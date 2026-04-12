@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETAAX - Insumos</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-shell">
+
+    <!-- NAV -->
+    <nav class="nav" id="nav">
+        <div class="nav-top">
+            <div class="nav-brand">
+                <span class="nav-brand-sub">Sistema de costeo</span>
+                <svg width="90" height="22" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
+                    <path d="M14.5 28H37C35.5 23 31.5 20 25.5 20C19.5 20 16 23 14.5 28Z" fill="#1a1916"/>
+                    <circle cx="45" cy="11" r="6" fill="#f5c842"/>
+                    <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
+                    <path d="M78 41C78 34.5 83.5 30.5 92.5 29.5L104 28.5V27.5C104 23.5 101.5 21 97 21C93 21 90 23 89 26.5L80.5 24C82.5 17.5 89 13 97 13C107.5 13 113 18.5 113 28.5V54.5H104V51C102 53.5 98.5 55 94 55C85.5 55 78 50.5 78 41Z" fill="#3dbe7a"/>
+                    <path d="M104 37L95.5 38C92.5 38.5 90.5 40 90.5 42.5C90.5 45 92.5 46.5 95.5 46.5C101 46.5 104 43.5 104 39V37Z" fill="#1a1916"/>
+                    <path d="M126 41C126 34.5 131.5 30.5 140.5 29.5L152 28.5V27.5C152 23.5 149.5 21 145 21C141 21 138 23 137 26.5L128.5 24C130.5 17.5 137 13 145 13C155.5 13 161 18.5 161 28.5V54.5H152V51C150 53.5 146.5 55 142 55C133.5 55 126 50.5 126 41Z" fill="#3dbe7a"/>
+                    <path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/>
+                    <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+                </svg>
+            </div>
+            <button class="nav-toggle" onclick="toggleNav()">☰</button>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Recetas</div>
+            <a href="index.html" class="nav-link"><span class="nav-icon">📋</span><span class="nav-text">Escandallo</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Catálogos</div>
+            <a href="insumos.html" class="nav-link active"><span class="nav-icon">🗄️</span><span class="nav-text">Insumos</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Operaciones</div>
+            <a href="inventarios.html" class="nav-link"><span class="nav-icon">📦</span><span class="nav-text">Inventarios</span></a>
+        </div>
+    </nav>
+
+    <main class="main-content" id="mainContent">
+
+        <div class="header">
+            <div class="brand">
+                <span class="brand-label">Catálogo de productos</span>
+                <span class="brand-title">Insumos</span>
+            </div>
+            <div style="display:flex;gap:10px">
+                <button class="btn-vista" onclick="abrirImportar()">⬆ Importar CSV</button>
+                <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)" onclick="abrirSelectorCategoria()">+ Agregar insumo</button>
+            </div>
+        </div>
+
+        <div class="wrap">
+
+
+
+            <!-- FILTROS -->
+            <div class="card">
+                <div class="card-body" style="padding:14px 20px">
+                    <div class="filtros-grid">
+                        <div class="search-wrap" style="position:relative">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" id="searchInput" placeholder="Buscar insumo..." oninput="filtrar();toggleClearBtn()">
+                            <button id="clearSearch" onclick="clearSearchInput()"
+                                style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);
+                                background:none;border:none;color:var(--text-dim);cursor:pointer;
+                                font-size:14px;padding:2px 4px;line-height:1;font-family:inherit"
+                                title="Limpiar búsqueda">✕</button>
+                        </div>
+                        <select class="filtro-select" id="filtroFamilia" onchange="filtrar()"><option value="">Todas las familias</option></select>
+                        <select class="filtro-select" id="filtroCategoria" onchange="filtrar()"><option value="">Todas las categorías</option></select>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /.wrap -->
+
+        <!-- TABLA — ancho completo sin max-width -->
+        <div style="padding:0 0 32px">
+            <div class="card" style="max-width:none;margin:0 16px">
+                <div class="card-header">
+                    <h2>Catálogo</h2>
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <span class="pill pill-amber" id="countLabel">0 insumos</span>
+                        <button id="btnVistaLista" onclick="setVistaInsumos('lista')"
+                            style="background:var(--accent);color:#0f0e0c;border:1px solid var(--accent);
+                            border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
+                            font-family:inherit;transition:all .2s" title="Vista lista">☰ Lista</button>
+                        <button id="btnVistaGrid" onclick="setVistaInsumos('grid')"
+                            style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
+                            border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
+                            font-family:inherit;transition:all .2s" title="Vista galería">⊞ Galería</button>
+                    </div>
+                </div>
+                <div class="card-body" style="padding:0">
+                    <!-- Vista lista -->
+                    <div id="contenedorLista">
+                        <div class="tabla-wrap">
+                            <table style="min-width:860px">
+                                <thead>
+                                    <tr>
+                                        <th style="min-width:230px">Nombre</th>
+                                        <th style="min-width:150px">Categoría</th>
+                                        <th style="min-width:190px">Presentaciones</th>
+                                        <th style="min-width:160px">Costo base</th>
+                                        <th style="min-width:130px">Proveedor</th>
+                                        <th style="min-width:210px"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbodyInsumos"></tbody>
+                            </table>
+                            <div id="emptyState" class="empty-state" style="display:none">
+                                <div class="empty-icon">🗄️</div>
+                                <div class="empty-title">Sin insumos</div>
+                                <div class="empty-desc">Agrega tu primer insumo o importa un CSV</div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Vista galería -->
+                    <div id="contenedorGrid" style="display:none;padding:16px">
+                        <div id="gridInsumos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px"></div>
+                        <div id="emptyStateGrid" class="empty-state" style="display:none">
+                            <div class="empty-icon">🗄️</div>
+                            <div class="empty-title">Sin insumos</div>
+                            <div class="empty-desc">Agrega tu primer insumo o importa un CSV</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    <!-- STATS FOOTER -->
+        <div style="padding:0 16px 24px">
+            <div class="stats-grid" style="margin-top:0">
+                <div class="stat-card"><div class="stat-label">Total insumos</div><div class="stat-val" id="statTotal">0</div></div>
+                <div class="stat-card"><div class="stat-label">Categorías</div><div class="stat-val" id="statCats">0</div></div>
+                <div class="stat-card"><div class="stat-label">Presentaciones</div><div class="stat-val" id="statPres">0</div></div>
+                <div class="stat-card"><div class="stat-label">Proveedores</div><div class="stat-val" id="statProvs">0</div></div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- MODAL AGREGAR/EDITAR -->
+<div class="modal-overlay" id="modalOverlay" onclick="cerrarModal(event)">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 id="modalTitulo">Nuevo insumo</h2>
+            <div style="display:flex;align-items:center;gap:10px">
+                <span class="pill pill-green" id="ins-activo-pill"
+                    onclick="toggleActivoInsumo()"
+                    style="cursor:pointer;user-select:none">Activo</span>
+                <input type="hidden" id="ins-activo" value="1">
+                <button class="modal-close" onclick="cerrarModalBtn()">✕</button>
+            </div>
+        </div>
+        <div class="modal-body">
+
+            <!-- FILA 1: Foto + campos principales -->
+            <div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:16px">
+                <!-- Foto + Descripción -->
+                <div style="display:flex;flex-direction:column;gap:8px;width:200px;flex-shrink:0">
+                    <label class="proc-label">Foto del producto</label>
+                    <div class="foto-wrap" id="insFotoWrap" style="width:200px;height:140px" onclick="document.getElementById('insFotoInput').click()">
+                        <div class="foto-placeholder" id="insFotoPlaceholder">
+                            <span class="foto-icon">📷</span>
+                            <span class="foto-texto" style="font-size:10px">Subir foto</span>
+                        </div>
+                        <img id="insFotoImg" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover">
+                    </div>
+                    <input type="file" id="insFotoInput" accept="image/*" style="display:none" onchange="cargarFotoInsumo(this)">
+                    <label class="proc-label">Descripción</label>
+                    <textarea id="ins-notas" placeholder="Describe el producto..." rows="3"
+                        style="width:100%;min-height:80px;resize:vertical;font-size:13px"></textarea>
+                </div>
+                <!-- Campos principales -->
+                <div style="flex:1">
+                    <div class="meta-grid" style="grid-template-columns:1fr 1fr">
+                        <div class="meta-item" style="grid-column:span 2">
+                            <label>Nombre base *</label>
+                            <input type="text" id="ins-nombre" placeholder="Ej. Vodka Absolut">
+                        </div>
+                        <div class="meta-item" id="row-marca">
+                            <label>Marca del producto</label>
+                            <input type="text" id="ins-marca" placeholder="Ej. Absolut">
+                        </div>
+                        <div class="meta-item">
+                            <label id="lbl-variedad">Variedad</label>
+                            <input type="text" id="ins-variedad" placeholder="Ej. Original">
+                        </div>
+                        <div class="meta-item" id="row-maduracion">
+                            <label id="lbl-maduracion">Variedad / Añejamiento</label>
+                            <input type="text" id="ins-maduracion" placeholder="Ej. Reposado, Original, 12 años...">
+                        </div>
+                        <div class="meta-item">
+                            <label>Categoría</label>
+                            <input type="text" id="ins-categoria" placeholder="Ej. Destilados" readonly
+                                style="opacity:.55;cursor:default;pointer-events:none">
+                        </div>
+                        <div class="meta-item">
+                            <label>Familia</label>
+                            <input type="text" id="ins-familia" placeholder="Ej. Bebidas" readonly
+                                style="opacity:.55;cursor:default;pointer-events:none">
+                        </div>
+                        <div class="meta-item" id="row-subcategoria">
+                            <label>Subcategoría</label>
+                            <input type="text" id="ins-subcategoria" placeholder="Ej. Vodka">
+                        </div>
+                        <div class="meta-item">
+                            <label>Tipo de empaque</label>
+                            <input type="text" id="ins-empaque" placeholder="Ej. Botella vidrio">
+                        </div>
+                        <div class="meta-item" id="row-temp-conservacion" style="display:none">
+                            <label>Temperatura de conservación</label>
+                            <input type="text" id="ins-tempConservacion" placeholder="Ej. 12-16°C">
+                        </div>
+                        <div class="meta-item" id="row-vida-util-abrir" style="display:none">
+                            <label>Vida útil al abrir</label>
+                            <input type="text" id="ins-vidaUtilAbrir" placeholder="Ej. 3 días">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PRESENTACIONES -->
+            <div style="margin-top:18px">
+                <div style="margin-bottom:10px">
+                    <span style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)">Presentaciones y costos</span>
+                </div>
+                <div id="listaPresentaciones"></div>
+                <button class="btn-add" style="width:100%;margin-top:8px;padding:10px;font-size:12px;text-align:center"
+                    onclick="agregarPresentacion()">+ Agregar presentación</button>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-vista" onclick="cerrarModalBtn()">Cancelar</button>
+            <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)" onclick="guardarInsumo()">💾 Guardar</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL FICHA TÉCNICA -->
+<div class="modal-overlay" id="modalFicha" onclick="cerrarFicha(event)">
+    <div class="modal" style="max-width:520px">
+        <div class="modal-header">
+            <h2>Ficha técnica</h2>
+            <button class="modal-close" onclick="document.getElementById('modalFicha').style.display='none'">✕</button>
+        </div>
+        <div class="modal-body" id="fichaContenido"></div>
+        <div class="modal-footer">
+            <button class="btn-vista" onclick="document.getElementById('modalFicha').style.display='none'">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL IMPORTAR CSV -->
+<div class="modal-overlay" id="modalImportar" onclick="cerrarImportar(event)">
+    <div class="modal" style="max-width:520px">
+        <div class="modal-header">
+            <h2>Importar CSV</h2>
+            <button class="modal-close" onclick="document.getElementById('modalImportar').style.display='none'">✕</button>
+        </div>
+        <div class="modal-body">
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.7">Importa tus 3 archivos en orden. Cada uno se procesa por separado.</p>
+            <div class="import-step">
+                <div class="import-step-header">
+                    <span class="import-step-num">1</span>
+                    <div><div class="import-step-title">Productos</div><div class="import-step-desc">ID_PROD, FAMILIA, CATEGORÍAS, NOMBRE_BASE...</div></div>
+                    <span class="import-step-status" id="status1">—</span>
+                </div>
+                <div class="foto-wrap" style="height:70px;margin-top:8px" onclick="document.getElementById('csvProd').click()" ondragover="event.preventDefault()" ondrop="onDropCSV(event,'prod')">
+                    <div class="foto-placeholder"><span class="foto-texto">📄 productos.csv</span></div>
+                </div>
+                <input type="file" id="csvProd" accept=".csv" style="display:none" onchange="importarProductos(this)">
+            </div>
+            <div class="import-step">
+                <div class="import-step-header">
+                    <span class="import-step-num">2</span>
+                    <div><div class="import-step-title">Presentaciones</div><div class="import-step-desc">ID_PRES, NOMBRE_BASE, CONT_NETO, UM_CONT_NETO...</div></div>
+                    <span class="import-step-status" id="status2">—</span>
+                </div>
+                <div class="foto-wrap" style="height:70px;margin-top:8px" onclick="document.getElementById('csvPres').click()" ondragover="event.preventDefault()" ondrop="onDropCSV(event,'pres')">
+                    <div class="foto-placeholder"><span class="foto-texto">📄 presentaciones.csv</span></div>
+                </div>
+                <input type="file" id="csvPres" accept=".csv" style="display:none" onchange="importarPresentaciones(this)">
+            </div>
+            <div class="import-step">
+                <div class="import-step-header">
+                    <span class="import-step-num">3</span>
+                    <div><div class="import-step-title">Costos</div><div class="import-step-desc">ID_PRICE, ID_PRES, PROVEDOR, ZONA, PRECIO_COMPRA...</div></div>
+                    <span class="import-step-status" id="status3">—</span>
+                </div>
+                <div class="foto-wrap" style="height:70px;margin-top:8px" onclick="document.getElementById('csvCost').click()" ondragover="event.preventDefault()" ondrop="onDropCSV(event,'cost')">
+                    <div class="foto-placeholder"><span class="foto-texto">📄 costos.csv</span></div>
+                </div>
+                <input type="file" id="csvCost" accept=".csv" style="display:none" onchange="importarCostos(this)">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-vista" onclick="document.getElementById('modalImportar').style.display='none'">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<script src="insumos.js"></script>
+<script>
+function toggleNav() {
+    document.getElementById('nav').classList.toggle('cerrado');
+    document.getElementById('mainContent').classList.toggle('expandido');
+}
+
+// ── Búsqueda con botón limpiar ────────────────────────────────
+function toggleClearBtn() {
+    const val = document.getElementById('searchInput').value;
+    document.getElementById('clearSearch').style.display = val ? 'block' : 'none';
+}
+
+function clearSearchInput() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('clearSearch').style.display = 'none';
+    filtrar();
+}
+</script>
+
+<!-- MODAL SELECTOR DE CATEGORÍA -->
+<div class="modal-overlay" id="modalCategoria" onclick="cerrarModalCategoria(event)">
+    <div class="modal" style="max-width:480px">
+        <div class="modal-header">
+            <h2>¿Qué tipo de insumo es?</h2>
+            <button class="modal-close" onclick="document.getElementById('modalCategoria').style.display='none'">✕</button>
+        </div>
+        <div class="modal-body" style="padding:20px 22px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <button onclick="abrirModalConTipo('destilado')" class="cat-btn">
+                    <span style="font-size:28px">🥃</span>
+                    <div class="cat-btn-title">Destilado</div>
+                    <div class="cat-btn-desc">Whisky, tequila, vodka, ron, mezcal...</div>
+                </button>
+                <button onclick="abrirModalConTipo('licor')" class="cat-btn">
+                    <span style="font-size:28px">🍹</span>
+                    <div class="cat-btn-title">Licor</div>
+                    <div class="cat-btn-desc">Aperitivos, amaretto, triple sec, cremas...</div>
+                </button>
+                <button onclick="abrirModalConTipo('vino')" class="cat-btn">
+                    <span style="font-size:28px">🍷</span>
+                    <div class="cat-btn-title">Vino / Espumoso</div>
+                    <div class="cat-btn-desc">Vinos, cavas, cervezas artesanales...</div>
+                </button>
+                <button onclick="abrirModalConTipo('refresco')" class="cat-btn">
+                    <span style="font-size:28px">🥤</span>
+                    <div class="cat-btn-title">Refrescos, sodas, jugos...</div>
+                    <div class="cat-btn-desc">Refrescos, jugos, aguas, energizantes, jarabes...</div>
+                </button>
+                <button onclick="abrirModalConTipo('cerveza')" class="cat-btn">
+                    <span style="font-size:28px">🍺</span>
+                    <div class="cat-btn-title">Cerveza</div>
+                    <div class="cat-btn-desc">Cervezas comerciales, artesanales...</div>
+                </button>
+                <button onclick="abrirModalConTipo('cerveza_barril')" class="cat-btn">
+                    <span style="font-size:28px">🛢️</span>
+                    <div class="cat-btn-title">Cerveza de barril</div>
+                    <div class="cat-btn-desc">Barril, tina, grifo — por vaso o jarra</div>
+                </button>
+                <button onclick="abrirModalConTipo('abarrote')" class="cat-btn">
+                    <span style="font-size:28px">🧂</span>
+                    <div class="cat-btn-title">Abarrotes y más</div>
+                    <div class="cat-btn-desc">Secos, enlatados, lácteos, aceites, especias...</div>
+                </button>
+                <button onclick="abrirModalConTipo('carne')" class="cat-btn">
+                    <span style="font-size:28px">🥩</span>
+                    <div class="cat-btn-title">Carnes</div>
+                    <div class="cat-btn-desc">Res, cerdo, pollo, mariscos...</div>
+                </button>
+                <button onclick="abrirModalConTipo('fruta')" class="cat-btn">
+                    <span style="font-size:28px">🥬</span>
+                    <div class="cat-btn-title">Fruta y Verdura</div>
+                    <div class="cat-btn-desc">Frescos, hierbas, condimentos...</div>
+                </button>
+                <button onclick="abrirModalConTipo('otro')" class="cat-btn">
+                    <span style="font-size:28px">📦</span>
+                    <div class="cat-btn-title">Otro</div>
+                    <div class="cat-btn-desc">Desechables, limpieza, varios...</div>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.cat-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 12px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    color: var(--text);
+}
+.cat-btn:hover {
+    border-color: var(--green);
+    background: rgba(61,190,122,0.06);
+    transform: translateY(-2px);
+}
+.cat-btn-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+.cat-btn-desc {
+    font-size: 10px;
+    color: var(--text-dim);
+    line-height: 1.4;
+}
+</style>
+
+<style>
+.theme-toggle {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 999;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 50px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+    transition: all 0.2s;
+}
+.theme-toggle:hover { border-color: var(--green); color: var(--green); }
+</style>
+<button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Cambiar modo">
+    <span id="themeIcon">☀️</span>
+    <span id="themeLabel">Modo claro</span>
+</button>
+<script>
+(function(){
+    var saved = localStorage.getItem('etaax_theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    document.addEventListener('DOMContentLoaded', function(){
+        var icon  = document.getElementById('themeIcon');
+        var label = document.getElementById('themeLabel');
+        if (saved === 'light') { if(icon) icon.textContent='🌙'; if(label) label.textContent='Modo oscuro'; }
+    });
+})();
+
+function toggleTheme() {
+    var html  = document.documentElement;
+    var curr  = html.getAttribute('data-theme');
+    var next  = curr === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    localStorage.setItem('etaax_theme', next);
+    var icon  = document.getElementById('themeIcon');
+    var label = document.getElementById('themeLabel');
+    if (next === 'light') { if(icon) icon.textContent='🌙'; if(label) label.textContent='Modo oscuro'; }
+    else                  { if(icon) icon.textContent='☀️'; if(label) label.textContent='Modo claro'; }
+}
+</script>
+
+<style>
+/* ── Grid / Galería ──────────────────────────────────────── */
+.insumo-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: transform .15s, border-color .15s;
+}
+.insumo-card:hover { transform: translateY(-3px); border-color: var(--green); }
+.insumo-card-foto {
+    position: relative;
+    height: 110px;
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+.insumo-card-foto img { width:100%;height:100%;object-fit:cover; }
+.card-emoji { font-size: 44px; }
+.insumo-card-tipo-badge {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    background: rgba(15,14,12,.75);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--accent);
+    padding: 2px 6px;
+}
+.insumo-card-body { padding: 10px 12px; flex: 1; }
+.insumo-card-nombre { font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.insumo-card-variedad { font-size:10px;color:var(--text-dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.insumo-card-cat { font-size:9px;color:var(--text-dim);opacity:.7;margin-top:2px; }
+.insumo-card-costo { font-size:12px;color:var(--green);font-weight:600;margin-top:6px; }
+.insumo-card-prov { font-size:9px;color:var(--text-dim);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.insumo-card-pres { display:flex;flex-wrap:wrap;gap:3px;margin-top:6px; }
+.insumo-card-actions {
+    display: flex;
+    gap: 4px;
+    padding: 8px 10px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+}
+.insumo-card-actions button {
+    flex: 1;
+    padding: 5px 4px;
+    font-size: 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all .15s;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+}
+.btn-ver:hover { border-color:var(--green);color:var(--green); }
+.btn-edit:hover { border-color:var(--accent);color:var(--accent); }
+.btn-del:hover { border-color:var(--red);color:var(--red); }
+</style>
+
+<style>
+/* ── Chip picker uvas vino ──────────────────────────────── */
+.uva-chip {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-dim);
+    font-size: 11px;
+    cursor: pointer;
+    user-select: none;
+    transition: all .15s;
+    line-height: 1.4;
+}
+.uva-chip:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+.uva-chip.active {
+    background: rgba(245,200,66,.15);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+}
+</style>
+</body>
+</html>

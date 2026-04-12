@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETAAX - Inventarios</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-shell">
+
+    <!-- NAV -->
+    <nav class="nav" id="nav">
+        <div class="nav-top">
+            <div class="nav-brand">
+                <span class="nav-brand-sub">Sistema de costeo</span>
+                <svg width="90" height="22" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
+                    <path d="M14.5 28H37C35.5 23 31.5 20 25.5 20C19.5 20 16 23 14.5 28Z" fill="#1a1916"/>
+                    <circle cx="45" cy="11" r="6" fill="#f5c842"/>
+                    <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
+                    <path d="M78 41C78 34.5 83.5 30.5 92.5 29.5L104 28.5V27.5C104 23.5 101.5 21 97 21C93 21 90 23 89 26.5L80.5 24C82.5 17.5 89 13 97 13C107.5 13 113 18.5 113 28.5V54.5H104V51C102 53.5 98.5 55 94 55C85.5 55 78 50.5 78 41Z" fill="#3dbe7a"/>
+                    <path d="M104 37L95.5 38C92.5 38.5 90.5 40 90.5 42.5C90.5 45 92.5 46.5 95.5 46.5C101 46.5 104 43.5 104 39V37Z" fill="#1a1916"/>
+                    <path d="M126 41C126 34.5 131.5 30.5 140.5 29.5L152 28.5V27.5C152 23.5 149.5 21 145 21C141 21 138 23 137 26.5L128.5 24C130.5 17.5 137 13 145 13C155.5 13 161 18.5 161 28.5V54.5H152V51C150 53.5 146.5 55 142 55C133.5 55 126 50.5 126 41Z" fill="#3dbe7a"/>
+                    <path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/>
+                    <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+                </svg>
+            </div>
+            <button class="nav-toggle" onclick="toggleNav()">☰</button>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Recetas</div>
+            <a href="index.html" class="nav-link"><span class="nav-icon">📋</span><span class="nav-text">Escandallo</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Catálogos</div>
+            <a href="insumos.html" class="nav-link"><span class="nav-icon">🗄️</span><span class="nav-text">Insumos</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Operaciones</div>
+            <a href="inventarios.html" class="nav-link active"><span class="nav-icon">📦</span><span class="nav-text">Inventarios</span></a>
+        </div>
+    </nav>
+
+    <main class="main-content" id="mainContent">
+
+        <!-- VISTA LISTA -->
+        <div id="vistaLista">
+            <div class="header">
+                <div class="brand">
+                    <span class="brand-label">Control de existencias</span>
+                    <span class="brand-title">Inventarios</span>
+                </div>
+                <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)" onclick="nuevoInventario()">+ Nuevo inventario</button>
+            </div>
+            <div class="wrap">
+                <div class="stats-grid">
+                    <div class="stat-card"><div class="stat-label">Inventarios</div><div class="stat-val" id="statInvs">0</div></div>
+                    <div class="stat-card"><div class="stat-label">Último inventario</div><div class="stat-val" style="font-size:16px;padding-top:6px" id="statUltimo">—</div></div>
+                    <div class="stat-card"><div class="stat-label">Capital último inv.</div><div class="stat-val" id="statCapital">$0</div></div>
+                    <div class="stat-card"><div class="stat-label">Diferencia último</div><div class="stat-val" id="statDif">—</div></div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><h2>Historial</h2></div>
+                    <div class="card-body" style="padding:0">
+                        <div class="tabla-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Fecha</th><th>Nombre</th><th>Productos</th>
+                                        <th>Capital costo</th><th>Capital carta</th>
+                                        <th>Diferencia</th><th>Estado</th><th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbodyInvs"></tbody>
+                            </table>
+                            <div id="emptyInvs" class="empty-state">
+                                <div class="empty-icon">📦</div>
+                                <div class="empty-title">Sin inventarios</div>
+                                <div class="empty-desc">Crea tu primer inventario</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VISTA CAPTURA -->
+        <div id="vistaCaptura" style="display:none">
+            <div class="header">
+                <div style="display:flex;align-items:center;gap:14px">
+                    <button class="btn-vista" onclick="volverLista()">← Volver</button>
+                    <div>
+                        <span class="brand-label">Captura de inventario</span>
+                        <div class="brand-title" style="font-size:28px" id="captTitulo">Nuevo inventario</div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:10px">
+                    <button class="btn-vista" onclick="verReporte()" id="btnReporte" style="display:none">📊 Ver reporte</button>
+                    <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)" onclick="guardarInventario()">💾 Guardar</button>
+                </div>
+            </div>
+            <div class="wrap">
+                <div class="card">
+                    <div class="card-header"><h2>Datos del inventario</h2></div>
+                    <div class="card-body">
+                        <div class="meta-grid" style="grid-template-columns:1fr 1fr 1fr">
+                            <div class="meta-item" style="grid-column:span 2">
+                                <label>Nombre del inventario</label>
+                                <input type="text" id="invNombre" placeholder="Ej. Inventario Barra Marzo 2026">
+                            </div>
+                            <div class="meta-item">
+                                <label>Fecha</label>
+                                <input type="date" id="invFecha">
+                            </div>
+                            <div class="meta-item">
+                                <label>Turno / Periodo</label>
+                                <select id="invTurno">
+                                    <option value="apertura">Apertura</option>
+                                    <option value="cierre">Cierre</option>
+                                    <option value="semanal">Semanal</option>
+                                    <option value="quincenal">Quincenal</option>
+                                    <option value="mensual">Mensual</option>
+                                </select>
+                            </div>
+                            <div class="meta-item">
+                                <label>Área</label>
+                                <select id="invArea">
+                                    <option value="barra">Barra</option>
+                                    <option value="bodega">Bodega</option>
+                                    <option value="cocina">Cocina</option>
+                                    <option value="general">General</option>
+                                </select>
+                            </div>
+                            <div class="meta-item">
+                                <label>Notas</label>
+                                <input type="text" id="invNotas" placeholder="Observaciones...">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Captura de existencias</h2>
+                        <div style="display:flex;gap:8px">
+                            <select class="filtro-select" id="filtroFamiliaInv" onchange="filtrarProductosInv()" style="font-size:11px;padding:4px 8px"><option value="">Todas las familias</option></select>
+                            <select class="filtro-select" id="filtroCatInv" onchange="filtrarProductosInv()" style="font-size:11px;padding:4px 8px"><option value="">Todas las categorías</option></select>
+                        </div>
+                    </div>
+                    <div class="card-body" style="padding:0">
+                        <div class="tabla-wrap">
+                            <table id="tablaCaptura">
+                                <thead>
+                                    <tr>
+                                        <th style="width:180px">Producto</th>
+                                        <th style="width:60px">Tipo</th>
+                                        <th style="width:70px">Cerradas bodega</th>
+                                        <th style="width:70px">Cerradas barra</th>
+                                        <th colspan="6" style="text-align:center">Peso botellas abiertas (g)</th>
+                                        <th style="width:70px">ML reales</th>
+                                        <th style="width:70px">Entradas</th>
+                                        <th style="width:70px">Venta copas</th>
+                                        <th style="width:70px">Venta bot.</th>
+                                        <th style="width:80px">Diferencia</th>
+                                        <th style="width:80px">Dif. $</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbodyCaptura"></tbody>
+                            </table>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:16px">
+                            <div class="stat-card"><div class="stat-label">Capital costo</div><div class="stat-val" style="font-size:20px" id="totalCosto">$0.00</div></div>
+                            <div class="stat-card"><div class="stat-label">Capital carta</div><div class="stat-val green" style="font-size:20px" id="totalCarta">$0.00</div></div>
+                            <div class="stat-card"><div class="stat-label">Diferencia total</div><div class="stat-val" style="font-size:20px" id="totalDif">—</div></div>
+                            <div class="stat-card"><div class="stat-label">Diferencia $</div><div class="stat-val" style="font-size:20px" id="totalDifCosto">$0.00</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VISTA REPORTE -->
+        <div id="vistaReporte" style="display:none">
+            <div class="header">
+                <div style="display:flex;align-items:center;gap:14px">
+                    <button class="btn-vista" onclick="volverCaptura()">← Volver</button>
+                    <div>
+                        <span class="brand-label">Reporte ejecutivo</span>
+                        <div class="brand-title" style="font-size:28px" id="repTitulo">Reporte</div>
+                    </div>
+                </div>
+            </div>
+            <div class="wrap" id="repContenido"></div>
+        </div>
+
+    </main>
+</div>
+
+<script src="inventarios.js"></script>
+<script>
+function toggleNav() {
+    document.getElementById('nav').classList.toggle('cerrado');
+    document.getElementById('mainContent').classList.toggle('expandido');
+}
+</script>
+
+<style>
+.theme-toggle {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 999;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 50px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+    transition: all 0.2s;
+}
+.theme-toggle:hover { border-color: var(--green); color: var(--green); }
+</style>
+<button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Cambiar modo">
+    <span id="themeIcon">☀️</span>
+    <span id="themeLabel">Modo claro</span>
+</button>
+<script>
+(function(){
+    var saved = localStorage.getItem('etaax_theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    document.addEventListener('DOMContentLoaded', function(){
+        var icon  = document.getElementById('themeIcon');
+        var label = document.getElementById('themeLabel');
+        if (saved === 'light') { if(icon) icon.textContent='🌙'; if(label) label.textContent='Modo oscuro'; }
+    });
+})();
+
+function toggleTheme() {
+    var html  = document.documentElement;
+    var curr  = html.getAttribute('data-theme');
+    var next  = curr === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    localStorage.setItem('etaax_theme', next);
+    var icon  = document.getElementById('themeIcon');
+    var label = document.getElementById('themeLabel');
+    if (next === 'light') { if(icon) icon.textContent='🌙'; if(label) label.textContent='Modo oscuro'; }
+    else                  { if(icon) icon.textContent='☀️'; if(label) label.textContent='Modo claro'; }
+}
+</script>
+</body>
+</html>
