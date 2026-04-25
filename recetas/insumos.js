@@ -7,6 +7,7 @@
    const UNIDADES_REN = ['OZ','ML','LT','G','KG','PZA','PORCION','COPA'];
    const OZ_ML        = 29.5735;   // ml por onza líquida
    const COPA_ML      = 44.36;     // ml por copa estándar
+   const _MXN         = '<span style="font-size:9px;letter-spacing:1px;color:var(--text-muted);font-weight:400;margin-left:4px">MXN</span>';
    
    // ── localStorage ──────────────────────────────────────────────
    function getInsumos() {
@@ -793,7 +794,7 @@
        presentacionesTemp.push({
            id: genId(), contNeto: '', umContenido: 'ML',
            pesoUnidad: '', umPeso: 'G', pesoCristal: '',
-           masaDrenada: '', rendimiento: '', umRendimiento: 'OZ',
+           masaDrenada: '', umMasaDrenada: 'G', rendimiento: '', umRendimiento: 'OZ',
            tamanoCopa: '', umTamanoCopa: 'ML',
            factorCopa: '3.3', factorBotella: '2.5', factorPieza: '2.0', costoPieza: '',
            proveedor: '', zona: '', fecha: hoy,
@@ -813,38 +814,38 @@
    
    // ── Auxiliares de cálculo para updPres ────────────────────────────────────
    function _calcCostosAbarrote(p, precioEfectivo, contML) {
-       const um = (p.umContenido || 'G').toUpperCase();
        const cantPres = parseFloat(p.cantPresCompra) || 1;
        const presCompra = p.presentacionCompra || 'Pieza';
 
-       // Precio por pieza individual (si viene en caja/paquete, dividir)
        const piezasEnPack = ['Caja','Paquete','Costal'].includes(presCompra) && cantPres > 1
            ? cantPres : 1;
        const costoPieza = precioEfectivo / piezasEnPack;
        p.costoPieza = costoPieza.toFixed(2);
 
-       if (um === 'ML') {
-           // Líquido en ML → $/ML
-           p.costoUnitario = contML > 0 ? (costoPieza / contML).toFixed(4) : '0';
+       // Si hay masa drenada usar ese contenido para el costo, si no el contenido del producto
+       const masaDrena  = parseFloat(p.masaDrenada) || 0;
+       const umEfectivo = masaDrena > 0
+           ? (p.umMasaDrenada || 'G').toUpperCase()
+           : (p.umContenido   || 'G').toUpperCase();
+       const contEfML   = masaDrena > 0 ? toML(masaDrena, umEfectivo) : contML;
+
+       if (umEfectivo === 'ML') {
+           p.costoUnitario = contEfML > 0 ? (costoPieza / contEfML).toFixed(4) : '0';
            p.umCosto = 'ML';
-       } else if (um === 'LT') {
-           // Líquido en LT → $/LT
-           p.costoUnitario = contML > 0 ? (costoPieza / (contML / 1000)).toFixed(2) : '0';
+       } else if (umEfectivo === 'LT') {
+           p.costoUnitario = contEfML > 0 ? (costoPieza / (contEfML / 1000)).toFixed(2) : '0';
            p.umCosto = 'LT';
-       } else if (um === 'G') {
-           // Sólido en G → $/G
-           p.costoUnitario = contML > 0 ? (costoPieza / contML).toFixed(4) : '0';
+       } else if (umEfectivo === 'G') {
+           p.costoUnitario = contEfML > 0 ? (costoPieza / contEfML).toFixed(4) : '0';
            p.umCosto = 'G';
-       } else if (um === 'KG') {
-           // Sólido en KG → $/KG
-           p.costoUnitario = contML > 0 ? (costoPieza / (contML / 1000)).toFixed(2) : '0';
+       } else if (umEfectivo === 'KG') {
+           p.costoUnitario = contEfML > 0 ? (costoPieza / (contEfML / 1000)).toFixed(2) : '0';
            p.umCosto = 'KG';
-       } else if (um === 'PZA' || um === 'CARGA' || um === 'PORCION') {
-           // Por pieza: huevo, lata entera → $/PZA
+       } else if (['PZA','CARGA','PORCION'].includes(umEfectivo)) {
            p.costoUnitario = costoPieza.toFixed(2);
            p.umCosto = 'PZA';
        } else {
-           p.costoUnitario = contML > 0 ? (costoPieza / (contML / 1000)).toFixed(2) : '0';
+           p.costoUnitario = contEfML > 0 ? (costoPieza / (contEfML / 1000)).toFixed(2) : '0';
            p.umCosto = 'KG';
        }
    }
@@ -881,15 +882,15 @@
        var _elO     = document.getElementById('ref-onza-'+i);
        var _elL     = document.getElementById('ref-litro-'+i);
        var _elCarta = document.getElementById('ref-precio-carta-'+i);
-       if (_elP) _elP.textContent = _cp ? '$ '+_cp.toFixed(2) : '\u2014';
+       if (_elP) _elP.textContent = fmtMXN(_cp);
        if (_elO) _elO.textContent = _ozV;
        if (_elL) _elL.textContent = _ltV;
-       if (_elCarta) _elCarta.textContent = _cp ? '$ '+(_cp*_fp).toFixed(2) : '\u2014';
+       if (_elCarta) _elCarta.textContent = fmtMXN(_cp * _fp);
        if (tipoInsumoActual === 'cerveza_barril') {
-           const _ltNum = _ltV !== '\u2014' ? parseFloat(_ltV.slice(2)) : 0;
-           if (_elCarta) _elCarta.textContent = _ltNum ? '$ '+(_ltNum*_fp).toFixed(2) : '\u2014';
+           const _ltNum = _ltV !== '\u2014' ? parseFloat(_ltV.replace('$ ','').replace(/,/g,'')) : 0;
+           if (_elCarta) _elCarta.textContent = fmtMXN(_ltNum * _fp);
            var _elVaso = document.getElementById('ref-precio-vaso-'+i);
-           if (_elVaso) _elVaso.textContent = _cp ? '$ '+(_cp*_fp).toFixed(2) : '\u2014';
+           if (_elVaso) _elVaso.textContent = fmtMXN(_cp * _fp);
        }
    }
 
@@ -903,7 +904,7 @@
        const precioEfectivo = precio * calcImpFactor(p);
        const contML         = toML(p.contNeto, p.umContenido || 'ML');
    
-       const _triggerCosto = ['precio','contNeto','umContenido','cantPresCompra','presentacionCompra','factorPieza','tamanoCopa','ivaCheck','iepsCheck','iepsTasa','incluyeImpuesto'];
+       const _triggerCosto = ['precio','contNeto','umContenido','cantPresCompra','presentacionCompra','factorPieza','tamanoCopa','ivaCheck','iepsCheck','iepsTasa','incluyeImpuesto','masaDrenada','umMasaDrenada'];
        if (_triggerCosto.includes(campo) && precioEfectivo > 0) {
            if (tipoInsumoActual === 'cerveza_barril') {
                _calcCostosBarril(p, precioEfectivo, contML);
@@ -922,17 +923,17 @@
                _updateDisplaysRefrescoCerv(p, i);
            }
            if (tipoInsumoActual === 'abarrote') {
-               const _cp  = parseFloat(p.costoPieza)||0;
-               const _cu  = parseFloat(p.costoUnitario)||0;
+               const _cp    = parseFloat(p.costoPieza)||0;
+               const _cu    = parseFloat(p.costoUnitario)||0;
+               const _um2   = (p.umCosto || 'KG').toUpperCase();
+               const _cuBig2   = ['ML','G'].includes(_um2) ? _cu * 1000 : _cu;
+               const _cuSmall2 = ['LT','KG'].includes(_um2) ? _cu / 1000 : _cu;
                const _elP  = document.getElementById('ref-pieza-'+i);
                const _elC  = document.getElementById('ref-costoum-'+i);
-               const _elCU = document.getElementById('ref-cu-'+i);
-               if (_elP)  _elP.textContent  = _cp ? '$ '+_cp.toFixed(2) : '—';
-               if (_elC)  _elC.textContent  = _cu ? '$ '+_cu.toFixed(2) : '—';
-               if (_elCU) _elCU.textContent = _cu ? '$ '+_cu.toFixed(2) : '—';
-               // Sincronizar el div de UM COSTO (auto)
-               const _elUM = document.getElementById('ref-umcosto-'+i);
-               if (_elUM && p.umCosto) _elUM.textContent = p.umCosto;
+               const _elS  = document.getElementById('ref-costomlgr-'+i);
+               if (_elP) _elP.textContent = fmtMXN(_cp);
+               if (_elC) _elC.textContent = fmtMXN(_cuBig2);
+               if (_elS) _elS.textContent = fmtMXN(_cuSmall2, 3);
            }
        }
    
@@ -1043,7 +1044,7 @@
                    <div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;
                        color:var(--text-dim);margin-bottom:4px">Costo copa</div>
                    <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;
-                       color:var(--text);letter-spacing:1px">$${copa.costoCopa}</div>
+                       color:var(--text);letter-spacing:1px">${fmtMXN(copa.costoCopa)}</div>
                    <div style="font-size:9px;color:var(--text-dim)">${p.tamanoCopa||0} ${p.umTamanoCopa||'ML'}</div>
                </div>
                <div style="background:var(--surface);border:1px solid var(--accent);
@@ -1051,7 +1052,7 @@
                    <div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;
                        color:var(--accent);margin-bottom:4px">Precio copa ×3.3</div>
                    <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;
-                       color:var(--accent);letter-spacing:1px">$${precioCopaAuto}</div>
+                       color:var(--accent);letter-spacing:1px">${fmtMXN(precioCopaAuto)}</div>
                    <div style="font-size:9px;color:var(--text-dim)">sugerido carta</div>
                </div>
                <div style="background:var(--surface);border:1px solid var(--border);
@@ -1059,7 +1060,7 @@
                    <div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;
                        color:var(--text-dim);margin-bottom:4px">Costo botella</div>
                    <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;
-                       color:var(--text);letter-spacing:1px">${costoBot>0?'$'+costoBot.toFixed(2):'—'}</div>
+                       color:var(--text);letter-spacing:1px">${fmtMXN(costoBot)}</div>
                    <div style="font-size:9px;color:var(--text-dim)">${contML>0?contML+' ML':'sin contenido'}</div>
                </div>
                <div style="background:var(--surface);border:1px solid var(--green);
@@ -1067,12 +1068,49 @@
                    <div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;
                        color:var(--green);margin-bottom:4px">Precio bot. ×2.5</div>
                    <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;
-                       color:var(--green);letter-spacing:1px">${precioBotAuto?'$'+precioBotAuto:'—'}</div>
+                       color:var(--green);letter-spacing:1px">${fmtMXN(precioBotAuto)}</div>
                    <div style="font-size:9px;color:var(--text-dim)">sugerido carta</div>
                </div>
            </div>`;
    }
    
+   // ── Helpers de formato de precio ─────────────────────────────
+   function fmtPrecio(val) {
+       const n = parseFloat(String(val).replace(/,/g,''));
+       if (!n) return '';
+       return n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+   }
+
+   function focusCurrency(el) {
+       el.value = el.value.replace(/,/g, '');
+   }
+
+   function blurCurrency(el, idx, campo) {
+       const raw = el.value.replace(/,/g, '');
+       const n = parseFloat(raw);
+       if (n) el.value = n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+       updPres(idx, campo, raw);
+   }
+
+   function inputCurrency(el, idx, campo) {
+       updPres(idx, campo, el.value.replace(/,/g, ''));
+   }
+
+   // aliases para compatibilidad con llamadas existentes
+   function focusPrecioInput(el)        { focusCurrency(el); }
+   function blurPrecioInput(el, idx)    { blurCurrency(el, idx, 'precio'); }
+   function inputPrecioRaw(el, idx)     { inputCurrency(el, idx, 'precio'); }
+
+   // Formatea número con comas de miles para mostrar en displays (no inputs)
+   function fmtMXN(val, dec) {
+       if (dec === undefined) dec = 2;
+       const n = parseFloat(val) || 0;
+       if (!n) return '\u2014';
+       const parts = n.toFixed(dec).split('.');
+       parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+       return '$ ' + parts.join('.');
+   }
+
    // ── Helpers de conversión ─────────────────────────────────────
    /** Convierte una cantidad en `um` a mililitros */
    function toML(valor, um) {
@@ -1091,8 +1129,8 @@
        const cML = toML(contNeto, umContenido);
        if (!cp || !cML) return { oz: '\u2014', lt: '\u2014' };
        return {
-           oz: '$ ' + (cp / (cML / OZ_ML)).toFixed(2),
-           lt: '$ ' + (cp / (cML / 1000)).toFixed(2),
+           oz: fmtMXN(cp / (cML / OZ_ML)),
+           lt: fmtMXN(cp / (cML / 1000)),
        };
    }
 
@@ -1150,18 +1188,27 @@
        const ivaChk  = p.ivaCheck==='1' || p.incluyeImpuesto==='1' || p.incluyeImpuesto==='2';
        const iepsChk = p.iepsCheck==='1' || p.incluyeImpuesto==='2';
 
+       const _hasMasaDrenada = parseFloat(p.masaDrenada) > 0;
+       const _hasImpuesto    = !dis && (p.ivaCheck==='1' || p.iepsCheck==='1');
        let precioFinalHtml = '';
-       if (!dis && (p.ivaCheck==='1' || p.iepsCheck==='1')) {
-           const base = parseFloat(p.precio)||0;
-           let factor = 1;
-           if (p.ivaCheck==='1')  factor *= 1.16;
-           if (p.iepsCheck==='1') factor *= (1 + parseFloat(p.iepsTasa||'26.5')/100);
-           const tags = [p.ivaCheck==='1'?'+ IVA 16%':'', p.iepsCheck==='1'?'+ IEPS '+(p.iepsTasa||'26.5')+'%':''].filter(Boolean).join(' · ');
-           precioFinalHtml = `<div class="meta-item" style="margin-top:10px">
-               <label>Precio final (c/impuestos)</label>
+       if (_hasMasaDrenada || _hasImpuesto) {
+           const base   = parseFloat(p.precio)||0;
+           let factor   = 1;
+           let tags     = '';
+           if (_hasImpuesto) {
+               if (p.ivaCheck==='1')  factor *= 1.16;
+               if (p.iepsCheck==='1') factor *= (1 + parseFloat(p.iepsTasa||'26.5')/100);
+               tags = [p.ivaCheck==='1'?'+ IVA 16%':'', p.iepsCheck==='1'?'+ IEPS '+(p.iepsTasa||'26.5')+'%':''].filter(Boolean).join(' · ');
+           }
+           const masaLabel = _hasMasaDrenada
+               ? `<div style="font-size:9px;color:var(--text-dim);margin-top:2px">Masa drenada: ${p.masaDrenada} ${p.umMasaDrenada||'G'}</div>`
+               : '';
+           precioFinalHtml = `<div class="meta-item" style="margin-top:10px" id="precio-final-block-${i}">
+               <label>${_hasImpuesto ? 'Precio final (c/impuestos)' : 'Precio base (masa drenada)'} ${_MXN}</label>
                <div style="background:var(--surface);border:1px solid var(--green-dim);border-radius:6px;padding:8px 12px">
-                   <div style="font-size:15px;font-weight:700;color:var(--green)">${base ? '$ '+(base*factor).toFixed(2) : '—'}</div>
-                   <div style="font-size:9px;color:var(--text-dim);margin-top:2px">${tags}</div>
+                   <div style="font-size:15px;font-weight:700;color:var(--green)">${fmtMXN(base * factor)}</div>
+                   ${tags ? `<div style="font-size:9px;color:var(--text-dim);margin-top:2px">${tags}</div>` : ''}
+                   ${masaLabel}
                </div>
            </div>`;
        }
@@ -1184,7 +1231,7 @@
                    <label for="ieps-${i}" style="cursor:pointer;font-size:12px;flex:1;display:flex;align-items:center;gap:6px">
                        <span style="font-weight:600">IEPS</span>
                        <select onchange="updPres(${i},'iepsTasa',this.value);renderPresentaciones()"
-                           ${dis?'disabled':''} style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:3px 6px;border-radius:4px;font-size:11px;font-family:inherit;opacity:${dis?'.6':'1'}">
+                           style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:3px 6px;border-radius:4px;font-size:11px;font-family:inherit">
                            ${['26.5','30','8','50','160'].map(t =>
                                '<option value="'+t+'"'+((p.iepsTasa||'26.5')===t?' selected':'')+'>'+t+'%</option>'
                            ).join('')}
@@ -1202,22 +1249,22 @@
        const _cp  = parseFloat(p.costoPieza)||0;
        const { oz: _ozV, lt: _ltV } = calcOzLt(p.costoPieza, p.contNeto, p.umContenido);
        const _fp  = parseFloat(p.factorPieza)||2.0;
-       const _csV = _ltV !== '\u2014' ? ('$ '+(parseFloat(_ltV.slice(2))*_fp).toFixed(2)) : '\u2014';
+       const _csV = _ltV !== '\u2014' ? fmtMXN(parseFloat(_ltV.replace('$ ','').replace(/,/g,'')) * _fp) : '\u2014';
 
        let innerHtml = '';
        if (esBarril) {
-           innerHtml = '<div class="meta-item"><label>Costo por onza</label>'
+           innerHtml = '<div class="meta-item"><label>Costo por onza '+_MXN+'</label>'
                + '<div id="ref-onza-'+i+'" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:14px;color:var(--accent);font-weight:600">'+_ozV+'</div></div>'
-               + '<div class="meta-item"><label>Costo por litro</label>'
+               + '<div class="meta-item"><label>Costo por litro '+_MXN+'</label>'
                + '<div id="ref-litro-'+i+'" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:14px;color:var(--text-dim);font-weight:600">'+_ltV+'</div></div>'
-               + '<div class="meta-item"><label>Costo sugerido por litro</label>'
+               + '<div class="meta-item"><label>Costo sugerido por litro '+_MXN+'</label>'
                + '<div id="ref-precio-carta-'+i+'" style="background:var(--surface);border:1px solid var(--accent);border-radius:6px;padding:8px 12px;font-size:15px;color:var(--accent);font-weight:700">'+_csV+'</div></div>';
        } else if (esRefrescoCerv) {
-           innerHtml = '<div class="meta-item"><label>Costo por pieza</label>'
-               + '<div id="ref-pieza-'+i+'" style="background:var(--surface);border:1px solid var(--green-dim);border-radius:6px;padding:8px 12px;font-size:14px;color:var(--green);font-weight:600">'+(_cp ? '$ '+_cp.toFixed(2) : '—')+'</div></div>'
-               + '<div class="meta-item"><label>Costo por onza</label>'
+           innerHtml = '<div class="meta-item"><label>Costo por pieza '+_MXN+'</label>'
+               + '<div id="ref-pieza-'+i+'" style="background:var(--surface);border:1px solid var(--green-dim);border-radius:6px;padding:8px 12px;font-size:14px;color:var(--green);font-weight:600">'+fmtMXN(_cp)+'</div></div>'
+               + '<div class="meta-item"><label>Costo por onza '+_MXN+'</label>'
                + '<div id="ref-onza-'+i+'" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:14px;color:var(--accent);font-weight:600">'+_ozV+'</div></div>'
-               + '<div class="meta-item"><label>Costo por litro</label>'
+               + '<div class="meta-item"><label>Costo por litro '+_MXN+'</label>'
                + '<div id="ref-litro-'+i+'" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:14px;color:var(--text-dim);font-weight:600">'+_ltV+'</div></div>';
        } else if (esAbarrote) {
            const _um      = (p.umCosto || 'KG').toUpperCase();
@@ -1225,39 +1272,18 @@
            const _umCont  = (p.umContenido || 'G').toUpperCase();
            const _esPieza = ['PZA','CARGA','PORCION'].includes(_umCont);
 
-           // Labels inteligentes según unidad de costo calculada
-           const _labelUm = {
-               LT: 'Costo por litro', ML: 'Costo por ml',
-               KG: 'Costo por kg',   G:  'Costo por gramo',
-               PZA: 'Costo por pieza', OZ: 'Costo por oz'
-           }[_um] || ('Costo / '+_um);
+           // Costo en unidad grande ($/KG o $/LT) y pequeña ($/GR o $/ML)
+           const _cuBig   = ['ML','G'].includes(_um) ? _cu * 1000 : _cu;
+           const _cuSmall = ['LT','KG'].includes(_um) ? _cu / 1000 : _cu;
 
-           // Tercer display: referencia cruzada útil
-           // $/LT → también $/100ml | $/KG → también $/100g
-           // $/ML → también $/LT    | $/G  → también $/KG
-           const _label3  = _um==='LT' ? 'Costo / 100 ml'
-               : _um==='KG' ? 'Costo / 100 g'
-               : _um==='ML' ? 'Costo / litro'
-               : _um==='G'  ? 'Costo / kg'
-               : '';
-           const _cuSmall = _um==='LT' ? (_cu/10).toFixed(4)
-               : _um==='KG' ? (_cu/10).toFixed(4)
-               : _um==='ML' ? (_cu*1000).toFixed(2)
-               : _um==='G'  ? (_cu*1000).toFixed(2)
-               : '';
-
-           // Si es por pieza no mostrar "pieza" dos veces
-           const _showPiezaRow = !_esPieza;
-           const _labelPieza = 'Costo por pieza';
-
-           innerHtml = (_showPiezaRow
-               ? '<div class="meta-item"><label>'+_labelPieza+'</label>'
-                 + '<div id="ref-pieza-'+i+'" style="background:var(--surface);border:1px solid var(--green-dim);border-radius:6px;padding:8px 12px;font-size:14px;color:var(--green);font-weight:600">'+(_cp ? '$ '+_cp.toFixed(2) : '—')+'</div></div>'
+           innerHtml = (!_esPieza
+               ? '<div class="meta-item"><label>Costo por pieza '+_MXN+'</label>'
+                 + '<div id="ref-pieza-'+i+'" style="background:var(--surface);border:1px solid var(--green-dim);border-radius:6px;padding:8px 12px;font-size:14px;color:var(--green);font-weight:600">'+fmtMXN(_cp)+'</div></div>'
                : '')
-               + '<div class="meta-item"><label>'+_labelUm+' (auto)</label>'
-               + '<div id="ref-costoum-'+i+'" style="background:var(--surface);border:1px solid var(--accent);border-radius:6px;padding:8px 12px;font-size:14px;color:var(--accent);font-weight:700">'+(_cu ? '$ '+_cu.toFixed(2) : '—')+'</div></div>'
-               + (_cuSmall ? '<div class="meta-item"><label>'+_label3+'</label>'
-               + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:13px;color:var(--text-dim);font-weight:600">'+(_cu ? '$ '+_cuSmall : '—')+'</div></div>' : '');
+               + (!_esPieza ? '<div class="meta-item"><label>Costo por KG/LT '+_MXN+'</label>'
+               + '<div id="ref-costoum-'+i+'" style="background:var(--surface);border:1px solid var(--accent);border-radius:6px;padding:8px 12px;font-size:14px;color:var(--accent);font-weight:700">'+fmtMXN(_cuBig)+'</div></div>' : '')
+               + (!_esPieza ? '<div class="meta-item"><label>Costo por ML/GR '+_MXN+'</label>'
+               + '<div id="ref-costomlgr-'+i+'" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:13px;color:var(--text-dim);font-weight:600">'+fmtMXN(_cuSmall, 3)+'</div></div>' : '');
        } else {
            innerHtml = `<div class="meta-item">
                <label>Rendimiento</label>
@@ -1273,7 +1299,7 @@
                </select>
            </div>
            <div class="meta-item">
-               <label id="lbl-costoum-${i}">Costo / ${p.umRendimiento||'OZ'} (auto)</label>
+               <label id="lbl-costoum-${i}">Costo / ${p.umRendimiento||'OZ'} (auto) ${_MXN}</label>
                <div id="costo-um-${i}" style="background:var(--surface);border:1px solid var(--green-dim);border-radius:6px;padding:8px 12px;font-size:14px;color:var(--green);font-weight:600">
                    ${(()=>{ const c = calcCostoPorUm(p.costoUnitario, p.umCosto||'LT', p.umRendimiento||'OZ'); return c ? '$'+c : '—'; })()}
                </div>
@@ -1401,21 +1427,25 @@
            <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--green);margin-bottom:8px">Precio carta (dato del negocio)</div>
            <div class="meta-grid" style="grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
                <div class="meta-item">
-                   <label>${tieneCopa ? 'Precio copa $' : 'Precio unitario $'}</label>
+                   <label>${tieneCopa ? 'Precio copa' : 'Precio unitario'} <span style="font-size:9px;letter-spacing:1px;color:var(--text-muted);font-weight:400;margin-left:4px">MXN</span></label>
                    <div style="display:flex;align-items:center;gap:4px">
                        <span style="color:var(--green);font-weight:600">$</span>
-                       <input type="number" value="${p.precioCarta||''}" placeholder="0.00" min="0" step="0.50"
-                           oninput="updPres(${i},'precioCarta',this.value)"
+                       <input type="text" inputmode="decimal" value="${fmtPrecio(p.precioCarta)}" placeholder="0.00"
+                           oninput="inputCurrency(this,${i},'precioCarta')"
+                           onfocus="focusCurrency(this)"
+                           onblur="blurCurrency(this,${i},'precioCarta')"
                            style="border-color:var(--green-dim);color:var(--green)">
                    </div>
                </div>
                ${tieneCopa ? `
                <div class="meta-item">
-                   <label>Precio botella $</label>
+                   <label>Precio botella <span style="font-size:9px;letter-spacing:1px;color:var(--text-muted);font-weight:400;margin-left:4px">MXN</span></label>
                    <div style="display:flex;align-items:center;gap:4px">
                        <span style="color:var(--green);font-weight:600">$</span>
-                       <input type="number" value="${p.precioCartaBot||''}" placeholder="0.00" min="0" step="0.50"
-                           oninput="updPres(${i},'precioCartaBot',this.value)"
+                       <input type="text" inputmode="decimal" value="${fmtPrecio(p.precioCartaBot)}" placeholder="0.00"
+                           oninput="inputCurrency(this,${i},'precioCartaBot')"
+                           onfocus="focusCurrency(this)"
+                           onblur="blurCurrency(this,${i},'precioCartaBot')"
                            style="border-color:var(--green-dim);color:var(--green)">
                    </div>
                </div>` : '<div class="meta-item"></div>'}
@@ -1521,7 +1551,7 @@
                    <!-- FILA 1: Contenido / Peso compra · Unidad -->
                    <div class="mg-2">
                        <div class="meta-item">
-                           <label>${esCarne ? 'Peso de compra' : esBarril ? 'Contenido por vaso/jarra' : esAbarrote ? 'Contenido del producto' : esRefrescoCerv ? 'Contenido por pieza' : 'Contenido neto'}</label>
+                           <label>${esCarne ? 'Peso de compra' : esBarril ? 'Contenido por vaso/jarra' : esAbarrote ? 'Contenido por pieza' : esRefrescoCerv ? 'Contenido por pieza' : 'Contenido neto'}</label>
                            <input type="number" value="${p.contNeto}" placeholder="${esCarne?'1000':esAbarrote?'500':'700'}"
                                oninput="updPres(${i},'contNeto',this.value)">
                        </div>
@@ -1535,16 +1565,35 @@
                        </div>
                    </div>
 
+                   <!-- Masa drenada (solo abarrotes) -->
+                   ${esAbarrote ? `<div class="mg-2">
+                       <div class="meta-item">
+                           <label>Masa drenada</label>
+                           <input type="number" value="${p.masaDrenada||''}" placeholder="0"
+                               oninput="updPres(${i},'masaDrenada',this.value)">
+                       </div>
+                       <div class="meta-item">
+                           <label>Unidad</label>
+                           <select onchange="updPres(${i},'umMasaDrenada',this.value);renderPresentaciones()">
+                               ${['G','KG','ML','LT'].map(u =>
+                                   `<option value="${u}" ${(p.umMasaDrenada||'G')===u?'selected':''}>${u}</option>`
+                               ).join('')}
+                           </select>
+                       </div>
+                   </div>` : ''}
+
 
                    <!-- Precio de compra -->
                    <div class="mg-1">
                        <div class="meta-item">
-                           <label>Precio de compra</label>
+                           <label>Precio de compra <span style="font-size:9px;letter-spacing:1px;color:var(--text-muted);font-weight:400;margin-left:4px">MXN</span></label>
                            <div style="display:flex;align-items:center;gap:4px">
                                <span style="color:var(--accent);font-weight:600;font-size:14px">$</span>
-                               <input type="number" value="${p.precio||''}" placeholder="0.00"
+                               <input type="text" inputmode="decimal" value="${fmtPrecio(p.precio)}" placeholder="0.00"
                                    style="color:var(--accent);border-color:var(--accent-dim)"
-                                   oninput="updPres(${i},'precio',this.value)">
+                                   oninput="inputPrecioRaw(this,${i})"
+                                   onfocus="focusPrecioInput(this)"
+                                   onblur="blurPrecioInput(this,${i})">
                            </div>
                        </div>
                    </div>
@@ -1570,47 +1619,42 @@
    
 
 
-                   <!-- FILA 4: Costo unitario · UM costo · Incluye impuesto -->
-                   <div class="mg-3">
+                   <!-- FILA 4: Costo unitario · UM costo (solo no-abarrotes) -->
+                   ${!esAbarrote ? `<div class="mg-3">
                        ${esBarril ? `
                        <div class="meta-item">
-                           <label>Precio sugerido por vaso/jarra</label>
+                           <label>Precio sugerido por vaso/jarra ${_MXN}</label>
                            <div id="ref-precio-vaso-${i}" style="background:var(--surface);
                                border:1px solid var(--accent);border-radius:6px;
                                padding:8px 12px;font-size:15px;color:var(--accent);font-weight:700">
                                ${(()=>{
                                    const cp = parseFloat(p.costoPieza)||0;
                                    const fp = parseFloat(p.factorPieza)||2.0;
-                                   return cp ? '$ '+(cp*fp).toFixed(2) : '\u2014';
+                                   return fmtMXN(cp * fp);
                                })()}
                            </div>
                        </div>` : esRefrescoCerv ? `
                        <div class="meta-item">
-                           <label>Precio sugerido / carta</label>
+                           <label>Precio sugerido / carta ${_MXN}</label>
                            <div id="ref-precio-carta-${i}" style="background:var(--surface);
                                border:1px solid var(--accent);border-radius:6px;
                                padding:8px 12px;font-size:15px;color:var(--accent);font-weight:700">
                                ${(()=>{
                                    const cp = parseFloat(p.costoPieza)||0;
                                    const fp = parseFloat(p.factorPieza)||2.0;
-                                   return cp ? '$ '+(cp*fp).toFixed(2) : '\u2014';
+                                   return fmtMXN(cp * fp);
                                })()}
-                           </div>
-                       </div>` : esAbarrote ? `
-                       <div class="meta-item">
-                           <label>Costo unitario (auto)</label>
-                           <div id="ref-cu-${i}" style="background:var(--surface);border:1px solid var(--accent);
-                               border-radius:6px;padding:8px 12px;font-size:14px;color:var(--accent);font-weight:700">
-                               ${parseFloat(p.costoUnitario) ? '$ '+(+p.costoUnitario).toFixed(2) : '\u2014'}
                            </div>
                        </div>` : `
                        <div class="meta-item">
-                           <label>Costo unitario</label>
+                           <label>Costo unitario <span style="font-size:9px;letter-spacing:1px;color:var(--text-muted);font-weight:400;margin-left:4px">MXN</span></label>
                            <div style="display:flex;align-items:center;gap:4px">
                                <span style="color:var(--accent);font-weight:600;font-size:14px">$</span>
-                               <input type="number" value="${p.costoUnitario||''}" placeholder="0.00"
+                               <input type="text" inputmode="decimal" value="${fmtPrecio(p.costoUnitario)}" placeholder="0.00"
                                    style="color:var(--accent)"
-                                   oninput="updPres(${i},'costoUnitario',this.value)">
+                                   oninput="inputCurrency(this,${i},'costoUnitario')"
+                                   onfocus="focusCurrency(this)"
+                                   onblur="blurCurrency(this,${i},'costoUnitario')">
                            </div>
                        </div>`}
                        ${esRefrescoCerv ? `
@@ -1624,13 +1668,6 @@
                                        background:rgba(245,200,66,.06);border-color:rgba(245,200,66,.2)"
                                    oninput="updPres(${i},'factorPieza',this.value)">
                            </div>
-                       </div>` : esAbarrote ? `
-                       <div class="meta-item">
-                           <label>UM costo (auto)</label>
-                           <div id="ref-umcosto-${i}" style="background:var(--surface);border:1px solid var(--border);
-                               border-radius:6px;padding:9px 12px;font-size:14px;font-weight:600;color:var(--text-dim)">
-                               ${p.umCosto || '—'}
-                           </div>
                        </div>` : `
                        <div class="meta-item">
                            <label>UM costo</label>
@@ -1640,7 +1677,7 @@
                                ).join('')}
                            </select>
                        </div>`}
-                   </div>
+                   </div>` : ''}
    
 
                    <!-- FILA 5: Peso botella (solo destilados/vinos) -->

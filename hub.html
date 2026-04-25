@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>etaax – Panel de acceso</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:     #0a0908;
+  --s1:     #141210;
+  --s2:     #1e1c19;
+  --b1:     #2a2825;
+  --b2:     #3a3835;
+  --green:  #3dbe7a;
+  --green2: #2a9960;
+  --greend: #1a5c3a;
+  --gold:   #f5c842;
+  --goldd:  rgba(245,200,66,0.12);
+  --text:   #f0ece4;
+  --muted:  #7a7570;
+  --dim:    #4a4844;
+  --salmon: #c87a6a;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden;}
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px;}
+
+/* GRID BG */
+.hub-bg{
+  position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(var(--b1) 1px, transparent 1px),linear-gradient(90deg, var(--b1) 1px, transparent 1px);
+  background-size:60px 60px;
+  opacity:0.2;
+  mask-image:radial-gradient(ellipse 100% 100% at 50% 0%, black 30%, transparent 80%);
+}
+.hub-glow{
+  position:fixed;top:-200px;left:50%;transform:translateX(-50%);
+  width:900px;height:600px;
+  background:radial-gradient(ellipse, rgba(61,190,122,0.07) 0%, transparent 65%);
+  pointer-events:none;z-index:0;
+}
+
+/* SHELL */
+.hub-shell{
+  position:relative;z-index:1;
+  min-height:100vh;
+  display:flex;flex-direction:column;
+  padding:0 24px 80px;
+}
+
+/* TOP BAR */
+.hub-topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:24px 0 0;
+  margin-bottom:80px;
+}
+.hub-back{
+  display:flex;align-items:center;gap:8px;
+  font-size:12px;color:var(--muted);text-decoration:none;
+  padding:6px 12px;border-radius:6px;border:1px solid transparent;
+  transition:all 0.2s;
+}
+.hub-back:hover{color:var(--text);border-color:var(--b2);background:var(--s2);}
+.hub-back-arrow{font-size:14px;transition:transform 0.2s;}
+.hub-back:hover .hub-back-arrow{transform:translateX(-2px);}
+
+.hub-user{
+  display:flex;align-items:center;gap:10px;
+  font-size:12px;color:var(--muted);
+}
+.hub-user-dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 2s ease infinite;}
+
+/* HERO */
+.hub-hero{
+  display:flex;flex-direction:column;align-items:center;
+  text-align:center;margin-bottom:72px;
+  animation:fadeUp 0.7s ease both;
+}
+.hub-eyebrow{
+  font-size:11px;letter-spacing:4px;text-transform:uppercase;
+  color:var(--muted);margin-bottom:16px;
+}
+.hub-title{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:clamp(40px,6vw,72px);
+  letter-spacing:2px;line-height:0.95;
+  color:var(--text);margin-bottom:12px;
+}
+.hub-title .g{color:var(--green);}
+.hub-subtitle{
+  font-size:14px;color:var(--dim);letter-spacing:1px;
+}
+
+/* GRID */
+.hub-grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  grid-template-rows:auto auto;
+  gap:16px;
+  width:100%;max-width:960px;
+  margin:0 auto;
+}
+
+/* CARDS */
+.hub-card{
+  position:relative;overflow:hidden;
+  background:var(--s1);
+  border:1px solid var(--b1);
+  border-radius:20px;
+  padding:36px;
+  text-decoration:none;
+  display:flex;flex-direction:column;gap:0;
+  transition:border-color 0.25s, transform 0.25s, box-shadow 0.25s;
+  animation:fadeUp 0.7s ease both;
+  cursor:pointer;
+}
+.hub-card:nth-child(1){animation-delay:0.1s;}
+.hub-card:nth-child(2){animation-delay:0.2s;}
+.hub-card:nth-child(3){animation-delay:0.3s;}
+.hub-card:nth-child(4){animation-delay:0.4s;}
+
+.hub-card:not(.disabled):hover{
+  border-color:var(--green);
+  transform:translateY(-4px);
+  box-shadow:0 24px 64px rgba(0,0,0,0.4), 0 0 0 1px rgba(61,190,122,0.15);
+}
+.hub-card.disabled{
+  opacity:0.42;
+  cursor:default;
+  pointer-events:none;
+}
+
+/* Card inner glow on hover */
+.hub-card::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 60% 50% at 50% 0%, rgba(61,190,122,0.06) 0%, transparent 70%);
+  opacity:0;transition:opacity 0.3s;
+  pointer-events:none;
+}
+.hub-card:not(.disabled):hover::before{opacity:1;}
+
+.card-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;}
+.card-icon{
+  width:52px;height:52px;border-radius:14px;
+  background:var(--s2);border:1px solid var(--b2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:24px;flex-shrink:0;
+}
+.card-status{
+  font-size:10px;letter-spacing:2px;text-transform:uppercase;
+  padding:4px 10px;border-radius:20px;
+  font-weight:600;margin-top:4px;
+}
+.status-active{background:var(--greend);color:var(--green);}
+.status-soon{background:var(--goldd);color:var(--gold);}
+
+.card-title{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:32px;letter-spacing:1px;
+  color:var(--text);margin-bottom:8px;line-height:1;
+}
+.card-desc{
+  font-size:13px;color:var(--muted);line-height:1.7;
+  margin-bottom:24px;flex:1;
+}
+.card-modules{
+  display:flex;flex-wrap:wrap;gap:6px;margin-bottom:28px;
+}
+.card-module-tag{
+  font-size:10px;color:var(--dim);
+  background:var(--s2);border:1px solid var(--b1);
+  padding:3px 10px;border-radius:20px;
+  letter-spacing:0.5px;
+}
+.card-footer{
+  display:flex;align-items:center;justify-content:space-between;
+  padding-top:20px;border-top:1px solid var(--b1);
+}
+.card-cta{
+  font-size:12px;font-weight:600;
+  color:var(--green);letter-spacing:0.5px;
+  display:flex;align-items:center;gap:6px;
+  transition:gap 0.2s;
+}
+.hub-card:not(.disabled):hover .card-cta{gap:10px;}
+.card-cta-disabled{font-size:12px;color:var(--dim);letter-spacing:0.5px;}
+.card-progress{
+  display:flex;align-items:center;gap:6px;
+  font-size:11px;color:var(--dim);
+}
+.progress-dot{width:6px;height:6px;border-radius:50%;background:var(--green);}
+.progress-dot.off{background:var(--b2);}
+
+/* FOOTER NOTE */
+.hub-footer{
+  text-align:center;margin-top:56px;
+  animation:fadeUp 0.7s 0.5s ease both;
+}
+.hub-footer-text{font-size:12px;color:var(--dim);}
+.hub-footer-text a{color:var(--muted);text-decoration:none;transition:color 0.2s;}
+.hub-footer-text a:hover{color:var(--text);}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:translateY(0);}}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.5;transform:scale(0.8);}}
+
+@media(max-width:720px){
+  .hub-grid{grid-template-columns:1fr;}
+  .hub-topbar{margin-bottom:48px;}
+  .hub-hero{margin-bottom:48px;}
+  .hub-card{padding:24px;}
+}
+</style>
+</head>
+<body>
+
+<div class="hub-bg"></div>
+<div class="hub-glow"></div>
+
+<div class="hub-shell">
+
+  <!-- TOP BAR -->
+  <div class="hub-topbar">
+    <a href="index.html" class="hub-back">
+      <span class="hub-back-arrow">←</span>
+      <span>Inicio</span>
+    </a>
+    <div class="hub-user">
+      <div class="hub-user-dot"></div>
+      <span>Modo local</span>
+    </div>
+  </div>
+
+  <!-- HERO -->
+  <div class="hub-hero">
+    <div class="hub-eyebrow">Panel de acceso</div>
+    <div class="hub-title">
+      Selecciona un<br><span class="g">módulo</span>
+    </div>
+    <div class="hub-subtitle">Sistema de gestión a&b · etaax</div>
+  </div>
+
+  <!-- GRID DE MÓDULOS -->
+  <div class="hub-grid">
+
+    <!-- RECETAS — ACTIVO -->
+    <a href="recetas/insumos.html" class="hub-card">
+      <div class="card-header">
+        <div class="card-icon">🗄️</div>
+        <span class="card-status status-active">Activo</span>
+      </div>
+      <div class="card-title">Recetas</div>
+      <div class="card-desc">Escandallos, costeo automático, catálogo de insumos e inventarios de producción. Tu operación gastronómica completa.</div>
+      <div class="card-modules">
+        <span class="card-module-tag">📋 Escandallo</span>
+        <span class="card-module-tag">🗄️ Insumos</span>
+        <span class="card-module-tag">📦 Inventarios</span>
+      </div>
+      <div class="card-footer">
+        <span class="card-cta">Abrir módulo →</span>
+        <div class="card-progress">
+          <div class="progress-dot"></div>
+          <div class="progress-dot"></div>
+          <div class="progress-dot"></div>
+          <span>3 herramientas</span>
+        </div>
+      </div>
+    </a>
+
+    <!-- FINANCIERO — PRÓXIMAMENTE -->
+    <div class="hub-card disabled">
+      <div class="card-header">
+        <div class="card-icon">📊</div>
+        <span class="card-status status-soon">Próximamente</span>
+      </div>
+      <div class="card-title">Financiero</div>
+      <div class="card-desc">Ventas, costos, márgenes y análisis de rentabilidad. Conecta tu operación con tus resultados económicos.</div>
+      <div class="card-modules">
+        <span class="card-module-tag">💰 Ventas</span>
+        <span class="card-module-tag">📈 Márgenes</span>
+        <span class="card-module-tag">🧾 Reportes</span>
+      </div>
+      <div class="card-footer">
+        <span class="card-cta-disabled">En desarrollo</span>
+        <div class="card-progress">
+          <div class="progress-dot off"></div>
+          <div class="progress-dot off"></div>
+          <div class="progress-dot off"></div>
+          <span>3 herramientas</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADMINISTRATIVO — PRÓXIMAMENTE -->
+    <div class="hub-card disabled">
+      <div class="card-header">
+        <div class="card-icon">🏢</div>
+        <span class="card-status status-soon">Próximamente</span>
+      </div>
+      <div class="card-title">Administrativo</div>
+      <div class="card-desc">Proveedores, recepciones, check-points de entrada de insumos y control operativo del día a día.</div>
+      <div class="card-modules">
+        <span class="card-module-tag">🚚 Recepciones</span>
+        <span class="card-module-tag">🏪 Proveedores</span>
+        <span class="card-module-tag">✅ Checklists</span>
+      </div>
+      <div class="card-footer">
+        <span class="card-cta-disabled">En desarrollo</span>
+        <div class="card-progress">
+          <div class="progress-dot off"></div>
+          <div class="progress-dot off"></div>
+          <div class="progress-dot off"></div>
+          <span>3 herramientas</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONSULTORÍA — PRÓXIMAMENTE -->
+    <div class="hub-card disabled">
+      <div class="card-header">
+        <div class="card-icon">📋</div>
+        <span class="card-status status-soon">Próximamente</span>
+      </div>
+      <div class="card-title">Consultoría</div>
+      <div class="card-desc">Reportes mensuales, análisis ejecutivos y recomendaciones estratégicas para la toma de decisiones.</div>
+      <div class="card-modules">
+        <span class="card-module-tag">📄 Reporte mensual</span>
+        <span class="card-module-tag">🎯 KPIs</span>
+        <span class="card-module-tag">📌 Estrategia</span>
+      </div>
+      <div class="card-footer">
+        <span class="card-cta-disabled">En desarrollo</span>
+        <div class="card-progress">
+          <div class="progress-dot off"></div>
+          <div class="progress-dot off"></div>
+          <div class="progress-dot off"></div>
+          <span>3 herramientas</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- FOOTER NOTE -->
+  <div class="hub-footer">
+    <p class="hub-footer-text">
+      <a href="index.html">etaax.com</a> · Desarrollado por <a href="index.html#nosotros">EGMx Consultoría Estratégica a&b</a>
+    </p>
+  </div>
+
+</div>
+</body>
+</html>

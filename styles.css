@@ -699,6 +699,22 @@ textarea:focus {
     min-height: 100vh;
 }
 
+/* ── HEADER SUPERIOR ── */
+.top-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 48px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    flex-shrink: 0;
+}
+
 .nav {
     width: 200px;
     background: var(--surface);
@@ -709,13 +725,16 @@ textarea:focus {
     transition: width 0.2s ease;
     overflow: hidden;
     position: fixed;
-    top: 0;
+    top: 48px;
     left: 0;
-    height: 100vh;
+    height: calc(100vh - 48px);
     z-index: 100;
 }
 
-.nav.cerrado { width: 50px; }
+.nav.cerrado {
+    width: 52px;
+    overflow: visible; /* permite que los tooltips salgan fuera del nav */
+}
 
 .nav.cerrado .nav-brand,
 .nav.cerrado .nav-section-label,
@@ -723,9 +742,52 @@ textarea:focus {
     display: none;
 }
 
+.nav.cerrado .nav-top {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 4px;
+    gap: 6px;
+    min-height: auto;
+}
+
+.nav.cerrado .nav-top-actions {
+    flex-direction: column;
+    gap: 6px;
+}
+
 .nav.cerrado .nav-link {
     justify-content: center;
     padding: 8px 0;
+}
+
+/* Tooltip: cualquier elemento con data-tooltip dentro del nav colapsado */
+.nav.cerrado [data-tooltip] {
+    position: relative;
+}
+.nav.cerrado [data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    white-space: nowrap;
+    z-index: 300;
+    pointer-events: none;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+.nav.cerrado [data-tooltip]:hover::after {
+    opacity: 1;
 }
 
 .nav.cerrado .nav-icon { width: auto; font-size: 18px; }
@@ -733,11 +795,11 @@ textarea:focus {
 
 .nav-top {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 14px;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 14px 14px 10px;
     border-bottom: 1px solid var(--border);
-    min-height: 70px;
+    gap: 10px;
 }
 
 .nav-brand {
@@ -769,17 +831,26 @@ textarea:focus {
     background: transparent;
     border: 1px solid var(--border);
     color: var(--text-muted);
-    width: 28px;
+    min-width: 28px;
     height: 28px;
+    padding: 0 8px;
     border-radius: 6px;
     cursor: pointer;
     font-size: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 6px;
     flex-shrink: 0;
     transition: all 0.2s;
     font-family: inherit;
+}
+
+/* En colapsado vuelve a tamaño fijo de ícono */
+.nav.cerrado .nav-toggle {
+    width: 28px;
+    min-width: 28px;
+    padding: 0;
 }
 
 .nav-toggle:hover {
@@ -787,8 +858,66 @@ textarea:focus {
     color: var(--accent);
 }
 
+.nav-top-actions {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+}
+
+.nav-home-btn {
+    text-decoration: none;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.nav-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.nav-toggle-text {
+    font-size: 11px;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.nav.cerrado .nav-toggle-text {
+    display: none;
+}
+
 .nav-section {
     padding: 12px 8px 4px;
+}
+
+.nav-footer {
+    margin-top: auto;
+    padding: 12px 8px 16px;
+    border-top: 1px solid var(--border);
+}
+
+.nav-link-disabled {
+    opacity: 0.38;
+    pointer-events: none;
+    cursor: default;
+}
+
+.nav-link-hub {
+    color: var(--text-dim) !important;
+}
+
+.nav-link-hub:hover {
+    color: var(--text-primary) !important;
+    background: rgba(255,255,255,0.05) !important;
+}
+
+.nav.cerrado .nav-footer {
+    padding: 12px 0 16px;
 }
 
 .nav-section-label {
@@ -842,6 +971,7 @@ textarea:focus {
 /* ── MAIN CONTENT ── */
 .main-content {
     margin-left: 200px;
+    margin-top: 48px;
     flex: 1;
     padding: 32px 16px;
     transition: margin-left 0.2s ease;

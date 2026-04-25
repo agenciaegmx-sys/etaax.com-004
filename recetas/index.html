@@ -1,0 +1,2706 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETAAX - Escandallo</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+<header class="top-bar">
+    <svg width="108" height="26" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
+        <path d="M14.5 28H37C35.5 23 31.5 20 25.5 20C19.5 20 16 23 14.5 28Z" fill="#1a1916"/>
+        <circle cx="45" cy="11" r="6" fill="#f5c842"/>
+        <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
+        <path d="M78 41C78 34.5 83.5 30.5 92.5 29.5L104 28.5V27.5C104 23.5 101.5 21 97 21C93 21 90 23 89 26.5L80.5 24C82.5 17.5 89 13 97 13C107.5 13 113 18.5 113 28.5V54.5H104V51C102 53.5 98.5 55 94 55C85.5 55 78 50.5 78 41Z" fill="#3dbe7a"/>
+        <path d="M104 37L95.5 38C92.5 38.5 90.5 40 90.5 42.5C90.5 45 92.5 46.5 95.5 46.5C101 46.5 104 43.5 104 39V37Z" fill="#1a1916"/>
+        <path d="M126 41C126 34.5 131.5 30.5 140.5 29.5L152 28.5V27.5C152 23.5 149.5 21 145 21C141 21 138 23 137 26.5L128.5 24C130.5 17.5 137 13 145 13C155.5 13 161 18.5 161 28.5V54.5H152V51C150 53.5 146.5 55 142 55C133.5 55 126 50.5 126 41Z" fill="#3dbe7a"/>
+        <path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/>
+        <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+    </svg>
+</header>
+<div class="app-shell">
+
+    <!-- NAV -->
+    <nav class="nav" id="nav">
+        <div class="nav-top">
+            <div class="nav-brand">
+                <span class="nav-brand-sub">Insumos y Recetas</span>
+            </div>
+            <div class="nav-top-actions">
+                <a href="../hub.html" class="nav-toggle nav-home-btn" data-tooltip="Home">🏠<span class="nav-toggle-text">Home</span></a>
+                <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">◀<span class="nav-toggle-text" id="navToggleTxt">Ocultar</span></button>
+            </div>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Catálogo de</div>
+            <a href="#" class="nav-link active" data-tooltip="Recetas" onclick="abrirMenuReceta();return false"><span class="nav-icon">📋</span><span class="nav-text">Recetas</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Catálogo de</div>
+            <a href="insumos.html" class="nav-link" data-tooltip="Insumos"><span class="nav-icon">🗄️</span><span class="nav-text">Insumos</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Control de</div>
+            <a href="inventarios.html" class="nav-link" data-tooltip="Inventarios"><span class="nav-icon">📦</span><span class="nav-text">Inventarios</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Sistema de</div>
+            <a href="#" class="nav-link nav-link-disabled" data-tooltip="Requisiciones"><span class="nav-icon">📝</span><span class="nav-text">Requisiciones</span></a>
+        </div>
+    </nav>
+
+    <main class="main-content" id="mainContent">
+
+        <div class="header">
+            <div style="display:flex;align-items:center;gap:12px">
+                <button class="btn-vista" id="btnVolver" onclick="volverAlMenu()"
+                    style="color:var(--text-muted)">← Volver</button>
+                <div>
+                    <div id="brandTitle" style="font-family:inherit;font-size:36px;
+                        letter-spacing:2px;line-height:1;color:var(--text);
+                        border-bottom:2px solid var(--green);padding-bottom:2px;
+                        display:inline-block">Escandallo</div>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+                <button class="btn-vista" id="btnUndo" onclick="undoReceta()"
+                    title="Deshacer (Ctrl+Z)" style="padding:8px 12px;opacity:0.4" disabled>↩</button>
+                <button class="btn-vista" id="btnRedo" onclick="redoReceta()"
+                    title="Rehacer (Ctrl+Y)" style="padding:8px 12px;opacity:0.4" disabled>↪</button>
+                <button class="btn-vista" onclick="guardarReceta()"
+                    style="color:var(--green);border-color:var(--green)">💾 Guardar</button>
+                <button class="btn-vista" onclick="eliminarRecetaActual()"
+                    style="color:var(--red);border-color:var(--red)">🗑️ Eliminar</button>
+                <button class="btn-vista" id="btnImprimirHeader" onclick="abrirMenuImpresion(null)"
+                    style="color:var(--text-muted);border-color:var(--border);display:none">🖨️ Imprimir</button>
+                <button class="btn-vista" id="btnConvertir" onclick="mostrarModalConvertir()"
+                    style="display:none;color:var(--accent);border-color:var(--accent)">⚡ Convertir a...</button>
+                <button class="btn-vista" id="btnVista" onclick="cambiarVista()">VISTA OPERATIVA</button>
+                <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)"
+                    onclick="abrirModalNuevaReceta()">+ Nueva receta</button>
+            </div>
+        </div>
+
+        <div class="wrap" id="editorWrap" style="display:none">
+
+            <!-- DATOS DE LA RECETA — dinámico por tipo -->
+            <div class="card" id="cardDatosReceta">
+                <div class="card-header">
+                    <div style="display:flex;align-items:center;gap:10px">
+                        <span id="recetaTipoIcon" style="font-size:20px">📋</span>
+                        <h2 id="cardDatosTitulo">Datos de la Receta</h2>
+                    </div>
+                    <span class="pill pill-amber" id="statusPill" onclick="toggleStatus()" style="cursor:pointer">Activa</span>
+                </div>
+                <div class="card-body" id="cardDatosBody">
+                    <!-- Se llena dinámicamente por renderFormularioPorTipo() -->
+                </div>
+            </div>
+
+            <!-- INGREDIENTES -->
+            <div class="card">
+                <div class="card-header"><h2>Ingredientes</h2></div>
+                <div class="card-body">
+                    <div class="tabla-wrap">
+                        <table id="tablaIngredientes">
+                            <thead>
+                                <tr>
+                                    <th>#</th><th>Ingrediente</th><th>Descripción</th>
+                                    <th>Cant.</th><th>Unidad</th><th>Costo / kg - lt - pz ($)</th>
+                                    <th>Costo U.</th><th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbodyIngredientes"></tbody>
+                        </table>
+                    </div>
+                    <button class="btn-add" onclick="agregarIngrediente()">+ Agregar ingrediente</button>
+
+                    <!-- Barra inferior: Rendimiento Bruto + Costo Total -->
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
+                        <!-- Rendimiento bruto auto (solo visible en sub-recetas) -->
+                        <div id="barraRendBruto" style="display:none;
+                            background:var(--surface2);border:1px solid var(--border);
+                            border-radius:8px;padding:12px 16px;
+                            display:none;align-items:center;justify-content:space-between;gap:12px">
+                            <span style="font-size:10px;letter-spacing:2px;text-transform:uppercase;
+                                color:var(--text-dim);flex-shrink:0">Rendimiento en peso bruto</span>
+                            <div style="display:flex;align-items:center;gap:8px">
+                                <span style="font-family:inherit;font-size:22px;
+                                    color:var(--accent)" id="barraRendBrutoVal">0.000</span>
+                                <select id="unidadRendBruto" onchange="calcSubRecetaCostos()"
+                                    style="background:var(--surface);border:1px solid var(--border);
+                                    color:var(--accent);padding:4px 8px;border-radius:6px;
+                                    font-size:13px;font-weight:600;outline:none;cursor:pointer">
+                                    <option value="KG">KG</option>
+                                    <option value="LT">LT</option>
+                                    <option value="G">G</option>
+                                    <option value="ML">ML</option>
+                                </select>
+                            </div>
+                        </div>
+                        <!-- Costo total siempre visible -->
+                        <div id="barraCostoTotal" class="costo-total-bar" style="margin:0">
+                            <span class="costo-total-label" id="barraCostoLabel">Costo total de la receta</span>
+                            <span class="costo-total-val" id="costoTotalDisplay">$0.00</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PROCEDIMIENTO + MEDIA -->
+            <div class="card" id="cardProcedimiento">
+                <div class="card-header"><h2>Procedimiento & Media</h2></div>
+                <div class="card-body">
+                    <div class="proc-media-grid">
+                        <div class="proc-col">
+                            <label class="proc-label">Procedimiento</label>
+                            <textarea id="procedimiento" placeholder="Describe el proceso paso a paso..."></textarea>
+                        </div>
+                        <div class="media-col">
+                            <label class="proc-label">Fotos del platillo/bebida</label>
+
+                            <!-- Carrusel de fotos -->
+                            <div id="fotoCarrusel" style="position:relative;width:100%;aspect-ratio:4/3;
+                                background:var(--surface2);border-radius:8px;overflow:hidden;
+                                border:1px solid var(--border)">
+
+                                <!-- Placeholder -->
+                                <div id="fotoPlaceholder" style="position:absolute;inset:0;display:flex;
+                                    flex-direction:column;align-items:center;justify-content:center;
+                                    cursor:pointer;gap:8px" onclick="document.getElementById('fotoInput').click()">
+                                    <span style="font-size:28px">📷</span>
+                                    <span style="font-size:12px;color:var(--text-dim)">Subir fotos</span>
+                                </div>
+
+                                <!-- Imagen activa -->
+                                <img id="fotoImg" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover">
+
+                                <!-- Flechas de navegación -->
+                                <button id="fotoLeft" onclick="navegarFoto(-1)"
+                                    style="display:none;position:absolute;left:6px;top:50%;transform:translateY(-50%);
+                                    background:rgba(0,0,0,0.5);border:none;color:#fff;border-radius:50%;
+                                    width:32px;height:32px;cursor:pointer;font-size:16px;line-height:1">‹</button>
+                                <button id="fotoRight" onclick="navegarFoto(1)"
+                                    style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);
+                                    background:rgba(0,0,0,0.5);border:none;color:#fff;border-radius:50%;
+                                    width:32px;height:32px;cursor:pointer;font-size:16px;line-height:1">›</button>
+
+                                <!-- Contador -->
+                                <div id="fotoContador" style="display:none;position:absolute;bottom:8px;right:10px;
+                                    background:rgba(0,0,0,0.5);color:#fff;font-size:10px;
+                                    border-radius:10px;padding:2px 8px"></div>
+
+                                <!-- Botón eliminar foto actual -->
+                                <button id="fotoBtnEliminar" onclick="eliminarFotoActual()"
+                                    style="display:none;position:absolute;top:8px;right:8px;
+                                    background:rgba(220,60,40,0.8);border:none;color:#fff;
+                                    border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:12px">✕</button>
+                            </div>
+
+                            <!-- Miniaturas + agregar -->
+                            <div id="fotoMiniaturas" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"></div>
+
+                            <!-- Botón agregar más fotos -->
+                            <button onclick="document.getElementById('fotoInput').click()"
+                                style="margin-top:6px;background:none;border:1px dashed var(--border);
+                                border-radius:6px;padding:6px 14px;color:var(--text-dim);cursor:pointer;
+                                font-size:12px;font-family:DM Sans,sans-serif;width:100%">
+                                + Agregar foto
+                            </button>
+
+                            <input type="file" id="fotoInput" accept="image/*" multiple
+                                onchange="cargarFotos(this)" style="display:none">
+
+                            <label class="proc-label" style="margin-top:14px">Tutorial</label>
+                            <div class="video-wrap">
+                                <span class="video-icon">🔗</span>
+                                <input type="text" id="videoUrl" placeholder="https://youtube.com/...">
+                            </div>
+                            <a class="video-btn" id="videoBtn" href="#" target="_blank" style="display:none">▶ Ver tutorial</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RENDIMIENTO SUB-RECETA — solo visible para sub-alimentos/sub-bebidas -->
+            <div class="card" id="cardRendimientoSub" style="display:none">
+                <div class="card-header">
+                    <h2>Rendimiento</h2>
+                    <span class="pill pill-amber">Sub Receta</span>
+                </div>
+                <div class="card-body" id="cardRendimientoBody">
+                    <!-- Se llena por renderRendimientoSub() -->
+                </div>
+            </div>
+
+            <!-- AGREGAR COMO INSUMO — solo sub-recetas -->
+            <div class="card" id="cardAgregarInsumo" style="display:none">
+                <div class="card-body" style="padding:16px 20px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+                        <div>
+                            <div style="font-size:12px;font-weight:600;margin-bottom:3px">
+                                📦 Usar como insumo en otras recetas
+                            </div>
+                            <div style="font-size:11px;color:var(--text-dim)">
+                                Guarda esta sub receta como insumo de producción propia para usarla en el escandallo
+                            </div>
+                        </div>
+                        <button onclick="agregarSubRecetaComoInsumo()"
+                            style="background:var(--green);color:#0f0e0c;border:none;border-radius:8px;
+                            padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;
+                            font-family:inherit;white-space:nowrap;transition:opacity 0.2s"
+                            onmouseenter="this.style.opacity='0.85'" onmouseleave="this.style.opacity='1'">
+                            + Agregar como insumo
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- COSTEO — normal para recetas, especial para sub-recetas -->
+            <div class="card" id="seccionCostos">
+                <div class="card-header">
+                    <h2>Costeo</h2>
+                    <span class="pill pill-green">Automático</span>
+                </div>
+                <div class="card-body">
+
+                    <!-- Costeo normal (recetas) -->
+                    <div id="costeoNormal">
+                        <div class="costeo-grid">
+                            <div class="costeo-col col-sugerido">
+                                <div class="costeo-col-title">📐 Costeo Sugerido</div>
+                                <div class="costeo-row"><span class="costeo-label">Costo Bruto <span class="costeo-pct">30%</span></span><span class="costeo-val val-amber" id="s-costobruto">$0.00</span></div>
+                                <div class="costeo-row"><span class="costeo-label">Gasto Operativo <span class="costeo-pct">40%</span></span><span class="costeo-val val-white" id="s-gasto">$0.00</span></div>
+                                <div class="costeo-row"><span class="costeo-label">Utilidad Neta <span class="costeo-pct">30%</span></span><span class="costeo-val val-white" id="s-utilidad">$0.00</span></div>
+                                <div class="divider">precio</div>
+                                <div class="costeo-row"><span class="costeo-label">Precio de platillo <span class="costeo-pct">100%</span></span><span class="costeo-val val-white" id="s-platillo">$0.00</span></div>
+                                <div class="costeo-row"><span class="costeo-label">+ IVA <span class="costeo-pct">16%</span></span><span class="costeo-val val-white" id="s-iva">$0.00</span></div>
+                                <div class="costeo-row highlight"><span class="costeo-label destacado-label">Precio en Comedor <span class="costeo-pct">116%</span></span><span class="costeo-val val-amber" id="s-comedor">$0.00</span></div>
+                                <div class="costeo-row highlight" style="margin-top:6px"><span class="costeo-label destacado-label">Precio en Delivery <span class="costeo-pct">156%</span></span><span class="costeo-val val-amber" id="s-delivery">$0.00</span></div>
+                            </div>
+                            <div class="costeo-col col-aplicado">
+                                <div class="costeo-col-title">💳 Costeo Aplicado</div>
+                                <div class="precio-carta-wrap">
+                                    <label>Precio carta con IVA</label>
+                                    <div style="display:flex;align-items:center;gap:4px">
+                                        <span style="color:var(--accent);font-size:15px;font-weight:600">$</span>
+                                        <input type="number" id="precioEnCarta" placeholder="0.00" min="0" step="0.50"
+                                            oninput="calcularCosteos()"
+                                            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+                                    </div>
+                                </div>
+                                <div class="costeo-row"><span class="costeo-label">Precio sin IVA <span class="costeo-pct">÷ 1.16</span></span><span class="costeo-val val-white" id="a-siniva">$0.00</span></div>
+                                <div class="costeo-row"><span class="costeo-label">Costo Bruto <span class="costeo-pct" id="a-costobruto-pct">—%</span></span><span class="costeo-val val-white" id="a-costobruto-monto">$0.00</span></div>
+                                <div class="costeo-row"><span class="costeo-label">Gasto Operativo <span class="costeo-pct">40%</span></span><span class="costeo-val val-white" id="a-gasto">$0.00</span></div>
+                                <div class="costeo-row"><span class="costeo-label">Utilidad Neta <span class="costeo-pct" id="a-utilidad-pct">—%</span></span><span class="costeo-val val-white" id="a-utilidad-monto">$0.00</span></div>
+                                <div class="divider">precio final</div>
+                                <div class="costeo-row"><span class="costeo-label">IVA incluido <span class="costeo-pct">16%</span></span><span class="costeo-val val-white" id="a-iva">$0.00</span></div>
+                                <div class="costeo-row highlight highlight-green"><span class="costeo-label destacado-label-green">Precio en Comedor <span class="costeo-pct">= entrada</span></span><span class="costeo-val val-green" id="a-comedor">$0.00</span></div>
+                                <div class="costeo-row highlight highlight-green" style="margin-top:6px"><span class="costeo-label destacado-label-green">Precio en Delivery <span class="costeo-pct">+40%</span></span><span class="costeo-val val-green" id="a-delivery">$0.00</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<!-- ══ VISTA PRINCIPAL ESCANDALLO (pantalla completa) ════════ -->
+<div id="vistaMenuReceta" style="display:flex;
+    position:fixed;top:48px;right:0;bottom:0;left:200px;
+    background:var(--bg);flex-direction:column;z-index:50;
+    transition:left 0.2s ease">
+    <div style="flex:1;overflow-y:auto;padding:64px 16px 32px">
+        <div class="header">
+            <div class="brand">
+                <span class="brand-label">Catálogo de Recetas</span>
+                <span class="brand-title">Escandallos</span>
+            </div>
+            <div style="display:flex;flex-direction:column;justify-content:center;align-items:flex-end;gap:2px;opacity:0.45">
+                <div style="font-size:12px;font-style:italic;color:var(--text);text-align:right;line-height:1.4">
+                    Crea tus recetas y administra tu rentabilidad.
+                </div>
+                <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-muted)">
+                    by EGMx Consultoría Estratégica
+                </div>
+            </div>
+        </div>
+        <div style="max-width:660px;margin:0 auto">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
+                <button onclick="crearReceta('alimentos')" class="cat-btn" style="padding:22px 16px">
+                    <span style="font-size:34px">🍽️</span>
+                    <div class="cat-btn-title" style="font-size:15px">Receta Alimentos</div>
+                    <div class="cat-btn-desc">Platillos, entradas, postres, guarniciones...</div>
+                </button>
+                <button onclick="crearReceta('sub-alimentos')" class="cat-btn" style="padding:22px 16px">
+                    <span style="font-size:34px">🥣</span>
+                    <div class="cat-btn-title" style="font-size:15px">Sub Receta Alimentos</div>
+                    <div class="cat-btn-desc">Salsas, fondos, masas, bases, rellenos...</div>
+                </button>
+                <button onclick="crearReceta('bebidas')" class="cat-btn" style="padding:22px 16px">
+                    <span style="font-size:34px">🥃</span>
+                    <div class="cat-btn-title" style="font-size:15px">Receta Bebidas</div>
+                    <div class="cat-btn-desc">Cócteles, mocktails, bebidas de la carta...</div>
+                </button>
+                <button onclick="crearReceta('sub-bebidas')" class="cat-btn" style="padding:22px 16px">
+                    <span style="font-size:34px">🧃</span>
+                    <div class="cat-btn-title" style="font-size:15px">Sub Receta Bebidas</div>
+                    <div class="cat-btn-desc">Jarabes, shrubs, purés, mixes, infusiones...</div>
+                </button>
+            </div>
+            <div style="height:1px;background:var(--border);margin-bottom:18px"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+                <button onclick="verRecetas()" class="cat-btn" style="border-color:var(--green);padding:22px 16px">
+                    <span style="font-size:34px">📚</span>
+                    <div class="cat-btn-title" style="color:var(--green);font-size:15px">Ver recetas</div>
+                    <div class="cat-btn-desc">Consultar el recetario completo</div>
+                </button>
+                <button onclick="verCaratula()" class="cat-btn" style="border-color:var(--accent);padding:22px 16px">
+                    <span style="font-size:34px">📊</span>
+                    <div class="cat-btn-title" style="color:var(--accent);font-size:15px">Carátula de costos</div>
+                    <div class="cat-btn-desc">Resumen ejecutivo de costeo</div>
+                </button>
+            </div>
+            <div style="height:1px;background:var(--border);margin:18px 0"></div>
+            <button onclick="crearRecetaSimple()" class="cat-btn"
+                style="width:100%;padding:16px 20px;display:flex;align-items:center;gap:16px;
+                    text-align:left;border-color:var(--border)">
+                <span style="font-size:28px;flex-shrink:0">📝</span>
+                <div>
+                    <div class="cat-btn-title" style="font-size:14px;color:var(--text-muted)">Receta Simple</div>
+                    <div class="cat-btn-desc" style="margin-top:2px">
+                        Solo nombre, grupo e ingredientes — elige el tipo después</div>
+                </div>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ══ MODAL NUEVA RECETA — flotante, solo 4 tipos ══════════ -->
+<div class="modal-overlay" id="modalNuevaReceta"
+    onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal" style="max-width:560px;width:100%">
+        <div class="modal-header">
+            <h2>¿Qué tipo de receta?</h2>
+            <button class="modal-close"
+                onclick="document.getElementById('modalNuevaReceta').style.display='none'">✕</button>
+        </div>
+        <div class="modal-body" style="padding:20px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+                <button onclick="crearRecetaDesdeModal('alimentos')"
+                    style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;
+                    padding:28px 16px;cursor:pointer;text-align:center;transition:all 0.2s;
+                    display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--text)"
+                    onmouseover="this.style.borderColor='var(--green)';this.style.background='rgba(61,190,122,0.07)';this.style.transform='translateY(-2px)'"
+                    onmouseout="this.style.borderColor='var(--border)';this.style.background='var(--surface2)';this.style.transform='none'">
+                    <span style="font-size:44px">🍽️</span>
+                    <div style="font-size:15px;font-weight:700;color:var(--text)">Receta Alimentos</div>
+                    <div style="font-size:11px;color:var(--text-dim);line-height:1.4">Platillos, entradas, postres, guarniciones...</div>
+                </button>
+                <button onclick="crearRecetaDesdeModal('sub-alimentos')"
+                    style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;
+                    padding:28px 16px;cursor:pointer;text-align:center;transition:all 0.2s;
+                    display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--text)"
+                    onmouseover="this.style.borderColor='var(--green)';this.style.background='rgba(61,190,122,0.07)';this.style.transform='translateY(-2px)'"
+                    onmouseout="this.style.borderColor='var(--border)';this.style.background='var(--surface2)';this.style.transform='none'">
+                    <span style="font-size:44px">🥣</span>
+                    <div style="font-size:15px;font-weight:700;color:var(--text)">Sub Receta Alimentos</div>
+                    <div style="font-size:11px;color:var(--text-dim);line-height:1.4">Salsas, fondos, masas, bases, rellenos...</div>
+                </button>
+                <button onclick="crearRecetaDesdeModal('bebidas')"
+                    style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;
+                    padding:28px 16px;cursor:pointer;text-align:center;transition:all 0.2s;
+                    display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--text)"
+                    onmouseover="this.style.borderColor='var(--green)';this.style.background='rgba(61,190,122,0.07)';this.style.transform='translateY(-2px)'"
+                    onmouseout="this.style.borderColor='var(--border)';this.style.background='var(--surface2)';this.style.transform='none'">
+                    <span style="font-size:44px">🥃</span>
+                    <div style="font-size:15px;font-weight:700;color:var(--text)">Receta Bebidas</div>
+                    <div style="font-size:11px;color:var(--text-dim);line-height:1.4">Cócteles, mocktails, bebidas de la carta...</div>
+                </button>
+                <button onclick="crearRecetaDesdeModal('sub-bebidas')"
+                    style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;
+                    padding:28px 16px;cursor:pointer;text-align:center;transition:all 0.2s;
+                    display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--text)"
+                    onmouseover="this.style.borderColor='var(--green)';this.style.background='rgba(61,190,122,0.07)';this.style.transform='translateY(-2px)'"
+                    onmouseout="this.style.borderColor='var(--border)';this.style.background='var(--surface2)';this.style.transform='none'">
+                    <span style="font-size:44px">🧃</span>
+                    <div style="font-size:15px;font-weight:700;color:var(--text)">Sub Receta Bebidas</div>
+                    <div style="font-size:11px;color:var(--text-dim);line-height:1.4">Jarabes, shrubs, purés, mixes, infusiones...</div>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.cat-btn { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:16px 12px; cursor:pointer; text-align:center; transition:all 0.2s; display:flex; flex-direction:column; align-items:center; gap:6px; color:var(--text); }
+.cat-btn:hover { border-color:var(--green); background:rgba(61,190,122,0.06); transform:translateY(-2px); }
+.cat-btn-title { font-size:13px; font-weight:600; color:var(--text); }
+.cat-btn-desc  { font-size:10px; color:var(--text-dim); line-height:1.4; }
+</style>
+
+<!-- ══ MODAL CONVERTIR RECETA SIMPLE ══════════════════════ -->
+<div class="modal-overlay" id="modalConvertirReceta"
+    onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal" style="max-width:480px;width:100%">
+        <div class="modal-header">
+            <h2>Convertir a...</h2>
+            <button class="modal-close"
+                onclick="document.getElementById('modalConvertirReceta').style.display='none'">✕</button>
+        </div>
+        <div class="modal-body" style="padding:20px">
+            <div style="font-size:12px;color:var(--text-dim);margin-bottom:16px">
+                Se conservarán el nombre, grupo e ingredientes ya agregados.</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <button onclick="convertirRecetaSimple('alimentos')" class="cat-btn" style="padding:20px 12px">
+                    <span style="font-size:28px">🍽️</span>
+                    <div class="cat-btn-title" style="font-size:13px">Receta Alimentos</div>
+                    <div class="cat-btn-desc">Platillos, entradas, postres...</div>
+                </button>
+                <button onclick="convertirRecetaSimple('sub-alimentos')" class="cat-btn" style="padding:20px 12px">
+                    <span style="font-size:28px">🥣</span>
+                    <div class="cat-btn-title" style="font-size:13px">Sub Receta Alimentos</div>
+                    <div class="cat-btn-desc">Salsas, fondos, masas, bases...</div>
+                </button>
+                <button onclick="convertirRecetaSimple('bebidas')" class="cat-btn" style="padding:20px 12px">
+                    <span style="font-size:28px">🥃</span>
+                    <div class="cat-btn-title" style="font-size:13px">Receta Bebidas</div>
+                    <div class="cat-btn-desc">Cócteles, mocktails, carta...</div>
+                </button>
+                <button onclick="convertirRecetaSimple('sub-bebidas')" class="cat-btn" style="padding:20px 12px">
+                    <span style="font-size:28px">🧃</span>
+                    <div class="cat-btn-title" style="font-size:13px">Sub Receta Bebidas</div>
+                    <div class="cat-btn-desc">Jarabes, shrubs, purés, mixes...</div>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ MODAL VER RECETAS ══════════════════════════════════ -->
+<div class="modal-overlay" id="modalVerRecetas" onclick="cerrarVerRecetas(event)"
+    style="align-items:flex-start;padding:20px">
+    <div class="modal" style="max-width:1060px;width:100%;margin-top:16px">
+        <div style="padding:0;border-bottom:1px solid var(--border)">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 0">
+                <h2 style="font-size:14px;font-weight:600">📚 Mis Recetas</h2>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <button class="btn-vista" id="btnImprimirSeleccion" onclick="imprimirSeleccionadas()"
+                        style="display:none;color:var(--green);border-color:var(--green);padding:6px 14px;font-size:12px">
+                        🖨️ Imprimir selección
+                    </button>
+                    <button class="modal-close"
+                        onclick="document.getElementById('modalVerRecetas').style.display='none';_showEscMenu()">✕</button>
+                </div>
+            </div>
+            <div style="padding:12px 20px 10px">
+                <div style="position:relative">
+                    <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:15px;color:var(--text-dim)">🔍</span>
+                    <input type="text" id="buscarReceta" placeholder="Buscar receta..."
+                        oninput="renderGridRecetas()"
+                        style="width:100%;background:var(--surface2);border:1px solid var(--border);
+                        color:var(--text);padding:11px 14px 11px 42px;border-radius:10px;
+                        font-family:sans-serif;font-size:15px;outline:none;
+                        transition:border-color 0.2s;box-sizing:border-box"
+                        onfocus="this.style.borderColor='var(--green)'"
+                        onblur="this.style.borderColor='var(--border)'">
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;padding:4px 20px 14px">
+                <button id="rp-todas" onclick="filtroRecetaTipo='';renderGridRecetas();_activarPillReceta('todas')"
+                    style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--green);background:rgba(61,190,122,0.12);color:var(--green);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s">Todas</button>
+                <button id="rp-alimentos" onclick="filtroRecetaTipo='alimentos';renderGridRecetas();_activarPillReceta('alimentos')"
+                    style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🍽️ Alimentos</button>
+                <button id="rp-sub-alimentos" onclick="filtroRecetaTipo='sub-alimentos';renderGridRecetas();_activarPillReceta('sub-alimentos')"
+                    style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🥣 Sub Alimentos</button>
+                <button id="rp-bebidas" onclick="filtroRecetaTipo='bebidas';renderGridRecetas();_activarPillReceta('bebidas')"
+                    style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🥃 Bebidas</button>
+                <button id="rp-sub-bebidas" onclick="filtroRecetaTipo='sub-bebidas';renderGridRecetas();_activarPillReceta('sub-bebidas')"
+                    style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🧃 Sub Bebidas</button>
+            </div>
+        </div>
+        <div class="modal-body" style="max-height:68vh;overflow-y:auto;padding:20px">
+            <div id="gridRecetas" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ MODAL FICHA TÉCNICA ════════════════════════════════ -->
+<div class="modal-overlay" id="modalFichaReceta" onclick="cerrarFichaReceta(event)"
+    style="align-items:flex-start;padding:20px">
+    <div class="modal" style="max-width:680px;width:100%;margin-top:20px">
+        <div class="modal-header">
+            <h2 id="fichaTitulo">Ficha técnica</h2>
+            <div style="display:flex;gap:8px">
+                <button class="btn-vista" onclick="editarDesdeficha()"
+                    style="color:var(--accent);border-color:var(--accent);padding:6px 14px;font-size:12px">
+                    ✏️ Editar
+                </button>
+                <button class="btn-vista" onclick="abrirFichaCosteo()"
+                    style="color:var(--text-muted);border-color:var(--border);padding:6px 14px;font-size:12px">
+                    💰 Ver costeo
+                </button>
+                <button class="btn-vista" onclick="abrirMenuImpresion(fichaRecetaActualId)"
+                    style="color:var(--green);border-color:var(--green);padding:6px 14px;font-size:12px">
+                    🖨️ Imprimir
+                </button>
+                <button class="modal-close" onclick="document.getElementById('modalFichaReceta').style.display='none'">✕</button>
+            </div>
+        </div>
+        <div class="modal-body" id="fichaRecetaContenido" style="max-height:72vh;overflow-y:auto"></div>
+    </div>
+</div>
+
+<!-- ══ MODAL SUBMENÚ IMPRESIÓN ════════════════════════════ -->
+<div class="modal-overlay" id="modalImpresion" onclick="cerrarModalImpresion(event)">
+    <div class="modal" style="max-width:440px">
+        <div class="modal-header">
+            <h2>🖨️ Tipo de impresión</h2>
+            <button class="modal-close"
+                onclick="document.getElementById('modalImpresion').style.display='none'">✕</button>
+        </div>
+        <div class="modal-body" style="padding:20px 22px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+
+                <button onclick="ejecutarImpresion('operativa')" class="cat-btn">
+                    <span style="font-size:28px">👨‍🍳</span>
+                    <div class="cat-btn-title">Operativa</div>
+                    <div class="cat-btn-desc">Ingredientes, procedimiento y foto. Sin costos.</div>
+                </button>
+
+                <button onclick="ejecutarImpresion('administrativa')" class="cat-btn"
+                    style="border-color:var(--accent)">
+                    <span style="font-size:28px">📊</span>
+                    <div class="cat-btn-title" style="color:var(--accent)">Administrativa</div>
+                    <div class="cat-btn-desc">Todos los datos incluyendo costeo completo.</div>
+                </button>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ MODAL CARÁTULA DE COSTOS ════════════════════════════ -->
+<div class="modal-overlay" id="modalCaratula" onclick="cerrarCaratula(event)" style="align-items:flex-start;padding:20px">
+    <div class="modal" style="max-width:1140px;width:100%;margin-top:14px">
+        <div class="modal-header" style="gap:10px">
+            <div style="display:flex;align-items:center;gap:10px">
+                <button id="caratulaBtnVolver" onclick="mostrarCaratulaSelector()" style="display:none;background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:5px 12px;cursor:pointer;font-family:inherit;font-size:12px">← Volver</button>
+                <h2 id="caratulaTituloHeader">📊 Carátula de Costos</h2>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+                <button id="caratulaBtnPrint" onclick="imprimirCaratula()" style="display:none;color:var(--accent);border-color:var(--accent)" class="btn-vista">🖨️ Imprimir</button>
+                <button class="modal-close" onclick="cerrarCaratulaBtnX()">✕</button>
+            </div>
+        </div>
+        <div class="modal-body" style="max-height:82vh;overflow-y:auto;padding:0">
+            <div id="caratulaSelectorView" style="padding:20px">
+                <p style="font-size:12px;color:var(--text-dim);margin-bottom:16px">Selecciona el grupo de recetas que deseas consultar.</p>
+                <div id="caratulaSelectorGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px"></div>
+            </div>
+            <div id="caratulaDetalleView" style="display:none">
+                <div style="background:#1a1916;padding:14px 20px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:16px">
+                    <svg width="100" height="24" viewBox="0 0 300 72" fill="none"><path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/><path d="M14.5 28H37C35.5 23 31.5 20 25.5 20C19.5 20 16 23 14.5 28Z" fill="#1a1916"/><circle cx="45" cy="11" r="6" fill="#f5c842"/><path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/><path d="M78 41C78 34.5 83.5 30.5 92.5 29.5L104 28.5V27.5C104 23.5 101.5 21 97 21C93 21 90 23 89 26.5L80.5 24C82.5 17.5 89 13 97 13C107.5 13 113 18.5 113 28.5V54.5H104V51C102 53.5 98.5 55 94 55C85.5 55 78 50.5 78 41Z" fill="#3dbe7a"/><path d="M104 37L95.5 38C92.5 38.5 90.5 40 90.5 42.5C90.5 45 92.5 46.5 95.5 46.5C101 46.5 104 43.5 104 39V37Z" fill="#1a1916"/><path d="M126 41C126 34.5 131.5 30.5 140.5 29.5L152 28.5V27.5C152 23.5 149.5 21 145 21C141 21 138 23 137 26.5L128.5 24C130.5 17.5 137 13 145 13C155.5 13 161 18.5 161 28.5V54.5H152V51C150 53.5 146.5 55 142 55C133.5 55 126 50.5 126 41Z" fill="#3dbe7a"/><path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/><path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/></svg>
+                    <div><input type="text" id="caratulaEstab" placeholder="Nombre del establecimiento" style="background:transparent;border:none;border-bottom:2px solid rgba(255,255,255,0.15);color:#f0ece4;padding:3px 0;font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:2px;outline:none;width:100%;transition:border-color 0.2s" onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='rgba(255,255,255,0.15)'"><div id="caratulaSubtitulo" style="font-size:9px;color:#f5c842;letter-spacing:3px;text-transform:uppercase;margin-top:4px;font-family:'Bebas Neue',sans-serif">Carátula de Costos</div></div>
+                    <div style="display:flex;align-items:center;gap:12px;flex-shrink:0">
+                        <div id="caratulaLogoZone" onclick="document.getElementById('caratulaLogoInput').click()" style="width:56px;height:56px;border:2px dashed rgba(255,255,255,0.2);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;background:rgba(255,255,255,0.05);flex-shrink:0"><img id="caratulaLogoImg" src="" alt="" style="display:none;width:100%;height:100%;object-fit:contain"><span id="caratulaLogoPlaceholder" style="font-size:20px;opacity:0.5">🏢</span></div>
+                        <input type="file" id="caratulaLogoInput" accept="image/*" style="display:none" onchange="cargarLogoCaratula(this)">
+                        <div style="position:relative"><span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,0.3);font-size:13px">🔍</span><input type="text" id="caratulaBuscar" placeholder="Buscar receta..." oninput="renderCaratulaDetalleTabla()" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#f0ece4;padding:8px 12px 8px 30px;border-radius:8px;font-family:sans-serif;font-size:12px;outline:none;width:180px"></div>
+                    </div>
+                </div>
+                <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                    <span style="font-size:10px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase">Filtrar:</span>
+                    <select id="caratulaFiltroGrupo" onchange="renderCaratulaDetalleTabla()" class="filtro-select" style="font-size:12px;padding:5px 10px;min-width:160px"><option value="">Todos los grupos</option></select>
+                    <select id="caratulaFiltroStatus" onchange="renderCaratulaDetalleTabla()" class="filtro-select" style="font-size:12px;padding:5px 10px;min-width:140px"><option value="">Activas e inactivas</option><option value="activa">Solo activas</option><option value="inactiva">Solo inactivas</option></select>
+                    <span id="caratulaContador" style="font-size:11px;color:var(--text-muted);margin-left:4px"></span>
+                </div>
+                <div id="caratulaDetalleBody" style="padding:16px 20px"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ MODAL COSTEO FLOTANTE ══════════════════════════════ -->
+<div id="modalCosteoFlotante" style="display:none;position:fixed;inset:0;z-index:10001;
+    align-items:center;justify-content:center" onclick="cerrarCosteoFlotante(event)">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;
+        padding:24px;width:520px;max-width:95vw;max-height:85vh;overflow-y:auto;
+        box-shadow:0 16px 48px rgba(0,0,0,0.4)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+            <div>
+                <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;
+                    color:var(--text-dim);margin-bottom:3px">Costeo</div>
+                <div id="costeoFlotanteNombre" style="font-size:16px;font-weight:600"></div>
+            </div>
+            <button onclick="document.getElementById('modalCosteoFlotante').style.display='none'"
+                style="background:none;border:none;color:var(--text-muted);cursor:pointer;
+                font-size:20px;line-height:1;padding:4px 8px">✕</button>
+        </div>
+        <div id="costeoFlotanteContenido"></div>
+    </div>
+</div>
+
+<script src="../app.js"></script>
+<script>
+function toggleNav() {
+    const nav = document.getElementById('nav');
+    nav.classList.toggle('cerrado');
+    document.getElementById('mainContent').classList.toggle('expandido');
+    const cerrado = nav.classList.contains('cerrado');
+    const btn = document.getElementById('navToggleBtn');
+    const txt = document.getElementById('navToggleTxt');
+    btn.childNodes[0].textContent = cerrado ? '▶' : '◀';
+    if (txt) txt.textContent = cerrado ? 'Expandir' : 'Ocultar';
+    btn.setAttribute('data-tooltip', cerrado ? 'Expandir' : 'Ocultar');
+    var menu = document.getElementById('vistaMenuReceta');
+    if (menu) menu.style.left = cerrado ? '50px' : '200px';
+}
+
+// ── Volver al menú ────────────────────────────────────────────
+// ── Sync precio formulario → costeo ──────────────────────────
+// ── Sistema de Tags (alérgenos, acompañamientos) ─────────────
+var alergenosList = ['Gluten','Lácteos','Huevo','Soya','Nueces','Mariscos','Pescado',
+    'Cacahuate','Sésamo','Mostaza','Apio','Altramuces','Moluscos','Dióxido de azufre'];
+
+var acompList = ['Pan','Bolillo','Pan tostado','Ensalada','Ensalada mixta','Arroz',
+    'Arroz blanco','Arroz frito','Frijoles','Frijoles negros','Frijoles charros',
+    'Papas','Papas fritas','Papas al horno','Puré de papa','Salsas','Salsa verde',
+    'Salsa roja','Emulsiones','Crema','Crema ácida','Guacamole','Pico de gallo',
+    'Guarnición del chef','Verduras al vapor','Vegetales salteados','Sin acompañamiento'];
+
+function showTagSuggestions(inputId, sugId, lista) {
+    var input = document.getElementById(inputId);
+    var sug   = document.getElementById(sugId);
+    if (!input || !sug) return;
+    var q = input.value.trim().toLowerCase();
+    var containerId = inputId === 'alergenosInput' ? 'alergenos-tags' : 'acomp-tags';
+    var existing = getTagsFromContainer(containerId);
+
+    var matches = q.length === 0
+        ? lista.filter(function(x){ return !existing.includes(x); }).slice(0, 12)
+        : lista.filter(function(x){ return x.toLowerCase().includes(q) && !existing.includes(x); });
+
+    if (!matches.length) { sug.style.display = 'none'; return; }
+
+    // Posición fija relativa al viewport — evita clipping del card
+    var rect = input.getBoundingClientRect();
+    sug.style.cssText =
+        'display:block;position:fixed;z-index:9999;' +
+        'top:' + (rect.bottom + 4) + 'px;' +
+        'left:' + rect.left + 'px;' +
+        'width:' + rect.width + 'px;' +
+        'background:var(--surface);border:1px solid var(--border);' +
+        'border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,0.5);' +
+        'max-height:260px;overflow-y:auto;';
+
+    sug.innerHTML = matches.map(function(m) {
+        var safe = m.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        var hi = q ? m.replace(new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')','gi'),
+            '<strong style="color:var(--green)">$1</strong>') : m;
+        return '<div onmousedown="event.preventDefault();selectTag(\'' + inputId + '\',\'' +
+            (inputId==='alergenosInput'?'alergenos-tags':'acomp-tags') + '\',\'' +
+            safe + '\')" ' +
+            'style="padding:10px 16px;cursor:pointer;font-size:13px;transition:background 0.15s;' +
+            'border-bottom:1px solid var(--border)" ' +
+            'onmouseenter="this.style.background=\'var(--surface2)\'" ' +
+            'onmouseleave="this.style.background=\'transparent\'">' + hi + '</div>';
+    }).join('');
+
+    // Mover al body para evitar clipping
+    document.body.appendChild(sug);
+}
+
+function selectTag(inputId, containerId, value) {
+    addTag(containerId, value);
+    var input = document.getElementById(inputId);
+    var sugId = inputId === 'alergenosInput' ? 'alergenosSug' : 'acompSug';
+    var sug   = document.getElementById(sugId);
+    if (input) { input.value = ''; input.focus(); }
+    if (sug)   sug.style.display = 'none';
+}
+
+function addTagFromInput(inputId, containerId, listVarName) {
+    var input = document.getElementById(inputId);
+    if (!input || !input.value.trim()) return;
+    addTag(containerId, input.value.trim());
+    input.value = '';
+    var sug = document.getElementById(inputId === 'alergenosInput' ? 'alergenosSug' : 'acompSug');
+    if (sug) sug.style.display = 'none';
+}
+
+function addTag(containerId, value) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    // Avoid duplicates
+    var existing = getTagsFromContainer(containerId);
+    if (existing.includes(value)) return;
+
+    var isAlerg = containerId === 'alergenos-tags';
+    var span = document.createElement('span');
+    span.style.cssText = 'display:flex;align-items:center;gap:4px;font-size:12px;' +
+        (isAlerg
+            ? 'background:rgba(224,90,58,0.12);border:1px solid var(--red);color:var(--text);'
+            : 'background:rgba(61,190,122,0.1);border:1px solid var(--green);color:var(--text);') +
+        'border-radius:20px;padding:4px 12px;';
+    var listVar = isAlerg ? 'alergenosList' : 'acompList';
+    span.innerHTML = value +
+        '<button type="button" onclick="removeTag(\'' + containerId + '\',this,\'' + listVar + '\')" ' +
+        'style="background:none;border:none;color:' + (isAlerg?'var(--red)':'var(--green)') +
+        ';cursor:pointer;font-size:13px;padding:0 0 0 4px;line-height:1">×</button>';
+    container.appendChild(span);
+}
+
+function removeTag(containerId, btn, listVar) {
+    var span = btn.closest('span');
+    if (span) span.remove();
+}
+
+function getTagsFromContainer(containerId) {
+    var container = document.getElementById(containerId);
+    if (!container) return [];
+    return [...container.querySelectorAll('span')].map(function(s){
+        return s.textContent.replace('×','').trim();
+    });
+}
+
+// Cerrar sugerencias al click fuera
+document.addEventListener('click', function(e) {
+    // Cerrar dropdown de tags
+    if (!e.target.closest('#alergenosSug') && e.target.id !== 'alergenosInput')
+        { var s = document.getElementById('alergenosSug'); if(s) s.style.display='none'; }
+    if (!e.target.closest('#acompSug') && e.target.id !== 'acompInput')
+        { var s2 = document.getElementById('acompSug'); if(s2) s2.style.display='none'; }
+});
+
+// Mostrar sugerencias al hacer focus en los inputs de tags
+document.addEventListener('focusin', function(e) {
+    if (e.target.id === 'alergenosInput') {
+        // Move sug element back under input for positioning calc
+        var s = document.getElementById('alergenosSug');
+        if (s) e.target.closest('div').appendChild(s);
+        showTagSuggestions('alergenosInput','alergenosSug',alergenosList);
+    }
+    if (e.target.id === 'acompInput') {
+        var s2 = document.getElementById('acompSug');
+        if (s2) e.target.closest('div').appendChild(s2);
+        showTagSuggestions('acompInput','acompSug',acompList);
+    }
+});
+
+// ── Switch costeo según tipo ──────────────────────────────────
+function actualizarVistaCosteo(tipo) {
+    var normal      = document.getElementById('costeoNormal');
+    var secCostos   = document.getElementById('seccionCostos');
+    var cardRend    = document.getElementById('cardRendimientoSub');
+    var barraRend   = document.getElementById('barraRendBruto');
+    var barraCosto  = document.getElementById('barraCostoTotal');
+    var esSub = tipo === 'sub-alimentos' || tipo === 'sub-bebidas';
+    if (secCostos) secCostos.style.display = esSub ? 'none' : '';
+    if (normal)    normal.style.display    = esSub ? 'none' : '';
+    if (cardRend)  cardRend.style.display  = esSub ? '' : 'none';
+    var cardInsumo = document.getElementById('cardAgregarInsumo');
+    if (cardInsumo) cardInsumo.style.display = esSub ? '' : 'none';
+    if (barraRend) barraRend.style.display = esSub ? 'flex' : 'none';
+    if (barraCosto) {
+        // En sub-recetas ocupa columna derecha, en recetas span completo
+        barraCosto.style.gridColumn = esSub ? '' : 'span 2';
+        barraCosto.style.marginTop  = esSub ? '0' : '0';
+    }
+    var costoLabel = document.getElementById('barraCostoLabel');
+    if (costoLabel) costoLabel.textContent = esSub ? 'Costo bruto de la sub receta' : 'Costo total de la receta';
+    // Resetear botón vista y estado al cambiar de tipo
+    if (secCostos) secCostos.classList.remove('oculto');
+    var btnVista = document.getElementById('btnVista');
+    if (btnVista) {
+        btnVista.textContent       = 'VISTA OPERATIVA';
+        btnVista.style.color       = '';
+        btnVista.style.borderColor = '';
+        btnVista.dataset.vistaActual = '';
+    }
+    if (esSub) renderRendimientoSub();
+}
+
+// ── Renderizar card de rendimiento (sub-recetas) ──────────────
+function renderRendimientoSub() {
+    var body = document.getElementById("cardRendimientoBody");
+    if (!body) return;
+    var getRV = function(id) { var e = document.getElementById(id); return e ? e.value : ""; };
+    var modo  = getTipoMedicion();
+
+    var selU = function(id, opts, val) {
+        var opts_html = opts.map(function(u) {
+            return "<option value=\"" + u + "\"" + (val === u ? " selected" : "") + ">" + u + "</option>";
+        }).join("");
+        return "<select id=\"" + id + "\" onchange=\"calcSubRecetaCostos()\" " +
+            "style=\"flex:1;background:var(--surface);border:1px solid var(--border);" +
+            "color:var(--text);padding:6px 8px;border-radius:6px;font-size:13px;outline:none\">" +
+            opts_html + "</select>";
+    };
+
+    var uBruto = getRV("unidadRendBruto") || "KG";
+    var uFinal = getRV("unidadRendimientoFinal") || (modo === "porcion" ? "PZA" : "KG");
+    var rfVal  = getRV("rendimientoFinal") || "";
+    var ppVal  = getRV("pesoPieza") || "";
+    var upVal  = getRV("unidadPesoPieza") || "G";
+    var mmVal  = getRV("mermaManual") || "";
+
+    var pQtyVal   = getRV("porcionesQty")            || "";
+    var pPesoVal  = getRV("pesoPorcion")             || "";
+    var pUndVal   = getRV("unidadPesoPorcion")       || "G";
+    var pUndSel   = getRV("porcionesUnidad")         || "pzas";
+    var pUndFila1 = getRV("unidadPesoAutoDisplay")   || pUndVal;
+    var pUndFila2 = getRV("porcionesUnidadFila2")    || pUndSel;
+    // Determine which row is active based on which has a value
+    var filaActiva  = pQtyVal ? "qty" : (pPesoVal ? "peso" : "");
+    var lockQty       = filaActiva === "peso" ? "opacity:0.4" : "";
+    var lockQtyInput  = filaActiva === "peso" ? "pointer-events:none" : "";
+    var lockPeso      = filaActiva === "qty"  ? "opacity:0.4" : "";
+    var lockPesoInput = filaActiva === "qty"  ? "pointer-events:none" : "";
+    var selUnd     = function(id, opts, val, extra) {
+        return "<select id=\"" + id + "\" onchange=\"calcSubRecetaCostos()\" " +
+            "style=\"flex:1;background:var(--surface);border:1px solid var(--border);" +
+            "color:var(--text);padding:6px 8px;border-radius:6px;font-size:13px;outline:none\"" + (extra||"") + ">" +
+            opts.map(function(u){ return "<option value=\"" + u + "\"" + (val===u?" selected":"") + ">" + u + "</option>"; }).join("") +
+            "</select>";
+    };
+
+    var porcionesBloque =
+        "<div style=\"margin-top:14px;padding:16px;background:var(--surface2);border:1px solid var(--border);border-radius:10px\">" +
+            "<div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:14px\">" +
+                "<div style=\"font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)\">" +
+                    "⚖️ Rendimiento en porciones <span style=\"font-weight:400\">(opcional)</span>" +
+                "</div>" +
+                (filaActiva ? "<button onclick=\"limpiarFilaPorciones()\" style=\"background:none;border:none;color:var(--text-dim);font-size:11px;cursor:pointer;text-decoration:underline\">✕ limpiar</button>" : "") +
+            "</div>" +
+            "<div style=\"display:grid;grid-template-columns:1fr auto 1fr;gap:0;align-items:stretch\">" +
+
+                // ── FILA 1: porciones → calcula peso ──
+                "<div style=\"" + lockQty + ";padding:12px;background:var(--surface);border:1px solid " + (filaActiva==="qty"?"var(--green)":"var(--border)") + ";border-radius:8px 0 0 8px\">" +
+                    "<div style=\"font-size:9px;letter-spacing:1px;text-transform:uppercase;color:" + (filaActiva==="qty"?"var(--green)":"var(--text-dim)") + ";margin-bottom:6px\">Porciones → peso auto</div>" +
+                    "<div style=\"display:flex;gap:6px;margin-bottom:6px\">" +
+                        "<input type=\"number\" id=\"porcionesQty\" value=\"" + pQtyVal + "\" placeholder=\"Ej. 10\" min=\"1\" step=\"1\" " +
+                        "oninput=\"activarFilaPorciones('qty');calcSubRecetaCostos()\" style=\"flex:1;" + lockQtyInput + "\">" +
+                        selUnd("porcionesUnidad", ["pzas","porciones","raciones","tazas","copas","oz"], pUndSel, " style='pointer-events:auto;opacity:1'") +
+                    "</div>" +
+                    "<div style=\"display:flex;gap:4px;align-items:center;margin-bottom:6px\">" +
+                        "<span style=\"font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;white-space:nowrap\">peso en:</span>" +
+                        selUnd("unidadPesoAutoDisplay", ["G","ML","KG","LT"], pUndFila1, " style='pointer-events:auto;opacity:1'") +
+                    "</div>" +
+                    "<div style=\"font-size:11px;color:var(--green);min-height:18px\" id=\"sub-pesoAutoResult\"></div>" +
+                "</div>" +
+
+                // ── DIVISOR ──
+                "<div style=\"display:flex;align-items:center;justify-content:center;padding:0 10px;font-size:11px;color:var(--text-dim);background:var(--surface2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)\">" +
+                    "ó" +
+                "</div>" +
+
+                // ── FILA 2: peso → calcula porciones ──
+                "<div style=\"" + lockPeso + ";padding:12px;background:var(--surface);border:1px solid " + (filaActiva==="peso"?"var(--green)":"var(--border)") + ";border-radius:0 8px 8px 0\">" +
+                    "<div style=\"font-size:9px;letter-spacing:1px;text-transform:uppercase;color:" + (filaActiva==="peso"?"var(--green)":"var(--text-dim)") + ";margin-bottom:6px\">Peso → porciones auto</div>" +
+                    "<div style=\"display:flex;gap:6px;margin-bottom:6px\">" +
+                        "<input type=\"number\" id=\"pesoPorcion\" value=\"" + pPesoVal + "\" placeholder=\"Ej. 150\" min=\"0\" step=\"1\" " +
+                        "oninput=\"activarFilaPorciones('peso');calcSubRecetaCostos()\" style=\"flex:1;" + lockPesoInput + "\">" +
+                        selUnd("unidadPesoPorcion", ["G","ML","KG","LT"], pUndVal, " style='pointer-events:auto;opacity:1'") +
+                    "</div>" +
+                    "<div style=\"display:flex;gap:4px;align-items:center;margin-bottom:6px\">" +
+                        "<span style=\"font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;white-space:nowrap\">expresar en:</span>" +
+                        selUnd("porcionesUnidadFila2", ["pzas","porciones","raciones","tazas","copas","oz"], pUndFila2, " style='pointer-events:auto;opacity:1'") +
+                    "</div>" +
+                    "<div style=\"font-size:11px;color:var(--green);min-height:18px\" id=\"sub-cantAutoResult\"></div>" +
+                "</div>" +
+
+            "</div>" +
+            // Resultado costo / porción
+            "<div id=\"subCardCostoPorcion\" style=\"margin-top:12px;padding:12px;background:var(--surface);border:1px solid var(--green-dim);border-radius:8px;display:flex;align-items:center;justify-content:space-between\">" +
+                "<div style=\"font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--green)\">Costo / porción</div>" +
+                "<div style=\"display:flex;align-items:baseline;gap:8px\">" +
+                    "<div style=\"font-size:24px;color:var(--green);font-weight:700\" id=\"sub-costoPorcion\">—</div>" +
+                    "<div style=\"font-size:10px;color:var(--text-dim)\" id=\"sub-costoPorcionLabel\"></div>" +
+                "</div>" +
+            "</div>" +
+        "</div>";
+
+    if (modo === "granel") {
+        body.innerHTML =
+            "<div style=\"display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:0\">" +
+                "<div style=\"background:var(--surface2);border:1px solid var(--green-dim);border-radius:10px;padding:16px\">" +
+                    "<div style=\"font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--green);margin-bottom:10px\">" +
+                        "Rendimiento Final <span style=\"color:var(--text-dim);font-size:9px\">(manual)</span>" +
+                    "</div>" +
+                    "<input type=\"number\" id=\"rendimientoFinal\" value=\"" + rfVal + "\" placeholder=\"0\" min=\"0\" step=\"0.001\" " +
+                    "oninput=\"calcSubRecetaCostos()\" " +
+                    "style=\"width:100%;font-size:28px;background:transparent;" +
+                    "border:none;border-bottom:2px solid var(--green);color:var(--green);" +
+                    "padding:0 0 4px 0;outline:none;margin-bottom:8px\">" +
+                    selU("unidadRendimientoFinal", ["G","KG","ML","LT"], uFinal) +
+                    "<div style=\"font-size:10px;color:var(--text-dim);margin-top:6px\">Cocido / procesado</div>" +
+                "</div>" +
+                "<div style=\"background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px\">" +
+                    "<div style=\"font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px\">" +
+                        "% Merma <span style=\"color:var(--accent);font-size:9px\">(auto)</span>" +
+                    "</div>" +
+                    "<div style=\"font-size:32px;line-height:1\" id=\"mermaVal\">—</div>" +
+                    "<div style=\"font-size:10px;color:var(--text-dim);margin-top:12px\" id=\"mermaDesc\">Ingresa rend. final</div>" +
+                "</div>" +
+                "<div id=\"subCardCostoFinal\" style=\"background:var(--surface2);border:1px solid var(--green-dim);border-radius:10px;padding:16px\">" +
+                    "<div style=\"font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--green);margin-bottom:10px\">Costo Final</div>" +
+                    "<div style=\"font-size:26px;color:var(--green);font-weight:700;line-height:1\" id=\"sub-costoTotalGranel\">—</div>" +
+                    "<div style=\"font-size:10px;color:var(--text-dim);margin-top:3px\" id=\"sub-unidadFinal\">costo total de la receta</div>" +
+                    "<div style=\"border-top:1px solid var(--border);margin-top:8px;padding-top:8px\">" +
+                        "<div style=\"font-size:14px;color:var(--accent);font-weight:600\" id=\"sub-costoUnitFinal\">—</div>" +
+                        "<div style=\"font-size:9px;color:var(--text-dim);margin-bottom:3px\" id=\"sub-labelKgLt\"></div>" +
+                        "<div style=\"font-size:11px;color:var(--text-dim)\" id=\"sub-costoPorGMl\"></div>" +
+                    "</div>" +
+                "</div>" +
+            "</div>" +
+            porcionesBloque;
+
+    } else {
+        body.innerHTML =
+            "<div style=\"display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:0\">" +
+                "<div style=\"background:var(--surface2);border:1px solid var(--green-dim);border-radius:10px;padding:16px\">" +
+                    "<div style=\"font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--green);margin-bottom:10px\">" +
+                        "Peso por pieza <span style=\"color:var(--text-dim);font-size:9px\">(manual)</span>" +
+                    "</div>" +
+                    "<input type=\"number\" id=\"pesoPieza\" value=\"" + ppVal + "\" placeholder=\"0\" min=\"0\" step=\"0.1\" " +
+                    "oninput=\"calcSubRecetaCostos()\" " +
+                    "style=\"width:100%;font-size:28px;background:transparent;" +
+                    "border:none;border-bottom:2px solid var(--green);color:var(--green);" +
+                    "padding:0 0 4px 0;outline:none;margin-bottom:8px\">" +
+                    selU("unidadPesoPieza", ["G","KG","ML","LT"], upVal) +
+                    "<div style=\"font-size:10px;color:var(--text-dim);margin-top:6px\">Ej: 30g churro, 80g empanada</div>" +
+                "</div>" +
+                "<div style=\"background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px\">" +
+                    "<div style=\"font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px\">" +
+                        "% Merma <span style=\"color:var(--text-dim);font-size:9px\">(opcional)</span>" +
+                    "</div>" +
+                    "<div style=\"display:flex;align-items:center;gap:6px;margin-bottom:8px\">" +
+                        "<input type=\"number\" id=\"mermaManual\" value=\"" + mmVal + "\" placeholder=\"0\" min=\"0\" max=\"100\" step=\"1\" " +
+                        "oninput=\"calcSubRecetaCostos()\" " +
+                        "style=\"flex:1;font-size:24px;background:transparent;" +
+                        "border:none;border-bottom:2px solid var(--border);color:var(--accent);" +
+                        "padding:0 0 4px 0;outline:none\">" +
+                        "<span style=\"font-size:22px;color:var(--text-dim)\">%</span>" +
+                    "</div>" +
+                    "<div style=\"font-size:10px;color:var(--text-dim);margin-top:4px\">Reducción por cocción</div>" +
+                    "<div style=\"font-size:11px;color:var(--text-dim);margin-top:6px\" id=\"mermaDesc\"></div>" +
+                "</div>" +
+                "<div id=\"subCardCostoFinal\" style=\"background:var(--surface2);border:1px solid var(--green-dim);border-radius:10px;padding:16px\">" +
+                    "<div style=\"font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--green);margin-bottom:6px\">" +
+                        "Piezas estimadas <span style=\"color:var(--accent);font-size:9px\">(auto)</span>" +
+                    "</div>" +
+                    "<div style=\"font-size:32px;color:var(--accent);line-height:1\" id=\"piezasEstimadas\">—</div>" +
+                    "<div style=\"font-size:10px;color:var(--text-dim);margin-top:4px;margin-bottom:10px\" id=\"piezasDesc\"></div>" +
+                    "<div style=\"border-top:1px solid var(--border);padding-top:8px\">" +
+                        "<div style=\"font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:4px\">Costo / pieza</div>" +
+                        "<div style=\"font-size:24px;color:var(--green)\" id=\"sub-costoUnitFinal\">—</div>" +
+                        "<div style=\"font-size:9px;color:var(--text-dim)\" id=\"sub-unidadFinal\"></div>" +
+                    "</div>" +
+                "</div>" +
+            "</div>" +
+            porcionesBloque;
+    }
+
+    calcSubRecetaCostos();
+}
+
+
+// ── Calcular costos de sub-receta ─────────────────────────────
+function calcSubRecetaCostos() {
+    // Guard: solo ejecutar si el card de rendimiento está visible y renderizado
+    var cardRend = document.getElementById('cardRendimientoSub');
+    if (!cardRend || cardRend.style.display === 'none') return;
+
+    var modo = getTipoMedicion();
+
+    // Costo total ingredientes
+    var costoTotal = ingredientes.reduce(function(s, ing) {
+        return s + getFactor(ing.cantidad, ing.unidad) * (ing.costoPorKgLt || 0);
+    }, 0);
+
+    // Suma de ingredientes en gramos/ml base
+    var sumaBase = ingredientes.reduce(function(s, ing) {
+        return s + ing.cantidad * getPesoBrutoPorUnidad(ing);
+    }, 0);
+
+    var unidadBruto = ((document.getElementById('unidadRendBruto')||{}).value||'KG').toUpperCase();
+    var divBruto    = (unidadBruto==='KG'||unidadBruto==='LT') ? 1000 : 1;
+    var sumaBrutoConv = sumaBase / divBruto;
+
+    // Actualizar barra inferior
+    var elBarraRB = document.getElementById('barraRendBrutoVal');
+    if (elBarraRB) elBarraRB.textContent = sumaBrutoConv.toFixed(3);
+    var elCT = document.getElementById('sub-costoTotal');
+    if (elCT) elCT.textContent = '$' + costoTotal.toFixed(2);
+
+    // ── MODO A: A Granel ──────────────────────────────────────
+    if (modo === 'granel') {
+        var rendFinal   = parseFloat(((document.getElementById('rendimientoFinal')||{}).value)||0);
+        var unidadFinal = ((document.getElementById('unidadRendimientoFinal')||{}).value||'KG').toUpperCase();
+        var fU = { G:1, KG:1000, ML:1, LT:1000, PZA:1 };
+
+        var rendFinalBase  = rendFinal  * (fU[unidadFinal]||1);
+        var rendBrutoBase  = sumaBase;
+
+        // Merma
+        var elMerma = document.getElementById('mermaVal');
+        var elMermaD= document.getElementById('mermaDesc');
+        if (rendFinal > 0 && sumaBase > 0) {
+            var merma = ((rendBrutoBase - rendFinalBase) / rendBrutoBase * 100);
+            if (merma < 0) merma = 0;
+            var mColor = merma>30?'var(--red)':merma>15?'var(--accent)':'var(--green)';
+            if (elMerma)  { elMerma.textContent  = merma.toFixed(1)+'%'; elMerma.style.color = mColor; }
+            if (elMermaD) elMermaD.textContent = sumaBrutoConv.toFixed(3) + ' ' + unidadBruto + ' → ' + rendFinal + ' ' + unidadFinal;
+        } else {
+            if (elMerma)  { elMerma.textContent = '—'; elMerma.style.color = 'var(--text-dim)'; }
+            if (elMermaD) elMermaD.textContent = 'Ingresa rendimiento final';
+        }
+
+        // ── Jerarquía de costos FINALES (referencia al rendimiento final) ──
+        var elCUF  = document.getElementById('sub-costoUnitFinal');   // PRINCIPAL: $/KG o $/LT final
+        var elUF   = document.getElementById('sub-unidadFinal');
+        var elTG   = document.getElementById('sub-costoTotalGranel'); // SECUNDARIO: $/G o $/ML final
+        var elLKL  = document.getElementById('sub-labelKgLt');
+        var elGMl  = document.getElementById('sub-costoPorGMl');      // TERCIARIO: total ingredientes
+
+        var fU_base    = { G:0.001, KG:1, ML:0.001, LT:1 };
+        var rendFinalKg = rendFinal > 0 ? rendFinal * (fU_base[unidadFinal] || 0.001) : 0;
+        var esLiquido   = (unidadFinal === 'ML' || unidadFinal === 'LT');
+
+        if (rendFinal > 0) {
+            // PRINCIPAL: costo total de la receta ($16.67) — lo que pagaste
+            if (elTG)  elTG.textContent = '$' + costoTotal.toFixed(2);
+            if (elUF)  elUF.textContent = rendFinal + ' ' + unidadFinal + ' rendimiento final';
+
+            // SECUNDARIO: $/KG o $/LT con merma — dorado
+            var costoXkg  = rendFinalKg > 0 ? costoTotal / rendFinalKg : 0;
+            var labelKgLt = esLiquido ? 'por LT · con merma' : 'por KG · con merma';
+            if (elCUF) elCUF.textContent = costoXkg > 0 ? '$' + costoXkg.toFixed(2) : '—';
+            if (elLKL) elLKL.textContent = labelKgLt;
+
+            // TERCIARIO: $/G o $/ML — referencia pequeña
+            var costoXgMl = rendFinalKg > 0 ? costoTotal / (rendFinalKg * 1000) : 0;
+            var labelGMl  = esLiquido ? '/ML' : '/G';
+            if (elGMl) elGMl.textContent = costoXgMl > 0
+                ? '$' + costoXgMl.toFixed(4) + labelGMl + ' · bruto $' + (sumaBrutoConv > 0 ? (costoTotal/sumaBrutoConv).toFixed(2) : '—') + (esLiquido?'/LT':'/KG')
+                : '';
+        } else {
+            if (elTG)  elTG.textContent  = '—';
+            if (elUF)  elUF.textContent  = 'costo total de la receta';
+            if (elCUF) elCUF.textContent = '—';
+            if (elLKL) elLKL.textContent = esLiquido ? 'por LT · con merma' : 'por KG · con merma';
+            if (elGMl) elGMl.textContent = '';
+        }
+
+        // ── Rendimiento en porciones (opcional) ──────────────
+        var pQty    = parseFloat(((document.getElementById('porcionesQty')||{}).value)||0);
+        var pPeso   = parseFloat(((document.getElementById('pesoPorcion')||{}).value)||0);
+        var pUnidad = (pQty > 0
+            ? ((document.getElementById('unidadPesoAutoDisplay')||{}).value||'G')
+            : ((document.getElementById('unidadPesoPorcion')||{}).value||'G')).toUpperCase();
+        var pUndSel = pPeso > 0
+            ? ((document.getElementById('porcionesUnidadFila2')||{}).value||'pzas')
+            : ((document.getElementById('porcionesUnidad')||{}).value||'pzas');
+        var elCP    = document.getElementById('sub-costoPorcion');
+        var elCPL   = document.getElementById('sub-costoPorcionLabel');
+        var elPesoAuto = document.getElementById('sub-pesoAutoResult');
+        var elCantAuto = document.getElementById('sub-cantAutoResult');
+
+        var fU3 = { G:1, KG:1000, ML:1, LT:1000 };
+        var rendFinalBase3 = rendFinal * (fU[unidadFinal]||1); // en g/ml
+
+        var costoPorcion = 0;
+
+        if (pQty > 0 && rendFinal > 0) {
+            // FILA 1 activa: porciones → calcula peso por porción automáticamente
+            costoPorcion = costoTotal / pQty;
+            var pesoPorcionAuto = rendFinalBase3 / pQty;
+            if (elPesoAuto) {
+                elPesoAuto.textContent = pesoPorcionAuto >= 1000
+                    ? (pesoPorcionAuto/1000).toFixed(3) + (pUnidad==='ML'||pUnidad==='LT'?' LT':' KG')
+                    : parseFloat(pesoPorcionAuto.toFixed(1)) + (pUnidad==='ML'||pUnidad==='LT'?' ML':' G');
+            }
+            if (elCantAuto) elCantAuto.textContent = '';
+            if (elCP)  elCP.textContent  = '$' + costoPorcion.toFixed(2);
+            if (elCPL) elCPL.textContent = 'por ' + pUndSel.replace('pzas','pieza').replace('porciones','porción').replace('raciones','ración').replace('tazas','taza');
+
+        } else if (pPeso > 0 && rendFinal > 0) {
+            // FILA 2 activa: peso → calcula porciones automáticamente
+            var pesoPorcionBase = pPeso * (fU3[pUnidad]||1);
+            var cantPorcAuto    = pesoPorcionBase > 0 ? Math.floor(rendFinalBase3 / pesoPorcionBase) : 0;
+            costoPorcion        = cantPorcAuto > 0 ? costoTotal / cantPorcAuto : 0;
+            if (elCantAuto) {
+                elCantAuto.textContent = cantPorcAuto > 0
+                    ? cantPorcAuto + ' ' + pUndSel
+                    : 'Peso mayor al rendimiento';
+            }
+            if (elPesoAuto) elPesoAuto.textContent = '';
+            if (elCP)  elCP.textContent  = costoPorcion > 0 ? '$' + costoPorcion.toFixed(2) : '—';
+            if (elCPL) elCPL.textContent = costoPorcion > 0 ? cantPorcAuto + ' porciones de ' + pPeso + ' ' + pUnidad : '';
+
+        } else {
+            if (elCP)  elCP.textContent  = '—';
+            if (elCPL) elCPL.textContent = 'Llena una de las filas';
+            if (elPesoAuto) elPesoAuto.textContent = '';
+            if (elCantAuto) elCantAuto.textContent = '';
+        }
+
+
+    // ── MODO B: Por Pieza ─────────────────────────────────────
+    } else {
+        var pesoPieza   = parseFloat(((document.getElementById('pesoPieza')||{}).value)||0);
+        var unidPieza   = ((document.getElementById('unidadPesoPieza')||{}).value||'G').toUpperCase();
+        var mermaManual = parseFloat(((document.getElementById('mermaManual')||{}).value)||0);
+        var fU2 = { G:1, KG:1000, ML:1, LT:1000, PZA:1 };
+
+        // Peso pieza en misma base que sumaBase (g/ml)
+        var pesoPiezaBase = pesoPieza * (fU2[unidPieza]||1);
+        var factorMerma   = 1 - (mermaManual/100);
+        var masaUtil      = sumaBase * factorMerma;
+        var piezas        = pesoPiezaBase > 0 ? Math.floor(masaUtil / pesoPiezaBase) : 0;
+        var costoPieza    = piezas > 0 ? costoTotal / piezas : 0;
+
+        var elPiezas = document.getElementById('piezasEstimadas');
+        var elPDesc  = document.getElementById('piezasDesc');
+        var elCUF2   = document.getElementById('sub-costoUnitFinal');
+        var elUF2    = document.getElementById('sub-unidadFinal');
+        var elMermaD2= document.getElementById('mermaDesc');
+
+        if (elPiezas) elPiezas.textContent = piezas > 0 ? piezas + ' pzas' : '—';
+        if (elPDesc)  elPDesc.textContent  = piezas > 0
+            ? masaUtil.toFixed(0)+'g útil ÷ '+pesoPiezaBase+'g/pza'
+            : (pesoPieza > 0 ? 'Verifica el peso por pieza' : 'Ingresa peso por pieza');
+        if (elCUF2)   elCUF2.textContent   = costoPieza > 0 ? '$'+costoPieza.toFixed(2) : '—';
+        if (elUF2)    elUF2.textContent    = piezas > 0 ? 'por pieza · '+piezas+' piezas total' : '';
+        if (elMermaD2 && mermaManual > 0) elMermaD2.textContent = sumaBase.toFixed(0)+'g → '+(masaUtil.toFixed(0))+'g útil';
+
+    }
+}
+
+// ── Actualizar sub-receta cuando cambian ingredientes ─────────
+// Se inicializa en window.load después de que app.js esté cargado
+function hookCalcularCosteos() {
+    if (typeof calcularCosteos !== 'function') return;
+    var orig = calcularCosteos;
+    calcularCosteos = function() {
+        orig();
+        try {
+            if (recetaTipoActual === 'sub-alimentos' || recetaTipoActual === 'sub-bebidas') {
+                calcSubRecetaCostos();
+            }
+        } catch(e) { /* silencioso — no interrumpir flujo de renderTabla */ }
+    };
+}
+
+// ── Tipo de medición de rendimiento (sub-recetas) ────────────
+function setTipoMedicion(tipo) {
+    var elGranel  = document.getElementById('tipoMedicionGranelLabel');
+    var elPorcion = document.getElementById('tipoMedicionPorcionLabel');
+    var radGranel = document.getElementById('tipoMedicionGranel');
+    var radPorcion= document.getElementById('tipoMedicionPorcion');
+
+    if (tipo === 'granel') {
+        if (radGranel)  radGranel.checked  = true;
+        if (radPorcion) radPorcion.checked = false;
+        if (elGranel)  elGranel.style.borderColor  = 'var(--green)';
+        if (elPorcion) elPorcion.style.borderColor = 'var(--border)';
+        // Cambiar labels del card rendimiento
+        actualizarLabelsRendimiento('granel');
+    } else {
+        if (radGranel)  radGranel.checked  = false;
+        if (radPorcion) radPorcion.checked = true;
+        if (elGranel)  elGranel.style.borderColor  = 'var(--border)';
+        if (elPorcion) elPorcion.style.borderColor = 'var(--green)';
+        actualizarLabelsRendimiento('porcion');
+    }
+    calcSubRecetaCostos();
+}
+
+function getTipoMedicion() {
+    var el = document.getElementById('tipoMedicionPorcion');
+    return (el && el.checked) ? 'porcion' : 'granel';
+}
+
+function actualizarLabelsRendimiento(tipo) {
+    // Actualiza placeholder del rendimiento final y labels de presentaciones
+    var elRF = document.getElementById('rendimientoFinal');
+    var elUF = document.getElementById('unidadRendimientoFinal');
+    var barraLabel = document.getElementById('barraRendBrutoVal');
+
+    if (tipo === 'porcion') {
+        if (elRF) elRF.placeholder = '0  (piezas que rinde)';
+        // Cambiar unidades a PZA por defecto para porción
+        if (elUF) {
+            elUF.innerHTML = ['PZA','G','KG','ML','LT'].map(function(u) {
+                return '<option value="'+u+'"'+(elUF.value===u?' selected':'')+'>'+u+'</option>';
+            }).join('');
+        }
+        // Actualizar título barra
+        if (barraLabel) {
+            var label = barraLabel.closest('div');
+            var span  = label ? label.querySelector('span:first-child') : null;
+            // label stays as 'Rendimiento en peso bruto'
+        }
+    } else {
+        if (elRF) elRF.placeholder = '0';
+        if (elUF) {
+            elUF.innerHTML = ['G','KG','ML','LT','PZA'].map(function(u) {
+                return '<option value="'+u+'"'+(elUF.value===u?' selected':'')+'>'+u+'</option>';
+            }).join('');
+        }
+    }
+}
+
+// ── Control de filas de porciones (mutuo exclusivo) ──────────
+function activarFilaPorciones(fila) {
+    var elQty  = document.getElementById('porcionesQty');
+    var elPeso = document.getElementById('pesoPorcion');
+    if (!elQty || !elPeso) return;
+
+    // Si el usuario borra su campo, desbloquear la otra fila
+    if (fila === 'qty' && !elQty.value) {
+        desbloquearFilaPorciones();
+        return;
+    }
+    if (fila === 'peso' && !elPeso.value) {
+        desbloquearFilaPorciones();
+        return;
+    }
+
+    // Si llenó una fila, bloquear la otra
+    if (fila === 'qty' && elQty.value) {
+        elPeso.value = '';
+        aplicarLockPorciones('qty');
+    } else if (fila === 'peso' && elPeso.value) {
+        elQty.value  = '';
+        aplicarLockPorciones('peso');
+    }
+}
+
+function getFilaContainer(inputEl) {
+    // input → flex div → fila container div
+    if (!inputEl) return null;
+    var p = inputEl.parentElement;
+    return p ? p.parentElement : null;
+}
+
+function aplicarLockPorciones(filaActiva) {
+    var elQty   = document.getElementById('porcionesQty');
+    var elPeso  = document.getElementById('pesoPorcion');
+    var pQty    = getFilaContainer(elQty);
+    var pPeso   = getFilaContainer(elPeso);
+    if (!pQty || !pPeso) return;
+
+    if (filaActiva === 'qty') {
+        pQty.style.borderColor   = 'var(--green)';
+        pQty.style.opacity       = '1';
+        pQty.style.pointerEvents = 'auto';
+        if (elQty)  elQty.style.pointerEvents  = 'auto';
+        pPeso.style.borderColor  = 'var(--border)';
+        pPeso.style.opacity      = '0.4';
+        pPeso.style.pointerEvents= 'none';
+        if (elPeso) elPeso.style.pointerEvents = 'none';
+    } else {
+        pPeso.style.borderColor  = 'var(--green)';
+        pPeso.style.opacity      = '1';
+        pPeso.style.pointerEvents= 'auto';
+        if (elPeso) elPeso.style.pointerEvents = 'auto';
+        pQty.style.borderColor   = 'var(--border)';
+        pQty.style.opacity       = '0.4';
+        pQty.style.pointerEvents = 'none';
+        if (elQty)  elQty.style.pointerEvents  = 'none';
+    }
+}
+
+function desbloquearFilaPorciones() {
+    var elQty  = document.getElementById('porcionesQty');
+    var elPeso = document.getElementById('pesoPorcion');
+    var pQty   = getFilaContainer(elQty);
+    var pPeso  = getFilaContainer(elPeso);
+    if (pQty) {
+        pQty.style.borderColor   = 'var(--border)';
+        pQty.style.opacity       = '1';
+        pQty.style.pointerEvents = 'auto';
+    }
+    if (pPeso) {
+        pPeso.style.borderColor  = 'var(--border)';
+        pPeso.style.opacity      = '1';
+        pPeso.style.pointerEvents= 'auto';
+    }
+    if (elQty)  elQty.style.pointerEvents  = 'auto';
+    if (elPeso) elPeso.style.pointerEvents = 'auto';
+    // Limpiar resultados auto
+    var elPA = document.getElementById('sub-pesoAutoResult');
+    var elCA = document.getElementById('sub-cantAutoResult');
+    var elCP = document.getElementById('sub-costoPorcion');
+    var elCPL= document.getElementById('sub-costoPorcionLabel');
+    if (elPA)  elPA.textContent  = '';
+    if (elCA)  elCA.textContent  = '';
+    if (elCP)  elCP.textContent  = '—';
+    if (elCPL) elCPL.textContent = 'Llena una de las filas';
+}
+
+function limpiarFilaPorciones() {
+    var elQty  = document.getElementById('porcionesQty');
+    var elPeso = document.getElementById('pesoPorcion');
+    if (elQty)  elQty.value  = '';
+    if (elPeso) elPeso.value = '';
+    // Re-render para quitar locks
+    if (typeof renderRendimientoSub === 'function') renderRendimientoSub();
+}
+
+// ── Agregar sub-receta como insumo ──────────────────────────
+function agregarSubRecetaComoInsumo() {
+    var nombre   = (document.getElementById('nombreReceta') || {}).value || '';
+    var grupo    = (document.getElementById('grupo') || {}).value || '';
+    if (!nombre) { alert('Primero agrega el nombre de la sub receta'); return; }
+
+    // Calcular costo total
+    var costoTotal = ingredientes.reduce(function(s, ing) {
+        return s + getFactor(ing.cantidad, ing.unidad) * (ing.costoPorKgLt || 0);
+    }, 0);
+
+    // Leer rendimiento final del card de rendimiento
+    var rendFinal   = parseFloat((document.getElementById('rendimientoFinal') || {}).value) || 0;
+    var unidadFinal = ((document.getElementById('unidadRendimientoFinal') || {}).value || 'KG').toUpperCase();
+    var unidadBruto = ((document.getElementById('unidadRendBruto') || {}).value || 'KG').toUpperCase();
+
+    // Sumar ingredientes (rendimiento bruto en g/ml base)
+    var sumaBase = ingredientes.reduce(function(s, ing) {
+        return s + ing.cantidad * getPesoBrutoPorUnidad(ing);
+    }, 0);
+    var fU = { G:0.001, KG:1, ML:0.001, LT:1 };
+    var rendFinalKg = rendFinal > 0 ? rendFinal * (fU[unidadFinal] || 0.001) : 0;
+
+    // Costo por KG/LT final (con merma)
+    var costoXkgFinal = rendFinalKg > 0 ? costoTotal / rendFinalKg : 0;
+    // Costo por KG/LT bruto
+    var divBruto = (unidadBruto==='KG'||unidadBruto==='LT') ? 1000 : 1;
+    var sumaBrutoKg = sumaBase / divBruto / (unidadBruto==='G'||unidadBruto==='ML' ? 0.001 : 1);
+    // Simplify: just costoXkgFinal is the costoUnitario
+
+    // Leer porción si existe
+    var porcionQty   = parseFloat((document.getElementById('porcionesQty') || {}).value) || 0;
+    var porciones    = [];
+    if (rendFinalKg > 0) {
+        // Presentación 1: por KG o LT
+        var esLiq = unidadFinal === 'ML' || unidadFinal === 'LT';
+        porciones.push({
+            contNeto:       rendFinal,
+            umContenido:    unidadFinal,
+            rendimiento:    rendFinalKg * 1000,  // en g o ml
+            umRendimiento:  esLiq ? 'ML' : 'G',
+            precio:         costoTotal,
+            costoUnitario:  costoXkgFinal,
+            umCosto:        esLiq ? 'LT' : 'KG',
+            proveedor:      'Producción propia',
+            zona:           'Cocina',
+            fecha:          new Date().toISOString().split('T')[0],
+            esProduccionPropia: true,
+        });
+    }
+    // Presentación 2: por porción si está definida
+    if (porcionQty > 0 && costoTotal > 0) {
+        var costoPorPorcion = costoTotal / porcionQty;
+        porciones.push({
+            contNeto:       1,
+            umContenido:    'PZA',
+            rendimiento:    porcionQty,
+            umRendimiento:  'PZA',
+            precio:         costoPorPorcion,
+            costoUnitario:  costoPorPorcion,
+            umCosto:        'PZA',
+            proveedor:      'Producción propia',
+            zona:           'Cocina',
+            fecha:          new Date().toISOString().split('T')[0],
+            esProduccionPropia: true,
+        });
+    }
+
+    // Construir objeto insumo
+    var insumoNuevo = {
+        id:            'prod_' + Date.now().toString(36),
+        nombre:        nombre,
+        familia:       recetaTipoActual === 'sub-bebidas' ? 'Bebidas' : 'Alimentos',
+        categoria:     'Producción propia',
+        subcategoria:  grupo || 'Sub receta',
+        variedad:      '',
+        marca:         'Producción propia',
+        empaque:       '',
+        activo:        true,
+        foto:          (typeof fotosReceta !== 'undefined' && fotosReceta.length) ? fotosReceta[0] : '',
+        esSubReceta:   true,
+        recetaId:      recetaActualId || null,
+        presentaciones: porciones,
+    };
+
+    // Guardar en catálogo
+    try {
+        var catalogo = JSON.parse(localStorage.getItem('etaax_insumos')) || [];
+        // Verificar si ya existe un insumo de esta sub-receta
+        var existeIdx = catalogo.findIndex(function(x) {
+            return x.esSubReceta && x.recetaId && x.recetaId === insumoNuevo.recetaId;
+        });
+        if (existeIdx >= 0) {
+            if (!confirm('Ya existe "' + catalogo[existeIdx].nombre + '" como insumo. ¿Actualizarlo?')) return;
+            insumoNuevo.id = catalogo[existeIdx].id; // mantener el mismo ID
+            catalogo[existeIdx] = insumoNuevo;
+        } else {
+            catalogo.push(insumoNuevo);
+        }
+        localStorage.setItem('etaax_insumos', JSON.stringify(catalogo));
+
+        // Feedback visual
+        var btn = document.querySelector('#cardAgregarInsumo button');
+        if (btn) {
+            var original = btn.textContent;
+            btn.textContent = '✅ Guardado como insumo';
+            btn.style.background = 'var(--surface2)';
+            btn.style.color = 'var(--green)';
+            setTimeout(function() {
+                btn.textContent = original;
+                btn.style.background = 'var(--green)';
+                btn.style.color = '#0f0e0c';
+            }, 2500);
+        }
+    } catch(e) {
+        alert('Error al guardar: ' + e.message);
+    }
+}
+
+function syncPrecio(val) {
+    const el = document.getElementById('precioEnCarta');
+    if (el) { el.value = val; calcularCosteos(); }
+}
+
+function volverAlMenu() {
+    // Confirmar solo si hay datos
+    const hayDatos = document.getElementById('nombreReceta').value.trim() ||
+                     ingredientes.some(i => i.nombre.trim());
+    if (hayDatos) {
+        if (!confirm('¿Volver al menú? Los cambios no guardados se perderán.')) return;
+    }
+    abrirMenuReceta();
+}
+
+// ── Sistema Undo / Redo ───────────────────────────────────────
+let historialReceta = [];
+let historialPos    = -1;
+let guardandoHistorial = false;
+
+function estadoActual() {
+    return {
+        nombreReceta: document.getElementById('nombreReceta').value,
+        grupo:        document.getElementById('grupo').value,
+        categoria:    document.getElementById('categoria').value,
+        cristaleria:  document.getElementById('cristaleria').value,
+        tiempoNum:    document.getElementById('tiempoNum').value,
+        tiempoUnidad: document.getElementById('tiempoUnidad').value,
+        procedimiento:document.getElementById('procedimiento').value,
+        precioEnCarta:(document.getElementById('precioFormulario') || document.getElementById('precioEnCarta') || {value:''}).value,
+        ingredientes: JSON.parse(JSON.stringify(ingredientes))
+    };
+}
+
+function guardarEnHistorial() {
+    if (guardandoHistorial) return;
+    historialReceta = historialReceta.slice(0, historialPos + 1);
+    historialReceta.push(estadoActual());
+    if (historialReceta.length > 50) historialReceta.shift();
+    historialPos = historialReceta.length - 1;
+    actualizarBotonesHistorial();
+}
+
+function restaurarEstado(estado) {
+    guardandoHistorial = true;
+    document.getElementById('nombreReceta').value  = estado.nombreReceta || '';
+    document.getElementById('grupo').value         = estado.grupo        || '';
+    document.getElementById('categoria').value     = estado.categoria    || '';
+    document.getElementById('cristaleria').value   = estado.cristaleria  || '';
+    document.getElementById('tiempoNum').value     = estado.tiempoNum    || '';
+    document.getElementById('tiempoUnidad').value  = estado.tiempoUnidad || 'min';
+    document.getElementById('procedimiento').value = estado.procedimiento|| '';
+    // Sync precio a ambos campos posibles
+    const pcEl = document.getElementById('precioEnCarta');
+    const pfEl = document.getElementById('precioFormulario');
+    if (pcEl) pcEl.value = estado.precioEnCarta || '';
+    if (pfEl) pfEl.value = estado.precioEnCarta || '';
+    ingredientes = JSON.parse(JSON.stringify(estado.ingredientes || []));
+    renderTabla();
+    guardandoHistorial = false;
+    actualizarBotonesHistorial();
+}
+
+function undoReceta() {
+    if (historialPos <= 0) return;
+    historialPos--;
+    restaurarEstado(historialReceta[historialPos]);
+}
+
+function redoReceta() {
+    if (historialPos >= historialReceta.length - 1) return;
+    historialPos++;
+    restaurarEstado(historialReceta[historialPos]);
+}
+
+function actualizarBotonesHistorial() {
+    const btnU = document.getElementById('btnUndo');
+    const btnR = document.getElementById('btnRedo');
+    if (!btnU || !btnR) return;
+    const puedeUndo = historialPos > 0;
+    const puedeRedo = historialPos < historialReceta.length - 1;
+    btnU.disabled = !puedeUndo;
+    btnR.disabled = !puedeRedo;
+    btnU.style.opacity = puedeUndo ? '1' : '0.4';
+    btnR.style.opacity = puedeRedo ? '1' : '0.4';
+}
+
+// Guardar en historial al cambiar cualquier input del formulario
+document.addEventListener('input', function(e) {
+    if (guardandoHistorial) return;
+    const enFormulario = e.target.closest('#nombreReceta, #grupo, #categoria, #cristaleria, #tiempoNum, #procedimiento, #precioEnCarta, #tbodyIngredientes');
+    if (enFormulario || e.target.id === 'tiempoUnidad') {
+        clearTimeout(window._histTimer);
+        window._histTimer = setTimeout(guardarEnHistorial, 600);
+    }
+});
+
+document.addEventListener('change', function(e) {
+    if (guardandoHistorial) return;
+    if (e.target.id === 'tiempoUnidad') {
+        clearTimeout(window._histTimer);
+        window._histTimer = setTimeout(guardarEnHistorial, 300);
+    }
+});
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        const focusable = [...document.querySelectorAll('input, select, button, textarea')];
+        const i = focusable.indexOf(e.target);
+        if (i >= 0 && focusable[i + 1]) focusable[i + 1].focus();
+        return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undoReceta();
+        return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        redoReceta();
+    }
+});
+
+// Guardar estado inicial
+setTimeout(guardarEnHistorial, 300);
+
+// ── Configuración de campos por tipo ─────────────────────────
+const TIPO_RECETA_CFG = {
+    'alimentos': {
+        icon: '🍽️', titulo: 'Receta · Alimentos',
+        cristalLabel: 'VAJILLA / CRISTALERIA',
+        cristalPH:    'Ej. Plato hondo, bowl, cuchara...',
+        grupoPH:      'Ej. Menú Alimentos, Menú Temporada, Menú Vegetariano...',
+        categoriaPH:  'Ej. Principales, Entradas, Sopas, Pastas, Postres...',
+        sinPrecioForm: true,
+        extraFields: ['porciones','temperatura','acompañamientos','alergenos'],
+    },
+    'sub-alimentos': {
+        icon: '🥣', titulo: 'Sub Receta · Alimentos',
+        cristalLabel: 'Tipo de envasado',
+        cristalPH:    'Ej. Frasco, bolsa, contenedor...',
+        grupoPH:      'Ej. Salsas, Fondos, Proteínas, Jugos, Masas...',
+        sinCategoria:  true,
+        sinPrecioForm: true,
+        esSubReceta:   true,
+        extraFields: ['vidaUtil','almacenamiento'],
+    },
+    'bebidas': {
+        icon: '🥃', titulo: 'Receta · Bebidas',
+        cristalLabel: 'CRISTALERIA / VAJILLA',
+        cristalPH:    'Ej. Old Fashion, Martini, Highball, Jarra...',
+        grupoPH:      'Ej. Menú Bebidas, Menú Temporada...',
+        categoriaPH:  'Ej. Coctelería Clásica, Mocktail, Shots...',
+        sinPrecioForm: true,
+        extraFields: ['metodo','garnish','rendimientoBebida'],
+    },
+    'sub-bebidas': {
+        icon: '🧃', titulo: 'Sub Receta · Bebidas',
+        cristalLabel: 'Tipo de envasado',
+        cristalPH:    'Ej. Frasco, botella, sifón, bolsa...',
+        grupoPH:      'Ej. Jarabes, Shrubs, Purés, Infusiones, Bases...',
+        sinCategoria:  true,
+        sinPrecioForm: true,
+        esSubReceta:   true,
+        extraFields: ['vidaUtil','almacenamiento'],
+    },
+};
+
+function renderFormularioPorTipo(tipo, datos) {
+    const cfg  = TIPO_RECETA_CFG[tipo] || TIPO_RECETA_CFG['alimentos'];
+    const d    = datos || {};
+    const sel  = (id, opts, val) => `<select id="${id}" style="width:100%;background:var(--surface2);
+        border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:6px;
+        font-family:sans-serif;font-size:14px;outline:none">
+        ${opts.map(o => `<option value="${o}" ${val===o?'selected':''}>${o}</option>`).join('')}
+    </select>`;
+
+    // Campos extra según tipo
+    const extraHTML = {
+        // Alimentos
+        porciones: `
+            <div class="meta-item">
+                <label>Porciones / Rendimiento</label>
+                <div style="display:flex;gap:6px">
+                    <input type="number" id="porciones" value="${d.porciones||''}"
+                        placeholder="1" min="1" step="1" style="width:80px;flex-shrink:0">
+                    <input type="text" id="unidadPorcion" value="${d.unidadPorcion||''}"
+                        placeholder="Ej. plato, taza, pieza..." style="flex:1">
+                </div>
+            </div>`,
+        temperatura: `
+            <div class="meta-item">
+                <label>Temperatura de servicio</label>
+                ${sel('temperaturaServicio',
+                    ['Caliente','Tibio','Temperatura ambiente','Frío','Muy frío','Congelado'],
+                    d.temperaturaServicio||'Caliente')}
+            </div>`,
+        'acompañamientos': `
+            <div class="meta-item" style="grid-column:span 2">
+                <label>Acompañamientos <span style="font-size:10px;color:var(--text-dim)">(opcional)</span></label>
+                <div id="acomp-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;margin-bottom:6px">
+                    ${(d.acompañamientos||[]).map(a =>
+                        '<span style="display:flex;align-items:center;gap:4px;font-size:12px;' +
+                        'background:rgba(61,190,122,0.1);border:1px solid var(--green);' +
+                        'border-radius:20px;padding:4px 12px;color:var(--text)">' +
+                        a + '<button type="button" onclick="removeTag(\'acomp-tags\',this,\'acompList\')" ' +
+                        'style="background:none;border:none;color:var(--green);cursor:pointer;' +
+                        'font-size:13px;padding:0 0 0 4px;line-height:1">×</button></span>'
+                    ).join('')}
+                </div>
+                <div style="position:relative">
+                    <input type="text" id="acompInput" placeholder="Escribe o elige un acompañamiento..."
+                        autocomplete="off"
+                        oninput="showTagSuggestions('acompInput','acompSug',acompList)"
+                        onkeydown="if(event.key==='Enter'){event.preventDefault();addTagFromInput('acompInput','acomp-tags','acompList');}"
+                        style="width:100%">
+                    <div id="acompSug" style="display:none;position:absolute;z-index:200;top:100%;left:0;right:0;
+                        background:var(--surface);border:1px solid var(--border);border-radius:8px;
+                        box-shadow:0 6px 20px rgba(0,0,0,0.3);max-height:200px;overflow-y:auto;margin-top:2px"></div>
+                </div>
+            </div>`,
+        alergenos: `
+            <div class="meta-item" style="grid-column:span 2">
+                <label>Alérgenos</label>
+                <div id="alergenos-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;margin-bottom:6px">
+                    ${(d.alergenos||[]).map(a =>
+                        '<span style="display:flex;align-items:center;gap:4px;font-size:12px;' +
+                        'background:rgba(224,90,58,0.12);border:1px solid var(--red);' +
+                        'border-radius:20px;padding:4px 12px;color:var(--text)">' +
+                        a + '<button type="button" onclick="removeTag(\'alergenos-tags\',this,\'alergenosList\')" ' +
+                        'style="background:none;border:none;color:var(--red);cursor:pointer;' +
+                        'font-size:13px;padding:0 0 0 4px;line-height:1">×</button></span>'
+                    ).join('')}
+                </div>
+                <div style="position:relative">
+                    <input type="text" id="alergenosInput" placeholder="Escribe o elige un alérgeno..."
+                        autocomplete="off"
+                        oninput="showTagSuggestions('alergenosInput','alergenosSug',alergenosList)"
+                        onkeydown="if(event.key==='Enter'){event.preventDefault();addTagFromInput('alergenosInput','alergenos-tags','alergenosList');}"
+                        style="width:100%">
+                    <div id="alergenosSug" style="display:none;position:absolute;z-index:200;top:100%;left:0;right:0;
+                        background:var(--surface);border:1px solid var(--border);border-radius:8px;
+                        box-shadow:0 6px 20px rgba(0,0,0,0.3);max-height:200px;overflow-y:auto;margin-top:2px"></div>
+                </div>
+            </div>`,
+
+        // Sub-recetas
+        rendimientoSub: `
+            <div class="meta-item">
+                <label>Rendimiento</label>
+                <input type="number" id="rendimientoSub" value="${d.rendimientoSub||''}"
+                    placeholder="500" min="0" step="1">
+            </div>`,
+        unidadRen: `
+            <div class="meta-item">
+                <label>Unidad de rendimiento</label>
+                ${sel('unidadRendimiento',
+                    ['G','KG','ML','LT','PZA','Porción','Taza'],
+                    d.unidadRendimiento||'ML')}
+            </div>`,
+        rendimientosBrutoFinal: `
+            <div class="meta-item" style="grid-column:span 2">
+                <label>Rendimiento</label>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px">
+                    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px">
+                        <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px">Peso / Vol. Bruto (ingredientes)</div>
+                        <div style="display:flex;gap:6px">
+                            <input type="number" id="pesoBruto" value="${d.pesoBruto||''}"
+                                placeholder="15" min="0" step="0.1" style="flex:1">
+                            ${sel('unidadPesoBruto',['G','KG','ML','LT','PZA'],d.unidadPesoBruto||'KG')}
+                        </div>
+                    </div>
+                    <div style="background:var(--surface2);border:1px solid var(--green-dim);border-radius:8px;padding:12px">
+                        <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--green);margin-bottom:8px">Rendimiento Final (cocido/procesado)</div>
+                        <div style="display:flex;gap:6px">
+                            <input type="number" id="rendimientoFinal" value="${d.rendimientoFinal||''}"
+                                placeholder="12" min="0" step="0.1"
+                                oninput="calcSubRecetaCostos()"
+                                style="flex:1;border-color:var(--green-dim)">
+                            ${sel('unidadRendimientoFinal',['G','KG','ML','LT','PZA'],d.unidadRendimientoFinal||'KG')}
+                        </div>
+                        <div id="pctMerma" style="font-size:10px;color:var(--text-dim);margin-top:6px"></div>
+                    </div>
+                </div>
+            </div>`,
+        presentacionesPorcion: `
+            <div class="meta-item" style="grid-column:span 2">
+                <label>Presentaciones de porción <span style="font-size:10px;color:var(--text-dim)">(hasta 3)</span></label>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:6px">
+                    ${[1,2,3].map(n => `
+                    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px">
+                        <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">Presentación ${n}</div>
+                        <div style="margin-bottom:8px">
+                            <label style="font-size:11px;color:var(--text-dim)">Nombre / etiqueta</label>
+                            <input type="text" id="porcion${n}Nombre" value="${d['porcion'+n+'Nombre']||''}"
+                                placeholder="${n===1?'Porción individual':n===2?'Ración doble':'Paquete familiar'}"
+                                style="width:100%;margin-top:3px">
+                        </div>
+                        <div style="display:flex;gap:5px">
+                            <input type="number" id="porcion${n}Cant" value="${d['porcion'+n+'Cant']||''}"
+                                placeholder="150" min="0" step="1" style="flex:1"
+                                oninput="calcSubRecetaCostos()">
+                            ${sel('porcion'+n+'Unidad',['G','KG','ML','LT','PZA'],d['porcion'+n+'Unidad']||'G')}
+                        </div>
+                        <div id="costoPorcion${n}" style="margin-top:8px;font-size:12px;color:var(--green);font-weight:600;min-height:18px"></div>
+                    </div>`).join('')}
+                </div>
+            </div>`,
+        vidaUtil: `
+            <div class="meta-item">
+                <label>Vida útil</label>
+                <div style="display:flex;gap:6px">
+                    <input type="number" id="vidaUtilNum" value="${d.vidaUtilNum||''}"
+                        placeholder="3" min="1" style="width:80px;flex-shrink:0">
+                    ${sel('vidaUtilUnidad', ['días','semanas','meses'],
+                        d.vidaUtilUnidad||'días')}
+                </div>
+            </div>`,
+        almacenamiento: `
+            <div class="meta-item">
+                <label>Condiciones de almacenamiento</label>
+                ${sel('almacenamiento',
+                    ['Refrigeración 2-4°C','Congelación -18°C','Temperatura ambiente','Lugar fresco y seco'],
+                    d.almacenamiento||'Refrigeración 2-4°C')}
+            </div>`,
+
+        // Bebidas
+        metodo: `
+            <div class="meta-item">
+                <label>Método de preparación</label>
+                ${sel('metodoPre',
+                    ['Built','Stirred','Shaken','Blended','Layered','Thrown','Espresso','Prensa francesa','Filtrado','Otro'],
+                    d.metodoPre||'Built')}
+            </div>`,
+        garnish: `
+            <div class="meta-item">
+                <label>Garnish / Decoración</label>
+                <input type="text" id="garnish" value="${d.garnish||''}"
+                    placeholder="Ej. Rodaja de naranja, hoja de menta...">
+            </div>`,
+        rendimientoBebida: `
+            <div class="meta-item">
+                <label>Rendimiento por bebida</label>
+                <div style="display:flex;gap:6px">
+                    <input type="number" id="rendimientoBebida" value="${d.rendimientoBebida||''}"
+                        placeholder="355" min="0" step="1" style="width:90px;flex-shrink:0">
+                    <select id="unidadRendimientoBebida" style="flex:1;background:var(--surface2);
+                        border:1px solid var(--border);color:var(--text);padding:9px 10px;
+                        border-radius:6px;font-family:sans-serif;font-size:14px;outline:none">
+                        ${['ML','LT','OZ','PZA'].map(u =>
+                            '<option value="'+u+'"'+(( d.unidadRendimientoBebida||'ML')===u?' selected':'')+'>'+u+'</option>'
+                        ).join('')}
+                    </select>
+                </div>
+            </div>`,
+    };
+
+    const tiempoSelect = sel('tiempoUnidad', ['min','hrs','días'], d.tiempoUnidad||'min');
+
+    document.getElementById('cardDatosBody').innerHTML = `
+        <div class="meta-grid">
+            <!-- Nombre siempre span 2 -->
+            <div class="meta-item" style="grid-column:span 2">
+                <label>Nombre de la receta</label>
+                <input type="text" id="nombreReceta" value="${d.nombreReceta||''}"
+                    placeholder="Ej. ${cfg.icon === '🍽️' ? 'Filete al chipotle' : cfg.icon === '🥃' ? 'Carajillo clásico' : cfg.icon === '🥣' ? 'Salsa verde' : 'Jarabe de jengibre'}">
+            </div>
+            <!-- Grupo -->
+            <div class="meta-item">
+                <label>Grupo</label>
+                <input type="text" id="grupo" value="${d.grupo||''}"
+                    placeholder="${cfg.grupoPH || (cfg.icon==='🍽️'||cfg.icon==='🥣' ? 'Ej. Entradas, Sopas, Postres...' : 'Ej. Menú Bebidas, Menú Temporada...')}">
+            </div>
+            <!-- Categoría — oculto para sub-recetas -->
+            ${!cfg.sinCategoria ? `
+            <div class="meta-item">
+                <label>Categoría</label>
+                <input type="text" id="categoria" value="${d.categoria||''}"
+                    placeholder="${cfg.categoriaPH || (cfg.icon==='🍽️'||cfg.icon==='🥣' ? 'Ej. Carnes, Pastas, Ensaladas...' : 'Ej. Coctelería Clásica, Mocktail, Shots...')}">
+            </div>` : '<input type="hidden" id="categoria" value="">'}
+            <!-- Cristalería/Loza y Tiempo — ocultos para sub-alimentos (van en fila especial) -->
+            ${!cfg.esSubReceta ? `
+            <div class="meta-item">
+                <label>${cfg.cristalLabel}</label>
+                <input type="text" id="cristaleria" value="${d.cristaleria||''}"
+                    placeholder="${cfg.cristalPH}">
+            </div>` : ''}
+            ${!cfg.esSubReceta ? `
+            <div class="meta-item">
+                <label>Tiempo de elaboración</label>
+                <div style="display:flex;gap:6px">
+                    <input type="number" id="tiempoNum" value="${d.tiempoNum||''}"
+                        placeholder="0" min="1" step="1" style="width:80px;flex-shrink:0">
+                    ${tiempoSelect}
+                </div>
+            </div>` : ''}
+            <!-- Para sub-alimentos: fila de 3 — Tiempo | Envase | Vida útil -->
+            ${cfg.esSubReceta ? `
+            <div class="meta-item">
+                <label>Tiempo de elaboración</label>
+                <div style="display:flex;gap:6px">
+                    <input type="number" id="tiempoNum" value="${d.tiempoNum||''}"
+                        placeholder="0" min="1" step="1" style="width:72px;flex-shrink:0">
+                    ${tiempoSelect}
+                </div>
+            </div>
+            <div class="meta-item">
+                <label>${cfg.cristalLabel}</label>
+                <input type="text" id="cristaleria" value="${d.cristaleria||''}" placeholder="${cfg.cristalPH}">
+            </div>
+            <div class="meta-item">
+                <label>Vida útil</label>
+                <div style="display:flex;gap:6px">
+                    <input type="number" id="vidaUtilNum" value="${d.vidaUtilNum||''}"
+                        placeholder="3" min="1" style="width:72px;flex-shrink:0">
+                    ${sel('vidaUtilUnidad', ['días','semanas','meses'], d.vidaUtilUnidad||'días')}
+                </div>
+            </div>
+            <div class="meta-item" style="grid-column:span 3">
+                <label>Condiciones de almacenamiento</label>
+                ${sel('almacenamiento',
+                    ['Refrigeración 2-4°C','Congelación -18°C','Temperatura ambiente','Lugar fresco y seco'],
+                    d.almacenamiento||'Refrigeración 2-4°C')}
+            </div>
+` : `
+            <!-- Layout normal: cristaleria + tiempo ya están arriba -->
+            ${cfg.extraFields.map(f => extraHTML[f]||'').join('')}`}
+            <!-- Precio en carta — oculto si sinPrecioForm (se captura en costeo aplicado) -->
+            ${!cfg.sinPrecioForm ? `
+            <div class="meta-item">
+                <label>Precio en carta <span style="font-size:10px;color:var(--text-dim)">(con IVA)</span></label>
+                <div style="display:flex;align-items:center;gap:4px">
+                    <span style="color:var(--accent);font-size:15px;font-weight:600">$</span>
+                    <input type="number" id="precioFormulario" value="${d.precioEnCarta||''}"
+                        placeholder="0.00" min="0" step="0.50"
+                        oninput="syncPrecio(this.value)"
+                        onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+                </div>
+            </div>` : ''}
+        </div>
+
+        `;;
+
+    // Actualizar icono y título del card header
+    const iconEl  = document.getElementById('recetaTipoIcon');
+    const tituloEl= document.getElementById('cardDatosTitulo');
+    const brandEl = document.getElementById('brandTitle');
+    if (iconEl)   iconEl.textContent   = cfg.icon;
+    if (tituloEl) tituloEl.textContent = cfg.titulo;
+    if (brandEl)  brandEl.textContent  = cfg.titulo;
+
+    // Mostrar costeo correcto
+    actualizarVistaCosteo(tipo);
+    // Re-bind listeners del historial
+    if (typeof bindHistorialInputs === 'function') bindHistorialInputs();
+}
+
+
+// ── Helpers pantalla principal Escandallo ─────────────────────
+function _showEscMenu() {
+    var m = document.getElementById('vistaMenuReceta');
+    if (m) { m.style.display = 'flex'; _syncVistaSidebarWidth(); }
+    var w = document.getElementById('editorWrap');
+    if (w) w.style.display = 'none';
+}
+function _showEscForm() {
+    var m = document.getElementById('vistaMenuReceta');
+    if (m) m.style.display = 'none';
+    var w = document.getElementById('editorWrap');
+    if (w) w.style.display = '';
+}
+function _syncVistaSidebarWidth() {
+    var m = document.getElementById('vistaMenuReceta'); if (!m) return;
+    m.style.left = document.getElementById('nav')?.classList.contains('cerrado') ? '50px' : '200px';
+}
+function abrirMenuReceta() { _showEscMenu(); }
+function cerrarMenuReceta(e) { /* no-op */ }
+
+// Modal flotante "+" — solo 4 tipos, no cierra el formulario
+function abrirModalNuevaReceta() {
+    document.getElementById('modalNuevaReceta').style.display = 'flex';
+}
+function crearRecetaDesdeModal(tipo) {
+    document.getElementById('modalNuevaReceta').style.display = 'none';
+    crearReceta(tipo);
+}
+
+var modoSimple = false;
+
+function crearRecetaSimple() {
+    modoSimple = true;
+    _showEscForm();
+    recetaActualId   = null;
+    recetaTipoActual = 'alimentos';
+
+    // Render simplified form: solo nombre + grupo
+    var iconEl   = document.getElementById('recetaTipoIcon');
+    var tituloEl = document.getElementById('cardDatosTitulo');
+    if (iconEl)   iconEl.textContent   = '📝';
+    if (tituloEl) tituloEl.textContent = 'Receta Simple';
+    document.getElementById('cardDatosBody').innerHTML =
+        '<div class="meta-grid">' +
+            '<div class="meta-item" style="grid-column:span 2">' +
+                '<label>Nombre de la receta</label>' +
+                '<input type="text" id="nombreReceta" value="" placeholder="Ej. Filete al chipotle...">' +
+            '</div>' +
+            '<div class="meta-item" style="grid-column:span 2">' +
+                '<label>Grupo</label>' +
+                '<input type="text" id="grupo" value="" ' +
+                    'placeholder="Ej. Entradas, Postres, Carnes...">' +
+            '</div>' +
+        '</div>';
+
+    ingredientes = [];
+    if (typeof fotosReceta !== 'undefined') { fotosReceta = []; fotoIndexActual = 0; }
+    renderTabla();
+
+    // Ocultar secciones innecesarias
+    var proc = document.getElementById('cardProcedimiento');
+    var costos = document.getElementById('seccionCostos');
+    if (proc)   proc.style.display   = 'none';
+    if (costos) costos.style.display = 'none';
+
+    // Mostrar botón Convertir, ocultar Vista
+    var btnC = document.getElementById('btnConvertir');
+    var btnV = document.getElementById('btnVista');
+    if (btnC) btnC.style.display = '';
+    if (btnV) btnV.style.display = 'none';
+
+    historialReceta = [];
+    historialPos    = -1;
+    setTimeout(guardarEnHistorial, 100);
+    var btnImp = document.getElementById('btnImprimirHeader');
+    if (btnImp) btnImp.style.display = 'none';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(function() {
+        var el = document.getElementById('nombreReceta');
+        if (el) el.focus();
+    }, 300);
+}
+
+function mostrarModalConvertir() {
+    document.getElementById('modalConvertirReceta').style.display = 'flex';
+}
+
+function convertirRecetaSimple(tipo) {
+    document.getElementById('modalConvertirReceta').style.display = 'none';
+    var savedNombre      = (document.getElementById('nombreReceta') || {}).value || '';
+    var savedGrupo       = (document.getElementById('grupo') || {}).value || '';
+    var savedIngredientes = ingredientes.slice();
+    crearReceta(tipo);
+    var elNombre = document.getElementById('nombreReceta');
+    var elGrupo  = document.getElementById('grupo');
+    if (elNombre) elNombre.value = savedNombre;
+    if (elGrupo)  elGrupo.value  = savedGrupo;
+    ingredientes = savedIngredientes;
+    renderTabla();
+}
+
+function crearReceta(tipo) {
+    _showEscForm(); // ocultar pantalla principal si estaba visible
+
+    // Resetear modo simple
+    modoSimple = false;
+    var proc = document.getElementById('cardProcedimiento');
+    if (proc) proc.style.display = '';
+    var btnC = document.getElementById('btnConvertir');
+    var btnV = document.getElementById('btnVista');
+    if (btnC) btnC.style.display = 'none';
+    if (btnV) btnV.style.display = '';
+
+    recetaActualId   = null;
+    recetaTipoActual = tipo;
+    renderFormularioPorTipo(tipo, {});
+    ingredientes = [];
+    if (typeof fotosReceta !== 'undefined') { fotosReceta = []; fotoIndexActual = 0; }
+    renderTabla();
+    if (typeof renderCarrusel === 'function') renderCarrusel();
+    historialReceta = [];
+    historialPos    = -1;
+    setTimeout(guardarEnHistorial, 100);
+    var btnImp = document.getElementById('btnImprimirHeader');
+    if (btnImp) btnImp.style.display = 'none';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(() => document.getElementById('nombreReceta')?.focus(), 300);
+}
+
+let filtroRecetaTipo   = '';
+let recetasSeleccionadas = new Set();
+let fichaRecetaActualId  = null;
+
+function _activarPillReceta(activa) {
+    ['todas','alimentos','sub-alimentos','bebidas','sub-bebidas'].forEach(function(id) {
+        var el = document.getElementById('rp-'+id); if (!el) return;
+        var on = id === activa;
+        el.style.background  = on ? 'rgba(61,190,122,0.12)' : 'transparent';
+        el.style.borderColor = on ? 'var(--green)' : 'var(--border)';
+        el.style.color       = on ? 'var(--green)' : 'var(--text-muted)';
+        el.style.fontWeight  = on ? '600' : '500';
+    });
+}
+
+function verRecetas() {
+    recetasSeleccionadas.clear();
+    filtroRecetaTipo = '';
+    _activarPillReceta('todas');
+    renderGridRecetas();
+    document.getElementById('modalVerRecetas').style.display = 'flex';
+}
+
+function cerrarVerRecetas(e) {
+    if (e.target === document.getElementById('modalVerRecetas')) {
+        document.getElementById('modalVerRecetas').style.display = 'none';
+        _showEscMenu();
+    }
+}
+
+function renderGridRecetas() {
+    const q   = (document.getElementById('buscarReceta')?.value || '').toLowerCase();
+    let lista = getRecetas();
+    if (filtroRecetaTipo) lista = lista.filter(r => r.tipo === filtroRecetaTipo);
+    if (q) lista = lista.filter(r =>
+        r.nombre.toLowerCase().includes(q) ||
+        (r.grupo||'').toLowerCase().includes(q) ||
+        (r.categoria||'').toLowerCase().includes(q)
+    );
+
+    const iconos = { alimentos:'🍽️', 'sub-alimentos':'🥣', bebidas:'🥃', 'sub-bebidas':'🧃' };
+    const grid   = document.getElementById('gridRecetas');
+    const btnImp = document.getElementById('btnImprimirSeleccion');
+
+    if (!lista.length) {
+        grid.innerHTML = '<div style="grid-column:span 4;text-align:center;padding:48px;color:var(--text-dim)">' +
+            '<div style="font-size:32px;margin-bottom:10px">📋</div><div>Sin recetas guardadas</div></div>';
+        return;
+    }
+
+    grid.innerHTML = lista.map(r => {
+        const icono  = iconos[r.tipo] || '📋';
+        const costo  = (r.ingredientes||[]).reduce((s,i) => s + getFactor(i.cantidad,i.unidad)*(i.costoPorKgLt||0), 0);
+        const fecha  = r.fechaGuardado ? new Date(r.fechaGuardado).toLocaleDateString('es-MX',{day:'2-digit',month:'short'}) : '';
+        const sel    = recetasSeleccionadas.has(r.id);
+        return `<div style="background:var(--surface2);border:2px solid ${sel?'var(--green)':'var(--border)'};
+                border-radius:12px;padding:14px;cursor:pointer;transition:all 0.2s;position:relative;
+                ${sel?'background:rgba(61,190,122,0.07)':''}"
+            onmouseenter="if(!${sel})this.style.borderColor='var(--green)'"
+            onmouseleave="if(!${recetasSeleccionadas.has(r.id)})this.style.borderColor='var(--border)'"
+            onclick="abrirFichaReceta('${r.id}')">
+            <!-- Checkbox selección -->
+            <div onclick="event.stopPropagation();toggleSeleccion('${r.id}',this.closest('div[onclick]'))"
+                style="position:absolute;top:8px;left:8px;width:18px;height:18px;
+                border-radius:4px;border:1.5px solid ${sel?'var(--green)':'var(--border)'};
+                background:${sel?'var(--green)':'transparent'};
+                display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2">
+                ${sel?'<span style="color:#0a0908;font-size:10px;font-weight:700">✓</span>':''}
+            </div>
+            <div style="font-size:20px;margin-bottom:6px;margin-top:4px;text-align:center">${icono}</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:3px;
+                white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.nombre}</div>
+            <div style="font-size:10px;color:var(--text-dim);margin-bottom:8px;
+                white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                ${r.grupo||''}${r.categoria?' · '+r.categoria:''}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-family:inherit;font-size:16px;color:var(--accent)">
+                    $${costo.toFixed(2)}</span>
+                <span style="font-size:9px;color:var(--text-dim)">${fecha}</span>
+            </div>
+            <button onclick="event.stopPropagation();eliminarReceta('${r.id}')"
+                style="position:absolute;top:8px;right:8px;background:none;border:none;
+                color:var(--text-dim);cursor:pointer;font-size:11px;padding:2px 5px;
+                border-radius:4px;z-index:2" title="Eliminar">✕</button>
+        </div>`;
+    }).join('');
+
+    // Mostrar botón imprimir selección
+    if (btnImp) btnImp.style.display = recetasSeleccionadas.size > 0
+        ? 'inline-flex' : 'none';
+}
+
+function toggleSeleccion(id, card) {
+    if (recetasSeleccionadas.has(id)) recetasSeleccionadas.delete(id);
+    else recetasSeleccionadas.add(id);
+    renderGridRecetas();
+}
+
+// ── Ficha técnica ─────────────────────────────────────────────
+function abrirFichaReceta(id) {
+    const r = getRecetas().find(x => x.id === id);
+    if (!r) return;
+    fichaRecetaActualId = id;
+
+    const costo = (r.ingredientes||[]).reduce((s,i) =>
+        s + getFactor(i.cantidad,i.unidad)*(i.costoPorKgLt||0), 0);
+    const sPlatillo = costo > 0 ? costo / 0.30 : 0;
+    const sComedor  = sPlatillo * 1.16;
+    const precioEnCarta = parseFloat(r.precioEnCarta) || 0;
+    const aSinIva = precioEnCarta > 0 ? precioEnCarta / 1.16 : 0;
+    const aCostoP = aSinIva > 0 ? (costo/aSinIva)*100 : 0;
+    const aUtilidadP = aSinIva > 0 ? 100 - aCostoP - 40 : 0;
+
+    const iconos = { alimentos:'🍽️', 'sub-alimentos':'🥣', bebidas:'🥃', 'sub-bebidas':'🧃' };
+
+    document.getElementById('fichaTitulo').textContent = r.nombre;
+    document.getElementById('fichaRecetaContenido').innerHTML = `
+        <!-- META -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid var(--border)">
+            <div>
+                <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px">Grupo</div>
+                <div style="font-size:13px">${iconos[r.tipo]||'📋'} ${r.grupo||''}</div>
+            </div>
+            ${r.tipo==='sub-alimentos'||r.tipo==='sub-bebidas' ? '' : `<div>
+                <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px">Categoría</div>
+                <div style="font-size:13px">${r.categoria||'—'}</div>
+            </div>`}
+            <div>
+                <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px">Tiempo de elaboración</div>
+                <div style="font-size:13px">${r.tiempo||'—'}</div>
+            </div>
+            <div>
+                <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px">${r.tipo==='sub-alimentos'||r.tipo==='sub-bebidas'?'TIPO DE ENVASADO':'VAJILLA / CRISTALERIA'}</div>
+                <div style="font-size:13px">${r.cristaleria||'—'}</div>
+            </div>
+        </div>
+
+        <!-- INGREDIENTES -->
+        <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px">Ingredientes</div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:18px">
+            <thead>
+                <tr style="border-bottom:1px solid var(--border)">
+                    <th style="text-align:left;padding:6px 0;font-size:10px;color:var(--text-dim);font-weight:500;letter-spacing:1px">Ingrediente</th>
+                    <th style="text-align:left;padding:6px 0;font-size:10px;color:var(--text-dim);font-weight:500;letter-spacing:1px">Descripción</th>
+                    <th style="text-align:right;padding:6px 0;font-size:10px;color:var(--text-dim);font-weight:500;letter-spacing:1px">Cant.</th>
+                    <th style="text-align:right;padding:6px 0;font-size:10px;color:var(--text-dim);font-weight:500;letter-spacing:1px">Unidad</th>
+                    <th style="text-align:right;padding:6px 0;font-size:10px;color:var(--text-dim);font-weight:500;letter-spacing:1px">Costo U.</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${(r.ingredientes||[]).map(i => {
+                    const cu = getFactor(i.cantidad,i.unidad)*(i.costoPorKgLt||0);
+                    return `<tr style="border-bottom:1px solid var(--border)">
+                        <td style="padding:7px 0;font-weight:500">${i.nombre||'—'}</td>
+                        <td style="padding:7px 0;color:var(--text-muted);font-size:12px">${i.desc||'—'}</td>
+                        <td style="padding:7px 0;text-align:right;color:var(--accent)">${i.cantidad}</td>
+                        <td style="padding:7px 0;text-align:right;color:var(--text-muted)">${i.unidad}</td>
+                        <td style="padding:7px 0;text-align:right;color:var(--green);font-weight:600">$${cu.toFixed(2)}</td>
+                    </tr>`;
+                }).join('')}
+                <tr>
+                    <td colspan="3" style="padding:10px 0;font-weight:600;color:var(--text-muted);font-size:11px;letter-spacing:1px;text-transform:uppercase">Costo total</td>
+                    <td style="padding:10px 0;text-align:right;font-family:inherit;font-size:22px;color:var(--accent)">$${costo.toFixed(2)}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- PROCEDIMIENTO -->
+        ${r.procedimiento ? `
+        <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px">Procedimiento</div>
+        <p style="font-size:13px;color:var(--text-muted);line-height:1.8">${r.procedimiento}</p>` : ''}
+
+        <!-- FOTOS -->
+        ${(()=>{
+            const fotos = r.fotos && r.fotos.length ? r.fotos
+                        : (r.foto && r.foto.startsWith('data:') ? [r.foto] : []);
+            if (!fotos.length) return '';
+
+            const items = fotos.map((src,i) =>
+                `<div style="flex:0 0 auto;width:${fotos.length===1?'100%':'calc(50% - 4px)'};
+                    aspect-ratio:4/3;border-radius:8px;overflow:hidden;
+                    border:1px solid var(--border);cursor:pointer"
+                    onclick="fichaFotoActual=${i};fichaFotoZoom()">
+                    <img src="${src}" style="width:100%;height:100%;object-fit:cover">
+                </div>`
+            ).join('');
+
+            return `
+            <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+                <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;
+                    color:var(--text-dim);margin-bottom:10px">Fotos (${fotos.length})</div>
+                <div id="fichaFotoGrid" style="display:flex;flex-wrap:wrap;gap:8px">
+                    ${items}
+                </div>
+            </div>`;
+        })()}
+    `;
+
+    document.getElementById('modalFichaReceta').style.display = 'flex';
+}
+
+function cerrarFichaReceta(e) {
+    if (e.target === document.getElementById('modalFichaReceta'))
+        document.getElementById('modalFichaReceta').style.display = 'none';
+}
+
+// ── Lightbox fotos ficha ──────────────────────────────────────
+let fichaFotoActual = 0;
+let fichaFotosActuales = [];
+
+function fichaFotoZoom() {
+    const r = getRecetas().find(x => x.id === fichaRecetaActualId);
+    if (!r) return;
+    fichaFotosActuales = r.fotos && r.fotos.length ? r.fotos
+        : (r.foto && r.foto.startsWith('data:') ? [r.foto] : []);
+    if (!fichaFotosActuales.length) return;
+
+    // Crear lightbox
+    var lb = document.getElementById('fichaLightbox');
+    if (!lb) {
+        lb = document.createElement('div');
+        lb.id = 'fichaLightbox';
+        lb.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.9);' +
+            'display:flex;align-items:center;justify-content:center;cursor:pointer';
+        lb.onclick = function(e) { if(e.target===lb) lb.style.display='none'; };
+        lb.innerHTML =
+            '<button onclick="fichaLbNav(-1)" style="position:absolute;left:20px;top:50%;transform:translateY(-50%);' +
+            'background:rgba(255,255,255,0.15);border:none;color:#fff;border-radius:50%;' +
+            'width:44px;height:44px;font-size:22px;cursor:pointer">‹</button>' +
+            '<img id="fichaLbImg" style="max-width:90vw;max-height:85vh;border-radius:8px;object-fit:contain">' +
+            '<button onclick="fichaLbNav(1)" style="position:absolute;right:20px;top:50%;transform:translateY(-50%);' +
+            'background:rgba(255,255,255,0.15);border:none;color:#fff;border-radius:50%;' +
+            'width:44px;height:44px;font-size:22px;cursor:pointer">›</button>' +
+            '<div id="fichaLbCount" style="position:absolute;bottom:20px;left:50%;transform:translateX(-50%);' +
+            'color:rgba(255,255,255,0.6);font-size:12px"></div>' +
+            '<button onclick="document.getElementById(\'fichaLightbox\').style.display=\'none\'" ' +
+            'style="position:absolute;top:16px;right:20px;background:rgba(255,255,255,0.15);' +
+            'border:none;color:#fff;border-radius:50%;width:34px;height:34px;font-size:16px;cursor:pointer">✕</button>';
+        document.body.appendChild(lb);
+    }
+
+    fichaLbRender();
+    lb.style.display = 'flex';
+}
+
+function fichaLbRender() {
+    var img   = document.getElementById('fichaLbImg');
+    var count = document.getElementById('fichaLbCount');
+    var lb    = document.getElementById('fichaLightbox');
+    if (!img || !fichaFotosActuales.length) return;
+    img.src = fichaFotosActuales[fichaFotoActual];
+    if (count) count.textContent = (fichaFotoActual+1) + ' / ' + fichaFotosActuales.length;
+    // Hide arrows if only 1 photo
+    var btns = lb ? lb.querySelectorAll('button') : [];
+    if (fichaFotosActuales.length <= 1) {
+        btns[0] && (btns[0].style.display='none');
+        btns[1] && (btns[1].style.display='none');
+    }
+}
+
+function fichaLbNav(dir) {
+    fichaFotoActual = (fichaFotoActual + dir + fichaFotosActuales.length) % fichaFotosActuales.length;
+    fichaLbRender();
+}
+
+function editarDesdeficha() {
+    document.getElementById('modalFichaReceta').style.display = 'none';
+    document.getElementById('modalVerRecetas').style.display  = 'none';
+    _showEscForm();
+    cargarReceta(fichaRecetaActualId);
+}
+
+function abrirFichaCosteo() {
+    const r = getRecetas().find(x => x.id === fichaRecetaActualId);
+    if (!r) return;
+
+    document.getElementById('costeoFlotanteNombre').textContent = r.nombre;
+
+    // ── Sub recetas: mostrar costo final + costo por porción ──
+    if (r.tipo === 'sub-alimentos' || r.tipo === 'sub-bebidas') {
+        const cx = r.camposExtra || {};
+        const costoTotal = (r.ingredientes||[]).reduce((s,i) =>
+            s + getFactor(i.cantidad,i.unidad)*(i.costoPorKgLt||0), 0);
+
+        const fU = { G:0.001, KG:1, ML:0.001, LT:1 };
+        const rendFinal   = parseFloat(cx.rendimientoFinal) || 0;
+        const unidadFinal = (cx.unidadRendimientoFinal || 'KG').toUpperCase();
+        const rendFinalKg = rendFinal > 0 ? rendFinal * (fU[unidadFinal]||0.001) : 0;
+        const esLiq       = unidadFinal === 'ML' || unidadFinal === 'LT';
+        const costoXkg    = rendFinalKg > 0 ? costoTotal / rendFinalKg : 0;
+        const costoXg     = rendFinalKg > 0 ? costoTotal / (rendFinalKg * 1000) : 0;
+
+        // Costo por porción — fila 1 (qty) o fila 2 (peso)
+        let porcionQty = parseFloat(cx.porcionesQty) || 0;
+        if (!porcionQty && cx.pesoPorcion && cx.unidadPesoPorcion && rendFinalKg > 0) {
+            const fU2 = { G:1, KG:1000, ML:1, LT:1000 };
+            const pesoPorzBase = parseFloat(cx.pesoPorcion) * (fU2[(cx.unidadPesoPorcion||'G').toUpperCase()]||1);
+            porcionQty = pesoPorzBase > 0 ? Math.floor(rendFinalKg * 1000 / pesoPorzBase) : 0;
+        }
+        const costoPorcion = porcionQty > 0 ? costoTotal / porcionQty : 0;
+
+        // Merma
+        let mermaHTML = '';
+        if (r.ingredientes && r.ingredientes.length > 0 && rendFinal > 0) {
+            const sumaBase = r.ingredientes.reduce((s,i) => {
+                return s + i.cantidad * getPesoBrutoPorUnidad(i);
+            }, 0);
+            const rendBase = rendFinal * ({G:1,KG:1000,ML:1,LT:1000}[unidadFinal]||1);
+            if (sumaBase > 0) {
+                const merma = Math.max(0, (sumaBase - rendBase) / sumaBase * 100);
+                const mColor = merma>30?'var(--red)':merma>15?'var(--accent)':'var(--green)';
+                mermaHTML = `<div style="display:flex;justify-content:space-between;align-items:center;
+                    padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+                    <span style="color:var(--text-muted)">% Merma</span>
+                    <span style="font-weight:600;color:${mColor}">${merma.toFixed(1)}%</span>
+                </div>`;
+            }
+        }
+
+        document.getElementById('costeoFlotanteContenido').innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <!-- Costo Final -->
+            <div style="background:var(--surface2);border:1px solid var(--green);border-radius:10px;padding:16px">
+                <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;
+                    color:var(--green);margin-bottom:12px">💰 Costo Final</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;
+                    padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+                    <span style="color:var(--text-muted)">Costo total ingredientes</span>
+                    <span style="font-weight:700;color:var(--text)">$${costoTotal.toFixed(2)}</span>
+                </div>
+                ${rendFinal > 0 ? `
+                <div style="display:flex;justify-content:space-between;align-items:center;
+                    padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+                    <span style="color:var(--text-muted)">Rendimiento final</span>
+                    <span style="font-weight:600;color:var(--text)">${rendFinal} ${unidadFinal}</span>
+                </div>
+                ${mermaHTML}
+                <div style="display:flex;justify-content:space-between;padding:8px 10px;
+                    margin-top:8px;background:rgba(61,190,122,0.08);border-radius:6px;font-size:13px">
+                    <span style="font-weight:700">Costo / ${esLiq?'LT':'KG'} <span style="font-size:10px;color:var(--text-dim)">con merma</span></span>
+                    <span style="font-weight:700;color:var(--green)">$${costoXkg.toFixed(2)}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:4px 10px;font-size:11px;color:var(--text-dim)">
+                    <span>${esLiq?'Costo / ML':'Costo / G'}</span>
+                    <span>$${costoXg.toFixed(4)}</span>
+                </div>` : `
+                <div style="text-align:center;padding:20px 0;color:var(--text-dim);font-size:12px">
+                    Ingresa el rendimiento final en el escandallo
+                </div>`}
+            </div>
+            <!-- Costo por Porción -->
+            <div style="background:var(--surface2);border:1px solid var(--accent);border-radius:10px;padding:16px">
+                <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;
+                    color:var(--accent);margin-bottom:12px">⚖️ Costo por Porción</div>
+                ${costoPorcion > 0 ? `
+                <div style="display:flex;justify-content:space-between;align-items:center;
+                    padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+                    <span style="color:var(--text-muted)">Porciones totales</span>
+                    <span style="font-weight:600;color:var(--text)">${porcionQty}</span>
+                </div>
+                ${(()=>{
+                    if (cx.pesoPorcion && cx.unidadPesoPorcion) {
+                        return `<div style="display:flex;justify-content:space-between;align-items:center;
+                            padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+                            <span style="color:var(--text-muted)">Peso por porción</span>
+                            <span style="font-weight:600;color:var(--text)">${cx.pesoPorcion} ${cx.unidadPesoPorcion}</span>
+                        </div>`;
+                    }
+                    if (cx.porcionesQty && rendFinalKg > 0) {
+                        const fU2 = {G:1,KG:1000,ML:1,LT:1000};
+                        const rendBase = rendFinal * (fU2[unidadFinal]||1);
+                        const pesoAuto = rendBase / parseFloat(cx.porcionesQty);
+                        const unidAuto = (cx.unidadPesoAutoDisplay || (esLiq ? 'ML' : 'G')).toUpperCase();
+                        const pesoConv = (unidAuto==='KG'||unidAuto==='LT') ? pesoAuto/1000 : pesoAuto;
+                        const pesoFmt  = unidAuto==='KG'||unidAuto==='LT' ? pesoConv.toFixed(3) : String(parseFloat(pesoConv.toFixed(1)));
+                        return `<div style="display:flex;justify-content:space-between;align-items:center;
+                            padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+                            <span style="color:var(--text-muted)">Peso por porción</span>
+                            <span style="font-weight:600;color:var(--text)">${pesoFmt} ${unidAuto}</span>
+                        </div>`;
+                    }
+                    return '';
+                })()}
+                <div style="display:flex;justify-content:space-between;padding:8px 10px;
+                    margin-top:8px;background:var(--accent-dim);border-radius:6px;font-size:14px">
+                    <span style="font-weight:700">Costo / porción</span>
+                    <span style="font-weight:700;color:var(--accent)">$${costoPorcion.toFixed(2)}</span>
+                </div>` : `
+                <div style="text-align:center;padding:32px 0;color:var(--text-dim);font-size:12px">
+                    Sin porciones definidas.<br>
+                    <span onclick="editarDesdeficha()" style="color:var(--green);cursor:pointer;
+                        text-decoration:underline">Agregar en el escandallo</span>
+                </div>`}
+            </div>
+        </div>`;
+
+        document.getElementById('modalCosteoFlotante').style.display = 'flex';
+        return;
+    }
+
+    // ── Recetas normales: costeo sugerido/aplicado ────────────
+    const costo = (r.ingredientes||[]).reduce((s,i) =>
+        s + getFactor(i.cantidad,i.unidad)*(i.costoPorKgLt||0), 0);
+    const sPlatillo  = costo > 0 ? costo / 0.30 : 0;
+    const sComedor   = sPlatillo * 1.16;
+    const precioEnCarta = parseFloat(r.precioEnCarta) || 0;
+    const aSinIva    = precioEnCarta > 0 ? precioEnCarta / 1.16 : 0;
+    const aCostoP    = aSinIva > 0 ? (costo/aSinIva)*100 : 0;
+    const aUtilidadP = aSinIva > 0 ? 100 - aCostoP - 40 : 0;
+    const colorCB    = aCostoP<=32?'var(--green)':aCostoP<=45?'var(--accent)':'var(--red)';
+    const colorUt    = aUtilidadP>=25?'var(--green)':aUtilidadP>=10?'var(--accent)':'var(--red)';
+
+    document.getElementById('costeoFlotanteContenido').innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <!-- Sugerido -->
+            <div style="background:var(--surface2);border:1px solid var(--accent);
+                border-radius:10px;padding:16px">
+                <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;
+                    color:var(--accent);margin-bottom:12px">📐 Costeo Sugerido</div>
+                ${[
+                    ['Costo Bruto','30%', '$'+costo.toFixed(2), 'var(--accent)'],
+                    ['Gasto Operativo','40%', '$'+(sPlatillo*0.40).toFixed(2), ''],
+                    ['Utilidad Neta','30%', '$'+(sPlatillo*0.30).toFixed(2), ''],
+                ].map(([lbl,pct,val,c]) => `
+                <div style="display:flex;justify-content:space-between;align-items:center;
+                    padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+                    <span style="color:var(--text-muted)">${lbl} <span style="color:var(--text-dim)">${pct}</span></span>
+                    <span style="font-weight:600;color:${c||'var(--text)'}"> ${val}</span>
+                </div>`).join('')}
+                <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;
+                    color:var(--text-dim);text-align:center;padding:8px 0 4px">precio</div>
+                ${[
+                    ['Precio platillo','100%', '$'+sPlatillo.toFixed(2),''],
+                    ['+ IVA','16%', '$'+(sPlatillo*0.16).toFixed(2),''],
+                ].map(([lbl,pct,val]) => `
+                <div style="display:flex;justify-content:space-between;align-items:center;
+                    padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+                    <span style="color:var(--text-muted)">${lbl} <span style="color:var(--text-dim)">${pct}</span></span>
+                    <span style="font-weight:600;color:var(--text)">${val}</span>
+                </div>`).join('')}
+                <div style="display:flex;justify-content:space-between;padding:8px 10px;
+                    margin-top:6px;background:var(--accent-dim);border-radius:6px;font-size:13px">
+                    <span style="font-weight:700">Comedor <span style="font-size:10px;color:var(--text-dim)">116%</span></span>
+                    <span style="font-weight:700;color:var(--accent)">$${sComedor.toFixed(2)}</span>
+                </div>
+            </div>
+            <!-- Aplicado -->
+            <div style="background:var(--surface2);border:1px solid var(--green);
+                border-radius:10px;padding:16px">
+                <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;
+                    color:var(--green);margin-bottom:12px">💳 Costeo Aplicado</div>
+                ${precioEnCarta > 0 ? `
+                <div style="margin-bottom:12px">
+                    <div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;
+                        text-transform:uppercase;margin-bottom:4px">Precio carta con IVA</div>
+                    <div style="font-family:inherit;font-size:28px;
+                        color:var(--text);letter-spacing:1px">$${precioEnCarta.toFixed(2)}</div>
+                </div>
+                ${[
+                    ['Precio sin IVA','÷1.16', '$'+aSinIva.toFixed(2), ''],
+                    ['Costo Bruto', aCostoP.toFixed(1)+'%', '$'+costo.toFixed(2), colorCB],
+                    ['Gasto Operativo','40%', '$'+(aSinIva*0.40).toFixed(2), ''],
+                    ['Utilidad Neta', aUtilidadP.toFixed(1)+'%', '$'+(aSinIva*(aUtilidadP/100)).toFixed(2), colorUt],
+                ].map(([lbl,pct,val,c]) => `
+                <div style="display:flex;justify-content:space-between;align-items:center;
+                    padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+                    <span style="color:var(--text-muted)">${lbl} <span style="font-weight:600;color:${c||'var(--text-dim)'}"> ${pct}</span></span>
+                    <span style="font-weight:600;color:var(--text)">${val}</span>
+                </div>`).join('')}
+                <div style="display:flex;justify-content:space-between;padding:8px 10px;
+                    margin-top:6px;background:rgba(61,190,122,0.08);border-radius:6px;font-size:13px">
+                    <span style="font-weight:700">Comedor</span>
+                    <span style="font-weight:700;color:var(--green)">$${precioEnCarta.toFixed(2)}</span>
+                </div>` : `
+                <div style="text-align:center;padding:32px 0;color:var(--text-dim);font-size:12px">
+                    Sin precio en carta registrado.<br>
+                    <span onclick="editarDesdeficha()" style="color:var(--green);cursor:pointer;
+                        text-decoration:underline">Agregar precio</span>
+                </div>`}
+            </div>
+        </div>`;
+
+    document.getElementById('modalCosteoFlotante').style.display = 'flex';
+}
+function cerrarCosteoFlotante(e) {
+    if (e.target === document.getElementById('modalCosteoFlotante'))
+        document.getElementById('modalCosteoFlotante').style.display = 'none';
+}
+
+// ── Impresión ─────────────────────────────────────────────────
+let _imprimirIds = null; // null = receta activa en escandallo, array = IDs específicos
+
+function abrirMenuImpresion(id) {
+    // id = null → imprimir receta activa del escandallo
+    // id = string → imprimir esa receta específica (desde ficha o grid)
+    _imprimirIds = id ? [id] : null;
+    document.getElementById('modalImpresion').style.display = 'flex';
+}
+
+function cerrarModalImpresion(e) {
+    if (e.target === document.getElementById('modalImpresion'))
+        document.getElementById('modalImpresion').style.display = 'none';
+}
+
+function ejecutarImpresion(modo) {
+    document.getElementById('modalImpresion').style.display = 'none';
+
+    var recetas;
+
+    if (_imprimirIds === null) {
+        // Imprimir receta activa en el escandallo (puede no estar guardada aún)
+        var tiempoNum    = document.getElementById('tiempoNum')?.value || '';
+        var tiempoUnidad = document.getElementById('tiempoUnidad')?.value || 'min';
+        var recetaViva = {
+            id:            recetaActualId || 'preview',
+            tipo:          recetaTipoActual || 'alimentos',
+            nombre:        document.getElementById('nombreReceta')?.value || 'Sin nombre',
+            grupo:         document.getElementById('grupo')?.value || '',
+            categoria:     document.getElementById('categoria')?.value || '',
+            cristaleria:   document.getElementById('cristaleria')?.value || '',
+            tiempo:        tiempoNum ? tiempoNum + ' ' + tiempoUnidad : '',
+            procedimiento: document.getElementById('procedimiento')?.value || '',
+            precioEnCarta: document.getElementById('precioEnCarta')?.value || '',
+            ingredientes:  JSON.parse(JSON.stringify(ingredientes)),
+            fotos:         typeof fotosReceta !== 'undefined' ? JSON.parse(JSON.stringify(fotosReceta)) : [],
+            foto:          typeof fotosReceta !== 'undefined' && fotosReceta.length ? fotosReceta[0] : '',
+            camposExtra:   typeof leerCamposExtra === 'function' ? leerCamposExtra(recetaTipoActual || 'alimentos') : {},
+        };
+        recetas = [recetaViva];
+    } else if (recetasSeleccionadas && recetasSeleccionadas.size > 1 && !_imprimirIds.length) {
+        recetas = getRecetas().filter(r => recetasSeleccionadas.has(r.id));
+    } else {
+        recetas = _imprimirIds.map(id => getRecetas().find(x => x.id === id)).filter(Boolean);
+    }
+
+    if (!recetas.length) { alert('No hay recetas para imprimir'); return; }
+
+    var html = modo === 'operativa'
+        ? buildPlantillaOperativa(recetas)
+        : buildPlantillaAdministrativa(recetas);
+
+    abrirVentanaImpresion(html);
+}
+
+function imprimirSeleccionadas() {
+    if (!recetasSeleccionadas.size) return;
+    _imprimirIds = [...recetasSeleccionadas];
+    document.getElementById('modalImpresion').style.display = 'flex';
+}
+
+
+// ══ CARÁTULA DE COSTOS ══════════════════════════════════════
+var caratulaTipoActual=null,caratulaLogoBase64='';
+var CARATULA_GRUPOS=[
+    {key:'alimentos',emoji:'🍽️',label:'Alimentos',subtitulo:'Carátula de Costos · Alimentos',desc:'Platillos, entradas, postres, guarniciones...',color:'var(--green)',tipo:'normal',rendDefault:'PLATILLO'},
+    {key:'bebidas',emoji:'🥃',label:'Coctelería / Bebidas',subtitulo:'Carátula de Costos · Coctelería',desc:'Cócteles, mocktails, bebidas de la carta...',color:'var(--green)',tipo:'normal',rendDefault:'BEBIDA'},
+    {key:'sub-alimentos',emoji:'🥣',label:'Sub Recetas Alimentos',subtitulo:'Carátula de Costos · Sub Recetas Alimentos',desc:'Salsas, fondos, masas, bases, rellenos...',color:'var(--accent)',tipo:'sub',rendDefault:'PREPARACIÓN'},
+    {key:'sub-bebidas',emoji:'🧃',label:'Sub Recetas Bebidas',subtitulo:'Carátula de Costos · Sub Recetas Bebidas',desc:'Jarabes, shrubs, purés, mixes, infusiones...',color:'var(--accent)',tipo:'sub',rendDefault:'PREPARACIÓN'}
+];
+function getRendimientoNeto(r,g){var cx=r.camposExtra||{};if(g.key==='alimentos')return (parseFloat(cx.porciones)||1)+' '+(cx.unidadPorcion||'PLATILLO').toUpperCase();if(g.key==='bebidas'){if(cx.rendimientoBebida&&cx.unidadRendimientoBebida)return cx.rendimientoBebida+' '+cx.unidadRendimientoBebida.toUpperCase();return '1 BEBIDA';}return '1 '+g.rendDefault;}
+function cerrarCaratula(e){if(e.target===document.getElementById('modalCaratula')){document.getElementById('modalCaratula').style.display='none';_showEscMenu();}}
+function cerrarCaratulaBtnX(){document.getElementById('modalCaratula').style.display='none';_showEscMenu();}
+function cargarLogoCaratula(input){var f=input.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(e){caratulaLogoBase64=e.target.result;var img=document.getElementById('caratulaLogoImg'),ph=document.getElementById('caratulaLogoPlaceholder');img.src=caratulaLogoBase64;img.style.display='block';ph.style.display='none';};rd.readAsDataURL(f);}
+function verCaratula(){mostrarCaratulaSelector();document.getElementById('modalCaratula').style.display='flex';}
+function mostrarCaratulaSelector(){caratulaTipoActual=null;document.getElementById('caratulaSelectorView').style.display='block';document.getElementById('caratulaDetalleView').style.display='none';document.getElementById('caratulaBtnVolver').style.display='none';document.getElementById('caratulaBtnPrint').style.display='none';document.getElementById('caratulaTituloHeader').textContent='📊 Carátula de Costos';renderCaratulaSelector();}
+function renderCaratulaSelector(){var recetas=getRecetas(),grid=document.getElementById('caratulaSelectorGrid');grid.innerHTML=CARATULA_GRUPOS.map(function(g){var lista=recetas.filter(function(r){return r.tipo===g.key;}),cnt=lista.length,vacio=cnt===0,bu='';if(g.tipo==='normal'&&cnt>0){var suma=0,n=0;lista.forEach(function(r){var p=parseFloat(r.precioEnCarta)||0;if(!p)return;var c=(r.ingredientes||[]).reduce(function(s,i){return s+getFactor(i.cantidad,i.unidad)*(i.costoPorKgLt||0);},0),si=p/1.16;if(si>0){suma+=100-(c/si)*100-40;n++;}});if(n>0){var pr=suma/n,col=pr>=30?'var(--green)':pr>=15?'var(--accent)':'var(--red)';bu='<div style="margin-top:6px;font-size:11px;font-weight:700;color:'+col+'">'+pr.toFixed(1)+'% utilidad neta promedio</div>';}}var grupos=[...new Set(lista.map(function(r){return r.grupo;}).filter(Boolean))];var gb=grupos.length>0?'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">'+grupos.slice(0,4).map(function(gr){return '<span style="font-size:9px;background:var(--surface);border:1px solid var(--border);padding:2px 7px;border-radius:8px;color:var(--text-dim)">'+gr+'</span>';}).join('')+(grupos.length>4?'<span style="font-size:9px;color:var(--text-dim)">+'+(grupos.length-4)+'</span>':'')+'</div>':'';var sinP=g.tipo==='normal'?lista.filter(function(r){return !parseFloat(r.precioEnCarta);}).length:0;return '<button onclick="'+(cnt>0?'verCaratulaGrupo(\''+g.key+'\')':'')+'" class="cat-btn" style="border-color:'+(cnt>0?g.color:'var(--border)')+';'+(vacio?'opacity:0.4;cursor:default;':'')+'padding:16px 18px;align-items:flex-start;text-align:left;"><div style="display:flex;align-items:flex-start;gap:12px;width:100%"><span style="font-size:28px;flex-shrink:0;margin-top:2px">'+g.emoji+'</span><div style="flex:1;min-width:0"><div class="cat-btn-title" style="color:'+(cnt>0?g.color:'var(--text-muted)')+';font-size:14px">'+g.label+'</div><div class="cat-btn-desc" style="margin-top:2px">'+g.desc+'</div><div style="display:flex;align-items:baseline;gap:8px;margin-top:8px"><span style="font-size:24px;font-weight:700;color:var(--text)">'+cnt+'</span><span style="font-size:11px;color:var(--text-dim)">recetas</span>'+(sinP>0?'<span style="font-size:10px;color:var(--accent);background:rgba(245,200,66,0.12);padding:1px 8px;border-radius:8px">'+sinP+' sin precio</span>':'')+'</div>'+gb+bu+'</div>'+(cnt>0?'<span style="color:var(--text-dim);font-size:18px;align-self:center">›</span>':'')+'</div></button>';}).join('');}
+function verCaratulaGrupo(key){caratulaTipoActual=key;var g=CARATULA_GRUPOS.find(function(x){return x.key===key;});document.getElementById('caratulaSelectorView').style.display='none';document.getElementById('caratulaDetalleView').style.display='block';document.getElementById('caratulaBtnVolver').style.display='inline-block';document.getElementById('caratulaBtnPrint').style.display='inline-flex';document.getElementById('caratulaTituloHeader').textContent=g.emoji+' '+g.label;var sub=document.getElementById('caratulaSubtitulo');if(sub)sub.textContent=g.subtitulo;document.getElementById('caratulaBuscar').value='';document.getElementById('caratulaFiltroStatus').value='';var recetas=getRecetas().filter(function(r){return r.tipo===key;});var grupos=[...new Set(recetas.map(function(r){return r.grupo;}).filter(Boolean))].sort();var sel=document.getElementById('caratulaFiltroGrupo');sel.innerHTML='<option value="">Todos los grupos</option>'+grupos.map(function(gr){return '<option value="'+gr+'">'+gr+'</option>';}).join('');renderCaratulaDetalleTabla();}
+function renderCaratulaDetalleTabla(){var key=caratulaTipoActual;if(!key)return;var g=CARATULA_GRUPOS.find(function(x){return x.key===key;});var q=(document.getElementById('caratulaBuscar')?.value||'').toLowerCase(),gF=document.getElementById('caratulaFiltroGrupo')?.value||'',sF=document.getElementById('caratulaFiltroStatus')?.value||'';var recetas=getRecetas().filter(function(r){return r.tipo===key;});if(q)recetas=recetas.filter(function(r){return r.nombre.toLowerCase().includes(q)||(r.grupo||'').toLowerCase().includes(q)||(r.categoria||'').toLowerCase().includes(q);});if(gF)recetas=recetas.filter(function(r){return r.grupo===gF;});if(sF==='activa')recetas=recetas.filter(function(r){return r.status!=='inactiva';});if(sF==='inactiva')recetas=recetas.filter(function(r){return r.status==='inactiva';});var cnt=document.getElementById('caratulaContador');if(cnt)cnt.textContent=recetas.length+' recetas';var body=document.getElementById('caratulaDetalleBody');if(!recetas.length){body.innerHTML='<div style="text-align:center;padding:48px;color:var(--text-dim)"><div style="font-size:32px;margin-bottom:10px">🔍</div><div>Sin resultados</div></div>';return;}body.innerHTML=g.tipo==='normal'?renderCaratulaTablaRecetas(recetas,g):renderCaratulaTablaSubRecetas(recetas,g);}
+function renderCaratulaTablaRecetas(recetas,g){var sU=0,cU=0;var filas=recetas.map(function(r){var c=(r.ingredientes||[]).reduce(function(s,i){return s+getFactor(i.cantidad,i.unidad)*(i.costoPorKgLt||0);},0),sC=c>0?c/0.30*1.16:0,p=parseFloat(r.precioEnCarta)||0,si=p>0?p/1.16:0,cP=si>0?(c/si)*100:0,uP=si>0?100-cP-40:0,uM=si*(uP/100),tP=p>0,in2=r.status==='inactiva',gr=r.grupo||'',rend=getRendimientoNeto(r,g);if(tP){sU+=uP;cU++;}var cU2=uP>=30?'var(--green)':uP>=15?'var(--accent)':'var(--red)',bU=uP>=30?'rgba(61,190,122,0.12)':uP>=15?'rgba(245,200,66,0.12)':'rgba(224,90,58,0.12)';return '<tr style="opacity:'+(in2?'0.5':'1')+'"><td style="font-size:12px;font-weight:600">'+r.nombre+(in2?'<span style="font-size:9px;color:var(--text-dim);margin-left:6px;background:var(--surface2);padding:1px 6px;border-radius:4px">inactiva</span>':'')+(gr?'<div style="font-size:10px;color:var(--text-dim);font-weight:400;margin-top:2px">'+gr+'</div>':'')+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+rend+'</td><td style="text-align:right;color:var(--accent);font-weight:600">$'+c.toFixed(2)+'</td><td style="text-align:right;color:var(--text-muted)">$'+sC.toFixed(2)+'</td><td style="text-align:right;font-weight:600;color:'+(tP?'var(--green)':'var(--text-dim)')+'">'+(tP?'$'+p.toFixed(2):'—')+'</td><td style="text-align:right;color:var(--text-muted)">'+(tP?'$'+uM.toFixed(2):'—')+'</td><td style="text-align:center">'+(tP?'<span style="color:'+cU2+';background:'+bU+';border-radius:20px;padding:2px 10px;font-weight:700;font-size:12px">'+uP.toFixed(0)+'%</span>':'<span style="color:var(--text-dim)">—</span>')+'</td></tr>';}).join('');var prom=cU>0?sU/cU:null,cP2=prom!==null?(prom>=30?'var(--green)':prom>=15?'var(--accent)':'var(--red)'):'var(--text-dim)',bP=prom!==null?(prom>=30?'rgba(61,190,122,0.12)':prom>=15?'rgba(245,200,66,0.12)':'rgba(224,90,58,0.12)'):'transparent';return '<div class="tabla-wrap"><table><thead><tr><th style="text-align:left">NOMBRE DE RECETA</th><th style="text-align:center">RENDIMIENTO NETO</th><th style="text-align:right">COSTO BRUTO</th><th style="text-align:right">PRECIO SUGERIDO c/IVA</th><th style="text-align:right">PRECIO EN CARTA</th><th style="text-align:right">$ UTILIDAD NETA</th><th style="text-align:center;width:90px">% UTILIDAD</th></tr></thead><tbody>'+filas+'</tbody><tfoot><tr><td colspan="6" style="padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);text-align:right">Porcentaje promedio de utilidad neta</td><td style="text-align:center;padding:10px 12px">'+(prom!==null?'<span style="color:'+cP2+';background:'+bP+';border-radius:20px;padding:4px 14px;font-weight:800;font-size:14px">'+prom.toFixed(2)+'%</span>':'<span style="color:var(--text-dim)">—</span>')+'</td></tr></tfoot></table></div>';}
+function _fmtNum(n){if(n===0)return '0';return parseFloat(n.toFixed(3))+'';}
+function renderCaratulaTablaSubRecetas(recetas,g){var filas=recetas.map(function(r){var c=(r.ingredientes||[]).reduce(function(s,i){return s+getFactor(i.cantidad,i.unidad)*(i.costoPorKgLt||0);},0),cx=r.camposExtra||{};var rN=parseFloat(cx.rendimientoFinal)||0,rU=(cx.unidadRendimientoFinal||'').toUpperCase();var rS=rN>0?_fmtNum(rN)+' '+rU.toLowerCase():'—';var rB=rN;if(rU==='G'||rU==='ML')rB=rN/1000;var cKL=rB>0?c/rB:0,uB=(rU==='G'||rU==='KG')?'kg':(rU==='ML'||rU==='LT')?'lts':rU.toLowerCase();var pQ=parseFloat(cx.porcionesQty)||0,pUn=(cx.porcionesUnidad||'pzs').toLowerCase(),pP=parseFloat(cx.pesoPorcion)||0,uP=(cx.unidadPesoPorcion||'').toLowerCase(),pD='—',uPD='—',cP=0;if(pQ>0){pD=pQ.toFixed(0)+' porciones';cP=c/pQ;if(rN>0)uPD=_fmtNum(rN/pQ)+' '+rU.toLowerCase();else if(pP>0)uPD=_fmtNum(pP)+' '+uP;}else if(pP>0&&rN>0){var pC=rN/pP;pD=pC.toFixed(0)+' porciones';cP=c/pC;uPD=_fmtNum(pP)+' '+uP;}var in2=r.status==='inactiva',gr=r.grupo||'';return '<tr style="opacity:'+(in2?'0.5':'1')+'"><td style="font-size:12px;font-weight:600">'+r.nombre+(in2?'<span style="font-size:9px;color:var(--text-dim);margin-left:6px;background:var(--surface2);padding:1px 6px;border-radius:4px">inactiva</span>':'')+(gr?'<div style="font-size:10px;color:var(--text-dim);font-weight:400;margin-top:2px">'+gr+'</div>':'')+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+rS+'</td><td style="text-align:right;color:var(--accent);font-weight:600">$'+c.toFixed(2)+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+pD+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+uPD+'</td><td style="text-align:right;color:var(--green);font-weight:600">'+(cP>0?'$'+cP.toFixed(2):'—')+'</td><td style="text-align:right;font-weight:600;color:var(--text-muted)">'+(cKL>0?'$'+cKL.toFixed(2)+'<span style="font-size:9px;margin-left:2px;color:var(--text-dim)">/'+uB+'</span>':'—')+'</td></tr>';}).join('');return '<div class="tabla-wrap"><table><thead><tr><th style="text-align:left">NOMBRE DE SUB RECETA</th><th style="text-align:center">RENDIMIENTO NETO</th><th style="text-align:right">COSTO BRUTO</th><th style="text-align:center">RENDIMIENTO x PORCIONES</th><th style="text-align:center">UNIDAD DE MEDIDA x PORCIÓN</th><th style="text-align:right">COSTO POR PORCIÓN</th><th style="text-align:right">COSTO POR kg o LT</th></tr></thead><tbody>'+filas+'</tbody></table></div>';}
+function imprimirCaratula(){if(!caratulaTipoActual)return;var q=(document.getElementById('caratulaBuscar')?.value||'').toLowerCase(),gF=document.getElementById('caratulaFiltroGrupo')?.value||'',sF=document.getElementById('caratulaFiltroStatus')?.value||'';var recetas=getRecetas().filter(function(r){return r.tipo===caratulaTipoActual;});if(q)recetas=recetas.filter(function(r){return r.nombre.toLowerCase().includes(q)||(r.grupo||'').toLowerCase().includes(q)||(r.categoria||'').toLowerCase().includes(q);});if(gF)recetas=recetas.filter(function(r){return r.grupo===gF;});if(sF==='activa')recetas=recetas.filter(function(r){return r.status!=='inactiva';});if(sF==='inactiva')recetas=recetas.filter(function(r){return r.status==='inactiva';});if(!recetas.length){alert('No hay recetas para imprimir.');return;}var estab=(document.getElementById('caratulaEstab')?document.getElementById('caratulaEstab').value.trim():'')||'Establecimiento';var g=CARATULA_GRUPOS.find(function(x){return x.key===caratulaTipoActual;});abrirVentanaImpresion(buildPlantillaCaratula(recetas,estab,g,caratulaLogoBase64));}
+
+function eliminarRecetaActual() {
+    if (!recetaActualId) { alert('Esta receta no está guardada aún.'); return; }
+    const nombre = document.getElementById('nombreReceta').value.trim() || 'esta receta';
+    if (!confirm('¿Eliminar "' + nombre + '"? Esta acción no se puede deshacer.')) return;
+    setRecetas(getRecetas().filter(r => r.id !== recetaActualId));
+    recetaActualId = null;
+    abrirMenuReceta();
+}
+
+// Mostrar menú al cargar la página
+window.addEventListener('load', function() {
+    hookCalcularCosteos();
+    if (typeof renderFormularioPorTipo === 'function') renderFormularioPorTipo('bebidas', {});
+    _showEscMenu();
+});
+</script>
+
+<style>
+.theme-toggle {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 999;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 50px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+    transition: all 0.2s;
+}
+.theme-toggle:hover { border-color: var(--green); color: var(--green); }
+</style>
+<button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Cambiar modo">
+    <span id="themeIcon">☀️</span>
+    <span id="themeLabel">Modo claro</span>
+</button>
+<script>
+(function(){
+    var saved = localStorage.getItem('etaax_theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    document.addEventListener('DOMContentLoaded', function(){
+        var icon  = document.getElementById('themeIcon');
+        var label = document.getElementById('themeLabel');
+        if (saved === 'light') { if(icon) icon.textContent='🌙'; if(label) label.textContent='Modo oscuro'; }
+    });
+})();
+
+function toggleTheme() {
+    var html  = document.documentElement;
+    var curr  = html.getAttribute('data-theme');
+    var next  = curr === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    localStorage.setItem('etaax_theme', next);
+    var icon  = document.getElementById('themeIcon');
+    var label = document.getElementById('themeLabel');
+    if (next === 'light') { if(icon) icon.textContent='🌙'; if(label) label.textContent='Modo oscuro'; }
+    else                  { if(icon) icon.textContent='☀️'; if(label) label.textContent='Modo claro'; }
+}
+</script>
+</body>
+</html>
