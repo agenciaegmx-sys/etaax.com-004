@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ETAAX – Configuración del negocio</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+.config-wrap { max-width:760px;margin:0 auto; }
+.config-section {
+    background:var(--surface);border:1px solid var(--border);border-radius:16px;
+    padding:28px;margin-bottom:20px;
+}
+.config-section-title {
+    font-size:10px;letter-spacing:3px;text-transform:uppercase;
+    color:var(--text-dim);margin-bottom:20px;padding-bottom:10px;
+    border-bottom:1px solid var(--border);
+}
+.form-grid { display:grid;grid-template-columns:1fr 1fr;gap:16px; }
+.form-group { display:flex;flex-direction:column;gap:6px; }
+.form-group.full { grid-column:1/-1; }
+.form-group label { font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim); }
+.form-group input,
+.form-group select,
+.form-group textarea {
+    background:var(--surface2);border:1px solid var(--border);color:var(--text);
+    padding:10px 14px;border-radius:8px;font-family:'DM Sans',sans-serif;
+    font-size:14px;outline:none;transition:border-color .2s;width:100%;
+}
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus { border-color:var(--green); }
+.form-group textarea { min-height:80px;resize:vertical; }
+.form-hint { font-size:11px;color:var(--text-dim); }
+
+/* Color picker */
+.color-grid { display:flex;flex-wrap:wrap;gap:10px;margin-top:4px; }
+.color-dot {
+    width:32px;height:32px;border-radius:50%;cursor:pointer;
+    border:2px solid transparent;transition:transform .15s,border-color .15s;
+    flex-shrink:0;
+}
+.color-dot:hover { transform:scale(1.15); }
+.color-dot.sel { border-color:#fff;transform:scale(1.15); }
+
+/* Tipo icons grid */
+.tipo-grid { display:flex;flex-wrap:wrap;gap:8px;margin-top:4px; }
+.tipo-btn {
+    display:flex;align-items:center;gap:8px;
+    padding:8px 14px;border-radius:8px;border:1px solid var(--border);
+    background:var(--surface2);cursor:pointer;font-family:'DM Sans',sans-serif;
+    font-size:13px;color:var(--text-muted);transition:all .15s;
+}
+.tipo-btn:hover { border-color:var(--green);color:var(--text); }
+.tipo-btn.sel { border-color:var(--accent);background:var(--accent-dim);color:var(--accent);font-weight:500; }
+
+/* Preview card */
+.neg-preview {
+    display:flex;align-items:center;gap:16px;
+    background:var(--surface2);border:1px solid var(--border);border-radius:12px;
+    padding:16px 20px;margin-bottom:20px;transition:border-color .3s;
+}
+.neg-preview-emoji {
+    width:52px;height:52px;border-radius:14px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:26px;flex-shrink:0;transition:background .3s;
+}
+.neg-preview-nombre { font-size:17px;font-weight:600;color:var(--text); }
+.neg-preview-tipo { font-size:11px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-top:3px; }
+
+/* Save bar */
+.save-bar {
+    position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--border);
+    padding:16px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;
+    z-index:10;flex-wrap:wrap;
+}
+.save-bar-status { font-size:12px;color:var(--text-dim); }
+.btn-save {
+    background:var(--green);border:none;color:#0a0908;
+    font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;
+    padding:11px 28px;border-radius:8px;cursor:pointer;transition:opacity .2s;
+}
+.btn-save:hover { opacity:.85; }
+.btn-back {
+    background:transparent;border:1px solid var(--border);color:var(--text-muted);
+    font-family:'DM Sans',sans-serif;font-size:13px;
+    padding:10px 20px;border-radius:8px;cursor:pointer;transition:all .2s;text-decoration:none;
+    display:inline-flex;align-items:center;gap:6px;
+}
+.btn-back:hover { border-color:var(--text-muted);color:var(--text); }
+
+.horario-grid { display:grid;grid-template-columns:repeat(7,1fr);gap:6px; }
+.dia-col { display:flex;flex-direction:column;gap:6px; }
+.dia-label { font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);text-align:center; }
+.dia-check { width:100%;aspect-ratio:1;border-radius:6px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-dim);transition:all .15s;user-select:none; }
+.dia-check.activo { background:rgba(61,190,122,.12);border-color:var(--green);color:var(--green);font-weight:600; }
+
+.theme-toggle{position:fixed;bottom:70px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;}
+.theme-toggle:hover{border-color:var(--green);color:var(--green);}
+@media(max-width:640px){ .form-grid{grid-template-columns:1fr;} .form-group.full{grid-column:1;} }
+</style>
+</head>
+<body>
+<header class="top-bar" style="display:flex;align-items:center;justify-content:space-between;padding:0 24px;">
+    <svg width="108" height="26" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
+        <path d="M14.5 28H37C35.5 23 31.5 20 25.5 20C19.5 20 16 23 14.5 28Z" fill="#1a1916"/>
+        <circle cx="45" cy="11" r="6" fill="#f5c842"/>
+        <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
+        <path d="M78 41C78 34.5 83.5 30.5 92.5 29.5L104 28.5V27.5C104 23.5 101.5 21 97 21C93 21 90 23 89 26.5L80.5 24C82.5 17.5 89 13 97 13C107.5 13 113 18.5 113 28.5V54.5H104V51C102 53.5 98.5 55 94 55C85.5 55 78 50.5 78 41Z" fill="#3dbe7a"/>
+        <path d="M104 37L95.5 38C92.5 38.5 90.5 40 90.5 42.5C90.5 45 92.5 46.5 95.5 46.5C101 46.5 104 43.5 104 39V37Z" fill="#1a1916"/>
+        <path d="M126 41C126 34.5 131.5 30.5 140.5 29.5L152 28.5V27.5C152 23.5 149.5 21 145 21C141 21 138 23 137 26.5L128.5 24C130.5 17.5 137 13 145 13C155.5 13 161 18.5 161 28.5V54.5H152V51C150 53.5 146.5 55 142 55C133.5 55 126 50.5 126 41Z" fill="#3dbe7a"/>
+        <path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/>
+        <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+    </svg>
+    <a href="hub.html" class="btn-back">← Volver al hub</a>
+</header>
+
+<div style="padding:32px 24px 100px;max-width:800px;margin:0 auto;">
+    <div style="margin-bottom:28px;">
+        <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px;">Configuración</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:1px;color:var(--text);">General del negocio</div>
+    </div>
+
+    <!-- Preview -->
+    <div class="neg-preview" id="negPreview">
+        <div class="neg-preview-emoji" id="prevEmoji">🏢</div>
+        <div>
+            <div class="neg-preview-nombre" id="prevNombre">—</div>
+            <div class="neg-preview-tipo" id="prevTipo">—</div>
+        </div>
+    </div>
+
+    <!-- Identidad -->
+    <div class="config-section">
+        <div class="config-section-title">Identidad del negocio</div>
+        <div class="form-grid">
+            <div class="form-group full">
+                <label>Nombre del negocio *</label>
+                <input type="text" id="cNombre" placeholder="Ej. Bar La Esperanza" oninput="updatePreview()">
+            </div>
+            <div class="form-group full">
+                <label>Tipo de negocio</label>
+                <div class="tipo-grid" id="tipoGrid"></div>
+            </div>
+            <div class="form-group full">
+                <label>Color del negocio</label>
+                <div class="color-grid" id="colorGrid"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contacto -->
+    <div class="config-section">
+        <div class="config-section-title">Datos de contacto</div>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Teléfono</label>
+                <input type="tel" id="cTel" placeholder="55 1234 5678">
+            </div>
+            <div class="form-group">
+                <label>Correo de contacto</label>
+                <input type="email" id="cCorreo" placeholder="contacto@negocio.com">
+            </div>
+            <div class="form-group">
+                <label>Sitio web</label>
+                <input type="url" id="cWeb" placeholder="https://minegocio.com">
+            </div>
+            <div class="form-group">
+                <label>RFC</label>
+                <input type="text" id="cRFC" placeholder="XAXX010101000" maxlength="13" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+            </div>
+            <div class="form-group full">
+                <label>Dirección fiscal / operativa</label>
+                <input type="text" id="cDireccion" placeholder="Calle, colonia, municipio, CP, estado">
+            </div>
+        </div>
+    </div>
+
+    <!-- Horario -->
+    <div class="config-section">
+        <div class="config-section-title">Horario de operación</div>
+        <div class="horario-grid" id="horarioGrid"></div>
+        <div class="form-grid" style="margin-top:16px;">
+            <div class="form-group">
+                <label>Hora de apertura</label>
+                <input type="time" id="cHoraOpen" value="09:00">
+            </div>
+            <div class="form-group">
+                <label>Hora de cierre</label>
+                <input type="time" id="cHoraClose" value="22:00">
+            </div>
+        </div>
+    </div>
+
+    <!-- Notas -->
+    <div class="config-section">
+        <div class="config-section-title">Notas internas</div>
+        <div class="form-group">
+            <textarea id="cNotas" placeholder="Información adicional, instrucciones para el equipo, notas operativas…"></textarea>
+        </div>
+    </div>
+</div>
+
+<!-- Save bar -->
+<div class="save-bar">
+    <div class="save-bar-status" id="saveStatus">Sin cambios pendientes</div>
+    <button class="btn-save" onclick="guardarConfig()">Guardar configuración</button>
+</div>
+
+<button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
+
+<script>
+(function(){
+    var saved = localStorage.getItem('etaax_theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    document.addEventListener('DOMContentLoaded', function(){
+        if (saved === 'light') { document.getElementById('themeIcon').textContent='🌙'; document.getElementById('themeLabel').textContent='Modo oscuro'; }
+    });
+})();
+function toggleTheme() {
+    var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('etaax_theme', next);
+    document.getElementById('themeIcon').textContent  = next === 'light' ? '🌙' : '☀️';
+    document.getElementById('themeLabel').textContent = next === 'light' ? 'Modo oscuro' : 'Modo claro';
+}
+
+/* ── SESSION & STORAGE ── */
+function getNegocioActivo() { return localStorage.getItem('etaax_negocio_activo') || ''; }
+function getNegocios() { try { return JSON.parse(localStorage.getItem('etaax_negocios')) || []; } catch(e){ return []; } }
+function setNegocios(d) { localStorage.setItem('etaax_negocios', JSON.stringify(d)); }
+function _sk(key) { var id = getNegocioActivo(); return id ? ('etaax_' + id + '_' + key) : ('etaax_' + key); }
+function loadExtra() { try { return JSON.parse(localStorage.getItem(_sk('config_extra'))) || {}; } catch(e){ return {}; } }
+function saveExtra(d) { localStorage.setItem(_sk('config_extra'), JSON.stringify(d)); }
+
+/* ── TIPOS ── */
+var TIPOS = [
+    { key:'bar',        emoji:'🍸', label:'Bar' },
+    { key:'restaurante',emoji:'🍽️', label:'Restaurante' },
+    { key:'cafe',       emoji:'☕', label:'Café' },
+    { key:'cocteleria', emoji:'🍹', label:'Coctelería' },
+    { key:'fonda',      emoji:'🥘', label:'Fonda / Comedor' },
+    { key:'banquetes',  emoji:'🥂', label:'Banquetes' },
+    { key:'eventos',    emoji:'🎉', label:'Eventos / Salón' },
+    { key:'cedis',      emoji:'🏭', label:'CEDIS' },
+    { key:'otro',       emoji:'🏢', label:'Otro' },
+];
+var COLORES = ['#3dbe7a','#f5c842','#c87a6a','#7ab8f5','#9b8de8','#e87a5a','#5ac8a8','#e8c45a','#a87ae8','#e85a8a'];
+var DIAS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+
+var _tipo   = 'otro';
+var _color  = '#3dbe7a';
+var _diasAct= [true,true,true,true,true,true,false];
+
+/* ── RENDER PICKERS ── */
+function renderTipoGrid() {
+    var g = document.getElementById('tipoGrid');
+    g.innerHTML = TIPOS.map(function(t){
+        return '<button type="button" class="tipo-btn' + (_tipo===t.key?' sel':'') + '" onclick="selTipo(\'' + t.key + '\')">' +
+            t.emoji + ' ' + t.label + '</button>';
+    }).join('');
+}
+
+function renderColorGrid() {
+    var g = document.getElementById('colorGrid');
+    g.innerHTML = COLORES.map(function(c){
+        return '<div class="color-dot' + (_color===c?' sel':'') + '" style="background:' + c + '" onclick="selColor(\'' + c + '\')"></div>';
+    }).join('');
+}
+
+function renderHorario() {
+    var g = document.getElementById('horarioGrid');
+    g.innerHTML = DIAS.map(function(d,i){
+        return '<div class="dia-col">' +
+            '<div class="dia-label">' + d + '</div>' +
+            '<div class="dia-check' + (_diasAct[i]?' activo':'') + '" onclick="toggleDia(' + i + ')" id="diaChk' + i + '">' + (_diasAct[i]?'✓':'') + '</div>' +
+        '</div>';
+    }).join('');
+}
+
+function selTipo(key) { _tipo = key; renderTipoGrid(); updatePreview(); markDirty(); }
+function selColor(c)  { _color = c; renderColorGrid(); updatePreview(); markDirty(); }
+function toggleDia(i) { _diasAct[i] = !_diasAct[i]; renderHorario(); markDirty(); }
+
+/* ── PREVIEW ── */
+function updatePreview() {
+    var nombre = document.getElementById('cNombre').value.trim() || '—';
+    var t = TIPOS.find(function(x){ return x.key === _tipo; }) || TIPOS[TIPOS.length-1];
+    document.getElementById('prevNombre').textContent = nombre;
+    document.getElementById('prevTipo').textContent   = t.label;
+    document.getElementById('prevEmoji').textContent  = t.emoji;
+    document.getElementById('prevEmoji').style.background = _color + '20';
+    document.getElementById('negPreview').style.borderColor = _color + '55';
+}
+
+function markDirty() {
+    document.getElementById('saveStatus').textContent = 'Cambios sin guardar';
+    document.getElementById('saveStatus').style.color = 'var(--accent)';
+}
+
+/* ── LOAD ── */
+function cargarDatos() {
+    var negId = getNegocioActivo();
+    if (!negId) { window.location.href = 'hub.html'; return; }
+
+    var neg = getNegocios().find(function(n){ return n.id === negId; });
+    if (!neg) { window.location.href = 'hub.html'; return; }
+
+    // Negocio base
+    document.getElementById('cNombre').value = neg.nombre || '';
+    _tipo  = neg.tipo  || 'otro';
+    _color = neg.color || '#3dbe7a';
+
+    // Extra config
+    var ex = loadExtra();
+    document.getElementById('cTel').value      = ex.telefono || '';
+    document.getElementById('cCorreo').value   = ex.correo   || '';
+    document.getElementById('cWeb').value      = ex.web      || '';
+    document.getElementById('cRFC').value      = ex.rfc      || '';
+    document.getElementById('cDireccion').value= ex.direccion|| '';
+    document.getElementById('cHoraOpen').value = ex.horaOpen || '09:00';
+    document.getElementById('cHoraClose').value= ex.horaClose|| '22:00';
+    document.getElementById('cNotas').value    = ex.notas    || '';
+    if (ex.dias) _diasAct = ex.dias;
+
+    renderTipoGrid();
+    renderColorGrid();
+    renderHorario();
+    updatePreview();
+
+    // Mark input changes
+    ['cNombre','cTel','cCorreo','cWeb','cRFC','cDireccion','cHoraOpen','cHoraClose','cNotas'].forEach(function(id){
+        document.getElementById(id).addEventListener('input', markDirty);
+    });
+}
+
+/* ── SAVE ── */
+function guardarConfig() {
+    var nombre = document.getElementById('cNombre').value.trim();
+    if (!nombre) { alert('El nombre del negocio es requerido.'); return; }
+
+    var negId = getNegocioActivo();
+    var negs  = getNegocios();
+    var idx   = negs.findIndex(function(n){ return n.id === negId; });
+    if (idx === -1) return;
+
+    negs[idx].nombre = nombre;
+    negs[idx].tipo   = _tipo;
+    negs[idx].color  = _color;
+    setNegocios(negs);
+
+    var ex = {
+        telefono:  document.getElementById('cTel').value.trim(),
+        correo:    document.getElementById('cCorreo').value.trim(),
+        web:       document.getElementById('cWeb').value.trim(),
+        rfc:       document.getElementById('cRFC').value.trim(),
+        direccion: document.getElementById('cDireccion').value.trim(),
+        horaOpen:  document.getElementById('cHoraOpen').value,
+        horaClose: document.getElementById('cHoraClose').value,
+        notas:     document.getElementById('cNotas').value.trim(),
+        dias:      _diasAct.slice(),
+    };
+    saveExtra(ex);
+
+    document.getElementById('saveStatus').textContent = 'Guardado correctamente';
+    document.getElementById('saveStatus').style.color = 'var(--green)';
+
+    var t = document.createElement('div');
+    t.textContent = 'Configuración guardada';
+    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--green);color:#0a0908;padding:10px 22px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;animation:fadeUp .3s ease';
+    document.body.appendChild(t);
+    setTimeout(function(){ t.remove(); }, 2000);
+}
+
+document.addEventListener('DOMContentLoaded', cargarDatos);
+</script>
+</body>
+</html>

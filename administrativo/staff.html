@@ -234,6 +234,14 @@
         .empty-state { text-align: center; padding: 48px 24px; color: var(--text-dim); }
         .empty-state-icon { font-size: 36px; margin-bottom: 12px; }
         .empty-state-text { font-size: 13px; line-height: 1.6; }
+        /* Rol badges */
+        .rol-badge { display:inline-flex;align-items:center;gap:4px;font-size:10px;padding:2px 9px;border-radius:20px;font-weight:600;letter-spacing:.3px;white-space:nowrap; }
+        /* Password field */
+        .pwd-wrap { position:relative; }
+        .pwd-wrap input { padding-right:40px !important; }
+        .pwd-toggle-btn { position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:3px;color:var(--text-dim);transition:color .2s;line-height:0; }
+        .pwd-toggle-btn:hover { color:var(--text); }
+        .form-hint { font-size:11px;color:var(--text-dim);margin-top:4px; }
 
         /* Modal wider */
         #modalStaff .modal { max-width: 700px; }
@@ -283,6 +291,7 @@
         <div class="nav-section">
             <div class="nav-section-label">Gestión de</div>
             <a href="staff.html" class="nav-link active" data-tooltip="Staff"><span class="nav-icon">👥</span><span class="nav-text">Staff</span></a>
+            <a href="permisos.html" class="nav-link" data-tooltip="Permisos y Roles"><span class="nav-icon">🔐</span><span class="nav-text">Permisos y Roles</span></a>
         </div>
         <div class="nav-section">
             <div class="nav-section-label">Base de</div>
@@ -333,6 +342,7 @@
                                 <tr>
                                     <th style="cursor:pointer" onclick="sortBy('nombre')">Nombre <span id="sortNombre"></span></th>
                                     <th style="cursor:pointer" onclick="sortBy('puesto')">Puesto <span id="sortPuesto"></span></th>
+                                    <th>Rol sistema</th>
                                     <th>Ingreso</th>
                                     <th>Cel / WhatsApp</th>
                                     <th>Pago nómina</th>
@@ -395,6 +405,41 @@
                         <option>Baja temporal</option>
                         <option>Baja definitiva</option>
                     </select>
+                </div>
+                <div class="form-group full">
+                    <label>Rol del sistema</label>
+                    <select id="fRol">
+                        <option value="">— Sin acceso al sistema —</option>
+                        <option value="admin">👑 Administrador</option>
+                        <option value="gerente">🎯 Gerente</option>
+                        <option value="jefe_cocina">👨‍🍳 Jefe de Cocina</option>
+                        <option value="chef">🍳 Chef</option>
+                        <option value="cocinero">🥘 Cocinero</option>
+                        <option value="barman">🍸 Barman</option>
+                        <option value="barista">☕ Barista</option>
+                        <option value="mesero">🛎️ Mesero</option>
+                        <option value="administrativo">📋 Administrativo</option>
+                        <option value="otro">👤 Otro</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="modal-section">Acceso al sistema</div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Usuario</label>
+                    <input type="text" id="fUsuario" placeholder="ej. juan.garcia" autocomplete="off">
+                    <span class="form-hint">Único por negocio, sin espacios</span>
+                </div>
+                <div class="form-group">
+                    <label>Contraseña</label>
+                    <div class="pwd-wrap">
+                        <input type="password" id="fPwd" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+                        <button type="button" class="pwd-toggle-btn" onclick="toggleStaffPwd(this)" tabindex="-1">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                    </div>
+                    <span class="form-hint">Dejar vacío para no cambiar</span>
                 </div>
             </div>
 
@@ -475,11 +520,47 @@ function toggleNav() {
     if (btn) btn.setAttribute('data-tooltip', cerrado ? 'Expandir' : 'Ocultar');
 }
 
+/* ── SESSION HELPERS ── */
+function getNegocioActivo() { return localStorage.getItem('etaax_negocio_activo') || ''; }
+function _sk(key) { var id = getNegocioActivo(); return id ? ('etaax_' + id + '_' + key) : ('etaax_' + key); }
+
+/* ── ROLES ── */
+var ROLES = [
+    { key:'admin',          label:'Administrador',   color:'#c87a6a', bg:'rgba(200,122,106,.15)', icon:'👑' },
+    { key:'gerente',        label:'Gerente',          color:'#f5c842', bg:'rgba(245,200,66,.12)',  icon:'🎯' },
+    { key:'jefe_cocina',    label:'Jefe de Cocina',   color:'#3dbe7a', bg:'rgba(61,190,122,.12)',  icon:'👨‍🍳' },
+    { key:'chef',           label:'Chef',             color:'#3dbe7a', bg:'rgba(61,190,122,.12)',  icon:'🍳' },
+    { key:'cocinero',       label:'Cocinero',         color:'#3dbe7a', bg:'rgba(61,190,122,.12)',  icon:'🥘' },
+    { key:'barman',         label:'Barman',           color:'#7ab8f5', bg:'rgba(122,184,245,.12)', icon:'🍸' },
+    { key:'barista',        label:'Barista',          color:'#c4a882', bg:'rgba(196,168,130,.12)', icon:'☕' },
+    { key:'mesero',         label:'Mesero',           color:'#9b8de8', bg:'rgba(155,141,232,.12)', icon:'🛎️' },
+    { key:'administrativo', label:'Administrativo',   color:'#f5c842', bg:'rgba(245,200,66,.12)',  icon:'📋' },
+    { key:'otro',           label:'Otro',             color:'#7a7570', bg:'rgba(122,117,112,.12)', icon:'👤' },
+];
+function getRol(key) { return ROLES.find(function(r){ return r.key === key; }) || null; }
+function rolBadge(key) {
+    var r = getRol(key);
+    if (!r) return '<span style="color:var(--text-dim);font-size:12px">—</span>';
+    return '<span class="rol-badge" style="background:' + r.bg + ';color:' + r.color + '">' + r.icon + ' ' + r.label + '</span>';
+}
+
 /* ── DATA ── */
-var LS_KEY = 'etaax_staff';
-function load() { try { return JSON.parse(localStorage.getItem(LS_KEY)) || []; } catch(e){ return []; } }
-function save(d) { localStorage.setItem(LS_KEY, JSON.stringify(d)); }
+function load() { try { return JSON.parse(localStorage.getItem(_sk('staff'))) || []; } catch(e){ return []; } }
+function save(d) { localStorage.setItem(_sk('staff'), JSON.stringify(d)); }
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
+function hashPwd(s) {
+    var h = 0;
+    for (var i = 0; i < s.length; i++) { h = (Math.imul(31,h) + s.charCodeAt(i)) | 0; }
+    return (h>>>0).toString(36) + btoa(unescape(encodeURIComponent(s))).slice(0,16).replace(/[^a-z0-9]/gi,'x');
+}
+function toggleStaffPwd(btn) {
+    var inp = btn.closest('.pwd-wrap').querySelector('input');
+    var showing = inp.type === 'text';
+    inp.type = showing ? 'password' : 'text';
+    btn.querySelector('svg').innerHTML = showing
+        ? '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'
+        : '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>';
+}
 
 /* ── SORT + FILTER STATE ── */
 var sortField    = 'nombre';
@@ -582,9 +663,11 @@ function renderTable() {
         var docsCount = (s.documentos||[]).length;
         var docsChip  = docsCount ? ' <span class="pill pill-green">' + docsCount + ' doc' + (docsCount>1?'s':'') + '</span>' : '';
         var ingreso   = s.fechaIngreso ? s.fechaIngreso : '—';
+        var usuarioChip = s.usuario ? '<span style="font-size:10px;color:var(--text-dim)"> @' + esc(s.usuario) + '</span>' : '';
         return '<tr style="cursor:pointer" ondblclick="openModal(\'' + s.id + '\')">' +
-            '<td><strong>' + esc(s.nombre) + '</strong>' + docsChip + '</td>' +
+            '<td><strong>' + esc(s.nombre) + '</strong>' + usuarioChip + docsChip + '</td>' +
             '<td>' + esc(s.puesto||'—') + '</td>' +
+            '<td>' + rolBadge(s.rol) + '</td>' +
             '<td style="font-variant-numeric:tabular-nums;color:var(--text-muted)">' + esc(ingreso) + '</td>' +
             '<td>' + esc(s.celular||'—') + '</td>' +
             '<td>' + esc(s.formaPagoNomina||'—') + '</td>' +
@@ -616,6 +699,9 @@ function openModal(id) {
             document.getElementById('fCorreo').value      = s.correo || '';
             document.getElementById('fDireccion').value   = s.direccion || '';
             document.getElementById('fEstado').value      = s.estado || 'Activo';
+            document.getElementById('fRol').value         = s.rol || '';
+            document.getElementById('fUsuario').value     = s.usuario || '';
+            document.getElementById('fPwd').value         = '';
             document.getElementById('fFormaPago').value   = s.formaPagoNomina || '';
             document.getElementById('fDatosBancarios').value = s.datosBancarios || '';
             document.getElementById('fReferencias').value = s.referencias || '';
@@ -628,11 +714,12 @@ function openModal(id) {
 }
 
 function clearForm() {
-    ['fNombre','fPuesto','fFechaIngreso','fCelular','fCorreo','fDireccion','fDatosBancarios','fReferencias','fNotas'].forEach(function(id){
+    ['fNombre','fPuesto','fFechaIngreso','fCelular','fCorreo','fDireccion','fDatosBancarios','fReferencias','fNotas','fUsuario','fPwd'].forEach(function(id){
         document.getElementById(id).value = '';
     });
     document.getElementById('fFormaPago').value = '';
     document.getElementById('fEstado').value = 'Activo';
+    document.getElementById('fRol').value = '';
     document.getElementById('fileInput').value = '';
 }
 
@@ -648,14 +735,31 @@ function deleteStaff(id) {
 }
 
 function saveStaff() {
-    var nombre = document.getElementById('fNombre').value.trim();
-    var puesto = document.getElementById('fPuesto').value.trim();
+    var nombre  = document.getElementById('fNombre').value.trim();
+    var puesto  = document.getElementById('fPuesto').value.trim();
+    var usuario = document.getElementById('fUsuario').value.trim().toLowerCase().replace(/\s+/g,'');
+    var pwd     = document.getElementById('fPwd').value;
+    var rol     = document.getElementById('fRol').value;
     if (!nombre) { alert('El nombre del colaborador es requerido.'); return; }
+    if (usuario && pwd && pwd.length < 6) { alert('La contraseña debe tener mínimo 6 caracteres.'); return; }
 
+    var editId = document.getElementById('fId').value;
+    var data   = load();
+
+    // Validar usuario único (excepto el propio registro en edición)
+    if (usuario) {
+        var dup = data.find(function(s){ return s.usuario === usuario && s.id !== editId; });
+        if (dup) { alert('El usuario "' + usuario + '" ya está registrado en este negocio.'); return; }
+    }
+
+    var existing = editId ? (data.find(function(s){ return s.id === editId; }) || {}) : {};
     var obj = {
-        id:              document.getElementById('fId').value || genId(),
+        id:              editId || genId(),
         nombre:          nombre,
         puesto:          puesto,
+        rol:             rol,
+        usuario:         usuario,
+        passwordHash:    pwd ? hashPwd(pwd) : (existing.passwordHash || ''),
         fechaIngreso:    document.getElementById('fFechaIngreso').value,
         celular:         document.getElementById('fCelular').value.trim(),
         correo:          document.getElementById('fCorreo').value.trim(),
@@ -668,8 +772,7 @@ function saveStaff() {
         documentos:      tmpDocs.slice()
     };
 
-    var data = load();
-    var idx  = data.findIndex(function(s){ return s.id === obj.id; });
+    var idx = data.findIndex(function(s){ return s.id === obj.id; });
     if (idx > -1) { data[idx] = obj; } else { data.push(obj); }
     save(data);
     closeModal();

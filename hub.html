@@ -103,6 +103,20 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .auth-input:focus{border-color:var(--green);}
 .auth-input.error{border-color:var(--salmon);}
 .auth-error{font-size:11px;color:var(--salmon);margin-top:12px;text-align:center;min-height:16px;}
+.pwd-wrap{position:relative;}
+.pwd-wrap .auth-input{padding-right:44px;}
+.pwd-toggle{
+  position:absolute;right:12px;top:50%;transform:translateY(-50%);
+  background:none;border:none;cursor:pointer;padding:4px;
+  color:var(--dim);transition:color .2s;line-height:0;
+}
+.pwd-toggle:hover{color:var(--text);}
+.plan-confirm{
+  font-size:12px;color:var(--muted);text-align:center;
+  margin-top:16px;padding:10px 14px;
+  background:var(--s2);border:1px solid var(--b1);border-radius:8px;
+  letter-spacing:.3px;
+}
 .btn-auth{
   width:100%;background:var(--green);color:#0a0908;font-family:'DM Sans',sans-serif;
   font-size:14px;font-weight:600;padding:13px;border-radius:8px;border:none;
@@ -371,12 +385,17 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
         <div class="auth-title">Acceder</div>
         <div class="auth-sub">Ingresa tus datos de cuenta</div>
         <div class="auth-field">
-          <label class="auth-label">Correo electrónico</label>
-          <input class="auth-input" id="loginEmail" type="email" placeholder="tu@negocio.com" onkeydown="if(event.key==='Enter')loginSubmit()">
+          <label class="auth-label">Correo o usuario</label>
+          <input class="auth-input" id="loginEmail" type="text" placeholder="tu@correo.com o tu_usuario" autocomplete="username" onkeydown="if(event.key==='Enter')loginSubmit()">
         </div>
         <div class="auth-field">
           <label class="auth-label">Contraseña</label>
-          <input class="auth-input" id="loginPwd" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')loginSubmit()">
+          <div class="pwd-wrap">
+            <input class="auth-input" id="loginPwd" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')loginSubmit()">
+            <button type="button" class="pwd-toggle" onclick="togglePwd('loginPwd',this)" tabindex="-1" aria-label="Mostrar contraseña">
+              <svg id="loginPwdIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
         </div>
         <div class="auth-error" id="loginError"></div>
         <button class="btn-auth" onclick="loginSubmit()">Iniciar sesión →</button>
@@ -417,9 +436,15 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
         </div>
         <div class="auth-field">
           <label class="auth-label">Contraseña</label>
-          <input class="auth-input" id="regPwd" type="password" placeholder="Mínimo 6 caracteres" onkeydown="if(event.key==='Enter')registroSubmit()">
+          <div class="pwd-wrap">
+            <input class="auth-input" id="regPwd" type="password" placeholder="Mínimo 6 caracteres" onkeydown="if(event.key==='Enter')registroSubmit()">
+            <button type="button" class="pwd-toggle" onclick="togglePwd('regPwd',this)" tabindex="-1" aria-label="Mostrar contraseña">
+              <svg id="regPwdIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
         </div>
         <div class="auth-error" id="regError"></div>
+        <div class="plan-confirm" id="planConfirm">Estás creando una cuenta en el plan <strong>Micro Pyme</strong></div>
         <button class="btn-auth" onclick="registroSubmit()">Crear cuenta →</button>
         <div class="auth-switch">
           ¿Ya tienes cuenta? <a onclick="showView('viewLogin')">Iniciar sesión</a>
@@ -515,7 +540,8 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
           <span id="userNombreChip" style="font-size:12px">—</span>
           <span class="user-badge-plan" id="userPlanChip">—</span>
         </div>
-        <button class="btn-cambiar-neg" onclick="cambiarNegocio()">↩ Cambiar negocio</button>
+        <button class="btn-cambiar-neg" onclick="window.location.href='configuracion.html'" title="Configuración del negocio">⚙️ Config</button>
+        <button class="btn-cambiar-neg" id="btnCambiarNeg" onclick="cambiarNegocio()">↩ Cambiar negocio</button>
         <button class="btn-logout" onclick="logout()">Salir</button>
       </div>
     </div>
@@ -695,6 +721,28 @@ function _hashPwd(pwd) {
     for (var i = 0; i < s.length; i++) h = ((h << 5) + h) + s.charCodeAt(i);
     return (h >>> 0).toString(36) + btoa(unescape(encodeURIComponent(s))).slice(0,16).replace(/[^a-z0-9]/gi,'x');
 }
+// Hash usado por staff.html — debe ser idéntico
+function _hashPwdStaff(s) {
+    var h = 0;
+    for (var i = 0; i < s.length; i++) { h = (Math.imul(31,h) + s.charCodeAt(i)) | 0; }
+    return (h>>>0).toString(36) + btoa(unescape(encodeURIComponent(s))).slice(0,16).replace(/[^a-z0-9]/gi,'x');
+}
+
+/* ════════════════════════════════════════════════════════
+   ROLES COLABORADORES (para chip de sesión)
+════════════════════════════════════════════════════════ */
+var ROLES_STAFF = {
+    admin:          { label:'Administrador',  color:'#c87a6a' },
+    gerente:        { label:'Gerente',         color:'#f5c842' },
+    jefe_cocina:    { label:'Jefe de Cocina',  color:'#3dbe7a' },
+    chef:           { label:'Chef',            color:'#3dbe7a' },
+    cocinero:       { label:'Cocinero',        color:'#3dbe7a' },
+    barman:         { label:'Barman',          color:'#7ab8f5' },
+    barista:        { label:'Barista',         color:'#c4a882' },
+    mesero:         { label:'Mesero',          color:'#9b8de8' },
+    administrativo: { label:'Administrativo',  color:'#f5c842' },
+    otro:           { label:'Colaborador',     color:'#7a7570' },
+};
 
 /* ════════════════════════════════════════════════════════
    INIT
@@ -703,12 +751,22 @@ function init() {
     _renderPlanGrid();
     var ses = _getSesion();
     if (ses && ses.expira > Date.now()) {
+        // ── Sesión de colaborador ──
+        if (ses.type === 'staff') {
+            _sesion = { type:'staff', staffId:ses.staffId, negocioId:ses.negocioId, nombre:ses.nombre, rol:ses.rol, expira:ses.expira };
+            var neg = _getNegocios().find(function(n){ return n.id === ses.negocioId; });
+            if (neg) {
+                localStorage.setItem('etaax_negocio_activo', neg.id);
+                _showModulos(neg);
+                return;
+            }
+        }
+        // ── Sesión de dueño ──
         var usuarios = _getUsuarios();
         var usr = usuarios.find(function(u){ return u.id === ses.usuarioId; });
         if (usr) {
             _sesion = { usuarioId: usr.id, nombre: usr.nombre, email: usr.email, plan: usr.plan, expira: ses.expira };
             _updateTopbar();
-            // Ver si hay negocio activo
             var negId = localStorage.getItem('etaax_negocio_activo') || '';
             _negocios = _getNegocios().filter(function(n){ return n.usuarioId === usr.id; });
             var neg = _negocios.find(function(n){ return n.id === negId; });
@@ -757,21 +815,52 @@ function showView(id) {
    LOGIN
 ════════════════════════════════════════════════════════ */
 function loginSubmit() {
-    var email = (document.getElementById('loginEmail').value || '').trim().toLowerCase();
+    var input = (document.getElementById('loginEmail').value || '').trim().toLowerCase();
     var pwd   = document.getElementById('loginPwd').value || '';
     var err   = document.getElementById('loginError');
     err.textContent = '';
-    if (!email || !pwd) { err.textContent = 'Completa todos los campos.'; return; }
+    if (!input || !pwd) { err.textContent = 'Completa todos los campos.'; return; }
 
-    var usuarios = _getUsuarios();
-    var usr = usuarios.find(function(u){ return u.email === email; });
-    if (!usr || usr.passwordHash !== _hashPwd(pwd)) {
-        err.textContent = 'Correo o contraseña incorrectos.';
-        document.getElementById('loginPwd').classList.add('error');
-        setTimeout(function(){ document.getElementById('loginPwd').classList.remove('error'); }, 1500);
+    var pwdField = document.getElementById('loginPwd');
+    function shakeError(msg) {
+        err.textContent = msg;
+        pwdField.classList.add('error');
+        setTimeout(function(){ pwdField.classList.remove('error'); }, 1500);
+    }
+
+    // ── Intento 1: login de dueño (contiene @) ──
+    if (input.includes('@')) {
+        var usuarios = _getUsuarios();
+        var usr = usuarios.find(function(u){ return u.email === input; });
+        if (usr && usr.passwordHash === _hashPwd(pwd)) { _iniciarSesion(usr); return; }
+        shakeError('Correo o contraseña incorrectos.');
         return;
     }
-    _iniciarSesion(usr);
+
+    // ── Intento 2: login de colaborador (usuario sin @) ──
+    var negocios = _getNegocios();
+    for (var i = 0; i < negocios.length; i++) {
+        var neg = negocios[i];
+        var staffRaw = localStorage.getItem('etaax_' + neg.id + '_staff');
+        var staffList = [];
+        try { staffList = JSON.parse(staffRaw) || []; } catch(e){}
+        var miembro = staffList.find(function(s){ return s.usuario === input; });
+        if (miembro && miembro.passwordHash && miembro.passwordHash === _hashPwdStaff(pwd)) {
+            _iniciarSesionStaff(miembro, neg);
+            return;
+        }
+    }
+
+    shakeError('Usuario o contraseña incorrectos.');
+}
+
+function _iniciarSesionStaff(miembro, neg) {
+    var expira = Date.now() + (30 * 24 * 60 * 60 * 1000);
+    _sesion = { type:'staff', staffId:miembro.id, negocioId:neg.id, nombre:miembro.nombre, rol:miembro.rol||'otro', expira:expira };
+    _setSesion(_sesion);
+    localStorage.setItem('etaax_negocio_activo', neg.id);
+    _migrarDatosLegacy(neg.id);
+    _showModulos(neg);
 }
 
 function _iniciarSesion(usr) {
@@ -809,6 +898,17 @@ function _renderPlanGrid() {
     }).join('');
 }
 
+function togglePwd(inputId, btn) {
+    var inp = document.getElementById(inputId);
+    var showing = inp.type === 'text';
+    inp.type = showing ? 'password' : 'text';
+    btn.querySelector('svg').innerHTML = showing
+        ? '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'
+        : '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>' +
+          '<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>' +
+          '<line x1="1" y1="1" x2="23" y2="23"/>';
+}
+
 function selectPlan(key) {
     if (!PLANES[key]) return;
     _planSel = key;
@@ -824,6 +924,8 @@ function selectPlan(key) {
         card.style.borderColor = p.color;
         card.style.background  = p.color + '0d';
     }
+    var confirm = document.getElementById('planConfirm');
+    if (confirm) confirm.innerHTML = 'Estás creando una cuenta en el plan <strong style="color:' + p.color + '">' + p.nombre + '</strong>';
 }
 
 function registroSubmit() {
@@ -907,6 +1009,7 @@ function _renderLista() {
                     '<div class="neg-card-nombre">' + _esc(n.nombre) + '</div>' +
                     '<div class="neg-card-meta">' + t.label + ' · ' + fecha + '</div>' +
                 '</div>' +
+                '<button class="neg-card-del" onclick="abrirConfig(\'' + n.id + '\',event)" title="Configurar" style="font-size:16px">⚙️</button>' +
                 '<button class="neg-card-del" onclick="eliminarNegocio(\'' + n.id + '\',event)" title="Eliminar">✕</button>' +
                 '<div class="neg-card-arrow" style="color:' + color + '">→</div>' +
             '</div>';
@@ -923,6 +1026,12 @@ function _renderLista() {
         document.getElementById('planLimitText').textContent =
             'Plan ' + plan.nombre + ': máximo ' + plan.maxNegocios + ' sucursal' + (plan.maxNegocios>1?'es':'');
     }
+}
+
+function abrirConfig(id, event) {
+    if (event) event.stopPropagation();
+    localStorage.setItem('etaax_negocio_activo', id);
+    window.location.href = 'configuracion.html';
 }
 
 function seleccionarNegocio(id) {
@@ -945,10 +1054,26 @@ function _showModulos(neg) {
     document.getElementById('negActEmojiWrap').style.borderColor = color + '33';
 
     if (_sesion) {
-        var p = PLANES[_sesion.plan] || PLANES.micro;
-        document.getElementById('userNombreChip').textContent = _sesion.nombre.split(' ')[0];
-        document.getElementById('userPlanChip').textContent   = p.nombre;
-        document.getElementById('userPlanChip').className     = 'user-badge-plan ' + p.planClass;
+        var nombreChip = document.getElementById('userNombreChip');
+        var planChip   = document.getElementById('userPlanChip');
+        var btnCambiar = document.getElementById('btnCambiarNeg');
+        nombreChip.textContent = _sesion.nombre.split(' ')[0];
+
+        if (_sesion.type === 'staff') {
+            var r = ROLES_STAFF[_sesion.rol] || ROLES_STAFF.otro;
+            planChip.textContent       = r.label;
+            planChip.className         = 'user-badge-plan';
+            planChip.style.background  = r.color + '22';
+            planChip.style.color       = r.color;
+            if (btnCambiar) btnCambiar.style.display = 'none';
+        } else {
+            var p = PLANES[_sesion.plan] || PLANES.micro;
+            planChip.textContent      = p.nombre;
+            planChip.className        = 'user-badge-plan ' + p.planClass;
+            planChip.style.background = '';
+            planChip.style.color      = '';
+            if (btnCambiar) btnCambiar.style.display = '';
+        }
     }
 }
 
