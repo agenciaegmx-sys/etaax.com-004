@@ -9,14 +9,30 @@
    const COPA_ML      = 44.36;     // ml por copa estándar
    const _MXN         = '<span style="font-size:9px;letter-spacing:1px;color:var(--text-muted);font-weight:400;margin-left:4px">MXN</span>';
    
+   // ── Helpers de sesión (mirror de app.js para páginas sin app.js) ──
+   function getNegocioActivo() { return localStorage.getItem('etaax_negocio_activo') || ''; }
+   function _sk(key) {
+       var id = getNegocioActivo();
+       return id ? ('etaax_' + id + '_' + key) : ('etaax_' + key);
+   }
+   function _skGet(key) {
+       var k = _sk(key), raw = localStorage.getItem(k);
+       if (raw !== null) return raw;
+       var id = getNegocioActivo();
+       if (!id) return null;
+       var legacy = localStorage.getItem('etaax_' + key);
+       if (legacy && legacy !== 'null') { localStorage.setItem(k, legacy); return legacy; }
+       return null;
+   }
+
    // ── localStorage ──────────────────────────────────────────────
    function getInsumos() {
-       try { return JSON.parse(localStorage.getItem('etaax_insumos')) || []; }
+       try { return JSON.parse(_skGet('insumos')) || []; }
        catch { return []; }
    }
-   
+
    function setInsumos(data) {
-       localStorage.setItem('etaax_insumos', JSON.stringify(data));
+       localStorage.setItem(_sk('insumos'), JSON.stringify(data));
    }
    
    function genId() {
@@ -317,7 +333,7 @@
            campos: ['contenido','rendimiento','proveedor','costeo','precioManual','presentacionCompra'] },
        abarrote:  { label:'Abarrotes y más',   icon:'🧂', familia:'Abarrotes', categoria:'',
            campos: ['contenido','rendimiento','proveedor','costeo','presentacionCompra'] },
-       carne:     { label:'Carnes',            icon:'🥩', familia:'Carnes', categoria:'',
+       carne:     { label:'Proteínas',           icon:'🥩', familia:'Proteínas', categoria:'',
            campos: ['pesoCompra','proveedor','costeo','presentacionCompra'] },
        fruta:     { label:'Fruta y Verdura',   icon:'🥬', familia:'Frutas y Verduras', categoria:'',
            campos: ['pesoCompra','proveedor','costeo','presentacionCompra'] },
@@ -355,6 +371,19 @@
        '19°C a 22°C (Temperatura Ambiente Controlada / Almacén)'
    ];
 
+   // ── Listas para proteínas ────────────────────────────────────
+   var CATS_PROTEINA = ['— Seleccionar —','Res','Cerdo','Pollo','Pescado','Marisco','Molusco','Ave','Caza'];
+   var ESTADOS_PROTEINA = [
+       'Fresco / Refrigerado (0°C a 4°C)',
+       'Congelado (-18°C o menos)',
+       'IQF — Congelado Individual (-18°C)'
+   ];
+   var TEMPS_PROTEINA = [
+       '0°C a 4°C (Refrigeración — Frescos)',
+       '-18°C o menos (Congelación profunda)',
+       '-25°C a -30°C (Ultracongelación / IQF)'
+   ];
+
    function toggleUvaChip(uva) {
        var hidden = document.getElementById('ins-variedad');
        if (!hidden) return;
@@ -371,11 +400,25 @@
    // ── Ajustar campos del modal según tipo de insumo ────────────
    var FAMILIA_POR_TIPO = {
        destilado: 'Bebidas', licor: 'Bebidas', vino: 'Bebidas', cerveza: 'Bebidas', cerveza_barril: 'Bebidas', refresco: 'Bebidas',
-       carne: 'Carnes', fruta: 'Frutas y Verduras', abarrote: 'Abarrotes', otro: ''
+       carne: 'Proteínas', fruta: 'Frutas y Verduras', abarrote: 'Abarrotes', otro: ''
    };
 
    function ajustarCamposPorTipo(tipo) {
        var SEL = 'width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:6px;font-family:sans-serif;font-size:14px;outline:none';
+
+       // Reset order, spans y visibilidad de empaque (limpio antes de aplicar carne)
+       ['row-nombre','row-familia','row-categoria','row-marca','row-variedad',
+        'row-maduracion','row-temp-conservacion','row-vida-util-abrir','row-subcategoria','row-empaque']
+           .forEach(function(id) {
+               var el = document.getElementById(id);
+               if (el) el.style.order = '';
+           });
+       var _rvag = document.getElementById('row-vida-util-abrir');
+       var _rsag = document.getElementById('row-subcategoria');
+       if (_rvag) _rvag.style.gridColumn = '';
+       if (_rsag) _rsag.style.gridColumn = '';
+       var _remp = document.getElementById('row-empaque');
+       if (_remp) _remp.style.display = '';
 
        // Auto-rellenar familia
        var elFam = document.getElementById('ins-familia');
@@ -387,9 +430,9 @@
         var ocultarMarca = ['destilado','licor','cerveza','cerveza_barril','refresco','abarrote'].includes(tipo);
            rowMarca.style.display = ocultarMarca ? 'none' : '';
            var lblMarca = rowMarca.querySelector('label');
-           if (lblMarca) lblMarca.textContent = tipo === 'vino' ? 'Bodega / Productor' : 'Marca base';
+           if (lblMarca) lblMarca.textContent = tipo === 'vino' ? 'Bodega / Productor' : tipo === 'carne' ? 'Marca / Empacador' : 'Marca base';
            var elMarca = document.getElementById('ins-marca');
-           if (elMarca) elMarca.placeholder = tipo === 'vino' ? 'Ej. Casillero del Diablo, Zuccardi' : 'Ej. La Costeña';
+           if (elMarca) elMarca.placeholder = tipo === 'vino' ? 'Ej. Casillero del Diablo, Zuccardi' : tipo === 'carne' ? 'Ej. La Superior, Don Jorge, Rancho Campestre' : 'Ej. La Costeña';
        }
 
        // ── Variedad / Tipo de uva (ins-variedad) ──────────────────
@@ -420,6 +463,7 @@
                if (lblV) {
                    if (['destilado','licor','cerveza','cerveza_barril','refresco'].includes(tipo)) lblV.textContent = 'Marca del producto';
                    else if (tipo === 'abarrote') lblV.textContent = 'Marca / Variedad';
+                   else if (tipo === 'carne') lblV.textContent = 'Corte / Variedad';
                    else lblV.textContent = 'Variedad';
                }
            }
@@ -428,7 +472,7 @@
        // ── Añejamiento / Tipo de vino (ins-maduracion) ────────────
        var rowMad = document.getElementById('row-maduracion');
        if (rowMad) {
-        rowMad.style.display = ['destilado','licor','vino','refresco','cerveza','cerveza_barril'].includes(tipo) ? '' : 'none';
+        rowMad.style.display = ['destilado','licor','vino','refresco','cerveza','cerveza_barril','carne'].includes(tipo) ? '' : 'none';
            var madEl = document.getElementById('ins-maduracion');
            var currentMad = madEl ? madEl.value || '' : '';
            if (tipo === 'vino') {
@@ -455,6 +499,14 @@
                    if (lblMadC) lblMadC.textContent = 'Estilo / Variedad';
                    madEl.placeholder = 'Ej. Clara, Oscura, Stout, IPA, Weizen, Artesanal';
                }
+           } else if (tipo === 'carne') {
+               var currentMadC = madEl ? madEl.value || '' : '';
+               var optEst = ESTADOS_PROTEINA.map(function(t) {
+                   return '<option value="' + t + '"' + (currentMadC === t ? ' selected' : '') + '>' + t + '</option>';
+               }).join('');
+               rowMad.innerHTML = '<label id="lbl-maduracion">Estado de compra</label>' +
+                   '<select id="ins-maduracion" style="' + SEL + '">' +
+                   '<option value="">— Seleccionar estado —</option>' + optEst + '</select>';
            } else {
                if (madEl && madEl.tagName === 'SELECT') {
                    rowMad.innerHTML = '<label id="lbl-maduracion">Variedad / Añejamiento</label>' +
@@ -501,6 +553,10 @@
            if (elVar2 && elVar2.type !== 'hidden') elVar2.placeholder = 'Ej. Del Monte, La Costeña, Herdez, Lala, Nestlé';
            if (elNombre)  elNombre.placeholder  = 'Ej. Arroz, Atún en agua, Aceite de oliva, Harina, Sal';
            if (elEmpaque) elEmpaque.placeholder = 'Ej. Bolsa 1kg, Lata 400g, Botella 1L, Frasco 250g';
+       } else if (tipo === 'carne') {
+           if (elVar2 && elVar2.type !== 'hidden') elVar2.placeholder = 'Ej. Rib Eye, T-Bone, Pechuga s/h, Lomo entero';
+           if (elNombre)  elNombre.placeholder  = 'Ej. Rib Eye Black Angus, Camarón 21/25, Pechuga de Pollo';
+           if (elEmpaque) elEmpaque.placeholder = 'Ej. Caja 10kg, Bolsa cryovac, Bolsa individual 200g';
        }
 
        // ── Categoría: ocultar para abarrote (usa familia+grupo) ─────
@@ -526,6 +582,13 @@
                catWrap.innerHTML = '<label>Categoría</label>' +
                    '<select id="ins-categoria" style="' + SEL + '">' +
                    '<option value="">— Seleccionar —</option>' + optRef + '</select>';
+           } else if (tipo === 'carne') {
+               var optCarne = CATS_PROTEINA.map(function(t) {
+                   var val = t === '— Seleccionar —' ? '' : t;
+                   return '<option value="' + val + '"' + (currentCat === val ? ' selected' : '') + '>' + t + '</option>';
+               }).join('');
+               catWrap.innerHTML = '<label>Tipo de proteína</label>' +
+                   '<select id="ins-categoria" style="' + SEL + '">' + optCarne + '</select>';
            } else {
                if (catEl.tagName === 'SELECT') {
                    catWrap.innerHTML = '<label>Categoría</label>' +
@@ -535,11 +598,11 @@
            }
        }
 
-       // ── Temperatura de conservación (solo vino) ─────────────────
+       // ── Temperatura de conservación / almacenaje ────────────────
        var rowTemp = document.getElementById('row-temp-conservacion');
        var rowVida = document.getElementById('row-vida-util-abrir');
        if (rowTemp) {
-           rowTemp.style.display = tipo === 'vino' ? '' : 'none';
+           rowTemp.style.display = (tipo === 'vino' || tipo === 'carne') ? '' : 'none';
            if (tipo === 'vino') {
                var tempEl = document.getElementById('ins-tempConservacion');
                var currentTemp = tempEl ? tempEl.value || '' : '';
@@ -549,6 +612,15 @@
                rowTemp.innerHTML = '<label>Temperatura de conservación</label>' +
                    '<select id="ins-tempConservacion" style="' + SEL + '">' +
                    '<option value="">— Seleccionar temperatura —</option>' + optTemps + '</select>';
+           } else if (tipo === 'carne') {
+               var tempElC = document.getElementById('ins-tempConservacion');
+               var currentTempC = tempElC ? tempElC.value || '' : '';
+               var optTempsC = TEMPS_PROTEINA.map(function(t) {
+                   return '<option value="' + t + '"' + (currentTempC === t ? ' selected' : '') + '>' + t + '</option>';
+               }).join('');
+               rowTemp.innerHTML = '<label>Temperatura de almacenaje</label>' +
+                   '<select id="ins-tempConservacion" style="' + SEL + '">' +
+                   '<option value="">— Seleccionar temperatura —</option>' + optTempsC + '</select>';
            } else {
                var tempEl2 = document.getElementById('ins-tempConservacion');
                if (tempEl2 && tempEl2.tagName === 'SELECT') {
@@ -558,7 +630,7 @@
            }
        }
        if (rowVida) {
-           rowVida.style.display = tipo === 'vino' ? '' : 'none';
+           rowVida.style.display = (tipo === 'vino' || tipo === 'carne') ? '' : 'none';
            if (tipo === 'vino') {
                var vidaEl = document.getElementById('ins-vidaUtilAbrir');
                var vidaEl2 = document.getElementById('ins-vidaUtilAbrirNum');
@@ -571,8 +643,23 @@
                        '<input type="number" id="ins-vidaUtilAbrirNum" placeholder="3" min="1" ' +
                        'style="width:80px;flex-shrink:0">' + selVida + '</div>';
                }
+           } else if (tipo === 'carne') {
+               var vidaElC  = document.getElementById('ins-vidaUtilAbrir');
+               var vidaNumC = document.getElementById('ins-vidaUtilAbrirNum');
+               if (!vidaNumC) {
+                   var existingVidaC = vidaElC ? vidaElC.value || '' : '';
+                   var matchVidaC    = existingVidaC.match(/^(\d+)\s+(.+)$/);
+                   var numValC  = matchVidaC ? matchVidaC[1] : '';
+                   var unitValC = matchVidaC ? matchVidaC[2] : 'horas';
+                   var selVidaC = '<select id="ins-vidaUtilAbrirUnidad" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:6px;font-family:sans-serif;font-size:14px;outline:none">' +
+                       ['horas','días','semanas'].map(function(u){ return '<option value="'+u+'"'+(unitValC===u?' selected':'')+'>'+u+'</option>'; }).join('') + '</select>';
+                   rowVida.innerHTML = '<label>Vida útil post-descongelación</label>' +
+                       '<div style="display:flex;gap:6px">' +
+                       '<input type="number" id="ins-vidaUtilAbrirNum" placeholder="48" min="1" value="'+numValC+'" ' +
+                       'style="width:80px;flex-shrink:0">' + selVidaC + '</div>';
+               }
            } else {
-               // Restaurar texto si venía de vino
+               // Restaurar texto si venía de vino o carne
                var numEl3 = document.getElementById('ins-vidaUtilAbrirNum');
                if (numEl3) {
                    rowVida.innerHTML = '<label>Vida útil al abrir</label>' +
@@ -604,11 +691,29 @@
                                (currentSub === val ? ' selected' : '') + '>' + s + '</option>';
                        }).join('') + '</select>';
                } else {
-                   subcatWrap.innerHTML = '<label>Subcategoría</label>' +
+                   var subLabel = tipo === 'carne' ? 'Método de descongelación' : 'Subcategoría';
+                   var subPh    = tipo === 'carne' ? 'Ej. Refrigeración gradual, Chorro de agua fría, Cocción directa' : 'Ej. Vodka';
+                   subcatWrap.innerHTML = '<label>' + subLabel + ' <span style="opacity:.4;font-weight:400;font-size:10px">' + (tipo === 'carne' ? '(opcional)' : '') + '</span></label>' +
                        '<input type="text" id="ins-subcategoria" ' +
-                       'value="' + currentSub + '" placeholder="Ej. Vodka">';
+                       'value="' + currentSub + '" placeholder="' + subPh + '">';
                }
            }
+       }
+
+       // ── Jerarquía y visibilidad exclusiva para Proteínas ────────
+       if (tipo === 'carne') {
+           ['row-nombre','row-familia','row-categoria','row-marca','row-variedad',
+            'row-maduracion','row-temp-conservacion','row-vida-util-abrir','row-subcategoria']
+               .forEach(function(id, idx) {
+                   var el = document.getElementById(id);
+                   if (el) el.style.order = String(idx + 1);
+               });
+           var _rowEmpC = document.getElementById('row-empaque');
+           if (_rowEmpC) { _rowEmpC.style.order = '99'; _rowEmpC.style.display = 'none'; }
+           var _rowVidaC = document.getElementById('row-vida-util-abrir');
+           if (_rowVidaC) _rowVidaC.style.gridColumn = 'span 2';
+           var _rowSubC = document.getElementById('row-subcategoria');
+           if (_rowSubC) _rowSubC.style.gridColumn = 'span 2';
        }
    }
 
@@ -629,12 +734,24 @@
        abrirModal(null, cfg.familia, cfg.categoria);
    }
    
-   // Delegated listener registrado una sola vez al inicio
+   const _soloMode = new URLSearchParams(location.search).get('solo') === '1';
+
+   // Delegado listener registrado una sola vez al inicio
    document.addEventListener('DOMContentLoaded', () => {
        const overlay = document.getElementById('modalOverlay');
        if (overlay) {
            overlay.addEventListener('input',  e => { if (e.target.closest('.modal')) modalDirty = true; });
            overlay.addEventListener('change', e => { if (e.target.closest('.modal')) modalDirty = true; });
+       }
+       const urlId = new URLSearchParams(location.search).get('id');
+       if (urlId) setTimeout(() => editarInsumo(urlId), 150);
+
+       if (_soloMode) {
+           const s = document.createElement('style');
+           s.textContent = '.top-bar,.app-shell{display:none!important}' +
+                           'html,body{background:transparent!important}' +
+                           '#modalOverlay{background:transparent!important}';
+           document.head.appendChild(s);
        }
    });
 
@@ -747,6 +864,7 @@
        if (modalDirty && !confirm('¿Salir sin guardar? Los cambios se perderán.')) return;
        modalDirty = false;
        document.getElementById('modalOverlay').style.display = 'none';
+       if (_soloMode) window.parent.postMessage({ type: 'cerrarEditor' }, '*');
    }
    
    function editarInsumo(id) {
@@ -859,6 +977,43 @@
        p.umCosto       = 'LT';
    }
 
+   // Proteínas: usa cantPresCompra + umPresCompra como peso/volumen total de compra
+   function _calcCostosProteina(p, precioEfectivo) {
+       const cantPres = parseFloat(p.cantPresCompra) || 0;
+       const umPres   = (p.umPresCompra || 'KG').toUpperCase();
+       const isPiezas = ['PZA','PORCION'].includes(umPres);
+
+       if (!isPiezas && cantPres > 0) {
+           // Compra por peso/volumen total (Rack 24 KG, Bolsa 5 KG, Granel 10 KG, etc.)
+           p.costoPieza = precioEfectivo.toFixed(2);
+           const totalML  = toML(cantPres, umPres); // KG→1000 G→1 LT→1000 ML→1
+           const isWeight = ['KG','G'].includes(umPres);
+           if (totalML > 0) {
+               // costoUnitario = $/KG o $/LT (unidad "grande")
+               p.costoUnitario = (precioEfectivo / (totalML / 1000)).toFixed(4);
+               p.umCosto = isWeight ? 'KG' : 'LT';
+           } else {
+               p.costoUnitario = '0';
+               p.umCosto = 'KG';
+           }
+       } else {
+           // Compra por piezas (10 PZA de 200G c/u)
+           const piezas     = cantPres > 0 ? cantPres : 1;
+           const costoPieza = precioEfectivo / piezas;
+           p.costoPieza = costoPieza.toFixed(2);
+           const contML2 = toML(p.contNeto, p.umContenido || 'G');
+           const umCont  = (p.umContenido || 'G').toUpperCase();
+           const isWeight = ['KG','G'].includes(umCont);
+           if (contML2 > 0) {
+               p.costoUnitario = (costoPieza / (contML2 / 1000)).toFixed(4);
+               p.umCosto = isWeight ? 'KG' : 'LT';
+           } else {
+               p.costoUnitario = '0';
+               p.umCosto = isWeight ? 'KG' : 'LT';
+           }
+       }
+   }
+
    function _calcCostosRefrescoCerveza(p, precioEfectivo, contML) {
        const presCompra = p.presentacionCompra || 'Pieza';
        const cantPres   = parseFloat(p.cantPresCompra) || 1;
@@ -904,12 +1059,14 @@
        const precioEfectivo = precio * calcImpFactor(p);
        const contML         = toML(p.contNeto, p.umContenido || 'ML');
    
-       const _triggerCosto = ['precio','contNeto','umContenido','cantPresCompra','presentacionCompra','factorPieza','tamanoCopa','ivaCheck','iepsCheck','iepsTasa','incluyeImpuesto','masaDrenada','umMasaDrenada'];
+       const _triggerCosto = ['precio','contNeto','umContenido','cantPresCompra','presentacionCompra','umPresCompra','factorPieza','tamanoCopa','ivaCheck','iepsCheck','iepsTasa','incluyeImpuesto','masaDrenada','umMasaDrenada'];
        if (_triggerCosto.includes(campo) && precioEfectivo > 0) {
            if (tipoInsumoActual === 'cerveza_barril') {
                _calcCostosBarril(p, precioEfectivo, contML);
            } else if (['refresco','cerveza'].includes(tipoInsumoActual)) {
                _calcCostosRefrescoCerveza(p, precioEfectivo, contML);
+           } else if (tipoInsumoActual === 'carne') {
+               _calcCostosProteina(p, precioEfectivo);
            } else if (tipoInsumoActual === 'abarrote') {
                _calcCostosAbarrote(p, precioEfectivo, contML);
            } else if (contML > 0) {
@@ -922,7 +1079,7 @@
            if (['refresco','cerveza','cerveza_barril'].includes(tipoInsumoActual)) {
                _updateDisplaysRefrescoCerv(p, i);
            }
-           if (tipoInsumoActual === 'abarrote') {
+           if (tipoInsumoActual === 'abarrote' || tipoInsumoActual === 'carne') {
                const _cp    = parseFloat(p.costoPieza)||0;
                const _cu    = parseFloat(p.costoUnitario)||0;
                const _um2   = (p.umCosto || 'KG').toUpperCase();
@@ -1245,7 +1402,7 @@
 
    function _renderFilaCostosBlock(p, i, flags) {
        const { esBarril, esRefrescoCerv, esBebidaCompleta, esAbarrote, esCarne } = flags;
-       const show = esBebidaCompleta || esRefrescoCerv || esAbarrote || (!esAbarrote && !esCarne);
+       const show = true;
        const _cp  = parseFloat(p.costoPieza)||0;
        const { oz: _ozV, lt: _ltV } = calcOzLt(p.costoPieza, p.contNeto, p.umContenido);
        const _fp  = parseFloat(p.factorPieza)||2.0;
@@ -1266,13 +1423,12 @@
                + '<div id="ref-onza-'+i+'" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:14px;color:var(--accent);font-weight:600">'+_ozV+'</div></div>'
                + '<div class="meta-item"><label>Costo por litro '+_MXN+'</label>'
                + '<div id="ref-litro-'+i+'" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:14px;color:var(--text-dim);font-weight:600">'+_ltV+'</div></div>';
-       } else if (esAbarrote) {
+       } else if (esAbarrote || esCarne) {
            const _um      = (p.umCosto || 'KG').toUpperCase();
            const _cu      = parseFloat(p.costoUnitario)||0;
            const _umCont  = (p.umContenido || 'G').toUpperCase();
            const _esPieza = ['PZA','CARGA','PORCION'].includes(_umCont);
 
-           // Costo en unidad grande ($/KG o $/LT) y pequeña ($/GR o $/ML)
            const _cuBig   = ['ML','G'].includes(_um) ? _cu * 1000 : _cu;
            const _cuSmall = ['LT','KG'].includes(_um) ? _cu / 1000 : _cu;
 
@@ -1506,10 +1662,13 @@
                    <!-- Presentación de compra -->
                    <div class="mg-3">
                        <div class="meta-item"><label>Presentación de compra</label>
-                           <select onchange="updPres(${i},'presentacionCompra',this.value)">
+                           <select onchange="updPres(${i},'presentacionCompra',this.value);renderPresentaciones()">
                                ${esBarril
                                    ? ['Barril','Barriles'].map(t =>
                                        `<option value="${t}" ${(p.presentacionCompra||'Barril')===t?'selected':''}>${t}</option>`).join('')
+                                   : esCarne
+                                   ? ['Caja','Pieza completa / Corte primario','Rack','Bolsa','Granel','Paquete porcionado','Kilo','Otro'].map(t =>
+                                       `<option value="${t}" ${(p.presentacionCompra||'Caja')===t?'selected':''}>${t}</option>`).join('')
                                    : esAbarrote
                                    ? ['Pieza','Caja','Paquete','Bolsa','Costal','Tarro','Frasco','Lata','Kilo','Litro','Otro'].map(t =>
                                        `<option value="${t}" ${(p.presentacionCompra||'Pieza')===t?'selected':''}>${t}</option>`).join('')
@@ -1518,14 +1677,14 @@
                                }
                            </select>
                        </div>
-                       <div class="meta-item"><label>${esBarril ? 'Litros del barril' : esAbarrote ? 'Piezas / Cantidad' : 'Cantidad'}</label>
-                           <input type="number" value="${p.cantPresCompra||''}" placeholder="${esBarril?'20':'1'}"
+                       <div class="meta-item"><label>${esBarril ? 'Litros del barril' : esCarne ? 'Cantidad / Piezas' : esAbarrote ? 'Piezas / Cantidad' : 'Cantidad'}</label>
+                           <input type="number" value="${p.cantPresCompra||''}" placeholder="${esBarril?'20':esCarne?'10':'1'}"
                                oninput="updPres(${i},'cantPresCompra',this.value)">
                        </div>
                        <div class="meta-item"><label>Unidad</label>
                            ${esBarril
                                ? `<div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:9px 12px;font-size:14px;color:var(--text-dim)">LT</div>`
-                               : `<select onchange="updPres(${i},'umPresCompra',this.value)">
+                               : `<select onchange="updPres(${i},'umPresCompra',this.value);renderPresentaciones()">
                                    ${['PZA','G','KG','ML','LT','PORCION'].map(u =>
                                        `<option value="${u}" ${(p.umPresCompra||'PZA')===u?'selected':''}>${u}</option>`
                                    ).join('')}
@@ -1538,7 +1697,7 @@
                    <div class="mg-2">
                        <div class="meta-item">
                            <label>Proveedor</label>
-                           <input type="text" value="${p.proveedor||''}" placeholder="${esRefrescoCerv ? 'Ej. Grupo Modelo' : 'Ej. Viños América'}"
+                           <input type="text" value="${p.proveedor||''}" placeholder="${esCarne ? 'Ej. Carnes Selectas, La Superior, Don Jorge' : esRefrescoCerv ? 'Ej. Grupo Modelo' : 'Ej. Viños América'}"
                                oninput="updPres(${i},'proveedor',this.value)">
                        </div>
                        <div class="meta-item">
@@ -1551,7 +1710,7 @@
                    <!-- FILA 1: Contenido / Peso compra · Unidad -->
                    <div class="mg-2">
                        <div class="meta-item">
-                           <label>${esCarne ? 'Peso de compra' : esBarril ? 'Contenido por vaso/jarra' : esAbarrote ? 'Contenido por pieza' : esRefrescoCerv ? 'Contenido por pieza' : 'Contenido neto'}</label>
+                           <label>${esBarril ? 'Contenido por vaso/jarra' : 'Contenido por pieza'}</label>
                            <input type="number" value="${p.contNeto}" placeholder="${esCarne?'1000':esAbarrote?'500':'700'}"
                                oninput="updPres(${i},'contNeto',this.value)">
                        </div>
@@ -1619,8 +1778,8 @@
    
 
 
-                   <!-- FILA 4: Costo unitario · UM costo (solo no-abarrotes) -->
-                   ${!esAbarrote ? `<div class="mg-3">
+                   <!-- FILA 4: Costo unitario · UM costo (bebidas y otros, no abarrotes ni proteínas) -->
+                   ${!esAbarrote && !esCarne ? `<div class="mg-3">
                        ${esBarril ? `
                        <div class="meta-item">
                            <label>Precio sugerido por vaso/jarra ${_MXN}</label>
@@ -1776,6 +1935,10 @@
    
        setInsumos(lista);
        modalDirty = false;
+       if (_soloMode) {
+           window.parent.postMessage({ type: 'insumoGuardado', insumoId: insumo.id }, '*');
+           return;
+       }
        cerrarModalBtn();
        init();
    }

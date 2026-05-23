@@ -27,7 +27,7 @@
     <nav class="nav" id="nav">
         <div class="nav-top">
             <div class="nav-brand">
-                <span class="nav-brand-sub">Insumos y Recetas</span>
+                <span class="nav-brand-sub">Recetas e Insumos</span>
             </div>
             <div class="nav-top-actions">
                 <a href="../hub.html" class="nav-toggle nav-home-btn" data-tooltip="Home">🏠<span class="nav-toggle-text">Home</span></a>
@@ -48,7 +48,7 @@
         </div>
         <div class="nav-section">
             <div class="nav-section-label">Sistema de</div>
-            <a href="#" class="nav-link nav-link-disabled" data-tooltip="Requisiciones"><span class="nav-icon">📝</span><span class="nav-text">Requisiciones</span></a>
+            <a href="requisiciones.html" class="nav-link" data-tooltip="Requisiciones"><span class="nav-icon">📝</span><span class="nav-text">Requisiciones</span></a>
         </div>
     </nav>
 
@@ -66,8 +66,6 @@
         </div>
 
         <div class="wrap">
-
-
 
             <!-- FILTROS -->
             <div class="card">
@@ -191,7 +189,7 @@
                 <!-- Campos principales -->
                 <div style="flex:1">
                     <div class="meta-grid" style="grid-template-columns:1fr 1fr">
-                        <div class="meta-item" style="grid-column:span 2">
+                        <div class="meta-item" id="row-nombre" style="grid-column:span 2">
                             <label>Nombre base *</label>
                             <input type="text" id="ins-nombre" placeholder="Ej. Vodka Absolut">
                         </div>
@@ -199,7 +197,7 @@
                             <label>Marca del producto</label>
                             <input type="text" id="ins-marca" placeholder="Ej. Absolut">
                         </div>
-                        <div class="meta-item">
+                        <div class="meta-item" id="row-variedad">
                             <label id="lbl-variedad">Variedad</label>
                             <input type="text" id="ins-variedad" placeholder="Ej. Original">
                         </div>
@@ -207,12 +205,12 @@
                             <label id="lbl-maduracion">Variedad / Añejamiento</label>
                             <input type="text" id="ins-maduracion" placeholder="Ej. Reposado, Original, 12 años...">
                         </div>
-                        <div class="meta-item">
+                        <div class="meta-item" id="row-categoria">
                             <label>Categoría</label>
                             <input type="text" id="ins-categoria" placeholder="Ej. Destilados" readonly
                                 style="opacity:.55;cursor:default;pointer-events:none">
                         </div>
-                        <div class="meta-item">
+                        <div class="meta-item" id="row-familia">
                             <label>Familia</label>
                             <input type="text" id="ins-familia" placeholder="Ej. Bebidas" readonly
                                 style="opacity:.55;cursor:default;pointer-events:none">
@@ -221,7 +219,7 @@
                             <label>Subcategoría</label>
                             <input type="text" id="ins-subcategoria" placeholder="Ej. Vodka">
                         </div>
-                        <div class="meta-item">
+                        <div class="meta-item" id="row-empaque">
                             <label>Tipo de empaque</label>
                             <input type="text" id="ins-empaque" placeholder="Ej. Botella vidrio">
                         </div>
@@ -331,7 +329,6 @@ function toggleNav() {
     btn.setAttribute('data-tooltip', cerrado ? 'Expandir' : 'Ocultar');
 }
 
-// ── Búsqueda con botón limpiar ────────────────────────────────
 function toggleClearBtn() {
     const val = document.getElementById('searchInput').value;
     document.getElementById('clearSearch').style.display = val ? 'block' : 'none';
@@ -346,60 +343,60 @@ function clearSearchInput() {
 
 <!-- MODAL SELECTOR DE CATEGORÍA -->
 <div class="modal-overlay" id="modalCategoria" onclick="cerrarModalCategoria(event)">
-    <div class="modal" style="max-width:480px">
+    <div class="modal" style="max-width:760px;max-height:none;overflow:visible">
         <div class="modal-header">
             <h2>¿Qué tipo de insumo es?</h2>
             <button class="modal-close" onclick="document.getElementById('modalCategoria').style.display='none'">✕</button>
         </div>
-        <div class="modal-body" style="padding:20px 22px">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="modal-body" style="padding:18px 20px">
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">
                 <button onclick="abrirModalConTipo('destilado')" class="cat-btn">
-                    <span style="font-size:28px">🥃</span>
+                    <span style="font-size:24px">🥃</span>
                     <div class="cat-btn-title">Destilado</div>
                     <div class="cat-btn-desc">Whisky, tequila, vodka, ron, mezcal...</div>
                 </button>
                 <button onclick="abrirModalConTipo('licor')" class="cat-btn">
-                    <span style="font-size:28px">🍹</span>
+                    <span style="font-size:24px">🍹</span>
                     <div class="cat-btn-title">Licor</div>
                     <div class="cat-btn-desc">Aperitivos, amaretto, triple sec, cremas...</div>
                 </button>
                 <button onclick="abrirModalConTipo('vino')" class="cat-btn">
-                    <span style="font-size:28px">🍷</span>
+                    <span style="font-size:24px">🍷</span>
                     <div class="cat-btn-title">Vino / Espumoso</div>
                     <div class="cat-btn-desc">Vinos, cavas, cervezas artesanales...</div>
                 </button>
                 <button onclick="abrirModalConTipo('refresco')" class="cat-btn">
-                    <span style="font-size:28px">🥤</span>
-                    <div class="cat-btn-title">Refrescos, sodas, jugos...</div>
-                    <div class="cat-btn-desc">Refrescos, jugos, aguas, energizantes, jarabes...</div>
+                    <span style="font-size:24px">🥤</span>
+                    <div class="cat-btn-title">Refrescos y jugos</div>
+                    <div class="cat-btn-desc">Sodas, aguas, energizantes, jarabes...</div>
                 </button>
                 <button onclick="abrirModalConTipo('cerveza')" class="cat-btn">
-                    <span style="font-size:28px">🍺</span>
+                    <span style="font-size:24px">🍺</span>
                     <div class="cat-btn-title">Cerveza</div>
-                    <div class="cat-btn-desc">Cervezas comerciales, artesanales...</div>
+                    <div class="cat-btn-desc">Comerciales, artesanales...</div>
                 </button>
                 <button onclick="abrirModalConTipo('cerveza_barril')" class="cat-btn">
-                    <span style="font-size:28px">🛢️</span>
-                    <div class="cat-btn-title">Cerveza de barril</div>
-                    <div class="cat-btn-desc">Barril, tina, grifo — por vaso o jarra</div>
+                    <span style="font-size:24px">🛢️</span>
+                    <div class="cat-btn-title">Barril</div>
+                    <div class="cat-btn-desc">Barril, tina, grifo — vaso o jarra</div>
                 </button>
                 <button onclick="abrirModalConTipo('abarrote')" class="cat-btn">
-                    <span style="font-size:28px">🧂</span>
-                    <div class="cat-btn-title">Abarrotes y más</div>
-                    <div class="cat-btn-desc">Secos, enlatados, lácteos, aceites, especias...</div>
+                    <span style="font-size:24px">🧂</span>
+                    <div class="cat-btn-title">Abarrotes</div>
+                    <div class="cat-btn-desc">Secos, lácteos, aceites, especias...</div>
                 </button>
                 <button onclick="abrirModalConTipo('carne')" class="cat-btn">
-                    <span style="font-size:28px">🥩</span>
-                    <div class="cat-btn-title">Carnes</div>
+                    <span style="font-size:24px">🥩</span>
+                    <div class="cat-btn-title">Proteínas</div>
                     <div class="cat-btn-desc">Res, cerdo, pollo, mariscos...</div>
                 </button>
                 <button onclick="abrirModalConTipo('fruta')" class="cat-btn">
-                    <span style="font-size:28px">🥬</span>
+                    <span style="font-size:24px">🥬</span>
                     <div class="cat-btn-title">Fruta y Verdura</div>
                     <div class="cat-btn-desc">Frescos, hierbas, condimentos...</div>
                 </button>
                 <button onclick="abrirModalConTipo('otro')" class="cat-btn">
-                    <span style="font-size:28px">📦</span>
+                    <span style="font-size:24px">📦</span>
                     <div class="cat-btn-title">Otro</div>
                     <div class="cat-btn-desc">Desechables, limpieza, varios...</div>
                 </button>
@@ -413,28 +410,31 @@ function clearSearchInput() {
     background: var(--surface2);
     border: 1px solid var(--border);
     border-radius: 12px;
-    padding: 16px 12px;
+    padding: 14px 10px;
     cursor: pointer;
     text-align: center;
-    transition: all 0.2s;
+    transition: all 0.18s;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     color: var(--text);
+    width: 100%;
 }
 .cat-btn:hover {
     border-color: var(--green);
-    background: rgba(61,190,122,0.06);
+    background: rgba(61,190,122,0.07);
     transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(61,190,122,0.12);
 }
 .cat-btn-title {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--text);
+    line-height: 1.2;
 }
 .cat-btn-desc {
-    font-size: 10px;
+    font-size: 9.5px;
     color: var(--text-dim);
     line-height: 1.4;
 }

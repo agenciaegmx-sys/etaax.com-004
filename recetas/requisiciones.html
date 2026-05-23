@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETAAX - Requisiciones</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../styles.css">
+    <style>
+        /* ── Tabla de requisición ── */
+        .req-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .req-table th {
+            font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+            color: var(--text-dim); font-weight: 500; padding: 10px 12px;
+            border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap;
+        }
+        .req-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        .req-table tr:last-child td { border-bottom: none; }
+        .req-table tr.no-pedir { opacity: 0.4; }
+        .req-table tr.ok td.col-pedido { color: var(--text-dim); }
+
+        /* chips de estado */
+        .chip { display:inline-block; padding: 2px 10px; border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: .5px; }
+        .chip-red    { background: rgba(224,90,58,.15);  color: var(--red);   border: 1px solid rgba(224,90,58,.3); }
+        .chip-amber  { background: rgba(245,200,66,.12); color: var(--accent); border: 1px solid rgba(245,200,66,.3); }
+        .chip-green  { background: rgba(61,190,122,.12); color: var(--green);  border: 1px solid rgba(61,190,122,.3); }
+
+        /* inputs inline */
+        .req-input {
+            width: 72px; background: var(--surface2); border: 1px solid var(--border);
+            color: var(--text); padding: 5px 8px; border-radius: 6px;
+            font-family: 'DM Sans', sans-serif; font-size: 13px; outline: none;
+            text-align: right;
+        }
+        .req-input:focus { border-color: var(--green); }
+        .req-input.override { border-color: var(--accent); color: var(--accent); }
+
+        /* toggle no-pedir */
+        .toggle-btn {
+            width: 36px; height: 20px; border-radius: 10px; border: none; cursor: pointer;
+            background: var(--border); position: relative; transition: background .2s; flex-shrink: 0;
+        }
+        .toggle-btn::after {
+            content: ''; position: absolute; top: 3px; left: 3px;
+            width: 14px; height: 14px; border-radius: 50%;
+            background: var(--text-dim); transition: all .2s;
+        }
+        .toggle-btn.activo { background: var(--red); }
+        .toggle-btn.activo::after { left: 19px; background: #fff; }
+
+        /* summary cards */
+        .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+        .summary-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+            padding: 14px 16px;
+        }
+        .summary-card .s-label { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px; }
+        .summary-card .s-val   { font-size: 24px; font-weight: 700; color: var(--text); }
+        .summary-card .s-val.red    { color: var(--red); }
+        .summary-card .s-val.amber  { color: var(--accent); }
+        .summary-card .s-val.green  { color: var(--green); }
+
+        /* barra filtros */
+        .filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+        .filter-bar input[type="text"], .filter-bar select {
+            background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+            padding: 8px 12px; border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 13px; outline: none;
+        }
+        .filter-bar input[type="text"] { flex: 1; min-width: 180px; }
+        .filter-bar input:focus, .filter-bar select:focus { border-color: var(--green); }
+
+        /* presentación selector */
+        .pres-select {
+            background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+            padding: 4px 6px; border-radius: 6px; font-family: 'DM Sans', sans-serif;
+            font-size: 12px; outline: none; max-width: 150px;
+        }
+
+        /* total footer */
+        .req-footer {
+            display: flex; align-items: center; justify-content: flex-end; gap: 24px;
+            padding: 16px 20px; border-top: 1px solid var(--border); margin-top: 4px;
+        }
+        .req-footer .f-label { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); }
+        .req-footer .f-val   { font-size: 20px; font-weight: 700; color: var(--green); }
+
+        /* historial drawer */
+        .hist-item {
+            padding: 10px 14px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+            cursor: pointer; transition: background .15s;
+        }
+        .hist-item:hover { background: var(--surface2); }
+        .hist-item:last-child { border-bottom: none; }
+
+        .insumo-nombre { font-weight: 600; font-size: 13px; }
+        .insumo-sub    { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+        .col-right { text-align: right; }
+        .col-center { text-align: center; }
+
+        .empty-state {
+            text-align: center; padding: 60px 20px; color: var(--text-dim);
+        }
+        .empty-state .e-icon { font-size: 40px; margin-bottom: 12px; }
+
+        .btn-sm {
+            background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+            padding: 5px 10px; border-radius: 6px; font-family: 'DM Sans', sans-serif;
+            font-size: 11px; cursor: pointer; transition: all .15s; white-space: nowrap;
+        }
+        .btn-sm:hover { border-color: var(--green); color: var(--green); }
+        .btn-sm.danger:hover { border-color: var(--red); color: var(--red); }
+    </style>
+</head>
+<body>
+
+<header class="top-bar">
+    <svg width="108" height="26" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
+        <path d="M14.5 28H37C35.5 23 31.5 20 25.5 20C19.5 20 16 23 14.5 28Z" fill="#1a1916"/>
+        <circle cx="45" cy="11" r="6" fill="#f5c842"/>
+        <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
+        <path d="M78 41C78 34.5 83.5 30.5 92.5 29.5L104 28.5V27.5C104 23.5 101.5 21 97 21C93 21 90 23 89 26.5L80.5 24C82.5 17.5 89 13 97 13C107.5 13 113 18.5 113 28.5V54.5H104V51C102 53.5 98.5 55 94 55C85.5 55 78 50.5 78 41Z" fill="#3dbe7a"/>
+        <path d="M104 37L95.5 38C92.5 38.5 90.5 40 90.5 42.5C90.5 45 92.5 46.5 95.5 46.5C101 46.5 104 43.5 104 39V37Z" fill="#1a1916"/>
+        <path d="M126 41C126 34.5 131.5 30.5 140.5 29.5L152 28.5V27.5C152 23.5 149.5 21 145 21C141 21 138 23 137 26.5L128.5 24C130.5 17.5 137 13 145 13C155.5 13 161 18.5 161 28.5V54.5H152V51C150 53.5 146.5 55 142 55C133.5 55 126 50.5 126 41Z" fill="#3dbe7a"/>
+        <path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/>
+        <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+    </svg>
+</header>
+
+<div class="app-shell">
+    <nav class="nav" id="nav">
+        <div class="nav-top">
+            <div class="nav-brand"><span class="nav-brand-sub">Recetas e Insumos</span></div>
+            <div class="nav-top-actions">
+                <a href="../hub.html" class="nav-toggle nav-home-btn" data-tooltip="Home">🏠<span class="nav-toggle-text">Home</span></a>
+                <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">◀<span class="nav-toggle-text" id="navToggleTxt">Ocultar</span></button>
+            </div>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Catálogo de</div>
+            <a href="index.html" class="nav-link" data-tooltip="Recetas"><span class="nav-icon">📋</span><span class="nav-text">Recetas</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Catálogo de</div>
+            <a href="insumos.html" class="nav-link" data-tooltip="Insumos"><span class="nav-icon">🗄️</span><span class="nav-text">Insumos</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Control de</div>
+            <a href="inventarios.html" class="nav-link" data-tooltip="Inventarios"><span class="nav-icon">📦</span><span class="nav-text">Inventarios</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Sistema de</div>
+            <a href="requisiciones.html" class="nav-link active" data-tooltip="Requisiciones"><span class="nav-icon">📝</span><span class="nav-text">Requisiciones</span></a>
+        </div>
+    </nav>
+
+    <main class="main-content" id="mainContent">
+
+        <!-- HEADER -->
+        <div class="header">
+            <div class="brand">
+                <span class="brand-label">Sistema de</span>
+                <span class="brand-title">Requisición</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <span id="fechaReq" style="font-size:12px;color:var(--text-dim);padding:0 4px"></span>
+                <button class="btn-vista" onclick="abrirHistorial()" style="color:var(--text-muted)">📋 Historial</button>
+                <button class="btn-vista" onclick="cargarTodasAnteriores()" style="color:var(--text-muted)" title="Cargar existencias vacías desde la última requisición archivada">↩ Cargar anteriores</button>
+                <button class="btn-vista" onclick="guardarExistencias()" style="color:var(--green);border-color:var(--green)">💾 Guardar existencias</button>
+                <button class="btn-vista" onclick="cerrarRequisicion()" style="color:var(--accent);border-color:var(--accent)">✅ Cerrar y archivar pedido</button>
+            </div>
+        </div>
+
+        <div class="wrap" style="padding-bottom:0">
+
+            <!-- SUMMARY CARDS -->
+            <div class="summary-grid" id="summaryCards">
+                <div class="summary-card">
+                    <div class="s-label">Insumos críticos</div>
+                    <div class="s-val red" id="sCriticos">—</div>
+                </div>
+                <div class="summary-card">
+                    <div class="s-label">Insumos bajos</div>
+                    <div class="s-val amber" id="sBajos">—</div>
+                </div>
+                <div class="summary-card">
+                    <div class="s-label">Ítems a pedir</div>
+                    <div class="s-val" id="sItems">—</div>
+                </div>
+                <div class="summary-card">
+                    <div class="s-label">Costo total estimado</div>
+                    <div class="s-val green" id="sCosto">—</div>
+                </div>
+            </div>
+
+            <!-- FILTROS -->
+            <div class="filter-bar">
+                <input type="text" id="buscarReq" placeholder="Buscar insumo..." oninput="renderReq()">
+                <select id="filtroFamilia" onchange="renderReq()">
+                    <option value="">Todas las familias</option>
+                </select>
+                <select id="filtroEstado" onchange="renderReq()">
+                    <option value="">Todos los estados</option>
+                    <option value="critico">🔴 Críticos primero</option>
+                    <option value="pedir">Solo los que pedir</option>
+                    <option value="ok">Solo OK</option>
+                </select>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);cursor:pointer">
+                    <input type="checkbox" id="ocultarNoPedir" onchange="renderReq()"> Ocultar "No pedir"
+                </label>
+            </div>
+
+        </div>
+        <!-- TABLA -->
+        <div class="card" style="overflow:visible;max-width:none;margin:0 16px;margin-bottom:60px">
+                <div id="tablaWrap">
+                    <table class="req-table" id="tablaReq">
+                        <thead>
+                            <tr>
+                                <th style="width:28px">#</th>
+                                <th style="min-width:300px">Insumo</th>
+                                <th class="col-center">Stock<br>Mín / Máx</th>
+                                <th class="col-center">Existencia<br>actual</th>
+                                <th class="col-center">Estado</th>
+                                <th class="col-right">Pedido<br>sugerido</th>
+                                <th class="col-right">Ajustar<br>pedido</th>
+                                <th class="col-center">No<br>pedir</th>
+                                <th class="col-right">Costo<br>pedido</th>
+                                <th>Presentación</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyReq"></tbody>
+                    </table>
+                    <div id="emptyReq" class="empty-state" style="display:none">
+                        <div class="e-icon">📋</div>
+                        <div>No hay insumos que coincidan</div>
+                    </div>
+                </div>
+
+                <!-- FOOTER TOTAL -->
+                <div class="req-footer">
+                    <div>
+                        <div class="f-label">Ítems a pedir</div>
+                        <div style="font-size:16px;font-weight:700;color:var(--text)" id="footerItems">0</div>
+                    </div>
+                    <div>
+                        <div class="f-label">Costo total del pedido</div>
+                        <div class="f-val" id="footerCosto">$0.00</div>
+                    </div>
+                </div>
+            </div>
+    </main>
+</div>
+
+<!-- MODAL HISTORIAL -->
+<div id="modalHistorial" onclick="if(event.target===this)cerrarHistorial()"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9900;
+            align-items:center;justify-content:center;padding:20px;box-sizing:border-box">
+    <div style="background:var(--surface);border-radius:14px;max-width:520px;width:100%;
+                max-height:80vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,0.5)">
+        <div style="display:flex;align-items:center;justify-content:space-between;
+                    padding:16px 20px;border-bottom:1px solid var(--border)">
+            <div style="font-size:14px;font-weight:600">Historial de requisiciones</div>
+            <button onclick="cerrarHistorial()"
+                    style="background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer">✕</button>
+        </div>
+        <div id="historialBody" style="padding:8px 0"></div>
+    </div>
+</div>
+
+<!-- THEME TOGGLE -->
+<style>
+.theme-toggle {
+    position: fixed; bottom: 20px; right: 20px; z-index: 999;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 50px; padding: 8px 16px; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-size: 12px; color: var(--text-muted);
+    display: flex; align-items: center; gap: 6px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.15); transition: all 0.2s;
+}
+.theme-toggle:hover { border-color: var(--green); color: var(--green); }
+</style>
+<button class="theme-toggle" onclick="toggleTheme()">
+    <span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span>
+</button>
+
+<script>
+// ── Tema ──────────────────────────────────────────────────────
+(function(){
+    var saved = localStorage.getItem('etaax_theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    document.addEventListener('DOMContentLoaded', function(){
+        if (saved === 'light') {
+            document.getElementById('themeIcon').textContent = '🌙';
+            document.getElementById('themeLabel').textContent = 'Modo oscuro';
+        }
+    });
+})();
+function toggleTheme() {
+    var html = document.documentElement;
+    var next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    localStorage.setItem('etaax_theme', next);
+    document.getElementById('themeIcon').textContent  = next === 'light' ? '🌙' : '☀️';
+    document.getElementById('themeLabel').textContent = next === 'light' ? 'Modo oscuro' : 'Modo claro';
+}
+
+// ── Nav toggle ────────────────────────────────────────────────
+function toggleNav() {
+    var nav  = document.getElementById('nav');
+    var main = document.getElementById('mainContent');
+    nav.classList.toggle('cerrado');
+    if (main) main.classList.toggle('expandido');
+    var cerrado = nav.classList.contains('cerrado');
+    var btn = document.getElementById('navToggleBtn');
+    var txt = document.getElementById('navToggleTxt');
+    if (btn) btn.childNodes[0].textContent = cerrado ? '▶' : '◀';
+    if (txt) txt.textContent = cerrado ? 'Expandir' : 'Ocultar';
+    if (btn) btn.setAttribute('data-tooltip', cerrado ? 'Expandir' : 'Ocultar');
+}
+
+// ── Helpers de sesión ─────────────────────────────────────────
+function _reqNeg() { return localStorage.getItem('etaax_negocio_activo') || ''; }
+function _reqSk(key) { var id=_reqNeg(); return id?('etaax_'+id+'_'+key):('etaax_'+key); }
+function _reqGet(key) {
+    var k=_reqSk(key), raw=localStorage.getItem(k);
+    if (raw!==null) return raw;
+    var id=_reqNeg(); if (!id) return null;
+    var leg=localStorage.getItem('etaax_'+key);
+    if (leg&&leg!=='null') { localStorage.setItem(k,leg); return leg; }
+    return null;
+}
+// ── Datos ─────────────────────────────────────────────────────
+function getInsumos() {
+    try { return JSON.parse(_reqGet('insumos')) || []; } catch(e) { return []; }
+}
+function getReqData() {
+    try { return JSON.parse(localStorage.getItem('etaax_req_items')) || {}; } catch(e) { return {}; }
+}
+function setReqData(d) { localStorage.setItem('etaax_req_items', JSON.stringify(d)); }
+function getHistorial() {
+    try { return JSON.parse(localStorage.getItem('etaax_req_historial')) || []; } catch(e) { return []; }
+}
+function setHistorial(h) { localStorage.setItem('etaax_req_historial', JSON.stringify(h)); }
+
+// Insumos del catálogo, excluyendo sub-recetas
+function getInsumosCatalogo() {
+    return getInsumos().filter(function(x) { return !x.esSubReceta && x.activo !== '0'; });
+}
+
+// ── Estado de un ítem ─────────────────────────────────────────
+// Retorna { estado, pedidoSugerido, costoUnitPieza, pres }
+function calcItem(ins, reqItem) {
+    var presIdx = reqItem.presIdx || 0;
+    var pres    = (ins.presentaciones || [])[presIdx] || (ins.presentaciones || [])[0] || {};
+    var sMin    = parseFloat(pres.stockMin) || 0;
+    var sMax    = parseFloat(pres.stockMax) || 0;
+    var exist   = parseFloat(reqItem.existencia);
+    if (isNaN(exist)) exist = null;
+
+    var estado = 'sin-datos';
+    var pedSug = 0;
+
+    if (exist !== null && sMax > 0) {
+        if (exist <= sMin)      { estado = 'critico'; pedSug = sMax - exist; }
+        else if (exist < sMax)  { estado = 'bajo';    pedSug = 0; }
+        else                    { estado = 'ok';      pedSug = 0; }
+    } else if (exist !== null && sMax === 0) {
+        estado = 'sin-stock';
+    }
+
+    pedSug = Math.max(0, Math.ceil(pedSug));
+
+    var costoUnitPieza = parseFloat(pres.costoPieza) || 0;
+
+    return { estado: estado, pedidoSugerido: pedSug, costoUnitPieza: costoUnitPieza, pres: pres };
+}
+
+function pedidoFinal(calc, reqItem) {
+    if (reqItem.noPedir) return 0;
+    var manual = parseInt(reqItem.pedidoManual);
+    if (!isNaN(manual) && manual >= 0) return manual;
+    return calc.pedidoSugerido;
+}
+
+function fmtMXN(n) {
+    return '$' + (n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// ── Render principal ──────────────────────────────────────────
+var reqData   = {};
+var insumos   = [];
+var familias  = [];
+
+function init() {
+    insumos  = getInsumosCatalogo();
+    reqData  = getReqData();
+
+    // Poblar select de familias
+    familias = [...new Set(insumos.map(function(x) { return x.familia || ''; }).filter(Boolean))].sort();
+    var selFam = document.getElementById('filtroFamilia');
+    selFam.innerHTML = '<option value="">Todas las familias</option>' +
+        familias.map(function(f) { return '<option value="' + f + '">' + f + '</option>'; }).join('');
+
+    // Fecha actual
+    document.getElementById('fechaReq').textContent =
+        new Date().toLocaleDateString('es-MX', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+
+    renderReq();
+}
+
+function renderReq() {
+    var q         = (document.getElementById('buscarReq').value || '').toLowerCase();
+    var famFil    = document.getElementById('filtroFamilia').value;
+    var estadoFil = document.getElementById('filtroEstado').value;
+    var ocultarNP = document.getElementById('ocultarNoPedir').checked;
+
+    var lista = insumos.filter(function(ins) {
+        if (q && !(ins.nombre || '').toLowerCase().includes(q) &&
+                 !(ins.marca  || '').toLowerCase().includes(q) &&
+                 !(ins.familia|| '').toLowerCase().includes(q)) return false;
+        if (famFil && ins.familia !== famFil) return false;
+        return true;
+    });
+
+    var tbody = document.getElementById('tbodyReq');
+    tbody.innerHTML = '';
+
+    var totalCosto  = 0;
+    var totalItems  = 0;
+    var nCriticos   = 0;
+    var nBajos      = 0;
+
+    var numVisible = 0;
+
+    lista.forEach(function(ins) {
+        var ri   = reqData[ins.id] || { presIdx: 0, existencia: '', pedidoManual: '', noPedir: false };
+        var calc = calcItem(ins, ri);
+        var pFin = pedidoFinal(calc, ri);
+        var costoRow = pFin * calc.costoUnitPieza;
+
+        // contadores globales (sin filtro de estado)
+        if (calc.estado === 'critico') nCriticos++;
+        if (calc.estado === 'bajo')    nBajos++;
+        if (pFin > 0) { totalItems++; totalCosto += costoRow; }
+
+        // filtros de estado
+        if (estadoFil === 'critico' && calc.estado !== 'critico' && calc.estado !== 'bajo') return;
+        if (estadoFil === 'pedir'   && pFin === 0) return;
+        if (estadoFil === 'ok'      && calc.estado !== 'ok') return;
+        if (ocultarNP && ri.noPedir) return;
+
+        numVisible++;
+
+        var pres    = calc.pres;
+        var presArr = ins.presentaciones || [];
+        var presIdx = ri.presIdx || 0;
+
+        // chip estado
+        var chipHtml = '';
+        if      (calc.estado === 'critico')   chipHtml = '<span class="chip chip-red">🔴 CRÍTICO</span>';
+        else if (calc.estado === 'bajo')      chipHtml = '<span class="chip chip-amber">🟡 BAJO</span>';
+        else if (calc.estado === 'ok')        chipHtml = '<span class="chip chip-green">🟢 OK</span>';
+        else if (calc.estado === 'sin-datos') chipHtml = '<span class="chip" style="opacity:.5">Sin datos</span>';
+        else                                  chipHtml = '<span class="chip" style="opacity:.5">Sin stock</span>';
+
+        // unidad de compra de la presentación
+        var unidadCompra = pres.presentacionCompra || pres.umPresCompra || 'uds.';
+
+        // pedido sugerido display
+        var pedSugHtml = calc.pedidoSugerido > 0
+            ? '<span style="font-weight:700;color:var(--red)">' + calc.pedidoSugerido + '</span>'
+            + '<span style="font-size:11px;color:var(--text-dim);margin-left:5px">' + _esc(unidadCompra) + '</span>'
+            : '<span style="color:var(--text-dim)">—</span>';
+
+        var hasManual = (ri.pedidoManual !== '' && ri.pedidoManual !== null && ri.pedidoManual !== undefined);
+
+        var tr = document.createElement('tr');
+        tr.className = (ri.noPedir ? 'no-pedir ' : '') + (calc.estado === 'ok' ? 'ok' : '');
+        var existVal = (ri.existencia !== '' && ri.existencia !== undefined && ri.existencia !== null) ? ri.existencia : '';
+        var historial  = getHistorial();
+        var existAnterior = historial.length ? (historial[0].items[ins.id] || {}).existencia : undefined;
+        var hayAnterior = existAnterior !== undefined && existAnterior !== '' && existAnterior !== null;
+
+        tr.innerHTML =
+            '<td style="color:var(--text-dim)">' + numVisible + '</td>' +
+            '<td style="min-width:300px">' +
+                '<div class="insumo-nombre">' + _esc(ins.nombre) + '</div>' +
+                '<div class="insumo-sub">' +
+                    (ins.familia   ? '<span style="margin-right:8px">' + _esc(ins.familia)   + '</span>' : '') +
+                    (ins.categoria ? '<span style="color:var(--text-dim)">'  + _esc(ins.categoria) + '</span>' : '') +
+                    (ins.marca     ? '<span style="color:var(--text-dim);margin-left:4px">· ' + _esc(ins.marca) + '</span>' : '') +
+                '</div>' +
+            '</td>' +
+            '<td class="col-center" style="font-size:13px">' +
+                (pres.stockMin || pres.stockMax
+                    ? '<span style="color:var(--red);font-weight:600">' + (pres.stockMin || '—') + '</span>' +
+                      '<span style="color:var(--text-dim);padding:0 4px">/</span>' +
+                      '<span style="color:var(--green);font-weight:600">' + (pres.stockMax || '—') + '</span>'
+                    : '<span style="opacity:.4;font-size:11px">Sin definir</span>') +
+            '</td>' +
+            '<td class="col-center">' +
+                '<div style="display:flex;flex-direction:column;align-items:center;gap:3px">' +
+                    '<input type="number" class="req-input" min="0" step="0.01" ' +
+                        'value="' + existVal + '" placeholder="—" ' +
+                        'oninput="actualizarExistencia(\'' + ins.id + '\',this.value)">' +
+                    (hayAnterior
+                        ? '<button onclick="cargarExistenciaAnterior(\'' + ins.id + '\')" ' +
+                          'style="background:none;border:none;color:var(--text-dim);font-size:10px;cursor:pointer;' +
+                          'padding:1px 4px;border-radius:4px;white-space:nowrap;' +
+                          'transition:color .15s" onmouseover="this.style.color=\'var(--green)\'" ' +
+                          'onmouseout="this.style.color=\'var(--text-dim)\'" ' +
+                          'title="Cargar existencia anterior: ' + existAnterior + '">↩ ' + existAnterior + '</button>'
+                        : '') +
+                '</div>' +
+            '</td>' +
+            '<td class="col-center">' + chipHtml + '</td>' +
+            '<td class="col-right">' + pedSugHtml + '</td>' +
+            '<td class="col-right">' +
+                '<input type="number" class="req-input' + (hasManual ? ' override' : '') + '" min="0" step="1" ' +
+                    'value="' + (hasManual ? ri.pedidoManual : '') + '" placeholder="auto" ' +
+                    'oninput="actualizarManual(\'' + ins.id + '\',this.value)">' +
+            '</td>' +
+            '<td class="col-center">' +
+                '<button class="toggle-btn' + (ri.noPedir ? ' activo' : '') + '" ' +
+                    'onclick="toggleNoPedir(\'' + ins.id + '\')" title="' + (ri.noPedir ? 'Excluido del pedido' : 'Incluido en el pedido') + '"></button>' +
+            '</td>' +
+            '<td class="col-right" style="font-weight:600;color:' + (costoRow > 0 ? 'var(--green)' : 'var(--text-dim)') + '">' +
+                (costoRow > 0 ? fmtMXN(costoRow) : (ri.noPedir ? '<span style="font-size:10px">No pedir</span>' : '—')) +
+            '</td>' +
+            '<td>' +
+                '<select class="pres-select" onchange="cambiarPres(\'' + ins.id + '\',this.value)">' +
+                    presArr.map(function(p, pi) {
+                        return '<option value="' + pi + '"' + (pi === presIdx ? ' selected' : '') + '>' +
+                            _esc(p.nombre || ('Presentación ' + (pi+1))) + '</option>';
+                    }).join('') +
+                '</select>' +
+            '</td>';
+
+        tbody.appendChild(tr);
+    });
+
+    // empty state
+    document.getElementById('emptyReq').style.display = numVisible === 0 ? 'block' : 'none';
+
+    // summary
+    document.getElementById('sCriticos').textContent = nCriticos;
+    document.getElementById('sBajos').textContent    = nBajos;
+    document.getElementById('sItems').textContent    = totalItems;
+    document.getElementById('sCosto').textContent    = fmtMXN(totalCosto);
+    document.getElementById('footerItems').textContent = totalItems + ' ítem' + (totalItems !== 1 ? 's' : '');
+    document.getElementById('footerCosto').textContent = fmtMXN(totalCosto);
+}
+
+// ── Acciones de fila ──────────────────────────────────────────
+function actualizarExistencia(id, val) {
+    if (!reqData[id]) reqData[id] = { presIdx: 0 };
+    reqData[id].existencia = val === '' ? '' : parseFloat(val);
+    setReqData(reqData);
+    renderReq();
+}
+
+function actualizarManual(id, val) {
+    if (!reqData[id]) reqData[id] = { presIdx: 0 };
+    reqData[id].pedidoManual = val === '' ? '' : parseInt(val);
+    setReqData(reqData);
+    renderReq();
+}
+
+function cambiarPres(id, idx) {
+    if (!reqData[id]) reqData[id] = {};
+    reqData[id].presIdx = parseInt(idx);
+    setReqData(reqData);
+    renderReq();
+}
+
+function cargarExistenciaAnterior(id) {
+    var hist = getHistorial();
+    if (!hist.length) return;
+    var val = (hist[0].items[id] || {}).existencia;
+    if (val === undefined || val === null || val === '') return;
+    if (!reqData[id]) reqData[id] = { presIdx: 0 };
+    reqData[id].existencia = val;
+    setReqData(reqData);
+    renderReq();
+}
+
+function cargarTodasAnteriores() {
+    var hist = getHistorial();
+    if (!hist.length) { alert('No hay requisición archivada para cargar.'); return; }
+    var prev = hist[0].items || {};
+    Object.keys(prev).forEach(function(id) {
+        var val = prev[id].existencia;
+        if (val !== undefined && val !== null && val !== '') {
+            if (!reqData[id]) reqData[id] = { presIdx: 0 };
+            if (reqData[id].existencia === '' || reqData[id].existencia === undefined || reqData[id].existencia === null) {
+                reqData[id].existencia = val;
+            }
+        }
+    });
+    setReqData(reqData);
+    renderReq();
+}
+
+function toggleNoPedir(id) {
+    if (!reqData[id]) reqData[id] = { presIdx: 0 };
+    reqData[id].noPedir = !reqData[id].noPedir;
+    setReqData(reqData);
+    renderReq();
+}
+
+
+// ── Guardar existencias (snapshot) ────────────────────────────
+function guardarExistencias() {
+    setReqData(reqData);
+    var msg = document.createElement('div');
+    msg.textContent = '✓ Existencias guardadas';
+    msg.style.cssText = 'position:fixed;bottom:80px;right:24px;background:var(--green);color:#fff;' +
+        'padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;' +
+        'box-shadow:0 4px 16px rgba(0,0,0,0.3);transition:opacity .4s';
+    document.body.appendChild(msg);
+    setTimeout(function() { msg.style.opacity = '0'; setTimeout(function() { msg.remove(); }, 400); }, 2000);
+}
+
+// ── Cerrar y archivar pedido ──────────────────────────────────
+function cerrarRequisicion() {
+    if (!confirm('¿Archivar este pedido en el historial? Las existencias quedarán guardadas y se iniciará una nueva requisición.')) return;
+
+    var hist  = getHistorial();
+    var snap  = {
+        fecha:  new Date().toISOString(),
+        items:  JSON.parse(JSON.stringify(reqData)),
+        resumen: calcResumen()
+    };
+    hist.unshift(snap);
+    if (hist.length > 52) hist = hist.slice(0, 52); // máximo 1 año de semanas
+    setHistorial(hist);
+
+    // Limpiar pedidos manuales y no-pedir pero conservar existencias
+    Object.keys(reqData).forEach(function(id) {
+        reqData[id].pedidoManual = '';
+        reqData[id].noPedir      = false;
+    });
+    setReqData(reqData);
+    renderReq();
+    alert('✓ Pedido archivado. Puedes iniciar una nueva requisición.');
+}
+
+function calcResumen() {
+    var totalCosto = 0; var totalItems = 0;
+    insumos.forEach(function(ins) {
+        var ri   = reqData[ins.id] || {};
+        var calc = calcItem(ins, ri);
+        var pFin = pedidoFinal(calc, ri);
+        if (pFin > 0) { totalItems++; totalCosto += pFin * calc.costoUnitPieza; }
+    });
+    return { totalItems: totalItems, totalCosto: totalCosto };
+}
+
+// ── Historial ─────────────────────────────────────────────────
+function abrirHistorial() {
+    var hist = getHistorial();
+    var body = document.getElementById('historialBody');
+    if (!hist.length) {
+        body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-dim)">Sin requisiciones archivadas aún</div>';
+    } else {
+        body.innerHTML = hist.map(function(snap, i) {
+            var d   = new Date(snap.fecha);
+            var res = snap.resumen || {};
+            return '<div class="hist-item" onclick="verSnapHistorial(' + i + ')">' +
+                '<div>' +
+                    '<div style="font-size:13px;font-weight:600">' +
+                        d.toLocaleDateString('es-MX', { weekday:'long', year:'numeric', month:'long', day:'numeric' }) +
+                    '</div>' +
+                    '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">' +
+                        (res.totalItems || 0) + ' ítems pedidos' +
+                    '</div>' +
+                '</div>' +
+                '<div style="text-align:right">' +
+                    '<div style="font-size:14px;font-weight:700;color:var(--green)">' + fmtMXN(res.totalCosto || 0) + '</div>' +
+                    '<div style="font-size:10px;color:var(--text-dim);margin-top:2px">costo estimado</div>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+    }
+    document.getElementById('modalHistorial').style.display = 'flex';
+}
+
+function cerrarHistorial() {
+    document.getElementById('modalHistorial').style.display = 'none';
+}
+
+function verSnapHistorial(i) {
+    var hist = getHistorial();
+    var snap = hist[i];
+    if (!snap) return;
+    if (!confirm('¿Cargar las existencias de esta requisición archivada como punto de partida?')) return;
+    // Solo restaura existencias, no pedidos manuales ni noPedir
+    Object.keys(snap.items || {}).forEach(function(id) {
+        if (!reqData[id]) reqData[id] = {};
+        reqData[id].existencia = snap.items[id].existencia;
+    });
+    setReqData(reqData);
+    cerrarHistorial();
+    renderReq();
+}
+
+// ── Utilidades ────────────────────────────────────────────────
+function _esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Init ──────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

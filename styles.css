@@ -134,7 +134,7 @@ body {
 
 /* ── HEADER ── */
 .header {
-    max-width: 900px;
+    max-width: 1200px;
     margin: 0 auto 32px;
     display: flex;
     align-items: flex-end;
@@ -187,9 +187,28 @@ body {
     color: var(--accent);
 }
 
+.btn-ver-ficha {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 10px;
+    padding: 2px 8px;
+    font-family: 'DM Sans', sans-serif;
+    transition: all 0.12s;
+    margin-left: 6px;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+.btn-ver-ficha:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
 /* ── LAYOUT ── */
 .wrap {
-    max-width: 900px;
+    max-width: 1200px;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
@@ -1080,9 +1099,11 @@ textarea:focus {
     display: none;
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.7);
+    background: rgba(0,0,0,0.65);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
     z-index: 200;
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
     padding: 20px;
     overflow-y: auto;
@@ -1096,7 +1117,8 @@ textarea:focus {
     border-radius: 12px;
     width: 100%;
     max-width: 680px;
-    margin-top: 20px;
+    max-height: 92vh;
+    overflow-y: auto;
 }
 
 .modal-header {

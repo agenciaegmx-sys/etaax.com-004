@@ -3,13 +3,37 @@
    app.js · Conectado a BD insumos
    ============================================================ */
 
+// ── Sesión / negocio activo ───────────────────────────────────
+function getNegocioActivo() {
+    return localStorage.getItem('etaax_negocio_activo') || '';
+}
+function _sk(key) {
+    var id = getNegocioActivo();
+    return id ? ('etaax_' + id + '_' + key) : ('etaax_' + key);
+}
+// Lee una clave con prefijo de negocio; si no existe aún para este negocio,
+// migra silenciosamente desde la clave legacy (etaax_{key}) una sola vez.
+function _skGet(key) {
+    var k   = _sk(key);
+    var raw = localStorage.getItem(k);
+    if (raw !== null) return raw;                       // ya tiene datos propios
+    var id = getNegocioActivo();
+    if (!id) return null;                               // sin negocio → usa key plana
+    var legacy = localStorage.getItem('etaax_' + key);
+    if (legacy && legacy !== 'null') {
+        localStorage.setItem(k, legacy);               // migrar una sola vez
+        return legacy;
+    }
+    return null;
+}
+
 // ── Recetas localStorage ──────────────────────────────────────
 function getRecetas() {
-    try { return JSON.parse(localStorage.getItem('etaax_recetas')) || []; }
+    try { return JSON.parse(_skGet('recetas')) || []; }
     catch { return []; }
 }
 function setRecetas(data) {
-    localStorage.setItem('etaax_recetas', JSON.stringify(data));
+    localStorage.setItem(_sk('recetas'), JSON.stringify(data));
 }
 function genId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2,5);
@@ -611,7 +635,7 @@ function abrirVentanaImpresion(html) {
 
 // ── Catálogo de insumos ──────────────────────────────────────
 function getCatalogoInsumos() {
-    try { return JSON.parse(localStorage.getItem('etaax_insumos')) || []; }
+    try { return JSON.parse(_skGet('insumos')) || []; }
     catch { return []; }
 }
 
@@ -892,7 +916,10 @@ function renderTabla() {
                 '<input type="number" value="'+(ing.costoPorKgLt||'')+'" min="0" step="0.01" placeholder="0.00"' +
                 ' oninput="updateIng('+i+',\'costoPorKgLt\',parseFloat(this.value)||0)"></div></td>' +
             '<td class="costo-u">$'+costoU.toFixed(2)+'</td>' +
-            '<td><button onclick="eliminarIng('+i+')" style="background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:15px;padding:2px 6px;" title="Eliminar">✕</button></td>';
+            '<td style="white-space:nowrap">' +
+                (vinculado ? '<button onclick="verFichaInsumo(\''+ing.insumoId+'\')" style="background:transparent;border:none;color:var(--green);cursor:pointer;font-size:13px;padding:2px 5px;opacity:0.85" title="Ver ficha técnica">◉</button>' : '') +
+                '<button onclick="eliminarIng('+i+')" style="background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:15px;padding:2px 6px;" title="Eliminar">✕</button>' +
+            '</td>';
         tbody.appendChild(tr);
     });
 
@@ -932,6 +959,135 @@ function eliminarIng(i) {
     renderTabla();
     if (typeof guardarEnHistorial === 'function') guardarEnHistorial();
 }
+
+// ── Ficha técnica de insumo desde el escandallo ──────────────
+function _fichaEsc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function _fichaFila(label, val) {
+    return '<div style="display:flex;justify-content:space-between;align-items:baseline;' +
+           'padding:7px 0;border-bottom:1px solid var(--border)">' +
+               '<span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;' +
+               'letter-spacing:1px;flex-shrink:0;margin-right:12px">' + label + '</span>' +
+               '<span style="font-size:13px;color:var(--text);font-weight:500;text-align:right">' +
+               _fichaEsc(String(val)) + '</span>' +
+           '</div>';
+}
+
+function verFichaInsumo(insumoId) {
+    const ins    = getCatalogoInsumos().find(x => x.id === insumoId);
+    const modal  = document.getElementById('modalFichaInsumo');
+    const tipoEl = document.getElementById('fichaInsumoTipo');
+    const body   = document.getElementById('fichaInsumoContent');
+    if (!ins || !modal) return;
+
+    const esSub = !!ins.esSubReceta;
+    const pres  = (ins.presentaciones || [])[0] || {};
+    tipoEl.textContent = esSub ? 'Sub-receta' : (ins.tipoInsumo || ins.familia || 'Insumo');
+
+    let html = '';
+
+    html += '<div style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:16px">' +
+            _fichaEsc(ins.nombre) + '</div>';
+
+    if (esSub) {
+        const costoKL  = parseFloat(pres.costoUnitario) || 0;
+        const umCosto  = pres.umCosto || 'KG';
+        const contNeto = parseFloat(pres.contNeto) || 0;
+        const umCont   = pres.umContenido || '';
+        if (contNeto) html += _fichaFila('Rendimiento', contNeto + ' ' + umCont);
+        if (costoKL)  html += _fichaFila('Costo por ' + umCosto, '$' + costoKL.toFixed(2));
+        const costo0  = parseFloat(pres.costoPieza) || 0;
+        if (costo0)   html += _fichaFila('Costo total lote', '$' + costo0.toFixed(2));
+        html += '<div style="margin-top:14px;padding:12px;background:var(--surface2);border:1px solid var(--border);' +
+                'border-radius:8px;font-size:12px;color:var(--text-dim)">Los datos se actualizan al guardar la sub-receta.</div>';
+    } else {
+        if (ins.familia)      html += _fichaFila('Familia',              ins.familia);
+        if (ins.categoria)    html += _fichaFila('Categoría',            ins.categoria);
+        if (ins.marca)        html += _fichaFila('Marca',                ins.marca);
+        if (ins.variedad)     html += _fichaFila('Variedad',             ins.variedad);
+        if (ins.subcategoria) html += _fichaFila('Subcategoría',         ins.subcategoria);
+        if (ins.maduracion)   html += _fichaFila('Añejamiento / Estado', ins.maduracion);
+        if (ins.notas)        html += _fichaFila('Notas',                ins.notas);
+
+        const presArr = ins.presentaciones || [];
+        if (presArr.length) {
+            html += '<div style="margin-top:16px;margin-bottom:8px;font-size:9px;letter-spacing:2px;' +
+                    'text-transform:uppercase;color:var(--text-dim)">Presentaciones</div>';
+            presArr.forEach(function(p) {
+                const costoKL    = parseFloat(p.costoUnitario) || 0;
+                const costoPieza = parseFloat(p.costoPieza)    || 0;
+                html += '<div style="background:var(--surface2);border:1px solid var(--border);' +
+                        'border-radius:8px;padding:10px 14px;margin-bottom:8px">' +
+                            '<div style="font-weight:600;font-size:13px;margin-bottom:6px">' +
+                            _fichaEsc(p.nombre || '—') + '</div>' +
+                            '<div style="display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--text-dim)">' +
+                                (p.contNeto  ? '<span>' + p.contNeto + ' ' + _fichaEsc(p.umContenido || '') + '</span>' : '') +
+                                (costoPieza  ? '<span>$' + costoPieza.toFixed(2) + ' / pieza</span>' : '') +
+                                (costoKL     ? '<span style="color:var(--green);font-weight:600">$' +
+                                              costoKL.toFixed(2) + ' / ' + _fichaEsc(p.umCosto || 'KG') + '</span>' : '') +
+                            '</div>' +
+                        '</div>';
+            });
+        }
+    }
+
+    html += '<div style="display:flex;gap:10px;margin-top:20px">';
+    if (esSub && ins.recetaId) {
+        html += '<button onclick="abrirEditorEnModal(\'index.html?r=' + _fichaEsc(ins.recetaId) + '\',\'Escandallo · ' + _fichaEsc(ins.nombre) + '\')" ' +
+                'style="flex:1;padding:10px;background:var(--green);color:#fff;border:none;' +
+                'border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Ver escandallo</button>';
+    } else {
+        html += '<button onclick="abrirEditorEnModal(\'insumos.html?solo=1&id=' + _fichaEsc(insumoId) + '\',\'Editar insumo · ' + _fichaEsc(ins.nombre) + '\')" ' +
+                'style="flex:1;padding:10px;background:var(--green);color:#fff;border:none;' +
+                'border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Editar insumo</button>';
+    }
+    html += '<button onclick="cerrarFichaInsumo()" ' +
+            'style="padding:10px 18px;background:var(--surface2);color:var(--text);border:1px solid var(--border);' +
+            'border-radius:8px;font-size:13px;cursor:pointer">Cerrar</button>';
+    html += '</div>';
+
+    body.innerHTML = html;
+    modal.style.display = 'flex';
+}
+
+function cerrarFichaInsumo() {
+    const m = document.getElementById('modalFichaInsumo');
+    if (m) m.style.display = 'none';
+}
+
+// ── Editor de insumo / escandallo en modal iframe ────────────
+function abrirEditorEnModal(url, label) {
+    const modal = document.getElementById('modalIframeInsumo');
+    const frame = document.getElementById('iframeInsumo');
+    const lbl   = document.getElementById('iframeInsumoLabel');
+    if (!modal || !frame) return;
+    cerrarFichaInsumo();
+    if (lbl) lbl.textContent = label || '';
+    frame.src = url;
+    modal.style.display = 'flex';
+}
+
+function cerrarIframeInsumo() {
+    const modal = document.getElementById('modalIframeInsumo');
+    const frame = document.getElementById('iframeInsumo');
+    if (frame) frame.src = '';
+    if (modal) modal.style.display = 'none';
+    ingredientes.forEach((ing, i) => recalcularCostoDesdeInsumo(i));
+    renderTabla();
+}
+
+window.addEventListener('message', function(e) {
+    if (!e.data || !e.data.type) return;
+    if (e.data.type === 'insumoGuardado') {
+        ingredientes.forEach((ing, i) => recalcularCostoDesdeInsumo(i));
+        renderTabla();
+        cerrarIframeInsumo();
+    } else if (e.data.type === 'cerrarEditor') {
+        cerrarIframeInsumo();
+    }
+});
 
 // ── Cálculos principales ─────────────────────────────────────
 function calcularCosteos() {

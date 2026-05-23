@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETAAX - Proveedores</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../styles.css">
+    <style>
+        .btn-primary {
+            background: var(--green);
+            border: none;
+            color: #fff;
+            padding: 9px 20px;
+            border-radius: 6px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            white-space: nowrap;
+        }
+        .btn-primary:hover { opacity: 0.85; }
+
+        .btn-ghost {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 9px 18px;
+            border-radius: 6px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-ghost:hover { border-color: var(--border2); color: var(--text); }
+
+        .btn-row {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn-row:hover { border-color: var(--green); color: var(--green); }
+        .btn-row.del:hover { border-color: var(--red); color: var(--red); }
+
+        /* Form */
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .form-group.full { grid-column: 1 / -1; }
+        .form-group label {
+            font-size: 10px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--text-dim);
+        }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 9px 12px;
+            border-radius: 6px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+            width: 100%;
+        }
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus { border-color: var(--green); }
+        .form-group textarea { min-height: 80px; resize: vertical; }
+
+        /* Filtros bar */
+        .filtros-bar {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .search-wrap { position: relative; flex: 1; min-width: 180px; }
+        .search-icon {
+            position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+            font-size: 13px; color: var(--text-dim); pointer-events: none;
+        }
+        .search-wrap input {
+            width: 100%;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 8px 12px 8px 32px;
+            border-radius: 6px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .search-wrap input:focus { border-color: var(--green); }
+        .filtro-select {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            outline: none;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        .filtro-select:focus { border-color: var(--green); }
+
+        /* Section divider in modal */
+        .modal-section {
+            font-size: 10px;
+            letter-spacing: 2.5px;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 6px;
+            margin: 20px 0 14px;
+        }
+
+        /* Expediente file upload */
+        .file-drop {
+            border: 1px dashed var(--border2);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s;
+            background: var(--surface2);
+        }
+        .file-drop:hover { border-color: var(--green); }
+        .file-drop input[type="file"] { display: none; }
+        .file-drop-text { font-size: 12px; color: var(--text-dim); line-height: 1.6; }
+        .file-drop-icon { font-size: 24px; margin-bottom: 6px; }
+
+        /* File chips */
+        .chips-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .file-chip {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 12px;
+            color: var(--text);
+            max-width: 220px;
+        }
+        .file-chip-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+        }
+        .file-chip-btn {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 11px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            transition: all 0.15s;
+            line-height: 1;
+        }
+        .file-chip-btn.dl { color: var(--green); }
+        .file-chip-btn.dl:hover { background: rgba(61,190,122,0.1); }
+        .file-chip-btn.rm { color: var(--red); }
+        .file-chip-btn.rm:hover { background: var(--red-dim); }
+
+        /* Empty state */
+        .empty-state { text-align: center; padding: 48px 24px; color: var(--text-dim); }
+        .empty-state-icon { font-size: 36px; margin-bottom: 12px; }
+        .empty-state-text { font-size: 13px; line-height: 1.6; }
+
+        .clabe-hint { font-size: 11px; color: var(--text-dim); margin-top: 3px; }
+
+        /* Modal wider */
+        #modalProv .modal { max-width: 700px; }
+
+        .controls-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+<body>
+<header class="top-bar">
+    <svg width="108" height="26" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
+        <path d="M14.5 28H37C35.5 23 31.5 20 25.5 20C19.5 20 16 23 14.5 28Z" fill="#1a1916"/>
+        <circle cx="45" cy="11" r="6" fill="#f5c842"/>
+        <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
+        <path d="M78 41C78 34.5 83.5 30.5 92.5 29.5L104 28.5V27.5C104 23.5 101.5 21 97 21C93 21 90 23 89 26.5L80.5 24C82.5 17.5 89 13 97 13C107.5 13 113 18.5 113 28.5V54.5H104V51C102 53.5 98.5 55 94 55C85.5 55 78 50.5 78 41Z" fill="#3dbe7a"/>
+        <path d="M104 37L95.5 38C92.5 38.5 90.5 40 90.5 42.5C90.5 45 92.5 46.5 95.5 46.5C101 46.5 104 43.5 104 39V37Z" fill="#1a1916"/>
+        <path d="M126 41C126 34.5 131.5 30.5 140.5 29.5L152 28.5V27.5C152 23.5 149.5 21 145 21C141 21 138 23 137 26.5L128.5 24C130.5 17.5 137 13 145 13C155.5 13 161 18.5 161 28.5V54.5H152V51C150 53.5 146.5 55 142 55C133.5 55 126 50.5 126 41Z" fill="#3dbe7a"/>
+        <path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/>
+        <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+    </svg>
+</header>
+
+<div class="app-shell">
+    <nav class="nav" id="nav">
+        <div class="nav-top">
+            <div class="nav-brand"><span class="nav-brand-sub">Control Administrativo</span></div>
+            <div class="nav-top-actions">
+                <a href="../hub.html" class="nav-toggle nav-home-btn" data-tooltip="Home">🏠<span class="nav-toggle-text">Home</span></a>
+                <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Ocultar" onclick="toggleNav()">◀<span class="nav-toggle-text" id="navToggleTxt">Ocultar</span></button>
+            </div>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Ventas</div>
+            <a href="menu.html" class="nav-link" data-tooltip="Menú"><span class="nav-icon">📋</span><span class="nav-text">Menú</span></a>
+            <a href="ventas.html" class="nav-link" data-tooltip="Registro"><span class="nav-icon">💰</span><span class="nav-text">Registro</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Directorio de</div>
+            <a href="proveedores.html" class="nav-link active" data-tooltip="Proveedores"><span class="nav-icon">🚚</span><span class="nav-text">Proveedores</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Gestión de</div>
+            <a href="staff.html" class="nav-link" data-tooltip="Staff"><span class="nav-icon">👥</span><span class="nav-text">Staff</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Base de</div>
+            <a href="#" class="nav-link" data-tooltip="Clientes"><span class="nav-icon">⭐</span><span class="nav-text">Clientes</span></a>
+        </div>
+    </nav>
+
+    <main class="main-content" id="mainContent">
+        <div class="header">
+            <div class="brand">
+                <span class="brand-label">Directorio de</span>
+                <span class="brand-title">Proveedores</span>
+            </div>
+        </div>
+
+        <div class="wrap">
+            <div class="card">
+                <div class="card-header" style="flex-direction:column;align-items:stretch;gap:12px;">
+                    <div class="controls-bar">
+                        <div class="filtros-bar" style="flex:1">
+                            <div class="search-wrap">
+                                <span class="search-icon">🔍</span>
+                                <input type="text" id="searchInput" placeholder="Buscar proveedor…" oninput="renderTable()">
+                            </div>
+                            <select class="filtro-select" id="filterPago" onchange="renderTable()">
+                                <option value="">Todas las formas de pago</option>
+                                <option>Transferencia Bancaria</option>
+                                <option>Efectivo</option>
+                                <option>Tarjeta de crédito</option>
+                                <option>Cheque</option>
+                                <option>Otro</option>
+                            </select>
+                        </div>
+                        <button class="btn-primary" onclick="openModal()">+ Agregar proveedor</button>
+                    </div>
+                </div>
+                <div class="card-body" style="padding:0">
+                    <div class="tabla-wrap">
+                        <table id="provTable">
+                            <thead>
+                                <tr>
+                                    <th style="cursor:pointer" onclick="sortBy('nombre')">Nombre <span id="sortNombre"></span></th>
+                                    <th>Tel. Empresa</th>
+                                    <th>Contacto directo</th>
+                                    <th>Forma de pago</th>
+                                    <th>Banco</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="provTbody"></tbody>
+                        </table>
+                        <div id="emptyState" class="empty-state" style="display:none">
+                            <div class="empty-state-icon">🚚</div>
+                            <div class="empty-state-text">Sin proveedores registrados.<br>Agrega el primero con el botón de arriba.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalProv">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 id="modalTitle">Agregar proveedor</h2>
+            <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-section">Datos de la empresa</div>
+            <div class="form-grid">
+                <div class="form-group full">
+                    <label>Nombre del Proveedor / Empresa *</label>
+                    <input type="text" id="fNombre" placeholder="Ej. Distribuidora García S.A.">
+                </div>
+                <div class="form-group">
+                    <label>Tel. de la Empresa</label>
+                    <input type="tel" id="fTel" placeholder="55 1234 5678">
+                </div>
+                <div class="form-group">
+                    <label>Nombre de Contacto Directo</label>
+                    <input type="text" id="fContacto" placeholder="Ej. Carlos Ramírez">
+                </div>
+                <div class="form-group">
+                    <label>Cel. Contacto Directo</label>
+                    <input type="tel" id="fCelContacto" placeholder="55 9876 5432">
+                </div>
+                <div class="form-group">
+                    <label>Correo electrónico (opcional)</label>
+                    <input type="email" id="fCorreo" placeholder="contacto@empresa.com">
+                </div>
+            </div>
+
+            <div class="modal-section">Datos bancarios y facturación</div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Forma de pago</label>
+                    <select id="fFormaPago">
+                        <option value="">— Seleccionar —</option>
+                        <option>Transferencia Bancaria</option>
+                        <option>Efectivo</option>
+                        <option>Tarjeta de crédito</option>
+                        <option>Cheque</option>
+                        <option>Otro</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Banco</label>
+                    <input type="text" id="fBanco" placeholder="Ej. BBVA, Banorte…">
+                </div>
+                <div class="form-group full">
+                    <label>Clave Interbancaria (CLABE — 18 dígitos)</label>
+                    <input type="text" id="fClabe" placeholder="000000000000000000" maxlength="18" inputmode="numeric" oninput="validateClabe(this)">
+                    <span class="clabe-hint" id="clabeHint"></span>
+                </div>
+                <div class="form-group full">
+                    <label>Método de facturación</label>
+                    <select id="fMetodoFac">
+                        <option value="">— Seleccionar —</option>
+                        <option>Directo con empresa</option>
+                        <option>CFDI por portal</option>
+                        <option>Sin factura</option>
+                        <option>Nota de remisión</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="modal-section">Expediente digital</div>
+            <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Máximo 3 archivos por proveedor. Formatos: PDF, JPG, PNG, DOCX.</p>
+            <div class="file-drop" onclick="document.getElementById('fileInput').click()">
+                <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png,.docx" multiple onchange="handleFiles(this)">
+                <div class="file-drop-icon">📎</div>
+                <div class="file-drop-text">Haz clic para seleccionar archivos<br><span style="font-size:11px;color:var(--text-dim)">PDF · JPG · PNG · DOCX</span></div>
+            </div>
+            <div class="chips-list" id="chipsList"></div>
+
+            <div class="modal-section">Notas</div>
+            <textarea id="fNotas" placeholder="Condiciones de entrega, horarios, observaciones…"></textarea>
+
+            <input type="hidden" id="fId">
+        </div>
+        <div class="modal-footer">
+            <button class="btn-ghost" onclick="closeModal()">Cancelar</button>
+            <button class="btn-primary" onclick="saveProv()">Guardar</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.theme-toggle{position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;}
+.theme-toggle:hover{border-color:var(--green);color:var(--green);}
+</style>
+<button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
+
+<script>
+(function(){
+    var saved = localStorage.getItem('etaax_theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    document.addEventListener('DOMContentLoaded', function(){
+        if (saved === 'light') { document.getElementById('themeIcon').textContent='🌙'; document.getElementById('themeLabel').textContent='Modo oscuro'; }
+    });
+})();
+function toggleTheme() {
+    var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('etaax_theme', next);
+    document.getElementById('themeIcon').textContent  = next === 'light' ? '🌙' : '☀️';
+    document.getElementById('themeLabel').textContent = next === 'light' ? 'Modo oscuro' : 'Modo claro';
+}
+function toggleNav() {
+    var nav = document.getElementById('nav'); var main = document.getElementById('mainContent');
+    nav.classList.toggle('cerrado'); if (main) main.classList.toggle('expandido');
+    var cerrado = nav.classList.contains('cerrado');
+    var btn = document.getElementById('navToggleBtn'); var txt = document.getElementById('navToggleTxt');
+    if (btn) btn.childNodes[0].textContent = cerrado ? '▶' : '◀';
+    if (txt) txt.textContent = cerrado ? 'Expandir' : 'Ocultar';
+    if (btn) btn.setAttribute('data-tooltip', cerrado ? 'Expandir' : 'Ocultar');
+}
+
+/* ── DATA ── */
+var LS_KEY = 'etaax_proveedores';
+function load() { try { return JSON.parse(localStorage.getItem(LS_KEY)) || []; } catch(e){ return []; } }
+function save(d) { localStorage.setItem(LS_KEY, JSON.stringify(d)); }
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
+
+/* ── SORT STATE ── */
+var sortField = 'nombre';
+var sortDir   = 1; // 1 asc, -1 desc
+
+function sortBy(field) {
+    if (sortField === field) { sortDir *= -1; } else { sortField = field; sortDir = 1; }
+    renderTable();
+}
+
+/* ── TEMP DOCS for current modal session ── */
+var tmpDocs = [];
+
+/* ── RENDER ── */
+function renderTable() {
+    var q    = document.getElementById('searchInput').value.toLowerCase();
+    var pago = document.getElementById('filterPago').value;
+    var data = load();
+
+    var filtered = data.filter(function(p){
+        var matchQ = !q || p.nombre.toLowerCase().includes(q) ||
+            (p.contacto||'').toLowerCase().includes(q) ||
+            (p.banco||'').toLowerCase().includes(q);
+        var matchP = !pago || p.formaPago === pago;
+        return matchQ && matchP;
+    });
+
+    filtered.sort(function(a,b){
+        var av = (a[sortField]||'').toLowerCase();
+        var bv = (b[sortField]||'').toLowerCase();
+        return av < bv ? -sortDir : av > bv ? sortDir : 0;
+    });
+
+    var tbody  = document.getElementById('provTbody');
+    var empty  = document.getElementById('emptyState');
+    var sortEl = document.getElementById('sortNombre');
+    if (sortEl) sortEl.textContent = sortField === 'nombre' ? (sortDir === 1 ? ' ▲' : ' ▼') : '';
+
+    if (!filtered.length) {
+        tbody.innerHTML = '';
+        empty.style.display = '';
+        return;
+    }
+    empty.style.display = 'none';
+
+    tbody.innerHTML = filtered.map(function(p){
+        var docsCount = (p.documentos||[]).length;
+        var docsChip  = docsCount ? '<span class="pill pill-green" style="margin-left:4px">' + docsCount + ' doc' + (docsCount>1?'s':'') + '</span>' : '';
+        return '<tr style="cursor:pointer" ondblclick="openModal(\'' + p.id + '\')">' +
+            '<td><strong>' + esc(p.nombre) + '</strong>' + docsChip + '</td>' +
+            '<td>' + esc(p.tel||'—') + '</td>' +
+            '<td>' + esc(p.contacto||'—') + '</td>' +
+            '<td><span class="pill pill-amber">' + esc(p.formaPago||'—') + '</span></td>' +
+            '<td>' + esc(p.banco||'—') + '</td>' +
+            '<td style="white-space:nowrap">' +
+                '<button class="btn-row" onclick="event.stopPropagation();openModal(\'' + p.id + '\')">Editar</button> ' +
+                '<button class="btn-row del" onclick="event.stopPropagation();deleteProv(\'' + p.id + '\')">Eliminar</button>' +
+            '</td>' +
+        '</tr>';
+    }).join('');
+}
+
+/* ── MODAL ── */
+function openModal(id) {
+    tmpDocs = [];
+    clearForm();
+    document.getElementById('modalTitle').textContent = id ? 'Editar proveedor' : 'Agregar proveedor';
+    document.getElementById('fId').value = '';
+
+    if (id) {
+        var data = load();
+        var p = data.find(function(x){ return x.id === id; });
+        if (p) {
+            document.getElementById('fId').value      = p.id;
+            document.getElementById('fNombre').value  = p.nombre || '';
+            document.getElementById('fTel').value     = p.tel || '';
+            document.getElementById('fContacto').value= p.contacto || '';
+            document.getElementById('fCelContacto').value = p.celContacto || '';
+            document.getElementById('fCorreo').value  = p.correo || '';
+            document.getElementById('fFormaPago').value = p.formaPago || '';
+            document.getElementById('fClabe').value   = p.clabe || '';
+            document.getElementById('fBanco').value   = p.banco || '';
+            document.getElementById('fMetodoFac').value = p.metodoFacturacion || '';
+            document.getElementById('fNotas').value   = p.notas || '';
+            tmpDocs = (p.documentos || []).slice();
+        }
+    }
+    renderChips();
+    document.getElementById('modalProv').classList.add('open');
+}
+
+function clearForm() {
+    ['fNombre','fTel','fContacto','fCelContacto','fCorreo','fBanco','fNotas'].forEach(function(id){
+        document.getElementById(id).value = '';
+    });
+    ['fFormaPago','fMetodoFac'].forEach(function(id){
+        document.getElementById(id).value = '';
+    });
+    document.getElementById('fClabe').value = '';
+    document.getElementById('clabeHint').textContent = '';
+    document.getElementById('fileInput').value = '';
+}
+
+function closeModal() {
+    document.getElementById('modalProv').classList.remove('open');
+    tmpDocs = [];
+}
+
+function deleteProv(id) {
+    if (!confirm('¿Eliminar este proveedor y todos sus documentos?')) return;
+    save(load().filter(function(p){ return p.id !== id; }));
+    renderTable();
+}
+
+function saveProv() {
+    var nombre = document.getElementById('fNombre').value.trim();
+    if (!nombre) { alert('El nombre del proveedor es requerido.'); return; }
+
+    var clabe = document.getElementById('fClabe').value.replace(/\s/g,'');
+    if (clabe && clabe.length !== 18) { alert('La CLABE debe tener exactamente 18 dígitos.'); return; }
+
+    var obj = {
+        id:               document.getElementById('fId').value || genId(),
+        nombre:           nombre,
+        tel:              document.getElementById('fTel').value.trim(),
+        contacto:         document.getElementById('fContacto').value.trim(),
+        celContacto:      document.getElementById('fCelContacto').value.trim(),
+        correo:           document.getElementById('fCorreo').value.trim(),
+        formaPago:        document.getElementById('fFormaPago').value,
+        clabe:            clabe,
+        banco:            document.getElementById('fBanco').value.trim(),
+        metodoFacturacion:document.getElementById('fMetodoFac').value,
+        notas:            document.getElementById('fNotas').value.trim(),
+        documentos:       tmpDocs.slice()
+    };
+
+    var data = load();
+    var idx  = data.findIndex(function(p){ return p.id === obj.id; });
+    if (idx > -1) { data[idx] = obj; } else { data.push(obj); }
+    save(data);
+    closeModal();
+    renderTable();
+}
+
+/* ── CLABE VALIDATION ── */
+function validateClabe(input) {
+    var val = input.value.replace(/\D/g,'');
+    input.value = val;
+    var hint = document.getElementById('clabeHint');
+    if (!val) { hint.textContent = ''; return; }
+    if (val.length < 18) { hint.textContent = val.length + '/18 dígitos'; hint.style.color = 'var(--text-dim)'; }
+    else { hint.textContent = '18 dígitos ✓'; hint.style.color = 'var(--green)'; }
+}
+
+/* ── FILE UPLOAD ── */
+function handleFiles(input) {
+    var files = Array.from(input.files);
+    var max   = 3;
+    var avail = max - tmpDocs.length;
+    if (avail <= 0) { alert('Máximo 3 archivos por proveedor.'); input.value=''; return; }
+    files = files.slice(0, avail);
+    if (files.length < input.files.length) { alert('Se agregarán solo ' + avail + ' archivo(s) para no superar el límite de 3.'); }
+
+    var pending = files.length;
+    files.forEach(function(file){
+        var reader = new FileReader();
+        reader.onload = function(e){
+            tmpDocs.push({ nombre: file.name, tipo: file.type, data: e.target.result });
+            pending--;
+            if (pending === 0) { renderChips(); }
+        };
+        reader.readAsDataURL(file);
+    });
+    input.value = '';
+}
+
+function renderChips() {
+    var list = document.getElementById('chipsList');
+    if (!tmpDocs.length) { list.innerHTML = ''; return; }
+    list.innerHTML = tmpDocs.map(function(doc, i){
+        var icon = doc.tipo && doc.tipo.includes('image') ? '🖼️' : (doc.tipo && doc.tipo.includes('pdf') ? '📄' : '📎');
+        return '<div class="file-chip">' +
+            '<span>' + icon + '</span>' +
+            '<span class="file-chip-name" title="' + esc(doc.nombre) + '">' + esc(doc.nombre) + '</span>' +
+            '<button class="file-chip-btn dl" title="Descargar" onclick="downloadDoc(' + i + ')">⬇</button>' +
+            '<button class="file-chip-btn rm" title="Eliminar" onclick="removeDoc(' + i + ')">✕</button>' +
+        '</div>';
+    }).join('');
+}
+
+function downloadDoc(i) {
+    var doc = tmpDocs[i];
+    if (!doc) return;
+    var a = document.createElement('a');
+    a.href = doc.data;
+    a.download = doc.nombre;
+    a.click();
+}
+
+function removeDoc(i) {
+    tmpDocs.splice(i, 1);
+    renderChips();
+}
+
+/* ── UTILS ── */
+function esc(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── INIT ── */
+document.addEventListener('DOMContentLoaded', renderTable);
+
+document.getElementById('modalProv').addEventListener('click', function(e){
+    if (e.target === this) closeModal();
+});
+</script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>etaax – Panel de acceso</title>
+<title>etaax – Acceso</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -21,6 +21,7 @@
   --muted:  #7a7570;
   --dim:    #4a4844;
   --salmon: #c87a6a;
+  --red:    #e05a3a;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
 body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden;}
@@ -28,194 +29,320 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 ::-webkit-scrollbar-track{background:var(--bg);}
 ::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px;}
 
-/* GRID BG */
+/* BG */
 .hub-bg{
   position:fixed;inset:0;pointer-events:none;z-index:0;
-  background-image:linear-gradient(var(--b1) 1px, transparent 1px),linear-gradient(90deg, var(--b1) 1px, transparent 1px);
-  background-size:60px 60px;
-  opacity:0.2;
-  mask-image:radial-gradient(ellipse 100% 100% at 50% 0%, black 30%, transparent 80%);
+  background-image:linear-gradient(var(--b1) 1px,transparent 1px),linear-gradient(90deg,var(--b1) 1px,transparent 1px);
+  background-size:60px 60px;opacity:0.2;
+  mask-image:radial-gradient(ellipse 100% 100% at 50% 0%,black 30%,transparent 80%);
 }
 .hub-glow{
   position:fixed;top:-200px;left:50%;transform:translateX(-50%);
   width:900px;height:600px;
-  background:radial-gradient(ellipse, rgba(61,190,122,0.07) 0%, transparent 65%);
+  background:radial-gradient(ellipse,rgba(61,190,122,0.07) 0%,transparent 65%);
   pointer-events:none;z-index:0;
 }
-
-/* SHELL */
 .hub-shell{
-  position:relative;z-index:1;
-  min-height:100vh;
-  display:flex;flex-direction:column;
-  padding:0 24px 80px;
+  position:relative;z-index:1;min-height:100vh;
+  display:flex;flex-direction:column;padding:0 24px 80px;
 }
 
-/* TOP BAR */
+/* TOPBAR */
 .hub-topbar{
   display:flex;align-items:center;justify-content:space-between;
-  padding:24px 0 0;
-  margin-bottom:80px;
+  padding:24px 0 0;margin-bottom:64px;
 }
 .hub-back{
-  display:flex;align-items:center;gap:8px;
-  font-size:12px;color:var(--muted);text-decoration:none;
-  padding:6px 12px;border-radius:6px;border:1px solid transparent;
-  transition:all 0.2s;
+  display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);
+  text-decoration:none;padding:6px 12px;border-radius:6px;border:1px solid transparent;transition:all .2s;
 }
 .hub-back:hover{color:var(--text);border-color:var(--b2);background:var(--s2);}
-.hub-back-arrow{font-size:14px;transition:transform 0.2s;}
-.hub-back:hover .hub-back-arrow{transform:translateX(-2px);}
-
-.hub-user{
-  display:flex;align-items:center;gap:10px;
-  font-size:12px;color:var(--muted);
-}
+.hub-user-top{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);}
 .hub-user-dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 2s ease infinite;}
+.btn-logout{
+  background:transparent;border:1px solid var(--b2);color:var(--dim);
+  font-family:'DM Sans',sans-serif;font-size:11px;padding:5px 12px;
+  border-radius:6px;cursor:pointer;transition:all .2s;letter-spacing:.5px;
+}
+.btn-logout:hover{border-color:var(--red);color:var(--red);}
 
 /* HERO */
 .hub-hero{
   display:flex;flex-direction:column;align-items:center;
-  text-align:center;margin-bottom:72px;
-  animation:fadeUp 0.7s ease both;
+  text-align:center;margin-bottom:40px;animation:fadeUp .7s ease both;
 }
-.hub-eyebrow{
-  font-size:11px;letter-spacing:4px;text-transform:uppercase;
-  color:var(--muted);margin-bottom:16px;
-}
-.hub-title{
-  font-family:'Bebas Neue',sans-serif;
-  font-size:clamp(40px,6vw,72px);
-  letter-spacing:2px;line-height:0.95;
-  color:var(--text);margin-bottom:12px;
-}
+.hub-eyebrow{font-size:11px;letter-spacing:4px;text-transform:uppercase;color:var(--muted);margin-bottom:16px;}
+.hub-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(36px,6vw,68px);letter-spacing:2px;line-height:.95;color:var(--text);margin-bottom:12px;}
 .hub-title .g{color:var(--green);}
-.hub-subtitle{
-  font-size:14px;color:var(--dim);letter-spacing:1px;
-}
+.hub-subtitle{font-size:14px;color:var(--dim);letter-spacing:1px;}
 
-/* GRID */
+/* ═══════════════════════════════════════
+   AUTH VIEWS (Login / Registro)
+═══════════════════════════════════════ */
+.auth-wrap{
+  width:100%;max-width:420px;margin:0 auto;
+  animation:fadeUp .5s ease both;
+}
+.auth-card{
+  background:var(--s1);border:1px solid var(--b1);border-radius:20px;
+  padding:36px;
+}
+.auth-title{
+  font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:1px;
+  color:var(--text);margin-bottom:4px;
+}
+.auth-sub{font-size:12px;color:var(--dim);margin-bottom:28px;letter-spacing:.5px;}
+.auth-field{margin-bottom:14px;}
+.auth-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:7px;display:block;}
+.auth-input{
+  width:100%;background:var(--s2);border:1px solid var(--b2);color:var(--text);
+  font-family:'DM Sans',sans-serif;font-size:14px;
+  padding:11px 14px;border-radius:8px;outline:none;transition:border-color .2s;
+}
+.auth-input::placeholder{color:var(--dim);}
+.auth-input:focus{border-color:var(--green);}
+.auth-input.error{border-color:var(--salmon);}
+.auth-error{font-size:11px;color:var(--salmon);margin-top:12px;text-align:center;min-height:16px;}
+.btn-auth{
+  width:100%;background:var(--green);color:#0a0908;font-family:'DM Sans',sans-serif;
+  font-size:14px;font-weight:600;padding:13px;border-radius:8px;border:none;
+  cursor:pointer;transition:background .2s,transform .15s;margin-top:20px;
+}
+.btn-auth:hover{background:var(--green2);transform:translateY(-1px);}
+.auth-switch{text-align:center;margin-top:20px;font-size:12px;color:var(--dim);}
+.auth-switch a{color:var(--muted);text-decoration:none;cursor:pointer;border-bottom:1px solid var(--b2);transition:color .2s;}
+.auth-switch a:hover{color:var(--green);}
+.auth-divider{height:1px;background:var(--b1);margin:24px 0;}
+
+/* ═══════════════════════════════════════
+   PLAN SELECTOR (en Registro)
+═══════════════════════════════════════ */
+.plan-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:4px;}
+.plan-card-sel{
+  background:var(--s2);border:1px solid var(--b2);border-radius:12px;
+  padding:16px 12px;text-align:center;cursor:pointer;
+  transition:border-color .2s,transform .15s;position:relative;
+  user-select:none;
+}
+.plan-card-sel.selected{border-color:var(--green);background:rgba(61,190,122,.06);}
+.plan-card-sel.disabled{opacity:.45;cursor:default;pointer-events:none;}
+.plan-icon-big{font-size:24px;margin-bottom:8px;}
+.plan-nombre{font-size:13px;font-weight:600;color:var(--text);line-height:1.2;}
+.plan-sub{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);margin-top:2px;}
+.plan-badge-sel{
+  position:absolute;top:-8px;left:50%;transform:translateX(-50%);
+  font-size:8px;letter-spacing:1px;text-transform:uppercase;font-weight:700;
+  padding:2px 8px;border-radius:20px;white-space:nowrap;
+}
+.plan-badge-free{background:var(--greend);color:var(--green);}
+.plan-badge-pronto{background:var(--goldd);color:var(--gold);}
+.plan-maxnegs{
+  font-size:11px;font-weight:600;color:var(--green);
+  margin-top:10px;padding-top:8px;border-top:1px solid var(--b1);
+}
+.plan-precio{
+  font-size:18px;font-weight:700;color:var(--text);
+  margin-top:8px;line-height:1;letter-spacing:-.5px;
+}
+.plan-precio-sub{
+  font-size:9px;letter-spacing:1px;text-transform:uppercase;
+  color:var(--dim);margin-top:3px;
+}
+.plan-card-sel.disabled .plan-maxnegs{color:var(--dim);}
+
+/* ═══════════════════════════════════════
+   SELECTOR DE NEGOCIOS
+═══════════════════════════════════════ */
+.neg-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:12px;width:100%;max-width:960px;margin:0 auto 20px;
+}
+.neg-card{
+  background:var(--s1);border:1px solid var(--b1);border-radius:16px;
+  padding:18px 20px;display:flex;align-items:center;gap:14px;
+  cursor:pointer;transition:border-color .2s,transform .2s,box-shadow .2s;
+  position:relative;animation:fadeUp .5s ease both;
+}
+.neg-card:hover{border-color:var(--green);transform:translateY(-2px);box-shadow:0 12px 40px rgba(0,0,0,.3);}
+.neg-card-emoji{
+  width:48px;height:48px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;flex-shrink:0;
+}
+.neg-card-nombre{font-size:15px;font-weight:600;color:var(--text);}
+.neg-card-meta{font-size:10px;color:var(--dim);margin-top:3px;letter-spacing:1px;text-transform:uppercase;}
+.neg-card-arrow{margin-left:auto;font-size:18px;flex-shrink:0;}
+.neg-card-del{
+  background:transparent;border:none;color:var(--dim);cursor:pointer;
+  font-size:14px;padding:5px 7px;border-radius:5px;
+  transition:color .2s,background .2s;flex-shrink:0;
+}
+.neg-card-del:hover{color:var(--red);background:rgba(224,90,58,.12);}
+
+.btn-nuevo-neg{
+  background:transparent;border:1px dashed var(--b2);color:var(--muted);
+  font-family:'DM Sans',sans-serif;font-size:13px;
+  padding:12px 28px;border-radius:10px;cursor:pointer;
+  transition:all .2s;letter-spacing:.5px;
+  display:inline-flex;align-items:center;gap:8px;
+}
+.btn-nuevo-neg:hover{border-color:var(--green);color:var(--green);background:rgba(61,190,122,.04);}
+
+/* Límite de plan */
+.plan-limit-msg{
+  background:var(--goldd);border:1px solid rgba(245,200,66,.3);
+  border-radius:12px;padding:16px 20px;
+  width:100%;max-width:960px;margin:0 auto 20px;
+  display:flex;align-items:center;gap:12px;
+}
+.plan-limit-icon{font-size:20px;flex-shrink:0;}
+.plan-limit-text{font-size:13px;color:var(--gold);}
+.plan-limit-sub{font-size:11px;color:rgba(245,200,66,.6);margin-top:2px;}
+
+/* Form nuevo negocio */
+.neg-form{
+  background:var(--s1);border:1px solid var(--b2);border-radius:16px;
+  padding:28px 32px;width:100%;max-width:960px;margin:0 auto;
+  animation:fadeUp .3s ease both;
+}
+.neg-form-label{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--green);margin-bottom:16px;}
+.neg-form-row{display:flex;gap:12px;margin-bottom:14px;}
+.neg-form input,.neg-form select{
+  background:var(--s2);border:1px solid var(--b2);color:var(--text);
+  font-family:'DM Sans',sans-serif;font-size:14px;
+  padding:11px 14px;border-radius:8px;outline:none;
+  transition:border-color .2s;width:100%;
+}
+.neg-form input::placeholder{color:var(--dim);}
+.neg-form input:focus,.neg-form select:focus{border-color:var(--green);}
+.neg-form select option{background:var(--s2);}
+.neg-form-colors{display:flex;gap:8px;align-items:center;flex-shrink:0;}
+.neg-color-dot{
+  width:26px;height:26px;border-radius:50%;border:2px solid transparent;
+  cursor:pointer;transition:transform .15s,border-color .15s,box-shadow .15s;flex-shrink:0;
+}
+.neg-color-dot:hover{transform:scale(1.15);}
+.neg-color-dot.active{border-color:white;box-shadow:0 0 0 3px rgba(255,255,255,.15);}
+.btn-crear-neg{
+  background:var(--green);color:#0a0908;font-family:'DM Sans',sans-serif;
+  font-size:13px;font-weight:600;padding:11px 22px;border-radius:8px;border:none;
+  cursor:pointer;transition:background .2s,transform .15s;white-space:nowrap;flex-shrink:0;
+}
+.btn-crear-neg:hover{background:var(--green2);transform:translateY(-1px);}
+
+/* Negocio activo bar */
+.neg-activo-bar{
+  display:flex;align-items:center;gap:12px;
+  background:var(--s1);border:1px solid var(--b1);border-radius:12px;
+  padding:12px 18px;width:100%;max-width:960px;margin:0 auto 40px;
+  transition:border-color .3s;
+}
+.neg-activo-emoji-wrap{
+  width:40px;height:40px;border-radius:10px;
+  background:rgba(61,190,122,.1);
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;flex-shrink:0;transition:background .3s;
+}
+.neg-activo-nombre{font-size:14px;font-weight:600;color:var(--text);}
+.neg-activo-tipo{font-size:10px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-top:2px;}
+.neg-activo-btns{margin-left:auto;display:flex;gap:8px;align-items:center;}
+.btn-cambiar-neg{
+  background:transparent;border:1px solid var(--b2);color:var(--muted);
+  font-family:'DM Sans',sans-serif;font-size:11px;
+  padding:7px 14px;border-radius:6px;cursor:pointer;
+  transition:all .2s;letter-spacing:.5px;white-space:nowrap;
+}
+.btn-cambiar-neg:hover{border-color:var(--green);color:var(--green);}
+
+/* Usuario badge en módulos */
+.user-badge{
+  display:flex;align-items:center;gap:8px;
+  background:var(--s2);border:1px solid var(--b1);border-radius:8px;
+  padding:6px 12px;font-size:11px;color:var(--muted);
+}
+.user-badge-plan{
+  font-size:9px;letter-spacing:2px;text-transform:uppercase;
+  padding:2px 7px;border-radius:20px;font-weight:600;
+}
+.plan-micro{background:var(--greend);color:var(--green);}
+.plan-pyme{background:var(--goldd);color:var(--gold);}
+.plan-gran{background:rgba(200,122,106,.15);color:var(--salmon);}
+
+/* MODULE GRID */
 .hub-grid{
-  display:grid;
-  grid-template-columns:repeat(2,1fr);
-  grid-template-rows:auto auto;
-  gap:16px;
-  width:100%;max-width:960px;
-  margin:0 auto;
+  display:grid;grid-template-columns:repeat(2,1fr);gap:16px;
+  width:100%;max-width:960px;margin:0 auto;
 }
-
-/* CARDS */
 .hub-card{
   position:relative;overflow:hidden;
-  background:var(--s1);
-  border:1px solid var(--b1);
-  border-radius:20px;
-  padding:36px;
-  text-decoration:none;
-  display:flex;flex-direction:column;gap:0;
-  transition:border-color 0.25s, transform 0.25s, box-shadow 0.25s;
-  animation:fadeUp 0.7s ease both;
-  cursor:pointer;
+  background:var(--s1);border:1px solid var(--b1);border-radius:20px;padding:36px;
+  text-decoration:none;display:flex;flex-direction:column;
+  transition:border-color .25s,transform .25s,box-shadow .25s;
+  animation:fadeUp .7s ease both;cursor:pointer;
 }
-.hub-card:nth-child(1){animation-delay:0.1s;}
-.hub-card:nth-child(2){animation-delay:0.2s;}
-.hub-card:nth-child(3){animation-delay:0.3s;}
-.hub-card:nth-child(4){animation-delay:0.4s;}
-
+.hub-card:nth-child(1){animation-delay:.1s;}
+.hub-card:nth-child(2){animation-delay:.2s;}
+.hub-card:nth-child(3){animation-delay:.3s;}
+.hub-card:nth-child(4){animation-delay:.4s;}
 .hub-card:not(.disabled):hover{
-  border-color:var(--green);
-  transform:translateY(-4px);
-  box-shadow:0 24px 64px rgba(0,0,0,0.4), 0 0 0 1px rgba(61,190,122,0.15);
+  border-color:var(--green);transform:translateY(-4px);
+  box-shadow:0 24px 64px rgba(0,0,0,.4),0 0 0 1px rgba(61,190,122,.15);
 }
-.hub-card.disabled{
-  opacity:0.42;
-  cursor:default;
-  pointer-events:none;
-}
-
-/* Card inner glow on hover */
+.hub-card.disabled{opacity:.42;cursor:default;pointer-events:none;}
 .hub-card::before{
   content:'';position:absolute;inset:0;
-  background:radial-gradient(ellipse 60% 50% at 50% 0%, rgba(61,190,122,0.06) 0%, transparent 70%);
-  opacity:0;transition:opacity 0.3s;
-  pointer-events:none;
+  background:radial-gradient(ellipse 60% 50% at 50% 0%,rgba(61,190,122,.06) 0%,transparent 70%);
+  opacity:0;transition:opacity .3s;pointer-events:none;
 }
 .hub-card:not(.disabled):hover::before{opacity:1;}
-
 .card-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;}
-.card-icon{
-  width:52px;height:52px;border-radius:14px;
-  background:var(--s2);border:1px solid var(--b2);
-  display:flex;align-items:center;justify-content:center;
-  font-size:24px;flex-shrink:0;
-}
-.card-status{
-  font-size:10px;letter-spacing:2px;text-transform:uppercase;
-  padding:4px 10px;border-radius:20px;
-  font-weight:600;margin-top:4px;
-}
+.card-icon{width:52px;height:52px;border-radius:14px;background:var(--s2);border:1px solid var(--b2);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;}
+.card-status{font-size:10px;letter-spacing:2px;text-transform:uppercase;padding:4px 10px;border-radius:20px;font-weight:600;margin-top:4px;}
 .status-active{background:var(--greend);color:var(--green);}
 .status-soon{background:var(--goldd);color:var(--gold);}
-
-.card-title{
-  font-family:'Bebas Neue',sans-serif;
-  font-size:32px;letter-spacing:1px;
-  color:var(--text);margin-bottom:8px;line-height:1;
-}
-.card-desc{
-  font-size:13px;color:var(--muted);line-height:1.7;
-  margin-bottom:24px;flex:1;
-}
-.card-modules{
-  display:flex;flex-wrap:wrap;gap:6px;margin-bottom:28px;
-}
-.card-module-tag{
-  font-size:10px;color:var(--dim);
-  background:var(--s2);border:1px solid var(--b1);
-  padding:3px 10px;border-radius:20px;
-  letter-spacing:0.5px;
-}
-.card-footer{
-  display:flex;align-items:center;justify-content:space-between;
-  padding-top:20px;border-top:1px solid var(--b1);
-}
-.card-cta{
-  font-size:12px;font-weight:600;
-  color:var(--green);letter-spacing:0.5px;
-  display:flex;align-items:center;gap:6px;
-  transition:gap 0.2s;
-}
+.card-title{font-family:'Bebas Neue',sans-serif;font-size:32px;letter-spacing:1px;color:var(--text);margin-bottom:8px;line-height:1;}
+.card-desc{font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:24px;flex:1;}
+.card-modules{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:28px;}
+.card-module-tag{font-size:10px;color:var(--dim);background:var(--s2);border:1px solid var(--b1);padding:3px 10px;border-radius:20px;letter-spacing:.5px;}
+.card-footer{display:flex;align-items:center;justify-content:space-between;padding-top:20px;border-top:1px solid var(--b1);}
+.card-cta{font-size:12px;font-weight:600;color:var(--green);letter-spacing:.5px;display:flex;align-items:center;gap:6px;transition:gap .2s;}
 .hub-card:not(.disabled):hover .card-cta{gap:10px;}
-.card-cta-disabled{font-size:12px;color:var(--dim);letter-spacing:0.5px;}
-.card-progress{
-  display:flex;align-items:center;gap:6px;
-  font-size:11px;color:var(--dim);
-}
+.card-cta-disabled{font-size:12px;color:var(--dim);letter-spacing:.5px;}
+.card-progress{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);}
 .progress-dot{width:6px;height:6px;border-radius:50%;background:var(--green);}
 .progress-dot.off{background:var(--b2);}
 
-/* FOOTER NOTE */
-.hub-footer{
-  text-align:center;margin-top:56px;
-  animation:fadeUp 0.7s 0.5s ease both;
-}
+/* Empty + misc */
+.neg-empty{text-align:center;padding:40px 24px;color:var(--dim);width:100%;max-width:960px;margin:0 auto;}
+.neg-empty-icon{font-size:44px;margin-bottom:14px;}
+.neg-empty-title{font-size:14px;color:var(--muted);margin-bottom:6px;}
+.neg-empty-sub{font-size:11px;letter-spacing:1px;text-transform:uppercase;}
+
+.hub-footer{text-align:center;margin-top:56px;animation:fadeUp .7s .5s ease both;}
 .hub-footer-text{font-size:12px;color:var(--dim);}
-.hub-footer-text a{color:var(--muted);text-decoration:none;transition:color 0.2s;}
+.hub-footer-text a{color:var(--muted);text-decoration:none;transition:color .2s;}
 .hub-footer-text a:hover{color:var(--text);}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:translateY(0);}}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.5;transform:scale(0.8);}}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(.8);}}
 
 @media(max-width:720px){
   .hub-grid{grid-template-columns:1fr;}
-  .hub-topbar{margin-bottom:48px;}
-  .hub-hero{margin-bottom:48px;}
+  .hub-topbar{margin-bottom:40px;}
+  .hub-hero{margin-bottom:28px;}
   .hub-card{padding:24px;}
+  .neg-grid{grid-template-columns:1fr;}
+  .neg-form{padding:20px;}
+  .neg-form-row{flex-direction:column;}
+  .neg-form select{max-width:100% !important;}
+  .btn-crear-neg{width:100%;}
+  .plan-grid{grid-template-columns:1fr;}
+  .auth-card{padding:24px;}
+  .neg-activo-btns{flex-direction:column;align-items:flex-end;gap:6px;}
 }
 </style>
 </head>
 <body>
-
 <div class="hub-bg"></div>
 <div class="hub-glow"></div>
 
@@ -223,133 +350,705 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 
   <!-- TOP BAR -->
   <div class="hub-topbar">
-    <a href="index.html" class="hub-back">
-      <span class="hub-back-arrow">←</span>
-      <span>Inicio</span>
-    </a>
-    <div class="hub-user">
+    <a href="index.html" class="hub-back">← Inicio</a>
+    <div class="hub-user-top" id="topbarUser">
       <div class="hub-user-dot"></div>
       <span>Modo local</span>
     </div>
   </div>
 
-  <!-- HERO -->
-  <div class="hub-hero">
-    <div class="hub-eyebrow">Panel de acceso</div>
-    <div class="hub-title">
-      Selecciona un<br><span class="g">módulo</span>
+  <!-- ══════════════════════════════════
+       VIEW: LOGIN
+  ══════════════════════════════════ -->
+  <div id="viewLogin" style="display:none">
+    <div class="hub-hero" style="margin-bottom:32px">
+      <div class="hub-eyebrow">Bienvenido</div>
+      <div class="hub-title">Inicia <span class="g">sesión</span></div>
+      <div class="hub-subtitle">Accede a tu plataforma etaax</div>
     </div>
-    <div class="hub-subtitle">Sistema de gestión a&b · etaax</div>
+    <div class="auth-wrap">
+      <div class="auth-card">
+        <div class="auth-title">Acceder</div>
+        <div class="auth-sub">Ingresa tus datos de cuenta</div>
+        <div class="auth-field">
+          <label class="auth-label">Correo electrónico</label>
+          <input class="auth-input" id="loginEmail" type="email" placeholder="tu@negocio.com" onkeydown="if(event.key==='Enter')loginSubmit()">
+        </div>
+        <div class="auth-field">
+          <label class="auth-label">Contraseña</label>
+          <input class="auth-input" id="loginPwd" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')loginSubmit()">
+        </div>
+        <div class="auth-error" id="loginError"></div>
+        <button class="btn-auth" onclick="loginSubmit()">Iniciar sesión →</button>
+        <div class="auth-switch">
+          ¿Primera vez? <a onclick="showView('viewRegistro')">Crear cuenta gratis</a>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <!-- GRID DE MÓDULOS -->
-  <div class="hub-grid">
+  <!-- ══════════════════════════════════
+       VIEW: REGISTRO
+  ══════════════════════════════════ -->
+  <div id="viewRegistro" style="display:none">
+    <div class="hub-hero" style="margin-bottom:32px">
+      <div class="hub-eyebrow">Nueva cuenta</div>
+      <div class="hub-title">Crear <span class="g">cuenta</span></div>
+      <div class="hub-subtitle">Empieza gratis, escala cuando crezcas</div>
+    </div>
+    <div class="auth-wrap" style="max-width:560px">
+      <div class="auth-card">
+        <div class="auth-title">Registro</div>
+        <div class="auth-sub">Elige tu plan y crea tu cuenta</div>
 
-    <!-- RECETAS — ACTIVO -->
-    <a href="recetas/insumos.html" class="hub-card">
-      <div class="card-header">
-        <div class="card-icon">🗄️</div>
-        <span class="card-status status-active">Activo</span>
-      </div>
-      <div class="card-title">Recetas</div>
-      <div class="card-desc">Escandallos, costeo automático, catálogo de insumos e inventarios de producción. Tu operación gastronómica completa.</div>
-      <div class="card-modules">
-        <span class="card-module-tag">📋 Escandallo</span>
-        <span class="card-module-tag">🗄️ Insumos</span>
-        <span class="card-module-tag">📦 Inventarios</span>
-      </div>
-      <div class="card-footer">
-        <span class="card-cta">Abrir módulo →</span>
-        <div class="card-progress">
-          <div class="progress-dot"></div>
-          <div class="progress-dot"></div>
-          <div class="progress-dot"></div>
-          <span>3 herramientas</span>
+        <!-- Plan selector -->
+        <div class="auth-label" style="margin-bottom:12px">Selecciona tu plan</div>
+        <div class="plan-grid" id="planGrid"></div>
+        <div class="auth-divider"></div>
+
+        <!-- Datos personales -->
+        <div class="auth-field">
+          <label class="auth-label">Nombre completo</label>
+          <input class="auth-input" id="regNombre" type="text" placeholder="Juan García">
         </div>
-      </div>
-    </a>
-
-    <!-- FINANCIERO — PRÓXIMAMENTE -->
-    <div class="hub-card disabled">
-      <div class="card-header">
-        <div class="card-icon">📊</div>
-        <span class="card-status status-soon">Próximamente</span>
-      </div>
-      <div class="card-title">Financiero</div>
-      <div class="card-desc">Ventas, costos, márgenes y análisis de rentabilidad. Conecta tu operación con tus resultados económicos.</div>
-      <div class="card-modules">
-        <span class="card-module-tag">💰 Ventas</span>
-        <span class="card-module-tag">📈 Márgenes</span>
-        <span class="card-module-tag">🧾 Reportes</span>
-      </div>
-      <div class="card-footer">
-        <span class="card-cta-disabled">En desarrollo</span>
-        <div class="card-progress">
-          <div class="progress-dot off"></div>
-          <div class="progress-dot off"></div>
-          <div class="progress-dot off"></div>
-          <span>3 herramientas</span>
+        <div class="auth-field">
+          <label class="auth-label">Correo electrónico</label>
+          <input class="auth-input" id="regEmail" type="email" placeholder="tu@negocio.com">
+        </div>
+        <div class="auth-field">
+          <label class="auth-label">Contraseña</label>
+          <input class="auth-input" id="regPwd" type="password" placeholder="Mínimo 6 caracteres" onkeydown="if(event.key==='Enter')registroSubmit()">
+        </div>
+        <div class="auth-error" id="regError"></div>
+        <button class="btn-auth" onclick="registroSubmit()">Crear cuenta →</button>
+        <div class="auth-switch">
+          ¿Ya tienes cuenta? <a onclick="showView('viewLogin')">Iniciar sesión</a>
         </div>
       </div>
     </div>
-
-    <!-- ADMINISTRATIVO — PRÓXIMAMENTE -->
-    <div class="hub-card disabled">
-      <div class="card-header">
-        <div class="card-icon">🏢</div>
-        <span class="card-status status-soon">Próximamente</span>
-      </div>
-      <div class="card-title">Administrativo</div>
-      <div class="card-desc">Proveedores, recepciones, check-points de entrada de insumos y control operativo del día a día.</div>
-      <div class="card-modules">
-        <span class="card-module-tag">🚚 Recepciones</span>
-        <span class="card-module-tag">🏪 Proveedores</span>
-        <span class="card-module-tag">✅ Checklists</span>
-      </div>
-      <div class="card-footer">
-        <span class="card-cta-disabled">En desarrollo</span>
-        <div class="card-progress">
-          <div class="progress-dot off"></div>
-          <div class="progress-dot off"></div>
-          <div class="progress-dot off"></div>
-          <span>3 herramientas</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- CONSULTORÍA — PRÓXIMAMENTE -->
-    <div class="hub-card disabled">
-      <div class="card-header">
-        <div class="card-icon">📋</div>
-        <span class="card-status status-soon">Próximamente</span>
-      </div>
-      <div class="card-title">Consultoría</div>
-      <div class="card-desc">Reportes mensuales, análisis ejecutivos y recomendaciones estratégicas para la toma de decisiones.</div>
-      <div class="card-modules">
-        <span class="card-module-tag">📄 Reporte mensual</span>
-        <span class="card-module-tag">🎯 KPIs</span>
-        <span class="card-module-tag">📌 Estrategia</span>
-      </div>
-      <div class="card-footer">
-        <span class="card-cta-disabled">En desarrollo</span>
-        <div class="card-progress">
-          <div class="progress-dot off"></div>
-          <div class="progress-dot off"></div>
-          <div class="progress-dot off"></div>
-          <span>3 herramientas</span>
-        </div>
-      </div>
-    </div>
-
   </div>
 
-  <!-- FOOTER NOTE -->
+  <!-- ══════════════════════════════════
+       VIEW: SELECTOR DE NEGOCIOS
+  ══════════════════════════════════ -->
+  <div id="viewNegocios" style="display:none">
+
+    <!-- Barra de sesión -->
+    <div class="neg-activo-bar" style="margin-bottom:24px">
+      <div class="neg-activo-emoji-wrap" style="font-size:18px">👤</div>
+      <div>
+        <div class="neg-activo-nombre" id="negViewUserNombre">—</div>
+        <div class="neg-activo-tipo">Sesión activa</div>
+      </div>
+      <div class="neg-activo-btns">
+        <div class="user-badge">
+          <span class="user-badge-plan" id="negViewUserPlan">—</span>
+        </div>
+        <button class="btn-logout" onclick="logout()">Salir</button>
+      </div>
+    </div>
+
+    <div class="hub-hero" style="margin-bottom:32px">
+      <div class="hub-eyebrow">Negocios</div>
+      <div class="hub-title">¿Con qué negocio<br><span class="g">trabajamos hoy?</span></div>
+      <div class="hub-subtitle">Selecciona o crea un nuevo negocio</div>
+    </div>
+
+    <!-- Lista de negocios -->
+    <div id="listNegocios" class="neg-grid"></div>
+
+    <!-- Límite de plan (oculto por defecto) -->
+    <div id="planLimitMsg" class="plan-limit-msg" style="display:none">
+      <div class="plan-limit-icon">🔒</div>
+      <div>
+        <div class="plan-limit-text" id="planLimitText">Límite de negocios alcanzado</div>
+        <div class="plan-limit-sub">Actualiza tu plan para agregar más sucursales</div>
+      </div>
+    </div>
+
+    <!-- Botón nuevo negocio -->
+    <div id="btnAbrirFormWrap" style="text-align:center;max-width:960px;margin:0 auto 20px">
+      <button class="btn-nuevo-neg" onclick="mostrarFormNuevo()">
+        <span style="font-size:16px">＋</span> Nuevo negocio
+      </button>
+    </div>
+
+    <!-- Form crear negocio -->
+    <div id="formNuevoNeg" class="neg-form" style="display:none">
+      <div class="neg-form-label">Nuevo negocio</div>
+      <div class="neg-form-row">
+        <input id="inNombre" placeholder="Nombre del negocio..." onkeydown="handleFormKey(event)" autocomplete="off">
+        <select id="inTipo" style="max-width:220px">
+          <option value="bar">🍸 Bar</option>
+          <option value="restaurante">🍽️ Restaurante</option>
+          <option value="cafe">☕ Café</option>
+          <option value="cocteleria">🍹 Coctelería</option>
+          <option value="fonda">🥘 Fonda / Comedor</option>
+          <option value="otro">🏢 Otro</option>
+        </select>
+      </div>
+      <div class="neg-form-row" style="align-items:center">
+        <span style="font-size:10px;color:var(--dim);letter-spacing:2px;text-transform:uppercase;flex-shrink:0">Color</span>
+        <div class="neg-form-colors" id="colorPicker"></div>
+        <div style="flex:1"></div>
+        <button class="btn-crear-neg" onclick="crearNegocio()">Crear negocio →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       VIEW: MÓDULOS
+  ══════════════════════════════════ -->
+  <div id="viewModulos" style="display:none">
+
+    <!-- Negocio activo + info usuario -->
+    <div class="neg-activo-bar" id="negActBar">
+      <div class="neg-activo-emoji-wrap" id="negActEmojiWrap">
+        <span id="chipEmoji">🏢</span>
+      </div>
+      <div>
+        <div id="chipNombre" class="neg-activo-nombre">—</div>
+        <div id="chipTipo" class="neg-activo-tipo">—</div>
+      </div>
+      <div class="neg-activo-btns">
+        <div class="user-badge">
+          <span id="userNombreChip" style="font-size:12px">—</span>
+          <span class="user-badge-plan" id="userPlanChip">—</span>
+        </div>
+        <button class="btn-cambiar-neg" onclick="cambiarNegocio()">↩ Cambiar negocio</button>
+        <button class="btn-logout" onclick="logout()">Salir</button>
+      </div>
+    </div>
+
+    <!-- Hero -->
+    <div class="hub-hero" style="margin-bottom:32px">
+      <div class="hub-eyebrow">Panel de acceso</div>
+      <div class="hub-title">Selecciona un<br><span class="g">módulo</span></div>
+      <div class="hub-subtitle">Sistema de gestión a&b · etaax</div>
+    </div>
+
+    <!-- Módulos -->
+    <div class="hub-grid">
+      <a href="recetas/insumos.html" class="hub-card">
+        <div class="card-header">
+          <div class="card-icon">🗄️</div>
+          <span class="card-status status-active">Activo</span>
+        </div>
+        <div class="card-title">Recetas e Insumos</div>
+        <div class="card-desc">Escandallos, costeo automático, catálogo de insumos e inventarios. Tu operación gastronómica completa.</div>
+        <div class="card-modules">
+          <span class="card-module-tag">📋 Escandallo</span>
+          <span class="card-module-tag">🗄️ Insumos</span>
+          <span class="card-module-tag">📦 Inventarios</span>
+        </div>
+        <div class="card-footer">
+          <span class="card-cta">Abrir módulo →</span>
+          <div class="card-progress">
+            <div class="progress-dot"></div><div class="progress-dot"></div><div class="progress-dot"></div>
+            <span>3 herramientas</span>
+          </div>
+        </div>
+      </a>
+
+      <a href="financiero/index.html" class="hub-card">
+        <div class="card-header">
+          <div class="card-icon">📊</div>
+          <span class="card-status status-active">Activo</span>
+        </div>
+        <div class="card-title">Salud Financiera</div>
+        <div class="card-desc">Ventas, gastos, previsiones, utilidades y KPI's. Conecta tu operación con tus resultados económicos.</div>
+        <div class="card-modules">
+          <span class="card-module-tag">📈 Ventas</span>
+          <span class="card-module-tag">💸 Gastos</span>
+          <span class="card-module-tag">🎯 KPI's</span>
+        </div>
+        <div class="card-footer">
+          <span class="card-cta">Abrir módulo →</span>
+          <div class="card-progress">
+            <div class="progress-dot"></div><div class="progress-dot"></div><div class="progress-dot"></div>
+            <span>5 herramientas</span>
+          </div>
+        </div>
+      </a>
+
+      <a href="administrativo/index.html" class="hub-card">
+        <div class="card-header">
+          <div class="card-icon">🏢</div>
+          <span class="card-status status-active">Activo</span>
+        </div>
+        <div class="card-title">Control Administrativo</div>
+        <div class="card-desc">Ventas, proveedores, staff y clientes. Control operativo y gestión del equipo en un solo lugar.</div>
+        <div class="card-modules">
+          <span class="card-module-tag">💰 Ventas</span>
+          <span class="card-module-tag">🚚 Proveedores</span>
+          <span class="card-module-tag">👥 Staff</span>
+        </div>
+        <div class="card-footer">
+          <span class="card-cta">Abrir módulo →</span>
+          <div class="card-progress">
+            <div class="progress-dot"></div><div class="progress-dot"></div><div class="progress-dot"></div>
+            <span>4 herramientas</span>
+          </div>
+        </div>
+      </a>
+
+      <div class="hub-card disabled">
+        <div class="card-header">
+          <div class="card-icon">📋</div>
+          <span class="card-status status-soon">Próximamente</span>
+        </div>
+        <div class="card-title">Consultoría</div>
+        <div class="card-desc">Reportes mensuales, análisis ejecutivos y recomendaciones estratégicas para la toma de decisiones.</div>
+        <div class="card-modules">
+          <span class="card-module-tag">📄 Reporte mensual</span>
+          <span class="card-module-tag">🎯 KPIs</span>
+          <span class="card-module-tag">📌 Estrategia</span>
+        </div>
+        <div class="card-footer">
+          <span class="card-cta-disabled">En desarrollo</span>
+          <div class="card-progress">
+            <div class="progress-dot off"></div><div class="progress-dot off"></div><div class="progress-dot off"></div>
+            <span>3 herramientas</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="hub-footer">
     <p class="hub-footer-text">
       <a href="index.html">etaax.com</a> · Desarrollado por <a href="index.html#nosotros">EGMx Consultoría Estratégica a&b</a>
     </p>
   </div>
-
 </div>
+
+<script>
+/* ════════════════════════════════════════════════════════
+   PLANES
+════════════════════════════════════════════════════════ */
+var PLANES = {
+    micro: {
+        nombre:      'Micro Pyme',
+        subtitulo:   'Básica',
+        icon:        '🏪',
+        maxNegocios: 1,
+        precio:      '$2,499',
+        activo:      true,
+        color:       '#3dbe7a',
+        planClass:   'plan-micro'
+    },
+    pyme: {
+        nombre:      'Pequeña Pyme',
+        subtitulo:   'Crecimiento',
+        icon:        '🏬',
+        maxNegocios: 3,
+        precio:      '$5,499',
+        activo:      true,
+        color:       '#f5c842',
+        planClass:   'plan-pyme'
+    },
+    gran: {
+        nombre:      'Gran Pyme',
+        subtitulo:   'En expansión',
+        icon:        '🏢',
+        maxNegocios: 10,
+        precio:      '$12,499',
+        activo:      true,
+        color:       '#c87a6a',
+        planClass:   'plan-gran'
+    }
+};
+
+var TIPOS = {
+    bar:         { emoji:'🍸',  label:'Bar' },
+    restaurante: { emoji:'🍽️', label:'Restaurante' },
+    cafe:        { emoji:'☕',  label:'Café' },
+    cocteleria:  { emoji:'🍹',  label:'Coctelería' },
+    fonda:       { emoji:'🥘',  label:'Fonda / Comedor' },
+    otro:        { emoji:'🏢',  label:'Negocio' }
+};
+var COLORES = ['#3dbe7a','#f5c842','#c87a6a','#5b9bd5','#9b7fd4','#e05a3a'];
+
+/* ════════════════════════════════════════════════════════
+   ESTADO
+════════════════════════════════════════════════════════ */
+var _sesion         = null;  // { usuarioId, nombre, email, plan, expira }
+var _negocios       = [];
+var _colorSel       = '#3dbe7a';
+var _planSel        = 'micro';
+
+/* ════════════════════════════════════════════════════════
+   STORAGE
+════════════════════════════════════════════════════════ */
+function _getUsuarios() { try { return JSON.parse(localStorage.getItem('etaax_usuarios') || '[]'); } catch { return []; } }
+function _setUsuarios(d){ localStorage.setItem('etaax_usuarios', JSON.stringify(d)); }
+function _getSesion()   { try { return JSON.parse(localStorage.getItem('etaax_sesion_hub') || 'null'); } catch { return null; } }
+function _setSesion(d)  { localStorage.setItem('etaax_sesion_hub', JSON.stringify(d)); }
+function _getNegocios() { try { return JSON.parse(localStorage.getItem('etaax_negocios') || '[]'); } catch { return []; } }
+function _setNegocios(d){ localStorage.setItem('etaax_negocios', JSON.stringify(d)); }
+
+/* ════════════════════════════════════════════════════════
+   CONTRASEÑA (hash simple — prototype)
+════════════════════════════════════════════════════════ */
+function _hashPwd(pwd) {
+    var h = 5381, s = pwd + '|etx26|' + pwd.length;
+    for (var i = 0; i < s.length; i++) h = ((h << 5) + h) + s.charCodeAt(i);
+    return (h >>> 0).toString(36) + btoa(unescape(encodeURIComponent(s))).slice(0,16).replace(/[^a-z0-9]/gi,'x');
+}
+
+/* ════════════════════════════════════════════════════════
+   INIT
+════════════════════════════════════════════════════════ */
+function init() {
+    _renderPlanGrid();
+    var ses = _getSesion();
+    if (ses && ses.expira > Date.now()) {
+        var usuarios = _getUsuarios();
+        var usr = usuarios.find(function(u){ return u.id === ses.usuarioId; });
+        if (usr) {
+            _sesion = { usuarioId: usr.id, nombre: usr.nombre, email: usr.email, plan: usr.plan, expira: ses.expira };
+            _updateTopbar();
+            // Ver si hay negocio activo
+            var negId = localStorage.getItem('etaax_negocio_activo') || '';
+            _negocios = _getNegocios().filter(function(n){ return n.usuarioId === usr.id; });
+            var neg = _negocios.find(function(n){ return n.id === negId; });
+            if (neg) {
+                _showModulos(neg);
+            } else {
+                localStorage.removeItem('etaax_negocio_activo');
+                _updateNegociosBar();
+                showView('viewNegocios');
+                _renderLista();
+                _renderColorPicker();
+            }
+            return;
+        }
+    }
+    _clearSesion();
+    showView('viewLogin');
+}
+
+function _updateTopbar() {
+    if (!_sesion) return;
+    var p = PLANES[_sesion.plan] || PLANES.micro;
+    document.getElementById('topbarUser').innerHTML =
+        '<div class="hub-user-dot"></div><span>' + _esc(_sesion.nombre.split(' ')[0]) + '</span>' +
+        '<span class="user-badge-plan ' + p.planClass + '">' + p.nombre + '</span>';
+}
+
+function _updateNegociosBar() {
+    if (!_sesion) return;
+    var p = PLANES[_sesion.plan] || PLANES.micro;
+    document.getElementById('negViewUserNombre').textContent = _sesion.nombre.split(' ')[0];
+    document.getElementById('negViewUserPlan').textContent   = p.nombre;
+    document.getElementById('negViewUserPlan').className     = 'user-badge-plan ' + p.planClass;
+}
+
+/* ════════════════════════════════════════════════════════
+   NAVEGACIÓN DE VISTAS
+════════════════════════════════════════════════════════ */
+var VIEWS = ['viewLogin','viewRegistro','viewNegocios','viewModulos'];
+function showView(id) {
+    VIEWS.forEach(function(v){ document.getElementById(v).style.display = (v===id)?'':'none'; });
+    window.scrollTo(0,0);
+}
+
+/* ════════════════════════════════════════════════════════
+   LOGIN
+════════════════════════════════════════════════════════ */
+function loginSubmit() {
+    var email = (document.getElementById('loginEmail').value || '').trim().toLowerCase();
+    var pwd   = document.getElementById('loginPwd').value || '';
+    var err   = document.getElementById('loginError');
+    err.textContent = '';
+    if (!email || !pwd) { err.textContent = 'Completa todos los campos.'; return; }
+
+    var usuarios = _getUsuarios();
+    var usr = usuarios.find(function(u){ return u.email === email; });
+    if (!usr || usr.passwordHash !== _hashPwd(pwd)) {
+        err.textContent = 'Correo o contraseña incorrectos.';
+        document.getElementById('loginPwd').classList.add('error');
+        setTimeout(function(){ document.getElementById('loginPwd').classList.remove('error'); }, 1500);
+        return;
+    }
+    _iniciarSesion(usr);
+}
+
+function _iniciarSesion(usr) {
+    var expira = Date.now() + (30 * 24 * 60 * 60 * 1000); // 30 días
+    _sesion = { usuarioId: usr.id, nombre: usr.nombre, email: usr.email, plan: usr.plan, expira: expira };
+    _setSesion({ usuarioId: usr.id, expira: expira });
+    localStorage.removeItem('etaax_negocio_activo');
+    _updateTopbar();
+    _updateNegociosBar();
+    _negocios = _getNegocios().filter(function(n){ return n.usuarioId === usr.id; });
+    showView('viewNegocios');
+    _renderLista();
+    _renderColorPicker();
+}
+
+/* ════════════════════════════════════════════════════════
+   REGISTRO
+════════════════════════════════════════════════════════ */
+function _renderPlanGrid() {
+    var grid = document.getElementById('planGrid');
+    grid.innerHTML = Object.keys(PLANES).map(function(key) {
+        var p = PLANES[key];
+        var isFirst = key === 'micro';
+        return '<div class="plan-card-sel' + (isFirst?' selected':'') + '" ' +
+            'onclick="selectPlan(\'' + key + '\')" id="planCard_' + key + '" ' +
+            'style="' + (isFirst ? 'border-color:' + p.color + ';background:' + p.color + '0d;' : '') + '">' +
+            '<div class="plan-badge-sel plan-badge-free" style="background:' + p.color + '22;color:' + p.color + '">Mensual</div>' +
+            '<div class="plan-icon-big">' + p.icon + '</div>' +
+            '<div class="plan-nombre">' + p.nombre + '</div>' +
+            (p.subtitulo ? '<div class="plan-sub">' + p.subtitulo + '</div>' : '') +
+            '<div class="plan-precio">' + p.precio + ' <span style="font-size:11px;font-weight:400;color:var(--dim)">MXN</span></div>' +
+            '<div class="plan-precio-sub">/ mes</div>' +
+            '<div class="plan-maxnegs" style="color:' + p.color + '">' + p.maxNegocios + ' sucursal' + (p.maxNegocios>1?'es':'') + '</div>' +
+        '</div>';
+    }).join('');
+}
+
+function selectPlan(key) {
+    if (!PLANES[key]) return;
+    _planSel = key;
+    document.querySelectorAll('.plan-card-sel').forEach(function(c){
+        c.classList.remove('selected');
+        c.style.borderColor = '';
+        c.style.background  = '';
+    });
+    var card = document.getElementById('planCard_' + key);
+    var p = PLANES[key];
+    if (card) {
+        card.classList.add('selected');
+        card.style.borderColor = p.color;
+        card.style.background  = p.color + '0d';
+    }
+}
+
+function registroSubmit() {
+    var nombre = (document.getElementById('regNombre').value || '').trim();
+    var email  = (document.getElementById('regEmail').value  || '').trim().toLowerCase();
+    var pwd    = document.getElementById('regPwd').value || '';
+    var err    = document.getElementById('regError');
+    err.textContent = '';
+
+    if (!nombre) { err.textContent = 'Agrega tu nombre.'; return; }
+    if (!email || !email.includes('@')) { err.textContent = 'Ingresa un correo válido.'; return; }
+    if (pwd.length < 6) { err.textContent = 'La contraseña debe tener mínimo 6 caracteres.'; return; }
+
+    var usuarios = _getUsuarios();
+    if (usuarios.find(function(u){ return u.email === email; })) {
+        err.textContent = 'Ya existe una cuenta con ese correo.'; return;
+    }
+    if (!PLANES[_planSel] || !PLANES[_planSel].activo) {
+        err.textContent = 'Selecciona un plan disponible.'; return;
+    }
+
+    var id  = 'u_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+    var usr = {
+        id:           id,
+        nombre:       nombre,
+        email:        email,
+        passwordHash: _hashPwd(pwd),
+        plan:         _planSel,
+        fechaCreado:  new Date().toISOString()
+    };
+    usuarios.push(usr);
+    _setUsuarios(usuarios);
+    _iniciarSesion(usr);
+}
+
+/* ════════════════════════════════════════════════════════
+   LOGOUT
+════════════════════════════════════════════════════════ */
+function logout() {
+    if (!confirm('¿Cerrar sesión?')) return;
+    _clearSesion();
+    showView('viewLogin');
+    document.getElementById('loginEmail').value = '';
+    document.getElementById('loginPwd').value   = '';
+    document.getElementById('loginError').textContent = '';
+}
+function _clearSesion() {
+    _sesion = null;
+    localStorage.removeItem('etaax_sesion_hub');
+    localStorage.removeItem('etaax_negocio_activo');
+    document.getElementById('topbarUser').innerHTML =
+        '<div class="hub-user-dot" style="background:var(--dim)"></div><span>Sin sesión</span>';
+}
+
+/* ════════════════════════════════════════════════════════
+   NEGOCIOS
+════════════════════════════════════════════════════════ */
+function _misNegocios() {
+    if (!_sesion) return [];
+    return _negocios.filter(function(n){ return n.usuarioId === _sesion.usuarioId; });
+}
+
+function _renderLista() {
+    var cont = document.getElementById('listNegocios');
+    var lista = _misNegocios();
+    if (!lista.length) {
+        cont.innerHTML =
+            '<div class="neg-empty" style="grid-column:1/-1">' +
+                '<div class="neg-empty-icon">🏪</div>' +
+                '<div class="neg-empty-title">Aún no hay negocios creados</div>' +
+                '<div class="neg-empty-sub">Crea tu primer negocio para comenzar</div>' +
+            '</div>';
+    } else {
+        cont.innerHTML = lista.map(function(n, i) {
+            var t     = TIPOS[n.tipo] || TIPOS.otro;
+            var fecha = new Date(n.fechaCreado).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'});
+            var color = n.color || '#3dbe7a';
+            return '<div class="neg-card" style="animation-delay:' + (i*.06) + 's" onclick="seleccionarNegocio(\'' + n.id + '\')">' +
+                '<div class="neg-card-emoji" style="background:' + color + '1a;border:1px solid ' + color + '33">' + (n.emoji||t.emoji) + '</div>' +
+                '<div style="flex:1;min-width:0">' +
+                    '<div class="neg-card-nombre">' + _esc(n.nombre) + '</div>' +
+                    '<div class="neg-card-meta">' + t.label + ' · ' + fecha + '</div>' +
+                '</div>' +
+                '<button class="neg-card-del" onclick="eliminarNegocio(\'' + n.id + '\',event)" title="Eliminar">✕</button>' +
+                '<div class="neg-card-arrow" style="color:' + color + '">→</div>' +
+            '</div>';
+        }).join('');
+    }
+
+    // Límite de plan
+    var plan  = PLANES[_sesion ? _sesion.plan : 'micro'] || PLANES.micro;
+    var lleno = lista.length >= plan.maxNegocios;
+    document.getElementById('planLimitMsg').style.display    = lleno ? '' : 'none';
+    document.getElementById('btnAbrirFormWrap').style.display = lleno ? 'none' : '';
+    document.getElementById('formNuevoNeg').style.display    = 'none';
+    if (lleno) {
+        document.getElementById('planLimitText').textContent =
+            'Plan ' + plan.nombre + ': máximo ' + plan.maxNegocios + ' sucursal' + (plan.maxNegocios>1?'es':'');
+    }
+}
+
+function seleccionarNegocio(id) {
+    var neg = _misNegocios().find(function(n){ return n.id === id; });
+    if (!neg) return;
+    localStorage.setItem('etaax_negocio_activo', id);
+    _migrarDatosLegacy(id);
+    _showModulos(neg);
+}
+
+function _showModulos(neg) {
+    showView('viewModulos');
+    var t     = TIPOS[neg.tipo] || TIPOS.otro;
+    var color = neg.color || '#3dbe7a';
+    document.getElementById('chipEmoji').textContent          = neg.emoji || t.emoji;
+    document.getElementById('chipNombre').textContent         = neg.nombre;
+    document.getElementById('chipTipo').textContent           = t.label;
+    document.getElementById('negActBar').style.borderColor    = color + '44';
+    document.getElementById('negActEmojiWrap').style.background  = color + '1a';
+    document.getElementById('negActEmojiWrap').style.borderColor = color + '33';
+
+    if (_sesion) {
+        var p = PLANES[_sesion.plan] || PLANES.micro;
+        document.getElementById('userNombreChip').textContent = _sesion.nombre.split(' ')[0];
+        document.getElementById('userPlanChip').textContent   = p.nombre;
+        document.getElementById('userPlanChip').className     = 'user-badge-plan ' + p.planClass;
+    }
+}
+
+function cambiarNegocio() {
+    localStorage.removeItem('etaax_negocio_activo');
+    _updateNegociosBar();
+    showView('viewNegocios');
+    _renderLista();
+    _renderColorPicker();
+}
+
+function mostrarFormNuevo() {
+    var f = document.getElementById('formNuevoNeg');
+    var b = document.getElementById('btnAbrirFormWrap');
+    var abierto = f.style.display !== 'none';
+    f.style.display = abierto ? 'none' : '';
+    b.style.display = abierto ? '' : 'none';
+    if (!abierto) document.getElementById('inNombre').focus();
+}
+
+function _renderColorPicker() {
+    var cp = document.getElementById('colorPicker');
+    if (!cp) return;
+    cp.innerHTML = COLORES.map(function(c) {
+        return '<div class="neg-color-dot' + (c===_colorSel?' active':'') + '" ' +
+            'style="background:' + c + '" data-color="' + c + '" onclick="setColor(\'' + c + '\')"></div>';
+    }).join('');
+}
+
+function setColor(c) {
+    _colorSel = c;
+    document.querySelectorAll('.neg-color-dot').forEach(function(d){
+        d.classList.toggle('active', d.dataset.color === c);
+    });
+}
+
+function crearNegocio() {
+    if (!_sesion) return;
+    var inp    = document.getElementById('inNombre');
+    var nombre = (inp.value || '').trim();
+    if (!nombre) {
+        inp.style.borderColor = 'var(--salmon)';
+        inp.focus();
+        setTimeout(function(){ inp.style.borderColor=''; }, 1500);
+        return;
+    }
+    var tipo  = document.getElementById('inTipo').value;
+    var t     = TIPOS[tipo] || TIPOS.otro;
+    var id    = 'n_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+    var neg   = {
+        id:          id,
+        usuarioId:   _sesion.usuarioId,
+        nombre:      nombre,
+        tipo:        tipo,
+        emoji:       t.emoji,
+        color:       _colorSel,
+        fechaCreado: new Date().toISOString()
+    };
+    var todos = _getNegocios();
+    todos.push(neg);
+    _setNegocios(todos);
+    _negocios = todos;
+    if (_misNegocios().length === 1) _migrarDatosLegacy(id);
+    seleccionarNegocio(id);
+}
+
+function eliminarNegocio(id, event) {
+    event.stopPropagation();
+    var neg = _misNegocios().find(function(n){ return n.id === id; });
+    if (!neg) return;
+    if (!confirm('¿Eliminar "' + neg.nombre + '"?\n\nTodos sus datos (insumos, recetas e inventarios) se borrarán permanentemente.')) return;
+    ['insumos','recetas','inventarios'].forEach(function(k){ localStorage.removeItem('etaax_' + id + '_' + k); });
+    var todos = _getNegocios().filter(function(n){ return n.id !== id; });
+    _setNegocios(todos);
+    _negocios = todos;
+    if (localStorage.getItem('etaax_negocio_activo') === id) localStorage.removeItem('etaax_negocio_activo');
+    _renderLista();
+}
+
+/* ════════════════════════════════════════════════════════
+   MIGRACIÓN DE DATOS LEGACY
+════════════════════════════════════════════════════════ */
+function _migrarDatosLegacy(negId) {
+    ['insumos','recetas','inventarios'].forEach(function(k) {
+        var nk = 'etaax_' + negId + '_' + k;
+        var lk = 'etaax_' + k;
+        var leg = localStorage.getItem(lk);
+        if (leg && leg !== '[]' && leg !== 'null' && !localStorage.getItem(nk)) {
+            localStorage.setItem(nk, leg);
+        }
+    });
+}
+
+/* ════════════════════════════════════════════════════════
+   UTILS
+════════════════════════════════════════════════════════ */
+function handleFormKey(e) { if (e.key === 'Enter') crearNegocio(); }
+function _esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+window.onload = init;
+</script>
 </body>
 </html>

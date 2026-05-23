@@ -3,16 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ETAAX - Financiero</title>
+    <title>ETAAX - Salud Financiera</title>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
 </head>
 <body>
-<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#0a0908;font-family:'DM Sans',sans-serif;">
-    <span style="font-size:48px">📊</span>
-    <span style="font-family:'Bebas Neue',sans-serif;font-size:32px;color:#f0ece4;letter-spacing:2px">Financiero</span>
-    <span style="font-size:13px;color:#7a7570">Módulo en construcción</span>
-    <a href="../hub.html" style="margin-top:16px;font-size:12px;color:#3dbe7a;text-decoration:none">← Volver al panel</a>
+<header class="top-bar">
+    <svg width="108" height="26" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
+        <path d="M14.5 28H37C35.5 23 31.5 20 25.5 20C19.5 20 16 23 14.5 28Z" fill="#1a1916"/>
+        <circle cx="45" cy="11" r="6" fill="#f5c842"/>
+        <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
+        <path d="M78 41C78 34.5 83.5 30.5 92.5 29.5L104 28.5V27.5C104 23.5 101.5 21 97 21C93 21 90 23 89 26.5L80.5 24C82.5 17.5 89 13 97 13C107.5 13 113 18.5 113 28.5V54.5H104V51C102 53.5 98.5 55 94 55C85.5 55 78 50.5 78 41Z" fill="#3dbe7a"/>
+        <path d="M104 37L95.5 38C92.5 38.5 90.5 40 90.5 42.5C90.5 45 92.5 46.5 95.5 46.5C101 46.5 104 43.5 104 39V37Z" fill="#1a1916"/>
+        <path d="M126 41C126 34.5 131.5 30.5 140.5 29.5L152 28.5V27.5C152 23.5 149.5 21 145 21C141 21 138 23 137 26.5L128.5 24C130.5 17.5 137 13 145 13C155.5 13 161 18.5 161 28.5V54.5H152V51C150 53.5 146.5 55 142 55C133.5 55 126 50.5 126 41Z" fill="#3dbe7a"/>
+        <path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/>
+        <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+    </svg>
+</header>
+
+<div class="app-shell">
+    <nav class="nav" id="nav">
+        <div class="nav-top">
+            <div class="nav-brand"><span class="nav-brand-sub">Salud Financiera</span></div>
+            <div class="nav-top-actions">
+                <a href="../hub.html" class="nav-toggle nav-home-btn" data-tooltip="Home">🏠<span class="nav-toggle-text">Home</span></a>
+                <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Ocultar" onclick="toggleNav()">◀<span class="nav-toggle-text" id="navToggleTxt">Ocultar</span></button>
+            </div>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Registro de</div>
+            <a href="#" class="nav-link active" data-tooltip="Ventas"><span class="nav-icon">📈</span><span class="nav-text">Ventas</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Control de</div>
+            <a href="#" class="nav-link" data-tooltip="Gastos"><span class="nav-icon">💸</span><span class="nav-text">Gastos</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Análisis de</div>
+            <a href="#" class="nav-link" data-tooltip="Previsiones"><span class="nav-icon">🔮</span><span class="nav-text">Previsiones</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Reporte de</div>
+            <a href="#" class="nav-link" data-tooltip="Utilidades"><span class="nav-icon">💹</span><span class="nav-text">Utilidades</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Indicadores</div>
+            <a href="#" class="nav-link" data-tooltip="KPIs"><span class="nav-icon">🎯</span><span class="nav-text">KPI's</span></a>
+        </div>
+    </nav>
+
+    <main class="main-content" id="mainContent">
+        <div class="header">
+            <div class="brand">
+                <span class="brand-label">Módulo</span>
+                <span class="brand-title">Salud Financiera</span>
+            </div>
+        </div>
+
+        <div class="wrap">
+            <div class="card">
+                <div class="card-body" style="padding:60px 32px;text-align:center">
+                    <div style="font-size:48px;margin-bottom:16px">📊</div>
+                    <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:2px;color:var(--text);margin-bottom:8px">Salud Financiera</div>
+                    <div style="font-size:13px;color:var(--text-dim);max-width:420px;margin:0 auto;line-height:1.6">
+                        Ventas, Gastos, Previsiones, Utilidades y KPI's están en construcción.<br>
+                        Este módulo se conectará con los datos de Recetas y Administrativo.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
 </div>
+
+<style>
+.theme-toggle {
+    position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);
+    border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;
+    font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);
+    display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;
+}
+.theme-toggle:hover{border-color:var(--green);color:var(--green);}
+</style>
+<button class="theme-toggle" onclick="toggleTheme()">
+    <span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span>
+</button>
+
+<script>
+(function(){
+    var saved = localStorage.getItem('etaax_theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    document.addEventListener('DOMContentLoaded', function(){
+        if (saved === 'light') {
+            document.getElementById('themeIcon').textContent = '🌙';
+            document.getElementById('themeLabel').textContent = 'Modo oscuro';
+        }
+    });
+})();
+function toggleTheme() {
+    var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('etaax_theme', next);
+    document.getElementById('themeIcon').textContent  = next === 'light' ? '🌙' : '☀️';
+    document.getElementById('themeLabel').textContent = next === 'light' ? 'Modo oscuro' : 'Modo claro';
+}
+function toggleNav() {
+    var nav = document.getElementById('nav');
+    var main = document.getElementById('mainContent');
+    nav.classList.toggle('cerrado');
+    if (main) main.classList.toggle('expandido');
+    var cerrado = nav.classList.contains('cerrado');
+    var btn = document.getElementById('navToggleBtn');
+    var txt = document.getElementById('navToggleTxt');
+    if (btn) btn.childNodes[0].textContent = cerrado ? '▶' : '◀';
+    if (txt) txt.textContent = cerrado ? 'Expandir' : 'Ocultar';
+    if (btn) btn.setAttribute('data-tooltip', cerrado ? 'Expandir' : 'Ocultar');
+}
+</script>
 </body>
 </html>

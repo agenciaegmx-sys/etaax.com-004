@@ -27,7 +27,7 @@
     <nav class="nav" id="nav">
         <div class="nav-top">
             <div class="nav-brand">
-                <span class="nav-brand-sub">Insumos y Recetas</span>
+                <span class="nav-brand-sub">Recetas e Insumos</span>
             </div>
             <div class="nav-top-actions">
                 <a href="../hub.html" class="nav-toggle nav-home-btn" data-tooltip="Home">🏠<span class="nav-toggle-text">Home</span></a>
@@ -48,76 +48,96 @@
         </div>
         <div class="nav-section">
             <div class="nav-section-label">Sistema de</div>
-            <a href="#" class="nav-link nav-link-disabled" data-tooltip="Requisiciones"><span class="nav-icon">📝</span><span class="nav-text">Requisiciones</span></a>
+            <a href="requisiciones.html" class="nav-link" data-tooltip="Requisiciones"><span class="nav-icon">📝</span><span class="nav-text">Requisiciones</span></a>
         </div>
     </nav>
 
     <main class="main-content" id="mainContent">
 
-        <!-- VISTA LISTA -->
+        <!-- ═══════════════════════════════════════════════════════════
+             VISTA LISTA — historial de inventarios
+        ════════════════════════════════════════════════════════════════ -->
         <div id="vistaLista">
             <div class="header">
                 <div class="brand">
                     <span class="brand-label">Control de existencias</span>
                     <span class="brand-title">Inventarios</span>
                 </div>
-                <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)" onclick="nuevoInventario()">+ Nuevo inventario</button>
+                <div style="display:flex;gap:8px">
+                    <button class="btn-vista" onclick="abrirRegistroEntradas()">📥 Registrar entradas</button>
+                    <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)"
+                        onclick="nuevoInventario()">+ Nuevo inventario</button>
+                </div>
             </div>
+
+            <!-- Stats -->
             <div class="wrap">
                 <div class="stats-grid">
                     <div class="stat-card"><div class="stat-label">Inventarios</div><div class="stat-val" id="statInvs">0</div></div>
                     <div class="stat-card"><div class="stat-label">Último inventario</div><div class="stat-val" style="font-size:16px;padding-top:6px" id="statUltimo">—</div></div>
-                    <div class="stat-card"><div class="stat-label">Capital último inv.</div><div class="stat-val" id="statCapital">$0</div></div>
-                    <div class="stat-card"><div class="stat-label">Diferencia último</div><div class="stat-val" id="statDif">—</div></div>
+                    <div class="stat-card stat-card-filter active" id="tabTodos" onclick="setModoHistorial('todos')">
+                        <div class="stat-label">Ver</div>
+                        <div style="font-size:26px;line-height:1;margin-top:6px">📋 Todos</div>
+                    </div>
+                    <div class="stat-card stat-card-filter" id="tabMes" onclick="setModoHistorial('mes')">
+                        <div class="stat-label">Filtrar por</div>
+                        <div style="font-size:26px;line-height:1;margin-top:6px">📅 Mes / Año</div>
+                    </div>
                 </div>
-                <div class="card">
-                    <div class="card-header"><h2>Historial</h2></div>
-                    <div class="card-body" style="padding:0">
-                        <div class="tabla-wrap">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Fecha</th><th>Nombre</th><th>Productos</th>
-                                        <th>Capital costo</th><th>Capital carta</th>
-                                        <th>Diferencia</th><th>Estado</th><th></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tbodyInvs"></tbody>
-                            </table>
-                            <div id="emptyInvs" class="empty-state">
-                                <div class="empty-icon">📦</div>
-                                <div class="empty-title">Sin inventarios</div>
-                                <div class="empty-desc">Crea tu primer inventario</div>
-                            </div>
+                <!-- Elementos ocultos requeridos por JS -->
+                <span id="statCapital" style="display:none">$0</span>
+                <span id="statDif" style="display:none">—</span>
+
+                <!-- Toggle lista/galería -->
+                <div style="display:flex;justify-content:flex-end;margin-top:-4px">
+                    <div id="toggleHistWrap" style="display:flex;gap:6px;align-items:center">
+                        <div class="vista-toggle" id="toggleHistLista">
+                            <button class="active" id="btnHistLista" onclick="setModoListaHist('lista')">≡ Lista</button>
+                            <button id="btnHistGal" onclick="setModoListaHist('galeria')">⊞ Galería</button>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <!-- Dynamic historial content -->
+            <div id="historialContent" style="padding:0 16px 24px"></div>
         </div>
 
-        <!-- VISTA CAPTURA -->
-        <div id="vistaCaptura" style="display:none">
+        <!-- ═══════════════════════════════════════════════════════════
+             VISTA FORM — datos generales del inventario
+        ════════════════════════════════════════════════════════════════ -->
+        <div id="vistaForm" style="display:none">
             <div class="header">
                 <div style="display:flex;align-items:center;gap:14px">
-                    <button class="btn-vista" onclick="volverLista()">← Volver</button>
+                    <button class="btn-vista" onclick="mostrarVista('vistaLista')">← Volver</button>
                     <div>
-                        <span class="brand-label">Captura de inventario</span>
-                        <div class="brand-title" style="font-size:28px" id="captTitulo">Nuevo inventario</div>
+                        <span class="brand-label" id="formModo">Nuevo inventario</span>
+                        <div class="brand-title" style="font-size:28px" id="formTitulo">Datos generales</div>
                     </div>
-                </div>
-                <div style="display:flex;gap:10px">
-                    <button class="btn-vista" onclick="verReporte()" id="btnReporte" style="display:none">📊 Ver reporte</button>
-                    <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)" onclick="guardarInventario()">💾 Guardar</button>
                 </div>
             </div>
             <div class="wrap">
                 <div class="card">
-                    <div class="card-header"><h2>Datos del inventario</h2></div>
+                    <div class="card-header"><h2>Configuración del inventario</h2></div>
                     <div class="card-body">
                         <div class="meta-grid" style="grid-template-columns:1fr 1fr 1fr">
-                            <div class="meta-item" style="grid-column:span 2">
+                            <div class="meta-item">
+                                <label>Tipo de inventario</label>
+                                <select id="invTipoInv">
+                                    <option value="bebidas">🍸 Bebidas / Barra</option>
+                                    <option value="alimentos">🍽️ Alimentos / Cocina</option>
+                                    <option value="almacen">📦 Almacén general</option>
+                                    <option value="restaurante">🏪 Restaurante (completo)</option>
+                                    <option value="otro">📋 Otro</option>
+                                </select>
+                            </div>
+                            <div class="meta-item">
+                                <label>Nombre del negocio</label>
+                                <input type="text" id="invNegocio" placeholder="Ej. ETAAX Rooftop Bar">
+                            </div>
+                            <div class="meta-item">
                                 <label>Nombre del inventario</label>
-                                <input type="text" id="invNombre" placeholder="Ej. Inventario Barra Marzo 2026">
+                                <input type="text" id="invNombre" placeholder="Ej. Inventario Barra Mayo 2026">
                             </div>
                             <div class="meta-item">
                                 <label>Fecha</label>
@@ -142,65 +162,95 @@
                                     <option value="general">General</option>
                                 </select>
                             </div>
-                            <div class="meta-item">
-                                <label>Notas</label>
-                                <input type="text" id="invNotas" placeholder="Observaciones...">
+                            <div class="meta-item" style="grid-column:span 3">
+                                <label>Observaciones</label>
+                                <input type="text" id="invNotas" placeholder="Notas generales del inventario...">
                             </div>
                         </div>
-                    </div>
-                </div>
-                <div class="card">
-                    <div class="card-header">
-                        <h2>Captura de existencias</h2>
-                        <div style="display:flex;gap:8px">
-                            <select class="filtro-select" id="filtroFamiliaInv" onchange="filtrarProductosInv()" style="font-size:11px;padding:4px 8px"><option value="">Todas las familias</option></select>
-                            <select class="filtro-select" id="filtroCatInv" onchange="filtrarProductosInv()" style="font-size:11px;padding:4px 8px"><option value="">Todas las categorías</option></select>
-                        </div>
-                    </div>
-                    <div class="card-body" style="padding:0">
-                        <div class="tabla-wrap">
-                            <table id="tablaCaptura">
-                                <thead>
-                                    <tr>
-                                        <th style="width:180px">Producto</th>
-                                        <th style="width:60px">Tipo</th>
-                                        <th style="width:70px">Cerradas bodega</th>
-                                        <th style="width:70px">Cerradas barra</th>
-                                        <th colspan="6" style="text-align:center">Peso botellas abiertas (g)</th>
-                                        <th style="width:70px">ML reales</th>
-                                        <th style="width:70px">Entradas</th>
-                                        <th style="width:70px">Venta copas</th>
-                                        <th style="width:70px">Venta bot.</th>
-                                        <th style="width:80px">Diferencia</th>
-                                        <th style="width:80px">Dif. $</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tbodyCaptura"></tbody>
-                            </table>
-                        </div>
-                        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:16px">
-                            <div class="stat-card"><div class="stat-label">Capital costo</div><div class="stat-val" style="font-size:20px" id="totalCosto">$0.00</div></div>
-                            <div class="stat-card"><div class="stat-label">Capital carta</div><div class="stat-val green" style="font-size:20px" id="totalCarta">$0.00</div></div>
-                            <div class="stat-card"><div class="stat-label">Diferencia total</div><div class="stat-val" style="font-size:20px" id="totalDif">—</div></div>
-                            <div class="stat-card"><div class="stat-label">Diferencia $</div><div class="stat-val" style="font-size:20px" id="totalDifCosto">$0.00</div></div>
+                        <div style="margin-top:28px;text-align:center">
+                            <button class="btn-vista"
+                                style="color:var(--accent);border-color:var(--accent);padding:14px 36px;font-size:15px;letter-spacing:0.5px"
+                                id="btnIniciarInv" onclick="iniciarInventario()">
+                                Iniciar inventario →
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- VISTA REPORTE -->
-        <div id="vistaReporte" style="display:none">
-            <div class="header">
-                <div style="display:flex;align-items:center;gap:14px">
-                    <button class="btn-vista" onclick="volverCaptura()">← Volver</button>
+        <!-- ═══════════════════════════════════════════════════════════
+             VISTA CAPTURA — wizard de 5 pasos
+        ════════════════════════════════════════════════════════════════ -->
+        <div id="vistaCaptura" style="display:none">
+
+            <!-- Header sticky -->
+            <div class="inv-wizard-header">
+                <div style="display:flex;align-items:center;gap:12px">
+                    <button class="btn-vista" onclick="volverForm()">← Datos</button>
                     <div>
-                        <span class="brand-label">Reporte ejecutivo</span>
-                        <div class="brand-title" style="font-size:28px" id="repTitulo">Reporte</div>
+                        <span class="brand-label" id="stepLabel">Paso 1 — Existencias físicas</span>
+                        <div class="brand-title" style="font-size:22px;line-height:1" id="captTitulo">Nuevo inventario</div>
                     </div>
                 </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <button class="btn-vista" onclick="pasoAnterior()" id="btnPasoAnt" style="display:none">← Anterior</button>
+                    <button class="btn-vista" onclick="pasoSiguiente()" id="btnPasoSig">Siguiente →</button>
+                    <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)" onclick="guardarInventario()">💾 Guardar</button>
+                    <button class="btn-vista" style="color:var(--green);border-color:var(--green);display:none" id="btnCerrar" onclick="cerrarInventario()">✅ Cerrar</button>
+                </div>
             </div>
-            <div class="wrap" id="repContenido"></div>
+
+            <!-- Step bar -->
+            <div class="inv-steps" id="invSteps">
+                <div class="inv-step active" data-step="1" onclick="irAPaso(1)">
+                    <div class="inv-step-num">1</div>
+                    <div class="inv-step-label">Existencias</div>
+                </div>
+                <div class="inv-step" data-step="2" onclick="irAPaso(2)">
+                    <div class="inv-step-num">2</div>
+                    <div class="inv-step-label">Entradas</div>
+                </div>
+                <div class="inv-step" data-step="3" onclick="irAPaso(3)">
+                    <div class="inv-step-num">3</div>
+                    <div class="inv-step-label">Ventas</div>
+                </div>
+                <div class="inv-step" data-step="4" onclick="irAPaso(4)">
+                    <div class="inv-step-num">4</div>
+                    <div class="inv-step-label">Cancelaciones</div>
+                </div>
+                <div class="inv-step" data-step="5" onclick="irAPaso(5)">
+                    <div class="inv-step-num">5</div>
+                    <div class="inv-step-label">Resultado</div>
+                </div>
+            </div>
+
+            <!-- Dynamic step content -->
+            <div id="stepContent"></div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             VISTA ENTRADAS — registro rápido (acceso directo)
+        ════════════════════════════════════════════════════════════════ -->
+        <div id="vistaEntradas" style="display:none">
+
+            <!-- Header sticky -->
+            <div class="inv-wizard-header">
+                <div style="display:flex;align-items:center;gap:12px">
+                    <button class="btn-vista" onclick="mostrarVista('vistaLista')">← Volver</button>
+                    <div>
+                        <span class="brand-label" id="entPeriodo">Inventario activo</span>
+                        <div class="brand-title" style="font-size:22px;line-height:1" id="entTitulo">Registro de entradas</div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)"
+                        id="btnGuardarEntradas" onclick="guardarEntradas()">💾 Guardar entradas</button>
+                </div>
+            </div>
+
+            <!-- Contenido dinámico (toolbar + tabla/galería) -->
+            <div id="entContent"></div>
         </div>
 
     </main>
@@ -222,27 +272,370 @@ function toggleNav() {
 </script>
 
 <style>
+/* ── Theme toggle ────────────────────────────────────────────── */
 .theme-toggle {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    z-index: 999;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 50px;
-    padding: 8px 16px;
-    cursor: pointer;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 12px;
-    color: var(--text-muted);
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.15);
-    transition: all 0.2s;
+    position: fixed; bottom: 20px; right: 20px; z-index: 999;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 50px;
+    padding: 8px 16px; cursor: pointer; font-family: 'DM Sans', sans-serif;
+    font-size: 12px; color: var(--text-muted); display: flex; align-items: center;
+    gap: 6px; box-shadow: 0 2px 12px rgba(0,0,0,0.15); transition: all 0.2s;
 }
 .theme-toggle:hover { border-color: var(--green); color: var(--green); }
+
+/* ── Tarjetas-filtro del historial ───────────────────────────── */
+.stat-card-filter { cursor: pointer; user-select: none; }
+.stat-card-filter.active { border-color: var(--green); }
+.stat-card-filter:hover:not(.active) { border-color: var(--border2); }
+
+/* ── Vista toggle (lista / galería) ─────────────────────────── */
+.vista-toggle {
+    display: flex; gap: 3px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 8px; padding: 3px;
+}
+.vista-toggle button {
+    padding: 5px 12px; border-radius: 5px; border: none;
+    background: transparent; color: var(--text-muted); font-size: 11px;
+    cursor: pointer; transition: all 0.15s; font-family: 'DM Sans', sans-serif;
+}
+.vista-toggle button.active { background: var(--surface); color: var(--text); }
+
+/* ── Historial galería ───────────────────────────────────────── */
+.hist-galeria {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(250px,1fr));
+    gap: 12px; margin-top: 12px;
+}
+.hist-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px; cursor: pointer; transition: all 0.15s;
+}
+.hist-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.hist-card.cerrado { border-left: 3px solid var(--green); }
+.hist-card-icon { font-size: 28px; margin-bottom: 10px; }
+.hist-card-nombre { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+.hist-card-meta { font-size: 10px; color: var(--text-dim); margin-bottom: 10px; line-height: 1.5; }
+.hist-card-stat { display: flex; justify-content: space-between; font-size: 11px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.hist-card-stat:last-child { border-bottom: none; }
+.hist-card-actions { display: flex; gap: 6px; margin-top: 12px; }
+
+/* ── Calendario por mes / año ────────────────────────────────── */
+.cal-nav { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 12px 0; }
+.cal-year { font-family: 'Bebas Neue', sans-serif; font-size: 36px; letter-spacing: 2px; color: var(--text); }
+.cal-nav-btn {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 14px; color: var(--text-muted); cursor: pointer; font-size: 16px;
+    transition: all 0.15s;
+}
+.cal-nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+.cal-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 16px; }
+.cal-mes {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; cursor: pointer; transition: all 0.15s;
+}
+.cal-mes:hover { border-color: var(--accent); transform: translateY(-1px); }
+.cal-mes.activo { border-color: var(--accent); background: rgba(245,200,66,0.05); }
+.cal-mes.con-inv { border-color: rgba(61,190,122,0.4); }
+.cal-mes-nombre { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); }
+.cal-mes-count { font-size: 30px; font-family: 'Bebas Neue', sans-serif; margin-top: 4px; letter-spacing: 1px; }
+.cal-mes-count.verde { color: var(--green); }
+.cal-mes-count.dim { color: var(--border); }
+
+/* ── Wizard header sticky ────────────────────────────────────── */
+.inv-wizard-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 20px; background: var(--bg); border-bottom: 1px solid var(--border);
+    position: sticky; top: 44px; z-index: 90; gap: 12px; flex-wrap: wrap;
+    min-height: 60px;
+}
+
+/* ── Step bar ────────────────────────────────────────────────── */
+.inv-steps {
+    display: flex; overflow-x: auto; background: var(--surface);
+    border-bottom: 1px solid var(--border); padding: 0 8px;
+    scrollbar-width: none; position: sticky; top: 104px; z-index: 89;
+}
+.inv-steps::-webkit-scrollbar { display: none; }
+.inv-step {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 10px 20px; cursor: pointer; border-bottom: 3px solid transparent;
+    transition: all 0.15s; white-space: nowrap; flex-shrink: 0; min-width: 80px;
+    user-select: none;
+}
+.inv-step:hover { border-bottom-color: var(--border); }
+.inv-step.active { border-bottom-color: var(--accent); }
+.inv-step.done { border-bottom-color: var(--green); }
+.inv-step-num {
+    width: 26px; height: 26px; border-radius: 50%; background: var(--bg);
+    border: 2px solid var(--border); display: flex; align-items: center;
+    justify-content: center; font-size: 11px; font-weight: 700; color: var(--text-dim);
+    transition: all 0.15s;
+}
+.inv-step.active .inv-step-num { border-color: var(--accent); color: var(--accent); }
+.inv-step.done .inv-step-num { border-color: var(--green); color: var(--green); background: rgba(61,190,122,0.12); }
+.inv-step-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+.inv-step.active .inv-step-label { color: var(--accent); font-weight: 600; }
+.inv-step.done .inv-step-label { color: var(--green); }
+
+/* ── Step toolbar (search + filters) ────────────────────────── */
+.step-toolbar {
+    display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+    background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: wrap;
+}
+.inv-search { position: relative; }
+.inv-search input {
+    padding: 7px 10px 7px 30px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--bg); color: var(--text); font-size: 12px; width: 190px;
+    font-family: 'DM Sans', sans-serif; transition: border-color 0.15s;
+}
+.inv-search input:focus { border-color: var(--accent); outline: none; }
+.inv-search::before {
+    content: '🔍'; position: absolute; left: 8px; top: 50%;
+    transform: translateY(-50%); font-size: 12px; pointer-events: none;
+}
+
+/* ── Galería de captura (step 1 & 2) ─────────────────────────── */
+.inv-galeria-wrap {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px; padding: 16px;
+}
+.inv-item-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden; transition: border-color 0.15s;
+}
+.inv-item-card:hover { border-color: var(--accent); }
+.inv-item-card-top {
+    padding: 12px 14px 10px; border-bottom: 1px solid var(--border);
+}
+.inv-item-card-nombre { font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.3; }
+.inv-item-card-cat { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+.inv-item-card-ant { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
+.inv-item-card-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.inv-card-field { display: flex; align-items: center; justify-content: space-between; }
+.inv-card-field label { font-size: 11px; color: var(--text-muted); }
+.inv-touch-input {
+    width: 84px; height: 46px; font-size: 22px; text-align: center;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif;
+    transition: border-color 0.15s;
+}
+.inv-touch-input:focus { border-color: var(--accent); outline: none; }
+.inv-pesos-section { margin-top: 4px; }
+.inv-pesos-section > label { font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 6px; }
+.inv-pesos-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 5px; }
+.inv-pesos-grid input {
+    height: 42px; font-size: 14px; text-align: center; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--bg); color: var(--text); width: 100%;
+    font-family: 'DM Sans', sans-serif; transition: border-color 0.15s;
+}
+.inv-pesos-grid input:focus { border-color: var(--accent); outline: none; }
+.inv-item-card-bot {
+    padding: 10px 14px; background: var(--bg); border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center; font-size: 11px;
+}
+
+/* ── Step 4 cancelaciones ────────────────────────────────────── */
+.cancel-toolbar {
+    display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap;
+    padding: 14px 16px; background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.cancel-field { display: flex; flex-direction: column; gap: 4px; }
+.cancel-field label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.cancel-field input, .cancel-field select {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+}
+.cancel-field input:focus, .cancel-field select:focus { border-color: var(--accent); outline: none; }
+
+/* ── Pills extras ────────────────────────────────────────────── */
+.pill-red { background: rgba(255,80,80,0.12); color: #ff5050; }
+
+/* ── Tabla captura paso 1 ────────────────────────────────────── */
+.inv-table-wrap {
+    margin: 16px; border-radius: 12px; border: 1px solid var(--border);
+    overflow: hidden; overflow-x: auto;
+}
+.inv-capture-table { width: 100%; border-collapse: collapse; }
+.inv-th {
+    padding: 12px 14px; text-align: left; font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.7px; color: var(--text-dim);
+    font-weight: 600; background: var(--surface); border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+}
+.inv-th-c { text-align: center; }
+.inv-th-pesos {
+    background: rgba(61,190,122,0.04);
+    border-left: 2px solid rgba(61,190,122,0.15);
+    border-right: 2px solid rgba(61,190,122,0.15);
+}
+.inv-row td { border-bottom: 1px solid var(--border); }
+.inv-row:last-child td { border-bottom: none; }
+.inv-row:hover td { background: rgba(255,255,255,0.018); }
+.inv-td-prod  { padding: 14px 16px; }
+.inv-td-ant   { padding: 10px 8px; text-align: center; vertical-align: middle; }
+.inv-td-input { padding: 10px 8px; text-align: center; vertical-align: middle; }
+.inv-td-pesos {
+    padding: 10px 16px;
+    background: rgba(61,190,122,0.025);
+    border-left: 2px solid rgba(61,190,122,0.1);
+    border-right: 2px solid rgba(61,190,122,0.1);
+}
+.inv-td-result { padding: 10px 8px; text-align: center; vertical-align: middle; font-weight: 600; font-size: 14px; }
+.inv-td-ef     { padding: 10px 10px; text-align: center; vertical-align: middle; font-weight: 700; font-size: 15px; color: var(--accent); }
+
+/* Producto info */
+.inv-prod-name { font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.3; }
+.inv-prod-meta { display: flex; gap: 5px; margin-top: 6px; flex-wrap: wrap; align-items: center; }
+.inv-tag { font-size: 10px; padding: 2px 8px; border-radius: 20px; background: var(--bg); border: 1px solid var(--border); color: var(--text-dim); white-space: nowrap; }
+.inv-ant-val  { font-size: 17px; font-weight: 700; color: var(--text-muted); }
+.inv-ant-unit { font-size: 11px; color: var(--text-dim); }
+
+/* Inputs grandes (bodega / barra) */
+.inv-num-input {
+    width: 76px; height: 52px; font-size: 24px; text-align: center; font-weight: 700;
+    border: 2px solid var(--border); border-radius: 10px;
+    background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif;
+    transition: border-color 0.15s; -moz-appearance: textfield;
+}
+.inv-num-input::-webkit-outer-spin-button,
+.inv-num-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.inv-num-input:focus { border-color: var(--accent); outline: none; }
+
+/* Pesos botellas abiertas */
+.inv-pesos-row { display: flex; gap: 8px; }
+.inv-peso-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; }
+.inv-peso-lbl  { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; }
+.inv-peso-input {
+    width: 100%; height: 60px; font-size: 22px; font-weight: 700; text-align: center;
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif;
+    transition: border-color 0.15s; box-sizing: border-box;
+}
+.inv-peso-input:focus { border-color: var(--green); outline: none; }
+
+/* Galería label */
+.inv-gal-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+
+/* ── Vista Existencias — switcher y búsqueda ─────────────── */
+.exist-vista-switcher { display:flex; gap:8px; padding:16px 16px 0; }
+.exist-vista-btn { padding:7px 16px; border:1px solid var(--border); border-radius:8px;
+    background:transparent; color:var(--text-muted); font-family:'DM Sans',sans-serif;
+    font-size:13px; cursor:pointer; transition:all 0.15s; }
+.exist-vista-btn:hover { border-color:var(--accent); color:var(--accent); }
+.exist-vista-btn.active { background:var(--accent); border-color:var(--accent); color:var(--bg); font-weight:600; }
+/* Método toggle inline en tabla */
+.inv-metodo-toggle { display:inline-flex; gap:2px; margin-left:6px; }
+.inv-metodo-toggle button { background:none; border:1px solid transparent; border-radius:5px;
+    cursor:pointer; font-size:12px; padding:1px 4px; opacity:0.45; transition:all 0.12s; }
+.inv-metodo-toggle button:hover { opacity:0.8; border-color:var(--border); }
+.inv-metodo-toggle button.on { opacity:1; border-color:var(--accent); background:rgba(245,200,66,0.12); }
+/* Botella nivel — vista lista compacta */
+.exist-nivel-bottle-sm { width:18px; height:52px; border:2px solid var(--border);
+    border-radius:3px 3px 5px 5px; background:var(--bg); position:relative; overflow:hidden; flex-shrink:0; }
+/* Botella nivel — vista búsqueda (grande) */
+.exist-nivel-bottle { width:36px; height:120px; border:2px solid var(--border);
+    border-radius:5px 5px 10px 10px; background:var(--bg); position:relative; overflow:hidden; flex-shrink:0; }
+.exist-nivel-bar { position:absolute; bottom:0; left:0; right:0; background:var(--accent);
+    transition:height 0.1s; }
+/* Slider nivel */
+.nivel-slider { width:100%; accent-color:var(--accent); cursor:pointer; }
+
+/* ── Vista Entradas Rápidas ───────────────────────────────── */
+.ent-rapida-wrap { max-width:720px; margin:16px auto; padding:0 16px 40px; display:flex; flex-direction:column; gap:20px; }
+.ent-buscador { width:100%; box-sizing:border-box; height:56px; font-size:18px; padding:0 20px;
+    border:2px solid var(--border); border-radius:14px; background:var(--surface); color:var(--text);
+    font-family:'DM Sans',sans-serif; transition:border-color 0.2s; outline:none; }
+.ent-buscador:focus { border-color:var(--accent); }
+.ent-chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.ent-chip { padding:8px 16px; border:1px solid var(--border); border-radius:100px; background:var(--surface);
+    color:var(--text); font-family:'DM Sans',sans-serif; font-size:13px; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+.ent-chip:hover { border-color:var(--accent); color:var(--accent); }
+.ent-chip.active { background:var(--accent); border-color:var(--accent); color:var(--bg); font-weight:600; }
+.ent-form-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:20px; }
+.ent-tipo-row { display:flex; gap:8px; flex-wrap:wrap; }
+.ent-tipo-btn { padding:8px 16px; border:1px solid var(--border); border-radius:8px; background:transparent;
+    color:var(--text-muted); font-family:'DM Sans',sans-serif; font-size:13px; cursor:pointer; transition:all 0.15s; }
+.ent-tipo-btn:hover { border-color:var(--accent); color:var(--accent); }
+.ent-tipo-btn.active { border-color:var(--accent); background:var(--accent); color:var(--bg); font-weight:600; }
+.ent-log-item { display:flex; align-items:center; justify-content:space-between; padding:14px 16px;
+    border:1px solid var(--border); border-radius:10px; background:var(--surface); margin-bottom:8px;
+    gap:12px; transition:border-color 0.15s; }
+.ent-log-item:hover { border-color:var(--text-dim); }
+/* Log compacto — filas densas */
+.ent-log-fila { display:flex; align-items:center; gap:10px; padding:9px 12px;
+    border:1px solid var(--border); border-radius:8px; background:var(--surface);
+    margin-bottom:5px; transition:border-color 0.12s; }
+.ent-log-fila:hover { border-color:var(--text-dim); }
+.ent-log-nombre { flex:1; min-width:0; font-size:13px; font-weight:600; color:var(--text);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ent-log-badge { font-size:10px; font-weight:600; border:1px solid; border-radius:20px;
+    padding:2px 9px; white-space:nowrap; flex-shrink:0; }
+.ent-log-fecha { font-size:11px; color:var(--text-muted); white-space:nowrap; flex-shrink:0; }
+.ent-log-cant { font-size:14px; font-weight:700; color:var(--green); white-space:nowrap; flex-shrink:0; }
+.ent-log-del { background:none; border:1px solid var(--border); border-radius:6px; cursor:pointer;
+    color:var(--text-dim); font-size:12px; padding:4px 8px; transition:all 0.12s; flex-shrink:0; }
+.ent-log-del.hover, .ent-log-del:hover { border-color:var(--red); color:var(--red); }
+/* ── Ficha técnica modal ──────────────────────────────────── */
+.ft-modal { background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    width:100%; max-width:580px; max-height:90vh; overflow:hidden; display:flex; flex-direction:column; }
+.ft-modal-header { padding:20px 24px 16px; border-bottom:1px solid var(--border);
+    display:flex; justify-content:space-between; align-items:flex-start; }
+.ft-modal-body { overflow-y:auto; padding:20px 24px; flex:1; }
+.ft-modal-footer { padding:14px 24px; border-top:1px solid var(--border);
+    display:flex; gap:8px; justify-content:flex-end; }
+.ft-lbl { display:block; font-size:11px; color:var(--text-dim); margin-bottom:5px; }
+.ft-input { width:100%; box-sizing:border-box; height:38px; padding:0 10px;
+    border:1px solid var(--border); border-radius:8px; background:var(--bg);
+    color:var(--text); font-family:'DM Sans',sans-serif; font-size:13px;
+    outline:none; transition:border-color 0.15s; }
+.ft-input:focus { border-color:var(--accent); }
+.ft-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
+.ft-section-title { font-size:10px; color:var(--text-dim); font-weight:400; text-transform:uppercase;
+    letter-spacing:2px; margin-top:16px; margin-bottom:10px; }
+/* Ficha vista — tarjeta de presentación */
+.ft-pres-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:8px; }
+.ft-pres-top { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+.ft-pres-info { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:6px; }
+.ft-pres-precios { background:var(--bg); border-radius:6px; padding:8px 10px; display:flex; gap:16px; flex-wrap:wrap; }
+/* Ver producto button */
+.btn-ver-prod { background:none; border:1px solid var(--border); border-radius:6px;
+    cursor:pointer; color:var(--text-dim); font-size:10px; padding:2px 7px;
+    font-family:'DM Sans',sans-serif; transition:all 0.12s; margin-left:4px; vertical-align:middle; }
+.btn-ver-prod:hover { border-color:var(--accent); color:var(--accent); }
+/* Step 3 menú grid */
+.step3-menu-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:8px; }
+.step3-menu-item { display:flex; align-items:center; gap:12px; padding:12px 14px;
+    border:1px solid var(--border); border-radius:10px; background:var(--surface);
+    transition:border-color 0.15s; }
+.step3-menu-item.has-cnt { border-color:rgba(61,190,122,0.45); background:rgba(61,190,122,0.04); }
+.step3-counter { display:flex; align-items:center; gap:0; border:1px solid var(--border);
+    border-radius:8px; overflow:hidden; flex-shrink:0; }
+.step3-counter button { background:var(--bg); border:none; cursor:pointer; color:var(--text-muted);
+    font-size:18px; width:36px; height:36px; display:flex; align-items:center; justify-content:center;
+    transition:background 0.12s; font-family:'DM Sans',sans-serif; line-height:1; }
+.step3-counter button:hover { background:var(--border); color:var(--text); }
+.step3-cnt-val { min-width:36px; text-align:center; font-size:15px; font-weight:700;
+    color:var(--text-dim); padding:0 4px; }
+.step3-cnt-val.active { color:var(--green); }
 </style>
+
+<!-- Ficha técnica modal -->
+<div id="modalFichaTecnica" style="display:none;position:fixed;inset:0;z-index:2000;
+    background:rgba(0,0,0,0.65);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+    align-items:center;justify-content:center;padding:16px">
+    <div class="ft-modal">
+        <div class="ft-modal-header">
+            <div>
+                <div id="ftModoLabel" style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;font-weight:500">Ficha técnica</div>
+                <div id="ftNombre" style="font-size:18px;font-weight:700;color:var(--text);margin-top:2px"></div>
+            </div>
+            <button onclick="cerrarFichaTecnica()"
+                style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:22px;padding:0;line-height:1">✕</button>
+        </div>
+        <div id="ftBody" class="ft-modal-body"></div>
+        <div class="ft-modal-footer" id="ftFooter"></div>
+    </div>
+</div>
+
 <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Cambiar modo">
     <span id="themeIcon">☀️</span>
     <span id="themeLabel">Modo claro</span>
@@ -257,7 +650,6 @@ function toggleNav() {
         if (saved === 'light') { if(icon) icon.textContent='🌙'; if(label) label.textContent='Modo oscuro'; }
     });
 })();
-
 function toggleTheme() {
     var html  = document.documentElement;
     var curr  = html.getAttribute('data-theme');
