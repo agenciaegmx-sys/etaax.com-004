@@ -648,6 +648,8 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="supabase-config.js"></script>
 <script>
 /* ════════════════════════════════════════════════════════
    PLANES
@@ -706,21 +708,15 @@ var _planSel        = 'micro';
 /* ════════════════════════════════════════════════════════
    STORAGE
 ════════════════════════════════════════════════════════ */
-function _getUsuarios() { try { return JSON.parse(localStorage.getItem('etaax_usuarios') || '[]'); } catch { return []; } }
-function _setUsuarios(d){ localStorage.setItem('etaax_usuarios', JSON.stringify(d)); }
+// Staff sessions siguen en localStorage (auth de dueños → Supabase)
 function _getSesion()   { try { return JSON.parse(localStorage.getItem('etaax_sesion_hub') || 'null'); } catch { return null; } }
 function _setSesion(d)  { localStorage.setItem('etaax_sesion_hub', JSON.stringify(d)); }
 function _getNegocios() { try { return JSON.parse(localStorage.getItem('etaax_negocios') || '[]'); } catch { return []; } }
 function _setNegocios(d){ localStorage.setItem('etaax_negocios', JSON.stringify(d)); }
 
 /* ════════════════════════════════════════════════════════
-   CONTRASEÑA (hash simple — prototype)
+   CONTRASEÑA — solo para staff (dueños usan Supabase Auth)
 ════════════════════════════════════════════════════════ */
-function _hashPwd(pwd) {
-    var h = 5381, s = pwd + '|etx26|' + pwd.length;
-    for (var i = 0; i < s.length; i++) h = ((h << 5) + h) + s.charCodeAt(i);
-    return (h >>> 0).toString(36) + btoa(unescape(encodeURIComponent(s))).slice(0,16).replace(/[^a-z0-9]/gi,'x');
-}
 // Hash usado por staff.html — debe ser idéntico
 function _hashPwdStaff(s) {
     var h = 0;
@@ -747,42 +743,44 @@ var ROLES_STAFF = {
 /* ════════════════════════════════════════════════════════
    INIT
 ════════════════════════════════════════════════════════ */
-function init() {
+async function init() {
     _renderPlanGrid();
+
+    // ── Sesión de colaborador (localStorage) ──
     var ses = _getSesion();
-    if (ses && ses.expira > Date.now()) {
-        // ── Sesión de colaborador ──
-        if (ses.type === 'staff') {
-            _sesion = { type:'staff', staffId:ses.staffId, negocioId:ses.negocioId, nombre:ses.nombre, rol:ses.rol, expira:ses.expira };
-            var neg = _getNegocios().find(function(n){ return n.id === ses.negocioId; });
-            if (neg) {
-                localStorage.setItem('etaax_negocio_activo', neg.id);
-                _showModulos(neg);
-                return;
-            }
-        }
-        // ── Sesión de dueño ──
-        var usuarios = _getUsuarios();
-        var usr = usuarios.find(function(u){ return u.id === ses.usuarioId; });
-        if (usr) {
-            _sesion = { usuarioId: usr.id, nombre: usr.nombre, email: usr.email, plan: usr.plan, expira: ses.expira };
-            _updateTopbar();
-            var negId = localStorage.getItem('etaax_negocio_activo') || '';
-            _negocios = _getNegocios().filter(function(n){ return n.usuarioId === usr.id; });
-            var neg = _negocios.find(function(n){ return n.id === negId; });
-            if (neg) {
-                _showModulos(neg);
-            } else {
-                localStorage.removeItem('etaax_negocio_activo');
-                _updateNegociosBar();
-                showView('viewNegocios');
-                _renderLista();
-                _renderColorPicker();
-            }
+    if (ses && ses.type === 'staff' && ses.expira > Date.now()) {
+        _sesion = { type:'staff', staffId:ses.staffId, negocioId:ses.negocioId, nombre:ses.nombre, rol:ses.rol, expira:ses.expira };
+        var neg = _getNegocios().find(function(n){ return n.id === ses.negocioId; });
+        if (neg) {
+            localStorage.setItem('etaax_negocio_activo', neg.id);
+            _showModulos(neg);
             return;
         }
     }
-    _clearSesion();
+
+    // ── Sesión de dueño (Supabase Auth) ──
+    var sessionData = await _supabase.auth.getSession();
+    var session = sessionData.data && sessionData.data.session;
+    if (session) {
+        var u    = session.user;
+        var meta = u.user_metadata || {};
+        _sesion  = { usuarioId: u.id, nombre: meta.nombre || u.email, email: u.email, plan: meta.plan || 'micro' };
+        _updateTopbar();
+        var negId = localStorage.getItem('etaax_negocio_activo') || '';
+        _negocios = _getNegocios().filter(function(n){ return n.usuarioId === u.id; });
+        var negActivo = _negocios.find(function(n){ return n.id === negId; });
+        if (negActivo) {
+            _showModulos(negActivo);
+        } else {
+            localStorage.removeItem('etaax_negocio_activo');
+            _updateNegociosBar();
+            showView('viewNegocios');
+            _renderLista();
+            _renderColorPicker();
+        }
+        return;
+    }
+
     showView('viewLogin');
 }
 
@@ -814,7 +812,7 @@ function showView(id) {
 /* ════════════════════════════════════════════════════════
    LOGIN
 ════════════════════════════════════════════════════════ */
-function loginSubmit() {
+async function loginSubmit() {
     var input = (document.getElementById('loginEmail').value || '').trim().toLowerCase();
     var pwd   = document.getElementById('loginPwd').value || '';
     var err   = document.getElementById('loginError');
@@ -828,16 +826,19 @@ function loginSubmit() {
         setTimeout(function(){ pwdField.classList.remove('error'); }, 1500);
     }
 
-    // ── Intento 1: login de dueño (contiene @) ──
+    // ── Intento 1: login de dueño (contiene @) → Supabase Auth ──
     if (input.includes('@')) {
-        var usuarios = _getUsuarios();
-        var usr = usuarios.find(function(u){ return u.email === input; });
-        if (usr && usr.passwordHash === _hashPwd(pwd)) { _iniciarSesion(usr); return; }
-        shakeError('Correo o contraseña incorrectos.');
+        var btn = document.querySelector('#viewLogin .btn-auth');
+        btn.disabled = true; btn.textContent = 'Verificando...';
+        var result = await _supabase.auth.signInWithPassword({ email: input, password: pwd });
+        btn.disabled = false; btn.textContent = 'Entrar';
+        if (result.error) { shakeError('Correo o contraseña incorrectos.'); return; }
+        var u = result.data.user, meta = u.user_metadata || {};
+        _iniciarSesion({ id: u.id, nombre: meta.nombre || u.email, email: u.email, plan: meta.plan || 'micro' });
         return;
     }
 
-    // ── Intento 2: login de colaborador (usuario sin @) ──
+    // ── Intento 2: login de colaborador (usuario sin @) → localStorage ──
     var negocios = _getNegocios();
     for (var i = 0; i < negocios.length; i++) {
         var neg = negocios[i];
@@ -864,9 +865,8 @@ function _iniciarSesionStaff(miembro, neg) {
 }
 
 function _iniciarSesion(usr) {
-    var expira = Date.now() + (30 * 24 * 60 * 60 * 1000); // 30 días
-    _sesion = { usuarioId: usr.id, nombre: usr.nombre, email: usr.email, plan: usr.plan, expira: expira };
-    _setSesion({ usuarioId: usr.id, expira: expira });
+    _sesion = { usuarioId: usr.id, nombre: usr.nombre, email: usr.email, plan: usr.plan };
+    // Supabase SDK persiste la sesión de dueño automáticamente
     localStorage.removeItem('etaax_negocio_activo');
     _updateTopbar();
     _updateNegociosBar();
@@ -928,44 +928,58 @@ function selectPlan(key) {
     if (confirm) confirm.innerHTML = 'Estás creando una cuenta en el plan <strong style="color:' + p.color + '">' + p.nombre + '</strong>';
 }
 
-function registroSubmit() {
+async function registroSubmit() {
     var nombre = (document.getElementById('regNombre').value || '').trim();
     var email  = (document.getElementById('regEmail').value  || '').trim().toLowerCase();
     var pwd    = document.getElementById('regPwd').value || '';
     var err    = document.getElementById('regError');
     err.textContent = '';
+    err.style.color = '';
 
     if (!nombre) { err.textContent = 'Agrega tu nombre.'; return; }
     if (!email || !email.includes('@')) { err.textContent = 'Ingresa un correo válido.'; return; }
     if (pwd.length < 6) { err.textContent = 'La contraseña debe tener mínimo 6 caracteres.'; return; }
-
-    var usuarios = _getUsuarios();
-    if (usuarios.find(function(u){ return u.email === email; })) {
-        err.textContent = 'Ya existe una cuenta con ese correo.'; return;
-    }
     if (!PLANES[_planSel] || !PLANES[_planSel].activo) {
         err.textContent = 'Selecciona un plan disponible.'; return;
     }
 
-    var id  = 'u_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
-    var usr = {
-        id:           id,
-        nombre:       nombre,
-        email:        email,
-        passwordHash: _hashPwd(pwd),
-        plan:         _planSel,
-        fechaCreado:  new Date().toISOString()
-    };
-    usuarios.push(usr);
-    _setUsuarios(usuarios);
-    _iniciarSesion(usr);
+    var btn = document.querySelector('#viewRegistro .btn-auth');
+    btn.disabled = true; btn.textContent = 'Creando cuenta...';
+
+    var result = await _supabase.auth.signUp({
+        email:    email,
+        password: pwd,
+        options:  { data: { nombre: nombre, plan: _planSel } }
+    });
+
+    btn.disabled = false; btn.textContent = 'Crear cuenta';
+
+    if (result.error) {
+        err.textContent = result.error.message === 'User already registered'
+            ? 'Ya existe una cuenta con ese correo.'
+            : result.error.message;
+        return;
+    }
+
+    // Si email confirmation está desactivado en Supabase, hay sesión inmediata
+    if (result.data.session) {
+        var u = result.data.user, meta = u.user_metadata || {};
+        _iniciarSesion({ id: u.id, nombre: meta.nombre || nombre, email: u.email, plan: meta.plan || _planSel });
+    } else {
+        // Email confirmation activado — informar al usuario
+        err.style.color = 'var(--green)';
+        err.textContent = '¡Cuenta creada! Revisa tu correo para confirmar y luego inicia sesión.';
+    }
 }
 
 /* ════════════════════════════════════════════════════════
    LOGOUT
 ════════════════════════════════════════════════════════ */
-function logout() {
+async function logout() {
     if (!confirm('¿Cerrar sesión?')) return;
+    if (!_sesion || _sesion.type !== 'staff') {
+        await _supabase.auth.signOut();
+    }
     _clearSesion();
     showView('viewLogin');
     document.getElementById('loginEmail').value = '';
