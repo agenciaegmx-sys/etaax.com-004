@@ -354,6 +354,54 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   .auth-card{padding:24px;}
   .neg-activo-btns{flex-direction:column;align-items:flex-end;gap:6px;}
 }
+
+/* ── MODALES ── */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:1000;
+  display:flex;align-items:center;justify-content:center;padding:20px;
+  animation:fadeIn .2s ease;
+}
+@keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+.modal-box{
+  background:var(--s1);border:1px solid var(--b2);border-radius:20px;
+  width:100%;max-width:540px;max-height:88vh;overflow-y:auto;
+  animation:slideUp .25s ease;
+}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+.modal-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:24px 28px 20px;border-bottom:1px solid var(--b1);
+}
+.modal-title{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;color:var(--text);}
+.modal-close{
+  background:transparent;border:1px solid var(--b2);color:var(--dim);
+  width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:16px;
+  display:flex;align-items:center;justify-content:center;transition:all .2s;
+}
+.modal-close:hover{border-color:var(--red);color:var(--red);}
+.modal-body{padding:24px 28px;}
+.info-row{display:flex;gap:10px;margin-bottom:14px;align-items:flex-start;}
+.info-icon{font-size:16px;width:24px;flex-shrink:0;margin-top:1px;}
+.info-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:2px;}
+.info-val{font-size:14px;color:var(--text);}
+.info-val.dim{color:var(--dim);}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;}
+.priv-text{font-size:12px;color:var(--muted);line-height:1.8;}
+.priv-text h4{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text);margin:18px 0 6px;}
+.priv-text h4:first-child{margin-top:0;}
+.priv-divider{height:1px;background:var(--b1);margin:20px 0;}
+/* Checkbox privacidad */
+.priv-check-wrap{
+  display:flex;align-items:flex-start;gap:10px;
+  margin-top:16px;padding:12px 14px;
+  background:var(--s2);border:1px solid var(--b1);border-radius:8px;
+}
+.priv-check-wrap input[type=checkbox]{
+  width:16px;height:16px;accent-color:var(--green);cursor:pointer;flex-shrink:0;margin-top:1px;
+}
+.priv-check-label{font-size:12px;color:var(--muted);line-height:1.5;}
+.priv-check-label a{color:var(--green);text-decoration:none;cursor:pointer;border-bottom:1px solid var(--greend);}
+.priv-check-label a:hover{color:var(--green2);}
 </style>
 </head>
 <body>
@@ -445,6 +493,12 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
         </div>
         <div class="auth-error" id="regError"></div>
         <div class="plan-confirm" id="planConfirm">Estás creando una cuenta en el plan <strong>Micro Pyme</strong></div>
+        <div class="priv-check-wrap">
+          <input type="checkbox" id="chkPrivacidad">
+          <label class="priv-check-label" for="chkPrivacidad">
+            He leído y acepto el <a onclick="abrirPrivacidad(event)">Aviso de Privacidad</a> y el tratamiento de mis datos personales conforme a la LFPDPPP.
+          </label>
+        </div>
         <button class="btn-auth" onclick="registroSubmit()">Crear cuenta →</button>
         <div class="auth-switch">
           ¿Ya tienes cuenta? <a onclick="showView('viewLogin')">Iniciar sesión</a>
@@ -540,6 +594,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
           <span id="userNombreChip" style="font-size:12px">—</span>
           <span class="user-badge-plan" id="userPlanChip">—</span>
         </div>
+        <button class="btn-cambiar-neg" id="btnInfoNeg" onclick="abrirInfoNegocio()" title="Ver información del negocio" style="display:none">ℹ️ Info</button>
         <button class="btn-cambiar-neg" onclick="window.location.href='configuracion.html'" title="Configuración del negocio">⚙️ Config</button>
         <button class="btn-cambiar-neg" id="btnCambiarNeg" onclick="cambiarNegocio()">↩ Cambiar negocio</button>
         <button class="btn-logout" onclick="logout()">Salir</button>
@@ -645,6 +700,57 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
     <p class="hub-footer-text">
       <a href="index.html">etaax.com</a> · Desarrollado por <a href="index.html#nosotros">EGMx Consultoría Estratégica a&b</a>
     </p>
+  </div>
+</div>
+
+<!-- ══ MODAL: Info del negocio ══ -->
+<div id="modalInfoNeg" class="modal-overlay" style="display:none" onclick="if(event.target===this)cerrarInfoNeg()">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div class="modal-title" id="infoNegTitulo">Información del negocio</div>
+      <button class="modal-close" onclick="cerrarInfoNeg()">✕</button>
+    </div>
+    <div class="modal-body" id="infoNegBody"></div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Aviso de privacidad ══ -->
+<div id="modalPrivacidad" class="modal-overlay" style="display:none" onclick="if(event.target===this)cerrarPrivacidad()">
+  <div class="modal-box" style="max-width:600px">
+    <div class="modal-head">
+      <div class="modal-title">Aviso de Privacidad</div>
+      <button class="modal-close" onclick="cerrarPrivacidad()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="priv-text">
+        <h4>Responsable del tratamiento</h4>
+        <p><strong>EGMx Consultoría Estratégica a&amp;b</strong>, con correo de contacto <strong>contacto@etaax.com</strong>, es responsable del tratamiento de los datos personales que proporciones a través de la plataforma etaax.com.</p>
+
+        <div class="priv-divider"></div>
+        <h4>Datos personales que recabamos</h4>
+        <p>Para la prestación del servicio recabamos: nombre completo, correo electrónico, contraseña (almacenada de forma cifrada), información del negocio registrado en la plataforma, y datos de configuración del mismo (nombre, tipo de negocio, horarios, contacto, RFC).</p>
+
+        <div class="priv-divider"></div>
+        <h4>Finalidades del tratamiento</h4>
+        <p><strong>Finalidades primarias:</strong> crear y gestionar tu cuenta, prestar el servicio de software contratado, garantizar la seguridad de la plataforma.</p>
+        <p style="margin-top:8px"><strong>Finalidades secundarias:</strong> comunicarte mejoras, actualizaciones del sistema y contenido de valor relacionado con la gestión de negocios de alimentos y bebidas. Puedes oponerte a estas finalidades enviando un correo a contacto@etaax.com.</p>
+
+        <div class="priv-divider"></div>
+        <h4>Transferencia de datos personales</h4>
+        <p>No transferimos tus datos personales a terceros, salvo cuando sea necesario para la prestación del servicio (proveedores de infraestructura tecnológica como Supabase y Netlify, sujetos a sus propias políticas de privacidad) o cuando exista obligación legal.</p>
+
+        <div class="priv-divider"></div>
+        <h4>Derechos ARCO</h4>
+        <p>Tienes derecho a <strong>Acceder, Rectificar, Cancelar u Oponerte</strong> al tratamiento de tus datos personales (derechos ARCO), conforme a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares (LFPDPPP). Para ejercer estos derechos, envía un correo a <strong>contacto@etaax.com</strong> con el asunto "Derechos ARCO", adjuntando identificación oficial. Responderemos en un plazo máximo de 20 días hábiles.</p>
+
+        <div class="priv-divider"></div>
+        <h4>Cambios al aviso de privacidad</h4>
+        <p>Cualquier modificación a este aviso de privacidad será comunicada a través de la plataforma etaax.com. Te recomendamos revisarlo periódicamente.</p>
+
+        <p style="margin-top:20px;font-size:11px;color:var(--dim)">Última actualización: Mayo 2026 · Este aviso de privacidad está sujeto a revisión legal y puede ser modificado.</p>
+      </div>
+      <button class="btn-auth" style="margin-top:24px" onclick="cerrarPrivacidad()">Entendido</button>
+    </div>
   </div>
 </div>
 
@@ -964,6 +1070,9 @@ async function registroSubmit() {
     if (!nombre) { err.textContent = 'Agrega tu nombre.'; return; }
     if (!email || !email.includes('@')) { err.textContent = 'Ingresa un correo válido.'; return; }
     if (pwd.length < 6) { err.textContent = 'La contraseña debe tener mínimo 6 caracteres.'; return; }
+    if (!document.getElementById('chkPrivacidad').checked) {
+        err.textContent = 'Debes aceptar el aviso de privacidad para continuar.'; return;
+    }
     if (!PLANES[_planSel] || !PLANES[_planSel].activo) {
         err.textContent = 'Selecciona un plan disponible.'; return;
     }
@@ -1096,6 +1205,7 @@ function _showModulos(neg) {
         var nombreChip = document.getElementById('userNombreChip');
         var planChip   = document.getElementById('userPlanChip');
         var btnCambiar = document.getElementById('btnCambiarNeg');
+        var btnInfo    = document.getElementById('btnInfoNeg');
         nombreChip.textContent = _sesion.nombre.split(' ')[0];
 
         if (_sesion.type === 'staff') {
@@ -1105,6 +1215,9 @@ function _showModulos(neg) {
             planChip.style.background  = r.color + '22';
             planChip.style.color       = r.color;
             if (btnCambiar) btnCambiar.style.display = 'none';
+            // Solo admin y gerente ven info del negocio
+            var rolesDirectivos = ['admin', 'gerente'];
+            if (btnInfo) btnInfo.style.display = rolesDirectivos.indexOf(_sesion.rol) !== -1 ? '' : 'none';
         } else {
             var p = PLANES[_sesion.plan] || PLANES.micro;
             planChip.textContent      = p.nombre;
@@ -1112,6 +1225,7 @@ function _showModulos(neg) {
             planChip.style.background = '';
             planChip.style.color      = '';
             if (btnCambiar) btnCambiar.style.display = '';
+            if (btnInfo) btnInfo.style.display = ''; // dueño siempre ve info
         }
     }
 }
@@ -1211,6 +1325,65 @@ function _migrarDatosLegacy(negId) {
             localStorage.setItem(nk, leg);
         }
     });
+}
+
+/* ════════════════════════════════════════════════════════
+   MODAL: INFO DEL NEGOCIO
+════════════════════════════════════════════════════════ */
+function abrirInfoNegocio() {
+    var negId = localStorage.getItem('etaax_negocio_activo') || '';
+    var negs  = _getNegocios();
+    var neg   = negs.find(function(n){ return n.id === negId; });
+    if (!neg) return;
+
+    var sk  = negId ? ('etaax_' + negId + '_config_extra') : 'etaax_config_extra';
+    var ex  = {};
+    try { ex = JSON.parse(localStorage.getItem(sk) || '{}'); } catch(e){}
+
+    var t    = TIPOS[neg.tipo] || TIPOS.otro;
+    var dias = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+    var diasStr = ex.dias
+        ? dias.filter(function(_,i){ return ex.dias[i]; }).join(', ') || '—'
+        : '—';
+
+    document.getElementById('infoNegTitulo').textContent = neg.nombre;
+
+    var rows = [
+        { icon: t.emoji,  label: 'Tipo de negocio', val: t.label },
+        { icon: '📞',      label: 'Teléfono',        val: ex.telefono   || '—' },
+        { icon: '✉️',      label: 'Correo',           val: ex.correo     || '—' },
+        { icon: '🌐',      label: 'Sitio web',        val: ex.web        || '—' },
+        { icon: '🧾',      label: 'RFC',              val: ex.rfc        || '—' },
+        { icon: '📍',      label: 'Dirección',        val: ex.direccion  || '—' },
+        { icon: '🕐',      label: 'Horario',          val: (ex.horaOpen && ex.horaClose) ? (ex.horaOpen + ' – ' + ex.horaClose) : '—' },
+        { icon: '📅',      label: 'Días de operación',val: diasStr },
+    ];
+
+    document.getElementById('infoNegBody').innerHTML =
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px">' +
+        rows.map(function(r){
+            return '<div class="info-row"><div class="info-icon">' + r.icon + '</div>' +
+                '<div><div class="info-label">' + _esc(r.label) + '</div>' +
+                '<div class="info-val' + (r.val === '—' ? ' dim' : '') + '">' + _esc(r.val) + '</div></div></div>';
+        }).join('') +
+        '</div>' +
+        (ex.notas ? '<div class="info-row" style="margin-top:8px;grid-column:1/-1"><div class="info-icon">📝</div><div><div class="info-label">Notas</div><div class="info-val">' + _esc(ex.notas) + '</div></div></div>' : '');
+
+    document.getElementById('modalInfoNeg').style.display = 'flex';
+}
+function cerrarInfoNeg() {
+    document.getElementById('modalInfoNeg').style.display = 'none';
+}
+
+/* ════════════════════════════════════════════════════════
+   MODAL: AVISO DE PRIVACIDAD
+════════════════════════════════════════════════════════ */
+function abrirPrivacidad(e) {
+    if (e) e.preventDefault();
+    document.getElementById('modalPrivacidad').style.display = 'flex';
+}
+function cerrarPrivacidad() {
+    document.getElementById('modalPrivacidad').style.display = 'none';
 }
 
 /* ════════════════════════════════════════════════════════
