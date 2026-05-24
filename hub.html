@@ -714,6 +714,32 @@ function _setSesion(d)  { localStorage.setItem('etaax_sesion_hub', JSON.stringif
 function _getNegocios() { try { return JSON.parse(localStorage.getItem('etaax_negocios') || '[]'); } catch { return []; } }
 function _setNegocios(d){ localStorage.setItem('etaax_negocios', JSON.stringify(d)); }
 
+// Converters: formato app ↔ formato Supabase
+function _negToDb(neg) {
+    return {
+        id:         neg.id,
+        usuario_id: neg.usuarioId,
+        datos:      { nombre: neg.nombre, tipo: neg.tipo, emoji: neg.emoji, color: neg.color, fechaCreado: neg.fechaCreado }
+    };
+}
+function _negFromDb(row) {
+    var d = row.datos || {};
+    return { id: row.id, usuarioId: row.usuario_id, nombre: d.nombre, tipo: d.tipo, emoji: d.emoji, color: d.color, fechaCreado: d.fechaCreado };
+}
+
+// Sync Supabase → localStorage (se llama al iniciar sesión y al cargar)
+async function _syncNegociosDB() {
+    if (!_sesion || _sesion.type === 'staff') return;
+    var res = await _supabase.from('negocios').select('*').eq('usuario_id', _sesion.usuarioId);
+    if (res.error || !res.data) {
+        _negocios = _getNegocios().filter(function(n){ return n.usuarioId === _sesion.usuarioId; });
+        return;
+    }
+    _negocios = res.data.map(_negFromDb);
+    var others = _getNegocios().filter(function(n){ return n.usuarioId !== _sesion.usuarioId; });
+    _setNegocios(others.concat(_negocios));
+}
+
 /* ════════════════════════════════════════════════════════
    CONTRASEÑA — solo para staff (dueños usan Supabase Auth)
 ════════════════════════════════════════════════════════ */
@@ -767,7 +793,7 @@ async function init() {
         _sesion  = { usuarioId: u.id, nombre: meta.nombre || u.email, email: u.email, plan: meta.plan || 'micro' };
         _updateTopbar();
         var negId = localStorage.getItem('etaax_negocio_activo') || '';
-        _negocios = _getNegocios().filter(function(n){ return n.usuarioId === u.id; });
+        await _syncNegociosDB();
         var negActivo = _negocios.find(function(n){ return n.id === negId; });
         if (negActivo) {
             _showModulos(negActivo);
@@ -864,13 +890,12 @@ function _iniciarSesionStaff(miembro, neg) {
     _showModulos(neg);
 }
 
-function _iniciarSesion(usr) {
+async function _iniciarSesion(usr) {
     _sesion = { usuarioId: usr.id, nombre: usr.nombre, email: usr.email, plan: usr.plan };
-    // Supabase SDK persiste la sesión de dueño automáticamente
     localStorage.removeItem('etaax_negocio_activo');
     _updateTopbar();
     _updateNegociosBar();
-    _negocios = _getNegocios().filter(function(n){ return n.usuarioId === usr.id; });
+    await _syncNegociosDB();
     showView('viewNegocios');
     _renderLista();
     _renderColorPicker();
@@ -1124,7 +1149,7 @@ function setColor(c) {
     });
 }
 
-function crearNegocio() {
+async function crearNegocio() {
     if (!_sesion) return;
     var inp    = document.getElementById('inNombre');
     var nombre = (inp.value || '').trim();
@@ -1146,23 +1171,30 @@ function crearNegocio() {
         color:       _colorSel,
         fechaCreado: new Date().toISOString()
     };
-    var todos = _getNegocios();
-    todos.push(neg);
-    _setNegocios(todos);
-    _negocios = todos;
+    // Guardar en Supabase
+    await _supabase.from('negocios').insert(_negToDb(neg));
+    // Actualizar cache local
+    _negocios.push(neg);
+    var all = _getNegocios().filter(function(n){ return n.id !== id; });
+    all.push(neg);
+    _setNegocios(all);
     if (_misNegocios().length === 1) _migrarDatosLegacy(id);
     seleccionarNegocio(id);
 }
 
-function eliminarNegocio(id, event) {
+async function eliminarNegocio(id, event) {
     event.stopPropagation();
     var neg = _misNegocios().find(function(n){ return n.id === id; });
     if (!neg) return;
-    if (!confirm('¿Eliminar "' + neg.nombre + '"?\n\nTodos sus datos (insumos, recetas e inventarios) se borrarán permanentemente.')) return;
-    ['insumos','recetas','inventarios'].forEach(function(k){ localStorage.removeItem('etaax_' + id + '_' + k); });
-    var todos = _getNegocios().filter(function(n){ return n.id !== id; });
-    _setNegocios(todos);
-    _negocios = todos;
+    if (!confirm('¿Eliminar "' + neg.nombre + '"?\n\nTodos sus datos se borrarán permanentemente.')) return;
+    // Eliminar de Supabase (cascade borra staff, config, permisos)
+    await _supabase.from('negocios').delete().eq('id', id);
+    // Limpiar localStorage
+    ['insumos','recetas','inventarios','staff','permisos','config_extra'].forEach(function(k){
+        localStorage.removeItem('etaax_' + id + '_' + k);
+    });
+    _negocios = _negocios.filter(function(n){ return n.id !== id; });
+    _setNegocios(_getNegocios().filter(function(n){ return n.id !== id; }));
     if (localStorage.getItem('etaax_negocio_activo') === id) localStorage.removeItem('etaax_negocio_activo');
     _renderLista();
 }

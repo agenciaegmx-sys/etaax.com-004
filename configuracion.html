@@ -211,6 +211,8 @@
 
 <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="supabase-config.js"></script>
 <script>
 (function(){
     var saved = localStorage.getItem('etaax_theme') || 'dark';
@@ -232,8 +234,23 @@ function getNegocioActivo() { return localStorage.getItem('etaax_negocio_activo'
 function getNegocios() { try { return JSON.parse(localStorage.getItem('etaax_negocios')) || []; } catch(e){ return []; } }
 function setNegocios(d) { localStorage.setItem('etaax_negocios', JSON.stringify(d)); }
 function _sk(key) { var id = getNegocioActivo(); return id ? ('etaax_' + id + '_' + key) : ('etaax_' + key); }
-function loadExtra() { try { return JSON.parse(localStorage.getItem(_sk('config_extra'))) || {}; } catch(e){ return {}; } }
-function saveExtra(d) { localStorage.setItem(_sk('config_extra'), JSON.stringify(d)); }
+async function loadExtra() {
+    var negId = getNegocioActivo();
+    if (!negId) { try { return JSON.parse(localStorage.getItem(_sk('config_extra'))) || {}; } catch(e){ return {}; } }
+    var res = await _supabase.from('config_negocio').select('datos').eq('negocio_id', negId).maybeSingle();
+    if (res.error || !res.data) {
+        try { return JSON.parse(localStorage.getItem(_sk('config_extra'))) || {}; } catch(e){ return {}; }
+    }
+    var d = res.data.datos || {};
+    localStorage.setItem(_sk('config_extra'), JSON.stringify(d));
+    return d;
+}
+async function saveExtra(d) {
+    localStorage.setItem(_sk('config_extra'), JSON.stringify(d));
+    var negId = getNegocioActivo();
+    if (!negId) return;
+    await _supabase.from('config_negocio').upsert({ negocio_id: negId, datos: d, updated_at: new Date().toISOString() });
+}
 
 /* ── TIPOS ── */
 var TIPOS = [
@@ -301,7 +318,7 @@ function markDirty() {
 }
 
 /* ── LOAD ── */
-function cargarDatos() {
+async function cargarDatos() {
     var negId = getNegocioActivo();
     if (!negId) { window.location.href = 'hub.html'; return; }
 
@@ -313,8 +330,8 @@ function cargarDatos() {
     _tipo  = neg.tipo  || 'otro';
     _color = neg.color || '#3dbe7a';
 
-    // Extra config
-    var ex = loadExtra();
+    // Extra config (desde Supabase, con fallback a localStorage)
+    var ex = await loadExtra();
     document.getElementById('cTel').value      = ex.telefono || '';
     document.getElementById('cCorreo').value   = ex.correo   || '';
     document.getElementById('cWeb').value      = ex.web      || '';
@@ -337,7 +354,7 @@ function cargarDatos() {
 }
 
 /* ── SAVE ── */
-function guardarConfig() {
+async function guardarConfig() {
     var nombre = document.getElementById('cNombre').value.trim();
     if (!nombre) { alert('El nombre del negocio es requerido.'); return; }
 
@@ -351,6 +368,12 @@ function guardarConfig() {
     negs[idx].color  = _color;
     setNegocios(negs);
 
+    // Actualizar negocio en Supabase
+    var neg = negs[idx];
+    await _supabase.from('negocios').update({
+        datos: { nombre: neg.nombre, tipo: neg.tipo, emoji: neg.emoji, color: neg.color, fechaCreado: neg.fechaCreado }
+    }).eq('id', negId);
+
     var ex = {
         telefono:  document.getElementById('cTel').value.trim(),
         correo:    document.getElementById('cCorreo').value.trim(),
@@ -362,7 +385,7 @@ function guardarConfig() {
         notas:     document.getElementById('cNotas').value.trim(),
         dias:      _diasAct.slice(),
     };
-    saveExtra(ex);
+    await saveExtra(ex);
 
     document.getElementById('saveStatus').textContent = 'Guardado correctamente';
     document.getElementById('saveStatus').style.color = 'var(--green)';

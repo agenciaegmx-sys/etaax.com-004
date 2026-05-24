@@ -160,6 +160,8 @@
 
 <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
 <script>
 (function(){
     var saved = localStorage.getItem('etaax_theme') || 'dark';
@@ -236,7 +238,22 @@ var DEFAULTS = {
 function loadPermisos() {
     try { return JSON.parse(localStorage.getItem(_sk('permisos'))) || {}; } catch(e){ return {}; }
 }
-function savePermisos(d) { localStorage.setItem(_sk('permisos'), JSON.stringify(d)); }
+async function savePermisos(d) {
+    localStorage.setItem(_sk('permisos'), JSON.stringify(d));
+    var negId = getNegocioActivo();
+    if (!negId) return;
+    var rows = Object.keys(d).map(function(rol){ return { negocio_id: negId, rol: rol, datos: d[rol] }; });
+    if (rows.length) await _supabase.from('permisos').upsert(rows);
+}
+async function syncPermisos() {
+    var negId = getNegocioActivo();
+    if (!negId) return;
+    var res = await _supabase.from('permisos').select('rol, datos').eq('negocio_id', negId);
+    if (res.error || !res.data || !res.data.length) return;
+    var combined = {};
+    res.data.forEach(function(row){ combined[row.rol] = row.datos; });
+    localStorage.setItem(_sk('permisos'), JSON.stringify(combined));
+}
 
 function getRolPermisos(rolKey) {
     var all = loadPermisos();
@@ -337,7 +354,8 @@ function showToast(msg) {
     setTimeout(function(){ t.remove(); }, 2200);
 }
 
-document.addEventListener('DOMContentLoaded', function(){
+document.addEventListener('DOMContentLoaded', async function(){
+    await syncPermisos();
     renderTabs();
     renderGrid();
 });

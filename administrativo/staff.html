@@ -495,6 +495,8 @@
 </style>
 <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
 <script>
 (function(){
     var saved = localStorage.getItem('etaax_theme') || 'dark';
@@ -546,7 +548,26 @@ function rolBadge(key) {
 
 /* ── DATA ── */
 function load() { try { return JSON.parse(localStorage.getItem(_sk('staff'))) || []; } catch(e){ return []; } }
-function save(d) { localStorage.setItem(_sk('staff'), JSON.stringify(d)); }
+async function save(d) {
+    localStorage.setItem(_sk('staff'), JSON.stringify(d));
+    var negId = getNegocioActivo();
+    if (!negId) return;
+    // Reemplazar todos los registros del negocio
+    await _supabase.from('staff').delete().eq('negocio_id', negId);
+    if (d.length) {
+        await _supabase.from('staff').insert(
+            d.map(function(m){ return { id: m.id, negocio_id: negId, datos: m }; })
+        );
+    }
+}
+async function syncFromDB() {
+    var negId = getNegocioActivo();
+    if (!negId) return;
+    var res = await _supabase.from('staff').select('datos').eq('negocio_id', negId);
+    if (res.error || !res.data) return;
+    var list = res.data.map(function(row){ return row.datos; });
+    localStorage.setItem(_sk('staff'), JSON.stringify(list));
+}
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
 function hashPwd(s) {
     var h = 0;
@@ -728,13 +749,13 @@ function closeModal() {
     tmpDocs = [];
 }
 
-function deleteStaff(id) {
+async function deleteStaff(id) {
     if (!confirm('¿Eliminar este colaborador y su expediente?')) return;
-    save(load().filter(function(s){ return s.id !== id; }));
+    await save(load().filter(function(s){ return s.id !== id; }));
     renderAll();
 }
 
-function saveStaff() {
+async function saveStaff() {
     var nombre  = document.getElementById('fNombre').value.trim();
     var puesto  = document.getElementById('fPuesto').value.trim();
     var usuario = document.getElementById('fUsuario').value.trim().toLowerCase().replace(/\s+/g,'');
@@ -774,7 +795,7 @@ function saveStaff() {
 
     var idx = data.findIndex(function(s){ return s.id === obj.id; });
     if (idx > -1) { data[idx] = obj; } else { data.push(obj); }
-    save(data);
+    await save(data);
     closeModal();
     renderAll();
 }
@@ -835,7 +856,13 @@ function esc(s) {
 }
 
 /* ── INIT ── */
-document.addEventListener('DOMContentLoaded', renderAll);
+async function initPage() {
+    var negId = getNegocioActivo();
+    if (!negId) { window.location.href = '../hub.html'; return; }
+    await syncFromDB();
+    renderAll();
+}
+document.addEventListener('DOMContentLoaded', initPage);
 
 document.getElementById('modalStaff').addEventListener('click', function(e){
     if (e.target === this) closeModal();
