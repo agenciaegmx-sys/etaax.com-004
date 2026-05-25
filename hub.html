@@ -570,7 +570,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
         <span style="font-size:10px;color:var(--dim);letter-spacing:2px;text-transform:uppercase;flex-shrink:0">Color</span>
         <div class="neg-form-colors" id="colorPicker"></div>
         <div style="flex:1"></div>
-        <button class="btn-crear-neg" onclick="crearNegocio()">Crear negocio →</button>
+        <button class="btn-crear-neg" id="btnCrearNeg" onclick="crearNegocio()">Crear negocio →</button>
       </div>
     </div>
   </div>
@@ -1295,8 +1295,12 @@ async function crearNegocio() {
         color:       _colorSel,
         fechaCreado: new Date().toISOString()
     };
+    // Loading state
+    var btn = document.getElementById('btnCrearNeg');
+    if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
     // Guardar en Supabase
     await _supabase.from('negocios').insert(_negToDb(neg));
+    if (btn) { btn.disabled = false; btn.textContent = 'Crear negocio →'; }
     // Actualizar cache local
     _negocios.push(neg);
     var all = _getNegocios().filter(function(n){ return n.id !== id; });
