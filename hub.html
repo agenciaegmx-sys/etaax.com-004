@@ -814,9 +814,9 @@ var _planSel        = 'micro';
 /* ════════════════════════════════════════════════════════
    STORAGE
 ════════════════════════════════════════════════════════ */
-// Staff sessions siguen en localStorage (auth de dueños → Supabase)
-function _getSesion()   { try { return JSON.parse(localStorage.getItem('etaax_sesion_hub') || 'null'); } catch { return null; } }
-function _setSesion(d)  { localStorage.setItem('etaax_sesion_hub', JSON.stringify(d)); }
+// Sesiones en sessionStorage — se borran al cerrar el navegador
+function _getSesion()   { try { return JSON.parse(sessionStorage.getItem('etaax_sesion_hub') || 'null'); } catch { return null; } }
+function _setSesion(d)  { sessionStorage.setItem('etaax_sesion_hub', JSON.stringify(d)); }
 function _getNegocios() { try { return JSON.parse(localStorage.getItem('etaax_negocios') || '[]'); } catch { return []; } }
 function _setNegocios(d){ localStorage.setItem('etaax_negocios', JSON.stringify(d)); }
 
@@ -1122,7 +1122,7 @@ async function logout() {
 }
 function _clearSesion() {
     _sesion = null;
-    localStorage.removeItem('etaax_sesion_hub');
+    sessionStorage.removeItem('etaax_sesion_hub');
     localStorage.removeItem('etaax_negocio_activo');
     document.getElementById('topbarUser').innerHTML =
         '<div class="hub-user-dot" style="background:var(--dim)"></div><span>Sin sesión</span>';
