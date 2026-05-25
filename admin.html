@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ETAAX · Panel Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:    #0a0908; --s1: #141210; --s2: #1e1c19;
+  --b1:    #2a2825; --b2: #3a3835;
+  --green: #3dbe7a; --green2: #2a9960;
+  --gold:  #f5c842; --salmon: #c87a6a; --red: #e05a3a;
+  --text:  #f0ece4; --muted: #7a7570; --dim: #4a4844;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;}
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px;}
+
+/* LAYOUT */
+.admin-shell{max-width:1200px;margin:0 auto;padding:32px 24px 80px;}
+
+/* TOPBAR */
+.admin-top{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:40px;padding-bottom:20px;border-bottom:1px solid var(--b1);
+}
+.admin-logo{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:2px;}
+.admin-logo span{color:var(--green);}
+.admin-badge{
+  font-size:10px;letter-spacing:3px;text-transform:uppercase;
+  background:var(--gold)22;color:var(--gold);
+  padding:4px 10px;border-radius:4px;border:1px solid var(--gold)44;
+}
+.admin-user{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted);}
+.btn-logout-adm{
+  background:transparent;border:1px solid var(--b2);color:var(--dim);
+  font-family:'DM Sans',sans-serif;font-size:11px;padding:5px 12px;
+  border-radius:6px;cursor:pointer;transition:all .2s;letter-spacing:.5px;
+}
+.btn-logout-adm:hover{border-color:var(--red);color:var(--red);}
+
+/* STAT CARDS */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:40px;}
+.stat-card{
+  background:var(--s1);border:1px solid var(--b1);border-radius:14px;padding:20px 24px;
+}
+.stat-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+.stat-val{font-family:'Bebas Neue',sans-serif;font-size:38px;letter-spacing:1px;line-height:1;}
+.stat-sub{font-size:11px;color:var(--dim);margin-top:4px;}
+
+/* SECCIÓN */
+.admin-section{margin-bottom:40px;}
+.section-head{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;
+}
+.section-title{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);}
+.section-count{font-size:11px;color:var(--dim);}
+
+/* TABLA */
+.admin-table{width:100%;border-collapse:collapse;}
+.admin-table th{
+  font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);
+  padding:8px 14px;text-align:left;border-bottom:1px solid var(--b1);font-weight:400;
+}
+.admin-table td{
+  padding:12px 14px;border-bottom:1px solid var(--b1);font-size:13px;color:var(--text);
+  vertical-align:middle;
+}
+.admin-table tr:last-child td{border-bottom:none;}
+.admin-table tr:hover td{background:var(--s2);}
+.table-wrap{background:var(--s1);border:1px solid var(--b1);border-radius:14px;overflow:hidden;}
+
+/* BADGES */
+.badge{
+  display:inline-block;font-size:10px;letter-spacing:1px;text-transform:uppercase;
+  padding:3px 8px;border-radius:4px;font-weight:500;
+}
+.badge-micro{background:#3dbe7a22;color:#3dbe7a;}
+.badge-pyme{background:#f5c84222;color:#f5c842;}
+.badge-gran{background:#c87a6a22;color:#c87a6a;}
+.badge-neg{background:#7ab8f522;color:#7ab8f5;}
+.text-dim{color:var(--dim);}
+.text-green{color:var(--green);}
+.text-gold{color:var(--gold);}
+
+/* TABS */
+.tabs{display:flex;gap:4px;margin-bottom:20px;background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:4px;}
+.tab{
+  flex:1;padding:8px 0;text-align:center;font-size:12px;letter-spacing:1px;text-transform:uppercase;
+  border-radius:7px;cursor:pointer;transition:all .2s;color:var(--muted);border:none;background:none;
+  font-family:'DM Sans',sans-serif;
+}
+.tab.active{background:var(--b1);color:var(--text);}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
+/* EMPTY */
+.empty-state{text-align:center;padding:48px 24px;color:var(--dim);font-size:13px;}
+
+/* LOADING / CENTRADO */
+.view-center{
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;text-align:center;gap:16px;
+}
+.loading-dots{display:inline-flex;gap:4px;align-items:center;}
+.loading-dots span{width:5px;height:5px;border-radius:50%;background:var(--muted);animation:blink 1.2s ease infinite;}
+.loading-dots span:nth-child(2){animation-delay:.2s;}
+.loading-dots span:nth-child(3){animation-delay:.4s;}
+@keyframes blink{0%,80%,100%{opacity:.2;}40%{opacity:1;}}
+
+/* ACCESO DENEGADO */
+.access-denied h2{font-family:'Bebas Neue',sans-serif;font-size:32px;color:var(--salmon);}
+.access-denied p{font-size:13px;color:var(--muted);}
+.btn-back{
+  margin-top:8px;background:var(--s1);border:1px solid var(--b2);color:var(--text);
+  font-family:'DM Sans',sans-serif;font-size:13px;padding:10px 24px;
+  border-radius:8px;cursor:pointer;transition:all .2s;text-decoration:none;display:inline-block;
+}
+.btn-back:hover{border-color:var(--green);color:var(--green);}
+
+/* LOGIN FORM */
+.login-card{
+  background:var(--s1);border:1px solid var(--b1);border-radius:20px;
+  padding:40px;width:100%;max-width:400px;
+}
+.login-logo{
+  font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:3px;
+  margin-bottom:4px;
+}
+.login-logo span{color:var(--green);}
+.login-sub{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:32px;}
+.login-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:7px;display:block;}
+.login-field{margin-bottom:14px;}
+.login-input{
+  width:100%;background:var(--s2);border:1px solid var(--b2);color:var(--text);
+  font-family:'DM Sans',sans-serif;font-size:14px;
+  padding:11px 14px;border-radius:8px;outline:none;transition:border-color .2s;
+}
+.login-input::placeholder{color:var(--dim);}
+.login-input:focus{border-color:var(--green);}
+.login-input.error{border-color:var(--red);}
+.login-error{font-size:11px;color:var(--salmon);margin-top:10px;text-align:center;min-height:16px;}
+.btn-login{
+  width:100%;background:var(--green);color:#0a0908;font-family:'DM Sans',sans-serif;
+  font-size:14px;font-weight:600;padding:13px;border-radius:8px;border:none;
+  cursor:pointer;transition:background .2s;margin-top:20px;letter-spacing:.3px;
+}
+.btn-login:hover{background:var(--green2);}
+.btn-login:disabled{opacity:.5;cursor:default;}
+
+/* DETAIL PANEL */
+.detail-panel{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;
+  align-items:center;justify-content:center;padding:20px;
+}
+.detail-panel.open{display:flex;}
+.detail-box{
+  background:var(--s1);border:1px solid var(--b2);border-radius:20px;
+  width:100%;max-width:600px;max-height:88vh;overflow-y:auto;
+  animation:slideUp .25s ease;
+}
+@keyframes slideUp{from{transform:translateY(16px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+.detail-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:22px 28px 18px;border-bottom:1px solid var(--b1);
+}
+.detail-title{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;}
+.detail-close{
+  background:transparent;border:1px solid var(--b2);color:var(--dim);
+  width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:16px;
+  display:flex;align-items:center;justify-content:center;transition:all .2s;
+}
+.detail-close:hover{border-color:var(--red);color:var(--red);}
+.detail-body{padding:24px 28px;}
+.drow{display:flex;gap:10px;margin-bottom:12px;align-items:flex-start;}
+.dicon{font-size:16px;width:24px;flex-shrink:0;margin-top:1px;}
+.dlabel{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:2px;}
+.dval{font-size:13px;color:var(--text);}
+.dval.dim{color:var(--dim);}
+.detail-section{margin-top:20px;padding-top:16px;border-top:1px solid var(--b1);}
+.detail-section-title{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:12px;}
+.neg-item{
+  display:flex;align-items:center;gap:10px;padding:10px 12px;
+  background:var(--s2);border:1px solid var(--b1);border-radius:10px;margin-bottom:8px;
+}
+.neg-item-emoji{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.neg-item-nombre{font-size:13px;font-weight:600;}
+.neg-item-meta{font-size:11px;color:var(--dim);}
+.neg-item-staff{margin-left:auto;font-size:11px;color:var(--muted);}
+
+/* ROW CLICKABLE */
+.admin-table tr.clickable{cursor:pointer;}
+.admin-table tr.clickable:hover td{background:var(--s2);}
+
+/* FORM PANEL */
+.form-field{margin-bottom:14px;}
+.form-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;display:block;}
+.form-input,.form-select,.form-textarea{
+  width:100%;background:var(--s2);border:1px solid var(--b2);color:var(--text);
+  font-family:'DM Sans',sans-serif;font-size:13px;
+  padding:10px 13px;border-radius:8px;outline:none;transition:border-color .2s;
+}
+.form-input::placeholder,.form-textarea::placeholder{color:var(--dim);}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--green);}
+.form-select option{background:var(--s2);}
+.form-textarea{min-height:72px;resize:vertical;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.btn-form-save{
+  width:100%;background:var(--green);color:#0a0908;font-family:'DM Sans',sans-serif;
+  font-size:13px;font-weight:600;padding:11px;border-radius:8px;border:none;
+  cursor:pointer;transition:background .2s;margin-top:8px;letter-spacing:.3px;
+}
+.btn-form-save:hover{background:var(--green2);}
+.btn-form-save:disabled{opacity:.5;cursor:default;}
+.btn-form-delete{
+  width:100%;background:transparent;border:1px solid var(--b2);color:var(--dim);
+  font-family:'DM Sans',sans-serif;font-size:12px;padding:9px;border-radius:8px;
+  cursor:pointer;transition:all .2s;margin-top:6px;
+}
+.btn-form-delete:hover{border-color:var(--red);color:var(--red);}
+.btn-add{
+  background:var(--green);color:#0a0908;font-family:'DM Sans',sans-serif;
+  font-size:11px;font-weight:600;letter-spacing:.5px;
+  padding:6px 14px;border-radius:6px;cursor:pointer;border:none;transition:background .2s;
+}
+.btn-add:hover{background:var(--green2);}
+.form-error{font-size:11px;color:var(--salmon);margin-top:6px;min-height:14px;}
+.form-divider{height:1px;background:var(--b1);margin:16px 0;}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+.fade-up{animation:fadeUp .4s ease both;}
+
+@media(max-width:900px){
+  .stat-grid{grid-template-columns:1fr 1fr;}
+  .admin-table th:nth-child(n+4),.admin-table td:nth-child(n+4){display:none;}
+}
+</style>
+</head>
+<body>
+
+<!-- ── LOADING ── -->
+<div id="viewLoading" class="view-center">
+  <div class="loading-dots"><span></span><span></span><span></span></div>
+</div>
+
+<!-- ── LOGIN ── -->
+<div id="viewLogin" class="view-center" style="display:none">
+  <div class="login-card fade-up">
+    <div class="login-logo">eta<span>ax</span></div>
+    <div class="login-sub">Panel de administración</div>
+
+    <div class="login-field">
+      <label class="login-label">Correo</label>
+      <input class="login-input" id="admEmail" type="email" placeholder="admin@etaax.com"
+             autocomplete="username" onkeydown="if(event.key==='Enter')adminLogin()">
+    </div>
+    <div class="login-field">
+      <label class="login-label">Contraseña</label>
+      <input class="login-input" id="admPwd" type="password" placeholder="••••••••"
+             autocomplete="current-password" onkeydown="if(event.key==='Enter')adminLogin()">
+    </div>
+    <div class="login-error" id="admLoginError"></div>
+    <button class="btn-login" id="btnAdmLogin" onclick="adminLogin()">Entrar al panel →</button>
+  </div>
+</div>
+
+<!-- ── ACCESO DENEGADO ── -->
+<div id="viewDenied" class="view-center access-denied" style="display:none">
+  <div style="font-size:48px">🔐</div>
+  <h2>Acceso restringido</h2>
+  <p>Esta sección es exclusiva del administrador de la plataforma.</p>
+  <a href="hub.html" class="btn-back">← Volver al inicio</a>
+</div>
+
+<!-- ── PANEL ADMIN ── -->
+<div id="viewAdmin" style="display:none">
+<div class="admin-shell fade-up">
+
+  <!-- TOPBAR -->
+  <div class="admin-top">
+    <div style="display:flex;align-items:center;gap:14px">
+      <div class="admin-logo">eta<span>ax</span></div>
+      <div class="admin-badge">⚡ Admin Master</div>
+    </div>
+    <div class="admin-user">
+      <span id="adminNombre">—</span>
+      <a href="hub.html" class="btn-logout-adm" style="text-decoration:none;border-color:var(--gold);color:var(--gold)" title="Explorar el hub de módulos como admin">⚡ Hub</a>
+      <button class="btn-logout-adm" onclick="adminLogout()">Cerrar sesión</button>
+    </div>
+  </div>
+
+  <!-- STAT CARDS -->
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-label">Usuarios registrados</div>
+      <div class="stat-val text-green" id="statUsuarios">—</div>
+      <div class="stat-sub">Cuentas activas</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Negocios creados</div>
+      <div class="stat-val text-gold" id="statNegocios">—</div>
+      <div class="stat-sub">Total en la plataforma</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Colaboradores</div>
+      <div class="stat-val" id="statStaff" style="color:var(--salmon)">—</div>
+      <div class="stat-sub">Staff registrado</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Plan más usado</div>
+      <div class="stat-val" id="statPlanTop" style="font-size:22px;color:var(--muted)">—</div>
+      <div class="stat-sub" id="statPlanSub">—</div>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('usuarios')">👥 Usuarios</button>
+    <button class="tab" onclick="switchTab('negocios')">🏪 Negocios</button>
+    <button class="tab" onclick="switchTab('staff')">🎯 Staff global</button>
+    <button class="tab" onclick="switchTab('proveedores')">🚚 Proveedores</button>
+    <button class="tab" onclick="switchTab('insumos')">🗄️ Insumos</button>
+  </div>
+
+  <!-- TAB: USUARIOS -->
+  <div id="tab-usuarios" class="tab-panel active">
+    <div class="admin-section">
+      <div class="section-head">
+        <div class="section-title">Cuentas registradas</div>
+        <div class="section-count" id="countUsuarios">—</div>
+      </div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Plan</th>
+              <th>Negocios</th>
+              <th>Registrado</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyUsuarios">
+            <tr><td colspan="4" class="empty-state">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: NEGOCIOS -->
+  <div id="tab-negocios" class="tab-panel">
+    <div class="admin-section">
+      <div class="section-head">
+        <div class="section-title">Todos los negocios</div>
+        <div class="section-count" id="countNegocios">—</div>
+      </div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Negocio</th>
+              <th>Tipo</th>
+              <th>Dueño</th>
+              <th>Colaboradores</th>
+              <th>Creado</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyNegocios">
+            <tr><td colspan="5" class="empty-state">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: STAFF GLOBAL -->
+  <div id="tab-staff" class="tab-panel">
+    <div class="admin-section">
+      <div class="section-head">
+        <div class="section-title">Colaboradores en la plataforma</div>
+        <div class="section-count" id="countStaff">—</div>
+      </div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Rol</th>
+              <th>Usuario</th>
+              <th>Negocio</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyStaff">
+            <tr><td colspan="5" class="empty-state">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: PROVEEDORES -->
+  <div id="tab-proveedores" class="tab-panel">
+    <div class="admin-section">
+      <div class="section-head">
+        <div class="section-title">Catálogo maestro de proveedores</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="section-count" id="countProveedores">—</span>
+          <button class="btn-add" onclick="abrirFormProveedor(null)">+ Agregar</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Categoría</th>
+              <th>Contacto</th>
+              <th>Teléfono</th>
+              <th>Email</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyProveedores">
+            <tr><td colspan="5" class="empty-state">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: INSUMOS — redirige a página dedicada -->
+  <div id="tab-insumos" class="tab-panel">
+    <div class="empty-state" style="padding:64px 24px">Redirigiendo al catálogo de insumos…</div>
+  </div>
+
+</div>
+</div>
+
+<!-- ── DETAIL PANEL (usuario) ── -->
+<div id="detailPanel" class="detail-panel" onclick="if(event.target===this)cerrarDetail()">
+  <div class="detail-box">
+    <div class="detail-head">
+      <div class="detail-title" id="detailTitle">—</div>
+      <button class="detail-close" onclick="cerrarDetail()">✕</button>
+    </div>
+    <div class="detail-body" id="detailBody"></div>
+  </div>
+</div>
+
+<!-- ── FORM PANEL (proveedores / insumos add-edit) ── -->
+<div id="formPanel" class="detail-panel" onclick="if(event.target===this)cerrarForm()">
+  <div class="detail-box" style="max-width:520px">
+    <div class="detail-head">
+      <div class="detail-title" id="formTitle">—</div>
+      <button class="detail-close" onclick="cerrarForm()">✕</button>
+    </div>
+    <div class="detail-body" id="formBody"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="supabase-config.js"></script>
+<script>
+var ADMIN_EMAIL = 'admin@etaax.com';
+
+var PLANES = {
+    micro: { nombre:'Micro Pyme',   color:'#3dbe7a', cls:'badge-micro' },
+    pyme:  { nombre:'Pequeña Pyme', color:'#f5c842', cls:'badge-pyme'  },
+    gran:  { nombre:'Gran Pyme',    color:'#c87a6a', cls:'badge-gran'  }
+};
+
+var ROLES_LABEL = {
+    admin:'Administrador', gerente:'Gerente', jefe_cocina:'Jefe de Cocina',
+    chef:'Chef', cocinero:'Cocinero', barman:'Barman', barista:'Barista',
+    mesero:'Mesero', administrativo:'Administrativo', otro:'Colaborador'
+};
+
+var _tabActivo = 'usuarios';
+var _data = { usuarios:[], negocios:[], staff:[], proveedores:[] };
+var _impersonateTarget = null;
+
+var TIPOS_PROVEEDOR = {
+    carnes:      '🥩 Carnes y proteínas',
+    lacteos:     '🥛 Lácteos y huevo',
+    frutas:      '🍎 Frutas y verduras',
+    granos:      '🌾 Granos y abarrotes',
+    bebidas:     '🍺 Bebidas y licores',
+    mariscos:    '🦞 Mariscos',
+    panaderia:   '🍞 Panadería',
+    condimentos: '🧂 Condimentos',
+    desechables: '📦 Desechables',
+    limpieza:    '🧹 Limpieza',
+    varios:      '🏢 Varios'
+};
+
+
+/* ── INIT ── */
+async function init() {
+    var sd = await _supabase.auth.getSession();
+    var session = sd.data && sd.data.session;
+
+    document.getElementById('viewLoading').style.display = 'none';
+
+    if (!session) {
+        document.getElementById('viewLogin').style.display = 'flex';
+        return;
+    }
+
+    if (session.user.email !== ADMIN_EMAIL) {
+        document.getElementById('viewDenied').style.display = 'flex';
+        return;
+    }
+
+    document.getElementById('adminNombre').textContent = session.user.email;
+    document.getElementById('viewAdmin').style.display = 'block';
+    await cargarDatos();
+}
+
+/* ── LOGIN ── */
+async function adminLogin() {
+    var email = (document.getElementById('admEmail').value || '').trim().toLowerCase();
+    var pwd   = document.getElementById('admPwd').value || '';
+    var err   = document.getElementById('admLoginError');
+    var btn   = document.getElementById('btnAdmLogin');
+    err.textContent = '';
+
+    if (!email || !pwd) { err.textContent = 'Completa los campos.'; return; }
+
+    btn.disabled = true; btn.textContent = 'Verificando...';
+    var result = await _supabase.auth.signInWithPassword({ email: email, password: pwd });
+    btn.disabled = false; btn.textContent = 'Entrar al panel →';
+
+    if (result.error) {
+        err.textContent = 'Correo o contraseña incorrectos.';
+        document.getElementById('admEmail').classList.add('error');
+        document.getElementById('admPwd').classList.add('error');
+        setTimeout(function(){
+            document.getElementById('admEmail').classList.remove('error');
+            document.getElementById('admPwd').classList.remove('error');
+        }, 1500);
+        return;
+    }
+
+    if (result.data.user.email !== ADMIN_EMAIL) {
+        await _supabase.auth.signOut();
+        err.textContent = 'Esta cuenta no tiene acceso al panel admin.';
+        return;
+    }
+
+    document.getElementById('viewLogin').style.display  = 'none';
+    document.getElementById('adminNombre').textContent  = result.data.user.email;
+    document.getElementById('viewAdmin').style.display  = 'block';
+    await cargarDatos();
+}
+
+/* ── CARGA DE DATOS ── */
+async function cargarDatos() {
+    var [resU, resN, resS, resP] = await Promise.all([
+        _supabase.from('usuarios').select('*'),
+        _supabase.from('negocios').select('*'),
+        _supabase.from('staff').select('*'),
+        _supabase.from('catalogo_proveedores').select('*').order('created_at', { ascending: true })
+    ]);
+
+    _data.usuarios    = (resU.data || []).filter(function(u){ return u.id !== ADMIN_EMAIL; });
+    _data.negocios    = resN.data || [];
+    _data.staff       = resS.data || [];
+    _data.proveedores = resP.data || [];
+
+    renderStats();
+    renderUsuarios();
+    renderNegocios();
+    renderStaff();
+    renderProveedores();
+}
+
+/* ── STATS ── */
+function renderStats() {
+    var u = _data.usuarios;
+    var n = _data.negocios;
+    var s = _data.staff;
+
+    document.getElementById('statUsuarios').textContent = u.length;
+    document.getElementById('statNegocios').textContent = n.length;
+    document.getElementById('statStaff').textContent    = s.length;
+
+    var counts = {};
+    u.forEach(function(x){ if(x.plan) counts[x.plan] = (counts[x.plan]||0) + 1; });
+    var top = Object.keys(counts).sort(function(a,b){ return counts[b]-counts[a]; })[0];
+    if (top) {
+        var p = PLANES[top] || { nombre: top, color:'var(--muted)' };
+        document.getElementById('statPlanTop').textContent = p.nombre;
+        document.getElementById('statPlanTop').style.color = p.color;
+        document.getElementById('statPlanSub').textContent = counts[top] + ' cuenta' + (counts[top]>1?'s':'');
+    }
+}
+
+/* ── TABLA USUARIOS ── */
+function renderUsuarios() {
+    var rows = _data.usuarios;
+    document.getElementById('countUsuarios').textContent = rows.length + ' cuenta' + (rows.length!==1?'s':'');
+
+    if (!rows.length) {
+        document.getElementById('tbodyUsuarios').innerHTML = '<tr><td colspan="4" class="empty-state">Sin usuarios registrados aún</td></tr>';
+        return;
+    }
+
+    var negsCount = {};
+    _data.negocios.forEach(function(n){ negsCount[n.usuario_id] = (negsCount[n.usuario_id]||0)+1; });
+
+    document.getElementById('tbodyUsuarios').innerHTML = rows.map(function(u) {
+        var p    = PLANES[u.plan] || PLANES.micro;
+        var cnt  = negsCount[u.id] || 0;
+        var fecha = u.created_at ? new Date(u.created_at).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+        var nombre = esc(u.nombre || '—');
+        return '<tr class="clickable" onclick="abrirDetalleUsuario(\'' + u.id + '\')">' +
+            '<td><strong>' + nombre + '</strong></td>' +
+            '<td><span class="badge ' + p.cls + '">' + p.nombre + '</span></td>' +
+            '<td class="text-green">' + cnt + ' negocio' + (cnt!==1?'s':'') + '</td>' +
+            '<td class="text-dim">' + fecha + '</td>' +
+        '</tr>';
+    }).join('');
+}
+
+/* ── TABLA NEGOCIOS ── */
+function renderNegocios() {
+    var rows = _data.negocios;
+    document.getElementById('countNegocios').textContent = rows.length + ' negocio' + (rows.length!==1?'s':'');
+
+    if (!rows.length) {
+        document.getElementById('tbodyNegocios').innerHTML = '<tr><td colspan="5" class="empty-state">Sin negocios creados aún</td></tr>';
+        return;
+    }
+
+    var staffCount = {};
+    _data.staff.forEach(function(s){ staffCount[s.negocio_id] = (staffCount[s.negocio_id]||0)+1; });
+
+    var usuariosMap = {};
+    _data.usuarios.forEach(function(u){ usuariosMap[u.id] = u; });
+
+    document.getElementById('tbodyNegocios').innerHTML = rows.map(function(n) {
+        var d     = n.datos || {};
+        var dueno = usuariosMap[n.usuario_id];
+        var staff = staffCount[n.id] || 0;
+        var fecha = n.created_at ? new Date(n.created_at).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+        return '<tr class="clickable" onclick="abrirDetalleNegocio(\'' + n.id + '\')">' +
+            '<td><strong>' + esc(d.emoji||'🏢') + ' ' + esc(d.nombre||'—') + '</strong></td>' +
+            '<td class="text-dim">' + esc(d.tipo||'—') + '</td>' +
+            '<td class="text-dim">' + esc(dueno ? (dueno.nombre||'—') : '—') + '</td>' +
+            '<td><span class="badge badge-neg">' + staff + ' colaborador' + (staff!==1?'es':'') + '</span></td>' +
+            '<td class="text-dim">' + fecha + '</td>' +
+        '</tr>';
+    }).join('');
+}
+
+/* ── TABLA STAFF ── */
+function renderStaff() {
+    var rows = _data.staff;
+    document.getElementById('countStaff').textContent = rows.length + ' colaborador' + (rows.length!==1?'es':'');
+
+    if (!rows.length) {
+        document.getElementById('tbodyStaff').innerHTML = '<tr><td colspan="5" class="empty-state">Sin colaboradores registrados aún</td></tr>';
+        return;
+    }
+
+    var negMap = {};
+    _data.negocios.forEach(function(n){ negMap[n.id] = n.datos || {}; });
+
+    document.getElementById('tbodyStaff').innerHTML = rows.map(function(s) {
+        var d   = s.datos || {};
+        var neg = negMap[s.negocio_id] || {};
+        var rol = ROLES_LABEL[d.rol] || d.rol || '—';
+        var estado = d.estado || 'Activo';
+        var estadoColor = estado === 'Activo' ? 'var(--green)' : 'var(--dim)';
+        return '<tr>' +
+            '<td><strong>' + esc(d.nombre||'—') + '</strong></td>' +
+            '<td class="text-dim">' + esc(rol) + '</td>' +
+            '<td class="text-dim">' + esc(d.usuario ? '@'+d.usuario : '—') + '</td>' +
+            '<td class="text-dim">' + esc(neg.emoji||'🏢') + ' ' + esc(neg.nombre||'—') + '</td>' +
+            '<td style="color:' + estadoColor + ';font-size:12px">' + esc(estado) + '</td>' +
+        '</tr>';
+    }).join('');
+}
+
+/* ── DETAIL: USUARIO ── */
+function abrirDetalleUsuario(uid) {
+    var u = _data.usuarios.find(function(x){ return x.id === uid; });
+    if (!u) return;
+
+    var p     = PLANES[u.plan] || PLANES.micro;
+    var fecha = u.created_at ? new Date(u.created_at).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+    var negs  = _data.negocios.filter(function(n){ return n.usuario_id === uid; });
+    var totalStaff = 0;
+    var staffMap = {};
+    _data.staff.forEach(function(s){ staffMap[s.negocio_id] = (staffMap[s.negocio_id]||0)+1; });
+
+    document.getElementById('detailTitle').textContent = u.nombre || '—';
+
+    var negsHtml = negs.length ? negs.map(function(n) {
+        var d = n.datos || {};
+        var sc = staffMap[n.id] || 0;
+        totalStaff += sc;
+        return '<div class="neg-item">' +
+            '<div class="neg-item-emoji" style="background:' + esc(d.color||'#3dbe7a') + '22">' + esc(d.emoji||'🏢') + '</div>' +
+            '<div><div class="neg-item-nombre">' + esc(d.nombre||'—') + '</div>' +
+            '<div class="neg-item-meta">' + esc(d.tipo||'—') + '</div></div>' +
+            '<div class="neg-item-staff">' + sc + ' colaborador' + (sc!==1?'es':'') + '</div>' +
+        '</div>';
+    }).join('') : '<div style="color:var(--dim);font-size:13px">Sin negocios creados</div>';
+
+    document.getElementById('detailBody').innerHTML =
+        '<div class="drow"><div class="dicon">👤</div><div>' +
+            '<div class="dlabel">Nombre</div><div class="dval">' + esc(u.nombre||'—') + '</div></div></div>' +
+        '<div class="drow"><div class="dicon">📋</div><div>' +
+            '<div class="dlabel">Plan</div><div class="dval">' +
+            '<span class="badge ' + p.cls + '">' + p.nombre + '</span></div></div></div>' +
+        '<div class="drow"><div class="dicon">📅</div><div>' +
+            '<div class="dlabel">Registrado</div><div class="dval dim">' + fecha + '</div></div></div>' +
+        '<div class="detail-section">' +
+            '<div class="detail-section-title">Negocios (' + negs.length + ')</div>' +
+            negsHtml +
+        '</div>';
+
+    document.getElementById('detailPanel').classList.add('open');
+}
+
+/* ── DETAIL: NEGOCIO ── */
+function abrirDetalleNegocio(nid) {
+    var n = _data.negocios.find(function(x){ return x.id === nid; });
+    if (!n) return;
+
+    var d     = n.datos || {};
+    var fecha = n.created_at ? new Date(n.created_at).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+    var dueno = _data.usuarios.find(function(u){ return u.id === n.usuario_id; });
+    var p     = dueno ? (PLANES[dueno.plan] || PLANES.micro) : null;
+    var staff = _data.staff.filter(function(s){ return s.negocio_id === nid; });
+
+    document.getElementById('detailTitle').textContent = (d.emoji||'🏢') + ' ' + (d.nombre||'—');
+
+    var staffHtml = staff.length ? staff.map(function(s) {
+        var sd  = s.datos || {};
+        var rol = ROLES_LABEL[sd.rol] || sd.rol || '—';
+        return '<div style="display:flex;gap:8px;align-items:center;padding:8px 10px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;margin-bottom:6px">' +
+            '<div style="font-size:12px;flex:1"><strong>' + esc(sd.nombre||'—') + '</strong> · <span style="color:var(--dim)">' + esc(rol) + '</span></div>' +
+            '<div style="font-size:11px;color:var(--muted)">@' + esc(sd.usuario||'—') + '</div>' +
+        '</div>';
+    }).join('') : '<div style="color:var(--dim);font-size:13px">Sin colaboradores</div>';
+
+    // Guardar target para cuando se haga click en "Entrar"
+    _impersonateTarget = {
+        negocioId:     n.id,
+        negocioNombre: d.nombre || '',
+        usuarioId:     n.usuario_id,
+        usuarioNombre: dueno ? (dueno.nombre || 'Usuario') : 'Usuario',
+        usuarioPlan:   dueno ? (dueno.plan || 'micro') : 'micro'
+    };
+
+    document.getElementById('detailBody').innerHTML =
+        '<div class="drow"><div class="dicon">🏢</div><div>' +
+            '<div class="dlabel">Nombre</div><div class="dval">' + esc(d.nombre||'—') + '</div></div></div>' +
+        '<div class="drow"><div class="dicon">🍽️</div><div>' +
+            '<div class="dlabel">Tipo</div><div class="dval dim">' + esc(d.tipo||'—') + '</div></div></div>' +
+        (dueno ? '<div class="drow"><div class="dicon">👤</div><div>' +
+            '<div class="dlabel">Dueño</div><div class="dval">' + esc(dueno.nombre||'—') +
+            (p ? ' <span class="badge ' + p.cls + '" style="margin-left:6px">' + p.nombre + '</span>' : '') +
+            '</div></div></div>' : '') +
+        '<div class="drow"><div class="dicon">📅</div><div>' +
+            '<div class="dlabel">Creado</div><div class="dval dim">' + fecha + '</div></div></div>' +
+        '<div class="detail-section">' +
+            '<div class="detail-section-title">Staff (' + staff.length + ')</div>' +
+            staffHtml +
+        '</div>' +
+        '<button onclick="entrarComoAdmin()" ' +
+            'style="width:100%;margin-top:20px;background:var(--gold);color:#0a0908;font-family:\'DM Sans\',sans-serif;' +
+            'font-size:13px;font-weight:700;padding:12px;border-radius:8px;border:none;cursor:pointer;letter-spacing:.5px">' +
+            '⚡ Entrar a este negocio' +
+        '</button>';
+
+    document.getElementById('detailPanel').classList.add('open');
+}
+
+/* ── ENTRAR A NEGOCIO COMO ADMIN ── */
+function entrarComoAdmin() {
+    if (!_impersonateTarget) return;
+    sessionStorage.setItem('etaax_admin_impersonate', JSON.stringify(_impersonateTarget));
+    localStorage.setItem('etaax_negocio_activo', _impersonateTarget.negocioId);
+    window.location.href = 'hub.html';
+}
+
+function cerrarDetail() {
+    document.getElementById('detailPanel').classList.remove('open');
+}
+
+/* ── TABS ── */
+function switchTab(tab) {
+    if (tab === 'insumos') { window.location.href = 'admin-catalogo-insumos.html'; return; }
+    _tabActivo = tab;
+    var tabs = ['usuarios','negocios','staff','proveedores','insumos'];
+    document.querySelectorAll('.tab').forEach(function(b,i){
+        b.classList.toggle('active', tabs[i] === tab);
+    });
+    document.querySelectorAll('.tab-panel').forEach(function(p){
+        p.classList.remove('active');
+    });
+    document.getElementById('tab-' + tab).classList.add('active');
+}
+
+/* ── LOGOUT ── */
+async function adminLogout() {
+    await _supabase.auth.signOut();
+    window.location.href = 'hub.html';
+}
+
+/* ══════════════════════════════════════════════
+   CATÁLOGO PROVEEDORES
+══════════════════════════════════════════════ */
+function renderProveedores() {
+    var rows = _data.proveedores;
+    document.getElementById('countProveedores').textContent = rows.length + ' proveedor' + (rows.length!==1?'es':'');
+    if (!rows.length) {
+        document.getElementById('tbodyProveedores').innerHTML = '<tr><td colspan="5" class="empty-state">Sin proveedores — agrega el primero</td></tr>';
+        return;
+    }
+    document.getElementById('tbodyProveedores').innerHTML = rows.map(function(p) {
+        var d = p.datos || {};
+        return '<tr class="clickable" onclick="abrirFormProveedor(\'' + p.id + '\')">' +
+            '<td><strong>' + esc(d.nombre||'—') + '</strong></td>' +
+            '<td class="text-dim">' + esc(TIPOS_PROVEEDOR[d.tipo] || d.tipo || '—') + '</td>' +
+            '<td class="text-dim">' + esc(d.contacto||'—') + '</td>' +
+            '<td class="text-dim">' + esc(d.telefono||'—') + '</td>' +
+            '<td class="text-dim">' + esc(d.email||'—') + '</td>' +
+        '</tr>';
+    }).join('');
+}
+
+function abrirFormProveedor(id) {
+    var p  = id ? _data.proveedores.find(function(x){ return x.id === id; }) : null;
+    var d  = p ? (p.datos || {}) : {};
+    var es = !!p;
+
+    document.getElementById('formTitle').textContent = es ? 'Editar proveedor' : 'Nuevo proveedor';
+
+    var tiposOpts = Object.keys(TIPOS_PROVEEDOR).map(function(k) {
+        return '<option value="' + k + '"' + (d.tipo === k ? ' selected' : '') + '>' + TIPOS_PROVEEDOR[k] + '</option>';
+    }).join('');
+
+    document.getElementById('formBody').innerHTML =
+        '<div class="form-field">' +
+            '<label class="form-label">Nombre *</label>' +
+            '<input class="form-input" id="fp_nombre" placeholder="Distribuidora XYZ" value="' + esc(d.nombre||'') + '">' +
+        '</div>' +
+        '<div class="form-field">' +
+            '<label class="form-label">Categoría *</label>' +
+            '<select class="form-select" id="fp_tipo"><option value="">— Seleccionar —</option>' + tiposOpts + '</select>' +
+        '</div>' +
+        '<div class="form-row">' +
+            '<div class="form-field">' +
+                '<label class="form-label">Contacto</label>' +
+                '<input class="form-input" id="fp_contacto" placeholder="Juan López" value="' + esc(d.contacto||'') + '">' +
+            '</div>' +
+            '<div class="form-field">' +
+                '<label class="form-label">Teléfono</label>' +
+                '<input class="form-input" id="fp_telefono" placeholder="55 1234 5678" value="' + esc(d.telefono||'') + '">' +
+            '</div>' +
+        '</div>' +
+        '<div class="form-row">' +
+            '<div class="form-field">' +
+                '<label class="form-label">Email</label>' +
+                '<input class="form-input" id="fp_email" type="email" placeholder="ventas@proveedor.com" value="' + esc(d.email||'') + '">' +
+            '</div>' +
+            '<div class="form-field">' +
+                '<label class="form-label">Sitio web</label>' +
+                '<input class="form-input" id="fp_web" placeholder="proveedor.com" value="' + esc(d.web||'') + '">' +
+            '</div>' +
+        '</div>' +
+        '<div class="form-field">' +
+            '<label class="form-label">Dirección</label>' +
+            '<input class="form-input" id="fp_direccion" placeholder="Calle, colonia, ciudad" value="' + esc(d.direccion||'') + '">' +
+        '</div>' +
+        '<div class="form-field">' +
+            '<label class="form-label">Notas</label>' +
+            '<textarea class="form-textarea" id="fp_notas" placeholder="Condiciones de pago, días de entrega...">' + esc(d.notas||'') + '</textarea>' +
+        '</div>' +
+        '<div class="form-error" id="fp_error"></div>' +
+        '<button class="btn-form-save" id="fp_btn" onclick="guardarProveedor(\'' + (id||'') + '\')">' +
+            (es ? 'Guardar cambios' : 'Agregar proveedor') +
+        '</button>' +
+        (es ? '<button class="btn-form-delete" onclick="eliminarProveedor(\'' + id + '\')">Eliminar proveedor</button>' : '');
+
+    document.getElementById('formPanel').classList.add('open');
+    setTimeout(function(){ document.getElementById('fp_nombre').focus(); }, 80);
+}
+
+async function guardarProveedor(id) {
+    var nombre = (document.getElementById('fp_nombre').value || '').trim();
+    var tipo   = document.getElementById('fp_tipo').value;
+    var err    = document.getElementById('fp_error');
+    var btn    = document.getElementById('fp_btn');
+    err.textContent = '';
+
+    if (!nombre) { err.textContent = 'El nombre es obligatorio.'; return; }
+    if (!tipo)   { err.textContent = 'Selecciona una categoría.'; return; }
+
+    var datos = {
+        nombre:    nombre,
+        tipo:      tipo,
+        contacto:  (document.getElementById('fp_contacto').value  || '').trim(),
+        telefono:  (document.getElementById('fp_telefono').value  || '').trim(),
+        email:     (document.getElementById('fp_email').value     || '').trim(),
+        web:       (document.getElementById('fp_web').value       || '').trim(),
+        direccion: (document.getElementById('fp_direccion').value || '').trim(),
+        notas:     (document.getElementById('fp_notas').value     || '').trim()
+    };
+
+    btn.disabled = true; btn.textContent = 'Guardando...';
+
+    var res;
+    if (id) {
+        res = await _supabase.from('catalogo_proveedores').update({ datos: datos }).eq('id', id);
+    } else {
+        var newId = 'prov_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+        res = await _supabase.from('catalogo_proveedores').insert({ id: newId, datos: datos });
+    }
+
+    btn.disabled = false; btn.textContent = id ? 'Guardar cambios' : 'Agregar proveedor';
+
+    if (res.error) { err.textContent = 'Error: ' + res.error.message; return; }
+
+    cerrarForm();
+    await recargarCatalogos();
+}
+
+async function eliminarProveedor(id) {
+    if (!confirm('¿Eliminar este proveedor del catálogo maestro?')) return;
+    await _supabase.from('catalogo_proveedores').delete().eq('id', id);
+    cerrarForm();
+    await recargarCatalogos();
+}
+
+/* ── RELOAD CATÁLOGO PROVEEDORES ── */
+async function recargarCatalogos() {
+    var resP = await _supabase.from('catalogo_proveedores').select('*').order('created_at', { ascending: true });
+    _data.proveedores = resP.data || [];
+    renderProveedores();
+}
+
+/* ── CERRAR FORM PANEL ── */
+function cerrarForm() {
+    document.getElementById('formPanel').classList.remove('open');
+}
+
+/* ── UTILS ── */
+function esc(s) {
+    return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+window.onload = init;
+</script>
+</body>
+</html>
