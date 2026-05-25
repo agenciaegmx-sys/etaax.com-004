@@ -1265,6 +1265,16 @@ function setColor(c) {
 
 async function crearNegocio() {
     if (!_sesion) return;
+    // Verificar límite del plan antes de crear
+    var plan = PLANES[_sesion.plan] || PLANES.micro;
+    if (_misNegocios().length >= plan.maxNegocios) {
+        var inp2 = document.getElementById('inNombre');
+        inp2.style.borderColor = 'var(--salmon)';
+        setTimeout(function(){ inp2.style.borderColor = ''; }, 1500);
+        document.getElementById('formNuevoNeg').style.background = 'rgba(200,122,106,.06)';
+        setTimeout(function(){ document.getElementById('formNuevoNeg').style.background = ''; }, 1500);
+        return;
+    }
     var inp    = document.getElementById('inNombre');
     var nombre = (inp.value || '').trim();
     if (!nombre) {
