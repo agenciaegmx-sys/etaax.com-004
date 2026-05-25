@@ -1295,19 +1295,17 @@ async function crearNegocio() {
         color:       _colorSel,
         fechaCreado: new Date().toISOString()
     };
-    // Loading state
-    var btn = document.getElementById('btnCrearNeg');
-    if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
-    // Guardar en Supabase
-    await _supabase.from('negocios').insert(_negToDb(neg));
-    if (btn) { btn.disabled = false; btn.textContent = 'Crear negocio →'; }
-    // Actualizar cache local
+    // UI optimista: actualizar local al instante, Supabase en segundo plano
     _negocios.push(neg);
     var all = _getNegocios().filter(function(n){ return n.id !== id; });
     all.push(neg);
     _setNegocios(all);
     if (_misNegocios().length === 1) _migrarDatosLegacy(id);
     seleccionarNegocio(id);
+    // Sync a Supabase sin bloquear la UI
+    _supabase.from('negocios').insert(_negToDb(neg)).then(function(res){
+        if (res.error) console.warn('Supabase sync error:', res.error.message);
+    });
 }
 
 async function eliminarNegocio(id, event) {
@@ -1315,8 +1313,7 @@ async function eliminarNegocio(id, event) {
     var neg = _misNegocios().find(function(n){ return n.id === id; });
     if (!neg) return;
     if (!confirm('¿Eliminar "' + neg.nombre + '"?\n\nTodos sus datos se borrarán permanentemente.')) return;
-    // Eliminar de Supabase (cascade borra staff, config, permisos)
-    await _supabase.from('negocios').delete().eq('id', id);
+    // UI optimista: limpiar local al instante, Supabase en segundo plano
     // Limpiar localStorage
     ['insumos','recetas','inventarios','staff','permisos','config_extra'].forEach(function(k){
         localStorage.removeItem('etaax_' + id + '_' + k);
@@ -1325,6 +1322,10 @@ async function eliminarNegocio(id, event) {
     _setNegocios(_getNegocios().filter(function(n){ return n.id !== id; }));
     if (localStorage.getItem('etaax_negocio_activo') === id) localStorage.removeItem('etaax_negocio_activo');
     _renderLista();
+    // Sync a Supabase en segundo plano
+    _supabase.from('negocios').delete().eq('id', id).then(function(res){
+        if (res.error) console.warn('Supabase delete error:', res.error.message);
+    });
 }
 
 /* ════════════════════════════════════════════════════════
