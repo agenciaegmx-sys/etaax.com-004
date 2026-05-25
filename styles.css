@@ -729,10 +729,28 @@ textarea:focus {
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
+    padding: 0 20px;
     z-index: 200;
     flex-shrink: 0;
 }
+
+/* ── Breadcrumb de ubicación ── */
+.top-breadcrumb { display: flex; align-items: center; gap: 8px; }
+.top-module-badge {
+    font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+    background: rgba(61,190,122,.1); color: var(--green);
+    padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(61,190,122,.2);
+}
+.top-sep { color: var(--border); font-size: 16px; line-height: 1; }
+.top-section-name { font-size: 12px; color: var(--text-dim); letter-spacing: .3px; }
+.btn-top-home {
+    background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+    font-family: 'DM Sans', sans-serif; font-size: 11px; padding: 4px 12px;
+    border-radius: 6px; cursor: pointer; transition: all .2s; letter-spacing: .3px;
+    text-decoration: none; display: inline-flex; align-items: center;
+}
+.btn-top-home:hover { border-color: var(--green); color: var(--green); }
 
 .nav {
     width: 200px;
@@ -1116,7 +1134,7 @@ textarea:focus {
     border: 1px solid var(--border);
     border-radius: 12px;
     width: 100%;
-    max-width: 680px;
+    max-width: 940px;
     max-height: 92vh;
     overflow-y: auto;
 }
@@ -1248,6 +1266,222 @@ textarea:focus {
 .mg-1 { display: grid; grid-template-columns: 1fr;         gap: 8px; margin-bottom: 10px; }
 .mg-2 { display: grid; grid-template-columns: 1fr 1fr;     gap: 8px; margin-bottom: 10px; }
 .mg-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+
+/* ── BOTÓN CENTRAL DE NAVEGACIÓN (top-bar) ── */
+.btn-module-back {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    padding: 5px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all .2s;
+    letter-spacing: .3px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+}
+.btn-module-back:hover { border-color: var(--green); color: var(--green); }
+
+/* ── LANDING DE MÓDULO (sin nav) ── */
+.mod-landing {
+    margin-top: 48px;
+    min-height: calc(100vh - 48px);
+    display: flex;
+    justify-content: center;
+    padding: 56px 24px 80px;
+    background: var(--bg);
+}
+.mod-landing-inner { max-width: 640px; width: 100%; }
+.mod-landing-eyebrow {
+    font-size: 10px; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--text-dim); margin-bottom: 10px;
+}
+.mod-landing-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 42px; letter-spacing: 2px; line-height: .95;
+    color: var(--text); margin-bottom: 10px;
+}
+.mod-landing-sub { font-size: 13px; color: var(--text-dim); margin-bottom: 40px; line-height: 1.5; }
+.mod-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+.mod-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 18px;
+    cursor: pointer;
+    transition: all .18s;
+    text-decoration: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    color: var(--text);
+}
+.mod-card:hover { border-color: var(--green); background: rgba(61,190,122,.05); transform: translateY(-2px); }
+.mod-card.coming-soon { opacity: .38; cursor: default; pointer-events: none; }
+.mod-card-icon { font-size: 28px; }
+.mod-card-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.mod-card-desc { font-size: 11px; color: var(--text-dim); line-height: 1.5; }
+
+/* ── CONTEXT BAR (negocio activo en sub-páginas) ── */
+.ctx-bar {
+    position: fixed; top: 48px; left: 0; right: 0;
+    height: 32px; z-index: 190;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 16px; gap: 10px;
+    font-family: 'DM Sans', sans-serif;
+    backdrop-filter: blur(8px);
+}
+.ctx-neg-emoji {
+    width: 22px; height: 22px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; flex-shrink: 0;
+}
+.ctx-neg-name { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.1; }
+.ctx-neg-tipo { font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-dim); }
+.ctx-vsep { width: 1px; height: 16px; background: var(--border); flex-shrink: 0; }
+.ctx-user-name { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.ctx-badge {
+    font-size: 8px; letter-spacing: 1.2px; text-transform: uppercase;
+    padding: 1px 7px; border-radius: 20px; white-space: nowrap;
+    border: 1px solid transparent;
+}
+.ctx-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+    font-family: 'DM Sans', sans-serif; font-size: 10px; padding: 3px 10px;
+    border-radius: 5px; cursor: pointer; transition: all .15s; letter-spacing: .3px;
+    text-decoration: none; display: inline-flex; align-items: center; white-space: nowrap;
+}
+.ctx-btn:hover { border-color: var(--green); color: var(--green); }
+.ctx-btn-danger:hover { border-color: var(--red); color: var(--red); }
+
+/* Ajustes de layout cuando ctx-bar está visible */
+body.has-ctx .nav { top: 80px; height: calc(100vh - 80px); }
+body.has-ctx .main-content { margin-top: 80px; }
+body.has-ctx .mod-landing-wrap { padding-top: 80px; }
+body.has-ctx #moduloLanding { top: 80px; }
+
+/* ── ANIMACIONES ── */
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── FONDO CUADRICULADO AZUL (module landings) ── */
+.mod-grid-bg {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+        linear-gradient(rgba(30,80,220,.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(30,80,220,.07) 1px, transparent 1px);
+    background-size: 60px 60px;
+}
+.mod-glow {
+    position: fixed; top: -120px; left: 50%; transform: translateX(-50%);
+    width: 700px; height: 420px; z-index: 0; pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(30,80,220,.13) 0%, transparent 70%);
+}
+
+/* ── HOME ICON en top-bar ── */
+.top-home-icon {
+    font-size: 15px; text-decoration: none; line-height: 1;
+    color: var(--text-dim); transition: color .15s;
+    display: inline-flex; align-items: center;
+    padding: 4px 6px; border-radius: 6px;
+}
+.top-home-icon:hover { color: var(--green); }
+
+/* ── HERO de módulo (hub-style) ── */
+.mlanding-hero {
+    position: relative; z-index: 1;
+    text-align: center; padding: 52px 0 44px;
+    animation: fadeUp .5s ease both;
+}
+.mlanding-hero-eyebrow {
+    font-size: 10px; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--text-dim); margin-bottom: 10px;
+}
+.mlanding-hero-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 58px; letter-spacing: 3px; line-height: .95;
+    color: var(--text); margin-bottom: 12px;
+}
+.mlanding-hero-title .g { color: var(--green); }
+.mlanding-hero-sub {
+    font-size: 13px; color: var(--text-dim); max-width: 360px;
+    margin: 0 auto; line-height: 1.6;
+}
+
+/* ── TARJETAS de módulo (hub-style, más grandes) ── */
+.mlanding-grid {
+    position: relative; z-index: 1;
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 16px; max-width: 720px; margin: 0 auto;
+    animation: fadeUp .5s .1s ease both;
+}
+.mlanding-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 28px 24px 24px;
+    cursor: pointer; transition: all .2s;
+    text-decoration: none;
+    display: flex; flex-direction: column;
+    align-items: flex-start; gap: 8px;
+    color: var(--text);
+}
+.mlanding-card:hover {
+    border-color: rgba(30,80,220,.5);
+    background: rgba(30,80,220,.05);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 32px rgba(30,80,220,.12);
+}
+.mlanding-card.coming-soon { opacity: .32; cursor: default; pointer-events: none; }
+.mlanding-card-header { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 4px; }
+.mlanding-card-icon { font-size: 32px; line-height: 1; }
+.mlanding-badge-active {
+    font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 20px;
+    background: rgba(61,190,122,.12); color: var(--green);
+    border: 1px solid rgba(61,190,122,.25);
+}
+.mlanding-badge-soon {
+    font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 20px;
+    background: rgba(74,72,68,.3); color: var(--text-dim);
+    border: 1px solid var(--border);
+}
+.mlanding-card-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px; letter-spacing: 1.5px; color: var(--text); line-height: 1;
+}
+.mlanding-card-desc { font-size: 11px; color: var(--text-dim); line-height: 1.55; flex: 1; }
+.mlanding-card-cta {
+    margin-top: 10px; font-size: 10px; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--text-dim);
+    display: flex; align-items: center; gap: 4px;
+}
+.mlanding-card:hover .mlanding-card-cta { color: rgba(30,80,220,.8); }
+
+/* ── WRAPPER para landings de módulo ── */
+.mod-landing-wrap {
+    min-height: 100vh; padding-top: 48px;
+    display: flex; flex-direction: column;
+    align-items: center; overflow-y: auto;
+    padding-bottom: 80px;
+}
 
 /* ── RESPONSIVE ── */
 @media (max-width: 600px) {

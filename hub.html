@@ -50,7 +50,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 /* TOPBAR */
 .hub-topbar{
   display:flex;align-items:center;justify-content:space-between;
-  padding:24px 0 0;margin-bottom:64px;
+  padding:20px 0 0;margin-bottom:28px;
 }
 .hub-back{
   display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);
@@ -412,7 +412,11 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 
   <!-- TOP BAR -->
   <div class="hub-topbar">
-    <a href="index.html" class="hub-back">← Inicio</a>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:2px;color:#f0ece4;">eta<span style="color:#3dbe7a">ax</span></div>
+      <span style="color:#2a2825;font-size:16px;line-height:1">|</span>
+      <span style="font-size:11px;color:#7a7570;letter-spacing:.3px">Hub Principal</span>
+    </div>
     <div class="hub-user-top" id="topbarUser">
       <div class="hub-user-dot"></div>
       <span>Modo local</span>
@@ -570,7 +574,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
         <span style="font-size:10px;color:var(--dim);letter-spacing:2px;text-transform:uppercase;flex-shrink:0">Color</span>
         <div class="neg-form-colors" id="colorPicker"></div>
         <div style="flex:1"></div>
-        <button class="btn-crear-neg" id="btnCrearNeg" onclick="crearNegocio()">Crear negocio →</button>
+        <button type="button" class="btn-crear-neg" id="btnCrearNeg" onclick="crearNegocio()">Crear negocio →</button>
       </div>
     </div>
   </div>
@@ -597,20 +601,21 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
         <button class="btn-cambiar-neg" id="btnInfoNeg" onclick="abrirInfoNegocio()" title="Ver información del negocio" style="display:none">ℹ️ Info</button>
         <button class="btn-cambiar-neg" onclick="window.location.href='configuracion.html'" title="Configuración del negocio">⚙️ Config</button>
         <button class="btn-cambiar-neg" id="btnCambiarNeg" onclick="cambiarNegocio()">↩ Cambiar negocio</button>
+        <button class="btn-cambiar-neg" id="btnVolverAdmin" onclick="volverAlAdmin()" style="display:none;border-color:var(--gold);color:var(--gold)">← Panel Admin</button>
         <button class="btn-logout" onclick="logout()">Salir</button>
       </div>
     </div>
 
     <!-- Hero -->
-    <div class="hub-hero" style="margin-bottom:32px">
+    <div class="hub-hero" style="margin-bottom:20px">
       <div class="hub-eyebrow">Panel de acceso</div>
-      <div class="hub-title">Selecciona un<br><span class="g">módulo</span></div>
+      <div class="hub-title" style="font-size:clamp(28px,4.5vw,52px)">Selecciona un<br><span class="g">módulo</span></div>
       <div class="hub-subtitle">Sistema de gestión a&b · etaax</div>
     </div>
 
     <!-- Módulos -->
     <div class="hub-grid">
-      <a href="recetas/insumos.html" class="hub-card">
+      <a href="recetas/index.html" class="hub-card">
         <div class="card-header">
           <div class="card-icon">🗄️</div>
           <span class="card-status status-active">Activo</span>
@@ -757,6 +762,8 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
 <script>
+var ADMIN_EMAIL = 'admin@etaax.com';
+
 /* ════════════════════════════════════════════════════════
    PLANES
 ════════════════════════════════════════════════════════ */
@@ -841,7 +848,13 @@ async function _syncNegociosDB() {
         _negocios = _getNegocios().filter(function(n){ return n.usuarioId === _sesion.usuarioId; });
         return;
     }
-    _negocios = res.data.map(_negFromDb);
+    var fromDB = res.data.map(_negFromDb);
+    var dbIds  = fromDB.map(function(n){ return n.id; });
+    // Keep optimistically created local businesses not yet synced to DB
+    var localOnly = _getNegocios().filter(function(n){
+        return n.usuarioId === _sesion.usuarioId && dbIds.indexOf(n.id) === -1;
+    });
+    _negocios = fromDB.concat(localOnly);
     var others = _getNegocios().filter(function(n){ return n.usuarioId !== _sesion.usuarioId; });
     _setNegocios(others.concat(_negocios));
 }
@@ -877,6 +890,16 @@ var ROLES_STAFF = {
 ════════════════════════════════════════════════════════ */
 async function init() {
     _renderPlanGrid();
+    // Manejar logout desde sub-páginas
+    if (new URLSearchParams(window.location.search).get('salir') === '1') {
+        history.replaceState(null, '', window.location.pathname);
+        localStorage.removeItem('etaax_negocio_activo');
+        localStorage.removeItem('etaax_ctx');
+        sessionStorage.clear();
+        try { await _supabase.auth.signOut(); } catch(e) {}
+        showView('viewLogin');
+        return;
+    }
 
     // ── Sesión de colaborador (localStorage) ──
     var ses = _getSesion();
@@ -890,12 +913,41 @@ async function init() {
         }
     }
 
-    // ── Sesión de dueño (Supabase Auth) ──
+    // ── Sesión de dueño / admin (Supabase Auth) ──
     var sessionData = await _supabase.auth.getSession();
     var session = sessionData.data && sessionData.data.session;
     if (session) {
         var u    = session.user;
         var meta = u.user_metadata || {};
+
+        // ── Admin maestro ──
+        if (u.email === ADMIN_EMAIL) {
+            var impRaw = sessionStorage.getItem('etaax_admin_impersonate');
+            if (impRaw) {
+                // Entrando a un negocio desde el panel admin
+                var imp = JSON.parse(impRaw);
+                _sesion = { usuarioId: imp.usuarioId, nombre: imp.usuarioNombre, email: ADMIN_EMAIL, plan: imp.usuarioPlan || 'gran', isAdmin: true };
+                _updateTopbar();
+                await _syncNegociosDB();
+                var negAdm = _negocios.find(function(n){ return n.id === imp.negocioId; });
+                if (negAdm) {
+                    localStorage.setItem('etaax_negocio_activo', negAdm.id);
+                    _showModulos(negAdm);
+                } else {
+                    sessionStorage.removeItem('etaax_admin_impersonate');
+                    window.location.href = 'admin.html';
+                }
+            } else {
+                // Acceso directo al hub general como admin
+                _sesion = { usuarioId: ADMIN_EMAIL, nombre: 'Admin Maestro', email: ADMIN_EMAIL, plan: 'gran', isAdmin: true };
+                _updateTopbar();
+                _showModulos({ id: null, nombre: 'Hub General', tipo: 'otro', emoji: '⚡', color: '#f5c842', fechaCreado: new Date().toISOString() });
+                var btnInfoDirect = document.getElementById('btnInfoNeg');
+                if (btnInfoDirect) btnInfoDirect.style.display = 'none';
+            }
+            return;
+        }
+
         _sesion  = { usuarioId: u.id, nombre: meta.nombre || u.email, email: u.email, plan: meta.plan || 'micro' };
         _updateTopbar();
         var negId = localStorage.getItem('etaax_negocio_activo') || '';
@@ -966,6 +1018,8 @@ async function loginSubmit() {
         btn.disabled = false; btn.textContent = 'Entrar';
         if (result.error) { shakeError('Correo o contraseña incorrectos.'); return; }
         var u = result.data.user, meta = u.user_metadata || {};
+        // Admin maestro → ir directo al panel
+        if (u.email === ADMIN_EMAIL) { window.location.href = 'admin.html'; return; }
         _iniciarSesion({ id: u.id, nombre: meta.nombre || u.email, email: u.email, plan: meta.plan || 'micro' });
         return;
     }
@@ -1111,6 +1165,11 @@ async function registroSubmit() {
 ════════════════════════════════════════════════════════ */
 async function logout() {
     if (!confirm('¿Cerrar sesión?')) return;
+    // Admin en modo negocio: volver al panel sin cerrar sesión Supabase
+    if (_sesion && _sesion.isAdmin) {
+        volverAlAdmin();
+        return;
+    }
     if (!_sesion || _sesion.type !== 'staff') {
         await _supabase.auth.signOut();
     }
@@ -1124,6 +1183,7 @@ function _clearSesion() {
     _sesion = null;
     sessionStorage.removeItem('etaax_sesion_hub');
     localStorage.removeItem('etaax_negocio_activo');
+    localStorage.removeItem('etaax_ctx');
     document.getElementById('topbarUser').innerHTML =
         '<div class="hub-user-dot" style="background:var(--dim)"></div><span>Sin sesión</span>';
 }
@@ -1187,7 +1247,29 @@ function seleccionarNegocio(id) {
     if (!neg) return;
     localStorage.setItem('etaax_negocio_activo', id);
     _migrarDatosLegacy(id);
+    _guardarCtx(neg);
     _showModulos(neg);
+}
+
+function _guardarCtx(neg) {
+    if (!_sesion) return;
+    var t   = TIPOS[neg.tipo] || TIPOS.otro;
+    var ctx = {
+        negId: neg.id, negNombre: neg.nombre,
+        negEmoji: neg.emoji || t.emoji, negTipo: t.label,
+        negColor: neg.color || '#3dbe7a',
+        userName: _sesion.nombre, userBadge: '', userColor: '#3dbe7a'
+    };
+    if (_sesion.type === 'staff') {
+        var r = ROLES_STAFF[_sesion.rol] || ROLES_STAFF.otro;
+        ctx.userBadge = r.label; ctx.userColor = r.color;
+    } else if (_sesion.isAdmin) {
+        ctx.userBadge = '⚡ Admin'; ctx.userColor = '#f5c842';
+    } else {
+        var p = PLANES[_sesion.plan] || PLANES.micro;
+        ctx.userBadge = p.nombre; ctx.userColor = p.color || '#3dbe7a';
+    }
+    localStorage.setItem('etaax_ctx', JSON.stringify(ctx));
 }
 
 function _showModulos(neg) {
@@ -1208,6 +1290,8 @@ function _showModulos(neg) {
         var btnInfo    = document.getElementById('btnInfoNeg');
         nombreChip.textContent = _sesion.nombre.split(' ')[0];
 
+        var btnVolver = document.getElementById('btnVolverAdmin');
+
         if (_sesion.type === 'staff') {
             var r = ROLES_STAFF[_sesion.rol] || ROLES_STAFF.otro;
             planChip.textContent       = r.label;
@@ -1215,9 +1299,18 @@ function _showModulos(neg) {
             planChip.style.background  = r.color + '22';
             planChip.style.color       = r.color;
             if (btnCambiar) btnCambiar.style.display = 'none';
-            // Solo admin y gerente ven info del negocio
+            if (btnVolver)  btnVolver.style.display  = 'none';
             var rolesDirectivos = ['admin', 'gerente'];
             if (btnInfo) btnInfo.style.display = rolesDirectivos.indexOf(_sesion.rol) !== -1 ? '' : 'none';
+        } else if (_sesion.isAdmin) {
+            // Admin maestro navegando dentro de un negocio
+            planChip.textContent      = '⚡ Admin';
+            planChip.className        = 'user-badge-plan';
+            planChip.style.background = 'rgba(245,200,66,.15)';
+            planChip.style.color      = 'var(--gold)';
+            if (btnCambiar) btnCambiar.style.display = 'none';
+            if (btnInfo)    btnInfo.style.display    = '';
+            if (btnVolver)  btnVolver.style.display  = '';
         } else {
             var p = PLANES[_sesion.plan] || PLANES.micro;
             planChip.textContent      = p.nombre;
@@ -1225,7 +1318,8 @@ function _showModulos(neg) {
             planChip.style.background = '';
             planChip.style.color      = '';
             if (btnCambiar) btnCambiar.style.display = '';
-            if (btnInfo) btnInfo.style.display = ''; // dueño siempre ve info
+            if (btnInfo)    btnInfo.style.display    = '';
+            if (btnVolver)  btnVolver.style.display  = 'none';
         }
     }
 }
@@ -1265,6 +1359,8 @@ function setColor(c) {
 
 async function crearNegocio() {
     if (!_sesion) return;
+    var btn = document.getElementById('btnCrearNeg');
+    if (btn && btn.disabled) return;  // prevent double-click
     // Verificar límite del plan antes de crear
     var plan = PLANES[_sesion.plan] || PLANES.micro;
     if (_misNegocios().length >= plan.maxNegocios) {
@@ -1283,6 +1379,7 @@ async function crearNegocio() {
         setTimeout(function(){ inp.style.borderColor=''; }, 1500);
         return;
     }
+    if (btn) { btn.disabled = true; btn.textContent = 'Creando...'; }
     var tipo  = document.getElementById('inTipo').value;
     var t     = TIPOS[tipo] || TIPOS.otro;
     var id    = 'n_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
@@ -1404,6 +1501,12 @@ function cerrarPrivacidad() {
 /* ════════════════════════════════════════════════════════
    UTILS
 ════════════════════════════════════════════════════════ */
+function volverAlAdmin() {
+    sessionStorage.removeItem('etaax_admin_impersonate');
+    localStorage.removeItem('etaax_negocio_activo');
+    window.location.href = 'admin.html';
+}
+
 function handleFormKey(e) { if (e.key === 'Enter') crearNegocio(); }
 function _esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 

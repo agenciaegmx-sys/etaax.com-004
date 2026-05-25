@@ -384,6 +384,32 @@
        '-25°C a -30°C (Ultracongelación / IQF)'
    ];
 
+   // ── Listas para frutas y verduras ────────────────────────────
+   var CATS_FRUTA = [
+       '— Seleccionar —',
+       'Fruta tropical','Fruta de temporada','Fruta cítrica','Fruta seca / deshidratada',
+       'Verdura de hoja verde','Verdura de raíz','Verdura crucífera',
+       'Allium (cebolla, ajo, poro)','Legumbre fresca','Hierba aromática / Quelite',
+       'Hongo / Seta','Tubérculo','Germinado / Microgreen','Flor comestible'
+   ];
+   var TIPOS_COMPRA_FRUTA = [
+       '— Seleccionar —',
+       'A granel — por kg (peso exacto)',
+       'Por pieza (peso variable)',
+       'Por manojo / atado (peso variable)',
+       'Por caja o cubeta',
+       'Por bolsa o red (peso aprox.)',
+       'Por charola o bandeja'
+   ];
+   var ALMACENAJE_FRUTA = [
+       'Refrigeración 0°C a 4°C (hoja verde, hierbas, setas)',
+       'Refrigeración 4°C a 8°C (cítricos, crucíferas, raíces)',
+       'Temperatura fresca 8°C a 12°C (tomate maduro, aguacate abierto)',
+       'Temperatura ambiente 15°C a 20°C (plátano, aguacate verde, mango verde)',
+       'Oscuridad seca — bodega (papa, cebolla, ajo)',
+       'Sumergida en agua fría (hierbas frescas, flores comestibles)'
+   ];
+
    function toggleUvaChip(uva) {
        var hidden = document.getElementById('ins-variedad');
        if (!hidden) return;
@@ -419,6 +445,12 @@
        if (_rsag) _rsag.style.gridColumn = '';
        var _remp = document.getElementById('row-empaque');
        if (_remp) _remp.style.display = '';
+
+       // Reset filas exclusivas de frutas
+       var _rcong = document.getElementById('row-como-congelar');
+       var _rvidc = document.getElementById('row-vida-congelado');
+       if (_rcong) { _rcong.style.display = 'none'; _rcong.style.gridColumn = ''; _rcong.style.order = ''; }
+       if (_rvidc) { _rvidc.style.display = 'none'; _rvidc.style.gridColumn = ''; _rvidc.style.order = ''; }
 
        // Auto-rellenar familia
        var elFam = document.getElementById('ins-familia');
@@ -464,15 +496,16 @@
                    if (['destilado','licor','cerveza','cerveza_barril','refresco'].includes(tipo)) lblV.textContent = 'Marca del producto';
                    else if (tipo === 'abarrote') lblV.textContent = 'Marca / Variedad';
                    else if (tipo === 'carne') lblV.textContent = 'Corte / Variedad';
+                   else if (tipo === 'fruta') lblV.textContent = 'Variedad comercial';
                    else lblV.textContent = 'Variedad';
                }
            }
        }
 
-       // ── Añejamiento / Tipo de vino (ins-maduracion) ────────────
+       // ── Añejamiento / Tipo de vino / Tipo de compra (ins-maduracion) ──
        var rowMad = document.getElementById('row-maduracion');
        if (rowMad) {
-        rowMad.style.display = ['destilado','licor','vino','refresco','cerveza','cerveza_barril','carne'].includes(tipo) ? '' : 'none';
+        rowMad.style.display = ['destilado','licor','vino','refresco','cerveza','cerveza_barril','carne','fruta'].includes(tipo) ? '' : 'none';
            var madEl = document.getElementById('ins-maduracion');
            var currentMad = madEl ? madEl.value || '' : '';
            if (tipo === 'vino') {
@@ -507,6 +540,14 @@
                rowMad.innerHTML = '<label id="lbl-maduracion">Estado de compra</label>' +
                    '<select id="ins-maduracion" style="' + SEL + '">' +
                    '<option value="">— Seleccionar estado —</option>' + optEst + '</select>';
+           } else if (tipo === 'fruta') {
+               var currentMadF = madEl ? madEl.value || '' : '';
+               var optCompraF = TIPOS_COMPRA_FRUTA.map(function(t) {
+                   var val = t === '— Seleccionar —' ? '' : t;
+                   return '<option value="' + val + '"' + (currentMadF === val ? ' selected' : '') + '>' + t + '</option>';
+               }).join('');
+               rowMad.innerHTML = '<label id="lbl-maduracion">Tipo de compra</label>' +
+                   '<select id="ins-maduracion" style="' + SEL + '">' + optCompraF + '</select>';
            } else {
                if (madEl && madEl.tagName === 'SELECT') {
                    rowMad.innerHTML = '<label id="lbl-maduracion">Variedad / Añejamiento</label>' +
@@ -557,6 +598,14 @@
            if (elVar2 && elVar2.type !== 'hidden') elVar2.placeholder = 'Ej. Rib Eye, T-Bone, Pechuga s/h, Lomo entero';
            if (elNombre)  elNombre.placeholder  = 'Ej. Rib Eye Black Angus, Camarón 21/25, Pechuga de Pollo';
            if (elEmpaque) elEmpaque.placeholder = 'Ej. Caja 10kg, Bolsa cryovac, Bolsa individual 200g';
+       } else if (tipo === 'fruta') {
+           if (elVar2 && elVar2.type !== 'hidden') elVar2.placeholder = 'Ej. Hass, Roma, Tabasco, Cherry, Manila';
+           if (elNombre)  elNombre.placeholder  = 'Ej. Aguacate Hass, Jitomate Roma, Plátano Tabasco';
+           if (elEmpaque) elEmpaque.placeholder = 'Ej. Caja 20kg, Costal 25kg, Bolsa 5kg';
+       } else if (tipo === 'otro') {
+           if (elVar2 && elVar2.type !== 'hidden') elVar2.placeholder = 'Ej. Látex, Nitrilo, Talla M, 500ml';
+           if (elNombre)  elNombre.placeholder  = 'Ej. Guantes desechables, Charolas aluminio, Palillos';
+           if (elEmpaque) elEmpaque.placeholder = 'Ej. Caja 100 pzas, Paquete x50, Frasco 1L';
        }
 
        // ── Categoría: ocultar para abarrote (usa familia+grupo) ─────
@@ -589,6 +638,13 @@
                }).join('');
                catWrap.innerHTML = '<label>Tipo de proteína</label>' +
                    '<select id="ins-categoria" style="' + SEL + '">' + optCarne + '</select>';
+           } else if (tipo === 'fruta') {
+               var optFruta = CATS_FRUTA.map(function(t) {
+                   var val = t === '— Seleccionar —' ? '' : t;
+                   return '<option value="' + val + '"' + (currentCat === val ? ' selected' : '') + '>' + t + '</option>';
+               }).join('');
+               catWrap.innerHTML = '<label>Tipo de producto</label>' +
+                   '<select id="ins-categoria" style="' + SEL + '">' + optFruta + '</select>';
            } else {
                if (catEl.tagName === 'SELECT') {
                    catWrap.innerHTML = '<label>Categoría</label>' +
@@ -602,7 +658,7 @@
        var rowTemp = document.getElementById('row-temp-conservacion');
        var rowVida = document.getElementById('row-vida-util-abrir');
        if (rowTemp) {
-           rowTemp.style.display = (tipo === 'vino' || tipo === 'carne') ? '' : 'none';
+           rowTemp.style.display = (tipo === 'vino' || tipo === 'carne' || tipo === 'fruta') ? '' : 'none';
            if (tipo === 'vino') {
                var tempEl = document.getElementById('ins-tempConservacion');
                var currentTemp = tempEl ? tempEl.value || '' : '';
@@ -621,6 +677,15 @@
                rowTemp.innerHTML = '<label>Temperatura de almacenaje</label>' +
                    '<select id="ins-tempConservacion" style="' + SEL + '">' +
                    '<option value="">— Seleccionar temperatura —</option>' + optTempsC + '</select>';
+           } else if (tipo === 'fruta') {
+               var tempElF = document.getElementById('ins-tempConservacion');
+               var currentTempF = tempElF ? tempElF.value || '' : '';
+               var optAlmF = ALMACENAJE_FRUTA.map(function(t) {
+                   return '<option value="' + t + '"' + (currentTempF === t ? ' selected' : '') + '>' + t + '</option>';
+               }).join('');
+               rowTemp.innerHTML = '<label>Almacenaje fresco</label>' +
+                   '<select id="ins-tempConservacion" style="' + SEL + '">' +
+                   '<option value="">— Cómo almacenar —</option>' + optAlmF + '</select>';
            } else {
                var tempEl2 = document.getElementById('ins-tempConservacion');
                if (tempEl2 && tempEl2.tagName === 'SELECT') {
@@ -630,7 +695,7 @@
            }
        }
        if (rowVida) {
-           rowVida.style.display = (tipo === 'vino' || tipo === 'carne') ? '' : 'none';
+           rowVida.style.display = (tipo === 'vino' || tipo === 'carne' || tipo === 'fruta') ? '' : 'none';
            if (tipo === 'vino') {
                var vidaEl = document.getElementById('ins-vidaUtilAbrir');
                var vidaEl2 = document.getElementById('ins-vidaUtilAbrirNum');
@@ -657,6 +722,21 @@
                        '<div style="display:flex;gap:6px">' +
                        '<input type="number" id="ins-vidaUtilAbrirNum" placeholder="48" min="1" value="'+numValC+'" ' +
                        'style="width:80px;flex-shrink:0">' + selVidaC + '</div>';
+               }
+           } else if (tipo === 'fruta') {
+               var vidaElF  = document.getElementById('ins-vidaUtilAbrir');
+               var vidaNumF = document.getElementById('ins-vidaUtilAbrirNum');
+               if (!vidaNumF) {
+                   var existingVidaF = vidaElF ? vidaElF.value || '' : '';
+                   var matchVidaF    = existingVidaF.match(/^(\d+)\s+(.+)$/);
+                   var numValF  = matchVidaF ? matchVidaF[1] : '';
+                   var unitValF = matchVidaF ? matchVidaF[2] : 'días';
+                   var selVidaF = '<select id="ins-vidaUtilAbrirUnidad" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:6px;font-family:sans-serif;font-size:14px;outline:none">' +
+                       ['horas','días','semanas','meses'].map(function(u){ return '<option value="'+u+'"'+(unitValF===u?' selected':'')+'>'+u+'</option>'; }).join('') + '</select>';
+                   rowVida.innerHTML = '<label>Vida útil fresca</label>' +
+                       '<div style="display:flex;gap:6px">' +
+                       '<input type="number" id="ins-vidaUtilAbrirNum" placeholder="7" min="1" value="'+numValF+'" ' +
+                       'style="width:80px;flex-shrink:0">' + selVidaF + '</div>';
                }
            } else {
                // Restaurar texto si venía de vino o carne
@@ -691,9 +771,14 @@
                                (currentSub === val ? ' selected' : '') + '>' + s + '</option>';
                        }).join('') + '</select>';
                } else {
-                   var subLabel = tipo === 'carne' ? 'Método de descongelación' : 'Subcategoría';
-                   var subPh    = tipo === 'carne' ? 'Ej. Refrigeración gradual, Chorro de agua fría, Cocción directa' : 'Ej. Vodka';
-                   subcatWrap.innerHTML = '<label>' + subLabel + ' <span style="opacity:.4;font-weight:400;font-size:10px">' + (tipo === 'carne' ? '(opcional)' : '') + '</span></label>' +
+                   var esDesce  = tipo === 'carne' || tipo === 'fruta';
+                   var subLabel = esDesce ? 'Método de descongelación'
+                                : tipo === 'otro' ? 'Subcategoría / Uso' : 'Subcategoría';
+                   var subPh    = esDesce ? 'Ej. Refrigeración gradual, Chorro de agua fría, Cocción directa'
+                                : tipo === 'otro' ? 'Ej. Limpieza de cocina, Protección personal, Servicio'
+                                : 'Ej. Vodka';
+                   var subOpc   = esDesce ? '(opcional)' : '';
+                   subcatWrap.innerHTML = '<label>' + subLabel + ' <span style="opacity:.4;font-weight:400;font-size:10px">' + subOpc + '</span></label>' +
                        '<input type="text" id="ins-subcategoria" ' +
                        'value="' + currentSub + '" placeholder="' + subPh + '">';
                }
@@ -714,6 +799,50 @@
            if (_rowVidaC) _rowVidaC.style.gridColumn = 'span 2';
            var _rowSubC = document.getElementById('row-subcategoria');
            if (_rowSubC) _rowSubC.style.gridColumn = 'span 2';
+       }
+
+       // ── Jerarquía y visibilidad exclusiva para Frutas y Verduras ─
+       if (tipo === 'fruta') {
+           ['row-nombre','row-categoria','row-variedad',
+            'row-maduracion','row-temp-conservacion',
+            'row-vida-util-abrir','row-vida-congelado',
+            'row-como-congelar','row-subcategoria']
+               .forEach(function(id, idx) {
+                   var el = document.getElementById(id);
+                   if (el) el.style.order = String(idx + 1);
+               });
+           // Ocultar marca, empaque y familia (siempre "Frutas y Verduras")
+           var _rowMarcaF = document.getElementById('row-marca');
+           if (_rowMarcaF) _rowMarcaF.style.display = 'none';
+           var _rowEmpF = document.getElementById('row-empaque');
+           if (_rowEmpF) { _rowEmpF.style.order = '99'; _rowEmpF.style.display = 'none'; }
+           var _rowFamF = document.getElementById('row-familia');
+           if (_rowFamF) _rowFamF.style.display = 'none';
+           // Mostrar y configurar nuevas filas
+           var _rowCongF = document.getElementById('row-como-congelar');
+           if (_rowCongF) { _rowCongF.style.display = ''; _rowCongF.style.gridColumn = 'span 2'; }
+           var _rowVidCF = document.getElementById('row-vida-congelado');
+           if (_rowVidCF) {
+               _rowVidCF.style.display = '';
+               // Convertir a num+select si aún es texto plano
+               if (!document.getElementById('ins-vidaUtilCongeladoNum')) {
+                   var _vcExist  = document.getElementById('ins-vidaUtilCongelado');
+                   var _vcVal    = _vcExist ? _vcExist.value || '' : '';
+                   var _vcMatch  = _vcVal.match(/^(\d+)\s+(.+)$/);
+                   var _vcNum    = _vcMatch ? _vcMatch[1] : '';
+                   var _vcUnit   = _vcMatch ? _vcMatch[2] : 'meses';
+                   var _vcSel    = '<select id="ins-vidaUtilCongeladoUnidad" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:6px;font-family:sans-serif;font-size:14px;outline:none">' +
+                       ['días','semanas','meses'].map(function(u){ return '<option value="'+u+'"'+(_vcUnit===u?' selected':'')+'>'+u+'</option>'; }).join('') + '</select>';
+                   _rowVidCF.innerHTML = '<label>Vida útil congelado</label>' +
+                       '<div style="display:flex;gap:6px">' +
+                       '<input type="number" id="ins-vidaUtilCongeladoNum" placeholder="3" min="1" value="'+_vcNum+'" ' +
+                       'style="width:80px;flex-shrink:0">' + _vcSel + '</div>';
+               }
+           }
+           var _rowSubF = document.getElementById('row-subcategoria');
+           if (_rowSubF) _rowSubF.style.gridColumn = 'span 2';
+           var _rowVidaF = document.getElementById('row-vida-util-abrir');
+           if (_rowVidaF) _rowVidaF.style.gridColumn = '';
        }
    }
 
@@ -771,6 +900,8 @@
        var _tmpEl = document.getElementById('ins-tempConservacion'); if (_tmpEl) _tmpEl.value = ins?.tempConservacion || '';
        var _vidaEl = document.getElementById('ins-vidaUtilAbrir'); if (_vidaEl) _vidaEl.value = ins?.vidaUtilAbrir || '';
        document.getElementById('ins-empaque').value          = ins?.empaque           || '';
+       var _congEl = document.getElementById('ins-comoCongelar'); if (_congEl) _congEl.value = ins?.comoCongelar || '';
+       var _vcEl   = document.getElementById('ins-vidaUtilCongelado'); if (_vcEl) _vcEl.value = ins?.vidaUtilCongelado || '';
        document.getElementById('ins-notas').value        = ins?.notas        || '';
    
        // Si es edición, detectar tipo desde tipoInsumo guardado o desde familia/categoria
@@ -824,6 +955,26 @@
            if (_match && _numEl && _unEl) {
                _numEl.value = _match[1];
                _unEl.value  = _match[2];
+           }
+       }
+
+       // Pre-rellenar campos de fruta editada
+       if (tipoInsumoActual === 'fruta' && ins) {
+           if (ins.vidaUtilAbrir) {
+               var _matchF = ins.vidaUtilAbrir.match(/^(\d+)\s+(.+)$/);
+               var _numFEl = document.getElementById('ins-vidaUtilAbrirNum');
+               var _unFEl  = document.getElementById('ins-vidaUtilAbrirUnidad');
+               if (_matchF && _numFEl && _unFEl) { _numFEl.value = _matchF[1]; _unFEl.value = _matchF[2]; }
+           }
+           var _congEl2 = document.getElementById('ins-comoCongelar');
+           if (_congEl2 && ins.comoCongelar) _congEl2.value = ins.comoCongelar;
+           // Pre-rellenar vida útil congelado (num+unidad)
+           if (ins.vidaUtilCongelado) {
+               var _matchVC = ins.vidaUtilCongelado.match(/^(\d+)\s+(.+)$/);
+               var _numVC = document.getElementById('ins-vidaUtilCongeladoNum');
+               var _unVC  = document.getElementById('ins-vidaUtilCongeladoUnidad');
+               if (_matchVC && _numVC && _unVC) { _numVC.value = _matchVC[1]; _unVC.value = _matchVC[2]; }
+               else { var _vcEl2 = document.getElementById('ins-vidaUtilCongelado'); if (_vcEl2) _vcEl2.value = ins.vidaUtilCongelado; }
            }
        }
 
@@ -1065,7 +1216,7 @@
                _calcCostosBarril(p, precioEfectivo, contML);
            } else if (['refresco','cerveza'].includes(tipoInsumoActual)) {
                _calcCostosRefrescoCerveza(p, precioEfectivo, contML);
-           } else if (tipoInsumoActual === 'carne') {
+           } else if (tipoInsumoActual === 'carne' || tipoInsumoActual === 'fruta') {
                _calcCostosProteina(p, precioEfectivo);
            } else if (tipoInsumoActual === 'abarrote') {
                _calcCostosAbarrote(p, precioEfectivo, contML);
@@ -1079,7 +1230,7 @@
            if (['refresco','cerveza','cerveza_barril'].includes(tipoInsumoActual)) {
                _updateDisplaysRefrescoCerv(p, i);
            }
-           if (tipoInsumoActual === 'abarrote' || tipoInsumoActual === 'carne') {
+           if (tipoInsumoActual === 'abarrote' || tipoInsumoActual === 'carne' || tipoInsumoActual === 'fruta') {
                const _cp    = parseFloat(p.costoPieza)||0;
                const _cu    = parseFloat(p.costoUnitario)||0;
                const _um2   = (p.umCosto || 'KG').toUpperCase();
@@ -1628,7 +1779,9 @@
        const esCerveza        = ['cerveza','cerveza_barril'].includes(tipoInsumoActual);
        const esBarril         = tipoInsumoActual === 'cerveza_barril';
        const esRefrescoCerv   = esRefresco || esCerveza;
-       const esCarne          = ['carne','fruta'].includes(tipoInsumoActual);
+       const esCarne          = tipoInsumoActual === 'carne';
+       const esFruta          = tipoInsumoActual === 'fruta';
+       const esCarneOFruta    = esCarne || esFruta;
        const esAbarrote       = tipoInsumoActual === 'abarrote';
        const tienePeso        = campos.includes('peso');
        const tieneCopa        = campos.includes('copa');
@@ -1669,6 +1822,9 @@
                                    : esCarne
                                    ? ['Caja','Pieza completa / Corte primario','Rack','Bolsa','Granel','Paquete porcionado','Kilo','Otro'].map(t =>
                                        `<option value="${t}" ${(p.presentacionCompra||'Caja')===t?'selected':''}>${t}</option>`).join('')
+                                   : esFruta
+                                   ? ['A granel — kg','Por pieza','Por manojo / atado','Por caja','Por bolsa / red','Por charola','Kilo','Otro'].map(t =>
+                                       `<option value="${t}" ${(p.presentacionCompra||'A granel — kg')===t?'selected':''}>${t}</option>`).join('')
                                    : esAbarrote
                                    ? ['Pieza','Caja','Paquete','Bolsa','Costal','Tarro','Frasco','Lata','Kilo','Litro','Otro'].map(t =>
                                        `<option value="${t}" ${(p.presentacionCompra||'Pieza')===t?'selected':''}>${t}</option>`).join('')
@@ -1677,27 +1833,27 @@
                                }
                            </select>
                        </div>
-                       <div class="meta-item"><label>${esBarril ? 'Litros del barril' : esCarne ? 'Cantidad / Piezas' : esAbarrote ? 'Piezas / Cantidad' : 'Cantidad'}</label>
-                           <input type="number" value="${p.cantPresCompra||''}" placeholder="${esBarril?'20':esCarne?'10':'1'}"
+                       <div class="meta-item"><label>${esBarril ? 'Litros del barril' : esCarne ? 'Cantidad / Piezas' : esFruta ? 'Cantidad / Kilos o Piezas' : esAbarrote ? 'Piezas / Cantidad' : 'Cantidad'}</label>
+                           <input type="number" value="${p.cantPresCompra||''}" placeholder="${esBarril?'20':esCarneOFruta?'10':'1'}"
                                oninput="updPres(${i},'cantPresCompra',this.value)">
                        </div>
                        <div class="meta-item"><label>Unidad</label>
                            ${esBarril
                                ? `<div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:9px 12px;font-size:14px;color:var(--text-dim)">LT</div>`
                                : `<select onchange="updPres(${i},'umPresCompra',this.value);renderPresentaciones()">
-                                   ${['PZA','G','KG','ML','LT','PORCION'].map(u =>
-                                       `<option value="${u}" ${(p.umPresCompra||'PZA')===u?'selected':''}>${u}</option>`
+                                   ${(esFruta ? ['KG','G','PZA','CARGA','PORCION'] : ['PZA','G','KG','ML','LT','PORCION']).map(u =>
+                                       `<option value="${u}" ${(p.umPresCompra||(esFruta?'KG':'PZA'))===u?'selected':''}>${u}</option>`
                                    ).join('')}
                                   </select>`
                            }
                        </div>
                    </div>` : ''}
-   
+
                    <!-- Proveedor/Zona (todos los tipos) -->
                    <div class="mg-2">
                        <div class="meta-item">
                            <label>Proveedor</label>
-                           <input type="text" value="${p.proveedor||''}" placeholder="${esCarne ? 'Ej. Carnes Selectas, La Superior, Don Jorge' : esRefrescoCerv ? 'Ej. Grupo Modelo' : 'Ej. Viños América'}"
+                           <input type="text" value="${p.proveedor||''}" placeholder="${esCarne ? 'Ej. Carnes Selectas, La Superior, Don Jorge' : esFruta ? 'Ej. Mercado Central, Central de Abasto, Distribuidor local' : esRefrescoCerv ? 'Ej. Grupo Modelo' : 'Ej. Viños América'}"
                                oninput="updPres(${i},'proveedor',this.value)">
                        </div>
                        <div class="meta-item">
@@ -1773,13 +1929,13 @@
                    ${_renderImpuestosBlock(p, i)}
    
                    <!-- FILA 2: Costos calculados -->
-                   ${_renderFilaCostosBlock(p, i, {esBarril, esRefrescoCerv, esBebidaCompleta, esAbarrote, esCarne})}
+                   ${_renderFilaCostosBlock(p, i, {esBarril, esRefrescoCerv, esBebidaCompleta, esAbarrote, esCarne: esCarneOFruta})}
    
    
 
 
-                   <!-- FILA 4: Costo unitario · UM costo (bebidas y otros, no abarrotes ni proteínas) -->
-                   ${!esAbarrote && !esCarne ? `<div class="mg-3">
+                   <!-- FILA 4: Precio sugerido (bebidas, no abarrotes ni proteínas ni fruta) -->
+                   ${!esAbarrote && !esCarneOFruta ? `<div class="mg-3">
                        ${esBarril ? `
                        <div class="meta-item">
                            <label>Precio sugerido por vaso/jarra ${_MXN}</label>
@@ -1919,6 +2075,14 @@
                return el ? el.value.trim() : '';
            })(),
            empaque:           document.getElementById('ins-empaque').value.trim(),
+           comoCongelar:      (function(){ var el = document.getElementById('ins-comoCongelar'); return el ? el.value.trim() : ''; })(),
+           vidaUtilCongelado: (function(){
+               var n = document.getElementById('ins-vidaUtilCongeladoNum');
+               var u = document.getElementById('ins-vidaUtilCongeladoUnidad');
+               if (n && u) return (n.value + ' ' + u.value).trim();
+               var el = document.getElementById('ins-vidaUtilCongelado');
+               return el ? el.value.trim() : '';
+           })(),
            notas:        document.getElementById('ins-notas').value.trim(),
            activo:       document.getElementById('ins-activo').value || '1',
            foto:         fotoInsumoBase64 || fotoAnterior,
@@ -2019,6 +2183,19 @@
                </div>`).join('')
            : '<div style="color:var(--text-dim);font-size:13px">Sin presentaciones registradas</div>'}
    
+           ${(ins.tipoInsumo === 'fruta' && (ins.maduracion || ins.tempConservacion || ins.vidaUtilAbrir || ins.vidaUtilCongelado || ins.comoCongelar || ins.subcategoria)) ? `
+               <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+                   <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px">🥬 Almacenaje y vida útil</div>
+                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;color:var(--text-muted)">
+                       ${ins.maduracion       ? `<div><span style="color:var(--text-dim)">Tipo de compra: </span>${ins.maduracion}</div>` : ''}
+                       ${ins.tempConservacion ? `<div><span style="color:var(--text-dim)">Almacenaje: </span>${ins.tempConservacion}</div>` : ''}
+                       ${ins.vidaUtilAbrir    ? `<div><span style="color:var(--text-dim)">Vida útil fresca: </span>${ins.vidaUtilAbrir}</div>` : ''}
+                       ${ins.vidaUtilCongelado? `<div><span style="color:var(--text-dim)">V. útil congelado: </span>${ins.vidaUtilCongelado}</div>` : ''}
+                       ${ins.comoCongelar     ? `<div style="grid-column:span 2"><span style="color:var(--text-dim)">Cómo congelar: </span>${ins.comoCongelar}</div>` : ''}
+                       ${ins.subcategoria     ? `<div style="grid-column:span 2"><span style="color:var(--text-dim)">Descongelación: </span>${ins.subcategoria}</div>` : ''}
+                   </div>
+               </div>` : ''}
+
            ${ins.notas ? `
                <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
                    <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;

@@ -127,20 +127,26 @@
         <path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/>
         <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
     </svg>
+    <a href="index.html" class="btn-module-back">← Recetas e Insumos</a>
+    <div class="top-breadcrumb">
+        <a href="../hub.html" class="top-home-icon" title="Hub">🏠</a>
+        <span class="top-module-badge">Recetas</span>
+        <span class="top-sep">|</span>
+        <span class="top-section-name">Requisiciones</span>
+    </div>
 </header>
-
+<div id="ctxBar" class="ctx-bar" style="display:none"></div>
 <div class="app-shell">
-    <nav class="nav" id="nav">
+    <nav class="nav cerrado" id="nav">
         <div class="nav-top">
             <div class="nav-brand"><span class="nav-brand-sub">Recetas e Insumos</span></div>
             <div class="nav-top-actions">
-                <a href="../hub.html" class="nav-toggle nav-home-btn" data-tooltip="Home">🏠<span class="nav-toggle-text">Home</span></a>
-                <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">◀<span class="nav-toggle-text" id="navToggleTxt">Ocultar</span></button>
+                <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
             </div>
         </div>
         <div class="nav-section">
             <div class="nav-section-label">Catálogo de</div>
-            <a href="index.html" class="nav-link" data-tooltip="Recetas"><span class="nav-icon">📋</span><span class="nav-text">Recetas</span></a>
+            <a href="index.html?escandallos=1" class="nav-link" data-tooltip="Recetas"><span class="nav-icon">📋</span><span class="nav-text">Recetas</span></a>
         </div>
         <div class="nav-section">
             <div class="nav-section-label">Catálogo de</div>
@@ -156,7 +162,7 @@
         </div>
     </nav>
 
-    <main class="main-content" id="mainContent">
+    <main class="main-content expandido" id="mainContent">
 
         <!-- HEADER -->
         <div class="header">

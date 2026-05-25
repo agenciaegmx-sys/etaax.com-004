@@ -20,18 +20,26 @@
         <path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/>
         <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
     </svg>
+    <a href="../hub.html" class="btn-module-back" id="btnTopHub">← Hub</a>
+    <button class="btn-module-back" id="btnTopVolver" onclick="volverALanding()" style="display:none">← Recetas e Insumos</button>
+    <div class="top-breadcrumb">
+        <a href="../hub.html" class="top-home-icon" title="Hub">🏠</a>
+        <span class="top-module-badge">Recetas</span>
+        <span class="top-sep">|</span>
+        <span class="top-section-name" id="topSectionText">Mis Recetas</span>
+    </div>
 </header>
+<div id="ctxBar" class="ctx-bar" style="display:none"></div>
 <div class="app-shell">
 
     <!-- NAV -->
-    <nav class="nav" id="nav">
+    <nav class="nav cerrado" id="nav">
         <div class="nav-top">
             <div class="nav-brand">
                 <span class="nav-brand-sub">Recetas e Insumos</span>
             </div>
             <div class="nav-top-actions">
-                <a href="../hub.html" class="nav-toggle nav-home-btn" data-tooltip="Home">🏠<span class="nav-toggle-text">Home</span></a>
-                <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">◀<span class="nav-toggle-text" id="navToggleTxt">Ocultar</span></button>
+                <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
             </div>
         </div>
         <div class="nav-section">
@@ -313,9 +321,60 @@
     </main>
 </div>
 
+<!-- ══ MÓDULO RECETAS — LANDING ══════════════════════════════ -->
+<div id="moduloLanding" style="position:fixed;top:48px;left:0;right:0;bottom:0;
+    z-index:80;overflow-y:auto;
+    background-image:linear-gradient(rgba(30,80,220,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(30,80,220,.07) 1px,transparent 1px);
+    background-size:60px 60px;background-color:var(--bg)">
+    <div style="position:absolute;top:-80px;left:50%;transform:translateX(-50%);width:600px;height:360px;pointer-events:none;background:radial-gradient(ellipse at center,rgba(30,80,220,.13) 0%,transparent 70%)"></div>
+    <div class="mlanding-hero">
+        <div class="mlanding-hero-eyebrow">Módulo</div>
+        <div class="mlanding-hero-title">Recetas<br><span class="g">e Insumos</span></div>
+        <div class="mlanding-hero-sub">Escandallos con costeo automático, catálogo de insumos, control de inventarios y requisiciones.</div>
+    </div>
+    <div class="mlanding-grid" style="padding:0 24px 80px">
+        <button onclick="entrarEscandallos()" class="mlanding-card" style="border:none;text-align:left;cursor:pointer">
+            <div class="mlanding-card-header">
+                <div class="mlanding-card-icon">📋</div>
+                <span class="mlanding-badge-active">Activo</span>
+            </div>
+            <div class="mlanding-card-title">Escandallos</div>
+            <div class="mlanding-card-desc">Recetas con costeo automático y control de márgenes.</div>
+            <div class="mlanding-card-cta">Abrir →</div>
+        </button>
+        <a href="insumos.html" class="mlanding-card">
+            <div class="mlanding-card-header">
+                <div class="mlanding-card-icon">🗄️</div>
+                <span class="mlanding-badge-active">Activo</span>
+            </div>
+            <div class="mlanding-card-title">Insumos</div>
+            <div class="mlanding-card-desc">Catálogo global de materias primas y sus costos.</div>
+            <div class="mlanding-card-cta">Abrir →</div>
+        </a>
+        <a href="inventarios.html" class="mlanding-card">
+            <div class="mlanding-card-header">
+                <div class="mlanding-card-icon">📦</div>
+                <span class="mlanding-badge-active">Activo</span>
+            </div>
+            <div class="mlanding-card-title">Inventarios</div>
+            <div class="mlanding-card-desc">Control de stock, entradas, salidas y movimientos.</div>
+            <div class="mlanding-card-cta">Abrir →</div>
+        </a>
+        <a href="requisiciones.html" class="mlanding-card">
+            <div class="mlanding-card-header">
+                <div class="mlanding-card-icon">📝</div>
+                <span class="mlanding-badge-active">Activo</span>
+            </div>
+            <div class="mlanding-card-title">Requisiciones</div>
+            <div class="mlanding-card-desc">Sistema de pedidos internos y gestión de compras.</div>
+            <div class="mlanding-card-cta">Abrir →</div>
+        </a>
+    </div>
+</div>
+
 <!-- ══ VISTA PRINCIPAL ESCANDALLO (pantalla completa) ════════ -->
-<div id="vistaMenuReceta" style="display:flex;
-    position:fixed;top:48px;right:0;bottom:0;left:200px;
+<div id="vistaMenuReceta" style="display:none;
+    position:fixed;top:48px;right:0;bottom:0;left:0;
     background:var(--bg);flex-direction:column;z-index:50;
     transition:left 0.2s ease">
     <div style="flex:1;overflow-y:auto;padding:64px 16px 32px">
@@ -716,7 +775,45 @@ function toggleNav() {
     if (vc) vc.style.left = cerrado ? '50px' : '200px';
 }
 
-// ── Volver al menú ────────────────────────────────────────────
+// ── Módulo landing ───────────────────────────────────────────
+function entrarEscandallos() {
+    document.getElementById('moduloLanding').style.display = 'none';
+    var nav = document.getElementById('nav');
+    nav.style.removeProperty('display');
+    document.getElementById('btnTopHub').style.display = 'none';
+    document.getElementById('btnTopVolver').style.display = '';
+    document.getElementById('topSectionText').textContent = 'Escandallos';
+    var menu = document.getElementById('vistaMenuReceta');
+    var cerrado = nav.classList.contains('cerrado');
+    if (menu) { menu.style.display = 'flex'; menu.style.left = cerrado ? '50px' : '200px'; }
+}
+
+function volverALanding() {
+    document.getElementById('moduloLanding').style.display = 'block';
+    document.getElementById('nav').style.display = 'none';
+    document.getElementById('btnTopHub').style.display = '';
+    document.getElementById('btnTopVolver').style.display = 'none';
+    document.getElementById('topSectionText').textContent = 'Mis Recetas';
+    var menu = document.getElementById('vistaMenuReceta');
+    if (menu) { menu.style.display = 'none'; }
+    var vc = document.getElementById('vistaCaratula');
+    if (vc) { vc.style.display = 'none'; }
+    var ew = document.getElementById('editorWrap');
+    if (ew) ew.style.display = 'none';
+}
+
+// Ocultar nav al cargar — o ir directo a Escandallos si viene de sub-página
+document.addEventListener('DOMContentLoaded', function() {
+    var nav = document.getElementById('nav');
+    if (new URLSearchParams(window.location.search).get('escandallos') === '1') {
+        history.replaceState(null, '', window.location.pathname);
+        entrarEscandallos();
+    } else {
+        nav.style.display = 'none';
+        document.getElementById('mainContent').classList.add('expandido');
+    }
+});
+
 // ── Sync precio formulario → costeo ──────────────────────────
 // ── Sistema de Tags (alérgenos, acompañamientos) ─────────────
 var alergenosList = ['Gluten','Lácteos','Huevo','Soya','Nueces','Mariscos','Pescado',

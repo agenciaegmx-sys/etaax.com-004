@@ -1307,6 +1307,41 @@ document.getElementById('videoUrl').addEventListener('input', function() {
 // ── Inicializar ───────────────────────────────────────────────
 renderTabla();
 
+/* ── Context bar (negocio activo en sub-páginas) ─────────────────── */
+function _esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function initCtxBar() {
+    var bar = document.getElementById('ctxBar');
+    if (!bar) return;
+    var ctx;
+    try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch(e) {}
+    if (!ctx) return;
+    var isSubdir = window.location.pathname.split('/').length > 2;
+    var hubPath  = isSubdir ? '../hub.html' : 'hub.html';
+    var color    = ctx.negColor || '#3dbe7a';
+    bar.innerHTML =
+        '<div class="ctx-neg-emoji" style="background:' + color + '22;border:1px solid ' + color + '44">' + _esc(ctx.negEmoji) + '</div>' +
+        '<div><div class="ctx-neg-name">' + _esc(ctx.negNombre) + '</div><div class="ctx-neg-tipo">' + _esc(ctx.negTipo) + '</div></div>' +
+        '<div class="ctx-vsep"></div>' +
+        '<span class="ctx-user-name">' + _esc(ctx.userName.split(' ')[0]) + '</span>' +
+        '<span class="ctx-badge" style="background:' + ctx.userColor + '22;color:' + ctx.userColor + ';border-color:' + ctx.userColor + '44">' + _esc(ctx.userBadge) + '</span>' +
+        '<div style="flex:1"></div>' +
+        '<a href="' + hubPath + '" class="ctx-btn">← Hub</a>' +
+        '<button class="ctx-btn ctx-btn-danger" onclick="ctxSalir()">Salir</button>';
+    bar.style.display = 'flex';
+    document.body.classList.add('has-ctx');
+}
+
+function ctxSalir() {
+    var isSubdir = window.location.pathname.split('/').length > 2;
+    var hubPath  = (isSubdir ? '../' : '') + 'hub.html?salir=1';
+    localStorage.removeItem('etaax_negocio_activo');
+    localStorage.removeItem('etaax_ctx');
+    window.location.href = hubPath;
+}
+
+document.addEventListener('DOMContentLoaded', initCtxBar);
+
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
         e.preventDefault();
