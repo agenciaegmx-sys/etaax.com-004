@@ -22,13 +22,14 @@
         }
         bar.innerHTML =
             '<div class="ctx-bar-inner" style="border-color:' + color + '44">' +
-            '<div class="ctx-neg-emoji-wrap" style="background:' + color + '1a;border-color:' + color + '33">' + esc(ctx.negEmoji) + '</div>' +
+            '<a href="' + hubPath + '" class="ctx-btn" style="white-space:nowrap;margin-right:4px">← Ir a Módulos</a>' +
+            '<div style="width:1px;height:18px;background:rgba(255,255,255,.1);flex-shrink:0"></div>' +
+            '<div class="ctx-neg-emoji-wrap" style="background:' + color + '1a;border-color:' + color + '33;margin-left:4px">' + esc(ctx.negEmoji) + '</div>' +
             '<div><div class="ctx-neg-name">' + esc(ctx.negNombre) + '</div><div class="ctx-neg-tipo">' + esc(ctx.negTipo) + '</div></div>' +
             navHtml +
             '<div style="margin-left:auto;display:flex;gap:8px;align-items:center">' +
             '<div class="ctx-user-badge"><span>' + esc(ctx.userName.split(' ')[0]) + '</span>' +
             '<span class="ctx-badge-plan" style="background:' + ctx.userColor + '22;color:' + ctx.userColor + '">' + esc(ctx.userBadge) + '</span></div>' +
-            '<a href="' + hubPath + '" class="ctx-btn">← Hub</a>' +
             '<button class="ctx-btn ctx-btn-danger" onclick="ctxSalir()">Salir</button>' +
             '</div>' +
             '</div>';

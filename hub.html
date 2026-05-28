@@ -643,8 +643,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
           <span id="userNombreChip" style="font-size:12px">—</span>
           <span class="user-badge-plan" id="userPlanChip">—</span>
         </div>
-        <button class="btn-cambiar-neg" id="btnInfoNeg" onclick="abrirInfoNegocio()" title="Ver información del negocio" style="display:none">ℹ️ Info</button>
-        <button class="btn-cambiar-neg" onclick="window.location.href='configuracion.html'" title="Configuración del negocio">⚙️ Config</button>
+        <button class="btn-cambiar-neg" id="btnInfoNeg" onclick="abrirInfoNegocio()" title="Ver información del negocio" style="display:none">ℹ️ Información del Negocio</button>
         <button class="btn-cambiar-neg" id="btnCambiarNeg" onclick="cambiarNegocio()">↩ Cambiar negocio</button>
         <button class="btn-cambiar-neg" id="btnVolverAdmin" onclick="volverAlAdmin()" style="display:none;border-color:var(--gold);color:var(--gold)">← Panel Admin</button>
         <button class="btn-logout" onclick="logout()">Salir</button>
@@ -1397,7 +1396,6 @@ function _renderBrandBar(neg) {
         '<div><div class="neg-activo-nombre">' + _esc(neg.nombre) + '</div>' +
         '<div class="neg-activo-tipo">' + t.label + '</div></div>' +
         '<div class="brand-info-bar-btns">' +
-        '<button class="btn-cambiar-neg" onclick="abrirConfig(\'' + neg.id + '\',event)">⚙️ Config</button>' +
         '<button class="neg-card-del" onclick="eliminarNegocio(\'' + neg.id + '\',event)" title="Eliminar negocio" ' +
             'style="font-size:11px;padding:5px 12px;border:1px solid var(--b2);border-radius:6px;letter-spacing:.3px">✕ Eliminar</button>' +
         '</div>';
