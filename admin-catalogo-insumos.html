@@ -3,66 +3,127 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ETAAX - Insumos</title>
+    <title>ETAAX · Catálogo Global de Insumos</title>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+    /* ── Admin topbar ────────────────────────────────────────────── */
+    .adm-topbar {
+        position: sticky; top: 0; z-index: 200;
+        display: flex; align-items: center; justify-content: space-between;
+        background: #0a0908; border-bottom: 1px solid #2a2825;
+        padding: 0 24px; height: 54px; flex-shrink: 0;
+    }
+    .adm-left  { display: flex; align-items: center; gap: 12px; }
+    .adm-logo  { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 2px; color: #f0ece4; }
+    .adm-logo span { color: #3dbe7a; }
+    .adm-badge {
+        font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+        background: rgba(245,200,66,.12); color: #f5c842;
+        padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(245,200,66,.25);
+    }
+    .adm-sep   { color: #2a2825; font-size: 18px; }
+    .adm-title { font-size: 13px; color: #7a7570; letter-spacing: .3px; }
+    .adm-right { display: flex; align-items: center; gap: 8px; }
+    .btn-adm-back {
+        background: transparent; border: 1px solid #3a3835; color: #7a7570;
+        font-family: 'DM Sans', sans-serif; font-size: 11px; padding: 5px 14px;
+        border-radius: 6px; cursor: pointer; transition: all .2s; letter-spacing: .3px;
+    }
+    .btn-adm-back:hover { border-color: #f5c842; color: #f5c842; }
+
+    /* ── Quitar nav lateral — full width ────────────────────────── */
+    body { padding-top: 0 !important; }
+    .top-bar { display: none !important; }
+    .app-shell { flex-direction: column !important; }
+    .nav { display: none !important; }
+    .main-content { margin-left: 0 !important; padding-top: 0 !important; width: 100% !important; }
+
+    /* ── Loading overlay ────────────────────────────────────────── */
+    #admLoadOverlay {
+        position: fixed; inset: 0; background: #0a0908; z-index: 9999;
+        display: flex; flex-direction: column; align-items: center;
+        justify-content: center; gap: 16px;
+    }
+    #admLoadOverlay.oculto { display: none; }
+    .adm-load-logo { font-family: 'Bebas Neue', sans-serif; font-size: 32px; letter-spacing: 3px; color: #f0ece4; }
+    .adm-load-logo span { color: #3dbe7a; }
+    .adm-dots { display: flex; gap: 5px; }
+    .adm-dots span { width: 6px; height: 6px; border-radius: 50%; background: #4a4844; animation: dotBlink 1.2s ease infinite; }
+    .adm-dots span:nth-child(2) { animation-delay: .2s; }
+    .adm-dots span:nth-child(3) { animation-delay: .4s; }
+    @keyframes dotBlink { 0%,80%,100%{opacity:.2}40%{opacity:1} }
+
+    /* ── Estilos inline de insumos.html ─────────────────────────── */
+    .cat-btn {
+        background: var(--surface2); border: 1px solid var(--border); border-radius: 12px;
+        padding: 14px 10px; cursor: pointer; text-align: center; transition: all 0.18s;
+        display: flex; flex-direction: column; align-items: center; gap: 5px;
+        color: var(--text); width: 100%;
+    }
+    .cat-btn:hover { border-color: var(--green); background: rgba(61,190,122,0.07); transform: translateY(-2px); }
+    .cat-btn-title { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.2; }
+    .cat-btn-desc  { font-size: 9.5px; color: var(--text-dim); line-height: 1.4; }
+
+    /* Grid / Galería */
+    .insumo-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; transition: transform .15s, border-color .15s; }
+    .insumo-card:hover { transform: translateY(-3px); border-color: var(--green); }
+    .insumo-card-foto { position: relative; height: 110px; background: var(--surface); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .insumo-card-foto img { width:100%;height:100%;object-fit:cover; }
+    .card-emoji { font-size: 44px; }
+    .insumo-card-tipo-badge { position: absolute; top: 6px; left: 6px; background: rgba(15,14,12,.75); border: 1px solid var(--border); border-radius: 4px; font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--accent); padding: 2px 6px; }
+    .insumo-card-body { padding: 10px 12px; flex: 1; }
+    .insumo-card-nombre  { font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    .insumo-card-variedad{ font-size:10px;color:var(--text-dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    .insumo-card-cat     { font-size:9px;color:var(--text-dim);opacity:.7;margin-top:2px; }
+    .insumo-card-costo   { font-size:12px;color:var(--green);font-weight:600;margin-top:6px; }
+    .insumo-card-prov    { font-size:9px;color:var(--text-dim);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    .insumo-card-pres    { display:flex;flex-wrap:wrap;gap:3px;margin-top:6px; }
+    .insumo-card-actions { display:flex;gap:4px;padding:8px 10px;border-top:1px solid var(--border);background:var(--surface); }
+    .insumo-card-actions button { flex:1;padding:5px 4px;font-size:10px;border-radius:5px;cursor:pointer;font-family:inherit;transition:all .15s;border:1px solid var(--border);background:transparent;color:var(--text-dim);display:flex;align-items:center;justify-content:center;gap:3px; }
+    .btn-ver:hover  { border-color:var(--green);color:var(--green); }
+    .btn-edit:hover { border-color:var(--accent);color:var(--accent); }
+    .btn-del:hover  { border-color:var(--red);color:var(--red); }
+
+    /* Chip picker uvas */
+    .uva-chip { display:inline-block;padding:4px 10px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text-dim);font-size:11px;cursor:pointer;user-select:none;transition:all .15s;line-height:1.4; }
+    .uva-chip:hover { border-color:var(--accent);color:var(--accent); }
+    .uva-chip.active { background:rgba(245,200,66,.15);border-color:var(--accent);color:var(--accent);font-weight:600; }
+
+    /* Theme toggle */
+    .theme-toggle { position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s; }
+    .theme-toggle:hover { border-color:var(--green);color:var(--green); }
+    </style>
 </head>
 <body>
-<header class="top-bar">
-    <svg width="108" height="26" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
-        <path d="M14.5 28H37C35.5 23 31.5 20 25.5 20C19.5 20 16 23 14.5 28Z" fill="#1a1916"/>
-        <circle cx="45" cy="11" r="6" fill="#f5c842"/>
-        <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
-        <path d="M78 41C78 34.5 83.5 30.5 92.5 29.5L104 28.5V27.5C104 23.5 101.5 21 97 21C93 21 90 23 89 26.5L80.5 24C82.5 17.5 89 13 97 13C107.5 13 113 18.5 113 28.5V54.5H104V51C102 53.5 98.5 55 94 55C85.5 55 78 50.5 78 41Z" fill="#3dbe7a"/>
-        <path d="M104 37L95.5 38C92.5 38.5 90.5 40 90.5 42.5C90.5 45 92.5 46.5 95.5 46.5C101 46.5 104 43.5 104 39V37Z" fill="#1a1916"/>
-        <path d="M126 41C126 34.5 131.5 30.5 140.5 29.5L152 28.5V27.5C152 23.5 149.5 21 145 21C141 21 138 23 137 26.5L128.5 24C130.5 17.5 137 13 145 13C155.5 13 161 18.5 161 28.5V54.5H152V51C150 53.5 146.5 55 142 55C133.5 55 126 50.5 126 41Z" fill="#3dbe7a"/>
-        <path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/>
-        <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
-    </svg>
-    <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🏠</a>
-    <div class="top-breadcrumb">
-        <span class="top-module-badge">Recetas</span>
-        <span class="top-sep">|</span>
-        <span class="top-section-name">Insumos</span>
+
+<!-- ── Loading overlay ── -->
+<div id="admLoadOverlay">
+    <div class="adm-load-logo">eta<span>ax</span></div>
+    <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#4a4844;margin-bottom:4px">Catálogo Global · Verificando acceso</div>
+    <div class="adm-dots"><span></span><span></span><span></span></div>
+</div>
+
+<!-- ── Admin topbar ── -->
+<div class="adm-topbar" id="admTopbar" style="display:none">
+    <div class="adm-left">
+        <div class="adm-logo">eta<span>ax</span></div>
+        <div class="adm-badge">⚡ Admin Master</div>
+        <div class="adm-sep">|</div>
+        <div class="adm-title">Catálogo Global de Insumos</div>
     </div>
-</header>
-<div id="ctxBar" class="ctx-bar" style="display:none"></div>
+    <div class="adm-right">
+        <button class="btn-adm-back" onclick="window.location.href='admin.html'">← Panel Admin</button>
+    </div>
+</div>
+
+<!-- ── App shell (sin nav) ── -->
 <div class="app-shell">
-
-    <!-- NAV -->
-    <nav class="nav cerrado" id="nav">
-        <div class="nav-top">
-            <div class="nav-brand">
-                <span class="nav-brand-sub">Recetas e Insumos</span>
-            </div>
-            <div class="nav-top-actions">
-                <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
-            </div>
-        </div>
-        <div class="nav-section">
-            <div class="nav-section-label">Catálogo de</div>
-            <a href="index.html?escandallos=1" class="nav-link" data-tooltip="Recetas"><span class="nav-icon">📋</span><span class="nav-text">Recetas</span></a>
-        </div>
-        <div class="nav-section">
-            <div class="nav-section-label">Catálogo de</div>
-            <a href="insumos.html" class="nav-link active" data-tooltip="Insumos"><span class="nav-icon">🗄️</span><span class="nav-text">Insumos</span></a>
-        </div>
-        <div class="nav-section">
-            <div class="nav-section-label">Control de</div>
-            <a href="inventarios.html" class="nav-link" data-tooltip="Inventarios"><span class="nav-icon">📦</span><span class="nav-text">Inventarios</span></a>
-        </div>
-        <div class="nav-section">
-            <div class="nav-section-label">Sistema de</div>
-            <a href="requisiciones.html" class="nav-link" data-tooltip="Requisiciones"><span class="nav-icon">📝</span><span class="nav-text">Requisiciones</span></a>
-        </div>
-    </nav>
-
-    <main class="main-content expandido" id="mainContent">
+    <main class="main-content" id="mainContent">
 
         <div class="header">
             <div class="brand">
-                <span class="brand-label">Catálogo de productos</span>
+                <span class="brand-label">Catálogo maestro global</span>
                 <span class="brand-title">Insumos</span>
             </div>
             <div style="display:flex;gap:10px">
@@ -72,8 +133,6 @@
         </div>
 
         <div class="wrap">
-
-            <!-- FILTROS -->
             <div class="card">
                 <div class="card-body" style="padding:14px 20px">
                     <div class="filtros-grid">
@@ -86,15 +145,13 @@
                                 font-size:14px;padding:2px 4px;line-height:1;font-family:inherit"
                                 title="Limpiar búsqueda">✕</button>
                         </div>
-                        <select class="filtro-select" id="filtroFamilia" onchange="filtrar()"><option value="">Todas las familias</option></select>
+                        <select class="filtro-select" id="filtroFamilia"   onchange="filtrar()"><option value="">Todas las familias</option></select>
                         <select class="filtro-select" id="filtroCategoria" onchange="filtrar()"><option value="">Todas las categorías</option></select>
                     </div>
                 </div>
             </div>
+        </div>
 
-        </div><!-- /.wrap -->
-
-        <!-- TABLA — ancho completo sin max-width -->
         <div style="padding:0 0 32px">
             <div class="card" style="max-width:none;margin:0 16px">
                 <div class="card-header">
@@ -104,15 +161,14 @@
                         <button id="btnVistaLista" onclick="setVistaInsumos('lista')"
                             style="background:var(--accent);color:#0f0e0c;border:1px solid var(--accent);
                             border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
-                            font-family:inherit;transition:all .2s" title="Vista lista">☰ Lista</button>
+                            font-family:inherit;transition:all .2s">☰ Lista</button>
                         <button id="btnVistaGrid" onclick="setVistaInsumos('grid')"
                             style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
                             border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
-                            font-family:inherit;transition:all .2s" title="Vista galería">⊞ Galería</button>
+                            font-family:inherit;transition:all .2s">⊞ Galería</button>
                     </div>
                 </div>
                 <div class="card-body" style="padding:0">
-                    <!-- Vista lista -->
                     <div id="contenedorLista">
                         <div class="tabla-wrap">
                             <table style="min-width:860px">
@@ -131,24 +187,22 @@
                             <div id="emptyState" class="empty-state" style="display:none">
                                 <div class="empty-icon">🗄️</div>
                                 <div class="empty-title">Sin insumos</div>
-                                <div class="empty-desc">Agrega tu primer insumo o importa un CSV</div>
+                                <div class="empty-desc">Agrega el primer insumo al catálogo global</div>
                             </div>
                         </div>
                     </div>
-                    <!-- Vista galería -->
                     <div id="contenedorGrid" style="display:none;padding:16px">
                         <div id="gridInsumos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px"></div>
                         <div id="emptyStateGrid" class="empty-state" style="display:none">
                             <div class="empty-icon">🗄️</div>
                             <div class="empty-title">Sin insumos</div>
-                            <div class="empty-desc">Agrega tu primer insumo o importa un CSV</div>
+                            <div class="empty-desc">Agrega el primer insumo al catálogo global</div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-    <!-- STATS FOOTER -->
         <div style="padding:0 16px 24px">
             <div class="stats-grid" style="margin-top:0">
                 <div class="stat-card"><div class="stat-label">Total insumos</div><div class="stat-val" id="statTotal">0</div></div>
@@ -160,24 +214,19 @@
     </main>
 </div>
 
-<!-- MODAL AGREGAR/EDITAR -->
+<!-- ── MODAL AGREGAR/EDITAR (idéntico a insumos.html) ── -->
 <div class="modal-overlay" id="modalOverlay">
     <div class="modal">
         <div class="modal-header">
             <h2 id="modalTitulo">Nuevo insumo</h2>
             <div style="display:flex;align-items:center;gap:10px">
-                <span class="pill pill-green" id="ins-activo-pill"
-                    onclick="toggleActivoInsumo()"
-                    style="cursor:pointer;user-select:none">Activo</span>
+                <span class="pill pill-green" id="ins-activo-pill" onclick="toggleActivoInsumo()" style="cursor:pointer;user-select:none">Activo</span>
                 <input type="hidden" id="ins-activo" value="1">
                 <button class="modal-close" onclick="cerrarModalBtn()">✕</button>
             </div>
         </div>
         <div class="modal-body">
-
-            <!-- FILA 1: Foto + campos principales -->
             <div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:16px">
-                <!-- Foto + Descripción -->
                 <div style="display:flex;flex-direction:column;gap:8px;width:200px;flex-shrink:0">
                     <label class="proc-label">Foto del producto</label>
                     <div class="foto-wrap" id="insFotoWrap" style="width:200px;height:140px" onclick="document.getElementById('insFotoInput').click()">
@@ -189,10 +238,8 @@
                     </div>
                     <input type="file" id="insFotoInput" accept="image/*" style="display:none" onchange="cargarFotoInsumo(this)">
                     <label class="proc-label">Descripción</label>
-                    <textarea id="ins-notas" placeholder="Describe el producto..." rows="3"
-                        style="width:100%;min-height:80px;resize:vertical;font-size:13px"></textarea>
+                    <textarea id="ins-notas" placeholder="Describe el producto..." rows="3" style="width:100%;min-height:80px;resize:vertical;font-size:13px"></textarea>
                 </div>
-                <!-- Campos principales -->
                 <div style="flex:1">
                     <div class="meta-grid" style="grid-template-columns:1fr 1fr">
                         <div class="meta-item" id="row-nombre" style="grid-column:span 2">
@@ -213,13 +260,11 @@
                         </div>
                         <div class="meta-item" id="row-categoria">
                             <label>Categoría</label>
-                            <input type="text" id="ins-categoria" placeholder="Ej. Destilados" readonly
-                                style="opacity:.55;cursor:default;pointer-events:none">
+                            <input type="text" id="ins-categoria" placeholder="Ej. Destilados" readonly style="opacity:.55;cursor:default;pointer-events:none">
                         </div>
                         <div class="meta-item" id="row-familia">
                             <label>Familia</label>
-                            <input type="text" id="ins-familia" placeholder="Ej. Bebidas" readonly
-                                style="opacity:.55;cursor:default;pointer-events:none">
+                            <input type="text" id="ins-familia" placeholder="Ej. Bebidas" readonly style="opacity:.55;cursor:default;pointer-events:none">
                         </div>
                         <div class="meta-item" id="row-subcategoria">
                             <label>Subcategoría</label>
@@ -248,15 +293,12 @@
                     </div>
                 </div>
             </div>
-
-            <!-- PRESENTACIONES -->
             <div style="margin-top:18px">
                 <div style="margin-bottom:10px">
                     <span style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)">Presentaciones y costos</span>
                 </div>
                 <div id="listaPresentaciones"></div>
-                <button class="btn-add" style="width:100%;margin-top:8px;padding:10px;font-size:12px;text-align:center"
-                    onclick="agregarPresentacion()">+ Agregar presentación</button>
+                <button class="btn-add" style="width:100%;margin-top:8px;padding:10px;font-size:12px;text-align:center" onclick="agregarPresentacion()">+ Agregar presentación</button>
             </div>
         </div>
         <div class="modal-footer">
@@ -266,7 +308,7 @@
     </div>
 </div>
 
-<!-- MODAL FICHA TÉCNICA -->
+<!-- ── MODAL FICHA TÉCNICA ── -->
 <div class="modal-overlay" id="modalFicha" onclick="cerrarFicha(event)">
     <div class="modal" style="max-width:520px">
         <div class="modal-header">
@@ -280,7 +322,7 @@
     </div>
 </div>
 
-<!-- MODAL IMPORTAR CSV -->
+<!-- ── MODAL IMPORTAR CSV ── -->
 <div class="modal-overlay" id="modalImportar" onclick="cerrarImportar(event)">
     <div class="modal" style="max-width:520px">
         <div class="modal-header">
@@ -329,33 +371,7 @@
     </div>
 </div>
 
-<script src="insumos.js"></script>
-<script>
-function toggleNav() {
-    const nav = document.getElementById('nav');
-    nav.classList.toggle('cerrado');
-    document.getElementById('mainContent').classList.toggle('expandido');
-    const cerrado = nav.classList.contains('cerrado');
-    const btn = document.getElementById('navToggleBtn');
-    const txt = document.getElementById('navToggleTxt');
-    btn.childNodes[0].textContent = cerrado ? '▶' : '◀';
-    if (txt) txt.textContent = cerrado ? 'Expandir' : 'Ocultar';
-    btn.setAttribute('data-tooltip', cerrado ? 'Expandir' : 'Ocultar');
-}
-
-function toggleClearBtn() {
-    const val = document.getElementById('searchInput').value;
-    document.getElementById('clearSearch').style.display = val ? 'block' : 'none';
-}
-
-function clearSearchInput() {
-    document.getElementById('searchInput').value = '';
-    document.getElementById('clearSearch').style.display = 'none';
-    filtrar();
-}
-</script>
-
-<!-- MODAL SELECTOR DE CATEGORÍA -->
+<!-- ── MODAL SELECTOR DE CATEGORÍA ── -->
 <div class="modal-overlay" id="modalCategoria" onclick="cerrarModalCategoria(event)">
     <div class="modal" style="max-width:760px;max-height:none;overflow:visible">
         <div class="modal-header">
@@ -364,123 +380,43 @@ function clearSearchInput() {
         </div>
         <div class="modal-body" style="padding:18px 20px">
             <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">
-                <button onclick="abrirModalConTipo('destilado')" class="cat-btn">
-                    <span style="font-size:24px">🥃</span>
-                    <div class="cat-btn-title">Destilado</div>
-                    <div class="cat-btn-desc">Whisky, tequila, vodka, ron, mezcal...</div>
-                </button>
-                <button onclick="abrirModalConTipo('licor')" class="cat-btn">
-                    <span style="font-size:24px">🍹</span>
-                    <div class="cat-btn-title">Licor</div>
-                    <div class="cat-btn-desc">Aperitivos, amaretto, triple sec, cremas...</div>
-                </button>
-                <button onclick="abrirModalConTipo('vino')" class="cat-btn">
-                    <span style="font-size:24px">🍷</span>
-                    <div class="cat-btn-title">Vino / Espumoso</div>
-                    <div class="cat-btn-desc">Vinos, cavas, cervezas artesanales...</div>
-                </button>
-                <button onclick="abrirModalConTipo('refresco')" class="cat-btn">
-                    <span style="font-size:24px">🥤</span>
-                    <div class="cat-btn-title">Refrescos y jugos</div>
-                    <div class="cat-btn-desc">Sodas, aguas, energizantes, jarabes...</div>
-                </button>
-                <button onclick="abrirModalConTipo('cerveza')" class="cat-btn">
-                    <span style="font-size:24px">🍺</span>
-                    <div class="cat-btn-title">Cerveza</div>
-                    <div class="cat-btn-desc">Comerciales, artesanales...</div>
-                </button>
-                <button onclick="abrirModalConTipo('cerveza_barril')" class="cat-btn">
-                    <span style="font-size:24px">🛢️</span>
-                    <div class="cat-btn-title">Barril</div>
-                    <div class="cat-btn-desc">Barril, tina, grifo — vaso o jarra</div>
-                </button>
-                <button onclick="abrirModalConTipo('abarrote')" class="cat-btn">
-                    <span style="font-size:24px">🧂</span>
-                    <div class="cat-btn-title">Abarrotes</div>
-                    <div class="cat-btn-desc">Secos, lácteos, aceites, especias...</div>
-                </button>
-                <button onclick="abrirModalConTipo('carne')" class="cat-btn">
-                    <span style="font-size:24px">🥩</span>
-                    <div class="cat-btn-title">Proteínas</div>
-                    <div class="cat-btn-desc">Res, cerdo, pollo, mariscos...</div>
-                </button>
-                <button onclick="abrirModalConTipo('fruta')" class="cat-btn">
-                    <span style="font-size:24px">🥬</span>
-                    <div class="cat-btn-title">Fruta y Verdura</div>
-                    <div class="cat-btn-desc">Frescos, hierbas, condimentos...</div>
-                </button>
-                <button onclick="abrirModalConTipo('otro')" class="cat-btn">
-                    <span style="font-size:24px">📦</span>
-                    <div class="cat-btn-title">Otro</div>
-                    <div class="cat-btn-desc">Desechables, limpieza, varios...</div>
-                </button>
+                <button onclick="abrirModalConTipo('destilado')" class="cat-btn"><span style="font-size:24px">🥃</span><div class="cat-btn-title">Destilado</div><div class="cat-btn-desc">Whisky, tequila, vodka, ron, mezcal...</div></button>
+                <button onclick="abrirModalConTipo('licor')"     class="cat-btn"><span style="font-size:24px">🍹</span><div class="cat-btn-title">Licor</div><div class="cat-btn-desc">Aperitivos, amaretto, triple sec...</div></button>
+                <button onclick="abrirModalConTipo('vino')"      class="cat-btn"><span style="font-size:24px">🍷</span><div class="cat-btn-title">Vino / Espumoso</div><div class="cat-btn-desc">Vinos, cavas, cervezas artesanales...</div></button>
+                <button onclick="abrirModalConTipo('refresco')"  class="cat-btn"><span style="font-size:24px">🥤</span><div class="cat-btn-title">Refrescos y jugos</div><div class="cat-btn-desc">Sodas, aguas, energizantes, jarabes...</div></button>
+                <button onclick="abrirModalConTipo('cerveza')"   class="cat-btn"><span style="font-size:24px">🍺</span><div class="cat-btn-title">Cerveza</div><div class="cat-btn-desc">Comerciales, artesanales...</div></button>
+                <button onclick="abrirModalConTipo('cerveza_barril')" class="cat-btn"><span style="font-size:24px">🛢️</span><div class="cat-btn-title">Barril</div><div class="cat-btn-desc">Barril, tina, grifo — vaso o jarra</div></button>
+                <button onclick="abrirModalConTipo('abarrote')"  class="cat-btn"><span style="font-size:24px">🧂</span><div class="cat-btn-title">Abarrotes</div><div class="cat-btn-desc">Secos, lácteos, aceites, especias...</div></button>
+                <button onclick="abrirModalConTipo('carne')"     class="cat-btn"><span style="font-size:24px">🥩</span><div class="cat-btn-title">Proteínas</div><div class="cat-btn-desc">Res, cerdo, pollo, mariscos...</div></button>
+                <button onclick="abrirModalConTipo('fruta')"     class="cat-btn"><span style="font-size:24px">🥬</span><div class="cat-btn-title">Fruta y Verdura</div><div class="cat-btn-desc">Frescos, hierbas, condimentos...</div></button>
+                <button onclick="abrirModalConTipo('otro')"      class="cat-btn"><span style="font-size:24px">📦</span><div class="cat-btn-title">Otro</div><div class="cat-btn-desc">Desechables, limpieza, varios...</div></button>
             </div>
         </div>
     </div>
 </div>
 
-<style>
-.cat-btn {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 14px 10px;
-    cursor: pointer;
-    text-align: center;
-    transition: all 0.18s;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 5px;
-    color: var(--text);
-    width: 100%;
-}
-.cat-btn:hover {
-    border-color: var(--green);
-    background: rgba(61,190,122,0.07);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 16px rgba(61,190,122,0.12);
-}
-.cat-btn-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text);
-    line-height: 1.2;
-}
-.cat-btn-desc {
-    font-size: 9.5px;
-    color: var(--text-dim);
-    line-height: 1.4;
-}
-</style>
-
-<style>
-.theme-toggle {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    z-index: 999;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 50px;
-    padding: 8px 16px;
-    cursor: pointer;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 12px;
-    color: var(--text-muted);
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.15);
-    transition: all 0.2s;
-}
-.theme-toggle:hover { border-color: var(--green); color: var(--green); }
-</style>
+<!-- ── Theme toggle ── -->
 <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Cambiar modo">
     <span id="themeIcon">☀️</span>
     <span id="themeLabel">Modo claro</span>
 </button>
+
+<!-- ── Scripts ── -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="supabase-config.js"></script>
 <script>
+/* ────────────────────────────────────────────────────────────
+   ADMIN CATÁLOGO INSUMOS — capa de integración
+   Carga datos desde Supabase → localStorage sentinel →
+   insumos.js los lee/escribe como si fuera un negocio normal →
+   setInsumos interceptado sincroniza de regreso a Supabase.
+──────────────────────────────────────────────────────────── */
+
+var ADMIN_EMAIL      = 'admin@etaax.com';
+var CATALOGO_KEY     = '__catalogo__';          // sentinel negocioId
+var LS_KEY           = 'etaax___catalogo___insumos'; // clave localStorage
+
+/* ── Theme ─────────────────────────────────────────────────── */
 (function(){
     var saved = localStorage.getItem('etaax_theme') || 'dark';
     document.documentElement.setAttribute('data-theme', saved);
@@ -502,106 +438,94 @@ function toggleTheme() {
     if (next === 'light') { if(icon) icon.textContent='🌙'; if(label) label.textContent='Modo oscuro'; }
     else                  { if(icon) icon.textContent='☀️'; if(label) label.textContent='Modo claro'; }
 }
+
+function toggleClearBtn() {
+    var val = document.getElementById('searchInput').value;
+    document.getElementById('clearSearch').style.display = val ? 'block' : 'none';
+}
+function clearSearchInput() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('clearSearch').style.display = 'none';
+    filtrar();
+}
+
+/* ── Sync Supabase → localStorage ───────────────────────────── */
+async function _loadCatalogFromSupabase() {
+    var res = await _supabase.from('catalogo_insumos').select('*').order('created_at', { ascending: true });
+    var insumos = (res.data || []).map(function(r){ return r.datos; }).filter(Boolean);
+    localStorage.setItem(LS_KEY, JSON.stringify(insumos));
+    // Asegurar que etaax_negocio_activo apunte al sentinel
+    localStorage.setItem('etaax_negocio_activo', CATALOGO_KEY);
+    return insumos;
+}
+
+/* ── Sync localStorage → Supabase (fire & forget) ─────────── */
+async function _syncCatalogToSupabase(data) {
+    // IDs actuales en Supabase
+    var res = await _supabase.from('catalogo_insumos').select('id');
+    var supaIds  = (res.data || []).map(function(r){ return r.id; });
+    var localIds = data.map(function(ins){ return ins.id; });
+
+    // Eliminar los que ya no existen localmente
+    var toDelete = supaIds.filter(function(id){ return !localIds.includes(id); });
+    if (toDelete.length) {
+        await _supabase.from('catalogo_insumos').delete().in('id', toDelete);
+    }
+
+    // Upsert todos los actuales
+    if (data.length) {
+        await _supabase.from('catalogo_insumos').upsert(
+            data.map(function(ins){ return { id: ins.id, datos: ins }; })
+        );
+    }
+}
+
+/* ── Carga dinámica de insumos.js ──────────────────────────── */
+function _loadInsumosJS(callback) {
+    var s = document.createElement('script');
+    s.src = 'recetas/insumos.js';
+    s.onload = callback;
+    document.body.appendChild(s);
+}
+
+/* ── Init principal ────────────────────────────────────────── */
+(async function() {
+    // 1. Verificar sesión admin
+    var sd      = await _supabase.auth.getSession();
+    var session = sd.data && sd.data.session;
+
+    if (!session || session.user.email !== ADMIN_EMAIL) {
+        window.location.href = 'admin.html';
+        return;
+    }
+
+    // 2. Cargar catálogo desde Supabase → localStorage sentinel
+    await _loadCatalogFromSupabase();
+
+    // 3. Cargar insumos.js dinámicamente
+    _loadInsumosJS(function() {
+        // insumos.js ya corrió su init() usando el sentinel.
+        // Ahora sobreescribimos getNegocioActivo para que siempre apunte al catálogo
+        // (por si insumos.js lo hubiera vuelto a leer de localStorage)
+        getNegocioActivo = function() { return CATALOGO_KEY; };
+
+        // Interceptar setInsumos para sincronizar a Supabase tras cada escritura
+        var _origSetInsumos = setInsumos;
+        setInsumos = function(data) {
+            _origSetInsumos(data);
+            _syncCatalogToSupabase(data).catch(function(e){
+                console.warn('[admin-catalogo] sync error:', e);
+            });
+        };
+
+        // Re-renderizar con el override activo
+        init();
+
+        // 4. Mostrar UI
+        document.getElementById('admLoadOverlay').classList.add('oculto');
+        document.getElementById('admTopbar').style.display = 'flex';
+    });
+})();
 </script>
-
-<style>
-/* ── Grid / Galería ──────────────────────────────────────── */
-.insumo-card {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    transition: transform .15s, border-color .15s;
-}
-.insumo-card:hover { transform: translateY(-3px); border-color: var(--green); }
-.insumo-card-foto {
-    position: relative;
-    height: 110px;
-    background: var(--surface);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-}
-.insumo-card-foto img { width:100%;height:100%;object-fit:cover; }
-.card-emoji { font-size: 44px; }
-.insumo-card-tipo-badge {
-    position: absolute;
-    top: 6px;
-    left: 6px;
-    background: rgba(15,14,12,.75);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    font-size: 9px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--accent);
-    padding: 2px 6px;
-}
-.insumo-card-body { padding: 10px 12px; flex: 1; }
-.insumo-card-nombre { font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-.insumo-card-variedad { font-size:10px;color:var(--text-dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-.insumo-card-cat { font-size:9px;color:var(--text-dim);opacity:.7;margin-top:2px; }
-.insumo-card-costo { font-size:12px;color:var(--green);font-weight:600;margin-top:6px; }
-.insumo-card-prov { font-size:9px;color:var(--text-dim);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-.insumo-card-pres { display:flex;flex-wrap:wrap;gap:3px;margin-top:6px; }
-.insumo-card-actions {
-    display: flex;
-    gap: 4px;
-    padding: 8px 10px;
-    border-top: 1px solid var(--border);
-    background: var(--surface);
-}
-.insumo-card-actions button {
-    flex: 1;
-    padding: 5px 4px;
-    font-size: 10px;
-    border-radius: 5px;
-    cursor: pointer;
-    font-family: inherit;
-    transition: all .15s;
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--text-dim);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 3px;
-}
-.btn-ver:hover { border-color:var(--green);color:var(--green); }
-.btn-edit:hover { border-color:var(--accent);color:var(--accent); }
-.btn-del:hover { border-color:var(--red);color:var(--red); }
-</style>
-
-<style>
-/* ── Chip picker uvas vino ──────────────────────────────── */
-.uva-chip {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: 20px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-dim);
-    font-size: 11px;
-    cursor: pointer;
-    user-select: none;
-    transition: all .15s;
-    line-height: 1.4;
-}
-.uva-chip:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-}
-.uva-chip.active {
-    background: rgba(245,200,66,.15);
-    border-color: var(--accent);
-    color: var(--accent);
-    font-weight: 600;
-}
-</style>
-<script>window.ctxNavBack = 'index.html?escandallos=1';</script>
-<script src="../ctx-bar.js"></script>
 </body>
 </html>

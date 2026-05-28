@@ -1316,28 +1316,43 @@ function initCtxBar() {
     var ctx;
     try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch(e) {}
     if (!ctx) return;
-    var isSubdir = window.location.pathname.split('/').length > 2;
-    var hubPath  = isSubdir ? '../hub.html' : 'hub.html';
-    var color    = ctx.negColor || '#3dbe7a';
+    var parts   = window.location.pathname.split('/').filter(Boolean);
+    var hubPath = parts.length > 1 ? '../hub.html' : 'hub.html';
+    var color   = ctx.negColor || '#3dbe7a';
     bar.innerHTML =
-        '<div class="ctx-neg-emoji" style="background:' + color + '22;border:1px solid ' + color + '44">' + _esc(ctx.negEmoji) + '</div>' +
+        '<div class="ctx-bar-inner" style="border-color:' + color + '44">' +
+        '<div class="ctx-neg-emoji-wrap" style="background:' + color + '1a;border-color:' + color + '33">' + _esc(ctx.negEmoji) + '</div>' +
         '<div><div class="ctx-neg-name">' + _esc(ctx.negNombre) + '</div><div class="ctx-neg-tipo">' + _esc(ctx.negTipo) + '</div></div>' +
-        '<div class="ctx-vsep"></div>' +
-        '<span class="ctx-user-name">' + _esc(ctx.userName.split(' ')[0]) + '</span>' +
-        '<span class="ctx-badge" style="background:' + ctx.userColor + '22;color:' + ctx.userColor + ';border-color:' + ctx.userColor + '44">' + _esc(ctx.userBadge) + '</span>' +
-        '<div style="flex:1"></div>' +
+        '<div id="ctxEditorNav" style="display:none;align-items:center;gap:6px;margin-left:12px;padding-left:12px;border-left:1px solid var(--border,#2a2825)">' +
+        '<button class="ctx-btn" id="btnVolver" onclick="history.back()">← Volver</button>' +
+        '<button class="ctx-btn" id="btnUndo" onclick="undoReceta()" title="Deshacer (Ctrl+Z)" disabled style="opacity:.4;padding:4px 9px">↩</button>' +
+        '<button class="ctx-btn" id="btnRedo" onclick="redoReceta()" title="Rehacer (Ctrl+Y)" disabled style="opacity:.4;padding:4px 9px">↪</button>' +
+        '</div>' +
+        '<div style="margin-left:auto;display:flex;gap:8px;align-items:center">' +
+        '<div class="ctx-user-badge"><span>' + _esc(ctx.userName.split(' ')[0]) + '</span>' +
+        '<span class="ctx-badge-plan" style="background:' + ctx.userColor + '22;color:' + ctx.userColor + '">' + _esc(ctx.userBadge) + '</span></div>' +
         '<a href="' + hubPath + '" class="ctx-btn">← Hub</a>' +
-        '<button class="ctx-btn ctx-btn-danger" onclick="ctxSalir()">Salir</button>';
+        '<button class="ctx-btn ctx-btn-danger" onclick="ctxSalir()">Salir</button>' +
+        '</div></div>';
     bar.style.display = 'flex';
     document.body.classList.add('has-ctx');
 }
 
+function ctxShowEditorNav() {
+    var nav = document.getElementById('ctxEditorNav');
+    if (nav) nav.style.display = 'flex';
+}
+function ctxHideEditorNav() {
+    var nav = document.getElementById('ctxEditorNav');
+    if (nav) nav.style.display = 'none';
+}
+
 function ctxSalir() {
-    var isSubdir = window.location.pathname.split('/').length > 2;
-    var hubPath  = (isSubdir ? '../' : '') + 'hub.html?salir=1';
+    var parts = window.location.pathname.split('/').filter(Boolean);
     localStorage.removeItem('etaax_negocio_activo');
     localStorage.removeItem('etaax_ctx');
-    window.location.href = hubPath;
+    sessionStorage.clear();
+    window.location.href = (parts.length > 1 ? '../' : '') + 'hub.html?salir=1';
 }
 
 document.addEventListener('DOMContentLoaded', initCtxBar);

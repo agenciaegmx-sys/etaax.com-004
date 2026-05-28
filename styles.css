@@ -1335,44 +1335,54 @@ textarea:focus {
 .mod-card-desc { font-size: 11px; color: var(--text-dim); line-height: 1.5; }
 
 /* ── CONTEXT BAR (negocio activo en sub-páginas) ── */
+/* ── BARRA DE CONTEXTO (negocio activo en sub-páginas) ── */
 .ctx-bar {
     position: fixed; top: 48px; left: 0; right: 0;
-    height: 32px; z-index: 190;
-    background: var(--surface);
+    height: 48px; z-index: 190;
+    padding: 6px 0;
+    background: var(--bg);
     border-bottom: 1px solid var(--border);
-    display: flex; align-items: center;
-    padding: 0 16px; gap: 10px;
-    font-family: 'DM Sans', sans-serif;
-    backdrop-filter: blur(8px);
-}
-.ctx-neg-emoji {
-    width: 22px; height: 22px; border-radius: 6px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 12px; flex-shrink: 0;
+    font-family: 'DM Sans', sans-serif;
+}
+.ctx-bar-inner {
+    display: flex; align-items: center; gap: 10px;
+    width: 60%; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 0 14px; height: 100%;
+    transition: border-color .3s;
+}
+.ctx-neg-emoji-wrap {
+    width: 26px; height: 26px; border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; flex-shrink: 0; border: 1px solid transparent;
+    transition: background .3s, border-color .3s;
 }
 .ctx-neg-name { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.1; }
-.ctx-neg-tipo { font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-dim); }
-.ctx-vsep { width: 1px; height: 16px; background: var(--border); flex-shrink: 0; }
-.ctx-user-name { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
-.ctx-badge {
-    font-size: 8px; letter-spacing: 1.2px; text-transform: uppercase;
-    padding: 1px 7px; border-radius: 20px; white-space: nowrap;
-    border: 1px solid transparent;
+.ctx-neg-tipo { font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-dim); margin-top: 1px; }
+.ctx-user-badge {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,.03); border: 1px solid var(--border);
+    border-radius: 7px; padding: 3px 10px; font-size: 11px; color: var(--text-muted);
+}
+.ctx-badge-plan {
+    font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 20px; font-weight: 600;
 }
 .ctx-btn {
     background: transparent; border: 1px solid var(--border); color: var(--text-dim);
-    font-family: 'DM Sans', sans-serif; font-size: 10px; padding: 3px 10px;
-    border-radius: 5px; cursor: pointer; transition: all .15s; letter-spacing: .3px;
+    font-family: 'DM Sans', sans-serif; font-size: 10px; padding: 4px 12px;
+    border-radius: 6px; cursor: pointer; transition: all .15s; letter-spacing: .3px;
     text-decoration: none; display: inline-flex; align-items: center; white-space: nowrap;
 }
 .ctx-btn:hover { border-color: var(--green); color: var(--green); }
 .ctx-btn-danger:hover { border-color: var(--red); color: var(--red); }
 
 /* Ajustes de layout cuando ctx-bar está visible */
-body.has-ctx .nav { top: 80px; height: calc(100vh - 80px); }
-body.has-ctx .main-content { margin-top: 80px; }
-body.has-ctx .mod-landing-wrap { padding-top: 80px; }
-body.has-ctx #moduloLanding { top: 80px; }
+body.has-ctx .nav { top: 96px; height: calc(100vh - 96px); }
+body.has-ctx .main-content { margin-top: 96px; }
+body.has-ctx .mod-landing-wrap { padding-top: 96px; }
+body.has-ctx #moduloLanding { top: 96px; }
 
 /* ── ANIMACIONES ── */
 @keyframes fadeUp {
@@ -1402,6 +1412,14 @@ body.has-ctx #moduloLanding { top: 80px; }
     padding: 4px 6px; border-radius: 6px;
 }
 .top-home-icon:hover { color: var(--green); }
+.topbar-home {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    font-size: 20px; text-decoration: none; cursor: pointer;
+    color: var(--text-dim); transition: color .15s, background .15s;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; border-radius: 8px;
+}
+.topbar-home:hover { color: var(--green); background: var(--surface); }
 
 /* ── HERO de módulo (hub-style) ── */
 .mlanding-hero {
@@ -1441,6 +1459,13 @@ body.has-ctx #moduloLanding { top: 80px; }
     display: flex; flex-direction: column;
     align-items: flex-start; gap: 8px;
     color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: left;
+    -webkit-appearance: none;
+    appearance: none;
 }
 .mlanding-card:hover {
     border-color: rgba(30,80,220,.5);

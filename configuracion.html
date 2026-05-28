@@ -13,7 +13,7 @@
     padding:28px;margin-bottom:20px;
 }
 .config-section-title {
-    font-size:10px;letter-spacing:3px;text-transform:uppercase;
+    font-size:9px;letter-spacing:2.5px;text-transform:uppercase;
     color:var(--text-dim);margin-bottom:20px;padding-bottom:10px;
     border-bottom:1px solid var(--border);
 }
@@ -26,48 +26,13 @@
 .form-group textarea {
     background:var(--surface2);border:1px solid var(--border);color:var(--text);
     padding:10px 14px;border-radius:8px;font-family:'DM Sans',sans-serif;
-    font-size:14px;outline:none;transition:border-color .2s;width:100%;
+    font-size:14px;outline:none;transition:border-color .2s;width:100%;box-sizing:border-box;
 }
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus { border-color:var(--green); }
 .form-group textarea { min-height:80px;resize:vertical; }
 .form-hint { font-size:11px;color:var(--text-dim); }
-
-/* Color picker */
-.color-grid { display:flex;flex-wrap:wrap;gap:10px;margin-top:4px; }
-.color-dot {
-    width:32px;height:32px;border-radius:50%;cursor:pointer;
-    border:2px solid transparent;transition:transform .15s,border-color .15s;
-    flex-shrink:0;
-}
-.color-dot:hover { transform:scale(1.15); }
-.color-dot.sel { border-color:#fff;transform:scale(1.15); }
-
-/* Tipo icons grid */
-.tipo-grid { display:flex;flex-wrap:wrap;gap:8px;margin-top:4px; }
-.tipo-btn {
-    display:flex;align-items:center;gap:8px;
-    padding:8px 14px;border-radius:8px;border:1px solid var(--border);
-    background:var(--surface2);cursor:pointer;font-family:'DM Sans',sans-serif;
-    font-size:13px;color:var(--text-muted);transition:all .15s;
-}
-.tipo-btn:hover { border-color:var(--green);color:var(--text); }
-.tipo-btn.sel { border-color:var(--accent);background:var(--accent-dim);color:var(--accent);font-weight:500; }
-
-/* Preview card */
-.neg-preview {
-    display:flex;align-items:center;gap:16px;
-    background:var(--surface2);border:1px solid var(--border);border-radius:12px;
-    padding:16px 20px;margin-bottom:20px;transition:border-color .3s;
-}
-.neg-preview-emoji {
-    width:52px;height:52px;border-radius:14px;
-    display:flex;align-items:center;justify-content:center;
-    font-size:26px;flex-shrink:0;transition:background .3s;
-}
-.neg-preview-nombre { font-size:17px;font-weight:600;color:var(--text); }
-.neg-preview-tipo { font-size:11px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-top:3px; }
 
 /* Save bar */
 .save-bar {
@@ -85,19 +50,30 @@
 .btn-back {
     background:transparent;border:1px solid var(--border);color:var(--text-muted);
     font-family:'DM Sans',sans-serif;font-size:13px;
-    padding:10px 20px;border-radius:8px;cursor:pointer;transition:all .2s;text-decoration:none;
-    display:inline-flex;align-items:center;gap:6px;
+    padding:10px 20px;border-radius:8px;cursor:pointer;transition:all .2s;
+    display:inline-flex;align-items:center;gap:6px;white-space:nowrap;text-decoration:none;
 }
 .btn-back:hover { border-color:var(--text-muted);color:var(--text); }
 
-.horario-grid { display:grid;grid-template-columns:repeat(7,1fr);gap:6px; }
-.dia-col { display:flex;flex-direction:column;gap:6px; }
-.dia-label { font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);text-align:center; }
-.dia-check { width:100%;aspect-ratio:1;border-radius:6px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-dim);transition:all .15s;user-select:none; }
-.dia-check.activo { background:rgba(61,190,122,.12);border-color:var(--green);color:var(--green);font-weight:600; }
-
 .theme-toggle{position:fixed;bottom:70px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;}
 .theme-toggle:hover{border-color:var(--green);color:var(--green);}
+
+/* Sucursal row */
+.suc-row {
+    display:flex;align-items:center;justify-content:space-between;
+    padding:12px 16px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);
+    margin-bottom:8px;
+}
+.suc-row-info { display:flex;flex-direction:column;gap:2px; }
+.suc-row-nombre { font-size:14px;font-weight:500;color:var(--text); }
+.suc-row-meta { font-size:11px;color:var(--text-dim); }
+.suc-toggle {
+    font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;letter-spacing:.5px;
+    padding:6px 14px;border-radius:6px;cursor:pointer;border:1px solid;transition:all .15s;
+}
+.suc-toggle.activa { background:rgba(61,190,122,.1);border-color:var(--green);color:var(--green); }
+.suc-toggle.inactiva { background:var(--surface);border-color:var(--border);color:var(--text-dim); }
+
 @media(max-width:640px){ .form-grid{grid-template-columns:1fr;} .form-group.full{grid-column:1;} }
 </style>
 </head>
@@ -117,7 +93,7 @@
     <div class="top-breadcrumb">
         <span class="top-module-badge">Configuración</span>
         <span class="top-sep">|</span>
-        <span class="top-section-name">General del negocio</span>
+        <span class="top-section-name" id="breadNombre">Información de marca</span>
         <a href="hub.html" class="btn-top-home">← Hub</a>
     </div>
 </header>
@@ -125,93 +101,86 @@
 <div style="padding:32px 24px 100px;max-width:800px;margin:0 auto;">
     <div style="margin-bottom:28px;">
         <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px;">Configuración</div>
-        <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:1px;color:var(--text);">General del negocio</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:1px;color:var(--text);">Información de marca</div>
+        <div style="font-size:13px;color:var(--text-dim);margin-top:6px;">Datos generales de la marca · no incluye datos específicos de cada sucursal</div>
     </div>
 
-    <!-- Preview -->
-    <div class="neg-preview" id="negPreview">
-        <div class="neg-preview-emoji" id="prevEmoji">🏢</div>
-        <div>
-            <div class="neg-preview-nombre" id="prevNombre">—</div>
-            <div class="neg-preview-tipo" id="prevTipo">—</div>
-        </div>
-    </div>
-
-    <!-- Identidad -->
+    <!-- IDENTIDAD DE MARCA -->
     <div class="config-section">
-        <div class="config-section-title">Identidad del negocio</div>
+        <div class="config-section-title">Identidad de marca</div>
+
+        <!-- Logo -->
+        <div style="display:flex;align-items:center;gap:20px;margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--border)">
+            <div id="logoPrev" style="flex-shrink:0"></div>
+            <div style="flex:1">
+                <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px">Logotipo de la marca</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <label style="display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;padding:9px 16px;border-radius:8px;cursor:pointer;transition:border-color .2s"
+                           onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border)'">
+                        📁 Subir imagen
+                        <input id="logoInput" type="file" accept="image/*" style="display:none" onchange="logoChange(this)">
+                    </label>
+                    <button onclick="logoEliminar()" style="background:transparent;border:1px solid var(--border);color:var(--text-dim);font-family:'DM Sans',sans-serif;font-size:12px;padding:9px 14px;border-radius:8px;cursor:pointer">Quitar</button>
+                </div>
+                <div style="font-size:11px;color:var(--text-dim);margin-top:6px">JPG, PNG · máx 5 MB · se comprimirá a 400px</div>
+            </div>
+        </div>
+
         <div class="form-grid">
             <div class="form-group full">
-                <label>Nombre del negocio *</label>
-                <input type="text" id="cNombre" placeholder="Ej. Bar La Esperanza" oninput="updatePreview()">
+                <label>Nombre / Marca comercial *</label>
+                <input type="text" id="cNombre" placeholder="Ej. Bar La Esperanza" oninput="markDirty()">
+            </div>
+            <div class="form-group">
+                <label>Fecha de apertura del negocio</label>
+                <input type="date" id="cFechaApertura">
             </div>
             <div class="form-group full">
-                <label>Tipo de negocio</label>
-                <div class="tipo-grid" id="tipoGrid"></div>
-            </div>
-            <div class="form-group full">
-                <label>Color del negocio</label>
-                <div class="color-grid" id="colorGrid"></div>
+                <label>Descripción de la marca</label>
+                <textarea id="cDescripcion" placeholder="Describe brevemente tu marca: concepto, propuesta de valor, historia…" style="min-height:90px"></textarea>
             </div>
         </div>
     </div>
 
-    <!-- Contacto -->
+    <!-- CONTACTO GLOBAL -->
     <div class="config-section">
-        <div class="config-section-title">Datos de contacto</div>
+        <div class="config-section-title">Contacto global de la marca</div>
         <div class="form-grid">
             <div class="form-group">
-                <label>Teléfono</label>
+                <label>Teléfono global</label>
                 <input type="tel" id="cTel" placeholder="55 1234 5678">
             </div>
             <div class="form-group">
-                <label>Correo de contacto</label>
-                <input type="email" id="cCorreo" placeholder="contacto@negocio.com">
-            </div>
-            <div class="form-group">
-                <label>Sitio web</label>
-                <input type="url" id="cWeb" placeholder="https://minegocio.com">
-            </div>
-            <div class="form-group">
-                <label>RFC</label>
-                <input type="text" id="cRFC" placeholder="XAXX010101000" maxlength="13" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+                <label>Correo global</label>
+                <input type="email" id="cCorreo" placeholder="contacto@marca.com">
             </div>
             <div class="form-group full">
-                <label>Dirección fiscal / operativa</label>
-                <input type="text" id="cDireccion" placeholder="Calle, colonia, municipio, CP, estado">
+                <label>Sitio web</label>
+                <input type="url" id="cWeb" placeholder="https://mimarca.com">
             </div>
         </div>
     </div>
 
-    <!-- Horario -->
+    <!-- SUCURSALES -->
     <div class="config-section">
-        <div class="config-section-title">Horario de operación</div>
-        <div class="horario-grid" id="horarioGrid"></div>
-        <div class="form-grid" style="margin-top:16px;">
-            <div class="form-group">
-                <label>Hora de apertura</label>
-                <input type="time" id="cHoraOpen" value="09:00">
-            </div>
-            <div class="form-group">
-                <label>Hora de cierre</label>
-                <input type="time" id="cHoraClose" value="22:00">
-            </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border)">
+            <div style="font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--text-dim)">Sucursales</div>
+            <div id="sucBadges" style="display:flex;gap:8px"></div>
         </div>
-    </div>
-
-    <!-- Notas -->
-    <div class="config-section">
-        <div class="config-section-title">Notas internas</div>
-        <div class="form-group">
-            <textarea id="cNotas" placeholder="Información adicional, instrucciones para el equipo, notas operativas…"></textarea>
+        <div id="sucList">
+            <div style="color:var(--text-dim);font-size:13px;text-align:center;padding:20px 0">Cargando sucursales…</div>
         </div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:10px">Los detalles de cada sucursal (logo, contacto, horario, redes…) se editan desde ⚙️ Ajustes en cada tarjeta de sucursal en Hub.</div>
     </div>
 </div>
 
 <!-- Save bar -->
 <div class="save-bar">
-    <div class="save-bar-status" id="saveStatus">Sin cambios pendientes</div>
-    <button class="btn-save" onclick="guardarConfig()">Guardar configuración</button>
+    <a href="hub.html" class="btn-back">← Regresar al negocio</a>
+    <div style="display:flex;align-items:center;gap:14px;margin-left:auto">
+        <div class="save-bar-status" id="saveStatus">Sin cambios pendientes</div>
+        <button class="btn-save" id="btnSave" onclick="guardarConfig()">Guardar configuración</button>
+    </div>
 </div>
 
 <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
@@ -234,11 +203,14 @@ function toggleTheme() {
     document.getElementById('themeLabel').textContent = next === 'light' ? 'Modo oscuro' : 'Modo claro';
 }
 
-/* ── SESSION & STORAGE ── */
+/* ── STORAGE ── */
 function getNegocioActivo() { return localStorage.getItem('etaax_negocio_activo') || ''; }
 function getNegocios() { try { return JSON.parse(localStorage.getItem('etaax_negocios')) || []; } catch(e){ return []; } }
 function setNegocios(d) { localStorage.setItem('etaax_negocios', JSON.stringify(d)); }
+function getSucursales(negId) { try { return JSON.parse(localStorage.getItem('etaax_' + negId + '_sucursales')) || []; } catch { return []; } }
+function setSucursales(negId, d) { localStorage.setItem('etaax_' + negId + '_sucursales', JSON.stringify(d)); }
 function _sk(key) { var id = getNegocioActivo(); return id ? ('etaax_' + id + '_' + key) : ('etaax_' + key); }
+
 async function loadExtra() {
     var negId = getNegocioActivo();
     if (!negId) { try { return JSON.parse(localStorage.getItem(_sk('config_extra'))) || {}; } catch(e){ return {}; } }
@@ -257,64 +229,116 @@ async function saveExtra(d) {
     await _supabase.from('config_negocio').upsert({ negocio_id: negId, datos: d, updated_at: new Date().toISOString() });
 }
 
-/* ── TIPOS ── */
-var TIPOS = [
-    { key:'bar',        emoji:'🍸', label:'Bar' },
-    { key:'restaurante',emoji:'🍽️', label:'Restaurante' },
-    { key:'cafe',       emoji:'☕', label:'Café' },
-    { key:'cocteleria', emoji:'🍹', label:'Coctelería' },
-    { key:'fonda',      emoji:'🥘', label:'Fonda / Comedor' },
-    { key:'banquetes',  emoji:'🥂', label:'Banquetes' },
-    { key:'eventos',    emoji:'🎉', label:'Eventos / Salón' },
-    { key:'cedis',      emoji:'🏭', label:'CEDIS' },
-    { key:'otro',       emoji:'🏢', label:'Otro' },
-];
-var COLORES = ['#3dbe7a','#f5c842','#c87a6a','#7ab8f5','#9b8de8','#e87a5a','#5ac8a8','#e8c45a','#a87ae8','#e85a8a'];
-var DIAS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
-
-var _tipo   = 'otro';
-var _color  = '#3dbe7a';
-var _diasAct= [true,true,true,true,true,true,false];
-
-/* ── RENDER PICKERS ── */
-function renderTipoGrid() {
-    var g = document.getElementById('tipoGrid');
-    g.innerHTML = TIPOS.map(function(t){
-        return '<button type="button" class="tipo-btn' + (_tipo===t.key?' sel':'') + '" onclick="selTipo(\'' + t.key + '\')">' +
-            t.emoji + ' ' + t.label + '</button>';
-    }).join('');
+/* ── LOGO ── */
+function _getNegLogo(negId) { return localStorage.getItem('etaax_' + negId + '_logo') || ''; }
+function _setNegLogo(negId, b64) {
+    if (b64) localStorage.setItem('etaax_' + negId + '_logo', b64);
+    else localStorage.removeItem('etaax_' + negId + '_logo');
+}
+function _comprimirImg(file, callback) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        var img = new Image();
+        img.onload = function() {
+            var MAX = 400, w = img.width, h = img.height;
+            if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; } }
+            else        { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; } }
+            var c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            c.getContext('2d').drawImage(img, 0, 0, w, h);
+            callback(c.toDataURL('image/jpeg', 0.8));
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+function renderLogoPrev() {
+    var negId = getNegocioActivo();
+    var prev  = document.getElementById('logoPrev');
+    var b64   = _getNegLogo(negId);
+    if (b64) {
+        prev.innerHTML = '<img src="' + b64 + '" style="width:88px;height:88px;object-fit:cover;border-radius:14px;border:1px solid var(--border)">';
+    } else {
+        prev.innerHTML = '<div style="width:88px;height:88px;border-radius:14px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:28px;background:var(--surface2)">🏢</div>';
+    }
+}
+function logoChange(input) {
+    if (!input.files || !input.files[0]) return;
+    var negId = getNegocioActivo();
+    _comprimirImg(input.files[0], function(b64) {
+        _setNegLogo(negId, b64);
+        renderLogoPrev();
+        markDirty();
+    });
+}
+function logoEliminar() {
+    var negId = getNegocioActivo();
+    _setNegLogo(negId, '');
+    renderLogoPrev();
+    markDirty();
+    var inp = document.getElementById('logoInput');
+    if (inp) inp.value = '';
 }
 
-function renderColorGrid() {
-    var g = document.getElementById('colorGrid');
-    g.innerHTML = COLORES.map(function(c){
-        return '<div class="color-dot' + (_color===c?' sel':'') + '" style="background:' + c + '" onclick="selColor(\'' + c + '\')"></div>';
-    }).join('');
-}
+/* ── SUCURSALES SECTION ── */
+function renderSucursalesSection(negId) {
+    var sucs   = getSucursales(negId);
+    var badges = document.getElementById('sucBadges');
+    var list   = document.getElementById('sucList');
+    var nAct   = sucs.filter(function(s){ return s.activa !== false; }).length;
+    var nInact = sucs.length - nAct;
 
-function renderHorario() {
-    var g = document.getElementById('horarioGrid');
-    g.innerHTML = DIAS.map(function(d,i){
-        return '<div class="dia-col">' +
-            '<div class="dia-label">' + d + '</div>' +
-            '<div class="dia-check' + (_diasAct[i]?' activo':'') + '" onclick="toggleDia(' + i + ')" id="diaChk' + i + '">' + (_diasAct[i]?'✓':'') + '</div>' +
+    badges.innerHTML =
+        '<span style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:rgba(61,190,122,.1);color:var(--green);border:1px solid var(--green)">' + nAct + ' activa' + (nAct !== 1 ? 's' : '') + '</span>' +
+        (nInact ? '<span style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:var(--surface2);color:var(--text-dim);border:1px solid var(--border)">' + nInact + ' inactiva' + (nInact !== 1 ? 's' : '') + '</span>' : '');
+
+    if (!sucs.length) {
+        list.innerHTML = '<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:20px 0">No hay sucursales registradas en este negocio.</div>';
+        return;
+    }
+    list.innerHTML = sucs.map(function(suc) {
+        var activa = suc.activa !== false;
+        var esMat  = suc.id === 'suc_principal';
+        return '<div class="suc-row" id="sucRow_' + suc.id + '">' +
+            '<div class="suc-row-info">' +
+                '<div class="suc-row-nombre">' + _esc(suc.nombre) + (esMat ? ' <span style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--green);background:rgba(61,190,122,.1);padding:2px 6px;border-radius:12px;border:1px solid var(--green)">Matriz</span>' : '') + '</div>' +
+                '<div class="suc-row-meta">' + (activa ? 'Activa' : 'Inactiva') + ' · ID: ' + suc.id + '</div>' +
+            '</div>' +
+            '<button class="suc-toggle ' + (activa ? 'activa' : 'inactiva') + '" onclick="toggleSucActiva(\'' + suc.id + '\',\'' + negId + '\')">' +
+                (activa ? '✓ Activa' : 'Inactiva') +
+            '</button>' +
         '</div>';
     }).join('');
 }
 
-function selTipo(key) { _tipo = key; renderTipoGrid(); updatePreview(); markDirty(); }
-function selColor(c)  { _color = c; renderColorGrid(); updatePreview(); markDirty(); }
-function toggleDia(i) { _diasAct[i] = !_diasAct[i]; renderHorario(); markDirty(); }
+function _esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-/* ── PREVIEW ── */
-function updatePreview() {
-    var nombre = document.getElementById('cNombre').value.trim() || '—';
-    var t = TIPOS.find(function(x){ return x.key === _tipo; }) || TIPOS[TIPOS.length-1];
-    document.getElementById('prevNombre').textContent = nombre;
-    document.getElementById('prevTipo').textContent   = t.label;
-    document.getElementById('prevEmoji').textContent  = t.emoji;
-    document.getElementById('prevEmoji').style.background = _color + '20';
-    document.getElementById('negPreview').style.borderColor = _color + '55';
+function toggleSucActiva(sucId, negId) {
+    var sucs = getSucursales(negId);
+    var idx  = sucs.findIndex(function(s){ return s.id === sucId; });
+    if (idx === -1) return;
+    sucs[idx].activa = sucs[idx].activa === false;
+    setSucursales(negId, sucs);
+    renderSucursalesSection(negId);
+    showToast((sucs[idx].activa ? '✓ Sucursal activada' : 'Sucursal desactivada'));
+}
+
+/* ── TOAST ── */
+var _toastEl = null, _toastTimer = null;
+function showToast(msg) {
+    if (!_toastEl) {
+        _toastEl = document.createElement('div');
+        _toastEl.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(8px);background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 22px;border-radius:10px;font-size:13px;letter-spacing:.3px;z-index:9999;pointer-events:none;opacity:0;transition:opacity .2s ease,transform .2s ease;white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,.4)';
+        document.body.appendChild(_toastEl);
+    }
+    _toastEl.textContent = msg;
+    _toastEl.style.opacity = '1';
+    _toastEl.style.transform = 'translateX(-50%) translateY(0)';
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(function(){
+        _toastEl.style.opacity = '0';
+        _toastEl.style.transform = 'translateX(-50%) translateY(8px)';
+    }, 2200);
 }
 
 function markDirty() {
@@ -326,34 +350,23 @@ function markDirty() {
 async function cargarDatos() {
     var negId = getNegocioActivo();
     if (!negId) { window.location.href = 'hub.html'; return; }
-
     var neg = getNegocios().find(function(n){ return n.id === negId; });
     if (!neg) { window.location.href = 'hub.html'; return; }
 
-    // Negocio base
+    document.getElementById('breadNombre').textContent = neg.nombre || 'Información de marca';
     document.getElementById('cNombre').value = neg.nombre || '';
-    _tipo  = neg.tipo  || 'otro';
-    _color = neg.color || '#3dbe7a';
+    renderLogoPrev();
 
-    // Extra config (desde Supabase, con fallback a localStorage)
     var ex = await loadExtra();
-    document.getElementById('cTel').value      = ex.telefono || '';
-    document.getElementById('cCorreo').value   = ex.correo   || '';
-    document.getElementById('cWeb').value      = ex.web      || '';
-    document.getElementById('cRFC').value      = ex.rfc      || '';
-    document.getElementById('cDireccion').value= ex.direccion|| '';
-    document.getElementById('cHoraOpen').value = ex.horaOpen || '09:00';
-    document.getElementById('cHoraClose').value= ex.horaClose|| '22:00';
-    document.getElementById('cNotas').value    = ex.notas    || '';
-    if (ex.dias) _diasAct = ex.dias;
+    document.getElementById('cFechaApertura').value = ex.fechaApertura || '';
+    document.getElementById('cDescripcion').value   = ex.descripcion   || '';
+    document.getElementById('cTel').value           = ex.telefono      || '';
+    document.getElementById('cCorreo').value        = ex.correo        || '';
+    document.getElementById('cWeb').value           = ex.web           || '';
 
-    renderTipoGrid();
-    renderColorGrid();
-    renderHorario();
-    updatePreview();
+    renderSucursalesSection(negId);
 
-    // Mark input changes
-    ['cNombre','cTel','cCorreo','cWeb','cRFC','cDireccion','cHoraOpen','cHoraClose','cNotas'].forEach(function(id){
+    ['cNombre','cFechaApertura','cDescripcion','cTel','cCorreo','cWeb'].forEach(function(id){
         document.getElementById(id).addEventListener('input', markDirty);
     });
 }
@@ -361,45 +374,48 @@ async function cargarDatos() {
 /* ── SAVE ── */
 async function guardarConfig() {
     var nombre = document.getElementById('cNombre').value.trim();
-    if (!nombre) { alert('El nombre del negocio es requerido.'); return; }
+    if (!nombre) { alert('El nombre de la marca es requerido.'); return; }
+
+    var btn = document.getElementById('btnSave');
+    if (btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
 
     var negId = getNegocioActivo();
     var negs  = getNegocios();
     var idx   = negs.findIndex(function(n){ return n.id === negId; });
-    if (idx === -1) return;
+    if (idx === -1) { if (btn) { btn.disabled = false; btn.textContent = 'Guardar configuración'; } return; }
 
     negs[idx].nombre = nombre;
-    negs[idx].tipo   = _tipo;
-    negs[idx].color  = _color;
     setNegocios(negs);
 
-    // Actualizar negocio en Supabase
     var neg = negs[idx];
-    await _supabase.from('negocios').update({
+    _supabase.from('negocios').update({
         datos: { nombre: neg.nombre, tipo: neg.tipo, emoji: neg.emoji, color: neg.color, fechaCreado: neg.fechaCreado }
-    }).eq('id', negId);
+    }).eq('id', negId).then(function(){});
 
     var ex = {
-        telefono:  document.getElementById('cTel').value.trim(),
-        correo:    document.getElementById('cCorreo').value.trim(),
-        web:       document.getElementById('cWeb').value.trim(),
-        rfc:       document.getElementById('cRFC').value.trim(),
-        direccion: document.getElementById('cDireccion').value.trim(),
-        horaOpen:  document.getElementById('cHoraOpen').value,
-        horaClose: document.getElementById('cHoraClose').value,
-        notas:     document.getElementById('cNotas').value.trim(),
-        dias:      _diasAct.slice(),
+        fechaApertura: document.getElementById('cFechaApertura').value,
+        descripcion:   document.getElementById('cDescripcion').value.trim(),
+        telefono:      document.getElementById('cTel').value.trim(),
+        correo:        document.getElementById('cCorreo').value.trim(),
+        web:           document.getElementById('cWeb').value.trim(),
     };
     await saveExtra(ex);
 
-    document.getElementById('saveStatus').textContent = 'Guardado correctamente';
+    document.getElementById('breadNombre').textContent = nombre;
+    document.getElementById('saveStatus').textContent = '✓ Guardado';
     document.getElementById('saveStatus').style.color = 'var(--green)';
-
-    var t = document.createElement('div');
-    t.textContent = 'Configuración guardada';
-    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--green);color:#0a0908;padding:10px 22px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;animation:fadeUp .3s ease';
-    document.body.appendChild(t);
-    setTimeout(function(){ t.remove(); }, 2000);
+    if (btn) {
+        btn.textContent = '✓ Cambios guardados';
+        btn.style.background = '#2a9960';
+        setTimeout(function() {
+            btn.textContent = 'Guardar configuración';
+            btn.style.background = '';
+            btn.disabled = false;
+            document.getElementById('saveStatus').textContent = 'Sin cambios pendientes';
+            document.getElementById('saveStatus').style.color = '';
+        }, 2500);
+    }
+    showToast('✓ Configuración guardada');
 }
 
 document.addEventListener('DOMContentLoaded', cargarDatos);

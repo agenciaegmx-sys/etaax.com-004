@@ -20,10 +20,8 @@
         <path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/>
         <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
     </svg>
-    <a href="../hub.html" class="btn-module-back" id="btnTopHub">← Hub</a>
-    <button class="btn-module-back" id="btnTopVolver" onclick="volverALanding()" style="display:none">← Recetas e Insumos</button>
+    <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🏠</a>
     <div class="top-breadcrumb">
-        <a href="../hub.html" class="top-home-icon" title="Hub">🏠</a>
         <span class="top-module-badge">Recetas</span>
         <span class="top-sep">|</span>
         <span class="top-section-name" id="topSectionText">Mis Recetas</span>
@@ -64,8 +62,6 @@
 
         <div class="header">
             <div style="display:flex;align-items:center;gap:12px">
-                <button class="btn-vista" id="btnVolver" onclick="volverAlMenu()"
-                    style="color:var(--text-muted)">← Volver</button>
                 <div>
                     <div id="brandTitle" style="font-family:inherit;font-size:36px;
                         letter-spacing:2px;line-height:1;color:var(--text);
@@ -74,10 +70,6 @@
                 </div>
             </div>
             <div style="display:flex;gap:8px;align-items:center">
-                <button class="btn-vista" id="btnUndo" onclick="undoReceta()"
-                    title="Deshacer (Ctrl+Z)" style="padding:8px 12px;opacity:0.4" disabled>↩</button>
-                <button class="btn-vista" id="btnRedo" onclick="redoReceta()"
-                    title="Rehacer (Ctrl+Y)" style="padding:8px 12px;opacity:0.4" disabled>↪</button>
                 <button class="btn-vista" onclick="guardarReceta()"
                     style="color:var(--green);border-color:var(--green)">💾 Guardar</button>
                 <button class="btn-vista" onclick="eliminarRecetaActual()"
@@ -333,7 +325,7 @@
         <div class="mlanding-hero-sub">Escandallos con costeo automático, catálogo de insumos, control de inventarios y requisiciones.</div>
     </div>
     <div class="mlanding-grid" style="padding:0 24px 80px">
-        <button onclick="entrarEscandallos()" class="mlanding-card" style="border:none;text-align:left;cursor:pointer">
+        <button onclick="entrarEscandallos()" class="mlanding-card">
             <div class="mlanding-card-header">
                 <div class="mlanding-card-icon">📋</div>
                 <span class="mlanding-badge-active">Activo</span>
@@ -394,29 +386,6 @@
         </div>
         <div style="max-width:660px;margin:0 auto">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
-                <button onclick="crearReceta('alimentos')" class="cat-btn" style="padding:22px 16px">
-                    <span style="font-size:34px">🍽️</span>
-                    <div class="cat-btn-title" style="font-size:15px">Receta Alimentos</div>
-                    <div class="cat-btn-desc">Platillos, entradas, postres, guarniciones...</div>
-                </button>
-                <button onclick="crearReceta('sub-alimentos')" class="cat-btn" style="padding:22px 16px">
-                    <span style="font-size:34px">🥣</span>
-                    <div class="cat-btn-title" style="font-size:15px">Sub Receta Alimentos</div>
-                    <div class="cat-btn-desc">Salsas, fondos, masas, bases, rellenos...</div>
-                </button>
-                <button onclick="crearReceta('bebidas')" class="cat-btn" style="padding:22px 16px">
-                    <span style="font-size:34px">🥃</span>
-                    <div class="cat-btn-title" style="font-size:15px">Receta Bebidas</div>
-                    <div class="cat-btn-desc">Cócteles, mocktails, bebidas de la carta...</div>
-                </button>
-                <button onclick="crearReceta('sub-bebidas')" class="cat-btn" style="padding:22px 16px">
-                    <span style="font-size:34px">🧃</span>
-                    <div class="cat-btn-title" style="font-size:15px">Sub Receta Bebidas</div>
-                    <div class="cat-btn-desc">Jarabes, shrubs, purés, mixes, infusiones...</div>
-                </button>
-            </div>
-            <div style="height:1px;background:var(--border);margin-bottom:18px"></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
                 <button onclick="verRecetas()" class="cat-btn" style="border-color:var(--green);padding:22px 16px">
                     <span style="font-size:34px">📚</span>
                     <div class="cat-btn-title" style="color:var(--green);font-size:15px">Ver recetas</div>
@@ -428,10 +397,10 @@
                     <div class="cat-btn-desc">Resumen ejecutivo de costeo</div>
                 </button>
             </div>
-            <div style="height:1px;background:var(--border);margin:18px 0"></div>
+            <div style="height:1px;background:var(--border);margin-bottom:18px"></div>
             <button onclick="crearRecetaSimple()" class="cat-btn"
                 style="width:100%;padding:16px 20px;display:flex;align-items:center;gap:16px;
-                    text-align:left;border-color:var(--border)">
+                    text-align:left;border-color:var(--border);margin-bottom:18px">
                 <span style="font-size:28px;flex-shrink:0">📝</span>
                 <div>
                     <div class="cat-btn-title" style="font-size:14px;color:var(--text-muted)">Receta Simple</div>
@@ -439,6 +408,31 @@
                         Solo nombre, grupo e ingredientes — elige el tipo después</div>
                 </div>
             </button>
+            <div style="height:1px;background:var(--border);margin-bottom:18px"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+                <button onclick="crearReceta('alimentos')" class="cat-btn" style="padding:22px 16px">
+                    <span style="font-size:34px">🍽️</span>
+                    <div class="cat-btn-title" style="font-size:15px">Receta Alimentos</div>
+                    <div class="cat-btn-desc">Platillos, entradas, postres, guarniciones...</div>
+                </button>
+                <button onclick="crearReceta('bebidas')" class="cat-btn" style="padding:22px 16px">
+                    <span style="font-size:34px">🥃</span>
+                    <div class="cat-btn-title" style="font-size:15px">Receta Bebidas</div>
+                    <div class="cat-btn-desc">Cócteles, mocktails, bebidas de la carta...</div>
+                </button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+                <button onclick="crearReceta('sub-alimentos')" class="cat-btn" style="padding:22px 16px">
+                    <span style="font-size:34px">🥣</span>
+                    <div class="cat-btn-title" style="font-size:15px">Sub Receta Alimentos</div>
+                    <div class="cat-btn-desc">Salsas, fondos, masas, bases, rellenos...</div>
+                </button>
+                <button onclick="crearReceta('sub-bebidas')" class="cat-btn" style="padding:22px 16px">
+                    <span style="font-size:34px">🧃</span>
+                    <div class="cat-btn-title" style="font-size:15px">Sub Receta Bebidas</div>
+                    <div class="cat-btn-desc">Jarabes, shrubs, purés, mixes, infusiones...</div>
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -780,9 +774,8 @@ function entrarEscandallos() {
     document.getElementById('moduloLanding').style.display = 'none';
     var nav = document.getElementById('nav');
     nav.style.removeProperty('display');
-    document.getElementById('btnTopHub').style.display = 'none';
-    document.getElementById('btnTopVolver').style.display = '';
     document.getElementById('topSectionText').textContent = 'Escandallos';
+    if (typeof ctxShowEditorNav === 'function') ctxShowEditorNav();
     var menu = document.getElementById('vistaMenuReceta');
     var cerrado = nav.classList.contains('cerrado');
     if (menu) { menu.style.display = 'flex'; menu.style.left = cerrado ? '50px' : '200px'; }
@@ -791,9 +784,8 @@ function entrarEscandallos() {
 function volverALanding() {
     document.getElementById('moduloLanding').style.display = 'block';
     document.getElementById('nav').style.display = 'none';
-    document.getElementById('btnTopHub').style.display = '';
-    document.getElementById('btnTopVolver').style.display = 'none';
     document.getElementById('topSectionText').textContent = 'Mis Recetas';
+    if (typeof ctxHideEditorNav === 'function') ctxHideEditorNav();
     var menu = document.getElementById('vistaMenuReceta');
     if (menu) { menu.style.display = 'none'; }
     var vc = document.getElementById('vistaCaratula');
