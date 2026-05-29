@@ -3,11 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ETAAX - Control Financiero</title>
+    <title>ETAAX - Recetas e Insumos</title>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
     <style>
-        /* ── Layout de sub-módulos ── */
         .cf-wrap {
             min-height: 100vh;
             padding: 48px 24px 100px;
@@ -15,8 +14,6 @@
             flex-direction: column;
             align-items: center;
         }
-
-        /* Hero */
         .cf-hero {
             text-align: center;
             padding: 52px 0 48px;
@@ -37,22 +34,14 @@
         .cf-hero-sub {
             font-size: 13px; color: var(--text-dim); line-height: 1.6;
         }
-
-        /* Sub-módulos container */
         .cf-modules {
             width: 100%; max-width: 960px;
             display: flex; flex-direction: column; gap: 40px;
         }
-
-        /* Cada sección / sub-módulo */
-        .cf-section {
-            animation: fadeUp .5s ease both;
-        }
+        .cf-section { animation: fadeUp .5s ease both; }
         .cf-section:nth-child(2) { animation-delay: .05s; }
         .cf-section:nth-child(3) { animation-delay: .10s; }
         .cf-section:nth-child(4) { animation-delay: .15s; }
-
-        /* Cabecera de sección */
         .cf-section-hdr {
             display: flex; align-items: flex-end; gap: 14px;
             margin-bottom: 14px;
@@ -73,17 +62,11 @@
             font-size: 11px; color: var(--text-dim); line-height: 1.5;
             margin-left: auto; text-align: right; max-width: 280px;
         }
-
-        /* Grid de cards dentro de cada sección */
         .cf-grid {
             display: grid;
             gap: 14px;
+            grid-template-columns: 1fr 1fr;
         }
-        .cf-grid-2 { grid-template-columns: 1fr 1fr; }
-        .cf-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
-        .cf-grid-1 { grid-template-columns: 1fr; max-width: 400px; }
-
-        /* Card */
         .cf-card {
             background: var(--surface);
             border: 1px solid var(--border);
@@ -103,18 +86,7 @@
             transform: translateY(-3px);
             box-shadow: 0 8px 32px rgba(30,80,220,.12);
         }
-        .cf-card.coming-soon {
-            opacity: .32; cursor: default; pointer-events: none;
-        }
-        .cf-card.highlight {
-            border-color: rgba(245,200,66,.3);
-            background: rgba(245,200,66,.03);
-        }
-        .cf-card.highlight:hover {
-            border-color: rgba(245,200,66,.6);
-            background: rgba(245,200,66,.07);
-            box-shadow: 0 8px 32px rgba(245,200,66,.1);
-        }
+        .cf-card.coming-soon { opacity: .32; cursor: default; pointer-events: none; }
         .cf-card-hdr {
             display: flex; align-items: center;
             justify-content: space-between; width: 100%; margin-bottom: 2px;
@@ -136,51 +108,18 @@
             font-family: 'Bebas Neue', sans-serif;
             font-size: 20px; letter-spacing: 1.5px; color: var(--text); line-height: 1;
         }
-        .cf-card-desc {
-            font-size: 11px; color: var(--text-dim); line-height: 1.55; flex: 1;
-        }
+        .cf-card-desc { font-size: 11px; color: var(--text-dim); line-height: 1.55; flex: 1; }
         .cf-card-cta {
             margin-top: 8px; font-size: 10px; letter-spacing: 1.5px;
             text-transform: uppercase; color: var(--text-dim);
         }
         .cf-card:hover .cf-card-cta { color: rgba(30,80,220,.8); }
-        .cf-card.highlight:hover .cf-card-cta { color: rgba(245,200,66,.8); }
 
-        /* KPI card especial: ancho completo con acento */
-        .cf-kpi-section .cf-grid { max-width: none; }
-        .cf-kpi-card {
-            grid-column: 1 / -1;
-            flex-direction: row; align-items: center; gap: 24px;
-        }
-        .cf-kpi-card .cf-card-icon { font-size: 40px; flex-shrink: 0; }
-        .cf-kpi-card .cf-kpi-info { flex: 1; }
-        .cf-kpi-card .cf-kpi-stats {
-            display: flex; gap: 24px; flex-shrink: 0;
-        }
-        .cf-kpi-stat {
-            text-align: center;
-            background: var(--surface2); border: 1px solid var(--border);
-            border-radius: 10px; padding: 10px 16px;
-        }
-        .cf-kpi-stat .ks-val { font-family:'Bebas Neue',sans-serif; font-size:22px; color: var(--green); }
-        .cf-kpi-stat .ks-lbl { font-size:9px; letter-spacing:1px; text-transform:uppercase; color:var(--text-dim); }
-
-        /* Divider de sección */
-        .cf-sep {
-            width: 100%; max-width: 960px;
-            height: 1px; background: var(--border);
-            margin: 0 auto;
-            opacity: .4;
-        }
-
-        @media (max-width: 700px) {
-            .cf-grid-2, .cf-grid-3 { grid-template-columns: 1fr; }
+        @media (max-width: 640px) {
+            .cf-grid { grid-template-columns: 1fr; }
             .cf-section-desc { display: none; }
-            .cf-kpi-card { flex-direction: column; }
-            .cf-kpi-card .cf-kpi-stats { flex-wrap: wrap; }
         }
 
-        /* Theme toggle */
         .theme-toggle {
             position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);
             border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;
@@ -209,7 +148,7 @@
     </svg>
     <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🏠</a>
     <div class="top-breadcrumb">
-        <span class="top-module-badge">Financiero</span>
+        <span class="top-module-badge">Recetas</span>
         <span class="top-sep">|</span>
         <span class="top-section-name">Panel principal</span>
     </div>
@@ -221,143 +160,88 @@
     <!-- HERO -->
     <div class="cf-hero">
         <div class="cf-hero-eyebrow">Módulo</div>
-        <div class="cf-hero-title">Control<br><span class="g">Administrativo</span></div>
-        <div class="cf-hero-sub">Ventas, gastos, catálogos, menús e indicadores clave del negocio.</div>
+        <div class="cf-hero-title">Recetas<br><span class="g">e Insumos</span></div>
+        <div class="cf-hero-sub">Escandallos, catálogo de insumos, control de inventarios y sistema de requisiciones.</div>
     </div>
 
     <div class="cf-modules">
 
-        <!-- ══ SUB-MÓDULO 1: ADMIN ══ -->
+        <!-- ══ 1: RECETAS ══ -->
         <div class="cf-section">
             <div class="cf-section-hdr">
-                <span class="cf-section-tag">Captura diaria</span>
-                <div class="cf-section-title">Admin</div>
-                <div class="cf-section-desc">Registro operativo de ventas y gastos por turno y sucursal.</div>
+                <span class="cf-section-tag">Escandallos y carta</span>
+                <div class="cf-section-title">Recetas</div>
+                <div class="cf-section-desc">Gestión de recetas estándar, cócteles, sub-recetas y costos de carta.</div>
             </div>
-            <div class="cf-grid cf-grid-2">
-                <a href="ventas.html" class="cf-card">
-                    <div class="cf-card-hdr">
-                        <div class="cf-card-icon">💰</div>
-                        <span class="cf-badge-active">Activo</span>
-                    </div>
-                    <div class="cf-card-title">Captura de Ventas</div>
-                    <div class="cf-card-desc">Registra ventas diarias por platillo o bebida, turno y sucursal. Historial semanal y mensual.</div>
-                    <div class="cf-card-cta">Abrir →</div>
-                </a>
-                <a href="gastos.html" class="cf-card coming-soon">
-                    <div class="cf-card-hdr">
-                        <div class="cf-card-icon">📤</div>
-                        <span class="cf-badge-soon">Próximamente</span>
-                    </div>
-                    <div class="cf-card-title">Captura de Gastos</div>
-                    <div class="cf-card-desc">Registro de egresos operativos: nómina, servicios, insumos, mantenimiento y gastos varios.</div>
-                    <div class="cf-card-cta">En desarrollo</div>
-                </a>
-            </div>
-        </div>
-
-        <!-- ══ SUB-MÓDULO 2: CATÁLOGOS ADMIN ══ -->
-        <div class="cf-section">
-            <div class="cf-section-hdr">
-                <span class="cf-section-tag">Directorios</span>
-                <div class="cf-section-title">Catálogos Admin</div>
-                <div class="cf-section-desc">Gestión de equipo, perfiles de seguridad, proveedores y clientes.</div>
-            </div>
-            <div class="cf-grid cf-grid-3">
-                <a href="staff.html" class="cf-card">
-                    <div class="cf-card-hdr">
-                        <div class="cf-card-icon">👥</div>
-                        <span class="cf-badge-active">Activo</span>
-                    </div>
-                    <div class="cf-card-title">Staff</div>
-                    <div class="cf-card-desc">Personal, roles y permisos de acceso por colaborador y sucursal.</div>
-                    <div class="cf-card-cta">Abrir →</div>
-                </a>
-                <a href="proveedores.html" class="cf-card">
-                    <div class="cf-card-hdr">
-                        <div class="cf-card-icon">🚚</div>
-                        <span class="cf-badge-active">Activo</span>
-                    </div>
-                    <div class="cf-card-title">Proveedores</div>
-                    <div class="cf-card-desc">Directorio de proveedores, contactos clave y condiciones de abastecimiento.</div>
-                    <div class="cf-card-cta">Abrir →</div>
-                </a>
-                <a href="clientes.html" class="cf-card coming-soon">
-                    <div class="cf-card-hdr">
-                        <div class="cf-card-icon">⭐</div>
-                        <span class="cf-badge-soon">Próximamente</span>
-                    </div>
-                    <div class="cf-card-title">Clientes</div>
-                    <div class="cf-card-desc">Base de clientes frecuentes, historial de visitas y programa de lealtad.</div>
-                    <div class="cf-card-cta">En desarrollo</div>
-                </a>
-            </div>
-        </div>
-
-        <!-- ══ SUB-MÓDULO 3: MENÚS ══ -->
-        <div class="cf-section">
-            <div class="cf-section-hdr">
-                <span class="cf-section-tag">Carta y precios</span>
-                <div class="cf-section-title">Menús</div>
-                <div class="cf-section-desc">Configuración de carta activa y repositorio global de platillos y bebidas.</div>
-            </div>
-            <div class="cf-grid cf-grid-2">
-                <a href="menu.html" class="cf-card">
+            <div class="cf-grid" style="grid-template-columns:1fr">
+                <a href="index.html" class="cf-card">
                     <div class="cf-card-hdr">
                         <div class="cf-card-icon">📋</div>
                         <span class="cf-badge-active">Activo</span>
                     </div>
-                    <div class="cf-card-title">Crear / Editar Menú</div>
-                    <div class="cf-card-desc">Configura el menú activo del negocio: platillos, bebidas, categorías y precios de carta.</div>
+                    <div class="cf-card-title">Escandallos</div>
+                    <div class="cf-card-desc">Recetas estándar, cócteles, sub-recetas y porciones. Cálculo automático de costos y precios de carta.</div>
                     <div class="cf-card-cta">Abrir →</div>
-                </a>
-                <a href="menu-global.html" class="cf-card coming-soon">
-                    <div class="cf-card-hdr">
-                        <div class="cf-card-icon">🌐</div>
-                        <span class="cf-badge-soon">Próximamente</span>
-                    </div>
-                    <div class="cf-card-title">Menú Global</div>
-                    <div class="cf-card-desc">Repositorio central de todos los platillos y bebidas disponibles en la cadena de negocios.</div>
-                    <div class="cf-card-cta">En desarrollo</div>
                 </a>
             </div>
         </div>
 
-        <!-- ══ SUB-MÓDULO 4: KPIs ══ -->
-        <div class="cf-section cf-kpi-section">
+        <!-- ══ 2: INSUMOS ══ -->
+        <div class="cf-section">
             <div class="cf-section-hdr">
-                <span class="cf-section-tag">Indicadores</span>
-                <div class="cf-section-title">KPIs Financieros</div>
-                <div class="cf-section-desc">Rendimientos, márgenes y tendencias basadas en ventas y gastos diarios.</div>
+                <span class="cf-section-tag">Catálogo y costos</span>
+                <div class="cf-section-title">Insumos</div>
+                <div class="cf-section-desc">Catálogo centralizado de ingredientes, presentaciones, proveedores y precios de compra.</div>
             </div>
-            <div class="cf-grid">
-                <a href="kpis.html" class="cf-card highlight cf-kpi-card coming-soon">
-                    <div class="cf-card-icon">📊</div>
-                    <div class="cf-kpi-info">
-                        <div class="cf-card-hdr" style="margin-bottom:6px">
-                            <div class="cf-card-title" style="font-size:24px">Dashboard de KPIs</div>
-                            <span class="cf-badge-soon">Próximamente</span>
-                        </div>
-                        <div class="cf-card-desc">
-                            Margen bruto, costo de ventas, ticket promedio, relación gastos/ingresos y tendencias semanales y mensuales.
-                            Cruza datos de ventas diarias y gastos para generar indicadores automáticos de desempeño.
-                        </div>
-                        <div class="cf-card-cta" style="margin-top:10px">En desarrollo — disponible pronto</div>
+            <div class="cf-grid" style="grid-template-columns:1fr">
+                <a href="insumos.html" class="cf-card">
+                    <div class="cf-card-hdr">
+                        <div class="cf-card-icon">🗄️</div>
+                        <span class="cf-badge-active">Activo</span>
                     </div>
-                    <div class="cf-kpi-stats">
-                        <div class="cf-kpi-stat">
-                            <div class="ks-val" style="color:var(--green)">—%</div>
-                            <div class="ks-lbl">Margen</div>
-                        </div>
-                        <div class="cf-kpi-stat">
-                            <div class="ks-val" style="color:var(--accent)">—%</div>
-                            <div class="ks-lbl">Costo ventas</div>
-                        </div>
-                        <div class="cf-kpi-stat">
-                            <div class="ks-val" style="color:var(--text)">$—</div>
-                            <div class="ks-lbl">Ticket prom.</div>
-                        </div>
+                    <div class="cf-card-title">Catálogo de Insumos</div>
+                    <div class="cf-card-desc">Gestión completa de ingredientes: familias, unidades, presentaciones de compra, costos y proveedores.</div>
+                    <div class="cf-card-cta">Abrir →</div>
+                </a>
+            </div>
+        </div>
+
+        <!-- ══ 3: INVENTARIOS ══ -->
+        <div class="cf-section">
+            <div class="cf-section-hdr">
+                <span class="cf-section-tag">Control de stock</span>
+                <div class="cf-section-title">Inventarios</div>
+                <div class="cf-section-desc">Control físico de existencias, entradas, ventas, mermas y reporte de varianzas.</div>
+            </div>
+            <div class="cf-grid" style="grid-template-columns:1fr">
+                <a href="inventarios.html" class="cf-card">
+                    <div class="cf-card-hdr">
+                        <div class="cf-card-icon">📦</div>
+                        <span class="cf-badge-active">Activo</span>
                     </div>
+                    <div class="cf-card-title">Control de Inventarios</div>
+                    <div class="cf-card-desc">Levantamiento de inventario por pasos: existencias, entradas, ventas, cancelaciones y reporte directivo de resultados.</div>
+                    <div class="cf-card-cta">Abrir →</div>
+                </a>
+            </div>
+        </div>
+
+        <!-- ══ 4: REQUISICIONES ══ -->
+        <div class="cf-section">
+            <div class="cf-section-hdr">
+                <span class="cf-section-tag">Sistema de pedidos</span>
+                <div class="cf-section-title">Requisiciones</div>
+                <div class="cf-section-desc">Generación de pedidos a proveedor basados en existencias actuales y stock mínimo.</div>
+            </div>
+            <div class="cf-grid" style="grid-template-columns:1fr">
+                <a href="requisiciones.html" class="cf-card">
+                    <div class="cf-card-hdr">
+                        <div class="cf-card-icon">📝</div>
+                        <span class="cf-badge-active">Activo</span>
+                    </div>
+                    <div class="cf-card-title">Sistema de Requisiciones</div>
+                    <div class="cf-card-desc">Captura de existencias, pedido sugerido automático, ajuste manual y vistas de pedido por proveedor con costos.</div>
+                    <div class="cf-card-cta">Abrir →</div>
                 </a>
             </div>
         </div>

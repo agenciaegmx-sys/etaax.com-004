@@ -72,7 +72,7 @@
    }
    
    // ── Toggle vista lista / cuadrícula ───────────────────────────
-   var vistaInsumos = 'lista';
+   var vistaInsumos = 'grid';
 
    function setVistaInsumos(modo) {
        vistaInsumos = modo;
@@ -98,6 +98,10 @@
        filtrar();
    }
 
+   const _PG_SIZE = 100;
+   let _paginaActual = 0;
+   let _listaFiltrada = [];
+
    function filtrar() {
        const q   = document.getElementById('searchInput').value.toLowerCase();
        const fam = document.getElementById('filtroFamilia').value;
@@ -112,12 +116,47 @@
        if (fam) lista = lista.filter(x => x.familia === fam);
        if (cat) lista = lista.filter(x => x.categoria === cat);
 
+       _listaFiltrada = lista;
+       _paginaActual  = 0;
+       _renderPagina();
+   }
+
+   function _renderPagina() {
+       const lista    = _listaFiltrada;
+       const total    = lista.length;
+       const totalPgs = Math.max(1, Math.ceil(total / _PG_SIZE));
+       const desde    = _paginaActual * _PG_SIZE;
+       const pagina   = lista.slice(desde, desde + _PG_SIZE);
+
        if (vistaInsumos === 'grid') {
-           renderGrid(lista);
+           renderGrid(pagina);
        } else {
-           renderTabla(lista);
+           renderTabla(pagina);
        }
-       document.getElementById('countLabel').textContent = `${lista.length} insumos`;
+       document.getElementById('countLabel').textContent = `${total} insumos`;
+       _renderPaginacion(totalPgs);
+   }
+
+   function _renderPaginacion(totalPgs) {
+       var bar = document.getElementById('pgBar');
+       if (!bar) return;
+       if (totalPgs <= 1) { bar.innerHTML = ''; return; }
+       var prev = _paginaActual > 0
+           ? `<button onclick="_irPagina(${_paginaActual-1})" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 14px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:12px">← Anterior</button>`
+           : `<button disabled style="background:transparent;border:1px solid var(--border);color:var(--text-dim);padding:5px 14px;border-radius:6px;font-family:inherit;font-size:12px;opacity:.35;cursor:default">← Anterior</button>`;
+       var next = _paginaActual < totalPgs - 1
+           ? `<button onclick="_irPagina(${_paginaActual+1})" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 14px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:12px">Siguiente →</button>`
+           : `<button disabled style="background:transparent;border:1px solid var(--border);color:var(--text-dim);padding:5px 14px;border-radius:6px;font-family:inherit;font-size:12px;opacity:.35;cursor:default">Siguiente →</button>`;
+       bar.innerHTML = prev
+           + `<span style="font-size:12px;color:var(--text-muted)">Página ${_paginaActual+1} de ${totalPgs}</span>`
+           + next;
+   }
+
+   function _irPagina(n) {
+       _paginaActual = n;
+       _renderPagina();
+       var cont = document.getElementById('contenedorTabla') || document.getElementById('contenedorGrid');
+       if (cont) cont.scrollTop = 0;
    }
 
    // ── Tabla ─────────────────────────────────────────────────────
@@ -1026,9 +1065,10 @@
    function eliminarInsumo(id) {
        const ins = getInsumos().find(x => x.id === id);
        if (!ins) return;
-       if (!confirm(`¿Eliminar "${ins.nombre}"?`)) return;
-       setInsumos(getInsumos().filter(x => x.id !== id));
-       init();
+       _pedirClaveAdmin('Eliminar insumo "' + ins.nombre + '"', function() {
+           setInsumos(getInsumos().filter(x => x.id !== id));
+           init();
+       });
    }
    
    // ── Foto ──────────────────────────────────────────────────────
@@ -2330,7 +2370,7 @@
    
        setInsumos(lista);
        setStatus(1, `✅ ${nuevos} nuevos · ${actualizados} actualizados`);
-       init();
+       // No llamar init() aquí — se renderiza solo al finalizar el paso 3
    }
    
    // ── PASO 2: Presentaciones — vincula por posición de fila ─────
@@ -2397,7 +2437,7 @@
    
        setInsumos(lista);
        setStatus(2, `✅ ${vinculados} vinculadas · ${sinVincular} sin vincular`);
-       init();
+       // No llamar init() aquí — se renderiza solo al finalizar el paso 3
    }
    
    // ── PASO 3: Costos — vincula por posición de fila ─────────────

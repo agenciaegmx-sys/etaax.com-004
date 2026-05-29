@@ -1323,15 +1323,14 @@ function initCtxBar() {
         '<div class="ctx-bar-inner" style="border-color:' + color + '44">' +
         '<div class="ctx-neg-emoji-wrap" style="background:' + color + '1a;border-color:' + color + '33">' + _esc(ctx.negEmoji) + '</div>' +
         '<div><div class="ctx-neg-name">' + _esc(ctx.negNombre) + '</div><div class="ctx-neg-tipo">' + _esc(ctx.negTipo) + '</div></div>' +
-        '<div id="ctxEditorNav" style="display:none;align-items:center;gap:6px;margin-left:12px;padding-left:12px;border-left:1px solid var(--border,#2a2825)">' +
-        '<button class="ctx-btn" id="btnVolver" onclick="history.back()">← Volver</button>' +
-        '<button class="ctx-btn" id="btnUndo" onclick="undoReceta()" title="Deshacer (Ctrl+Z)" disabled style="opacity:.4;padding:4px 9px">↩</button>' +
-        '<button class="ctx-btn" id="btnRedo" onclick="redoReceta()" title="Rehacer (Ctrl+Y)" disabled style="opacity:.4;padding:4px 9px">↪</button>' +
+        '<div id="ctxEditorNav" style="display:flex;align-items:center;gap:4px;margin-left:12px;padding-left:12px;border-left:1px solid var(--border,#2a2825)">' +
+        '<button class="ctx-btn" id="btnUndo" onclick="ctxNavBack()" title="Atrás" style="padding:4px 9px">↩</button>' +
+        '<button class="ctx-btn" id="btnRedo" onclick="ctxNavForward()" title="Adelante" style="padding:4px 9px">↪</button>' +
         '</div>' +
         '<div style="margin-left:auto;display:flex;gap:8px;align-items:center">' +
         '<div class="ctx-user-badge"><span>' + _esc(ctx.userName.split(' ')[0]) + '</span>' +
         '<span class="ctx-badge-plan" style="background:' + ctx.userColor + '22;color:' + ctx.userColor + '">' + _esc(ctx.userBadge) + '</span></div>' +
-        '<a href="' + hubPath + '" class="ctx-btn">← Hub</a>' +
+        '<a href="' + hubPath + '" class="ctx-btn">← Ir a Módulos</a>' +
         '<button class="ctx-btn ctx-btn-danger" onclick="ctxSalir()">Salir</button>' +
         '</div></div>';
     bar.style.display = 'flex';
@@ -1345,6 +1344,20 @@ function ctxShowEditorNav() {
 function ctxHideEditorNav() {
     var nav = document.getElementById('ctxEditorNav');
     if (nav) nav.style.display = 'none';
+}
+
+function ctxNavBack() {
+    // Único caso especial: si la carátula está abierta como overlay, cerrarla primero
+    var vc = document.getElementById('vistaCaratula');
+    if (vc && vc.style.display !== 'none') {
+        if (typeof cerrarCaratulaBtnX === 'function') cerrarCaratulaBtnX();
+        return;
+    }
+    history.back();
+}
+
+function ctxNavForward() {
+    history.forward();
 }
 
 function ctxSalir() {

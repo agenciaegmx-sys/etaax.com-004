@@ -6,6 +6,15 @@
     <title>ETAAX - Inventarios</title>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <script src="../supabase-config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+    <script>
+        if (typeof pdfjsLib !== 'undefined') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+        }
+    </script>
 </head>
 <body>
 <header class="top-bar">
@@ -69,8 +78,9 @@
                     <span class="brand-label">Control de existencias</span>
                     <span class="brand-title">Inventarios</span>
                 </div>
-                <div style="display:flex;gap:8px">
-                    <button class="btn-vista" onclick="abrirRegistroEntradas()">📥 Registrar entradas</button>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <button class="btn-vista" onclick="mostrarVista('vistaEntradas')">📋 Revisar entradas</button>
+                    <button class="btn-vista" onclick="nuevoPrimerLev()">📋 Primer levantamiento</button>
                     <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)"
                         onclick="nuevoInventario()">+ Nuevo inventario</button>
                 </div>
@@ -107,6 +117,7 @@
 
             <!-- Dynamic historial content -->
             <div id="historialContent" style="padding:0 16px 24px"></div>
+
         </div>
 
         <!-- ═══════════════════════════════════════════════════════════
@@ -127,36 +138,20 @@
                     <div class="card-header"><h2>Configuración del inventario</h2></div>
                     <div class="card-body">
                         <div class="meta-grid" style="grid-template-columns:1fr 1fr 1fr">
+                            <!-- Fila 1: Sucursal · Tipo · Área -->
+                            <div class="meta-item">
+                                <label>Sucursal activa</label>
+                                <input type="text" id="invNegocio" placeholder="Nombre de la sucursal">
+                            </div>
                             <div class="meta-item">
                                 <label>Tipo de inventario</label>
-                                <select id="invTipoInv">
+                                <select id="invTipoInv" onchange="onTipoInvChange(this.value)">
+                                    <option value="primer_lev">📋 Primer levantamiento</option>
                                     <option value="bebidas">🍸 Bebidas / Barra</option>
                                     <option value="alimentos">🍽️ Alimentos / Cocina</option>
                                     <option value="almacen">📦 Almacén general</option>
                                     <option value="restaurante">🏪 Restaurante (completo)</option>
                                     <option value="otro">📋 Otro</option>
-                                </select>
-                            </div>
-                            <div class="meta-item">
-                                <label>Nombre del negocio</label>
-                                <input type="text" id="invNegocio" placeholder="Ej. ETAAX Rooftop Bar">
-                            </div>
-                            <div class="meta-item">
-                                <label>Nombre del inventario</label>
-                                <input type="text" id="invNombre" placeholder="Ej. Inventario Barra Mayo 2026">
-                            </div>
-                            <div class="meta-item">
-                                <label>Fecha</label>
-                                <input type="date" id="invFecha">
-                            </div>
-                            <div class="meta-item">
-                                <label>Turno / Periodo</label>
-                                <select id="invTurno">
-                                    <option value="apertura">Apertura</option>
-                                    <option value="cierre">Cierre</option>
-                                    <option value="semanal">Semanal</option>
-                                    <option value="quincenal">Quincenal</option>
-                                    <option value="mensual">Mensual</option>
                                 </select>
                             </div>
                             <div class="meta-item">
@@ -168,6 +163,25 @@
                                     <option value="general">General</option>
                                 </select>
                             </div>
+                            <!-- Fila 2: Último inv · Fecha actual · Hora inicio -->
+                            <div class="meta-item">
+                                <label>Fecha último inventario</label>
+                                <div id="invFechaUltimo"
+                                    style="height:38px;display:flex;align-items:center;padding:0 10px;
+                                    border:1px solid var(--border);border-radius:8px;background:var(--bg);
+                                    color:var(--text-dim);font-size:13px">—</div>
+                            </div>
+                            <div class="meta-item">
+                                <label>Fecha actual</label>
+                                <input type="date" id="invFecha">
+                            </div>
+                            <div class="meta-item">
+                                <label>Hora de inicio</label>
+                                <input type="time" id="invTurno"
+                                    style="background:var(--bg);border:1px solid var(--border);border-radius:8px;
+                                    padding:0 10px;height:38px;color:var(--text);font-family:inherit;font-size:13px;width:100%;box-sizing:border-box">
+                            </div>
+                            <!-- Fila 3: Observaciones -->
                             <div class="meta-item" style="grid-column:span 3">
                                 <label>Observaciones</label>
                                 <input type="text" id="invNotas" placeholder="Notas generales del inventario...">
@@ -193,17 +207,17 @@
             <!-- Header sticky -->
             <div class="inv-wizard-header">
                 <div style="display:flex;align-items:center;gap:12px">
-                    <button class="btn-vista" onclick="volverForm()">← Datos</button>
                     <div>
                         <span class="brand-label" id="stepLabel">Paso 1 — Existencias físicas</span>
                         <div class="brand-title" style="font-size:22px;line-height:1" id="captTitulo">Nuevo inventario</div>
                     </div>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center">
+                    <span id="autoGuardarInd" style="font-size:12px;color:var(--green);opacity:0;transition:opacity .4s">✓ Guardado</span>
                     <button class="btn-vista" onclick="pasoAnterior()" id="btnPasoAnt" style="display:none">← Anterior</button>
                     <button class="btn-vista" onclick="pasoSiguiente()" id="btnPasoSig">Siguiente →</button>
-                    <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)" onclick="guardarInventario()">💾 Guardar</button>
-                    <button class="btn-vista" style="color:var(--green);border-color:var(--green);display:none" id="btnCerrar" onclick="cerrarInventario()">✅ Cerrar</button>
+                    <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)" id="btnGuardarInv" onclick="guardarYSalir()">💾 Guardar y salir</button>
+                    <button class="btn-vista" style="color:var(--green);border-color:var(--green);display:none" id="btnFinalizarLev" onclick="finalizarPrimerLev()">✅ Guardar levantamiento</button>
                 </div>
             </div>
 
@@ -250,6 +264,7 @@
                     </div>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center">
+                    <button class="btn-vista" onclick="abrirRegistroEntradas()">📥 Agregar entrada</button>
                     <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)"
                         id="btnGuardarEntradas" onclick="guardarEntradas()">💾 Guardar entradas</button>
                 </div>
@@ -668,7 +683,130 @@ function toggleTheme() {
     else                  { if(icon) icon.textContent='☀️'; if(label) label.textContent='Modo claro'; }
 }
 </script>
-<script>window.ctxNavBack = 'index.html?escandallos=1';</script>
 <script src="../ctx-bar.js"></script>
+<script src="../admin-guard.js"></script>
+
+<!-- ── MODAL BLOQUEO NAVEGACIÓN (inventario en progreso) ──────── -->
+<div id="modalSalirInv" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:600;align-items:center;justify-content:center">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px 28px;max-width:360px;width:90%;text-align:center">
+        <div style="font-size:36px;margin-bottom:12px">📦</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:1px;margin-bottom:8px;color:var(--text)">Inventario en progreso</div>
+        <div style="font-size:13px;color:var(--text-dim);margin-bottom:24px;line-height:1.6">
+            Guarda el inventario antes de salir<br>para no perder tus cambios.
+        </div>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+            <button class="btn-vista" style="padding:10px 18px"
+                onclick="_cancelarSalirInv()">Seguir editando</button>
+            <button class="btn-vista" style="color:var(--accent);border-color:var(--accent);padding:10px 18px"
+                onclick="_confirmarSalirInv()">💾 Guardar y salir</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── MODAL REGISTRAR ENTRADA (log independiente) ───────────── -->
+<div id="modalEntradaLog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;align-items:flex-start;justify-content:center;padding-top:60px">
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;width:min(560px,96vw);max-height:85vh;display:flex;flex-direction:column;overflow:hidden">
+
+        <!-- Header -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0">
+            <div>
+                <div style="font-size:15px;font-weight:600;color:var(--text)">📥 Registrar entrada</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Log independiente · sin necesidad de inventario abierto</div>
+            </div>
+            <button onclick="cerrarEntradaLog()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:5px 12px;cursor:pointer;font-family:inherit;font-size:12px">✕ Cerrar</button>
+        </div>
+
+        <div style="overflow-y:auto;flex:1;padding:16px 20px;display:flex;flex-direction:column;gap:14px">
+
+            <!-- Insumo selector -->
+            <div>
+                <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">Insumo</div>
+                <div id="entLogInsumoNombre" style="font-size:13px;font-weight:500;color:var(--accent);margin-bottom:8px">Selecciona un insumo</div>
+                <input type="hidden" id="entLogInsumoId">
+                <input type="text" id="entLogBusqueda" placeholder="Buscar insumo…" oninput="_renderEntLogChips(this.value)"
+                    style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:12px;box-sizing:border-box">
+                <div id="entLogChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;max-height:120px;overflow-y:auto"></div>
+            </div>
+
+            <!-- Fecha + Tipo -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div>
+                    <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">Fecha de entrada</div>
+                    <input type="date" id="entLogFecha"
+                        style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:12px;box-sizing:border-box">
+                </div>
+                <div>
+                    <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">Tipo</div>
+                    <select id="entLogTipo" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:12px;box-sizing:border-box">
+                        <option value="compra">Compra</option>
+                        <option value="bonificacion">Bonificación</option>
+                        <option value="consignacion">Consignación</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Cantidad + Costo -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div>
+                    <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">Cantidad</div>
+                    <input type="number" id="entLogCantidad" placeholder="0" min="0" step="0.01"
+                        style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:12px;box-sizing:border-box">
+                </div>
+                <div>
+                    <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">Costo unitario</div>
+                    <input type="number" id="entLogCosto" placeholder="$0.00" min="0" step="0.01"
+                        style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:12px;box-sizing:border-box">
+                </div>
+            </div>
+
+            <!-- Notas -->
+            <div>
+                <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">Notas (opcional)</div>
+                <input type="text" id="entLogNotas" placeholder="Proveedor, lote, observaciones…"
+                    style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:12px;box-sizing:border-box">
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid var(--border);flex-shrink:0">
+            <button onclick="cerrarEntradaLog()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:8px 16px;cursor:pointer;font-family:inherit;font-size:12px">Cancelar</button>
+            <button id="btnGuardarEntradaLog" onclick="guardarEntradaLog()" style="background:var(--green);color:#0f0e0c;border:none;border-radius:8px;padding:8px 20px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Guardar entrada</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── MODAL AUTORIZACIÓN ADMIN ───────────────────────────────── -->
+<div id="modalAuthClave" style="display:none;position:fixed;inset:0;z-index:3500;
+    background:rgba(0,0,0,.8);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;
+      width:min(400px,94vw);overflow:hidden">
+    <div style="padding:18px 22px 14px;border-bottom:1px solid var(--border)">
+      <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:4px">🔒 Autorización requerida</div>
+      <div id="claveAccionLabel" style="font-size:16px;font-weight:600;color:var(--text)">Acción</div>
+    </div>
+    <div style="padding:18px 22px">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Cuenta</div>
+      <div id="claveEmailInfo" style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:16px">—</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Contraseña de inicio de sesión</div>
+      <input type="password" id="claveInput" placeholder="Ingresa tu contraseña"
+        onkeydown="if(event.key==='Enter')_confirmarClave()"
+        style="width:100%;box-sizing:border-box;height:46px;padding:0 14px;
+        border:1px solid var(--border);border-radius:10px;background:var(--bg);
+        color:var(--text);font-family:inherit;font-size:15px;outline:none;transition:border-color .15s"
+        onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+      <div id="claveError" style="color:var(--red);font-size:12px;margin-top:10px;min-height:16px"></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;padding:12px 22px;border-top:1px solid var(--border)">
+      <button onclick="_cerrarModalClave()"
+        style="background:transparent;border:1px solid var(--border);color:var(--text-muted);
+        border-radius:8px;padding:8px 18px;cursor:pointer;font-family:inherit;font-size:13px">Cancelar</button>
+      <button id="btnConfirmarClave" onclick="_confirmarClave()"
+        style="background:var(--accent);color:#0f0e0c;border:none;border-radius:8px;
+        padding:8px 22px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">Confirmar</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

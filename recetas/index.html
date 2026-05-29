@@ -60,7 +60,7 @@
 
     <main class="main-content" id="mainContent">
 
-        <div class="header">
+        <div class="header" id="recetaEditorHeader" style="display:none">
             <div style="display:flex;align-items:center;gap:12px">
                 <div>
                     <div id="brandTitle" style="font-family:inherit;font-size:36px;
@@ -369,19 +369,11 @@
     position:fixed;top:48px;right:0;bottom:0;left:0;
     background:var(--bg);flex-direction:column;z-index:50;
     transition:left 0.2s ease">
-    <div style="flex:1;overflow-y:auto;padding:64px 16px 32px">
-        <div class="header">
+    <div style="flex:1;overflow-y:auto;padding:8px 16px 32px">
+        <div class="header" style="position:relative;top:auto;margin:0 -16px 32px">
             <div class="brand">
                 <span class="brand-label">Catálogo de Recetas</span>
                 <span class="brand-title">Escandallos</span>
-            </div>
-            <div style="display:flex;flex-direction:column;justify-content:center;align-items:flex-end;gap:2px;opacity:0.45">
-                <div style="font-size:12px;font-style:italic;color:var(--text);text-align:right;line-height:1.4">
-                    Crea tus recetas y administra tu rentabilidad.
-                </div>
-                <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-muted)">
-                    by EGMx Consultoría Estratégica
-                </div>
             </div>
         </div>
         <div style="max-width:660px;margin:0 auto">
@@ -751,6 +743,8 @@
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
 <script src="../app.js"></script>
 <script>
 function toggleNav() {
@@ -775,7 +769,6 @@ function entrarEscandallos() {
     var nav = document.getElementById('nav');
     nav.style.removeProperty('display');
     document.getElementById('topSectionText').textContent = 'Escandallos';
-    if (typeof ctxShowEditorNav === 'function') ctxShowEditorNav();
     var menu = document.getElementById('vistaMenuReceta');
     var cerrado = nav.classList.contains('cerrado');
     if (menu) { menu.style.display = 'flex'; menu.style.left = cerrado ? '50px' : '200px'; }
@@ -785,13 +778,14 @@ function volverALanding() {
     document.getElementById('moduloLanding').style.display = 'block';
     document.getElementById('nav').style.display = 'none';
     document.getElementById('topSectionText').textContent = 'Mis Recetas';
-    if (typeof ctxHideEditorNav === 'function') ctxHideEditorNav();
     var menu = document.getElementById('vistaMenuReceta');
     if (menu) { menu.style.display = 'none'; }
     var vc = document.getElementById('vistaCaratula');
     if (vc) { vc.style.display = 'none'; }
     var ew = document.getElementById('editorWrap');
     if (ew) ew.style.display = 'none';
+    var h = document.getElementById('recetaEditorHeader');
+    if (h) h.style.display = 'none';
 }
 
 // Ocultar nav al cargar — o ir directo a Escandallos si viene de sub-página
@@ -2084,12 +2078,16 @@ function _showEscMenu() {
     if (m) { m.style.display = 'flex'; _syncVistaSidebarWidth(); }
     var w = document.getElementById('editorWrap');
     if (w) w.style.display = 'none';
+    var h = document.getElementById('recetaEditorHeader');
+    if (h) h.style.display = 'none';
 }
 function _showEscForm() {
     var m = document.getElementById('vistaMenuReceta');
     if (m) m.style.display = 'none';
     var w = document.getElementById('editorWrap');
     if (w) w.style.display = '';
+    var h = document.getElementById('recetaEditorHeader');
+    if (h) h.style.display = '';
 }
 function _syncVistaSidebarWidth() {
     var m = document.getElementById('vistaMenuReceta'); if (!m) return;
@@ -2828,13 +2826,24 @@ function _fmtNum(n){if(n===0)return '0';return parseFloat(n.toFixed(3))+'';}
 function renderCaratulaTablaSubRecetas(recetas,g){var filas=recetas.map(function(r){var c=(r.ingredientes||[]).reduce(function(s,i){return s+getFactor(i.cantidad,i.unidad)*(i.costoPorKgLt||0);},0),cx=r.camposExtra||{};var rN=parseFloat(cx.rendimientoFinal)||0,rU=(cx.unidadRendimientoFinal||'').toUpperCase();var rS=rN>0?_fmtNum(rN)+' '+rU.toLowerCase():'—';var rB=rN;if(rU==='G'||rU==='ML')rB=rN/1000;var cKL=rB>0?c/rB:0,uB=(rU==='G'||rU==='KG')?'kg':(rU==='ML'||rU==='LT')?'lts':rU.toLowerCase();var pQ=parseFloat(cx.porcionesQty)||0,pUn=(cx.porcionesUnidad||'pzs').toLowerCase(),pP=parseFloat(cx.pesoPorcion)||0,uP=(cx.unidadPesoPorcion||'').toLowerCase(),pD='—',uPD='—',cP=0;if(pQ>0){pD=pQ.toFixed(0)+' porciones';cP=c/pQ;if(rN>0)uPD=_fmtNum(rN/pQ)+' '+rU.toLowerCase();else if(pP>0)uPD=_fmtNum(pP)+' '+uP;}else if(pP>0&&rN>0){var pC=rN/pP;pD=pC.toFixed(0)+' porciones';cP=c/pC;uPD=_fmtNum(pP)+' '+uP;}var in2=r.status==='inactiva',gr=r.grupo||'';return '<tr style="opacity:'+(in2?'0.5':'1')+'"><td style="font-size:12px;font-weight:600"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><button class="btn-ver-ficha" onclick="abrirFichaDesdeCaratula(\''+r.id+'\')">📋 Ver</button>'+r.nombre+(in2?'<span style="font-size:9px;color:var(--text-dim);background:var(--surface2);padding:1px 6px;border-radius:4px">inactiva</span>':'')+'</div>'+(gr?'<div style="font-size:10px;color:var(--text-dim);font-weight:400;margin-top:2px">'+gr+'</div>':'')+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+rS+'</td><td style="text-align:right;color:var(--accent);font-weight:600">$'+c.toFixed(2)+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+pD+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+uPD+'</td><td style="text-align:right;color:var(--green);font-weight:600">'+(cP>0?'$'+cP.toFixed(2):'—')+'</td><td style="text-align:right;font-weight:600;color:var(--text-muted)">'+(cKL>0?'$'+cKL.toFixed(2)+'<span style="font-size:9px;margin-left:2px;color:var(--text-dim)">/'+uB+'</span>':'—')+'</td></tr>';}).join('');return '<div class="tabla-wrap"><table><thead><tr><th style="text-align:left">NOMBRE DE SUB RECETA</th><th style="text-align:center">RENDIMIENTO NETO</th><th style="text-align:right">COSTO BRUTO</th><th style="text-align:center">RENDIMIENTO x PORCIONES</th><th style="text-align:center">UNIDAD DE MEDIDA x PORCIÓN</th><th style="text-align:right">COSTO POR PORCIÓN</th><th style="text-align:right">COSTO POR kg o LT</th></tr></thead><tbody>'+filas+'</tbody></table></div>';}
 function imprimirCaratula(){if(!caratulaTipoActual)return;var q=(document.getElementById('caratulaBuscar')?.value||'').toLowerCase(),gF=document.getElementById('caratulaFiltroGrupo')?.value||'',sF=document.getElementById('caratulaFiltroStatus')?.value||'';var recetas=getRecetas().filter(function(r){return r.tipo===caratulaTipoActual;});if(q)recetas=recetas.filter(function(r){return r.nombre.toLowerCase().includes(q)||(r.grupo||'').toLowerCase().includes(q)||(r.categoria||'').toLowerCase().includes(q);});if(gF)recetas=recetas.filter(function(r){return r.grupo===gF;});if(sF==='activa')recetas=recetas.filter(function(r){return r.status!=='inactiva';});if(sF==='inactiva')recetas=recetas.filter(function(r){return r.status==='inactiva';});if(!recetas.length){alert('No hay recetas para imprimir.');return;}var estab=(document.getElementById('caratulaEstab')?document.getElementById('caratulaEstab').value.trim():'')||'Establecimiento';var g=CARATULA_GRUPOS.find(function(x){return x.key===caratulaTipoActual;});abrirVentanaImpresion(buildPlantillaCaratula(recetas,estab,g,caratulaLogoBase64));}
 
+function eliminarReceta(id) {
+    var rec = getRecetas().find(function(r){ return r.id === id; });
+    var nombre = rec ? rec.nombre : 'esta receta';
+    _pedirClaveAdmin('Eliminar "' + nombre + '"', function() {
+        setRecetas(getRecetas().filter(function(r){ return r.id !== id; }));
+        if (typeof renderMenuReceta === 'function') renderMenuReceta();
+    });
+}
+
 function eliminarRecetaActual() {
     if (!recetaActualId) { alert('Esta receta no está guardada aún.'); return; }
     const nombre = document.getElementById('nombreReceta').value.trim() || 'esta receta';
-    if (!confirm('¿Eliminar "' + nombre + '"? Esta acción no se puede deshacer.')) return;
-    setRecetas(getRecetas().filter(r => r.id !== recetaActualId));
-    recetaActualId = null;
-    abrirMenuReceta();
+    const id = recetaActualId;
+    _pedirClaveAdmin('Eliminar "' + nombre + '"', function() {
+        setRecetas(getRecetas().filter(r => r.id !== id));
+        recetaActualId = null;
+        abrirMenuReceta();
+    });
 }
 
 // Mostrar menú al cargar la página
@@ -2969,5 +2978,6 @@ function toggleTheme() {
     </div>
 </div>
 
+<script src="../admin-guard.js"></script>
 </body>
 </html>

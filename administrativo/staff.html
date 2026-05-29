@@ -270,7 +270,7 @@
     </svg>
     <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🏠</a>
     <div class="top-breadcrumb">
-        <span class="top-module-badge">Administrativo</span>
+        <span class="top-module-badge">Financiero</span>
         <span class="top-sep">|</span>
         <span class="top-section-name">Staff</span>
     </div>
@@ -279,28 +279,26 @@
 <div class="app-shell">
     <nav class="nav cerrado" id="nav">
         <div class="nav-top">
-            <div class="nav-brand"><span class="nav-brand-sub">Control Administrativo</span></div>
+            <div class="nav-brand"><span class="nav-brand-sub">Control Financiero</span></div>
             <div class="nav-top-actions">
                 <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
             </div>
         </div>
         <div class="nav-section">
-            <div class="nav-section-label">Ventas</div>
-            <a href="menu.html" class="nav-link" data-tooltip="Menú"><span class="nav-icon">📋</span><span class="nav-text">Menú</span></a>
-            <a href="ventas.html" class="nav-link" data-tooltip="Registro"><span class="nav-icon">💰</span><span class="nav-text">Registro</span></a>
+            <div class="nav-section-label">Admin</div>
+            <a href="ventas.html" class="nav-link" data-tooltip="Captura Ventas"><span class="nav-icon">💰</span><span class="nav-text">Captura Ventas</span></a>
+            <a href="#" class="nav-link" data-tooltip="Captura Gastos" style="opacity:.4;pointer-events:none"><span class="nav-icon">📤</span><span class="nav-text">Captura Gastos</span></a>
         </div>
         <div class="nav-section">
-            <div class="nav-section-label">Directorio de</div>
-            <a href="proveedores.html" class="nav-link" data-tooltip="Proveedores"><span class="nav-icon">🚚</span><span class="nav-text">Proveedores</span></a>
-        </div>
-        <div class="nav-section">
-            <div class="nav-section-label">Gestión de</div>
+            <div class="nav-section-label">Catálogos</div>
             <a href="staff.html" class="nav-link active" data-tooltip="Staff"><span class="nav-icon">👥</span><span class="nav-text">Staff</span></a>
             <a href="permisos.html" class="nav-link" data-tooltip="Permisos y Roles"><span class="nav-icon">🔐</span><span class="nav-text">Permisos y Roles</span></a>
+            <a href="proveedores.html" class="nav-link" data-tooltip="Proveedores"><span class="nav-icon">🚚</span><span class="nav-text">Proveedores</span></a>
+            <a href="#" class="nav-link" data-tooltip="Clientes" style="opacity:.4;pointer-events:none"><span class="nav-icon">⭐</span><span class="nav-text">Clientes</span></a>
         </div>
         <div class="nav-section">
-            <div class="nav-section-label">Base de</div>
-            <a href="#" class="nav-link" data-tooltip="Clientes"><span class="nav-icon">⭐</span><span class="nav-text">Clientes</span></a>
+            <div class="nav-section-label">Menús</div>
+            <a href="menu.html" class="nav-link" data-tooltip="Menú"><span class="nav-icon">📋</span><span class="nav-text">Menú</span></a>
         </div>
     </nav>
 
@@ -528,7 +526,16 @@ function toggleNav() {
 }
 
 /* ── SESSION HELPERS ── */
-function getNegocioActivo() { return localStorage.getItem('etaax_negocio_activo') || ''; }
+function getNegocioActivo() {
+    var id = localStorage.getItem('etaax_negocio_activo') || '';
+    if (!id) {
+        try {
+            var ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null');
+            if (ctx && ctx.negId) { id = ctx.negId; localStorage.setItem('etaax_negocio_activo', id); }
+        } catch(e) {}
+    }
+    return id;
+}
 function _sk(key) { var id = getNegocioActivo(); return id ? ('etaax_' + id + '_' + key) : ('etaax_' + key); }
 
 /* ── ROLES ── */
@@ -755,9 +762,10 @@ function closeModal() {
 }
 
 async function deleteStaff(id) {
-    if (!confirm('¿Eliminar este colaborador y su expediente?')) return;
-    await save(load().filter(function(s){ return s.id !== id; }));
-    renderAll();
+    _pedirClaveAdmin('Eliminar colaborador', async function() {
+        await save(load().filter(function(s){ return s.id !== id; }));
+        renderAll();
+    });
 }
 
 async function saveStaff() {
@@ -873,7 +881,7 @@ document.getElementById('modalStaff').addEventListener('click', function(e){
     if (e.target === this) closeModal();
 });
 </script>
-<script>window.ctxNavBack = 'index.html';</script>
 <script src="../ctx-bar.js"></script>
+<script src="../admin-guard.js"></script>
 </body>
 </html>

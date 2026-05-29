@@ -279,7 +279,7 @@
     </svg>
     <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🏠</a>
     <div class="top-breadcrumb">
-        <span class="top-module-badge">Administrativo</span>
+        <span class="top-module-badge">Financiero</span>
         <span class="top-sep">|</span>
         <span class="top-section-name">Ventas</span>
     </div>
@@ -288,27 +288,26 @@
 <div class="app-shell">
     <nav class="nav cerrado" id="nav">
         <div class="nav-top">
-            <div class="nav-brand"><span class="nav-brand-sub">Control Administrativo</span></div>
+            <div class="nav-brand"><span class="nav-brand-sub">Control Financiero</span></div>
             <div class="nav-top-actions">
                 <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
             </div>
         </div>
         <div class="nav-section">
-            <div class="nav-section-label">Ventas</div>
-            <a href="menu.html" class="nav-link" data-tooltip="Menú"><span class="nav-icon">📋</span><span class="nav-text">Menú</span></a>
-            <a href="ventas.html" class="nav-link active" data-tooltip="Registro"><span class="nav-icon">💰</span><span class="nav-text">Registro</span></a>
+            <div class="nav-section-label">Admin</div>
+            <a href="ventas.html" class="nav-link active" data-tooltip="Captura Ventas"><span class="nav-icon">💰</span><span class="nav-text">Captura Ventas</span></a>
+            <a href="#" class="nav-link" data-tooltip="Captura Gastos" style="opacity:.4;pointer-events:none"><span class="nav-icon">📤</span><span class="nav-text">Captura Gastos</span></a>
         </div>
         <div class="nav-section">
-            <div class="nav-section-label">Directorio de</div>
-            <a href="proveedores.html" class="nav-link" data-tooltip="Proveedores"><span class="nav-icon">🚚</span><span class="nav-text">Proveedores</span></a>
-        </div>
-        <div class="nav-section">
-            <div class="nav-section-label">Gestión de</div>
+            <div class="nav-section-label">Catálogos</div>
             <a href="staff.html" class="nav-link" data-tooltip="Staff"><span class="nav-icon">👥</span><span class="nav-text">Staff</span></a>
+            <a href="permisos.html" class="nav-link" data-tooltip="Permisos y Roles"><span class="nav-icon">🔐</span><span class="nav-text">Permisos y Roles</span></a>
+            <a href="proveedores.html" class="nav-link" data-tooltip="Proveedores"><span class="nav-icon">🚚</span><span class="nav-text">Proveedores</span></a>
+            <a href="#" class="nav-link" data-tooltip="Clientes" style="opacity:.4;pointer-events:none"><span class="nav-icon">⭐</span><span class="nav-text">Clientes</span></a>
         </div>
         <div class="nav-section">
-            <div class="nav-section-label">Base de</div>
-            <a href="#" class="nav-link" data-tooltip="Clientes"><span class="nav-icon">⭐</span><span class="nav-text">Clientes</span></a>
+            <div class="nav-section-label">Menús</div>
+            <a href="menu.html" class="nav-link" data-tooltip="Menú"><span class="nav-icon">📋</span><span class="nav-text">Menú</span></a>
         </div>
     </nav>
 
@@ -465,6 +464,8 @@
 .theme-toggle:hover{border-color:var(--green);color:var(--green);}
 </style>
 <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
 
 <script>
 (function(){
@@ -766,10 +767,13 @@ function closeModal() {
 function editVenta(id) { openModal(id); }
 
 function deleteVenta(id) {
-    if (!confirm('¿Eliminar esta venta?')) return;
-    var data = load().filter(function(v){ return v.id !== id; });
-    save(data);
-    renderAll();
+    var v = load().find(function(v){ return v.id === id; });
+    var nombre = v ? v.nombre : 'esta venta';
+    _pedirClaveAdmin('Eliminar "' + nombre + '"', function() {
+        var data = load().filter(function(v){ return v.id !== id; });
+        save(data);
+        renderAll();
+    });
 }
 
 function saveVenta() {
@@ -844,7 +848,7 @@ document.getElementById('modalVentas').addEventListener('click', function(e){
     if (e.target === this) closeModal();
 });
 </script>
-<script>window.ctxNavBack = 'index.html';</script>
 <script src="../ctx-bar.js"></script>
+<script src="../admin-guard.js"></script>
 </body>
 </html>

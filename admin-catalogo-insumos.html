@@ -100,7 +100,7 @@
 <!-- ── Loading overlay ── -->
 <div id="admLoadOverlay">
     <div class="adm-load-logo">eta<span>ax</span></div>
-    <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#4a4844;margin-bottom:4px">Catálogo Global · Verificando acceso</div>
+    <div id="admLoadMsg" style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#4a4844;margin-bottom:4px">Catálogo Global · Verificando acceso</div>
     <div class="adm-dots"><span></span><span></span><span></span></div>
 </div>
 
@@ -199,6 +199,8 @@
                             <div class="empty-desc">Agrega el primer insumo al catálogo global</div>
                         </div>
                     </div>
+                    <!-- Paginación -->
+                    <div id="pgBar" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 16px;border-top:1px solid var(--border)"></div>
                 </div>
             </div>
         </div>
@@ -449,34 +451,49 @@ function clearSearchInput() {
     filtrar();
 }
 
-/* ── Sync Supabase → localStorage ───────────────────────────── */
+/* ── Catálogo en memoria (evita límite 5MB de localStorage) ─── */
+var _catalogoMem = null;
+
+/* ── Sync Supabase → memoria (en batches de 1000 para evitar límite del servidor) ── */
 async function _loadCatalogFromSupabase() {
-    var res = await _supabase.from('catalogo_insumos').select('*').order('created_at', { ascending: true });
-    var insumos = (res.data || []).map(function(r){ return r.datos; }).filter(Boolean);
-    localStorage.setItem(LS_KEY, JSON.stringify(insumos));
-    // Asegurar que etaax_negocio_activo apunte al sentinel
+    var all = [];
+    var BATCH = 1000;
+    var from  = 0;
+    while (true) {
+        var res = await _supabase.from('catalogo_insumos')
+            .select('*')
+            .order('created_at', { ascending: true })
+            .range(from, from + BATCH - 1);
+        var chunk = (res.data || []).map(function(r){ return r.datos; }).filter(Boolean);
+        all = all.concat(chunk);
+        _setLoadMsg('Cargando catálogo… ' + all.length + ' insumos');
+        if (chunk.length < BATCH) break;
+        from += BATCH;
+    }
+    _catalogoMem = all;
     localStorage.setItem('etaax_negocio_activo', CATALOGO_KEY);
-    return insumos;
+    return _catalogoMem;
 }
 
-/* ── Sync localStorage → Supabase (fire & forget) ─────────── */
+/* ── Sync localStorage → Supabase en lotes de 100 ──────────── */
 async function _syncCatalogToSupabase(data) {
+    var BATCH = 100;
+
     // IDs actuales en Supabase
     var res = await _supabase.from('catalogo_insumos').select('id');
     var supaIds  = (res.data || []).map(function(r){ return r.id; });
     var localIds = data.map(function(ins){ return ins.id; });
 
-    // Eliminar los que ya no existen localmente
+    // Eliminar en lotes los que ya no existen localmente
     var toDelete = supaIds.filter(function(id){ return !localIds.includes(id); });
-    if (toDelete.length) {
-        await _supabase.from('catalogo_insumos').delete().in('id', toDelete);
+    for (var di = 0; di < toDelete.length; di += BATCH) {
+        await _supabase.from('catalogo_insumos').delete().in('id', toDelete.slice(di, di + BATCH));
     }
 
-    // Upsert todos los actuales
-    if (data.length) {
-        await _supabase.from('catalogo_insumos').upsert(
-            data.map(function(ins){ return { id: ins.id, datos: ins }; })
-        );
+    // Upsert en lotes de 100
+    var records = data.map(function(ins){ return { id: ins.id, datos: ins }; });
+    for (var i = 0; i < records.length; i += BATCH) {
+        await _supabase.from('catalogo_insumos').upsert(records.slice(i, i + BATCH));
     }
 }
 
@@ -488,43 +505,58 @@ function _loadInsumosJS(callback) {
     document.body.appendChild(s);
 }
 
+function _setLoadMsg(txt) {
+    var el = document.getElementById('admLoadMsg');
+    if (el) el.textContent = txt;
+}
+
 /* ── Init principal ────────────────────────────────────────── */
 (async function() {
-    // 1. Verificar sesión admin
-    var sd      = await _supabase.auth.getSession();
-    var session = sd.data && sd.data.session;
+    try {
+        // 1. Verificar sesión admin
+        _setLoadMsg('Verificando acceso...');
+        var sd      = await _supabase.auth.getSession();
+        var session = sd.data && sd.data.session;
 
-    if (!session || session.user.email !== ADMIN_EMAIL) {
-        window.location.href = 'admin.html';
-        return;
+        if (!session || session.user.email !== ADMIN_EMAIL) {
+            window.location.href = 'admin.html';
+            return;
+        }
+
+        // 2. Cargar catálogo desde Supabase → localStorage sentinel
+        _setLoadMsg('Cargando catálogo (' + new Date().toLocaleTimeString() + ')…');
+        await _loadCatalogFromSupabase();
+
+        // 3. Cargar insumos.js dinámicamente
+        _setLoadMsg('Iniciando módulo…');
+        _loadInsumosJS(function() {
+            getNegocioActivo = function() { return CATALOGO_KEY; };
+
+            // Sobreescribir getInsumos/setInsumos para usar memoria en lugar de localStorage
+            getInsumos = function() { return _catalogoMem || []; };
+
+            var _syncTimer = null;
+            setInsumos = function(data) {
+                _catalogoMem = data;
+                clearTimeout(_syncTimer);
+                _syncTimer = setTimeout(function() {
+                    _syncCatalogToSupabase(_catalogoMem).catch(function(e){
+                        console.warn('[admin-catalogo] sync error:', e);
+                    });
+                }, 3000);
+            };
+
+            // 4. Mostrar UI inmediatamente
+            document.getElementById('admLoadOverlay').classList.add('oculto');
+            document.getElementById('admTopbar').style.display = 'flex';
+
+            // Re-renderizar con overrides activos (diferido para que el browser pinte primero)
+            setTimeout(function() { init(); }, 60);
+        });
+    } catch(err) {
+        _setLoadMsg('Error: ' + (err.message || err));
+        console.error('[admin-catalogo] init error:', err);
     }
-
-    // 2. Cargar catálogo desde Supabase → localStorage sentinel
-    await _loadCatalogFromSupabase();
-
-    // 3. Cargar insumos.js dinámicamente
-    _loadInsumosJS(function() {
-        // insumos.js ya corrió su init() usando el sentinel.
-        // Ahora sobreescribimos getNegocioActivo para que siempre apunte al catálogo
-        // (por si insumos.js lo hubiera vuelto a leer de localStorage)
-        getNegocioActivo = function() { return CATALOGO_KEY; };
-
-        // Interceptar setInsumos para sincronizar a Supabase tras cada escritura
-        var _origSetInsumos = setInsumos;
-        setInsumos = function(data) {
-            _origSetInsumos(data);
-            _syncCatalogToSupabase(data).catch(function(e){
-                console.warn('[admin-catalogo] sync error:', e);
-            });
-        };
-
-        // Re-renderizar con el override activo
-        init();
-
-        // 4. Mostrar UI
-        document.getElementById('admLoadOverlay').classList.add('oculto');
-        document.getElementById('admTopbar').style.display = 'flex';
-    });
 })();
 </script>
 </body>

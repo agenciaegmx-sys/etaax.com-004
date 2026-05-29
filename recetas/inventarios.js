@@ -23,6 +23,8 @@ function getInsumos()     { try { return JSON.parse(_skGet('insumos'))     || []
 function getRecetas()     { try { return JSON.parse(_skGet('recetas'))     || []; } catch { return []; } }
 function getInventarios() { try { return JSON.parse(_skGet('inventarios')) || []; } catch { return []; } }
 function setInventarios(d){ localStorage.setItem(_sk('inventarios'), JSON.stringify(d)); }
+function getEntradasLog() { try { return JSON.parse(_skGet('entradas_log')) || []; } catch { return []; } }
+function setEntradasLog(d){ localStorage.setItem(_sk('entradas_log'), JSON.stringify(d)); }
 function genId()          { return Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
 
 // ── Estado global ─────────────────────────────────────────────
@@ -41,6 +43,9 @@ let modoListaCapt  = 'lista';
 let busquedaCapt   = '';
 let filtroFamActivo = '';
 let filtroCatActiva = '';
+
+// Paso 4 — tab activo
+let _paso4Tab = 'cancelaciones';
 
 // Vista entradas rápidas
 let _entRapidaInsumoId  = null;
@@ -70,7 +75,7 @@ const COPA_STD = {
     'espumosos':  88.72, 'cervezas': 355,  'default': 44.36
 };
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-const TIPOS_ICON = { bebidas:'🍸', alimentos:'🍽️', almacen:'📦', restaurante:'🏪', otro:'📋' };
+const TIPOS_ICON = { primer_lev:'📋', bebidas:'🍸', alimentos:'🍽️', almacen:'📦', restaurante:'🏪', otro:'📋' };
 
 // ── Helpers matemáticos ───────────────────────────────────────
 function ingredienteML(cantidad, unidad) {
@@ -105,9 +110,52 @@ function calcVentasCopasRecetas(insumoId, copaML) {
     return total;
 }
 
+// ── Fuzzy match cancelación → insumo ─────────────────────────
+function _normMatch(s) {
+    return (s || '').toString()
+        .toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/\b\d+\s*(?:ml|oz|lt|lts|cl|g|kg|cc)\b/gi, '')
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function _matchInsumo(nombreProducto) {
+    if (!nombreProducto || !filasCaptura.length) return null;
+    const q      = _normMatch(nombreProducto);
+    const words  = q.split(' ').filter(p => p.length >= 3);
+    if (!words.length) return null;
+    let best = null, bestScore = 0;
+    filasCaptura.forEach(fila => {
+        const n = _normMatch(fila.nombre);
+        let score = 0;
+        words.forEach(w => { if (n.includes(w)) score++; });
+        if (n.includes(q) || q.includes(n)) score += 0.5;
+        if (score > bestScore) { bestScore = score; best = fila; }
+    });
+    return bestScore > 0 ? best : null;
+}
+
+function _autoMatchCancelaciones() {
+    (invActual?.cancelaciones || []).forEach(c => {
+        if (!c.insumoId) {
+            const m = _matchInsumo(c.nombreProducto);
+            if (m) { c.insumoId = m.insumoId; c.insumoNombre = m.nombre; }
+        }
+    });
+}
+
 function getCancelacionesCopas(insumoId) {
+    _autoMatchCancelaciones();
+    const fila = filasCaptura.find(f => f.insumoId === insumoId);
     return (invActual?.cancelaciones || [])
-        .filter(c => c.insumoId === insumoId)
+        .filter(c => {
+            if (c.insumoId) return c.insumoId === insumoId;
+            // legacy fallback
+            return fila && c.nombreProducto &&
+                fila.nombre.toLowerCase().includes(c.nombreProducto.toLowerCase().split(' ')[0]);
+        })
         .reduce((s, c) => s + (parseFloat(c.cantidad) || 0), 0);
 }
 
@@ -152,8 +200,9 @@ function calcExistenciaTeorica(fila) {
     const ventasRec   = calcVentasCopasRecetas(fila.insumoId, fila.copaML);
     const ventasDir   = parseFloat(fila.ventasCopasDirectas) || 0;
     const cancelCopas = getCancelacionesCopas(fila.insumoId);
-    const totalCopas  = ventasRec + ventasDir + cancelCopas;
-    // entradas en copas (from log sum)
+    const cortesia    = parseFloat(fila.cortesiaCopas) || 0;
+    const merma       = parseFloat(fila.mermaCopas) || 0;
+    const totalCopas  = ventasRec + ventasDir + cancelCopas + cortesia + merma;
     const entTotal    = getEntradasCopas(fila);
     if (fila.tipo === 'pza') return ea + entTotal - (fila.ventasBotella || 0);
     return ea + entTotal - totalCopas - (fila.ventasBotella || 0) * (fila.contNeto > 0 && fila.copaML > 0 ? fila.contNeto / fila.copaML : 0);
@@ -188,6 +237,7 @@ function updEntrada(idx, ei, val) {
         el.textContent = total > 0 ? '+' + (total % 1 ? total.toFixed(1) : total) + ' bot' : '—';
         el.style.color = total > 0 ? 'var(--green)' : 'var(--text-dim)';
     }
+    _autoGuardar();
 }
 
 function calcDiferencia(fila) { return calcExistencia(fila) - calcExistenciaTeorica(fila); }
@@ -308,6 +358,11 @@ function renderHistTabla(lista) {
             </tr></thead>
             <tbody>${lista.map(inv => {
                 const dif = inv.diferenciaCosto || 0;
+                const accionBtn = inv.cerrado
+                    ? `<button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px;color:var(--accent);border-color:var(--accent)"
+                        onclick="editarInventario('${inv.id}')">✏️ Editar</button>`
+                    : `<button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px"
+                        onclick="abrirInventario('${inv.id}')">▶ Continuar</button>`;
                 return `<tr>
                     <td style="color:var(--text-muted)">${new Date(inv.fecha+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'})}</td>
                     <td style="font-weight:500">${tipoIcon(inv.tipoInv)} ${inv.nombre||'Sin nombre'}</td>
@@ -318,8 +373,7 @@ function renderHistTabla(lista) {
                     <td style="color:${dif>=0?'var(--green)':'var(--red)'};font-weight:500">${dif>=0?'+':''}$${dif.toFixed(0)}</td>
                     <td><span class="pill ${inv.cerrado?'pill-green':'pill-amber'}">${inv.cerrado?'Cerrado':'Abierto'}</span></td>
                     <td style="text-align:right;white-space:nowrap">
-                        <button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px"
-                            onclick="abrirInventario('${inv.id}')">📋 Abrir</button>
+                        ${accionBtn}
                         <button class="btn-vista" style="padding:4px 10px;font-size:11px;color:var(--red);border-color:var(--red)"
                             onclick="eliminarInventario('${inv.id}')">🗑️</button>
                     </td>
@@ -331,7 +385,12 @@ function renderHistTabla(lista) {
 
 function renderHistCard(inv) {
     const dif = inv.diferenciaCosto || 0;
-    return `<div class="hist-card ${inv.cerrado?'cerrado':''}" onclick="abrirInventario('${inv.id}')">
+    const accionBtn = inv.cerrado
+        ? `<button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1;color:var(--accent);border-color:var(--accent)"
+            onclick="editarInventario('${inv.id}')">✏️ Editar</button>`
+        : `<button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1"
+            onclick="abrirInventario('${inv.id}')">▶ Continuar</button>`;
+    return `<div class="hist-card ${inv.cerrado?'cerrado':''}">
         <div class="hist-card-icon">${tipoIcon(inv.tipoInv)}</div>
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
             <div class="hist-card-nombre">${inv.nombre||'Sin nombre'}</div>
@@ -340,7 +399,7 @@ function renderHistCard(inv) {
         </div>
         <div class="hist-card-meta">
             ${new Date(inv.fecha+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'})}
-            ${inv.turno?' · '+inv.turno:''} ${inv.area?' · '+inv.area:''}
+            ${inv.turno && /^\d{2}:\d{2}/.test(inv.turno) ? ' · '+inv.turno+'h' : ''} ${inv.area?' · '+inv.area:''}
             ${inv.negocio?'<br>'+inv.negocio:''}
         </div>
         <div style="border-top:1px solid var(--border);padding-top:10px">
@@ -350,9 +409,8 @@ function renderHistCard(inv) {
                 <span style="color:${dif>=0?'var(--green)':'var(--red)'};font-weight:600">${dif>=0?'+':''}$${dif.toFixed(0)}</span></div>
             <div class="hist-card-stat"><span>Productos</span><span>${(inv.filas||[]).length}</span></div>
         </div>
-        <div class="hist-card-actions" onclick="event.stopPropagation()">
-            <button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1"
-                onclick="abrirInventario('${inv.id}')">📋 Abrir</button>
+        <div class="hist-card-actions">
+            ${accionBtn}
             <button class="btn-vista" style="padding:5px 10px;font-size:11px;color:var(--red);border-color:var(--red)"
                 onclick="eliminarInventario('${inv.id}')">🗑️</button>
         </div>
@@ -410,39 +468,156 @@ function nuevoInventario() {
     document.getElementById('btnIniciarInv').textContent = 'Iniciar inventario →';
 }
 
+function nuevoPrimerLev() {
+    invActual = null; filasCaptura = [];
+    mostrarVista('vistaForm');
+    limpiarFormulario();
+    document.getElementById('invTipoInv').value = 'primer_lev';
+    onTipoInvChange('primer_lev');
+    document.getElementById('formModo').textContent   = 'Nuevo registro';
+    document.getElementById('formTitulo').textContent = 'Primer Levantamiento';
+    document.getElementById('btnIniciarInv').textContent = 'Iniciar levantamiento →';
+}
+
 function abrirInventario(id) {
     const inv = getInventarios().find(x => x.id === id);
     if (!inv) return;
     invActual = JSON.parse(JSON.stringify(inv));
     if (!invActual.cocktailsVendidos) invActual.cocktailsVendidos = {};
     if (!invActual.cancelaciones)     invActual.cancelaciones     = [];
+    if (!invActual.descuentos)        invActual.descuentos        = [];
     if (!invActual.entradasLog)       invActual.entradasLog       = [];
     filasCaptura = invActual.filas || [];
-    mostrarVista('vistaForm');
-    poblarFormulario();
-    document.getElementById('formModo').textContent   = invActual.cerrado ? 'Inventario cerrado' : 'Editando inventario';
-    document.getElementById('formTitulo').textContent = invActual.nombre || 'Sin nombre';
-    document.getElementById('btnIniciarInv').textContent = 'Continuar inventario →';
+    if (!filasCaptura.length) cargarProductosCaptura();
+    pasoActual = 1;
+    busquedaCapt = ''; filtroFamActivo = ''; filtroCatActiva = '';
+    mostrarVista('vistaCaptura');
+    document.getElementById('captTitulo').textContent = invActual.nombre || 'Inventario';
+    actualizarStepBar();
+    actualizarNavBtns();
+    renderStepContent();
+}
+
+function _getNegocioNombre() {
+    const id = getNegocioActivo();
+    if (!id) return '';
+    try {
+        const lista = JSON.parse(localStorage.getItem('etaax_negocios') || '[]');
+        const neg   = lista.find(n => n.id === id);
+        return neg ? (neg.nombre || '') : '';
+    } catch { return ''; }
+}
+
+function _getUltimoInvFecha() {
+    const lista = getInventarios();
+    if (!lista.length) return null;
+    return lista[lista.length - 1].fecha || null;
+}
+
+function onTipoInvChange(tipo) {
+    const mapa = { primer_lev:'general', bebidas:'barra', alimentos:'cocina', almacen:'bodega', restaurante:'general', otro:'general' };
+    const sel  = document.getElementById('invArea');
+    if (sel) sel.value = mapa[tipo] || 'general';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AUTH — Verifica con la contraseña de inicio de sesión (Supabase)
+// ═══════════════════════════════════════════════════════════════
+let _claveCallback = null;
+let _sesionEmail   = null;
+
+// Carga el email de la sesión activa en cuanto el script corre
+(async function _cargarSesion() {
+    try {
+        const { data } = await _supabase.auth.getSession();
+        _sesionEmail = data?.session?.user?.email || null;
+    } catch(e) { _sesionEmail = null; }
+})();
+
+function _solicitarClave(accion, callback) {
+    _claveCallback = callback;
+    document.getElementById('claveAccionLabel').textContent = accion;
+    document.getElementById('claveError').textContent       = '';
+    document.getElementById('claveInput').value             = '';
+    // Mostrar correo del usuario activo
+    const info = document.getElementById('claveEmailInfo');
+    if (info) info.textContent = _sesionEmail || '(sin sesión activa)';
+    document.getElementById('modalAuthClave').style.display = 'flex';
+    setTimeout(() => { const inp = document.getElementById('claveInput'); if (inp) inp.focus(); }, 80);
+}
+
+function _cerrarModalClave() {
+    document.getElementById('modalAuthClave').style.display = 'none';
+    _claveCallback = null;
+}
+
+async function _confirmarClave() {
+    const errEl   = document.getElementById('claveError');
+    const btnConf = document.getElementById('btnConfirmarClave');
+    const pass    = (document.getElementById('claveInput').value || '').trim();
+
+    if (!pass) { errEl.textContent = 'Ingresa tu contraseña'; return; }
+    if (!_sesionEmail) {
+        // intento de recuperar sesión en el momento
+        try {
+            const { data } = await _supabase.auth.getSession();
+            _sesionEmail = data?.session?.user?.email || null;
+        } catch(e) {}
+        if (!_sesionEmail) { errEl.textContent = 'No hay sesión activa. Vuelve a iniciar sesión desde el Hub.'; return; }
+    }
+
+    if (btnConf) { btnConf.textContent = 'Verificando…'; btnConf.disabled = true; }
+    errEl.textContent = '';
+    try {
+        const { error } = await _supabase.auth.signInWithPassword({ email: _sesionEmail, password: pass });
+        if (error) throw new Error('Contraseña incorrecta');
+    } catch(e) {
+        errEl.textContent = e.message || 'Error al verificar';
+        document.getElementById('claveInput').value = '';
+        document.getElementById('claveInput').focus();
+        if (btnConf) { btnConf.textContent = 'Confirmar'; btnConf.disabled = false; }
+        return;
+    }
+    if (btnConf) { btnConf.textContent = 'Confirmar'; btnConf.disabled = false; }
+    // Cerrar modal ANTES de ejecutar la acción (fuera del try-catch)
+    const cb = _claveCallback;
+    _cerrarModalClave();
+    if (cb) cb();
+}
+
+function _setFechaUltimo() {
+    const el   = document.getElementById('invFechaUltimo');
+    const f    = _getUltimoInvFecha();
+    if (!el) return;
+    el.textContent = f
+        ? new Date(f + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'long', year:'numeric' })
+        : 'Sin inventarios previos';
 }
 
 function poblarFormulario() {
-    document.getElementById('invTipoInv').value = invActual.tipoInv || 'bebidas';
-    document.getElementById('invNegocio').value = invActual.negocio || '';
-    document.getElementById('invNombre').value  = invActual.nombre  || '';
+    const tipo = invActual.tipoInv || 'bebidas';
+    document.getElementById('invTipoInv').value = tipo;
+    document.getElementById('invNegocio').value = invActual.negocio || _getNegocioNombre();
     document.getElementById('invFecha').value   = invActual.fecha   || '';
-    document.getElementById('invTurno').value   = invActual.turno   || 'cierre';
+    // Hora: si el valor guardado parece HH:MM lo usamos, si no dejamos vacío
+    const t = invActual.turno || '';
+    document.getElementById('invTurno').value   = /^\d{2}:\d{2}/.test(t) ? t : '';
     document.getElementById('invArea').value    = invActual.area    || 'barra';
     document.getElementById('invNotas').value   = invActual.notas   || '';
+    _setFechaUltimo();
 }
 
 function limpiarFormulario() {
+    const hoy  = new Date();
+    const hh   = String(hoy.getHours()).padStart(2,'0');
+    const mm   = String(hoy.getMinutes()).padStart(2,'0');
     document.getElementById('invTipoInv').value = 'bebidas';
-    document.getElementById('invNegocio').value = '';
-    document.getElementById('invNombre').value  = '';
-    document.getElementById('invFecha').value   = new Date().toISOString().slice(0,10);
-    document.getElementById('invTurno').value   = 'cierre';
+    document.getElementById('invNegocio').value = _getNegocioNombre();
+    document.getElementById('invFecha').value   = hoy.toISOString().slice(0,10);
+    document.getElementById('invTurno').value   = hh + ':' + mm;
     document.getElementById('invArea').value    = 'barra';
     document.getElementById('invNotas').value   = '';
+    _setFechaUltimo();
 }
 
 function iniciarInventario() {
@@ -450,18 +625,22 @@ function iniciarInventario() {
     if (esNuevo) {
         invActual = {
             id: genId(), cerrado: false,
-            cocktailsVendidos: {}, cancelaciones: [], entradasLog: [],
+            cocktailsVendidos: {}, cancelaciones: [], descuentos: [], entradasLog: [],
             filas: [], capitalCosto: 0, capitalCarta: 0, diferenciaCosto: 0
         };
     }
     invActual.tipoInv = document.getElementById('invTipoInv').value;
     invActual.negocio = document.getElementById('invNegocio').value.trim();
-    invActual.nombre  = document.getElementById('invNombre').value.trim() ||
-        'Inventario ' + new Date().toLocaleDateString('es-MX');
     invActual.fecha   = document.getElementById('invFecha').value || new Date().toISOString().slice(0,10);
     invActual.turno   = document.getElementById('invTurno').value;
     invActual.area    = document.getElementById('invArea').value;
     invActual.notas   = document.getElementById('invNotas').value;
+    // Auto-generar nombre a partir de tipo + área + fecha
+    const _tipoLabel = { bebidas:'Bebidas', alimentos:'Alimentos', almacen:'Almacén', restaurante:'Restaurante', otro:'Inventario' };
+    const _areaLabel = { barra:'Barra', bodega:'Bodega', cocina:'Cocina', general:'General' };
+    invActual.nombre  = (_tipoLabel[invActual.tipoInv] || 'Inventario') + ' ' +
+        (_areaLabel[invActual.area] || invActual.area) + ' · ' +
+        new Date(invActual.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' });
 
     if (esNuevo || !filasCaptura.length) cargarProductosCaptura();
 
@@ -472,12 +651,6 @@ function iniciarInventario() {
     actualizarStepBar();
     actualizarNavBtns();
     renderStepContent();
-}
-
-function eliminarInventario(id) {
-    if (!confirm('¿Eliminar este inventario?')) return;
-    setInventarios(getInventarios().filter(x => x.id !== id));
-    init();
 }
 
 // ── Cargar productos ──────────────────────────────────────────
@@ -538,7 +711,7 @@ function cargarProductosCaptura() {
 // ═══════════════════════════════════════════════════════════════
 // WIZARD — navegación
 // ═══════════════════════════════════════════════════════════════
-const PASO_LABELS = ['','Existencias','Entradas','Ventas','Cancelaciones','Resultado'];
+const PASO_LABELS = ['','Existencias','Entradas','Ventas','Cancelaciones','Resumen de Resultado'];
 
 function irAPaso(n) {
     pasoActual = n;
@@ -560,31 +733,43 @@ function actualizarStepBar() {
 }
 
 function actualizarNavBtns() {
+    const esLev  = invActual && invActual.tipoInv === 'primer_lev';
     const btnAnt = document.getElementById('btnPasoAnt');
     const btnSig = document.getElementById('btnPasoSig');
-    const btnCer = document.getElementById('btnCerrar');
-    if (btnAnt) btnAnt.style.display = pasoActual > 1 ? 'inline-flex' : 'none';
-    if (btnSig) btnSig.style.display = pasoActual < 5 ? 'inline-flex' : 'none';
-    if (btnCer) {
-        btnCer.style.display  = pasoActual === 5 ? 'inline-flex' : 'none';
-        btnCer.disabled       = !!(invActual?.cerrado);
-        btnCer.textContent    = invActual?.cerrado ? '✅ Cerrado' : '✅ Cerrar';
+    const btnLev = document.getElementById('btnFinalizarLev');
+    const steps  = document.getElementById('invSteps');
+
+    if (esLev) {
+        if (btnAnt) btnAnt.style.display = 'none';
+        if (btnSig) btnSig.style.display = 'none';
+        if (btnLev) { btnLev.style.display = 'inline-flex'; btnLev.disabled = !!(invActual?.cerrado); btnLev.textContent = invActual?.cerrado ? '✅ Guardado' : '✅ Guardar levantamiento'; }
+        if (steps)  steps.style.display = 'none';
+        const lbl = document.getElementById('stepLabel');
+        if (lbl) lbl.textContent = 'Primer Levantamiento — Captura de existencias';
+    } else {
+        if (btnLev) btnLev.style.display = 'none';
+        if (steps)  steps.style.display = '';
+        if (btnAnt) btnAnt.style.display = pasoActual > 1 ? 'inline-flex' : 'none';
+        if (btnSig) btnSig.style.display = pasoActual < 5 ? 'inline-flex' : 'none';
     }
 }
 
 function renderStepContent() {
     const cont = document.getElementById('stepContent');
     if (!cont) return;
+    // Primer levantamiento solo captura existencias
+    const paso = (invActual && invActual.tipoInv === 'primer_lev') ? 1 : pasoActual;
     const renders = [null, renderStep1, renderStep2, renderStep3, renderStep4, renderStep5];
-    cont.innerHTML = renders[pasoActual]();
+    cont.innerHTML = renders[paso]();
     // Restore filter selects
     const ffF = document.getElementById('filtroFamStep');
     const ffC = document.getElementById('filtroCatStep');
     if (ffF) ffF.value = filtroFamActivo;
     if (ffC) ffC.value = filtroCatActiva;
-    if (pasoActual === 2 && vistaEntradas2 === 'busqueda') initEntradaRapidaUI();
-    if (pasoActual === 1 && vistaCapturaExist === 'busqueda') initExistBusquedaUI();
-    if (pasoActual === 3 && vistaVentas === 'busqueda') initVentasBusquedaUI();
+    if (paso === 2 && vistaEntradas2 === 'busqueda') initEntradaRapidaUI();
+    if (paso === 1 && vistaCapturaExist === 'busqueda') initExistBusquedaUI();
+    if (paso === 3 && vistaVentas === 'busqueda') initVentasBusquedaUI();
+    if (paso === 4) _initPaso4Tables();
 }
 
 // ── Toolbar para steps 1 y 2 ──────────────────────────────────
@@ -636,8 +821,8 @@ function refreshFilaDisplay(idx) {
     if (elEF) elEF.textContent = fmtBot(exist) + ' ' + efUnit;
 }
 
-function updCaptura(idx, campo, val) { filasCaptura[idx][campo] = val; refreshFilaDisplay(idx); }
-function updPeso(idx, pi, val)       { filasCaptura[idx].pesos[pi] = val; refreshFilaDisplay(idx); }
+function updCaptura(idx, campo, val) { filasCaptura[idx][campo] = val; refreshFilaDisplay(idx); _autoGuardar(); }
+function updPeso(idx, pi, val)       { filasCaptura[idx].pesos[pi] = val; refreshFilaDisplay(idx); _autoGuardar(); }
 
 // ═══════════════════════════════════════════════════════════════
 // PASO 1 — Existencias físicas
@@ -764,6 +949,7 @@ function updNivel(idx, val) {
     if (bar) bar.style.height = (fila.nivelPct || 0) + '%';
     if (pct) pct.textContent = (fila.nivelPct || 0) + '%';
     refreshFilaDisplay(idx);
+    _autoGuardar();
 }
 
 function previewFotoExist(insumoId, input) {
@@ -1377,6 +1563,7 @@ function renderStep3Insumos() {
         const tipoSt = fila.tipo === 'pza'
             ? 'background:rgba(61,190,122,0.15);border-color:rgba(61,190,122,0.45);color:var(--green)'
             : 'background:rgba(245,200,66,0.12);border-color:rgba(245,200,66,0.45);color:var(--accent)';
+        const esCopa = fila.tipo !== 'pza';
         return `<tr class="inv-row">
             <td class="inv-td-prod">
                 <div class="inv-prod-name">${fila.nombre}</div>
@@ -1386,26 +1573,41 @@ function renderStep3Insumos() {
                     <button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">📋 Ver</button>
                 </div>
             </td>
-            <td class="inv-td-input" style="width:110px">
+            <td class="inv-td-input" style="width:95px">
                 <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">${unidad}</div>
                 <input type="number" class="inv-num-input" value="${fila.ventasCopasDirectas||0}" min="0" step="0.5"
                     oninput="updVentasDirectas(${idx},'ventasCopasDirectas',+this.value)">
             </td>
-            <td class="inv-td-input" style="width:110px">
+            <td class="inv-td-input" style="width:95px">
                 <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">bot</div>
                 <input type="number" class="inv-num-input" value="${fila.ventasBotella||0}" min="0" step="1"
                     oninput="updVentasDirectas(${idx},'ventasBotella',+this.value)">
             </td>
+            ${esCopa ? `
+            <td class="inv-td-input" style="width:95px">
+                <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">cortesía</div>
+                <input type="number" class="inv-num-input" style="border-color:rgba(155,141,232,.4)"
+                    value="${fila.cortesiaCopas||0}" min="0" step="0.5"
+                    oninput="updVentasDirectas(${idx},'cortesiaCopas',+this.value)">
+            </td>
+            <td class="inv-td-input" style="width:95px">
+                <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">merma</div>
+                <input type="number" class="inv-num-input" style="border-color:rgba(224,90,58,.35)"
+                    value="${fila.mermaCopas||0}" min="0" step="0.5"
+                    oninput="updVentasDirectas(${idx},'mermaCopas',+this.value)">
+            </td>` : '<td colspan="2"></td>'}
         </tr>`;
     }).join('');
     return buildToolbar(true) + `<div class="inv-table-wrap">
         <table class="inv-capture-table">
             <thead><tr>
                 <th class="inv-th">Producto</th>
-                <th class="inv-th inv-th-c" style="width:110px">Copas / Pzas</th>
-                <th class="inv-th inv-th-c" style="width:110px">Botellas</th>
+                <th class="inv-th inv-th-c" style="width:95px">Copas / Pzas</th>
+                <th class="inv-th inv-th-c" style="width:95px">Botellas</th>
+                <th class="inv-th inv-th-c" style="width:95px">Cortesía</th>
+                <th class="inv-th inv-th-c" style="width:95px">Merma</th>
             </tr></thead>
-            <tbody>${rows||'<tr><td colspan="3" style="text-align:center;color:var(--text-dim);padding:32px">Sin resultados</td></tr>'}</tbody>
+            <tbody>${rows||'<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:32px">Sin resultados</td></tr>'}</tbody>
         </table>
     </div>`;
 }
@@ -1484,7 +1686,8 @@ function renderStep3Menu() {
 // ── Búsqueda rápida ventas ────────────────────────────────────
 function renderStep3BusquedaScaffold() {
     const conVentas = filasCaptura.filter(f =>
-        (f.ventasCopasDirectas||0) > 0 || (f.ventasBotella||0) > 0
+        (f.ventasCopasDirectas||0)>0 || (f.ventasBotella||0)>0 ||
+        (f.cortesiaCopas||0)>0 || (f.mermaCopas||0)>0
     ).length;
     return `<div class="ent-rapida-wrap">
         <div>
@@ -1531,7 +1734,7 @@ function renderChipsVentas() {
         return;
     }
     cont.innerHTML = matches.map(f => {
-        const tieneVentas = (f.ventasCopasDirectas||0)>0 || (f.ventasBotella||0)>0;
+        const tieneVentas = (f.ventasCopasDirectas||0)>0 || (f.ventasBotella||0)>0 || (f.cortesiaCopas||0)>0 || (f.mermaCopas||0)>0;
         return `<button class="ent-chip ${_ventasInsumoId===f.insumoId?'active':''}"
             onclick="seleccionarProductoVentas('${f.insumoId}')" style="position:relative">
             ${f.nombre}
@@ -1567,6 +1770,7 @@ function renderCardVentas() {
     const tipoSt = fila.tipo === 'pza'
         ? 'background:rgba(61,190,122,0.15);border-color:rgba(61,190,122,0.45);color:var(--green)'
         : 'background:rgba(245,200,66,0.12);border-color:rgba(245,200,66,0.45);color:var(--accent)';
+    const esCopa = fila.tipo !== 'pza';
     cont.innerHTML = `
         <div class="ent-form-card">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
@@ -1583,21 +1787,65 @@ function renderCardVentas() {
                         style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:20px;padding:0;line-height:1">✕</button>
                 </div>
             </div>
-            <div style="display:flex;gap:16px;flex-wrap:wrap">
+
+            <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600">Ventas</div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
                 <div>
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">${unidad} vendidas</div>
                     <input type="number" id="venta-copas-${idx}" class="inv-num-input"
-                        style="width:110px" value="${fila.ventasCopasDirectas||0}" min="0" step="0.5"
+                        style="width:100px" value="${fila.ventasCopasDirectas||0}" min="0" step="0.5"
                         oninput="updVentasDirectas(${idx},'ventasCopasDirectas',+this.value);renderResumenVentas()">
                 </div>
                 <div>
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Botellas vendidas</div>
                     <input type="number" id="venta-bot-${idx}" class="inv-num-input"
-                        style="width:110px" value="${fila.ventasBotella||0}" min="0" step="1"
+                        style="width:100px" value="${fila.ventasBotella||0}" min="0" step="1"
                         oninput="updVentasDirectas(${idx},'ventasBotella',+this.value);renderResumenVentas()">
                 </div>
             </div>
-            ${fila.costoUnitario ? `<div style="margin-top:12px;font-size:11px;color:var(--text-dim)">
+
+            ${esCopa ? `
+            <div style="border-top:1px solid var(--border);padding-top:14px;margin-bottom:14px">
+                <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600">Cortesía</div>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+                    <div>
+                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Copas</div>
+                        <input type="number" class="inv-num-input"
+                            style="width:100px;border-color:rgba(155,141,232,.5)"
+                            value="${fila.cortesiaCopas||0}" min="0" step="0.5"
+                            oninput="updVentasDirectas(${idx},'cortesiaCopas',+this.value);renderResumenVentas()">
+                    </div>
+                    <div style="flex:1;min-width:140px">
+                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Concepto</div>
+                        <input type="text" class="inv-num-input"
+                            style="width:100%;border-color:rgba(155,141,232,.5)"
+                            value="${fila.cortesiaConcepto||''}" placeholder="ej. VIP, degustación…"
+                            oninput="updVentasConcepto(${idx},'cortesiaConcepto',this.value)">
+                    </div>
+                </div>
+            </div>
+
+            <div style="border-top:1px solid var(--border);padding-top:14px">
+                <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600">Merma</div>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+                    <div>
+                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Copas</div>
+                        <input type="number" class="inv-num-input"
+                            style="width:100px;border-color:rgba(224,90,58,.4)"
+                            value="${fila.mermaCopas||0}" min="0" step="0.5"
+                            oninput="updVentasDirectas(${idx},'mermaCopas',+this.value);renderResumenVentas()">
+                    </div>
+                    <div style="flex:1;min-width:140px">
+                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Concepto</div>
+                        <input type="text" class="inv-num-input"
+                            style="width:100%;border-color:rgba(224,90,58,.4)"
+                            value="${fila.mermaConcepto||''}" placeholder="ej. derrame, rotura…"
+                            oninput="updVentasConcepto(${idx},'mermaConcepto',this.value)">
+                    </div>
+                </div>
+            </div>` : ''}
+
+            ${fila.costoUnitario ? `<div style="margin-top:14px;font-size:11px;color:var(--text-dim);border-top:1px solid var(--border);padding-top:10px">
                 Costo referencia: <span style="color:var(--accent)">$${(fila.costoUnitario).toFixed(2)}/bot</span>
             </div>` : ''}
         </div>`;
@@ -1606,7 +1854,10 @@ function renderCardVentas() {
 function renderResumenVentas() {
     const cont = document.getElementById('ventasResumen');
     if (!cont) return;
-    const conVentas = filasCaptura.filter(f => (f.ventasCopasDirectas||0)>0 || (f.ventasBotella||0)>0);
+    const conVentas = filasCaptura.filter(f =>
+        (f.ventasCopasDirectas||0)>0 || (f.ventasBotella||0)>0 ||
+        (f.cortesiaCopas||0)>0 || (f.mermaCopas||0)>0
+    );
     const countEl = document.querySelector('#ventasResumen')?.previousElementSibling?.querySelector('span:last-child');
     if (!conVentas.length) {
         cont.innerHTML = `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:20px 0">Sin ventas capturadas aún</div>`;
@@ -1617,6 +1868,8 @@ function renderResumenVentas() {
         const partes = [];
         if ((fila.ventasCopasDirectas||0)>0) partes.push(`${fila.ventasCopasDirectas} ${unidad}`);
         if ((fila.ventasBotella||0)>0)       partes.push(`${fila.ventasBotella} bot`);
+        if ((fila.cortesiaCopas||0)>0)       partes.push(`${fila.cortesiaCopas} cortesía`);
+        if ((fila.mermaCopas||0)>0)          partes.push(`${fila.mermaCopas} merma`);
         return `<div class="ent-log-fila" onclick="seleccionarProductoVentas('${fila.insumoId}')" style="cursor:pointer">
             <span class="ent-log-nombre">${fila.nombre}</span>
             <span class="ent-log-cant" style="color:var(--accent)">${partes.join(' · ')}</span>
@@ -1628,193 +1881,627 @@ function updCoctelVendido(id, val) {
     if (!invActual.cocktailsVendidos) invActual.cocktailsVendidos = {};
     invActual.cocktailsVendidos[id] = val;
 }
-function updVentasDirectas(idx, campo, val) { filasCaptura[idx][campo] = val; }
+function updVentasDirectas(idx, campo, val) { filasCaptura[idx][campo] = val; _autoGuardar(); }
+function updVentasConcepto(idx, campo, val) { filasCaptura[idx][campo] = val; _autoGuardar(); }
 
 // ═══════════════════════════════════════════════════════════════
-// PASO 4 — Cancelaciones y descuentos
+// PASO 4 — Cancelaciones y Descuentos (dos sub-tabs)
 // ═══════════════════════════════════════════════════════════════
+function setPaso4Tab(tab) { _paso4Tab = tab; renderStepContent(); }
+
 function renderStep4() {
     const cancelaciones = invActual?.cancelaciones || [];
-    const opsProd = filasCaptura.map(f=>`<option value="${f.insumoId}">${f.nombre}</option>`).join('');
+    const descuentos    = invActual?.descuentos    || [];
+    const totalDesc     = descuentos.reduce((s,d)=>s+(parseFloat(d.monto)||0),0);
 
-    const tablaReg = cancelaciones.length ? `<div class="tabla-wrap"><table>
-        <thead><tr>
-            <th>Producto</th><th>Tipo</th><th style="text-align:center">Copas</th>
-            <th style="text-align:right">Importe</th><th>Motivo</th><th>Responsable</th><th></th>
-        </tr></thead>
-        <tbody>${cancelaciones.map((c,i)=>`<tr>
-            <td style="font-size:12px;font-weight:500">${c.nombreProducto||c.insumoId}</td>
-            <td><span class="pill pill-amber" style="font-size:10px">${c.tipo}</span></td>
-            <td style="text-align:center">${c.cantidad}</td>
-            <td style="text-align:right;color:var(--accent)">$${(c.importe||0).toFixed(2)}</td>
-            <td style="color:var(--text-dim)">${c.motivo||'—'}</td>
-            <td style="color:var(--text-dim)">${c.responsable||'—'}</td>
-            <td style="text-align:right">
-                <button class="btn-vista" style="padding:3px 8px;font-size:10px;color:var(--red);border-color:var(--red)"
-                    onclick="eliminarCancelacion(${i})">🗑️</button>
-            </td>
-        </tr>`).join('')}</tbody>
-    </table></div>` : `<div class="empty-state" style="padding:40px">
-        <div class="empty-icon">📋</div>
-        <div class="empty-title">Sin registros</div>
-        <div class="empty-desc">Agrega cancelaciones manualmente o pega desde Excel</div>
+    const tabBar = `
+    <div style="display:flex;gap:6px;padding:16px 16px 0">
+        <button class="btn-vista" onclick="setPaso4Tab('cancelaciones')"
+            style="${_paso4Tab==='cancelaciones'?'color:var(--accent);border-color:var(--accent)':''}">
+            🚫 Cancelaciones
+            <span class="pill pill-amber" style="margin-left:6px;font-size:10px">${cancelaciones.length}</span>
+        </button>
+        <button class="btn-vista" onclick="setPaso4Tab('descuentos')"
+            style="${_paso4Tab==='descuentos'?'color:var(--green);border-color:var(--green)':''}">
+            💸 Descuentos
+            ${descuentos.length ? `<span class="pill pill-green" style="margin-left:6px;font-size:10px">$${totalDesc.toFixed(0)}</span>` : ''}
+        </button>
     </div>`;
 
+    return tabBar + (_paso4Tab === 'cancelaciones'
+        ? _renderCancelacionesTab(cancelaciones)
+        : _renderDescuentosTab(descuentos, totalDesc));
+}
+
+function _renderCancelacionesTab(cancelaciones) {
+    // Run auto-match on cancelaciones that haven't been matched yet
+    _autoMatchCancelaciones();
+    const noMatch = cancelaciones.filter(c => !c.insumoId).length;
+    const insumoOpts = filasCaptura.map(f =>
+        `<option value="${f.insumoId}">${f.nombre}</option>`
+    ).join('');
+
+    const tabla = cancelaciones.length ? `<div class="tabla-wrap" style="overflow-x:auto"><table style="min-width:820px">
+        <thead><tr>
+            <th style="width:110px">Fecha / Hora</th>
+            <th>Producto POS</th>
+            <th style="width:55px;text-align:center">Cant.</th>
+            <th style="width:165px">Insumo detectado</th>
+            <th>Motivo</th>
+            <th style="width:80px">Mesero</th>
+            <th style="width:28px"></th>
+        </tr></thead>
+        <tbody>${cancelaciones.map((c,i)=>{
+            const matched = !!c.insumoId;
+            const badge = matched
+                ? `<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(61,190,122,.12);
+                    border:1px solid rgba(61,190,122,.4);color:var(--green);border-radius:6px;
+                    padding:2px 8px;font-size:11px;font-weight:600;max-width:100%;overflow:hidden;
+                    text-overflow:ellipsis;white-space:nowrap" title="${c.insumoNombre||''}">
+                    ✓ ${c.insumoNombre||'—'}</span>`
+                : `<span style="background:rgba(245,200,66,.12);border:1px solid rgba(245,200,66,.4);
+                    color:var(--accent);border-radius:6px;padding:2px 8px;font-size:11px">
+                    ⚠ Sin match</span>`;
+            return `<tr>
+                <td style="font-size:11px;color:var(--text-dim);white-space:nowrap">${c.fechaHora||'—'}</td>
+                <td style="font-size:12px;font-weight:500">${c.nombreProducto||'—'}</td>
+                <td style="text-align:center;font-weight:600">${c.cantidad||'—'}</td>
+                <td>
+                    <div style="display:flex;flex-direction:column;gap:4px">
+                        ${badge}
+                        <select onchange="_setCancelInsumo(${i},this.value)"
+                            style="font-size:10px;background:var(--surface2);border:1px solid var(--border);
+                            color:var(--text-muted);border-radius:5px;padding:2px 4px;width:100%;font-family:inherit">
+                            <option value="">— cambiar insumo —</option>
+                            ${insumoOpts}
+                        </select>
+                    </div>
+                </td>
+                <td style="color:var(--text-dim);font-size:11px">${c.motivo||'—'}</td>
+                <td style="color:var(--text-dim);font-size:11px">${c.mesero||'—'}</td>
+                <td><button class="btn-vista" style="padding:3px 8px;font-size:10px;color:var(--red);border-color:var(--red)"
+                    onclick="eliminarCancelacion(${i})">🗑️</button></td>
+            </tr>`;
+        }).join('')}</tbody>
+    </table></div>` : `<div class="empty-state" style="padding:40px">
+        <div class="empty-icon">🚫</div><div class="empty-title">Sin cancelaciones</div>
+        <div class="empty-desc">Agrega manualmente o importa desde tu POS</div></div>`;
+
     return `
-    <!-- Sección de carga: paste / CSV -->
-    <div class="card" style="max-width:none;margin:16px 16px 0">
-        <div class="card-header"><h2>📥 Importar datos</h2></div>
-        <div class="card-body">
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">
-                Pega datos desde Excel (Tab-separado) o carga un CSV.<br>
-                Columnas: <strong>Producto · Tipo · Copas · Importe · Motivo · Responsable</strong>
+    <div class="card" style="max-width:none;margin:12px 16px 0">
+        <div class="card-header">
+            <h2>📥 Cancelaciones — pega por columna o importa archivo</h2>
+        </div>
+        <div class="card-body" style="padding:0">
+            <div style="padding:10px 14px 6px;font-size:11px;color:var(--text-dim)">
+                Haz clic en una celda y pega (Ctrl+V) — una columna a la vez o un rango completo desde Excel.
             </div>
-            <textarea id="cancelPaste" rows="5"
-                style="width:100%;font-size:12px;font-family:monospace;border:1px solid var(--border);
-                background:var(--bg);color:var(--text);border-radius:8px;padding:10px;box-sizing:border-box"
-                placeholder="Pega aquí los datos copiados de Excel...&#10;Ej: Grey Goose Vodka	cancelacion	2	150	Cliente rechazó	Juan"></textarea>
-            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-                <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)"
-                    onclick="procesarPaste()">⬆️ Procesar pegado</button>
-                <label class="btn-vista" style="cursor:pointer">
-                    📂 Cargar CSV
-                    <input type="file" accept=".csv,.txt" style="display:none" onchange="cargarCSV(event)">
+            <div class="tabla-wrap" style="overflow-x:auto;overflow-y:auto;max-height:280px">
+                <table id="cancelPasteTable" class="paste-table">
+                    <thead><tr>
+                        <th class="pt-num">#</th>
+                        <th>Fecha / Hora</th><th>Producto</th>
+                        <th style="text-align:center">Cantidad</th>
+                        <th>Autorizó</th><th>Motivo</th><th>Mesero</th>
+                    </tr></thead>
+                    <tbody id="cancelPasteBody"></tbody>
+                </table>
+            </div>
+            <div style="display:flex;gap:8px;padding:8px 14px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--border)">
+                <button class="btn-vista" onclick="_agregarFilasTabla('cancelPasteBody',6)">+ 10 filas</button>
+                <button class="btn-vista" style="color:var(--red);border-color:var(--red)" onclick="_limpiarTabla('cancelPasteBody',6)">🗑 Limpiar</button>
+                <button class="btn-vista" style="color:var(--accent);border-color:var(--accent);padding:7px 16px"
+                    onclick="confirmarTablaCancelaciones()">✓ Agregar a cancelaciones</button>
+            </div>
+            <div style="display:flex;gap:8px;padding:0 14px 12px;flex-wrap:wrap;align-items:center">
+                <label class="btn-vista" style="cursor:pointer;color:var(--accent);border-color:var(--accent)">
+                    📊 .xlsx / .xls
+                    <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarXLSXCancelaciones(event)">
                 </label>
-                <button class="btn-vista" onclick="descargarPlantillaCSV()">⬇️ Plantilla CSV</button>
+                <label class="btn-vista" style="cursor:pointer">
+                    📄 PDF
+                    <input type="file" accept=".pdf" style="display:none" onchange="importarPDFCancelaciones(event)">
+                </label>
+                <span style="font-size:11px;color:var(--text-dim)">Importar archivo rellena la tabla automáticamente</span>
             </div>
         </div>
     </div>
-
-    <!-- Formulario manual -->
     <div class="cancel-toolbar">
-        <div class="cancel-field">
-            <label>Producto</label>
-            <select id="cancelProd" style="min-width:180px">${opsProd}</select>
-        </div>
-        <div class="cancel-field">
-            <label>Tipo</label>
-            <select id="cancelTipo">
-                <option value="cancelacion">Cancelación</option>
-                <option value="descuento">Descuento</option>
-                <option value="cortesia">Cortesía</option>
-                <option value="derrame">Derrame</option>
-                <option value="otro">Otro</option>
-            </select>
-        </div>
-        <div class="cancel-field">
-            <label>Copas</label>
-            <input type="number" id="cancelCantidad" style="width:80px" placeholder="0" min="0" step="0.5">
-        </div>
-        <div class="cancel-field">
-            <label>Importe $</label>
-            <input type="number" id="cancelImporte" style="width:90px" placeholder="0.00" min="0" step="0.01">
-        </div>
-        <div class="cancel-field">
-            <label>Motivo</label>
-            <input type="text" id="cancelMotivo" style="width:160px" placeholder="Ej. Cliente rechazó pedido">
-        </div>
-        <div class="cancel-field">
-            <label>Responsable</label>
-            <input type="text" id="cancelResp" style="width:110px" placeholder="Nombre">
-        </div>
+        <div class="cancel-field"><label>Fecha / Hora</label>
+            <input type="datetime-local" id="cancelFechaHora" style="width:170px"></div>
+        <div class="cancel-field"><label>Producto</label>
+            <input type="text" id="cancelProd" style="width:180px" placeholder="Nombre del producto"></div>
+        <div class="cancel-field"><label>Cantidad</label>
+            <input type="number" id="cancelCantidad" style="width:75px" placeholder="0" min="0" step="1"></div>
+        <div class="cancel-field"><label>Autorizó</label>
+            <input type="text" id="cancelAutorizo" style="width:110px" placeholder="39-TOMAS"></div>
+        <div class="cancel-field"><label>Motivo</label>
+            <input type="text" id="cancelMotivo" style="width:190px" placeholder="Motivo de la cancelación"></div>
+        <div class="cancel-field"><label>Mesero</label>
+            <input type="text" id="cancelMesero" style="width:110px" placeholder="Nombre"></div>
         <div style="display:flex;align-items:flex-end">
-            <button class="btn-vista" style="color:var(--green);border-color:var(--green);padding:7px 16px"
-                onclick="agregarCancelacion()">+ Agregar</button>
+            <button class="btn-vista" style="color:var(--accent);border-color:var(--accent);padding:7px 16px"
+                onclick="agregarCancelacionManual()">+ Agregar</button>
         </div>
     </div>
-
-    <!-- Tabla de registros -->
     <div class="card" style="max-width:none;margin:0 16px 24px">
         <div class="card-header">
-            <h2>Registros de cancelaciones y descuentos</h2>
-            <span class="pill ${cancelaciones.length?'pill-amber':''}">
-                ${cancelaciones.length} registro${cancelaciones.length!==1?'s':''}
-            </span>
+            <h2>🚫 Cancelaciones registradas</h2>
+            <div style="display:flex;gap:8px;align-items:center">
+                <span class="pill ${cancelaciones.length?'pill-amber':''}">
+                    ${cancelaciones.length} cancelación${cancelaciones.length!==1?'es':''}</span>
+                ${noMatch > 0 ? `<span class="pill pill-amber">${noMatch} sin detectar</span>` : `<span class="pill pill-green">Todos detectados</span>`}
+                <button class="btn-vista" style="font-size:11px;padding:4px 10px"
+                    onclick="_reDetectarCancelaciones()">🔍 Re-detectar</button>
+            </div>
         </div>
-        <div class="card-body" style="padding:0">${tablaReg}</div>
+        <div class="card-body" style="padding:0">${tabla}</div>
     </div>`;
 }
 
-function procesarPaste() {
-    const text = document.getElementById('cancelPaste')?.value.trim();
-    if (!text) return;
-    const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
-    let added = 0;
-    lines.forEach(line => {
-        const cols = line.includes('\t') ? line.split('\t') : line.split(',');
-        if (cols.length < 3) return;
-        const [nombreProd, tipo, cantStr, importeStr, motivo, responsable] = cols.map(c=>c.trim().replace(/^"|"$/g,''));
-        if (!nombreProd || nombreProd.toLowerCase() === 'producto') return; // skip header
-        const cantidad = parseFloat(cantStr) || 0;
-        if (cantidad <= 0) return;
-        // fuzzy match product name
-        const fila = filasCaptura.find(f =>
-            f.nombre.toLowerCase().includes(nombreProd.toLowerCase()) ||
-            nombreProd.toLowerCase().includes(f.nombre.toLowerCase().split(' ')[0].toLowerCase())
-        );
-        if (!invActual.cancelaciones) invActual.cancelaciones = [];
-        invActual.cancelaciones.push({
-            insumoId: fila?.insumoId || nombreProd,
-            nombreProducto: fila?.nombre || nombreProd,
-            tipo: tipo || 'cancelacion',
-            cantidad, importe: parseFloat(importeStr)||0,
-            motivo: motivo||'', responsable: responsable||''
-        });
-        added++;
+function _renderDescuentosTab(descuentos, totalDesc) {
+    const tabla = descuentos.length ? `<div class="tabla-wrap"><table>
+        <thead><tr>
+            <th>Fecha / Hora</th><th style="text-align:center">% Desc.</th>
+            <th style="text-align:right">Monto $</th><th>Folio</th>
+            <th>Motivo</th><th>Autorizó</th><th></th>
+        </tr></thead>
+        <tbody>${descuentos.map((d,i)=>`<tr>
+            <td style="font-size:11px;color:var(--text-dim);white-space:nowrap">${d.fechaHora||'—'}</td>
+            <td style="text-align:center;font-weight:600">${d.porcentaje!=null?d.porcentaje+'%':'—'}</td>
+            <td style="text-align:right;color:var(--red);font-weight:600">$${(parseFloat(d.monto)||0).toFixed(2)}</td>
+            <td style="font-size:11px;color:var(--text-dim)">${d.folio||'—'}</td>
+            <td style="color:var(--text-dim)">${d.motivo||'—'}</td>
+            <td style="font-size:12px">${d.autorizo||'—'}</td>
+            <td><button class="btn-vista" style="padding:3px 8px;font-size:10px;color:var(--red);border-color:var(--red)"
+                onclick="eliminarDescuento(${i})">🗑️</button></td>
+        </tr>`).join('')}</tbody>
+    </table></div>` : `<div class="empty-state" style="padding:40px">
+        <div class="empty-icon">💸</div><div class="empty-title">Sin descuentos</div>
+        <div class="empty-desc">Agrega manualmente o importa desde tu POS</div></div>`;
+
+    return `
+    <div class="card" style="max-width:none;margin:12px 16px 0">
+        <div class="card-header">
+            <h2>📥 Descuentos — pega por columna o importa archivo</h2>
+        </div>
+        <div class="card-body" style="padding:0">
+            <div style="padding:10px 14px 6px;font-size:11px;color:var(--text-dim)">
+                Haz clic en una celda y pega (Ctrl+V) — una columna a la vez o un rango completo desde Excel.
+            </div>
+            <div class="tabla-wrap" style="overflow-x:auto;overflow-y:auto;max-height:280px">
+                <table id="descPasteTable" class="paste-table">
+                    <thead><tr>
+                        <th class="pt-num">#</th>
+                        <th>Fecha / Hora</th><th style="text-align:center">% Desc.</th>
+                        <th style="text-align:right">Monto $</th>
+                        <th>Folio</th><th>Motivo</th><th>Autorizó</th>
+                    </tr></thead>
+                    <tbody id="descPasteBody"></tbody>
+                </table>
+            </div>
+            <div style="display:flex;gap:8px;padding:8px 14px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--border)">
+                <button class="btn-vista" onclick="_agregarFilasTabla('descPasteBody',6)">+ 10 filas</button>
+                <button class="btn-vista" style="color:var(--red);border-color:var(--red)" onclick="_limpiarTabla('descPasteBody',6)">🗑 Limpiar</button>
+                <button class="btn-vista" style="color:var(--green);border-color:var(--green);padding:7px 16px"
+                    onclick="confirmarTablaDescuentos()">✓ Agregar a descuentos</button>
+            </div>
+            <div style="display:flex;gap:8px;padding:0 14px 12px;flex-wrap:wrap;align-items:center">
+                <label class="btn-vista" style="cursor:pointer;color:var(--green);border-color:var(--green)">
+                    📊 .xlsx / .xls
+                    <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarXLSXDescuentos(event)">
+                </label>
+                <label class="btn-vista" style="cursor:pointer">
+                    📄 PDF
+                    <input type="file" accept=".pdf" style="display:none" onchange="importarPDFDescuentos(event)">
+                </label>
+                <span style="font-size:11px;color:var(--text-dim)">Importar archivo rellena la tabla automáticamente</span>
+            </div>
+        </div>
+    </div>
+    <div class="cancel-toolbar">
+        <div class="cancel-field"><label>Fecha / Hora</label>
+            <input type="datetime-local" id="descFechaHora" style="width:170px"></div>
+        <div class="cancel-field"><label>% Descuento</label>
+            <input type="number" id="descPorcentaje" style="width:90px" placeholder="0.00" min="0" max="100" step="0.01"></div>
+        <div class="cancel-field"><label>Monto $</label>
+            <input type="number" id="descMonto" style="width:100px" placeholder="0.00" min="0" step="0.01"></div>
+        <div class="cancel-field"><label>Folio</label>
+            <input type="text" id="descFolio" style="width:90px" placeholder="44612"></div>
+        <div class="cancel-field"><label>Motivo</label>
+            <input type="text" id="descMotivo" style="width:200px" placeholder="Motivo del descuento"></div>
+        <div class="cancel-field"><label>Autorizó</label>
+            <input type="text" id="descAutorizo" style="width:110px" placeholder="39-TOMAS"></div>
+        <div style="display:flex;align-items:flex-end">
+            <button class="btn-vista" style="color:var(--green);border-color:var(--green);padding:7px 16px"
+                onclick="agregarDescuentoManual()">+ Agregar</button>
+        </div>
+    </div>
+    <div class="card" style="max-width:none;margin:0 16px 24px">
+        <div class="card-header">
+            <h2>💸 Descuentos registrados</h2>
+            <span class="pill pill-green" style="font-size:11px">
+                Total: $${totalDesc.toFixed(2)}</span>
+        </div>
+        <div class="card-body" style="padding:0">${tabla}</div>
+    </div>`;
+}
+
+// ── Cancelaciones — manual + import ───────────────────────────
+function agregarCancelacionManual() {
+    const fechaHora      = document.getElementById('cancelFechaHora')?.value || '';
+    const nombreProducto = document.getElementById('cancelProd')?.value.trim() || '';
+    const cantidad       = parseFloat(document.getElementById('cancelCantidad')?.value) || 0;
+    const autorizo       = document.getElementById('cancelAutorizo')?.value.trim() || '';
+    const motivo         = document.getElementById('cancelMotivo')?.value.trim() || '';
+    const mesero         = document.getElementById('cancelMesero')?.value.trim() || '';
+    if (!nombreProducto || cantidad <= 0) { alert('Indica el producto y la cantidad.'); return; }
+    if (!invActual.cancelaciones) invActual.cancelaciones = [];
+    const entrada = { fechaHora, nombreProducto, cantidad, autorizo, motivo, mesero };
+    const m = _matchInsumo(nombreProducto);
+    if (m) { entrada.insumoId = m.insumoId; entrada.insumoNombre = m.nombre; }
+    invActual.cancelaciones.push(entrada);
+    _autoGuardar(); renderStepContent();
+}
+
+function eliminarCancelacion(idx) {
+    _pedirClaveAdmin('Eliminar cancelación', function() {
+        if (invActual?.cancelaciones) { invActual.cancelaciones.splice(idx,1); _autoGuardar(); renderStepContent(); }
     });
-    if (added > 0) {
-        const ta = document.getElementById('cancelPaste');
-        if (ta) ta.value = '';
-        renderStepContent();
-        alert(`✅ ${added} registro(s) importados correctamente.`);
-    } else {
-        alert('No se encontraron datos válidos.\nVerifica el formato: Producto · Tipo · Copas · Importe · Motivo · Responsable');
+}
+
+// POS column normalizer
+function _normCol(s) { return (s||'').toString().toLowerCase().replace(/[\s_áéíóúüñ]/g, c =>
+    ({' ':'','_':'','á':'a','é':'e','í':'i','ó':'o','ú':'u','ü':'u','ñ':'n'}[c]||c)); }
+
+function _mapPOSCancelaciones(rows) {
+    if (!rows.length) return [];
+    const firstNorm = rows[0].map(_normCol);
+    const POS_KEYS = ['seriefolio','numcheque','idmesero','mesero','comanda','cantidad','descripcion','razon','fecha','nombre','usuario'];
+    const isHeader = firstNorm.some(h => POS_KEYS.some(k => h.includes(k)));
+    const dataRows = isHeader ? rows.slice(1) : rows;
+    let colMap = null;
+    if (isHeader) {
+        colMap = {};
+        firstNorm.forEach((h, i) => { colMap[h] = i; });
+    }
+    const g = (cols, ...keys) => {
+        if (!colMap) return undefined;
+        for (const k of keys) {
+            const idx = Object.keys(colMap).find(h => h.includes(_normCol(k)));
+            if (idx !== undefined && cols[colMap[idx]] != null) return (cols[colMap[idx]]||'').toString().trim();
+        }
+        return '';
+    };
+    return dataRows.map(cols => {
+        if (!cols || cols.every(c => !c)) return null;
+        let rec;
+        if (colMap) {
+            const fechaHora      = g(cols, 'fecha');
+            const nombreProducto = g(cols, 'descripcion', 'producto');
+            const cantidad       = parseFloat(g(cols, 'cantidad', 'qty') || '1') || 1;
+            const autorizo       = [g(cols, 'nombre'), g(cols, 'usuario')].filter(Boolean).join(' / ') || '';
+            const motivo         = g(cols, 'razon', 'motivo');
+            const mesero         = g(cols, 'mesero');
+            rec = { fechaHora, nombreProducto, cantidad, autorizo, motivo, mesero };
+        } else {
+            const [fh='',np='',qs='',au='',mo='',me=''] = cols.map(c=>(c||'').toString().trim().replace(/^"|"$/g,''));
+            rec = { fechaHora:fh, nombreProducto:np, cantidad:parseFloat(qs)||1, autorizo:au, motivo:mo, mesero:me };
+        }
+        return rec.nombreProducto ? rec : null;
+    }).filter(Boolean);
+}
+
+// ── Paste table shared helpers ────────────────────────────────
+function _initPaso4Tables() {
+    const tbodyId = _paso4Tab === 'cancelaciones' ? 'cancelPasteBody' : 'descPasteBody';
+    const tbody = document.getElementById(tbodyId);
+    if (tbody && !tbody.rows.length) {
+        for (let i = 0; i < 15; i++) _addPasteTableRow(tbody, tbodyId, 6);
     }
 }
 
-function cargarCSV(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-        const ta = document.getElementById('cancelPaste');
-        if (ta) ta.value = e.target.result;
-        procesarPaste();
-    };
-    reader.readAsText(file);
-    event.target.value = ''; // reset for re-upload
+function _addPasteTableRow(tbody, tbodyId, colCount) {
+    const rowNum = tbody.rows.length + 1;
+    const tr = document.createElement('tr');
+    const numTd = document.createElement('td');
+    numTd.className = 'pt-num';
+    numTd.textContent = rowNum;
+    tr.appendChild(numTd);
+    for (let i = 0; i < colCount; i++) {
+        const td = document.createElement('td');
+        td.contentEditable = 'true';
+        td.className = 'pt-cell';
+        td.setAttribute('onpaste', `_pasteTableCell(event,this,'${tbodyId}',${colCount})`);
+        td.setAttribute('onfocus', "this.classList.add('focused')");
+        td.setAttribute('onblur', "this.classList.remove('focused')");
+        tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
 }
 
-function descargarPlantillaCSV() {
-    const content = 'Producto,Tipo,Copas,Importe,Motivo,Responsable\nGrey Goose Vodka,cancelacion,2,150,Cliente rechazó pedido,Juan García\nJack Daniel\'s,cortesia,1,80,Mesa VIP,María López';
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+function _agregarFilasTabla(tbodyId, colCount) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    for (let i = 0; i < 10; i++) _addPasteTableRow(tbody, tbodyId, colCount);
+}
+
+function _limpiarTabla(tbodyId, colCount) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    for (let i = 0; i < 15; i++) _addPasteTableRow(tbody, tbodyId, colCount);
+}
+
+function _pasteTableCell(event, cell, tbodyId, colCount) {
+    event.preventDefault();
+    const text = (event.clipboardData || window.clipboardData).getData('text/plain');
+    if (!text.trim()) return;
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    const allRows = Array.from(tbody.rows);
+    const startRowIdx = allRows.indexOf(cell.closest('tr'));
+    const startColIdx = cell.cellIndex - 1; // skip # column
+    const lines = text.trim().split('\n');
+    const hasTab = lines.some(l => l.includes('\t'));
+    lines.forEach((line, ri) => {
+        const rowIdx = startRowIdx + ri;
+        while (tbody.rows.length <= rowIdx) _addPasteTableRow(tbody, tbodyId, colCount);
+        const dataCells = Array.from(tbody.rows[rowIdx].cells).slice(1);
+        const values = hasTab ? line.split('\t') : [line];
+        values.forEach((val, ci) => {
+            const idx = startColIdx + ci;
+            if (dataCells[idx]) dataCells[idx].textContent = val.trim().replace(/^"|"$/g, '');
+        });
+    });
+    // Renumber rows
+    Array.from(tbody.rows).forEach((row, i) => { if (row.cells[0]) row.cells[0].textContent = i + 1; });
+}
+
+// ── Cancelaciones — paste table confirm + file import ─────────
+function confirmarTablaCancelaciones() {
+    const tbody = document.getElementById('cancelPasteBody');
+    if (!tbody) return;
+    const toAdd = [];
+    Array.from(tbody.rows).forEach(row => {
+        const tds = Array.from(row.cells).slice(1).map(td => td.textContent.trim());
+        const [fechaHora='', nombreProducto='', cantStr='', autorizo='', motivo='', mesero=''] = tds;
+        if (!nombreProducto) return;
+        const entrada = { fechaHora, nombreProducto, cantidad: parseFloat(cantStr)||1, autorizo, motivo, mesero };
+        const m = _matchInsumo(nombreProducto);
+        if (m) { entrada.insumoId = m.insumoId; entrada.insumoNombre = m.nombre; }
+        toAdd.push(entrada);
+    });
+    if (!toAdd.length) { alert('Sin datos válidos. Ingresa productos en la columna Producto.'); return; }
+    if (!invActual.cancelaciones) invActual.cancelaciones = [];
+    invActual.cancelaciones.push(...toAdd);
+    _autoGuardar(); renderStepContent();
+}
+
+function _reDetectarCancelaciones() {
+    (invActual?.cancelaciones || []).forEach(c => {
+        const m = _matchInsumo(c.nombreProducto);
+        c.insumoId     = m ? m.insumoId : null;
+        c.insumoNombre = m ? m.nombre   : null;
+    });
+    _autoGuardar(); renderStepContent();
+}
+
+function _setCancelInsumo(idx, insumoId) {
+    const c = invActual?.cancelaciones?.[idx];
+    if (!c) return;
+    const fila = filasCaptura.find(f => f.insumoId === insumoId);
+    c.insumoId     = insumoId || null;
+    c.insumoNombre = fila ? fila.nombre : null;
+    _autoGuardar(); renderStepContent();
+}
+
+function _populateCancelTable(data) {
+    const tbody = document.getElementById('cancelPasteBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    data.forEach(r => {
+        _addPasteTableRow(tbody, 'cancelPasteBody', 6);
+        const tds = Array.from(tbody.rows[tbody.rows.length - 1].cells).slice(1);
+        tds[0].textContent = r.fechaHora       || '';
+        tds[1].textContent = r.nombreProducto  || '';
+        tds[2].textContent = r.cantidad != null ? r.cantidad : '';
+        tds[3].textContent = r.autorizo        || '';
+        tds[4].textContent = r.motivo          || '';
+        tds[5].textContent = r.mesero          || '';
+    });
+    for (let i = 0; i < 5; i++) _addPasteTableRow(tbody, 'cancelPasteBody', 6);
+}
+
+function importarXLSXCancelaciones(event) {
+    const file = event.target.files[0]; if (!file) return;
+    event.target.value = '';
+    if (typeof XLSX === 'undefined') { alert('Error: librería XLSX no cargada.'); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+        try {
+            const wb = XLSX.read(e.target.result, { type:'array' });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+            _populateCancelTable(_mapPOSCancelaciones(rows));
+        } catch(err) { alert('No se pudo leer el archivo: ' + err.message); }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+async function importarPDFCancelaciones(event) {
+    const file = event.target.files[0]; if (!file) return;
+    event.target.value = '';
+    if (typeof pdfjsLib === 'undefined') { alert('Error: PDF.js no cargado.'); return; }
+    try {
+        const buf = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+        const items = [];
+        for (let p = 1; p <= pdf.numPages; p++) {
+            const page = await pdf.getPage(p);
+            const tc   = await page.getTextContent();
+            tc.items.forEach(it => items.push({ x: Math.round(it.transform[4]), y: Math.round(it.transform[5]), text: it.str }));
+        }
+        _populateCancelTable(_mapPOSCancelaciones(_pdfItemsToRows(items)));
+    } catch(err) { alert('No se pudo leer el PDF: ' + err.message); }
+}
+
+function _pdfItemsToRows(items) {
+    const filtered = items.filter(i => i.text.trim());
+    if (!filtered.length) return [];
+    filtered.sort((a, b) => b.y - a.y);
+    const groups = [];
+    let curY = null, curGroup = [];
+    filtered.forEach(item => {
+        if (curY === null || Math.abs(item.y - curY) > 4) {
+            if (curGroup.length) groups.push(curGroup);
+            curGroup = [item]; curY = item.y;
+        } else {
+            curGroup.push(item); curY = (curY + item.y) / 2;
+        }
+    });
+    if (curGroup.length) groups.push(curGroup);
+    return groups.map(g => g.sort((a, b) => a.x - b.x).map(i => i.text.trim()).filter(Boolean));
+}
+
+// ── Descuentos — manual + import ──────────────────────────────
+function agregarDescuentoManual() {
+    const fechaHora  = document.getElementById('descFechaHora')?.value  || '';
+    const porcentaje = parseFloat(document.getElementById('descPorcentaje')?.value) || 0;
+    const monto      = parseFloat(document.getElementById('descMonto')?.value)      || 0;
+    const folio      = document.getElementById('descFolio')?.value.trim()   || '';
+    const motivo     = document.getElementById('descMotivo')?.value.trim()  || '';
+    const autorizo   = document.getElementById('descAutorizo')?.value.trim()|| '';
+    if (monto <= 0) { alert('Indica el monto del descuento.'); return; }
+    if (!invActual.descuentos) invActual.descuentos = [];
+    invActual.descuentos.push({ fechaHora, porcentaje, monto, folio, motivo, autorizo });
+    _autoGuardar(); renderStepContent();
+}
+
+function eliminarDescuento(idx) {
+    _pedirClaveAdmin('Eliminar descuento', function() {
+        if (invActual?.descuentos) { invActual.descuentos.splice(idx,1); _autoGuardar(); renderStepContent(); }
+    });
+}
+
+function _mapPOSDescuentos(rows) {
+    if (!rows.length) return [];
+    const firstNorm = rows[0].map(_normCol);
+    const POS_KEYS = ['fecha','porcentaje','descuento','monto','importe','folio','cuenta','cheque','motivo','razon','concepto','autorizo','nombre','usuario'];
+    const isHeader = firstNorm.some(h => POS_KEYS.some(k => h.includes(k)));
+    const dataRows = isHeader ? rows.slice(1) : rows;
+    let colMap = null;
+    if (isHeader) {
+        colMap = {};
+        firstNorm.forEach((h, i) => { colMap[h] = i; });
+    }
+    const g = (cols, ...keys) => {
+        if (!colMap) return undefined;
+        for (const k of keys) {
+            const idx = Object.keys(colMap).find(h => h.includes(_normCol(k)));
+            if (idx !== undefined && cols[colMap[idx]] != null) return (cols[colMap[idx]]||'').toString().trim().replace('$','');
+        }
+        return '';
+    };
+    return dataRows.map(cols => {
+        if (!cols || cols.every(c => !c)) return null;
+        let rec;
+        if (colMap) {
+            const fechaHora  = g(cols, 'fecha');
+            const porcentaje = parseFloat(g(cols, 'porcentaje', 'descuento', 'percent', 'disc') || '0') || 0;
+            const monto      = parseFloat(g(cols, 'monto', 'importe', 'amount') || '0') || 0;
+            const folio      = g(cols, 'folio', 'cuenta', 'cheque', 'ticket');
+            const motivo     = g(cols, 'motivo', 'razon', 'concepto');
+            const autorizo   = [g(cols, 'nombre'), g(cols, 'usuario'), g(cols, 'autorizo')].filter(Boolean).join(' / ') || '';
+            rec = { fechaHora, porcentaje, monto, folio, motivo, autorizo };
+        } else {
+            const [fh='',ps='',ms='',fo='',mo='',au=''] = cols.map(c=>(c||'').toString().trim().replace(/^"|"$/g,'').replace('$',''));
+            rec = { fechaHora:fh, porcentaje:parseFloat(ps)||0, monto:parseFloat(ms)||0, folio:fo, motivo:mo, autorizo:au };
+        }
+        return (rec.monto > 0 || rec.porcentaje > 0) ? rec : null;
+    }).filter(Boolean);
+}
+
+// ── Descuentos — paste table confirm + file import ───────────
+function confirmarTablaDescuentos() {
+    const tbody = document.getElementById('descPasteBody');
+    if (!tbody) return;
+    const toAdd = [];
+    Array.from(tbody.rows).forEach(row => {
+        const tds = Array.from(row.cells).slice(1).map(td => td.textContent.trim().replace('$', ''));
+        const [fechaHora='', pctStr='', montoStr='', folio='', motivo='', autorizo=''] = tds;
+        const monto = parseFloat(montoStr) || 0;
+        const porcentaje = parseFloat(pctStr) || 0;
+        if (monto <= 0 && porcentaje <= 0) return;
+        toAdd.push({ fechaHora, porcentaje, monto, folio, motivo, autorizo });
+    });
+    if (!toAdd.length) { alert('Sin datos válidos. Ingresa al menos Monto o % Descuento.'); return; }
+    if (!invActual.descuentos) invActual.descuentos = [];
+    invActual.descuentos.push(...toAdd);
+    _autoGuardar(); renderStepContent();
+}
+
+function _populateDescTable(data) {
+    const tbody = document.getElementById('descPasteBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    data.forEach(r => {
+        _addPasteTableRow(tbody, 'descPasteBody', 6);
+        const tds = Array.from(tbody.rows[tbody.rows.length - 1].cells).slice(1);
+        tds[0].textContent = r.fechaHora  || '';
+        tds[1].textContent = r.porcentaje != null ? r.porcentaje : '';
+        tds[2].textContent = r.monto      != null ? r.monto : '';
+        tds[3].textContent = r.folio      || '';
+        tds[4].textContent = r.motivo     || '';
+        tds[5].textContent = r.autorizo   || '';
+    });
+    for (let i = 0; i < 5; i++) _addPasteTableRow(tbody, 'descPasteBody', 6);
+}
+
+function importarXLSXDescuentos(event) {
+    const file = event.target.files[0]; if (!file) return;
+    event.target.value = '';
+    if (typeof XLSX === 'undefined') { alert('Error: librería XLSX no cargada.'); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+        try {
+            const wb = XLSX.read(e.target.result, { type:'array' });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+            _populateDescTable(_mapPOSDescuentos(rows));
+        } catch(err) { alert('No se pudo leer el archivo: ' + err.message); }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+async function importarPDFDescuentos(event) {
+    const file = event.target.files[0]; if (!file) return;
+    event.target.value = '';
+    if (typeof pdfjsLib === 'undefined') { alert('Error: PDF.js no cargado.'); return; }
+    try {
+        const buf = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+        const items = [];
+        for (let p = 1; p <= pdf.numPages; p++) {
+            const page = await pdf.getPage(p);
+            const tc   = await page.getTextContent();
+            tc.items.forEach(it => items.push({ x: Math.round(it.transform[4]), y: Math.round(it.transform[5]), text: it.str }));
+        }
+        _populateDescTable(_mapPOSDescuentos(_pdfItemsToRows(items)));
+    } catch(err) { alert('No se pudo leer el PDF: ' + err.message); }
+}
+
+function _descargarCSV(content, filename) {
+    const blob = new Blob([content], { type:'text/csv;charset=utf-8;' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
-    a.href = url; a.download = 'plantilla_cancelaciones.csv';
+    a.href=url; a.download=filename;
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
-function agregarCancelacion() {
-    const insumoId = document.getElementById('cancelProd')?.value;
-    const fila     = filasCaptura.find(f=>f.insumoId===insumoId);
-    const tipo     = document.getElementById('cancelTipo')?.value || 'cancelacion';
-    const cantidad = parseFloat(document.getElementById('cancelCantidad')?.value) || 0;
-    const importe  = parseFloat(document.getElementById('cancelImporte')?.value)  || 0;
-    const motivo   = document.getElementById('cancelMotivo')?.value.trim() || '';
-    const resp     = document.getElementById('cancelResp')?.value.trim()   || '';
-    if (!insumoId || cantidad <= 0) { alert('Selecciona un producto e indica la cantidad en copas.'); return; }
-    if (!invActual.cancelaciones) invActual.cancelaciones = [];
-    invActual.cancelaciones.push({ insumoId, nombreProducto: fila?.nombre||insumoId, tipo, cantidad, importe, motivo, responsable: resp });
-    renderStepContent();
-}
-
-function eliminarCancelacion(idx) {
-    if (invActual?.cancelaciones) { invActual.cancelaciones.splice(idx,1); renderStepContent(); }
-}
-
 // ═══════════════════════════════════════════════════════════════
-// PASO 5 — Resultado
+// PASO 5 — Resumen de Resultado
 // ═══════════════════════════════════════════════════════════════
 function renderStep5() {
     let capitalCosto=0, capitalCarta=0, difCostoTotal=0, conAlerta=0;
@@ -1831,59 +2518,154 @@ function renderStep5() {
     if (invActual) invActual.diferenciaCosto = difCostoTotal;
     const colorDif = difCostoTotal>=0 ? 'var(--green)' : 'var(--red)';
 
+    const numCancel       = (invActual?.cancelaciones||[]).length;
+    const totalDescuentos = (invActual?.descuentos||[]).reduce((s,d)=>s+(parseFloat(d.monto)||0),0);
+
     const kpis = `<div class="wrap" style="padding-bottom:0">
         <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
             <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)"
                 onclick="verReporteDirectivo()">📄 Reporte directivo</button>
         </div>
-        <div class="stats-grid">
+        <div class="stats-grid" style="grid-template-columns:repeat(6,1fr)">
             <div class="stat-card"><div class="stat-label">Capital a costo</div><div class="stat-val">$${capitalCosto.toFixed(0)}</div></div>
             <div class="stat-card"><div class="stat-label">Capital a carta</div><div class="stat-val green">$${capitalCarta.toFixed(0)}</div></div>
             <div class="stat-card"><div class="stat-label">Diferencia total</div>
                 <div class="stat-val" style="color:${colorDif}">${difCostoTotal>=0?'+':''}$${difCostoTotal.toFixed(2)}</div></div>
             <div class="stat-card"><div class="stat-label">Con alerta >25%</div>
                 <div class="stat-val" style="color:${conAlerta>0?'var(--red)':'var(--green)'}">${conAlerta}</div></div>
+            <div class="stat-card"><div class="stat-label">Cancelaciones POS</div>
+                <div class="stat-val" style="color:${numCancel>0?'var(--accent)':'var(--text)'}">${numCancel}</div></div>
+            <div class="stat-card"><div class="stat-label">Total descuentos</div>
+                <div class="stat-val" style="color:${totalDescuentos>0?'var(--red)':'var(--text)'}">$${totalDescuentos.toFixed(2)}</div></div>
         </div>
     </div>`;
 
-    const grupos = {};
+    // Split filas into copa-type (bebidas con botella y copa) and pza-type groups
+    const gruposCopa = {};
+    const gruposPza  = {};
     filasCaptura.forEach(f => {
         const g = f.familia || f.categoria || 'Otros';
-        if (!grupos[g]) grupos[g] = [];
-        grupos[g].push(f);
+        if (f.tipo === 'pza') {
+            if (!gruposPza[g])  gruposPza[g]  = [];
+            gruposPza[g].push(f);
+        } else {
+            if (!gruposCopa[g]) gruposCopa[g] = [];
+            gruposCopa[g].push(f);
+        }
     });
 
-    const tablas = Object.entries(grupos).map(([grp,items]) => {
+    // ── Copa block: columnas separadas para venta bot, venta copa, cortesía/merma, cancelac. ──
+    const tablasCopa = Object.entries(gruposCopa).map(([grp, items]) => {
         let grpDif = 0;
         const rows = items.map(fila => {
-            const ea        = parseFloat(fila.existenciaAnterior)||0;
-            const copasBot  = fila.contNeto>0&&fila.copaML>0 ? fila.contNeto/fila.copaML : 0;
-            const entCopas  = getEntradasCopas(fila);
-            const ventas    = calcVentasCopasRecetas(fila.insumoId,fila.copaML)
-                            + (fila.ventasCopasDirectas||0)
-                            + (fila.tipo==='pza'?0:(fila.ventasBotella||0)*copasBot);
+            const ea        = parseFloat(fila.existenciaAnterior) || 0;
+            const copasBot  = fila.contNeto>0 && fila.copaML>0 ? fila.contNeto/fila.copaML : 0;
+            const entBot    = getEntradasBottles(fila.insumoId);
+            const ventaBot  = parseFloat(fila.ventasBotella) || 0;
+            const ventaCopa = calcVentasCopasRecetas(fila.insumoId, fila.copaML) + (parseFloat(fila.ventasCopasDirectas)||0);
+            const cortesia  = parseFloat(fila.cortesiaCopas) || 0;
+            const merma     = parseFloat(fila.mermaCopas)    || 0;
+            const cmTotal   = cortesia + merma;
+            const cmConc    = [fila.cortesiaConcepto, fila.mermaConcepto].filter(Boolean).join(' / ');
             const cancelCop = getCancelacionesCopas(fila.insumoId);
             const teorico   = calcExistenciaTeorica(fila);
             const fisico    = calcExistencia(fila);
             const dif       = fisico - teorico;
             const cc        = costoCopa(fila);
             const difCosto  = dif * cc;
-            const ref       = teorico>0?teorico:fisico;
-            const color     = semaforo(dif,ref);
-            const pctVal    = ref>0 ? (dif/ref*100) : null;
-            const pctStr    = pctVal!==null ? (pctVal>=0?'+':'')+pctVal.toFixed(1)+'%' : '—';
-            const unidad    = fila.tipo==='pza'?'pza':'cop';
+            const ref       = teorico > 0 ? teorico : fisico;
+            const color     = semaforo(dif, ref);
+            const pctVal    = ref > 0 ? (dif/ref*100) : null;
+            const pctStr    = pctVal !== null ? (pctVal>=0?'+':'')+pctVal.toFixed(1)+'%' : '—';
+            // Show existencia anterior and actual in bottles
+            const eaBot     = copasBot > 0 ? (ea/copasBot).toFixed(1) : ea.toFixed(1);
+            const entBotStr = entBot > 0 ? `+${entBot % 1 ? entBot.toFixed(1) : entBot} bot` : '—';
+            const fisicoBot = copasBot > 0 ? (fisico/copasBot).toFixed(2) : fisico.toFixed(1);
+            // Diferencia in copas, with sign and unit label
+            const difStr    = `${dif>=0?'+':''}${dif.toFixed(1)} cop`;
             grpDif += difCosto;
             return `<tr>
-                <td><div style="font-size:12px;font-weight:500">${fila.nombre}</div>
-                    <div style="font-size:10px;color:var(--text-dim)">${fila.categoria||''}</div></td>
-                <td style="text-align:center">${ea.toFixed(1)}</td>
-                <td style="text-align:center;color:var(--green)">${entCopas.toFixed(1)}</td>
-                <td style="text-align:center;color:var(--accent)">${ventas.toFixed(1)}</td>
-                <td style="text-align:center;color:var(--text-muted)">${cancelCop>0?cancelCop.toFixed(1):'—'}</td>
-                <td style="text-align:center">${teorico.toFixed(1)} ${unidad}</td>
-                <td style="text-align:center;font-weight:600">${fisico.toFixed(1)} ${unidad}</td>
-                <td style="text-align:center;font-weight:700;color:${color}">${dif>=0?'+':''}${dif.toFixed(1)}</td>
+                <td style="min-width:140px">
+                    <div style="font-size:12px;font-weight:600">${fila.nombre}</div>
+                    <div style="font-size:10px;color:var(--text-dim)">${fila.categoria||''}</div>
+                </td>
+                <td style="text-align:center;white-space:nowrap">${eaBot} bot</td>
+                <td style="text-align:center;color:var(--green);white-space:nowrap">${entBotStr}</td>
+                <td style="text-align:center;color:var(--accent)">${ventaBot > 0 ? ventaBot + ' bot' : '—'}</td>
+                <td style="text-align:center;color:var(--accent)">${ventaCopa > 0 ? ventaCopa.toFixed(1) + ' cop' : '—'}</td>
+                <td style="text-align:center">
+                    ${cmTotal > 0
+                        ? `<div style="color:var(--red);font-size:12px;font-weight:600">${cmTotal.toFixed(1)} cop</div>
+                           ${cmConc ? `<div style="font-size:10px;color:var(--text-dim);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${cmConc}">${cmConc}</div>` : ''}`
+                        : '—'}
+                </td>
+                <td style="text-align:center;color:var(--text-muted)">${cancelCop > 0 ? cancelCop.toFixed(1) + ' cop' : '—'}</td>
+                <td style="text-align:center;font-weight:600;white-space:nowrap">${fisicoBot} bot</td>
+                <td style="text-align:center;font-weight:700;color:${color};white-space:nowrap">${difStr}</td>
+                <td style="text-align:center;font-size:11px;color:${color}">${pctStr}</td>
+                <td style="text-align:right;font-weight:600;color:${color};white-space:nowrap">${difCosto>=0?'+':''}$${difCosto.toFixed(2)}</td>
+            </tr>`;
+        }).join('');
+        return `<div class="card" style="max-width:none;margin:0 16px 12px">
+            <div class="card-header">
+                <h2>${grp}</h2>
+                <span class="pill ${grpDif>=0?'pill-green':'pill-red'}" style="font-size:11px">
+                    ${grpDif>=0?'+':''}$${grpDif.toFixed(2)}</span>
+            </div>
+            <div class="card-body" style="padding:0"><div class="tabla-wrap" style="overflow-x:auto"><table style="min-width:900px">
+                <thead>
+                    <tr>
+                        <th rowspan="2" style="text-align:left;vertical-align:bottom">Producto</th>
+                        <th rowspan="2" style="text-align:center;width:70px;vertical-align:bottom">Exist.<br>anterior</th>
+                        <th rowspan="2" style="text-align:center;width:65px;vertical-align:bottom">Entradas</th>
+                        <th colspan="2" style="text-align:center;border-bottom:1px solid var(--border);padding-bottom:4px">Ventas</th>
+                        <th rowspan="2" style="text-align:center;width:95px;vertical-align:bottom">Cortesía /<br>Merma</th>
+                        <th rowspan="2" style="text-align:center;width:70px;vertical-align:bottom">Cancelac.<br>POS</th>
+                        <th rowspan="2" style="text-align:center;width:80px;vertical-align:bottom">Exist.<br>actual</th>
+                        <th rowspan="2" style="text-align:center;width:80px;vertical-align:bottom">Diferencia</th>
+                        <th rowspan="2" style="text-align:center;width:50px;vertical-align:bottom">%</th>
+                        <th rowspan="2" style="text-align:right;width:80px;vertical-align:bottom">Dif. $</th>
+                    </tr>
+                    <tr>
+                        <th style="text-align:center;width:65px;font-size:10px;color:var(--text-muted)">Botella</th>
+                        <th style="text-align:center;width:65px;font-size:10px;color:var(--text-muted)">Copa</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table></div></div>
+        </div>`;
+    }).join('');
+
+    // ── Pza block: layout original (una sola columna ventas) ──
+    const tablasPza = Object.entries(gruposPza).map(([grp, items]) => {
+        let grpDif = 0;
+        const rows = items.map(fila => {
+            const ea        = parseFloat(fila.existenciaAnterior) || 0;
+            const entTotal  = getEntradasCopas(fila);
+            const ventas    = (fila.ventasBotella || 0);
+            const cancelPza = getCancelacionesCopas(fila.insumoId);
+            const teorico   = calcExistenciaTeorica(fila);
+            const fisico    = calcExistencia(fila);
+            const dif       = fisico - teorico;
+            const cc        = costoCopa(fila);
+            const difCosto  = dif * cc;
+            const ref       = teorico > 0 ? teorico : fisico;
+            const color     = semaforo(dif, ref);
+            const pctVal    = ref > 0 ? (dif/ref*100) : null;
+            const pctStr    = pctVal !== null ? (pctVal>=0?'+':'')+pctVal.toFixed(1)+'%' : '—';
+            grpDif += difCosto;
+            return `<tr>
+                <td>
+                    <div style="font-size:12px;font-weight:600">${fila.nombre}</div>
+                    <div style="font-size:10px;color:var(--text-dim)">${fila.categoria||''}</div>
+                </td>
+                <td style="text-align:center">${ea.toFixed(0)} pza</td>
+                <td style="text-align:center;color:var(--green)">${entTotal>0?'+'+entTotal.toFixed(0)+' pza':'—'}</td>
+                <td style="text-align:center;color:var(--accent)">${ventas>0?ventas+' pza':'—'}</td>
+                <td style="text-align:center;color:var(--text-muted)">${cancelPza>0?cancelPza.toFixed(0)+' pza':'—'}</td>
+                <td style="text-align:center">${teorico.toFixed(0)} pza</td>
+                <td style="text-align:center;font-weight:600">${fisico.toFixed(0)} pza</td>
+                <td style="text-align:center;font-weight:700;color:${color}">${dif>=0?'+':''}${dif.toFixed(0)} pza</td>
                 <td style="text-align:center;font-size:11px;color:${color}">${pctStr}</td>
                 <td style="text-align:right;font-weight:600;color:${color}">${difCosto>=0?'+':''}$${difCosto.toFixed(2)}</td>
             </tr>`;
@@ -1897,132 +2679,446 @@ function renderStep5() {
             <div class="card-body" style="padding:0"><div class="tabla-wrap"><table>
                 <thead><tr>
                     <th>Producto</th>
-                    <th style="text-align:center;width:60px">Exist. ant.</th>
+                    <th style="text-align:center;width:70px">Exist. ant.</th>
                     <th style="text-align:center;width:65px">Entradas</th>
                     <th style="text-align:center;width:65px">Ventas</th>
                     <th style="text-align:center;width:70px">Cancelac.</th>
-                    <th style="text-align:center;width:80px">Teórico</th>
-                    <th style="text-align:center;width:80px">Físico</th>
-                    <th style="text-align:center;width:75px">Varianza</th>
-                    <th style="text-align:center;width:55px">%</th>
-                    <th style="text-align:right;width:85px">Dif. $</th>
+                    <th style="text-align:center;width:70px">Teórico</th>
+                    <th style="text-align:center;width:70px">Físico</th>
+                    <th style="text-align:center;width:75px">Diferencia</th>
+                    <th style="text-align:center;width:50px">%</th>
+                    <th style="text-align:right;width:80px">Dif. $</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table></div></div>
         </div>`;
     }).join('');
 
-    return kpis + `<div style="padding:16px 0 24px">${tablas||'<div style="text-align:center;padding:40px;color:var(--text-dim)">Sin productos capturados</div>'}</div>`;
+    const sinDatos = !tablasCopa && !tablasPza
+        ? '<div style="text-align:center;padding:40px;color:var(--text-dim)">Sin productos capturados</div>'
+        : '';
+
+    return kpis + `<div style="padding:16px 0 24px">${sinDatos}${tablasCopa}${tablasPza}</div>`;
 }
 
 // ── Reporte directivo ─────────────────────────────────────────
 function verReporteDirectivo() {
     if (!invActual) return;
-    let capitalCosto=0, capitalCarta=0, difTotal=0;
-    filasCaptura.forEach(f => {
-        const e=calcExistencia(f), cc=costoCopa(f), d=calcDiferencia(f);
-        capitalCosto+=e*cc; capitalCarta+=e*(f.precioCarta||0); difTotal+=d*cc;
+
+    // ── Analytics ──────────────────────────────────────────────────
+    let capitalCosto = 0, capitalCarta = 0, difTotal = 0;
+    let conAlerta = 0, conRiesgo = 0, conOk = 0;
+
+    const analisis = filasCaptura.map(f => {
+        const fisico    = calcExistencia(f);
+        const teorico   = calcExistenciaTeorica(f);
+        const dif       = fisico - teorico;
+        const cc        = costoCopa(f);
+        const difCosto  = dif * cc;
+        const ea        = parseFloat(f.existenciaAnterior) || 0;
+        const entBot    = getEntradasBottles(f.insumoId);
+        const copasBot  = f.contNeto > 0 && f.copaML > 0 ? f.contNeto / f.copaML : 1;
+        const ventaCopa = calcVentasCopasRecetas(f.insumoId, f.copaML) + (parseFloat(f.ventasCopasDirectas) || 0);
+        const ventaBot  = parseFloat(f.ventasBotella) || 0;
+        const cortesia  = parseFloat(f.cortesiaCopas)  || 0;
+        const merma     = parseFloat(f.mermaCopas)     || 0;
+        const cancel    = getCancelacionesCopas(f.insumoId);
+        const consumo   = f.tipo === 'pza'
+            ? ventaBot + cancel
+            : ventaCopa + ventaBot * copasBot + cortesia + merma + cancel;
+        const disponible = ea + (f.tipo === 'pza' ? entBot : entBot * copasBot);
+        const pctConsumo = disponible > 0 ? (consumo / disponible) * 100 : 0;
+        const varPct     = teorico > 0 ? (dif / teorico) * 100 : 0;
+        capitalCosto += fisico * cc;
+        capitalCarta += fisico * (f.precioCarta || 0);
+        difTotal     += difCosto;
+        if (Math.abs(varPct) > 25) conAlerta++;
+        else if (Math.abs(varPct) > 10) conRiesgo++;
+        else conOk++;
+        return { f, fisico, teorico, dif, cc, difCosto, ea, entBot, copasBot,
+                 ventaCopa, ventaBot, cortesia, merma, cancel, consumo,
+                 disponible, pctConsumo, varPct };
     });
-    const grupos={};
-    filasCaptura.forEach(f=>{const g=f.familia||f.categoria||'Otros';if(!grupos[g])grupos[g]=[];grupos[g].push(f);});
-    const inv = invActual;
-    const fecha = new Date().toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 
-    const tablasHtml = Object.entries(grupos).map(([grp,items])=>{
-        let gDif=0;
-        const rows=items.map(f=>{
-            const e=calcExistencia(f),t=calcExistenciaTeorica(f),d=e-t,cc=costoCopa(f),dc=d*cc;
-            const pct=t>0?(d/t*100):0; gDif+=dc;
-            const col=Math.abs(pct)>25?(pct<0?'#c0392b':'#1a7a4a'):'#555';
-            const u=f.tipo==='pza'?'pza':'cop';
-            return `<tr><td>${f.nombre}</td><td style="text-align:center">${e.toFixed(1)} ${u}</td>
-                <td style="text-align:center">${t.toFixed(1)} ${u}</td>
-                <td style="text-align:center;color:${col};font-weight:600">${d>=0?'+':''}${d.toFixed(1)}</td>
-                <td style="text-align:center;color:${col}">${pct.toFixed(1)}%</td>
-                <td style="text-align:right">$${(e*cc).toFixed(2)}</td>
-                <td style="text-align:right;color:${col};font-weight:600">${dc>=0?'+':''}$${dc.toFixed(2)}</td></tr>`;
-        }).join('');
-        const gc=gDif>=0?'#1a7a4a':'#c0392b';
-        return `<h2 style="font-size:13px;margin:16px 0 8px;padding-bottom:4px;border-bottom:2px solid #1a1916">
-                ${grp} <span style="font-size:11px;color:${gc}">${gDif>=0?'+':''}$${gDif.toFixed(2)}</span></h2>
-            <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:16px">
-                <thead><tr style="background:#f5f5f0">
-                    <th style="padding:5px 8px;text-align:left;border-bottom:2px solid #ddd">Producto</th>
-                    <th style="padding:5px 8px;text-align:center;border-bottom:2px solid #ddd">Físico</th>
-                    <th style="padding:5px 8px;text-align:center;border-bottom:2px solid #ddd">Teórico</th>
-                    <th style="padding:5px 8px;text-align:center;border-bottom:2px solid #ddd">Varianza</th>
-                    <th style="padding:5px 8px;text-align:center;border-bottom:2px solid #ddd">%</th>
-                    <th style="padding:5px 8px;text-align:right;border-bottom:2px solid #ddd">Capital</th>
-                    <th style="padding:5px 8px;text-align:right;border-bottom:2px solid #ddd">Dif. $</th>
-                </tr></thead>
-                <tbody>${rows}</tbody>
-            </table>`;
+    const totalProds = analisis.length;
+    const pctControl = totalProds > 0 ? (conOk / totalProds * 100) : 0;
+    const numCancel  = (invActual.cancelaciones || []).length;
+    const totalDesc  = (invActual.descuentos || []).reduce((s, d) => s + (parseFloat(d.monto) || 0), 0);
+    const margenPot  = capitalCarta - capitalCosto;
+
+    // Rankings y grupos
+    const top10      = [...analisis].sort((a, b) => b.consumo - a.consumo).slice(0, 10).filter(a => a.consumo > 0);
+    const estancados = analisis.filter(a => a.consumo === 0 && a.fisico > 0);
+    const alertasCrit= analisis.filter(a => a.varPct < -25).sort((a, b) => a.varPct - b.varPct);
+    const alertasSob = analisis.filter(a => a.varPct > 25).sort((a, b) => b.varPct - a.varPct);
+    const gruposTabla = {};
+    analisis.forEach(a => {
+        const g = a.f.familia || a.f.categoria || 'Otros';
+        if (!gruposTabla[g]) gruposTabla[g] = [];
+        gruposTabla[g].push(a);
+    });
+
+    // Recomendaciones automáticas
+    const recos = [];
+    if (alertasCrit.length)
+        recos.push({ t:'crit', ico:'🔴', txt:`<strong>${alertasCrit.length} producto${alertasCrit.length>1?'s':''} con faltante crítico</strong> (varianza &gt; 25%). Revisar posibles mermas no registradas, derrames o errores de captura en los productos marcados en rojo.` });
+    if (alertasSob.length)
+        recos.push({ t:'warn', ico:'🟡', txt:`<strong>${alertasSob.length} producto${alertasSob.length>1?'s':''} con sobrante significativo</strong>. Verificar que no haya entradas duplicadas o existencia anterior incorrecta.` });
+    if (numCancel > 5)
+        recos.push({ t:'warn', ico:'🟡', txt:`Se registraron <strong>${numCancel} cancelaciones</strong> en el período. Analizar patrones con el equipo de piso y validar los procesos de autorización.` });
+    if (totalDesc > 0)
+        recos.push({ t:'info', ico:'🔵', txt:`Descuentos aplicados por <strong>$${totalDesc.toFixed(2)}</strong>. Verificar que todas las autorizaciones estén dentro de la política de la casa.` });
+    if (estancados.length)
+        recos.push({ t:'info', ico:'🔵', txt:`<strong>${estancados.length} producto${estancados.length>1?'s sin':' sin'} movimiento</strong> en el período. Evaluar si hay sobre-stock o baja demanda; considerar promoción o devolución al proveedor.` });
+    if (!recos.length)
+        recos.push({ t:'ok', ico:'🟢', txt:`<strong>Operación saludable.</strong> Todos los productos están dentro del margen de control esperado. Sin alertas activas en este período.` });
+
+    // Helpers
+    const [cOk, cWarn, cCrit] = ['#1a7a4a', '#c0870c', '#c0392b'];
+    function vc(pct) { const a = Math.abs(pct); return a <= 10 ? cOk : a <= 25 ? cWarn : cCrit; }
+    const inv      = invActual;
+    const fecha    = new Date().toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    const invFecha = inv.fecha ? new Date(inv.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'long', year:'numeric' }) : '—';
+
+    // Limpiar overlay anterior si existiera
+    document.getElementById('rdOverlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'rdOverlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9998;overflow-y:auto;background:#1a1916';
+
+    overlay.innerHTML = `
+<style>
+.rd-paper{background:#fff;width:216mm;padding:18mm 18mm 16mm;margin:58px auto 24px;box-shadow:0 4px 40px rgba(0,0,0,.55);font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1916}
+.rd-h1{font-size:22px;font-weight:900;margin:0 0 3px;color:#1a1916}
+.rd-sub{font-size:11px;color:#888}
+.rd-sec{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888;border-bottom:2px solid #1a1916;padding-bottom:5px;margin:18px 0 10px}
+.rd-kgrid{display:grid;gap:8px}
+.rd-k6{grid-template-columns:repeat(6,1fr)}
+.rd-kpi{border:1px solid #e8e8e0;border-radius:8px;padding:10px 12px}
+.rd-kl{font-size:9px;color:#999;text-transform:uppercase;letter-spacing:.5px}
+.rd-kv{font-size:18px;font-weight:800;margin-top:2px;color:#1a1916}
+.rd-ks{font-size:9px;color:#aaa;margin-top:1px}
+.rd-sem{display:flex;align-items:center;gap:12px;background:#f9f9f6;border-radius:8px;padding:10px 14px}
+.rd-sem-blk{text-align:center;min-width:38px}
+.rd-sem-n{font-size:22px;font-weight:900;line-height:1}
+.rd-sem-l{font-size:8px;text-transform:uppercase;letter-spacing:.5px;color:#888;margin-top:2px}
+.rd-bar{flex:1;height:10px;border-radius:5px;overflow:hidden;display:flex}
+.rda{border-radius:6px;padding:7px 12px;margin-bottom:5px;font-size:11px;line-height:1.55}
+.rda-crit{background:#fff0ee;border-left:4px solid #c0392b}
+.rda-warn{background:#fffbee;border-left:4px solid #c0870c}
+.rda-info{background:#eef4ff;border-left:4px solid #2471a3}
+.rda-ok{background:#eeffee;border-left:4px solid #1a7a4a}
+.rd-t{width:100%;border-collapse:collapse;font-size:10px}
+.rd-t th{padding:5px 7px;text-align:left;background:#f5f5f0;border-bottom:2px solid #ddd;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#666;white-space:nowrap}
+.rd-t td{padding:4px 7px;border-bottom:1px solid #f0f0ec;vertical-align:middle}
+.rd-t tr:last-child td{border-bottom:none}
+.tc{text-align:center!important}.tr{text-align:right!important}
+.rd-rank{display:inline-block;width:18px;height:18px;border-radius:50%;background:#1a1916;color:#f5c842;font-size:9px;font-weight:900;text-align:center;line-height:18px}
+.rd-foot{margin-top:18px;padding-top:10px;border-top:1px solid #eee;font-size:9px;color:#bbb;text-align:center}
+@media print{
+  body>*:not(#rdOverlay){display:none!important}
+  #rdOverlay{position:static!important;overflow:visible!important;background:white!important}
+  #rd-toolbar{display:none!important}
+  .rd-paper{box-shadow:none!important;width:100%!important;margin:0!important;padding:12mm 14mm!important;page-break-after:always;break-after:page}
+}
+</style>
+
+<div id="rd-toolbar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#1a1916;padding:10px 20px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.5)">
+  <span style="color:#f5f0e8;font-size:14px;font-weight:700">📊 Reporte Directivo — ${inv.nombre || 'Inventario'}</span>
+  <div style="display:flex;gap:8px">
+    <button onclick="window.print()" style="padding:7px 18px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;background:#f5c842;color:#1a1916;border:none">🖨️ Imprimir / Exportar PDF</button>
+    <button onclick="document.getElementById('rdOverlay').remove()" style="padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;background:transparent;border:1px solid rgba(255,255,255,.3);color:#f5f0e8">✕ Cerrar</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ PÁGINA 1 — RESUMEN EJECUTIVO -->
+<div class="rd-paper">
+
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+    <div>
+      <div class="rd-h1">${tipoIcon(inv.tipoInv)} ${inv.nombre || 'Inventario'}</div>
+      <div class="rd-sub">${inv.negocio ? inv.negocio + ' · ' : ''}${invFecha}${inv.turno ? ' · ' + inv.turno : ''}${inv.area ? ' · ' + inv.area : ''} · ${inv.cerrado ? '<strong style="color:#c0392b">CERRADO</strong>' : '<em>BORRADOR</em>'}</div>
+    </div>
+    <div style="text-align:right;font-size:9px;color:#aaa;line-height:1.8">
+      Reporte Directivo<br>${fecha}
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="rd-sec">Resumen ejecutivo</div>
+  <div class="rd-kgrid rd-k6" style="margin-bottom:8px">
+    <div class="rd-kpi">
+      <div class="rd-kl">Capital a costo</div>
+      <div class="rd-kv">$${capitalCosto.toFixed(0)}</div>
+      <div class="rd-ks">Existencia valorada</div>
+    </div>
+    <div class="rd-kpi">
+      <div class="rd-kl">Capital a carta</div>
+      <div class="rd-kv" style="color:${cOk}">$${capitalCarta.toFixed(0)}</div>
+      <div class="rd-ks">Valor potencial de venta</div>
+    </div>
+    <div class="rd-kpi">
+      <div class="rd-kl">Margen potencial</div>
+      <div class="rd-kv" style="color:${cOk}">$${margenPot.toFixed(0)}</div>
+      <div class="rd-ks">Carta − costo</div>
+    </div>
+    <div class="rd-kpi" style="border-left:4px solid ${difTotal >= 0 ? cOk : cCrit}">
+      <div class="rd-kl">Diferencia total</div>
+      <div class="rd-kv" style="color:${difTotal >= 0 ? cOk : cCrit}">${difTotal >= 0 ? '+' : ''}$${difTotal.toFixed(2)}</div>
+      <div class="rd-ks">${difTotal >= 0 ? 'Sobrante' : 'Faltante'} en inventario</div>
+    </div>
+    <div class="rd-kpi">
+      <div class="rd-kl">Cancelaciones POS</div>
+      <div class="rd-kv" style="color:${numCancel > 5 ? cCrit : numCancel > 0 ? cWarn : '#555'}">${numCancel}</div>
+      <div class="rd-ks">Registros del período</div>
+    </div>
+    <div class="rd-kpi" style="border-left:4px solid ${totalDesc > 0 ? cWarn : '#e8e8e0'}">
+      <div class="rd-kl">Descuentos aplicados</div>
+      <div class="rd-kv" style="color:${totalDesc > 0 ? cWarn : '#555'}">$${totalDesc.toFixed(0)}</div>
+      <div class="rd-ks">Total del período</div>
+    </div>
+  </div>
+
+  <!-- Semáforo de control -->
+  <div class="rd-sec">Control de inventario — semáforo por producto</div>
+  <div class="rd-sem">
+    <div class="rd-sem-blk">
+      <div class="rd-sem-n" style="color:${cOk}">${conOk}</div>
+      <div class="rd-sem-l">🟢 OK<br>&lt;10% var.</div>
+    </div>
+    <div class="rd-sem-blk">
+      <div class="rd-sem-n" style="color:${cWarn}">${conRiesgo}</div>
+      <div class="rd-sem-l">🟡 Riesgo<br>10–25%</div>
+    </div>
+    <div class="rd-sem-blk">
+      <div class="rd-sem-n" style="color:${cCrit}">${conAlerta}</div>
+      <div class="rd-sem-l">🔴 Crítico<br>&gt;25%</div>
+    </div>
+    <div class="rd-bar">
+      ${totalProds > 0 ? `
+      <div style="width:${(conOk/totalProds*100).toFixed(1)}%;background:${cOk};height:100%"></div>
+      <div style="width:${(conRiesgo/totalProds*100).toFixed(1)}%;background:${cWarn};height:100%"></div>
+      <div style="width:${(conAlerta/totalProds*100).toFixed(1)}%;background:${cCrit};height:100%"></div>
+      ` : ''}
+    </div>
+    <div style="text-align:right;white-space:nowrap">
+      <div style="font-size:22px;font-weight:900;color:${pctControl >= 80 ? cOk : pctControl >= 60 ? cWarn : cCrit}">${pctControl.toFixed(0)}%</div>
+      <div style="font-size:9px;color:#aaa">bajo control<br><span style="color:#bbb">${totalProds} productos</span></div>
+    </div>
+  </div>
+
+  <!-- Recomendaciones -->
+  <div class="rd-sec">Acciones recomendadas para dirección</div>
+  ${recos.map(r => `<div class="rda rda-${r.t}">${r.ico} ${r.txt}</div>`).join('')}
+
+  <!-- Top 10 más vendidos -->
+  <div class="rd-sec">Top 10 productos — mayor movimiento en el período</div>
+  ${top10.length ? `
+  <table class="rd-t">
+    <thead><tr>
+      <th style="width:20px">#</th>
+      <th>Producto</th>
+      <th class="tc">Venta copa</th>
+      <th class="tc">Venta bot.</th>
+      <th class="tc">Cortesía</th>
+      <th class="tc">Merma</th>
+      <th class="tc">Cancelac.</th>
+      <th class="tc">Total consumo</th>
+      <th class="tr">% consumo</th>
+    </tr></thead>
+    <tbody>
+      ${top10.map((a, i) => {
+        const u    = a.f.tipo === 'pza' ? 'pza' : 'cop';
+        const pcc  = a.pctConsumo;
+        const pcol = pcc >= 70 ? cOk : pcc >= 30 ? '#555' : cWarn;
+        return `<tr>
+          <td><span class="rd-rank">${i+1}</span></td>
+          <td style="font-weight:600">${a.f.nombre}<br><span style="font-size:9px;color:#aaa;font-weight:400">${a.f.categoria||''}</span></td>
+          <td class="tc">${a.ventaCopa > 0 ? a.ventaCopa.toFixed(1)+' c' : '—'}</td>
+          <td class="tc">${a.ventaBot > 0 ? a.ventaBot+' b' : '—'}</td>
+          <td class="tc" style="color:${a.cortesia>0?'#7d5fa3':'#ccc'}">${a.cortesia > 0 ? a.cortesia.toFixed(1) : '—'}</td>
+          <td class="tc" style="color:${a.merma>0?cWarn:'#ccc'}">${a.merma > 0 ? a.merma.toFixed(1) : '—'}</td>
+          <td class="tc" style="color:${a.cancel>0?cCrit:'#ccc'}">${a.cancel > 0 ? a.cancel.toFixed(1) : '—'}</td>
+          <td class="tc" style="font-weight:700">${a.consumo.toFixed(1)} ${u}</td>
+          <td class="tr" style="color:${pcol};font-weight:700">${pcc.toFixed(0)}%</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>
+  <div style="font-size:9px;color:#aaa;margin-top:5px">% consumo = total consumido ÷ (existencia anterior + entradas). &gt;70% alta rotación · &lt;30% baja rotación.</div>
+  ` : '<div style="font-size:11px;color:#aaa;padding:8px 0">Sin ventas registradas en el período.</div>'}
+
+  <!-- Productos sin movimiento -->
+  ${estancados.length > 0 ? `
+  <div class="rd-sec">Productos sin movimiento (${estancados.length}) — evaluar sobre-stock o baja demanda</div>
+  <div style="display:flex;flex-wrap:wrap;gap:5px">
+    ${estancados.slice(0, 20).map(a => `<span style="font-size:10px;background:#f5f5f0;border:1px solid #e0e0d8;border-radius:4px;padding:2px 8px;color:#666">${a.f.nombre}</span>`).join('')}
+    ${estancados.length > 20 ? `<span style="font-size:10px;color:#aaa;padding:2px 8px">+${estancados.length - 20} más…</span>` : ''}
+  </div>
+  ` : ''}
+
+  <div class="rd-foot">Reporte Directivo · ${inv.negocio || ''} · ${fecha} · ETAAX Sistema de Inventarios</div>
+</div>
+
+<!-- ═══════════════════════════════════ PÁGINA 2 — DESGLOSE COMPLETO -->
+<div class="rd-paper" style="margin-bottom:40px">
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #1a1916">
+    <span style="font-size:14px;font-weight:900;color:#1a1916">${inv.nombre || 'Inventario'} — Desglose por familia</span>
+    <span style="font-size:9px;color:#aaa">${invFecha} · ${fecha}</span>
+  </div>
+
+  <!-- Faltantes críticos -->
+  ${alertasCrit.length > 0 ? `
+  <div class="rd-sec" style="color:${cCrit};border-color:${cCrit}">🔴 Faltantes críticos — varianza &gt; 25% (acción inmediata recomendada)</div>
+  <table class="rd-t" style="margin-bottom:14px">
+    <thead><tr>
+      <th>Producto</th><th class="tc">Familia</th>
+      <th class="tc">Físico</th><th class="tc">Teórico</th>
+      <th class="tc">Diferencia</th><th class="tc">Varianza %</th>
+      <th class="tr">Dif. $</th>
+    </tr></thead>
+    <tbody>
+      ${alertasCrit.map(a => {
+        const u = a.f.tipo === 'pza' ? 'pza' : 'cop';
+        return `<tr>
+          <td style="font-weight:600">${a.f.nombre}</td>
+          <td class="tc" style="color:#888">${a.f.familia || a.f.categoria || '—'}</td>
+          <td class="tc">${a.fisico.toFixed(1)} ${u}</td>
+          <td class="tc">${a.teorico.toFixed(1)} ${u}</td>
+          <td class="tc" style="font-weight:700;color:${cCrit}">${a.dif >= 0 ? '+' : ''}${a.dif.toFixed(1)}</td>
+          <td class="tc" style="color:${cCrit};font-weight:700">${a.varPct.toFixed(1)}%</td>
+          <td class="tr" style="color:${cCrit};font-weight:700">${a.difCosto >= 0 ? '+' : ''}$${a.difCosto.toFixed(2)}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>
+  ` : ''}
+
+  <!-- Sobrantes significativos -->
+  ${alertasSob.length > 0 ? `
+  <div class="rd-sec" style="color:${cWarn};border-color:${cWarn}">🟡 Sobrantes significativos — varianza &gt; 25% positiva (verificar captura)</div>
+  <table class="rd-t" style="margin-bottom:14px">
+    <thead><tr>
+      <th>Producto</th>
+      <th class="tc">Físico</th><th class="tc">Teórico</th>
+      <th class="tc">Diferencia</th><th class="tc">Varianza %</th>
+      <th class="tr">Dif. $</th>
+    </tr></thead>
+    <tbody>
+      ${alertasSob.map(a => {
+        const u = a.f.tipo === 'pza' ? 'pza' : 'cop';
+        return `<tr>
+          <td style="font-weight:600">${a.f.nombre}</td>
+          <td class="tc">${a.fisico.toFixed(1)} ${u}</td>
+          <td class="tc">${a.teorico.toFixed(1)} ${u}</td>
+          <td class="tc" style="font-weight:700;color:${cWarn}">+${a.dif.toFixed(1)}</td>
+          <td class="tc" style="color:${cWarn};font-weight:700">+${a.varPct.toFixed(1)}%</td>
+          <td class="tr" style="color:${cOk};font-weight:700">+$${a.difCosto.toFixed(2)}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>
+  ` : ''}
+
+  <!-- Inventario completo por familia -->
+  <div class="rd-sec">Inventario completo por familia</div>
+  ${Object.entries(gruposTabla).map(([grp, items]) => {
+    let gDif = 0;
+    const rows = items.map(a => {
+        gDif += a.difCosto;
+        const u = a.f.tipo === 'pza' ? 'pza' : 'cop';
+        const entStr = a.f.tipo === 'pza'
+            ? (a.entBot > 0 ? '+' + a.entBot + ' p' : '—')
+            : (a.entBot > 0 ? '+' + a.entBot.toFixed(1) + ' b' : '—');
+        const ventStr = a.f.tipo === 'pza'
+            ? (a.ventaBot > 0 ? a.ventaBot + ' p' : '—')
+            : (a.ventaCopa > 0 ? a.ventaCopa.toFixed(1) + ' c' : (a.ventaBot > 0 ? a.ventaBot + ' b' : '—'));
+        const cmStr = (a.cortesia + a.merma) > 0 ? (a.cortesia + a.merma).toFixed(1) : '—';
+        const vcol  = vc(a.varPct);
+        return `<tr>
+          <td style="font-weight:600;max-width:125px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.f.nombre}</td>
+          <td class="tc" style="color:#888">${a.ea.toFixed(1)} ${u}</td>
+          <td class="tc" style="color:${cOk}">${entStr}</td>
+          <td class="tc">${ventStr}</td>
+          <td class="tc" style="color:${(a.cortesia+a.merma)>0?'#7d5fa3':'#ccc'}">${cmStr}</td>
+          <td class="tc" style="color:${a.cancel>0?cWarn:'#ccc'}">${a.cancel>0 ? a.cancel.toFixed(1) : '—'}</td>
+          <td class="tc" style="font-weight:600">${a.fisico.toFixed(1)} ${u}</td>
+          <td class="tc" style="color:${vcol};font-weight:700">${a.dif>=0?'+':''}${a.dif.toFixed(1)}</td>
+          <td class="tc" style="color:${vcol}">${a.varPct.toFixed(0)}%</td>
+          <td class="tr" style="color:${vcol};font-weight:700">${a.difCosto>=0?'+':''}$${a.difCosto.toFixed(2)}</td>
+        </tr>`;
     }).join('');
+    const gc = gDif >= 0 ? cOk : cCrit;
+    return `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 4px">
+      <span style="font-size:11px;font-weight:700;color:#1a1916">${grp}</span>
+      <span style="font-size:11px;font-weight:700;color:${gc}">${gDif>=0?'+':''}$${gDif.toFixed(2)}</span>
+    </div>
+    <table class="rd-t" style="margin-bottom:6px">
+      <thead><tr>
+        <th>Producto</th>
+        <th class="tc">Exist. ant.</th>
+        <th class="tc">Entradas</th>
+        <th class="tc">Ventas</th>
+        <th class="tc">Cort/Merma</th>
+        <th class="tc">Cancel.</th>
+        <th class="tc">Exist. act.</th>
+        <th class="tc">Varianza</th>
+        <th class="tc">%</th>
+        <th class="tr">Dif. $</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }).join('')}
 
-    const cancelHtml = (inv.cancelaciones||[]).length ? `
-        <h2 style="font-size:13px;margin:16px 0 8px;padding-bottom:4px;border-bottom:2px solid #1a1916">Cancelaciones y descuentos</h2>
-        <table style="width:100%;border-collapse:collapse;font-size:11px">
-            <thead><tr style="background:#f5f5f0">
-                <th style="padding:5px 8px;text-align:left;border-bottom:2px solid #ddd">Producto</th>
-                <th style="padding:5px 8px;text-align:left;border-bottom:2px solid #ddd">Tipo</th>
-                <th style="padding:5px 8px;text-align:center;border-bottom:2px solid #ddd">Copas</th>
-                <th style="padding:5px 8px;text-align:right;border-bottom:2px solid #ddd">Importe</th>
-                <th style="padding:5px 8px;border-bottom:2px solid #ddd">Motivo</th>
-            </tr></thead>
-            <tbody>${(inv.cancelaciones||[]).map(c=>`<tr>
-                <td style="padding:4px 8px;border-bottom:1px solid #eee">${c.nombreProducto||c.insumoId}</td>
-                <td style="padding:4px 8px;border-bottom:1px solid #eee">${c.tipo}</td>
-                <td style="padding:4px 8px;text-align:center;border-bottom:1px solid #eee">${c.cantidad}</td>
-                <td style="padding:4px 8px;text-align:right;border-bottom:1px solid #eee">$${(c.importe||0).toFixed(2)}</td>
-                <td style="padding:4px 8px;border-bottom:1px solid #eee">${c.motivo||'—'}</td>
-            </tr>`).join('')}</tbody>
-        </table>` : '';
+  <!-- Cancelaciones -->
+  ${numCancel > 0 ? `
+  <div class="rd-sec">Cancelaciones del período — ${numCancel} registro${numCancel !== 1 ? 's' : ''}</div>
+  <table class="rd-t">
+    <thead><tr>
+      <th>Fecha / Hora</th><th>Producto</th>
+      <th class="tc">Cant.</th><th>Autorizó</th><th>Motivo</th><th>Mesero</th>
+    </tr></thead>
+    <tbody>
+      ${(invActual.cancelaciones || []).map(c => `<tr>
+        <td style="white-space:nowrap;color:#888">${c.fechaHora||'—'}</td>
+        <td style="font-weight:500">${c.nombreProducto||'—'}</td>
+        <td class="tc" style="font-weight:700">${c.cantidad||'—'}</td>
+        <td>${c.autorizo||c.responsable||'—'}</td>
+        <td style="color:#888">${c.motivo||'—'}</td>
+        <td style="color:#888">${c.mesero||'—'}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>
+  ` : ''}
 
-    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-    <title>Reporte — ${inv.nombre}</title>
-    <style>body{font-family:Arial,sans-serif;font-size:12px;color:#1a1916;margin:0;padding:32px}
-    @media print{.no-print{display:none!important}}</style></head>
-    <body>
-    <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #1a1916">
-        <strong style="font-size:16px">Reporte Directivo</strong>
-        <div style="display:flex;gap:8px">
-            <button onclick="window.print()" style="padding:7px 16px;border:1px solid #1a1916;border-radius:6px;cursor:pointer;font-size:12px">🖨️ Imprimir</button>
-            <button onclick="window.close()" style="padding:7px 16px;border:1px solid #ccc;border-radius:6px;cursor:pointer;font-size:12px">✕ Cerrar</button>
-        </div>
-    </div>
-    <div style="font-size:22px;font-weight:900;margin-bottom:4px">${tipoIcon(inv.tipoInv)} ${inv.nombre||'Inventario'}</div>
-    <div style="font-size:11px;color:#666;margin-bottom:20px">
-        ${inv.negocio?inv.negocio+' · ':''}
-        ${new Date(inv.fecha+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'})}
-        ${inv.turno?' · '+inv.turno:''} ${inv.area?' · '+inv.area:''}
-        ${inv.notas?' · '+inv.notas:''}
-        ${inv.cerrado?' · <strong>INVENTARIO CERRADO</strong>':' · BORRADOR'}
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px">
-        <div style="border:1px solid #ddd;border-radius:8px;padding:14px">
-            <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px">Capital a costo</div>
-            <div style="font-size:22px;font-weight:700;margin-top:4px">$${capitalCosto.toFixed(0)}</div>
-        </div>
-        <div style="border:1px solid #ddd;border-radius:8px;padding:14px">
-            <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px">Capital a carta</div>
-            <div style="font-size:22px;font-weight:700;margin-top:4px;color:#1a7a4a">$${capitalCarta.toFixed(0)}</div>
-        </div>
-        <div style="border:1px solid #ddd;border-radius:8px;padding:14px;border-left:4px solid ${difTotal>=0?'#1a7a4a':'#c0392b'}">
-            <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px">Diferencia total</div>
-            <div style="font-size:22px;font-weight:700;margin-top:4px;color:${difTotal>=0?'#1a7a4a':'#c0392b'}">${difTotal>=0?'+':''}$${difTotal.toFixed(2)}</div>
-        </div>
-    </div>
-    ${tablasHtml}
-    ${cancelHtml}
-    <div style="margin-top:30px;padding-top:12px;border-top:1px solid #ddd;font-size:10px;color:#999">
-        Generado el ${fecha} · ETAAX Sistema de Inventarios
-    </div>
-    <script>setTimeout(()=>window.print(),400)<\/script>
-    </body></html>`;
+  <!-- Descuentos -->
+  ${(invActual.descuentos || []).length > 0 ? `
+  <div class="rd-sec">Descuentos del período — Total: <span style="color:${cCrit}">$${totalDesc.toFixed(2)}</span></div>
+  <table class="rd-t">
+    <thead><tr>
+      <th>Fecha / Hora</th><th class="tc">%</th>
+      <th class="tr">Monto $</th><th>Folio</th><th>Motivo</th><th>Autorizó</th>
+    </tr></thead>
+    <tbody>
+      ${(invActual.descuentos || []).map(d => `<tr>
+        <td style="white-space:nowrap;color:#888">${d.fechaHora||'—'}</td>
+        <td class="tc">${d.porcentaje != null ? d.porcentaje + '%' : '—'}</td>
+        <td class="tr" style="color:${cCrit};font-weight:700">$${(parseFloat(d.monto)||0).toFixed(2)}</td>
+        <td>${d.folio||'—'}</td>
+        <td style="color:#888">${d.motivo||'—'}</td>
+        <td>${d.autorizo||'—'}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>
+  ` : ''}
 
-    const win = window.open('', '_blank');
-    if (win) { win.document.write(html); win.document.close(); }
-    else { alert('Permite ventanas emergentes para ver el reporte.'); }
+  <div class="rd-foot">Reporte Directivo · ${inv.negocio || ''} · Generado: ${fecha} · ETAAX Sistema de Inventarios</div>
+</div>`;
+
+    document.body.appendChild(overlay);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2035,53 +3131,216 @@ function guardarInventario() {
     const idx   = lista.findIndex(x=>x.id===invActual.id);
     if (idx>=0) lista[idx]=invActual; else lista.push(invActual);
     setInventarios(lista);
-    alert('✅ Inventario guardado');
+}
+
+let _autoGuardarTimer = null;
+function _autoGuardar() {
+    if (!invActual) return;
+    clearTimeout(_autoGuardarTimer);
+    _autoGuardarTimer = setTimeout(function() {
+        guardarInventario();
+        const ind = document.getElementById('autoGuardarInd');
+        if (ind) {
+            ind.textContent = '✓ Guardado';
+            ind.style.opacity = '1';
+            setTimeout(() => { ind.style.opacity = '0'; }, 1800);
+        }
+    }, 600);
+}
+
+function guardarYSalir() {
+    if (!invActual) return;
+    invActual.cerrado = true;
+    guardarInventario();
+    invActual = null;
+    mostrarVista('vistaLista');
+}
+
+function finalizarPrimerLev() {
+    if (!invActual) return;
+    if (invActual.cerrado) return;
+    _solicitarClave('Guardar y cerrar levantamiento', function() {
+        invActual.cerrado = true;
+        invActual.filas   = filasCaptura.map(f=>({...f, existenciaFisica: calcExistencia(f)}));
+        const lista = getInventarios();
+        const idx   = lista.findIndex(x=>x.id===invActual.id);
+        if (idx>=0) lista[idx]=invActual; else lista.push(invActual);
+        setInventarios(lista);
+        mostrarVista('vistaLista');
+    });
 }
 
 function cerrarInventario() {
     if (!invActual) return;
     if (invActual.cerrado) { alert('Este inventario ya está cerrado.'); return; }
-    if (!confirm('¿Cerrar este inventario? No podrás modificarlo después.')) return;
-    invActual.cerrado = true;
-    invActual.filas   = filasCaptura.map(f=>({...f, existenciaFisica: calcExistencia(f)}));
-    const lista = getInventarios();
-    const idx   = lista.findIndex(x=>x.id===invActual.id);
-    if (idx>=0) lista[idx]=invActual; else lista.push(invActual);
-    setInventarios(lista);
-    actualizarNavBtns();
-    alert('✅ Inventario cerrado. La existencia física queda como punto de partida del siguiente.');
+    _solicitarClave('Cerrar y finalizar inventario', function() {
+        invActual.cerrado = true;
+        invActual.filas   = filasCaptura.map(f=>({...f, existenciaFisica: calcExistencia(f)}));
+        const lista = getInventarios();
+        const idx   = lista.findIndex(x=>x.id===invActual.id);
+        if (idx>=0) lista[idx]=invActual; else lista.push(invActual);
+        setInventarios(lista);
+        actualizarNavBtns();
+        mostrarVista('vistaLista');
+    });
+}
+
+function editarInventario(id) {
+    _solicitarClave('Editar inventario', function() {
+        // Re-abrir si estaba cerrado
+        const lista = getInventarios();
+        const idx   = lista.findIndex(x=>x.id===id);
+        if (idx >= 0 && lista[idx].cerrado) {
+            lista[idx].cerrado = false;
+            setInventarios(lista);
+        }
+        // Cargar el inventario en memoria
+        const inv = getInventarios().find(x=>x.id===id);
+        if (!inv) { alert('Inventario no encontrado'); return; }
+        invActual = JSON.parse(JSON.stringify(inv));
+        if (!invActual.cocktailsVendidos) invActual.cocktailsVendidos = {};
+        if (!invActual.cancelaciones)     invActual.cancelaciones     = [];
+        if (!invActual.descuentos)        invActual.descuentos        = [];
+        if (!invActual.entradasLog)       invActual.entradasLog       = [];
+        filasCaptura = invActual.filas || [];
+        // Ir directo al wizard (paso 1), sin pasar por el formulario de datos
+        pasoActual = 1;
+        busquedaCapt = ''; filtroFamActivo = ''; filtroCatActiva = '';
+        mostrarVista('vistaCaptura');
+        document.getElementById('captTitulo').textContent = invActual.nombre || 'Inventario';
+        actualizarStepBar();
+        actualizarNavBtns();
+        renderStepContent();
+    });
 }
 
 function eliminarInventario(id) {
-    if (!confirm('¿Eliminar este inventario?')) return;
-    setInventarios(getInventarios().filter(x=>x.id!==id));
-    init();
+    _pedirClaveAdmin('Eliminar inventario', function() {
+        setInventarios(getInventarios().filter(x=>x.id!==id));
+        if (invActual && invActual.id === id) mostrarVista('vistaLista');
+        else init();
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════
 // VISTA ENTRADAS — registro rápido de entradas
 // ═══════════════════════════════════════════════════════════════
-function abrirRegistroEntradas() {
-    const lista   = getInventarios();
-    const abierto = [...lista].reverse().find(x => !x.cerrado);
-    if (!abierto) {
-        alert('No hay inventarios abiertos.\nCrea un nuevo inventario primero.');
-        return;
-    }
-    invActual = JSON.parse(JSON.stringify(abierto));
-    if (!invActual.cocktailsVendidos) invActual.cocktailsVendidos = {};
-    if (!invActual.cancelaciones)     invActual.cancelaciones     = [];
-    if (!invActual.entradasLog)       invActual.entradasLog       = [];
+let _entLogInsumoCache = null;
 
-    if ((invActual.filas || []).length) {
-        filasCaptura = invActual.filas.map(f => ({...f, entradas: f.entradas || ['','','','','']}));
-    } else {
-        cargarProductosCaptura();
-    }
-    busquedaCapt = ''; filtroFamActivo = ''; filtroCatActiva = '';
-    _entRapidaInsumoId = null; _entRapidaBusqueda = '';
-    mostrarVista('vistaEntradas');
+function abrirRegistroEntradas() {
+    _entLogInsumoCache = getInsumos(); // cache once to avoid repeated JSON parse on every keystroke
+    _entRapidaInsumoId = null;
+    _entRapidaBusqueda = '';
+    _entRapidaTipo     = 'compra';
+    const hoy = new Date().toISOString().split('T')[0];
+    document.getElementById('entLogFecha').value    = hoy;
+    document.getElementById('entLogCantidad').value = '';
+    document.getElementById('entLogCosto').value    = '';
+    document.getElementById('entLogNotas').value    = '';
+    document.getElementById('entLogTipo').value     = 'compra';
+    document.getElementById('entLogInsumoNombre').textContent = 'Selecciona un insumo';
+    document.getElementById('entLogInsumoId').value = '';
+    document.getElementById('entLogBusqueda').value = '';
+    _renderEntLogChips('');
+    document.getElementById('modalEntradaLog').style.display = 'flex';
 }
+
+function _renderEntLogChips(q) {
+    const insumos = _entLogInsumoCache || getInsumos();
+    const lista   = q
+        ? insumos.filter(x => x.nombre.toLowerCase().includes(q.toLowerCase()) ||
+                               (x.marca||'').toLowerCase().includes(q.toLowerCase()))
+        : insumos.slice(0, 40);
+    const cont = document.getElementById('entLogChips');
+    if (!cont) return;
+    if (!lista.length) { cont.innerHTML = '<div style="font-size:11px;color:var(--text-dim);padding:8px">Sin resultados</div>'; return; }
+    cont.innerHTML = lista.map(ins =>
+        `<button onclick="seleccionarEntLogInsumo('${ins.id}')"
+            style="background:var(--surface2);border:1px solid var(--border);color:var(--text);
+            border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit;
+            text-align:left;transition:all .15s"
+            onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border)'">
+            ${ins.nombre}${ins.variedad ? ' <span style="color:var(--text-muted)">' + ins.variedad + '</span>' : ''}
+        </button>`
+    ).join('');
+}
+
+function seleccionarEntLogInsumo(id) {
+    const ins = (_entLogInsumoCache || getInsumos()).find(x => x.id === id);
+    if (!ins) return;
+    _entRapidaInsumoId = id;
+    document.getElementById('entLogInsumoId').value = id;
+    document.getElementById('entLogInsumoNombre').textContent = ins.nombre + (ins.variedad ? ' ' + ins.variedad : '');
+    // Autocompletar costo desde primera presentación
+    const p0 = (ins.presentaciones||[])[0];
+    if (p0 && p0.precio && !document.getElementById('entLogCosto').value) {
+        document.getElementById('entLogCosto').value = p0.precio;
+    }
+    document.getElementById('entLogChips').innerHTML = '';
+    document.getElementById('entLogBusqueda').value  = '';
+}
+
+function guardarEntradaLog() {
+    const insumoId = document.getElementById('entLogInsumoId').value;
+    const fecha    = document.getElementById('entLogFecha').value;
+    const cantidad = parseFloat(document.getElementById('entLogCantidad').value);
+    const costo    = parseFloat(document.getElementById('entLogCosto').value) || 0;
+    const tipo     = document.getElementById('entLogTipo').value;
+    const notas    = document.getElementById('entLogNotas').value.trim();
+
+    if (!insumoId) { alert('Selecciona un insumo'); return; }
+    if (!fecha)    { alert('Indica la fecha'); return; }
+    if (!cantidad || cantidad <= 0) { alert('Indica la cantidad'); return; }
+
+    const ins = (_entLogInsumoCache || getInsumos()).find(x => x.id === insumoId);
+
+    // Save to global entradas log
+    const log = getEntradasLog();
+    log.push({
+        id:       genId(),
+        insumoId,
+        nombre:   ins ? ins.nombre : '—',
+        familia:  ins ? (ins.familia||'') : '',
+        cantidad,
+        costo,
+        tipo,
+        notas,
+        fecha,
+        registrado: new Date().toISOString()
+    });
+    setEntradasLog(log);
+
+    // Also save to active inventory so it appears in vistaEntradas historial
+    if (invActual) {
+        if (!invActual.entradasLog) invActual.entradasLog = [];
+        invActual.entradasLog.push({
+            insumoId,
+            nombreProducto: ins ? ins.nombre + (ins.variedad ? ' ' + ins.variedad : '') : '—',
+            cantidad,
+            costo,
+            tipo,
+            notas,
+            fecha
+        });
+        guardarEntradas();
+    }
+
+    // Close modal and refresh historial
+    document.getElementById('modalEntradaLog').style.display = 'none';
+    _entLogInsumoCache = null;
+    // Re-render the full view if vistaEntradas is visible, otherwise just the list
+    if (document.getElementById('vistaEntradas')?.style.display !== 'none') {
+        renderVistaEntradas();
+    } else {
+        renderListadoEntradas();
+    }
+}
+
+function cerrarEntradaLog() {
+    document.getElementById('modalEntradaLog').style.display = 'none';
+    renderListadoEntradas();
+}
+
 
 function tipoEntradaLabel(tipo) {
     if (tipo === 'compra')       return 'Compra';
@@ -2218,82 +3477,107 @@ function agregarEntradaRapida() {
 }
 
 function eliminarEntradaRapida(idx) {
-    if (!invActual?.entradasLog) return;
-    invActual.entradasLog.splice(idx, 1);
-    guardarEntradas();
-    renderFormEntrada();
-    renderListadoEntradas();
-    renderChipsEntrada();
+    _pedirClaveAdmin('Eliminar entrada', function() {
+        if (!invActual?.entradasLog) return;
+        invActual.entradasLog.splice(idx, 1);
+        guardarEntradas();
+        renderFormEntrada();
+        renderListadoEntradas();
+        renderChipsEntrada();
+    });
 }
 
 function renderListadoEntradas() {
     const cont = document.getElementById('entLogList');
     if (!cont) return;
-    const log = invActual?.entradasLog || [];
+    // Use inventory-specific log when active, global log otherwise
+    let log, useGlobal;
+    if (invActual) {
+        log = invActual.entradasLog || [];
+        useGlobal = false;
+    } else {
+        log = [...getEntradasLog()].reverse();
+        useGlobal = true;
+    }
     const countEl = document.getElementById('entLogCount');
     if (countEl) countEl.textContent = log.length + ' registro' + (log.length !== 1 ? 's' : '');
     if (!log.length) {
         cont.innerHTML = `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:24px 0">
-            Sin entradas registradas en este período</div>`;
+            Sin entradas registradas</div>`;
         return;
     }
-    cont.innerHTML = [...log].map((e, i) => {
-        const color = tipoEntradaColor(e.tipo);
+    const rows = useGlobal ? log : [...log].reverse();
+    cont.innerHTML = rows.map((e, i) => {
+        const color   = tipoEntradaColor(e.tipo);
+        const nombre  = e.nombreProducto || e.nombre || '—';
+        const delFn   = useGlobal
+            ? `eliminarEntradaGlobal('${e.id}')`
+            : `eliminarEntradaRapida(${i})`;
         return `<div class="ent-log-fila">
-            <span class="ent-log-nombre">${e.nombreProducto}</span>
+            <span class="ent-log-nombre">${nombre}</span>
             <span class="ent-log-badge" style="color:${color};background:${color}1a;border-color:${color}50">${tipoEntradaLabel(e.tipo)}</span>
             <span class="ent-log-fecha">${e.fecha || '—'}</span>
-            <span class="ent-log-cant">+${e.cantidad % 1 ? e.cantidad.toFixed(1) : e.cantidad} bot</span>
-            <button class="ent-log-del" onclick="eliminarEntradaRapida(${i})"
+            <span class="ent-log-cant">+${(e.cantidad||0) % 1 ? (e.cantidad||0).toFixed(1) : (e.cantidad||0)} bot</span>
+            <button class="ent-log-del" onclick="${delFn}"
                 onmouseenter="this.classList.add('hover')" onmouseleave="this.classList.remove('hover')">🗑️</button>
         </div>`;
-    }).reverse().join('');
+    }).join('');
+}
+
+function eliminarEntradaGlobal(id) {
+    _pedirClaveAdmin('Eliminar entrada', function() {
+        setEntradasLog(getEntradasLog().filter(e => e.id !== id));
+        renderListadoEntradas();
+    });
 }
 
 function renderVistaEntradas() {
     const cont = document.getElementById('entContent');
     if (!cont) return;
 
-    if (!invActual) {
-        cont.innerHTML = `<div class="empty-state" style="padding:60px">
-            <div class="empty-icon">📭</div>
-            <div class="empty-title">Sin inventario activo</div>
-            <div class="empty-desc">Crea un inventario primero desde la pantalla principal</div>
-        </div>`;
-        return;
-    }
-
     const tituloEl  = document.getElementById('entTitulo');
     const periodoEl = document.getElementById('entPeriodo');
-    if (tituloEl)  tituloEl.textContent = invActual.nombre || 'Registro de entradas';
-    if (periodoEl) {
-        const fecha = new Date(invActual.fecha + 'T12:00:00')
-            .toLocaleDateString('es-MX', { day:'2-digit', month:'long', year:'numeric' });
-        periodoEl.textContent = fecha
-            + (invActual.turno ? ' · ' + invActual.turno : '')
-            + (invActual.area  ? ' · ' + invActual.area  : '');
+    if (invActual) {
+        if (tituloEl)  tituloEl.textContent = invActual.nombre || 'Registro de entradas';
+        if (periodoEl) {
+            const fecha = new Date(invActual.fecha + 'T12:00:00')
+                .toLocaleDateString('es-MX', { day:'2-digit', month:'long', year:'numeric' });
+            periodoEl.textContent = fecha
+                + (invActual.turno ? ' · ' + invActual.turno : '')
+                + (invActual.area  ? ' · ' + invActual.area  : '');
+        }
+    } else {
+        if (tituloEl)  tituloEl.textContent = 'Registro de entradas';
+        if (periodoEl) periodoEl.textContent = 'Historial global';
     }
 
+    const searchSection = invActual ? `
+        <div>
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Buscar producto</div>
+            <input type="text" id="entBuscador" class="ent-buscador"
+                placeholder="Escribe el nombre del producto…"
+                oninput="buscarInsumoEntrada(this.value)" autocomplete="off">
+            <div id="entChips" class="ent-chips"></div>
+        </div>
+        <div id="entFormCard"></div>` : '';
+
+    const logLen = invActual ? (invActual.entradasLog||[]).length : getEntradasLog().length;
     cont.innerHTML = `
         <div class="ent-rapida-wrap">
-            <div>
-                <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Buscar producto</div>
-                <input type="text" id="entBuscador" class="ent-buscador"
-                    placeholder="Escribe el nombre del producto…"
-                    oninput="buscarInsumoEntrada(this.value)" autocomplete="off">
-                <div id="entChips" class="ent-chips"></div>
-            </div>
-            <div id="entFormCard"></div>
+            ${searchSection}
             <div>
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-                    <span style="font-size:11px;color:var(--text-dim);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Entradas del período</span>
-                    <span id="entLogCount" style="font-size:13px;font-weight:700;color:var(--text)">${(invActual.entradasLog||[]).length} registro${(invActual.entradasLog||[]).length !== 1 ? 's' : ''}</span>
+                    <span style="font-size:11px;color:var(--text-dim);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">
+                        ${invActual ? 'Entradas del período' : 'Historial de entradas'}
+                    </span>
+                    <span id="entLogCount" style="font-size:13px;font-weight:700;color:var(--text)">${logLen} registro${logLen !== 1 ? 's' : ''}</span>
                 </div>
                 <div id="entLogList"></div>
             </div>
         </div>`;
 
-    initEntradaRapidaUI();
+    if (invActual) initEntradaRapidaUI();
+    else renderListadoEntradas();
 }
 
 function guardarEntradas() {
@@ -2549,3 +3833,45 @@ function guardarFichaTecnica() {
 // ── Init ──────────────────────────────────────────────────────
 function init() { renderStats(); renderHistorial(); }
 init();
+
+// ── Bloqueo de navegación mientras haya un inventario abierto ──
+let _pendingNavHref = null;
+
+function _estaEnWizard() {
+    return !!invActual && document.getElementById('vistaCaptura')?.style.display !== 'none';
+}
+
+function _cancelarSalirInv() {
+    _pendingNavHref = null;
+    document.getElementById('modalSalirInv').style.display = 'none';
+}
+
+function _confirmarSalirInv() {
+    guardarInventario();
+    invActual = null;
+    const href = _pendingNavHref;
+    _pendingNavHref = null;
+    document.getElementById('modalSalirInv').style.display = 'none';
+    if (href) {
+        window.location.href = href;
+    } else {
+        mostrarVista('vistaLista');
+    }
+}
+
+document.addEventListener('click', function(e) {
+    const link = e.target.closest('a[href]');
+    if (!link || !link.href || link.href.startsWith('javascript')) return;
+    if (!_estaEnWizard()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    _pendingNavHref = link.href;
+    document.getElementById('modalSalirInv').style.display = 'flex';
+}, true);
+
+window.addEventListener('beforeunload', function(e) {
+    if (_estaEnWizard()) {
+        e.preventDefault();
+        e.returnValue = '';
+    }
+});

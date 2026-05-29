@@ -27,13 +27,44 @@
 
         /* inputs inline */
         .req-input {
-            width: 72px; background: var(--surface2); border: 1px solid var(--border);
+            background: var(--surface2); border: 1px solid var(--border);
             color: var(--text); padding: 5px 8px; border-radius: 6px;
             font-family: 'DM Sans', sans-serif; font-size: 13px; outline: none;
             text-align: right;
         }
         .req-input:focus { border-color: var(--green); }
         .req-input.override { border-color: var(--accent); color: var(--accent); }
+        /* hide number spinners so user can type freely */
+        .req-input::-webkit-outer-spin-button,
+        .req-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .req-input[type="number"] { -moz-appearance: textfield; }
+        .req-num { width: 72px; }
+        /* unit-of-measure select */
+        .req-um-select {
+            background: var(--surface2); border: 1px solid var(--border);
+            color: var(--text-muted); padding: 5px 4px; border-radius: 6px;
+            font-family: 'DM Sans', sans-serif; font-size: 11px; outline: none;
+            width: 72px; cursor: pointer;
+        }
+        .req-um-select:focus { border-color: var(--green); color: var(--text); }
+        /* intelligent purchase-unit badge (ajustar pedido) */
+        .req-ped-um {
+            font-size: 11px; color: var(--text-dim); white-space: nowrap;
+            background: var(--surface2); border: 1px solid var(--border);
+            border-radius: 6px; padding: 5px 7px; max-width: 90px;
+            overflow: hidden; text-overflow: ellipsis;
+        }
+        .req-ped-um.override { color: var(--accent); border-color: rgba(245,200,66,.45); }
+        .req-cell { display: flex; align-items: center; gap: 4px; }
+        .req-cell.center { justify-content: center; }
+        .req-cell.right  { justify-content: flex-end; }
+        .btn-cargar-ant {
+            background: none; border: 1px solid var(--border); color: var(--text-dim);
+            font-size: 13px; cursor: pointer; padding: 4px 8px; border-radius: 6px;
+            line-height: 1; transition: all .15s; white-space: nowrap; flex-shrink: 0;
+        }
+        .btn-cargar-ant:hover:not(:disabled) { border-color: var(--green); color: var(--green); }
+        .btn-cargar-ant:disabled { opacity: 0.22; cursor: default; }
 
         /* toggle no-pedir */
         .toggle-btn {
@@ -96,7 +127,10 @@
         .insumo-nombre { font-weight: 600; font-size: 13px; }
         .insumo-sub    { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
 
-        .col-right { text-align: right; }
+        /* higher specificity so .req-table th { text-align:left } doesn't win */
+        .req-table th.col-right,  .req-table td.col-right  { text-align: right; }
+        .req-table th.col-center, .req-table td.col-center { text-align: center; }
+        .col-right  { text-align: right; }
         .col-center { text-align: center; }
 
         .empty-state {
@@ -174,7 +208,9 @@
                 <button class="btn-vista" onclick="abrirHistorial()" style="color:var(--text-muted)">📋 Historial</button>
                 <button class="btn-vista" onclick="cargarTodasAnteriores()" style="color:var(--text-muted)" title="Cargar existencias vacías desde la última requisición archivada">↩ Cargar anteriores</button>
                 <button class="btn-vista" onclick="guardarExistencias()" style="color:var(--green);border-color:var(--green)">💾 Guardar existencias</button>
-                <button class="btn-vista" onclick="cerrarRequisicion()" style="color:var(--accent);border-color:var(--accent)">✅ Cerrar y archivar pedido</button>
+                <button class="btn-vista" onclick="verPedido()" style="color:var(--text);border-color:var(--border)">📄 Ver pedido</button>
+                <button class="btn-vista" onclick="verPedidoAdmin()" style="color:var(--accent);border-color:var(--accent)">🔒 Vista admin</button>
+                <button class="btn-vista" onclick="cerrarRequisicion()" style="color:var(--red);border-color:var(--red)">✅ Cerrar y archivar</button>
             </div>
         </div>
 
@@ -225,12 +261,13 @@
                         <thead>
                             <tr>
                                 <th style="width:28px">#</th>
-                                <th style="min-width:300px">Insumo</th>
+                                <th style="min-width:260px">Insumo</th>
                                 <th class="col-center">Stock<br>Mín / Máx</th>
-                                <th class="col-center">Existencia<br>actual</th>
+                                <th class="col-center" style="min-width:160px">Existencia actual<br><span style="font-size:8px;opacity:.6;font-weight:400">Cantidad · U/M</span></th>
+                                <th class="col-center" style="width:90px">Cargar<br>anterior</th>
                                 <th class="col-center">Estado</th>
                                 <th class="col-right">Pedido<br>sugerido</th>
-                                <th class="col-right">Ajustar<br>pedido</th>
+                                <th class="col-right" style="min-width:140px">Ajustar pedido<br><span style="font-size:8px;opacity:.6;font-weight:400">Cantidad · U/M</span></th>
                                 <th class="col-center">No<br>pedir</th>
                                 <th class="col-right">Costo<br>pedido</th>
                                 <th>Presentación</th>
@@ -489,15 +526,62 @@ function renderReq() {
         var existAnterior = historial.length ? (historial[0].items[ins.id] || {}).existencia : undefined;
         var hayAnterior = existAnterior !== undefined && existAnterior !== '' && existAnterior !== null;
 
+        // Existencia: unit-of-measure select
+        var UM_OPTIONS = ['pzas','botellas','litros','ml','kg','g','cajas','latas','rejillas','medidas','copas','bolsas'];
+        var existUm = (ri.existenciaUnidad !== undefined && ri.existenciaUnidad !== null && ri.existenciaUnidad !== '')
+            ? ri.existenciaUnidad
+            : (pres.umPresCompra || pres.presentacionCompra || ins.unidad || 'pzas');
+        if (UM_OPTIONS.indexOf(existUm) < 0) UM_OPTIONS = [existUm].concat(UM_OPTIONS);
+        var umOptHtml = UM_OPTIONS.map(function(u) {
+            return '<option value="' + _esc(u) + '"' + (u === existUm ? ' selected' : '') + '>' + _esc(u) + '</option>';
+        }).join('');
+
+        // Ajustar pedido: intelligent unit badge from catalog
+        var pedUmRaw = pres.presentacionCompra || pres.umPresCompra || pres.nombre || unidadCompra || 'uds.';
+        // Normalise common catalog values → legible label
+        var pedUmLabel = pedUmRaw
+            .replace(/botella[s]?\s*(?:\d+\s*ml)?/i, 'botella')
+            .replace(/caja[s]?\s*(?:de\s*\d+)?/i, 'caja')
+            .replace(/rejilla[s]?/i, 'rejilla')
+            .replace(/lata[s]?/i, 'lata')
+            .replace(/presentaci[oó]n\s*\d+/i, 'uds.')
+            .trim() || 'uds.';
+
         tr.innerHTML =
             '<td style="color:var(--text-dim)">' + numVisible + '</td>' +
-            '<td style="min-width:300px">' +
+            '<td style="min-width:260px">' +
                 '<div class="insumo-nombre">' + _esc(ins.nombre) + '</div>' +
                 '<div class="insumo-sub">' +
-                    (ins.familia   ? '<span style="margin-right:8px">' + _esc(ins.familia)   + '</span>' : '') +
+                    (ins.familia   ? '<span style="margin-right:6px">' + _esc(ins.familia)   + '</span>' : '') +
                     (ins.categoria ? '<span style="color:var(--text-dim)">'  + _esc(ins.categoria) + '</span>' : '') +
                     (ins.marca     ? '<span style="color:var(--text-dim);margin-left:4px">· ' + _esc(ins.marca) + '</span>' : '') +
                 '</div>' +
+                (function() {
+                    // Build a descriptive label from presentation data
+                    var parts = [];
+                    var presNombre = pres.nombre && !/^Presentaci[oó]n\s*\d+$/i.test(pres.nombre) ? pres.nombre : '';
+                    var compra = pres.presentacionCompra || pres.umPresCompra || '';
+                    if (presNombre) parts.push(presNombre);
+                    else if (compra) parts.push(compra);
+                    // Add size/content info if not already in the name
+                    var contenido = pres.contenido || pres.volumen || pres.contNeto || '';
+                    var unidad    = pres.unidadContenido || pres.unidad || pres.um || '';
+                    if (contenido && unidad && presNombre.indexOf(contenido) < 0)
+                        parts.push(contenido + ' ' + unidad);
+                    if (pres.piezas && presNombre.toLowerCase().indexOf('pz') < 0)
+                        parts.push(pres.piezas + ' pzas');
+                    var label = parts.join(' · ');
+                    if (!label) return '';
+                    return '<div style="font-size:10px;margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+                        '<span style="background:rgba(245,200,66,.1);border:1px solid rgba(245,200,66,.3);' +
+                            'color:var(--accent);border-radius:4px;padding:1px 7px;font-weight:600">' +
+                            '📦 ' + _esc(label) +
+                        '</span>' +
+                        (pres.costoPieza
+                            ? '<span style="color:var(--green);font-size:10px">$' + parseFloat(pres.costoPieza).toFixed(2) + ' / pieza</span>'
+                            : '') +
+                    '</div>';
+                })() +
             '</td>' +
             '<td class="col-center" style="font-size:13px">' +
                 (pres.stockMin || pres.stockMax
@@ -507,26 +591,38 @@ function renderReq() {
                     : '<span style="opacity:.4;font-size:11px">Sin definir</span>') +
             '</td>' +
             '<td class="col-center">' +
-                '<div style="display:flex;flex-direction:column;align-items:center;gap:3px">' +
-                    '<input type="number" class="req-input" min="0" step="0.01" ' +
+                '<div class="req-cell center">' +
+                    '<input type="text" inputmode="decimal" class="req-input req-num" ' +
                         'value="' + existVal + '" placeholder="—" ' +
-                        'oninput="actualizarExistencia(\'' + ins.id + '\',this.value)">' +
+                        'oninput="guardarExistSilent(\'' + ins.id + '\',this.value)" ' +
+                        'onblur="actualizarExistencia(\'' + ins.id + '\',this.value)">' +
+                    '<select class="req-um-select" ' +
+                        'onchange="actualizarExistenciaUnidad(\'' + ins.id + '\',this.value)">' +
+                        umOptHtml +
+                    '</select>' +
+                '</div>' +
+            '</td>' +
+            '<td class="col-center">' +
+                '<div style="display:flex;flex-direction:column;align-items:center;gap:3px">' +
+                    '<button class="btn-cargar-ant" ' +
+                        (hayAnterior ? '' : 'disabled ') +
+                        'onclick="cargarExistenciaAnterior(\'' + ins.id + '\')" ' +
+                        'title="' + (hayAnterior ? 'Cargar anterior: ' + existAnterior : 'Sin historial previo') + '">↩</button>' +
                     (hayAnterior
-                        ? '<button onclick="cargarExistenciaAnterior(\'' + ins.id + '\')" ' +
-                          'style="background:none;border:none;color:var(--text-dim);font-size:10px;cursor:pointer;' +
-                          'padding:1px 4px;border-radius:4px;white-space:nowrap;' +
-                          'transition:color .15s" onmouseover="this.style.color=\'var(--green)\'" ' +
-                          'onmouseout="this.style.color=\'var(--text-dim)\'" ' +
-                          'title="Cargar existencia anterior: ' + existAnterior + '">↩ ' + existAnterior + '</button>'
-                        : '') +
+                        ? '<span style="font-size:9px;color:var(--text-dim)">' + existAnterior + '</span>'
+                        : '<span style="font-size:9px;color:var(--text-dim);opacity:.4">—</span>') +
                 '</div>' +
             '</td>' +
             '<td class="col-center">' + chipHtml + '</td>' +
             '<td class="col-right">' + pedSugHtml + '</td>' +
             '<td class="col-right">' +
-                '<input type="number" class="req-input' + (hasManual ? ' override' : '') + '" min="0" step="1" ' +
-                    'value="' + (hasManual ? ri.pedidoManual : '') + '" placeholder="auto" ' +
-                    'oninput="actualizarManual(\'' + ins.id + '\',this.value)">' +
+                '<div class="req-cell right">' +
+                    '<input type="number" class="req-input req-num' + (hasManual ? ' override' : '') + '" min="0" step="1" ' +
+                        'value="' + (hasManual ? ri.pedidoManual : '') + '" placeholder="auto" ' +
+                        'oninput="actualizarManual(\'' + ins.id + '\',this.value)">' +
+                    '<span class="req-ped-um' + (hasManual ? ' override' : '') + '" ' +
+                        'title="' + _esc(pedUmRaw) + '">' + _esc(pedUmLabel) + '</span>' +
+                '</div>' +
             '</td>' +
             '<td class="col-center">' +
                 '<button class="toggle-btn' + (ri.noPedir ? ' activo' : '') + '" ' +
@@ -560,6 +656,13 @@ function renderReq() {
 }
 
 // ── Acciones de fila ──────────────────────────────────────────
+function guardarExistSilent(id, val) {
+    // Save while typing without re-rendering (preserves focus + cursor)
+    if (!reqData[id]) reqData[id] = { presIdx: 0 };
+    reqData[id].existencia = val;
+    setReqData(reqData);
+}
+
 function actualizarExistencia(id, val) {
     if (!reqData[id]) reqData[id] = { presIdx: 0 };
     reqData[id].existencia = val === '' ? '' : parseFloat(val);
@@ -573,6 +676,13 @@ function actualizarManual(id, val) {
     setReqData(reqData);
     renderReq();
 }
+
+function actualizarExistenciaUnidad(id, val) {
+    if (!reqData[id]) reqData[id] = { presIdx: 0 };
+    reqData[id].existenciaUnidad = val;
+    setReqData(reqData);
+}
+
 
 function cambiarPres(id, idx) {
     if (!reqData[id]) reqData[id] = {};
@@ -717,10 +827,259 @@ function _esc(s) {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// ── Vistas de pedido ──────────────────────────────────────────
+function _buildPedidoItems() {
+    var result = [];
+    insumos.forEach(function(ins) {
+        var ri   = reqData[ins.id] || {};
+        var calc = calcItem(ins, ri);
+        var pFin = pedidoFinal(calc, ri);
+        if (pFin <= 0 || ri.noPedir) return;
+        var pres = calc.pres;
+        var presNombre = (pres.nombre && !/^Presentaci[oó]n\s*\d+$/i.test(pres.nombre)) ? pres.nombre : '';
+        var presLabel  = presNombre || pres.presentacionCompra || pres.umPresCompra || 'uds.';
+        result.push({
+            ins: ins, pFin: pFin, presLabel: presLabel,
+            proveedor:  pres.proveedor  || '—',
+            costoUnit:  calc.costoUnitPieza || 0,
+            costoTotal: pFin * (calc.costoUnitPieza || 0),
+            pres: pres
+        });
+    });
+    result.sort(function(a, b) {
+        var p = a.proveedor.localeCompare(b.proveedor, 'es');
+        return p !== 0 ? p : a.ins.nombre.localeCompare(b.ins.nombre, 'es');
+    });
+    return result;
+}
+
+function _pedSharedStyles() {
+    return `<style>
+.ped-paper{background:#fff;width:216mm;padding:16mm 18mm;margin:58px auto 24px;
+    box-shadow:0 4px 40px rgba(0,0,0,.55);font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1916}
+.ped-t{width:100%;border-collapse:collapse;font-size:11px}
+.ped-t th{padding:5px 8px;text-align:left;background:#f5f5f0;border-bottom:2px solid #1a1916;
+    font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#666;white-space:nowrap}
+.ped-t td{padding:5px 8px;border-bottom:1px solid #f0f0ec;vertical-align:middle}
+.ped-t tr:last-child td{border-bottom:none}
+.ped-prov-hdr td{background:#f0f0e8;font-size:10px;font-weight:700;letter-spacing:.5px;
+    color:#444;padding:8px 8px 4px;border-top:2px solid #1a1916}
+.ped-subtotal td{background:#f9f9f6;font-size:10px;font-style:italic;color:#666}
+.tc{text-align:center!important}.tr{text-align:right!important}
+.ped-foot{margin-top:16px;padding-top:10px;border-top:1px solid #eee;
+    font-size:9px;color:#bbb;display:flex;justify-content:space-between;align-items:center}
+@media print{
+    body>*:not(#pedOverlay){display:none!important}
+    #pedOverlay{position:static!important;overflow:visible!important;background:white!important}
+    #pedToolbar{display:none!important}
+    .ped-paper{box-shadow:none!important;width:100%!important;margin:0!important;padding:10mm 12mm!important}
+}
+</style>`;
+}
+
+function _pedToolbar(overlayId, title) {
+    return `<div id="pedToolbar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#1a1916;
+        padding:10px 20px;display:flex;justify-content:space-between;align-items:center;
+        box-shadow:0 2px 8px rgba(0,0,0,.5)">
+        <span style="color:#f5f0e8;font-size:14px;font-weight:700">${title}</span>
+        <div style="display:flex;gap:8px">
+            <button onclick="window.print()" style="padding:7px 18px;border-radius:6px;cursor:pointer;
+                font-size:12px;font-weight:700;background:#f5c842;color:#1a1916;border:none">🖨️ Imprimir / PDF</button>
+            <button onclick="document.getElementById('${overlayId}').remove()" style="padding:7px 14px;
+                border-radius:6px;cursor:pointer;font-size:12px;background:transparent;
+                border:1px solid rgba(255,255,255,.3);color:#f5f0e8">✕ Cerrar</button>
+        </div>
+    </div>`;
+}
+
+function verPedido() {
+    var items = _buildPedidoItems();
+    if (!items.length) { alert('Sin ítems a pedir en el pedido actual.'); return; }
+
+    var fecha   = new Date().toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    var grupos  = {};
+    items.forEach(function(it) {
+        if (!grupos[it.proveedor]) grupos[it.proveedor] = [];
+        grupos[it.proveedor].push(it);
+    });
+    var provs = Object.keys(grupos);
+
+    var bodyRows = provs.map(function(prov) {
+        var list  = grupos[prov];
+        var filas = list.map(function(it, i) {
+            return `<tr>
+                <td class="tc" style="color:#aaa;font-size:10px">${i+1}</td>
+                <td>
+                    <div style="font-weight:600">${_esc(it.ins.nombre)}</div>
+                    <div style="font-size:10px;color:#999;margin-top:1px">${_esc(it.ins.familia||'')}${it.ins.categoria?' · '+_esc(it.ins.categoria):''}</div>
+                </td>
+                <td>${_esc(it.presLabel)}</td>
+                <td class="tc" style="font-size:18px;font-weight:900;color:#1a1916">${it.pFin}</td>
+                <td style="color:#666">${_esc(it.proveedor)}</td>
+            </tr>`;
+        }).join('');
+        return `<tr class="ped-prov-hdr"><td colspan="5">🏪 ${_esc(prov)} — ${list.length} ítem${list.length!==1?'s':''}</td></tr>` + filas;
+    }).join('');
+
+    document.getElementById('pedOverlay')?.remove();
+    var ov = document.createElement('div');
+    ov.id = 'pedOverlay';
+    ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9998;overflow-y:auto;background:#1a1916';
+    ov.innerHTML = _pedSharedStyles() + _pedToolbar('pedOverlay', '📄 Pedido de Compra — ' + items.length + ' ítems') + `
+    <div class="ped-paper">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;
+                    margin-bottom:14px;padding-bottom:12px;border-bottom:3px solid #1a1916">
+            <div>
+                <div style="font-size:22px;font-weight:900;margin-bottom:3px">📋 Pedido de Compra</div>
+                <div style="font-size:11px;color:#888">${fecha}</div>
+            </div>
+            <div style="text-align:right;font-size:11px;color:#888;line-height:1.8">
+                <strong>${items.length}</strong> ítem${items.length!==1?'s':''}<br>
+                ${provs.length} proveedor${provs.length!==1?'es':''}
+            </div>
+        </div>
+        <table class="ped-t">
+            <thead><tr>
+                <th class="tc" style="width:24px">#</th>
+                <th>Insumo</th>
+                <th>Presentación</th>
+                <th class="tc" style="width:70px">Cantidad</th>
+                <th>Proveedor</th>
+            </tr></thead>
+            <tbody>${bodyRows}</tbody>
+        </table>
+        <div class="ped-foot">
+            <span>Generado: ${fecha} · ETAAX Sistema de Requisiciones</span>
+            <strong>Total: ${items.length} ítems · ${provs.length} proveedores</strong>
+        </div>
+    </div>`;
+    document.body.appendChild(ov);
+}
+
+function verPedidoAdmin() {
+    var items = _buildPedidoItems();
+    if (!items.length) { alert('Sin ítems a pedir en el pedido actual.'); return; }
+
+    var fecha  = new Date().toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    var grupos = {};
+    items.forEach(function(it) {
+        if (!grupos[it.proveedor]) grupos[it.proveedor] = [];
+        grupos[it.proveedor].push(it);
+    });
+    var provs      = Object.keys(grupos);
+    var granTotal  = items.reduce(function(s, it) { return s + it.costoTotal; }, 0);
+
+    // Supplier filter options
+    var filterOpts = '<option value="">Todos los proveedores</option>' +
+        provs.map(function(p) { return '<option value="' + _esc(p) + '">' + _esc(p) + '</option>'; }).join('');
+
+    var bodyRows = provs.map(function(prov) {
+        var list     = grupos[prov];
+        var subTotal = list.reduce(function(s, it) { return s + it.costoTotal; }, 0);
+        var filas = list.map(function(it, i) {
+            return `<tr data-prov="${_esc(prov)}">
+                <td class="tc" style="color:#aaa;font-size:10px">${i+1}</td>
+                <td>
+                    <div style="font-weight:600">${_esc(it.ins.nombre)}</div>
+                    <div style="font-size:10px;color:#999;margin-top:1px">${_esc(it.ins.familia||'')}${it.ins.categoria?' · '+_esc(it.ins.categoria):''}</div>
+                </td>
+                <td>${_esc(it.presLabel)}</td>
+                <td class="tc" style="font-size:18px;font-weight:900;color:#1a1916">${it.pFin}</td>
+                <td style="color:#666">${_esc(it.proveedor)}</td>
+                <td class="tr" style="color:#555">${it.costoUnit > 0 ? fmtMXN(it.costoUnit) : '—'}</td>
+                <td class="tr" style="font-weight:700;color:${it.costoTotal>0?'#1a7a4a':'#aaa'}">${it.costoTotal > 0 ? fmtMXN(it.costoTotal) : '—'}</td>
+            </tr>`;
+        }).join('');
+        var subRow = `<tr class="ped-subtotal" data-prov="${_esc(prov)}">
+            <td colspan="5" style="text-align:right;padding-right:8px">Subtotal ${_esc(prov)}</td>
+            <td></td>
+            <td class="tr" style="font-weight:700;color:#1a7a4a">${fmtMXN(subTotal)}</td>
+        </tr>`;
+        return `<tr class="ped-prov-hdr" data-prov="${_esc(prov)}">
+            <td colspan="7">🏪 ${_esc(prov)} — ${list.length} ítem${list.length!==1?'s':''}</td>
+        </tr>${filas}${subRow}`;
+    }).join('');
+
+    document.getElementById('pedAdminOverlay')?.remove();
+    var ov = document.createElement('div');
+    ov.id = 'pedAdminOverlay';
+    ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9998;overflow-y:auto;background:#1a1916';
+    ov.innerHTML = _pedSharedStyles() + _pedToolbar('pedAdminOverlay', '🔒 Vista Admin — Costo del Pedido') + `
+    <div class="ped-paper">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;
+                    margin-bottom:14px;padding-bottom:12px;border-bottom:3px solid #1a1916">
+            <div>
+                <div style="font-size:22px;font-weight:900;margin-bottom:3px">🔒 Resumen Administrativo del Pedido</div>
+                <div style="font-size:11px;color:#888">${fecha}</div>
+            </div>
+            <div style="text-align:right">
+                <div style="font-size:24px;font-weight:900;color:#1a7a4a">${fmtMXN(granTotal)}</div>
+                <div style="font-size:10px;color:#aaa">${items.length} ítems · ${provs.length} proveedores</div>
+            </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:10px 12px;
+                    background:#f9f9f6;border-radius:8px;flex-wrap:wrap">
+            <span style="font-size:11px;font-weight:600;color:#555">Filtrar por proveedor:</span>
+            <select id="pedProvFiltro" onchange="filtrarPedProv(this.value)"
+                style="background:#fff;border:1px solid #ddd;padding:5px 10px;border-radius:6px;
+                       font-family:Arial,sans-serif;font-size:12px;outline:none;min-width:200px">
+                ${filterOpts}
+            </select>
+            <span id="pedProvTotal" style="font-size:11px;color:#888;margin-left:auto">
+                Total: <strong style="color:#1a7a4a">${fmtMXN(granTotal)}</strong>
+            </span>
+        </div>
+        <table class="ped-t" id="pedAdminTabla">
+            <thead><tr>
+                <th class="tc" style="width:24px">#</th>
+                <th>Insumo</th>
+                <th>Presentación</th>
+                <th class="tc" style="width:70px">Cantidad</th>
+                <th>Proveedor</th>
+                <th class="tr" style="width:90px">Costo unit.</th>
+                <th class="tr" style="width:100px">Subtotal</th>
+            </tr></thead>
+            <tbody>${bodyRows}</tbody>
+        </table>
+        <div style="display:flex;justify-content:flex-end;align-items:center;gap:20px;
+                    margin-top:12px;padding:12px 8px;border-top:2px solid #1a1916">
+            <span style="font-size:11px;color:#888">Total del pedido</span>
+            <span id="pedTotalGran" style="font-size:20px;font-weight:900;color:#1a7a4a">${fmtMXN(granTotal)}</span>
+        </div>
+        <div class="ped-foot">
+            <span>Vista confidencial · Generado: ${fecha} · ETAAX Sistema de Requisiciones</span>
+            <strong>${items.length} ítems · ${provs.length} proveedores</strong>
+        </div>
+    </div>`;
+    document.body.appendChild(ov);
+}
+
+function filtrarPedProv(val) {
+    var rows  = document.querySelectorAll('#pedAdminTabla tbody tr[data-prov]');
+    var total = 0;
+    rows.forEach(function(r) {
+        var show = !val || r.getAttribute('data-prov') === val;
+        r.style.display = show ? '' : 'none';
+        // Sum subtotal rows for the counter
+        if (show && r.classList.contains('ped-subtotal')) {
+            var cell = r.querySelector('td:last-child');
+            if (cell) {
+                var n = parseFloat((cell.textContent || '').replace(/[^0-9.]/g,''));
+                if (!isNaN(n)) total += n;
+            }
+        }
+    });
+    // Update the visible total label
+    var lbl = document.getElementById('pedProvTotal');
+    if (lbl) {
+        var shown = !val ? document.querySelectorAll('#pedAdminTabla tbody tr[data-prov]') : [];
+        lbl.innerHTML = 'Total: <strong style="color:#1a7a4a">' + fmtMXN(val ? total : parseFloat(document.getElementById('pedTotalGran').textContent.replace(/[^0-9.]/g,'') || 0)) + '</strong>';
+    }
+}
+
 // ── Init ──────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', init);
 </script>
-<script>window.ctxNavBack = 'index.html?escandallos=1';</script>
 <script src="../ctx-bar.js"></script>
 </body>
 </html>
