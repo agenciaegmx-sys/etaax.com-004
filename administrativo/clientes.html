@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETAAX - Clientes</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../styles.css">
+    <style>
+        .btn-primary{background:var(--green);border:none;color:#fff;padding:9px 20px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:opacity .2s;white-space:nowrap;}
+        .btn-primary:hover{opacity:.85;}
+        .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text-muted);padding:9px 18px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;transition:all .2s;}
+        .btn-ghost:hover{border-color:var(--border2);color:var(--text);}
+        .btn-row{background:transparent;border:1px solid var(--border);color:var(--text-dim);padding:4px 10px;border-radius:4px;font-family:'DM Sans',sans-serif;font-size:11px;cursor:pointer;transition:all .15s;}
+        .btn-row:hover{border-color:var(--green);color:var(--green);}
+        .btn-row.del:hover{border-color:var(--red);color:var(--red);}
+
+        /* Search bar */
+        .search-bar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
+        .search-bar input{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 14px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;flex:1;min-width:200px;}
+        .search-bar input:focus{border-color:var(--green);}
+
+        /* Stats */
+        .cl-stats{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;}
+        .cl-stat{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;min-width:130px;}
+        .cl-stat-lbl{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;}
+        .cl-stat-val{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:1px;color:var(--text);}
+
+        /* Clients table */
+        .cl-table{width:100%;border-collapse:collapse;font-size:13px;}
+        .cl-table th{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);font-weight:500;padding:10px 14px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;}
+        .cl-table td{padding:12px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
+        .cl-table tr:last-child td{border-bottom:none;}
+        .cl-table tr:hover td{background:var(--surface2);}
+        .cl-avatar{width:34px;height:34px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--text-dim);flex-shrink:0;font-family:'Bebas Neue',sans-serif;}
+        .cl-name{font-weight:600;font-size:13px;color:var(--text);}
+        .cl-fecha{font-size:10px;color:var(--text-dim);margin-top:2px;}
+
+        /* Modal */
+        .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9000;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;}
+        .modal-overlay.open{display:flex;}
+        .modal-cl{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:500px;box-shadow:0 24px 60px rgba(0,0,0,.5);}
+        .modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--border);}
+        .modal-header h2{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1.5px;color:var(--text);}
+        .modal-close{background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:6px;}
+        .modal-close:hover{color:var(--text);}
+        .modal-body{padding:22px 24px;display:flex;flex-direction:column;gap:14px;}
+        .modal-footer{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:16px 24px;border-top:1px solid var(--border);}
+        .fg{display:flex;flex-direction:column;gap:5px;}
+        .fg label{font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:var(--text-dim);}
+        .fg input,.fg textarea,.fg select{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;width:100%;box-sizing:border-box;transition:border-color .15s;}
+        .fg input:focus,.fg textarea:focus,.fg select:focus{border-color:var(--green);}
+        .fg-row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+        @media(max-width:480px){.fg-row-2{grid-template-columns:1fr;}}
+
+        .empty-state{text-align:center;padding:60px 24px;color:var(--text-dim);}
+        .empty-state-icon{font-size:40px;margin-bottom:12px;}
+        .theme-toggle{position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;}
+        .theme-toggle:hover{border-color:var(--green);color:var(--green);}
+    </style>
+</head>
+<body>
+
+<header class="top-bar">
+    <svg width="108" height="26" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
+        <path d="M14.5 28H37C35.5 23 31.5 20 25.5 20C19.5 20 16 23 14.5 28Z" fill="#1a1916"/>
+        <circle cx="45" cy="11" r="6" fill="#f5c842"/>
+        <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
+        <path d="M78 41C78 34.5 83.5 30.5 92.5 29.5L104 28.5V27.5C104 23.5 101.5 21 97 21C93 21 90 23 89 26.5L80.5 24C82.5 17.5 89 13 97 13C107.5 13 113 18.5 113 28.5V54.5H104V51C102 53.5 98.5 55 94 55C85.5 55 78 50.5 78 41Z" fill="#3dbe7a"/>
+        <path d="M104 37L95.5 38C92.5 38.5 90.5 40 90.5 42.5C90.5 45 92.5 46.5 95.5 46.5C101 46.5 104 43.5 104 39V37Z" fill="#1a1916"/>
+        <path d="M126 41C126 34.5 131.5 30.5 140.5 29.5L152 28.5V27.5C152 23.5 149.5 21 145 21C141 21 138 23 137 26.5L128.5 24C130.5 17.5 137 13 145 13C155.5 13 161 18.5 161 28.5V54.5H152V51C150 53.5 146.5 55 142 55C133.5 55 126 50.5 126 41Z" fill="#3dbe7a"/>
+        <path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/>
+        <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+    </svg>
+    <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🏠</a>
+    <div class="top-breadcrumb">
+        <span class="top-module-badge">Financiero</span>
+        <span class="top-sep">|</span>
+        <span class="top-section-name">Clientes</span>
+    </div>
+</header>
+<div id="ctxBar" class="ctx-bar" style="display:none"></div>
+
+<div class="app-shell">
+    <nav class="nav cerrado" id="nav">
+        <div class="nav-top">
+            <div class="nav-brand"><span class="nav-brand-sub">Control Financiero</span></div>
+            <div class="nav-top-actions">
+                <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
+            </div>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Admin</div>
+            <a href="ventas.html" class="nav-link" data-tooltip="Captura Ventas"><span class="nav-icon">💰</span><span class="nav-text">Captura Ventas</span></a>
+            <a href="gastos.html" class="nav-link" data-tooltip="Captura Gastos"><span class="nav-icon">📤</span><span class="nav-text">Captura Gastos</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Catálogos</div>
+            <a href="staff.html" class="nav-link" data-tooltip="Staff"><span class="nav-icon">👥</span><span class="nav-text">Staff</span></a>
+            <a href="permisos.html" class="nav-link" data-tooltip="Permisos y Roles"><span class="nav-icon">🔐</span><span class="nav-text">Permisos y Roles</span></a>
+            <a href="proveedores.html" class="nav-link" data-tooltip="Proveedores"><span class="nav-icon">🚚</span><span class="nav-text">Proveedores</span></a>
+            <a href="clientes.html" class="nav-link active" data-tooltip="Clientes"><span class="nav-icon">⭐</span><span class="nav-text">Clientes</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Menús</div>
+            <a href="menu.html" class="nav-link" data-tooltip="Menú"><span class="nav-icon">📋</span><span class="nav-text">Menú</span></a>
+        </div>
+    </nav>
+
+    <main class="main-content expandido" id="mainContent">
+        <div class="header">
+            <div class="brand">
+                <span class="brand-label">Base de</span>
+                <span class="brand-title">Clientes</span>
+            </div>
+            <button class="btn-primary" onclick="abrirModal()">+ Nuevo cliente</button>
+        </div>
+
+        <div class="wrap">
+            <!-- Stats -->
+            <div class="cl-stats">
+                <div class="cl-stat">
+                    <div class="cl-stat-lbl">Total clientes</div>
+                    <div class="cl-stat-val" id="statTotal">0</div>
+                </div>
+                <div class="cl-stat">
+                    <div class="cl-stat-lbl">Con correo</div>
+                    <div class="cl-stat-val" id="statEmail">0</div>
+                </div>
+                <div class="cl-stat">
+                    <div class="cl-stat-lbl">Con teléfono</div>
+                    <div class="cl-stat-val" id="statTel">0</div>
+                </div>
+            </div>
+
+            <!-- Buscador -->
+            <div class="search-bar">
+                <input type="text" id="buscarCl" placeholder="Buscar por nombre, teléfono o correo…" oninput="renderClientes()">
+            </div>
+
+            <!-- Tabla -->
+            <div class="card">
+                <div class="card-body" style="padding:0;overflow-x:auto">
+                    <table class="cl-table" id="tablaClientes">
+                        <thead>
+                            <tr>
+                                <th style="width:42px"></th>
+                                <th>Nombre</th>
+                                <th>Teléfono</th>
+                                <th>Correo electrónico</th>
+                                <th>Notas</th>
+                                <th>Registro</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyClientes"></tbody>
+                    </table>
+                    <div id="emptyClientes" class="empty-state" style="display:none">
+                        <div class="empty-state-icon">⭐</div>
+                        <div>Sin clientes registrados aún.<br>Agrega el primero con el botón de arriba.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalCl" onclick="if(event.target===this)cerrarModal()">
+    <div class="modal-cl">
+        <div class="modal-header">
+            <h2 id="modalTitulo">Nuevo cliente</h2>
+            <button class="modal-close" onclick="cerrarModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="fg">
+                <label>Nombre completo *</label>
+                <input type="text" id="clNombre" placeholder="Nombre del cliente">
+            </div>
+            <div class="fg-row-2">
+                <div class="fg">
+                    <label>Teléfono</label>
+                    <input type="tel" id="clTel" placeholder="+52 55 0000 0000">
+                </div>
+                <div class="fg">
+                    <label>Correo electrónico</label>
+                    <input type="email" id="clEmail" placeholder="correo@ejemplo.com">
+                </div>
+            </div>
+            <div class="fg">
+                <label>Notas</label>
+                <textarea id="clNotas" rows="2" placeholder="Preferencias, alergias, observaciones…" style="resize:vertical"></textarea>
+            </div>
+            <input type="hidden" id="clId">
+        </div>
+        <div class="modal-footer">
+            <button class="btn-ghost" onclick="cerrarModal()">Cancelar</button>
+            <button class="btn-primary" onclick="guardarCliente()">Guardar</button>
+        </div>
+    </div>
+</div>
+
+<button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
+
+<script>
+(function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);document.addEventListener('DOMContentLoaded',function(){if(s==='light'){document.getElementById('themeIcon').textContent='🌙';document.getElementById('themeLabel').textContent='Modo oscuro';}});})();
+function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('etaax_theme',n);document.getElementById('themeIcon').textContent=n==='light'?'🌙':'☀️';document.getElementById('themeLabel').textContent=n==='light'?'Modo oscuro':'Modo claro';}
+function toggleNav(){var nav=document.getElementById('nav'),main=document.getElementById('mainContent');nav.classList.toggle('cerrado');if(main)main.classList.toggle('expandido');var c=nav.classList.contains('cerrado');var btn=document.getElementById('navToggleBtn'),txt=document.getElementById('navToggleTxt');if(btn)btn.childNodes[0].textContent=c?'▶':'◀';if(txt)txt.textContent=c?'Expandir':'Ocultar';if(btn)btn.setAttribute('data-tooltip',c?'Expandir':'Ocultar');}
+
+var LS_KEY='etaax_clientes';
+function load(){try{return JSON.parse(localStorage.getItem(LS_KEY))||[];}catch(e){return[];}}
+function save(d){localStorage.setItem(LS_KEY,JSON.stringify(d));}
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
+function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function initials(n){return(n||'?').trim().split(/\s+/).slice(0,2).map(function(w){return w[0].toUpperCase();}).join('');}
+
+function renderClientes(){
+    var q=(document.getElementById('buscarCl').value||'').toLowerCase();
+    var all=load();
+    var lista=all.filter(function(c){
+        if(!q)return true;
+        return(c.nombre||'').toLowerCase().includes(q)||(c.tel||'').includes(q)||(c.email||'').toLowerCase().includes(q);
+    }).sort(function(a,b){return(a.nombre||'').localeCompare(b.nombre||'','es');});
+
+    document.getElementById('statTotal').textContent=all.length;
+    document.getElementById('statEmail').textContent=all.filter(function(c){return c.email;}).length;
+    document.getElementById('statTel').textContent=all.filter(function(c){return c.tel;}).length;
+
+    var tbody=document.getElementById('tbodyClientes'),empty=document.getElementById('emptyClientes');
+    if(!lista.length){tbody.innerHTML='';empty.style.display='block';return;}
+    empty.style.display='none';
+    tbody.innerHTML=lista.map(function(c){
+        var ini=initials(c.nombre);
+        var fechaStr=c.fecha?new Date(c.fecha).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}):'—';
+        return'<tr>'+
+            '<td><div class="cl-avatar">'+ini+'</div></td>'+
+            '<td>'+
+                '<div class="cl-name">'+_esc(c.nombre)+'</div>'+
+                (c.fecha?'<div class="cl-fecha">Desde '+fechaStr+'</div>':'')+'</td>'+
+            '<td>'+(c.tel?'<a href="tel:'+_esc(c.tel)+'" style="color:var(--text);text-decoration:none">'+_esc(c.tel)+'</a>':'<span style="opacity:.4;font-size:11px">—</span>')+'</td>'+
+            '<td>'+(c.email?'<a href="mailto:'+_esc(c.email)+'" style="color:var(--green);text-decoration:none;font-size:12px">'+_esc(c.email)+'</a>':'<span style="opacity:.4;font-size:11px">—</span>')+'</td>'+
+            '<td style="font-size:11px;color:var(--text-dim);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+_esc(c.notas||'')+'">'+_esc(c.notas||'—')+'</td>'+
+            '<td style="font-size:11px;color:var(--text-dim);white-space:nowrap">'+fechaStr+'</td>'+
+            '<td style="display:flex;gap:4px;justify-content:flex-end">'+
+                '<button class="btn-row" onclick="editarCliente(\''+c.id+'\')">✏️</button>'+
+                '<button class="btn-row del" onclick="eliminarCliente(\''+c.id+'\')">🗑️</button>'+
+            '</td>'+
+        '</tr>';
+    }).join('');
+}
+
+function abrirModal(id){
+    var d=id?(load().find(function(c){return c.id===id;})||{}):{};
+    document.getElementById('modalTitulo').textContent=id?'Editar cliente':'Nuevo cliente';
+    document.getElementById('clId').value=d.id||'';
+    document.getElementById('clNombre').value=d.nombre||'';
+    document.getElementById('clTel').value=d.tel||'';
+    document.getElementById('clEmail').value=d.email||'';
+    document.getElementById('clNotas').value=d.notas||'';
+    document.getElementById('modalCl').classList.add('open');
+    setTimeout(function(){document.getElementById('clNombre').focus();},80);
+}
+function editarCliente(id){abrirModal(id);}
+function cerrarModal(){document.getElementById('modalCl').classList.remove('open');}
+
+function guardarCliente(){
+    var nombre=document.getElementById('clNombre').value.trim();
+    if(!nombre){alert('El nombre es obligatorio.');document.getElementById('clNombre').focus();return;}
+    var id=document.getElementById('clId').value||genId();
+    var cliente={
+        id:id,nombre:nombre,
+        tel:document.getElementById('clTel').value.trim(),
+        email:document.getElementById('clEmail').value.trim(),
+        notas:document.getElementById('clNotas').value.trim(),
+        fecha:document.getElementById('clId').value
+            ?(load().find(function(c){return c.id===id;})||{}).fecha||new Date().toISOString()
+            :new Date().toISOString()
+    };
+    var lista=load().filter(function(c){return c.id!==id;});
+    lista.push(cliente);
+    save(lista);
+    cerrarModal();
+    renderClientes();
+}
+
+function eliminarCliente(id){
+    var c=load().find(function(x){return x.id===id;});
+    if(!confirm('¿Eliminar a '+(c?c.nombre:'este cliente')+'? Esta acción no se puede deshacer.'))return;
+    save(load().filter(function(x){return x.id!==id;}));
+    renderClientes();
+}
+
+document.addEventListener('DOMContentLoaded',renderClientes);
+</script>
+<script src="../ctx-bar.js"></script>
+</body>
+</html>

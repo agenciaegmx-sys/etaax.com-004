@@ -6,6 +6,154 @@
     <title>ETAAX - Salud Financiera</title>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
+    <style>
+        .cf-wrap {
+            min-height: 100vh;
+            padding: 48px 24px 100px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .cf-hero {
+            text-align: center;
+            padding: 52px 0 48px;
+            animation: fadeUp .5s ease both;
+            max-width: 600px;
+            width: 100%;
+        }
+        .cf-hero-eyebrow {
+            font-size: 10px; letter-spacing: 3px; text-transform: uppercase;
+            color: var(--text-dim); margin-bottom: 10px;
+        }
+        .cf-hero-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 58px; letter-spacing: 3px; line-height: .95;
+            color: var(--text); margin-bottom: 12px;
+        }
+        .cf-hero-title .g { color: var(--green); }
+        .cf-hero-sub {
+            font-size: 13px; color: var(--text-dim); line-height: 1.6;
+        }
+        .cf-modules {
+            width: 100%; max-width: 960px;
+            display: flex; flex-direction: column; gap: 40px;
+        }
+        .cf-section { animation: fadeUp .5s ease both; }
+        .cf-section:nth-child(2) { animation-delay: .05s; }
+        .cf-section:nth-child(3) { animation-delay: .10s; }
+        .cf-section:nth-child(4) { animation-delay: .15s; }
+        .cf-section-hdr {
+            display: flex; align-items: flex-end; gap: 14px;
+            margin-bottom: 14px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+        .cf-section-tag {
+            font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase;
+            color: var(--text-dim); padding: 3px 10px;
+            background: var(--surface2); border: 1px solid var(--border);
+            border-radius: 20px; white-space: nowrap; line-height: 1.6;
+        }
+        .cf-section-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 28px; letter-spacing: 2px; color: var(--text); line-height: 1;
+        }
+        .cf-section-desc {
+            font-size: 11px; color: var(--text-dim); line-height: 1.5;
+            margin-left: auto; text-align: right; max-width: 280px;
+        }
+        .cf-grid {
+            display: grid;
+            gap: 14px;
+            grid-template-columns: 1fr 1fr;
+        }
+        .cf-grid-1 { grid-template-columns: 1fr; }
+        .cf-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px 22px 20px;
+            cursor: pointer; transition: all .2s;
+            text-decoration: none;
+            display: flex; flex-direction: column;
+            align-items: flex-start; gap: 7px;
+            color: var(--text);
+            font-family: 'DM Sans', sans-serif;
+            box-sizing: border-box;
+        }
+        .cf-card:hover {
+            border-color: rgba(30,80,220,.5);
+            background: rgba(30,80,220,.05);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 32px rgba(30,80,220,.12);
+        }
+        .cf-card.coming-soon { opacity: .35; cursor: default; pointer-events: none; }
+        /* KPI card — horizontal accent */
+        .cf-card.kpi {
+            flex-direction: row; align-items: center; gap: 20px;
+            border-color: rgba(245,200,66,.25);
+            background: rgba(245,200,66,.03);
+        }
+        .cf-card.kpi:hover {
+            border-color: rgba(245,200,66,.5);
+            background: rgba(245,200,66,.07);
+            box-shadow: 0 8px 32px rgba(245,200,66,.1);
+        }
+        .cf-card.kpi .cf-card-icon { font-size: 40px; flex-shrink: 0; }
+        .cf-card.kpi .cf-kpi-info { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+        .cf-card.kpi .cf-kpi-stats {
+            display: flex; gap: 14px; flex-shrink: 0;
+        }
+        .cf-kpi-stat {
+            text-align: center;
+            background: var(--surface2); border: 1px solid var(--border);
+            border-radius: 10px; padding: 10px 16px;
+        }
+        .cf-kpi-stat .ks-val { font-family:'Bebas Neue',sans-serif; font-size:22px; color: var(--green); }
+        .cf-kpi-stat .ks-lbl { font-size:9px; letter-spacing:1px; text-transform:uppercase; color:var(--text-dim); }
+        .cf-card-hdr {
+            display: flex; align-items: center;
+            justify-content: space-between; width: 100%; margin-bottom: 2px;
+        }
+        .cf-card-icon { font-size: 28px; line-height: 1; }
+        .cf-badge-soon {
+            font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+            padding: 3px 8px; border-radius: 20px;
+            background: rgba(74,72,68,.3); color: var(--text-dim);
+            border: 1px solid var(--border);
+        }
+        .cf-card-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 20px; letter-spacing: 1.5px; color: var(--text); line-height: 1;
+        }
+        .cf-card-desc { font-size: 11px; color: var(--text-dim); line-height: 1.55; flex: 1; }
+        .cf-card-cta {
+            margin-top: 8px; font-size: 10px; letter-spacing: 1.5px;
+            text-transform: uppercase; color: var(--text-dim);
+        }
+        .cf-notice {
+            width: 100%; max-width: 960px;
+            margin-top: 8px;
+            padding: 14px 18px;
+            background: rgba(245,200,66,.06);
+            border: 1px solid rgba(245,200,66,.18);
+            border-radius: 10px;
+            font-size: 11px; color: var(--accent); letter-spacing: .3px;
+        }
+        @media (max-width: 640px) {
+            .cf-grid { grid-template-columns: 1fr; }
+            .cf-section-desc { display: none; }
+            .cf-card.kpi { flex-direction: column; }
+            .cf-card.kpi .cf-kpi-stats { flex-wrap: wrap; }
+        }
+        .theme-toggle {
+            position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);
+            border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;
+            font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);
+            display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;
+        }
+        .theme-toggle:hover{border-color:var(--green);color:var(--green);}
+    </style>
 </head>
 <body>
 
@@ -33,70 +181,123 @@
 </header>
 <div id="ctxBar" class="ctx-bar" style="display:none"></div>
 
-<div class="mod-landing-wrap">
-    <div class="mlanding-hero">
-        <div class="mlanding-hero-eyebrow">Módulo</div>
-        <div class="mlanding-hero-title">Salud<br><span class="g">Financiera</span></div>
-        <div class="mlanding-hero-sub">Ventas, gastos, previsiones, utilidades y KPI's — conecta tu operación con tus resultados.</div>
+<div class="cf-wrap">
+
+    <!-- HERO -->
+    <div class="cf-hero">
+        <div class="cf-hero-eyebrow">Módulo</div>
+        <div class="cf-hero-title">Salud<br><span class="g">Financiera</span></div>
+        <div class="cf-hero-sub">Ventas, gastos, previsiones, utilidades y KPI's — conecta tu operación con tus resultados.</div>
     </div>
 
-    <div class="mlanding-grid">
-        <div class="mlanding-card coming-soon">
-            <div class="mlanding-card-header">
-                <div class="mlanding-card-icon">📈</div>
-                <span class="mlanding-badge-soon">Próximamente</span>
-            </div>
-            <div class="mlanding-card-title">Registro de Ventas</div>
-            <div class="mlanding-card-desc">Ventas diarias, desglose por producto y turno.</div>
-        </div>
-        <div class="mlanding-card coming-soon">
-            <div class="mlanding-card-header">
-                <div class="mlanding-card-icon">💸</div>
-                <span class="mlanding-badge-soon">Próximamente</span>
-            </div>
-            <div class="mlanding-card-title">Control de Gastos</div>
-            <div class="mlanding-card-desc">Registro y categorización de egresos operativos.</div>
-        </div>
-        <div class="mlanding-card coming-soon">
-            <div class="mlanding-card-header">
-                <div class="mlanding-card-icon">🔮</div>
-                <span class="mlanding-badge-soon">Próximamente</span>
-            </div>
-            <div class="mlanding-card-title">Previsiones</div>
-            <div class="mlanding-card-desc">Proyecciones y análisis de tendencias financieras.</div>
-        </div>
-        <div class="mlanding-card coming-soon">
-            <div class="mlanding-card-header">
-                <div class="mlanding-card-icon">💹</div>
-                <span class="mlanding-badge-soon">Próximamente</span>
-            </div>
-            <div class="mlanding-card-title">Utilidades</div>
-            <div class="mlanding-card-desc">Reportes de rentabilidad y márgenes por período.</div>
-        </div>
-        <div class="mlanding-card coming-soon" style="grid-column:1/-1">
-            <div class="mlanding-card-header">
-                <div class="mlanding-card-icon">🎯</div>
-                <span class="mlanding-badge-soon">Próximamente</span>
-            </div>
-            <div class="mlanding-card-title">KPI's</div>
-            <div class="mlanding-card-desc">Indicadores clave de desempeño y tablero de control ejecutivo.</div>
-        </div>
-    </div>
+    <div class="cf-modules">
 
-    <div style="position:relative;z-index:1;margin-top:24px;max-width:720px;width:100%;padding:14px 18px;background:rgba(245,200,66,.06);border:1px solid rgba(245,200,66,.18);border-radius:10px;font-size:11px;color:var(--accent);letter-spacing:.3px">
+        <!-- ══ 1: CAPTURA OPERATIVA ══ -->
+        <div class="cf-section">
+            <div class="cf-section-hdr">
+                <span class="cf-section-tag">Registro diario</span>
+                <div class="cf-section-title">Captura Operativa</div>
+                <div class="cf-section-desc">Registro de ingresos y egresos del negocio por turno y período.</div>
+            </div>
+            <div class="cf-grid">
+                <div class="cf-card coming-soon">
+                    <div class="cf-card-hdr">
+                        <div class="cf-card-icon">📈</div>
+                        <span class="cf-badge-soon">Próximamente</span>
+                    </div>
+                    <div class="cf-card-title">Registro de Ventas</div>
+                    <div class="cf-card-desc">Captura de ventas diarias con desglose por producto, turno y sucursal. Historial semanal y mensual.</div>
+                    <div class="cf-card-cta">En desarrollo</div>
+                </div>
+                <div class="cf-card coming-soon">
+                    <div class="cf-card-hdr">
+                        <div class="cf-card-icon">💸</div>
+                        <span class="cf-badge-soon">Próximamente</span>
+                    </div>
+                    <div class="cf-card-title">Control de Gastos</div>
+                    <div class="cf-card-desc">Registro y categorización de egresos operativos: nómina, servicios, insumos y gastos varios.</div>
+                    <div class="cf-card-cta">En desarrollo</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ 2: ANÁLISIS Y PROYECCIONES ══ -->
+        <div class="cf-section">
+            <div class="cf-section-hdr">
+                <span class="cf-section-tag">Análisis</span>
+                <div class="cf-section-title">Resultados y Proyecciones</div>
+                <div class="cf-section-desc">Rentabilidad, márgenes y proyecciones basadas en datos históricos.</div>
+            </div>
+            <div class="cf-grid">
+                <div class="cf-card coming-soon">
+                    <div class="cf-card-hdr">
+                        <div class="cf-card-icon">🔮</div>
+                        <span class="cf-badge-soon">Próximamente</span>
+                    </div>
+                    <div class="cf-card-title">Previsiones</div>
+                    <div class="cf-card-desc">Proyecciones financieras y análisis de tendencias para anticipar escenarios de ingresos y costos.</div>
+                    <div class="cf-card-cta">En desarrollo</div>
+                </div>
+                <div class="cf-card coming-soon">
+                    <div class="cf-card-hdr">
+                        <div class="cf-card-icon">💹</div>
+                        <span class="cf-badge-soon">Próximamente</span>
+                    </div>
+                    <div class="cf-card-title">Utilidades</div>
+                    <div class="cf-card-desc">Reportes de rentabilidad, márgenes brutos y netos, y comparativa de períodos por sucursal.</div>
+                    <div class="cf-card-cta">En desarrollo</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ 3: KPIs ══ -->
+        <div class="cf-section">
+            <div class="cf-section-hdr">
+                <span class="cf-section-tag">Indicadores</span>
+                <div class="cf-section-title">KPIs Ejecutivos</div>
+                <div class="cf-section-desc">Tablero de control con los indicadores clave del negocio en tiempo real.</div>
+            </div>
+            <div class="cf-grid cf-grid-1">
+                <div class="cf-card kpi coming-soon">
+                    <div class="cf-card-icon">🎯</div>
+                    <div class="cf-kpi-info">
+                        <div class="cf-card-hdr" style="margin-bottom:4px">
+                            <div class="cf-card-title" style="font-size:24px">Dashboard de KPI's</div>
+                            <span class="cf-badge-soon">Próximamente</span>
+                        </div>
+                        <div class="cf-card-desc">
+                            Indicadores clave en tiempo real: margen bruto, costo de ventas, ticket promedio,
+                            rotación de inventario y relación gastos/ingresos. Cruza datos de todos los módulos.
+                        </div>
+                        <div class="cf-card-cta" style="margin-top:8px">En desarrollo — disponible pronto</div>
+                    </div>
+                    <div class="cf-kpi-stats">
+                        <div class="cf-kpi-stat">
+                            <div class="ks-val">—%</div>
+                            <div class="ks-lbl">Margen</div>
+                        </div>
+                        <div class="cf-kpi-stat">
+                            <div class="ks-val" style="color:var(--accent)">—%</div>
+                            <div class="ks-lbl">Costo venta</div>
+                        </div>
+                        <div class="cf-kpi-stat">
+                            <div class="ks-val" style="color:var(--text)">$—</div>
+                            <div class="ks-lbl">Ticket prom.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /cf-modules -->
+
+    <!-- Nota de integración -->
+    <div class="cf-notice">
         ⚡ Este módulo se conectará automáticamente con los datos de Recetas e Insumos y Control Administrativo.
     </div>
-</div>
 
-<style>
-.theme-toggle {
-    position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);
-    border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;
-    font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);
-    display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;
-}
-.theme-toggle:hover{border-color:var(--green);color:var(--green);}
-</style>
+</div><!-- /cf-wrap -->
+
 <button class="theme-toggle" onclick="toggleTheme()">
     <span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span>
 </button>

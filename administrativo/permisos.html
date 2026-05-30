@@ -80,6 +80,19 @@
 
 .theme-toggle{position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;}
 .theme-toggle:hover{border-color:var(--green);color:var(--green);}
+
+/* PIN gate — modal overlay, deja el top-bar y ctx-bar visibles */
+.pin-gate{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:8000;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px);}
+.pin-panel{background:var(--surface);border:1px solid rgba(245,200,66,.3);border-radius:16px;padding:36px 40px;width:100%;max-width:340px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.5);}
+.pin-lock-icon{font-size:44px;margin-bottom:12px;}
+.pin-title{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:2px;color:var(--text);margin-bottom:4px;}
+.pin-sub{font-size:12px;color:var(--text-dim);margin-bottom:24px;}
+.pin-input{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:13px;border-radius:8px;font-family:'Bebas Neue',sans-serif;font-size:32px;letter-spacing:8px;text-align:center;width:100%;box-sizing:border-box;outline:none;transition:border-color .2s;}
+.pin-input:focus{border-color:var(--accent);}
+.pin-error{color:var(--red);font-size:12px;min-height:18px;margin-top:8px;}
+.pin-btn{width:100%;margin-top:16px;background:var(--accent);border:none;color:#1a1916;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;padding:12px;border-radius:8px;cursor:pointer;transition:opacity .2s;}
+.pin-btn:hover{opacity:.88;}
+.pin-hint{margin-top:14px;font-size:10px;color:var(--text-dim);}
 </style>
 </head>
 <body>
@@ -95,7 +108,14 @@
         <path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/>
         <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
     </svg>
+    <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🏠</a>
+    <div class="top-breadcrumb">
+        <span class="top-module-badge">Financiero</span>
+        <span class="top-sep">|</span>
+        <span class="top-section-name">Permisos y Roles</span>
+    </div>
 </header>
+<div id="ctxBar" class="ctx-bar" style="display:none"></div>
 
 <div class="app-shell">
     <nav class="nav" id="nav">
@@ -109,14 +129,14 @@
         <div class="nav-section">
             <div class="nav-section-label">Admin</div>
             <a href="ventas.html" class="nav-link" data-tooltip="Captura Ventas"><span class="nav-icon">💰</span><span class="nav-text">Captura Ventas</span></a>
-            <a href="#" class="nav-link" data-tooltip="Captura Gastos" style="opacity:.4;pointer-events:none"><span class="nav-icon">📤</span><span class="nav-text">Captura Gastos</span></a>
+            <a href="gastos.html" class="nav-link" data-tooltip="Captura Gastos"><span class="nav-icon">📤</span><span class="nav-text">Captura Gastos</span></a>
         </div>
         <div class="nav-section">
             <div class="nav-section-label">Catálogos</div>
             <a href="staff.html" class="nav-link" data-tooltip="Staff"><span class="nav-icon">👥</span><span class="nav-text">Staff</span></a>
             <a href="permisos.html" class="nav-link active" data-tooltip="Permisos y Roles"><span class="nav-icon">🔐</span><span class="nav-text">Permisos y Roles</span></a>
             <a href="proveedores.html" class="nav-link" data-tooltip="Proveedores"><span class="nav-icon">🚚</span><span class="nav-text">Proveedores</span></a>
-            <a href="#" class="nav-link" data-tooltip="Clientes" style="opacity:.4;pointer-events:none"><span class="nav-icon">⭐</span><span class="nav-text">Clientes</span></a>
+            <a href="clientes.html" class="nav-link" data-tooltip="Clientes"><span class="nav-icon">⭐</span><span class="nav-text">Clientes</span></a>
         </div>
         <div class="nav-section">
             <div class="nav-section-label">Menús</div>
@@ -154,6 +174,21 @@
             <div class="permisos-grid" id="permisosGrid"></div>
         </div>
     </main>
+</div>
+
+<!-- PIN GATE -->
+<div class="pin-gate" id="pinGate">
+    <div class="pin-panel">
+        <div class="pin-lock-icon">🔐</div>
+        <div class="pin-title">Acceso restringido</div>
+        <div class="pin-sub">Ingresa el PIN de administrador para gestionar permisos y roles.</div>
+        <input type="password" class="pin-input" id="gatePin" maxlength="6" placeholder="••••"
+            oninput="this.value=this.value.replace(/\D/g,'')"
+            onkeydown="if(event.key==='Enter')verificarGate()">
+        <div class="pin-error" id="gateError"></div>
+        <button class="pin-btn" onclick="verificarGate()">Desbloquear →</button>
+        <div class="pin-hint">PIN por defecto: <strong>1234</strong> · Cámbialo en Configuración</div>
+    </div>
 </div>
 
 <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
@@ -352,7 +387,28 @@ function showToast(msg) {
     setTimeout(function(){ t.remove(); }, 2200);
 }
 
+/* ── PIN GATE ── */
+var PIN_KEY = 'etaax_admin_pin';
+function getPin(){ return localStorage.getItem(PIN_KEY) || '1234'; }
+
+function verificarGate() {
+    var pin = document.getElementById('gatePin').value;
+    if (pin === getPin()) {
+        document.getElementById('pinGate').style.display = 'none';
+        document.getElementById('gateError').textContent = '';
+        // Forzar ctx-bar visible si ya fue inicializado por ctx-bar.js
+        var cb = document.getElementById('ctxBar');
+        if (cb && cb.innerHTML.trim()) cb.style.display = 'flex';
+    } else {
+        document.getElementById('gateError').textContent = 'PIN incorrecto. Inténtalo de nuevo.';
+        document.getElementById('gatePin').value = '';
+        document.getElementById('gatePin').focus();
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async function(){
+    // Show PIN gate first; content loads in background
+    document.getElementById('gatePin').focus();
     await syncPermisos();
     renderTabs();
     renderGrid();
