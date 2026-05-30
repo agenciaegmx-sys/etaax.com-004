@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETAAX – Salud Financiera · Utilidades</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../styles.css">
+    <style>
+        /* Period tabs */
+        .period-tabs{display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:4px;}
+        .period-tab{background:transparent;border:none;color:var(--text-muted);padding:7px 16px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;transition:all .15s;white-space:nowrap;}
+        .period-tab.active{background:var(--surface);color:var(--green);font-weight:500;border:1px solid var(--border);}
+        .period-tab:hover:not(.active){color:var(--text);}
+
+        /* KPI Cards */
+        .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+        @media(max-width:900px){.kpi-grid{grid-template-columns:repeat(2,1fr);}}
+        .kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;position:relative;}
+        .kpi-card.highlight{border-color:rgba(61,190,122,.3);background:rgba(61,190,122,.03);}
+        .kpi-card.warn{border-color:rgba(245,200,66,.3);background:rgba(245,200,66,.03);}
+        .kpi-card.danger{border-color:rgba(224,90,58,.3);background:rgba(224,90,58,.03);}
+        .kpi-card.loss{border-color:rgba(224,90,58,.5);background:rgba(224,90,58,.06);}
+        .kpi-lbl{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px;}
+        .kpi-val{font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:1px;line-height:1;}
+        .kpi-sub{font-size:11px;color:var(--text-muted);margin-top:6px;}
+        .semaforo{position:absolute;top:14px;right:16px;font-size:20px;}
+
+        /* Sucursal */
+        .suc-wrap{position:relative;}
+        .suc-chip{background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);padding:6px 14px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer;transition:all .2s;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;}
+        .suc-chip:hover,.suc-chip.open{border-color:var(--green);color:var(--green);}
+        .suc-menu{position:absolute;top:calc(100% + 6px);left:0;background:var(--surface);border:1px solid var(--border);border-radius:10px;min-width:210px;padding:5px;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:2000;display:none;}
+        .suc-menu.open{display:block;}
+        .suc-opt{padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer;color:var(--text);transition:background .12s;}
+        .suc-opt:hover{background:var(--surface2);}
+        .suc-opt.active{color:var(--green);font-weight:600;}
+        .suc-sep{height:1px;background:var(--border);margin:4px 0;}
+
+        /* Main table */
+        .ut-table{width:100%;border-collapse:collapse;font-size:12px;}
+        .ut-table th{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);font-weight:500;padding:10px 14px;border-bottom:1px solid var(--border);white-space:nowrap;}
+        .ut-table th.ar,.ut-table td.ar{text-align:right;}
+        .ut-table td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle;font-variant-numeric:tabular-nums;}
+        .ut-table tr:last-child td{border-bottom:none;}
+        .ut-table tr:hover td{background:var(--surface2);}
+        .ut-table tfoot td{background:var(--surface2);font-weight:700;border-top:2px solid var(--border);border-bottom:none;}
+        .ut-table tfoot .tot-lbl{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);}
+        .ut-table tfoot .tot-val{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:.5px;}
+
+        /* Semáforo inline */
+        .sem-icon{font-size:16px;margin-right:4px;}
+        .sem-verde{color:var(--green);}
+        .sem-amarillo{color:var(--accent);}
+        .sem-rojo{color:var(--red);}
+        .sem-negro{color:#666;}
+
+        /* Margin bar */
+        .marg-bar{display:flex;align-items:center;gap:6px;}
+        .marg-track{width:60px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;flex-shrink:0;}
+        .marg-fill{height:100%;border-radius:3px;transition:width .3s;}
+        .marg-fill.verde{background:var(--green);}
+        .marg-fill.amarillo{background:var(--accent);}
+        .marg-fill.rojo{background:var(--red);}
+        .marg-fill.negro{background:#444;}
+
+        /* Leyenda semáforo */
+        .sem-leyenda{display:flex;gap:16px;font-size:11px;color:var(--text-dim);flex-wrap:wrap;}
+        .sem-item{display:flex;align-items:center;gap:5px;}
+
+        /* Period picker */
+        .period-picker{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+        .period-picker label{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);white-space:nowrap;}
+        .period-picker input{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;cursor:pointer;}
+        .period-picker input:focus{border-color:var(--green);}
+
+        /* Thresholds config */
+        .thresh-box{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-size:12px;}
+        .thresh-input{width:60px;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:12px;text-align:center;outline:none;}
+        .thresh-input:focus{border-color:var(--green);}
+
+        .empty-state{text-align:center;padding:48px 20px;color:var(--text-dim);}
+        .theme-toggle{position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;}
+        .theme-toggle:hover{border-color:var(--green);color:var(--green);}
+    </style>
+</head>
+<body>
+<header class="top-bar">
+    <svg width="108" height="26" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
+        <path d="M14.5 28H37C35.5 23 31.5 20 25.5 20C19.5 20 16 23 14.5 28Z" fill="#1a1916"/>
+        <circle cx="45" cy="11" r="6" fill="#f5c842"/>
+        <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
+        <path d="M78 41C78 34.5 83.5 30.5 92.5 29.5L104 28.5V27.5C104 23.5 101.5 21 97 21C93 21 90 23 89 26.5L80.5 24C82.5 17.5 89 13 97 13C107.5 13 113 18.5 113 28.5V54.5H104V51C102 53.5 98.5 55 94 55C85.5 55 78 50.5 78 41Z" fill="#3dbe7a"/>
+        <path d="M104 37L95.5 38C92.5 38.5 90.5 40 90.5 42.5C90.5 45 92.5 46.5 95.5 46.5C101 46.5 104 43.5 104 39V37Z" fill="#1a1916"/>
+        <path d="M126 41C126 34.5 131.5 30.5 140.5 29.5L152 28.5V27.5C152 23.5 149.5 21 145 21C141 21 138 23 137 26.5L128.5 24C130.5 17.5 137 13 145 13C155.5 13 161 18.5 161 28.5V54.5H152V51C150 53.5 146.5 55 142 55C133.5 55 126 50.5 126 41Z" fill="#3dbe7a"/>
+        <path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/>
+        <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+    </svg>
+    <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🏠</a>
+    <div class="top-breadcrumb">
+        <span class="top-module-badge">Financiero</span>
+        <span class="top-sep">|</span>
+        <span class="top-section-name">Utilidades</span>
+    </div>
+</header>
+<div id="ctxBar" class="ctx-bar" style="display:none"></div>
+
+<div class="app-shell">
+    <nav class="nav cerrado" id="nav">
+        <div class="nav-top">
+            <div class="nav-brand"><span class="nav-brand-sub">Salud Financiera</span></div>
+            <div class="nav-top-actions">
+                <a href="index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Panel Financiero" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1">🗃️</a>
+                <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
+            </div>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Ingresos</div>
+            <a href="ventas.html" class="nav-link" data-tooltip="Ventas Globales"><span class="nav-icon">💰</span><span class="nav-text">Ventas Globales</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Egresos</div>
+            <a href="gastos-globales.html" class="nav-link" data-tooltip="Gastos Globales"><span class="nav-icon">📤</span><span class="nav-text">Gastos Globales</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Análisis</div>
+            <a href="previsiones.html" class="nav-link" data-tooltip="Previsiones"><span class="nav-icon">🔮</span><span class="nav-text">Previsiones</span></a>
+            <a href="utilidades.html" class="nav-link active" data-tooltip="Utilidades"><span class="nav-icon">💹</span><span class="nav-text">Utilidades</span></a>
+        </div>
+    </nav>
+
+    <main class="main-content expandido" id="mainContent">
+        <div class="header">
+            <div class="brand">
+                <span class="brand-label">Salud Financiera</span>
+                <span class="brand-title">Utilidades</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <div class="suc-wrap">
+                    <button class="suc-chip" id="sucChip">🌐 Todas las sucursales ▾</button>
+                    <div class="suc-menu" id="sucMenu"></div>
+                </div>
+                <div class="period-tabs">
+                    <button class="period-tab" id="tabDia">Día</button>
+                    <button class="period-tab active" id="tabMes">Mes</button>
+                    <button class="period-tab" id="tabSemana">Semana</button>
+                    <button class="period-tab" id="tabRango">Rango</button>
+                </div>
+                <div class="period-picker">
+                    <label id="pickerLabel">Mes</label>
+                    <input type="month" id="pickerInput">
+                    <input type="date" id="pickerEnd" style="display:none">
+                </div>
+            </div>
+        </div>
+
+        <div class="wrap">
+
+            <!-- Umbrales del semáforo (configurables) -->
+            <div class="thresh-box">
+                <span style="font-weight:600;color:var(--text-muted)">Umbrales semáforo:</span>
+                <span>🟢 ≥ <input type="number" class="thresh-input" id="threshVerde" value="20" min="0" max="100">%</span>
+                <span>🟡 ≥ <input type="number" class="thresh-input" id="threshAmarillo" value="10" min="0" max="100">%</span>
+                <span>🔴 ≥ 0%</span>
+                <span>⚫ Pérdida</span>
+                <button class="suc-chip" id="btnApplyThresh" style="border-radius:6px;font-size:11px;padding:5px 12px">Aplicar</button>
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="kpi-grid" id="kpiGrid">
+                <div class="kpi-card" id="kpiVentasCard">
+                    <div class="kpi-lbl">Ingresos totales</div>
+                    <div class="kpi-val" id="kpiVentas" style="color:var(--green)">$0.00</div>
+                    <div class="kpi-sub" id="kpiVentasSub">Ventas + otros</div>
+                </div>
+                <div class="kpi-card danger" id="kpiCostosCard">
+                    <div class="kpi-lbl">Costos totales</div>
+                    <div class="kpi-val" id="kpiCostos" style="color:var(--red)">$0.00</div>
+                    <div class="kpi-sub">Fijos + Nóminas + Variables</div>
+                </div>
+                <div class="kpi-card" id="kpiUtilCard">
+                    <div class="semaforo" id="kpiSemaforo">—</div>
+                    <div class="kpi-lbl">Utilidad neta</div>
+                    <div class="kpi-val" id="kpiUtil">$0.00</div>
+                    <div class="kpi-sub" id="kpiUtilSub">—</div>
+                </div>
+                <div class="kpi-card" id="kpiMargenCard">
+                    <div class="kpi-lbl">Margen %</div>
+                    <div class="kpi-val" id="kpiMargen">—%</div>
+                    <div class="kpi-sub" id="kpiMargenSub">Sobre ingresos</div>
+                </div>
+            </div>
+
+            <!-- Leyenda -->
+            <div class="sem-leyenda" style="margin-bottom:16px">
+                <div class="sem-item">🟢 <span>Rentable (≥ umbral verde)</span></div>
+                <div class="sem-item">🟡 <span>Bajo margen (entre umbrales)</span></div>
+                <div class="sem-item">🔴 <span>Margen crítico (0–umbral amarillo)</span></div>
+                <div class="sem-item">⚫ <span>Pérdida operativa</span></div>
+            </div>
+
+            <!-- Tabla de períodos -->
+            <div class="card">
+                <div class="card-header" style="justify-content:space-between">
+                    <h2 id="tablaTitle">Detalle por período</h2>
+                    <span id="tablaSub" style="font-size:12px;color:var(--text-dim)"></span>
+                </div>
+                <div class="card-body" style="padding:0;overflow-x:auto">
+                    <table class="ut-table">
+                        <thead id="utThead"></thead>
+                        <tbody id="utTbody"></tbody>
+                        <tfoot id="utTfoot"></tfoot>
+                    </table>
+                    <div id="utEmpty" class="empty-state" style="display:none">
+                        <div style="font-size:32px;margin-bottom:10px">💹</div>
+                        <div>Sin datos de ventas en este período.<br>Registra cortes en <a href="../administrativo/ventas.html" style="color:var(--green)">Captura de Ventas</a> para ver tus utilidades.</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
+
+<script>
+(function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);document.addEventListener('DOMContentLoaded',function(){var ti=document.getElementById('themeIcon'),tl=document.getElementById('themeLabel');if(s==='light'){if(ti)ti.textContent='🌙';if(tl)tl.textContent='Modo oscuro';}});})();
+function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('etaax_theme',n);document.getElementById('themeIcon').textContent=n==='light'?'🌙':'☀️';document.getElementById('themeLabel').textContent=n==='light'?'Modo oscuro':'Modo claro';}
+function toggleNav(){var nav=document.getElementById('nav'),main=document.getElementById('mainContent');nav.classList.toggle('cerrado');if(main)main.classList.toggle('expandido');var c=nav.classList.contains('cerrado');var btn=document.getElementById('navToggleBtn'),txt=document.getElementById('navToggleTxt');if(btn)btn.childNodes[0].textContent=c?'▶':'◀';if(txt)txt.textContent=c?'Expandir':'Ocultar';if(btn)btn.setAttribute('data-tooltip',c?'Expandir':'Ocultar');}
+
+/* ── Data ── */
+var LS_CORTES   = 'etaax_cortes';
+var LS_OTROS    = 'etaax_sf_otros';
+var LS_GASTOS   = 'etaax_gastos';
+var LS_FIJOS    = 'etaax_gf_fijos';
+var LS_NOMINAS  = 'etaax_gf_nominas';
+
+function loadCortes(){try{return JSON.parse(localStorage.getItem(LS_CORTES))||[];}catch(e){return[];}}
+function loadOtros(){try{return JSON.parse(localStorage.getItem(LS_OTROS))||[];}catch(e){return[];}}
+function loadGastos(){try{return JSON.parse(localStorage.getItem(LS_GASTOS))||[];}catch(e){return[];}}
+function loadFijos(){try{return JSON.parse(localStorage.getItem(LS_FIJOS))||[];}catch(e){return[];}}
+function loadNominasMes(mes){
+    try{var all=JSON.parse(localStorage.getItem(LS_NOMINAS))||{};var d=all[mes]||{operativa:[],administrativa:[],socios:[]};var t=0;['operativa','administrativa','socios'].forEach(function(c){(d[c]||[]).forEach(function(p){t+=n(p.base)+n(p.bonos)+n(p.imss);});});return t;}
+    catch(e){return 0;}
+}
+
+/* ── Helpers ── */
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
+function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function n(v){return parseFloat(v)||0;}
+function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function flujoNeto(c){return(n(c.efectivo)-n(c.propEfectivo))+(n(c.tarjeta)-n(c.propTarjeta))+n(c.transferencia);}
+function daysInMonth(y,m){return new Date(y,m,0).getDate();}
+
+/* ── Sucursal ── */
+var _sucursalId=null;
+function _loadNegocios(){try{return JSON.parse(localStorage.getItem('etaax_negocios')||'[]');}catch(e){return[];}}
+function _renderSucMenu(){
+    var menu=document.getElementById('sucMenu');
+    var negs=_loadNegocios();
+    var html='<div class="suc-opt'+(!_sucursalId?' active':'')+'" data-suc="">🌐 Todas las sucursales</div>';
+    if(negs.length)html+='<div class="suc-sep"></div>';
+    negs.forEach(function(neg){html+='<div class="suc-opt'+(_sucursalId===neg.id?' active':'')+'" data-suc="'+_esc(neg.id)+'">'+(neg.emoji||'🏢')+' '+_esc(neg.nombre)+'</div>';});
+    menu.innerHTML=html;
+    menu.querySelectorAll('.suc-opt').forEach(function(el){
+        el.addEventListener('click',function(){
+            _sucursalId=el.dataset.suc||null;
+            var chip=document.getElementById('sucChip');
+            chip.textContent=(_sucursalId?(_loadNegocios().find(function(x){return x.id===_sucursalId;})||{nombre:'Sucursal'}).nombre:'🌐 Todas las sucursales')+' ▾';
+            menu.classList.remove('open'); chip.classList.remove('open'); renderAll();
+        });
+    });
+}
+
+/* ── Period state ── */
+var periodoTipo='mes';
+function _pickerVal(){return(document.getElementById('pickerInput')||{}).value||todayStr().slice(0,7);}
+function _pickerEnd(){return(document.getElementById('pickerEnd')||{}).value||todayStr();}
+
+function getRange(){
+    var val=_pickerVal(), end=_pickerEnd();
+    if(periodoTipo==='dia') return{from:val,to:val,tipo:'dia'};
+    if(periodoTipo==='mes'){
+        var y=parseInt(val.slice(0,4)),m=parseInt(val.slice(5,7));
+        return{from:val+'-01',to:new Date(y,m,0).toISOString().slice(0,10),mes:val,tipo:'mes'};
+    }
+    if(periodoTipo==='semana'){
+        var p=val.split('-W'),yr=parseInt(p[0]),wk=parseInt(p[1]);
+        var j4=new Date(yr,0,4),ws=new Date(j4.getTime()+(wk-1)*7*86400000);
+        ws.setDate(ws.getDate()-(ws.getDay()||7)+1);
+        var we=new Date(ws); we.setDate(ws.getDate()+6);
+        return{from:ws.toISOString().slice(0,10),to:we.toISOString().slice(0,10),tipo:'semana'};
+    }
+    return{from:val,to:end,tipo:'rango'};
+}
+function inRange(f,r){return f>=r.from&&f<=r.to;}
+
+/* ── Thresholds ── */
+function getThresh(){
+    return{verde:n(document.getElementById('threshVerde').value)||20,amarillo:n(document.getElementById('threshAmarillo').value)||10};
+}
+function semaforo(pct,thresh){
+    if(pct===null||pct===undefined) return{icon:'⚫',cls:'negro',label:'Sin datos'};
+    if(pct<0) return{icon:'⚫',cls:'negro',label:'Pérdida'};
+    if(pct<thresh.amarillo) return{icon:'🔴',cls:'rojo',label:'Crítico'};
+    if(pct<thresh.verde) return{icon:'🟡',cls:'amarillo',label:'Bajo margen'};
+    return{icon:'🟢',cls:'verde',label:'Rentable'};
+}
+
+/* ── Cost calculator for a date range ── */
+function calcCostos(r){
+    // Variable: gastos in range
+    var gastos=loadGastos().filter(function(g){
+        if(!inRange(g.fecha,r)) return false;
+        if(_sucursalId&&g.negocioId&&g.negocioId!==_sucursalId) return false;
+        return true;
+    });
+    var varCost=gastos.reduce(function(s,g){return s+n(g.monto);},0);
+
+    // Fixed costs: pro-rate by days
+    var fijos=loadFijos();
+    var totalFijoMensual=fijos.reduce(function(s,f){return s+n(f.monto);},0);
+
+    // Count days in range
+    var dFrom=new Date(r.from+'T12:00:00'),dTo=new Date(r.to+'T12:00:00');
+    var rangeDays=Math.max(1,Math.round((dTo-dFrom)/86400000)+1);
+
+    // Days in the month(s) covered — use first month
+    var mesR=r.from.slice(0,7);
+    var y=parseInt(mesR.slice(0,4)),m=parseInt(mesR.slice(5,7));
+    var diasMes=daysInMonth(y,m);
+
+    var fixedPortion=(totalFijoMensual/diasMes)*rangeDays;
+
+    // Nominas pro-rate
+    var nomMensual=loadNominasMes(mesR);
+    var nomPortion=(nomMensual/diasMes)*rangeDays;
+
+    return{variable:varCost,fijo:fixedPortion,nomina:nomPortion,total:varCost+fixedPortion+nomPortion};
+}
+
+/* ── Income for a range ── */
+function calcIngresos(r){
+    var cortes=loadCortes().filter(function(c){
+        if(!inRange(c.fecha,r)) return false;
+        if(_sucursalId&&c.negocioId&&c.negocioId!==_sucursalId) return false;
+        return true;
+    });
+    var ventas=cortes.reduce(function(s,c){return s+flujoNeto(c);},0);
+    var otros=loadOtros().filter(function(o){return inRange(o.fecha,r);}).reduce(function(s,o){return s+n(o.monto);},0);
+    return ventas+otros;
+}
+
+/* ── Build list of periods to show in table ── */
+function buildPeriods(r){
+    var periods=[];
+    if(r.tipo==='dia'||r.tipo==='rango'){
+        var cur=new Date(r.from+'T12:00:00'),end=new Date(r.to+'T12:00:00');
+        while(cur<=end){
+            var f=cur.toISOString().slice(0,10);
+            periods.push({label:f,from:f,to:f});
+            cur.setDate(cur.getDate()+1);
+        }
+    } else if(r.tipo==='semana'){
+        // Show by day within the week
+        var cur=new Date(r.from+'T12:00:00'),end=new Date(r.to+'T12:00:00');
+        var DOW=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+        while(cur<=end){
+            var f=cur.toISOString().slice(0,10);
+            periods.push({label:DOW[cur.getDay()]+' '+f.slice(8),from:f,to:f});
+            cur.setDate(cur.getDate()+1);
+        }
+    } else if(r.tipo==='mes'){
+        // Show by day within the month
+        var y=parseInt(r.mes.slice(0,4)),m=parseInt(r.mes.slice(5,7));
+        var dias=daysInMonth(y,m);
+        var DOW=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+        for(var i=1;i<=dias;i++){
+            var f=r.mes+'-'+String(i).padStart(2,'0');
+            var dow=new Date(y,m-1,i).getDay();
+            periods.push({label:DOW[dow]+' '+i,from:f,to:f});
+        }
+    }
+    return periods;
+}
+
+/* ── RENDER ── */
+function renderAll(){
+    var r=getRange();
+    var thresh=getThresh();
+
+    // Overall KPIs
+    var totalIngresos=calcIngresos(r);
+    var totalCostos=calcCostos(r).total;
+    var utilidad=totalIngresos-totalCostos;
+    var margen=totalIngresos>0?(utilidad/totalIngresos)*100:null;
+    var sem=semaforo(margen,thresh);
+
+    document.getElementById('kpiVentas').textContent=fmtM(totalIngresos);
+    document.getElementById('kpiVentas').style.color='var(--green)';
+    document.getElementById('kpiCostos').textContent=fmtM(totalCostos);
+    document.getElementById('kpiUtil').textContent=fmtM(utilidad);
+    document.getElementById('kpiUtil').style.color=utilidad>=0?'var(--green)':'var(--red)';
+    document.getElementById('kpiUtilSub').textContent=utilidad>=0?'✅ Positivo':'⚠️ Negativo';
+    document.getElementById('kpiSemaforo').textContent=sem.icon;
+    document.getElementById('kpiMargen').textContent=margen!==null?margen.toFixed(1)+'%':'—%';
+    document.getElementById('kpiMargen').style.color=sem.cls==='verde'?'var(--green)':sem.cls==='amarillo'?'var(--accent)':'var(--red)';
+    document.getElementById('kpiMargenSub').textContent=sem.label;
+
+    var utCard=document.getElementById('kpiUtilCard');
+    utCard.className='kpi-card '+(sem.cls==='verde'?'highlight':sem.cls==='amarillo'?'warn':'danger');
+    var mgCard=document.getElementById('kpiMargenCard');
+    mgCard.className='kpi-card '+(sem.cls==='verde'?'highlight':sem.cls==='amarillo'?'warn':'danger');
+
+    // Table
+    var periods=buildPeriods(r);
+    var thead=document.getElementById('utThead');
+    var tbody=document.getElementById('utTbody');
+    var tfoot=document.getElementById('utTfoot');
+    var empty=document.getElementById('utEmpty');
+
+    // Filter periods with data
+    var dataRows=periods.map(function(p){
+        var pr={from:p.from,to:p.to,tipo:'dia'};
+        var ing=calcIngresos(pr);
+        var cost=calcCostos(pr);
+        var ut=ing-cost.total;
+        var mg=ing>0?(ut/ing)*100:null;
+        return{label:p.label,from:p.from,ing:ing,cost:cost.total,ut:ut,mg:mg};
+    }).filter(function(row){return row.ing>0||row.cost>0;});
+
+    if(!dataRows.length){
+        thead.innerHTML=''; tbody.innerHTML=''; tfoot.innerHTML='';
+        empty.style.display='block';
+        document.getElementById('tablaSub').textContent='';
+        return;
+    }
+    empty.style.display='none';
+    document.getElementById('tablaSub').textContent=dataRows.length+' días con datos';
+
+    thead.innerHTML='<tr>'
+        +'<th>Período</th>'
+        +'<th class="ar">Ingresos</th>'
+        +'<th class="ar">Costos</th>'
+        +'<th class="ar">Utilidad $</th>'
+        +'<th class="ar">Margen %</th>'
+        +'<th>Semáforo</th>'
+        +'</tr>';
+
+    var tV=0,tC=0;
+    tbody.innerHTML=dataRows.map(function(row){
+        var sem=semaforo(row.mg,thresh);
+        var mgPct=row.mg!==null?Math.min(100,Math.max(0,row.mg)):0;
+        tV+=row.ing; tC+=row.cost;
+        return'<tr>'
+            +'<td style="font-size:11px;white-space:nowrap;color:var(--text-muted)">'+row.label+'</td>'
+            +'<td class="ar" style="color:var(--green);font-weight:500">'+fmtM(row.ing)+'</td>'
+            +'<td class="ar" style="color:var(--red)">'+fmtM(row.cost)+'</td>'
+            +'<td class="ar" style="font-weight:700;color:'+(row.ut>=0?'var(--green)':'var(--red)')+'">'+fmtM(row.ut)+'</td>'
+            +'<td class="ar"><div class="marg-bar" style="justify-content:flex-end">'
+            +'<span style="font-size:11px;color:var(--text-muted);min-width:38px;text-align:right">'+(row.mg!==null?row.mg.toFixed(1)+'%':'—')+'</span>'
+            +'<div class="marg-track"><div class="marg-fill '+sem.cls+'" style="width:'+mgPct+'%"></div></div>'
+            +'</div></td>'
+            +'<td><span style="font-size:16px" title="'+sem.label+'">'+sem.icon+'</span></td>'
+            +'</tr>';
+    }).join('');
+
+    var tUt=tV-tC, tMg=tV>0?(tUt/tV)*100:null;
+    var tSem=semaforo(tMg,thresh);
+    tfoot.innerHTML='<tr>'
+        +'<td class="tot-lbl">Total período</td>'
+        +'<td class="ar"><span class="tot-val" style="color:var(--green)">'+fmtM(tV)+'</span></td>'
+        +'<td class="ar"><span class="tot-val" style="color:var(--red)">'+fmtM(tC)+'</span></td>'
+        +'<td class="ar"><span class="tot-val" style="color:'+(tUt>=0?'var(--green)':'var(--red)')+'">'+fmtM(tUt)+'</span></td>'
+        +'<td class="ar"><span class="tot-val" style="color:'+(tMg!==null&&tMg>=thresh.verde?'var(--green)':tMg!==null&&tMg>=thresh.amarillo?'var(--accent)':'var(--red)')+'">'+( tMg!==null?tMg.toFixed(1)+'%':'—')+'</span></td>'
+        +'<td><span style="font-size:20px">'+tSem.icon+'</span></td>'
+        +'</tr>';
+}
+
+function _setPeriod(tipo,btn){
+    periodoTipo=tipo;
+    document.querySelectorAll('.period-tab').forEach(function(b){b.classList.remove('active');});
+    if(btn)btn.classList.add('active');
+    var pi=document.getElementById('pickerInput'),pe=document.getElementById('pickerEnd'),pl=document.getElementById('pickerLabel');
+    if(tipo==='dia'){pi.type='date';pe.style.display='none';pl.textContent='Fecha';pi.value=todayStr();}
+    else if(tipo==='semana'){pi.type='week';pe.style.display='none';pl.textContent='Semana';}
+    else if(tipo==='mes'){pi.type='month';pe.style.display='none';pl.textContent='Mes';pi.value=todayStr().slice(0,7);}
+    else{pi.type='date';pe.style.display='';pl.textContent='Desde';pi.value=todayStr().slice(0,8)+'01';pe.value=todayStr();}
+    renderAll();
+}
+
+document.addEventListener('DOMContentLoaded',function(){
+    document.getElementById('pickerInput').value=todayStr().slice(0,7);
+    document.getElementById('pickerInput').addEventListener('change',renderAll);
+    document.getElementById('pickerEnd').addEventListener('change',renderAll);
+
+    // Period tabs
+    var tabs={tabDia:'dia',tabMes:'mes',tabSemana:'semana',tabRango:'rango'};
+    Object.keys(tabs).forEach(function(id){
+        var btn=document.getElementById(id);
+        if(btn)btn.addEventListener('click',function(){_setPeriod(tabs[id],btn);});
+    });
+
+    // Sucursal
+    var chip=document.getElementById('sucChip');
+    chip.addEventListener('click',function(e){e.stopPropagation();_renderSucMenu();var menu=document.getElementById('sucMenu');menu.classList.toggle('open');chip.classList.toggle('open');});
+    document.addEventListener('click',function(e){if(!e.target.closest('#sucMenu')&&!e.target.closest('#sucChip')){var m=document.getElementById('sucMenu');if(m)m.classList.remove('open');chip.classList.remove('open');}});
+
+    // Thresholds
+    document.getElementById('btnApplyThresh').addEventListener('click',renderAll);
+
+    renderAll();
+});
+</script>
+<script src="../ctx-bar.js"></script>
+</body>
+</html>

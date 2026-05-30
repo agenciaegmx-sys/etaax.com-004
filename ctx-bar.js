@@ -33,6 +33,8 @@
     }
 
     document.addEventListener('DOMContentLoaded', initCtxBar);
+    // Expose so pages with PIN gates can re-call after unlock
+    window._ctxBarInit = initCtxBar;
 })();
 
 function ctxSalir() {

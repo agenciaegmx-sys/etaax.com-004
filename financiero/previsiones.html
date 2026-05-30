@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETAAX – Salud Financiera · Previsiones</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../styles.css">
+    <style>
+        /* KPI Cards */
+        .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+        @media(max-width:900px){.kpi-grid{grid-template-columns:repeat(2,1fr);}}
+        .kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;}
+        .kpi-card.highlight{border-color:rgba(61,190,122,.3);background:rgba(61,190,122,.03);}
+        .kpi-card.warn{border-color:rgba(245,200,66,.3);background:rgba(245,200,66,.03);}
+        .kpi-card.danger{border-color:rgba(224,90,58,.3);background:rgba(224,90,58,.03);}
+        .kpi-lbl{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px;}
+        .kpi-val{font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:1px;color:var(--accent);line-height:1;}
+        .kpi-sub{font-size:11px;color:var(--text-muted);margin-top:6px;}
+
+        /* Sucursal */
+        .suc-wrap{position:relative;}
+        .suc-chip{background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);padding:6px 14px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer;transition:all .2s;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;}
+        .suc-chip:hover,.suc-chip.open{border-color:var(--green);color:var(--green);}
+        .suc-menu{position:absolute;top:calc(100% + 6px);left:0;background:var(--surface);border:1px solid var(--border);border-radius:10px;min-width:210px;padding:5px;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:2000;display:none;}
+        .suc-menu.open{display:block;}
+        .suc-opt{padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer;color:var(--text);transition:background .12s;}
+        .suc-opt:hover{background:var(--surface2);}
+        .suc-opt.active{color:var(--green);font-weight:600;}
+        .suc-sep{height:1px;background:var(--border);margin:4px 0;}
+
+        /* Table */
+        .prev-table{width:100%;border-collapse:collapse;font-size:12px;}
+        .prev-table th{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);font-weight:500;padding:10px 14px;border-bottom:1px solid var(--border);white-space:nowrap;}
+        .prev-table td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
+        .prev-table tr:last-child td{border-bottom:none;}
+        .prev-table tr:hover td{background:var(--surface2);}
+
+        /* Estado badges */
+        .est-badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:600;letter-spacing:.5px;}
+        .est-pendiente{background:rgba(74,72,68,.25);color:var(--text-muted);border:1px solid var(--border);}
+        .est-en_curso{background:rgba(245,200,66,.12);color:var(--accent);border:1px solid rgba(245,200,66,.3);}
+        .est-cumplida{background:rgba(61,190,122,.1);color:var(--green);border:1px solid rgba(61,190,122,.3);}
+        .est-cancelada{background:rgba(224,90,58,.08);color:var(--red);border:1px solid rgba(224,90,58,.25);}
+
+        /* Tipo badges */
+        .tipo-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);}
+
+        /* Progress bar */
+        .prog-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;width:80px;}
+        .prog-fill{height:100%;border-radius:3px;background:var(--green);transition:width .3s;}
+        .prog-fill.warn{background:var(--accent);}
+        .prog-fill.over{background:var(--red);}
+
+        /* Buttons */
+        .btn-primary{background:var(--green);border:none;color:#fff;padding:9px 18px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:opacity .2s;white-space:nowrap;}
+        .btn-primary:hover{opacity:.85;}
+        .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text-muted);padding:8px 16px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;transition:all .2s;}
+        .btn-ghost:hover{border-color:var(--border2);color:var(--text);}
+        .btn-row{background:transparent;border:1px solid var(--border);color:var(--text-dim);padding:3px 9px;border-radius:4px;font-size:11px;cursor:pointer;transition:all .15s;}
+        .btn-row:hover{border-color:var(--green);color:var(--green);}
+        .btn-row.del:hover{border-color:var(--red);color:var(--red);}
+
+        /* Filtros */
+        .filter-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px;}
+        .filter-chip{background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);padding:5px 12px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap;}
+        .filter-chip.active{border-color:var(--accent);color:var(--accent);background:rgba(245,200,66,.08);}
+        .filter-chip:hover:not(.active){color:var(--text);}
+
+        /* Modal */
+        .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9000;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;}
+        .modal-overlay.open{display:flex;}
+        .modal-pv{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:560px;box-shadow:0 24px 60px rgba(0,0,0,.5);}
+        .modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--border);}
+        .modal-header h2{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1.5px;color:var(--text);}
+        .modal-close{background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:6px;}
+        .modal-close:hover{color:var(--text);}
+        .modal-body{padding:20px 24px;display:flex;flex-direction:column;gap:14px;}
+        .modal-footer{display:flex;justify-content:flex-end;gap:10px;padding:16px 24px;border-top:1px solid var(--border);}
+        .fg{display:flex;flex-direction:column;gap:4px;}
+        .fg label{font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:var(--text-dim);}
+        .fg input,.fg select,.fg textarea{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;width:100%;box-sizing:border-box;transition:border-color .15s;}
+        .fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--green);}
+        .fg-row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+        .fg-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+        @media(max-width:520px){.fg-row-2,.fg-row-3{grid-template-columns:1fr;}}
+
+        .empty-state{text-align:center;padding:48px 20px;color:var(--text-dim);}
+        .theme-toggle{position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;}
+        .theme-toggle:hover{border-color:var(--green);color:var(--green);}
+    </style>
+</head>
+<body>
+<header class="top-bar">
+    <svg width="108" height="26" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
+        <path d="M14.5 28H37C35.5 23 31.5 20 25.5 20C19.5 20 16 23 14.5 28Z" fill="#1a1916"/>
+        <circle cx="45" cy="11" r="6" fill="#f5c842"/>
+        <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
+        <path d="M78 41C78 34.5 83.5 30.5 92.5 29.5L104 28.5V27.5C104 23.5 101.5 21 97 21C93 21 90 23 89 26.5L80.5 24C82.5 17.5 89 13 97 13C107.5 13 113 18.5 113 28.5V54.5H104V51C102 53.5 98.5 55 94 55C85.5 55 78 50.5 78 41Z" fill="#3dbe7a"/>
+        <path d="M104 37L95.5 38C92.5 38.5 90.5 40 90.5 42.5C90.5 45 92.5 46.5 95.5 46.5C101 46.5 104 43.5 104 39V37Z" fill="#1a1916"/>
+        <path d="M126 41C126 34.5 131.5 30.5 140.5 29.5L152 28.5V27.5C152 23.5 149.5 21 145 21C141 21 138 23 137 26.5L128.5 24C130.5 17.5 137 13 145 13C155.5 13 161 18.5 161 28.5V54.5H152V51C150 53.5 146.5 55 142 55C133.5 55 126 50.5 126 41Z" fill="#3dbe7a"/>
+        <path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/>
+        <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+    </svg>
+    <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🏠</a>
+    <div class="top-breadcrumb">
+        <span class="top-module-badge">Financiero</span>
+        <span class="top-sep">|</span>
+        <span class="top-section-name">Previsiones</span>
+    </div>
+</header>
+<div id="ctxBar" class="ctx-bar" style="display:none"></div>
+
+<div class="app-shell">
+    <nav class="nav cerrado" id="nav">
+        <div class="nav-top">
+            <div class="nav-brand"><span class="nav-brand-sub">Salud Financiera</span></div>
+            <div class="nav-top-actions">
+                <a href="index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Panel Financiero" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1">🗃️</a>
+                <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
+            </div>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Ingresos</div>
+            <a href="ventas.html" class="nav-link" data-tooltip="Ventas Globales"><span class="nav-icon">💰</span><span class="nav-text">Ventas Globales</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Egresos</div>
+            <a href="gastos-globales.html" class="nav-link" data-tooltip="Gastos Globales"><span class="nav-icon">📤</span><span class="nav-text">Gastos Globales</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Análisis</div>
+            <a href="previsiones.html" class="nav-link active" data-tooltip="Previsiones"><span class="nav-icon">🔮</span><span class="nav-text">Previsiones</span></a>
+            <a href="utilidades.html" class="nav-link" data-tooltip="Utilidades"><span class="nav-icon">💹</span><span class="nav-text">Utilidades</span></a>
+        </div>
+    </nav>
+
+    <main class="main-content expandido" id="mainContent">
+        <div class="header">
+            <div class="brand">
+                <span class="brand-label">Salud Financiera</span>
+                <span class="brand-title">Previsiones</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <div class="suc-wrap">
+                    <button class="suc-chip" id="sucChip">🌐 Todas las sucursales ▾</button>
+                    <div class="suc-menu" id="sucMenu"></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                    <label style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim)">Mes</label>
+                    <input type="month" id="mesInput" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;">
+                </div>
+                <button class="btn-primary" id="btnAddPrev">+ Nueva previsión</button>
+            </div>
+        </div>
+
+        <div class="wrap">
+
+            <!-- KPIs -->
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-lbl">Total previsto</div>
+                    <div class="kpi-val" id="kpiTotal">$0.00</div>
+                    <div class="kpi-sub" id="kpiCount">0 previsiones</div>
+                </div>
+                <div class="kpi-card warn">
+                    <div class="kpi-lbl">Pendientes</div>
+                    <div class="kpi-val" id="kpiPendientes" style="color:var(--text-muted)">0</div>
+                    <div class="kpi-sub" id="kpiPendientesMonto">—</div>
+                </div>
+                <div class="kpi-card highlight">
+                    <div class="kpi-lbl">En curso</div>
+                    <div class="kpi-val" id="kpiEnCurso" style="color:var(--green)">0</div>
+                    <div class="kpi-sub" id="kpiEnCursoMonto">—</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-lbl">Cumplidas</div>
+                    <div class="kpi-val" id="kpiCumplidas" style="color:var(--text-muted)">0</div>
+                    <div class="kpi-sub" id="kpiCumplidasMonto">—</div>
+                </div>
+            </div>
+
+            <!-- Filtros de estado -->
+            <div class="filter-bar">
+                <span style="font-size:11px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase">Filtrar:</span>
+                <button class="filter-chip active" data-estado="">Todas</button>
+                <button class="filter-chip" data-estado="pendiente">⏳ Pendiente</button>
+                <button class="filter-chip" data-estado="en_curso">🔄 En curso</button>
+                <button class="filter-chip" data-estado="cumplida">✅ Cumplida</button>
+                <button class="filter-chip" data-estado="cancelada">❌ Cancelada</button>
+            </div>
+
+            <!-- Tabla -->
+            <div class="card">
+                <div class="card-body" style="padding:0;overflow-x:auto">
+                    <table class="prev-table">
+                        <thead>
+                            <tr>
+                                <th>Concepto</th>
+                                <th>Tipo</th>
+                                <th>Sucursal</th>
+                                <th style="text-align:right">Monto est.</th>
+                                <th>Período</th>
+                                <th style="text-align:right">T. Acumulado</th>
+                                <th>Estado</th>
+                                <th>Progreso</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="prevTbody"></tbody>
+                    </table>
+                    <div id="prevEmpty" class="empty-state" style="display:none">
+                        <div style="font-size:32px;margin-bottom:10px">🔮</div>
+                        <div>Sin previsiones registradas para este período.<br>Agrega una nueva previsión para comenzar a planificar.</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalPrev">
+    <div class="modal-pv">
+        <div class="modal-header">
+            <h2 id="modalTitle">🔮 Nueva Previsión</h2>
+            <button class="modal-close" id="btnCerrarPrev">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="fg">
+                <label>Concepto</label>
+                <input type="text" id="pvConcepto" placeholder="Ej: Renovación cocina, Campaña marketing…">
+            </div>
+            <div class="fg-row-2">
+                <div class="fg">
+                    <label>Tipo de previsión</label>
+                    <select id="pvTipo">
+                        <option value="Inversión">💼 Inversión</option>
+                        <option value="Gasto">📤 Gasto planificado</option>
+                        <option value="Ingreso">💰 Ingreso esperado</option>
+                        <option value="Mantenimiento">🔧 Mantenimiento</option>
+                        <option value="Evento">🎯 Evento</option>
+                        <option value="Otro">📋 Otro</option>
+                    </select>
+                </div>
+                <div class="fg">
+                    <label>Monto estimado ($)</label>
+                    <input type="number" id="pvMonto" min="0" step="100" placeholder="0.00">
+                </div>
+            </div>
+            <div class="fg-row-2">
+                <div class="fg">
+                    <label>Fecha inicio</label>
+                    <input type="date" id="pvFechaInicio">
+                </div>
+                <div class="fg">
+                    <label>Fecha fin</label>
+                    <input type="date" id="pvFechaFin">
+                </div>
+            </div>
+            <div class="fg-row-2">
+                <div class="fg">
+                    <label>Tiempo acumulado (meses)</label>
+                    <input type="number" id="pvTiempo" min="1" max="120" step="1" placeholder="1">
+                </div>
+                <div class="fg">
+                    <label>Estado</label>
+                    <select id="pvEstado">
+                        <option value="pendiente">⏳ Pendiente</option>
+                        <option value="en_curso">🔄 En curso</option>
+                        <option value="cumplida">✅ Cumplida</option>
+                        <option value="cancelada">❌ Cancelada</option>
+                    </select>
+                </div>
+            </div>
+            <div class="fg">
+                <label>Sucursal</label>
+                <select id="pvSucursal">
+                    <option value="">🌐 Todas las sucursales</option>
+                </select>
+            </div>
+            <div class="fg">
+                <label>Notas (opcional)</label>
+                <textarea id="pvNotas" rows="2" placeholder="Observaciones, detalles adicionales…" style="resize:vertical"></textarea>
+            </div>
+            <input type="hidden" id="pvId">
+        </div>
+        <div class="modal-footer">
+            <button class="btn-ghost" id="btnCancelarPrev">Cancelar</button>
+            <button class="btn-primary" id="btnGuardarPrev">Guardar previsión</button>
+        </div>
+    </div>
+</div>
+
+<button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
+
+<script>
+(function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);document.addEventListener('DOMContentLoaded',function(){var ti=document.getElementById('themeIcon'),tl=document.getElementById('themeLabel');if(s==='light'){if(ti)ti.textContent='🌙';if(tl)tl.textContent='Modo oscuro';}});})();
+function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('etaax_theme',n);document.getElementById('themeIcon').textContent=n==='light'?'🌙':'☀️';document.getElementById('themeLabel').textContent=n==='light'?'Modo oscuro':'Modo claro';}
+function toggleNav(){var nav=document.getElementById('nav'),main=document.getElementById('mainContent');nav.classList.toggle('cerrado');if(main)main.classList.toggle('expandido');var c=nav.classList.contains('cerrado');var btn=document.getElementById('navToggleBtn'),txt=document.getElementById('navToggleTxt');if(btn)btn.childNodes[0].textContent=c?'▶':'◀';if(txt)txt.textContent=c?'Expandir':'Ocultar';if(btn)btn.setAttribute('data-tooltip',c?'Expandir':'Ocultar');}
+
+var LS_KEY = 'etaax_previsiones';
+function loadAll(){try{return JSON.parse(localStorage.getItem(LS_KEY))||[];}catch(e){return[];}}
+function saveAll(d){localStorage.setItem(LS_KEY,JSON.stringify(d));}
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
+function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function mesStr(){return todayStr().slice(0,7);}
+function n(v){return parseFloat(v)||0;}
+function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+/* Sucursal */
+var _sucursalId=null;
+function _loadNegocios(){try{return JSON.parse(localStorage.getItem('etaax_negocios')||'[]');}catch(e){return[];}}
+function _negLabel(id){if(!id)return'🌐 Todas';var neg=_loadNegocios().find(function(n){return n.id===id;});return neg?(neg.emoji||'🏢')+' '+neg.nombre:'Sucursal';}
+function _renderSucMenu(){
+    var menu=document.getElementById('sucMenu');
+    var negs=_loadNegocios();
+    var html='<div class="suc-opt'+(!_sucursalId?' active':'')+'" data-suc="">🌐 Todas las sucursales</div>';
+    if(negs.length)html+='<div class="suc-sep"></div>';
+    negs.forEach(function(neg){html+='<div class="suc-opt'+(_sucursalId===neg.id?' active':'')+'" data-suc="'+_esc(neg.id)+'">'+(neg.emoji||'🏢')+' '+_esc(neg.nombre)+'</div>';});
+    menu.innerHTML=html;
+    menu.querySelectorAll('.suc-opt').forEach(function(el){
+        el.addEventListener('click',function(){
+            _sucursalId=el.dataset.suc||null;
+            document.getElementById('sucChip').textContent=_negLabel(_sucursalId)+' ▾';
+            menu.classList.remove('open');
+            document.getElementById('sucChip').classList.remove('open');
+            renderAll();
+        });
+    });
+}
+
+/* Filtro estado */
+var _filtroEstado='';
+
+/* Helpers */
+function progPct(p){
+    if(!p.fechaInicio||!p.fechaFin) return 0;
+    var hoy=new Date(),ini=new Date(p.fechaInicio),fin=new Date(p.fechaFin);
+    if(hoy<=ini) return 0;
+    if(hoy>=fin) return 100;
+    return Math.round((hoy-ini)/(fin-ini)*100);
+}
+
+/* Render */
+function renderAll(){
+    var mes=document.getElementById('mesInput').value||mesStr();
+    var lista=loadAll().filter(function(p){
+        if(_sucursalId&&p.sucursalId&&p.sucursalId!==_sucursalId) return false;
+        if(_filtroEstado&&p.estado!==_filtroEstado) return false;
+        // Show if date range overlaps with selected month
+        var mesStart=mes+'-01';
+        var y=parseInt(mes.slice(0,4)),m=parseInt(mes.slice(5,7));
+        var mesEnd=new Date(y,m,0).toISOString().slice(0,10);
+        if(p.fechaInicio&&p.fechaFin) return p.fechaInicio<=mesEnd&&p.fechaFin>=mesStart;
+        if(p.fechaInicio) return p.fechaInicio.slice(0,7)===mes;
+        return true;
+    });
+
+    // KPIs
+    var total=lista.reduce(function(s,p){return s+n(p.montoEstimado);},0);
+    var byEst={pendiente:[],en_curso:[],cumplida:[],cancelada:[]};
+    lista.forEach(function(p){if(byEst[p.estado])byEst[p.estado].push(p);});
+    document.getElementById('kpiTotal').textContent=fmtM(total);
+    document.getElementById('kpiCount').textContent=lista.length+' previsión'+(lista.length!==1?'es':'');
+    document.getElementById('kpiPendientes').textContent=byEst.pendiente.length;
+    document.getElementById('kpiPendientesMonto').textContent=fmtM(byEst.pendiente.reduce(function(s,p){return s+n(p.montoEstimado);},0));
+    document.getElementById('kpiEnCurso').textContent=byEst.en_curso.length;
+    document.getElementById('kpiEnCursoMonto').textContent=fmtM(byEst.en_curso.reduce(function(s,p){return s+n(p.montoEstimado);},0));
+    document.getElementById('kpiCumplidas').textContent=byEst.cumplida.length;
+    document.getElementById('kpiCumplidasMonto').textContent=fmtM(byEst.cumplida.reduce(function(s,p){return s+n(p.montoEstimado);},0));
+
+    // Table
+    var tbody=document.getElementById('prevTbody'),empty=document.getElementById('prevEmpty');
+    if(!lista.length){tbody.innerHTML='';empty.style.display='block';return;}
+    empty.style.display='none';
+
+    var EST_LABELS={pendiente:'pendiente',en_curso:'en_curso',cumplida:'cumplida',cancelada:'cancelada'};
+    tbody.innerHTML=lista.sort(function(a,b){return(a.fechaInicio||'').localeCompare(b.fechaFin||'');}).map(function(p){
+        var pct=progPct(p);
+        var pFill=pct>=100?'over':pct>=50?'warn':'';
+        return'<tr>'
+            +'<td><div style="font-weight:500">'+_esc(p.concepto)+'</div>'+(p.notas?'<div style="font-size:10px;color:var(--text-dim);margin-top:2px">'+_esc(p.notas.slice(0,60))+'</div>':'')+'</td>'
+            +'<td><span class="tipo-badge">'+_esc(p.tipo||'—')+'</span></td>'
+            +'<td style="font-size:11px;color:var(--text-dim)">'+_negLabel(p.sucursalId||'')+'</td>'
+            +'<td style="text-align:right;font-weight:600;color:var(--accent)">'+fmtM(p.montoEstimado)+'</td>'
+            +'<td style="font-size:11px;white-space:nowrap;color:var(--text-dim)">'+(p.fechaInicio||'—')+' → '+(p.fechaFin||'—')+'</td>'
+            +'<td style="text-align:right;font-size:12px;color:var(--text-muted)">'+(n(p.tiempoAcumulado)||1)+' mes'+(n(p.tiempoAcumulado)!==1?'es':'')+'</td>'
+            +'<td><span class="est-badge est-'+_esc(p.estado||'pendiente')+'">'+(p.estado==='pendiente'?'⏳ Pendiente':p.estado==='en_curso'?'🔄 En curso':p.estado==='cumplida'?'✅ Cumplida':'❌ Cancelada')+'</span></td>'
+            +'<td><div style="display:flex;align-items:center;gap:6px"><div class="prog-bar"><div class="prog-fill '+pFill+'" style="width:'+Math.min(100,pct)+'%"></div></div><span style="font-size:10px;color:var(--text-dim)">'+pct+'%</span></div></td>'
+            +'<td style="white-space:nowrap"><button class="btn-row" data-edit="'+p.id+'">✏️</button> <button class="btn-row del" data-del="'+p.id+'">🗑️</button></td>'
+            +'</tr>';
+    }).join('');
+
+    tbody.querySelectorAll('[data-edit]').forEach(function(btn){btn.addEventListener('click',function(){abrirModal(btn.dataset.edit);});});
+    tbody.querySelectorAll('[data-del]').forEach(function(btn){btn.addEventListener('click',function(){
+        if(!confirm('¿Eliminar esta previsión?'))return;
+        saveAll(loadAll().filter(function(p){return p.id!==btn.dataset.del;}));
+        renderAll();
+    });});
+}
+
+/* Modal */
+function abrirModal(id){
+    var p=id?(loadAll().find(function(x){return x.id===id;})||{}):{};
+    document.getElementById('pvId').value=p.id||'';
+    document.getElementById('pvConcepto').value=p.concepto||'';
+    document.getElementById('pvTipo').value=p.tipo||'Inversión';
+    document.getElementById('pvMonto').value=p.montoEstimado||'';
+    document.getElementById('pvFechaInicio').value=p.fechaInicio||todayStr();
+    document.getElementById('pvFechaFin').value=p.fechaFin||'';
+    document.getElementById('pvTiempo').value=p.tiempoAcumulado||1;
+    document.getElementById('pvEstado').value=p.estado||'pendiente';
+    document.getElementById('pvNotas').value=p.notas||'';
+
+    // Populate sucursal select
+    var sel=document.getElementById('pvSucursal');
+    sel.innerHTML='<option value="">🌐 Todas las sucursales</option>';
+    _loadNegocios().forEach(function(neg){
+        var opt=document.createElement('option');
+        opt.value=neg.id; opt.textContent=(neg.emoji||'🏢')+' '+neg.nombre;
+        if(p.sucursalId===neg.id)opt.selected=true;
+        sel.appendChild(opt);
+    });
+    document.getElementById('pvSucursal').value=p.sucursalId||'';
+    document.getElementById('modalTitle').textContent=id?'✏️ Editar Previsión':'🔮 Nueva Previsión';
+    document.getElementById('modalPrev').classList.add('open');
+    setTimeout(function(){document.getElementById('pvConcepto').focus();},60);
+}
+function cerrarModal(){document.getElementById('modalPrev').classList.remove('open');}
+function guardarPrev(){
+    var concepto=document.getElementById('pvConcepto').value.trim();
+    if(!concepto){alert('El concepto es obligatorio.');return;}
+    var id=document.getElementById('pvId').value||genId();
+    var lista=loadAll().filter(function(p){return p.id!==id;});
+    lista.push({
+        id:id,
+        concepto:concepto,
+        tipo:document.getElementById('pvTipo').value,
+        montoEstimado:n(document.getElementById('pvMonto').value),
+        fechaInicio:document.getElementById('pvFechaInicio').value,
+        fechaFin:document.getElementById('pvFechaFin').value,
+        tiempoAcumulado:n(document.getElementById('pvTiempo').value)||1,
+        estado:document.getElementById('pvEstado').value,
+        sucursalId:document.getElementById('pvSucursal').value||'',
+        notas:document.getElementById('pvNotas').value.trim()
+    });
+    saveAll(lista); cerrarModal(); renderAll();
+}
+
+document.addEventListener('DOMContentLoaded',function(){
+    document.getElementById('mesInput').value=mesStr();
+    document.getElementById('mesInput').addEventListener('change',renderAll);
+
+    // Sucursal
+    var chip=document.getElementById('sucChip');
+    chip.addEventListener('click',function(e){e.stopPropagation();_renderSucMenu();var menu=document.getElementById('sucMenu');menu.classList.toggle('open');chip.classList.toggle('open');});
+    document.addEventListener('click',function(e){if(!e.target.closest('#sucMenu')&&!e.target.closest('#sucChip')){var m=document.getElementById('sucMenu');if(m)m.classList.remove('open');chip.classList.remove('open');}});
+
+    // Filtros
+    document.querySelectorAll('.filter-chip').forEach(function(btn){
+        btn.addEventListener('click',function(){
+            document.querySelectorAll('.filter-chip').forEach(function(b){b.classList.remove('active');});
+            btn.classList.add('active');
+            _filtroEstado=btn.dataset.estado||'';
+            renderAll();
+        });
+    });
+
+    // Botones
+    document.getElementById('btnAddPrev').addEventListener('click',function(){abrirModal();});
+    document.getElementById('btnCerrarPrev').addEventListener('click',cerrarModal);
+    document.getElementById('btnCancelarPrev').addEventListener('click',cerrarModal);
+    document.getElementById('btnGuardarPrev').addEventListener('click',guardarPrev);
+    document.getElementById('modalPrev').addEventListener('click',function(e){if(e.target===this)cerrarModal();});
+
+    renderAll();
+});
+</script>
+<script src="../ctx-bar.js"></script>
+</body>
+</html>

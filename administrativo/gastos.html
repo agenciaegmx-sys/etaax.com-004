@@ -158,7 +158,7 @@
         <path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/>
         <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
     </svg>
-    <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🏠</a>
+    <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🗃️</a>
     <div class="top-breadcrumb">
         <span class="top-module-badge">Financiero</span>
         <span class="top-sep">|</span>
@@ -172,6 +172,7 @@
         <div class="nav-top">
             <div class="nav-brand"><span class="nav-brand-sub">Control Financiero</span></div>
             <div class="nav-top-actions">
+                <a href="index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Panel Admin" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1">🗃️</a>
                 <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
             </div>
         </div>
@@ -501,7 +502,8 @@ var LS_KEY='etaax_gastos';
 function load(){try{return JSON.parse(localStorage.getItem(LS_KEY))||[];}catch(e){return[];}}
 function save(d){localStorage.setItem(LS_KEY,JSON.stringify(d));}
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
-function todayStr(){return new Date().toISOString().slice(0,10);}
+function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function getNegocioActivo(){return localStorage.getItem('etaax_negocio_activo')||'';}
 function n(v){return parseFloat(v)||0;}
 function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
 
@@ -835,7 +837,7 @@ function guardarGasto(){
     if(tipo==='mayor'&&!mayorDesbloqueado){alert('Se requiere autorización admin para gastos mayores.');return;}
     var id=document.getElementById('gId').value||genId();
     var gasto={
-        id:id,fecha:fecha,tipo:tipo,
+        id:id,negocioId:getNegocioActivo(),fecha:fecha,tipo:tipo,
         concepto:concepto,
         categoria:document.getElementById('gCategoria').value,
         proveedor:document.getElementById('gProveedor').value.trim(),

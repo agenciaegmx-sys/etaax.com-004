@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETAAX – Salud Financiera · KPIs</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../styles.css">
+    <style>
+        /* ── Category colors ── */
+        :root{
+            --cat-fijos:     #3a3835;
+            --cat-variables: #c8621a;
+            --cat-nom-op:    #2563c4;
+            --cat-nom-adm:   #6b4fa0;
+            --cat-prev:      #a0524a;
+            --cat-util:      #1a7a4a;
+            --cat-fijos-txt:     #f0ece4;
+            --cat-variables-txt: #fff;
+            --cat-nom-op-txt:    #fff;
+            --cat-nom-adm-txt:   #fff;
+            --cat-prev-txt:      #fff;
+            --cat-util-txt:      #e0ffe8;
+        }
+
+        /* ── Sucursal / Period ── */
+        .suc-wrap{position:relative;}
+        .suc-chip{background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);padding:6px 14px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer;transition:all .2s;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;}
+        .suc-chip:hover,.suc-chip.open{border-color:var(--green);color:var(--green);}
+        .suc-menu{position:absolute;top:calc(100% + 6px);left:0;background:var(--surface);border:1px solid var(--border);border-radius:10px;min-width:210px;padding:5px;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:2000;display:none;}
+        .suc-menu.open{display:block;}
+        .suc-opt{padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer;color:var(--text);transition:background .12s;}
+        .suc-opt:hover{background:var(--surface2);}
+        .suc-opt.active{color:var(--green);font-weight:600;}
+        .suc-sep{height:1px;background:var(--border);margin:4px 0;}
+
+        /* ── KPI Summary cards ── */
+        .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}
+        @media(max-width:900px){.kpi-grid{grid-template-columns:repeat(2,1fr);}}
+        .kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;}
+        .kpi-card.g{border-color:rgba(61,190,122,.3);background:rgba(61,190,122,.03);}
+        .kpi-card.r{border-color:rgba(224,90,58,.3);background:rgba(224,90,58,.03);}
+        .kpi-card.y{border-color:rgba(245,200,66,.3);background:rgba(245,200,66,.03);}
+        .kpi-lbl{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px;}
+        .kpi-val{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:1px;line-height:1;}
+        .kpi-sub{font-size:11px;color:var(--text-muted);margin-top:5px;}
+
+        /* ── Distribution block ── */
+        .dist-block{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:24px;}
+        .dist-title{background:var(--surface2);border-bottom:1px solid var(--border);padding:13px 20px;font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;color:var(--text);text-align:center;}
+
+        /* Grid de columnas */
+        .dist-grid{display:grid;grid-template-columns:repeat(6,1fr);border-bottom:1px solid var(--border);}
+        .dist-col{border-right:1px solid var(--border);display:flex;flex-direction:column;}
+        .dist-col:last-child{border-right:none;}
+        .dist-col-hdr{padding:10px 12px;text-align:center;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;letter-spacing:.5px;}
+        .dist-col-hdr.fijos    {background:var(--cat-fijos);    color:var(--cat-fijos-txt);}
+        .dist-col-hdr.variables{background:var(--cat-variables);color:var(--cat-variables-txt);}
+        .dist-col-hdr.nom-op   {background:var(--cat-nom-op);   color:var(--cat-nom-op-txt);}
+        .dist-col-hdr.nom-adm  {background:var(--cat-nom-adm);  color:var(--cat-nom-adm-txt);}
+        .dist-col-hdr.prev     {background:var(--cat-prev);     color:var(--cat-prev-txt);}
+        .dist-col-hdr.util     {background:var(--cat-util);     color:var(--cat-util-txt);}
+
+        .dist-val{padding:10px 12px;text-align:center;font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:.5px;}
+        .dist-val.fijos    {color:#c8b89a;}
+        .dist-val.variables{color:#f5a060;}
+        .dist-val.nom-op   {color:#7aafff;}
+        .dist-val.nom-adm  {color:#c4a0f0;}
+        .dist-val.prev     {color:#f0a0a0;}
+        .dist-val.util     {color:var(--green);}
+        .dist-val.neg      {color:var(--red);}
+
+        .dist-sub{text-align:center;font-size:10px;color:var(--text-dim);padding:0 8px 8px;font-variant-numeric:tabular-nums;}
+
+        /* Barra proporcional */
+        .dist-bars-row{padding:12px 0 4px;border-top:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:4px;min-height:60px;}
+        .bars-label{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);text-align:center;}
+        .blocks-wrap{display:flex;flex-wrap:wrap;gap:2px;justify-content:center;padding:0 8px;}
+        .blk{width:10px;height:10px;border-radius:2px;opacity:.85;}
+        .blk.fijos    {background:var(--cat-fijos);}
+        .blk.variables{background:var(--cat-variables);}
+        .blk.nom-op   {background:var(--cat-nom-op);}
+        .blk.nom-adm  {background:var(--cat-nom-adm);}
+        .blk.prev     {background:var(--cat-prev);}
+        .blk.util     {background:var(--cat-util);}
+        .blk.filler   {background:var(--border);opacity:.4;}
+
+        /* Semáforo row */
+        .dist-sem-row{padding:10px 8px;border-top:1px solid var(--border);text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;}
+        .sem-dot{width:14px;height:14px;border-radius:50%;display:inline-block;}
+        .sem-dot.verde    {background:#3dbe7a;box-shadow:0 0 6px rgba(61,190,122,.5);}
+        .sem-dot.amarillo {background:#f5c842;box-shadow:0 0 6px rgba(245,200,66,.5);}
+        .sem-dot.naranja  {background:#e07830;box-shadow:0 0 6px rgba(224,120,48,.5);}
+        .sem-dot.rojo     {background:#e05a3a;box-shadow:0 0 6px rgba(224,90,58,.5);}
+        .sem-label{font-size:9px;letter-spacing:.5px;text-transform:uppercase;font-weight:600;}
+        .sem-label.verde    {color:#3dbe7a;}
+        .sem-label.amarillo {color:#f5c842;}
+        .sem-label.naranja  {color:#e07830;}
+        .sem-label.rojo     {color:#e05a3a;}
+
+        /* ── Indicadores / Targets block ── */
+        .targets-block{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:24px;}
+        .targets-title{background:#1e1c19;border-bottom:1px solid var(--border);padding:13px 20px;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:2px;color:var(--text);text-align:center;}
+        .targets-grid{display:grid;grid-template-columns:repeat(6,1fr);}
+        .tgt-col{border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;}
+        .tgt-col:last-child{border-right:none;}
+        .tgt-col-hdr{width:100%;padding:10px 8px;text-align:center;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;letter-spacing:.5px;}
+        .tgt-col-hdr.fijos    {background:var(--cat-fijos);    color:var(--cat-fijos-txt);}
+        .tgt-col-hdr.variables{background:var(--cat-variables);color:var(--cat-variables-txt);}
+        .tgt-col-hdr.nom-op   {background:var(--cat-nom-op);   color:var(--cat-nom-op-txt);}
+        .tgt-col-hdr.nom-adm  {background:var(--cat-nom-adm);  color:var(--cat-nom-adm-txt);}
+        .tgt-col-hdr.prev     {background:var(--cat-prev);     color:var(--cat-prev-txt);}
+        .tgt-col-hdr.util     {background:var(--cat-util);     color:var(--cat-util-txt);}
+        .tgt-input{width:70px;text-align:center;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 6px;font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:1px;outline:none;margin:12px auto;border-radius:8px;transition:border-color .15s;}
+        .tgt-input:focus{border-color:var(--green);}
+        .tgt-pct{font-size:11px;color:var(--text-dim);padding-bottom:10px;}
+
+        /* ── Stacked bar total ── */
+        .stacked-block{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:24px;}
+        .stacked-title{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:12px;}
+        .stacked-bar{display:flex;height:32px;border-radius:8px;overflow:hidden;border:1px solid var(--border);}
+        .stacked-seg{display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:11px;letter-spacing:.5px;transition:width .4s ease;overflow:hidden;white-space:nowrap;}
+        .stacked-legend{display:flex;gap:16px;margin-top:10px;flex-wrap:wrap;}
+        .stacked-leg-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted);}
+        .stacked-leg-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0;}
+
+        /* ── Historial mensual ── */
+        .hist-table{width:100%;border-collapse:collapse;font-size:11px;}
+        .hist-table th{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);font-weight:500;padding:9px 12px;border-bottom:1px solid var(--border);white-space:nowrap;}
+        .hist-table th.ar,.hist-table td.ar{text-align:right;}
+        .hist-table td{padding:9px 12px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums;}
+        .hist-table tr:last-child td{border-bottom:none;}
+        .hist-table tr:hover td{background:var(--surface2);}
+        .hist-table tr.current-month td{background:rgba(245,200,66,.04);}
+
+        /* Period picker */
+        .period-picker{display:flex;align-items:center;gap:8px;}
+        .period-picker input{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;cursor:pointer;}
+        .period-picker input:focus{border-color:var(--green);}
+        .period-picker label{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);}
+
+        .btn-primary{background:var(--green);border:none;color:#fff;padding:8px 16px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;cursor:pointer;transition:opacity .2s;}
+        .btn-primary:hover{opacity:.85;}
+
+        .empty-state{text-align:center;padding:48px 20px;color:var(--text-dim);}
+        .theme-toggle{position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;}
+        .theme-toggle:hover{border-color:var(--green);color:var(--green);}
+    </style>
+</head>
+<body>
+<header class="top-bar">
+    <svg width="108" height="26" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
+        <path d="M14.5 28H37C35.5 23 31.5 20 25.5 20C19.5 20 16 23 14.5 28Z" fill="#1a1916"/>
+        <circle cx="45" cy="11" r="6" fill="#f5c842"/>
+        <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
+        <path d="M78 41C78 34.5 83.5 30.5 92.5 29.5L104 28.5V27.5C104 23.5 101.5 21 97 21C93 21 90 23 89 26.5L80.5 24C82.5 17.5 89 13 97 13C107.5 13 113 18.5 113 28.5V54.5H104V51C102 53.5 98.5 55 94 55C85.5 55 78 50.5 78 41Z" fill="#3dbe7a"/>
+        <path d="M104 37L95.5 38C92.5 38.5 90.5 40 90.5 42.5C90.5 45 92.5 46.5 95.5 46.5C101 46.5 104 43.5 104 39V37Z" fill="#1a1916"/>
+        <path d="M126 41C126 34.5 131.5 30.5 140.5 29.5L152 28.5V27.5C152 23.5 149.5 21 145 21C141 21 138 23 137 26.5L128.5 24C130.5 17.5 137 13 145 13C155.5 13 161 18.5 161 28.5V54.5H152V51C150 53.5 146.5 55 142 55C133.5 55 126 50.5 126 41Z" fill="#3dbe7a"/>
+        <path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/>
+        <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+    </svg>
+    <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🏠</a>
+    <div class="top-breadcrumb">
+        <span class="top-module-badge">Financiero</span>
+        <span class="top-sep">|</span>
+        <span class="top-section-name">KPIs Financieros</span>
+    </div>
+</header>
+<div id="ctxBar" class="ctx-bar" style="display:none"></div>
+
+<div class="app-shell">
+    <nav class="nav cerrado" id="nav">
+        <div class="nav-top">
+            <div class="nav-brand"><span class="nav-brand-sub">Salud Financiera</span></div>
+            <div class="nav-top-actions">
+                <a href="index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Panel Financiero" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1">🗃️</a>
+                <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
+            </div>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Ingresos</div>
+            <a href="ventas.html" class="nav-link" data-tooltip="Ventas Globales"><span class="nav-icon">💰</span><span class="nav-text">Ventas Globales</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Egresos</div>
+            <a href="gastos-globales.html" class="nav-link" data-tooltip="Gastos Globales"><span class="nav-icon">📤</span><span class="nav-text">Gastos Globales</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Análisis</div>
+            <a href="previsiones.html" class="nav-link" data-tooltip="Previsiones"><span class="nav-icon">🔮</span><span class="nav-text">Previsiones</span></a>
+            <a href="utilidades.html" class="nav-link" data-tooltip="Utilidades"><span class="nav-icon">💹</span><span class="nav-text">Utilidades</span></a>
+            <a href="kpis.html" class="nav-link active" data-tooltip="KPIs"><span class="nav-icon">🎯</span><span class="nav-text">KPIs</span></a>
+        </div>
+    </nav>
+
+    <main class="main-content expandido" id="mainContent">
+        <div class="header">
+            <div class="brand">
+                <span class="brand-label">Salud Financiera</span>
+                <span class="brand-title">KPIs Financieros</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <div class="suc-wrap">
+                    <button class="suc-chip" id="sucChip">🌐 Todas las sucursales ▾</button>
+                    <div class="suc-menu" id="sucMenu"></div>
+                </div>
+                <div class="period-picker">
+                    <label>Mes</label>
+                    <input type="month" id="mesInput">
+                </div>
+                <button class="btn-primary" id="btnGuardarTargets" style="font-size:11px;padding:7px 14px">💾 Guardar metas</button>
+            </div>
+        </div>
+
+        <div class="wrap">
+
+            <!-- KPI Summary Cards -->
+            <div class="kpi-grid">
+                <div class="kpi-card g">
+                    <div class="kpi-lbl">Ingresos del mes</div>
+                    <div class="kpi-val" id="kpiIngresos" style="color:var(--green)">$0</div>
+                    <div class="kpi-sub" id="kpiIngresosSub">Ventas + otros ingresos</div>
+                </div>
+                <div class="kpi-card r">
+                    <div class="kpi-lbl">Egresos totales</div>
+                    <div class="kpi-val" id="kpiEgresos" style="color:var(--red)">$0</div>
+                    <div class="kpi-sub">Fijos + Nóminas + Variables</div>
+                </div>
+                <div class="kpi-card" id="kpiUtilCard">
+                    <div class="kpi-lbl">Utilidad neta</div>
+                    <div class="kpi-val" id="kpiUtil">$0</div>
+                    <div class="kpi-sub" id="kpiUtilSub">—</div>
+                </div>
+                <div class="kpi-card" id="kpiMargenCard">
+                    <div class="kpi-lbl">Margen operativo</div>
+                    <div class="kpi-val" id="kpiMargen" style="font-size:36px">—%</div>
+                    <div class="kpi-sub" id="kpiMargenSub">Meta: <span id="kpiMargenMeta">—%</span></div>
+                </div>
+            </div>
+
+            <!-- Distribución de Egresos -->
+            <div class="dist-block">
+                <div class="dist-title">DISTRIBUCIÓN DE EGRESOS + UTILIDAD &nbsp;(% sobre Ingresos)</div>
+
+                <!-- Headers + valores actuales -->
+                <div class="dist-grid" id="distGrid">
+                    <!-- rendered by JS -->
+                </div>
+
+                <!-- Barra proporcional apilada -->
+                <div class="stacked-block" style="border-radius:0;border:none;border-top:1px solid var(--border);margin:0;padding:16px 20px">
+                    <div class="stacked-title">Barras proporcionales (cada ■ ≈ 2% de ingresos)</div>
+                    <div class="stacked-bar" id="stackedBar">
+                        <div class="stacked-seg" style="width:100%;background:var(--border);color:var(--text-dim);font-size:12px">Sin datos</div>
+                    </div>
+                    <div class="stacked-legend">
+                        <div class="stacked-leg-item"><div class="stacked-leg-dot" style="background:var(--cat-fijos)"></div>G. Fijos</div>
+                        <div class="stacked-leg-item"><div class="stacked-leg-dot" style="background:var(--cat-variables)"></div>G. Variables</div>
+                        <div class="stacked-leg-item"><div class="stacked-leg-dot" style="background:var(--cat-nom-op)"></div>Nóm. Operativa</div>
+                        <div class="stacked-leg-item"><div class="stacked-leg-dot" style="background:var(--cat-nom-adm)"></div>Nóm. Administrativa</div>
+                        <div class="stacked-leg-item"><div class="stacked-leg-dot" style="background:var(--cat-prev)"></div>Previsiones</div>
+                        <div class="stacked-leg-item"><div class="stacked-leg-dot" style="background:var(--cat-util)"></div>Utilidad</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Indicadores saludables (editables) -->
+            <div class="targets-block">
+                <div class="targets-title">INDICADORES DE PORCENTAJES SALUDABLES PARA EL NEGOCIO</div>
+                <div class="targets-grid">
+                    <div class="tgt-col">
+                        <div class="tgt-col-hdr fijos">GASTOS FIJOS</div>
+                        <input type="number" class="tgt-input" id="tgtFijos" min="0" max="100" step="0.5" value="15">
+                        <div class="tgt-pct">% ideal</div>
+                    </div>
+                    <div class="tgt-col">
+                        <div class="tgt-col-hdr variables">GASTOS VARIABLES</div>
+                        <input type="number" class="tgt-input" id="tgtVariables" min="0" max="100" step="0.5" value="30">
+                        <div class="tgt-pct">% ideal</div>
+                    </div>
+                    <div class="tgt-col">
+                        <div class="tgt-col-hdr nom-op">NÓMINA OPERATIVA</div>
+                        <input type="number" class="tgt-input" id="tgtNomOp" min="0" max="100" step="0.5" value="22">
+                        <div class="tgt-pct">% ideal</div>
+                    </div>
+                    <div class="tgt-col">
+                        <div class="tgt-col-hdr nom-adm">NÓMINA ADM.</div>
+                        <input type="number" class="tgt-input" id="tgtNomAdm" min="0" max="100" step="0.5" value="8">
+                        <div class="tgt-pct">% ideal</div>
+                    </div>
+                    <div class="tgt-col">
+                        <div class="tgt-col-hdr prev">PREVISIONES</div>
+                        <input type="number" class="tgt-input" id="tgtPrev" min="0" max="100" step="0.5" value="5">
+                        <div class="tgt-pct">% ideal</div>
+                    </div>
+                    <div class="tgt-col">
+                        <div class="tgt-col-hdr util">UTILIDAD</div>
+                        <input type="number" class="tgt-input" id="tgtUtil" min="0" max="100" step="0.5" value="20">
+                        <div class="tgt-pct">% meta</div>
+                    </div>
+                </div>
+                <div style="padding:10px 20px;font-size:11px;color:var(--text-dim);border-top:1px solid var(--border);text-align:center">
+                    Total de columnas: <strong id="sumTargets" style="color:var(--accent)">—%</strong> &nbsp;·&nbsp; Ideal = 100%
+                </div>
+            </div>
+
+            <!-- Historial últimos meses -->
+            <div class="card">
+                <div class="card-header" style="justify-content:space-between">
+                    <h2>Historial mensual</h2>
+                    <span style="font-size:11px;color:var(--text-dim)">Últimos 6 meses</span>
+                </div>
+                <div class="card-body" style="padding:0;overflow-x:auto">
+                    <table class="hist-table">
+                        <thead>
+                            <tr>
+                                <th>Mes</th>
+                                <th class="ar">Ingresos</th>
+                                <th class="ar" style="color:#c8b89a">Fijos %</th>
+                                <th class="ar" style="color:#f5a060">Variables %</th>
+                                <th class="ar" style="color:#7aafff">Nóm.Op %</th>
+                                <th class="ar" style="color:#c4a0f0">Nóm.Adm %</th>
+                                <th class="ar" style="color:#f0a0a0">Prev %</th>
+                                <th class="ar" style="color:var(--green)">Utilidad %</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="histTbody"></tbody>
+                    </table>
+                    <div id="histEmpty" class="empty-state" style="display:none;padding:28px">
+                        <div style="font-size:11px;color:var(--text-dim)">Sin datos de meses anteriores.</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
+
+<script>
+(function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);document.addEventListener('DOMContentLoaded',function(){var ti=document.getElementById('themeIcon'),tl=document.getElementById('themeLabel');if(s==='light'){if(ti)ti.textContent='🌙';if(tl)tl.textContent='Modo oscuro';}});})();
+function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('etaax_theme',n);document.getElementById('themeIcon').textContent=n==='light'?'🌙':'☀️';document.getElementById('themeLabel').textContent=n==='light'?'Modo oscuro':'Modo claro';}
+function toggleNav(){var nav=document.getElementById('nav'),main=document.getElementById('mainContent');nav.classList.toggle('cerrado');if(main)main.classList.toggle('expandido');var c=nav.classList.contains('cerrado');var btn=document.getElementById('navToggleBtn'),txt=document.getElementById('navToggleTxt');if(btn)btn.childNodes[0].textContent=c?'▶':'◀';if(txt)txt.textContent=c?'Expandir':'Ocultar';if(btn)btn.setAttribute('data-tooltip',c?'Expandir':'Ocultar');}
+
+/* ── Storage keys ── */
+var LS_CORTES  = 'etaax_cortes';
+var LS_OTROS   = 'etaax_sf_otros';
+var LS_GASTOS  = 'etaax_gastos';
+var LS_FIJOS   = 'etaax_gf_fijos';
+var LS_NOMINAS = 'etaax_gf_nominas';
+var LS_PREVS   = 'etaax_previsiones';
+var LS_KPI_TGT = 'etaax_kpi_targets';
+
+/* ── Helpers ── */
+function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function mesStr(){return todayStr().slice(0,7);}
+function n(v){return parseFloat(v)||0;}
+function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0});}
+function fmtPct(v){return n(v).toFixed(1)+'%';}
+function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+/* ── Loaders ── */
+function loadCortes(){try{return JSON.parse(localStorage.getItem(LS_CORTES))||[];}catch(e){return[];}}
+function loadOtros(){try{return JSON.parse(localStorage.getItem(LS_OTROS))||[];}catch(e){return[];}}
+function loadGastos(){try{return JSON.parse(localStorage.getItem(LS_GASTOS))||[];}catch(e){return[];}}
+function loadFijos(){try{return JSON.parse(localStorage.getItem(LS_FIJOS))||[];}catch(e){return[];}}
+function loadNominasMes(mes){
+    try{
+        var all=JSON.parse(localStorage.getItem(LS_NOMINAS))||{};
+        var d=all[mes]||{operativa:[],administrativa:[],socios:[]};
+        var op=0,adm=0;
+        (d.operativa||[]).forEach(function(p){op+=n(p.base)+n(p.bonos)+n(p.imss);});
+        (d.administrativa||[]).forEach(function(p){adm+=n(p.base)+n(p.bonos)+n(p.imss);});
+        (d.socios||[]).forEach(function(p){adm+=n(p.base)+n(p.bonos)+n(p.imss);});
+        return{op:op,adm:adm};
+    }catch(e){return{op:0,adm:0};}
+}
+function loadPrevsMes(mes){
+    try{
+        var all=JSON.parse(localStorage.getItem(LS_PREVS))||[];
+        var mesStart=mes+'-01';
+        var y=parseInt(mes.slice(0,4)),m=parseInt(mes.slice(5,7));
+        var mesEnd=new Date(y,m,0).toISOString().slice(0,10);
+        return all.filter(function(p){
+            if(p.estado==='cancelada') return false;
+            if(p.fechaInicio&&p.fechaFin) return p.fechaInicio<=mesEnd&&p.fechaFin>=mesStart;
+            return p.fechaInicio&&p.fechaInicio.slice(0,7)===mes;
+        }).reduce(function(s,p){return s+n(p.montoEstimado);},0);
+    }catch(e){return 0;}
+}
+
+/* ── Sucursal ── */
+var _sucursalId=null;
+function _loadNegocios(){try{return JSON.parse(localStorage.getItem('etaax_negocios')||'[]');}catch(e){return[];}}
+function _renderSucMenu(){
+    var menu=document.getElementById('sucMenu');
+    var negs=_loadNegocios();
+    var html='<div class="suc-opt'+(!_sucursalId?' active':'')+'" data-suc="">🌐 Todas</div>';
+    if(negs.length)html+='<div class="suc-sep"></div>';
+    negs.forEach(function(neg){html+='<div class="suc-opt'+(_sucursalId===neg.id?' active':'')+'" data-suc="'+_esc(neg.id)+'">'+(neg.emoji||'🏢')+' '+_esc(neg.nombre)+'</div>';});
+    menu.innerHTML=html;
+    menu.querySelectorAll('.suc-opt').forEach(function(el){
+        el.addEventListener('click',function(){
+            _sucursalId=el.dataset.suc||null;
+            var chip=document.getElementById('sucChip');
+            chip.textContent=(_sucursalId?(_loadNegocios().find(function(x){return x.id===_sucursalId;})||{nombre:'Sucursal'}).nombre:'🌐 Todas las sucursales')+' ▾';
+            menu.classList.remove('open'); chip.classList.remove('open'); renderAll();
+        });
+    });
+}
+
+/* ── Data aggregation for a month ── */
+function flujoNeto(c){return(n(c.efectivo)-n(c.propEfectivo))+(n(c.tarjeta)-n(c.propTarjeta))+n(c.transferencia);}
+function getMesData(mes){
+    var mesStart=mes+'-01';
+    var y=parseInt(mes.slice(0,4)),m=parseInt(mes.slice(5,7));
+    var mesEnd=new Date(y,m,0).toISOString().slice(0,10);
+    function inMes(f){return f>=mesStart&&f<=mesEnd;}
+
+    var cortes=loadCortes().filter(function(c){return inMes(c.fecha)&&(!_sucursalId||!c.negocioId||c.negocioId===_sucursalId);});
+    var otros=loadOtros().filter(function(o){return inMes(o.fecha);});
+    var gastos=loadGastos().filter(function(g){return inMes(g.fecha)&&(!_sucursalId||!g.negocioId||g.negocioId===_sucursalId);});
+
+    var ventas=cortes.reduce(function(s,c){return s+flujoNeto(c);},0);
+    var otrosT=otros.reduce(function(s,o){return s+n(o.monto);},0);
+    var ingresos=ventas+otrosT;
+
+    var variables=gastos.reduce(function(s,g){return s+n(g.monto);},0);
+    var fijosM=loadFijos().reduce(function(s,f){return s+n(f.monto);},0);
+    var noms=loadNominasMes(mes);
+    var prevs=loadPrevsMes(mes);
+
+    var egresos=fijosM+variables+noms.op+noms.adm+prevs;
+    var util=ingresos-egresos;
+
+    return{ingresos:ingresos,fijos:fijosM,variables:variables,nomOp:noms.op,nomAdm:noms.adm,prevs:prevs,egresos:egresos,util:util};
+}
+
+/* ── Targets ── */
+function loadTargets(){
+    try{return JSON.parse(localStorage.getItem(LS_KPI_TGT))||{fijos:15,variables:30,nomOp:22,nomAdm:8,prev:5,util:20};}
+    catch(e){return{fijos:15,variables:30,nomOp:22,nomAdm:8,prev:5,util:20};}
+}
+function saveTargets(){
+    var t={
+        fijos:n(document.getElementById('tgtFijos').value)||15,
+        variables:n(document.getElementById('tgtVariables').value)||30,
+        nomOp:n(document.getElementById('tgtNomOp').value)||22,
+        nomAdm:n(document.getElementById('tgtNomAdm').value)||8,
+        prev:n(document.getElementById('tgtPrev').value)||5,
+        util:n(document.getElementById('tgtUtil').value)||20
+    };
+    localStorage.setItem(LS_KPI_TGT,JSON.stringify(t));
+    renderAll();
+}
+function updateSumTargets(){
+    var sum=['tgtFijos','tgtVariables','tgtNomOp','tgtNomAdm','tgtPrev','tgtUtil'].reduce(function(s,id){return s+n(document.getElementById(id).value);},0);
+    var el=document.getElementById('sumTargets');
+    el.textContent=sum.toFixed(1)+'%';
+    el.style.color=Math.abs(sum-100)<0.5?'var(--green)':'var(--accent)';
+}
+
+/* ── Semáforo lógica ── */
+function getSem(actual, target, isUtil){
+    if(isUtil){
+        if(actual>=target) return{cls:'verde',label:'IDEAL'};
+        if(actual>=target*0.85) return{cls:'amarillo',label:'BUENO BAJO'};
+        if(actual>=target*0.6) return{cls:'naranja',label:'BAJO'};
+        return{cls:'rojo',label:'PELIGRO'};
+    } else {
+        if(actual<=target) return{cls:'verde',label:'IDEAL'};
+        if(actual<=target*1.1) return{cls:'amarillo',label:'BUENO'};
+        if(actual<=target*1.25) return{cls:'naranja',label:'ALTO'};
+        return{cls:'rojo',label:'CRÍTICO'};
+    }
+}
+
+/* ── RENDER ── */
+function renderAll(){
+    var mes=document.getElementById('mesInput').value||mesStr();
+    var d=getMesData(mes);
+    var t=loadTargets();
+
+    // Percentages
+    var pFijos   =d.ingresos>0?(d.fijos/d.ingresos)*100:0;
+    var pVars    =d.ingresos>0?(d.variables/d.ingresos)*100:0;
+    var pNomOp   =d.ingresos>0?(d.nomOp/d.ingresos)*100:0;
+    var pNomAdm  =d.ingresos>0?(d.nomAdm/d.ingresos)*100:0;
+    var pPrev    =d.ingresos>0?(d.prevs/d.ingresos)*100:0;
+    var pUtil    =d.ingresos>0?(d.util/d.ingresos)*100:0;
+
+    // Summary KPIs
+    document.getElementById('kpiIngresos').textContent=fmtM(d.ingresos);
+    document.getElementById('kpiEgresos').textContent=fmtM(d.egresos);
+    document.getElementById('kpiUtil').textContent=fmtM(d.util);
+    document.getElementById('kpiUtil').style.color=d.util>=0?'var(--green)':'var(--red)';
+    document.getElementById('kpiUtilSub').textContent=fmtPct(pUtil)+' sobre ingresos';
+    document.getElementById('kpiMargen').textContent=d.ingresos>0?fmtPct(pUtil):'—%';
+    document.getElementById('kpiMargenMeta').textContent=t.util+'%';
+    var semMrg=getSem(pUtil,t.util,true);
+    document.getElementById('kpiMargen').style.color=semMrg.cls==='verde'?'var(--green)':semMrg.cls==='amarillo'?'var(--accent)':'var(--red)';
+    document.getElementById('kpiMargenCard').className='kpi-card '+(semMrg.cls==='verde'?'g':semMrg.cls==='amarillo'?'y':'r');
+    var semUtil=getSem(pUtil,t.util,true);
+    document.getElementById('kpiUtilCard').className='kpi-card '+(semUtil.cls==='verde'?'g':semUtil.cls==='amarillo'?'y':'r');
+
+    // Distribution grid
+    var CATS=[
+        {id:'fijos',   label:'G. FIJOS',     val:d.fijos,    pct:pFijos,   tgt:t.fijos,   cls:'fijos',    isUtil:false},
+        {id:'vars',    label:'G. VARIABLES', val:d.variables,pct:pVars,    tgt:t.variables,cls:'variables',isUtil:false},
+        {id:'nomop',   label:'NÓM. OP.',     val:d.nomOp,    pct:pNomOp,   tgt:t.nomOp,   cls:'nom-op',   isUtil:false},
+        {id:'nomadm',  label:'NÓM. ADM.',    val:d.nomAdm,   pct:pNomAdm,  tgt:t.nomAdm,  cls:'nom-adm',  isUtil:false},
+        {id:'prev',    label:'PREVISIONES',  val:d.prevs,    pct:pPrev,    tgt:t.prev,    cls:'prev',     isUtil:false},
+        {id:'util',    label:'UTILIDAD',     val:d.util,     pct:pUtil,    tgt:t.util,    cls:'util',     isUtil:true}
+    ];
+
+    var grid=document.getElementById('distGrid');
+    grid.innerHTML=CATS.map(function(cat){
+        var sem=getSem(cat.pct,cat.tgt,cat.isUtil);
+        var blocks=d.ingresos>0?Math.max(0,Math.round(cat.pct/2)):0;
+        var blocksHtml='';
+        for(var i=0;i<Math.min(blocks,25);i++) blocksHtml+='<div class="blk '+cat.cls+'"></div>';
+        if(blocks===0&&d.ingresos>0) blocksHtml='<span style="font-size:10px;color:var(--text-dim)">0%</span>';
+        return'<div class="dist-col">'
+            +'<div class="dist-col-hdr '+cat.cls+'">'+cat.label+'</div>'
+            +'<div class="dist-val '+cat.cls+(cat.isUtil&&cat.val<0?' neg':'')+'">'+fmtPct(cat.pct)+'</div>'
+            +'<div class="dist-sub">'+fmtM(cat.val)+'</div>'
+            +'<div class="dist-bars-row">'
+            +'<div class="blocks-wrap">'+blocksHtml+'</div>'
+            +'<div class="bars-label" style="margin-top:4px;opacity:.6">meta: '+cat.tgt+'%</div>'
+            +'</div>'
+            +'<div class="dist-sem-row">'
+            +'<div class="sem-dot '+sem.cls+'"></div>'
+            +'<div class="sem-label '+sem.cls+'">'+sem.label+'</div>'
+            +'</div>'
+            +'</div>';
+    }).join('');
+
+    // Stacked bar
+    var bar=document.getElementById('stackedBar');
+    if(d.ingresos<=0){
+        bar.innerHTML='<div class="stacked-seg" style="width:100%;background:var(--border);color:var(--text-dim);font-size:12px;justify-content:center">Sin datos de ingresos</div>';
+    } else {
+        var COLORS=['var(--cat-fijos)','var(--cat-variables)','var(--cat-nom-op)','var(--cat-nom-adm)','var(--cat-prev)','var(--cat-util)'];
+        var TXT=['var(--cat-fijos-txt)','var(--cat-variables-txt)','var(--cat-nom-op-txt)','var(--cat-nom-adm-txt)','var(--cat-prev-txt)','var(--cat-util-txt)'];
+        bar.innerHTML=CATS.map(function(cat,i){
+            var w=Math.max(0,cat.pct);
+            if(w<0.5) return '';
+            return'<div class="stacked-seg" style="width:'+w+'%;min-width:'+(w>3?0:30)+'px;background:'+COLORS[i]+';color:'+TXT[i]+'">'+(w>4?fmtPct(cat.pct):'')+'</div>';
+        }).join('');
+        // Remainder if total < 100
+        var used=CATS.reduce(function(s,c){return s+Math.max(0,c.pct);},0);
+        if(used<99) bar.innerHTML+='<div class="stacked-seg" style="width:'+(100-Math.min(100,used))+'%;background:var(--border);color:var(--text-dim)"></div>';
+    }
+
+    renderHistorial(mes,t);
+    updateSumTargets();
+}
+
+/* ── Historial ── */
+function renderHistorial(mesSel, t){
+    var months=[];
+    var d=new Date(mesSel+'-01T12:00:00');
+    for(var i=0;i<6;i++){
+        var y=d.getFullYear(),m=d.getMonth()+1;
+        months.unshift(y+'-'+String(m).padStart(2,'0'));
+        d.setMonth(d.getMonth()-1);
+    }
+
+    var tbody=document.getElementById('histTbody');
+    var empty=document.getElementById('histEmpty');
+    var rows=months.map(function(mes){
+        var md=getMesData(mes);
+        if(md.ingresos<=0) return null;
+        var pF=md.ingresos>0?(md.fijos/md.ingresos)*100:0;
+        var pV=md.ingresos>0?(md.variables/md.ingresos)*100:0;
+        var pNO=md.ingresos>0?(md.nomOp/md.ingresos)*100:0;
+        var pNA=md.ingresos>0?(md.nomAdm/md.ingresos)*100:0;
+        var pP=md.ingresos>0?(md.prevs/md.ingresos)*100:0;
+        var pU=md.ingresos>0?(md.util/md.ingresos)*100:0;
+        var semU=getSem(pU,t.util,true);
+        return{mes:mes,ing:md.ingresos,pF:pF,pV:pV,pNO:pNO,pNA:pNA,pP:pP,pU:pU,semU:semU};
+    }).filter(Boolean);
+
+    if(!rows.length){tbody.innerHTML='';empty.style.display='block';return;}
+    empty.style.display='none';
+
+    var MES_NAMES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    tbody.innerHTML=rows.map(function(r){
+        return'<tr class="'+(r.mes===mesSel?'current-month':'')+'">'
+            +'<td style="font-weight:500">'+MES_NAMES[parseInt(r.mes.slice(5,7))-1]+' '+r.mes.slice(0,4)+(r.mes===mesSel?' ◀':'')+'</td>'
+            +'<td class="ar" style="color:var(--green);font-weight:600">'+fmtM(r.ing)+'</td>'
+            +'<td class="ar" style="color:#c8b89a">'+fmtPct(r.pF)+'</td>'
+            +'<td class="ar" style="color:#f5a060">'+fmtPct(r.pV)+'</td>'
+            +'<td class="ar" style="color:#7aafff">'+fmtPct(r.pNO)+'</td>'
+            +'<td class="ar" style="color:#c4a0f0">'+fmtPct(r.pNA)+'</td>'
+            +'<td class="ar" style="color:#f0a0a0">'+fmtPct(r.pP)+'</td>'
+            +'<td class="ar" style="color:'+(r.pU>=0?'var(--green)':'var(--red)')+';font-weight:700">'+fmtPct(r.pU)+'</td>'
+            +'<td><span class="sem-dot '+r.semU.cls+'" style="display:inline-block"></span> <span class="sem-label '+r.semU.cls+'" style="font-size:10px">'+r.semU.label+'</span></td>'
+            +'</tr>';
+    }).join('');
+}
+
+/* ── INIT ── */
+document.addEventListener('DOMContentLoaded',function(){
+    // Load saved targets
+    var t=loadTargets();
+    document.getElementById('tgtFijos').value=t.fijos;
+    document.getElementById('tgtVariables').value=t.variables;
+    document.getElementById('tgtNomOp').value=t.nomOp;
+    document.getElementById('tgtNomAdm').value=t.nomAdm;
+    document.getElementById('tgtPrev').value=t.prev;
+    document.getElementById('tgtUtil').value=t.util;
+
+    document.getElementById('mesInput').value=mesStr();
+    document.getElementById('mesInput').addEventListener('change',renderAll);
+
+    document.getElementById('btnGuardarTargets').addEventListener('click',saveTargets);
+
+    // Live sum of targets
+    ['tgtFijos','tgtVariables','tgtNomOp','tgtNomAdm','tgtPrev','tgtUtil'].forEach(function(id){
+        document.getElementById(id).addEventListener('input',updateSumTargets);
+    });
+
+    // Sucursal
+    var chip=document.getElementById('sucChip');
+    chip.addEventListener('click',function(e){e.stopPropagation();_renderSucMenu();var menu=document.getElementById('sucMenu');menu.classList.toggle('open');chip.classList.toggle('open');});
+    document.addEventListener('click',function(e){if(!e.target.closest('#sucMenu')&&!e.target.closest('#sucChip')){var m=document.getElementById('sucMenu');if(m)m.classList.remove('open');chip.classList.remove('open');}});
+
+    renderAll();
+});
+</script>
+<script src="../ctx-bar.js"></script>
+</body>
+</html>
