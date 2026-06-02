@@ -223,7 +223,8 @@ body { font-family:'DM Sans',sans-serif; background:#fff; color:#1a1916; }
     padding-bottom:3px; border-bottom:1px solid #e8e8e8;
 }
 .tabla-ing { width:100%; border-collapse:collapse; }
-.tabla-ing td, .tabla-ing th { padding:4px 7px; }
+.tabla-ing td  { padding:4px 7px; font-size:10px; color:#333; }
+.tabla-ing th  { padding:5px 7px; font-size:9px; color:#666; text-transform:uppercase; letter-spacing:1px; }
 .costeo-block { page-break-inside: avoid; }
 .footer-imp {
     display:flex; justify-content:space-between;
@@ -231,13 +232,13 @@ body { font-family:'DM Sans',sans-serif; background:#fff; color:#1a1916; }
     font-size:9px; color:#aaa; margin-top:16px;
     letter-spacing:1px; flex-shrink:0;
 }
-/* Escala compacta para recetas con muchos ingredientes */
-.tabla-ing.compact td, .tabla-ing.compact th { padding:3px 6px; font-size:10px; }
-.tabla-ing.compact th { font-size:9px; }
-.body-imp.compact { gap:9px; }
-.tabla-ing.mini td, .tabla-ing.mini th { padding:2px 5px; font-size:9px; }
-.tabla-ing.mini th { font-size:8px; }
-.body-imp.mini { gap:7px; }
+/* Escala dinámica — se activa antes */
+.tabla-ing.compact td  { padding:3px 6px; font-size:9.5px; }
+.tabla-ing.compact th  { padding:4px 6px; font-size:8.5px; }
+.body-imp.compact { gap:8px; }
+.tabla-ing.mini td  { padding:2px 5px; font-size:9px; }
+.tabla-ing.mini th  { padding:3px 5px; font-size:8px; }
+.body-imp.mini { gap:6px; }
 .receta-nombre.compact { font-size:24px; }
 .receta-nombre.mini { font-size:20px; }
 @media print {
@@ -444,7 +445,7 @@ function buildPlantillaOperativa(recetas) {
     var paginasHTML = recetas.map(function(r) {
         var esSub = esSubRecetaTipo(r.tipo);
         var numIng = (r.ingredientes||[]).length;
-        var sizeClass = numIng > 16 ? 'mini' : numIng > 11 ? 'compact' : '';
+        var sizeClass = numIng > 13 ? 'mini' : numIng > 7 ? 'compact' : '';
         var filas = (r.ingredientes||[]).map(function(i) {
             return '<tr>' +
                 '<td style="border-bottom:1px solid #efefef">' + (i.nombre||'—') + '</td>' +
@@ -535,7 +536,7 @@ function buildPlantillaAdministrativa(recetas) {
         var aUtilidadP   = aSinIva > 0 ? 100 - aCostoP - 40 : 0;
 
         var numIng = (r.ingredientes||[]).length;
-        var sizeClass = numIng > 16 ? 'mini' : numIng > 11 ? 'compact' : '';
+        var sizeClass = numIng > 13 ? 'mini' : numIng > 7 ? 'compact' : '';
         var filas = (r.ingredientes||[]).map(function(i) {
             var cu = getFactor(i.cantidad,i.unidad)*(i.costoPorKgLt||0);
             // Reference unit cost label ($/kg, $/lt, $/pz)
