@@ -202,34 +202,49 @@ const CSS_PRINT_BASE = `
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family:'DM Sans',sans-serif; background:#fff; color:#1a1916; }
 .pagina {
-    width:21.6cm; min-height:27.9cm; max-height:27.9cm;
-    padding:1.2cm 1.4cm; page-break-after:always;
-    display:flex; flex-direction:column; overflow:hidden;
+    width:100%;
+    padding:1.2cm 1.4cm;
+    page-break-after: always;
+    display: flex;
+    flex-direction: column;
 }
 .header-imp {
     display:flex; justify-content:space-between; align-items:center;
-    padding-bottom:12px; border-bottom:3px solid #3dbe7a; margin-bottom:16px;
+    padding-bottom:10px; border-bottom:3px solid #3dbe7a; margin-bottom:14px;
+    flex-shrink: 0;
 }
 .header-left { display:flex; align-items:center; gap:12px; }
 .receta-tipo { font-size:10px; letter-spacing:3px; text-transform:uppercase; color:#888; margin-bottom:2px; }
-.receta-nombre { font-family:'Bebas Neue',sans-serif; font-size:30px; letter-spacing:1px; color:#1a1916; line-height:1; }
-.body-imp { flex:1; display:flex; flex-direction:column; gap:14px; }
+.receta-nombre { font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:1px; color:#1a1916; line-height:1; }
+.body-imp { display:flex; flex-direction:column; gap:12px; }
 .sec-title {
     font-size:9px; letter-spacing:3px; text-transform:uppercase;
-    color:#3dbe7a; font-weight:600; margin-bottom:6px;
-    padding-bottom:4px; border-bottom:1px solid #e8e8e8;
+    color:#3dbe7a; font-weight:600; margin-bottom:5px;
+    padding-bottom:3px; border-bottom:1px solid #e8e8e8;
 }
 .tabla-ing { width:100%; border-collapse:collapse; }
+.tabla-ing td, .tabla-ing th { padding:4px 7px; }
+.costeo-block { page-break-inside: avoid; }
 .footer-imp {
     display:flex; justify-content:space-between;
     padding-top:10px; border-top:1px solid #e8e8e8;
-    font-size:9px; color:#aaa; margin-top:auto; padding-top:12px;
-    letter-spacing:1px;
+    font-size:9px; color:#aaa; margin-top:16px;
+    letter-spacing:1px; flex-shrink:0;
 }
+/* Escala compacta para recetas con muchos ingredientes */
+.tabla-ing.compact td, .tabla-ing.compact th { padding:3px 6px; font-size:10px; }
+.tabla-ing.compact th { font-size:9px; }
+.body-imp.compact { gap:9px; }
+.tabla-ing.mini td, .tabla-ing.mini th { padding:2px 5px; font-size:9px; }
+.tabla-ing.mini th { font-size:8px; }
+.body-imp.mini { gap:7px; }
+.receta-nombre.compact { font-size:24px; }
+.receta-nombre.mini { font-size:20px; }
 @media print {
-    @page { size:letter; margin:0; }
+    @page { size:letter; margin:1cm 1.2cm; }
     body { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-    .pagina { page-break-after:always; }
+    .pagina { page-break-after:always; padding:0; }
+    .costeo-block { page-break-inside: avoid; }
 }`;
 
 const LOGO_SVG_DARK_BG='<svg width="110" height="27" viewBox="0 0 300 72" fill="none"><path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/><path d="M14.5 28H37C35.5 23 31.5 20 25.5 20C19.5 20 16 23 14.5 28Z" fill="#1a1916"/><circle cx="45" cy="11" r="6" fill="#f5c842"/><path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/><path d="M78 41C78 34.5 83.5 30.5 92.5 29.5L104 28.5V27.5C104 23.5 101.5 21 97 21C93 21 90 23 89 26.5L80.5 24C82.5 17.5 89 13 97 13C107.5 13 113 18.5 113 28.5V54.5H104V51C102 53.5 98.5 55 94 55C85.5 55 78 50.5 78 41Z" fill="#3dbe7a"/><path d="M104 37L95.5 38C92.5 38.5 90.5 40 90.5 42.5C90.5 45 92.5 46.5 95.5 46.5C101 46.5 104 43.5 104 39V37Z" fill="#1a1916"/><path d="M126 41C126 34.5 131.5 30.5 140.5 29.5L152 28.5V27.5C152 23.5 149.5 21 145 21C141 21 138 23 137 26.5L128.5 24C130.5 17.5 137 13 145 13C155.5 13 161 18.5 161 28.5V54.5H152V51C150 53.5 146.5 55 142 55C133.5 55 126 50.5 126 41Z" fill="#3dbe7a"/><path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/><path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/></svg>';
@@ -428,12 +443,14 @@ function buildSubRecetaCostoBlock(r) {
 function buildPlantillaOperativa(recetas) {
     var paginasHTML = recetas.map(function(r) {
         var esSub = esSubRecetaTipo(r.tipo);
+        var numIng = (r.ingredientes||[]).length;
+        var sizeClass = numIng > 16 ? 'mini' : numIng > 11 ? 'compact' : '';
         var filas = (r.ingredientes||[]).map(function(i) {
             return '<tr>' +
-                '<td style="padding:5px 8px;border-bottom:1px solid #efefef;font-size:11px">' + (i.nombre||'—') + '</td>' +
-                '<td style="padding:5px 8px;border-bottom:1px solid #efefef;font-size:11px;text-align:center;color:#555">' + (i.desc||'—') + '</td>' +
-                '<td style="padding:5px 8px;border-bottom:1px solid #efefef;font-size:11px;text-align:center;font-weight:600">' + i.cantidad + '</td>' +
-                '<td style="padding:5px 8px;border-bottom:1px solid #efefef;font-size:11px;text-align:center;color:#888">' + i.unidad + '</td>' +
+                '<td style="border-bottom:1px solid #efefef">' + (i.nombre||'—') + '</td>' +
+                '<td style="border-bottom:1px solid #efefef;text-align:center;color:#555">' + (i.desc||'—') + '</td>' +
+                '<td style="border-bottom:1px solid #efefef;text-align:center;font-weight:600">' + i.cantidad + '</td>' +
+                '<td style="border-bottom:1px solid #efefef;text-align:center;color:#888">' + i.unidad + '</td>' +
             '</tr>';
         }).join('');
 
@@ -467,18 +484,18 @@ function buildPlantillaOperativa(recetas) {
                     '<div>' + LOGO_SVG_PRINT + '</div>' +
                     '<div>' +
                         '<div class="receta-tipo">' + recetaTipoLine + '</div>' +
-                        '<div class="receta-nombre">' + r.nombre + '</div>' +
+                        '<div class="receta-nombre' + (sizeClass?' '+sizeClass:'') + '">' + r.nombre + '</div>' +
                     '</div>' +
                 '</div>' +
             '</div>' +
-            '<div class="body-imp">' +
+            '<div class="body-imp' + (sizeClass?' '+sizeClass:'') + '">' +
                 '<div class="sec-title">Ingredientes</div>' +
-                '<table class="tabla-ing">' +
+                '<table class="tabla-ing' + (sizeClass?' '+sizeClass:'') + '">' +
                     '<thead><tr style="background:#f8f8f8">' +
-                        '<th style="padding:6px 8px;font-size:10px;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:1px;text-align:left">Ingrediente</th>' +
-                        '<th style="padding:6px 8px;font-size:10px;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:1px;text-align:center">Descripción</th>' +
-                        '<th style="padding:6px 8px;font-size:10px;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:1px;text-align:center">Cant.</th>' +
-                        '<th style="padding:6px 8px;font-size:10px;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:1px;text-align:center">Unidad</th>' +
+                        '<th style="font-weight:600;color:#666;text-transform:uppercase;letter-spacing:1px;text-align:left">Ingrediente</th>' +
+                        '<th style="font-weight:600;color:#666;text-transform:uppercase;letter-spacing:1px;text-align:center">Descripción</th>' +
+                        '<th style="font-weight:600;color:#666;text-transform:uppercase;letter-spacing:1px;text-align:center">Cant.</th>' +
+                        '<th style="font-weight:600;color:#666;text-transform:uppercase;letter-spacing:1px;text-align:center">Unidad</th>' +
                     '</tr></thead>' +
                     '<tbody>' + filas + '</tbody>' +
                 '</table>' +
@@ -517,19 +534,30 @@ function buildPlantillaAdministrativa(recetas) {
         var aCostoP      = aSinIva > 0 ? (costo/aSinIva)*100 : 0;
         var aUtilidadP   = aSinIva > 0 ? 100 - aCostoP - 40 : 0;
 
+        var numIng = (r.ingredientes||[]).length;
+        var sizeClass = numIng > 16 ? 'mini' : numIng > 11 ? 'compact' : '';
         var filas = (r.ingredientes||[]).map(function(i) {
             var cu = getFactor(i.cantidad,i.unidad)*(i.costoPorKgLt||0);
+            // Reference unit cost label ($/kg, $/lt, $/pz)
+            var uRef = i.unidad;
+            var refLabel = '$/pz';
+            if(['G','KG'].indexOf((uRef||'').toUpperCase())>=0) refLabel='$/kg';
+            else if(['ML','LT'].indexOf((uRef||'').toUpperCase())>=0) refLabel='$/lt';
+            var refVal = (i.costoPorKgLt||0) > 0
+                ? '<span style="color:#999;font-size:9px">'+refLabel+'&nbsp;</span>$' + (i.costoPorKgLt).toFixed(2)
+                : '<span style="color:#ccc">—</span>';
             return '<tr>' +
-                '<td style="padding:5px 8px;border-bottom:1px solid #efefef;font-size:11px">' + (i.nombre||'—') + '</td>' +
-                '<td style="padding:5px 8px;border-bottom:1px solid #efefef;font-size:11px;text-align:center;color:#555">' + (i.desc||'—') + '</td>' +
-                '<td style="padding:5px 8px;border-bottom:1px solid #efefef;font-size:11px;text-align:center;font-weight:600">' + i.cantidad + '</td>' +
-                '<td style="padding:5px 8px;border-bottom:1px solid #efefef;font-size:11px;text-align:center;color:#888">' + i.unidad + '</td>' +
-                '<td style="padding:5px 8px;border-bottom:1px solid #efefef;font-size:11px;text-align:right;color:#3dbe7a;font-weight:600">$' + cu.toFixed(2) + '</td>' +
+                '<td style="border-bottom:1px solid #efefef">' + (i.nombre||'—') + '</td>' +
+                '<td style="border-bottom:1px solid #efefef;text-align:center;color:#555">' + (i.desc||'—') + '</td>' +
+                '<td style="border-bottom:1px solid #efefef;text-align:center;font-weight:600">' + i.cantidad + '</td>' +
+                '<td style="border-bottom:1px solid #efefef;text-align:center;color:#888">' + i.unidad + '</td>' +
+                '<td style="border-bottom:1px solid #efefef;text-align:right;color:#999">' + refVal + '</td>' +
+                '<td style="border-bottom:1px solid #efefef;text-align:right;color:#3dbe7a;font-weight:600">$' + cu.toFixed(2) + '</td>' +
             '</tr>';
         }).join('');
 
-        var costoTotalRow = '<tr style="background:#fafafa"><td colspan="4" style="padding:7px 8px;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#333">Costo total</td>' +
-            '<td style="padding:7px 8px;text-align:right;font-weight:700;font-size:15px;color:#1a1916">$' + costo.toFixed(2) + '</td></tr>';
+        var costoTotalRow = '<tr style="background:#fafafa"><td colspan="5" style="padding:6px 7px;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#333">Costo total</td>' +
+            '<td style="padding:6px 7px;text-align:right;font-weight:700;font-size:15px;color:#1a1916">$' + costo.toFixed(2) + '</td></tr>';
 
         var bloquesSugerido =
             '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f0f0f0;font-size:11px"><span style="color:#666">Precio sugerido comedor</span><span style="font-weight:700;color:#f5c842">$' + sComedor.toFixed(2) + '</span></div>' +
@@ -550,19 +578,20 @@ function buildPlantillaAdministrativa(recetas) {
                         '<div class="receta-tipo">' + (esSub
                             ? (r.tipo==='sub-alimentos'?'Sub Receta Alimentos':'Sub Receta Bebidas') + (r.grupo?' · '+r.grupo:'')
                             : (r.grupo||'') + (r.categoria?' · '+r.categoria:'')) + '</div>' +
-                        '<div class="receta-nombre">' + r.nombre + '</div>' +
+                        '<div class="receta-nombre' + (sizeClass?' '+sizeClass:'') + '">' + r.nombre + '</div>' +
                     '</div>' +
                 '</div>' +
             '</div>' +
-            '<div class="body-imp">' +
+            '<div class="body-imp' + (sizeClass?' '+sizeClass:'') + '">' +
                 '<div class="sec-title">Ingredientes</div>' +
-                '<table class="tabla-ing">' +
+                '<table class="tabla-ing' + (sizeClass?' '+sizeClass:'') + '">' +
                     '<thead><tr style="background:#f8f8f8">' +
-                        '<th style="padding:6px 8px;font-size:10px;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:1px;text-align:left">Ingrediente</th>' +
-                        '<th style="padding:6px 8px;font-size:10px;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:1px;text-align:center">Descripción</th>' +
-                        '<th style="padding:6px 8px;font-size:10px;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:1px;text-align:center">Cant.</th>' +
-                        '<th style="padding:6px 8px;font-size:10px;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:1px;text-align:center">Unidad</th>' +
-                        '<th style="padding:6px 8px;font-size:10px;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:1px;text-align:right">Costo U.</th>' +
+                        '<th style="font-weight:600;color:#666;text-transform:uppercase;letter-spacing:1px;text-align:left">Ingrediente</th>' +
+                        '<th style="font-weight:600;color:#666;text-transform:uppercase;letter-spacing:1px;text-align:center">Descripción</th>' +
+                        '<th style="font-weight:600;color:#666;text-transform:uppercase;letter-spacing:1px;text-align:center">Cant.</th>' +
+                        '<th style="font-weight:600;color:#666;text-transform:uppercase;letter-spacing:1px;text-align:center">Unidad</th>' +
+                        '<th style="font-weight:600;color:#999;text-transform:uppercase;letter-spacing:1px;text-align:right">Precio ref.</th>' +
+                        '<th style="font-weight:600;color:#666;text-transform:uppercase;letter-spacing:1px;text-align:right">Costo</th>' +
                     '</tr></thead>' +
                     '<tbody>' + filas + '</tbody>' +
                     '<tfoot>' + costoTotalRow + '</tfoot>' +
@@ -577,9 +606,9 @@ function buildPlantillaAdministrativa(recetas) {
                     (r.tiempo ? '<span style="font-size:10px;background:#f5f5f5;border-radius:4px;padding:5px 12px;color:#555"><span style="color:#888;letter-spacing:1px;text-transform:uppercase;font-size:9px">Tiempo de elaboración&nbsp;</span>' + r.tiempo + '</span>' : '') +
                 '</div>') : '') +
                 (esSub ? buildSubRecetaInfoBlock(r) : chipsExtra) +
-                (esSub ? buildSubRecetaCostoBlock(r) : ('<div style="border-top:2px solid #3dbe7a;margin-top:14px;padding-top:12px">')) +
-                    (!esSub ? '<div class="sec-title" style="margin-bottom:12px">Costeo</div>' : '') +
-                    (!esSub ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">' : '') +
+                (esSub ? buildSubRecetaCostoBlock(r) : ('<div class="costeo-block" style="border-top:2px solid #3dbe7a;margin-top:12px;padding-top:10px">')) +
+                    (!esSub ? '<div class="sec-title" style="margin-bottom:10px">Costeo</div>' : '') +
+                    (!esSub ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' : '') +
                         (!esSub ? '<div style="background:#fafafa;border:1px solid #f5c842;border-radius:8px;padding:14px">' : '') +
                         (!esSub ? '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#f5c842;margin-bottom:10px">📐 Costeo Sugerido</div>' : '') +
                             (!esSub ? '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee;font-size:11px"><span style="color:#666">Costo Bruto <span style="color:#aaa">30%</span></span><span style="font-weight:700;color:#f5c842">$' + costo.toFixed(2) + '</span></div>' : '') +

@@ -9,9 +9,7 @@
         var ctx;
         try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch (e) {}
         if (!ctx) return;
-        var parts = window.location.pathname.split('/').filter(Boolean);
-        var inSubdir = parts.length > 1;
-        var hubPath = inSubdir ? '../hub.html' : 'hub.html';
+        var hubPath = '/hub.html';
         var color = ctx.negColor || '#3dbe7a';
         bar.innerHTML =
             '<div class="ctx-bar-inner" style="border-color:' + color + '44">' +
@@ -41,6 +39,5 @@ function ctxSalir() {
     localStorage.removeItem('etaax_negocio_activo');
     localStorage.removeItem('etaax_ctx');
     sessionStorage.clear();
-    var parts = window.location.pathname.split('/').filter(Boolean);
-    window.location.href = (parts.length > 1 ? '../' : '') + 'hub.html?salir=1';
+    window.location.href = '/hub.html?salir=1';
 }
