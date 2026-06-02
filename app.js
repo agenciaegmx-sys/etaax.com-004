@@ -606,37 +606,51 @@ function buildPlantillaAdministrativa(recetas) {
                     (r.tiempo ? '<span style="font-size:10px;background:#f5f5f5;border-radius:4px;padding:5px 12px;color:#555"><span style="color:#888;letter-spacing:1px;text-transform:uppercase;font-size:9px">Tiempo de elaboración&nbsp;</span>' + r.tiempo + '</span>' : '') +
                 '</div>') : '') +
                 (esSub ? buildSubRecetaInfoBlock(r) : chipsExtra) +
-                (esSub ? buildSubRecetaCostoBlock(r) : ('<div class="costeo-block" style="border-top:2px solid #3dbe7a;margin-top:12px;padding-top:10px">')) +
-                    (!esSub ? '<div class="sec-title" style="margin-bottom:10px">Costeo</div>' : '') +
-                    (!esSub ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' : '') +
-                        (!esSub ? '<div style="background:#fafafa;border:1px solid #f5c842;border-radius:8px;padding:14px">' : '') +
-                        (!esSub ? '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#f5c842;margin-bottom:10px">📐 Costeo Sugerido</div>' : '') +
-                            (!esSub ? '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee;font-size:11px"><span style="color:#666">Costo Bruto <span style="color:#aaa">30%</span></span><span style="font-weight:700;color:#f5c842">$' + costo.toFixed(2) + '</span></div>' : '') +
-                            (!esSub ? '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee;font-size:11px"><span style="color:#666">Gasto Operativo <span style="color:#aaa">40%</span></span><span style="font-weight:600">$' + (sPlatillo*0.40).toFixed(2) + '</span></div>' : '') +
-                            (!esSub ? '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee;font-size:11px"><span style="color:#666">Utilidad Neta <span style="color:#aaa">30%</span></span><span style="font-weight:600">$' + (sPlatillo*0.30).toFixed(2) + '</span></div>' : '') +
-                            (!esSub ? '<div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#aaa;text-align:center;padding:6px 0 4px">precio</div>' : '') +
-                            (!esSub ? '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee;font-size:11px"><span style="color:#666">Precio de platillo <span style="color:#aaa">100%</span></span><span style="font-weight:600">$' + sPlatillo.toFixed(2) + '</span></div>' : '') +
-                            (!esSub ? '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee;font-size:11px"><span style="color:#666">+ IVA <span style="color:#aaa">16%</span></span><span style="font-weight:600">$' + (sPlatillo*0.16).toFixed(2) + '</span></div>' : '') +
-                            (!esSub ? '<div style="display:flex;justify-content:space-between;padding:7px 8px;margin-top:4px;background:#fff8e1;border-radius:4px;font-size:11px"><span style="font-weight:700;color:#333">Precio Comedor <span style="color:#aaa">116%</span></span><span style="font-weight:700;color:#f5c842">$' + sComedor.toFixed(2) + '</span></div>' : '') +
-    
-                        (!esSub ? '</div>' : '') +
-                        (!esSub ? '<div style="background:#fafafa;border:1px solid #3dbe7a;border-radius:8px;padding:14px">' : '') +
-(!esSub ?                             '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#3dbe7a;margin-bottom:10px">💳 Costeo Aplicado</div>' : '') +
-                            (precioEnCarta > 0 ? (
-                                (!esSub ? '<div style="font-size:10px;color:#888;margin-bottom:6px;letter-spacing:1px;text-transform:uppercase">Precio carta con IVA</div>' : '') +
-                                (!esSub ? '<div style="font-family:monospace;font-size:18px;font-weight:700;color:#1a1916;margin-bottom:10px">$' + precioEnCarta.toFixed(2) + '</div>' : '') +
-                                (!esSub ? '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee;font-size:11px"><span style="color:#666">Precio sin IVA <span style="color:#aaa">÷1.16</span></span><span style="font-weight:600">$' + aSinIva.toFixed(2) + '</span></div>' : '') +
-                                (!esSub ? '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee;font-size:11px"><span style="color:#666">Costo Bruto <span style="font-weight:700;color:' + (aCostoP<=32?'#3dbe7a':aCostoP<=45?'#f5c842':'#e05a3a') + '">' + aCostoP.toFixed(1) + '%</span></span><span style="font-weight:600">$' + costo.toFixed(2) + '</span></div>' : '') +
-                                (!esSub ? '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee;font-size:11px"><span style="color:#666">Gasto Operativo <span style="color:#aaa">40%</span></span><span style="font-weight:600">$' + (aSinIva*0.40).toFixed(2) + '</span></div>' : '') +
-                                (!esSub ? '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee;font-size:11px"><span style="color:#666">Utilidad Neta <span style="font-weight:700;color:' + (aUtilidadP>=25?'#3dbe7a':aUtilidadP>=10?'#f5c842':'#e05a3a') + '">' + aUtilidadP.toFixed(1) + '%</span></span><span style="font-weight:600">$' + (aSinIva*(aUtilidadP/100)).toFixed(2) + '</span></div>' : '') +
-                                (!esSub ? '<div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#aaa;text-align:center;padding:6px 0 4px">precio final</div>' : '') +
-                                (!esSub ? '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee;font-size:11px"><span style="color:#666">IVA incluido <span style="color:#aaa">16%</span></span><span style="font-weight:600">$' + (precioEnCarta-aSinIva).toFixed(2) + '</span></div>' : '') +
-                                (!esSub ? '<div style="display:flex;justify-content:space-between;padding:7px 8px;margin-top:4px;background:#f0faf5;border-radius:4px;font-size:11px"><span style="font-weight:700;color:#333">Precio Comedor</span><span style="font-weight:700;color:#3dbe7a">$' + precioEnCarta.toFixed(2) + '</span></div>' : '') +
-''
-                            ) : '<div style="font-size:11px;color:#aaa;padding:16px 0">Sin precio en carta registrado</div>') +
-                        (!esSub ? '</div>' : '') +
-                    (!esSub ? '</div>' : '') +
-                (!esSub ? '</div>' : '') +
+                (esSub ? buildSubRecetaCostoBlock(r) : (function(){
+                    var R = '<div class="costeo-block" style="border-top:2px solid #3dbe7a;margin-top:10px;padding-top:8px">';
+                    R += '<div class="sec-title" style="margin-bottom:6px">Costeo</div>';
+                    // row: helper
+                    function cr(lbl,val,bold,color){
+                        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-bottom:1px solid #f5f5f5;font-size:9.5px">'
+                            +'<span style="color:#666">'+lbl+'</span>'
+                            +'<span style="font-weight:'+(bold?'700':'500')+';color:'+(color||'#333')+'">'+val+'</span>'
+                            +'</div>';
+                    }
+                    function priceRow(lbl,val,bg,color){
+                        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 6px;margin-top:3px;border-radius:4px;background:'+bg+';font-size:10px">'
+                            +'<span style="font-weight:700;color:#333">'+lbl+'</span>'
+                            +'<span style="font-weight:700;color:'+color+'">'+val+'</span>'
+                            +'</div>';
+                    }
+                    R += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+                    // SUGERIDO
+                    R += '<div style="background:#fafafa;border:1px solid #f5c842;border-radius:6px;padding:8px 10px">';
+                    R += '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#f5c842;margin-bottom:5px">📐 Costeo Sugerido</div>';
+                    R += cr('Costo Bruto 30%','$'+costo.toFixed(2),true,'#c8960a');
+                    R += cr('Gasto Operativo 40%','$'+(sPlatillo*0.40).toFixed(2),false);
+                    R += cr('Utilidad Neta 30%','$'+(sPlatillo*0.30).toFixed(2),false);
+                    R += cr('Precio platillo','$'+sPlatillo.toFixed(2),false,'#555');
+                    R += cr('+ IVA 16%','$'+(sPlatillo*0.16).toFixed(2),false,'#888');
+                    R += priceRow('Precio Comedor 116%','$'+sComedor.toFixed(2),'#fff8e1','#c8960a');
+                    R += '</div>';
+                    // APLICADO
+                    R += '<div style="background:#fafafa;border:1px solid #3dbe7a;border-radius:6px;padding:8px 10px">';
+                    R += '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#3dbe7a;margin-bottom:5px">💳 Costeo Aplicado</div>';
+                    if(precioEnCarta > 0){
+                        R += '<div style="font-size:13px;font-weight:700;color:#1a1916;margin-bottom:4px">$'+precioEnCarta.toFixed(2)+'<span style="font-size:8px;color:#888;font-weight:400;margin-left:4px">con IVA</span></div>';
+                        R += cr('Precio sin IVA','$'+aSinIva.toFixed(2),false,'#555');
+                        R += cr('Costo Bruto','<span style="color:'+(aCostoP<=32?'#3dbe7a':aCostoP<=45?'#c8960a':'#e05a3a')+'">'+aCostoP.toFixed(1)+'%</span>  $'+costo.toFixed(2),false);
+                        R += cr('Gasto Operativo 40%','$'+(aSinIva*0.40).toFixed(2),false);
+                        R += cr('Utilidad Neta','<span style="color:'+(aUtilidadP>=25?'#3dbe7a':aUtilidadP>=10?'#c8960a':'#e05a3a')+'">'+aUtilidadP.toFixed(1)+'%</span>  $'+(aSinIva*(aUtilidadP/100)).toFixed(2),false);
+                        R += cr('IVA incluido 16%','$'+(precioEnCarta-aSinIva).toFixed(2),false,'#888');
+                        R += priceRow('Precio Comedor','$'+precioEnCarta.toFixed(2),'#f0faf5','#3dbe7a');
+                    } else {
+                        R += '<div style="font-size:10px;color:#aaa;padding:12px 0;text-align:center">Sin precio en carta registrado</div>';
+                    }
+                    R += '</div>';
+                    R += '</div></div>';
+                    return R;
+                })()) +
             '</div>' +
             '<div class="footer-imp">' +
                 '<span>etaax.com</span>' +
