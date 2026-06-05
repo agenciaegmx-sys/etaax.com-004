@@ -112,6 +112,10 @@
                             style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
                             border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
                             font-family:inherit;transition:all .2s" title="Vista lista">☰ Lista</button>
+                        <button id="btnModoSeleccion" onclick="toggleModoSeleccion()"
+                            style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
+                            border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
+                            font-family:inherit;transition:all .2s" title="Selección múltiple">☐ Seleccionar</button>
                     </div>
                 </div>
                 <div class="card-body" style="padding:0">
@@ -121,6 +125,10 @@
                             <table style="min-width:860px">
                                 <thead>
                                     <tr>
+                                        <th id="thSeleccion" style="width:36px;display:none;padding:0 8px;text-align:center">
+                                            <input type="checkbox" id="chkSelTodos" style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer"
+                                                onclick="_toggleSeleccionTodos(this.checked)">
+                                        </th>
                                         <th style="min-width:230px">Nombre</th>
                                         <th style="min-width:150px">Categoría</th>
                                         <th style="min-width:190px">Presentaciones</th>
@@ -149,6 +157,31 @@
                     </div>
                     <!-- Paginación -->
                     <div id="pgBar" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 16px;border-top:1px solid var(--border)"></div>
+
+                    <!-- Barra selección múltiple -->
+                    <div id="seleccionBar" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;
+                        position:sticky;bottom:0;background:var(--surface);
+                        border-top:2px solid var(--accent);padding:10px 16px;z-index:50">
+                        <span id="seleccionCount" style="font-weight:600;color:var(--accent);font-size:13px">0 seleccionados</span>
+                        <button onclick="_seleccionarTodaVista()"
+                            style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
+                            border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit">
+                            Selec. todo</button>
+                        <button onclick="_deseleccionarTodo()"
+                            style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
+                            border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit">
+                            Limpiar</button>
+                        <div style="flex:1"></div>
+                        <button onclick="toggleModoSeleccion()"
+                            style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
+                            border-radius:6px;padding:4px 12px;font-size:11px;cursor:pointer;font-family:inherit">
+                            Cancelar</button>
+                        <button id="btnEliminarSelec" onclick="_eliminarSeleccionados()" disabled
+                            style="background:rgba(224,90,58,.1);color:var(--red);border:1px solid var(--red);
+                            border-radius:6px;padding:4px 14px;font-size:12px;font-weight:600;cursor:pointer;
+                            font-family:inherit;opacity:.4;transition:opacity .2s">
+                            🗑️ Eliminar seleccionados</button>
+                    </div>
                 </div>
             </div>
         </div>

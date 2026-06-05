@@ -191,7 +191,38 @@
            }
            const prov = p0?.proveedor || '—';
    
-           return `<tr>
+           const sel     = _modoSeleccion && _seleccionados.has(ins.id);
+           const rowBg   = sel ? 'background:rgba(245,200,66,.07);' : '';
+           const tdSel   = _modoSeleccion
+               ? `<td data-sel-id="${ins.id}" style="width:36px;text-align:center;padding:0 10px;${rowBg}" onclick="_toggleSeleccionCard('${ins.id}',event)">
+                      <input type="checkbox" ${sel?'checked':''} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer"
+                          onclick="_toggleSeleccionCard('${ins.id}',event)">
+                  </td>` : '';
+           const accionesTd = _modoSeleccion
+               ? `<td></td>`
+               : `<td style="text-align:right;white-space:nowrap">
+                   <button class="btn-vista" style="padding:6px 14px;font-size:12px;margin-right:6px;
+                       display:inline-flex;align-items:center;gap:5px"
+                       onclick="verFicha('${ins.id}')">
+                       <span style="font-size:14px">👁️</span> Ver
+                   </button>
+                   <button class="btn-vista" style="padding:6px 14px;font-size:12px;margin-right:6px;
+                       color:var(--accent);border-color:var(--accent);
+                       display:inline-flex;align-items:center;gap:5px"
+                       onclick="editarInsumo('${ins.id}')">
+                       <span style="font-size:14px">✏️</span> Editar
+                   </button>
+                   <button class="btn-vista" style="padding:6px 12px;font-size:12px;
+                       color:var(--red);border-color:var(--red);
+                       display:inline-flex;align-items:center;justify-content:center"
+                       onclick="eliminarInsumo('${ins.id}')">
+                       <span style="font-size:14px">🗑️</span>
+                   </button>
+               </td>`;
+
+           return `<tr data-sel-id="${ins.id}" style="${rowBg}cursor:${_modoSeleccion?'pointer':'default'}"
+               ${_modoSeleccion ? `onclick="_toggleSeleccionCard('${ins.id}',event)"` : ''}>
+               ${tdSel}
                <td>
                    <div style="display:flex;align-items:center;gap:10px">
                        ${ins.foto
@@ -212,25 +243,7 @@
                </td>
                <td style="color:var(--green);font-weight:500;white-space:nowrap">${costo}</td>
                <td style="color:var(--text-muted)">${prov}</td>
-               <td style="text-align:right;white-space:nowrap">
-                   <button class="btn-vista" style="padding:6px 14px;font-size:12px;margin-right:6px;
-                       display:inline-flex;align-items:center;gap:5px"
-                       onclick="verFicha('${ins.id}')">
-                       <span style="font-size:14px">👁️</span> Ver
-                   </button>
-                   <button class="btn-vista" style="padding:6px 14px;font-size:12px;margin-right:6px;
-                       color:var(--accent);border-color:var(--accent);
-                       display:inline-flex;align-items:center;gap:5px"
-                       onclick="editarInsumo('${ins.id}')">
-                       <span style="font-size:14px">✏️</span> Editar
-                   </button>
-                   <button class="btn-vista" style="padding:6px 12px;font-size:12px;
-                       color:var(--red);border-color:var(--red);
-                       display:inline-flex;align-items:center;justify-content:center"
-                       onclick="eliminarInsumo('${ins.id}')">
-                       <span style="font-size:14px">🗑️</span>
-                   </button>
-               </td>
+               ${accionesTd}
            </tr>`;
        }).join('');
    }
@@ -286,7 +299,28 @@
            }).join('');
            if (nPres > 3) presChips += '<span style="font-size:9px;color:var(--text-dim)">+' + (nPres-3) + '</span>';
 
-           return '<div class="insumo-card">' +
+           var sel     = _modoSeleccion && _seleccionados.has(ins.id);
+           var selStyle = sel ? 'border-color:var(--accent);background:rgba(245,200,66,.07);' : '';
+           var selOverlay = _modoSeleccion
+               ? '<div style="position:absolute;top:7px;left:7px;z-index:4;width:22px;height:22px;border-radius:6px;' +
+                 'border:2px solid ' + (sel ? 'var(--accent)' : 'rgba(255,255,255,.45)') + ';' +
+                 'background:' + (sel ? 'var(--accent)' : 'rgba(0,0,0,.45)') + ';' +
+                 'display:flex;align-items:center;justify-content:center;' +
+                 'font-size:13px;font-weight:700;color:#0f0e0c;pointer-events:none" class="sel-badge">' +
+                 (sel ? '✓' : '') + '</div>'
+               : '';
+           var cardClick = _modoSeleccion
+               ? 'onclick="_toggleSeleccionCard(\'' + ins.id + '\',event)" style="cursor:pointer;position:relative;' + selStyle + '"'
+               : 'style="position:relative"';
+           var actionsHtml = _modoSeleccion ? '' :
+               '<div class="insumo-card-actions">' +
+                   '<button class="btn-ver" onclick="verFicha(\'' + ins.id + '\')">👁️ Ver</button>' +
+                   '<button class="btn-edit" onclick="editarInsumo(\'' + ins.id + '\')">✏️ Editar</button>' +
+                   '<button class="btn-del" onclick="eliminarInsumo(\'' + ins.id + '\')">🗑️</button>' +
+               '</div>';
+
+           return '<div class="insumo-card" data-sel-id="' + ins.id + '" ' + cardClick + '>' +
+               selOverlay +
                '<div class="insumo-card-foto">' +
                    fotoHTML +
                    tipoBadge +
@@ -299,13 +333,110 @@
                    (prov ? '<div class="insumo-card-prov">📍 ' + prov + '</div>' : '') +
                    (presChips ? '<div class="insumo-card-pres">' + presChips + '</div>' : '') +
                '</div>' +
-               '<div class="insumo-card-actions">' +
-                   '<button class="btn-ver" onclick="verFicha(\'' + ins.id + '\')">👁️ Ver</button>' +
-                   '<button class="btn-edit" onclick="editarInsumo(\'' + ins.id + '\')">✏️ Editar</button>' +
-                   '<button class="btn-del" onclick="eliminarInsumo(\'' + ins.id + '\')">🗑️</button>' +
-               '</div>' +
+               actionsHtml +
            '</div>';
        }).join('');
+   }
+
+   // ── Selección múltiple ────────────────────────────────────────
+   let _modoSeleccion = false;
+   let _seleccionados = new Set();
+
+   function toggleModoSeleccion() {
+       _modoSeleccion = !_modoSeleccion;
+       _seleccionados.clear();
+       const btn  = document.getElementById('btnModoSeleccion');
+       const bar  = document.getElementById('seleccionBar');
+       const thS  = document.getElementById('thSeleccion');
+       if (_modoSeleccion) {
+           btn.style.background  = 'var(--accent)';
+           btn.style.color       = '#0f0e0c';
+           btn.style.borderColor = 'var(--accent)';
+           btn.textContent       = '✕ Cancelar selección';
+           bar.style.display     = 'flex';
+           if (thS) thS.style.display = '';
+       } else {
+           btn.style.background  = 'transparent';
+           btn.style.color       = 'var(--text-muted)';
+           btn.style.borderColor = 'var(--border)';
+           btn.textContent       = '☐ Seleccionar';
+           bar.style.display     = 'none';
+           if (thS) thS.style.display = 'none';
+       }
+       _renderPagina();
+   }
+
+   function _toggleSeleccionCard(id, e) {
+       if (e) e.stopPropagation();
+       if (_seleccionados.has(id)) _seleccionados.delete(id);
+       else _seleccionados.add(id);
+       const sel = _seleccionados.has(id);
+       _actualizarBarraSeleccion();
+       // Actualiza todos los elementos con data-sel-id (card en grid, td y tr en lista)
+       document.querySelectorAll('[data-sel-id="' + id + '"]').forEach(function(el) {
+           if (el.tagName === 'TR') {
+               el.style.background = sel ? 'rgba(245,200,66,.07)' : '';
+           } else if (el.tagName === 'DIV') {
+               el.style.borderColor = sel ? 'var(--accent)' : '';
+               el.style.background  = sel ? 'rgba(245,200,66,.07)' : '';
+               const badge = el.querySelector('.sel-badge');
+               if (badge) {
+                   badge.textContent = sel ? '✓' : '';
+                   badge.style.borderColor  = sel ? 'var(--accent)' : 'rgba(255,255,255,.45)';
+                   badge.style.background   = sel ? 'var(--accent)' : 'rgba(0,0,0,.45)';
+               }
+           }
+           const cb = el.querySelector('input[type=checkbox]');
+           if (cb) cb.checked = sel;
+       });
+       // Actualiza el "seleccionar todos" del thead
+       const chkTodos = document.getElementById('chkSelTodos');
+       if (chkTodos) {
+           chkTodos.checked       = _seleccionados.size === _listaFiltrada.length;
+           chkTodos.indeterminate = _seleccionados.size > 0 && _seleccionados.size < _listaFiltrada.length;
+       }
+   }
+
+   function _toggleSeleccionTodos(checked) {
+       if (checked) _listaFiltrada.forEach(function(ins){ _seleccionados.add(ins.id); });
+       else _seleccionados.clear();
+       _actualizarBarraSeleccion();
+       _renderPagina();
+   }
+
+   function _seleccionarTodaVista() {
+       _listaFiltrada.forEach(function(ins){ _seleccionados.add(ins.id); });
+       _actualizarBarraSeleccion();
+       _renderPagina();
+   }
+
+   function _deseleccionarTodo() {
+       _seleccionados.clear();
+       _actualizarBarraSeleccion();
+       _renderPagina();
+   }
+
+   function _actualizarBarraSeleccion() {
+       const n      = _seleccionados.size;
+       const countEl = document.getElementById('seleccionCount');
+       const btnEl   = document.getElementById('btnEliminarSelec');
+       if (countEl) countEl.textContent = n + ' seleccionado' + (n !== 1 ? 's' : '');
+       if (btnEl) {
+           btnEl.disabled     = n === 0;
+           btnEl.style.opacity = n === 0 ? '.4' : '1';
+           btnEl.style.cursor  = n === 0 ? 'default' : 'pointer';
+       }
+   }
+
+   function _eliminarSeleccionados() {
+       const ids = Array.from(_seleccionados);
+       if (!ids.length) return;
+       _pedirClaveAdmin('Eliminar ' + ids.length + ' insumo' + (ids.length !== 1 ? 's' : ''), function() {
+           setInsumos(getInsumos().filter(function(x){ return !_seleccionados.has(x.id); }));
+           _seleccionados.clear();
+           toggleModoSeleccion();
+           init();
+       });
    }
 
    // ── Modal insumo ──────────────────────────────────────────────
