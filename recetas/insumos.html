@@ -476,10 +476,10 @@ function clearSearchInput() {
 </div>
 
 <style>
-/* Modal insumo — ancho completo de ventana */
+/* Modal insumo — ancho amplio pero acotado */
 #modalOverlay { padding: 12px; }
 #modalOverlay .modal {
-    max-width: calc(100vw - 24px);
+    max-width: min(960px, calc(100vw - 24px));
     width: 100%;
     max-height: calc(100vh - 24px);
 }

@@ -138,16 +138,42 @@
        const insumos  = getInsumos();
        const familias = [...new Set(insumos.map(x => x.familia).filter(Boolean))].sort();
        const cats     = [...new Set(insumos.map(x => x.categoria).filter(Boolean))].sort();
-   
+       if (!familias.length && !cats.length) return; // nada que cargar aún
+
        const fFam = document.getElementById('filtroFamilia');
        const fCat = document.getElementById('filtroCategoria');
+       if (!fFam || !fCat) return;
        const selFam = fFam.value;
        const selCat = fCat.value;
-   
+
        fFam.innerHTML = '<option value="">Todas las familias</option>' +
            familias.map(f => `<option value="${f}" ${f===selFam?'selected':''}>${f}</option>`).join('');
        fCat.innerHTML = '<option value="">Todas las categorías</option>' +
            cats.map(c => `<option value="${c}" ${c===selCat?'selected':''}>${c}</option>`).join('');
+   }
+
+   function filtrar() {
+       // Si los selects de filtro están vacíos (solo la opción default), recargarlos
+       const fFam = document.getElementById('filtroFamilia');
+       const fCat = document.getElementById('filtroCategoria');
+       if (fFam && fFam.options.length <= 1) cargarFiltros();
+
+       const q   = (fFam ? document.getElementById('searchInput').value : '').toLowerCase();
+       const fam = fFam ? fFam.value : '';
+       const cat = fCat ? fCat.value : '';
+
+       var lista = getInsumos();
+       if (q)   lista = lista.filter(x =>
+           x.nombre.toLowerCase().includes(q) ||
+           (x.marca||'').toLowerCase().includes(q) ||
+           (x.categoria||'').toLowerCase().includes(q)
+       );
+       if (fam) lista = lista.filter(x => x.familia === fam);
+       if (cat) lista = lista.filter(x => x.categoria === cat);
+
+       _listaFiltrada = lista;
+       _paginaActual  = 0;
+       _renderPagina();
    }
    
    // ── Toggle vista lista / cuadrícula ───────────────────────────
@@ -180,25 +206,6 @@
    const _PG_SIZE = 100;
    let _paginaActual = 0;
    let _listaFiltrada = [];
-
-   function filtrar() {
-       const q   = document.getElementById('searchInput').value.toLowerCase();
-       const fam = document.getElementById('filtroFamilia').value;
-       const cat = document.getElementById('filtroCategoria').value;
-
-       let lista = getInsumos();
-       if (q)   lista = lista.filter(x =>
-           x.nombre.toLowerCase().includes(q) ||
-           (x.marca||'').toLowerCase().includes(q) ||
-           (x.categoria||'').toLowerCase().includes(q)
-       );
-       if (fam) lista = lista.filter(x => x.familia === fam);
-       if (cat) lista = lista.filter(x => x.categoria === cat);
-
-       _listaFiltrada = lista;
-       _paginaActual  = 0;
-       _renderPagina();
-   }
 
    function _renderPagina() {
        const lista    = _listaFiltrada;
