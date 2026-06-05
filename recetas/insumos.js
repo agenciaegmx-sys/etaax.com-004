@@ -231,7 +231,7 @@
                        }
                        <div>
                            <div style="font-weight:500">${ins.nombre}</div>
-                           ${(ins.variedad||ins.maduracion) ? `<div style="font-size:11px;color:var(--text-muted)">${[ins.variedad,ins.maduracion].filter(Boolean).join(' · ')}</div>` : ''}
+                           ${(ins.maduracion||ins.variedad) ? `<div style="font-size:11px;color:var(--text-muted)">${[ins.maduracion,ins.variedad].filter(Boolean).join(' · ')}</div>` : ''}
                            ${ins.marca ? `<div style="font-size:10px;color:var(--text-dim)">${ins.marca}</div>` : ''}
                        </div>
                    </div>
@@ -282,7 +282,7 @@
            }
 
            var prov         = (p0 && p0.proveedor) ? p0.proveedor : '';
-           var variedadLine = [ins.variedad, ins.maduracion].filter(Boolean).join(' · ');
+           var variedadLine = [ins.maduracion, ins.variedad].filter(Boolean).join(' · ');
            var cat          = [ins.categoria, ins.subcategoria].filter(Boolean).join(' · ');
            var nPres    = pres.length;
 
@@ -2747,7 +2747,7 @@
    function init() {
        renderStats();
        cargarFiltros();
-       filtrar();
+       setVistaInsumos(vistaInsumos);
    }
    
    init();
