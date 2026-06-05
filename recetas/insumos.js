@@ -554,7 +554,7 @@
        'Licor de Café', 'Licor de Cacao',
        'Crema', 'Crema Irlandesa',
        'Anís', 'Sambuca', 'Absenta',
-       'Triple Sec', 'Curacao',
+       'Triple Sec', 'Curacao', 'Amaretto',
        'Otros Licores'
    ];
 
