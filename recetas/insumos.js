@@ -230,8 +230,9 @@
                            : `<div style="width:36px;height:36px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px">📦</div>`
                        }
                        <div>
-                           <div style="font-weight:500">${ins.nombre} ${ins.variedad ? '<span style="font-weight:400;color:var(--text-muted)">'+ins.variedad+'</span>' : ''}</div>
-                           <div style="font-size:11px;color:var(--text-dim)">${ins.marca||''} ${ins.maduracion ? '· '+ins.maduracion : ''}</div>
+                           <div style="font-weight:500">${ins.nombre}</div>
+                           ${(ins.variedad||ins.maduracion) ? `<div style="font-size:11px;color:var(--text-muted)">${[ins.variedad,ins.maduracion].filter(Boolean).join(' · ')}</div>` : ''}
+                           ${ins.marca ? `<div style="font-size:10px;color:var(--text-dim)">${ins.marca}</div>` : ''}
                        </div>
                    </div>
                </td>
@@ -280,9 +281,9 @@
                else if (p0.costoUnitario) costo = '$' + (+p0.costoUnitario).toFixed(2) + ' / ' + (p0.umCosto||'LT');
            }
 
-           var prov    = (p0 && p0.proveedor) ? p0.proveedor : '';
-           var variedad = [ins.marca, ins.variedad].filter(Boolean).join(' · ');
-           var cat      = [ins.categoria, ins.subcategoria].filter(Boolean).join(' · ');
+           var prov         = (p0 && p0.proveedor) ? p0.proveedor : '';
+           var variedadLine = [ins.variedad, ins.maduracion].filter(Boolean).join(' · ');
+           var cat          = [ins.categoria, ins.subcategoria].filter(Boolean).join(' · ');
            var nPres    = pres.length;
 
            var fotoHTML = ins.foto
@@ -327,7 +328,8 @@
                '</div>' +
                '<div class="insumo-card-body">' +
                    '<div class="insumo-card-nombre" title="' + ins.nombre + '">' + ins.nombre + '</div>' +
-                   (variedad ? '<div class="insumo-card-variedad">' + variedad + '</div>' : '') +
+                   (variedadLine ? '<div class="insumo-card-variedad">' + variedadLine + '</div>' : '') +
+                   (ins.marca ? '<div style="font-size:10px;color:var(--text-dim);margin-top:1px">' + ins.marca + '</div>' : '') +
                    (cat ? '<div class="insumo-card-cat">' + cat + '</div>' : '') +
                    '<div class="insumo-card-costo">' + costo + '</div>' +
                    (prov ? '<div class="insumo-card-prov">📍 ' + prov + '</div>' : '') +
