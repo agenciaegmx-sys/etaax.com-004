@@ -25,14 +25,86 @@
        return null;
    }
 
-   // ── localStorage ──────────────────────────────────────────────
+   // ── Insumos: caché en memoria + Supabase + localStorage fallback ──
+   var _insumosCache       = null;
+   var _insumosCacheNegId  = null;
+   var _insumosSyncTimer   = null;
+   var _insumosSupaCargado = false;
+
    function getInsumos() {
-       try { return JSON.parse(_skGet('insumos')) || []; }
-       catch { return []; }
+       var negId = getNegocioActivo();
+       if (_insumosCacheNegId !== negId) { _insumosCache = null; _insumosCacheNegId = negId; }
+       if (_insumosCache !== null) return _insumosCache;
+       try { _insumosCache = JSON.parse(_skGet('insumos')) || []; }
+       catch(e) { _insumosCache = []; }
+       return _insumosCache;
    }
 
    function setInsumos(data) {
-       localStorage.setItem(_sk('insumos'), JSON.stringify(data));
+       var negId = getNegocioActivo();
+       _insumosCache      = data;
+       _insumosCacheNegId = negId;
+       // localStorage como caché local (best-effort, puede fallar por cuota)
+       try { localStorage.setItem(_sk('insumos'), JSON.stringify(data)); } catch(e) {}
+       // Sincronizar a Supabase (debounced 2s)
+       clearTimeout(_insumosSyncTimer);
+       _insumosSyncTimer = setTimeout(function() {
+           _sincronizarInsumosSupabase(negId, data).catch(function(e) {
+               console.warn('[setInsumos] sync error:', e);
+           });
+       }, 2000);
+   }
+
+   async function _cargarInsumosDeSupabase() {
+       var negId = getNegocioActivo();
+       if (!negId || typeof _supabase === 'undefined') return;
+       try {
+           var res = await _supabase.from('negocio_insumos')
+               .select('datos')
+               .eq('negocio_id', negId)
+               .limit(5000);
+           if (res.error || !res.data) return;
+           var lista = res.data.map(function(r){ return r.datos; }).filter(Boolean);
+           if (lista.length > 0) {
+               // Supabase tiene datos → actualizar caché y re-render
+               _insumosCache      = lista;
+               _insumosCacheNegId = negId;
+               try { localStorage.setItem(_sk('insumos'), JSON.stringify(lista)); } catch(e) {}
+               renderStats(); cargarFiltros(); setVistaInsumos(vistaInsumos);
+           } else {
+               // Supabase vacío → migrar datos locales a Supabase
+               var local = _insumosCache || [];
+               if (local.length > 0) {
+                   _sincronizarInsumosSupabase(negId, local).catch(function(){});
+               }
+           }
+       } catch(e) { console.warn('[_cargarInsumosDeSupabase]', e); }
+   }
+
+   async function _sincronizarInsumosSupabase(negId, data) {
+       if (!negId || typeof _supabase === 'undefined') return;
+       var BATCH = 100;
+       // IDs actuales en Supabase
+       var resIds = await _supabase.from('negocio_insumos')
+           .select('insumo_id').eq('negocio_id', negId);
+       var supaIds  = (resIds.data || []).map(function(r){ return r.insumo_id; });
+       var localIds = data.map(function(ins){ return ins.id; });
+       // Eliminar los que ya no existen localmente
+       var toDelete = supaIds.filter(function(id){ return !localIds.includes(id); });
+       for (var di = 0; di < toDelete.length; di += BATCH) {
+           await _supabase.from('negocio_insumos')
+               .delete().eq('negocio_id', negId)
+               .in('insumo_id', toDelete.slice(di, di + BATCH));
+       }
+       // Upsert (sin fotos base64 — se guardan solo URLs)
+       var records = data.map(function(ins) {
+           var d = JSON.parse(JSON.stringify(ins));
+           if (d.foto && d.foto.startsWith('data:')) d.foto = '';
+           return { negocio_id: negId, insumo_id: ins.id, datos: d };
+       });
+       for (var i = 0; i < records.length; i += BATCH) {
+           await _supabase.from('negocio_insumos').upsert(records.slice(i, i + BATCH));
+       }
    }
    
    function genId() {
@@ -2774,6 +2846,11 @@
        renderStats();
        cargarFiltros();
        setVistaInsumos(vistaInsumos);
+       // Primera carga: sincronizar con Supabase en background
+       if (!_insumosSupaCargado && getNegocioActivo()) {
+           _insumosSupaCargado = true;
+           _cargarInsumosDeSupabase();
+       }
    }
    
    init();
