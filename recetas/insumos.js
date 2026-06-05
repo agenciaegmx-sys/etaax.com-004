@@ -2745,8 +2745,32 @@
        }).join('');
    }
 
+   // ── Limpieza de fotos base64 en localStorage ──────────────────
+   // Las fotos base64 pueden pesar >500KB cada una y agotar el cupo de 5MB.
+   // Se reemplaza por '' — la foto sigue en Supabase (catálogo global) o se
+   // puede volver a subir localmente en el insumo del negocio.
+   function _limpiarFotosBase64() {
+       var key = _sk('insumos');
+       var raw = localStorage.getItem(key);
+       if (!raw) return;
+       var tamanoMB = raw.length / 1024 / 1024;
+       if (tamanoMB < 1.5) return; // solo limpiar si hay riesgo real (>1.5 MB)
+       try {
+           var lista = JSON.parse(raw) || [];
+           var changed = false;
+           lista.forEach(function(ins) {
+               if (ins.foto && ins.foto.startsWith('data:')) {
+                   ins.foto = '';
+                   changed = true;
+               }
+           });
+           if (changed) localStorage.setItem(key, JSON.stringify(lista));
+       } catch(e) {}
+   }
+
    // ── Init ──────────────────────────────────────────────────────
    function init() {
+       _limpiarFotosBase64();
        renderStats();
        cargarFiltros();
        setVistaInsumos(vistaInsumos);
