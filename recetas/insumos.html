@@ -831,13 +831,12 @@ function cgAgregar(id) {
     if (!ins) return;
     var lista = getInsumos();
     if (lista.find(function(x){ return x.id === id; })) return;
-    // Clonar sin _csvRow (campo interno del import)
+    // Clonar sin campos internos del import
     var copia = JSON.parse(JSON.stringify(ins));
     delete copia._csvRow;
     lista.push(copia);
-    setInsumos(lista);
-    filtrar(); // reflejar al instante en la lista del negocio (background)
-    // Feedback visual
+    try { setInsumos(lista); } catch(e) { console.error('[cgAgregar] setInsumos error:', e); return; }
+    // Feedback visual ANTES de cualquier re-render para que siempre ocurra
     var btn = document.getElementById('cgBtn_' + id);
     if (btn) {
         btn.textContent = '✓ Agregado';
@@ -846,7 +845,10 @@ function cgAgregar(id) {
         btn.style.borderColor = 'var(--border)';
         btn.style.color = 'var(--text-dim)';
         btn.style.cursor = 'default';
+        btn.onclick = null;
     }
+    // Re-render background (con guard para que errores no rompan la UX)
+    try { filtrar(); } catch(e) { console.warn('[cgAgregar] filtrar error:', e); }
 }
 </script>
 </body>

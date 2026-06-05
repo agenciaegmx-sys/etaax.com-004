@@ -163,7 +163,8 @@
    function renderTabla(lista) {
        const tbody = document.getElementById('tbodyInsumos');
        const empty = document.getElementById('emptyState');
-   
+       if (!tbody || !empty) return;
+
        if (!lista.length) {
            tbody.innerHTML = '';
            empty.style.display = 'block';
@@ -253,6 +254,7 @@
    function renderGrid(lista) {
        var grid  = document.getElementById('gridInsumos');
        var empty = document.getElementById('emptyStateGrid');
+       if (!grid || !empty) return;
 
        if (!lista.length) {
            grid.innerHTML = '';
