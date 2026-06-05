@@ -683,6 +683,36 @@
        });
    }
 
+   function agregarUvaPersonalizada() {
+       var inp = document.getElementById('uva-nueva-input');
+       if (!inp) return;
+       var nombre = inp.value.trim();
+       if (!nombre) return;
+       var hidden = document.getElementById('ins-variedad');
+       if (!hidden) return;
+       var vals = hidden.value ? hidden.value.split(',').map(function(s){return s.trim();}).filter(Boolean) : [];
+       // Ignorar si ya existe (case-insensitive)
+       if (vals.some(function(v){ return v.toLowerCase() === nombre.toLowerCase(); })) {
+           inp.value = ''; return;
+       }
+       vals.push(nombre);
+       hidden.value = vals.join(', ');
+       modalDirty = true;
+       // Crear chip en el picker
+       var picker = document.getElementById('uva-picker');
+       if (picker) {
+           var esc = nombre.replace(/'/g, "\\'");
+           var chip = document.createElement('div');
+           chip.className = 'uva-chip active';
+           chip.dataset.uva = nombre;
+           chip.innerHTML = nombre + ' <span style="opacity:.5;font-size:9px">✕</span>';
+           chip.onclick = function(){ toggleUvaChip(esc); };
+           picker.appendChild(chip);
+       }
+       inp.value = '';
+       inp.focus();
+   }
+
    // ── Ajustar campos del modal según tipo de insumo ────────────
    var FAMILIA_POR_TIPO = {
        destilado: 'Bebidas', licor: 'Bebidas', vino: 'Bebidas', cerveza: 'Bebidas', cerveza_barril: 'Bebidas', refresco: 'Bebidas',
@@ -735,16 +765,32 @@
            if (tipo === 'vino') {
                varWrap.style.gridColumn = 'span 2';
                var selUvas = currentVar ? currentVar.split(',').map(function(s){return s.trim();}).filter(Boolean) : [];
+               // Chips del catálogo predefinido
                var chips = UVAS_VINO.map(function(u) {
                    var esc = u.replace(/'/g, "\\'");
                    return '<div class="uva-chip' + (selUvas.includes(u) ? ' active' : '') + '" ' +
                        'data-uva="' + u + '" onclick="toggleUvaChip(\'' + esc + '\')">' + u + '</div>';
                }).join('');
+               // Chips de uvas personalizadas (están en la selección pero no en UVAS_VINO)
+               var customChips = selUvas.filter(function(u){ return !UVAS_VINO.includes(u); }).map(function(u) {
+                   var esc = u.replace(/'/g, "\\'");
+                   return '<div class="uva-chip active" data-uva="' + u + '" onclick="toggleUvaChip(\'' + esc + '\')">'
+                       + u + ' <span style="opacity:.5;font-size:9px">✕</span></div>';
+               }).join('');
                varWrap.innerHTML = '<label id="lbl-variedad" style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);display:block;margin-bottom:4px">'
                    + 'Tipo de uva <span style="opacity:.5;font-weight:400">(selección múltiple)</span></label>'
                    + '<div id="uva-picker" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;'
-                   + 'max-height:150px;overflow-y:auto;padding:6px 2px;border-top:1px solid var(--border)">'
-                   + chips + '<input type="hidden" id="ins-variedad" value="' + currentVar + '"></div>';
+                   + 'max-height:180px;overflow-y:auto;padding:6px 2px;border-top:1px solid var(--border)">'
+                   + chips + customChips
+                   + '</div>'
+                   + '<div style="display:flex;gap:6px;margin-top:8px;align-items:center">'
+                   + '<input type="text" id="uva-nueva-input" placeholder="Otra uva o cepa…" '
+                   + 'style="flex:1;font-size:12px;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:inherit" '
+                   + 'onkeydown="if(event.key===\'Enter\'){event.preventDefault();agregarUvaPersonalizada()}">'
+                   + '<button onclick="agregarUvaPersonalizada()" '
+                   + 'style="background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-family:inherit;font-size:12px;cursor:pointer;white-space:nowrap">+ Agregar</button>'
+                   + '</div>'
+                   + '<input type="hidden" id="ins-variedad" value="' + currentVar + '">';
            } else {
                varWrap.style.gridColumn = '';
                if (document.getElementById('uva-picker')) {
