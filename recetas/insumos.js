@@ -42,11 +42,15 @@
 
    function setInsumos(data) {
        var negId = getNegocioActivo();
-       _insumosCache      = data;
+       _insumosCache      = data; // memoria: datos completos (con foto)
        _insumosCacheNegId = negId;
-       // localStorage como caché local (best-effort, puede fallar por cuota)
-       try { localStorage.setItem(_sk('insumos'), JSON.stringify(data)); } catch(e) {}
-       // Sincronizar a Supabase (debounced 2s)
+       // localStorage: sin fotos base64 para evitar QuotaExceededError
+       var paraLocal = data.map(function(ins) {
+           if (!ins.foto || !ins.foto.startsWith('data:')) return ins;
+           var d = Object.assign({}, ins); d.foto = ''; return d;
+       });
+       try { localStorage.setItem(_sk('insumos'), JSON.stringify(paraLocal)); } catch(e) {}
+       // Supabase: datos completos con fotos (JSONB no tiene límite práctico)
        clearTimeout(_insumosSyncTimer);
        _insumosSyncTimer = setTimeout(function() {
            _sincronizarInsumosSupabase(negId, data).catch(function(e) {
@@ -66,10 +70,15 @@
            if (res.error || !res.data) return;
            var lista = res.data.map(function(r){ return r.datos; }).filter(Boolean);
            if (lista.length > 0) {
-               // Supabase tiene datos → actualizar caché y re-render
+               // Supabase tiene datos → actualizar caché (con fotos) y re-render
                _insumosCache      = lista;
                _insumosCacheNegId = negId;
-               try { localStorage.setItem(_sk('insumos'), JSON.stringify(lista)); } catch(e) {}
+               // localStorage: versión sin fotos base64
+               var sinFotos = lista.map(function(ins) {
+                   if (!ins.foto || !ins.foto.startsWith('data:')) return ins;
+                   var d = Object.assign({}, ins); d.foto = ''; return d;
+               });
+               try { localStorage.setItem(_sk('insumos'), JSON.stringify(sinFotos)); } catch(e) {}
                renderStats(); cargarFiltros(); setVistaInsumos(vistaInsumos);
            } else {
                // Supabase vacío → migrar datos locales a Supabase
@@ -96,11 +105,9 @@
                .delete().eq('negocio_id', negId)
                .in('insumo_id', toDelete.slice(di, di + BATCH));
        }
-       // Upsert (sin fotos base64 — se guardan solo URLs)
+       // Upsert con datos completos — Supabase JSONB aguanta fotos base64
        var records = data.map(function(ins) {
-           var d = JSON.parse(JSON.stringify(ins));
-           if (d.foto && d.foto.startsWith('data:')) d.foto = '';
-           return { negocio_id: negId, insumo_id: ins.id, datos: d };
+           return { negocio_id: negId, insumo_id: ins.id, datos: ins };
        });
        for (var i = 0; i < records.length; i += BATCH) {
            await _supabase.from('negocio_insumos').upsert(records.slice(i, i + BATCH));

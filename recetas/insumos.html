@@ -850,9 +850,8 @@ function cgAgregar(id) {
     // Clonar y limpiar campos internos
     var copia = JSON.parse(JSON.stringify(ins));
     delete copia._csvRow;
-    // Strip foto base64 — puede ser muy grande (>500KB) y reventar el localStorage
-    // Se guarda solo si es URL (http/https), no data URI
-    if (copia.foto && copia.foto.startsWith('data:')) copia.foto = '';
+    // La foto base64 se mantiene — setInsumos la guarda en Supabase (sin límite)
+    // y la omite solo del localStorage para evitar QuotaExceededError
     lista.push(copia);
     var guardado = false;
     try {
