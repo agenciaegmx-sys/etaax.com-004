@@ -777,17 +777,26 @@ function _cgRender() {
     var html = pagina.length === 0
         ? '<div style="text-align:center;color:var(--text-dim);padding:40px">Sin resultados</div>'
         : pagina.map(function(ins) {
-            var p0     = (ins.presentaciones || [])[0];
-            var precio = p0 && parseFloat(p0.precio) > 0
+            var p0        = (ins.presentaciones || [])[0];
+            var precio    = p0 && parseFloat(p0.precio) > 0
                 ? '$' + parseFloat(p0.precio).toFixed(2) + ' / ' + (p0.contNeto||'') + ' ' + (p0.umContenido||'')
                 : '—';
-            var prov   = p0 && p0.proveedor ? p0.proveedor : '—';
-            var yaEsta = actuales.indexOf(ins.id) !== -1;
+            var prov      = p0 && p0.proveedor ? p0.proveedor : '';
+            var yaEsta    = actuales.indexOf(ins.id) !== -1;
+            var varLine   = [ins.maduracion, ins.variedad].filter(Boolean).join(' · ');
+            var cat       = [ins.familia, ins.categoria, ins.subcategoria].filter(Boolean).join(' · ');
+            var fotoEl    = ins.foto
+                ? '<img src="'+ins.foto+'" style="width:40px;height:40px;border-radius:8px;object-fit:cover;border:1px solid var(--border);flex-shrink:0">'
+                : '<div style="width:40px;height:40px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">📦</div>';
             return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">' +
-                '<div style="width:36px;height:36px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">📦</div>' +
+                fotoEl +
                 '<div style="flex:1;min-width:0">' +
-                    '<div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + ins.nombre + (ins.variedad ? ' <span style="font-weight:400;color:var(--text-muted)">'+ins.variedad+'</span>' : '') + '</div>' +
-                    '<div style="font-size:11px;color:var(--text-dim)">' + (ins.familia||'') + (ins.categoria ? ' · '+ins.categoria : '') + ' · ' + prov + '</div>' +
+                    '<div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + ins.nombre + '</div>' +
+                    (varLine ? '<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + varLine + '</div>' : '') +
+                    '<div style="font-size:10px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
+                        (ins.marca ? ins.marca + (cat ? '  ·  ' : '') : '') + cat +
+                        (prov ? '  ·  📍' + prov : '') +
+                    '</div>' +
                 '</div>' +
                 '<div style="font-size:12px;color:var(--green);white-space:nowrap;flex-shrink:0;margin-right:8px">' + precio + '</div>' +
                 (yaEsta
