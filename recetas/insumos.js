@@ -1503,12 +1503,28 @@
        if (_elP) _elP.textContent = fmtMXN(_cp);
        if (_elO) _elO.textContent = _ozV;
        if (_elL) _elL.textContent = _ltV;
-       if (_elCarta) _elCarta.textContent = fmtMXN(_cp * _fp);
+
+       // Precio sugerido = costo pieza \u00d7 factor
+       var _precioSugerido = _cp * _fp;
        if (tipoInsumoActual === 'cerveza_barril') {
            const _ltNum = _ltV !== '\u2014' ? parseFloat(_ltV.replace('$ ','').replace(/,/g,'')) : 0;
-           if (_elCarta) _elCarta.textContent = fmtMXN(_ltNum * _fp);
+           _precioSugerido = _ltNum * _fp;
+           if (_elCarta) _elCarta.textContent = fmtMXN(_precioSugerido);
            var _elVaso = document.getElementById('ref-precio-vaso-'+i);
            if (_elVaso) _elVaso.textContent = fmtMXN(_cp * _fp);
+       } else {
+           if (_elCarta) _elCarta.textContent = fmtMXN(_precioSugerido);
+       }
+
+       // Auto-poblar precioCarta con el precio sugerido si est\u00e1 vac\u00edo o igual al sugerido anterior
+       if (_precioSugerido > 0) {
+           const _pcActual = parseFloat(p.precioCarta) || 0;
+           // Solo auto-fill si precioCarta est\u00e1 vac\u00edo \u2014 no sobreescribir si el usuario lo cambi\u00f3
+           if (!_pcActual) {
+               p.precioCarta = _precioSugerido.toFixed(2);
+               const _elInput = document.querySelector(`#listaPresentaciones [oninput*="updPres(${i},'precioCarta'"]`);
+               if (_elInput) _elInput.value = fmtPrecio(p.precioCarta);
+           }
        }
    }
 
