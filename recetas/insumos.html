@@ -826,28 +826,59 @@ function _cgIrPagina(n) {
     document.getElementById('cgLista').scrollTop = 0;
 }
 
+function _cgMarcarAgregado(id) {
+    var btn = document.getElementById('cgBtn_' + id);
+    if (!btn) return;
+    btn.textContent = '✓ Agregado';
+    btn.disabled = true;
+    btn.style.background = 'transparent';
+    btn.style.borderColor = 'var(--border)';
+    btn.style.color = 'var(--text-dim)';
+    btn.style.cursor = 'default';
+    btn.onclick = null;
+}
+
 function cgAgregar(id) {
     var ins = _cgTodos.find(function(x){ return x.id === id; });
     if (!ins) return;
     var lista = getInsumos();
-    if (lista.find(function(x){ return x.id === id; })) return;
-    // Clonar sin campos internos del import
+    // Si ya existe, solo actualizar visual (pudo haberse guardado en intento previo)
+    if (lista.find(function(x){ return x.id === id; })) {
+        _cgMarcarAgregado(id);
+        return;
+    }
+    // Clonar y limpiar campos internos
     var copia = JSON.parse(JSON.stringify(ins));
     delete copia._csvRow;
+    // Strip foto base64 — puede ser muy grande (>500KB) y reventar el localStorage
+    // Se guarda solo si es URL (http/https), no data URI
+    if (copia.foto && copia.foto.startsWith('data:')) copia.foto = '';
     lista.push(copia);
-    try { setInsumos(lista); } catch(e) { console.error('[cgAgregar] setInsumos error:', e); return; }
-    // Feedback visual ANTES de cualquier re-render para que siempre ocurra
-    var btn = document.getElementById('cgBtn_' + id);
-    if (btn) {
-        btn.textContent = '✓ Agregado';
-        btn.disabled = true;
-        btn.style.background = 'transparent';
-        btn.style.borderColor = 'var(--border)';
-        btn.style.color = 'var(--text-dim)';
-        btn.style.cursor = 'default';
-        btn.onclick = null;
+    var guardado = false;
+    try {
+        setInsumos(lista);
+        guardado = true;
+    } catch(e) {
+        console.error('[cgAgregar] setInsumos error:', e);
+        // Último recurso: intentar sin foto de ningún tipo
+        try {
+            copia.foto = '';
+            setInsumos(lista);
+            guardado = true;
+        } catch(e2) {
+            console.error('[cgAgregar] setInsumos sin foto también falló:', e2);
+        }
     }
-    // Re-render background (con guard para que errores no rompan la UX)
+    if (!guardado) {
+        var btn = document.getElementById('cgBtn_' + id);
+        if (btn) {
+            btn.textContent = '⚠ Sin espacio';
+            btn.style.color = 'var(--red)';
+            btn.style.borderColor = 'var(--red)';
+        }
+        return;
+    }
+    _cgMarcarAgregado(id);
     try { filtrar(); } catch(e) { console.warn('[cgAgregar] filtrar error:', e); }
 }
 </script>
