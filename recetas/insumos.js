@@ -2245,11 +2245,13 @@
                        color:var(--accent);margin-bottom:4px">
                        ${[ins.familia, ins.categoria, ins.subcategoria].filter(Boolean).join(' · ')}
                    </div>
-                   <div style="font-size:22px;font-weight:600;color:var(--text);margin-bottom:4px">${ins.nombre}</div>
-                   <div style="font-size:13px;color:var(--text-muted)">
-                       ${[ins.marca, ins.variedad, ins.maduracion].filter(Boolean).join(' · ')}
+                   <div style="font-size:22px;font-weight:600;color:var(--text);margin-bottom:2px">${ins.nombre}</div>
+                   ${ins.marca ? `<div style="font-size:12px;color:var(--text-dim);margin-bottom:3px">${ins.marca}</div>` : ''}
+                   <div style="display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:2px">
+                       ${ins.variedad ? `<span style="font-size:11px;color:var(--text-muted)">${ins.variedad}</span>` : ''}
+                       ${ins.maduracion ? `<span class="pill pill-amber" style="font-size:10px;padding:1px 8px">${ins.maduracion}</span>` : ''}
+                       ${ins.empaque ? `<span style="font-size:11px;color:var(--text-dim)">· ${ins.empaque}</span>` : ''}
                    </div>
-                   ${ins.empaque ? `<div style="font-size:11px;color:var(--text-dim);margin-top:4px">${ins.empaque}</div>` : ''}
                </div>
                <span class="pill ${ins.activo==='1'?'pill-amber':'pill-red'}" style="flex-shrink:0">
                    ${ins.activo==='1'?'Activo':'Inactivo'}
