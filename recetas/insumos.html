@@ -175,6 +175,20 @@
                     onclick="toggleActivoInsumo()"
                     style="cursor:pointer;user-select:none">Activo</span>
                 <input type="hidden" id="ins-activo" value="1">
+                <!-- Convertir tipo -->
+                <div style="position:relative">
+                    <button id="btnConvertirTipo" onclick="toggleConvertirTipoPop(event)"
+                        style="display:flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:5px 11px;font-family:inherit;font-size:12px;cursor:pointer;white-space:nowrap">
+                        <span id="iconTipoActual" style="font-size:14px">🥃</span>
+                        <span style="color:var(--text-dim)">Convertir</span>
+                    </button>
+                    <div id="convertirTipoPop" style="display:none;position:absolute;right:0;top:calc(100% + 6px);
+                        z-index:9999;background:var(--surface);border:1px solid var(--border);border-radius:12px;
+                        padding:10px;box-shadow:0 8px 32px rgba(0,0,0,.5);width:220px">
+                        <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px;padding:0 2px">Cambiar tipo de insumo</div>
+                        <div id="convertirTipoGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:4px"></div>
+                    </div>
+                </div>
                 <button class="modal-close" onclick="cerrarModalBtn()">✕</button>
             </div>
         </div>
@@ -425,6 +439,14 @@ function clearSearchInput() {
 </div>
 
 <style>
+/* Modal insumo — ancho completo de ventana */
+#modalOverlay { padding: 12px; }
+#modalOverlay .modal {
+    max-width: calc(100vw - 24px);
+    width: 100%;
+    max-height: calc(100vh - 24px);
+}
+
 .cat-btn {
     background: var(--surface2);
     border: 1px solid var(--border);

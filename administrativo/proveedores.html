@@ -309,6 +309,43 @@
                     </div>
                 </div>
             </div>
+
+            <!-- ══ DESCUBRIMIENTO ══ -->
+            <div class="card" style="margin-top:16px">
+                <div class="card-header" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+                    <div>
+                        <h2>🔍 Descubrimiento</h2>
+                        <div style="font-size:11px;color:var(--text-dim);margin-top:2px">Proveedores e insumos capturados en el sistema que aún no están en el catálogo global</div>
+                    </div>
+                    <button class="btn-ghost" onclick="renderDescubrimiento()" style="font-size:12px">↺ Actualizar</button>
+                </div>
+                <div class="card-body" style="padding:16px 20px;display:flex;flex-direction:column;gap:20px">
+
+                    <!-- Proveedores sin catalogar -->
+                    <div>
+                        <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px;display:flex;align-items:center;gap:10px">
+                            <span>🚚 Proveedores usados en insumos — sin catalogar</span>
+                            <span id="descProvCount" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1px 8px;font-size:10px"></span>
+                        </div>
+                        <div id="descProvList" style="display:flex;flex-wrap:wrap;gap:8px">
+                            <span style="font-size:12px;color:var(--text-dim)">Cargando…</span>
+                        </div>
+                    </div>
+
+                    <!-- Insumos sin catalogar (nombres únicos no en catálogo) -->
+                    <div style="border-top:1px solid var(--border);padding-top:16px">
+                        <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px;display:flex;align-items:center;gap:10px">
+                            <span>🧂 Insumos nuevos por negocio — sin catálogo global</span>
+                            <span id="descInsCount" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1px 8px;font-size:10px"></span>
+                        </div>
+                        <div id="descInsList" style="display:flex;flex-wrap:wrap;gap:8px">
+                            <span style="font-size:12px;color:var(--text-dim)">Cargando…</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
         </div>
     </main>
 </div>
@@ -650,12 +687,103 @@ function esc(s) {
     return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+/* ── DESCUBRIMIENTO ── */
+function _getAllInsumos() {
+    // Lee insumos de todas las keys posibles (global + por negocio)
+    var result = [];
+    var keys = Object.keys(localStorage);
+    keys.forEach(function(k) {
+        if (!k.endsWith('_insumos') && k !== 'etaax_insumos') return;
+        try {
+            var lista = JSON.parse(localStorage.getItem(k)) || [];
+            lista.forEach(function(ins) { result.push(ins); });
+        } catch(e) {}
+    });
+    return result;
+}
+
+function renderDescubrimiento() {
+    var catalogados = load();
+    var nombresEnCatalogo = new Set(catalogados.map(function(p){ return (p.nombre||'').toLowerCase(); }));
+
+    // ── Proveedores ──
+    var insumosAll = _getAllInsumos();
+    var provsUsados = new Set();
+    insumosAll.forEach(function(ins) {
+        (ins.presentaciones || []).forEach(function(pr) {
+            if (pr.proveedor && pr.proveedor.trim()) provsUsados.add(pr.proveedor.trim());
+        });
+    });
+    var provsSinCatalog = Array.from(provsUsados).filter(function(n) {
+        return !nombresEnCatalogo.has(n.toLowerCase());
+    }).sort();
+
+    var provEl = document.getElementById('descProvList');
+    var provCount = document.getElementById('descProvCount');
+    provCount.textContent = provsSinCatalog.length + ' pendientes';
+    if (!provsSinCatalog.length) {
+        provEl.innerHTML = '<span style="font-size:12px;color:var(--text-dim)">✅ Todos los proveedores usados ya están catalogados.</span>';
+    } else {
+        provEl.innerHTML = provsSinCatalog.map(function(nombre) {
+            return '<div style="display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 12px">'
+                + '<span style="font-size:12px;font-weight:500">' + esc(nombre) + '</span>'
+                + '<button onclick="agregarProveedorDescubierto(' + JSON.stringify(nombre) + ')" '
+                + 'style="background:var(--green);border:none;color:#fff;border-radius:4px;padding:2px 8px;font-size:10px;cursor:pointer;font-family:inherit">+ Agregar</button>'
+                + '</div>';
+        }).join('');
+    }
+
+    // ── Insumos ──
+    var catInsumos = new Set();
+    try {
+        var catG = JSON.parse(localStorage.getItem('etaax_catalogo_insumos_local') || '[]');
+        catG.forEach(function(ci) { if(ci.nombre) catInsumos.add(ci.nombre.toLowerCase()); });
+    } catch(e) {}
+    var insNombres = new Set(insumosAll.map(function(i){ return i.nombre; }).filter(Boolean));
+    var insSinCatalog = Array.from(insNombres).filter(function(n) {
+        return !catInsumos.has(n.toLowerCase());
+    }).sort();
+
+    var insEl = document.getElementById('descInsList');
+    var insCount = document.getElementById('descInsCount');
+    insCount.textContent = insSinCatalog.length + ' pendientes';
+    if (!insSinCatalog.length) {
+        insEl.innerHTML = '<span style="font-size:12px;color:var(--text-dim)">✅ Todos los insumos ya están en el catálogo global.</span>';
+    } else {
+        insEl.innerHTML = insSinCatalog.slice(0, 60).map(function(nombre) {
+            return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px">'
+                + esc(nombre) + '</div>';
+        }).join('') + (insSinCatalog.length > 60
+            ? '<div style="font-size:11px;color:var(--text-dim);align-self:center">…y ' + (insSinCatalog.length - 60) + ' más</div>'
+            : '');
+    }
+}
+
+function agregarProveedorDescubierto(nombre) {
+    var lista = load();
+    if (lista.some(function(p){ return p.nombre.toLowerCase() === nombre.toLowerCase(); })) {
+        alert('Ya existe un proveedor con ese nombre.');
+        return;
+    }
+    var id = Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+    lista.push({ id: id, nombre: nombre, contacto: '', telEmpresa: '', telPersonal: '',
+        correo: '', formaPago: '', banco: '', clabe: '', cuenta: '',
+        rfc: '', zona: '', notas: '', docs: [] });
+    save(lista);
+    renderTable();
+    renderDescubrimiento();
+}
+
 /* ── INIT ── */
-document.addEventListener('DOMContentLoaded', renderTable);
+document.addEventListener('DOMContentLoaded', function() {
+    renderTable();
+    renderDescubrimiento();
+});
 
 document.getElementById('modalProv').addEventListener('click', function(e){
     if (e.target === this) closeModal();
 });
+
 </script>
 <script src="../ctx-bar.js"></script>
 <script src="../admin-guard.js"></script>

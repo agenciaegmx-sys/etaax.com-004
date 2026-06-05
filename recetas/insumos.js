@@ -985,6 +985,8 @@
        else renderPresentaciones();
 
        ajustarCamposPorTipo(tipoInsumoActual);
+       const _iconEl = document.getElementById('iconTipoActual');
+       if (_iconEl) _iconEl.textContent = (TIPO_CONFIG[tipoInsumoActual] || TIPO_CONFIG['destilado']).icon;
 
        // Pre-rellenar vida útil num+unidad si es vino editado
        if (tipoInsumoActual === 'vino' && ins && ins.vidaUtilAbrir) {
@@ -1018,6 +1020,7 @@
        }
 
        modalDirty = false;
+       _actualizarDatalistProveedores();
        document.getElementById('modalOverlay').style.display = 'flex';
        setTimeout(() => document.getElementById('ins-nombre').focus(), 100);
    }
@@ -1070,7 +1073,55 @@
            init();
        });
    }
-   
+
+   // ── Convertir tipo de insumo ──────────────────────────────────
+   const _TIPOS_ORDEN = [
+       ['destilado','🥃','Destilado'],
+       ['licor',    '🍹','Licor'],
+       ['vino',     '🍷','Vino'],
+       ['refresco', '🧃','Refresco'],
+       ['cerveza',  '🍺','Cerveza'],
+       ['cerveza_barril','🛢️','Barril'],
+       ['abarrote', '🧂','Abarrote'],
+       ['carne',    '🥩','Proteína'],
+       ['fruta',    '🥬','Fruta/Verd.'],
+       ['otro',     '📦','Otro'],
+   ];
+
+   function toggleConvertirTipoPop(e) {
+       e.stopPropagation();
+       const pop  = document.getElementById('convertirTipoPop');
+       const grid = document.getElementById('convertirTipoGrid');
+       if (pop.style.display !== 'none') { pop.style.display = 'none'; return; }
+       grid.innerHTML = _TIPOS_ORDEN.map(([tipo, icon, label]) => {
+           const activo = tipo === tipoInsumoActual;
+           return `<button onclick="_aplicarConversionTipo('${tipo}')"
+               style="display:flex;align-items:center;gap:6px;background:${activo ? 'rgba(245,200,66,.15)' : 'var(--surface2)'};
+               border:1px solid ${activo ? 'var(--accent)' : 'var(--border)'};border-radius:7px;
+               padding:6px 9px;cursor:pointer;font-family:inherit;font-size:11px;color:${activo ? 'var(--accent)' : 'var(--text)'};
+               text-align:left;width:100%">
+               <span style="font-size:15px">${icon}</span><span>${label}</span>
+           </button>`;
+       }).join('');
+       pop.style.display = 'block';
+       const closePop = () => { pop.style.display = 'none'; document.removeEventListener('click', closePop); };
+       setTimeout(() => document.addEventListener('click', closePop), 0);
+   }
+
+   function _aplicarConversionTipo(tipo) {
+       if (tipo === tipoInsumoActual) { document.getElementById('convertirTipoPop').style.display = 'none'; return; }
+       tipoInsumoActual = tipo;
+       modalDirty = true;
+       const cfg = TIPO_CONFIG[tipo] || TIPO_CONFIG['destilado'];
+       const nombre = document.getElementById('ins-nombre').value.trim();
+       document.getElementById('modalTitulo').textContent = nombre ? nombre : `Insumo · ${cfg.icon} ${cfg.label}`;
+       const iconEl = document.getElementById('iconTipoActual');
+       if (iconEl) iconEl.textContent = cfg.icon;
+       ajustarCamposPorTipo(tipo);
+       renderPresentaciones();
+       document.getElementById('convertirTipoPop').style.display = 'none';
+   }
+
    // ── Foto ──────────────────────────────────────────────────────
    function cargarFotoInsumo(input) {
        const file = input.files[0];
@@ -1266,6 +1317,21 @@
            }
            const elCU = document.querySelector(`#listaPresentaciones [oninput*="updPres(${i},'costoUnitario"]`);
            if (elCU) elCU.value = p.costoUnitario;
+           // Actualizar display auto-calc (solo lectura)
+           const elCUAuto = document.getElementById(`cu-auto-val-${i}`);
+           if (elCUAuto) elCUAuto.textContent = fmtPrecio(p.costoUnitario);
+           // Actualizar precio final c/impuestos
+           const elPF = document.getElementById(`precio-final-val-${i}`);
+           if (elPF) {
+               const _base = parseFloat(p.precio) || 0;
+               const _dis  = p.incluyeImpuesto !== '0';
+               let _factor = 1;
+               if (!_dis) {
+                   if (p.ivaCheck === '1')  _factor *= 1.16;
+                   if (p.iepsCheck === '1') _factor *= (1 + parseFloat(p.iepsTasa || '26.5') / 100);
+               }
+               elPF.textContent = fmtMXN(_base * _factor);
+           }
            // Actualizar displays de refresco/cerveza/abarrote
            if (['refresco','cerveza','cerveza_barril'].includes(tipoInsumoActual)) {
                _updateDisplaysRefrescoCerv(p, i);
@@ -1530,13 +1596,13 @@
    
    // ── Sub-render helpers para renderPresentaciones ─────────────────────────
 
-   function _renderImpuestosBlock(p, i) {
+   function _renderImpuestosBlock(p, i, esAbarrote) {
        if (p.incluyeImpuesto === undefined) return '';
        const dis     = p.incluyeImpuesto !== '0';
        const ivaChk  = p.ivaCheck==='1' || p.incluyeImpuesto==='1' || p.incluyeImpuesto==='2';
        const iepsChk = p.iepsCheck==='1' || p.incluyeImpuesto==='2';
 
-       const _hasMasaDrenada = parseFloat(p.masaDrenada) > 0;
+       const _hasMasaDrenada = esAbarrote && parseFloat(p.masaDrenada) > 0;
        const _hasImpuesto    = !dis && (p.ivaCheck==='1' || p.iepsCheck==='1');
        let precioFinalHtml = '';
        if (_hasMasaDrenada || _hasImpuesto) {
@@ -1554,7 +1620,7 @@
            precioFinalHtml = `<div class="meta-item" style="margin-top:10px" id="precio-final-block-${i}">
                <label>${_hasImpuesto ? 'Precio final (c/impuestos)' : 'Precio base (masa drenada)'} ${_MXN}</label>
                <div style="background:var(--surface);border:1px solid var(--green-dim);border-radius:6px;padding:8px 12px">
-                   <div style="font-size:15px;font-weight:700;color:var(--green)">${fmtMXN(base * factor)}</div>
+                   <div id="precio-final-val-${i}" style="font-size:15px;font-weight:700;color:var(--green)">${fmtMXN(base * factor)}</div>
                    ${tags ? `<div style="font-size:9px;color:var(--text-dim);margin-top:2px">${tags}</div>` : ''}
                    ${masaLabel}
                </div>
@@ -1893,7 +1959,7 @@
                    <div class="mg-2">
                        <div class="meta-item">
                            <label>Proveedor</label>
-                           <input type="text" value="${p.proveedor||''}" placeholder="${esCarne ? 'Ej. Carnes Selectas, La Superior, Don Jorge' : esFruta ? 'Ej. Mercado Central, Central de Abasto, Distribuidor local' : esRefrescoCerv ? 'Ej. Grupo Modelo' : 'Ej. Viños América'}"
+                           <input type="text" list="etaax-provs-list" value="${p.proveedor||''}" placeholder="${esCarne ? 'Ej. Carnes Selectas' : esFruta ? 'Ej. Central de Abasto' : esRefrescoCerv ? 'Ej. Grupo Modelo' : 'Ej. Viños América'}"
                                oninput="updPres(${i},'proveedor',this.value)">
                        </div>
                        <div class="meta-item">
@@ -1966,7 +2032,7 @@
                    </div>
 
                    <!-- IMPUESTOS -->
-                   ${_renderImpuestosBlock(p, i)}
+                   ${_renderImpuestosBlock(p, i, esAbarrote)}
    
                    <!-- FILA 2: Costos calculados -->
                    ${_renderFilaCostosBlock(p, i, {esBarril, esRefrescoCerv, esBebidaCompleta, esAbarrote, esCarne: esCarneOFruta})}
@@ -2002,15 +2068,27 @@
                            </div>
                        </div>` : `
                        <div class="meta-item">
-                           <label>Costo unitario <span style="font-size:9px;letter-spacing:1px;color:var(--text-muted);font-weight:400;margin-left:4px">MXN</span></label>
-                           <div style="display:flex;align-items:center;gap:4px">
-                               <span style="color:var(--accent);font-weight:600;font-size:14px">$</span>
-                               <input type="text" inputmode="decimal" value="${fmtPrecio(p.costoUnitario)}" placeholder="0.00"
-                                   style="color:var(--accent)"
-                                   oninput="inputCurrency(this,${i},'costoUnitario')"
-                                   onfocus="focusCurrency(this)"
-                                   onblur="blurCurrency(this,${i},'costoUnitario')">
-                           </div>
+                           ${(()=>{
+                               const _autoCalc = parseFloat(p.precio) > 0 && parseFloat(p.contNeto) > 0;
+                               const _umLbl = (p.umCosto || 'LT').toUpperCase();
+                               if (_autoCalc) {
+                                   return `<label>Costo / ${_umLbl} <span style="font-size:9px;letter-spacing:1px;color:var(--text-muted);font-weight:400;margin-left:4px">MXN · auto</span></label>
+                                   <div style="display:flex;align-items:center;gap:4px;background:rgba(245,200,66,.06);border:1px solid rgba(245,200,66,.2);border-radius:6px;padding:8px 12px;cursor:default">
+                                       <span style="color:var(--accent);font-weight:600;font-size:14px">$</span>
+                                       <span id="cu-auto-val-${i}" style="color:var(--accent);font-weight:700;font-size:14px">${fmtPrecio(p.costoUnitario)}</span>
+                                       <span style="font-size:9px;color:var(--text-dim);margin-left:4px">/ ${_umLbl}</span>
+                                   </div>`;
+                               }
+                               return `<label>Costo unitario <span style="font-size:9px;letter-spacing:1px;color:var(--text-muted);font-weight:400;margin-left:4px">MXN</span></label>
+                               <div style="display:flex;align-items:center;gap:4px">
+                                   <span style="color:var(--accent);font-weight:600;font-size:14px">$</span>
+                                   <input type="text" inputmode="decimal" value="${fmtPrecio(p.costoUnitario)}" placeholder="0.00"
+                                       style="color:var(--accent)"
+                                       oninput="inputCurrency(this,${i},'costoUnitario')"
+                                       onfocus="focusCurrency(this)"
+                                       onblur="blurCurrency(this,${i},'costoUnitario')">
+                               </div>`;
+                           })()}
                        </div>`}
                        ${esRefrescoCerv ? `
                        <div class="meta-item">
@@ -2496,7 +2574,9 @@
        if (e.key !== 'Enter' && e.key !== 'Tab') return;
        if (e.target.tagName === 'TEXTAREA') return;
        if (e.target.tagName === 'SELECT') return;
-   
+       // Si el foco está en un botón, Enter ejecuta su acción normal (click)
+       if (e.key === 'Enter' && e.target.tagName === 'BUTTON') return;
+
        // En inputs de texto/número: Enter avanza al siguiente campo
        if (e.key === 'Enter') {
            e.preventDefault();
@@ -2507,6 +2587,27 @@
        }
    });
    
+   // ── Datalist de proveedores (catálogo global + usados en insumos) ──
+   function _actualizarDatalistProveedores() {
+       var listId = 'etaax-provs-list';
+       var dl = document.getElementById(listId);
+       if (!dl) { dl = document.createElement('datalist'); dl.id = listId; document.body.appendChild(dl); }
+       // Proveedores del catálogo global
+       var catalogados = [];
+       try { catalogados = JSON.parse(localStorage.getItem('etaax_proveedores') || '[]'); } catch(e){}
+       var nombres = new Set(catalogados.map(function(p){ return p.nombre; }).filter(Boolean));
+       // Proveedores usados en insumos de este negocio (puede que no estén en catálogo)
+       var todosInsumos = getInsumos();
+       todosInsumos.forEach(function(ins){
+           (ins.presentaciones || []).forEach(function(pr){
+               if (pr.proveedor) nombres.add(pr.proveedor);
+           });
+       });
+       dl.innerHTML = Array.from(nombres).sort().map(function(n){
+           return '<option value="' + n.replace(/"/g,'&quot;') + '">';
+       }).join('');
+   }
+
    // ── Init ──────────────────────────────────────────────────────
    function init() {
        renderStats();
