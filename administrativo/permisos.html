@@ -415,7 +415,7 @@ function _mostrarNavBar() {
     var ctx;
     try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch(e) {}
     var parts = window.location.pathname.split('/').filter(Boolean);
-    var hubPath = parts.length > 1 ? '../hub.html' : 'hub.html';
+    var hubPath = '/hub.html';
 
     if (ctx) {
         var color = ctx.negColor || '#3dbe7a';
@@ -464,7 +464,7 @@ function ctxSalir() {
     localStorage.removeItem('etaax_ctx');
     sessionStorage.clear();
     var parts = window.location.pathname.split('/').filter(Boolean);
-    window.location.href = (parts.length > 1 ? '../' : '') + 'hub.html?salir=1';
+    window.location.href = '/hub.html?salir=1';
 }
 </script>
 </body>
