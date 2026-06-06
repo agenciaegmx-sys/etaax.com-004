@@ -22,7 +22,51 @@ function _skGet(key) {
 function getInsumos()     { try { return JSON.parse(_skGet('insumos'))     || []; } catch { return []; } }
 function getRecetas()     { try { return JSON.parse(_skGet('recetas'))     || []; } catch { return []; } }
 function getInventarios() { try { return JSON.parse(_skGet('inventarios')) || []; } catch { return []; } }
-function setInventarios(d){ try { localStorage.setItem(_sk('inventarios'), JSON.stringify(d)); } catch(e){ console.error('[setInventarios] storage error:', e); } }
+function _limpiarStorageEmergencia() {
+    const id = getNegocioActivo();
+    // Eliminar claves legacy (sin ID de negocio) que hayan sido copiadas pero ya tienen versión con ID
+    const keys = ['insumos', 'inventarios', 'recetas', 'entradas_log'];
+    keys.forEach(k => {
+        const legacyKey = 'etaax_' + k;
+        const modernKey = _sk(k);
+        if (legacyKey !== modernKey && localStorage.getItem(legacyKey) !== null) {
+            localStorage.removeItem(legacyKey);
+        }
+    });
+    // Limpiar fotos base64 de insumos del negocio
+    const insKey = _sk('insumos');
+    try {
+        const raw = localStorage.getItem(insKey);
+        if (raw) {
+            const lista = JSON.parse(raw) || [];
+            let changed = false;
+            lista.forEach(ins => {
+                if (ins.foto && ins.foto.startsWith('data:')) { ins.foto = ''; changed = true; }
+                if (ins.fotoUrl && ins.fotoUrl.startsWith('data:')) { ins.fotoUrl = ''; changed = true; }
+            });
+            if (changed) try { localStorage.setItem(insKey, JSON.stringify(lista)); } catch(e) {}
+        }
+    } catch(e) {}
+}
+
+function setInventarios(d) {
+    const json = JSON.stringify(d);
+    try {
+        localStorage.setItem(_sk('inventarios'), json);
+        return true;
+    } catch(e) {
+        // Intento de rescate: limpiar espacio y reintentar
+        console.warn('[setInventarios] storage lleno, limpiando...', e);
+        _limpiarStorageEmergencia();
+        try {
+            localStorage.setItem(_sk('inventarios'), json);
+            return true;
+        } catch(e2) {
+            console.error('[setInventarios] storage lleno incluso después de limpieza:', e2);
+            return false;
+        }
+    }
+}
 function getEntradasLog() { try { return JSON.parse(_skGet('entradas_log')) || []; } catch { return []; } }
 function setEntradasLog(d){ try { localStorage.setItem(_sk('entradas_log'), JSON.stringify(d)); } catch(e){ console.error('[setEntradasLog] storage error:', e); } }
 function genId()          { return Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
@@ -43,6 +87,8 @@ let modoListaCapt  = 'lista';
 let busquedaCapt   = '';
 let filtroFamActivo = '';
 let filtroCatActiva = '';
+let filtroSubcatActiva = '';
+let filtroRegistroActivo = 'pendientes'; // 'pendientes' | 'registrados'
 
 // Paso 4 — tab activo
 let _paso4Tab = 'cancelaciones';
@@ -256,11 +302,13 @@ function costoCopa(fila) {
 
 function tipoIcon(tipo) { return TIPOS_ICON[tipo] || '📋'; }
 
-function getFilasFiltradas() {
+function getFilasFiltradas(conRegistro = false) {
     const b = busquedaCapt.toLowerCase();
     return filasCaptura.filter(f =>
-        (!filtroFamActivo || f.familia === filtroFamActivo) &&
-        (!filtroCatActiva || f.categoria === filtroCatActiva) &&
+        (!filtroFamActivo    || f.familia     === filtroFamActivo) &&
+        (!filtroCatActiva    || f.categoria   === filtroCatActiva) &&
+        (!filtroSubcatActiva || f.subcategoria === filtroSubcatActiva) &&
+        (!conRegistro || (filtroRegistroActivo === 'registrados' ? _esRegistrado(f) : !_esRegistrado(f))) &&
         (!b || f.nombre.toLowerCase().includes(b))
     );
 }
@@ -487,10 +535,11 @@ function abrirInventario(id) {
     if (!invActual.cancelaciones)     invActual.cancelaciones     = [];
     if (!invActual.descuentos)        invActual.descuentos        = [];
     if (!invActual.entradasLog)       invActual.entradasLog       = [];
-    filasCaptura = invActual.filas || [];
-    if (!filasCaptura.length) cargarProductosCaptura();
+    // Siempre recarga desde insumos para mostrar el catálogo completo;
+    // cargarProductosCaptura hace merge: usa filas guardadas si existen, default si no
+    cargarProductosCaptura();
     pasoActual = 1;
-    busquedaCapt = ''; filtroFamActivo = ''; filtroCatActiva = '';
+    busquedaCapt = ''; filtroFamActivo = ''; filtroCatActiva = ''; filtroSubcatActiva = ''; filtroRegistroActivo = 'pendientes';
     mostrarVista('vistaCaptura');
     document.getElementById('captTitulo').textContent = invActual.nombre || 'Inventario';
     actualizarStepBar();
@@ -645,7 +694,7 @@ function iniciarInventario() {
     if (esNuevo || !filasCaptura.length) cargarProductosCaptura();
 
     pasoActual = 1;
-    busquedaCapt = ''; filtroFamActivo = ''; filtroCatActiva = '';
+    busquedaCapt = ''; filtroFamActivo = ''; filtroCatActiva = ''; filtroSubcatActiva = ''; filtroRegistroActivo = 'pendientes';
     mostrarVista('vistaCaptura');
     document.getElementById('captTitulo').textContent = invActual.nombre;
     actualizarStepBar();
@@ -764,8 +813,10 @@ function renderStepContent() {
     // Restore filter selects
     const ffF = document.getElementById('filtroFamStep');
     const ffC = document.getElementById('filtroCatStep');
+    const ffS = document.getElementById('filtroSubcatStep');
     if (ffF) ffF.value = filtroFamActivo;
     if (ffC) ffC.value = filtroCatActiva;
+    if (ffS) ffS.value = filtroSubcatActiva;
     if (paso === 2 && vistaEntradas2 === 'busqueda') initEntradaRapidaUI();
     if (paso === 1 && vistaCapturaExist === 'busqueda') initExistBusquedaUI();
     if (paso === 3 && vistaVentas === 'busqueda') initVentasBusquedaUI();
@@ -773,9 +824,33 @@ function renderStepContent() {
 }
 
 // ── Toolbar para steps 1 y 2 ──────────────────────────────────
+function buildFiltroRegistroBar() {
+    const nPend = filasCaptura.filter(f => !_esRegistrado(f)).length;
+    const nReg  = filasCaptura.filter(_esRegistrado).length;
+    const btnSt = (activo) => activo
+        ? 'background:var(--surface2);border-color:var(--accent);color:var(--accent);font-weight:700'
+        : 'background:transparent;border-color:var(--border);color:var(--text-muted);font-weight:500';
+    return `<div style="display:flex;gap:8px;padding:10px 0 4px">
+        <button onclick="setFiltroRegistro('pendientes')"
+            style="${btnSt(filtroRegistroActivo==='pendientes')};border:1px solid;border-radius:20px;
+            padding:5px 14px;font-family:inherit;font-size:12px;cursor:pointer">
+            🔍 Pendientes <span style="opacity:.7">(${nPend})</span>
+        </button>
+        <button onclick="setFiltroRegistro('registrados')"
+            style="${btnSt(filtroRegistroActivo==='registrados')};border:1px solid;border-radius:20px;
+            padding:5px 14px;font-family:inherit;font-size:12px;cursor:pointer">
+            ✅ Registrados <span style="opacity:.7">(${nReg})</span>
+        </button>
+    </div>`;
+}
+
 function buildToolbar(conModo = true) {
-    const fams = [...new Set(filasCaptura.map(f=>f.familia).filter(Boolean))].sort();
-    const cats = [...new Set(filasCaptura.map(f=>f.categoria).filter(Boolean))].sort();
+    const pool = filasCaptura
+        .filter(f => !filtroFamActivo || f.familia === filtroFamActivo)
+        .filter(f => !filtroCatActiva || f.categoria === filtroCatActiva);
+    const fams    = [...new Set(filasCaptura.map(f=>f.familia).filter(Boolean))].sort();
+    const cats    = [...new Set(filasCaptura.map(f=>f.categoria).filter(Boolean))].sort();
+    const subcats = [...new Set(pool.map(f=>f.subcategoria).filter(Boolean))].sort();
     return `<div class="step-toolbar">
         <div class="inv-search">
             <input type="text" placeholder="Buscar producto..." value="${busquedaCapt}"
@@ -791,6 +866,11 @@ function buildToolbar(conModo = true) {
             <option value="">Todas las categorías</option>
             ${cats.map(c=>`<option value="${c}" ${filtroCatActiva===c?'selected':''}>${c}</option>`).join('')}
         </select>
+        ${subcats.length ? `<select class="filtro-select" id="filtroSubcatStep" onchange="onFiltroSubcat(this.value)"
+            style="font-size:11px;padding:6px 8px">
+            <option value="">Todas las sub.</option>
+            ${subcats.map(s=>`<option value="${s}" ${filtroSubcatActiva===s?'selected':''}>${s}</option>`).join('')}
+        </select>` : ''}
         ${conModo ? `<div class="vista-toggle" style="margin-left:auto">
             <button class="${modoListaCapt==='lista'?'active':''}" onclick="setModoCaptura('lista')">≡ Lista</button>
             <button class="${modoListaCapt==='galeria'?'active':''}" onclick="setModoCaptura('galeria')">⊞ Galería</button>
@@ -798,10 +878,12 @@ function buildToolbar(conModo = true) {
     </div>`;
 }
 
-function onBusqueda(val)  { busquedaCapt    = val; rerenderCaptura(); }
-function onFiltroFam(val) { filtroFamActivo = val; rerenderCaptura(); }
-function onFiltroCat(val) { filtroCatActiva = val; rerenderCaptura(); }
-function setModoCaptura(m){ modoListaCapt   = m;   rerenderCaptura(); }
+function onBusqueda(val)     { busquedaCapt       = val; rerenderCaptura(); }
+function onFiltroFam(val)    { filtroFamActivo    = val; filtroSubcatActiva = ''; rerenderCaptura(); }
+function onFiltroCat(val)    { filtroCatActiva    = val; filtroSubcatActiva = ''; rerenderCaptura(); }
+function onFiltroSubcat(val) { filtroSubcatActiva = val; rerenderCaptura(); }
+function setModoCaptura(m)   { modoListaCapt      = m;   rerenderCaptura(); }
+function setFiltroRegistro(modo) { filtroRegistroActivo = modo; _existBusqueda = ''; _existInsumoId = null; renderStepContent(); }
 
 // ── Actualizar cells calculadas sin re-render ─────────────────
 function fmtBot(n) { return n % 1 === 0 ? n.toFixed(0) : n.toFixed(2); }
@@ -823,10 +905,10 @@ function refreshFilaDisplay(idx) {
     const elBtn = document.getElementById('btn-listo-'+idx);
     if (elBtn) {
         const tiene = exist > 0;
-        elBtn.textContent   = tiene ? '✓ Registrado — Siguiente producto →' : '↩ Otro producto';
-        elBtn.style.background   = tiene ? 'rgba(61,190,122,.15)' : 'var(--surface2)';
-        elBtn.style.borderColor  = tiene ? 'var(--green)' : 'var(--border)';
-        elBtn.style.color        = tiene ? 'var(--green)' : 'var(--text-muted)';
+        elBtn.textContent        = tiene ? '✓ Registrado — Siguiente →' : '⊙ Registrar en cero — Siguiente →';
+        elBtn.style.background   = tiene ? 'rgba(61,190,122,.15)' : 'rgba(245,200,66,.08)';
+        elBtn.style.borderColor  = tiene ? 'var(--green)' : 'var(--accent)';
+        elBtn.style.color        = tiene ? 'var(--green)' : 'var(--accent)';
     }
 }
 
@@ -853,17 +935,16 @@ function setVistaExist(modo) {
 
 function renderStep1() {
     if (vistaCapturaExist === 'busqueda') {
-        const capturados = filasCaptura.filter(f =>
-            (f.cerradasBodega || 0) + (f.cerradasBarra || 0) > 0 ||
-            (f.metodoCaptura === 'nivel' && (f.nivelPct || 0) > 0) ||
-            (f.metodoCaptura !== 'nivel' && (f.pesos || []).some(p => parseFloat(p) > 0))
-        ).length;
-        return buildVistaSwitcherExist() + `
+        const nReg  = filasCaptura.filter(_esRegistrado).length;
+        const nPend = filasCaptura.length - nReg;
+        const placeholder = filtroRegistroActivo === 'registrados'
+            ? 'Buscar en registrados…' : 'Buscar producto pendiente…';
+        return buildVistaSwitcherExist() + buildFiltroRegistroBar() + `
             <div class="ent-rapida-wrap">
                 <div>
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Buscar producto</div>
                     <input type="text" id="existBuscador" class="ent-buscador"
-                        placeholder="Escribe el nombre del producto…"
+                        placeholder="${placeholder}"
                         oninput="buscarInsumoExist(this.value)" autocomplete="off">
                     <div id="existChips" class="ent-chips"></div>
                 </div>
@@ -871,17 +952,17 @@ function renderStep1() {
                 <div>
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
                         <div style="display:flex;align-items:center;gap:10px">
-                            <span style="font-size:11px;color:var(--text-dim);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Capturados</span>
-                            <span style="font-size:13px;font-weight:700;color:${capturados>0?'var(--green)':'var(--text)'}">${capturados} / ${filasCaptura.length} productos</span>
+                            <span style="font-size:11px;color:var(--text-dim);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Registrados</span>
+                            <span style="font-size:13px;font-weight:700;color:${nReg>0?'var(--green)':'var(--text)'}">${nReg} / ${filasCaptura.length} productos</span>
                         </div>
-                        ${capturados > 0 ? `
+                        ${nReg > 0 ? `
                         <div style="display:flex;gap:8px">
                             <button onclick="guardarYSalir()"
                                 style="background:rgba(245,200,66,.1);border:1px solid var(--accent);color:var(--accent);
                                 border-radius:7px;padding:6px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">
                                 💾 Guardar y salir
                             </button>
-                            <button onclick="finalizarPrimerLev ? finalizarPrimerLev() : guardarYSalir()"
+                            <button onclick="typeof finalizarPrimerLev==='function'?finalizarPrimerLev():guardarYSalir()"
                                 style="background:rgba(61,190,122,.1);border:1px solid var(--green);color:var(--green);
                                 border-radius:7px;padding:6px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">
                                 ✅ Finalizar
@@ -893,17 +974,19 @@ function renderStep1() {
             </div>`;
     }
 
-    const filas = getFilasFiltradas();
+    const filas = getFilasFiltradas(true); // true = aplica filtro registro
     const noData = !filasCaptura.length
         ? `<div class="empty-state" style="padding:60px">
             <div class="empty-icon">🗄️</div><div class="empty-title">Sin insumos en catálogo</div>
             <div class="empty-desc">Agrega insumos en Catálogo → Insumos</div></div>`
         : !filas.length
         ? `<div class="empty-state" style="padding:40px">
-            <div class="empty-icon">🔍</div><div class="empty-title">Sin resultados</div>
-            <div class="empty-desc">Cambia los filtros de búsqueda</div></div>` : null;
+            <div class="empty-icon">${filtroRegistroActivo==='registrados'?'✅':'🔍'}</div>
+            <div class="empty-title">${filtroRegistroActivo==='registrados'?'Sin registrados aún':'Todos registrados'}</div>
+            <div class="empty-desc">${filtroRegistroActivo==='registrados'?'Captura existencias en Búsqueda rápida':'¡Levantamiento completo!'}</div>
+        </div>` : null;
 
-    return buildVistaSwitcherExist() + buildToolbar(true) + (noData || (
+    return buildVistaSwitcherExist() + buildFiltroRegistroBar() + buildToolbar(true) + (noData || (
         modoListaCapt === 'galeria' ? renderStep1Galeria(filas) : renderStep1Lista(filas)
     ));
 }
@@ -919,20 +1002,23 @@ function renderChipsExist() {
     if (!cont) return;
     const q = _existBusqueda.trim().toLowerCase();
     if (!q) { cont.innerHTML = ''; return; }
-    const matches = filasCaptura.filter(f => f.nombre.toLowerCase().includes(q));
+    // Filtrar pool según estado de registro activo
+    const pool = filtroRegistroActivo === 'registrados'
+        ? filasCaptura.filter(_esRegistrado)
+        : filasCaptura.filter(f => !_esRegistrado(f));
+    const matches = pool.filter(f => f.nombre.toLowerCase().includes(q));
     if (!matches.length) {
         cont.innerHTML = `<div style="color:var(--text-dim);font-size:13px;padding:8px 0">Sin resultados para "${_existBusqueda}"</div>`;
         return;
     }
     cont.innerHTML = matches.map(f => {
-        const tieneData = (f.cerradasBodega||0)+(f.cerradasBarra||0) > 0 ||
-            (f.metodoCaptura==='nivel' && (f.nivelPct||0)>0) ||
-            (f.metodoCaptura!=='nivel' && (f.pesos||[]).some(p=>parseFloat(p)>0));
+        const reg = _esRegistrado(f);
         return `<button class="ent-chip ${_existInsumoId===f.insumoId?'active':''}"
             onclick="seleccionarProductoExist('${f.insumoId}')" style="position:relative">
             ${f.nombre}
-            ${f.categoria?`<span style="font-size:10px;opacity:0.65;margin-left:4px">${f.categoria}</span>`:''}
-            ${tieneData?'<span style="position:absolute;top:4px;right:6px;width:6px;height:6px;background:var(--green);border-radius:50%"></span>':''}
+            ${f.subcategoria?`<span style="font-size:10px;opacity:0.65;margin-left:4px">${f.subcategoria}</span>`:
+              f.categoria?`<span style="font-size:10px;opacity:0.65;margin-left:4px">${f.categoria}</span>`:''}
+            ${reg?'<span style="position:absolute;top:4px;right:6px;width:6px;height:6px;background:var(--green);border-radius:50%"></span>':''}
         </button>`;
     }).join('');
 }
@@ -944,12 +1030,16 @@ function seleccionarProductoExist(insumoId) {
 }
 
 function limpiarSeleccionExist() {
+    // Marcar el producto actual como registrado (aunque tenga ceros)
+    if (_existInsumoId) {
+        const fila = filasCaptura.find(f => f.insumoId === _existInsumoId);
+        if (fila) { fila.registrado = true; _autoGuardar(); }
+    }
     _existInsumoId = null;
     _existBusqueda = '';
-    const inp = document.getElementById('existBuscador');
-    if (inp) { inp.value = ''; inp.focus(); }
-    renderChipsExist();
-    renderCardExist();
+    // Re-render completo para actualizar contadores y filtros
+    renderStepContent();
+    setTimeout(() => { const inp = document.getElementById('existBuscador'); if (inp) inp.focus(); }, 40);
 }
 
 function setMetodoCapturaExist(insumoId, metodo) {
@@ -1126,12 +1216,12 @@ function renderCardExist() {
             <!-- Botón Listo / Siguiente -->
             <div style="margin-top:14px;display:flex;gap:8px">
                 <button id="btn-listo-${idx}" onclick="limpiarSeleccionExist()"
-                    style="flex:1;background:${exist>0?'rgba(61,190,122,.15)':'var(--surface2)'};
-                    border:1px solid ${exist>0?'var(--green)':'var(--border)'};
-                    color:${exist>0?'var(--green)':'var(--text-muted)'};
+                    style="flex:1;background:${exist>0?'rgba(61,190,122,.15)':'rgba(245,200,66,.08)'};
+                    border:1px solid ${exist>0?'var(--green)':'var(--accent)'};
+                    color:${exist>0?'var(--green)':'var(--accent)'};
                     border-radius:8px;padding:10px 0;font-family:inherit;font-size:13px;
                     font-weight:600;cursor:pointer;transition:all .15s">
-                    ${exist>0?'✓ Registrado — Siguiente producto →':'↩ Otro producto'}
+                    ${exist>0?'✓ Registrado — Siguiente →':'⊙ Registrar en cero — Siguiente →'}
                 </button>
             </div>
         </div>`;
@@ -1140,11 +1230,7 @@ function renderCardExist() {
 function renderResumenExist() {
     const cont = document.getElementById('existResumen');
     if (!cont) return;
-    const capturados = filasCaptura.filter(f =>
-        (f.cerradasBodega||0)+(f.cerradasBarra||0)>0 ||
-        (f.metodoCaptura==='nivel'&&(f.nivelPct||0)>0) ||
-        (f.metodoCaptura!=='nivel'&&(f.pesos||[]).some(p=>parseFloat(p)>0))
-    );
+    const capturados = filasCaptura.filter(_esRegistrado);
     if (!capturados.length) {
         cont.innerHTML = `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:20px 0">Aún no hay existencias capturadas</div>`;
         return;
@@ -3160,13 +3246,27 @@ function verReporteDirectivo() {
 // ═══════════════════════════════════════════════════════════════
 // GUARDAR / CERRAR
 // ═══════════════════════════════════════════════════════════════
+function _filaConDatos(f) {
+    return f.registrado === true
+        || (f.cerradasBodega || 0) + (f.cerradasBarra || 0) > 0
+        || (f.metodoCaptura === 'nivel' ? (f.nivelPct || 0) > 0 : (f.pesos || []).some(p => parseFloat(p) > 0))
+        || (f.entradas || []).some(e => parseFloat(e) > 0)
+        || (f.ventasCopasDirectas || 0) > 0
+        || (f.ventasBotella || 0) > 0;
+}
+function _esRegistrado(f) { return _filaConDatos(f); }
+
 function guardarInventario() {
     if (!invActual) return;
-    invActual.filas = filasCaptura.map(f=>({...f, existenciaFisica: calcExistencia(f)}));
+    // Solo guardar filas con datos capturados — evita guardar 1400+ filas vacías
+    invActual.filas = filasCaptura
+        .filter(_filaConDatos)
+        .map(f => ({...f, existenciaFisica: calcExistencia(f)}));
     const lista = getInventarios();
     const idx   = lista.findIndex(x=>x.id===invActual.id);
     if (idx>=0) lista[idx]=invActual; else lista.push(invActual);
-    setInventarios(lista);
+    const ok = setInventarios(lista);
+    if (!ok) throw new Error('storage-full');
 }
 
 let _autoGuardarTimer = null;
@@ -3174,7 +3274,7 @@ function _autoGuardar() {
     if (!invActual) return;
     clearTimeout(_autoGuardarTimer);
     _autoGuardarTimer = setTimeout(function() {
-        guardarInventario();
+        try { guardarInventario(); } catch(e) { console.warn('[autoGuardar]', e); return; }
         const ind = document.getElementById('autoGuardarInd');
         if (ind) {
             ind.textContent = '✓ Guardado';
@@ -3187,7 +3287,13 @@ function _autoGuardar() {
 function guardarYSalir() {
     if (!invActual) return;
     invActual.cerrado = true;
-    try { guardarInventario(); } catch(e) { console.warn('[guardarYSalir]', e); }
+    let guardado = false;
+    try { guardarInventario(); guardado = true; } catch(e) { console.warn('[guardarYSalir]', e); }
+    if (!guardado) {
+        invActual.cerrado = false;
+        alert('No se pudo guardar el inventario (almacenamiento lleno). Intenta cerrar otras pestañas o liberar espacio y vuelve a intentarlo.');
+        return;
+    }
     invActual = null;
     mostrarVista('vistaLista');
 }
@@ -3197,11 +3303,9 @@ function finalizarPrimerLev() {
     if (invActual.cerrado) return;
     _solicitarClave('Guardar y cerrar levantamiento', function() {
         invActual.cerrado = true;
-        invActual.filas   = filasCaptura.map(f=>({...f, existenciaFisica: calcExistencia(f)}));
-        const lista = getInventarios();
-        const idx   = lista.findIndex(x=>x.id===invActual.id);
-        if (idx>=0) lista[idx]=invActual; else lista.push(invActual);
-        setInventarios(lista);
+        let ok = false;
+        try { guardarInventario(); ok = true; } catch(e) {}
+        if (!ok) { invActual.cerrado = false; alert('No se pudo guardar (almacenamiento lleno).'); return; }
         mostrarVista('vistaLista');
     });
 }
@@ -3211,11 +3315,9 @@ function cerrarInventario() {
     if (invActual.cerrado) { alert('Este inventario ya está cerrado.'); return; }
     _solicitarClave('Cerrar y finalizar inventario', function() {
         invActual.cerrado = true;
-        invActual.filas   = filasCaptura.map(f=>({...f, existenciaFisica: calcExistencia(f)}));
-        const lista = getInventarios();
-        const idx   = lista.findIndex(x=>x.id===invActual.id);
-        if (idx>=0) lista[idx]=invActual; else lista.push(invActual);
-        setInventarios(lista);
+        let ok = false;
+        try { guardarInventario(); ok = true; } catch(e) {}
+        if (!ok) { invActual.cerrado = false; alert('No se pudo guardar (almacenamiento lleno).'); return; }
         actualizarNavBtns();
         mostrarVista('vistaLista');
     });
@@ -3238,10 +3340,10 @@ function editarInventario(id) {
         if (!invActual.cancelaciones)     invActual.cancelaciones     = [];
         if (!invActual.descuentos)        invActual.descuentos        = [];
         if (!invActual.entradasLog)       invActual.entradasLog       = [];
-        filasCaptura = invActual.filas || [];
+        cargarProductosCaptura(); // merge filas guardadas con catálogo completo
         // Ir directo al wizard (paso 1), sin pasar por el formulario de datos
         pasoActual = 1;
-        busquedaCapt = ''; filtroFamActivo = ''; filtroCatActiva = '';
+        busquedaCapt = ''; filtroFamActivo = ''; filtroCatActiva = ''; filtroSubcatActiva = ''; filtroRegistroActivo = 'pendientes';
         mostrarVista('vistaCaptura');
         document.getElementById('captTitulo').textContent = invActual.nombre || 'Inventario';
         actualizarStepBar();
@@ -3846,7 +3948,7 @@ function guardarFichaTecnica() {
     p.precioCartaBot    = parseFloat(document.getElementById('ft_precioCartaBot')?.value) || 0;
     p.rendimiento       = document.getElementById('ft_rendimiento')?.value                || p.rendimiento || '';
     p.umRendimiento     = document.getElementById('ft_umRendimiento')?.value              || 'OZ';
-    localStorage.setItem(_invSk('insumos'), JSON.stringify(lista));
+    try { localStorage.setItem(_sk('insumos'), JSON.stringify(lista)); } catch(e) {}
     // Sync fila en inventario activo
     const fila = filasCaptura.find(f => f.insumoId === _ftInsumoId);
     if (fila) {
@@ -3867,7 +3969,7 @@ function guardarFichaTecnica() {
 }
 
 // ── Init ──────────────────────────────────────────────────────
-function init() { renderStats(); renderHistorial(); }
+function init() { _limpiarStorageEmergencia(); renderStats(); renderHistorial(); }
 init();
 
 // ── Bloqueo de navegación mientras haya un inventario abierto ──
