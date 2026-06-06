@@ -819,6 +819,15 @@ function refreshFilaDisplay(idx) {
         elML.style.color = lts > 0 ? 'var(--green)' : 'var(--text-dim)';
     }
     if (elEF) elEF.textContent = fmtBot(exist) + ' ' + efUnit;
+    // Actualizar botón Listo según si hay datos
+    const elBtn = document.getElementById('btn-listo-'+idx);
+    if (elBtn) {
+        const tiene = exist > 0;
+        elBtn.textContent   = tiene ? '✓ Registrado — Siguiente producto →' : '↩ Otro producto';
+        elBtn.style.background   = tiene ? 'rgba(61,190,122,.15)' : 'var(--surface2)';
+        elBtn.style.borderColor  = tiene ? 'var(--green)' : 'var(--border)';
+        elBtn.style.color        = tiene ? 'var(--green)' : 'var(--text-muted)';
+    }
 }
 
 function updCaptura(idx, campo, val) { filasCaptura[idx][campo] = val; refreshFilaDisplay(idx); _autoGuardar(); }
@@ -860,9 +869,24 @@ function renderStep1() {
                 </div>
                 <div id="existCardWrap"></div>
                 <div>
-                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-                        <span style="font-size:11px;color:var(--text-dim);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Capturados</span>
-                        <span style="font-size:13px;font-weight:700;color:var(--text)">${capturados} / ${filasCaptura.length} productos</span>
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+                        <div style="display:flex;align-items:center;gap:10px">
+                            <span style="font-size:11px;color:var(--text-dim);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Capturados</span>
+                            <span style="font-size:13px;font-weight:700;color:${capturados>0?'var(--green)':'var(--text)'}">${capturados} / ${filasCaptura.length} productos</span>
+                        </div>
+                        ${capturados > 0 ? `
+                        <div style="display:flex;gap:8px">
+                            <button onclick="guardarYSalir()"
+                                style="background:rgba(245,200,66,.1);border:1px solid var(--accent);color:var(--accent);
+                                border-radius:7px;padding:6px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">
+                                💾 Guardar y salir
+                            </button>
+                            <button onclick="finalizarPrimerLev ? finalizarPrimerLev() : guardarYSalir()"
+                                style="background:rgba(61,190,122,.1);border:1px solid var(--green);color:var(--green);
+                                border-radius:7px;padding:6px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">
+                                ✅ Finalizar
+                            </button>
+                        </div>` : ''}
                     </div>
                     <div id="existResumen"></div>
                 </div>
@@ -1097,6 +1121,18 @@ function renderCardExist() {
                 <span style="font-size:12px;color:var(--text-dim)">Existencia actual</span>
                 <span id="ef-${idx}" style="font-size:22px;font-weight:900;color:var(--accent)">
                     ${fmtBot(exist)} ${efUnit}</span>
+            </div>
+
+            <!-- Botón Listo / Siguiente -->
+            <div style="margin-top:14px;display:flex;gap:8px">
+                <button id="btn-listo-${idx}" onclick="limpiarSeleccionExist()"
+                    style="flex:1;background:${exist>0?'rgba(61,190,122,.15)':'var(--surface2)'};
+                    border:1px solid ${exist>0?'var(--green)':'var(--border)'};
+                    color:${exist>0?'var(--green)':'var(--text-muted)'};
+                    border-radius:8px;padding:10px 0;font-family:inherit;font-size:13px;
+                    font-weight:600;cursor:pointer;transition:all .15s">
+                    ${exist>0?'✓ Registrado — Siguiente producto →':'↩ Otro producto'}
+                </button>
             </div>
         </div>`;
 }
