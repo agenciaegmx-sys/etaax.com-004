@@ -22,9 +22,9 @@ function _skGet(key) {
 function getInsumos()     { try { return JSON.parse(_skGet('insumos'))     || []; } catch { return []; } }
 function getRecetas()     { try { return JSON.parse(_skGet('recetas'))     || []; } catch { return []; } }
 function getInventarios() { try { return JSON.parse(_skGet('inventarios')) || []; } catch { return []; } }
-function setInventarios(d){ localStorage.setItem(_sk('inventarios'), JSON.stringify(d)); }
+function setInventarios(d){ try { localStorage.setItem(_sk('inventarios'), JSON.stringify(d)); } catch(e){ console.error('[setInventarios] storage error:', e); } }
 function getEntradasLog() { try { return JSON.parse(_skGet('entradas_log')) || []; } catch { return []; } }
-function setEntradasLog(d){ localStorage.setItem(_sk('entradas_log'), JSON.stringify(d)); }
+function setEntradasLog(d){ try { localStorage.setItem(_sk('entradas_log'), JSON.stringify(d)); } catch(e){ console.error('[setEntradasLog] storage error:', e); } }
 function genId()          { return Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
 
 // ── Estado global ─────────────────────────────────────────────
@@ -3187,7 +3187,7 @@ function _autoGuardar() {
 function guardarYSalir() {
     if (!invActual) return;
     invActual.cerrado = true;
-    guardarInventario();
+    try { guardarInventario(); } catch(e) { console.warn('[guardarYSalir]', e); }
     invActual = null;
     mostrarVista('vistaLista');
 }
@@ -3883,11 +3883,12 @@ function _cancelarSalirInv() {
 }
 
 function _confirmarSalirInv() {
-    guardarInventario();
+    try { guardarInventario(); } catch(e) { console.warn('[confirmarSalirInv] guardar error:', e); }
     invActual = null;
     const href = _pendingNavHref;
     _pendingNavHref = null;
-    document.getElementById('modalSalirInv').style.display = 'none';
+    const modal = document.getElementById('modalSalirInv');
+    if (modal) modal.style.display = 'none';
     if (href) {
         window.location.href = href;
     } else {
