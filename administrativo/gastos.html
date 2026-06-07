@@ -132,6 +132,38 @@
         .pin-actions{display:flex;gap:10px;margin-top:16px;}
 
         .empty-state{text-align:center;padding:48px 24px;color:var(--text-dim);}
+
+        /* Proveedor autocomplete */
+        .prov-wrap{position:relative;}
+        .prov-dropdown{display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;max-height:190px;overflow-y:auto;z-index:200;box-shadow:0 8px 28px rgba(0,0,0,.4);}
+        .prov-dropdown.open{display:block;}
+        .prov-dd-item{padding:9px 12px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);transition:background .1s;}
+        .prov-dd-item:last-child{border-bottom:none;}
+        .prov-dd-item:hover{background:var(--surface2);}
+        .prov-dd-nombre{font-size:13px;color:var(--text);font-weight:500;}
+        .prov-dd-sub{font-size:10px;color:var(--text-dim);}
+        .prov-dd-match{font-size:9px;color:var(--green);background:rgba(61,190,122,.1);border:1px solid rgba(61,190,122,.25);border-radius:10px;padding:1px 7px;letter-spacing:.3px;}
+        .prov-match-chip{display:none;align-items:center;gap:5px;font-size:11px;color:var(--green);margin-top:4px;}
+        .prov-match-chip.show{display:flex;}
+
+        /* Panel catálogo proveedores */
+        .panel-prov-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9200;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;}
+        .panel-prov-overlay.open{display:flex;}
+        .panel-prov{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:100%;max-width:560px;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.55);}
+        .panel-prov-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);}
+        .panel-prov-title{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--text);}
+        .panel-prov-body{flex:1;overflow-y:auto;padding:14px 20px;display:flex;flex-direction:column;gap:8px;}
+        .panel-prov-footer{padding:12px 20px;border-top:1px solid var(--border);}
+        .prov-cat-row{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--border);}
+        .prov-cat-row:last-child{border-bottom:none;}
+        .prov-cat-info{flex:1;min-width:0;}
+        .prov-cat-nombre{font-size:13px;font-weight:600;color:var(--text);}
+        .prov-cat-sub{font-size:11px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .prov-cat-match{font-size:9px;color:var(--accent);background:rgba(245,200,66,.1);border:1px solid rgba(245,200,66,.25);border-radius:10px;padding:1px 8px;white-space:nowrap;}
+
+        /* Mini form nuevo proveedor */
+        .nuevo-prov-form{background:rgba(61,190,122,.04);border:1px solid rgba(61,190,122,.2);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;margin-top:4px;}
+        .nuevo-prov-form h4{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--green);margin:0;}
         .empty-state-icon{font-size:36px;margin-bottom:12px;}
         .theme-toggle{position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;}
         .theme-toggle:hover{border-color:var(--green);color:var(--green);}
@@ -247,14 +279,30 @@
                 <select id="filtroCategoria" onchange="renderAll()">
                     <option value="">Todas las categorías</option>
                     <option>Nómina y personal</option>
-                    <option>Insumos y materia prima</option>
-                    <option>Servicios (agua, luz, gas)</option>
-                    <option>Mantenimiento y reparaciones</option>
+                    <option>Propinas y gratificaciones</option>
+                    <option>Uniformes y equipo personal</option>
+                    <option>Alimentos e ingredientes</option>
+                    <option>Bebidas y licores</option>
+                    <option>Insumos de limpieza</option>
+                    <option>Desechables y empaque</option>
+                    <option>Insumos de barra (garnish, hielo…)</option>
                     <option>Renta y arrendamiento</option>
+                    <option>Servicios (agua, luz, gas)</option>
+                    <option>Internet y telecomunicaciones</option>
+                    <option>Seguridad y vigilancia</option>
+                    <option>Software y suscripciones (POS…)</option>
+                    <option>Comisiones de plataformas</option>
+                    <option>Mantenimiento y reparaciones</option>
+                    <option>Equipo de cocina y bar</option>
+                    <option>Equipo y herramientas</option>
+                    <option>Mobiliario y decoración</option>
+                    <option>Contabilidad e impuestos</option>
+                    <option>Permisos y licencias</option>
                     <option>Publicidad y marketing</option>
                     <option>Transporte y logística</option>
-                    <option>Equipo y herramientas</option>
-                    <option>Contabilidad e impuestos</option>
+                    <option>Gastos financieros</option>
+                    <option>Gastos de oficina</option>
+                    <option>Donaciones y cortesías</option>
                     <option>Varios</option>
                 </select>
                 <select id="filtroMetodo" onchange="renderAll()">
@@ -379,23 +427,93 @@
                 <input type="text" id="gConcepto" placeholder="Descripción del gasto…">
             </div>
             <div class="fg-row-2">
-                <div class="fg"><label>Categoría</label>
-                    <select id="gCategoria">
+                <!-- Categoría con opción custom -->
+                <div class="fg">
+                    <label>Categoría</label>
+                    <select id="gCategoria" onchange="onCategoriaChange(this)">
                         <option value="">— Seleccionar —</option>
-                        <option>Nómina y personal</option>
-                        <option>Insumos y materia prima</option>
-                        <option>Servicios (agua, luz, gas)</option>
-                        <option>Mantenimiento y reparaciones</option>
-                        <option>Renta y arrendamiento</option>
-                        <option>Publicidad y marketing</option>
-                        <option>Transporte y logística</option>
-                        <option>Equipo y herramientas</option>
-                        <option>Contabilidad e impuestos</option>
-                        <option>Varios</option>
+                        <optgroup label="Operaciones">
+                            <option>Nómina y personal</option>
+                            <option>Propinas y gratificaciones</option>
+                            <option>Uniformes y equipo personal</option>
+                        </optgroup>
+                        <optgroup label="Compras e insumos">
+                            <option>Alimentos e ingredientes</option>
+                            <option>Bebidas y licores</option>
+                            <option>Insumos de limpieza</option>
+                            <option>Desechables y empaque</option>
+                            <option>Insumos de barra (garnish, hielo…)</option>
+                        </optgroup>
+                        <optgroup label="Servicios y gastos fijos">
+                            <option>Renta y arrendamiento</option>
+                            <option>Servicios (agua, luz, gas)</option>
+                            <option>Internet y telecomunicaciones</option>
+                            <option>Seguridad y vigilancia</option>
+                            <option>Software y suscripciones (POS…)</option>
+                            <option>Comisiones de plataformas</option>
+                        </optgroup>
+                        <optgroup label="Mantenimiento y equipo">
+                            <option>Mantenimiento y reparaciones</option>
+                            <option>Equipo de cocina y bar</option>
+                            <option>Equipo y herramientas</option>
+                            <option>Mobiliario y decoración</option>
+                        </optgroup>
+                        <optgroup label="Administrativo">
+                            <option>Contabilidad e impuestos</option>
+                            <option>Permisos y licencias</option>
+                            <option>Publicidad y marketing</option>
+                            <option>Transporte y logística</option>
+                            <option>Gastos financieros</option>
+                            <option>Gastos de oficina</option>
+                            <option>Donaciones y cortesías</option>
+                            <option>Varios</option>
+                        </optgroup>
+                        <optgroup label="Personalizado" id="catCustomGroup"></optgroup>
+                        <option value="__nueva__">✏️ Agregar categoría…</option>
                     </select>
+                    <!-- Input para categoría custom (oculto por default) -->
+                    <div id="catCustomWrap" style="display:none;margin-top:6px;display:none">
+                        <div style="display:flex;gap:6px">
+                            <input type="text" id="catCustomInput" placeholder="Nombre de la categoría…"
+                                style="background:var(--surface2);border:1px solid var(--border);color:var(--text);
+                                padding:8px 10px;border-radius:6px;font-family:inherit;font-size:13px;
+                                outline:none;flex:1;box-sizing:border-box">
+                            <button onclick="guardarCatCustom()"
+                                style="background:var(--green);border:none;color:#fff;padding:8px 14px;
+                                border-radius:6px;font-family:inherit;font-size:12px;cursor:pointer;white-space:nowrap">
+                                ✓ Guardar
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <div class="fg"><label>Proveedor</label>
-                    <input type="text" id="gProveedor" placeholder="Nombre o razón social">
+
+                <!-- Proveedor con autocomplete -->
+                <div class="fg">
+                    <label>Proveedor</label>
+                    <div class="prov-wrap">
+                        <div style="display:flex;gap:6px">
+                            <input type="text" id="gProveedor" placeholder="Nombre o razón social"
+                                autocomplete="off"
+                                oninput="onProveedorInput(this.value)"
+                                onfocus="onProveedorInput(this.value)"
+                                onblur="setTimeout(cerrarDropdownProv,180)">
+                            <button onclick="abrirPanelProveedores()" title="Ver catálogo de proveedores"
+                                style="background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);
+                                border-radius:6px;padding:0 10px;font-family:inherit;font-size:13px;cursor:pointer;
+                                white-space:nowrap;flex-shrink:0;transition:all .15s"
+                                onmouseover="this.style.borderColor='var(--green)';this.style.color='var(--green)'"
+                                onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">
+                                📋
+                            </button>
+                        </div>
+                        <!-- Dropdown autocomplete -->
+                        <div id="provDropdown" class="prov-dropdown"></div>
+                        <!-- Chip de coincidencia exacta -->
+                        <div id="provMatchChip" class="prov-match-chip">
+                            <span style="color:var(--green)">✓</span>
+                            <span id="provMatchTxt"></span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -489,6 +607,76 @@
     </div>
 </div>
 
+<!-- ══ PANEL CATÁLOGO PROVEEDORES ══ -->
+<div class="panel-prov-overlay" id="panelProvOverlay" onclick="if(event.target===this)cerrarPanelProveedores()">
+    <div class="panel-prov">
+        <div class="panel-prov-header">
+            <span class="panel-prov-title">📋 Catálogo de proveedores</span>
+            <button class="modal-close" onclick="cerrarPanelProveedores()">✕</button>
+        </div>
+        <div style="padding:10px 20px;border-bottom:1px solid var(--border)">
+            <input type="text" id="panelProvSearch" placeholder="Buscar proveedor…" autocomplete="off"
+                oninput="renderPanelProveedores()"
+                style="background:var(--surface2);border:1px solid var(--border);color:var(--text);
+                padding:8px 12px;border-radius:6px;font-family:inherit;font-size:13px;outline:none;
+                width:100%;box-sizing:border-box">
+        </div>
+        <div class="panel-prov-body" id="panelProvBody">
+            <div style="text-align:center;padding:30px;color:var(--text-dim)">Sin proveedores en catálogo</div>
+        </div>
+        <div class="panel-prov-footer">
+            <!-- Botón agregar nuevo -->
+            <button onclick="toggleNuevoProvForm()" id="btnNuevoProv"
+                style="width:100%;background:rgba(61,190,122,.08);border:1px solid rgba(61,190,122,.3);
+                color:var(--green);border-radius:8px;padding:9px 0;font-family:inherit;
+                font-size:12px;font-weight:600;cursor:pointer;letter-spacing:.5px;transition:all .15s">
+                + Agregar nuevo proveedor
+            </button>
+            <!-- Mini form nuevo proveedor (oculto por default) -->
+            <div class="nuevo-prov-form" id="nuevoProvForm" style="display:none">
+                <h4>Nuevo proveedor</h4>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                    <div>
+                        <div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Nombre *</div>
+                        <input type="text" id="npNombre" placeholder="Razón social o nombre"
+                            style="background:var(--surface2);border:1px solid var(--border);color:var(--text);
+                            padding:8px 10px;border-radius:6px;font-family:inherit;font-size:12px;
+                            outline:none;width:100%;box-sizing:border-box">
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Teléfono</div>
+                        <input type="text" id="npTel" placeholder="10 dígitos"
+                            style="background:var(--surface2);border:1px solid var(--border);color:var(--text);
+                            padding:8px 10px;border-radius:6px;font-family:inherit;font-size:12px;
+                            outline:none;width:100%;box-sizing:border-box">
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Contacto</div>
+                    <input type="text" id="npContacto" placeholder="Nombre del contacto"
+                        style="background:var(--surface2);border:1px solid var(--border);color:var(--text);
+                        padding:8px 10px;border-radius:6px;font-family:inherit;font-size:12px;
+                        outline:none;width:100%;box-sizing:border-box">
+                </div>
+                <div id="npError" style="font-size:11px;color:var(--red);display:none"></div>
+                <div id="npWarning" style="font-size:11px;color:var(--accent);display:none"></div>
+                <div style="display:flex;gap:8px">
+                    <button onclick="guardarNuevoProv()"
+                        style="flex:1;background:var(--green);border:none;color:#fff;padding:8px 0;
+                        border-radius:6px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">
+                        ✓ Guardar proveedor
+                    </button>
+                    <button onclick="toggleNuevoProvForm()"
+                        style="background:transparent;border:1px solid var(--border);color:var(--text-dim);
+                        padding:8px 14px;border-radius:6px;font-family:inherit;font-size:12px;cursor:pointer">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
 
 <script>
@@ -499,7 +687,207 @@ function toggleNav(){var nav=document.getElementById('nav'),main=document.getEle
 
 /* ── Data ── */
 var LS_KEY='etaax_gastos';
+var LS_PROV='etaax_proveedores';
+var LS_CATS_CUSTOM='etaax_gastos_cats_custom';
 function load(){try{return JSON.parse(localStorage.getItem(LS_KEY))||[];}catch(e){return[];}}
+function loadProveedores(){try{return JSON.parse(localStorage.getItem(LS_PROV))||[];}catch(e){return[];}}
+function loadCatsCustom(){try{return JSON.parse(localStorage.getItem(LS_CATS_CUSTOM))||[];}catch(e){return[];}}
+function saveCatsCustom(d){localStorage.setItem(LS_CATS_CUSTOM,JSON.stringify(d));}
+
+/* ── Categorías custom ── */
+function initCategorias(){
+    var custom=loadCatsCustom();
+    var grp=document.getElementById('catCustomGroup');
+    if(!grp)return;
+    grp.innerHTML='';
+    custom.forEach(function(cat){
+        var opt=document.createElement('option');
+        opt.textContent=cat;opt.value=cat;
+        grp.appendChild(opt);
+    });
+    // También actualizar el filtro de categorías
+    var filtro=document.getElementById('filtroCategoria');
+    if(filtro){
+        // quitar duplicados de custom que ya existen
+        custom.forEach(function(cat){
+            if(!Array.from(filtro.options).some(function(o){return o.value===cat;})){
+                var opt=document.createElement('option');
+                opt.textContent=cat;opt.value=cat;
+                filtro.appendChild(opt);
+            }
+        });
+    }
+}
+
+function onCategoriaChange(sel){
+    var wrap=document.getElementById('catCustomWrap');
+    if(sel.value==='__nueva__'){
+        wrap.style.display='block';
+        document.getElementById('catCustomInput').focus();
+    } else {
+        wrap.style.display='none';
+    }
+}
+
+function guardarCatCustom(){
+    var val=document.getElementById('catCustomInput').value.trim();
+    if(!val)return;
+    var custom=loadCatsCustom();
+    if(custom.includes(val)){
+        document.getElementById('gCategoria').value=val;
+    } else {
+        custom.push(val);
+        saveCatsCustom(custom);
+    }
+    initCategorias();
+    document.getElementById('gCategoria').value=val;
+    document.getElementById('catCustomWrap').style.display='none';
+    document.getElementById('catCustomInput').value='';
+}
+
+/* ── Proveedor autocomplete ── */
+function _normProv(s){return(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();}
+
+function onProveedorInput(val){
+    var dd=document.getElementById('provDropdown');
+    var chip=document.getElementById('provMatchChip');
+    var chipTxt=document.getElementById('provMatchTxt');
+    var q=_normProv(val);
+    chip.classList.remove('show');
+    if(!q){dd.classList.remove('open');dd.innerHTML='';return;}
+    var provs=loadProveedores();
+    var exacto=provs.find(function(p){return _normProv(p.nombre)===q;});
+    if(exacto){
+        chip.classList.add('show');
+        chipTxt.textContent='En catálogo: '+exacto.nombre;
+        dd.classList.remove('open');dd.innerHTML='';
+        return;
+    }
+    var matches=provs.filter(function(p){return _normProv(p.nombre).includes(q);}).slice(0,6);
+    if(!matches.length){dd.classList.remove('open');dd.innerHTML='';return;}
+    dd.innerHTML=matches.map(function(p){
+        var sub=[p.tel,p.contacto].filter(Boolean).join(' · ');
+        return '<div class="prov-dd-item" onmousedown="selProveedorDD(\''+p.nombre.replace(/'/g,"\\'")+'\')">'
+            +'<div><div class="prov-dd-nombre">'+p.nombre+'</div>'+(sub?'<div class="prov-dd-sub">'+sub+'</div>':'')+'</div>'
+            +'<span class="prov-dd-match">en catálogo</span>'
+            +'</div>';
+    }).join('');
+    dd.classList.add('open');
+}
+
+function selProveedorDD(nombre){
+    document.getElementById('gProveedor').value=nombre;
+    cerrarDropdownProv();
+    onProveedorInput(nombre); // actualiza chip
+}
+
+function cerrarDropdownProv(){
+    var dd=document.getElementById('provDropdown');
+    if(dd){dd.classList.remove('open');dd.innerHTML='';}
+}
+
+/* ── Panel catálogo proveedores ── */
+function abrirPanelProveedores(){
+    document.getElementById('panelProvOverlay').classList.add('open');
+    document.getElementById('nuevoProvForm').style.display='none';
+    var s=document.getElementById('panelProvSearch');
+    if(s){s.value='';s.focus();}
+    renderPanelProveedores();
+}
+function cerrarPanelProveedores(){
+    document.getElementById('panelProvOverlay').classList.remove('open');
+}
+
+function renderPanelProveedores(){
+    var q=_normProv(document.getElementById('panelProvSearch').value);
+    var typed=_normProv(document.getElementById('gProveedor').value);
+    var provs=loadProveedores();
+    var filtrados=q?provs.filter(function(p){return _normProv(p.nombre).includes(q);}):provs;
+    var body=document.getElementById('panelProvBody');
+    if(!filtrados.length){
+        body.innerHTML='<div style="text-align:center;padding:30px;color:var(--text-dim)">'
+            +(provs.length?'Sin resultados para "'+q+'"':'Sin proveedores en catálogo. Agrega el primero.')+'</div>';
+        return;
+    }
+    body.innerHTML=filtrados.map(function(p){
+        var sub=[p.tel,p.contacto,p.correo].filter(Boolean).join(' · ').slice(0,60);
+        var esActual=typed&&_normProv(p.nombre)===typed;
+        var similar=typed&&!esActual&&_normProv(p.nombre).includes(typed);
+        return '<div class="prov-cat-row">'
+            +'<div class="prov-cat-info">'
+                +'<div class="prov-cat-nombre">'+p.nombre+'</div>'
+                +(sub?'<div class="prov-cat-sub">'+sub+'</div>':'')
+            +'</div>'
+            +(esActual?'<span class="prov-cat-match">✓ Seleccionado</span>':'')
+            +(similar&&!esActual?'<span class="prov-cat-match" style="color:var(--green)">✓ Similar</span>':'')
+            +'<button onclick="selProveedorPanel(\''+p.nombre.replace(/'/g,"\\'")+'\')"'
+                +' style="background:'+(esActual?'var(--green)':'transparent')+';border:1px solid '
+                +(esActual?'var(--green)':'var(--border)')+';color:'+(esActual?'#fff':'var(--text-muted)')
+                +';border-radius:6px;padding:5px 12px;font-family:inherit;font-size:11px;cursor:pointer;white-space:nowrap">'
+                +(esActual?'✓ Activo':'Seleccionar')
+            +'</button>'
+        +'</div>';
+    }).join('');
+}
+
+function selProveedorPanel(nombre){
+    document.getElementById('gProveedor').value=nombre;
+    onProveedorInput(nombre);
+    cerrarPanelProveedores();
+}
+
+function toggleNuevoProvForm(){
+    var f=document.getElementById('nuevoProvForm');
+    var visible=f.style.display==='flex'||f.style.display==='block';
+    f.style.display=visible?'none':'flex';
+    f.style.flexDirection='column';
+    if(!visible){
+        // Pre-llenar nombre con lo que el usuario escribió
+        var typed=document.getElementById('gProveedor').value.trim();
+        if(typed)document.getElementById('npNombre').value=typed;
+        document.getElementById('npNombre').focus();
+        document.getElementById('npError').style.display='none';
+        document.getElementById('npWarning').style.display='none';
+    }
+}
+
+function guardarNuevoProv(){
+    var nombre=document.getElementById('npNombre').value.trim();
+    var errEl=document.getElementById('npError');
+    var warnEl=document.getElementById('npWarning');
+    if(!nombre){errEl.textContent='El nombre es obligatorio.';errEl.style.display='block';return;}
+    var provs=loadProveedores();
+    // Detectar coincidencias exactas
+    var exacto=provs.find(function(p){return _normProv(p.nombre)===_normProv(nombre);});
+    if(exacto){errEl.textContent='Ya existe un proveedor con ese nombre.';errEl.style.display='block';return;}
+    // Advertir si hay similares
+    var similares=provs.filter(function(p){return _normProv(p.nombre).includes(_normProv(nombre))||_normProv(nombre).includes(_normProv(p.nombre));});
+    if(similares.length&&!warnEl._confirmado){
+        warnEl.textContent='⚠ Posibles coincidencias: '+similares.map(function(p){return p.nombre;}).join(', ')+'. Haz clic en Guardar de nuevo para confirmar.';
+        warnEl.style.display='block';
+        warnEl._confirmado=true;
+        return;
+    }
+    // Guardar
+    var np={
+        id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),
+        nombre:nombre,
+        tel:document.getElementById('npTel').value.trim(),
+        contacto:document.getElementById('npContacto').value.trim(),
+        correo:'',formaPago:'',clabe:'',banco:'',metodoFacturacion:'',notas:'',documentos:[]
+    };
+    provs.push(np);
+    localStorage.setItem(LS_PROV,JSON.stringify(provs));
+    // Seleccionar en el campo de gasto
+    selProveedorPanel(np.nombre);
+    // Reset form
+    document.getElementById('npNombre').value='';
+    document.getElementById('npTel').value='';
+    document.getElementById('npContacto').value='';
+    errEl.style.display='none';warnEl.style.display='none';warnEl._confirmado=false;
+    document.getElementById('nuevoProvForm').style.display='none';
+    renderPanelProveedores();
+}
 function save(d){localStorage.setItem(LS_KEY,JSON.stringify(d));}
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
 function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
@@ -878,6 +1266,7 @@ document.getElementById('mayorWall').querySelector('button').onclick=function(){
 
 document.addEventListener('DOMContentLoaded',function(){
     document.getElementById('pickerInput').value=todayStr();
+    initCategorias();
     renderAll();
 });
 </script>
