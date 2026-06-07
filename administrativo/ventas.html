@@ -342,7 +342,16 @@
                             <input type="number" class="pago-input prop" id="fPropEfectivo" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()">
                             <div style="font-size:9px;color:var(--text-dim);text-align:right;margin-top:2px;letter-spacing:.3px">referencial</div>
                         </td>
-                        <td><input type="number" class="pago-input prop" id="fPropTarjeta" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()"></td>
+                        <td>
+                            <input type="number" class="pago-input prop" id="fPropTarjeta" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()">
+                            <button id="btnPosIncluyeProp" onclick="togglePosIncluyeProp()"
+                                title="¿El POS ya incluye esta propina en su total declarado?"
+                                style="margin-top:4px;width:100%;background:rgba(61,190,122,.12);border:1px solid rgba(61,190,122,.4);
+                                color:var(--green);border-radius:4px;padding:2px 6px;font-family:inherit;font-size:9px;
+                                letter-spacing:.5px;cursor:pointer;text-align:center;transition:all .15s">
+                                ✓ EN TOTAL POS
+                            </button>
+                        </td>
                         <td class="pago-neto" id="totPropina" style="color:var(--accent)">$0.00</td>
                     </tr>
                     <!-- Fila 3: Transferencia -->
@@ -419,24 +428,24 @@
             <div class="resguardo-box">
                 <div class="resguardo-eq">
                     <div class="resguardo-item">
-                        <span class="ri-lbl">Fondo</span>
+                        <span class="ri-lbl">Fondo inicial</span>
                         <span class="ri-val" id="rFondo" style="color:var(--text-muted)">$0</span>
                     </div>
                     <span class="resguardo-op">+</span>
                     <div class="resguardo-item">
-                        <span class="ri-lbl">Ef. + Prop.</span>
+                        <span class="ri-lbl">Venta ef.</span>
                         <span class="ri-val" id="rEfNeto" style="color:var(--green)">$0</span>
                     </div>
                     <span class="resguardo-op">−</span>
                     <div class="resguardo-item">
-                        <span class="ri-lbl">Retiros</span>
+                        <span class="ri-lbl">Fondo sig. turno</span>
                         <input type="number" class="pago-input" id="fRetiros" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()"
-                            style="width:90px;font-size:14px;text-align:right">
+                            style="width:100px;font-size:14px;text-align:right">
                     </div>
                     <span class="resguardo-op">=</span>
                 </div>
                 <div class="resguardo-result">
-                    <span class="rr-lbl">Para resguardo</span>
+                    <span class="rr-lbl">Efectivo resguardo</span>
                     <span class="rr-val" id="rParaResguardo">$0.00</span>
                 </div>
             </div>
@@ -501,6 +510,20 @@ function n(v){return parseFloat(v)||0;}
 function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function fmtN(v){return n(v).toLocaleString('es-MX');}
 
+/* Toggle: ¿el POS (FUDO) ya incluye la propina de tarjeta en su total declarado? */
+var _posIncluyePropTa = true; // default ON — FUDO la incluye por default
+function togglePosIncluyeProp() {
+    _posIncluyePropTa = !_posIncluyePropTa;
+    var btn = document.getElementById('btnPosIncluyeProp');
+    if (btn) {
+        btn.textContent = _posIncluyePropTa ? '✓ EN TOTAL POS' : '○ EXCLUIDA DE POS';
+        btn.style.background    = _posIncluyePropTa ? 'rgba(61,190,122,.12)' : 'var(--surface2)';
+        btn.style.borderColor   = _posIncluyePropTa ? 'rgba(61,190,122,.4)'  : 'var(--border)';
+        btn.style.color         = _posIncluyePropTa ? 'var(--green)'          : 'var(--text-dim)';
+    }
+    calcCorte();
+}
+
 /* Calculated values
    Efectivo: la propina en efectivo es REFERENCIAL (va a los meseros, no al banco)
    Tarjeta:  venta + propina → ambas van al banco (aparecen en estado de cuenta)
@@ -512,8 +535,8 @@ function ventasBruta(c){return n(c.efectivo)+n(c.tarjeta)+n(c.transferencia);}
 function flujoNeto(c){return efNeto(c)+taBanco(c)+n(c.transferencia);}
 function propinas(c){return n(c.propEfectivo)+n(c.propTarjeta);}
 function cheque(c){var com=n(c.comensales);var ven=n(c.ventaDeclarada)||ventasBruta(c)||(n(c.comedor)+n(c.paraLlevar));return com>0?ven/com:0;}
-// Resguardo = fondo + efectivo en caja (venta + propina física) - retiros
-function resguardo(c){return n(c.fondoInicial)+n(c.efectivo)+n(c.propEfectivo)-n(c.retiros);}
+// Resguardo = Fondo inicial + Venta efectivo − Fondo siguiente turno
+function resguardo(c){return n(c.fondoInicial)+n(c.efectivo)-n(c.retiros);}
 function resultado(c){return flujoNeto(c)-n(c.gastos);}
 
 /* ── Period state ── */
@@ -631,11 +654,14 @@ function calcCorte(){
     document.getElementById('totNeto').textContent    = fmtM(totFlujo); // Flujo total
 
     // Diferencia capturado vs. declarado
+    // Si el POS incluye propina tarjeta en su total, comparamos contra flujoTotal;
+    // si no la incluye, comparamos solo contra ventas brutas (ef+ta+tr)
     var ddEl = document.getElementById('difDeclarada');
     if(decl > 0){
-        var dif = totV - decl;
-        ddEl.textContent = (dif >= 0 ? '+' : '') + fmtM(dif);
-        ddEl.className = 'calc-val ' + (Math.abs(dif) < 1 ? '' : dif > 0 ? '' : 'neg');
+        var baseComp = _posIncluyePropTa ? totFlujo : totV;
+        var difDecl = baseComp - decl;
+        ddEl.textContent = (difDecl >= 0 ? '+' : '') + fmtM(difDecl);
+        ddEl.className = 'calc-val ' + (Math.abs(difDecl) < 1 ? '' : difDecl > 0 ? '' : 'neg');
     } else {
         ddEl.textContent = '—'; ddEl.className = 'calc-val neu';
     }
@@ -656,16 +682,16 @@ function calcCorte(){
     rdEl.textContent = gastos > 0 ? fmtM(res) : '—';
     rdEl.style.color = gastos > 0 ? (res >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-muted)';
 
-    // Resguardo: la caja física tiene fondo + venta ef + propina ef (hasta que se retiran)
-    var fondo=v('fFondo'), retiros=v('fRetiros');
-    var resguardoVal = fondo + ef + pef - retiros;
+    // Resguardo: Fondo inicial + Venta efectivo − Fondo siguiente turno = Efectivo resguardo
+    var fondo=v('fFondo'), fondoSig=v('fRetiros');
+    var resguardoVal = fondo + ef - fondoSig;
     document.getElementById('rFondo').textContent    = fmtM(fondo);
-    document.getElementById('rEfNeto').textContent   = fmtM(ef + pef); // ef físico en caja
+    document.getElementById('rEfNeto').textContent   = fmtM(ef);  // venta en efectivo
     document.getElementById('rParaResguardo').textContent = fmtM(resguardoVal);
 
     // Diferencia caja
     var efFinal = v('fEfectivoFinal');
-    var hasClose = fondo > 0 || efFinal > 0 || retiros > 0;
+    var hasClose = fondo > 0 || efFinal > 0 || fondoSig > 0;
     var difCaja = resguardoVal - efFinal;
     var difEl = document.getElementById('difCaja');
     difEl.textContent = hasClose ? fmtM(difCaja) : '—';
