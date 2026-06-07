@@ -609,6 +609,20 @@
     </div>
 </div>
 
+<!-- ══ MODAL VER CORTE ══ -->
+<div class="modal-overlay" id="modalVerCorte" onclick="if(event.target===this)cerrarVerCorte()">
+  <div class="modal-corte" style="max-width:720px">
+    <div class="modal-header" id="verCorteHeader">
+        <h2 id="verCorteTitulo">Corte del día</h2>
+        <div style="display:flex;gap:8px;align-items:center">
+            <button id="verCorteEditBtn" class="btn-ghost" style="font-size:12px;padding:6px 14px" onclick="verCorteAEdicion()">✏️ Editar</button>
+            <button class="modal-close" onclick="cerrarVerCorte()">✕</button>
+        </div>
+    </div>
+    <div class="modal-body" id="verCorteBody" style="gap:12px"></div>
+  </div>
+</div>
+
 <!-- ══ MODAL DEPOSITAR ══ -->
 <div class="modal-overlay" id="modalDeposito" onclick="if(event.target===this)cerrarModalDeposito()">
   <div class="modal-corte" style="max-width:600px">
@@ -882,6 +896,7 @@ function renderTabla(cur){
             '<td class="num-col" style="color:var(--red)">'+(gas>0?fmtM(gas):'—')+'</td>'+
             '<td class="num-col '+resClass+'" style="font-weight:700">'+(gas>0?fmtM(res):'—')+'</td>'+
             '<td style="display:flex;gap:4px;justify-content:flex-end">'+
+                '<button class="btn-row" onclick="verCorte(\''+c.id+'\')" title="Ver corte">👁️</button>'+
                 '<button class="btn-row" onclick="abrirModal(\''+c.id+'\')">✏️</button>'+
                 '<button class="btn-row del" onclick="eliminarCorte(\''+c.id+'\')">🗑️</button>'+
             '</td>'+
@@ -1068,6 +1083,121 @@ function _abrirCajaFuerteContenido(){
     document.getElementById('cajOverlay').classList.add('open');
 }
 function cerrarCajaFuerte(){document.getElementById('cajOverlay').classList.remove('open');}
+
+
+/* ══════════════════════════════════════════════════════════
+   VER CORTE (modo lectura)
+   ══════════════════════════════════════════════════════════ */
+var _verCorteId = null;
+
+function verCorte(id) {
+    var c = load().find(function(x){ return x.id===id; });
+    if (!c) return;
+    _verCorteId = id;
+    var turnoLabel = {dia:'Día completo',manana:'Mañana',tarde:'Tarde',noche:'Noche'};
+    var metLabel = {efectivo:'💵 Efectivo',transferencia:'🏛️ Transfer.',tarjeta:'💳 Tarjeta',mixto:'🔀 Mixto'};
+    var fn = flujoNeto(c), pp = propinas(c), ck = cheque(c);
+    var rsg = n(c.fondoInicial)+n(c.efectivo)-n(c.gastosCajaChica)-n(c.retiros);
+    document.getElementById('verCorteTitulo').textContent = (c.nombre||('Corte · '+c.fecha));
+    document.getElementById('verCorteHeader').style.background = '';
+
+    var ingrExtra = (c.ingresosExtra||[]);
+    var ingrHTML = ingrExtra.length
+        ? '<div style="display:flex;flex-direction:column;gap:4px">'+
+            ingrExtra.map(function(ie){
+                var icon={efectivo:'💵',transfer:'🏛️',propietario:'👤',evento:'🎪',otro:'📋'};
+                return '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted)">'
+                    +'<span>'+(icon[ie.origen]||'📋')+' '+ie.concepto+'</span>'
+                    +'<span style="color:var(--green)">+'+fmtM(ie.monto)+'</span></div>';
+            }).join('')+'</div>'
+        : '<span style="color:var(--text-dim);font-size:12px">Sin ingresos adicionales</span>';
+
+    function row(lbl,val,color){
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">'
+            +'<span style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim)">'+lbl+'</span>'
+            +'<span style="font-family:Bebas Neue,sans-serif;font-size:18px;letter-spacing:.5px;color:'+(color||'var(--text)')+'">'+val+'</span>'
+            +'</div>';
+    }
+    function sec(title){
+        return '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);padding:8px 0 4px;border-bottom:2px solid var(--border);margin-top:4px">'+title+'</div>';
+    }
+
+    document.getElementById('verCorteBody').innerHTML =
+        // Datos generales
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px">'+
+            '<div><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px">Fecha</div><div style="font-size:15px;font-weight:600">'+c.fecha+'</div></div>'+
+            '<div><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px">Turno</div><div>'+turnoChip(c.turno||'dia')+'</div></div>'+
+            '<div><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px">Fondo inicial</div><div style="font-size:15px;font-weight:600">'+fmtM(n(c.fondoInicial))+'</div></div>'+
+        '</div>'+
+        // Formas de pago
+        '<div>'+
+        sec('💳 Formas de pago')+
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px">'+
+            _vcCard('Ef. Venta',fmtM(n(c.efectivo)),'var(--green)')+
+            _vcCard('Prop. Ef.',fmtM(n(c.propEfectivo)),'var(--accent)')+
+            _vcCard('Tarjeta →🏦',fmtM(taBanco(c)),'var(--green)')+
+            _vcCard('Prop. Tarjeta',fmtM(n(c.propTarjeta)),'var(--accent)')+
+            _vcCard('Transfer.',fmtM(n(c.transferencia)),'var(--text-muted)')+
+            _vcCard('Flujo total',fmtM(fn),'var(--green)')+
+        '</div>'+
+        (c.ventaDeclarada?'<div style="margin-top:6px;font-size:12px;color:var(--text-dim)">Venta declarada POS: <strong style="color:var(--text)">'+fmtM(n(c.ventaDeclarada))+'</strong></div>':'')+
+        '</div>'+
+        // Desglose operativo
+        '<div>'+
+        sec('🍽️ Desglose operativo')+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">'+
+            _vcCard('Comensales',n(c.comensales)?fmtN(c.comensales):'—','var(--text)')+
+            _vcCard('Cheque prom.',ck>0?fmtM(ck):'—','var(--text)')+
+        '</div>'+
+        '</div>'+
+        // Gastos + resguardo
+        '<div>'+
+        sec('📤 Gastos del día')+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">'+
+            _vcCard('Caja chica',fmtM(n(c.gastosCajaChica)),'var(--red)')+
+            _vcCard('Fondo sig. turno',fmtM(n(c.retiros)),'var(--text-muted)')+
+        '</div>'+
+        '</div>'+
+        // Resguardo
+        '<div style="background:rgba(245,200,66,.06);border:1px solid rgba(245,200,66,.2);border-radius:8px;padding:12px 16px">'+
+            '<div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">🏦 Efectivo para resguardo</div>'+
+            '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+                _vcInline(fmtM(n(c.fondoInicial)),'Fondo')+
+                '<span style="font-size:16px;color:var(--text-dim)">+</span>'+
+                _vcInline(fmtM(n(c.efectivo)),'Venta ef.')+
+                '<span style="font-size:16px;color:var(--text-dim)">−</span>'+
+                _vcInline(fmtM(n(c.gastosCajaChica)),'Gs. caja chica')+
+                '<span style="font-size:16px;color:var(--text-dim)">−</span>'+
+                _vcInline(fmtM(n(c.retiros)),'Fondo sig.')+
+                '<span style="font-size:16px;color:var(--text-dim)">=</span>'+
+                '<div style="margin-left:auto;text-align:right">'+
+                    '<div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--accent)">Efectivo resguardo</div>'+
+                    '<div style="font-family:Bebas Neue,sans-serif;font-size:28px;color:var(--accent);letter-spacing:1px">'+fmtM(rsg)+'</div>'+
+                '</div>'+
+            '</div>'+
+        '</div>'+
+        // Ingresos adicionales
+        (ingrExtra.length?'<div>'+sec('💸 Ingresos adicionales')+ingrHTML+'</div>':'')+
+        // Notas
+        (c.notas?'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px"><div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Notas</div><div style="font-size:13px;color:var(--text)">'+c.notas+'</div></div>':'');
+
+    document.getElementById('modalVerCorte').classList.add('open');
+}
+
+function _vcCard(lbl,val,color){
+    return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px">'+
+        '<div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px">'+lbl+'</div>'+
+        '<div style="font-family:Bebas Neue,sans-serif;font-size:17px;letter-spacing:.5px;color:'+(color||'var(--text)')+'">'+val+'</div>'+
+    '</div>';
+}
+function _vcInline(val,lbl){
+    return '<div style="text-align:center">'+
+        '<div style="font-family:Bebas Neue,sans-serif;font-size:18px;color:var(--text);letter-spacing:.5px">'+val+'</div>'+
+        '<div style="font-size:9px;color:var(--text-dim);letter-spacing:.5px">'+lbl+'</div>'+
+    '</div>';
+}
+function cerrarVerCorte(){ document.getElementById('modalVerCorte').classList.remove('open'); _verCorteId=null; }
+function verCorteAEdicion(){ cerrarVerCorte(); if(_verCorteId) abrirModal(_verCorteId); }
 
 document.addEventListener('DOMContentLoaded',function(){
     document.getElementById('pickerInput').value=todayStr();
