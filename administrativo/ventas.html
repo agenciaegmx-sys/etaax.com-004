@@ -249,8 +249,8 @@
                                 <th class="al">Turno</th>
                                 <th>Comensales</th>
                                 <th>Cheque prom.</th>
-                                <th>Efectivo</th>
-                                <th>Tarjeta</th>
+                                <th>Ef. venta</th>
+                                <th>Tarjeta →🏦</th>
                                 <th>Transfer.</th>
                                 <th>Propinas</th>
                                 <th>Flujo neto</th>
@@ -302,27 +302,46 @@
         <!-- 2. Formas de pago -->
         <div class="corte-sec">
             <div class="corte-sec-title">💳 Formas de pago</div>
+
+            <!-- Venta total declarada (POS/sistema) -->
+            <div class="fg-row-2" style="margin-bottom:4px">
+                <div class="fg">
+                    <label>Venta total declarada <span style="font-size:9px;color:var(--text-dim);text-transform:none;letter-spacing:0">(POS / sistema)</span></label>
+                    <input type="number" id="fVentaDeclarada" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()">
+                </div>
+                <div class="fg">
+                    <label>Diferencia capturado vs. declarado</label>
+                    <div class="calc-val neu" id="difDeclarada">—</div>
+                </div>
+            </div>
+
             <table class="pago-tbl">
                 <thead>
                     <tr>
                         <th></th>
                         <th style="text-align:right">Venta</th>
                         <th style="text-align:right;color:var(--accent)">Propina</th>
-                        <th style="text-align:right">Flujo neto</th>
+                        <th style="text-align:right">Banco / Flujo</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
                         <td class="pago-label">💵 Efectivo</td>
                         <td><input type="number" class="pago-input" id="fEfectivo" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()"></td>
-                        <td><input type="number" class="pago-input prop" id="fPropEfectivo" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()"></td>
-                        <td class="pago-neto" id="netoEfectivo">$0.00</td>
+                        <td>
+                            <input type="number" class="pago-input prop" id="fPropEfectivo" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()">
+                            <div style="font-size:9px;color:var(--text-dim);text-align:right;margin-top:2px;letter-spacing:.5px">★ referencial</div>
+                        </td>
+                        <td class="pago-neto" id="netoEfectivo" title="Solo la venta — propina va directo a meseros">$0.00</td>
                     </tr>
                     <tr>
                         <td class="pago-label">💳 Tarjeta</td>
                         <td><input type="number" class="pago-input" id="fTarjeta" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()"></td>
                         <td><input type="number" class="pago-input prop" id="fPropTarjeta" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()"></td>
-                        <td class="pago-neto" id="netoTarjeta">$0.00</td>
+                        <td>
+                            <div class="pago-neto" id="netoTarjeta" title="Venta + Propina → deposito en banco">$0.00</div>
+                            <div style="font-size:9px;color:var(--text-dim);text-align:right;margin-top:2px;letter-spacing:.5px">venta + propina → banco</div>
+                        </td>
                     </tr>
                     <tr>
                         <td class="pago-label">🏦 Transfer.</td>
@@ -333,10 +352,16 @@
                 </tbody>
                 <tfoot>
                     <tr>
-                        <td>Total</td>
+                        <td style="color:var(--text-dim);font-size:9px;letter-spacing:1px;text-transform:uppercase">Total ventas</td>
                         <td style="text-align:right;font-family:'Bebas Neue',sans-serif;font-size:17px;color:var(--text)" id="totVenta">$0.00</td>
-                        <td style="text-align:right;font-family:'Bebas Neue',sans-serif;font-size:17px;color:var(--accent)" id="totPropina">$0.00</td>
-                        <td class="pago-neto" id="totNeto" style="font-size:22px;color:var(--accent)">$0.00</td>
+                        <td style="text-align:right">
+                            <div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:2px">Total propinas</div>
+                            <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;color:var(--accent)" id="totPropina">$0.00</span>
+                        </td>
+                        <td>
+                            <div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;text-align:right;margin-bottom:2px">Flujo total</div>
+                            <div class="pago-neto" id="totNeto" style="font-size:22px;color:var(--accent)">$0.00</div>
+                        </td>
                     </tr>
                 </tfoot>
             </table>
@@ -400,7 +425,7 @@
                     </div>
                     <span class="resguardo-op">+</span>
                     <div class="resguardo-item">
-                        <span class="ri-lbl">Ef. neto</span>
+                        <span class="ri-lbl">Ef. + Prop.</span>
                         <span class="ri-val" id="rEfNeto" style="color:var(--green)">$0</span>
                     </div>
                     <span class="resguardo-op">−</span>
@@ -477,13 +502,19 @@ function n(v){return parseFloat(v)||0;}
 function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function fmtN(v){return n(v).toLocaleString('es-MX');}
 
-/* Calculated values */
-function efNeto(c){return n(c.efectivo)-n(c.propEfectivo);}
-function taNeto(c){return n(c.tarjeta)-n(c.propTarjeta);}
-function flujoNeto(c){return efNeto(c)+taNeto(c)+n(c.transferencia);}
+/* Calculated values
+   Efectivo: la propina en efectivo es REFERENCIAL (va a los meseros, no al banco)
+   Tarjeta:  venta + propina → ambas van al banco (aparecen en estado de cuenta)
+*/
+function efNeto(c){return n(c.efectivo);}                              // solo la venta
+function taBanco(c){return n(c.tarjeta)+n(c.propTarjeta);}            // venta + propina → banco
+function taNeto(c){return taBanco(c);}                                 // alias legacy
+function ventasBruta(c){return n(c.efectivo)+n(c.tarjeta)+n(c.transferencia);}
+function flujoNeto(c){return efNeto(c)+taBanco(c)+n(c.transferencia);}
 function propinas(c){return n(c.propEfectivo)+n(c.propTarjeta);}
-function cheque(c){var com=n(c.comensales); var ven=n(c.comedor)+n(c.paraLlevar)||flujoNeto(c); return com>0?ven/com:0;}
-function resguardo(c){return n(c.fondoInicial)+efNeto(c)-n(c.retiros);}
+function cheque(c){var com=n(c.comensales);var ven=n(c.ventaDeclarada)||ventasBruta(c)||(n(c.comedor)+n(c.paraLlevar));return com>0?ven/com:0;}
+// Resguardo = fondo + efectivo en caja (venta + propina física) - retiros
+function resguardo(c){return n(c.fondoInicial)+n(c.efectivo)+n(c.propEfectivo)-n(c.retiros);}
 function resultado(c){return flujoNeto(c)-n(c.gastos);}
 
 /* ── Period state ── */
@@ -570,6 +601,7 @@ function abrirModal(id){
     document.getElementById('fAlimentos').value=d.alimentos||'';
     document.getElementById('fBebidas').value=d.bebidas||'';
     document.getElementById('fOtros').value=d.otros||'';
+    document.getElementById('fVentaDeclarada').value=d.ventaDeclarada||'';
     document.getElementById('fGastos').value=d.gastos||'';
     document.getElementById('fRetiros').value=d.retiros||'';
     document.getElementById('fEfectivoFinal').value=d.efectivoFinal||'';
@@ -585,42 +617,62 @@ function calcCorte(){
     var ef=v('fEfectivo'),pef=v('fPropEfectivo');
     var ta=v('fTarjeta'),pta=v('fPropTarjeta');
     var tr=v('fTransfer');
-    var efn=ef-pef,tan=ta-pta;
-    var totV=ef+ta+tr,totP=pef+pta,totN=efn+tan+tr;
-    // Formas de pago
-    document.getElementById('netoEfectivo').textContent=fmtM(efn);
-    document.getElementById('netoTarjeta').textContent=fmtM(tan);
-    document.getElementById('netoTransfer').textContent=fmtM(tr);
-    document.getElementById('totVenta').textContent=fmtM(totV);
-    document.getElementById('totPropina').textContent=fmtM(totP);
-    document.getElementById('totNeto').textContent=fmtM(totN);
-    // Cheque promedio (venta comedor+para llevar / comensales, si no hay usa flujo neto)
+    var decl=v('fVentaDeclarada');
+
+    // Ventas y propinas son independientes
+    var totV   = ef + ta + tr;           // Total ventas (sin propinas)
+    var totP   = pef + pta;              // Total propinas (dato informativo)
+    var taBanc = ta + pta;               // Tarjeta → banco (venta + propina tarjeta)
+    var totFlujo = ef + taBanc + tr;     // Flujo total = ef + (ta+pta) + tr
+
+    // Columna Banco/Flujo por forma de pago
+    document.getElementById('netoEfectivo').textContent = fmtM(ef);     // solo la venta
+    document.getElementById('netoTarjeta').textContent  = fmtM(taBanc); // venta + propina → banco
+    document.getElementById('netoTransfer').textContent = fmtM(tr);
+    document.getElementById('totVenta').textContent  = fmtM(totV);
+    document.getElementById('totPropina').textContent = fmtM(totP);
+    document.getElementById('totNeto').textContent   = fmtM(totFlujo);
+
+    // Diferencia capturado vs. declarado
+    var ddEl = document.getElementById('difDeclarada');
+    if(decl > 0){
+        var dif = totV - decl;
+        ddEl.textContent = (dif >= 0 ? '+' : '') + fmtM(dif);
+        ddEl.className = 'calc-val ' + (Math.abs(dif) < 1 ? '' : dif > 0 ? '' : 'neg');
+    } else {
+        ddEl.textContent = '—'; ddEl.className = 'calc-val neu';
+    }
+
+    // Cheque promedio — usa venta declarada si está disponible
     var com=v('fComedor'),pll=v('fParaLlevar'),comensales=v('fComensales');
-    var venCanal=(com+pll)||totN;
-    var ck=comensales>0?venCanal/comensales:0;
-    var ckEl=document.getElementById('ticketCalc');
-    ckEl.textContent=ck>0?fmtM(ck):'—';
-    ckEl.className='calc-val '+(ck>0?'':'neu');
+    var ventaRef = decl || totV;
+    var venCanal = (com + pll) || ventaRef;
+    var ck = comensales > 0 ? venCanal / comensales : 0;
+    var ckEl = document.getElementById('ticketCalc');
+    ckEl.textContent = ck > 0 ? fmtM(ck) : '—';
+    ckEl.className = 'calc-val ' + (ck > 0 ? '' : 'neu');
+
     // Gastos y resultado del día
-    var gastos=v('fGastos');
-    var res=totN-gastos;
-    var rdEl=document.getElementById('resultDia');
-    rdEl.textContent=gastos>0?fmtM(res):'—';
-    rdEl.style.color=gastos>0?(res>=0?'var(--green)':'var(--red)'):'var(--text-muted)';
-    // Resguardo
-    var fondo=v('fFondo'),retiros=v('fRetiros');
-    var resguardoVal=fondo+efn-retiros;
-    document.getElementById('rFondo').textContent=fmtM(fondo);
-    document.getElementById('rEfNeto').textContent=fmtM(efn);
-    document.getElementById('rParaResguardo').textContent=fmtM(resguardoVal);
+    var gastos = v('fGastos');
+    var res = totFlujo - gastos;
+    var rdEl = document.getElementById('resultDia');
+    rdEl.textContent = gastos > 0 ? fmtM(res) : '—';
+    rdEl.style.color = gastos > 0 ? (res >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-muted)';
+
+    // Resguardo: la caja física tiene fondo + venta ef + propina ef (hasta que se retiran)
+    var fondo=v('fFondo'), retiros=v('fRetiros');
+    var resguardoVal = fondo + ef + pef - retiros;
+    document.getElementById('rFondo').textContent    = fmtM(fondo);
+    document.getElementById('rEfNeto').textContent   = fmtM(ef + pef); // ef físico en caja
+    document.getElementById('rParaResguardo').textContent = fmtM(resguardoVal);
+
     // Diferencia caja
-    var efFinal=v('fEfectivoFinal');
-    var hasClose=v('fFondo')>0||efFinal>0||retiros>0;
-    var dif=resguardoVal-efFinal;
-    var difEl=document.getElementById('difCaja');
-    difEl.textContent=hasClose?fmtM(dif):'—';
-    difEl.className='calc-val '+(hasClose?(Math.abs(dif)<0.5?'':'dif'+(dif>0?' pos':' neg')):'neu').replace('dif ',dif>0?'':'neg');
-    if(hasClose) difEl.className='calc-val '+(Math.abs(dif)<0.5?'':dif>0?'':'neg');
+    var efFinal = v('fEfectivoFinal');
+    var hasClose = fondo > 0 || efFinal > 0 || retiros > 0;
+    var difCaja = resguardoVal - efFinal;
+    var difEl = document.getElementById('difCaja');
+    difEl.textContent = hasClose ? fmtM(difCaja) : '—';
+    difEl.className = 'calc-val ' + (hasClose ? (Math.abs(difCaja) < 0.5 ? '' : difCaja > 0 ? '' : 'neg') : 'neu');
 }
 
 function guardarCorte(){
@@ -628,7 +680,8 @@ function guardarCorte(){
     if(!fecha){alert('La fecha es obligatoria.');return;}
     var id=document.getElementById('fId').value||genId();
     var corte={id:id,negocioId:getNegocioActivo(),fecha:fecha,turno:document.getElementById('fTurno').value,
-        fondoInicial:v('fFondo'),efectivo:v('fEfectivo'),propEfectivo:v('fPropEfectivo'),
+        fondoInicial:v('fFondo'),ventaDeclarada:v('fVentaDeclarada'),
+        efectivo:v('fEfectivo'),propEfectivo:v('fPropEfectivo'),
         tarjeta:v('fTarjeta'),propTarjeta:v('fPropTarjeta'),transferencia:v('fTransfer'),
         comedor:v('fComedor'),paraLlevar:v('fParaLlevar'),comensales:v('fComensales'),
         alimentos:v('fAlimentos'),bebidas:v('fBebidas'),otros:v('fOtros'),
