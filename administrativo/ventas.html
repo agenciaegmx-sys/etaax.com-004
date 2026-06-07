@@ -340,7 +340,7 @@
         <div class="corte-sec">
             <div class="corte-sec-title">📋 Datos del corte</div>
             <div class="fg-row-3">
-                <div class="fg"><label>Fecha</label><input type="date" id="fFecha" onchange="document.getElementById('fGastos')._editadoManual=false;jalarGastosFecha()"></div>
+                <div class="fg"><label>Fecha</label><input type="date" id="fFecha" onchange="jalarGastosFecha()"></div>
                 <div class="fg"><label>Turno</label>
                     <select id="fTurno">
                         <option value="dia">Día completo</option>
@@ -503,11 +503,11 @@
             <!-- Campo editable (pre-llenado, ajustable) y resultado -->
             <div class="gastos-row">
                 <div class="fg">
-                    <label>Total gastos del día
-                        <span style="font-size:9px;color:var(--text-dim);text-transform:none;letter-spacing:0;margin-left:6px">(pre-llenado · editable)</span>
+                    <label>Gastos caja chica del día
+                        <span style="font-size:9px;color:var(--text-dim);text-transform:none;letter-spacing:0;margin-left:6px">(auto · editable)</span>
                     </label>
                     <input type="number" id="fGastos" min="0" step="0.01" placeholder="0.00"
-                        oninput="this._editadoManual=true;calcCorte()">
+                        oninput="calcCorte()">
                 </div>
                 <div class="result-dia">
                     <div class="rd-lbl">Resultado del día</div>
@@ -766,20 +766,33 @@ function jalarGastosFecha() {
     var banco  = todos.filter(function(g){ return g.metodoPago==='banco'; })
                       .reduce(function(s,g){ return s+n(g.monto); }, 0);
     var total  = chica + fuerte + banco;
-    // Guardar caja chica para resguardo
+    // Guardar caja chica para resguardo y resultado
     _gastosCajaChica = chica;
-    // Actualizar desglose visual
-    document.getElementById('gDesgCajaChica').textContent  = fmtM(chica);
-    document.getElementById('gDesgCajaFuerte').textContent = fmtM(fuerte);
-    document.getElementById('gDesgBanco').textContent      = fmtM(banco);
-    document.getElementById('gDesgTotal').textContent      = fmtM(total);
+    // Actualizar desglose visual (informativo)
+    var elChica = document.getElementById('gDesgCajaChica');
+    var elFuerte = document.getElementById('gDesgCajaFuerte');
+    var elBanco = document.getElementById('gDesgBanco');
+    var elTotal = document.getElementById('gDesgTotal');
+    if (elChica)  elChica.textContent  = fmtM(chica);
+    if (elFuerte) elFuerte.textContent = fmtM(fuerte);
+    if (elBanco)  elBanco.textContent  = fmtM(banco);
+    if (elTotal)  elTotal.textContent  = fmtM(total);
     var infoEl = document.getElementById('gastosNRegistros');
-    infoEl.textContent = todos.length > 0
-        ? todos.length + ' gasto' + (todos.length!==1?'s':'') + ' registrado' + (todos.length!==1?'s':'') + ' — Caja chica: ' + fmtM(chica)
-        : 'Sin gastos registrados para esta fecha';
-    // Pre-llenar el campo total (solo si está vacío o si el usuario no lo tocó)
+    if (infoEl) {
+        if (todos.length > 0) {
+            var partes = [];
+            if (chica > 0)  partes.push('Caja chica: ' + fmtM(chica) + ' ← afecta resultado');
+            if (fuerte > 0) partes.push('Caja fuerte: ' + fmtM(fuerte) + ' (referencial)');
+            if (banco > 0)  partes.push('Banco: ' + fmtM(banco) + ' (referencial)');
+            infoEl.textContent = todos.length + ' gasto' + (todos.length!==1?'s':'') + ' · ' + partes.join(' · ');
+        } else {
+            infoEl.textContent = 'Sin gastos registrados para esta fecha';
+        }
+    }
+    // Siempre sincronizar el campo con los gastos de CAJA CHICA
+    // (caja fuerte y banco son de otro origen y no afectan el efectivo del día)
     var fGastos = document.getElementById('fGastos');
-    if (!fGastos._editadoManual) { fGastos.value = total > 0 ? total.toFixed(2) : ''; }
+    if (fGastos) { fGastos.value = chica > 0 ? chica.toFixed(2) : ''; }
     calcCorte();
 }
 
@@ -897,11 +910,7 @@ function abrirModal(id){
     document.getElementById('fBebidas').value=d.bebidas||'';
     document.getElementById('fOtros').value=d.otros||'';
     document.getElementById('fVentaDeclarada').value=d.ventaDeclarada||'';
-    // Gastos: si el corte ya tenía valor guardado, usarlo (flag manual ON); si no, auto-jalar
-    var fGastosEl=document.getElementById('fGastos');
-    fGastosEl._editadoManual=!!(d.gastos);
-    fGastosEl.value=d.gastos||'';
-    // Restaurar gastos caja chica guardados (si existen)
+    // Restaurar gastos caja chica guardados (jalarGastosFecha siempre recalcula)
     _gastosCajaChica = n(d.gastosCajaChica);
     document.getElementById('fRetiros').value=d.retiros||'';
     // fEfectivoFinal eliminado — ya no se usa
