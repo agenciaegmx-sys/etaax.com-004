@@ -756,8 +756,10 @@ function jalarGastosFecha() {
     var fecha  = document.getElementById('fFecha').value;
     var negId  = getNegocioActivo();
     if (!fecha) return;
+    // Filtrar solo por fecha — misma lógica que gastos.html que no filtra por negocioId
+    // (los gastos usan etaax_gastos flat key, no prefijo de negocio)
     var todos  = _loadGastos().filter(function(g) {
-        return g.fecha === fecha && (!negId || !g.negocioId || g.negocioId === negId);
+        return g.fecha === fecha;
     });
     var chica  = todos.filter(function(g){ return g.metodoPago==='caja_chica'; })
                       .reduce(function(s,g){ return s+n(g.monto); }, 0);
