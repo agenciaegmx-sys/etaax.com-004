@@ -6,6 +6,8 @@
     <title>ETAAX - Registro de Ventas</title>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+    <script src="../supabase-config.js"></script>
     <style>
         .period-tabs{display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:4px;}
         .period-tab{background:transparent;border:none;color:var(--text-muted);padding:7px 16px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;transition:all .15s;white-space:nowrap;}
@@ -999,6 +1001,12 @@ function eliminarCorte(id){
 
 /* ── Caja fuerte ── */
 function abrirCajaFuerte(){
+    // Gate de seguridad: verifica contraseña del usuario activo (owner o admin)
+    _pedirClaveAdmin('Ver Caja Fuerte — Efectivo acumulado', function(){
+        _abrirCajaFuerteContenido();
+    }, '🔒 Acceder');
+}
+function _abrirCajaFuerteContenido(){
     var lista=load().slice().sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
     var body=document.getElementById('cajBody');
     if(!lista.length){
@@ -1087,9 +1095,9 @@ function guardarDeposito(){
     lista.push(dep);
     saveDep(lista);
     cerrarModalDeposito();
-    // Actualizar caja fuerte si está abierta
+    // Actualizar caja fuerte si está abierta (sin pedir clave de nuevo)
     var cajEl=document.getElementById('cajOverlay');
-    if(cajEl&&cajEl.classList.contains('open'))abrirCajaFuerte();
+    if(cajEl&&cajEl.classList.contains('open'))_abrirCajaFuerteContenido();
 }
 
 function eliminarDeposito(id){
@@ -1227,5 +1235,6 @@ function totalIngresosExtra(){
 }
 </script>
 <script src="../ctx-bar.js"></script>
+<script src="../admin-guard.js"></script>
 </body>
 </html>

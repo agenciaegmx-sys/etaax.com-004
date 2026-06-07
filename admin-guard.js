@@ -40,14 +40,16 @@
         document.body.appendChild(el);
     }
 
-    window._pedirClaveAdmin = function (accion, callback) {
+    window._pedirClaveAdmin = function (accion, callback, btnLabel) {
         _ensureModal();
         _guardCb = callback;
         document.getElementById('adminGuardAccion').textContent = accion;
         document.getElementById('adminGuardError').textContent = '';
         document.getElementById('adminGuardInput').value = '';
         var btn = document.getElementById('adminGuardBtn');
-        btn.textContent = 'Eliminar';
+        btn.textContent = btnLabel || 'Eliminar';
+        btn.style.background = btnLabel ? 'var(--accent,#f5c842)' : 'var(--red,#e05a3a)';
+        btn.style.color = btnLabel ? '#000' : '#fff';
         btn.disabled = false;
         document.getElementById('modalAdminGuard').style.display = 'flex';
         setTimeout(function () {
