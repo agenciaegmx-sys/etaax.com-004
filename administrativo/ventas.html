@@ -318,50 +318,46 @@
             <table class="pago-tbl">
                 <thead>
                     <tr>
-                        <th></th>
-                        <th style="text-align:right">Venta</th>
-                        <th style="text-align:right;color:var(--accent)">Propina</th>
-                        <th style="text-align:right">Banco / Flujo</th>
+                        <th style="width:110px"></th>
+                        <th style="text-align:center">Efectivo</th>
+                        <th style="text-align:center">
+                            Tarjeta
+                            <div style="font-size:9px;color:var(--text-dim);letter-spacing:.3px;text-transform:none;font-weight:400;margin-top:1px">venta + prop → banco</div>
+                        </th>
+                        <th style="text-align:right">Total</th>
                     </tr>
                 </thead>
                 <tbody>
+                    <!-- Fila 1: Ventas (ef | ta) → suma independiente -->
                     <tr>
-                        <td class="pago-label">💵 Efectivo</td>
+                        <td class="pago-label">💰 Ventas</td>
                         <td><input type="number" class="pago-input" id="fEfectivo" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()"></td>
+                        <td><input type="number" class="pago-input" id="fTarjeta" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()"></td>
+                        <td class="pago-neto" id="totVenta">$0.00</td>
+                    </tr>
+                    <!-- Fila 2: Propinas (prop_ef referencial | prop_ta → banco) → suma independiente -->
+                    <tr>
+                        <td class="pago-label" style="color:var(--accent)">★ Propinas</td>
                         <td>
                             <input type="number" class="pago-input prop" id="fPropEfectivo" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()">
-                            <div style="font-size:9px;color:var(--text-dim);text-align:right;margin-top:2px;letter-spacing:.5px">★ referencial</div>
+                            <div style="font-size:9px;color:var(--text-dim);text-align:right;margin-top:2px;letter-spacing:.3px">referencial</div>
                         </td>
-                        <td class="pago-neto" id="netoEfectivo" title="Solo la venta — propina va directo a meseros">$0.00</td>
-                    </tr>
-                    <tr>
-                        <td class="pago-label">💳 Tarjeta</td>
-                        <td><input type="number" class="pago-input" id="fTarjeta" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()"></td>
                         <td><input type="number" class="pago-input prop" id="fPropTarjeta" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()"></td>
-                        <td>
-                            <div class="pago-neto" id="netoTarjeta" title="Venta + Propina → deposito en banco">$0.00</div>
-                            <div style="font-size:9px;color:var(--text-dim);text-align:right;margin-top:2px;letter-spacing:.5px">venta + propina → banco</div>
-                        </td>
+                        <td class="pago-neto" id="totPropina" style="color:var(--accent)">$0.00</td>
                     </tr>
+                    <!-- Fila 3: Transferencia -->
                     <tr>
                         <td class="pago-label">🏦 Transfer.</td>
-                        <td><input type="number" class="pago-input" id="fTransfer" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()"></td>
-                        <td style="text-align:center;color:var(--text-dim);font-size:20px;padding:0 10px">—</td>
+                        <td colspan="2">
+                            <input type="number" class="pago-input" id="fTransfer" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()">
+                        </td>
                         <td class="pago-neto" id="netoTransfer">$0.00</td>
                     </tr>
                 </tbody>
                 <tfoot>
                     <tr>
-                        <td style="color:var(--text-dim);font-size:9px;letter-spacing:1px;text-transform:uppercase">Total ventas</td>
-                        <td style="text-align:right;font-family:'Bebas Neue',sans-serif;font-size:17px;color:var(--text)" id="totVenta">$0.00</td>
-                        <td style="text-align:right">
-                            <div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:2px">Total propinas</div>
-                            <span style="font-family:'Bebas Neue',sans-serif;font-size:17px;color:var(--accent)" id="totPropina">$0.00</span>
-                        </td>
-                        <td>
-                            <div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;text-align:right;margin-bottom:2px">Flujo total</div>
-                            <div class="pago-neto" id="totNeto" style="font-size:22px;color:var(--accent)">$0.00</div>
-                        </td>
+                        <td colspan="3" style="text-align:right;padding-right:14px;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim)">Flujo total</td>
+                        <td class="pago-neto" id="totNeto" style="font-size:22px;color:var(--accent)">$0.00</td>
                     </tr>
                 </tfoot>
             </table>
@@ -370,17 +366,8 @@
         <!-- 3. Desglose operativo -->
         <div class="corte-sec">
             <div class="corte-sec-title">🍽️ Desglose operativo</div>
-            <!-- Venta por canal PRIMERO -->
+            <!-- Comensales y cheque PRIMERO -->
             <div class="fg-row-2">
-                <div class="fg"><label>Venta comedor</label>
-                    <input type="number" id="fComedor" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()">
-                </div>
-                <div class="fg"><label>Para llevar / Delivery</label>
-                    <input type="number" id="fParaLlevar" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()">
-                </div>
-            </div>
-            <!-- Comensales y ticket -->
-            <div class="fg-row-2" style="margin-top:4px">
                 <div class="fg"><label>No. comensales</label>
                     <input type="number" id="fComensales" min="0" step="1" placeholder="0" oninput="calcCorte()">
                 </div>
@@ -388,9 +375,21 @@
                     <div class="calc-val neu" id="ticketCalc">—</div>
                 </div>
             </div>
-            <!-- Desglose opcional -->
+            <!-- Venta por canal — opcional -->
+            <details style="margin-top:8px">
+                <summary style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);cursor:pointer;user-select:none;padding:4px 0">▶ Venta por canal (opcional)</summary>
+                <div class="fg-row-2" style="margin-top:10px">
+                    <div class="fg"><label>Venta comedor</label>
+                        <input type="number" id="fComedor" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()">
+                    </div>
+                    <div class="fg"><label>Para llevar / Delivery</label>
+                        <input type="number" id="fParaLlevar" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()">
+                    </div>
+                </div>
+            </details>
+            <!-- Desglose alimentos/bebidas — opcional -->
             <details style="margin-top:4px">
-                <summary style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);cursor:pointer;user-select:none;padding:4px 0">Desglose alimentos / bebidas (opcional)</summary>
+                <summary style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);cursor:pointer;user-select:none;padding:4px 0">▶ Desglose alimentos / bebidas (opcional)</summary>
                 <div class="fg-row-3" style="margin-top:10px">
                     <div class="fg"><label>Alimentos</label><input type="number" id="fAlimentos" min="0" step="0.01" placeholder="0.00"></div>
                     <div class="fg"><label>Bebidas</label><input type="number" id="fBebidas" min="0" step="0.01" placeholder="0.00"></div>
@@ -625,13 +624,11 @@ function calcCorte(){
     var taBanc = ta + pta;               // Tarjeta → banco (venta + propina tarjeta)
     var totFlujo = ef + taBanc + tr;     // Flujo total = ef + (ta+pta) + tr
 
-    // Columna Banco/Flujo por forma de pago
-    document.getElementById('netoEfectivo').textContent = fmtM(ef);     // solo la venta
-    document.getElementById('netoTarjeta').textContent  = fmtM(taBanc); // venta + propina → banco
+    // Columna Total por fila (ventas independiente, propinas independiente)
+    document.getElementById('totVenta').textContent   = fmtM(ef + ta);  // Total ventas (ef+ta, transfer es fila aparte)
+    document.getElementById('totPropina').textContent = fmtM(totP);     // Total propinas
     document.getElementById('netoTransfer').textContent = fmtM(tr);
-    document.getElementById('totVenta').textContent  = fmtM(totV);
-    document.getElementById('totPropina').textContent = fmtM(totP);
-    document.getElementById('totNeto').textContent   = fmtM(totFlujo);
+    document.getElementById('totNeto').textContent    = fmtM(totFlujo); // Flujo total
 
     // Diferencia capturado vs. declarado
     var ddEl = document.getElementById('difDeclarada');
