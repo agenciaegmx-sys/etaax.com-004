@@ -522,9 +522,9 @@
         <div class="gs-sec">
             <div class="gs-sec-title">💳 Método de pago</div>
             <div class="metodo-opts">
-                <button class="metodo-btn active" onclick="setMetodo('caja_fuerte',this)">🏦 Caja fuerte</button>
-                <button class="metodo-btn" onclick="setMetodo('caja_chica',this)">💼 Caja chica</button>
-                <button class="metodo-btn" onclick="setMetodo('banco',this)">🏛️ Cuenta bancaria</button>
+                <button class="metodo-btn active" id="mCajaFuerte" onclick="setMetodo('caja_fuerte',this)">🏦 Caja fuerte</button>
+                <button class="metodo-btn" id="mCajaChica" onclick="setMetodo('caja_chica',this)">💼 Caja chica</button>
+                <button class="metodo-btn" id="mBanco" onclick="setMetodo('banco',this)">🏛️ Cuenta bancaria</button>
             </div>
             <!-- Sub-tipo banco -->
             <div id="bancoSubtipo" style="display:none;margin-top:8px">
@@ -1102,11 +1102,12 @@ function _abrirModalGasto(g,tipo){
     document.getElementById('gEvidenciaNombre').value=d.evidenciaNombre||'';
     // Tipo
     setTipo(tipo||d.tipo||'menor',true);
-    // Método
+    // Método — usando IDs directos para evitar el bug de :first-of-type
     var met=d.metodoPago||'caja_fuerte';
-    document.querySelectorAll('.metodo-btn').forEach(function(b){b.classList.remove('active');});
-    var labels={'caja_fuerte':'Caja fuerte','caja_chica':'Caja chica','banco':'Cuenta bancaria'};
-    document.querySelectorAll('.metodo-btn').forEach(function(b){if(b.textContent.trim().includes(labels[met]||'?')||b.textContent.includes('Caja fuerte')&&met==='caja_fuerte'||b.textContent.includes('Caja chica')&&met==='caja_chica'||b.textContent.includes('bancaria')&&met==='banco')b.classList.add('active');});
+    var metMap={'caja_fuerte':'mCajaFuerte','caja_chica':'mCajaChica','banco':'mBanco'};
+    ['mCajaFuerte','mCajaChica','mBanco'].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.remove('active');});
+    var metBtn=document.getElementById(metMap[met]);
+    if(metBtn)metBtn.classList.add('active');
     document.getElementById('gMetodo').value=met;
     document.getElementById('bancoSubtipo').style.display=met==='banco'?'block':'none';
     if(met==='banco'&&d.metodoBanco){
@@ -1162,7 +1163,11 @@ function setTipoMayor(){
 }
 
 function setMetodo(met,btn){
-    document.querySelectorAll('#modalGasto .metodo-opts:first-of-type .metodo-btn').forEach(function(b){b.classList.remove('active');});
+    // Usar IDs directos en lugar de :first-of-type (falla si hay divs hermanos previos)
+    ['mCajaFuerte','mCajaChica','mBanco'].forEach(function(id){
+        var el=document.getElementById(id);
+        if(el)el.classList.remove('active');
+    });
     btn.classList.add('active');
     document.getElementById('gMetodo').value=met;
     document.getElementById('bancoSubtipo').style.display=met==='banco'?'block':'none';
