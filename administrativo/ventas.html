@@ -35,6 +35,29 @@
         .btn-row.del:hover{border-color:var(--red);color:var(--red);}
         .btn-caja{background:rgba(245,200,66,.12);border:1px solid rgba(245,200,66,.35);color:var(--accent);padding:8px 16px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;white-space:nowrap;}
         .btn-caja:hover{background:rgba(245,200,66,.22);border-color:var(--accent);}
+        .btn-deposito{background:rgba(61,190,122,.1);border:1px solid rgba(61,190,122,.3);color:var(--green);padding:8px 16px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;white-space:nowrap;}
+        .btn-deposito:hover{background:rgba(61,190,122,.2);border-color:var(--green);}
+        .btn-venta-extra{background:rgba(100,120,255,.1);border:1px solid rgba(100,120,255,.3);color:#7ba7ff;padding:8px 16px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;white-space:nowrap;}
+        .btn-venta-extra:hover{background:rgba(100,120,255,.2);}
+
+        /* Ingresos extra inline en corte */
+        .ingreso-list{display:flex;flex-direction:column;gap:6px;margin-top:6px;}
+        .ingreso-row{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;}
+        .ingreso-row .ir-concepto{flex:1;font-size:13px;color:var(--text);}
+        .ingreso-row .ir-monto{font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--green);letter-spacing:.5px;white-space:nowrap;}
+
+        /* Ventas extra table */
+        .vex-table{width:100%;border-collapse:collapse;font-size:12px;}
+        .vex-table th{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);font-weight:500;padding:9px 12px;border-bottom:1px solid var(--border);white-space:nowrap;}
+        .vex-table th.al,.vex-table td.al{text-align:left;}
+        .vex-table td{padding:9px 12px;border-bottom:1px solid var(--border);text-align:right;font-variant-numeric:tabular-nums;}
+        .vex-table tr:last-child td{border-bottom:none;}
+        .vex-table tr:hover td{background:var(--surface2);}
+        .vex-chip{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;letter-spacing:.3px;background:rgba(100,120,255,.1);color:#7ba7ff;border:1px solid rgba(100,120,255,.25);}
+
+        /* Depósito table chips */
+        .dep-chip-caja{background:rgba(245,200,66,.1);color:var(--accent);border:1px solid rgba(245,200,66,.25);display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;}
+        .dep-chip-banco{background:rgba(61,190,122,.1);color:var(--green);border:1px solid rgba(61,190,122,.25);display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;}
 
         /* Modal */
         .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9000;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;box-sizing:border-box;}
@@ -208,6 +231,7 @@
                     <input type="date" id="pickerInput" onchange="renderAll()">
                     <input type="date" id="pickerEnd" style="display:none" onchange="renderAll()">
                 </div>
+                <button class="btn-deposito" onclick="abrirModalDeposito()">💸 Depositar</button>
                 <button class="btn-caja" onclick="abrirCajaFuerte()">🔒 Caja fuerte</button>
             </div>
         </div>
@@ -239,7 +263,10 @@
             <div class="card">
                 <div class="card-header" style="justify-content:space-between">
                     <h2>Cortes del período</h2>
-                    <button class="btn-primary" onclick="abrirModal()">+ Capturar corte</button>
+                    <div style="display:flex;gap:8px">
+                        <button class="btn-venta-extra" onclick="abrirModalVentaExtra()">🎪 Venta extra</button>
+                        <button class="btn-primary" onclick="abrirModal()">+ Capturar corte</button>
+                    </div>
                 </div>
                 <div class="card-body" style="padding:0;overflow-x:auto">
                     <table class="cortes-table" id="cortesTable">
@@ -265,6 +292,33 @@
                         <div class="empty-state-icon">📋</div>
                         <div>Sin cortes en este período. Captura el primero con el botón de arriba.</div>
                     </div>
+                </div>
+            </div>
+            <!-- Ventas Extra del período -->
+            <div class="card" id="cardVentasExtra" style="margin-top:16px;display:none">
+                <div class="card-header" style="justify-content:space-between">
+                    <h2>🎪 Ventas especiales / Extras</h2>
+                    <button class="btn-venta-extra" onclick="abrirModalVentaExtra()">+ Agregar</button>
+                </div>
+                <div class="card-body" style="padding:0;overflow-x:auto">
+                    <table class="vex-table">
+                        <thead>
+                            <tr>
+                                <th class="al">Fecha</th>
+                                <th class="al">Tipo</th>
+                                <th class="al">Concepto</th>
+                                <th class="al">Método</th>
+                                <th class="al">Responsable</th>
+                                <th>Monto</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="vexTbody"></tbody>
+                    </table>
+                </div>
+                <div style="padding:10px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;align-items:center;gap:12px">
+                    <span style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim)">Total ventas extra</span>
+                    <span style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:#7ba7ff;letter-spacing:.5px" id="vexTotal">$0.00</span>
                 </div>
             </div>
         </div>
@@ -494,7 +548,43 @@
             </div>
         </div>
 
-        <!-- 6. Notas -->
+        <!-- 6. Depósitos / Ingresos adicionales del día -->
+        <div class="corte-sec">
+            <div class="corte-sec-title">💸 Depósitos / Ingresos adicionales</div>
+            <div id="ingresosExtraList" class="ingreso-list"></div>
+            <!-- Mini form para agregar -->
+            <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+                <input type="text" id="iexConcepto" placeholder="Concepto (evento, venta, depósito…)"
+                    style="background:var(--surface2);border:1px solid var(--border);color:var(--text);
+                    padding:8px 10px;border-radius:6px;font-family:inherit;font-size:12px;
+                    outline:none;flex:2;min-width:140px;box-sizing:border-box">
+                <select id="iexOrigen"
+                    style="background:var(--surface2);border:1px solid var(--border);color:var(--text);
+                    padding:8px 10px;border-radius:6px;font-family:inherit;font-size:12px;outline:none">
+                    <option value="efectivo">💵 Efectivo</option>
+                    <option value="transfer">🏛️ Transfer.</option>
+                    <option value="propietario">👤 Propietario</option>
+                    <option value="evento">🎪 Evento</option>
+                    <option value="otro">📋 Otro</option>
+                </select>
+                <input type="number" id="iexMonto" placeholder="Monto" min="0" step="0.01"
+                    style="background:var(--surface2);border:1px solid var(--border);color:var(--text);
+                    padding:8px 10px;border-radius:6px;font-family:inherit;font-size:12px;
+                    outline:none;width:100px;text-align:right;box-sizing:border-box">
+                <button onclick="agregarIngresoExtra()"
+                    style="background:rgba(61,190,122,.1);border:1px solid rgba(61,190,122,.3);
+                    color:var(--green);border-radius:6px;padding:8px 14px;font-family:inherit;
+                    font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">
+                    + Agregar
+                </button>
+            </div>
+            <div id="iexTotalRow" style="display:none;justify-content:flex-end;align-items:center;gap:10px;margin-top:6px">
+                <span style="font-size:10px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase">Total ingresos adicionales</span>
+                <span id="iexTotal" style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--green);letter-spacing:.5px">$0.00</span>
+            </div>
+        </div>
+
+        <!-- 7. Notas -->
         <div class="fg">
             <label>Notas del corte</label>
             <textarea id="fNotas" rows="2" placeholder="Observaciones, incidencias, contexto…" style="resize:vertical"></textarea>
@@ -518,6 +608,115 @@
         </div>
         <div class="cj-body" id="cajBody"></div>
     </div>
+</div>
+
+<!-- ══ MODAL DEPOSITAR ══ -->
+<div class="modal-overlay" id="modalDeposito" onclick="if(event.target===this)cerrarModalDeposito()">
+  <div class="modal-corte" style="max-width:600px">
+    <div class="modal-header">
+        <h2>💸 Registrar depósito</h2>
+        <button class="modal-close" onclick="cerrarModalDeposito()">✕</button>
+    </div>
+    <div class="modal-body">
+        <div class="corte-sec">
+            <div class="corte-sec-title">📋 Datos del depósito</div>
+            <div class="fg-row-3">
+                <div class="fg"><label>Fecha</label><input type="date" id="depFecha"></div>
+                <div class="fg"><label>Monto</label>
+                    <input type="number" id="depMonto" min="0" step="0.01" placeholder="0.00">
+                </div>
+                <div class="fg"><label>Destino</label>
+                    <select id="depDestino">
+                        <option value="caja_fuerte">🏦 Caja fuerte</option>
+                        <option value="banco">🏛️ Cuenta bancaria</option>
+                    </select>
+                </div>
+            </div>
+            <div class="fg"><label>Concepto</label>
+                <input type="text" id="depConcepto" placeholder="Descripción del depósito…">
+            </div>
+            <div class="fg"><label>Finalidad / uso</label>
+                <input type="text" id="depFinalidad" placeholder="Para qué es este depósito…">
+            </div>
+            <div class="fg-row-2">
+                <div class="fg"><label>Autoriza</label>
+                    <input type="text" id="depAutoriza" placeholder="Nombre del autorizante">
+                </div>
+                <div class="fg"><label>Deposita / entrega</label>
+                    <input type="text" id="depDeposita" placeholder="Quien hace el depósito">
+                </div>
+            </div>
+            <div class="fg"><label>Notas</label>
+                <textarea id="depNotas" rows="2" placeholder="Observaciones adicionales…" style="resize:vertical"></textarea>
+            </div>
+        </div>
+        <input type="hidden" id="depId">
+    </div>
+    <div class="modal-footer">
+        <button class="btn-ghost" onclick="cerrarModalDeposito()">Cancelar</button>
+        <button class="btn-deposito" style="padding:9px 20px" onclick="guardarDeposito()">💸 Guardar depósito</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL VENTA EXTRA ══ -->
+<div class="modal-overlay" id="modalVentaExtra" onclick="if(event.target===this)cerrarModalVentaExtra()">
+  <div class="modal-corte" style="max-width:580px">
+    <div class="modal-header">
+        <h2>🎪 Venta especial / Extra</h2>
+        <button class="modal-close" onclick="cerrarModalVentaExtra()">✕</button>
+    </div>
+    <div class="modal-body">
+        <div class="corte-sec">
+            <div class="corte-sec-title">📋 Datos de la venta</div>
+            <div class="fg-row-2">
+                <div class="fg"><label>Fecha</label><input type="date" id="vexFecha"></div>
+                <div class="fg"><label>Tipo</label>
+                    <select id="vexTipo">
+                        <option value="evento">🎉 Evento</option>
+                        <option value="festival">🎪 Festival</option>
+                        <option value="cena_especial">🍽️ Cena especial / privada</option>
+                        <option value="renta_espacio">🏛️ Renta de espacio</option>
+                        <option value="catering">📦 Catering</option>
+                        <option value="otro">📋 Otro</option>
+                    </select>
+                </div>
+            </div>
+            <div class="fg"><label>Concepto / descripción</label>
+                <input type="text" id="vexConcepto" placeholder="Nombre del evento o descripción…">
+            </div>
+            <div class="fg-row-2">
+                <div class="fg"><label>Monto total</label>
+                    <input type="number" id="vexMonto" min="0" step="0.01" placeholder="0.00">
+                </div>
+                <div class="fg"><label>Método de cobro</label>
+                    <select id="vexMetodo">
+                        <option value="efectivo">💵 Efectivo</option>
+                        <option value="transferencia">🏛️ Transferencia</option>
+                        <option value="tarjeta">💳 Tarjeta</option>
+                        <option value="mixto">🔀 Mixto</option>
+                    </select>
+                </div>
+            </div>
+            <div class="fg-row-2">
+                <div class="fg"><label>Responsable / organizador</label>
+                    <input type="text" id="vexResponsable" placeholder="Quien coordinó la venta">
+                </div>
+                <div class="fg"><label>Comensales (est.)</label>
+                    <input type="number" id="vexComensales" min="0" step="1" placeholder="0">
+                </div>
+            </div>
+            <div class="fg"><label>Notas</label>
+                <textarea id="vexNotas" rows="2" placeholder="Detalles adicionales…" style="resize:vertical"></textarea>
+            </div>
+        </div>
+        <input type="hidden" id="vexId">
+    </div>
+    <div class="modal-footer">
+        <button class="btn-ghost" onclick="cerrarModalVentaExtra()">Cancelar</button>
+        <button class="btn-venta-extra" style="padding:9px 20px" onclick="guardarVentaExtra()">🎪 Guardar venta extra</button>
+    </div>
+  </div>
 </div>
 
 <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
@@ -622,7 +821,7 @@ function currentData(){var r=getRange(periodoTipo,periodoVal,periodoEnd);return 
 function prevData(){var pr=prevRange(periodoTipo,periodoVal,periodoEnd);return load().filter(function(c){return inRange(c.fecha,pr.from,pr.to);});}
 
 /* ── Render ── */
-function renderAll(){var pi=document.getElementById('pickerInput'),pe=document.getElementById('pickerEnd');periodoVal=pi.value||periodoVal;if(periodoTipo==='rango')periodoEnd=pe.value||periodoEnd;var cur=currentData(),prev=prevData();renderSummary(cur,prev);renderTabla(cur);}
+function renderAll(){var pi=document.getElementById('pickerInput'),pe=document.getElementById('pickerEnd');periodoVal=pi.value||periodoVal;if(periodoTipo==='rango')periodoEnd=pe.value||periodoEnd;var cur=currentData(),prev=prevData();renderSummary(cur,prev);renderTabla(cur);renderVentasExtra(cur);}
 
 function renderSummary(cur,prev){
     var totCur=cur.reduce(function(s,c){return s+flujoNeto(c);},0);
@@ -705,11 +904,14 @@ function abrirModal(id){
     document.getElementById('fRetiros').value=d.retiros||'';
     // fEfectivoFinal eliminado — ya no se usa
     document.getElementById('fNotas').value=d.notas||'';
+    // Cargar ingresos extra del corte (si ya existen)
+    _ingresosExtra = (d.ingresosExtra||[]).slice();
+    renderIngresosExtra();
     // Auto-jalar gastos del módulo para la fecha del corte
     jalarGastosFecha();
     document.getElementById('modalCorte').classList.add('open');
 }
-function cerrarModal(){document.getElementById('modalCorte').classList.remove('open');}
+function cerrarModal(){document.getElementById('modalCorte').classList.remove('open');_ingresosExtra=[];}
 
 function v(id){return n(document.getElementById(id).value);}
 
@@ -780,6 +982,7 @@ function guardarCorte(){
         comedor:v('fComedor'),paraLlevar:v('fParaLlevar'),comensales:v('fComensales'),
         alimentos:v('fAlimentos'),bebidas:v('fBebidas'),otros:v('fOtros'),
         gastos:v('fGastos'),gastosCajaChica:_gastosCajaChica,retiros:v('fRetiros'),
+        ingresosExtra:_ingresosExtra.slice(),
         notas:document.getElementById('fNotas').value.trim()};
     var lista=load().filter(function(c){return c.id!==id;});
     lista.push(corte);
@@ -840,6 +1043,188 @@ document.addEventListener('DOMContentLoaded',function(){
     document.getElementById('pickerInput').value=todayStr();
     renderAll();
 });
+
+/* ══════════════════════════════════════════════════════════
+   DEPÓSITOS
+   ══════════════════════════════════════════════════════════ */
+var LS_DEP='etaax_depositos';
+function loadDep(){try{return JSON.parse(localStorage.getItem(LS_DEP))||[];}catch(e){return[];}}
+function saveDep(d){localStorage.setItem(LS_DEP,JSON.stringify(d));}
+
+function abrirModalDeposito(id){
+    var d=id?(loadDep().find(function(x){return x.id===id;})||{}):{};
+    document.getElementById('depId').value=id||'';
+    document.getElementById('depFecha').value=d.fecha||todayStr();
+    document.getElementById('depMonto').value=d.monto||'';
+    document.getElementById('depDestino').value=d.destino||'caja_fuerte';
+    document.getElementById('depConcepto').value=d.concepto||'';
+    document.getElementById('depFinalidad').value=d.finalidad||'';
+    document.getElementById('depAutoriza').value=d.autorizadoPor||'';
+    document.getElementById('depDeposita').value=d.depositadoPor||'';
+    document.getElementById('depNotas').value=d.notas||'';
+    document.getElementById('modalDeposito').classList.add('open');
+}
+function cerrarModalDeposito(){document.getElementById('modalDeposito').classList.remove('open');}
+
+function guardarDeposito(){
+    var fecha=document.getElementById('depFecha').value;
+    var monto=parseFloat(document.getElementById('depMonto').value);
+    var concepto=document.getElementById('depConcepto').value.trim();
+    if(!fecha){alert('La fecha es obligatoria.');return;}
+    if(!monto||monto<=0){alert('El monto debe ser mayor a cero.');return;}
+    if(!concepto){alert('El concepto es obligatorio.');return;}
+    var id=document.getElementById('depId').value||genId();
+    var dep={
+        id:id, negocioId:getNegocioActivo(), fecha:fecha, monto:monto,
+        destino:document.getElementById('depDestino').value,
+        concepto:concepto,
+        finalidad:document.getElementById('depFinalidad').value.trim(),
+        autorizadoPor:document.getElementById('depAutoriza').value.trim(),
+        depositadoPor:document.getElementById('depDeposita').value.trim(),
+        notas:document.getElementById('depNotas').value.trim()
+    };
+    var lista=loadDep().filter(function(x){return x.id!==id;});
+    lista.push(dep);
+    saveDep(lista);
+    cerrarModalDeposito();
+    // Actualizar caja fuerte si está abierta
+    var cajEl=document.getElementById('cajOverlay');
+    if(cajEl&&cajEl.classList.contains('open'))abrirCajaFuerte();
+}
+
+function eliminarDeposito(id){
+    if(!confirm('¿Eliminar este depósito?'))return;
+    saveDep(loadDep().filter(function(x){return x.id!==id;}));
+}
+
+/* ══════════════════════════════════════════════════════════
+   VENTAS EXTRA
+   ══════════════════════════════════════════════════════════ */
+var LS_VEX='etaax_ventas_extra';
+function loadVex(){try{return JSON.parse(localStorage.getItem(LS_VEX))||[];}catch(e){return[];}}
+function saveVex(d){localStorage.setItem(LS_VEX,JSON.stringify(d));}
+
+function abrirModalVentaExtra(id){
+    var d=id?(loadVex().find(function(x){return x.id===id;})||{}):{};
+    document.getElementById('vexId').value=id||'';
+    document.getElementById('vexFecha').value=d.fecha||periodoVal||todayStr();
+    document.getElementById('vexTipo').value=d.tipo||'evento';
+    document.getElementById('vexConcepto').value=d.concepto||'';
+    document.getElementById('vexMonto').value=d.monto||'';
+    document.getElementById('vexMetodo').value=d.metodoPago||'efectivo';
+    document.getElementById('vexResponsable').value=d.responsable||'';
+    document.getElementById('vexComensales').value=d.comensales||'';
+    document.getElementById('vexNotas').value=d.notas||'';
+    document.getElementById('modalVentaExtra').classList.add('open');
+}
+function cerrarModalVentaExtra(){document.getElementById('modalVentaExtra').classList.remove('open');}
+
+function guardarVentaExtra(){
+    var fecha=document.getElementById('vexFecha').value;
+    var monto=parseFloat(document.getElementById('vexMonto').value);
+    var concepto=document.getElementById('vexConcepto').value.trim();
+    if(!fecha){alert('La fecha es obligatoria.');return;}
+    if(!monto||monto<=0){alert('El monto debe ser mayor a cero.');return;}
+    if(!concepto){alert('El concepto es obligatorio.');return;}
+    var id=document.getElementById('vexId').value||genId();
+    var vex={
+        id:id, negocioId:getNegocioActivo(), fecha:fecha, monto:monto,
+        tipo:document.getElementById('vexTipo').value,
+        concepto:concepto,
+        metodoPago:document.getElementById('vexMetodo').value,
+        responsable:document.getElementById('vexResponsable').value.trim(),
+        comensales:parseInt(document.getElementById('vexComensales').value)||0,
+        notas:document.getElementById('vexNotas').value.trim()
+    };
+    var lista=loadVex().filter(function(x){return x.id!==id;});
+    lista.push(vex);
+    saveVex(lista);
+    cerrarModalVentaExtra();
+    renderAll();
+}
+
+function eliminarVentaExtra(id){
+    if(!confirm('¿Eliminar esta venta extra?'))return;
+    saveVex(loadVex().filter(function(x){return x.id!==id;}));
+    renderAll();
+}
+
+function renderVentasExtra(cur){
+    var r=getRange(periodoTipo,periodoVal,periodoEnd);
+    var negId=getNegocioActivo();
+    var lista=loadVex().filter(function(v){
+        return inRange(v.fecha,r.from,r.to)&&(!negId||!v.negocioId||v.negocioId===negId);
+    }).sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
+    var card=document.getElementById('cardVentasExtra');
+    var tbody=document.getElementById('vexTbody');
+    var totalEl=document.getElementById('vexTotal');
+    card.style.display=lista.length?'block':'none';
+    if(!lista.length)return;
+    var tipoLabel={evento:'🎉 Evento',festival:'🎪 Festival',cena_especial:'🍽️ Cena especial',renta_espacio:'🏛️ Renta',catering:'📦 Catering',otro:'📋 Otro'};
+    var metLabel={efectivo:'💵 Ef.',transferencia:'🏛️ Transfer.',tarjeta:'💳 Tarjeta',mixto:'🔀 Mixto'};
+    var total=lista.reduce(function(s,v){return s+n(v.monto);},0);
+    totalEl.textContent=fmtM(total);
+    tbody.innerHTML=lista.map(function(v){
+        return '<tr>'
+            +'<td class="al num-col">'+v.fecha+'</td>'
+            +'<td class="al"><span class="vex-chip">'+(tipoLabel[v.tipo]||v.tipo)+'</span></td>'
+            +'<td class="al" style="font-weight:500">'+v.concepto+'</td>'
+            +'<td class="al" style="color:var(--text-dim)">'+(metLabel[v.metodoPago]||v.metodoPago||'—')+'</td>'
+            +'<td class="al" style="color:var(--text-dim)">'+(v.responsable||'—')+'</td>'
+            +'<td style="font-weight:700;color:#7ba7ff">'+fmtM(v.monto)+'</td>'
+            +'<td style="display:flex;gap:4px;justify-content:flex-end">'
+                +'<button class="btn-row" onclick="abrirModalVentaExtra(\''+v.id+'\')">✏️</button>'
+                +'<button class="btn-row del" onclick="eliminarVentaExtra(\''+v.id+'\')">🗑️</button>'
+            +'</td>'
+        +'</tr>';
+    }).join('');
+}
+
+/* ══════════════════════════════════════════════════════════
+   INGRESOS EXTRA EN EL CORTE
+   ══════════════════════════════════════════════════════════ */
+var _ingresosExtra = []; // array temporal mientras el modal está abierto
+
+function agregarIngresoExtra(){
+    var concepto=document.getElementById('iexConcepto').value.trim();
+    var monto=parseFloat(document.getElementById('iexMonto').value);
+    if(!concepto||!(monto>0)){return;}
+    var origen=document.getElementById('iexOrigen').value;
+    _ingresosExtra.push({concepto:concepto,origen:origen,monto:monto});
+    document.getElementById('iexConcepto').value='';
+    document.getElementById('iexMonto').value='';
+    renderIngresosExtra();
+    calcCorte();
+}
+
+function eliminarIngresoExtra(idx){
+    _ingresosExtra.splice(idx,1);
+    renderIngresosExtra();
+    calcCorte();
+}
+
+function renderIngresosExtra(){
+    var list=document.getElementById('ingresosExtraList');
+    var totalRow=document.getElementById('iexTotalRow');
+    var totalEl=document.getElementById('iexTotal');
+    if(!_ingresosExtra.length){list.innerHTML='';totalRow.style.display='none';return;}
+    var origenIcon={efectivo:'💵',transfer:'🏛️',propietario:'👤',evento:'🎪',otro:'📋'};
+    list.innerHTML=_ingresosExtra.map(function(ie,i){
+        return '<div class="ingreso-row">'
+            +'<span style="font-size:14px">'+(origenIcon[ie.origen]||'📋')+'</span>'
+            +'<span class="ir-concepto">'+ie.concepto+'</span>'
+            +'<span class="ir-monto">+'+fmtM(ie.monto)+'</span>'
+            +'<button onclick="eliminarIngresoExtra('+i+')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;padding:2px 4px;font-size:12px">✕</button>'
+        +'</div>';
+    }).join('');
+    var tot=_ingresosExtra.reduce(function(s,ie){return s+ie.monto;},0);
+    totalEl.textContent=fmtM(tot);
+    totalRow.style.display='flex';
+}
+
+function totalIngresosExtra(){
+    return _ingresosExtra.reduce(function(s,ie){return s+ie.monto;},0);
+}
 </script>
 <script src="../ctx-bar.js"></script>
 </body>
