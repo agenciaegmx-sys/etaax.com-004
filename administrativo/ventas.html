@@ -284,7 +284,7 @@
         <div class="corte-sec">
             <div class="corte-sec-title">📋 Datos del corte</div>
             <div class="fg-row-3">
-                <div class="fg"><label>Fecha</label><input type="date" id="fFecha"></div>
+                <div class="fg"><label>Fecha</label><input type="date" id="fFecha" onchange="document.getElementById('fGastos')._editadoManual=false;jalarGastosFecha()"></div>
                 <div class="fg"><label>Turno</label>
                     <select id="fTurno">
                         <option value="dia">Día completo</option>
@@ -410,10 +410,48 @@
         <!-- 4. Gastos del día -->
         <div class="corte-sec">
             <div class="corte-sec-title">📤 Gastos del día</div>
+
+            <!-- Gastos jalados automáticamente del módulo -->
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                    <span style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim)">Gastos capturados en módulo Gastos</span>
+                    <button onclick="jalarGastosFecha()" title="Actualizar desde módulo Gastos"
+                        style="background:transparent;border:1px solid var(--border);color:var(--text-dim);border-radius:5px;
+                        padding:3px 10px;font-family:inherit;font-size:11px;cursor:pointer;transition:all .15s"
+                        onmouseover="this.style.borderColor='var(--green)';this.style.color='var(--green)'"
+                        onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">
+                        🔄 Actualizar
+                    </button>
+                </div>
+                <div id="gastosDesglose" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">
+                    <div>
+                        <div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:2px">💼 Caja chica</div>
+                        <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--accent);letter-spacing:.5px" id="gDesgCajaChica">$0.00</div>
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:2px">🏦 Caja fuerte</div>
+                        <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--text-muted);letter-spacing:.5px" id="gDesgCajaFuerte">$0.00</div>
+                    </div>
+                    <div>
+                        <div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:2px">🏛️ Banco / Transfer</div>
+                        <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--text-muted);letter-spacing:.5px" id="gDesgBanco">$0.00</div>
+                    </div>
+                    <div style="margin-left:auto;text-align:right">
+                        <div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:2px">Total registrado</div>
+                        <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--green);letter-spacing:.5px" id="gDesgTotal">$0.00</div>
+                    </div>
+                </div>
+                <div id="gastosNRegistros" style="font-size:11px;color:var(--text-dim)">Sin gastos registrados para esta fecha</div>
+            </div>
+
+            <!-- Campo editable (pre-llenado, ajustable) y resultado -->
             <div class="gastos-row">
-                <div class="fg"><label>Total gastos del día</label>
-                    <input type="number" id="fGastos" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()"
-                        title="Captura los gastos operativos del día. El desglose por concepto se define en el módulo de Gastos.">
+                <div class="fg">
+                    <label>Total gastos del día
+                        <span style="font-size:9px;color:var(--text-dim);text-transform:none;letter-spacing:0;margin-left:6px">(pre-llenado · editable)</span>
+                    </label>
+                    <input type="number" id="fGastos" min="0" step="0.01" placeholder="0.00"
+                        oninput="this._editadoManual=true;calcCorte()">
                 </div>
                 <div class="result-dia">
                     <div class="rd-lbl">Resultado del día</div>
@@ -509,6 +547,39 @@ function getNegocioActivo(){return localStorage.getItem('etaax_negocio_activo')|
 function n(v){return parseFloat(v)||0;}
 function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function fmtN(v){return n(v).toLocaleString('es-MX');}
+
+/* ── Gastos del módulo Gastos ── */
+function _loadGastos() {
+    try { return JSON.parse(localStorage.getItem('etaax_gastos')) || []; } catch(e) { return []; }
+}
+function jalarGastosFecha() {
+    var fecha  = document.getElementById('fFecha').value;
+    var negId  = getNegocioActivo();
+    if (!fecha) return;
+    var todos  = _loadGastos().filter(function(g) {
+        return g.fecha === fecha && (!negId || !g.negocioId || g.negocioId === negId);
+    });
+    var chica  = todos.filter(function(g){ return g.metodoPago==='caja_chica'; })
+                      .reduce(function(s,g){ return s+n(g.monto); }, 0);
+    var fuerte = todos.filter(function(g){ return g.metodoPago==='caja_fuerte'; })
+                      .reduce(function(s,g){ return s+n(g.monto); }, 0);
+    var banco  = todos.filter(function(g){ return g.metodoPago==='banco'; })
+                      .reduce(function(s,g){ return s+n(g.monto); }, 0);
+    var total  = chica + fuerte + banco;
+    // Actualizar desglose visual
+    document.getElementById('gDesgCajaChica').textContent  = fmtM(chica);
+    document.getElementById('gDesgCajaFuerte').textContent = fmtM(fuerte);
+    document.getElementById('gDesgBanco').textContent      = fmtM(banco);
+    document.getElementById('gDesgTotal').textContent      = fmtM(total);
+    var infoEl = document.getElementById('gastosNRegistros');
+    infoEl.textContent = todos.length > 0
+        ? todos.length + ' gasto' + (todos.length!==1?'s':'') + ' registrado' + (todos.length!==1?'s':'') + ' — Caja chica: ' + fmtM(chica)
+        : 'Sin gastos registrados para esta fecha';
+    // Pre-llenar el campo total (solo si está vacío o si el usuario no lo tocó)
+    var fGastos = document.getElementById('fGastos');
+    if (!fGastos._editadoManual) { fGastos.value = total > 0 ? total.toFixed(2) : ''; }
+    calcCorte();
+}
 
 /* Toggle: ¿el POS (FUDO) ya incluye la propina de tarjeta en su total declarado? */
 var _posIncluyePropTa = true; // default ON — FUDO la incluye por default
@@ -624,11 +695,15 @@ function abrirModal(id){
     document.getElementById('fBebidas').value=d.bebidas||'';
     document.getElementById('fOtros').value=d.otros||'';
     document.getElementById('fVentaDeclarada').value=d.ventaDeclarada||'';
-    document.getElementById('fGastos').value=d.gastos||'';
+    // Gastos: si el corte ya tenía valor guardado, usarlo (flag manual ON); si no, auto-jalar
+    var fGastosEl=document.getElementById('fGastos');
+    fGastosEl._editadoManual=!!(d.gastos);
+    fGastosEl.value=d.gastos||'';
     document.getElementById('fRetiros').value=d.retiros||'';
     document.getElementById('fEfectivoFinal').value=d.efectivoFinal||'';
     document.getElementById('fNotas').value=d.notas||'';
-    calcCorte();
+    // Auto-jalar gastos del módulo para la fecha del corte
+    jalarGastosFecha();
     document.getElementById('modalCorte').classList.add('open');
 }
 function cerrarModal(){document.getElementById('modalCorte').classList.remove('open');}
