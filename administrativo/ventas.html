@@ -476,23 +476,20 @@
                     </div>
                     <span class="resguardo-op">−</span>
                     <div class="resguardo-item">
+                        <span class="ri-lbl">Gs. caja chica</span>
+                        <span class="ri-val" id="rGasCajaChica" style="color:var(--red)">$0</span>
+                    </div>
+                    <span class="resguardo-op">−</span>
+                    <div class="resguardo-item">
                         <span class="ri-lbl">Fondo sig. turno</span>
                         <input type="number" class="pago-input" id="fRetiros" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()"
-                            style="width:100px;font-size:14px;text-align:right">
+                            style="width:90px;font-size:14px;text-align:right">
                     </div>
                     <span class="resguardo-op">=</span>
                 </div>
                 <div class="resguardo-result">
                     <span class="rr-lbl">Efectivo resguardo</span>
                     <span class="rr-val" id="rParaResguardo">$0.00</span>
-                </div>
-            </div>
-            <div class="fg-row-2" style="margin-top:4px">
-                <div class="fg"><label>Efectivo físico contado</label>
-                    <input type="number" id="fEfectivoFinal" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()">
-                </div>
-                <div class="fg"><label>Diferencia</label>
-                    <div class="calc-val neu" id="difCaja">—</div>
                 </div>
             </div>
         </div>
@@ -549,6 +546,8 @@ function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:2,
 function fmtN(v){return n(v).toLocaleString('es-MX');}
 
 /* ── Gastos del módulo Gastos ── */
+var _gastosCajaChica = 0; // solo caja chica — se usa en resguardo
+
 function _loadGastos() {
     try { return JSON.parse(localStorage.getItem('etaax_gastos')) || []; } catch(e) { return []; }
 }
@@ -566,6 +565,8 @@ function jalarGastosFecha() {
     var banco  = todos.filter(function(g){ return g.metodoPago==='banco'; })
                       .reduce(function(s,g){ return s+n(g.monto); }, 0);
     var total  = chica + fuerte + banco;
+    // Guardar caja chica para resguardo
+    _gastosCajaChica = chica;
     // Actualizar desglose visual
     document.getElementById('gDesgCajaChica').textContent  = fmtM(chica);
     document.getElementById('gDesgCajaFuerte').textContent = fmtM(fuerte);
@@ -606,8 +607,8 @@ function ventasBruta(c){return n(c.efectivo)+n(c.tarjeta)+n(c.transferencia);}
 function flujoNeto(c){return efNeto(c)+taBanco(c)+n(c.transferencia);}
 function propinas(c){return n(c.propEfectivo)+n(c.propTarjeta);}
 function cheque(c){var com=n(c.comensales);var ven=n(c.ventaDeclarada)||ventasBruta(c)||(n(c.comedor)+n(c.paraLlevar));return com>0?ven/com:0;}
-// Resguardo = Fondo inicial + Venta efectivo − Fondo siguiente turno
-function resguardo(c){return n(c.fondoInicial)+n(c.efectivo)-n(c.retiros);}
+// Resguardo = Fondo inicial + Venta efectivo − Gastos caja chica − Fondo siguiente turno
+function resguardo(c){return n(c.fondoInicial)+n(c.efectivo)-n(c.gastosCajaChica)-n(c.retiros);}
 function resultado(c){return flujoNeto(c)-n(c.gastos);}
 
 /* ── Period state ── */
@@ -699,8 +700,10 @@ function abrirModal(id){
     var fGastosEl=document.getElementById('fGastos');
     fGastosEl._editadoManual=!!(d.gastos);
     fGastosEl.value=d.gastos||'';
+    // Restaurar gastos caja chica guardados (si existen)
+    _gastosCajaChica = n(d.gastosCajaChica);
     document.getElementById('fRetiros').value=d.retiros||'';
-    document.getElementById('fEfectivoFinal').value=d.efectivoFinal||'';
+    // fEfectivoFinal eliminado — ya no se usa
     document.getElementById('fNotas').value=d.notas||'';
     // Auto-jalar gastos del módulo para la fecha del corte
     jalarGastosFecha();
@@ -757,20 +760,13 @@ function calcCorte(){
     rdEl.textContent = gastos > 0 ? fmtM(res) : '—';
     rdEl.style.color = gastos > 0 ? (res >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-muted)';
 
-    // Resguardo: Fondo inicial + Venta efectivo − Fondo siguiente turno = Efectivo resguardo
+    // Resguardo: Fondo inicial + Venta efectivo − Gastos caja chica − Fondo sig. turno
     var fondo=v('fFondo'), fondoSig=v('fRetiros');
-    var resguardoVal = fondo + ef - fondoSig;
-    document.getElementById('rFondo').textContent    = fmtM(fondo);
-    document.getElementById('rEfNeto').textContent   = fmtM(ef);  // venta en efectivo
+    var resguardoVal = fondo + ef - _gastosCajaChica - fondoSig;
+    document.getElementById('rFondo').textContent       = fmtM(fondo);
+    document.getElementById('rEfNeto').textContent      = fmtM(ef);
+    document.getElementById('rGasCajaChica').textContent = fmtM(_gastosCajaChica);
     document.getElementById('rParaResguardo').textContent = fmtM(resguardoVal);
-
-    // Diferencia caja
-    var efFinal = v('fEfectivoFinal');
-    var hasClose = fondo > 0 || efFinal > 0 || fondoSig > 0;
-    var difCaja = resguardoVal - efFinal;
-    var difEl = document.getElementById('difCaja');
-    difEl.textContent = hasClose ? fmtM(difCaja) : '—';
-    difEl.className = 'calc-val ' + (hasClose ? (Math.abs(difCaja) < 0.5 ? '' : difCaja > 0 ? '' : 'neg') : 'neu');
 }
 
 function guardarCorte(){
@@ -783,7 +779,7 @@ function guardarCorte(){
         tarjeta:v('fTarjeta'),propTarjeta:v('fPropTarjeta'),transferencia:v('fTransfer'),
         comedor:v('fComedor'),paraLlevar:v('fParaLlevar'),comensales:v('fComensales'),
         alimentos:v('fAlimentos'),bebidas:v('fBebidas'),otros:v('fOtros'),
-        gastos:v('fGastos'),retiros:v('fRetiros'),efectivoFinal:v('fEfectivoFinal'),
+        gastos:v('fGastos'),gastosCajaChica:_gastosCajaChica,retiros:v('fRetiros'),
         notas:document.getElementById('fNotas').value.trim()};
     var lista=load().filter(function(c){return c.id!==id;});
     lista.push(corte);
