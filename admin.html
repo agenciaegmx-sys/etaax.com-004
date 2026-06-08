@@ -784,9 +784,30 @@ function abrirDetalleNegocio(nid) {
             'style="width:100%;margin-top:20px;background:var(--gold);color:#0a0908;font-family:\'DM Sans\',sans-serif;' +
             'font-size:13px;font-weight:700;padding:12px;border-radius:8px;border:none;cursor:pointer;letter-spacing:.5px">' +
             '⚡ Entrar a este negocio' +
+        '</button>' +
+        '<button onclick="eliminarNegocio(\'' + n.id + '\')" ' +
+            'style="width:100%;margin-top:10px;background:transparent;color:var(--red,#e05252);font-family:\'DM Sans\',sans-serif;' +
+            'font-size:13px;font-weight:600;padding:11px;border-radius:8px;border:1px solid var(--red,#e05252);cursor:pointer;letter-spacing:.3px">' +
+            '🗑 Eliminar negocio' +
         '</button>';
 
     document.getElementById('detailPanel').classList.add('open');
+}
+
+/* ── ELIMINAR NEGOCIO ── */
+async function eliminarNegocio(nid) {
+    var n = _data.negocios.find(function(x){ return x.id === nid; });
+    if (!n) return;
+    var nombre = (n.datos && n.datos.nombre) ? n.datos.nombre : 'este negocio';
+    if (!confirm('¿Eliminar "' + nombre + '"?\n\nEsta acción borra el negocio de la plataforma y no se puede deshacer.')) return;
+
+    var res = await _supabase.from('negocios').delete().eq('id', nid);
+    if (res.error) { alert('Error: ' + res.error.message); return; }
+
+    _data.negocios = _data.negocios.filter(function(x){ return x.id !== nid; });
+    renderNegocios();
+    renderStats();
+    cerrarDetail();
 }
 
 /* ── ENTRAR A NEGOCIO COMO ADMIN ── */
