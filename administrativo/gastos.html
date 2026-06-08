@@ -768,9 +768,9 @@ function onProveedorInput(val){
     var matches=provs.filter(function(p){return _normProv(p.nombre).includes(q);}).slice(0,6);
     if(!matches.length){dd.classList.remove('open');dd.innerHTML='';return;}
     dd.innerHTML=matches.map(function(p){
-        var sub=[p.tel,p.contacto].filter(Boolean).join(' · ');
-        return '<div class="prov-dd-item" onmousedown="selProveedorDD(\''+p.nombre.replace(/'/g,"\\'")+'\')">'
-            +'<div><div class="prov-dd-nombre">'+p.nombre+'</div>'+(sub?'<div class="prov-dd-sub">'+sub+'</div>':'')+'</div>'
+        var sub=[p.tel,p.contacto].filter(Boolean).map(etx).join(' · ');
+        return '<div class="prov-dd-item" onmousedown="selProveedorDD(\''+etx(p.nombre).replace(/'/g,'&#39;')+'\')">'
+            +'<div><div class="prov-dd-nombre">'+etx(p.nombre)+'</div>'+(sub?'<div class="prov-dd-sub">'+sub+'</div>':'')+'</div>'
             +'<span class="prov-dd-match">en catálogo</span>'
             +'</div>';
     }).join('');
@@ -812,17 +812,17 @@ function renderPanelProveedores(){
         return;
     }
     body.innerHTML=filtrados.map(function(p){
-        var sub=[p.tel,p.contacto,p.correo].filter(Boolean).join(' · ').slice(0,60);
+        var sub=[p.tel,p.contacto,p.correo].filter(Boolean).map(etx).join(' · ').slice(0,80);
         var esActual=typed&&_normProv(p.nombre)===typed;
         var similar=typed&&!esActual&&_normProv(p.nombre).includes(typed);
         return '<div class="prov-cat-row">'
             +'<div class="prov-cat-info">'
-                +'<div class="prov-cat-nombre">'+p.nombre+'</div>'
+                +'<div class="prov-cat-nombre">'+etx(p.nombre)+'</div>'
                 +(sub?'<div class="prov-cat-sub">'+sub+'</div>':'')
             +'</div>'
             +(esActual?'<span class="prov-cat-match">✓ Seleccionado</span>':'')
             +(similar&&!esActual?'<span class="prov-cat-match" style="color:var(--green)">✓ Similar</span>':'')
-            +'<button onclick="selProveedorPanel(\''+p.nombre.replace(/'/g,"\\'")+'\')"'
+            +'<button onclick="selProveedorPanel(\''+etx(p.nombre).replace(/'/g,'&#39;')+'\')"'
                 +' style="background:'+(esActual?'var(--green)':'transparent')+';border:1px solid '
                 +(esActual?'var(--green)':'var(--border)')+';color:'+(esActual?'#fff':'var(--text-muted)')
                 +';border-radius:6px;padding:5px 12px;font-family:inherit;font-size:11px;cursor:pointer;white-space:nowrap">'
@@ -1380,6 +1380,7 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 <script src="../admin-guard.js"></script>
 </body>

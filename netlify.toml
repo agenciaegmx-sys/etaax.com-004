@@ -4,3 +4,31 @@
 
 [build.environment]
   NODE_VERSION = "20.18.1"
+
+# ── Security Headers ──────────────────────────────────────────
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Clickjacking: nadie puede meter el sitio en un iframe
+    X-Frame-Options = "DENY"
+    # Sniffing: el browser respeta el Content-Type declarado
+    X-Content-Type-Options = "nosniff"
+    # Referrer: no filtra la URL completa a terceros
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    # HSTS: fuerza HTTPS por 1 año
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+    # Permisos: deshabilita APIs que no usa la app
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=()"
+    # CSP: restringe desde dónde se pueden cargar recursos
+    Content-Security-Policy = """
+      default-src 'self';
+      script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      font-src 'self' https://fonts.gstatic.com;
+      connect-src 'self' https://byjuocnkyuxxudondciz.supabase.co wss://byjuocnkyuxxudondciz.supabase.co;
+      img-src 'self' data: blob:;
+      object-src 'none';
+      frame-src 'none';
+      base-uri 'self';
+      form-action 'self';
+    """
