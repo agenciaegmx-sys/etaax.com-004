@@ -79,7 +79,6 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   display:inline-block;font-size:10px;letter-spacing:1px;text-transform:uppercase;
   padding:3px 8px;border-radius:4px;font-weight:500;
 }
-.badge-micro{background:#3dbe7a22;color:#3dbe7a;}
 .badge-pyme{background:#f5c84222;color:#f5c842;}
 .badge-gran{background:#c87a6a22;color:#c87a6a;}
 .badge-neg{background:#7ab8f522;color:#7ab8f5;}
@@ -260,8 +259,16 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
     </div>
     <div class="login-field">
       <label class="login-label">Contraseña</label>
-      <input class="login-input" id="admPwd" type="password" placeholder="••••••••"
-             autocomplete="current-password" onkeydown="if(event.key==='Enter')adminLogin()">
+      <div style="position:relative">
+        <input class="login-input" id="admPwd" type="password" placeholder="••••••••"
+               autocomplete="current-password" onkeydown="if(event.key==='Enter')adminLogin()"
+               style="padding-right:44px">
+        <button type="button" tabindex="-1" id="admPwdEye"
+          onclick="(function(){var i=document.getElementById('admPwd'),e=document.getElementById('admPwdEye'),s=i.type==='password';i.type=s?'text':'password';e.textContent=s?'🙈':'👁';})()"
+          style="position:absolute;right:0;top:0;height:100%;width:42px;background:transparent;border:none;
+          cursor:pointer;font-size:16px;color:var(--dim);display:flex;align-items:center;justify-content:center"
+          title="Mostrar/ocultar">👁</button>
+      </div>
     </div>
     <div class="login-error" id="admLoginError"></div>
     <button class="btn-login" id="btnAdmLogin" onclick="adminLogin()">Entrar al panel →</button>
@@ -468,7 +475,6 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 var ADMIN_EMAIL = 'admin@etaax.com';
 
 var PLANES = {
-    micro: { nombre:'Micro Pyme',   color:'#3dbe7a', cls:'badge-micro' },
     pyme:  { nombre:'Pequeña Pyme', color:'#f5c842', cls:'badge-pyme'  },
     gran:  { nombre:'Gran Pyme',    color:'#c87a6a', cls:'badge-gran'  }
 };
@@ -613,7 +619,7 @@ function renderUsuarios() {
     _data.negocios.forEach(function(n){ negsCount[n.usuario_id] = (negsCount[n.usuario_id]||0)+1; });
 
     document.getElementById('tbodyUsuarios').innerHTML = rows.map(function(u) {
-        var p    = PLANES[u.plan] || PLANES.micro;
+        var p    = PLANES[u.plan] || PLANES.pyme;
         var cnt  = negsCount[u.id] || 0;
         var fecha = u.created_at ? new Date(u.created_at).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) : '—';
         var nombre = esc(u.nombre || '—');
@@ -691,7 +697,7 @@ function abrirDetalleUsuario(uid) {
     var u = _data.usuarios.find(function(x){ return x.id === uid; });
     if (!u) return;
 
-    var p     = PLANES[u.plan] || PLANES.micro;
+    var p     = PLANES[u.plan] || PLANES.pyme;
     var fecha = u.created_at ? new Date(u.created_at).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) : '—';
     var negs  = _data.negocios.filter(function(n){ return n.usuario_id === uid; });
     var totalStaff = 0;
@@ -736,7 +742,7 @@ function abrirDetalleNegocio(nid) {
     var d     = n.datos || {};
     var fecha = n.created_at ? new Date(n.created_at).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) : '—';
     var dueno = _data.usuarios.find(function(u){ return u.id === n.usuario_id; });
-    var p     = dueno ? (PLANES[dueno.plan] || PLANES.micro) : null;
+    var p     = dueno ? (PLANES[dueno.plan] || PLANES.pyme) : null;
     var staff = _data.staff.filter(function(s){ return s.negocio_id === nid; });
 
     document.getElementById('detailTitle').textContent = (d.emoji||'🏢') + ' ' + (d.nombre||'—');
@@ -756,7 +762,7 @@ function abrirDetalleNegocio(nid) {
         negocioNombre: d.nombre || '',
         usuarioId:     n.usuario_id,
         usuarioNombre: dueno ? (dueno.nombre || 'Usuario') : 'Usuario',
-        usuarioPlan:   dueno ? (dueno.plan || 'micro') : 'micro'
+        usuarioPlan:   dueno ? (dueno.plan || 'pyme') :  'pyme'
     };
 
     document.getElementById('detailBody').innerHTML =

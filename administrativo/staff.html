@@ -450,6 +450,41 @@
             <div class="modal-section">Datos de nómina</div>
             <div class="form-grid">
                 <div class="form-group">
+                    <label>Salario base</label>
+                    <input type="number" id="fSalarioBase" min="0" step="0.01" placeholder="0.00">
+                </div>
+                <div class="form-group">
+                    <label>Periodicidad de pago</label>
+                    <select id="fPeriodicidad">
+                        <option value="">— Seleccionar —</option>
+                        <option value="semanal">Semanal</option>
+                        <option value="quincenal">Quincenal</option>
+                        <option value="mensual">Mensual</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Día de pago</label>
+                    <select id="fDiaPago">
+                        <option value="">— Seleccionar —</option>
+                        <optgroup label="Semanal">
+                            <option value="lunes">Lunes</option>
+                            <option value="martes">Martes</option>
+                            <option value="miercoles">Miércoles</option>
+                            <option value="jueves">Jueves</option>
+                            <option value="viernes">Viernes</option>
+                            <option value="sabado">Sábado</option>
+                        </optgroup>
+                        <optgroup label="Quincenal / Mensual">
+                            <option value="dia1_15">Días 1 y 15</option>
+                            <option value="dia1_16">Días 1 y 16</option>
+                            <option value="dia15_ultimo">Días 15 y último</option>
+                            <option value="dia1">Día 1 del mes</option>
+                            <option value="dia15">Día 15 del mes</option>
+                            <option value="ultimo">Último día del mes</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label>Forma de pago de nómina</label>
                     <select id="fFormaPago">
                         <option value="">— Seleccionar —</option>
@@ -458,7 +493,9 @@
                         <option>Cheque</option>
                     </select>
                 </div>
-                <div class="form-group">
+            </div>
+            <div class="form-grid">
+                <div class="form-group full">
                     <label>Datos bancarios (CLABE / cuenta, opcional)</label>
                     <input type="text" id="fDatosBancarios" placeholder="18 dígitos o cuenta">
                 </div>
@@ -704,7 +741,7 @@ function renderTable() {
             '<td>' + rolBadge(s.rol) + '</td>' +
             '<td style="font-variant-numeric:tabular-nums;color:var(--text-muted)">' + esc(ingreso) + '</td>' +
             '<td>' + esc(s.celular||'—') + '</td>' +
-            '<td>' + esc(s.formaPagoNomina||'—') + '</td>' +
+            '<td>' + (s.salarioBase?'$'+Number(s.salarioBase).toLocaleString('es-MX',{minimumFractionDigits:2}):'—') + (s.periodicidad?' <span style="font-size:10px;color:var(--text-dim)">'+s.periodicidad+'</span>':'') + '</td>' +
             '<td><span class="estado-chip ' + estadoClass + '">' + esc(s.estado||'Activo') + '</span></td>' +
             '<td style="white-space:nowrap">' +
                 '<button class="btn-row" onclick="event.stopPropagation();openModal(\'' + s.id + '\')">Editar</button> ' +
@@ -736,7 +773,10 @@ function openModal(id) {
             document.getElementById('fRol').value         = s.rol || '';
             document.getElementById('fUsuario').value     = s.usuario || '';
             document.getElementById('fPwd').value         = '';
-            document.getElementById('fFormaPago').value   = s.formaPagoNomina || '';
+            document.getElementById('fSalarioBase').value  = s.salarioBase || '';
+            document.getElementById('fPeriodicidad').value = s.periodicidad || '';
+            document.getElementById('fDiaPago').value      = s.diaPago || '';
+            document.getElementById('fFormaPago').value    = s.formaPagoNomina || '';
             document.getElementById('fDatosBancarios').value = s.datosBancarios || '';
             document.getElementById('fReferencias').value = s.referencias || '';
             document.getElementById('fNotas').value       = s.notas || '';
@@ -748,9 +788,11 @@ function openModal(id) {
 }
 
 function clearForm() {
-    ['fNombre','fPuesto','fFechaIngreso','fCelular','fCorreo','fDireccion','fDatosBancarios','fReferencias','fNotas','fUsuario','fPwd'].forEach(function(id){
+    ['fNombre','fPuesto','fFechaIngreso','fCelular','fCorreo','fDireccion','fDatosBancarios','fReferencias','fNotas','fUsuario','fPwd','fSalarioBase'].forEach(function(id){
         document.getElementById(id).value = '';
     });
+    document.getElementById('fPeriodicidad').value = '';
+    document.getElementById('fDiaPago').value = '';
     document.getElementById('fFormaPago').value = '';
     document.getElementById('fEstado').value = 'Activo';
     document.getElementById('fRol').value = '';
@@ -800,6 +842,9 @@ async function saveStaff() {
         correo:          document.getElementById('fCorreo').value.trim(),
         direccion:       document.getElementById('fDireccion').value.trim(),
         estado:          document.getElementById('fEstado').value || 'Activo',
+        salarioBase:     parseFloat(document.getElementById('fSalarioBase').value)||0,
+        periodicidad:    document.getElementById('fPeriodicidad').value,
+        diaPago:         document.getElementById('fDiaPago').value,
         formaPagoNomina: document.getElementById('fFormaPago').value,
         datosBancarios:  document.getElementById('fDatosBancarios').value.trim(),
         referencias:     document.getElementById('fReferencias').value.trim(),

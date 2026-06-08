@@ -192,6 +192,12 @@
                 </div>
             </div>
 
+            <!-- Widget Tarjetas de Crédito -->
+            <div id="tcWidgetWrap" style="display:none;margin-bottom:16px">
+                <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px">💳 Pasivos — Tarjetas de Crédito</div>
+                <div id="tcWidgetGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px"></div>
+            </div>
+
             <!-- Leyenda -->
             <div class="sem-leyenda" style="margin-bottom:16px">
                 <div class="sem-item">🟢 <span>Rentable (≥ umbral verde)</span></div>
@@ -252,12 +258,21 @@ function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMont
 function n(v){return parseFloat(v)||0;}
 function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function flujoNeto(c){return(n(c.efectivo)-n(c.propEfectivo))+(n(c.tarjeta)-n(c.propTarjeta))+n(c.transferencia);}
+function flujoNeto(c){return n(c.efectivo)+n(c.tarjeta)+n(c.propTarjeta)+n(c.transferencia);}
 function daysInMonth(y,m){return new Date(y,m,0).getDate();}
 
 /* ── Sucursal ── */
 var _sucursalId=null;
-function _loadNegocios(){try{return JSON.parse(localStorage.getItem('etaax_negocios')||'[]');}catch(e){return[];}}
+function _loadNegocios(){
+    try{
+        var all=JSON.parse(localStorage.getItem('etaax_negocios')||'[]');
+        var activoId=localStorage.getItem('etaax_negocio_activo')||'';
+        if(!activoId)return all;
+        var activo=all.find(function(n){return n.id===activoId;});
+        if(!activo||!activo.usuarioId)return all;
+        return all.filter(function(n){return n.usuarioId===activo.usuarioId;});
+    }catch(e){return[];}
+}
 function _renderSucMenu(){
     var menu=document.getElementById('sucMenu');
     var negs=_loadNegocios();
@@ -415,6 +430,9 @@ function renderAll(){
     var mgCard=document.getElementById('kpiMargenCard');
     mgCard.className='kpi-card '+(sem.cls==='verde'?'highlight':sem.cls==='amarillo'?'warn':'danger');
 
+    // Tarjetas de crédito
+    renderTarjetasWidget(r);
+
     // Table
     var periods=buildPeriods(r);
     var thead=document.getElementById('utThead');
@@ -478,6 +496,44 @@ function renderAll(){
         +'<td class="ar"><span class="tot-val" style="color:'+(tMg!==null&&tMg>=thresh.verde?'var(--green)':tMg!==null&&tMg>=thresh.amarillo?'var(--accent)':'var(--red)')+'">'+( tMg!==null?tMg.toFixed(1)+'%':'—')+'</span></td>'
         +'<td><span style="font-size:20px">'+tSem.icon+'</span></td>'
         +'</tr>';
+}
+
+/* ── Widget tarjetas de crédito ── */
+function _tcSk(){var id=localStorage.getItem('etaax_negocio_activo')||'';return id?'etaax_'+id+'_tarjetas_credito':'etaax_tarjetas_credito';}
+function _loadTarjetas(){try{return JSON.parse(localStorage.getItem(_tcSk()))||[];}catch(e){return[];}}
+
+function renderTarjetasWidget(r){
+    var tarjetas=_loadTarjetas();
+    var wrap=document.getElementById('tcWidgetWrap');
+    var grid=document.getElementById('tcWidgetGrid');
+    if(!tarjetas.length){wrap.style.display='none';return;}
+    wrap.style.display='block';
+    // Gastos con tarjeta crédito en el período
+    var gastos=loadGastos().filter(function(g){
+        return g.metodoPago==='banco'&&g.metodoBanco==='credito'&&g.fecha>=r.from&&g.fecha<=r.to;
+    });
+    var totalGastado=gastos.reduce(function(s,g){return s+n(g.monto);},0);
+    grid.innerHTML=tarjetas.map(function(t){
+        var limite=t.limite||0;
+        var pct=limite>0?Math.min(totalGastado/limite*100,100):0;
+        var disponible=limite>0?Math.max(limite-totalGastado,0):null;
+        var barColor=pct>80?'var(--red)':pct>50?'var(--accent)':'var(--green)';
+        return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;border-left:3px solid '+t.color+'">'
+            +'<div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px">'+t.banco+'  ···· '+t.digitos+'</div>'
+            +(limite>0
+                ?'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">'
+                    +'<span style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:var(--red)">'+fmtM(totalGastado)+'</span>'
+                    +'<span style="font-size:11px;color:var(--text-dim)">de '+fmtM(limite)+'</span>'
+                +'</div>'
+                +'<div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:6px">'
+                    +'<div style="width:'+pct.toFixed(1)+'%;height:100%;background:'+barColor+';border-radius:3px;transition:width .4s"></div>'
+                +'</div>'
+                +'<div style="font-size:11px;color:var(--text-dim)">Disponible: <strong style="color:var(--green)">'+fmtM(disponible)+'</strong></div>'
+                :'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:var(--red)">'+fmtM(totalGastado)+'</div>'
+                +'<div style="font-size:11px;color:var(--text-dim)">Sin límite definido</div>')
+            +(t.corte?'<div style="font-size:10px;color:var(--text-dim);margin-top:4px">Corte día '+t.corte+(t.pago?' · Pago día '+t.pago:'')+'</div>':'')
+        +'</div>';
+    }).join('');
 }
 
 function _setPeriod(tipo,btn){

@@ -250,7 +250,22 @@
             </div>
         </div>
 
-        <!-- ══ 3: KPIs ══ -->
+        <!-- ══ 3: PASIVOS: TARJETAS DE CRÉDITO ══ -->
+        <div class="cf-section">
+            <div class="cf-section-hdr">
+                <span class="cf-section-tag">Pasivos</span>
+                <div class="cf-section-title">💳 Tarjetas de Crédito</div>
+                <div class="cf-section-desc">Registra y monitorea los límites y gastos de cada tarjeta de crédito del negocio.</div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+                <button onclick="abrirTc()" style="background:var(--green);border:none;color:#fff;padding:8px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">+ Agregar tarjeta</button>
+            </div>
+            <div id="tcList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">
+                <div id="tcEmpty" style="color:var(--text-dim);font-size:13px;padding:20px 0;grid-column:1/-1">Sin tarjetas registradas. Agrega las tarjetas de crédito del negocio.</div>
+            </div>
+        </div>
+
+        <!-- ══ 4: KPIs ══ -->
         <div class="cf-section">
             <div class="cf-section-hdr">
                 <span class="cf-section-tag">Indicadores</span>
@@ -284,7 +299,7 @@
                             <div class="ks-lbl">Ticket prom.</div>
                         </div>
                     </div>
-                </div>
+                </a>
             </div>
         </div>
 
@@ -319,6 +334,120 @@ function toggleTheme() {
     document.getElementById('themeIcon').textContent  = next === 'light' ? '🌙' : '☀️';
     document.getElementById('themeLabel').textContent = next === 'light' ? 'Modo oscuro' : 'Modo claro';
 }
+</script>
+<!-- ══ MODAL TARJETA ══ -->
+<style>
+#tcModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9200;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;}
+#tcModal.open{display:flex;}
+</style>
+<div id="tcModal" onclick="if(event.target===this)cerrarTc()">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;width:100%;max-width:460px;padding:24px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+            <h2 id="tcModalTitle" style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--accent)">💳 Nueva Tarjeta</h2>
+            <button onclick="cerrarTc()" style="background:none;border:none;color:var(--text-dim);font-size:20px;cursor:pointer">✕</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div style="grid-column:1/-1;display:flex;flex-direction:column;gap:5px">
+                <label style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim)">Banco / Emisor</label>
+                <input id="tcBanco" type="text" placeholder="Ej. BBVA, Banamex, HSBC…" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;width:100%;box-sizing:border-box">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px">
+                <label style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim)">Últimos 4 dígitos</label>
+                <input id="tcDigitos" type="text" maxlength="4" placeholder="0000" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;letter-spacing:4px;width:100%;box-sizing:border-box">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px">
+                <label style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim)">Límite de crédito ($)</label>
+                <input id="tcLimite" type="number" min="0" step="100" placeholder="0.00" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;width:100%;box-sizing:border-box">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px">
+                <label style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim)">Día de corte</label>
+                <input id="tcCorte" type="number" min="1" max="31" placeholder="Ej. 15" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;width:100%;box-sizing:border-box">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px">
+                <label style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim)">Día de pago</label>
+                <input id="tcPago" type="number" min="1" max="31" placeholder="Ej. 5" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;width:100%;box-sizing:border-box">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px">
+                <label style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim)">Color</label>
+                <input id="tcColor" type="color" value="#3dbe7a" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px;height:42px;cursor:pointer;width:100%;box-sizing:border-box">
+            </div>
+        </div>
+        <input type="hidden" id="tcId">
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+            <button onclick="cerrarTc()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);padding:9px 18px;border-radius:6px;font-size:13px;cursor:pointer">Cancelar</button>
+            <button onclick="guardarTc()" style="background:var(--green);border:none;color:#fff;padding:9px 20px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">Guardar</button>
+        </div>
+    </div>
+</div>
+
+<script>
+/* ── Tarjetas de crédito (financiero/index.html) ── */
+function _tcSk(){var id=localStorage.getItem('etaax_negocio_activo')||'';return id?'etaax_'+id+'_tarjetas_credito':'etaax_tarjetas_credito';}
+function _loadTc(){try{return JSON.parse(localStorage.getItem(_tcSk()))||[];}catch(e){return[];}}
+function _saveTc(d){localStorage.setItem(_tcSk(),JSON.stringify(d));}
+function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function _fmt(v){return '$'+parseFloat(v||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+function renderTc(){
+    var lista=_loadTc();
+    var cont=document.getElementById('tcList');
+    if(!lista.length){
+        cont.innerHTML='<div id="tcEmpty" style="color:var(--text-dim);font-size:13px;padding:20px 0;grid-column:1/-1">Sin tarjetas registradas. Agrega las tarjetas de crédito del negocio.</div>';
+        return;
+    }
+    cont.innerHTML=lista.map(function(t){
+        var limite=parseFloat(t.limite)||0;
+        return '<div style="background:var(--surface);border:1px solid var(--border);border-left:4px solid '+t.color+';border-radius:10px;padding:14px 16px">'
+            +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
+                +'<div>'
+                    +'<div style="font-weight:600;font-size:14px">'+_esc(t.banco)+'</div>'
+                    +'<div style="font-size:11px;color:var(--text-dim);letter-spacing:2px">···· '+_esc(t.digitos||'——')+'</div>'
+                +'</div>'
+                +'<div style="display:flex;gap:6px">'
+                    +'<button onclick="abrirTc(\''+t.id+'\')" style="background:none;border:1px solid var(--border);color:var(--text-dim);padding:4px 10px;border-radius:5px;font-size:11px;cursor:pointer">Editar</button>'
+                    +'<button onclick="eliminarTc(\''+t.id+'\')" style="background:none;border:1px solid var(--red);color:var(--red);padding:4px 10px;border-radius:5px;font-size:11px;cursor:pointer">✕</button>'
+                +'</div>'
+            +'</div>'
+            +(limite>0
+                ?'<div style="font-size:12px;color:var(--text-dim)">Límite: <strong style="color:var(--text)">'+_fmt(limite)+'</strong></div>'
+                :'<div style="font-size:11px;color:var(--text-dim)">Sin límite definido</div>')
+            +(t.corte||t.pago
+                ?'<div style="font-size:11px;color:var(--text-dim);margin-top:4px">'
+                    +(t.corte?'Corte: día <strong>'+t.corte+'</strong>  ':'')
+                    +(t.pago?'Pago: día <strong>'+t.pago+'</strong>':'')
+                +'</div>':'')
+        +'</div>';
+    }).join('');
+}
+
+function abrirTc(id){
+    var t=id?(_loadTc().find(function(x){return x.id===id;})||{}):{};
+    document.getElementById('tcId').value=t.id||'';
+    document.getElementById('tcBanco').value=t.banco||'';
+    document.getElementById('tcDigitos').value=t.digitos||'';
+    document.getElementById('tcLimite').value=t.limite||'';
+    document.getElementById('tcCorte').value=t.corte||'';
+    document.getElementById('tcPago').value=t.pago||'';
+    document.getElementById('tcColor').value=t.color||'#3dbe7a';
+    document.getElementById('tcModalTitle').textContent=id?'✏️ Editar Tarjeta':'💳 Nueva Tarjeta';
+    document.getElementById('tcModal').classList.add('open');
+}
+function cerrarTc(){
+    document.getElementById('tcModal').classList.remove('open');
+}
+function guardarTc(){
+    var banco=document.getElementById('tcBanco').value.trim();
+    if(!banco){alert('El banco es obligatorio.');return;}
+    var id=document.getElementById('tcId').value||(Date.now().toString(36)+Math.random().toString(36).slice(2,5));
+    var lista=_loadTc().filter(function(t){return t.id!==id;});
+    lista.push({id:id,banco:banco,digitos:document.getElementById('tcDigitos').value.trim(),limite:parseFloat(document.getElementById('tcLimite').value)||0,corte:parseInt(document.getElementById('tcCorte').value)||0,pago:parseInt(document.getElementById('tcPago').value)||0,color:document.getElementById('tcColor').value});
+    _saveTc(lista); cerrarTc(); renderTc();
+}
+function eliminarTc(id){
+    if(!confirm('¿Eliminar esta tarjeta?'))return;
+    _saveTc(_loadTc().filter(function(t){return t.id!==id;})); renderTc();
+}
+document.addEventListener('DOMContentLoaded', renderTc);
 </script>
 <script src="../ctx-bar.js"></script>
 </body>

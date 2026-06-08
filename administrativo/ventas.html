@@ -234,6 +234,7 @@
                     <input type="date" id="pickerEnd" style="display:none" onchange="renderAll()">
                 </div>
                 <button class="btn-deposito" onclick="abrirModalDeposito()">💸 Depositar</button>
+                <button class="btn-deposito" style="background:rgba(120,160,240,.1);border-color:rgba(120,160,240,.3);color:#78a0f0" onclick="abrirVerDepositos()">📋 Ver depósitos</button>
                 <button class="btn-caja" onclick="abrirCajaFuerte()">🔒 Caja fuerte</button>
             </div>
         </div>
@@ -276,15 +277,12 @@
                             <tr>
                                 <th class="al">Fecha</th>
                                 <th class="al">Turno</th>
+                                <th>Venta total</th>
+                                <th>Propinas</th>
                                 <th>Comensales</th>
                                 <th>Cheque prom.</th>
-                                <th>Ef. venta</th>
-                                <th>Tarjeta →🏦</th>
-                                <th>Transfer.</th>
-                                <th>Propinas</th>
-                                <th>Flujo neto</th>
                                 <th>Gastos</th>
-                                <th>Resultado</th>
+                                <th>Resguardo</th>
                                 <th></th>
                             </tr>
                         </thead>
@@ -296,6 +294,41 @@
                     </div>
                 </div>
             </div>
+            <!-- Depósitos (card oculta — vista en overlay) -->
+            <div class="card" id="cardDepositos" style="margin-top:16px;display:none">
+                <div class="card-header" style="justify-content:space-between">
+                    <h2>💸 Depósitos registrados</h2>
+                    <button class="btn-deposito" onclick="abrirModalDeposito()">+ Nuevo depósito</button>
+                </div>
+                <div class="card-body" style="padding:0;overflow-x:auto">
+                    <table class="cortes-table">
+                        <thead>
+                            <tr>
+                                <th class="al">Fecha</th>
+                                <th class="al">Destino</th>
+                                <th class="al">Concepto</th>
+                                <th class="al">Finalidad</th>
+                                <th class="al">Deposita</th>
+                                <th class="al">Autoriza</th>
+                                <th>Monto</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="depTbody"></tbody>
+                    </table>
+                    <div id="depEmpty" class="empty-state" style="display:none">
+                        <div class="empty-state-icon">💸</div>
+                        <div>Sin depósitos registrados aún.</div>
+                    </div>
+                </div>
+                <div style="padding:10px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;align-items:center;gap:20px" id="depFooter" style="display:none">
+                    <span style="font-size:11px;color:var(--text-dim)">🏦 Caja fuerte: <strong id="depTotCaja" style="color:var(--accent)">$0.00</strong></span>
+                    <span style="font-size:11px;color:var(--text-dim)">🏛️ Banco: <strong id="depTotBanco" style="color:var(--green)">$0.00</strong></span>
+                    <span style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim)">Total depositado</span>
+                    <span style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--green);letter-spacing:.5px" id="depTotal">$0.00</span>
+                </div>
+            </div>
+
             <!-- Ventas Extra del período -->
             <div class="card" id="cardVentasExtra" style="margin-top:16px;display:none">
                 <div class="card-header" style="justify-content:space-between">
@@ -352,6 +385,10 @@
                 <div class="fg"><label>Fondo inicial</label>
                     <input type="number" id="fFondo" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()">
                 </div>
+            </div>
+            <div class="fg" style="margin-top:8px">
+                <label>Cajero / Colaborador que hace el corte</label>
+                <input type="text" id="fCajero" placeholder="Nombre del cajero o colaborador" autocomplete="off">
             </div>
         </div>
 
@@ -609,6 +646,20 @@
     </div>
 </div>
 
+<!-- ══ OVERLAY DEPÓSITOS ══ -->
+<div class="cj-overlay" id="depOverlay" onclick="if(event.target===this)cerrarVerDepositos()">
+    <div class="cj-panel">
+        <div class="cj-header">
+            <span class="cj-title">💸 Depósitos registrados</span>
+            <div style="display:flex;gap:8px;align-items:center">
+                <button class="btn-deposito" style="padding:6px 14px;font-size:12px" onclick="cerrarVerDepositos();abrirModalDeposito()">+ Nuevo</button>
+                <button class="modal-close" onclick="cerrarVerDepositos()">✕</button>
+            </div>
+        </div>
+        <div class="cj-body" id="depOverlayBody"></div>
+    </div>
+</div>
+
 <!-- ══ MODAL VER CORTE ══ -->
 <div class="modal-overlay" id="modalVerCorte" onclick="if(event.target===this)cerrarVerCorte()">
   <div class="modal-corte" style="max-width:720px">
@@ -767,10 +818,8 @@ function jalarGastosFecha() {
     var fecha  = document.getElementById('fFecha').value;
     var negId  = getNegocioActivo();
     if (!fecha) return;
-    // Filtrar solo por fecha — misma lógica que gastos.html que no filtra por negocioId
-    // (los gastos usan etaax_gastos flat key, no prefijo de negocio)
     var todos  = _loadGastos().filter(function(g) {
-        return g.fecha === fecha;
+        return g.fecha === fecha && (!negId || !g.negocioId || g.negocioId === negId);
     });
     var chica  = todos.filter(function(g){ return g.metodoPago==='caja_chica'; })
                       .reduce(function(s,g){ return s+n(g.monto); }, 0);
@@ -845,11 +894,50 @@ function setPeriodType(tipo,btn){periodoTipo=tipo;document.querySelectorAll('.pe
 function getRange(tipo,val,end){if(tipo==='dia')return{from:val,to:val};if(tipo==='mes'){var y=parseInt(val.slice(0,4)),m=parseInt(val.slice(5,7));return{from:val+'-01',to:new Date(y,m,0).toISOString().slice(0,10)};}if(tipo==='semana'){var p=val.split('-W'),yr=parseInt(p[0]),wk=parseInt(p[1]);var j4=new Date(yr,0,4);var ws=new Date(j4.getTime()+(wk-1)*7*86400000);ws.setDate(ws.getDate()-(ws.getDay()||7)+1);var we=new Date(ws);we.setDate(ws.getDate()+6);return{from:ws.toISOString().slice(0,10),to:we.toISOString().slice(0,10)};}return{from:val,to:end};}
 function prevRange(tipo,val,end){var r=getRange(tipo,val,end);if(tipo==='dia'){var d=new Date(r.from+'T12:00:00');d.setDate(d.getDate()-1);return getRange('dia',d.toISOString().slice(0,10),null);}if(tipo==='mes'){var y=parseInt(val.slice(0,4)),m=parseInt(val.slice(5,7))-1;if(m===0){m=12;y--;}return getRange('mes',y+'-'+String(m).padStart(2,'0'),null);}if(tipo==='semana'){var p2=val.split('-W'),yr2=parseInt(p2[0]),wk2=parseInt(p2[1])-1;if(wk2===0){yr2--;wk2=52;}return getRange('semana',yr2+'-W'+String(wk2).padStart(2,'0'),null);}var fromD=new Date(r.from+'T12:00:00'),toD=new Date(r.to+'T12:00:00');var span=Math.round((toD-fromD)/86400000)+1;var pe=new Date(fromD);pe.setDate(pe.getDate()-1);var pf=new Date(pe);pf.setDate(pf.getDate()-span+1);return{from:pf.toISOString().slice(0,10),to:pe.toISOString().slice(0,10)};}
 function inRange(fecha,from,to){return fecha>=from&&fecha<=to;}
-function currentData(){var r=getRange(periodoTipo,periodoVal,periodoEnd);return load().filter(function(c){return inRange(c.fecha,r.from,r.to);});}
-function prevData(){var pr=prevRange(periodoTipo,periodoVal,periodoEnd);return load().filter(function(c){return inRange(c.fecha,pr.from,pr.to);});}
+function _negFilter(c){var id=getNegocioActivo();return !id||!c.negocioId||c.negocioId===id;}
+function currentData(){var r=getRange(periodoTipo,periodoVal,periodoEnd);return load().filter(function(c){return _negFilter(c)&&inRange(c.fecha,r.from,r.to);});}
+function prevData(){var pr=prevRange(periodoTipo,periodoVal,periodoEnd);return load().filter(function(c){return _negFilter(c)&&inRange(c.fecha,pr.from,pr.to);});}
 
 /* ── Render ── */
-function renderAll(){var pi=document.getElementById('pickerInput'),pe=document.getElementById('pickerEnd');periodoVal=pi.value||periodoVal;if(periodoTipo==='rango')periodoEnd=pe.value||periodoEnd;var cur=currentData(),prev=prevData();renderSummary(cur,prev);renderTabla(cur);renderVentasExtra(cur);}
+function renderAll(){var pi=document.getElementById('pickerInput'),pe=document.getElementById('pickerEnd');periodoVal=pi.value||periodoVal;if(periodoTipo==='rango')periodoEnd=pe.value||periodoEnd;var cur=currentData(),prev=prevData();renderSummary(cur,prev);renderTabla(cur);renderVentasExtra(cur);renderDepositos();}
+
+function renderDepositos(){
+    var deps=loadDep().slice().sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
+    var tbody=document.getElementById('depTbody');
+    var empty=document.getElementById('depEmpty');
+    var footer=document.getElementById('depFooter');
+    var destIcon={caja_fuerte:'🏦 Caja fuerte',banco:'🏛️ Banco'};
+    var totCaja=deps.filter(function(d){return d.destino==='caja_fuerte';}).reduce(function(s,d){return s+n(d.monto);},0);
+    var totBanco=deps.filter(function(d){return d.destino==='banco';}).reduce(function(s,d){return s+n(d.monto);},0);
+    var totAll=totCaja+totBanco;
+    if(!deps.length){
+        tbody.innerHTML='';empty.style.display='block';footer.style.display='none';
+        return;
+    }
+    empty.style.display='none';footer.style.display='flex';
+    document.getElementById('depTotCaja').textContent=fmtM(totCaja);
+    document.getElementById('depTotBanco').textContent=fmtM(totBanco);
+    document.getElementById('depTotal').textContent=fmtM(totAll);
+    tbody.innerHTML=deps.map(function(d){
+        var destStyle=d.destino==='caja_fuerte'
+            ?'color:var(--accent);background:rgba(245,200,66,.08);padding:2px 8px;border-radius:4px;font-size:11px'
+            :'color:var(--green);background:rgba(61,190,122,.08);padding:2px 8px;border-radius:4px;font-size:11px';
+        return'<tr>'+
+            '<td style="white-space:nowrap">'+d.fecha+'</td>'+
+            '<td><span style="'+destStyle+'">'+(destIcon[d.destino]||d.destino)+'</span></td>'+
+            '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_escV(d.concepto||'—')+'</td>'+
+            '<td style="font-size:11px;color:var(--text-dim);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_escV(d.finalidad||'—')+'</td>'+
+            '<td style="font-size:11px;color:var(--text-dim)">'+_escV(d.depositadoPor||'—')+'</td>'+
+            '<td style="font-size:11px;color:var(--text-dim)">'+_escV(d.autorizadoPor||'—')+'</td>'+
+            '<td style="text-align:right;font-weight:700;color:var(--green)">'+fmtM(n(d.monto))+'</td>'+
+            '<td style="display:flex;gap:4px;justify-content:flex-end">'+
+                '<button class="btn-row" onclick="abrirModalDeposito(\''+d.id+'\')" title="Editar">✏️</button>'+
+                '<button class="btn-row del" onclick="eliminarDeposito(\''+d.id+'\')">🗑️</button>'+
+            '</td>'+
+        '</tr>';
+    }).join('');
+}
+function _escV(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 function renderSummary(cur,prev){
     var totCur=cur.reduce(function(s,c){return s+flujoNeto(c);},0);
@@ -879,22 +967,25 @@ function renderTabla(cur){
     var lista=cur.slice().sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
     if(!lista.length){tbody.innerHTML='';empty.style.display='block';return;}
     empty.style.display='none';
+    // Pre-calcular totales de gastos por fecha desde localStorage
+    var gastosPorFecha = {};
+    _loadGastos().forEach(function(g){
+        if (!gastosPorFecha[g.fecha]) gastosPorFecha[g.fecha] = 0;
+        gastosPorFecha[g.fecha] += n(g.monto);
+    });
+
     tbody.innerHTML=lista.map(function(c){
-        var fn=flujoNeto(c),pp=propinas(c),ck=cheque(c),res=resultado(c);
-        var gas=n(c.gastos);
-        var resClass=res>=0?'dif-pos':'dif-neg';
+        var vt=ventasBruta(c), pp=propinas(c), ck=cheque(c);
+        var gas=gastosPorFecha[c.fecha]||0, rsg=resguardo(c);
         return'<tr>'+
             '<td class="al num-col">'+c.fecha+'</td>'+
             '<td class="al">'+turnoChip(c.turno||'dia')+'</td>'+
+            '<td class="num-col" style="font-weight:700;color:var(--green)">'+fmtM(vt)+'</td>'+
+            '<td class="num-col" style="color:var(--accent)">'+(pp>0?fmtM(pp):'—')+'</td>'+
             '<td>'+(n(c.comensales)?fmtN(c.comensales):'—')+'</td>'+
             '<td class="num-col">'+(ck>0?fmtM(ck):'—')+'</td>'+
-            '<td class="num-col">'+fmtM(efNeto(c))+'</td>'+
-            '<td class="num-col">'+fmtM(taNeto(c))+'</td>'+
-            '<td class="num-col">'+fmtM(n(c.transferencia))+'</td>'+
-            '<td class="num-col" style="color:var(--accent)">'+(pp>0?fmtM(pp):'—')+'</td>'+
-            '<td class="num-col" style="font-weight:700;color:var(--green)">'+fmtM(fn)+'</td>'+
             '<td class="num-col" style="color:var(--red)">'+(gas>0?fmtM(gas):'—')+'</td>'+
-            '<td class="num-col '+resClass+'" style="font-weight:700">'+(gas>0?fmtM(res):'—')+'</td>'+
+            '<td class="num-col" style="font-weight:700;color:var(--accent)">'+fmtM(rsg)+'</td>'+
             '<td style="display:flex;gap:4px;justify-content:flex-end">'+
                 '<button class="btn-row" onclick="verCorte(\''+c.id+'\')" title="Ver corte">👁️</button>'+
                 '<button class="btn-row" onclick="abrirModal(\''+c.id+'\')">✏️</button>'+
@@ -911,6 +1002,7 @@ function abrirModal(id){
     document.getElementById('fId').value=id||'';
     document.getElementById('fFecha').value=d.fecha||todayStr();
     document.getElementById('fTurno').value=d.turno||'dia';
+    document.getElementById('fCajero').value=d.cajero||'';
     document.getElementById('fFondo').value=d.fondoInicial||'';
     document.getElementById('fEfectivo').value=d.efectivo||'';
     document.getElementById('fPropEfectivo').value=d.propEfectivo||'';
@@ -1022,7 +1114,8 @@ function guardarCorte(){
         alimentos:v('fAlimentos'),bebidas:v('fBebidas'),otros:v('fOtros'),
         gastos:v('fGastos'),gastosCajaChica:_gastosCajaChica,retiros:v('fRetiros'),
         ingresosExtra:_ingresosExtra.slice(),
-        notas:document.getElementById('fNotas').value.trim()};
+        notas:document.getElementById('fNotas').value.trim(),
+        cajero:document.getElementById('fCajero').value.trim()};
     var lista=load().filter(function(c){return c.id!==id;});
     lista.push(corte);
     save(lista);
@@ -1045,44 +1138,224 @@ function abrirCajaFuerte(){
 }
 function _abrirCajaFuerteContenido(){
     var lista=load().slice().sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
+    var deps=loadDep().slice().sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
     var body=document.getElementById('cajBody');
-    if(!lista.length){
-        body.innerHTML='<div style="text-align:center;padding:40px;color:var(--text-dim)">Sin cortes registrados aún.</div>';
-        document.getElementById('cajOverlay').classList.add('open');
-        return;
-    }
-    var acumulado=lista.reduce(function(s,c){return s+resguardo(c);},0);
-    var rows=lista.map(function(c,i){
-        var acum=lista.slice(i).reduce(function(s,cc){return s+resguardo(cc);},0);
-        var rsg=resguardo(c);
-        return'<tr>'+
-            '<td>'+c.fecha+'</td>'+
-            '<td>'+turnoChip(c.turno||'dia')+'</td>'+
-            '<td style="text-align:right">'+fmtM(n(c.fondoInicial))+'</td>'+
-            '<td style="text-align:right;color:var(--green)">'+fmtM(efNeto(c))+'</td>'+
-            '<td style="text-align:right;color:var(--red)">'+(n(c.retiros)>0?'-'+fmtM(c.retiros):'—')+'</td>'+
-            '<td style="text-align:right;font-weight:700;color:var(--accent)">'+fmtM(rsg)+'</td>'+
-            '<td style="text-align:right;color:var(--text-dim)">'+fmtM(acum)+'</td>'+
-        '</tr>';
-    }).join('');
+
+    // ── Gastos desde etaax_gastos ────────────────────────────
+    var todosGastos = _loadGastos();
+    var gastosCajaFuerte = todosGastos.filter(function(g){return g.metodoPago==='caja_fuerte';})
+                                      .reduce(function(s,g){return s+n(g.monto);},0);
+    var gastosDebito     = todosGastos.filter(function(g){return g.metodoPago==='banco'&&g.metodoBanco!=='credito';})
+                                      .reduce(function(s,g){return s+n(g.monto);},0);
+    var gastosTarjetaCred= todosGastos.filter(function(g){return g.metodoPago==='banco'&&g.metodoBanco==='credito';})
+                                      .reduce(function(s,g){return s+n(g.monto);},0);
+    // ── Catálogo tarjetas de crédito ─────────────────────────
+    var negId = localStorage.getItem('etaax_negocio_activo')||'';
+    var _tcKey = negId?'etaax_'+negId+'_tarjetas_credito':'etaax_tarjetas_credito';
+    var catalogoTc = (function(){try{return JSON.parse(localStorage.getItem(_tcKey))||[];}catch(e){return[];}})();
+
+    // ── Saldos ──────────────────────────────────────────────
+    var totalResguardos = lista.reduce(function(s,c){return s+resguardo(c);},0);
+    var depsCaja  = deps.filter(function(d){return d.destino==='caja_fuerte';});
+    var depsBanco = deps.filter(function(d){return d.destino==='banco';});
+    var totDepCaja  = depsCaja.reduce(function(s,d){return s+n(d.monto);},0);
+    var totDepBanco = depsBanco.reduce(function(s,d){return s+n(d.monto);},0);
+    // Caja fuerte: resguardos + depósitos recibidos − salidas al banco − gastos efectivo caja
+    var saldoCaja = totalResguardos + totDepCaja - totDepBanco - gastosCajaFuerte;
+    // Cuenta débito: tarjeta terminal + transferencias + depósitos al banco − gastos débito
+    var totTarjeta  = lista.reduce(function(s,c){return s+taBanco(c);},0);
+    var totTransfer = lista.reduce(function(s,c){return s+n(c.transferencia);},0);
+    var saldoDebito = totTarjeta + totTransfer + totDepBanco - gastosDebito;
+    // Tarjeta de crédito: solo gastos registrados − saldo negativo = lo que se debe
+    var saldoTarjetaCred = -gastosTarjetaCred;
+
+    // ── Header: 2 cards fila 1 + tarjeta opcional fila 2 ────
+    var headerHTML =
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
+            '<div class="cj-acum" style="margin:0">'+
+                '<div>'+
+                    '<div class="cj-acum-lbl">🏦 Caja Fuerte</div>'+
+                    '<div style="margin-top:4px;font-size:10px;color:var(--text-dim);line-height:1.6">'+
+                        fmtM(totalResguardos)+' resguardos'+
+                        (totDepCaja?' + '+fmtM(totDepCaja)+' dep.':'')+'<br>'+
+                        (gastosCajaFuerte?'− '+fmtM(gastosCajaFuerte)+' gs.caja':'')+
+                        (totDepBanco?(gastosCajaFuerte?' · ':'')+'− '+fmtM(totDepBanco)+' banco':'')+
+                    '</div>'+
+                '</div>'+
+                '<div class="cj-acum-val">'+fmtM(saldoCaja)+'</div>'+
+            '</div>'+
+            '<div class="cj-acum" style="margin:0;border-color:rgba(61,190,122,.3)">'+
+                '<div>'+
+                    '<div class="cj-acum-lbl" style="color:var(--green)">🏛️ Cuenta Débito</div>'+
+                    '<div style="margin-top:4px;font-size:10px;color:var(--text-dim);line-height:1.6">'+
+                        fmtM(totTarjeta)+' terminal'+
+                        (totTransfer?' + '+fmtM(totTransfer)+' transfer.':'')+
+                        (totDepBanco?' + '+fmtM(totDepBanco)+' dep.':'')+'<br>'+
+                        (gastosDebito?'− '+fmtM(gastosDebito)+' gs.banco':'sin gastos débito')+
+                    '</div>'+
+                '</div>'+
+                '<div class="cj-acum-val" style="color:var(--green)">'+fmtM(saldoDebito)+'</div>'+
+            '</div>'+
+        '</div>'+
+        (gastosTarjetaCred>0||catalogoTc.length>0?
+        '<div style="margin:0 0 10px">'+
+            '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px">💳 Tarjetas de Crédito</div>'+
+            (catalogoTc.length>0
+            ? catalogoTc.map(function(tc){
+                var lim=parseFloat(tc.limite)||0;
+                var gastado=gastosTarjetaCred; // total compartido (sin desglose por tarjeta aún)
+                var pct=lim>0?Math.min(gastado/lim*100,100):0;
+                var barColor=pct>=80?'#ff7070':pct>=50?'#f5c842':'var(--green)';
+                return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid '+tc.color+';border-radius:8px;padding:10px 12px;margin-bottom:6px">'+
+                    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'+
+                        '<div>'+
+                            '<div style="font-size:12px;font-weight:600;color:var(--text)">'+tc.banco+'</div>'+
+                            '<div style="font-size:10px;color:var(--text-dim);letter-spacing:2px">···· '+(tc.digitos||'——')+'</div>'+
+                        '</div>'+
+                        '<div style="text-align:right">'+
+                            '<div style="font-size:13px;font-weight:700;color:#ff7070">'+fmtM(-gastosTarjetaCred)+'</div>'+
+                            (lim>0?'<div style="font-size:9px;color:var(--text-dim)">de '+fmtM(lim)+' límite</div>':'<div style="font-size:9px;color:var(--text-dim)">sin límite def.</div>')+
+                        '</div>'+
+                    '</div>'+
+                    (lim>0?
+                    '<div style="background:var(--border);border-radius:4px;height:4px;overflow:hidden">'+
+                        '<div style="width:'+pct.toFixed(1)+'%;height:100%;background:'+barColor+';border-radius:4px;transition:width .4s"></div>'+
+                    '</div>'+
+                    '<div style="font-size:9px;color:var(--text-dim);margin-top:3px;text-align:right">'+pct.toFixed(0)+'% usado · disponible '+fmtM(Math.max(lim-gastosTarjetaCred,0))+'</div>'
+                    :'')+
+                '</div>';
+            }).join('')
+            : '<div style="background:var(--surface2);border:1px solid rgba(255,90,90,.3);border-radius:8px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center">'+
+                '<div style="font-size:11px;color:var(--text-dim)">'+fmtM(gastosTarjetaCred)+' en gastos — saldo a pagar</div>'+
+                '<div style="font-size:16px;font-weight:700;color:#ff7070">'+fmtM(saldoTarjetaCred)+'</div>'+
+              '</div>')+
+        '</div>':'');
+
+    // ── Tabla cortes ─────────────────────────────────────────
+    var rowsCortes = lista.length
+        ? lista.map(function(c,i){
+            var acum=lista.slice(i).reduce(function(s,cc){return s+resguardo(cc);},0);
+            var rsg=resguardo(c);
+            return'<tr>'+
+                '<td>'+c.fecha+'</td>'+
+                '<td>'+turnoChip(c.turno||'dia')+'</td>'+
+                '<td style="text-align:right">'+fmtM(n(c.fondoInicial))+'</td>'+
+                '<td style="text-align:right;color:var(--green)">'+fmtM(efNeto(c))+'</td>'+
+                '<td style="text-align:right;color:var(--text-dim)">'+fmtM(n(c.gastosCajaChica))+'</td>'+
+                '<td style="text-align:right;color:var(--red)">'+(n(c.retiros)>0?'−'+fmtM(c.retiros):'—')+'</td>'+
+                '<td style="text-align:right;font-weight:700;color:var(--accent)">'+fmtM(rsg)+'</td>'+
+                '<td style="text-align:right;color:var(--text-dim)">'+fmtM(acum)+'</td>'+
+            '</tr>';
+          }).join('')
+        : '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text-dim)">Sin cortes aún</td></tr>';
+
+    // ── Tabla depósitos ──────────────────────────────────────
+    var rowsDeps = deps.length
+        ? deps.map(function(d){
+            var isCaja=d.destino==='caja_fuerte';
+            var destStyle=isCaja
+                ?'color:var(--accent);background:rgba(245,200,66,.08);padding:2px 6px;border-radius:4px;font-size:10px'
+                :'color:var(--green);background:rgba(61,190,122,.08);padding:2px 6px;border-radius:4px;font-size:10px';
+            var montoColor=isCaja?'var(--accent)':'var(--green)';
+            return'<tr>'+
+                '<td>'+d.fecha+'</td>'+
+                '<td><span style="'+destStyle+'">'+(isCaja?'🏦 Caja fuerte':'🏛️ Banco')+'</span></td>'+
+                '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_escV(d.concepto||'—')+'</td>'+
+                '<td style="font-size:11px;color:var(--text-dim)">'+_escV(d.depositadoPor||'—')+'</td>'+
+                '<td style="text-align:right;font-weight:700;color:'+montoColor+'">'+fmtM(n(d.monto))+'</td>'+
+            '</tr>';
+          }).join('')
+        : '<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--text-dim)">Sin depósitos registrados</td></tr>';
+
+    body.innerHTML = headerHTML +
+        // Cortes
+        '<div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px">Detalle de cortes</div>'+
+        '<div style="overflow-x:auto;margin-bottom:20px">'+
+        '<table class="cj-table">'+
+            '<thead><tr>'+
+                '<th>Fecha</th><th>Turno</th>'+
+                '<th style="text-align:right">Fondo</th><th style="text-align:right">Ef. neto</th>'+
+                '<th style="text-align:right">Gs. caja</th><th style="text-align:right">Retiros</th>'+
+                '<th style="text-align:right">Resguardo</th><th style="text-align:right">Acumulado</th>'+
+            '</tr></thead>'+
+            '<tbody>'+rowsCortes+'</tbody>'+
+        '</table></div>'+
+        // Depósitos
+        '<div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px">Depósitos</div>'+
+        '<div style="overflow-x:auto">'+
+        '<table class="cj-table">'+
+            '<thead><tr>'+
+                '<th>Fecha</th><th>Destino</th><th>Concepto</th><th>Deposita</th><th style="text-align:right">Monto</th>'+
+            '</tr></thead>'+
+            '<tbody>'+rowsDeps+'</tbody>'+
+        '</table></div>';
+
+    document.getElementById('cajOverlay').classList.add('open');
+}
+function cerrarCajaFuerte(){document.getElementById('cajOverlay').classList.remove('open');}
+
+function abrirVerDepositos(){
+    var deps=loadDep().slice().sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
+    var body=document.getElementById('depOverlayBody');
+    var destIcon={caja_fuerte:'🏦 Caja fuerte',banco:'🏛️ Banco'};
+    var totCaja =deps.filter(function(d){return d.destino==='caja_fuerte';}).reduce(function(s,d){return s+n(d.monto);},0);
+    var totBanco=deps.filter(function(d){return d.destino==='banco';}).reduce(function(s,d){return s+n(d.monto);},0);
+    var rows=deps.length
+        ? deps.map(function(d){
+            var isCaja=d.destino==='caja_fuerte';
+            var destStyle=isCaja
+                ?'color:var(--accent);background:rgba(245,200,66,.08);padding:2px 8px;border-radius:4px;font-size:11px'
+                :'color:var(--green);background:rgba(61,190,122,.08);padding:2px 8px;border-radius:4px;font-size:11px';
+            return'<tr>'+
+                '<td style="white-space:nowrap">'+d.fecha+'</td>'+
+                '<td><span style="'+destStyle+'">'+(isCaja?'🏦 Caja fuerte':'🏛️ Banco')+'</span></td>'+
+                '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_escV(d.concepto||'—')+'</td>'+
+                '<td style="font-size:11px;color:var(--text-dim);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_escV(d.finalidad||'—')+'</td>'+
+                '<td style="font-size:11px;color:var(--text-dim)">'+_escV(d.depositadoPor||'—')+'</td>'+
+                '<td style="font-size:11px;color:var(--text-dim)">'+_escV(d.autorizadoPor||'—')+'</td>'+
+                '<td style="text-align:right;font-weight:700;color:'+(isCaja?'var(--accent)':'var(--green)')+'">'+fmtM(n(d.monto))+'</td>'+
+                '<td style="display:flex;gap:4px">'+
+                    '<button class="btn-row" onclick="cerrarVerDepositos();abrirModalDeposito(\''+d.id+'\')" title="Editar">✏️</button>'+
+                    '<button class="btn-row del" onclick="_elimDepOv(\''+d.id+'\')">🗑️</button>'+
+                '</td>'+
+            '</tr>';
+          }).join('')
+        : '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-dim)">Sin depósitos registrados aún.</td></tr>';
+
     body.innerHTML=
-        '<div class="cj-acum">'+
-            '<div><div class="cj-acum-lbl">Efectivo acumulado en caja fuerte</div>'+
-            '<div style="font-size:11px;color:var(--text-dim);margin-top:3px">'+lista.length+' corte'+(lista.length!==1?'s':'')+' registrado'+(lista.length!==1?'s':'')+'</div></div>'+
-            '<div class="cj-acum-val">'+fmtM(acumulado)+'</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">'+
+            '<div class="cj-acum" style="margin:0">'+
+                '<div><div class="cj-acum-lbl">🏦 A Caja fuerte</div></div>'+
+                '<div class="cj-acum-val">'+fmtM(totCaja)+'</div>'+
+            '</div>'+
+            '<div class="cj-acum" style="margin:0;border-color:rgba(61,190,122,.3)">'+
+                '<div><div class="cj-acum-lbl" style="color:var(--green)">🏛️ Al Banco</div></div>'+
+                '<div class="cj-acum-val" style="color:var(--green)">'+fmtM(totBanco)+'</div>'+
+            '</div>'+
+            '<div class="cj-acum" style="margin:0;border-color:rgba(120,160,240,.3)">'+
+                '<div><div class="cj-acum-lbl" style="color:#78a0f0">Total depositado</div></div>'+
+                '<div class="cj-acum-val" style="color:#78a0f0">'+fmtM(totCaja+totBanco)+'</div>'+
+            '</div>'+
         '</div>'+
         '<div style="overflow-x:auto">'+
         '<table class="cj-table">'+
             '<thead><tr>'+
-                '<th>Fecha</th><th>Turno</th>'+
-                '<th>Fondo inicial</th><th>Ef. neto</th>'+
-                '<th>Retiros</th><th>Para resguardo</th><th>Acumulado</th>'+
+                '<th>Fecha</th><th>Destino</th><th>Concepto</th><th>Finalidad</th>'+
+                '<th>Deposita</th><th>Autoriza</th><th style="text-align:right">Monto</th><th></th>'+
             '</tr></thead>'+
             '<tbody>'+rows+'</tbody>'+
         '</table></div>';
-    document.getElementById('cajOverlay').classList.add('open');
+    document.getElementById('depOverlay').classList.add('open');
 }
-function cerrarCajaFuerte(){document.getElementById('cajOverlay').classList.remove('open');}
+function cerrarVerDepositos(){document.getElementById('depOverlay').classList.remove('open');}
+function _elimDepOv(id){
+    if(!confirm('¿Eliminar este depósito?'))return;
+    saveDep(loadDep().filter(function(x){return x.id!==id;}));
+    renderDepositos();
+    abrirVerDepositos();
+    var cajEl=document.getElementById('cajOverlay');
+    if(cajEl&&cajEl.classList.contains('open'))_abrirCajaFuerteContenido();
+}
 
 
 /* ══════════════════════════════════════════════════════════
@@ -1122,25 +1395,95 @@ function verCorte(id) {
         return '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);padding:8px 0 4px;border-bottom:2px solid var(--border);margin-top:4px">'+title+'</div>';
     }
 
+    // Gastos del día desde localStorage (misma lógica que jalarGastosFecha)
+    var gastosDelDia = _loadGastos().filter(function(g){ return g.fecha === c.fecha; });
+    var metIcon = {caja_chica:'💵',caja_fuerte:'🏦',banco:'🏛️'};
+    var metLabel2 = {caja_chica:'Caja chica',caja_fuerte:'Caja fuerte',banco:'Banco'};
+    var gChica  = gastosDelDia.filter(function(g){ return g.metodoPago==='caja_chica'; }).reduce(function(s,g){ return s+n(g.monto); },0);
+    var gFuerte = gastosDelDia.filter(function(g){ return g.metodoPago==='caja_fuerte'; }).reduce(function(s,g){ return s+n(g.monto); },0);
+    var gBanco  = gastosDelDia.filter(function(g){ return g.metodoPago==='banco'; }).reduce(function(s,g){ return s+n(g.monto); },0);
+    var gTotal  = gChica + gFuerte + gBanco;
+
+    var gastosHTML;
+    if (gastosDelDia.length === 0) {
+        gastosHTML = '<div style="color:var(--text-dim);font-size:12px;padding:6px 0">Sin gastos registrados para esta fecha</div>';
+    } else {
+        gastosHTML =
+            '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:6px">'+
+            gastosDelDia.map(function(g){
+                return '<tr style="border-bottom:1px solid var(--border)">'+
+                    '<td style="padding:5px 0;color:var(--text-dim)">'+(metIcon[g.metodoPago]||'📋')+' '+(metLabel2[g.metodoPago]||g.metodoPago)+'</td>'+
+                    '<td style="padding:5px 0;color:var(--text)">'+(g.concepto||'—')+'</td>'+
+                    '<td style="padding:5px 0;text-align:right;font-family:Bebas Neue,sans-serif;font-size:14px;color:var(--red)">'+fmtM(n(g.monto))+'</td>'+
+                '</tr>';
+            }).join('')+
+            '</table>'+
+            '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">'+
+                (gChica>0?'<span style="font-size:11px;color:var(--text-dim)">💵 Caja chica: <strong style="color:var(--red)">'+fmtM(gChica)+'</strong></span>':'')+
+                (gFuerte>0?'<span style="font-size:11px;color:var(--text-dim)">🏦 Caja fuerte: <strong style="color:var(--red)">'+fmtM(gFuerte)+'</strong></span>':'')+
+                (gBanco>0?'<span style="font-size:11px;color:var(--text-dim)">🏛️ Banco: <strong style="color:var(--red)">'+fmtM(gBanco)+'</strong></span>':'')+
+                '<span style="font-size:11px;color:var(--text-dim);margin-left:auto">Total: <strong style="color:var(--red)">'+fmtM(gTotal)+'</strong></span>'+
+            '</div>';
+    }
+
+    // Tabla de formas de pago — mismo layout que el editor (filas: Ventas | Propinas | Transfer)
+    var totVenta = n(c.efectivo) + n(c.tarjeta);
+    var totPropina = n(c.propEfectivo) + n(c.propTarjeta);
+    var thStyle = 'padding:6px 8px;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);text-align:center;border-bottom:1px solid var(--border)';
+    var tdLbl  = 'padding:7px 4px;font-size:11px;letter-spacing:.5px;color:var(--text-dim)';
+    var tdNum  = 'padding:7px 8px;font-family:Bebas Neue,sans-serif;font-size:16px;letter-spacing:.5px;text-align:center';
+    var tdTot  = 'padding:7px 8px;font-family:Bebas Neue,sans-serif;font-size:16px;letter-spacing:.5px;text-align:right';
+    var pagosTable =
+        '<table style="width:100%;border-collapse:collapse;margin-top:8px">'+
+            '<thead><tr>'+
+                '<th style="'+thStyle+';text-align:left"></th>'+
+                '<th style="'+thStyle+'">Efectivo</th>'+
+                '<th style="'+thStyle+'">Tarjeta</th>'+
+                '<th style="'+thStyle+';text-align:right">Total</th>'+
+            '</tr></thead>'+
+            '<tbody>'+
+            // Fila 1: Ventas
+            '<tr style="border-bottom:1px solid var(--border)">'+
+                '<td style="'+tdLbl+'">💰 Ventas</td>'+
+                '<td style="'+tdNum+';color:var(--green)">'+fmtM(n(c.efectivo))+'</td>'+
+                '<td style="'+tdNum+';color:var(--green)">'+fmtM(n(c.tarjeta))+'</td>'+
+                '<td style="'+tdTot+';color:var(--green)">'+fmtM(totVenta)+'</td>'+
+            '</tr>'+
+            // Fila 2: Propinas
+            '<tr style="border-bottom:1px solid var(--border)">'+
+                '<td style="'+tdLbl+';color:var(--accent)">★ Propinas</td>'+
+                '<td style="'+tdNum+';color:var(--accent)">'+fmtM(n(c.propEfectivo))+
+                    '<div style="font-size:9px;color:var(--text-dim);letter-spacing:.3px">referencial</div></td>'+
+                '<td style="'+tdNum+';color:var(--accent)">'+fmtM(n(c.propTarjeta))+'</td>'+
+                '<td style="'+tdTot+';color:var(--accent)">'+fmtM(totPropina)+'</td>'+
+            '</tr>'+
+            // Fila 3: Transfer
+            (n(c.transferencia)>0?
+            '<tr style="border-bottom:1px solid var(--border)">'+
+                '<td style="'+tdLbl+'">🏦 Transfer.</td>'+
+                '<td style="'+tdNum+';color:var(--text-muted)" colspan="2">'+fmtM(n(c.transferencia))+'</td>'+
+                '<td style="'+tdTot+';color:var(--text-muted)">'+fmtM(n(c.transferencia))+'</td>'+
+            '</tr>':'')+
+            '</tbody>'+
+        '</table>'+
+        '<div style="margin-top:6px;font-size:11px;color:var(--text-dim)">'+
+            'Tarjeta →🏦 <strong style="color:var(--text)">'+fmtM(taBanco(c))+'</strong>'+
+            '<span style="margin-left:6px;opacity:.6">(venta + prop. tarjeta)</span>'+
+            (c.ventaDeclarada?' &nbsp;·&nbsp; Declarado POS: <strong style="color:var(--text)">'+fmtM(n(c.ventaDeclarada))+'</strong>':'')+
+        '</div>';
+
     document.getElementById('verCorteBody').innerHTML =
         // Datos generales
-        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px">'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr'+(c.cajero?' 1fr':'')+';gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px">'+
             '<div><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px">Fecha</div><div style="font-size:15px;font-weight:600">'+c.fecha+'</div></div>'+
             '<div><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px">Turno</div><div>'+turnoChip(c.turno||'dia')+'</div></div>'+
             '<div><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px">Fondo inicial</div><div style="font-size:15px;font-weight:600">'+fmtM(n(c.fondoInicial))+'</div></div>'+
+            (c.cajero?'<div><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px">Cajero</div><div style="font-size:13px;font-weight:600">'+c.cajero+'</div></div>':'')+
         '</div>'+
         // Formas de pago
         '<div>'+
         sec('💳 Formas de pago')+
-        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px">'+
-            _vcCard('Ef. Venta',fmtM(n(c.efectivo)),'var(--green)')+
-            _vcCard('Prop. Ef.',fmtM(n(c.propEfectivo)),'var(--accent)')+
-            _vcCard('Tarjeta →🏦',fmtM(taBanco(c)),'var(--green)')+
-            _vcCard('Prop. Tarjeta',fmtM(n(c.propTarjeta)),'var(--accent)')+
-            _vcCard('Transfer.',fmtM(n(c.transferencia)),'var(--text-muted)')+
-            _vcCard('Flujo total',fmtM(fn),'var(--green)')+
-        '</div>'+
-        (c.ventaDeclarada?'<div style="margin-top:6px;font-size:12px;color:var(--text-dim)">Venta declarada POS: <strong style="color:var(--text)">'+fmtM(n(c.ventaDeclarada))+'</strong></div>':'')+
+        pagosTable+
         '</div>'+
         // Desglose operativo
         '<div>'+
@@ -1150,13 +1493,10 @@ function verCorte(id) {
             _vcCard('Cheque prom.',ck>0?fmtM(ck):'—','var(--text)')+
         '</div>'+
         '</div>'+
-        // Gastos + resguardo
+        // Gastos del día — desglose completo desde localStorage
         '<div>'+
         sec('📤 Gastos del día')+
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">'+
-            _vcCard('Caja chica',fmtM(n(c.gastosCajaChica)),'var(--red)')+
-            _vcCard('Fondo sig. turno',fmtM(n(c.retiros)),'var(--text-muted)')+
-        '</div>'+
+        gastosHTML+
         '</div>'+
         // Resguardo
         '<div style="background:rgba(245,200,66,.06);border:1px solid rgba(245,200,66,.2);border-radius:8px;padding:12px 16px">'+
@@ -1247,6 +1587,7 @@ function guardarDeposito(){
     lista.push(dep);
     saveDep(lista);
     cerrarModalDeposito();
+    renderDepositos();
     // Actualizar caja fuerte si está abierta (sin pedir clave de nuevo)
     var cajEl=document.getElementById('cajOverlay');
     if(cajEl&&cajEl.classList.contains('open'))_abrirCajaFuerteContenido();
@@ -1255,6 +1596,9 @@ function guardarDeposito(){
 function eliminarDeposito(id){
     if(!confirm('¿Eliminar este depósito?'))return;
     saveDep(loadDep().filter(function(x){return x.id!==id;}));
+    renderDepositos();
+    var cajEl=document.getElementById('cajOverlay');
+    if(cajEl&&cajEl.classList.contains('open'))_abrirCajaFuerteContenido();
 }
 
 /* ══════════════════════════════════════════════════════════

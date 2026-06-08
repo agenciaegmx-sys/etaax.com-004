@@ -313,7 +313,16 @@ function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
 
 /* Sucursal */
 var _sucursalId=null;
-function _loadNegocios(){try{return JSON.parse(localStorage.getItem('etaax_negocios')||'[]');}catch(e){return[];}}
+function _loadNegocios(){
+    try{
+        var all=JSON.parse(localStorage.getItem('etaax_negocios')||'[]');
+        var activoId=localStorage.getItem('etaax_negocio_activo')||'';
+        if(!activoId)return all;
+        var activo=all.find(function(n){return n.id===activoId;});
+        if(!activo||!activo.usuarioId)return all;
+        return all.filter(function(n){return n.usuarioId===activo.usuarioId;});
+    }catch(e){return[];}
+}
 function _negLabel(id){if(!id)return'🌐 Todas';var neg=_loadNegocios().find(function(n){return n.id===id;});return neg?(neg.emoji||'🏢')+' '+neg.nombre:'Sucursal';}
 function _renderSucMenu(){
     var menu=document.getElementById('sucMenu');

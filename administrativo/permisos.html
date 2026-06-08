@@ -81,18 +81,6 @@
 .theme-toggle{position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;}
 .theme-toggle:hover{border-color:var(--green);color:var(--green);}
 
-/* PIN gate — modal overlay, deja el top-bar y ctx-bar visibles */
-.pin-gate{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:8000;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px);}
-.pin-panel{background:var(--surface);border:1px solid rgba(245,200,66,.3);border-radius:16px;padding:36px 40px;width:100%;max-width:340px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.5);}
-.pin-lock-icon{font-size:44px;margin-bottom:12px;}
-.pin-title{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:2px;color:var(--text);margin-bottom:4px;}
-.pin-sub{font-size:12px;color:var(--text-dim);margin-bottom:24px;}
-.pin-input{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:13px;border-radius:8px;font-family:'Bebas Neue',sans-serif;font-size:32px;letter-spacing:8px;text-align:center;width:100%;box-sizing:border-box;outline:none;transition:border-color .2s;}
-.pin-input:focus{border-color:var(--accent);}
-.pin-error{color:var(--red);font-size:12px;min-height:18px;margin-top:8px;}
-.pin-btn{width:100%;margin-top:16px;background:var(--accent);border:none;color:#1a1916;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;padding:12px;border-radius:8px;cursor:pointer;transition:opacity .2s;}
-.pin-btn:hover{opacity:.88;}
-.pin-hint{margin-top:14px;font-size:10px;color:var(--text-dim);}
 </style>
 </head>
 <body>
@@ -180,19 +168,6 @@
 </div>
 
 <!-- PIN GATE -->
-<div class="pin-gate" id="pinGate">
-    <div class="pin-panel">
-        <div class="pin-lock-icon">🔐</div>
-        <div class="pin-title">Acceso restringido</div>
-        <div class="pin-sub">Ingresa el PIN de administrador para gestionar permisos y roles.</div>
-        <input type="password" class="pin-input" id="gatePin" maxlength="6" placeholder="••••"
-            oninput="this.value=this.value.replace(/\D/g,'')"
-            onkeydown="if(event.key==='Enter')verificarGate()">
-        <div class="pin-error" id="gateError"></div>
-        <button class="pin-btn" onclick="verificarGate()">Desbloquear →</button>
-        <div class="pin-hint">PIN por defecto: <strong>1234</strong> · Cámbialo en Configuración</div>
-    </div>
-</div>
 
 <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
 
@@ -390,22 +365,6 @@ function showToast(msg) {
     setTimeout(function(){ t.remove(); }, 2200);
 }
 
-/* ── PIN GATE ── */
-var PIN_KEY = 'etaax_admin_pin';
-function getPin(){ return localStorage.getItem(PIN_KEY) || '1234'; }
-
-function verificarGate() {
-    var pin = document.getElementById('gatePin').value;
-    if (pin === getPin()) {
-        document.getElementById('pinGate').style.display = 'none';
-        document.getElementById('gateError').textContent = '';
-        _mostrarNavBar();
-    } else {
-        document.getElementById('gateError').textContent = 'PIN incorrecto. Inténtalo de nuevo.';
-        document.getElementById('gatePin').value = '';
-        document.getElementById('gatePin').focus();
-    }
-}
 
 function _esc2(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
@@ -452,11 +411,12 @@ function _mostrarNavBar() {
 }
 
 document.addEventListener('DOMContentLoaded', async function(){
-    // Show PIN gate first; content loads in background
-    document.getElementById('gatePin').focus();
-    await syncPermisos();
-    renderTabs();
-    renderGrid();
+    // Cargar datos en background mientras se muestra el modal de auth
+    syncPermisos().then(function(){ renderTabs(); renderGrid(); });
+    // Pedir contraseña admin para acceder
+    _pedirClaveAdmin('Permisos y roles — Acceso restringido', function(){
+        _mostrarNavBar();
+    }, '🔐 Desbloquear');
 });
 
 function ctxSalir() {
@@ -467,5 +427,6 @@ function ctxSalir() {
     window.location.href = '/hub.html?salir=1';
 }
 </script>
+<script src="../admin-guard.js"></script>
 </body>
 </html>

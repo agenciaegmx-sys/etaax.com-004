@@ -790,12 +790,19 @@ function toggleTheme() {
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Cuenta</div>
       <div id="claveEmailInfo" style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:16px">—</div>
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Contraseña de inicio de sesión</div>
-      <input type="password" id="claveInput" placeholder="Ingresa tu contraseña"
-        onkeydown="if(event.key==='Enter')_confirmarClave()"
-        style="width:100%;box-sizing:border-box;height:46px;padding:0 14px;
-        border:1px solid var(--border);border-radius:10px;background:var(--bg);
-        color:var(--text);font-family:inherit;font-size:15px;outline:none;transition:border-color .15s"
-        onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+      <div style="position:relative">
+        <input type="password" id="claveInput" placeholder="Ingresa tu contraseña"
+          onkeydown="if(event.key==='Enter')_confirmarClave()"
+          style="width:100%;box-sizing:border-box;height:46px;padding:0 44px 0 14px;
+          border:1px solid var(--border);border-radius:10px;background:var(--bg);
+          color:var(--text);font-family:inherit;font-size:15px;outline:none;transition:border-color .15s"
+          onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+        <button type="button" tabindex="-1" id="claveInputEye"
+          onclick="(function(){var i=document.getElementById('claveInput'),e=document.getElementById('claveInputEye'),s=i.type==='password';i.type=s?'text':'password';e.textContent=s?'🙈':'👁';})()"
+          style="position:absolute;right:0;top:0;height:46px;width:42px;background:transparent;border:none;
+          cursor:pointer;font-size:16px;color:var(--text-muted);display:flex;align-items:center;justify-content:center"
+          title="Mostrar/ocultar">👁</button>
+      </div>
       <div id="claveError" style="color:var(--red);font-size:12px;margin-top:10px;min-height:16px"></div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;padding:12px 22px;border-top:1px solid var(--border)">

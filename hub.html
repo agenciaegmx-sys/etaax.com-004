@@ -131,7 +131,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 /* ═══════════════════════════════════════
    PLAN SELECTOR (en Registro)
 ═══════════════════════════════════════ */
-.plan-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:4px;}
+.plan-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:4px;}
 .plan-card-sel{
   background:var(--s2);border:1px solid var(--b2);border-radius:12px;
   padding:16px 12px;text-align:center;cursor:pointer;
@@ -278,7 +278,6 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   font-size:9px;letter-spacing:2px;text-transform:uppercase;
   padding:2px 7px;border-radius:20px;font-weight:600;
 }
-.plan-micro{background:var(--greend);color:var(--green);}
 .plan-pyme{background:var(--goldd);color:var(--gold);}
 .plan-gran{background:rgba(200,122,106,.15);color:var(--salmon);}
 
@@ -516,7 +515,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
           </div>
         </div>
         <div class="auth-error" id="regError"></div>
-        <div class="plan-confirm" id="planConfirm">Estás creando una cuenta en el plan <strong>Micro Pyme</strong></div>
+        <div class="plan-confirm" id="planConfirm">Estás creando una cuenta en el plan <strong>Pequeña Pyme</strong></div>
         <div class="priv-check-wrap">
           <input type="checkbox" id="chkPrivacidad">
           <label class="priv-check-label" for="chkPrivacidad">
@@ -813,19 +812,9 @@ var ADMIN_EMAIL = 'admin@etaax.com';
    PLANES
 ════════════════════════════════════════════════════════ */
 var PLANES = {
-    micro: {
-        nombre:        'Micro Pyme',
-        subtitulo:     'Básica',
-        icon:          '🏪',
-        maxSucursales: 1,
-        precio:        '$2,499',
-        activo:        true,
-        color:         '#3dbe7a',
-        planClass:     'plan-micro'
-    },
     pyme: {
         nombre:        'Pequeña Pyme',
-        subtitulo:     'Crecimiento',
+        subtitulo:     'Entrada',
         icon:          '🏬',
         maxSucursales: 3,
         precio:        '$5,499',
@@ -861,7 +850,7 @@ var COLORES = ['#3dbe7a','#f5c842','#c87a6a','#5b9bd5','#9b7fd4','#e05a3a'];
 var _sesion         = null;  // { usuarioId, nombre, email, plan, expira }
 var _negocios       = [];
 var _colorSel       = '#3dbe7a';
-var _planSel        = 'micro';
+var _planSel        = 'pyme';
 
 /* ════════════════════════════════════════════════════════
    STORAGE
@@ -1084,7 +1073,7 @@ async function init() {
             return;
         }
 
-        _sesion = { usuarioId: u.id, nombre: meta.nombre || u.email, email: u.email, plan: meta.plan || 'micro' };
+        _sesion = { usuarioId: u.id, nombre: meta.nombre || u.email, email: u.email, plan: meta.plan || 'pyme' };
         _saveQuickSes(_sesion);
         _updateTopbar();
         var negId = negIdCach;
@@ -1122,7 +1111,7 @@ async function _bgVerify() {
         }
         var u    = s.user;
         var meta = u.user_metadata || {};
-        _sesion  = { usuarioId: u.id, nombre: meta.nombre || u.email, email: u.email, plan: meta.plan || 'micro' };
+        _sesion  = { usuarioId: u.id, nombre: meta.nombre || u.email, email: u.email, plan: meta.plan || 'pyme' };
         _saveQuickSes(_sesion);
         _updateTopbar();
         await _syncNegociosDB();
@@ -1137,7 +1126,7 @@ async function _bgVerify() {
 
 function _updateTopbar() {
     if (!_sesion) return;
-    var p = PLANES[_sesion.plan] || PLANES.micro;
+    var p = PLANES[_sesion.plan] || PLANES.pyme;
     document.getElementById('topbarUser').innerHTML =
         '<div class="hub-user-dot"></div><span>' + _esc(_sesion.nombre.split(' ')[0]) + '</span>' +
         '<span class="user-badge-plan ' + p.planClass + '">' + p.nombre + '</span>';
@@ -1145,7 +1134,7 @@ function _updateTopbar() {
 
 function _updateNegociosBar() {
     if (!_sesion) return;
-    var p = PLANES[_sesion.plan] || PLANES.micro;
+    var p = PLANES[_sesion.plan] || PLANES.pyme;
     document.getElementById('negViewUserNombre').textContent = _sesion.nombre.split(' ')[0];
     document.getElementById('negViewUserPlan').textContent   = p.nombre;
     document.getElementById('negViewUserPlan').className     = 'user-badge-plan ' + p.planClass;
@@ -1187,7 +1176,7 @@ async function loginSubmit() {
         var u = result.data.user, meta = u.user_metadata || {};
         // Admin maestro → ir directo al panel
         if (u.email === ADMIN_EMAIL) { window.location.href = 'admin.html'; return; }
-        _iniciarSesion({ id: u.id, nombre: meta.nombre || u.email, email: u.email, plan: meta.plan || 'micro' });
+        _iniciarSesion({ id: u.id, nombre: meta.nombre || u.email, email: u.email, plan: meta.plan || 'pyme' });
         return;
     }
 
@@ -1237,7 +1226,7 @@ function _renderPlanGrid() {
     var grid = document.getElementById('planGrid');
     grid.innerHTML = Object.keys(PLANES).map(function(key) {
         var p = PLANES[key];
-        var isFirst = key === 'micro';
+        var isFirst = key === 'pyme';
         return '<div class="plan-card-sel' + (isFirst?' selected':'') + '" ' +
             'onclick="selectPlan(\'' + key + '\')" id="planCard_' + key + '" ' +
             'style="' + (isFirst ? 'border-color:' + p.color + ';background:' + p.color + '0d;' : '') + '">' +
@@ -1418,7 +1407,7 @@ function _migrarSucursalesLegacy(neg) {
 
 function _renderSucursales(neg) {
     var sucs  = _migrarSucursalesLegacy(neg);
-    var plan  = PLANES[_sesion ? _sesion.plan : 'micro'] || PLANES.micro;
+    var plan  = PLANES[_sesion ? _sesion.plan : 'pyme'] || PLANES.pyme;
     var lleno = sucs.length >= plan.maxSucursales;
     var color = neg.color || '#3dbe7a';
 
@@ -1846,7 +1835,7 @@ function mostrarFormNuevaSuc() {
 function crearSucursal() {
     var marca = _misNegocios()[0];
     if (!marca || !_sesion) return;
-    var plan = PLANES[_sesion.plan] || PLANES.micro;
+    var plan = PLANES[_sesion.plan] || PLANES.pyme;
     var sucs = _getSucursales(marca.id);
     if (sucs.length >= plan.maxSucursales) return;
     var inp    = document.getElementById('inSucNombre');
@@ -1906,7 +1895,7 @@ function _guardarCtx(neg, suc) {
     } else if (_sesion.isAdmin) {
         ctx.userBadge = '⚡ Admin'; ctx.userColor = '#f5c842';
     } else {
-        var p = PLANES[_sesion.plan] || PLANES.micro;
+        var p = PLANES[_sesion.plan] || PLANES.pyme;
         ctx.userBadge = p.nombre; ctx.userColor = p.color || '#3dbe7a';
     }
     localStorage.setItem('etaax_ctx', JSON.stringify(ctx));
@@ -1954,7 +1943,7 @@ function _showModulos(neg) {
             if (btnInfo)    btnInfo.style.display    = '';
             if (btnVolver)  btnVolver.style.display  = '';
         } else {
-            var p = PLANES[_sesion.plan] || PLANES.micro;
+            var p = PLANES[_sesion.plan] || PLANES.pyme;
             planChip.textContent      = p.nombre;
             planChip.className        = 'user-badge-plan ' + p.planClass;
             planChip.style.background = '';

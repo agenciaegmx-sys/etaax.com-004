@@ -22,12 +22,19 @@
               '</div>' +
               '<div style="padding:18px 22px">' +
                 '<div style="font-size:11px;color:var(--text-dim,#7a7570);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Contraseña de administrador</div>' +
-                '<input type="password" id="adminGuardInput" placeholder="Ingresa tu contraseña"' +
-                '  onkeydown="if(event.key===\'Enter\')_confirmarAdminGuard()"' +
-                '  style="width:100%;box-sizing:border-box;height:46px;padding:0 14px;border:1px solid var(--border,#2a2825);' +
-                '  border-radius:10px;background:var(--bg,#0f0e0c);color:var(--text,#f0ece6);' +
-                '  font-family:inherit;font-size:15px;outline:none;transition:border-color .15s"' +
-                '  onfocus="this.style.borderColor=\'var(--accent,#f5c842)\'" onblur="this.style.borderColor=\'var(--border,#2a2825)\'">' +
+                '<div style="position:relative">' +
+                  '<input type="password" id="adminGuardInput" placeholder="Ingresa tu contraseña"' +
+                  '  onkeydown="if(event.key===\'Enter\')_confirmarAdminGuard()"' +
+                  '  style="width:100%;box-sizing:border-box;height:46px;padding:0 44px 0 14px;border:1px solid var(--border,#2a2825);' +
+                  '  border-radius:10px;background:var(--bg,#0f0e0c);color:var(--text,#f0ece6);' +
+                  '  font-family:inherit;font-size:15px;outline:none;transition:border-color .15s"' +
+                  '  onfocus="this.style.borderColor=\'var(--accent,#f5c842)\'" onblur="this.style.borderColor=\'var(--border,#2a2825)\'">' +
+                  '<button type="button" onclick="_toggleAdminGuardPass()" tabindex="-1"' +
+                  '  id="adminGuardEye"' +
+                  '  style="position:absolute;right:0;top:0;height:46px;width:42px;background:transparent;border:none;' +
+                  '  cursor:pointer;font-size:16px;color:var(--text-dim,#7a7570);display:flex;align-items:center;justify-content:center;' +
+                  '  border-radius:0 10px 10px 0;transition:color .15s" title="Mostrar/ocultar contraseña">👁</button>' +
+                '</div>' +
                 '<div id="adminGuardError" style="color:var(--red,#e05a3a);font-size:12px;margin-top:10px;min-height:16px"></div>' +
               '</div>' +
               '<div style="display:flex;gap:8px;justify-content:flex-end;padding:12px 22px;border-top:1px solid var(--border,#2a2825)">' +
@@ -45,7 +52,10 @@
         _guardCb = callback;
         document.getElementById('adminGuardAccion').textContent = accion;
         document.getElementById('adminGuardError').textContent = '';
-        document.getElementById('adminGuardInput').value = '';
+        var inp = document.getElementById('adminGuardInput');
+        inp.value = '';
+        inp.type = 'password';
+        document.getElementById('adminGuardEye').textContent = '👁';
         var btn = document.getElementById('adminGuardBtn');
         btn.textContent = btnLabel || 'Eliminar';
         btn.style.background = btnLabel ? 'var(--accent,#f5c842)' : 'var(--red,#e05a3a)';
@@ -56,6 +66,15 @@
             var inp = document.getElementById('adminGuardInput');
             if (inp) inp.focus();
         }, 80);
+    };
+
+    window._toggleAdminGuardPass = function () {
+        var inp = document.getElementById('adminGuardInput');
+        var eye = document.getElementById('adminGuardEye');
+        if (!inp) return;
+        var show = inp.type === 'password';
+        inp.type = show ? 'text' : 'password';
+        eye.textContent = show ? '🙈' : '👁';
     };
 
     window._cerrarAdminGuard = function () {

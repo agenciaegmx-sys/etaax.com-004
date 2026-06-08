@@ -1,0 +1,10 @@
+# Datos de importación / scripts usados
+_data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp

@@ -398,6 +398,15 @@
         </div>
         <div class="modal-body">
             <div class="fg">
+                <label>Seleccionar del catálogo de colaboradores</label>
+                <select id="nomStaffSel">
+                    <option value="">— Nuevo colaborador (captura manual) —</option>
+                </select>
+            </div>
+            <div id="nomStaffInfo" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text-dim);margin-top:-4px">
+                <span id="nomStaffMeta"></span>
+            </div>
+            <div class="fg">
                 <label>Nombre del colaborador</label>
                 <input type="text" id="nomNombre" placeholder="Nombre completo">
             </div>
@@ -421,6 +430,7 @@
             </div>
             <input type="hidden" id="nomId">
             <input type="hidden" id="nomCategoria">
+            <input type="hidden" id="nomStaffId">
         </div>
         <div class="modal-footer">
             <button class="btn-ghost" id="btnCancelarNomina">Cancelar</button>
@@ -465,6 +475,9 @@ var LS_GASTOS  = 'etaax_gastos';      // daily gastos from admin module
 var LS_CORTES  = 'etaax_cortes';      // daily ventas
 var LS_OTROS   = 'etaax_sf_otros';    // other income
 
+function _skStaff(){var id=localStorage.getItem('etaax_negocio_activo')||'';return id?'etaax_'+id+'_staff':'etaax_staff';}
+function _loadStaff(){try{return JSON.parse(localStorage.getItem(_skStaff()))||[];}catch(e){return[];}}
+
 function loadFijos(){try{return JSON.parse(localStorage.getItem(LS_FIJOS))||[];}catch(e){return[];}}
 function saveFijos(d){localStorage.setItem(LS_FIJOS,JSON.stringify(d));}
 function loadNominas(mes){
@@ -505,11 +518,20 @@ function mesStr(){return todayStr().slice(0,7);}
 function n(v){return parseFloat(v)||0;}
 function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function flujoNeto(c){return(n(c.efectivo)-n(c.propEfectivo))+(n(c.tarjeta)-n(c.propTarjeta))+n(c.transferencia);}
+function flujoNeto(c){return n(c.efectivo)+n(c.tarjeta)+n(c.propTarjeta)+n(c.transferencia);}
 
 /* ── Sucursal state ── */
 var _sucursalId=null;
-function _loadNegocios(){try{return JSON.parse(localStorage.getItem('etaax_negocios')||'[]');}catch(e){return[];}}
+function _loadNegocios(){
+    try{
+        var all=JSON.parse(localStorage.getItem('etaax_negocios')||'[]');
+        var activoId=localStorage.getItem('etaax_negocio_activo')||'';
+        if(!activoId)return all;
+        var activo=all.find(function(n){return n.id===activoId;});
+        if(!activo||!activo.usuarioId)return all;
+        return all.filter(function(n){return n.usuarioId===activo.usuarioId;});
+    }catch(e){return[];}
+}
 function _renderSucMenu(){
     var menu=document.getElementById('sucMenu');
     if(!menu)return;
@@ -756,6 +778,42 @@ function calcTotalNomina(){
     var tot=n(document.getElementById('nomBase').value)+n(document.getElementById('nomBonos').value)+n(document.getElementById('nomImss').value);
     document.getElementById('nomTotalPreview').textContent=fmtM(tot);
 }
+var _PERIOD_LABEL={semanal:'Semanal',quincenal:'Quincenal',mensual:'Mensual'};
+
+function _poblarStaffSel(staffIdSel){
+    var sel=document.getElementById('nomStaffSel');
+    var staff=_loadStaff().filter(function(s){return s.estado!=='Baja definitiva';});
+    sel.innerHTML='<option value="">— Nuevo colaborador (captura manual) —</option>';
+    staff.forEach(function(s){
+        var opt=document.createElement('option');
+        opt.value=s.id;
+        opt.textContent=s.nombre+(s.puesto?' — '+s.puesto:'')+(s.periodicidad?' ('+(_PERIOD_LABEL[s.periodicidad]||s.periodicidad)+')':'');
+        if(s.id===staffIdSel) opt.selected=true;
+        sel.appendChild(opt);
+    });
+    _onStaffSelChange(staffIdSel,staff);
+}
+
+function _onStaffSelChange(staffId,staffList){
+    var infoBox=document.getElementById('nomStaffInfo');
+    var metaEl=document.getElementById('nomStaffMeta');
+    if(!staffId){infoBox.style.display='none';return;}
+    var staff=staffList||_loadStaff();
+    var s=staff.find(function(x){return x.id===staffId;});
+    if(!s){infoBox.style.display='none';return;}
+    document.getElementById('nomNombre').value=s.nombre||'';
+    if(s.salarioBase>0) document.getElementById('nomBase').value=s.salarioBase;
+    document.getElementById('nomStaffId').value=s.id;
+    calcTotalNomina();
+    var parts=[];
+    if(s.puesto) parts.push(s.puesto);
+    if(s.periodicidad) parts.push('Pago '+(_PERIOD_LABEL[s.periodicidad]||s.periodicidad));
+    if(s.diaPago) parts.push('Día: '+s.diaPago.replace(/_/g,' '));
+    if(s.salarioBase>0) parts.push('Base: '+fmtM(s.salarioBase));
+    metaEl.textContent=parts.join(' · ');
+    infoBox.style.display=parts.length?'block':'none';
+}
+
 function abrirNomina(id){
     var mes=_mesPicker||mesStr();
     var data=loadNominas(mes);
@@ -772,11 +830,13 @@ function abrirNomina(id){
     document.getElementById('nomBonos').value=d.bonos||'';
     document.getElementById('nomImss').value=d.imss||'';
     document.getElementById('nomCategoria').value=_nomCat;
+    document.getElementById('nomStaffId').value=d.staffId||'';
+    _poblarStaffSel(d.staffId||'');
     calcTotalNomina();
     var catLabels={operativa:'Operativa',administrativa:'Administrativa',socios:'Socio Operativo'};
     document.getElementById('modalNominaTitle').textContent=(id?'✏️ Editar':'👤 Nuevo')+' — '+catLabels[_nomCat];
     document.getElementById('modalNomina').classList.add('open');
-    setTimeout(function(){document.getElementById('nomNombre').focus();},60);
+    setTimeout(function(){document.getElementById('nomStaffSel').focus();},60);
 }
 function cerrarNomina(){document.getElementById('modalNomina').classList.remove('open');}
 function guardarNomina(){
@@ -791,7 +851,7 @@ function guardarNomina(){
     // Remove from all categories first (in case of move)
     ['operativa','administrativa','socios'].forEach(function(c){data[c]=(data[c]||[]).filter(function(p){return p.id!==id;});});
     data[cat]=(data[cat]||[]);
-    data[cat].push({id:id,nombre:nombre,base:base,bonos:n(document.getElementById('nomBonos').value),imss:n(document.getElementById('nomImss').value)});
+    data[cat].push({id:id,nombre:nombre,staffId:document.getElementById('nomStaffId').value||'',base:base,bonos:n(document.getElementById('nomBonos').value),imss:n(document.getElementById('nomImss').value)});
     saveNominas(mes,data); cerrarNomina(); renderAll();
 }
 
@@ -850,6 +910,10 @@ document.addEventListener('DOMContentLoaded',function(){
     document.getElementById('btnCancelarNomina').addEventListener('click',cerrarNomina);
     document.getElementById('btnGuardarNomina').addEventListener('click',guardarNomina);
     document.getElementById('modalNomina').addEventListener('click',function(e){if(e.target===this)cerrarNomina();});
+    document.getElementById('nomStaffSel').addEventListener('change',function(){
+        document.getElementById('nomStaffId').value=this.value;
+        _onStaffSelChange(this.value);
+    });
 
     /* Initial render */
     renderAll();

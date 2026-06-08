@@ -334,6 +334,7 @@
                                 <th>Proveedor</th>
                                 <th>Método</th>
                                 <th>Factura</th>
+                                <th>Estatus</th>
                                 <th>Evidencia</th>
                                 <th class="ar">Monto</th>
                                 <th></th>
@@ -376,7 +377,7 @@
                                         <th>Proveedor</th>
                                         <th>Método</th>
                                         <th>Factura</th>
-                                        <th>Estado</th>
+                                        <th>Estatus</th>
                                         <th>Evidencia</th>
                                         <th class="ar">Monto</th>
                                         <th></th>
@@ -571,6 +572,22 @@
             </div>
         </div>
 
+        <!-- Estatus de pago -->
+        <div class="fg">
+            <label>Estatus del gasto</label>
+            <div style="display:flex;gap:6px;margin-top:2px">
+                <button type="button" id="sBtn_pagado"    class="metodo-btn active" onclick="setEstatus('pagado')"     style="flex:1;font-size:12px;padding:8px 0">✅ Pagado</button>
+                <button type="button" id="sBtn_pendiente" class="metodo-btn"        onclick="setEstatus('pendiente')"  style="flex:1;font-size:12px;padding:8px 0">⏳ Pendiente</button>
+                <button type="button" id="sBtn_programado"class="metodo-btn"        onclick="setEstatus('programado')" style="flex:1;font-size:12px;padding:8px 0">📅 Programado</button>
+            </div>
+            <input type="hidden" id="gEstatus" value="pagado">
+        </div>
+        <!-- Fecha de pago — solo visible si estatus !== 'pagado' -->
+        <div class="fg" id="fechaPagoWrap" style="display:none">
+            <label>Fecha de pago programada</label>
+            <input type="date" id="gFechaPago">
+        </div>
+
         <!-- Notas -->
         <div class="fg">
             <label>Notas adicionales</label>
@@ -591,21 +608,6 @@
 </div>
 
 <!-- ══ PIN MODAL ══ -->
-<div class="pin-overlay" id="pinOverlay">
-    <div class="pin-panel">
-        <div class="pin-title">🔐 Acceso admin</div>
-        <div class="pin-sub" id="pinSub">Ingresa el PIN de administrador</div>
-        <input type="password" class="pin-input" id="pinInput" maxlength="6" placeholder="••••"
-            oninput="this.value=this.value.replace(/\D/g,'')"
-            onkeydown="if(event.key==='Enter')verificarPIN()">
-        <div class="pin-error" id="pinError"></div>
-        <div class="pin-actions">
-            <button class="btn-ghost" style="flex:1" onclick="cerrarPIN()">Cancelar</button>
-            <button class="btn-primary" style="flex:1" onclick="verificarPIN()">Confirmar</button>
-        </div>
-        <div style="margin-top:14px;font-size:10px;color:var(--text-dim)">PIN por defecto: <strong>1234</strong> · Cámbialo en Configuración</div>
-    </div>
-</div>
 
 <!-- ══ PANEL CATÁLOGO PROVEEDORES ══ -->
 <div class="panel-prov-overlay" id="panelProvOverlay" onclick="if(event.target===this)cerrarPanelProveedores()">
@@ -897,29 +899,10 @@ function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:2,
 
 /* ── Auth state ── */
 var mayorDesbloqueado=false;
-var PIN_KEY='etaax_admin_pin';
-function getPin(){return localStorage.getItem(PIN_KEY)||'1234';}
-var pinCallback=null;
-
 function solicitarPIN(motivo,cb){
-    pinCallback=cb||null;
-    document.getElementById('pinSub').textContent=motivo==='ver'?'Autorización para ver gastos mayores':'Autorización requerida para gasto mayor';
-    document.getElementById('pinInput').value='';
-    document.getElementById('pinError').textContent='';
-    document.getElementById('pinOverlay').classList.add('open');
-    setTimeout(function(){document.getElementById('pinInput').focus();},100);
-}
-function cerrarPIN(){document.getElementById('pinOverlay').classList.remove('open');pinCallback=null;}
-function verificarPIN(){
-    var pin=document.getElementById('pinInput').value;
-    if(pin===getPin()){
-        document.getElementById('pinOverlay').classList.remove('open');
-        if(pinCallback){pinCallback();pinCallback=null;}
-    } else {
-        document.getElementById('pinError').textContent='PIN incorrecto. Inténtalo de nuevo.';
-        document.getElementById('pinInput').value='';
-        document.getElementById('pinInput').focus();
-    }
+    var label  = motivo==='ver' ? 'Ver gastos mayores — Acceso restringido' : 'Autorización requerida para gasto mayor';
+    var btnLbl = motivo==='ver' ? '🔐 Desbloquear' : '🔐 Acceder';
+    _pedirClaveAdmin(label, cb||function(){}, btnLbl);
 }
 
 function bloquearMayores(){
@@ -950,8 +933,9 @@ function applyFilters(lista){
     });
 }
 
-function currentData(){var r=getRange(periodoTipo,periodoVal,periodoEnd);return load().filter(function(g){return inRange(g.fecha,r.from,r.to);});}
-function prevData(){var pr=prevRange(periodoTipo,periodoVal,periodoEnd);return load().filter(function(g){return inRange(g.fecha,pr.from,pr.to);});}
+function _negFilter(g){var id=getNegocioActivo();return !id||!g.negocioId||g.negocioId===id;}
+function currentData(){var r=getRange(periodoTipo,periodoVal,periodoEnd);return load().filter(function(g){return _negFilter(g)&&inRange(g.fecha,r.from,r.to);});}
+function prevData(){var pr=prevRange(periodoTipo,periodoVal,periodoEnd);return load().filter(function(g){return _negFilter(g)&&inRange(g.fecha,pr.from,pr.to);});}
 
 /* ── Render ── */
 function renderAll(){
@@ -996,6 +980,18 @@ function metodoLabel(g){
     return'<span class="met-banco">🏛️ '+sub+'</span>';
 }
 
+function estatusBadge(g){
+    var s=g.estatus||'pagado';
+    var cfg={
+        pagado:   {lbl:'Pagado',    bg:'rgba(61,190,122,.12)',  color:'#3dbe7a'},
+        pendiente:{lbl:'Pendiente', bg:'rgba(245,200,66,.12)',  color:'#f5c842'},
+        programado:{lbl:'Programado',bg:'rgba(120,160,240,.12)',color:'#78a0f0'}
+    };
+    var c=cfg[s]||cfg.pagado;
+    var extra=s!=='pagado'&&g.fechaPago?' <span style="font-size:9px;opacity:.7">'+g.fechaPago+'</span>':'';
+    return'<span style="background:'+c.bg+';color:'+c.color+';font-size:10px;letter-spacing:.5px;padding:2px 7px;border-radius:4px;white-space:nowrap">'+c.lbl+'</span>'+extra;
+}
+
 function evLink(g){
     if(!g.evidenciaData)return'<span style="opacity:.3;font-size:10px">—</span>';
     var isPdf=g.evidenciaNombre&&g.evidenciaNombre.toLowerCase().endsWith('.pdf');
@@ -1019,9 +1015,11 @@ function renderTabla(menores, mayores){
                 '<td style="font-size:11px;color:var(--text-dim)">'+_esc(g.proveedor||'—')+'</td>'+
                 '<td>'+metodoLabel(g)+'</td>'+
                 '<td>'+(g.facturado?'<span class="fact-si">✔ Sí</span>':'<span class="fact-no">✗</span>')+'</td>'+
+                '<td>'+estatusBadge(g)+'</td>'+
                 '<td>'+evLink(g)+'</td>'+
                 '<td class="ar" style="font-weight:600;color:var(--red)">'+fmtM(g.monto)+'</td>'+
                 '<td style="display:flex;gap:4px;justify-content:flex-end">'+
+                    '<button class="btn-row" onclick="verGasto(\''+g.id+'\')" title="Ver">👁️</button>'+
                     '<button class="btn-row" onclick="editarGasto(\''+g.id+'\')">✏️</button>'+
                     '<button class="btn-row del" onclick="eliminarGasto(\''+g.id+'\')">🗑️</button>'+
                 '</td>'+
@@ -1046,9 +1044,11 @@ function renderTabla(menores, mayores){
                 '<td>'+metodoLabel(g)+'</td>'+
                 '<td>'+(g.facturado?'<span class="fact-si">✔ Sí</span>':'<span class="fact-no">✗</span>')+'</td>'+
                 '<td>'+authBadge+'</td>'+
+                '<td>'+estatusBadge(g)+'</td>'+
                 '<td>'+evLink(g)+'</td>'+
                 '<td class="ar" style="font-weight:700;color:var(--red)">'+fmtM(g.monto)+'</td>'+
                 '<td style="display:flex;gap:4px;justify-content:flex-end">'+
+                    '<button class="btn-row" onclick="verGasto(\''+g.id+'\')" title="Ver">👁️</button>'+
                     '<button class="btn-row" onclick="editarGasto(\''+g.id+'\')">✏️</button>'+
                     '<button class="btn-row del" onclick="eliminarGasto(\''+g.id+'\')">🗑️</button>'+
                 '</td>'+
@@ -1058,6 +1058,96 @@ function renderTabla(menores, mayores){
 }
 
 function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+/* ── Ver gasto (modo lectura) ── */
+function _ensureVerGastoModal(){
+    if(document.getElementById('modalVerGasto'))return;
+    var el=document.createElement('div');
+    el.id='modalVerGasto';
+    el.style.cssText='display:none;position:fixed;inset:0;z-index:8500;background:rgba(0,0,0,.75);'+
+        'backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);'+
+        'align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto';
+    el.onclick=function(e){if(e.target===el)cerrarVerGasto();};
+    el.innerHTML=
+        '<div style="background:var(--surface,#1a1916);border:1px solid var(--border,#2a2825);'+
+        'border-radius:16px;width:min(440px,96vw);overflow:hidden;margin:auto">'+
+          '<div id="vgHeader" style="padding:16px 20px 12px;border-bottom:1px solid var(--border,#2a2825);'+
+          'display:flex;align-items:center;justify-content:space-between">'+
+            '<div>'+
+              '<div id="vgTipo" style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim,#7a7570);margin-bottom:3px"></div>'+
+              '<div id="vgConcepto" style="font-size:17px;font-weight:700;color:var(--text,#f0ece6)"></div>'+
+            '</div>'+
+            '<div style="text-align:right">'+
+              '<div id="vgMonto" style="font-family:\'Bebas Neue\',sans-serif;font-size:26px;letter-spacing:.5px;color:var(--red,#e05a3a)"></div>'+
+              '<div id="vgFecha" style="font-size:11px;color:var(--text-dim,#7a7570)"></div>'+
+            '</div>'+
+          '</div>'+
+          '<div id="vgBody" style="padding:16px 20px;display:flex;flex-direction:column;gap:10px"></div>'+
+          '<div style="padding:10px 20px 14px;border-top:1px solid var(--border,#2a2825);display:flex;gap:8px;justify-content:flex-end">'+
+            '<button onclick="cerrarVerGasto()" style="background:transparent;border:1px solid var(--border,#2a2825);'+
+            'color:var(--text-muted,#7a7570);border-radius:8px;padding:7px 18px;cursor:pointer;font-family:inherit;font-size:13px">Cerrar</button>'+
+            '<button id="vgEditBtn" style="background:var(--accent,#f5c842);color:#000;border:none;border-radius:8px;'+
+            'padding:7px 18px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">✏️ Editar</button>'+
+          '</div>'+
+        '</div>';
+    document.body.appendChild(el);
+}
+
+function verGasto(id){
+    _ensureVerGastoModal();
+    var g=load().find(function(x){return x.id===id;});
+    if(!g)return;
+    // Si es mayor y no desbloqueado, pedir clave primero
+    if(g.tipo==='mayor'&&!mayorDesbloqueado){
+        solicitarPIN('ver',function(){mayorDesbloqueado=true;document.getElementById('mayorContent').style.display='block';document.getElementById('mayorWall').style.display='none';verGasto(id);});
+        return;
+    }
+    // Header
+    var esMayor=g.tipo==='mayor';
+    document.getElementById('vgHeader').style.borderColor=esMayor?'rgba(224,90,58,.35)':'var(--border,#2a2825)';
+    document.getElementById('vgTipo').textContent=esMayor?'🔴 Gasto mayor':'🟢 Gasto menor';
+    document.getElementById('vgConcepto').textContent=g.concepto||'—';
+    document.getElementById('vgMonto').textContent='$'+n(g.monto).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
+    document.getElementById('vgFecha').textContent=g.fecha||'—';
+    // Botón editar
+    document.getElementById('vgEditBtn').onclick=function(){cerrarVerGasto();editarGasto(id);};
+
+    function fila(lbl,val){
+        return'<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border,#2a2825)">'+
+            '<span style="font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-dim,#7a7570)">'+lbl+'</span>'+
+            '<span style="font-size:13px;color:var(--text,#f0ece6)">'+val+'</span>'+
+        '</div>';
+    }
+
+    var sub=g.metodoBanco==='debito'?'T. débito':g.metodoBanco==='credito'?'T. crédito':'Transfer.';
+    var metTxt=g.metodoPago==='caja_fuerte'?'🏦 Caja fuerte':g.metodoPago==='caja_chica'?'💼 Caja chica':'🏛️ '+sub;
+
+    var evHTML='';
+    if(g.evidenciaData){
+        var isPdf=g.evidenciaNombre&&g.evidenciaNombre.toLowerCase().endsWith('.pdf');
+        evHTML=isPdf
+            ?'<a href="'+g.evidenciaData+'" target="_blank" style="font-size:12px;color:var(--accent,#f5c842)">📄 '+_esc(g.evidenciaNombre)+'</a>'
+            :'<a href="'+g.evidenciaData+'" target="_blank"><img src="'+g.evidenciaData+'" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border,#2a2825)" alt="evidencia"></a>';
+    }
+
+    var sCfg={pagado:{lbl:'✅ Pagado',c:'#3dbe7a'},pendiente:{lbl:'⏳ Pendiente',c:'#f5c842'},programado:{lbl:'📅 Programado',c:'#78a0f0'}};
+    var sc=sCfg[g.estatus||'pagado']||sCfg.pagado;
+    var estatusVal='<span style="color:'+sc.c+'">'+sc.lbl+'</span>'+(g.fechaPago&&g.estatus!=='pagado'?' · <span style="font-size:11px;color:var(--text-dim,#7a7570)">'+g.fechaPago+'</span>':'');
+
+    var body=
+        fila('Categoría',_esc(g.categoria||'—'))+
+        fila('Proveedor',_esc(g.proveedor||'—'))+
+        fila('Método de pago',metTxt)+
+        fila('Facturado',g.facturado?'<span style="color:var(--green,#3dbe7a)">✔ Con factura</span>':'<span style="color:var(--text-dim,#7a7570)">✗ Sin factura</span>')+
+        fila('Estatus',estatusVal)+
+        (g.notas?fila('Notas',_esc(g.notas)):'');
+
+    if(evHTML)body+='<div style="padding:8px 0"><div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-dim,#7a7570);margin-bottom:6px">Evidencia</div>'+evHTML+'</div>';
+
+    document.getElementById('vgBody').innerHTML=body;
+    document.getElementById('modalVerGasto').style.display='flex';
+}
+function cerrarVerGasto(){var m=document.getElementById('modalVerGasto');if(m)m.style.display='none';}
 
 /* ── Modal ── */
 function nuevoGasto(tipo){
@@ -1098,6 +1188,9 @@ function _abrirModalGasto(g,tipo){
     document.getElementById('gCategoria').value=d.categoria||'';
     document.getElementById('gProveedor').value=d.proveedor||'';
     document.getElementById('gNotas').value=d.notas||'';
+    // Estatus
+    setEstatus(d.estatus||'pagado');
+    document.getElementById('gFechaPago').value=d.fechaPago||'';
     document.getElementById('gEvidenciaData').value=d.evidenciaData||'';
     document.getElementById('gEvidenciaNombre').value=d.evidenciaNombre||'';
     // Tipo
@@ -1140,6 +1233,14 @@ function _abrirModalGasto(g,tipo){
 }
 
 function cerrarModal(){document.getElementById('modalGasto').classList.remove('open');}
+
+function setEstatus(val){
+    document.getElementById('gEstatus').value=val;
+    ['pagado','pendiente','programado'].forEach(function(s){
+        document.getElementById('sBtn_'+s).classList.toggle('active',s===val);
+    });
+    document.getElementById('fechaPagoWrap').style.display=(val==='pendiente'||val==='programado')?'':'none';
+}
 
 function setTipo(tipo,skipPin){
     document.getElementById('gTipo').value=tipo;
@@ -1241,7 +1342,9 @@ function guardarGasto(){
         autorizado:tipo==='mayor'?mayorDesbloqueado:true,
         evidenciaData:document.getElementById('gEvidenciaData').value,
         evidenciaNombre:document.getElementById('gEvidenciaNombre').value,
-        notas:document.getElementById('gNotas').value.trim()
+        notas:document.getElementById('gNotas').value.trim(),
+        estatus:document.getElementById('gEstatus').value||'pagado',
+        fechaPago:document.getElementById('gFechaPago').value||''
     };
     var lista=load().filter(function(g){return g.id!==id;});
     lista.push(gasto);
@@ -1275,6 +1378,9 @@ document.addEventListener('DOMContentLoaded',function(){
     renderAll();
 });
 </script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
 <script src="../ctx-bar.js"></script>
+<script src="../admin-guard.js"></script>
 </body>
 </html>
