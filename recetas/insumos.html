@@ -712,6 +712,9 @@ var _cgFiltrada = [];
 var _cgPagina   = 0;
 var _cgPgSize   = 80;
 var _cgCargado  = false;
+var _cgCompleto = false;   // true cuando background load terminó
+var _CG_CACHE   = 'etaax_cg_v1';
+var _CG_TTL     = 30 * 60 * 1000;
 
 async function abrirCatalogoGlobal() {
     var modal = document.getElementById('modalCatalogoGlobal');
@@ -727,27 +730,84 @@ function cerrarCatalogoGlobal() {
     filtrar(); // re-renderizar lista del negocio al instante
 }
 
+function _cgPoblarFamilias(todos) {
+    var familias = [...new Set(todos.map(function(x){ return x.familia; }).filter(Boolean))].sort();
+    var sel = document.getElementById('cgFamilia');
+    var actual = sel.value;
+    sel.innerHTML = '<option value="">Todas las familias</option>' +
+        familias.map(function(f){ return '<option value="'+f+'">'+f+'</option>'; }).join('');
+    if (actual) sel.value = actual;
+}
+
 async function _cgCargar() {
-    document.getElementById('cgTotal').textContent = 'Cargando catálogo…';
-    var all = [], BATCH = 1000, from = 0;
+    // 1. Revisar cache en sessionStorage (apertura instantánea si ya se cargó antes)
+    try {
+        var raw = sessionStorage.getItem(_CG_CACHE);
+        if (raw) {
+            var cached = JSON.parse(raw);
+            if (cached && cached.ts && (Date.now() - cached.ts < _CG_TTL) && (cached.data||[]).length) {
+                _cgTodos    = cached.data;
+                _cgCompleto = true;
+                _cgCargado  = true;
+                _cgPoblarFamilias(_cgTodos);
+                cgFiltrar();
+                return;
+            }
+        }
+    } catch(e) {}
+
+    // 2. Fetch primeros 30 → render inmediato (< 300 ms)
+    document.getElementById('cgTotal').textContent = 'Cargando…';
+    var FIRST = 30;
+    var resFirst = await _supabase.from('catalogo_insumos')
+        .select('datos')
+        .order('created_at', { ascending: true })
+        .range(0, FIRST - 1);
+    var primeros = (resFirst.data || []).map(function(r){ return r.datos; }).filter(Boolean);
+    _cgTodos   = primeros;
+    _cgCargado = true;
+    _cgPoblarFamilias(primeros);
+    cgFiltrar();
+
+    // 3. Cargar el resto en background sin bloquear al usuario
+    _cgBgLoad(FIRST);
+}
+
+async function _cgBgLoad(startFrom) {
+    var all = _cgTodos.slice();
+    var BATCH = 500, from = startFrom;
     while (true) {
         var res = await _supabase.from('catalogo_insumos')
             .select('datos')
             .order('created_at', { ascending: true })
             .range(from, from + BATCH - 1);
         var chunk = (res.data || []).map(function(r){ return r.datos; }).filter(Boolean);
+        if (!chunk.length) break;
         all = all.concat(chunk);
+        _cgTodos = all;
+        var elTotal = document.getElementById('cgTotal');
+        if (elTotal) elTotal.textContent = all.length + ' insumos · cargando…';
         if (chunk.length < BATCH) break;
         from += BATCH;
     }
-    _cgTodos   = all;
-    _cgCargado = true;
-    // Poblar filtro de familias
-    var familias = [...new Set(all.map(function(x){ return x.familia; }).filter(Boolean))].sort();
-    var sel = document.getElementById('cgFamilia');
-    sel.innerHTML = '<option value="">Todas las familias</option>' +
-        familias.map(function(f){ return '<option value="'+f+'">'+f+'</option>'; }).join('');
-    cgFiltrar();
+    _cgCompleto = true;
+    _cgPoblarFamilias(_cgTodos);
+
+    // Si hay búsqueda/filtro activo: re-filtrar para mostrar coincidencias del set completo
+    // Si no hay filtro: solo actualizar el render sin resetear la página actual
+    var _q = (document.getElementById('cgSearch').value || '').trim();
+    var _fam = document.getElementById('cgFamilia').value;
+    if (_q || _fam) {
+        cgFiltrar();
+    } else {
+        _cgFiltrada = _cgTodos;
+        _cgRender();
+    }
+
+    // 4. Guardar en sessionStorage para próximas aperturas (silent fail si quota excedida)
+    try {
+        sessionStorage.setItem(_CG_CACHE, JSON.stringify({ ts: Date.now(), data: _cgTodos }));
+    } catch(e) {}
 }
 
 function cgFiltrar() {
