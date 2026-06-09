@@ -70,7 +70,8 @@
         /* Modal */
         #vpModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.78); z-index:1000; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto; }
         #vpModal.open { display:flex; }
-        .vp-mbox { background:var(--surface); border:1px solid var(--border); border-radius:20px; width:100%; max-width:780px; padding:28px; position:relative; }
+        .vp-mbox { background:var(--surface); border:1px solid var(--border); border-radius:20px; width:min(820px,100%); min-width:380px; min-height:320px; padding:28px; position:relative; resize:both; overflow:auto; box-sizing:border-box; }
+        .vp-mbox::after { content:''; position:absolute; bottom:6px; right:6px; width:10px; height:10px; border-right:2px solid var(--border); border-bottom:2px solid var(--border); border-radius:0 0 4px 0; pointer-events:none; opacity:.5; }
         .vp-mclose { position:absolute; top:18px; right:18px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:5px 12px; font-size:12px; cursor:pointer; color:var(--text-muted); font-family:'DM Sans',sans-serif; }
         .vp-mtitle { font-family:'Bebas Neue',sans-serif; font-size:26px; letter-spacing:2px; margin-bottom:20px; }
         .vp-tabs   { display:flex; gap:6px; margin-bottom:20px; }
@@ -219,7 +220,7 @@
         <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
             Haz clic en una celda y pega (Ctrl+V) — una columna a la vez o un rango completo desde Excel.
         </div>
-        <div style="overflow-x:auto;max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
+        <div style="overflow-x:auto;max-height:clamp(200px,40vh,520px);overflow-y:auto;border:1px solid var(--border);border-radius:8px">
             <table id="vpPasteTable" class="paste-table">
                 <thead>
                     <tr>
