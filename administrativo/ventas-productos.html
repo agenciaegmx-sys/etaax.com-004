@@ -198,19 +198,22 @@
 
     <!-- ── PANEL MANUAL ── -->
     <div id="panelManual">
-        <div class="vp-frow">
-            <div style="flex:2;min-width:160px">
-                <div class="vp-flabel">Nombre del periodo *</div>
-                <input id="mLabel" class="vp-finput" type="text" placeholder="ej. Anual 2025, Mayo 2026, Semana 22…">
-            </div>
-            <div style="flex:1;min-width:120px">
-                <div class="vp-flabel">Tipo</div>
-                <select id="mTipo" class="vp-finput">
+        <div class="vp-frow" style="align-items:flex-end">
+            <div style="flex:1;min-width:110px">
+                <div class="vp-flabel">Tipo de periodo</div>
+                <select id="mTipo" class="vp-finput" onchange="_rfecha('m')">
                     <option value="anio">Año</option>
                     <option value="mes">Mes</option>
                     <option value="semana">Semana</option>
-                    <option value="dia">Día</option>
+                    <option value="dia">Día / Rango</option>
                 </select>
+            </div>
+            <div id="mFechaWrap" style="flex:3;display:flex;gap:8px;flex-wrap:wrap"></div>
+        </div>
+        <div class="vp-frow" style="margin-top:4px">
+            <div style="flex:1">
+                <div class="vp-flabel">Nombre del periodo <span style="color:var(--text-dim);font-weight:400">(auto-generado, editable)</span></div>
+                <input id="mLabel" class="vp-finput" type="text" placeholder="Se llena al elegir fecha…">
             </div>
         </div>
         <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
@@ -244,19 +247,22 @@
 
     <!-- ── PANEL CSV ── -->
     <div id="panelCsv" style="display:none">
-        <div class="vp-frow">
-            <div style="flex:2;min-width:160px">
-                <div class="vp-flabel">Nombre del periodo *</div>
-                <input id="cLabel" class="vp-finput" type="text" placeholder="ej. Anual 2025, Mayo 2026…">
-            </div>
-            <div style="flex:1;min-width:120px">
-                <div class="vp-flabel">Tipo</div>
-                <select id="cTipo" class="vp-finput">
+        <div class="vp-frow" style="align-items:flex-end">
+            <div style="flex:1;min-width:110px">
+                <div class="vp-flabel">Tipo de periodo</div>
+                <select id="cTipo" class="vp-finput" onchange="_rfecha('c')">
                     <option value="anio">Año</option>
                     <option value="mes">Mes</option>
                     <option value="semana">Semana</option>
-                    <option value="dia">Día</option>
+                    <option value="dia">Día / Rango</option>
                 </select>
+            </div>
+            <div id="cFechaWrap" style="flex:3;display:flex;gap:8px;flex-wrap:wrap"></div>
+        </div>
+        <div class="vp-frow" style="margin-top:4px">
+            <div style="flex:1">
+                <div class="vp-flabel">Nombre del periodo <span style="color:var(--text-dim);font-weight:400">(auto-generado, editable)</span></div>
+                <input id="cLabel" class="vp-finput" type="text" placeholder="Se llena al elegir fecha…">
             </div>
         </div>
 
@@ -359,8 +365,96 @@ function abrirModal(id){
         document.getElementById('btnGuardarCsv').style.display='none';
         _vpInitTable();
     }
+    // Inicializar campos de fecha para ambos paneles
+    _rfecha('m');
+    _rfecha('c');
 }
 function cerrarModal(){ document.getElementById('vpModal').classList.remove('open'); }
+
+/* ── Fecha dinámica según tipo ── */
+var _MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+function _rfecha(p){
+    var tipo=document.getElementById(p+'Tipo').value;
+    var wrap=document.getElementById(p+'FechaWrap');
+    var hoy=new Date();
+    var anioAct=hoy.getFullYear();
+    var mesAct=hoy.getMonth()+1;
+    var fi=function(id,label,type,val,extra){
+        return '<div style="min-width:90px;flex:1"><div class="vp-flabel">'+label+'</div>'+
+            '<input id="'+p+id+'" class="vp-finput" type="'+type+'" value="'+val+'" '+(extra||'')+' oninput="_autoLabel(\''+p+'\')" onchange="_autoLabel(\''+p+'\')">'+
+        '</div>';
+    };
+    var fsel=function(id,label,opts,val){
+        return '<div style="min-width:110px;flex:1"><div class="vp-flabel">'+label+'</div>'+
+            '<select id="'+p+id+'" class="vp-finput" onchange="_autoLabel(\''+p+'\')">'+opts+'</select></div>';
+    };
+    var html='';
+    if(tipo==='anio'){
+        html=fi('Anio','Año','number',anioAct,'min="2000" max="2099"');
+    } else if(tipo==='mes'){
+        var mOpts=_MESES.map(function(m,i){return '<option value="'+(i+1)+'"'+(i+1===mesAct?' selected':'')+'>'+m+'</option>';}).join('');
+        html=fsel('Mes','Mes',mOpts,mesAct)+fi('Anio','Año','number',anioAct,'min="2000" max="2099"');
+    } else if(tipo==='semana'){
+        var sem=_semanaActual();
+        html=fi('Semana','Semana #','number',sem,'min="1" max="53" style="max-width:80px"')+
+             fi('Anio','Año','number',anioAct,'min="2000" max="2099" style="max-width:90px"')+
+             '<div style="min-width:110px;flex:2"><div class="vp-flabel">Rango <span style="font-weight:400;color:var(--text-dim)">(opc.)</span></div>'+
+             '<div style="display:flex;gap:6px;align-items:center">'+
+             '<input id="'+p+'Desde" class="vp-finput" type="date" style="flex:1;padding:7px 8px" oninput="_autoLabel(\''+p+'\')" onchange="_autoLabel(\''+p+'\')">'+
+             '<span style="color:var(--text-dim);font-size:11px;white-space:nowrap">—</span>'+
+             '<input id="'+p+'Hasta" class="vp-finput" type="date" style="flex:1;padding:7px 8px" oninput="_autoLabel(\''+p+'\')" onchange="_autoLabel(\''+p+'\')">'+
+             '</div></div>';
+    } else if(tipo==='dia'){
+        var hoyStr=hoy.toISOString().slice(0,10);
+        html='<div style="min-width:130px;flex:1"><div class="vp-flabel">Desde</div>'+
+             '<input id="'+p+'Desde" class="vp-finput" type="date" value="'+hoyStr+'" oninput="_autoLabel(\''+p+'\')" onchange="_autoLabel(\''+p+'\')"></div>'+
+             '<div style="min-width:130px;flex:1"><div class="vp-flabel">Hasta <span style="font-weight:400;color:var(--text-dim)">(opc.)</span></div>'+
+             '<input id="'+p+'Hasta" class="vp-finput" type="date" oninput="_autoLabel(\''+p+'\')" onchange="_autoLabel(\''+p+'\')"></div>';
+    }
+    wrap.innerHTML=html;
+    _autoLabel(p);
+}
+
+function _semanaActual(){
+    var d=new Date(); d.setHours(0,0,0,0);
+    d.setDate(d.getDate()+3-(d.getDay()+6)%7);
+    var w=new Date(d.getFullYear(),0,4);
+    return 1+Math.round(((d-w)/86400000-(3-(w.getDay()+6)%7))/7);
+}
+
+function _autoLabel(p){
+    var tipo=document.getElementById(p+'Tipo').value;
+    var label='';
+    var _g=function(id){var el=document.getElementById(p+id);return el?el.value:'';};
+    if(tipo==='anio'){
+        var a=_g('Anio'); if(a)label=a;
+    } else if(tipo==='mes'){
+        var m=_g('Mes'),a=_g('Anio');
+        if(m&&a)label=_MESES[parseInt(m)-1]+' '+a;
+    } else if(tipo==='semana'){
+        var desde=_g('Desde'),hasta=_g('Hasta');
+        if(desde&&hasta){
+            var fd=new Date(desde+'T12:00:00'),fh=new Date(hasta+'T12:00:00');
+            label=fd.toLocaleDateString('es-MX',{day:'2-digit',month:'short'})+' — '+fh.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'});
+        } else {
+            var s=_g('Semana'),a=_g('Anio');
+            if(s&&a)label='Semana '+s+' · '+a;
+        }
+    } else if(tipo==='dia'){
+        var desde=_g('Desde'),hasta=_g('Hasta');
+        if(desde){
+            var fd=new Date(desde+'T12:00:00');
+            var ds=fd.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'});
+            if(hasta&&hasta!==desde){
+                var fh=new Date(hasta+'T12:00:00');
+                label=ds+' — '+fh.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'});
+            } else label=ds;
+        }
+    }
+    var el=document.getElementById(p+'Label');
+    if(label&&el)el.value=label;
+}
 
 function setModalTab(t){
     document.getElementById('tabM').classList.toggle('active',t==='manual');
@@ -808,7 +902,7 @@ function init(){
     renderPeriodos();
 }
 
-document.addEventListener('DOMContentLoaded',function(){init();_vpInitTable();});
+document.addEventListener('DOMContentLoaded',function(){init();_vpInitTable();_rfecha('m');_rfecha('c');});
 </script>
 
 <script>
