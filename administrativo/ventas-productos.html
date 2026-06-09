@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETAAX — Ventas por Producto</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../styles.css">
+    <style>
+        .vp-wrap { min-height:100vh; padding:80px 24px 100px; max-width:1100px; margin:0 auto; }
+        .vp-hdr  { display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:28px; flex-wrap:wrap; gap:12px; }
+        .vp-title { font-family:'Bebas Neue',sans-serif; font-size:38px; letter-spacing:2px; line-height:1; }
+        .vp-title span { color:var(--green); }
+        .vp-eyebrow { font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--text-dim); margin-bottom:4px; }
+
+        /* Cards */
+        .vp-card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:22px 24px; margin-bottom:20px; }
+        .vp-card-hdr { display:flex; align-items:center; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
+        .vp-card-title { font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:1.5px; flex:1; }
+
+        /* Buttons */
+        .btn-primary { background:var(--green); color:#0a0908; border:none; border-radius:8px; padding:9px 18px; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; }
+        .btn-ghost   { background:transparent; color:var(--text-muted); border:1px solid var(--border); border-radius:8px; padding:7px 14px; font-family:'DM Sans',sans-serif; font-size:12px; cursor:pointer; transition:all .15s; }
+        .btn-ghost:hover { border-color:var(--green); color:var(--green); }
+        .btn-danger  { background:transparent; color:#e05252; border:1px solid #e05252; border-radius:6px; padding:5px 10px; font-size:11px; cursor:pointer; font-family:'DM Sans',sans-serif; }
+
+        /* Selects */
+        .vp-sel { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:8px 12px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:13px; cursor:pointer; }
+        .vp-vs  { font-size:12px; color:var(--text-dim); font-weight:700; padding:0 4px; }
+
+        /* Comparison table */
+        .vp-table { width:100%; border-collapse:collapse; font-size:12px; }
+        .vp-table th { text-align:left; padding:8px 10px; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-dim); border-bottom:1px solid var(--border); white-space:nowrap; }
+        .vp-table th.num,.vp-table td.num { text-align:right; }
+        .vp-table td { padding:8px 10px; border-bottom:1px solid rgba(255,255,255,.04); }
+        .vp-table tr:hover td { background:rgba(255,255,255,.02); }
+        .vp-table .g-row td { background:var(--surface2); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-dim); padding:7px 10px; }
+        .vp-table .total-row td { border-top:2px solid var(--border); font-weight:600; }
+        .dp  { color:var(--green); font-weight:600; }
+        .dn  { color:#e05252; font-weight:600; }
+        .dz  { color:var(--text-dim); }
+        .sort-btn { background:none; border:none; cursor:pointer; color:var(--text-dim); font-size:9px; letter-spacing:1.5px; text-transform:uppercase; padding:0; font-family:'DM Sans',sans-serif; white-space:nowrap; }
+        .sort-btn.on { color:var(--green); }
+
+        /* Rankings */
+        .rank-tabs { display:flex; gap:6px; }
+        .rank-tab  { padding:6px 14px; border-radius:20px; font-size:11px; font-family:'DM Sans',sans-serif; cursor:pointer; border:1px solid var(--border); color:var(--text-dim); background:transparent; transition:all .2s; }
+        .rank-tab.active { background:rgba(61,190,122,.12); border-color:rgba(61,190,122,.35); color:var(--green); }
+        .topn-sel { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:5px 10px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:12px; }
+        .rank-item { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid rgba(255,255,255,.05); }
+        .rank-num  { font-family:'Bebas Neue',sans-serif; font-size:18px; color:var(--text-dim); min-width:32px; text-align:center; }
+        .rank-num.gold { color:#f5c842; }
+        .rank-info { flex:1; min-width:0; }
+        .rank-nombre { font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .rank-grupo  { font-size:10px; color:var(--text-dim); margin-top:2px; }
+        .rank-bar-w  { width:120px; background:var(--surface2); border-radius:4px; height:4px; overflow:hidden; margin-top:5px; }
+        .rank-bar    { height:4px; border-radius:4px; }
+        .rank-qty    { font-family:'Bebas Neue',sans-serif; font-size:22px; color:var(--text); min-width:60px; text-align:right; }
+
+        /* Periodos list */
+        .per-item { display:flex; align-items:center; gap:10px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,.05); flex-wrap:wrap; }
+        .per-badge { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:3px 10px; font-size:10px; color:var(--text-muted); letter-spacing:.5px; white-space:nowrap; }
+        .per-label { font-size:14px; font-weight:500; flex:1; min-width:120px; }
+        .per-meta  { font-size:11px; color:var(--text-dim); white-space:nowrap; }
+
+        /* Empty */
+        .vp-empty { text-align:center; padding:40px 20px; color:var(--text-dim); }
+        .vp-empty-icon { font-size:36px; margin-bottom:10px; }
+
+        /* Modal */
+        #vpModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.78); z-index:1000; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto; }
+        #vpModal.open { display:flex; }
+        .vp-mbox { background:var(--surface); border:1px solid var(--border); border-radius:20px; width:100%; max-width:780px; padding:28px; position:relative; }
+        .vp-mclose { position:absolute; top:18px; right:18px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:5px 12px; font-size:12px; cursor:pointer; color:var(--text-muted); font-family:'DM Sans',sans-serif; }
+        .vp-mtitle { font-family:'Bebas Neue',sans-serif; font-size:26px; letter-spacing:2px; margin-bottom:20px; }
+        .vp-tabs   { display:flex; gap:6px; margin-bottom:20px; }
+        .vp-tab    { padding:8px 18px; border-radius:8px; font-size:12px; font-family:'DM Sans',sans-serif; cursor:pointer; border:1px solid var(--border); color:var(--text-dim); background:transparent; }
+        .vp-tab.active { background:rgba(61,190,122,.1); border-color:rgba(61,190,122,.4); color:var(--green); font-weight:600; }
+
+        /* Form */
+        .vp-frow  { display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+        .vp-flabel { font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--text-dim); margin-bottom:4px; }
+        .vp-finput { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:9px 12px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:13px; width:100%; box-sizing:border-box; }
+        .vp-finput:focus { outline:none; border-color:var(--green); }
+
+        /* Manual rows */
+        .m-table { width:100%; border-collapse:collapse; }
+        .m-table th { text-align:left; padding:5px 6px; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-dim); border-bottom:1px solid var(--border); white-space:nowrap; }
+        .m-inp { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:6px 8px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:12px; width:100%; box-sizing:border-box; }
+        .m-inp:focus { outline:none; border-color:rgba(61,190,122,.5); }
+        .m-inp.num { text-align:right; }
+
+        /* CSV */
+        .csv-area { width:100%; height:150px; resize:vertical; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:10px 12px; color:var(--text); font-family:monospace; font-size:11px; box-sizing:border-box; }
+        .csv-area:focus { outline:none; border-color:var(--green); }
+        .csv-col-sel { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:6px 10px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:12px; }
+
+        /* Theme toggle */
+        .theme-toggle { position:fixed; bottom:20px; right:20px; z-index:999; background:var(--surface); border:1px solid var(--border); border-radius:50px; padding:8px 16px; cursor:pointer; font-family:'DM Sans',sans-serif; font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:6px; box-shadow:0 2px 12px rgba(0,0,0,.15); transition:all .2s; }
+        .theme-toggle:hover { border-color:var(--green); color:var(--green); }
+
+        @media(max-width:700px){
+            .vp-card-hdr { flex-direction:column; align-items:flex-start; }
+            .rank-tabs { flex-wrap:wrap; }
+            .per-meta { display:none; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="mod-grid-bg"></div>
+<div class="mod-glow"></div>
+
+<header class="top-bar">
+    <svg width="108" height="26" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/><path d="M14.5 28H37C35.5 23 31.5 20 25.5 20C19.5 20 16 23 14.5 28Z" fill="#1a1916"/><circle cx="45" cy="11" r="6" fill="#f5c842"/><path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/><path d="M78 41C78 34.5 83.5 30.5 92.5 29.5L104 28.5V27.5C104 23.5 101.5 21 97 21C93 21 90 23 89 26.5L80.5 24C82.5 17.5 89 13 97 13C107.5 13 113 18.5 113 28.5V54.5H104V51C102 53.5 98.5 55 94 55C85.5 55 78 50.5 78 41Z" fill="#3dbe7a"/><path d="M104 37L95.5 38C92.5 38.5 90.5 40 90.5 42.5C90.5 45 92.5 46.5 95.5 46.5C101 46.5 104 43.5 104 39V37Z" fill="#1a1916"/><path d="M126 41C126 34.5 131.5 30.5 140.5 29.5L152 28.5V27.5C152 23.5 149.5 21 145 21C141 21 138 23 137 26.5L128.5 24C130.5 17.5 137 13 145 13C155.5 13 161 18.5 161 28.5V54.5H152V51C150 53.5 146.5 55 142 55C133.5 55 126 50.5 126 41Z" fill="#3dbe7a"/><path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/><path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+    </svg>
+    <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🗃️</a>
+    <div class="top-breadcrumb">
+        <a href="index.html" style="text-decoration:none;color:inherit"><span class="top-module-badge">Administrativo</span></a>
+        <span class="top-sep">|</span>
+        <span class="top-section-name">Ventas por Producto</span>
+    </div>
+</header>
+<div id="ctxBar" class="ctx-bar" style="display:none"></div>
+
+<div class="vp-wrap">
+
+    <!-- Header -->
+    <div class="vp-hdr">
+        <div>
+            <div class="vp-eyebrow">Control Administrativo</div>
+            <div class="vp-title">Ventas por <span>Producto</span></div>
+        </div>
+        <button class="btn-primary" onclick="abrirModal()">+ Cargar periodo</button>
+    </div>
+
+    <!-- ── Comparativa ── -->
+    <div class="vp-card">
+        <div class="vp-card-hdr">
+            <div class="vp-card-title">📊 Comparativa</div>
+            <select id="selA" class="vp-sel" onchange="renderComparativa()">
+                <option value="">— Periodo A —</option>
+            </select>
+            <span class="vp-vs">VS</span>
+            <select id="selB" class="vp-sel" onchange="renderComparativa()">
+                <option value="">— Periodo B —</option>
+            </select>
+        </div>
+        <div id="compBody">
+            <div class="vp-empty"><div class="vp-empty-icon">📊</div>Carga al menos dos periodos para comparar</div>
+        </div>
+    </div>
+
+    <!-- ── Rankings ── -->
+    <div class="vp-card">
+        <div class="vp-card-hdr">
+            <div class="vp-card-title">🏆 Rankings</div>
+            <select id="selRank" class="vp-sel" onchange="renderRankings()">
+                <option value="">— Seleccionar periodo —</option>
+            </select>
+            <select class="topn-sel" id="topN" onchange="renderRankings()">
+                <option value="10">Top 10</option>
+                <option value="20">Top 20</option>
+                <option value="30">Top 30</option>
+                <option value="50">Top 50</option>
+            </select>
+            <div class="rank-tabs">
+                <button class="rank-tab active" id="rtMas"   onclick="setRankTab('mas')">▲ Más vendidos</button>
+                <button class="rank-tab"        id="rtMenos" onclick="setRankTab('menos')">▼ Menos vendidos</button>
+                <button class="rank-tab"        id="rtGrupo" onclick="setRankTab('grupo')">≡ Por grupo</button>
+            </div>
+        </div>
+        <div id="rankBody">
+            <div class="vp-empty"><div class="vp-empty-icon">🏆</div>Selecciona un periodo para ver el ranking</div>
+        </div>
+    </div>
+
+    <!-- ── Periodos cargados ── -->
+    <div class="vp-card">
+        <div class="vp-card-hdr">
+            <div class="vp-card-title">📅 Periodos cargados</div>
+            <span id="cntPer" style="font-size:11px;color:var(--text-dim)"></span>
+        </div>
+        <div id="perBody">
+            <div class="vp-empty" style="padding:24px"><div class="vp-empty-icon" style="font-size:28px">📂</div>Sin periodos aún</div>
+        </div>
+    </div>
+
+</div><!-- /vp-wrap -->
+
+<!-- ══════════════════════════════════════════════
+     MODAL — Cargar periodo
+══════════════════════════════════════════════ -->
+<div id="vpModal" onclick="if(event.target===this)cerrarModal()">
+<div class="vp-mbox">
+    <button class="vp-mclose" onclick="cerrarModal()">✕ Cerrar</button>
+    <div class="vp-mtitle" id="vpModalTitle">Cargar Periodo</div>
+
+    <!-- Tabs -->
+    <div class="vp-tabs">
+        <button class="vp-tab active" id="tabM" onclick="setModalTab('manual')">✏️ Manual</button>
+        <button class="vp-tab"        id="tabC" onclick="setModalTab('csv')">📋 Desde CSV</button>
+    </div>
+
+    <!-- ── PANEL MANUAL ── -->
+    <div id="panelManual">
+        <div class="vp-frow">
+            <div style="flex:2;min-width:160px">
+                <div class="vp-flabel">Nombre del periodo *</div>
+                <input id="mLabel" class="vp-finput" type="text" placeholder="ej. Anual 2025, Mayo 2026, Semana 22…">
+            </div>
+            <div style="flex:1;min-width:120px">
+                <div class="vp-flabel">Tipo</div>
+                <select id="mTipo" class="vp-finput">
+                    <option value="anio">Año</option>
+                    <option value="mes">Mes</option>
+                    <option value="semana">Semana</option>
+                    <option value="dia">Día</option>
+                </select>
+            </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+            <button class="btn-ghost" onclick="_mAdd()">+ Agregar fila</button>
+            <button class="btn-ghost" onclick="_mDesdeMenu()">📋 Cargar desde menú</button>
+            <button class="btn-ghost" onclick="_mClear()">🗑 Limpiar</button>
+        </div>
+        <div style="overflow-x:auto;max-height:340px;overflow-y:auto">
+            <table class="m-table">
+                <thead>
+                    <tr>
+                        <th style="width:130px">Grupo / Categoría</th>
+                        <th>Platillo / Producto *</th>
+                        <th style="width:80px">Cantidad *</th>
+                        <th style="width:80px">Precio $</th>
+                        <th style="width:80px">Costo $</th>
+                        <th style="width:28px"></th>
+                    </tr>
+                </thead>
+                <tbody id="mRows"></tbody>
+            </table>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
+            <button class="btn-ghost" onclick="cerrarModal()">Cancelar</button>
+            <button class="btn-primary" onclick="guardarManual()">Guardar periodo</button>
+        </div>
+    </div>
+
+    <!-- ── PANEL CSV ── -->
+    <div id="panelCsv" style="display:none">
+        <div class="vp-frow">
+            <div style="flex:2;min-width:160px">
+                <div class="vp-flabel">Nombre del periodo *</div>
+                <input id="cLabel" class="vp-finput" type="text" placeholder="ej. Anual 2025, Mayo 2026…">
+            </div>
+            <div style="flex:1;min-width:120px">
+                <div class="vp-flabel">Tipo</div>
+                <select id="cTipo" class="vp-finput">
+                    <option value="anio">Año</option>
+                    <option value="mes">Mes</option>
+                    <option value="semana">Semana</option>
+                    <option value="dia">Día</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="vp-flabel" style="margin-bottom:6px">Pega el CSV / reporte de Soft Restaurants</div>
+        <textarea id="csvTxt" class="csv-area" placeholder="Grupo&#9;Platillo&#9;Cantidad&#10;ENTRADAS&#9;Tostada de pulpo&#9;45&#10;ENTRADAS&#9;Panuchos de Maíz Azul&#9;132&#10;&#10;Acepta: TSV, CSV o columnas separadas por ; · También detecta encabezados automáticamente"></textarea>
+
+        <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button class="btn-ghost" onclick="_csvDetectar()">🔍 Detectar columnas</button>
+        </div>
+
+        <!-- Column selectors (aparecen tras detectar) -->
+        <div id="csvColSel" style="display:none;margin-top:14px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px">
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">Asigna las columnas detectadas:</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;flex-wrap:wrap">
+                <div>
+                    <div class="vp-flabel">Nombre platillo *</div>
+                    <select id="csvColNombre" class="csv-col-sel" style="width:100%"></select>
+                </div>
+                <div>
+                    <div class="vp-flabel">Grupo (opc.)</div>
+                    <select id="csvColGrupo" class="csv-col-sel" style="width:100%"></select>
+                </div>
+                <div>
+                    <div class="vp-flabel">Cantidad *</div>
+                    <select id="csvColCantidad" class="csv-col-sel" style="width:100%"></select>
+                </div>
+                <div>
+                    <div class="vp-flabel">Precio (opc.)</div>
+                    <select id="csvColPrecio" class="csv-col-sel" style="width:100%"></select>
+                </div>
+            </div>
+            <button class="btn-ghost" style="margin-top:10px" onclick="_csvPrevisualizarConCols()">👁 Previsualizar</button>
+        </div>
+
+        <div id="csvPreview" style="display:none;margin-top:12px"></div>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
+            <button class="btn-ghost" onclick="cerrarModal()">Cancelar</button>
+            <button class="btn-primary" id="btnGuardarCsv" style="display:none" onclick="guardarCsv()">Guardar periodo</button>
+        </div>
+    </div>
+
+</div><!-- /vp-mbox -->
+</div><!-- /vpModal -->
+
+<!-- ── theme toggle ── -->
+<button class="theme-toggle" onclick="toggleTheme()">
+    <span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span>
+</button>
+
+<script>
+/* ══════════════════════════════════════════════════════
+   VENTAS POR PRODUCTO — lógica completa
+══════════════════════════════════════════════════════ */
+
+/* ── Utils ── */
+function _uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function _esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _n(v){ return parseFloat(v)||0; }
+function _fmt(n){ return Number.isFinite(n)?n.toLocaleString('es-MX'):'0'; }
+
+/* ── Storage ── */
+function _sk(){
+    var id=localStorage.getItem('etaax_negocio_activo');
+    return id?'etaax_'+id+'_ventas_productos':'etaax_ventas_productos';
+}
+function _load(){ return JSON.parse(localStorage.getItem(_sk())||'[]'); }
+function _save(d){ localStorage.setItem(_sk(),JSON.stringify(d)); }
+function _loadMenu(){ return JSON.parse(localStorage.getItem('etaax_recetas')||'[]'); }
+
+/* ── State ── */
+var _rankTab='mas';
+var _sortCol='nombre';
+var _sortDir=1;
+var _editId=null;
+var _mFilas=[];
+var _csvHeaders=[];
+var _csvRows=[];
+var _csvParsed=[];
+
+/* ── Modal ── */
+function abrirModal(id){
+    _editId=id||null;
+    _csvParsed=[];
+    document.getElementById('vpModal').classList.add('open');
+    document.getElementById('vpModalTitle').textContent=id?'Editar Periodo':'Cargar Periodo';
+    setModalTab('manual');
+    if(id){
+        var p=_load().find(function(x){return x.id===id;});
+        if(p){
+            document.getElementById('mLabel').value=p.label||'';
+            document.getElementById('mTipo').value=p.tipo||'anio';
+            _mFilas=(p.platillos||[]).map(function(pl){
+                return {id:_uid(),grupo:pl.grupo||'',nombre:pl.nombre||'',cantidad:pl.cantidad!=null?pl.cantidad:'',precio:pl.precio!=null?pl.precio:'',costo:pl.costo!=null?pl.costo:''};
+            });
+            _mRender();
+        }
+    } else {
+        _mFilas=[];
+        document.getElementById('mLabel').value='';
+        document.getElementById('cLabel').value='';
+        document.getElementById('csvTxt').value='';
+        document.getElementById('csvColSel').style.display='none';
+        document.getElementById('csvPreview').style.display='none';
+        document.getElementById('btnGuardarCsv').style.display='none';
+        _mAdd();
+    }
+}
+function cerrarModal(){ document.getElementById('vpModal').classList.remove('open'); }
+
+function setModalTab(t){
+    document.getElementById('tabM').classList.toggle('active',t==='manual');
+    document.getElementById('tabC').classList.toggle('active',t==='csv');
+    document.getElementById('panelManual').style.display=t==='manual'?'':'none';
+    document.getElementById('panelCsv').style.display=t==='csv'?'':'none';
+}
+
+/* ── Manual mode ── */
+function _mAdd(grupo,nombre,cantidad,precio,costo){
+    _mFilas.push({id:_uid(),grupo:grupo||'',nombre:nombre||'',cantidad:cantidad!=null?cantidad:'',precio:precio!=null?precio:'',costo:costo!=null?costo:''});
+    _mRender();
+}
+function _mClear(){ _mFilas=[]; _mRender(); }
+
+function _mDesdeMenu(){
+    var recetas=_loadMenu();
+    if(!recetas.length){alert('No hay platillos en el menú de este negocio.');return;}
+    var existing=new Set(_mFilas.map(function(f){return f.nombre.toLowerCase();}));
+    var added=0;
+    recetas.forEach(function(r){
+        if(!r.nombre||existing.has(r.nombre.toLowerCase()))return;
+        _mFilas.push({id:_uid(),grupo:r.grupo||'',nombre:r.nombre,cantidad:'',precio:r.precioVenta||'',costo:''});
+        existing.add(r.nombre.toLowerCase());
+        added++;
+    });
+    _mRender();
+    if(!added)alert('Todos los platillos del menú ya están en la tabla.');
+}
+
+function _mRender(){
+    document.getElementById('mRows').innerHTML=_mFilas.map(function(f){
+        return '<tr>'+
+            '<td style="padding:3px 4px"><input class="m-inp" value="'+_esc(f.grupo)+'" oninput="_mUpd(\''+f.id+'\',\'grupo\',this.value)" placeholder="Grupo…"></td>'+
+            '<td style="padding:3px 4px"><input class="m-inp" value="'+_esc(f.nombre)+'" oninput="_mUpd(\''+f.id+'\',\'nombre\',this.value)" placeholder="Nombre *"></td>'+
+            '<td style="padding:3px 4px"><input class="m-inp num" type="number" min="0" value="'+_esc(f.cantidad)+'" oninput="_mUpd(\''+f.id+'\',\'cantidad\',this.value)" placeholder="0"></td>'+
+            '<td style="padding:3px 4px"><input class="m-inp num" type="number" min="0" step="0.01" value="'+_esc(f.precio)+'" oninput="_mUpd(\''+f.id+'\',\'precio\',this.value)" placeholder="—"></td>'+
+            '<td style="padding:3px 4px"><input class="m-inp num" type="number" min="0" step="0.01" value="'+_esc(f.costo)+'" oninput="_mUpd(\''+f.id+'\',\'costo\',this.value)" placeholder="—"></td>'+
+            '<td style="padding:3px 2px"><button onclick="_mDel(\''+f.id+'\')" style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:14px;padding:2px 6px">✕</button></td>'+
+        '</tr>';
+    }).join('');
+}
+function _mUpd(id,k,v){ var f=_mFilas.find(function(x){return x.id===id;}); if(f)f[k]=v; }
+function _mDel(id){ _mFilas=_mFilas.filter(function(f){return f.id!==id;}); _mRender(); }
+
+function guardarManual(){
+    var label=(document.getElementById('mLabel').value||'').trim();
+    if(!label){alert('Escribe un nombre para el periodo.');return;}
+    var platillos=_mFilas.filter(function(f){return f.nombre.trim()&&f.cantidad!=='';}).map(function(f){
+        return {
+            grupo:f.grupo.trim(),nombre:f.nombre.trim(),
+            cantidad:_n(f.cantidad),
+            precio:f.precio!==''&&f.precio!=null?_n(f.precio):null,
+            costo:f.costo!==''&&f.costo!=null?_n(f.costo):null
+        };
+    });
+    if(!platillos.length){alert('Agrega al menos un platillo con nombre y cantidad.');return;}
+    var data=_load();
+    if(_editId){
+        var idx=data.findIndex(function(x){return x.id===_editId;});
+        if(idx>=0)data[idx]=Object.assign(data[idx],{label:label,tipo:document.getElementById('mTipo').value,platillos:platillos});
+    } else {
+        data.push({id:_uid(),label:label,tipo:document.getElementById('mTipo').value,platillos:platillos,fuente:'manual',createdAt:new Date().toISOString()});
+    }
+    _save(data); cerrarModal(); init();
+}
+
+/* ── CSV mode ── */
+function _csvDetectar(){
+    var raw=document.getElementById('csvTxt').value.trim();
+    if(!raw){alert('Pega el contenido del CSV primero.');return;}
+    var lines=raw.split(/\r?\n/).filter(function(l){return l.trim();});
+    var sep=lines[0].includes('\t')?'\t':lines[0].includes(';')?';':',';
+    _csvRows=lines.map(function(l){return l.split(sep).map(function(c){return c.trim().replace(/^["']|["']$/g,'');});});
+
+    // Detect if first row is a header (has non-numeric text in non-first cols)
+    var maybeHdr=_csvRows[0].some(function(c,i){return i>0&&isNaN(parseFloat(c))&&c.length>0;});
+    _csvHeaders=maybeHdr?_csvRows[0]:_csvRows[0].map(function(_,i){return 'Columna '+(i+1);});
+
+    // Build options for selectors
+    var noneOpt='<option value="-1">— Ninguna —</option>';
+    var opts=_csvHeaders.map(function(h,i){return '<option value="'+i+'">'+_esc(h)+'</option>';}).join('');
+
+    // Auto-detect best column for each field
+    var hLow=_csvHeaders.map(function(h){return h.toLowerCase();});
+    function bestIdx(keywords,defIdx){
+        for(var k=0;k<keywords.length;k++){
+            for(var i=0;i<hLow.length;i++){
+                if(hLow[i].includes(keywords[k]))return i;
+            }
+        }
+        return defIdx;
+    }
+    var iNombre  =bestIdx(['platillo','nombre','producto','item','descripcion','name'],0);
+    var iGrupo   =bestIdx(['grupo','categoria','category','group','seccion'],maybeHdr?-1:-1);
+    var iCantidad=bestIdx(['cantidad','piezas','qty','quantity','vendid','venta anual','ventas'],maybeHdr?1:1);
+    var iPrecio  =bestIdx(['precio','price','carta','p.v.p'],maybeHdr?-1:-1);
+
+    document.getElementById('csvColNombre').innerHTML=opts;
+    document.getElementById('csvColGrupo').innerHTML=noneOpt+opts;
+    document.getElementById('csvColCantidad').innerHTML=opts;
+    document.getElementById('csvColPrecio').innerHTML=noneOpt+opts;
+
+    document.getElementById('csvColNombre').value=iNombre;
+    document.getElementById('csvColGrupo').value=iGrupo;
+    document.getElementById('csvColCantidad').value=iCantidad;
+    document.getElementById('csvColPrecio').value=iPrecio;
+
+    document.getElementById('csvColSel').style.display='';
+    document.getElementById('csvPreview').style.display='none';
+    document.getElementById('btnGuardarCsv').style.display='none';
+}
+
+function _csvPrevisualizarConCols(){
+    var iN=parseInt(document.getElementById('csvColNombre').value);
+    var iG=parseInt(document.getElementById('csvColGrupo').value);
+    var iC=parseInt(document.getElementById('csvColCantidad').value);
+    var iP=parseInt(document.getElementById('csvColPrecio').value);
+    var startRow=_csvHeaders[0]&&isNaN(parseFloat(_csvHeaders[0]))?1:0;
+
+    _csvParsed=[];
+    for(var i=startRow;i<_csvRows.length;i++){
+        var r=_csvRows[i];
+        var nombre=iN>=0?(r[iN]||''):'';
+        var cant=iC>=0?parseFloat((r[iC]||'').replace(/[^0-9.]/g,'')):NaN;
+        if(!nombre.trim()||isNaN(cant))continue;
+        _csvParsed.push({
+            nombre:nombre.trim(),
+            grupo:iG>=0?(r[iG]||'').trim():'',
+            cantidad:cant,
+            precio:iP>=0&&r[iP]?parseFloat((r[iP]||'').replace(/[^0-9.]/g,''))||null:null,
+            costo:null
+        });
+    }
+
+    var prev=document.getElementById('csvPreview');
+    if(!_csvParsed.length){
+        prev.innerHTML='<div style="color:#e05252;font-size:13px;padding:10px">⚠️ No se detectaron datos válidos. Revisa las columnas seleccionadas.</div>';
+        prev.style.display='';
+        document.getElementById('btnGuardarCsv').style.display='none';
+        return;
+    }
+
+    var html='<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;max-height:200px;overflow-y:auto">'+
+        '<div style="font-size:11px;color:var(--green);margin-bottom:8px">✓ '+_csvParsed.length+' platillos detectados</div>'+
+        '<table style="width:100%;border-collapse:collapse;font-size:11px">'+
+        '<tr style="border-bottom:1px solid var(--border)">'+
+        '<th style="text-align:left;padding:4px 8px;font-size:9px;color:var(--text-dim);letter-spacing:1.5px;text-transform:uppercase">GRUPO</th>'+
+        '<th style="text-align:left;padding:4px 8px;font-size:9px;color:var(--text-dim);letter-spacing:1.5px;text-transform:uppercase">PLATILLO</th>'+
+        '<th style="text-align:right;padding:4px 8px;font-size:9px;color:var(--text-dim);letter-spacing:1.5px;text-transform:uppercase">CANT.</th>'+
+        '<th style="text-align:right;padding:4px 8px;font-size:9px;color:var(--text-dim);letter-spacing:1.5px;text-transform:uppercase">PRECIO</th>'+
+        '</tr>'+
+        _csvParsed.slice(0,20).map(function(r){
+            return '<tr style="border-bottom:1px solid rgba(255,255,255,.04)">'+
+                '<td style="padding:5px 8px;color:var(--text-dim)">'+_esc(r.grupo||'—')+'</td>'+
+                '<td style="padding:5px 8px">'+_esc(r.nombre)+'</td>'+
+                '<td style="padding:5px 8px;text-align:right;font-weight:600">'+r.cantidad.toLocaleString()+'</td>'+
+                '<td style="padding:5px 8px;text-align:right;color:var(--text-dim)">'+(r.precio?'$'+r.precio:'—')+'</td>'+
+            '</tr>';
+        }).join('')+
+        (_csvParsed.length>20?'<tr><td colspan="4" style="padding:6px 8px;text-align:center;color:var(--text-dim);font-size:10px">…y '+(_csvParsed.length-20)+' filas más</td></tr>':'')+
+        '</table></div>';
+    prev.innerHTML=html;
+    prev.style.display='';
+    document.getElementById('btnGuardarCsv').style.display='';
+}
+
+function guardarCsv(){
+    var label=(document.getElementById('cLabel').value||'').trim();
+    if(!label){alert('Escribe un nombre para el periodo.');return;}
+    if(!_csvParsed.length){alert('Primero parsea y previsualiza el CSV.');return;}
+    var data=_load();
+    data.push({id:_uid(),label:label,tipo:document.getElementById('cTipo').value,platillos:_csvParsed,fuente:'csv',createdAt:new Date().toISOString()});
+    _save(data); cerrarModal(); init();
+}
+
+/* ── Comparativa ── */
+function setSort(col){
+    if(_sortCol===col)_sortDir=-_sortDir; else{_sortCol=col;_sortDir=col==='deltaPct'||col==='delta'?-1:1;}
+    renderComparativa();
+}
+
+function renderComparativa(){
+    var idA=document.getElementById('selA').value;
+    var idB=document.getElementById('selB').value;
+    var body=document.getElementById('compBody');
+    if(!idA||!idB){body.innerHTML='<div class="vp-empty"><div class="vp-empty-icon">📊</div>Selecciona dos periodos para comparar</div>';return;}
+    if(idA===idB){body.innerHTML='<div class="vp-empty" style="color:#e05252">⚠️ Elige periodos diferentes</div>';return;}
+    var data=_load();
+    var pA=data.find(function(x){return x.id===idA;});
+    var pB=data.find(function(x){return x.id===idB;});
+    if(!pA||!pB)return;
+
+    var mapA={},mapB={};
+    (pA.platillos||[]).forEach(function(p){mapA[p.grupo+'\0'+p.nombre]=p;});
+    (pB.platillos||[]).forEach(function(p){mapB[p.grupo+'\0'+p.nombre]=p;});
+    var keys=Object.keys(Object.assign({},mapA,mapB));
+
+    var rows=keys.map(function(k){
+        var pts=k.split('\0');
+        var pa=mapA[k]||{cantidad:0};
+        var pb=mapB[k]||{cantidad:0};
+        var ca=_n(pa.cantidad),cb=_n(pb.cantidad);
+        var delta=cb-ca;
+        var deltaPct=ca>0?((delta/ca)*100):(cb>0?100:0);
+        return {grupo:pts[0],nombre:pts[1],ca:ca,cb:cb,delta:delta,deltaPct:deltaPct,
+            precio:pa.precio||pb.precio||null,costo:pa.costo||pb.costo||null};
+    });
+
+    // Sort
+    rows.sort(function(a,b){
+        if(_sortCol==='nombre')return _sortDir*(a.nombre<b.nombre?-1:a.nombre>b.nombre?1:0);
+        if(_sortCol==='grupo') return _sortDir*(a.grupo<b.grupo?-1:a.grupo>b.grupo?1:0);
+        return _sortDir*(_n(a[_sortCol])-_n(b[_sortCol]));
+    });
+
+    // Group
+    var grupos={},gOrder=[];
+    rows.forEach(function(r){if(!grupos[r.grupo]){grupos[r.grupo]=[];gOrder.push(r.grupo);}grupos[r.grupo].push(r);});
+
+    var hasPrecio=rows.some(function(r){return r.precio!=null;});
+    var hasCosto =rows.some(function(r){return r.costo!=null;});
+
+    function dClass(v){return v>0?'dp':v<0?'dn':'dz';}
+    function dSign(v){return v>0?'+':'';}
+    function sBtnCls(c){return 'sort-btn'+((_sortCol===c)?' on':'');}
+    function sArrow(c){return _sortCol===c?(_sortDir>0?'▲':'▼'):'↕';}
+
+    var html='<div style="overflow-x:auto"><table class="vp-table"><thead><tr>'+
+        '<th><button class="'+sBtnCls('nombre')+'" onclick="setSort(\'nombre\')">PLATILLO '+sArrow('nombre')+'</button></th>'+
+        (hasPrecio?'<th class="num">PRECIO</th>':'')+
+        (hasCosto ?'<th class="num">COSTO</th>' :'')+
+        '<th class="num"><button class="'+sBtnCls('ca')+'" onclick="setSort(\'ca\')">'+_esc(pA.label)+' '+sArrow('ca')+'</button></th>'+
+        '<th class="num"><button class="'+sBtnCls('cb')+'" onclick="setSort(\'cb\')">'+_esc(pB.label)+' '+sArrow('cb')+'</button></th>'+
+        '<th class="num"><button class="'+sBtnCls('delta')+'" onclick="setSort(\'delta\')">Δ '+sArrow('delta')+'</button></th>'+
+        '<th class="num"><button class="'+sBtnCls('deltaPct')+'" onclick="setSort(\'deltaPct\')">Δ% '+sArrow('deltaPct')+'</button></th>'+
+        '</tr></thead><tbody>';
+
+    gOrder.forEach(function(g){
+        var gr=grupos[g];
+        var sA=gr.reduce(function(s,r){return s+r.ca;},0);
+        var sB=gr.reduce(function(s,r){return s+r.cb;},0);
+        var gD=sB-sA; var gP=sA>0?((gD/sA)*100):(sB>0?100:0);
+        var gc=dClass(gD);
+        var extraCols=(hasPrecio?1:0)+(hasCosto?1:0);
+        html+='<tr class="g-row">'+
+            '<td colspan="'+(1+extraCols)+'">'+(g||'Sin grupo')+'</td>'+
+            '<td class="num">'+_fmt(sA)+'</td>'+
+            '<td class="num">'+_fmt(sB)+'</td>'+
+            '<td class="num '+gc+'">'+dSign(gD)+_fmt(gD)+'</td>'+
+            '<td class="num '+gc+'">'+dSign(gP)+gP.toFixed(1)+'%</td>'+
+        '</tr>';
+        gr.forEach(function(r){
+            var dc=dClass(r.delta);
+            html+='<tr>'+
+                '<td style="padding-left:18px">'+_esc(r.nombre)+'</td>'+
+                (hasPrecio?'<td class="num" style="color:var(--text-dim)">'+(r.precio!=null?'$'+r.precio.toFixed(2):'—')+'</td>':'')+
+                (hasCosto ?'<td class="num" style="color:var(--text-dim)">'+(r.costo !=null?'$'+r.costo.toFixed(2) :'—')+'</td>':'')+
+                '<td class="num">'+_fmt(r.ca)+'</td>'+
+                '<td class="num">'+_fmt(r.cb)+'</td>'+
+                '<td class="num '+dc+'">'+dSign(r.delta)+_fmt(r.delta)+'</td>'+
+                '<td class="num '+dc+'">'+dSign(r.deltaPct)+r.deltaPct.toFixed(1)+'%</td>'+
+            '</tr>';
+        });
+    });
+
+    // Totals
+    var tA=rows.reduce(function(s,r){return s+r.ca;},0);
+    var tB=rows.reduce(function(s,r){return s+r.cb;},0);
+    var tD=tB-tA; var tP=tA>0?((tD/tA)*100):0;
+    var tc=dClass(tD);
+    var extraCols=(hasPrecio?1:0)+(hasCosto?1:0);
+    html+='<tr class="total-row">'+
+        '<td colspan="'+(1+extraCols)+'">TOTAL</td>'+
+        '<td class="num">'+_fmt(tA)+'</td>'+
+        '<td class="num">'+_fmt(tB)+'</td>'+
+        '<td class="num '+tc+'">'+dSign(tD)+_fmt(tD)+'</td>'+
+        '<td class="num '+tc+'">'+dSign(tP)+tP.toFixed(1)+'%</td>'+
+    '</tr>';
+
+    html+='</tbody></table></div>';
+    body.innerHTML=html;
+}
+
+/* ── Rankings ── */
+function setRankTab(t){
+    _rankTab=t;
+    ['Mas','Menos','Grupo'].forEach(function(x){document.getElementById('rt'+x).classList.toggle('active',t===x.toLowerCase());});
+    renderRankings();
+}
+
+function renderRankings(){
+    var id=document.getElementById('selRank').value;
+    var body=document.getElementById('rankBody');
+    if(!id){body.innerHTML='<div class="vp-empty"><div class="vp-empty-icon">🏆</div>Selecciona un periodo</div>';return;}
+    var p=_load().find(function(x){return x.id===id;});
+    if(!p)return;
+    var n=parseInt(document.getElementById('topN').value)||10;
+    var pls=(p.platillos||[]).slice();
+
+    if(_rankTab==='grupo'){
+        var gm={};
+        pls.forEach(function(pl){var g=pl.grupo||'Sin grupo';gm[g]=(gm[g]||0)+_n(pl.cantidad);});
+        var ga=Object.keys(gm).map(function(g){return{nombre:g,cantidad:gm[g]};});
+        ga.sort(function(a,b){return b.cantidad-a.cantidad;});
+        var mx=ga[0]?ga[0].cantidad:1;
+        body.innerHTML=ga.map(function(g,i){
+            var pct=mx>0?(g.cantidad/mx*100):0;
+            return '<div class="rank-item">'+
+                '<div class="rank-num'+(i<3?' gold':'')+'">'+_esc(g.nombre)+'</div>'+
+                '<div class="rank-info">'+
+                    '<div class="rank-bar-w" style="width:100%;max-width:200px"><div class="rank-bar" style="width:'+pct+'%;background:var(--green)"></div></div>'+
+                '</div>'+
+                '<div class="rank-qty">'+_fmt(g.cantidad)+'</div>'+
+            '</div>';
+        }).join('')||'<div class="vp-empty">Sin datos</div>';
+        return;
+    }
+
+    pls.sort(function(a,b){return _rankTab==='mas'?_n(b.cantidad)-_n(a.cantidad):_n(a.cantidad)-_n(b.cantidad);});
+    var lista=pls.slice(0,n);
+    var mx=lista.length?Math.max.apply(null,lista.map(function(x){return _n(x.cantidad);})):1;
+    var barColor=_rankTab==='menos'?'#e05252':'var(--green)';
+
+    body.innerHTML=lista.map(function(pl,i){
+        var q=_n(pl.cantidad);
+        var pct=mx>0?(q/mx*100):0;
+        return '<div class="rank-item">'+
+            '<div class="rank-num'+(i<3?' gold':'')+'">#'+(i+1)+'</div>'+
+            '<div class="rank-info">'+
+                '<div class="rank-nombre">'+_esc(pl.nombre)+'</div>'+
+                (pl.grupo?'<div class="rank-grupo">'+_esc(pl.grupo)+'</div>':'')+
+                '<div class="rank-bar-w"><div class="rank-bar" style="width:'+pct+'%;background:'+barColor+'"></div></div>'+
+            '</div>'+
+            (pl.precio!=null?'<div style="font-size:11px;color:var(--text-dim);white-space:nowrap;margin-right:8px">$'+pl.precio+'</div>':'')+
+            '<div class="rank-qty">'+_fmt(q)+'</div>'+
+        '</div>';
+    }).join('')||'<div class="vp-empty">Sin datos</div>';
+}
+
+/* ── Periodos ── */
+function renderPeriodos(){
+    var data=_load();
+    document.getElementById('cntPer').textContent=data.length+' periodo'+(data.length!==1?'s':'');
+    if(!data.length){
+        document.getElementById('perBody').innerHTML='<div class="vp-empty" style="padding:24px"><div class="vp-empty-icon" style="font-size:28px">📂</div>Sin periodos aún</div>';
+        return;
+    }
+    var tl={anio:'Año',mes:'Mes',semana:'Semana',dia:'Día'};
+    document.getElementById('perBody').innerHTML=data.map(function(p){
+        var fecha=p.createdAt?new Date(p.createdAt).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}):'—';
+        return '<div class="per-item">'+
+            '<span class="per-badge">'+_esc(tl[p.tipo]||p.tipo)+'</span>'+
+            '<div class="per-label">'+_esc(p.label)+'</div>'+
+            '<div class="per-meta">'+(p.platillos||[]).length+' platillos · '+(p.fuente==='csv'?'📋 CSV':'✏️ Manual')+' · '+fecha+'</div>'+
+            '<button class="btn-ghost" style="font-size:11px;padding:5px 10px" onclick="abrirModal(\''+p.id+'\')">Editar</button>'+
+            '<button class="btn-danger" onclick="eliminarPeriodo(\''+p.id+'\')">Eliminar</button>'+
+        '</div>';
+    }).join('');
+}
+
+function eliminarPeriodo(id){
+    var p=_load().find(function(x){return x.id===id;});
+    if(!p||!confirm('¿Eliminar "'+p.label+'"?'))return;
+    _save(_load().filter(function(x){return x.id!==id;}));
+    init();
+}
+
+/* ── Populate selects ── */
+function _poblarSelects(){
+    var data=_load();
+    function makeOpts(placeholder){
+        return '<option value="">'+placeholder+'</option>'+data.map(function(p){return '<option value="'+p.id+'">'+_esc(p.label)+'</option>';}).join('');
+    }
+    var elA=document.getElementById('selA'),elB=document.getElementById('selB'),elR=document.getElementById('selRank');
+    var pA=elA.value,pB=elB.value,pR=elR.value;
+    elA.innerHTML=makeOpts('— Periodo A —');
+    elB.innerHTML=makeOpts('— Periodo B —');
+    elR.innerHTML=makeOpts('— Seleccionar —');
+    if(pA)elA.value=pA; if(pB)elB.value=pB; if(pR)elR.value=pR;
+    // Auto-select last two for comparativa
+    if(!elA.value&&!elB.value&&data.length>=2){elA.value=data[data.length-2].id;elB.value=data[data.length-1].id;}
+    if(!elR.value&&data.length)elR.value=data[data.length-1].id;
+}
+
+/* ── Init ── */
+function init(){
+    _poblarSelects();
+    renderComparativa();
+    renderRankings();
+    renderPeriodos();
+}
+
+document.addEventListener('DOMContentLoaded',function(){init();_mAdd();});
+</script>
+
+<script>
+(function(){
+    var saved=localStorage.getItem('etaax_theme')||'dark';
+    document.documentElement.setAttribute('data-theme',saved);
+    document.addEventListener('DOMContentLoaded',function(){
+        if(saved==='light'){document.getElementById('themeIcon').textContent='🌙';document.getElementById('themeLabel').textContent='Modo oscuro';}
+    });
+})();
+function toggleTheme(){
+    var next=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';
+    document.documentElement.setAttribute('data-theme',next);
+    localStorage.setItem('etaax_theme',next);
+    document.getElementById('themeIcon').textContent=next==='light'?'🌙':'☀️';
+    document.getElementById('themeLabel').textContent=next==='light'?'Modo oscuro':'Modo claro';
+}
+</script>
+<script src="../security.js"></script>
+<script src="../ctx-bar.js"></script>
+</body>
+</html>
