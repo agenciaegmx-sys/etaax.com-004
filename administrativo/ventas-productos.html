@@ -83,13 +83,6 @@
         .vp-finput { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:9px 12px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:13px; width:100%; box-sizing:border-box; }
         .vp-finput:focus { outline:none; border-color:var(--green); }
 
-        /* Manual rows */
-        .m-table { width:100%; border-collapse:collapse; }
-        .m-table th { text-align:left; padding:5px 6px; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-dim); border-bottom:1px solid var(--border); white-space:nowrap; }
-        .m-inp { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:6px 8px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:12px; width:100%; box-sizing:border-box; }
-        .m-inp:focus { outline:none; border-color:rgba(61,190,122,.5); }
-        .m-inp.num { text-align:right; }
-
         /* CSV */
         .csv-area { width:100%; height:150px; resize:vertical; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:10px 12px; color:var(--text); font-family:monospace; font-size:11px; box-sizing:border-box; }
         .csv-area:focus { outline:none; border-color:var(--green); }
@@ -220,25 +213,28 @@
                 </select>
             </div>
         </div>
-        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-            <button class="btn-ghost" onclick="_mAdd()">+ Agregar fila</button>
-            <button class="btn-ghost" onclick="_mDesdeMenu()">📋 Cargar desde menú</button>
-            <button class="btn-ghost" onclick="_mClear()">🗑 Limpiar</button>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
+            Haz clic en una celda y pega (Ctrl+V) — una columna a la vez o un rango completo desde Excel.
         </div>
-        <div style="overflow-x:auto;max-height:340px;overflow-y:auto">
-            <table class="m-table">
+        <div style="overflow-x:auto;max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
+            <table id="vpPasteTable" class="paste-table">
                 <thead>
                     <tr>
-                        <th style="width:130px">Grupo / Categoría</th>
-                        <th>Platillo / Producto *</th>
-                        <th style="width:80px">Cantidad *</th>
-                        <th style="width:80px">Precio $</th>
-                        <th style="width:80px">Costo $</th>
-                        <th style="width:28px"></th>
+                        <th style="width:28px">#</th>
+                        <th style="min-width:130px">Grupo / Categoría</th>
+                        <th style="min-width:200px">Platillo / Producto *</th>
+                        <th style="min-width:90px">Cantidad *</th>
+                        <th style="min-width:90px">Precio $</th>
+                        <th style="min-width:90px">Costo $</th>
                     </tr>
                 </thead>
-                <tbody id="mRows"></tbody>
+                <tbody id="vpPasteBody"></tbody>
             </table>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+            <button class="btn-ghost" onclick="_vpAddRows()">+ 10 filas</button>
+            <button class="btn-ghost" onclick="_vpDesdeMenu()">📋 Desde menú</button>
+            <button class="btn-ghost" style="color:#e05252;border-color:#e05252" onclick="_vpClear()">🗑 Limpiar</button>
         </div>
         <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
             <button class="btn-ghost" onclick="cerrarModal()">Cancelar</button>
@@ -336,7 +332,6 @@ var _rankTab='mas';
 var _sortCol='nombre';
 var _sortDir=1;
 var _editId=null;
-var _mFilas=[];
 var _csvHeaders=[];
 var _csvRows=[];
 var _csvParsed=[];
@@ -353,20 +348,16 @@ function abrirModal(id){
         if(p){
             document.getElementById('mLabel').value=p.label||'';
             document.getElementById('mTipo').value=p.tipo||'anio';
-            _mFilas=(p.platillos||[]).map(function(pl){
-                return {id:_uid(),grupo:pl.grupo||'',nombre:pl.nombre||'',cantidad:pl.cantidad!=null?pl.cantidad:'',precio:pl.precio!=null?pl.precio:'',costo:pl.costo!=null?pl.costo:''};
-            });
-            _mRender();
+            _vpFill(p.platillos);
         }
     } else {
-        _mFilas=[];
         document.getElementById('mLabel').value='';
         document.getElementById('cLabel').value='';
         document.getElementById('csvTxt').value='';
         document.getElementById('csvColSel').style.display='none';
         document.getElementById('csvPreview').style.display='none';
         document.getElementById('btnGuardarCsv').style.display='none';
-        _mAdd();
+        _vpInitTable();
     }
 }
 function cerrarModal(){ document.getElementById('vpModal').classList.remove('open'); }
@@ -378,53 +369,107 @@ function setModalTab(t){
     document.getElementById('panelCsv').style.display=t==='csv'?'':'none';
 }
 
-/* ── Manual mode ── */
-function _mAdd(grupo,nombre,cantidad,precio,costo){
-    _mFilas.push({id:_uid(),grupo:grupo||'',nombre:nombre||'',cantidad:cantidad!=null?cantidad:'',precio:precio!=null?precio:'',costo:costo!=null?costo:''});
-    _mRender();
-}
-function _mClear(){ _mFilas=[]; _mRender(); }
+/* ── Paste table (manual mode) ── */
+var _VP_COLS = 5;
 
-function _mDesdeMenu(){
+function _vpInitTable(){
+    var tbody=document.getElementById('vpPasteBody');
+    tbody.innerHTML='';
+    for(var i=0;i<15;i++)_vpAddRow(tbody);
+}
+
+function _vpAddRow(tbody){
+    tbody=tbody||document.getElementById('vpPasteBody');
+    var rowNum=tbody.rows.length+1;
+    var tr=document.createElement('tr');
+    var num=document.createElement('td');
+    num.className='pt-num'; num.textContent=rowNum; tr.appendChild(num);
+    for(var i=0;i<_VP_COLS;i++){
+        var td=document.createElement('td');
+        td.contentEditable='true'; td.className='pt-cell';
+        td.setAttribute('onpaste','_vpPaste(event,this)');
+        td.setAttribute('onfocus',"this.classList.add('focused')");
+        td.setAttribute('onblur',"this.classList.remove('focused')");
+        tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+}
+
+function _vpPaste(event,cell){
+    event.preventDefault();
+    var text=(event.clipboardData||window.clipboardData).getData('text/plain');
+    if(!text.trim())return;
+    var tbody=document.getElementById('vpPasteBody');
+    var allRows=Array.from(tbody.rows);
+    var startRow=allRows.indexOf(cell.closest('tr'));
+    var startCol=cell.cellIndex-1;
+    var lines=text.trim().split('\n');
+    var hasTab=lines.some(function(l){return l.includes('\t');});
+    lines.forEach(function(line,ri){
+        var rowIdx=startRow+ri;
+        while(tbody.rows.length<=rowIdx)_vpAddRow(tbody);
+        var cells=Array.from(tbody.rows[rowIdx].cells).slice(1);
+        var vals=hasTab?line.split('\t'):[line];
+        vals.forEach(function(val,ci){
+            var idx=startCol+ci;
+            if(cells[idx])cells[idx].textContent=val.trim().replace(/^"|"$/g,'');
+        });
+    });
+    Array.from(tbody.rows).forEach(function(row,i){if(row.cells[0])row.cells[0].textContent=i+1;});
+}
+
+function _vpAddRows(){ var t=document.getElementById('vpPasteBody'); for(var i=0;i<10;i++)_vpAddRow(t); }
+function _vpClear(){ _vpInitTable(); }
+
+function _vpDesdeMenu(){
     var recetas=_loadMenu();
     if(!recetas.length){alert('No hay platillos en el menú de este negocio.');return;}
-    var existing=new Set(_mFilas.map(function(f){return f.nombre.toLowerCase();}));
-    var added=0;
+    var tbody=document.getElementById('vpPasteBody');
+    tbody.innerHTML='';
     recetas.forEach(function(r){
-        if(!r.nombre||existing.has(r.nombre.toLowerCase()))return;
-        _mFilas.push({id:_uid(),grupo:r.grupo||'',nombre:r.nombre,cantidad:'',precio:r.precioVenta||'',costo:''});
-        existing.add(r.nombre.toLowerCase());
-        added++;
+        if(!r.nombre)return;
+        _vpAddRow(tbody);
+        var cells=Array.from(tbody.rows[tbody.rows.length-1].cells).slice(1);
+        cells[0].textContent=r.grupo||'';
+        cells[1].textContent=r.nombre;
+        cells[2].textContent='';
+        cells[3].textContent=r.precioVenta!=null?String(r.precioVenta):'';
+        cells[4].textContent='';
     });
-    _mRender();
-    if(!added)alert('Todos los platillos del menú ya están en la tabla.');
+    for(var i=0;i<5;i++)_vpAddRow(tbody);
 }
 
-function _mRender(){
-    document.getElementById('mRows').innerHTML=_mFilas.map(function(f){
-        return '<tr>'+
-            '<td style="padding:3px 4px"><input class="m-inp" value="'+_esc(f.grupo)+'" oninput="_mUpd(\''+f.id+'\',\'grupo\',this.value)" placeholder="Grupo…"></td>'+
-            '<td style="padding:3px 4px"><input class="m-inp" value="'+_esc(f.nombre)+'" oninput="_mUpd(\''+f.id+'\',\'nombre\',this.value)" placeholder="Nombre *"></td>'+
-            '<td style="padding:3px 4px"><input class="m-inp num" type="number" min="0" value="'+_esc(f.cantidad)+'" oninput="_mUpd(\''+f.id+'\',\'cantidad\',this.value)" placeholder="0"></td>'+
-            '<td style="padding:3px 4px"><input class="m-inp num" type="number" min="0" step="0.01" value="'+_esc(f.precio)+'" oninput="_mUpd(\''+f.id+'\',\'precio\',this.value)" placeholder="—"></td>'+
-            '<td style="padding:3px 4px"><input class="m-inp num" type="number" min="0" step="0.01" value="'+_esc(f.costo)+'" oninput="_mUpd(\''+f.id+'\',\'costo\',this.value)" placeholder="—"></td>'+
-            '<td style="padding:3px 2px"><button onclick="_mDel(\''+f.id+'\')" style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:14px;padding:2px 6px">✕</button></td>'+
-        '</tr>';
-    }).join('');
+function _vpFill(platillos){
+    var tbody=document.getElementById('vpPasteBody');
+    tbody.innerHTML='';
+    (platillos||[]).forEach(function(pl){
+        _vpAddRow(tbody);
+        var cells=Array.from(tbody.rows[tbody.rows.length-1].cells).slice(1);
+        cells[0].textContent=pl.grupo||'';
+        cells[1].textContent=pl.nombre||'';
+        cells[2].textContent=pl.cantidad!=null?String(pl.cantidad):'';
+        cells[3].textContent=pl.precio!=null?String(pl.precio):'';
+        cells[4].textContent=pl.costo!=null?String(pl.costo):'';
+    });
+    for(var i=0;i<5;i++)_vpAddRow(tbody);
+    Array.from(tbody.rows).forEach(function(row,i){if(row.cells[0])row.cells[0].textContent=i+1;});
 }
-function _mUpd(id,k,v){ var f=_mFilas.find(function(x){return x.id===id;}); if(f)f[k]=v; }
-function _mDel(id){ _mFilas=_mFilas.filter(function(f){return f.id!==id;}); _mRender(); }
 
 function guardarManual(){
     var label=(document.getElementById('mLabel').value||'').trim();
     if(!label){alert('Escribe un nombre para el periodo.');return;}
-    var platillos=_mFilas.filter(function(f){return f.nombre.trim()&&f.cantidad!=='';}).map(function(f){
-        return {
-            grupo:f.grupo.trim(),nombre:f.nombre.trim(),
-            cantidad:_n(f.cantidad),
-            precio:f.precio!==''&&f.precio!=null?_n(f.precio):null,
-            costo:f.costo!==''&&f.costo!=null?_n(f.costo):null
-        };
+    var tbody=document.getElementById('vpPasteBody');
+    var platillos=[];
+    Array.from(tbody.rows).forEach(function(row){
+        var cells=Array.from(row.cells).slice(1).map(function(td){return td.textContent.trim();});
+        var nombre=cells[1]||'';
+        var cantStr=cells[2]||'';
+        if(!nombre||!cantStr)return;
+        var cant=parseFloat(cantStr.replace(/[^0-9.,-]/g,'').replace(',','.'));
+        if(isNaN(cant))return;
+        var p=cells[3]?parseFloat(cells[3].replace(/[^0-9.]/g,'')):NaN;
+        var c=cells[4]?parseFloat(cells[4].replace(/[^0-9.]/g,'')):NaN;
+        platillos.push({grupo:cells[0],nombre:nombre,cantidad:cant,precio:isNaN(p)?null:p,costo:isNaN(c)?null:c});
     });
     if(!platillos.length){alert('Agrega al menos un platillo con nombre y cantidad.');return;}
     var data=_load();
@@ -763,7 +808,7 @@ function init(){
     renderPeriodos();
 }
 
-document.addEventListener('DOMContentLoaded',function(){init();_mAdd();});
+document.addEventListener('DOMContentLoaded',function(){init();_vpInitTable();});
 </script>
 
 <script>
