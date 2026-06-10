@@ -209,10 +209,33 @@
 function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('etaax_theme',n);document.getElementById('themeIcon').textContent=n==='light'?'🌙':'☀️';document.getElementById('themeLabel').textContent=n==='light'?'Modo oscuro':'Modo claro';}
 function toggleNav(){var nav=document.getElementById('nav'),main=document.getElementById('mainContent');nav.classList.toggle('cerrado');if(main)main.classList.toggle('expandido');var c=nav.classList.contains('cerrado');var btn=document.getElementById('navToggleBtn'),txt=document.getElementById('navToggleTxt');if(btn)btn.childNodes[0].textContent=c?'▶':'◀';if(txt)txt.textContent=c?'Expandir':'Ocultar';if(btn)btn.setAttribute('data-tooltip',c?'Expandir':'Ocultar');}
 
-var LS_KEY='etaax_clientes';
-function load(){try{return JSON.parse(localStorage.getItem(LS_KEY))||[];}catch(e){return[];}}
-function save(d){localStorage.setItem(LS_KEY,JSON.stringify(d));}
+function getNegocioActivo(){return localStorage.getItem('etaax_negocio_activo')||'';}
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
+
+var _cacheClientes = null;
+
+async function _sbInit() {
+    var negId = getNegocioActivo();
+    if (!negId) return;
+    var r = await _supabase.from('clientes').select('datos').eq('negocio_id', negId).order('datos->>nombre');
+    if (!r.error) _cacheClientes = (r.data||[]).map(function(x){return x.datos;});
+    renderClientes();
+}
+function _sbUp(record) {
+    _supabase.from('clientes').upsert({
+        id: record.id, negocio_id: getNegocioActivo(),
+        datos: record, updated_at: new Date().toISOString()
+    }, {onConflict:'id'}).then(function(r){
+        if (r.error) console.error('[clientes] upsert:', r.error.message);
+    });
+}
+function _sbDel(id) {
+    _supabase.from('clientes').delete().eq('id', id).then(function(r){
+        if (r.error) console.error('[clientes] delete:', r.error.message);
+    });
+}
+
+function load(){ return _cacheClientes || []; }
 function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function initials(n){return(n||'?').trim().split(/\s+/).slice(0,2).map(function(w){return w[0].toUpperCase();}).join('');}
 
@@ -269,18 +292,17 @@ function guardarCliente(){
     var nombre=document.getElementById('clNombre').value.trim();
     if(!nombre){alert('El nombre es obligatorio.');document.getElementById('clNombre').focus();return;}
     var id=document.getElementById('clId').value||genId();
+    var existing = load().find(function(c){return c.id===id;});
     var cliente={
-        id:id,nombre:nombre,
+        id:id, negocioId:getNegocioActivo(), nombre:nombre,
         tel:document.getElementById('clTel').value.trim(),
         email:document.getElementById('clEmail').value.trim(),
         notas:document.getElementById('clNotas').value.trim(),
-        fecha:document.getElementById('clId').value
-            ?(load().find(function(c){return c.id===id;})||{}).fecha||new Date().toISOString()
-            :new Date().toISOString()
+        fecha: existing ? (existing.fecha || new Date().toISOString()) : new Date().toISOString()
     };
-    var lista=load().filter(function(c){return c.id!==id;});
-    lista.push(cliente);
-    save(lista);
+    _cacheClientes = (_cacheClientes||[]).filter(function(c){return c.id!==id;});
+    _cacheClientes.push(cliente);
+    _sbUp(cliente);
     cerrarModal();
     renderClientes();
 }
@@ -288,12 +310,15 @@ function guardarCliente(){
 function eliminarCliente(id){
     var c=load().find(function(x){return x.id===id;});
     if(!confirm('¿Eliminar a '+(c?c.nombre:'este cliente')+'? Esta acción no se puede deshacer.'))return;
-    save(load().filter(function(x){return x.id!==id;}));
+    _cacheClientes = (_cacheClientes||[]).filter(function(x){return x.id!==id;});
+    _sbDel(id);
     renderClientes();
 }
 
-document.addEventListener('DOMContentLoaded',renderClientes);
+document.addEventListener('DOMContentLoaded',function(){renderClientes();_sbInit();});
 </script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 </body>

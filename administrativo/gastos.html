@@ -688,13 +688,52 @@ function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')
 function toggleNav(){var nav=document.getElementById('nav'),main=document.getElementById('mainContent');nav.classList.toggle('cerrado');if(main)main.classList.toggle('expandido');var c=nav.classList.contains('cerrado');var btn=document.getElementById('navToggleBtn'),txt=document.getElementById('navToggleTxt');if(btn)btn.childNodes[0].textContent=c?'▶':'◀';if(txt)txt.textContent=c?'Expandir':'Ocultar';if(btn)btn.setAttribute('data-tooltip',c?'Expandir':'Ocultar');}
 
 /* ── Data ── */
-var LS_KEY='etaax_gastos';
-var LS_PROV='etaax_proveedores';
-var LS_CATS_CUSTOM='etaax_gastos_cats_custom';
-function load(){try{return JSON.parse(localStorage.getItem(LS_KEY))||[];}catch(e){return[];}}
-function loadProveedores(){try{return JSON.parse(localStorage.getItem(LS_PROV))||[];}catch(e){return[];}}
-function loadCatsCustom(){try{return JSON.parse(localStorage.getItem(LS_CATS_CUSTOM))||[];}catch(e){return[];}}
-function saveCatsCustom(d){localStorage.setItem(LS_CATS_CUSTOM,JSON.stringify(d));}
+/* ── Supabase cache ── */
+var _cacheGastos = null;
+var _cacheProvs  = null;
+var _cacheCats   = null; // array de strings
+
+async function _sbInit() {
+    var negId = getNegocioActivo();
+    if (!negId) return;
+    var r = await Promise.all([
+        _supabase.from('gastos').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
+        _supabase.from('proveedores').select('datos').eq('negocio_id', negId).order('datos->>nombre'),
+        _supabase.from('gastos_cats_custom').select('datos').eq('negocio_id', negId).maybeSingle(),
+    ]);
+    if (!r[0].error) _cacheGastos = (r[0].data||[]).map(function(x){return x.datos;});
+    if (!r[1].error) _cacheProvs  = (r[1].data||[]).map(function(x){return x.datos;});
+    if (!r[2].error && r[2].data) _cacheCats = r[2].data.datos || [];
+    initCategorias();
+    renderAll();
+}
+
+function _sbUp(tabla, record) {
+    _supabase.from(tabla).upsert({
+        id: record.id, negocio_id: getNegocioActivo(),
+        datos: record, updated_at: new Date().toISOString()
+    }, {onConflict:'id'}).then(function(r){
+        if (r.error) console.error('[gastos] upsert '+tabla+':', r.error.message);
+    });
+}
+function _sbDel(tabla, id) {
+    _supabase.from(tabla).delete().eq('id', id).then(function(r){
+        if (r.error) console.error('[gastos] delete '+tabla+':', r.error.message);
+    });
+}
+function _sbSaveCats(cats) {
+    var negId = getNegocioActivo();
+    _supabase.from('gastos_cats_custom').upsert({
+        negocio_id: negId, datos: cats, updated_at: new Date().toISOString()
+    }, {onConflict:'negocio_id'}).then(function(r){
+        if (r.error) console.error('[gastos] cats upsert:', r.error.message);
+    });
+}
+
+function load()           { return _cacheGastos || []; }
+function loadProveedores(){ return _cacheProvs  || []; }
+function loadCatsCustom() { return _cacheCats   || []; }
+function saveCatsCustom(d){ _cacheCats = d; _sbSaveCats(d); }
 
 /* ── Categorías custom ── */
 function initCategorias(){
@@ -879,7 +918,8 @@ function guardarNuevoProv(){
         correo:'',formaPago:'',clabe:'',banco:'',metodoFacturacion:'',notas:'',documentos:[]
     };
     provs.push(np);
-    localStorage.setItem(LS_PROV,JSON.stringify(provs));
+    _cacheProvs = provs;
+    _sbUp('proveedores', np);
     // Seleccionar en el campo de gasto
     selProveedorPanel(np.nombre);
     // Reset form
@@ -890,7 +930,6 @@ function guardarNuevoProv(){
     document.getElementById('nuevoProvForm').style.display='none';
     renderPanelProveedores();
 }
-function save(d){localStorage.setItem(LS_KEY,JSON.stringify(d));}
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
 function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function getNegocioActivo(){return localStorage.getItem('etaax_negocio_activo')||'';}
@@ -933,9 +972,8 @@ function applyFilters(lista){
     });
 }
 
-function _negFilter(g){var id=getNegocioActivo();return !id||!g.negocioId||g.negocioId===id;}
-function currentData(){var r=getRange(periodoTipo,periodoVal,periodoEnd);return load().filter(function(g){return _negFilter(g)&&inRange(g.fecha,r.from,r.to);});}
-function prevData(){var pr=prevRange(periodoTipo,periodoVal,periodoEnd);return load().filter(function(g){return _negFilter(g)&&inRange(g.fecha,pr.from,pr.to);});}
+function currentData(){var r=getRange(periodoTipo,periodoVal,periodoEnd);return load().filter(function(g){return inRange(g.fecha,r.from,r.to);});}
+function prevData(){var pr=prevRange(periodoTipo,periodoVal,periodoEnd);return load().filter(function(g){return inRange(g.fecha,pr.from,pr.to);});}
 
 /* ── Render ── */
 function renderAll(){
@@ -1346,9 +1384,9 @@ function guardarGasto(){
         estatus:document.getElementById('gEstatus').value||'pagado',
         fechaPago:document.getElementById('gFechaPago').value||''
     };
-    var lista=load().filter(function(g){return g.id!==id;});
-    lista.push(gasto);
-    save(lista);
+    _cacheGastos = (_cacheGastos||[]).filter(function(g){return g.id!==id;});
+    _cacheGastos.push(gasto);
+    _sbUp('gastos', gasto);
     cerrarModal();
     renderAll();
 }
@@ -1358,7 +1396,8 @@ function eliminarGasto(id){
     if(!g)return;
     if(g.tipo==='mayor'&&!mayorDesbloqueado){solicitarPIN('mayor',function(){mayorDesbloqueado=true;eliminarGasto(id);});return;}
     if(!confirm('¿Eliminar este gasto? Esta acción no se puede deshacer.'))return;
-    save(load().filter(function(x){return x.id!==id;}));
+    _cacheGastos = (_cacheGastos||[]).filter(function(x){return x.id!==id;});
+    _sbDel('gastos', id);
     renderAll();
 }
 
@@ -1376,6 +1415,7 @@ document.addEventListener('DOMContentLoaded',function(){
     document.getElementById('pickerInput').value=todayStr();
     initCategorias();
     renderAll();
+    _sbInit();
 });
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>

@@ -797,10 +797,47 @@
 function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('etaax_theme',n);document.getElementById('themeIcon').textContent=n==='light'?'🌙':'☀️';document.getElementById('themeLabel').textContent=n==='light'?'Modo oscuro':'Modo claro';}
 function toggleNav(){var nav=document.getElementById('nav'),main=document.getElementById('mainContent');nav.classList.toggle('cerrado');if(main)main.classList.toggle('expandido');var c=nav.classList.contains('cerrado');var btn=document.getElementById('navToggleBtn'),txt=document.getElementById('navToggleTxt');if(btn)btn.childNodes[0].textContent=c?'▶':'◀';if(txt)txt.textContent=c?'Expandir':'Ocultar';if(btn)btn.setAttribute('data-tooltip',c?'Expandir':'Ocultar');}
 
+/* ── Supabase cache ── */
+var _cacheCortes = null;
+var _cacheDeps   = null;
+var _cacheVex    = null;
+var _cacheGastosExt = null; // gastos cargados para caja fuerte
+
+async function _sbInit() {
+    var negId = getNegocioActivo();
+    if (!negId) return;
+    var r = await Promise.all([
+        _supabase.from('cortes').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
+        _supabase.from('depositos').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
+        _supabase.from('ventas_extra').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
+        _supabase.from('gastos').select('datos').eq('negocio_id', negId),
+    ]);
+    if (!r[0].error) _cacheCortes = (r[0].data||[]).map(function(x){return x.datos;});
+    if (!r[1].error) _cacheDeps   = (r[1].data||[]).map(function(x){return x.datos;});
+    if (!r[2].error) _cacheVex    = (r[2].data||[]).map(function(x){return x.datos;});
+    if (!r[3].error) _cacheGastosExt = (r[3].data||[]).map(function(x){return x.datos;});
+    renderAll();
+    renderDepositos();
+}
+
+function _sbUp(tabla, record) {
+    _supabase.from(tabla).upsert({
+        id: record.id, negocio_id: getNegocioActivo(),
+        datos: record, updated_at: new Date().toISOString()
+    }, {onConflict:'id'}).then(function(r){
+        if (r.error) console.error('[ventas] upsert '+tabla+':', r.error.message);
+    });
+}
+function _sbDel(tabla, id) {
+    _supabase.from(tabla).delete().eq('id', id).then(function(r){
+        if (r.error) console.error('[ventas] delete '+tabla+':', r.error.message);
+    });
+}
+
 /* ── Data helpers ── */
-var LS_KEY='etaax_cortes';
-function load(){try{return JSON.parse(localStorage.getItem(LS_KEY))||[];}catch(e){return[];}}
-function save(d){localStorage.setItem(LS_KEY,JSON.stringify(d));}
+function load()    { return _cacheCortes || []; }
+function loadDep() { return _cacheDeps   || []; }
+function loadVex() { return _cacheVex    || []; }
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
 function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function getNegocioActivo(){return localStorage.getItem('etaax_negocio_activo')||'';}
@@ -811,9 +848,7 @@ function fmtN(v){return n(v).toLocaleString('es-MX');}
 /* ── Gastos del módulo Gastos ── */
 var _gastosCajaChica = 0; // solo caja chica — se usa en resguardo
 
-function _loadGastos() {
-    try { return JSON.parse(localStorage.getItem('etaax_gastos')) || []; } catch(e) { return []; }
-}
+function _loadGastos() { return _cacheGastosExt || []; }
 function jalarGastosFecha() {
     var fecha  = document.getElementById('fFecha').value;
     var negId  = getNegocioActivo();
@@ -894,9 +929,8 @@ function setPeriodType(tipo,btn){periodoTipo=tipo;document.querySelectorAll('.pe
 function getRange(tipo,val,end){if(tipo==='dia')return{from:val,to:val};if(tipo==='mes'){var y=parseInt(val.slice(0,4)),m=parseInt(val.slice(5,7));return{from:val+'-01',to:new Date(y,m,0).toISOString().slice(0,10)};}if(tipo==='semana'){var p=val.split('-W'),yr=parseInt(p[0]),wk=parseInt(p[1]);var j4=new Date(yr,0,4);var ws=new Date(j4.getTime()+(wk-1)*7*86400000);ws.setDate(ws.getDate()-(ws.getDay()||7)+1);var we=new Date(ws);we.setDate(ws.getDate()+6);return{from:ws.toISOString().slice(0,10),to:we.toISOString().slice(0,10)};}return{from:val,to:end};}
 function prevRange(tipo,val,end){var r=getRange(tipo,val,end);if(tipo==='dia'){var d=new Date(r.from+'T12:00:00');d.setDate(d.getDate()-1);return getRange('dia',d.toISOString().slice(0,10),null);}if(tipo==='mes'){var y=parseInt(val.slice(0,4)),m=parseInt(val.slice(5,7))-1;if(m===0){m=12;y--;}return getRange('mes',y+'-'+String(m).padStart(2,'0'),null);}if(tipo==='semana'){var p2=val.split('-W'),yr2=parseInt(p2[0]),wk2=parseInt(p2[1])-1;if(wk2===0){yr2--;wk2=52;}return getRange('semana',yr2+'-W'+String(wk2).padStart(2,'0'),null);}var fromD=new Date(r.from+'T12:00:00'),toD=new Date(r.to+'T12:00:00');var span=Math.round((toD-fromD)/86400000)+1;var pe=new Date(fromD);pe.setDate(pe.getDate()-1);var pf=new Date(pe);pf.setDate(pf.getDate()-span+1);return{from:pf.toISOString().slice(0,10),to:pe.toISOString().slice(0,10)};}
 function inRange(fecha,from,to){return fecha>=from&&fecha<=to;}
-function _negFilter(c){var id=getNegocioActivo();return !id||!c.negocioId||c.negocioId===id;}
-function currentData(){var r=getRange(periodoTipo,periodoVal,periodoEnd);return load().filter(function(c){return _negFilter(c)&&inRange(c.fecha,r.from,r.to);});}
-function prevData(){var pr=prevRange(periodoTipo,periodoVal,periodoEnd);return load().filter(function(c){return _negFilter(c)&&inRange(c.fecha,pr.from,pr.to);});}
+function currentData(){var r=getRange(periodoTipo,periodoVal,periodoEnd);return load().filter(function(c){return inRange(c.fecha,r.from,r.to);});}
+function prevData(){var pr=prevRange(periodoTipo,periodoVal,periodoEnd);return load().filter(function(c){return inRange(c.fecha,pr.from,pr.to);});}
 
 /* ── Render ── */
 function renderAll(){var pi=document.getElementById('pickerInput'),pe=document.getElementById('pickerEnd');periodoVal=pi.value||periodoVal;if(periodoTipo==='rango')periodoEnd=pe.value||periodoEnd;var cur=currentData(),prev=prevData();renderSummary(cur,prev);renderTabla(cur);renderVentasExtra(cur);renderDepositos();}
@@ -1116,16 +1150,17 @@ function guardarCorte(){
         ingresosExtra:_ingresosExtra.slice(),
         notas:document.getElementById('fNotas').value.trim(),
         cajero:document.getElementById('fCajero').value.trim()};
-    var lista=load().filter(function(c){return c.id!==id;});
-    lista.push(corte);
-    save(lista);
+    _cacheCortes = (_cacheCortes||[]).filter(function(c){return c.id!==id;});
+    _cacheCortes.push(corte);
+    _sbUp('cortes', corte);
     cerrarModal();
     renderAll();
 }
 
 function eliminarCorte(id){
     if(!confirm('¿Eliminar este corte? Esta acción no se puede deshacer.'))return;
-    save(load().filter(function(c){return c.id!==id;}));
+    _cacheCortes = (_cacheCortes||[]).filter(function(c){return c.id!==id;});
+    _sbDel('cortes', id);
     renderAll();
 }
 
@@ -1350,7 +1385,8 @@ function abrirVerDepositos(){
 function cerrarVerDepositos(){document.getElementById('depOverlay').classList.remove('open');}
 function _elimDepOv(id){
     if(!confirm('¿Eliminar este depósito?'))return;
-    saveDep(loadDep().filter(function(x){return x.id!==id;}));
+    _cacheDeps = (_cacheDeps||[]).filter(function(x){return x.id!==id;});
+    _sbDel('depositos', id);
     renderDepositos();
     abrirVerDepositos();
     var cajEl=document.getElementById('cajOverlay');
@@ -1542,15 +1578,12 @@ function verCorteAEdicion(){ cerrarVerCorte(); if(_verCorteId) abrirModal(_verCo
 document.addEventListener('DOMContentLoaded',function(){
     document.getElementById('pickerInput').value=todayStr();
     renderAll();
+    _sbInit();
 });
 
 /* ══════════════════════════════════════════════════════════
    DEPÓSITOS
    ══════════════════════════════════════════════════════════ */
-var LS_DEP='etaax_depositos';
-function loadDep(){try{return JSON.parse(localStorage.getItem(LS_DEP))||[];}catch(e){return[];}}
-function saveDep(d){localStorage.setItem(LS_DEP,JSON.stringify(d));}
-
 function abrirModalDeposito(id){
     var d=id?(loadDep().find(function(x){return x.id===id;})||{}):{};
     document.getElementById('depId').value=id||'';
@@ -1583,19 +1616,19 @@ function guardarDeposito(){
         depositadoPor:document.getElementById('depDeposita').value.trim(),
         notas:document.getElementById('depNotas').value.trim()
     };
-    var lista=loadDep().filter(function(x){return x.id!==id;});
-    lista.push(dep);
-    saveDep(lista);
+    _cacheDeps = (_cacheDeps||[]).filter(function(x){return x.id!==id;});
+    _cacheDeps.push(dep);
+    _sbUp('depositos', dep);
     cerrarModalDeposito();
     renderDepositos();
-    // Actualizar caja fuerte si está abierta (sin pedir clave de nuevo)
     var cajEl=document.getElementById('cajOverlay');
     if(cajEl&&cajEl.classList.contains('open'))_abrirCajaFuerteContenido();
 }
 
 function eliminarDeposito(id){
     if(!confirm('¿Eliminar este depósito?'))return;
-    saveDep(loadDep().filter(function(x){return x.id!==id;}));
+    _cacheDeps = (_cacheDeps||[]).filter(function(x){return x.id!==id;});
+    _sbDel('depositos', id);
     renderDepositos();
     var cajEl=document.getElementById('cajOverlay');
     if(cajEl&&cajEl.classList.contains('open'))_abrirCajaFuerteContenido();
@@ -1604,10 +1637,6 @@ function eliminarDeposito(id){
 /* ══════════════════════════════════════════════════════════
    VENTAS EXTRA
    ══════════════════════════════════════════════════════════ */
-var LS_VEX='etaax_ventas_extra';
-function loadVex(){try{return JSON.parse(localStorage.getItem(LS_VEX))||[];}catch(e){return[];}}
-function saveVex(d){localStorage.setItem(LS_VEX,JSON.stringify(d));}
-
 function abrirModalVentaExtra(id){
     var d=id?(loadVex().find(function(x){return x.id===id;})||{}):{};
     document.getElementById('vexId').value=id||'';
@@ -1640,24 +1669,24 @@ function guardarVentaExtra(){
         comensales:parseInt(document.getElementById('vexComensales').value)||0,
         notas:document.getElementById('vexNotas').value.trim()
     };
-    var lista=loadVex().filter(function(x){return x.id!==id;});
-    lista.push(vex);
-    saveVex(lista);
+    _cacheVex = (_cacheVex||[]).filter(function(x){return x.id!==id;});
+    _cacheVex.push(vex);
+    _sbUp('ventas_extra', vex);
     cerrarModalVentaExtra();
     renderAll();
 }
 
 function eliminarVentaExtra(id){
     if(!confirm('¿Eliminar esta venta extra?'))return;
-    saveVex(loadVex().filter(function(x){return x.id!==id;}));
+    _cacheVex = (_cacheVex||[]).filter(function(x){return x.id!==id;});
+    _sbDel('ventas_extra', id);
     renderAll();
 }
 
 function renderVentasExtra(cur){
     var r=getRange(periodoTipo,periodoVal,periodoEnd);
-    var negId=getNegocioActivo();
     var lista=loadVex().filter(function(v){
-        return inRange(v.fecha,r.from,r.to)&&(!negId||!v.negocioId||v.negocioId===negId);
+        return inRange(v.fecha,r.from,r.to);
     }).sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
     var card=document.getElementById('cardVentasExtra');
     var tbody=document.getElementById('vexTbody');

@@ -468,48 +468,72 @@ function toggleNav(){
     if(btn)btn.setAttribute('data-tooltip',c?'Expandir':'Ocultar');
 }
 
-/* ── Storage ── */
-var LS_FIJOS   = 'etaax_gf_fijos';    // array [{id,concepto,categoria,proveedor,monto}]
-var LS_NOMINAS = 'etaax_gf_nominas';  // {"2026-05":{operativa:[],administrativa:[],socios:[]}}
-var LS_GASTOS  = 'etaax_gastos';      // daily gastos from admin module
-var LS_CORTES  = 'etaax_cortes';      // daily ventas
-var LS_OTROS   = 'etaax_sf_otros';    // other income
+/* ── Supabase cache ── */
+var _cacheGG_Fijos   = null;
+var _cacheGG_Nominas = null; // {[mes]: {operativa:[], administrativa:[], socios:[]}}
+var _cacheGG_Gastos  = null;
+var _cacheGG_Cortes  = null;
+var _cacheGG_Otros   = null;
+var _cacheGG_Staff   = null;
 
-function _skStaff(){var id=localStorage.getItem('etaax_negocio_activo')||'';return id?'etaax_'+id+'_staff':'etaax_staff';}
-function _loadStaff(){try{return JSON.parse(localStorage.getItem(_skStaff()))||[];}catch(e){return[];}}
+function getNegocioActivo(){ return localStorage.getItem('etaax_negocio_activo')||''; }
 
-function loadFijos(){try{return JSON.parse(localStorage.getItem(LS_FIJOS))||[];}catch(e){return[];}}
-function saveFijos(d){localStorage.setItem(LS_FIJOS,JSON.stringify(d));}
+async function _sbInit() {
+    var negId = getNegocioActivo();
+    if (!negId) return;
+    var r = await Promise.all([
+        _supabase.from('gf_fijos').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
+        _supabase.from('gf_nominas').select('datos').eq('negocio_id', negId).maybeSingle(),
+        _supabase.from('gastos').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
+        _supabase.from('cortes').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
+        _supabase.from('sf_otros').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
+        _supabase.from('staff').select('datos').eq('negocio_id', negId),
+    ]);
+    if (!r[0].error) _cacheGG_Fijos   = (r[0].data||[]).map(function(x){return x.datos;});
+    if (!r[1].error && r[1].data) _cacheGG_Nominas = r[1].data.datos || {};
+    if (!r[2].error) _cacheGG_Gastos  = (r[2].data||[]).map(function(x){return x.datos;});
+    if (!r[3].error) _cacheGG_Cortes  = (r[3].data||[]).map(function(x){return x.datos;});
+    if (!r[4].error) _cacheGG_Otros   = (r[4].data||[]).map(function(x){return x.datos;});
+    if (!r[5].error) _cacheGG_Staff   = (r[5].data||[]).map(function(x){return x.datos;});
+    renderAll();
+}
+function _sbUpFijo(record) {
+    _supabase.from('gf_fijos').upsert({
+        id: record.id, negocio_id: getNegocioActivo(),
+        datos: record, updated_at: new Date().toISOString()
+    }, {onConflict:'id'}).then(function(r){ if (r.error) console.error('[gf_fijos] upsert:', r.error.message); });
+}
+function _sbDelFijo(id) {
+    _supabase.from('gf_fijos').delete().eq('id', id)
+        .then(function(r){ if (r.error) console.error('[gf_fijos] delete:', r.error.message); });
+}
+function _sbSaveNominas(allNominas) {
+    var negId = getNegocioActivo();
+    _supabase.from('gf_nominas').upsert({negocio_id: negId, datos: allNominas, updated_at: new Date().toISOString()}, {onConflict:'negocio_id'})
+        .then(function(r){ if (r.error) console.error('[gf_nominas] upsert:', r.error.message); });
+}
+
+function loadFijos(){ return _cacheGG_Fijos || []; }
 function loadNominas(mes){
-    try{
-        var all=JSON.parse(localStorage.getItem(LS_NOMINAS))||{};
-        return all[mes]||{operativa:[],administrativa:[],socios:[]};
-    }catch(e){return{operativa:[],administrativa:[],socios:[]};}
+    var all = _cacheGG_Nominas || {};
+    return all[mes] || {operativa:[],administrativa:[],socios:[]};
 }
 function saveNominas(mes,d){
-    try{var all=JSON.parse(localStorage.getItem(LS_NOMINAS))||{};}
-    catch(e){var all={};}
-    all[mes]=d;
-    localStorage.setItem(LS_NOMINAS,JSON.stringify(all));
+    var all = _cacheGG_Nominas || {};
+    all[mes] = d;
+    _cacheGG_Nominas = all;
+    _sbSaveNominas(all);
 }
 function loadGastosMes(mes){
-    try{
-        var all=JSON.parse(localStorage.getItem(LS_GASTOS))||[];
-        return all.filter(function(g){return g.fecha&&g.fecha.slice(0,7)===mes;});
-    }catch(e){return[];}
+    return (_cacheGG_Gastos||[]).filter(function(g){return g.fecha&&g.fecha.slice(0,7)===mes;});
 }
 function loadCortesMonth(mes){
-    try{
-        var all=JSON.parse(localStorage.getItem(LS_CORTES))||[];
-        return all.filter(function(c){return c.fecha&&c.fecha.slice(0,7)===mes;});
-    }catch(e){return[];}
+    return (_cacheGG_Cortes||[]).filter(function(c){return c.fecha&&c.fecha.slice(0,7)===mes;});
 }
 function loadOtrosMes(mes){
-    try{
-        var all=JSON.parse(localStorage.getItem(LS_OTROS))||[];
-        return all.filter(function(o){return o.fecha&&o.fecha.slice(0,7)===mes;});
-    }catch(e){return[];}
+    return (_cacheGG_Otros||[]).filter(function(o){return o.fecha&&o.fecha.slice(0,7)===mes;});
 }
+function _loadStaff(){ return _cacheGG_Staff || []; }
 
 /* ── Helpers ── */
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
@@ -632,7 +656,8 @@ function renderFijos(){
     tbody.querySelectorAll('[data-del-fijo]').forEach(function(btn){
         btn.addEventListener('click',function(){
             if(!confirm('¿Eliminar este gasto fijo?'))return;
-            saveFijos(loadFijos().filter(function(f){return f.id!==btn.dataset.delFijo;}));
+            _cacheGG_Fijos = loadFijos().filter(function(f){return f.id!==btn.dataset.delFijo;});
+            _sbDelFijo(btn.dataset.delFijo);
             renderAll();
         });
     });
@@ -768,9 +793,10 @@ function guardarFijo(){
     if(!concepto){alert('El concepto es obligatorio.');return;}
     if(!monto||monto<=0){alert('El monto debe ser mayor a cero.');return;}
     var id=document.getElementById('fijoId').value||genId();
-    var lista=loadFijos().filter(function(f){return f.id!==id;});
-    lista.push({id:id,concepto:concepto,categoria:document.getElementById('fijoCategoria').value,proveedor:document.getElementById('fijoProveedor').value.trim(),monto:monto});
-    saveFijos(lista); cerrarFijo(); renderAll();
+    var record={id:id,concepto:concepto,categoria:document.getElementById('fijoCategoria').value,proveedor:document.getElementById('fijoProveedor').value.trim(),monto:monto};
+    _cacheGG_Fijos = loadFijos().filter(function(f){return f.id!==id;});
+    _cacheGG_Fijos.push(record);
+    _sbUpFijo(record); cerrarFijo(); renderAll();
 }
 
 /* ── Modal Nómina ── */
@@ -917,8 +943,11 @@ document.addEventListener('DOMContentLoaded',function(){
 
     /* Initial render */
     renderAll();
+    _sbInit();
 });
 </script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 </body>

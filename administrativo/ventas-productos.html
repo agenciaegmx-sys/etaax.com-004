@@ -326,12 +326,33 @@ function _n(v){ return parseFloat(v)||0; }
 function _fmt(n){ return Number.isFinite(n)?n.toLocaleString('es-MX'):'0'; }
 
 /* ── Storage ── */
-function _sk(){
-    var id=localStorage.getItem('etaax_negocio_activo');
-    return id?'etaax_'+id+'_ventas_productos':'etaax_ventas_productos';
+function _getNeg(){ return localStorage.getItem('etaax_negocio_activo')||''; }
+
+var _cacheVP = null;
+
+async function _sbInit() {
+    var negId = _getNeg();
+    if (!negId) return;
+    var r = await _supabase.from('ventas_productos').select('datos').eq('negocio_id', negId).order('created_at', {ascending:true});
+    if (!r.error) _cacheVP = (r.data||[]).map(function(x){return x.datos;});
+    init();
 }
-function _load(){ return JSON.parse(localStorage.getItem(_sk())||'[]'); }
-function _save(d){ localStorage.setItem(_sk(),JSON.stringify(d)); }
+function _sbUp(record) {
+    _supabase.from('ventas_productos').upsert({
+        id: record.id, negocio_id: _getNeg(),
+        datos: record, updated_at: new Date().toISOString()
+    }, {onConflict:'id'}).then(function(r){
+        if (r.error) console.error('[vp] upsert:', r.error.message);
+    });
+}
+function _sbDel(id) {
+    _supabase.from('ventas_productos').delete().eq('id', id).then(function(r){
+        if (r.error) console.error('[vp] delete:', r.error.message);
+    });
+}
+
+function _load(){ return _cacheVP || []; }
+function _save(d){ _cacheVP = d; }
 function _loadMenu(){ return JSON.parse(localStorage.getItem('etaax_recetas')||'[]'); }
 
 /* ── State ── */
@@ -567,14 +588,16 @@ function guardarManual(){
         platillos.push({grupo:cells[0],nombre:nombre,cantidad:cant,precio:isNaN(p)?null:p,costo:isNaN(c)?null:c});
     });
     if(!platillos.length){alert('Agrega al menos un platillo con nombre y cantidad.');return;}
-    var data=_load();
+    var record;
     if(_editId){
-        var idx=data.findIndex(function(x){return x.id===_editId;});
-        if(idx>=0)data[idx]=Object.assign(data[idx],{label:label,tipo:document.getElementById('mTipo').value,platillos:platillos});
+        record = (_cacheVP||[]).find(function(x){return x.id===_editId;})||{id:_editId};
+        Object.assign(record,{label:label,tipo:document.getElementById('mTipo').value,platillos:platillos});
+        _cacheVP = (_cacheVP||[]).map(function(x){return x.id===_editId?record:x;});
     } else {
-        data.push({id:_uid(),label:label,tipo:document.getElementById('mTipo').value,platillos:platillos,fuente:'manual',createdAt:new Date().toISOString()});
+        record = {id:_uid(),negocioId:_getNeg(),label:label,tipo:document.getElementById('mTipo').value,platillos:platillos,fuente:'manual',createdAt:new Date().toISOString()};
+        _cacheVP = (_cacheVP||[]).concat([record]);
     }
-    _save(data); cerrarModal(); init();
+    _sbUp(record); cerrarModal(); init();
 }
 
 /* ── CSV mode ── */
@@ -681,9 +704,9 @@ function guardarCsv(){
     var label=(document.getElementById('cLabel').value||'').trim();
     if(!label){alert('Escribe un nombre para el periodo.');return;}
     if(!_csvParsed.length){alert('Primero parsea y previsualiza el CSV.');return;}
-    var data=_load();
-    data.push({id:_uid(),label:label,tipo:document.getElementById('cTipo').value,platillos:_csvParsed,fuente:'csv',createdAt:new Date().toISOString()});
-    _save(data); cerrarModal(); init();
+    var record={id:_uid(),negocioId:_getNeg(),label:label,tipo:document.getElementById('cTipo').value,platillos:_csvParsed,fuente:'csv',createdAt:new Date().toISOString()};
+    _cacheVP = (_cacheVP||[]).concat([record]);
+    _sbUp(record); cerrarModal(); init();
 }
 
 /* ── Comparativa ── */
@@ -872,9 +895,10 @@ function renderPeriodos(){
 }
 
 function eliminarPeriodo(id){
-    var p=_load().find(function(x){return x.id===id;});
+    var p=(_cacheVP||[]).find(function(x){return x.id===id;});
     if(!p||!confirm('¿Eliminar "'+p.label+'"?'))return;
-    _save(_load().filter(function(x){return x.id!==id;}));
+    _cacheVP = (_cacheVP||[]).filter(function(x){return x.id!==id;});
+    _sbDel(id);
     init();
 }
 
@@ -903,7 +927,7 @@ function init(){
     renderPeriodos();
 }
 
-document.addEventListener('DOMContentLoaded',function(){init();_vpInitTable();_rfecha('m');_rfecha('c');});
+document.addEventListener('DOMContentLoaded',function(){init();_vpInitTable();_rfecha('m');_rfecha('c');_sbInit();});
 </script>
 
 <script>
@@ -922,6 +946,8 @@ function toggleTheme(){
     document.getElementById('themeLabel').textContent=next==='light'?'Modo oscuro':'Modo claro';
 }
 </script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 </body>

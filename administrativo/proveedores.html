@@ -471,10 +471,35 @@ function toggleNav() {
 }
 
 /* ── DATA ── */
-var LS_KEY = 'etaax_proveedores';
-function load() { try { return JSON.parse(localStorage.getItem(LS_KEY)) || []; } catch(e){ return []; } }
-function save(d) { localStorage.setItem(LS_KEY, JSON.stringify(d)); }
+function getNegocioActivo(){ return localStorage.getItem('etaax_negocio_activo') || ''; }
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
+
+var _cacheProvs = null;
+
+async function _sbInit() {
+    var negId = getNegocioActivo();
+    if (!negId) return;
+    var r = await _supabase.from('proveedores').select('datos').eq('negocio_id', negId).order('datos->>nombre');
+    if (!r.error) _cacheProvs = (r.data||[]).map(function(x){return x.datos;});
+    renderTable();
+    renderDescubrimiento();
+}
+function _sbUp(record) {
+    _supabase.from('proveedores').upsert({
+        id: record.id, negocio_id: getNegocioActivo(),
+        datos: record, updated_at: new Date().toISOString()
+    }, {onConflict:'id'}).then(function(r){
+        if (r.error) console.error('[proveedores] upsert:', r.error.message);
+    });
+}
+function _sbDel(id) {
+    _supabase.from('proveedores').delete().eq('id', id).then(function(r){
+        if (r.error) console.error('[proveedores] delete:', r.error.message);
+    });
+}
+
+function load() { return _cacheProvs || []; }
+function save(d) { /* no-op: cache is updated in-place */ }
 
 /* ── SORT STATE ── */
 var sortField = 'nombre';
@@ -587,7 +612,8 @@ function deleteProv(id) {
     var p = load().find(function(p){ return p.id === id; });
     var nombre = p ? p.nombre : 'este proveedor';
     _pedirClaveAdmin('Eliminar "' + nombre + '"', function() {
-        save(load().filter(function(p){ return p.id !== id; }));
+        _cacheProvs = (_cacheProvs||[]).filter(function(p){ return p.id !== id; });
+        _sbDel(id);
         renderTable();
     });
 }
@@ -614,10 +640,10 @@ function saveProv() {
         documentos:       tmpDocs.slice()
     };
 
-    var data = load();
-    var idx  = data.findIndex(function(p){ return p.id === obj.id; });
-    if (idx > -1) { data[idx] = obj; } else { data.push(obj); }
-    save(data);
+    obj.negocioId = getNegocioActivo();
+    _cacheProvs = (_cacheProvs||[]).filter(function(p){ return p.id !== obj.id; });
+    _cacheProvs.push(obj);
+    _sbUp(obj);
     closeModal();
     renderTable();
 }
@@ -778,6 +804,7 @@ function agregarProveedorDescubierto(nombre) {
 document.addEventListener('DOMContentLoaded', function() {
     renderTable();
     renderDescubrimiento();
+    _sbInit();
 });
 
 document.getElementById('modalProv').addEventListener('click', function(e){

@@ -380,11 +380,28 @@ function toggleTheme() {
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
 <script>
 /* ── Tarjetas de crédito (financiero/index.html) ── */
-function _tcSk(){var id=localStorage.getItem('etaax_negocio_activo')||'';return id?'etaax_'+id+'_tarjetas_credito':'etaax_tarjetas_credito';}
-function _loadTc(){try{return JSON.parse(localStorage.getItem(_tcSk()))||[];}catch(e){return[];}}
-function _saveTc(d){localStorage.setItem(_tcSk(),JSON.stringify(d));}
+function getNegocioActivo(){ return localStorage.getItem('etaax_negocio_activo') || ''; }
+var _cacheTc = null;
+
+function _sbUpTc(rec){
+    var negId = getNegocioActivo(); if(!negId) return;
+    _supabase.from('tarjetas_credito').upsert({id: rec.id, negocio_id: negId, datos: rec, updated_at: new Date().toISOString()});
+}
+function _sbDelTc(id){
+    _supabase.from('tarjetas_credito').delete().eq('id', id);
+}
+async function _sbInitTc(){
+    var negId = getNegocioActivo(); if(!negId) return;
+    var res = await _supabase.from('tarjetas_credito').select('datos').eq('negocio_id', negId).order('created_at', {ascending:true});
+    if(!res.error) _cacheTc = (res.data||[]).map(function(x){ return x.datos; });
+    renderTc();
+}
+function _loadTc(){ return _cacheTc || []; }
+
 function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function _fmt(v){return '$'+parseFloat(v||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
 
@@ -439,15 +456,19 @@ function guardarTc(){
     var banco=document.getElementById('tcBanco').value.trim();
     if(!banco){alert('El banco es obligatorio.');return;}
     var id=document.getElementById('tcId').value||(Date.now().toString(36)+Math.random().toString(36).slice(2,5));
-    var lista=_loadTc().filter(function(t){return t.id!==id;});
-    lista.push({id:id,banco:banco,digitos:document.getElementById('tcDigitos').value.trim(),limite:parseFloat(document.getElementById('tcLimite').value)||0,corte:parseInt(document.getElementById('tcCorte').value)||0,pago:parseInt(document.getElementById('tcPago').value)||0,color:document.getElementById('tcColor').value});
-    _saveTc(lista); cerrarTc(); renderTc();
+    var rec={id:id,banco:banco,digitos:document.getElementById('tcDigitos').value.trim(),limite:parseFloat(document.getElementById('tcLimite').value)||0,corte:parseInt(document.getElementById('tcCorte').value)||0,pago:parseInt(document.getElementById('tcPago').value)||0,color:document.getElementById('tcColor').value};
+    _cacheTc = (_cacheTc||[]).filter(function(t){return t.id!==id;});
+    _cacheTc.push(rec);
+    _sbUpTc(rec);
+    cerrarTc(); renderTc();
 }
 function eliminarTc(id){
     if(!confirm('¿Eliminar esta tarjeta?'))return;
-    _saveTc(_loadTc().filter(function(t){return t.id!==id;})); renderTc();
+    _cacheTc = (_cacheTc||[]).filter(function(t){return t.id!==id;});
+    _sbDelTc(id);
+    renderTc();
 }
-document.addEventListener('DOMContentLoaded', renderTc);
+document.addEventListener('DOMContentLoaded', function(){ renderTc(); _sbInitTc(); });
 </script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>

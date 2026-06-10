@@ -345,14 +345,36 @@
 function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('etaax_theme',n);document.getElementById('themeIcon').textContent=n==='light'?'🌙':'☀️';document.getElementById('themeLabel').textContent=n==='light'?'Modo oscuro':'Modo claro';}
 function toggleNav(){var nav=document.getElementById('nav'),main=document.getElementById('mainContent');nav.classList.toggle('cerrado');if(main)main.classList.toggle('expandido');var c=nav.classList.contains('cerrado');var btn=document.getElementById('navToggleBtn'),txt=document.getElementById('navToggleTxt');if(btn)btn.childNodes[0].textContent=c?'▶':'◀';if(txt)txt.textContent=c?'Expandir':'Ocultar';if(btn)btn.setAttribute('data-tooltip',c?'Expandir':'Ocultar');}
 
-/* ── Storage keys ── */
-var LS_CORTES  = 'etaax_cortes';
-var LS_OTROS   = 'etaax_sf_otros';
-var LS_GASTOS  = 'etaax_gastos';
-var LS_FIJOS   = 'etaax_gf_fijos';
-var LS_NOMINAS = 'etaax_gf_nominas';
-var LS_PREVS   = 'etaax_previsiones';
-var LS_KPI_TGT = 'etaax_kpi_targets';
+/* ── Supabase cache ── */
+var _kCache = {
+    cortes: null, otros: null, gastos: null,
+    fijos: null, nominas: null, prevs: null, targets: null
+};
+var _KPI_DEFAULTS = {fijos:15,variables:30,nomOp:22,nomAdm:8,prev:5,util:20};
+
+function getNegocioActivo(){ return localStorage.getItem('etaax_negocio_activo')||''; }
+
+async function _sbInit() {
+    var negId = getNegocioActivo();
+    if (!negId) return;
+    var r = await Promise.all([
+        _supabase.from('cortes').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
+        _supabase.from('sf_otros').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
+        _supabase.from('gastos').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
+        _supabase.from('gf_fijos').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
+        _supabase.from('gf_nominas').select('datos').eq('negocio_id', negId).maybeSingle(),
+        _supabase.from('previsiones').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
+        _supabase.from('kpi_targets').select('datos').eq('negocio_id', negId).maybeSingle(),
+    ]);
+    if (!r[0].error) _kCache.cortes  = (r[0].data||[]).map(function(x){return x.datos;});
+    if (!r[1].error) _kCache.otros   = (r[1].data||[]).map(function(x){return x.datos;});
+    if (!r[2].error) _kCache.gastos  = (r[2].data||[]).map(function(x){return x.datos;});
+    if (!r[3].error) _kCache.fijos   = (r[3].data||[]).map(function(x){return x.datos;});
+    if (!r[4].error && r[4].data) _kCache.nominas = r[4].data.datos || {};
+    if (!r[5].error) _kCache.prevs   = (r[5].data||[]).map(function(x){return x.datos;});
+    if (!r[6].error && r[6].data) _kCache.targets = r[6].data.datos || _KPI_DEFAULTS;
+    renderAll();
+}
 
 /* ── Helpers ── */
 function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
@@ -363,33 +385,29 @@ function fmtPct(v){return n(v).toFixed(1)+'%';}
 function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 /* ── Loaders ── */
-function loadCortes(){try{return JSON.parse(localStorage.getItem(LS_CORTES))||[];}catch(e){return[];}}
-function loadOtros(){try{return JSON.parse(localStorage.getItem(LS_OTROS))||[];}catch(e){return[];}}
-function loadGastos(){try{return JSON.parse(localStorage.getItem(LS_GASTOS))||[];}catch(e){return[];}}
-function loadFijos(){try{return JSON.parse(localStorage.getItem(LS_FIJOS))||[];}catch(e){return[];}}
+function loadCortes(){ return _kCache.cortes || []; }
+function loadOtros() { return _kCache.otros  || []; }
+function loadGastos(){ return _kCache.gastos  || []; }
+function loadFijos() { return _kCache.fijos   || []; }
 function loadNominasMes(mes){
-    try{
-        var all=JSON.parse(localStorage.getItem(LS_NOMINAS))||{};
-        var d=all[mes]||{operativa:[],administrativa:[],socios:[]};
-        var op=0,adm=0;
-        (d.operativa||[]).forEach(function(p){op+=n(p.base)+n(p.bonos)+n(p.imss);});
-        (d.administrativa||[]).forEach(function(p){adm+=n(p.base)+n(p.bonos)+n(p.imss);});
-        (d.socios||[]).forEach(function(p){adm+=n(p.base)+n(p.bonos)+n(p.imss);});
-        return{op:op,adm:adm};
-    }catch(e){return{op:0,adm:0};}
+    var all = _kCache.nominas || {};
+    var d=all[mes]||{operativa:[],administrativa:[],socios:[]};
+    var op=0,adm=0;
+    (d.operativa||[]).forEach(function(p){op+=n(p.base)+n(p.bonos)+n(p.imss);});
+    (d.administrativa||[]).forEach(function(p){adm+=n(p.base)+n(p.bonos)+n(p.imss);});
+    (d.socios||[]).forEach(function(p){adm+=n(p.base)+n(p.bonos)+n(p.imss);});
+    return{op:op,adm:adm};
 }
 function loadPrevsMes(mes){
-    try{
-        var all=JSON.parse(localStorage.getItem(LS_PREVS))||[];
-        var mesStart=mes+'-01';
-        var y=parseInt(mes.slice(0,4)),m=parseInt(mes.slice(5,7));
-        var mesEnd=new Date(y,m,0).toISOString().slice(0,10);
-        return all.filter(function(p){
-            if(p.estado==='cancelada') return false;
-            if(p.fechaInicio&&p.fechaFin) return p.fechaInicio<=mesEnd&&p.fechaFin>=mesStart;
-            return p.fechaInicio&&p.fechaInicio.slice(0,7)===mes;
-        }).reduce(function(s,p){return s+n(p.montoEstimado);},0);
-    }catch(e){return 0;}
+    var all = _kCache.prevs || [];
+    var mesStart=mes+'-01';
+    var y=parseInt(mes.slice(0,4)),m=parseInt(mes.slice(5,7));
+    var mesEnd=new Date(y,m,0).toISOString().slice(0,10);
+    return all.filter(function(p){
+        if(p.estado==='cancelada') return false;
+        if(p.fechaInicio&&p.fechaFin) return p.fechaInicio<=mesEnd&&p.fechaFin>=mesStart;
+        return p.fechaInicio&&p.fechaInicio.slice(0,7)===mes;
+    }).reduce(function(s,p){return s+n(p.montoEstimado);},0);
 }
 
 /* ── Sucursal ── */
@@ -449,10 +467,7 @@ function getMesData(mes){
 }
 
 /* ── Targets ── */
-function loadTargets(){
-    try{return JSON.parse(localStorage.getItem(LS_KPI_TGT))||{fijos:15,variables:30,nomOp:22,nomAdm:8,prev:5,util:20};}
-    catch(e){return{fijos:15,variables:30,nomOp:22,nomAdm:8,prev:5,util:20};}
-}
+function loadTargets(){ return _kCache.targets || _KPI_DEFAULTS; }
 function saveTargets(){
     var t={
         fijos:n(document.getElementById('tgtFijos').value)||15,
@@ -462,7 +477,10 @@ function saveTargets(){
         prev:n(document.getElementById('tgtPrev').value)||5,
         util:n(document.getElementById('tgtUtil').value)||20
     };
-    localStorage.setItem(LS_KPI_TGT,JSON.stringify(t));
+    _kCache.targets = t;
+    var negId = getNegocioActivo();
+    _supabase.from('kpi_targets').upsert({negocio_id: negId, datos: t, updated_at: new Date().toISOString()}, {onConflict:'negocio_id'})
+        .then(function(r){ if (r.error) console.error('[kpi_targets] upsert:', r.error.message); });
     renderAll();
 }
 function updateSumTargets(){
@@ -639,8 +657,11 @@ document.addEventListener('DOMContentLoaded',function(){
     document.addEventListener('click',function(e){if(!e.target.closest('#sucMenu')&&!e.target.closest('#sucChip')){var m=document.getElementById('sucMenu');if(m)m.classList.remove('open');chip.classList.remove('open');}});
 
     renderAll();
+    _sbInit();
 });
 </script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 </body>

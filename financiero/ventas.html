@@ -455,10 +455,39 @@ function toggleNav(){
     if(btn)btn.setAttribute('data-tooltip',c?'Expandir':'Ocultar');
 }
 
-/* ── Storage keys ── */
-var LS_METAS  = 'etaax_sf_metas';
-var LS_OTROS  = 'etaax_sf_otros';
-var LS_CORTES = 'etaax_cortes';
+/* ── Supabase cache ── */
+var _cacheCortesSF = null;
+var _cacheMetas    = null; // {[mes]: {meta,dist,fechaSet,manualDays}}
+var _cacheOtros    = null;
+
+function getNegocioActivo(){ return localStorage.getItem('etaax_negocio_activo')||''; }
+
+async function _sbInit() {
+    var negId = getNegocioActivo();
+    if (!negId) return;
+    var r = await Promise.all([
+        _supabase.from('cortes').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
+        _supabase.from('sf_metas').select('datos').eq('negocio_id', negId).maybeSingle(),
+        _supabase.from('sf_otros').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
+    ]);
+    if (!r[0].error) _cacheCortesSF = (r[0].data||[]).map(function(x){return x.datos;});
+    if (!r[1].error && r[1].data) _cacheMetas = r[1].data.datos || {};
+    if (!r[2].error) _cacheOtros   = (r[2].data||[]).map(function(x){return x.datos;});
+    renderAll();
+}
+function _sbUpOtro(record) {
+    _supabase.from('sf_otros').upsert({
+        id: record.id, negocio_id: getNegocioActivo(),
+        datos: record, updated_at: new Date().toISOString()
+    }, {onConflict:'id'}).then(function(r){
+        if (r.error) console.error('[sf_otros] upsert:', r.error.message);
+    });
+}
+function _sbDelOtro(id) {
+    _supabase.from('sf_otros').delete().eq('id', id).then(function(r){
+        if (r.error) console.error('[sf_otros] delete:', r.error.message);
+    });
+}
 
 /* ── Sucursal state ── */
 var _sucursalId = null; // null = todas
@@ -507,16 +536,18 @@ function _updateSucChip(){
 }
 
 /* ── Data loaders ── */
-function loadMetas(){try{return JSON.parse(localStorage.getItem(LS_METAS))||{};}catch(e){return{};}}
-function saveMetas(d){localStorage.setItem(LS_METAS,JSON.stringify(d));}
-function loadOtros(){try{return JSON.parse(localStorage.getItem(LS_OTROS))||[];}catch(e){return[];}}
-function saveOtros(d){localStorage.setItem(LS_OTROS,JSON.stringify(d));}
-function loadCortes(){
-    try{
-        var all=JSON.parse(localStorage.getItem(LS_CORTES))||[];
-        if(!_sucursalId) return all;
-        return all.filter(function(c){return !c.negocioId||c.negocioId===_sucursalId;});
-    }catch(e){return[];}
+function loadMetas() { return _cacheMetas || {}; }
+function saveMetas(d) {
+    _cacheMetas = d;
+    var negId = getNegocioActivo();
+    _supabase.from('sf_metas').upsert({negocio_id: negId, datos: d, updated_at: new Date().toISOString()}, {onConflict:'negocio_id'})
+        .then(function(r){ if (r.error) console.error('[sf_metas] upsert:', r.error.message); });
+}
+function loadOtros() { return _cacheOtros || []; }
+function loadCortes() {
+    var all = _cacheCortesSF || [];
+    if (!_sucursalId) return all;
+    return all.filter(function(c){return !c.negocioId||c.negocioId===_sucursalId;});
 }
 
 /* ── Helpers ── */
@@ -836,7 +867,9 @@ function _renderOtros(r){
     tbody.querySelectorAll('[data-otro-del]').forEach(function(btn){
         btn.addEventListener('click',function(){
             if(!confirm('¿Eliminar este ingreso?'))return;
-            saveOtros(loadOtros().filter(function(o){return o.id!==btn.dataset.otroDel;}));
+            var delId = btn.dataset.otroDel;
+            _cacheOtros = loadOtros().filter(function(o){return o.id!==delId;});
+            _sbDelOtro(delId);
             renderAll();
         });
     });
@@ -975,9 +1008,10 @@ function guardarOtro(){
     if(!monto||monto<=0){alert('El monto debe ser mayor a cero.');return;}
     if(!concepto){alert('El concepto es obligatorio.');return;}
     var id=document.getElementById('oId').value||genId();
-    var lista=loadOtros().filter(function(o){return o.id!==id;});
-    lista.push({id:id,fecha:fecha,concepto:concepto,monto:monto,metodo:document.getElementById('oMetodo').value});
-    saveOtros(lista);
+    var record={id:id,fecha:fecha,concepto:concepto,monto:monto,metodo:document.getElementById('oMetodo').value};
+    _cacheOtros = loadOtros().filter(function(o){return o.id!==id;});
+    _cacheOtros.push(record);
+    _sbUpOtro(record);
     cerrarOtros();
     renderAll();
 }
@@ -1091,8 +1125,11 @@ document.addEventListener('DOMContentLoaded',function(){
 
     /* Initial render */
     renderAll();
+    _sbInit();
 });
 </script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 </body>
