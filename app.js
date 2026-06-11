@@ -52,10 +52,11 @@ function _sbUpReceta(rec) {
     _supabase.from('recetas').upsert({
         id: rec.id, negocio_id: negId, datos: rec,
         updated_at: new Date().toISOString()
-    });
+    }).then(function(r){ if (r.error) console.error('[recetas] upsert:', r.error.message); });
 }
 function _sbDelReceta(id) {
-    _supabase.from('recetas').delete().eq('id', id);
+    _supabase.from('recetas').delete().eq('id', id)
+        .then(function(r){ if (r.error) console.error('[recetas] delete:', r.error.message); });
 }
 async function _sbInitRecetas() {
     var negId = getNegocioActivo(); if (!negId) return;

@@ -388,11 +388,13 @@ function getHistorial() { return _cacheReqHist || []; }
 
 function _sbSaveReqData(d) {
     var negId = _reqNeg(); if (!negId || typeof _supabase === 'undefined') return;
-    _supabase.from('req_pedido').upsert({ negocio_id: negId, datos: d, updated_at: new Date().toISOString() }, { onConflict: 'negocio_id' });
+    _supabase.from('req_pedido').upsert({ negocio_id: negId, datos: d, updated_at: new Date().toISOString() }, { onConflict: 'negocio_id' })
+        .then(function(r){ if (r.error) console.error('[req_pedido] upsert:', r.error.message); });
 }
 function _sbUpHist(snap) {
     var negId = _reqNeg(); if (!negId || typeof _supabase === 'undefined') return;
-    _supabase.from('req_historial').upsert({ id: snap.id, negocio_id: negId, datos: snap, created_at: snap.fecha || new Date().toISOString() });
+    _supabase.from('req_historial').upsert({ id: snap.id, negocio_id: negId, datos: snap, created_at: snap.fecha || new Date().toISOString() })
+        .then(function(r){ if (r.error) console.error('[req_historial] upsert:', r.error.message); });
 }
 
 function setReqData(d) {

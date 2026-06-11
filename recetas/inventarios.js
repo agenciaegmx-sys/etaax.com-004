@@ -35,22 +35,24 @@ function _sbUpInv(inv) {
     _supabase.from('inventarios').upsert({
         id: inv.id, negocio_id: negId, datos: inv,
         updated_at: new Date().toISOString()
-    });
+    }).then(function(r){ if (r.error) console.error('[inventarios] upsert:', r.error.message); });
 }
 function _sbDelInv(id) {
     if (typeof _supabase === 'undefined') return;
-    _supabase.from('inventarios').delete().eq('id', id);
+    _supabase.from('inventarios').delete().eq('id', id)
+        .then(function(r){ if (r.error) console.error('[inventarios] delete:', r.error.message); });
 }
 function _sbUpEL(entry) {
     var negId = getNegocioActivo(); if (!negId || typeof _supabase === 'undefined') return;
     _supabase.from('entradas_log').upsert({
         id: entry.id, negocio_id: negId, datos: entry,
         updated_at: new Date().toISOString()
-    });
+    }).then(function(r){ if (r.error) console.error('[entradas_log] upsert:', r.error.message); });
 }
 function _sbDelEL(id) {
     if (typeof _supabase === 'undefined') return;
-    _supabase.from('entradas_log').delete().eq('id', id);
+    _supabase.from('entradas_log').delete().eq('id', id)
+        .then(function(r){ if (r.error) console.error('[entradas_log] delete:', r.error.message); });
 }
 
 async function _sbInitInv() {

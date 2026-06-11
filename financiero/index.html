@@ -389,10 +389,12 @@ var _cacheTc = null;
 
 function _sbUpTc(rec){
     var negId = getNegocioActivo(); if(!negId) return;
-    _supabase.from('tarjetas_credito').upsert({id: rec.id, negocio_id: negId, datos: rec, updated_at: new Date().toISOString()});
+    _supabase.from('tarjetas_credito').upsert({id: rec.id, negocio_id: negId, datos: rec, updated_at: new Date().toISOString()})
+        .then(function(r){ if (r.error) console.error('[tarjetas] upsert:', r.error.message); });
 }
 function _sbDelTc(id){
-    _supabase.from('tarjetas_credito').delete().eq('id', id);
+    _supabase.from('tarjetas_credito').delete().eq('id', id)
+        .then(function(r){ if (r.error) console.error('[tarjetas] delete:', r.error.message); });
 }
 async function _sbInitTc(){
     var negId = getNegocioActivo(); if(!negId) return;
