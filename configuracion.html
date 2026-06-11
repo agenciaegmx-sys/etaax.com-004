@@ -415,6 +415,17 @@ async function guardarConfig() {
     document.getElementById('breadNombre').textContent = nombre;
     document.getElementById('saveStatus').textContent = '✓ Guardado';
     document.getElementById('saveStatus').style.color = 'var(--green)';
+
+    // Actualizar etaax_ctx para que el ctx-bar refleje el nuevo nombre sin reload
+    try {
+        var ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null');
+        if (ctx) {
+            ctx.negNombre = nombre;
+            localStorage.setItem('etaax_ctx', JSON.stringify(ctx));
+            if (typeof window._ctxBarInit === 'function') window._ctxBarInit();
+        }
+    } catch(e) {}
+
     if (btn) {
         btn.textContent = '✓ Cambios guardados';
         btn.style.background = '#2a9960';

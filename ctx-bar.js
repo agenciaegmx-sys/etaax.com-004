@@ -28,6 +28,28 @@
             '</div>';
         bar.style.display = 'flex';
         document.body.classList.add('has-ctx');
+        // Sync nombre desde Supabase en background (multi-dispositivo)
+        _syncNegNombre(ctx, initCtxBar);
+    }
+
+    // Compara el nombre en Supabase con el de etaax_ctx y actualiza si cambió
+    function _syncNegNombre(ctx, rerender) {
+        if (typeof _supabase === 'undefined' || !ctx || !ctx.negId) return;
+        _supabase.from('negocios').select('datos').eq('id', ctx.negId).maybeSingle().then(function(res) {
+            if (res.error || !res.data) return;
+            var nombre = (res.data.datos || {}).nombre;
+            if (!nombre || nombre === ctx.negNombre) return;
+            // El nombre cambió en Supabase — actualizar ctx y re-renderizar
+            ctx.negNombre = nombre;
+            localStorage.setItem('etaax_ctx', JSON.stringify(ctx));
+            // Actualizar también etaax_negocios
+            try {
+                var negs = JSON.parse(localStorage.getItem('etaax_negocios') || '[]');
+                var idx = negs.findIndex(function(n) { return n.id === ctx.negId; });
+                if (idx >= 0) { negs[idx].nombre = nombre; localStorage.setItem('etaax_negocios', JSON.stringify(negs)); }
+            } catch(e) {}
+            rerender();
+        });
     }
 
     document.addEventListener('DOMContentLoaded', initCtxBar);
