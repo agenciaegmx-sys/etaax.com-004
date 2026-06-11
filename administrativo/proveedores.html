@@ -445,6 +445,7 @@
 <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
 
 <script>
 (function(){
@@ -485,19 +486,8 @@ async function _sbInit() {
     renderTable();
     renderDescubrimiento();
 }
-function _sbUp(record) {
-    _supabase.from('proveedores').upsert({
-        id: record.id, negocio_id: getNegocioActivo(),
-        datos: record, updated_at: new Date().toISOString()
-    }, {onConflict:'id'}).then(function(r){
-        if (r.error) console.error('[proveedores] upsert:', r.error.message);
-    });
-}
-function _sbDel(id) {
-    _supabase.from('proveedores').delete().eq('id', id).then(function(r){
-        if (r.error) console.error('[proveedores] delete:', r.error.message);
-    });
-}
+function _sbUp(record) { sbUpsert('proveedores', record); }
+function _sbDel(id) { sbDelete('proveedores', id); }
 
 function load() { return _cacheProvs || []; }
 function save(d) { /* no-op: cache is updated in-place */ }

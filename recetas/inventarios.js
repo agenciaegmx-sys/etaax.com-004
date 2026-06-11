@@ -32,27 +32,17 @@ function getEntradasLog() { return _cacheEL || []; }
 // ── Helpers Supabase inventarios ──────────────────────────────
 function _sbUpInv(inv) {
     var negId = getNegocioActivo(); if (!negId || typeof _supabase === 'undefined') return;
-    _supabase.from('inventarios').upsert({
-        id: inv.id, negocio_id: negId, datos: inv,
-        updated_at: new Date().toISOString()
-    }).then(function(r){ if (r.error) console.error('[inventarios] upsert:', r.error.message); });
+    sbUpsert('inventarios', inv, negId);
 }
 function _sbDelInv(id) {
-    if (typeof _supabase === 'undefined') return;
-    _supabase.from('inventarios').delete().eq('id', id)
-        .then(function(r){ if (r.error) console.error('[inventarios] delete:', r.error.message); });
+    sbDelete('inventarios', id);
 }
 function _sbUpEL(entry) {
     var negId = getNegocioActivo(); if (!negId || typeof _supabase === 'undefined') return;
-    _supabase.from('entradas_log').upsert({
-        id: entry.id, negocio_id: negId, datos: entry,
-        updated_at: new Date().toISOString()
-    }).then(function(r){ if (r.error) console.error('[entradas_log] upsert:', r.error.message); });
+    sbUpsert('entradas_log', entry, negId);
 }
 function _sbDelEL(id) {
-    if (typeof _supabase === 'undefined') return;
-    _supabase.from('entradas_log').delete().eq('id', id)
-        .then(function(r){ if (r.error) console.error('[entradas_log] delete:', r.error.message); });
+    sbDelete('entradas_log', id);
 }
 
 async function _sbInitInv() {

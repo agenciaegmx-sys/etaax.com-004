@@ -498,21 +498,9 @@ async function _sbInit() {
     if (!r[5].error) _cacheGG_Staff   = (r[5].data||[]).map(function(x){return x.datos;});
     renderAll();
 }
-function _sbUpFijo(record) {
-    _supabase.from('gf_fijos').upsert({
-        id: record.id, negocio_id: getNegocioActivo(),
-        datos: record, updated_at: new Date().toISOString()
-    }, {onConflict:'id'}).then(function(r){ if (r.error) console.error('[gf_fijos] upsert:', r.error.message); });
-}
-function _sbDelFijo(id) {
-    _supabase.from('gf_fijos').delete().eq('id', id)
-        .then(function(r){ if (r.error) console.error('[gf_fijos] delete:', r.error.message); });
-}
-function _sbSaveNominas(allNominas) {
-    var negId = getNegocioActivo();
-    _supabase.from('gf_nominas').upsert({negocio_id: negId, datos: allNominas, updated_at: new Date().toISOString()}, {onConflict:'negocio_id'})
-        .then(function(r){ if (r.error) console.error('[gf_nominas] upsert:', r.error.message); });
-}
+function _sbUpFijo(record) { sbUpsert('gf_fijos', record); }
+function _sbDelFijo(id) { sbDelete('gf_fijos', id); }
+function _sbSaveNominas(allNominas) { sbUpsertDoc('gf_nominas', allNominas); }
 
 function loadFijos(){ return _cacheGG_Fijos || []; }
 function loadNominas(mes){
@@ -949,6 +937,7 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 </body>

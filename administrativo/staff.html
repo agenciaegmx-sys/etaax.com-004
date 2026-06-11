@@ -539,6 +539,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
 <script>
 (function(){
     var saved = localStorage.getItem('etaax_theme') || 'dark';
@@ -604,11 +605,13 @@ async function save(d) {
     var negId = getNegocioActivo();
     if (!negId) return;
     // Reemplazar todos los registros del negocio
-    await _supabase.from('staff').delete().eq('negocio_id', negId);
+    var rDel = await _supabase.from('staff').delete().eq('negocio_id', negId);
+    if (rDel.error) { _sbToastError('staff delete: ' + rDel.error.message); return; }
     if (d.length) {
-        await _supabase.from('staff').insert(
+        var rIns = await _supabase.from('staff').insert(
             d.map(function(m){ return { id: m.id, negocio_id: negId, datos: m }; })
         );
+        if (rIns.error) _sbToastError('staff insert: ' + rIns.error.message);
     }
 }
 async function syncFromDB() {

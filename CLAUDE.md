@@ -54,9 +54,9 @@ id TEXT PRIMARY KEY, negocio_id TEXT REFERENCES negocios(id), datos JSONB, creat
 
 El objeto completo de la app vive en `datos` (JSONB); las columnas solo dan identidad e índice. Cada tabla tiene dos políticas RLS: `"own"` (el `usuario_id` del negocio debe ser `auth.uid()`) y `"admin_all"` (función `is_platform_admin()`). Tablas raíz: `usuarios` (espejo de auth.users) y `negocios`.
 
-Patrón de acceso en el cliente (ver `app.js` recetas como referencia):
+Patrón de acceso en el cliente:
 1. Al cargar la página, `select('datos').eq('negocio_id', negId)` → cache en memoria (`_cacheRecetas` etc.) con fallback a localStorage si falla.
-2. Escrituras: `upsert({id, negocio_id, datos, updated_at})` fire-and-forget por registro; deletes por `id`.
+2. Escrituras: usar los helpers de `etaax-db.js` — `sbUpsert(tabla, record)` para tablas per-record, `sbUpsertDoc(tabla, datos)` para documento único por negocio (onConflict negocio_id), `sbDelete(tabla, id)`. Reportan fallos al usuario con `_sbToastError`. Incluir `/etaax-db.js` después de `supabase-config.js`. OJO: las queries de supabase-js v2 NO se ejecutan sin `await` o `.then()` — nunca dejar un builder suelto.
 3. localStorage se mantiene como respaldo (sin fotos base64, por la quota).
 
 La migración localStorage→Supabase ya está completa para todos los módulos; al tocar persistencia, seguir este patrón y no inventar otro.

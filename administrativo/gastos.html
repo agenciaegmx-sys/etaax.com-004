@@ -709,27 +709,9 @@ async function _sbInit() {
     renderAll();
 }
 
-function _sbUp(tabla, record) {
-    _supabase.from(tabla).upsert({
-        id: record.id, negocio_id: getNegocioActivo(),
-        datos: record, updated_at: new Date().toISOString()
-    }, {onConflict:'id'}).then(function(r){
-        if (r.error) console.error('[gastos] upsert '+tabla+':', r.error.message);
-    });
-}
-function _sbDel(tabla, id) {
-    _supabase.from(tabla).delete().eq('id', id).then(function(r){
-        if (r.error) console.error('[gastos] delete '+tabla+':', r.error.message);
-    });
-}
-function _sbSaveCats(cats) {
-    var negId = getNegocioActivo();
-    _supabase.from('gastos_cats_custom').upsert({
-        negocio_id: negId, datos: cats, updated_at: new Date().toISOString()
-    }, {onConflict:'negocio_id'}).then(function(r){
-        if (r.error) console.error('[gastos] cats upsert:', r.error.message);
-    });
-}
+function _sbUp(tabla, record) { sbUpsert(tabla, record); }
+function _sbDel(tabla, id) { sbDelete(tabla, id); }
+function _sbSaveCats(cats) { sbUpsertDoc('gastos_cats_custom', cats); }
 
 function load()           { return _cacheGastos || []; }
 function loadProveedores(){ return _cacheProvs  || []; }
@@ -1421,6 +1403,7 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 <script src="../admin-guard.js"></script>

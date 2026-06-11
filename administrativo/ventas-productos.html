@@ -338,19 +338,8 @@ async function _sbInit() {
     if (!r.error) _cacheVP = (r.data||[]).map(function(x){return x.datos;});
     init();
 }
-function _sbUp(record) {
-    _supabase.from('ventas_productos').upsert({
-        id: record.id, negocio_id: _getNeg(),
-        datos: record, updated_at: new Date().toISOString()
-    }, {onConflict:'id'}).then(function(r){
-        if (r.error) console.error('[vp] upsert:', r.error.message);
-    });
-}
-function _sbDel(id) {
-    _supabase.from('ventas_productos').delete().eq('id', id).then(function(r){
-        if (r.error) console.error('[vp] delete:', r.error.message);
-    });
-}
+function _sbUp(record) { sbUpsert('ventas_productos', record, _getNeg()); }
+function _sbDel(id) { sbDelete('ventas_productos', id); }
 
 function _load(){ return _cacheVP || []; }
 function _save(d){ _cacheVP = d; }
@@ -949,6 +938,7 @@ function toggleTheme(){
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 </body>

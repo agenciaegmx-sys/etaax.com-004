@@ -476,19 +476,8 @@ async function _sbInit() {
     if (!r[2].error) _cacheOtros   = (r[2].data||[]).map(function(x){return x.datos;});
     renderAll();
 }
-function _sbUpOtro(record) {
-    _supabase.from('sf_otros').upsert({
-        id: record.id, negocio_id: getNegocioActivo(),
-        datos: record, updated_at: new Date().toISOString()
-    }, {onConflict:'id'}).then(function(r){
-        if (r.error) console.error('[sf_otros] upsert:', r.error.message);
-    });
-}
-function _sbDelOtro(id) {
-    _supabase.from('sf_otros').delete().eq('id', id).then(function(r){
-        if (r.error) console.error('[sf_otros] delete:', r.error.message);
-    });
-}
+function _sbUpOtro(record) { sbUpsert('sf_otros', record); }
+function _sbDelOtro(id) { sbDelete('sf_otros', id); }
 
 /* ── Sucursal state ── */
 var _sucursalId = null; // null = todas
@@ -541,8 +530,7 @@ function loadMetas() { return _cacheMetas || {}; }
 function saveMetas(d) {
     _cacheMetas = d;
     var negId = getNegocioActivo();
-    _supabase.from('sf_metas').upsert({negocio_id: negId, datos: d, updated_at: new Date().toISOString()}, {onConflict:'negocio_id'})
-        .then(function(r){ if (r.error) console.error('[sf_metas] upsert:', r.error.message); });
+    sbUpsertDoc('sf_metas', d, negId);
 }
 function loadOtros() { return _cacheOtros || []; }
 function loadCortes() {
@@ -1131,6 +1119,7 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 </body>

@@ -211,10 +211,7 @@ function setRecetas(lista) {
 }
 function _sbMenuUpRec(rec) {
     var negId = getNegocioActivo(); if (!negId) return;
-    _supabase.from('recetas').upsert({
-        id: rec.id, negocio_id: negId, datos: rec,
-        updated_at: new Date().toISOString()
-    }).then(function(r){ if (r.error) console.error('[menu] upsert receta:', r.error.message); });
+    sbUpsert('recetas', rec, negId);
 }
 async function _sbInitMenu() {
     var negId = getNegocioActivo(); if (!negId) return;
@@ -401,6 +398,7 @@ document.addEventListener('DOMContentLoaded', function() { renderMenu(); _sbInit
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 </body>

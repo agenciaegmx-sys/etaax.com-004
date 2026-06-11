@@ -110,7 +110,8 @@
            return { negocio_id: negId, insumo_id: ins.id, datos: ins };
        });
        for (var i = 0; i < records.length; i += BATCH) {
-           await _supabase.from('negocio_insumos').upsert(records.slice(i, i + BATCH));
+           var rUp = await _supabase.from('negocio_insumos').upsert(records.slice(i, i + BATCH));
+           if (rUp.error) { _sbToastError('sync negocio_insumos: ' + rUp.error.message); break; }
        }
    }
    

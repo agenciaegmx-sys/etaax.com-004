@@ -383,6 +383,7 @@ function toggleTheme() {
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
 <script>
 /* ── Tarjetas de crédito (financiero/index.html) ── */
 function getNegocioActivo(){ return localStorage.getItem('etaax_negocio_activo') || ''; }
@@ -390,12 +391,10 @@ var _cacheTc = null;
 
 function _sbUpTc(rec){
     var negId = getNegocioActivo(); if(!negId) return;
-    _supabase.from('tarjetas_credito').upsert({id: rec.id, negocio_id: negId, datos: rec, updated_at: new Date().toISOString()})
-        .then(function(r){ if (r.error) console.error('[tarjetas] upsert:', r.error.message); });
+    sbUpsert('tarjetas_credito', rec, negId);
 }
 function _sbDelTc(id){
-    _supabase.from('tarjetas_credito').delete().eq('id', id)
-        .then(function(r){ if (r.error) console.error('[tarjetas] delete:', r.error.message); });
+    sbDelete('tarjetas_credito', id);
 }
 async function _sbInitTc(){
     var negId = getNegocioActivo(); if(!negId) return;

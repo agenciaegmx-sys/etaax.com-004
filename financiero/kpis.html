@@ -480,8 +480,7 @@ function saveTargets(){
     };
     _kCache.targets = t;
     var negId = getNegocioActivo();
-    _supabase.from('kpi_targets').upsert({negocio_id: negId, datos: t, updated_at: new Date().toISOString()}, {onConflict:'negocio_id'})
-        .then(function(r){ if (r.error) console.error('[kpi_targets] upsert:', r.error.message); });
+    sbUpsertDoc('kpi_targets', t, negId);
     renderAll();
 }
 function updateSumTargets(){
@@ -663,6 +662,7 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 </body>

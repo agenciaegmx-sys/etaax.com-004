@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="../styles.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
     <script src="../supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
     <style>
         .period-tabs{display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:4px;}
         .period-tab{background:transparent;border:none;color:var(--text-muted);padding:7px 16px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;transition:all .15s;white-space:nowrap;}
@@ -821,19 +822,8 @@ async function _sbInit() {
     renderDepositos();
 }
 
-function _sbUp(tabla, record) {
-    _supabase.from(tabla).upsert({
-        id: record.id, negocio_id: getNegocioActivo(),
-        datos: record, updated_at: new Date().toISOString()
-    }, {onConflict:'id'}).then(function(r){
-        if (r.error) console.error('[ventas] upsert '+tabla+':', r.error.message);
-    });
-}
-function _sbDel(tabla, id) {
-    _supabase.from(tabla).delete().eq('id', id).then(function(r){
-        if (r.error) console.error('[ventas] delete '+tabla+':', r.error.message);
-    });
-}
+function _sbUp(tabla, record) { sbUpsert(tabla, record); }
+function _sbDel(tabla, id) { sbDelete(tabla, id); }
 
 /* ── Data helpers ── */
 function load()    { return _cacheCortes || []; }

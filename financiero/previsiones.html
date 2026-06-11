@@ -314,16 +314,8 @@ async function _sbInit() {
     if (!r.error) _cachePrevs = (r.data||[]).map(function(x){return x.datos;});
     renderAll();
 }
-function _sbUp(record) {
-    _supabase.from('previsiones').upsert({
-        id: record.id, negocio_id: getNegocioActivo(),
-        datos: record, updated_at: new Date().toISOString()
-    }, {onConflict:'id'}).then(function(r){ if (r.error) console.error('[previsiones] upsert:', r.error.message); });
-}
-function _sbDel(id) {
-    _supabase.from('previsiones').delete().eq('id', id)
-        .then(function(r){ if (r.error) console.error('[previsiones] delete:', r.error.message); });
-}
+function _sbUp(record) { sbUpsert('previsiones', record); }
+function _sbDel(id) { sbDelete('previsiones', id); }
 
 function loadAll(){ return _cachePrevs || []; }
 function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
@@ -516,6 +508,7 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 </body>

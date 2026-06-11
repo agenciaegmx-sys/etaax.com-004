@@ -222,19 +222,8 @@ async function _sbInit() {
     if (!r.error) _cacheClientes = (r.data||[]).map(function(x){return x.datos;});
     renderClientes();
 }
-function _sbUp(record) {
-    _supabase.from('clientes').upsert({
-        id: record.id, negocio_id: getNegocioActivo(),
-        datos: record, updated_at: new Date().toISOString()
-    }, {onConflict:'id'}).then(function(r){
-        if (r.error) console.error('[clientes] upsert:', r.error.message);
-    });
-}
-function _sbDel(id) {
-    _supabase.from('clientes').delete().eq('id', id).then(function(r){
-        if (r.error) console.error('[clientes] delete:', r.error.message);
-    });
-}
+function _sbUp(record) { sbUpsert('clientes', record); }
+function _sbDel(id) { sbDelete('clientes', id); }
 
 function load(){ return _cacheClientes || []; }
 function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -320,6 +309,7 @@ document.addEventListener('DOMContentLoaded',function(){renderClientes();_sbInit
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 </body>

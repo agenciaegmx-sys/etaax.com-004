@@ -747,6 +747,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
 <script src="../app.js"></script>
 <script>
@@ -1604,7 +1605,7 @@ function agregarSubRecetaComoInsumo() {
             _supabase.from('negocio_insumos').upsert({
                 insumo_id: insumoNuevo.id, negocio_id: negId, datos: insumoNuevo,
                 updated_at: new Date().toISOString()
-            }).then(function(r){ if (r.error) console.error('[negocio_insumos] upsert:', r.error.message); });
+            }).then(function(r){ if (r.error) _sbToastError('upsert negocio_insumos: ' + r.error.message); });
         }
 
         // Feedback visual
