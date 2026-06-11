@@ -799,6 +799,8 @@ document.addEventListener('DOMContentLoaded', function() {
         nav.style.display = 'none';
         document.getElementById('mainContent').classList.add('expandido');
     }
+    // Cargar recetas desde Supabase
+    if (typeof _sbInitRecetas === 'function') _sbInitRecetas();
 });
 
 // ── Sync precio formulario → costeo ──────────────────────────
@@ -1580,6 +1582,7 @@ function agregarSubRecetaComoInsumo() {
 
     // Guardar en catálogo
     try {
+        var negId = getNegocioActivo ? getNegocioActivo() : (localStorage.getItem('etaax_negocio_activo') || '');
         var catalogo = JSON.parse(localStorage.getItem(_sk('insumos'))) || [];
         // Verificar si ya existe un insumo de esta sub-receta
         var existeIdx = catalogo.findIndex(function(x) {
@@ -1593,6 +1596,13 @@ function agregarSubRecetaComoInsumo() {
             catalogo.push(insumoNuevo);
         }
         localStorage.setItem(_sk('insumos'), JSON.stringify(catalogo));
+        // Sync a Supabase negocio_insumos
+        if (negId && typeof _supabase !== 'undefined') {
+            _supabase.from('negocio_insumos').upsert({
+                id: insumoNuevo.id, negocio_id: negId, datos: insumoNuevo,
+                updated_at: new Date().toISOString()
+            });
+        }
 
         // Feedback visual
         var btn = document.querySelector('#cardAgregarInsumo button');
@@ -2832,6 +2842,7 @@ function eliminarReceta(id) {
     var nombre = rec ? rec.nombre : 'esta receta';
     _pedirClaveAdmin('Eliminar "' + nombre + '"', function() {
         setRecetas(getRecetas().filter(function(r){ return r.id !== id; }));
+        if (typeof _sbDelReceta === 'function') _sbDelReceta(id);
         if (typeof renderMenuReceta === 'function') renderMenuReceta();
     });
 }
@@ -2842,6 +2853,7 @@ function eliminarRecetaActual() {
     const id = recetaActualId;
     _pedirClaveAdmin('Eliminar "' + nombre + '"', function() {
         setRecetas(getRecetas().filter(r => r.id !== id));
+        if (typeof _sbDelReceta === 'function') _sbDelReceta(id);
         recetaActualId = null;
         abrirMenuReceta();
     });

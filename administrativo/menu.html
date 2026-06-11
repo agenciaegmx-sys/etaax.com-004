@@ -200,14 +200,26 @@ function toggleNav() {
     if (btn) btn.setAttribute('data-tooltip', cerrado ? 'Expandir' : 'Ocultar');
 }
 
-// ── Datos ────────────────────────────────────────────────────
-var KEY_RECETAS = 'etaax_recetas';
+// ── Datos — cache + Supabase ──────────────────────────────────
+function getNegocioActivo() { return localStorage.getItem('etaax_negocio_activo') || ''; }
+var _cacheMenuRec = null;
 
-function getRecetas() {
-    return JSON.parse(localStorage.getItem(KEY_RECETAS) || '[]');
-}
+function getRecetas() { return _cacheMenuRec || []; }
 function setRecetas(lista) {
-    localStorage.setItem(KEY_RECETAS, JSON.stringify(lista));
+    _cacheMenuRec = lista;
+}
+function _sbMenuUpRec(rec) {
+    var negId = getNegocioActivo(); if (!negId) return;
+    _supabase.from('recetas').upsert({
+        id: rec.id, negocio_id: negId, datos: rec,
+        updated_at: new Date().toISOString()
+    });
+}
+async function _sbInitMenu() {
+    var negId = getNegocioActivo(); if (!negId) return;
+    var res = await _supabase.from('recetas').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true});
+    if (!res.error) _cacheMenuRec = (res.data || []).map(function(x) { return x.datos; });
+    renderMenu();
 }
 
 // ── Cálculos ─────────────────────────────────────────────────
@@ -271,6 +283,7 @@ function toggleStatus(id) {
     if (idx < 0) return;
     lista[idx].status = lista[idx].status === 'inactiva' ? 'activa' : 'inactiva';
     setRecetas(lista);
+    _sbMenuUpRec(lista[idx]);
     renderMenu();
 }
 
@@ -383,8 +396,10 @@ function esc(s) {
 }
 
 // ── Init ─────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', renderMenu);
+document.addEventListener('DOMContentLoaded', function() { renderMenu(); _sbInitMenu(); });
 </script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 </body>

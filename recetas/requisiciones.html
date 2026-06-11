@@ -375,18 +375,55 @@ function _reqGet(key) {
     if (leg&&leg!=='null') { localStorage.setItem(k,leg); return leg; }
     return null;
 }
-// ── Datos ─────────────────────────────────────────────────────
-function getInsumos() {
-    try { return JSON.parse(_reqGet('insumos')) || []; } catch(e) { return []; }
+function _reqGenId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
+
+// ── Datos — cache + Supabase ──────────────────────────────────
+var _cacheInsumosReq = null;
+var _cacheReqData    = null;
+var _cacheReqHist    = null;
+
+function getInsumos() { return _cacheInsumosReq || (function(){ try { return JSON.parse(_reqGet('insumos')) || []; } catch(e) { return []; } }()); }
+function getReqData() { return _cacheReqData !== null ? _cacheReqData : {}; }
+function getHistorial() { return _cacheReqHist || []; }
+
+function _sbSaveReqData(d) {
+    var negId = _reqNeg(); if (!negId || typeof _supabase === 'undefined') return;
+    _supabase.from('req_pedido').upsert({ negocio_id: negId, datos: d, updated_at: new Date().toISOString() }, { onConflict: 'negocio_id' });
 }
-function getReqData() {
-    try { return JSON.parse(localStorage.getItem('etaax_req_items')) || {}; } catch(e) { return {}; }
+function _sbUpHist(snap) {
+    var negId = _reqNeg(); if (!negId || typeof _supabase === 'undefined') return;
+    _supabase.from('req_historial').upsert({ id: snap.id, negocio_id: negId, datos: snap, created_at: snap.fecha || new Date().toISOString() });
 }
-function setReqData(d) { localStorage.setItem('etaax_req_items', JSON.stringify(d)); }
-function getHistorial() {
-    try { return JSON.parse(localStorage.getItem('etaax_req_historial')) || []; } catch(e) { return []; }
+
+function setReqData(d) {
+    _cacheReqData = d;
+    _sbSaveReqData(d);
 }
-function setHistorial(h) { localStorage.setItem('etaax_req_historial', JSON.stringify(h)); }
+function setHistorial(h) {
+    var prev = _cacheReqHist || [];
+    // Asignar IDs a snapshots que no los tengan
+    h.forEach(function(s) { if (!s.id) s.id = _reqGenId(); });
+    _cacheReqHist = h;
+    // Upsert only new entries
+    h.forEach(function(snap) {
+        if (!prev.find(function(x){ return x.id === snap.id; })) _sbUpHist(snap);
+    });
+}
+
+async function _sbInitReq() {
+    var negId = _reqNeg();
+    if (!negId || typeof _supabase === 'undefined') return;
+    var r = await Promise.all([
+        _supabase.from('negocio_insumos').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true}),
+        _supabase.from('req_pedido').select('datos').eq('negocio_id', negId).maybeSingle(),
+        _supabase.from('req_historial').select('datos').eq('negocio_id', negId).order('created_at', {ascending: false}),
+    ]);
+    if (!r[0].error) _cacheInsumosReq = (r[0].data || []).map(function(x){ return x.datos; });
+    if (!r[1].error && r[1].data) _cacheReqData = r[1].data.datos;
+    else if (_cacheReqData === null) _cacheReqData = {};
+    if (!r[2].error) _cacheReqHist = (r[2].data || []).map(function(x){ return x.datos; });
+    init();
+}
 
 // Insumos del catálogo, excluyendo sub-recetas
 function getInsumosCatalogo() {
@@ -1079,8 +1116,13 @@ function filtrarPedProv(val) {
 }
 
 // ── Init ──────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', function() {
+    init(); // render inmediato con cache vacío
+    _sbInitReq(); // carga desde Supabase y re-renderiza
+});
 </script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 </body>

@@ -27,13 +27,45 @@ function _skGet(key) {
     return null;
 }
 
-// ── Recetas localStorage ──────────────────────────────────────
+// ── Recetas — cache + Supabase ────────────────────────────────
+var _cacheRecetas = null;
+
 function getRecetas() {
-    try { return JSON.parse(_skGet('recetas')) || []; }
-    catch { return []; }
+    return _cacheRecetas || [];
 }
 function setRecetas(data) {
-    localStorage.setItem(_sk('recetas'), JSON.stringify(data));
+    _cacheRecetas = data;
+    // localStorage fallback (sin fotos base64 para evitar quota)
+    try {
+        var sinFotos = data.map(function(r) {
+            if (!r.fotos || !r.fotos.length) return r;
+            var c = Object.assign({}, r);
+            c.fotos = []; c.foto = '';
+            return c;
+        });
+        localStorage.setItem(_sk('recetas'), JSON.stringify(sinFotos));
+    } catch(e) {}
+}
+
+function _sbUpReceta(rec) {
+    var negId = getNegocioActivo(); if (!negId) return;
+    _supabase.from('recetas').upsert({
+        id: rec.id, negocio_id: negId, datos: rec,
+        updated_at: new Date().toISOString()
+    });
+}
+function _sbDelReceta(id) {
+    _supabase.from('recetas').delete().eq('id', id);
+}
+async function _sbInitRecetas() {
+    var negId = getNegocioActivo(); if (!negId) return;
+    var res = await _supabase.from('recetas').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true});
+    if (!res.error) {
+        _cacheRecetas = (res.data || []).map(function(x) { return x.datos; });
+    } else {
+        // fallback localStorage si Supabase falla
+        try { _cacheRecetas = JSON.parse(_skGet('recetas')) || []; } catch(e) { _cacheRecetas = []; }
+    }
 }
 function genId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2,5);
@@ -128,6 +160,7 @@ function guardarReceta() {
     else lista.push(receta);
 
     setRecetas(lista);
+    if (typeof _sbUpReceta === 'function') _sbUpReceta(receta);
     recetaActualId = receta.id;
     alert('✅ Receta "' + nombre + '" guardada');
     var btnImp = document.getElementById('btnImprimirHeader');

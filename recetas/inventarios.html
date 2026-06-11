@@ -684,6 +684,10 @@ function toggleTheme() {
     else                  { if(icon) icon.textContent='☀️'; if(label) label.textContent='Modo claro'; }
 }
 </script>
+<script>
+// Cargar inventarios + insumos + recetas desde Supabase al iniciar
+document.addEventListener('DOMContentLoaded', function() { _sbInitInv(); });
+</script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 <script src="../admin-guard.js"></script>

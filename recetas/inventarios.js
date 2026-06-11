@@ -18,13 +18,62 @@ function _skGet(key) {
     return null;
 }
 
-// ── Storage ───────────────────────────────────────────────────
-function getInsumos()     { try { return JSON.parse(_skGet('insumos'))     || []; } catch { return []; } }
-function getRecetas()     { try { return JSON.parse(_skGet('recetas'))     || []; } catch { return []; } }
-function getInventarios() { try { return JSON.parse(_skGet('inventarios')) || []; } catch { return []; } }
+// ── Storage — cache + Supabase ────────────────────────────────
+var _cacheInv  = null;
+var _cacheEL   = null;
+var _cacheRecetasInv = null; // recetas para uso interno de este módulo
+var _cacheInsumosInv = null; // insumos para uso interno de este módulo
+
+function getInsumos()     { return _cacheInsumosInv || (function(){ try { return JSON.parse(_skGet('insumos')) || []; } catch { return []; } }()); }
+function getRecetas()     { return _cacheRecetasInv || []; }
+function getInventarios() { return _cacheInv || []; }
+function getEntradasLog() { return _cacheEL || []; }
+
+// ── Helpers Supabase inventarios ──────────────────────────────
+function _sbUpInv(inv) {
+    var negId = getNegocioActivo(); if (!negId || typeof _supabase === 'undefined') return;
+    _supabase.from('inventarios').upsert({
+        id: inv.id, negocio_id: negId, datos: inv,
+        updated_at: new Date().toISOString()
+    });
+}
+function _sbDelInv(id) {
+    if (typeof _supabase === 'undefined') return;
+    _supabase.from('inventarios').delete().eq('id', id);
+}
+function _sbUpEL(entry) {
+    var negId = getNegocioActivo(); if (!negId || typeof _supabase === 'undefined') return;
+    _supabase.from('entradas_log').upsert({
+        id: entry.id, negocio_id: negId, datos: entry,
+        updated_at: new Date().toISOString()
+    });
+}
+function _sbDelEL(id) {
+    if (typeof _supabase === 'undefined') return;
+    _supabase.from('entradas_log').delete().eq('id', id);
+}
+
+async function _sbInitInv() {
+    var negId = getNegocioActivo();
+    if (!negId || typeof _supabase === 'undefined') return;
+    var r = await Promise.all([
+        _supabase.from('inventarios').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true}),
+        _supabase.from('entradas_log').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true}),
+        _supabase.from('recetas').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true}),
+        _supabase.from('negocio_insumos').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true}),
+    ]);
+    if (!r[0].error) _cacheInv  = (r[0].data || []).map(function(x){ return x.datos; });
+    if (!r[1].error) _cacheEL   = (r[1].data || []).map(function(x){ return x.datos; });
+    if (!r[2].error) _cacheRecetasInv = (r[2].data || []).map(function(x){ return x.datos; });
+    if (!r[3].error) {
+        _cacheInsumosInv = (r[3].data || []).map(function(x){ return x.datos; });
+        // actualizar localStorage para compatibilidad con insumos.js
+        try { localStorage.setItem(_sk('insumos'), JSON.stringify(_cacheInsumosInv.map(function(ins){ var c=Object.assign({},ins); c.foto=''; c.fotoUrl=''; return c; }))); } catch(e) {}
+    }
+    if (typeof init === 'function') init();
+}
+
 function _limpiarStorageEmergencia() {
-    const id = getNegocioActivo();
-    // Eliminar claves legacy (sin ID de negocio) que hayan sido copiadas pero ya tienen versión con ID
     const keys = ['insumos', 'inventarios', 'recetas', 'entradas_log'];
     keys.forEach(k => {
         const legacyKey = 'etaax_' + k;
@@ -33,42 +82,35 @@ function _limpiarStorageEmergencia() {
             localStorage.removeItem(legacyKey);
         }
     });
-    // Limpiar fotos base64 de insumos del negocio
-    const insKey = _sk('insumos');
-    try {
-        const raw = localStorage.getItem(insKey);
-        if (raw) {
-            const lista = JSON.parse(raw) || [];
-            let changed = false;
-            lista.forEach(ins => {
-                if (ins.foto && ins.foto.startsWith('data:')) { ins.foto = ''; changed = true; }
-                if (ins.fotoUrl && ins.fotoUrl.startsWith('data:')) { ins.fotoUrl = ''; changed = true; }
-            });
-            if (changed) try { localStorage.setItem(insKey, JSON.stringify(lista)); } catch(e) {}
-        }
-    } catch(e) {}
 }
 
 function setInventarios(d) {
-    const json = JSON.stringify(d);
-    try {
-        localStorage.setItem(_sk('inventarios'), json);
-        return true;
-    } catch(e) {
-        // Intento de rescate: limpiar espacio y reintentar
-        console.warn('[setInventarios] storage lleno, limpiando...', e);
-        _limpiarStorageEmergencia();
-        try {
-            localStorage.setItem(_sk('inventarios'), json);
-            return true;
-        } catch(e2) {
-            console.error('[setInventarios] storage lleno incluso después de limpieza:', e2);
-            return false;
-        }
-    }
+    var prev = _cacheInv || [];
+    _cacheInv = d;
+    // Upsert changed/added records
+    d.forEach(function(inv) {
+        var old = prev.find(function(x){ return x.id === inv.id; });
+        if (!old || JSON.stringify(old) !== JSON.stringify(inv)) _sbUpInv(inv);
+    });
+    // Delete removed records
+    prev.forEach(function(inv) {
+        if (!d.find(function(x){ return x.id === inv.id; })) _sbDelInv(inv.id);
+    });
+    return true; // ya no falla por quota
 }
-function getEntradasLog() { try { return JSON.parse(_skGet('entradas_log')) || []; } catch { return []; } }
-function setEntradasLog(d){ try { localStorage.setItem(_sk('entradas_log'), JSON.stringify(d)); } catch(e){ console.error('[setEntradasLog] storage error:', e); } }
+
+function setEntradasLog(d) {
+    var prev = _cacheEL || [];
+    _cacheEL = d;
+    // Upsert new entries
+    d.forEach(function(e) {
+        if (!prev.find(function(x){ return x.id === e.id; })) _sbUpEL(e);
+    });
+    // Delete removed entries
+    prev.forEach(function(e) {
+        if (!d.find(function(x){ return x.id === e.id; })) _sbDelEL(e.id);
+    });
+}
 function genId()          { return Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
 
 // ── Estado global ─────────────────────────────────────────────
