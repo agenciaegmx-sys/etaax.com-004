@@ -619,11 +619,7 @@ async function syncFromDB() {
     localStorage.setItem(_sk('staff'), JSON.stringify(list));
 }
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
-function hashPwd(s) {
-    var h = 0;
-    for (var i = 0; i < s.length; i++) { h = (Math.imul(31,h) + s.charCodeAt(i)) | 0; }
-    return (h>>>0).toString(36) + btoa(unescape(encodeURIComponent(s))).slice(0,16).replace(/[^a-z0-9]/gi,'x');
-}
+// Hash de contraseñas: _hashPwdStaff (SHA-256) compartido en ../security.js
 function toggleStaffPwd(btn) {
     var inp = btn.closest('.pwd-wrap').querySelector('input');
     var showing = inp.type === 'text';
@@ -836,7 +832,7 @@ async function saveStaff() {
         puesto:          puesto,
         rol:             rol,
         usuario:         usuario,
-        passwordHash:    pwd ? hashPwd(pwd) : (existing.passwordHash || ''),
+        passwordHash:    pwd ? await _hashPwdStaff(pwd) : (existing.passwordHash || ''),
         fechaIngreso:    document.getElementById('fFechaIngreso').value,
         celular:         document.getElementById('fCelular').value.trim(),
         correo:          document.getElementById('fCorreo').value.trim(),

@@ -897,13 +897,8 @@ async function _syncNegociosDB() {
 
 /* ════════════════════════════════════════════════════════
    CONTRASEÑA — solo para staff (dueños usan Supabase Auth)
+   _hashPwdStaff y _hashPwdStaffLegacy viven en security.js
 ════════════════════════════════════════════════════════ */
-// Hash usado por staff.html — debe ser idéntico
-function _hashPwdStaff(s) {
-    var h = 0;
-    for (var i = 0; i < s.length; i++) { h = (Math.imul(31,h) + s.charCodeAt(i)) | 0; }
-    return (h>>>0).toString(36) + btoa(unescape(encodeURIComponent(s))).slice(0,16).replace(/[^a-z0-9]/gi,'x');
-}
 
 /* ════════════════════════════════════════════════════════
    ROLES COLABORADORES (para chip de sesión)
@@ -1188,7 +1183,17 @@ async function loginSubmit() {
         var staffList = [];
         try { staffList = JSON.parse(staffRaw) || []; } catch(e){}
         var miembro = staffList.find(function(s){ return s.usuario === input; });
-        if (miembro && miembro.passwordHash && miembro.passwordHash === _hashPwdStaff(pwd)) {
+        if (!miembro || !miembro.passwordHash) continue;
+        var ok = false;
+        if (miembro.passwordHash.indexOf('v2$') === 0) {
+            ok = miembro.passwordHash === await _hashPwdStaff(pwd);
+        } else if (miembro.passwordHash === _hashPwdStaffLegacy(pwd)) {
+            // Hash legacy válido → migrar al formato SHA-256
+            ok = true;
+            miembro.passwordHash = await _hashPwdStaff(pwd);
+            localStorage.setItem('etaax_' + neg.id + '_staff', JSON.stringify(staffList));
+        }
+        if (ok) {
             _iniciarSesionStaff(miembro, neg);
             return;
         }

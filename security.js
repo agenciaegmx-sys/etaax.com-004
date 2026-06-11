@@ -74,6 +74,26 @@
 })();
 
 /* ============================================================
+   Hash de contraseñas de colaboradores (staff)
+   - _hashPwdStaff: SHA-256 (async), formato 'v2$<hex>'
+   - _hashPwdStaffLegacy: algoritmo anterior (reversible — contenía
+     base64 de la contraseña). Solo se usa para validar hashes viejos
+     y migrarlos al formato v2 en el siguiente login exitoso.
+   Compartido por hub.html (login) y administrativo/staff.html (alta).
+   ============================================================ */
+window._hashPwdStaffLegacy = function (s) {
+    var h = 0;
+    for (var i = 0; i < s.length; i++) { h = (Math.imul(31, h) + s.charCodeAt(i)) | 0; }
+    return (h >>> 0).toString(36) + btoa(unescape(encodeURIComponent(s))).slice(0, 16).replace(/[^a-z0-9]/gi, 'x');
+};
+window._hashPwdStaff = async function (s) {
+    var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('etaax-staff|' + s));
+    return 'v2$' + Array.prototype.map.call(new Uint8Array(buf), function (b) {
+        return ('0' + b.toString(16)).slice(-2);
+    }).join('');
+};
+
+/* ============================================================
    XSS-safe helper — usar en lugar de innerHTML con datos de usuario
    Uso: etx(valor) en cualquier concatenación de HTML
    ============================================================ */
