@@ -457,7 +457,7 @@ function renderHistTabla(lista) {
                         onclick="abrirInventario('${inv.id}')">▶ Continuar</button>`;
                 return `<tr>
                     <td style="color:var(--text-muted)">${new Date(inv.fecha+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'})}</td>
-                    <td style="font-weight:500">${tipoIcon(inv.tipoInv)} ${inv.nombre||'Sin nombre'}</td>
+                    <td style="font-weight:500">${tipoIcon(inv.tipoInv)} ${etx(inv.nombre||'Sin nombre')}</td>
                     <td style="color:var(--text-dim);font-size:11px">${inv.area||'—'}</td>
                     <td style="color:var(--text-muted)">${(inv.filas||[]).length}</td>
                     <td style="color:var(--accent);font-weight:500">$${(inv.capitalCosto||0).toFixed(0)}</td>
@@ -485,7 +485,7 @@ function renderHistCard(inv) {
     return `<div class="hist-card ${inv.cerrado?'cerrado':''}">
         <div class="hist-card-icon">${tipoIcon(inv.tipoInv)}</div>
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
-            <div class="hist-card-nombre">${inv.nombre||'Sin nombre'}</div>
+            <div class="hist-card-nombre">${etx(inv.nombre||'Sin nombre')}</div>
             <span class="pill ${inv.cerrado?'pill-green':'pill-amber'}" style="flex-shrink:0;margin-left:8px">
                 ${inv.cerrado?'Cerrado':'Abierto'}</span>
         </div>
@@ -1052,14 +1052,14 @@ function renderChipsExist() {
         : filasCaptura.filter(f => !_esRegistrado(f));
     const matches = pool.filter(f => f.nombre.toLowerCase().includes(q));
     if (!matches.length) {
-        cont.innerHTML = `<div style="color:var(--text-dim);font-size:13px;padding:8px 0">Sin resultados para "${_existBusqueda}"</div>`;
+        cont.innerHTML = `<div style="color:var(--text-dim);font-size:13px;padding:8px 0">Sin resultados para "${etx(_existBusqueda)}"</div>`;
         return;
     }
     cont.innerHTML = matches.map(f => {
         const reg = _esRegistrado(f);
         return `<button class="ent-chip ${_existInsumoId===f.insumoId?'active':''}"
             onclick="seleccionarProductoExist('${f.insumoId}')" style="position:relative">
-            ${f.nombre}
+            ${etx(f.nombre)}
             ${f.subcategoria?`<span style="font-size:10px;opacity:0.65;margin-left:4px">${f.subcategoria}</span>`:
               f.categoria?`<span style="font-size:10px;opacity:0.65;margin-left:4px">${f.categoria}</span>`:''}
             ${reg?'<span style="position:absolute;top:4px;right:6px;width:6px;height:6px;background:var(--green);border-radius:50%"></span>':''}
@@ -1155,7 +1155,7 @@ function buildInputsExist(fila, idx) {
                 <input type="file" accept="image/*" capture="environment" style="display:none"
                     onchange="previewFotoExist('${fila.insumoId}',this)">
             </label>
-            ${fila.fotoUrl ? `<img id="foto-preview-${fila.insumoId}" src="${fila.fotoUrl}"
+            ${fila.fotoUrl ? `<img id="foto-preview-${fila.insumoId}" src="${etx(fila.fotoUrl)}"
                 style="width:100%;border-radius:10px;margin-top:10px;object-fit:cover;max-height:200px">` :
                 `<img id="foto-preview-${fila.insumoId}" style="display:none;width:100%;border-radius:10px;margin-top:10px">`}
             <div style="margin-top:10px;padding:10px 12px;background:rgba(245,200,66,0.08);border-radius:8px;
@@ -1205,7 +1205,7 @@ function renderCardExist() {
         <div class="ent-form-card">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
                 <div>
-                    <div style="font-weight:700;font-size:17px;color:var(--text)">${fila.nombre}</div>
+                    <div style="font-weight:700;font-size:17px;color:var(--text)">${etx(fila.nombre)}</div>
                     <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap">
                         ${fila.categoria?`<span class="inv-tag">${fila.categoria}</span>`:''}
                         <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
@@ -1287,7 +1287,7 @@ function renderResumenExist() {
         const metIcon = metodo==='nivel'?'🌡️':metodo==='foto'?'📷':'⚖️';
         return `<div class="ent-log-fila" onclick="seleccionarProductoExist('${fila.insumoId}')"
             style="cursor:pointer">
-            <span class="ent-log-nombre">${fila.nombre}</span>
+            <span class="ent-log-nombre">${etx(fila.nombre)}</span>
             <span style="font-size:13px;color:var(--text-dim)">${metIcon}</span>
             <span class="ent-log-cant">${fmtBot(exist)} ${efUnit}</span>
         </div>`;
@@ -1347,7 +1347,7 @@ function renderStep1Lista(filas) {
                     <input type="file" accept="image/*" capture="environment" style="display:none"
                         onchange="previewFotoExist('${fila.insumoId}',this)">
                 </label>
-                ${fila.fotoUrl ? `<img src="${fila.fotoUrl}" style="width:60px;height:40px;object-fit:cover;border-radius:4px;margin-top:4px">` : ''}
+                ${fila.fotoUrl ? `<img src="${etx(fila.fotoUrl)}" style="width:60px;height:40px;object-fit:cover;border-radius:4px;margin-top:4px">` : ''}
             </td>`;
         } else {
             inputCell = `<td class="inv-td-pesos">
@@ -1364,7 +1364,7 @@ function renderStep1Lista(filas) {
 
         return `<tr class="inv-row">
             <td class="inv-td-prod">
-                <div class="inv-prod-name">${fila.nombre}</div>
+                <div class="inv-prod-name">${etx(fila.nombre)}</div>
                 <div class="inv-prod-meta">
                     ${fila.categoria ? `<span class="inv-tag">${fila.categoria}</span>` : ''}
                     <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
@@ -1423,7 +1423,7 @@ function renderStep1Galeria(filas) {
             : 'background:rgba(245,200,66,0.12);border-color:rgba(245,200,66,0.45);color:var(--accent)';
         return `<div class="inv-item-card">
             <div class="inv-item-card-top">
-                <div class="inv-prod-name">${fila.nombre}</div>
+                <div class="inv-prod-name">${etx(fila.nombre)}</div>
                 <div class="inv-prod-meta" style="margin-top:6px">
                     ${fila.categoria ? `<span class="inv-tag">${fila.categoria}</span>` : ''}
                     <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
@@ -1550,7 +1550,7 @@ function renderStep2Lista(filas) {
             : 'background:rgba(245,200,66,0.12);border-color:rgba(245,200,66,0.45);color:var(--accent)';
         return `<tr class="inv-row">
             <td class="inv-td-prod">
-                <div class="inv-prod-name">${fila.nombre}</div>
+                <div class="inv-prod-name">${etx(fila.nombre)}</div>
                 <div class="inv-prod-meta">
                     ${fila.categoria ? `<span class="inv-tag">${fila.categoria}</span>` : ''}
                     <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
@@ -1607,7 +1607,7 @@ function renderStep2Galeria(filas) {
             : 'background:rgba(245,200,66,0.12);border-color:rgba(245,200,66,0.45);color:var(--accent)';
         return `<div class="inv-item-card">
             <div class="inv-item-card-top">
-                <div class="inv-prod-name">${fila.nombre}</div>
+                <div class="inv-prod-name">${etx(fila.nombre)}</div>
                 <div class="inv-prod-meta" style="margin-top:6px">
                     ${fila.categoria ? `<span class="inv-tag">${fila.categoria}</span>` : ''}
                     <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
@@ -1660,7 +1660,7 @@ function abrirModalEntrada(insumoId, nombre) {
     if (logEl) logEl.innerHTML = log.length ? `
         <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:8px">Entradas anteriores:</div>
         ${log.map((e,i)=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-bottom:1px solid var(--border)">
-            <span>${e.fecha||'—'} · ${e.cantidad} bot · $${(e.costo||0).toFixed(2)} · ${e.notas||''}</span>
+            <span>${e.fecha||'—'} · ${e.cantidad} bot · $${(e.costo||0).toFixed(2)} · ${etx(e.notas||'')}</span>
             <button onclick="eliminarEntradaLog('${insumoId}',${i})"
                 style="color:var(--red);background:none;border:none;cursor:pointer;font-size:11px">🗑️</button>
         </div>`).join('')}` : `<div style="font-size:11px;color:var(--text-dim)">Sin entradas previas</div>`;
@@ -1732,7 +1732,7 @@ function renderStep3Insumos() {
         const esCopa = fila.tipo !== 'pza';
         return `<tr class="inv-row">
             <td class="inv-td-prod">
-                <div class="inv-prod-name">${fila.nombre}</div>
+                <div class="inv-prod-name">${etx(fila.nombre)}</div>
                 <div class="inv-prod-meta">
                     ${fila.categoria?`<span class="inv-tag">${fila.categoria}</span>`:''}
                     <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
@@ -1832,7 +1832,7 @@ function renderStep3Menu() {
                     return `<div class="step3-menu-item ${cnt>0?'has-cnt':''}">
                         <div style="flex:1;min-width:0">
                             <div style="font-weight:600;font-size:14px;color:var(--text);
-                                white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.nombre}</div>
+                                white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${etx(r.nombre)}</div>
                             ${ingStr?`<div style="font-size:10px;color:var(--text-dim);margin-top:2px;
                                 white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ingStr}</div>`:''}
                             ${p>0?`<div style="font-size:12px;color:var(--green);font-weight:600;margin-top:2px">$${p.toFixed(0)}</div>`:''}
@@ -1896,14 +1896,14 @@ function renderChipsVentas() {
     if (!q) { cont.innerHTML = ''; return; }
     const matches = filasCaptura.filter(f => f.nombre.toLowerCase().includes(q));
     if (!matches.length) {
-        cont.innerHTML = `<div style="color:var(--text-dim);font-size:13px;padding:8px 0">Sin resultados para "${_ventasBusqueda}"</div>`;
+        cont.innerHTML = `<div style="color:var(--text-dim);font-size:13px;padding:8px 0">Sin resultados para "${etx(_ventasBusqueda)}"</div>`;
         return;
     }
     cont.innerHTML = matches.map(f => {
         const tieneVentas = (f.ventasCopasDirectas||0)>0 || (f.ventasBotella||0)>0 || (f.cortesiaCopas||0)>0 || (f.mermaCopas||0)>0;
         return `<button class="ent-chip ${_ventasInsumoId===f.insumoId?'active':''}"
             onclick="seleccionarProductoVentas('${f.insumoId}')" style="position:relative">
-            ${f.nombre}
+            ${etx(f.nombre)}
             ${f.categoria?`<span style="font-size:10px;opacity:0.65;margin-left:4px">${f.categoria}</span>`:''}
             ${tieneVentas?'<span style="position:absolute;top:4px;right:6px;width:6px;height:6px;background:var(--green);border-radius:50%"></span>':''}
         </button>`;
@@ -1941,7 +1941,7 @@ function renderCardVentas() {
         <div class="ent-form-card">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
                 <div>
-                    <div style="font-weight:700;font-size:17px;color:var(--text)">${fila.nombre}</div>
+                    <div style="font-weight:700;font-size:17px;color:var(--text)">${etx(fila.nombre)}</div>
                     <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap">
                         ${fila.categoria?`<span class="inv-tag">${fila.categoria}</span>`:''}
                         <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
@@ -2037,7 +2037,7 @@ function renderResumenVentas() {
         if ((fila.cortesiaCopas||0)>0)       partes.push(`${fila.cortesiaCopas} cortesía`);
         if ((fila.mermaCopas||0)>0)          partes.push(`${fila.mermaCopas} merma`);
         return `<div class="ent-log-fila" onclick="seleccionarProductoVentas('${fila.insumoId}')" style="cursor:pointer">
-            <span class="ent-log-nombre">${fila.nombre}</span>
+            <span class="ent-log-nombre">${etx(fila.nombre)}</span>
             <span class="ent-log-cant" style="color:var(--accent)">${partes.join(' · ')}</span>
         </div>`;
     }).join('');
@@ -2084,7 +2084,7 @@ function _renderCancelacionesTab(cancelaciones) {
     _autoMatchCancelaciones();
     const noMatch = cancelaciones.filter(c => !c.insumoId).length;
     const insumoOpts = filasCaptura.map(f =>
-        `<option value="${f.insumoId}">${f.nombre}</option>`
+        `<option value="${f.insumoId}">${etx(f.nombre)}</option>`
     ).join('');
 
     const tabla = cancelaciones.length ? `<div class="tabla-wrap" style="overflow-x:auto"><table style="min-width:820px">
@@ -2110,7 +2110,7 @@ function _renderCancelacionesTab(cancelaciones) {
                     ⚠ Sin match</span>`;
             return `<tr>
                 <td style="font-size:11px;color:var(--text-dim);white-space:nowrap">${c.fechaHora||'—'}</td>
-                <td style="font-size:12px;font-weight:500">${c.nombreProducto||'—'}</td>
+                <td style="font-size:12px;font-weight:500">${etx(c.nombreProducto||'—')}</td>
                 <td style="text-align:center;font-weight:600">${c.cantidad||'—'}</td>
                 <td>
                     <div style="display:flex;flex-direction:column;gap:4px">
@@ -2752,7 +2752,7 @@ function renderStep5() {
             grpDif += difCosto;
             return `<tr>
                 <td style="min-width:140px">
-                    <div style="font-size:12px;font-weight:600">${fila.nombre}</div>
+                    <div style="font-size:12px;font-weight:600">${etx(fila.nombre)}</div>
                     <div style="font-size:10px;color:var(--text-dim)">${fila.categoria||''}</div>
                 </td>
                 <td style="text-align:center;white-space:nowrap">${eaBot} bot</td>
@@ -2822,7 +2822,7 @@ function renderStep5() {
             grpDif += difCosto;
             return `<tr>
                 <td>
-                    <div style="font-size:12px;font-weight:600">${fila.nombre}</div>
+                    <div style="font-size:12px;font-weight:600">${etx(fila.nombre)}</div>
                     <div style="font-size:10px;color:var(--text-dim)">${fila.categoria||''}</div>
                 </td>
                 <td style="text-align:center">${ea.toFixed(0)} pza</td>
@@ -2991,7 +2991,7 @@ function verReporteDirectivo() {
 </style>
 
 <div id="rd-toolbar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#1a1916;padding:10px 20px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.5)">
-  <span style="color:#f5f0e8;font-size:14px;font-weight:700">📊 Reporte Directivo — ${inv.nombre || 'Inventario'}</span>
+  <span style="color:#f5f0e8;font-size:14px;font-weight:700">📊 Reporte Directivo — ${etx(inv.nombre || 'Inventario')}</span>
   <div style="display:flex;gap:8px">
     <button onclick="window.print()" style="padding:7px 18px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;background:#f5c842;color:#1a1916;border:none">🖨️ Imprimir / Exportar PDF</button>
     <button onclick="document.getElementById('rdOverlay').remove()" style="padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;background:transparent;border:1px solid rgba(255,255,255,.3);color:#f5f0e8">✕ Cerrar</button>
@@ -3003,7 +3003,7 @@ function verReporteDirectivo() {
 
   <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
     <div>
-      <div class="rd-h1">${tipoIcon(inv.tipoInv)} ${inv.nombre || 'Inventario'}</div>
+      <div class="rd-h1">${tipoIcon(inv.tipoInv)} ${etx(inv.nombre || 'Inventario')}</div>
       <div class="rd-sub">${inv.negocio ? inv.negocio + ' · ' : ''}${invFecha}${inv.turno ? ' · ' + inv.turno : ''}${inv.area ? ' · ' + inv.area : ''} · ${inv.cerrado ? '<strong style="color:#c0392b">CERRADO</strong>' : '<em>BORRADOR</em>'}</div>
     </div>
     <div style="text-align:right;font-size:9px;color:#aaa;line-height:1.8">
@@ -3100,7 +3100,7 @@ function verReporteDirectivo() {
         const pcol = pcc >= 70 ? cOk : pcc >= 30 ? '#555' : cWarn;
         return `<tr>
           <td><span class="rd-rank">${i+1}</span></td>
-          <td style="font-weight:600">${a.f.nombre}<br><span style="font-size:9px;color:#aaa;font-weight:400">${a.f.categoria||''}</span></td>
+          <td style="font-weight:600">${etx(a.f.nombre)}<br><span style="font-size:9px;color:#aaa;font-weight:400">${etx(a.f.categoria||'')}</span></td>
           <td class="tc">${a.ventaCopa > 0 ? a.ventaCopa.toFixed(1)+' c' : '—'}</td>
           <td class="tc">${a.ventaBot > 0 ? a.ventaBot+' b' : '—'}</td>
           <td class="tc" style="color:${a.cortesia>0?'#7d5fa3':'#ccc'}">${a.cortesia > 0 ? a.cortesia.toFixed(1) : '—'}</td>
@@ -3119,7 +3119,7 @@ function verReporteDirectivo() {
   ${estancados.length > 0 ? `
   <div class="rd-sec">Productos sin movimiento (${estancados.length}) — evaluar sobre-stock o baja demanda</div>
   <div style="display:flex;flex-wrap:wrap;gap:5px">
-    ${estancados.slice(0, 20).map(a => `<span style="font-size:10px;background:#f5f5f0;border:1px solid #e0e0d8;border-radius:4px;padding:2px 8px;color:#666">${a.f.nombre}</span>`).join('')}
+    ${estancados.slice(0, 20).map(a => `<span style="font-size:10px;background:#f5f5f0;border:1px solid #e0e0d8;border-radius:4px;padding:2px 8px;color:#666">${etx(a.f.nombre)}</span>`).join('')}
     ${estancados.length > 20 ? `<span style="font-size:10px;color:#aaa;padding:2px 8px">+${estancados.length - 20} más…</span>` : ''}
   </div>
   ` : ''}
@@ -3131,7 +3131,7 @@ function verReporteDirectivo() {
 <div class="rd-paper" style="margin-bottom:40px">
 
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #1a1916">
-    <span style="font-size:14px;font-weight:900;color:#1a1916">${inv.nombre || 'Inventario'} — Desglose por familia</span>
+    <span style="font-size:14px;font-weight:900;color:#1a1916">${etx(inv.nombre || 'Inventario')} — Desglose por familia</span>
     <span style="font-size:9px;color:#aaa">${invFecha} · ${fecha}</span>
   </div>
 
@@ -3149,7 +3149,7 @@ function verReporteDirectivo() {
       ${alertasCrit.map(a => {
         const u = a.f.tipo === 'pza' ? 'pza' : 'cop';
         return `<tr>
-          <td style="font-weight:600">${a.f.nombre}</td>
+          <td style="font-weight:600">${etx(a.f.nombre)}</td>
           <td class="tc" style="color:#888">${a.f.familia || a.f.categoria || '—'}</td>
           <td class="tc">${a.fisico.toFixed(1)} ${u}</td>
           <td class="tc">${a.teorico.toFixed(1)} ${u}</td>
@@ -3176,7 +3176,7 @@ function verReporteDirectivo() {
       ${alertasSob.map(a => {
         const u = a.f.tipo === 'pza' ? 'pza' : 'cop';
         return `<tr>
-          <td style="font-weight:600">${a.f.nombre}</td>
+          <td style="font-weight:600">${etx(a.f.nombre)}</td>
           <td class="tc">${a.fisico.toFixed(1)} ${u}</td>
           <td class="tc">${a.teorico.toFixed(1)} ${u}</td>
           <td class="tc" style="font-weight:700;color:${cWarn}">+${a.dif.toFixed(1)}</td>
@@ -3204,7 +3204,7 @@ function verReporteDirectivo() {
         const cmStr = (a.cortesia + a.merma) > 0 ? (a.cortesia + a.merma).toFixed(1) : '—';
         const vcol  = vc(a.varPct);
         return `<tr>
-          <td style="font-weight:600;max-width:125px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.f.nombre}</td>
+          <td style="font-weight:600;max-width:125px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${etx(a.f.nombre)}</td>
           <td class="tc" style="color:#888">${a.ea.toFixed(1)} ${u}</td>
           <td class="tc" style="color:${cOk}">${entStr}</td>
           <td class="tc">${ventStr}</td>
@@ -3250,7 +3250,7 @@ function verReporteDirectivo() {
     <tbody>
       ${(invActual.cancelaciones || []).map(c => `<tr>
         <td style="white-space:nowrap;color:#888">${c.fechaHora||'—'}</td>
-        <td style="font-weight:500">${c.nombreProducto||'—'}</td>
+        <td style="font-weight:500">${etx(c.nombreProducto||'—')}</td>
         <td class="tc" style="font-weight:700">${c.cantidad||'—'}</td>
         <td>${c.autorizo||c.responsable||'—'}</td>
         <td style="color:#888">${c.motivo||'—'}</td>
@@ -3442,7 +3442,7 @@ function _renderEntLogChips(q) {
             border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit;
             text-align:left;transition:all .15s"
             onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border)'">
-            ${ins.nombre}${ins.variedad ? ' <span style="color:var(--text-muted)">' + ins.variedad + '</span>' : ''}
+            ${etx(ins.nombre)}${ins.variedad ? ' <span style="color:var(--text-muted)">' + etx(ins.variedad) + '</span>' : ''}
         </button>`
     ).join('');
 }
@@ -3550,13 +3550,13 @@ function renderChipsEntrada() {
     if (!q) { cont.innerHTML = ''; return; }
     const matches = filasCaptura.filter(f => f.nombre.toLowerCase().includes(q));
     if (!matches.length) {
-        cont.innerHTML = `<div style="color:var(--text-dim);font-size:13px;padding:8px 0">Sin resultados para "${_entRapidaBusqueda}"</div>`;
+        cont.innerHTML = `<div style="color:var(--text-dim);font-size:13px;padding:8px 0">Sin resultados para "${etx(_entRapidaBusqueda)}"</div>`;
         return;
     }
     cont.innerHTML = matches.map(f => `
         <button class="ent-chip ${_entRapidaInsumoId === f.insumoId ? 'active' : ''}"
             onclick="seleccionarProductoEntrada('${f.insumoId}')">
-            ${f.nombre}
+            ${etx(f.nombre)}
             ${f.categoria ? `<span style="font-size:10px;opacity:0.65;margin-left:4px">${f.categoria}</span>` : ''}
         </button>`).join('');
 }
@@ -3578,7 +3578,7 @@ function renderFormEntrada() {
         <div class="ent-form-card">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
                 <div>
-                    <div style="font-weight:700;font-size:17px;color:var(--text)">${fila.nombre}</div>
+                    <div style="font-weight:700;font-size:17px;color:var(--text)">${etx(fila.nombre)}</div>
                     ${fila.categoria ? `<div style="font-size:11px;color:var(--text-dim);margin-top:2px">${fila.categoria}</div>` : ''}
                     ${totalBot > 0 ? `<div style="font-size:12px;color:var(--green);margin-top:5px;font-weight:600">Ya registrado este período: +${totalBot % 1 ? totalBot.toFixed(1) : totalBot} bot</div>` : ''}
                 </div>
@@ -3691,7 +3691,7 @@ function renderListadoEntradas() {
     const rows = useGlobal ? log : [...log].reverse();
     cont.innerHTML = rows.map((e, i) => {
         const color   = tipoEntradaColor(e.tipo);
-        const nombre  = e.nombreProducto || e.nombre || '—';
+        const nombre  = etx(e.nombreProducto || e.nombre || '—');
         const delFn   = useGlobal
             ? `eliminarEntradaGlobal('${e.id}')`
             : `eliminarEntradaRapida(${i})`;
@@ -3829,14 +3829,14 @@ function _ftRenderVer(ins) {
             <div style="width:80px;height:80px;background:var(--surface);border-radius:8px;
                 border:1px solid var(--border);overflow:hidden;flex-shrink:0;
                 display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--text-dim)">
-                ${ins.foto ? `<img src="${ins.foto}" style="width:100%;height:100%;object-fit:cover">` : '📦'}
+                ${ins.foto ? `<img src="${etx(ins.foto)}" style="width:100%;height:100%;object-fit:cover">` : '📦'}
             </div>
             <div style="flex:1">
                 <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;
                     color:var(--accent);margin-bottom:4px">
                     ${[ins.familia, ins.categoria, ins.subcategoria].filter(Boolean).join(' · ')}
                 </div>
-                <div style="font-size:20px;font-weight:600;color:var(--text);margin-bottom:3px">${ins.nombre}</div>
+                <div style="font-size:20px;font-weight:600;color:var(--text);margin-bottom:3px">${etx(ins.nombre)}</div>
                 <div style="font-size:12px;color:var(--text-muted)">
                     ${[ins.marca, ins.variedad, ins.maduracion].filter(Boolean).join(' · ')}
                 </div>

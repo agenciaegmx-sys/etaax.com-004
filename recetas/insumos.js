@@ -147,9 +147,9 @@
        const selCat = fCat.value;
 
        fFam.innerHTML = '<option value="">Todas las familias</option>' +
-           familias.map(f => `<option value="${f}" ${f===selFam?'selected':''}>${f}</option>`).join('');
+           familias.map(f => `<option value="${etx(f)}" ${f===selFam?'selected':''}>${etx(f)}</option>`).join('');
        fCat.innerHTML = '<option value="">Todas las categorías</option>' +
-           cats.map(c => `<option value="${c}" ${c===selCat?'selected':''}>${c}</option>`).join('');
+           cats.map(c => `<option value="${etx(c)}" ${c===selCat?'selected':''}>${etx(c)}</option>`).join('');
    }
 
    function filtrar() {
@@ -313,24 +313,24 @@
                <td>
                    <div style="display:flex;align-items:center;gap:10px">
                        ${ins.foto
-                           ? `<img src="${ins.foto}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;border:1px solid var(--border)">`
+                           ? `<img src="${etx(ins.foto)}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;border:1px solid var(--border)">`
                            : `<div style="width:36px;height:36px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px">📦</div>`
                        }
                        <div>
-                           <div style="font-weight:500">${ins.nombre}</div>
-                           ${(ins.maduracion||ins.variedad) ? `<div style="font-size:11px;color:var(--text-muted)">${[ins.maduracion,ins.variedad].filter(Boolean).join(' · ')}</div>` : ''}
-                           ${ins.marca ? `<div style="font-size:10px;color:var(--text-dim)">${ins.marca}</div>` : ''}
+                           <div style="font-weight:500">${etx(ins.nombre)}</div>
+                           ${(ins.maduracion||ins.variedad) ? `<div style="font-size:11px;color:var(--text-muted)">${etx([ins.maduracion,ins.variedad].filter(Boolean).join(' · '))}</div>` : ''}
+                           ${ins.marca ? `<div style="font-size:10px;color:var(--text-dim)">${etx(ins.marca)}</div>` : ''}
                        </div>
                    </div>
                </td>
-               <td style="color:var(--text-muted)">${ins.categoria||''} ${ins.subcategoria ? '· '+ins.subcategoria : ''}</td>
+               <td style="color:var(--text-muted)">${etx(ins.categoria||'')} ${ins.subcategoria ? '· '+etx(ins.subcategoria) : ''}</td>
                <td style="white-space:nowrap">
                    ${pres.map(p =>
-                       `<span class="pill pill-amber" style="margin:2px;font-size:9px;white-space:nowrap">${p.contNeto} ${p.umContenido} · ${p.rendimiento||'—'} ${p.umRendimiento||''}</span>`
+                       `<span class="pill pill-amber" style="margin:2px;font-size:9px;white-space:nowrap">${etx(p.contNeto)} ${etx(p.umContenido)} · ${etx(p.rendimiento||'—')} ${etx(p.umRendimiento||'')}</span>`
                    ).join('')}
                </td>
-               <td style="color:var(--green);font-weight:500;white-space:nowrap">${costo}</td>
-               <td style="color:var(--text-muted)">${prov}</td>
+               <td style="color:var(--green);font-weight:500;white-space:nowrap">${etx(costo)}</td>
+               <td style="color:var(--text-muted)">${etx(prov)}</td>
                ${accionesTd}
            </tr>`;
        }).join('');
@@ -369,22 +369,22 @@
                else if (p0.costoUnitario) costo = '$' + (+p0.costoUnitario).toFixed(2) + ' / ' + (p0.umCosto||'LT');
            }
 
-           var prov         = (p0 && p0.proveedor) ? p0.proveedor : '';
-           var variedadLine = [ins.maduracion, ins.variedad].filter(Boolean).join(' · ');
-           var cat          = [ins.categoria, ins.subcategoria].filter(Boolean).join(' · ');
+           var prov         = (p0 && p0.proveedor) ? etx(p0.proveedor) : '';
+           var variedadLine = etx([ins.maduracion, ins.variedad].filter(Boolean).join(' · '));
+           var cat          = etx([ins.categoria, ins.subcategoria].filter(Boolean).join(' · '));
            var nPres    = pres.length;
 
            var fotoHTML = ins.foto
-               ? '<img src="' + ins.foto + '" alt="">'
+               ? '<img src="' + etx(ins.foto) + '" alt="">'
                : '<span class="card-emoji">' + emoji + '</span>';
 
            var tipoBadge = ins.categoria
-               ? '<div class="insumo-card-tipo-badge">' + ins.familia + '</div>'
+               ? '<div class="insumo-card-tipo-badge">' + etx(ins.familia) + '</div>'
                : '';
 
            var presChips = pres.slice(0,3).map(function(p) {
                return '<span class="pill pill-amber" style="font-size:9px;white-space:nowrap">' +
-                   (p.contNeto||'') + ' ' + (p.umContenido||'') + '</span>';
+                   etx(p.contNeto||'') + ' ' + etx(p.umContenido||'') + '</span>';
            }).join('');
            if (nPres > 3) presChips += '<span style="font-size:9px;color:var(--text-dim)">+' + (nPres-3) + '</span>';
 
@@ -415,11 +415,11 @@
                    tipoBadge +
                '</div>' +
                '<div class="insumo-card-body">' +
-                   '<div class="insumo-card-nombre" title="' + ins.nombre + '">' + ins.nombre + '</div>' +
+                   '<div class="insumo-card-nombre" title="' + etx(ins.nombre) + '">' + etx(ins.nombre) + '</div>' +
                    (variedadLine ? '<div class="insumo-card-variedad">' + variedadLine + '</div>' : '') +
-                   (ins.marca ? '<div style="font-size:10px;color:var(--text-dim);margin-top:1px">' + ins.marca + '</div>' : '') +
+                   (ins.marca ? '<div style="font-size:10px;color:var(--text-dim);margin-top:1px">' + etx(ins.marca) + '</div>' : '') +
                    (cat ? '<div class="insumo-card-cat">' + cat + '</div>' : '') +
-                   '<div class="insumo-card-costo">' + costo + '</div>' +
+                   '<div class="insumo-card-costo">' + etx(costo) + '</div>' +
                    (prov ? '<div class="insumo-card-prov">📍 ' + prov + '</div>' : '') +
                    (presChips ? '<div class="insumo-card-pres">' + presChips + '</div>' : '') +
                '</div>' +
@@ -705,7 +705,7 @@
            var chip = document.createElement('div');
            chip.className = 'uva-chip active';
            chip.dataset.uva = nombre;
-           chip.innerHTML = nombre + ' <span style="opacity:.5;font-size:9px">✕</span>';
+           chip.innerHTML = etx(nombre) + ' <span style="opacity:.5;font-size:9px">✕</span>';
            chip.onclick = function(){ toggleUvaChip(esc); };
            picker.appendChild(chip);
        }
@@ -2177,7 +2177,8 @@
        const tienePresCompra  = campos.includes('presentacionCompra');
    
        document.getElementById('listaPresentaciones').innerHTML =
-           presentacionesTemp.map((p, i) => {
+           presentacionesTemp.map((pRaw, i) => {
+               const p = _escCampos(pRaw);
                const contNeto   = parseFloat(p.contNeto)   || 0;
                const pesoUnidad = parseFloat(p.pesoUnidad) || 0;
                const umCont = (p.umContenido || 'ML').toUpperCase();
@@ -2509,11 +2510,19 @@
    }
    
    // ── Ficha técnica ─────────────────────────────────────────────
+   // Copia superficial con todos los campos string escapados (XSS-safe
+   // para templates que insertan con innerHTML)
+   function _escCampos(o) {
+       var c = {};
+       for (var k in o) { c[k] = (typeof o[k] === 'string') ? etx(o[k]) : o[k]; }
+       return c;
+   }
    function verFicha(id) {
-       const ins = getInsumos().find(x => x.id === id);
-       if (!ins) return;
-   
-       const pres = ins.presentaciones || [];
+       const insRaw = getInsumos().find(x => x.id === id);
+       if (!insRaw) return;
+
+       const ins  = _escCampos(insRaw);
+       const pres = (insRaw.presentaciones || []).map(_escCampos);
    
        document.getElementById('fichaContenido').innerHTML = `
            <div style="display:flex;gap:16px;align-items:flex-start;
