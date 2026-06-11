@@ -12,6 +12,7 @@
     var _toastEl    = null;
 
     function _logout() {
+        _etaaxWipeCache();
         localStorage.removeItem('etaax_negocio_activo');
         localStorage.removeItem('etaax_ctx');
         sessionStorage.clear();
@@ -72,6 +73,32 @@
     // Exponer reset público para que páginas con mucha actividad programática lo llamen
     window._sessionReset = _reset;
 })();
+
+/* ============================================================
+   Limpieza de caché al cerrar sesión
+   Borra los datos de negocio cacheados en localStorage para que
+   no queden expuestos en equipos compartidos.
+   - Solo aplica a sesiones de dueño (ctxType 'owner'): los datos
+     de Supabase se recargan al volver a entrar. Las sesiones de
+     staff trabajan solo sobre caché local y borrarlo perdería
+     su captura (pendiente: sync de staff a la nube).
+   - Conserva etaax_negocios y etaax_*_staff (necesarios para el
+     login de colaboradores en este dispositivo) y etaax_theme.
+   ============================================================ */
+window._etaaxWipeCache = function () {
+    var ctx = null;
+    try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch (e) {}
+    if (ctx && ctx.ctxType !== 'owner') return;
+    var keys = [];
+    for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (!k || k.indexOf('etaax_') !== 0) continue;
+        if (k === 'etaax_negocios' || k === 'etaax_theme') continue;
+        if (/_staff$/.test(k)) continue;
+        keys.push(k);
+    }
+    keys.forEach(function (k) { localStorage.removeItem(k); });
+};
 
 /* ============================================================
    Hash de contraseñas de colaboradores (staff)

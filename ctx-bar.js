@@ -58,6 +58,7 @@
 })();
 
 function ctxSalir() {
+    if (typeof _etaaxWipeCache === 'function') _etaaxWipeCache();
     localStorage.removeItem('etaax_negocio_activo');
     localStorage.removeItem('etaax_ctx');
     sessionStorage.clear();

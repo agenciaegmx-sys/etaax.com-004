@@ -1213,6 +1213,12 @@ function _iniciarSesionStaff(miembro, neg) {
 }
 
 async function _iniciarSesion(usr) {
+    // Plan autoritativo desde la tabla usuarios (v10) — user_metadata
+    // es editable por el cliente, solo se usa como fallback
+    try {
+        var rp = await _supabase.from('usuarios').select('plan').eq('id', usr.id).maybeSingle();
+        if (!rp.error && rp.data && rp.data.plan) usr.plan = rp.data.plan;
+    } catch (e) {}
     _sesion = { usuarioId: usr.id, nombre: usr.nombre, email: usr.email, plan: usr.plan };
     _saveQuickSes(_sesion);
     localStorage.removeItem('etaax_negocio_activo');
@@ -1345,6 +1351,7 @@ async function logout() {
 function _clearSesion() {
     _sesion = null;
     _clearQuickSes();
+    if (typeof _etaaxWipeCache === 'function') _etaaxWipeCache();
     sessionStorage.removeItem('etaax_sesion_hub');
     localStorage.removeItem('etaax_negocio_activo');
     localStorage.removeItem('etaax_ctx');
@@ -1892,7 +1899,8 @@ function _guardarCtx(neg, suc) {
         negTipo: t.label + (suc ? ' · ' + suc.nombre : ''),
         negColor: sucColor,
         sucId: suc ? suc.id : null, sucNombre: suc ? suc.nombre : null,
-        userName: _sesion.nombre, userBadge: '', userColor: '#3dbe7a'
+        userName: _sesion.nombre, userBadge: '', userColor: '#3dbe7a',
+        ctxType: _sesion.type === 'staff' ? 'staff' : 'owner'
     };
     if (_sesion.type === 'staff') {
         var r = ROLES_STAFF[_sesion.rol] || ROLES_STAFF.otro;

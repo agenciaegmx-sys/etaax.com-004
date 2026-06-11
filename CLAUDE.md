@@ -22,8 +22,9 @@ Cambios de esquema: los archivos `supabase-migration-v*.sql` NO se aplican autom
 
 ### Páginas / módulos
 
+- `index.html` — landing pública de marketing (sin scripts de app, sin guarda).
 - `hub.html` — login (Supabase Auth) y selector de negocio + módulos. Es el punto de entrada; al elegir negocio escribe el contexto en localStorage.
-- `index.html` + `app.js` — módulo de costeos/escandallos de recetas (el más grande).
+- `recetas/index.html` + `app.js` — módulo de costeos/escandallos de recetas (el más grande).
 - `administrativo/` — ventas, gastos, clientes, proveedores, staff, menú, permisos.
 - `financiero/` — KPIs, utilidades, previsiones, gastos globales.
 - `recetas/` — insumos, inventarios, requisiciones.
@@ -32,6 +33,7 @@ Cambios de esquema: los archivos `supabase-migration-v*.sql` NO se aplican autom
 ### Scripts compartidos (se incluyen con `<script src>` en cada página)
 
 - `supabase-config.js` — crea el cliente global `_supabase` (sesión en sessionStorage, se pierde al cerrar el navegador). Cargar siempre después del CDN de supabase-js y antes de cualquier script que lo use.
+- `page-guard.js` — redirige a `/hub.html` si no hay `etaax_ctx`. Va al inicio del `<head>` de toda página de módulo (no en hub, landing ni admin). Toda página de módulo nueva debe incluirlo.
 - `ctx-bar.js` — barra de contexto del negocio activo; expone `window._ctxBarInit` y `ctxSalir()`.
 - `security.js` — auto-logout por inactividad (30 min) y el helper global `etx()` para escapar HTML. Usar `etx()` en toda concatenación de HTML con datos de usuario.
 - `admin-guard.js` — modal `_pedirClaveAdmin(accion, callback)` que re-verifica la contraseña antes de acciones destructivas.
