@@ -174,6 +174,8 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
+<script src="../security.js"></script>
 <script>
 (function(){
     var saved = localStorage.getItem('etaax_theme') || 'dark';
@@ -224,27 +226,20 @@ var MODULES = [
     { key:'inventarios',   label:'Inventarios',           icon:'📦', sub:'Control de existencias por área' },
     { key:'requisiciones', label:'Requisiciones',         icon:'📋', sub:'Solicitudes de compra y pedidos' },
     { key:'ventas',        label:'Ventas',                icon:'💰', sub:'Registro y reporte de ventas' },
+    { key:'gastos',        label:'Gastos',                icon:'📤', sub:'Captura y control de gastos' },
     { key:'menu',          label:'Menú',                  icon:'📄', sub:'Carta digital y precios de venta' },
     { key:'proveedores',   label:'Proveedores',           icon:'🚚', sub:'Directorio y condiciones de compra' },
+    { key:'clientes',      label:'Clientes',              icon:'⭐', sub:'Directorio de clientes frecuentes' },
     { key:'staff',         label:'Gestión de Staff',      icon:'👥', sub:'Expedientes y datos del equipo' },
     { key:'permisos',      label:'Permisos y Roles',      icon:'🔐', sub:'Control de acceso por perfil' },
     { key:'financiero',    label:'Financiero',            icon:'📊', sub:'Costos, márgenes y análisis' },
     { key:'config',        label:'Configuración',         icon:'⚙️', sub:'Ajustes generales del negocio' },
 ];
 
-/* ── DEFAULT PERMISSIONS ── */
-var DEFAULTS = {
-    admin:          { recetas:true, insumos:true, inventarios:true, requisiciones:true, ventas:true, menu:true, proveedores:true, staff:true, permisos:true, financiero:true, config:true },
-    gerente:        { recetas:true, insumos:true, inventarios:true, requisiciones:true, ventas:true, menu:true, proveedores:true, staff:true, permisos:false, financiero:true, config:false },
-    jefe_cocina:    { recetas:true, insumos:true, inventarios:true, requisiciones:true, ventas:false, menu:true, proveedores:false, staff:false, permisos:false, financiero:false, config:false },
-    chef:           { recetas:true, insumos:true, inventarios:true, requisiciones:true, ventas:false, menu:true, proveedores:false, staff:false, permisos:false, financiero:false, config:false },
-    cocinero:       { recetas:true, insumos:false, inventarios:true, requisiciones:true, ventas:false, menu:false, proveedores:false, staff:false, permisos:false, financiero:false, config:false },
-    barman:         { recetas:true, insumos:true, inventarios:true, requisiciones:true, ventas:false, menu:true, proveedores:false, staff:false, permisos:false, financiero:false, config:false },
-    barista:        { recetas:true, insumos:true, inventarios:true, requisiciones:true, ventas:false, menu:true, proveedores:false, staff:false, permisos:false, financiero:false, config:false },
-    mesero:         { recetas:false, insumos:false, inventarios:false, requisiciones:false, ventas:true, menu:true, proveedores:false, staff:false, permisos:false, financiero:false, config:false },
-    administrativo: { recetas:false, insumos:true, inventarios:true, requisiciones:true, ventas:true, menu:false, proveedores:true, staff:true, permisos:false, financiero:true, config:false },
-    otro:           { recetas:false, insumos:false, inventarios:false, requisiciones:false, ventas:false, menu:false, proveedores:false, staff:false, permisos:false, financiero:false, config:false },
-};
+/* ── DEFAULT PERMISSIONS ──
+   Fuente única en /page-guard.js (ETAAX_PERM_DEFAULTS) — el guard
+   de las páginas usa el mismo mapa para hacer el enforcement. */
+var DEFAULTS = window.ETAAX_PERM_DEFAULTS;
 
 /* ── STORAGE ── */
 function loadPermisos() {
@@ -254,8 +249,12 @@ async function savePermisos(d) {
     localStorage.setItem(_sk('permisos'), JSON.stringify(d));
     var negId = getNegocioActivo();
     if (!negId) return;
-    var rows = Object.keys(d).map(function(rol){ return { negocio_id: negId, rol: rol, datos: d[rol] }; });
-    if (rows.length) await _supabase.from('permisos').upsert(rows);
+    var rows = Object.keys(d).map(function(rol){
+        return { negocio_id: negId, rol: rol, datos: d[rol], updated_at: new Date().toISOString() };
+    });
+    if (!rows.length) return;
+    var r = await _supabase.from('permisos').upsert(rows, { onConflict: 'negocio_id,rol' });
+    if (r.error) _sbToastError('permisos upsert: ' + r.error.message);
 }
 async function syncPermisos() {
     var negId = getNegocioActivo();
@@ -421,10 +420,20 @@ document.addEventListener('DOMContentLoaded', async function(){
 });
 
 function ctxSalir() {
+    var ctx = null;
+    try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch (e) {}
+    // Admin maestro: volver al panel sin cerrar su sesión de Supabase
+    if (ctx && ctx.ctxAdmin) {
+        sessionStorage.removeItem('etaax_admin_impersonate');
+        localStorage.removeItem('etaax_negocio_activo');
+        localStorage.removeItem('etaax_ctx');
+        window.location.href = '/admin.html';
+        return;
+    }
+    if (typeof _etaaxWipeCache === 'function') _etaaxWipeCache();
     localStorage.removeItem('etaax_negocio_activo');
     localStorage.removeItem('etaax_ctx');
     sessionStorage.clear();
-    var parts = window.location.pathname.split('/').filter(Boolean);
     window.location.href = '/hub.html?salir=1';
 }
 </script>

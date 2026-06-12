@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>etaax – Acceso</title>
+<script src="/page-guard.js"></script><!-- solo helpers de permisos; el guard no aplica en hub -->
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -1922,6 +1923,7 @@ function _guardarCtx(neg, suc) {
     if (_sesion.type === 'staff') {
         var r = ROLES_STAFF[_sesion.rol] || ROLES_STAFF.otro;
         ctx.userBadge = r.label; ctx.userColor = r.color;
+        ctx.rol = _sesion.rol || 'otro'; // page-guard verifica permisos con esto
     } else if (_sesion.isAdmin) {
         ctx.userBadge = '⚡ Admin'; ctx.userColor = '#f5c842';
     } else {
@@ -1934,16 +1936,30 @@ function _guardarCtx(neg, suc) {
 function _showModulos(neg) {
     showView('viewModulos');
     // Hub General (admin sin negocio): los módulos no operan sin negocio
-    // activo — deshabilitar cards para no abrir páginas vacías
+    // activo — deshabilitar cards para no abrir páginas vacías.
+    // Staff: deshabilitar los módulos a los que su rol no tiene acceso.
     var esHubGeneral = !!(_sesion && _sesion.isAdmin && !neg.id);
+    var permsStaff = (_sesion && _sesion.type === 'staff' && neg.id && window.etaaxPermisosRol)
+        ? etaaxPermisosRol(neg.id, _sesion.rol || 'otro') : null;
+    var CARD_KEYS = {
+        'recetas/landing.html':      ['recetas','insumos','inventarios','requisiciones'],
+        'financiero/index.html':     ['financiero'],
+        'administrativo/index.html': ['ventas','gastos','menu','proveedores','clientes','staff','permisos']
+    };
     document.querySelectorAll('a.hub-card').forEach(function(a) {
+        var href = a.getAttribute('href') || '';
         if (esHubGeneral) {
             a.classList.add('disabled');
             a.title = 'Estás en el Hub General — entra a un negocio desde el Panel Admin para operar sus módulos';
-        } else if (a.getAttribute('href')) {
-            a.classList.remove('disabled');
-            a.title = '';
+            return;
         }
+        if (permsStaff && CARD_KEYS[href]) {
+            var ok = CARD_KEYS[href].some(function(k){ return permsStaff[k]; });
+            a.classList.toggle('disabled', !ok);
+            a.title = ok ? '' : 'Tu rol no tiene acceso a este módulo';
+            return;
+        }
+        if (href) { a.classList.remove('disabled'); a.title = ''; }
     });
     var t      = TIPOS[neg.tipo] || TIPOS.otro;
     var sucId  = localStorage.getItem('etaax_sucursal_activa') || '';
