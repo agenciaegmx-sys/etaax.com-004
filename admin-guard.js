@@ -21,7 +21,12 @@
                 '<div id="adminGuardAccion" style="font-size:16px;font-weight:600;color:var(--text,#f0ece6)">Confirmar acción</div>' +
               '</div>' +
               '<div style="padding:18px 22px">' +
-                '<div style="font-size:11px;color:var(--text-dim,#7a7570);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Contraseña de administrador</div>' +
+                '<div style="font-size:11px;color:var(--text-dim,#7a7570);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Cuenta administradora</div>' +
+                '<input type="email" id="adminGuardEmail" placeholder="Correo del dueño o admin" autocomplete="username"' +
+                '  style="width:100%;box-sizing:border-box;height:46px;padding:0 14px;border:1px solid var(--border,#2a2825);' +
+                '  border-radius:10px;background:var(--bg,#0f0e0c);color:var(--text,#f0ece6);' +
+                '  font-family:inherit;font-size:15px;outline:none;transition:border-color .15s;margin-bottom:10px"' +
+                '  onfocus="this.style.borderColor=\'var(--accent,#f5c842)\'" onblur="this.style.borderColor=\'var(--border,#2a2825)\'">' +
                 '<div style="position:relative">' +
                   '<input type="password" id="adminGuardInput" placeholder="Ingresa tu contraseña"' +
                   '  onkeydown="if(event.key===\'Enter\')_confirmarAdminGuard()"' +
@@ -62,10 +67,21 @@
         btn.style.color = btnLabel ? '#000' : '#fff';
         btn.disabled = false;
         document.getElementById('modalAdminGuard').style.display = 'flex';
+        // Prellenar el correo con la sesión actual si existe (editable:
+        // el admin maestro puede usar sus credenciales en cualquier escenario)
+        var emailInp = document.getElementById('adminGuardEmail');
+        emailInp.value = '';
+        try {
+            _supabase.auth.getSession().then(function (sess) {
+                var u = sess.data && sess.data.session && sess.data.session.user;
+                if (u && u.email && !emailInp.value) emailInp.value = u.email;
+            });
+        } catch (e) {}
         setTimeout(function () {
-            var inp = document.getElementById('adminGuardInput');
-            if (inp) inp.focus();
-        }, 80);
+            var em = document.getElementById('adminGuardEmail');
+            var pw = document.getElementById('adminGuardInput');
+            if (em && !em.value) em.focus(); else if (pw) pw.focus();
+        }, 120);
     };
 
     window._toggleAdminGuardPass = function () {
@@ -83,41 +99,62 @@
         _guardCb = null;
     };
 
+    var GUARD_ADMIN_EMAIL = 'admin@etaax.com';
+
     window._confirmarAdminGuard = async function () {
         var errEl = document.getElementById('adminGuardError');
         var btn   = document.getElementById('adminGuardBtn');
+        var lbl   = btn.textContent;
+        var email = (document.getElementById('adminGuardEmail').value || '').trim().toLowerCase();
         var pass  = (document.getElementById('adminGuardInput').value || '').trim();
-        if (!pass) { errEl.textContent = 'Ingresa la contraseña'; return; }
-
-        var email = null;
-        try {
-            var sess = await _supabase.auth.getSession();
-            email = sess.data && sess.data.session && sess.data.session.user
-                ? sess.data.session.user.email : null;
-        } catch (e) {}
-
-        if (!email) {
-            errEl.textContent = 'No hay sesión activa. Inicia sesión desde el Hub.';
-            return;
-        }
+        if (!email) { errEl.textContent = 'Ingresa el correo de la cuenta administradora'; return; }
+        if (!pass)  { errEl.textContent = 'Ingresa la contraseña'; return; }
 
         btn.textContent = 'Verificando…';
         btn.disabled = true;
         errEl.textContent = '';
 
-        try {
-            var res = await _supabase.auth.signInWithPassword({ email: email, password: pass });
-            if (res.error) throw new Error('Contraseña incorrecta');
-        } catch (e) {
-            errEl.textContent = e.message || 'Error al verificar';
+        function fallar(msg) {
+            errEl.textContent = msg;
             document.getElementById('adminGuardInput').value = '';
             document.getElementById('adminGuardInput').focus();
-            btn.textContent = 'Eliminar';
+            btn.textContent = lbl === 'Verificando…' ? 'Eliminar' : lbl;
             btn.disabled = false;
+        }
+
+        // Email de la sesión previa (si la hay), antes de verificar
+        var prevEmail = null;
+        try {
+            var sess0 = await _supabase.auth.getSession();
+            prevEmail = sess0.data && sess0.data.session && sess0.data.session.user
+                ? sess0.data.session.user.email : null;
+        } catch (e) {}
+
+        // 1. Credenciales válidas (funciona también en sesiones de staff,
+        //    que no tienen sesión de Supabase propia)
+        var res = await _supabase.auth.signInWithPassword({ email: email, password: pass });
+        if (res.error) { fallar('Correo o contraseña incorrectos'); return; }
+
+        // 2. Autorización: admin maestro pasa siempre; cualquier otra
+        //    cuenta debe ser dueña del negocio activo (el RLS solo le
+        //    regresa el negocio a su dueño o al admin). Sin negocio
+        //    activo (hub), debe ser la misma cuenta de la sesión.
+        var autorizado = email === GUARD_ADMIN_EMAIL;
+        if (!autorizado) {
+            var negId = localStorage.getItem('etaax_negocio_activo') || '';
+            if (negId) {
+                var rn = await _supabase.from('negocios').select('id').eq('id', negId).maybeSingle();
+                autorizado = !!(rn.data && rn.data.id);
+            } else {
+                autorizado = !!prevEmail && email === prevEmail.toLowerCase();
+            }
+        }
+        if (!autorizado) {
+            try { await _supabase.auth.signOut(); } catch (e) {}
+            fallar('Esta cuenta no administra este negocio');
             return;
         }
 
-        btn.textContent = 'Eliminar';
         btn.disabled = false;
         var cb = _guardCb;
         _cerrarAdminGuard();
