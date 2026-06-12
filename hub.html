@@ -1009,9 +1009,14 @@ async function init() {
 
     // ── FAST PATH: render instantáneo desde caché local ───────────────
     // Muestra la UI de inmediato. Supabase verifica en background.
+    // NO aplica si hay impersonación de admin pendiente ni si el caché
+    // pertenece al admin maestro: esos casos van al slow path siempre
+    // (el fast path pintaba la identidad cacheada equivocada).
     var qSes      = _getQuickSes();
     var negIdCach = localStorage.getItem('etaax_negocio_activo') || '';
-    if (qSes && !goNegocios) {
+    var _impPend  = !!sessionStorage.getItem('etaax_admin_impersonate');
+    if (qSes && qSes.email === ADMIN_EMAIL) { _clearQuickSes(); qSes = null; }
+    if (qSes && !goNegocios && !_impPend) {
         _sesion = qSes;
         _updateTopbar();
         var negCach = _getNegocios().find(function(n){ return n.id === negIdCach; });
@@ -1040,8 +1045,11 @@ async function init() {
         // ── Admin maestro ──
         if (u.email === ADMIN_EMAIL) {
             var impRaw = sessionStorage.getItem('etaax_admin_impersonate');
+            // "Seleccionar negocio" para el admin = volver al panel
+            if (goNegocios) { volverAlAdmin(); return; }
             if (impRaw) {
                 // Entrando a un negocio desde el panel admin
+                _clearQuickSes(); // descartar caché de sesiones anteriores
                 var imp = JSON.parse(impRaw);
                 _sesion = { usuarioId: imp.usuarioId, nombre: imp.usuarioNombre, email: ADMIN_EMAIL, plan: imp.usuarioPlan || 'gran', isAdmin: true };
                 _updateTopbar();
@@ -1106,6 +1114,14 @@ async function _bgVerify() {
         }
         var u    = s.user;
         var meta = u.user_metadata || {};
+        // Admin maestro: nunca degradarlo a usuario normal ni cachear su
+        // sesión como qses (eso corrompía el fast path). Re-inicializar
+        // por el slow path, que sí tiene rama de admin.
+        if (u.email === ADMIN_EMAIL) {
+            _clearQuickSes();
+            window.location.reload();
+            return;
+        }
         _sesion  = { usuarioId: u.id, nombre: meta.nombre || u.email, email: u.email, plan: meta.plan || 'pyme' };
         _saveQuickSes(_sesion);
         _updateTopbar();
@@ -1900,7 +1916,8 @@ function _guardarCtx(neg, suc) {
         negColor: sucColor,
         sucId: suc ? suc.id : null, sucNombre: suc ? suc.nombre : null,
         userName: _sesion.nombre, userBadge: '', userColor: '#3dbe7a',
-        ctxType: _sesion.type === 'staff' ? 'staff' : 'owner'
+        ctxType: _sesion.type === 'staff' ? 'staff' : 'owner',
+        ctxAdmin: !!_sesion.isAdmin
     };
     if (_sesion.type === 'staff') {
         var r = ROLES_STAFF[_sesion.rol] || ROLES_STAFF.otro;
@@ -1916,6 +1933,18 @@ function _guardarCtx(neg, suc) {
 
 function _showModulos(neg) {
     showView('viewModulos');
+    // Hub General (admin sin negocio): los módulos no operan sin negocio
+    // activo — deshabilitar cards para no abrir páginas vacías
+    var esHubGeneral = !!(_sesion && _sesion.isAdmin && !neg.id);
+    document.querySelectorAll('a.hub-card').forEach(function(a) {
+        if (esHubGeneral) {
+            a.classList.add('disabled');
+            a.title = 'Estás en el Hub General — entra a un negocio desde el Panel Admin para operar sus módulos';
+        } else if (a.getAttribute('href')) {
+            a.classList.remove('disabled');
+            a.title = '';
+        }
+    });
     var t      = TIPOS[neg.tipo] || TIPOS.otro;
     var sucId  = localStorage.getItem('etaax_sucursal_activa') || '';
     var sucCfg = sucId ? _getSucCfg(sucId, neg.id) : {};

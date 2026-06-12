@@ -58,6 +58,16 @@
 })();
 
 function ctxSalir() {
+    var ctx = null;
+    try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch (e) {}
+    // Admin maestro: volver al panel sin cerrar su sesión de Supabase
+    if (ctx && ctx.ctxAdmin) {
+        sessionStorage.removeItem('etaax_admin_impersonate');
+        localStorage.removeItem('etaax_negocio_activo');
+        localStorage.removeItem('etaax_ctx');
+        window.location.href = '/admin.html';
+        return;
+    }
     if (typeof _etaaxWipeCache === 'function') _etaaxWipeCache();
     localStorage.removeItem('etaax_negocio_activo');
     localStorage.removeItem('etaax_ctx');
