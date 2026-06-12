@@ -617,8 +617,19 @@ async function save(d) {
 async function syncFromDB() {
     var negId = getNegocioActivo();
     if (!negId) return;
+    // Sin sesión de Supabase el SELECT regresa vacío por RLS (no error):
+    // no tocar el caché local en ese caso o se borra el staff del equipo
+    var sess = await _supabase.auth.getSession();
+    if (!sess.data || !sess.data.session) return;
     var res = await _supabase.from('staff').select('datos').eq('negocio_id', negId);
     if (res.error || !res.data) return;
+    var local = load();
+    if (!res.data.length) {
+        // Servidor vacío pero hay staff local (capturado antes de que
+        // existiera la tabla en Supabase): subirlo en vez de perderlo
+        if (local.length) await save(local);
+        return;
+    }
     var list = res.data.map(function(row){ return row.datos; });
     localStorage.setItem(_sk('staff'), JSON.stringify(list));
 }
@@ -752,7 +763,18 @@ function renderTable() {
 }
 
 /* ── MODAL ── */
+// Expedientes con datos sensibles (salarios, bancos, credenciales):
+// abrir el editor requiere la contraseña del administrador, igual que
+// eliminar. Se pide una vez por visita a la página.
+var _staffEditUnlocked = false;
 function openModal(id) {
+    if (_staffEditUnlocked) { _openModalReal(id); return; }
+    _pedirClaveAdmin('Expedientes de staff — Acceso restringido', function () {
+        _staffEditUnlocked = true;
+        _openModalReal(id);
+    }, '🔓 Desbloquear');
+}
+function _openModalReal(id) {
     tmpDocs = [];
     clearForm();
     document.getElementById('modalTitle').textContent = id ? 'Editar colaborador' : 'Agregar colaborador';
@@ -772,7 +794,12 @@ function openModal(id) {
             document.getElementById('fEstado').value      = s.estado || 'Activo';
             document.getElementById('fRol').value         = s.rol || '';
             document.getElementById('fUsuario').value     = s.usuario || '';
+            // La contraseña guardada nunca se muestra; el placeholder
+            // indica que existe y que dejarla vacía la conserva
             document.getElementById('fPwd').value         = '';
+            document.getElementById('fPwd').placeholder   = s.passwordHash
+                ? '•••••••• guardada — déjala vacía para conservarla'
+                : 'Mínimo 6 caracteres';
             document.getElementById('fSalarioBase').value  = s.salarioBase || '';
             document.getElementById('fPeriodicidad').value = s.periodicidad || '';
             document.getElementById('fDiaPago').value      = s.diaPago || '';
@@ -797,6 +824,7 @@ function clearForm() {
     document.getElementById('fEstado').value = 'Activo';
     document.getElementById('fRol').value = '';
     document.getElementById('fileInput').value = '';
+    document.getElementById('fPwd').placeholder = 'Mínimo 6 caracteres';
 }
 
 function closeModal() {
