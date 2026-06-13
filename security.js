@@ -95,6 +95,7 @@ window._etaaxWipeCache = function () {
         if (!k || k.indexOf('etaax_') !== 0) continue;
         if (k === 'etaax_negocios' || k === 'etaax_theme') continue;
         if (/_staff$/.test(k)) continue;
+        if (/_owner_email$/.test(k)) continue; // lo usa admin-guard en sesiones staff
         keys.push(k);
     }
     keys.forEach(function (k) { localStorage.removeItem(k); });

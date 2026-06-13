@@ -1924,11 +1924,17 @@ function _guardarCtx(neg, suc) {
         var r = ROLES_STAFF[_sesion.rol] || ROLES_STAFF.otro;
         ctx.userBadge = r.label; ctx.userColor = r.color;
         ctx.rol = _sesion.rol || 'otro'; // page-guard verifica permisos con esto
+        ctx.staffId = _sesion.staffId;   // admin-guard re-autentica con esto
     } else if (_sesion.isAdmin) {
         ctx.userBadge = '⚡ Admin'; ctx.userColor = '#f5c842';
     } else {
         var p = PLANES[_sesion.plan] || PLANES.pyme;
         ctx.userBadge = p.nombre; ctx.userColor = p.color || '#3dbe7a';
+        // El admin-guard usa este correo para aceptar la contraseña del
+        // dueño en sesiones de staff sin pedir el correo
+        if (neg.id && _sesion.email) {
+            localStorage.setItem('etaax_' + neg.id + '_owner_email', _sesion.email);
+        }
     }
     localStorage.setItem('etaax_ctx', JSON.stringify(ctx));
 }

@@ -21,12 +21,7 @@
                 '<div id="adminGuardAccion" style="font-size:16px;font-weight:600;color:var(--text,#f0ece6)">Confirmar acción</div>' +
               '</div>' +
               '<div style="padding:18px 22px">' +
-                '<div style="font-size:11px;color:var(--text-dim,#7a7570);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Cuenta administradora</div>' +
-                '<input type="email" id="adminGuardEmail" placeholder="Correo del dueño o admin" autocomplete="username"' +
-                '  style="width:100%;box-sizing:border-box;height:46px;padding:0 14px;border:1px solid var(--border,#2a2825);' +
-                '  border-radius:10px;background:var(--bg,#0f0e0c);color:var(--text,#f0ece6);' +
-                '  font-family:inherit;font-size:15px;outline:none;transition:border-color .15s;margin-bottom:10px"' +
-                '  onfocus="this.style.borderColor=\'var(--accent,#f5c842)\'" onblur="this.style.borderColor=\'var(--border,#2a2825)\'">' +
+                '<div style="font-size:11px;color:var(--text-dim,#7a7570);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Confirma tu contraseña</div>' +
                 '<div style="position:relative">' +
                   '<input type="password" id="adminGuardInput" placeholder="Ingresa tu contraseña"' +
                   '  onkeydown="if(event.key===\'Enter\')_confirmarAdminGuard()"' +
@@ -67,21 +62,10 @@
         btn.style.color = btnLabel ? '#000' : '#fff';
         btn.disabled = false;
         document.getElementById('modalAdminGuard').style.display = 'flex';
-        // Prellenar el correo con la sesión actual si existe (editable:
-        // el admin maestro puede usar sus credenciales en cualquier escenario)
-        var emailInp = document.getElementById('adminGuardEmail');
-        emailInp.value = '';
-        try {
-            _supabase.auth.getSession().then(function (sess) {
-                var u = sess.data && sess.data.session && sess.data.session.user;
-                if (u && u.email && !emailInp.value) emailInp.value = u.email;
-            });
-        } catch (e) {}
         setTimeout(function () {
-            var em = document.getElementById('adminGuardEmail');
             var pw = document.getElementById('adminGuardInput');
-            if (em && !em.value) em.focus(); else if (pw) pw.focus();
-        }, 120);
+            if (pw) pw.focus();
+        }, 80);
     };
 
     window._toggleAdminGuardPass = function () {
@@ -101,14 +85,35 @@
 
     var GUARD_ADMIN_EMAIL = 'admin@etaax.com';
 
+    function _guardCtx() {
+        try { return JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch (e) { return null; }
+    }
+
+    // ¿La contraseña es la del colaborador con sesión activa?
+    // (verificación local contra su hash; sus alcances ya los
+    // controla el page-guard según Permisos y Roles)
+    async function _checkStaffPass(pass) {
+        var ctx = _guardCtx();
+        if (!ctx || ctx.ctxType !== 'staff' || !ctx.staffId || !ctx.negId) return null;
+        var list = [];
+        try { list = JSON.parse(localStorage.getItem('etaax_' + ctx.negId + '_staff') || '[]'); } catch (e) {}
+        var m = list.find(function (x) { return x.id === ctx.staffId; });
+        if (!m || !m.passwordHash) return null;
+        if (m.passwordHash.indexOf('v2$') === 0 && typeof _hashPwdStaff === 'function') {
+            return (m.passwordHash === await _hashPwdStaff(pass)) ? (m.nombre || 'colaborador') : null;
+        }
+        if (typeof _hashPwdStaffLegacy === 'function' && m.passwordHash === _hashPwdStaffLegacy(pass)) {
+            return m.nombre || 'colaborador';
+        }
+        return null;
+    }
+
     window._confirmarAdminGuard = async function () {
         var errEl = document.getElementById('adminGuardError');
         var btn   = document.getElementById('adminGuardBtn');
         var lbl   = btn.textContent;
-        var email = (document.getElementById('adminGuardEmail').value || '').trim().toLowerCase();
         var pass  = (document.getElementById('adminGuardInput').value || '').trim();
-        if (!email) { errEl.textContent = 'Ingresa el correo de la cuenta administradora'; return; }
-        if (!pass)  { errEl.textContent = 'Ingresa la contraseña'; return; }
+        if (!pass) { errEl.textContent = 'Ingresa la contraseña'; return; }
 
         btn.textContent = 'Verificando…';
         btn.disabled = true;
@@ -121,44 +126,46 @@
             btn.textContent = lbl === 'Verificando…' ? 'Eliminar' : lbl;
             btn.disabled = false;
         }
+        function autorizar(quien) {
+            btn.disabled = false;
+            var cb = _guardCb;
+            _cerrarAdminGuard();
+            alert('Autorizado por: ' + quien);
+            if (cb) cb();
+        }
 
-        // Email de la sesión previa (si la hay), antes de verificar
+        // La contraseña se acepta en este orden:
+        // 1. La del colaborador con sesión activa (verificación local)
+        var staffNombre = await _checkStaffPass(pass);
+        if (staffNombre) { autorizar(staffNombre); return; }
+
+        // 2. La de la cuenta con sesión de Supabase activa (dueño/admin)
         var prevEmail = null;
         try {
-            var sess0 = await _supabase.auth.getSession();
-            prevEmail = sess0.data && sess0.data.session && sess0.data.session.user
-                ? sess0.data.session.user.email : null;
+            var sess = await _supabase.auth.getSession();
+            prevEmail = sess.data && sess.data.session && sess.data.session.user
+                ? sess.data.session.user.email : null;
         } catch (e) {}
-
-        // 1. Credenciales válidas (funciona también en sesiones de staff,
-        //    que no tienen sesión de Supabase propia)
-        var res = await _supabase.auth.signInWithPassword({ email: email, password: pass });
-        if (res.error) { fallar('Correo o contraseña incorrectos'); return; }
-
-        // 2. Autorización: admin maestro pasa siempre; cualquier otra
-        //    cuenta debe ser dueña del negocio activo (el RLS solo le
-        //    regresa el negocio a su dueño o al admin). Sin negocio
-        //    activo (hub), debe ser la misma cuenta de la sesión.
-        var autorizado = email === GUARD_ADMIN_EMAIL;
-        if (!autorizado) {
-            var negId = localStorage.getItem('etaax_negocio_activo') || '';
-            if (negId) {
-                var rn = await _supabase.from('negocios').select('id').eq('id', negId).maybeSingle();
-                autorizado = !!(rn.data && rn.data.id);
-            } else {
-                autorizado = !!prevEmail && email === prevEmail.toLowerCase();
-            }
-        }
-        if (!autorizado) {
-            try { await _supabase.auth.signOut(); } catch (e) {}
-            fallar('Esta cuenta no administra este negocio');
-            return;
+        if (prevEmail) {
+            var r1 = await _supabase.auth.signInWithPassword({ email: prevEmail, password: pass });
+            if (!r1.error) { autorizar(prevEmail); return; }
         }
 
-        btn.disabled = false;
-        var cb = _guardCb;
-        _cerrarAdminGuard();
-        alert('Autorizado por: ' + email);
-        if (cb) cb();
+        // 3. La del dueño del negocio activo (correo guardado al
+        //    iniciar sesión como dueño en este dispositivo)
+        var negId = localStorage.getItem('etaax_negocio_activo') || '';
+        var ownerEmail = negId ? (localStorage.getItem('etaax_' + negId + '_owner_email') || '') : '';
+        if (ownerEmail && ownerEmail !== prevEmail && ownerEmail !== GUARD_ADMIN_EMAIL) {
+            var r2 = await _supabase.auth.signInWithPassword({ email: ownerEmail, password: pass });
+            if (!r2.error) { autorizar(ownerEmail); return; }
+        }
+
+        // 4. La del admin maestro (abre todo en cualquier escenario)
+        if (prevEmail !== GUARD_ADMIN_EMAIL) {
+            var r3 = await _supabase.auth.signInWithPassword({ email: GUARD_ADMIN_EMAIL, password: pass });
+            if (!r3.error) { autorizar('Admin Maestro'); return; }
+        }
+
+        fallar('Contraseña incorrecta');
     };
 })();
