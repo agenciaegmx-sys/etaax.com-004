@@ -85,6 +85,23 @@
 </style>
 </head>
 <body>
+<!-- Candado: cubre la página hasta autorizar con contraseña de
+     dueño/admin; cancelar el modal no da acceso al contenido -->
+<div id="permLockOverlay" style="position:fixed;inset:0;z-index:8500;background:rgba(10,9,8,.93);
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px">
+    <div style="font-size:36px">🔐</div>
+    <div style="color:#f0ece6;font-family:'DM Sans',sans-serif;font-size:15px;text-align:center;padding:0 20px">
+        Permisos y Roles — acceso restringido<br>
+        <span style="font-size:12px;color:#7a7570">Se requiere la contraseña del dueño o del administrador</span>
+    </div>
+    <div style="display:flex;gap:10px">
+        <button onclick="_gatePermisos()" style="background:#f5c842;color:#0a0908;border:none;border-radius:8px;
+            padding:9px 20px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">🔓 Desbloquear</button>
+        <a href="staff.html" style="display:inline-block;background:transparent;border:1px solid #2a2825;color:#7a7570;
+            border-radius:8px;padding:9px 20px;font-family:'DM Sans',sans-serif;font-size:13px;text-decoration:none">← Volver</a>
+    </div>
+</div>
 <header class="top-bar">
     <svg width="108" height="26" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
@@ -126,7 +143,6 @@
         <div class="nav-section">
             <div class="nav-section-label">Catálogos</div>
             <a href="staff.html" class="nav-link" data-tooltip="Staff"><span class="nav-icon">👥</span><span class="nav-text">Staff</span></a>
-            <a href="permisos.html" class="nav-link active" data-tooltip="Permisos y Roles"><span class="nav-icon">🔐</span><span class="nav-text">Permisos y Roles</span></a>
             <a href="proveedores.html" class="nav-link" data-tooltip="Proveedores"><span class="nav-icon">🚚</span><span class="nav-text">Proveedores</span></a>
             <a href="clientes.html" class="nav-link" data-tooltip="Clientes"><span class="nav-icon">⭐</span><span class="nav-text">Clientes</span></a>
         </div>
@@ -410,13 +426,18 @@ function _mostrarNavBar() {
     document.body.classList.add('has-ctx');
 }
 
-document.addEventListener('DOMContentLoaded', async function(){
-    // Cargar datos en background mientras se muestra el modal de auth
-    syncPermisos().then(function(){ renderTabs(); renderGrid(); });
-    // Pedir contraseña admin para acceder
+function _gatePermisos() {
     _pedirClaveAdmin('Permisos y roles — Acceso restringido', function(){
+        var ov = document.getElementById('permLockOverlay');
+        if (ov) ov.remove();
         _mostrarNavBar();
-    }, '🔐 Desbloquear');
+    }, '🔓 Desbloquear', { soloAdmin: true });
+}
+
+document.addEventListener('DOMContentLoaded', async function(){
+    // Cargar datos en background mientras se muestra el candado
+    syncPermisos().then(function(){ renderTabs(); renderGrid(); });
+    _gatePermisos();
 });
 
 function ctxSalir() {

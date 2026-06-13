@@ -47,9 +47,14 @@
         document.body.appendChild(el);
     }
 
-    window._pedirClaveAdmin = function (accion, callback, btnLabel) {
+    var _guardSoloAdmin = false;
+
+    window._pedirClaveAdmin = function (accion, callback, btnLabel, opts) {
         _ensureModal();
         _guardCb = callback;
+        // soloAdmin: no acepta la contraseña del colaborador, solo la
+        // del dueño del negocio o la del admin maestro (p.ej. Permisos)
+        _guardSoloAdmin = !!(opts && opts.soloAdmin);
         document.getElementById('adminGuardAccion').textContent = accion;
         document.getElementById('adminGuardError').textContent = '';
         var inp = document.getElementById('adminGuardInput');
@@ -135,9 +140,12 @@
         }
 
         // La contraseña se acepta en este orden:
-        // 1. La del colaborador con sesión activa (verificación local)
-        var staffNombre = await _checkStaffPass(pass);
-        if (staffNombre) { autorizar(staffNombre); return; }
+        // 1. La del colaborador con sesión activa (verificación local),
+        //    salvo en modo soloAdmin
+        if (!_guardSoloAdmin) {
+            var staffNombre = await _checkStaffPass(pass);
+            if (staffNombre) { autorizar(staffNombre); return; }
+        }
 
         // 2. La de la cuenta con sesión de Supabase activa (dueño/admin)
         var prevEmail = null;

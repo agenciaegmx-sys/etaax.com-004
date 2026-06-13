@@ -62,7 +62,8 @@ window.etaaxPermisosRol = function (negId, rol) {
         [/\/administrativo\/proveedores/,       'proveedores'],
         [/\/administrativo\/clientes/,          'clientes'],
         [/\/administrativo\/staff/,             'staff'],
-        [/\/administrativo\/permisos/,          'permisos'],
+        // permisos.html NO va aquí: la página se protege sola con el
+        // candado de contraseña de administrador (solo dueño/admin)
         [/\/recetas\/insumos/,                  'insumos'],
         [/\/recetas\/inventarios/,              'inventarios'],
         [/\/recetas\/requisiciones/,            'requisiciones'],

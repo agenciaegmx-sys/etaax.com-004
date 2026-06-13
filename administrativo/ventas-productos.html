@@ -119,6 +119,35 @@
 </header>
 <div id="ctxBar" class="ctx-bar" style="display:none"></div>
 
+<div class="app-shell">
+    <nav class="nav cerrado" id="nav">
+        <div class="nav-top">
+            <div class="nav-brand"><span class="nav-brand-sub">Control Administrativo</span></div>
+            <div class="nav-top-actions">
+                <a href="index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Panel Admin" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1">🗃️</a>
+                <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
+            </div>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Admin</div>
+            <a href="ventas.html" class="nav-link" data-tooltip="Captura Ventas"><span class="nav-icon">💰</span><span class="nav-text">Captura Ventas</span></a>
+            <a href="ventas-productos.html" class="nav-link active" data-tooltip="Ventas por Producto"><span class="nav-icon">🧾</span><span class="nav-text">Ventas por Producto</span></a>
+            <a href="gastos.html" class="nav-link" data-tooltip="Captura Gastos"><span class="nav-icon">📤</span><span class="nav-text">Captura Gastos</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Catálogos</div>
+            <a href="staff.html" class="nav-link" data-tooltip="Staff"><span class="nav-icon">👥</span><span class="nav-text">Staff</span></a>
+            <a href="proveedores.html" class="nav-link" data-tooltip="Proveedores"><span class="nav-icon">🚚</span><span class="nav-text">Proveedores</span></a>
+            <a href="clientes.html" class="nav-link" data-tooltip="Clientes"><span class="nav-icon">⭐</span><span class="nav-text">Clientes</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Menús</div>
+            <a href="menu.html" class="nav-link" data-tooltip="Menú"><span class="nav-icon">📋</span><span class="nav-text">Menú</span></a>
+        </div>
+    </nav>
+
+    <main class="main-content expandido" id="mainContent">
+
 <div class="vp-wrap">
 
     <!-- Header -->
@@ -183,6 +212,9 @@
     </div>
 
 </div><!-- /vp-wrap -->
+
+    </main>
+</div><!-- /app-shell -->
 
 <!-- ══════════════════════════════════════════════
      MODAL — Cargar periodo
@@ -938,6 +970,17 @@ function toggleTheme(){
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script>
+function toggleNav() {
+    var nav = document.getElementById('nav'); var main = document.getElementById('mainContent');
+    nav.classList.toggle('cerrado'); if (main) main.classList.toggle('expandido');
+    var cerrado = nav.classList.contains('cerrado');
+    var btn = document.getElementById('navToggleBtn'); var txt = document.getElementById('navToggleTxt');
+    if (btn) btn.childNodes[0].textContent = cerrado ? '▶' : '◀';
+    if (txt) txt.textContent = cerrado ? 'Expandir' : 'Ocultar';
+    if (btn) btn.setAttribute('data-tooltip', cerrado ? 'Expandir' : 'Ocultar');
+}
+</script>
 <script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
