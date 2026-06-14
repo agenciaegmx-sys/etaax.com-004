@@ -162,6 +162,54 @@
         </div>
     </div>
 
+    <!-- CUENTA DE ACCESO AL NEGOCIO -->
+    <div class="config-section">
+        <div class="config-section-title">Cuenta de acceso al negocio</div>
+        <div class="form-hint" style="margin-bottom:18px;line-height:1.6">
+            Correo y contraseña con los que se abre este negocio en ETAAX. Comparte estas credenciales solo con quien deba administrar el negocio (p. ej. tu gerente).
+        </div>
+
+        <!-- Aviso: sesión de Admin Maestro -->
+        <div id="cuentaWarn" style="display:none;background:rgba(245,200,66,.08);border:1px solid rgba(245,200,66,.3);border-radius:10px;padding:14px 16px;font-size:13px;color:var(--accent);line-height:1.6">
+            ⚠️ Estás dentro como <strong>Admin Maestro</strong>. Para cambiar el correo o la contraseña de acceso de <em>este negocio</em>, inicia sesión con la cuenta propia del negocio. Desde la cuenta maestra no se editan esas credenciales (cambiarías la cuenta maestra).
+        </div>
+
+        <div id="cuentaControls">
+            <div class="form-group full" style="margin-bottom:22px">
+                <label>Correo de acceso actual</label>
+                <input type="email" id="cuentaCorreoActual" readonly style="opacity:.85;cursor:default">
+                <div class="form-hint">Por seguridad, la contraseña no se muestra. Puedes cambiarla abajo.</div>
+            </div>
+
+            <!-- Cambiar correo -->
+            <div style="border-top:1px solid var(--border);padding-top:20px;margin-bottom:22px">
+                <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:14px">📧 Cambiar correo</div>
+                <div class="form-grid">
+                    <div class="form-group"><label>Nuevo correo</label><input type="email" id="accNuevoCorreo" placeholder="nuevo@correo.com" autocomplete="off"></div>
+                    <div class="form-group"><label>Contraseña actual</label><input type="password" id="accCorreoPass" placeholder="Para confirmar" autocomplete="off"></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:14px;margin-top:14px;flex-wrap:wrap">
+                    <button class="btn-save" id="btnCambiarCorreo" style="font-size:13px;padding:9px 20px" onclick="cambiarCorreoAcceso()">Actualizar correo</button>
+                    <div id="accCorreoMsg" class="form-hint" style="flex:1;min-width:180px"></div>
+                </div>
+            </div>
+
+            <!-- Cambiar contraseña -->
+            <div style="border-top:1px solid var(--border);padding-top:20px">
+                <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:14px">🔑 Cambiar contraseña</div>
+                <div class="form-grid">
+                    <div class="form-group full"><label>Contraseña actual</label><input type="password" id="accPassActual" placeholder="Tu contraseña actual" autocomplete="off"></div>
+                    <div class="form-group"><label>Nueva contraseña</label><input type="password" id="accPassNueva" placeholder="Mín. 6 caracteres" autocomplete="off"></div>
+                    <div class="form-group"><label>Confirmar nueva contraseña</label><input type="password" id="accPassConf" placeholder="Repite la nueva" autocomplete="off"></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:14px;margin-top:14px;flex-wrap:wrap">
+                    <button class="btn-save" id="btnCambiarPass" style="font-size:13px;padding:9px 20px" onclick="cambiarPasswordAcceso()">Cambiar contraseña</button>
+                    <div id="accPassMsg" class="form-hint" style="flex:1;min-width:180px"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- TARJETAS DE CRÉDITO -->
     <div class="config-section">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border)">
@@ -441,7 +489,123 @@ async function guardarConfig() {
     showToast('✓ Configuración guardada');
 }
 
-document.addEventListener('DOMContentLoaded', cargarDatos);
+/* ══════════════════════════════════════════════════════════
+   CUENTA DE ACCESO AL NEGOCIO (Supabase Auth)
+   ══════════════════════════════════════════════════════════ */
+var ACCESO_ADMIN_EMAIL = 'admin@etaax.com';
+var _cuentaEmail = '';
+
+// Cliente efímero SOLO para verificar la contraseña actual sin reemplazar
+// la sesión activa (mismo patrón que admin-guard.js).
+var _accVerifier = null;
+function _getAccVerifier() {
+    if (_accVerifier) return _accVerifier;
+    if (typeof supabase === 'undefined' || !supabase.createClient) return null;
+    _accVerifier = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'etaax-verify-cfg' }
+    });
+    return _accVerifier;
+}
+async function _verificarPassEfimera(email, pass) {
+    var v = _getAccVerifier();
+    if (!v) return false;
+    try {
+        var r = await v.auth.signInWithPassword({ email: email, password: pass });
+        if (!r.error) { try { await v.auth.signOut({ scope: 'local' }); } catch (e) {} }
+        return !r.error;
+    } catch (e) { return false; }
+}
+
+async function cargarCuentaAcceso() {
+    var warn = document.getElementById('cuentaWarn');
+    var box  = document.getElementById('cuentaControls');
+    var sess = null;
+    try { var s = await _supabase.auth.getSession(); sess = s.data && s.data.session; } catch (e) {}
+    if (!sess || !sess.user) {
+        warn.style.display = 'block';
+        warn.innerHTML = 'No hay una sesión activa para gestionar las credenciales de acceso.';
+        box.style.display = 'none';
+        return;
+    }
+    _cuentaEmail = sess.user.email || '';
+    document.getElementById('cuentaCorreoActual').value = _cuentaEmail;
+    // Admin maestro: no permitir editar credenciales (cambiaría la cuenta maestra)
+    if (_cuentaEmail === ACCESO_ADMIN_EMAIL) {
+        warn.style.display = 'block';
+        box.style.display  = 'none';
+    } else {
+        warn.style.display = 'none';
+        box.style.display  = 'block';
+    }
+}
+
+function _accMsg(id, texto, ok) {
+    var el = document.getElementById(id);
+    el.textContent = texto;
+    el.style.color = ok ? 'var(--green)' : 'var(--red)';
+}
+
+async function cambiarCorreoAcceso() {
+    var nuevo = document.getElementById('accNuevoCorreo').value.trim().toLowerCase();
+    var pass  = document.getElementById('accCorreoPass').value;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(nuevo)) { _accMsg('accCorreoMsg', 'Ingresa un correo válido.', false); return; }
+    if (nuevo === (_cuentaEmail || '').toLowerCase()) { _accMsg('accCorreoMsg', 'Es el mismo correo actual.', false); return; }
+    if (!pass) { _accMsg('accCorreoMsg', 'Ingresa tu contraseña actual para confirmar.', false); return; }
+
+    var btn = document.getElementById('btnCambiarCorreo'); var t0 = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Verificando…'; _accMsg('accCorreoMsg', '', true);
+
+    var ok = await _verificarPassEfimera(_cuentaEmail, pass);
+    if (!ok) { btn.disabled = false; btn.textContent = t0; _accMsg('accCorreoMsg', 'La contraseña actual es incorrecta.', false); return; }
+
+    btn.textContent = 'Actualizando…';
+    var r = await _supabase.auth.updateUser({ email: nuevo });
+    btn.disabled = false; btn.textContent = t0;
+    if (r.error) { _accMsg('accCorreoMsg', 'No se pudo: ' + r.error.message, false); return; }
+
+    document.getElementById('accCorreoPass').value = '';
+    var u = r.data && r.data.user;
+    if (u && (u.email || '').toLowerCase() === nuevo) {
+        // Cambio inmediato (verificación de correo desactivada en el proyecto)
+        _cuentaEmail = nuevo;
+        document.getElementById('cuentaCorreoActual').value = nuevo;
+        document.getElementById('accNuevoCorreo').value = '';
+        var negId = getNegocioActivo();
+        if (negId) localStorage.setItem('etaax_' + negId + '_owner_email', nuevo);
+        _accMsg('accCorreoMsg', '✓ Correo de acceso actualizado.', true);
+    } else {
+        // Verificación de correo activa: queda pendiente de confirmar
+        _accMsg('accCorreoMsg', 'Enviamos un correo de confirmación a ' + nuevo + '. El cambio se aplicará al confirmarlo.', true);
+    }
+}
+
+async function cambiarPasswordAcceso() {
+    var actual = document.getElementById('accPassActual').value;
+    var nueva  = document.getElementById('accPassNueva').value;
+    var conf   = document.getElementById('accPassConf').value;
+    if (!actual) { _accMsg('accPassMsg', 'Ingresa tu contraseña actual.', false); return; }
+    if ((nueva || '').length < 6) { _accMsg('accPassMsg', 'La nueva contraseña debe tener al menos 6 caracteres.', false); return; }
+    if (nueva !== conf) { _accMsg('accPassMsg', 'Las contraseñas nuevas no coinciden.', false); return; }
+    if (nueva === actual) { _accMsg('accPassMsg', 'La nueva contraseña debe ser distinta a la actual.', false); return; }
+
+    var btn = document.getElementById('btnCambiarPass'); var t0 = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Verificando…'; _accMsg('accPassMsg', '', true);
+
+    var ok = await _verificarPassEfimera(_cuentaEmail, actual);
+    if (!ok) { btn.disabled = false; btn.textContent = t0; _accMsg('accPassMsg', 'La contraseña actual es incorrecta.', false); return; }
+
+    btn.textContent = 'Actualizando…';
+    var r = await _supabase.auth.updateUser({ password: nueva });
+    btn.disabled = false; btn.textContent = t0;
+    if (r.error) { _accMsg('accPassMsg', 'No se pudo: ' + r.error.message, false); return; }
+
+    document.getElementById('accPassActual').value = '';
+    document.getElementById('accPassNueva').value  = '';
+    document.getElementById('accPassConf').value   = '';
+    _accMsg('accPassMsg', '✓ Contraseña actualizada. Úsala la próxima vez que abras el negocio.', true);
+}
+
+document.addEventListener('DOMContentLoaded', function(){ cargarDatos(); cargarCuentaAcceso(); });
 </script>
 
 <!-- ══ MODAL TARJETA DE CRÉDITO ══ -->

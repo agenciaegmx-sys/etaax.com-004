@@ -334,9 +334,14 @@
                         <button class="btn-ghost" onclick="window.location.href='permisos.html'"
                             title="Acceso restringido — requiere contraseña de administrador"
                             style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">🔐 Permisos y Roles</button>
+                        <button class="btn-ghost" onclick="_abrirNomParams()"
+                            style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">⚙️ Parámetros de nómina</button>
                         <button class="btn-primary" onclick="openModal()">+ Agregar colaborador</button>
                     </div>
                 </div>
+
+                <!-- Aviso de cumpleaños del día -->
+                <div id="cumpleBanner" style="display:none;margin:12px 22px 0;background:rgba(245,200,66,.1);border:1px solid rgba(245,200,66,.4);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--accent)"></div>
 
                 <!-- Puesto summary chips -->
                 <div class="puesto-chips" id="puestoChips">
@@ -392,7 +397,7 @@
                 </div>
                 <div class="form-group">
                     <label>Fecha de ingreso</label>
-                    <input type="date" id="fFechaIngreso">
+                    <input type="date" id="fFechaIngreso" onchange="_calcPrimaVacacional()">
                 </div>
                 <div class="form-group">
                     <label>Celular / WhatsApp</label>
@@ -401,6 +406,18 @@
                 <div class="form-group">
                     <label>Correo (opcional)</label>
                     <input type="email" id="fCorreo" placeholder="nombre@correo.com">
+                </div>
+                <div class="form-group">
+                    <label>Fecha de nacimiento</label>
+                    <input type="date" id="fFechaNacimiento">
+                </div>
+                <div class="form-group">
+                    <label>CURP</label>
+                    <input type="text" id="fCurp" maxlength="18" placeholder="18 caracteres" style="text-transform:uppercase">
+                </div>
+                <div class="form-group">
+                    <label>N° Seguro Social (NSS)</label>
+                    <input type="text" id="fNss" maxlength="11" placeholder="11 dígitos" inputmode="numeric">
                 </div>
                 <div class="form-group full">
                     <label>Dirección actual</label>
@@ -416,7 +433,7 @@
                 </div>
                 <div class="form-group full">
                     <label>Rol del sistema</label>
-                    <select id="fRol">
+                    <select id="fRol" onchange="_sugerirCategoria()">
                         <option value="">— Sin acceso al sistema —</option>
                         <option value="admin">👑 Administrador</option>
                         <option value="gerente">🎯 Gerente</option>
@@ -453,13 +470,37 @@
 
             <div class="modal-section">Datos de nómina</div>
             <div class="form-grid">
+                <div class="form-group full">
+                    <label>Categoría de nómina</label>
+                    <select id="fCategoriaNomina">
+                        <option value="operativa">⚙️ Operativa — cocina, bar, servicio</option>
+                        <option value="administrativa">📋 Administrativa — gerencia, oficina</option>
+                        <option value="socios">🤝 Socios Operativos</option>
+                    </select>
+                    <span class="form-hint">Define en qué grupo de nómina suma este colaborador en Gastos globales.</span>
+                </div>
                 <div class="form-group">
-                    <label>Salario base</label>
-                    <input type="number" id="fSalarioBase" min="0" step="0.01" placeholder="0.00">
+                    <label>Esquema de pago</label>
+                    <select id="fEsquemaSueldo" onchange="_toggleEsquemaSueldo()">
+                        <option value="periodo">Sueldo fijo por periodo</option>
+                        <option value="diario">Sueldo por día (× días trabajados)</option>
+                    </select>
+                </div>
+                <div class="form-group" id="grpSueldoDiario" style="display:none">
+                    <label>Sueldo diario</label>
+                    <input type="number" id="fSueldoDiario" min="0" step="0.01" placeholder="0.00" oninput="_updateSueldoPreview();_calcPrimaVacacional()">
+                    <span class="form-hint">Al pagar, el monto = sueldo diario × días trabajados.</span>
+                </div>
+                <div class="form-group" id="grpSalarioBase">
+                    <label>Salario base (por periodo)</label>
+                    <input type="number" id="fSalarioBase" min="0" step="0.01" placeholder="0.00" oninput="_calcPrimaVacacional()">
+                </div>
+                <div class="form-group full" id="sueldoPreview" style="display:none">
+                    <div style="background:var(--surface2);border:1px solid var(--green);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text-muted)" id="sueldoPreviewTxt"></div>
                 </div>
                 <div class="form-group">
                     <label>Periodicidad de pago</label>
-                    <select id="fPeriodicidad">
+                    <select id="fPeriodicidad" onchange="_calcPrimaVacacional()">
                         <option value="">— Seleccionar —</option>
                         <option value="semanal">Semanal</option>
                         <option value="quincenal">Quincenal</option>
@@ -502,6 +543,18 @@
                 <div class="form-group full">
                     <label>Datos bancarios (CLABE / cuenta, opcional)</label>
                     <input type="text" id="fDatosBancarios" placeholder="18 dígitos o cuenta">
+                </div>
+                <div class="form-group full">
+                    <label>Prima dominical ($) — calculada automáticamente</label>
+                    <input type="number" id="fPrimaVacacional" min="0" step="0.01" placeholder="0.00" readonly style="opacity:.85">
+                    <span class="form-hint" id="primaVacHint"></span>
+                    <label style="display:flex;align-items:center;gap:8px;font-size:12px;letter-spacing:0;text-transform:none;color:var(--text-muted);margin-top:8px;cursor:pointer">
+                        <input type="checkbox" id="fPrimaVacacionalEnPago" style="width:auto"> Trabaja domingos — sumar prima dominical al pago
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>Bono / incentivo extra ($)</label>
+                    <input type="number" id="fBonoIncentivo" min="0" step="0.01" placeholder="0.00">
                 </div>
             </div>
 
@@ -664,7 +717,26 @@ var tmpDocs = [];
 function renderAll() {
     renderPuestoChips();
     renderPuestoFilter();
+    renderCumpleBanner();
     renderTable();
+}
+
+/* ── Cumpleaños ── */
+function _esCumpleHoy(fechaNac) {
+    if (!fechaNac) return false;
+    var p = String(fechaNac).split('-'); // YYYY-MM-DD
+    if (p.length !== 3) return false;
+    var hoy = new Date();
+    return parseInt(p[1],10) === hoy.getMonth()+1 && parseInt(p[2],10) === hoy.getDate();
+}
+function renderCumpleBanner() {
+    var banner = document.getElementById('cumpleBanner');
+    if (!banner) return;
+    var hoyCumple = load().filter(function(s){ return _esCumpleHoy(s.fechaNacimiento) && s.estado !== 'Baja definitiva'; });
+    if (!hoyCumple.length) { banner.style.display = 'none'; return; }
+    var nombres = hoyCumple.map(function(s){ return esc(s.nombre); }).join(', ');
+    banner.innerHTML = '🎂 <strong>¡Hoy cumple años:</strong> ' + nombres + '! No olvides felicitarlo.';
+    banner.style.display = '';
 }
 
 function renderPuestoChips() {
@@ -749,8 +821,9 @@ function renderTable() {
         var docsChip  = docsCount ? ' <span class="pill pill-green">' + docsCount + ' doc' + (docsCount>1?'s':'') + '</span>' : '';
         var ingreso   = s.fechaIngreso ? s.fechaIngreso : '—';
         var usuarioChip = s.usuario ? '<span style="font-size:10px;color:var(--text-dim)"> @' + esc(s.usuario) + '</span>' : '';
+        var cumpleChip = _esCumpleHoy(s.fechaNacimiento) ? ' <span title="Hoy cumple años">🎂</span>' : '';
         return '<tr style="cursor:pointer" ondblclick="openModal(\'' + s.id + '\')">' +
-            '<td><strong>' + esc(s.nombre) + '</strong>' + usuarioChip + docsChip + '</td>' +
+            '<td><strong>' + esc(s.nombre) + '</strong>' + cumpleChip + usuarioChip + docsChip + '</td>' +
             '<td>' + esc(s.puesto||'—') + '</td>' +
             '<td>' + rolBadge(s.rol) + '</td>' +
             '<td style="font-variant-numeric:tabular-nums;color:var(--text-muted)">' + esc(ingreso) + '</td>' +
@@ -791,6 +864,9 @@ function _openModalReal(id) {
             document.getElementById('fNombre').value      = s.nombre || '';
             document.getElementById('fPuesto').value      = s.puesto || '';
             document.getElementById('fFechaIngreso').value= s.fechaIngreso || '';
+            document.getElementById('fFechaNacimiento').value = s.fechaNacimiento || '';
+            document.getElementById('fCurp').value        = s.curp || '';
+            document.getElementById('fNss').value         = s.nss || '';
             document.getElementById('fCelular').value     = s.celular || '';
             document.getElementById('fCorreo').value      = s.correo || '';
             document.getElementById('fDireccion').value   = s.direccion || '';
@@ -804,21 +880,28 @@ function _openModalReal(id) {
                 ? '•••••••• guardada — déjala vacía para conservarla'
                 : 'Mínimo 6 caracteres';
             document.getElementById('fSalarioBase').value  = s.salarioBase || '';
+            document.getElementById('fEsquemaSueldo').value = s.esquemaSueldo || 'periodo';
+            document.getElementById('fSueldoDiario').value  = s.sueldoDiario || '';
+            _toggleEsquemaSueldo();
+            document.getElementById('fCategoriaNomina').value = s.categoriaNomina || _categoriaPorRol(s.rol);
             document.getElementById('fPeriodicidad').value = s.periodicidad || '';
             document.getElementById('fDiaPago').value      = s.diaPago || '';
             document.getElementById('fFormaPago').value    = s.formaPagoNomina || '';
             document.getElementById('fDatosBancarios').value = s.datosBancarios || '';
+            document.getElementById('fPrimaVacacionalEnPago').checked = !!s.primaVacacionalEnPago;
+            document.getElementById('fBonoIncentivo').value  = s.bonoIncentivo || '';
             document.getElementById('fReferencias').value = s.referencias || '';
             document.getElementById('fNotas').value       = s.notas || '';
             tmpDocs = (s.documentos || []).slice();
         }
     }
+    _calcPrimaVacacional(); // recalcular con todos los datos ya cargados
     renderChips();
     document.getElementById('modalStaff').classList.add('open');
 }
 
 function clearForm() {
-    ['fNombre','fPuesto','fFechaIngreso','fCelular','fCorreo','fDireccion','fDatosBancarios','fReferencias','fNotas','fUsuario','fPwd','fSalarioBase'].forEach(function(id){
+    ['fNombre','fPuesto','fFechaIngreso','fFechaNacimiento','fCurp','fNss','fCelular','fCorreo','fDireccion','fDatosBancarios','fPrimaVacacional','fBonoIncentivo','fReferencias','fNotas','fUsuario','fPwd','fSalarioBase'].forEach(function(id){
         document.getElementById(id).value = '';
     });
     document.getElementById('fPeriodicidad').value = '';
@@ -826,8 +909,92 @@ function clearForm() {
     document.getElementById('fFormaPago').value = '';
     document.getElementById('fEstado').value = 'Activo';
     document.getElementById('fRol').value = '';
+    document.getElementById('fCategoriaNomina').value = 'operativa';
+    document.getElementById('fEsquemaSueldo').value = 'periodo';
+    document.getElementById('fSueldoDiario').value = '';
+    document.getElementById('fPrimaVacacionalEnPago').checked = false;
+    _toggleEsquemaSueldo();
     document.getElementById('fileInput').value = '';
     document.getElementById('fPwd').placeholder = 'Mínimo 6 caracteres';
+}
+
+/* Muestra el campo correcto según el esquema de pago elegido */
+function _toggleEsquemaSueldo() {
+    var diario = document.getElementById('fEsquemaSueldo').value === 'diario';
+    document.getElementById('grpSueldoDiario').style.display = diario ? '' : 'none';
+    document.getElementById('grpSalarioBase').style.display  = diario ? 'none' : '';
+    // Precargar el sueldo diario estándar (global) si el campo está vacío
+    if (diario && !document.getElementById('fSueldoDiario').value && window.NominaParams) {
+        var def = NominaParams.get(getNegocioActivo()).salarioDiarioDefault;
+        if (def > 0) document.getElementById('fSueldoDiario').value = def;
+    }
+    _updateSueldoPreview();
+    _calcPrimaVacacional();
+}
+
+/* ── Prima vacacional automática (LFT: días de vacaciones por antigüedad) ── */
+function _diasVacaciones(anios) {
+    if (anios < 1) return 0;
+    if (anios <= 5) return 10 + anios * 2;       // 1→12, 2→14 … 5→20
+    return 20 + 2 * Math.ceil((anios - 5) / 5);  // 6-10→22, 11-15→24 …
+}
+function _antiguedadAnios(fechaIngreso) {
+    if (!fechaIngreso) return 0;
+    var ing = new Date(fechaIngreso + 'T12:00:00'), hoy = new Date();
+    var a = hoy.getFullYear() - ing.getFullYear();
+    if (hoy.getMonth() < ing.getMonth() || (hoy.getMonth() === ing.getMonth() && hoy.getDate() < ing.getDate())) a--;
+    return a < 0 ? 0 : a;
+}
+function _sueldoDiarioEditor() {
+    if (document.getElementById('fEsquemaSueldo').value === 'diario') return parseFloat(document.getElementById('fSueldoDiario').value) || 0;
+    var b = parseFloat(document.getElementById('fSalarioBase').value) || 0, per = document.getElementById('fPeriodicidad').value;
+    if (per === 'semanal') return b / 7;
+    if (per === 'quincenal') return b / 15;
+    return b / 30;
+}
+/* Domingos del mes en curso (por calendario) */
+function _domingosDelMes() {
+    var d = new Date(), y = d.getFullYear(), m = d.getMonth();
+    var ult = new Date(y, m + 1, 0).getDate(), c = 0;
+    for (var i = 1; i <= ult; i++) if (new Date(y, m, i).getDay() === 0) c++;
+    return c;
+}
+/* Prima DOMINICAL = domingos del mes × sueldo diario × % (si trabaja domingos).
+   (la función conserva el nombre _calcPrimaVacacional por compatibilidad interna) */
+function _calcPrimaVacacional() {
+    var pct = (window.NominaParams ? NominaParams.get(getNegocioActivo()).primaVacacionalPct : 25) || 25;
+    var diario = _sueldoDiarioEditor();
+    var domingos = _domingosDelMes();
+    var prima = domingos * diario * (pct / 100);
+    document.getElementById('fPrimaVacacional').value = prima > 0 ? prima.toFixed(2) : '';
+    var hint = document.getElementById('primaVacHint');
+    if (hint) hint.textContent = diario > 0
+        ? (domingos + ' domingos del mes × $' + diario.toFixed(2) + ' × ' + pct + '% (si trabaja domingos)')
+        : 'Define el sueldo del colaborador para calcular la prima dominical.';
+}
+
+/* Preview reactivo del sueldo equivalente por semana/quincena/mes */
+function _diasMesActual() { var d = new Date(); return new Date(d.getFullYear(), d.getMonth()+1, 0).getDate(); }
+function _updateSueldoPreview() {
+    var prev = document.getElementById('sueldoPreview');
+    if (document.getElementById('fEsquemaSueldo').value !== 'diario') { prev.style.display = 'none'; return; }
+    var diario = parseFloat(document.getElementById('fSueldoDiario').value) || 0;
+    var fmt = function(v){ return '$' + v.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2}); };
+    document.getElementById('sueldoPreviewTxt').innerHTML =
+        '💡 Equivale a — Semana: <strong style="color:var(--text)">' + fmt(diario*7) + '</strong> · ' +
+        'Quincena: <strong style="color:var(--text)">' + fmt(diario*15) + '</strong> · ' +
+        'Mes (' + _diasMesActual() + ' días): <strong style="color:var(--text)">' + fmt(diario*_diasMesActual()) + '</strong>';
+    prev.style.display = '';
+}
+
+/* Sugiere la categoría de nómina a partir del rol del sistema */
+function _categoriaPorRol(rol) {
+    if (rol === 'gerente' || rol === 'administrativo' || rol === 'admin') return 'administrativa';
+    return 'operativa';
+}
+function _sugerirCategoria() {
+    var sel = document.getElementById('fCategoriaNomina');
+    if (sel) sel.value = _categoriaPorRol(document.getElementById('fRol').value);
 }
 
 function closeModal() {
@@ -869,15 +1036,24 @@ async function saveStaff() {
         usuario:         usuario,
         passwordHash:    pwd ? await _hashPwdStaff(pwd) : (existing.passwordHash || ''),
         fechaIngreso:    document.getElementById('fFechaIngreso').value,
+        fechaNacimiento: document.getElementById('fFechaNacimiento').value,
+        curp:            document.getElementById('fCurp').value.trim().toUpperCase(),
+        nss:             document.getElementById('fNss').value.trim(),
         celular:         document.getElementById('fCelular').value.trim(),
         correo:          document.getElementById('fCorreo').value.trim(),
         direccion:       document.getElementById('fDireccion').value.trim(),
         estado:          document.getElementById('fEstado').value || 'Activo',
         salarioBase:     parseFloat(document.getElementById('fSalarioBase').value)||0,
+        esquemaSueldo:   document.getElementById('fEsquemaSueldo').value || 'periodo',
+        sueldoDiario:    parseFloat(document.getElementById('fSueldoDiario').value)||0,
+        categoriaNomina: document.getElementById('fCategoriaNomina').value || 'operativa',
         periodicidad:    document.getElementById('fPeriodicidad').value,
         diaPago:         document.getElementById('fDiaPago').value,
         formaPagoNomina: document.getElementById('fFormaPago').value,
         datosBancarios:  document.getElementById('fDatosBancarios').value.trim(),
+        primaVacacional: parseFloat(document.getElementById('fPrimaVacacional').value)||0,
+        primaVacacionalEnPago: document.getElementById('fPrimaVacacionalEnPago').checked,
+        bonoIncentivo:   parseFloat(document.getElementById('fBonoIncentivo').value)||0,
         referencias:     document.getElementById('fReferencias').value.trim(),
         notas:           document.getElementById('fNotas').value.trim(),
         documentos:      tmpDocs.slice()
@@ -949,8 +1125,12 @@ function esc(s) {
 async function initPage() {
     var negId = getNegocioActivo();
     if (!negId) { window.location.href = '../hub.html'; return; }
+    if (window.NominaParams) { try { await NominaParams.sync(negId); } catch(e){} }
     await syncFromDB();
     renderAll();
+}
+function _abrirNomParams() {
+    if (window.NominaParams) NominaParams.open(getNegocioActivo(), function(){ renderAll(); });
 }
 document.addEventListener('DOMContentLoaded', initPage);
 
@@ -961,5 +1141,6 @@ document.getElementById('modalStaff').addEventListener('click', function(e){
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 <script src="../admin-guard.js"></script>
+<script src="/nomina-params.js"></script>
 </body>
 </html>

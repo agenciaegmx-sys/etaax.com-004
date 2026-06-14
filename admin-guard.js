@@ -90,6 +90,34 @@
 
     var GUARD_ADMIN_EMAIL = 'admin@etaax.com';
 
+    // Cliente efímero SOLO para verificar contraseñas. No persiste sesión
+    // (storage propio en memoria), así validar una clave —incluida la del
+    // admin maestro— NUNCA reemplaza la sesión activa del usuario. Antes se
+    // verificaba con _supabase (el cliente global) y eso cambiaba de usuario.
+    var _verifier = null;
+    function _getVerifier() {
+        if (_verifier) return _verifier;
+        if (typeof supabase === 'undefined' || !supabase.createClient) return null;
+        var url = (typeof SUPABASE_URL !== 'undefined') ? SUPABASE_URL : (window.SUPABASE_URL || '');
+        var key = (typeof SUPABASE_ANON !== 'undefined') ? SUPABASE_ANON : (window.SUPABASE_ANON || '');
+        if (!url || !key) return null;
+        _verifier = supabase.createClient(url, key, {
+            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'etaax-verify' }
+        });
+        return _verifier;
+    }
+
+    // Valida email+password contra el servidor sin alterar la sesión activa.
+    async function _verificarCred(email, pass) {
+        var v = _getVerifier();
+        if (!v) return false;
+        try {
+            var r = await v.auth.signInWithPassword({ email: email, password: pass });
+            if (!r.error) { try { await v.auth.signOut({ scope: 'local' }); } catch (e) {} }
+            return !r.error;
+        } catch (e) { return false; }
+    }
+
     function _guardCtx() {
         try { return JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch (e) { return null; }
     }
@@ -147,7 +175,9 @@
             if (staffNombre) { autorizar(staffNombre); return; }
         }
 
-        // 2. La de la cuenta con sesión de Supabase activa (dueño/admin)
+        // 2. La de la cuenta con sesión de Supabase activa (dueño/admin).
+        //    getSession() solo LEE la sesión; la verificación va por el
+        //    cliente efímero para no reemplazar al usuario activo.
         var prevEmail = null;
         try {
             var sess = await _supabase.auth.getSession();
@@ -155,8 +185,7 @@
                 ? sess.data.session.user.email : null;
         } catch (e) {}
         if (prevEmail) {
-            var r1 = await _supabase.auth.signInWithPassword({ email: prevEmail, password: pass });
-            if (!r1.error) { autorizar(prevEmail); return; }
+            if (await _verificarCred(prevEmail, pass)) { autorizar(prevEmail); return; }
         }
 
         // 3. La del dueño del negocio activo (correo guardado al
@@ -164,14 +193,14 @@
         var negId = localStorage.getItem('etaax_negocio_activo') || '';
         var ownerEmail = negId ? (localStorage.getItem('etaax_' + negId + '_owner_email') || '') : '';
         if (ownerEmail && ownerEmail !== prevEmail && ownerEmail !== GUARD_ADMIN_EMAIL) {
-            var r2 = await _supabase.auth.signInWithPassword({ email: ownerEmail, password: pass });
-            if (!r2.error) { autorizar(ownerEmail); return; }
+            if (await _verificarCred(ownerEmail, pass)) { autorizar(ownerEmail); return; }
         }
 
-        // 4. La del admin maestro (abre todo en cualquier escenario)
+        // 4. La del admin maestro (abre todo en cualquier escenario).
+        //    Antes este paso re-logueaba al admin maestro en el cliente
+        //    global y por eso la navegación saltaba a su panel.
         if (prevEmail !== GUARD_ADMIN_EMAIL) {
-            var r3 = await _supabase.auth.signInWithPassword({ email: GUARD_ADMIN_EMAIL, password: pass });
-            if (!r3.error) { autorizar('Admin Maestro'); return; }
+            if (await _verificarCred(GUARD_ADMIN_EMAIL, pass)) { autorizar('Admin Maestro'); return; }
         }
 
         fallar('Contraseña incorrecta');

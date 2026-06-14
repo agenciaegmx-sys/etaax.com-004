@@ -245,14 +245,16 @@
                     <input type="date" id="pickerInput" onchange="renderAll()">
                     <input type="date" id="pickerEnd" style="display:none" onchange="renderAll()">
                 </div>
-                <button class="btn-primary" onclick="nuevoGasto('menor')">+ Gasto</button>
-                <button class="btn-mayor" onclick="nuevoGasto('mayor')">🔴 Gasto mayor</button>
+                <button class="btn-primary" id="btnNuevoGasto" onclick="nuevoGasto('menor')">+ Gasto</button>
+                <button class="btn-mayor" id="btnPagarNomina" style="background:rgba(120,160,240,.1);border:1px solid rgba(120,160,240,.3);color:#78a0f0" onclick="abrirSelectorPago('nomina')">💰 Pagar nómina</button>
+                <button class="btn-mayor" id="btnPagarFijo" style="background:rgba(245,200,66,.1);border:1px solid rgba(245,200,66,.3);color:var(--accent)" onclick="abrirSelectorPago('fijo')">🏢 Pagar gasto fijo</button>
+                <button class="btn-mayor" id="btnGastoMayor" onclick="nuevoGasto('mayor')">🔴 Gasto mayor</button>
             </div>
         </div>
 
         <div class="wrap">
             <!-- KPI Cards -->
-            <div class="summary-grid">
+            <div class="summary-grid" id="summaryGrid">
                 <div class="sum-card">
                     <div class="sum-card-label">Total gastos período</div>
                     <div class="sum-card-val" id="sumTotal" style="color:var(--red)">$0.00</div>
@@ -693,6 +695,9 @@ function toggleNav(){var nav=document.getElementById('nav'),main=document.getEle
 var _cacheGastos = null;
 var _cacheProvs  = null;
 var _cacheCats   = null; // array de strings
+var _cacheFijos  = null; // gastos fijos (gf_fijos)
+var _cacheNominas= null; // {[mes]:{operativa:[],administrativa:[],socios:[]}}
+var _cacheStaff  = null; // catálogo de colaboradores
 
 async function _sbInit() {
     var negId = getNegocioActivo();
@@ -701,10 +706,17 @@ async function _sbInit() {
         _supabase.from('gastos').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
         _supabase.from('proveedores').select('datos').eq('negocio_id', negId).order('datos->>nombre'),
         _supabase.from('gastos_cats_custom').select('datos').eq('negocio_id', negId).maybeSingle(),
+        _supabase.from('gf_fijos').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
+        _supabase.from('gf_nominas').select('datos').eq('negocio_id', negId).maybeSingle(),
+        _supabase.from('staff').select('datos').eq('negocio_id', negId),
     ]);
     if (!r[0].error) _cacheGastos = (r[0].data||[]).map(function(x){return x.datos;});
     if (!r[1].error) _cacheProvs  = (r[1].data||[]).map(function(x){return x.datos;});
     if (!r[2].error && r[2].data) _cacheCats = r[2].data.datos || [];
+    if (!r[3].error) _cacheFijos  = (r[3].data||[]).map(function(x){return x.datos;});
+    if (!r[4].error && r[4].data) _cacheNominas = r[4].data.datos || {};
+    if (!r[5].error) _cacheStaff  = (r[5].data||[]).map(function(x){return x.datos;});
+    if (window.NominaParams) { try { await NominaParams.sync(negId); } catch(e){} }
     initCategorias();
     renderAll();
 }
@@ -919,6 +931,40 @@ function getNegocioActivo(){return localStorage.getItem('etaax_negocio_activo')|
 function n(v){return parseFloat(v)||0;}
 function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
 
+/* ── Permisos del rol activo ──
+   _puede('gastos.verCajaFuerte') etc. Dueño y admin: acceso total. */
+function _puede(path){
+    var ctx; try{ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null');}catch(e){}
+    if(!ctx) return false;
+    if(ctx.ctxType!=='staff') return true;           // dueño / admin maestro
+    if((ctx.rol||'')==='admin') return true;          // admin del negocio
+    return window.etaaxPerm ? window.etaaxPerm(ctx.negId||getNegocioActivo(), ctx.rol, path) : true;
+}
+/* ¿Este gasto es visible para el rol? (tipo mayor + método de pago) */
+function _gastoVisible(g){
+    if(g.tipo==='mayor' && !_puede('gastos.gastosMayores')) return false;
+    if(g.metodoPago==='caja_fuerte' && !_puede('gastos.verCajaFuerte')) return false;
+    if(g.metodoPago==='banco' && !_puede('gastos.verBanco')) return false;
+    return true;
+}
+function _puedeEditarGasto(g){ return _puede('gastos.editarHistorico') || (g && g.fecha===todayStr()); }
+function _metodoDefault(){ return _puede('gastos.verCajaFuerte') ? 'caja_fuerte' : 'caja_chica'; }
+function _hide(id){ var el=document.getElementById(id); if(el) el.style.display='none'; }
+function aplicarPermisosGastos(){
+    if(!_puede('gastos.capturar')){ _hide('btnNuevoGasto'); _hide('btnPagarNomina'); _hide('btnPagarFijo'); }
+    if(!_puede('gastos.gastosMayores')){ _hide('btnGastoMayor'); _hide('mayorSection'); }
+    if(!_puede('gastos.verResumen'))   _hide('summaryGrid');
+    // Quitar del filtro de método las opciones que el rol no puede ver
+    var fm=document.getElementById('filtroMetodo');
+    if(fm){
+        if(!_puede('gastos.verCajaFuerte')){ var o1=fm.querySelector('option[value="caja_fuerte"]'); if(o1)o1.remove(); }
+        if(!_puede('gastos.verBanco')){ var o2=fm.querySelector('option[value="banco"]'); if(o2)o2.remove(); }
+    }
+    // Ocultar botones de método restringidos en el modal de captura
+    if(!_puede('gastos.verCajaFuerte')) _hide('mCajaFuerte');
+    if(!_puede('gastos.verBanco'))      _hide('mBanco');
+}
+
 /* ── Auth state ── */
 var mayorDesbloqueado=false;
 function solicitarPIN(motivo,cb){
@@ -963,7 +1009,8 @@ function renderAll(){
     var pi=document.getElementById('pickerInput'),pe=document.getElementById('pickerEnd');
     periodoVal=pi.value||periodoVal;
     if(periodoTipo==='rango')periodoEnd=pe.value||periodoEnd;
-    var all=currentData(),prev=prevData();
+    // Filtra por permisos del rol (tipo mayor / método de pago) antes de todo
+    var all=currentData().filter(_gastoVisible),prev=prevData().filter(_gastoVisible);
     var filtered=applyFilters(all);
     renderSummary(all,prev);
     renderTabla(filtered.filter(function(g){return g.tipo==='menor';}), filtered.filter(function(g){return g.tipo==='mayor';}));
@@ -1041,8 +1088,10 @@ function renderTabla(menores, mayores){
                 '<td class="ar" style="font-weight:600;color:var(--red)">'+fmtM(g.monto)+'</td>'+
                 '<td style="display:flex;gap:4px;justify-content:flex-end">'+
                     '<button class="btn-row" onclick="verGasto(\''+g.id+'\')" title="Ver">👁️</button>'+
-                    '<button class="btn-row" onclick="editarGasto(\''+g.id+'\')">✏️</button>'+
-                    '<button class="btn-row del" onclick="eliminarGasto(\''+g.id+'\')">🗑️</button>'+
+                    (_puedeEditarGasto(g)
+                        ? '<button class="btn-row" onclick="editarGasto(\''+g.id+'\')">✏️</button>'+
+                          '<button class="btn-row del" onclick="eliminarGasto(\''+g.id+'\')">🗑️</button>'
+                        : '')+
                 '</td>'+
             '</tr>';
         }).join('');
@@ -1070,8 +1119,10 @@ function renderTabla(menores, mayores){
                 '<td class="ar" style="font-weight:700;color:var(--red)">'+fmtM(g.monto)+'</td>'+
                 '<td style="display:flex;gap:4px;justify-content:flex-end">'+
                     '<button class="btn-row" onclick="verGasto(\''+g.id+'\')" title="Ver">👁️</button>'+
-                    '<button class="btn-row" onclick="editarGasto(\''+g.id+'\')">✏️</button>'+
-                    '<button class="btn-row del" onclick="eliminarGasto(\''+g.id+'\')">🗑️</button>'+
+                    (_puedeEditarGasto(g)
+                        ? '<button class="btn-row" onclick="editarGasto(\''+g.id+'\')">✏️</button>'+
+                          '<button class="btn-row del" onclick="eliminarGasto(\''+g.id+'\')">🗑️</button>'
+                        : '')+
                 '</td>'+
             '</tr>';
         }).join('');
@@ -1172,6 +1223,8 @@ function cerrarVerGasto(){var m=document.getElementById('modalVerGasto');if(m)m.
 
 /* ── Modal ── */
 function nuevoGasto(tipo){
+    if(!_puede('gastos.capturar')) return;
+    if(tipo==='mayor'&&!_puede('gastos.gastosMayores')) return;
     if(tipo==='mayor'&&!mayorDesbloqueado){
         solicitarPIN('mayor',function(){
             mayorDesbloqueado=true;
@@ -1187,6 +1240,7 @@ function nuevoGasto(tipo){
 function editarGasto(id){
     var g=load().find(function(x){return x.id===id;});
     if(!g)return;
+    if(!_puedeEditarGasto(g)){ alert('Tu rol no puede editar gastos de días anteriores.'); return; }
     if(g.tipo==='mayor'&&!mayorDesbloqueado){
         solicitarPIN('mayor',function(){
             mayorDesbloqueado=true;
@@ -1217,7 +1271,7 @@ function _abrirModalGasto(g,tipo){
     // Tipo
     setTipo(tipo||d.tipo||'menor',true);
     // Método — usando IDs directos para evitar el bug de :first-of-type
-    var met=d.metodoPago||'caja_fuerte';
+    var met=d.metodoPago||_metodoDefault();
     var metMap={'caja_fuerte':'mCajaFuerte','caja_chica':'mCajaChica','banco':'mBanco'};
     ['mCajaFuerte','mCajaChica','mBanco'].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.remove('active');});
     var metBtn=document.getElementById(metMap[met]);
@@ -1254,6 +1308,277 @@ function _abrirModalGasto(g,tipo){
 }
 
 function cerrarModal(){document.getElementById('modalGasto').classList.remove('open');}
+
+/* ══════════════════════════════════════════════════════════
+   PAGOS RÁPIDOS — Nómina y Gastos fijos (desde Gastos globales)
+   Jalan los datos ya configurados y abren el modal de gasto
+   precargado (monto editable) para registrarlo en su categoría.
+   ══════════════════════════════════════════════════════════ */
+function _ggStaffCat(s){ if(s.categoriaNomina)return s.categoriaNomina; return (s.rol==='gerente'||s.rol==='administrativo'||s.rol==='admin')?'administrativa':'operativa'; }
+function _ggMesActual(){ return todayStr().slice(0,7); }
+/* Monto a pagar = salario base TAL CUAL su periodicidad (lo que se le paga
+   al colaborador ese periodo). El resumen financiero mensualiza aparte;
+   aquí NO se mensualiza ni se suman bonos/IMSS (son del costo mensual). */
+var _PERIOD_LBL={semanal:'semanal',quincenal:'quincenal',mensual:'mensual'};
+function _ggPeriodLabel(p){ return _PERIOD_LBL[p]||''; }
+function _ggMontoPeriodo(s){ return n(s.salarioBase); }
+/* Categoría del gasto fijo → categoría exacta del catálogo de gastos */
+var _CAT_FIJO_MAP={ 'Renta':'Renta y arrendamiento','Servicios':'Servicios (agua, luz, gas)','Internet':'Internet y telecomunicaciones','Seguros':'Varios','Mantenimiento':'Mantenimiento y reparaciones','Software':'Software y suscripciones (POS…)','Financiero':'Gastos financieros','Otro':'Varios' };
+
+function _ensureSelModal(){
+    if(document.getElementById('modalSelPago'))return;
+    var el=document.createElement('div');
+    el.id='modalSelPago';
+    el.className='modal-overlay';
+    el.onclick=function(e){ if(e.target===el) _cerrarSelPago(); };
+    el.innerHTML='<div class="modal" style="max-width:560px">'
+      +'<div class="modal-header"><h2 id="selPagoTitle">Pagar</h2><button class="modal-close" onclick="_cerrarSelPago()">✕</button></div>'
+      +'<div class="modal-body" id="selPagoBody" style="max-height:62vh;overflow-y:auto"></div>'
+      +'</div>';
+    document.body.appendChild(el);
+}
+function _cerrarSelPago(){ var m=document.getElementById('modalSelPago'); if(m) m.classList.remove('open'); }
+function _selRow(onclick,izq,sub,der,derSub){
+    return '<div onclick="'+onclick+'" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer;background:var(--surface2);transition:border-color .15s" '
+      +'onmouseover="this.style.borderColor=\'var(--green)\'" onmouseout="this.style.borderColor=\'var(--border)\'">'
+      +'<div><div style="font-weight:600">'+izq+'</div><div style="font-size:11px;color:var(--text-dim)">'+sub+'</div></div>'
+      +'<div style="text-align:right"><div style="font-weight:700;color:var(--red)">'+der+'</div>'+(derSub?'<div style="font-size:10px;color:var(--text-dim)">'+derSub+'</div>':'')+'</div>'
+      +'</div>';
+}
+function abrirSelectorPago(tipo){
+    // Filtro de seguridad: requiere autorización del admin/dueño antes de pagar
+    _pedirClaveAdmin('Pagar '+(tipo==='nomina'?'nómina':'gasto fijo')+' — Autorización requerida', function(){
+        _abrirSelectorPagoReal(tipo);
+    }, '🔓 Autorizar', { soloAdmin:true });
+}
+function _abrirSelectorPagoReal(tipo){
+    _ensureSelModal();
+    var body=document.getElementById('selPagoBody');
+    var title=document.getElementById('selPagoTitle');
+    if(tipo==='nomina'){
+        title.textContent='💰 Pagar nómina — elige colaborador';
+        var staff=(_cacheStaff||[]).filter(function(s){ return s.estado!=='Baja definitiva'; });
+        if(!staff.length){ body.innerHTML='<div style="padding:28px;text-align:center;color:var(--text-dim)">Sin colaboradores en el catálogo de staff.</div>'; }
+        else {
+            var catLbl={operativa:'Operativa',administrativa:'Administrativa',socios:'Socios'};
+            body.innerHTML=staff.map(function(s){
+                var sub=(s.puesto?_esc(s.puesto)+' · ':'')+(catLbl[_ggStaffCat(s)]||'');
+                return _selRow('abrirPagoNomina(\''+s.id+'\')', _esc(s.nombre), sub, fmtM(_sueldoDiarioEfectivo(s)), '≈ sueldo diario');
+            }).join('');
+        }
+    } else {
+        title.textContent='🏢 Pagar gasto fijo — elige uno';
+        var fijos=_cacheFijos||[];
+        if(!fijos.length){ body.innerHTML='<div style="padding:28px;text-align:center;color:var(--text-dim)">Sin gastos fijos configurados en Gastos globales.</div>'; }
+        else {
+            body.innerHTML=fijos.map(function(f){
+                var sub=_esc(f.categoria||'—')+(f.proveedor?' · '+_esc(f.proveedor):'');
+                return _selRow('pagarFijo(\''+f.id+'\')', _esc(f.concepto), sub, fmtM(f.monto), '');
+            }).join('');
+        }
+    }
+    document.getElementById('modalSelPago').classList.add('open');
+}
+/* Garantiza que la categoría exista como opción del select del modal */
+function _asegurarCategoria(cat){
+    if(!cat)return;
+    var sel=document.getElementById('gCategoria');
+    if(!sel)return;
+    var existe=Array.prototype.some.call(sel.options,function(o){return o.value===cat;});
+    if(!existe){ var opt=document.createElement('option'); opt.value=cat; opt.textContent=cat; sel.appendChild(opt); }
+}
+/* ── Modal de pago de nómina: periodo + días + conceptos extra ── */
+var _pagoNomStaff = null;
+var _pagoNomConceptos = [];   // [{concepto, monto}]
+
+/* Sueldo diario efectivo: del esquema diario, o derivado del salario por periodo */
+function _sueldoDiarioEfectivo(s){
+    if(s.esquemaSueldo==='diario' && n(s.sueldoDiario)>0) return n(s.sueldoDiario);
+    var b=n(s.salarioBase);
+    if(s.periodicidad==='semanal')   return b/7;
+    if(s.periodicidad==='quincenal') return b/15;
+    return b/30; // mensual o sin especificar
+}
+function _diasDelMesActual(){ var d=new Date(); return new Date(d.getFullYear(),d.getMonth()+1,0).getDate(); }
+function _diasDefaultPeriodo(tipo){ return tipo==='semana'?7:tipo==='quincena'?15:tipo==='mes'?_diasDelMesActual():7; }
+function _diffDias(desde,hasta){
+    if(!desde||!hasta) return 0;
+    var d1=new Date(desde+'T12:00:00'),d2=new Date(hasta+'T12:00:00');
+    var n2=Math.round((d2-d1)/86400000)+1;
+    return n2>0?n2:0;
+}
+
+function _ensurePagoNomModal(){
+    if(document.getElementById('modalPagoNom'))return;
+    var el=document.createElement('div');
+    el.id='modalPagoNom';
+    el.className='modal-overlay';
+    el.onclick=function(e){ if(e.target===el) _cerrarPagoNom(); };
+    el.innerHTML='<div class="modal" style="max-width:600px">'
+      +'<div class="modal-header"><h2 id="pagoNomTitle">Pagar nómina</h2><button class="modal-close" onclick="_cerrarPagoNom()">✕</button></div>'
+      +'<div class="modal-body" style="max-height:72vh;overflow-y:auto">'
+        +'<div class="gs-sec"><div class="gs-sec-title">Periodo a pagar</div>'
+          +'<div class="fg-row-3">'
+            +'<div class="fg"><label>Tipo</label><select id="pnTipo" onchange="_pnTipoChange()"><option value="semana">Semanal</option><option value="quincena">Quincenal</option><option value="mes">Mensual</option><option value="personalizado">Personalizado</option></select></div>'
+            +'<div class="fg"><label>Desde</label><input type="date" id="pnDesde" onchange="_pnRangoChange()"></div>'
+            +'<div class="fg"><label>Hasta</label><input type="date" id="pnHasta" onchange="_pnRangoChange()"></div>'
+          +'</div>'
+        +'</div>'
+        +'<div class="gs-sec"><div class="gs-sec-title">Sueldo del periodo</div>'
+          +'<div class="fg-row-3">'
+            +'<div class="fg"><label>Sueldo diario ($)</label><input type="number" id="pnDiario" min="0" step="0.01" oninput="_pnCalc()"></div>'
+            +'<div class="fg"><label>Días trabajados</label><input type="number" id="pnDias" min="0" step="1" oninput="_pnCalc()"></div>'
+            +'<div class="fg"><label>Subtotal sueldo</label><input type="text" id="pnSubtotal" readonly style="opacity:.85"></div>'
+          +'</div>'
+        +'</div>'
+        +'<div class="gs-sec"><div class="gs-sec-title">Conceptos adicionales</div>'
+          +'<div class="fg-row-3" style="align-items:end">'
+            +'<div class="fg"><label>Tipo</label><select id="pnCptTipo" onchange="_pnCptTipoChange()"><option value="bono">🎁 Bono</option><option value="horas">⏱️ Horas extras</option><option value="festivo">🎉 Día festivo</option><option value="doble">2️⃣ Día doble</option><option value="prima">☀️ Prima dominical</option><option value="otro">📋 Otro</option></select></div>'
+            +'<div class="fg" id="pnCptCantWrap" style="display:none"><label id="pnCptCantLbl">Horas</label><input type="number" id="pnCptCant" min="0" step="1" placeholder="0"></div>'
+            +'<div class="fg"><label>Monto ($)</label><input type="number" id="pnCptMonto" min="0" step="0.01" placeholder="0.00"></div>'
+          +'</div>'
+          +'<div style="display:flex;gap:8px;margin:6px 0 12px">'
+            +'<button class="btn-mayor" id="pnCptCalcBtn" style="display:none;font-size:11px;padding:6px 12px" onclick="_pnCptCalcular()">💡 Calcular sugerido</button>'
+            +'<button class="btn-primary" style="font-size:11px;padding:6px 12px" onclick="_pnCptAgregar()">+ Agregar concepto</button>'
+          +'</div>'
+          +'<div id="pnCptList"></div>'
+        +'</div>'
+        +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center">'
+          +'<span style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim)">Total a pagar</span>'
+          +'<span id="pnTotal" style="font-family:\'Bebas Neue\',sans-serif;font-size:26px;letter-spacing:1px;color:var(--green)">$0.00</span>'
+        +'</div>'
+      +'</div>'
+      +'<div class="modal-footer"><button class="btn-ghost" onclick="_cerrarPagoNom()">Cancelar</button>'
+        +'<button class="btn-primary" onclick="_confirmarPagoNom()">Continuar a registrar pago →</button></div>'
+      +'</div>';
+    document.body.appendChild(el);
+}
+function _cerrarPagoNom(){ var m=document.getElementById('modalPagoNom'); if(m) m.classList.remove('open'); }
+
+function abrirPagoNomina(staffId){
+    var s=(_cacheStaff||[]).find(function(x){ return x.id===staffId; });
+    if(!s)return;
+    _cerrarSelPago();
+    _ensurePagoNomModal();
+    _pagoNomStaff=s; _pagoNomConceptos=[];
+    // Si el colaborador trabaja domingos, sumar su prima dominical al pago
+    if(s.primaVacacionalEnPago && n(s.primaVacacional)>0){
+        _pagoNomConceptos.push({concepto:'Prima dominical', monto:n(s.primaVacacional)});
+    }
+    document.getElementById('pagoNomTitle').textContent='Pagar nómina — '+s.nombre;
+    // Periodo por defecto según su periodicidad
+    var tipo = s.periodicidad==='mensual'?'mes':s.periodicidad==='quincenal'?'quincena':'semana';
+    document.getElementById('pnTipo').value=tipo;
+    document.getElementById('pnDiario').value=Math.round(_sueldoDiarioEfectivo(s)*100)/100;
+    document.getElementById('pnDias').value=_diasDefaultPeriodo(tipo);
+    document.getElementById('pnCptTipo').value='bono';
+    _pnTipoChange();      // ajusta fechas según tipo
+    _pnCptTipoChange();   // ajusta el captador de conceptos
+    _pnRenderCptList();
+    _pnCalc();
+    document.getElementById('modalPagoNom').classList.add('open');
+}
+
+function _pnISO(dt){ return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); }
+function _pnTipoChange(){
+    // Las fechas SIEMPRE son editables; al elegir un tipo se prellenan sugeridas.
+    var tipo=document.getElementById('pnTipo').value;
+    var hoy=new Date(), y=hoy.getFullYear(), m=hoy.getMonth(), day=hoy.getDate();
+    if(tipo==='semana'){
+        document.getElementById('pnDesde').value=_pnISO(new Date(y,m,day));
+        document.getElementById('pnHasta').value=_pnISO(new Date(y,m,day+6));
+    } else if(tipo==='quincena'){
+        document.getElementById('pnDesde').value=_pnISO(new Date(y,m,day));
+        document.getElementById('pnHasta').value=_pnISO(new Date(y,m,day+14));
+    } else if(tipo==='mes'){
+        var ult=new Date(y,m+1,0).getDate(), mm=String(m+1).padStart(2,'0');
+        document.getElementById('pnDesde').value=y+'-'+mm+'-01';
+        document.getElementById('pnHasta').value=y+'-'+mm+'-'+String(ult).padStart(2,'0');
+    }
+    // 'personalizado': se respetan las fechas que ya estén puestas
+    _pnRangoChange();
+}
+function _pnRangoChange(){
+    // Editar cualquier fecha recalcula los días trabajados (en todos los tipos)
+    var d=document.getElementById('pnDesde').value, h=document.getElementById('pnHasta').value;
+    if(d && h){ document.getElementById('pnDias').value=_diffDias(d,h); }
+    _pnCalc();
+}
+function _pnCalc(){
+    var diario=n(document.getElementById('pnDiario').value);
+    var dias=n(document.getElementById('pnDias').value);
+    var subtotal=diario*dias;
+    document.getElementById('pnSubtotal').value=fmtM(subtotal);
+    var extra=_pagoNomConceptos.reduce(function(s,c){return s+n(c.monto);},0);
+    document.getElementById('pnTotal').textContent=fmtM(subtotal+extra);
+    return subtotal+extra;
+}
+function _nomParams(){ return (window.NominaParams ? NominaParams.get(getNegocioActivo()) : {jornadaHoras:8,primaVacacionalPct:25,salarioDiarioDefault:0}); }
+function _pnCptTipoChange(){
+    var tipo=document.getElementById('pnCptTipo').value;
+    var necesitaCant = (tipo==='horas'||tipo==='festivo'||tipo==='doble'||tipo==='prima');
+    document.getElementById('pnCptCantWrap').style.display=necesitaCant?'':'none';
+    document.getElementById('pnCptCantLbl').textContent=tipo==='horas'?'Horas':tipo==='prima'?'Domingos':'Días';
+    document.getElementById('pnCptCalcBtn').style.display=necesitaCant?'':'none';
+}
+function _pnCptCalcular(){
+    var tipo=document.getElementById('pnCptTipo').value;
+    var cant=n(document.getElementById('pnCptCant').value);
+    var diario=n(document.getElementById('pnDiario').value);
+    var par=_nomParams();
+    var jornada=par.jornadaHoras||8;
+    var monto=0;
+    if(tipo==='horas'){ var sh=diario/jornada; var dob=Math.min(cant,9), tri=Math.max(cant-9,0); monto=(dob*2+tri*3)*sh; }
+    else if(tipo==='festivo'){ monto=cant*diario*2; }   // adicional por trabajar festivo
+    else if(tipo==='doble'){ monto=cant*diario; }        // 1× extra sobre el día normal
+    else if(tipo==='prima'){ monto=cant*diario*((par.primaVacacionalPct||25)/100); } // días vac × diario × %
+    document.getElementById('pnCptMonto').value=Math.round(monto*100)/100;
+}
+function _pnCptAgregar(){
+    var tipo=document.getElementById('pnCptTipo').value;
+    var monto=n(document.getElementById('pnCptMonto').value);
+    if(!monto||monto<=0){ alert('Indica el monto del concepto.'); return; }
+    var lbl={bono:'Bono',horas:'Horas extras',festivo:'Día festivo',doble:'Día doble',prima:'Prima dominical',otro:'Pago extra'}[tipo]||'Pago extra';
+    var cant=n(document.getElementById('pnCptCant').value);
+    if(cant>0) lbl+=' ('+cant+(tipo==='horas'?' h':' d')+')';
+    _pagoNomConceptos.push({concepto:lbl, monto:monto});
+    document.getElementById('pnCptCant').value=''; document.getElementById('pnCptMonto').value='';
+    _pnRenderCptList(); _pnCalc();
+}
+function _pnCptEliminar(i){ _pagoNomConceptos.splice(i,1); _pnRenderCptList(); _pnCalc(); }
+function _pnRenderCptList(){
+    var c=document.getElementById('pnCptList');
+    if(!_pagoNomConceptos.length){ c.innerHTML='<div style="font-size:12px;color:var(--text-dim);padding:4px 0">Sin conceptos adicionales.</div>'; return; }
+    c.innerHTML=_pagoNomConceptos.map(function(x,i){
+        return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;background:var(--surface2)">'
+          +'<span style="font-size:13px">'+_esc(x.concepto)+'</span>'
+          +'<span style="display:flex;align-items:center;gap:10px"><strong style="color:var(--accent)">'+fmtM(x.monto)+'</strong>'
+          +'<button class="btn-row del" onclick="_pnCptEliminar('+i+')">🗑️</button></span></div>';
+    }).join('');
+}
+function _confirmarPagoNom(){
+    var s=_pagoNomStaff; if(!s)return;
+    var total=_pnCalc();
+    if(total<=0){ alert('El total a pagar debe ser mayor a cero.'); return; }
+    var dias=n(document.getElementById('pnDias').value);
+    var tipo=document.getElementById('pnTipo').value;
+    var perLbl={semana:'semanal',quincena:'quincenal',mes:'mensual',personalizado:'periodo'}[tipo]||'';
+    // Desglose para las notas del gasto
+    var desg='Sueldo: '+fmtM(n(document.getElementById('pnDiario').value))+' × '+dias+' días = '+document.getElementById('pnSubtotal').value;
+    _pagoNomConceptos.forEach(function(c){ desg+='\n+ '+c.concepto+': '+fmtM(c.monto); });
+    _cerrarPagoNom();
+    var g={ concepto:'Nómina '+perLbl+' — '+s.nombre, categoria:'Nómina y personal', monto:total, proveedor:'', notas:desg };
+    _asegurarCategoria(g.categoria);
+    _abrirModalGasto(g,'menor');
+}
+function pagarFijo(fijoId){
+    var f=(_cacheFijos||[]).find(function(x){ return x.id===fijoId; });
+    if(!f)return;
+    _cerrarSelPago();
+    var g={ concepto:f.concepto, categoria:_CAT_FIJO_MAP[f.categoria]||'Varios', monto:n(f.monto), proveedor:f.proveedor||'' };
+    _asegurarCategoria(g.categoria);
+    _abrirModalGasto(g,'menor');
+}
 
 function setEstatus(val){
     document.getElementById('gEstatus').value=val;
@@ -1377,6 +1702,7 @@ function guardarGasto(){
 function eliminarGasto(id){
     var g=load().find(function(x){return x.id===id;});
     if(!g)return;
+    if(!_puedeEditarGasto(g)){ alert('Tu rol no puede eliminar gastos de días anteriores.'); return; }
     if(g.tipo==='mayor'&&!mayorDesbloqueado){solicitarPIN('mayor',function(){mayorDesbloqueado=true;eliminarGasto(id);});return;}
     if(!confirm('¿Eliminar este gasto? Esta acción no se puede deshacer.'))return;
     _cacheGastos = (_cacheGastos||[]).filter(function(x){return x.id!==id;});
@@ -1396,6 +1722,7 @@ document.getElementById('mayorWall').querySelector('button').onclick=function(){
 
 document.addEventListener('DOMContentLoaded',function(){
     document.getElementById('pickerInput').value=todayStr();
+    aplicarPermisosGastos();
     initCategorias();
     renderAll();
     _sbInit();
@@ -1407,5 +1734,6 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 <script src="../admin-guard.js"></script>
+<script src="/nomina-params.js"></script>
 </body>
 </html>

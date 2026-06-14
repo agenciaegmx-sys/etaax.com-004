@@ -470,6 +470,10 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
           </div>
         </div>
         <div class="auth-error" id="loginError"></div>
+        <!-- Aparece solo cuando la contraseña es incorrecta -->
+        <div id="loginForgot" style="display:none;margin:-2px 0 14px">
+          <a onclick="abrirResetPassword()" style="font-size:12px;color:var(--green);cursor:pointer;text-decoration:none">¿Olvidaste tu contraseña?</a>
+        </div>
         <button class="btn-auth" onclick="loginSubmit()">Iniciar sesión →</button>
         <div class="auth-switch">
           ¿Primera vez? <a onclick="showView('viewRegistro')">Crear cuenta gratis</a>
@@ -723,26 +727,26 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
         </div>
       </a>
 
-      <div class="hub-card disabled">
+      <a href="consultoria/index.html" class="hub-card">
         <div class="card-header">
           <div class="card-icon">📋</div>
-          <span class="card-status status-soon">Próximamente</span>
+          <span class="card-status status-active">Activo</span>
         </div>
         <div class="card-title">Consultoría</div>
-        <div class="card-desc">Reportes mensuales, análisis ejecutivos y recomendaciones estratégicas para la toma de decisiones.</div>
+        <div class="card-desc">Simulador de KPIs: parte de tus números reales y proyecta escenarios. Reportes y estrategia, próximamente.</div>
         <div class="card-modules">
+          <span class="card-module-tag">🧮 Simulador KPIs</span>
           <span class="card-module-tag">📄 Reporte mensual</span>
-          <span class="card-module-tag">🎯 KPIs</span>
           <span class="card-module-tag">📌 Estrategia</span>
         </div>
         <div class="card-footer">
-          <span class="card-cta-disabled">En desarrollo</span>
+          <span class="card-cta">Abrir módulo →</span>
           <div class="card-progress">
-            <div class="progress-dot off"></div><div class="progress-dot off"></div><div class="progress-dot off"></div>
-            <span>3 herramientas</span>
+            <div class="progress-dot"></div><div class="progress-dot off"></div><div class="progress-dot off"></div>
+            <span>1 de 3 herramientas</span>
           </div>
         </div>
-      </div>
+      </a>
     </div>
   </div>
 
@@ -1169,6 +1173,7 @@ async function loginSubmit() {
     var pwd   = document.getElementById('loginPwd').value || '';
     var err   = document.getElementById('loginError');
     err.textContent = '';
+    document.getElementById('loginForgot').style.display = 'none';
     if (!input || !pwd) { err.textContent = 'Completa todos los campos.'; return; }
 
     var pwdField = document.getElementById('loginPwd');
@@ -1184,7 +1189,12 @@ async function loginSubmit() {
         btn.disabled = true; btn.textContent = 'Verificando...';
         var result = await _supabase.auth.signInWithPassword({ email: input, password: pwd });
         btn.disabled = false; btn.textContent = 'Entrar';
-        if (result.error) { shakeError('Correo o contraseña incorrectos.'); return; }
+        if (result.error) {
+            shakeError('Correo o contraseña incorrectos.');
+            // Solo al fallar: ofrecer recuperar contraseña
+            document.getElementById('loginForgot').style.display = 'block';
+            return;
+        }
         var u = result.data.user, meta = u.user_metadata || {};
         // Admin maestro → ir directo al panel
         if (u.email === ADMIN_EMAIL) { window.location.href = 'admin.html'; return; }
@@ -1606,6 +1616,12 @@ function ajSucLogoEliminar() {
 
 function abrirAjustesSucursal(sucId, negId, event) {
     if (event) event.stopPropagation();
+    // Filtro de seguridad: requiere la contraseña del dueño/admin
+    _pedirClaveAdmin('Ajustes de sucursal — acceso restringido', function(){
+        _abrirAjustesSucursal(sucId, negId);
+    }, '🔓 Acceder', { soloAdmin: true });
+}
+function _abrirAjustesSucursal(sucId, negId) {
     _ajSucId = sucId;
     _ajNegId = negId;
     var suc = _getSucursales(negId).find(function(s){ return s.id === sucId; });
@@ -1762,6 +1778,12 @@ function cfgNegToggleSuc(sucId) {
 
 function abrirConfig(id, event) {
     if (event) event.stopPropagation();
+    // Filtro de seguridad: requiere la contraseña del dueño/admin
+    _pedirClaveAdmin('Configuración del negocio — acceso restringido', function(){
+        _abrirConfigNeg(id);
+    }, '🔓 Acceder', { soloAdmin: true });
+}
+function _abrirConfigNeg(id) {
     _cfgNegId = id;
     var neg = _misNegocios().find(function(n){ return n.id === id; }) || _getNegocios().find(function(n){ return n.id === id; });
     if (!neg) return;
@@ -1776,7 +1798,98 @@ function abrirConfig(id, event) {
     document.getElementById('cfgNegWeb').value     = ex.web             || '';
     _renderCfgNegSucursales();
     document.getElementById('modalConfigNeg').style.display = 'flex';
+    cfgCargarCuenta();
 }
+
+/* ── Cuenta de acceso al negocio (Supabase Auth) — en el modal de config ── */
+var _cfgCuentaEmail = '';
+var _cfgVerifier = null;
+function _cfgGetVerifier() {
+    if (_cfgVerifier) return _cfgVerifier;
+    if (typeof supabase === 'undefined' || !supabase.createClient) return null;
+    _cfgVerifier = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'etaax-verify-hub' }
+    });
+    return _cfgVerifier;
+}
+async function _cfgVerificarPass(email, pass) {
+    var v = _cfgGetVerifier();
+    if (!v) return false;
+    try {
+        var r = await v.auth.signInWithPassword({ email: email, password: pass });
+        if (!r.error) { try { await v.auth.signOut({ scope: 'local' }); } catch (e) {} }
+        return !r.error;
+    } catch (e) { return false; }
+}
+function _cfgMsg(id, texto, ok) { var el = document.getElementById(id); el.textContent = texto; el.style.color = ok ? 'var(--green)' : 'var(--red)'; }
+
+async function cfgCargarCuenta() {
+    var warn = document.getElementById('cfgCuentaWarn');
+    var box  = document.getElementById('cfgCuentaControls');
+    ['cfgCuentaNuevoCorreo','cfgCuentaCorreoPass','cfgPassActual','cfgPassNueva','cfgPassConf'].forEach(function(id){ var e = document.getElementById(id); if (e) e.value = ''; });
+    document.getElementById('cfgCorreoMsg').textContent = '';
+    document.getElementById('cfgPassMsg').textContent = '';
+    var sess = null;
+    try { var s = await _supabase.auth.getSession(); sess = s.data && s.data.session; } catch (e) {}
+    if (!sess || !sess.user) {
+        warn.style.display = 'block';
+        warn.innerHTML = 'No hay una sesión activa para gestionar las credenciales de acceso.';
+        box.style.display = 'none';
+        return;
+    }
+    _cfgCuentaEmail = sess.user.email || '';
+    document.getElementById('cfgCuentaCorreoActual').value = _cfgCuentaEmail;
+    if (_cfgCuentaEmail === ADMIN_EMAIL) { warn.style.display = 'block'; box.style.display = 'none'; }
+    else { warn.style.display = 'none'; box.style.display = 'block'; }
+}
+
+async function cfgCambiarCorreo() {
+    var nuevo = (document.getElementById('cfgCuentaNuevoCorreo').value || '').trim().toLowerCase();
+    var pass  = document.getElementById('cfgCuentaCorreoPass').value;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(nuevo)) { _cfgMsg('cfgCorreoMsg', 'Ingresa un correo válido.', false); return; }
+    if (nuevo === (_cfgCuentaEmail || '').toLowerCase()) { _cfgMsg('cfgCorreoMsg', 'Es el mismo correo actual.', false); return; }
+    if (!pass) { _cfgMsg('cfgCorreoMsg', 'Ingresa tu contraseña actual para confirmar.', false); return; }
+    var btn = document.getElementById('cfgBtnCambiarCorreo'); var t0 = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Verificando…'; _cfgMsg('cfgCorreoMsg', '', true);
+    var ok = await _cfgVerificarPass(_cfgCuentaEmail, pass);
+    if (!ok) { btn.disabled = false; btn.textContent = t0; _cfgMsg('cfgCorreoMsg', 'La contraseña actual es incorrecta.', false); return; }
+    btn.textContent = 'Actualizando…';
+    var r = await _supabase.auth.updateUser({ email: nuevo });
+    btn.disabled = false; btn.textContent = t0;
+    if (r.error) { _cfgMsg('cfgCorreoMsg', 'No se pudo: ' + r.error.message, false); return; }
+    document.getElementById('cfgCuentaCorreoPass').value = '';
+    var u = r.data && r.data.user;
+    if (u && (u.email || '').toLowerCase() === nuevo) {
+        _cfgCuentaEmail = nuevo;
+        document.getElementById('cfgCuentaCorreoActual').value = nuevo;
+        document.getElementById('cfgCuentaNuevoCorreo').value = '';
+        if (_cfgNegId) localStorage.setItem('etaax_' + _cfgNegId + '_owner_email', nuevo);
+        _cfgMsg('cfgCorreoMsg', '✓ Correo de acceso actualizado.', true);
+    } else {
+        _cfgMsg('cfgCorreoMsg', 'Enviamos un correo de confirmación a ' + nuevo + '. El cambio se aplicará al confirmarlo.', true);
+    }
+}
+
+async function cfgCambiarPassword() {
+    var actual = document.getElementById('cfgPassActual').value;
+    var nueva  = document.getElementById('cfgPassNueva').value;
+    var conf   = document.getElementById('cfgPassConf').value;
+    if (!actual) { _cfgMsg('cfgPassMsg', 'Ingresa tu contraseña actual.', false); return; }
+    if ((nueva || '').length < 6) { _cfgMsg('cfgPassMsg', 'La nueva contraseña debe tener al menos 6 caracteres.', false); return; }
+    if (nueva !== conf) { _cfgMsg('cfgPassMsg', 'Las contraseñas nuevas no coinciden.', false); return; }
+    if (nueva === actual) { _cfgMsg('cfgPassMsg', 'La nueva contraseña debe ser distinta a la actual.', false); return; }
+    var btn = document.getElementById('cfgBtnCambiarPass'); var t0 = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Verificando…'; _cfgMsg('cfgPassMsg', '', true);
+    var ok = await _cfgVerificarPass(_cfgCuentaEmail, actual);
+    if (!ok) { btn.disabled = false; btn.textContent = t0; _cfgMsg('cfgPassMsg', 'La contraseña actual es incorrecta.', false); return; }
+    btn.textContent = 'Actualizando…';
+    var r = await _supabase.auth.updateUser({ password: nueva });
+    btn.disabled = false; btn.textContent = t0;
+    if (r.error) { _cfgMsg('cfgPassMsg', 'No se pudo: ' + r.error.message, false); return; }
+    ['cfgPassActual','cfgPassNueva','cfgPassConf'].forEach(function(id){ document.getElementById(id).value = ''; });
+    _cfgMsg('cfgPassMsg', '✓ Contraseña actualizada. Úsala la próxima vez que abras el negocio.', true);
+}
+
 function cerrarConfigNeg() {
     document.getElementById('modalConfigNeg').style.display = 'none';
     _cfgNegId = null;
@@ -1950,7 +2063,8 @@ function _showModulos(neg) {
     var CARD_KEYS = {
         'recetas/landing.html':      ['recetas','insumos','inventarios','requisiciones'],
         'financiero/index.html':     ['financiero'],
-        'administrativo/index.html': ['ventas','gastos','menu','proveedores','clientes','staff','permisos']
+        'consultoria/index.html':    ['financiero'],
+        'administrativo/index.html': ['ventas','ventas_productos','gastos','menu','proveedores','clientes','staff','permisos']
     };
     document.querySelectorAll('a.hub-card').forEach(function(a) {
         var href = a.getAttribute('href') || '';
@@ -2284,6 +2398,73 @@ window.onload = function() {
         </div>
       </div>
 
+      <!-- ── CUENTA DE ACCESO AL NEGOCIO ────────────── -->
+      <div>
+        <div style="font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--dim);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--b1)">Cuenta de acceso al negocio</div>
+        <div style="font-size:11px;color:var(--dim);margin-bottom:14px;line-height:1.6">Correo y contraseña con los que se abre este negocio en ETAAX. Compártelos solo con quien deba administrarlo (p. ej. tu gerente).</div>
+
+        <!-- Aviso: sesión de Admin Maestro -->
+        <div id="cfgCuentaWarn" style="display:none;background:rgba(245,200,66,.08);border:1px solid rgba(245,200,66,.3);border-radius:10px;padding:12px 14px;font-size:12px;color:var(--accent,#f5c842);line-height:1.6">
+          ⚠️ Estás dentro como <strong>Admin Maestro</strong>. Para cambiar el correo o la contraseña de <em>este negocio</em>, inicia sesión con la cuenta propia del negocio (desde la cuenta maestra cambiarías la maestra).
+        </div>
+
+        <div id="cfgCuentaControls">
+          <div style="margin-bottom:16px">
+            <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Correo de acceso actual</div>
+            <input type="email" id="cfgCuentaCorreoActual" readonly
+                   style="width:100%;box-sizing:border-box;background:var(--s2);border:1px solid var(--b2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;padding:11px 14px;border-radius:8px;outline:none;opacity:.85">
+            <div style="font-size:11px;color:var(--dim);margin-top:5px">La contraseña no se muestra por seguridad. Puedes cambiarla abajo.</div>
+          </div>
+
+          <!-- Cambiar correo -->
+          <div style="border-top:1px solid var(--b1);padding-top:14px;margin-bottom:14px">
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:10px">📧 Cambiar correo</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div>
+                <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Nuevo correo</div>
+                <input type="email" id="cfgCuentaNuevoCorreo" placeholder="nuevo@correo.com" autocomplete="off"
+                       style="width:100%;box-sizing:border-box;background:var(--s2);border:1px solid var(--b2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:10px 12px;border-radius:8px;outline:none">
+              </div>
+              <div>
+                <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Contraseña actual</div>
+                <input type="password" id="cfgCuentaCorreoPass" placeholder="Para confirmar" autocomplete="off"
+                       style="width:100%;box-sizing:border-box;background:var(--s2);border:1px solid var(--b2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:10px 12px;border-radius:8px;outline:none">
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap">
+              <button id="cfgBtnCambiarCorreo" onclick="cfgCambiarCorreo()" style="background:var(--green);color:#0a0908;border:none;border-radius:7px;padding:8px 16px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer">Actualizar correo</button>
+              <div id="cfgCorreoMsg" style="font-size:11px;color:var(--dim);flex:1;min-width:160px;line-height:1.5"></div>
+            </div>
+          </div>
+
+          <!-- Cambiar contraseña -->
+          <div style="border-top:1px solid var(--b1);padding-top:14px">
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:10px">🔑 Cambiar contraseña</div>
+            <div style="margin-bottom:10px">
+              <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Contraseña actual</div>
+              <input type="password" id="cfgPassActual" placeholder="Tu contraseña actual" autocomplete="off"
+                     style="width:100%;box-sizing:border-box;background:var(--s2);border:1px solid var(--b2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:10px 12px;border-radius:8px;outline:none">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div>
+                <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Nueva contraseña</div>
+                <input type="password" id="cfgPassNueva" placeholder="Mín. 6 caracteres" autocomplete="off"
+                       style="width:100%;box-sizing:border-box;background:var(--s2);border:1px solid var(--b2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:10px 12px;border-radius:8px;outline:none">
+              </div>
+              <div>
+                <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:5px">Confirmar nueva</div>
+                <input type="password" id="cfgPassConf" placeholder="Repite la nueva" autocomplete="off"
+                       style="width:100%;box-sizing:border-box;background:var(--s2);border:1px solid var(--b2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:10px 12px;border-radius:8px;outline:none">
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap">
+              <button id="cfgBtnCambiarPass" onclick="cfgCambiarPassword()" style="background:var(--green);color:#0a0908;border:none;border-radius:7px;padding:8px 16px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer">Cambiar contraseña</button>
+              <div id="cfgPassMsg" style="font-size:11px;color:var(--dim);flex:1;min-width:160px;line-height:1.5"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ── SUCURSALES ─────────────────────────────── -->
       <div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--b1)">
@@ -2525,6 +2706,115 @@ window.onload = function() {
     opacity:0;transition:opacity .2s ease,transform .2s ease;
     white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,.4);
 "></div>
+<!-- ══ MODAL: Recuperar contraseña (enviar enlace) ══ -->
+<div id="modalReset" class="modal-overlay" style="display:none;position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,.8);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)cerrarReset()">
+  <div style="background:var(--s1,#1a1916);border:1px solid var(--b2,#2a2825);border-radius:16px;width:min(400px,94vw);overflow:hidden">
+    <div style="padding:18px 22px 14px;border-bottom:1px solid var(--b1,#2a2825);display:flex;align-items:center;justify-content:space-between">
+      <div style="font-size:16px;font-weight:600;color:var(--text,#f0ece6)">Recuperar contraseña</div>
+      <button onclick="cerrarReset()" style="background:none;border:none;color:var(--dim,#7a7570);font-size:18px;cursor:pointer">✕</button>
+    </div>
+    <div style="padding:18px 22px">
+      <div style="font-size:12px;color:var(--dim,#7a7570);margin-bottom:14px;line-height:1.6">Te enviaremos un enlace a tu correo para crear una nueva contraseña.</div>
+      <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--dim,#7a7570);margin-bottom:6px">Correo de la cuenta</div>
+      <input type="email" id="resetEmail" placeholder="tu@correo.com" autocomplete="off"
+             style="width:100%;box-sizing:border-box;background:var(--s2,#0f0e0c);border:1px solid var(--b2,#2a2825);color:var(--text,#f0ece6);padding:11px 14px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;outline:none">
+      <div id="resetMsg" style="font-size:12px;color:var(--dim,#7a7570);margin-top:10px;min-height:16px;line-height:1.5"></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;padding:12px 22px;border-top:1px solid var(--b1,#2a2825)">
+      <button onclick="cerrarReset()" style="background:transparent;border:1px solid var(--b2,#2a2825);color:var(--muted,#7a7570);border-radius:8px;padding:9px 18px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px">Cancelar</button>
+      <button id="btnEnviarReset" onclick="enviarReset()" style="background:var(--green,#3dbe7a);color:#0a0908;border:none;border-radius:8px;padding:9px 20px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">Enviar enlace</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Nueva contraseña (al volver del enlace de recuperación) ══ -->
+<div id="modalNuevaPwd" class="modal-overlay" style="display:none;position:fixed;inset:0;z-index:9300;background:rgba(0,0,0,.85);align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--s1,#1a1916);border:1px solid var(--b2,#2a2825);border-radius:16px;width:min(400px,94vw);overflow:hidden">
+    <div style="padding:18px 22px 14px;border-bottom:1px solid var(--b1,#2a2825)">
+      <div style="font-size:16px;font-weight:600;color:var(--text,#f0ece6)">Crear nueva contraseña</div>
+      <div style="font-size:12px;color:var(--dim,#7a7570);margin-top:4px">Ingresa tu nueva contraseña de acceso.</div>
+    </div>
+    <div style="padding:18px 22px;display:flex;flex-direction:column;gap:12px">
+      <div>
+        <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--dim,#7a7570);margin-bottom:6px">Nueva contraseña</div>
+        <input type="password" id="npwNueva" placeholder="Mínimo 6 caracteres" autocomplete="new-password"
+               style="width:100%;box-sizing:border-box;background:var(--s2,#0f0e0c);border:1px solid var(--b2,#2a2825);color:var(--text,#f0ece6);padding:11px 14px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;outline:none">
+      </div>
+      <div>
+        <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--dim,#7a7570);margin-bottom:6px">Confirmar nueva contraseña</div>
+        <input type="password" id="npwConf" placeholder="Repite la nueva" autocomplete="new-password"
+               style="width:100%;box-sizing:border-box;background:var(--s2,#0f0e0c);border:1px solid var(--b2,#2a2825);color:var(--text,#f0ece6);padding:11px 14px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;outline:none">
+      </div>
+      <div id="npwMsg" style="font-size:12px;color:var(--red,#e05a3a);min-height:16px;line-height:1.5"></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;padding:12px 22px;border-top:1px solid var(--b1,#2a2825)">
+      <button id="btnNuevaPwd" onclick="guardarNuevaPassword()" style="background:var(--green,#3dbe7a);color:#0a0908;border:none;border-radius:8px;padding:9px 22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">Guardar contraseña</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── Recuperación de contraseña (Supabase Auth) ── */
+function abrirResetPassword(){
+    var pre = (document.getElementById('loginEmail').value || '').trim();
+    document.getElementById('resetEmail').value = pre;
+    var msg = document.getElementById('resetMsg');
+    msg.textContent = ''; msg.style.color = 'var(--dim)';
+    document.getElementById('modalReset').style.display = 'flex';
+    setTimeout(function(){ var e = document.getElementById('resetEmail'); if (e) e.focus(); }, 60);
+}
+function cerrarReset(){ document.getElementById('modalReset').style.display = 'none'; }
+
+async function enviarReset(){
+    var email = (document.getElementById('resetEmail').value || '').trim().toLowerCase();
+    var msg = document.getElementById('resetMsg');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { msg.style.color = 'var(--red)'; msg.textContent = 'Ingresa un correo válido.'; return; }
+    var btn = document.getElementById('btnEnviarReset'); var t0 = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Enviando…'; msg.textContent = '';
+    try {
+        var r = await _supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname });
+        if (r.error) { msg.style.color = 'var(--red)'; msg.textContent = 'No se pudo enviar: ' + r.error.message; }
+        else { msg.style.color = 'var(--green)'; msg.textContent = 'Si el correo está registrado, te enviamos un enlace para restablecer tu contraseña. Revisa tu bandeja (y la carpeta de spam).'; }
+    } catch (e) { msg.style.color = 'var(--red)'; msg.textContent = 'No se pudo enviar el enlace.'; }
+    btn.disabled = false; btn.textContent = t0;
+}
+
+function abrirNuevaPassword(){
+    document.getElementById('npwMsg').textContent = '';
+    document.getElementById('npwNueva').value = '';
+    document.getElementById('npwConf').value = '';
+    document.getElementById('modalNuevaPwd').style.display = 'flex';
+}
+async function guardarNuevaPassword(){
+    var nueva = document.getElementById('npwNueva').value;
+    var conf  = document.getElementById('npwConf').value;
+    var msg = document.getElementById('npwMsg'); msg.style.color = 'var(--red)';
+    if ((nueva || '').length < 6) { msg.textContent = 'La contraseña debe tener al menos 6 caracteres.'; return; }
+    if (nueva !== conf) { msg.textContent = 'Las contraseñas no coinciden.'; return; }
+    var btn = document.getElementById('btnNuevaPwd'); var t0 = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    var r = await _supabase.auth.updateUser({ password: nueva });
+    btn.disabled = false; btn.textContent = t0;
+    if (r.error) { msg.textContent = 'No se pudo: ' + r.error.message; return; }
+    msg.style.color = 'var(--green)'; msg.textContent = '✓ Contraseña actualizada. Ya puedes iniciar sesión.';
+    setTimeout(function(){
+        document.getElementById('modalNuevaPwd').style.display = 'none';
+        try { history.replaceState(null, '', window.location.pathname); } catch (e) {}
+        window.location.reload();
+    }, 1600);
+}
+
+/* Detecta el regreso desde el enlace del correo → pedir nueva contraseña */
+(function(){
+    try {
+        if (window._supabase && _supabase.auth && _supabase.auth.onAuthStateChange) {
+            _supabase.auth.onAuthStateChange(function(event){
+                if (event === 'PASSWORD_RECOVERY') abrirNuevaPassword();
+            });
+        }
+    } catch (e) {}
+})();
+</script>
 <script src="admin-guard.js"></script>
 <script src="security.js"></script>
 </body>

@@ -19,22 +19,55 @@
 .rol-tab.active { border-color:var(--accent);background:var(--accent-dim);color:var(--accent);font-weight:600; }
 .rol-tab-icon { font-size:16px; }
 
-.permisos-grid {
-    display:grid;
-    grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
-    gap:12px;
+/* Contenedor general */
+.permisos-grid { display:flex;flex-direction:column;gap:26px; }
+
+/* Sección por categoría de módulo */
+.cat-section { display:flex;flex-direction:column;gap:8px; }
+.cat-label {
+    font-size:11px;letter-spacing:2.5px;text-transform:uppercase;
+    color:var(--text-dim);font-weight:600;display:flex;align-items:center;gap:12px;margin-bottom:2px;
 }
-.permiso-card {
+.cat-label::after { content:'';flex:1;height:1px;background:var(--border); }
+
+/* Card de módulo (acordeón) */
+.mod-card {
     background:var(--surface);border:1px solid var(--border);border-radius:12px;
-    padding:16px 20px;display:flex;align-items:center;gap:14px;
-    transition:border-color .2s;
+    overflow:hidden;transition:border-color .2s,background .2s;
 }
-.permiso-card.active-perm { border-color:var(--green); background:rgba(61,190,122,.04); }
-.permiso-card.locked { opacity:.5; cursor:default; }
-.permiso-icon { font-size:22px;width:40px;text-align:center;flex-shrink:0; }
-.permiso-info { flex:1;min-width:0; }
-.permiso-label { font-size:14px;font-weight:500;color:var(--text); }
-.permiso-sub { font-size:11px;color:var(--text-dim);margin-top:2px; }
+.mod-card.active-perm { border-color:var(--green); }
+.mod-card.locked { opacity:.55; }
+.mod-card.open { border-color:var(--border2); }
+
+.mod-head {
+    display:flex;align-items:center;gap:14px;padding:15px 18px;
+    cursor:pointer;user-select:none;transition:background .15s;
+}
+.mod-head:hover { background:rgba(255,255,255,.02); }
+.mod-card.no-expand .mod-head { cursor:pointer; }
+.mod-icon { font-size:22px;width:38px;text-align:center;flex-shrink:0; }
+.mod-info { flex:1;min-width:0; }
+.mod-label { font-size:14px;font-weight:500;color:var(--text); }
+.mod-sub { font-size:11px;color:var(--text-dim);margin-top:2px; }
+.mod-count {
+    font-size:10px;color:var(--green);background:rgba(61,190,122,.1);
+    border:1px solid rgba(61,190,122,.25);border-radius:20px;padding:2px 9px;
+    white-space:nowrap;
+}
+.mod-chev { font-size:11px;color:var(--text-dim);width:14px;text-align:center;transition:transform .25s; }
+.mod-card.open .mod-chev { transform:rotate(90deg); }
+
+/* Cuerpo desplegable con sub-permisos */
+.mod-body { border-top:1px solid var(--border);padding:2px 18px 8px;background:rgba(0,0,0,.14); }
+.mod-body.module-off { opacity:.4;pointer-events:none; }
+.subperm-row {
+    display:flex;align-items:center;gap:12px;padding:11px 0 11px 52px;
+    border-bottom:1px solid rgba(255,255,255,.045);
+}
+.subperm-row:last-child { border-bottom:none; }
+.subperm-info { flex:1;min-width:0; }
+.subperm-label { font-size:13px;color:var(--text); }
+.subperm-sub { font-size:11px;color:var(--text-dim);margin-top:1px; }
 
 /* Toggle switch */
 .toggle-wrap { flex-shrink:0; }
@@ -243,6 +276,7 @@ var MODULES = [
     { key:'inventarios',   label:'Inventarios',           icon:'📦', sub:'Control de existencias por área' },
     { key:'requisiciones', label:'Requisiciones',         icon:'📋', sub:'Solicitudes de compra y pedidos' },
     { key:'ventas',        label:'Ventas',                icon:'💰', sub:'Registro y reporte de ventas' },
+    { key:'ventas_productos', label:'Ventas por Producto', icon:'🧾', sub:'Desglose y reporte de ventas por producto' },
     { key:'gastos',        label:'Gastos',                icon:'📤', sub:'Captura y control de gastos' },
     { key:'menu',          label:'Menú',                  icon:'📄', sub:'Carta digital y precios de venta' },
     { key:'proveedores',   label:'Proveedores',           icon:'🚚', sub:'Directorio y condiciones de compra' },
@@ -253,10 +287,23 @@ var MODULES = [
     { key:'config',        label:'Configuración',         icon:'⚙️', sub:'Ajustes generales del negocio' },
 ];
 
+/* ── CATEGORÍAS (agrupación visual, igual que el nav) ── */
+var CATEGORIAS = [
+    { label:'Recetas y Escandallos', modulos:['recetas','insumos','inventarios','requisiciones'] },
+    { label:'Control Administrativo', modulos:['ventas','ventas_productos','gastos','menu','proveedores','clientes','staff','permisos'] },
+    { label:'Finanzas',              modulos:['financiero'] },
+    { label:'Ajustes',               modulos:['config'] },
+];
+var _MOD_BY_KEY = {};
+MODULES.forEach(function(m){ _MOD_BY_KEY[m.key] = m; });
+
 /* ── DEFAULT PERMISSIONS ──
    Fuente única en /page-guard.js (ETAAX_PERM_DEFAULTS) — el guard
    de las páginas usa el mismo mapa para hacer el enforcement. */
 var DEFAULTS = window.ETAAX_PERM_DEFAULTS;
+
+/* Catálogo de sub-permisos por módulo (ventas / gastos) */
+var SUBPERMS = window.ETAAX_SUBPERMS || {};
 
 /* ── STORAGE ── */
 function loadPermisos() {
@@ -295,6 +342,7 @@ function setRolPermisos(rolKey, perms) {
 
 /* ── STATE ── */
 var _rolActivo = 'gerente';
+var _expandido = {};   // qué cards de módulo están desplegados
 
 /* ── RENDER ── */
 function renderTabs() {
@@ -309,23 +357,60 @@ function renderTabs() {
     document.getElementById('rolActivoLabel').textContent = (ROLES.find(function(r){ return r.key === _rolActivo; })||{}).label || _rolActivo;
 }
 
-function renderGrid() {
-    var isAdmin = _rolActivo === 'admin';
-    var perms   = getRolPermisos(_rolActivo);
-    var grid    = document.getElementById('permisosGrid');
-    document.getElementById('adminLockNote').style.display = isAdmin ? '' : 'none';
+/* Valor efectivo de un sub-permiso en el editor (en memoria) */
+function _subVal(perms, mod, sub) {
+    var v = perms[mod];
+    if (v === true)  return true;
+    if (!v)          return false;
+    if (typeof v === 'object') {
+        if (sub in v) return v[sub] !== false;
+        var def = (DEFAULTS[_rolActivo] || {})[mod];
+        if (def && typeof def === 'object' && sub in def) return def[sub] !== false;
+        return false;
+    }
+    return false;
+}
 
-    grid.innerHTML = MODULES.map(function(m){
-        var checked  = perms[m.key] !== false && (perms[m.key] || DEFAULTS[_rolActivo][m.key]);
-        var disabled = isAdmin;
-        return '<div class="permiso-card' + (checked ? ' active-perm' : '') + (disabled ? ' locked' : '') + '" ' +
-            (disabled ? '' : 'onclick="togglePermiso(\'' + m.key + '\')"') + ' id="pcard_' + m.key + '">' +
-            '<div class="permiso-icon">' + m.icon + '</div>' +
-            '<div class="permiso-info">' +
-                '<div class="permiso-label">' + m.label + '</div>' +
-                '<div class="permiso-sub">' + m.sub + '</div>' +
+function _toggleHTML(id, checked, disabled, onchange) {
+    return '<div class="toggle-wrap">' +
+        '<label class="toggle">' +
+            '<input type="checkbox"' + (checked ? ' checked' : '') + (disabled ? ' disabled' : '') +
+            ' id="' + id + '" onchange="' + onchange + '">' +
+            '<span class="toggle-slider"></span>' +
+        '</label>' +
+    '</div>';
+}
+
+/* Render de un card de módulo (acordeón) */
+function _renderModCard(m, perms, isAdmin) {
+    var checked  = !!perms[m.key];
+    var disabled = isAdmin;
+    var subs     = SUBPERMS[m.key] || [];
+    var hasSubs  = subs.length > 0;
+    var open     = !!_expandido[m.key];
+
+    // Contador "N de M activos" para módulos con sub-permisos
+    var countChip = '';
+    if (hasSubs && checked) {
+        var activos = subs.filter(function(sp){ return _subVal(perms, m.key, sp.key); }).length;
+        countChip = '<span class="mod-count">' + activos + '/' + subs.length + '</span>';
+    }
+
+    // Cabecera: click expande (si hay sub-permisos) o togglea acceso (si no)
+    var headAction = disabled ? '' :
+        (hasSubs ? ' onclick="toggleExpandir(\'' + m.key + '\')"'
+                 : ' onclick="togglePermiso(\'' + m.key + '\')"');
+
+    var head =
+        '<div class="mod-head"' + headAction + '>' +
+            '<div class="mod-icon">' + m.icon + '</div>' +
+            '<div class="mod-info">' +
+                '<div class="mod-label">' + m.label + '</div>' +
+                '<div class="mod-sub">' + m.sub + '</div>' +
             '</div>' +
-            '<div class="toggle-wrap">' +
+            countChip +
+            (hasSubs ? '<div class="mod-chev">▸</div>' : '') +
+            '<div class="toggle-wrap" onclick="event.stopPropagation()">' +
                 '<label class="toggle">' +
                     '<input type="checkbox"' + (checked ? ' checked' : '') + (disabled ? ' disabled' : '') +
                     ' id="tog_' + m.key + '" onchange="togglePermiso(\'' + m.key + '\')">' +
@@ -333,7 +418,55 @@ function renderGrid() {
                 '</label>' +
             '</div>' +
         '</div>';
+
+    // Cuerpo desplegable
+    var body = '';
+    if (hasSubs) {
+        var subRows = subs.map(function(sp){
+            var sc = _subVal(perms, m.key, sp.key);
+            return '<div class="subperm-row">' +
+                '<div class="subperm-info">' +
+                    '<div class="subperm-label">' + sp.label + '</div>' +
+                    '<div class="subperm-sub">' + sp.sub + '</div>' +
+                '</div>' +
+                _toggleHTML('sub_' + m.key + '_' + sp.key, sc, disabled || !checked,
+                    'toggleSubPermiso(\'' + m.key + '\',\'' + sp.key + '\')') +
+            '</div>';
+        }).join('');
+        body = '<div class="mod-body' + (checked ? '' : ' module-off') + '" id="mbody_' + m.key + '"' +
+               (open ? '' : ' style="display:none"') + '>' + subRows + '</div>';
+    }
+
+    return '<div class="mod-card' + (hasSubs ? '' : ' no-expand') + (checked ? ' active-perm' : '') +
+        (disabled ? ' locked' : '') + (open ? ' open' : '') + '" id="pcard_' + m.key + '">' +
+        head + body +
+    '</div>';
+}
+
+function renderGrid() {
+    var isAdmin = _rolActivo === 'admin';
+    var perms   = getRolPermisos(_rolActivo);
+    var grid    = document.getElementById('permisosGrid');
+    document.getElementById('adminLockNote').style.display = isAdmin ? '' : 'none';
+
+    grid.innerHTML = CATEGORIAS.map(function(cat){
+        var cards = cat.modulos.map(function(key){
+            var m = _MOD_BY_KEY[key];
+            return m ? _renderModCard(m, perms, isAdmin) : '';
+        }).join('');
+        return '<div class="cat-section">' +
+            '<div class="cat-label">' + cat.label + '</div>' +
+            cards +
+        '</div>';
     }).join('');
+}
+
+function toggleExpandir(modKey) {
+    _expandido[modKey] = !_expandido[modKey];
+    var card = document.getElementById('pcard_' + modKey);
+    var body = document.getElementById('mbody_' + modKey);
+    if (card) card.classList.toggle('open', _expandido[modKey]);
+    if (body) body.style.display = _expandido[modKey] ? 'block' : 'none';
 }
 
 function selectRol(key) {
@@ -342,21 +475,47 @@ function selectRol(key) {
     renderGrid();
 }
 
+/* Objeto de sub-permisos por defecto al encender un módulo expandible:
+   clona el default del rol si es objeto; si no, todo en true. */
+function _objSubsOn(modKey) {
+    var def = (DEFAULTS[_rolActivo] || {})[modKey];
+    if (def && typeof def === 'object') return JSON.parse(JSON.stringify(def));
+    var o = {};
+    (SUBPERMS[modKey] || []).forEach(function(sp){ o[sp.key] = true; });
+    return o;
+}
+
 function togglePermiso(modKey) {
     if (_rolActivo === 'admin') return;
     var perms = getRolPermisos(_rolActivo);
-    perms[modKey] = !perms[modKey];
-    // Update UI immediately
-    var tog   = document.getElementById('tog_' + modKey);
-    var card  = document.getElementById('pcard_' + modKey);
-    if (tog)  tog.checked = perms[modKey];
-    if (card) {
-        card.classList.toggle('active-perm', perms[modKey]);
+    var nowOn = !perms[modKey];
+    // Módulos con sub-permisos: al encender se guarda el objeto; al apagar, false
+    if (SUBPERMS[modKey] && SUBPERMS[modKey].length) {
+        perms[modKey] = nowOn ? _objSubsOn(modKey) : false;
+        // Al encender, desplegar para mostrar las opciones; al apagar, colapsar
+        _expandido[modKey] = nowOn;
+    } else {
+        perms[modKey] = nowOn;
     }
-    // Store in memory (not saved yet)
     var all = loadPermisos();
     all[_rolActivo] = perms;
     savePermisos(all);
+    renderGrid();
+}
+
+function toggleSubPermiso(modKey, subKey) {
+    if (_rolActivo === 'admin') return;
+    var perms = getRolPermisos(_rolActivo);
+    // Si el módulo está apagado, no hay sub-permisos que tocar
+    if (!perms[modKey]) return;
+    // Asegurar que el módulo sea un objeto de sub-permisos
+    if (typeof perms[modKey] !== 'object') perms[modKey] = _objSubsOn(modKey);
+    var cur = _subVal(perms, modKey, subKey);
+    perms[modKey][subKey] = !cur;
+    var all = loadPermisos();
+    all[_rolActivo] = perms;
+    savePermisos(all);
+    renderGrid();
 }
 
 function guardarPermisos() {

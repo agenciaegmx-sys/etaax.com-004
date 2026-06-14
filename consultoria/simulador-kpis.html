@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<script src="/page-guard.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ETAAX – Simulador de KPIs</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+<style>
+.sim-wrap{max-width:1180px;margin:0 auto;padding:24px 22px 90px}
+.sim-head{margin-bottom:20px}
+.sim-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:20px}
+.sim-grid{display:grid;grid-template-columns:380px 1fr;gap:20px;align-items:start}
+@media(max-width:900px){.sim-grid{grid-template-columns:1fr}}
+.sim-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px}
+.sim-sec-title{font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.ctrl{margin-bottom:18px}
+.ctrl-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.ctrl-lbl{font-size:12px;color:var(--text-muted)}
+.ctrl-val{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:.5px;color:var(--green)}
+.ctrl input[type=number]{width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:14px;outline:none}
+.ctrl input[type=number]:focus{border-color:var(--green)}
+.ctrl input[type=range]{width:100%;margin-top:8px;accent-color:var(--green)}
+.base-tag{font-size:10px;color:var(--text-dim)}
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.kpi{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+.kpi.good{border-color:rgba(61,190,122,.35)}
+.kpi.bad{border-color:rgba(224,90,58,.35)}
+.kpi-lbl{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px}
+.kpi-val{font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:.5px;color:var(--text)}
+.kpi-sub{font-size:11px;color:var(--text-dim);margin-top:4px}
+.prog-wrap{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:16px}
+.prog-bar{height:10px;background:var(--border);border-radius:6px;overflow:hidden;margin-top:8px}
+.prog-fill{height:100%;background:var(--green);border-radius:6px;transition:width .3s}
+.diag textarea,.pil textarea{width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;resize:vertical;line-height:1.6}
+.diag textarea:focus,.pil textarea:focus{border-color:var(--green)}
+.pil-block{margin-bottom:14px}
+.pil-block label{font-size:12px;font-weight:600;color:var(--text);display:block;margin-bottom:6px}
+.sim-btn{font-family:'DM Sans',sans-serif;font-size:13px;padding:9px 18px;border-radius:8px;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text-muted);transition:all .2s}
+.sim-btn:hover{border-color:var(--green);color:var(--green)}
+.sim-btn-primary{background:var(--green);border:none;color:#0a0908;font-weight:600}
+.toggle-line{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-muted);cursor:pointer;margin-bottom:12px}
+.theme-toggle{position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15)}
+@media print{.sim-bar,.sim-card.controls,.theme-toggle,.top-bar,.ctx-bar{display:none!important}.sim-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="top-bar">
+    <svg width="108" height="26" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
+        <circle cx="45" cy="11" r="6" fill="#f5c842"/>
+        <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
+        <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+    </svg>
+    <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🗃️</a>
+    <div class="top-breadcrumb">
+        <span class="top-module-badge">Consultoría</span>
+        <span class="top-sep">|</span>
+        <span class="top-section-name">Simulador de KPIs</span>
+    </div>
+</header>
+<div id="ctxBar" class="ctx-bar" style="display:none"></div>
+
+<div class="sim-wrap">
+    <div class="sim-head">
+        <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px">Consultoría</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:1px;color:var(--text)">Simulador de KPIs</div>
+        <div style="font-size:13px;color:var(--text-dim);margin-top:4px">Parte de los números reales de tu negocio y simula escenarios moviendo cada variable a mano.</div>
+    </div>
+
+    <div class="sim-bar">
+        <label style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim)">Mes base</label>
+        <input type="month" id="simMes" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:7px;font-family:inherit;font-size:13px;outline:none">
+        <button class="sim-btn" onclick="restablecer()">↺ Restablecer a datos reales</button>
+        <div id="baseInfo" style="margin-left:auto;font-size:11px;color:var(--text-dim)"></div>
+    </div>
+
+    <div class="sim-grid">
+        <!-- CONTROLES -->
+        <div class="sim-card controls">
+            <div class="sim-sec-title">Variables del escenario</div>
+
+            <div class="ctrl">
+                <div class="ctrl-top"><span class="ctrl-lbl">💳 Cheque promedio</span><span class="ctrl-val" id="vCheque">$0</span></div>
+                <input type="number" id="iCheque" min="0" step="1" oninput="onInput()">
+                <input type="range" id="rCheque" min="0" max="1000" step="1" oninput="onRange('Cheque')">
+                <div class="base-tag" id="bCheque"></div>
+            </div>
+
+            <div class="ctrl">
+                <div class="ctrl-top"><span class="ctrl-lbl">👥 Comensales (mes)</span><span class="ctrl-val" id="vComensales">0</span></div>
+                <input type="number" id="iComensales" min="0" step="1" oninput="onInput()">
+                <input type="range" id="rComensales" min="0" max="3000" step="1" oninput="onRange('Comensales')">
+                <div class="base-tag" id="bComensales"></div>
+            </div>
+
+            <div class="ctrl">
+                <div class="ctrl-top"><span class="ctrl-lbl">📤 Gastos del mes</span><span class="ctrl-val" id="vGastos">$0</span></div>
+                <input type="number" id="iGastos" min="0" step="100" oninput="onInput()">
+                <input type="range" id="rGastos" min="0" max="500000" step="500" oninput="onRange('Gastos')">
+                <div class="base-tag" id="bGastos"></div>
+            </div>
+
+            <div class="ctrl">
+                <div class="ctrl-top"><span class="ctrl-lbl">🎯 Meta de ventas</span><span class="ctrl-val" id="vMeta">$0</span></div>
+                <input type="number" id="iMeta" min="0" step="1000" oninput="onInput()">
+                <div class="base-tag" id="bMeta"></div>
+            </div>
+
+            <div class="sim-sec-title" style="margin-top:8px">Salón superior / eventos (opcional)</div>
+            <label class="toggle-line"><input type="checkbox" id="iSalon" style="width:auto" onchange="onInput()"> Incluir ingresos de eventos del salón</label>
+            <div id="salonBox" style="display:none">
+                <div class="ctrl"><div class="ctrl-top"><span class="ctrl-lbl">Eventos / mes</span></div><input type="number" id="iEventos" min="0" step="1" value="4" oninput="onInput()"></div>
+                <div class="ctrl"><div class="ctrl-top"><span class="ctrl-lbl">Ticket por asistente</span></div><input type="number" id="iSalTicket" min="0" step="10" value="350" oninput="onInput()"></div>
+                <div class="ctrl"><div class="ctrl-top"><span class="ctrl-lbl">Asistentes por evento</span></div><input type="number" id="iSalClientes" min="0" step="1" value="20" oninput="onInput()"></div>
+            </div>
+        </div>
+
+        <!-- PREVIEW / RESULTADOS -->
+        <div>
+            <div class="kpi-grid">
+                <div class="kpi" id="kVentasCard"><div class="kpi-lbl">Ventas estimadas</div><div class="kpi-val" id="kVentas">$0</div><div class="kpi-sub" id="kVentasSub"></div></div>
+                <div class="kpi" id="kResultadoCard"><div class="kpi-lbl">Resultado (ventas − gastos)</div><div class="kpi-val" id="kResultado">$0</div><div class="kpi-sub" id="kResultadoSub"></div></div>
+                <div class="kpi"><div class="kpi-lbl">Incremento vs. base</div><div class="kpi-val" id="kIncremento">$0</div><div class="kpi-sub">contra tus ventas reales del mes</div></div>
+                <div class="kpi"><div class="kpi-lbl">Margen</div><div class="kpi-val" id="kMargen">—</div><div class="kpi-sub">resultado / ventas</div></div>
+            </div>
+
+            <div class="prog-wrap">
+                <div style="display:flex;align-items:center;justify-content:space-between">
+                    <span style="font-size:12px;color:var(--text-muted)">Avance hacia la meta</span>
+                    <span style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--accent)" id="kAvance">0%</span>
+                </div>
+                <div class="prog-bar"><div class="prog-fill" id="kProgFill" style="width:0%"></div></div>
+                <div style="font-size:11px;color:var(--text-dim);margin-top:6px" id="kMetaSub"></div>
+            </div>
+
+            <div class="sim-card diag" style="margin-bottom:16px">
+                <div class="sim-sec-title">Resumen de diagnóstico</div>
+                <textarea id="iDiag" rows="3" oninput="saveTextos()"></textarea>
+            </div>
+
+            <div class="sim-card pil" style="margin-bottom:16px">
+                <div class="sim-sec-title">Pilares estratégicos</div>
+                <div class="pil-block"><label id="lPil1">1. Ingeniería de Ventas</label><textarea id="iPil1" rows="3" oninput="saveTextos()"></textarea></div>
+                <div class="pil-block"><label id="lPil2">2. Rentabilización del Espacio</label><textarea id="iPil2" rows="3" oninput="saveTextos()"></textarea></div>
+                <div class="pil-block"><label id="lPil3">3. Fortaleza Administrativa</label><textarea id="iPil3" rows="3" oninput="saveTextos()"></textarea></div>
+            </div>
+
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <button class="sim-btn sim-btn-primary" onclick="window.print()">🖨️ Imprimir</button>
+                <button class="sim-btn" onclick="copiarResumen()" id="btnCopiar">📋 Copiar resumen</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
+<script>
+/* ── Tema ── */
+(function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);document.addEventListener('DOMContentLoaded',function(){if(s==='light'){document.getElementById('themeIcon').textContent='🌙';document.getElementById('themeLabel').textContent='Modo oscuro';}});})();
+function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('etaax_theme',n);document.getElementById('themeIcon').textContent=n==='light'?'🌙':'☀️';document.getElementById('themeLabel').textContent=n==='light'?'Modo oscuro':'Modo claro';}
+
+/* ── Helpers ── */
+function getNegocioActivo(){return localStorage.getItem('etaax_negocio_activo')||'';}
+function n(v){return parseFloat(v)||0;}
+function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0});}
+function fmtN(v){return n(v).toLocaleString('es-MX');}
+function mesActual(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function diasMes(mes){var y=parseInt(mes.slice(0,4),10),m=parseInt(mes.slice(5,7),10);return new Date(y,m,0).getDate();}
+function flujoNeto(c){return n(c.efectivo)+n(c.tarjeta)+n(c.propTarjeta)+n(c.transferencia);}
+
+/* ── Cache de datos del negocio ── */
+var _cortes=[], _gastos=[], _fijos=[], _nominas={}, _staff=[], _metas={};
+
+async function _sbInit(){
+    var negId=getNegocioActivo();
+    if(!negId) return;
+    var r=await Promise.all([
+        _supabase.from('cortes').select('datos').eq('negocio_id',negId),
+        _supabase.from('gastos').select('datos').eq('negocio_id',negId),
+        _supabase.from('gf_fijos').select('datos').eq('negocio_id',negId),
+        _supabase.from('gf_nominas').select('datos').eq('negocio_id',negId).maybeSingle(),
+        _supabase.from('staff').select('datos').eq('negocio_id',negId),
+        _supabase.from('sf_metas').select('datos').eq('negocio_id',negId).maybeSingle()
+    ]);
+    if(!r[0].error) _cortes=(r[0].data||[]).map(function(x){return x.datos;});
+    if(!r[1].error) _gastos=(r[1].data||[]).map(function(x){return x.datos;});
+    if(!r[2].error) _fijos=(r[2].data||[]).map(function(x){return x.datos;});
+    if(!r[3].error && r[3].data) _nominas=r[3].data.datos||{};
+    if(!r[4].error) _staff=(r[4].data||[]).map(function(x){return x.datos;});
+    if(!r[5].error && r[5].data) _metas=r[5].data.datos||{};
+    restablecer();
+}
+
+/* ── Cálculo de datos reales (base) del mes ── */
+function _mensualizar(s,mes){
+    if(s.esquemaSueldo==='diario') return n(s.sueldoDiario)*diasMes(mes);
+    var b=n(s.salarioBase);
+    if(s.periodicidad==='semanal') return b*(52/12);
+    if(s.periodicidad==='quincenal') return b*2;
+    return b;
+}
+function _nominaMes(mes){
+    var total=0, nom=_nominas[mes]||{}, conEntrada={};
+    ['operativa','administrativa','socios'].forEach(function(cat){
+        (nom[cat]||[]).forEach(function(p){ if(p.staffId)conEntrada[p.staffId]=true; total+=n(p.base)+n(p.bonos)+n(p.imss)+n(p.prima); });
+    });
+    (_staff||[]).filter(function(s){return s.estado!=='Baja definitiva';}).forEach(function(s){
+        if(!conEntrada[s.id]) total+=_mensualizar(s,mes);
+    });
+    return total;
+}
+function datosBase(mes){
+    var cortesMes=_cortes.filter(function(c){return c.fecha&&c.fecha.slice(0,7)===mes;});
+    var comensales=cortesMes.reduce(function(s,c){return s+n(c.comensales);},0);
+    var ventas=cortesMes.reduce(function(s,c){return s+flujoNeto(c);},0);
+    var cheque=comensales>0?Math.round(ventas/comensales):0;
+    var gVar=_gastos.filter(function(g){return g.fecha&&g.fecha.slice(0,7)===mes;}).reduce(function(s,g){return s+n(g.monto);},0);
+    var gFijos=_fijos.reduce(function(s,f){return s+n(f.monto);},0);
+    var gNomina=_nominaMes(mes);
+    var gastos=Math.round(gVar+gFijos+gNomina);
+    var meta=(_metas[mes]&&n(_metas[mes].meta))||0;
+    return {cheque:cheque,comensales:comensales,ventas:Math.round(ventas),gastos:gastos,gVar:Math.round(gVar),gFijos:Math.round(gFijos),gNomina:Math.round(gNomina),meta:meta,nCortes:cortesMes.length};
+}
+
+var _base={cheque:0,comensales:0,ventas:0,gastos:0,meta:0};
+
+/* ── Restablecer a datos reales ── */
+function restablecer(){
+    var mes=document.getElementById('simMes').value||mesActual();
+    var b=datosBase(mes);
+    _base=b;
+    document.getElementById('iCheque').value=b.cheque;
+    document.getElementById('iComensales').value=b.comensales;
+    document.getElementById('iGastos').value=b.gastos;
+    document.getElementById('iMeta').value=b.meta||150000;
+    document.getElementById('rCheque').value=Math.min(b.cheque,1000);
+    document.getElementById('rComensales').value=Math.min(b.comensales,3000);
+    document.getElementById('rGastos').value=Math.min(b.gastos,500000);
+    document.getElementById('bCheque').textContent='Real: '+fmtM(b.cheque);
+    document.getElementById('bComensales').textContent='Real: '+fmtN(b.comensales)+' comensales en '+b.nCortes+' cortes';
+    document.getElementById('bGastos').textContent='Real: '+fmtM(b.gastos)+' (variables '+fmtM(b.gVar)+' + fijos '+fmtM(b.gFijos)+' + nómina '+fmtM(b.gNomina)+')';
+    document.getElementById('bMeta').textContent=b.meta?('Meta del mes: '+fmtM(b.meta)):'Sin meta definida — usando $150,000';
+    document.getElementById('baseInfo').textContent=b.nCortes?(b.nCortes+' cortes · ventas reales '+fmtM(b.ventas)):'Sin cortes en este mes';
+    render();
+}
+
+/* ── Inputs ── */
+function onRange(which){
+    document.getElementById('i'+which).value=document.getElementById('r'+which).value;
+    render();
+}
+function onInput(){
+    document.getElementById('rCheque').value=Math.min(n(document.getElementById('iCheque').value),1000);
+    document.getElementById('rComensales').value=Math.min(n(document.getElementById('iComensales').value),3000);
+    document.getElementById('rGastos').value=Math.min(n(document.getElementById('iGastos').value),500000);
+    document.getElementById('salonBox').style.display=document.getElementById('iSalon').checked?'block':'none';
+    render();
+}
+
+/* ── Render KPIs ── */
+function render(){
+    var cheque=n(document.getElementById('iCheque').value);
+    var comensales=n(document.getElementById('iComensales').value);
+    var gastos=n(document.getElementById('iGastos').value);
+    var meta=n(document.getElementById('iMeta').value)||150000;
+    var salon=document.getElementById('iSalon').checked;
+    var vEventos=salon?(n(document.getElementById('iEventos').value)*n(document.getElementById('iSalTicket').value)*n(document.getElementById('iSalClientes').value)):0;
+    var ventasEstab=cheque*comensales;
+    var ventas=ventasEstab+vEventos;
+    var resultado=ventas-gastos;
+    var avance=meta>0?Math.min(100,ventas/meta*100):0;
+    var incremento=ventas-_base.ventas;
+    var margen=ventas>0?(resultado/ventas*100):0;
+
+    document.getElementById('vCheque').textContent=fmtM(cheque);
+    document.getElementById('vComensales').textContent=fmtN(comensales);
+    document.getElementById('vGastos').textContent=fmtM(gastos);
+    document.getElementById('vMeta').textContent=fmtM(meta);
+
+    document.getElementById('kVentas').textContent=fmtM(ventas);
+    document.getElementById('kVentasSub').textContent=salon?('Establecimiento '+fmtM(ventasEstab)+' + eventos '+fmtM(vEventos)):(fmtM(cheque)+' × '+fmtN(comensales)+' comensales');
+    document.getElementById('kResultado').textContent=fmtM(resultado);
+    document.getElementById('kResultadoCard').className='kpi '+(resultado>=0?'good':'bad');
+    document.getElementById('kResultadoSub').textContent=resultado>=0?'Utilidad estimada del mes':'Pérdida — los gastos superan las ventas';
+    document.getElementById('kIncremento').textContent=(incremento>=0?'+':'')+fmtM(incremento);
+    document.getElementById('kMargen').textContent=ventas>0?(margen.toFixed(1)+'%'):'—';
+    document.getElementById('kVentasCard').className='kpi '+(ventas>=meta?'good':'');
+
+    document.getElementById('kAvance').textContent=avance.toFixed(1)+'%';
+    document.getElementById('kProgFill').style.width=avance+'%';
+    document.getElementById('kMetaSub').textContent=ventas>=meta
+        ? ('¡Meta superada por '+fmtM(ventas-meta)+'!')
+        : ('Faltan '+fmtM(meta-ventas)+' para la meta de '+fmtM(meta));
+}
+
+/* ── Textos editables (persisten por negocio) ── */
+var DEF_TEXTOS={
+    diag:'El negocio opera con una base sólida de visitantes, pero hay subutilización del ticket de consumo. Hay oportunidad de crecimiento inmediato sin aumentar agresivamente el volumen de clientes.',
+    pil1:'Elevar el ticket promedio con venta sugestiva enfocada en productos de mayor margen. Programa de lealtad para asegurar el regreso del cliente.',
+    pil2:'Rentabilizar el salón superior con un esquema de paquetes (espacio + consumo) dirigido a eventos en días de baja afluencia.',
+    pil3:'Cumplimiento estricto de nómina y prestaciones para reducir rotación. Relaciones públicas apoyando a la comunidad local.'
+};
+function _txKey(){return'etaax_'+getNegocioActivo()+'_simulador_textos';}
+function loadTextos(){
+    var t=DEF_TEXTOS;
+    try{var s=JSON.parse(localStorage.getItem(_txKey())||'null');if(s)t=s;}catch(e){}
+    document.getElementById('iDiag').value=t.diag;
+    document.getElementById('iPil1').value=t.pil1;
+    document.getElementById('iPil2').value=t.pil2;
+    document.getElementById('iPil3').value=t.pil3;
+}
+function saveTextos(){
+    localStorage.setItem(_txKey(),JSON.stringify({
+        diag:document.getElementById('iDiag').value,
+        pil1:document.getElementById('iPil1').value,
+        pil2:document.getElementById('iPil2').value,
+        pil3:document.getElementById('iPil3').value
+    }));
+}
+
+/* ── Copiar resumen (markdown) ── */
+function copiarResumen(){
+    var cheque=n(document.getElementById('iCheque').value),comensales=n(document.getElementById('iComensales').value);
+    var gastos=n(document.getElementById('iGastos').value),meta=n(document.getElementById('iMeta').value)||150000;
+    var ventas=cheque*comensales+(document.getElementById('iSalon').checked?(n(document.getElementById('iEventos').value)*n(document.getElementById('iSalTicket').value)*n(document.getElementById('iSalClientes').value)):0);
+    var resultado=ventas-gastos;
+    var md='# Simulador de KPIs — '+(document.getElementById('simMes').value||mesActual())+'\n\n'
+        +'## Diagnóstico\n'+document.getElementById('iDiag').value+'\n\n'
+        +'| KPI | Valor |\n|---|---|\n'
+        +'| Cheque promedio | '+fmtM(cheque)+' |\n'
+        +'| Comensales | '+fmtN(comensales)+' |\n'
+        +'| Ventas estimadas | '+fmtM(ventas)+' |\n'
+        +'| Gastos | '+fmtM(gastos)+' |\n'
+        +'| Resultado | '+fmtM(resultado)+' |\n'
+        +'| Meta | '+fmtM(meta)+' ('+(meta>0?Math.min(100,ventas/meta*100).toFixed(1):0)+'%) |\n\n'
+        +'## Pilares\n1. '+document.getElementById('iPil1').value+'\n2. '+document.getElementById('iPil2').value+'\n3. '+document.getElementById('iPil3').value+'\n';
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(md).then(function(){var b=document.getElementById('btnCopiar');b.textContent='✓ Copiado';setTimeout(function(){b.textContent='📋 Copiar resumen';},1800);});
+    }
+}
+
+document.addEventListener('DOMContentLoaded',function(){
+    document.getElementById('simMes').value=mesActual();
+    document.getElementById('simMes').addEventListener('change',restablecer);
+    loadTextos();
+    _sbInit();
+});
+</script>
+<script src="../security.js"></script>
+<script src="../ctx-bar.js"></script>
+</body>
+</html>

@@ -235,9 +235,9 @@
                     <input type="date" id="pickerInput" onchange="renderAll()">
                     <input type="date" id="pickerEnd" style="display:none" onchange="renderAll()">
                 </div>
-                <button class="btn-deposito" onclick="abrirModalDeposito()">💸 Depositar</button>
-                <button class="btn-deposito" style="background:rgba(120,160,240,.1);border-color:rgba(120,160,240,.3);color:#78a0f0" onclick="abrirVerDepositos()">📋 Ver depósitos</button>
-                <button class="btn-caja" onclick="abrirCajaFuerte()">🔒 Caja fuerte</button>
+                <button class="btn-deposito" id="btnDepositar" onclick="abrirModalDeposito()">💸 Depositar</button>
+                <button class="btn-deposito" id="btnVerDepositos" style="background:rgba(120,160,240,.1);border-color:rgba(120,160,240,.3);color:#78a0f0" onclick="abrirVerDepositos()">📋 Ver depósitos</button>
+                <button class="btn-caja" id="btnCajaFuerte" onclick="abrirCajaFuerte()">🔒 Caja fuerte</button>
             </div>
         </div>
 
@@ -269,8 +269,8 @@
                 <div class="card-header" style="justify-content:space-between">
                     <h2>Cortes del período</h2>
                     <div style="display:flex;gap:8px">
-                        <button class="btn-venta-extra" onclick="abrirModalVentaExtra()">🎪 Venta extra</button>
-                        <button class="btn-primary" onclick="abrirModal()">+ Capturar corte</button>
+                        <button class="btn-venta-extra" id="btnVentaExtra" onclick="abrirModalVentaExtra()">🎪 Venta extra</button>
+                        <button class="btn-primary" id="btnCapturarCorte" onclick="abrirModal()">+ Capturar corte</button>
                     </div>
                 </div>
                 <div class="card-body" style="padding:0;overflow-x:auto">
@@ -300,7 +300,7 @@
             <div class="card" id="cardDepositos" style="margin-top:16px;display:none">
                 <div class="card-header" style="justify-content:space-between">
                     <h2>💸 Depósitos registrados</h2>
-                    <button class="btn-deposito" onclick="abrirModalDeposito()">+ Nuevo depósito</button>
+                    <button class="btn-deposito" id="btnNuevoDepCard" onclick="abrirModalDeposito()">+ Nuevo depósito</button>
                 </div>
                 <div class="card-body" style="padding:0;overflow-x:auto">
                     <table class="cortes-table">
@@ -335,7 +335,7 @@
             <div class="card" id="cardVentasExtra" style="margin-top:16px;display:none">
                 <div class="card-header" style="justify-content:space-between">
                     <h2>🎪 Ventas especiales / Extras</h2>
-                    <button class="btn-venta-extra" onclick="abrirModalVentaExtra()">+ Agregar</button>
+                    <button class="btn-venta-extra" id="btnAgregarVexCard" onclick="abrirModalVentaExtra()">+ Agregar</button>
                 </div>
                 <div class="card-body" style="padding:0;overflow-x:auto">
                     <table class="vex-table">
@@ -836,6 +836,31 @@ function n(v){return parseFloat(v)||0;}
 function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function fmtN(v){return n(v).toLocaleString('es-MX');}
 
+/* ── Permisos del rol activo ──
+   _puede('ventas.cajaFuerte') etc. Dueño y admin: acceso total. */
+function _puede(path){
+    var ctx; try{ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null');}catch(e){}
+    if(!ctx) return false;
+    if(ctx.ctxType!=='staff') return true;           // dueño / admin maestro
+    if((ctx.rol||'')==='admin') return true;          // admin del negocio
+    return window.etaaxPerm ? window.etaaxPerm(ctx.negId||getNegocioActivo(), ctx.rol, path) : true;
+}
+function _puedeEditarCorte(c){ return _puede('ventas.editarHistorico') || (c && c.fecha===todayStr()); }
+/* ¿Es visible este gasto para el rol? (respeta gastos.verCajaFuerte / verBanco) */
+function _gastoVisible(g){
+    if(g.metodoPago==='caja_fuerte' && !_puede('gastos.verCajaFuerte')) return false;
+    if(g.metodoPago==='banco' && !_puede('gastos.verBanco')) return false;
+    return true;
+}
+function _hide(id){ var el=document.getElementById(id); if(el) el.style.display='none'; }
+function aplicarPermisosVentas(){
+    if(!_puede('ventas.cajaFuerte'))    _hide('btnCajaFuerte');
+    if(!_puede('ventas.verDepositos'))  _hide('btnVerDepositos');
+    if(!_puede('ventas.hacerDeposito')){ _hide('btnDepositar'); _hide('btnNuevoDepCard'); }
+    if(!_puede('ventas.ventaExtra')){    _hide('btnVentaExtra'); _hide('btnAgregarVexCard'); }
+    if(!_puede('ventas.capturarCorte'))  _hide('btnCapturarCorte');
+}
+
 /* ── Gastos del módulo Gastos ── */
 var _gastosCajaChica = 0; // solo caja chica — se usa en resguardo
 
@@ -993,8 +1018,10 @@ function renderTabla(cur){
     if(!lista.length){tbody.innerHTML='';empty.style.display='block';return;}
     empty.style.display='none';
     // Pre-calcular totales de gastos por fecha desde localStorage
+    // (solo métodos visibles para el rol — p.ej. gerente: solo caja chica)
     var gastosPorFecha = {};
     _loadGastos().forEach(function(g){
+        if (!_gastoVisible(g)) return;
         if (!gastosPorFecha[g.fecha]) gastosPorFecha[g.fecha] = 0;
         gastosPorFecha[g.fecha] += n(g.monto);
     });
@@ -1013,8 +1040,10 @@ function renderTabla(cur){
             '<td class="num-col" style="font-weight:700;color:var(--accent)">'+fmtM(rsg)+'</td>'+
             '<td style="display:flex;gap:4px;justify-content:flex-end">'+
                 '<button class="btn-row" onclick="verCorte(\''+c.id+'\')" title="Ver corte">👁️</button>'+
-                '<button class="btn-row" onclick="abrirModal(\''+c.id+'\')">✏️</button>'+
-                '<button class="btn-row del" onclick="eliminarCorte(\''+c.id+'\')">🗑️</button>'+
+                (_puedeEditarCorte(c)
+                    ? '<button class="btn-row" onclick="abrirModal(\''+c.id+'\')">✏️</button>'+
+                      '<button class="btn-row del" onclick="eliminarCorte(\''+c.id+'\')">🗑️</button>'
+                    : '')+
             '</td>'+
         '</tr>';
     }).join('');
@@ -1022,6 +1051,8 @@ function renderTabla(cur){
 
 /* ── Modal ── */
 function abrirModal(id){
+    if(!id){ if(!_puede('ventas.capturarCorte')) return; }
+    else { var _c=load().find(function(c){return c.id===id;}); if(_c && !_puedeEditarCorte(_c)){ alert('Tu rol no puede editar cortes de días anteriores.'); return; } }
     var d=id?(load().find(function(c){return c.id===id;})||{}): {};
     document.getElementById('modalTitulo').textContent=id?'Editar corte':'Capturar corte del día';
     document.getElementById('fId').value=id||'';
@@ -1149,6 +1180,8 @@ function guardarCorte(){
 }
 
 function eliminarCorte(id){
+    var _c=load().find(function(c){return c.id===id;});
+    if(_c && !_puedeEditarCorte(_c)){ alert('Tu rol no puede eliminar cortes de días anteriores.'); return; }
     if(!confirm('¿Eliminar este corte? Esta acción no se puede deshacer.'))return;
     _cacheCortes = (_cacheCortes||[]).filter(function(c){return c.id!==id;});
     _sbDel('cortes', id);
@@ -1157,6 +1190,7 @@ function eliminarCorte(id){
 
 /* ── Caja fuerte ── */
 function abrirCajaFuerte(){
+    if(!_puede('ventas.cajaFuerte')) return;
     // Gate de seguridad: verifica contraseña del usuario activo (owner o admin)
     _pedirClaveAdmin('Ver Caja Fuerte — Efectivo acumulado', function(){
         _abrirCajaFuerteContenido();
@@ -1321,6 +1355,7 @@ function _abrirCajaFuerteContenido(){
 function cerrarCajaFuerte(){document.getElementById('cajOverlay').classList.remove('open');}
 
 function abrirVerDepositos(){
+    if(!_puede('ventas.verDepositos')) return;
     var deps=loadDep().slice().sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
     var body=document.getElementById('depOverlayBody');
     var destIcon={caja_fuerte:'🏦 Caja fuerte',banco:'🏛️ Banco'};
@@ -1394,6 +1429,7 @@ function verCorte(id) {
     var c = load().find(function(x){ return x.id===id; });
     if (!c) return;
     _verCorteId = id;
+    var _vbtn=document.getElementById('verCorteEditBtn'); if(_vbtn) _vbtn.style.display=_puedeEditarCorte(c)?'':'none';
     var turnoLabel = {dia:'Día completo',manana:'Mañana',tarde:'Tarde',noche:'Noche'};
     var metLabel = {efectivo:'💵 Efectivo',transferencia:'🏛️ Transfer.',tarjeta:'💳 Tarjeta',mixto:'🔀 Mixto'};
     var fn = flujoNeto(c), pp = propinas(c), ck = cheque(c);
@@ -1423,7 +1459,8 @@ function verCorte(id) {
     }
 
     // Gastos del día desde localStorage (misma lógica que jalarGastosFecha)
-    var gastosDelDia = _loadGastos().filter(function(g){ return g.fecha === c.fecha; });
+    // Filtrado por permisos: solo métodos que el rol puede ver (p.ej. solo caja chica)
+    var gastosDelDia = _loadGastos().filter(function(g){ return g.fecha === c.fecha && _gastoVisible(g); });
     var metIcon = {caja_chica:'💵',caja_fuerte:'🏦',banco:'🏛️'};
     var metLabel2 = {caja_chica:'Caja chica',caja_fuerte:'Caja fuerte',banco:'Banco'};
     var gChica  = gastosDelDia.filter(function(g){ return g.metodoPago==='caja_chica'; }).reduce(function(s,g){ return s+n(g.monto); },0);
@@ -1568,6 +1605,7 @@ function verCorteAEdicion(){ cerrarVerCorte(); if(_verCorteId) abrirModal(_verCo
 
 document.addEventListener('DOMContentLoaded',function(){
     document.getElementById('pickerInput').value=todayStr();
+    aplicarPermisosVentas();
     renderAll();
     _sbInit();
 });
@@ -1576,6 +1614,7 @@ document.addEventListener('DOMContentLoaded',function(){
    DEPÓSITOS
    ══════════════════════════════════════════════════════════ */
 function abrirModalDeposito(id){
+    if(!_puede('ventas.hacerDeposito')) return;
     var d=id?(loadDep().find(function(x){return x.id===id;})||{}):{};
     document.getElementById('depId').value=id||'';
     document.getElementById('depFecha').value=d.fecha||todayStr();
@@ -1629,6 +1668,7 @@ function eliminarDeposito(id){
    VENTAS EXTRA
    ══════════════════════════════════════════════════════════ */
 function abrirModalVentaExtra(id){
+    if(!_puede('ventas.ventaExtra')) return;
     var d=id?(loadVex().find(function(x){return x.id===id;})||{}):{};
     document.getElementById('vexId').value=id||'';
     document.getElementById('vexFecha').value=d.fecha||periodoVal||todayStr();

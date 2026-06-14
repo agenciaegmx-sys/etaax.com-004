@@ -259,6 +259,7 @@
                                 <button class="nom-tab" data-nom="administrativa">📋 Administrativa</button>
                                 <button class="nom-tab" data-nom="socios">🤝 Socios Operativos</button>
                             </div>
+                            <button class="btn-ghost" id="btnNomParams" style="font-size:12px;padding:6px 12px">⚙️ Parámetros</button>
                             <button class="btn-accent" id="btnAddNomina">+ Agregar colaborador</button>
                         </div>
                     </div>
@@ -273,6 +274,7 @@
                                     <th class="ar">Nómina Base</th>
                                     <th class="ar">Bonos / Incentivos</th>
                                     <th class="ar">IMSS</th>
+                                    <th class="ar">Prima dom.</th>
                                     <th class="ar">Total</th>
                                     <th></th>
                                 </tr>
@@ -284,6 +286,7 @@
                                     <td class="ar"><span id="nomBaseTotal" style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--text-muted)"></span></td>
                                     <td class="ar"><span id="nomBonosTotal" style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--text-muted)"></span></td>
                                     <td class="ar"><span id="nomImssTotal" style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--text-muted)"></span></td>
+                                    <td class="ar"><span id="nomPrimaTotal" style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--text-muted)"></span></td>
                                     <td class="ar"><span class="tot-val" id="nominasTotal"></span></td>
                                     <td></td>
                                 </tr>
@@ -425,6 +428,12 @@
                     <input type="number" id="nomImss" min="0" step="100" placeholder="0.00" oninput="calcTotalNomina()">
                 </div>
             </div>
+            <div class="fg-row-3">
+                <div class="fg">
+                    <label>Prima dominical ($)</label>
+                    <input type="number" id="nomPrima" min="0" step="100" placeholder="0.00" oninput="calcTotalNomina()">
+                </div>
+            </div>
             <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center">
                 <span style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim)">Total colaborador</span>
                 <span id="nomTotalPreview" style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;color:var(--accent)">$0.00</span>
@@ -495,8 +504,50 @@ async function _sbInit() {
     if (!r[2].error) _cacheGG_Gastos  = (r[2].data||[]).map(function(x){return x.datos;});
     if (!r[3].error) _cacheGG_Cortes  = (r[3].data||[]).map(function(x){return x.datos;});
     if (!r[4].error) _cacheGG_Otros   = (r[4].data||[]).map(function(x){return x.datos;});
-    if (!r[5].error) _cacheGG_Staff   = (r[5].data||[]).map(function(x){return x.datos;});
+    if (!r[5].error) {
+        _cacheGG_Staff = (r[5].data||[]).map(function(x){return x.datos;});
+        // Mantener localStorage consistente con el servidor (el modal de staff
+        // y la migración leen de localStorage). Si el servidor vino vacío por
+        // RLS, conservar lo local en vez de borrarlo.
+        if (_cacheGG_Staff.length) localStorage.setItem('etaax_'+negId+'_staff', JSON.stringify(_cacheGG_Staff));
+        else { try { var _ls=JSON.parse(localStorage.getItem('etaax_'+negId+'_staff'))||[]; if(_ls.length) _cacheGG_Staff=_ls; } catch(e){} }
+    }
+    if (window.NominaParams) { try { await NominaParams.sync(negId); } catch(e){} }
+    try { await _migrarNominasManuales(); } catch(e){ if(window.console) console.warn('Migración de nóminas omitida:', e); }
     renderAll();
+}
+
+/* ── Migración automática: colaboradores capturados manualmente en nóminas
+   (sin staffId) se crean en el catálogo de staff y se ligan. Idempotente:
+   una entrada ya ligada (con staffId) no se vuelve a procesar. ── */
+function _normNom(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
+async function _migrarNominasManuales(){
+    var negId=getNegocioActivo();
+    if(!negId || !window.StaffModal) return;
+    var all=_cacheGG_Nominas||{};
+    if(!all || !Object.keys(all).length) return;
+    var staff=StaffModal.load(negId).slice();   // localStorage = fuente completa
+    var porNombre={};
+    staff.forEach(function(s){ porNombre[_normNom(s.nombre)]=s; });
+    var cambiosStaff=false, cambiosNom=false;
+    Object.keys(all).forEach(function(mes){
+        ['operativa','administrativa','socios'].forEach(function(cat){
+            (all[mes][cat]||[]).forEach(function(p){
+                if(p.staffId || !p.nombre) return; // ya ligado o sin nombre
+                var key=_normNom(p.nombre);
+                var s=porNombre[key];
+                if(!s){
+                    s={ id:genId(), nombre:p.nombre, rol:'', puesto:'', usuario:'', passwordHash:'',
+                        categoriaNomina:cat, salarioBase:n(p.base), periodicidad:'mensual',
+                        estado:'Activo', documentos:[] };
+                    staff.push(s); porNombre[key]=s; cambiosStaff=true;
+                }
+                p.staffId=s.id; cambiosNom=true;
+            });
+        });
+    });
+    if(cambiosStaff){ _cacheGG_Staff=staff; await StaffModal.save(negId, staff); }
+    if(cambiosNom){ _cacheGG_Nominas=all; _sbSaveNominas(all); }
 }
 function _sbUpFijo(record) { sbUpsert('gf_fijos', record); }
 function _sbDelFijo(id) { sbDelete('gf_fijos', id); }
@@ -587,10 +638,10 @@ function renderKPIs(mes){
     var fijos=loadFijos();
     var totalFijos=fijos.reduce(function(s,f){return s+n(f.monto);},0);
 
-    var noms=loadNominas(mes);
     var totalNom=0;
     ['operativa','administrativa','socios'].forEach(function(cat){
-        (noms[cat]||[]).forEach(function(p){totalNom+=n(p.base)+n(p.bonos)+n(p.imss);});
+        // _nominaItems incluye los colaboradores del catálogo de staff (auto) + capturados
+        _nominaItems(cat,mes).forEach(function(p){totalNom+=n(p.base)+n(p.bonos)+n(p.imss)+n(p.prima);});
     });
 
     var gastos=loadGastosMes(mes);
@@ -655,37 +706,101 @@ function renderFijos(){
 /* ── NÓMINAS ── */
 var NOM_CAT_LABELS={operativa:'Nómina Operativa — personal de cocina, bar, servicio.',administrativa:'Nómina Administrativa — administración, contabilidad, RRHH.',socios:'Socios Operativos — participación operativa de socios.'};
 
+/* Mensualiza el salario base según su periodicidad de pago */
+function _mensualizar(base,period){
+    base=n(base);
+    if(period==='semanal')   return base*(52/12); // ~4.33 semanas/mes
+    if(period==='quincenal') return base*2;
+    return base; // mensual o sin especificar
+}
+/* Días reales del mes (calendario): 'YYYY-MM' → 28/29/30/31 */
+function _diasDelMes(mes){
+    mes=mes||mesStr();
+    var y=parseInt(mes.slice(0,4),10), m=parseInt(mes.slice(5,7),10);
+    return new Date(y,m,0).getDate();
+}
+/* Costo mensual de un colaborador para el resumen financiero:
+   esquema 'diario' → sueldo diario × días reales del mes; 'periodo' → mensualizado. */
+function _baseMensualStaff(s,mes){
+    if(s.esquemaSueldo==='diario') return n(s.sueldoDiario)*_diasDelMes(mes);
+    return _mensualizar(s.salarioBase,s.periodicidad);
+}
+/* Categoría de nómina de un colaborador de staff (con fallback por rol) */
+function _staffCategoria(s){
+    if(s.categoriaNomina) return s.categoriaNomina;
+    return (s.rol==='gerente'||s.rol==='administrativo'||s.rol==='admin')?'administrativa':'operativa';
+}
+function _staffNominaActivo(){ return _loadStaff().filter(function(s){return s.estado!=='Baja definitiva';}); }
+
+/* Lista combinada de una categoría/mes: entradas guardadas (manuales o con
+   bonos/IMSS capturados) + colaboradores de staff que aún no tienen entrada,
+   cargados automáticamente con su base mensualizada. */
+function _nominaItems(cat,mes){
+    var data=loadNominas(mes);
+    var staff=_staffNominaActivo();
+    var staffPorId={}; staff.forEach(function(s){ staffPorId[s.id]=s; });
+    var conEntrada={};
+    // Entradas guardadas: si están ligadas a staff, la base/nombre se refrescan
+    // siempre desde el catálogo (solo bonos/IMSS quedan capturados por mes).
+    var guardadas=(data[cat]||[]).map(function(p){
+        if(p.staffId){
+            conEntrada[p.staffId]=true;
+            var s=staffPorId[p.staffId];
+            if(s){
+                var copia={}; for(var k in p) copia[k]=p[k];
+                copia.nombre=s.nombre;
+                copia.base=_baseMensualStaff(s,mes);
+                return copia;
+            }
+        }
+        return p;
+    });
+    // Colaboradores de staff de esta categoría sin entrada → auto
+    var autos=staff.filter(function(s){
+        return _staffCategoria(s)===cat && !conEntrada[s.id];
+    }).map(function(s){
+        return { id:'', staffId:s.id, nombre:s.nombre, base:_baseMensualStaff(s,mes),
+                 bonos:0, imss:0, prima:0, _auto:true, _period:s.periodicidad };
+    });
+    return guardadas.concat(autos);
+}
+
 function renderNominas(){
     var mes=_mesPicker||mesStr();
-    var data=loadNominas(mes);
-    var lista=data[_nomCat]||[];
+    var lista=_nominaItems(_nomCat,mes);
     var tbody=document.getElementById('nominasTbody');
     var empty=document.getElementById('nominasEmpty');
     var foot=document.getElementById('nominasFoot');
     document.getElementById('nomCatLabel').textContent=NOM_CAT_LABELS[_nomCat]||'';
     if(!lista.length){tbody.innerHTML='';empty.style.display='block';foot.style.display='none';return;}
     empty.style.display='none'; foot.style.display='';
-    var totBase=0,totBonos=0,totImss=0;
+    var totBase=0,totBonos=0,totImss=0,totPrima=0;
     tbody.innerHTML=lista.map(function(p){
-        var tot=n(p.base)+n(p.bonos)+n(p.imss);
-        totBase+=n(p.base); totBonos+=n(p.bonos); totImss+=n(p.imss);
+        var tot=n(p.base)+n(p.bonos)+n(p.imss)+n(p.prima);
+        totBase+=n(p.base); totBonos+=n(p.bonos); totImss+=n(p.imss); totPrima+=n(p.prima);
+        var autoBadge=p.staffId?' <span style="font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--green);background:rgba(61,190,122,.1);border:1px solid rgba(61,190,122,.25);border-radius:10px;padding:1px 7px;vertical-align:middle">Catálogo</span>':'';
+        var acc=p._auto
+            ? '<button class="btn-row" data-edit-staff="'+_esc(p.staffId)+'" title="Capturar bonos / IMSS / prima del mes">✏️</button>'
+            : '<button class="btn-row" data-edit-nom="'+p.id+'">✏️</button> <button class="btn-row del" data-del-nom="'+p.id+'">🗑️</button>';
         return'<tr>'
-            +'<td style="font-weight:500">'+_esc(p.nombre)+'</td>'
+            +'<td style="font-weight:500">'+_esc(p.nombre)+autoBadge+'</td>'
             +'<td class="ar">'+fmtM(p.base)+'</td>'
             +'<td class="ar" style="color:var(--accent)">'+fmtM(p.bonos)+'</td>'
             +'<td class="ar" style="color:var(--text-muted)">'+fmtM(p.imss)+'</td>'
+            +'<td class="ar" style="color:var(--text-muted)">'+fmtM(p.prima)+'</td>'
             +'<td class="ar" style="font-weight:700;color:var(--red)">'+fmtM(tot)+'</td>'
-            +'<td style="text-align:right;white-space:nowrap">'
-            +'<button class="btn-row" data-edit-nom="'+p.id+'">✏️</button> '
-            +'<button class="btn-row del" data-del-nom="'+p.id+'">🗑️</button>'
-            +'</td></tr>';
+            +'<td style="text-align:right;white-space:nowrap">'+acc+'</td></tr>';
     }).join('');
     document.getElementById('nomBaseTotal').textContent=fmtM(totBase);
     document.getElementById('nomBonosTotal').textContent=fmtM(totBonos);
     document.getElementById('nomImssTotal').textContent=fmtM(totImss);
-    document.getElementById('nominasTotal').textContent=fmtM(totBase+totBonos+totImss);
+    document.getElementById('nomPrimaTotal').textContent=fmtM(totPrima);
+    document.getElementById('nominasTotal').textContent=fmtM(totBase+totBonos+totImss+totPrima);
     tbody.querySelectorAll('[data-edit-nom]').forEach(function(btn){
         btn.addEventListener('click',function(){abrirNomina(btn.dataset.editNom);});
+    });
+    tbody.querySelectorAll('[data-edit-staff]').forEach(function(btn){
+        btn.addEventListener('click',function(){abrirNominaStaff(btn.dataset.editStaff);});
     });
     tbody.querySelectorAll('[data-del-nom]').forEach(function(btn){
         btn.addEventListener('click',function(){
@@ -695,6 +810,23 @@ function renderNominas(){
             saveNominas(mes,data); renderAll();
         });
     });
+}
+
+/* Abre el modal para capturar bonos/IMSS del mes de un colaborador de
+   staff que entró automáticamente (su base viene del catálogo). */
+function abrirNominaStaff(staffId){
+    document.getElementById('nomId').value='';
+    document.getElementById('nomCategoria').value=_nomCat;
+    document.getElementById('nomBonos').value='';
+    document.getElementById('nomImss').value='';
+    document.getElementById('nomPrima').value='';
+    _poblarStaffSel(staffId); // precarga nombre + base mensualizada
+    document.getElementById('nomStaffId').value=staffId;
+    calcTotalNomina();
+    var s=_loadStaff().find(function(x){return x.id===staffId;});
+    document.getElementById('modalNominaTitle').textContent='✏️ Bonos / IMSS — '+(s?s.nombre:'');
+    document.getElementById('modalNomina').classList.add('open');
+    setTimeout(function(){document.getElementById('nomBonos').focus();},60);
 }
 
 /* ── GASTOS VARIABLES ── */
@@ -790,7 +922,7 @@ function guardarFijo(){
 
 /* ── Modal Nómina ── */
 function calcTotalNomina(){
-    var tot=n(document.getElementById('nomBase').value)+n(document.getElementById('nomBonos').value)+n(document.getElementById('nomImss').value);
+    var tot=n(document.getElementById('nomBase').value)+n(document.getElementById('nomBonos').value)+n(document.getElementById('nomImss').value)+n(document.getElementById('nomPrima').value);
     document.getElementById('nomTotalPreview').textContent=fmtM(tot);
 }
 var _PERIOD_LABEL={semanal:'Semanal',quincenal:'Quincenal',mensual:'Mensual'};
@@ -817,7 +949,7 @@ function _onStaffSelChange(staffId,staffList){
     var s=staff.find(function(x){return x.id===staffId;});
     if(!s){infoBox.style.display='none';return;}
     document.getElementById('nomNombre').value=s.nombre||'';
-    if(s.salarioBase>0) document.getElementById('nomBase').value=s.salarioBase;
+    if(s.salarioBase>0) document.getElementById('nomBase').value=Math.round(_mensualizar(s.salarioBase,s.periodicidad)*100)/100;
     document.getElementById('nomStaffId').value=s.id;
     calcTotalNomina();
     var parts=[];
@@ -844,6 +976,7 @@ function abrirNomina(id){
     document.getElementById('nomBase').value=d.base||'';
     document.getElementById('nomBonos').value=d.bonos||'';
     document.getElementById('nomImss').value=d.imss||'';
+    document.getElementById('nomPrima').value=d.prima||'';
     document.getElementById('nomCategoria').value=_nomCat;
     document.getElementById('nomStaffId').value=d.staffId||'';
     _poblarStaffSel(d.staffId||'');
@@ -857,8 +990,11 @@ function cerrarNomina(){document.getElementById('modalNomina').classList.remove(
 function guardarNomina(){
     var nombre=document.getElementById('nomNombre').value.trim();
     var base=n(document.getElementById('nomBase').value);
+    var staffId=document.getElementById('nomStaffId').value||'';
     if(!nombre){alert('El nombre es obligatorio.');return;}
-    if(!base||base<=0){alert('La nómina base debe ser mayor a cero.');return;}
+    // Para colaboradores del catálogo la base sale de staff (puede ser 0);
+    // solo las capturas manuales exigen base > 0.
+    if((!base||base<=0)&&!staffId){alert('La nómina base debe ser mayor a cero.');return;}
     var mes=_mesPicker||mesStr();
     var data=loadNominas(mes);
     var cat=document.getElementById('nomCategoria').value||_nomCat;
@@ -866,7 +1002,7 @@ function guardarNomina(){
     // Remove from all categories first (in case of move)
     ['operativa','administrativa','socios'].forEach(function(c){data[c]=(data[c]||[]).filter(function(p){return p.id!==id;});});
     data[cat]=(data[cat]||[]);
-    data[cat].push({id:id,nombre:nombre,staffId:document.getElementById('nomStaffId').value||'',base:base,bonos:n(document.getElementById('nomBonos').value),imss:n(document.getElementById('nomImss').value)});
+    data[cat].push({id:id,nombre:nombre,staffId:document.getElementById('nomStaffId').value||'',base:base,bonos:n(document.getElementById('nomBonos').value),imss:n(document.getElementById('nomImss').value),prima:n(document.getElementById('nomPrima').value)});
     saveNominas(mes,data); cerrarNomina(); renderAll();
 }
 
@@ -920,7 +1056,21 @@ document.addEventListener('DOMContentLoaded',function(){
     document.getElementById('modalFijo').addEventListener('click',function(e){if(e.target===this)cerrarFijo();});
 
     /* Nóminas */
-    document.getElementById('btnAddNomina').addEventListener('click',function(){abrirNomina();});
+    var _bnp=document.getElementById('btnNomParams');
+    if(_bnp) _bnp.addEventListener('click',function(){
+        if(window.NominaParams) NominaParams.open(getNegocioActivo(), function(){ renderAll(); });
+    });
+    document.getElementById('btnAddNomina').addEventListener('click',function(){
+        // Abre el modal del catálogo de staff (mismo formulario). Al guardar,
+        // el colaborador aparece automáticamente en su categoría de nómina.
+        if(window.StaffModal){
+            StaffModal.open({ negId:getNegocioActivo(), staffId:'', onSaved:function(){
+                var negId=getNegocioActivo();
+                try{ _cacheGG_Staff=JSON.parse(localStorage.getItem('etaax_'+negId+'_staff'))||[]; }catch(e){}
+                renderAll();
+            }});
+        } else { abrirNomina(); }
+    });
     document.getElementById('btnCerrarNomina').addEventListener('click',cerrarNomina);
     document.getElementById('btnCancelarNomina').addEventListener('click',cerrarNomina);
     document.getElementById('btnGuardarNomina').addEventListener('click',guardarNomina);
@@ -940,5 +1090,8 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
+<script src="../admin-guard.js"></script>
+<script src="/staff-modal.js"></script>
+<script src="/nomina-params.js"></script>
 </body>
 </html>
