@@ -82,17 +82,24 @@
                 '<div class="sm-grp"><label>N° Seguro Social (NSS)</label><input type="text" id="sm_nss" maxlength="11" placeholder="11 dígitos" inputmode="numeric"></div>' +
                 '<div class="sm-grp full"><label>Dirección actual</label><input type="text" id="sm_direccion" placeholder="Calle, colonia, municipio, CP"></div>' +
                 '<div class="sm-grp full"><label>Estado</label><select id="sm_estado"><option>Activo</option><option>Baja temporal</option><option>Baja definitiva</option></select></div>' +
-                '<div class="sm-grp full"><label>Rol del sistema</label><select id="sm_rol" onchange="StaffModal._sugCat()">' +
+                '<div class="sm-grp full"><label>Rol del sistema</label><select id="sm_rol" onchange="StaffModal._rolChange()">' +
                   '<option value="">— Sin acceso al sistema —</option><option value="admin">👑 Administrador</option><option value="gerente">🎯 Gerente</option>' +
-                  '<option value="jefe_cocina">👨‍🍳 Jefe de Cocina</option><option value="chef">🍳 Chef</option><option value="cocinero">🥘 Cocinero</option>' +
+                  '<option value="administrativo">📋 Administrativo</option><option value="chef">🍳 Chef</option><option value="jefe_barra">🍷 Jefe de Barra</option>' +
+                  '<option value="jefe_cocina">👨‍🍳 Jefe de Cocina</option><option value="cocinero">🥘 Cocinero</option>' +
                   '<option value="barman">🍸 Barman</option><option value="barista">☕ Barista</option><option value="mesero">🛎️ Mesero</option>' +
-                  '<option value="administrativo">📋 Administrativo</option><option value="otro">👤 Otro</option></select></div>' +
+                  '<option value="otro">👤 Otro</option></select></div>' +
               '</div>' +
 
-              '<div class="sm-sec">Acceso al sistema</div>' +
-              '<div class="sm-grid">' +
+              '<div class="sm-sec" id="sm_accesoSec">Acceso al sistema</div>' +
+              '<div class="sm-grid" id="sm_accesoAdmin">' +
                 '<div class="sm-grp"><label>Usuario</label><input type="text" id="sm_usuario" placeholder="ej. juan.garcia" autocomplete="off"><span class="sm-hint">Único por negocio, sin espacios</span></div>' +
                 '<div class="sm-grp"><label>Contraseña</label><div class="sm-pwd"><input type="password" id="sm_pwd" placeholder="Mínimo 6 caracteres" autocomplete="new-password"><button type="button" class="sm-pwd-btn" onclick="StaffModal._togglePwd(this)" tabindex="-1">👁</button></div><span class="sm-hint">Dejar vacío para no cambiar</span></div>' +
+              '</div>' +
+              '<div class="sm-grid" id="sm_accesoNip" style="display:none">' +
+                '<div class="sm-grp full"><label>NIP de acceso (5 dígitos)</label><input type="text" id="sm_nip" maxlength="5" inputmode="numeric" placeholder="5 dígitos" autocomplete="off" oninput="this.value=this.value.replace(/[^0-9]/g,\'\')"><span class="sm-hint">Acceso rápido por QR a las vistas permitidas. Sin usuario ni contraseña.</span></div>' +
+              '</div>' +
+              '<div class="sm-grid" id="sm_accesoNone" style="display:none">' +
+                '<div class="sm-grp full"><span class="sm-hint">Este colaborador no tendrá acceso al sistema.</span></div>' +
               '</div>' +
 
               '<div class="sm-sec">Datos de nómina</div>' +
@@ -154,9 +161,13 @@
         return 'operativa';
     }
 
+    // Roles con acceso completo (usuario + contraseña). El resto: solo NIP.
+    var ADMIN_ROLES = ['admin', 'gerente', 'administrativo', 'chef', 'jefe_barra'];
+    function _esRolAdmin(rol) { return ADMIN_ROLES.indexOf(rol) !== -1; }
+
     function _fill(staffId) {
         _tmpDocs = [];
-        ['sm_nombre','sm_puesto','sm_fechaIngreso','sm_fechaNacimiento','sm_curp','sm_nss','sm_celular','sm_correo','sm_direccion','sm_usuario','sm_pwd','sm_salarioBase','sm_diaPago','sm_formaPago','sm_datosBancarios','sm_primaVacacional','sm_bonoIncentivo','sm_referencias','sm_notas'].forEach(function(id){ document.getElementById(id).value=''; });
+        ['sm_nombre','sm_puesto','sm_fechaIngreso','sm_fechaNacimiento','sm_curp','sm_nss','sm_celular','sm_correo','sm_direccion','sm_usuario','sm_pwd','sm_nip','sm_salarioBase','sm_diaPago','sm_formaPago','sm_datosBancarios','sm_primaVacacional','sm_bonoIncentivo','sm_referencias','sm_notas'].forEach(function(id){ document.getElementById(id).value=''; });
         document.getElementById('sm_estado').value = 'Activo';
         document.getElementById('sm_rol').value = '';
         document.getElementById('sm_periodicidad').value = '';
@@ -169,6 +180,7 @@
         document.getElementById('sm_primaVacacionalEnPago').checked = false;
         window.StaffModal._togEsq();
         document.getElementById('sm_pwd').placeholder = 'Mínimo 6 caracteres';
+        document.getElementById('sm_nip').placeholder = '5 dígitos';
         document.getElementById('sm_id').value = '';
         document.getElementById('sm_title').textContent = staffId ? 'Editar colaborador' : 'Agregar colaborador';
 
@@ -189,6 +201,7 @@
                 document.getElementById('sm_rol').value = s.rol || '';
                 document.getElementById('sm_usuario').value = s.usuario || '';
                 document.getElementById('sm_pwd').placeholder = s.passwordHash ? '•••••••• guardada — vacía para conservarla' : 'Mínimo 6 caracteres';
+                document.getElementById('sm_nip').placeholder = s.nipHash ? '••••• guardado — vacío para conservarlo' : '5 dígitos';
                 document.getElementById('sm_salarioBase').value = s.salarioBase || '';
                 document.getElementById('sm_esquemaSueldo').value = s.esquemaSueldo || 'periodo';
                 document.getElementById('sm_sueldoDiario').value = s.sueldoDiario || '';
@@ -206,6 +219,7 @@
                 _tmpDocs = (s.documentos || []).slice();
             }
         }
+        window.StaffModal._togAcceso(); // mostrar credenciales o NIP según el rol
         window.StaffModal._calcPrima(); // recalcular con todos los datos cargados
         _renderChips();
     }
@@ -225,25 +239,36 @@
 
     async function _saveColaborador() {
         var nombre  = document.getElementById('sm_nombre').value.trim();
-        var usuario = document.getElementById('sm_usuario').value.trim().toLowerCase().replace(/\s+/g,'');
+        var rol     = document.getElementById('sm_rol').value;
+        var esAdmin = _esRolAdmin(rol);
+        var usuario = esAdmin ? document.getElementById('sm_usuario').value.trim().toLowerCase().replace(/\s+/g,'') : '';
         var pwd     = document.getElementById('sm_pwd').value;
+        var nipRaw  = (document.getElementById('sm_nip').value || '').trim();
         if (!nombre) { alert('El nombre del colaborador es requerido.'); return; }
-        if (usuario && pwd && pwd.length < 6) { alert('La contraseña debe tener mínimo 6 caracteres.'); return; }
+        if (esAdmin) {
+            if (usuario && pwd && pwd.length < 6) { alert('La contraseña debe tener mínimo 6 caracteres.'); return; }
+        } else if (rol) {
+            if (nipRaw && !/^\d{5}$/.test(nipRaw)) { alert('El NIP debe ser exactamente 5 dígitos numéricos.'); return; }
+        }
 
         var editId = document.getElementById('sm_id').value;
         var data = _load(_negId);
-        if (usuario) {
+        if (esAdmin && usuario) {
             var dup = data.find(function(s){ return s.usuario === usuario && s.id !== editId; });
             if (dup) { alert('El usuario "' + usuario + '" ya está registrado en este negocio.'); return; }
         }
         var existing = editId ? (data.find(function(s){ return s.id === editId; }) || {}) : {};
+        // Credenciales según el tipo de rol
+        var passwordHash = esAdmin ? (pwd ? await window._hashPwdStaff(pwd) : (existing.passwordHash || '')) : '';
+        var nipHash      = (!esAdmin && rol) ? (nipRaw ? await window._hashPwdStaff('nip|' + nipRaw) : (existing.nipHash || '')) : '';
         var obj = {
             id: editId || _genId(),
             nombre: nombre,
             puesto: document.getElementById('sm_puesto').value.trim(),
-            rol: document.getElementById('sm_rol').value,
+            rol: rol,
             usuario: usuario,
-            passwordHash: pwd ? await window._hashPwdStaff(pwd) : (existing.passwordHash || ''),
+            passwordHash: passwordHash,
+            nipHash: nipHash,
             fechaIngreso: document.getElementById('sm_fechaIngreso').value,
             fechaNacimiento: document.getElementById('sm_fechaNacimiento').value,
             curp: document.getElementById('sm_curp').value.trim().toUpperCase(),
@@ -290,6 +315,15 @@
         _close: _close,
         _save: _saveColaborador,
         _sugCat: function () { document.getElementById('sm_categoriaNomina').value = _categoriaPorRol(document.getElementById('sm_rol').value); },
+        _rolChange: function () { window.StaffModal._sugCat(); window.StaffModal._togAcceso(); },
+        _togAcceso: function () {
+            var rol = document.getElementById('sm_rol').value;
+            var admin = _esRolAdmin(rol), conRol = !!rol;
+            document.getElementById('sm_accesoSec').style.display   = conRol ? '' : 'none';
+            document.getElementById('sm_accesoAdmin').style.display = admin ? '' : 'none';
+            document.getElementById('sm_accesoNip').style.display   = (conRol && !admin) ? '' : 'none';
+            document.getElementById('sm_accesoNone').style.display  = conRol ? 'none' : '';
+        },
         _togEsq: function () {
             var diario = document.getElementById('sm_esquemaSueldo').value === 'diario';
             document.getElementById('grpSmDiario').style.display = diario ? '' : 'none';

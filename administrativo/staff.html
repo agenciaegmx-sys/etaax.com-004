@@ -436,24 +436,25 @@
                 </div>
                 <div class="form-group full">
                     <label>Rol del sistema</label>
-                    <select id="fRol" onchange="_sugerirCategoria()">
+                    <select id="fRol" onchange="_rolChangeStaff()">
                         <option value="">— Sin acceso al sistema —</option>
                         <option value="admin">👑 Administrador</option>
                         <option value="gerente">🎯 Gerente</option>
-                        <option value="jefe_cocina">👨‍🍳 Jefe de Cocina</option>
+                        <option value="administrativo">📋 Administrativo</option>
                         <option value="chef">🍳 Chef</option>
+                        <option value="jefe_barra">🍷 Jefe de Barra</option>
+                        <option value="jefe_cocina">👨‍🍳 Jefe de Cocina</option>
                         <option value="cocinero">🥘 Cocinero</option>
                         <option value="barman">🍸 Barman</option>
                         <option value="barista">☕ Barista</option>
                         <option value="mesero">🛎️ Mesero</option>
-                        <option value="administrativo">📋 Administrativo</option>
                         <option value="otro">👤 Otro</option>
                     </select>
                 </div>
             </div>
 
-            <div class="modal-section">Acceso al sistema</div>
-            <div class="form-grid">
+            <div class="modal-section" id="accesoSec">Acceso al sistema</div>
+            <div class="form-grid" id="accesoAdmin">
                 <div class="form-group">
                     <label>Usuario</label>
                     <input type="text" id="fUsuario" placeholder="ej. juan.garcia" autocomplete="off">
@@ -468,6 +469,18 @@
                         </button>
                     </div>
                     <span class="form-hint">Dejar vacío para no cambiar</span>
+                </div>
+            </div>
+            <div class="form-grid" id="accesoNip" style="display:none">
+                <div class="form-group full">
+                    <label>NIP de acceso (5 dígitos)</label>
+                    <input type="text" id="fNip" maxlength="5" inputmode="numeric" placeholder="5 dígitos" autocomplete="off" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+                    <span class="form-hint">Acceso rápido por QR a las vistas permitidas. Sin usuario ni contraseña.</span>
+                </div>
+            </div>
+            <div class="form-grid" id="accesoNone" style="display:none">
+                <div class="form-group full">
+                    <span class="form-hint">Este colaborador no tendrá acceso al sistema.</span>
                 </div>
             </div>
 
@@ -643,6 +656,7 @@ var ROLES = [
     { key:'gerente',        label:'Gerente',          color:'#f5c842', bg:'rgba(245,200,66,.12)',  icon:'🎯' },
     { key:'jefe_cocina',    label:'Jefe de Cocina',   color:'#3dbe7a', bg:'rgba(61,190,122,.12)',  icon:'👨‍🍳' },
     { key:'chef',           label:'Chef',             color:'#3dbe7a', bg:'rgba(61,190,122,.12)',  icon:'🍳' },
+    { key:'jefe_barra',     label:'Jefe de Barra',    color:'#c89b6a', bg:'rgba(200,155,106,.12)', icon:'🍷' },
     { key:'cocinero',       label:'Cocinero',         color:'#3dbe7a', bg:'rgba(61,190,122,.12)',  icon:'🥘' },
     { key:'barman',         label:'Barman',           color:'#7ab8f5', bg:'rgba(122,184,245,.12)', icon:'🍸' },
     { key:'barista',        label:'Barista',          color:'#c4a882', bg:'rgba(196,168,130,.12)', icon:'☕' },
@@ -882,6 +896,8 @@ function _openModalReal(id) {
             document.getElementById('fPwd').placeholder   = s.passwordHash
                 ? '•••••••• guardada — déjala vacía para conservarla'
                 : 'Mínimo 6 caracteres';
+            document.getElementById('fNip').value         = '';
+            document.getElementById('fNip').placeholder   = s.nipHash ? '••••• guardado — vacío para conservarlo' : '5 dígitos';
             document.getElementById('fSalarioBase').value  = s.salarioBase || '';
             document.getElementById('fEsquemaSueldo').value = s.esquemaSueldo || 'periodo';
             document.getElementById('fSueldoDiario').value  = s.sueldoDiario || '';
@@ -898,13 +914,14 @@ function _openModalReal(id) {
             tmpDocs = (s.documentos || []).slice();
         }
     }
+    _togAccesoStaff(); // mostrar credenciales o NIP según el rol
     _calcPrimaVacacional(); // recalcular con todos los datos ya cargados
     renderChips();
     document.getElementById('modalStaff').classList.add('open');
 }
 
 function clearForm() {
-    ['fNombre','fPuesto','fFechaIngreso','fFechaNacimiento','fCurp','fNss','fCelular','fCorreo','fDireccion','fDatosBancarios','fPrimaVacacional','fBonoIncentivo','fReferencias','fNotas','fUsuario','fPwd','fSalarioBase'].forEach(function(id){
+    ['fNombre','fPuesto','fFechaIngreso','fFechaNacimiento','fCurp','fNss','fCelular','fCorreo','fDireccion','fDatosBancarios','fPrimaVacacional','fBonoIncentivo','fReferencias','fNotas','fUsuario','fPwd','fNip','fSalarioBase'].forEach(function(id){
         document.getElementById(id).value = '';
     });
     document.getElementById('fPeriodicidad').value = '';
@@ -919,6 +936,21 @@ function clearForm() {
     _toggleEsquemaSueldo();
     document.getElementById('fileInput').value = '';
     document.getElementById('fPwd').placeholder = 'Mínimo 6 caracteres';
+    document.getElementById('fNip').placeholder = '5 dígitos';
+    _togAccesoStaff();
+}
+
+// Roles con acceso completo (usuario + contraseña). El resto: solo NIP.
+var STAFF_ADMIN_ROLES = ['admin','gerente','administrativo','chef','jefe_barra'];
+function _esRolAdminStaff(rol){ return STAFF_ADMIN_ROLES.indexOf(rol) !== -1; }
+function _rolChangeStaff(){ _sugerirCategoria(); _togAccesoStaff(); }
+function _togAccesoStaff(){
+    var rol = document.getElementById('fRol').value;
+    var admin = _esRolAdminStaff(rol), conRol = !!rol;
+    document.getElementById('accesoSec').style.display   = conRol ? '' : 'none';
+    document.getElementById('accesoAdmin').style.display = admin ? '' : 'none';
+    document.getElementById('accesoNip').style.display   = (conRol && !admin) ? '' : 'none';
+    document.getElementById('accesoNone').style.display  = conRol ? 'none' : '';
 }
 
 /* Muestra el campo correcto según el esquema de pago elegido */
@@ -1015,29 +1047,39 @@ async function deleteStaff(id) {
 async function saveStaff() {
     var nombre  = document.getElementById('fNombre').value.trim();
     var puesto  = document.getElementById('fPuesto').value.trim();
-    var usuario = document.getElementById('fUsuario').value.trim().toLowerCase().replace(/\s+/g,'');
-    var pwd     = document.getElementById('fPwd').value;
     var rol     = document.getElementById('fRol').value;
+    var esAdmin = _esRolAdminStaff(rol);
+    var usuario = esAdmin ? document.getElementById('fUsuario').value.trim().toLowerCase().replace(/\s+/g,'') : '';
+    var pwd     = document.getElementById('fPwd').value;
+    var nipRaw  = (document.getElementById('fNip').value || '').trim();
     if (!nombre) { alert('El nombre del colaborador es requerido.'); return; }
-    if (usuario && pwd && pwd.length < 6) { alert('La contraseña debe tener mínimo 6 caracteres.'); return; }
+    if (esAdmin) {
+        if (usuario && pwd && pwd.length < 6) { alert('La contraseña debe tener mínimo 6 caracteres.'); return; }
+    } else if (rol) {
+        if (nipRaw && !/^\d{5}$/.test(nipRaw)) { alert('El NIP debe ser exactamente 5 dígitos numéricos.'); return; }
+    }
 
     var editId = document.getElementById('fId').value;
     var data   = load();
 
     // Validar usuario único (excepto el propio registro en edición)
-    if (usuario) {
+    if (esAdmin && usuario) {
         var dup = data.find(function(s){ return s.usuario === usuario && s.id !== editId; });
         if (dup) { alert('El usuario "' + usuario + '" ya está registrado en este negocio.'); return; }
     }
 
     var existing = editId ? (data.find(function(s){ return s.id === editId; }) || {}) : {};
+    // Credenciales según el tipo de rol
+    var passwordHash = esAdmin ? (pwd ? await _hashPwdStaff(pwd) : (existing.passwordHash || '')) : '';
+    var nipHash      = (!esAdmin && rol) ? (nipRaw ? await _hashPwdStaff('nip|' + nipRaw) : (existing.nipHash || '')) : '';
     var obj = {
         id:              editId || genId(),
         nombre:          nombre,
         puesto:          puesto,
         rol:             rol,
         usuario:         usuario,
-        passwordHash:    pwd ? await _hashPwdStaff(pwd) : (existing.passwordHash || ''),
+        passwordHash:    passwordHash,
+        nipHash:         nipHash,
         fechaIngreso:    document.getElementById('fFechaIngreso').value,
         fechaNacimiento: document.getElementById('fFechaNacimiento').value,
         curp:            document.getElementById('fCurp').value.trim().toUpperCase(),
