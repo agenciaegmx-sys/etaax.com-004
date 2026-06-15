@@ -1613,6 +1613,22 @@ function verCorte(id) {
             (c.ventaDeclarada?' &nbsp;·&nbsp; Declarado POS: <strong style="color:var(--text)">'+fmtM(n(c.ventaDeclarada))+'</strong>':'')+
         '</div>';
 
+    // Evidencia visual — miniaturas (click abre la foto completa)
+    var evid = (c.evidencias||[]).filter(function(e){ return e && e.url; });
+    var evidHTML = evid.length
+        ? '<div>'+sec('📸 Evidencia visual')+
+            '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">'+
+            evid.map(function(e){
+                var u=_escV(e.url);
+                return '<a href="'+u+'" target="_blank" rel="noopener" '+
+                    'style="display:block;width:72px;height:72px;border-radius:8px;overflow:hidden;'+
+                    'border:1px solid var(--border);background:var(--surface2)" title="Ver foto completa">'+
+                    '<img src="'+u+'" alt="" loading="lazy" '+
+                    'style="width:100%;height:100%;object-fit:cover;display:block"></a>';
+            }).join('')+
+            '</div></div>'
+        : '';
+
     document.getElementById('verCorteBody').innerHTML =
         // Datos generales
         '<div style="display:grid;grid-template-columns:1fr 1fr 1fr'+(c.cajero?' 1fr':'')+';gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px">'+
@@ -1659,6 +1675,8 @@ function verCorte(id) {
         '</div>'+
         // Ingresos adicionales
         (ingrExtra.length?'<div>'+sec('💸 Ingresos adicionales')+ingrHTML+'</div>':'')+
+        // Evidencia visual
+        evidHTML+
         // Notas
         (c.notas?'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px"><div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Notas</div><div style="font-size:13px;color:var(--text)">'+c.notas+'</div></div>':'');
 
