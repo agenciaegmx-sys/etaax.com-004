@@ -36,6 +36,7 @@ body{min-height:100vh;display:flex;flex-direction:column;align-items:center;just
     </div>
     <div class="cap-title" id="capTitle">Subir foto</div>
     <div class="cap-sub" id="capSub">Evidencia visual</div>
+    <div id="capCount" style="display:none;font-size:12px;color:var(--text-dim);margin:-10px 0 16px">⏱️ Expira en <b id="capCountVal" style="color:var(--text)">1:00</b></div>
 
     <div id="capForm">
         <div class="cap-fecha">
@@ -63,7 +64,32 @@ function genId(){return Date.now().toString(36)+Math.random().toString(36).slice
 function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 
 var TOKEN=_q('t'), NEG=_q('neg'), TIPO=_q('tipo')||'corte';
-var _subidas=0;
+var TS=parseInt(_q('ts'),10)||0;
+var VIDA_MS=60000;            // el código vive 1 minuto
+var _subidas=0, _countTimer=null;
+
+function _vivo(){ return !TS || (Date.now()-TS) < VIDA_MS; }
+
+function mostrarMuerto(expirado){
+    if(_countTimer){ clearInterval(_countTimer); _countTimer=null; }
+    document.getElementById('capForm').style.display='none';
+    document.getElementById('capCount').style.display='none';
+    var inv=document.getElementById('capInvalid');
+    inv.style.display='block';
+    inv.innerHTML='<div style="font-size:36px;margin:10px 0">'+(expirado?'⏱️':'🔒')+'</div>'+
+        '<div style="font-size:13px;color:var(--text-dim);line-height:1.6">'+
+        (expirado
+            ? 'Este código expiró (dura 1&nbsp;minuto).<br>Vuelve a escanear el QR en la computadora.'
+            : 'Este enlace no es válido o ya expiró.<br>Pide a la computadora que genere un QR nuevo.')+
+        '</div>';
+}
+
+function _tick(){
+    var rest=Math.max(0, TS + VIDA_MS - Date.now());
+    var s=Math.ceil(rest/1000);
+    document.getElementById('capCountVal').textContent=Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+    if(rest<=0) mostrarMuerto(true);
+}
 
 function _comprimir(file,maxPx){
     return new Promise(function(resolve){
@@ -88,6 +114,7 @@ function _comprimir(file,maxPx){
 async function onPick(input){
     var files=Array.prototype.slice.call(input.files);
     input.value='';
+    if(!_vivo()){ mostrarMuerto(true); return; }
     var msg=document.getElementById('capMsg');
     var thumbs=document.getElementById('capThumbs');
     var fecha=document.getElementById('capFecha').value||todayStr();
@@ -114,14 +141,16 @@ async function onPick(input){
 
 document.addEventListener('DOMContentLoaded',function(){
     var lbl={corte:'corte',gasto:'gasto'}[TIPO]||TIPO;
-    if(!TOKEN||!NEG){
-        document.getElementById('capForm').style.display='none';
-        document.getElementById('capInvalid').style.display='block';
-        return;
-    }
+    if(!TOKEN||!NEG){ mostrarMuerto(false); return; }
+    if(!_vivo()){ mostrarMuerto(true); return; }
     document.getElementById('capTitle').textContent='Subir foto al '+lbl;
     document.getElementById('capSub').textContent='Se enviará a la computadora donde está abierto el '+lbl+'.';
     document.getElementById('capFecha').value=todayStr();
+    if(TS){
+        document.getElementById('capCount').style.display='block';
+        _tick();
+        _countTimer=setInterval(_tick,1000);
+    }
 });
 </script>
 </body>

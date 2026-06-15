@@ -35,7 +35,7 @@ SET search_path = public AS $$
     SELECT EXISTS (
         SELECT 1 FROM pairing_sesiones
         WHERE token = t AND negocio_id = negid
-          AND created_at > NOW() - INTERVAL '20 minutes'
+          AND created_at > NOW() - INTERVAL '1 minute'
     );
 $$;
 
