@@ -63,4 +63,49 @@
         if (typeof _supabase === 'undefined') return;
         _supabase.from(tabla).delete().eq('id', id).then(_check('delete ' + tabla));
     };
+
+    /* ── Storage de evidencias (fotos) ──
+       Comprime la imagen a JPEG y la sube al bucket 'evidencias' en una
+       ruta por negocio. Devuelve {url, path} o null si falla. */
+    function _comprimir(file, maxPx) {
+        return new Promise(function (resolve) {
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                var img = new Image();
+                img.onload = function () {
+                    var w = img.width, h = img.height, M = maxPx || 1280;
+                    if (w > h) { if (w > M) { h = Math.round(h * M / w); w = M; } }
+                    else { if (h > M) { w = Math.round(w * M / h); h = M; } }
+                    var c = document.createElement('canvas'); c.width = w; c.height = h;
+                    c.getContext('2d').drawImage(img, 0, 0, w, h);
+                    c.toBlob(function (b) { resolve(b); }, 'image/jpeg', 0.72);
+                };
+                img.onerror = function () { resolve(null); };
+                img.src = e.target.result;
+            };
+            reader.onerror = function () { resolve(null); };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // sbSubirEvidencia(carpeta, file [, negId]) → Promise<{url,path}|null>
+    window.sbSubirEvidencia = async function (carpeta, file, negId) {
+        var id = negId || _negId();
+        if (!id || typeof _supabase === 'undefined' || !file) return null;
+        var blob = await _comprimir(file, 1280);
+        if (!blob) { window._sbToastError('No se pudo procesar la imagen'); return null; }
+        var nombre = Date.now().toString(36) + Math.random().toString(36).slice(2, 8) + '.jpg';
+        var path = id + '/' + carpeta + '/' + nombre;
+        var r = await _supabase.storage.from('evidencias').upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+        if (r.error) { window._sbToastError('subir foto: ' + r.error.message); return null; }
+        var pub = _supabase.storage.from('evidencias').getPublicUrl(path);
+        return { url: pub.data.publicUrl, path: path };
+    };
+
+    // sbBorrarEvidencia(path) → borra el archivo del bucket
+    window.sbBorrarEvidencia = async function (path) {
+        if (!path || typeof _supabase === 'undefined') return;
+        var r = await _supabase.storage.from('evidencias').remove([path]);
+        if (r.error) window._sbToastError('borrar foto: ' + r.error.message);
+    };
 })();

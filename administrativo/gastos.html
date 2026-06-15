@@ -557,15 +557,17 @@
         <!-- Evidencia -->
         <div class="gs-sec">
             <div class="gs-sec-title">📎 Evidencia (foto / PDF)</div>
-            <div class="evidencia-zone" id="evZone">
-                <input type="file" id="gEvidencia" accept="image/*,application/pdf" onchange="previewEvidencia(this)">
-                <div id="evPlaceholder">
-                    <div style="font-size:24px;margin-bottom:6px">📁</div>
-                    <div style="font-size:12px;color:var(--text-dim)">Arrastra o haz click para subir foto o PDF</div>
-                    <div style="font-size:10px;color:var(--text-dim);margin-top:4px;opacity:.6">JPG, PNG o PDF · máx. 5 MB</div>
+            <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+              <div style="flex:1;min-width:200px">
+                <div class="evidencia-zone" id="evZone">
+                    <input type="file" id="gEvidencia" accept="image/*,application/pdf" onchange="previewEvidencia(this)">
+                    <div id="evPlaceholder">
+                        <div style="font-size:24px;margin-bottom:6px">📁</div>
+                        <div style="font-size:12px;color:var(--text-dim)">Arrastra o haz click para subir foto o PDF</div>
+                        <div style="font-size:10px;color:var(--text-dim);margin-top:4px;opacity:.6">JPG, PNG o PDF · máx. 5 MB</div>
+                    </div>
                 </div>
-            </div>
-            <div id="evPreview" style="display:none" class="evidencia-preview">
+                <div id="evPreview" style="display:none" class="evidencia-preview">
                 <img id="evImg" src="" alt="" style="display:none">
                 <span style="font-size:20px" id="evPdfIcon" style="display:none">📄</span>
                 <div style="flex:1;overflow:hidden">
@@ -573,6 +575,9 @@
                     <div class="ev-size" id="evSize"></div>
                 </div>
                 <button onclick="quitarEvidencia()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">✕</button>
+                </div>
+              </div>
+              <div id="qrGastoBox" style="display:none"></div>
             </div>
         </div>
 
@@ -1306,9 +1311,30 @@ function _abrirModalGasto(g,tipo){
         document.getElementById('evImg').src='';
     }
     document.getElementById('modalGasto').classList.add('open');
+    _abrirPuenteGasto();
 }
 
-function cerrarModal(){document.getElementById('modalGasto').classList.remove('open');}
+function _abrirPuenteGasto(){
+    var box=document.getElementById('qrGastoBox');
+    if(!box||!window.QrPuente)return;
+    box.style.display='block';
+    QrPuente.abrir(getNegocioActivo(),'gasto',box,function(foto){
+        document.getElementById('gEvidenciaData').value=foto.url;
+        document.getElementById('gEvidenciaNombre').value='foto-celular.jpg';
+        document.getElementById('evPlaceholder').style.display='none';
+        document.getElementById('evPreview').style.display='flex';
+        document.getElementById('evName').textContent='Foto del celular';
+        document.getElementById('evSize').textContent='Recibida por QR';
+        document.getElementById('evImg').style.display='block';
+        document.getElementById('evImg').src=foto.url;
+        document.getElementById('evPdfIcon').style.display='none';
+    });
+}
+
+function cerrarModal(){
+    document.getElementById('modalGasto').classList.remove('open');
+    if(window.QrPuente)QrPuente.cerrar();
+}
 
 /* ══════════════════════════════════════════════════════════
    PAGOS RÁPIDOS — Nómina y Gastos fijos (desde Gastos globales)
@@ -1732,6 +1758,7 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
 <script src="/etaax-db.js"></script>
+<script src="/qr-pairing.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 <script src="../admin-guard.js"></script>

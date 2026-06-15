@@ -26,7 +26,7 @@
       style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
       font-src 'self' https://fonts.gstatic.com;
       connect-src 'self' https://byjuocnkyuxxudondciz.supabase.co wss://byjuocnkyuxxudondciz.supabase.co;
-      img-src 'self' data: blob:;
+      img-src 'self' data: blob: https://byjuocnkyuxxudondciz.supabase.co;
       object-src 'none';
       frame-src 'none';
       base-uri 'self';

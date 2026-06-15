@@ -11,6 +11,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
     <script src="../supabase-config.js"></script>
 <script src="/etaax-db.js"></script>
+<script src="/qr-pairing.js"></script>
     <style>
         .period-tabs{display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:4px;}
         .period-tab{background:transparent;border:none;color:var(--text-muted);padding:7px 16px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;transition:all .15s;white-space:nowrap;}
@@ -623,7 +624,25 @@
             </div>
         </div>
 
-        <!-- 7. Notas -->
+        <!-- 7. Evidencia visual -->
+        <div class="corte-sec" style="margin-top:6px">
+            <div class="corte-sec-title">📸 Evidencia visual</div>
+            <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+                <div style="flex:1;min-width:220px">
+                    <div onclick="document.getElementById('fEvidenciaInput').click()" style="border:2px dashed var(--border);border-radius:8px;padding:16px;text-align:center;cursor:pointer;transition:border-color .2s" onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border)'">
+                        <input type="file" id="fEvidenciaInput" accept="image/*" capture="environment" multiple style="display:none" onchange="subirEvidenciasCorte(this)">
+                        <div style="font-size:22px">📷</div>
+                        <div style="font-size:12px;color:var(--text-dim)">Toca para subir fotos · <span id="evCorteCount">0</span>/5</div>
+                        <div id="evCorteLoading" style="font-size:11px;color:var(--accent);margin-top:4px;display:none">Subiendo…</div>
+                    </div>
+                    <div id="evCorteGrid" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px"></div>
+                </div>
+                <!-- Contenedor del QR de captura móvil (Fase 2) -->
+                <div id="qrCorteBox" style="display:none"></div>
+            </div>
+        </div>
+
+        <!-- 8. Notas -->
         <div class="fg">
             <label>Notas del corte</label>
             <textarea id="fNotas" rows="2" placeholder="Observaciones, incidencias, contexto…" style="resize:vertical"></textarea>
@@ -1081,18 +1100,72 @@ function abrirModal(id){
     // Cargar ingresos extra del corte (si ya existen)
     _ingresosExtra = (d.ingresosExtra||[]).slice();
     renderIngresosExtra();
+    // Cargar evidencia visual del corte
+    _evidenciasCorte = (d.evidencias||[]).slice();
+    renderEvidenciasCorte();
+    // Puente QR: generar el QR y escuchar fotos del celular
+    _abrirPuenteCorte();
     // Auto-jalar gastos del módulo para la fecha del corte
     jalarGastosFecha();
     document.getElementById('modalCorte').classList.add('open');
 }
+function _abrirPuenteCorte(){
+    var box=document.getElementById('qrCorteBox');
+    if(!box || !window.QrPuente) return;
+    box.style.display='block';
+    QrPuente.abrir(getNegocioActivo(), 'corte', box, function(foto){
+        if(_evidenciasCorte.length>=5){ alert('Ya tienes 5 fotos en este corte.'); return; }
+        _evidenciasCorte.push({url:foto.url, path:foto.path});
+        renderEvidenciasCorte();
+    });
+}
 function cerrarModal(){
     document.getElementById('modalCorte').classList.remove('open');
+    if(window.QrPuente) QrPuente.cerrar();
     _ingresosExtra=[];
+    _evidenciasCorte=[];
     // Resetear gate de gastos al cerrar
     var gate=document.getElementById('gastosGate');
     var box=document.getElementById('gastosDesgloseBox');
     if(gate)gate.style.display='flex';
     if(box)box.style.display='none';
+}
+
+/* ── Evidencia visual del corte (fotos en Supabase Storage) ── */
+var _evidenciasCorte = []; // [{url, path}]
+async function subirEvidenciasCorte(input){
+    var files = Array.prototype.slice.call(input.files);
+    input.value='';
+    var disp = 5 - _evidenciasCorte.length;
+    if(disp<=0){ alert('Máximo 5 fotos por corte.'); return; }
+    files = files.slice(0, disp);
+    var loading = document.getElementById('evCorteLoading');
+    if(loading) loading.style.display='block';
+    for(var i=0;i<files.length;i++){
+        var r = await sbSubirEvidencia('cortes', files[i]);
+        if(r) _evidenciasCorte.push(r);
+    }
+    if(loading) loading.style.display='none';
+    renderEvidenciasCorte();
+}
+function renderEvidenciasCorte(){
+    var grid = document.getElementById('evCorteGrid');
+    var cnt = document.getElementById('evCorteCount');
+    if(cnt) cnt.textContent = _evidenciasCorte.length;
+    if(!grid) return;
+    grid.innerHTML = _evidenciasCorte.map(function(e,i){
+        return '<div style="position:relative">'
+            +'<a href="'+_escV(e.url)+'" target="_blank"><img src="'+_escV(e.url)+'" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" alt="evidencia"></a>'
+            +'<button onclick="eliminarEvidenciaCorte('+i+')" title="Quitar" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1">✕</button>'
+            +'</div>';
+    }).join('');
+}
+function eliminarEvidenciaCorte(i){
+    var e = _evidenciasCorte[i];
+    if(!e) return;
+    _evidenciasCorte.splice(i,1);
+    renderEvidenciasCorte();
+    if(e.path && window.sbBorrarEvidencia) sbBorrarEvidencia(e.path);
 }
 function verDesglosGastos(){
     _pedirClaveAdmin('Ver desglose de gastos del día', function(){
@@ -1171,6 +1244,7 @@ function guardarCorte(){
         alimentos:v('fAlimentos'),bebidas:v('fBebidas'),otros:v('fOtros'),
         gastos:v('fGastos'),gastosCajaChica:_gastosCajaChica,retiros:v('fRetiros'),
         ingresosExtra:_ingresosExtra.slice(),
+        evidencias:_evidenciasCorte.slice(),
         notas:document.getElementById('fNotas').value.trim(),
         cajero:document.getElementById('fCajero').value.trim()};
     _cacheCortes = (_cacheCortes||[]).filter(function(c){return c.id!==id;});

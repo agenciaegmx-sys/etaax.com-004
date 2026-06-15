@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>ETAAX – Subir foto</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+body{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:28px 18px 40px;box-sizing:border-box}
+.cap-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:420px;padding:24px 22px;text-align:center}
+.cap-logo{margin-bottom:18px}
+.cap-title{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:1px;color:var(--text)}
+.cap-sub{font-size:13px;color:var(--text-dim);margin:4px 0 20px}
+.cap-fecha{margin-bottom:16px;text-align:left}
+.cap-fecha label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);display:block;margin-bottom:6px}
+.cap-fecha input{width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 14px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:15px;outline:none}
+.cap-btn{display:block;width:100%;box-sizing:border-box;background:var(--green);color:#0a0908;border:none;border-radius:10px;padding:16px;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;cursor:pointer;margin-top:8px}
+.cap-btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-weight:500}
+.cap-thumbs{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:14px 0}
+.cap-thumbs img{width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border)}
+.cap-msg{font-size:13px;margin-top:14px;min-height:18px}
+.cap-msg.ok{color:var(--green)} .cap-msg.err{color:var(--red)}
+</style>
+</head>
+<body>
+<div class="cap-card">
+    <div class="cap-logo">
+        <svg width="120" height="29" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
+            <circle cx="45" cy="11" r="6" fill="#f5c842"/>
+            <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
+            <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+        </svg>
+    </div>
+    <div class="cap-title" id="capTitle">Subir foto</div>
+    <div class="cap-sub" id="capSub">Evidencia visual</div>
+
+    <div id="capForm">
+        <div class="cap-fecha">
+            <label>Fecha</label>
+            <input type="date" id="capFecha">
+        </div>
+        <div class="cap-thumbs" id="capThumbs"></div>
+        <input type="file" id="capInput" accept="image/*" capture="environment" multiple style="display:none" onchange="onPick(this)">
+        <button class="cap-btn" onclick="document.getElementById('capInput').click()">📷 Tomar / elegir foto</button>
+        <div class="cap-msg" id="capMsg"></div>
+    </div>
+
+    <div id="capInvalid" style="display:none">
+        <div style="font-size:36px;margin:10px 0">🔒</div>
+        <div style="font-size:13px;color:var(--text-dim);line-height:1.6">Este enlace no es válido o ya expiró.<br>Pide a la computadora que genere un QR nuevo.</div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="supabase-config.js"></script>
+<script>
+(function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);})();
+function _q(k){var m=new RegExp('[?&]'+k+'=([^&]*)').exec(location.search);return m?decodeURIComponent(m[1]):'';}
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+
+var TOKEN=_q('t'), NEG=_q('neg'), TIPO=_q('tipo')||'corte';
+var _subidas=0;
+
+function _comprimir(file,maxPx){
+    return new Promise(function(resolve){
+        var reader=new FileReader();
+        reader.onload=function(e){
+            var img=new Image();
+            img.onload=function(){
+                var w=img.width,h=img.height,M=maxPx||1280;
+                if(w>h){if(w>M){h=Math.round(h*M/w);w=M;}}else{if(h>M){w=Math.round(w*M/h);h=M;}}
+                var c=document.createElement('canvas');c.width=w;c.height=h;
+                c.getContext('2d').drawImage(img,0,0,w,h);
+                c.toBlob(function(b){resolve(b);},'image/jpeg',0.72);
+            };
+            img.onerror=function(){resolve(null);};
+            img.src=e.target.result;
+        };
+        reader.onerror=function(){resolve(null);};
+        reader.readAsDataURL(file);
+    });
+}
+
+async function onPick(input){
+    var files=Array.prototype.slice.call(input.files);
+    input.value='';
+    var msg=document.getElementById('capMsg');
+    var thumbs=document.getElementById('capThumbs');
+    var fecha=document.getElementById('capFecha').value||todayStr();
+    for(var i=0;i<files.length;i++){
+        msg.className='cap-msg'; msg.textContent='Subiendo foto…';
+        var blob=await _comprimir(files[i],1280);
+        if(!blob){ msg.className='cap-msg err'; msg.textContent='No se pudo procesar la imagen.'; continue; }
+        var nombre=genId()+'.jpg';
+        var path=NEG+'/inbox/'+TOKEN+'/'+nombre;
+        var up=await _supabase.storage.from('evidencias').upload(path,blob,{contentType:'image/jpeg'});
+        if(up.error){ msg.className='cap-msg err'; msg.textContent='Error al subir: '+up.error.message; continue; }
+        var pub=_supabase.storage.from('evidencias').getPublicUrl(path);
+        var ins=await _supabase.from('capturas_pendientes').insert({
+            id:genId()+genId(), negocio_id:NEG, tipo:TIPO, fecha:fecha, token:TOKEN,
+            foto_url:pub.data.publicUrl, foto_path:path
+        });
+        if(ins.error){ msg.className='cap-msg err'; msg.textContent='Enlace expirado o inválido.'; continue; }
+        // miniatura + éxito
+        var im=document.createElement('img'); im.src=pub.data.publicUrl; thumbs.appendChild(im);
+        _subidas++;
+        msg.className='cap-msg ok'; msg.textContent='✓ Foto enviada ('+_subidas+'). Aparecerá en la computadora.';
+    }
+}
+
+document.addEventListener('DOMContentLoaded',function(){
+    var lbl={corte:'corte',gasto:'gasto'}[TIPO]||TIPO;
+    if(!TOKEN||!NEG){
+        document.getElementById('capForm').style.display='none';
+        document.getElementById('capInvalid').style.display='block';
+        return;
+    }
+    document.getElementById('capTitle').textContent='Subir foto al '+lbl;
+    document.getElementById('capSub').textContent='Se enviará a la computadora donde está abierto el '+lbl+'.';
+    document.getElementById('capFecha').value=todayStr();
+});
+</script>
+</body>
+</html>
