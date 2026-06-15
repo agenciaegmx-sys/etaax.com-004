@@ -561,23 +561,14 @@
             <div class="gs-sec-title">📎 Evidencia (foto / PDF)</div>
             <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
               <div style="flex:1;min-width:200px">
-                <div class="evidencia-zone" id="evZone">
-                    <input type="file" id="gEvidencia" accept="image/*,application/pdf" onchange="previewEvidencia(this)">
-                    <div id="evPlaceholder">
-                        <div style="font-size:24px;margin-bottom:6px">📁</div>
-                        <div style="font-size:12px;color:var(--text-dim)">Arrastra o haz click para subir foto o PDF</div>
-                        <div style="font-size:10px;color:var(--text-dim);margin-top:4px;opacity:.6">JPG, PNG o PDF · máx. 5 MB</div>
-                    </div>
+                <div onclick="document.getElementById('gEvidencia').click()" style="border:2px dashed var(--border);border-radius:8px;padding:16px;text-align:center;cursor:pointer;transition:border-color .2s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+                    <input type="file" id="gEvidencia" accept="image/*,application/pdf" capture="environment" multiple style="display:none" onchange="subirEvidenciasGasto(this)">
+                    <div style="font-size:24px;margin-bottom:6px">📁</div>
+                    <div style="font-size:12px;color:var(--text-dim)">Toca para subir foto o PDF · <span id="evGastoCount">0</span>/3</div>
+                    <div style="font-size:10px;color:var(--text-dim);margin-top:4px;opacity:.6">Recibos, vouchers, comprobantes</div>
+                    <div id="evGastoLoading" style="font-size:11px;color:var(--accent);margin-top:4px;display:none">Subiendo…</div>
                 </div>
-                <div id="evPreview" style="display:none" class="evidencia-preview">
-                <img id="evImg" src="" alt="" style="display:none">
-                <span style="font-size:20px" id="evPdfIcon" style="display:none">📄</span>
-                <div style="flex:1;overflow:hidden">
-                    <div class="ev-name" id="evName"></div>
-                    <div class="ev-size" id="evSize"></div>
-                </div>
-                <button onclick="quitarEvidencia()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">✕</button>
-                </div>
+                <div id="evGastoGrid" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px"></div>
               </div>
               <div id="qrGastoBox" style="display:none"></div>
             </div>
@@ -608,8 +599,6 @@
         <input type="hidden" id="gId">
         <input type="hidden" id="gTipo" value="menor">
         <input type="hidden" id="gFacturado" value="0">
-        <input type="hidden" id="gEvidenciaData" value="">
-        <input type="hidden" id="gEvidenciaNombre" value="">
     </div>
     <div class="modal-footer">
         <button class="btn-ghost" onclick="cerrarModal()">Cancelar</button>
@@ -1068,11 +1057,22 @@ function estatusBadge(g){
     return'<span style="background:'+c.bg+';color:'+c.color+';font-size:10px;letter-spacing:.5px;padding:2px 7px;border-radius:4px;white-space:nowrap">'+c.lbl+'</span>'+extra;
 }
 
+// Lee las evidencias de un gasto (array nuevo, con compat. del single viejo)
+function _gEvids(g){
+    if(g.evidencias && g.evidencias.length) return g.evidencias;
+    if(g.evidenciaData) return [{url:g.evidenciaData, pdf:(g.evidenciaNombre||'').toLowerCase().endsWith('.pdf'), nombre:g.evidenciaNombre||''}];
+    return [];
+}
+
 function evLink(g){
-    if(!g.evidenciaData)return'<span style="opacity:.3;font-size:10px">—</span>';
-    var isPdf=g.evidenciaNombre&&g.evidenciaNombre.toLowerCase().endsWith('.pdf');
-    if(isPdf)return'<a href="'+g.evidenciaData+'" target="_blank" style="font-size:11px;color:var(--accent)">📄 PDF</a>';
-    return'<a href="'+g.evidenciaData+'" target="_blank"><img src="'+g.evidenciaData+'" style="width:28px;height:28px;object-fit:cover;border-radius:3px;border:1px solid var(--border)" alt="evidencia"></a>';
+    var ev=_gEvids(g);
+    if(!ev.length)return'<span style="opacity:.3;font-size:10px">—</span>';
+    var e0=ev[0];
+    var thumb=e0.pdf
+        ?'<a href="'+_esc(e0.url)+'" target="_blank" style="font-size:11px;color:var(--accent)">📄 PDF</a>'
+        :'<a href="'+_esc(e0.url)+'" target="_blank"><img src="'+_esc(e0.url)+'" style="width:28px;height:28px;object-fit:cover;border-radius:3px;border:1px solid var(--border)" alt="evidencia"></a>';
+    if(ev.length>1)thumb+='<span style="font-size:10px;color:var(--text-dim);margin-left:3px">+'+(ev.length-1)+'</span>';
+    return'<span style="display:inline-flex;align-items:center">'+thumb+'</span>';
 }
 
 function renderTabla(menores, mayores){
@@ -1203,11 +1203,13 @@ function verGasto(id){
     var metTxt=g.metodoPago==='caja_fuerte'?'🏦 Caja fuerte':g.metodoPago==='caja_chica'?'💼 Caja chica':'🏛️ '+sub;
 
     var evHTML='';
-    if(g.evidenciaData){
-        var isPdf=g.evidenciaNombre&&g.evidenciaNombre.toLowerCase().endsWith('.pdf');
-        evHTML=isPdf
-            ?'<a href="'+g.evidenciaData+'" target="_blank" style="font-size:12px;color:var(--accent,#f5c842)">📄 '+_esc(g.evidenciaNombre)+'</a>'
-            :'<a href="'+g.evidenciaData+'" target="_blank"><img src="'+g.evidenciaData+'" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border,#2a2825)" alt="evidencia"></a>';
+    var _evs=_gEvids(g);
+    if(_evs.length){
+        evHTML='<div style="display:flex;flex-wrap:wrap;gap:8px">'+_evs.map(function(e){
+            return e.pdf
+                ?'<a href="'+_esc(e.url)+'" target="_blank" style="display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:6px;border:1px solid var(--border,#2a2825);background:var(--surface2);font-size:24px;text-decoration:none" title="'+_esc(e.nombre||'PDF')+'">📄</a>'
+                :'<a href="'+_esc(e.url)+'" target="_blank"><img src="'+_esc(e.url)+'" loading="lazy" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border,#2a2825)" alt="evidencia"></a>';
+        }).join('')+'</div>';
     }
 
     var sCfg={pagado:{lbl:'✅ Pagado',c:'#3dbe7a'},pendiente:{lbl:'⏳ Pendiente',c:'#f5c842'},programado:{lbl:'📅 Programado',c:'#78a0f0'}};
@@ -1274,8 +1276,6 @@ function _abrirModalGasto(g,tipo){
     // Estatus
     setEstatus(d.estatus||'pagado');
     document.getElementById('gFechaPago').value=d.fechaPago||'';
-    document.getElementById('gEvidenciaData').value=d.evidenciaData||'';
-    document.getElementById('gEvidenciaNombre').value=d.evidenciaNombre||'';
     // Tipo
     setTipo(tipo||d.tipo||'menor',true);
     // Método — usando IDs directos para evitar el bug de :first-of-type
@@ -1298,20 +1298,13 @@ function _abrirModalGasto(g,tipo){
     var ft=document.getElementById('factToggle');
     ft.className='toggle-sm'+(fact?' on':'');
     document.getElementById('factLabel').textContent=fact?'Con factura / Comprobante fiscal':'Sin factura / Sin comprobante';
-    // Evidencia
-    if(d.evidenciaData){
-        document.getElementById('evPlaceholder').style.display='none';
-        document.getElementById('evPreview').style.display='flex';
-        document.getElementById('evName').textContent=d.evidenciaNombre||'Archivo adjunto';
-        var isPdf=d.evidenciaNombre&&d.evidenciaNombre.toLowerCase().endsWith('.pdf');
-        document.getElementById('evImg').style.display=isPdf?'none':'block';
-        document.getElementById('evImg').src=isPdf?'':d.evidenciaData;
-        document.getElementById('evPdfIcon').style.display=isPdf?'block':'none';
-    } else {
-        document.getElementById('evPlaceholder').style.display='block';
-        document.getElementById('evPreview').style.display='none';
-        document.getElementById('evImg').src='';
+    // Evidencia — array (con compat. hacia atrás del single viejo)
+    _evidenciasGasto = (d.evidencias||[]).slice();
+    if(!_evidenciasGasto.length && d.evidenciaData){
+        var _isPdf = d.evidenciaNombre && d.evidenciaNombre.toLowerCase().endsWith('.pdf');
+        _evidenciasGasto = [{url:d.evidenciaData, path:'', pdf:!!_isPdf, nombre:d.evidenciaNombre||''}];
     }
+    renderEvidenciasGasto();
     document.getElementById('modalGasto').classList.add('open');
     _abrirPuenteGasto();
 }
@@ -1321,15 +1314,9 @@ function _abrirPuenteGasto(){
     if(!box||!window.QrPuente)return;
     box.style.display='block';
     QrPuente.abrir(getNegocioActivo(),'gasto',box,function(foto){
-        document.getElementById('gEvidenciaData').value=foto.url;
-        document.getElementById('gEvidenciaNombre').value='foto-celular.jpg';
-        document.getElementById('evPlaceholder').style.display='none';
-        document.getElementById('evPreview').style.display='flex';
-        document.getElementById('evName').textContent='Foto del celular';
-        document.getElementById('evSize').textContent='Recibida por QR';
-        document.getElementById('evImg').style.display='block';
-        document.getElementById('evImg').src=foto.url;
-        document.getElementById('evPdfIcon').style.display='none';
+        if(_evidenciasGasto.length>=3){ alert('Ya tienes 3 archivos en este gasto.'); return; }
+        _evidenciasGasto.push({url:foto.url, path:foto.path, pdf:false, nombre:'foto-celular.jpg'});
+        renderEvidenciasGasto();
     });
 }
 
@@ -1666,33 +1653,43 @@ function toggleFact(){
     document.getElementById('factLabel').textContent=next?'Con factura / Comprobante fiscal':'Sin factura / Sin comprobante';
 }
 
-function previewEvidencia(input){
-    var file=input.files[0];
-    if(!file)return;
-    if(file.size>5*1024*1024){alert('El archivo supera 5 MB. Por favor elige uno más pequeño.');input.value='';return;}
-    var reader=new FileReader();
-    reader.onload=function(e){
-        document.getElementById('gEvidenciaData').value=e.target.result;
-        document.getElementById('gEvidenciaNombre').value=file.name;
-        document.getElementById('evPlaceholder').style.display='none';
-        document.getElementById('evPreview').style.display='flex';
-        document.getElementById('evName').textContent=file.name;
-        document.getElementById('evSize').textContent=(file.size/1024).toFixed(0)+' KB';
-        var isPdf=file.type==='application/pdf';
-        document.getElementById('evImg').style.display=isPdf?'none':'block';
-        if(!isPdf)document.getElementById('evImg').src=e.target.result;
-        document.getElementById('evPdfIcon').style.display=isPdf?'inline':'none';
-    };
-    reader.readAsDataURL(file);
+var _evidenciasGasto = []; // [{url, path, pdf, nombre}] — hasta 3
+async function subirEvidenciasGasto(input){
+    var files=Array.prototype.slice.call(input.files);
+    input.value='';
+    var disp=3-_evidenciasGasto.length;
+    if(disp<=0){ alert('Máximo 3 archivos por gasto.'); return; }
+    files=files.slice(0,disp);
+    var loading=document.getElementById('evGastoLoading');
+    if(loading) loading.style.display='block';
+    for(var i=0;i<files.length;i++){
+        if(files[i].size>10*1024*1024){ alert('"'+files[i].name+'" supera 10 MB, se omite.'); continue; }
+        var r=await sbSubirEvidencia('gastos',files[i]);
+        if(r) _evidenciasGasto.push(r);
+    }
+    if(loading) loading.style.display='none';
+    renderEvidenciasGasto();
 }
-
-function quitarEvidencia(){
-    document.getElementById('gEvidenciaData').value='';
-    document.getElementById('gEvidenciaNombre').value='';
-    document.getElementById('gEvidencia').value='';
-    document.getElementById('evPreview').style.display='none';
-    document.getElementById('evPlaceholder').style.display='block';
-    document.getElementById('evImg').src='';
+function renderEvidenciasGasto(){
+    var grid=document.getElementById('evGastoGrid');
+    var cnt=document.getElementById('evGastoCount');
+    if(cnt) cnt.textContent=_evidenciasGasto.length;
+    if(!grid) return;
+    grid.innerHTML=_evidenciasGasto.map(function(e,i){
+        var inner=e.pdf
+            ?'<a href="'+_esc(e.url)+'" target="_blank" style="display:flex;align-items:center;justify-content:center;width:54px;height:54px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);font-size:22px;text-decoration:none">📄</a>'
+            :'<a href="'+_esc(e.url)+'" target="_blank"><img src="'+_esc(e.url)+'" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" alt="evidencia"></a>';
+        return '<div style="position:relative">'+inner
+            +'<button onclick="eliminarEvidenciaGasto('+i+')" title="Quitar" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1">✕</button>'
+            +'</div>';
+    }).join('');
+}
+function eliminarEvidenciaGasto(i){
+    var e=_evidenciasGasto[i];
+    if(!e) return;
+    _evidenciasGasto.splice(i,1);
+    renderEvidenciasGasto();
+    if(e.path && window.sbBorrarEvidencia) sbBorrarEvidencia(e.path);
 }
 
 function guardarGasto(){
@@ -1715,8 +1712,7 @@ function guardarGasto(){
         metodoBanco:document.getElementById('gMetodoBanco').value,
         facturado:document.getElementById('gFacturado').value==='1',
         autorizado:tipo==='mayor'?mayorDesbloqueado:true,
-        evidenciaData:document.getElementById('gEvidenciaData').value,
-        evidenciaNombre:document.getElementById('gEvidenciaNombre').value,
+        evidencias:_evidenciasGasto.slice(),
         notas:document.getElementById('gNotas').value.trim(),
         estatus:document.getElementById('gEstatus').value||'pagado',
         fechaPago:document.getElementById('gFechaPago').value||''

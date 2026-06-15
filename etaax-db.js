@@ -88,18 +88,26 @@
         });
     }
 
-    // sbSubirEvidencia(carpeta, file [, negId]) → Promise<{url,path}|null>
+    // sbSubirEvidencia(carpeta, file [, negId]) → Promise<{url,path,pdf,nombre}|null>
+    // Imágenes: se comprimen a JPEG. PDF: se sube tal cual.
     window.sbSubirEvidencia = async function (carpeta, file, negId) {
         var id = negId || _negId();
         if (!id || typeof _supabase === 'undefined' || !file) return null;
-        var blob = await _comprimir(file, 1280);
-        if (!blob) { window._sbToastError('No se pudo procesar la imagen'); return null; }
-        var nombre = Date.now().toString(36) + Math.random().toString(36).slice(2, 8) + '.jpg';
-        var path = id + '/' + carpeta + '/' + nombre;
-        var r = await _supabase.storage.from('evidencias').upload(path, blob, { contentType: 'image/jpeg', upsert: false });
-        if (r.error) { window._sbToastError('subir foto: ' + r.error.message); return null; }
+        var esPdf = /pdf$/i.test(file.type || '') || /\.pdf$/i.test(file.name || '');
+        var blob, ext, ctype;
+        if (esPdf) {
+            blob = file; ext = '.pdf'; ctype = 'application/pdf';
+        } else {
+            blob = await _comprimir(file, 1280);
+            if (!blob) { window._sbToastError('No se pudo procesar la imagen'); return null; }
+            ext = '.jpg'; ctype = 'image/jpeg';
+        }
+        var base = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        var path = id + '/' + carpeta + '/' + base + ext;
+        var r = await _supabase.storage.from('evidencias').upload(path, blob, { contentType: ctype, upsert: false });
+        if (r.error) { window._sbToastError('subir archivo: ' + r.error.message); return null; }
         var pub = _supabase.storage.from('evidencias').getPublicUrl(path);
-        return { url: pub.data.publicUrl, path: path };
+        return { url: pub.data.publicUrl, path: path, pdf: esPdf, nombre: file.name || '' };
     };
 
     // sbBorrarEvidencia(path) → borra el archivo del bucket
