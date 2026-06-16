@@ -316,54 +316,116 @@
     </main>
 </div>
 
-<!-- ══ MÓDULO RECETAS — LANDING ══════════════════════════════ -->
+<!-- ══ MÓDULO RECETAS — LANDING (estilo cf-*, igual que los demás módulos) ══ -->
+<style>
+@keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:none; } }
+#moduloLanding .cf-wrap { min-height:auto; padding:8px 24px 80px; display:flex; flex-direction:column; align-items:center; }
+#moduloLanding .cf-hero { text-align:center; padding:40px 0 44px; animation:fadeUp .5s ease both; max-width:600px; width:100%; }
+#moduloLanding .cf-hero-eyebrow { font-size:10px; letter-spacing:3px; text-transform:uppercase; color:var(--text-dim); margin-bottom:10px; }
+#moduloLanding .cf-hero-title { font-family:'Bebas Neue',sans-serif; font-size:58px; letter-spacing:3px; line-height:.95; color:var(--text); margin-bottom:12px; }
+#moduloLanding .cf-hero-title .g { color:var(--green); }
+#moduloLanding .cf-hero-sub { font-size:13px; color:var(--text-dim); line-height:1.6; }
+#moduloLanding .cf-modules { width:100%; max-width:960px; display:flex; flex-direction:column; gap:40px; }
+#moduloLanding .cf-section { animation:fadeUp .5s ease both; }
+#moduloLanding .cf-section:nth-child(2) { animation-delay:.06s; }
+#moduloLanding .cf-section-hdr { display:flex; align-items:flex-end; gap:14px; margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid var(--border); }
+#moduloLanding .cf-section-tag { font-size:9px; letter-spacing:2.5px; text-transform:uppercase; color:var(--text-dim); padding:3px 10px; background:var(--surface2); border:1px solid var(--border); border-radius:20px; white-space:nowrap; line-height:1.6; }
+#moduloLanding .cf-section-title { font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:2px; color:var(--text); line-height:1; }
+#moduloLanding .cf-section-desc { font-size:11px; color:var(--text-dim); line-height:1.5; margin-left:auto; text-align:right; max-width:280px; }
+#moduloLanding .cf-grid { display:grid; gap:14px; }
+#moduloLanding .cf-grid-2 { grid-template-columns:1fr 1fr; }
+#moduloLanding .cf-grid-3 { grid-template-columns:1fr 1fr 1fr; }
+#moduloLanding .cf-grid-1 { grid-template-columns:1fr; max-width:400px; }
+#moduloLanding .cf-card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:24px 22px 20px; cursor:pointer; transition:all .2s; text-decoration:none; display:flex; flex-direction:column; align-items:flex-start; gap:7px; color:var(--text); font-family:'DM Sans',sans-serif; box-sizing:border-box; }
+#moduloLanding .cf-card:hover { border-color:rgba(30,80,220,.5); background:rgba(30,80,220,.05); transform:translateY(-3px); box-shadow:0 8px 32px rgba(30,80,220,.12); }
+#moduloLanding .cf-card.highlight { border-color:rgba(245,200,66,.3); background:rgba(245,200,66,.03); }
+#moduloLanding .cf-card.highlight:hover { border-color:rgba(245,200,66,.6); background:rgba(245,200,66,.07); box-shadow:0 8px 32px rgba(245,200,66,.1); }
+#moduloLanding .cf-card-hdr { display:flex; align-items:center; justify-content:space-between; width:100%; margin-bottom:2px; }
+#moduloLanding .cf-card-icon { font-size:28px; line-height:1; }
+#moduloLanding .cf-badge-active { font-size:9px; letter-spacing:1.5px; text-transform:uppercase; padding:3px 8px; border-radius:20px; background:rgba(61,190,122,.12); color:var(--green); border:1px solid rgba(61,190,122,.25); }
+#moduloLanding .cf-card-title { font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:1.5px; color:var(--text); line-height:1; }
+#moduloLanding .cf-card-desc { font-size:11px; color:var(--text-dim); line-height:1.55; flex:1; }
+#moduloLanding .cf-card-cta { margin-top:8px; font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-dim); }
+#moduloLanding .cf-card:hover .cf-card-cta { color:rgba(30,80,220,.8); }
+#moduloLanding .cf-card.highlight:hover .cf-card-cta { color:rgba(245,200,66,.8); }
+@media (max-width:700px) {
+    #moduloLanding .cf-grid-2, #moduloLanding .cf-grid-3 { grid-template-columns:1fr; }
+    #moduloLanding .cf-section-desc { display:none; }
+    #moduloLanding .cf-hero-title { font-size:44px; }
+}
+</style>
 <div id="moduloLanding" style="position:fixed;top:48px;left:0;right:0;bottom:0;
     z-index:80;overflow-y:auto;
     background-image:linear-gradient(rgba(30,80,220,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(30,80,220,.07) 1px,transparent 1px);
     background-size:60px 60px;background-color:var(--bg)">
     <div style="position:absolute;top:-80px;left:50%;transform:translateX(-50%);width:600px;height:360px;pointer-events:none;background:radial-gradient(ellipse at center,rgba(30,80,220,.13) 0%,transparent 70%)"></div>
-    <div class="mlanding-hero">
-        <div class="mlanding-hero-eyebrow">Módulo</div>
-        <div class="mlanding-hero-title">Recetas<br><span class="g">e Insumos</span></div>
-        <div class="mlanding-hero-sub">Escandallos con costeo automático, catálogo de insumos, control de inventarios y requisiciones.</div>
-    </div>
-    <div class="mlanding-grid" style="padding:0 24px 80px">
-        <button onclick="entrarEscandallos()" class="mlanding-card">
-            <div class="mlanding-card-header">
-                <div class="mlanding-card-icon">📋</div>
-                <span class="mlanding-badge-active">Activo</span>
+    <div class="cf-wrap">
+        <div class="cf-hero">
+            <div class="cf-hero-eyebrow">Módulo</div>
+            <div class="cf-hero-title">Recetas <span class="g">e Insumos</span></div>
+            <div class="cf-hero-sub">Escandallos con costeo automático, catálogo de insumos, control de inventarios y requisiciones.</div>
+        </div>
+        <div class="cf-modules">
+
+            <!-- ══ Costeo ══ -->
+            <div class="cf-section">
+                <div class="cf-section-hdr">
+                    <span class="cf-section-tag">Costeo</span>
+                    <div class="cf-section-title">Recetas</div>
+                    <div class="cf-section-desc">Escandallos con costeo automático y control de márgenes.</div>
+                </div>
+                <div class="cf-grid cf-grid-1">
+                    <a href="#" onclick="entrarEscandallos();return false" class="cf-card highlight">
+                        <div class="cf-card-hdr">
+                            <div class="cf-card-icon">📋</div>
+                            <span class="cf-badge-active">Activo</span>
+                        </div>
+                        <div class="cf-card-title">Escandallos</div>
+                        <div class="cf-card-desc">Recetas de cocina y bar con costeo automático, precio sugerido y aplicado, y semáforo de rentabilidad.</div>
+                        <div class="cf-card-cta">Abrir →</div>
+                    </a>
+                </div>
             </div>
-            <div class="mlanding-card-title">Escandallos</div>
-            <div class="mlanding-card-desc">Recetas con costeo automático y control de márgenes.</div>
-            <div class="mlanding-card-cta">Abrir →</div>
-        </button>
-        <a href="insumos.html" class="mlanding-card">
-            <div class="mlanding-card-header">
-                <div class="mlanding-card-icon">🗄️</div>
-                <span class="mlanding-badge-active">Activo</span>
+
+            <!-- ══ Abastecimiento ══ -->
+            <div class="cf-section">
+                <div class="cf-section-hdr">
+                    <span class="cf-section-tag">Abastecimiento</span>
+                    <div class="cf-section-title">Insumos y Compras</div>
+                    <div class="cf-section-desc">Catálogo de materias primas, existencias y pedidos internos.</div>
+                </div>
+                <div class="cf-grid cf-grid-3">
+                    <a href="insumos.html" class="cf-card">
+                        <div class="cf-card-hdr">
+                            <div class="cf-card-icon">🗄️</div>
+                            <span class="cf-badge-active">Activo</span>
+                        </div>
+                        <div class="cf-card-title">Insumos</div>
+                        <div class="cf-card-desc">Catálogo de materias primas con presentaciones, costos por proveedor y costeo de bebidas.</div>
+                        <div class="cf-card-cta">Abrir →</div>
+                    </a>
+                    <a href="inventarios.html" class="cf-card">
+                        <div class="cf-card-hdr">
+                            <div class="cf-card-icon">📦</div>
+                            <span class="cf-badge-active">Activo</span>
+                        </div>
+                        <div class="cf-card-title">Inventarios</div>
+                        <div class="cf-card-desc">Control de existencias por área: entradas, salidas y movimientos con reporte ejecutivo.</div>
+                        <div class="cf-card-cta">Abrir →</div>
+                    </a>
+                    <a href="requisiciones.html" class="cf-card">
+                        <div class="cf-card-hdr">
+                            <div class="cf-card-icon">📝</div>
+                            <span class="cf-badge-active">Activo</span>
+                        </div>
+                        <div class="cf-card-title">Requisiciones</div>
+                        <div class="cf-card-desc">Sistema de pedidos internos y gestión de compras entre áreas y sucursales.</div>
+                        <div class="cf-card-cta">Abrir →</div>
+                    </a>
+                </div>
             </div>
-            <div class="mlanding-card-title">Insumos</div>
-            <div class="mlanding-card-desc">Catálogo global de materias primas y sus costos.</div>
-            <div class="mlanding-card-cta">Abrir →</div>
-        </a>
-        <a href="inventarios.html" class="mlanding-card">
-            <div class="mlanding-card-header">
-                <div class="mlanding-card-icon">📦</div>
-                <span class="mlanding-badge-active">Activo</span>
-            </div>
-            <div class="mlanding-card-title">Inventarios</div>
-            <div class="mlanding-card-desc">Control de stock, entradas, salidas y movimientos.</div>
-            <div class="mlanding-card-cta">Abrir →</div>
-        </a>
-        <a href="requisiciones.html" class="mlanding-card">
-            <div class="mlanding-card-header">
-                <div class="mlanding-card-icon">📝</div>
-                <span class="mlanding-badge-active">Activo</span>
-            </div>
-            <div class="mlanding-card-title">Requisiciones</div>
-            <div class="mlanding-card-desc">Sistema de pedidos internos y gestión de compras.</div>
-            <div class="mlanding-card-cta">Abrir →</div>
-        </a>
+
+        </div>
     </div>
 </div>
 
