@@ -116,4 +116,28 @@
         var r = await _supabase.storage.from('evidencias').remove([path]);
         if (r.error) window._sbToastError('borrar foto: ' + r.error.message);
     };
+
+    // sbSubirFotoBase64(carpeta, dataUrl [, scope]) → Promise<url|null>
+    // Sube una foto base64 (data:) a Storage y devuelve su URL pública.
+    // Sirve para sacar las imágenes de adentro del dato (JSONB) → URLs ligeras.
+    window.sbSubirFotoBase64 = async function (carpeta, dataUrl, scope) {
+        if (!dataUrl || typeof dataUrl !== 'string' || dataUrl.indexOf('data:') !== 0) return null;
+        if (typeof _supabase === 'undefined') return null;
+        var blob;
+        try {
+            var parts = dataUrl.split(',');
+            var mime  = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+            var bin   = atob(parts[1]);
+            var arr   = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            blob = new Blob([arr], { type: mime });
+        } catch (e) { return null; }
+        var id    = scope || _negId() || 'catalogo';
+        var base  = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        var path  = id + '/' + carpeta + '/' + base + '.jpg';
+        var r = await _supabase.storage.from('evidencias').upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: false });
+        if (r.error) { window._sbToastError && window._sbToastError('subir foto: ' + r.error.message); return null; }
+        var pub = _supabase.storage.from('evidencias').getPublicUrl(path);
+        return pub.data.publicUrl;
+    };
 })();

@@ -2689,7 +2689,7 @@
        return '<div style="display:grid;grid-template-columns:repeat('+cards.length+',1fr);gap:8px;margin-bottom:10px">' + cards.join('') + '</div>';
    }
 
-   function guardarInsumo() {
+   async function guardarInsumo() {
        const nombre = document.getElementById('ins-nombre').value.trim();
        if (!nombre) { alert('El nombre es obligatorio'); return; }
    
@@ -2733,7 +2733,21 @@
            foto:         fotoInsumoBase64 || fotoAnterior,
            presentaciones: presentacionesTemp
        };
-   
+
+       // #2 Storage: si la foto es base64, súbela a Storage y guarda solo la URL
+       // (saca la imagen de adentro del dato → registros ligeros). Si falla, se
+       // queda el base64 ya comprimido (#1) como respaldo.
+       if (insumo.foto && insumo.foto.indexOf('data:') === 0 && window.sbSubirFotoBase64) {
+           var _btnG = document.querySelector('[onclick="guardarInsumo()"]');
+           var _btnTxt = _btnG ? _btnG.textContent : '';
+           if (_btnG) { _btnG.textContent = 'Subiendo foto…'; _btnG.disabled = true; }
+           try {
+               var _url = await sbSubirFotoBase64('insumos', insumo.foto, getNegocioActivo() || 'catalogo');
+               if (_url) insumo.foto = _url;
+           } catch (e) { /* fallback: base64 comprimido */ }
+           if (_btnG) { _btnG.textContent = _btnTxt; _btnG.disabled = false; }
+       }
+
        const lista = getInsumos();
        if (editandoId) {
            const i = lista.findIndex(x => x.id === editandoId);
