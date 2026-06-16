@@ -3214,5 +3214,11 @@
            _cargarInsumosDeSupabase();
        }
    }
-   
-   init();
+
+   // OJO: insumos.js puede cargar ANTES que security.js (etx) y otros helpers.
+   // Si arrancamos init() de inmediato, cargarFiltros() usa etx() indefinido y
+   // aborta init() antes de pintar la vista. Esperar a DOMContentLoaded garantiza
+   // que todos los <script> síncronos (security/ctx-bar/etaax-db/supabase) ya
+   // cargaron. En el admin (carga dinámica) readyState ya es 'complete' → corre ya.
+   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+   else init();
