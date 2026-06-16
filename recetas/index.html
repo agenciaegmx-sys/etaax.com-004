@@ -317,7 +317,7 @@
 </div>
 
 <!-- ══ MÓDULO RECETAS — LANDING ══════════════════════════════ -->
-<div id="moduloLanding" style="display:none;position:fixed;top:48px;left:0;right:0;bottom:0;
+<div id="moduloLanding" style="position:fixed;top:48px;left:0;right:0;bottom:0;
     z-index:80;overflow-y:auto;
     background-image:linear-gradient(rgba(30,80,220,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(30,80,220,.07) 1px,transparent 1px);
     background-size:60px 60px;background-color:var(--bg)">
@@ -795,12 +795,16 @@ function volverALanding() {
 
 // Ocultar nav al cargar — o ir directo a Escandallos si viene de sub-página
 document.addEventListener('DOMContentLoaded', function() {
-    // Se eliminó el selector intermedio: entrar SIEMPRE directo a Escandallos.
-    // Insumos/Inventarios/Requisiciones siguen accesibles desde el menú lateral.
+    var nav = document.getElementById('nav');
+    // Por default se muestra la navegación de submódulos (Escandallos / Insumos /
+    // Inventarios / Requisiciones). Con ?escandallos=1 se entra directo al editor.
     if (new URLSearchParams(window.location.search).get('escandallos') === '1') {
         history.replaceState(null, '', window.location.pathname);
+        entrarEscandallos();
+    } else {
+        nav.style.display = 'none';
+        document.getElementById('mainContent').classList.add('expandido');
     }
-    entrarEscandallos();
     // Cargar recetas desde Supabase
     if (typeof _sbInitRecetas === 'function') _sbInitRecetas();
 });
