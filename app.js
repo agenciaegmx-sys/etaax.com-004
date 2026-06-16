@@ -127,7 +127,7 @@ function leerCamposExtra(tipo) {
     }
 }
 
-function guardarReceta() {
+async function guardarReceta() {
     const nombre = document.getElementById('nombreReceta').value.trim();
     if (!nombre) { alert('Agrega un nombre a la receta antes de guardar'); return; }
 
@@ -150,6 +150,25 @@ function guardarReceta() {
         camposExtra:  typeof leerCamposExtra === 'function' ? leerCamposExtra(recetaTipoActual||'alimentos') : {},
         fechaGuardado: new Date().toISOString(),
     };
+
+    // Subir fotos base64 a Storage y dejar solo URLs (evita el payload gigante
+    // que hacía fallar el upsert → la receta se "perdía" al recargar).
+    if (window.sbSubirFotoBase64 && receta.fotos && receta.fotos.length) {
+        var _btnSv = document.getElementById('btnGuardarReceta');
+        var _btnSvTxt = _btnSv ? _btnSv.textContent : '';
+        if (_btnSv) { _btnSv.textContent = 'Subiendo fotos…'; _btnSv.disabled = true; }
+        var urls = [];
+        for (var _i = 0; _i < receta.fotos.length; _i++) {
+            var _f = receta.fotos[_i];
+            if (_f && _f.indexOf('data:') === 0) {
+                var _u = await sbSubirFotoBase64('recetas', _f, getNegocioActivo());
+                urls.push(_u || _f);
+            } else if (_f) { urls.push(_f); }
+        }
+        receta.fotos = urls;
+        receta.foto  = urls[0] || '';
+        if (_btnSv) { _btnSv.textContent = _btnSvTxt; _btnSv.disabled = false; }
+    }
 
     const lista = getRecetas();
     const idx   = lista.findIndex(r => r.id === receta.id);
@@ -1284,19 +1303,41 @@ function cargarFotos(input) {
     if (!files.length) return;
     let pendientes = files.length;
     files.forEach(function(file) {
-        var reader = new FileReader();
-        reader.onload = function(e) {
-            fotosReceta.push(e.target.result);
+        // Antes se guardaba la foto CRUDA como base64 (varios MB). Eso hacía que
+        // el upsert de la receta a Supabase fallara (payload enorme) → la receta
+        // se "perdía" al recargar. Ahora se redimensiona y comprime (~50 KB).
+        _comprimirFotoReceta(file, 512, 0.7, function(b64) {
+            if (b64) fotosReceta.push(b64);
             pendientes--;
             if (pendientes === 0) {
-                fotoIndexActual = fotosReceta.length - files.length; // ir a la primera nueva
+                fotoIndexActual = Math.max(0, fotosReceta.length - files.length);
                 renderCarrusel();
                 if (typeof guardarEnHistorial === 'function') guardarEnHistorial();
             }
-        };
-        reader.readAsDataURL(file);
+        });
     });
     input.value = ''; // reset para poder volver a subir mismos archivos
+}
+
+function _comprimirFotoReceta(file, maxPx, calidad, cb) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        var img = new Image();
+        img.onload = function() {
+            var w = img.width, h = img.height, M = maxPx || 512;
+            if (w > h) { if (w > M) { h = Math.round(h * M / w); w = M; } }
+            else        { if (h > M) { w = Math.round(w * M / h); h = M; } }
+            var c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            c.getContext('2d').drawImage(img, 0, 0, w, h);
+            try { cb(c.toDataURL('image/jpeg', calidad || 0.7)); }
+            catch (err) { cb(e.target.result); }
+        };
+        img.onerror = function() { cb(e.target.result); };
+        img.src = e.target.result;
+    };
+    reader.onerror = function() { cb(''); };
+    reader.readAsDataURL(file);
 }
 
 function renderCarrusel() {
