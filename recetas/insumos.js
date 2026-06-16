@@ -1597,15 +1597,37 @@
    function cargarFotoInsumo(input) {
        const file = input.files[0];
        if (!file) return;
-       const reader = new FileReader();
-       reader.onload = e => {
-           fotoInsumoBase64 = e.target.result;
+       // Antes se guardaba la foto CRUDA como base64 (varios MB dentro del dato).
+       // Ahora se redimensiona y comprime: una foto de celular pasa de ~4 MB a ~50 KB.
+       _comprimirFotoInsumo(file, 512, 0.7, function(b64) {
+           if (!b64) return;
+           fotoInsumoBase64 = b64;
            const img = document.getElementById('insFotoImg');
            const ph  = document.getElementById('insFotoPlaceholder');
-           img.src           = e.target.result;
+           img.src           = b64;
            img.style.display = 'block';
            ph.style.display  = 'none';
+       });
+   }
+
+   function _comprimirFotoInsumo(file, maxPx, calidad, cb) {
+       var reader = new FileReader();
+       reader.onload = function(e) {
+           var img = new Image();
+           img.onload = function() {
+               var w = img.width, h = img.height, M = maxPx || 512;
+               if (w > h) { if (w > M) { h = Math.round(h * M / w); w = M; } }
+               else        { if (h > M) { w = Math.round(w * M / h); h = M; } }
+               var c = document.createElement('canvas');
+               c.width = w; c.height = h;
+               c.getContext('2d').drawImage(img, 0, 0, w, h);
+               try { cb(c.toDataURL('image/jpeg', calidad || 0.7)); }
+               catch (err) { cb(e.target.result); } // fallback: original si el canvas falla
+           };
+           img.onerror = function() { cb(e.target.result); };
+           img.src = e.target.result;
        };
+       reader.onerror = function() { cb(''); };
        reader.readAsDataURL(file);
    }
    
