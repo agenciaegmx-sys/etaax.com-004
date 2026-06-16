@@ -51,13 +51,26 @@
        });
        try { localStorage.setItem(_sk('insumos'), JSON.stringify(paraLocal)); } catch(e) {}
        // Supabase: datos completos con fotos (JSONB no tiene límite práctico)
+       _insumosSyncPend = { negId: negId, data: data };
        clearTimeout(_insumosSyncTimer);
        _insumosSyncTimer = setTimeout(function() {
+           _insumosSyncPend = null;
            _sincronizarInsumosSupabase(negId, data).catch(function(e) {
                console.warn('[setInsumos] sync error:', e);
            });
-       }, 2000);
+       }, 1200);
    }
+
+   // Si quedó un sync pendiente al navegar de módulo, dispararlo ya (best-effort).
+   // El merge en la carga recupera lo que no alcance a subir aquí.
+   var _insumosSyncPend = null;
+   window.addEventListener('pagehide', function() {
+       if (_insumosSyncPend) {
+           clearTimeout(_insumosSyncTimer);
+           var p = _insumosSyncPend; _insumosSyncPend = null;
+           try { _sincronizarInsumosSupabase(p.negId, p.data); } catch(e) {}
+       }
+   });
 
    async function _cargarInsumosDeSupabase() {
        var negId = getNegocioActivo();
@@ -68,29 +81,32 @@
                .eq('negocio_id', negId)
                .limit(5000);
            if (res.error || !res.data) return;
-           var lista = res.data.map(function(r){ return r.datos; }).filter(Boolean);
+           var remote = res.data.map(function(r){ return r.datos; }).filter(Boolean);
            // Dedup defensivo por id (por si quedaron duplicados de versiones previas)
            var _vistos = {}, _dedup = [];
-           lista.forEach(function(x){ if (x && x.id && !_vistos[x.id]) { _vistos[x.id] = 1; _dedup.push(x); } });
-           lista = _dedup;
-           if (lista.length > 0) {
-               // Supabase tiene datos → actualizar caché (con fotos) y re-render
-               _insumosCache      = lista;
-               _insumosCacheNegId = negId;
-               // localStorage: versión sin fotos base64
-               var sinFotos = lista.map(function(ins) {
-                   if (!ins.foto || !ins.foto.startsWith('data:')) return ins;
-                   var d = Object.assign({}, ins); d.foto = ''; return d;
-               });
-               try { localStorage.setItem(_sk('insumos'), JSON.stringify(sinFotos)); } catch(e) {}
-               renderStats(); cargarFiltros(); setVistaInsumos(vistaInsumos);
-           } else {
-               // Supabase vacío → migrar datos locales a Supabase
-               var local = _insumosCache || [];
-               if (local.length > 0) {
-                   _sincronizarInsumosSupabase(negId, local).catch(function(){});
-               }
-           }
+           remote.forEach(function(x){ if (x && x.id && !_vistos[x.id]) { _vistos[x.id] = 1; _dedup.push(x); } });
+           remote = _dedup;
+
+           // MERGE: conservar las adiciones locales que aún no sincronizaron
+           // (ej. agregar del catálogo y navegar de módulo antes del sync).
+           // Antes esto sobreescribía con lo remoto y "perdía" los recién agregados.
+           var local = _insumosCache;
+           if (local === null) { try { local = JSON.parse(_skGet('insumos')) || []; } catch(e) { local = []; } }
+           var soloLocal = (local || []).filter(function(x){ return x && x.id && !_vistos[x.id]; });
+           var lista = remote.concat(soloLocal);
+
+           _insumosCache      = lista;
+           _insumosCacheNegId = negId;
+           // localStorage: versión sin fotos base64
+           var sinFotos = lista.map(function(ins) {
+               if (!ins.foto || !ins.foto.startsWith('data:')) return ins;
+               var d = Object.assign({}, ins); d.foto = ''; return d;
+           });
+           try { localStorage.setItem(_sk('insumos'), JSON.stringify(sinFotos)); } catch(e) {}
+           renderStats(); cargarFiltros(); setVistaInsumos(vistaInsumos);
+
+           // Empujar a Supabase lo que solo existía localmente (no sincronizado)
+           if (soloLocal.length) _sincronizarInsumosSupabase(negId, soloLocal).catch(function(){});
        } catch(e) { console.warn('[_cargarInsumosDeSupabase]', e); }
    }
 

@@ -768,13 +768,13 @@ async function _cgCargar() {
     // 2. Fetch primeros 30 → render inmediato (< 300 ms)
     document.getElementById('cgTotal').textContent = 'Cargando…';
     // Las consultas RLS requieren sesión autenticada. La sesión vive en
-    // sessionStorage (por pestaña): si abriste esta página en una pestaña
-    // sin pasar por el inicio, no hay sesión → catálogo vacío.
+    // localStorage (compartida entre pestañas): si no hay sesión válida la
+    // lectura del catálogo regresa vacía.
     try {
         var _ses = await _supabase.auth.getSession();
         if (!_ses.data || !_ses.data.session) {
-            _cgError('Sesión no activa en esta pestaña',
-                'El catálogo requiere tu sesión. Vuelve a entrar al negocio desde el inicio en esta misma pestaña.');
+            _cgError('Sesión no activa',
+                'El catálogo requiere tu sesión. Cierra sesión y vuelve a entrar desde el inicio (el manejo de sesión cambió y hay que iniciar de nuevo una vez).');
             return;
         }
     } catch(e) {}
@@ -788,6 +788,13 @@ async function _cgCargar() {
         return;
     }
     var primeros = (resFirst.data || []).map(function(r){ return r.datos; }).filter(Boolean);
+    // Hay sesión pero 0 filas: el catálogo global no está vacío, así que es
+    // un tema de permisos (RLS) o de sesión sin propagar.
+    if (primeros.length === 0) {
+        _cgError('El catálogo respondió vacío',
+            'Tu sesión está activa pero no se recibió ningún insumo del catálogo global. Suele ser permisos (RLS) o una sesión que no se aplicó: cierra sesión y vuelve a entrar desde el inicio.');
+        return;
+    }
     _cgTodos   = primeros;
     _cgCargado = true;
     _cgPoblarFamilias(primeros);
