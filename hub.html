@@ -664,7 +664,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 
     <!-- Módulos -->
     <div class="hub-grid">
-      <a href="recetas/landing.html" class="hub-card">
+      <a href="recetas/index.html" class="hub-card">
         <div class="card-header">
           <div class="card-icon">🗄️</div>
           <span class="card-status status-active">Activo</span>
@@ -2071,7 +2071,7 @@ function _showModulos(neg) {
     var permsStaff = (_sesion && _sesion.type === 'staff' && neg.id && window.etaaxPermisosRol)
         ? etaaxPermisosRol(neg.id, _sesion.rol || 'otro') : null;
     var CARD_KEYS = {
-        'recetas/landing.html':      ['recetas','insumos','inventarios','requisiciones'],
+        'recetas/index.html':        ['recetas','insumos','inventarios','requisiciones'],
         'financiero/index.html':     ['financiero'],
         'consultoria/index.html':    ['financiero'],
         'administrativo/index.html': ['ventas','ventas_productos','gastos','menu','proveedores','clientes','staff','permisos']
