@@ -200,7 +200,7 @@
    }
    
    // ── Toggle vista lista / cuadrícula ───────────────────────────
-   var vistaInsumos = 'grid';
+   var vistaInsumos = 'lista'; // lista por default: más ligera que galería (imágenes)
 
    function setVistaInsumos(modo) {
        vistaInsumos = modo;
@@ -465,7 +465,7 @@
                <td>
                    <div style="display:flex;align-items:center;gap:10px">
                        ${ins.foto
-                           ? `<img src="${etx(ins.foto)}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;border:1px solid var(--border)">`
+                           ? `<img src="${etx(ins.foto)}" loading="lazy" decoding="async" style="width:36px;height:36px;border-radius:6px;object-fit:cover;border:1px solid var(--border)">`
                            : `<div style="width:36px;height:36px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px">📦</div>`
                        }
                        <div>
@@ -527,7 +527,7 @@
            var nPres    = pres.length;
 
            var fotoHTML = ins.foto
-               ? '<img src="' + etx(ins.foto) + '" alt="">'
+               ? '<img src="' + etx(ins.foto) + '" alt="" loading="lazy" decoding="async">'
                : '<span class="card-emoji">' + emoji + '</span>';
 
            var tipoBadge = ins.categoria
