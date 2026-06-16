@@ -786,17 +786,22 @@ async function _cgCargar() {
             return;
         }
     } catch(e) {}
-    var FIRST = 30;
+    var FIRST = 15;
     var resFirst = await _supabase.from('catalogo_insumos')
         .select('datos')
         .order('created_at', { ascending: true })
         .range(0, FIRST - 1);
     if (resFirst.error) {
-        _cgError('No se pudo cargar el catálogo', resFirst.error.message);
+        // El primer lote falló (suele ser una foto base64 enorme). No matar la
+        // carga: arrancar el background resiliente desde 0 (reduce lote y salta
+        // registros rotos). Si fuera RLS, daría 0 filas SIN error (caso de abajo).
+        console.warn('[cg] primer lote falló:', resFirst.error.message, '— carga resiliente desde 0');
+        _cgCargado = true;
+        _cgBgLoad(0);
         return;
     }
     var primeros = (resFirst.data || []).map(function(r){ return r.datos; }).filter(Boolean);
-    // Hay sesión pero 0 filas: el catálogo global no está vacío, así que es
+    // Hay sesión pero 0 filas SIN error: el catálogo no está vacío, así que es
     // un tema de permisos (RLS) o de sesión sin propagar.
     if (primeros.length === 0) {
         _cgError('El catálogo respondió vacío',
@@ -814,20 +819,34 @@ async function _cgCargar() {
 
 async function _cgBgLoad(startFrom) {
     var all = _cgTodos.slice();
-    var BATCH = 500, from = startFrom;
-    while (true) {
+    var from = startFrom;
+    var BATCH = 150;          // lotes chicos: las fotos base64 pesan mucho
+    var guard = 0;
+    while (guard++ < 5000) {
         var res = await _supabase.from('catalogo_insumos')
             .select('datos')
             .order('created_at', { ascending: true })
             .range(from, from + BATCH - 1);
+        if (res.error) {
+            // El lote falló (suele ser payload demasiado grande por una foto
+            // base64 enorme). Reintentar más chico; si un solo registro no se
+            // puede traer, saltarlo para NO cortar el resto del catálogo.
+            if (BATCH > 1) { BATCH = Math.max(1, Math.floor(BATCH / 2)); continue; }
+            console.warn('[cg] registro problemático en offset', from, '·', res.error.message, '— se omite');
+            from += 1; BATCH = 150;
+            continue;
+        }
         var chunk = (res.data || []).map(function(r){ return r.datos; }).filter(Boolean);
-        if (!chunk.length) break;
+        if (!chunk.length) break;          // ya no hay más registros
         all = all.concat(chunk);
         _cgTodos = all;
         var elTotal = document.getElementById('cgTotal');
         if (elTotal) elTotal.textContent = all.length + ' insumos · cargando…';
-        if (chunk.length < BATCH) break;
-        from += BATCH;
+        // Refresca la búsqueda en vivo: si buscas algo que está en un lote que
+        // aún no llegaba, aparece en cuanto carga (ya no hay que esperar todo).
+        if ((document.getElementById('cgSearch').value || '').trim()) cgFiltrar();
+        from += chunk.length;
+        BATCH = 150;                        // restaurar tras un lote exitoso
     }
     _cgCompleto = true;
     _cgPoblarFamilias(_cgTodos);
