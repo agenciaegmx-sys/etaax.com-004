@@ -1672,6 +1672,14 @@ function guardarAjustesSucursal() {
         var sucs = _getSucursales(_ajNegId);
         var idx  = sucs.findIndex(function(s){ return s.id === _ajSucId; });
         if (idx !== -1) { sucs[idx].nombre = nombre; _setSucursales(_ajNegId, sucs); }
+        // Reflejar de inmediato si es la sucursal activa (ctx-bar de los módulos)
+        try {
+            if (localStorage.getItem('etaax_negocio_activo') === _ajNegId &&
+                localStorage.getItem('etaax_sucursal_activa') === _ajSucId) {
+                var _ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null');
+                if (_ctx) { _ctx.sucNombre = nombre; localStorage.setItem('etaax_ctx', JSON.stringify(_ctx)); }
+            }
+        } catch (e) {}
     }
     _setSucCfg(_ajSucId, _ajNegId, {
         color:          _ajColor,

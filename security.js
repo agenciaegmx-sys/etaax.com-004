@@ -15,6 +15,14 @@
         _etaaxWipeCache();
         localStorage.removeItem('etaax_negocio_activo');
         localStorage.removeItem('etaax_ctx');
+        // La sesión de Supabase vive en localStorage: cerrarla de verdad.
+        try { if (window._supabase) _supabase.auth.signOut(); } catch (e) {}
+        try {
+            for (var i = localStorage.length - 1; i >= 0; i--) {
+                var k = localStorage.key(i);
+                if (k && k.indexOf('sb-') === 0) localStorage.removeItem(k);
+            }
+        } catch (e) {}
         sessionStorage.clear();
         window.location.href = '/hub.html?salir=1&razon=inactividad';
     }
@@ -96,6 +104,8 @@ window._etaaxWipeCache = function () {
         if (k === 'etaax_negocios' || k === 'etaax_theme') continue;
         if (/_staff$/.test(k)) continue;
         if (/_owner_email$/.test(k)) continue; // lo usa admin-guard en sesiones staff
+        if (/_sucursales$/.test(k)) continue;  // lista de sucursales (nombre matriz, etc.)
+        if (/_suc_/.test(k)) continue;         // config y logo por sucursal (etaax_<neg>_suc_<id>[_logo])
         keys.push(k);
     }
     keys.forEach(function (k) { localStorage.removeItem(k); });
