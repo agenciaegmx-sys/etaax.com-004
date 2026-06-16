@@ -136,6 +136,7 @@
                 <span class="brand-title">Insumos</span>
             </div>
             <div style="display:flex;gap:10px">
+                <button class="btn-vista" id="btnMigrarFotos" onclick="migrarFotosStorage()" title="Mueve las fotos base64 existentes a Storage (URLs ligeras)">🗜️ Optimizar fotos</button>
                 <button class="btn-vista" onclick="abrirImportar()">⬆ Importar CSV</button>
                 <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)" onclick="abrirSelectorCategoria()">+ Agregar insumo</button>
             </div>
@@ -564,6 +565,35 @@ async function _syncCatalogToSupabase(data) {
     for (var i = 0; i < records.length; i += BATCH) {
         await _supabase.from('catalogo_insumos').upsert(records.slice(i, i + BATCH));
     }
+}
+
+/* ── Migración #4: fotos base64 existentes → Storage (URLs) ──
+   Recorre el catálogo, sube cada foto base64 a Storage y deja solo la URL.
+   Idempotente: salta las que ya son URL. Procesa y persiste por lotes. */
+async function migrarFotosStorage() {
+    if (typeof sbSubirFotoBase64 !== 'function') { alert('Falta etaax-db.js (sbSubirFotoBase64).'); return; }
+    if (!_catalogoMem || !_catalogoMem.length) { alert('El catálogo aún no termina de cargar.'); return; }
+    var pend = _catalogoMem.filter(function(x){ return x.foto && x.foto.indexOf('data:') === 0; });
+    if (!pend.length) { alert('✓ No hay fotos base64 por migrar. El catálogo ya usa Storage.'); return; }
+    if (!confirm('Se moverán ' + pend.length + ' fotos a Storage (URLs ligeras). Puede tardar varios minutos. ¿Continuar?')) return;
+
+    var btn = document.getElementById('btnMigrarFotos');
+    var ok = 0, fail = 0, BATCH = 20;
+    for (var i = 0; i < pend.length; i += BATCH) {
+        var grupo = pend.slice(i, i + BATCH);
+        for (var j = 0; j < grupo.length; j++) {
+            var url = await sbSubirFotoBase64('insumos', grupo[j].foto, 'catalogo');
+            if (url) { grupo[j].foto = url; ok++; } else { fail++; }
+        }
+        // Persistir este grupo (datos ya livianos: la foto es URL)
+        var recs = grupo.map(function(ins){ return { id: ins.id, datos: ins }; });
+        var up = await _supabase.from('catalogo_insumos').upsert(recs);
+        if (up.error) console.warn('[migra] upsert:', up.error.message);
+        if (btn) btn.textContent = '🗜️ Migrando… ' + Math.min(i + BATCH, pend.length) + '/' + pend.length;
+    }
+    if (btn) btn.textContent = '🗜️ Optimizar fotos';
+    alert('Listo. ' + ok + ' fotos migradas a Storage' + (fail ? ' · ' + fail + ' fallaron (se conservan en base64)' : '') + '.');
+    if (typeof init === 'function') init();
 }
 
 /* ── Carga dinámica de insumos.js ──────────────────────────── */
