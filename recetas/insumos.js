@@ -69,6 +69,10 @@
                .limit(5000);
            if (res.error || !res.data) return;
            var lista = res.data.map(function(r){ return r.datos; }).filter(Boolean);
+           // Dedup defensivo por id (por si quedaron duplicados de versiones previas)
+           var _vistos = {}, _dedup = [];
+           lista.forEach(function(x){ if (x && x.id && !_vistos[x.id]) { _vistos[x.id] = 1; _dedup.push(x); } });
+           lista = _dedup;
            if (lista.length > 0) {
                // Supabase tiene datos → actualizar caché (con fotos) y re-render
                _insumosCache      = lista;
@@ -93,25 +97,26 @@
    async function _sincronizarInsumosSupabase(negId, data) {
        if (!negId || typeof _supabase === 'undefined') return;
        var BATCH = 100;
-       // IDs actuales en Supabase
-       var resIds = await _supabase.from('negocio_insumos')
-           .select('insumo_id').eq('negocio_id', negId);
-       var supaIds  = (resIds.data || []).map(function(r){ return r.insumo_id; });
-       var localIds = data.map(function(ins){ return ins.id; });
-       // Eliminar los que ya no existen localmente
-       var toDelete = supaIds.filter(function(id){ return !localIds.includes(id); });
-       for (var di = 0; di < toDelete.length; di += BATCH) {
-           await _supabase.from('negocio_insumos')
-               .delete().eq('negocio_id', negId)
-               .in('insumo_id', toDelete.slice(di, di + BATCH));
-       }
-       // Upsert con datos completos — Supabase JSONB aguanta fotos base64
+       // SOLO upsert (PK negocio_id+insumo_id) — NUNCA borra: las eliminaciones
+       // son explícitas vía _borrarInsumosSupabase. Así, agregar/guardar con un
+       // caché incompleto no puede borrar los demás insumos del negocio.
        var records = data.map(function(ins) {
            return { negocio_id: negId, insumo_id: ins.id, datos: ins };
        });
        for (var i = 0; i < records.length; i += BATCH) {
            var rUp = await _supabase.from('negocio_insumos').upsert(records.slice(i, i + BATCH));
            if (rUp.error) { _sbToastError('sync negocio_insumos: ' + rUp.error.message); break; }
+       }
+   }
+
+   // Borrado explícito en Supabase (las eliminaciones ya no dependen del diff)
+   async function _borrarInsumosSupabase(negId, ids) {
+       if (!negId || typeof _supabase === 'undefined' || !ids || !ids.length) return;
+       var BATCH = 100;
+       for (var i = 0; i < ids.length; i += BATCH) {
+           var r = await _supabase.from('negocio_insumos')
+               .delete().eq('negocio_id', negId).in('insumo_id', ids.slice(i, i + BATCH));
+           if (r.error) { _sbToastError('eliminar insumo: ' + r.error.message); break; }
        }
    }
    
@@ -184,23 +189,27 @@
        vistaInsumos = modo;
        var contLista = document.getElementById('contenedorLista');
        var contGrid  = document.getElementById('contenedorGrid');
-       var btnLista  = document.getElementById('btnVistaLista');
-       var btnGrid   = document.getElementById('btnVistaGrid');
-       if (modo === 'lista') {
-           contLista.style.display = '';
-           contGrid.style.display  = 'none';
-           btnLista.style.background = 'var(--accent)';
-           btnLista.style.color      = '#0f0e0c';
-           btnGrid.style.background  = 'transparent';
-           btnGrid.style.color       = 'var(--text-muted)';
-       } else {
-           contLista.style.display = 'none';
-           contGrid.style.display  = '';
-           btnGrid.style.background  = 'var(--accent)';
-           btnGrid.style.color       = '#0f0e0c';
-           btnLista.style.background = 'transparent';
-           btnLista.style.color      = 'var(--text-muted)';
+       var contCosteo= document.getElementById('contenedorCosteo');
+       var pgBar     = document.getElementById('pgBar');
+       function _off(b){ if(b){ b.style.background='transparent'; b.style.color='var(--text-muted)'; } }
+       function _on(b){ if(b){ b.style.background='var(--accent)'; b.style.color='#0f0e0c'; } }
+       if (contLista)  contLista.style.display  = 'none';
+       if (contGrid)   contGrid.style.display   = 'none';
+       if (contCosteo) contCosteo.style.display = 'none';
+       _off(document.getElementById('btnVistaLista'));
+       _off(document.getElementById('btnVistaGrid'));
+       _off(document.getElementById('btnVistaCosteo'));
+
+       if (modo === 'costeo') {
+           if (contCosteo) contCosteo.style.display = '';
+           if (pgBar) pgBar.style.display = 'none';
+           _on(document.getElementById('btnVistaCosteo'));
+           renderCosteoBebidas();
+           return;
        }
+       if (pgBar) pgBar.style.display = '';
+       if (modo === 'lista') { if (contLista) contLista.style.display = ''; _on(document.getElementById('btnVistaLista')); }
+       else                  { if (contGrid)  contGrid.style.display  = ''; _on(document.getElementById('btnVistaGrid')); }
        filtrar();
    }
 
@@ -244,6 +253,131 @@
        _renderPagina();
        var cont = document.getElementById('contenedorTabla') || document.getElementById('contenedorGrid');
        if (cont) cont.scrollTop = 0;
+   }
+
+   /* ════════════════════════════════════════════════════════════
+      VISTA COSTEO DE BEBIDAS — tabla tipo carátula de precios.
+      Destilados/Licores/Vinos: copa + botella. Cervezas/Refrescos: pieza.
+      Costo = 0%; utilidad y múltiplo sobre el costo. Usa la 1ª presentación.
+      ════════════════════════════════════════════════════════════ */
+   function _grupoIns(ins){ return ins.subcategoria || ins.categoria || ins.familia || '—'; }
+   function _costoPorMLp(p){
+       var cu = parseFloat(p.costoUnitario)||0, um = (p.umCosto||'LT').toUpperCase();
+       if (um==='LT') return cu/1000;
+       if (um==='ML') return cu;
+       var cp = parseFloat(p.costoPieza||p.precio)||0, cml = toML(p.contNeto, p.umContenido||'ML');
+       return cml>0 ? cp/cml : 0;
+   }
+   function _cMoney(v){ return v>0 ? fmtMXN(v) : '<span style="color:var(--text-dim)">—</span>'; }
+   function _cUtil(precio, costo){
+       if (!(precio>0) || !(costo>0)) return '<span style="color:var(--text-dim)">—</span>';
+       var pct=(precio-costo)/costo*100, mult=precio/costo, col=pct>=0?'var(--green)':'var(--red)';
+       return '<span style="color:'+col+';font-weight:600">'+(pct>=0?'+':'')+pct.toFixed(0)+'%</span>'+
+              '<span style="color:var(--text-dim);font-size:10px"> · '+mult.toFixed(1)+'x</span>';
+   }
+   var _CTH  = 'padding:8px 10px;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);text-align:right;border-bottom:1px solid var(--border);white-space:nowrap';
+   var _CTHL = _CTH + ';text-align:left';
+   var _CTD  = 'padding:7px 10px;font-size:12px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap';
+   var _CTDL = _CTD + ';text-align:left;color:var(--text)';
+
+   function _costeoSecTitle(txt, n){
+       return '<div style="display:flex;align-items:center;gap:8px;padding:18px 16px 8px">'+
+           '<span style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--accent)">'+txt+'</span>'+
+           '<span class="pill pill-amber" style="font-size:10px">'+n+'</span></div>';
+   }
+   function _unitTxt(p){
+       return (parseFloat(p.costoUnitario)||0)>0
+           ? fmtMXN(parseFloat(p.costoUnitario))+'<span style="color:var(--text-dim);font-size:10px">/'+(p.umCosto||'LT')+'</span>'
+           : '<span style="color:var(--text-dim)">—</span>';
+   }
+
+   function renderCosteoBebidas(){
+       var cont = document.getElementById('contenedorCosteo');
+       if (!cont) return;
+       var todos = getInsumos();
+       var byN = function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); };
+       var g1 = todos.filter(function(x){ return ['destilado','licor','vino'].indexOf(x.tipoInsumo)!==-1; }).sort(byN);
+       var g2 = todos.filter(function(x){ return ['cerveza','cerveza_barril','refresco'].indexOf(x.tipoInsumo)!==-1; }).sort(byN);
+       var html = '';
+       if (g1.length) html += _costeoTablaCopa(g1, todos);
+       if (g2.length) html += _costeoTablaPieza(g2);
+       if (!g1.length && !g2.length)
+           html = '<div class="empty-state" style="padding:48px 20px"><div class="empty-icon">🍸</div><div class="empty-title">Sin bebidas</div><div class="empty-desc">Registra destilados, licores, vinos, cervezas o refrescos para ver su costeo.</div></div>';
+       cont.innerHTML = html;
+       var cl = document.getElementById('countLabel'); if (cl) cl.textContent = (g1.length+g2.length)+' bebidas';
+   }
+
+   function _costeoTablaCopa(lista, todos){
+       var head = '<tr>'+
+           '<th style="'+_CTHL+'">Bebida</th><th style="'+_CTHL+'">Grupo</th>'+
+           '<th style="'+_CTH+'">Costo unit.</th><th style="'+_CTH+'">Costo/oz</th><th style="'+_CTH+'">Costo/copa</th>'+
+           '<th style="'+_CTH+'">Sug. copa</th><th style="'+_CTH+'">Carta copa</th><th style="'+_CTH+'">Utilidad copa</th>'+
+           '<th style="'+_CTH+';text-align:center">Mezcl.</th>'+
+           '<th style="'+_CTH+'">Costo bot.</th><th style="'+_CTH+'">Sug. bot.</th><th style="'+_CTH+'">Carta bot.</th><th style="'+_CTH+'">Utilidad bot.</th></tr>';
+       var rows = lista.map(function(ins){
+           var p = (ins.presentaciones||[])[0] || {};
+           var cml = _costoPorMLp(p);
+           var costoOz = cml*OZ_ML;
+           var copaCalc = calcCostoCopa(p.costoUnitario, p.umCosto||'LT', p.tamanoCopa, p.umTamanoCopa||'ML');
+           var costoCopa = copaCalc ? parseFloat(copaCalc.costoCopa)||0 : 0;
+           var fCopa = parseFloat(p.factorCopa)||3.3;
+           var sugCopa = costoCopa*fCopa;
+           var cartaCopa = parseFloat(String(p.precioCarta||'').replace(/,/g,''))||0;
+           var refIns = p.mezcladorId ? todos.find(function(x){return x.id===p.mezcladorId;}) : null;
+           var mezPiezas = parseFloat(p.mezcladores)||0;
+           var mezCost = (refIns&&mezPiezas>0) ? mezPiezas*_refrescoCostoPorPieza(refIns) : 0;
+           var costoTrago = costoCopa+mezCost;
+           var contML = toML(p.contNeto, p.umContenido||'ML');
+           var costoBot = cml*contML;
+           var fBot = parseFloat(p.factorBotella)||2.5;
+           var sugBot = costoBot*fBot;
+           var cartaBot = parseFloat(String(p.precioCartaBot||'').replace(/,/g,''))||0;
+           return '<tr>'+
+               '<td style="'+_CTDL+';font-weight:600">'+etx(ins.nombre)+'</td>'+
+               '<td style="'+_CTDL+';color:var(--text-muted)">'+etx(_grupoIns(ins))+'</td>'+
+               '<td style="'+_CTD+'">'+_unitTxt(p)+'</td>'+
+               '<td style="'+_CTD+'">'+_cMoney(costoOz)+'</td>'+
+               '<td style="'+_CTD+'">'+_cMoney(costoCopa)+'</td>'+
+               '<td style="'+_CTD+'">'+_cMoney(sugCopa)+'<span style="color:var(--text-dim);font-size:10px"> ×'+fCopa+'</span></td>'+
+               '<td style="'+_CTD+';color:var(--accent)">'+_cMoney(cartaCopa)+'</td>'+
+               '<td style="'+_CTD+'">'+_cUtil(cartaCopa, costoTrago)+'</td>'+
+               '<td style="'+_CTD+';text-align:center">'+(p.mezcladorId?'🥤':'<span style="color:var(--text-dim)">—</span>')+'</td>'+
+               '<td style="'+_CTD+'">'+_cMoney(costoBot)+'</td>'+
+               '<td style="'+_CTD+'">'+_cMoney(sugBot)+'<span style="color:var(--text-dim);font-size:10px"> ×'+fBot+'</span></td>'+
+               '<td style="'+_CTD+';color:var(--accent)">'+_cMoney(cartaBot)+'</td>'+
+               '<td style="'+_CTD+'">'+_cUtil(cartaBot, costoBot)+'</td>'+
+               '</tr>';
+       }).join('');
+       return _costeoSecTitle('🥃 Destilados · Licores · Vinos', lista.length)+
+           '<div class="tabla-wrap"><table style="min-width:1140px"><thead>'+head+'</thead><tbody>'+rows+'</tbody></table></div>';
+   }
+
+   function _costeoTablaPieza(lista){
+       var head = '<tr>'+
+           '<th style="'+_CTHL+'">Bebida</th><th style="'+_CTHL+'">Grupo</th>'+
+           '<th style="'+_CTH+'">Costo unit.</th><th style="'+_CTH+'">Costo/oz</th><th style="'+_CTH+'">Costo/pza</th>'+
+           '<th style="'+_CTH+'">Sug. pza</th><th style="'+_CTH+'">Carta</th><th style="'+_CTH+'">Utilidad</th></tr>';
+       var rows = lista.map(function(ins){
+           var p = (ins.presentaciones||[])[0] || {};
+           var cml = _costoPorMLp(p);
+           var costoOz = cml*OZ_ML;
+           var costoPieza = parseFloat(p.costoPieza) || (parseFloat(p.precio)||0);
+           var fP = parseFloat(p.factorPieza)||2.0;
+           var sugPza = costoPieza*fP;
+           var carta = parseFloat(String(p.precioCarta||'').replace(/,/g,''))||0;
+           return '<tr>'+
+               '<td style="'+_CTDL+';font-weight:600">'+etx(ins.nombre)+'</td>'+
+               '<td style="'+_CTDL+';color:var(--text-muted)">'+etx(_grupoIns(ins))+'</td>'+
+               '<td style="'+_CTD+'">'+_unitTxt(p)+'</td>'+
+               '<td style="'+_CTD+'">'+_cMoney(costoOz)+'</td>'+
+               '<td style="'+_CTD+'">'+_cMoney(costoPieza)+'</td>'+
+               '<td style="'+_CTD+'">'+_cMoney(sugPza)+'<span style="color:var(--text-dim);font-size:10px"> ×'+fP+'</span></td>'+
+               '<td style="'+_CTD+';color:var(--accent)">'+_cMoney(carta)+'</td>'+
+               '<td style="'+_CTD+'">'+_cUtil(carta, costoPieza)+'</td>'+
+               '</tr>';
+       }).join('');
+       return _costeoSecTitle('🍺 Cervezas · Refrescos y Sodas', lista.length)+
+           '<div class="tabla-wrap"><table style="min-width:780px"><thead>'+head+'</thead><tbody>'+rows+'</tbody></table></div>';
    }
 
    // ── Tabla ─────────────────────────────────────────────────────
@@ -524,6 +658,7 @@
        if (!ids.length) return;
        _pedirClaveAdmin('Eliminar ' + ids.length + ' insumo' + (ids.length !== 1 ? 's' : ''), function() {
            setInsumos(getInsumos().filter(function(x){ return !_seleccionados.has(x.id); }));
+           _borrarInsumosSupabase(getNegocioActivo(), ids).catch(function(e){ console.warn('[eliminar] ', e); });
            _seleccionados.clear();
            toggleModoSeleccion();
            init();
@@ -1388,6 +1523,7 @@
        if (!ins) return;
        _pedirClaveAdmin('Eliminar insumo "' + ins.nombre + '"', function() {
            setInsumos(getInsumos().filter(x => x.id !== id));
+           _borrarInsumosSupabase(getNegocioActivo(), [id]).catch(function(e){ console.warn('[eliminar] ', e); });
            init();
        });
    }

@@ -175,6 +175,10 @@
                             style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
                             border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
                             font-family:inherit;transition:all .2s">⊞ Galería</button>
+                        <button id="btnVistaCosteo" onclick="setVistaInsumos('costeo')"
+                            style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
+                            border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
+                            font-family:inherit;transition:all .2s" title="Costeo de bebidas">🍸 Costeo</button>
                         <button id="btnModoSeleccion" onclick="toggleModoSeleccion()"
                             style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
                             border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
@@ -216,6 +220,7 @@
                             <div class="empty-desc">Agrega el primer insumo al catálogo global</div>
                         </div>
                     </div>
+                    <div id="contenedorCosteo" style="display:none"></div>
                     <!-- Paginación -->
                     <div id="pgBar" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 16px;border-top:1px solid var(--border)"></div>
 

@@ -115,6 +115,10 @@
                             style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
                             border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
                             font-family:inherit;transition:all .2s" title="Vista lista">☰ Lista</button>
+                        <button id="btnVistaCosteo" onclick="setVistaInsumos('costeo')"
+                            style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
+                            border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
+                            font-family:inherit;transition:all .2s" title="Costeo de bebidas">🍸 Costeo</button>
                         <button id="btnModoSeleccion" onclick="toggleModoSeleccion()"
                             style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
                             border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
@@ -158,6 +162,8 @@
                             <div class="empty-desc">Agrega tu primer insumo o importa desde el Catálogo Global ETAAX</div>
                         </div>
                     </div>
+                    <!-- Vista costeo de bebidas -->
+                    <div id="contenedorCosteo" style="display:none"></div>
                     <!-- Paginación -->
                     <div id="pgBar" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 16px;border-top:1px solid var(--border)"></div>
 
@@ -761,11 +767,26 @@ async function _cgCargar() {
 
     // 2. Fetch primeros 30 → render inmediato (< 300 ms)
     document.getElementById('cgTotal').textContent = 'Cargando…';
+    // Las consultas RLS requieren sesión autenticada. La sesión vive en
+    // sessionStorage (por pestaña): si abriste esta página en una pestaña
+    // sin pasar por el inicio, no hay sesión → catálogo vacío.
+    try {
+        var _ses = await _supabase.auth.getSession();
+        if (!_ses.data || !_ses.data.session) {
+            _cgError('Sesión no activa en esta pestaña',
+                'El catálogo requiere tu sesión. Vuelve a entrar al negocio desde el inicio en esta misma pestaña.');
+            return;
+        }
+    } catch(e) {}
     var FIRST = 30;
     var resFirst = await _supabase.from('catalogo_insumos')
         .select('datos')
         .order('created_at', { ascending: true })
         .range(0, FIRST - 1);
+    if (resFirst.error) {
+        _cgError('No se pudo cargar el catálogo', resFirst.error.message);
+        return;
+    }
     var primeros = (resFirst.data || []).map(function(r){ return r.datos; }).filter(Boolean);
     _cgTodos   = primeros;
     _cgCargado = true;
@@ -882,6 +903,17 @@ function _cgRender() {
         ? '<button onclick="_cgIrPagina('+(_cgPagina+1)+')" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 14px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:12px">Siguiente →</button>'
         : '<button disabled style="opacity:.35;background:transparent;border:1px solid var(--border);color:var(--text-dim);padding:5px 14px;border-radius:6px;font-family:inherit;font-size:12px">Siguiente →</button>';
     pgBar.innerHTML = prev + '<span>Página ' + (_cgPagina+1) + ' de ' + totalPgs + '</span>' + next;
+}
+
+function _cgError(titulo, detalle) {
+    var t = document.getElementById('cgTotal'); if (t) t.textContent = '⚠ ' + titulo;
+    var l = document.getElementById('cgLista');
+    if (l) l.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:48px 20px;line-height:1.6">' +
+        '<div style="font-size:34px;margin-bottom:12px">🔒</div>' +
+        '<div style="color:var(--text);font-size:14px;margin-bottom:6px">' + etx(titulo) + '</div>' +
+        '<div style="font-size:12px;max-width:380px;margin:0 auto">' + etx(detalle || '') + '</div>' +
+        '<a href="../hub.html" style="display:inline-block;margin-top:16px;color:var(--accent);font-size:12px;text-decoration:none">↩ Ir al inicio</a>' +
+        '</div>';
 }
 
 function _cgIrPagina(n) {
