@@ -968,7 +968,7 @@ function _cgMarcarAgregado(id) {
     btn.onclick = null;
 }
 
-function cgAgregar(id) {
+async function cgAgregar(id) {
     var ins = _cgTodos.find(function(x){ return x.id === id; });
     if (!ins) return;
     var lista = getInsumos();
@@ -980,8 +980,17 @@ function cgAgregar(id) {
     // Clonar y limpiar campos internos
     var copia = JSON.parse(JSON.stringify(ins));
     delete copia._csvRow;
-    // La foto base64 se mantiene — setInsumos la guarda en Supabase (sin límite)
-    // y la omite solo del localStorage para evitar QuotaExceededError
+    // Si la foto viene como base64 (insumo del catálogo aún sin migrar), súbela a
+    // Storage y guarda solo la URL → el negocio queda LIVIANO (carga rápida) y no
+    // se duplica la imagen pesada en cada negocio.
+    if (window.sbSubirFotoBase64 && copia.foto && copia.foto.indexOf('data:') === 0) {
+        var _bUp = document.getElementById('cgBtn_' + id);
+        if (_bUp) { _bUp.textContent = '⏳ Subiendo…'; _bUp.disabled = true; }
+        try {
+            var _url = await sbSubirFotoBase64('insumos', copia.foto, getNegocioActivo());
+            if (_url) copia.foto = _url;
+        } catch(e) {}
+    }
     lista.push(copia);
     var guardado = false;
     try {

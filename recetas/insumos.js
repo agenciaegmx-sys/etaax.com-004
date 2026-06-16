@@ -76,13 +76,32 @@
        var negId = getNegocioActivo();
        if (!negId || typeof _supabase === 'undefined') return;
        try {
-           var res = await _supabase.from('negocio_insumos')
-               .select('datos')
-               .eq('negocio_id', negId)
-               .limit(5000);
-           console.log('[insumos] negocio', negId, '→ Supabase:', (res.data||[]).length, 'insumos · err:', res.error && res.error.message);
-           if (res.error || !res.data) return;
-           var remote = res.data.map(function(r){ return r.datos; }).filter(Boolean);
+           // Carga PAGINADA y resiliente. Una sola query de hasta 5000 trayendo el
+           // `datos` completo (con fotos base64 viejas y pesadas) podía tardar o
+           // fallar por payload demasiado grande. Se pagina en lotes y, si un lote
+           // falla, se reduce; si un registro no se puede traer, se omite.
+           var remote = [], from = 0, BATCH = 200, guard = 0, skips = 0, huboError = false;
+           while (guard++ < 10000) {
+               var res = await _supabase.from('negocio_insumos')
+                   .select('datos').eq('negocio_id', negId)
+                   .order('insumo_id', { ascending: true })
+                   .range(from, from + BATCH - 1);
+               if (res.error) {
+                   huboError = true;
+                   if (BATCH > 1) { BATCH = Math.max(1, Math.floor(BATCH / 2)); continue; }
+                   if (++skips > 3) { console.warn('[insumos] errores sistemáticos, aborta carga remota:', res.error.message); break; }
+                   from += 1; BATCH = 200; continue; // saltar registro problemático
+               }
+               skips = 0;
+               var chunk = (res.data || []).map(function(r){ return r.datos; }).filter(Boolean);
+               if (!chunk.length) break;
+               remote = remote.concat(chunk);
+               from += chunk.length;
+               BATCH = 200;
+           }
+           console.log('[insumos] negocio', negId, '→ Supabase:', remote.length, 'insumos' + (huboError ? ' (con reintentos)' : ''));
+           // Si no se pudo traer nada y hubo error, conservar el caché local.
+           if (!remote.length && huboError) return;
            // Dedup defensivo por id (por si quedaron duplicados de versiones previas)
            var _vistos = {}, _dedup = [];
            remote.forEach(function(x){ if (x && x.id && !_vistos[x.id]) { _vistos[x.id] = 1; _dedup.push(x); } });
