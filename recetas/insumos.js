@@ -720,6 +720,62 @@
        carne: 'Proteínas', fruta: 'Frutas y Verduras', abarrote: 'Abarrotes', otro: ''
    };
 
+   /* ── Subcategorías personalizadas (agregar manualmente, como en gastos) ──
+      Lista = base predefinida + las que el usuario agregó (localStorage por
+      negocio) + las ya usadas por insumos del catálogo. Sin migración. */
+   var _SUBCAT_SEL = 'width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:6px;font-family:sans-serif;font-size:14px;outline:none';
+   var _subcatsCustom = null;
+
+   function _loadSubcatsCustom() {
+       if (_subcatsCustom) return _subcatsCustom;
+       try { _subcatsCustom = JSON.parse(_skGet('subcats_custom')) || {}; }
+       catch (e) { _subcatsCustom = {}; }
+       return _subcatsCustom;
+   }
+   function _saveSubcatsCustom() {
+       try { localStorage.setItem(_sk('subcats_custom'), JSON.stringify(_subcatsCustom || {})); } catch (e) {}
+   }
+
+   function _subcatsLista(tipo) {
+       var base = tipo === 'destilado' ? SUBCATS_DESTILADO
+                : tipo === 'licor'     ? SUBCATS_LICOR
+                : tipo === 'abarrote'  ? GRUPOS_ABARROTE
+                : null;
+       if (!base) return null;
+       var out = base.slice();
+       (_loadSubcatsCustom()[tipo] || []).forEach(function (s) { if (s && out.indexOf(s) === -1) out.push(s); });
+       try {
+           getInsumos().forEach(function (x) {
+               if (x.tipoInsumo === tipo && x.subcategoria && out.indexOf(x.subcategoria) === -1) out.push(x.subcategoria);
+           });
+       } catch (e) {}
+       return out;
+   }
+
+   function _subcatSelectHTML(tipo, currentSub) {
+       var lista = _subcatsLista(tipo);
+       var label = tipo === 'abarrote' ? 'Grupo de abarrote' : 'Subcategoría';
+       var opts = lista.map(function (s) {
+           var val = s === '— Seleccionar —' ? '' : s;
+           return '<option value="' + etx(val) + '"' + (currentSub === val ? ' selected' : '') + '>' + etx(s) + '</option>';
+       }).join('');
+       opts += '<option value="__add__">➕ Agregar nueva…</option>';
+       return '<label>' + label + '</label>' +
+           '<select id="ins-subcategoria" style="' + _SUBCAT_SEL + '" onchange="_onSubcatChange(this,\'' + tipo + '\')">' + opts + '</select>';
+   }
+
+   function _onSubcatChange(sel, tipo) {
+       if (sel.value !== '__add__') return;
+       var nombre = (prompt('Nueva subcategoría:') || '').trim();
+       if (!nombre) { sel.value = ''; return; }
+       var cust = _loadSubcatsCustom();
+       if (!cust[tipo]) cust[tipo] = [];
+       if (cust[tipo].indexOf(nombre) === -1) cust[tipo].push(nombre);
+       _saveSubcatsCustom();
+       var wrap = sel.parentElement;
+       if (wrap) wrap.innerHTML = _subcatSelectHTML(tipo, nombre);
+   }
+
    function ajustarCamposPorTipo(tipo) {
        var SEL = 'width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:6px;font-family:sans-serif;font-size:14px;outline:none';
 
@@ -1070,13 +1126,7 @@
                             : tipo === 'abarrote'  ? GRUPOS_ABARROTE
                             : null;
                if (listaSub) {
-                   subcatWrap.innerHTML = '<label>' + (tipo === 'abarrote' ? 'Grupo de abarrote' : 'Subcategoría') + '</label>' +
-                       '<select id="ins-subcategoria" style="' + SEL + '">' +
-                       listaSub.map(function(s) {
-                           var val = s === '— Seleccionar —' ? '' : s;
-                           return '<option value="' + val + '"' +
-                               (currentSub === val ? ' selected' : '') + '>' + s + '</option>';
-                       }).join('') + '</select>';
+                   subcatWrap.innerHTML = _subcatSelectHTML(tipo, currentSub);
                } else {
                    var esDesce  = tipo === 'carne' || tipo === 'fruta';
                    var subLabel = esDesce ? 'Método de descongelación'
@@ -1702,74 +1752,19 @@
            }
            actualizarCopaCosto(i);
        }
+       _actualizarUtilidad(i);
    }
-   
+
    function actualizarCopaCosto(i) {
        const p    = presentacionesTemp[i];
        const wrap = document.getElementById(`copa-cards-${i}`);
        if (!wrap) return;
-   
-       const copa = calcCostoCopa(p.costoUnitario, p.umCosto||'LT', p.tamanoCopa, p.umTamanoCopa||'ML');
-       if (!copa) {
-           wrap.innerHTML = `<div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
-               Ingresa costo unitario y tamaño de copa para ver el costeo automático</div>`;
-           return;
-       }
-   
-       const costoCopaNum = parseFloat(copa.costoCopa) || 0;
-       const cu           = parseFloat(p.costoUnitario) || 0;
-       const contML       = (()=>{
-           const cn = parseFloat(p.contNeto)||0;
-           const uc = (p.umContenido||'ML').toUpperCase();
-           return uc==='LT' ? cn*1000 : cn;
-       })();
-       const costoBot       = cu > 0 && contML > 0 ? cu*(contML/1000) : 0;
-       const fCopa          = parseFloat(p.factorCopa)    || 3.3;
-       const fBot           = parseFloat(p.factorBotella) || 2.5;
-       const precioCopaAuto = (costoCopaNum * fCopa).toFixed(2);
-       const precioBotAuto  = costoBot > 0 ? (costoBot * fBot).toFixed(2) : null;
-
-       // Actualizar rendimiento en copas
-       const tc    = parseFloat(p.tamanoCopa) || 0;
-       const tML   = toML(p.tamanoCopa, p.umTamanoCopa||'ML');
+       // Rendimiento en copas
+       const contML = toML(p.contNeto, p.umContenido||'ML');
+       const tML    = toML(p.tamanoCopa, p.umTamanoCopa||'ML');
        const elRend = document.getElementById('copas-rend-' + i);
        if (elRend) elRend.textContent = (contML > 0 && tML > 0) ? Math.floor(contML / tML) + ' copas' : '—';
-   
-       wrap.innerHTML = `
-           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
-               <div style="background:var(--surface);border:1px solid var(--border);
-                   border-radius:8px;padding:10px;text-align:center">
-                   <div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;
-                       color:var(--text-dim);margin-bottom:4px">Costo copa</div>
-                   <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;
-                       color:var(--text);letter-spacing:1px">${fmtMXN(copa.costoCopa)}</div>
-                   <div style="font-size:9px;color:var(--text-dim)">${p.tamanoCopa||0} ${p.umTamanoCopa||'ML'}</div>
-               </div>
-               <div style="background:var(--surface);border:1px solid var(--accent);
-                   border-radius:8px;padding:10px;text-align:center">
-                   <div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;
-                       color:var(--accent);margin-bottom:4px">Precio copa ×3.3</div>
-                   <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;
-                       color:var(--accent);letter-spacing:1px">${fmtMXN(precioCopaAuto)}</div>
-                   <div style="font-size:9px;color:var(--text-dim)">sugerido carta</div>
-               </div>
-               <div style="background:var(--surface);border:1px solid var(--border);
-                   border-radius:8px;padding:10px;text-align:center">
-                   <div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;
-                       color:var(--text-dim);margin-bottom:4px">Costo botella</div>
-                   <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;
-                       color:var(--text);letter-spacing:1px">${fmtMXN(costoBot)}</div>
-                   <div style="font-size:9px;color:var(--text-dim)">${contML>0?contML+' ML':'sin contenido'}</div>
-               </div>
-               <div style="background:var(--surface);border:1px solid var(--green);
-                   border-radius:8px;padding:10px;text-align:center">
-                   <div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;
-                       color:var(--green);margin-bottom:4px">Precio bot. ×2.5</div>
-                   <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;
-                       color:var(--green);letter-spacing:1px">${fmtMXN(precioBotAuto)}</div>
-                   <div style="font-size:9px;color:var(--text-dim)">sugerido carta</div>
-               </div>
-           </div>`;
+       wrap.innerHTML = _costeoCardsHTML(p);
    }
    
    // ── Helpers de formato de precio ─────────────────────────────
@@ -2045,54 +2040,15 @@
                <div class="meta-item">
                    <label>Mezcladores (pzas)</label>
                    <input type="number" value="${p.mezcladores||''}" placeholder="0" min="0" step="1"
-                       oninput="updPres(${i},'mezcladores',this.value)">
+                       oninput="updPres(${i},'mezcladores',this.value);actualizarCopaCosto(${i})">
                </div>
                <div class="meta-item">
-                   <label>Tipo mezclador</label>
-                   <select onchange="updPres(${i},'tipoMezclador',this.value)">
-                       ${['—','Refresco','Agua','Soda','Jugo','Cerveza','Otro'].map(t =>
-                           '<option value="'+t+'"'+((p.tipoMezclador||'—')===t?' selected':'')+'>'+t+'</option>'
-                       ).join('')}
-                   </select>
+                   <label>Mezclador (refresco)</label>
+                   ${_mezcladorSelectHTML(p, i)}
                </div>
            </div>`;
 
-       const copa = calcCostoCopa(p.costoUnitario, p.umCosto||'LT', p.tamanoCopa, p.umTamanoCopa||'ML');
-       let cardsHtml;
-       if (!copa) {
-           cardsHtml = '<div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">Ingresa costo unitario y tamaño de copa para ver el costeo automático</div>';
-       } else {
-           const costoCopaNum   = parseFloat(copa.costoCopa) || 0;
-           const cu             = parseFloat(p.costoUnitario)||0;
-           const contML_        = toML(p.contNeto, p.umContenido||'ML');
-           const costoBot       = cu > 0 && contML_ > 0 ? cu*(contML_/1000) : 0;
-           const fCopa          = parseFloat(p.factorCopa) || 3.3;
-           const fBot           = parseFloat(p.factorBotella) || 2.5;
-           const precioCopaAuto = (costoCopaNum * fCopa).toFixed(2);
-           const precioBotAuto  = costoBot > 0 ? (costoBot * fBot).toFixed(2) : null;
-           cardsHtml = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">'
-               + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">'
-               +   '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:4px">Costo copa</div>'
-               +   '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--text);letter-spacing:1px">$'+copa.costoCopa+'</div>'
-               +   '<div style="font-size:9px;color:var(--text-dim)">'+(p.tamanoCopa||0)+' '+(p.umTamanoCopa||'ML')+'</div>'
-               + '</div>'
-               + '<div style="background:var(--surface);border:1px solid var(--accent);border-radius:8px;padding:10px;text-align:center">'
-               +   '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Precio copa \xd7'+fCopa+'</div>'
-               +   '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--accent);letter-spacing:1px">$'+precioCopaAuto+'</div>'
-               +   '<div style="font-size:9px;color:var(--text-dim)">sugerido carta</div>'
-               + '</div>'
-               + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">'
-               +   '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:4px">Costo botella</div>'
-               +   '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--text);letter-spacing:1px">'+(costoBot>0?'$'+costoBot.toFixed(2):'—')+'</div>'
-               +   '<div style="font-size:9px;color:var(--text-dim)">'+(contML_>0?contML_+' ML':'sin contenido')+'</div>'
-               + '</div>'
-               + '<div style="background:var(--surface);border:1px solid var(--green);border-radius:8px;padding:10px;text-align:center">'
-               +   '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--green);margin-bottom:4px">Precio bot. \xd7'+fBot+'</div>'
-               +   '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--green);letter-spacing:1px">'+(precioBotAuto?'$'+precioBotAuto:'—')+'</div>'
-               +   '<div style="font-size:9px;color:var(--text-dim)">sugerido carta</div>'
-               + '</div>'
-               + '</div>';
-       }
+       const cardsHtml = _costeoCardsHTML(p);
 
        return `<div style="padding-top:12px;border-top:1px solid var(--border)">
            <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:10px">Costeo automático</div>
@@ -2157,7 +2113,44 @@
                        oninput="updPres(${i},'stockMax',this.value)">
                </div>
            </div>
+           <div id="utilidad-${i}">${_utilidadHTML(p)}</div>
        </div>`;
+   }
+
+   // ── % de utilidad según el precio de carta vs el costo (costo = 0%) ──
+   function _utilidadHTML(p) {
+       var copa = calcCostoCopa(p.costoUnitario, p.umCosto||'LT', p.tamanoCopa, p.umTamanoCopa||'ML');
+       var costoCopaNum = copa ? (parseFloat(copa.costoCopa) || 0) : 0;
+       var refIns    = p.mezcladorId ? getInsumos().find(function(x){ return x.id === p.mezcladorId; }) : null;
+       var mezPiezas = parseFloat(p.mezcladores) || 0;
+       var mezCost   = (refIns && mezPiezas > 0) ? mezPiezas * _refrescoCostoPorPieza(refIns) : 0;
+       var costoTrago = costoCopaNum + mezCost;
+       var cu       = parseFloat(p.costoUnitario) || 0;
+       var contML   = toML(p.contNeto, p.umContenido||'ML');
+       var costoBot = cu > 0 && contML > 0 ? cu*(contML/1000) : 0;
+       var precioCopa = parseFloat(String(p.precioCarta||'').replace(/,/g,'')) || 0;
+       var precioBot  = parseFloat(String(p.precioCartaBot||'').replace(/,/g,'')) || 0;
+       var items = [];
+       if (precioCopa > 0 && costoTrago > 0)
+           items.push(_utilChip(mezCost > 0 ? 'Utilidad trago' : 'Utilidad copa', (precioCopa - costoTrago)/costoTrago*100, precioCopa, costoTrago));
+       if (precioBot > 0 && costoBot > 0)
+           items.push(_utilChip('Utilidad botella', (precioBot - costoBot)/costoBot*100, precioBot, costoBot));
+       if (!items.length) return '';
+       return '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">' + items.join('') + '</div>';
+   }
+
+   function _utilChip(label, pct, precio, costo) {
+       var col = pct >= 0 ? 'var(--green)' : 'var(--red)';
+       return '<div style="flex:1;min-width:140px;background:var(--surface);border:1px solid ' + col + ';border-radius:8px;padding:10px;text-align:center">' +
+           '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:4px">' + label + '</div>' +
+           '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:' + col + ';letter-spacing:1px">' + (pct >= 0 ? '+' : '') + pct.toFixed(0) + '%</div>' +
+           '<div style="font-size:9px;color:var(--text-dim)">precio ' + fmtMXN(precio) + ' · costo ' + fmtMXN(costo) + '</div>' +
+           '</div>';
+   }
+
+   function _actualizarUtilidad(i) {
+       var el = document.getElementById('utilidad-' + i);
+       if (el) el.innerHTML = _utilidadHTML(presentacionesTemp[i]);
    }
 
    function renderPresentaciones() {
@@ -2447,6 +2440,80 @@
    }
    
    // ── Guardar insumo ────────────────────────────────────────────
+   /* ════════════════════════════════════════════════════════════
+      MEZCLADORES (refrescos / sodas del catálogo) para destilados
+      El mezclador de cada presentación referencia un refresco del
+      catálogo; su costo POR PIEZA se jala en vivo y, × las piezas, se
+      suma al costo de la copa → costo del trago.
+      ════════════════════════════════════════════════════════════ */
+   function _esRefresco(x) {
+       if (!x) return false;
+       if (x.tipoInsumo === 'refresco') return true;
+       var s = ((x.categoria||'') + ' ' + (x.subcategoria||'') + ' ' + (x.familia||'')).toLowerCase();
+       return /refresc|soda|t[oó]nica|jugo|mezclador|agua/.test(s);
+   }
+
+   // Costo de UNA pieza del refresco según su primera presentación (en vivo)
+   function _refrescoCostoPorPieza(ins) {
+       var p = ((ins && ins.presentaciones) || [])[0];
+       if (!p) return 0;
+       var cp = parseFloat(p.costoPieza) || 0;
+       if (cp > 0) return cp;
+       var precio = parseFloat(p.precio) || 0;   // fallback
+       return precio * (typeof calcImpFactor === 'function' ? calcImpFactor(p) : 1);
+   }
+
+   function _refrescosDelCatalogo() {
+       return getInsumos().filter(_esRefresco).map(function(x) {
+           return { id: x.id, nombre: x.nombre + (x.marca ? ' · ' + x.marca : ''), pza: _refrescoCostoPorPieza(x) };
+       }).sort(function(a, b){ return a.nombre.localeCompare(b.nombre); });
+   }
+
+   // <select> de mezclador (refresco del catálogo) para la presentación i
+   function _mezcladorSelectHTML(p, i) {
+       var refrescos = _refrescosDelCatalogo();
+       var opts = '<option value="">— Ninguno —</option>' + refrescos.map(function(r) {
+           return '<option value="' + etx(r.id) + '"' + (((p.mezcladorId||'') === r.id) ? ' selected' : '') + '>' +
+               etx(r.nombre) + ' (' + fmtMXN(r.pza) + '/pza)</option>';
+       }).join('');
+       return '<select onchange="updPres(' + i + ',\'mezcladorId\',this.value);actualizarCopaCosto(' + i + ')">' + opts + '</select>';
+   }
+
+   function _cardCosteo(border, labelCol, valCol, label, value, sub) {
+       return '<div style="background:var(--surface);border:1px solid ' + border + ';border-radius:8px;padding:10px;text-align:center">' +
+           '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:' + labelCol + ';margin-bottom:4px">' + label + '</div>' +
+           '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:' + valCol + ';letter-spacing:1px">' + value + '</div>' +
+           '<div style="font-size:9px;color:var(--text-dim)">' + sub + '</div></div>';
+   }
+
+   // Tarjetas de costeo automático (compartidas por el render inicial y el live)
+   function _costeoCardsHTML(p) {
+       var copa = calcCostoCopa(p.costoUnitario, p.umCosto||'LT', p.tamanoCopa, p.umTamanoCopa||'ML');
+       if (!copa) return '<div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">Ingresa costo unitario y tamaño de copa para ver el costeo automático</div>';
+       var costoCopaNum = parseFloat(copa.costoCopa) || 0;
+       var cu       = parseFloat(p.costoUnitario) || 0;
+       var contML   = toML(p.contNeto, p.umContenido||'ML');
+       var costoBot = cu > 0 && contML > 0 ? cu*(contML/1000) : 0;
+       var fCopa    = parseFloat(p.factorCopa)    || 3.3;
+       var fBot     = parseFloat(p.factorBotella) || 2.5;
+       // Mezclador (refresco del catálogo, por pieza)
+       var refIns    = p.mezcladorId ? getInsumos().find(function(x){ return x.id === p.mezcladorId; }) : null;
+       var mezPiezas = parseFloat(p.mezcladores) || 0;
+       var mezCost   = (refIns && mezPiezas > 0) ? mezPiezas * _refrescoCostoPorPieza(refIns) : 0;
+       var precioCopaAuto = costoCopaNum * fCopa;          // markup SOLO sobre la copa
+       var precioTrago    = precioCopaAuto + mezCost;      // + mezclador a costo (sin multiplicar)
+       var precioBotAuto  = costoBot > 0 ? (costoBot * fBot).toFixed(2) : null;
+
+       var cards = [];
+       cards.push(_cardCosteo('var(--border)','var(--text-dim)','var(--text)','Costo copa', fmtMXN(copa.costoCopa), (p.tamanoCopa||0)+' '+(p.umTamanoCopa||'ML')));
+       cards.push(_cardCosteo('var(--accent)','var(--accent)','var(--accent)','Precio copa ×'+fCopa, fmtMXN(precioCopaAuto), mezCost>0?'solo copa':'sugerido carta'));
+       if (mezCost > 0)
+           cards.push(_cardCosteo('var(--green)','var(--green)','var(--green)','Precio trago', fmtMXN(precioTrago), 'copa ×'+fCopa+' + '+fmtMXN(mezCost)+' mezcl.'));
+       cards.push(_cardCosteo('var(--border)','var(--text-dim)','var(--text)','Costo botella', costoBot>0?fmtMXN(costoBot):'—', contML>0?contML+' ML':'sin contenido'));
+       cards.push(_cardCosteo('var(--green)','var(--green)','var(--green)','Precio bot. ×'+fBot, precioBotAuto?fmtMXN(precioBotAuto):'—', 'sugerido carta'));
+       return '<div style="display:grid;grid-template-columns:repeat('+cards.length+',1fr);gap:8px;margin-bottom:10px">' + cards.join('') + '</div>';
+   }
+
    function guardarInsumo() {
        const nombre = document.getElementById('ins-nombre').value.trim();
        if (!nombre) { alert('El nombre es obligatorio'); return; }
@@ -2518,6 +2585,19 @@
        for (var k in o) { c[k] = (typeof o[k] === 'string') ? etx(o[k]) : o[k]; }
        return c;
    }
+   // Lightbox: amplía la foto a pantalla completa (clic para cerrar)
+   function _ampliarFotoFicha(src) {
+       if (!src) return;
+       var ov = document.createElement('div');
+       ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;padding:24px;cursor:zoom-out';
+       ov.onclick = function () { ov.remove(); };
+       var img = document.createElement('img');
+       img.src = src;
+       img.style.cssText = 'max-width:92vw;max-height:92vh;object-fit:contain;border-radius:10px;box-shadow:0 12px 48px rgba(0,0,0,.6)';
+       ov.appendChild(img);
+       document.body.appendChild(ov);
+   }
+
    function verFicha(id) {
        const insRaw = getInsumos().find(x => x.id === id);
        if (!insRaw) return;
@@ -2528,11 +2608,18 @@
        document.getElementById('fichaContenido').innerHTML = `
            <div style="display:flex;gap:16px;align-items:flex-start;
                padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:16px">
-               <div style="width:90px;height:90px;background:var(--surface2);border-radius:8px;
-                   border:1px solid var(--border);overflow:hidden;flex-shrink:0;
-                   display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--text-dim)">
-                   ${ins.foto ? `<img src="${ins.foto}" style="width:100%;height:100%;object-fit:cover">` : '📦'}
-               </div>
+               ${ins.foto
+                   ? `<div style="width:150px;height:150px;background:var(--surface2);border-radius:10px;
+                       border:1px solid var(--border);overflow:hidden;flex-shrink:0;cursor:zoom-in;
+                       transition:transform .2s ease,border-color .2s ease" title="Clic para ampliar"
+                       onmouseover="this.style.transform='scale(1.25)';this.style.borderColor='var(--accent)';this.style.zIndex='5';this.style.position='relative'"
+                       onmouseout="this.style.transform='scale(1)';this.style.borderColor='var(--border)';this.style.zIndex=''"
+                       onclick="var im=this.querySelector('img'); if(im) _ampliarFotoFicha(im.src);">
+                       <img src="${ins.foto}" style="width:100%;height:100%;object-fit:cover;display:block">
+                     </div>`
+                   : `<div style="width:150px;height:150px;background:var(--surface2);border-radius:10px;
+                       border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;
+                       justify-content:center;font-size:40px;color:var(--text-dim)">📦</div>`}
                <div style="flex:1">
                    <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;
                        color:var(--accent);margin-bottom:4px">
