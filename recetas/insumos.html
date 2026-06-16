@@ -774,7 +774,15 @@ async function _cgCargar() {
         var _ses = await _supabase.auth.getSession();
         if (!_ses.data || !_ses.data.session) {
             _cgError('Sesión no activa',
-                'El catálogo requiere tu sesión. Cierra sesión y vuelve a entrar desde el inicio (el manejo de sesión cambió y hay que iniciar de nuevo una vez).');
+                'El catálogo requiere tu sesión. Cierra sesión y vuelve a entrar desde el inicio.');
+            return;
+        }
+        // Validar el token contra el servidor (no solo que exista localmente)
+        var _u = await _supabase.auth.getUser();
+        console.log('[catalogo] user:', _u.data && _u.data.user ? _u.data.user.email : null, 'err:', _u.error && _u.error.message);
+        if (_u.error || !_u.data || !_u.data.user) {
+            _cgError('Sesión inválida o expirada',
+                'Tu sesión existe pero el servidor la rechazó. Cierra sesión y vuelve a entrar desde el inicio.');
             return;
         }
     } catch(e) {}

@@ -80,6 +80,7 @@
                .select('datos')
                .eq('negocio_id', negId)
                .limit(5000);
+           console.log('[insumos] negocio', negId, '→ Supabase:', (res.data||[]).length, 'insumos · err:', res.error && res.error.message);
            if (res.error || !res.data) return;
            var remote = res.data.map(function(r){ return r.datos; }).filter(Boolean);
            // Dedup defensivo por id (por si quedaron duplicados de versiones previas)
