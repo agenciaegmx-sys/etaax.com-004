@@ -116,10 +116,14 @@
     }
 
     function _obAdd(item) {
-        item.tries = 0;
-        var q = _obLoad();
-        // dedup: misma tabla + clave + op → gana el último estado
-        q = q.filter(function (x) { return !(x.tabla === item.tabla && x.k === item.k && x.op === item.op); });
+        var q = _obLoad(), prev = null;
+        // dedup: misma tabla + clave + op → gana el último estado (conserva los intentos
+        // para que un item genuinamente roto no se re-encole en bucle eterno)
+        q = q.filter(function (x) {
+            if (x.tabla === item.tabla && x.k === item.k && x.op === item.op) { prev = x; return false; }
+            return true;
+        });
+        item.tries = prev ? (prev.tries || 0) : 0;
         q.push(item);
         _obSave(q);
         _obIndicador();
@@ -129,6 +133,7 @@
     async function _obEjecutar(it) {
         if (it.op === 'delete') {
             var rd = await _supabase.from(it.tabla).delete().eq('id', it.id);
+            if (rd.error) console.warn('[outbox] delete falló', it.tabla, it.id, '→', rd.error.message);
             return !rd.error;
         }
         // Aligerar al momento de subir (requiere red): base64 → Storage URL
@@ -136,8 +141,12 @@
             if (it.payload && it.payload.datos && window.sbAligerarRecord) {
                 await window.sbAligerarRecord(it.payload.datos, it.tabla, it.payload.negocio_id);
             }
-        } catch (e) {}
+        } catch (e) { console.warn('[outbox] aligerar falló', it.tabla, it.k, '→', (e && e.message) || e); }
         var ru = await _supabase.from(it.tabla).upsert(it.payload, it.opts);
+        if (ru.error) {
+            var kb = '?'; try { kb = Math.round(JSON.stringify(it.payload).length / 1024) + 'KB'; } catch (e) {}
+            console.warn('[outbox] upsert falló', it.tabla, it.k, '(' + kb + ') →', ru.error.message);
+        }
         return !ru.error;
     }
 
@@ -163,6 +172,15 @@
     }
     window._sbFlush = _obFlush;
     window._sbPendientes = function () { return _obLoad().length; };
+    // Diagnóstico: en consola, _sbOutbox() lista los items atorados (tabla, clave, intentos, tamaño).
+    window._sbOutbox = function () {
+        return _obLoad().map(function (it) {
+            var kb = '?'; try { kb = Math.round(JSON.stringify(it.payload || {}).length / 1024) + 'KB'; } catch (e) {}
+            return { tabla: it.tabla, op: it.op, clave: it.k, intentos: it.tries || 0, tamaño: kb };
+        });
+    };
+    // _sbVaciarOutbox() — descarta la cola (último recurso si algo quedó roto).
+    window._sbVaciarOutbox = function () { _obSave([]); _obIndicador(); return 'outbox vaciado'; };
 
     window.sbUpsert = function (tabla, record, negId) {
         var id = negId || _negId();
