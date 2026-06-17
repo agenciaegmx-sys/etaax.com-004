@@ -72,6 +72,7 @@
                 <span class="brand-title">Insumos</span>
             </div>
             <div style="display:flex;gap:10px">
+                <button class="btn-vista" id="btnOptFotosNeg" onclick="migrarFotosNegocio()" title="Mueve las fotos base64 de este negocio a Storage (carga más fluida)">🗜️ Optimizar fotos</button>
                 <button class="btn-vista" onclick="abrirCatalogoGlobal()">🌐 Catálogo Global</button>
                 <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)" onclick="abrirSelectorCategoria()">+ Agregar insumo</button>
             </div>
@@ -417,6 +418,31 @@ function clearSearchInput() {
     document.getElementById('searchInput').value = '';
     document.getElementById('clearSearch').style.display = 'none';
     filtrar();
+}
+
+/* Optimizar fotos del negocio: mueve los base64 viejos a Storage (URLs ligeras)
+   → carga fluida. El catálogo tiene su propio botón en el panel admin. */
+async function migrarFotosNegocio() {
+    if (typeof getInsumos !== 'function' || typeof sbAligerarRecord !== 'function') {
+        alert('Aún cargando. Intenta de nuevo en un momento.'); return;
+    }
+    var negId = getNegocioActivo();
+    if (!negId) { alert('Sin negocio activo.'); return; }
+    var lista = getInsumos();
+    var pend = lista.filter(function(x){ return x && x.foto && x.foto.indexOf('data:') === 0; });
+    if (!pend.length) { alert('✓ No hay fotos por optimizar. Este negocio ya usa Storage.'); return; }
+    if (!confirm('Se moverán ' + pend.length + ' fotos a Storage (URLs ligeras). Puede tardar. ¿Continuar?')) return;
+    var btn = document.getElementById('btnOptFotosNeg');
+    var ok = 0;
+    for (var i = 0; i < pend.length; i++) {
+        if (btn) btn.textContent = '🗜️ ' + (i + 1) + '/' + pend.length + '…';
+        try { if (await sbAligerarRecord(pend[i], 'insumos', negId)) ok++; } catch(e) {}
+    }
+    // Persistir: los objetos ya tienen URL → setInsumos sincroniza ligero a Supabase
+    if (typeof setInsumos === 'function') setInsumos(lista);
+    if (btn) btn.textContent = '🗜️ Optimizar fotos';
+    alert('Listo. ' + ok + ' fotos optimizadas a Storage. La carga será más fluida.');
+    if (typeof init === 'function') init();
 }
 </script>
 
