@@ -1423,6 +1423,24 @@ function _renderVistaNegocio() {
         // Pull primero, luego push → no pisa datos más nuevos de otro dispositivo.
         if (window.sbSucPush) sbSucPush(marca.id);
     });
+    _subSucRealtime(marca.id);
+}
+
+// Realtime: si las sucursales cambian en otro dispositivo, refrescamos solos.
+var _sucRtNeg = null, _sucRtCh = null;
+function _subSucRealtime(negId) {
+    if (!negId || _sucRtNeg === negId || typeof sbRealtime !== 'function') return;
+    if (_sucRtCh && _supabase.removeChannel) { try { _supabase.removeChannel(_sucRtCh); } catch (e) {} }
+    _sucRtNeg = negId;
+    _sucRtCh = sbRealtime('negocio_sucursales', negId, function () {
+        if (!window.sbSucPull) return;
+        sbSucPull(negId).then(function (ok) {
+            if (!ok) return;
+            var m = _misNegocios().find(function (n) { return n.id === negId; })
+                 || _getNegocios().find(function (n) { return n.id === negId; });
+            if (m) { try { _renderSucursales(m); } catch (e) {} }
+        });
+    });
 }
 
 function _renderBrandBar(neg) {

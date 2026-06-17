@@ -82,6 +82,17 @@ async function _sbInitRecetas() {
     // upsert pasa) para que aparezcan en los demás dispositivos.
     soloLocal.forEach(function(r){ if (typeof _sbUpReceta === 'function') _sbUpReceta(r); });
     if (typeof renderGridRecetas === 'function') renderGridRecetas();
+    _subRecetasRealtime(negId);
+}
+
+// Realtime: si otro dispositivo cambia una receta, recargamos solos (sin F5).
+var _recetasRtCh = null;
+function _subRecetasRealtime(negId) {
+    if (_recetasRtCh || typeof sbRealtime !== 'function' || !negId) return;
+    _recetasRtCh = sbRealtime('recetas', negId, function() {
+        console.log('[recetas] cambio en vivo desde otro dispositivo → recargando');
+        _sbInitRecetas();
+    });
 }
 function genId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2,5);

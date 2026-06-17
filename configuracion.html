@@ -429,6 +429,12 @@ async function cargarDatos() {
     // Traer sucursales desde Supabase (sync entre dispositivos) antes de pintar
     if (window.sbSucPull) { try { await sbSucPull(negId); } catch(e) {} }
     renderSucursalesSection(negId);
+    // Realtime: si se edita en otro dispositivo, refrescar la sección sola (sin F5)
+    if (typeof sbRealtime === 'function' && !window._sucRtCfg) {
+        window._sucRtCfg = sbRealtime('negocio_sucursales', negId, function() {
+            if (window.sbSucPull) sbSucPull(negId).then(function(ok){ if (ok) renderSucursalesSection(negId); });
+        });
+    }
 
     ['cNombre','cFechaApertura','cDescripcion','cTel','cCorreo','cWeb'].forEach(function(id){
         document.getElementById(id).addEventListener('input', markDirty);

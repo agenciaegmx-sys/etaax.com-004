@@ -85,30 +85,62 @@
         return changed;
     };
 
+    // Upsert con REINTENTOS: ante un fallo transitorio (parpadeo de red) reintenta
+    // antes de avisar. Así "Sin sincronizar" deja de saltar por un blip de internet
+    // y solo aparece si de verdad no se pudo tras varios intentos.
+    async function _upsertReintento(tabla, payload, opts) {
+        var delays = [0, 1200, 3500];
+        for (var i = 0; i < delays.length; i++) {
+            if (delays[i]) await new Promise(function (res) { setTimeout(res, delays[i]); });
+            try {
+                var r = await _supabase.from(tabla).upsert(payload, opts);
+                if (!r || !r.error) return true;
+                if (i === delays.length - 1) { window._sbToastError('upsert ' + tabla + ': ' + r.error.message); return false; }
+            } catch (e) {
+                if (i === delays.length - 1) { window._sbToastError('upsert ' + tabla + ': ' + ((e && e.message) || e)); return false; }
+            }
+        }
+        return false;
+    }
+
     window.sbUpsert = async function (tabla, record, negId) {
         var id = negId || _negId();
         if (!id || typeof _supabase === 'undefined') return;
         try { await window.sbAligerarRecord(record, tabla, id); } catch (e) {}
-        var r = await _supabase.from(tabla).upsert({
-            id: record.id, negocio_id: id, datos: record,
-            updated_at: new Date().toISOString()
+        await _upsertReintento(tabla, {
+            id: record.id, negocio_id: id, datos: record, updated_at: new Date().toISOString()
         }, { onConflict: 'id' });
-        _check('upsert ' + tabla)(r);
     };
 
     window.sbUpsertDoc = async function (tabla, datos, negId) {
         var id = negId || _negId();
         if (!id || typeof _supabase === 'undefined') return;
         try { await window.sbAligerarRecord(datos, tabla, id); } catch (e) {}
-        var r = await _supabase.from(tabla).upsert({
+        await _upsertReintento(tabla, {
             negocio_id: id, datos: datos, updated_at: new Date().toISOString()
         }, { onConflict: 'negocio_id' });
-        _check('upsert ' + tabla)(r);
     };
 
     window.sbDelete = function (tabla, id) {
         if (typeof _supabase === 'undefined') return;
         _supabase.from(tabla).delete().eq('id', id).then(_check('delete ' + tabla));
+    };
+
+    /* ── Realtime: el servidor EMPUJA los cambios → el otro dispositivo se
+       actualiza solo, sin recargar (efecto Google Drive). Requiere que la tabla
+       esté en la publicación supabase_realtime (migración v16). onChange(payload)
+       se dispara en cada INSERT/UPDATE/DELETE de ese negocio. Devuelve el canal. */
+    window.sbRealtime = function (tabla, negId, onChange) {
+        if (typeof _supabase === 'undefined' || !negId || !_supabase.channel) return null;
+        try {
+            var ch = _supabase
+                .channel('rt_' + tabla + '_' + negId + '_' + Math.random().toString(36).slice(2, 6))
+                .on('postgres_changes',
+                    { event: '*', schema: 'public', table: tabla, filter: 'negocio_id=eq.' + negId },
+                    function (payload) { try { onChange(payload); } catch (e) {} })
+                .subscribe();
+            return ch;
+        } catch (e) { return null; }
     };
 
     /* ── Storage de evidencias (fotos) ──
