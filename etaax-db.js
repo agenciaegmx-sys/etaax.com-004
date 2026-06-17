@@ -42,21 +42,68 @@
         return function (r) { if (r && r.error) window._sbToastError(tag + ': ' + r.error.message); };
     }
 
-    window.sbUpsert = function (tabla, record, negId) {
-        var id = negId || _negId();
-        if (!id || typeof _supabase === 'undefined') return;
-        _supabase.from(tabla).upsert({
-            id: record.id, negocio_id: id, datos: record,
-            updated_at: new Date().toISOString()
-        }, { onConflict: 'id' }).then(_check('upsert ' + tabla));
+    // Sube un data:URL (imagen o PDF) a Storage y devuelve su URL pública.
+    async function _subirDataUrl(carpeta, dataUrl, negId) {
+        if (typeof _supabase === 'undefined') return null;
+        var blob, ctype = 'image/jpeg', ext = 'jpg';
+        try {
+            var parts = dataUrl.split(',');
+            ctype = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+            var bin = atob(parts[1]); var arr = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            blob = new Blob([arr], { type: ctype });
+            ext = ctype.indexOf('pdf') >= 0 ? 'pdf' : ctype.indexOf('png') >= 0 ? 'png' :
+                  ctype.indexOf('webp') >= 0 ? 'webp' : ctype.indexOf('gif') >= 0 ? 'gif' : 'jpg';
+        } catch (e) { return null; }
+        var id = negId || _negId() || 'catalogo';
+        var path = id + '/' + carpeta + '/' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8) + '.' + ext;
+        var r = await _supabase.storage.from('evidencias').upload(path, blob, { contentType: ctype, upsert: false });
+        if (r.error) return null;
+        return _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
+    }
+
+    // ALIGERAR: recorre el registro y sube a Storage cualquier base64 (data:),
+    // dejando solo la URL. Es la pieza clave: evita que payloads gigantes (fotos,
+    // PDFs) rompan el upsert ("Sin sincronizar") y migra lo viejo de forma
+    // transparente en la primera sincronización. Universal para todos los módulos.
+    window.sbAligerarRecord = async function (record, carpeta, negId) {
+        if (!record || typeof record !== 'object' || typeof _supabase === 'undefined') return false;
+        var changed = false;
+        async function walk(obj) {
+            var keys = Array.isArray(obj) ? obj.map(function (_, i) { return i; }) : Object.keys(obj);
+            for (var ki = 0; ki < keys.length; ki++) {
+                var k = keys[ki], v = obj[k];
+                if (typeof v === 'string' && v.indexOf('data:') === 0 && v.length > 256) {
+                    var url = await _subirDataUrl(carpeta || 'archivos', v, negId);
+                    if (url) { obj[k] = url; changed = true; }
+                } else if (v && typeof v === 'object') {
+                    await walk(v);
+                }
+            }
+        }
+        try { await walk(record); } catch (e) {}
+        return changed;
     };
 
-    window.sbUpsertDoc = function (tabla, datos, negId) {
+    window.sbUpsert = async function (tabla, record, negId) {
         var id = negId || _negId();
         if (!id || typeof _supabase === 'undefined') return;
-        _supabase.from(tabla).upsert({
+        try { await window.sbAligerarRecord(record, tabla, id); } catch (e) {}
+        var r = await _supabase.from(tabla).upsert({
+            id: record.id, negocio_id: id, datos: record,
+            updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
+        _check('upsert ' + tabla)(r);
+    };
+
+    window.sbUpsertDoc = async function (tabla, datos, negId) {
+        var id = negId || _negId();
+        if (!id || typeof _supabase === 'undefined') return;
+        try { await window.sbAligerarRecord(datos, tabla, id); } catch (e) {}
+        var r = await _supabase.from(tabla).upsert({
             negocio_id: id, datos: datos, updated_at: new Date().toISOString()
-        }, { onConflict: 'negocio_id' }).then(_check('upsert ' + tabla));
+        }, { onConflict: 'negocio_id' });
+        _check('upsert ' + tabla)(r);
     };
 
     window.sbDelete = function (tabla, id) {

@@ -132,17 +132,39 @@
 
    async function _sincronizarInsumosSupabase(negId, data) {
        if (!negId || typeof _supabase === 'undefined') return;
-       var BATCH = 100;
+       // ALIGERAR: subir las fotos base64 (incluidas las viejas y pesadas) a
+       // Storage y dejar URL. Así el payload siempre es liviano → el upsert no
+       // falla por tamaño ("Sin sincronizar") y se migra lo viejo de forma
+       // transparente. Muta los objetos (compartidos con el cache) → quedan ligeros.
+       if (window.sbAligerarRecord) {
+           for (var a = 0; a < data.length; a++) {
+               try { await sbAligerarRecord(data[a], 'insumos', negId); } catch(e) {}
+           }
+           // Reflejar en localStorage que ya son URLs (no base64)
+           try {
+               localStorage.setItem(_sk('insumos'), JSON.stringify((_insumosCache || data).map(function(x) {
+                   if (!x.foto || !x.foto.startsWith('data:')) return x;
+                   var c = Object.assign({}, x); c.foto = ''; return c;
+               })));
+           } catch(e) {}
+       }
        // SOLO upsert (PK negocio_id+insumo_id) — NUNCA borra: las eliminaciones
-       // son explícitas vía _borrarInsumosSupabase. Así, agregar/guardar con un
-       // caché incompleto no puede borrar los demás insumos del negocio.
+       // son explícitas vía _borrarInsumosSupabase. Lotes chicos y resiliente:
+       // si un lote falla lo reduce; si un registro no pasa, se omite (no corta el resto).
        var records = data.map(function(ins) {
            return { negocio_id: negId, insumo_id: ins.id, datos: ins };
        });
-       for (var i = 0; i < records.length; i += BATCH) {
+       var i = 0, BATCH = 50, fallo = false;
+       while (i < records.length) {
            var rUp = await _supabase.from('negocio_insumos').upsert(records.slice(i, i + BATCH));
-           if (rUp.error) { _sbToastError('sync negocio_insumos: ' + rUp.error.message); break; }
+           if (rUp.error) {
+               if (BATCH > 1) { BATCH = Math.max(1, Math.floor(BATCH / 2)); continue; }
+               console.warn('[insumos] registro no sincronizado, se omite:', records[i].insumo_id, rUp.error.message);
+               fallo = true; i += 1; BATCH = 50; continue;
+           }
+           i += records.slice(i, i + BATCH).length; BATCH = 50;
        }
+       if (fallo) _sbToastError('Algunos insumos no se sincronizaron (registro problemático omitido).');
    }
 
    // Borrado explícito en Supabase (las eliminaciones ya no dependen del diff)
