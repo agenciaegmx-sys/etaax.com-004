@@ -248,6 +248,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
 <script>
 (function(){
     var saved = localStorage.getItem('etaax_theme') || 'dark';
@@ -269,7 +270,7 @@ function getNegocioActivo() { return localStorage.getItem('etaax_negocio_activo'
 function getNegocios() { try { return JSON.parse(localStorage.getItem('etaax_negocios')) || []; } catch(e){ return []; } }
 function setNegocios(d) { localStorage.setItem('etaax_negocios', JSON.stringify(d)); }
 function getSucursales(negId) { try { return JSON.parse(localStorage.getItem('etaax_' + negId + '_sucursales')) || []; } catch { return []; } }
-function setSucursales(negId, d) { localStorage.setItem('etaax_' + negId + '_sucursales', JSON.stringify(d)); }
+function setSucursales(negId, d) { localStorage.setItem('etaax_' + negId + '_sucursales', JSON.stringify(d)); if (window.sbSucPush) sbSucPush(negId); }
 function _sk(key) { var id = getNegocioActivo(); return id ? ('etaax_' + id + '_' + key) : ('etaax_' + key); }
 
 async function loadExtra() {
@@ -425,6 +426,8 @@ async function cargarDatos() {
     document.getElementById('cCorreo').value        = ex.correo        || '';
     document.getElementById('cWeb').value           = ex.web           || '';
 
+    // Traer sucursales desde Supabase (sync entre dispositivos) antes de pintar
+    if (window.sbSucPull) { try { await sbSucPull(negId); } catch(e) {} }
     renderSucursalesSection(negId);
 
     ['cNombre','cFechaApertura','cDescripcion','cTel','cCorreo','cWeb'].forEach(function(id){

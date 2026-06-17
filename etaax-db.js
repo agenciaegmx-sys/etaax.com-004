@@ -187,4 +187,50 @@
         var pub = _supabase.storage.from('evidencias').getPublicUrl(path);
         return pub.data.publicUrl;
     };
+
+    /* ── Sucursales en Supabase (antes solo localStorage → no sincronizaban) ──
+       Doc por negocio en negocio_sucursales: { sucursales:[...], cfg:{[id]:{...}} }.
+       sbUpsertDoc aligera los logos base64 a Storage automáticamente. */
+    var _sucPushTimers = {};
+    function _sucPushNow(negId) {
+        var sucs = [];
+        try { sucs = JSON.parse(localStorage.getItem('etaax_' + negId + '_sucursales') || '[]'); } catch (e) {}
+        if (!sucs.length) return; // nada que respaldar
+        var cfg = {};
+        sucs.forEach(function (s) {
+            var c = {};
+            try { c = JSON.parse(localStorage.getItem('etaax_' + negId + '_suc_' + s.id) || '{}'); } catch (e) {}
+            var logo = localStorage.getItem('etaax_' + negId + '_suc_' + s.id + '_logo') || '';
+            if (logo) c._logo = logo; // sbUpsertDoc lo aligera a URL si es base64
+            cfg[s.id] = c;
+        });
+        window.sbUpsertDoc('negocio_sucursales', { sucursales: sucs, cfg: cfg }, negId);
+    }
+    window.sbSucPush = function (negId) {
+        if (!negId) return;
+        clearTimeout(_sucPushTimers[negId]);
+        _sucPushTimers[negId] = setTimeout(function () { _sucPushNow(negId); }, 800);
+    };
+
+    // Trae las sucursales del negocio desde Supabase → localStorage. Devuelve true si trajo algo.
+    window.sbSucPull = async function (negId) {
+        if (!negId || typeof _supabase === 'undefined') return false;
+        try {
+            var res = await _supabase.from('negocio_sucursales').select('datos').eq('negocio_id', negId).maybeSingle();
+            if (res.error || !res.data) return false;
+            var d = res.data.datos || {};
+            if (Array.isArray(d.sucursales) && d.sucursales.length) {
+                try { localStorage.setItem('etaax_' + negId + '_sucursales', JSON.stringify(d.sucursales)); } catch (e) {}
+            }
+            if (d.cfg && typeof d.cfg === 'object') {
+                Object.keys(d.cfg).forEach(function (sid) {
+                    var c = Object.assign({}, d.cfg[sid]);
+                    var logo = c._logo; delete c._logo;
+                    try { localStorage.setItem('etaax_' + negId + '_suc_' + sid, JSON.stringify(c)); } catch (e) {}
+                    if (logo) { try { localStorage.setItem('etaax_' + negId + '_suc_' + sid + '_logo', logo); } catch (e) {} }
+                });
+            }
+            return true;
+        } catch (e) { return false; }
+    };
 })();

@@ -811,6 +811,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
 <script>
 var ADMIN_EMAIL = 'admin@etaax.com';
 
@@ -867,7 +868,7 @@ function _setSesion(d)  { sessionStorage.setItem('etaax_sesion_hub', JSON.string
 function _getNegocios() { try { return JSON.parse(localStorage.getItem('etaax_negocios') || '[]'); } catch { return []; } }
 function _setNegocios(d){ localStorage.setItem('etaax_negocios', JSON.stringify(d)); }
 function _getSucursales(negId) { try { return JSON.parse(localStorage.getItem('etaax_' + negId + '_sucursales') || '[]'); } catch { return []; } }
-function _setSucursales(negId, arr) { localStorage.setItem('etaax_' + negId + '_sucursales', JSON.stringify(arr)); }
+function _setSucursales(negId, arr) { localStorage.setItem('etaax_' + negId + '_sucursales', JSON.stringify(arr)); if (window.sbSucPush) sbSucPush(negId); }
 
 // Converters: formato app ↔ formato Supabase
 function _negToDb(neg) {
@@ -1414,6 +1415,14 @@ function _renderVistaNegocio() {
     if (heroSub)   heroSub.textContent = 'Elige con qué sucursal trabajarás hoy';
     _renderBrandBar(marca);
     _renderSucursales(marca);
+    // Sincronizar sucursales desde Supabase y re-renderizar (nombres/config que
+    // se editaron en otro dispositivo). Render inmediato con localStorage arriba.
+    if (window.sbSucPull) sbSucPull(marca.id).then(function (ok) {
+        if (ok) { try { _renderSucursales(marca); } catch (e) {} }
+        // Migrar a Supabase lo que solo estaba en localStorage (primera vez).
+        // Pull primero, luego push → no pisa datos más nuevos de otro dispositivo.
+        if (window.sbSucPush) sbSucPush(marca.id);
+    });
 }
 
 function _renderBrandBar(neg) {
@@ -1541,11 +1550,13 @@ function _getSucCfg(sucId, negId) {
 }
 function _setSucCfg(sucId, negId, data) {
     localStorage.setItem('etaax_' + negId + '_suc_' + sucId, JSON.stringify(data));
+    if (window.sbSucPush) sbSucPush(negId);
 }
 function _getSucLogo(sucId, negId) { return localStorage.getItem('etaax_' + negId + '_suc_' + sucId + '_logo') || ''; }
 function _setSucLogo(sucId, negId, b64) {
     if (b64) localStorage.setItem('etaax_' + negId + '_suc_' + sucId + '_logo', b64);
     else localStorage.removeItem('etaax_' + negId + '_suc_' + sucId + '_logo');
+    if (window.sbSucPush) sbSucPush(negId);
 }
 function _comprimirImg(file, callback) {
     var reader = new FileReader();
