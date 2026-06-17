@@ -48,7 +48,9 @@ function setRecetas(data) {
 }
 
 function _sbUpReceta(rec) {
-    var negId = getNegocioActivo(); if (!negId) return;
+    var negId = getNegocioActivo();
+    if (!negId) { console.warn('[recetas] SIN negocio activo → no se sube:', rec && rec.id); return; }
+    console.log('[recetas] upsert', rec && rec.id, '· neg', negId);
     sbUpsert('recetas', rec, negId);
 }
 function _sbDelReceta(id) {
@@ -74,6 +76,7 @@ async function _sbInitRecetas() {
     var local = [];
     try { local = JSON.parse(_skGet('recetas')) || []; } catch(e) {}
     var soloLocal = (local || []).filter(function(r){ return r && r.id && !vistos[r.id]; });
+    console.log('[recetas] init · neg', negId, '· Supabase:', remote.length, '· solo-local (re-subir):', soloLocal.length);
     _cacheRecetas = remote.concat(soloLocal);
     // Re-empujar a Supabase las que solo existían localmente (ya sin base64 → el
     // upsert pasa) para que aparezcan en los demás dispositivos.
