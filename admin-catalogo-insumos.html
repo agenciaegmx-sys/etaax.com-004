@@ -560,11 +560,22 @@ async function _syncCatalogToSupabase(data) {
         await _supabase.from('catalogo_insumos').delete().in('id', toDelete.slice(di, di + BATCH));
     }
 
-    // Upsert en lotes de 100
+    // Upsert RESILIENTE: lotes chicos; si un lote falla (registro pesado por foto
+    // base64 vieja), se reduce a la mitad; si un registro suelto no pasa, se OMITE
+    // (ya está en Supabase de antes → no se pierde) para no tumbar el import del
+    // resto. Los pesados se migran a URL con el botón "🗜️ Optimizar fotos".
     var records = data.map(function(ins){ return { id: ins.id, datos: ins }; });
-    for (var i = 0; i < records.length; i += BATCH) {
-        await _supabase.from('catalogo_insumos').upsert(records.slice(i, i + BATCH));
+    var i = 0, B = 60, omitidos = 0;
+    while (i < records.length) {
+        var rUp = await _supabase.from('catalogo_insumos').upsert(records.slice(i, i + B));
+        if (rUp.error) {
+            if (B > 1) { B = Math.max(1, Math.floor(B / 2)); continue; }
+            console.warn('[catalogo] registro pesado omitido:', records[i].id, rUp.error.message);
+            omitidos++; i += 1; B = 60; continue;
+        }
+        i += records.slice(i, i + B).length; B = 60;
     }
+    if (omitidos) console.warn('[catalogo] ' + omitidos + ' registros pesados no re-sincronizados (usa "Optimizar fotos").');
 }
 
 /* ── Migración #4: fotos base64 existentes → Storage (URLs) ──
