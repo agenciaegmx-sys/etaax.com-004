@@ -192,19 +192,29 @@
        Doc por negocio en negocio_sucursales: { sucursales:[...], cfg:{[id]:{...}} }.
        sbUpsertDoc aligera los logos base64 a Storage automáticamente. */
     var _sucPushTimers = {};
-    function _sucPushNow(negId) {
+    async function _sucPushNow(negId) {
         var sucs = [];
         try { sucs = JSON.parse(localStorage.getItem('etaax_' + negId + '_sucursales') || '[]'); } catch (e) {}
-        if (!sucs.length) return; // nada que respaldar
+        if (!sucs.length || typeof _supabase === 'undefined') return; // nada que respaldar
         var cfg = {};
         sucs.forEach(function (s) {
             var c = {};
             try { c = JSON.parse(localStorage.getItem('etaax_' + negId + '_suc_' + s.id) || '{}'); } catch (e) {}
             var logo = localStorage.getItem('etaax_' + negId + '_suc_' + s.id + '_logo') || '';
-            if (logo) c._logo = logo; // sbUpsertDoc lo aligera a URL si es base64
+            if (logo) c._logo = logo; // se aligera a URL si es base64
             cfg[s.id] = c;
         });
-        window.sbUpsertDoc('negocio_sucursales', { sucursales: sucs, cfg: cfg }, negId);
+        var datos = { sucursales: sucs, cfg: cfg };
+        try { if (window.sbAligerarRecord) await window.sbAligerarRecord(datos, 'sucursales', negId); } catch (e) {}
+        // Upsert SILENCIOSO (solo consola): el sync de sucursales es de fondo y los
+        // datos están a salvo en localStorage. No dispara el toast "Sin sincronizar"
+        // (que alarmaba en el login si faltaba la migración v15).
+        try {
+            var r = await _supabase.from('negocio_sucursales').upsert(
+                { negocio_id: negId, datos: datos, updated_at: new Date().toISOString() },
+                { onConflict: 'negocio_id' });
+            if (r.error) console.warn('[sucursales] no sincronizó (¿falta correr migración v15?):', r.error.message);
+        } catch (e) { console.warn('[sucursales] push error:', e); }
     }
     window.sbSucPush = function (negId) {
         if (!negId) return;
