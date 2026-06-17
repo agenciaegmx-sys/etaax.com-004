@@ -57,12 +57,28 @@ function _sbDelReceta(id) {
 async function _sbInitRecetas() {
     var negId = getNegocioActivo(); if (!negId) return;
     var res = await _supabase.from('recetas').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true});
-    if (!res.error) {
-        _cacheRecetas = (res.data || []).map(function(x) { return x.datos; });
-    } else {
-        // fallback localStorage si Supabase falla
+    if (res.error) {
+        // Sin conexión / error: usar respaldo local.
         try { _cacheRecetas = JSON.parse(_skGet('recetas')) || []; } catch(e) { _cacheRecetas = []; }
+        if (typeof renderGridRecetas === 'function') renderGridRecetas();
+        return;
     }
+    var remote = (res.data || []).map(function(x){ return x.datos; }).filter(Boolean);
+    // dedup defensivo por id
+    var vistos = {}, dedup = [];
+    remote.forEach(function(r){ if (r && r.id && !vistos[r.id]) { vistos[r.id] = 1; dedup.push(r); } });
+    remote = dedup;
+    // MERGE: conservar las recetas locales que NO están en Supabase. Antes esto
+    // SOBREESCRIBÍA con lo remoto → si una receta no había sincronizado (ej. el
+    // upsert falló por foto base64 pesada) se "perdía" al abrir en otro dispositivo.
+    var local = [];
+    try { local = JSON.parse(_skGet('recetas')) || []; } catch(e) {}
+    var soloLocal = (local || []).filter(function(r){ return r && r.id && !vistos[r.id]; });
+    _cacheRecetas = remote.concat(soloLocal);
+    // Re-empujar a Supabase las que solo existían localmente (ya sin base64 → el
+    // upsert pasa) para que aparezcan en los demás dispositivos.
+    soloLocal.forEach(function(r){ if (typeof _sbUpReceta === 'function') _sbUpReceta(r); });
+    if (typeof renderGridRecetas === 'function') renderGridRecetas();
 }
 function genId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2,5);
