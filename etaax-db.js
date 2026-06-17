@@ -85,46 +85,112 @@
         return changed;
     };
 
-    // Upsert con REINTENTOS: ante un fallo transitorio (parpadeo de red) reintenta
-    // antes de avisar. Así "Sin sincronizar" deja de saltar por un blip de internet
-    // y solo aparece si de verdad no se pudo tras varios intentos.
-    async function _upsertReintento(tabla, payload, opts) {
-        var delays = [0, 1200, 3500];
-        for (var i = 0; i < delays.length; i++) {
-            if (delays[i]) await new Promise(function (res) { setTimeout(res, delays[i]); });
-            try {
-                var r = await _supabase.from(tabla).upsert(payload, opts);
-                if (!r || !r.error) return true;
-                if (i === delays.length - 1) { window._sbToastError('upsert ' + tabla + ': ' + r.error.message); return false; }
-            } catch (e) {
-                if (i === delays.length - 1) { window._sbToastError('upsert ' + tabla + ': ' + ((e && e.message) || e)); return false; }
-            }
+    /* ════════════════════════════════════════════════════════════
+       COLA DE SALIDA (OUTBOX) — sincronización confiable estilo Drive.
+       Cada escritura se ENCOLA en localStorage y se sube en segundo plano.
+       Si falla (sin red / error) se queda y se reintenta al reconectar y
+       cada 20s. El dato NUNCA se pierde aunque guardes offline y cierres.
+       Indicador discreto "Sincronizando… N pendientes" en vez del toast rojo.
+       ════════════════════════════════════════════════════════════ */
+    var OUTBOX = 'etaax_outbox_v1';
+    function _obLoad() { try { return JSON.parse(localStorage.getItem(OUTBOX)) || []; } catch (e) { return []; } }
+    function _obSave(q) { try { localStorage.setItem(OUTBOX, JSON.stringify(q)); } catch (e) {} }
+
+    function _obIndicador() {
+        var n = _obLoad().length;
+        var el = document.getElementById('etaax-sync-pending');
+        if (!n) { if (el) el.style.display = 'none'; return; }
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'etaax-sync-pending';
+            el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:99998;' +
+                'background:#1a1916;border:1px solid #f5c842;border-radius:10px;padding:9px 15px;' +
+                'font-family:DM Sans,sans-serif;font-size:12px;color:#f0ece6;max-width:340px;' +
+                'box-shadow:0 8px 32px rgba(0,0,0,.45)';
+            if (document.body) document.body.appendChild(el);
         }
-        return false;
+        var s = n !== 1 ? 's' : '';
+        el.innerHTML = '<span style="color:#f5c842;font-weight:700">⏳ Sincronizando…</span> ' +
+            n + ' cambio' + s + ' pendiente' + s + ' (se sube' + (n !== 1 ? 'n' : '') + ' solo' + s + ').';
+        el.style.display = 'block';
     }
 
-    window.sbUpsert = async function (tabla, record, negId) {
+    function _obAdd(item) {
+        item.tries = 0;
+        var q = _obLoad();
+        // dedup: misma tabla + clave + op → gana el último estado
+        q = q.filter(function (x) { return !(x.tabla === item.tabla && x.k === item.k && x.op === item.op); });
+        q.push(item);
+        _obSave(q);
+        _obIndicador();
+        _obFlush();
+    }
+
+    async function _obEjecutar(it) {
+        if (it.op === 'delete') {
+            var rd = await _supabase.from(it.tabla).delete().eq('id', it.id);
+            return !rd.error;
+        }
+        // Aligerar al momento de subir (requiere red): base64 → Storage URL
+        try {
+            if (it.payload && it.payload.datos && window.sbAligerarRecord) {
+                await window.sbAligerarRecord(it.payload.datos, it.tabla, it.payload.negocio_id);
+            }
+        } catch (e) {}
+        var ru = await _supabase.from(it.tabla).upsert(it.payload, it.opts);
+        return !ru.error;
+    }
+
+    var _obFlushing = false;
+    async function _obFlush() {
+        if (_obFlushing || typeof _supabase === 'undefined') return;
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) return; // sin red
+        _obFlushing = true;
+        try {
+            var q = _obLoad(), quedan = [];
+            for (var i = 0; i < q.length; i++) {
+                var it = q[i], ok = false;
+                try { ok = await _obEjecutar(it); } catch (e) { ok = false; }
+                if (!ok) {
+                    it.tries = (it.tries || 0) + 1;
+                    if (it.tries < 8) quedan.push(it);
+                    else console.error('[outbox] descartado tras 8 intentos:', it.tabla, it.k);
+                }
+            }
+            _obSave(quedan);
+            _obIndicador();
+        } finally { _obFlushing = false; }
+    }
+    window._sbFlush = _obFlush;
+    window._sbPendientes = function () { return _obLoad().length; };
+
+    window.sbUpsert = function (tabla, record, negId) {
         var id = negId || _negId();
-        if (!id || typeof _supabase === 'undefined') return;
-        try { await window.sbAligerarRecord(record, tabla, id); } catch (e) {}
-        await _upsertReintento(tabla, {
-            id: record.id, negocio_id: id, datos: record, updated_at: new Date().toISOString()
-        }, { onConflict: 'id' });
+        if (!id || !record || typeof _supabase === 'undefined') return;
+        _obAdd({ op: 'upsert', tabla: tabla, k: record.id,
+            payload: { id: record.id, negocio_id: id, datos: record, updated_at: new Date().toISOString() },
+            opts: { onConflict: 'id' } });
     };
 
-    window.sbUpsertDoc = async function (tabla, datos, negId) {
+    window.sbUpsertDoc = function (tabla, datos, negId) {
         var id = negId || _negId();
         if (!id || typeof _supabase === 'undefined') return;
-        try { await window.sbAligerarRecord(datos, tabla, id); } catch (e) {}
-        await _upsertReintento(tabla, {
-            negocio_id: id, datos: datos, updated_at: new Date().toISOString()
-        }, { onConflict: 'negocio_id' });
+        _obAdd({ op: 'upsert', tabla: tabla, k: id,
+            payload: { negocio_id: id, datos: datos, updated_at: new Date().toISOString() },
+            opts: { onConflict: 'negocio_id' } });
     };
 
     window.sbDelete = function (tabla, id) {
-        if (typeof _supabase === 'undefined') return;
-        _supabase.from(tabla).delete().eq('id', id).then(_check('delete ' + tabla));
+        if (typeof _supabase === 'undefined' || !id) return;
+        _obAdd({ op: 'delete', tabla: tabla, k: id, id: id });
     };
+
+    // Disparadores del flush: al cargar, al reconectar, y cada 20s.
+    if (typeof window !== 'undefined') {
+        window.addEventListener('online', _obFlush);
+        setInterval(_obFlush, 20000);
+        setTimeout(function () { _obIndicador(); _obFlush(); }, 1500);
+    }
 
     /* ── Realtime: el servidor EMPUJA los cambios → el otro dispositivo se
        actualiza solo, sin recargar (efecto Google Drive). Requiere que la tabla
@@ -224,29 +290,20 @@
        Doc por negocio en negocio_sucursales: { sucursales:[...], cfg:{[id]:{...}} }.
        sbUpsertDoc aligera los logos base64 a Storage automáticamente. */
     var _sucPushTimers = {};
-    async function _sucPushNow(negId) {
+    function _sucPushNow(negId) {
         var sucs = [];
         try { sucs = JSON.parse(localStorage.getItem('etaax_' + negId + '_sucursales') || '[]'); } catch (e) {}
-        if (!sucs.length || typeof _supabase === 'undefined') return; // nada que respaldar
+        if (!sucs.length) return; // nada que respaldar
         var cfg = {};
         sucs.forEach(function (s) {
             var c = {};
             try { c = JSON.parse(localStorage.getItem('etaax_' + negId + '_suc_' + s.id) || '{}'); } catch (e) {}
             var logo = localStorage.getItem('etaax_' + negId + '_suc_' + s.id + '_logo') || '';
-            if (logo) c._logo = logo; // se aligera a URL si es base64
+            if (logo) c._logo = logo; // el outbox lo aligera a URL si es base64
             cfg[s.id] = c;
         });
-        var datos = { sucursales: sucs, cfg: cfg };
-        try { if (window.sbAligerarRecord) await window.sbAligerarRecord(datos, 'sucursales', negId); } catch (e) {}
-        // Upsert SILENCIOSO (solo consola): el sync de sucursales es de fondo y los
-        // datos están a salvo en localStorage. No dispara el toast "Sin sincronizar"
-        // (que alarmaba en el login si faltaba la migración v15).
-        try {
-            var r = await _supabase.from('negocio_sucursales').upsert(
-                { negocio_id: negId, datos: datos, updated_at: new Date().toISOString() },
-                { onConflict: 'negocio_id' });
-            if (r.error) console.warn('[sucursales] no sincronizó (¿falta correr migración v15?):', r.error.message);
-        } catch (e) { console.warn('[sucursales] push error:', e); }
+        // Vía outbox: confiable + offline + sin toast rojo (indicador discreto).
+        window.sbUpsertDoc('negocio_sucursales', { sucursales: sucs, cfg: cfg }, negId);
     }
     window.sbSucPush = function (negId) {
         if (!negId) return;
