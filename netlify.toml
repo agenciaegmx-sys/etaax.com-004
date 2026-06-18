@@ -9,8 +9,9 @@
 [[headers]]
   for = "/*"
   [headers.values]
-    # Clickjacking: nadie puede meter el sitio en un iframe
-    X-Frame-Options = "DENY"
+    # Clickjacking: solo el propio sitio puede enmarcarse (lo usa el editor de
+    # insumo/escandallo en un iframe). Sigue bloqueando enmarcado de terceros.
+    X-Frame-Options = "SAMEORIGIN"
     # Sniffing: el browser respeta el Content-Type declarado
     X-Content-Type-Options = "nosniff"
     # Referrer: no filtra la URL completa a terceros
@@ -29,6 +30,7 @@
       img-src 'self' data: blob: https://byjuocnkyuxxudondciz.supabase.co;
       object-src 'none';
       frame-src 'self';
+      frame-ancestors 'self';
       base-uri 'self';
       form-action 'self';
     """
