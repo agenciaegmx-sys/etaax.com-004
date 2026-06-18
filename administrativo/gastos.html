@@ -1314,16 +1314,6 @@ function _abrirPuenteGasto(){
     var box=document.getElementById('qrGastoBox');
     if(!box||!window.QrPuente)return;
     box.style.display='block';
-    // El escaneo por QR y la subida de fotos usan Supabase Storage, que exige la
-    // sesión del DUEÑO. Las sesiones de colaborador (gerente, etc.) son locales y
-    // no pueden, así que mostramos un aviso claro en vez de un QR que fallaría.
-    var _ctxQR; try{ _ctxQR=JSON.parse(localStorage.getItem('etaax_ctx')||'null'); }catch(e){}
-    if(_ctxQR && _ctxQR.ctxType==='staff'){
-        box.innerHTML='<div style="font-size:11px;color:var(--text-dim);line-height:1.5;max-width:150px">'
-          +'📵 El escaneo por QR está disponible solo en sesión del <b>dueño</b>. '
-          +'Como colaborador puedes registrar el gasto sin foto; el dueño podrá adjuntarla después.</div>';
-        return;
-    }
     QrPuente.abrir(getNegocioActivo(),'gasto',box,function(foto){
         if(_evidenciasGasto.length>=3){ alert('Ya tienes 3 archivos en este gasto.'); return; }
         _evidenciasGasto.push({url:foto.url, path:foto.path, pdf:false, nombre:'foto-celular.jpg'});

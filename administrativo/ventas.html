@@ -1115,15 +1115,6 @@ function _abrirPuenteCorte(){
     var box=document.getElementById('qrCorteBox');
     if(!box || !window.QrPuente) return;
     box.style.display='block';
-    // El QR usa Supabase Storage (requiere sesión del dueño). En sesión de
-    // colaborador no funciona, así que avisamos en vez de mostrar un QR roto.
-    var _ctxQR; try{ _ctxQR=JSON.parse(localStorage.getItem('etaax_ctx')||'null'); }catch(e){}
-    if(_ctxQR && _ctxQR.ctxType==='staff'){
-        box.innerHTML='<div style="font-size:11px;color:var(--text-dim);line-height:1.5;max-width:160px">'
-          +'📵 El escaneo por QR está disponible solo en sesión del <b>dueño</b>. '
-          +'Como colaborador puedes registrar el corte sin fotos; el dueño podrá adjuntarlas después.</div>';
-        return;
-    }
     QrPuente.abrir(getNegocioActivo(), 'corte', box, function(foto){
         if(_evidenciasCorte.length>=5){ alert('Ya tienes 5 fotos en este corte.'); return; }
         _evidenciasCorte.push({url:foto.url, path:foto.path});

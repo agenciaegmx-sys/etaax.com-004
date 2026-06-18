@@ -36,7 +36,15 @@
         var token = _token16();
         var ahora = Date.now();
         var r = await _supabase.from('pairing_sesiones').insert({ token: token, negocio_id: _ctx.negId, tipo: _ctx.tipo });
-        if (r.error) { if (window._sbToastError) _sbToastError('QR: ' + r.error.message); }
+        if (r.error) {
+            // Sin permiso para crear el token (p.ej. falta correr la migración v18).
+            // Aviso claro en vez de un QR que no funcionaría.
+            if (_ctx && _ctx.el) _ctx.el.innerHTML =
+                '<div style="font-size:11px;color:var(--text-dim);line-height:1.5;max-width:160px">' +
+                '📵 No se pudo iniciar el escaneo. Registra sin foto; el dueño podrá adjuntarla después.</div>';
+            if (window._sbToastError) _sbToastError('QR: ' + r.error.message);
+            return;
+        }
 
         _tokens.push({ token: token, ts: ahora });
         // purga tokens que ya pasaron su minuto (+10s de gracia)
@@ -67,15 +75,16 @@
     async function _poll() {
         if (!_ctx || !_tokens.length) return;
         var lista = _tokens.map(function (x) { return x.token; });
-        var q = await _supabase.from('capturas_pendientes')
-            .select('id,foto_url,foto_path,token').in('token', lista).eq('asociado', false);
+        // claim_capturas (RPC SECURITY DEFINER): devuelve las fotos de estos tokens
+        // y las marca asociadas en un solo paso. Funciona también para sesiones de
+        // colaborador (anon), sin exponer la tabla completa por SELECT.
+        var q = await _supabase.rpc('claim_capturas', { p_tokens: lista });
         if (q.error || !q.data) return;
         for (var i = 0; i < q.data.length; i++) {
             var c = q.data[i];
             if (_seen[c.id]) continue;
             _seen[c.id] = true;
             if (_ctx && typeof _ctx.onFoto === 'function' && c.foto_url) _ctx.onFoto({ url: c.foto_url, path: c.foto_path });
-            _supabase.from('capturas_pendientes').update({ asociado: true }).eq('id', c.id).then(function () {});
         }
     }
 
