@@ -812,6 +812,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
 <script src="/etaax-db.js"></script>
+<script src="staff-auth.js"></script>
 <script>
 var ADMIN_EMAIL = 'admin@etaax.com';
 
@@ -893,6 +894,10 @@ async function _syncNegociosDB() {
     }
     var fromDB = res.data.map(_negFromDb);
     var dbIds  = fromDB.map(function(n){ return n.id; });
+    // Asegurar la cuenta de colaboradores de cada negocio (best-effort, en
+    // segundo plano). Así, al iniciar sesión un colaborador en este equipo, la
+    // app puede entrar a Supabase y ver/escribir los datos de la nube.
+    if (window.StaffAuth) { fromDB.forEach(function(n){ StaffAuth.provisionar(n.id); }); }
     // Keep optimistically created local businesses not yet synced to DB
     var localOnly = _getNegocios().filter(function(n){
         return n.usuarioId === _sesion.usuarioId && dbIds.indexOf(n.id) === -1;
@@ -1232,11 +1237,15 @@ async function loginSubmit() {
     shakeError('Usuario o contraseña incorrectos.');
 }
 
-function _iniciarSesionStaff(miembro, neg) {
+async function _iniciarSesionStaff(miembro, neg) {
     var expira = Date.now() + (30 * 24 * 60 * 60 * 1000);
     _sesion = { type:'staff', staffId:miembro.id, negocioId:neg.id, nombre:miembro.nombre, rol:miembro.rol||'otro', expira:expira };
     _setSesion(_sesion);
     localStorage.setItem('etaax_negocio_activo', neg.id);
+    // Iniciar la cuenta de colaboradores en Supabase para ver/escribir los datos
+    // de la nube (histórico de cortes, gastos, etc.). Si no está provisionada o
+    // falla, el colaborador sigue trabajando en local (sin regresión).
+    if (window.StaffAuth) { try { await StaffAuth.login(neg.id); } catch (e) {} }
     _migrarDatosLegacy(neg.id);
     _guardarCtx(neg);
     _showModulos(neg);
