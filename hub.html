@@ -1243,9 +1243,10 @@ async function _iniciarSesionStaff(miembro, neg) {
     _setSesion(_sesion);
     localStorage.setItem('etaax_negocio_activo', neg.id);
     // Iniciar la cuenta de colaboradores en Supabase para ver/escribir los datos
-    // de la nube (histórico de cortes, gastos, etc.). Si no está provisionada o
-    // falla, el colaborador sigue trabajando en local (sin regresión).
-    if (window.StaffAuth) { try { await StaffAuth.login(neg.id); } catch (e) {} }
+    // de la nube (histórico de cortes, gastos, etc.). Pasa el hash de su contraseña
+    // para obtener la credencial de la nube si no está cacheada (v20). Si falla,
+    // el colaborador sigue trabajando en local (sin regresión).
+    if (window.StaffAuth) { try { await StaffAuth.login(neg.id, miembro.passwordHash); } catch (e) {} }
     _migrarDatosLegacy(neg.id);
     _guardarCtx(neg);
     _showModulos(neg);

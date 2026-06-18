@@ -104,12 +104,21 @@
         },
 
         // STAFF: inicia la cuenta compartida del negocio en Supabase.
-        // Devuelve true si quedó con sesión real; false → seguir en local.
-        login: async function (negId) {
+        // pwdHash = hash de la contraseña del colaborador (para pedir la credencial
+        // a la nube si no está cacheada). Devuelve true si quedó con sesión real.
+        login: async function (negId, pwdHash) {
             if (!negId || typeof _supabase === 'undefined') return false;
             var cred = _getCredLocal(negId);
+            // Si no hay credencial local, pedirla a la nube con el hash (v20).
+            if ((!cred || !cred.email) && pwdHash) {
+                try {
+                    var rc = await _supabase.rpc('obtener_staff_cred', { p_neg: negId, p_hash: pwdHash });
+                    if (!rc.error && rc.data && rc.data.email) { cred = rc.data; _setCredLocal(negId, cred); }
+                    else if (rc.error) { _lastErr = 'rpc cred: ' + rc.error.message; console.warn('[staff-auth] obtener_staff_cred:', rc.error.message); }
+                } catch (e) { _lastErr = 'rpc cred: ' + ((e && e.message) || e); }
+            }
             if (!cred || !cred.email) {
-                _lastErr = 'sin credenciales en este equipo (el dueño debe iniciar sesión aquí tras correr v19)';
+                _lastErr = _lastErr || 'sin credenciales (¿falta correr v19/v20 o aprovisionar como dueño?)';
                 console.warn('[staff-auth] ' + _lastErr);
                 return false;
             }
