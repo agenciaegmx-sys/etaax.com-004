@@ -895,11 +895,12 @@ function _renderOtros(r){
     }).join('');
     tbody.querySelectorAll('[data-otro-del]').forEach(function(btn){
         btn.addEventListener('click',function(){
-            if(!confirm('¿Eliminar este ingreso?'))return;
             var delId = btn.dataset.otroDel;
-            _cacheOtros = loadOtros().filter(function(o){return o.id!==delId;});
-            _sbDelOtro(delId);
-            renderAll();
+            _pedirClaveAdmin('Eliminar otro ingreso', function(){
+                _cacheOtros = loadOtros().filter(function(o){return o.id!==delId;});
+                _sbDelOtro(delId);
+                renderAll();
+            });
         });
     });
 }
@@ -908,6 +909,10 @@ function _renderOtros(r){
 var _manualDays = {}; // { "2026-05-01": 5000, ... } temp state while modal is open
 
 function abrirMetas(){
+    // Definir metas requiere autorización (gerente o dueño).
+    _pedirClaveAdmin('Definir meta de venta', function(){ _abrirMetasModal(); }, '🎯 Continuar');
+}
+function _abrirMetasModal(){
     var mes=_pickerVal().slice(0,7);
     var metaDatos=getMetaMes(mes)||{};
     document.getElementById('metaMes').value=mes;
@@ -1024,6 +1029,10 @@ function guardarMeta(){
 
 /* ── Modal Otros Ingresos ── */
 function abrirOtros(id){
+    // Agregar/editar otros ingresos requiere autorización (gerente o dueño).
+    _pedirClaveAdmin(id?'Editar otro ingreso':'Agregar otro ingreso', function(){ _abrirOtrosModal(id); }, id?'✏️ Editar':'➕ Agregar');
+}
+function _abrirOtrosModal(id){
     var d=id?(loadOtros().find(function(o){return o.id===id;})||{}):{};
     document.getElementById('oId').value=d.id||'';
     document.getElementById('oFecha').value=d.fecha||todayStr();
@@ -1167,6 +1176,7 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="../supabase-config.js"></script>
 <script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
+<script src="../admin-guard.js"></script>
 <script src="../ctx-bar.js"></script>
 </body>
 </html>

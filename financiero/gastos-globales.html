@@ -696,10 +696,11 @@ function renderFijos(){
     });
     tbody.querySelectorAll('[data-del-fijo]').forEach(function(btn){
         btn.addEventListener('click',function(){
-            if(!confirm('¿Eliminar este gasto fijo?'))return;
-            _cacheGG_Fijos = loadFijos().filter(function(f){return f.id!==btn.dataset.delFijo;});
-            _sbDelFijo(btn.dataset.delFijo);
-            renderAll();
+            _pedirClaveAdmin('Eliminar gasto fijo', function(){
+                _cacheGG_Fijos = loadFijos().filter(function(f){return f.id!==btn.dataset.delFijo;});
+                _sbDelFijo(btn.dataset.delFijo);
+                renderAll();
+            });
         });
     });
 }
@@ -898,6 +899,10 @@ function renderResumen(){
 
 /* ── Modal Gasto Fijo ── */
 function abrirFijo(id){
+    // Agregar/editar un gasto fijo requiere autorización (gerente o dueño).
+    _pedirClaveAdmin(id?'Editar gasto fijo':'Agregar gasto fijo', function(){ _abrirFijoModal(id); }, id?'✏️ Editar':'➕ Agregar');
+}
+function _abrirFijoModal(id){
     var d=id?(loadFijos().find(function(f){return f.id===id;})||{}):{};
     document.getElementById('fijoId').value=d.id||'';
     document.getElementById('fijoConcepto').value=d.concepto||'';

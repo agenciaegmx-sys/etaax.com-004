@@ -1115,6 +1115,15 @@ function _abrirPuenteCorte(){
     var box=document.getElementById('qrCorteBox');
     if(!box || !window.QrPuente) return;
     box.style.display='block';
+    // El QR usa Supabase Storage (requiere sesión del dueño). En sesión de
+    // colaborador no funciona, así que avisamos en vez de mostrar un QR roto.
+    var _ctxQR; try{ _ctxQR=JSON.parse(localStorage.getItem('etaax_ctx')||'null'); }catch(e){}
+    if(_ctxQR && _ctxQR.ctxType==='staff'){
+        box.innerHTML='<div style="font-size:11px;color:var(--text-dim);line-height:1.5;max-width:160px">'
+          +'📵 El escaneo por QR está disponible solo en sesión del <b>dueño</b>. '
+          +'Como colaborador puedes registrar el corte sin fotos; el dueño podrá adjuntarlas después.</div>';
+        return;
+    }
     QrPuente.abrir(getNegocioActivo(), 'corte', box, function(foto){
         if(_evidenciasCorte.length>=5){ alert('Ya tienes 5 fotos en este corte.'); return; }
         _evidenciasCorte.push({url:foto.url, path:foto.path});
@@ -1259,10 +1268,12 @@ function guardarCorte(){
 function eliminarCorte(id){
     var _c=load().find(function(c){return c.id===id;});
     if(_c && !_puedeEditarCorte(_c)){ alert('Tu rol no puede eliminar cortes de días anteriores.'); return; }
-    if(!confirm('¿Eliminar este corte? Esta acción no se puede deshacer.'))return;
-    _cacheCortes = (_cacheCortes||[]).filter(function(c){return c.id!==id;});
-    _sbDel('cortes', id);
-    renderAll();
+    // Eliminar requiere autorización (contraseña del gerente o del dueño).
+    _pedirClaveAdmin('Eliminar corte de venta', function(){
+        _cacheCortes = (_cacheCortes||[]).filter(function(c){return c.id!==id;});
+        _sbDel('cortes', id);
+        renderAll();
+    });
 }
 
 /* ── Caja fuerte ── */
@@ -1696,7 +1707,7 @@ function _vcInline(val,lbl){
     '</div>';
 }
 function cerrarVerCorte(){ document.getElementById('modalVerCorte').classList.remove('open'); _verCorteId=null; }
-function verCorteAEdicion(){ cerrarVerCorte(); if(_verCorteId) abrirModal(_verCorteId); }
+function verCorteAEdicion(){ cerrarVerCorte(); if(_verCorteId) _pedirClaveAdmin('Editar corte de venta', function(){ abrirModal(_verCorteId); }, '✏️ Editar'); }
 
 document.addEventListener('DOMContentLoaded',function(){
     document.getElementById('pickerInput').value=todayStr();
