@@ -287,6 +287,9 @@
                                 <option>Cheque</option>
                                 <option>Otro</option>
                             </select>
+                            <select class="filtro-select" id="filterSucProv" onchange="renderTable()">
+                                <option value="">Todas las sucursales</option>
+                            </select>
                         </div>
                         <button class="btn-primary" onclick="openModal()">+ Agregar proveedor</button>
                     </div>
@@ -299,6 +302,7 @@
                                     <th style="cursor:pointer" onclick="sortBy('nombre')">Nombre <span id="sortNombre"></span></th>
                                     <th>Tel. Empresa</th>
                                     <th>Contacto directo</th>
+                                    <th>Sucursal</th>
                                     <th>Forma de pago</th>
                                     <th>Banco</th>
                                     <th>Acciones</th>
@@ -383,6 +387,12 @@
                 <div class="form-group">
                     <label>Correo electrónico (opcional)</label>
                     <input type="email" id="fCorreo" placeholder="contacto@empresa.com">
+                </div>
+                <div class="form-group">
+                    <label>Sucursal asignada</label>
+                    <select id="fSucursalProv">
+                        <option value="">— Global / Todas las sucursales —</option>
+                    </select>
                 </div>
             </div>
 
@@ -478,6 +488,43 @@ function toggleNav() {
 /* ── DATA ── */
 function getNegocioActivo(){ return localStorage.getItem('etaax_negocio_activo') || ''; }
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
+function _getSucsProv() {
+    var negId = getNegocioActivo();
+    try { return JSON.parse(localStorage.getItem('etaax_' + negId + '_sucursales') || '[]'); } catch(e) { return []; }
+}
+function _getSucActivaProv() { return localStorage.getItem('etaax_sucursal_activa') || ''; }
+// Sin sucursal = matriz (sucursal por defecto), no "global en todas".
+var MATRIZ_ID = 'suc_principal';
+function _effSucProv(id) { return id || MATRIZ_ID; }
+function _catGlobalProv() { return sessionStorage.getItem('etaax_cat_global') === '1'; }
+function _sucNomProv(id) {
+    if (!id) return '';
+    var s = _getSucsProv().find(function(x){ return x.id === id; });
+    return s ? (s.nombre || id) : id;
+}
+function _poblarSucSelectProv(selId, val) {
+    var sucs = _getSucsProv();
+    var el = document.getElementById(selId);
+    if (!el) return;
+    var tieneMatriz = sucs.some(function(s){ return s.id === MATRIZ_ID; });
+    el.innerHTML = '<option value="">— Sin asignar (Matriz) —</option>' +
+        (tieneMatriz ? '' : (sucs.length ? '<option value="' + MATRIZ_ID + '">Matriz</option>' : '')) +
+        sucs.map(function(s){ return '<option value="' + esc(s.id) + '">' + esc(s.nombre || s.id) + '</option>'; }).join('');
+    if (val) el.value = val;
+}
+function _poblarFiltroSucProv() {
+    var sucs = _getSucsProv();
+    var el = document.getElementById('filterSucProv');
+    if (!el) return;
+    if (sucs.length <= 1) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    var cur = el.value;
+    var tieneMatriz = sucs.some(function(s){ return s.id === MATRIZ_ID; });
+    el.innerHTML = '<option value="">Todas las sucursales</option>' +
+        (tieneMatriz ? '' : '<option value="' + MATRIZ_ID + '">Matriz</option>') +
+        sucs.map(function(s){ return '<option value="' + esc(s.id) + '">' + esc(s.nombre || s.id) + '</option>'; }).join('');
+    if (cur) el.value = cur;
+}
 
 var _cacheProvs = null;
 
@@ -509,8 +556,12 @@ var tmpDocs = [];
 
 /* ── RENDER ── */
 function renderTable() {
-    var q    = document.getElementById('searchInput').value.toLowerCase();
-    var pago = document.getElementById('filterPago').value;
+    _poblarFiltroSucProv();
+    var q       = document.getElementById('searchInput').value.toLowerCase();
+    var pago    = document.getElementById('filterPago').value;
+    var sucFilt = document.getElementById('filterSucProv').value;
+    var catGlobal = _catGlobalProv();
+    var sucActiva = _getSucActivaProv();
     var data = load();
 
     var filtered = data.filter(function(p){
@@ -518,7 +569,16 @@ function renderTable() {
             (p.contacto||'').toLowerCase().includes(q) ||
             (p.banco||'').toLowerCase().includes(q);
         var matchP = !pago || p.formaPago === pago;
-        return matchQ && matchP;
+        // Sin sucursal = matriz. Con catálogo global, sin filtro por sucursal.
+        var matchS = true;
+        if (catGlobal) {
+            matchS = true;
+        } else if (sucFilt) {
+            matchS = _effSucProv(p.sucursalId) === sucFilt;
+        } else if (sucActiva) {
+            matchS = _effSucProv(p.sucursalId) === sucActiva;
+        }
+        return matchQ && matchP && matchS;
     });
 
     filtered.sort(function(a,b){
@@ -542,10 +602,20 @@ function renderTable() {
     tbody.innerHTML = filtered.map(function(p){
         var docsCount = (p.documentos||[]).length;
         var docsChip  = docsCount ? '<span class="pill pill-green" style="margin-left:4px">' + docsCount + ' doc' + (docsCount>1?'s':'') + '</span>' : '';
+        var _haySucsP = _getSucsProv().length > 0;
+        var sucCellP;
+        if (p.sucursalId) {
+            sucCellP = '<span style="font-size:11px;background:rgba(122,184,245,.12);color:#7ab8f5;border:1px solid rgba(122,184,245,.25);border-radius:4px;padding:2px 7px">' + esc(_sucNomProv(p.sucursalId)) + '</span>';
+        } else if (_haySucsP) {
+            sucCellP = '<span style="font-size:11px;background:rgba(255,255,255,.05);color:var(--text-muted);border:1px solid var(--b2);border-radius:4px;padding:2px 7px" title="Sin asignar — pertenece a la matriz">Matriz</span>';
+        } else {
+            sucCellP = '<span style="color:var(--text-dim);font-size:11px">—</span>';
+        }
         return '<tr style="cursor:pointer" ondblclick="openModal(\'' + p.id + '\')">' +
             '<td><strong>' + esc(p.nombre) + '</strong>' + docsChip + '</td>' +
             '<td>' + esc(p.tel||'—') + '</td>' +
             '<td>' + esc(p.contacto||'—') + '</td>' +
+            '<td>' + sucCellP + '</td>' +
             '<td><span class="pill pill-amber">' + esc(p.formaPago||'—') + '</span></td>' +
             '<td>' + esc(p.banco||'—') + '</td>' +
             '<td style="white-space:nowrap">' +
@@ -565,6 +635,7 @@ function openModal(id) {
 function _openModalReal(id) {
     tmpDocs = [];
     clearForm();
+    _poblarSucSelectProv('fSucursalProv', id ? '' : _getSucActivaProv());
     document.getElementById('modalTitle').textContent = id ? 'Editar proveedor' : 'Agregar proveedor';
     document.getElementById('fId').value = '';
 
@@ -578,6 +649,7 @@ function _openModalReal(id) {
             document.getElementById('fContacto').value= p.contacto || '';
             document.getElementById('fCelContacto').value = p.celContacto || '';
             document.getElementById('fCorreo').value  = p.correo || '';
+            _poblarSucSelectProv('fSucursalProv', p.sucursalId || '');
             document.getElementById('fFormaPago').value = p.formaPago || '';
             document.getElementById('fClabe').value   = p.clabe || '';
             document.getElementById('fBanco').value   = p.banco || '';
@@ -636,7 +708,8 @@ function saveProv() {
         banco:            document.getElementById('fBanco').value.trim(),
         metodoFacturacion:document.getElementById('fMetodoFac').value,
         notas:            document.getElementById('fNotas').value.trim(),
-        documentos:       tmpDocs.slice()
+        documentos:       tmpDocs.slice(),
+        sucursalId:       document.getElementById('fSucursalProv').value
     };
 
     obj.negocioId = getNegocioActivo();

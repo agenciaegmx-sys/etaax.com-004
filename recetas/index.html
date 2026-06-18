@@ -869,6 +869,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     // Cargar recetas desde Supabase
     if (typeof _sbInitRecetas === 'function') _sbInitRecetas();
+    // Cargar el catálogo de insumos (para el editor) aunque no se haya visitado Insumos.
+    if (typeof _sbInitInsumosCatalogo === 'function') _sbInitInsumosCatalogo();
 });
 
 // ── Sync precio formulario → costeo ──────────────────────────

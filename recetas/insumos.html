@@ -95,6 +95,7 @@
                         </div>
                         <select class="filtro-select" id="filtroFamilia" onchange="filtrar()"><option value="">Todas las familias</option></select>
                         <select class="filtro-select" id="filtroCategoria" onchange="filtrar()"><option value="">Todas las categorías</option></select>
+                        <select class="filtro-select" id="filtroSucursalIns" onchange="filtrar()"><option value="">Todas las sucursales</option></select>
                     </div>
                 </div>
             </div>
@@ -306,6 +307,14 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Sucursal (solo visible si hay más de 1 sucursal) -->
+            <div id="row-ins-sucursal" style="display:none;margin-bottom:10px">
+                <label class="proc-label">Sucursal asignada</label>
+                <select id="ins-sucursal" style="width:100%;margin-top:4px;font-size:13px">
+                    <option value="">— Global / Todas las sucursales —</option>
+                </select>
             </div>
 
             <!-- Descripción — ancho completo -->

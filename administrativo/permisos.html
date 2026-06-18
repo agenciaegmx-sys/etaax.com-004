@@ -558,15 +558,17 @@ function _mostrarNavBar() {
 
     if (ctx) {
         var color = ctx.negColor || '#3dbe7a';
+        var tipo = (ctx.negTipo || '').split(' · ')[0];
         bar.innerHTML =
             '<div class="ctx-bar-inner" style="border-color:'+color+'44">' +
             '<div class="ctx-neg-emoji-wrap" style="background:'+color+'1a;border-color:'+color+'33">'+_esc2(ctx.negEmoji)+'</div>' +
-            '<div><div class="ctx-neg-name">'+_esc2(ctx.negNombre)+'</div><div class="ctx-neg-tipo">'+_esc2(ctx.negTipo)+'</div></div>' +
-            '<div style="display:flex;align-items:center;gap:4px;margin-left:12px;padding-left:12px;border-left:1px solid rgba(255,255,255,.08)">' +
-            '<button class="ctx-btn" onclick="history.back()" title="Atrás" style="padding:4px 9px">↩</button>' +
-            '<button class="ctx-btn" onclick="history.forward()" title="Adelante" style="padding:4px 9px">↪</button>' +
+            '<div class="ctx-neg-id"><div class="ctx-neg-name">'+_esc2(ctx.negNombre)+'</div><div class="ctx-neg-tipo">'+_esc2(tipo)+'</div></div>' +
+            (ctx.sucNombre ? '<span class="ctx-suc-pill" style="background:'+color+'1f;color:'+color+';border-color:'+color+'55">📍 '+_esc2(ctx.sucNombre)+'</span>' : '') +
+            '<div class="ctx-nav-btns">' +
+            '<button class="ctx-btn ctx-btn-icon" onclick="history.back()" title="Atrás">↩</button>' +
+            '<button class="ctx-btn ctx-btn-icon" onclick="history.forward()" title="Adelante">↪</button>' +
             '</div>' +
-            '<div style="margin-left:auto;display:flex;gap:8px;align-items:center">' +
+            '<div class="ctx-right">' +
             '<div class="ctx-user-badge"><span>'+_esc2((ctx.userName||'').split(' ')[0])+'</span>' +
             '<span class="ctx-badge-plan" style="background:'+ctx.userColor+'22;color:'+ctx.userColor+'">'+_esc2(ctx.userBadge)+'</span></div>' +
             '<a href="'+hubPath+'" class="ctx-btn">← Ir a Módulos</a>' +

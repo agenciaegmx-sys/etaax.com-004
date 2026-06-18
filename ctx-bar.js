@@ -11,19 +11,26 @@
         if (!ctx) return;
         var hubPath = '/hub.html';
         var color = ctx.negColor || '#3dbe7a';
+        // El tipo puede traer " · Sucursal" de sesiones viejas; lo recortamos porque
+        // ahora la sucursal se muestra como pill aparte (sin duplicar).
+        var tipo = (ctx.negTipo || '').split(' · ')[0];
         bar.innerHTML =
             '<div class="ctx-bar-inner" style="border-color:' + color + '44">' +
             '<div class="ctx-neg-emoji-wrap" style="background:' + color + '1a;border-color:' + color + '33">' + esc(ctx.negEmoji) + '</div>' +
-            '<div><div class="ctx-neg-name">' + esc(ctx.negNombre) + '</div><div class="ctx-neg-tipo">' + esc(ctx.negTipo) + '</div></div>' +
-            '<div style="display:flex;align-items:center;gap:4px;margin-left:12px;padding-left:12px;border-left:1px solid rgba(255,255,255,.08)">' +
-            '<button class="ctx-btn" onclick="history.back()" title="Atrás" style="padding:4px 9px">↩</button>' +
-            '<button class="ctx-btn" onclick="history.forward()" title="Adelante" style="padding:4px 9px">↪</button>' +
+            '<div class="ctx-neg-id">' +
+                '<div class="ctx-neg-name">' + esc(ctx.negNombre) + '</div>' +
+                '<div class="ctx-neg-tipo">' + esc(tipo) + '</div>' +
             '</div>' +
-            '<div style="margin-left:auto;display:flex;gap:8px;align-items:center">' +
-            '<div class="ctx-user-badge"><span>' + esc(ctx.userName.split(' ')[0]) + '</span>' +
-            '<span class="ctx-badge-plan" style="background:' + ctx.userColor + '22;color:' + ctx.userColor + '">' + esc(ctx.userBadge) + '</span></div>' +
-            '<a href="' + hubPath + '" class="ctx-btn">← Ir a Módulos</a>' +
-            '<button class="ctx-btn ctx-btn-danger" onclick="ctxSalir()">Salir</button>' +
+            (ctx.sucNombre ? '<span class="ctx-suc-pill" style="background:' + color + '1f;color:' + color + ';border-color:' + color + '55">📍 ' + esc(ctx.sucNombre) + '</span>' : '') +
+            '<div class="ctx-nav-btns">' +
+                '<button class="ctx-btn ctx-btn-icon" onclick="history.back()" title="Atrás">↩</button>' +
+                '<button class="ctx-btn ctx-btn-icon" onclick="history.forward()" title="Adelante">↪</button>' +
+            '</div>' +
+            '<div class="ctx-right">' +
+                '<div class="ctx-user-badge"><span>' + esc(ctx.userName.split(' ')[0]) + '</span>' +
+                '<span class="ctx-badge-plan" style="background:' + ctx.userColor + '22;color:' + ctx.userColor + '">' + esc(ctx.userBadge) + '</span></div>' +
+                '<a href="' + hubPath + '" class="ctx-btn">← Ir a Módulos</a>' +
+                '<button class="ctx-btn ctx-btn-danger" onclick="ctxSalir()">Salir</button>' +
             '</div>' +
             '</div>';
         bar.style.display = 'flex';

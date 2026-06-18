@@ -11,6 +11,27 @@
    
    // ── Helpers de sesión (mirror de app.js para páginas sin app.js) ──
    function getNegocioActivo() { return localStorage.getItem('etaax_negocio_activo') || ''; }
+   function _getSucsIns() {
+       var negId = getNegocioActivo();
+       try { return JSON.parse(localStorage.getItem('etaax_' + negId + '_sucursales') || '[]'); } catch(e) { return []; }
+   }
+   function _getSucActivaIns() { return localStorage.getItem('etaax_sucursal_activa') || ''; }
+   // Sin sucursal = matriz (sucursal por defecto), no "global en todas".
+   var MATRIZ_ID_INS = 'suc_principal';
+   function _effSucIns(id) { return id || MATRIZ_ID_INS; }
+   function _catGlobalIns() { return sessionStorage.getItem('etaax_cat_global') === '1'; }
+   function _poblarFiltroSucIns() {
+       var sucs = _getSucsIns();
+       var el = document.getElementById('filtroSucursalIns');
+       if (!el || sucs.length <= 1) { if (el) el.style.display = 'none'; return; }
+       el.style.display = '';
+       var cur = el.value;
+       var tieneMatriz = sucs.some(function(s){ return s.id === MATRIZ_ID_INS; });
+       el.innerHTML = '<option value="">Todas las sucursales</option>' +
+           (tieneMatriz ? '' : '<option value="' + MATRIZ_ID_INS + '">Matriz</option>') +
+           sucs.map(function(s){ return '<option value="' + (s.id||'') + '">' + (s.nombre || s.id) + '</option>'; }).join('');
+       if (cur) el.value = cur;
+   }
    function _sk(key) {
        var id = getNegocioActivo();
        return id ? ('etaax_' + id + '_' + key) : ('etaax_' + key);
@@ -221,10 +242,15 @@
        const fFam = document.getElementById('filtroFamilia');
        const fCat = document.getElementById('filtroCategoria');
        if (fFam && fFam.options.length <= 1) cargarFiltros();
+       _poblarFiltroSucIns();
 
-       const q   = (fFam ? document.getElementById('searchInput').value : '').toLowerCase();
-       const fam = fFam ? fFam.value : '';
-       const cat = fCat ? fCat.value : '';
+       const q      = (fFam ? document.getElementById('searchInput').value : '').toLowerCase();
+       const fam    = fFam ? fFam.value : '';
+       const cat    = fCat ? fCat.value : '';
+       const fSucEl = document.getElementById('filtroSucursalIns');
+       const sucFil = fSucEl ? fSucEl.value : '';
+       const catGlobal  = _catGlobalIns();
+       const sucActiva  = _getSucActivaIns();
 
        var lista = getInsumos();
        if (q)   lista = lista.filter(x =>
@@ -234,6 +260,11 @@
        );
        if (fam) lista = lista.filter(x => x.familia === fam);
        if (cat) lista = lista.filter(x => x.categoria === cat);
+       // Sin sucursal = matriz. Con catálogo global, no se filtra por sucursal.
+       if (!catGlobal) {
+           if (sucFil)        lista = lista.filter(x => _effSucIns(x.sucursalId) === sucFil);
+           else if (sucActiva) lista = lista.filter(x => _effSucIns(x.sucursalId) === sucActiva);
+       }
 
        _listaFiltrada = lista;
        _paginaActual  = 0;
@@ -1532,6 +1563,20 @@
 
        modalDirty = false;
        _actualizarDatalistProveedores();
+       // Sucursal: poblar select si hay más de 1 sucursal
+       (function() {
+           var sucs = _getSucsIns();
+           var rowEl = document.getElementById('row-ins-sucursal');
+           var selEl = document.getElementById('ins-sucursal');
+           if (!rowEl || !selEl) return;
+           if (sucs.length <= 1) { rowEl.style.display = 'none'; return; }
+           rowEl.style.display = '';
+           var tieneMatriz = sucs.some(function(s){ return s.id === MATRIZ_ID_INS; });
+           selEl.innerHTML = '<option value="">— Sin asignar (Matriz) —</option>' +
+               (tieneMatriz ? '' : '<option value="' + MATRIZ_ID_INS + '">Matriz</option>') +
+               sucs.map(function(s){ return '<option value="' + (s.id||'') + '">' + (s.nombre||s.id) + '</option>'; }).join('');
+           selEl.value = ins ? (ins.sucursalId || '') : (_getSucActivaIns() || '');
+       })();
        document.getElementById('modalOverlay').style.display = 'flex';
        setTimeout(() => document.getElementById('ins-nombre').focus(), 100);
    }
@@ -2772,7 +2817,8 @@
            notas:        document.getElementById('ins-notas').value.trim(),
            activo:       document.getElementById('ins-activo').value || '1',
            foto:         fotoInsumoBase64 || fotoAnterior,
-           presentaciones: presentacionesTemp
+           presentaciones: presentacionesTemp,
+           sucursalId:   (function(){ var el = document.getElementById('ins-sucursal'); return el ? el.value : ''; })()
        };
 
        // #2 Storage: si la foto es base64, súbela a Storage y guarda solo la URL

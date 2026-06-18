@@ -664,6 +664,11 @@ function _getSucs() {
     try { return JSON.parse(localStorage.getItem('etaax_' + negId + '_sucursales') || '[]'); } catch(e) { return []; }
 }
 function _getSucActiva() { return localStorage.getItem('etaax_sucursal_activa') || ''; }
+// La matriz es la sucursal por defecto. Un colaborador SIN sucursalId pertenece
+// a la matriz (no a "ninguna"), así no desaparece al filtrar por sucursal.
+var MATRIZ_ID = 'suc_principal';
+function _effSuc(sucursalId) { return sucursalId || MATRIZ_ID; }
+function _catGlobalOn() { return sessionStorage.getItem('etaax_cat_global') === '1'; }
 function _sucNombre(id) {
     if (!id) return '';
     var s = _getSucs().find(function(x){ return x.id === id; });
@@ -764,9 +769,12 @@ function renderSucursalFilter() {
     var sel = document.getElementById('filterSucursal');
     if (!sel) return;
     var current = sel.value;
+    // Si la matriz no está en la lista (negocio sin sucursales creadas aún) pero
+    // hay otras, igual la mostramos como destino por defecto.
+    var tieneMatriz = sucs.some(function(s){ return s.id === MATRIZ_ID; });
     sel.innerHTML = '<option value="">Todas las sucursales</option>' +
-        sucs.map(function(s){ return '<option value="' + s.id + '">' + esc(s.nombre || s.id) + '</option>'; }).join('') +
-        '<option value="__ninguna">— Sin sucursal —</option>';
+        (tieneMatriz ? '' : '<option value="' + MATRIZ_ID + '">Matriz</option>') +
+        sucs.map(function(s){ return '<option value="' + s.id + '">' + esc(s.nombre || s.id) + '</option>'; }).join('');
     if (current) sel.value = current;
 }
 
@@ -775,7 +783,9 @@ function _poblarSucursalModal() {
     var sel = document.getElementById('fSucursal');
     if (!sel) return;
     var current = sel.value;
-    sel.innerHTML = '<option value="">— Sin sucursal asignada —</option>' +
+    var tieneMatriz = sucs.some(function(s){ return s.id === MATRIZ_ID; });
+    sel.innerHTML = '<option value="">— Sin asignar (Matriz) —</option>' +
+        (tieneMatriz ? '' : (sucs.length ? '<option value="' + MATRIZ_ID + '">Matriz</option>' : '')) +
         sucs.map(function(s){ return '<option value="' + s.id + '">' + esc(s.nombre || s.id) + '</option>'; }).join('');
     if (current) sel.value = current;
 }
@@ -844,17 +854,15 @@ function renderTable() {
     var sucFilt  = document.getElementById('filterSucursal').value;
     var data     = load();
 
+    var catGlobal = _catGlobalOn();
     var filtered = data.filter(function(s){
         var matchQ = !q || s.nombre.toLowerCase().includes(q) ||
             (s.puesto||'').toLowerCase().includes(q) ||
             (s.celular||'').includes(q);
         var matchP = !puesto || s.puesto === puesto;
         var matchE = !estado || s.estado === estado;
-        var matchS = !sucFilt
-            ? true
-            : sucFilt === '__ninguna'
-                ? !s.sucursalId
-                : s.sucursalId === sucFilt;
+        // Sin sucursal = matriz. Con catálogo global, no se filtra por sucursal.
+        var matchS = (catGlobal || !sucFilt) ? true : _effSuc(s.sucursalId) === sucFilt;
         return matchQ && matchP && matchE && matchS;
     });
 
@@ -887,10 +895,16 @@ function renderTable() {
         var ingreso   = s.fechaIngreso ? s.fechaIngreso : '—';
         var usuarioChip = s.usuario ? '<span style="font-size:10px;color:var(--text-dim)"> @' + esc(s.usuario) + '</span>' : '';
         var cumpleChip = _esCumpleHoy(s.fechaNacimiento) ? ' <span title="Hoy cumple años">🎂</span>' : '';
-        var sucNom = s.sucursalId ? _sucNombre(s.sucursalId) : '';
-        var sucCell = sucNom
-            ? '<span style="font-size:11px;background:rgba(122,184,245,.12);color:#7ab8f5;border:1px solid rgba(122,184,245,.25);border-radius:4px;padding:2px 7px;white-space:nowrap">' + esc(sucNom) + '</span>'
-            : '<span style="color:var(--text-dim);font-size:12px">—</span>';
+        var _haySucs = _getSucs().length > 0;
+        var sucCell;
+        if (s.sucursalId) {
+            sucCell = '<span style="font-size:11px;background:rgba(122,184,245,.12);color:#7ab8f5;border:1px solid rgba(122,184,245,.25);border-radius:4px;padding:2px 7px;white-space:nowrap">' + esc(_sucNombre(s.sucursalId)) + '</span>';
+        } else if (_haySucs) {
+            // Sin asignar = matriz (por defecto)
+            sucCell = '<span style="font-size:11px;background:rgba(255,255,255,.05);color:var(--text-muted);border:1px solid var(--b2);border-radius:4px;padding:2px 7px;white-space:nowrap" title="Sin asignar — pertenece a la matriz">Matriz</span>';
+        } else {
+            sucCell = '<span style="color:var(--text-dim);font-size:12px">—</span>';
+        }
         return '<tr style="cursor:pointer" ondblclick="openModal(\'' + s.id + '\')">' +
             '<td><strong>' + esc(s.nombre) + '</strong>' + cumpleChip + usuarioChip + docsChip + '</td>' +
             '<td>' + esc(s.puesto||'—') + '</td>' +
@@ -1232,9 +1246,9 @@ function esc(s) {
 async function initPage() {
     var negId = getNegocioActivo();
     if (!negId) { window.location.href = '../hub.html'; return; }
-    // Si hay sucursal activa, pre-filtrar por ella
+    // Si hay sucursal activa, pre-filtrar por ella (salvo modo catálogo global).
     var sucActiva = _getSucActiva();
-    if (sucActiva) {
+    if (sucActiva && !_catGlobalOn()) {
         renderSucursalFilter(); // poblar primero
         var fSuc = document.getElementById('filterSucursal');
         if (fSuc) fSuc.value = sucActiva;

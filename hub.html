@@ -248,9 +248,9 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 
 /* Negocio activo bar */
 .neg-activo-bar{
-  display:flex;align-items:center;gap:12px;
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
   background:var(--s1);border:1px solid var(--b1);border-radius:12px;
-  padding:12px 18px;width:100%;max-width:960px;margin:0 auto 40px;
+  padding:12px 18px;width:100%;max-width:1120px;margin:0 auto 40px;
   transition:border-color .3s;
 }
 .neg-activo-emoji-wrap{
@@ -259,9 +259,14 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   display:flex;align-items:center;justify-content:center;
   font-size:20px;flex-shrink:0;transition:background .3s;
 }
-.neg-activo-nombre{font-size:14px;font-weight:600;color:var(--text);}
-.neg-activo-tipo{font-size:10px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-top:2px;}
-.neg-activo-btns{margin-left:auto;display:flex;gap:8px;align-items:center;}
+.neg-activo-id{flex-shrink:0;min-width:0;}
+.neg-activo-nombre{font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;}
+.neg-activo-tipo{font-size:10px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-top:2px;white-space:nowrap;}
+.chip-sucursal-hub{
+  flex-shrink:0;white-space:nowrap;font-size:11px;font-weight:600;
+  padding:4px 11px;border-radius:20px;letter-spacing:.4px;
+}
+.neg-activo-btns{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
 .btn-cambiar-neg{
   background:transparent;border:1px solid var(--b2);color:var(--muted);
   font-family:'DM Sans',sans-serif;font-size:11px;
@@ -639,16 +644,19 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
       <div class="neg-activo-emoji-wrap" id="negActEmojiWrap">
         <span id="chipEmoji">🏢</span>
       </div>
-      <div>
+      <div class="neg-activo-id">
         <div id="chipNombre" class="neg-activo-nombre">—</div>
         <div id="chipTipo" class="neg-activo-tipo">—</div>
       </div>
+      <span id="chipSucursalHub" class="chip-sucursal-hub" style="display:none"></span>
       <div class="neg-activo-btns">
         <div class="user-badge">
           <span id="userNombreChip" style="font-size:12px">—</span>
           <span class="user-badge-plan" id="userPlanChip">—</span>
         </div>
         <button class="btn-cambiar-neg" id="btnInfoNeg" onclick="abrirInfoNegocio()" title="Ver información del negocio" style="display:none">ℹ️ Información del Negocio</button>
+        <button class="btn-cambiar-neg" id="btnInfoSuc" onclick="abrirInfoSucursal()" title="Ver información de la sucursal" style="display:none">🏪 Info Sucursal</button>
+        <button class="btn-cambiar-neg" id="btnCatGlobal" onclick="abrirCatalogosGlobales()" title="Catálogos globales de todas las sucursales" style="display:none">🌐 Catálogos Globales</button>
         <button class="btn-cambiar-neg" id="btnCambiarNeg" onclick="cambiarNegocio()">↩ Cambiar negocio</button>
         <button class="btn-cambiar-neg" id="btnVolverAdmin" onclick="volverAlAdmin()" style="display:none;border-color:var(--gold);color:var(--gold)">← Panel Admin</button>
         <button class="btn-logout" onclick="logout()">Salir</button>
@@ -766,6 +774,54 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
       <button class="modal-close" onclick="cerrarInfoNeg()">✕</button>
     </div>
     <div class="modal-body" id="infoNegBody"></div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Info Sucursal ══ -->
+<div id="modalInfoSuc" class="modal-overlay" style="display:none" onclick="if(event.target===this)cerrarInfoSuc()">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div class="modal-title" id="infoSucTitulo">Información de la sucursal</div>
+      <button class="modal-close" onclick="cerrarInfoSuc()">✕</button>
+    </div>
+    <div class="modal-body" id="infoSucBody"></div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Catálogos Globales ══ -->
+<style>
+.catg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+@media(max-width:560px){.catg-grid{grid-template-columns:repeat(2,1fr);}}
+.catg-card{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  background:var(--s2);border:1px solid var(--b1);border-radius:12px;
+  padding:18px 10px;cursor:pointer;transition:all .18s;font-family:inherit;
+}
+.catg-card:hover{border-color:#7ab8f5;background:rgba(122,184,245,.08);transform:translateY(-2px);}
+.catg-emoji{font-size:28px;line-height:1;}
+.catg-label{font-size:12px;font-weight:600;color:var(--text);letter-spacing:.3px;}
+</style>
+<div id="modalCatGlobal" class="modal-overlay" style="display:none" onclick="if(event.target===this)cerrarCatGlobal()">
+  <div class="modal-box" style="max-width:640px">
+    <div class="modal-head">
+      <div class="modal-title">🌐 Catálogos Globales</div>
+      <button class="modal-close" onclick="cerrarCatGlobal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--muted);font-size:13px;margin:0 0 18px;line-height:1.5">
+        Vista empresarial: consulta y administra los catálogos de
+        <strong style="color:var(--text)">todas las sucursales</strong> juntos.
+        La cuenta madre comparte esta información entre sucursales.
+      </p>
+      <div class="catg-grid">
+        <button class="catg-card" onclick="abrirCatGlobal('administrativo/staff.html')"><span class="catg-emoji">👥</span><span class="catg-label">Colaboradores</span></button>
+        <button class="catg-card" onclick="abrirCatGlobal('recetas/index.html')"><span class="catg-emoji">🍽️</span><span class="catg-label">Recetas</span></button>
+        <button class="catg-card" onclick="abrirCatGlobal('recetas/index.html')"><span class="catg-emoji">🥘</span><span class="catg-label">Sub-recetas</span></button>
+        <button class="catg-card" onclick="abrirCatGlobal('recetas/insumos.html')"><span class="catg-emoji">📦</span><span class="catg-label">Insumos</span></button>
+        <button class="catg-card" onclick="abrirCatGlobal('administrativo/clientes.html')"><span class="catg-emoji">🧾</span><span class="catg-label">Clientes</span></button>
+        <button class="catg-card" onclick="abrirCatGlobal('administrativo/proveedores.html')"><span class="catg-emoji">🚚</span><span class="catg-label">Proveedores</span></button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1248,7 +1304,7 @@ async function loginSubmit() {
             }
             if (row) {
                 var negObj = _negFromDb({ id: row.negocio_id, usuario_id: null, datos: row.negocio_datos || {} });
-                var miembroObj = { id: row.staff_id, nombre: row.nombre, rol: row.rol || 'otro', usuario: input, passwordHash: hv2 };
+                var miembroObj = { id: row.staff_id, nombre: row.nombre, rol: row.rol || 'otro', usuario: input, passwordHash: hv2, sucursalId: row.sucursal_id || '' };
                 // Cachear localmente para los próximos logins en este equipo.
                 try {
                     var lst = JSON.parse(localStorage.getItem('etaax_' + row.negocio_id + '_staff') || '[]');
@@ -1278,8 +1334,18 @@ async function _iniciarSesionStaff(miembro, neg) {
     // para obtener la credencial de la nube si no está cacheada (v20). Si falla,
     // el colaborador sigue trabajando en local (sin regresión).
     if (window.StaffAuth) { try { await StaffAuth.login(neg.id, miembro.passwordHash); } catch (e) {} }
+    // Sincronizar la lista de sucursales desde la nube (en otro equipo el caché
+    // local no las tiene) para poder resolver la sucursal asignada al colaborador.
+    if (window.sbSucPull) { try { await sbSucPull(neg.id); } catch (e) {} }
+    // Sucursal asignada al colaborador: fija el contexto de sucursal para el header.
+    var sucAsignada = null;
+    if (miembro.sucursalId) {
+        sucAsignada = _getSucursales(neg.id).find(function(s){ return s.id === miembro.sucursalId; }) || null;
+    }
+    if (sucAsignada) localStorage.setItem('etaax_sucursal_activa', sucAsignada.id);
+    else localStorage.removeItem('etaax_sucursal_activa');
     _migrarDatosLegacy(neg.id);
-    _guardarCtx(neg);
+    _guardarCtx(neg, sucAsignada);
     _showModulos(neg);
 }
 
@@ -2106,7 +2172,7 @@ function _guardarCtx(neg, suc) {
     var ctx = {
         negId: neg.id, negNombre: neg.nombre,
         negEmoji: neg.emoji || t.emoji,
-        negTipo: t.label + (suc ? ' · ' + suc.nombre : ''),
+        negTipo: t.label,
         negColor: sucColor,
         sucId: suc ? suc.id : null, sucNombre: suc ? suc.nombre : null,
         userName: _sesion.nombre, userBadge: '', userColor: '#3dbe7a',
@@ -2165,12 +2231,40 @@ function _showModulos(neg) {
     var sucId  = localStorage.getItem('etaax_sucursal_activa') || '';
     var sucCfg = sucId ? _getSucCfg(sucId, neg.id) : {};
     var color  = sucCfg.color || neg.color || '#3dbe7a';
+    var sucNom = sucId ? (_getSucursales(neg.id).find(function(s){ return s.id === sucId; }) || {}).nombre || '' : '';
     document.getElementById('chipEmoji').textContent          = neg.emoji || t.emoji;
     document.getElementById('chipNombre').textContent         = neg.nombre;
     document.getElementById('chipTipo').textContent           = t.label;
     document.getElementById('negActBar').style.borderColor    = color + '44';
     document.getElementById('negActEmojiWrap').style.background  = color + '1a';
     document.getElementById('negActEmojiWrap').style.borderColor = color + '33';
+
+    // Chip de sucursal activa en el header
+    var chipSuc = document.getElementById('chipSucursalHub');
+    var btnInfoSuc = document.getElementById('btnInfoSuc');
+    var btnCatGlobal = document.getElementById('btnCatGlobal');
+    var tieneMasSucs = _getSucursales(neg.id).length > 1;
+    if (chipSuc) {
+        if (sucNom) {
+            chipSuc.textContent = '📍 ' + sucNom;
+            chipSuc.style.display = '';
+            chipSuc.style.background = color + '22';
+            chipSuc.style.color = color;
+            chipSuc.style.border = '1px solid ' + color + '44';
+        } else {
+            chipSuc.style.display = 'none';
+        }
+    }
+    if (btnInfoSuc) btnInfoSuc.style.display = sucId ? '' : 'none';
+    // Al ver la parrilla de módulos estamos en el contexto de UNA sucursal: apagar
+    // el modo catálogo global (se activa solo al abrir una tarjeta del menú global).
+    sessionStorage.removeItem('etaax_cat_global');
+    if (btnCatGlobal) {
+        // Los catálogos globales son una vista de dueño/admin (multi-sucursal). Un
+        // colaborador queda acotado a su sucursal, así que no se le muestra.
+        var esStaff = !!(_sesion && _sesion.type === 'staff');
+        btnCatGlobal.style.display = (sucId && tieneMasSucs && !esStaff) ? '' : 'none';
+    }
 
     if (_sesion) {
         var nombreChip = document.getElementById('userNombreChip');
@@ -2189,10 +2283,9 @@ function _showModulos(neg) {
             planChip.style.color       = r.color;
             if (btnCambiar) btnCambiar.style.display = 'none';
             if (btnVolver)  btnVolver.style.display  = 'none';
-            var rolesDirectivos = ['admin', 'gerente'];
+            var rolesDirectivos = ['admin', 'gerente', 'administrativo'];
             if (btnInfo) btnInfo.style.display = rolesDirectivos.indexOf(_sesion.rol) !== -1 ? '' : 'none';
         } else if (_sesion.isAdmin) {
-            // Admin maestro navegando dentro de un negocio
             planChip.textContent      = '⚡ Admin';
             planChip.className        = 'user-badge-plan';
             planChip.style.background = 'rgba(245,200,66,.15)';
@@ -2211,6 +2304,20 @@ function _showModulos(neg) {
             if (btnVolver)  btnVolver.style.display  = 'none';
         }
     }
+}
+
+// ── Catálogos Globales (vista empresarial multi-sucursal) ──
+function abrirCatalogosGlobales() {
+    document.getElementById('modalCatGlobal').style.display = 'flex';
+}
+function cerrarCatGlobal() {
+    document.getElementById('modalCatGlobal').style.display = 'none';
+}
+// Activa el modo global (toda la empresa) y abre el catálogo elegido. El flag se
+// apaga solo al volver a la parrilla de módulos (_showModulos).
+function abrirCatGlobal(url) {
+    sessionStorage.setItem('etaax_cat_global', '1');
+    window.location.href = url;
 }
 
 function cambiarNegocio() {
@@ -2360,6 +2467,42 @@ function cerrarInfoNeg() {
     document.getElementById('modalInfoNeg').style.display = 'none';
 }
 
+function abrirInfoSucursal() {
+    var negId = localStorage.getItem('etaax_negocio_activo') || '';
+    var sucId = localStorage.getItem('etaax_sucursal_activa') || '';
+    if (!negId || !sucId) return;
+    var sucs = _getSucursales(negId);
+    var suc  = sucs.find(function(s){ return s.id === sucId; });
+    if (!suc) return;
+    var cfg  = _getSucCfg(sucId, negId);
+    var logo = _getSucLogo(sucId, negId);
+    var dias = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+    var diasStr = cfg.dias
+        ? dias.filter(function(_,i){ return cfg.dias[i]; }).join(', ') || '—'
+        : '—';
+    document.getElementById('infoSucTitulo').textContent = suc.nombre || 'Sucursal';
+    var rows = [
+        { icon: '📞', label: 'Teléfono',   val: cfg.telefono  || '—' },
+        { icon: '✉️',  label: 'Correo',     val: cfg.correo    || '—' },
+        { icon: '📍', label: 'Dirección',   val: cfg.direccion || '—' },
+        { icon: '🕐', label: 'Horario',     val: (cfg.horaOpen && cfg.horaClose) ? (cfg.horaOpen + ' – ' + cfg.horaClose) : '—' },
+        { icon: '📅', label: 'Días de operación', val: diasStr },
+        { icon: '🌐', label: 'Sitio web',   val: cfg.web       || '—' },
+    ];
+    document.getElementById('infoSucBody').innerHTML =
+        (logo ? '<div style="text-align:center;margin-bottom:16px"><img src="' + logo + '" style="width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid rgba(255,255,255,.1)"></div>' : '') +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px">' +
+        rows.map(function(r){
+            return '<div class="info-row"><div class="info-icon">' + r.icon + '</div>' +
+                '<div><div class="info-label">' + _esc(r.label) + '</div>' +
+                '<div class="info-val' + (r.val === '—' ? ' dim' : '') + '">' + _esc(r.val) + '</div></div></div>';
+        }).join('') + '</div>';
+    document.getElementById('modalInfoSuc').style.display = 'flex';
+}
+function cerrarInfoSuc() {
+    document.getElementById('modalInfoSuc').style.display = 'none';
+}
+
 /* ════════════════════════════════════════════════════════
    MODAL: AVISO DE PRIVACIDAD
 ════════════════════════════════════════════════════════ */
@@ -2384,6 +2527,9 @@ function handleFormKey(e) { if (e.key === 'Enter') crearNegocio(); }
 function _esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 window.onload = function() {
+    // El modo catálogo global solo vive durante la navegación a un catálogo desde
+    // el menú; al volver al hub siempre arrancamos en vista por sucursal.
+    sessionStorage.removeItem('etaax_cat_global');
     loginSubmit    = _guardBusy(loginSubmit);
     registroSubmit = _guardBusy(registroSubmit);
     crearNegocio   = _guardBusy(crearNegocio);

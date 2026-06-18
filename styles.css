@@ -1359,9 +1359,9 @@ textarea:focus {
 }
 .ctx-bar-inner {
     display: flex; align-items: center; gap: 10px;
-    width: 60%; background: var(--surface);
+    width: 94%; max-width: 1180px; background: var(--surface);
     border: 1px solid var(--border); border-radius: 10px;
-    padding: 0 14px; height: 100%;
+    padding: 0 14px; height: 100%; overflow: hidden;
     transition: border-color .3s;
 }
 .ctx-neg-emoji-wrap {
@@ -1370,8 +1370,20 @@ textarea:focus {
     font-size: 13px; flex-shrink: 0; border: 1px solid transparent;
     transition: background .3s, border-color .3s;
 }
-.ctx-neg-name { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.1; }
-.ctx-neg-tipo { font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-dim); margin-top: 1px; }
+.ctx-neg-id { min-width: 0; flex-shrink: 1; overflow: hidden; }
+.ctx-neg-name { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctx-neg-tipo { font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-dim); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctx-suc-pill {
+    flex-shrink: 0; white-space: nowrap; display: inline-flex; align-items: center;
+    font-size: 10px; font-weight: 600; letter-spacing: .3px;
+    padding: 3px 10px; border-radius: 20px; border: 1px solid transparent;
+}
+.ctx-nav-btns {
+    display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+    padding-left: 10px; margin-left: 2px; border-left: 1px solid var(--border);
+}
+.ctx-btn-icon { padding: 4px 9px; }
+.ctx-right { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .ctx-user-badge {
     display: flex; align-items: center; gap: 6px;
     background: rgba(255,255,255,.03); border: 1px solid var(--border);

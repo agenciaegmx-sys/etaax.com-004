@@ -87,6 +87,62 @@ async function _sbInitRecetas() {
     _subRecetasRealtime(negId);
 }
 
+// Catálogo de insumos para el editor de recetas. El editor lee los insumos de
+// localStorage (getCatalogoInsumos → _skGet('insumos')), que SOLO se llena al
+// visitar insumos.html. Si el usuario entra directo a Recetas, el catálogo sale
+// vacío. Aquí lo cargamos desde Supabase al iniciar el módulo de recetas.
+async function _sbInitInsumosCatalogo() {
+    var negId = getNegocioActivo(); if (!negId) return;
+    if (typeof _supabase === 'undefined') return;
+    try {
+        // OJO: los insumos del negocio viven en la tabla `negocio_insumos`
+        // (negocio_id + insumo_id + datos), NO en `insumos`. Misma lectura
+        // paginada que usa insumos.js.
+        var remote = [], from = 0, BATCH = 200, guard = 0, huboError = false;
+        while (guard++ < 200) {
+            var res = await _supabase.from('negocio_insumos')
+                .select('datos').eq('negocio_id', negId)
+                .order('insumo_id', { ascending: true })
+                .range(from, from + BATCH - 1);
+            if (res.error) {
+                huboError = true;
+                console.warn('[recetas] no se pudo cargar el catálogo de insumos:', res.error.message);
+                break;
+            }
+            var chunk = (res.data || []).map(function(r){ return r.datos; }).filter(Boolean);
+            if (!chunk.length) break;
+            remote = remote.concat(chunk);
+            from += chunk.length;
+            if (chunk.length < BATCH) break;
+        }
+        // Si vino vacío por error, no pisar el caché local.
+        if (!remote.length && huboError) return;
+        // Dedup + conservar insumos solo-locales (aún sin sincronizar).
+        var vistos = {}, dedup = [];
+        remote.forEach(function(i){ if (i && i.id && !vistos[i.id]) { vistos[i.id] = 1; dedup.push(i); } });
+        var local = [];
+        try { local = JSON.parse(_skGet('insumos')) || []; } catch(e) {}
+        var soloLocal = (local || []).filter(function(i){ return i && i.id && !vistos[i.id]; });
+        var lista = dedup.concat(soloLocal);
+        // localStorage sin fotos base64 (quota). El editor solo usa nombre/costos/presentaciones.
+        var paraLocal = lista.map(function(ins) {
+            if (ins && ins.foto && String(ins.foto).indexOf('data:') === 0) {
+                var d = Object.assign({}, ins); d.foto = ''; return d;
+            }
+            return ins;
+        });
+        try { localStorage.setItem(_sk('insumos'), JSON.stringify(paraLocal)); } catch(e) {}
+        console.log('[recetas] catálogo de insumos cargado · negocio_insumos:', dedup.length, '· solo-local:', soloLocal.length);
+        // Refrescar la tabla del editor si ya está abierta, pero SIN interrumpir si
+        // el usuario está escribiendo un ingrediente en ese momento (perdería foco).
+        if (typeof renderTabla === 'function') {
+            var act = document.activeElement;
+            var escribiendo = act && act.getAttribute && act.getAttribute('data-ing') === 'nombre';
+            if (!escribiendo) { try { renderTabla(); } catch(e) {} }
+        }
+    } catch(e) { console.warn('[recetas] error al cargar insumos:', e); }
+}
+
 // Realtime: si otro dispositivo cambia una receta, recargamos solos (sin F5).
 var _recetasRtCh = null;
 function _subRecetasRealtime(negId) {
@@ -1475,15 +1531,19 @@ function initCtxBar() {
     if (!ctx) return;
     var hubPath = '/hub.html';
     var color   = ctx.negColor || '#3dbe7a';
+    // El tipo puede traer " · Sucursal" de sesiones viejas; lo recortamos porque
+    // ahora la sucursal se muestra como pill aparte (sin duplicar).
+    var tipo = (ctx.negTipo || '').split(' · ')[0];
     bar.innerHTML =
         '<div class="ctx-bar-inner" style="border-color:' + color + '44">' +
         '<div class="ctx-neg-emoji-wrap" style="background:' + color + '1a;border-color:' + color + '33">' + _esc(ctx.negEmoji) + '</div>' +
-        '<div><div class="ctx-neg-name">' + _esc(ctx.negNombre) + '</div><div class="ctx-neg-tipo">' + _esc(ctx.negTipo) + '</div></div>' +
-        '<div id="ctxEditorNav" style="display:flex;align-items:center;gap:4px;margin-left:12px;padding-left:12px;border-left:1px solid var(--border,#2a2825)">' +
-        '<button class="ctx-btn" id="btnUndo" onclick="ctxNavBack()" title="Atrás" style="padding:4px 9px">↩</button>' +
-        '<button class="ctx-btn" id="btnRedo" onclick="ctxNavForward()" title="Adelante" style="padding:4px 9px">↪</button>' +
+        '<div class="ctx-neg-id"><div class="ctx-neg-name">' + _esc(ctx.negNombre) + '</div><div class="ctx-neg-tipo">' + _esc(tipo) + '</div></div>' +
+        (ctx.sucNombre ? '<span class="ctx-suc-pill" style="background:' + color + '1f;color:' + color + ';border-color:' + color + '55">📍 ' + _esc(ctx.sucNombre) + '</span>' : '') +
+        '<div class="ctx-nav-btns" id="ctxEditorNav">' +
+        '<button class="ctx-btn ctx-btn-icon" id="btnUndo" onclick="ctxNavBack()" title="Atrás">↩</button>' +
+        '<button class="ctx-btn ctx-btn-icon" id="btnRedo" onclick="ctxNavForward()" title="Adelante">↪</button>' +
         '</div>' +
-        '<div style="margin-left:auto;display:flex;gap:8px;align-items:center">' +
+        '<div class="ctx-right">' +
         '<div class="ctx-user-badge"><span>' + _esc(ctx.userName.split(' ')[0]) + '</span>' +
         '<span class="ctx-badge-plan" style="background:' + ctx.userColor + '22;color:' + ctx.userColor + '">' + _esc(ctx.userBadge) + '</span></div>' +
         '<a href="' + hubPath + '" class="ctx-btn">← Ir a Módulos</a>' +
