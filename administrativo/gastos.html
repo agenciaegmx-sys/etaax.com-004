@@ -1454,6 +1454,7 @@ function _ensurePagoNomModal(){
             +'<div class="fg"><label>Días trabajados</label><input type="number" id="pnDias" min="0" step="1" oninput="_pnCalc()"></div>'
             +'<div class="fg"><label>Subtotal sueldo</label><input type="text" id="pnSubtotal" readonly style="opacity:.85"></div>'
           +'</div>'
+          +'<div id="pnPrimaDom" style="display:none;margin-top:8px;font-size:12px;color:var(--accent);background:rgba(245,200,66,.08);border:1px solid rgba(245,200,66,.25);border-radius:6px;padding:8px 12px"></div>'
         +'</div>'
         +'<div class="gs-sec"><div class="gs-sec-title">Conceptos adicionales</div>'
           +'<div class="fg-row-3" style="align-items:end">'
@@ -1495,10 +1496,8 @@ function abrirPagoNomina(staffId){
     _cerrarSelPago();
     _ensurePagoNomModal();
     _pagoNomStaff=s; _pagoNomConceptos=[]; _pnTotalManual=null;
-    // Si el colaborador trabaja domingos, sumar su prima dominical al pago
-    if(s.primaVacacionalEnPago && n(s.primaVacacional)>0){
-        _pagoNomConceptos.push({concepto:'Prima dominical', monto:n(s.primaVacacional)});
-    }
+    // La prima dominical se calcula automáticamente según los domingos del periodo
+    // (ver _pnPrimaDom / _pnCalc) y se suma al subtotal — ya no como concepto fijo.
     document.getElementById('pagoNomTitle').textContent='Pagar nómina — '+s.nombre;
     // Periodo por defecto según su periodicidad
     var tipo = s.periodicidad==='mensual'?'mes':s.periodicidad==='quincenal'?'quincena':'semana';
@@ -1538,9 +1537,37 @@ function _pnRangoChange(){
     if(d && h){ document.getElementById('pnDias').value=_diffDias(d,h); }
     _pnCalc();
 }
-function _pnSubtotal(){ return n(document.getElementById('pnDiario').value)*n(document.getElementById('pnDias').value); }
+function _pnSueldo(){ return n(document.getElementById('pnDiario').value)*n(document.getElementById('pnDias').value); }
+/* Domingos dentro del rango del periodo [desde, hasta] */
+function _pnDomingosEnRango(desde,hasta){
+    if(!desde||!hasta) return 0;
+    var d=new Date(desde+'T12:00:00'), fin=new Date(hasta+'T12:00:00'), c=0, guard=0;
+    if(fin<d) return 0;
+    while(d<=fin && guard++<400){ if(d.getDay()===0) c++; d.setDate(d.getDate()+1); }
+    return c;
+}
+/* Prima dominical automática: domingos del periodo × sueldo diario × % (solo si trabaja domingos) */
+function _pnPrimaDom(){
+    var s=_pagoNomStaff;
+    if(!s || !s.primaVacacionalEnPago) return {domingos:0, monto:0, pct:0};
+    var dom=_pnDomingosEnRango(document.getElementById('pnDesde').value, document.getElementById('pnHasta').value);
+    var diario=n(document.getElementById('pnDiario').value);
+    var pct=_nomParams().primaVacacionalPct||25;
+    return {domingos:dom, monto:Math.round(dom*diario*(pct/100)*100)/100, pct:pct};
+}
+function _pnRenderPrimaDom(p){
+    var el=document.getElementById('pnPrimaDom'); if(!el) return;
+    if(!p.monto || !p.domingos){ el.style.display='none'; el.innerHTML=''; return; }
+    var diario=n(document.getElementById('pnDiario').value);
+    el.style.display='';
+    el.innerHTML='☀️ <strong>Prima dominical</strong> · '+p.domingos+' domingo'+(p.domingos!==1?'s':'')
+      +' trabajado'+(p.domingos!==1?'s':'')+' × '+fmtM(diario)+' × '+p.pct+'% = <strong>'+fmtM(p.monto)+'</strong>'
+      +' <span style="color:var(--text-dim)">(incluida en el subtotal)</span>';
+}
 function _pnCalc(){
-    var subtotal=_pnSubtotal();
+    var prima=_pnPrimaDom();
+    _pnRenderPrimaDom(prima);
+    var subtotal=_pnSueldo()+prima.monto;   // el subtotal ya incluye la prima dominical
     document.getElementById('pnSubtotal').value=fmtM(subtotal);
     var extra=_pagoNomConceptos.reduce(function(s,c){return s+n(c.monto);},0);
     var auto=subtotal+extra;
@@ -1628,8 +1655,10 @@ function _confirmarPagoNom(){
     var montoPrincipal=Math.round((total-sumaAparte)*100)/100;
     if(montoPrincipal<0){ alert('El total a pagar es menor que los conceptos pagados aparte. Ajusta el total.'); return; }
 
-    // Desglose del gasto principal (sueldo + conceptos con el mismo método)
-    var desg='Sueldo: '+fmtM(n(document.getElementById('pnDiario').value))+' × '+dias+' días = '+document.getElementById('pnSubtotal').value;
+    // Desglose del gasto principal (sueldo + prima dominical + conceptos del mismo método)
+    var desg='Sueldo: '+fmtM(n(document.getElementById('pnDiario').value))+' × '+dias+' días = '+fmtM(_pnSueldo());
+    var prima=_pnPrimaDom();
+    if(prima.monto>0) desg+='\n+ Prima dominical ('+prima.domingos+' domingo'+(prima.domingos!==1?'s':'')+'): '+fmtM(prima.monto);
     mismos.forEach(function(c){ desg+='\n+ '+c.concepto+': '+fmtM(c.monto); });
     if(_pnTotalManual!==null) desg+='\n(Total ajustado manualmente)';
     if(aparte.length) desg+='\nPagado aparte: '+aparte.map(function(c){ return c.concepto+' '+fmtM(c.monto)+' ('+(_PN_METODOS[c.pago]||{}).lbl+')'; }).join(', ');
