@@ -1206,8 +1206,16 @@ function cerrarIframeInsumo() {
 window.addEventListener('message', function(e) {
     if (!e.data || !e.data.type) return;
     if (e.data.type === 'insumoGuardado') {
-        ingredientes.forEach((ing, i) => recalcularCostoDesdeInsumo(i));
-        renderTabla();
+        var _insumoId = e.data.insumoId;
+        // Sincronizar nombre y costo del insumo editado en los ingredientes actuales
+        var _insActualizado = _insumoId ? getCatalogoInsumos().find(function(x) { return x.id === _insumoId; }) : null;
+        ingredientes.forEach(function(ing, i) {
+            if (_insActualizado && ing.insumoId === _insumoId) {
+                ing.nombre = _insActualizado.nombre;
+            }
+            recalcularCostoDesdeInsumo(i);
+        });
+        try { renderTabla(); } catch (err) {}
         cerrarIframeInsumo();
     } else if (e.data.type === 'cerrarEditor') {
         cerrarIframeInsumo();
