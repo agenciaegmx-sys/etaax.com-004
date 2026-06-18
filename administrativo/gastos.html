@@ -1405,7 +1405,15 @@ function _asegurarCategoria(cat){
 }
 /* ── Modal de pago de nómina: periodo + días + conceptos extra ── */
 var _pagoNomStaff = null;
-var _pagoNomConceptos = [];   // [{concepto, monto}]
+var _pagoNomConceptos = [];   // [{concepto, monto, pago}]
+var _pnTotalManual = null;    // total ajustado a mano (null = automático)
+// Métodos de pago por concepto (ej. bono en efectivo aunque la nómina sea transfer)
+var _PN_METODOS = {
+    mismo:       {lbl:'Mismo método',        metodoPago:null},
+    caja_chica:  {lbl:'💵 Efectivo',          metodoPago:'caja_chica'},
+    caja_fuerte: {lbl:'🏦 Caja fuerte',        metodoPago:'caja_fuerte'},
+    transfer:    {lbl:'🏛️ Transferencia',      metodoPago:'banco', metodoBanco:'transfer'}
+};
 
 /* Sueldo diario efectivo: del esquema diario, o derivado del salario por periodo */
 function _sueldoDiarioEfectivo(s){
@@ -1453,15 +1461,25 @@ function _ensurePagoNomModal(){
             +'<div class="fg" id="pnCptCantWrap" style="display:none"><label id="pnCptCantLbl">Horas</label><input type="number" id="pnCptCant" min="0" step="1" placeholder="0"></div>'
             +'<div class="fg"><label>Monto ($)</label><input type="number" id="pnCptMonto" min="0" step="0.01" placeholder="0.00"></div>'
           +'</div>'
+          +'<div class="fg" style="margin-top:8px"><label>¿Cómo se paga este concepto?</label>'
+            +'<select id="pnCptMetodo"><option value="mismo">Mismo método que la nómina</option>'
+            +'<option value="caja_chica">💵 Efectivo (caja chica)</option>'
+            +'<option value="caja_fuerte">🏦 Caja fuerte</option>'
+            +'<option value="transfer">🏛️ Transferencia</option></select></div>'
           +'<div style="display:flex;gap:8px;margin:6px 0 12px">'
             +'<button class="btn-mayor" id="pnCptCalcBtn" style="display:none;font-size:11px;padding:6px 12px" onclick="_pnCptCalcular()">💡 Calcular sugerido</button>'
             +'<button class="btn-primary" style="font-size:11px;padding:6px 12px" onclick="_pnCptAgregar()">+ Agregar concepto</button>'
           +'</div>'
           +'<div id="pnCptList"></div>'
         +'</div>'
-        +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center">'
-          +'<span style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim)">Total a pagar</span>'
-          +'<span id="pnTotal" style="font-family:\'Bebas Neue\',sans-serif;font-size:26px;letter-spacing:1px;color:var(--green)">$0.00</span>'
+        +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px">'
+          +'<div><div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim)">Total a pagar</div>'
+            +'<div id="pnTotalHint" style="font-size:10px;color:var(--accent);margin-top:2px;display:none">✏️ Ajustado manualmente · <span onclick="_pnTotalAuto()" style="cursor:pointer;text-decoration:underline">volver al automático</span></div></div>'
+          +'<div style="display:flex;align-items:center;gap:4px">'
+            +'<span style="font-family:\'Bebas Neue\',sans-serif;font-size:26px;color:var(--green)">$</span>'
+            +'<input type="number" id="pnTotal" min="0" step="0.01" oninput="_pnTotalEdit()" '
+              +'style="width:140px;text-align:right;font-family:\'Bebas Neue\',sans-serif;font-size:26px;letter-spacing:1px;color:var(--green);background:transparent;border:none;border-bottom:2px solid var(--green);padding:0 2px 2px;outline:none">'
+          +'</div>'
         +'</div>'
       +'</div>'
       +'<div class="modal-footer"><button class="btn-ghost" onclick="_cerrarPagoNom()">Cancelar</button>'
@@ -1476,7 +1494,7 @@ function abrirPagoNomina(staffId){
     if(!s)return;
     _cerrarSelPago();
     _ensurePagoNomModal();
-    _pagoNomStaff=s; _pagoNomConceptos=[];
+    _pagoNomStaff=s; _pagoNomConceptos=[]; _pnTotalManual=null;
     // Si el colaborador trabaja domingos, sumar su prima dominical al pago
     if(s.primaVacacionalEnPago && n(s.primaVacacional)>0){
         _pagoNomConceptos.push({concepto:'Prima dominical', monto:n(s.primaVacacional)});
@@ -1520,15 +1538,24 @@ function _pnRangoChange(){
     if(d && h){ document.getElementById('pnDias').value=_diffDias(d,h); }
     _pnCalc();
 }
+function _pnSubtotal(){ return n(document.getElementById('pnDiario').value)*n(document.getElementById('pnDias').value); }
 function _pnCalc(){
-    var diario=n(document.getElementById('pnDiario').value);
-    var dias=n(document.getElementById('pnDias').value);
-    var subtotal=diario*dias;
+    var subtotal=_pnSubtotal();
     document.getElementById('pnSubtotal').value=fmtM(subtotal);
     var extra=_pagoNomConceptos.reduce(function(s,c){return s+n(c.monto);},0);
-    document.getElementById('pnTotal').textContent=fmtM(subtotal+extra);
-    return subtotal+extra;
+    var auto=subtotal+extra;
+    var inp=document.getElementById('pnTotal');
+    // Si el usuario no ha ajustado a mano, el total sigue al cálculo automático.
+    if(_pnTotalManual===null && inp){ inp.value=Math.round(auto*100)/100; }
+    var hint=document.getElementById('pnTotalHint');
+    if(hint) hint.style.display=_pnTotalManual!==null?'':'none';
+    return _pnTotalManual!==null?_pnTotalManual:auto;
 }
+function _pnTotalEdit(){
+    _pnTotalManual=n(document.getElementById('pnTotal').value);
+    var hint=document.getElementById('pnTotalHint'); if(hint) hint.style.display='';
+}
+function _pnTotalAuto(){ _pnTotalManual=null; _pnCalc(); }
 function _nomParams(){ return (window.NominaParams ? NominaParams.get(getNegocioActivo()) : {jornadaHoras:8,primaVacacionalPct:25,salarioDiarioDefault:0}); }
 function _pnCptTipoChange(){
     var tipo=document.getElementById('pnCptTipo').value;
@@ -1557,20 +1584,33 @@ function _pnCptAgregar(){
     var lbl={bono:'Bono',horas:'Horas extras',festivo:'Día festivo',doble:'Día doble',prima:'Prima dominical',otro:'Pago extra'}[tipo]||'Pago extra';
     var cant=n(document.getElementById('pnCptCant').value);
     if(cant>0) lbl+=' ('+cant+(tipo==='horas'?' h':' d')+')';
-    _pagoNomConceptos.push({concepto:lbl, monto:monto});
+    var pago=(document.getElementById('pnCptMetodo')||{}).value||'mismo';
+    _pagoNomConceptos.push({concepto:lbl, monto:monto, pago:pago});
     document.getElementById('pnCptCant').value=''; document.getElementById('pnCptMonto').value='';
+    var met=document.getElementById('pnCptMetodo'); if(met) met.value='mismo';
+    _pnTotalManual=null; // al cambiar conceptos, el total vuelve a seguir el cálculo
     _pnRenderCptList(); _pnCalc();
 }
-function _pnCptEliminar(i){ _pagoNomConceptos.splice(i,1); _pnRenderCptList(); _pnCalc(); }
+function _pnCptEliminar(i){ _pagoNomConceptos.splice(i,1); _pnTotalManual=null; _pnRenderCptList(); _pnCalc(); }
 function _pnRenderCptList(){
     var c=document.getElementById('pnCptList');
     if(!_pagoNomConceptos.length){ c.innerHTML='<div style="font-size:12px;color:var(--text-dim);padding:4px 0">Sin conceptos adicionales.</div>'; return; }
     c.innerHTML=_pagoNomConceptos.map(function(x,i){
+        var pg=_PN_METODOS[x.pago||'mismo']||_PN_METODOS.mismo;
+        var badge=(x.pago && x.pago!=='mismo')
+          ? '<span style="font-size:10px;color:var(--accent);background:rgba(245,200,66,.12);border:1px solid rgba(245,200,66,.3);padding:1px 7px;border-radius:8px;white-space:nowrap">'+pg.lbl+'</span>'
+          : '';
         return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;background:var(--surface2)">'
-          +'<span style="font-size:13px">'+_esc(x.concepto)+'</span>'
+          +'<span style="font-size:13px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+_esc(x.concepto)+badge+'</span>'
           +'<span style="display:flex;align-items:center;gap:10px"><strong style="color:var(--accent)">'+fmtM(x.monto)+'</strong>'
           +'<button class="btn-row del" onclick="_pnCptEliminar('+i+')">🗑️</button></span></div>';
     }).join('');
+}
+function _pnGuardarGastoDirecto(g){
+    g.id=genId(); g.negocioId=getNegocioActivo();
+    _cacheGastos=(_cacheGastos||[]).filter(function(x){return x.id!==g.id;});
+    _cacheGastos.push(g);
+    _sbUp('gastos', g);
 }
 function _confirmarPagoNom(){
     var s=_pagoNomStaff; if(!s)return;
@@ -1579,11 +1619,43 @@ function _confirmarPagoNom(){
     var dias=n(document.getElementById('pnDias').value);
     var tipo=document.getElementById('pnTipo').value;
     var perLbl={semana:'semanal',quincena:'quincenal',mes:'mensual',personalizado:'periodo'}[tipo]||'';
-    // Desglose para las notas del gasto
+
+    // Separar los conceptos que se pagan con OTRO método (ej. bono en efectivo):
+    // cada uno se registra como un gasto aparte con su propio método.
+    var aparte=_pagoNomConceptos.filter(function(c){ return c.pago && c.pago!=='mismo'; });
+    var mismos=_pagoNomConceptos.filter(function(c){ return !c.pago || c.pago==='mismo'; });
+    var sumaAparte=aparte.reduce(function(a,c){ return a+n(c.monto); },0);
+    var montoPrincipal=Math.round((total-sumaAparte)*100)/100;
+    if(montoPrincipal<0){ alert('El total a pagar es menor que los conceptos pagados aparte. Ajusta el total.'); return; }
+
+    // Desglose del gasto principal (sueldo + conceptos con el mismo método)
     var desg='Sueldo: '+fmtM(n(document.getElementById('pnDiario').value))+' × '+dias+' días = '+document.getElementById('pnSubtotal').value;
-    _pagoNomConceptos.forEach(function(c){ desg+='\n+ '+c.concepto+': '+fmtM(c.monto); });
+    mismos.forEach(function(c){ desg+='\n+ '+c.concepto+': '+fmtM(c.monto); });
+    if(_pnTotalManual!==null) desg+='\n(Total ajustado manualmente)';
+    if(aparte.length) desg+='\nPagado aparte: '+aparte.map(function(c){ return c.concepto+' '+fmtM(c.monto)+' ('+(_PN_METODOS[c.pago]||{}).lbl+')'; }).join(', ');
+
+    // Registrar los conceptos pagados aparte (gastos independientes, ya pagados)
+    aparte.forEach(function(c){
+        var m=_PN_METODOS[c.pago]||{};
+        _pnGuardarGastoDirecto({
+            fecha:todayStr(), tipo:'menor',
+            concepto:c.concepto+' — '+s.nombre,
+            categoria:'Nómina y personal', proveedor:'', monto:n(c.monto),
+            metodoPago:m.metodoPago||_metodoDefault(), metodoBanco:m.metodoBanco||'',
+            facturado:false, autorizado:true, evidencias:[],
+            notas:'Pago aparte de la nómina de '+s.nombre+' ('+m.lbl+')',
+            estatus:'pagado', fechaPago:''
+        });
+    });
+
     _cerrarPagoNom();
-    var g={ concepto:'Nómina '+perLbl+' — '+s.nombre, categoria:'Nómina y personal', monto:total, proveedor:'', notas:desg };
+    if(aparte.length) renderAll(); // reflejar de inmediato los pagados aparte
+
+    // Si TODO se pagó aparte (sin sueldo restante), no abrir el modal principal
+    if(montoPrincipal<=0 && aparte.length){
+        return;
+    }
+    var g={ concepto:'Nómina '+perLbl+' — '+s.nombre, categoria:'Nómina y personal', monto:montoPrincipal, proveedor:'', notas:desg };
     _asegurarCategoria(g.categoria);
     _abrirModalGasto(g,'menor');
 }
