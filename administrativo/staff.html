@@ -857,15 +857,12 @@ function renderTable() {
 
 /* ── MODAL ── */
 // Expedientes con datos sensibles (salarios, bancos, credenciales):
-// abrir el editor requiere la contraseña del administrador, igual que
-// eliminar. Se pide una vez por visita a la página.
-var _staffEditUnlocked = false;
+// agregar o editar un colaborador requiere la contraseña del administrador
+// (gerente o dueño) en CADA acción.
 function openModal(id) {
-    if (_staffEditUnlocked) { _openModalReal(id); return; }
-    _pedirClaveAdmin('Expedientes de staff — Acceso restringido', function () {
-        _staffEditUnlocked = true;
+    _pedirClaveAdmin(id ? 'Editar colaborador' : 'Agregar colaborador', function () {
         _openModalReal(id);
-    }, '🔓 Desbloquear');
+    }, id ? '✏️ Editar' : '➕ Agregar');
 }
 function _openModalReal(id) {
     tmpDocs = [];

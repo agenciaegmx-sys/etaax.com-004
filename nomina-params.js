@@ -95,6 +95,14 @@
         sync: _sync,
         save: _save,
         open: function (negId, onSaved) {
+            var self = this;
+            // Los parámetros de nómina afectan todos los pagos: requiere autorización.
+            if (window._pedirClaveAdmin) {
+                _pedirClaveAdmin('Parámetros de nómina — Autorización requerida',
+                    function () { self._openReal(negId, onSaved); }, '⚙️ Continuar');
+            } else { this._openReal(negId, onSaved); }
+        },
+        _openReal: function (negId, onSaved) {
             _negId = negId || localStorage.getItem('etaax_negocio_activo') || '';
             _onSaved = onSaved || null;
             _ensureModal();

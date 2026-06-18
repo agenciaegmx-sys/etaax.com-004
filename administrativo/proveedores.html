@@ -558,6 +558,11 @@ function renderTable() {
 
 /* ── MODAL ── */
 function openModal(id) {
+    // Editar un proveedor requiere autorización (gerente o dueño).
+    if (id) { _pedirClaveAdmin('Editar proveedor', function(){ _openModalReal(id); }, '✏️ Editar'); return; }
+    _openModalReal(id);
+}
+function _openModalReal(id) {
     tmpDocs = [];
     clearForm();
     document.getElementById('modalTitle').textContent = id ? 'Editar proveedor' : 'Agregar proveedor';
