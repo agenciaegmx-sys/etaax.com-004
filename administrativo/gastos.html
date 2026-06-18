@@ -937,11 +937,26 @@ function _puede(path){
     if((ctx.rol||'')==='admin') return true;          // admin del negocio
     return window.etaaxPerm ? window.etaaxPerm(ctx.negId||getNegocioActivo(), ctx.rol, path) : true;
 }
-/* ¿Este gasto es visible para el rol? (tipo mayor + método de pago) */
+/* ¿Un permiso está EXPLÍCITAMENTE negado? (para permisos de "ver" nuevos:
+   permitido por defecto, solo se oculta si el dueño lo apagó a propósito —
+   así no se rompen los permisos guardados antes de agregar la clave). */
+function _negadoExplicito(mod, sub){
+    var ctx; try{ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null');}catch(e){}
+    if(!ctx || ctx.ctxType!=='staff') return false;   // dueño / admin maestro
+    if((ctx.rol||'')==='admin') return false;          // admin del negocio
+    var perms = window.etaaxPermisosRol ? etaaxPermisosRol(ctx.negId||getNegocioActivo(), ctx.rol) : {};
+    var v = perms[mod];
+    if(v===false) return true;                         // sin acceso al módulo
+    if(v && typeof v==='object') return v[sub]===false; // negado solo si explícito
+    return false;
+}
+/* ¿Este gasto es visible para el rol? (tipo mayor + método de pago + histórico) */
 function _gastoVisible(g){
     if(g.tipo==='mayor' && !_puede('gastos.gastosMayores')) return false;
     if(g.metodoPago==='caja_fuerte' && !_puede('gastos.verCajaFuerte')) return false;
+    if(g.metodoPago==='caja_chica' && _negadoExplicito('gastos','verCajaChica')) return false;
     if(g.metodoPago==='banco' && !_puede('gastos.verBanco')) return false;
+    if(g.fecha!==todayStr() && _negadoExplicito('gastos','verHistorico')) return false;
     return true;
 }
 function _puedeEditarGasto(g){ return _puede('gastos.editarHistorico') || (g && g.fecha===todayStr()); }

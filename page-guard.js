@@ -25,9 +25,9 @@
 window.ETAAX_PERM_DEFAULTS = {
     admin:          { recetas:true,  insumos:true,  inventarios:true,  requisiciones:true,  ventas:true,  ventas_productos:true,  gastos:true,  menu:true,  proveedores:true,  clientes:true,  staff:true,  permisos:true,  financiero:true,  config:true  },
     gerente:        { recetas:true,  insumos:true,  inventarios:true,  requisiciones:true,
-                      ventas:{ capturarCorte:true, editarHistorico:false, ventaExtra:true, hacerDeposito:true, verDepositos:false, cajaFuerte:false },
+                      ventas:{ capturarCorte:true, verLista:true, editarHistorico:false, ventaExtra:true, hacerDeposito:true, verDepositos:false, cajaFuerte:false },
                       ventas_productos:true,
-                      gastos:{ capturar:true, gastosMayores:false, verCajaFuerte:false, verBanco:false, editarHistorico:false, verResumen:false },
+                      gastos:{ capturar:true, verCajaChica:true, verHistorico:true, gastosMayores:false, verCajaFuerte:false, verBanco:false, editarHistorico:false, verResumen:false },
                       menu:true,  proveedores:true,  clientes:true,  staff:true,  permisos:false, financiero:true,  config:false },
     jefe_cocina:    { recetas:true,  insumos:true,  inventarios:true,  requisiciones:true,  ventas:false, ventas_productos:false, gastos:false, menu:true,  proveedores:false, clientes:false, staff:false, permisos:false, financiero:false, config:false },
     chef:           { recetas:true,  insumos:true,  inventarios:true,  requisiciones:true,  ventas:false, ventas_productos:false, gastos:false, menu:true,  proveedores:false, clientes:false, staff:false, permisos:false, financiero:false, config:false },
@@ -44,6 +44,7 @@ window.ETAAX_PERM_DEFAULTS = {
 window.ETAAX_SUBPERMS = {
     ventas: [
         { key:'capturarCorte',  label:'Capturar cortes',          sub:'Registrar el corte del día' },
+        { key:'verLista',       label:'Ver cortes anteriores / lista', sub:'Consultar cortes de días pasados (solo lectura)' },
         { key:'editarHistorico',label:'Editar cortes anteriores',  sub:'El corte de hoy siempre es editable' },
         { key:'ventaExtra',     label:'Registrar venta extra',     sub:'Eventos, festivales, catering' },
         { key:'hacerDeposito',  label:'Hacer depósitos',           sub:'Registrar depósitos a caja fuerte o banco' },
@@ -52,6 +53,8 @@ window.ETAAX_SUBPERMS = {
     ],
     gastos: [
         { key:'capturar',       label:'Capturar gastos',           sub:'Registrar gastos menores / normales' },
+        { key:'verCajaChica',   label:'Ver gastos de caja chica',  sub:'Gastos pagados desde caja chica' },
+        { key:'verHistorico',   label:'Ver gastos anteriores',     sub:'Consultar gastos de días pasados (solo lectura)' },
         { key:'gastosMayores',  label:'Gastos mayores',            sub:'Ver y gestionar gastos mayores' },
         { key:'verCajaFuerte',  label:'Ver gastos de caja fuerte', sub:'Gastos pagados desde caja fuerte' },
         { key:'verBanco',       label:'Ver gastos de banco',       sub:'Transferencia, débito y crédito' },

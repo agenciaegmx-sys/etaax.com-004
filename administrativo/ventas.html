@@ -868,6 +868,18 @@ function _puede(path){
     return window.etaaxPerm ? window.etaaxPerm(ctx.negId||getNegocioActivo(), ctx.rol, path) : true;
 }
 function _puedeEditarCorte(c){ return _puede('ventas.editarHistorico') || (c && c.fecha===todayStr()); }
+/* ¿Un permiso está EXPLÍCITAMENTE negado? (permisos de "ver" nuevos: permitidos
+   por defecto, ocultos solo si el dueño los apagó — no rompe permisos viejos). */
+function _negadoExplicito(mod, sub){
+    var ctx; try{ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null');}catch(e){}
+    if(!ctx || ctx.ctxType!=='staff') return false;
+    if((ctx.rol||'')==='admin') return false;
+    var perms = window.etaaxPermisosRol ? etaaxPermisosRol(ctx.negId||getNegocioActivo(), ctx.rol) : {};
+    var v = perms[mod];
+    if(v===false) return true;
+    if(v && typeof v==='object') return v[sub]===false;
+    return false;
+}
 /* ¿Es visible este gasto para el rol? (respeta gastos.verCajaFuerte / verBanco) */
 function _gastoVisible(g){
     if(g.metodoPago==='caja_fuerte' && !_puede('gastos.verCajaFuerte')) return false;
@@ -967,8 +979,10 @@ function setPeriodType(tipo,btn){periodoTipo=tipo;document.querySelectorAll('.pe
 function getRange(tipo,val,end){if(tipo==='dia')return{from:val,to:val};if(tipo==='mes'){var y=parseInt(val.slice(0,4)),m=parseInt(val.slice(5,7));return{from:val+'-01',to:new Date(y,m,0).toISOString().slice(0,10)};}if(tipo==='semana'){var p=val.split('-W'),yr=parseInt(p[0]),wk=parseInt(p[1]);var j4=new Date(yr,0,4);var ws=new Date(j4.getTime()+(wk-1)*7*86400000);ws.setDate(ws.getDate()-(ws.getDay()||7)+1);var we=new Date(ws);we.setDate(ws.getDate()+6);return{from:ws.toISOString().slice(0,10),to:we.toISOString().slice(0,10)};}return{from:val,to:end};}
 function prevRange(tipo,val,end){var r=getRange(tipo,val,end);if(tipo==='dia'){var d=new Date(r.from+'T12:00:00');d.setDate(d.getDate()-1);return getRange('dia',d.toISOString().slice(0,10),null);}if(tipo==='mes'){var y=parseInt(val.slice(0,4)),m=parseInt(val.slice(5,7))-1;if(m===0){m=12;y--;}return getRange('mes',y+'-'+String(m).padStart(2,'0'),null);}if(tipo==='semana'){var p2=val.split('-W'),yr2=parseInt(p2[0]),wk2=parseInt(p2[1])-1;if(wk2===0){yr2--;wk2=52;}return getRange('semana',yr2+'-W'+String(wk2).padStart(2,'0'),null);}var fromD=new Date(r.from+'T12:00:00'),toD=new Date(r.to+'T12:00:00');var span=Math.round((toD-fromD)/86400000)+1;var pe=new Date(fromD);pe.setDate(pe.getDate()-1);var pf=new Date(pe);pf.setDate(pf.getDate()-span+1);return{from:pf.toISOString().slice(0,10),to:pe.toISOString().slice(0,10)};}
 function inRange(fecha,from,to){return fecha>=from&&fecha<=to;}
-function currentData(){var r=getRange(periodoTipo,periodoVal,periodoEnd);return load().filter(function(c){return inRange(c.fecha,r.from,r.to);});}
-function prevData(){var pr=prevRange(periodoTipo,periodoVal,periodoEnd);return load().filter(function(c){return inRange(c.fecha,pr.from,pr.to);});}
+// Si el rol no puede "ver cortes anteriores / lista", solo ve el corte de hoy.
+function _filtraVerLista(lista){ return _negadoExplicito('ventas','verLista') ? lista.filter(function(c){return c.fecha===todayStr();}) : lista; }
+function currentData(){var r=getRange(periodoTipo,periodoVal,periodoEnd);return _filtraVerLista(load().filter(function(c){return inRange(c.fecha,r.from,r.to);}));}
+function prevData(){var pr=prevRange(periodoTipo,periodoVal,periodoEnd);return _filtraVerLista(load().filter(function(c){return inRange(c.fecha,pr.from,pr.to);}));}
 
 /* ── Render ── */
 function renderAll(){var pi=document.getElementById('pickerInput'),pe=document.getElementById('pickerEnd');periodoVal=pi.value||periodoVal;if(periodoTipo==='rango')periodoEnd=pe.value||periodoEnd;var cur=currentData(),prev=prevData();renderSummary(cur,prev);renderTabla(cur);renderVentasExtra(cur);renderDepositos();}
