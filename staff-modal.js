@@ -81,7 +81,8 @@
                 '<div class="sm-grp"><label>CURP</label><input type="text" id="sm_curp" maxlength="18" placeholder="18 caracteres" style="text-transform:uppercase"></div>' +
                 '<div class="sm-grp"><label>N° Seguro Social (NSS)</label><input type="text" id="sm_nss" maxlength="11" placeholder="11 dígitos" inputmode="numeric"></div>' +
                 '<div class="sm-grp full"><label>Dirección actual</label><input type="text" id="sm_direccion" placeholder="Calle, colonia, municipio, CP"></div>' +
-                '<div class="sm-grp full"><label>Estado</label><select id="sm_estado"><option>Activo</option><option>Baja temporal</option><option>Baja definitiva</option></select></div>' +
+                '<div class="sm-grp"><label>Estado</label><select id="sm_estado"><option>Activo</option><option>Baja temporal</option><option>Baja definitiva</option></select></div>' +
+                '<div class="sm-grp"><label>Sucursal asignada</label><select id="sm_sucursal"><option value="">— Sin sucursal —</option></select></div>' +
                 '<div class="sm-grp full"><label>Rol del sistema</label><select id="sm_rol" onchange="StaffModal._rolChange()">' +
                   '<option value="">— Sin acceso al sistema —</option><option value="admin">👑 Administrador</option><option value="gerente">🎯 Gerente</option>' +
                   '<option value="administrativo">📋 Administrativo</option><option value="chef">🍳 Chef</option><option value="jefe_barra">🍷 Jefe de Barra</option>' +
@@ -165,11 +166,24 @@
     var ADMIN_ROLES = ['admin', 'gerente', 'administrativo', 'chef', 'jefe_barra'];
     function _esRolAdmin(rol) { return ADMIN_ROLES.indexOf(rol) !== -1; }
 
+    function _getSucsModal() {
+        try { return JSON.parse(localStorage.getItem('etaax_' + _negId + '_sucursales') || '[]'); } catch(e) { return []; }
+    }
+    function _poblarSucModal(selVal) {
+        var sel = document.getElementById('sm_sucursal');
+        if (!sel) return;
+        var sucs = _getSucsModal();
+        sel.innerHTML = '<option value="">— Sin sucursal —</option>' +
+            sucs.map(function(s){ return '<option value="' + _esc(s.id) + '">' + _esc(s.nombre || s.id) + '</option>'; }).join('');
+        if (selVal) sel.value = selVal;
+    }
+
     function _fill(staffId) {
         _tmpDocs = [];
         ['sm_nombre','sm_puesto','sm_fechaIngreso','sm_fechaNacimiento','sm_curp','sm_nss','sm_celular','sm_correo','sm_direccion','sm_usuario','sm_pwd','sm_nip','sm_salarioBase','sm_diaPago','sm_formaPago','sm_datosBancarios','sm_primaVacacional','sm_bonoIncentivo','sm_referencias','sm_notas'].forEach(function(id){ document.getElementById(id).value=''; });
         document.getElementById('sm_estado').value = 'Activo';
         document.getElementById('sm_rol').value = '';
+        _poblarSucModal(staffId ? '' : (localStorage.getItem('etaax_sucursal_activa') || ''));
         document.getElementById('sm_periodicidad').value = '';
         document.getElementById('sm_categoriaNomina').value = 'operativa';
         document.getElementById('sm_esquemaSueldo').value = 'periodo';
@@ -195,6 +209,7 @@
                 document.getElementById('sm_correo').value = s.correo || '';
                 document.getElementById('sm_direccion').value = s.direccion || '';
                 document.getElementById('sm_estado').value = s.estado || 'Activo';
+                _poblarSucModal(s.sucursalId || '');
                 document.getElementById('sm_fechaNacimiento').value = s.fechaNacimiento || '';
                 document.getElementById('sm_curp').value = s.curp || '';
                 document.getElementById('sm_nss').value = s.nss || '';
@@ -265,6 +280,7 @@
             id: editId || _genId(),
             nombre: nombre,
             puesto: document.getElementById('sm_puesto').value.trim(),
+            sucursalId: (document.getElementById('sm_sucursal').value || '').trim(),
             rol: rol,
             usuario: usuario,
             passwordHash: passwordHash,

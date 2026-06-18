@@ -333,6 +333,9 @@
                                 <option>Baja temporal</option>
                                 <option>Baja definitiva</option>
                             </select>
+                            <select class="filtro-select" id="filterSucursal" onchange="renderAll()">
+                                <option value="">Todas las sucursales</option>
+                            </select>
                         </div>
                         <button class="btn-ghost" onclick="window.location.href='permisos.html'"
                             title="Acceso restringido — requiere contraseña de administrador"
@@ -358,6 +361,7 @@
                                 <tr>
                                     <th style="cursor:pointer" onclick="sortBy('nombre')">Nombre <span id="sortNombre"></span></th>
                                     <th style="cursor:pointer" onclick="sortBy('puesto')">Puesto <span id="sortPuesto"></span></th>
+                                    <th>Sucursal</th>
                                     <th>Rol sistema</th>
                                     <th>Ingreso</th>
                                     <th>Cel / WhatsApp</th>
@@ -426,12 +430,18 @@
                     <label>Dirección actual</label>
                     <input type="text" id="fDireccion" placeholder="Calle, colonia, municipio, CP">
                 </div>
-                <div class="form-group full">
+                <div class="form-group">
                     <label>Estado</label>
                     <select id="fEstado">
                         <option>Activo</option>
                         <option>Baja temporal</option>
                         <option>Baja definitiva</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Sucursal asignada</label>
+                    <select id="fSucursal">
+                        <option value="">— Sin sucursal asignada —</option>
                     </select>
                 </div>
                 <div class="form-group full">
@@ -649,6 +659,16 @@ function getNegocioActivo() {
     return id;
 }
 function _sk(key) { var id = getNegocioActivo(); return id ? ('etaax_' + id + '_' + key) : ('etaax_' + key); }
+function _getSucs() {
+    var negId = getNegocioActivo();
+    try { return JSON.parse(localStorage.getItem('etaax_' + negId + '_sucursales') || '[]'); } catch(e) { return []; }
+}
+function _getSucActiva() { return localStorage.getItem('etaax_sucursal_activa') || ''; }
+function _sucNombre(id) {
+    if (!id) return '';
+    var s = _getSucs().find(function(x){ return x.id === id; });
+    return s ? (s.nombre || s.id) : id;
+}
 
 /* ── ROLES ── */
 var ROLES = [
@@ -734,8 +754,30 @@ var tmpDocs = [];
 function renderAll() {
     renderPuestoChips();
     renderPuestoFilter();
+    renderSucursalFilter();
     renderCumpleBanner();
     renderTable();
+}
+
+function renderSucursalFilter() {
+    var sucs = _getSucs();
+    var sel = document.getElementById('filterSucursal');
+    if (!sel) return;
+    var current = sel.value;
+    sel.innerHTML = '<option value="">Todas las sucursales</option>' +
+        sucs.map(function(s){ return '<option value="' + s.id + '">' + esc(s.nombre || s.id) + '</option>'; }).join('') +
+        '<option value="__ninguna">— Sin sucursal —</option>';
+    if (current) sel.value = current;
+}
+
+function _poblarSucursalModal() {
+    var sucs = _getSucs();
+    var sel = document.getElementById('fSucursal');
+    if (!sel) return;
+    var current = sel.value;
+    sel.innerHTML = '<option value="">— Sin sucursal asignada —</option>' +
+        sucs.map(function(s){ return '<option value="' + s.id + '">' + esc(s.nombre || s.id) + '</option>'; }).join('');
+    if (current) sel.value = current;
 }
 
 /* ── Cumpleaños ── */
@@ -796,10 +838,11 @@ function renderPuestoFilter() {
 
 /* ── RENDER TABLE ── */
 function renderTable() {
-    var q      = document.getElementById('searchInput').value.toLowerCase();
-    var puesto = document.getElementById('filterPuesto').value || selectedPuesto;
-    var estado = document.getElementById('filterEstado').value;
-    var data   = load();
+    var q        = document.getElementById('searchInput').value.toLowerCase();
+    var puesto   = document.getElementById('filterPuesto').value || selectedPuesto;
+    var estado   = document.getElementById('filterEstado').value;
+    var sucFilt  = document.getElementById('filterSucursal').value;
+    var data     = load();
 
     var filtered = data.filter(function(s){
         var matchQ = !q || s.nombre.toLowerCase().includes(q) ||
@@ -807,7 +850,12 @@ function renderTable() {
             (s.celular||'').includes(q);
         var matchP = !puesto || s.puesto === puesto;
         var matchE = !estado || s.estado === estado;
-        return matchQ && matchP && matchE;
+        var matchS = !sucFilt
+            ? true
+            : sucFilt === '__ninguna'
+                ? !s.sucursalId
+                : s.sucursalId === sucFilt;
+        return matchQ && matchP && matchE && matchS;
     });
 
     filtered.sort(function(a,b){
@@ -839,9 +887,14 @@ function renderTable() {
         var ingreso   = s.fechaIngreso ? s.fechaIngreso : '—';
         var usuarioChip = s.usuario ? '<span style="font-size:10px;color:var(--text-dim)"> @' + esc(s.usuario) + '</span>' : '';
         var cumpleChip = _esCumpleHoy(s.fechaNacimiento) ? ' <span title="Hoy cumple años">🎂</span>' : '';
+        var sucNom = s.sucursalId ? _sucNombre(s.sucursalId) : '';
+        var sucCell = sucNom
+            ? '<span style="font-size:11px;background:rgba(122,184,245,.12);color:#7ab8f5;border:1px solid rgba(122,184,245,.25);border-radius:4px;padding:2px 7px;white-space:nowrap">' + esc(sucNom) + '</span>'
+            : '<span style="color:var(--text-dim);font-size:12px">—</span>';
         return '<tr style="cursor:pointer" ondblclick="openModal(\'' + s.id + '\')">' +
             '<td><strong>' + esc(s.nombre) + '</strong>' + cumpleChip + usuarioChip + docsChip + '</td>' +
             '<td>' + esc(s.puesto||'—') + '</td>' +
+            '<td>' + sucCell + '</td>' +
             '<td>' + rolBadge(s.rol) + '</td>' +
             '<td style="font-variant-numeric:tabular-nums;color:var(--text-muted)">' + esc(ingreso) + '</td>' +
             '<td>' + esc(s.celular||'—') + '</td>' +
@@ -867,8 +920,16 @@ function openModal(id) {
 function _openModalReal(id) {
     tmpDocs = [];
     clearForm();
+    _poblarSucursalModal();
     document.getElementById('modalTitle').textContent = id ? 'Editar colaborador' : 'Agregar colaborador';
     document.getElementById('fId').value = '';
+
+    // Pre-asignar sucursal activa si es nuevo colaborador
+    var sucActiva = _getSucActiva();
+    if (!id && sucActiva) {
+        var fSuc = document.getElementById('fSucursal');
+        if (fSuc) fSuc.value = sucActiva;
+    }
 
     if (id) {
         var data = load();
@@ -885,6 +946,8 @@ function _openModalReal(id) {
             document.getElementById('fCorreo').value      = s.correo || '';
             document.getElementById('fDireccion').value   = s.direccion || '';
             document.getElementById('fEstado').value      = s.estado || 'Activo';
+            var fSucEdit = document.getElementById('fSucursal');
+            if (fSucEdit) fSucEdit.value = s.sucursalId || '';
             document.getElementById('fRol').value         = s.rol || '';
             document.getElementById('fUsuario').value     = s.usuario || '';
             // La contraseña guardada nunca se muestra; el placeholder
@@ -1069,10 +1132,12 @@ async function saveStaff() {
     // Credenciales según el tipo de rol
     var passwordHash = esAdmin ? (pwd ? await _hashPwdStaff(pwd) : (existing.passwordHash || '')) : '';
     var nipHash      = (!esAdmin && rol) ? (nipRaw ? await _hashPwdStaff('nip|' + nipRaw) : (existing.nipHash || '')) : '';
+    var sucursalId = (document.getElementById('fSucursal').value || '').trim();
     var obj = {
         id:              editId || genId(),
         nombre:          nombre,
         puesto:          puesto,
+        sucursalId:      sucursalId,
         rol:             rol,
         usuario:         usuario,
         passwordHash:    passwordHash,
@@ -1167,6 +1232,13 @@ function esc(s) {
 async function initPage() {
     var negId = getNegocioActivo();
     if (!negId) { window.location.href = '../hub.html'; return; }
+    // Si hay sucursal activa, pre-filtrar por ella
+    var sucActiva = _getSucActiva();
+    if (sucActiva) {
+        renderSucursalFilter(); // poblar primero
+        var fSuc = document.getElementById('filterSucursal');
+        if (fSuc) fSuc.value = sucActiva;
+    }
     if (window.NominaParams) { try { await NominaParams.sync(negId); } catch(e){} }
     await syncFromDB();
     renderAll();
