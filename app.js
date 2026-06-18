@@ -162,6 +162,7 @@ function leerCamposExtra(tipo) {
 async function guardarReceta() {
     const nombre = document.getElementById('nombreReceta').value.trim();
     if (!nombre) { alert('Agrega un nombre a la receta antes de guardar'); return; }
+    var _guardandoDesdeCaratula = !!window._volverACaratula;
 
     const tiempoNum    = document.getElementById('tiempoNum')?.value    || '';
     const tiempoUnidad = document.getElementById('tiempoUnidad')?.value || 'min';
@@ -213,6 +214,7 @@ async function guardarReceta() {
     alert('✅ Receta "' + nombre + '" guardada');
     var btnImp = document.getElementById('btnImprimirHeader');
     if (btnImp) btnImp.style.display = '';
+    if (typeof _showEscMenu === 'function' && !_guardandoDesdeCaratula) _showEscMenu();
 }
 
 function cargarReceta(id) {
