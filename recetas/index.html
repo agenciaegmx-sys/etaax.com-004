@@ -1052,8 +1052,12 @@ function renderRendimientoSub() {
             opts_html + "</select>";
     };
 
-    var uBruto = getRV("unidadRendBruto") || "KG";
-    var uFinal = getRV("unidadRendimientoFinal") || (modo === "porcion" ? "PZA" : "KG");
+    // Default consciente del tipo: una sub-receta de BEBIDA es líquida → LT,
+    // no KG (antes siempre defaulteaba a KG y "marcaba kg" aunque fuera lt).
+    var _esBeb = (typeof recetaTipoActual !== "undefined") &&
+                 (recetaTipoActual === "sub-bebidas" || recetaTipoActual === "bebidas");
+    var uBruto = getRV("unidadRendBruto") || (_esBeb ? "LT" : "KG");
+    var uFinal = getRV("unidadRendimientoFinal") || (modo === "porcion" ? "PZA" : (_esBeb ? "LT" : "KG"));
     var rfVal  = getRV("rendimientoFinal") || "";
     var ppVal  = getRV("pesoPieza") || "";
     var upVal  = getRV("unidadPesoPieza") || "G";
@@ -1575,10 +1579,14 @@ function agregarSubRecetaComoInsumo() {
         return s + getFactor(ing.cantidad, ing.unidad) * (ing.costoPorKgLt || 0);
     }, 0);
 
+    // Una sub-receta de bebida es líquida: su rendimiento va en LT/ML, no KG.
+    var esBebida = recetaTipoActual === 'sub-bebidas' || recetaTipoActual === 'bebidas';
+    var umDefault = esBebida ? 'LT' : 'KG';
+
     // Leer rendimiento final del card de rendimiento
     var rendFinal   = parseFloat((document.getElementById('rendimientoFinal') || {}).value) || 0;
-    var unidadFinal = ((document.getElementById('unidadRendimientoFinal') || {}).value || 'KG').toUpperCase();
-    var unidadBruto = ((document.getElementById('unidadRendBruto') || {}).value || 'KG').toUpperCase();
+    var unidadFinal = ((document.getElementById('unidadRendimientoFinal') || {}).value || umDefault).toUpperCase();
+    var unidadBruto = ((document.getElementById('unidadRendBruto') || {}).value || umDefault).toUpperCase();
 
     // Sumar ingredientes (rendimiento bruto en g/ml base)
     var sumaBase = ingredientes.reduce(function(s, ing) {
@@ -1598,8 +1606,8 @@ function agregarSubRecetaComoInsumo() {
     var porcionQty   = parseFloat((document.getElementById('porcionesQty') || {}).value) || 0;
     var porciones    = [];
     if (rendFinalKg > 0) {
-        // Presentación 1: por KG o LT
-        var esLiq = unidadFinal === 'ML' || unidadFinal === 'LT';
+        // Presentación 1: por KG o LT (las bebidas siempre son líquidas)
+        var esLiq = esBebida || unidadFinal === 'ML' || unidadFinal === 'LT';
         porciones.push({
             contNeto:       rendFinal,
             umContenido:    unidadFinal,

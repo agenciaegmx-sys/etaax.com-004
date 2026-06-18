@@ -28,7 +28,7 @@
       connect-src 'self' https://byjuocnkyuxxudondciz.supabase.co wss://byjuocnkyuxxudondciz.supabase.co;
       img-src 'self' data: blob: https://byjuocnkyuxxudondciz.supabase.co;
       object-src 'none';
-      frame-src 'none';
+      frame-src 'self';
       base-uri 'self';
       form-action 'self';
     """
