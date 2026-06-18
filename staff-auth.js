@@ -44,6 +44,26 @@
         return 'Sx' + Date.now().toString(36) + Math.random().toString(36).slice(2, 14) + 'Z9!';
     }
 
+    var _lastErr = null;  // último motivo de fallo (para diagnóstico)
+
+    // Diagnóstico desde consola: _staffDiag() dice qué falta para el acceso staff.
+    window._staffDiag = async function (negId) {
+        negId = negId || localStorage.getItem('etaax_negocio_activo') || '';
+        var cred = _getCredLocal(negId), sess = null, nube = null;
+        try { var s = await _supabase.auth.getSession(); sess = (s.data && s.data.session && s.data.session.user) ? s.data.session.user.email : null; } catch (e) {}
+        try { var n = await _supabase.from('negocios').select('staff_uid,staff_cred').eq('id', negId).maybeSingle(); nube = n.error ? ('ERROR: ' + n.error.message) : (n.data ? { staff_uid: n.data.staff_uid, tiene_cred: !!(n.data.staff_cred && n.data.staff_cred.email) } : null); } catch (e) {}
+        var info = {
+            negId: negId,
+            credCacheadaEnEsteEquipo: !!(cred && cred.email),
+            emailCuentaStaff: cred ? cred.email : null,
+            sesionSupabaseActiva: sess,
+            enLaNube: nube,
+            ultimoError: _lastErr
+        };
+        console.log('[staff-auth] diagnóstico:', info);
+        return info;
+    };
+
     window.StaffAuth = {
         getCredLocal: _getCredLocal,
 
@@ -65,18 +85,21 @@
                 var email = _email(negId), pass = _genPass();
                 var up = await ep.auth.signUp({ email: email, password: pass });
                 if (up.error) {
-                    // Ya registrada pero sin credenciales guardadas (caso raro): no
-                    // podemos recuperar el password → queda local-only. No romper nada.
-                    console.warn('[staff-auth] no se pudo crear la cuenta de staff:', up.error.message);
+                    // Típico: "Signups not allowed" (deshabilitado en Auth) o límite.
+                    _lastErr = 'signUp: ' + up.error.message;
+                    console.warn('[staff-auth] no se pudo crear la cuenta de staff:', up.error.message,
+                        '· Revisa Supabase → Auth: permite registros y desactiva "Confirm email".');
                     return;
                 }
                 var uid = up.data && up.data.user ? up.data.user.id : null;
                 try { await ep.auth.signOut({ scope: 'local' }); } catch (e) {}
-                if (!uid) return;
+                if (!uid) { _lastErr = 'signUp sin uid'; return; }
                 var cred = { email: email, password: pass };
                 var u = await _supabase.from('negocios').update({ staff_uid: uid, staff_cred: cred }).eq('id', negId);
-                if (u.error) { console.warn('[staff-auth] no se pudo guardar la cuenta:', u.error.message); return; }
+                if (u.error) { _lastErr = 'update negocios: ' + u.error.message; console.warn('[staff-auth] no se pudo guardar la cuenta:', u.error.message); return; }
                 _setCredLocal(negId, cred);
+                _lastErr = null;
+                console.log('[staff-auth] cuenta de colaboradores lista para', negId);
             } catch (e) { console.warn('[staff-auth] provisionar:', e); }
         },
 
@@ -85,12 +108,23 @@
         login: async function (negId) {
             if (!negId || typeof _supabase === 'undefined') return false;
             var cred = _getCredLocal(negId);
-            if (!cred || !cred.email) return false;
+            if (!cred || !cred.email) {
+                _lastErr = 'sin credenciales en este equipo (el dueño debe iniciar sesión aquí tras correr v19)';
+                console.warn('[staff-auth] ' + _lastErr);
+                return false;
+            }
             try {
                 var r = await _supabase.auth.signInWithPassword({ email: cred.email, password: cred.password });
-                if (r.error) { console.warn('[staff-auth] login staff:', r.error.message); return false; }
+                if (r.error) {
+                    // Típico: "Email not confirmed" → falta desactivar "Confirm email".
+                    _lastErr = 'login: ' + r.error.message;
+                    console.warn('[staff-auth] login staff:', r.error.message,
+                        '· Si dice "Email not confirmed", desactiva "Confirm email" en Supabase → Auth.');
+                    return false;
+                }
+                _lastErr = null;
                 return true;
-            } catch (e) { console.warn('[staff-auth] login staff:', e); return false; }
+            } catch (e) { _lastErr = 'login: ' + ((e && e.message) || e); console.warn('[staff-auth] login staff:', e); return false; }
         }
     };
 })();
