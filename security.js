@@ -143,3 +143,158 @@ window.etx = function (s) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 };
+
+/* ============================================================
+   ETAAX — UI compartida (diálogos bonitos + guarda de cierre)
+   - window.alert        → tarjeta estilizada (no el cuadro feo del navegador)
+   - window.etaaxAlert / window.etaaxConfirm
+   - Click en el FONDO de un modal → confirma antes de cerrar (reutiliza el
+     propio handler de cierre del modal, sin tener que editar cada uno).
+   ============================================================ */
+(function () {
+    if (window._etaaxUI) return; window._etaaxUI = true;
+
+    var st = document.createElement('style');
+    st.textContent =
+        '@keyframes etaaxFade{from{opacity:0}to{opacity:1}}' +
+        '@keyframes etaaxPop{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:none}}' +
+        '.etaax-ui-ov{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;' +
+            'padding:18px;background:rgba(7,7,6,.64);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);' +
+            'animation:etaaxFade .15s ease both;font-family:DM Sans,system-ui,sans-serif}' +
+        '.etaax-ui-card{width:100%;max-width:390px;background:#1c1b18;border:1px solid #34322c;border-radius:16px;' +
+            'box-shadow:0 24px 70px rgba(0,0,0,.62);padding:22px 22px 18px;animation:etaaxPop .18s cubic-bezier(.2,.8,.2,1) both}' +
+        '.etaax-ui-ico{font-size:30px;line-height:1;margin-bottom:10px}' +
+        '.etaax-ui-ttl{font-size:17px;font-weight:700;color:#f3efe8;margin:0 0 6px;letter-spacing:.2px}' +
+        '.etaax-ui-msg{font-size:13.5px;line-height:1.5;color:#a7a299;margin:0 0 18px;white-space:pre-wrap;word-break:break-word}' +
+        '.etaax-ui-row{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}' +
+        '.etaax-ui-btn{border:none;border-radius:9px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;' +
+            'font-family:inherit;transition:filter .15s,opacity .15s}' +
+        '.etaax-ui-btn:hover{filter:brightness(1.12)}' +
+        '.etaax-ui-btn.primary{background:#3dbe7a;color:#06140d}' +
+        '.etaax-ui-btn.danger{background:#e05a3a;color:#fff}' +
+        '.etaax-ui-btn.ghost{background:transparent;color:#a7a299;border:1px solid #3a382f}';
+    (document.head || document.documentElement).appendChild(st);
+
+    var _queue = [], _active = false;
+    function _next() {
+        if (_active || !_queue.length) return;
+        _active = true;
+        _render(_queue.shift());
+    }
+    function _render(cfg) {
+        var ov = document.createElement('div');
+        ov.className = 'etaax-ui-ov';
+        ov.setAttribute('data-etaax-ui', '1');
+        var card = document.createElement('div');
+        card.className = 'etaax-ui-card';
+        var h = '';
+        if (cfg.icon)  h += '<div class="etaax-ui-ico">' + cfg.icon + '</div>';
+        if (cfg.title) h += '<div class="etaax-ui-ttl">' + window.etx(cfg.title) + '</div>';
+        h += '<div class="etaax-ui-msg">' + window.etx(cfg.msg) + '</div><div class="etaax-ui-row"></div>';
+        card.innerHTML = h;
+        ov.appendChild(card);
+
+        function onKey(ev) {
+            if (ev.key === 'Escape') { ev.preventDefault(); cerrar(cfg.onBackdrop); }
+            else if (ev.key === 'Enter') { ev.preventDefault(); cerrar(cfg.primary || cfg.onBackdrop); }
+        }
+        function cerrar(cb) {
+            document.removeEventListener('keydown', onKey, true);
+            ov.style.animation = 'etaaxFade .12s ease both reverse';
+            setTimeout(function () {
+                if (ov.parentNode) ov.parentNode.removeChild(ov);
+                _active = false; _next();
+                if (typeof cb === 'function') cb();
+            }, 110);
+        }
+        var row = card.querySelector('.etaax-ui-row');
+        cfg.buttons.forEach(function (b) {
+            var btn = document.createElement('button');
+            btn.className = 'etaax-ui-btn ' + (b.kind || 'ghost');
+            btn.textContent = b.label;
+            btn.onclick = function () { cerrar(b.onClick); };
+            row.appendChild(btn);
+        });
+        ov.addEventListener('click', function (e) { if (e.target === ov) cerrar(cfg.onBackdrop); });
+        document.addEventListener('keydown', onKey, true);
+        document.body.appendChild(ov);
+        var pb = card.querySelector('.etaax-ui-btn.primary,.etaax-ui-btn.danger') || card.querySelector('.etaax-ui-btn');
+        if (pb) { try { pb.focus(); } catch (e) {} }
+    }
+
+    window.etaaxAlert = function (msg, opts) {
+        opts = opts || {};
+        var cb = opts.onOk || null;
+        _queue.push({
+            icon: opts.icon || '', title: opts.title || '', msg: String(msg == null ? '' : msg),
+            buttons: [{ label: opts.okLabel || 'Aceptar', kind: 'primary', onClick: cb }],
+            primary: cb, onBackdrop: cb
+        });
+        _next();
+    };
+    window.etaaxConfirm = function (title, msg, onYes, onNo, opts) {
+        opts = opts || {};
+        _queue.push({
+            icon: opts.icon || '❓', title: title || '¿Confirmar?', msg: msg || '',
+            buttons: [
+                { label: opts.noLabel || 'Cancelar', kind: 'ghost', onClick: onNo },
+                { label: opts.yesLabel || 'Continuar', kind: opts.danger === false ? 'primary' : 'danger', onClick: onYes }
+            ],
+            primary: onYes, onBackdrop: onNo
+        });
+        _next();
+    };
+
+    // Reemplazar el alert() nativo por la tarjeta estilizada (no bloqueante).
+    window.alert = function (msg) { window.etaaxAlert(msg); };
+
+    /* Guarda de cierre: si haces click en el FONDO de un modal a pantalla
+       completa, en vez de cerrarlo de golpe pregunta primero. Para cerrar
+       re-dispara un click real en el overlay → activa su propio handler de
+       cierre (sea inline onclick, .onclick o addEventListener), así respeta
+       la limpieza de cada modal sin tener que editarlos uno por uno. */
+    function _esModalOverlay(ov) {
+        if (!ov || ov.nodeType !== 1 || !ov.getAttribute) return false;
+        if (ov.getAttribute('data-etaax-ui')) return false;       // nuestros diálogos
+        if (ov.getAttribute('data-etaax-allow')) return false;    // click sintético propio
+        var cs = window.getComputedStyle(ov);
+        if (cs.position !== 'fixed' && cs.position !== 'absolute') return false;
+        if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return false;
+        var r = ov.getBoundingClientRect();
+        if (r.width < window.innerWidth * 0.6 || r.height < window.innerHeight * 0.6) return false;
+        // ¿parece un modal que cierra al click-fuera?
+        if (typeof ov.onclick === 'function') return true;
+        if (/overlay/i.test(ov.className || '')) return true;
+        if (ov.querySelector && ov.querySelector('.modal, .modal-card, .gs-card, .sm-card')) return true;
+        // Fondo translúcido a pantalla completa = backdrop de modal (estilos inline).
+        var m = (cs.backgroundColor || '').match(/^rgba?\(([^)]+)\)/);
+        if (m) { var p = m[1].split(',').map(function (x) { return parseFloat(x); }); var a = p.length > 3 ? p[3] : 1; if (a > 0.05 && a < 1) return true; }
+        return false;
+    }
+    function _cerrarOverlay(ov) {
+        ov.setAttribute('data-etaax-allow', '1');
+        try { ov.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); } catch (e) {}
+        ov.removeAttribute('data-etaax-allow');
+        // Garantía: si su propio handler no lo cerró, ocultarlo de todos modos.
+        setTimeout(function () {
+            try {
+                if (window.getComputedStyle(ov).display !== 'none' && ov.offsetParent !== null) {
+                    ov.classList.remove('open'); ov.style.display = 'none';
+                }
+            } catch (e) {}
+        }, 50);
+    }
+    document.addEventListener('click', function (e) {
+        var ov = e.target;
+        if (!_esModalOverlay(ov)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        window.etaaxConfirm(
+            '¿Cerrar esta ventana?',
+            'Si fue sin querer, puedes seguir aquí. Los cambios sin guardar se perderán.',
+            function () { _cerrarOverlay(ov); },
+            null,
+            { yesLabel: 'Sí, cerrar', noLabel: 'Seguir aquí' }
+        );
+    }, true);
+})();
