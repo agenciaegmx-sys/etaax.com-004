@@ -103,6 +103,7 @@ window._etaaxWipeCache = function () {
         if (!k || k.indexOf('etaax_') !== 0) continue;
         if (k === 'etaax_negocios' || k === 'etaax_theme') continue;
         if (/_staff$/.test(k)) continue;
+        if (/_staffcred$/.test(k)) continue;   // credenciales de la cuenta de colaboradores (login staff en la nube)
         if (/_owner_email$/.test(k)) continue; // lo usa admin-guard en sesiones staff
         if (/_sucursales$/.test(k)) continue;  // lista de sucursales (nombre matriz, etc.)
         if (/_suc_/.test(k)) continue;         // config y logo por sucursal (etaax_<neg>_suc_<id>[_logo])
