@@ -60,7 +60,9 @@ async function _sbInitRecetas() {
     var negId = getNegocioActivo(); if (!negId) return;
     var res = await _supabase.from('recetas').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true});
     if (res.error) {
-        // Sin conexión / error: usar respaldo local.
+        // Sin conexión / error de esquema: usar respaldo local.
+        console.warn('[recetas] no se pudo leer de Supabase →', res.error.message,
+            '· (si dice "created_at"/"id no existe", falta correr la migración v17)');
         try { _cacheRecetas = JSON.parse(_skGet('recetas')) || []; } catch(e) { _cacheRecetas = []; }
         if (typeof renderGridRecetas === 'function') renderGridRecetas();
         return;
