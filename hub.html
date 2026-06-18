@@ -1234,6 +1234,37 @@ async function loginSubmit() {
         }
     }
 
+    // ── Intento 3: validar contra la NUBE (otro equipo/origen sin caché local) ──
+    // Busca al colaborador en Supabase por usuario + hash (v21). Así el login
+    // funciona en etaax.com aunque el caché local no tenga la lista de staff.
+    if (typeof _supabase !== 'undefined' && typeof _hashPwdStaff === 'function') {
+        try {
+            var hv2 = await _hashPwdStaff(pwd);
+            var rs = await _supabase.rpc('staff_login', { p_usuario: input, p_hash: hv2 });
+            var row = (rs && !rs.error && rs.data && rs.data[0]) ? rs.data[0] : null;
+            if (!row) {  // fallback: hash legacy (cuentas viejas aún sin migrar en la nube)
+                var rl = await _supabase.rpc('staff_login', { p_usuario: input, p_hash: _hashPwdStaffLegacy(pwd) });
+                row = (rl && !rl.error && rl.data && rl.data[0]) ? rl.data[0] : null;
+            }
+            if (row) {
+                var negObj = _negFromDb({ id: row.negocio_id, usuario_id: null, datos: row.negocio_datos || {} });
+                var miembroObj = { id: row.staff_id, nombre: row.nombre, rol: row.rol || 'otro', usuario: input, passwordHash: hv2 };
+                // Cachear localmente para los próximos logins en este equipo.
+                try {
+                    var lst = JSON.parse(localStorage.getItem('etaax_' + row.negocio_id + '_staff') || '[]');
+                    var ix = lst.findIndex(function (x) { return x.id === miembroObj.id; });
+                    if (ix >= 0) lst[ix] = Object.assign(lst[ix], miembroObj); else lst.push(miembroObj);
+                    localStorage.setItem('etaax_' + row.negocio_id + '_staff', JSON.stringify(lst));
+                    // Asegurar que el negocio esté en la lista local (para ctx-bar, etc.)
+                    var negs = _getNegocios();
+                    if (!negs.find(function (n) { return n.id === negObj.id; })) { negs.push(negObj); _setNegocios(negs); }
+                } catch (e) {}
+                await _iniciarSesionStaff(miembroObj, negObj);
+                return;
+            }
+        } catch (e) { console.warn('[login] staff nube:', e); }
+    }
+
     shakeError('Usuario o contraseña incorrectos.');
 }
 
