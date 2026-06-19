@@ -1563,6 +1563,9 @@
 
        modalDirty = false;
        _actualizarDatalistProveedores();
+       // Datalists de conceptos reutilizables (empaque, zona)
+       _poblarDatalistConcepto('empaque', 'dl-empaque', EMPAQUE_DEFAULTS);
+       _poblarDatalistConcepto('zona', 'dl-zona', ZONA_DEFAULTS);
        // Sucursal: poblar select si hay más de 1 sucursal
        (function() {
            var sucs = _getSucsIns();
@@ -2460,22 +2463,22 @@
                    <!-- Presentación de compra -->
                    <div class="mg-3">
                        <div class="meta-item"><label>Presentación de compra</label>
-                           <select onchange="updPres(${i},'presentacionCompra',this.value);renderPresentaciones()">
-                               ${esBarril
-                                   ? ['Barril','Barriles'].map(t =>
-                                       `<option value="${t}" ${(p.presentacionCompra||'Barril')===t?'selected':''}>${t}</option>`).join('')
-                                   : esCarne
-                                   ? ['Caja','Pieza completa / Corte primario','Rack','Bolsa','Granel','Paquete porcionado','Kilo','Otro'].map(t =>
-                                       `<option value="${t}" ${(p.presentacionCompra||'Caja')===t?'selected':''}>${t}</option>`).join('')
-                                   : esFruta
-                                   ? ['A granel — kg','Por pieza','Por manojo / atado','Por caja','Por bolsa / red','Por charola','Kilo','Otro'].map(t =>
-                                       `<option value="${t}" ${(p.presentacionCompra||'A granel — kg')===t?'selected':''}>${t}</option>`).join('')
-                                   : esAbarrote
-                                   ? ['Pieza','Caja','Paquete','Bolsa','Costal','Tarro','Frasco','Lata','Kilo','Litro','Otro'].map(t =>
-                                       `<option value="${t}" ${(p.presentacionCompra||'Pieza')===t?'selected':''}>${t}</option>`).join('')
-                                   : ['Pieza','Caja','Rejilla','Paquete','Rack','Bolsa','Lata','Botella','Frasco','Kilo','Gramo','Litro','Otro'].map(t =>
-                                       `<option value="${t}" ${(p.presentacionCompra||'Pieza')===t?'selected':''}>${t}</option>`).join('')
-                               }
+                           <select onchange="onPresCompraChange(${i}, this)">
+                               ${(function(){
+                                   var base = esBarril ? ['Barril','Barriles']
+                                       : esCarne ? ['Caja','Pieza completa / Corte primario','Rack','Bolsa','Granel','Paquete porcionado','Kilo','Otro']
+                                       : esFruta ? ['A granel — kg','Por pieza','Por manojo / atado','Por caja','Por bolsa / red','Por charola','Kilo','Otro']
+                                       : esAbarrote ? ['Pieza','Caja','Paquete','Bolsa','Costal','Tarro','Frasco','Lata','Kilo','Litro','Otro']
+                                       : ['Pieza','Caja','Rejilla','Paquete','Rack','Bolsa','Lata','Botella','Frasco','Kilo','Gramo','Litro','Otro'];
+                                   var def  = esBarril ? 'Barril' : esCarne ? 'Caja' : esFruta ? 'A granel — kg' : 'Pieza';
+                                   var customs = _getConceptos('presentacionCompra').filter(function(c){ return base.indexOf(c) === -1; });
+                                   var all = base.concat(customs);
+                                   var cur = p.presentacionCompra || def;
+                                   if (cur && all.indexOf(cur) === -1) all.push(cur);
+                                   return all.map(function(t){
+                                       return '<option value="' + String(t).replace(/"/g,'&quot;') + '" ' + (cur === t ? 'selected' : '') + '>' + t + '</option>';
+                                   }).join('') + '<option value="__nuevo__">＋ Agregar concepto…</option>';
+                               })()}
                            </select>
                        </div>
                        <div class="meta-item"><label>${esBarril ? 'Litros del barril' : esCarne ? 'Cantidad / Piezas' : esFruta ? 'Cantidad / Kilos o Piezas' : esAbarrote ? 'Piezas / Cantidad' : 'Cantidad'}</label>
@@ -2498,13 +2501,21 @@
                    <div class="mg-2">
                        <div class="meta-item">
                            <label>Proveedor</label>
-                           <input type="text" list="etaax-provs-list" value="${p.proveedor||''}" placeholder="${esCarne ? 'Ej. Carnes Selectas' : esFruta ? 'Ej. Central de Abasto' : esRefrescoCerv ? 'Ej. Grupo Modelo' : 'Ej. Viños América'}"
-                               oninput="updPres(${i},'proveedor',this.value)">
+                           <div style="display:flex;gap:6px;align-items:center">
+                               <input type="text" list="etaax-provs-list" value="${p.proveedor||''}" placeholder="${esCarne ? 'Ej. Carnes Selectas' : esFruta ? 'Ej. Central de Abasto' : esRefrescoCerv ? 'Ej. Grupo Modelo' : 'Ej. Viños América'}"
+                                   oninput="updPres(${i},'proveedor',this.value)" style="flex:1;min-width:0">
+                               <button type="button" onclick="abrirPanelProvIns(${i})" title="Catálogo de proveedores"
+                                   style="flex-shrink:0;background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:9px 11px;cursor:pointer;font-size:14px;line-height:1">📋</button>
+                           </div>
                        </div>
                        <div class="meta-item">
                            <label>Zona / Ciudad</label>
-                           <input type="text" value="${p.zona||''}" placeholder="${esRefrescoCerv ? 'Ej. CDMX' : 'Ej. Morelia'}"
-                               oninput="updPres(${i},'zona',this.value)">
+                           <div style="display:flex;gap:6px;align-items:center">
+                               <input type="text" list="dl-zona" value="${p.zona||''}" placeholder="${esRefrescoCerv ? 'Ej. CDMX' : 'Ej. Morelia'}"
+                                   oninput="updPres(${i},'zona',this.value)" style="flex:1;min-width:0">
+                               <button type="button" onclick="agregarConceptoPres('zona',${i},'dl-zona',this)" title="Guardar como concepto reutilizable"
+                                   style="flex-shrink:0;background:var(--surface);border:1px solid var(--border);color:var(--green);border-radius:6px;padding:9px 12px;cursor:pointer;font-size:15px;line-height:1;font-weight:700">＋</button>
+                           </div>
                        </div>
                    </div>
 
@@ -2846,6 +2857,14 @@
        setInsumos(lista);
        modalDirty = false;
        if (_soloMode) {
+           // El padre cierra el iframe al recibir el mensaje, lo que MATA el
+           // setTimeout de sincronización debounced (1200ms) → el cambio (p.ej. la
+           // sucursal asignada) nunca llegaría a Supabase y "al minuto" una recarga
+           // lo revierte. Por eso forzamos el upsert de ESTE insumo AHORA y solo
+           // después avisamos al padre.
+           clearTimeout(_insumosSyncTimer);
+           _insumosSyncPend = null;
+           try { await _sincronizarInsumosSupabase(getNegocioActivo(), [insumo]); } catch(e) {}
            window.parent.postMessage({ type: 'insumoGuardado', insumoId: insumo.id }, '*');
            return;
        }
@@ -3245,15 +3264,209 @@
        }
    });
    
+   // ── Catálogo de proveedores en el editor de insumo (panel estilo gastos) ──
+   var _provsCacheIns = null;
+   var _provPanelIdx  = -1;
+   function _normProvIns(s){ return (s||'').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim(); }
+   function _loadProvsIns() {
+       if (_provsCacheIns) return _provsCacheIns;
+       var negId = getNegocioActivo();
+       try { _provsCacheIns = JSON.parse(localStorage.getItem('etaax_' + negId + '_proveedores') || '[]'); } catch(e) { _provsCacheIns = []; }
+       return _provsCacheIns;
+   }
+   async function _cargarProveedoresIns() {
+       var negId = getNegocioActivo();
+       if (!negId || typeof _supabase === 'undefined') return;
+       try {
+           var r = await _supabase.from('proveedores').select('datos').eq('negocio_id', negId).order('datos->>nombre');
+           if (!r.error) {
+               _provsCacheIns = (r.data || []).map(function(x){ return x.datos; }).filter(Boolean);
+               try { localStorage.setItem('etaax_' + negId + '_proveedores', JSON.stringify(_provsCacheIns)); } catch(e){}
+           }
+       } catch(e) {}
+   }
+   function abrirPanelProvIns(idx) {
+       _provPanelIdx = idx;
+       var ov = document.getElementById('panelProvInsOverlay');
+       if (!ov) return;
+       ov.style.display = 'flex';
+       var f = document.getElementById('nuevoProvInsForm'); if (f) f.style.display = 'none';
+       var s = document.getElementById('panelProvInsSearch'); if (s) { s.value = ''; setTimeout(function(){ s.focus(); }, 50); }
+       renderPanelProvIns();
+       // Refrescar desde la nube en background y re-pintar si sigue abierto.
+       _cargarProveedoresIns().then(function(){
+           if (document.getElementById('panelProvInsOverlay').style.display === 'flex') renderPanelProvIns();
+       });
+   }
+   function cerrarPanelProvIns() {
+       var ov = document.getElementById('panelProvInsOverlay'); if (ov) ov.style.display = 'none';
+   }
+   function renderPanelProvIns() {
+       var q = _normProvIns(document.getElementById('panelProvInsSearch').value);
+       var actual = (_provPanelIdx >= 0 && presentacionesTemp[_provPanelIdx]) ? presentacionesTemp[_provPanelIdx].proveedor : '';
+       var typed = _normProvIns(actual);
+       var provs = _loadProvsIns();
+       var lista = q ? provs.filter(function(p){ return _normProvIns(p.nombre).includes(q); }) : provs;
+       var body = document.getElementById('panelProvInsBody');
+       if (!lista.length) {
+           body.innerHTML = '<div style="text-align:center;padding:26px 8px;color:var(--text-dim);font-size:13px">' +
+               (provs.length ? 'Sin resultados para "' + etx(document.getElementById('panelProvInsSearch').value) + '"' : 'Sin proveedores en catálogo. Agrega el primero.') + '</div>';
+           return;
+       }
+       body.innerHTML = lista.map(function(p){
+           var sub = [p.tel, p.contacto, p.correo].filter(Boolean).map(etx).join(' · ').slice(0,70);
+           var esActual = typed && _normProvIns(p.nombre) === typed;
+           return '<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border)">' +
+               '<div style="flex:1;min-width:0">' +
+                   '<div style="font-size:13px;color:var(--text);font-weight:500">' + etx(p.nombre) + '</div>' +
+                   (sub ? '<div style="font-size:11px;color:var(--text-muted)">' + sub + '</div>' : '') +
+               '</div>' +
+               '<button onclick="selProvIns(\'' + etx(p.nombre).replace(/'/g,'&#39;') + '\')" ' +
+                   'style="flex-shrink:0;background:' + (esActual?'var(--green)':'transparent') + ';border:1px solid ' + (esActual?'var(--green)':'var(--border)') + ';color:' + (esActual?'#0f0e0c':'var(--text-muted)') + ';border-radius:6px;padding:5px 12px;font-family:inherit;font-size:11px;cursor:pointer;white-space:nowrap">' +
+                   (esActual?'✓ Activo':'Seleccionar') + '</button>' +
+           '</div>';
+       }).join('');
+   }
+   function selProvIns(nombre) {
+       if (_provPanelIdx >= 0) { updPres(_provPanelIdx, 'proveedor', nombre); renderPresentaciones(); _actualizarDatalistProveedores(); }
+       cerrarPanelProvIns();
+   }
+   function toggleNuevoProvInsForm() {
+       var f = document.getElementById('nuevoProvInsForm');
+       var visible = f.style.display === 'flex';
+       f.style.display = visible ? 'none' : 'flex';
+       if (!visible) {
+           var typed = (_provPanelIdx >= 0 && presentacionesTemp[_provPanelIdx]) ? (presentacionesTemp[_provPanelIdx].proveedor || '') : '';
+           var sq = document.getElementById('panelProvInsSearch').value.trim();
+           document.getElementById('npiNombre').value = sq || typed || '';
+           document.getElementById('npiTel').value = '';
+           document.getElementById('npiContacto').value = '';
+           document.getElementById('npiError').style.display = 'none';
+           var w = document.getElementById('npiWarning'); w.style.display = 'none'; w._confirmado = false;
+           document.getElementById('npiNombre').focus();
+       }
+   }
+   function guardarNuevoProvIns() {
+       var nombre = document.getElementById('npiNombre').value.trim();
+       var errEl = document.getElementById('npiError');
+       var warnEl = document.getElementById('npiWarning');
+       if (!nombre) { errEl.textContent = 'El nombre es obligatorio.'; errEl.style.display = 'block'; return; }
+       var provs = _loadProvsIns();
+       var exacto = provs.find(function(p){ return _normProvIns(p.nombre) === _normProvIns(nombre); });
+       if (exacto) { errEl.textContent = 'Ya existe un proveedor con ese nombre.'; errEl.style.display = 'block'; return; }
+       var similares = provs.filter(function(p){ return _normProvIns(p.nombre).includes(_normProvIns(nombre)) || _normProvIns(nombre).includes(_normProvIns(p.nombre)); });
+       if (similares.length && !warnEl._confirmado) {
+           warnEl.textContent = '⚠ Posibles coincidencias: ' + similares.map(function(p){ return p.nombre; }).join(', ') + '. Clic en Guardar otra vez para confirmar.';
+           warnEl.style.display = 'block'; warnEl._confirmado = true; return;
+       }
+       var np = {
+           id: genId(), nombre: nombre,
+           tel: document.getElementById('npiTel').value.trim(),
+           contacto: document.getElementById('npiContacto').value.trim(),
+           celContacto:'', correo:'', formaPago:'', clabe:'', banco:'', metodoFacturacion:'', notas:'', documentos:[],
+           sucursalId: (localStorage.getItem('etaax_sucursal_activa') || '')
+       };
+       provs.push(np);
+       _provsCacheIns = provs;
+       try { localStorage.setItem('etaax_' + getNegocioActivo() + '_proveedores', JSON.stringify(provs)); } catch(e){}
+       if (window.sbUpsert) { try { sbUpsert('proveedores', np); } catch(e){} }
+       errEl.style.display='none'; warnEl.style.display='none'; warnEl._confirmado=false;
+       document.getElementById('nuevoProvInsForm').style.display='none';
+       selProvIns(np.nombre);
+   }
+
+   // ── Conceptos reutilizables por negocio (empaque, zona, presentación) ──
+   // Se guardan en localStorage para reutilizarlos al instante; además, una vez
+   // usados en un insumo guardado se sincronizan vía la data de insumos.
+   var EMPAQUE_DEFAULTS = ['Botella vidrio','Botella plástico','Lata','Caja','Bolsa','Frasco','Tetrapak','Barril','Garrafón','Costal','Paquete','Tarro'];
+   var ZONA_DEFAULTS    = [];
+   function _getConceptosStore() {
+       var negId = getNegocioActivo();
+       try { return JSON.parse(localStorage.getItem('etaax_' + negId + '_conceptos') || '{}'); } catch(e) { return {}; }
+   }
+   function _getConceptos(tipo) {
+       var s = _getConceptosStore();
+       return Array.isArray(s[tipo]) ? s[tipo] : [];
+   }
+   function _addConcepto(tipo, valor) {
+       valor = (valor || '').trim();
+       if (!valor) return false;
+       var negId = getNegocioActivo();
+       var s = _getConceptosStore();
+       if (!Array.isArray(s[tipo])) s[tipo] = [];
+       if (s[tipo].some(function(v){ return v.toLowerCase() === valor.toLowerCase(); })) return false;
+       s[tipo].push(valor);
+       try { localStorage.setItem('etaax_' + negId + '_conceptos', JSON.stringify(s)); } catch(e) {}
+       return true;
+   }
+   function _conceptosUsados(tipo) {
+       var set = new Set();
+       getInsumos().forEach(function(ins){
+           if (tipo === 'empaque') { if (ins.empaque) set.add(ins.empaque); }
+           else (ins.presentaciones || []).forEach(function(pr){ if (pr[tipo]) set.add(pr[tipo]); });
+       });
+       return Array.from(set);
+   }
+   function _sugerenciasConcepto(tipo, defaults) {
+       var s = new Set(defaults || []);
+       _conceptosUsados(tipo).forEach(function(v){ s.add(v); });
+       _getConceptos(tipo).forEach(function(v){ s.add(v); });
+       return Array.from(s).filter(Boolean);
+   }
+   function _poblarDatalistConcepto(tipo, listId, defaults) {
+       var dl = document.getElementById(listId);
+       if (!dl) { dl = document.createElement('datalist'); dl.id = listId; document.body.appendChild(dl); }
+       dl.innerHTML = _sugerenciasConcepto(tipo, defaults).sort().map(function(v){
+           return '<option value="' + String(v).replace(/"/g,'&quot;') + '">';
+       }).join('');
+   }
+   function _flashBtnConcepto(btn, ok) {
+       if (!btn) return;
+       var t = btn.textContent;
+       btn.textContent = ok ? '✓' : '–';
+       btn.style.color = ok ? 'var(--green)' : 'var(--text-dim)';
+       setTimeout(function(){ btn.textContent = t; btn.style.color = 'var(--green)'; }, 800);
+   }
+   // Botón ＋ para campos de texto (empaque): guarda el valor escrito como concepto.
+   function agregarConceptoCampo(tipo, inputId, listId, btn, defaults) {
+       var el = document.getElementById(inputId);
+       var val = el ? (el.value || '').trim() : '';
+       if (!val) { _flashBtnConcepto(btn, false); return; }
+       _addConcepto(tipo, val);
+       _poblarDatalistConcepto(tipo, listId, defaults);
+       _flashBtnConcepto(btn, true);
+   }
+   // Botón ＋ para campos dentro de una presentación (zona).
+   function agregarConceptoPres(tipo, i, listId, btn, defaults) {
+       var val = (presentacionesTemp[i] && (presentacionesTemp[i][tipo] || '').trim()) || '';
+       if (!val) { _flashBtnConcepto(btn, false); return; }
+       _addConcepto(tipo, val);
+       _poblarDatalistConcepto(tipo, listId, defaults);
+       _flashBtnConcepto(btn, true);
+   }
+   // Cambio en el select de presentación de compra (intercepta "＋ Agregar concepto").
+   function onPresCompraChange(i, sel) {
+       if (sel.value === '__nuevo__') {
+           var v = prompt('Nuevo concepto de presentación de compra:');
+           v = (v || '').trim();
+           if (v) { _addConcepto('presentacionCompra', v); updPres(i, 'presentacionCompra', v); }
+           renderPresentaciones();
+           return;
+       }
+       updPres(i, 'presentacionCompra', sel.value);
+       renderPresentaciones();
+   }
+
    // ── Datalist de proveedores (catálogo global + usados en insumos) ──
    function _actualizarDatalistProveedores() {
        var listId = 'etaax-provs-list';
        var dl = document.getElementById(listId);
        if (!dl) { dl = document.createElement('datalist'); dl.id = listId; document.body.appendChild(dl); }
-       // Proveedores del catálogo global
+       // Proveedores del catálogo del negocio (tabla proveedores) + clave legacy
        var catalogados = [];
        try { catalogados = JSON.parse(localStorage.getItem('etaax_proveedores') || '[]'); } catch(e){}
        var nombres = new Set(catalogados.map(function(p){ return p.nombre; }).filter(Boolean));
+       _loadProvsIns().forEach(function(p){ if (p && p.nombre) nombres.add(p.nombre); });
        // Proveedores usados en insumos de este negocio (puede que no estén en catálogo)
        var todosInsumos = getInsumos();
        todosInsumos.forEach(function(ins){
@@ -3299,6 +3512,7 @@
        if (!_insumosSupaCargado && getNegocioActivo()) {
            _insumosSupaCargado = true;
            _cargarInsumosDeSupabase();
+           _cargarProveedoresIns(); // catálogo de proveedores para el editor
        }
    }
 

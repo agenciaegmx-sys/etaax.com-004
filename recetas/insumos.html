@@ -73,7 +73,8 @@
             </div>
             <div style="display:flex;gap:10px">
                 <button class="btn-vista" id="btnOptFotosNeg" onclick="migrarFotosNegocio()" title="Mueve las fotos base64 de este negocio a Storage (carga más fluida)">🗜️ Optimizar fotos</button>
-                <button class="btn-vista" onclick="abrirCatalogoGlobal()">🌐 Catálogo Global</button>
+                <button class="btn-vista" id="btnInsumosNegGlobal" onclick="abrirInsumosGlobalNeg()" title="Insumos de todas las sucursales de este negocio — cópialos a esta sucursal">🏢 <span id="lblInsumosNeg">Insumos Globales</span></button>
+                <button class="btn-vista" onclick="abrirCatalogoGlobal()" title="Importar del catálogo maestro de ETAAX">🌐 Insumos ETAAX</button>
                 <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)" onclick="abrirSelectorCategoria()">+ Agregar insumo</button>
             </div>
         </div>
@@ -287,7 +288,12 @@
                         </div>
                         <div class="meta-item" id="row-empaque">
                             <label>Tipo de empaque</label>
-                            <input type="text" id="ins-empaque" placeholder="Ej. Botella vidrio">
+                            <div style="display:flex;gap:6px;align-items:center">
+                                <input type="text" id="ins-empaque" list="dl-empaque" placeholder="Ej. Botella vidrio" style="flex:1;min-width:0">
+                                <button type="button" onclick="agregarConceptoCampo('empaque','ins-empaque','dl-empaque',this)" title="Guardar como concepto reutilizable"
+                                    style="flex-shrink:0;background:var(--surface);border:1px solid var(--border);color:var(--green);border-radius:6px;padding:9px 12px;cursor:pointer;font-size:15px;line-height:1;font-weight:700">＋</button>
+                            </div>
+                            <datalist id="dl-empaque"></datalist>
                         </div>
                         <div class="meta-item" id="row-temp-conservacion" style="display:none">
                             <label>Temperatura de conservación</label>
@@ -745,6 +751,166 @@ function toggleTheme() {
             <button onclick="cerrarCatalogoGlobal()" style="background:var(--green);color:#0f0e0c;border:none;border-radius:8px;padding:8px 20px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">
                 ✓ Guardar y cerrar
             </button>
+        </div>
+    </div>
+</div>
+
+<!-- ── MODAL INSUMOS GLOBALES DEL NEGOCIO (copiar entre sucursales) ── -->
+<div id="modalInsumosNeg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)cerrarInsumosNeg()">
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;width:min(820px,96vw);height:84vh;display:flex;flex-direction:column;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0">
+            <div>
+                <div id="ignTitulo" style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--text)">Insumos Globales</div>
+                <div id="ignTotal" style="font-size:11px;color:var(--text-muted);letter-spacing:.5px">—</div>
+            </div>
+            <button onclick="cerrarInsumosNeg()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:6px 14px;cursor:pointer;font-family:inherit;font-size:12px">✕ Cerrar</button>
+        </div>
+        <div style="padding:12px 20px;border-bottom:1px solid var(--border);flex-shrink:0">
+            <input id="ignSearch" type="text" placeholder="Buscar insumo de otras sucursales…" oninput="ignFiltrar()"
+                style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:inherit;font-size:13px;box-sizing:border-box">
+        </div>
+        <div id="ignLista" style="flex:1;overflow-y:auto;padding:0 20px"></div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);flex-shrink:0;display:flex;justify-content:flex-end">
+            <button onclick="cerrarInsumosNeg()" style="background:var(--green);color:#0f0e0c;border:none;border-radius:8px;padding:8px 22px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">✓ Listo</button>
+        </div>
+    </div>
+</div>
+
+<script>
+/* ── Insumos Globales del negocio — copiar insumos de otras sucursales ── */
+var _ignTodos = [];
+var _ignEnSuc = {};
+function _negNombreActual() {
+    try { var c = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); return (c && c.negNombre) || 'Negocio'; } catch(e) { return 'Negocio'; }
+}
+function _keyIns(x) { return ((x.nombre || '') + '|' + (x.marca || '')).toLowerCase().trim(); }
+function _sucNombreIgn(id) {
+    if (!id || id === MATRIZ_ID_INS) return 'Matriz';
+    var s = _getSucsIns().find(function(x){ return x.id === id; });
+    return s ? (s.nombre || id) : id;
+}
+function abrirInsumosGlobalNeg() {
+    var modal = document.getElementById('modalInsumosNeg');
+    document.getElementById('ignTitulo').textContent = 'Insumos Globales · ' + _negNombreActual();
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    document.getElementById('ignSearch').value = '';
+    ignFiltrar();
+    // Refrescar desde la nube (otras sucursales pudieron agregar insumos) y re-pintar.
+    if (typeof _cargarInsumosDeSupabase === 'function') {
+        _cargarInsumosDeSupabase().then(function(){
+            if (document.getElementById('modalInsumosNeg').style.display === 'flex') ignFiltrar();
+        });
+    }
+}
+function cerrarInsumosNeg() {
+    document.getElementById('modalInsumosNeg').style.display = 'none';
+    document.body.style.overflow = '';
+    try { filtrar(); } catch(e) {}
+}
+function ignFiltrar() {
+    var q = (document.getElementById('ignSearch').value || '').toLowerCase();
+    var curEff = _getSucActivaIns() || MATRIZ_ID_INS;
+    var todos = getInsumos();
+    // Lo que ya existe en la sucursal actual (por nombre+marca) → para marcar.
+    _ignEnSuc = {};
+    todos.forEach(function(x){ if (_effSucIns(x.sucursalId) === curEff) _ignEnSuc[_keyIns(x)] = true; });
+    // Candidatos: insumos de OTRAS sucursales, dedup por nombre+marca.
+    var vistos = {}, cand = [];
+    todos.forEach(function(x){
+        if (_effSucIns(x.sucursalId) === curEff) return;
+        var k = _keyIns(x);
+        if (vistos[k]) return; vistos[k] = 1;
+        cand.push(x);
+    });
+    if (q) cand = cand.filter(function(x){
+        return (x.nombre || '').toLowerCase().includes(q) || (x.marca || '').toLowerCase().includes(q) || (x.categoria || '').toLowerCase().includes(q);
+    });
+    _ignTodos = cand;
+    ignRender();
+}
+function ignRender() {
+    var curNom = _sucNombreIgn(_getSucActivaIns() || MATRIZ_ID_INS);
+    document.getElementById('ignTotal').textContent = _ignTodos.length + ' insumos de otras sucursales · destino: ' + curNom;
+    var html = _ignTodos.length === 0
+        ? '<div style="text-align:center;color:var(--text-dim);padding:40px 20px;line-height:1.6">No hay insumos de otras sucursales para copiar.<br><span style="font-size:12px">Los insumos sin sucursal pertenecen a la Matriz.</span></div>'
+        : _ignTodos.map(function(ins){
+            var p0     = (ins.presentaciones || [])[0];
+            var precio = p0 && parseFloat(p0.precio) > 0 ? '$' + parseFloat(p0.precio).toFixed(2) : '';
+            var cat    = etx([ins.familia, ins.categoria].filter(Boolean).join(' · '));
+            var ya     = _ignEnSuc[_keyIns(ins)];
+            var sucBadge = '<span style="font-size:10px;background:rgba(122,184,245,.12);color:#7ab8f5;border:1px solid rgba(122,184,245,.25);border-radius:4px;padding:1px 6px;white-space:nowrap">' + etx(_sucNombreIgn(ins.sucursalId)) + '</span>';
+            var fotoEl = ins.foto
+                ? '<img src="' + etx(ins.foto) + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;border:1px solid var(--border);flex-shrink:0">'
+                : '<div style="width:38px;height:38px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">📦</div>';
+            return '<div style="display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--border)">' +
+                fotoEl +
+                '<div style="flex:1;min-width:0">' +
+                    '<div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + etx(ins.nombre) + (ins.marca ? ' <span style="color:var(--text-muted);font-weight:400">' + etx(ins.marca) + '</span>' : '') + '</div>' +
+                    '<div style="font-size:10px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;gap:6px;align-items:center;margin-top:2px">' + sucBadge + (cat ? '<span>' + cat + '</span>' : '') + '</div>' +
+                '</div>' +
+                (precio ? '<div style="font-size:12px;color:var(--green);white-space:nowrap;flex-shrink:0;margin-right:8px">' + precio + '</div>' : '') +
+                (ya
+                    ? '<button disabled style="background:transparent;border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:5px 12px;font-size:11px;cursor:default;font-family:inherit">✓ Ya en sucursal</button>'
+                    : '<button id="ignBtn_' + ins.id + '" onclick="ignAgregar(\'' + ins.id + '\')" style="background:rgba(61,190,122,.12);border:1px solid var(--green);color:var(--green);border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap">+ Copiar aquí</button>'
+                ) +
+            '</div>';
+        }).join('');
+    document.getElementById('ignLista').innerHTML = '<div style="padding:4px 0">' + html + '</div>';
+}
+function ignAgregar(id) {
+    var ins = getInsumos().find(function(x){ return x.id === id; });
+    if (!ins) return;
+    var copia = JSON.parse(JSON.stringify(ins));
+    copia.id = genId();                                   // copia independiente
+    copia.sucursalId = _getSucActivaIns() || '';          // asignada a la sucursal actual (''=Matriz)
+    delete copia._csvRow;
+    var lista = getInsumos();
+    lista.push(copia);
+    setInsumos(lista);
+    var btn = document.getElementById('ignBtn_' + id);
+    if (btn) { btn.textContent = '✓ Copiado'; btn.disabled = true; btn.style.opacity = '.55'; btn.style.cursor = 'default'; btn.onclick = null; }
+    // Reflejar en el mapa para que un duplicado por nombre quede marcado también.
+    _ignEnSuc[_keyIns(copia)] = true;
+}
+document.addEventListener('DOMContentLoaded', function(){
+    var lbl = document.getElementById('lblInsumosNeg');
+    if (lbl) lbl.textContent = 'Insumos ' + _negNombreActual();
+});
+</script>
+
+<!-- ── PANEL CATÁLOGO DE PROVEEDORES (editor de insumo) ── -->
+<div id="panelProvInsOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10000;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)cerrarPanelProvIns()">
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;width:min(460px,96vw);max-height:82vh;display:flex;flex-direction:column;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--border)">
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1.5px;color:var(--text)">📋 Catálogo de Proveedores</div>
+            <button onclick="cerrarPanelProvIns()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:4px 11px;cursor:pointer;font-family:inherit;font-size:13px">✕</button>
+        </div>
+        <div style="padding:12px 18px;border-bottom:1px solid var(--border)">
+            <input id="panelProvInsSearch" type="text" placeholder="Buscar proveedor…" oninput="renderPanelProvIns()"
+                style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:inherit;font-size:13px;box-sizing:border-box">
+        </div>
+        <div id="panelProvInsBody" style="flex:1;overflow-y:auto;padding:6px 18px;min-height:120px"></div>
+        <!-- Form nuevo proveedor -->
+        <div id="nuevoProvInsForm" style="display:none;flex-direction:column;gap:8px;padding:12px 18px;border-top:1px solid var(--border);background:var(--surface)">
+            <input id="npiNombre" type="text" placeholder="Nombre del proveedor *"
+                style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:inherit;font-size:13px;box-sizing:border-box">
+            <div style="display:flex;gap:8px">
+                <input id="npiTel" type="text" placeholder="Teléfono"
+                    style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:inherit;font-size:13px;box-sizing:border-box">
+                <input id="npiContacto" type="text" placeholder="Contacto"
+                    style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:inherit;font-size:13px;box-sizing:border-box">
+            </div>
+            <div id="npiError" style="display:none;color:var(--red);font-size:11px"></div>
+            <div id="npiWarning" style="display:none;color:var(--accent);font-size:11px"></div>
+            <div style="display:flex;gap:8px">
+                <button onclick="guardarNuevoProvIns()" style="flex:1;background:var(--green);color:#0f0e0c;border:none;border-radius:8px;padding:9px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Guardar proveedor</button>
+                <button onclick="toggleNuevoProvInsForm()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:9px 14px;font-family:inherit;font-size:12px;cursor:pointer">Cancelar</button>
+            </div>
+        </div>
+        <div style="padding:12px 18px;border-top:1px solid var(--border)">
+            <button id="btnNuevoProvIns" onclick="toggleNuevoProvInsForm()"
+                style="width:100%;background:transparent;border:1px solid var(--green);color:var(--green);border-radius:8px;padding:10px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">+ Agregar nuevo proveedor</button>
         </div>
     </div>
 </div>
