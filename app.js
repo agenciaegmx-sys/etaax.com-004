@@ -1534,11 +1534,16 @@ function initCtxBar() {
     // El tipo puede traer " · Sucursal" de sesiones viejas; lo recortamos porque
     // ahora la sucursal se muestra como pill aparte (sin duplicar).
     var tipo = (ctx.negTipo || '').split(' · ')[0];
+    var catGlobal = false;
+    try { catGlobal = sessionStorage.getItem('etaax_cat_global') === '1'; } catch(e) {}
+    var pill = catGlobal
+        ? '<span class="ctx-suc-pill" style="background:rgba(122,184,245,.15);color:#7ab8f5;border-color:#7ab8f5">🌐 Global · todas las sucursales</span>'
+        : (ctx.sucNombre ? '<span class="ctx-suc-pill" style="background:' + color + '1f;color:' + color + ';border-color:' + color + '55">📍 ' + _esc(ctx.sucNombre) + '</span>' : '');
     bar.innerHTML =
-        '<div class="ctx-bar-inner" style="border-color:' + color + '44">' +
+        '<div class="ctx-bar-inner" style="border-color:' + (catGlobal ? '#7ab8f544' : (color + '44')) + '">' +
         '<div class="ctx-neg-emoji-wrap" style="background:' + color + '1a;border-color:' + color + '33">' + _esc(ctx.negEmoji) + '</div>' +
         '<div class="ctx-neg-id"><div class="ctx-neg-name">' + _esc(ctx.negNombre) + '</div><div class="ctx-neg-tipo">' + _esc(tipo) + '</div></div>' +
-        (ctx.sucNombre ? '<span class="ctx-suc-pill" style="background:' + color + '1f;color:' + color + ';border-color:' + color + '55">📍 ' + _esc(ctx.sucNombre) + '</span>' : '') +
+        pill +
         '<div class="ctx-nav-btns" id="ctxEditorNav">' +
         '<button class="ctx-btn ctx-btn-icon" id="btnUndo" onclick="ctxNavBack()" title="Atrás">↩</button>' +
         '<button class="ctx-btn ctx-btn-icon" id="btnRedo" onclick="ctxNavForward()" title="Adelante">↪</button>' +

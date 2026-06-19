@@ -20,6 +20,27 @@
    var MATRIZ_ID_INS = 'suc_principal';
    function _effSucIns(id) { return id || MATRIZ_ID_INS; }
    function _catGlobalIns() { return sessionStorage.getItem('etaax_cat_global') === '1'; }
+   // Refleja en el header/banner si entramos en modo Catálogo Global del negocio
+   // (se activa desde el menú "Catálogos Globales" del hub → flag etaax_cat_global).
+   function _actualizarBannerGlobal() {
+       var on  = _catGlobalIns();
+       var b   = document.getElementById('bannerGlobalIns');
+       var lbl = document.querySelector('.brand-label');
+       var ttl = document.querySelector('.brand-title');
+       var bn  = document.getElementById('btnInsumosNegGlobal');
+       if (b)  b.style.display = on ? 'flex' : 'none';
+       if (lbl) lbl.textContent = on ? 'Catálogo Global del negocio' : 'Catálogo de productos';
+       if (ttl) ttl.innerHTML   = on ? 'Insumos <span style="color:#7ab8f5">· Global</span>' : 'Insumos';
+       // En modo global no tiene sentido el botón de copiar entre sucursales.
+       if (bn) bn.style.display = on ? 'none' : '';
+   }
+   function salirGlobalIns() {
+       sessionStorage.removeItem('etaax_cat_global');
+       _actualizarBannerGlobal();
+       _poblarFiltroSucIns();
+       filtrar();
+       if (window._ctxBarInit) { try { _ctxBarInit(); } catch(e) {} } // re-pintar header → vuelve a 📍 sucursal
+   }
    function _poblarFiltroSucIns() {
        var sucs = _getSucsIns();
        var el = document.getElementById('filtroSucursalIns');
@@ -2793,7 +2814,14 @@
        const fotoAnterior = editandoId
            ? getInsumos().find(x => x.id === editandoId)?.foto || ''
            : '';
-   
+       // Identidad ORIGINAL (nombre+marca antes de editar) para encontrar los
+       // "hermanos" en otras sucursales aunque el nombre cambie en esta edición.
+       var _origKeyProp = '';
+       if (editandoId && typeof _keyIns === 'function') {
+           var _prevIns = getInsumos().find(x => x.id === editandoId);
+           if (_prevIns) _origKeyProp = _keyIns(_prevIns);
+       }
+
        // Asegurar familia auto-rellenada antes de guardar
        var famEl = document.getElementById('ins-familia');
        if (famEl && !famEl.value) famEl.value = FAMILIA_POR_TIPO[tipoInsumoActual] || '';
@@ -2868,10 +2896,16 @@
            window.parent.postMessage({ type: 'insumoGuardado', insumoId: insumo.id }, '*');
            return;
        }
+       var _eraEdicion = !!editandoId;
        cerrarModalBtn();
        init();
+       // En el Catálogo Global del negocio: si editaste un insumo que también
+       // existe en otras sucursales, ofrecer propagar su ficha técnica.
+       if (_eraEdicion && _catGlobalIns() && typeof _ofrecerPropagacion === 'function') {
+           _ofrecerPropagacion(insumo, _origKeyProp);
+       }
    }
-   
+
    // ── Ficha técnica ─────────────────────────────────────────────
    // Copia superficial con todos los campos string escapados (XSS-safe
    // para templates que insertan con innerHTML)
@@ -3505,6 +3539,7 @@
    // ── Init ──────────────────────────────────────────────────────
    function init() {
        _limpiarFotosBase64();
+       _actualizarBannerGlobal();
        renderStats();
        cargarFiltros();
        setVistaInsumos(vistaInsumos);
