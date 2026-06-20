@@ -84,6 +84,16 @@ async function _sbInitRecetas() {
     // upsert pasa) para que aparezcan en los demás dispositivos.
     soloLocal.forEach(function(r){ if (typeof _sbUpReceta === 'function') _sbUpReceta(r); });
     if (typeof renderGridRecetas === 'function') renderGridRecetas();
+    // Si se entró con ?r=<id> y la receta no estaba cargada todavía, abrirla ahora.
+    if (window._pendingOpenReceta) {
+        var _rid = window._pendingOpenReceta;
+        if (_cacheRecetas.find(function(x){ return x.id === _rid; })) {
+            window._pendingOpenReceta = null;
+            if (typeof entrarEscandallos === 'function') entrarEscandallos();
+            if (typeof _showEscForm === 'function') _showEscForm();
+            if (typeof cargarReceta === 'function') cargarReceta(_rid);
+        }
+    }
     _subRecetasRealtime(negId);
 }
 
@@ -217,7 +227,7 @@ function leerCamposExtra(tipo) {
 
 async function guardarReceta() {
     const nombre = document.getElementById('nombreReceta').value.trim();
-    if (!nombre) { alert('Agrega un nombre a la receta antes de guardar'); return; }
+    if (!nombre) { alert('Agrega un nombre a la receta antes de guardar'); return false; }
     var _guardandoDesdeCaratula = !!window._volverACaratula;
 
     const tiempoNum    = document.getElementById('tiempoNum')?.value    || '';
@@ -267,10 +277,19 @@ async function guardarReceta() {
     setRecetas(lista);
     if (typeof _sbUpReceta === 'function') _sbUpReceta(receta);
     recetaActualId = receta.id;
+    window._escDirty = false; // ya se guardó → sin cambios pendientes
+    // Si es una sub-receta con insumo convertido, refrescarlo (y sus copias por
+    // sucursal) para que el costo/ficha se actualice en TODOS lados sin re-convertir.
+    var _esSubR = (recetaTipoActual === 'sub-alimentos' || recetaTipoActual === 'sub-bebidas' || (String(receta.tipo||'').indexOf('sub') === 0));
+    if (_esSubR && typeof agregarSubRecetaComoInsumo === 'function' && typeof getCatalogoInsumos === 'function') {
+        var _hayConvertido = getCatalogoInsumos().some(function(x){ return x.esSubReceta && x.recetaId === receta.id; });
+        if (_hayConvertido) { try { agregarSubRecetaComoInsumo(true); } catch(e) { console.warn('[auto-update sub-receta→insumo]', e); } }
+    }
     alert('✅ Receta "' + nombre + '" guardada');
     var btnImp = document.getElementById('btnImprimirHeader');
     if (btnImp) btnImp.style.display = '';
     if (typeof _showEscMenu === 'function' && !_guardandoDesdeCaratula) _showEscMenu();
+    return true;
 }
 
 function cargarReceta(id) {
@@ -314,7 +333,29 @@ function cargarReceta(id) {
     ingredientes = JSON.parse(JSON.stringify(r.ingredientes || []));
     renderTabla();
 
+    // Sub-recetas: la sección de rendimiento/porciones se reconstruye leyendo el DOM
+    // (renderRendimientoSub usa los <input> actuales, no los datos). Según la ruta de
+    // apertura (p.ej. ?r= desde insumos) esos inputs pueden quedar vacíos al momento de
+    // leerlos → se "resetean". Re-sembramos los valores guardados al final (setTimeout 0)
+    // y re-renderizamos para que NUNCA se pierdan.
+    if (recetaTipoActual === 'sub-alimentos' || recetaTipoActual === 'sub-bebidas') {
+        var _ce = r.camposExtra || {};
+        setTimeout(function() {
+            ['rendimientoFinal','unidadRendimientoFinal','unidadRendBruto','pesoPieza','unidadPesoPieza',
+             'mermaManual','porcionesQty','porcionesUnidad','pesoPorcion','unidadPesoPorcion',
+             'unidadPesoAutoDisplay','porcionesUnidadFila2','vidaUtilNum','vidaUtilUnidad','almacenamiento'
+            ].forEach(function(id){
+                var el = document.getElementById(id);
+                if (el && _ce[id] != null && _ce[id] !== '') el.value = _ce[id];
+            });
+            if (typeof renderRendimientoSub === 'function') { try { renderRendimientoSub(); } catch(e) {} }
+            if (typeof calcSubRecetaCostos === 'function') { try { calcSubRecetaCostos(); } catch(e) {} }
+        }, 0);
+    }
+
     if (typeof guardarEnHistorial === 'function') guardarEnHistorial();
+    // Recién cargada → sin cambios pendientes (las cargas programáticas no disparan input).
+    window._escDirty = false;
     // Show print button for saved recipe
     var btnImp = document.getElementById('btnImprimirHeader');
     if (btnImp) btnImp.style.display = '';
@@ -822,6 +863,19 @@ function getCatalogoInsumos() {
     catch { return []; }
 }
 
+// Catálogo acotado a la SUCURSAL donde se trabaja (regla "sin sucursal = matriz").
+// El escandallo de una sucursal solo debe ofrecer SUS insumos, no los de todo el
+// negocio. En modo catálogo global (o sin sucursal activa) devuelve todo.
+function getCatalogoInsumosScope() {
+    var cat = getCatalogoInsumos();
+    var catGlobal = false;
+    try { catGlobal = sessionStorage.getItem('etaax_cat_global') === '1'; } catch(e) {}
+    if (catGlobal) return cat;
+    var sucActiva = localStorage.getItem('etaax_sucursal_activa') || '';
+    if (!sucActiva) return cat;
+    return cat.filter(function(x){ return (x.sucursalId || 'suc_principal') === sucActiva; });
+}
+
 // Devuelve el contenido real en ml/g de 1 pieza de un insumo.
 // Busca la presentación más relevante: primero la que tiene umContenido != PZA
 // (porque contNeto está en ML/G), luego cualquiera con contNeto > 0.
@@ -945,7 +999,8 @@ function getFactor(cantidad, unidad) {
 function buscarInsumos(query) {
     if (!query || query.length < 2) return [];
     const q = query.toLowerCase();
-    return getCatalogoInsumos().filter(x =>
+    // Acotado a la sucursal donde se trabaja (no todo el catálogo global del negocio).
+    return getCatalogoInsumosScope().filter(x =>
         x.nombre.toLowerCase().includes(q) ||
         (x.marca||'').toLowerCase().includes(q) ||
         (x.variedad||'').toLowerCase().includes(q) ||
@@ -1551,7 +1606,7 @@ function initCtxBar() {
         '<div class="ctx-right">' +
         '<div class="ctx-user-badge"><span>' + _esc(ctx.userName.split(' ')[0]) + '</span>' +
         '<span class="ctx-badge-plan" style="background:' + ctx.userColor + '22;color:' + ctx.userColor + '">' + _esc(ctx.userBadge) + '</span></div>' +
-        '<a href="' + hubPath + '" class="ctx-btn">← Ir a Módulos</a>' +
+        '<a href="' + (catGlobal ? hubPath + '?negocios=1' : hubPath) + '" class="ctx-btn">← ' + (catGlobal ? 'Ir al negocio' : 'Ir a Módulos') + '</a>' +
         '<button class="ctx-btn ctx-btn-danger" onclick="ctxSalir()">Salir</button>' +
         '</div></div>';
     bar.style.display = 'flex';
@@ -1582,6 +1637,11 @@ function ctxNavForward() {
 }
 
 function ctxSalir() {
+    // Si hay cambios sin guardar en el editor, pedir confirmación antes de salir.
+    if (window._escGuardNav) { window._escGuardNav(_ctxSalirReal); return; }
+    _ctxSalirReal();
+}
+function _ctxSalirReal() {
     localStorage.removeItem('etaax_negocio_activo');
     localStorage.removeItem('etaax_ctx');
     sessionStorage.clear();
@@ -1589,6 +1649,71 @@ function ctxSalir() {
 }
 
 document.addEventListener('DOMContentLoaded', initCtxBar);
+
+/* ── Guard de cambios sin guardar en el editor de escandallo ──────────
+   Si el usuario está editando una receta y no ha guardado, al intentar ir a
+   otro submódulo o cualquier otra ruta se pide confirmación (mismo diálogo que
+   el editor de insumos, vía etaaxConfirm). beforeunload cubre recarga/back. */
+(function(){
+    function _escEditorAbierto() {
+        var ew = document.getElementById('editorWrap');
+        return !!(ew && ew.style.display !== 'none' && ew.offsetParent !== null);
+    }
+    window._escEditorAbierto = _escEditorAbierto;
+    function _marcarSucio(e) {
+        if (_escEditorAbierto() && e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) {
+            window._escDirty = true;
+        }
+    }
+    document.addEventListener('input',  _marcarSucio, true);
+    document.addEventListener('change', _marcarSucio, true);
+
+    // Helper reusable: si hay cambios sin guardar en el editor, pide confirmación
+    // (3 botones) antes de ejecutar `continuar`. Si no hay cambios, ejecuta directo.
+    // Lo usan el interceptor de links Y las acciones onclick (Recetas, Nueva, Salir).
+    window._escGuardNav = function(continuar){
+        if (typeof continuar !== 'function') return;
+        if (!window._escDirty || !_escEditorAbierto()) { continuar(); return; }
+        var irse = function(){ window._escDirty = false; continuar(); };
+        var guardarYSalir = function(){
+            if (typeof guardarReceta !== 'function') { irse(); return; }
+            Promise.resolve(guardarReceta()).then(function(ok){
+                // Si la validación falló (ok===false) no continúa: el usuario se queda
+                // en el editor para corregir (ej. falta el nombre).
+                if (ok !== false) { window._escDirty = false; continuar(); }
+            }).catch(function(){});
+        };
+        if (typeof etaaxDialog === 'function') {
+            etaaxDialog({
+                icon: '❓',
+                title: '¿Salir del editor?',
+                msg: 'Tienes cambios sin guardar en la receta.',
+                buttons: [
+                    { label: 'Seguir editando',   kind: 'ghost',   onClick: null },
+                    { label: 'Guardar y salir',   kind: 'primary', onClick: guardarYSalir },
+                    { label: 'Salir sin guardar', kind: 'danger',  onClick: irse }
+                ]
+            });
+        } else if (confirm('¿Salir sin guardar? Los cambios se perderán.')) { irse(); }
+    };
+
+    // Interceptar clics en links que navegan a otra ruta (submódulos, ctx-bar, nav).
+    document.addEventListener('click', function(e){
+        if (!window._escDirty || !_escEditorAbierto()) return;
+        var a = e.target.closest ? e.target.closest('a[href]') : null;
+        if (!a) return;
+        var href = a.getAttribute('href') || '';
+        if (!href || href.charAt(0) === '#' || href.toLowerCase().indexOf('javascript:') === 0) return;
+        e.preventDefault(); e.stopPropagation();
+        var url = a.href, blank = a.target === '_blank';
+        window._escGuardNav(function(){ if (blank) window.open(url, '_blank'); else window.location.href = url; });
+    }, true);
+
+    // Recarga / cierre / botón atrás del navegador (prompt nativo de respaldo).
+    window.addEventListener('beforeunload', function(e){
+        if (window._escDirty && _escEditorAbierto()) { e.preventDefault(); e.returnValue = ''; return ''; }
+    });
+})();
 
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {

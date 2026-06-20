@@ -19,8 +19,17 @@
     }
 
     var _toastTimer = null;
+    // ¿El error es por falta de RED (offline / fetch fallido)? El aviso
+    // "Sin sincronizar · revisa tu conexión" SOLO debe salir en ese caso. Errores de
+    // servidor/permiso (RLS, esquema) se registran en consola pero no se muestran como
+    // problema de internet (sería un falso "revisa tu conexión").
+    function _esErrorDeRed(detalle) {
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+        return /failed to fetch|networkerror|network request failed|load failed|err_internet|err_network|err_connection|timeout|fetch/i.test(String(detalle || ''));
+    }
     window._sbToastError = function (detalle) {
         console.error('[etaax-db]', detalle);
+        if (!_esErrorDeRed(detalle)) return; // no es de red → solo consola, sin alarmar
         var el = document.getElementById('etaax-sync-toast');
         if (!el) {
             el = document.createElement('div');

@@ -1571,10 +1571,10 @@ function limpiarFilaPorciones() {
 }
 
 // ── Agregar sub-receta como insumo ──────────────────────────
-function agregarSubRecetaComoInsumo() {
+function agregarSubRecetaComoInsumo(silent) {
     var nombre   = (document.getElementById('nombreReceta') || {}).value || '';
     var grupo    = (document.getElementById('grupo') || {}).value || '';
-    if (!nombre) { alert('Primero agrega el nombre de la sub receta'); return; }
+    if (!nombre) { if (!silent) alert('Primero agrega el nombre de la sub receta'); return; }
 
     // Calcular costo total
     var costoTotal = ingredientes.reduce(function(s, ing) {
@@ -1663,41 +1663,54 @@ function agregarSubRecetaComoInsumo() {
     try {
         var negId = getNegocioActivo ? getNegocioActivo() : (localStorage.getItem('etaax_negocio_activo') || '');
         var catalogo = JSON.parse(localStorage.getItem(_sk('insumos'))) || [];
-        // Verificar si ya existe un insumo de esta sub-receta
-        var existeIdx = catalogo.findIndex(function(x) {
-            return x.esSubReceta && x.recetaId && x.recetaId === insumoNuevo.recetaId;
-        });
-        if (existeIdx >= 0) {
-            if (!confirm('Ya existe "' + catalogo[existeIdx].nombre + '" como insumo. ¿Actualizarlo?')) return;
-            insumoNuevo.id = catalogo[existeIdx].id; // mantener el mismo ID
-            catalogo[existeIdx] = insumoNuevo;
+        // TODAS las copias de esta sub-receta (puede haber una por sucursal).
+        var matches = [];
+        catalogo.forEach(function(x, i){ if (x.esSubReceta && x.recetaId && x.recetaId === insumoNuevo.recetaId) matches.push(i); });
+        var actualizados = [];
+        if (matches.length) {
+            if (!silent && !confirm('Ya existe "' + catalogo[matches[0]].nombre + '" como insumo' +
+                (matches.length > 1 ? ' en ' + matches.length + ' sucursales' : '') + '. ¿Actualizar' + (matches.length > 1 ? 'los' : 'lo') + '?')) return;
+            // Actualizar cada copia conservando su id y su sucursalId (el precio/ficha
+            // de la sub-receta es el mismo; lo que cambia por sucursal es a qué sucursal pertenece).
+            matches.forEach(function(idx){
+                var prev = catalogo[idx];
+                var upd  = Object.assign({}, insumoNuevo, { id: prev.id, sucursalId: prev.sucursalId || '' });
+                catalogo[idx] = upd;
+                actualizados.push(upd);
+            });
         } else {
+            if (silent) return; // el auto-update NO crea, solo refresca las existentes
+            insumoNuevo.sucursalId = localStorage.getItem('etaax_sucursal_activa') || '';
             catalogo.push(insumoNuevo);
+            actualizados.push(insumoNuevo);
         }
         localStorage.setItem(_sk('insumos'), JSON.stringify(catalogo));
-        // Sync a Supabase negocio_insumos
+        // Sync a Supabase negocio_insumos (cada copia actualizada)
         if (negId && typeof _supabase !== 'undefined') {
-            _supabase.from('negocio_insumos').upsert({
-                insumo_id: insumoNuevo.id, negocio_id: negId, datos: insumoNuevo,
-                updated_at: new Date().toISOString()
-            }).then(function(r){ if (r.error) _sbToastError('upsert negocio_insumos: ' + r.error.message); });
+            actualizados.forEach(function(rec){
+                _supabase.from('negocio_insumos').upsert({
+                    insumo_id: rec.id, negocio_id: negId, datos: rec, updated_at: new Date().toISOString()
+                }).then(function(r){ if (r.error) _sbToastError('upsert negocio_insumos: ' + r.error.message); });
+            });
         }
 
-        // Feedback visual
-        var btn = document.querySelector('#cardAgregarInsumo button');
-        if (btn) {
-            var original = btn.textContent;
-            btn.textContent = '✅ Guardado como insumo';
-            btn.style.background = 'var(--surface2)';
-            btn.style.color = 'var(--green)';
-            setTimeout(function() {
-                btn.textContent = original;
-                btn.style.background = 'var(--green)';
-                btn.style.color = '#0f0e0c';
-            }, 2500);
+        // Feedback visual (solo cuando el usuario lo pulsó, no en auto-update)
+        if (!silent) {
+            var btn = document.querySelector('#cardAgregarInsumo button');
+            if (btn) {
+                var original = btn.textContent;
+                btn.textContent = '✅ Guardado como insumo';
+                btn.style.background = 'var(--surface2)';
+                btn.style.color = 'var(--green)';
+                setTimeout(function() {
+                    btn.textContent = original;
+                    btn.style.background = 'var(--green)';
+                    btn.style.color = '#0f0e0c';
+                }, 2500);
+            }
         }
     } catch(e) {
-        alert('Error al guardar: ' + e.message);
+        if (!silent) alert('Error al guardar: ' + e.message);
     }
 }
 
@@ -2183,12 +2196,19 @@ function _syncVistaSidebarWidth() {
     var m = document.getElementById('vistaMenuReceta'); if (!m) return;
     m.style.left = document.getElementById('nav')?.classList.contains('cerrado') ? '50px' : '200px';
 }
-function abrirMenuReceta() { _showEscMenu(); }
+function abrirMenuReceta() {
+    // Volver al menú de Escandallos desde el editor: confirmar si hay cambios sin guardar.
+    if (window._escGuardNav) { window._escGuardNav(_showEscMenu); return; }
+    _showEscMenu();
+}
 function cerrarMenuReceta(e) { /* no-op */ }
 
 // Modal flotante "+" — solo 4 tipos, no cierra el formulario
 function abrirModalNuevaReceta() {
-    document.getElementById('modalNuevaReceta').style.display = 'flex';
+    var _abrir = function(){ document.getElementById('modalNuevaReceta').style.display = 'flex'; };
+    // Nueva receta desde el editor: confirmar si hay cambios sin guardar.
+    if (window._escGuardNav) { window._escGuardNav(_abrir); return; }
+    _abrir();
 }
 function crearRecetaDesdeModal(tipo) {
     document.getElementById('modalNuevaReceta').style.display = 'none';
@@ -2281,6 +2301,7 @@ function crearReceta(tipo) {
 
     recetaActualId   = null;
     recetaTipoActual = tipo;
+    window._escDirty = false; // editor nuevo en blanco → sin cambios pendientes
     renderFormularioPorTipo(tipo, {});
     ingredientes = [];
     if (typeof fotosReceta !== 'undefined') { fotosReceta = []; fotoIndexActual = 0; }
@@ -2944,8 +2965,16 @@ window.addEventListener('load', function() {
     if (typeof renderFormularioPorTipo === 'function') renderFormularioPorTipo('bebidas', {});
     var urlR = new URLSearchParams(location.search).get('r');
     if (urlR && typeof cargarReceta === 'function') {
+        // Entrar al escandallo (oculta el landing de submódulos) y abrir el editor.
+        if (typeof entrarEscandallos === 'function') entrarEscandallos();
         _showEscForm();
-        cargarReceta(urlR);
+        // Si las recetas aún no cargan (vienen de Supabase), _sbInitRecetas la abrirá
+        // al terminar (window._pendingOpenReceta).
+        if (typeof getRecetas === 'function' && getRecetas().find(function(x){ return x.id === urlR; })) {
+            cargarReceta(urlR);
+        } else {
+            window._pendingOpenReceta = urlR;
+        }
     } else {
         _showEscMenu();
     }
@@ -3071,5 +3100,6 @@ function toggleTheme() {
 </div>
 
 <script src="../admin-guard.js"></script>
+<script src="/global-nav.js"></script>
 </body>
 </html>

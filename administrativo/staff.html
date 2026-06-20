@@ -333,9 +333,6 @@
                                 <option>Baja temporal</option>
                                 <option>Baja definitiva</option>
                             </select>
-                            <select class="filtro-select" id="filterSucursal" onchange="renderAll()">
-                                <option value="">Todas las sucursales</option>
-                            </select>
                         </div>
                         <button class="btn-ghost" onclick="window.location.href='permisos.html'"
                             title="Acceso restringido — requiere contraseña de administrador"
@@ -759,7 +756,6 @@ var tmpDocs = [];
 function renderAll() {
     renderPuestoChips();
     renderPuestoFilter();
-    renderSucursalFilter();
     renderCumpleBanner();
     renderTable();
 }
@@ -851,18 +847,19 @@ function renderTable() {
     var q        = document.getElementById('searchInput').value.toLowerCase();
     var puesto   = document.getElementById('filterPuesto').value || selectedPuesto;
     var estado   = document.getElementById('filterEstado').value;
-    var sucFilt  = document.getElementById('filterSucursal').value;
     var data     = load();
 
+    // El alcance lo da la navegación: en global muestra todo; en una sucursal,
+    // solo la suya (sin sucursal = matriz). Se eliminó el filtro por sucursal.
     var catGlobal = _catGlobalOn();
+    var sucActiva = _getSucActiva();
     var filtered = data.filter(function(s){
         var matchQ = !q || s.nombre.toLowerCase().includes(q) ||
             (s.puesto||'').toLowerCase().includes(q) ||
             (s.celular||'').includes(q);
         var matchP = !puesto || s.puesto === puesto;
         var matchE = !estado || s.estado === estado;
-        // Sin sucursal = matriz. Con catálogo global, no se filtra por sucursal.
-        var matchS = (catGlobal || !sucFilt) ? true : _effSuc(s.sucursalId) === sucFilt;
+        var matchS = catGlobal ? true : (sucActiva ? _effSuc(s.sucursalId) === sucActiva : true);
         return matchQ && matchP && matchE && matchS;
     });
 
@@ -1246,13 +1243,8 @@ function esc(s) {
 async function initPage() {
     var negId = getNegocioActivo();
     if (!negId) { window.location.href = '../hub.html'; return; }
-    // Si hay sucursal activa, pre-filtrar por ella (salvo modo catálogo global).
-    var sucActiva = _getSucActiva();
-    if (sucActiva && !_catGlobalOn()) {
-        renderSucursalFilter(); // poblar primero
-        var fSuc = document.getElementById('filterSucursal');
-        if (fSuc) fSuc.value = sucActiva;
-    }
+    // El alcance por sucursal lo aplica renderTable según la sucursal activa / modo
+    // global (se eliminó el filtro por sucursal de la UI).
     if (window.NominaParams) { try { await NominaParams.sync(negId); } catch(e){} }
     await syncFromDB();
     renderAll();
@@ -1270,5 +1262,6 @@ document.getElementById('modalStaff').addEventListener('click', function(e){
 <script src="../ctx-bar.js"></script>
 <script src="../admin-guard.js"></script>
 <script src="/nomina-params.js"></script>
+<script src="/global-nav.js"></script>
 </body>
 </html>

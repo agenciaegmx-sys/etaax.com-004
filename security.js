@@ -245,6 +245,19 @@ window.etx = function (s) {
         });
         _next();
     };
+    // Diálogo genérico con N botones: { icon, title, msg, buttons:[{label,kind,onClick}], onBackdrop }
+    // kind: 'ghost' | 'primary' | 'danger'. onClick null = solo cerrar.
+    window.etaaxDialog = function (cfg) {
+        cfg = cfg || {};
+        _queue.push({
+            icon: cfg.icon || '❓', title: cfg.title || '', msg: cfg.msg || '',
+            buttons: (cfg.buttons || []).map(function (b) {
+                return { label: b.label, kind: b.kind || 'ghost', onClick: b.onClick };
+            }),
+            primary: cfg.primary || null, onBackdrop: ('onBackdrop' in cfg) ? cfg.onBackdrop : null
+        });
+        _next();
+    };
 
     // Reemplazar el alert() nativo por la tarjeta estilizada (no bloqueante).
     window.alert = function (msg) { window.etaaxAlert(msg); };

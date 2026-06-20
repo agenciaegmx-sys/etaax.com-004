@@ -24,22 +24,13 @@
    // (se activa desde el menú "Catálogos Globales" del hub → flag etaax_cat_global).
    function _actualizarBannerGlobal() {
        var on  = _catGlobalIns();
-       var b   = document.getElementById('bannerGlobalIns');
        var lbl = document.querySelector('.brand-label');
        var ttl = document.querySelector('.brand-title');
        var bn  = document.getElementById('btnInsumosNegGlobal');
-       if (b)  b.style.display = on ? 'flex' : 'none';
        if (lbl) lbl.textContent = on ? 'Catálogo Global del negocio' : 'Catálogo de productos';
        if (ttl) ttl.innerHTML   = on ? 'Insumos <span style="color:#7ab8f5">· Global</span>' : 'Insumos';
        // En modo global no tiene sentido el botón de copiar entre sucursales.
        if (bn) bn.style.display = on ? 'none' : '';
-   }
-   function salirGlobalIns() {
-       sessionStorage.removeItem('etaax_cat_global');
-       _actualizarBannerGlobal();
-       _poblarFiltroSucIns();
-       filtrar();
-       if (window._ctxBarInit) { try { _ctxBarInit(); } catch(e) {} } // re-pintar header → vuelve a 📍 sucursal
    }
    function _poblarFiltroSucIns() {
        var sucs = _getSucsIns();
@@ -169,7 +160,24 @@
 
            // Empujar a Supabase lo que solo existía localmente (no sincronizado)
            if (soloLocal.length) _sincronizarInsumosSupabase(negId, soloLocal).catch(function(){});
+           // Realtime: si otro dispositivo cambia un insumo, recargar solos (estilo Drive).
+           _subInsumosRealtime(negId);
        } catch(e) { console.warn('[_cargarInsumosDeSupabase]', e); }
+   }
+
+   // Realtime: el servidor empuja cambios de negocio_insumos → este dispositivo se
+   // actualiza solo (sin recargar), como recetas y sucursales.
+   var _insumosRtCh = null, _insumosRtNeg = null;
+   function _subInsumosRealtime(negId) {
+       if (!negId || _insumosRtNeg === negId || typeof sbRealtime !== 'function') return;
+       if (_insumosRtCh && _supabase.removeChannel) { try { _supabase.removeChannel(_insumosRtCh); } catch(e) {} }
+       _insumosRtNeg = negId;
+       _insumosRtCh = sbRealtime('negocio_insumos', negId, function() {
+           // No interrumpir si el usuario está editando un insumo (modal abierto).
+           var modal = document.getElementById('modalOverlay');
+           if (modal && modal.style.display !== 'none' && modal.offsetParent !== null) return;
+           if (getNegocioActivo() === negId) _cargarInsumosDeSupabase();
+       });
    }
 
    async function _sincronizarInsumosSupabase(negId, data) {
@@ -225,8 +233,22 @@
    }
    
    // ── Stats ─────────────────────────────────────────────────────
+   // Insumos en el alcance de la sucursal actual (sin aplicar búsqueda/familia/
+   // categoría). En modo global incluye todas las sucursales. Lo usan las stats
+   // para que el conteo de abajo sea independiente por sucursal, igual que arriba.
+   function _insumosScope() {
+       var lista = getInsumos();
+       if (_catGlobalIns()) return lista;
+       var fSucEl = document.getElementById('filtroSucursalIns');
+       var sucFil = fSucEl ? fSucEl.value : '';
+       var sucActiva = _getSucActivaIns();
+       if (sucFil)        return lista.filter(function(x){ return _effSucIns(x.sucursalId) === sucFil; });
+       if (sucActiva)     return lista.filter(function(x){ return _effSucIns(x.sucursalId) === sucActiva; });
+       return lista;
+   }
+
    function renderStats() {
-       const insumos = getInsumos();
+       const insumos = _insumosScope();
        const cats    = [...new Set(insumos.map(x => x.categoria).filter(Boolean))];
        const provs   = [...new Set(insumos.flatMap(x =>
            (x.presentaciones||[]).map(p => p.proveedor).filter(Boolean)
@@ -240,9 +262,14 @@
    }
    
    // ── Filtros ───────────────────────────────────────────────────
+   // Las sub-recetas convertidas a insumo NO entran en las familias normales
+   // (Alimentos/Bebidas): se agrupan en su propia sección "Producción propia".
+   var FAMILIA_SUBRECETA = 'Producción propia';
+   function _familiaIns(ins){ return (ins && ins.esSubReceta) ? FAMILIA_SUBRECETA : ((ins && ins.familia) || ''); }
+
    function cargarFiltros() {
        const insumos  = getInsumos();
-       const familias = [...new Set(insumos.map(x => x.familia).filter(Boolean))].sort();
+       const familias = [...new Set(insumos.map(x => _familiaIns(x)).filter(Boolean))].sort();
        const cats     = [...new Set(insumos.map(x => x.categoria).filter(Boolean))].sort();
        if (!familias.length && !cats.length) return; // nada que cargar aún
 
@@ -279,7 +306,7 @@
            (x.marca||'').toLowerCase().includes(q) ||
            (x.categoria||'').toLowerCase().includes(q)
        );
-       if (fam) lista = lista.filter(x => x.familia === fam);
+       if (fam) lista = lista.filter(x => _familiaIns(x) === fam);
        if (cat) lista = lista.filter(x => x.categoria === cat);
        // Sin sucursal = matriz. Con catálogo global, no se filtra por sucursal.
        if (!catGlobal) {
@@ -290,6 +317,7 @@
        _listaFiltrada = lista;
        _paginaActual  = 0;
        _renderPagina();
+       renderStats(); // stats por sucursal (se actualiza al cambiar el filtro de sucursal)
    }
    
    // ── Toggle vista lista / cuadrícula ───────────────────────────
@@ -559,10 +587,10 @@
                    <div style="display:flex;align-items:center;gap:10px">
                        ${ins.foto
                            ? `<img src="${etx(ins.foto)}" loading="lazy" decoding="async" style="width:36px;height:36px;border-radius:6px;object-fit:cover;border:1px solid var(--border)">`
-                           : `<div style="width:36px;height:36px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px">📦</div>`
+                           : `<div style="width:36px;height:36px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px">${ins.esSubReceta ? '🍳' : '📦'}</div>`
                        }
                        <div>
-                           <div style="font-weight:500">${etx(ins.nombre)}</div>
+                           <div style="font-weight:500">${etx(ins.nombre)}${ins.esSubReceta ? ' <span style="font-size:9px;background:rgba(245,200,66,.15);color:var(--accent);border:1px solid rgba(245,200,66,.3);border-radius:4px;padding:1px 6px;vertical-align:middle;white-space:nowrap">🍳 Sub-receta</span>' : ''}</div>
                            ${(ins.maduracion||ins.variedad) ? `<div style="font-size:11px;color:var(--text-muted)">${etx([ins.maduracion,ins.variedad].filter(Boolean).join(' · '))}</div>` : ''}
                            ${ins.marca ? `<div style="font-size:10px;color:var(--text-dim)">${etx(ins.marca)}</div>` : ''}
                        </div>
@@ -602,7 +630,7 @@
        grid.innerHTML = lista.map(function(ins) {
            var pres  = ins.presentaciones || [];
            var p0    = pres[0];
-           var emoji = tipoEmojis[ins.tipoInsumo] || '📦';
+           var emoji = ins.esSubReceta ? '🍳' : (tipoEmojis[ins.tipoInsumo] || '📦');
 
            var costo = '—';
            if (p0) {
@@ -661,6 +689,7 @@
                '</div>' +
                '<div class="insumo-card-body">' +
                    '<div class="insumo-card-nombre" title="' + etx(ins.nombre) + '">' + etx(ins.nombre) + '</div>' +
+                   (ins.esSubReceta ? '<div style="font-size:9px;color:var(--accent);margin-top:2px">🍳 Sub-receta</div>' : '') +
                    (variedadLine ? '<div class="insumo-card-variedad">' + variedadLine + '</div>' : '') +
                    (ins.marca ? '<div style="font-size:10px;color:var(--text-dim);margin-top:1px">' + etx(ins.marca) + '</div>' : '') +
                    (cat ? '<div class="insumo-card-cat">' + cat + '</div>' : '') +
@@ -1642,7 +1671,14 @@
    
    function editarInsumo(id) {
        const ins = getInsumos().find(x => x.id === id);
-       if (ins) abrirModal(ins);
+       if (!ins) return;
+       // Las sub-recetas convertidas a insumo NO se editan como insumo: se abren
+       // en su editor de sub-receta (recetas), no en este modal.
+       if (ins.esSubReceta && ins.recetaId) {
+           window.location.href = 'index.html?r=' + encodeURIComponent(ins.recetaId);
+           return;
+       }
+       abrirModal(ins);
    }
    
    function eliminarInsumo(id) {

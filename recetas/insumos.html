@@ -79,15 +79,6 @@
             </div>
         </div>
 
-        <!-- Banner modo Catálogo Global del negocio -->
-        <div id="bannerGlobalIns" style="display:none;align-items:center;justify-content:space-between;gap:12px;background:rgba(122,184,245,.1);border:1px solid rgba(122,184,245,.3);border-radius:10px;margin:0 24px 14px;padding:10px 16px">
-            <div style="display:flex;align-items:center;gap:10px;color:#7ab8f5;font-size:13px">
-                <span style="font-size:16px">🌐</span>
-                <span><strong>Catálogo Global del negocio</strong> · estás viendo los insumos de todas las sucursales</span>
-            </div>
-            <button onclick="salirGlobalIns()" style="flex-shrink:0;background:transparent;border:1px solid rgba(122,184,245,.4);color:#7ab8f5;border-radius:8px;padding:6px 14px;font-family:inherit;font-size:12px;cursor:pointer;white-space:nowrap">← Volver a mi sucursal</button>
-        </div>
-
         <div class="wrap">
 
             <!-- FILTROS -->
@@ -105,7 +96,6 @@
                         </div>
                         <select class="filtro-select" id="filtroFamilia" onchange="filtrar()"><option value="">Todas las familias</option></select>
                         <select class="filtro-select" id="filtroCategoria" onchange="filtrar()"><option value="">Todas las categorías</option></select>
-                        <select class="filtro-select" id="filtroSucursalIns" onchange="filtrar()"><option value="">Todas las sucursales</option></select>
                     </div>
                 </div>
             </div>
@@ -727,6 +717,7 @@ function toggleTheme() {
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 <script src="../admin-guard.js"></script>
+<script src="/global-nav.js"></script>
 
 <!-- ── MODAL CATÁLOGO GLOBAL ────────────────────────────────── -->
 <div id="modalCatalogoGlobal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;align-items:center;justify-content:center">

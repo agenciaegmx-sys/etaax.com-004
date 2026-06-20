@@ -597,6 +597,22 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
       <!-- Brand info bar -->
       <div class="brand-info-bar" id="brandInfoBar" style="max-width:960px;margin:0 auto 28px"></div>
 
+      <!-- Catálogos Globales (nivel negocio · independiente de sucursales) -->
+      <div style="max-width:960px;margin:0 auto 28px">
+        <button onclick="abrirCatalogosGlobalesNeg()"
+          style="width:100%;display:flex;align-items:center;justify-content:center;gap:14px;
+                 background:rgba(122,184,245,.08);border:1px solid rgba(122,184,245,.35);
+                 border-radius:14px;padding:18px 22px;cursor:pointer;font-family:inherit;transition:all .18s"
+          onmouseover="this.style.background='rgba(122,184,245,.14)';this.style.borderColor='#7ab8f5'"
+          onmouseout="this.style.background='rgba(122,184,245,.08)';this.style.borderColor='rgba(122,184,245,.35)'">
+          <span style="font-size:26px">🌐</span>
+          <div style="text-align:left">
+            <div style="font-size:16px;font-weight:600;color:#7ab8f5;letter-spacing:.3px">Catálogos Globales del negocio</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">Administra insumos, recetas, proveedores, clientes y colaboradores de todo el negocio</div>
+          </div>
+        </button>
+      </div>
+
       <!-- Header sucursales -->
       <div class="suc-section-head" style="max-width:960px;margin:0 auto 16px">
         <div class="suc-section-label">Sucursales</div>
@@ -2259,12 +2275,9 @@ function _showModulos(neg) {
     // Al ver la parrilla de módulos estamos en el contexto de UNA sucursal: apagar
     // el modo catálogo global (se activa solo al abrir una tarjeta del menú global).
     sessionStorage.removeItem('etaax_cat_global');
-    if (btnCatGlobal) {
-        // Los catálogos globales son una vista de dueño/admin (multi-sucursal). Un
-        // colaborador queda acotado a su sucursal, así que no se le muestra.
-        var esStaff = !!(_sesion && _sesion.type === 'staff');
-        btnCatGlobal.style.display = (sucId && tieneMasSucs && !esStaff) ? '' : 'none';
-    }
+    // Los catálogos globales se movieron al selector de sucursales (nivel negocio),
+    // para independizarlos de la sucursal activa. Ya no van en el header de módulos.
+    if (btnCatGlobal) btnCatGlobal.style.display = 'none';
 
     if (_sesion) {
         var nombreChip = document.getElementById('userNombreChip');
@@ -2309,6 +2322,18 @@ function _showModulos(neg) {
 // ── Catálogos Globales (vista empresarial multi-sucursal) ──
 function abrirCatalogosGlobales() {
     document.getElementById('modalCatGlobal').style.display = 'flex';
+}
+// Catálogos globales A NIVEL NEGOCIO (desde el selector de sucursales): establece
+// el contexto del negocio SIN una sucursal específica, activa el modo global y
+// abre el menú de catálogos. Así los catálogos quedan independientes de sucursales.
+function abrirCatalogosGlobalesNeg() {
+    var marca = _misNegocios()[0];
+    if (!marca) { alert('Primero registra tu negocio.'); return; }
+    localStorage.setItem('etaax_negocio_activo', marca.id);
+    localStorage.removeItem('etaax_sucursal_activa'); // sin sucursal → vista global del negocio
+    if (typeof _guardarCtx === 'function') _guardarCtx(marca); // ctx del negocio (sin sucursal)
+    sessionStorage.setItem('etaax_cat_global', '1');
+    abrirCatalogosGlobales();
 }
 function cerrarCatGlobal() {
     document.getElementById('modalCatGlobal').style.display = 'none';

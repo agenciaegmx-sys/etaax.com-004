@@ -287,9 +287,6 @@
                                 <option>Cheque</option>
                                 <option>Otro</option>
                             </select>
-                            <select class="filtro-select" id="filterSucProv" onchange="renderTable()">
-                                <option value="">Todas las sucursales</option>
-                            </select>
                         </div>
                         <button class="btn-primary" onclick="openModal()">+ Agregar proveedor</button>
                     </div>
@@ -556,10 +553,9 @@ var tmpDocs = [];
 
 /* ── RENDER ── */
 function renderTable() {
-    _poblarFiltroSucProv();
     var q       = document.getElementById('searchInput').value.toLowerCase();
     var pago    = document.getElementById('filterPago').value;
-    var sucFilt = document.getElementById('filterSucProv').value;
+    var sucFilt = '';   // el filtro por sucursal se eliminó: el alcance lo da la navegación
     var catGlobal = _catGlobalProv();
     var sucActiva = _getSucActivaProv();
     var data = load();
@@ -887,5 +883,6 @@ document.getElementById('modalProv').addEventListener('click', function(e){
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 <script src="../admin-guard.js"></script>
+<script src="/global-nav.js"></script>
 </body>
 </html>

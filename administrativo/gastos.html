@@ -716,6 +716,32 @@ async function _sbInit() {
     if (window.NominaParams) { try { await NominaParams.sync(negId); } catch(e){} }
     initCategorias();
     renderAll();
+    _subGastosRealtime(negId);
+}
+
+// Realtime: si otro dispositivo registra/edita un gasto, este se actualiza solo
+// (estilo Drive). Recarga ligera (solo gastos) + render, sin interrumpir modales.
+var _gastosRtCh = null, _gastosRtNeg = null;
+async function _reloadGastosRT() {
+    var negId = getNegocioActivo();
+    if (!negId || typeof _supabase === 'undefined') return;
+    var r = await _supabase.from('gastos').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false});
+    if (r.error) return;
+    var remote = (r.data||[]).map(function(x){return x.datos;}).filter(Boolean);
+    // Conservar gastos locales aún sin sincronizar (en el outbox).
+    var vistos = {}; remote.forEach(function(g){ if (g && g.id) vistos[g.id]=1; });
+    var soloLocal = (_cacheGastos||[]).filter(function(g){ return g && g.id && !vistos[g.id]; });
+    _cacheGastos = remote.concat(soloLocal);
+    renderAll();
+}
+function _subGastosRealtime(negId) {
+    if (!negId || _gastosRtNeg === negId || typeof sbRealtime !== 'function') return;
+    if (_gastosRtCh && _supabase.removeChannel) { try { _supabase.removeChannel(_gastosRtCh); } catch(e){} }
+    _gastosRtNeg = negId;
+    _gastosRtCh = sbRealtime('gastos', negId, function() {
+        if (document.querySelector('.modal-overlay.open, .panel-prov-overlay.open, .pin-overlay.open')) return; // no interrumpir
+        if (getNegocioActivo() === negId) _reloadGastosRT();
+    });
 }
 
 function _sbUp(tabla, record) { sbUpsert(tabla, record); }

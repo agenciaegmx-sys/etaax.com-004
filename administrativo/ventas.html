@@ -842,6 +842,33 @@ async function _sbInit() {
     if (!r[3].error) _cacheGastosExt = (r[3].data||[]).map(function(x){return x.datos;});
     renderAll();
     renderDepositos();
+    _subCortesRealtime(negId);
+}
+
+// Realtime: si otro dispositivo registra/edita un corte, este se actualiza solo
+// (estilo Drive). Recarga ligera (solo cortes) + render, sin interrumpir modales.
+var _cortesRtCh = null, _cortesRtNeg = null;
+async function _reloadCortesRT() {
+    var negId = getNegocioActivo();
+    if (!negId || typeof _supabase === 'undefined') return;
+    var r = await _supabase.from('cortes').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false});
+    if (r.error) return;
+    var remote = (r.data||[]).map(function(x){return x.datos;}).filter(Boolean);
+    // Conservar cortes locales aún sin sincronizar (en el outbox) para que no
+    // desaparezcan si llega un realtime de otro dispositivo antes de subir.
+    var vistos = {}; remote.forEach(function(c){ if (c && c.id) vistos[c.id]=1; });
+    var soloLocal = (_cacheCortes||[]).filter(function(c){ return c && c.id && !vistos[c.id]; });
+    _cacheCortes = remote.concat(soloLocal);
+    renderAll(); renderDepositos();
+}
+function _subCortesRealtime(negId) {
+    if (!negId || _cortesRtNeg === negId || typeof sbRealtime !== 'function') return;
+    if (_cortesRtCh && _supabase.removeChannel) { try { _supabase.removeChannel(_cortesRtCh); } catch(e){} }
+    _cortesRtNeg = negId;
+    _cortesRtCh = sbRealtime('cortes', negId, function() {
+        if (document.querySelector('.modal-overlay.open, .pin-overlay.open')) return; // no interrumpir
+        if (getNegocioActivo() === negId) _reloadCortesRT();
+    });
 }
 
 function _sbUp(tabla, record) { sbUpsert(tabla, record); }

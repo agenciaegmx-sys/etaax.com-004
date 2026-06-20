@@ -35,7 +35,7 @@
             '<div class="ctx-right">' +
                 '<div class="ctx-user-badge"><span>' + esc(ctx.userName.split(' ')[0]) + '</span>' +
                 '<span class="ctx-badge-plan" style="background:' + ctx.userColor + '22;color:' + ctx.userColor + '">' + esc(ctx.userBadge) + '</span></div>' +
-                '<a href="' + hubPath + '" class="ctx-btn">← Ir a Módulos</a>' +
+                '<a href="' + (catGlobal ? hubPath + '?negocios=1' : hubPath) + '" class="ctx-btn">← ' + (catGlobal ? 'Ir al negocio' : 'Ir a Módulos') + '</a>' +
                 '<button class="ctx-btn ctx-btn-danger" onclick="ctxSalir()">Salir</button>' +
             '</div>' +
             '</div>';
