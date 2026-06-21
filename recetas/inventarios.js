@@ -63,6 +63,36 @@ async function _sbInitInv() {
         try { localStorage.setItem(_sk('insumos'), JSON.stringify(_cacheInsumosInv.map(function(ins){ var c=Object.assign({},ins); c.foto=''; c.fotoUrl=''; return c; }))); } catch(e) {}
     }
     if (typeof init === 'function') init();
+    _subInvRealtime(negId);
+}
+
+// Realtime: si otro dispositivo registra/edita un inventario, el historial se
+// actualiza solo (estilo Drive). OJO: NO refresca si el usuario está en el wizard
+// de captura (vistaForm/Captura/Entradas) — solo cuando ve el historial (vistaLista).
+var _invRtCh = null, _invRtNeg = null;
+async function _reloadInvRT() {
+    var negId = getNegocioActivo();
+    if (!negId || typeof _supabase === 'undefined') return;
+    var r = await _supabase.from('inventarios').select('datos').eq('negocio_id', negId).order('created_at', { ascending: true });
+    if (r.error) return;
+    var remote = (r.data || []).map(function(x){ return x.datos; }).filter(Boolean);
+    // Conservar inventarios locales aún sin sincronizar (outbox).
+    var vistos = {}; remote.forEach(function(c){ if (c && c.id) vistos[c.id] = 1; });
+    var soloLocal = (_cacheInv || []).filter(function(c){ return c && c.id && !vistos[c.id]; });
+    _cacheInv = remote.concat(soloLocal);
+    if (typeof renderStats === 'function') renderStats();
+    if (typeof renderHistorial === 'function') renderHistorial();
+}
+function _subInvRealtime(negId) {
+    if (!negId || _invRtNeg === negId || typeof sbRealtime !== 'function') return;
+    if (_invRtCh && _supabase.removeChannel) { try { _supabase.removeChannel(_invRtCh); } catch(e) {} }
+    _invRtNeg = negId;
+    _invRtCh = sbRealtime('inventarios', negId, function() {
+        var lista = document.getElementById('vistaLista');
+        // Solo refrescar viendo el historial; en el wizard de captura no interrumpir.
+        if (!lista || lista.style.display === 'none') return;
+        if (getNegocioActivo() === negId) _reloadInvRT();
+    });
 }
 
 function _limpiarStorageEmergencia() {

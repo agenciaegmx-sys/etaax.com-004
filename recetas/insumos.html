@@ -998,7 +998,7 @@ var _cgPagina   = 0;
 var _cgPgSize   = 80;
 var _cgCargado  = false;
 var _cgCompleto = false;   // true cuando background load terminó
-var _CG_CACHE   = 'etaax_cg_v1';
+var _CG_CACHE   = 'etaax_cg_v2';   // v2: invalida caches incompletos de la versión que saltaba registros
 var _CG_TTL     = 30 * 60 * 1000;
 
 async function abrirCatalogoGlobal() {
@@ -1096,24 +1096,25 @@ async function _cgCargar() {
 async function _cgBgLoad(startFrom) {
     var all = _cgTodos.slice();
     var from = startFrom;
-    var BATCH = 150;          // lotes chicos: las fotos base64 pesan mucho
+    var BATCH = 1000;         // igual que el admin: una sola pasada robusta (2 lotes p/1300)
+    var huboError = false;
     var guard = 0;
-    while (guard++ < 5000) {
+    while (guard++ < 10000) {
+        var size = BATCH;
         var res = await _supabase.from('catalogo_insumos')
             .select('datos')
             .order('created_at', { ascending: true })
-            .range(from, from + BATCH - 1);
+            .range(from, from + size - 1);
         if (res.error) {
-            // El lote falló (suele ser payload demasiado grande por una foto
-            // base64 enorme). Reintentar más chico; si un solo registro no se
-            // puede traer, saltarlo para NO cortar el resto del catálogo.
-            if (BATCH > 1) { BATCH = Math.max(1, Math.floor(BATCH / 2)); continue; }
-            console.warn('[cg] registro problemático en offset', from, '·', res.error.message, '— se omite');
-            from += 1; BATCH = 150;
-            continue;
+            // Reintentar el MISMO rango con lote más chico antes de rendirse.
+            // NUNCA saltar registros: eso dejaba el catálogo incompleto (faltaban
+            // insumos en el negocio aunque el admin sí los veía).
+            if (BATCH > 100) { BATCH = Math.floor(BATCH / 2); continue; }
+            console.warn('[cg] error cargando catálogo en offset', from, '·', res.error.message, '— se corta sin cachear');
+            huboError = true;
+            break;
         }
         var chunk = (res.data || []).map(function(r){ return r.datos; }).filter(Boolean);
-        if (!chunk.length) break;          // ya no hay más registros
         all = all.concat(chunk);
         _cgTodos = all;
         var elTotal = document.getElementById('cgTotal');
@@ -1122,9 +1123,10 @@ async function _cgBgLoad(startFrom) {
         // aún no llegaba, aparece en cuanto carga (ya no hay que esperar todo).
         if ((document.getElementById('cgSearch').value || '').trim()) cgFiltrar();
         from += chunk.length;
-        BATCH = 150;                        // restaurar tras un lote exitoso
+        if (chunk.length < size) break;     // última página (recibí menos de lo pedido)
+        BATCH = 1000;                        // restaurar tras un lote exitoso
     }
-    _cgCompleto = true;
+    _cgCompleto = !huboError;
     _cgPoblarFamilias(_cgTodos);
 
     // Si hay búsqueda/filtro activo: re-filtrar para mostrar coincidencias del set completo
@@ -1138,10 +1140,13 @@ async function _cgBgLoad(startFrom) {
         _cgRender();
     }
 
-    // 4. Guardar en sessionStorage para próximas aperturas (silent fail si quota excedida)
-    try {
-        sessionStorage.setItem(_CG_CACHE, JSON.stringify({ ts: Date.now(), data: _cgTodos }));
-    } catch(e) {}
+    // 4. Guardar en sessionStorage SOLO si la carga fue completa (no cachear sets
+    //    incompletos: dejarían insumos fuera en próximas aperturas). Silent fail si quota.
+    if (!huboError) {
+        try {
+            sessionStorage.setItem(_CG_CACHE, JSON.stringify({ ts: Date.now(), data: _cgTodos }));
+        } catch(e) {}
+    }
 }
 
 function cgFiltrar() {

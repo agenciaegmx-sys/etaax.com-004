@@ -214,6 +214,15 @@
                                 + Agregar foto
                             </button>
 
+                            <!-- Subir foto desde el celular vía QR -->
+                            <button type="button" id="btnQrReceta" onclick="_toggleQrReceta()"
+                                style="margin-top:6px;background:none;border:1px dashed var(--green-dim);
+                                border-radius:6px;padding:6px 14px;color:var(--green);cursor:pointer;
+                                font-size:12px;font-family:DM Sans,sans-serif;width:100%">
+                                📱 Subir foto desde el celular
+                            </button>
+                            <div id="qrRecetaBox" style="display:none;margin-top:8px;text-align:center"></div>
+
                             <input type="file" id="fotoInput" accept="image/*" multiple
                                 onchange="cargarFotos(this)" style="display:none">
 
@@ -318,6 +327,10 @@
 
 <!-- ══ MÓDULO RECETAS — LANDING (estilo cf-*, igual que los demás módulos) ══ -->
 <style>
+/* Ancho del editor de escandallo (receta Y sub-receta usan el mismo #editorWrap,
+   así quedan idénticos). Más ancho que el .wrap default (1200) para aprovechar
+   mejor las pantallas anchas. */
+#editorWrap { max-width: 1480px; width: 100%; margin-left: auto; margin-right: auto; }
 @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:none; } }
 #moduloLanding .cf-wrap { min-height:auto; padding:8px 24px 80px; display:flex; flex-direction:column; align-items:center; }
 #moduloLanding .cf-hero { text-align:center; padding:40px 0 44px; animation:fadeUp .5s ease both; max-width:600px; width:100%; }
@@ -811,6 +824,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
 <script src="/etaax-db.js"></script>
+<script src="/qr-pairing.js"></script>
 <script src="../security.js"></script>
 <script src="../app.js"></script>
 <script>
@@ -1331,10 +1345,12 @@ function calcSubRecetaCostos() {
         var rendFinalBase3 = rendFinal * (fU[unidadFinal]||1); // en g/ml
 
         var costoPorcion = 0;
+        var _calcCant    = 0;   // cantidad de porciones que el costeo determinó (qty o peso)
 
         if (pQty > 0 && rendFinal > 0) {
             // FILA 1 activa: porciones → calcula peso por porción automáticamente
             costoPorcion = costoTotal / pQty;
+            _calcCant    = pQty;
             var pesoPorcionAuto = rendFinalBase3 / pQty;
             if (elPesoAuto) {
                 elPesoAuto.textContent = pesoPorcionAuto >= 1000
@@ -1350,6 +1366,7 @@ function calcSubRecetaCostos() {
             var pesoPorcionBase = pPeso * (fU3[pUnidad]||1);
             var cantPorcAuto    = pesoPorcionBase > 0 ? Math.floor(rendFinalBase3 / pesoPorcionBase) : 0;
             costoPorcion        = cantPorcAuto > 0 ? costoTotal / cantPorcAuto : 0;
+            _calcCant           = cantPorcAuto;
             if (elCantAuto) {
                 elCantAuto.textContent = cantPorcAuto > 0
                     ? cantPorcAuto + ' ' + pUndSel
@@ -1365,6 +1382,12 @@ function calcSubRecetaCostos() {
             if (elPesoAuto) elPesoAuto.textContent = '';
             if (elCantAuto) elCantAuto.textContent = '';
         }
+
+        // Guardar el resultado del costeo de porción para que la conversión a insumo
+        // use EXACTAMENTE este valor (evita recalcular del DOM y fallar por timing).
+        window._subPorcionCalc = (costoPorcion > 0 && _calcCant > 0)
+            ? { costo: costoPorcion, cantidad: _calcCant }
+            : null;
 
 
     // ── MODO B: Por Pieza ─────────────────────────────────────
@@ -1604,8 +1627,26 @@ function agregarSubRecetaComoInsumo(silent) {
     var sumaBrutoKg = sumaBase / divBruto / (unidadBruto==='G'||unidadBruto==='ML' ? 0.001 : 1);
     // Simplify: just costoXkgFinal is the costoUnitario
 
-    // Leer porción si existe
-    var porcionQty   = parseFloat((document.getElementById('porcionesQty') || {}).value) || 0;
+    // Porción: usar PRIMERO el resultado que el costeo ya calculó y mostró
+    // (window._subPorcionCalc) — es el mismo $4.67 que ve el usuario y funciona
+    // sin importar si las porciones se definieron por cantidad o por peso.
+    var porcionQty       = 0;
+    var costoPorcionCalc = 0;
+    if (window._subPorcionCalc && window._subPorcionCalc.costo > 0 && window._subPorcionCalc.cantidad > 0) {
+        porcionQty       = window._subPorcionCalc.cantidad;
+        costoPorcionCalc = window._subPorcionCalc.costo;
+    } else {
+        // Fallback: leer del DOM (por cantidad o por peso) y calcular.
+        porcionQty = parseFloat((document.getElementById('porcionesQty') || {}).value) || 0;
+        if (!porcionQty) {
+            var _pPeso = parseFloat((document.getElementById('pesoPorcion') || {}).value) || 0;
+            var _pUni  = ((document.getElementById('unidadPesoPorcion') || {}).value || 'G').toUpperCase();
+            var _toBase = { G:1, KG:1000, ML:1, LT:1000 };
+            var _rendBase = rendFinal * (_toBase[unidadFinal] || 1);   // rendimiento en g/ml
+            var _pesoBase = _pPeso    * (_toBase[_pUni]      || 1);     // peso porción en g/ml
+            if (_pesoBase > 0 && _rendBase > 0) porcionQty = Math.floor(_rendBase / _pesoBase);
+        }
+    }
     var porciones    = [];
     if (rendFinalKg > 0) {
         // Presentación 1: por KG o LT (las bebidas siempre son líquidas)
@@ -1626,7 +1667,8 @@ function agregarSubRecetaComoInsumo(silent) {
     }
     // Presentación 2: por porción si está definida
     if (porcionQty > 0 && costoTotal > 0) {
-        var costoPorPorcion = costoTotal / porcionQty;
+        // Usar el costo/porción que el costeo ya calculó; si no, derivarlo.
+        var costoPorPorcion = costoPorcionCalc > 0 ? costoPorcionCalc : (costoTotal / porcionQty);
         porciones.push({
             contNeto:       1,
             umContenido:    'PZA',
@@ -2183,6 +2225,7 @@ function _showEscMenu() {
     if (w) w.style.display = 'none';
     var h = document.getElementById('recetaEditorHeader');
     if (h) h.style.display = 'none';
+    if (typeof _cerrarPuenteReceta === 'function') _cerrarPuenteReceta(); // detener QR al salir del editor
 }
 function _showEscForm() {
     var m = document.getElementById('vistaMenuReceta');
@@ -2302,6 +2345,7 @@ function crearReceta(tipo) {
     recetaActualId   = null;
     recetaTipoActual = tipo;
     window._escDirty = false; // editor nuevo en blanco → sin cambios pendientes
+    if (typeof _cerrarPuenteReceta === 'function') _cerrarPuenteReceta(); // QR cerrado al iniciar
     renderFormularioPorTipo(tipo, {});
     ingredientes = [];
     if (typeof fotosReceta !== 'undefined') { fotosReceta = []; fotoIndexActual = 0; }

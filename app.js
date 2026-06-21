@@ -329,6 +329,7 @@ function cargarReceta(id) {
                     : (r.foto && r.foto.startsWith('data:') ? [r.foto] : []);
     fotoIndexActual = 0;
     renderCarrusel();
+    if (typeof _cerrarPuenteReceta === 'function') _cerrarPuenteReceta(); // QR cerrado al cargar otra receta
 
     ingredientes = JSON.parse(JSON.stringify(r.ingredientes || []));
     renderTabla();
@@ -902,12 +903,27 @@ function getContenidoPorPieza(insumoId) {
 }
 
 function getCostoParaUnidad(insumo, unidadEscandallo) {
-    const p   = (insumo.presentaciones || [])[0];
+    const pres = insumo.presentaciones || [];
+    const umEs = (unidadEscandallo || 'ML').toUpperCase();
+    // Sub-recetas: tienen UNA presentación por cada rendimiento (granel KG/LT y por
+    // porción PZA). Usar la que COINCIDE con la unidad seleccionada → su costoUnitario
+    // directo. Ej. PZA → costo por porción ($4.67), NO el costo de toda la tanda.
+    if (insumo.esSubReceta) {
+        // PZA y PORCION son equivalentes (ambos = rendimiento por porción de la sub-receta).
+        const _grp = function(u){ u = (u||'').toUpperCase(); return (u === 'PZA' || u === 'PORCION') ? 'POR' : u; };
+        const pM = pres.find(function(x){
+            return _grp(x.umContenido) === _grp(umEs) || _grp(x.umCosto) === _grp(umEs);
+        });
+        if (pM) {
+            const cuM = parseFloat(pM.costoUnitario) || parseFloat(pM.precio) || 0;
+            if (cuM > 0) return cuM;
+        }
+    }
+    const p   = pres[0];
     if (!p) return 0;
     const cu   = parseFloat(p.costoUnitario) || parseFloat(p.precio) || 0;
     if (!cu) return 0;
     const umCu = (p.umCosto || 'LT').toUpperCase();
-    const umEs = (unidadEscandallo || 'ML').toUpperCase();
     const OZ_ML = 29.5735;
 
     // getFactor() divide ML y G entre 1000, y devuelve directamente PZA/CARGA/LT/KG/OZ
@@ -1097,10 +1113,14 @@ function mostrarDropdown(idx, query) {
 }
 
 
+// Redondea el costo por unidad a 2 decimales (centavos) — el COSTO es $/KG-LT-PZ,
+// así no se arrastran decimales de más (ej. $25.8513824 → $25.85).
+function _redondeaCosto(v) { return Math.round((parseFloat(v) || 0) * 100) / 100; }
+
 function seleccionarInsumo(idx, insumoId) {
     const ins = getCatalogoInsumos().find(x => x.id === insumoId);
     if (!ins) return;
-    const costo = getCostoParaUnidad(ins, ingredientes[idx].unidad);
+    const costo = _redondeaCosto(getCostoParaUnidad(ins, ingredientes[idx].unidad));
     ingredientes[idx].nombre       = ins.nombre + (ins.variedad ? ' '+ins.variedad : '');
     ingredientes[idx].insumoId     = insumoId;
     ingredientes[idx].costoPorKgLt = costo;
@@ -1113,7 +1133,7 @@ function recalcularCostoDesdeInsumo(idx) {
     const ing = ingredientes[idx];
     if (!ing.insumoId) return;
     const ins = getCatalogoInsumos().find(x => x.id === ing.insumoId);
-    if (ins) ing.costoPorKgLt = getCostoParaUnidad(ins, ing.unidad);
+    if (ins) ing.costoPorKgLt = _redondeaCosto(getCostoParaUnidad(ins, ing.unidad));
 }
 
 document.addEventListener('click', function(e) {
@@ -1491,6 +1511,36 @@ function _comprimirFotoReceta(file, maxPx, calidad, cb) {
     };
     reader.onerror = function() { cb(''); };
     reader.readAsDataURL(file);
+}
+
+// ── Subir foto de la receta desde el celular vía QR (mismo puente que cortes/gastos) ──
+function _abrirPuenteReceta() {
+    var box = document.getElementById('qrRecetaBox');
+    if (!box || !window.QrPuente) return;
+    box.style.display = 'block';
+    var btn = document.getElementById('btnQrReceta');
+    if (btn) btn.textContent = '✕ Cerrar escaneo';
+    QrPuente.abrir(getNegocioActivo(), 'receta', box, function(foto){
+        if (!foto || !foto.url) return;
+        if (typeof fotosReceta === 'undefined') return;
+        fotosReceta.push(foto.url);
+        fotoIndexActual = fotosReceta.length - 1;
+        renderCarrusel();
+        window._escDirty = true; // foto nueva = cambio sin guardar
+    });
+}
+function _cerrarPuenteReceta() {
+    if (window.QrPuente) QrPuente.cerrar();
+    var box = document.getElementById('qrRecetaBox');
+    if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+    var btn = document.getElementById('btnQrReceta');
+    if (btn) btn.textContent = '📱 Subir foto desde el celular';
+}
+function _toggleQrReceta() {
+    var box = document.getElementById('qrRecetaBox');
+    if (!box) return;
+    if (box.style.display === 'none' || !box.style.display) _abrirPuenteReceta();
+    else _cerrarPuenteReceta();
 }
 
 function renderCarrusel() {
