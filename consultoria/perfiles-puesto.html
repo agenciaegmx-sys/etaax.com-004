@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<script src="/page-guard.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>ETAAX – Perfiles de Puesto</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+<style>
+.pp-wrap{max-width:1100px;margin:0 auto;padding:24px 22px 90px}
+.pp-head{margin-bottom:20px;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.pp-title{font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:1px;color:var(--text)}
+.pp-eyebrow{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px}
+.pp-btn{font-family:'DM Sans',sans-serif;font-size:13px;padding:10px 18px;border-radius:8px;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text-muted);transition:all .2s}
+.pp-btn:hover{border-color:var(--green);color:var(--green)}
+.pp-btn-primary{background:var(--green);border:none;color:#0a0908;font-weight:600}
+.pp-btn-danger{border-color:rgba(224,90,58,.4);color:var(--salmon,#e05a3a)}
+.pp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.pp-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;cursor:pointer;transition:all .2s}
+.pp-card:hover{border-color:rgba(61,190,122,.5);transform:translateY(-2px)}
+.pp-card-tit{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:.5px;color:var(--text);line-height:1.1}
+.pp-card-sub{font-size:11px;color:var(--text-dim);margin-top:4px}
+.pp-card-acts{display:flex;gap:8px;margin-top:14px}
+.pp-empty{grid-column:1/-1;text-align:center;color:var(--text-dim);padding:48px 20px;border:1px dashed var(--border);border-radius:14px}
+/* editor */
+.pp-card-form{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px;margin-bottom:16px}
+.pp-sec{font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:var(--green);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.pp-field{margin-bottom:14px}
+.pp-field label{display:block;font-size:11px;color:var(--text-muted);margin-bottom:5px;font-weight:500}
+.pp-field input,.pp-field textarea{width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13.5px;outline:none}
+.pp-field input:focus,.pp-field textarea:focus{border-color:var(--green)}
+.pp-field textarea{resize:vertical;line-height:1.6;min-height:64px}
+.pp-hint{font-size:10px;color:var(--text-dim);margin-top:4px}
+.pp-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:700px){.pp-cols{grid-template-columns:1fr}}
+/* preview tipo documento — estilo de impresión ETAAX (verde #3dbe7a, no naranja) */
+.pp-doc{background:#fff;color:#1a1916;border-radius:14px;padding:40px 44px;max-width:820px;margin:0 auto;box-shadow:0 10px 40px rgba(0,0,0,.3);font-family:'DM Sans',sans-serif}
+.pp-doc-head{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:3px solid #3dbe7a;padding-bottom:12px}
+.pp-doc-eyebrow{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#888}
+.pp-doc-empresa{font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:1px;color:#1a1916;line-height:1;margin-top:3px}
+.pp-doc-mark{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px;color:#1a1916}
+.pp-doc-mark span{color:#3dbe7a}
+.pp-doc-puesto{font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:.5px;color:#1a1916;margin:16px 0 6px}
+.pp-doc h2{font-size:12px;font-weight:700;color:#3dbe7a;text-transform:uppercase;letter-spacing:1.5px;margin:22px 0 9px;border-bottom:1px solid #ececec;padding-bottom:5px}
+.pp-doc .pp-gen{display:grid;grid-template-columns:1fr 1fr;gap:3px 24px;font-size:13px;margin-bottom:6px}
+.pp-doc .pp-gen b{color:#1a1916}
+.pp-doc ul{margin:6px 0 6px 18px;padding:0;font-size:13px;line-height:1.65}
+.pp-doc .pp-td{font-size:13px;line-height:1.6;margin-bottom:9px}
+.pp-doc .pp-td b{color:#1a1916}
+.pp-doc .pp-age{font-size:15px;font-weight:700;margin:18px 0 8px;color:#1a1916}
+.pp-doc .pp-age span{color:#3dbe7a}
+.pp-doc-foot{margin-top:26px;padding-top:10px;border-top:1px solid #ececec;font-size:9px;color:#aaa;display:flex;justify-content:space-between;gap:10px}
+.pp-doc-foot strong{color:#3dbe7a}
+.theme-toggle{position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15)}
+@media print{.top-bar,.ctx-bar,.nav,.theme-toggle,.pp-head,.pp-noprint{display:none!important}.main-content{margin:0!important}body.has-ctx .pp-wrap{padding-top:0}.pp-wrap{padding:0!important}.pp-doc{box-shadow:none;max-width:100%;padding:0}}
+</style>
+</head>
+<body>
+<header class="top-bar">
+    <svg width="108" height="26" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
+        <circle cx="45" cy="11" r="6" fill="#f5c842"/>
+        <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
+        <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+    </svg>
+    <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🗃️</a>
+    <div class="top-breadcrumb">
+        <span class="top-module-badge">Consultoría</span>
+        <span class="top-sep">|</span>
+        <span class="top-section-name">Perfiles de Puesto</span>
+    </div>
+</header>
+<div id="ctxBar" class="ctx-bar" style="display:none"></div>
+
+<nav class="nav cerrado" id="nav">
+    <div class="nav-top">
+        <div class="nav-brand"><span class="nav-brand-sub">Consultoría</span></div>
+        <div class="nav-top-actions">
+            <a href="index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Panel Consultoría" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1">🗃️</a>
+            <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
+        </div>
+    </div>
+    <div class="nav-section">
+        <div class="nav-section-label">Herramientas</div>
+        <a href="simulador-kpis.html" class="nav-link" data-tooltip="Metas de Venta"><span class="nav-icon">🎯</span><span class="nav-text">Metas de Venta</span></a>
+        <a href="perfiles-puesto.html" class="nav-link active" data-tooltip="Perfiles"><span class="nav-icon">📋</span><span class="nav-text">Perfiles</span></a>
+        <a href="organigrama.html" class="nav-link" data-tooltip="Organigrama"><span class="nav-icon">🧠</span><span class="nav-text">Organigrama</span></a>
+    </div>
+</nav>
+
+<main class="main-content expandido" id="mainContent">
+<div class="pp-wrap">
+
+    <!-- ════ LISTA ════ -->
+    <div id="viewLista">
+        <div class="pp-head">
+            <div>
+                <div class="pp-eyebrow">Consultoría</div>
+                <div class="pp-title">Perfiles de Puesto</div>
+            </div>
+            <button class="pp-btn pp-btn-primary" onclick="nuevoPerfil()">+ Nuevo perfil</button>
+        </div>
+        <div class="pp-grid" id="listaPerfiles"></div>
+    </div>
+
+    <!-- ════ EDITOR ════ -->
+    <div id="viewEditor" style="display:none">
+        <div class="pp-head">
+            <div>
+                <div class="pp-eyebrow">Perfil de puesto</div>
+                <div class="pp-title" id="edTitulo">Nuevo perfil</div>
+            </div>
+            <div style="display:flex;gap:8px">
+                <button class="pp-btn" onclick="verLista()">← Cancelar</button>
+                <button class="pp-btn pp-btn-primary" onclick="guardarPerfil()">✓ Guardar</button>
+            </div>
+        </div>
+
+        <div class="pp-card-form">
+            <div class="pp-sec">Información general</div>
+            <div class="pp-field"><label>Puesto (título del perfil)</label><input id="fPuesto" placeholder="Ej. Cociner@ A — Área Caliente"></div>
+            <div class="pp-cols">
+                <div class="pp-field"><label>Empresa</label><input id="fEmpresa"></div>
+                <div class="pp-field"><label>Concepto</label><input id="fConcepto" placeholder="Ej. Asador de campo"></div>
+                <div class="pp-field"><label>Sucursal</label><input id="fSucursal"></div>
+                <div class="pp-field"><label>Sede</label><input id="fSede" placeholder="Ciudad / estado"></div>
+                <div class="pp-field"><label>Contratación</label><input id="fContratacion" placeholder="Ej. Tiempo indefinido"></div>
+                <div class="pp-field"><label>Horario</label><input id="fHorario" placeholder="Ej. Turno completo / fines de semana"></div>
+                <div class="pp-field"><label>Oferta salarial</label><input id="fOferta" placeholder="Ej. Sueldo semanal + propinas"></div>
+                <div class="pp-field"><label>Periodo de prueba</label><input id="fPrueba" placeholder="Ej. 2 meses"></div>
+            </div>
+            <div class="pp-field"><label>Prestaciones</label><textarea id="fPrestaciones" placeholder="Una por línea"></textarea><div class="pp-hint">Una prestación por línea.</div></div>
+        </div>
+
+        <div class="pp-card-form">
+            <div class="pp-sec">Perfil y competencias</div>
+            <div class="pp-field"><label>Educación y experiencia laboral</label><textarea id="fEducacion"></textarea><div class="pp-hint">Un punto por línea.</div></div>
+            <div class="pp-field"><label>Habilidades interpersonales</label><textarea id="fHabilidades"></textarea><div class="pp-hint">Un punto por línea.</div></div>
+            <div class="pp-field"><label>Estándares de calificación</label><textarea id="fEstandares"></textarea><div class="pp-hint">Un punto por línea.</div></div>
+        </div>
+
+        <div class="pp-card-form">
+            <div class="pp-sec">Salud y condición física</div>
+            <div class="pp-cols">
+                <div class="pp-field"><label>Edad mínima</label><input id="fEdadMin" type="number" min="0" placeholder="22"></div>
+                <div class="pp-field"><label>Edad máxima</label><input id="fEdadMax" type="number" min="0" placeholder="40"></div>
+            </div>
+            <div class="pp-field"><label>Requisitos de salud / condición física</label><textarea id="fSalud" rows="4"></textarea><div class="pp-hint">Uno por línea, formato <b>Título :: descripción</b> (ej. <i>Resistencia térmica :: Apto para operar frente a calor directo…</i>).</div></div>
+        </div>
+
+        <div class="pp-card-form">
+            <div class="pp-sec">Funciones</div>
+            <div class="pp-field"><label>Propósito del rol</label><textarea id="fProposito"></textarea><div class="pp-hint">Un punto por línea.</div></div>
+            <div class="pp-field"><label>Contexto del puesto</label><textarea id="fContexto" rows="4"></textarea><div class="pp-hint">Uno por línea, formato <b>Título :: descripción</b>.</div></div>
+            <div class="pp-field"><label>Responsabilidades operativas</label><textarea id="fResponsabilidades" rows="6"></textarea><div class="pp-hint">Una por línea, formato <b>Título :: descripción</b>.</div></div>
+        </div>
+    </div>
+
+    <!-- ════ VISTA / IMPRESIÓN ════ -->
+    <div id="viewPreview" style="display:none">
+        <div class="pp-head pp-noprint">
+            <div>
+                <div class="pp-eyebrow">Perfil de puesto</div>
+                <div class="pp-title">Vista del documento</div>
+            </div>
+            <div style="display:flex;gap:8px">
+                <button class="pp-btn" onclick="verLista()">← Volver</button>
+                <button class="pp-btn" onclick="editarPerfil(_verId)">✎ Editar</button>
+                <button class="pp-btn pp-btn-primary" onclick="window.print()">🖨️ Imprimir / PDF</button>
+            </div>
+        </div>
+        <div class="pp-doc" id="docPreview"></div>
+    </div>
+
+</div>
+</main>
+
+<button class="theme-toggle pp-noprint" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
+<script>
+(function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);document.addEventListener('DOMContentLoaded',function(){if(s==='light'){document.getElementById('themeIcon').textContent='🌙';document.getElementById('themeLabel').textContent='Modo oscuro';}});})();
+function toggleTheme(){var nn=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',nn);localStorage.setItem('etaax_theme',nn);document.getElementById('themeIcon').textContent=nn==='light'?'🌙':'☀️';document.getElementById('themeLabel').textContent=nn==='light'?'Modo oscuro':'Modo claro';}
+function toggleNav(){var nav=document.getElementById('nav'),main=document.getElementById('mainContent');nav.classList.toggle('cerrado');if(main)main.classList.toggle('expandido');var c=nav.classList.contains('cerrado');var b=document.getElementById('navToggleBtn'),t=document.getElementById('navToggleTxt');if(b)b.childNodes[0].textContent=c?'▶':'◀';if(t)t.textContent=c?'Expandir':'Ocultar';if(b)b.setAttribute('data-tooltip',c?'Expandir':'Ocultar');document.body.classList.toggle('nav-open',!c);}
+
+function getNegocioActivo(){return localStorage.getItem('etaax_negocio_activo')||'';}
+function esc(s){return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function _ctx(){try{return JSON.parse(localStorage.getItem('etaax_ctx')||'null')||{};}catch(e){return {};}}
+
+var _perfiles=[], _verId=null;
+
+/* ── Carga ── */
+async function _sbInit(){
+    var negId=getNegocioActivo();
+    if(!negId||typeof _supabase==='undefined'){ renderLista(); return; }
+    var r=await _supabase.from('perfiles_puesto').select('datos').eq('negocio_id',negId);
+    if(!r.error) _perfiles=(r.data||[]).map(function(x){return x.datos;}).filter(Boolean);
+    renderLista();
+    // Si vienen con ?ver=ID (ej. desde el organigrama), abrir ese perfil directo.
+    var m=/[?&]ver=([^&]+)/.exec(location.search);
+    if(m && _perfiles.find(function(p){return p.id===decodeURIComponent(m[1]);})) verPerfil(decodeURIComponent(m[1]));
+    _subPerfilesRealtime(negId);
+}
+
+// Realtime: si otro dispositivo crea/edita/borra un perfil, la lista se actualiza
+// sola (estilo Drive). No refresca si estás en el editor (no perder lo que escribes).
+var _perfRtCh=null, _perfRtNeg=null, _perfRtT=null;
+function _subPerfilesRealtime(negId){
+    if(!negId||_perfRtNeg===negId||typeof sbRealtime!=='function') return;
+    if(_perfRtCh&&_supabase.removeChannel){ try{_supabase.removeChannel(_perfRtCh);}catch(e){} }
+    _perfRtNeg=negId;
+    _perfRtCh=sbRealtime('perfiles_puesto',negId,function(){
+        if(getNegocioActivo()!==negId) return;
+        if(document.getElementById('viewEditor').style.display!=='none') return; // editando
+        clearTimeout(_perfRtT);
+        _perfRtT=setTimeout(async function(){
+            var r=await _supabase.from('perfiles_puesto').select('datos').eq('negocio_id',negId);
+            if(r.error) return;
+            _perfiles=(r.data||[]).map(function(x){return x.datos;}).filter(Boolean);
+            if(document.getElementById('viewLista').style.display!=='none') renderLista();
+            else if(document.getElementById('viewPreview').style.display!=='none' && _verId) verPerfil(_verId);
+        },400);
+    });
+}
+
+/* ── Lista ── */
+function renderLista(){
+    var cont=document.getElementById('listaPerfiles');
+    if(!_perfiles.length){
+        cont.innerHTML='<div class="pp-empty">Aún no hay perfiles de puesto.<br><span style="font-size:12px">Crea el primero con “+ Nuevo perfil”.</span></div>';
+        return;
+    }
+    var arr=_perfiles.slice().sort(function(a,b){return (a.puesto||'').localeCompare(b.puesto||'');});
+    cont.innerHTML=arr.map(function(p){
+        return '<div class="pp-card" onclick="verPerfil(\''+p.id+'\')">'+
+            '<div class="pp-card-tit">'+esc(p.puesto||'Sin título')+'</div>'+
+            '<div class="pp-card-sub">'+esc([p.general&&p.general.concepto,p.general&&p.general.sucursal].filter(Boolean).join(' · ')||'—')+'</div>'+
+            '<div class="pp-card-acts">'+
+                '<button class="pp-btn" onclick="event.stopPropagation();editarPerfil(\''+p.id+'\')">✎ Editar</button>'+
+                '<button class="pp-btn pp-btn-danger" onclick="event.stopPropagation();eliminarPerfil(\''+p.id+'\')">🗑</button>'+
+            '</div></div>';
+    }).join('');
+}
+function verLista(){ document.getElementById('viewEditor').style.display='none'; document.getElementById('viewPreview').style.display='none'; document.getElementById('viewLista').style.display='block'; }
+
+/* ── Helpers texto ── */
+function _val(id){return document.getElementById(id).value.trim();}
+function _setVal(id,v){document.getElementById(id).value=v==null?'':v;}
+function _lines(str){return (str||'').split('\n').map(function(s){return s.trim();}).filter(Boolean);}
+function _toLines(arr){return (arr||[]).join('\n');}
+function _parseTD(str){return _lines(str).map(function(l){var i=l.indexOf('::');return i>=0?{t:l.slice(0,i).trim(),d:l.slice(i+2).trim()}:{t:'',d:l};});}
+function _tdToText(arr){return (arr||[]).map(function(o){return o.t?(o.t+' :: '+o.d):o.d;}).join('\n');}
+
+/* ── Editor ── */
+var _editId=null;
+function nuevoPerfil(){
+    _editId=null;
+    var ctx=_ctx();
+    document.getElementById('edTitulo').textContent='Nuevo perfil';
+    ['fPuesto','fConcepto','fSede','fContratacion','fHorario','fOferta','fPrueba','fPrestaciones','fEducacion','fHabilidades','fEstandares','fSalud','fProposito','fContexto','fResponsabilidades'].forEach(function(id){_setVal(id,'');});
+    _setVal('fEmpresa', ctx.negNombre||'');
+    _setVal('fSucursal', ctx.sucNombre||'');
+    _setVal('fEdadMin',''); _setVal('fEdadMax','');
+    document.getElementById('viewLista').style.display='none';
+    document.getElementById('viewPreview').style.display='none';
+    document.getElementById('viewEditor').style.display='block';
+    window.scrollTo(0,0);
+}
+function editarPerfil(id){
+    var p=_perfiles.find(function(x){return x.id===id;}); if(!p) return;
+    _editId=id;
+    var g=p.general||{}, c=p.competencias||{}, sa=p.salud||{}, f=p.funciones||{};
+    document.getElementById('edTitulo').textContent='Editar perfil';
+    _setVal('fPuesto',p.puesto); _setVal('fEmpresa',g.empresa); _setVal('fConcepto',g.concepto);
+    _setVal('fSucursal',g.sucursal); _setVal('fSede',g.sede); _setVal('fContratacion',g.contratacion);
+    _setVal('fHorario',g.horario); _setVal('fOferta',g.ofertaSalarial); _setVal('fPrueba',g.periodoPrueba);
+    _setVal('fPrestaciones',_toLines(g.prestaciones));
+    _setVal('fEducacion',_toLines(c.educacion)); _setVal('fHabilidades',_toLines(c.habilidades)); _setVal('fEstandares',_toLines(c.estandares));
+    _setVal('fEdadMin',sa.edadMin); _setVal('fEdadMax',sa.edadMax); _setVal('fSalud',_tdToText(sa.items));
+    _setVal('fProposito',_toLines(f.proposito)); _setVal('fContexto',_tdToText(f.contexto)); _setVal('fResponsabilidades',_tdToText(f.responsabilidades));
+    document.getElementById('viewLista').style.display='none';
+    document.getElementById('viewPreview').style.display='none';
+    document.getElementById('viewEditor').style.display='block';
+    window.scrollTo(0,0);
+}
+function guardarPerfil(){
+    var puesto=_val('fPuesto');
+    if(!puesto){ alert('Ponle un título al puesto.'); return; }
+    var p={
+        id: _editId||('perf_'+genId()),
+        puesto: puesto,
+        general:{ empresa:_val('fEmpresa'), concepto:_val('fConcepto'), sucursal:_val('fSucursal'), sede:_val('fSede'),
+            contratacion:_val('fContratacion'), horario:_val('fHorario'), ofertaSalarial:_val('fOferta'),
+            periodoPrueba:_val('fPrueba'), prestaciones:_lines(_val('fPrestaciones')) },
+        competencias:{ educacion:_lines(_val('fEducacion')), habilidades:_lines(_val('fHabilidades')), estandares:_lines(_val('fEstandares')) },
+        salud:{ edadMin:_val('fEdadMin'), edadMax:_val('fEdadMax'), items:_parseTD(_val('fSalud')) },
+        funciones:{ proposito:_lines(_val('fProposito')), contexto:_parseTD(_val('fContexto')), responsabilidades:_parseTD(_val('fResponsabilidades')) },
+        updatedAt:new Date().toISOString()
+    };
+    var idx=_perfiles.findIndex(function(x){return x.id===p.id;});
+    if(idx>=0) _perfiles[idx]=p; else _perfiles.push(p);
+    if(typeof sbUpsert==='function') sbUpsert('perfiles_puesto', p);
+    verPerfil(p.id);
+}
+function eliminarPerfil(id){
+    var p=_perfiles.find(function(x){return x.id===id;}); if(!p) return;
+    var go=function(){
+        _perfiles=_perfiles.filter(function(x){return x.id!==id;});
+        if(typeof sbDelete==='function') sbDelete('perfiles_puesto', id);
+        renderLista();
+    };
+    if(window.etaaxConfirm) etaaxConfirm('Eliminar perfil','¿Eliminar el perfil «'+esc(p.puesto||'')+'»? No se puede deshacer.',go,null,{yesLabel:'Sí, eliminar'});
+    else if(confirm('¿Eliminar el perfil "'+(p.puesto||'')+'"?')) go();
+}
+
+/* ── Vista documento ── */
+function _ul(arr){ return arr&&arr.length?('<ul>'+arr.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>'):''; }
+function _td(arr){ return (arr||[]).map(function(o){return '<div class="pp-td">'+(o.t?('<b>'+esc(o.t)+':</b> '):'')+esc(o.d)+'</div>';}).join(''); }
+function verPerfil(id){
+    var p=_perfiles.find(function(x){return x.id===id;}); if(!p) return;
+    _verId=id;
+    var g=p.general||{}, c=p.competencias||{}, sa=p.salud||{}, f=p.funciones||{};
+    var gen=function(l,v){return v?('<div><b>'+l+':</b> '+esc(v)+'</div>'):'';};
+    var edad=(sa.edadMin||sa.edadMax)?('<div class="pp-age">Salud y condición física: <span>'+esc(sa.edadMin||'?')+' a '+esc(sa.edadMax||'?')+' años</span></div>'):'';
+    var fecha=new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'});
+    var html=
+        '<div class="pp-doc-head">'+
+            '<div><div class="pp-doc-eyebrow">Perfil de Puesto</div>'+
+                '<div class="pp-doc-empresa">'+esc(g.empresa||'Empresa')+'</div></div>'+
+            '<div class="pp-doc-mark">ET<span>AA</span>X</div>'+
+        '</div>'+
+        '<div class="pp-doc-puesto">'+esc(p.puesto||'')+'</div>'+
+        '<h2>Información general</h2>'+
+        '<div class="pp-gen">'+
+            gen('Empresa',g.empresa)+gen('Concepto',g.concepto)+gen('Sucursal',g.sucursal)+gen('Sede',g.sede)+
+            gen('Contratación',g.contratacion)+gen('Horario',g.horario)+gen('Oferta salarial',g.ofertaSalarial)+gen('Periodo de prueba',g.periodoPrueba)+
+        '</div>'+
+        (g.prestaciones&&g.prestaciones.length?('<div style="font-size:13px;margin-top:6px"><b>Prestaciones:</b></div>'+_ul(g.prestaciones)):'')+
+        (c.educacion&&c.educacion.length?('<h2>Educación y experiencia laboral</h2>'+_ul(c.educacion)):'')+
+        (c.habilidades&&c.habilidades.length?('<h2>Habilidades interpersonales</h2>'+_ul(c.habilidades)):'')+
+        (c.estandares&&c.estandares.length?('<h2>Estándares de calificación</h2>'+_ul(c.estandares)):'')+
+        (edad||((sa.items||[]).length)?(edad+_td(sa.items)):'')+
+        ((f.proposito||[]).length?('<h2>Propósito del rol</h2>'+_ul(f.proposito)):'')+
+        ((f.contexto||[]).length?('<h2>Contexto del puesto</h2>'+_td(f.contexto)):'')+
+        ((f.responsabilidades||[]).length?('<h2>Responsabilidades operativas</h2>'+_td(f.responsabilidades)):'')+
+        '<div class="pp-doc-foot"><span>etaax.com · EGMx Consultoría Estratégica a&b</span><strong>Perfil de Puesto</strong><span>'+fecha+'</span></div>';
+    document.getElementById('docPreview').innerHTML=html;
+    document.getElementById('viewLista').style.display='none';
+    document.getElementById('viewEditor').style.display='none';
+    document.getElementById('viewPreview').style.display='block';
+    window.scrollTo(0,0);
+}
+
+document.addEventListener('DOMContentLoaded', _sbInit);
+</script>
+<script src="../security.js"></script>
+<script src="../ctx-bar.js"></script>
+</body>
+</html>

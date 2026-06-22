@@ -332,6 +332,12 @@ function cargarReceta(id) {
     if (typeof _cerrarPuenteReceta === 'function') _cerrarPuenteReceta(); // QR cerrado al cargar otra receta
 
     ingredientes = JSON.parse(JSON.stringify(r.ingredientes || []));
+    // Re-sincronizar el costo de los ingredientes VINCULADOS al catálogo: si el insumo
+    // cambió de precio en el módulo de Insumos, la receta lo refleja al abrirla
+    // (antes quedaba congelado el costo guardado al agregarlo).
+    if (typeof recalcularCostoDesdeInsumo === 'function') {
+        ingredientes.forEach(function(ing, i) { if (ing && ing.insumoId) recalcularCostoDesdeInsumo(i); });
+    }
     renderTabla();
 
     // Sub-recetas: la sección de rendimiento/porciones se reconstruye leyendo el DOM

@@ -371,10 +371,10 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
           <thead>
             <tr>
               <th>Negocio</th>
-              <th>Tipo</th>
               <th>Dueño</th>
-              <th>Colaboradores</th>
-              <th>Creado</th>
+              <th>Suscripción</th>
+              <th>Vence</th>
+              <th>Gestión</th>
             </tr>
           </thead>
           <tbody id="tbodyNegocios">
@@ -487,7 +487,94 @@ var ROLES_LABEL = {
 };
 
 var _tabActivo = 'usuarios';
-var _data = { usuarios:[], negocios:[], staff:[], proveedores:[] };
+var _data = { usuarios:[], negocios:[], staff:[], proveedores:[], suscripciones:{} };
+
+/* ── Diálogo estilizado (reemplaza confirm/alert nativos del navegador) ── */
+function admDialog(cfg) {
+    cfg = cfg || {};
+    var danger = !!cfg.danger;
+    var ov = document.createElement('div');
+    ov.setAttribute('data-adm-dialog','1');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.62);display:flex;align-items:center;justify-content:center;padding:20px';
+    var btns = '';
+    if (cfg.cancel !== false)
+        btns += '<button data-act="no" style="background:var(--s2);border:1px solid var(--b1);color:var(--muted);padding:11px 20px;border-radius:9px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer">' + (cfg.noLabel || 'Cancelar') + '</button>';
+    btns += '<button data-act="yes" style="background:' + (danger ? 'var(--red)' : 'var(--green)') + ';border:none;color:#0a0908;padding:11px 20px;border-radius:9px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">' + (cfg.yesLabel || 'Aceptar') + '</button>';
+    ov.innerHTML =
+        '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;max-width:400px;width:100%;padding:26px 24px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)">' +
+            '<div style="font-size:40px;margin-bottom:10px">' + (cfg.icon || (danger ? '⚠️' : '❓')) + '</div>' +
+            (cfg.title ? '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:.5px;color:var(--text);margin-bottom:8px">' + cfg.title + '</div>' : '') +
+            '<div style="font-size:13.5px;color:var(--muted);line-height:1.55;margin-bottom:22px">' + (cfg.msg || '') + '</div>' +
+            '<div style="display:flex;gap:10px;justify-content:center">' + btns + '</div>' +
+        '</div>';
+    function cerrar(){ try { ov.remove(); } catch(e){} }
+    ov.addEventListener('click', function(e){
+        var act = e.target.getAttribute && e.target.getAttribute('data-act');
+        if (e.target === ov || act === 'no') { cerrar(); if (cfg.onNo) cfg.onNo(); }
+        else if (act === 'yes') { cerrar(); if (cfg.onYes) cfg.onYes(); }
+    });
+    document.body.appendChild(ov);
+}
+function admConfirm(title, msg, onYes, opts) {
+    opts = opts || {};
+    admDialog({ icon:opts.icon, title:title, msg:msg, yesLabel:opts.yesLabel, noLabel:opts.noLabel, danger:opts.danger !== false, onYes:onYes });
+}
+function admAlert(msg, opts) {
+    opts = opts || {};
+    admDialog({ icon:opts.icon || 'ℹ️', title:opts.title || '', msg:msg, yesLabel:'Entendido', cancel:false, danger:false });
+}
+// Indicador de carga simple (devuelve función para cerrarlo).
+function _admLoading(msg) {
+    var ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center';
+    ov.innerHTML = '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:14px;padding:20px 28px;color:var(--text);font-size:14px">⏳ ' + (msg || 'Procesando…') + '</div>';
+    document.body.appendChild(ov);
+    return function(){ try { ov.remove(); } catch(e){} };
+}
+
+/* ── RESPALDO DE UN NEGOCIO (descarga JSON con todos sus datos) ── */
+// Tablas que guardan datos POR negocio (las globales como catalogo_* se omiten).
+var TABLAS_RESPALDO = [
+    'negocio_sucursales','recetas','negocio_insumos','proveedores','clientes','staff','permisos',
+    'cortes','depositos','ventas_extra','ventas_productos','gastos','gastos_cats_custom','tarjetas_credito',
+    'inventarios','req_historial','req_pedido','entradas_log','evidencias',
+    'gf_fijos','gf_nominas','gf_nomina_params','previsiones','kpi_targets','sf_metas','sf_otros',
+    'perfiles_puesto','organigrama','suscripciones'
+];
+async function descargarRespaldoNegocio(nid) {
+    var neg    = _data.negocios.find(function(x){ return x.id === nid; });
+    var nombre = (neg && neg.datos && neg.datos.nombre) ? neg.datos.nombre : nid;
+    var cerrar = _admLoading('Generando respaldo de «' + nombre + '»…');
+    try {
+        var bundle = {
+            _tipo: 'respaldo_negocio_etaax', _version: 1, generado: new Date().toISOString(),
+            negocio: neg ? { id: neg.id, usuario_id: neg.usuario_id, datos: neg.datos, created_at: neg.created_at } : { id: nid },
+            tablas: {}
+        };
+        var resultados = await Promise.all(TABLAS_RESPALDO.map(function(t){
+            return _supabase.from(t).select('*').eq('negocio_id', nid)
+                .then(function(r){ return { t:t, data:r.data, error:r.error }; });
+        }));
+        var totalRegs = 0;
+        resultados.forEach(function(r){
+            if (r.error) bundle.tablas[r.t] = { _error: r.error.message };
+            else { bundle.tablas[r.t] = r.data || []; totalRegs += (r.data || []).length; }
+        });
+        var slug  = String(nombre || 'negocio').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'negocio';
+        var fecha = new Date().toISOString().slice(0,10);
+        var blob  = new Blob([JSON.stringify(bundle, null, 2)], { type:'application/json' });
+        var url   = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = 'respaldo_' + slug + '_' + fecha + '.json';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+        cerrar();
+        admAlert('Se descargó el respaldo de «' + esc(nombre) + '»: <strong>' + totalRegs + '</strong> registros en ' + TABLAS_RESPALDO.length + ' tablas.', { icon:'✅', title:'Respaldo listo' });
+    } catch (e) {
+        cerrar();
+        admAlert('No se pudo generar el respaldo: ' + (e.message || e), { icon:'⚠️', title:'Error' });
+    }
+}
 var _impersonateTarget = null;
 
 var TIPOS_PROVEEDOR = {
@@ -566,17 +653,20 @@ async function adminLogin() {
 
 /* ── CARGA DE DATOS ── */
 async function cargarDatos() {
-    var [resU, resN, resS, resP] = await Promise.all([
+    var [resU, resN, resS, resP, resSub] = await Promise.all([
         _supabase.from('usuarios').select('*'),
         _supabase.from('negocios').select('*'),
         _supabase.from('staff').select('*'),
-        _supabase.from('catalogo_proveedores').select('*').order('created_at', { ascending: true })
+        _supabase.from('catalogo_proveedores').select('*').order('created_at', { ascending: true }),
+        _supabase.from('suscripciones').select('*')
     ]);
 
     _data.usuarios    = (resU.data || []).filter(function(u){ return u.id !== ADMIN_EMAIL; });
     _data.negocios    = resN.data || [];
     _data.staff       = resS.data || [];
     _data.proveedores = resP.data || [];
+    _data.suscripciones = {};
+    (resSub.data || []).forEach(function(s){ _data.suscripciones[s.negocio_id] = s; });
 
     renderStats();
     renderUsuarios();
@@ -653,15 +743,73 @@ function renderNegocios() {
         var d     = n.datos || {};
         var dueno = usuariosMap[n.usuario_id];
         var staff = staffCount[n.id] || 0;
-        var fecha = n.created_at ? new Date(n.created_at).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+        var st    = _estadoSuscripcion(n.id);
+        var vence = st.activaHasta
+            ? new Date(st.activaHasta).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) +
+              (st.diasRestantes != null ? ' <span class="text-dim">(' + st.diasRestantes + 'd)</span>' : '')
+            : '—';
+        var badge = '<span class="badge" style="background:' + st.color + '22;color:' + st.color + ';border:1px solid ' + st.color + '55">' + st.label + '</span>';
+        // Botones de gestión (stopPropagation para no abrir el detalle).
+        var btnBase = 'border:none;border-radius:6px;padding:5px 9px;font-family:inherit;font-size:11px;cursor:pointer;margin-right:4px;';
+        var btnActivar = '<button onclick="event.stopPropagation();activarSuscripcion(\'' + n.id + '\')" style="' + btnBase + 'background:rgba(61,190,122,.15);color:#3dbe7a">' + (st.activa ? '+1 mes' : 'Activar 1 mes') + '</button>';
+        var btnCancelar = st.estado !== 'cancelada' && st.estado !== 'pendiente'
+            ? '<button onclick="event.stopPropagation();cancelarSuscripcion(\'' + n.id + '\')" style="' + btnBase + 'background:rgba(232,90,90,.14);color:#e85a5a">Cancelar</button>'
+            : '';
+        var btnRespaldo = '<button title="Descargar respaldo del negocio" onclick="event.stopPropagation();descargarRespaldoNegocio(\'' + n.id + '\')" style="' + btnBase + 'background:var(--s2);color:var(--muted)">⬇️</button>';
+        var btnEliminar = '<button title="Eliminar negocio" onclick="event.stopPropagation();eliminarNegocio(\'' + n.id + '\')" style="' + btnBase + 'background:rgba(232,90,90,.10);color:#e85a5a">🗑️</button>';
         return '<tr class="clickable" onclick="abrirDetalleNegocio(\'' + n.id + '\')">' +
-            '<td><strong>' + esc(d.emoji||'🏢') + ' ' + esc(d.nombre||'—') + '</strong></td>' +
-            '<td class="text-dim">' + esc(d.tipo||'—') + '</td>' +
+            '<td><strong>' + esc(d.emoji||'🏢') + ' ' + esc(d.nombre||'—') + '</strong>' +
+                '<div class="text-dim" style="font-size:11px">' + esc(d.tipo||'—') + ' · ' + staff + ' colab.</div></td>' +
             '<td class="text-dim">' + esc(dueno ? (dueno.nombre||'—') : '—') + '</td>' +
-            '<td><span class="badge badge-neg">' + staff + ' colaborador' + (staff!==1?'es':'') + '</span></td>' +
-            '<td class="text-dim">' + fecha + '</td>' +
+            '<td>' + badge + '</td>' +
+            '<td class="text-dim">' + vence + '</td>' +
+            '<td style="white-space:nowrap">' + btnActivar + btnCancelar + btnRespaldo + btnEliminar + '</td>' +
         '</tr>';
     }).join('');
+}
+
+/* ── Suscripciones (activación manual) ── */
+function _estadoSuscripcion(negId) {
+    var s = (_data.suscripciones || {})[negId];
+    var ahora = new Date();
+    if (!s) return { estado:'pendiente', label:'Pendiente', color:'#e0a93d', activa:false, activaHasta:null, diasRestantes:null };
+    var hasta = s.activa_hasta ? new Date(s.activa_hasta) : null;
+    var activa = s.estado === 'activa' && hasta && hasta > ahora;
+    if (s.estado === 'cancelada') return { estado:'cancelada', label:'Cancelada', color:'#e85a5a', activa:false, activaHasta:s.activa_hasta, diasRestantes:null };
+    if (activa) {
+        var dias = Math.ceil((hasta - ahora) / 86400000);
+        return { estado:'activa', label:'Activa', color:'#3dbe7a', activa:true, activaHasta:s.activa_hasta, diasRestantes:dias };
+    }
+    if (hasta && hasta <= ahora) return { estado:'vencida', label:'Vencida', color:'#e85a5a', activa:false, activaHasta:s.activa_hasta, diasRestantes:0 };
+    return { estado:'pendiente', label:'Pendiente', color:'#e0a93d', activa:false, activaHasta:s.activa_hasta, diasRestantes:null };
+}
+
+// Activar / extender un mes. Si ya está activa, suma el mes a la fecha vigente.
+async function activarSuscripcion(negId) {
+    var s = (_data.suscripciones || {})[negId];
+    var base = (s && s.activa_hasta && new Date(s.activa_hasta) > new Date()) ? new Date(s.activa_hasta) : new Date();
+    base.setMonth(base.getMonth() + 1);
+    var reg = {
+        negocio_id: negId, estado: 'activa', activa_hasta: base.toISOString(),
+        activada_at: new Date().toISOString(), updated_at: new Date().toISOString()
+    };
+    var r = await _supabase.from('suscripciones').upsert(reg, { onConflict: 'negocio_id' });
+    if (r.error) { admAlert('No se pudo activar: ' + r.error.message); return; }
+    _data.suscripciones[negId] = Object.assign({}, s, reg);
+    renderNegocios();
+}
+
+function cancelarSuscripcion(negId) {
+    admConfirm('Cancelar suscripción',
+        'El negocio perderá el acceso hasta que lo reactives. ¿Continuar?',
+        async function(){
+            var reg = { negocio_id: negId, estado: 'cancelada', updated_at: new Date().toISOString() };
+            var r = await _supabase.from('suscripciones').upsert(reg, { onConflict: 'negocio_id' });
+            if (r.error) { admAlert('No se pudo cancelar: ' + r.error.message); return; }
+            _data.suscripciones[negId] = Object.assign({}, _data.suscripciones[negId], reg);
+            renderNegocios();
+        },
+        { yesLabel:'Sí, cancelar', danger:true });
 }
 
 /* ── TABLA STAFF ── */
@@ -786,6 +934,11 @@ function abrirDetalleNegocio(nid) {
             'font-size:13px;font-weight:700;padding:12px;border-radius:8px;border:none;cursor:pointer;letter-spacing:.5px">' +
             '⚡ Entrar a este negocio' +
         '</button>' +
+        '<button onclick="descargarRespaldoNegocio(\'' + n.id + '\')" ' +
+            'style="width:100%;margin-top:10px;background:var(--s2);color:var(--text);font-family:\'DM Sans\',sans-serif;' +
+            'font-size:13px;font-weight:600;padding:11px;border-radius:8px;border:1px solid var(--b1);cursor:pointer;letter-spacing:.3px">' +
+            '⬇️ Descargar respaldo' +
+        '</button>' +
         '<button onclick="eliminarNegocio(\'' + n.id + '\')" ' +
             'style="width:100%;margin-top:10px;background:transparent;color:var(--red,#e05252);font-family:\'DM Sans\',sans-serif;' +
             'font-size:13px;font-weight:600;padding:11px;border-radius:8px;border:1px solid var(--red,#e05252);cursor:pointer;letter-spacing:.3px">' +
@@ -796,19 +949,21 @@ function abrirDetalleNegocio(nid) {
 }
 
 /* ── ELIMINAR NEGOCIO ── */
-async function eliminarNegocio(nid) {
+function eliminarNegocio(nid) {
     var n = _data.negocios.find(function(x){ return x.id === nid; });
     if (!n) return;
     var nombre = (n.datos && n.datos.nombre) ? n.datos.nombre : 'este negocio';
-    if (!confirm('¿Eliminar "' + nombre + '"?\n\nEsta acción borra el negocio de la plataforma y no se puede deshacer.')) return;
-
-    var res = await _supabase.from('negocios').delete().eq('id', nid);
-    if (res.error) { alert('Error: ' + res.error.message); return; }
-
-    _data.negocios = _data.negocios.filter(function(x){ return x.id !== nid; });
-    renderNegocios();
-    renderStats();
-    cerrarDetail();
+    admConfirm('Eliminar negocio',
+        'Se eliminará «' + esc(nombre) + '» de la plataforma. Esta acción no se puede deshacer.',
+        async function(){
+            var res = await _supabase.from('negocios').delete().eq('id', nid);
+            if (res.error) { admAlert('Error: ' + res.error.message); return; }
+            _data.negocios = _data.negocios.filter(function(x){ return x.id !== nid; });
+            renderNegocios();
+            renderStats();
+            cerrarDetail();
+        },
+        { yesLabel:'Sí, eliminar', danger:true });
 }
 
 /* ── ENTRAR A NEGOCIO COMO ADMIN ── */
@@ -962,11 +1117,15 @@ async function guardarProveedor(id) {
     await recargarCatalogos();
 }
 
-async function eliminarProveedor(id) {
-    if (!confirm('¿Eliminar este proveedor del catálogo maestro?')) return;
-    await _supabase.from('catalogo_proveedores').delete().eq('id', id);
-    cerrarForm();
-    await recargarCatalogos();
+function eliminarProveedor(id) {
+    admConfirm('Eliminar proveedor',
+        'Se quitará este proveedor del catálogo maestro.',
+        async function(){
+            await _supabase.from('catalogo_proveedores').delete().eq('id', id);
+            cerrarForm();
+            await recargarCatalogos();
+        },
+        { yesLabel:'Sí, eliminar', danger:true });
 }
 
 /* ── RELOAD CATÁLOGO PROVEEDORES ── */

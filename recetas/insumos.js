@@ -105,7 +105,8 @@
        }
    });
 
-   async function _cargarInsumosDeSupabase() {
+   async function _cargarInsumosDeSupabase(opts) {
+       opts = opts || {};
        var negId = getNegocioActivo();
        if (!negId || typeof _supabase === 'undefined') return;
        try {
@@ -158,8 +159,11 @@
            try { localStorage.setItem(_sk('insumos'), JSON.stringify(sinFotos)); } catch(e) {}
            renderStats(); cargarFiltros(); setVistaInsumos(vistaInsumos);
 
-           // Empujar a Supabase lo que solo existía localmente (no sincronizado)
-           if (soloLocal.length) _sincronizarInsumosSupabase(negId, soloLocal).catch(function(){});
+           // Empujar a Supabase lo que solo existía localmente (no sincronizado).
+           // OJO: NO empujar cuando la recarga viene del realtime (es el eco de
+           // nuestro propio write) — eso causaba el bucle push → realtime → push
+           // que hacía parpadear la pantalla y mataba los botones de editar/ver.
+           if (soloLocal.length && !opts.realtime) _sincronizarInsumosSupabase(negId, soloLocal).catch(function(){});
            // Realtime: si otro dispositivo cambia un insumo, recargar solos (estilo Drive).
            _subInsumosRealtime(negId);
        } catch(e) { console.warn('[_cargarInsumosDeSupabase]', e); }
@@ -167,7 +171,7 @@
 
    // Realtime: el servidor empuja cambios de negocio_insumos → este dispositivo se
    // actualiza solo (sin recargar), como recetas y sucursales.
-   var _insumosRtCh = null, _insumosRtNeg = null;
+   var _insumosRtCh = null, _insumosRtNeg = null, _insRtT = null, _insRtCargando = false;
    function _subInsumosRealtime(negId) {
        if (!negId || _insumosRtNeg === negId || typeof sbRealtime !== 'function') return;
        if (_insumosRtCh && _supabase.removeChannel) { try { _supabase.removeChannel(_insumosRtCh); } catch(e) {} }
@@ -176,7 +180,17 @@
            // No interrumpir si el usuario está editando un insumo (modal abierto).
            var modal = document.getElementById('modalOverlay');
            if (modal && modal.style.display !== 'none' && modal.offsetParent !== null) return;
-           if (getNegocioActivo() === negId) _cargarInsumosDeSupabase();
+           if (getNegocioActivo() !== negId) return;
+           // Debounce: coalescer ráfagas de eventos en UNA sola recarga (sin parpadeo)
+           // y sin re-empujar (realtime:true) → ya no hay bucle.
+           clearTimeout(_insRtT);
+           _insRtT = setTimeout(function() {
+               if (_insRtCargando) return;
+               _insRtCargando = true;
+               Promise.resolve(_cargarInsumosDeSupabase({ realtime: true }))
+                   .catch(function(){})
+                   .then(function(){ _insRtCargando = false; });
+           }, 450);
        });
    }
 

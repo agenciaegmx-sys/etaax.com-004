@@ -653,6 +653,9 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   <!-- ══════════════════════════════════
        VIEW: MÓDULOS
   ══════════════════════════════════ -->
+  <!-- Pantalla de bloqueo por suscripción (cuenta pendiente / vencida / cancelada) -->
+  <div id="viewBloqueado" style="display:none"></div>
+
   <div id="viewModulos" style="display:none">
 
     <!-- Negocio activo + info usuario -->
@@ -887,6 +890,81 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 <script src="staff-auth.js"></script>
 <script>
 var ADMIN_EMAIL = 'admin@etaax.com';
+
+/* ════════════════════════════════════════════════════════
+   SUSCRIPCIÓN — activación manual por negocio (v24)
+   El negocio se bloquea hasta que el admin lo activa desde admin.html.
+   Estados: pendiente | activa | vencida | cancelada.
+════════════════════════════════════════════════════════ */
+// ⚠️ EDWIN: pon aquí tus datos de contacto reales (el WhatsApp en formato
+// internacional sin signos: 52 + 10 dígitos). Se muestran en la pantalla de
+// "cuenta en revisión / vencida" para que el cliente te contacte.
+var ETAAX_CONTACTO = {
+    email:    'agencia.egmx@gmail.com',
+    whatsapp: '524435266424',            // 52 (México) + 10 dígitos → para el link de wa.me
+    whatsappMostrar: '+52 443 526 6424'  // cómo se ve en pantalla
+};
+
+// Lee la suscripción del negocio. Devuelve { ok, estado, activaHasta, indeterminado }.
+// indeterminado=true cuando no se pudo verificar (sin sesión / error de red) →
+// en ese caso NO bloqueamos (fail-open) para no dejar fuera a un cliente que sí pagó.
+async function _leerSuscripcion(negId) {
+    if (!negId || typeof _supabase === 'undefined') return { ok: true, indeterminado: true };
+    try {
+        var ses = await _supabase.auth.getSession();
+        if (!ses.data || !ses.data.session) return { ok: true, indeterminado: true };
+        var r = await _supabase.from('suscripciones').select('estado,activa_hasta').eq('negocio_id', negId).maybeSingle();
+        if (r.error) return { ok: true, indeterminado: true };           // error → fail-open
+        if (!r.data) return { ok: false, estado: 'pendiente' };          // sin fila → nunca activado
+        var activa = r.data.estado === 'activa' && r.data.activa_hasta && new Date(r.data.activa_hasta) > new Date();
+        var estado = activa ? 'activa'
+                   : (r.data.activa_hasta && new Date(r.data.activa_hasta) <= new Date() && r.data.estado !== 'cancelada' ? 'vencida' : r.data.estado);
+        return { ok: activa, estado: estado, activaHasta: r.data.activa_hasta };
+    } catch (e) { return { ok: true, indeterminado: true }; }
+}
+
+// Gate principal: se llama dentro de _showModulos. Si el negocio no está activo,
+// reemplaza la vista de módulos por la pantalla de bloqueo.
+async function _gateSuscripcion(neg) {
+    if (!neg || !neg.id) return;                              // hub general / sin negocio
+    if (_sesion && _sesion.isAdmin) return;                  // admin maestro en modo negocio → libre
+    var sub = await _leerSuscripcion(neg.id);
+    if (sub.ok) return;                                       // activa o indeterminado → dejar pasar
+    _mostrarBloqueo(neg, sub.estado);
+}
+
+function _mostrarBloqueo(neg, estado) {
+    var copia = {
+        pendiente: { icon:'⏳', titulo:'Tu cuenta está en revisión',
+            msg:'Tu negocio se registró correctamente. Para activar el servicio, contáctame y coordinamos la activación de tu mes.' },
+        vencida:   { icon:'🔔', titulo:'Tu suscripción venció',
+            msg:'El acceso a tu negocio está pausado. Contáctame para renovar tu mes y reactivarlo al instante.' },
+        cancelada: { icon:'🚫', titulo:'Tu suscripción está cancelada',
+            msg:'El acceso a tu negocio está desactivado. Si quieres reactivarlo, ponte en contacto conmigo.' }
+    }[estado] || { icon:'🔒', titulo:'Acceso no disponible',
+            msg:'El acceso a tu negocio no está activo. Contáctame para ayudarte.' };
+
+    // Limpiar el contexto: si intentan abrir un módulo por URL directa, page-guard
+    // los rebota al hub y aquí se vuelven a bloquear (no operan datos del negocio).
+    try { localStorage.removeItem('etaax_ctx'); } catch (e) {}
+
+    var waLink = 'https://wa.me/' + ETAAX_CONTACTO.whatsapp +
+        '?text=' + encodeURIComponent('Hola, soy ' + (neg.nombre || 'un negocio') + ' y quiero activar mi suscripción de ETAAX.');
+    var v = document.getElementById('viewBloqueado');
+    v.innerHTML =
+        '<div style="max-width:480px;margin:0 auto;text-align:center;padding:48px 24px">' +
+            '<div style="font-size:54px;margin-bottom:10px">' + copia.icon + '</div>' +
+            '<h2 style="font-family:\'Bebas Neue\',sans-serif;font-size:30px;letter-spacing:1px;color:var(--text);margin:0 0 10px">' + copia.titulo + '</h2>' +
+            '<p style="color:var(--muted);font-size:14px;line-height:1.6;margin:0 0 26px">' + copia.msg + '</p>' +
+            '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:22px">' +
+                '<a href="' + waLink + '" target="_blank" rel="noopener" style="background:#25d366;color:#0a0908;text-decoration:none;font-weight:600;padding:14px;border-radius:10px;font-size:15px">💬 Escríbeme por WhatsApp</a>' +
+                '<a href="mailto:' + ETAAX_CONTACTO.email + '?subject=' + encodeURIComponent('Activar suscripción ETAAX') + '" style="background:var(--s2);border:1px solid var(--b1);color:var(--text);text-decoration:none;font-weight:500;padding:13px;border-radius:10px;font-size:14px">✉️ ' + ETAAX_CONTACTO.email + '</a>' +
+            '</div>' +
+            '<div style="font-size:12px;color:var(--dim);margin-bottom:26px">WhatsApp: ' + _esc(ETAAX_CONTACTO.whatsappMostrar) + '</div>' +
+            '<button onclick="logout()" style="background:transparent;border:1px solid var(--b1);color:var(--muted);padding:10px 22px;border-radius:8px;cursor:pointer;font-family:\'DM Sans\',sans-serif;font-size:13px">Cerrar sesión</button>' +
+        '</div>';
+    showView('viewBloqueado');
+}
 
 /* ════════════════════════════════════════════════════════
    PLANES
@@ -1239,7 +1317,7 @@ function _updateNegociosBar() {
 /* ════════════════════════════════════════════════════════
    NAVEGACIÓN DE VISTAS
 ════════════════════════════════════════════════════════ */
-var VIEWS = ['viewLogin','viewRegistro','viewNegocios','viewModulos'];
+var VIEWS = ['viewLogin','viewRegistro','viewNegocios','viewModulos','viewBloqueado'];
 function showView(id) {
     VIEWS.forEach(function(v){ document.getElementById(v).style.display = (v===id)?'':'none'; });
     window.scrollTo(0,0);
@@ -1547,6 +1625,9 @@ function _renderVistaNegocio() {
         if (window.sbSucPush) sbSucPush(marca.id);
     });
     _subSucRealtime(marca.id);
+    // Gate de suscripción: si el negocio no está activo, esta vista se reemplaza
+    // por la pantalla de bloqueo (cubre también el botón de catálogos globales).
+    _gateSuscripcion(marca);
 }
 
 // Realtime: si las sucursales cambian en otro dispositivo, refrescamos solos.
@@ -2216,6 +2297,7 @@ function _guardarCtx(neg, suc) {
 
 function _showModulos(neg) {
     showView('viewModulos');
+    _gateSuscripcion(neg); // si el negocio no está activo, reemplaza por la pantalla de bloqueo
     // Hub General (admin sin negocio): los módulos no operan sin negocio
     // activo — deshabilitar cards para no abrir páginas vacías.
     // Staff: deshabilitar los módulos a los que su rol no tiene acceso.
