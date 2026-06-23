@@ -54,7 +54,21 @@
 .pp-doc-foot{margin-top:26px;padding-top:10px;border-top:1px solid #ececec;font-size:9px;color:#aaa;display:flex;justify-content:space-between;gap:10px}
 .pp-doc-foot strong{color:#3dbe7a}
 .theme-toggle{position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15)}
-@media print{.top-bar,.ctx-bar,.nav,.theme-toggle,.pp-head,.pp-noprint{display:none!important}.main-content{margin:0!important}body.has-ctx .pp-wrap{padding-top:0}.pp-wrap{padding:0!important}.pp-doc{box-shadow:none;max-width:100%;padding:0}}
+@media print{
+    /* Tamaño carta + margen inferior reservado para el pie repetido */
+    @page{size:letter;margin:1.4cm 1.3cm 1.9cm}
+    .top-bar,.ctx-bar,.nav,.theme-toggle,.pp-head,.pp-noprint{display:none!important}
+    .main-content{margin:0!important}
+    body.has-ctx .pp-wrap{padding-top:0}
+    .pp-wrap{padding:0!important}
+    .pp-doc{box-shadow:none;max-width:100%;padding:0}
+    /* Pie de página fijo: se repite en TODAS las hojas, dentro del margen inferior */
+    .pp-doc-foot{
+        position:fixed;left:1.3cm;right:1.3cm;bottom:0.6cm;
+        margin:0;padding-top:8px;
+        border-top:1px solid #ececec;background:#fff;
+    }
+}
 </style>
 </head>
 <body>

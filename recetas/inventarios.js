@@ -252,6 +252,45 @@ function calcVentasBaseRecetas(insumoId) {
     return total; // g / ml / pza
 }
 
+// ── PREBATCH: producción de batches (sub-receta→insumo) ──────────
+// Insumos prebatch disponibles = sub-recetas convertidas a insumo.
+function prebatchesProducibles() {
+    return getInsumos().filter(function(x){ return x.esSubReceta && x.recetaId; });
+}
+// Cuánto de un insumo BASE se consumió al producir batches (en su unidad base ml/g/pza).
+function consumoBasesPorProduccion(insumoId) {
+    var prod = (invActual && invActual.prebatchProducidos) || {};
+    var total = 0;
+    Object.keys(prod).forEach(function(pid) {
+        var n = parseFloat(prod[pid]) || 0;
+        if (!n) return;
+        var pre = getInsumos().find(function(x){ return x.id === pid; });
+        if (!pre || !pre.recetaId) return;
+        var sr = getRecetas().find(function(r){ return r.id === pre.recetaId; });
+        if (!sr) return;
+        (sr.ingredientes || []).forEach(function(ing){
+            if (ing.insumoId === insumoId)
+                total += ingredienteBase(parseFloat(ing.cantidad) || 0, ing.unidad) * n; // x batch x #batches
+        });
+    });
+    return total; // unidad base del ingrediente (ml / g / pza)
+}
+// Producción de ESTE insumo si es un prebatch, en la unidad de su fila (copas / base / pza).
+function _prodPrebatchUnidades(fila) {
+    var n = (invActual && invActual.prebatchProducidos && parseFloat(invActual.prebatchProducidos[fila.insumoId])) || 0;
+    if (!n) return 0;
+    if (fila.tipo === 'copa') return n * (fila.contNeto > 0 && fila.copaML > 0 ? fila.contNeto / fila.copaML : 0); // batches→copas
+    if (fila.tipo === 'peso') return n * (fila.contNeto || 0); // batches→unidad base
+    return n; // pza: 1 batch = 1 pza
+}
+// Consumo de ESTE insumo base por la producción de batches, en la unidad de su fila.
+function _consumoBaseProd(fila) {
+    var u = consumoBasesPorProduccion(fila.insumoId); // ml / g / pza base
+    if (!u) return 0;
+    if (fila.tipo === 'copa') return fila.copaML > 0 ? u / fila.copaML : 0; // base ml → copas
+    return u; // peso (g/ml) y pza: directo
+}
+
 // ── Fuzzy match cancelación → insumo ─────────────────────────
 function _normMatch(s) {
     return (s || '').toString()
@@ -341,12 +380,15 @@ function calcExistencia(fila) {
 
 function calcExistenciaTeorica(fila) {
     // Alimentos (unidad base): existencia anterior + entradas − consumo por recetas − merma.
+    // Prebatch: + lo producido (si esta fila es un prebatch) / − lo consumido al producir batches (si es base).
+    const prodAdd = _prodPrebatchUnidades(fila);
+    const prodSub = _consumoBaseProd(fila);
     if (fila.tipo === 'peso') {
         const eaP    = parseFloat(fila.existenciaAnterior) || 0;
         const entP   = getEntradasBottles(fila.insumoId);     // entradas en unidad base
         const ventP  = calcVentasBaseRecetas(fila.insumoId);  // consumo por platillos vendidos
         const mermaP = parseFloat(fila.mermaBase) || 0;
-        return eaP + entP - ventP - mermaP;
+        return eaP + entP + prodAdd - ventP - mermaP - prodSub;
     }
     const ea          = parseFloat(fila.existenciaAnterior) || 0;
     const ventasRec   = calcVentasCopasRecetas(fila.insumoId, fila.copaML);
@@ -356,8 +398,8 @@ function calcExistenciaTeorica(fila) {
     const merma       = parseFloat(fila.mermaCopas) || 0;
     const totalCopas  = ventasRec + ventasDir + cancelCopas + cortesia + merma;
     const entTotal    = getEntradasCopas(fila);
-    if (fila.tipo === 'pza') return ea + entTotal - (fila.ventasBotella || 0);
-    return ea + entTotal - totalCopas - (fila.ventasBotella || 0) * (fila.contNeto > 0 && fila.copaML > 0 ? fila.contNeto / fila.copaML : 0);
+    if (fila.tipo === 'pza') return ea + entTotal + prodAdd - (fila.ventasBotella || 0) - prodSub;
+    return ea + entTotal + prodAdd - totalCopas - prodSub - (fila.ventasBotella || 0) * (fila.contNeto > 0 && fila.copaML > 0 ? fila.contNeto / fila.copaML : 0);
 }
 
 function getEntradasBottles(insumoId) {
@@ -781,7 +823,7 @@ function iniciarInventario() {
     if (esNuevo) {
         invActual = {
             id: genId(), cerrado: false,
-            cocktailsVendidos: {}, cancelaciones: [], descuentos: [], entradasLog: [],
+            cocktailsVendidos: {}, prebatchProducidos: {}, cancelaciones: [], descuentos: [], entradasLog: [],
             filas: [], capitalCosto: 0, capitalCarta: 0, diferenciaCosto: 0
         };
     }
@@ -1864,7 +1906,7 @@ function renderStep3() {
     </div>`;
     if (vistaVentas === 'lista')    return switcher + renderStep3Insumos();
     if (vistaVentas === 'busqueda') return switcher + renderStep3BusquedaScaffold();
-    return switcher + renderStep3Menu();
+    return switcher + _renderProduccionPrebatch() + renderStep3Menu();
 }
 
 function renderStep3Insumos() {
@@ -1942,6 +1984,58 @@ function updCntMenu(id, delta) {
         const item = el.closest('.step3-menu-item');
         if (item) item.classList.toggle('has-cnt', nuevo > 0);
     }
+}
+
+// ── Producción de prebatch (batches hechos) ──────────────────────
+function updProduccionPrebatch(id, delta) {
+    if (!invActual.prebatchProducidos) invActual.prebatchProducidos = {};
+    const actual = parseFloat(invActual.prebatchProducidos[id] || 0);
+    const nuevo  = Math.max(0, actual + delta);
+    invActual.prebatchProducidos[id] = nuevo;
+    const el = document.getElementById('prod-' + id);
+    if (el) {
+        el.textContent = nuevo;
+        el.classList.toggle('active', nuevo > 0);
+        const item = el.closest('.step3-menu-item');
+        if (item) item.classList.toggle('has-cnt', nuevo > 0);
+    }
+}
+
+function _renderProduccionPrebatch() {
+    const pres = prebatchesProducibles();
+    if (!pres.length) return '';
+    const prod = invActual?.prebatchProducidos || {};
+    const items = pres.map(p => {
+        const n  = parseFloat(prod[p.id]) || 0;
+        const sr = getRecetas().find(r => r.id === p.recetaId);
+        const bases = sr ? (sr.ingredientes||[]).map(ing => {
+            const ins = getInsumos().find(x => x.id === ing.insumoId);
+            return ins ? ins.nombre.split(' ')[0] : '?';
+        }).slice(0,3).join(', ') : '';
+        return `<div class="step3-menu-item ${n>0?'has-cnt':''}">
+            <div style="flex:1;min-width:0">
+                <div style="font-weight:600;font-size:14px;color:var(--text);
+                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${etx(p.nombre)}</div>
+                ${bases?`<div style="font-size:10px;color:var(--text-dim);margin-top:2px;
+                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis">↓ ${etx(bases)}</div>`:''}
+            </div>
+            <div class="step3-counter">
+                <button onclick="updProduccionPrebatch('${p.id}',-1)">−</button>
+                <span id="prod-${p.id}" class="step3-cnt-val ${n>0?'active':''}">${n}</span>
+                <button onclick="updProduccionPrebatch('${p.id}',1)">+</button>
+            </div>
+        </div>`;
+    }).join('');
+    return `<div style="padding:0 16px 16px">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1.5px;
+            color:var(--accent);padding:12px 0 4px;border-bottom:1px solid var(--border);margin-bottom:4px">
+            🍸 Producción de prebatch — batches hechos
+        </div>
+        <div style="font-size:11px;color:var(--text-dim);padding:0 0 10px">
+            Anota cuántos batches hiciste: descuenta los insumos base por receta y le suma la producción al prebatch.
+        </div>
+        <div class="step3-menu-grid">${items}</div>
+    </div>`;
 }
 
 function renderStep3Menu() {

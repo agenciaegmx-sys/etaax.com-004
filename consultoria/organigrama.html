@@ -22,7 +22,7 @@ body.nav-open .org-top{left:200px}
 .org-btn.on{background:rgba(122,184,245,.16);border-color:#7ab8f5;color:#7ab8f5}
 .org-hint{font-size:11px;color:var(--text-dim);margin-left:auto}
 /* viewport / lienzo neuronal */
-#viewport{position:fixed;inset:0;left:52px;transition:left .2s;cursor:grab;background:
+#viewport{position:fixed;inset:0;left:52px;transition:left .2s;cursor:grab;touch-action:none;background:
     radial-gradient(circle at 30% 25%, rgba(61,190,122,.07), transparent 45%),
     radial-gradient(circle at 75% 70%, rgba(122,184,245,.07), transparent 45%),
     var(--bg)}
@@ -126,7 +126,7 @@ body.nav-open #viewport{left:200px}
         <div class="om-field"><label>Nombre de la persona</label><input id="nmNombre" placeholder="Ej. Juan García"></div>
         <div class="om-field"><label>Acceso de comunicación</label><input id="nmAcceso" placeholder="Ej. Reporta a dirección · coordina cocina y barra"></div>
         <div class="om-field"><label>Contexto del rol</label><textarea id="nmContexto" placeholder="Responsabilidad principal, alcance, con quién se sincroniza…"></textarea></div>
-        <div class="om-field"><label>Perfil de puesto (opcional)</label><select id="nmPerfil"></select>
+        <div class="om-field"><label>Perfil de puesto (opcional)</label><select id="nmPerfil" onchange="_perfilElegido()"></select>
             <button class="org-btn" style="margin-top:7px;font-size:11px;padding:6px 10px" onclick="abrirPerfilDeNodo()">📋 Abrir perfil vinculado →</button></div>
         <div class="om-field"><label>Color</label><div class="om-colors" id="nmColors"></div></div>
         <div class="om-actions">
@@ -215,30 +215,50 @@ viewport.addEventListener('wheel',function(e){
     pan.x=mx-((mx-pan.x)/prev)*zoom; pan.y=my-((my-pan.y)/prev)*zoom; applyTransform();
 },{passive:false});
 
-var panning=false, panStart=null, dragId=null, dragStart=null, moved=0;
-viewport.addEventListener('mousedown',function(e){
-    if(e.target.closest('.org-node')) return;
-    panning=true; viewport.classList.add('grabbing'); panStart={x:e.clientX-pan.x,y:e.clientY-pan.y};
-});
-document.addEventListener('mousemove',function(e){
-    if(panning){ pan.x=e.clientX-panStart.x; pan.y=e.clientY-panStart.y; applyTransform(); return; }
+var panning=false, panStart=null, dragId=null, dragStart=null, moved=0, _lastPt=null;
+function _startPan(cx,cy){ panning=true; viewport.classList.add('grabbing'); panStart={x:cx-pan.x,y:cy-pan.y}; }
+function _moveTo(cx,cy){
+    if(panning){ pan.x=cx-panStart.x; pan.y=cy-panStart.y; applyTransform(); return; }
     if(dragId){
         var nd=_nodos.find(function(n){return n.id===dragId;}); if(!nd) return;
-        nd.x=dragStart.x+(e.clientX-dragStart.mx)/zoom;
-        nd.y=dragStart.y+(e.clientY-dragStart.my)/zoom;
-        moved+=Math.abs(e.movementX)+Math.abs(e.movementY);
+        nd.x=dragStart.x+(cx-dragStart.mx)/zoom;
+        nd.y=dragStart.y+(cy-dragStart.my)/zoom;
+        if(_lastPt) moved+=Math.abs(cx-_lastPt.x)+Math.abs(cy-_lastPt.y); // sirve para mouse y touch
+        _lastPt={x:cx,y:cy};
         var el=document.getElementById('nd_'+nd.id); if(el){ el.style.left=nd.x+'px'; el.style.top=nd.y+'px'; }
         renderConex();
     }
-});
-document.addEventListener('mouseup',function(){
+}
+function _endPointer(){
+    _lastPt=null;
     if(panning){ panning=false; viewport.classList.remove('grabbing'); }
     if(dragId){
         var id=dragId; dragId=null;          // limpiar SIEMPRE → nunca se queda pegado
-        if(moved<=4){ if(!_connectMode) abrirModal(id); }   // clic sin arrastre → editar
+        if(moved<=4){ if(!_connectMode) abrirModal(id); }   // clic/tap sin arrastre → editar
         else { guardar(); }                                  // arrastre real → guardar posición
     }
+}
+// Mouse
+viewport.addEventListener('mousedown',function(e){
+    if(e.target.closest('.org-node')) return;
+    _startPan(e.clientX,e.clientY);
 });
+document.addEventListener('mousemove',function(e){ _moveTo(e.clientX,e.clientY); });
+document.addEventListener('mouseup',_endPointer);
+// Touch (tablet) — mismos gestos con un dedo
+viewport.addEventListener('touchstart',function(e){
+    if(e.target.closest('.org-node')) return;
+    if(e.touches.length!==1) return;
+    _startPan(e.touches[0].clientX,e.touches[0].clientY);
+},{passive:true});
+document.addEventListener('touchmove',function(e){
+    if(!panning&&!dragId) return;
+    if(e.touches.length!==1) return;
+    e.preventDefault();                       // evita el scroll de la página al arrastrar/panear
+    _moveTo(e.touches[0].clientX,e.touches[0].clientY);
+},{passive:false});
+document.addEventListener('touchend',_endPointer);
+document.addEventListener('touchcancel',_endPointer);
 
 /* ── Nodos ── */
 function nuevoNodo(){
@@ -261,10 +281,18 @@ function nodeEl(nd){
     el.addEventListener('mousedown',function(e){
         e.stopPropagation();
         if(_connectMode){ _connectClick(nd.id); return; }
-        dragId=nd.id; moved=0; dragStart={mx:e.clientX,my:e.clientY,x:nd.x,y:nd.y};
-        if(!_connectMode) document.querySelectorAll('.org-node.sel').forEach(function(n){n.classList.remove('sel');});
+        dragId=nd.id; moved=0; _lastPt=null; dragStart={mx:e.clientX,my:e.clientY,x:nd.x,y:nd.y};
+        document.querySelectorAll('.org-node.sel').forEach(function(n){n.classList.remove('sel');});
     });
-    // OJO: el soltar (mouseup) lo maneja el listener del document para que SIEMPRE
+    el.addEventListener('touchstart',function(e){
+        if(e.touches.length!==1) return;
+        e.stopPropagation(); e.preventDefault();   // evita scroll y el "ghost click" del mouse sintético
+        if(_connectMode){ _connectClick(nd.id); return; }
+        var t=e.touches[0];
+        dragId=nd.id; moved=0; _lastPt=null; dragStart={mx:t.clientX,my:t.clientY,x:nd.x,y:nd.y};
+        document.querySelectorAll('.org-node.sel').forEach(function(n){n.classList.remove('sel');});
+    },{passive:false});
+    // OJO: el soltar (mouseup/touchend) lo maneja el listener del document para que SIEMPRE
     // limpie dragId. Si lo manejáramos aquí con stopPropagation, el nodo se quedaba
     // "pegado" al cursor y el siguiente clic abría el editor.
     return el;
@@ -349,6 +377,19 @@ async function _refrescarPerfiles(selId){
 function pickColor(c){
     _editColor=c;
     document.querySelectorAll('.om-color').forEach(function(el,i){ el.classList.toggle('sel',COLORS[i]===c); });
+}
+function _perfilElegido(){
+    var pid=document.getElementById('nmPerfil').value;
+    if(!pid) return;
+    var p=_perfiles.find(function(x){return x.id===pid;}); if(!p) return;
+    var pu=document.getElementById('nmPuesto');
+    if(!pu.value.trim()) pu.value=p.puesto||'';           // solo si está vacío (no piso lo que escribiste)
+    var ctx=document.getElementById('nmContexto');
+    if(!ctx.value.trim()){
+        var prop=(p.funciones&&p.funciones.proposito)||[];
+        if(prop.length) ctx.value=prop.join(' ');
+    }
+    document.getElementById('nmTitle').textContent=pu.value||'Nuevo puesto';
 }
 function abrirPerfilDeNodo(){
     var pid=document.getElementById('nmPerfil').value;
