@@ -220,6 +220,38 @@ function calcVentasCopasRecetas(insumoId, copaML) {
     return total;
 }
 
+// ── INVENTARIO DE ALIMENTOS: consumo teórico en unidad base (g/ml/pza) ──
+// Convierte la cantidad de un ingrediente de receta a la unidad base chica.
+function ingredienteBase(cantidad, unidad) {
+    const u = (unidad || '').toUpperCase();
+    if (u === 'KG' || u === 'LT') return cantidad * 1000; // a g / ml
+    if (u === 'OZ') return cantidad * OZ_ML;              // a ml
+    return cantidad;                                       // G, ML, PZA, PORCION… tal cual
+}
+// Unidad base de un insumo de alimentos según su presentación.
+function unidadBaseInsumo(ins) {
+    const p = ((ins && ins.presentaciones) || [])[0] || {};
+    const u = (p.umContenido || '').toUpperCase();
+    if (u === 'KG' || u === 'G') return 'G';
+    if (u === 'LT' || u === 'ML') return 'ML';
+    return 'PZA';
+}
+// Consumo teórico de un insumo por las recetas de ALIMENTOS vendidas (en unidad base).
+function calcVentasBaseRecetas(insumoId) {
+    const recetas  = getRecetas().filter(r => r.tipo === 'alimentos' && r.status !== 'inactiva');
+    const vendidos = (invActual && invActual.cocktailsVendidos) || {};
+    let total = 0;
+    recetas.forEach(r => {
+        const uds = parseFloat(vendidos[r.id]) || 0;
+        if (!uds) return;
+        (r.ingredientes || []).forEach(ing => {
+            if (ing.insumoId === insumoId)
+                total += ingredienteBase(parseFloat(ing.cantidad) || 0, ing.unidad) * uds;
+        });
+    });
+    return total; // g / ml / pza
+}
+
 // ── Fuzzy match cancelación → insumo ─────────────────────────
 function _normMatch(s) {
     return (s || '').toString()
@@ -288,6 +320,7 @@ function calcMLReales(fila) {
 }
 
 function calcExistenciaBot(fila) {
+    if (fila.tipo === 'peso') return parseFloat(fila.existenciaPeso) || 0; // alimentos: conteo en unidad base
     const cerradas = (fila.cerradasBodega || 0) + (fila.cerradasBarra || 0);
     const mlReales = calcMLReales(fila);
     if (fila.tipo === 'pza') return cerradas + (mlReales > 0 ? 1 : 0);
@@ -297,6 +330,7 @@ function calcExistenciaBot(fila) {
 }
 
 function calcExistencia(fila) {
+    if (fila.tipo === 'peso') return parseFloat(fila.existenciaPeso) || 0; // alimentos: conteo en unidad base
     const cerradas = (fila.cerradasBodega || 0) + (fila.cerradasBarra || 0);
     const mlReales = calcMLReales(fila);
     if (fila.tipo === 'pza') return cerradas + (mlReales > 0 ? 1 : 0);
@@ -306,6 +340,14 @@ function calcExistencia(fila) {
 }
 
 function calcExistenciaTeorica(fila) {
+    // Alimentos (unidad base): existencia anterior + entradas − consumo por recetas − merma.
+    if (fila.tipo === 'peso') {
+        const eaP    = parseFloat(fila.existenciaAnterior) || 0;
+        const entP   = getEntradasBottles(fila.insumoId);     // entradas en unidad base
+        const ventP  = calcVentasBaseRecetas(fila.insumoId);  // consumo por platillos vendidos
+        const mermaP = parseFloat(fila.mermaBase) || 0;
+        return eaP + entP - ventP - mermaP;
+    }
     const ea          = parseFloat(fila.existenciaAnterior) || 0;
     const ventasRec   = calcVentasCopasRecetas(fila.insumoId, fila.copaML);
     const ventasDir   = parseFloat(fila.ventasCopasDirectas) || 0;
@@ -360,6 +402,7 @@ function semaforo(dif, ref) {
 
 function costoCopa(fila) {
     const cu = fila.costoUnitario || 0;
+    if (fila.tipo === 'peso') { const cn = fila.contNeto || 0; return cn > 0 ? cu / cn : cu; } // costo por unidad base
     if (fila.tipo === 'pza') return cu;
     return fila.copaML > 0 && cu > 0 ? cu * (fila.copaML / 1000) : cu;
 }
@@ -780,8 +823,11 @@ function cargarProductosCaptura() {
 
         const p      = (ins.presentaciones || [])[0];
         const catLow = (ins.categoria || '').toLowerCase();
-        const tipo   = catLow.includes('cerveza') || catLow.includes('refresco') ||
-                       catLow.includes('soda')    || catLow.includes('agua') ? 'pza' : 'copa';
+        // ALIMENTOS: tipo 'peso' (conteo en unidad base g/ml/pza, descuento por recetas).
+        const esFood = (ins.familia || '').toLowerCase().includes('aliment');
+        const tipo   = esFood ? 'peso'
+                     : (catLow.includes('cerveza') || catLow.includes('refresco') ||
+                        catLow.includes('soda')    || catLow.includes('agua') ? 'pza' : 'copa');
 
         let copaML = COPA_STD.default;
         for (const [key, val] of Object.entries(COPA_STD)) {
@@ -793,9 +839,11 @@ function cargarProductosCaptura() {
         }
 
         const pesoCristal = parseFloat(p?.pesoCristal) || 0;
-        const contML = (() => {
+        const _umP = (p?.umContenido || 'ML').toUpperCase();
+        // Contenido neto en unidad base: licor en ML; alimentos en g/ml/pza (KG/LT → ×1000).
+        const contBase = (() => {
             const cn = parseFloat(p?.contNeto) || 0;
-            return (p?.umContenido||'ML').toUpperCase()==='LT' ? cn*1000 : cn;
+            return (_umP === 'LT' || _umP === 'KG') ? cn * 1000 : cn;
         })();
 
         return {
@@ -804,7 +852,8 @@ function cargarProductosCaptura() {
             categoria: ins.categoria  || '',
             subcategoria: ins.subcategoria || '',
             familia:  ins.familia    || '',
-            tipo, copaML, contNeto: contML, pesoCristal,
+            tipo, copaML, contNeto: contBase, pesoCristal,
+            baseUnit: esFood ? unidadBaseInsumo(ins) : '',   // g / ml / pza (solo alimentos)
             costoUnitario:  parseFloat(p?.costoUnitario) || parseFloat(p?.precio) || 0,
             precioCarta:    parseFloat(p?.precioCarta)   || 0,
             precioCartaBot: parseFloat(p?.precioCartaBot)|| 0,
@@ -813,10 +862,11 @@ function cargarProductosCaptura() {
             // Paso 1: existencias físicas
             cerradasBodega: 0, cerradasBarra: 0,
             pesos: ['','','',''],   // 4 botellas abiertas (kg)
+            existenciaPeso: '',     // alimentos: conteo físico en unidad base
             // Paso 2: entradas (hasta 5 por producto)
             entradas: ['','','','',''],
-            // Paso 3: ventas directas
-            ventasCopasDirectas: 0, ventasBotella: 0,
+            // Paso 3: ventas directas / merma
+            ventasCopasDirectas: 0, ventasBotella: 0, mermaBase: 0,
         };
     });
 }
@@ -957,7 +1007,7 @@ function refreshFilaDisplay(idx) {
     const fila   = filasCaptura[idx];
     const lts    = calcNetLiters(fila);
     const exist  = calcExistenciaBot(fila);
-    const efUnit = fila.tipo === 'pza' ? 'pza' : 'bot';
+    const efUnit = fila.tipo === 'peso' ? (fila.baseUnit||'g').toLowerCase() : (fila.tipo === 'pza' ? 'pza' : 'bot');
     const elML   = document.getElementById('ml-'+idx);
     const elEF   = document.getElementById('ef-'+idx);
     if (elML) {
@@ -1211,9 +1261,10 @@ function renderCardExist() {
     const fila = filasCaptura.find(f => f.insumoId === _existInsumoId);
     if (!fila) { cont.innerHTML = ''; return; }
     const idx    = filasCaptura.indexOf(fila);
+    if (fila.tipo === 'peso') { cont.innerHTML = _cardExistPeso(fila, idx); return; } // alimentos: tarjeta propia
     const metodo = fila.metodoCaptura || 'peso';
     const exist  = calcExistenciaBot(fila);
-    const efUnit = fila.tipo === 'pza' ? 'pza' : 'bot';
+    const efUnit = fila.tipo === 'peso' ? (fila.baseUnit||'g').toLowerCase() : (fila.tipo === 'pza' ? 'pza' : 'bot');
     const eaCopas = parseFloat(fila.existenciaAnterior) || 0;
     const copasBot = fila.contNeto>0&&fila.copaML>0 ? fila.contNeto/fila.copaML : 0;
     const eaBot  = fila.tipo==='pza' ? eaCopas : (copasBot>0 ? eaCopas/copasBot : eaCopas);
@@ -1291,6 +1342,87 @@ function renderCardExist() {
         </div>`;
 }
 
+// ── ALIMENTOS: tarjeta de captura por peso (unidad base) ──────
+function _fmtBase(v){ v = parseFloat(v)||0; return v % 1 === 0 ? v.toFixed(0) : v.toFixed(1); }
+function _cardExistPeso(fila, idx) {
+    const u    = (fila.baseUnit || 'G').toLowerCase();
+    const ea   = parseFloat(fila.existenciaAnterior) || 0;
+    const ent  = getEntradasBottles(fila.insumoId);
+    const cons = calcVentasBaseRecetas(fila.insumoId);
+    const merm = parseFloat(fila.mermaBase) || 0;
+    const teo  = calcExistenciaTeorica(fila);
+    const fis  = parseFloat(fila.existenciaPeso) || 0;
+    const dif  = fis - teo;
+    const difCol = Math.abs(dif) <= teo * 0.1 ? 'var(--green)' : 'var(--red)';
+    return `
+        <div class="ent-form-card">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+                <div>
+                    <div style="font-weight:700;font-size:17px;color:var(--text)">${etx(fila.nombre)}</div>
+                    <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;align-items:center">
+                        ${fila.categoria?`<span class="inv-tag">${etx(fila.categoria)}</span>`:''}
+                        <span class="inv-tag" style="background:rgba(61,190,122,.15);border-color:rgba(61,190,122,.45);color:var(--green)">⚖️ ${u}</span>
+                        <span style="font-size:11px;color:var(--text-dim);margin-left:4px">Anterior: ${_fmtBase(ea)} ${u}</span>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                    <button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">📋 Ver</button>
+                    <button onclick="limpiarSeleccionExist()" style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:20px;padding:0;line-height:1">✕</button>
+                </div>
+            </div>
+
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text-muted);line-height:1.7">
+                Anterior <b>${_fmtBase(ea)}</b> + entradas <b>${_fmtBase(ent)}</b> − consumo recetas <b style="color:var(--accent)">${_fmtBase(cons)}</b> − merma <b>${_fmtBase(merm)}</b>
+                <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center">
+                    <span>Existencia teórica</span>
+                    <b id="teo-${idx}" style="color:var(--text);font-size:14px">${_fmtBase(teo)} ${u}</b>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:10px;margin-bottom:8px">
+                <div style="flex:1.3">
+                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Existencia física (${u})</div>
+                    <input type="number" class="inv-num-input" style="width:100%;box-sizing:border-box" value="${fila.existenciaPeso||''}" min="0" step="any" placeholder="0"
+                        oninput="updCapturaPeso(${idx},'existenciaPeso',this.value)">
+                </div>
+                <div style="flex:1">
+                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Entradas (${u})</div>
+                    <input type="number" class="inv-num-input" style="width:100%;box-sizing:border-box" value="${(fila.entradas&&fila.entradas[0])||''}" min="0" step="any" placeholder="0"
+                        oninput="updCapturaPeso(${idx},'entrada0',this.value)">
+                </div>
+                <div style="flex:1">
+                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Merma (${u})</div>
+                    <input type="number" class="inv-num-input" style="width:100%;box-sizing:border-box" value="${fila.mermaBase||''}" min="0" step="any" placeholder="0"
+                        oninput="updCapturaPeso(${idx},'mermaBase',this.value)">
+                </div>
+            </div>
+
+            <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+                <span style="font-size:12px;color:var(--text-dim)">Diferencia (física − teórica)</span>
+                <span id="ef-${idx}" style="font-size:20px;font-weight:900;color:${difCol}">${dif>0?'+':''}${_fmtBase(dif)} ${u}</span>
+            </div>
+
+            <div style="margin-top:14px;display:flex;gap:8px">
+                <button onclick="limpiarSeleccionExist()" style="flex:1;background:rgba(61,190,122,.15);border:1px solid var(--green);color:var(--green);border-radius:8px;padding:10px 0;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">✓ Registrado — Siguiente →</button>
+            </div>
+        </div>`;
+}
+function updCapturaPeso(idx, campo, val) {
+    const fila = filasCaptura[idx]; if (!fila) return;
+    if (campo === 'entrada0') { if (!fila.entradas) fila.entradas = ['','','','','']; fila.entradas[0] = val; }
+    else fila[campo] = val;
+    // Actualizar teórica + diferencia sin re-render (no perder el foco del input).
+    const u   = (fila.baseUnit || 'G').toLowerCase();
+    const teo = calcExistenciaTeorica(fila);
+    const fis = parseFloat(fila.existenciaPeso) || 0;
+    const dif = fis - teo;
+    const teoEl = document.getElementById('teo-' + idx);
+    if (teoEl) teoEl.textContent = _fmtBase(teo) + ' ' + u;
+    const efEl = document.getElementById('ef-' + idx);
+    if (efEl) { efEl.textContent = (dif > 0 ? '+' : '') + _fmtBase(dif) + ' ' + u; efEl.style.color = Math.abs(dif) <= teo * 0.1 ? 'var(--green)' : 'var(--red)'; }
+    _autoGuardar();
+}
+
 function renderResumenExist() {
     const cont = document.getElementById('existResumen');
     if (!cont) return;
@@ -1302,7 +1434,7 @@ function renderResumenExist() {
     cont.innerHTML = capturados.map(fila => {
         const idx    = filasCaptura.indexOf(fila);
         const exist  = calcExistenciaBot(fila);
-        const efUnit = fila.tipo==='pza'?'pza':'bot';
+        const efUnit = fila.tipo==='peso'?(fila.baseUnit||'g').toLowerCase():(fila.tipo==='pza'?'pza':'bot');
         const metodo = fila.metodoCaptura || 'peso';
         const metIcon = metodo==='nivel'?'🌡️':metodo==='foto'?'📷':'⚖️';
         return `<div class="ent-log-fila" onclick="seleccionarProductoExist('${fila.insumoId}')"
@@ -1331,10 +1463,10 @@ function renderStep1Lista(filas) {
         const eaCopas  = parseFloat(fila.existenciaAnterior) || 0;
         const copasBot = fila.contNeto > 0 && fila.copaML > 0 ? fila.contNeto / fila.copaML : 0;
         const eaBot    = fila.tipo === 'pza' ? eaCopas : (copasBot > 0 ? eaCopas / copasBot : eaCopas);
-        const eaUnit   = fila.tipo === 'pza' ? 'pza' : 'bot';
+        const eaUnit   = fila.tipo === 'peso' ? (fila.baseUnit||'g').toLowerCase() : (fila.tipo === 'pza' ? 'pza' : 'bot');
         const lts      = calcNetLiters(fila);
         const existBot = calcExistenciaBot(fila);
-        const efUnit   = fila.tipo === 'pza' ? 'pza' : 'bot';
+        const efUnit   = fila.tipo === 'peso' ? (fila.baseUnit||'g').toLowerCase() : (fila.tipo === 'pza' ? 'pza' : 'bot');
         const tipoSt   = fila.tipo === 'pza'
             ? 'background:rgba(61,190,122,0.15);border-color:rgba(61,190,122,0.45);color:var(--green)'
             : 'background:rgba(245,200,66,0.12);border-color:rgba(245,200,66,0.45);color:var(--accent)';
@@ -1488,7 +1620,7 @@ function renderStep1Galeria(filas) {
             <div class="inv-item-card-bot">${(() => {
                 const lt = calcNetLiters(fila);
                 const eb = calcExistenciaBot(fila);
-                const eu = fila.tipo==='pza'?'pza':'bot';
+                const eu = fila.tipo==='peso'?(fila.baseUnit||'g').toLowerCase():(fila.tipo==='pza'?'pza':'bot');
                 return `
                 <span id="ml-${idx}" style="font-size:13px;color:${lt>0?'var(--green)':'var(--text-dim)'}">
                     ${fmtLt(lt)}</span>
@@ -1563,7 +1695,7 @@ function renderStep2Lista(filas) {
         const idx      = filasCaptura.indexOf(fila);
         const total    = getTotalEntradas(fila);
         const existBot = calcExistenciaBot(fila);
-        const efUnit   = fila.tipo === 'pza' ? 'pza' : 'bot';
+        const efUnit   = fila.tipo === 'peso' ? (fila.baseUnit||'g').toLowerCase() : (fila.tipo === 'pza' ? 'pza' : 'bot');
         const precio   = fila.costoUnitario || 0;
         const tipoSt   = fila.tipo === 'pza'
             ? 'background:rgba(61,190,122,0.15);border-color:rgba(61,190,122,0.45);color:var(--green)'
@@ -1620,7 +1752,7 @@ function renderStep2Galeria(filas) {
         const idx      = filasCaptura.indexOf(fila);
         const total    = getTotalEntradas(fila);
         const existBot = calcExistenciaBot(fila);
-        const efUnit   = fila.tipo === 'pza' ? 'pza' : 'bot';
+        const efUnit   = fila.tipo === 'peso' ? (fila.baseUnit||'g').toLowerCase() : (fila.tipo === 'pza' ? 'pza' : 'bot');
         const precio   = fila.costoUnitario || 0;
         const tipoSt   = fila.tipo === 'pza'
             ? 'background:rgba(61,190,122,0.15);border-color:rgba(61,190,122,0.45);color:var(--green)'
@@ -3316,7 +3448,9 @@ function _filaConDatos(f) {
         || (f.metodoCaptura === 'nivel' ? (f.nivelPct || 0) > 0 : (f.pesos || []).some(p => parseFloat(p) > 0))
         || (f.entradas || []).some(e => parseFloat(e) > 0)
         || (f.ventasCopasDirectas || 0) > 0
-        || (f.ventasBotella || 0) > 0;
+        || (f.ventasBotella || 0) > 0
+        || parseFloat(f.existenciaPeso) > 0   // alimentos: conteo físico
+        || parseFloat(f.mermaBase) > 0;
 }
 function _esRegistrado(f) { return _filaConDatos(f); }
 

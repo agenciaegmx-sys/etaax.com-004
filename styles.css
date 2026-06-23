@@ -1408,6 +1408,7 @@ body.has-ctx .main-content { margin-top: 96px; }
 body.has-ctx .mod-landing-wrap { padding-top: 96px; }
 body.has-ctx #moduloLanding { top: 96px; }
 body.has-ctx #vistaMenuReceta { top: 96px !important; }
+body.has-ctx #vistaCaratula { top: 96px !important; }
 
 /* ── ANIMACIONES ── */
 @keyframes fadeUp {

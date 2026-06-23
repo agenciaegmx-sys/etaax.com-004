@@ -826,6 +826,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
 <script src="/etaax-db.js"></script>
+<script src="/etaax-nav.js"></script>
 <script src="/qr-pairing.js"></script>
 <script src="../security.js"></script>
 <script src="../app.js"></script>
@@ -855,6 +856,7 @@ function entrarEscandallos() {
     var menu = document.getElementById('vistaMenuReceta');
     var cerrado = nav.classList.contains('cerrado');
     if (menu) { menu.style.display = 'flex'; menu.style.left = cerrado ? '50px' : '200px'; }
+    if (window.etaaxNav) etaaxNav.go(_showEscMenu); // historial: pantalla menú de escandallos
 }
 
 function volverALanding() {
@@ -873,6 +875,7 @@ function volverALanding() {
 
 // Ocultar nav al cargar — o ir directo a Escandallos si viene de sub-página
 document.addEventListener('DOMContentLoaded', function() {
+    if (window.etaaxNav) etaaxNav.base(volverALanding); // historial: panel de sub-módulos = pantalla base
     var nav = document.getElementById('nav');
     // Por default se muestra la navegación de submódulos (Escandallos / Insumos /
     // Inventarios / Requisiciones). Con ?escandallos=1 se entra directo al editor.
@@ -2220,7 +2223,14 @@ function renderFormularioPorTipo(tipo, datos) {
 
 
 // ── Helpers pantalla principal Escandallo ─────────────────────
+function _ocultarCaratula() {
+    var vc = document.getElementById('vistaCaratula');
+    if (vc) vc.style.display = 'none'; // el overlay (z-index:100) tapaba el menú/editor al navegar
+    var mvr = document.getElementById('modalVerRecetas');
+    if (mvr) mvr.style.display = 'none'; // cerrar la lista de recetas al volver al menú
+}
 function _showEscMenu() {
+    _ocultarCaratula();
     var m = document.getElementById('vistaMenuReceta');
     if (m) { m.style.display = 'flex'; _syncVistaSidebarWidth(); }
     var w = document.getElementById('editorWrap');
@@ -2230,6 +2240,7 @@ function _showEscMenu() {
     if (typeof _cerrarPuenteReceta === 'function') _cerrarPuenteReceta(); // detener QR al salir del editor
 }
 function _showEscForm() {
+    _ocultarCaratula();
     var m = document.getElementById('vistaMenuReceta');
     if (m) m.style.display = 'none';
     var w = document.getElementById('editorWrap');
@@ -2334,6 +2345,7 @@ function convertirRecetaSimple(tipo) {
 
 function crearReceta(tipo) {
     _showEscForm(); // ocultar pantalla principal si estaba visible
+    if (window.etaaxNav) etaaxNav.go(_showEscForm); // historial: pantalla editor
 
     // Resetear modo simple
     modoSimple = false;
@@ -2380,11 +2392,13 @@ function _activarPillReceta(activa) {
 }
 
 function verRecetas() {
+    if (typeof _ocultarCaratula === 'function') _ocultarCaratula(); // si venías de la carátula, destápala
     recetasSeleccionadas.clear();
     filtroRecetaTipo = '';
     _activarPillReceta('todas');
     renderGridRecetas();
     document.getElementById('modalVerRecetas').style.display = 'flex';
+    if (window.etaaxNav) etaaxNav.go(verRecetas); // historial: pantalla lista de recetas
 }
 
 function cerrarVerRecetas(e) {
@@ -2674,6 +2688,7 @@ function editarDesdeficha() {
         document.getElementById('modalVerRecetas').style.display = 'none';
         _showEscForm();
         cargarReceta(fichaRecetaActualId);
+        if (window.etaaxNav) etaaxNav.go(_showEscForm); // historial: pantalla editor
     }
 }
 
@@ -2973,7 +2988,7 @@ function getRendimientoNeto(r,g){var cx=r.camposExtra||{};if(g.key==='alimentos'
 function cerrarCaratula(e){/* backdrop click removed — now full page */}
 function cerrarCaratulaBtnX(){document.getElementById('vistaCaratula').style.display='none';_showEscMenu();}
 function cargarLogoCaratula(input){var f=input.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(e){caratulaLogoBase64=e.target.result;var img=document.getElementById('caratulaLogoImg'),ph=document.getElementById('caratulaLogoPlaceholder');img.src=caratulaLogoBase64;img.style.display='block';ph.style.display='none';};rd.readAsDataURL(f);}
-function verCaratula(){mostrarCaratulaSelector();var vc=document.getElementById('vistaCaratula');if(vc){vc.style.display='block';var cerrado=document.getElementById('nav')?.classList.contains('cerrado');vc.style.left=cerrado?'50px':'200px';}}
+function verCaratula(){mostrarCaratulaSelector();var vc=document.getElementById('vistaCaratula');if(vc){vc.style.display='block';var cerrado=document.getElementById('nav')?.classList.contains('cerrado');vc.style.left=cerrado?'50px':'200px';}if(window.etaaxNav)etaaxNav.go(verCaratula);}
 function mostrarCaratulaSelector(){caratulaTipoActual=null;document.getElementById('caratulaSelectorView').style.display='block';document.getElementById('caratulaDetalleView').style.display='none';document.getElementById('caratulaBtnVolver').style.display='none';document.getElementById('caratulaBtnPrint').style.display='none';document.getElementById('caratulaTituloHeader').textContent='📊 Carátula de Costos';renderCaratulaSelector();}
 function renderCaratulaSelector(){var recetas=getRecetas(),grid=document.getElementById('caratulaSelectorGrid');grid.innerHTML=CARATULA_GRUPOS.map(function(g){var lista=recetas.filter(function(r){return r.tipo===g.key;}),cnt=lista.length,vacio=cnt===0,bu='';if(g.tipo==='normal'&&cnt>0){var suma=0,n=0;lista.forEach(function(r){var p=parseFloat(r.precioEnCarta)||0;if(!p)return;var c=(r.ingredientes||[]).reduce(function(s,i){return s+getFactor(i.cantidad,i.unidad)*(i.costoPorKgLt||0);},0),si=p/1.16;if(si>0){suma+=100-(c/si)*100-40;n++;}});if(n>0){var pr=suma/n,col=pr>=30?'var(--green)':pr>=15?'var(--accent)':'var(--red)';bu='<div style="margin-top:6px;font-size:11px;font-weight:700;color:'+col+'">'+pr.toFixed(1)+'% utilidad neta promedio</div>';}}var grupos=[...new Set(lista.map(function(r){return r.grupo;}).filter(Boolean))];var gb=grupos.length>0?'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">'+grupos.slice(0,4).map(function(gr){return '<span style="font-size:9px;background:var(--surface);border:1px solid var(--border);padding:2px 7px;border-radius:8px;color:var(--text-dim)">'+etx(gr)+'</span>';}).join('')+(grupos.length>4?'<span style="font-size:9px;color:var(--text-dim)">+'+(grupos.length-4)+'</span>':'')+'</div>':'';var sinP=g.tipo==='normal'?lista.filter(function(r){return !parseFloat(r.precioEnCarta);}).length:0;return '<button onclick="'+(cnt>0?'verCaratulaGrupo(\''+g.key+'\')':'')+'" class="cat-btn" style="border-color:'+(cnt>0?g.color:'var(--border)')+';'+(vacio?'opacity:0.4;cursor:default;':'')+'padding:16px 18px;align-items:flex-start;text-align:left;"><div style="display:flex;align-items:flex-start;gap:12px;width:100%"><span style="font-size:28px;flex-shrink:0;margin-top:2px">'+g.emoji+'</span><div style="flex:1;min-width:0"><div class="cat-btn-title" style="color:'+(cnt>0?g.color:'var(--text-muted)')+';font-size:14px">'+g.label+'</div><div class="cat-btn-desc" style="margin-top:2px">'+g.desc+'</div><div style="display:flex;align-items:baseline;gap:8px;margin-top:8px"><span style="font-size:24px;font-weight:700;color:var(--text)">'+cnt+'</span><span style="font-size:11px;color:var(--text-dim)">recetas</span>'+(sinP>0?'<span style="font-size:10px;color:var(--accent);background:rgba(245,200,66,0.12);padding:1px 8px;border-radius:8px">'+sinP+' sin precio</span>':'')+'</div>'+gb+bu+'</div>'+(cnt>0?'<span style="color:var(--text-dim);font-size:18px;align-self:center">›</span>':'')+'</div></button>';}).join('');}
 function verCaratulaGrupo(key){caratulaTipoActual=key;var g=CARATULA_GRUPOS.find(function(x){return x.key===key;});document.getElementById('caratulaSelectorView').style.display='none';document.getElementById('caratulaDetalleView').style.display='block';document.getElementById('caratulaBtnVolver').style.display='inline-block';document.getElementById('caratulaBtnPrint').style.display='inline-flex';document.getElementById('caratulaTituloHeader').textContent=g.emoji+' '+g.label;var sub=document.getElementById('caratulaSubtitulo');if(sub)sub.textContent=g.subtitulo;document.getElementById('caratulaBuscar').value='';document.getElementById('caratulaFiltroStatus').value='';var recetas=getRecetas().filter(function(r){return r.tipo===key;});var grupos=[...new Set(recetas.map(function(r){return r.grupo;}).filter(Boolean))].sort();var sel=document.getElementById('caratulaFiltroGrupo');sel.innerHTML='<option value="">Todos los grupos</option>'+grupos.map(function(gr){return '<option value="'+etx(gr)+'">'+etx(gr)+'</option>';}).join('');renderCaratulaDetalleTabla();}

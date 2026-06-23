@@ -136,6 +136,7 @@
                 <span class="brand-title">Insumos</span>
             </div>
             <div style="display:flex;gap:10px">
+                <button class="btn-vista" style="color:var(--green);border-color:var(--green)" onclick="abrirNovedades()" title="Rastrea insumos nuevos y cambios de costo/presentación en los negocios para actualizar el catálogo ETAAX">🔔 Novedades de negocios</button>
                 <button class="btn-vista" id="btnMigrarFotos" onclick="migrarFotosStorage()" title="Mueve las fotos base64 existentes a Storage (URLs ligeras)">🗜️ Optimizar fotos</button>
                 <button class="btn-vista" onclick="abrirImportar()">⬆ Importar CSV</button>
                 <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)" onclick="abrirSelectorCategoria()">+ Agregar insumo</button>
@@ -440,6 +441,26 @@
     </div>
 </div>
 
+<!-- ── MODAL NOVEDADES DE NEGOCIOS ── -->
+<div class="modal-overlay" id="modalNovedades" onclick="if(event.target===this)cerrarNovedades()">
+    <div class="modal" style="max-width:820px">
+        <div class="modal-header">
+            <h2>🔔 Novedades de negocios</h2>
+            <button class="modal-close" onclick="cerrarNovedades()">✕</button>
+        </div>
+        <div style="padding:8px 20px;font-size:12px;color:var(--text-dim);border-bottom:1px solid var(--border)">
+            Cambios de costo/presentación e insumos nuevos detectados en los negocios. Revisa y actualiza el catálogo ETAAX con un clic, sin re-editar.
+        </div>
+        <div id="novBody" style="padding:14px 20px;max-height:64vh;overflow:auto">
+            <div style="text-align:center;color:var(--text-dim);padding:40px">Cargando…</div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-vista" onclick="abrirNovedades()">↻ Volver a revisar</button>
+            <button class="btn-vista" onclick="cerrarNovedades()">Cerrar</button>
+        </div>
+    </div>
+</div>
+
 <!-- ── MODAL SELECTOR DE CATEGORÍA ── -->
 <div class="modal-overlay" id="modalCategoria" onclick="cerrarModalCategoria(event)">
     <div class="modal" style="max-width:760px;max-height:none;overflow:visible">
@@ -618,6 +639,133 @@ function _loadInsumosJS(callback) {
 function _setLoadMsg(txt) {
     var el = document.getElementById('admLoadMsg');
     if (el) el.textContent = txt;
+}
+
+/* ── NOVEDADES DE NEGOCIOS: rastrear cambios e insumos nuevos ──
+   Compara los negocio_insumos de TODOS los negocios contra el catálogo ETAAX.
+   - Actualización: insumo importado del catálogo (mismo id) con costo/presentación distinta.
+   - Nuevo: insumo cuya identidad (nombre+marca) no existe en el catálogo.
+   El admin revisa y, con un clic, sube el cambio al catálogo (sin re-editar). */
+var _novActu = [], _novNuevos = [];
+function _escN(s){ return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _keyN(x){ return (((x&&x.nombre)||'')+'|'+((x&&x.marca)||'')).toLowerCase().trim(); }
+function _costoN(ins){ var p=((ins&&ins.presentaciones)||[])[0]||{}; return Math.round((parseFloat(p.costoUnitario)||parseFloat(p.precio)||0)*100)/100; }
+function _fmtMN(v){ return '$'+(parseFloat(v)||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+function cerrarNovedades(){ document.getElementById('modalNovedades').style.display='none'; }
+
+async function abrirNovedades(){
+    document.getElementById('modalNovedades').style.display='flex';
+    document.getElementById('novBody').innerHTML='<div style="text-align:center;color:var(--text-dim);padding:40px">Cargando insumos de todos los negocios…</div>';
+    try { await _cargarNovedades(); _renderNovedades(); }
+    catch(e){ document.getElementById('novBody').innerHTML='<div style="text-align:center;color:var(--red);padding:40px">Error: '+_escN(e.message||e)+'</div>'; }
+}
+
+async function _cargarNovedades(){
+    // Nombres de negocios
+    var rn = await _supabase.from('negocios').select('id, datos');
+    var negMap = {}; (rn.data||[]).forEach(function(n){ negMap[n.id]=(n.datos&&n.datos.nombre)||n.id; });
+    // Todos los negocio_insumos (paginado)
+    var all=[], from=0, BATCH=1000;
+    while (true){
+        var r = await _supabase.from('negocio_insumos').select('insumo_id, negocio_id, datos').range(from, from+BATCH-1);
+        if (r.error) break;
+        var chunk = r.data||[]; all = all.concat(chunk);
+        document.getElementById('novBody').innerHTML='<div style="text-align:center;color:var(--text-dim);padding:40px">Analizando… '+all.length+' insumos</div>';
+        if (chunk.length < BATCH) break; from += BATCH;
+    }
+    // Índices del catálogo
+    var catById={}, catByKey={};
+    (_catalogoMem||[]).forEach(function(c){ catById[c.id]=c; catByKey[_keyN(c)]=c; });
+    var actu=[], nuevosMap={};
+    all.forEach(function(row){
+        var ins=row.datos; if(!ins) return;
+        if (ins.esSubReceta) return; // producción propia, no es material de catálogo
+        var negNombre = negMap[row.negocio_id]||row.negocio_id;
+        var cat = catById[row.insumo_id];
+        if (cat){
+            var cN=_costoN(ins), cC=_costoN(cat);
+            var presN=JSON.stringify(ins.presentaciones||[]), presC=JSON.stringify(cat.presentaciones||[]);
+            if (cN!==cC || presN!==presC)
+                actu.push({ insumoId:row.insumo_id, negId:row.negocio_id, negNombre:negNombre, nombre:ins.nombre, marca:ins.marca, costoCat:cC, costoNeg:cN, presCambio:(presN!==presC), datosNeg:ins });
+        } else {
+            var k=_keyN(ins);
+            if (catByKey[k]) return; // existe por identidad con otro id → no es nuevo
+            if (!nuevosMap[k]) nuevosMap[k]={ key:k, nombre:ins.nombre, marca:ins.marca, costo:_costoN(ins), negs:{}, datosNeg:ins };
+            nuevosMap[k].negs[negNombre]=1;
+        }
+    });
+    // Ordenar actualizaciones por nombre
+    actu.sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
+    _novActu = actu;
+    _novNuevos = Object.keys(nuevosMap).map(function(k){ var o=nuevosMap[k]; o.negsArr=Object.keys(o.negs); return o; })
+        .sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
+}
+
+function _renderNovedades(){
+    var body=document.getElementById('novBody');
+    if (!_novActu.length && !_novNuevos.length){
+        body.innerHTML='<div style="text-align:center;padding:48px;color:var(--text-dim)"><div style="font-size:40px;margin-bottom:8px">✓</div>El catálogo ETAAX está al día con todos los negocios.</div>';
+        return;
+    }
+    var html='';
+    // Actualizaciones
+    html += '<div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin:4px 0 10px">📈 Actualizaciones de costo / presentación ('+_novActu.length+')</div>';
+    if (!_novActu.length) html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:18px">Sin cambios de costo pendientes.</div>';
+    _novActu.forEach(function(it, idx){
+        var diff = it.costoNeg - it.costoCat;
+        var col = diff>0?'var(--red)':(diff<0?'var(--green)':'var(--text-dim)');
+        html += '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">'+
+            '<div style="flex:1;min-width:0">'+
+              '<div style="font-weight:600;font-size:13.5px">'+_escN(it.nombre)+(it.marca?' <span style="color:var(--text-muted);font-weight:400">'+_escN(it.marca)+'</span>':'')+'</div>'+
+              '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">'+_escN(it.negNombre)+' · catálogo '+_fmtMN(it.costoCat)+' → <b style="color:'+col+'">'+_fmtMN(it.costoNeg)+'</b>'+(it.presCambio?' · presentaciones cambiaron':'')+'</div>'+
+            '</div>'+
+            '<button class="btn-vista" style="color:var(--green);border-color:var(--green);white-space:nowrap" onclick="_aplicarActualizacion('+idx+')">↑ Actualizar catálogo</button>'+
+        '</div>';
+    });
+    // Nuevos
+    html += '<div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--green);margin:22px 0 10px">🆕 Insumos nuevos en negocios ('+_novNuevos.length+')</div>';
+    if (!_novNuevos.length) html += '<div style="font-size:12px;color:var(--text-dim)">Sin insumos nuevos por agregar.</div>';
+    _novNuevos.forEach(function(it, idx){
+        html += '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">'+
+            '<div style="flex:1;min-width:0">'+
+              '<div style="font-weight:600;font-size:13.5px">'+_escN(it.nombre)+(it.marca?' <span style="color:var(--text-muted);font-weight:400">'+_escN(it.marca)+'</span>':'')+'</div>'+
+              '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">'+_fmtMN(it.costo)+' · en: '+_escN(it.negsArr.join(', '))+'</div>'+
+            '</div>'+
+            '<button class="btn-vista" style="color:var(--accent);border-color:var(--accent);white-space:nowrap" onclick="_agregarAlCatalogo('+idx+')">+ Agregar al catálogo</button>'+
+        '</div>';
+    });
+    body.innerHTML=html;
+}
+
+async function _aplicarActualizacion(idx){
+    var it=_novActu[idx];
+    if (!it) return;
+    var i=_catalogoMem.findIndex(function(c){ return c.id===it.insumoId; });
+    if (i<0) return;
+    // Actualizar SOLO costos/presentaciones; conservar la ficha curada del catálogo
+    // (nombre, categoría, foto, etc.). El admin revisó el cambio de costo del negocio.
+    var upd=Object.assign({}, _catalogoMem[i]);
+    upd.presentaciones=JSON.parse(JSON.stringify(it.datosNeg.presentaciones||[]));
+    var r=await _supabase.from('catalogo_insumos').upsert([{ id:upd.id, datos:upd }]);
+    if (r.error){ alert('Error al actualizar: '+r.error.message); return; }
+    _catalogoMem[i]=upd;
+    _novActu.splice(idx,1);
+    _renderNovedades();
+    if (typeof init==='function') init();
+}
+
+async function _agregarAlCatalogo(idx){
+    var it=_novNuevos[idx];
+    if (!it) return;
+    var nuevo=JSON.parse(JSON.stringify(it.datosNeg));
+    delete nuevo.sucursalId; delete nuevo.origenId;
+    var r=await _supabase.from('catalogo_insumos').upsert([{ id:nuevo.id, datos:nuevo }]);
+    if (r.error){ alert('Error al agregar: '+r.error.message); return; }
+    _catalogoMem.push(nuevo);
+    _novNuevos.splice(idx,1);
+    _renderNovedades();
+    if (typeof init==='function') init();
 }
 
 /* ── Init principal ────────────────────────────────────────── */
