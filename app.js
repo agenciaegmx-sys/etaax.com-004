@@ -292,6 +292,28 @@ async function guardarReceta() {
     return true;
 }
 
+// ── Hacer una copia de la receta/sub-receta actual ──────────────
+// Crea un duplicado independiente (nuevo id, nombre + " (copia)") y deja el
+// editor trabajando sobre la copia. El original queda intacto.
+function duplicarReceta() {
+    var nEl = document.getElementById('nombreReceta');
+    if (!nEl || !nEl.value.trim()) { alert('Agrega un nombre a la receta antes de copiarla.'); return; }
+    if (!recetaActualId) { alert('Guarda la receta una vez antes de hacer una copia.'); return; }
+    if (window._escDirty) { alert('Tienes cambios sin guardar. Guarda primero para incluirlos en la copia.'); return; }
+    var src = getRecetas().find(function(r){ return r.id === recetaActualId; });
+    if (!src) { alert('No se encontró la receta a copiar.'); return; }
+    var copia = JSON.parse(JSON.stringify(src));
+    copia.id     = genId();
+    copia.nombre = (src.nombre || 'Receta') + ' (copia)';
+    var lista = getRecetas(); lista.push(copia); setRecetas(lista);
+    if (typeof _sbUpReceta === 'function') _sbUpReceta(copia);
+    // El editor ya muestra el mismo contenido → solo lo "reapuntamos" a la copia.
+    recetaActualId = copia.id;
+    nEl.value = copia.nombre;
+    window._escDirty = false;
+    alert('✅ Copia creada: "' + copia.nombre + '". Ya la estás editando; el original quedó intacto.');
+}
+
 function cargarReceta(id) {
     const r = getRecetas().find(x => x.id === id);
     if (!r) return;

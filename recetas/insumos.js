@@ -105,6 +105,7 @@
        }
    });
 
+   var _insBorrados = {}; // tombstones de insumos eliminados (evita que "reaparezcan")
    async function _cargarInsumosDeSupabase(opts) {
        opts = opts || {};
        var negId = getNegocioActivo();
@@ -136,9 +137,13 @@
            console.log('[insumos] negocio', negId, '→ Supabase:', remote.length, 'insumos' + (huboError ? ' (con reintentos)' : ''));
            // Si no se pudo traer nada y hubo error, conservar el caché local.
            if (!remote.length && huboError) return;
-           // Dedup defensivo por id (por si quedaron duplicados de versiones previas)
+           // Dedup defensivo por id (por si quedaron duplicados de versiones previas).
+           // Tombstones: excluir insumos recién eliminados que aún no se reflejan en
+           // remote (el delete podía estar en vuelo) → evita que "reaparezcan".
            var _vistos = {}, _dedup = [];
-           remote.forEach(function(x){ if (x && x.id && !_vistos[x.id]) { _vistos[x.id] = 1; _dedup.push(x); } });
+           remote.forEach(function(x){
+               if (x && x.id && !_vistos[x.id] && !_insBorrados[x.id]) { _vistos[x.id] = 1; _dedup.push(x); }
+           });
            remote = _dedup;
 
            // MERGE: conservar las adiciones locales que aún no sincronizaron
@@ -261,6 +266,48 @@
        return lista;
    }
 
+   // ── Identidad y sincronización entre sucursales ──────────────
+   // Mismo nombre+marca = el mismo insumo en otra sucursal (igual que _keyIns).
+   function _keyInsLocal(x){ return (((x && x.nombre) || '') + '|' + ((x && x.marca) || '')).toLowerCase().trim(); }
+   // Dedup para el catálogo global: un representante por identidad (prefiere el original).
+   function _dedupGlobal(lista){
+       var seen = {}, out = [];
+       lista.forEach(function(x){
+           var k = _keyInsLocal(x);
+           if (seen[k] === undefined) { seen[k] = out.length; out.push(x); }
+           else if (!x.origenId && out[seen[k]].origenId) { out[seen[k]] = x; }
+       });
+       return out;
+   }
+   // "Actualizar en catálogo global": empuja ficha + presentaciones + precios de este
+   // insumo a TODAS las sucursales que tengan el mismo insumo (misma identidad).
+   function actualizarEnGlobal(id){
+       var lista = getInsumos();
+       var src = lista.find(function(x){ return x.id === id; });
+       if (!src) return;
+       var k = _keyInsLocal(src);
+       var hermanos = lista.filter(function(x){ return x.id !== src.id && _keyInsLocal(x) === k; });
+       if (!hermanos.length) {
+           alert('«' + (src.nombre || 'Este insumo') + '» ya es único en el catálogo global (no está en otras sucursales).');
+           return;
+       }
+       if (!confirm('Actualizar «' + (src.nombre || '') + '» (ficha técnica, presentaciones y precios) en ' +
+                    hermanos.length + ' sucursal' + (hermanos.length > 1 ? 'es' : '') + ' más?\n\nSus datos quedarán iguales a este insumo.')) return;
+       hermanos.forEach(function(h){
+           var i = lista.findIndex(function(x){ return x.id === h.id; });
+           if (i < 0) return;
+           var upd = JSON.parse(JSON.stringify(src));
+           upd.id         = h.id;          // conservar identidad por registro
+           upd.sucursalId = h.sucursalId;
+           upd.origenId   = h.origenId;
+           lista[i] = upd;
+       });
+       setInsumos(lista);
+       alert('✅ Actualizado en ' + hermanos.length + ' sucursal' + (hermanos.length > 1 ? 'es' : '') + '.');
+       filtrar();
+   }
+   window.actualizarEnGlobal = actualizarEnGlobal;
+
    function renderStats() {
        const insumos = _insumosScope();
        const cats    = [...new Set(insumos.map(x => x.categoria).filter(Boolean))];
@@ -326,6 +373,11 @@
        if (!catGlobal) {
            if (sucFil)        lista = lista.filter(x => _effSucIns(x.sucursalId) === sucFil);
            else if (sucActiva) lista = lista.filter(x => _effSucIns(x.sucursalId) === sucActiva);
+       } else {
+           // Catálogo global del negocio: UN insumo por identidad (nombre+marca),
+           // aunque exista en varias sucursales → sin duplicados. Se prefiere el
+           // "original" (sin origenId) como representante.
+           lista = _dedupGlobal(lista);
        }
 
        _listaFiltrada = lista;
@@ -586,6 +638,13 @@
                        onclick="editarInsumo('${ins.id}')">
                        <span style="font-size:14px">✏️</span> Editar
                    </button>
+                   <button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;
+                       color:var(--green);border-color:var(--green);
+                       display:inline-flex;align-items:center;gap:5px"
+                       title="Actualizar este insumo (ficha + precios) en todas las sucursales / catálogo global"
+                       onclick="actualizarEnGlobal('${ins.id}')">
+                       <span style="font-size:14px">📤</span> Global
+                   </button>
                    <button class="btn-vista" style="padding:6px 12px;font-size:12px;
                        color:var(--red);border-color:var(--red);
                        display:inline-flex;align-items:center;justify-content:center"
@@ -692,6 +751,7 @@
                '<div class="insumo-card-actions">' +
                    '<button class="btn-ver" onclick="verFicha(\'' + ins.id + '\')">👁️ Ver</button>' +
                    '<button class="btn-edit" onclick="editarInsumo(\'' + ins.id + '\')">✏️ Editar</button>' +
+                   '<button class="btn-edit" style="color:var(--green);border-color:var(--green)" title="Actualizar en todas las sucursales / catálogo global" onclick="actualizarEnGlobal(\'' + ins.id + '\')">📤 Global</button>' +
                    '<button class="btn-del" onclick="eliminarInsumo(\'' + ins.id + '\')">🗑️</button>' +
                '</div>';
 
@@ -1054,14 +1114,18 @@
 
    function _onSubcatChange(sel, tipo) {
        if (sel.value !== '__add__') return;
-       var nombre = (prompt('Nueva subcategoría:') || '').trim();
-       if (!nombre) { sel.value = ''; return; }
-       var cust = _loadSubcatsCustom();
-       if (!cust[tipo]) cust[tipo] = [];
-       if (cust[tipo].indexOf(nombre) === -1) cust[tipo].push(nombre);
-       _saveSubcatsCustom();
-       var wrap = sel.parentElement;
-       if (wrap) wrap.innerHTML = _subcatSelectHTML(tipo, nombre);
+       sel.value = ''; // reset mientras se captura
+       var _ask = window.etaaxPrompt || function(t,d,cb){ cb(window.prompt(t) || ''); };
+       _ask('Nueva subcategoría', '', function(val){
+           var nombre = (val || '').trim();
+           if (!nombre) return;
+           var cust = _loadSubcatsCustom();
+           if (!cust[tipo]) cust[tipo] = [];
+           if (cust[tipo].indexOf(nombre) === -1) cust[tipo].push(nombre);
+           _saveSubcatsCustom();
+           var wrap = sel.parentElement;
+           if (wrap) wrap.innerHTML = _subcatSelectHTML(tipo, nombre);
+       }, { icon:'🏷️', placeholder:'Ej. Quesos, Embutidos…' });
    }
 
    function ajustarCamposPorTipo(tipo) {
@@ -1574,6 +1638,7 @@
    
        // Foto
        fotoInsumoBase64 = '';
+       _cerrarPuenteInsumo(); // resetear el escáner QR al abrir/cambiar de insumo
        const fotoImg = document.getElementById('insFotoImg');
        const fotoPh  = document.getElementById('insFotoPlaceholder');
        if (ins?.foto) {
@@ -1673,12 +1738,14 @@
        if (e.target !== document.getElementById('modalOverlay')) return;
        if (modalDirty && !confirm('¿Salir sin guardar? Los cambios se perderán.')) return;
        modalDirty = false;
+       _cerrarPuenteInsumo();
        document.getElementById('modalOverlay').style.display = 'none';
    }
-   
+
    function cerrarModalBtn() {
        if (modalDirty && !confirm('¿Salir sin guardar? Los cambios se perderán.')) return;
        modalDirty = false;
+       _cerrarPuenteInsumo();
        document.getElementById('modalOverlay').style.display = 'none';
        if (_soloMode) window.parent.postMessage({ type: 'cerrarEditor' }, '*');
    }
@@ -1698,10 +1765,17 @@
    function eliminarInsumo(id) {
        const ins = getInsumos().find(x => x.id === id);
        if (!ins) return;
-       _pedirClaveAdmin('Eliminar insumo "' + ins.nombre + '"', function() {
+       _pedirClaveAdmin('Eliminar insumo "' + ins.nombre + '"', async function() {
+           _insBorrados[id] = Date.now();
+           // Quitar de local + render YA (UX inmediata).
            setInsumos(getInsumos().filter(x => x.id !== id));
-           _borrarInsumosSupabase(getNegocioActivo(), [id]).catch(function(e){ console.warn('[eliminar] ', e); });
            init();
+           // Borrar en Supabase y ESPERAR a que confirme: si no, una recarga/realtime
+           // que llegara con el delete aún en vuelo lo re-traía desde la nube (zombie).
+           try { await _borrarInsumosSupabase(getNegocioActivo(), [id]); }
+           catch(e) { console.warn('[eliminar] ', e); }
+           // Ya confirmado en la nube → liberar el tombstone tras un margen.
+           setTimeout(function(){ delete _insBorrados[id]; }, 20000);
        });
    }
 
@@ -1769,6 +1843,38 @@
            ph.style.display  = 'none';
        });
    }
+
+   // ── Subir foto del insumo desde el celular vía QR (mismo puente que cortes/gastos/recetas) ──
+   function _abrirPuenteInsumo() {
+       var box = document.getElementById('qrInsumoBox');
+       if (!box || !window.QrPuente) return;
+       box.style.display = 'block';
+       var btn = document.getElementById('btnQrInsumo');
+       if (btn) btn.textContent = '✕ Cerrar escaneo';
+       QrPuente.abrir(getNegocioActivo(), 'insumo', box, function(foto) {
+           if (!foto || !foto.url) return;
+           fotoInsumoBase64 = foto.url; // ya es URL de Storage (liviana)
+           var img = document.getElementById('insFotoImg');
+           var ph  = document.getElementById('insFotoPlaceholder');
+           if (img) { img.src = foto.url; img.style.display = 'block'; }
+           if (ph)  ph.style.display = 'none';
+       });
+   }
+   function _cerrarPuenteInsumo() {
+       if (window.QrPuente) { try { QrPuente.cerrar(); } catch(e) {} }
+       var box = document.getElementById('qrInsumoBox');
+       if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+       var btn = document.getElementById('btnQrInsumo');
+       if (btn) btn.textContent = '📱 Subir foto desde el celular';
+   }
+   function _toggleQrInsumo() {
+       var box = document.getElementById('qrInsumoBox');
+       if (!box) return;
+       if (box.style.display === 'none' || !box.style.display) _abrirPuenteInsumo();
+       else _cerrarPuenteInsumo();
+   }
+   window._toggleQrInsumo = _toggleQrInsumo;
+   window._cerrarPuenteInsumo = _cerrarPuenteInsumo;
 
    function _comprimirFotoInsumo(file, maxPx, calidad, cb) {
        var reader = new FileReader();
@@ -2934,15 +3040,15 @@
    
        setInsumos(lista);
        modalDirty = false;
+       // Forzar el upsert de ESTE insumo a Supabase AHORA (no esperar el debounce de
+       // 1.2s). Si navegas enseguida a recetas/otra página, ésta relee el catálogo
+       // desde Supabase; sin esto, a veces leía el dato viejo y parecía que "el
+       // cambio no se guardó" hasta el segundo intento. (Antes solo se forzaba en
+       // modo iframe; ahora también en el flujo normal.)
+       clearTimeout(_insumosSyncTimer);
+       _insumosSyncPend = null;
+       try { await _sincronizarInsumosSupabase(getNegocioActivo(), [insumo]); } catch(e) {}
        if (_soloMode) {
-           // El padre cierra el iframe al recibir el mensaje, lo que MATA el
-           // setTimeout de sincronización debounced (1200ms) → el cambio (p.ej. la
-           // sucursal asignada) nunca llegaría a Supabase y "al minuto" una recarga
-           // lo revierte. Por eso forzamos el upsert de ESTE insumo AHORA y solo
-           // después avisamos al padre.
-           clearTimeout(_insumosSyncTimer);
-           _insumosSyncPend = null;
-           try { await _sincronizarInsumosSupabase(getNegocioActivo(), [insumo]); } catch(e) {}
            window.parent.postMessage({ type: 'insumoGuardado', insumoId: insumo.id }, '*');
            return;
        }
@@ -3531,10 +3637,13 @@
    // Cambio en el select de presentación de compra (intercepta "＋ Agregar concepto").
    function onPresCompraChange(i, sel) {
        if (sel.value === '__nuevo__') {
-           var v = prompt('Nuevo concepto de presentación de compra:');
-           v = (v || '').trim();
-           if (v) { _addConcepto('presentacionCompra', v); updPres(i, 'presentacionCompra', v); }
-           renderPresentaciones();
+           sel.value = ''; // reset mientras se captura
+           var _ask = window.etaaxPrompt || function(t,d,cb){ cb(window.prompt(t) || ''); };
+           _ask('Nuevo concepto de presentación de compra', '', function(val){
+               var v = (val || '').trim();
+               if (v) { _addConcepto('presentacionCompra', v); updPres(i, 'presentacionCompra', v); }
+               renderPresentaciones();
+           }, { icon:'📦', placeholder:'Ej. Bote, Caja, Costal…' });
            return;
        }
        updPres(i, 'presentacionCompra', sel.value);

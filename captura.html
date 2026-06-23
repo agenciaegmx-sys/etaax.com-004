@@ -140,7 +140,7 @@ async function onPick(input){
 }
 
 document.addEventListener('DOMContentLoaded',function(){
-    var lbl={corte:'corte',gasto:'gasto',receta:'platillo / bebida'}[TIPO]||TIPO;
+    var lbl={corte:'corte',gasto:'gasto',receta:'platillo / bebida',insumo:'insumo / producto'}[TIPO]||TIPO;
     if(!TOKEN||!NEG){ mostrarMuerto(false); return; }
     if(!_vivo()){ mostrarMuerto(true); return; }
     document.getElementById('capTitle').textContent='Subir foto al '+lbl;

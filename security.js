@@ -173,7 +173,10 @@ window.etx = function (s) {
         '.etaax-ui-btn:hover{filter:brightness(1.12)}' +
         '.etaax-ui-btn.primary{background:#3dbe7a;color:#06140d}' +
         '.etaax-ui-btn.danger{background:#e05a3a;color:#fff}' +
-        '.etaax-ui-btn.ghost{background:transparent;color:#a7a299;border:1px solid #3a382f}';
+        '.etaax-ui-btn.ghost{background:transparent;color:#a7a299;border:1px solid #3a382f}' +
+        '.etaax-ui-inp{width:100%;box-sizing:border-box;background:#13120f;border:1px solid #3a382f;color:#f3efe8;' +
+            'padding:10px 12px;border-radius:9px;font-size:14px;font-family:inherit;outline:none;margin:0 0 16px}' +
+        '.etaax-ui-inp:focus{border-color:#3dbe7a}';
     (document.head || document.documentElement).appendChild(st);
 
     var _queue = [], _active = false;
@@ -191,21 +194,29 @@ window.etx = function (s) {
         var h = '';
         if (cfg.icon)  h += '<div class="etaax-ui-ico">' + cfg.icon + '</div>';
         if (cfg.title) h += '<div class="etaax-ui-ttl">' + window.etx(cfg.title) + '</div>';
-        h += '<div class="etaax-ui-msg">' + window.etx(cfg.msg) + '</div><div class="etaax-ui-row"></div>';
+        if (cfg.msg)   h += '<div class="etaax-ui-msg">' + window.etx(cfg.msg) + '</div>';
+        if (cfg.input) h += '<input class="etaax-ui-inp" type="text">';
+        h += '<div class="etaax-ui-row"></div>';
         card.innerHTML = h;
         ov.appendChild(card);
+        var inputEl = card.querySelector('.etaax-ui-inp');
+        if (inputEl) {
+            if (cfg.inputValue != null) inputEl.value = cfg.inputValue;
+            if (cfg.placeholder) inputEl.placeholder = cfg.placeholder;
+        }
+        function valOf() { return inputEl ? inputEl.value : undefined; }
 
         function onKey(ev) {
             if (ev.key === 'Escape') { ev.preventDefault(); cerrar(cfg.onBackdrop); }
-            else if (ev.key === 'Enter') { ev.preventDefault(); cerrar(cfg.primary || cfg.onBackdrop); }
+            else if (ev.key === 'Enter') { ev.preventDefault(); cerrar(cfg.primary || cfg.onBackdrop, valOf()); }
         }
-        function cerrar(cb) {
+        function cerrar(cb, val) {
             document.removeEventListener('keydown', onKey, true);
             ov.style.animation = 'etaaxFade .12s ease both reverse';
             setTimeout(function () {
                 if (ov.parentNode) ov.parentNode.removeChild(ov);
                 _active = false; _next();
-                if (typeof cb === 'function') cb();
+                if (typeof cb === 'function') cb(val);
             }, 110);
         }
         var row = card.querySelector('.etaax-ui-row');
@@ -213,14 +224,17 @@ window.etx = function (s) {
             var btn = document.createElement('button');
             btn.className = 'etaax-ui-btn ' + (b.kind || 'ghost');
             btn.textContent = b.label;
-            btn.onclick = function () { cerrar(b.onClick); };
+            btn.onclick = function () { cerrar(b.onClick, b.kind === 'primary' ? valOf() : undefined); };
             row.appendChild(btn);
         });
         ov.addEventListener('click', function (e) { if (e.target === ov) cerrar(cfg.onBackdrop); });
         document.addEventListener('keydown', onKey, true);
         document.body.appendChild(ov);
-        var pb = card.querySelector('.etaax-ui-btn.primary,.etaax-ui-btn.danger') || card.querySelector('.etaax-ui-btn');
-        if (pb) { try { pb.focus(); } catch (e) {} }
+        if (inputEl) { try { inputEl.focus(); inputEl.select(); } catch (e) {} }
+        else {
+            var pb = card.querySelector('.etaax-ui-btn.primary,.etaax-ui-btn.danger') || card.querySelector('.etaax-ui-btn');
+            if (pb) { try { pb.focus(); } catch (e) {} }
+        }
     }
 
     window.etaaxAlert = function (msg, opts) {
@@ -230,6 +244,21 @@ window.etx = function (s) {
             icon: opts.icon || '', title: opts.title || '', msg: String(msg == null ? '' : msg),
             buttons: [{ label: opts.okLabel || 'Aceptar', kind: 'primary', onClick: cb }],
             primary: cb, onBackdrop: cb
+        });
+        _next();
+    };
+    // Prompt estilizado (input de texto). onOk recibe el valor escrito.
+    window.etaaxPrompt = function (title, defaultVal, onOk, opts) {
+        opts = opts || {};
+        function ok(val) { if (typeof onOk === 'function') onOk((val == null ? '' : val)); }
+        _queue.push({
+            icon: opts.icon || '✏️', title: title || '', msg: opts.msg || '',
+            input: true, inputValue: defaultVal || '', placeholder: opts.placeholder || '',
+            buttons: [
+                { label: opts.cancelLabel || 'Cancelar', kind: 'ghost', onClick: opts.onCancel || null },
+                { label: opts.okLabel || 'Aceptar', kind: 'primary', onClick: ok }
+            ],
+            primary: ok, onBackdrop: opts.onCancel || null
         });
         _next();
     };
