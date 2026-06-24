@@ -68,6 +68,7 @@ async function _sbInitInv() {
         _supabase.from('negocio_insumos').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true}),
     ]);
     if (!r[0].error) _cacheInv  = (r[0].data || []).map(function(x){ return x.datos; });
+    _mergeDraftsLocal(); // recuperar borradores que aún no sincronizaron a la nube
     if (!r[1].error) _cacheEL   = (r[1].data || []).map(function(x){ return x.datos; });
     if (!r[2].error) _cacheRecetasInv = (r[2].data || []).map(function(x){ return x.datos; });
     if (!r[3].error) {
@@ -119,9 +120,31 @@ function _limpiarStorageEmergencia() {
     });
 }
 
+// ── Respaldo local de borradores (inventarios SIN cerrar) ──────────
+// El inventario vive en Supabase, pero si refrescas antes de que el
+// autoguardado llegue a la nube, se perdía la captura. Guardamos los
+// borradores (cerrado=false) en localStorage y los mezclamos al cargar.
+function _guardarDraftsLocal() {
+    try {
+        var drafts = (_cacheInv || []).filter(function(x){ return x && x.id && !x.cerrado; });
+        localStorage.setItem(_sk('inv_drafts'), JSON.stringify(drafts));
+    } catch(e) {}
+}
+function _cargarDraftsLocal() {
+    try { return JSON.parse(localStorage.getItem(_sk('inv_drafts')) || '[]') || []; } catch(e) { return []; }
+}
+function _mergeDraftsLocal() {
+    var drafts = _cargarDraftsLocal();
+    if (!drafts.length) return;
+    if (!_cacheInv) _cacheInv = [];
+    var ids = {}; _cacheInv.forEach(function(x){ if (x && x.id) ids[x.id] = 1; });
+    drafts.forEach(function(d){ if (d && d.id && !ids[d.id]) _cacheInv.push(d); }); // solo los que la nube aún no tiene
+}
+
 function setInventarios(d) {
     var prev = _cacheInv || [];
     _cacheInv = d;
+    _guardarDraftsLocal(); // respaldo inmediato del borrador (sobrevive al refresh)
     // Upsert changed/added records
     d.forEach(function(inv) {
         var old = prev.find(function(x){ return x.id === inv.id; });
@@ -1127,6 +1150,14 @@ function cargarProductosCaptura() {
             ventasCopasDirectas: 0, ventasBotella: 0, mermaBase: 0,
         };
     });
+    // Salvaguarda: conservar filas YA capturadas cuyo insumo no esté en el scope
+    // actual (ej. se capturó en otra sucursal/contexto) → nunca perder lo registrado.
+    (invActual && invActual.filas || []).forEach(function(sf){
+        if (sf && sf.insumoId && !filasCaptura.some(function(f){ return f.insumoId === sf.insumoId; })) {
+            if (!sf.entradas) sf.entradas = ['','','','',''];
+            filasCaptura.push(sf);
+        }
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1282,6 +1313,15 @@ function refreshFilaDisplay(idx) {
         elBtn.style.borderColor  = tiene ? 'var(--green)' : 'var(--accent)';
         elBtn.style.color        = tiene ? 'var(--green)' : 'var(--accent)';
     }
+    // Botón "Registrar" de la vista de LISTA — cambia a verde al entrar datos
+    const elReg = document.getElementById('btn-reg-'+idx);
+    if (elReg) { var s = _regBtnState(fila); elReg.textContent = s.txt; elReg.style.background = s.bg; elReg.style.borderColor = s.col; elReg.style.color = s.col; }
+}
+// Estado del botón Registrar en la lista (verde si hay existencia o ya está registrado; ámbar si va en cero).
+function _regBtnState(fila) {
+    if (fila.registrado === true) return { col:'var(--green)', bg:'rgba(61,190,122,.18)', txt:'✓ Registrado' };
+    if (calcExistenciaBot(fila) > 0) return { col:'var(--green)', bg:'rgba(61,190,122,.10)', txt:'✓ Registrar' };
+    return { col:'var(--accent)', bg:'rgba(245,200,66,.08)', txt:'⊙ En cero' };
 }
 
 function updCaptura(idx, campo, val) { filasCaptura[idx][campo] = val; refreshFilaDisplay(idx); _autoGuardar(); }
@@ -1401,6 +1441,14 @@ function seleccionarProductoExist(insumoId) {
     renderCardExist();
 }
 
+// Registrar una fila desde la vista de LISTA completa (marca registrado, aunque sea en cero).
+function registrarFilaLista(idx) {
+    var fila = filasCaptura[idx];
+    if (!fila) return;
+    fila.registrado = true;
+    _autoGuardar();
+    renderStepContent(); // actualiza el contador "registrados" y respeta el filtro pendientes/registrados
+}
 function limpiarSeleccionExist() {
     // Marcar el producto actual como registrado (aunque tenga ceros)
     if (_existInsumoId) {
@@ -1538,6 +1586,7 @@ function renderCardExist() {
                     <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap">
                         ${fila.categoria?`<span class="inv-tag">${fila.categoria}</span>`:''}
                         <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
+                        ${_fmtContenido(fila)?`<span class="inv-tag" style="background:rgba(122,184,245,0.12);border-color:rgba(122,184,245,0.4);color:#7ab8f5">📦 ${_fmtContenido(fila)}</span>`:''}
                         <span style="font-size:11px;color:var(--text-dim);margin-left:4px">
                             Anterior: ${eaBot%1===0?eaBot.toFixed(0):eaBot.toFixed(1)} bot</span>
                     </div>
@@ -1602,6 +1651,14 @@ function renderCardExist() {
 
 // ── ALIMENTOS: tarjeta de captura por peso (unidad base) ──────
 function _fmtBase(v){ v = parseFloat(v)||0; return v % 1 === 0 ? v.toFixed(0) : v.toFixed(1); }
+// Contenido de la presentación (ej. 750 ml, 1 L, 350 pza) para la info del producto.
+function _fmtContenido(fila){
+    var cn = parseFloat(fila && fila.contNeto) || 0;
+    if (cn <= 0) return '';
+    if (fila.tipo === 'pza') return _fmtBase(cn) + ' ' + (fila.baseUnit || 'pza');
+    if (fila.tipo === 'peso') return _fmtBase(cn) + ' ' + (fila.baseUnit || 'g');
+    return cn >= 1000 ? _fmtBase(cn/1000) + ' L' : _fmtBase(cn) + ' ml';
+}
 function _cardExistPeso(fila, idx) {
     const u    = (fila.baseUnit || 'G').toLowerCase();
     const ea   = parseFloat(fila.existenciaAnterior) || 0;
@@ -1778,6 +1835,7 @@ function renderStep1Lista(filas) {
                 <div class="inv-prod-meta">
                     ${fila.categoria ? `<span class="inv-tag">${fila.categoria}</span>` : ''}
                     <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
+                    ${_fmtContenido(fila)?`<span class="inv-tag" style="background:rgba(122,184,245,0.12);border-color:rgba(122,184,245,0.4);color:#7ab8f5">📦 ${_fmtContenido(fila)}</span>`:''}
                     <span class="inv-metodo-toggle">
                         <button class="${metodo==='peso'?'on':''}" onclick="setMetodoCapturaExist('${fila.insumoId}','peso')" title="Peso">⚖️</button>
                         <button class="${metodo==='nivel'?'on':''}" onclick="setMetodoCapturaExist('${fila.insumoId}','nivel')" title="Nivel">🌡️</button>
@@ -1803,6 +1861,10 @@ function renderStep1Lista(filas) {
                 <span id="ml-${idx}" style="color:${lts>0?'var(--green)':'var(--text-dim)'}">
                     ${metodo === 'peso' ? fmtLt(lts) : ''}</span></td>
             <td class="inv-td-ef" id="ef-${idx}">${fmtBot(existBot)} ${efUnit}</td>
+            <td class="inv-td-c" style="width:104px">
+                ${(function(){ var s = _regBtnState(fila);
+                    return '<button id="btn-reg-'+idx+'" onclick="registrarFilaLista('+idx+')" style="width:96px;padding:7px 0;border-radius:7px;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;background:'+s.bg+';border:1px solid '+s.col+';color:'+s.col+'">'+s.txt+'</button>'; })()}
+            </td>
         </tr>`;
     }).join('');
 
@@ -1816,6 +1878,7 @@ function renderStep1Lista(filas) {
                 <th class="inv-th inv-th-c inv-th-pesos">Botella abierta</th>
                 <th class="inv-th inv-th-c" style="width:82px;color:var(--green)">Total (L)</th>
                 <th class="inv-th inv-th-c" style="width:92px;color:var(--accent)">Existencia</th>
+                <th class="inv-th inv-th-c" style="width:104px">Registrar</th>
             </tr></thead>
             <tbody>${rows}</tbody>
         </table>
@@ -3131,6 +3194,65 @@ function _descargarCSV(content, filename) {
 // ═══════════════════════════════════════════════════════════════
 // PASO 5 — Resumen de Resultado
 // ═══════════════════════════════════════════════════════════════
+// ── Consumo (uso) de un insumo en el periodo, en la unidad de su fila ──
+function _consumoPeriodo(f) {
+    if (f.tipo === 'peso') return calcVentasBaseRecetas(f.insumoId);
+    if (f.tipo === 'pza')  return (parseFloat(f.ventasBotella)||0) + (parseFloat(f.ventasCopasDirectas)||0);
+    var copasBot = f.contNeto>0 && f.copaML>0 ? f.contNeto/f.copaML : 0;
+    return calcVentasCopasRecetas(f.insumoId, f.copaML) + (parseFloat(f.ventasCopasDirectas)||0) + (parseFloat(f.ventasBotella)||0)*copasBot;
+}
+// ── FASE 1 — Resumen ejecutivo del inventario (faltantes/sobrantes, merma,
+//    vendidos por categoría, usados/sin usar, vendido vs compras) ──
+function _resumenEjecutivo() {
+    var faltU=0, sobrU=0, faltCosto=0, sobrCosto=0, faltCarta=0, sobrCarta=0;
+    var mermados=[], mermaCosto=0, usados=0, sinUsar=0, sinUsarLista=[], vendidoCosto=0;
+    filasCaptura.forEach(function(f){
+        var cc = costoCopa(f), dif = calcDiferencia(f);
+        if (dif < -0.001) { faltU++; faltCosto += Math.abs(dif)*cc; faltCarta += Math.abs(dif)*(f.precioCarta||0); }
+        else if (dif > 0.001) { sobrU++; sobrCosto += dif*cc; sobrCarta += dif*(f.precioCarta||0); }
+        var merma = (parseFloat(f.mermaCopas)||0) + (parseFloat(f.mermaBase)||0);
+        if (merma > 0) { mermados.push({nombre:f.nombre, costo:merma*cc, f:f, m:merma}); mermaCosto += merma*cc; }
+        var cons = _consumoPeriodo(f);
+        if (cons > 0.001) { usados++; vendidoCosto += cons*cc; } else { sinUsar++; if (sinUsarLista.length<60) sinUsarLista.push(f.nombre); }
+    });
+    var comprasCosto = ((invActual && invActual.entradasLog) || []).reduce(function(s,e){ return s + (parseFloat(e.cantidad)||0)*(parseFloat(e.costo)||0); }, 0);
+    // Vendidos por categoría (a precio carta)
+    var porCat = {}, recetas = getRecetas().filter(function(r){ return r.tipo==='alimentos'||r.tipo==='bebidas'; });
+    var vendidos = (invActual && invActual.cocktailsVendidos) || {};
+    recetas.forEach(function(r){ var n=parseFloat(vendidos[r.id])||0; if(!n) return; var cat=r.categoria||r.grupo||'Otros'; var c=porCat[cat]=porCat[cat]||{u:0,carta:0}; c.u+=n; c.carta+=n*(parseFloat(r.precioEnCarta)||0); });
+    var cats = Object.keys(porCat).sort(function(a,b){ return porCat[b].carta - porCat[a].carta; });
+    var totVendCarta = cats.reduce(function(s,c){ return s+porCat[c].carta; }, 0);
+
+    function card(lbl, val, col, sub){ return '<div class="stat-card"><div class="stat-label">'+lbl+'</div><div class="stat-val" style="color:'+col+';font-size:18px">'+val+'</div>'+(sub?'<div style="font-size:10px;color:var(--text-dim);margin-top:2px">'+sub+'</div>':'')+'</div>'; }
+    var M = function(n){ return '$'+(Math.round((n||0))).toLocaleString('es-MX'); };
+
+    var bloqueKpis = '<div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:10px">'+
+        card('Faltante a costo', M(faltCosto), 'var(--red)', faltU+' insumos · '+M(faltCarta)+' a carta')+
+        card('Sobrante a costo', M(sobrCosto), 'var(--green)', sobrU+' insumos · '+M(sobrCarta)+' a carta')+
+        card('Merma del periodo', M(mermaCosto), 'var(--accent)', mermados.length+' productos')+
+        card('Insumos sin usar', String(sinUsar), sinUsar>0?'var(--accent)':'var(--green)', usados+' usados en el periodo')+
+        '</div>'+
+        '<div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:14px">'+
+        card('Vendido a precio proveedor', M(vendidoCosto), 'var(--text)', 'costo de lo que salió')+
+        card('Compras del periodo', M(comprasCosto), 'var(--text)', 'entradas registradas')+
+        card('Vendido vs Compras', (vendidoCosto-comprasCosto>=0?'+':'−')+M(Math.abs(vendidoCosto-comprasCosto)), (vendidoCosto-comprasCosto>=0?'var(--green)':'var(--red)'), vendidoCosto>=comprasCosto?'compraste menos de lo que vendiste':'compraste más de lo que vendiste')+
+        '</div>';
+
+    var tablaCat = cats.length ? ('<div class="card" style="max-width:none;margin:0 16px 12px"><div class="card-body" style="padding:0"><div style="padding:12px 16px;font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:1px;color:var(--accent)">🍽️ Vendidos por categoría — '+M(totVendCarta)+' a carta</div><div class="tabla-wrap"><table style="font-size:12px"><thead><tr><th style="text-align:left">Categoría</th><th style="text-align:right">Unidades</th><th style="text-align:right">$ a carta</th><th style="text-align:right">%</th></tr></thead><tbody>'+
+        cats.map(function(c){ var p=totVendCarta>0?(porCat[c].carta/totVendCarta*100):0; return '<tr><td style="font-weight:600">'+etx(c)+'</td><td style="text-align:right">'+porCat[c].u+'</td><td style="text-align:right;color:var(--green);font-weight:600">'+M(porCat[c].carta)+'</td><td style="text-align:right;color:var(--text-dim)">'+p.toFixed(0)+'%</td></tr>'; }).join('')+
+        '</tbody></table></div></div></div>') : '';
+
+    var tablaMerma = mermados.length ? ('<div class="card" style="max-width:none;margin:0 16px 12px"><div class="card-body" style="padding:0"><div style="padding:12px 16px;font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:1px;color:var(--accent)">🗑️ Productos mermados — '+M(mermaCosto)+'</div><div class="tabla-wrap"><table style="font-size:12px"><thead><tr><th style="text-align:left">Producto</th><th style="text-align:right">Merma</th><th style="text-align:right">$ a costo</th></tr></thead><tbody>'+
+        mermados.sort(function(a,b){return b.costo-a.costo;}).map(function(x){ return '<tr><td style="font-weight:600">'+etx(x.nombre)+'</td><td style="text-align:right">'+_fmtBase(x.m)+'</td><td style="text-align:right;color:var(--accent);font-weight:600">'+M(x.costo)+'</td></tr>'; }).join('')+
+        '</tbody></table></div></div></div>') : '';
+
+    var listaSinUsar = sinUsar ? ('<div class="card" style="max-width:none;margin:0 16px 12px"><div class="card-body" style="padding:12px 16px"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px">💤 Insumos sin usar en este periodo ('+sinUsar+')</div><div style="display:flex;flex-wrap:wrap;gap:6px">'+
+        sinUsarLista.map(function(n){ return '<span style="font-size:11px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:3px 9px;color:var(--text-dim)">'+etx(n)+'</span>'; }).join('')+
+        (sinUsar>sinUsarLista.length?'<span style="font-size:11px;color:var(--text-dim)">+'+(sinUsar-sinUsarLista.length)+' más</span>':'')+'</div></div></div>') : '';
+
+    return '<div class="wrap" style="padding-top:0"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--text);margin:6px 0 10px">📊 Resumen ejecutivo</div>'+bloqueKpis+'</div>'+tablaCat+tablaMerma+listaSinUsar;
+}
+
 function renderStep5() {
     let capitalCosto=0, capitalCarta=0, difCostoTotal=0, conAlerta=0;
     filasCaptura.forEach(fila => {
@@ -3326,7 +3448,7 @@ function renderStep5() {
         ? '<div style="text-align:center;padding:40px;color:var(--text-dim)">Sin productos capturados</div>'
         : '';
 
-    return kpis + `<div style="padding:16px 0 24px">${sinDatos}${tablasCopa}${tablasPza}</div>`;
+    return kpis + _resumenEjecutivo() + `<div style="padding:16px 0 24px">${sinDatos}${tablasCopa}${tablasPza}</div>`;
 }
 
 // ── Reporte directivo ─────────────────────────────────────────
@@ -4477,7 +4599,7 @@ function guardarFichaTecnica() {
 }
 
 // ── Init ──────────────────────────────────────────────────────
-function init() { _limpiarStorageEmergencia(); renderStats(); renderHistorial(); }
+function init() { _limpiarStorageEmergencia(); _mergeDraftsLocal(); renderStats(); renderHistorial(); }
 init();
 
 // ── Bloqueo de navegación mientras haya un inventario abierto ──
