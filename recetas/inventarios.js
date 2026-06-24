@@ -94,6 +94,7 @@ async function _reloadInvRT() {
     var vistos = {}; remote.forEach(function(c){ if (c && c.id) vistos[c.id] = 1; });
     var soloLocal = (_cacheInv || []).filter(function(c){ return c && c.id && !vistos[c.id]; });
     _cacheInv = remote.concat(soloLocal);
+    _mergeDraftsLocal(); // nunca perder borradores locales en un reload de realtime
     if (typeof renderStats === 'function') renderStats();
     if (typeof renderHistorial === 'function') renderHistorial();
 }
@@ -771,7 +772,13 @@ function renderHistorial() {
     const cont = document.getElementById('historialContent');
     if (!cont) return;
     if (modoHistorial === 'mes') { cont.innerHTML = renderCalendario(); return; }
-    const lista = [..._scopeSucInvs(getInventarios())].reverse();
+    // Acotar por sucursal, PERO siempre incluir los borradores abiertos (cerrado=false)
+    // aunque el scope no los muestre → un inventario en curso NUNCA se oculta/pierde.
+    const todos  = getInventarios();
+    const scoped = _scopeSucInvs(todos);
+    const _ids   = {}; scoped.forEach(function(x){ if (x && x.id) _ids[x.id] = 1; });
+    todos.forEach(function(x){ if (x && x.id && !x.cerrado && !_ids[x.id]) scoped.push(x); });
+    const lista = [...scoped].reverse();
     if (!lista.length) {
         cont.innerHTML = `<div class="empty-state" style="margin-top:16px">
             <div class="empty-icon">📦</div>
@@ -3899,9 +3906,28 @@ function guardarInventario() {
     if (!ok) throw new Error('storage-full');
 }
 
+// Respaldo INMEDIATO del borrador en localStorage (síncrono, en cada cambio).
+// No espera el debounce ni a Supabase → aunque refresques al instante, no se pierde.
+function _persistirBorradorLocal() {
+    if (!invActual || invActual.cerrado) return;
+    try {
+        invActual.filas = filasCaptura.filter(_filaConDatos).map(function(f){ return Object.assign({}, f, { existenciaFisica: calcExistencia(f) }); });
+        var lista = getInventarios();
+        var idx = lista.findIndex(function(x){ return x.id === invActual.id; });
+        if (idx >= 0) lista[idx] = invActual; else lista.push(invActual);
+        _cacheInv = lista;
+        _guardarDraftsLocal();
+    } catch(e) { console.warn('[borrador local]', e); }
+}
+// Flush al cerrar/ocultar la pestaña (móvil incluido).
+window.addEventListener('pagehide',     function(){ _persistirBorradorLocal(); });
+window.addEventListener('beforeunload', function(){ _persistirBorradorLocal(); });
+window.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'hidden') _persistirBorradorLocal(); });
+
 let _autoGuardarTimer = null;
 function _autoGuardar() {
     if (!invActual) return;
+    _persistirBorradorLocal(); // ← respaldo local INMEDIATO en cada cambio
     clearTimeout(_autoGuardarTimer);
     _autoGuardarTimer = setTimeout(function() {
         try { guardarInventario(); } catch(e) { console.warn('[autoGuardar]', e); return; }
