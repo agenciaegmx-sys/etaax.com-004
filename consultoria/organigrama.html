@@ -100,6 +100,7 @@ body.nav-open #viewport{left:200px}
     <span class="org-eyebrow">🧠 Organigrama</span>
     <button class="org-btn primary" onclick="nuevoNodo()">+ Puesto</button>
     <button class="org-btn" id="btnConnect" onclick="toggleConnect()">🔗 Conectar</button>
+    <button class="org-btn" id="btnDisconnect" onclick="toggleDisconnect()">✂️ Desconectar</button>
     <button class="org-btn" onclick="zoomBtn(1.2)">＋</button>
     <button class="org-btn" onclick="zoomBtn(0.83)">－</button>
     <button class="org-btn" onclick="resetVista()">⟲ Centrar</button>
@@ -150,7 +151,7 @@ var COLORS=['#3dbe7a','#7ab8f5','#f5c842','#e0a93d','#c87a6a','#b98cff'];
 var _nodos=[], _conex=[], _perfiles=[];
 var pan={x:0,y:0}, zoom=1;
 var _editId=null, _editColor=COLORS[0];
-var _connectMode=false, _connectFrom=null;
+var _connectMode=false, _disconnectMode=false, _connectFrom=null;
 var _orgRtCh=null, _orgGuardarTs=0, _orgRtT=null;
 
 var viewport=document.getElementById('viewport'), world=document.getElementById('world'), svg=document.getElementById('links');
@@ -230,14 +231,15 @@ function _moveTo(cx,cy){
     }
 }
 function _endPointer(){
-    _lastPt=null;
+    _lastPt=null; _pinch=null;
     if(panning){ panning=false; viewport.classList.remove('grabbing'); }
     if(dragId){
         var id=dragId; dragId=null;          // limpiar SIEMPRE → nunca se queda pegado
-        if(moved<=4){ if(!_connectMode) abrirModal(id); }   // clic/tap sin arrastre → editar
+        if(moved<=4){ if(!_connectMode && !_disconnectMode) abrirModal(id); }   // clic/tap sin arrastre → editar
         else { guardar(); }                                  // arrastre real → guardar posición
     }
 }
+var _pinch=null; // estado del pinch-zoom (2 dedos) en tablet
 // Mouse
 viewport.addEventListener('mousedown',function(e){
     if(e.target.closest('.org-node')) return;
@@ -252,6 +254,22 @@ viewport.addEventListener('touchstart',function(e){
     _startPan(e.touches[0].clientX,e.touches[0].clientY);
 },{passive:true});
 document.addEventListener('touchmove',function(e){
+    // Pinch-zoom con 2 dedos (tablet) — equivalente a la rueda del mouse
+    if(e.touches.length===2){
+        e.preventDefault();
+        panning=false; dragId=null;           // 2 dedos → no es pan/arrastre
+        var t0=e.touches[0], t1=e.touches[1];
+        var dist=Math.hypot(t1.clientX-t0.clientX, t1.clientY-t0.clientY);
+        var r=viewport.getBoundingClientRect();
+        var mx=(t0.clientX+t1.clientX)/2 - r.left, my=(t0.clientY+t1.clientY)/2 - r.top;
+        if(!_pinch){ _pinch={dist:dist, zoom:zoom, mx:mx, my:my, panx:pan.x, pany:pan.y}; return; }
+        var nz=clamp(_pinch.zoom*(dist/_pinch.dist), 0.3, 2.5);
+        pan.x=_pinch.mx-((_pinch.mx-_pinch.panx)/_pinch.zoom)*nz; // zoom centrado en el punto medio
+        pan.y=_pinch.my-((_pinch.my-_pinch.pany)/_pinch.zoom)*nz;
+        zoom=nz; applyTransform();
+        return;
+    }
+    _pinch=null;
     if(!panning&&!dragId) return;
     if(e.touches.length!==1) return;
     e.preventDefault();                       // evita el scroll de la página al arrastrar/panear
@@ -281,6 +299,7 @@ function nodeEl(nd){
     el.addEventListener('mousedown',function(e){
         e.stopPropagation();
         if(_connectMode){ _connectClick(nd.id); return; }
+        if(_disconnectMode){ _disconnectClick(nd.id); return; }
         dragId=nd.id; moved=0; _lastPt=null; dragStart={mx:e.clientX,my:e.clientY,x:nd.x,y:nd.y};
         document.querySelectorAll('.org-node.sel').forEach(function(n){n.classList.remove('sel');});
     });
@@ -288,6 +307,7 @@ function nodeEl(nd){
         if(e.touches.length!==1) return;
         e.stopPropagation(); e.preventDefault();   // evita scroll y el "ghost click" del mouse sintético
         if(_connectMode){ _connectClick(nd.id); return; }
+        if(_disconnectMode){ _disconnectClick(nd.id); return; }
         var t=e.touches[0];
         dragId=nd.id; moved=0; _lastPt=null; dragStart={mx:t.clientX,my:t.clientY,x:nd.x,y:nd.y};
         document.querySelectorAll('.org-node.sel').forEach(function(n){n.classList.remove('sel');});
@@ -328,6 +348,7 @@ function renderConex(){
 /* ── Conectar ── */
 function toggleConnect(){
     _connectMode=!_connectMode; _connectFrom=null;
+    if(_connectMode && _disconnectMode){ _disconnectMode=false; document.getElementById('btnDisconnect').classList.remove('on'); } // exclusivos
     document.getElementById('btnConnect').classList.toggle('on',_connectMode);
     viewport.classList.toggle('connect',_connectMode);
     document.getElementById('orgHint').textContent=_connectMode
@@ -342,6 +363,27 @@ function _connectClick(id){
     if(!dup){ _conex.push({from:_connectFrom,to:id}); guardar(); }
     var prev=document.getElementById('nd_'+_connectFrom); if(prev)prev.classList.remove('sel');
     _connectFrom=null; renderConex();
+}
+/* ── Desconectar ── (clic en los DOS puestos para quitar su línea; fácil en tablet) */
+function toggleDisconnect(){
+    _disconnectMode=!_disconnectMode; _connectFrom=null;
+    if(_disconnectMode && _connectMode){ _connectMode=false; document.getElementById('btnConnect').classList.remove('on'); viewport.classList.remove('connect'); }
+    document.getElementById('btnDisconnect').classList.toggle('on',_disconnectMode);
+    viewport.classList.toggle('connect',_disconnectMode);
+    document.getElementById('orgHint').textContent=_disconnectMode
+        ? 'Modo desconectar: clic en los DOS puestos conectados para quitar su línea.'
+        : 'Arrastra el fondo para mover · rueda para zoom · clic en un nodo para editar';
+    document.querySelectorAll('.org-node.sel').forEach(function(n){n.classList.remove('sel');});
+}
+function _disconnectClick(id){
+    if(!_connectFrom){ _connectFrom=id; var el=document.getElementById('nd_'+id); if(el) el.classList.add('sel'); return; }
+    if(_connectFrom===id){ _connectFrom=null; var e2=document.getElementById('nd_'+id); if(e2)e2.classList.remove('sel'); return; }
+    var antes=_conex.length;
+    _conex=_conex.filter(function(c){ return !((c.from===_connectFrom&&c.to===id)||(c.from===id&&c.to===_connectFrom)); });
+    var prev=document.getElementById('nd_'+_connectFrom); if(prev)prev.classList.remove('sel');
+    _connectFrom=null; renderConex();
+    if(_conex.length!==antes) guardar();
+    else if(window.etaaxAlert) etaaxAlert('Esos dos puestos no están conectados.');
 }
 function borrarConex(i){ _conex.splice(i,1); renderConex(); guardar(); }
 
