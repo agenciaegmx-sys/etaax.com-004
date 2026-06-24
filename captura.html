@@ -65,7 +65,7 @@ function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMont
 
 var TOKEN=_q('t'), NEG=_q('neg'), TIPO=_q('tipo')||'corte';
 var TS=parseInt(_q('ts'),10)||0;
-var VIDA_MS=60000;            // el código vive 1 minuto
+var VIDA_MS=300000;          // el código vive 5 minutos (servidor: token_pairing_valido v26)
 var _subidas=0, _countTimer=null;
 
 function _vivo(){ return !TS || (Date.now()-TS) < VIDA_MS; }
@@ -79,7 +79,7 @@ function mostrarMuerto(expirado){
     inv.innerHTML='<div style="font-size:36px;margin:10px 0">'+(expirado?'⏱️':'🔒')+'</div>'+
         '<div style="font-size:13px;color:var(--text-dim);line-height:1.6">'+
         (expirado
-            ? 'Este código expiró (dura 1&nbsp;minuto).<br>Vuelve a escanear el QR en la computadora.'
+            ? 'Este código expiró (dura 5&nbsp;minutos).<br>Vuelve a escanear el QR en la computadora.'
             : 'Este enlace no es válido o ya expiró.<br>Pide a la computadora que genere un QR nuevo.')+
         '</div>';
 }

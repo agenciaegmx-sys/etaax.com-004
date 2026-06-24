@@ -2,8 +2,9 @@
    ETAAX — Puente QR de captura (lado computadora)
    Genera un token temporal, dibuja el QR y escucha (polling) las
    fotos que el celular sube a la bandeja con ese token.
-   El token vive 1 minuto (seguridad), así que la compu lo
-   REGENERA sola cada ~55s para que el QR en pantalla siempre sirva.
+   El token vive 5 minutos (seguridad), así que la compu lo
+   REGENERA sola cada 3 min para que el QR en pantalla siempre sirva
+   (al escanear siempre quedan ≥2 min).
    Requiere: _supabase (supabase-config.js). Carga la librería de
    QR desde jsdelivr la primera vez.
 
@@ -14,8 +15,8 @@
    ============================================================ */
 (function () {
     var QR_LIB = 'https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js';
-    var VIDA_MS = 60000;            // un token vive 1 minuto en el servidor
-    var REGEN_MS = 55000;           // se regenera antes de morir
+    var VIDA_MS = 300000;           // un token vive 5 minutos (servidor: token_pairing_valido v26)
+    var REGEN_MS = 180000;          // se regenera cada 3 min → al escanear siempre quedan ≥2 min
     var _pollTimer = null, _regenTimer = null;
     var _tokens = [];               // [{token, ts}] tokens aún vivos
     var _seen = {};                 // ids de capturas ya entregadas

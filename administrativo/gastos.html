@@ -433,6 +433,10 @@
             <div class="fg"><label>Concepto</label>
                 <input type="text" id="gConcepto" placeholder="Descripción del gasto…">
             </div>
+            <div class="fg" id="row-gasto-sucursal" style="display:none">
+                <label>📍 Sucursal a la que pertenece</label>
+                <select id="gSucursal"></select>
+            </div>
             <div class="fg-row-2">
                 <!-- Categoría con opción custom -->
                 <div class="fg">
@@ -570,7 +574,13 @@
                 </div>
                 <div id="evGastoGrid" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px"></div>
               </div>
-              <div id="qrGastoBox" style="display:none"></div>
+              <button type="button" id="btnQrGasto" onclick="_toggleQrGasto()"
+                  style="margin-top:6px;background:none;border:1px dashed var(--green-dim);
+                  border-radius:6px;padding:8px 14px;color:var(--green);cursor:pointer;
+                  font-size:12px;font-family:DM Sans,sans-serif;width:100%">
+                  📱 Subir foto desde el celular
+              </button>
+              <div id="qrGastoBox" style="display:none;margin-top:8px;text-align:center"></div>
             </div>
         </div>
 
@@ -748,7 +758,36 @@ function _sbUp(tabla, record) { sbUpsert(tabla, record); }
 function _sbDel(tabla, id) { sbDelete(tabla, id); }
 function _sbSaveCats(cats) { sbUpsertDoc('gastos_cats_custom', cats); }
 
-function load()           { return _cacheGastos || []; }
+// Acotar a la SUCURSAL activa (regla "sin sucursal = matriz: ve todo"). El cache
+// completo se mantiene para sync/borrado; solo el display filtra.
+function _sucActiva(){ return localStorage.getItem('etaax_sucursal_activa') || ''; }
+function _scopeSuc(lista){
+    var s=_sucActiva(); if(!s) return lista||[];
+    return (lista||[]).filter(function(x){ return (x && (x.sucursalId || 'suc_principal')) === s; });
+}
+function load()           { return _scopeSuc(_cacheGastos || []); }
+// Permiso "cambiar de sucursal": permitido salvo que el dueño lo apague (fail-open).
+function _puedeCambiarSuc(){
+    var ctx; try{ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null');}catch(e){}
+    if(!ctx || ctx.ctxType!=='staff') return true;          // dueño / admin maestro
+    if((ctx.rol||'')==='admin') return true;
+    var perms=window.etaaxPermisosRol?etaaxPermisosRol(ctx.negId||getNegocioActivo(),ctx.rol):{};
+    return perms.cambiarSucursal!==false;
+}
+// Selector "📍 Sucursal" del gasto: solo si hay >1 sucursal y el rol puede reasignar.
+function _pobSucursalGasto(sucId){
+    var sel=document.getElementById('gSucursal'), row=document.getElementById('row-gasto-sucursal');
+    if(!sel||!row) return;
+    var negId=getNegocioActivo()||'', sucs=[];
+    try{ sucs=JSON.parse(localStorage.getItem('etaax_'+negId+'_sucursales')||'[]'); }catch(e){}
+    if(sucs.length<=1 || !_puedeCambiarSuc()){ row.style.display='none'; return; }
+    row.style.display='';
+    var tieneMatriz=sucs.some(function(s){return s.id==='suc_principal';});
+    sel.innerHTML='<option value="">— Sin asignar (Matriz) —</option>'+
+        (tieneMatriz?'':'<option value="suc_principal">Matriz</option>')+
+        sucs.map(function(s){return '<option value="'+(s.id||'')+'">'+(s.nombre||s.id)+'</option>';}).join('');
+    sel.value=sucId||'';
+}
 function loadProveedores(){ return _cacheProvs  || []; }
 function loadCatsCustom() { return _cacheCats   || []; }
 function saveCatsCustom(d){ _cacheCats = d; _sbSaveCats(d); }
@@ -1314,6 +1353,7 @@ function _abrirModalGasto(g,tipo){
     document.getElementById('gConcepto').value=d.concepto||'';
     document.getElementById('gCategoria').value=d.categoria||'';
     document.getElementById('gProveedor').value=d.proveedor||'';
+    _pobSucursalGasto(g ? (d.sucursalId||'') : _sucActiva()); // editar→la del gasto; nuevo→sucursal activa
     document.getElementById('gNotas').value=d.notas||'';
     // Estatus
     setEstatus(d.estatus||'pagado');
@@ -1348,23 +1388,38 @@ function _abrirModalGasto(g,tipo){
     }
     renderEvidenciasGasto();
     document.getElementById('modalGasto').classList.add('open');
-    _abrirPuenteGasto();
+    _cerrarPuenteGasto(); // QR apagado al abrir — el usuario lo activa con el botón (📱)
 }
 
 function _abrirPuenteGasto(){
     var box=document.getElementById('qrGastoBox');
     if(!box||!window.QrPuente)return;
     box.style.display='block';
+    var btn=document.getElementById('btnQrGasto');
+    if(btn) btn.textContent='✕ Cerrar escaneo';
     QrPuente.abrir(getNegocioActivo(),'gasto',box,function(foto){
         if(_evidenciasGasto.length>=3){ alert('Ya tienes 3 archivos en este gasto.'); return; }
         _evidenciasGasto.push({url:foto.url, path:foto.path, pdf:false, nombre:'foto-celular.jpg'});
         renderEvidenciasGasto();
     });
 }
+function _cerrarPuenteGasto(){
+    if(window.QrPuente)QrPuente.cerrar();
+    var box=document.getElementById('qrGastoBox');
+    if(box){ box.style.display='none'; box.innerHTML=''; }
+    var btn=document.getElementById('btnQrGasto');
+    if(btn) btn.textContent='📱 Subir foto desde el celular';
+}
+function _toggleQrGasto(){
+    var box=document.getElementById('qrGastoBox');
+    if(!box) return;
+    if(box.style.display==='none' || !box.style.display) _abrirPuenteGasto();
+    else _cerrarPuenteGasto();
+}
 
 function cerrarModal(){
     document.getElementById('modalGasto').classList.remove('open');
-    if(window.QrPuente)QrPuente.cerrar();
+    _cerrarPuenteGasto();
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1682,7 +1737,7 @@ function _pnRenderCptList(){
     }).join('');
 }
 function _pnGuardarGastoDirecto(g){
-    g.id=genId(); g.negocioId=getNegocioActivo();
+    g.id=genId(); g.negocioId=getNegocioActivo(); g.sucursalId=_sucActiva();
     _cacheGastos=(_cacheGastos||[]).filter(function(x){return x.id!==g.id;});
     _cacheGastos.push(g);
     _sbUp('gastos', g);
@@ -1851,8 +1906,13 @@ function guardarGasto(){
     var tipo=document.getElementById('gTipo').value;
     if(tipo==='mayor'&&!mayorDesbloqueado){alert('Se requiere autorización admin para gastos mayores.');return;}
     var id=document.getElementById('gId').value||genId();
+    var _exG=(_cacheGastos||[]).find(function(x){return x.id===id;});
+    var _selSucG=document.getElementById('gSucursal'), _rowSucG=document.getElementById('row-gasto-sucursal');
+    var _sucG=(_rowSucG && _rowSucG.style.display!=='none' && _selSucG)
+        ? _selSucG.value
+        : ((_exG && _exG.sucursalId!==undefined)?_exG.sucursalId:_sucActiva());
     var gasto={
-        id:id,negocioId:getNegocioActivo(),fecha:fecha,tipo:tipo,
+        id:id,negocioId:getNegocioActivo(),sucursalId:_sucG,fecha:fecha,tipo:tipo,
         concepto:concepto,
         categoria:document.getElementById('gCategoria').value,
         proveedor:document.getElementById('gProveedor').value.trim(),

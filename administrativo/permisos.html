@@ -289,6 +289,7 @@ var MODULES = [
     { key:'permisos',      label:'Permisos y Roles',      icon:'🔐', sub:'Control de acceso por perfil' },
     { key:'financiero',    label:'Financiero',            icon:'📊', sub:'Costos, márgenes y análisis' },
     { key:'config',        label:'Configuración',         icon:'⚙️', sub:'Ajustes generales del negocio' },
+    { key:'cambiarSucursal', label:'Cambiar registros de sucursal', icon:'📍', sub:'Reasignar gastos, cortes, recetas e insumos a otra sucursal' },
 ];
 
 /* ── CATEGORÍAS (agrupación visual, igual que el nav) ── */
@@ -297,6 +298,7 @@ var CATEGORIAS = [
     { label:'Control Administrativo', modulos:['ventas','ventas_productos','gastos','menu','proveedores','clientes','staff','permisos'] },
     { label:'Finanzas',              modulos:['financiero'] },
     { label:'Ajustes',               modulos:['config'] },
+    { label:'Acciones especiales',   modulos:['cambiarSucursal'] },
 ];
 var _MOD_BY_KEY = {};
 MODULES.forEach(function(m){ _MOD_BY_KEY[m.key] = m; });
@@ -387,7 +389,8 @@ function _toggleHTML(id, checked, disabled, onchange) {
 
 /* Render de un card de módulo (acordeón) */
 function _renderModCard(m, perms, isAdmin) {
-    var checked  = !!perms[m.key];
+    // cambiarSucursal es fail-open: prendido salvo que lo apaguen explícitamente.
+    var checked  = (m.key === 'cambiarSucursal') ? (perms[m.key] !== false) : !!perms[m.key];
     var disabled = isAdmin;
     var subs     = SUBPERMS[m.key] || [];
     var hasSubs  = subs.length > 0;
@@ -492,7 +495,8 @@ function _objSubsOn(modKey) {
 function togglePermiso(modKey) {
     if (_rolActivo === 'admin') return;
     var perms = getRolPermisos(_rolActivo);
-    var nowOn = !perms[modKey];
+    // cambiarSucursal es fail-open (prendido si no es false): el toggle se basa en eso.
+    var nowOn = (modKey === 'cambiarSucursal') ? (perms[modKey] === false) : !perms[modKey];
     // Módulos con sub-permisos: al encender se guarda el objeto; al apagar, false
     if (SUBPERMS[modKey] && SUBPERMS[modKey].length) {
         perms[modKey] = nowOn ? _objSubsOn(modKey) : false;

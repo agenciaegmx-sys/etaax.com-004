@@ -83,6 +83,7 @@
                     <span class="brand-title">Inventarios</span>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <button class="btn-vista" onclick="abrirReporteExistencias()">📊 Reporte de existencias</button>
                     <button class="btn-vista" onclick="mostrarVista('vistaEntradas')">📋 Revisar entradas</button>
                     <button class="btn-vista" onclick="nuevoPrimerLev()">📋 Primer levantamiento</button>
                     <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)"
@@ -821,6 +822,21 @@ document.addEventListener('DOMContentLoaded', function() { _sbInitInv(); });
         style="background:var(--accent);color:#0f0e0c;border:none;border-radius:8px;
         padding:8px 22px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">Confirmar</button>
     </div>
+  </div>
+</div>
+
+<!-- ── Reporte de existencias por área ── -->
+<div id="modalReporteExist" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:700;align-items:flex-start;justify-content:center;padding:30px 16px;overflow:auto">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;max-width:960px;width:100%;margin:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:1.5px;color:var(--text)">📊 Existencias por área</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="repAreaSel" onchange="setReporteArea(this.value)" style="font-size:13px;padding:6px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px"></select>
+        <button class="btn-vista" onclick="imprimirReporteExistencias()" style="color:var(--accent);border-color:var(--accent)">🖨️ Imprimir</button>
+        <button class="btn-vista" onclick="document.getElementById('modalReporteExist').style.display='none'">✕ Cerrar</button>
+      </div>
+    </div>
+    <div id="repExistBody" style="padding:0 4px 20px"></div>
   </div>
 </div>
 

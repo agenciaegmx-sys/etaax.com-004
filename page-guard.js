@@ -27,7 +27,7 @@ window.ETAAX_PERM_DEFAULTS = {
     gerente:        { recetas:true,  insumos:true,  inventarios:true,  requisiciones:true,
                       ventas:{ capturarCorte:true, verLista:true, editarHistorico:false, ventaExtra:true, hacerDeposito:true, verDepositos:false, cajaFuerte:false },
                       ventas_productos:true,
-                      gastos:{ capturar:true, verCajaChica:true, verHistorico:true, gastosMayores:false, verCajaFuerte:false, verBanco:false, editarHistorico:false, verResumen:false },
+                      gastos:{ capturar:true, verCajaChica:true, verHistorico:true, gastosMayores:false, verCajaFuerte:true, verBanco:true, editarHistorico:false, verResumen:false },
                       menu:true,  proveedores:true,  clientes:true,  staff:true,  permisos:false, financiero:true,  config:false },
     jefe_cocina:    { recetas:true,  insumos:true,  inventarios:true,  requisiciones:true,  ventas:false, ventas_productos:false, gastos:false, menu:true,  proveedores:false, clientes:false, staff:false, permisos:false, financiero:false, config:false },
     chef:           { recetas:true,  insumos:true,  inventarios:true,  requisiciones:true,  ventas:false, ventas_productos:false, gastos:false, menu:true,  proveedores:false, clientes:false, staff:false, permisos:false, financiero:false, config:false },
@@ -38,6 +38,13 @@ window.ETAAX_PERM_DEFAULTS = {
     administrativo: { recetas:false, insumos:true,  inventarios:true,  requisiciones:true,  ventas:true,  ventas_productos:true,  gastos:true,  menu:false, proveedores:true,  clientes:true,  staff:true,  permisos:false, financiero:true,  config:false },
     otro:           { recetas:false, insumos:false, inventarios:false, requisiciones:false, ventas:false, ventas_productos:false, gastos:false, menu:false, proveedores:false, clientes:false, staff:false, permisos:false, financiero:false, config:false },
 };
+
+/* Acción transversal "cambiar de sucursal" (reasignar gastos/cortes/recetas/insumos):
+   permitida por defecto en todos los roles; el dueño la apaga por rol en Permisos. */
+Object.keys(window.ETAAX_PERM_DEFAULTS).forEach(function (rol) {
+    if (window.ETAAX_PERM_DEFAULTS[rol].cambiarSucursal === undefined)
+        window.ETAAX_PERM_DEFAULTS[rol].cambiarSucursal = true;
+});
 
 /* Catálogo de sub-permisos por módulo — fuente única para la UI de
    permisos.html y para validar claves. El orden define cómo se listan. */

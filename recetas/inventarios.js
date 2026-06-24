@@ -25,6 +25,19 @@ var _cacheRecetasInv = null; // recetas para uso interno de este módulo
 var _cacheInsumosInv = null; // insumos para uso interno de este módulo
 
 function getInsumos()     { return _cacheInsumosInv || (function(){ try { return JSON.parse(_skGet('insumos')) || []; } catch { return []; } }()); }
+// Insumos acotados a la SUCURSAL activa (regla "sin sucursal = matriz: ve todo").
+// Sin esto, el inventario leía los insumos de TODAS las sucursales y los duplicaba.
+function _scopeSucInsumos(lista) {
+    const s = localStorage.getItem('etaax_sucursal_activa') || '';
+    if (!s) return lista || [];
+    return (lista || []).filter(x => (x && (x.sucursalId || 'suc_principal')) === s);
+}
+// Inventarios de la SUCURSAL activa (independientes por sucursal). "Sin sucursal = ve todo".
+function _scopeSucInvs(lista) {
+    const s = localStorage.getItem('etaax_sucursal_activa') || '';
+    if (!s) return lista || [];
+    return (lista || []).filter(x => (x && (x.sucursalId || 'suc_principal')) === s);
+}
 function getRecetas()     { return _cacheRecetasInv || []; }
 function getInventarios() { return _cacheInv || []; }
 function getEntradasLog() { return _cacheEL || []; }
@@ -196,7 +209,7 @@ function ingredienteML(cantidad, unidad) {
 }
 
 function getExistenciaAnterior(insumoId) {
-    const cerrados = getInventarios().filter(x => x.cerrado);
+    const cerrados = _scopeSucInvs(getInventarios()).filter(x => x.cerrado);
     if (!cerrados.length) return 0;
     const ultimo = cerrados[cerrados.length - 1];
     const fila   = (ultimo.filas || []).find(f => f.insumoId === insumoId);
@@ -255,7 +268,7 @@ function calcVentasBaseRecetas(insumoId) {
 // ── PREBATCH: producción de batches (sub-receta→insumo) ──────────
 // Insumos prebatch disponibles = sub-recetas convertidas a insumo.
 function prebatchesProducibles() {
-    return getInsumos().filter(function(x){ return x.esSubReceta && x.recetaId; });
+    return _scopeSucInsumos(getInsumos()).filter(function(x){ return x.esSubReceta && x.recetaId; });
 }
 // Cuánto de un insumo BASE se consumió al producir batches (en su unidad base ml/g/pza).
 function consumoBasesPorProduccion(insumoId) {
@@ -463,7 +476,7 @@ function getFilasFiltradas(conRegistro = false) {
 }
 
 function getInventariosMes(anio, mes) {
-    return getInventarios().filter(inv => {
+    return _scopeSucInvs(getInventarios()).filter(inv => {
         if (!inv.fecha) return false;
         const [y, m] = inv.fecha.split('-').map(Number);
         return y === anio && m === mes;
@@ -495,7 +508,7 @@ function rerenderCaptura() {
 // VISTA LISTA
 // ═══════════════════════════════════════════════════════════════
 function renderStats() {
-    const lista  = getInventarios();
+    const lista  = _scopeSucInvs(getInventarios());
     const ultimo = lista[lista.length - 1];
     document.getElementById('statInvs').textContent   = lista.length;
     document.getElementById('statUltimo').textContent = ultimo
@@ -529,11 +542,213 @@ function setModoListaHist(modo) {
     renderHistorial();
 }
 
+// ═══════════════════════════════════════════════════════════════
+// REPORTE — Existencias por área (cantidad + capital a costo proveedor + última fecha)
+// ═══════════════════════════════════════════════════════════════
+var _repArea = 'todas';
+const _AREA_LBL = { barra:'Barra', bodega:'Bodega', cocina:'Cocina', general:'General' };
+function _areaNom(a){ return _AREA_LBL[a] || (a ? (a.charAt(0).toUpperCase()+a.slice(1)) : 'General'); }
+
+// Última existencia registrada de cada insumo (del inventario CERRADO más reciente
+// que lo contó), acotado por área. Devuelve filas con cantidad, costo y capital.
+// Existencia de UNA fila en un área dada (en la unidad de la fila: copas / pza / base).
+// Licor/pza: botellas cerradas por área (la botella ABIERTA se cuenta en barra).
+// Alimentos (peso): no se separan por bodega/barra → van al área del insumo (default cocina).
+function _existenciaArea(fila, area, ins) {
+    if (fila.tipo === 'peso') {
+        var aIns = (ins && ins.area) || 'cocina';
+        return area === aIns ? (parseFloat(fila.existenciaPeso) || 0) : 0;
+    }
+    var cerr   = area === 'bodega' ? (fila.cerradasBodega || 0)
+               : area === 'barra'  ? (fila.cerradasBarra  || 0) : 0;
+    var mlOpen = area === 'barra' ? calcMLReales(fila) : 0; // la botella abierta vive en barra
+    if (fila.tipo === 'pza') return cerr + (mlOpen > 0 ? 1 : 0);
+    var copasBot   = (fila.contNeto > 0 && fila.copaML > 0) ? fila.contNeto / fila.copaML : 0;
+    var copasAbier = fila.copaML > 0 ? mlOpen / fila.copaML : 0;
+    return cerr * copasBot + copasAbier;
+}
+
+function _datosReporteExistencias(area) {
+    var invs = _scopeSucInvs(getInventarios()).filter(function(i){ return i && i.cerrado && (i.filas||[]).length; });
+    invs.sort(function(a,b){ return String(b.fecha||'').localeCompare(String(a.fecha||'')); }); // más reciente primero
+    // Última fila registrada de cada insumo (de cualquier inventario).
+    var porIns = {};
+    invs.forEach(function(inv){
+        (inv.filas||[]).forEach(function(f){
+            if (!f || !f.insumoId || porIns[f.insumoId]) return;
+            porIns[f.insumoId] = { fila:f, fecha:inv.fecha };
+        });
+    });
+    var insById = {}; getInsumos().forEach(function(x){ if (x && x.id) insById[x.id] = x; });
+    // UNA fila por insumo, con su existencia en barra, en bodega y el total.
+    var rows = [];
+    Object.keys(porIns).forEach(function(id){
+        var o = porIns[id], f = o.fila, ins = insById[id];
+        var cc     = costoCopa(f);
+        var barra  = _existenciaArea(f, 'barra',  ins);
+        var bodega = _existenciaArea(f, 'bodega', ins);
+        var total  = calcExistencia(f); // total real (incluye la botella abierta pesada)
+        if (barra <= 0 && bodega <= 0 && total <= 0) return;
+        rows.push({
+            insumoId: id, nombre: f.nombre || '—', familia: f.familia || f.categoria || 'Otros',
+            tipo: f.tipo, copaML: f.copaML, contNeto: f.contNeto, baseUnit: f.baseUnit,
+            barra: barra, bodega: bodega, total: total,
+            costoUnit: parseFloat(f.costoUnitario) || 0,
+            capBarra: barra * cc, capBodega: bodega * cc, capital: total * cc, fecha: o.fecha
+        });
+    });
+    // Filtro por área: muestra solo los insumos con existencia en esa área
+    if (area && area !== 'todas') rows = rows.filter(function(r){ return (area === 'barra' ? r.barra : r.bodega) > 0; });
+    return rows;
+}
+function _fmtCant(qty, r){
+    var e = qty || 0;
+    if (e <= 0) return '—';
+    if (r.tipo === 'peso') return _fmtBase(e) + ' ' + (r.baseUnit || 'u');
+    if (r.tipo === 'pza')  return _fmtBase(e) + ' pza';
+    var copasBot = (r.contNeto > 0 && r.copaML > 0) ? r.contNeto / r.copaML : 0;
+    var bot = copasBot > 0 ? e / copasBot : e;
+    return (Math.round(bot * 10) / 10) + ' bot';
+}
+function _repFecha(f){ return f ? new Date(f+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) : '—'; }
+function _repMoney(n){ return '$' + (Math.round((n||0)*100)/100).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+function abrirReporteExistencias(){
+    // Selector: siempre ofrece Barra/Bodega/Cocina + cualquier otra área presente (ej. General)
+    var rows = _datosReporteExistencias('todas');
+    var presentes = [...new Set(rows.map(function(r){ return r.area; }))];
+    var fijas = ['barra','bodega','cocina'];
+    var areas = fijas.concat(presentes.filter(function(a){ return fijas.indexOf(a) < 0; }));
+    areas = [...new Set(areas)];
+    var sel = document.getElementById('repAreaSel');
+    if (sel) sel.innerHTML = '<option value="todas">Todas las áreas</option>' +
+        areas.map(function(a){ return '<option value="'+a+'">'+_areaNom(a)+'</option>'; }).join('');
+    _repArea = 'todas';
+    if (sel) sel.value = 'todas';
+    _renderReporteExistencias();
+    document.getElementById('modalReporteExist').style.display = 'flex';
+}
+function setReporteArea(a){ _repArea = a; _renderReporteExistencias(); }
+
+function _renderReporteExistencias(){
+    var body = document.getElementById('repExistBody');
+    if (!body) return;
+    var rows = _datosReporteExistencias(_repArea);
+    if (!rows.length){
+        body.innerHTML = '<div class="empty-state" style="padding:50px"><div class="empty-icon">📦</div>'+
+            '<div class="empty-title">Sin existencias registradas</div>'+
+            '<div class="empty-desc">Cierra al menos un inventario de esta área.</div></div>';
+        return;
+    }
+    // Resumen FIJO arriba (todas las áreas) → capital en barra, bodega y total
+    var _all = _datosReporteExistencias('todas');
+    var _capBarra  = _all.reduce(function(s,r){ return s + r.capBarra;  }, 0);
+    var _capBodega = _all.reduce(function(s,r){ return s + r.capBodega; }, 0);
+    var _capTotal  = _all.reduce(function(s,r){ return s + r.capital;   }, 0);
+    function _chip(lbl, cap, col){
+        return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 16px;min-width:130px">'+
+            '<div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">'+lbl+'</div>'+
+            '<div style="font-size:18px;font-weight:800;color:'+col+';margin-top:2px">'+_repMoney(cap)+'</div></div>';
+    }
+    var html = '<div style="display:flex;gap:10px;flex-wrap:wrap;padding:14px 16px 8px">'+
+        _chip('📍 Barra',  _capBarra,  'var(--accent)') +
+        _chip('📍 Bodega', _capBodega, 'var(--accent)') +
+        '<div style="background:rgba(61,190,122,.12);border:1px solid rgba(61,190,122,.35);border-radius:10px;padding:10px 16px;min-width:130px">'+
+        '<div style="font-size:11px;color:var(--green);text-transform:uppercase;letter-spacing:1px">TOTAL · '+(new Set(_all.map(function(r){return r.insumoId;}))).size+' insumos</div>'+
+        '<div style="font-size:18px;font-weight:800;color:var(--green);margin-top:2px">'+_repMoney(_capTotal)+'</div></div></div>';
+
+    // Tabla: UNA fila por insumo con Barra | Bodega | Total
+    rows.sort(function(a,b){ return b.capital - a.capital; });
+    var totBarra = rows.reduce(function(s,r){ return s + r.capBarra;  }, 0);
+    var totBodega= rows.reduce(function(s,r){ return s + r.capBodega; }, 0);
+    var totCap   = rows.reduce(function(s,r){ return s + r.capital;   }, 0);
+    html += '<div class="tabla-wrap" style="padding:0 8px"><table style="font-size:12px"><thead><tr>'+
+        '<th style="text-align:left">Insumo</th><th style="text-align:left">Familia</th>'+
+        '<th style="text-align:right">Exist. Barra</th><th style="text-align:right">Exist. Bodega</th>'+
+        '<th style="text-align:right">Total exist.</th><th style="text-align:right">Costo prov.</th>'+
+        '<th style="text-align:right">Capital</th><th style="text-align:center">Última existencia</th></tr></thead><tbody>'+
+        rows.map(function(r){
+            return '<tr><td style="font-weight:600">'+etx(r.nombre)+'</td>'+
+                '<td style="color:var(--text-dim)">'+etx(r.familia)+'</td>'+
+                '<td style="text-align:right">'+_fmtCant(r.barra, r)+'</td>'+
+                '<td style="text-align:right">'+_fmtCant(r.bodega, r)+'</td>'+
+                '<td style="text-align:right;font-weight:700;color:var(--text)">'+_fmtCant(r.total, r)+'</td>'+
+                '<td style="text-align:right;color:var(--text-muted)">'+_repMoney(r.costoUnit)+'</td>'+
+                '<td style="text-align:right;color:var(--accent);font-weight:600">'+_repMoney(r.capital)+'</td>'+
+                '<td style="text-align:center;color:var(--text-dim);font-size:11px">'+_repFecha(r.fecha)+'</td></tr>';
+        }).join('')+
+        '<tr style="border-top:2px solid var(--border)"><td colspan="6" style="text-align:right;font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:1px;color:var(--text-muted)">'+
+        'Capital · Barra '+_repMoney(totBarra)+' · Bodega '+_repMoney(totBodega)+'</td>'+
+        '<td style="text-align:right;font-weight:800;color:var(--green)">'+_repMoney(totCap)+'</td><td></td></tr>'+
+        '</tbody></table></div>';
+    body.innerHTML = html;
+}
+
+function imprimirReporteExistencias(){
+    var rows = _datosReporteExistencias(_repArea);
+    if (!rows.length){ alert('No hay existencias para imprimir.'); return; }
+    rows.sort(function(a,b){ return b.capital - a.capital; });
+    var negNom = (function(){ try { return (JSON.parse(localStorage.getItem('etaax_ctx')||'{}').negocio||{}).nombre || ''; } catch(e){ return ''; } })();
+    var totBarra = rows.reduce(function(s,r){ return s + r.capBarra;  }, 0);
+    var totBodega= rows.reduce(function(s,r){ return s + r.capBodega; }, 0);
+    var totCap   = rows.reduce(function(s,r){ return s + r.capital;   }, 0);
+    var fechaLarga = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'});
+    var nIns = (new Set(rows.map(function(r){return r.insumoId;}))).size;
+    var areaTxt = _repArea === 'todas' ? 'Todas las áreas' : _areaNom(_repArea);
+
+    var CSS = "* { margin:0; padding:0; box-sizing:border-box; }"+
+        "body { font-family:'DM Sans',sans-serif; background:#fff; color:#1a1916; -webkit-print-color-adjust:exact; print-color-adjust:exact; }"+
+        ".cab { display:flex; align-items:center; justify-content:space-between; padding:14px 22px; border-bottom:3px solid #3dbe7a; }"+
+        ".neg-nombre { font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:1px; color:#1a1916; line-height:1; }"+
+        ".neg-sub { font-size:9px; letter-spacing:3px; text-transform:uppercase; color:#888; margin-top:3px; }"+
+        ".etx-mark { font-family:'Bebas Neue',sans-serif; font-size:24px; letter-spacing:2px; color:#1a1916; text-align:right; }"+
+        ".etx-mark span { color:#3dbe7a; }"+
+        ".fecha-txt { font-size:9px; color:#aaa; letter-spacing:1px; text-align:right; margin-top:3px; }"+
+        ".fecha-cnt { font-size:10px; color:#888; text-align:right; }"+
+        "table.ct { width:100%; border-collapse:collapse; margin-top:6px; }"+
+        "table.ct thead tr { background:#f5f5f5; }"+
+        "table.ct thead th { padding:8px 10px; font-size:8.5px; font-weight:700; color:#666; text-transform:uppercase; letter-spacing:1.5px; border-bottom:2px solid #e0e0e0; }"+
+        "table.ct tbody tr { border-bottom:1px solid #f0f0f0; }"+
+        "table.ct tbody tr:nth-child(even) { background:#fafafa; }"+
+        "table.ct tbody td { padding:7px 10px; font-size:11px; }"+
+        "table.ct tfoot td { background:#f8f8f8; border-top:2px solid #3dbe7a; padding:9px 10px; font-weight:700; }"+
+        ".r { text-align:right; } .c { text-align:center; } .b { font-weight:700; color:#1a7a46; }"+
+        ".grp { font-size:8.5px; color:#aaa; margin-top:1px; }"+
+        ".footer { display:flex; justify-content:space-between; padding:10px 22px; border-top:1px solid #e8e8e8; font-size:9px; color:#aaa; margin-top:10px; }"+
+        ".footer strong { color:#3dbe7a; }"+
+        "@page { size:letter landscape; margin:1cm; }";
+
+    var tabla = '<table class="ct"><thead><tr>'+
+        '<th style="text-align:left">Insumo</th><th style="text-align:left">Familia</th>'+
+        '<th class="r">Exist. Barra</th><th class="r">Exist. Bodega</th><th class="r">Total exist.</th>'+
+        '<th class="r">Costo prov.</th><th class="r">Capital</th><th class="c">Última existencia</th></tr></thead><tbody>'+
+        rows.map(function(r){ return '<tr><td style="font-weight:600">'+etx(r.nombre)+'</td><td style="color:#888">'+etx(r.familia)+'</td>'+
+            '<td class="r">'+_fmtCant(r.barra,r)+'</td><td class="r">'+_fmtCant(r.bodega,r)+'</td>'+
+            '<td class="r b" style="color:#1a1916">'+_fmtCant(r.total,r)+'</td><td class="r" style="color:#888">'+_repMoney(r.costoUnit)+'</td>'+
+            '<td class="r b">'+_repMoney(r.capital)+'</td><td class="c" style="color:#aaa">'+_repFecha(r.fecha)+'</td></tr>'; }).join('')+
+        '</tbody><tfoot><tr><td colspan="6" class="r" style="text-transform:uppercase;font-size:9px;letter-spacing:1.5px;color:#888">Capital · Barra '+_repMoney(totBarra)+' &nbsp;·&nbsp; Bodega '+_repMoney(totBodega)+'</td>'+
+        '<td class="r b" style="font-size:13px">'+_repMoney(totCap)+'</td><td></td></tr></tfoot></table>';
+
+    var pagina = '<div class="cab"><div><div class="neg-nombre">'+(negNom?etx(negNom):'Existencias')+'</div>'+
+        '<div class="neg-sub">Existencias por área · '+etx(areaTxt)+'</div></div>'+
+        '<div><div class="etx-mark">ET<span>AA</span>X</div>'+
+        '<div class="fecha-txt">'+fechaLarga+'</div><div class="fecha-cnt">'+nIns+' insumos</div></div></div>'+
+        tabla +
+        '<div class="footer"><span>etaax.com · EGMx Consultoría Estratégica a&b</span>'+
+        '<strong>📊 Existencias por área</strong><span>'+fechaLarga+'</span></div>';
+
+    var w = window.open('', '_blank');
+    w.document.write('<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Existencias por área — '+(negNom?etx(negNom):'ETAAX')+'</title>'+
+        '<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">'+
+        '<style>'+CSS+'</style></head><body>'+pagina+'</body></html>');
+    w.document.close(); w.focus(); setTimeout(function(){ w.print(); }, 350);
+}
+
 function renderHistorial() {
     const cont = document.getElementById('historialContent');
     if (!cont) return;
     if (modoHistorial === 'mes') { cont.innerHTML = renderCalendario(); return; }
-    const lista = [...getInventarios()].reverse();
+    const lista = [..._scopeSucInvs(getInventarios())].reverse();
     if (!lista.length) {
         cont.innerHTML = `<div class="empty-state" style="margin-top:16px">
             <div class="empty-icon">📦</div>
@@ -823,6 +1038,7 @@ function iniciarInventario() {
     if (esNuevo) {
         invActual = {
             id: genId(), cerrado: false,
+            sucursalId: localStorage.getItem('etaax_sucursal_activa') || '', // independiente por sucursal
             cocktailsVendidos: {}, prebatchProducidos: {}, cancelaciones: [], descuentos: [], entradasLog: [],
             filas: [], capitalCosto: 0, capitalCarta: 0, diferenciaCosto: 0
         };
@@ -853,7 +1069,7 @@ function iniciarInventario() {
 
 // ── Cargar productos ──────────────────────────────────────────
 function cargarProductosCaptura() {
-    const insumos = getInsumos(); // load ALL insumos (no active filter - user can see all)
+    const insumos = _scopeSucInsumos(getInsumos()); // solo los insumos de la sucursal activa (evita duplicados entre sucursales)
     if (!insumos.length) { filasCaptura = []; return; }
 
     filasCaptura = insumos.map(ins => {
@@ -3658,7 +3874,7 @@ function eliminarInventario(id) {
 let _entLogInsumoCache = null;
 
 function abrirRegistroEntradas() {
-    _entLogInsumoCache = getInsumos(); // cache once to avoid repeated JSON parse on every keystroke
+    _entLogInsumoCache = _scopeSucInsumos(getInsumos()); // solo insumos de la sucursal activa
     _entRapidaInsumoId = null;
     _entRapidaBusqueda = '';
     _entRapidaTipo     = 'compra';

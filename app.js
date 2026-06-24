@@ -33,6 +33,16 @@ var _cacheRecetas = null;
 function getRecetas() {
     return _cacheRecetas || [];
 }
+// Recetas acotadas a la SUCURSAL activa (regla "sin sucursal = matriz: ve todo").
+// SOLO para mostrar listas; getRecetas() sigue completo para lookups por id y
+// para reconstruir el cache (si filtráramos ahí, se borrarían recetas de otras
+// sucursales al hacer setRecetas(getRecetas().filter(...))).
+function getRecetasScope() {
+    var s = localStorage.getItem('etaax_sucursal_activa') || '';
+    var l = getRecetas();
+    if (!s) return l;
+    return l.filter(function(r){ return (r && (r.sucursalId || 'suc_principal')) === s; });
+}
 function setRecetas(data) {
     _cacheRecetas = data;
     // localStorage fallback (sin fotos base64 para evitar quota)
@@ -233,8 +243,20 @@ async function guardarReceta() {
     const tiempoNum    = document.getElementById('tiempoNum')?.value    || '';
     const tiempoUnidad = document.getElementById('tiempoUnidad')?.value || 'min';
 
+    // Sucursal donde vive la receta: si el selector está visible, usa la elección;
+    // si no, conserva la existente al editar o estampa la sucursal activa al crear.
+    var _exRec = getRecetas().find(function(r){ return r.id === (recetaActualId||''); });
+    var _selSucR = document.getElementById('receta-sucursal');
+    var _rowSucR = document.getElementById('row-receta-sucursal');
+    var _sucRec = (_rowSucR && _rowSucR.style.display !== 'none' && _selSucR)
+        ? _selSucR.value
+        : ((_exRec && _exRec.sucursalId !== undefined)
+            ? _exRec.sucursalId
+            : (localStorage.getItem('etaax_sucursal_activa') || ''));
+
     const receta = {
         id:           recetaActualId || genId(),
+        sucursalId:   _sucRec,
         tipo:         recetaTipoActual || 'alimentos',
         nombre,
         grupo:        document.getElementById('grupo')?.value        || '',
@@ -321,6 +343,7 @@ function cargarReceta(id) {
     recetaActualId    = r.id;
     recetaTipoActual  = r.tipo || 'alimentos';
 
+    if (typeof _pobSucursalReceta === 'function') _pobSucursalReceta(r.sucursalId || ''); // sucursal asignada
     document.getElementById('nombreReceta').value  = r.nombre       || '';
     document.getElementById('grupo').value         = r.grupo        || '';
     document.getElementById('categoria').value     = r.categoria    || '';

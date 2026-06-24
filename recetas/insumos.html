@@ -266,10 +266,6 @@
                             <label>Nombre base *</label>
                             <input type="text" id="ins-nombre" placeholder="Ej. Vodka Absolut">
                         </div>
-                        <div class="meta-item" id="row-marca">
-                            <label>Marca del producto</label>
-                            <input type="text" id="ins-marca" placeholder="Ej. Absolut">
-                        </div>
                         <div class="meta-item" id="row-variedad">
                             <label id="lbl-variedad">Variedad</label>
                             <input type="text" id="ins-variedad" placeholder="Ej. Original">
@@ -277,6 +273,10 @@
                         <div class="meta-item" id="row-maduracion">
                             <label id="lbl-maduracion">Variedad / Añejamiento</label>
                             <input type="text" id="ins-maduracion" placeholder="Ej. Reposado, Original, 12 años...">
+                        </div>
+                        <div class="meta-item" id="row-marca">
+                            <label>Marca del producto</label>
+                            <input type="text" id="ins-marca" placeholder="Ej. Absolut">
                         </div>
                         <div class="meta-item" id="row-categoria">
                             <label>Categoría</label>
@@ -319,6 +319,17 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Área del insumo (barra / bodega / cocina) — para separar existencias en reportes -->
+            <div style="margin-bottom:10px">
+                <label class="proc-label">📍 Área (dónde se guarda)</label>
+                <select id="ins-area" style="width:100%;margin-top:4px;font-size:13px">
+                    <option value="">— Sin área —</option>
+                    <option value="barra">Barra</option>
+                    <option value="bodega">Bodega</option>
+                    <option value="cocina">Cocina</option>
+                </select>
             </div>
 
             <!-- Sucursal (solo visible si hay más de 1 sucursal) -->
@@ -1005,7 +1016,7 @@ var _cgPagina   = 0;
 var _cgPgSize   = 80;
 var _cgCargado  = false;
 var _cgCompleto = false;   // true cuando background load terminó
-var _CG_CACHE   = 'etaax_cg_v2';   // v2: invalida caches incompletos de la versión que saltaba registros
+var _CG_CACHE   = 'etaax_cg_v3';   // v3: orden estable (created_at+id); invalida caches incompletos de v2
 var _CG_TTL     = 30 * 60 * 1000;
 
 async function abrirCatalogoGlobal() {
@@ -1073,6 +1084,7 @@ async function _cgCargar() {
     var resFirst = await _supabase.from('catalogo_insumos')
         .select('datos')
         .order('created_at', { ascending: true })
+        .order('id', { ascending: true })   // desempate ÚNICO → paginación estable (sin esto se saltaban insumos)
         .range(0, FIRST - 1);
     if (resFirst.error) {
         // El primer lote falló (suele ser una foto base64 enorme). No matar la
@@ -1111,6 +1123,7 @@ async function _cgBgLoad(startFrom) {
         var res = await _supabase.from('catalogo_insumos')
             .select('datos')
             .order('created_at', { ascending: true })
+            .order('id', { ascending: true })   // mismo orden estable que el primer lote
             .range(from, from + size - 1);
         if (res.error) {
             // Reintentar el MISMO rango con lote más chico antes de rendirse.
@@ -1161,7 +1174,7 @@ function cgFiltrar() {
     var fam = document.getElementById('cgFamilia').value;
     var lista = _cgTodos;
     if (q)   lista = lista.filter(function(x){
-        return x.nombre.toLowerCase().includes(q) ||
+        return (x.nombre||'').toLowerCase().includes(q) ||
                (x.marca||'').toLowerCase().includes(q) ||
                (x.categoria||'').toLowerCase().includes(q);
     });

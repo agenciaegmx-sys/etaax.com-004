@@ -16,6 +16,14 @@
        try { return JSON.parse(localStorage.getItem('etaax_' + negId + '_sucursales') || '[]'); } catch(e) { return []; }
    }
    function _getSucActivaIns() { return localStorage.getItem('etaax_sucursal_activa') || ''; }
+   // Permiso "cambiar de sucursal": permitido salvo que el dueño lo apague (fail-open).
+   function _puedeCambiarSucIns() {
+       var ctx; try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch(e) {}
+       if (!ctx || ctx.ctxType !== 'staff') return true;
+       if ((ctx.rol||'') === 'admin') return true;
+       var perms = window.etaaxPermisosRol ? etaaxPermisosRol(ctx.negId||getNegocioActivo(), ctx.rol) : {};
+       return perms.cambiarSucursal !== false;
+   }
    // Sin sucursal = matriz (sucursal por defecto), no "global en todas".
    var MATRIZ_ID_INS = 'suc_principal';
    function _effSucIns(id) { return id || MATRIZ_ID_INS; }
@@ -1603,6 +1611,7 @@
        document.getElementById('ins-familia').value      = ins?.familia      || familiaDefault;
        document.getElementById('ins-categoria').value    = ins?.categoria    || categoriaDefault;
        document.getElementById('ins-subcategoria').value = ins?.subcategoria || '';
+       (function(){ var elA = document.getElementById('ins-area'); if (elA) elA.value = ins?.area || ''; })();
        document.getElementById('ins-marca').value        = ins?.marca        || '';
        document.getElementById('ins-variedad').value     = ins?.variedad     || '';
        var _madEl = document.getElementById('ins-maduracion'); if (_madEl) _madEl.value = ins?.maduracion || '';
@@ -1701,7 +1710,7 @@
            var rowEl = document.getElementById('row-ins-sucursal');
            var selEl = document.getElementById('ins-sucursal');
            if (!rowEl || !selEl) return;
-           if (sucs.length <= 1) { rowEl.style.display = 'none'; return; }
+           if (sucs.length <= 1 || !_puedeCambiarSucIns()) { rowEl.style.display = 'none'; return; }
            rowEl.style.display = '';
            var tieneMatriz = sucs.some(function(s){ return s.id === MATRIZ_ID_INS; });
            selEl.innerHTML = '<option value="">— Sin asignar (Matriz) —</option>' +
@@ -3013,6 +3022,7 @@
            activo:       document.getElementById('ins-activo').value || '1',
            foto:         fotoInsumoBase64 || fotoAnterior,
            presentaciones: presentacionesTemp,
+           area:         (function(){ var el = document.getElementById('ins-area'); return el ? el.value : ''; })(),
            sucursalId:   (function(){ var el = document.getElementById('ins-sucursal'); return el ? el.value : ''; })()
        };
 
@@ -3111,10 +3121,12 @@
                        ${[ins.familia, ins.categoria, ins.subcategoria].filter(Boolean).join(' · ')}
                    </div>
                    <div style="font-size:22px;font-weight:600;color:var(--text);margin-bottom:2px">${ins.nombre}</div>
-                   ${ins.marca ? `<div style="font-size:12px;color:var(--text-dim);margin-bottom:3px">${ins.marca}</div>` : ''}
-                   <div style="display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:2px">
-                       ${ins.variedad ? `<span style="font-size:11px;color:var(--text-muted)">${ins.variedad}</span>` : ''}
+                   <div style="display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-bottom:3px">
+                       ${ins.variedad ? `<span style="font-size:12px;color:var(--text-muted)">${ins.variedad}</span>` : ''}
                        ${ins.maduracion ? `<span class="pill pill-amber" style="font-size:10px;padding:1px 8px">${ins.maduracion}</span>` : ''}
+                   </div>
+                   <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">
+                       ${ins.marca ? `<span style="font-size:12px;color:var(--text-dim)">${ins.marca}</span>` : ''}
                        ${ins.empaque ? `<span style="font-size:11px;color:var(--text-dim)">· ${ins.empaque}</span>` : ''}
                    </div>
                </div>

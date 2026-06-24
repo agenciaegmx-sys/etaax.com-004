@@ -396,6 +396,10 @@
                 <label>Cajero / Colaborador que hace el corte</label>
                 <input type="text" id="fCajero" placeholder="Nombre del cajero o colaborador" autocomplete="off">
             </div>
+            <div class="fg" id="row-corte-sucursal" style="margin-top:8px;display:none">
+                <label>📍 Sucursal a la que pertenece</label>
+                <select id="fSucursal"></select>
+            </div>
         </div>
 
         <!-- 2. Formas de pago -->
@@ -639,8 +643,14 @@
                     </div>
                     <div id="evCorteGrid" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px"></div>
                 </div>
-                <!-- Contenedor del QR de captura móvil (Fase 2) -->
-                <div id="qrCorteBox" style="display:none"></div>
+                <!-- Subir foto desde el celular vía QR (se activa/desactiva con el botón) -->
+                <button type="button" id="btnQrCorte" onclick="_toggleQrCorte()"
+                    style="margin-top:6px;background:none;border:1px dashed var(--green-dim);
+                    border-radius:6px;padding:8px 14px;color:var(--green);cursor:pointer;
+                    font-size:12px;font-family:DM Sans,sans-serif;width:100%">
+                    📱 Subir foto desde el celular
+                </button>
+                <div id="qrCorteBox" style="display:none;margin-top:8px;text-align:center"></div>
             </div>
         </div>
 
@@ -875,7 +885,36 @@ function _sbUp(tabla, record) { sbUpsert(tabla, record); }
 function _sbDel(tabla, id) { sbDelete(tabla, id); }
 
 /* ── Data helpers ── */
-function load()    { return _cacheCortes || []; }
+// Acotar a la SUCURSAL activa (regla "sin sucursal = matriz: ve todo"). El cache
+// completo (_cacheCortes) se mantiene para sync/borrado; solo el display filtra.
+function _sucActiva(){ return localStorage.getItem('etaax_sucursal_activa') || ''; }
+function _scopeSuc(lista){
+    var s=_sucActiva(); if(!s) return lista||[];
+    return (lista||[]).filter(function(x){ return (x && (x.sucursalId || 'suc_principal')) === s; });
+}
+function load()    { return _scopeSuc(_cacheCortes || []); }
+// Permiso "cambiar de sucursal": permitido salvo que el dueño lo apague (fail-open).
+function _puedeCambiarSuc(){
+    var ctx; try{ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null');}catch(e){}
+    if(!ctx || ctx.ctxType!=='staff') return true;
+    if((ctx.rol||'')==='admin') return true;
+    var perms=window.etaaxPermisosRol?etaaxPermisosRol(ctx.negId||getNegocioActivo(),ctx.rol):{};
+    return perms.cambiarSucursal!==false;
+}
+// Selector "📍 Sucursal" del corte: solo si hay >1 sucursal y el rol puede reasignar.
+function _pobSucursalCorte(sucId){
+    var sel=document.getElementById('fSucursal'), row=document.getElementById('row-corte-sucursal');
+    if(!sel||!row) return;
+    var negId=getNegocioActivo()||'', sucs=[];
+    try{ sucs=JSON.parse(localStorage.getItem('etaax_'+negId+'_sucursales')||'[]'); }catch(e){}
+    if(sucs.length<=1 || !_puedeCambiarSuc()){ row.style.display='none'; return; }
+    row.style.display='';
+    var tieneMatriz=sucs.some(function(s){return s.id==='suc_principal';});
+    sel.innerHTML='<option value="">— Sin asignar (Matriz) —</option>'+
+        (tieneMatriz?'':'<option value="suc_principal">Matriz</option>')+
+        sucs.map(function(s){return '<option value="'+(s.id||'')+'">'+(s.nombre||s.id)+'</option>';}).join('');
+    sel.value=sucId||'';
+}
 function loadDep() { return _cacheDeps   || []; }
 function loadVex() { return _cacheVex    || []; }
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
@@ -1122,6 +1161,7 @@ function abrirModal(id){
     document.getElementById('fFecha').value=d.fecha||todayStr();
     document.getElementById('fTurno').value=d.turno||'dia';
     document.getElementById('fCajero').value=d.cajero||'';
+    _pobSucursalCorte(id ? (d.sucursalId||'') : _sucActiva()); // editar→la del corte; nuevo→sucursal activa
     document.getElementById('fFondo').value=d.fondoInicial||'';
     document.getElementById('fEfectivo').value=d.efectivo||'';
     document.getElementById('fPropEfectivo').value=d.propEfectivo||'';
@@ -1146,8 +1186,8 @@ function abrirModal(id){
     // Cargar evidencia visual del corte
     _evidenciasCorte = (d.evidencias||[]).slice();
     renderEvidenciasCorte();
-    // Puente QR: generar el QR y escuchar fotos del celular
-    _abrirPuenteCorte();
+    // Puente QR: NO arranca solo — el usuario lo activa con el botón (📱).
+    _cerrarPuenteCorte(); // asegurar estado apagado al abrir el modal
     // Auto-jalar gastos del módulo para la fecha del corte
     jalarGastosFecha();
     document.getElementById('modalCorte').classList.add('open');
@@ -1156,15 +1196,30 @@ function _abrirPuenteCorte(){
     var box=document.getElementById('qrCorteBox');
     if(!box || !window.QrPuente) return;
     box.style.display='block';
+    var btn=document.getElementById('btnQrCorte');
+    if(btn) btn.textContent='✕ Cerrar escaneo';
     QrPuente.abrir(getNegocioActivo(), 'corte', box, function(foto){
         if(_evidenciasCorte.length>=5){ alert('Ya tienes 5 fotos en este corte.'); return; }
         _evidenciasCorte.push({url:foto.url, path:foto.path});
         renderEvidenciasCorte();
     });
 }
+function _cerrarPuenteCorte(){
+    if(window.QrPuente) QrPuente.cerrar();
+    var box=document.getElementById('qrCorteBox');
+    if(box){ box.style.display='none'; box.innerHTML=''; }
+    var btn=document.getElementById('btnQrCorte');
+    if(btn) btn.textContent='📱 Subir foto desde el celular';
+}
+function _toggleQrCorte(){
+    var box=document.getElementById('qrCorteBox');
+    if(!box) return;
+    if(box.style.display==='none' || !box.style.display) _abrirPuenteCorte();
+    else _cerrarPuenteCorte();
+}
 function cerrarModal(){
     document.getElementById('modalCorte').classList.remove('open');
-    if(window.QrPuente) QrPuente.cerrar();
+    _cerrarPuenteCorte();
     _ingresosExtra=[];
     _evidenciasCorte=[];
     // Resetear gate de gastos al cerrar
@@ -1279,7 +1334,12 @@ function guardarCorte(){
     var fecha=document.getElementById('fFecha').value;
     if(!fecha){alert('La fecha es obligatoria.');return;}
     var id=document.getElementById('fId').value||genId();
-    var corte={id:id,negocioId:getNegocioActivo(),fecha:fecha,turno:document.getElementById('fTurno').value,
+    var _exC=(_cacheCortes||[]).find(function(c){return c.id===id;});
+    var _selSucC=document.getElementById('fSucursal'), _rowSucC=document.getElementById('row-corte-sucursal');
+    var _sucC=(_rowSucC && _rowSucC.style.display!=='none' && _selSucC)
+        ? _selSucC.value
+        : ((_exC && _exC.sucursalId!==undefined)?_exC.sucursalId:_sucActiva());
+    var corte={id:id,negocioId:getNegocioActivo(),sucursalId:_sucC,fecha:fecha,turno:document.getElementById('fTurno').value,
         fondoInicial:v('fFondo'),ventaDeclarada:v('fVentaDeclarada'),
         efectivo:v('fEfectivo'),propEfectivo:v('fPropEfectivo'),
         tarjeta:v('fTarjeta'),propTarjeta:v('fPropTarjeta'),transferencia:v('fTransfer'),

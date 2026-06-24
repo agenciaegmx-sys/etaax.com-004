@@ -197,6 +197,10 @@
                 <label>Notas</label>
                 <textarea id="clNotas" rows="2" placeholder="Preferencias, alergias, observaciones…" style="resize:vertical"></textarea>
             </div>
+            <div class="fg" id="row-cl-sucursal" style="display:none">
+                <label>📍 Sucursal a la que pertenece</label>
+                <select id="clSucursal"></select>
+            </div>
             <input type="hidden" id="clId">
         </div>
         <div class="modal-footer">
@@ -228,7 +232,34 @@ async function _sbInit() {
 function _sbUp(record) { sbUpsert('clientes', record); }
 function _sbDel(id) { sbDelete('clientes', id); }
 
-function load(){ return _cacheClientes || []; }
+// Acotar a la SUCURSAL activa ("sin sucursal = matriz: ve todo"). El cache completo
+// se mantiene para sync/borrado; solo el display filtra.
+function _sucActiva(){ return localStorage.getItem('etaax_sucursal_activa') || ''; }
+function _scopeSuc(lista){
+    var s=_sucActiva(); if(!s) return lista||[];
+    return (lista||[]).filter(function(x){ return (x && (x.sucursalId || 'suc_principal')) === s; });
+}
+function _puedeCambiarSuc(){
+    var ctx; try{ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null');}catch(e){}
+    if(!ctx || ctx.ctxType!=='staff') return true;
+    if((ctx.rol||'')==='admin') return true;
+    var perms=window.etaaxPermisosRol?etaaxPermisosRol(ctx.negId||getNegocioActivo(),ctx.rol):{};
+    return perms.cambiarSucursal!==false;
+}
+function _pobSucursalCliente(sucId){
+    var sel=document.getElementById('clSucursal'), row=document.getElementById('row-cl-sucursal');
+    if(!sel||!row) return;
+    var negId=getNegocioActivo()||'', sucs=[];
+    try{ sucs=JSON.parse(localStorage.getItem('etaax_'+negId+'_sucursales')||'[]'); }catch(e){}
+    if(sucs.length<=1 || !_puedeCambiarSuc()){ row.style.display='none'; return; }
+    row.style.display='';
+    var tieneMatriz=sucs.some(function(s){return s.id==='suc_principal';});
+    sel.innerHTML='<option value="">— Sin asignar (Matriz) —</option>'+
+        (tieneMatriz?'':'<option value="suc_principal">Matriz</option>')+
+        sucs.map(function(s){return '<option value="'+(s.id||'')+'">'+(s.nombre||s.id)+'</option>';}).join('');
+    sel.value=sucId||'';
+}
+function load(){ return _scopeSuc(_cacheClientes || []); }
 function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function initials(n){return(n||'?').trim().split(/\s+/).slice(0,2).map(function(w){return w[0].toUpperCase();}).join('');}
 
@@ -275,6 +306,7 @@ function abrirModal(id){
     document.getElementById('clTel').value=d.tel||'';
     document.getElementById('clEmail').value=d.email||'';
     document.getElementById('clNotas').value=d.notas||'';
+    _pobSucursalCliente(id ? (d.sucursalId||'') : _sucActiva()); // editar→la del cliente; nuevo→sucursal activa
     document.getElementById('modalCl').classList.add('open');
     setTimeout(function(){document.getElementById('clNombre').focus();},80);
 }
@@ -285,9 +317,13 @@ function guardarCliente(){
     var nombre=document.getElementById('clNombre').value.trim();
     if(!nombre){alert('El nombre es obligatorio.');document.getElementById('clNombre').focus();return;}
     var id=document.getElementById('clId').value||genId();
-    var existing = load().find(function(c){return c.id===id;});
+    var existing = (_cacheClientes||[]).find(function(c){return c.id===id;});
+    var _selSucCl=document.getElementById('clSucursal'), _rowSucCl=document.getElementById('row-cl-sucursal');
+    var _sucCl=(_rowSucCl && _rowSucCl.style.display!=='none' && _selSucCl)
+        ? _selSucCl.value
+        : ((existing && existing.sucursalId!==undefined)?existing.sucursalId:_sucActiva());
     var cliente={
-        id:id, negocioId:getNegocioActivo(), nombre:nombre,
+        id:id, negocioId:getNegocioActivo(), sucursalId:_sucCl, nombre:nombre,
         tel:document.getElementById('clTel').value.trim(),
         email:document.getElementById('clEmail').value.trim(),
         notas:document.getElementById('clNotas').value.trim(),

@@ -554,12 +554,13 @@ async function _loadCatalogFromSupabase() {
         var res = await _supabase.from('catalogo_insumos')
             .select('*')
             .order('created_at', { ascending: true })
+            .order('id', { ascending: true })   // desempate único → paginación estable >1000
             .range(from, from + BATCH - 1);
         var chunk = (res.data || []).map(function(r){ return r.datos; }).filter(Boolean);
         all = all.concat(chunk);
         _setLoadMsg('Cargando catálogo… ' + all.length + ' insumos');
         if (chunk.length < BATCH) break;
-        from += BATCH;
+        from += chunk.length;   // avanzar por lo recibido (no por BATCH fijo) — más seguro
     }
     _catalogoMem = all;
     localStorage.setItem('etaax_negocio_activo', CATALOGO_KEY);
