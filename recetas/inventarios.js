@@ -121,25 +121,33 @@ function _limpiarStorageEmergencia() {
     });
 }
 
-// ── Respaldo local de borradores (inventarios SIN cerrar) ──────────
-// El inventario vive en Supabase, pero si refrescas antes de que el
-// autoguardado llegue a la nube, se perdía la captura. Guardamos los
-// borradores (cerrado=false) en localStorage y los mezclamos al cargar.
+// ── Respaldo local de TODOS los inventarios ──────────────────────
+// El inventario vive en Supabase, pero si el upsert a la nube falla (o tarda),
+// se perdía la captura al refrescar — borradores Y cerrados. Guardamos TODOS
+// los inventarios en localStorage y los mezclamos al cargar (los que la nube
+// aún no tiene). Si la nube falla, el inventario sigue ahí en este equipo.
 function _guardarDraftsLocal() {
     try {
-        var drafts = (_cacheInv || []).filter(function(x){ return x && x.id && !x.cerrado; });
-        localStorage.setItem(_sk('inv_drafts'), JSON.stringify(drafts));
-    } catch(e) {}
+        localStorage.setItem(_sk('inv_local'), JSON.stringify(_cacheInv || []));
+    } catch(e) {
+        // Si no cabe (quota), al menos respaldar los borradores abiertos (lo más crítico).
+        try { localStorage.setItem(_sk('inv_local'), JSON.stringify((_cacheInv||[]).filter(function(x){return x && !x.cerrado;}))); } catch(e2) {}
+    }
 }
 function _cargarDraftsLocal() {
-    try { return JSON.parse(localStorage.getItem(_sk('inv_drafts')) || '[]') || []; } catch(e) { return []; }
+    try { return JSON.parse(localStorage.getItem(_sk('inv_local')) || '[]') || []; } catch(e) { return []; }
 }
 function _mergeDraftsLocal() {
-    var drafts = _cargarDraftsLocal();
-    if (!drafts.length) return;
+    var locales = _cargarDraftsLocal();
+    if (!locales.length) return;
     if (!_cacheInv) _cacheInv = [];
     var ids = {}; _cacheInv.forEach(function(x){ if (x && x.id) ids[x.id] = 1; });
-    drafts.forEach(function(d){ if (d && d.id && !ids[d.id]) _cacheInv.push(d); }); // solo los que la nube aún no tiene
+    locales.forEach(function(d){
+        if (d && d.id && !ids[d.id]) {
+            _cacheInv.push(d);
+            try { _sbUpInv(d); } catch(e) {} // re-subir: una vez que la nube funcione (v17), se sincroniza solo
+        }
+    });
 }
 
 function setInventarios(d) {
