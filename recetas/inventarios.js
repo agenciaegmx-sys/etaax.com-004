@@ -517,11 +517,15 @@ function getInventariosMes(anio, mes) {
 
 // ── Gestión de vistas ─────────────────────────────────────────
 const VISTAS = ['vistaLista', 'vistaForm', 'vistaCaptura', 'vistaEntradas'];
+// Flag explícito: ¿hay un inventario ABIERTO en edición? Se actualiza en CADA cambio
+// de vista (única fuente de verdad para la navegación segura — sin depender del DOM).
+window._invEditando = false;
 function mostrarVista(id) {
     VISTAS.forEach(v => {
         const el = document.getElementById(v);
         if (el) el.style.display = v === id ? 'block' : 'none';
     });
+    window._invEditando = (id !== 'vistaLista') && !!invActual && !invActual.cerrado;
     if (id === 'vistaLista')    init();
     if (id === 'vistaEntradas') renderVistaEntradas();
 }
@@ -628,11 +632,14 @@ function _datosReporteExistencias(area) {
         var bodega = _existenciaArea(f, 'bodega', ins);
         var total  = calcExistencia(f); // total real (incluye la botella abierta pesada)
         if (barra <= 0 && bodega <= 0 && total <= 0) return;
+        // Costo prov. = PRECIO DE COMPRA por unidad de conteo (botella/pza/base), no el costo por litro.
+        var copasBot = (f.tipo === 'copa' && f.contNeto > 0 && f.copaML > 0) ? f.contNeto / f.copaML : 0;
+        var costoCompra = f.tipo === 'copa' ? cc * copasBot : cc; // costo de 1 botella/pza/unidad base
         rows.push({
             insumoId: id, nombre: f.nombre || '—', familia: f.familia || f.categoria || 'Otros',
             tipo: f.tipo, copaML: f.copaML, contNeto: f.contNeto, baseUnit: f.baseUnit,
             barra: barra, bodega: bodega, total: total,
-            costoUnit: parseFloat(f.costoUnitario) || 0,
+            costoUnit: costoCompra,
             capBarra: barra * cc, capBodega: bodega * cc, capital: total * cc, fecha: o.fecha
         });
     });
@@ -817,6 +824,33 @@ function renderHistorial() {
         : renderHistTabla(lista);
 }
 
+// Calcular capital a costo / a carta de un inventario guardado (sus filas).
+function _calcCapitalesInv(inv) {
+    var capCosto = 0, capCarta = 0;
+    (inv.filas || []).forEach(function(f){
+        var exist = (f.existenciaFisica !== undefined && f.existenciaFisica !== null) ? f.existenciaFisica : calcExistencia(f);
+        capCosto += exist * costoCopa(f);
+        capCarta += exist * (parseFloat(f.precioCarta) || 0);
+    });
+    inv.capitalCosto = capCosto;
+    inv.capitalCarta = capCarta;
+}
+// Finalizar (cerrar) un inventario desde el historial: ABIERTO → CERRADO.
+function finalizarInventarioHistorial(id) {
+    var inv = getInventarios().find(function(x){ return x.id === id; });
+    if (!inv) return;
+    if (inv.cerrado) { alert('Este inventario ya está cerrado.'); return; }
+    _solicitarClave('Finalizar y cerrar inventario', function(){
+        inv.cerrado = true;
+        _calcCapitalesInv(inv); // refrescar capital al cerrar
+        var lista = getInventarios();
+        var idx = lista.findIndex(function(x){ return x.id === id; });
+        if (idx >= 0) lista[idx] = inv;
+        setInventarios(lista); // guarda local + nube
+        renderStats(); renderHistorial();
+    });
+}
+
 function renderHistTabla(lista) {
     return `<div class="card" style="max-width:none;margin-top:12px">
         <div class="card-body" style="padding:0"><div class="tabla-wrap"><table>
@@ -830,7 +864,9 @@ function renderHistTabla(lista) {
                     ? `<button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px;color:var(--accent);border-color:var(--accent)"
                         onclick="editarInventario('${inv.id}')">✏️ Editar</button>`
                     : `<button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px"
-                        onclick="abrirInventario('${inv.id}')">▶ Continuar</button>`;
+                        onclick="abrirInventario('${inv.id}')">▶ Continuar</button>
+                       <button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px;color:var(--green);border-color:var(--green)"
+                        onclick="finalizarInventarioHistorial('${inv.id}')">✅ Finalizar</button>`;
                 return `<tr>
                     <td style="color:var(--text-muted)">${new Date(inv.fecha+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'})}</td>
                     <td style="font-weight:500">${tipoIcon(inv.tipoInv)} ${etx(inv.nombre||'Sin nombre')}</td>
@@ -857,7 +893,9 @@ function renderHistCard(inv) {
         ? `<button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1;color:var(--accent);border-color:var(--accent)"
             onclick="editarInventario('${inv.id}')">✏️ Editar</button>`
         : `<button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1"
-            onclick="abrirInventario('${inv.id}')">▶ Continuar</button>`;
+            onclick="abrirInventario('${inv.id}')">▶ Continuar</button>
+           <button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1;color:var(--green);border-color:var(--green)"
+            onclick="finalizarInventarioHistorial('${inv.id}')">✅ Finalizar</button>`;
     return `<div class="hist-card ${inv.cerrado?'cerrado':''}">
         <div class="hist-card-icon">${tipoIcon(inv.tipoInv)}</div>
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
@@ -1076,6 +1114,19 @@ function poblarFormulario() {
     _setFechaUltimo();
 }
 
+// Volver a la pantalla de configuración general del inventario en curso (para editar
+// tipo/área/fecha/notas). Los datos capturados se conservan (cargarProductosCaptura merge).
+function abrirInfoGeneral() {
+    if (!invActual) { mostrarVista('vistaLista'); return; }
+    try { guardarInventario(); } catch(e) {} // persistir lo capturado antes de ir a la config (no perder nada)
+    poblarFormulario();
+    if (typeof onTipoInvChange === 'function') onTipoInvChange(invActual.tipoInv || 'bebidas');
+    var fm = document.getElementById('formModo');    if (fm) fm.textContent = 'Editar información general';
+    var ft = document.getElementById('formTitulo');  if (ft) ft.textContent = invActual.tipoInv === 'primer_lev' ? 'Primer Levantamiento' : 'Inventario';
+    var bi = document.getElementById('btnIniciarInv'); if (bi) bi.textContent = 'Guardar y continuar →';
+    mostrarVista('vistaForm');
+}
+
 function limpiarFormulario() {
     const hoy  = new Date();
     const hh   = String(hoy.getHours()).padStart(2,'0');
@@ -1222,21 +1273,32 @@ function actualizarNavBtns() {
     const btnAnt = document.getElementById('btnPasoAnt');
     const btnSig = document.getElementById('btnPasoSig');
     const btnLev = document.getElementById('btnFinalizarLev');
+    const btnFin = document.getElementById('btnFinalizarInv');
     const steps  = document.getElementById('invSteps');
+    const cerr   = !!(invActual && invActual.cerrado);
 
     if (esLev) {
         if (btnAnt) btnAnt.style.display = 'none';
         if (btnSig) btnSig.style.display = 'none';
-        if (btnLev) { btnLev.style.display = 'inline-flex'; btnLev.disabled = !!(invActual?.cerrado); btnLev.textContent = invActual?.cerrado ? '✅ Guardado' : '✅ Guardar levantamiento'; }
+        if (btnFin) btnFin.style.display = 'none'; // primer_lev usa su propio botón
+        if (btnLev) { btnLev.style.display = 'inline-flex'; btnLev.disabled = cerr; btnLev.textContent = cerr ? '✅ Guardado' : '✅ Guardar levantamiento'; }
         if (steps)  steps.style.display = 'none';
         const lbl = document.getElementById('stepLabel');
         if (lbl) lbl.textContent = 'Primer Levantamiento — Captura de existencias';
     } else {
         if (btnLev) btnLev.style.display = 'none';
+        if (btnFin) { btnFin.style.display = 'inline-flex'; btnFin.disabled = cerr; btnFin.textContent = cerr ? '✅ Cerrado' : '✅ Finalizar inventario'; }
         if (steps)  steps.style.display = '';
         if (btnAnt) btnAnt.style.display = pasoActual > 1 ? 'inline-flex' : 'none';
         if (btnSig) btnSig.style.display = pasoActual < 5 ? 'inline-flex' : 'none';
     }
+}
+// Finalizar el inventario actual desde el wizard (cierra: ABIERTO → CERRADO).
+function finalizarInventarioActual() {
+    if (!invActual) return;
+    if (invActual.cerrado) { alert('Este inventario ya está cerrado.'); return; }
+    if (invActual.tipoInv === 'primer_lev') { finalizarPrimerLev(); return; }
+    cerrarInventario();
 }
 
 function renderStepContent() {
@@ -3950,19 +4012,23 @@ window.addEventListener('pagehide',     function(){ _persistirBorradorLocal(); }
 window.addEventListener('beforeunload', function(){ _persistirBorradorLocal(); });
 window.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'hidden') _persistirBorradorLocal(); });
 
+// Indicador de guardado persistente (estilo Google Sheets).
+function _setGuardadoInd(estado) {
+    const ind = document.getElementById('autoGuardarInd');
+    if (!ind) return;
+    ind.style.opacity = '1';
+    if (estado === 'guardando') { ind.textContent = '💾 Guardando…'; ind.style.color = 'var(--text-muted)'; }
+    else { ind.textContent = '✓ Todos los cambios guardados'; ind.style.color = 'var(--green)'; }
+}
 let _autoGuardarTimer = null;
 function _autoGuardar() {
     if (!invActual) return;
     _persistirBorradorLocal(); // ← respaldo local INMEDIATO en cada cambio
+    _setGuardadoInd('guardando');
     clearTimeout(_autoGuardarTimer);
     _autoGuardarTimer = setTimeout(function() {
         try { guardarInventario(); } catch(e) { console.warn('[autoGuardar]', e); return; }
-        const ind = document.getElementById('autoGuardarInd');
-        if (ind) {
-            ind.textContent = '✓ Guardado';
-            ind.style.opacity = '1';
-            setTimeout(() => { ind.style.opacity = '0'; }, 1800);
-        }
+        _setGuardadoInd('ok'); // queda fijo "✓ Todos los cambios guardados"
     }, 600);
 }
 
@@ -4656,28 +4722,61 @@ init();
 
 // ── Bloqueo de navegación mientras haya un inventario abierto ──
 let _pendingNavHref = null;
+let _pendingSalirFn = null; // acción de salida (ej. ctxSalir) a ejecutar tras el card
 
+// El botón "Salir" de la barra superior (ctxSalir) navega por JS y se saltaba el card.
+// Lo envolvemos: si hay inventario en curso, muestra el card en vez de salir directo.
+document.addEventListener('DOMContentLoaded', function(){
+    if (typeof window.ctxSalir === 'function' && !window._ctxSalirWrapInv) {
+        window._ctxSalirWrapInv = true;
+        var _orig = window.ctxSalir;
+        window.ctxSalir = function(){
+            if (_estaEnWizard()) { _pendingSalirFn = _orig; document.getElementById('modalSalirInv').style.display = 'flex'; return; }
+            return _orig.apply(this, arguments);
+        };
+    }
+});
+
+// Hay un inventario ABIERTO en edición → cualquier salida pide el card.
+// Usa el flag que mostrarVista mantiene (confiable, sin depender del DOM).
 function _estaEnWizard() {
-    return !!invActual && document.getElementById('vistaCaptura')?.style.display !== 'none';
+    return !!window._invEditando && !!invActual && !invActual.cerrado;
+}
+// Abrir el card de salida (botón "Salir"): sin destino → al historial.
+function pedirSalirInv() {
+    _pendingNavHref = null; _pendingSalirFn = null;
+    var m = document.getElementById('modalSalirInv');
+    if (m) m.style.display = 'flex';
 }
 
 function _cancelarSalirInv() {
-    _pendingNavHref = null;
+    _pendingNavHref = null; _pendingSalirFn = null;
     document.getElementById('modalSalirInv').style.display = 'none';
 }
 
 function _confirmarSalirInv() {
     try { guardarInventario(); } catch(e) { console.warn('[confirmarSalirInv] guardar error:', e); }
     invActual = null;
-    const href = _pendingNavHref;
-    _pendingNavHref = null;
+    const href = _pendingNavHref, fn = _pendingSalirFn;
+    _pendingNavHref = null; _pendingSalirFn = null;
     const modal = document.getElementById('modalSalirInv');
     if (modal) modal.style.display = 'none';
-    if (href) {
-        window.location.href = href;
-    } else {
-        mostrarVista('vistaLista');
-    }
+    if (fn) { fn(); return; }
+    if (href) { window.location.href = href; }
+    else { mostrarVista('vistaLista'); }
+}
+
+function _salirSinGuardarInv() {
+    // Sale sin forzar un guardado final. (El inventario autoguarda mientras capturas,
+    // así que esto omite el guardado explícito; lo ya capturado permanece como respaldo.)
+    invActual = null;
+    const href = _pendingNavHref, fn = _pendingSalirFn;
+    _pendingNavHref = null; _pendingSalirFn = null;
+    const modal = document.getElementById('modalSalirInv');
+    if (modal) modal.style.display = 'none';
+    if (fn) { fn(); return; }
+    if (href) { window.location.href = href; }
+    else { mostrarVista('vistaLista'); }
 }
 
 document.addEventListener('click', function(e) {

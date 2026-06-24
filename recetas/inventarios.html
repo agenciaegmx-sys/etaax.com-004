@@ -218,10 +218,12 @@
                     </div>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center">
-                    <span id="autoGuardarInd" style="font-size:12px;color:var(--green);opacity:0;transition:opacity .4s">✓ Guardado</span>
+                    <span id="autoGuardarInd" style="font-size:12px;color:var(--green);display:inline-flex;align-items:center;gap:4px">✓ Todos los cambios guardados</span>
+                    <button class="btn-vista" onclick="abrirInfoGeneral()" id="btnInfoGeneral" title="Editar la configuración del inventario">ℹ️ Info general</button>
                     <button class="btn-vista" onclick="pasoAnterior()" id="btnPasoAnt" style="display:none">← Anterior</button>
                     <button class="btn-vista" onclick="pasoSiguiente()" id="btnPasoSig">Siguiente →</button>
-                    <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)" id="btnGuardarInv" onclick="guardarYSalir()">💾 Guardar y salir</button>
+                    <button class="btn-vista" id="btnGuardarInv" onclick="pedirSalirInv()">🚪 Salir</button>
+                    <button class="btn-vista" style="color:var(--green);border-color:var(--green)" id="btnFinalizarInv" onclick="finalizarInventarioActual()">✅ Finalizar inventario</button>
                     <button class="btn-vista" style="color:var(--green);border-color:var(--green);display:none" id="btnFinalizarLev" onclick="finalizarPrimerLev()">✅ Guardar levantamiento</button>
                 </div>
             </div>
@@ -702,13 +704,15 @@ document.addEventListener('DOMContentLoaded', function() { _sbInitInv(); });
         <div style="font-size:36px;margin-bottom:12px">📦</div>
         <div style="font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:1px;margin-bottom:8px;color:var(--text)">Inventario en progreso</div>
         <div style="font-size:13px;color:var(--text-dim);margin-bottom:24px;line-height:1.6">
-            Guarda el inventario antes de salir<br>para no perder tus cambios.
+            ¿Qué quieres hacer con este inventario?
         </div>
-        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-            <button class="btn-vista" style="padding:10px 18px"
-                onclick="_cancelarSalirInv()">Seguir editando</button>
-            <button class="btn-vista" style="color:var(--accent);border-color:var(--accent);padding:10px 18px"
+        <div style="display:flex;flex-direction:column;gap:10px">
+            <button class="btn-vista" style="padding:11px 18px"
+                onclick="_cancelarSalirInv()">✏️ Seguir editando</button>
+            <button class="btn-vista" style="color:var(--green);border-color:var(--green);padding:11px 18px"
                 onclick="_confirmarSalirInv()">💾 Guardar y salir</button>
+            <button class="btn-vista" style="color:var(--red);border-color:var(--red);padding:11px 18px"
+                onclick="_salirSinGuardarInv()">🚪 Salir sin guardar cambios</button>
         </div>
     </div>
 </div>
