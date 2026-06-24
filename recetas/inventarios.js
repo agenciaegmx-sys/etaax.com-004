@@ -578,6 +578,13 @@ function setModoListaHist(modo) {
 // REPORTE — Existencias por área (cantidad + capital a costo proveedor + última fecha)
 // ═══════════════════════════════════════════════════════════════
 var _repArea = 'todas';
+var _repModoOp = false; // false = admin (con capital y totales) · true = operativa (sin dinero agregado)
+function toggleReporteVista(){
+    _repModoOp = !_repModoOp;
+    var btn = document.getElementById('repVistaBtn');
+    if (btn) btn.textContent = _repModoOp ? '🔒 Vista operativa' : '👁️ Vista admin';
+    _renderReporteExistencias();
+}
 const _AREA_LBL = { barra:'Barra', bodega:'Bodega', cocina:'Cocina', general:'General' };
 function _areaNom(a){ return _AREA_LBL[a] || (a ? (a.charAt(0).toUpperCase()+a.slice(1)) : 'General'); }
 
@@ -657,6 +664,8 @@ function abrirReporteExistencias(){
         areas.map(function(a){ return '<option value="'+a+'">'+_areaNom(a)+'</option>'; }).join('');
     _repArea = 'todas';
     if (sel) sel.value = 'todas';
+    _repModoOp = false;
+    var vbtn = document.getElementById('repVistaBtn'); if (vbtn) vbtn.textContent = '👁️ Vista admin';
     _renderReporteExistencias();
     document.getElementById('modalReporteExist').style.display = 'flex';
 }
@@ -672,25 +681,31 @@ function _renderReporteExistencias(){
             '<div class="empty-desc">Cierra al menos un inventario de esta área.</div></div>';
         return;
     }
-    // Resumen FIJO arriba (todas las áreas) → capital en barra, bodega y total
-    var _all = _datosReporteExistencias('todas');
-    var _capBarra  = _all.reduce(function(s,r){ return s + r.capBarra;  }, 0);
-    var _capBodega = _all.reduce(function(s,r){ return s + r.capBodega; }, 0);
-    var _capTotal  = _all.reduce(function(s,r){ return s + r.capital;   }, 0);
-    function _chip(lbl, cap, col){
-        return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 16px;min-width:130px">'+
-            '<div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">'+lbl+'</div>'+
-            '<div style="font-size:18px;font-weight:800;color:'+col+';margin-top:2px">'+_repMoney(cap)+'</div></div>';
+    var op = _repModoOp; // operativa: sin capital ni totales en dinero
+    var html = '';
+    // Resumen FIJO arriba (solo en vista ADMIN) → capital en barra, bodega y total
+    if (!op) {
+        var _all = _datosReporteExistencias('todas');
+        var _capBarra  = _all.reduce(function(s,r){ return s + r.capBarra;  }, 0);
+        var _capBodega = _all.reduce(function(s,r){ return s + r.capBodega; }, 0);
+        var _capTotal  = _all.reduce(function(s,r){ return s + r.capital;   }, 0);
+        function _chip(lbl, cap, col){
+            return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 16px;min-width:130px">'+
+                '<div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">'+lbl+'</div>'+
+                '<div style="font-size:18px;font-weight:800;color:'+col+';margin-top:2px">'+_repMoney(cap)+'</div></div>';
+        }
+        html += '<div style="display:flex;gap:10px;flex-wrap:wrap;padding:14px 16px 8px">'+
+            _chip('📍 Barra',  _capBarra,  'var(--accent)') +
+            _chip('📍 Bodega', _capBodega, 'var(--accent)') +
+            '<div style="background:rgba(61,190,122,.12);border:1px solid rgba(61,190,122,.35);border-radius:10px;padding:10px 16px;min-width:130px">'+
+            '<div style="font-size:11px;color:var(--green);text-transform:uppercase;letter-spacing:1px">TOTAL · '+(new Set(_all.map(function(r){return r.insumoId;}))).size+' insumos</div>'+
+            '<div style="font-size:18px;font-weight:800;color:var(--green);margin-top:2px">'+_repMoney(_capTotal)+'</div></div></div>';
+    } else {
+        html += '<div style="padding:10px 16px 4px;font-size:11px;color:var(--text-dim)">🔒 Vista operativa · existencias y costo por producto (sin totales en dinero)</div>';
     }
-    var html = '<div style="display:flex;gap:10px;flex-wrap:wrap;padding:14px 16px 8px">'+
-        _chip('📍 Barra',  _capBarra,  'var(--accent)') +
-        _chip('📍 Bodega', _capBodega, 'var(--accent)') +
-        '<div style="background:rgba(61,190,122,.12);border:1px solid rgba(61,190,122,.35);border-radius:10px;padding:10px 16px;min-width:130px">'+
-        '<div style="font-size:11px;color:var(--green);text-transform:uppercase;letter-spacing:1px">TOTAL · '+(new Set(_all.map(function(r){return r.insumoId;}))).size+' insumos</div>'+
-        '<div style="font-size:18px;font-weight:800;color:var(--green);margin-top:2px">'+_repMoney(_capTotal)+'</div></div></div>';
 
     // Tabla: UNA fila por insumo con Barra | Bodega | Total
-    rows.sort(function(a,b){ return b.capital - a.capital; });
+    rows.sort(function(a,b){ return b.total - a.total; });
     var totBarra = rows.reduce(function(s,r){ return s + r.capBarra;  }, 0);
     var totBodega= rows.reduce(function(s,r){ return s + r.capBodega; }, 0);
     var totCap   = rows.reduce(function(s,r){ return s + r.capital;   }, 0);
@@ -698,20 +713,22 @@ function _renderReporteExistencias(){
         '<th style="text-align:left">Insumo</th><th style="text-align:left">Familia</th>'+
         '<th style="text-align:right">Exist. Barra</th><th style="text-align:right">Exist. Bodega</th>'+
         '<th style="text-align:right">Total exist.</th><th style="text-align:right">Costo prov.</th>'+
-        '<th style="text-align:right">Capital</th><th style="text-align:center">Última existencia</th></tr></thead><tbody>'+
+        (op ? '' : '<th style="text-align:right">Capital</th>')+'<th style="text-align:center">Última existencia</th></tr></thead><tbody>'+
         rows.map(function(r){
-            return '<tr><td style="font-weight:600">'+etx(r.nombre)+'</td>'+
+            var cont = _fmtContenido(r);
+            return '<tr><td style="font-weight:600">'+etx(r.nombre)+(cont?'<div style="font-size:10px;color:#7ab8f5;font-weight:400">📦 '+cont+'</div>':'')+'</td>'+
                 '<td style="color:var(--text-dim)">'+etx(r.familia)+'</td>'+
                 '<td style="text-align:right">'+_fmtCant(r.barra, r)+'</td>'+
                 '<td style="text-align:right">'+_fmtCant(r.bodega, r)+'</td>'+
                 '<td style="text-align:right;font-weight:700;color:var(--text)">'+_fmtCant(r.total, r)+'</td>'+
                 '<td style="text-align:right;color:var(--text-muted)">'+_repMoney(r.costoUnit)+'</td>'+
-                '<td style="text-align:right;color:var(--accent);font-weight:600">'+_repMoney(r.capital)+'</td>'+
+                (op ? '' : '<td style="text-align:right;color:var(--accent);font-weight:600">'+_repMoney(r.capital)+'</td>')+
                 '<td style="text-align:center;color:var(--text-dim);font-size:11px">'+_repFecha(r.fecha)+'</td></tr>';
         }).join('')+
+        (op ? '' :
         '<tr style="border-top:2px solid var(--border)"><td colspan="6" style="text-align:right;font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:1px;color:var(--text-muted)">'+
         'Capital · Barra '+_repMoney(totBarra)+' · Bodega '+_repMoney(totBodega)+'</td>'+
-        '<td style="text-align:right;font-weight:800;color:var(--green)">'+_repMoney(totCap)+'</td><td></td></tr>'+
+        '<td style="text-align:right;font-weight:800;color:var(--green)">'+_repMoney(totCap)+'</td><td></td></tr>')+
         '</tbody></table></div>';
     body.innerHTML = html;
 }
@@ -750,19 +767,20 @@ function imprimirReporteExistencias(){
         ".footer strong { color:#3dbe7a; }"+
         "@page { size:letter landscape; margin:1cm; }";
 
+    var op = _repModoOp;
     var tabla = '<table class="ct"><thead><tr>'+
         '<th style="text-align:left">Insumo</th><th style="text-align:left">Familia</th>'+
         '<th class="r">Exist. Barra</th><th class="r">Exist. Bodega</th><th class="r">Total exist.</th>'+
-        '<th class="r">Costo prov.</th><th class="r">Capital</th><th class="c">Última existencia</th></tr></thead><tbody>'+
-        rows.map(function(r){ return '<tr><td style="font-weight:600">'+etx(r.nombre)+'</td><td style="color:#888">'+etx(r.familia)+'</td>'+
+        '<th class="r">Costo prov.</th>'+(op?'':'<th class="r">Capital</th>')+'<th class="c">Última existencia</th></tr></thead><tbody>'+
+        rows.map(function(r){ var cont=_fmtContenido(r); return '<tr><td style="font-weight:600">'+etx(r.nombre)+(cont?'<div class="grp" style="color:#5a8fc7">📦 '+cont+'</div>':'')+'</td><td style="color:#888">'+etx(r.familia)+'</td>'+
             '<td class="r">'+_fmtCant(r.barra,r)+'</td><td class="r">'+_fmtCant(r.bodega,r)+'</td>'+
             '<td class="r b" style="color:#1a1916">'+_fmtCant(r.total,r)+'</td><td class="r" style="color:#888">'+_repMoney(r.costoUnit)+'</td>'+
-            '<td class="r b">'+_repMoney(r.capital)+'</td><td class="c" style="color:#aaa">'+_repFecha(r.fecha)+'</td></tr>'; }).join('')+
-        '</tbody><tfoot><tr><td colspan="6" class="r" style="text-transform:uppercase;font-size:9px;letter-spacing:1.5px;color:#888">Capital · Barra '+_repMoney(totBarra)+' &nbsp;·&nbsp; Bodega '+_repMoney(totBodega)+'</td>'+
-        '<td class="r b" style="font-size:13px">'+_repMoney(totCap)+'</td><td></td></tr></tfoot></table>';
+            (op?'':'<td class="r b">'+_repMoney(r.capital)+'</td>')+'<td class="c" style="color:#aaa">'+_repFecha(r.fecha)+'</td></tr>'; }).join('')+
+        '</tbody>'+(op?'':'<tfoot><tr><td colspan="6" class="r" style="text-transform:uppercase;font-size:9px;letter-spacing:1.5px;color:#888">Capital · Barra '+_repMoney(totBarra)+' &nbsp;·&nbsp; Bodega '+_repMoney(totBodega)+'</td>'+
+        '<td class="r b" style="font-size:13px">'+_repMoney(totCap)+'</td><td></td></tr></tfoot>')+'</table>';
 
     var pagina = '<div class="cab"><div><div class="neg-nombre">'+(negNom?etx(negNom):'Existencias')+'</div>'+
-        '<div class="neg-sub">Existencias por área · '+etx(areaTxt)+'</div></div>'+
+        '<div class="neg-sub">Existencias por área · '+etx(areaTxt)+(op?' · Operativa':'')+'</div></div>'+
         '<div><div class="etx-mark">ET<span>AA</span>X</div>'+
         '<div class="fecha-txt">'+fechaLarga+'</div><div class="fecha-cnt">'+nIns+' insumos</div></div></div>'+
         tabla +
