@@ -142,8 +142,18 @@ async function entrar(){
         var staff = (rs.data || []).map(function(r){ return r.datos || {}; });
         var h = await _hashNip(pin);
         var yo = staff.find(function(m){ return m.nipHash && m.nipHash === h; });
-        if (!yo) { btn.disabled=false; msg.className='cap-msg err';
-            msg.textContent='PIN no reconocido. Pide a tu encargado que te asigne un NIP de 5 dígitos.'; return; }
+        if (!yo) {
+            btn.disabled = false; msg.className = 'cap-msg err';
+            var conNip = staff.filter(function(m){ return m.nipHash; }).length;
+            if (staff.length === 0) {
+                msg.innerHTML = 'No pude leer los colaboradores de este negocio.<br><span style="font-size:11px;color:var(--text-dim)">Falta activar la cuenta de colaboradores o este dispositivo no tiene sesión. Inicia sesión una vez en ETAAX (hub) aquí.</span>';
+            } else if (conNip === 0) {
+                msg.innerHTML = 'NIP no reconocido.<br><span style="font-size:11px;color:var(--text-dim)">Leí ' + staff.length + ' colaborador(es) pero ninguno tiene NIP. El rol "Jefe de Barra" usa usuario/contraseña (no NIP). Asígnale un rol operativo (ej. Barra/Mesero) con NIP de 5 dígitos.</span>';
+            } else {
+                msg.innerHTML = 'NIP no reconocido.<br><span style="font-size:11px;color:var(--text-dim)">Leí ' + staff.length + ' colaborador(es), ' + conNip + ' con NIP — ninguno coincide con ese PIN. Revisa el NIP en Gestión de Staff.</span>';
+            }
+            return;
+        }
         COLAB = yo.nombre || yo.usuario || 'Colaborador';
         // 3) Cargar insumos del negocio.
         var ri = await _supabase.from('negocio_insumos').select('datos').eq('negocio_id', NEG);

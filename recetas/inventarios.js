@@ -67,7 +67,7 @@ async function _sbInitInv() {
         _supabase.from('recetas').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true}),
         _supabase.from('negocio_insumos').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true}),
     ]);
-    if (!r[0].error) _cacheInv  = (r[0].data || []).map(function(x){ return x.datos; });
+    if (!r[0].error) { _cacheInv = (r[0].data || []).map(function(x){ return x.datos; }); _marcarSynced(_cacheInv.map(function(c){ return c && c.id; })); }
     _mergeDraftsLocal(); // recuperar borradores que aún no sincronizaron a la nube
     if (!r[1].error) _cacheEL   = (r[1].data || []).map(function(x){ return x.datos; });
     _mergeELLocal(); // recuperar entradas que aún no sincronizaron a la nube
@@ -91,11 +91,15 @@ async function _reloadInvRT() {
     var r = await _supabase.from('inventarios').select('datos').eq('negocio_id', negId).order('created_at', { ascending: true });
     if (r.error) return;
     var remote = (r.data || []).map(function(x){ return x.datos; }).filter(Boolean);
-    // Conservar inventarios locales aún sin sincronizar (outbox).
     var vistos = {}; remote.forEach(function(c){ if (c && c.id) vistos[c.id] = 1; });
-    var soloLocal = (_cacheInv || []).filter(function(c){ return c && c.id && !vistos[c.id]; });
+    _marcarSynced(remote.map(function(c){ return c.id; }));
+    var synced = _getSynced();
+    // Conservar SOLO borradores que nunca se sincronizaron. Si un inventario ya
+    // estuvo en la nube y ahora no está, fue BORRADO en otro equipo → soltarlo.
+    var soloLocal = (_cacheInv || []).filter(function(c){ return c && c.id && !vistos[c.id] && !synced[c.id]; });
     _cacheInv = remote.concat(soloLocal);
     _mergeDraftsLocal(); // nunca perder borradores locales en un reload de realtime
+    _guardarDraftsLocal(); // reflejar el borrado en el respaldo local (no resucitar al refrescar)
     if (typeof renderStats === 'function') renderStats();
     if (typeof renderHistorial === 'function') renderHistorial();
 }
@@ -138,13 +142,29 @@ function _guardarDraftsLocal() {
 function _cargarDraftsLocal() {
     try { return JSON.parse(localStorage.getItem(_sk('inv_local')) || '[]') || []; } catch(e) { return []; }
 }
+// IDs que YA se vieron en la nube alguna vez. Sirve para distinguir un borrador
+// nunca sincronizado (conservar) de un inventario que estaba sincronizado y se
+// BORRÓ en otro dispositivo (no resucitar). Sin esto, el borrado no se propagaba.
+var _syncedIds = null;
+function _getSynced() {
+    if (!_syncedIds) { try { _syncedIds = JSON.parse(localStorage.getItem(_sk('inv_synced')) || '{}') || {}; } catch(e) { _syncedIds = {}; } }
+    return _syncedIds;
+}
+function _marcarSynced(ids) {
+    var s = _getSynced(), ch = false;
+    (ids || []).forEach(function(id){ if (id && !s[id]) { s[id] = 1; ch = true; } });
+    if (ch) { try { localStorage.setItem(_sk('inv_synced'), JSON.stringify(s)); } catch(e) {} }
+}
 function _mergeDraftsLocal() {
     var locales = _cargarDraftsLocal();
     if (!locales.length) return;
     if (!_cacheInv) _cacheInv = [];
     var ids = {}; _cacheInv.forEach(function(x){ if (x && x.id) ids[x.id] = 1; });
+    var synced = _getSynced();
     locales.forEach(function(d){
-        if (d && d.id && !ids[d.id]) {
+        // Solo recuperar/re-subir borradores que NUNCA se sincronizaron. Si ya estuvo
+        // en la nube y ahora no está, fue BORRADO en otro equipo → no resucitar.
+        if (d && d.id && !ids[d.id] && !synced[d.id]) {
             _cacheInv.push(d);
             try { _sbUpInv(d); } catch(e) {} // re-subir: una vez que la nube funcione (v17), se sincroniza solo
         }
