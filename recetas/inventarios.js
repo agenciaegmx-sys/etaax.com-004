@@ -689,7 +689,15 @@ function _renderReporteExistencias(){
         return;
     }
     var op = _repModoOp; // operativa: sin capital ni totales en dinero
-    var html = '';
+    var negNom = (function(){ try { return (JSON.parse(localStorage.getItem('etaax_ctx')||'{}').negocio||{}).nombre || ''; } catch(e){ return ''; } })();
+    var fechaL = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'});
+    var areaTxt = _repArea === 'todas' ? 'Todas las áreas' : _areaNom(_repArea);
+    // Encabezado branded ETAAX (estilo hoja de recetas)
+    var html = '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px 12px;border-bottom:3px solid var(--green);margin-bottom:10px">'+
+        '<div><div style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:1px;color:var(--text);line-height:1">'+etx(negNom||'Existencias')+'</div>'+
+        '<div style="font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--text-dim);margin-top:3px">Existencias por área · '+etx(areaTxt)+(op?' · Operativa':'')+'</div></div>'+
+        '<div style="text-align:right"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:2px;color:var(--text)">ET<span style="color:var(--green)">AA</span>X</div>'+
+        '<div style="font-size:9px;color:var(--text-dim);margin-top:2px">'+fechaL+'</div></div></div>';
     // Resumen FIJO arriba (solo en vista ADMIN) → capital en barra, bodega y total
     if (!op) {
         var _all = _datosReporteExistencias('todas');
@@ -737,6 +745,8 @@ function _renderReporteExistencias(){
         'Capital · Barra '+_repMoney(totBarra)+' · Bodega '+_repMoney(totBodega)+'</td>'+
         '<td style="text-align:right;font-weight:800;color:var(--green)">'+_repMoney(totCap)+'</td><td></td></tr>')+
         '</tbody></table></div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-top:1px solid var(--border);font-size:9px;color:var(--text-dim);margin-top:8px">'+
+        '<span>etaax.com · EGMx Consultoría Estratégica a&b</span><strong style="color:var(--green)">📊 Existencias por área</strong><span>'+fechaL+'</span></div>';
     body.innerHTML = html;
 }
 
@@ -786,11 +796,15 @@ function imprimirReporteExistencias(){
         '</tbody>'+(op?'':'<tfoot><tr><td colspan="6" class="r" style="text-transform:uppercase;font-size:9px;letter-spacing:1.5px;color:#888">Capital · Barra '+_repMoney(totBarra)+' &nbsp;·&nbsp; Bodega '+_repMoney(totBodega)+'</td>'+
         '<td class="r b" style="font-size:13px">'+_repMoney(totCap)+'</td><td></td></tr></tfoot>')+'</table>';
 
+    var resumen = op ? '' : '<div style="display:flex;gap:22px;padding:10px 22px 0;font-size:11px;color:#555">'+
+        '<span>📍 <b>Barra</b> '+_repMoney(totBarra)+'</span>'+
+        '<span>📍 <b>Bodega</b> '+_repMoney(totBodega)+'</span>'+
+        '<span style="color:#1a7a46;font-weight:700">TOTAL '+_repMoney(totCap)+' · '+nIns+' insumos</span></div>';
     var pagina = '<div class="cab"><div><div class="neg-nombre">'+(negNom?etx(negNom):'Existencias')+'</div>'+
         '<div class="neg-sub">Existencias por área · '+etx(areaTxt)+(op?' · Operativa':'')+'</div></div>'+
         '<div><div class="etx-mark">ET<span>AA</span>X</div>'+
         '<div class="fecha-txt">'+fechaLarga+'</div><div class="fecha-cnt">'+nIns+' insumos</div></div></div>'+
-        tabla +
+        resumen + tabla +
         '<div class="footer"><span>etaax.com · EGMx Consultoría Estratégica a&b</span>'+
         '<strong>📊 Existencias por área</strong><span>'+fechaLarga+'</span></div>';
 
@@ -1376,7 +1390,13 @@ function buildToolbar(conModo = true) {
     </div>`;
 }
 
-function onBusqueda(val)     { busquedaCapt       = val; rerenderCaptura(); }
+function onBusqueda(val) {
+    busquedaCapt = val;
+    // Actualizar SOLO la lista, no el input → no se pierde el foco al escribir.
+    var cont = document.getElementById('step1ListaCont');
+    if (cont) cont.innerHTML = _step1ListaInner();
+    else rerenderCaptura();
+}
 function onFiltroFam(val)    { filtroFamActivo    = val; filtroSubcatActiva = ''; rerenderCaptura(); }
 function onFiltroCat(val)    { filtroCatActiva    = val; filtroSubcatActiva = ''; rerenderCaptura(); }
 function onFiltroSubcat(val) { filtroSubcatActiva = val; rerenderCaptura(); }
@@ -1481,7 +1501,15 @@ function renderStep1() {
             </div>`;
     }
 
-    const filas = getFilasFiltradas(true); // true = aplica filtro registro
+    // La lista va en su propio contenedor → la búsqueda actualiza SOLO esto (no el
+    // input del toolbar) para no perder el foco al escribir.
+    return buildVistaSwitcherExist() + buildFiltroRegistroBar() + buildToolbar(true) +
+        '<div id="step1ListaCont">' + _step1ListaInner() + '</div>';
+}
+
+// Contenido de la lista (filas filtradas) — se re-renderiza solo al buscar/filtrar.
+function _step1ListaInner() {
+    const filas = getFilasFiltradas(true);
     const noData = !filasCaptura.length
         ? `<div class="empty-state" style="padding:60px">
             <div class="empty-icon">🗄️</div><div class="empty-title">Sin insumos en catálogo</div>
@@ -1492,10 +1520,7 @@ function renderStep1() {
             <div class="empty-title">${filtroRegistroActivo==='registrados'?'Sin registrados aún':'Todos registrados'}</div>
             <div class="empty-desc">${filtroRegistroActivo==='registrados'?'Captura existencias en Búsqueda rápida':'¡Levantamiento completo!'}</div>
         </div>` : null;
-
-    return buildVistaSwitcherExist() + buildFiltroRegistroBar() + buildToolbar(true) + (noData || (
-        modoListaCapt === 'galeria' ? renderStep1Galeria(filas) : renderStep1Lista(filas)
-    ));
+    return noData || (modoListaCapt === 'galeria' ? renderStep1Galeria(filas) : renderStep1Lista(filas));
 }
 
 // ── Búsqueda rápida existencias ───────────────────────────────
@@ -4718,7 +4743,8 @@ function guardarFichaTecnica() {
 
 // ── Init ──────────────────────────────────────────────────────
 function init() { _limpiarStorageEmergencia(); _mergeDraftsLocal(); renderStats(); renderHistorial(); }
-init();
+// OJO: init() se llama AL FINAL del archivo, DESPUÉS de registrar los guardias de
+// navegación. Así, si init() llegara a fallar, los guardias ya quedaron activos.
 
 // ── Bloqueo de navegación mientras haya un inventario abierto ──
 let _pendingNavHref = null;
@@ -4738,9 +4764,10 @@ document.addEventListener('DOMContentLoaded', function(){
 });
 
 // Hay un inventario ABIERTO en edición → cualquier salida pide el card.
-// Usa el flag que mostrarVista mantiene (confiable, sin depender del DOM).
+// Fuente de verdad SIMPLE: invActual existe y no está cerrado. (En el historial
+// invActual es null o el inventario está cerrado → no bloquea.)
 function _estaEnWizard() {
-    return !!window._invEditando && !!invActual && !invActual.cerrado;
+    return !!invActual && !invActual.cerrado;
 }
 // Abrir el card de salida (botón "Salir"): sin destino → al historial.
 function pedirSalirInv() {
@@ -4795,3 +4822,6 @@ window.addEventListener('beforeunload', function(e) {
         e.returnValue = '';
     }
 });
+
+// Render inicial AL FINAL — los guardias de navegación ya quedaron registrados arriba.
+try { init(); } catch (e) { console.warn('[init]', e); }
