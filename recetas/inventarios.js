@@ -2500,8 +2500,8 @@ function renderStep2Lista(filas) {
                 ${(fila.entradas||['','','','','']).map((e,ei)=>`
                     <div class="inv-peso-cell">
                         <div class="inv-peso-lbl">E${ei+1}</div>
-                        <input type="number" class="inv-peso-input" value="${e||''}" placeholder="0" min="0" step="1"
-                            oninput="updEntrada(${idx},${ei},this.value)">
+                        <input type="text" inputmode="decimal" class="inv-peso-input" value="${e||''}" placeholder="0"
+                            oninput="this.value=this.value.replace(/[^0-9.]/g,'');updEntrada(${idx},${ei},this.value)">
                     </div>`).join('')}
                 </div>
             </td>
@@ -2554,8 +2554,8 @@ function renderStep2Galeria(filas) {
                     ${(fila.entradas||['','','','','']).map((e,ei)=>`
                     <div>
                         <div style="font-size:9px;color:var(--text-dim);text-align:center;margin-bottom:3px">E${ei+1}</div>
-                        <input type="number" class="inv-pesos-grid-input" value="${e||''}" placeholder="0" min="0" step="1"
-                            oninput="updEntrada(${idx},${ei},this.value)"
+                        <input type="text" inputmode="decimal" class="inv-pesos-grid-input" value="${e||''}" placeholder="0"
+                            oninput="this.value=this.value.replace(/[^0-9.]/g,'');updEntrada(${idx},${ei},this.value)"
                             style="height:42px;font-size:16px;text-align:center;border:1px solid var(--border);
                                    border-radius:8px;background:var(--bg);color:var(--text);width:100%;
                                    font-family:'DM Sans',sans-serif;transition:border-color 0.15s;box-sizing:border-box">
