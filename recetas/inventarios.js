@@ -2716,11 +2716,34 @@ function updCntMenu(id, delta) {
     invActual.cocktailsVendidos[id] = nuevo;
     const el = document.getElementById('cnt-' + id);
     if (el) {
-        el.textContent = nuevo;
+        el.value = nuevo; // ahora es un input editable
         el.classList.toggle('active', nuevo > 0);
         const item = el.closest('.step3-menu-item');
         if (item) item.classList.toggle('has-cnt', nuevo > 0);
     }
+    _updStep3MenuTotal();
+    _autoGuardar();
+}
+// Captura manual: el usuario teclea la cantidad vendida directamente.
+function setCntMenu(id, val) {
+    if (!invActual.cocktailsVendidos) invActual.cocktailsVendidos = {};
+    const nuevo = Math.max(0, parseFloat(val) || 0);
+    invActual.cocktailsVendidos[id] = nuevo;
+    const el = document.getElementById('cnt-' + id);
+    if (el) {
+        el.classList.toggle('active', nuevo > 0);
+        const item = el.closest('.step3-menu-item');
+        if (item) item.classList.toggle('has-cnt', nuevo > 0);
+    }
+    _updStep3MenuTotal();
+    _autoGuardar();
+}
+function _updStep3MenuTotal() {
+    const el = document.getElementById('step3MenuTotal');
+    if (!el) return;
+    const v = (invActual && invActual.cocktailsVendidos) || {};
+    const t = Object.keys(v).reduce(function(s, k){ return s + (parseFloat(v[k]) || 0); }, 0);
+    el.textContent = (t % 1 ? t.toFixed(1) : t) + ' unidades';
 }
 
 // ── Producción de prebatch (batches hechos) ──────────────────────
@@ -2796,7 +2819,7 @@ function renderStep3Menu() {
     const totalItems = recetas.reduce((s, r) => s + (parseFloat(vendidos[r.id]) || 0), 0);
     const resumenHtml = `<div style="padding:12px 16px;display:flex;align-items:center;gap:12px">
         <span style="font-size:11px;color:var(--text-dim)">Total registrado:</span>
-        <span style="font-size:15px;font-weight:700;color:var(--green)">${totalItems} unidades</span>
+        <span id="step3MenuTotal" style="font-size:15px;font-weight:700;color:var(--green)">${totalItems} unidades</span>
     </div>`;
     const gruposHtml = Object.entries(grupos).map(([grp, items]) => `
         <div style="padding:0 16px 16px">
@@ -2822,7 +2845,10 @@ function renderStep3Menu() {
                         </div>
                         <div class="step3-counter">
                             <button onclick="updCntMenu('${r.id}',-1)">−</button>
-                            <span id="cnt-${r.id}" class="step3-cnt-val ${cnt>0?'active':''}">${cnt}</span>
+                            <input id="cnt-${r.id}" type="text" inputmode="numeric"
+                                class="step3-cnt-val ${cnt>0?'active':''}" value="${cnt}"
+                                oninput="this.value=this.value.replace(/[^0-9.]/g,'');setCntMenu('${r.id}',this.value)"
+                                style="width:42px;text-align:center;background:transparent;border:none;outline:none;font-family:inherit">
                             <button onclick="updCntMenu('${r.id}',1)">+</button>
                         </div>
                     </div>`;
