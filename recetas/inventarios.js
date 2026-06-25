@@ -288,6 +288,52 @@ function getExistenciaAnterior(insumoId) {
     return fila.existenciaFisica !== undefined ? fila.existenciaFisica : calcExistencia(fila);
 }
 
+// Última fila de un inventario CERRADO previo (misma sucursal, distinto del actual)
+// que contó este insumo → para copiar su existencia (desglose bodega/barra/pesos).
+function _filaAnteriorInsumo(insumoId) {
+    var cerrados = _scopeSucInvs(getInventarios()).filter(function(x){ return x && x.cerrado && (!invActual || x.id !== invActual.id); });
+    for (var i = cerrados.length - 1; i >= 0; i--) {
+        var f = (cerrados[i].filas || []).find(function(x){ return x && x.insumoId === insumoId; });
+        if (f) return f;
+    }
+    return null;
+}
+// Copia la existencia del inventario anterior a la captura actual de esa fila.
+function copiarExistenciaAnterior(idx) {
+    var fila = filasCaptura[idx];
+    if (!fila) return;
+    var prev = _filaAnteriorInsumo(fila.insumoId);
+    if (!prev) { alert('No hay un inventario anterior con este insumo.'); return; }
+    if (fila.tipo === 'peso') {
+        fila.existenciaPeso = (prev.existenciaPeso != null && prev.existenciaPeso !== '') ? prev.existenciaPeso
+                            : (prev.existenciaFisica != null ? prev.existenciaFisica : '');
+    } else {
+        fila.cerradasBodega = prev.cerradasBodega || 0;
+        fila.cerradasBarra  = prev.cerradasBarra  || 0;
+        fila.pesos          = Array.isArray(prev.pesos) ? prev.pesos.slice() : (fila.pesos || ['','','','']);
+        if (prev.metodoCaptura)    fila.metodoCaptura = prev.metodoCaptura;
+        if (prev.nivelPct != null) fila.nivelPct      = prev.nivelPct;
+    }
+    _autoGuardar();
+    if (typeof vistaCapturaExist !== 'undefined' && vistaCapturaExist === 'busqueda') renderCardExist();
+    else renderStepContent();
+}
+
+// Botón "Copiar existencia anterior" — vacío si no hay inventario previo con el insumo.
+function _btnCopiarAnterior(idx, fila, estilo) {
+    var pf = _filaAnteriorInsumo(fila.insumoId);
+    if (!pf) return '';
+    var pe = pf.tipo === 'peso' ? (parseFloat(pf.existenciaPeso) || parseFloat(pf.existenciaFisica) || 0) : calcExistenciaBot(pf);
+    var pu = pf.tipo === 'peso' ? (pf.baseUnit || 'g').toLowerCase() : (pf.tipo === 'pza' ? 'pza' : 'bot');
+    var lbl = (pe % 1 === 0 ? pe.toFixed(0) : pe.toFixed(1)) + ' ' + pu;
+    if (estilo === 'mini') {
+        return '<button onclick="copiarExistenciaAnterior(' + idx + ')" title="Copiar existencia anterior (' + lbl + ')" '+
+            'style="width:96px;margin-top:5px;background:rgba(122,184,245,.10);border:1px solid rgba(122,184,245,.45);color:#7ab8f5;border-radius:7px;padding:5px 0;font-family:inherit;font-size:10px;font-weight:600;cursor:pointer">📋 Copiar ant.</button>';
+    }
+    return '<button onclick="copiarExistenciaAnterior(' + idx + ')" '+
+        'style="width:100%;margin-bottom:14px;background:rgba(122,184,245,.10);border:1px solid rgba(122,184,245,.5);color:#7ab8f5;border-radius:8px;padding:9px 0;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">📋 Copiar existencia anterior (' + lbl + ')</button>';
+}
+
 function calcVentasCopasRecetas(insumoId, copaML) {
     if (!copaML || copaML <= 0) return 0;
     const recetas  = getRecetas().filter(r => r.tipo === 'bebidas');
@@ -2013,6 +2059,9 @@ function renderCardExist() {
                 </div>
             </div>
 
+            <!-- Copiar existencia anterior -->
+            ${_btnCopiarAnterior(idx, fila)}
+
             <!-- Botellas cerradas -->
             <div style="display:flex;gap:12px;margin-bottom:16px">
                 <div style="flex:1">
@@ -2098,6 +2147,8 @@ function _cardExistPeso(fila, idx) {
                     <b id="teo-${idx}" style="color:var(--text);font-size:14px">${_fmtBase(teo)} ${u}</b>
                 </div>
             </div>
+
+            ${_btnCopiarAnterior(idx, fila)}
 
             <div style="display:flex;gap:10px;margin-bottom:8px">
                 <div style="flex:1.3">
@@ -2269,6 +2320,7 @@ function renderStep1Lista(filas) {
             <td class="inv-td-c" style="width:104px">
                 ${(function(){ var s = _regBtnState(fila);
                     return '<button id="btn-reg-'+idx+'" onclick="registrarFilaLista('+idx+')" style="width:96px;padding:7px 0;border-radius:7px;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;background:'+s.bg+';border:1px solid '+s.col+';color:'+s.col+'">'+s.txt+'</button>'; })()}
+                ${_btnCopiarAnterior(idx, fila, 'mini')}
             </td>
         </tr>`;
     }).join('');
@@ -2342,6 +2394,7 @@ function renderStep1Galeria(filas) {
                         </div>`).join('')}
                     </div>
                 </div>
+                ${(function(){ var b=_btnCopiarAnterior(idx, fila); return b ? '<div style="margin-top:10px">'+b.replace('margin-bottom:14px','margin-bottom:0')+'</div>' : ''; })()}
             </div>
             <div class="inv-item-card-bot">${(() => {
                 const lt = calcNetLiters(fila);
