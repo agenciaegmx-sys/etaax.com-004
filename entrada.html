@@ -206,9 +206,9 @@ async function onFoto(input){
     var msg=document.getElementById('formMsg'); msg.className='cap-msg'; msg.textContent='Subiendo foto…';
     var blob = await _comprimir(f);
     if (!blob){ msg.className='cap-msg err'; msg.textContent='No se pudo procesar la imagen.'; return; }
-    var path = NEG+'/entradas/'+genId()+'.jpg';
+    var path = NEG+'/entradas/'+TOKEN+'/'+genId()+'.jpg'; // path validado por la política de v28
     var up = await _supabase.storage.from('evidencias').upload(path, blob, {contentType:'image/jpeg'});
-    if (up.error){ msg.className='cap-msg err'; msg.textContent='Error al subir foto: '+up.error.message; return; }
+    if (up.error){ msg.className='cap-msg err'; msg.textContent='Error al subir foto: '+up.error.message+' (¿corriste v28?)'; return; }
     FOTO_URL = _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
     var im=document.getElementById('fotoThumb'); im.src=FOTO_URL; im.style.display='block';
     msg.className='cap-msg ok'; msg.textContent='✓ Foto lista';
