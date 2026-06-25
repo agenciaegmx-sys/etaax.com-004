@@ -915,15 +915,27 @@ function abrirParametros() {
     document.getElementById('modalParametros').style.display = 'flex';
 }
 
-// QR de entradas por negocio: abre entrada.html en el cel (login PIN → registrar entradas).
-function abrirQrEntradas() {
+// QR de entradas por negocio: abre entrada.html en el cel SIN login (token + NIP).
+async function abrirQrEntradas() {
     var negId = getNegocioActivo();
     if (!negId) { alert('No hay negocio activo.'); return; }
-    var url = location.origin + '/entrada.html?n=' + encodeURIComponent(negId);
-    document.getElementById('qrEntradasUrl').textContent = url;
     document.getElementById('modalQrEntradas').style.display = 'flex';
     var box = document.getElementById('qrEntradasBox');
+    var urlEl = document.getElementById('qrEntradasUrl');
     box.innerHTML = '<div style="color:var(--text-dim);font-size:12px">Generando…</div>';
+    urlEl.textContent = '';
+    // Obtener (o crear) el token secreto del negocio que va en el QR.
+    var token = '';
+    try {
+        var r = await _supabase.rpc('entrada_token_asegurar', { p_neg: negId });
+        if (r.error) throw r.error;
+        token = r.data || '';
+    } catch (e) {
+        box.innerHTML = '<div style="color:var(--red);font-size:12px;line-height:1.5">No se pudo generar el token del QR.<br>¿Corriste la migración v27 en Supabase?<br><span style="color:var(--text-dim)">' + etx((e && e.message) || e) + '</span></div>';
+        return;
+    }
+    var url = location.origin + '/entrada.html?n=' + encodeURIComponent(negId) + '&t=' + encodeURIComponent(token);
+    urlEl.textContent = url;
     function gen() {
         box.innerHTML = '';
         var d = document.createElement('div');

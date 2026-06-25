@@ -102,7 +102,6 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
-<script src="staff-auth.js"></script>
 <script>
 (function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);})();
 function _q(k){var m=new RegExp('[?&]'+k+'=([^&]*)').exec(location.search);return m?decodeURIComponent(m[1]):'';}
@@ -116,8 +115,9 @@ async function _hashNip(pin){
 }
 
 var NEG = _q('n') || _q('neg');
+var TOKEN = _q('t');             // token secreto del negocio (va en el QR) — NO requiere login
 var VIDA_MS = 300000;            // la sesión / ventana para subir la foto dura 5 minutos
-var COLAB = '', INSUMOS = [], SEL = null, FOTO_URL = '', _countTimer = null, _t0 = 0;
+var COLAB = '', _NIPHASH = '', INSUMOS = [], SEL = null, FOTO_URL = '', _countTimer = null, _t0 = 0;
 
 function _show(id){ ['pinScreen','formScreen','errScreen'].forEach(function(x){ document.getElementById(x).style.display = x===id?'block':'none'; }); }
 function _err(txt){ document.getElementById('errTxt').innerHTML = txt; document.getElementById('capSub').textContent = ''; _show('errScreen'); if(_countTimer){clearInterval(_countTimer);_countTimer=null;} }
@@ -125,41 +125,28 @@ function _err(txt){ document.getElementById('errTxt').innerHTML = txt; document.
 async function entrar(){
     var pin = (document.getElementById('pinInput').value || '').trim();
     var msg = document.getElementById('pinMsg'); msg.className = 'cap-msg'; msg.textContent = '';
-    if (!/^\d{4,6}$/.test(pin)) { msg.className='cap-msg err'; msg.textContent='Pon tu PIN (5 dígitos).'; return; }
+    if (!/^\d{4,6}$/.test(pin)) { msg.className='cap-msg err'; msg.textContent='Pon tu NIP (5 dígitos).'; return; }
     var btn = document.getElementById('pinBtn'); btn.disabled = true; msg.textContent = 'Validando…';
     try {
-        // 1) Sesión de la cuenta compartida del negocio (cred cacheada en este equipo).
-        var ok = false;
-        if (window.StaffAuth) { try { ok = await StaffAuth.login(NEG); } catch(e){} }
-        if (!ok) {
-            var s = await _supabase.auth.getSession();
-            ok = !!(s.data && s.data.session);
-        }
-        if (!ok) { btn.disabled=false; msg.className='cap-msg err';
-            msg.innerHTML='No se pudo activar este dispositivo.<br>Inicia sesión una vez en ETAAX (hub) en este celular y vuelve a escanear.'; return; }
-        // 2) Leer staff → identificar al colaborador por su PIN.
-        var rs = await _supabase.from('staff').select('datos').eq('negocio_id', NEG);
-        var staff = (rs.data || []).map(function(r){ return r.datos || {}; });
         var h = await _hashNip(pin);
-        var yo = staff.find(function(m){ return m.nipHash && m.nipHash === h; });
-        if (!yo) {
+        // 1) Validar token + NIP en el SERVIDOR (sin sesión, login efímero por RPC).
+        var rv = await _supabase.rpc('entrada_validar_nip', { p_neg: NEG, p_token: TOKEN, p_niphash: h });
+        if (rv.error) {
             btn.disabled = false; msg.className = 'cap-msg err';
-            var conNip = staff.filter(function(m){ return m.nipHash; }).length;
-            if (staff.length === 0) {
-                msg.innerHTML = 'No pude leer los colaboradores de este negocio.<br><span style="font-size:11px;color:var(--text-dim)">Falta activar la cuenta de colaboradores o este dispositivo no tiene sesión. Inicia sesión una vez en ETAAX (hub) aquí.</span>';
-            } else if (conNip === 0) {
-                msg.innerHTML = 'NIP no reconocido.<br><span style="font-size:11px;color:var(--text-dim)">Leí ' + staff.length + ' colaborador(es) pero ninguno tiene NIP. El rol "Jefe de Barra" usa usuario/contraseña (no NIP). Asígnale un rol operativo (ej. Barra/Mesero) con NIP de 5 dígitos.</span>';
-            } else {
-                msg.innerHTML = 'NIP no reconocido.<br><span style="font-size:11px;color:var(--text-dim)">Leí ' + staff.length + ' colaborador(es), ' + conNip + ' con NIP — ninguno coincide con ese PIN. Revisa el NIP en Gestión de Staff.</span>';
-            }
+            msg.innerHTML = 'No se pudo validar.<br><span style="font-size:11px;color:var(--text-dim)">' + etx(rv.error.message) + ' — ¿se corrió la migración v27 en Supabase?</span>';
             return;
         }
-        COLAB = yo.nombre || yo.usuario || 'Colaborador';
-        // 3) Cargar insumos del negocio.
-        var ri = await _supabase.from('negocio_insumos').select('datos').eq('negocio_id', NEG);
-        INSUMOS = (ri.data || []).map(function(r){ return r.datos || {}; }).filter(function(x){ return x && x.id; });
+        if (!rv.data) {
+            btn.disabled = false; msg.className = 'cap-msg err';
+            msg.innerHTML = 'NIP no reconocido.<br><span style="font-size:11px;color:var(--text-dim)">Verifica con tu encargado tu NIP de 5 dígitos (Gestión de Staff). El rol "Jefe de Barra" usa usuario/contraseña, no NIP.</span>';
+            return;
+        }
+        COLAB = rv.data; _NIPHASH = h;
+        // 2) Cargar insumos (token-gated, también por RPC).
+        var ri = await _supabase.rpc('entrada_insumos', { p_neg: NEG, p_token: TOKEN });
+        INSUMOS = (ri.data || []).filter(function(x){ return x && x.id; });
         INSUMOS.sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
-        // 4) Mostrar formulario.
+        // 3) Mostrar formulario.
         document.getElementById('quienNom').textContent = COLAB;
         document.getElementById('entFecha').value = todayStr();
         document.getElementById('capSub').textContent = 'Registra insumos que llegaron';
@@ -245,12 +232,11 @@ async function registrar(){
         notas: (document.getElementById('entNota').value||'').trim(),
         fecha: document.getElementById('entFecha').value || todayStr(),
         registrado: new Date().toISOString(),
-        registradoPor: COLAB,
-        origen: 'qr',
         foto_url: FOTO_URL || ''
+        // registradoPor lo sella el servidor (RPC) a partir del NIP validado
     };
     try {
-        var ins = await _supabase.from('entradas_log').insert({ id: entry.id, negocio_id: NEG, datos: entry });
+        var ins = await _supabase.rpc('entrada_registrar', { p_neg: NEG, p_token: TOKEN, p_niphash: _NIPHASH, p_datos: entry });
         if (ins.error) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent='No se pudo guardar: '+ins.error.message; return; }
         // Reset para la siguiente entrada (la sesión sigue viva).
         limpiarIns();
@@ -262,7 +248,7 @@ async function registrar(){
 }
 
 document.addEventListener('DOMContentLoaded', function(){
-    if (!NEG) { _err('Este QR no es válido.<br>Genera uno nuevo desde Inventarios.'); return; }
+    if (!NEG || !TOKEN) { _err('Este QR no es válido o está incompleto.<br>Genera uno nuevo desde Inventarios → 📱 QR de entradas.'); return; }
     document.getElementById('pinInput').focus();
     document.getElementById('pinInput').addEventListener('keydown', function(e){ if (e.key==='Enter') entrar(); });
 });
