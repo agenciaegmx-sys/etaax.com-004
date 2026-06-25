@@ -4272,6 +4272,10 @@ function guardarInventario() {
     if (idx>=0) lista[idx]=invActual; else lista.push(invActual);
     const ok = setInventarios(lista);
     if (!ok) throw new Error('storage-full');
+    // FORZAR el upsert a la nube: el diff de setInventarios no detecta el cambio
+    // porque _persistirBorradorLocal ya mutó _cacheInv (= prev). Sin esto, el
+    // inventario solo vivía en localStorage y no sincronizaba entre dispositivos.
+    try { _sbUpInv(invActual); } catch(e) { console.warn('[guardarInventario upsert]', e); }
 }
 
 // Respaldo INMEDIATO del borrador en localStorage (síncrono, en cada cambio).
@@ -4462,7 +4466,7 @@ function guardarEntradaLog() {
 
     // Save to global entradas log
     const log = getEntradasLog();
-    log.push({
+    const _nuevaEnt = {
         id:       genId(),
         insumoId,
         nombre:   ins ? ins.nombre : '—',
@@ -4473,8 +4477,13 @@ function guardarEntradaLog() {
         notas,
         fecha,
         registrado: new Date().toISOString()
-    });
+    };
+    log.push(_nuevaEnt);
     setEntradasLog(log);
+    // FORZAR el upsert a la nube: setEntradasLog no detecta la nueva entrada porque
+    // log === _cacheEL (misma referencia ya mutada por el push). Sin esto, la entrada
+    // solo vivía en localStorage y no sincronizaba entre dispositivos.
+    try { _sbUpEL(_nuevaEnt); } catch(e) { console.warn('[guardarEntradaLog upsert]', e); }
 
     // Also save to active inventory so it appears in vistaEntradas historial
     if (invActual) {
