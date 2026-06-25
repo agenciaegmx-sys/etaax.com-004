@@ -70,6 +70,7 @@ async function _sbInitInv() {
     if (!r[0].error) _cacheInv  = (r[0].data || []).map(function(x){ return x.datos; });
     _mergeDraftsLocal(); // recuperar borradores que aún no sincronizaron a la nube
     if (!r[1].error) _cacheEL   = (r[1].data || []).map(function(x){ return x.datos; });
+    _mergeELLocal(); // recuperar entradas que aún no sincronizaron a la nube
     if (!r[2].error) _cacheRecetasInv = (r[2].data || []).map(function(x){ return x.datos; });
     if (!r[3].error) {
         _cacheInsumosInv = (r[3].data || []).map(function(x){ return x.datos; });
@@ -166,9 +167,27 @@ function setInventarios(d) {
     return true; // ya no falla por quota
 }
 
+// ── Respaldo local de entradas (entradas_log) ──────────────────────
+// Mismo problema que los inventarios: si el upsert a la nube falla/tarda, al
+// refrescar se perdían. Respaldo en localStorage + merge (y re-subida) al cargar.
+function _guardarELLocal() {
+    try { localStorage.setItem(_sk('el_local'), JSON.stringify(_cacheEL || [])); } catch(e) {}
+}
+function _cargarELLocal() {
+    try { return JSON.parse(localStorage.getItem(_sk('el_local')) || '[]') || []; } catch(e) { return []; }
+}
+function _mergeELLocal() {
+    var locales = _cargarELLocal();
+    if (!locales.length) return;
+    if (!_cacheEL) _cacheEL = [];
+    var ids = {}; _cacheEL.forEach(function(x){ if (x && x.id) ids[x.id] = 1; });
+    locales.forEach(function(e){ if (e && e.id && !ids[e.id]) { _cacheEL.push(e); try { _sbUpEL(e); } catch(err){} } });
+}
+
 function setEntradasLog(d) {
     var prev = _cacheEL || [];
     _cacheEL = d;
+    _guardarELLocal(); // respaldo inmediato (sobrevive al refresh)
     // Upsert new entries
     d.forEach(function(e) {
         if (!prev.find(function(x){ return x.id === e.id; })) _sbUpEL(e);
@@ -583,6 +602,59 @@ function setModoListaHist(modo) {
 // ═══════════════════════════════════════════════════════════════
 var _repArea = 'todas';
 var _repModoOp = false; // false = admin (con capital y totales) · true = operativa (sin dinero agregado)
+var _repFusion = false; // true = Reporte FINAL (fusiona los productos compuestos)
+
+// Aplica los productos compuestos: agrupa los miembros en una sola fila (suma en
+// unidad base y muestra en la unidad definida). Lo demás sale igual.
+function _fusionarRows(rows) {
+    var comps = getCompuestos();
+    if (!comps.length) return rows;
+    var compDe = {}; comps.forEach(function(c){ (c.miembros||[]).forEach(function(m){ compDe[m] = c; }); });
+    var acc = {}, out = [];
+    rows.forEach(function(r){
+        var c = compDe[r.insumoId];
+        if (!c) { out.push(r); return; }
+        var toBase = function(qty){ return r.tipo === 'copa' ? qty * (r.copaML || 0) : qty; }; // copas→ml; pza/peso ya en base
+        if (!acc[c.id]) { acc[c.id] = { _comp:c, barraB:0, bodegaB:0, totalB:0, capBarra:0, capBodega:0, capital:0, fecha:'' }; out.push(acc[c.id]); }
+        var fc = acc[c.id];
+        fc.barraB += toBase(r.barra); fc.bodegaB += toBase(r.bodega); fc.totalB += toBase(r.total);
+        fc.capBarra += r.capBarra; fc.capBodega += r.capBodega; fc.capital += r.capital;
+        if ((r.fecha||'') > fc.fecha) fc.fecha = r.fecha;
+    });
+    return out.map(function(r){
+        if (!r._comp) return r;
+        var c = r._comp;
+        var conv = function(b){ return c.unidad==='lt'||c.unidad==='kg' ? b/1000 : c.unidad==='botella' ? b/750 : b; };
+        var totU = conv(r.totalB);
+        return { insumoId:'_comp_'+c.id, nombre:c.nombre, familia:'🧩 Compuesto', tipo:'_comp', unidadComp:c.unidad,
+            barra:conv(r.barraB), bodega:conv(r.bodegaB), total:totU,
+            costoUnit: totU>0 ? r.capital/totU : 0, capital:r.capital, capBarra:r.capBarra, capBodega:r.capBodega, fecha:r.fecha };
+    });
+}
+// Compuestos del inventario ACTUAL (filasCaptura) → para el Reporte Directivo.
+function _rowsCompuestosActual() {
+    if (!getCompuestos().length) return [];
+    var rows = [];
+    filasCaptura.forEach(function(f){
+        if (!f || !f.insumoId) return;
+        var cc = costoCopa(f);
+        var ins = getInsumos().find(function(x){ return x.id === f.insumoId; });
+        var barra = _existenciaArea(f,'barra',ins), bodega = _existenciaArea(f,'bodega',ins), total = calcExistencia(f);
+        if (barra<=0 && bodega<=0 && total<=0) return;
+        rows.push({ insumoId:f.insumoId, nombre:f.nombre, familia:f.familia||f.categoria||'Otros', tipo:f.tipo,
+            copaML:f.copaML, contNeto:f.contNeto, baseUnit:f.baseUnit, barra:barra, bodega:bodega, total:total,
+            capital:total*cc, capBarra:barra*cc, capBodega:bodega*cc, costoUnit:0, fecha:'' });
+    });
+    return _fusionarRows(rows).filter(function(r){ return r.tipo === '_comp'; });
+}
+function _seccionCompuestosDirectivo() {
+    var rows = _rowsCompuestosActual();
+    if (!rows.length) return '';
+    return '<div class="rd-sec">🧩 Productos compuestos (fusionados)</div>'+
+        '<table class="rd-t" style="margin-bottom:14px"><thead><tr><th>Producto</th><th class="tr">Existencia</th><th class="tr">Capital</th></tr></thead><tbody>'+
+        rows.map(function(r){ return '<tr><td style="font-weight:600">'+etx(r.nombre)+'</td><td class="tr">'+_fmtCant(r.total,r)+'</td><td class="tr" style="color:#1a7a46;font-weight:700">'+_repMoney(r.capital)+'</td></tr>'; }).join('')+
+        '</tbody></table>';
+}
 function toggleReporteVista(){
     _repModoOp = !_repModoOp;
     var btn = document.getElementById('repVistaBtn');
@@ -650,6 +722,7 @@ function _datosReporteExistencias(area) {
 function _fmtCant(qty, r){
     var e = qty || 0;
     if (e <= 0) return '—';
+    if (r.tipo === '_comp') return (Math.round(e*10)/10) + ' ' + (r.unidadComp || 'u'); // producto compuesto
     if (r.tipo === 'peso') return _fmtBase(e) + ' ' + (r.baseUnit || 'u');
     if (r.tipo === 'pza')  return _fmtBase(e) + ' pza';
     var copasBot = (r.contNeto > 0 && r.copaML > 0) ? r.contNeto / r.copaML : 0;
@@ -659,7 +732,9 @@ function _fmtCant(qty, r){
 function _repFecha(f){ return f ? new Date(f+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) : '—'; }
 function _repMoney(n){ return '$' + (Math.round((n||0)*100)/100).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
-function abrirReporteExistencias(){
+function abrirReporteFinal(){ abrirReporteExistencias(true); }
+function abrirReporteExistencias(fusion){
+    _repFusion = !!fusion;
     // Selector: siempre ofrece Barra/Bodega/Cocina + cualquier otra área presente (ej. General)
     var rows = _datosReporteExistencias('todas');
     var presentes = [...new Set(rows.map(function(r){ return r.area; }))];
@@ -682,6 +757,7 @@ function _renderReporteExistencias(){
     var body = document.getElementById('repExistBody');
     if (!body) return;
     var rows = _datosReporteExistencias(_repArea);
+    if (_repFusion) rows = _fusionarRows(rows); // Reporte final: fusiona productos compuestos
     if (!rows.length){
         body.innerHTML = '<div class="empty-state" style="padding:50px"><div class="empty-icon">📦</div>'+
             '<div class="empty-title">Sin existencias registradas</div>'+
@@ -695,7 +771,7 @@ function _renderReporteExistencias(){
     // Encabezado branded ETAAX (estilo hoja de recetas)
     var html = '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px 12px;border-bottom:3px solid var(--green);margin-bottom:10px">'+
         '<div><div style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:1px;color:var(--text);line-height:1">'+etx(negNom||'Existencias')+'</div>'+
-        '<div style="font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--text-dim);margin-top:3px">Existencias por área · '+etx(areaTxt)+(op?' · Operativa':'')+'</div></div>'+
+        '<div style="font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--text-dim);margin-top:3px">'+(_repFusion?'Reporte final (fusionado)':'Existencias por área')+' · '+etx(areaTxt)+(op?' · Operativa':'')+'</div></div>'+
         '<div style="text-align:right"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:2px;color:var(--text)">ET<span style="color:var(--green)">AA</span>X</div>'+
         '<div style="font-size:9px;color:var(--text-dim);margin-top:2px">'+fechaL+'</div></div></div>';
     // Resumen FIJO arriba (solo en vista ADMIN) → capital en barra, bodega y total
@@ -750,8 +826,181 @@ function _renderReporteExistencias(){
     body.innerHTML = html;
 }
 
+// ── Vista previa de UN inventario (estilo reporte de existencias) ──
+function _rowsDeInventario(inv) {
+    var insById = {}; getInsumos().forEach(function(x){ if (x && x.id) insById[x.id] = x; });
+    var rows = [];
+    (inv.filas || []).forEach(function(f){
+        if (!f || !f.insumoId) return;
+        var ins = insById[f.insumoId];
+        var cc = costoCopa(f);
+        var barra = _existenciaArea(f, 'barra', ins);
+        var bodega = _existenciaArea(f, 'bodega', ins);
+        var total = calcExistencia(f);
+        if (barra <= 0 && bodega <= 0 && total <= 0) return;
+        var copasBot = (f.tipo === 'copa' && f.contNeto > 0 && f.copaML > 0) ? f.contNeto/f.copaML : 0;
+        var costoCompra = f.tipo === 'copa' ? cc*copasBot : cc;
+        rows.push({ nombre:f.nombre||'—', familia:f.familia||f.categoria||'Otros', tipo:f.tipo,
+            copaML:f.copaML, contNeto:f.contNeto, baseUnit:f.baseUnit, barra:barra, bodega:bodega, total:total,
+            costoUnit:costoCompra, capital:total*cc, capBarra:barra*cc, capBodega:bodega*cc });
+    });
+    return rows;
+}
+function verPreviewInventario(id) {
+    var inv = getInventarios().find(function(x){ return x.id === id; });
+    if (!inv) return;
+    var rows = _rowsDeInventario(inv);
+    rows.sort(function(a,b){ return b.total - a.total; });
+    var capB = rows.reduce(function(s,r){ return s+r.capBarra; }, 0);
+    var capBo= rows.reduce(function(s,r){ return s+r.capBodega; }, 0);
+    var capT = rows.reduce(function(s,r){ return s+r.capital; }, 0);
+    var negNom = (function(){ try { return (JSON.parse(localStorage.getItem('etaax_ctx')||'{}').negocio||{}).nombre || ''; } catch(e){ return ''; } })();
+    var fechaInv = _repFecha(inv.fecha);
+    var estado = inv.cerrado ? 'Cerrado' : 'Abierto';
+    var html = '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px 12px;border-bottom:3px solid var(--green);margin-bottom:10px">'+
+        '<div><div style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:1px;color:var(--text);line-height:1">'+etx(inv.nombre||negNom||'Inventario')+'</div>'+
+        '<div style="font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--text-dim);margin-top:3px">'+etx(negNom)+' · '+(inv.area||'general')+' · '+fechaInv+' · '+estado+'</div></div>'+
+        '<div style="text-align:right"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:2px;color:var(--text)">ET<span style="color:var(--green)">AA</span>X</div>'+
+        '<div style="font-size:9px;color:var(--text-dim);margin-top:2px">'+rows.length+' insumos</div></div></div>';
+    function _chip(lbl,cap,col){ return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 16px;min-width:120px"><div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">'+lbl+'</div><div style="font-size:18px;font-weight:800;color:'+col+';margin-top:2px">'+_repMoney(cap)+'</div></div>'; }
+    html += '<div style="display:flex;gap:10px;flex-wrap:wrap;padding:0 16px 10px">'+_chip('📍 Barra',capB,'var(--accent)')+_chip('📍 Bodega',capBo,'var(--accent)')+
+        '<div style="background:rgba(61,190,122,.12);border:1px solid rgba(61,190,122,.35);border-radius:10px;padding:10px 16px;min-width:120px"><div style="font-size:11px;color:var(--green);text-transform:uppercase;letter-spacing:1px">TOTAL</div><div style="font-size:18px;font-weight:800;color:var(--green);margin-top:2px">'+_repMoney(capT)+'</div></div></div>';
+    if (!rows.length) {
+        html += '<div class="empty-state" style="padding:40px"><div class="empty-icon">📦</div><div class="empty-title">Sin existencias en este inventario</div></div>';
+    } else {
+        html += '<div class="tabla-wrap" style="padding:0 8px"><table style="font-size:12px"><thead><tr><th style="text-align:left">Insumo</th><th style="text-align:left">Familia</th><th style="text-align:right">Exist. Barra</th><th style="text-align:right">Exist. Bodega</th><th style="text-align:right">Total exist.</th><th style="text-align:right">Costo prov.</th><th style="text-align:right">Capital</th></tr></thead><tbody>'+
+            rows.map(function(r){ var cont=_fmtContenido(r); return '<tr><td style="font-weight:600">'+etx(r.nombre)+(cont?'<div style="font-size:10px;color:#7ab8f5;font-weight:400">📦 '+cont+'</div>':'')+'</td><td style="color:var(--text-dim)">'+etx(r.familia)+'</td><td style="text-align:right">'+_fmtCant(r.barra,r)+'</td><td style="text-align:right">'+_fmtCant(r.bodega,r)+'</td><td style="text-align:right;font-weight:700;color:var(--text)">'+_fmtCant(r.total,r)+'</td><td style="text-align:right;color:var(--text-muted)">'+_repMoney(r.costoUnit)+'</td><td style="text-align:right;color:var(--accent);font-weight:600">'+_repMoney(r.capital)+'</td></tr>'; }).join('')+
+            '</tbody></table></div>';
+    }
+    document.getElementById('previewInvBody').innerHTML = html;
+    document.getElementById('modalPreviewInv').style.display = 'flex';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PRODUCTOS COMPUESTOS (fusionar insumos) — config por sucursal
+// La captura es independiente; el reporte FINAL/directivo lee esta config.
+// ═══════════════════════════════════════════════════════════════
+function _compuestosKey() {
+    var neg = getNegocioActivo() || '';
+    var suc = localStorage.getItem('etaax_sucursal_activa') || 'matriz';
+    return 'etaax_' + neg + '_inv_compuestos_' + suc;
+}
+function getCompuestos() { try { return JSON.parse(localStorage.getItem(_compuestosKey()) || '[]') || []; } catch(e) { return []; } }
+function setCompuestos(arr) { try { localStorage.setItem(_compuestosKey(), JSON.stringify(arr)); } catch(e) {} }
+
+var _compEditId = null, _compMiembros = [], _compBusca = '';
+function abrirParametros() {
+    _compEditId = null;
+    _renderParamLista();
+    document.getElementById('modalParametros').style.display = 'flex';
+}
+
+// QR de entradas por negocio: abre entrada.html en el cel (login PIN → registrar entradas).
+function abrirQrEntradas() {
+    var negId = getNegocioActivo();
+    if (!negId) { alert('No hay negocio activo.'); return; }
+    var url = location.origin + '/entrada.html?n=' + encodeURIComponent(negId);
+    document.getElementById('qrEntradasUrl').textContent = url;
+    document.getElementById('modalQrEntradas').style.display = 'flex';
+    var box = document.getElementById('qrEntradasBox');
+    box.innerHTML = '<div style="color:var(--text-dim);font-size:12px">Generando…</div>';
+    function gen() {
+        box.innerHTML = '';
+        var d = document.createElement('div');
+        d.style.cssText = 'background:#fff;padding:14px;border-radius:12px;display:inline-block';
+        box.appendChild(d);
+        try { new QRCode(d, { text: url, width: 210, height: 210, colorDark: '#0a0908', colorLight: '#ffffff' }); }
+        catch(e) { box.innerHTML = '<div style="color:var(--red);font-size:12px">No se pudo generar el QR.</div>'; }
+    }
+    if (window.QRCode) gen();
+    else {
+        var s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js';
+        s.onload = gen;
+        s.onerror = function(){ box.innerHTML = '<div style="color:var(--red);font-size:12px">No se pudo cargar el generador de QR.</div>'; };
+        document.head.appendChild(s);
+    }
+}
+function _renderParamLista() {
+    var comps = getCompuestos();
+    var html = '<div style="padding:16px 18px">'+
+        '<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;line-height:1.5">Une 2+ presentaciones del MISMO producto (ej. Mezcal Granel + Mezcal Botella) → en el reporte final salen como uno solo. La captura sigue siendo independiente.</div>'+
+        '<button class="btn-vista" style="color:var(--green);border-color:var(--green);margin-bottom:14px" onclick="nuevoCompuesto()">+ Nuevo producto compuesto</button>'+
+        (comps.length ? comps.map(function(c){
+            return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px">'+
+                '<div><div style="font-weight:600;color:var(--text)">🧩 '+etx(c.nombre)+'</div>'+
+                '<div style="font-size:11px;color:var(--text-dim)">'+(c.miembros||[]).length+' insumos · unidad final: '+(c.unidad||'—')+'</div></div>'+
+                '<div style="display:flex;gap:6px"><button class="btn-vista" style="padding:4px 10px;font-size:11px" onclick="editarCompuesto(\''+c.id+'\')">✏️ Editar</button>'+
+                '<button class="btn-vista" style="padding:4px 10px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="eliminarCompuesto(\''+c.id+'\')">🗑️</button></div></div>';
+        }).join('') : '<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:30px 0">Sin productos compuestos todavía.</div>')+
+        '</div>';
+    document.getElementById('paramBody').innerHTML = html;
+}
+function nuevoCompuesto() { _compEditId = null; _compMiembros = []; _compBusca = ''; _renderCompForm({}); }
+function editarCompuesto(id) {
+    var c = getCompuestos().find(function(x){ return x.id === id; }); if (!c) return;
+    _compEditId = id; _compMiembros = (c.miembros||[]).slice(); _compBusca = '';
+    _renderCompForm(c);
+}
+function _toggleMiembro(id) {
+    var i = _compMiembros.indexOf(id);
+    if (i >= 0) _compMiembros.splice(i,1); else _compMiembros.push(id);
+    var el = document.getElementById('compCount'); if (el) el.textContent = _compMiembros.length + ' seleccionados';
+}
+function _compChecklistHTML() {
+    var insumos = _scopeSucInsumos(getInsumos());
+    var q = _compBusca.toLowerCase();
+    var lista = insumos.filter(function(x){ return !q || (x.nombre||'').toLowerCase().indexOf(q) >= 0 || (x.marca||'').toLowerCase().indexOf(q) >= 0; });
+    return lista.slice(0,120).map(function(x){ var sel=_compMiembros.indexOf(x.id)>=0;
+        return '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-radius:6px;'+(sel?'background:rgba(61,190,122,.1)':'')+'">'+
+        '<input type="checkbox" '+(sel?'checked':'')+' onchange="_toggleMiembro(\''+x.id+'\')"><span style="font-size:13px;color:var(--text)">'+etx(x.nombre)+(x.marca?' · '+etx(x.marca):'')+'</span></label>';
+    }).join('');
+}
+// La búsqueda actualiza SOLO la lista (no el input) → no se pierde el foco al escribir.
+function onCompBusca(val) {
+    _compBusca = val;
+    var cont = document.getElementById('compChecklist');
+    if (cont) cont.innerHTML = _compChecklistHTML();
+}
+function _renderCompForm(c) {
+    c = c || {};
+    var inpSt = 'width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 12px;font-size:14px';
+    var html = '<div style="padding:16px 18px">'+
+        '<input id="compNombre" placeholder="Nombre (ej. Mezcal de la Casa)" value="'+etx(c.nombre||'')+'" style="'+inpSt+';margin-bottom:10px">'+
+        '<label style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Unidad de la vista final</label>'+
+        '<select id="compUnidad" style="'+inpSt+';margin:4px 0 12px">'+
+        ['pza','botella','ml','lt','g','kg'].map(function(u){ return '<option value="'+u+'"'+((c.unidad||'lt')===u?' selected':'')+'>'+u+'</option>'; }).join('')+'</select>'+
+        '<label style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Insumos a fusionar · <span id="compCount">'+_compMiembros.length+' seleccionados</span></label>'+
+        '<input placeholder="Buscar insumo…" value="'+etx(_compBusca)+'" oninput="onCompBusca(this.value)" style="'+inpSt.replace('14px','13px')+';margin:4px 0 8px">'+
+        '<div id="compChecklist" style="max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px">'+
+        _compChecklistHTML()+'</div>'+
+        '<div style="display:flex;gap:8px;margin-top:14px"><button class="btn-vista" onclick="_renderParamLista()">← Volver</button>'+
+        '<button class="btn-vista" style="color:var(--green);border-color:var(--green);margin-left:auto" onclick="guardarCompuesto()">💾 Guardar</button></div></div>';
+    document.getElementById('paramBody').innerHTML = html;
+}
+function guardarCompuesto() {
+    var nombre = (document.getElementById('compNombre').value || '').trim();
+    if (!nombre) { alert('Ponle nombre al producto compuesto.'); return; }
+    if (_compMiembros.length < 2) { alert('Selecciona al menos 2 insumos para fusionar.'); return; }
+    var unidad = document.getElementById('compUnidad').value;
+    var comps = getCompuestos();
+    if (_compEditId) {
+        var c = comps.find(function(x){ return x.id === _compEditId; });
+        if (c) { c.nombre = nombre; c.unidad = unidad; c.miembros = _compMiembros.slice(); }
+    } else {
+        comps.push({ id: genId(), nombre: nombre, unidad: unidad, miembros: _compMiembros.slice() });
+    }
+    setCompuestos(comps);
+    _renderParamLista();
+}
+function eliminarCompuesto(id) {
+    setCompuestos(getCompuestos().filter(function(x){ return x.id !== id; }));
+    _renderParamLista();
+}
+
 function imprimirReporteExistencias(){
     var rows = _datosReporteExistencias(_repArea);
+    if (_repFusion) rows = _fusionarRows(rows); // Reporte final: fusiona productos compuestos
     if (!rows.length){ alert('No hay existencias para imprimir.'); return; }
     rows.sort(function(a,b){ return b.capital - a.capital; });
     var negNom = (function(){ try { return (JSON.parse(localStorage.getItem('etaax_ctx')||'{}').negocio||{}).nombre || ''; } catch(e){ return ''; } })();
@@ -891,6 +1140,8 @@ function renderHistTabla(lista) {
                     <td style="color:${dif>=0?'var(--green)':'var(--red)'};font-weight:500">${dif>=0?'+':''}$${dif.toFixed(0)}</td>
                     <td><span class="pill ${inv.cerrado?'pill-green':'pill-amber'}">${inv.cerrado?'Cerrado':'Abierto'}</span></td>
                     <td style="text-align:right;white-space:nowrap">
+                        <button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px"
+                            onclick="verPreviewInventario('${inv.id}')">👁️ Ver</button>
                         ${accionBtn}
                         <button class="btn-vista" style="padding:4px 10px;font-size:11px;color:var(--red);border-color:var(--red)"
                             onclick="eliminarInventario('${inv.id}')">🗑️</button>
@@ -930,6 +1181,8 @@ function renderHistCard(inv) {
             <div class="hist-card-stat"><span>Productos</span><span>${(inv.filas||[]).length}</span></div>
         </div>
         <div class="hist-card-actions">
+            <button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1"
+                onclick="verPreviewInventario('${inv.id}')">👁️ Ver</button>
             ${accionBtn}
             <button class="btn-vista" style="padding:5px 10px;font-size:11px;color:var(--red);border-color:var(--red)"
                 onclick="eliminarInventario('${inv.id}')">🗑️</button>
@@ -1648,7 +1901,7 @@ function buildInputsExist(fila, idx) {
                 onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border)'">
                 <span style="font-size:36px">📷</span>
                 <span style="font-size:13px;color:var(--text-dim)">Tomar foto o seleccionar imagen</span>
-                <input type="file" accept="image/*" capture="environment" style="display:none"
+                <input type="file" accept="image/*" style="display:none"
                     onchange="previewFotoExist('${fila.insumoId}',this)">
             </label>
             ${fila.fotoUrl ? `<img id="foto-preview-${fila.insumoId}" src="${etx(fila.fotoUrl)}"
@@ -1931,7 +2184,7 @@ function renderStep1Lista(filas) {
                     padding:8px 12px;border:1px dashed var(--border);border-radius:8px;font-size:12px;color:var(--text-dim)">
                     <span style="font-size:20px">📷</span>
                     ${fila.fotoUrl ? 'Cambiar foto' : 'Tomar foto'}
-                    <input type="file" accept="image/*" capture="environment" style="display:none"
+                    <input type="file" accept="image/*" style="display:none"
                         onchange="previewFotoExist('${fila.insumoId}',this)">
                 </label>
                 ${fila.fotoUrl ? `<img src="${etx(fila.fotoUrl)}" style="width:60px;height:40px;object-fit:cover;border-radius:4px;margin-top:4px">` : ''}
@@ -3828,6 +4081,8 @@ function verReporteDirectivo() {
   </div>
   ` : ''}
 
+  ${_seccionCompuestosDirectivo()}
+
   <div class="rd-foot">Reporte Directivo · ${inv.negocio || ''} · ${fecha} · ETAAX Sistema de Inventarios</div>
 </div>
 
@@ -4398,6 +4653,27 @@ function eliminarEntradaRapida(idx) {
     });
 }
 
+// ── Filtro de fechas del historial de entradas (día/semana/mes/rango) ──
+var _entPeriodo = 'todos', _entDesde = '', _entHasta = '';
+function _entEnPeriodo(fechaStr) {
+    if (_entPeriodo === 'todos') return true;
+    if (!fechaStr) return false;
+    var f = String(fechaStr).slice(0,10);
+    var hoy = new Date(); hoy.setHours(0,0,0,0);
+    var hoyStr = hoy.toISOString().slice(0,10);
+    if (_entPeriodo === 'dia')    return f === hoyStr;
+    if (_entPeriodo === 'mes')    return f.slice(0,7) === hoyStr.slice(0,7);
+    if (_entPeriodo === 'semana') { var ini = new Date(hoy); ini.setDate(hoy.getDate() - hoy.getDay()); return f >= ini.toISOString().slice(0,10) && f <= hoyStr; }
+    if (_entPeriodo === 'rango')  { return (!_entDesde || f >= _entDesde) && (!_entHasta || f <= _entHasta); }
+    return true;
+}
+function setEntPeriodo(p) { _entPeriodo = p; renderVistaEntradas(); }
+function setEntRango() {
+    _entDesde = (document.getElementById('entDesde')||{}).value || '';
+    _entHasta = (document.getElementById('entHasta')||{}).value || '';
+    renderListadoEntradas();
+}
+
 function renderListadoEntradas() {
     const cont = document.getElementById('entLogList');
     if (!cont) return;
@@ -4407,7 +4683,7 @@ function renderListadoEntradas() {
         log = invActual.entradasLog || [];
         useGlobal = false;
     } else {
-        log = [...getEntradasLog()].reverse();
+        log = [...getEntradasLog()].filter(function(e){ return _entEnPeriodo(e.fecha); }).reverse();
         useGlobal = true;
     }
     const countEl = document.getElementById('entLogCount');
@@ -4473,10 +4749,20 @@ function renderVistaEntradas() {
         <div id="entFormCard"></div>` : '';
 
     const logLen = invActual ? (invActual.entradasLog||[]).length : getEntradasLog().length;
+    const _perTab = (p, lbl) => `<button onclick="setEntPeriodo('${p}')" style="border:1px solid ${_entPeriodo===p?'var(--accent)':'var(--border)'};background:${_entPeriodo===p?'rgba(245,200,66,.12)':'transparent'};color:${_entPeriodo===p?'var(--accent)':'var(--text-muted)'};border-radius:20px;padding:5px 14px;font-family:inherit;font-size:12px;cursor:pointer;font-weight:${_entPeriodo===p?'700':'500'}">${lbl}</button>`;
+    const _inpDate = 'background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 8px;font-size:12px';
+    const filtroFechas = invActual ? '' : `
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+            ${_perTab('todos','Todas')}${_perTab('dia','Hoy')}${_perTab('semana','Semana')}${_perTab('mes','Mes')}${_perTab('rango','Rango')}
+            ${_entPeriodo==='rango' ? `<input type="date" id="entDesde" value="${_entDesde}" onchange="setEntRango()" style="${_inpDate}">
+                <span style="color:var(--text-dim);font-size:12px">a</span>
+                <input type="date" id="entHasta" value="${_entHasta}" onchange="setEntRango()" style="${_inpDate}">` : ''}
+        </div>`;
     cont.innerHTML = `
         <div class="ent-rapida-wrap">
             ${searchSection}
             <div>
+                ${filtroFechas}
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
                     <span style="font-size:11px;color:var(--text-dim);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">
                         ${invActual ? 'Entradas del período' : 'Historial de entradas'}
@@ -4742,7 +5028,7 @@ function guardarFichaTecnica() {
 }
 
 // ── Init ──────────────────────────────────────────────────────
-function init() { _limpiarStorageEmergencia(); _mergeDraftsLocal(); renderStats(); renderHistorial(); }
+function init() { _limpiarStorageEmergencia(); _mergeDraftsLocal(); _mergeELLocal(); renderStats(); renderHistorial(); }
 // OJO: init() se llama AL FINAL del archivo, DESPUÉS de registrar los guardias de
 // navegación. Así, si init() llegara a fallar, los guardias ya quedaron activos.
 

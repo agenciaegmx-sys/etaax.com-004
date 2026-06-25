@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>ETAAX – Registrar entrada</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+body{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:24px 16px 40px;box-sizing:border-box}
+.cap-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:440px;padding:24px 22px;text-align:center}
+.cap-logo{margin-bottom:14px}
+.cap-title{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:1px;color:var(--text)}
+.cap-sub{font-size:13px;color:var(--text-dim);margin:4px 0 18px}
+label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);display:block;margin:0 0 6px;text-align:left}
+.fld{width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:12px 14px;border-radius:9px;font-family:'DM Sans',sans-serif;font-size:15px;outline:none;margin-bottom:14px}
+#pinInput{text-align:center;letter-spacing:10px;font-size:26px;font-weight:600}
+.cap-btn{display:block;width:100%;box-sizing:border-box;background:var(--green);color:#0a0908;border:none;border-radius:10px;padding:15px;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;cursor:pointer;margin-top:4px}
+.cap-btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-weight:500}
+.cap-btn:disabled{opacity:.5}
+.cap-msg{font-size:13px;margin-top:12px;min-height:18px}
+.cap-msg.ok{color:var(--green)} .cap-msg.err{color:var(--red)}
+.row{display:flex;gap:10px}.row>*{flex:1}
+#insList{max-height:230px;overflow:auto;border:1px solid var(--border);border-radius:9px;margin-bottom:14px;text-align:left}
+.ins-it{padding:11px 13px;border-bottom:1px solid var(--border);cursor:pointer;font-size:14px;color:var(--text)}
+.ins-it:active{background:var(--surface2)}
+.ins-sel{display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(61,190,122,.12);border:1px solid var(--green);border-radius:9px;padding:11px 13px;margin-bottom:14px;text-align:left}
+.ins-sel b{color:var(--text);font-size:14px}
+.chip{font-size:12px;color:var(--text-dim)}
+#countBox{font-size:12px;color:var(--text-dim);margin:-6px 0 14px}
+.thumb{width:60px;height:60px;object-fit:cover;border-radius:8px;border:1px solid var(--border);margin:0 auto 12px;display:block}
+.quien{background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 13px;margin-bottom:14px;font-size:13px;color:var(--text);text-align:left}
+</style>
+</head>
+<body>
+<div class="cap-card">
+    <div class="cap-logo">
+        <svg width="120" height="29" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
+            <circle cx="45" cy="11" r="6" fill="#f5c842"/>
+            <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
+            <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+        </svg>
+    </div>
+    <div class="cap-title">Registrar entrada</div>
+    <div class="cap-sub" id="capSub">Identifícate con tu PIN</div>
+
+    <!-- ── Pantalla PIN ── -->
+    <div id="pinScreen">
+        <label class="lbl">PIN de 5 dígitos</label>
+        <input id="pinInput" class="fld" type="tel" inputmode="numeric" maxlength="5" placeholder="•••••" autocomplete="off">
+        <button class="cap-btn" id="pinBtn" onclick="entrar()">Entrar</button>
+        <div class="cap-msg" id="pinMsg"></div>
+    </div>
+
+    <!-- ── Pantalla formulario ── -->
+    <div id="formScreen" style="display:none">
+        <div class="quien">👤 Registra: <b id="quienNom">—</b></div>
+        <div id="countBox">⏱️ Esta sesión expira en <b id="countVal" style="color:var(--text)">5:00</b></div>
+
+        <label class="lbl">Insumo</label>
+        <input id="insBusca" class="fld" placeholder="Buscar insumo…" oninput="filtrarIns(this.value)" autocomplete="off">
+        <div id="insSelBox"></div>
+        <div id="insList"></div>
+
+        <div class="row">
+            <div>
+                <label class="lbl">Tipo</label>
+                <select id="entTipo" class="fld">
+                    <option value="compra">Compra</option>
+                    <option value="bonificacion">Bonificación</option>
+                    <option value="consignacion">Consignación</option>
+                </select>
+            </div>
+            <div>
+                <label class="lbl">Cantidad</label>
+                <input id="entCant" class="fld" type="number" inputmode="decimal" min="0" step="any" placeholder="0">
+            </div>
+        </div>
+
+        <label class="lbl">Fecha</label>
+        <input id="entFecha" class="fld" type="date">
+
+        <label class="lbl">Nota (opcional)</label>
+        <input id="entNota" class="fld" placeholder="Proveedor, ticket, etc.">
+
+        <img id="fotoThumb" class="thumb" style="display:none">
+        <input type="file" id="fotoInput" accept="image/*" style="display:none" onchange="onFoto(this)">
+        <button class="cap-btn ghost" onclick="document.getElementById('fotoInput').click()">📷 Foto del ticket (cámara o galería)</button>
+
+        <button class="cap-btn" id="regBtn" style="margin-top:12px" onclick="registrar()">✓ Registrar entrada</button>
+        <div class="cap-msg" id="formMsg"></div>
+    </div>
+
+    <!-- ── Pantalla error ── -->
+    <div id="errScreen" style="display:none">
+        <div style="font-size:38px;margin:10px 0">🔒</div>
+        <div id="errTxt" style="font-size:13px;color:var(--text-dim);line-height:1.6"></div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="supabase-config.js"></script>
+<script src="staff-auth.js"></script>
+<script>
+(function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);})();
+function _q(k){var m=new RegExp('[?&]'+k+'=([^&]*)').exec(location.search);return m?decodeURIComponent(m[1]):'';}
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function etx(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// Mismo hash que security.js (_hashPwdStaff): el NIP del staff se guarda como nipHash = v2$sha256('etaax-staff|nip|'+pin)
+async function _hashNip(pin){
+    var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('etaax-staff|nip|' + pin));
+    return 'v2$' + Array.prototype.map.call(new Uint8Array(buf), function(b){ return ('0'+b.toString(16)).slice(-2); }).join('');
+}
+
+var NEG = _q('n') || _q('neg');
+var VIDA_MS = 300000;            // la sesión / ventana para subir la foto dura 5 minutos
+var COLAB = '', INSUMOS = [], SEL = null, FOTO_URL = '', _countTimer = null, _t0 = 0;
+
+function _show(id){ ['pinScreen','formScreen','errScreen'].forEach(function(x){ document.getElementById(x).style.display = x===id?'block':'none'; }); }
+function _err(txt){ document.getElementById('errTxt').innerHTML = txt; document.getElementById('capSub').textContent = ''; _show('errScreen'); if(_countTimer){clearInterval(_countTimer);_countTimer=null;} }
+
+async function entrar(){
+    var pin = (document.getElementById('pinInput').value || '').trim();
+    var msg = document.getElementById('pinMsg'); msg.className = 'cap-msg'; msg.textContent = '';
+    if (!/^\d{4,6}$/.test(pin)) { msg.className='cap-msg err'; msg.textContent='Pon tu PIN (5 dígitos).'; return; }
+    var btn = document.getElementById('pinBtn'); btn.disabled = true; msg.textContent = 'Validando…';
+    try {
+        // 1) Sesión de la cuenta compartida del negocio (cred cacheada en este equipo).
+        var ok = false;
+        if (window.StaffAuth) { try { ok = await StaffAuth.login(NEG); } catch(e){} }
+        if (!ok) {
+            var s = await _supabase.auth.getSession();
+            ok = !!(s.data && s.data.session);
+        }
+        if (!ok) { btn.disabled=false; msg.className='cap-msg err';
+            msg.innerHTML='No se pudo activar este dispositivo.<br>Inicia sesión una vez en ETAAX (hub) en este celular y vuelve a escanear.'; return; }
+        // 2) Leer staff → identificar al colaborador por su PIN.
+        var rs = await _supabase.from('staff').select('datos').eq('negocio_id', NEG);
+        var staff = (rs.data || []).map(function(r){ return r.datos || {}; });
+        var h = await _hashNip(pin);
+        var yo = staff.find(function(m){ return m.nipHash && m.nipHash === h; });
+        if (!yo) { btn.disabled=false; msg.className='cap-msg err';
+            msg.textContent='PIN no reconocido. Pide a tu encargado que te asigne un NIP de 5 dígitos.'; return; }
+        COLAB = yo.nombre || yo.usuario || 'Colaborador';
+        // 3) Cargar insumos del negocio.
+        var ri = await _supabase.from('negocio_insumos').select('datos').eq('negocio_id', NEG);
+        INSUMOS = (ri.data || []).map(function(r){ return r.datos || {}; }).filter(function(x){ return x && x.id; });
+        INSUMOS.sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
+        // 4) Mostrar formulario.
+        document.getElementById('quienNom').textContent = COLAB;
+        document.getElementById('entFecha').value = todayStr();
+        document.getElementById('capSub').textContent = 'Registra insumos que llegaron';
+        filtrarIns('');
+        _show('formScreen');
+        _t0 = Date.now(); _tick(); _countTimer = setInterval(_tick, 1000);
+    } catch (e) {
+        btn.disabled=false; msg.className='cap-msg err'; msg.textContent='Error: '+((e&&e.message)||e);
+    }
+}
+
+function _tick(){
+    var rest = Math.max(0, _t0 + VIDA_MS - Date.now());
+    var s = Math.ceil(rest/1000);
+    var el = document.getElementById('countVal'); if (el) el.textContent = Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+    if (rest <= 0) { _err('Tu sesión expiró (dura 5&nbsp;minutos).<br>Vuelve a escanear el QR e ingresa tu PIN.'); }
+}
+
+function filtrarIns(q){
+    q = (q||'').toLowerCase();
+    var lista = INSUMOS.filter(function(x){
+        return !q || (x.nombre||'').toLowerCase().indexOf(q)>=0 || (x.marca||'').toLowerCase().indexOf(q)>=0 || (x.variedad||'').toLowerCase().indexOf(q)>=0;
+    }).slice(0, 60);
+    document.getElementById('insList').innerHTML = lista.length
+        ? lista.map(function(x){
+            var sub = [x.variedad, x.marca].filter(Boolean).join(' · ');
+            return '<div class="ins-it" onclick="selIns(\''+x.id+'\')">'+etx(x.nombre)+(sub?' <span class="chip">'+etx(sub)+'</span>':'')+'</div>';
+        }).join('')
+        : '<div class="ins-it" style="color:var(--text-dim);cursor:default">Sin resultados</div>';
+}
+function selIns(id){
+    SEL = INSUMOS.find(function(x){ return x.id===id; });
+    if (!SEL) return;
+    var sub = [SEL.variedad, SEL.marca].filter(Boolean).join(' · ');
+    document.getElementById('insSelBox').innerHTML =
+        '<div class="ins-sel"><div><b>'+etx(SEL.nombre)+'</b>'+(sub?'<div class="chip">'+etx(sub)+'</div>':'')+'</div>'+
+        '<button class="cap-btn ghost" style="width:auto;margin:0;padding:6px 12px" onclick="limpiarIns()">cambiar</button></div>';
+    document.getElementById('insList').innerHTML = '';
+    document.getElementById('insBusca').value = '';
+}
+function limpiarIns(){ SEL=null; document.getElementById('insSelBox').innerHTML=''; filtrarIns(''); }
+
+function _comprimir(file){
+    return new Promise(function(resolve){
+        var r=new FileReader();
+        r.onload=function(e){ var img=new Image(); img.onload=function(){
+            var w=img.width,h=img.height,M=1280; if(w>h){if(w>M){h=Math.round(h*M/w);w=M;}}else{if(h>M){w=Math.round(w*M/h);h=M;}}
+            var c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);
+            c.toBlob(function(b){resolve(b);},'image/jpeg',0.72);
+        }; img.onerror=function(){resolve(null);}; img.src=e.target.result; };
+        r.onerror=function(){resolve(null);}; r.readAsDataURL(file);
+    });
+}
+async function onFoto(input){
+    var f = input.files && input.files[0]; input.value='';
+    if (!f) return;
+    var msg=document.getElementById('formMsg'); msg.className='cap-msg'; msg.textContent='Subiendo foto…';
+    var blob = await _comprimir(f);
+    if (!blob){ msg.className='cap-msg err'; msg.textContent='No se pudo procesar la imagen.'; return; }
+    var path = NEG+'/entradas/'+genId()+'.jpg';
+    var up = await _supabase.storage.from('evidencias').upload(path, blob, {contentType:'image/jpeg'});
+    if (up.error){ msg.className='cap-msg err'; msg.textContent='Error al subir foto: '+up.error.message; return; }
+    FOTO_URL = _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
+    var im=document.getElementById('fotoThumb'); im.src=FOTO_URL; im.style.display='block';
+    msg.className='cap-msg ok'; msg.textContent='✓ Foto lista';
+}
+
+async function registrar(){
+    var msg = document.getElementById('formMsg'); msg.className='cap-msg'; msg.textContent='';
+    if (Date.now() - _t0 >= VIDA_MS) { _err('Tu sesión expiró.<br>Vuelve a escanear el QR.'); return; }
+    if (!SEL) { msg.className='cap-msg err'; msg.textContent='Elige un insumo.'; return; }
+    var cant = parseFloat(document.getElementById('entCant').value) || 0;
+    if (cant <= 0) { msg.className='cap-msg err'; msg.textContent='Pon una cantidad mayor a 0.'; return; }
+    var btn = document.getElementById('regBtn'); btn.disabled = true; msg.textContent = 'Registrando…';
+    var entry = {
+        id: genId()+genId(),
+        insumoId: SEL.id,
+        nombre: SEL.nombre + (SEL.variedad ? ' '+SEL.variedad : ''),
+        familia: SEL.familia || SEL.categoria || '',
+        cantidad: cant,
+        costo: 0,
+        tipo: document.getElementById('entTipo').value,
+        notas: (document.getElementById('entNota').value||'').trim(),
+        fecha: document.getElementById('entFecha').value || todayStr(),
+        registrado: new Date().toISOString(),
+        registradoPor: COLAB,
+        origen: 'qr',
+        foto_url: FOTO_URL || ''
+    };
+    try {
+        var ins = await _supabase.from('entradas_log').insert({ id: entry.id, negocio_id: NEG, datos: entry });
+        if (ins.error) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent='No se pudo guardar: '+ins.error.message; return; }
+        // Reset para la siguiente entrada (la sesión sigue viva).
+        limpiarIns();
+        document.getElementById('entCant').value=''; document.getElementById('entNota').value='';
+        FOTO_URL=''; var im=document.getElementById('fotoThumb'); im.style.display='none'; im.src='';
+        btn.disabled=false;
+        msg.className='cap-msg ok'; msg.textContent='✓ Entrada de '+etx(entry.nombre)+' registrada. Puedes capturar otra.';
+    } catch (e) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent='Error: '+((e&&e.message)||e); }
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+    if (!NEG) { _err('Este QR no es válido.<br>Genera uno nuevo desde Inventarios.'); return; }
+    document.getElementById('pinInput').focus();
+    document.getElementById('pinInput').addEventListener('keydown', function(e){ if (e.key==='Enter') entrar(); });
+});
+</script>
+</body>
+</html>

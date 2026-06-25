@@ -44,7 +44,7 @@ body{min-height:100vh;display:flex;flex-direction:column;align-items:center;just
             <input type="date" id="capFecha">
         </div>
         <div class="cap-thumbs" id="capThumbs"></div>
-        <input type="file" id="capInput" accept="image/*" capture="environment" multiple style="display:none" onchange="onPick(this)">
+        <input type="file" id="capInput" accept="image/*" multiple style="display:none" onchange="onPick(this)">
         <button class="cap-btn" onclick="document.getElementById('capInput').click()">📷 Tomar / elegir foto</button>
         <div class="cap-msg" id="capMsg"></div>
     </div>

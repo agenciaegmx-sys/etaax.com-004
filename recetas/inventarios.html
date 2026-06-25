@@ -84,6 +84,9 @@
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
                     <button class="btn-vista" onclick="abrirReporteExistencias()">📊 Reporte de existencias</button>
+                    <button class="btn-vista" onclick="abrirReporteFinal()">📋 Reporte final</button>
+                    <button class="btn-vista" onclick="abrirParametros()">⚙️ Definir parámetros</button>
+                    <button class="btn-vista" onclick="abrirQrEntradas()">📱 QR de entradas</button>
                     <button class="btn-vista" onclick="mostrarVista('vistaEntradas')">📋 Revisar entradas</button>
                     <button class="btn-vista" onclick="nuevoPrimerLev()">📋 Primer levantamiento</button>
                     <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)"
@@ -842,6 +845,39 @@ document.addEventListener('DOMContentLoaded', function() { _sbInitInv(); });
       </div>
     </div>
     <div id="repExistBody" style="padding:0 4px 20px"></div>
+  </div>
+</div>
+
+<!-- ── Vista previa de un inventario ── -->
+<div id="modalPreviewInv" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:710;align-items:flex-start;justify-content:center;padding:30px 16px;overflow:auto">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;max-width:960px;width:100%;margin:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:1px solid var(--border)">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--text-muted)">👁️ Vista previa del inventario</div>
+      <button class="btn-vista" onclick="document.getElementById('modalPreviewInv').style.display='none'">✕ Cerrar</button>
+    </div>
+    <div id="previewInvBody" style="padding:0 4px 20px"></div>
+  </div>
+</div>
+
+<!-- ── QR de entradas (por negocio) ── -->
+<div id="modalQrEntradas" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:720;align-items:center;justify-content:center;padding:24px">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;max-width:420px;width:100%;text-align:center;padding:24px">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;color:var(--text);margin-bottom:6px">📱 QR de entradas</div>
+    <div style="font-size:12px;color:var(--text-dim);line-height:1.5;margin-bottom:16px">Pega este QR en la barra/bodega. El colaborador lo escanea, pone su <b>NIP de 5 dígitos</b> (el de Gestión de Staff) y registra entradas desde el celular.</div>
+    <div id="qrEntradasBox" style="display:flex;justify-content:center;margin-bottom:12px"></div>
+    <div id="qrEntradasUrl" style="font-size:10px;color:var(--text-dim);word-break:break-all;margin-bottom:16px"></div>
+    <button class="btn-vista" onclick="document.getElementById('modalQrEntradas').style.display='none'">✕ Cerrar</button>
+  </div>
+</div>
+
+<!-- ── Definir parámetros (productos compuestos) ── -->
+<div id="modalParametros" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:715;align-items:flex-start;justify-content:center;padding:30px 16px;overflow:auto">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;max-width:680px;width:100%;margin:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--text)">⚙️ Parámetros · Fusionar insumos</div>
+      <button class="btn-vista" onclick="document.getElementById('modalParametros').style.display='none'">✕ Cerrar</button>
+    </div>
+    <div id="paramBody"></div>
   </div>
 </div>
 
