@@ -3940,7 +3940,7 @@ function renderStep5() {
         // La diferencia de los MIEMBROS se evalúa en su compuesto, no individual.
         if (!mapaC5[fila.insumoId]) {
             const dif = calcDiferencia(fila);
-            difCostoTotal += dif * cc;
+            difCostoTotal += dif * (fila.precioCarta || 0); // diferencia valorada a precio de carta
             const ref = calcExistenciaTeorica(fila);
             if (ref>0 && Math.abs(dif/ref)*100>25) conAlerta++;
         }
@@ -3948,7 +3948,7 @@ function renderStep5() {
     // Diferencia de los compuestos (existencia sumada − ventas en copas).
     vcomps.forEach(vf => {
         const dif = calcDiferencia(vf);
-        difCostoTotal += dif * costoCopa(vf);
+        difCostoTotal += dif * (vf.precioCarta || 0);
         const ref = calcExistenciaTeorica(vf);
         if (ref>0 && Math.abs(dif/ref)*100>25) conAlerta++;
     });
@@ -4019,7 +4019,9 @@ function _step5TablasHTML() {
             const copasBot  = fila.contNeto>0 && fila.copaML>0 ? fila.contNeto/fila.copaML : 0;
             const entBot    = getEntradasBottles(fila.insumoId);
             const ventaBot  = parseFloat(fila.ventasBotella) || 0;
-            const ventaCopa = calcVentasCopasRecetas(fila.insumoId, fila.copaML) + (parseFloat(fila.ventasCopasDirectas)||0);
+            const ventaCoct    = calcVentasCopasRecetas(fila.insumoId, fila.copaML); // copas vendidas vía recetas del menú (Paso 3)
+            const ventaCopaDir = parseFloat(fila.ventasCopasDirectas) || 0;           // copas vendidas directas
+            const ventaCopa    = ventaCoct + ventaCopaDir;                            // total (para cálculos)
             const cortesia  = parseFloat(fila.cortesiaCopas) || 0;
             const merma     = parseFloat(fila.mermaCopas)    || 0;
             const cmTotal   = cortesia + merma;
@@ -4029,7 +4031,7 @@ function _step5TablasHTML() {
             const fisico    = calcExistencia(fila);
             const dif       = fisico - teorico;
             const cc        = costoCopa(fila);
-            const difCosto  = dif * cc;
+            const difCosto  = dif * (fila.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)
             const ref       = teorico > 0 ? teorico : fisico;
             const color     = semaforo(dif, ref);
             const pctVal    = ref > 0 ? (dif/ref*100) : null;
@@ -4049,7 +4051,8 @@ function _step5TablasHTML() {
                 <td style="text-align:center;white-space:nowrap">${eaBot} bot</td>
                 <td style="text-align:center;color:var(--green);white-space:nowrap">${entBotStr}</td>
                 <td style="text-align:center;color:var(--accent)">${ventaBot > 0 ? ventaBot + ' bot' : '—'}</td>
-                <td style="text-align:center;color:var(--accent)">${ventaCopa > 0 ? ventaCopa.toFixed(1) + ' cop' : '—'}</td>
+                <td style="text-align:center;color:var(--accent)">${ventaCopaDir > 0 ? ventaCopaDir.toFixed(1) + ' cop' : '—'}</td>
+                <td style="text-align:center;color:#9b8de8">${ventaCoct > 0 ? ventaCoct.toFixed(1) + ' cop' : '—'}</td>
                 <td style="text-align:center">
                     ${cmTotal > 0
                         ? `<div style="color:var(--red);font-size:12px;font-weight:600">${cmTotal.toFixed(1)} cop</div>
@@ -4075,17 +4078,18 @@ function _step5TablasHTML() {
                         <th rowspan="2" style="text-align:left;vertical-align:bottom">Producto</th>
                         <th rowspan="2" style="text-align:center;width:70px;vertical-align:bottom">Exist.<br>anterior</th>
                         <th rowspan="2" style="text-align:center;width:65px;vertical-align:bottom">Entradas</th>
-                        <th colspan="2" style="text-align:center;border-bottom:1px solid var(--border);padding-bottom:4px">Ventas</th>
+                        <th colspan="3" style="text-align:center;border-bottom:1px solid var(--border);padding-bottom:4px">Ventas</th>
                         <th rowspan="2" style="text-align:center;width:95px;vertical-align:bottom">Cortesía /<br>Merma</th>
                         <th rowspan="2" style="text-align:center;width:70px;vertical-align:bottom">Cancelac.<br>POS</th>
                         <th rowspan="2" style="text-align:center;width:80px;vertical-align:bottom">Exist.<br>actual</th>
                         <th rowspan="2" style="text-align:center;width:80px;vertical-align:bottom">Diferencia</th>
                         <th rowspan="2" style="text-align:center;width:50px;vertical-align:bottom">%</th>
-                        <th rowspan="2" style="text-align:right;width:80px;vertical-align:bottom">Dif. $</th>
+                        <th rowspan="2" style="text-align:right;width:80px;vertical-align:bottom">Dif. $<br><span style="font-size:8px;font-weight:400">a carta</span></th>
                     </tr>
                     <tr>
                         <th style="text-align:center;width:65px;font-size:10px;color:var(--text-muted)">Botella</th>
                         <th style="text-align:center;width:65px;font-size:10px;color:var(--text-muted)">Copa</th>
+                        <th style="text-align:center;width:70px;font-size:10px;color:#9b8de8">Coctelería</th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
@@ -4105,7 +4109,7 @@ function _step5TablasHTML() {
             const fisico    = calcExistencia(fila);
             const dif       = fisico - teorico;
             const cc        = costoCopa(fila);
-            const difCosto  = dif * cc;
+            const difCosto  = dif * (fila.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)
             const ref       = teorico > 0 ? teorico : fisico;
             const color     = semaforo(dif, ref);
             const pctVal    = ref > 0 ? (dif/ref*100) : null;
@@ -4160,12 +4164,13 @@ function _step5TablasHTML() {
         let ea=0, ent=0, cancel=0;
         members.forEach(m => { ea += (parseFloat(m.existenciaAnterior)||0); ent += getEntradasCopas(m); cancel += getCancelacionesCopas(m.insumoId); });
         const ventaCopa = (vf.ventasCopasDirectas||0);
+        const ventaCoct = members.reduce((s,m)=>s+calcVentasCopasRecetas(m.insumoId, m.copaML), 0); // recetas del menú de los miembros
         const cm        = (vf.cortesiaCopas||0) + (vf.mermaCopas||0);
         const fisico    = calcExistencia(vf);
         const teorico   = calcExistenciaTeorica(vf);
         const dif       = fisico - teorico;
         const cc        = costoCopa(vf);
-        const difCosto  = dif * cc;
+        const difCosto  = dif * (vf.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)
         const ref       = teorico>0 ? teorico : fisico;
         const color     = semaforo(dif, ref);
         const pctStr    = ref>0 ? ((dif/ref*100>=0?'+':'')+(dif/ref*100).toFixed(1)+'%') : '—';
@@ -4184,6 +4189,7 @@ function _step5TablasHTML() {
             <td style="text-align:center;color:var(--green);white-space:nowrap">${ent>0?'+'+_nc(toF(ent))+' '+uLbl:'—'}</td>
             <td style="text-align:center;color:var(--text-dim)">—</td>
             <td style="text-align:center;color:var(--accent)">${ventaCopa>0?_nc(ventaCopa)+' cop':'—'}</td>
+            <td style="text-align:center;color:#9b8de8">${ventaCoct>0?_nc(ventaCoct)+' cop':'—'}</td>
             <td style="text-align:center">${cm>0?`<div style="color:var(--red);font-size:12px;font-weight:600">${_nc(cm)} cop</div>`:'—'}</td>
             <td style="text-align:center;color:var(--text-muted)">${cancel>0?_nc(cancel)+' cop':'—'}</td>
             <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(toF(fisico))} ${uLbl}</td>
@@ -4203,17 +4209,18 @@ function _step5TablasHTML() {
                     <th rowspan="2" style="text-align:left;vertical-align:bottom">Producto</th>
                     <th rowspan="2" style="text-align:center;width:70px;vertical-align:bottom">Exist.<br>anterior</th>
                     <th rowspan="2" style="text-align:center;width:65px;vertical-align:bottom">Entradas</th>
-                    <th colspan="2" style="text-align:center;border-bottom:1px solid var(--border);padding-bottom:4px">Ventas</th>
+                    <th colspan="3" style="text-align:center;border-bottom:1px solid var(--border);padding-bottom:4px">Ventas</th>
                     <th rowspan="2" style="text-align:center;width:95px;vertical-align:bottom">Cortesía /<br>Merma</th>
                     <th rowspan="2" style="text-align:center;width:70px;vertical-align:bottom">Cancelac.<br>POS</th>
                     <th rowspan="2" style="text-align:center;width:80px;vertical-align:bottom">Exist.<br>actual</th>
                     <th rowspan="2" style="text-align:center;width:80px;vertical-align:bottom">Diferencia</th>
                     <th rowspan="2" style="text-align:center;width:50px;vertical-align:bottom">%</th>
-                    <th rowspan="2" style="text-align:right;width:80px;vertical-align:bottom">Dif. $</th>
+                    <th rowspan="2" style="text-align:right;width:80px;vertical-align:bottom">Dif. $<br><span style="font-size:8px;font-weight:400">a carta</span></th>
                 </tr>
                 <tr>
                     <th style="text-align:center;width:65px;font-size:10px;color:var(--text-muted)">Botella</th>
                     <th style="text-align:center;width:65px;font-size:10px;color:var(--text-muted)">Copa</th>
+                    <th style="text-align:center;width:70px;font-size:10px;color:#9b8de8">Coctelería</th>
                 </tr>
             </thead>
             <tbody>${_compRows}</tbody>
@@ -4240,7 +4247,7 @@ function verReporteDirectivo() {
         const teorico   = calcExistenciaTeorica(f);
         const dif       = fisico - teorico;
         const cc        = costoCopa(f);
-        const difCosto  = dif * cc;
+        const difCosto  = dif * (f.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)
         const ea        = parseFloat(f.existenciaAnterior) || 0;
         const entBot    = getEntradasBottles(f.insumoId);
         const copasBot  = f.contNeto > 0 && f.copaML > 0 ? f.contNeto / f.copaML : 1;
