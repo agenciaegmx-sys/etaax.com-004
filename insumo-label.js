@@ -18,7 +18,8 @@
 (function () {
     var UM = { ML:'ml', L:'L', LT:'L', LTS:'L', GR:'g', G:'g', KG:'kg', PZA:'pza', PZ:'pza', PIEZA:'pza', OZ:'oz' };
 
-    function _contenido(ins) {
+    // Solo el contenido: "750 ml" / "4 L" / "350 g".
+    function _soloContenido(ins) {
         if (!ins) return '';
         if (ins.contenido) return ins.contenido; // ya normalizado en la fila
         var p = (ins.presentaciones && ins.presentaciones[0]) || null;
@@ -28,6 +29,13 @@
         var um = (p.umContenido || '').toString().toUpperCase();
         var uml = UM[um] || (p.umContenido || '').toLowerCase();
         return (cn % 1 ? cn.toFixed(1) : cn) + (uml ? ' ' + uml : '');
+    }
+    // Empaque + contenido juntos para leer rápido: "Botella 750 ml" / "Garrafa 4 L".
+    function _contenido(ins) {
+        if (!ins) return '';
+        var emp  = (ins.empaque || '').toString().trim();
+        var cont = _soloContenido(ins);
+        return [emp, cont].filter(Boolean).join(' ');
     }
 
     // Devuelve el insumo del catálogo si `o` es una fila/ingrediente con insumoId.

@@ -2035,9 +2035,8 @@ function renderCardExist() {
                 <div>
                     <div style="font-weight:700;font-size:17px;color:var(--text)">${etx(insumoTitulo(fila))}</div>
                     <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap">
-                        ${fila.categoria?`<span class="inv-tag">${fila.categoria}</span>`:''}
+                        ${insumoMeta(fila)?`<span class="inv-tag">${etx(insumoMeta(fila))}</span>`:''}
                         <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
-                        ${_fmtContenido(fila)?`<span class="inv-tag" style="background:rgba(122,184,245,0.12);border-color:rgba(122,184,245,0.4);color:#7ab8f5">📦 ${_fmtContenido(fila)}</span>`:''}
                         <span style="font-size:11px;color:var(--text-dim);margin-left:4px">
                             Anterior: ${eaBot%1===0?eaBot.toFixed(0):eaBot.toFixed(1)} bot</span>
                     </div>
@@ -2291,7 +2290,6 @@ function renderStep1Lista(filas) {
                 <div class="inv-prod-meta">
                     ${insumoMeta(fila) ? `<span class="inv-tag">${etx(insumoMeta(fila))}</span>` : ''}
                     <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
-                    ${_fmtContenido(fila)?`<span class="inv-tag" style="background:rgba(122,184,245,0.12);border-color:rgba(122,184,245,0.4);color:#7ab8f5">📦 ${_fmtContenido(fila)}</span>`:''}
                     <span class="inv-metodo-toggle">
                         <button class="${metodo==='peso'?'on':''}" onclick="setMetodoCapturaExist('${fila.insumoId}','peso')" title="Peso">⚖️</button>
                         <button class="${metodo==='nivel'?'on':''}" onclick="setMetodoCapturaExist('${fila.insumoId}','nivel')" title="Nivel">🌡️</button>
@@ -4973,7 +4971,6 @@ function _ftRenderVer(ins) {
                 <div style="font-size:12px;color:var(--text-muted)">
                     ${[ins.variedad || ins.maduracion, insumoContenido(ins), ins.marca].filter(Boolean).join(' · ')}
                 </div>
-                ${ins.empaque ? `<div style="font-size:11px;color:var(--text-dim);margin-top:3px">${ins.empaque}</div>` : ''}
             </div>
             <span class="pill ${ins.activo==='1'?'pill-amber':'pill-red'}" style="flex-shrink:0">
                 ${ins.activo==='1'?'Activo':'Inactivo'}
