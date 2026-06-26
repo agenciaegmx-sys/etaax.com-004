@@ -1069,12 +1069,22 @@ function buscarInsumos(query) {
     if (!query || query.length < 2) return [];
     const q = query.toLowerCase();
     // Acotado a la sucursal donde se trabaja (no todo el catálogo global del negocio).
-    return getCatalogoInsumosScope().filter(x =>
+    var lista = getCatalogoInsumosScope().filter(x =>
         x.nombre.toLowerCase().includes(q) ||
         (x.marca||'').toLowerCase().includes(q) ||
         (x.variedad||'').toLowerCase().includes(q) ||
         (x.categoria||'').toLowerCase().includes(q)
-    ).slice(0, 8);
+    );
+    // Priorizar coincidencias por NOMBRE (ej. "Campari" antes que los de marca "Campari México")
+    // y los que EMPIEZAN con la búsqueda. Si no, con tope de 8 el insumo real se perdía.
+    lista.sort(function(a, b){
+        var an = (a.nombre||'').toLowerCase(), bn = (b.nombre||'').toLowerCase();
+        var as = an.indexOf(q) === 0 ? 0 : (an.indexOf(q) >= 0 ? 1 : 2);
+        var bs = bn.indexOf(q) === 0 ? 0 : (bn.indexOf(q) >= 0 ? 1 : 2);
+        if (as !== bs) return as - bs;
+        return an.localeCompare(bn);
+    });
+    return lista.slice(0, 12);
 }
 
 function cerrarTodosDropdowns() {

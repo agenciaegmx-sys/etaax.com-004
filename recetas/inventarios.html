@@ -226,6 +226,7 @@
                 <div style="display:flex;gap:8px;align-items:center">
                     <span id="autoGuardarInd" style="font-size:12px;color:var(--green);display:inline-flex;align-items:center;gap:4px">✓ Todos los cambios guardados</span>
                     <button class="btn-vista" onclick="abrirInfoGeneral()" id="btnInfoGeneral" title="Editar la configuración del inventario">ℹ️ Info general</button>
+                    <button class="btn-vista" onclick="verPreviewActual()" id="btnPreviewActual" title="Reporte de existencias del inventario en curso">📊 Existencias</button>
                     <button class="btn-vista" onclick="pasoAnterior()" id="btnPasoAnt" style="display:none">← Anterior</button>
                     <button class="btn-vista" onclick="pasoSiguiente()" id="btnPasoSig">Siguiente →</button>
                     <button class="btn-vista" id="btnGuardarInv" onclick="pedirSalirInv()">🚪 Salir</button>
@@ -843,6 +844,7 @@ document.addEventListener('DOMContentLoaded', function() { _sbInitInv(); });
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="btn-vista" id="repVistaBtn" onclick="toggleReporteVista()">👁️ Vista admin</button>
         <select id="repAreaSel" onchange="setReporteArea(this.value)" style="font-size:13px;padding:6px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px"></select>
+        <select id="repSubcatSel" onchange="setReporteSubcat(this.value)" style="font-size:13px;padding:6px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px"></select>
         <button class="btn-vista" onclick="imprimirReporteExistencias()" style="color:var(--accent);border-color:var(--accent)">🖨️ Imprimir</button>
         <button class="btn-vista" onclick="document.getElementById('modalReporteExist').style.display='none'">✕ Cerrar</button>
       </div>
@@ -852,13 +854,13 @@ document.addEventListener('DOMContentLoaded', function() { _sbInitInv(); });
 </div>
 
 <!-- ── Vista previa de un inventario ── -->
-<div id="modalPreviewInv" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:710;align-items:flex-start;justify-content:center;padding:30px 16px;overflow:auto">
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;max-width:960px;width:100%;margin:auto">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:1px solid var(--border)">
+<div id="modalPreviewInv" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:710;align-items:center;justify-content:center;padding:24px 16px">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;max-width:960px;width:100%;margin:auto;max-height:92vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0">
       <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--text-muted)">👁️ Vista previa del inventario</div>
       <button class="btn-vista" onclick="document.getElementById('modalPreviewInv').style.display='none'">✕ Cerrar</button>
     </div>
-    <div id="previewInvBody" style="padding:0 4px 20px"></div>
+    <div id="previewInvBody" style="padding:0 4px 20px;overflow:auto;flex:1"></div>
   </div>
 </div>
 

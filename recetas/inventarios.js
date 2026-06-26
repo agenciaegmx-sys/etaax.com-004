@@ -629,10 +629,38 @@ function semaforo(dif, ref) {
     return pct <= 25 ? 'var(--green)' : pct <= 50 ? 'var(--accent)' : 'var(--red)';
 }
 
+// ¿El insumo es refresco/cerveza/soda/agua? Revisa tipoInsumo, categoría Y subcategoría
+// (algunos tienen categoría "No alcohólicas" y la pista está en la subcategoría).
+function _esRefrescoCerveza(ins) {
+    if (!ins) return false;
+    var t = (ins.tipoInsumo || '').toLowerCase();
+    if (['refresco','cerveza','cerveza_barril'].indexOf(t) >= 0) return true;
+    var txt = ((ins.categoria || '') + ' ' + (ins.subcategoria || '')).toLowerCase();
+    return txt.indexOf('refresco') >= 0 || txt.indexOf('cerveza') >= 0 || txt.indexOf('soda') >= 0 || txt.indexOf('agua') >= 0;
+}
 function costoCopa(fila) {
-    const cu = fila.costoUnitario || 0;
-    if (fila.tipo === 'peso') { const cn = fila.contNeto || 0; return cn > 0 ? cu / cn : cu; } // costo por unidad base
-    if (fila.tipo === 'pza') return cu;
+    // Usa el costo ACTUAL del insumo (refleja ediciones); si no, el congelado en la fila.
+    var _ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(fila.insumoId) : null;
+    var _p   = _ins && _ins.presentaciones && _ins.presentaciones[0];
+    var cu       = (_p && parseFloat(_p.costoUnitario)) || fila.costoUnitario || 0;
+    var costoPza = (_p && parseFloat(_p.costoPieza))    || fila.costoPieza    || 0;
+    var umc      = ((_p && _p.umCosto) || '').toString().toUpperCase();
+
+    // Refrescos/cervezas: SIEMPRE costo por pieza (aunque la captura los guardó como 'copa').
+    if (fila.tipo !== 'peso' && !fila.esCompuesto && _esRefrescoCerveza(_ins) && costoPza > 0) return costoPza;
+
+    // peso (alimentos): costo por unidad base (g/ml). costoUnitario viene en $/KG o $/LT.
+    if (fila.tipo === 'peso') {
+        if (umc === 'KG' || umc === 'LT') return cu / 1000;          // $/KG o $/LT → $/g o $/ml
+        if (umc === 'G' || umc === 'GR' || umc === 'ML') return cu;  // ya viene por g/ml
+        var cnP = fila.contNeto || 0; return cnP > 0 ? cu / cnP : cu;
+    }
+    // pza (refrescos/latas): costo de COMPRA por pieza, NO el costo por litro/ml.
+    if (fila.tipo === 'pza') {
+        if (costoPza > 0) return costoPza;
+        return umc === 'ML' ? cu * (fila.contNeto || 0) : (fila.contNeto > 0 ? cu * fila.contNeto / 1000 : cu);
+    }
+    // copa (licor/destilados/vinos): costo por copa.
     return fila.copaML > 0 && cu > 0 ? cu * (fila.copaML / 1000) : cu;
 }
 
@@ -724,6 +752,10 @@ function setModoListaHist(modo) {
 // REPORTE — Existencias por área (cantidad + capital a costo proveedor + última fecha)
 // ═══════════════════════════════════════════════════════════════
 var _repArea = 'todas';
+var _repSubcat = '';
+function setReporteSubcat(s){ _repSubcat = s; _renderReporteExistencias(); }
+// Filtra filas del reporte por subcategoría (o categoría) seleccionada.
+function _filtraSubcatRep(rows){ return _repSubcat ? rows.filter(function(r){ return (r.subcat||'') === _repSubcat; }) : rows; }
 var _repModoOp = false; // false = admin (con capital y totales) · true = operativa (sin dinero agregado)
 var _repFusion = false; // true = Reporte FINAL (fusiona los productos compuestos)
 
@@ -832,6 +864,7 @@ function _datosReporteExistencias(area) {
         var costoCompra = f.tipo === 'copa' ? cc * copasBot : cc; // costo de 1 botella/pza/unidad base
         rows.push({
             insumoId: id, nombre: f.nombre || '—', familia: f.familia || f.categoria || 'Otros',
+            subcat: f.subcategoria || f.categoria || '',
             tipo: f.tipo, copaML: f.copaML, contNeto: f.contNeto, baseUnit: f.baseUnit,
             barra: barra, bodega: bodega, total: total,
             costoUnit: costoCompra,
@@ -869,6 +902,13 @@ function abrirReporteExistencias(fusion){
         areas.map(function(a){ return '<option value="'+a+'">'+_areaNom(a)+'</option>'; }).join('');
     _repArea = 'todas';
     if (sel) sel.value = 'todas';
+    // Subcategorías presentes (Mezcal, Licor, Brandy, Refresco, Cerveza…) para el filtro.
+    var subs = [...new Set(rows.map(function(r){ return r.subcat; }).filter(Boolean))].sort();
+    var ssel = document.getElementById('repSubcatSel');
+    if (ssel) ssel.innerHTML = '<option value="">Todas las categorías</option>' +
+        subs.map(function(s){ return '<option value="'+etx(s)+'">'+etx(s)+'</option>'; }).join('');
+    _repSubcat = '';
+    if (ssel) ssel.value = '';
     _repModoOp = false;
     var vbtn = document.getElementById('repVistaBtn'); if (vbtn) vbtn.textContent = '👁️ Vista admin';
     _renderReporteExistencias();
@@ -880,6 +920,7 @@ function _renderReporteExistencias(){
     var body = document.getElementById('repExistBody');
     if (!body) return;
     var rows = _datosReporteExistencias(_repArea);
+    rows = _filtraSubcatRep(rows); // filtro por subcategoría (Mezcal, Licor, Refresco…)
     if (_repFusion) rows = _fusionarRows(rows); // Reporte final: fusiona productos compuestos
     if (!rows.length){
         body.innerHTML = '<div class="empty-state" style="padding:50px"><div class="empty-icon">📦</div>'+
@@ -963,40 +1004,69 @@ function _rowsDeInventario(inv) {
         if (barra <= 0 && bodega <= 0 && total <= 0) return;
         var copasBot = (f.tipo === 'copa' && f.contNeto > 0 && f.copaML > 0) ? f.contNeto/f.copaML : 0;
         var costoCompra = f.tipo === 'copa' ? cc*copasBot : cc;
-        rows.push({ nombre:f.nombre||'—', familia:f.familia||f.categoria||'Otros', tipo:f.tipo,
+        rows.push({ nombre:f.nombre||'—', familia:f.familia||f.categoria||'Otros',
+            subcat:f.subcategoria||f.categoria||'', tipo:f.tipo,
             copaML:f.copaML, contNeto:f.contNeto, baseUnit:f.baseUnit, barra:barra, bodega:bodega, total:total,
             costoUnit:costoCompra, capital:total*cc, capBarra:barra*cc, capBodega:bodega*cc });
     });
     return rows;
 }
+// Vista previa de existencias del inventario EN CURSO (desde el header del wizard).
+function verPreviewActual() {
+    if (!invActual) { alert('Abre o inicia un inventario primero.'); return; }
+    try { guardarInventario(); } catch(e) {} // asegurar invActual.filas al día
+    verPreviewInventario(invActual.id);
+}
+var _previewInv = null, _previewRows = [], _previewBusq = '', _previewSubcat = '';
 function verPreviewInventario(id) {
     var inv = getInventarios().find(function(x){ return x.id === id; });
     if (!inv) return;
-    var rows = _rowsDeInventario(inv);
-    rows.sort(function(a,b){ return b.total - a.total; });
-    var capB = rows.reduce(function(s,r){ return s+r.capBarra; }, 0);
-    var capBo= rows.reduce(function(s,r){ return s+r.capBodega; }, 0);
-    var capT = rows.reduce(function(s,r){ return s+r.capital; }, 0);
-    var negNom = (function(){ try { return (JSON.parse(localStorage.getItem('etaax_ctx')||'{}').negocio||{}).nombre || ''; } catch(e){ return ''; } })();
-    var fechaInv = _repFecha(inv.fecha);
-    var estado = inv.cerrado ? 'Cerrado' : 'Abierto';
-    var html = '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px 12px;border-bottom:3px solid var(--green);margin-bottom:10px">'+
-        '<div><div style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:1px;color:var(--text);line-height:1">'+etx(inv.nombre||negNom||'Inventario')+'</div>'+
-        '<div style="font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--text-dim);margin-top:3px">'+etx(negNom)+' · '+(inv.area||'general')+' · '+fechaInv+' · '+estado+'</div></div>'+
-        '<div style="text-align:right"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:2px;color:var(--text)">ET<span style="color:var(--green)">AA</span>X</div>'+
-        '<div style="font-size:9px;color:var(--text-dim);margin-top:2px">'+rows.length+' insumos</div></div></div>';
-    function _chip(lbl,cap,col){ return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 16px;min-width:120px"><div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">'+lbl+'</div><div style="font-size:18px;font-weight:800;color:'+col+';margin-top:2px">'+_repMoney(cap)+'</div></div>'; }
-    html += '<div style="display:flex;gap:10px;flex-wrap:wrap;padding:0 16px 10px">'+_chip('📍 Barra',capB,'var(--accent)')+_chip('📍 Bodega',capBo,'var(--accent)')+
-        '<div style="background:rgba(61,190,122,.12);border:1px solid rgba(61,190,122,.35);border-radius:10px;padding:10px 16px;min-width:120px"><div style="font-size:11px;color:var(--green);text-transform:uppercase;letter-spacing:1px">TOTAL</div><div style="font-size:18px;font-weight:800;color:var(--green);margin-top:2px">'+_repMoney(capT)+'</div></div></div>';
-    if (!rows.length) {
-        html += '<div class="empty-state" style="padding:40px"><div class="empty-icon">📦</div><div class="empty-title">Sin existencias en este inventario</div></div>';
-    } else {
-        html += '<div class="tabla-wrap" style="padding:0 8px"><table style="font-size:12px"><thead><tr><th style="text-align:left">Insumo</th><th style="text-align:left">Familia</th><th style="text-align:right">Exist. Barra</th><th style="text-align:right">Exist. Bodega</th><th style="text-align:right">Total exist.</th><th style="text-align:right">Costo prov.</th><th style="text-align:right">Capital</th></tr></thead><tbody>'+
-            rows.map(function(r){ var cont=_fmtContenido(r); return '<tr><td style="font-weight:600">'+etx(r.nombre)+(cont?'<div style="font-size:10px;color:#7ab8f5;font-weight:400">📦 '+cont+'</div>':'')+'</td><td style="color:var(--text-dim)">'+etx(r.familia)+'</td><td style="text-align:right">'+_fmtCant(r.barra,r)+'</td><td style="text-align:right">'+_fmtCant(r.bodega,r)+'</td><td style="text-align:right;font-weight:700;color:var(--text)">'+_fmtCant(r.total,r)+'</td><td style="text-align:right;color:var(--text-muted)">'+_repMoney(r.costoUnit)+'</td><td style="text-align:right;color:var(--accent);font-weight:600">'+_repMoney(r.capital)+'</td></tr>'; }).join('')+
-            '</tbody></table></div>';
-    }
-    document.getElementById('previewInvBody').innerHTML = html;
+    _previewInv = inv;
+    _previewRows = _rowsDeInventario(inv);
+    _previewRows.sort(function(a,b){ return b.total - a.total; });
+    _previewBusq = ''; _previewSubcat = '';
+    _renderPreviewInv();
     document.getElementById('modalPreviewInv').style.display = 'flex';
+    var body = document.getElementById('previewInvBody'); if (body) body.scrollTop = 0;
+}
+function onPreviewBusq(v){ _previewBusq = v; _renderPreviewTabla(); }     // solo re-renderiza la tabla → no pierde foco
+function setPreviewSubcat(v){ _previewSubcat = v; _renderPreviewTabla(); }
+function _renderPreviewInv() {
+    var inv = _previewInv; if (!inv) return;
+    var all = _previewRows;
+    var capB = all.reduce(function(s,r){ return s+r.capBarra; }, 0);
+    var capBo= all.reduce(function(s,r){ return s+r.capBodega; }, 0);
+    var capT = all.reduce(function(s,r){ return s+r.capital; }, 0);
+    var negNom = (function(){ try { return (JSON.parse(localStorage.getItem('etaax_ctx')||'{}').negocio||{}).nombre || ''; } catch(e){ return ''; } })();
+    var fechaInv = _repFecha(inv.fecha), estado = inv.cerrado ? 'Cerrado' : 'Abierto';
+    var subs = [...new Set(all.map(function(r){ return r.subcat || r.familia; }).filter(Boolean))].sort();
+    function _chip(lbl,cap,col){ return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:8px 14px;min-width:110px"><div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">'+lbl+'</div><div style="font-size:17px;font-weight:800;color:'+col+';margin-top:2px">'+_repMoney(cap)+'</div></div>'; }
+    // ── Encabezado FIJO (sticky): título + capitales + búsqueda + filtro ──
+    var header = '<div style="position:sticky;top:0;background:var(--surface);z-index:3;padding:8px 0 0">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px 10px;border-bottom:3px solid var(--green)">'+
+            '<div><div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:1px;color:var(--text);line-height:1">'+etx(inv.nombre||negNom||'Inventario')+'</div>'+
+            '<div style="font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--text-dim);margin-top:3px">'+etx(negNom)+' · '+(inv.area||'general')+' · '+fechaInv+' · '+estado+'</div></div>'+
+            '<div style="text-align:right"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:2px;color:var(--text)">ET<span style="color:var(--green)">AA</span>X</div>'+
+            '<div style="font-size:9px;color:var(--text-dim);margin-top:2px">'+all.length+' insumos</div></div></div>'+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;padding:10px 14px 8px">'+_chip('📍 Barra',capB,'var(--accent)')+_chip('📍 Bodega',capBo,'var(--accent)')+
+            '<div style="background:rgba(61,190,122,.12);border:1px solid rgba(61,190,122,.35);border-radius:10px;padding:8px 14px;min-width:110px"><div style="font-size:10px;color:var(--green);text-transform:uppercase;letter-spacing:1px">TOTAL</div><div style="font-size:17px;font-weight:800;color:var(--green);margin-top:2px">'+_repMoney(capT)+'</div></div></div>'+
+        '<div style="display:flex;gap:8px;padding:0 14px 10px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--border)">'+
+            '<div class="inv-search" style="flex:1;min-width:200px;max-width:340px"><input type="text" placeholder="Buscar producto…" value="'+etx(_previewBusq)+'" oninput="onPreviewBusq(this.value)" style="width:100%;box-sizing:border-box"></div>'+
+            '<select class="filtro-select" onchange="setPreviewSubcat(this.value)" style="font-size:11px;padding:6px 8px;max-width:200px"><option value="">Todas las categorías</option>'+subs.map(function(s){ return '<option value="'+etx(s)+'" '+(_previewSubcat===s?'selected':'')+'>'+etx(s)+'</option>'; }).join('')+'</select>'+
+        '</div></div>';
+    document.getElementById('previewInvBody').innerHTML = header + '<div id="previewInvTabla"></div>';
+    _renderPreviewTabla();
+}
+function _renderPreviewTabla() {
+    var cont = document.getElementById('previewInvTabla'); if (!cont) return;
+    var q = (_previewBusq||'').toLowerCase();
+    var rows = _previewRows.filter(function(r){
+        return (!q || (r.nombre||'').toLowerCase().includes(q)) && (!_previewSubcat || (r.subcat||r.familia) === _previewSubcat);
+    });
+    if (!rows.length) { cont.innerHTML = '<div class="empty-state" style="padding:40px"><div class="empty-icon">🔍</div><div class="empty-title">Sin resultados</div></div>'; return; }
+    cont.innerHTML = '<div class="tabla-wrap" style="padding:0 8px"><table style="font-size:12px"><thead><tr><th style="text-align:left">Insumo</th><th style="text-align:left">Familia</th><th style="text-align:right">Exist. Barra</th><th style="text-align:right">Exist. Bodega</th><th style="text-align:right">Total exist.</th><th style="text-align:right">Costo prov.</th><th style="text-align:right">Capital</th></tr></thead><tbody>'+
+        rows.map(function(r){ var cont2=_fmtContenido(r); return '<tr><td style="font-weight:600">'+etx(r.nombre)+(cont2?'<div style="font-size:10px;color:#7ab8f5;font-weight:400">📦 '+cont2+'</div>':'')+'</td><td style="color:var(--text-dim)">'+etx(r.familia)+'</td><td style="text-align:right">'+_fmtCant(r.barra,r)+'</td><td style="text-align:right">'+_fmtCant(r.bodega,r)+'</td><td style="text-align:right;font-weight:700;color:var(--text)">'+_fmtCant(r.total,r)+'</td><td style="text-align:right;color:var(--text-muted)">'+_repMoney(r.costoUnit)+'</td><td style="text-align:right;color:var(--accent);font-weight:600">'+_repMoney(r.capital)+'</td></tr>'; }).join('')+
+        '</tbody></table></div>';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1193,6 +1263,7 @@ function eliminarCompuesto(id) {
 
 function imprimirReporteExistencias(){
     var rows = _datosReporteExistencias(_repArea);
+    rows = _filtraSubcatRep(rows); // filtro por subcategoría (Mezcal, Licor, Refresco…)
     if (_repFusion) rows = _fusionarRows(rows); // Reporte final: fusiona productos compuestos
     if (!rows.length){ alert('No hay existencias para imprimir.'); return; }
     rows.sort(function(a,b){ return b.capital - a.capital; });
@@ -1651,16 +1722,18 @@ function cargarProductosCaptura() {
         const existe = (invActual.filas || []).find(f => f.insumoId === ins.id);
         if (existe) {
             if (!existe.entradas) existe.entradas = ['','','','',''];
+            // Corregir refrescos/cervezas guardados como 'copa' por error → pza (conteo por pieza).
+            if (existe.tipo === 'copa' && _esRefrescoCerveza(ins)) existe.tipo = 'pza';
             return existe;
         }
 
         const p      = (ins.presentaciones || [])[0];
-        const catLow = (ins.categoria || '').toLowerCase();
+        const catLow  = (ins.categoria || '').toLowerCase();
         // ALIMENTOS: tipo 'peso' (conteo en unidad base g/ml/pza, descuento por recetas).
         const esFood = (ins.familia || '').toLowerCase().includes('aliment');
-        const tipo   = esFood ? 'peso'
-                     : (catLow.includes('cerveza') || catLow.includes('refresco') ||
-                        catLow.includes('soda')    || catLow.includes('agua') ? 'pza' : 'copa');
+        // REFRESCOS/CERVEZAS → pza (revisa tipoInsumo + categoría + subcategoría).
+        const esPza  = _esRefrescoCerveza(ins);
+        const tipo   = esFood ? 'peso' : (esPza ? 'pza' : 'copa');
 
         let copaML = COPA_STD.default;
         for (const [key, val] of Object.entries(COPA_STD)) {
@@ -1688,6 +1761,7 @@ function cargarProductosCaptura() {
             tipo, copaML, contNeto: contBase, pesoCristal,
             baseUnit: esFood ? unidadBaseInsumo(ins) : '',   // g / ml / pza (solo alimentos)
             costoUnitario:  parseFloat(p?.costoUnitario) || parseFloat(p?.precio) || 0,
+            costoPieza:     parseFloat(p?.costoPieza) || 0,   // costo de compra por pieza (refrescos/latas por rejilla/caja)
             precioCarta:    parseFloat(p?.precioCarta)   || 0,
             precioCartaBot: parseFloat(p?.precioCartaBot)|| 0,
             stockMin:       parseFloat(ins.stockMin)     || 0,
@@ -4071,8 +4145,13 @@ function renderStep5() {
         </div>
     </div>`;
 
+    const _subcatsS5 = [...new Set(filasCaptura.map(f => f.subcategoria || f.categoria).filter(Boolean))].sort();
     const searchBar5 = `<div class="wrap" style="padding:0 0 4px"><div class="step-toolbar">
-        <div class="inv-search"><input type="text" placeholder="Buscar producto en el resultado…" value="${etx(_busqStep5)}" oninput="onBusqStep5(this.value)"></div>
+        <div class="inv-search" style="flex:1;max-width:340px"><input type="text" placeholder="Buscar producto en el resultado…" value="${etx(_busqStep5)}" oninput="onBusqStep5(this.value)" style="width:100%;box-sizing:border-box"></div>
+        <select class="filtro-select" onchange="setSubcatStep5(this.value)" style="font-size:11px;padding:6px 8px;max-width:180px">
+            <option value="">Todas las categorías</option>
+            ${_subcatsS5.map(s => `<option value="${etx(s)}" ${_subcatStep5===s?'selected':''}>${etx(s)}</option>`).join('')}
+        </select>
         <div class="vista-toggle" style="margin-left:auto">
             <button id="s5ModoLista" class="${_step5Modo==='lista'?'active':''}" onclick="setStep5Modo('lista')">≡ Lista</button>
             <button id="s5ModoGal" class="${_step5Modo==='galeria'?'active':''}" onclick="setStep5Modo('galeria')">⊞ Galería</button>
@@ -4083,10 +4162,20 @@ function renderStep5() {
 
 var _busqStep5 = '';
 var _step5Modo = 'lista';
-function onBusqStep5(val) {
-    _busqStep5 = val;
+var _subcatStep5 = '';
+function setSubcatStep5(v) {
+    _subcatStep5 = v;
     const cont = document.getElementById('step5Tablas');
-    if (cont) cont.innerHTML = _step5TablasHTML(); // solo re-renderiza las tablas → no pierde el foco
+    if (cont) cont.innerHTML = _step5TablasHTML();
+}
+var _busqStep5Timer = null;
+function onBusqStep5(val) {
+    _busqStep5 = val; // el input se actualiza al instante; el re-render pesado se hace con debounce
+    clearTimeout(_busqStep5Timer);
+    _busqStep5Timer = setTimeout(function(){
+        const cont = document.getElementById('step5Tablas');
+        if (cont) cont.innerHTML = _step5TablasHTML();
+    }, 220);
 }
 function setStep5Modo(m) {
     _step5Modo = m;
@@ -4107,6 +4196,7 @@ function _step5TablasHTML() {
     filasCaptura.forEach(f => {
         if (mapaC5[f.insumoId]) return; // miembros de un compuesto: salen en la sección de compuestos
         if (q && !(f.nombre||'').toLowerCase().includes(q)) return; // buscador del Paso 5
+        if (_subcatStep5 && (f.subcategoria||f.categoria) !== _subcatStep5) return; // filtro de categoría
         const g = f.familia || f.categoria || 'Otros';
         if (f.tipo === 'pza') {
             if (!gruposPza[g])  gruposPza[g]  = [];
@@ -4350,15 +4440,19 @@ function _step5GaleriaHTML(q, mapaC5, vcomps) {
     var items = vcomps.concat(filasCaptura.filter(function(f){
         if (mapaC5[f.insumoId]) return false;
         if (q && !(f.nombre||'').toLowerCase().includes(q)) return false;
+        if (_subcatStep5 && (f.subcategoria||f.categoria) !== _subcatStep5) return false;
         return calcExistencia(f) > 0 || (parseFloat(f.existenciaAnterior)||0) > 0
             || getEntradasBottles(f.insumoId) > 0 || _esRegistrado(f)
             || (f.ventasCopasDirectas||0) > 0 || (f.ventasBotella||0) > 0;
     }));
     if (!items.length) return '<div style="text-align:center;padding:40px;color:var(--text-dim)">Sin productos con movimiento</div>';
+    // Inventario de referencia precomputado UNA vez (evita _filaAnteriorInsumo O(n²) por tarjeta).
+    var _refInv = _getRefInv(), _refMap = {};
+    if (_refInv) (_refInv.filas||[]).forEach(function(f){ if (f && f.insumoId) _refMap[f.insumoId] = f; });
     return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px;padding:8px 16px 24px">'+
-        items.map(_step5DesgloseCard).join('') + '</div>';
+        items.map(function(fila){ try { return _step5DesgloseCard(fila, _refMap); } catch(e){ console.warn('[desglose]', fila && fila.nombre, e); return ''; } }).join('') + '</div>';
 }
-function _step5DesgloseCard(fila) {
+function _step5DesgloseCard(fila, refMap) {
     var esComp   = !!fila.esCompuesto;
     var copasBot = (fila.contNeto>0 && fila.copaML>0) ? fila.contNeto/fila.copaML : 0;
     var ea       = parseFloat(fila.existenciaAnterior)||0; // copas
@@ -4388,7 +4482,7 @@ function _step5DesgloseCard(fila) {
         fiDisp = copasBot>0 ? _n1(fisico/copasBot) : _n1(fisico);
     }
     var pesosAct = (fila.pesos||[]).filter(function(p){return parseFloat(p)>0;}).map(function(p){return (Math.round(parseFloat(p)*1000)/1000)+' kg';});
-    var prevFila = esComp ? null : _filaAnteriorInsumo(fila.insumoId);
+    var prevFila = esComp ? null : (refMap ? refMap[fila.insumoId] : _filaAnteriorInsumo(fila.insumoId));
     var pesosAnt = prevFila ? (prevFila.pesos||[]).filter(function(p){return parseFloat(p)>0;}).map(function(p){return (Math.round(parseFloat(p)*1000)/1000)+' kg';}) : [];
     var entradas = esComp ? [] : _entradasDeInsumo(fila.insumoId);
     var entTotal = esComp ? 0 : getEntradasBottles(fila.insumoId);
