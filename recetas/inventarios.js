@@ -3929,22 +3929,23 @@ function renderStep5() {
     const numCancel       = (invActual?.cancelaciones||[]).length;
     const totalDescuentos = (invActual?.descuentos||[]).reduce((s,d)=>s+(parseFloat(d.monto)||0),0);
 
+    const _M2 = v => (v||0).toLocaleString('es-MX', { minimumFractionDigits:2, maximumFractionDigits:2 }); // $1,832,994.00
     const kpis = `<div class="wrap" style="padding-bottom:0">
         <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
             <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)"
                 onclick="verReporteDirectivo()">📄 Reporte directivo</button>
         </div>
         <div class="stats-grid" style="grid-template-columns:repeat(6,1fr)">
-            <div class="stat-card"><div class="stat-label">Capital a costo</div><div class="stat-val">$${capitalCosto.toFixed(0)}</div></div>
-            <div class="stat-card"><div class="stat-label">Capital a carta</div><div class="stat-val green">$${capitalCarta.toFixed(0)}</div></div>
+            <div class="stat-card"><div class="stat-label">Capital a costo</div><div class="stat-val">$${_M2(capitalCosto)}</div></div>
+            <div class="stat-card"><div class="stat-label">Capital a carta</div><div class="stat-val green">$${_M2(capitalCarta)}</div></div>
             <div class="stat-card"><div class="stat-label">Diferencia total</div>
-                <div class="stat-val" style="color:${colorDif}">${difCostoTotal>=0?'+':''}$${difCostoTotal.toFixed(2)}</div></div>
+                <div class="stat-val" style="color:${colorDif}">${difCostoTotal>=0?'+':''}$${_M2(difCostoTotal)}</div></div>
             <div class="stat-card"><div class="stat-label">Con alerta >25%</div>
                 <div class="stat-val" style="color:${conAlerta>0?'var(--red)':'var(--green)'}">${conAlerta}</div></div>
             <div class="stat-card"><div class="stat-label">Cancelaciones POS</div>
                 <div class="stat-val" style="color:${numCancel>0?'var(--accent)':'var(--text)'}">${numCancel}</div></div>
             <div class="stat-card"><div class="stat-label">Total descuentos</div>
-                <div class="stat-val" style="color:${totalDescuentos>0?'var(--red)':'var(--text)'}">$${totalDescuentos.toFixed(2)}</div></div>
+                <div class="stat-val" style="color:${totalDescuentos>0?'var(--red)':'var(--text)'}">$${_M2(totalDescuentos)}</div></div>
         </div>
     </div>`;
 
@@ -4123,36 +4124,66 @@ function _step5TablasHTML() {
 
     // ── Sección de PRODUCTOS COMPUESTOS: una línea por compuesto (copas) ──
     const _nc = v => (v % 1 ? (Math.round(v*10)/10).toFixed(1) : v);
-    const tablaComp = vcomps.length ? `<div style="margin-bottom:20px">
-        <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1.5px;color:#7ab8f5;padding:12px 0 8px;border-bottom:1px solid var(--border);margin-bottom:8px">🧩 Productos compuestos</div>
-        <div class="inv-table-wrap"><table class="inv-capture-table"><thead><tr>
-            <th class="inv-th">Compuesto</th>
-            <th class="inv-th inv-th-c">Existencia</th>
-            <th class="inv-th inv-th-c">Ventas (cop)</th>
-            <th class="inv-th inv-th-c">Teórico</th>
-            <th class="inv-th inv-th-c">Diferencia</th>
-            <th class="inv-th inv-th-c">$ Dif</th>
-        </tr></thead><tbody>${vcomps.map(vf => {
-            const comp = getCompuestos().find(c => c.id === vf.compId) || {};
-            const members = (comp.miembros||[]).map(mid => filasCaptura.find(f=>f.insumoId===mid)).filter(Boolean);
-            const real = calcExistencia(vf), teo = calcExistenciaTeorica(vf), dif = real - teo;
-            const cc = costoCopa(vf), difCosto = dif*cc, ref = teo>0?teo:real;
-            const color = semaforo(dif, ref);
-            const pct = ref>0 ? ((dif/ref*100>=0?'+':'')+(dif/ref*100).toFixed(1)+'%') : '—';
-            const vparts = [];
-            if ((vf.ventasCopasDirectas||0)>0) vparts.push(_nc(vf.ventasCopasDirectas));
-            if ((vf.cortesiaCopas||0)>0) vparts.push('+'+_nc(vf.cortesiaCopas)+' cort');
-            if ((vf.mermaCopas||0)>0) vparts.push('+'+_nc(vf.mermaCopas)+' merma');
-            return `<tr class="inv-row">
-                <td class="inv-td-prod"><div class="inv-prod-name">🧩 ${etx(comp.nombre||vf.nombre)}</div>
-                    <div style="font-size:10px;color:var(--text-dim)">${members.map(m=>etx(insumoTitulo(m))).join('  +  ')}</div></td>
-                <td class="inv-td-ef" style="text-align:center">${_nc(real)} cop</td>
-                <td style="text-align:center;color:var(--accent)">${vparts.join(' ')||'—'}</td>
-                <td style="text-align:center">${_nc(teo)} cop</td>
-                <td style="text-align:center;font-weight:700;color:${color}">${dif>=0?'+':''}${_nc(dif)} (${pct})</td>
-                <td style="text-align:center;color:${difCosto>=0?'var(--green)':'var(--red)'}">${difCosto>=0?'+':''}$${difCosto.toFixed(2)}</td>
-            </tr>`;
-        }).join('')}</tbody></table></div>
+    let _compGrpDif = 0;
+    const _compRows = vcomps.map(vf => {
+        const comp = getCompuestos().find(c => c.id === vf.compId) || {};
+        const members = (comp.miembros||[]).map(mid => filasCaptura.find(f=>f.insumoId===mid)).filter(Boolean);
+        let ea=0, ent=0, cancel=0;
+        members.forEach(m => { ea += (parseFloat(m.existenciaAnterior)||0); ent += getEntradasCopas(m); cancel += getCancelacionesCopas(m.insumoId); });
+        const ventaCopa = (vf.ventasCopasDirectas||0);
+        const cm        = (vf.cortesiaCopas||0) + (vf.mermaCopas||0);
+        const fisico    = calcExistencia(vf);
+        const teorico   = calcExistenciaTeorica(vf);
+        const dif       = fisico - teorico;
+        const cc        = costoCopa(vf);
+        const difCosto  = dif * cc;
+        const ref       = teorico>0 ? teorico : fisico;
+        const color     = semaforo(dif, ref);
+        const pctStr    = ref>0 ? ((dif/ref*100>=0?'+':'')+(dif/ref*100).toFixed(1)+'%') : '—';
+        _compGrpDif += difCosto;
+        return `<tr>
+            <td style="min-width:140px">
+                <div style="font-size:12px;font-weight:600">🧩 ${etx(comp.nombre||vf.nombre)}</div>
+                <div style="font-size:10px;color:var(--text-dim)">${members.map(m=>etx(insumoTitulo(m))).join(' + ')}</div>
+            </td>
+            <td style="text-align:center;white-space:nowrap">${_nc(ea)} cop</td>
+            <td style="text-align:center;color:var(--green);white-space:nowrap">${ent>0?'+'+_nc(ent)+' cop':'—'}</td>
+            <td style="text-align:center;color:var(--text-dim)">—</td>
+            <td style="text-align:center;color:var(--accent)">${ventaCopa>0?_nc(ventaCopa)+' cop':'—'}</td>
+            <td style="text-align:center">${cm>0?`<div style="color:var(--red);font-size:12px;font-weight:600">${_nc(cm)} cop</div>`:'—'}</td>
+            <td style="text-align:center;color:var(--text-muted)">${cancel>0?_nc(cancel)+' cop':'—'}</td>
+            <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(fisico)} cop</td>
+            <td style="text-align:center;font-weight:700;color:${color};white-space:nowrap">${dif>=0?'+':''}${_nc(dif)} cop</td>
+            <td style="text-align:center;font-size:11px;color:${color}">${pctStr}</td>
+            <td style="text-align:right;font-weight:600;color:${color};white-space:nowrap">${difCosto>=0?'+':''}$${difCosto.toFixed(2)}</td>
+        </tr>`;
+    }).join('');
+    const tablaComp = vcomps.length ? `<div class="card" style="max-width:none;margin:0 16px 12px">
+        <div class="card-header">
+            <h2>🧩 Productos compuestos</h2>
+            <span class="pill ${_compGrpDif>=0?'pill-green':'pill-red'}" style="font-size:11px">${_compGrpDif>=0?'+':''}$${_compGrpDif.toFixed(2)}</span>
+        </div>
+        <div class="card-body" style="padding:0"><div class="tabla-wrap" style="overflow-x:auto"><table style="min-width:900px">
+            <thead>
+                <tr>
+                    <th rowspan="2" style="text-align:left;vertical-align:bottom">Producto</th>
+                    <th rowspan="2" style="text-align:center;width:70px;vertical-align:bottom">Exist.<br>anterior</th>
+                    <th rowspan="2" style="text-align:center;width:65px;vertical-align:bottom">Entradas</th>
+                    <th colspan="2" style="text-align:center;border-bottom:1px solid var(--border);padding-bottom:4px">Ventas</th>
+                    <th rowspan="2" style="text-align:center;width:95px;vertical-align:bottom">Cortesía /<br>Merma</th>
+                    <th rowspan="2" style="text-align:center;width:70px;vertical-align:bottom">Cancelac.<br>POS</th>
+                    <th rowspan="2" style="text-align:center;width:80px;vertical-align:bottom">Exist.<br>actual</th>
+                    <th rowspan="2" style="text-align:center;width:80px;vertical-align:bottom">Diferencia</th>
+                    <th rowspan="2" style="text-align:center;width:50px;vertical-align:bottom">%</th>
+                    <th rowspan="2" style="text-align:right;width:80px;vertical-align:bottom">Dif. $</th>
+                </tr>
+                <tr>
+                    <th style="text-align:center;width:65px;font-size:10px;color:var(--text-muted)">Botella</th>
+                    <th style="text-align:center;width:65px;font-size:10px;color:var(--text-muted)">Copa</th>
+                </tr>
+            </thead>
+            <tbody>${_compRows}</tbody>
+        </table></div></div>
     </div>` : '';
 
     const sinDatos = !tablasCopa && !tablasPza && !tablaComp
@@ -5039,30 +5070,71 @@ function renderListadoEntradas() {
             Sin entradas registradas</div>`;
         return;
     }
+    // Asegurar id estable en cada entrada (las de inventario no lo traían) → borrar/editar por id.
+    const fuente = invActual ? (invActual.entradasLog || []) : getEntradasLog();
+    let _ch = false;
+    fuente.forEach(e => { if (e && !e.id) { e.id = genId() + genId(); _ch = true; } });
+    if (_ch) { if (invActual) { guardarEntradas(); } else { _guardarELLocal(); } }
+
     const rows = useGlobal ? log : [...log].reverse();
-    cont.innerHTML = rows.map((e, i) => {
+    cont.innerHTML = rows.map((e) => {
         const color   = tipoEntradaColor(e.tipo);
         const nombre  = etx(e.nombreProducto || e.nombre || '—');
-        const delFn   = useGlobal
-            ? `eliminarEntradaGlobal('${e.id}')`
-            : `eliminarEntradaRapida(${i})`;
+        const cant    = (e.cantidad||0) % 1 ? (e.cantidad||0).toFixed(1) : (e.cantidad||0);
+        if (_entEditId === e.id) {
+            return `<div class="ent-log-fila" style="gap:8px;flex-wrap:wrap">
+                <span class="ent-log-nombre">${nombre}</span>
+                <input id="entEdCant" type="text" inputmode="decimal" value="${cant}" oninput="this.value=this.value.replace(/[^0-9.]/g,'')"
+                    style="width:70px;background:var(--surface2);border:1px solid var(--accent);color:var(--text);border-radius:6px;padding:5px 8px;font-size:13px;text-align:center">
+                <input id="entEdFecha" type="date" value="${e.fecha||''}"
+                    style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 8px;font-size:13px">
+                <button class="ent-log-del" style="color:var(--green)" onclick="guardarEdicionEntrada('${e.id}')">✓</button>
+                <button class="ent-log-del" onclick="_entEditId=null;renderListadoEntradas()">✕</button>
+            </div>`;
+        }
         return `<div class="ent-log-fila">
             <span class="ent-log-nombre">${nombre}</span>
             <span class="ent-log-badge" style="color:${color};background:${color}1a;border-color:${color}50">${tipoEntradaLabel(e.tipo)}</span>
             <span class="ent-log-fecha">${e.fecha || '—'}</span>
-            <span class="ent-log-cant">+${(e.cantidad||0) % 1 ? (e.cantidad||0).toFixed(1) : (e.cantidad||0)} bot</span>
-            <button class="ent-log-del" onclick="${delFn}"
+            <span class="ent-log-cant">+${cant} bot</span>
+            <button class="ent-log-del" title="Editar" onclick="_entEditId='${e.id}';renderListadoEntradas()">✏️</button>
+            <button class="ent-log-del" title="Eliminar" onclick="eliminarEntradaPorId('${e.id}')"
                 onmouseenter="this.classList.add('hover')" onmouseleave="this.classList.remove('hover')">🗑️</button>
         </div>`;
     }).join('');
 }
 
-function eliminarEntradaGlobal(id) {
+var _entEditId = null;
+function eliminarEntradaPorId(id) {
     _pedirClaveAdmin('Eliminar entrada', function() {
-        setEntradasLog(getEntradasLog().filter(e => e.id !== id));
+        if (invActual) {
+            invActual.entradasLog = (invActual.entradasLog || []).filter(e => e.id !== id);
+            guardarEntradas();
+        } else {
+            setEntradasLog(getEntradasLog().filter(e => e.id !== id));
+        }
+        _entEditId = null;
         renderListadoEntradas();
     });
 }
+function guardarEdicionEntrada(id) {
+    const cant  = parseFloat((document.getElementById('entEdCant')||{}).value) || 0;
+    const fecha = (document.getElementById('entEdFecha')||{}).value || '';
+    if (cant <= 0) { alert('La cantidad debe ser mayor a 0.'); return; }
+    if (invActual) {
+        const e = (invActual.entradasLog || []).find(x => x.id === id);
+        if (e) { e.cantidad = cant; if (fecha) e.fecha = fecha; }
+        guardarEntradas();
+    } else {
+        const arr = getEntradasLog();
+        const e = arr.find(x => x.id === id);
+        if (e) { e.cantidad = cant; if (fecha) e.fecha = fecha; _guardarELLocal(); try { _sbUpEL(e); } catch(err){} } // forzar sync (el diff no detecta updates)
+    }
+    _entEditId = null;
+    renderListadoEntradas();
+}
+// Compat: viejos llamados
+function eliminarEntradaGlobal(id) { eliminarEntradaPorId(id); }
 
 function renderVistaEntradas() {
     const cont = document.getElementById('entContent');
