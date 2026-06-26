@@ -576,13 +576,25 @@ function _unidadCompra(o) {
     if (!o) return 'bot';
     var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(o.insumoId) : null;
     var p   = ins && ins.presentaciones && ins.presentaciones[0];
-    var pc  = (p && (p.presentacionCompra || '')).toString();
-    if (pc === 'Granel') {
-        var um = ((p && (p.umContenido || p.umCompra)) || 'LT').toString().toUpperCase();
-        return (um === 'LT' || um === 'L') ? 'L' : um === 'ML' ? 'ml' : um === 'KG' ? 'kg' : (um === 'GR' || um === 'G') ? 'g' : 'u';
-    }
+    // 1) Unidad de COMPRA real (la "Unidad" junto a Cantidad en la presentación de compra).
+    //    Si se compra por volumen/peso, ESA es la unidad de la entrada (ej. LT → litros).
+    var umP = (p && (p.umPresCompra || '')).toString().toUpperCase();
+    if (umP === 'LT')  return 'L';
+    if (umP === 'ML')  return 'ml';
+    if (umP === 'KG')  return 'kg';
+    if (umP === 'G' || umP === 'GR') return 'g';
+    // 2) Se compra por pieza/contenedor → usar el empaque que ve el usuario (Garrafa, Botella, Lata…).
+    var emp = (ins && (ins.empaque || '')).toString().toLowerCase();
+    if (emp.indexOf('garrafa') >= 0) return 'garrafa';
+    if (emp.indexOf('botella') >= 0) return 'bot';
+    if (emp.indexOf('lata')    >= 0) return 'lata';
+    if (emp.indexOf('barril')  >= 0) return 'barril';
+    if (emp.indexOf('bolsa')   >= 0) return 'bolsa';
+    if (emp.indexOf('caja')    >= 0) return 'caja';
+    // 3) Presentación de compra (dropdown) como respaldo.
+    var pc = (p && (p.presentacionCompra || '')).toString();
     if (_UCOMPRA[pc]) return _UCOMPRA[pc];
-    if (pc) return pc.toLowerCase();
+    if (pc && pc !== 'Pieza') return pc.toLowerCase();
     return o.tipo === 'pza' ? 'pza' : (o.tipo === 'peso' ? (o.baseUnit || 'u').toLowerCase() : 'bot');
 }
 
