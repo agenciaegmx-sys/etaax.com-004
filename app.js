@@ -914,6 +914,8 @@ function getCatalogoInsumos() {
     try { return JSON.parse(_skGet('insumos')) || []; }
     catch { return []; }
 }
+// Resolver para la etiqueta canónica (insumo-label.js): id → insumo del catálogo.
+(function(){ var _ix=null,_n=-1; window._insumoResolver=function(id){ var a=getCatalogoInsumos()||[]; if(!_ix||_n!==a.length){_ix={};a.forEach(function(x){if(x&&x.id)_ix[x.id]=x;});_n=a.length;} return _ix[id]||null; }; })();
 
 // Catálogo acotado a la SUCURSAL donde se trabaja (regla "sin sucursal = matriz").
 // El escandallo de una sucursal solo debe ofrecer SUS insumos, no los de todo el
@@ -1111,10 +1113,10 @@ function crearItemDropdown(ins, idx) {
     var nameDiv = document.createElement('div');
     nameDiv.style.cssText = 'font-size:13px;font-weight:500;color:var(--text);' +
         'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-    nameDiv.textContent = ins.nombre + (ins.variedad ? ' '+ins.variedad : '');
+    nameDiv.textContent = insumoTitulo(ins);
     var catDiv = document.createElement('div');
     catDiv.style.cssText = 'font-size:10px;color:var(--text-dim);margin-top:2px;';
-    catDiv.textContent = (ins.categoria||'') + (ins.subcategoria?' · '+ins.subcategoria:'');
+    catDiv.textContent = insumoMeta(ins);
     infoDiv.appendChild(nameDiv);
     infoDiv.appendChild(catDiv);
 
@@ -1172,7 +1174,7 @@ function seleccionarInsumo(idx, insumoId) {
     const ins = getCatalogoInsumos().find(x => x.id === insumoId);
     if (!ins) return;
     const costo = _redondeaCosto(getCostoParaUnidad(ins, ingredientes[idx].unidad));
-    ingredientes[idx].nombre       = ins.nombre + (ins.variedad ? ' '+ins.variedad : '');
+    ingredientes[idx].nombre       = insumoTitulo(ins);
     ingredientes[idx].insumoId     = insumoId;
     ingredientes[idx].costoPorKgLt = costo;
     cerrarTodosDropdowns();

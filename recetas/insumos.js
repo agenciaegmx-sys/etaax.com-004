@@ -80,6 +80,8 @@
        catch(e) { _insumosCache = []; }
        return _insumosCache;
    }
+   // Resolver para la etiqueta canónica (insumo-label.js): id → insumo del catálogo.
+   (function(){ var _ix=null,_n=-1; window._insumoResolver=function(id){ var a=getInsumos()||[]; if(!_ix||_n!==a.length){_ix={};a.forEach(function(x){if(x&&x.id)_ix[x.id]=x;});_n=a.length;} return _ix[id]||null; }; })();
 
    function setInsumos(data) {
        var negId = getNegocioActivo();

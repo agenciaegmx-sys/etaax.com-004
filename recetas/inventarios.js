@@ -25,6 +25,8 @@ var _cacheRecetasInv = null; // recetas para uso interno de este módulo
 var _cacheInsumosInv = null; // insumos para uso interno de este módulo
 
 function getInsumos()     { return _cacheInsumosInv || (function(){ try { return JSON.parse(_skGet('insumos')) || []; } catch { return []; } }()); }
+// Resolver para la etiqueta canónica (insumo-label.js): id → insumo del catálogo.
+(function(){ var _ix=null,_n=-1; window._insumoResolver=function(id){ var a=getInsumos()||[]; if(!_ix||_n!==a.length){_ix={};a.forEach(function(x){if(x&&x.id)_ix[x.id]=x;});_n=a.length;} return _ix[id]||null; }; })();
 // Insumos acotados a la SUCURSAL activa (regla "sin sucursal = matriz: ve todo").
 // Sin esto, el inventario leía los insumos de TODAS las sucursales y los duplicaba.
 function _scopeSucInsumos(lista) {
@@ -1031,7 +1033,7 @@ function _compChecklistHTML() {
     var lista = insumos.filter(function(x){ return !q || (x.nombre||'').toLowerCase().indexOf(q) >= 0 || (x.marca||'').toLowerCase().indexOf(q) >= 0; });
     return lista.slice(0,120).map(function(x){ var sel=_compMiembros.indexOf(x.id)>=0;
         return '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-radius:6px;'+(sel?'background:rgba(61,190,122,.1)':'')+'">'+
-        '<input type="checkbox" '+(sel?'checked':'')+' onchange="_toggleMiembro(\''+x.id+'\')"><span style="font-size:13px;color:var(--text)">'+etx(x.nombre)+(x.marca?' · '+etx(x.marca):'')+'</span></label>';
+        '<input type="checkbox" '+(sel?'checked':'')+' onchange="_toggleMiembro(\''+x.id+'\')"><span style="font-size:13px;color:var(--text)">'+etx(insumoEtiqueta(x))+'</span></label>';
     }).join('');
 }
 // La búsqueda actualiza SOLO la lista (no el input) → no se pierde el foco al escribir.
@@ -1878,9 +1880,7 @@ function renderChipsExist() {
         const reg = _esRegistrado(f);
         return `<button class="ent-chip ${_existInsumoId===f.insumoId?'active':''}"
             onclick="seleccionarProductoExist('${f.insumoId}')" style="position:relative">
-            ${etx(f.nombre)}
-            ${f.subcategoria?`<span style="font-size:10px;opacity:0.65;margin-left:4px">${f.subcategoria}</span>`:
-              f.categoria?`<span style="font-size:10px;opacity:0.65;margin-left:4px">${f.categoria}</span>`:''}
+            ${etx(insumoEtiqueta(f))}
             ${reg?'<span style="position:absolute;top:4px;right:6px;width:6px;height:6px;background:var(--green);border-radius:50%"></span>':''}
         </button>`;
     }).join('');
@@ -2033,7 +2033,7 @@ function renderCardExist() {
         <div class="ent-form-card">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
                 <div>
-                    <div style="font-weight:700;font-size:17px;color:var(--text)">${etx(fila.nombre)}</div>
+                    <div style="font-weight:700;font-size:17px;color:var(--text)">${etx(insumoTitulo(fila))}</div>
                     <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap">
                         ${fila.categoria?`<span class="inv-tag">${fila.categoria}</span>`:''}
                         <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
@@ -2127,7 +2127,7 @@ function _cardExistPeso(fila, idx) {
         <div class="ent-form-card">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
                 <div>
-                    <div style="font-weight:700;font-size:17px;color:var(--text)">${etx(fila.nombre)}</div>
+                    <div style="font-weight:700;font-size:17px;color:var(--text)">${etx(insumoTitulo(fila))}</div>
                     <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;align-items:center">
                         ${fila.categoria?`<span class="inv-tag">${etx(fila.categoria)}</span>`:''}
                         <span class="inv-tag" style="background:rgba(61,190,122,.15);border-color:rgba(61,190,122,.45);color:var(--green)">⚖️ ${u}</span>
@@ -2210,7 +2210,7 @@ function renderResumenExist() {
         const metIcon = metodo==='nivel'?'🌡️':metodo==='foto'?'📷':'⚖️';
         return `<div class="ent-log-fila" onclick="seleccionarProductoExist('${fila.insumoId}')"
             style="cursor:pointer">
-            <span class="ent-log-nombre">${etx(fila.nombre)}</span>
+            <span class="ent-log-nombre">${etx(insumoTitulo(fila))}</span>
             <span style="font-size:13px;color:var(--text-dim)">${metIcon}</span>
             <span class="ent-log-cant">${fmtBot(exist)} ${efUnit}</span>
         </div>`;
@@ -2287,9 +2287,9 @@ function renderStep1Lista(filas) {
 
         return `<tr class="inv-row">
             <td class="inv-td-prod">
-                <div class="inv-prod-name">${etx(fila.nombre)}</div>
+                <div class="inv-prod-name">${etx(insumoTitulo(fila))}</div>
                 <div class="inv-prod-meta">
-                    ${fila.categoria ? `<span class="inv-tag">${fila.categoria}</span>` : ''}
+                    ${insumoMeta(fila) ? `<span class="inv-tag">${etx(insumoMeta(fila))}</span>` : ''}
                     <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
                     ${_fmtContenido(fila)?`<span class="inv-tag" style="background:rgba(122,184,245,0.12);border-color:rgba(122,184,245,0.4);color:#7ab8f5">📦 ${_fmtContenido(fila)}</span>`:''}
                     <span class="inv-metodo-toggle">
@@ -2353,9 +2353,9 @@ function renderStep1Galeria(filas) {
             : 'background:rgba(245,200,66,0.12);border-color:rgba(245,200,66,0.45);color:var(--accent)';
         return `<div class="inv-item-card">
             <div class="inv-item-card-top">
-                <div class="inv-prod-name">${etx(fila.nombre)}</div>
+                <div class="inv-prod-name">${etx(insumoTitulo(fila))}</div>
                 <div class="inv-prod-meta" style="margin-top:6px">
-                    ${fila.categoria ? `<span class="inv-tag">${fila.categoria}</span>` : ''}
+                    ${insumoMeta(fila) ? `<span class="inv-tag">${etx(insumoMeta(fila))}</span>` : ''}
                     <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
                 </div>
                 <div style="margin-top:8px;font-size:11px;color:var(--text-dim)">
@@ -2481,9 +2481,9 @@ function renderStep2Lista(filas) {
             : 'background:rgba(245,200,66,0.12);border-color:rgba(245,200,66,0.45);color:var(--accent)';
         return `<tr class="inv-row">
             <td class="inv-td-prod">
-                <div class="inv-prod-name">${etx(fila.nombre)}</div>
+                <div class="inv-prod-name">${etx(insumoTitulo(fila))}</div>
                 <div class="inv-prod-meta">
-                    ${fila.categoria ? `<span class="inv-tag">${fila.categoria}</span>` : ''}
+                    ${insumoMeta(fila) ? `<span class="inv-tag">${etx(insumoMeta(fila))}</span>` : ''}
                     <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
                     <button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">📋 Ver</button>
                 </div>
@@ -2538,9 +2538,9 @@ function renderStep2Galeria(filas) {
             : 'background:rgba(245,200,66,0.12);border-color:rgba(245,200,66,0.45);color:var(--accent)';
         return `<div class="inv-item-card">
             <div class="inv-item-card-top">
-                <div class="inv-prod-name">${etx(fila.nombre)}</div>
+                <div class="inv-prod-name">${etx(insumoTitulo(fila))}</div>
                 <div class="inv-prod-meta" style="margin-top:6px">
-                    ${fila.categoria ? `<span class="inv-tag">${fila.categoria}</span>` : ''}
+                    ${insumoMeta(fila) ? `<span class="inv-tag">${etx(insumoMeta(fila))}</span>` : ''}
                     <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
                 </div>
                 <div style="margin-top:8px;font-size:11px;color:var(--text-dim)">
@@ -2663,7 +2663,7 @@ function renderStep3Insumos() {
         const esCopa = fila.tipo !== 'pza';
         return `<tr class="inv-row">
             <td class="inv-td-prod">
-                <div class="inv-prod-name">${etx(fila.nombre)}</div>
+                <div class="inv-prod-name">${etx(insumoTitulo(fila))}</div>
                 <div class="inv-prod-meta">
                     ${fila.categoria?`<span class="inv-tag">${fila.categoria}</span>`:''}
                     <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
@@ -2912,8 +2912,7 @@ function renderChipsVentas() {
         const tieneVentas = (f.ventasCopasDirectas||0)>0 || (f.ventasBotella||0)>0 || (f.cortesiaCopas||0)>0 || (f.mermaCopas||0)>0;
         return `<button class="ent-chip ${_ventasInsumoId===f.insumoId?'active':''}"
             onclick="seleccionarProductoVentas('${f.insumoId}')" style="position:relative">
-            ${etx(f.nombre)}
-            ${f.categoria?`<span style="font-size:10px;opacity:0.65;margin-left:4px">${f.categoria}</span>`:''}
+            ${etx(insumoEtiqueta(f))}
             ${tieneVentas?'<span style="position:absolute;top:4px;right:6px;width:6px;height:6px;background:var(--green);border-radius:50%"></span>':''}
         </button>`;
     }).join('');
@@ -2950,7 +2949,7 @@ function renderCardVentas() {
         <div class="ent-form-card">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
                 <div>
-                    <div style="font-weight:700;font-size:17px;color:var(--text)">${etx(fila.nombre)}</div>
+                    <div style="font-weight:700;font-size:17px;color:var(--text)">${etx(insumoTitulo(fila))}</div>
                     <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap">
                         ${fila.categoria?`<span class="inv-tag">${fila.categoria}</span>`:''}
                         <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
@@ -3046,7 +3045,7 @@ function renderResumenVentas() {
         if ((fila.cortesiaCopas||0)>0)       partes.push(`${fila.cortesiaCopas} cortesía`);
         if ((fila.mermaCopas||0)>0)          partes.push(`${fila.mermaCopas} merma`);
         return `<div class="ent-log-fila" onclick="seleccionarProductoVentas('${fila.insumoId}')" style="cursor:pointer">
-            <span class="ent-log-nombre">${etx(fila.nombre)}</span>
+            <span class="ent-log-nombre">${etx(insumoTitulo(fila))}</span>
             <span class="ent-log-cant" style="color:var(--accent)">${partes.join(' · ')}</span>
         </div>`;
     }).join('');
@@ -3093,7 +3092,7 @@ function _renderCancelacionesTab(cancelaciones) {
     _autoMatchCancelaciones();
     const noMatch = cancelaciones.filter(c => !c.insumoId).length;
     const insumoOpts = filasCaptura.map(f =>
-        `<option value="${f.insumoId}">${etx(f.nombre)}</option>`
+        `<option value="${f.insumoId}">${etx(insumoEtiqueta(f))}</option>`
     ).join('');
 
     const tabla = cancelaciones.length ? `<div class="tabla-wrap" style="overflow-x:auto"><table style="min-width:820px">
@@ -3820,7 +3819,7 @@ function renderStep5() {
             grpDif += difCosto;
             return `<tr>
                 <td style="min-width:140px">
-                    <div style="font-size:12px;font-weight:600">${etx(fila.nombre)}</div>
+                    <div style="font-size:12px;font-weight:600">${etx(insumoTitulo(fila))}</div>
                     <div style="font-size:10px;color:var(--text-dim)">${fila.categoria||''}</div>
                 </td>
                 <td style="text-align:center;white-space:nowrap">${eaBot} bot</td>
@@ -3890,7 +3889,7 @@ function renderStep5() {
             grpDif += difCosto;
             return `<tr>
                 <td>
-                    <div style="font-size:12px;font-weight:600">${etx(fila.nombre)}</div>
+                    <div style="font-size:12px;font-weight:600">${etx(insumoTitulo(fila))}</div>
                     <div style="font-size:10px;color:var(--text-dim)">${fila.categoria||''}</div>
                 </td>
                 <td style="text-align:center">${ea.toFixed(0)} pza</td>
@@ -4660,8 +4659,7 @@ function renderChipsEntrada() {
     cont.innerHTML = matches.map(f => `
         <button class="ent-chip ${_entRapidaInsumoId === f.insumoId ? 'active' : ''}"
             onclick="seleccionarProductoEntrada('${f.insumoId}')">
-            ${etx(f.nombre)}
-            ${f.categoria ? `<span style="font-size:10px;opacity:0.65;margin-left:4px">${f.categoria}</span>` : ''}
+            ${etx(insumoEtiqueta(f))}
         </button>`).join('');
 }
 
@@ -4682,8 +4680,8 @@ function renderFormEntrada() {
         <div class="ent-form-card">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
                 <div>
-                    <div style="font-weight:700;font-size:17px;color:var(--text)">${etx(fila.nombre)}</div>
-                    ${fila.categoria ? `<div style="font-size:11px;color:var(--text-dim);margin-top:2px">${fila.categoria}</div>` : ''}
+                    <div style="font-weight:700;font-size:17px;color:var(--text)">${etx(insumoTitulo(fila))}</div>
+                    ${insumoMeta(fila) ? `<div style="font-size:11px;color:var(--text-dim);margin-top:2px">${etx(insumoMeta(fila))}</div>` : ''}
                     ${totalBot > 0 ? `<div style="font-size:12px;color:var(--green);margin-top:5px;font-weight:600">Ya registrado este período: +${totalBot % 1 ? totalBot.toFixed(1) : totalBot} bot</div>` : ''}
                 </div>
                 <div style="display:flex;align-items:center;gap:8px">
@@ -4973,7 +4971,7 @@ function _ftRenderVer(ins) {
                 </div>
                 <div style="font-size:20px;font-weight:600;color:var(--text);margin-bottom:3px">${etx(ins.nombre)}</div>
                 <div style="font-size:12px;color:var(--text-muted)">
-                    ${[ins.marca, ins.variedad, ins.maduracion].filter(Boolean).join(' · ')}
+                    ${[ins.variedad || ins.maduracion, insumoContenido(ins), ins.marca].filter(Boolean).join(' · ')}
                 </div>
                 ${ins.empaque ? `<div style="font-size:11px;color:var(--text-dim);margin-top:3px">${ins.empaque}</div>` : ''}
             </div>
