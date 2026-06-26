@@ -569,6 +569,23 @@ function getEntradasBottles(insumoId) {
     return deFilas + deLog;
 }
 
+// Unidad de la ENTRADA según la presentación de compra del insumo (no siempre "bot").
+// Granel→L, Garrafa→garrafa, Pieza→pza, Botella→bot, etc. Así la entrada se lee en su presentación real.
+var _UCOMPRA = { 'Botella':'bot', 'Garrafa':'garrafa', 'Lata':'lata', 'Pieza':'pza', 'Barril':'barril', 'Caja':'caja', 'Paquete':'paq', 'Costal':'costal', 'Bolsa':'bolsa' };
+function _unidadCompra(o) {
+    if (!o) return 'bot';
+    var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(o.insumoId) : null;
+    var p   = ins && ins.presentaciones && ins.presentaciones[0];
+    var pc  = (p && (p.presentacionCompra || '')).toString();
+    if (pc === 'Granel') {
+        var um = ((p && (p.umContenido || p.umCompra)) || 'LT').toString().toUpperCase();
+        return (um === 'LT' || um === 'L') ? 'L' : um === 'ML' ? 'ml' : um === 'KG' ? 'kg' : (um === 'GR' || um === 'G') ? 'g' : 'u';
+    }
+    if (_UCOMPRA[pc]) return _UCOMPRA[pc];
+    if (pc) return pc.toLowerCase();
+    return o.tipo === 'pza' ? 'pza' : (o.tipo === 'peso' ? (o.baseUnit || 'u').toLowerCase() : 'bot');
+}
+
 function getEntradasCopas(fila) {
     const totalBot = getEntradasBottles(fila.insumoId);
     if (fila.tipo === 'pza') return totalBot;
@@ -586,7 +603,7 @@ function updEntrada(idx, ei, val) {
     const total = getTotalEntradas(filasCaptura[idx]);
     const el    = document.getElementById('ent-tot-' + idx);
     if (el) {
-        el.textContent = total > 0 ? '+' + (total % 1 ? total.toFixed(1) : total) + ' bot' : '—';
+        el.textContent = total > 0 ? '+' + (total % 1 ? total.toFixed(1) : total) + ' ' + _unidadCompra(filasCaptura[idx]) : '—';
         el.style.color = total > 0 ? 'var(--green)' : 'var(--text-dim)';
     }
     _autoGuardar();
@@ -2597,7 +2614,7 @@ function renderStep2Lista(filas) {
             </td>
             <td class="inv-td-ef" id="ent-tot-${idx}"
                 style="color:${total>0?'var(--green)':'var(--text-dim)'}">
-                ${total>0?'+'+(total%1?total.toFixed(1):total)+' bot':'—'}
+                ${total>0?'+'+(total%1?total.toFixed(1):total)+' '+_unidadCompra(fila):'—'}
             </td>
         </tr>`;
     }).join('');
@@ -2608,7 +2625,7 @@ function renderStep2Lista(filas) {
                 <th class="inv-th">Producto</th>
                 <th class="inv-th inv-th-c" style="width:90px">Existencia</th>
                 <th class="inv-th inv-th-c" style="width:80px;color:var(--text-dim)">$ Ref.</th>
-                <th class="inv-th inv-th-c inv-th-pesos">Entradas — cantidad (bot / pzas)</th>
+                <th class="inv-th inv-th-c inv-th-pesos">Entradas — cantidad (en su presentación)</th>
                 <th class="inv-th inv-th-c" style="width:90px;color:var(--green)">Total</th>
             </tr></thead>
             <tbody>${rows}</tbody>
@@ -2639,7 +2656,7 @@ function renderStep2Galeria(filas) {
                 </div>
             </div>
             <div class="inv-item-card-body">
-                <div class="inv-gal-label" style="margin-bottom:6px">Entradas (bot / pzas)</div>
+                <div class="inv-gal-label" style="margin-bottom:6px">Entradas (en su presentación)</div>
                 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px">
                     ${(fila.entradas||['','','','','']).map((e,ei)=>`
                     <div>
@@ -2655,7 +2672,7 @@ function renderStep2Galeria(filas) {
             <div class="inv-item-card-bot">
                 <span style="font-size:11px;color:var(--text-dim)">Total entradas</span>
                 <span id="ent-tot-${idx}" style="font-weight:700;font-size:15px;color:${total>0?'var(--green)':'var(--text-dim)'}">
-                    ${total>0?'+'+(total%1?total.toFixed(1):total)+' bot':'—'}
+                    ${total>0?'+'+(total%1?total.toFixed(1):total)+' '+_unidadCompra(fila):'—'}
                 </span>
             </div>
         </div>`;
@@ -4007,7 +4024,7 @@ function _step5TablasHTML() {
             const pctStr    = pctVal !== null ? (pctVal>=0?'+':'')+pctVal.toFixed(1)+'%' : '—';
             // Show existencia anterior and actual in bottles
             const eaBot     = copasBot > 0 ? (ea/copasBot).toFixed(1) : ea.toFixed(1);
-            const entBotStr = entBot > 0 ? `+${entBot % 1 ? entBot.toFixed(1) : entBot} bot` : '—';
+            const entBotStr = entBot > 0 ? `+${entBot % 1 ? entBot.toFixed(1) : entBot} ${_unidadCompra(fila)}` : '—';
             const fisicoBot = copasBot > 0 ? (fisico/copasBot).toFixed(2) : fisico.toFixed(1);
             // Diferencia in copas, with sign and unit label
             const difStr    = `${dif>=0?'+':''}${dif.toFixed(1)} cop`;
@@ -4141,19 +4158,24 @@ function _step5TablasHTML() {
         const color     = semaforo(dif, ref);
         const pctStr    = ref>0 ? ((dif/ref*100>=0?'+':'')+(dif/ref*100).toFixed(1)+'%') : '—';
         _compGrpDif += difCosto;
+        // Columnas FÍSICAS en la unidad final definida (ej. L), no en copas. Ventas se quedan en copas (así se capturan).
+        const cml = vf.copaML || 0;
+        const uF  = comp.unidad || 'lt';
+        const uLbl = uF==='lt'?'L':uF==='botella'?'bot':uF;
+        const toF = c => { if (!cml) return c; const ml = c*cml; return (uF==='lt'||uF==='kg')?ml/1000:uF==='botella'?ml/750:(uF==='ml'||uF==='g')?ml:ml/1000; };
         return `<tr>
             <td style="min-width:140px">
                 <div style="font-size:12px;font-weight:600">🧩 ${etx(comp.nombre||vf.nombre)}</div>
                 <div style="font-size:10px;color:var(--text-dim)">${members.map(m=>etx(insumoTitulo(m))).join(' + ')}</div>
             </td>
-            <td style="text-align:center;white-space:nowrap">${_nc(ea)} cop</td>
-            <td style="text-align:center;color:var(--green);white-space:nowrap">${ent>0?'+'+_nc(ent)+' cop':'—'}</td>
+            <td style="text-align:center;white-space:nowrap">${_nc(toF(ea))} ${uLbl}</td>
+            <td style="text-align:center;color:var(--green);white-space:nowrap">${ent>0?'+'+_nc(toF(ent))+' '+uLbl:'—'}</td>
             <td style="text-align:center;color:var(--text-dim)">—</td>
             <td style="text-align:center;color:var(--accent)">${ventaCopa>0?_nc(ventaCopa)+' cop':'—'}</td>
             <td style="text-align:center">${cm>0?`<div style="color:var(--red);font-size:12px;font-weight:600">${_nc(cm)} cop</div>`:'—'}</td>
             <td style="text-align:center;color:var(--text-muted)">${cancel>0?_nc(cancel)+' cop':'—'}</td>
-            <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(fisico)} cop</td>
-            <td style="text-align:center;font-weight:700;color:${color};white-space:nowrap">${dif>=0?'+':''}${_nc(dif)} cop</td>
+            <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(toF(fisico))} ${uLbl}</td>
+            <td style="text-align:center;font-weight:700;color:${color};white-space:nowrap">${dif>=0?'+':''}${_nc(toF(dif))} ${uLbl}</td>
             <td style="text-align:center;font-size:11px;color:${color}">${pctStr}</td>
             <td style="text-align:right;font-weight:600;color:${color};white-space:nowrap">${difCosto>=0?'+':''}$${difCosto.toFixed(2)}</td>
         </tr>`;
@@ -4956,7 +4978,7 @@ function renderFormEntrada() {
             </div>
             <div style="display:flex;gap:12px;align-items:flex-end;margin-top:16px;flex-wrap:wrap">
                 <div>
-                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Cantidad (bot / pzas)</div>
+                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Cantidad (${_unidadCompra({insumoId:_entRapidaInsumoId})})</div>
                     <input type="number" id="entRapidaCant" placeholder="0" min="0" step="1"
                         style="width:120px;height:52px;font-size:22px;text-align:center;border:1px solid var(--border);
                                border-radius:10px;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
@@ -5096,7 +5118,7 @@ function renderListadoEntradas() {
             <span class="ent-log-nombre">${nombre}</span>
             <span class="ent-log-badge" style="color:${color};background:${color}1a;border-color:${color}50">${tipoEntradaLabel(e.tipo)}</span>
             <span class="ent-log-fecha">${e.fecha || '—'}</span>
-            <span class="ent-log-cant">+${cant} bot</span>
+            <span class="ent-log-cant">+${cant} ${_unidadCompra(e)}</span>
             <button class="ent-log-del" title="Editar" onclick="_entEditId='${e.id}';renderListadoEntradas()">✏️</button>
             <button class="ent-log-del" title="Eliminar" onclick="eliminarEntradaPorId('${e.id}')"
                 onmouseenter="this.classList.add('hover')" onmouseleave="this.classList.remove('hover')">🗑️</button>
