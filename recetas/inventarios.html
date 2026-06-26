@@ -862,6 +862,13 @@ document.addEventListener('DOMContentLoaded', function() { _sbInitInv(); });
   </div>
 </div>
 
+<!-- ── Ficha técnica de receta (desde el menú del Paso 3) ── -->
+<div id="modalFichaReceta" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:720;align-items:flex-start;justify-content:center;padding:30px 16px;overflow:auto">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;max-width:560px;width:100%;margin:auto">
+    <div id="fichaRecetaBody"></div>
+  </div>
+</div>
+
 <!-- ── QR de entradas (por negocio) ── -->
 <div id="modalQrEntradas" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:720;align-items:center;justify-content:center;padding:24px">
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;max-width:420px;width:100%;text-align:center;padding:24px">

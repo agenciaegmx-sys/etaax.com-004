@@ -2969,8 +2969,11 @@ function renderStep3Menu() {
                     }).slice(0,3).join(', ');
                     return `<div class="step3-menu-item ${cnt>0?'has-cnt':''}">
                         <div style="flex:1;min-width:0">
-                            <div style="font-weight:600;font-size:14px;color:var(--text);
-                                white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${etx(r.nombre)}</div>
+                            <div style="display:flex;align-items:center;gap:6px;min-width:0">
+                                <div style="font-weight:600;font-size:14px;color:var(--text);
+                                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${etx(r.nombre)}</div>
+                                <button onclick="verFichaReceta('${r.id}')" title="Ficha técnica" style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:13px;padding:0;flex-shrink:0">📋</button>
+                            </div>
                             ${ingStr?`<div style="font-size:10px;color:var(--text-dim);margin-top:2px;
                                 white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ingStr}</div>`:''}
                             ${p>0?`<div style="font-size:12px;color:var(--green);font-weight:600;margin-top:2px">$${p.toFixed(0)}</div>`:''}
@@ -2988,6 +2991,47 @@ function renderStep3Menu() {
             </div>
         </div>`).join('');
     return resumenHtml + gruposHtml;
+}
+
+// Ficha técnica de una receta (igual que en escandallos): ingredientes, costo, carta, margen.
+function _frKpi(lbl, val, col) {
+    return '<div style="flex:1;min-width:88px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px">'+
+        '<div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim)">'+lbl+'</div>'+
+        '<div style="font-size:16px;font-weight:700;color:'+col+';margin-top:2px">'+val+'</div></div>';
+}
+function verFichaReceta(recetaId) {
+    var r = getRecetas().find(function(x){ return x.id === recetaId; });
+    if (!r) { alert('Receta no encontrada.'); return; }
+    var ings = r.ingredientes || [];
+    var costoTotal = ings.reduce(function(s,ing){ return s + (parseFloat(ing.costo)||0); }, 0);
+    var precio = parseFloat(r.precioEnCarta) || 0;
+    var margen = precio > 0 ? ((precio - costoTotal)/precio*100) : 0;
+    var foodCost = precio > 0 ? (costoTotal/precio*100) : 0;
+    var html = '<div style="padding:18px 20px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px">'+
+            '<div><div style="font-size:20px;font-weight:700;color:var(--text)">'+etx(r.nombre)+'</div>'+
+            '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">'+etx(r.grupo||(r.tipo==='alimentos'?'Alimentos':'Bebidas'))+'</div></div>'+
+            '<button class="btn-vista" onclick="document.getElementById(\'modalFichaReceta\').style.display=\'none\'">✕ Cerrar</button></div>'+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">'+
+            _frKpi('Precio carta', '$'+precio.toFixed(2), 'var(--green)')+
+            _frKpi('Costo', '$'+costoTotal.toFixed(2), 'var(--accent)')+
+            _frKpi('Margen', (precio>0?margen.toFixed(1)+'%':'—'), 'var(--text)')+
+            _frKpi('Food cost', (precio>0?foodCost.toFixed(1)+'%':'—'), foodCost>30?'var(--red)':'var(--green)')+
+        '</div>'+
+        '<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:6px;font-weight:600">Ingredientes ('+ings.length+')</div>'+
+        '<table style="width:100%;border-collapse:collapse;font-size:13px">'+
+            '<thead><tr style="font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px"><th style="text-align:left;padding:5px 8px">Insumo</th><th style="text-align:right">Cantidad</th><th style="text-align:right;padding-right:8px">Costo</th></tr></thead>'+
+            '<tbody>'+(ings.length?ings.map(function(ing){
+                return '<tr style="border-top:1px solid var(--border)"><td style="padding:7px 8px;color:var(--text)">'+etx(ing.nombre||'—')+'</td>'+
+                '<td style="text-align:right;color:var(--text-muted);white-space:nowrap">'+(ing.cantidad||'')+' '+etx(ing.unidad||'')+'</td>'+
+                '<td style="text-align:right;padding-right:8px;color:var(--accent)">$'+(parseFloat(ing.costo)||0).toFixed(2)+'</td></tr>';
+            }).join(''):'<tr><td colspan="3" style="text-align:center;color:var(--text-dim);padding:16px">Sin ingredientes</td></tr>')+
+            '<tr style="border-top:2px solid var(--border)"><td style="padding:8px;font-weight:700;color:var(--text)">Total costo</td><td></td><td style="text-align:right;padding-right:8px;font-weight:700;color:var(--accent)">$'+costoTotal.toFixed(2)+'</td></tr>'+
+            '</tbody></table>'+
+        (r.preparacion?'<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin:16px 0 6px;font-weight:600">Preparación</div><div style="font-size:13px;color:var(--text-muted);line-height:1.6;white-space:pre-wrap">'+etx(r.preparacion)+'</div>':'')+
+        '</div>';
+    document.getElementById('fichaRecetaBody').innerHTML = html;
+    document.getElementById('modalFichaReceta').style.display = 'flex';
 }
 
 // ── Búsqueda rápida ventas ────────────────────────────────────
@@ -3978,23 +4022,36 @@ function renderStep5() {
         </div>
     </div>`;
 
-    const searchBar5 = `<div class="wrap" style="padding:0 0 4px"><div class="step-toolbar"><div class="inv-search">
-        <input type="text" placeholder="Buscar producto en el resultado…" value="${etx(_busqStep5)}" oninput="onBusqStep5(this.value)">
-    </div></div></div>`;
+    const searchBar5 = `<div class="wrap" style="padding:0 0 4px"><div class="step-toolbar">
+        <div class="inv-search"><input type="text" placeholder="Buscar producto en el resultado…" value="${etx(_busqStep5)}" oninput="onBusqStep5(this.value)"></div>
+        <div class="vista-toggle" style="margin-left:auto">
+            <button id="s5ModoLista" class="${_step5Modo==='lista'?'active':''}" onclick="setStep5Modo('lista')">≡ Lista</button>
+            <button id="s5ModoGal" class="${_step5Modo==='galeria'?'active':''}" onclick="setStep5Modo('galeria')">⊞ Galería</button>
+        </div>
+    </div></div>`;
     return kpis + _resumenEjecutivo() + searchBar5 + `<div id="step5Tablas">${_step5TablasHTML()}</div>`;
 }
 
 var _busqStep5 = '';
+var _step5Modo = 'lista';
 function onBusqStep5(val) {
     _busqStep5 = val;
     const cont = document.getElementById('step5Tablas');
     if (cont) cont.innerHTML = _step5TablasHTML(); // solo re-renderiza las tablas → no pierde el foco
+}
+function setStep5Modo(m) {
+    _step5Modo = m;
+    const cont = document.getElementById('step5Tablas');
+    if (cont) cont.innerHTML = _step5TablasHTML();
+    const l = document.getElementById('s5ModoLista'), g = document.getElementById('s5ModoGal');
+    if (l && g) { l.classList.toggle('active', m==='lista'); g.classList.toggle('active', m==='galeria'); }
 }
 function _step5TablasHTML() {
     const q      = (_busqStep5 || '').toLowerCase();
     const mapaC5 = _compDeInsumo();
     const vcomps = _compuestosActivos().map(_virtualFilaCompuesto)
         .filter(vf => !q || (vf.nombre||'').toLowerCase().includes(q));
+    if (_step5Modo === 'galeria') return _step5GaleriaHTML(q, mapaC5, vcomps);
     // Split filas into copa-type (bebidas con botella y copa) and pza-type groups
     const gruposCopa = {};
     const gruposPza  = {};
@@ -4232,6 +4289,81 @@ function _step5TablasHTML() {
         : '';
 
     return `<div style="padding:16px 0 24px">${sinDatos}${tablaComp}${tablasCopa}${tablasPza}</div>`;
+}
+
+// Entradas de un insumo, con fecha (de la cola de entradas del inventario).
+function _entradasDeInsumo(insumoId) {
+    return ((invActual && invActual.entradasLog) || []).filter(function(e){ return e.insumoId === insumoId; })
+        .map(function(e){ return { cantidad: parseFloat(e.cantidad)||0, fecha: e.fecha||'', tipo: e.tipo||'' }; });
+}
+// Vista GALERÍA del resultado: una tarjeta de desglose por insumo.
+function _step5GaleriaHTML(q, mapaC5, vcomps) {
+    var items = vcomps.concat(filasCaptura.filter(function(f){
+        if (mapaC5[f.insumoId]) return false;
+        if (q && !(f.nombre||'').toLowerCase().includes(q)) return false;
+        return calcExistencia(f) > 0 || (parseFloat(f.existenciaAnterior)||0) > 0
+            || getEntradasBottles(f.insumoId) > 0 || _esRegistrado(f)
+            || (f.ventasCopasDirectas||0) > 0 || (f.ventasBotella||0) > 0;
+    }));
+    if (!items.length) return '<div style="text-align:center;padding:40px;color:var(--text-dim)">Sin productos con movimiento</div>';
+    return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px;padding:8px 16px 24px">'+
+        items.map(_step5DesgloseCard).join('') + '</div>';
+}
+function _step5DesgloseCard(fila) {
+    var esComp   = !!fila.esCompuesto;
+    var copasBot = (fila.contNeto>0 && fila.copaML>0) ? fila.contNeto/fila.copaML : 0;
+    var ea       = parseFloat(fila.existenciaAnterior)||0; // copas
+    var fisico   = calcExistencia(fila);                    // copas
+    var teorico  = calcExistenciaTeorica(fila);
+    var dif      = fisico - teorico;
+    var ref      = teorico>0 ? teorico : fisico;
+    var color    = semaforo(dif, ref);
+    var difCarta = dif * (fila.precioCarta||0);
+    var pct      = ref>0 ? ((dif/ref*100>=0?'+':'')+(dif/ref*100).toFixed(1)+'%') : '—';
+    var ventaCoct = esComp ? 0 : calcVentasCopasRecetas(fila.insumoId, fila.copaML);
+    var ventaDir  = parseFloat(fila.ventasCopasDirectas)||0;
+    var ventaBot  = parseFloat(fila.ventasBotella)||0;
+    var cort = parseFloat(fila.cortesiaCopas)||0, merma = parseFloat(fila.mermaCopas)||0;
+    var cancel = esComp ? 0 : getCancelacionesCopas(fila.insumoId);
+    var _n1 = function(v){ return v%1 ? (Math.round(v*10)/10).toFixed(1) : v; };
+    var eaDisp, fiDisp, uEx;
+    if (esComp) {
+        var uF = (getCompuestos().find(function(c){return c.id===fila.compId;})||{}).unidad || 'lt';
+        uEx = uF==='lt'?'L':uF==='botella'?'bot':uF;
+        var cml = fila.copaML||0;
+        var toF = function(c){ if(!cml) return c; var ml=c*cml; return (uF==='lt'||uF==='kg')?ml/1000:uF==='botella'?ml/750:(uF==='ml'||uF==='g')?ml:ml/1000; };
+        eaDisp = _n1(toF(ea)); fiDisp = _n1(toF(fisico));
+    } else {
+        uEx = fila.tipo==='pza'?'pza':(fila.tipo==='peso'?(fila.baseUnit||'u'):'bot');
+        eaDisp = copasBot>0 ? _n1(ea/copasBot) : _n1(ea);
+        fiDisp = copasBot>0 ? _n1(fisico/copasBot) : _n1(fisico);
+    }
+    var pesosAct = (fila.pesos||[]).filter(function(p){return parseFloat(p)>0;}).map(function(p){return (Math.round(parseFloat(p)*1000)/1000)+' kg';});
+    var prevFila = esComp ? null : _filaAnteriorInsumo(fila.insumoId);
+    var pesosAnt = prevFila ? (prevFila.pesos||[]).filter(function(p){return parseFloat(p)>0;}).map(function(p){return (Math.round(parseFloat(p)*1000)/1000)+' kg';}) : [];
+    var entradas = esComp ? [] : _entradasDeInsumo(fila.insumoId);
+    var entTotal = esComp ? 0 : getEntradasBottles(fila.insumoId);
+    var uEnt = esComp ? uEx : _unidadCompra(fila);
+    var fila2 = function(lbl, val, col){ return '<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;font-size:12px"><span style="color:var(--text-dim)">'+lbl+'</span><span style="color:'+(col||'var(--text)')+';font-weight:600;text-align:right">'+val+'</span></div>'; };
+    var ventasParts = [];
+    if (ventaDir>0)  ventasParts.push(_n1(ventaDir)+' copa');
+    if (ventaCoct>0) ventasParts.push('<span style="color:#9b8de8">'+_n1(ventaCoct)+' coct</span>');
+    if (ventaBot>0)  ventasParts.push(_n1(ventaBot)+' bot');
+    return '<div class="inv-item-card" style="padding:14px">'+
+        '<div style="font-weight:700;font-size:14px;color:var(--text);margin-bottom:2px">'+(esComp?'🧩 ':'')+etx(esComp?fila.nombre:insumoTitulo(fila))+'</div>'+
+        '<div style="font-size:10px;color:var(--text-dim);margin-bottom:10px">'+etx(esComp?'Compuesto':insumoMeta(fila))+'</div>'+
+        fila2('Exist. anterior', eaDisp+' '+uEx+(pesosAnt.length?' <span style="font-size:10px;color:var(--text-dim)">('+pesosAnt.join(', ')+')</span>':''))+
+        fila2('Entradas', entTotal>0?'+'+_n1(entTotal)+' '+uEnt:'—', entTotal>0?'var(--green)':'var(--text-dim)')+
+        (entradas.length?'<div style="font-size:10px;color:var(--text-dim);padding:1px 0 4px 10px;line-height:1.6">'+entradas.map(function(e){return '• '+_n1(e.cantidad)+' '+uEnt+(e.fecha?' · '+e.fecha:'')+(e.tipo?' ('+tipoEntradaLabel(e.tipo)+')':'');}).join('<br>')+'</div>':'')+
+        fila2('Ventas', ventasParts.length?ventasParts.join(' · '):'—', 'var(--accent)')+
+        fila2('Cortesía / Merma', (cort+merma)>0?_n1(cort+merma)+' cop':'—', (cort+merma)>0?'var(--red)':'var(--text-dim)')+
+        fila2('Cancelaciones', cancel>0?_n1(cancel)+' cop':'—', 'var(--text-muted)')+
+        fila2('Exist. actual', fiDisp+' '+uEx+(pesosAct.length?' <span style="font-size:10px;color:var(--text-dim)">('+pesosAct.join(', ')+')</span>':''))+
+        '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px">'+
+            fila2('Diferencia', (dif>=0?'+':'')+_n1(dif)+' cop · '+pct, color)+
+            fila2('Dif. $ (carta)', (difCarta>=0?'+':'')+'$'+difCarta.toFixed(2), color)+
+        '</div>'+
+    '</div>';
 }
 
 // ── Reporte directivo ─────────────────────────────────────────
