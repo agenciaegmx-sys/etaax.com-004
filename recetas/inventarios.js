@@ -281,18 +281,42 @@ function ingredienteML(cantidad, unidad) {
     return cantidad;
 }
 
+// Inventario cerrado que se toma como referencia para la "existencia anterior".
+// Por defecto el último cerrado; el usuario puede elegir otro (invActual.refInventarioId).
+function _getRefInv() {
+    const cerrados = _scopeSucInvs(getInventarios()).filter(x => x.cerrado && (!invActual || x.id !== invActual.id));
+    if (!cerrados.length) return null;
+    if (invActual && invActual.refInventarioId) {
+        const r = cerrados.find(x => x.id === invActual.refInventarioId);
+        if (r) return r;
+    }
+    return cerrados[cerrados.length - 1];
+}
 function getExistenciaAnterior(insumoId) {
-    const cerrados = _scopeSucInvs(getInventarios()).filter(x => x.cerrado);
-    if (!cerrados.length) return 0;
-    const ultimo = cerrados[cerrados.length - 1];
-    const fila   = (ultimo.filas || []).find(f => f.insumoId === insumoId);
+    const inv = _getRefInv();
+    if (!inv) return 0;
+    const fila = (inv.filas || []).find(f => f.insumoId === insumoId);
     if (!fila) return 0;
     return fila.existenciaFisica !== undefined ? fila.existenciaFisica : calcExistencia(fila);
+}
+// Cambiar el inventario de referencia → recalcula la existencia anterior de todas las filas.
+function onCambiarRefInv(id) {
+    if (!invActual) return;
+    invActual.refInventarioId = id || '';
+    filasCaptura.forEach(function(f){ f.existenciaAnterior = getExistenciaAnterior(f.insumoId); });
+    _setFechaUltimo();
+    if (typeof _autoGuardar === 'function') _autoGuardar();
 }
 
 // Última fila de un inventario CERRADO previo (misma sucursal, distinto del actual)
 // que contó este insumo → para copiar su existencia (desglose bodega/barra/pesos).
 function _filaAnteriorInsumo(insumoId) {
+    // Prioriza el inventario de referencia elegido; si ahí no está el insumo, busca el más reciente que sí lo tenga.
+    var ref = _getRefInv();
+    if (ref) {
+        var fr = (ref.filas || []).find(function(x){ return x && x.insumoId === insumoId; });
+        if (fr) return fr;
+    }
     var cerrados = _scopeSucInvs(getInventarios()).filter(function(x){ return x && x.cerrado && (!invActual || x.id !== invActual.id); });
     for (var i = cerrados.length - 1; i >= 0; i--) {
         var f = (cerrados[i].filas || []).find(function(x){ return x && x.insumoId === insumoId; });
@@ -1501,12 +1525,19 @@ async function _confirmarClave() {
 }
 
 function _setFechaUltimo() {
-    const el   = document.getElementById('invFechaUltimo');
-    const f    = _getUltimoInvFecha();
+    const el = document.getElementById('invRefSelect');
     if (!el) return;
-    el.textContent = f
-        ? new Date(f + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'long', year:'numeric' })
-        : 'Sin inventarios previos';
+    const cerrados = _scopeSucInvs(getInventarios())
+        .filter(x => x.cerrado && (!invActual || x.id !== invActual.id))
+        .slice().sort((a,b) => String(b.fecha||'').localeCompare(String(a.fecha||''))); // más reciente primero
+    if (!cerrados.length) { el.innerHTML = '<option value="">Sin inventarios previos</option>'; el.disabled = true; return; }
+    el.disabled = false;
+    const ref = _getRefInv();
+    const refId = ref ? ref.id : cerrados[0].id;
+    el.innerHTML = cerrados.map(inv => {
+        const fch = inv.fecha ? new Date(inv.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' }) : 's/f';
+        return `<option value="${inv.id}" ${refId === inv.id ? 'selected' : ''}>${etx(inv.nombre || 'Inventario')} · ${fch}</option>`;
+    }).join('');
 }
 
 function poblarFormulario() {
@@ -3917,11 +3948,29 @@ function renderStep5() {
         </div>
     </div>`;
 
+    const searchBar5 = `<div class="wrap" style="padding:0 0 4px"><div class="step-toolbar"><div class="inv-search">
+        <input type="text" placeholder="Buscar producto en el resultado…" value="${etx(_busqStep5)}" oninput="onBusqStep5(this.value)">
+    </div></div></div>`;
+    return kpis + _resumenEjecutivo() + searchBar5 + `<div id="step5Tablas">${_step5TablasHTML()}</div>`;
+}
+
+var _busqStep5 = '';
+function onBusqStep5(val) {
+    _busqStep5 = val;
+    const cont = document.getElementById('step5Tablas');
+    if (cont) cont.innerHTML = _step5TablasHTML(); // solo re-renderiza las tablas → no pierde el foco
+}
+function _step5TablasHTML() {
+    const q      = (_busqStep5 || '').toLowerCase();
+    const mapaC5 = _compDeInsumo();
+    const vcomps = _compuestosActivos().map(_virtualFilaCompuesto)
+        .filter(vf => !q || (vf.nombre||'').toLowerCase().includes(q));
     // Split filas into copa-type (bebidas con botella y copa) and pza-type groups
     const gruposCopa = {};
     const gruposPza  = {};
     filasCaptura.forEach(f => {
         if (mapaC5[f.insumoId]) return; // miembros de un compuesto: salen en la sección de compuestos
+        if (q && !(f.nombre||'').toLowerCase().includes(q)) return; // buscador del Paso 5
         const g = f.familia || f.categoria || 'Otros';
         if (f.tipo === 'pza') {
             if (!gruposPza[g])  gruposPza[g]  = [];
@@ -4110,7 +4159,7 @@ function renderStep5() {
         ? '<div style="text-align:center;padding:40px;color:var(--text-dim)">Sin productos capturados</div>'
         : '';
 
-    return kpis + _resumenEjecutivo() + `<div style="padding:16px 0 24px">${sinDatos}${tablaComp}${tablasCopa}${tablasPza}</div>`;
+    return `<div style="padding:16px 0 24px">${sinDatos}${tablaComp}${tablasCopa}${tablasPza}</div>`;
 }
 
 // ── Reporte directivo ─────────────────────────────────────────

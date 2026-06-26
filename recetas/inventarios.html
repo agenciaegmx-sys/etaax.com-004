@@ -174,11 +174,13 @@
                             </div>
                             <!-- Fila 2: Último inv · Fecha actual · Hora inicio -->
                             <div class="meta-item">
-                                <label>Fecha último inventario</label>
-                                <div id="invFechaUltimo"
-                                    style="height:38px;display:flex;align-items:center;padding:0 10px;
+                                <label>Inventario de referencia (existencia anterior)</label>
+                                <select id="invRefSelect" onchange="onCambiarRefInv(this.value)"
+                                    style="height:38px;width:100%;box-sizing:border-box;padding:0 10px;
                                     border:1px solid var(--border);border-radius:8px;background:var(--bg);
-                                    color:var(--text-dim);font-size:13px">—</div>
+                                    color:var(--text);font-size:13px">
+                                    <option value="">—</option>
+                                </select>
                             </div>
                             <div class="meta-item">
                                 <label>Fecha actual</label>
