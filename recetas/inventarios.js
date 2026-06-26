@@ -270,6 +270,23 @@ const COPA_STD = {
     'destilados': 44.36, 'licores': 29.57, 'vinos': 147.87,
     'espumosos':  88.72, 'cervezas': 355,  'default': 44.36
 };
+// Tamaño de copa (ml) del insumo: respeta el explícito; si no, lo deduce por
+// tipoInsumo/categoría/subcategoría. Antes solo miraba categoría → vinos con
+// categoría "Blanco/Tinto" caían al default de licor y descuadraban las copas.
+function _copaMLInsumo(ins) {
+    if (!ins) return COPA_STD.default;
+    if (ins.tamanoCopa) { var tc = parseFloat(ins.tamanoCopa)||0; if (tc > 0) return (ins.umTamanoCopa||'ML').toUpperCase()==='OZ' ? tc*OZ_ML : tc; }
+    var t = (ins.tipoInsumo||'').toLowerCase();
+    if (t === 'vino')      return COPA_STD.vinos;
+    if (t === 'licor')     return COPA_STD.licores;
+    if (t === 'destilado') return COPA_STD.destilados;
+    var hay = ((ins.categoria||'') + ' ' + (ins.subcategoria||'')).toLowerCase();
+    if (hay.indexOf('espumos')>=0 || hay.indexOf('cava')>=0 || hay.indexOf('champ')>=0 || hay.indexOf('prosecco')>=0) return COPA_STD.espumosos;
+    if (hay.indexOf('vino')>=0)     return COPA_STD.vinos;
+    if (hay.indexOf('licor')>=0)    return COPA_STD.licores;
+    if (hay.indexOf('destilad')>=0) return COPA_STD.destilados;
+    return COPA_STD.default;
+}
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const TIPOS_ICON = { primer_lev:'📋', bebidas:'🍸', alimentos:'🍽️', almacen:'📦', restaurante:'🏪', otro:'📋' };
 
@@ -297,7 +314,17 @@ function getExistenciaAnterior(insumoId) {
     if (!inv) return 0;
     const fila = (inv.filas || []).find(f => f.insumoId === insumoId);
     if (!fila) return 0;
-    return fila.existenciaFisica !== undefined ? fila.existenciaFisica : calcExistencia(fila);
+    const ea = fila.existenciaFisica !== undefined ? fila.existenciaFisica : calcExistencia(fila);
+    // Las copas dependen del tamaño de copa. Si la copa del insumo cambió desde el
+    // inventario anterior (p.ej. vinos corregidos de 44ml→148ml), re-escalar: las copas
+    // varían inversamente con el ml de copa, así no infla las botellas.
+    if (fila.tipo === 'copa') {
+        const ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(insumoId) : null;
+        const copaNew = ins ? _copaMLInsumo(ins) : 0;
+        const copaOld = parseFloat(fila.copaML) || 0;
+        if (copaNew > 0 && copaOld > 0 && Math.abs(copaNew - copaOld) > 0.01) return ea * (copaOld / copaNew);
+    }
+    return ea;
 }
 // Cambiar el inventario de referencia → recalcula la existencia anterior de todas las filas.
 function onCambiarRefInv(id) {
@@ -406,6 +433,28 @@ function calcVentasBaseRecetas(insumoId) {
         });
     });
     return total; // g / ml / pza
+}
+
+// Consumo de un insumo PZA (refresco/cerveza/lata) por las recetas/menú vendidos, EN PIEZAS.
+// Antes no se contaba (calcVentasCopasRecetas devuelve 0 si no hay copaML) → no descontaba.
+function calcVentasPzaRecetas(insumoId) {
+    const recetas  = getRecetas().filter(r => (r.tipo === 'bebidas' || r.tipo === 'alimentos') && r.status !== 'inactiva');
+    const vendidos = (invActual && invActual.cocktailsVendidos) || {};
+    const fila     = filasCaptura.find(f => f.insumoId === insumoId);
+    const contNeto = fila ? (fila.contNeto || 0) : 0; // ml por pieza
+    let total = 0;
+    recetas.forEach(r => {
+        const uds = parseFloat(vendidos[r.id]) || 0;
+        if (!uds) return;
+        (r.ingredientes || []).forEach(ing => {
+            if (ing.insumoId !== insumoId) return;
+            const cant = parseFloat(ing.cantidad) || 0;
+            const u = (ing.unidad || '').toUpperCase();
+            if (u === 'PZA' || u === 'PZ' || u === '') total += cant * uds;                 // por pieza directa
+            else { const ml = ingredienteML(cant, ing.unidad); total += (contNeto > 0 ? ml / contNeto : 0) * uds; } // ml → piezas
+        });
+    });
+    return total;
 }
 
 // ── PREBATCH: producción de batches (sub-receta→insumo) ──────────
@@ -556,7 +605,13 @@ function calcExistenciaTeorica(fila) {
     const merma       = parseFloat(fila.mermaCopas) || 0;
     const totalCopas  = ventasRec + ventasDir + cancelCopas + cortesia + merma;
     const entTotal    = getEntradasCopas(fila);
-    if (fila.tipo === 'pza') return ea + entTotal + prodAdd - (fila.ventasBotella || 0) - prodSub;
+    if (fila.tipo === 'pza') {
+        const ventaPzaRec = calcVentasPzaRecetas(fila.insumoId);     // venta por menú/recetas (piezas)
+        const ventaPzaDir = parseFloat(fila.ventasCopasDirectas) || 0; // venta directa por pieza (campo "Pzas")
+        return ea + entTotal + prodAdd
+            - (fila.ventasBotella || 0) - ventaPzaDir - ventaPzaRec
+            - cancelCopas - cortesia - merma - prodSub;
+    }
     return ea + entTotal + prodAdd - totalCopas - prodSub - (fila.ventasBotella || 0) * (fila.contNeto > 0 && fila.copaML > 0 ? fila.contNeto / fila.copaML : 0);
 }
 
@@ -1729,6 +1784,8 @@ function cargarProductosCaptura() {
             if (!existe.entradas) existe.entradas = ['','','','',''];
             // Corregir refrescos/cervezas guardados como 'copa' por error → pza (conteo por pieza).
             if (existe.tipo === 'copa' && _esRefrescoCerveza(ins)) existe.tipo = 'pza';
+            // Recalcular el tamaño de copa (vinos guardados con copa de licor descuadraban).
+            if (existe.tipo === 'copa') existe.copaML = _copaMLInsumo(ins);
             // Refrescar la "existencia anterior" desde el inventario de referencia actual:
             // si editaste el inventario anterior / primer levantamiento, se actualiza aquí.
             existe.existenciaAnterior = getExistenciaAnterior(ins.id);
@@ -1736,21 +1793,13 @@ function cargarProductosCaptura() {
         }
 
         const p      = (ins.presentaciones || [])[0];
-        const catLow  = (ins.categoria || '').toLowerCase();
         // ALIMENTOS: tipo 'peso' (conteo en unidad base g/ml/pza, descuento por recetas).
         const esFood = (ins.familia || '').toLowerCase().includes('aliment');
         // REFRESCOS/CERVEZAS → pza (revisa tipoInsumo + categoría + subcategoría).
         const esPza  = _esRefrescoCerveza(ins);
         const tipo   = esFood ? 'peso' : (esPza ? 'pza' : 'copa');
 
-        let copaML = COPA_STD.default;
-        for (const [key, val] of Object.entries(COPA_STD)) {
-            if (catLow.includes(key)) { copaML = val; break; }
-        }
-        if (ins.tamanoCopa) {
-            const tc = parseFloat(ins.tamanoCopa) || 0;
-            if (tc > 0) copaML = (ins.umTamanoCopa||'ML').toUpperCase()==='OZ' ? tc*OZ_ML : tc;
-        }
+        const copaML = _copaMLInsumo(ins);
 
         const pesoCristal = parseFloat(p?.pesoCristal) || 0;
         const _umP = (p?.umContenido || 'ML').toUpperCase();
@@ -4064,7 +4113,45 @@ function _resumenEjecutivo() {
         var cons = _consumoPeriodo(f);
         if (cons > 0.001) { usados++; vendidoCosto += cons*cc; } else { sinUsar++; if (sinUsarLista.length<60) sinUsarLista.push(f.nombre); }
     });
-    var comprasCosto = ((invActual && invActual.entradasLog) || []).reduce(function(s,e){ return s + (parseFloat(e.cantidad)||0)*(parseFloat(e.costo)||0); }, 0);
+    // Costo de COMPRA por unidad de entrada (botella/garrafa/pieza/base) según el insumo.
+    function _costoCompraInsumo(f){
+        var cc = costoCopa(f);
+        if (f.tipo === 'copa') { var cb = (f.contNeto>0 && f.copaML>0) ? f.contNeto/f.copaML : 0; return cc*cb; }
+        return cc; // pza: por pieza · peso: por unidad base
+    }
+    // Entradas del período, desglosadas por tipo (compra / bonificación / consignación).
+    var comprasU=0, comprasCosto=0, bonifU=0, bonifCosto=0, consigU=0, consigCosto=0;
+    var _filaIns = {}; filasCaptura.forEach(function(f){ if (f && f.insumoId) _filaIns[f.insumoId] = f; });
+    ((invActual && invActual.entradasLog) || []).forEach(function(e){
+        var f = _filaIns[e.insumoId]; if (!f) return;
+        var cant = parseFloat(e.cantidad)||0; if (cant <= 0) return;
+        var costo = cant * _costoCompraInsumo(f);
+        var t = (e.tipo||'compra').toLowerCase();
+        if (t === 'bonificacion')      { bonifU  += cant; bonifCosto  += costo; }
+        else if (t === 'consignacion') { consigU += cant; consigCosto += costo; }
+        else                           { comprasU += cant; comprasCosto += costo; }
+    });
+    // Entradas manuales (5 slots por fila del Paso 2) = compra.
+    filasCaptura.forEach(function(f){
+        var man = (f.entradas||[]).reduce(function(s,x){ return s+(parseFloat(x)||0); }, 0);
+        if (man > 0) { comprasU += man; comprasCosto += man * _costoCompraInsumo(f); }
+    });
+    // Capital representativo del stock MÍNIMO / MÁXIMO definidos en el catálogo (a precio proveedor),
+    // y el capital del stock ACTUAL. % relativo al máximo (como en el Excel).
+    var capStockMin=0, capStockMax=0, capActual=0;
+    filasCaptura.forEach(function(f){
+        if (!f || !f.insumoId) return;
+        var cc = costoCopa(f);
+        var copasBot = (f.tipo==='copa' && f.contNeto>0 && f.copaML>0) ? f.contNeto/f.copaML : 0;
+        var costoCompra = f.tipo==='copa' ? cc*copasBot : cc; // costo por botella/pieza/unidad de compra
+        var _ins = (typeof window._insumoResolver==='function') ? window._insumoResolver(f.insumoId) : null;
+        var _p   = _ins && _ins.presentaciones && _ins.presentaciones[0];
+        var smin = parseFloat((_p && _p.stockMin) || (_ins && _ins.stockMin) || f.stockMin) || 0;
+        var smax = parseFloat((_p && _p.stockMax) || (_ins && _ins.stockMax) || f.stockMax) || 0;
+        capStockMin += smin * costoCompra;
+        capStockMax += smax * costoCompra;
+        capActual   += calcExistencia(f) * cc;
+    });
     // Vendidos por categoría (a precio carta)
     var porCat = {}, recetas = getRecetas().filter(function(r){ return r.tipo==='alimentos'||r.tipo==='bebidas'; });
     var vendidos = (invActual && invActual.cocktailsVendidos) || {};
@@ -4075,17 +4162,34 @@ function _resumenEjecutivo() {
     function card(lbl, val, col, sub){ return '<div class="stat-card"><div class="stat-label">'+lbl+'</div><div class="stat-val" style="color:'+col+';font-size:18px">'+val+'</div>'+(sub?'<div style="font-size:10px;color:var(--text-dim);margin-top:2px">'+sub+'</div>':'')+'</div>'; }
     var M = function(n){ return '$'+(Math.round((n||0))).toLocaleString('es-MX'); };
 
-    var bloqueKpis = '<div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:10px">'+
-        card('Faltante a costo', M(faltCosto), 'var(--red)', faltU+' insumos · '+M(faltCarta)+' a carta')+
-        card('Sobrante a costo', M(sobrCosto), 'var(--green)', sobrU+' insumos · '+M(sobrCarta)+' a carta')+
-        card('Merma del periodo', M(mermaCosto), 'var(--accent)', mermados.length+' productos')+
-        card('Insumos sin usar', String(sinUsar), sinUsar>0?'var(--accent)':'var(--green)', usados+' usados en el periodo')+
-        '</div>'+
-        '<div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:14px">'+
+    var _pct = function(n,d){ return d>0 ? Math.round(n/d*100) : 0; };
+    var bloqueKpis =
+        ((capStockMin>0 || capStockMax>0) ? '<div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">'+
+            card('Stock mínimo en capital', M(capStockMin), 'var(--accent)', _pct(capStockMin,capStockMax)+'% del máximo · precio proveedor')+
+            card('Stock máximo en capital', M(capStockMax), 'var(--text)', 'meta de stock · precio proveedor')+
+            card('Stock actual en capital', M(capActual), (capActual<capStockMin?'var(--red)':'var(--green)'), _pct(capActual,capStockMax)+'% del máximo · precio proveedor')+
+        '</div>' : '')+
+        (function(){
+            // Diferencia NETA (sobrante − faltante): una sola cifra general.
+            var netCosto = sobrCosto - faltCosto, netCarta = sobrCarta - faltCarta, esSobr = netCosto >= 0;
+            return '<div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">'+
+                card(esSobr ? 'Sobrante a costo' : 'Faltante a costo',
+                    (esSobr?'+':'−')+M(Math.abs(netCosto)),
+                    esSobr ? 'var(--green)' : 'var(--red)',
+                    (faltU+sobrU)+' insumos con diferencia · '+(esSobr?'+':'−')+M(Math.abs(netCarta))+' a carta')+
+                card('Merma del periodo', M(mermaCosto), 'var(--accent)', mermados.length+' productos')+
+                card('Insumos sin usar', String(sinUsar), sinUsar>0?'var(--accent)':'var(--green)', usados+' usados en el periodo')+
+            '</div>';
+        })()+
+        '<div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">'+
         card('Vendido a precio proveedor', M(vendidoCosto), 'var(--text)', 'costo de lo que salió')+
-        card('Compras del periodo', M(comprasCosto), 'var(--text)', 'entradas registradas')+
+        card('Compras del periodo', M(comprasCosto), 'var(--text)', comprasU>0 ? (comprasU%1?comprasU.toFixed(1):comprasU)+' unid. compradas' : 'sin compras registradas')+
         card('Vendido vs Compras', (vendidoCosto-comprasCosto>=0?'+':'−')+M(Math.abs(vendidoCosto-comprasCosto)), (vendidoCosto-comprasCosto>=0?'var(--green)':'var(--red)'), vendidoCosto>=comprasCosto?'compraste menos de lo que vendiste':'compraste más de lo que vendiste')+
-        '</div>';
+        '</div>'+
+        ((bonifU>0 || consigU>0) ? '<div class="stats-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:14px">'+
+            card('🎁 Bonificación', (bonifU%1?bonifU.toFixed(1):bonifU)+' unid.', 'var(--green)', 'valor '+M(bonifCosto)+' (sin costo)')+
+            card('📦 Consignación', (consigU%1?consigU.toFixed(1):consigU)+' unid.', '#7c7cff', 'valor '+M(consigCosto))+
+        '</div>' : '');
 
     var tablaCat = cats.length ? ('<div class="card" style="max-width:none;margin:0 16px 12px"><div class="card-body" style="padding:0"><div style="padding:12px 16px;font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:1px;color:var(--accent)">🍽️ Vendidos por categoría — '+M(totVendCarta)+' a carta</div><div class="tabla-wrap"><table style="font-size:12px"><thead><tr><th style="text-align:left">Categoría</th><th style="text-align:right">Unidades</th><th style="text-align:right">$ a carta</th><th style="text-align:right">%</th></tr></thead><tbody>'+
         cats.map(function(c){ var p=totVendCarta>0?(porCat[c].carta/totVendCarta*100):0; return '<tr><td style="font-weight:600">'+etx(c)+'</td><td style="text-align:right">'+porCat[c].u+'</td><td style="text-align:right;color:var(--green);font-weight:600">'+M(porCat[c].carta)+'</td><td style="text-align:right;color:var(--text-dim)">'+p.toFixed(0)+'%</td></tr>'; }).join('')+
@@ -4249,8 +4353,8 @@ function _step5TablasHTML() {
             grpDif += difCosto;
             return `<tr>
                 <td style="min-width:140px">
-                    <div style="font-size:12px;font-weight:600">${etx(insumoTitulo(fila))}</div>
-                    <div style="font-size:10px;color:var(--text-dim)">${fila.categoria||''}</div>
+                    <div style="font-size:14px;font-weight:600">${etx(insumoTitulo(fila))}</div>
+                    <div style="font-size:11.5px;color:var(--text-dim)">${fila.categoria||''}</div>
                 </td>
                 <td style="text-align:center;white-space:nowrap">${eaBot} bot</td>
                 <td style="text-align:center;color:var(--green);white-space:nowrap">${entBotStr}</td>
@@ -4276,7 +4380,7 @@ function _step5TablasHTML() {
                 <span class="pill ${grpDif>=0?'pill-green':'pill-red'}" style="font-size:11px">
                     ${grpDif>=0?'+':''}$${grpDif.toFixed(2)}</span>
             </div>
-            <div class="card-body" style="padding:0"><div class="tabla-wrap" style="overflow-x:auto"><table style="min-width:900px">
+            <div class="card-body" style="padding:0"><div class="tabla-wrap" style="overflow-x:auto"><table style="min-width:900px;font-size:13.5px">
                 <thead>
                     <tr>
                         <th rowspan="2" style="text-align:left;vertical-align:bottom">Producto</th>
@@ -4307,7 +4411,8 @@ function _step5TablasHTML() {
         const rows = items.map(fila => {
             const ea        = parseFloat(fila.existenciaAnterior) || 0;
             const entTotal  = getEntradasCopas(fila);
-            const ventas    = (fila.ventasBotella || 0);
+            // Venta total en piezas: directa (botella + pza) + por menú/recetas.
+            const ventas    = (fila.ventasBotella || 0) + (parseFloat(fila.ventasCopasDirectas)||0) + calcVentasPzaRecetas(fila.insumoId);
             const cancelPza = getCancelacionesCopas(fila.insumoId);
             const teorico   = calcExistenciaTeorica(fila);
             const fisico    = calcExistencia(fila);
@@ -4321,12 +4426,12 @@ function _step5TablasHTML() {
             grpDif += difCosto;
             return `<tr>
                 <td>
-                    <div style="font-size:12px;font-weight:600">${etx(insumoTitulo(fila))}</div>
-                    <div style="font-size:10px;color:var(--text-dim)">${fila.categoria||''}</div>
+                    <div style="font-size:14px;font-weight:600">${etx(insumoTitulo(fila))}</div>
+                    <div style="font-size:11.5px;color:var(--text-dim)">${fila.categoria||''}</div>
                 </td>
                 <td style="text-align:center">${ea.toFixed(0)} pza</td>
                 <td style="text-align:center;color:var(--green)">${entTotal>0?'+'+entTotal.toFixed(0)+' pza':'—'}</td>
-                <td style="text-align:center;color:var(--accent)">${ventas>0?ventas+' pza':'—'}</td>
+                <td style="text-align:center;color:var(--accent)">${ventas>0?(ventas%1?ventas.toFixed(1):ventas)+' pza':'—'}</td>
                 <td style="text-align:center;color:var(--text-muted)">${cancelPza>0?cancelPza.toFixed(0)+' pza':'—'}</td>
                 <td style="text-align:center">${teorico.toFixed(0)} pza</td>
                 <td style="text-align:center;font-weight:600">${fisico.toFixed(0)} pza</td>
@@ -4341,7 +4446,7 @@ function _step5TablasHTML() {
                 <span class="pill ${grpDif>=0?'pill-green':'pill-red'}" style="font-size:11px">
                     ${grpDif>=0?'+':''}$${grpDif.toFixed(2)}</span>
             </div>
-            <div class="card-body" style="padding:0"><div class="tabla-wrap"><table>
+            <div class="card-body" style="padding:0"><div class="tabla-wrap"><table style="font-size:13.5px">
                 <thead><tr>
                     <th>Producto</th>
                     <th style="text-align:center;width:70px">Exist. ant.</th>
@@ -4386,7 +4491,7 @@ function _step5TablasHTML() {
         const toF = c => { if (!cml) return c; const ml = c*cml; return (uF==='lt'||uF==='kg')?ml/1000:uF==='botella'?ml/750:(uF==='ml'||uF==='g')?ml:ml/1000; };
         return `<tr>
             <td style="min-width:140px">
-                <div style="font-size:12px;font-weight:600">🧩 ${etx(comp.nombre||vf.nombre)}</div>
+                <div style="font-size:14px;font-weight:600">🧩 ${etx(comp.nombre||vf.nombre)}</div>
                 <div style="font-size:10px;color:var(--text-dim)">${members.map(m=>etx(insumoTitulo(m))).join(' + ')}</div>
             </td>
             <td style="text-align:center;white-space:nowrap">${_nc(toF(ea))} ${uLbl}</td>
@@ -4407,7 +4512,7 @@ function _step5TablasHTML() {
             <h2>🧩 Productos compuestos</h2>
             <span class="pill ${_compGrpDif>=0?'pill-green':'pill-red'}" style="font-size:11px">${_compGrpDif>=0?'+':''}$${_compGrpDif.toFixed(2)}</span>
         </div>
-        <div class="card-body" style="padding:0"><div class="tabla-wrap" style="overflow-x:auto"><table style="min-width:900px">
+        <div class="card-body" style="padding:0"><div class="tabla-wrap" style="overflow-x:auto"><table style="min-width:900px;font-size:13.5px">
             <thead>
                 <tr>
                     <th rowspan="2" style="text-align:left;vertical-align:bottom">Producto</th>
