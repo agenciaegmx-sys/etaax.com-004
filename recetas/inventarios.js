@@ -720,10 +720,11 @@ function renderStats() {
     document.getElementById('statUltimo').textContent = ultimo
         ? new Date(ultimo.fecha+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short'}) : '—';
     if (ultimo) {
-        document.getElementById('statCapital').textContent = '$'+(ultimo.capitalCosto||0).toFixed(0);
+        try { if ((ultimo.filas||[]).length) _calcCapitalesInv(ultimo); } catch(e){}
+        document.getElementById('statCapital').textContent = '$'+_money2(ultimo.capitalCosto);
         const dif = ultimo.diferenciaCosto || 0;
         const el  = document.getElementById('statDif');
-        el.textContent = (dif>=0?'+':'')+'$'+Math.abs(dif).toFixed(0);
+        el.textContent = (dif>=0?'+':'')+'$'+_money2(Math.abs(dif));
         el.style.color = dif >= 0 ? 'var(--green)' : 'var(--red)';
     } else {
         document.getElementById('statCapital').textContent = '$0';
@@ -1346,11 +1347,15 @@ function renderHistorial() {
             <div class="empty-desc">Crea tu primer inventario</div>
         </div>`; return;
     }
+    // Recalcular capital en vivo (refleja ediciones de costos/insumos en inventarios previos).
+    lista.forEach(function(inv){ if (inv && (inv.filas||[]).length) { try { _calcCapitalesInv(inv); } catch(e){} } });
     cont.innerHTML = modoListaHist === 'galeria'
         ? `<div class="hist-galeria">${lista.map(renderHistCard).join('')}</div>`
         : renderHistTabla(lista);
 }
 
+// Formato de dinero con separador de miles y 2 decimales: 2400 → "2,400.00".
+function _money2(v){ return (parseFloat(v)||0).toLocaleString('es-MX', { minimumFractionDigits:2, maximumFractionDigits:2 }); }
 // Calcular capital a costo / a carta de un inventario guardado (sus filas).
 function _calcCapitalesInv(inv) {
     var capCosto = 0, capCarta = 0;
@@ -1399,9 +1404,9 @@ function renderHistTabla(lista) {
                     <td style="font-weight:500">${tipoIcon(inv.tipoInv)} ${etx(inv.nombre||'Sin nombre')}</td>
                     <td style="color:var(--text-dim);font-size:11px">${inv.area||'—'}</td>
                     <td style="color:var(--text-muted)">${(inv.filas||[]).length}</td>
-                    <td style="color:var(--accent);font-weight:500">$${(inv.capitalCosto||0).toFixed(0)}</td>
-                    <td style="color:var(--green);font-weight:500">$${(inv.capitalCarta||0).toFixed(0)}</td>
-                    <td style="color:${dif>=0?'var(--green)':'var(--red)'};font-weight:500">${dif>=0?'+':''}$${dif.toFixed(0)}</td>
+                    <td style="color:var(--accent);font-weight:500">$${_money2(inv.capitalCosto)}</td>
+                    <td style="color:var(--green);font-weight:500">$${_money2(inv.capitalCarta)}</td>
+                    <td style="color:${dif>=0?'var(--green)':'var(--red)'};font-weight:500">${dif>=0?'+':''}$${_money2(dif)}</td>
                     <td><span class="pill ${inv.cerrado?'pill-green':'pill-amber'}">${inv.cerrado?'Cerrado':'Abierto'}</span></td>
                     <td style="text-align:right;white-space:nowrap">
                         <button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px"
@@ -1438,10 +1443,10 @@ function renderHistCard(inv) {
             ${inv.negocio?'<br>'+inv.negocio:''}
         </div>
         <div style="border-top:1px solid var(--border);padding-top:10px">
-            <div class="hist-card-stat"><span>Capital costo</span><span style="color:var(--accent);font-weight:500">$${(inv.capitalCosto||0).toFixed(0)}</span></div>
-            <div class="hist-card-stat"><span>Capital carta</span><span style="color:var(--green);font-weight:500">$${(inv.capitalCarta||0).toFixed(0)}</span></div>
+            <div class="hist-card-stat"><span>Capital costo</span><span style="color:var(--accent);font-weight:500">$${_money2(inv.capitalCosto)}</span></div>
+            <div class="hist-card-stat"><span>Capital carta</span><span style="color:var(--green);font-weight:500">$${_money2(inv.capitalCarta)}</span></div>
             <div class="hist-card-stat"><span>Diferencia</span>
-                <span style="color:${dif>=0?'var(--green)':'var(--red)'};font-weight:600">${dif>=0?'+':''}$${dif.toFixed(0)}</span></div>
+                <span style="color:${dif>=0?'var(--green)':'var(--red)'};font-weight:600">${dif>=0?'+':''}$${_money2(dif)}</span></div>
             <div class="hist-card-stat"><span>Productos</span><span>${(inv.filas||[]).length}</span></div>
         </div>
         <div class="hist-card-actions">
@@ -1724,6 +1729,9 @@ function cargarProductosCaptura() {
             if (!existe.entradas) existe.entradas = ['','','','',''];
             // Corregir refrescos/cervezas guardados como 'copa' por error → pza (conteo por pieza).
             if (existe.tipo === 'copa' && _esRefrescoCerveza(ins)) existe.tipo = 'pza';
+            // Refrescar la "existencia anterior" desde el inventario de referencia actual:
+            // si editaste el inventario anterior / primer levantamiento, se actualiza aquí.
+            existe.existenciaAnterior = getExistenciaAnterior(ins.id);
             return existe;
         }
 
