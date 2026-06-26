@@ -2993,27 +2993,50 @@ function renderStep3Menu() {
     return resumenHtml + gruposHtml;
 }
 
+// Costo de un ingrediente, calculado EN VIVO desde el costo actual del insumo
+// (no el ing.costo guardado, que suele venir en 0/viejo).
+function _costoIngrediente(ing) {
+    var fila = filasCaptura.find(function(f){ return f.insumoId === ing.insumoId; });
+    if (!fila) return parseFloat(ing.costo) || 0; // insumo fuera de la captura → respaldo
+    var cc   = costoCopa(fila); // por copa (licor) / por base g-ml (alimento) / por pza
+    var cant = parseFloat(ing.cantidad) || 0;
+    var u    = (ing.unidad || '').toString().toUpperCase();
+    if (fila.tipo === 'pza' || u === 'PZA' || u === 'PZ') return cc * cant;
+    if (fila.tipo === 'peso') return cc * ingredienteBase(cant, ing.unidad);
+    // licor: cantidad → ml, ÷ copaML = copas, × costo por copa
+    var ml = ingredienteML(cant, ing.unidad);
+    return fila.copaML > 0 ? (ml / fila.copaML) * cc : 0;
+}
 // Ficha técnica de una receta (igual que en escandallos): ingredientes, costo, carta, margen.
 function _frKpi(lbl, val, col) {
     return '<div style="flex:1;min-width:88px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px">'+
         '<div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim)">'+lbl+'</div>'+
         '<div style="font-size:16px;font-weight:700;color:'+col+';margin-top:2px">'+val+'</div></div>';
 }
-function verFichaReceta(recetaId) {
+var _frRecetaId = null;
+function verFichaReceta(recetaId, editar) {
     var r = getRecetas().find(function(x){ return x.id === recetaId; });
     if (!r) { alert('Receta no encontrada.'); return; }
+    _frRecetaId = recetaId;
+    var ed = !!editar;
     var ings = r.ingredientes || [];
-    var costoTotal = ings.reduce(function(s,ing){ return s + (parseFloat(ing.costo)||0); }, 0);
+    var costoTotal = ings.reduce(function(s,ing){ return s + _costoIngrediente(ing); }, 0); // costo EN VIVO
     var precio = parseFloat(r.precioEnCarta) || 0;
     var margen = precio > 0 ? ((precio - costoTotal)/precio*100) : 0;
     var foodCost = precio > 0 ? (costoTotal/precio*100) : 0;
+    var inpSt = 'background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 8px;font-size:13px';
     var html = '<div style="padding:18px 20px">'+
         '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px">'+
             '<div><div style="font-size:20px;font-weight:700;color:var(--text)">'+etx(r.nombre)+'</div>'+
             '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">'+etx(r.grupo||(r.tipo==='alimentos'?'Alimentos':'Bebidas'))+'</div></div>'+
-            '<button class="btn-vista" onclick="document.getElementById(\'modalFichaReceta\').style.display=\'none\'">✕ Cerrar</button></div>'+
+            '<div style="display:flex;gap:6px">'+
+                (ed ? '<button class="btn-vista" style="color:var(--green);border-color:var(--green)" onclick="guardarFichaReceta()">💾 Guardar</button>'
+                    : '<button class="btn-vista" onclick="verFichaReceta(\''+recetaId+'\',true)">✏️ Editar</button>')+
+                '<button class="btn-vista" onclick="document.getElementById(\'modalFichaReceta\').style.display=\'none\'">✕</button>'+
+            '</div></div>'+
         '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">'+
-            _frKpi('Precio carta', '$'+precio.toFixed(2), 'var(--green)')+
+            (ed ? '<div style="flex:1;min-width:90px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim)">Precio carta</div><input id="frPrecio" type="number" min="0" step="0.01" value="'+precio+'" style="'+inpSt+';width:100%;margin-top:3px;font-size:15px;font-weight:700;box-sizing:border-box"></div>'
+                : _frKpi('Precio carta', '$'+precio.toFixed(2), 'var(--green)'))+
             _frKpi('Costo', '$'+costoTotal.toFixed(2), 'var(--accent)')+
             _frKpi('Margen', (precio>0?margen.toFixed(1)+'%':'—'), 'var(--text)')+
             _frKpi('Food cost', (precio>0?foodCost.toFixed(1)+'%':'—'), foodCost>30?'var(--red)':'var(--green)')+
@@ -3021,17 +3044,43 @@ function verFichaReceta(recetaId) {
         '<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:6px;font-weight:600">Ingredientes ('+ings.length+')</div>'+
         '<table style="width:100%;border-collapse:collapse;font-size:13px">'+
             '<thead><tr style="font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px"><th style="text-align:left;padding:5px 8px">Insumo</th><th style="text-align:right">Cantidad</th><th style="text-align:right;padding-right:8px">Costo</th></tr></thead>'+
-            '<tbody>'+(ings.length?ings.map(function(ing){
+            '<tbody>'+(ings.length?ings.map(function(ing,i){
+                var costo = _costoIngrediente(ing);
+                var cantCell = ed
+                    ? '<input id="frCant-'+i+'" type="number" min="0" step="any" value="'+(ing.cantidad||'')+'" style="'+inpSt+';width:62px;text-align:right"> '+etx(ing.unidad||'')
+                    : (ing.cantidad||'')+' '+etx(ing.unidad||'');
                 return '<tr style="border-top:1px solid var(--border)"><td style="padding:7px 8px;color:var(--text)">'+etx(ing.nombre||'—')+'</td>'+
-                '<td style="text-align:right;color:var(--text-muted);white-space:nowrap">'+(ing.cantidad||'')+' '+etx(ing.unidad||'')+'</td>'+
-                '<td style="text-align:right;padding-right:8px;color:var(--accent)">$'+(parseFloat(ing.costo)||0).toFixed(2)+'</td></tr>';
+                '<td style="text-align:right;color:var(--text-muted);white-space:nowrap">'+cantCell+'</td>'+
+                '<td style="text-align:right;padding-right:8px;color:var(--accent)">$'+costo.toFixed(2)+'</td></tr>';
             }).join(''):'<tr><td colspan="3" style="text-align:center;color:var(--text-dim);padding:16px">Sin ingredientes</td></tr>')+
             '<tr style="border-top:2px solid var(--border)"><td style="padding:8px;font-weight:700;color:var(--text)">Total costo</td><td></td><td style="text-align:right;padding-right:8px;font-weight:700;color:var(--accent)">$'+costoTotal.toFixed(2)+'</td></tr>'+
             '</tbody></table>'+
-        (r.preparacion?'<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin:16px 0 6px;font-weight:600">Preparación</div><div style="font-size:13px;color:var(--text-muted);line-height:1.6;white-space:pre-wrap">'+etx(r.preparacion)+'</div>':'')+
+        '<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin:16px 0 6px;font-weight:600">Preparación</div>'+
+        (ed ? '<textarea id="frPrep" style="'+inpSt+';width:100%;min-height:70px;resize:vertical;box-sizing:border-box">'+etx(r.preparacion||'')+'</textarea>'
+            : (r.preparacion?'<div style="font-size:13px;color:var(--text-muted);line-height:1.6;white-space:pre-wrap">'+etx(r.preparacion)+'</div>':'<div style="font-size:12px;color:var(--text-dim)">—</div>'))+
         '</div>';
     document.getElementById('fichaRecetaBody').innerHTML = html;
     document.getElementById('modalFichaReceta').style.display = 'flex';
+}
+// Guarda la edición de la receta en la tabla `recetas` → se actualiza en todos lados.
+function guardarFichaReceta() {
+    var r = getRecetas().find(function(x){ return x.id === _frRecetaId; });
+    if (!r) return;
+    var pEl = document.getElementById('frPrecio'); if (pEl) r.precioEnCarta = parseFloat(pEl.value) || 0;
+    var prep = document.getElementById('frPrep');  if (prep) r.preparacion = prep.value;
+    (r.ingredientes || []).forEach(function(ing, i){
+        var c = document.getElementById('frCant-' + i);
+        if (c) ing.cantidad = parseFloat(c.value) || 0;
+        ing.costo = Math.round(_costoIngrediente(ing) * 100) / 100; // recalcular y guardar el costo
+    });
+    r.costo = (r.ingredientes || []).reduce(function(s, ing){ return s + (parseFloat(ing.costo) || 0); }, 0);
+    r.updatedAt = new Date().toISOString();
+    try {
+        var negId = getNegocioActivo();
+        if (typeof sbUpsert === 'function' && negId) sbUpsert('recetas', r, negId); // nube → todos los módulos
+    } catch(e) { console.warn('[guardarFichaReceta]', e); }
+    if (typeof renderStepContent === 'function') renderStepContent(); // refresca el menú/ventas
+    verFichaReceta(_frRecetaId, false);
 }
 
 // ── Búsqueda rápida ventas ────────────────────────────────────
