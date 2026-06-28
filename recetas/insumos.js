@@ -1833,6 +1833,12 @@
        document.getElementById('modalTitulo').textContent = nombre ? nombre : `Insumo · ${cfg.icon} ${cfg.label}`;
        const iconEl = document.getElementById('iconTipoActual');
        if (iconEl) iconEl.textContent = cfg.icon;
+       // Al CONVERTIR, la categoría y la familia siguen al nuevo tipo (Destilados→Licores, etc.).
+       // Antes quedaban vacías/viejas y el insumo no se agrupaba bien en los reportes.
+       const elCatConv = document.getElementById('ins-categoria');
+       if (elCatConv && cfg.categoria) elCatConv.value = cfg.categoria;
+       const elFamConv = document.getElementById('ins-familia');
+       if (elFamConv && cfg.familia) elFamConv.value = cfg.familia;
        ajustarCamposPorTipo(tipo);
        renderPresentaciones();
        document.getElementById('convertirTipoPop').style.display = 'none';

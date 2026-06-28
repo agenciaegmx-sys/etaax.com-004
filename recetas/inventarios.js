@@ -290,6 +290,30 @@ function _copaMLInsumo(ins) {
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const TIPOS_ICON = { primer_lev:'📋', bebidas:'🍸', alimentos:'🍽️', almacen:'📦', restaurante:'🏪', otro:'📋' };
 
+// Grupo grande de categoría para los reportes (legibilidad): Destilados, Licores, Vinos,
+// Cervezas, Refrescos/Sodas, Alimentos, Otros. Usa tipoInsumo y, si falta (p.ej. insumos
+// convertidos sin categoría), cae a heurística por subcategoría/categoría.
+function _grupoCategoria(f) {
+    if (!f) return 'Otros';
+    var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(f.insumoId) : null;
+    var t = ((ins && ins.tipoInsumo) || f.tipoInsumo || '').toLowerCase();
+    if (t === 'destilado') return 'Destilados';
+    if (t === 'licor')     return 'Licores';
+    if (t === 'vino')      return 'Vinos';
+    if (t === 'cerveza' || t === 'cerveza_barril') return 'Cervezas';
+    if (t === 'refresco')  return 'Refrescos / Sodas';
+    var fam = ((ins && ins.familia) || f.familia || '').toLowerCase();
+    if (fam.indexOf('aliment') >= 0 || f.tipo === 'peso') return 'Alimentos';
+    var hay = (((ins && ins.subcategoria) || f.subcategoria || '') + ' ' + ((ins && ins.categoria) || f.categoria || '')).toLowerCase();
+    if (/espumos|cava|champ|prosecco/.test(hay)) return 'Vinos';
+    if (/vino|tinto|blanco|ros[eé]|cabernet|merlot|syrah|garnacha|grigio/.test(hay)) return 'Vinos';
+    if (/cerveza|lager|ale|stout|pilsner/.test(hay)) return 'Cervezas';
+    if (/refresco|soda|agua|jugo|t[oó]nica|sifon/.test(hay)) return 'Refrescos / Sodas';
+    if (/licor|crema de|amaretto|triple sec|vermouth|aperol|campari|baileys/.test(hay)) return 'Licores';
+    if (/destilad|tequila|mezcal|whisk|ron|ginebra|gin|vodka|brandy|cognac|coñac/.test(hay)) return 'Destilados';
+    return f.subcategoria || f.categoria || 'Otros';
+}
+
 // ── Helpers matemáticos ───────────────────────────────────────
 function ingredienteML(cantidad, unidad) {
     const u = (unidad || 'ML').toUpperCase();
@@ -1137,6 +1161,23 @@ function _compuestosKey() {
 function getCompuestos() { try { return JSON.parse(localStorage.getItem(_compuestosKey()) || '[]') || []; } catch(e) { return []; } }
 function setCompuestos(arr) { try { localStorage.setItem(_compuestosKey(), JSON.stringify(arr)); } catch(e) {} }
 
+// ── Insumos "de bateo": alta varianza es normal (se sirve a ojo / barra libre).
+// Se separan en su propio grupo arriba del resultado y NO cuentan como crítico/riesgo.
+const GRUPO_BATEO = '🏏 Insumos de bateo';
+function _bateoKey() {
+    var neg = getNegocioActivo() || '';
+    var suc = localStorage.getItem('etaax_sucursal_activa') || 'matriz';
+    return 'etaax_' + neg + '_inv_bateo_' + suc;
+}
+function getBateo() { try { return JSON.parse(localStorage.getItem(_bateoKey()) || '[]') || []; } catch(e) { return []; } }
+function esBateo(insumoId) { return getBateo().indexOf(insumoId) >= 0; }
+function toggleBateo(insumoId) {
+    var arr = getBateo(), i = arr.indexOf(insumoId);
+    if (i >= 0) arr.splice(i, 1); else arr.push(insumoId);
+    try { localStorage.setItem(_bateoKey(), JSON.stringify(arr)); } catch(e) {}
+    if (typeof renderStep5 === 'function') renderStep5();
+}
+
 // ── Compuestos en VENTAS (Paso 3) y RESULTADO ──────────────────────────────
 // El compuesto REEMPLAZA a sus presentaciones miembro: se vende en copas contra
 // el compuesto (un solo ítem) y el resultado sale en una sola línea.
@@ -1786,6 +1827,8 @@ function cargarProductosCaptura() {
             if (existe.tipo === 'copa' && _esRefrescoCerveza(ins)) existe.tipo = 'pza';
             // Recalcular el tamaño de copa (vinos guardados con copa de licor descuadraban).
             if (existe.tipo === 'copa') existe.copaML = _copaMLInsumo(ins);
+            // Asegurar subcategoría/categoría en filas viejas (para agrupar bien en el resultado).
+            if (!existe.subcategoria && ins.subcategoria) existe.subcategoria = ins.subcategoria;
             // Refrescar la "existencia anterior" desde el inventario de referencia actual:
             // si editaste el inventario anterior / primer levantamiento, se actualiza aquí.
             existe.existenciaAnterior = getExistenciaAnterior(ins.id);
@@ -4121,16 +4164,19 @@ function _resumenEjecutivo() {
     }
     // Entradas del período, desglosadas por tipo (compra / bonificación / consignación).
     var comprasU=0, comprasCosto=0, bonifU=0, bonifCosto=0, consigU=0, consigCosto=0;
+    var bonifItems={}, consigItems={};
     var _filaIns = {}; filasCaptura.forEach(function(f){ if (f && f.insumoId) _filaIns[f.insumoId] = f; });
     ((invActual && invActual.entradasLog) || []).forEach(function(e){
         var f = _filaIns[e.insumoId]; if (!f) return;
         var cant = parseFloat(e.cantidad)||0; if (cant <= 0) return;
         var costo = cant * _costoCompraInsumo(f);
         var t = (e.tipo||'compra').toLowerCase();
-        if (t === 'bonificacion')      { bonifU  += cant; bonifCosto  += costo; }
-        else if (t === 'consignacion') { consigU += cant; consigCosto += costo; }
+        var nm = (f.nombre)||e.nombre||'';
+        if (t === 'bonificacion')      { bonifU  += cant; bonifCosto  += costo; if(nm) bonifItems[nm]=(bonifItems[nm]||0)+cant; }
+        else if (t === 'consignacion') { consigU += cant; consigCosto += costo; if(nm) consigItems[nm]=(consigItems[nm]||0)+cant; }
         else                           { comprasU += cant; comprasCosto += costo; }
     });
+    var _listaItems = function(obj){ return Object.keys(obj).map(function(n){ return etx(n)+' ('+(obj[n]%1?obj[n].toFixed(1):obj[n])+')'; }).join(' · '); };
     // Entradas manuales (5 slots por fila del Paso 2) = compra.
     filasCaptura.forEach(function(f){
         var man = (f.entradas||[]).reduce(function(s,x){ return s+(parseFloat(x)||0); }, 0);
@@ -4187,8 +4233,8 @@ function _resumenEjecutivo() {
         card('Vendido vs Compras', (vendidoCosto-comprasCosto>=0?'+':'−')+M(Math.abs(vendidoCosto-comprasCosto)), (vendidoCosto-comprasCosto>=0?'var(--green)':'var(--red)'), vendidoCosto>=comprasCosto?'compraste menos de lo que vendiste':'compraste más de lo que vendiste')+
         '</div>'+
         ((bonifU>0 || consigU>0) ? '<div class="stats-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:14px">'+
-            card('🎁 Bonificación', (bonifU%1?bonifU.toFixed(1):bonifU)+' unid.', 'var(--green)', 'valor '+M(bonifCosto)+' (sin costo)')+
-            card('📦 Consignación', (consigU%1?consigU.toFixed(1):consigU)+' unid.', '#7c7cff', 'valor '+M(consigCosto))+
+            card('🎁 Bonificación', (bonifU%1?bonifU.toFixed(1):bonifU)+' unid.', 'var(--green)', 'valor '+M(bonifCosto)+' (sin costo)'+(bonifU>0?'<br><span style="color:var(--text)"><b>Productos:</b> '+_listaItems(bonifItems)+'</span>':''))+
+            card('📦 Consignación', (consigU%1?consigU.toFixed(1):consigU)+' unid.', '#7c7cff', 'valor '+M(consigCosto)+(consigU>0?'<br><span style="color:var(--text)"><b>Productos:</b> '+_listaItems(consigItems)+'</span>':''))+
         '</div>' : '');
 
     var tablaCat = cats.length ? ('<div class="card" style="max-width:none;margin:0 16px 12px"><div class="card-body" style="padding:0"><div style="padding:12px 16px;font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:1px;color:var(--accent)">🍽️ Vendidos por categoría — '+M(totVendCarta)+' a carta</div><div class="tabla-wrap"><table style="font-size:12px"><thead><tr><th style="text-align:left">Categoría</th><th style="text-align:right">Unidades</th><th style="text-align:right">$ a carta</th><th style="text-align:right">%</th></tr></thead><tbody>'+
@@ -4239,17 +4285,15 @@ function renderStep5() {
 
     const _M2 = v => (v||0).toLocaleString('es-MX', { minimumFractionDigits:2, maximumFractionDigits:2 }); // $1,832,994.00
     const kpis = `<div class="wrap" style="padding-bottom:0">
-        <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px">
+            <button class="btn-vista" style="color:#3dbe7a;border-color:#3dbe7a"
+                onclick="verReporteDirectivo(true)">🔐 Reporte gerencial</button>
             <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)"
                 onclick="verReporteDirectivo()">📄 Reporte directivo</button>
         </div>
-        <div class="stats-grid" style="grid-template-columns:repeat(6,1fr)">
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
             <div class="stat-card"><div class="stat-label">Capital a costo</div><div class="stat-val">$${_M2(capitalCosto)}</div></div>
             <div class="stat-card"><div class="stat-label">Capital a carta</div><div class="stat-val green">$${_M2(capitalCarta)}</div></div>
-            <div class="stat-card"><div class="stat-label">Diferencia total</div>
-                <div class="stat-val" style="color:${colorDif}">${difCostoTotal>=0?'+':''}$${_M2(difCostoTotal)}</div></div>
-            <div class="stat-card"><div class="stat-label">Con alerta >25%</div>
-                <div class="stat-val" style="color:${conAlerta>0?'var(--red)':'var(--green)'}">${conAlerta}</div></div>
             <div class="stat-card"><div class="stat-label">Cancelaciones POS</div>
                 <div class="stat-val" style="color:${numCancel>0?'var(--accent)':'var(--text)'}">${numCancel}</div></div>
             <div class="stat-card"><div class="stat-label">Total descuentos</div>
@@ -4309,7 +4353,7 @@ function _step5TablasHTML() {
         if (mapaC5[f.insumoId]) return; // miembros de un compuesto: salen en la sección de compuestos
         if (q && !(f.nombre||'').toLowerCase().includes(q)) return; // buscador del Paso 5
         if (_subcatStep5 && (f.subcategoria||f.categoria) !== _subcatStep5) return; // filtro de categoría
-        const g = f.familia || f.categoria || 'Otros';
+        const g = esBateo(f.insumoId) ? GRUPO_BATEO : _grupoCategoria(f); // bateo → su propio grupo; resto por grupo grande
         if (f.tipo === 'pza') {
             if (!gruposPza[g])  gruposPza[g]  = [];
             gruposPza[g].push(f);
@@ -4320,7 +4364,8 @@ function _step5TablasHTML() {
     });
 
     // ── Copa block: columnas separadas para venta bot, venta copa, cortesía/merma, cancelac. ──
-    const tablasCopa = Object.entries(gruposCopa).map(([grp, items]) => {
+    const _ordGrupo = (a,b) => { const A=a[0]===GRUPO_BATEO, B=b[0]===GRUPO_BATEO; return A===B ? String(a[0]).localeCompare(String(b[0])) : (A?-1:1); }; // bateo primero
+    const tablasCopa = Object.entries(gruposCopa).sort(_ordGrupo).map(([grp, items]) => {
         let grpDif = 0;
         const rows = items.map(fila => {
             const ea        = parseFloat(fila.existenciaAnterior) || 0;
@@ -4341,7 +4386,7 @@ function _step5TablasHTML() {
             const cc        = costoCopa(fila);
             const difCosto  = dif * (fila.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)
             const ref       = teorico > 0 ? teorico : fisico;
-            const color     = semaforo(dif, ref);
+            const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
             const pctVal    = ref > 0 ? (dif/ref*100) : null;
             const pctStr    = pctVal !== null ? (pctVal>=0?'+':'')+pctVal.toFixed(1)+'%' : '—';
             // Show existencia anterior and actual in bottles
@@ -4355,6 +4400,7 @@ function _step5TablasHTML() {
                 <td style="min-width:140px">
                     <div style="font-size:14px;font-weight:600">${etx(insumoTitulo(fila))}</div>
                     <div style="font-size:11.5px;color:var(--text-dim)">${fila.categoria||''}</div>
+                    <button onclick="event.stopPropagation();toggleBateo('${fila.insumoId}')" style="margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid ${esBateo(fila.insumoId)?'#3dbe7a':'#888'};background:${esBateo(fila.insumoId)?'#3dbe7a':'transparent'};color:${esBateo(fila.insumoId)?'#fff':'#999'}">🏏 ${esBateo(fila.insumoId)?'De bateo ✓':'Marcar bateo'}</button>
                 </td>
                 <td style="text-align:center;white-space:nowrap">${eaBot} bot</td>
                 <td style="text-align:center;color:var(--green);white-space:nowrap">${entBotStr}</td>
@@ -4406,7 +4452,7 @@ function _step5TablasHTML() {
     }).join('');
 
     // ── Pza block: layout original (una sola columna ventas) ──
-    const tablasPza = Object.entries(gruposPza).map(([grp, items]) => {
+    const tablasPza = Object.entries(gruposPza).sort(_ordGrupo).map(([grp, items]) => {
         let grpDif = 0;
         const rows = items.map(fila => {
             const ea        = parseFloat(fila.existenciaAnterior) || 0;
@@ -4420,7 +4466,7 @@ function _step5TablasHTML() {
             const cc        = costoCopa(fila);
             const difCosto  = dif * (fila.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)
             const ref       = teorico > 0 ? teorico : fisico;
-            const color     = semaforo(dif, ref);
+            const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
             const pctVal    = ref > 0 ? (dif/ref*100) : null;
             const pctStr    = pctVal !== null ? (pctVal>=0?'+':'')+pctVal.toFixed(1)+'%' : '—';
             grpDif += difCosto;
@@ -4428,6 +4474,7 @@ function _step5TablasHTML() {
                 <td>
                     <div style="font-size:14px;font-weight:600">${etx(insumoTitulo(fila))}</div>
                     <div style="font-size:11.5px;color:var(--text-dim)">${fila.categoria||''}</div>
+                    <button onclick="event.stopPropagation();toggleBateo('${fila.insumoId}')" style="margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid ${esBateo(fila.insumoId)?'#3dbe7a':'#888'};background:${esBateo(fila.insumoId)?'#3dbe7a':'transparent'};color:${esBateo(fila.insumoId)?'#fff':'#999'}">🏏 ${esBateo(fila.insumoId)?'De bateo ✓':'Marcar bateo'}</button>
                 </td>
                 <td style="text-align:center">${ea.toFixed(0)} pza</td>
                 <td style="text-align:center;color:var(--green)">${entTotal>0?'+'+entTotal.toFixed(0)+' pza':'—'}</td>
@@ -4481,7 +4528,7 @@ function _step5TablasHTML() {
         const cc        = costoCopa(vf);
         const difCosto  = dif * (vf.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)
         const ref       = teorico>0 ? teorico : fisico;
-        const color     = semaforo(dif, ref);
+        const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
         const pctStr    = ref>0 ? ((dif/ref*100>=0?'+':'')+(dif/ref*100).toFixed(1)+'%') : '—';
         _compGrpDif += difCosto;
         // Columnas FÍSICAS en la unidad final definida (ej. L), no en copas. Ventas se quedan en copas (así se capturan).
@@ -4573,7 +4620,7 @@ function _step5DesgloseCard(fila, refMap) {
     var teorico  = calcExistenciaTeorica(fila);
     var dif      = fisico - teorico;
     var ref      = teorico>0 ? teorico : fisico;
-    var color    = semaforo(dif, ref);
+    var color    = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
     var difCarta = dif * (fila.precioCarta||0);
     var pct      = ref>0 ? ((dif/ref*100>=0?'+':'')+(dif/ref*100).toFixed(1)+'%') : '—';
     var ventaCoct = esComp ? 0 : calcVentasCopasRecetas(fila.insumoId, fila.copaML);
@@ -4622,9 +4669,86 @@ function _step5DesgloseCard(fila, refMap) {
     '</div>';
 }
 
+// ── Paginador del reporte: mide alturas reales y reparte el contenido (#rd-src) en hojas A4
+//    discretas (#rd-pages), cada una con encabezado y pie. Si una tabla cruza de hoja, repite
+//    su cabecera de columnas. Garantiza: hojas visibles en digital, encabezado en cada hoja,
+//    y que NINGUNA fila se corte. ──────────────────────────────────────────────────────────
+function _rdConstruirPaginas(src, pagesC, headHtml, footHtml) {
+    if (!src || !pagesC) return;
+    const mkPage = () => {
+        const p = document.createElement('div');
+        p.className = 'rd-paper';
+        p.innerHTML = '<div class="rd-pagehead-wrap"></div><div class="rd-pagebody"><div class="rd-bodyinner"></div></div><div class="rd-pagefoot-wrap"></div>';
+        p.querySelector('.rd-pagehead-wrap').innerHTML = headHtml;
+        p.querySelector('.rd-pagefoot-wrap').innerHTML = footHtml;
+        pagesC.appendChild(p);
+        return p;
+    };
+    let page = mkPage();
+    let bodyOuter = page.querySelector('.rd-pagebody');   // celda estirada (altura disponible)
+    let body = page.querySelector('.rd-bodyinner');        // contenido real (altura auto = lo que mide)
+    // Cabe si la altura REAL del contenido (body.offsetHeight) entra en el espacio disponible
+    // (bodyOuter.clientHeight). Margen de 6px ante el clip (overflow:hidden).
+    const fits = () => body.offsetHeight <= bodyOuter.clientHeight - 6;
+    const room = () => bodyOuter.clientHeight - body.offsetHeight;
+    const newPage = () => { page = mkPage(); bodyOuter = page.querySelector('.rd-pagebody'); body = page.querySelector('.rd-bodyinner'); };
+    const shell = (orig) => {
+        const t = orig.cloneNode(false);
+        const th = orig.querySelector('thead');
+        if (th) t.appendChild(th.cloneNode(true));
+        t.appendChild(document.createElement('tbody'));
+        return t;
+    };
+    // Reparte las filas de una tabla en varias hojas, repitiendo su cabecera y (en la 1ª) el título.
+    const splitTable = (table, titleEl) => {
+        const rows = Array.from(table.querySelectorAll('tbody > tr'));
+        let s = shell(table), tb = s.querySelector('tbody');
+        const wrap = document.createElement('div');
+        if (titleEl) wrap.appendChild(titleEl.cloneNode(true));
+        wrap.appendChild(s);
+        body.appendChild(wrap);
+        rows.forEach(r => {
+            tb.appendChild(r);
+            if (!fits()) {
+                tb.removeChild(r);
+                newPage();
+                s = shell(table); tb = s.querySelector('tbody');
+                body.appendChild(s);
+                tb.appendChild(r); // una fila siempre cabe en una hoja vacía
+            }
+        });
+    };
+    const isHeading = (n) => n.classList && (n.classList.contains('rd-sec') || n.classList.contains('rd-grptitle'));
+    Array.from(src.children).forEach(node => {
+        if (node.classList && node.classList.contains('rd-break')) { if (body.children.length) newPage(); return; }
+        // Evitar encabezado huérfano al pie de la hoja.
+        if (isHeading(node) && body.children.length && room() < 90) newPage();
+        if (node.classList && node.classList.contains('rd-grp')) {
+            body.appendChild(node);
+            if (fits()) return;
+            body.removeChild(node);
+            if (body.children.length) { newPage(); body.appendChild(node); if (fits()) return; body.removeChild(node); }
+            splitTable(node.querySelector('table'), node.querySelector('.rd-grptitle'));
+            return;
+        }
+        if (node.tagName === 'TABLE') {
+            body.appendChild(node);
+            if (fits()) return;
+            body.removeChild(node);
+            if (body.children.length) { newPage(); body.appendChild(node); if (fits()) return; body.removeChild(node); }
+            splitTable(node, null);
+            return;
+        }
+        body.appendChild(node);
+        if (!fits() && body.children.length > 1) { body.removeChild(node); newPage(); body.appendChild(node); }
+    });
+    src.remove();
+}
+
 // ── Reporte directivo ─────────────────────────────────────────
-function verReporteDirectivo() {
+function verReporteDirectivo(gerencial) {
     if (!invActual) return;
+    const ger = gerencial === true; // Reporte Gerencial: oculta los importes (solo % + neto + dif$ por insumo).
 
     // ── Analytics ──────────────────────────────────────────────────
     let capitalCosto = 0, capitalCarta = 0, difTotal = 0;
@@ -4644,21 +4768,24 @@ function verReporteDirectivo() {
         const cortesia  = parseFloat(f.cortesiaCopas)  || 0;
         const merma     = parseFloat(f.mermaCopas)     || 0;
         const cancel    = getCancelacionesCopas(f.insumoId);
+        // pza: venta total en piezas = botella + directa + por menú/recetas (igual que el Resultado).
+        const ventaPzaTot = f.tipo === 'pza' ? (ventaBot + (parseFloat(f.ventasCopasDirectas)||0) + calcVentasPzaRecetas(f.insumoId)) : 0;
         const consumo   = f.tipo === 'pza'
-            ? ventaBot + cancel
+            ? ventaPzaTot + cortesia + merma + cancel
             : ventaCopa + ventaBot * copasBot + cortesia + merma + cancel;
         const disponible = ea + (f.tipo === 'pza' ? entBot : entBot * copasBot);
         const pctConsumo = disponible > 0 ? (consumo / disponible) * 100 : 0;
         const varPct     = teorico > 0 ? (dif / teorico) * 100 : 0;
+        const _bat       = esBateo(f.insumoId); // de bateo: su varianza no cuenta como crítico/riesgo
         capitalCosto += fisico * cc;
         capitalCarta += fisico * (f.precioCarta || 0);
         difTotal     += difCosto;
-        if (Math.abs(varPct) > 25) conAlerta++;
-        else if (Math.abs(varPct) > 10) conRiesgo++;
+        if (!_bat && Math.abs(varPct) > 25) conAlerta++;
+        else if (!_bat && Math.abs(varPct) > 10) conRiesgo++;
         else conOk++;
         return { f, fisico, teorico, dif, cc, difCosto, ea, entBot, copasBot,
-                 ventaCopa, ventaBot, cortesia, merma, cancel, consumo,
-                 disponible, pctConsumo, varPct };
+                 ventaCopa, ventaBot, ventaPzaTot, cortesia, merma, cancel, consumo,
+                 disponible, pctConsumo, varPct, esBateo:_bat };
     });
 
     const totalProds = analisis.length;
@@ -4667,14 +4794,46 @@ function verReporteDirectivo() {
     const totalDesc  = (invActual.descuentos || []).reduce((s, d) => s + (parseFloat(d.monto) || 0), 0);
     const margenPot  = capitalCarta - capitalCosto;
 
+    // ── Métricas del resumen ejecutivo (igualadas con el Resultado del inventario) ──
+    function _costoCompraF(f){ var c=costoCopa(f); if(f.tipo==='copa'){var cb=(f.contNeto>0&&f.copaML>0)?f.contNeto/f.copaML:0; return c*cb;} return c; }
+    let capStockMin=0, capStockMax=0;
+    filasCaptura.forEach(f => {
+        if(!f||!f.insumoId) return;
+        const costoCompra=_costoCompraF(f);
+        const _ins=(typeof window._insumoResolver==='function')?window._insumoResolver(f.insumoId):null;
+        const _p=_ins&&_ins.presentaciones&&_ins.presentaciones[0];
+        capStockMin += (parseFloat((_p&&_p.stockMin)||(_ins&&_ins.stockMin)||f.stockMin)||0)*costoCompra;
+        capStockMax += (parseFloat((_p&&_p.stockMax)||(_ins&&_ins.stockMax)||f.stockMax)||0)*costoCompra;
+    });
+    let comprasU=0, comprasCosto=0, bonifU=0, bonifCosto=0, consigU=0, consigCosto=0;
+    const bonifItems={}, consigItems={}; // nombre → unidades acumuladas
+    const _filaInsD={}; filasCaptura.forEach(f => { if(f&&f.insumoId) _filaInsD[f.insumoId]=f; });
+    ((invActual.entradasLog)||[]).forEach(e => {
+        const f=_filaInsD[e.insumoId]; if(!f) return;
+        const cant=parseFloat(e.cantidad)||0; if(cant<=0) return;
+        const costo=cant*_costoCompraF(f), t=(e.tipo||'compra').toLowerCase();
+        const nm=(f.nombre)||e.nombre||'';
+        if(t==='bonificacion'){bonifU+=cant;bonifCosto+=costo; if(nm) bonifItems[nm]=(bonifItems[nm]||0)+cant;}
+        else if(t==='consignacion'){consigU+=cant;consigCosto+=costo; if(nm) consigItems[nm]=(consigItems[nm]||0)+cant;}
+        else{comprasU+=cant;comprasCosto+=costo;}
+    });
+    const _listaItems = obj => Object.keys(obj).map(n => `${etx(n)} (${obj[n]%1?obj[n].toFixed(1):obj[n]})`).join(' · ');
+    filasCaptura.forEach(f => { const man=(f.entradas||[]).reduce((s,x)=>s+(parseFloat(x)||0),0); if(man>0){comprasU+=man;comprasCosto+=man*_costoCompraF(f);} });
+    let vendidoCosto=0, faltCosto=0, sobrCosto=0;
+    analisis.forEach(a => { if(a.consumo>0) vendidoCosto+=a.consumo*a.cc; if(a.dif<-0.001) faltCosto+=Math.abs(a.dif)*a.cc; else if(a.dif>0.001) sobrCosto+=a.dif*a.cc; });
+    const netCosto = sobrCosto - faltCosto;
+    const pctMinD = capStockMax>0?Math.round(capStockMin/capStockMax*100):0;
+    const pctActD = capStockMax>0?Math.round(capitalCosto/capStockMax*100):0;
+
     // Rankings y grupos
     const top10      = [...analisis].sort((a, b) => b.consumo - a.consumo).slice(0, 10).filter(a => a.consumo > 0);
     const estancados = analisis.filter(a => a.consumo === 0 && a.fisico > 0);
-    const alertasCrit= analisis.filter(a => a.varPct < -25).sort((a, b) => a.varPct - b.varPct);
-    const alertasSob = analisis.filter(a => a.varPct > 25).sort((a, b) => b.varPct - a.varPct);
+    const alertasCrit= analisis.filter(a => !a.esBateo && a.varPct < -25).sort((a, b) => a.varPct - b.varPct);
+    const alertasSob = analisis.filter(a => !a.esBateo && a.varPct > 25).sort((a, b) => b.varPct - a.varPct);
+    const riesgos    = analisis.filter(a => !a.esBateo && Math.abs(a.varPct) > 10 && Math.abs(a.varPct) <= 25).sort((a, b) => Math.abs(b.varPct) - Math.abs(a.varPct));
     const gruposTabla = {};
     analisis.forEach(a => {
-        const g = a.f.familia || a.f.categoria || 'Otros';
+        const g = a.esBateo ? GRUPO_BATEO : _grupoCategoria(a.f); // bateo → su propio grupo
         if (!gruposTabla[g]) gruposTabla[g] = [];
         gruposTabla[g].push(a);
     });
@@ -4688,7 +4847,7 @@ function verReporteDirectivo() {
     if (numCancel > 5)
         recos.push({ t:'warn', ico:'🟡', txt:`Se registraron <strong>${numCancel} cancelaciones</strong> en el período. Analizar patrones con el equipo de piso y validar los procesos de autorización.` });
     if (totalDesc > 0)
-        recos.push({ t:'info', ico:'🔵', txt:`Descuentos aplicados por <strong>$${totalDesc.toFixed(2)}</strong>. Verificar que todas las autorizaciones estén dentro de la política de la casa.` });
+        recos.push({ t:'info', ico:'🔵', txt:`Descuentos aplicados por <strong>${ger?'(monto reservado)':'$'+(parseFloat(totalDesc)||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong>. Verificar que todas las autorizaciones estén dentro de la política de la casa.` });
     if (estancados.length)
         recos.push({ t:'info', ico:'🔵', txt:`<strong>${estancados.length} producto${estancados.length>1?'s sin':' sin'} movimiento</strong> en el período. Evaluar si hay sobre-stock o baja demanda; considerar promoción o devolución al proveedor.` });
     if (!recos.length)
@@ -4697,20 +4856,147 @@ function verReporteDirectivo() {
     // Helpers
     const [cOk, cWarn, cCrit] = ['#1a7a4a', '#c0870c', '#c0392b'];
     function vc(pct) { const a = Math.abs(pct); return a <= 10 ? cOk : a <= 25 ? cWarn : cCrit; }
+    // Formato de moneda con separador de miles (es-MX): _m0 sin decimales, _m2 con 2 decimales.
+    const _m0 = n => (Math.round(parseFloat(n)||0)).toLocaleString('es-MX');
+    const _m2 = n => (parseFloat(n)||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
+    // En modo gerencial se ocultan los importes: muestra el % si existe, o '•••'. En directivo, el monto real.
+    const $g = (montoHTML, pct) => ger ? (pct!=null ? pct+'%' : '<span style="color:#bbb">•••</span>') : montoHTML;
+    // Existencia en BOTELLAS (licor/vino) o PIEZAS (refresco/cerveza) — no en copas (más legible, igual que el resultado).
+    const _exFmt = (a, copas) => { const v = a.f.tipo==='pza' ? copas : (a.copasBot>0 ? copas/a.copasBot : copas); return (a.f.tipo==='pza' ? v.toFixed(0)+' pza' : v.toFixed(2)+' bot'); };
+    // Tabla de varianza reutilizable (críticos / riesgo) con su grupo y motivo (físico vs teórico).
+    function _rdTablaVar(items){
+        if(!items.length) return '<div style="font-size:10px;color:#aaa;padding:4px 0 10px">Ninguno en este estado. ✅</div>';
+        return `<table class="rd-t" style="margin-bottom:10px"><thead><tr>
+            <th>Producto</th><th class="tc">Grupo</th><th class="tc">Físico</th><th class="tc">Teórico</th>
+            <th class="tc">Diferencia</th><th class="tc">Varianza %</th><th class="tr">Dif. $</th></tr></thead><tbody>${
+            items.map(a=>{const u=a.f.tipo==='pza'?'pza':'cop';const col=vc(a.varPct);const dc=a.dif>=0?cOk:cCrit;
+            return `<tr><td style="font-weight:600">${etx(a.f.nombre)}</td>
+                <td class="tc" style="color:#888">${_grupoCategoria(a.f)}</td>
+                <td class="tc">${_exFmt(a, a.fisico)}</td><td class="tc">${_exFmt(a, a.teorico)}</td>
+                <td class="tc" style="font-weight:700;color:${dc}">${a.dif>=0?'+':''}${a.dif.toFixed(1)} ${u}</td>
+                <td class="tc" style="color:${col};font-weight:700">${a.varPct>=0?'+':''}${a.varPct.toFixed(1)}%</td>
+                <td class="tr" style="font-weight:700;color:${a.difCosto>=0?cOk:cCrit}">${a.difCosto>=0?'+':''}$${_m2(a.difCosto)}</td></tr>`;
+            }).join('')}</tbody></table>`;
+    }
     const inv      = invActual;
     const fecha    = new Date().toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
     const invFecha = inv.fecha ? new Date(inv.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'long', year:'numeric' }) : '—';
+    // Período del inventario = del inventario de referencia (de donde sale la existencia anterior) al actual.
+    const _refInvD   = (typeof _getRefInv === 'function') ? _getRefInv() : null;
+    const _fmtD      = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'long', year:'numeric' }) : null;
+    const _periodoIni= _refInvD && _refInvD.fecha ? _fmtD(_refInvD.fecha) : null;
+    const periodoTxt = _periodoIni ? `del ${_periodoIni} al ${invFecha}` : `levantamiento del ${invFecha}`;
+    const _tipoTxt   = ({ bebidas:'de bebidas', alimentos:'de alimentos', almacen:'de almacén', restaurante:'general', primer_lev:'— primer levantamiento', otro:'' })[inv.tipoInv] || '';
+    const _estadoInv = inv.cerrado ? 'CERRADO' : 'BORRADOR';
+
+    // ── Encabezado y pie de página (estructura de recetas: marca ETAAX + negocio, borde verde) ──
+    const brandGreen = '#3dbe7a';
+    const rdHeader = (subt) => `
+    <div class="rd-pagehead" style="display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:3px solid ${brandGreen};margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="font-family:'Bebas Neue',Arial,sans-serif;font-size:30px;font-weight:900;letter-spacing:2px;color:#1a1916;line-height:1">ETAAX<span style="color:${brandGreen}">.</span></div>
+        <div style="border-left:1px solid #ddd;padding-left:12px">
+          <div style="font-size:16px;font-weight:800;color:#1a1916;line-height:1.1">${etx(inv.negocio||'Negocio')}</div>
+          <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;margin-top:2px">${subt}</div>
+        </div>
+      </div>
+      <div style="text-align:right;font-size:9px;color:#aaa;line-height:1.7">
+        ${ger?'Reporte Gerencial':'Reporte Directivo'}<br>Generado: ${fecha}${inv.area?'<br>Área: '+etx(inv.area):''}
+      </div>
+    </div>`;
+    const rdFoot = `<div class="rd-foot" style="display:flex;justify-content:space-between;align-items:center">
+      <span>etaax.com · EGMx Consultoría Estratégica a&amp;b</span>
+      <span style="color:${brandGreen};font-weight:700">${etx(inv.nombre||'Inventario')}</span>
+      <span>${fecha}</span>
+    </div>`;
+
+    // ── Inventario completo: render por grupo y PAGINADO en hojas A4 (~26 filas por hoja) ──
+    const _grupoInvHTML = ([grp, items]) => {
+        let gDif = 0;
+        const rows = items.map(a => {
+            gDif += a.difCosto;
+            const u = a.f.tipo === 'pza' ? 'pza' : 'cop';
+            const entStr = a.f.tipo === 'pza' ? (a.entBot>0?'+'+a.entBot+' p':'—') : (a.entBot>0?'+'+a.entBot.toFixed(1)+' b':'—');
+            const vtaCopaStr = a.f.tipo === 'pza' ? '—' : (a.ventaCopa>0?a.ventaCopa.toFixed(1)+' c':'—');
+            const vtaBotStr  = a.f.tipo === 'pza' ? (a.ventaPzaTot>0?a.ventaPzaTot.toFixed(0)+' p':'—') : (a.ventaBot>0?a.ventaBot+' b':'—');
+            const cmStr = (a.cortesia+a.merma)>0 ? (a.cortesia+a.merma).toFixed(1) : '—';
+            const vcol  = vc(a.varPct);
+            return `<tr>
+              <td style="font-weight:600;max-width:200px;white-space:normal;word-break:break-word">${etx(a.f.nombre)}</td>
+              <td class="tc" style="color:#888">${_exFmt(a, a.ea)}</td>
+              <td class="tc" style="color:${cOk}">${entStr}</td>
+              <td class="tc">${vtaCopaStr}</td>
+              <td class="tc">${vtaBotStr}</td>
+              <td class="tc" style="color:${(a.cortesia+a.merma)>0?'#7d5fa3':'#ccc'}">${cmStr}</td>
+              <td class="tc" style="color:${a.cancel>0?cWarn:'#ccc'}">${a.cancel>0 ? a.cancel.toFixed(1) : '—'}</td>
+              <td class="tc" style="font-weight:600">${_exFmt(a, a.fisico)}</td>
+              <td class="tc" style="color:${vcol};font-weight:700">${a.dif>=0?'+':''}${a.dif.toFixed(1)} ${u}</td>
+              <td class="tc" style="color:${vcol}">${a.varPct.toFixed(0)}%</td>
+              <td class="tr" style="color:${vcol};font-weight:700">${a.difCosto>=0?'+':''}$${_m2(a.difCosto)}</td>
+            </tr>`;
+        }).join('');
+        const gc = gDif >= 0 ? cOk : cCrit;
+        return `<div class="rd-grp">
+        <div class="rd-grptitle" style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 4px">
+          <span style="font-size:11px;font-weight:700;color:#1a1916">${grp}</span>
+          <span style="font-size:11px;font-weight:700;color:${gc}">${gDif>=0?'+':''}$${_m2(gDif)}</span>
+        </div>
+        <table class="rd-t" style="margin-bottom:6px">
+          <thead><tr>
+            <th>Producto</th><th class="tc">Exist. ant.</th><th class="tc">Entradas</th>
+            <th class="tc">Vta. copa</th><th class="tc">Vta. bot.</th><th class="tc">Cort/Merma</th>
+            <th class="tc">Cancel.</th><th class="tc">Exist. act.</th><th class="tc">Varianza</th>
+            <th class="tc">%</th><th class="tr">Dif. $</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>`;
+    };
+    // Cancelaciones + descuentos (van en la última hoja del inventario).
+    const _cancelDescHTML = `
+      ${numCancel > 0 ? `
+      <div class="rd-sec">Cancelaciones del período — ${numCancel} registro${numCancel !== 1 ? 's' : ''}</div>
+      <table class="rd-t"><thead><tr><th>Fecha / Hora</th><th>Producto</th><th class="tc">Cant.</th><th>Autorizó</th><th>Motivo</th><th>Mesero</th></tr></thead>
+        <tbody>${(invActual.cancelaciones || []).map(c => `<tr>
+          <td style="white-space:nowrap;color:#888">${c.fechaHora||'—'}</td><td style="font-weight:500">${etx(c.nombreProducto||'—')}</td>
+          <td class="tc" style="font-weight:700">${c.cantidad||'—'}</td><td>${c.autorizo||c.responsable||'—'}</td>
+          <td style="color:#888">${c.motivo||'—'}</td><td style="color:#888">${c.mesero||'—'}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${(!ger && (invActual.descuentos || []).length > 0) ? `
+      <div class="rd-sec">Descuentos del período — Total: <span style="color:${cCrit}">$${_m2(totalDesc)}</span></div>
+      <table class="rd-t"><thead><tr><th>Fecha / Hora</th><th class="tc">%</th><th class="tr">Monto $</th><th>Folio</th><th>Motivo</th><th>Autorizó</th></tr></thead>
+        <tbody>${(invActual.descuentos || []).map(d => `<tr>
+          <td style="white-space:nowrap;color:#888">${d.fechaHora||'—'}</td><td class="tc">${d.porcentaje != null ? d.porcentaje + '%' : '—'}</td>
+          <td class="tr" style="color:${cCrit};font-weight:700">$${_m2((parseFloat(d.monto)||0))}</td><td>${d.folio||'—'}</td>
+          <td style="color:#888">${d.motivo||'—'}</td><td>${d.autorizo||'—'}</td></tr>`).join('')}</tbody></table>` : ''}`;
+    // Inventario completo: todos los grupos (bateo primero). El encabezado grande se repite por
+    // hoja automáticamente porque TODO el reporte va dentro de una tabla con <thead> (ver abajo).
+    const _gruposInvOrden = Object.entries(gruposTabla).sort((a,b)=>{const A=a[0]===GRUPO_BATEO,B=b[0]===GRUPO_BATEO;return A===B?String(a[0]).localeCompare(String(b[0])):(A?-1:1);});
+    const inventarioHTML = `
+      <div class="rd-sec">Inventario completo por grupo de categoría</div>
+      ${_gruposInvOrden.map(_grupoInvHTML).join('')}
+      ${_cancelDescHTML}`;
+    // Encabezado grande y pie que un PAGINADOR (mide alturas) replica en cada hoja A4 discreta.
+    const _headHtml = rdHeader(`Inventario ${_tipoTxt} · ${periodoTxt} · ${_estadoInv}`);
+    const _footHtml = rdFoot;
 
     // Limpiar overlay anterior si existiera
     document.getElementById('rdOverlay')?.remove();
 
     const overlay = document.createElement('div');
     overlay.id = 'rdOverlay';
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9998;overflow-y:auto;background:#1a1916';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9998;overflow:auto;background:#1a1916';
 
     overlay.innerHTML = `
 <style>
-.rd-paper{background:#fff;width:216mm;padding:18mm 18mm 16mm;margin:58px auto 24px;box-shadow:0 4px 40px rgba(0,0,0,.55);font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1916}
+/* Cada hoja A4 = un .rd-paper de altura fija; el cuerpo (rd-pagebody) tiene la altura útil. */
+.rd-paper{background:#fff;width:210mm;height:297mm;margin:24px auto;box-shadow:0 4px 40px rgba(0,0,0,.55);font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1916;display:flex;flex-direction:column;overflow:hidden}
+.rd-pagehead-wrap{flex:0 0 auto;padding:12mm 10mm 0}
+.rd-pagebody{flex:1 1 auto;overflow:hidden;padding:0 10mm}
+.rd-bodyinner{padding-top:3mm}
+.rd-pagefoot-wrap{flex:0 0 auto;padding:0 10mm 7mm}
+.rd-pagehead-wrap .rd-foot,.rd-pagefoot-wrap .rd-foot{margin-top:0}
+#rd-pages{padding-top:34px}
+/* Fuente de medición: ancho = ancho útil de la hoja (210 − 2×10mm), fuera de pantalla. */
+#rd-src{position:absolute;left:-9999px;top:0;width:190mm;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1916}
 .rd-h1{font-size:22px;font-weight:900;margin:0 0 3px;color:#1a1916}
 .rd-sub{font-size:11px;color:#888}
 .rd-sec{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#888;border-bottom:2px solid #1a1916;padding-bottom:5px;margin:18px 0 10px}
@@ -4732,62 +5018,54 @@ function verReporteDirectivo() {
 .rda-ok{background:#eeffee;border-left:4px solid #1a7a4a}
 .rd-t{width:100%;border-collapse:collapse;font-size:10px}
 .rd-t th{padding:5px 7px;text-align:left;background:#f5f5f0;border-bottom:2px solid #ddd;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#666;white-space:nowrap}
-.rd-t td{padding:4px 7px;border-bottom:1px solid #f0f0ec;vertical-align:middle}
+.rd-t td{padding:6px 7px;border-bottom:1px solid #f0f0ec;vertical-align:middle;line-height:1.25}
 .rd-t tr:last-child td{border-bottom:none}
 .tc{text-align:center!important}.tr{text-align:right!important}
 .rd-rank{display:inline-block;width:18px;height:18px;border-radius:50%;background:#1a1916;color:#f5c842;font-size:9px;font-weight:900;text-align:center;line-height:18px}
-.rd-foot{margin-top:18px;padding-top:10px;border-top:1px solid #eee;font-size:9px;color:#bbb;text-align:center}
+.rd-foot{padding-top:10px;border-top:1px solid #eee;font-size:9px;color:#bbb;text-align:center}
+.rd-t thead{display:table-header-group}
 @media print{
+  /* Impresión = la MISMA paginación de la vista digital, en A4 (cada .rd-paper = 1 hoja). */
+  @page{size:A4;margin:0}
   body>*:not(#rdOverlay){display:none!important}
   #rdOverlay{position:static!important;overflow:visible!important;background:white!important}
   #rd-toolbar{display:none!important}
-  .rd-paper{box-shadow:none!important;width:100%!important;margin:0!important;padding:12mm 14mm!important;page-break-after:always;break-after:page}
+  #rd-pages{padding-top:0!important}
+  .rd-paper{box-shadow:none!important;margin:0!important;page-break-after:always;break-after:page}
+  .rd-paper:last-child{page-break-after:auto;break-after:auto}
 }
 </style>
 
 <div id="rd-toolbar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#1a1916;padding:10px 20px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.5)">
-  <span style="color:#f5f0e8;font-size:14px;font-weight:700">📊 Reporte Directivo — ${etx(inv.nombre || 'Inventario')}</span>
+  <span style="color:#f5f0e8;font-size:14px;font-weight:700">${ger?'🔐 Reporte Gerencial':'📊 Reporte Directivo'} — ${etx(inv.nombre || 'Inventario')}</span>
   <div style="display:flex;gap:8px">
     <button onclick="window.print()" style="padding:7px 18px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;background:#f5c842;color:#1a1916;border:none">🖨️ Imprimir / Exportar PDF</button>
     <button onclick="document.getElementById('rdOverlay').remove()" style="padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;background:transparent;border:1px solid rgba(255,255,255,.3);color:#f5f0e8">✕ Cerrar</button>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════ PÁGINA 1 — RESUMEN EJECUTIVO -->
-<div class="rd-paper">
-
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
-    <div>
-      <div class="rd-h1">${tipoIcon(inv.tipoInv)} ${etx(inv.nombre || 'Inventario')}</div>
-      <div class="rd-sub">${inv.negocio ? inv.negocio + ' · ' : ''}${invFecha}${inv.turno ? ' · ' + inv.turno : ''}${inv.area ? ' · ' + inv.area : ''} · ${inv.cerrado ? '<strong style="color:#c0392b">CERRADO</strong>' : '<em>BORRADOR</em>'}</div>
-    </div>
-    <div style="text-align:right;font-size:9px;color:#aaa;line-height:1.8">
-      Reporte Directivo<br>${fecha}
-    </div>
-  </div>
+<!-- Contenedor donde el paginador (JS) arma las hojas A4 -->
+<div id="rd-pages"></div>
+<!-- Fuente: TODO el contenido en orden; el paginador lo mide y reparte por hoja -->
+<div id="rd-src">
 
   <!-- KPIs -->
   <div class="rd-sec">Resumen ejecutivo</div>
-  <div class="rd-kgrid rd-k6" style="margin-bottom:8px">
+  <div class="rd-kgrid" style="grid-template-columns:repeat(5,1fr);margin-bottom:8px">
     <div class="rd-kpi">
       <div class="rd-kl">Capital a costo</div>
-      <div class="rd-kv">$${capitalCosto.toFixed(0)}</div>
+      <div class="rd-kv">${$g('$'+_m0(capitalCosto))}</div>
       <div class="rd-ks">Existencia valorada</div>
     </div>
     <div class="rd-kpi">
       <div class="rd-kl">Capital a carta</div>
-      <div class="rd-kv" style="color:${cOk}">$${capitalCarta.toFixed(0)}</div>
+      <div class="rd-kv" style="color:${cOk}">${$g('$'+_m0(capitalCarta))}</div>
       <div class="rd-ks">Valor potencial de venta</div>
     </div>
     <div class="rd-kpi">
       <div class="rd-kl">Margen potencial</div>
-      <div class="rd-kv" style="color:${cOk}">$${margenPot.toFixed(0)}</div>
+      <div class="rd-kv" style="color:${cOk}">${$g('$'+_m0(margenPot))}</div>
       <div class="rd-ks">Carta − costo</div>
-    </div>
-    <div class="rd-kpi" style="border-left:4px solid ${difTotal >= 0 ? cOk : cCrit}">
-      <div class="rd-kl">Diferencia total</div>
-      <div class="rd-kv" style="color:${difTotal >= 0 ? cOk : cCrit}">${difTotal >= 0 ? '+' : ''}$${difTotal.toFixed(2)}</div>
-      <div class="rd-ks">${difTotal >= 0 ? 'Sobrante' : 'Faltante'} en inventario</div>
     </div>
     <div class="rd-kpi">
       <div class="rd-kl">Cancelaciones POS</div>
@@ -4796,13 +5074,66 @@ function verReporteDirectivo() {
     </div>
     <div class="rd-kpi" style="border-left:4px solid ${totalDesc > 0 ? cWarn : '#e8e8e0'}">
       <div class="rd-kl">Descuentos aplicados</div>
-      <div class="rd-kv" style="color:${totalDesc > 0 ? cWarn : '#555'}">$${totalDesc.toFixed(0)}</div>
+      <div class="rd-kv" style="color:${totalDesc > 0 ? cWarn : '#555'}">${$g('$'+_m0(totalDesc))}</div>
       <div class="rd-ks">Total del período</div>
     </div>
   </div>
 
+  <!-- Stock requerido en capital (precio proveedor) -->
+  <div class="rd-kgrid" style="grid-template-columns:repeat(3,1fr);margin-bottom:8px">
+    <div class="rd-kpi">
+      <div class="rd-kl">Stock mínimo en capital</div>
+      <div class="rd-kv" style="color:${cWarn}">${$g('$'+_m0(capStockMin), pctMinD)}</div>
+      <div class="rd-ks">${pctMinD}% del máximo${ger?'':' · precio proveedor'}</div>
+    </div>
+    <div class="rd-kpi">
+      <div class="rd-kl">Stock máximo en capital</div>
+      <div class="rd-kv">${$g('$'+_m0(capStockMax), 100)}</div>
+      <div class="rd-ks">meta de stock${ger?'':' · precio proveedor'}</div>
+    </div>
+    <div class="rd-kpi" style="border-left:4px solid ${capitalCosto<capStockMin?cCrit:cOk}">
+      <div class="rd-kl">Stock actual en capital</div>
+      <div class="rd-kv" style="color:${capitalCosto<capStockMin?cCrit:cOk}">${$g('$'+_m0(capitalCosto), pctActD)}</div>
+      <div class="rd-ks">${pctActD}% del máximo${ger?'':' · precio proveedor'}</div>
+    </div>
+  </div>
+
+  <!-- Movimiento del período: vendido vs compras + entradas por tipo -->
+  <div class="rd-kgrid" style="grid-template-columns:repeat(3,1fr);margin-bottom:8px">
+    <div class="rd-kpi">
+      <div class="rd-kl">Vendido a precio proveedor</div>
+      <div class="rd-kv">${$g('$'+_m0(vendidoCosto))}</div>
+      <div class="rd-ks">costo de lo que salió</div>
+    </div>
+    <div class="rd-kpi">
+      <div class="rd-kl">Compras del período</div>
+      <div class="rd-kv">${$g('$'+_m0(comprasCosto))}</div>
+      <div class="rd-ks">${comprasU>0?(comprasU%1?comprasU.toFixed(1):comprasU)+' unid. compradas':'sin compras'}</div>
+    </div>
+    <div class="rd-kpi" style="border-left:4px solid ${netCosto>=0?cOk:cCrit}">
+      <div class="rd-kl">${netCosto>=0?'Sobrante':'Faltante'} neto a costo</div>
+      <div class="rd-kv" style="color:${netCosto>=0?cOk:cCrit}">${netCosto>=0?'+':'−'}$${_m0(Math.abs(netCosto))}</div>
+      <div class="rd-ks">sobrante − faltante</div>
+    </div>
+  </div>
+  ${(bonifU>0||consigU>0)?`
+  <div class="rd-kgrid" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px">
+    <div class="rd-kpi" style="border-left:4px solid ${cOk}">
+      <div class="rd-kl">🎁 Bonificación</div>
+      <div class="rd-kv" style="color:${cOk}">${bonifU%1?bonifU.toFixed(1):bonifU} unid.</div>
+      <div class="rd-ks">${ger?'sin costo':'valor $'+_m0(bonifCosto)+' (sin costo)'}</div>
+      ${bonifU>0?`<div style="font-size:9px;color:#666;margin-top:4px;line-height:1.5"><strong>Productos:</strong> ${_listaItems(bonifItems)}</div>`:''}
+    </div>
+    <div class="rd-kpi" style="border-left:4px solid #2471a3">
+      <div class="rd-kl">📦 Consignación</div>
+      <div class="rd-kv" style="color:#2471a3">${consigU%1?consigU.toFixed(1):consigU} unid.</div>
+      <div class="rd-ks">${ger?'en consignación':'valor $'+_m0(consigCosto)}</div>
+      ${consigU>0?`<div style="font-size:9px;color:#666;margin-top:4px;line-height:1.5"><strong>Productos:</strong> ${_listaItems(consigItems)}</div>`:''}
+    </div>
+  </div>`:''}
+
   <!-- Semáforo de control -->
-  <div class="rd-sec">Control de inventario — semáforo por producto</div>
+  <div class="rd-sec">Control de inventario — ${totalProds} insumos inventariados</div>
   <div class="rd-sem">
     <div class="rd-sem-blk">
       <div class="rd-sem-n" style="color:${cOk}">${conOk}</div>
@@ -4833,6 +5164,27 @@ function verReporteDirectivo() {
   <div class="rd-sec">Acciones recomendadas para dirección</div>
   ${recos.map(r => `<div class="rda rda-${r.t}">${r.ico} ${r.txt}</div>`).join('')}
 
+  <div class="rd-break"></div>
+  <!-- Desglose del semáforo: CRÍTICOS (faltante / sobrante > 25%) -->
+  <div class="rd-sec" style="color:${cCrit};border-color:${cCrit}">🔴 Estado crítico — varianza mayor a 25% (${alertasCrit.length + alertasSob.length} insumos · acción inmediata)</div>
+  <div style="font-size:9.5px;color:#888;margin:-4px 0 8px">Faltante = hay <strong>menos</strong> de lo esperado (posible merma, derrame, robo o error de captura). Sobrante = hay <strong>de más</strong> (posible entrada no registrada o existencia anterior mal capturada).</div>
+  <div style="font-size:10px;font-weight:700;color:${cCrit};margin:4px 0 3px">🔻 Faltantes (${alertasCrit.length})</div>
+  ${_rdTablaVar(alertasCrit)}
+  <div style="font-size:10px;font-weight:700;color:${cWarn};margin:6px 0 3px">🔺 Sobrantes (${alertasSob.length})</div>
+  ${_rdTablaVar(alertasSob)}
+
+  <!-- Desglose del semáforo: EN RIESGO (10–25%) -->
+  <div class="rd-sec" style="color:${cWarn};border-color:${cWarn}">🟡 En riesgo — varianza entre 10% y 25% (${riesgos.length} insumos · vigilar)</div>
+  ${_rdTablaVar(riesgos)}
+
+  <div class="rd-break"></div>
+  <!-- Desglose del semáforo: SIN MOVIMIENTO -->
+  ${estancados.length > 0 ? `
+  <div class="rd-sec">🔵 Sin movimiento (${estancados.length}) — sin ventas en el período · evaluar sobre-stock o baja demanda</div>
+  <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px">
+    ${estancados.map(a => `<span style="font-size:10px;background:#f5f5f0;border:1px solid #e0e0d8;border-radius:4px;padding:2px 8px;color:#666">${etx(a.f.nombre)}</span>`).join('')}
+  </div>` : ''}
+
   <!-- Top 10 más vendidos -->
   <div class="rd-sec">Top 10 productos — mayor movimiento en el período</div>
   ${top10.length ? `
@@ -4856,8 +5208,8 @@ function verReporteDirectivo() {
         return `<tr>
           <td><span class="rd-rank">${i+1}</span></td>
           <td style="font-weight:600">${etx(a.f.nombre)}<br><span style="font-size:9px;color:#aaa;font-weight:400">${etx(a.f.categoria||'')}</span></td>
-          <td class="tc">${a.ventaCopa > 0 ? a.ventaCopa.toFixed(1)+' c' : '—'}</td>
-          <td class="tc">${a.ventaBot > 0 ? a.ventaBot+' b' : '—'}</td>
+          <td class="tc">${a.f.tipo==='pza' ? (a.ventaPzaTot>0?a.ventaPzaTot.toFixed(0)+' p':'—') : (a.ventaCopa > 0 ? a.ventaCopa.toFixed(1)+' c' : '—')}</td>
+          <td class="tc">${a.f.tipo==='pza' ? '—' : (a.ventaBot > 0 ? a.ventaBot+' b' : '—')}</td>
           <td class="tc" style="color:${a.cortesia>0?'#7d5fa3':'#ccc'}">${a.cortesia > 0 ? a.cortesia.toFixed(1) : '—'}</td>
           <td class="tc" style="color:${a.merma>0?cWarn:'#ccc'}">${a.merma > 0 ? a.merma.toFixed(1) : '—'}</td>
           <td class="tc" style="color:${a.cancel>0?cCrit:'#ccc'}">${a.cancel > 0 ? a.cancel.toFixed(1) : '—'}</td>
@@ -4870,178 +5222,23 @@ function verReporteDirectivo() {
   <div style="font-size:9px;color:#aaa;margin-top:5px">% consumo = total consumido ÷ (existencia anterior + entradas). &gt;70% alta rotación · &lt;30% baja rotación.</div>
   ` : '<div style="font-size:11px;color:#aaa;padding:8px 0">Sin ventas registradas en el período.</div>'}
 
-  <!-- Productos sin movimiento -->
-  ${estancados.length > 0 ? `
-  <div class="rd-sec">Productos sin movimiento (${estancados.length}) — evaluar sobre-stock o baja demanda</div>
-  <div style="display:flex;flex-wrap:wrap;gap:5px">
-    ${estancados.slice(0, 20).map(a => `<span style="font-size:10px;background:#f5f5f0;border:1px solid #e0e0d8;border-radius:4px;padding:2px 8px;color:#666">${etx(a.f.nombre)}</span>`).join('')}
-    ${estancados.length > 20 ? `<span style="font-size:10px;color:#aaa;padding:2px 8px">+${estancados.length - 20} más…</span>` : ''}
-  </div>
-  ` : ''}
-
   ${_seccionCompuestosDirectivo()}
 
-  <div class="rd-foot">Reporte Directivo · ${inv.negocio || ''} · ${fecha} · ETAAX Sistema de Inventarios</div>
-</div>
+  <div class="rd-break"></div>
+  ${inventarioHTML}
 
-<!-- ═══════════════════════════════════ PÁGINA 2 — DESGLOSE COMPLETO -->
-<div class="rd-paper" style="margin-bottom:40px">
-
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #1a1916">
-    <span style="font-size:14px;font-weight:900;color:#1a1916">${etx(inv.nombre || 'Inventario')} — Desglose por familia</span>
-    <span style="font-size:9px;color:#aaa">${invFecha} · ${fecha}</span>
-  </div>
-
-  <!-- Faltantes críticos -->
-  ${alertasCrit.length > 0 ? `
-  <div class="rd-sec" style="color:${cCrit};border-color:${cCrit}">🔴 Faltantes críticos — varianza &gt; 25% (acción inmediata recomendada)</div>
-  <table class="rd-t" style="margin-bottom:14px">
-    <thead><tr>
-      <th>Producto</th><th class="tc">Familia</th>
-      <th class="tc">Físico</th><th class="tc">Teórico</th>
-      <th class="tc">Diferencia</th><th class="tc">Varianza %</th>
-      <th class="tr">Dif. $</th>
-    </tr></thead>
-    <tbody>
-      ${alertasCrit.map(a => {
-        const u = a.f.tipo === 'pza' ? 'pza' : 'cop';
-        return `<tr>
-          <td style="font-weight:600">${etx(a.f.nombre)}</td>
-          <td class="tc" style="color:#888">${a.f.familia || a.f.categoria || '—'}</td>
-          <td class="tc">${a.fisico.toFixed(1)} ${u}</td>
-          <td class="tc">${a.teorico.toFixed(1)} ${u}</td>
-          <td class="tc" style="font-weight:700;color:${cCrit}">${a.dif >= 0 ? '+' : ''}${a.dif.toFixed(1)}</td>
-          <td class="tc" style="color:${cCrit};font-weight:700">${a.varPct.toFixed(1)}%</td>
-          <td class="tr" style="color:${cCrit};font-weight:700">${a.difCosto >= 0 ? '+' : ''}$${a.difCosto.toFixed(2)}</td>
-        </tr>`;
-      }).join('')}
-    </tbody>
-  </table>
-  ` : ''}
-
-  <!-- Sobrantes significativos -->
-  ${alertasSob.length > 0 ? `
-  <div class="rd-sec" style="color:${cWarn};border-color:${cWarn}">🟡 Sobrantes significativos — varianza &gt; 25% positiva (verificar captura)</div>
-  <table class="rd-t" style="margin-bottom:14px">
-    <thead><tr>
-      <th>Producto</th>
-      <th class="tc">Físico</th><th class="tc">Teórico</th>
-      <th class="tc">Diferencia</th><th class="tc">Varianza %</th>
-      <th class="tr">Dif. $</th>
-    </tr></thead>
-    <tbody>
-      ${alertasSob.map(a => {
-        const u = a.f.tipo === 'pza' ? 'pza' : 'cop';
-        return `<tr>
-          <td style="font-weight:600">${etx(a.f.nombre)}</td>
-          <td class="tc">${a.fisico.toFixed(1)} ${u}</td>
-          <td class="tc">${a.teorico.toFixed(1)} ${u}</td>
-          <td class="tc" style="font-weight:700;color:${cWarn}">+${a.dif.toFixed(1)}</td>
-          <td class="tc" style="color:${cWarn};font-weight:700">+${a.varPct.toFixed(1)}%</td>
-          <td class="tr" style="color:${cOk};font-weight:700">+$${a.difCosto.toFixed(2)}</td>
-        </tr>`;
-      }).join('')}
-    </tbody>
-  </table>
-  ` : ''}
-
-  <!-- Inventario completo por familia -->
-  <div class="rd-sec">Inventario completo por familia</div>
-  ${Object.entries(gruposTabla).map(([grp, items]) => {
-    let gDif = 0;
-    const rows = items.map(a => {
-        gDif += a.difCosto;
-        const u = a.f.tipo === 'pza' ? 'pza' : 'cop';
-        const entStr = a.f.tipo === 'pza'
-            ? (a.entBot > 0 ? '+' + a.entBot + ' p' : '—')
-            : (a.entBot > 0 ? '+' + a.entBot.toFixed(1) + ' b' : '—');
-        const ventStr = a.f.tipo === 'pza'
-            ? (a.ventaBot > 0 ? a.ventaBot + ' p' : '—')
-            : (a.ventaCopa > 0 ? a.ventaCopa.toFixed(1) + ' c' : (a.ventaBot > 0 ? a.ventaBot + ' b' : '—'));
-        const cmStr = (a.cortesia + a.merma) > 0 ? (a.cortesia + a.merma).toFixed(1) : '—';
-        const vcol  = vc(a.varPct);
-        return `<tr>
-          <td style="font-weight:600;max-width:125px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${etx(a.f.nombre)}</td>
-          <td class="tc" style="color:#888">${a.ea.toFixed(1)} ${u}</td>
-          <td class="tc" style="color:${cOk}">${entStr}</td>
-          <td class="tc">${ventStr}</td>
-          <td class="tc" style="color:${(a.cortesia+a.merma)>0?'#7d5fa3':'#ccc'}">${cmStr}</td>
-          <td class="tc" style="color:${a.cancel>0?cWarn:'#ccc'}">${a.cancel>0 ? a.cancel.toFixed(1) : '—'}</td>
-          <td class="tc" style="font-weight:600">${a.fisico.toFixed(1)} ${u}</td>
-          <td class="tc" style="color:${vcol};font-weight:700">${a.dif>=0?'+':''}${a.dif.toFixed(1)}</td>
-          <td class="tc" style="color:${vcol}">${a.varPct.toFixed(0)}%</td>
-          <td class="tr" style="color:${vcol};font-weight:700">${a.difCosto>=0?'+':''}$${a.difCosto.toFixed(2)}</td>
-        </tr>`;
-    }).join('');
-    const gc = gDif >= 0 ? cOk : cCrit;
-    return `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 4px">
-      <span style="font-size:11px;font-weight:700;color:#1a1916">${grp}</span>
-      <span style="font-size:11px;font-weight:700;color:${gc}">${gDif>=0?'+':''}$${gDif.toFixed(2)}</span>
-    </div>
-    <table class="rd-t" style="margin-bottom:6px">
-      <thead><tr>
-        <th>Producto</th>
-        <th class="tc">Exist. ant.</th>
-        <th class="tc">Entradas</th>
-        <th class="tc">Ventas</th>
-        <th class="tc">Cort/Merma</th>
-        <th class="tc">Cancel.</th>
-        <th class="tc">Exist. act.</th>
-        <th class="tc">Varianza</th>
-        <th class="tc">%</th>
-        <th class="tr">Dif. $</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
-  }).join('')}
-
-  <!-- Cancelaciones -->
-  ${numCancel > 0 ? `
-  <div class="rd-sec">Cancelaciones del período — ${numCancel} registro${numCancel !== 1 ? 's' : ''}</div>
-  <table class="rd-t">
-    <thead><tr>
-      <th>Fecha / Hora</th><th>Producto</th>
-      <th class="tc">Cant.</th><th>Autorizó</th><th>Motivo</th><th>Mesero</th>
-    </tr></thead>
-    <tbody>
-      ${(invActual.cancelaciones || []).map(c => `<tr>
-        <td style="white-space:nowrap;color:#888">${c.fechaHora||'—'}</td>
-        <td style="font-weight:500">${etx(c.nombreProducto||'—')}</td>
-        <td class="tc" style="font-weight:700">${c.cantidad||'—'}</td>
-        <td>${c.autorizo||c.responsable||'—'}</td>
-        <td style="color:#888">${c.motivo||'—'}</td>
-        <td style="color:#888">${c.mesero||'—'}</td>
-      </tr>`).join('')}
-    </tbody>
-  </table>
-  ` : ''}
-
-  <!-- Descuentos -->
-  ${(invActual.descuentos || []).length > 0 ? `
-  <div class="rd-sec">Descuentos del período — Total: <span style="color:${cCrit}">$${totalDesc.toFixed(2)}</span></div>
-  <table class="rd-t">
-    <thead><tr>
-      <th>Fecha / Hora</th><th class="tc">%</th>
-      <th class="tr">Monto $</th><th>Folio</th><th>Motivo</th><th>Autorizó</th>
-    </tr></thead>
-    <tbody>
-      ${(invActual.descuentos || []).map(d => `<tr>
-        <td style="white-space:nowrap;color:#888">${d.fechaHora||'—'}</td>
-        <td class="tc">${d.porcentaje != null ? d.porcentaje + '%' : '—'}</td>
-        <td class="tr" style="color:${cCrit};font-weight:700">$${(parseFloat(d.monto)||0).toFixed(2)}</td>
-        <td>${d.folio||'—'}</td>
-        <td style="color:#888">${d.motivo||'—'}</td>
-        <td>${d.autorizo||'—'}</td>
-      </tr>`).join('')}
-    </tbody>
-  </table>
-  ` : ''}
-
-  <div class="rd-foot">Reporte Directivo · ${inv.negocio || ''} · Generado: ${fecha} · ETAAX Sistema de Inventarios</div>
 </div>`;
 
     document.body.appendChild(overlay);
+    // Paginar: medir alturas reales y repartir el contenido en hojas A4 discretas, cada una con
+    // su encabezado y pie, sin cortar filas (cuando una tabla cruza de hoja, repite su cabecera).
+    try {
+        _rdConstruirPaginas(overlay.querySelector('#rd-src'), overlay.querySelector('#rd-pages'), _headHtml, _footHtml);
+    } catch (e) {
+        console.error('Paginado del reporte falló, se muestra sin paginar:', e);
+        const s = overlay.querySelector('#rd-src'), pg = overlay.querySelector('#rd-pages');
+        if (s && pg) { s.removeAttribute('id'); s.style.cssText = ''; const w = document.createElement('div'); w.className = 'rd-paper'; w.appendChild(s); pg.appendChild(w); }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
