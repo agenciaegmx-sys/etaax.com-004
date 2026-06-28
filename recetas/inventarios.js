@@ -4763,7 +4763,10 @@ function verReporteDirectivo(gerencial) {
         const ea        = parseFloat(f.existenciaAnterior) || 0;
         const entBot    = getEntradasBottles(f.insumoId);
         const copasBot  = f.contNeto > 0 && f.copaML > 0 ? f.contNeto / f.copaML : 1;
-        const ventaCopa = calcVentasCopasRecetas(f.insumoId, f.copaML) + (parseFloat(f.ventasCopasDirectas) || 0);
+        // Coctelería = consumo por recetas del menú; copa → en copas, pza → en piezas.
+        const ventaCoct    = f.tipo === 'pza' ? calcVentasPzaRecetas(f.insumoId) : calcVentasCopasRecetas(f.insumoId, f.copaML);
+        const ventaCopaDir = parseFloat(f.ventasCopasDirectas) || 0; // venta directa por copa/pza
+        const ventaCopa = ventaCoct + ventaCopaDir;
         const ventaBot  = parseFloat(f.ventasBotella) || 0;
         const cortesia  = parseFloat(f.cortesiaCopas)  || 0;
         const merma     = parseFloat(f.mermaCopas)     || 0;
@@ -4784,7 +4787,7 @@ function verReporteDirectivo(gerencial) {
         else if (!_bat && Math.abs(varPct) > 10) conRiesgo++;
         else conOk++;
         return { f, fisico, teorico, dif, cc, difCosto, ea, entBot, copasBot,
-                 ventaCopa, ventaBot, ventaPzaTot, cortesia, merma, cancel, consumo,
+                 ventaCopa, ventaCoct, ventaCopaDir, ventaBot, ventaPzaTot, cortesia, merma, cancel, consumo,
                  disponible, pctConsumo, varPct, esBateo:_bat };
     });
 
@@ -4917,9 +4920,9 @@ function verReporteDirectivo(gerencial) {
             gDif += a.difCosto;
             const u = a.f.tipo === 'pza' ? 'pza' : 'cop';
             const entStr = a.f.tipo === 'pza' ? (a.entBot>0?'+'+a.entBot+' p':'—') : (a.entBot>0?'+'+a.entBot.toFixed(1)+' b':'—');
-            const vtaCopaStr = a.f.tipo === 'pza' ? '—' : (a.ventaCopa>0?a.ventaCopa.toFixed(1)+' c':'—');
-            const vtaBotStr  = a.f.tipo === 'pza' ? (a.ventaPzaTot>0?a.ventaPzaTot.toFixed(0)+' p':'—') : (a.ventaBot>0?a.ventaBot+' b':'—');
-            const cmStr = (a.cortesia+a.merma)>0 ? (a.cortesia+a.merma).toFixed(1) : '—';
+            const vtaCopaStr = a.f.tipo === 'pza' ? '—' : (a.ventaCopaDir>0?a.ventaCopaDir.toFixed(1)+' c':'—');
+            const vtaBotStr  = a.f.tipo === 'pza' ? ((a.ventaBot+a.ventaCopaDir)>0?(a.ventaBot+a.ventaCopaDir).toFixed(0)+' p':'—') : (a.ventaBot>0?a.ventaBot+' b':'—');
+            const coctStr    = a.ventaCoct>0 ? (a.f.tipo==='pza'?a.ventaCoct.toFixed(0)+' p':a.ventaCoct.toFixed(1)+' c') : '—';
             const vcol  = vc(a.varPct);
             return `<tr>
               <td style="font-weight:600;max-width:200px;white-space:normal;word-break:break-word">${etx(a.f.nombre)}</td>
@@ -4927,8 +4930,7 @@ function verReporteDirectivo(gerencial) {
               <td class="tc" style="color:${cOk}">${entStr}</td>
               <td class="tc">${vtaCopaStr}</td>
               <td class="tc">${vtaBotStr}</td>
-              <td class="tc" style="color:${(a.cortesia+a.merma)>0?'#7d5fa3':'#ccc'}">${cmStr}</td>
-              <td class="tc" style="color:${a.cancel>0?cWarn:'#ccc'}">${a.cancel>0 ? a.cancel.toFixed(1) : '—'}</td>
+              <td class="tc" style="color:#9b8de8">${coctStr}</td>
               <td class="tc" style="font-weight:600">${_exFmt(a, a.fisico)}</td>
               <td class="tc" style="color:${vcol};font-weight:700">${a.dif>=0?'+':''}${a.dif.toFixed(1)} ${u}</td>
               <td class="tc" style="color:${vcol}">${a.varPct.toFixed(0)}%</td>
@@ -4944,36 +4946,46 @@ function verReporteDirectivo(gerencial) {
         <table class="rd-t" style="margin-bottom:6px">
           <thead><tr>
             <th>Producto</th><th class="tc">Exist. ant.</th><th class="tc">Entradas</th>
-            <th class="tc">Vta. copa</th><th class="tc">Vta. bot.</th><th class="tc">Cort/Merma</th>
-            <th class="tc">Cancel.</th><th class="tc">Exist. act.</th><th class="tc">Varianza</th>
+            <th class="tc">Vta. copa</th><th class="tc">Vta. bot.</th><th class="tc">Coctelería</th>
+            <th class="tc">Exist. act.</th><th class="tc">Varianza</th>
             <th class="tc">%</th><th class="tr">Dif. $</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table></div>`;
     };
-    // Cancelaciones + descuentos (van en la última hoja del inventario).
-    const _cancelDescHTML = `
-      ${numCancel > 0 ? `
-      <div class="rd-sec">Cancelaciones del período — ${numCancel} registro${numCancel !== 1 ? 's' : ''}</div>
-      <table class="rd-t"><thead><tr><th>Fecha / Hora</th><th>Producto</th><th class="tc">Cant.</th><th>Autorizó</th><th>Motivo</th><th>Mesero</th></tr></thead>
-        <tbody>${(invActual.cancelaciones || []).map(c => `<tr>
-          <td style="white-space:nowrap;color:#888">${c.fechaHora||'—'}</td><td style="font-weight:500">${etx(c.nombreProducto||'—')}</td>
-          <td class="tc" style="font-weight:700">${c.cantidad||'—'}</td><td>${c.autorizo||c.responsable||'—'}</td>
-          <td style="color:#888">${c.motivo||'—'}</td><td style="color:#888">${c.mesero||'—'}</td></tr>`).join('')}</tbody></table>` : ''}
-      ${(!ger && (invActual.descuentos || []).length > 0) ? `
+    // ── Hoja de MOVIMIENTOS ESPECIALES: productos cancelados, mermados y cortesías ──
+    const _mermados  = analisis.filter(a => a.merma > 0).sort((x,y)=>y.merma-x.merma);
+    const _cortesias = analisis.filter(a => a.cortesia > 0).sort((x,y)=>y.cortesia-x.cortesia);
+    const _cancels   = invActual.cancelaciones || [];
+    const _uMC = a => a.f.tipo === 'pza' ? 'pza' : 'cop';
+    const _movTit = t => `<div class="rd-grptitle" style="font-size:11px;font-weight:700;color:#1a1916;margin:12px 0 4px">${t}</div>`;
+    const _movVacio = '<div style="font-size:10px;color:#aaa;padding:2px 0 10px">Ninguno en el período. ✅</div>';
+    const movimientosHTML = `
+      <div class="rd-sec">Movimientos especiales del período</div>
+      ${_cancels.length ? `<div class="rd-grp">${_movTit('🚫 Productos cancelados (POS) — '+_cancels.length)}
+        <table class="rd-t"><thead><tr><th>Fecha / Hora</th><th>Producto</th><th class="tc">Cant.</th><th>Autorizó</th><th>Motivo</th><th>Mesero</th></tr></thead>
+          <tbody>${_cancels.map(c=>`<tr><td style="white-space:nowrap;color:#888">${c.fechaHora||'—'}</td><td style="font-weight:500">${etx(c.nombreProducto||'—')}</td><td class="tc" style="font-weight:700">${c.cantidad||'—'}</td><td>${etx(c.autorizo||c.responsable||'—')}</td><td style="color:#888">${etx(c.motivo||'—')}</td><td style="color:#888">${etx(c.mesero||'—')}</td></tr>`).join('')}</tbody></table></div>`
+        : _movTit('🚫 Productos cancelados (POS) — 0')+_movVacio}
+      ${_mermados.length ? `<div class="rd-grp">${_movTit('🗑️ Productos mermados — '+_mermados.length)}
+        <table class="rd-t"><thead><tr><th>Producto</th><th class="tc">Grupo</th><th class="tc">Merma</th><th>Motivo</th><th class="tr">Valor (carta)</th></tr></thead>
+          <tbody>${_mermados.map(a=>`<tr><td style="font-weight:600">${etx(a.f.nombre)}</td><td class="tc" style="color:#888">${_grupoCategoria(a.f)}</td><td class="tc" style="color:${cCrit};font-weight:700">${a.merma.toFixed(1)} ${_uMC(a)}</td><td style="color:#888">${etx(a.f.mermaConcepto||'—')}</td><td class="tr" style="font-weight:600">$${_m2(a.merma*(a.f.precioCarta||0))}</td></tr>`).join('')}</tbody></table></div>`
+        : _movTit('🗑️ Productos mermados — 0')+_movVacio}
+      ${_cortesias.length ? `<div class="rd-grp">${_movTit('🎁 Cortesías — '+_cortesias.length)}
+        <table class="rd-t"><thead><tr><th>Producto</th><th class="tc">Grupo</th><th class="tc">Cantidad</th><th>Motivo</th><th class="tr">Valor (carta)</th></tr></thead>
+          <tbody>${_cortesias.map(a=>`<tr><td style="font-weight:600">${etx(a.f.nombre)}</td><td class="tc" style="color:#888">${_grupoCategoria(a.f)}</td><td class="tc" style="color:#7d5fa3;font-weight:700">${a.cortesia.toFixed(1)} ${_uMC(a)}</td><td style="color:#888">${etx(a.f.cortesiaConcepto||'—')}</td><td class="tr" style="font-weight:600">$${_m2(a.cortesia*(a.f.precioCarta||0))}</td></tr>`).join('')}</tbody></table></div>`
+        : _movTit('🎁 Cortesías — 0')+_movVacio}`;
+    // Descuentos: van al final del inventario (no es movimiento de producto).
+    const _descuentosHTML = `${(!ger && (invActual.descuentos || []).length > 0) ? `
       <div class="rd-sec">Descuentos del período — Total: <span style="color:${cCrit}">$${_m2(totalDesc)}</span></div>
       <table class="rd-t"><thead><tr><th>Fecha / Hora</th><th class="tc">%</th><th class="tr">Monto $</th><th>Folio</th><th>Motivo</th><th>Autorizó</th></tr></thead>
-        <tbody>${(invActual.descuentos || []).map(d => `<tr>
-          <td style="white-space:nowrap;color:#888">${d.fechaHora||'—'}</td><td class="tc">${d.porcentaje != null ? d.porcentaje + '%' : '—'}</td>
-          <td class="tr" style="color:${cCrit};font-weight:700">$${_m2((parseFloat(d.monto)||0))}</td><td>${d.folio||'—'}</td>
-          <td style="color:#888">${d.motivo||'—'}</td><td>${d.autorizo||'—'}</td></tr>`).join('')}</tbody></table>` : ''}`;
+        <tbody>${(invActual.descuentos || []).map(d => `<tr><td style="white-space:nowrap;color:#888">${d.fechaHora||'—'}</td><td class="tc">${d.porcentaje != null ? d.porcentaje + '%' : '—'}</td><td class="tr" style="color:${cCrit};font-weight:700">$${_m2((parseFloat(d.monto)||0))}</td><td>${etx(d.folio||'—')}</td><td style="color:#888">${etx(d.motivo||'—')}</td><td>${etx(d.autorizo||'—')}</td></tr>`).join('')}</tbody></table>` : ''}`;
     // Inventario completo: todos los grupos (bateo primero). El encabezado grande se repite por
     // hoja automáticamente porque TODO el reporte va dentro de una tabla con <thead> (ver abajo).
     const _gruposInvOrden = Object.entries(gruposTabla).sort((a,b)=>{const A=a[0]===GRUPO_BATEO,B=b[0]===GRUPO_BATEO;return A===B?String(a[0]).localeCompare(String(b[0])):(A?-1:1);});
     const inventarioHTML = `
       <div class="rd-sec">Inventario completo por grupo de categoría</div>
       ${_gruposInvOrden.map(_grupoInvHTML).join('')}
-      ${_cancelDescHTML}`;
+      ${_descuentosHTML}`;
     // Encabezado grande y pie que un PAGINADOR (mide alturas) replica en cada hoja A4 discreta.
     const _headHtml = rdHeader(`Inventario ${_tipoTxt} · ${periodoTxt} · ${_estadoInv}`);
     const _footHtml = rdFoot;
@@ -5223,6 +5235,9 @@ function verReporteDirectivo(gerencial) {
   ` : '<div style="font-size:11px;color:#aaa;padding:8px 0">Sin ventas registradas en el período.</div>'}
 
   ${_seccionCompuestosDirectivo()}
+
+  <div class="rd-break"></div>
+  ${movimientosHTML}
 
   <div class="rd-break"></div>
   ${inventarioHTML}
