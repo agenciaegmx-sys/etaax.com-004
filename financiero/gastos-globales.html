@@ -225,17 +225,17 @@
                         <table class="gg-table">
                             <thead>
                                 <tr>
-                                    <th>Concepto</th>
+                                    <th>Concepto / estatus del mes</th>
                                     <th>Categoría</th>
-                                    <th>Proveedor</th>
-                                    <th class="ar">Monto mensual</th>
+                                    <th class="ar">Plan</th>
+                                    <th class="ar">Pagado (mes)</th>
                                     <th></th>
                                 </tr>
                             </thead>
                             <tbody id="fijosTbody"></tbody>
                             <tfoot id="fijosFoot" style="display:none">
                                 <tr>
-                                    <td colspan="3" class="tot-lbl">Total gastos fijos</td>
+                                    <td colspan="3" class="tot-lbl">Total pagado del mes · <span id="fijosPlan" style="color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0"></span></td>
                                     <td class="ar"><span class="tot-val" id="fijosTotal"></span></td>
                                     <td></td>
                                 </tr>
@@ -301,6 +301,28 @@
                 </div>
 
                 <!-- Desglose de pagos de IMSS / cargas sociales (cuenta en nóminas, no en variables) -->
+                <!-- Nómina pagada del mes (gastos diarios categoría nómina) — de aquí sale el total de nóminas -->
+                <div class="card" id="cardNomGastos" style="margin-top:16px;display:none">
+                    <div class="card-header"><h2>💵 Nómina pagada del mes (gastos)</h2></div>
+                    <div style="padding:12px 20px;font-size:11px;color:var(--text-dim);background:rgba(61,190,122,.05);border-bottom:1px solid var(--border)">
+                        El total de nóminas se calcula desde lo realmente <strong>pagado</strong> (sueldo final + bonos) en el módulo de gastos, no del catálogo de staff. La plantilla de arriba es referencia.
+                    </div>
+                    <div class="card-body" style="padding:0;overflow-x:auto">
+                        <table class="gg-table">
+                            <thead><tr><th>Fecha</th><th>Concepto</th><th class="ar">Monto</th></tr></thead>
+                            <tbody id="nomGTbody"></tbody>
+                            <tfoot>
+                                <tr><td class="tot-lbl" colspan="2">Nómina pagada (gastos)</td>
+                                    <td class="ar"><span class="tot-val" id="nomGTotal" style="color:var(--green)"></span></td></tr>
+                                <tr><td colspan="2" style="font-size:11px;color:var(--text-dim);border:none;padding:6px 14px">+ IMSS / cargas sociales del mes</td>
+                                    <td class="ar" style="border:none;font-size:13px;color:var(--accent)"><span id="nomGImss"></span></td></tr>
+                                <tr><td class="tot-lbl" colspan="2" style="border-top:1px solid var(--border)">= Total Nóminas (igual al KPI de arriba)</td>
+                                    <td class="ar" style="border-top:1px solid var(--border)"><span class="tot-val" id="nomGTotalConImss" style="color:var(--green)"></span></td></tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
                 <div class="card" id="cardImss" style="margin-top:16px;display:none">
                     <div class="card-header"><h2>💉 Pagos de IMSS / cargas sociales</h2></div>
                     <div style="padding:12px 20px;font-size:11px;color:var(--text-dim);background:rgba(245,200,66,.05);border-bottom:1px solid var(--border)">
@@ -613,15 +635,51 @@ function totalImssMes(mes){ return loadImssMes(mes).reduce(function(s,g){return 
 function _esNominaCat(g){ return /n[oó]mina|personal/i.test(g.categoria||''); }
 // Categorías que NO son gasto variable real (propinas pasan al personal; contabilidad/impuestos van aparte).
 function _catExcluidaVar(g){ return /propina|gratificaci|contabilidad|impuesto/i.test(g.categoria||''); }
+// Categoría de naturaleza FIJA (renta/servicios/agua/luz/internet…) → cuenta en Gastos Fijos, no en variables.
+function _esFijoPat(g){ return /renta|arrendamiento|servicio|\bagua\b|\bluz\b|electric|energ[ií]a|internet|telecom|tel[eé]fon|\bgas\b|predial|software|suscripci/i.test(g.categoria||''); }
 // Categorías definidas como GASTO FIJO (en gf_fijos) → no deben recontarse en variables.
 function _catsFijos(){ var s={}; loadFijos().forEach(function(f){ if(f.categoria) s[String(f.categoria).toLowerCase().trim()]=1; }); return s; }
-// El desglose de VARIABLES excluye nómina, IMSS y categorías de gasto fijo (cada uno cuenta en su sección).
-function loadVariablesMes(mes){
-    var fc=_catsFijos();
-    return loadGastosMes(mes).filter(function(g){
-        return !_esIMSS(g) && !_esNominaCat(g) && !_catExcluidaVar(g) && !fc[String(g.categoria||'').toLowerCase().trim()];
+// ── Matcher: liga cada gasto fijo del catálogo con su(s) pago(s) reales del mes ──
+// Por `fijoId` (pagos nuevos) o, si falta, por concepto + proveedor (pagos viejos sin link).
+function _norm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
+function _pagosFijosMes(mes){
+    var fijos=loadFijos(), gastos=loadGastosMes(mes);
+    return fijos.map(function(f){
+        var pagos=gastos.filter(function(g){
+            if(g.fijoId) return g.fijoId===f.id;
+            if(_norm(g.concepto)!==_norm(f.concepto)) return false;
+            return !f.proveedor || _norm(g.proveedor)===_norm(f.proveedor);
+        });
+        var pagado=pagos.reduce(function(s,g){return s+n(g.monto);},0);
+        var first=pagos.slice().sort(function(a,b){return String(a.fecha||'').localeCompare(String(b.fecha||''));})[0];
+        return { fijo:f, pagos:pagos, pagado:pagado, estaPagado:pagos.length>0,
+                 fecha:(first&&(first.fechaPago||first.fecha))||'', metodo:(first&&first.metodoPago)||'', metodoBanco:(first&&first.metodoBanco)||'' };
     });
 }
+// Conjunto de IDs de gastos que son pago de algún fijo (para excluirlos de variables de forma confiable).
+function _idsPagosFijos(mes){ var s={}; _pagosFijosMes(mes).forEach(function(x){ x.pagos.forEach(function(g){ if(g.id) s[g.id]=1; }); }); return s; }
+// Total REALMENTE pagado de gastos fijos en el mes (Opción A).
+function totalFijosPagado(mes){ return _pagosFijosMes(mes).reduce(function(s,x){return s+x.pagado;},0); }
+// Etiqueta del fondo de origen de un pago.
+function _fondoLbl(metodo, metodoBanco){
+    if(metodo==='caja_fuerte') return '🏦 Caja fuerte';
+    if(metodo==='caja_chica') return '💼 Caja chica';
+    if(metodo==='banco') return '🏛️ '+(metodoBanco==='credito'?'T. crédito':metodoBanco==='debito'?'T. débito':'Transfer.');
+    return '🏛️ Banco';
+}
+
+// El desglose de VARIABLES excluye nómina, IMSS, propinas, contabilidad/impuestos y gastos fijos (pagos reales + recurrentes).
+function loadVariablesMes(mes){
+    var fc=_catsFijos(), idsFijo=_idsPagosFijos(mes);
+    return loadGastosMes(mes).filter(function(g){
+        if(g.fijoId || idsFijo[g.id]) return false; // pago de un gasto fijo (nuevo o casado por concepto)
+        return !_esIMSS(g) && !_esNominaCat(g) && !_catExcluidaVar(g) && !_esFijoPat(g) && !fc[String(g.categoria||'').toLowerCase().trim()];
+    });
+}
+// Pagos REALES de nómina del mes (gastos con categoría de nómina/personal) — el costo de nómina
+// se calcula desde los gastos diarios (sueldo final + bonos), no desde el catálogo de staff.
+function loadNominaGastosMes(mes){ return loadGastosMes(mes).filter(function(g){ return _esNominaCat(g) && !_esIMSS(g); }); }
+function totalNominaGastosMes(mes){ return loadNominaGastosMes(mes).reduce(function(s,g){return s+n(g.monto);},0); }
 function loadCortesMonth(mes){
     return (_cacheGG_Cortes||[]).filter(function(c){return c.fecha&&c.fecha.slice(0,7)===mes;});
 }
@@ -701,17 +759,14 @@ function setTab(tab){
 
 /* ── KPIs ── */
 function renderKPIs(mes){
-    var fijos=loadFijos();
-    var totalFijos=fijos.reduce(function(s,f){return s+n(f.monto);},0);
+    // Gastos fijos = lo REALMENTE pagado del mes (Opción A), no el plan del catálogo.
+    var totalFijos=totalFijosPagado(mes);
 
-    var totalNom=0;
-    ['operativa','administrativa','socios'].forEach(function(cat){
-        // _nominaItems incluye los colaboradores del catálogo de staff (auto) + capturados
-        _nominaItems(cat,mes).forEach(function(p){totalNom+=n(p.base)+n(p.bonos)+n(p.imss)+n(p.prima);});
-    });
-    // El IMSS pagado como gasto del mes es una carga social → suma a NÓMINAS, no a variables.
+    // Nómina REAL = lo pagado en gastos diarios por nómina/personal (sueldo final + bonos) + IMSS.
+    // (No se jala del catálogo de staff: el sueldo final suele ajustarse al pagar.)
+    var totalNomGastos=totalNominaGastosMes(mes);
     var totalImssG=totalImssMes(mes);
-    totalNom += totalImssG;
+    var totalNom=totalNomGastos+totalImssG;
 
     var totalVar=loadVariablesMes(mes).reduce(function(s,g){return s+n(g.monto);},0);
 
@@ -745,14 +800,27 @@ function renderFijos(){
     var foot=document.getElementById('fijosFoot');
     if(!lista.length){tbody.innerHTML='';empty.style.display='block';foot.style.display='none';return;}
     empty.style.display='none'; foot.style.display='';
-    var total=lista.reduce(function(s,f){return s+n(f.monto);},0);
-    document.getElementById('fijosTotal').textContent=fmtM(total);
-    tbody.innerHTML=lista.map(function(f){
+    var mes=_mesPicker||mesStr();
+    var matches=_pagosFijosMes(mes);
+    var totalPlan=lista.reduce(function(s,f){return s+n(f.monto);},0);
+    var totalReal=matches.reduce(function(s,x){return s+x.pagado;},0);
+    var nPag=matches.filter(function(x){return x.estaPagado;}).length;
+    document.getElementById('fijosTotal').textContent=fmtM(totalReal); // Opción A: lo realmente pagado
+    var planEl=document.getElementById('fijosPlan'); if(planEl) planEl.textContent=nPag+'/'+lista.length+' pagados · plan '+fmtM(totalPlan);
+    tbody.innerHTML=matches.map(function(x){
+        var f=x.fijo, dif=x.pagado-n(f.monto);
+        var estatus=x.estaPagado
+            ? '<span style="font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--green);background:rgba(61,190,122,.12);border:1px solid rgba(61,190,122,.3);border-radius:10px;padding:1px 8px;white-space:nowrap">✓ Pagado'+(x.fecha?' '+x.fecha:'')+'</span>'
+            : '<span style="font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--accent);background:rgba(245,200,66,.1);border:1px solid rgba(245,200,66,.3);border-radius:10px;padding:1px 8px;white-space:nowrap">⏳ Pendiente</span>';
+        var fondo=x.estaPagado?_fondoLbl(x.metodo,x.metodoBanco):'';
+        var realCell=x.estaPagado
+            ? '<span style="font-weight:700;color:var(--red)">'+fmtM(x.pagado)+'</span>'+(Math.abs(dif)>0.01?' <span title="Difiere del plan: '+(dif>0?'+':'')+fmtM(dif)+'" style="color:var(--accent);cursor:help">⚠️</span>':'')
+            : '<span style="color:var(--text-dim)">—</span>';
         return'<tr>'
-            +'<td style="font-weight:500">'+_esc(f.concepto)+'</td>'
-            +'<td><span class="cat-badge">'+_esc(f.categoria||'—')+'</span></td>'
-            +'<td style="color:var(--text-dim);font-size:12px">'+_esc(f.proveedor||'—')+'</td>'
-            +'<td class="ar" style="font-weight:600;color:var(--red)">'+fmtM(f.monto)+'</td>'
+            +'<td style="font-weight:500">'+_esc(f.concepto)+'<div style="margin-top:3px">'+estatus+(fondo?' <span style="font-size:9px;color:var(--text-dim)">desde '+fondo+'</span>':'')+'</div></td>'
+            +'<td><span class="cat-badge">'+_esc(f.categoria||'—')+'</span><div style="font-size:10px;color:var(--text-dim);margin-top:2px">'+_esc(f.proveedor||'')+'</div></td>'
+            +'<td class="ar" style="color:var(--text-dim)">'+fmtM(f.monto)+'</td>'
+            +'<td class="ar">'+realCell+'</td>'
             +'<td style="text-align:right;white-space:nowrap">'
             +'<button class="btn-row" data-edit-fijo="'+f.id+'">✏️</button> '
             +'<button class="btn-row del" data-del-fijo="'+f.id+'">🗑️</button>'
@@ -834,6 +902,24 @@ function _nominaItems(cat,mes){
     return guardadas.concat(autos);
 }
 
+function renderNomGastos(mes){
+    var card=document.getElementById('cardNomGastos'); if(!card) return;
+    var lista=loadNominaGastosMes(mes).slice().sort(function(a,b){return (b.fecha||'').localeCompare(a.fecha||'');});
+    var imss=totalImssMes(mes);
+    if(!lista.length && !imss){ card.style.display='none'; return; }
+    card.style.display='';
+    var nom=lista.reduce(function(s,g){return s+n(g.monto);},0);
+    document.getElementById('nomGTotal').textContent=fmtM(nom);
+    document.getElementById('nomGImss').textContent='+ '+fmtM(imss);
+    document.getElementById('nomGTotalConImss').textContent=fmtM(nom+imss);
+    document.getElementById('nomGTbody').innerHTML=lista.map(function(g){
+        return '<tr>'
+            +'<td style="white-space:nowrap;color:var(--text-dim);font-size:12px">'+_esc(g.fecha||'—')+'</td>'
+            +'<td style="font-weight:500">'+_esc(g.concepto||'—')+'</td>'
+            +'<td class="ar" style="font-weight:600;color:var(--green)">'+fmtM(g.monto)+'</td>'
+        +'</tr>';
+    }).join('');
+}
 function renderImss(mes){
     var card=document.getElementById('cardImss'); if(!card) return;
     var lista=loadImssMes(mes).slice().sort(function(a,b){return (b.fecha||'').localeCompare(a.fecha||'');});
@@ -851,6 +937,7 @@ function renderImss(mes){
 }
 function renderNominas(){
     var mes=_mesPicker||mesStr();
+    renderNomGastos(mes); // nómina realmente pagada (gastos diarios)
     renderImss(mes); // desglose de pagos de IMSS (cargas sociales) del mes
     var lista=_nominaItems(_nomCat,mes);
     var tbody=document.getElementById('nominasTbody');

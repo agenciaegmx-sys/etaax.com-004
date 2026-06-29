@@ -269,7 +269,7 @@ function loadNominasMes(mes){
     var all = _uCache.nominas || {};
     var d=all[mes]||{operativa:[],administrativa:[],socios:[]};
     var t=0;
-    ['operativa','administrativa','socios'].forEach(function(c){(d[c]||[]).forEach(function(p){t+=n(p.base)+n(p.bonos)+n(p.imss);});});
+    ['operativa','administrativa','socios'].forEach(function(c){(d[c]||[]).forEach(function(p){t+=n(p.base)+n(p.bonos)+n(p.imss)+n(p.prima);});});
     return t;
 }
 
@@ -347,35 +347,47 @@ function semaforo(pct,thresh){
 }
 
 /* ── Cost calculator for a date range ── */
+// Mismas exclusiones que Gastos Globales para que los totales coincidan:
+// el "gasto variable" real NO incluye nómina, IMSS, propinas, contabilidad/impuestos
+// ni categorías de gasto fijo (cada uno cuenta en su propia parte). Los depósitos no
+// están en la tabla de gastos (son movimientos internos), así que no cuentan aquí.
+function _u_esIMSS(g){ return /\bimss\b|seguro\s*social|cargas\s*sociales/i.test((g.categoria||'')+' '+(g.concepto||'')); }
+function _u_esNominaCat(g){ return /n[oó]mina|personal/i.test(g.categoria||''); }
+function _u_catExcluida(g){ return /propina|gratificaci|contabilidad|impuesto/i.test(g.categoria||''); }
+function _u_catsFijos(){ var s={}; loadFijos().forEach(function(f){ if(f.categoria) s[String(f.categoria).toLowerCase().trim()]=1; }); return s; }
+// Categoría de naturaleza FIJA (renta/servicios/etc.) → ya cuenta en Gastos Fijos, fuera de variables.
+function _u_esFijoPat(g){ return /renta|arrendamiento|servicio|\bagua\b|\bluz\b|electric|energ[ií]a|internet|telecom|tel[eé]fon|\bgas\b|predial|software|suscripci/i.test(g.categoria||''); }
+function _u_norm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
+// ¿El gasto es pago de un gasto fijo del catálogo? Por fijoId, o por concepto+proveedor (pagos viejos).
+function _u_esPagoFijo(g, fijos){
+    return fijos.some(function(f){
+        if(g.fijoId) return g.fijoId===f.id;
+        if(_u_norm(g.concepto)!==_u_norm(f.concepto)) return false;
+        return !f.proveedor || _u_norm(g.proveedor)===_u_norm(f.proveedor);
+    });
+}
 function calcCostos(r){
-    // Variable: gastos in range
+    var fijos=loadFijos(), fijosCats=_u_catsFijos();
     var gastos=loadGastos().filter(function(g){
         if(!inRange(g.fecha,r)) return false;
         if(_sucursalId&&g.negocioId&&g.negocioId!==_sucursalId) return false;
         return true;
     });
-    var varCost=gastos.reduce(function(s,g){return s+n(g.monto);},0);
-
-    // Fixed costs: pro-rate by days
-    var fijos=loadFijos();
-    var totalFijoMensual=fijos.reduce(function(s,f){return s+n(f.monto);},0);
-
-    // Count days in range
-    var dFrom=new Date(r.from+'T12:00:00'),dTo=new Date(r.to+'T12:00:00');
-    var rangeDays=Math.max(1,Math.round((dTo-dFrom)/86400000)+1);
-
-    // Days in the month(s) covered — use first month
-    var mesR=r.from.slice(0,7);
-    var y=parseInt(mesR.slice(0,4)),m=parseInt(mesR.slice(5,7));
-    var diasMes=daysInMonth(y,m);
-
-    var fixedPortion=(totalFijoMensual/diasMes)*rangeDays;
-
-    // Nominas pro-rate
-    var nomMensual=loadNominasMes(mesR);
-    var nomPortion=(nomMensual/diasMes)*rangeDays;
-
-    return{variable:varCost,fijo:fixedPortion,nomina:nomPortion,total:varCost+fixedPortion+nomPortion};
+    // Todo se basa en los GASTOS DIARIOS reales (no en catálogos/plan):
+    //  · FIJO  = lo realmente pagado de gastos fijos del catálogo (Opción A).
+    //  · NÓMINA = pagos de nómina/personal (sueldo final + bonos) + IMSS.
+    //  · VARIABLE = el resto, excluyendo propinas, contabilidad/impuestos y categorías fijas.
+    var varCost=0, imssCost=0, nomCost=0, fijoCost=0;
+    gastos.forEach(function(g){
+        if(g.fijoId || _u_esPagoFijo(g,fijos)){ fijoCost+=n(g.monto); return; } // pago de fijo (link o concepto)
+        if(_u_esIMSS(g)){ imssCost+=n(g.monto); return; }
+        if(_u_esNominaCat(g)){ nomCost+=n(g.monto); return; }
+        var cat=String(g.categoria||'').toLowerCase().trim();
+        if(_u_catExcluida(g)||fijosCats[cat]||_u_esFijoPat(g)) return; // propinas/contabilidad/fijos por categoría fuera de variables
+        varCost+=n(g.monto);
+    });
+    var nomPortion=nomCost+imssCost;
+    return{variable:varCost,fijo:fijoCost,nomina:nomPortion,total:varCost+fijoCost+nomPortion};
 }
 
 /* ── Income for a range ── */

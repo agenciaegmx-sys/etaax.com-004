@@ -1351,8 +1351,10 @@ function editarGasto(id){
     _pedirClaveAdmin('Editar gasto: '+(g.concepto||''), function(){ _abrirModalGasto(g,g.tipo); }, '✏️ Editar');
 }
 
+var _gastoFijoId=''; // si el gasto se generó pagando un gasto fijo, guarda su id (link al catálogo de fijos)
 function _abrirModalGasto(g,tipo){
     var d=g||{};
+    _gastoFijoId=(d.fijoId)||''; // pagar fijo → link; editar → conserva el del gasto; nuevo → vacío
     document.getElementById('modalTitulo').textContent=g?'Editar gasto':'Nuevo gasto';
     document.getElementById('gId').value=d.id||'';
     document.getElementById('gFecha').value=d.fecha||todayStr();
@@ -1814,7 +1816,7 @@ function pagarFijo(fijoId){
     var f=(_cacheFijos||[]).find(function(x){ return x.id===fijoId; });
     if(!f)return;
     _cerrarSelPago();
-    var g={ concepto:f.concepto, categoria:_CAT_FIJO_MAP[f.categoria]||'Varios', monto:n(f.monto), proveedor:f.proveedor||'' };
+    var g={ concepto:f.concepto, categoria:_CAT_FIJO_MAP[f.categoria]||'Varios', monto:n(f.monto), proveedor:f.proveedor||'', fijoId:f.id };
     _asegurarCategoria(g.categoria);
     _abrirModalGasto(g,'menor');
 }
@@ -1943,7 +1945,8 @@ function guardarGasto(){
         evidencias:_evidenciasGasto.slice(),
         notas:document.getElementById('gNotas').value.trim(),
         estatus:document.getElementById('gEstatus').value||'pagado',
-        fechaPago:document.getElementById('gFechaPago').value||''
+        fechaPago:document.getElementById('gFechaPago').value||'',
+        fijoId:_gastoFijoId||((_exG&&_exG.fijoId)||'') // link al gasto fijo si se pagó desde el catálogo
     };
     _cacheGastos = (_cacheGastos||[]).filter(function(g){return g.id!==id;});
     _cacheGastos.push(gasto);
