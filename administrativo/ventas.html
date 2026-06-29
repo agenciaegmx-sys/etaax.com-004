@@ -1952,11 +1952,11 @@ function _depPoblarSelects(d){
     var oSel=document.getElementById('depOrigen'), dSel=document.getElementById('depDestino2');
     if(!oSel||!dSel) return;
     var oOpts='<option value="externo">➕ Entrada externa (sin origen)</option><option value="caja_fuerte">🏦 Caja fuerte</option>';
-    deb.forEach(function(c){ oOpts+='<option value="banco:'+c.id+'">🏛️ '+_esc(_cuentaBancoLabel(c.id))+'</option>'; });
+    deb.forEach(function(c){ oOpts+='<option value="banco:'+c.id+'">🏛️ '+_escV(_cuentaBancoLabel(c.id))+'</option>'; });
     oSel.innerHTML=oOpts;
     var dOpts='<option value="caja_fuerte">🏦 Caja fuerte</option>';
-    deb.forEach(function(c){ dOpts+='<option value="banco:'+c.id+'">🏛️ '+_esc(_cuentaBancoLabel(c.id))+'</option>'; });
-    cred.forEach(function(c){ dOpts+='<option value="tc:'+c.id+'">💳 Pago tarjeta crédito · '+_esc(_cuentaBancoLabel(c.id))+'</option>'; });
+    deb.forEach(function(c){ dOpts+='<option value="banco:'+c.id+'">🏛️ '+_escV(_cuentaBancoLabel(c.id))+'</option>'; });
+    cred.forEach(function(c){ dOpts+='<option value="tc:'+c.id+'">💳 Pago tarjeta crédito · '+_escV(_cuentaBancoLabel(c.id))+'</option>'; });
     dSel.innerHTML=dOpts;
     // Valores guardados (o compat con depósitos viejos que solo tenían `destino`)
     var oVal = d.origen ? (d.origen==='banco' ? 'banco:'+(d.origenCuentaId||'') : d.origen)
