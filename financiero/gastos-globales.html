@@ -299,6 +299,22 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Desglose de pagos de IMSS / cargas sociales (cuenta en nóminas, no en variables) -->
+                <div class="card" id="cardImss" style="margin-top:16px;display:none">
+                    <div class="card-header"><h2>💉 Pagos de IMSS / cargas sociales</h2></div>
+                    <div style="padding:12px 20px;font-size:11px;color:var(--text-dim);background:rgba(245,200,66,.05);border-bottom:1px solid var(--border)">
+                        Capturados en el módulo de gastos y reclasificados aquí. <strong>Se suman al total de Nóminas, no a Gastos Variables.</strong>
+                    </div>
+                    <div class="card-body" style="padding:0;overflow-x:auto">
+                        <table class="gg-table">
+                            <thead><tr><th>Fecha</th><th>Concepto</th><th>Proveedor</th><th class="ar">Monto</th></tr></thead>
+                            <tbody id="imssTbody"></tbody>
+                            <tfoot><tr><td class="tot-lbl" colspan="3">Total IMSS del mes</td>
+                                <td class="ar"><span class="tot-val" id="imssTotal" style="color:var(--accent)"></span></td></tr></tfoot>
+                        </table>
+                    </div>
+                </div>
             </div>
 
             <!-- ═══ SECCIÓN 3: GASTOS VARIABLES ═══ -->
@@ -308,7 +324,7 @@
                         <h2>Gastos Variables del Mes</h2>
                     </div>
                     <div style="padding:12px 20px;font-size:11px;color:var(--text-dim);background:rgba(30,80,220,.04);border-bottom:1px solid var(--border)">
-                        📊 Datos del módulo <strong>Captura de Gastos</strong> consolidados aquí automáticamente. Solo monitoreo.
+                        📊 Datos del módulo <strong>Captura de Gastos</strong> consolidados aquí. <strong>Excluye nómina, IMSS, gastos fijos, propinas y contabilidad/impuestos</strong> (cada uno cuenta aparte, para no duplicar).
                     </div>
                     <div class="card-body" style="padding:0;overflow-x:auto">
                         <table class="gg-table">
@@ -589,6 +605,23 @@ function saveNominas(mes,d){
 function loadGastosMes(mes){
     return (_cacheGG_Gastos||[]).filter(function(g){return g.fecha&&g.fecha.slice(0,7)===mes;});
 }
+// IMSS / cargas sociales: aunque se capture como gasto, cuenta en NÓMINAS, no en variables.
+function _esIMSS(g){ return /\bimss\b|seguro\s*social|cargas\s*sociales/i.test((g.categoria||'')+' '+(g.concepto||'')); }
+function loadImssMes(mes){ return loadGastosMes(mes).filter(_esIMSS); }
+function totalImssMes(mes){ return loadImssMes(mes).reduce(function(s,g){return s+n(g.monto);},0); }
+// Un gasto es categoría de NÓMINA (pago de sueldo/personal capturado como gasto → ya cuenta en Nóminas).
+function _esNominaCat(g){ return /n[oó]mina|personal/i.test(g.categoria||''); }
+// Categorías que NO son gasto variable real (propinas pasan al personal; contabilidad/impuestos van aparte).
+function _catExcluidaVar(g){ return /propina|gratificaci|contabilidad|impuesto/i.test(g.categoria||''); }
+// Categorías definidas como GASTO FIJO (en gf_fijos) → no deben recontarse en variables.
+function _catsFijos(){ var s={}; loadFijos().forEach(function(f){ if(f.categoria) s[String(f.categoria).toLowerCase().trim()]=1; }); return s; }
+// El desglose de VARIABLES excluye nómina, IMSS y categorías de gasto fijo (cada uno cuenta en su sección).
+function loadVariablesMes(mes){
+    var fc=_catsFijos();
+    return loadGastosMes(mes).filter(function(g){
+        return !_esIMSS(g) && !_esNominaCat(g) && !_catExcluidaVar(g) && !fc[String(g.categoria||'').toLowerCase().trim()];
+    });
+}
 function loadCortesMonth(mes){
     return (_cacheGG_Cortes||[]).filter(function(c){return c.fecha&&c.fecha.slice(0,7)===mes;});
 }
@@ -676,9 +709,11 @@ function renderKPIs(mes){
         // _nominaItems incluye los colaboradores del catálogo de staff (auto) + capturados
         _nominaItems(cat,mes).forEach(function(p){totalNom+=n(p.base)+n(p.bonos)+n(p.imss)+n(p.prima);});
     });
+    // El IMSS pagado como gasto del mes es una carga social → suma a NÓMINAS, no a variables.
+    var totalImssG=totalImssMes(mes);
+    totalNom += totalImssG;
 
-    var gastos=loadGastosMes(mes);
-    var totalVar=gastos.reduce(function(s,g){return s+n(g.monto);},0);
+    var totalVar=loadVariablesMes(mes).reduce(function(s,g){return s+n(g.monto);},0);
 
     var total=totalFijos+totalNom+totalVar;
 
@@ -799,8 +834,24 @@ function _nominaItems(cat,mes){
     return guardadas.concat(autos);
 }
 
+function renderImss(mes){
+    var card=document.getElementById('cardImss'); if(!card) return;
+    var lista=loadImssMes(mes).slice().sort(function(a,b){return (b.fecha||'').localeCompare(a.fecha||'');});
+    if(!lista.length){ card.style.display='none'; return; }
+    card.style.display='';
+    document.getElementById('imssTotal').textContent=fmtM(lista.reduce(function(s,g){return s+n(g.monto);},0));
+    document.getElementById('imssTbody').innerHTML=lista.map(function(g){
+        return '<tr>'
+            +'<td style="white-space:nowrap;color:var(--text-dim);font-size:12px">'+_esc(g.fecha||'—')+'</td>'
+            +'<td style="font-weight:500">'+_esc(g.concepto||'—')+'</td>'
+            +'<td style="color:var(--text-dim);font-size:12px">'+_esc(g.proveedor||'—')+'</td>'
+            +'<td class="ar" style="font-weight:600;color:var(--accent)">'+fmtM(g.monto)+'</td>'
+        +'</tr>';
+    }).join('');
+}
 function renderNominas(){
     var mes=_mesPicker||mesStr();
+    renderImss(mes); // desglose de pagos de IMSS (cargas sociales) del mes
     var lista=_nominaItems(_nomCat,mes);
     var tbody=document.getElementById('nominasTbody');
     var empty=document.getElementById('nominasEmpty');
@@ -883,7 +934,7 @@ function renderRetiros(mes){
 function renderVariables(){
     var mes=_mesPicker||mesStr();
     renderRetiros(mes); // movimientos internos (informativo, no afecta utilidad)
-    var gastos=loadGastosMes(mes);
+    var gastos=loadVariablesMes(mes); // sin IMSS (ese cuenta en nóminas)
     var tbody=document.getElementById('varTbody');
     var empty=document.getElementById('varEmpty');
     var foot=document.getElementById('varFoot');
