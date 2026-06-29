@@ -1656,54 +1656,46 @@ function abrirVerDepositos(){
     if(!_puede('ventas.verDepositos')) return;
     var deps=loadDep().slice().sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
     var body=document.getElementById('depOverlayBody');
-    var totCaja=0, totBanco=0;
-    deps.forEach(function(d){ var e=_depEfecto(d); totCaja+=e.caja; totBanco+=e.banco; });
-    var rows=deps.length
+    var totCaja=0, totBanco=0, totTc=0;
+    deps.forEach(function(d){ var e=_depEfecto(d); totCaja+=e.caja; totBanco+=e.banco; totTc+=e.tcPago; });
+    // Color del movimiento según destino.
+    function _movColor(d){ return d.destino==='caja_fuerte'?'var(--accent)':(d.destino==='tarjeta_credito'?'#ff7070':'var(--green)'); }
+    var cards = deps.length
         ? deps.map(function(d){
-            var isCaja=d.destino==='caja_fuerte';
-            var destStyle=isCaja
-                ?'color:var(--accent);background:rgba(245,200,66,.08);padding:2px 8px;border-radius:4px;font-size:11px'
-                :(d.destino==='tarjeta_credito'?'color:#ff7070;background:rgba(255,112,112,.08);padding:2px 8px;border-radius:4px;font-size:11px'
-                  :'color:var(--green);background:rgba(61,190,122,.08);padding:2px 8px;border-radius:4px;font-size:11px');
-            return'<tr>'+
-                '<td style="white-space:nowrap">'+d.fecha+'</td>'+
-                '<td><span style="'+destStyle+'">'+_escV(_depMovTxt(d))+'</span></td>'+
-                '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_escV(d.concepto||'—')+'</td>'+
-                '<td style="font-size:11px;color:var(--text-dim);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_escV(d.finalidad||'—')+'</td>'+
-                '<td style="font-size:11px;color:var(--text-dim)">'+_escV(d.depositadoPor||'—')+'</td>'+
-                '<td style="font-size:11px;color:var(--text-dim)">'+_escV(d.autorizadoPor||'—')+'</td>'+
-                '<td style="text-align:right;font-weight:700;color:'+(isCaja?'var(--accent)':'var(--green)')+'">'+fmtM(n(d.monto))+'</td>'+
-                '<td style="display:flex;gap:4px">'+
-                    '<button class="btn-row" onclick="cerrarVerDepositos();abrirModalDeposito(\''+d.id+'\')" title="Editar">✏️</button>'+
-                    '<button class="btn-row del" onclick="_elimDepOv(\''+d.id+'\')">🗑️</button>'+
-                '</td>'+
-            '</tr>';
+            var col=_movColor(d);
+            return '<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid '+col+';border-radius:11px;padding:13px 15px;display:flex;flex-direction:column;gap:7px">'
+                +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'
+                    +'<div style="min-width:0">'
+                        +'<div style="font-size:13px;font-weight:600;line-height:1.35;color:'+col+'">'+_escV(_depMovTxt(d))+'</div>'
+                        +'<div style="font-size:11px;color:var(--text-dim);margin-top:2px">📅 '+(d.fecha||'—')+'</div>'
+                    +'</div>'
+                    +'<div style="font-size:17px;font-weight:700;white-space:nowrap;color:'+col+'">'+fmtM(n(d.monto))+'</div>'
+                +'</div>'
+                +(d.concepto?'<div style="font-size:12px;color:var(--text)">'+_escV(d.concepto)+'</div>':'')
+                +((d.finalidad||d.depositadoPor||d.autorizadoPor)?'<div style="font-size:11px;color:var(--text-dim);display:flex;flex-wrap:wrap;gap:3px 14px">'
+                    +(d.finalidad?'<span>🎯 '+_escV(d.finalidad)+'</span>':'')
+                    +(d.depositadoPor?'<span>👤 '+_escV(d.depositadoPor)+'</span>':'')
+                    +(d.autorizadoPor?'<span>✅ '+_escV(d.autorizadoPor)+'</span>':'')
+                +'</div>':'')
+                +'<div style="display:flex;gap:6px;justify-content:flex-end;border-top:1px solid var(--border);padding-top:8px;margin-top:1px">'
+                    +'<button class="btn-row" onclick="cerrarVerDepositos();abrirModalDeposito(\''+d.id+'\')">✏️ Editar</button>'
+                    +'<button class="btn-row del" onclick="_elimDepOv(\''+d.id+'\')">🗑️</button>'
+                +'</div>'
+            +'</div>';
           }).join('')
-        : '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-dim)">Sin depósitos registrados aún.</td></tr>';
+        : '<div style="grid-column:1/-1;text-align:center;padding:50px 0;color:var(--text-dim)">Sin depósitos registrados aún.</div>';
+
+    function _kpi(lbl,val,color){ return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:13px 16px">'
+        +'<div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:7px">'+lbl+'</div>'
+        +'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:26px;letter-spacing:.5px;color:'+color+';line-height:1">'+fmtM(val)+'</div></div>'; }
 
     body.innerHTML=
-        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">'+
-            '<div class="cj-acum" style="margin:0">'+
-                '<div><div class="cj-acum-lbl">🏦 A Caja fuerte</div></div>'+
-                '<div class="cj-acum-val">'+fmtM(totCaja)+'</div>'+
-            '</div>'+
-            '<div class="cj-acum" style="margin:0;border-color:rgba(61,190,122,.3)">'+
-                '<div><div class="cj-acum-lbl" style="color:var(--green)">🏛️ Al Banco</div></div>'+
-                '<div class="cj-acum-val" style="color:var(--green)">'+fmtM(totBanco)+'</div>'+
-            '</div>'+
-            '<div class="cj-acum" style="margin:0;border-color:rgba(120,160,240,.3)">'+
-                '<div><div class="cj-acum-lbl" style="color:#78a0f0">Total depositado</div></div>'+
-                '<div class="cj-acum-val" style="color:#78a0f0">'+fmtM(totCaja+totBanco)+'</div>'+
-            '</div>'+
+        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px">'+
+            _kpi('🏦 Neto a Caja fuerte', totCaja, totCaja<0?'#ff9e6b':'var(--accent)')+
+            _kpi('🏛️ Neto a Banco', totBanco, 'var(--green)')+
+            _kpi('💳 Pagos a tarjeta', totTc, '#ff7070')+
         '</div>'+
-        '<div style="overflow-x:auto">'+
-        '<table class="cj-table">'+
-            '<thead><tr>'+
-                '<th>Fecha</th><th>Destino</th><th>Concepto</th><th>Finalidad</th>'+
-                '<th>Deposita</th><th>Autoriza</th><th style="text-align:right">Monto</th><th></th>'+
-            '</tr></thead>'+
-            '<tbody>'+rows+'</tbody>'+
-        '</table></div>';
+        '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:11px">'+cards+'</div>';
     document.getElementById('depOverlay').classList.add('open');
 }
 function cerrarVerDepositos(){document.getElementById('depOverlay').classList.remove('open');}

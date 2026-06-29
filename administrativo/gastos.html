@@ -313,9 +313,11 @@
                 </select>
                 <select id="filtroMetodo" onchange="renderAll()">
                     <option value="">Todos los métodos</option>
-                    <option value="caja_fuerte">Caja fuerte</option>
-                    <option value="caja_chica">Caja chica</option>
-                    <option value="banco">Cuenta bancaria</option>
+                    <option value="caja_fuerte">🏦 Caja fuerte</option>
+                    <option value="caja_chica">💼 Caja chica</option>
+                    <option value="banco:transfer">🏛️ Transferencia</option>
+                    <option value="banco:debito">💳 Tarjeta débito</option>
+                    <option value="banco:credito">💳 Tarjeta crédito</option>
                 </select>
                 <select id="filtroTipo" onchange="renderAll()">
                     <option value="">Menores + Mayores (visibles)</option>
@@ -1072,7 +1074,11 @@ function applyFilters(lista){
     return lista.filter(function(g){
         if(tip==='menor'&&g.tipo!=='menor')return false;
         if(cat&&g.categoria!==cat)return false;
-        if(met&&g.metodoPago!==met)return false;
+        if(met){
+            if(met.indexOf('banco:')===0){ // Transferencia / T. débito / T. crédito
+                if(g.metodoPago!=='banco' || (g.metodoBanco||'transfer')!==met.slice(6)) return false;
+            } else if(g.metodoPago!==met) return false;
+        }
         if(con&&!(g.concepto||'').toLowerCase().includes(con)&&!(g.proveedor||'').toLowerCase().includes(con))return false;
         return true;
     });
@@ -1088,8 +1094,9 @@ function renderAll(){
     if(periodoTipo==='rango')periodoEnd=pe.value||periodoEnd;
     // Filtra por permisos del rol (tipo mayor / método de pago) antes de todo
     var all=currentData().filter(_gastoVisible),prev=prevData().filter(_gastoVisible);
-    var filtered=applyFilters(all);
-    renderSummary(all,prev);
+    // El resumen/total respeta los filtros activos (categoría, método, tipo, búsqueda).
+    var filtered=applyFilters(all), filteredPrev=applyFilters(prev);
+    renderSummary(filtered,filteredPrev);
     renderTabla(filtered.filter(function(g){return g.tipo==='menor';}), filtered.filter(function(g){return g.tipo==='mayor';}));
 }
 
