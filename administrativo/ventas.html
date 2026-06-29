@@ -425,17 +425,24 @@
                         <th style="text-align:center">Efectivo</th>
                         <th style="text-align:center">
                             Tarjeta
-                            <div style="font-size:9px;color:var(--text-dim);letter-spacing:.3px;text-transform:none;font-weight:400;margin-top:1px">venta + prop → banco</div>
+                            <div style="font-size:9px;color:var(--text-dim);letter-spacing:.3px;text-transform:none;font-weight:400;margin-top:1px">crédito · débito → banco</div>
                         </th>
                         <th style="text-align:right">Total</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <!-- Fila 1: Ventas (ef | ta) → suma independiente -->
+                    <!-- Fila 1: Ventas (efectivo | tarjeta crédito+débito) → suma independiente -->
                     <tr>
                         <td class="pago-label">💰 Ventas</td>
                         <td><input type="number" class="pago-input" id="fEfectivo" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()"></td>
-                        <td><input type="number" class="pago-input" id="fTarjeta" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()"></td>
+                        <td>
+                            <div style="display:flex;gap:4px">
+                                <input type="number" class="pago-input" id="fTarCred" min="0" step="0.01" placeholder="Créd." title="Venta con tarjeta de crédito" oninput="calcTarjeta()">
+                                <input type="number" class="pago-input" id="fTarDeb" min="0" step="0.01" placeholder="Déb." title="Venta con tarjeta de débito" oninput="calcTarjeta()">
+                            </div>
+                            <div id="tarCtaA" style="font-size:8.5px;color:var(--text-dim);text-align:center;margin-top:2px;line-height:1.3"></div>
+                            <input type="hidden" id="fTarjeta">
+                        </td>
                         <td class="pago-neto" id="totVenta">$0.00</td>
                     </tr>
                     <!-- Fila 2: Propinas (prop_ef referencial | prop_ta → banco) → suma independiente -->
@@ -469,6 +476,9 @@
                 <!-- totNeto oculto — ya no se muestra en tabla, solo se usa en calcCorte() internamente -->
                 <span id="totNeto" style="display:none">0</span>
             </table>
+
+            <!-- Desglose de la venta con TARJETA por cuenta de débito (crédito/débito + comisión) -->
+            <div id="tarjetaCuentasBox" style="margin-top:10px"></div>
         </div>
 
         <!-- 3. Desglose operativo -->
@@ -718,18 +728,21 @@
     <div class="modal-body">
         <div class="corte-sec">
             <div class="corte-sec-title">📋 Datos del depósito</div>
-            <div class="fg-row-3">
+            <div class="fg-row-2">
                 <div class="fg"><label>Fecha</label><input type="date" id="depFecha"></div>
                 <div class="fg"><label>Monto</label>
                     <input type="number" id="depMonto" min="0" step="0.01" placeholder="0.00">
                 </div>
-                <div class="fg"><label>Destino</label>
-                    <select id="depDestino">
-                        <option value="caja_fuerte">🏦 Caja fuerte</option>
-                        <option value="banco">🏛️ Cuenta bancaria</option>
-                    </select>
+            </div>
+            <div class="fg-row-2">
+                <div class="fg"><label>Origen (de dónde sale)</label>
+                    <select id="depOrigen" onchange="_depMov()"></select>
+                </div>
+                <div class="fg"><label>Destino (a dónde va)</label>
+                    <select id="depDestino2" onchange="_depMov()"></select>
                 </div>
             </div>
+            <div id="depMovHint" style="font-size:10.5px;color:var(--text-dim);margin:-4px 0 10px;line-height:1.5"></div>
             <div class="fg"><label>Concepto</label>
                 <input type="text" id="depConcepto" placeholder="Descripción del depósito…">
             </div>
@@ -836,6 +849,35 @@ var _cacheCortes = null;
 var _cacheDeps   = null;
 var _cacheVex    = null;
 var _cacheGastosExt = null; // gastos cargados para caja fuerte
+var _cuentasBancarias = []; // cuentas bancarias (tabla tarjetas_credito): débito/crédito + comisiones
+// Cuentas de DÉBITO (ahí se deposita la venta con tarjeta). Las viejas sin tipo eran crédito.
+function _cuentasDebito(){ return (_cuentasBancarias||[]).filter(function(c){ return c && c.tipo==='debito'; }); }
+// Filas para el desglose del corte: las cuentas de débito, o una genérica si no hay ninguna
+// (así SIEMPRE se capturan venta con tarjeta crédito y débito; sin cuenta no hay comisión).
+function _ctasCorte(){ var d=_cuentasDebito(); return d.length?d:[{id:'_sin',banco:'Tarjeta (sin cuenta asignada)',comisionTC:null,comisionTD:null,aplicaIva:false}]; }
+// Comisión efectiva (con IVA si aplica) de una cuenta para crédito/débito → fracción 0..1 que se descuenta.
+function _comEf(cta, cual){ var base=parseFloat(cual==='tc'?cta.comisionTC:cta.comisionTD); if(isNaN(base)) return 0; var f=cta.aplicaIva?(1+(parseFloat(cta.ivaPct)||0)/100):1; return base*f/100; }
+// Tarjetas de CRÉDITO del negocio (las viejas sin tipo eran crédito).
+function _cuentasCredito(){ return (_cuentasBancarias||[]).filter(function(c){ return c && c.tipo!=='debito'; }); }
+function _cuentaBancoLabel(id){ var c=(_cuentasBancarias||[]).find(function(x){return x.id===id;}); return c?((c.banco||'Cuenta')+(c.alias?' · '+c.alias:'')+(c.digitos?' ····'+c.digitos:'')):'Cuenta'; }
+// Efecto de un depósito/movimiento sobre los saldos. Compat: deps viejos solo tenían `destino`
+// (caja_fuerte|banco); "banco" implicaba que salía de caja fuerte.
+function _depEfecto(d){
+    var m=n(d.monto);
+    var origen=d.origen||(d.destino==='banco'?'caja_fuerte':'externo');
+    var dest=d.destino||'caja_fuerte';
+    var e={caja:0,banco:0,tcPago:0};
+    if(dest==='caja_fuerte') e.caja+=m; else if(dest==='banco') e.banco+=m; else if(dest==='tarjeta_credito') e.tcPago+=m;
+    if(origen==='caja_fuerte') e.caja-=m; else if(origen==='banco') e.banco-=m;
+    return e;
+}
+// Texto legible del movimiento de un depósito: "origen → destino".
+function _depMovTxt(d){
+    var origen=d.origen||(d.destino==='banco'?'caja_fuerte':'externo');
+    function lbl(t,id){ if(t==='externo')return 'Externo'; if(t==='caja_fuerte')return '🏦 Caja fuerte'; if(t==='banco')return '🏛️ '+_cuentaBancoLabel(id); if(t==='tarjeta_credito')return '💳 '+_cuentaBancoLabel(id); return t||'—'; }
+    var dst=lbl(d.destino, d.destino==='tarjeta_credito'?d.tcId:d.destinoCuentaId);
+    return origen==='externo' ? ('➕ '+dst) : (lbl(origen,d.origenCuentaId)+' → '+dst);
+}
 
 async function _sbInit() {
     var negId = getNegocioActivo();
@@ -845,11 +887,13 @@ async function _sbInit() {
         _supabase.from('depositos').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
         _supabase.from('ventas_extra').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
         _supabase.from('gastos').select('datos').eq('negocio_id', negId),
+        _supabase.from('tarjetas_credito').select('datos').eq('negocio_id', negId).order('created_at', {ascending:true}),
     ]);
     if (!r[0].error) _cacheCortes = (r[0].data||[]).map(function(x){return x.datos;});
     if (!r[1].error) _cacheDeps   = (r[1].data||[]).map(function(x){return x.datos;});
     if (!r[2].error) _cacheVex    = (r[2].data||[]).map(function(x){return x.datos;});
     if (!r[3].error) _cacheGastosExt = (r[3].data||[]).map(function(x){return x.datos;});
+    if (!r[4].error) _cuentasBancarias = (r[4].data||[]).map(function(x){return x.datos;});
     renderAll();
     renderDepositos();
     _subCortesRealtime(negId);
@@ -1058,10 +1102,9 @@ function renderDepositos(){
     var tbody=document.getElementById('depTbody');
     var empty=document.getElementById('depEmpty');
     var footer=document.getElementById('depFooter');
-    var destIcon={caja_fuerte:'🏦 Caja fuerte',banco:'🏛️ Banco'};
-    var totCaja=deps.filter(function(d){return d.destino==='caja_fuerte';}).reduce(function(s,d){return s+n(d.monto);},0);
-    var totBanco=deps.filter(function(d){return d.destino==='banco';}).reduce(function(s,d){return s+n(d.monto);},0);
-    var totAll=totCaja+totBanco;
+    var totCaja=0, totBanco=0;
+    deps.forEach(function(d){ var e=_depEfecto(d); totCaja+=e.caja; totBanco+=e.banco; });
+    var totAll=deps.reduce(function(s,d){return s+n(d.monto);},0);
     if(!deps.length){
         tbody.innerHTML='';empty.style.display='block';footer.style.display='none';
         return;
@@ -1071,12 +1114,14 @@ function renderDepositos(){
     document.getElementById('depTotBanco').textContent=fmtM(totBanco);
     document.getElementById('depTotal').textContent=fmtM(totAll);
     tbody.innerHTML=deps.map(function(d){
-        var destStyle=d.destino==='caja_fuerte'
+        var destStyle=(d.destino==='caja_fuerte')
             ?'color:var(--accent);background:rgba(245,200,66,.08);padding:2px 8px;border-radius:4px;font-size:11px'
-            :'color:var(--green);background:rgba(61,190,122,.08);padding:2px 8px;border-radius:4px;font-size:11px';
+            :(d.destino==='tarjeta_credito'
+              ?'color:#ff7070;background:rgba(255,112,112,.08);padding:2px 8px;border-radius:4px;font-size:11px'
+              :'color:var(--green);background:rgba(61,190,122,.08);padding:2px 8px;border-radius:4px;font-size:11px');
         return'<tr>'+
             '<td style="white-space:nowrap">'+d.fecha+'</td>'+
-            '<td><span style="'+destStyle+'">'+(destIcon[d.destino]||d.destino)+'</span></td>'+
+            '<td><span style="'+destStyle+'">'+_escV(_depMovTxt(d))+'</span></td>'+
             '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_escV(d.concepto||'—')+'</td>'+
             '<td style="font-size:11px;color:var(--text-dim);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_escV(d.finalidad||'—')+'</td>'+
             '<td style="font-size:11px;color:var(--text-dim)">'+_escV(d.depositadoPor||'—')+'</td>'+
@@ -1166,6 +1211,9 @@ function abrirModal(id){
     document.getElementById('fEfectivo').value=d.efectivo||'';
     document.getElementById('fPropEfectivo').value=d.propEfectivo||'';
     document.getElementById('fTarjeta').value=d.tarjeta||'';
+    // Desglose de tarjeta por cuenta de débito (si hay cuentas registradas).
+    var _savedTar={}; (d.tarjetaCuentas||[]).forEach(function(t){ _savedTar[t.cuentaId]={tc:t.ventaTC,td:t.ventaTD}; });
+    renderTarjetaCuentas(_savedTar, parseFloat(d.tarjeta)||0);
     document.getElementById('fPropTarjeta').value=d.propTarjeta||'';
     document.getElementById('fTransfer').value=d.transferencia||'';
     document.getElementById('fComedor').value=d.comedor||'';
@@ -1274,6 +1322,76 @@ function verDesglosGastos(){
 
 function v(id){return n(document.getElementById(id).value);}
 
+// ── Venta con TARJETA: crédito/débito en la fila de Ventas (cuenta A por default) +
+//    otras cuentas (B/C) abajo. El bruto total alimenta fTarjeta (oculto) → calcCorte. ──
+function _ctaLabel(c){ return (c.banco||'Cuenta') + (c.alias?' · '+c.alias:'') + (c.digitos?' ····'+c.digitos:''); }
+function _ctaComTxt(c){ var tc=parseFloat(c.comisionTC),td=parseFloat(c.comisionTD),iva=c.aplicaIva?'+IVA':''; return 'com. TC '+(isNaN(tc)?'—':tc+'%'+iva)+' · TD '+(isNaN(td)?'—':td+'%'+iva); }
+function _netoCuenta(c, tc, td){ return c ? (tc*(1-_comEf(c,'tc'))+td*(1-_comEf(c,'td'))) : (tc+td); }
+function renderTarjetaCuentas(saved, fallbackTotal){
+    var ctas=_cuentasDebito(), ctaA=ctas[0]||null, extras=ctas.slice(1), keyA=ctaA?ctaA.id:'_sin';
+    saved = saved || {}; // { cuentaId: {tc, td} }
+    // Corte viejo (total de tarjeta sin desglose): migrar todo a la cuenta A como débito.
+    if(!Object.keys(saved).length && parseFloat(fallbackTotal)>0){ saved[keyA]={td:parseFloat(fallbackTotal)}; }
+    // Cuenta A → inputs de la fila de Ventas (crédito / débito)
+    var sA=saved[keyA]||{};
+    var cred=document.getElementById('fTarCred'), deb=document.getElementById('fTarDeb');
+    if(cred) cred.value=(sA.tc!=null?sA.tc:'');
+    if(deb)  deb.value=(sA.td!=null?sA.td:'');
+    var lineA=document.getElementById('tarCtaA');
+    if(lineA) lineA.innerHTML = ctaA
+        ? '→ '+_ctaLabel(ctaA)+' · neto <span id="netoCta_'+keyA+'" style="color:var(--green)">$0.00</span>'
+        : 'Sin cuenta · <a href="../financiero/cuentas-bancarias.html" style="color:var(--green)">agregar débito</a>';
+    // Cuentas B/C → caja "otras cuentas" abajo (solo si existen)
+    var box=document.getElementById('tarjetaCuentasBox');
+    if(box){
+        if(!extras.length){ box.innerHTML=''; }
+        else{
+            var rows=extras.map(function(c){
+                var s=saved[c.id]||{};
+                return '<tr>'
+                    +'<td style="text-align:left;font-size:11px">'+_ctaLabel(c)+'<div style="font-size:8.5px;color:var(--text-dim)">'+_ctaComTxt(c)+'</div></td>'
+                    +'<td><input type="number" class="pago-input tcuenta" data-id="'+c.id+'" data-k="tc" min="0" step="0.01" placeholder="Créd." value="'+(s.tc!=null?s.tc:'')+'" oninput="calcTarjeta()"></td>'
+                    +'<td><input type="number" class="pago-input tcuenta" data-id="'+c.id+'" data-k="td" min="0" step="0.01" placeholder="Déb." value="'+(s.td!=null?s.td:'')+'" oninput="calcTarjeta()"></td>'
+                    +'<td class="pago-neto" id="netoCta_'+c.id+'" style="color:var(--green)">$0.00</td></tr>';
+            }).join('');
+            box.innerHTML='<div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin:2px 0 5px">💳 Tarjeta — otras cuentas</div>'
+                +'<table class="pago-tbl"><thead><tr><th style="text-align:left">Cuenta</th><th style="text-align:center">Crédito</th><th style="text-align:center">Débito</th><th style="text-align:right">Neto</th></tr></thead><tbody>'+rows+'</tbody></table>';
+        }
+    }
+    calcTarjeta();
+}
+function calcTarjeta(){
+    var ctas=_cuentasDebito(), ctaA=ctas[0]||null, keyA=ctaA?ctaA.id:'_sin';
+    var sumGross=0;
+    var tcA=parseFloat((document.getElementById('fTarCred')||{}).value)||0;
+    var tdA=parseFloat((document.getElementById('fTarDeb')||{}).value)||0;
+    var netoA=_netoCuenta(ctaA, tcA, tdA);
+    var nA=document.getElementById('netoCta_'+keyA); if(nA) nA.textContent=fmtM(netoA);
+    sumGross+=tcA+tdA;
+    ctas.slice(1).forEach(function(c){
+        var tcI=document.querySelector('.tcuenta[data-id="'+c.id+'"][data-k="tc"]');
+        var tdI=document.querySelector('.tcuenta[data-id="'+c.id+'"][data-k="td"]');
+        var tc=tcI?(parseFloat(tcI.value)||0):0, td=tdI?(parseFloat(tdI.value)||0):0;
+        var nEl=document.getElementById('netoCta_'+c.id); if(nEl) nEl.textContent=fmtM(_netoCuenta(c,tc,td));
+        sumGross+=tc+td;
+    });
+    var fTar=document.getElementById('fTarjeta'); if(fTar) fTar.value=sumGross?sumGross.toFixed(2):'';
+    calcCorte();
+}
+function _getTarjetaCuentas(){
+    var ctas=_cuentasDebito(), out=[], ctaA=ctas[0]||null, keyA=ctaA?ctaA.id:'_sin';
+    var tcA=parseFloat((document.getElementById('fTarCred')||{}).value)||0;
+    var tdA=parseFloat((document.getElementById('fTarDeb')||{}).value)||0;
+    if(tcA||tdA) out.push({cuentaId:keyA,banco:ctaA?ctaA.banco:'Tarjeta',alias:ctaA?(ctaA.alias||''):'',ventaTC:tcA,ventaTD:tdA,neto:_netoCuenta(ctaA,tcA,tdA)});
+    ctas.slice(1).forEach(function(c){
+        var tcI=document.querySelector('.tcuenta[data-id="'+c.id+'"][data-k="tc"]');
+        var tdI=document.querySelector('.tcuenta[data-id="'+c.id+'"][data-k="td"]');
+        var tc=tcI?(parseFloat(tcI.value)||0):0, td=tdI?(parseFloat(tdI.value)||0):0;
+        if(tc||td) out.push({cuentaId:c.id,banco:c.banco,alias:c.alias||'',ventaTC:tc,ventaTD:td,neto:_netoCuenta(c,tc,td)});
+    });
+    return out;
+}
+
 function calcCorte(){
     var ef=v('fEfectivo'),pef=v('fPropEfectivo');
     var ta=v('fTarjeta'),pta=v('fPropTarjeta');
@@ -1343,6 +1461,7 @@ function guardarCorte(){
         fondoInicial:v('fFondo'),ventaDeclarada:v('fVentaDeclarada'),
         efectivo:v('fEfectivo'),propEfectivo:v('fPropEfectivo'),
         tarjeta:v('fTarjeta'),propTarjeta:v('fPropTarjeta'),transferencia:v('fTransfer'),
+        tarjetaCuentas:_getTarjetaCuentas(),
         comedor:v('fComedor'),paraLlevar:v('fParaLlevar'),comensales:v('fComensales'),
         alimentos:v('fAlimentos'),bebidas:v('fBebidas'),otros:v('fOtros'),
         gastos:v('fGastos'),gastosCajaChica:_gastosCajaChica,retiros:v('fRetiros'),
@@ -1396,18 +1515,17 @@ function _abrirCajaFuerteContenido(){
 
     // ── Saldos ──────────────────────────────────────────────
     var totalResguardos = lista.reduce(function(s,c){return s+resguardo(c);},0);
-    var depsCaja  = deps.filter(function(d){return d.destino==='caja_fuerte';});
-    var depsBanco = deps.filter(function(d){return d.destino==='banco';});
-    var totDepCaja  = depsCaja.reduce(function(s,d){return s+n(d.monto);},0);
-    var totDepBanco = depsBanco.reduce(function(s,d){return s+n(d.monto);},0);
-    // Caja fuerte: resguardos + depósitos recibidos − salidas al banco − gastos efectivo caja
-    var saldoCaja = totalResguardos + totDepCaja - totDepBanco - gastosCajaFuerte;
-    // Cuenta débito: tarjeta terminal + transferencias + depósitos al banco − gastos débito
+    // Efecto neto de TODOS los depósitos/movimientos sobre los fondos (origen → destino).
+    var _efC=0,_efB=0,_efTcPago=0, totDepCaja=0, totDepBanco=0;
+    deps.forEach(function(d){ var e=_depEfecto(d); _efC+=e.caja; _efB+=e.banco; _efTcPago+=e.tcPago; if(e.caja>0)totDepCaja+=e.caja; if(e.caja<0)totDepBanco+=-e.caja; });
+    // Caja fuerte: resguardos + efecto neto de movimientos − gastos efectivo caja
+    var saldoCaja = totalResguardos + _efC - gastosCajaFuerte;
+    // Cuenta débito (total): tarjeta terminal + transferencias + efecto neto en banco − gastos débito
     var totTarjeta  = lista.reduce(function(s,c){return s+taBanco(c);},0);
     var totTransfer = lista.reduce(function(s,c){return s+n(c.transferencia);},0);
-    var saldoDebito = totTarjeta + totTransfer + totDepBanco - gastosDebito;
-    // Tarjeta de crédito: solo gastos registrados − saldo negativo = lo que se debe
-    var saldoTarjetaCred = -gastosTarjetaCred;
+    var saldoDebito = totTarjeta + totTransfer + _efB - gastosDebito;
+    // Tarjeta de crédito: gastos a crédito (deuda) − pagos hechos a la TC (reducen deuda)
+    var saldoTarjetaCred = -gastosTarjetaCred + _efTcPago;
 
     // ── Header: 2 cards fila 1 + tarjeta opcional fila 2 ────
     var headerHTML =
@@ -1538,18 +1656,18 @@ function abrirVerDepositos(){
     if(!_puede('ventas.verDepositos')) return;
     var deps=loadDep().slice().sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
     var body=document.getElementById('depOverlayBody');
-    var destIcon={caja_fuerte:'🏦 Caja fuerte',banco:'🏛️ Banco'};
-    var totCaja =deps.filter(function(d){return d.destino==='caja_fuerte';}).reduce(function(s,d){return s+n(d.monto);},0);
-    var totBanco=deps.filter(function(d){return d.destino==='banco';}).reduce(function(s,d){return s+n(d.monto);},0);
+    var totCaja=0, totBanco=0;
+    deps.forEach(function(d){ var e=_depEfecto(d); totCaja+=e.caja; totBanco+=e.banco; });
     var rows=deps.length
         ? deps.map(function(d){
             var isCaja=d.destino==='caja_fuerte';
             var destStyle=isCaja
                 ?'color:var(--accent);background:rgba(245,200,66,.08);padding:2px 8px;border-radius:4px;font-size:11px'
-                :'color:var(--green);background:rgba(61,190,122,.08);padding:2px 8px;border-radius:4px;font-size:11px';
+                :(d.destino==='tarjeta_credito'?'color:#ff7070;background:rgba(255,112,112,.08);padding:2px 8px;border-radius:4px;font-size:11px'
+                  :'color:var(--green);background:rgba(61,190,122,.08);padding:2px 8px;border-radius:4px;font-size:11px');
             return'<tr>'+
                 '<td style="white-space:nowrap">'+d.fecha+'</td>'+
-                '<td><span style="'+destStyle+'">'+(isCaja?'🏦 Caja fuerte':'🏛️ Banco')+'</span></td>'+
+                '<td><span style="'+destStyle+'">'+_escV(_depMovTxt(d))+'</span></td>'+
                 '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_escV(d.concepto||'—')+'</td>'+
                 '<td style="font-size:11px;color:var(--text-dim);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_escV(d.finalidad||'—')+'</td>'+
                 '<td style="font-size:11px;color:var(--text-dim)">'+_escV(d.depositadoPor||'—')+'</td>'+
@@ -1817,7 +1935,7 @@ function abrirModalDeposito(id){
     document.getElementById('depId').value=id||'';
     document.getElementById('depFecha').value=d.fecha||todayStr();
     document.getElementById('depMonto').value=d.monto||'';
-    document.getElementById('depDestino').value=d.destino||'caja_fuerte';
+    _depPoblarSelects(d);
     document.getElementById('depConcepto').value=d.concepto||'';
     document.getElementById('depFinalidad').value=d.finalidad||'';
     document.getElementById('depAutoriza').value=d.autorizadoPor||'';
@@ -1827,6 +1945,39 @@ function abrirModalDeposito(id){
 }
 function cerrarModalDeposito(){document.getElementById('modalDeposito').classList.remove('open');}
 
+// Poblar selects de Origen/Destino con caja fuerte, cuentas de débito y pago de tarjeta de crédito.
+function _depPoblarSelects(d){
+    d=d||{};
+    var deb=_cuentasDebito(), cred=_cuentasCredito();
+    var oSel=document.getElementById('depOrigen'), dSel=document.getElementById('depDestino2');
+    if(!oSel||!dSel) return;
+    var oOpts='<option value="externo">➕ Entrada externa (sin origen)</option><option value="caja_fuerte">🏦 Caja fuerte</option>';
+    deb.forEach(function(c){ oOpts+='<option value="banco:'+c.id+'">🏛️ '+_esc(_cuentaBancoLabel(c.id))+'</option>'; });
+    oSel.innerHTML=oOpts;
+    var dOpts='<option value="caja_fuerte">🏦 Caja fuerte</option>';
+    deb.forEach(function(c){ dOpts+='<option value="banco:'+c.id+'">🏛️ '+_esc(_cuentaBancoLabel(c.id))+'</option>'; });
+    cred.forEach(function(c){ dOpts+='<option value="tc:'+c.id+'">💳 Pago tarjeta crédito · '+_esc(_cuentaBancoLabel(c.id))+'</option>'; });
+    dSel.innerHTML=dOpts;
+    // Valores guardados (o compat con depósitos viejos que solo tenían `destino`)
+    var oVal = d.origen ? (d.origen==='banco' ? 'banco:'+(d.origenCuentaId||'') : d.origen)
+                        : (d.destino==='banco' ? 'caja_fuerte' : 'externo');
+    var dVal = d.destino==='tarjeta_credito' ? 'tc:'+(d.tcId||'')
+             : d.destino==='banco' ? 'banco:'+(d.destinoCuentaId||(deb[0]?deb[0].id:''))
+             : (d.destino||'caja_fuerte');
+    oSel.value=oVal; if(oSel.selectedIndex<0) oSel.selectedIndex=0;
+    dSel.value=dVal; if(dSel.selectedIndex<0) dSel.selectedIndex=0;
+    _depMov();
+}
+function _depMov(){
+    var oSel=document.getElementById('depOrigen'), dSel=document.getElementById('depDestino2'), h=document.getElementById('depMovHint');
+    if(!oSel||!dSel||!h) return;
+    function lbl(val){ if(val==='externo')return 'una entrada externa'; if(val==='caja_fuerte')return 'Caja fuerte'; if(val.indexOf('banco:')===0)return _cuentaBancoLabel(val.slice(6)); if(val.indexOf('tc:')===0)return 'Tarjeta de crédito · '+_cuentaBancoLabel(val.slice(3)); return val; }
+    var o=oSel.value, dd=dSel.value;
+    var txt=(o==='externo')?('➕ Entra a '+lbl(dd)+' (no descuenta de ningún fondo).'):('Sale de '+lbl(o)+' → entra a '+lbl(dd)+'.');
+    if(dd.indexOf('tc:')===0) txt+=' Reduce la deuda de la tarjeta de crédito.';
+    h.textContent=txt;
+}
+
 function guardarDeposito(){
     var fecha=document.getElementById('depFecha').value;
     var monto=parseFloat(document.getElementById('depMonto').value);
@@ -1834,10 +1985,19 @@ function guardarDeposito(){
     if(!fecha){alert('La fecha es obligatoria.');return;}
     if(!monto||monto<=0){alert('El monto debe ser mayor a cero.');return;}
     if(!concepto){alert('El concepto es obligatorio.');return;}
+    var oVal=document.getElementById('depOrigen').value, dVal=document.getElementById('depDestino2').value;
+    var origen, origenCuentaId='', destino, destinoCuentaId='', tcId='';
+    if(oVal.indexOf('banco:')===0){ origen='banco'; origenCuentaId=oVal.slice(6); } else origen=oVal;
+    if(dVal.indexOf('banco:')===0){ destino='banco'; destinoCuentaId=dVal.slice(6); }
+    else if(dVal.indexOf('tc:')===0){ destino='tarjeta_credito'; tcId=dVal.slice(3); }
+    else destino=dVal;
+    if(origen==='banco' && destino==='banco' && origenCuentaId===destinoCuentaId){ alert('El origen y el destino son la misma cuenta.'); return; }
+    if(origen==='caja_fuerte' && destino==='caja_fuerte'){ alert('El origen y el destino son caja fuerte.'); return; }
     var id=document.getElementById('depId').value||genId();
     var dep={
         id:id, negocioId:getNegocioActivo(), fecha:fecha, monto:monto,
-        destino:document.getElementById('depDestino').value,
+        origen:origen, origenCuentaId:origenCuentaId,
+        destino:destino, destinoCuentaId:destinoCuentaId, tcId:tcId,
         concepto:concepto,
         finalidad:document.getElementById('depFinalidad').value.trim(),
         autorizadoPor:document.getElementById('depAutoriza').value.trim(),

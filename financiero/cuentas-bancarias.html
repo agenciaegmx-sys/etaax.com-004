@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<script src="/page-guard.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <title>ETAAX – Salud Financiera · Gestión de Cuentas Bancarias</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../styles.css">
+    <style>
+        .cb-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:20px;}
+        .cb-title{font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:1px;line-height:1;color:var(--text);}
+        .cb-sub{font-size:12px;color:var(--text-dim);margin-top:4px;}
+        .cb-add{background:var(--green);border:none;color:#fff;padding:10px 18px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;}
+        .cb-add:hover{filter:brightness(1.08);}
+
+        .kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:22px;}
+        @media(max-width:760px){.kpi-grid{grid-template-columns:1fr;}}
+        .kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;}
+        .kpi-lbl{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:9px;}
+        .kpi-val{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:1px;color:var(--accent);line-height:1;}
+        .kpi-sub{font-size:11px;color:var(--text-muted);margin-top:6px;}
+
+        .cb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;}
+        .cb-card{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--green);border-radius:12px;padding:16px 18px;}
+        .cb-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;}
+        .cb-bank{font-weight:600;font-size:15px;color:var(--text);}
+        .cb-alias{font-size:11px;color:var(--text-dim);margin-top:1px;}
+        .cb-digits{font-size:11px;color:var(--text-dim);letter-spacing:2px;margin-top:3px;}
+        .cb-badge{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;}
+        .cb-badge.credito{background:rgba(224,90,58,.14);color:#e05a3a;}
+        .cb-badge.debito{background:rgba(61,190,122,.14);color:#3dbe7a;}
+        .cb-com{display:flex;gap:10px;margin-top:8px;}
+        .cb-com-box{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;text-align:center;}
+        .cb-com-lbl{font-size:8.5px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);}
+        .cb-com-val{font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--text);letter-spacing:.5px;margin-top:2px;}
+        .cb-credinfo{font-size:11px;color:var(--text-dim);margin-top:10px;line-height:1.6;border-top:1px dashed var(--border);padding-top:8px;}
+        .cb-acts{display:flex;gap:6px;}
+        .cb-btn{background:none;border:1px solid var(--border);color:var(--text-dim);padding:4px 10px;border-radius:5px;font-size:11px;cursor:pointer;}
+        .cb-btn.del{border-color:var(--red);color:var(--red);}
+        .cb-empty{color:var(--text-dim);font-size:13px;padding:30px 0;text-align:center;grid-column:1/-1;}
+
+        /* ── Modal ── */
+        .cb-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:3000;padding:16px;}
+        .cb-modal.open{display:flex;}
+        .cb-modal-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px;width:100%;max-width:460px;max-height:92vh;overflow:auto;}
+        .cb-modal-title{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;margin-bottom:16px;color:var(--text);}
+        .fg{display:flex;flex-direction:column;gap:5px;margin-bottom:13px;}
+        .fg label{font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:var(--text-dim);}
+        .fg input{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:7px;font-family:'DM Sans',sans-serif;font-size:14px;outline:none;width:100%;box-sizing:border-box;}
+        .fg input[type=color]{height:42px;padding:5px;cursor:pointer;}
+        .fg-row{display:flex;gap:10px;}
+        .fg-row .fg{flex:1;}
+        .tipo-toggle{display:flex;gap:8px;}
+        .tipo-btn{flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);padding:11px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;}
+        .tipo-btn.active{border-color:var(--green);color:var(--green);background:rgba(61,190,122,.08);}
+        .cb-modal-acts{display:flex;justify-content:flex-end;gap:10px;margin-top:6px;}
+        .cb-cancel{background:transparent;border:1px solid var(--border);color:var(--text-muted);padding:9px 18px;border-radius:6px;font-size:13px;cursor:pointer;}
+        .cb-save{background:var(--green);border:none;color:#fff;padding:9px 22px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;}
+        .hint{font-size:10.5px;color:var(--text-dim);margin-top:-7px;margin-bottom:13px;line-height:1.5;}
+    </style>
+</head>
+<body>
+
+<header class="top-bar">
+    <svg width="108" height="26" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
+        <path d="M14.5 28H37C35.5 23 31.5 20 25.5 20C19.5 20 16 23 14.5 28Z" fill="#1a1916"/>
+        <circle cx="45" cy="11" r="6" fill="#f5c842"/>
+        <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
+        <path d="M78 41C78 34.5 83.5 30.5 92.5 29.5L104 28.5V27.5C104 23.5 101.5 21 97 21C93 21 90 23 89 26.5L80.5 24C82.5 17.5 89 13 97 13C107.5 13 113 18.5 113 28.5V54.5H104V51C102 53.5 98.5 55 94 55C85.5 55 78 50.5 78 41Z" fill="#3dbe7a"/>
+        <path d="M104 37L95.5 38C92.5 38.5 90.5 40 90.5 42.5C90.5 45 92.5 46.5 95.5 46.5C101 46.5 104 43.5 104 39V37Z" fill="#1a1916"/>
+        <path d="M126 41C126 34.5 131.5 30.5 140.5 29.5L152 28.5V27.5C152 23.5 149.5 21 145 21C141 21 138 23 137 26.5L128.5 24C130.5 17.5 137 13 145 13C155.5 13 161 18.5 161 28.5V54.5H152V51C150 53.5 146.5 55 142 55C133.5 55 126 50.5 126 41Z" fill="#3dbe7a"/>
+        <path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/>
+        <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+    </svg>
+    <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🗃️</a>
+    <div class="top-breadcrumb">
+        <a href="index.html" class="top-module-badge" style="text-decoration:none">Financiero</a>
+        <span class="top-sep">|</span>
+        <span class="top-section-name">Gestión de Cuentas Bancarias</span>
+    </div>
+</header>
+<div id="ctxBar" class="ctx-bar" style="display:none"></div>
+
+<div class="app-shell">
+    <main class="main-content" style="margin-left:0">
+    <div class="wrap" style="max-width:1100px;margin:0 auto;padding:22px 20px 60px">
+
+        <div class="cb-head">
+            <div>
+                <div class="cb-title">🏦 Gestión de Cuentas Bancarias</div>
+                <div class="cb-sub">Cuentas de débito y crédito del negocio, con la comisión que cobra el banco por transacción con tarjeta.</div>
+            </div>
+            <button class="cb-add" onclick="abrirCb()">+ Agregar cuenta</button>
+        </div>
+
+        <div class="kpi-grid">
+            <div class="kpi-card"><div class="kpi-lbl">Cuentas registradas</div><div class="kpi-val" id="kpiTotal">0</div><div class="kpi-sub" id="kpiTipos">— débito · — crédito</div></div>
+            <div class="kpi-card"><div class="kpi-lbl">Comisión prom. T. crédito</div><div class="kpi-val" id="kpiTC">—</div><div class="kpi-sub">por transacción de tarjeta de crédito</div></div>
+            <div class="kpi-card"><div class="kpi-lbl">Comisión prom. T. débito</div><div class="kpi-val" id="kpiTD">—</div><div class="kpi-sub">por transacción de tarjeta de débito</div></div>
+        </div>
+
+        <div class="cb-grid" id="cbList">
+            <div class="cb-empty">Cargando…</div>
+        </div>
+
+    </div>
+    </main>
+</div>
+
+<!-- ── Modal ── -->
+<div class="cb-modal" id="cbModal">
+    <div class="cb-modal-box">
+        <div class="cb-modal-title" id="cbModalTitle">🏦 Nueva cuenta</div>
+
+        <div class="fg">
+            <label>Tipo de cuenta</label>
+            <div class="tipo-toggle">
+                <button type="button" class="tipo-btn" id="tipoDebito" onclick="setTipo('debito')">💳 Débito</button>
+                <button type="button" class="tipo-btn" id="tipoCredito" onclick="setTipo('credito')">💠 Crédito</button>
+            </div>
+        </div>
+
+        <div class="fg"><label>Banco *</label><input id="cbBanco" type="text" placeholder="Ej. BBVA, Banorte, Santander…"></div>
+        <div class="fg-row">
+            <div class="fg"><label>Alias (opcional)</label><input id="cbAlias" type="text" placeholder="Ej. Cuenta principal"></div>
+            <div class="fg"><label>Últimos 4 dígitos</label><input id="cbDigitos" type="text" maxlength="4" placeholder="0000" style="letter-spacing:4px"></div>
+        </div>
+
+        <!-- Solo DÉBITO: aquí entra el dinero de ventas con tarjeta, con su comisión -->
+        <div id="cbDebitoBlock">
+            <div class="fg-row">
+                <div class="fg"><label>Comisión pago con T. crédito (%)</label><input id="cbComTC" type="number" min="0" step="0.01" placeholder="Ej. 3.5"></div>
+                <div class="fg"><label>Comisión pago con T. débito (%)</label><input id="cbComTD" type="number" min="0" step="0.01" placeholder="Ej. 1.8"></div>
+            </div>
+            <div class="fg-row" style="align-items:flex-end">
+                <div class="fg" style="flex:1.4">
+                    <label style="display:flex;align-items:center;gap:7px;cursor:pointer;text-transform:none;letter-spacing:.5px">
+                        <input type="checkbox" id="cbAplicaIva" onchange="toggleIva()" style="width:16px;height:16px;accent-color:var(--green);cursor:pointer"> Sumar IVA a la comisión
+                    </label>
+                </div>
+                <div class="fg"><label>IVA (%)</label><input id="cbIva" type="number" min="0" step="0.01" value="16" disabled></div>
+            </div>
+            <div class="hint">Es lo que el banco te descuenta por cada cobro con terminal según el tipo de tarjeta del cliente. Si marcas "Sumar IVA", la comisión efectiva = comisión × (1 + IVA%). Se usará en los cortes diarios para descontar de cada venta con tarjeta.</div>
+        </div>
+
+        <!-- Solo crédito -->
+        <div id="cbCreditoBlock">
+            <div class="fg"><label>Límite de crédito ($)</label><input id="cbLimite" type="number" min="0" step="100" placeholder="0.00"></div>
+            <div class="fg-row">
+                <div class="fg"><label>Día de corte</label><input id="cbCorte" type="number" min="1" max="31" placeholder="Ej. 15"></div>
+                <div class="fg"><label>Día de pago</label><input id="cbPago" type="number" min="1" max="31" placeholder="Ej. 5"></div>
+            </div>
+        </div>
+
+        <div class="fg"><label>Color</label><input id="cbColor" type="color" value="#3dbe7a"></div>
+
+        <input type="hidden" id="cbId">
+        <div class="cb-modal-acts">
+            <button class="cb-cancel" onclick="cerrarCb()">Cancelar</button>
+            <button class="cb-save" onclick="guardarCb()">Guardar</button>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
+<script src="../security.js"></script>
+<script src="../ctx-bar.js"></script>
+<script>
+/* ══ Gestión de Cuentas Bancarias ══
+   Reutiliza la tabla per-record `tarjetas_credito` (datos JSONB). Una "cuenta"
+   guarda: banco, alias, tipo (debito|credito), digitos, color, comisionTC,
+   comisionTD y (si es crédito) limite, corte, pago.
+   Registros viejos de tarjeta sin `tipo` se interpretan como crédito.        */
+var TABLA = 'tarjetas_credito';
+var _cache = null, _tipoActual = 'debito';
+
+function getNegocioActivo(){ return localStorage.getItem('etaax_negocio_activo') || ''; }
+function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function _fmt(v){return '$'+parseFloat(v||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function _pct(v){var n=parseFloat(v); return isNaN(n)?'—':(n%1?n.toFixed(2):n)+'%';}
+function _tipoDe(c){return (c.tipo==='debito')?'debito':'credito';} // default crédito (datos viejos)
+// Comisión EFECTIVA (con IVA si aplica) — número, para cortes; y formateada.
+function _efNum(com,c){ var n=parseFloat(com); if(isNaN(n)) return null; return c.aplicaIva ? n*(1+(parseFloat(c.ivaPct)||0)/100) : n; }
+function _efPct(com,c){ var n=_efNum(com,c); return n==null?'—':(n%1?n.toFixed(2):n)+'%'; }
+
+function _load(){ return _cache || []; }
+
+async function _sbInit(){
+    var negId = getNegocioActivo(); if(!negId){ render(); return; }
+    try{
+        var res = await _supabase.from(TABLA).select('datos').eq('negocio_id', negId).order('created_at',{ascending:true});
+        if(!res.error) _cache = (res.data||[]).map(function(x){ return x.datos; });
+    }catch(e){ /* offline: queda lo que haya en cache */ }
+    if(!_cache) _cache=[];
+    render();
+}
+function _sbUp(rec){ var negId=getNegocioActivo(); if(negId) sbUpsert(TABLA, rec, negId); }
+function _sbDel(id){ sbDelete(TABLA, id); }
+
+function render(){
+    var lista=_load();
+    var cont=document.getElementById('cbList');
+    // KPIs
+    var nDeb=0,nCred=0,sTC=0,cTC=0,sTD=0,cTD=0;
+    lista.forEach(function(c){
+        if(_tipoDe(c)==='debito') nDeb++; else nCred++;
+        var tc=parseFloat(c.comisionTC), td=parseFloat(c.comisionTD);
+        if(!isNaN(tc)){ sTC+=tc; cTC++; }
+        if(!isNaN(td)){ sTD+=td; cTD++; }
+    });
+    document.getElementById('kpiTotal').textContent = lista.length;
+    document.getElementById('kpiTipos').textContent = nDeb+' débito · '+nCred+' crédito';
+    document.getElementById('kpiTC').textContent = cTC?_pct(sTC/cTC):'—';
+    document.getElementById('kpiTD').textContent = cTD?_pct(sTD/cTD):'—';
+
+    if(!lista.length){
+        cont.innerHTML='<div class="cb-empty">Sin cuentas registradas. Agrega las cuentas bancarias del negocio (débito o crédito).</div>';
+        return;
+    }
+    cont.innerHTML=lista.map(function(c){
+        var tipo=_tipoDe(c), esCred=tipo==='credito';
+        var color=c.color||'#3dbe7a';
+        return '<div class="cb-card" style="border-left-color:'+color+'">'
+            +'<div class="cb-card-top">'
+                +'<div>'
+                    +'<div class="cb-bank">'+_esc(c.banco)+'</div>'
+                    +(c.alias?'<div class="cb-alias">'+_esc(c.alias)+'</div>':'')
+                    +'<div class="cb-digits">···· '+_esc(c.digitos||'——')+'</div>'
+                +'</div>'
+                +'<span class="cb-badge '+tipo+'">'+(esCred?'Crédito':'Débito')+'</span>'
+            +'</div>'
+            +(!esCred
+                ? '<div class="cb-com">'
+                    +'<div class="cb-com-box"><div class="cb-com-lbl">Com. T. crédito</div><div class="cb-com-val">'+_pct(c.comisionTC)+'</div></div>'
+                    +'<div class="cb-com-box"><div class="cb-com-lbl">Com. T. débito</div><div class="cb-com-val">'+_pct(c.comisionTD)+'</div></div>'
+                  +'</div>'
+                  +(c.aplicaIva
+                    ? '<div style="font-size:10px;color:var(--text-dim);margin-top:6px">+ IVA '+_pct(c.ivaPct)+' → efectiva: TC <strong style="color:var(--text)">'+_efPct(c.comisionTC,c)+'</strong> · TD <strong style="color:var(--text)">'+_efPct(c.comisionTD,c)+'</strong></div>'
+                    : '')
+                : '')
+            +(esCred && (c.limite||c.corte||c.pago)
+                ? '<div class="cb-credinfo">'
+                    +(parseFloat(c.limite)>0?'Límite: <strong style="color:var(--text)">'+_fmt(c.limite)+'</strong><br>':'')
+                    +(c.corte?'Corte: día <strong>'+c.corte+'</strong>   ':'')
+                    +(c.pago?'Pago: día <strong>'+c.pago+'</strong>':'')
+                  +'</div>'
+                : '')
+            +'<div class="cb-acts" style="margin-top:12px">'
+                +'<button class="cb-btn" onclick="abrirCb(\''+c.id+'\')">✏️ Editar</button>'
+                +'<button class="cb-btn del" onclick="eliminarCb(\''+c.id+'\')">✕ Eliminar</button>'
+            +'</div>'
+        +'</div>';
+    }).join('');
+}
+
+function setTipo(t){
+    _tipoActual=t;
+    document.getElementById('tipoDebito').classList.toggle('active', t==='debito');
+    document.getElementById('tipoCredito').classList.toggle('active', t==='credito');
+    // Comisiones SOLO en débito (ahí entra el dinero de ventas); límite/corte/pago solo en crédito.
+    document.getElementById('cbDebitoBlock').style.display  = (t==='debito')?'block':'none';
+    document.getElementById('cbCreditoBlock').style.display = (t==='credito')?'block':'none';
+}
+function toggleIva(){
+    var on=document.getElementById('cbAplicaIva').checked;
+    var ivaInp=document.getElementById('cbIva');
+    ivaInp.disabled=!on;
+    ivaInp.style.opacity=on?'1':'.45';
+    if(on && !ivaInp.value) ivaInp.value=16;
+}
+
+function abrirCb(id){
+    var c=id?(_load().find(function(x){return x.id===id;})||{}):{};
+    setTipo(id?_tipoDe(c):'debito');
+    document.getElementById('cbId').value=c.id||'';
+    document.getElementById('cbBanco').value=c.banco||'';
+    document.getElementById('cbAlias').value=c.alias||'';
+    document.getElementById('cbDigitos').value=c.digitos||'';
+    document.getElementById('cbComTC').value=(c.comisionTC!=null?c.comisionTC:'');
+    document.getElementById('cbComTD').value=(c.comisionTD!=null?c.comisionTD:'');
+    document.getElementById('cbAplicaIva').checked=!!c.aplicaIva;
+    document.getElementById('cbIva').value=(c.ivaPct!=null?c.ivaPct:16);
+    toggleIva();
+    document.getElementById('cbLimite').value=c.limite||'';
+    document.getElementById('cbCorte').value=c.corte||'';
+    document.getElementById('cbPago').value=c.pago||'';
+    document.getElementById('cbColor').value=c.color||'#3dbe7a';
+    document.getElementById('cbModalTitle').textContent=id?'✏️ Editar cuenta':'🏦 Nueva cuenta';
+    document.getElementById('cbModal').classList.add('open');
+}
+function cerrarCb(){ document.getElementById('cbModal').classList.remove('open'); }
+
+function guardarCb(){
+    var banco=document.getElementById('cbBanco').value.trim();
+    if(!banco){ alert('El banco es obligatorio.'); return; }
+    var id=document.getElementById('cbId').value || (Date.now().toString(36)+Math.random().toString(36).slice(2,5));
+    var comTC=parseFloat(document.getElementById('cbComTC').value);
+    var comTD=parseFloat(document.getElementById('cbComTD').value);
+    var rec={
+        id:id, banco:banco,
+        alias:document.getElementById('cbAlias').value.trim(),
+        tipo:_tipoActual,
+        digitos:document.getElementById('cbDigitos').value.trim(),
+        comisionTC:(_tipoActual==='debito' && !isNaN(comTC))?comTC:null,
+        comisionTD:(_tipoActual==='debito' && !isNaN(comTD))?comTD:null,
+        aplicaIva:(_tipoActual==='debito') && document.getElementById('cbAplicaIva').checked,
+        ivaPct:(_tipoActual==='debito')?(parseFloat(document.getElementById('cbIva').value)||0):0,
+        color:document.getElementById('cbColor').value,
+        limite:(_tipoActual==='credito')?(parseFloat(document.getElementById('cbLimite').value)||0):0,
+        corte:(_tipoActual==='credito')?(parseInt(document.getElementById('cbCorte').value)||0):0,
+        pago:(_tipoActual==='credito')?(parseInt(document.getElementById('cbPago').value)||0):0
+    };
+    _cache=(_cache||[]).filter(function(x){return x.id!==id;});
+    _cache.push(rec);
+    _sbUp(rec);
+    cerrarCb(); render();
+}
+function eliminarCb(id){
+    if(!confirm('¿Eliminar esta cuenta bancaria?')) return;
+    _cache=(_cache||[]).filter(function(x){return x.id!==id;});
+    _sbDel(id);
+    render();
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+    if(window._ctxBarInit) try{ _ctxBarInit(); }catch(e){}
+    render();
+    _sbInit();
+});
+</script>
+</body>
+</html>

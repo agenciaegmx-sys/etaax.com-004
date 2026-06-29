@@ -1561,10 +1561,11 @@ function _ensurePagoNomModal(){
             +'<div class="fg"><label>Monto ($)</label><input type="number" id="pnCptMonto" min="0" step="0.01" placeholder="0.00"></div>'
           +'</div>'
           +'<div class="fg" style="margin-top:8px"><label>¿Cómo se paga este concepto?</label>'
-            +'<select id="pnCptMetodo"><option value="mismo">Mismo método que la nómina</option>'
+            +'<select id="pnCptMetodo" onchange="_pnCptMetodoChange()"><option value="mismo">Mismo método que la nómina</option>'
             +'<option value="caja_chica">💵 Efectivo (caja chica)</option>'
             +'<option value="caja_fuerte">🏦 Caja fuerte</option>'
             +'<option value="transfer">🏛️ Transferencia</option></select></div>'
+          +'<div class="fg" id="pnCptFechaWrap" style="display:none;margin-top:8px"><label>Fecha de pago de este concepto</label><input type="date" id="pnCptFecha"><div style="font-size:10px;color:var(--text-dim);margin-top:3px">Si lo pagas en otra fecha (no hoy), defínela aquí.</div></div>'
           +'<div style="display:flex;gap:8px;margin:6px 0 12px">'
             +'<button class="btn-mayor" id="pnCptCalcBtn" style="display:none;font-size:11px;padding:6px 12px" onclick="_pnCptCalcular()">💡 Calcular sugerido</button>'
             +'<button class="btn-primary" style="font-size:11px;padding:6px 12px" onclick="_pnCptAgregar()">+ Agregar concepto</button>'
@@ -1707,6 +1708,13 @@ function _pnCptCalcular(){
     else if(tipo==='prima'){ monto=cant*diario*((par.primaVacacionalPct||25)/100); } // días vac × diario × %
     document.getElementById('pnCptMonto').value=Math.round(monto*100)/100;
 }
+// Mostrar el campo de fecha solo si el concepto se paga con OTRO método (no "mismo").
+function _pnCptMetodoChange(){
+    var pago=(document.getElementById('pnCptMetodo')||{}).value||'mismo';
+    var wrap=document.getElementById('pnCptFechaWrap'), inp=document.getElementById('pnCptFecha');
+    if(wrap) wrap.style.display=(pago!=='mismo')?'':'none';
+    if(inp && pago!=='mismo' && !inp.value) inp.value=todayStr();
+}
 function _pnCptAgregar(){
     var tipo=document.getElementById('pnCptTipo').value;
     var monto=n(document.getElementById('pnCptMonto').value);
@@ -1715,9 +1723,13 @@ function _pnCptAgregar(){
     var cant=n(document.getElementById('pnCptCant').value);
     if(cant>0) lbl+=' ('+cant+(tipo==='horas'?' h':' d')+')';
     var pago=(document.getElementById('pnCptMetodo')||{}).value||'mismo';
-    _pagoNomConceptos.push({concepto:lbl, monto:monto, pago:pago});
+    // Fecha de pago propia solo si se paga aparte; default hoy.
+    var fecha=(pago!=='mismo')?(((document.getElementById('pnCptFecha')||{}).value)||todayStr()):'';
+    _pagoNomConceptos.push({concepto:lbl, monto:monto, pago:pago, fecha:fecha});
     document.getElementById('pnCptCant').value=''; document.getElementById('pnCptMonto').value='';
     var met=document.getElementById('pnCptMetodo'); if(met) met.value='mismo';
+    var fw=document.getElementById('pnCptFechaWrap'); if(fw) fw.style.display='none';
+    var fi=document.getElementById('pnCptFecha'); if(fi) fi.value='';
     _pnTotalManual=null; // al cambiar conceptos, el total vuelve a seguir el cálculo
     _pnRenderCptList(); _pnCalc();
 }
@@ -1728,7 +1740,7 @@ function _pnRenderCptList(){
     c.innerHTML=_pagoNomConceptos.map(function(x,i){
         var pg=_PN_METODOS[x.pago||'mismo']||_PN_METODOS.mismo;
         var badge=(x.pago && x.pago!=='mismo')
-          ? '<span style="font-size:10px;color:var(--accent);background:rgba(245,200,66,.12);border:1px solid rgba(245,200,66,.3);padding:1px 7px;border-radius:8px;white-space:nowrap">'+pg.lbl+'</span>'
+          ? '<span style="font-size:10px;color:var(--accent);background:rgba(245,200,66,.12);border:1px solid rgba(245,200,66,.3);padding:1px 7px;border-radius:8px;white-space:nowrap">'+pg.lbl+(x.fecha?' · '+x.fecha:'')+'</span>'
           : '';
         return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;background:var(--surface2)">'
           +'<span style="font-size:13px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+_esc(x.concepto)+badge+'</span>'
@@ -1770,7 +1782,7 @@ function _confirmarPagoNom(){
     aparte.forEach(function(c){
         var m=_PN_METODOS[c.pago]||{};
         _pnGuardarGastoDirecto({
-            fecha:todayStr(), tipo:'menor',
+            fecha:(c.fecha||todayStr()), tipo:'menor',
             concepto:c.concepto+' — '+s.nombre,
             categoria:'Nómina y personal', proveedor:'', monto:n(c.monto),
             metodoPago:m.metodoPago||_metodoDefault(), metodoBanco:m.metodoBanco||'',
