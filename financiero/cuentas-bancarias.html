@@ -85,7 +85,35 @@
 <div id="ctxBar" class="ctx-bar" style="display:none"></div>
 
 <div class="app-shell">
-    <main class="main-content" style="margin-left:0">
+    <nav class="nav cerrado" id="nav">
+        <div class="nav-top">
+            <div class="nav-brand"><span class="nav-brand-sub">Salud Financiera</span></div>
+            <div class="nav-top-actions">
+                <a href="index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Panel Financiero" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1">🗃️</a>
+                <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
+            </div>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Ingresos</div>
+            <a href="ventas.html" class="nav-link" data-tooltip="Ventas Globales"><span class="nav-icon">💰</span><span class="nav-text">Ventas Globales</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Egresos</div>
+            <a href="gastos-globales.html" class="nav-link" data-tooltip="Gastos Globales"><span class="nav-icon">📤</span><span class="nav-text">Gastos Globales</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Cuentas</div>
+            <a href="cuentas-bancarias.html" class="nav-link active" data-tooltip="Cuentas Bancarias"><span class="nav-icon">🏦</span><span class="nav-text">Cuentas Bancarias</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Análisis</div>
+            <a href="previsiones.html" class="nav-link" data-tooltip="Previsiones"><span class="nav-icon">🔮</span><span class="nav-text">Previsiones</span></a>
+            <a href="utilidades.html" class="nav-link" data-tooltip="Utilidades"><span class="nav-icon">💹</span><span class="nav-text">Utilidades</span></a>
+            <a href="kpis.html" class="nav-link" data-tooltip="KPIs Financieros"><span class="nav-icon">🎯</span><span class="nav-text">KPIs</span></a>
+        </div>
+    </nav>
+
+    <main class="main-content expandido" id="mainContent">
     <div class="wrap" style="max-width:1100px;margin:0 auto;padding:22px 20px 60px">
 
         <div class="cb-head">
@@ -171,6 +199,15 @@
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 <script>
+function toggleNav(){
+    var nav=document.getElementById('nav'),main=document.getElementById('mainContent');
+    nav.classList.toggle('cerrado'); if(main)main.classList.toggle('expandido');
+    var c=nav.classList.contains('cerrado');
+    var btn=document.getElementById('navToggleBtn'),txt=document.getElementById('navToggleTxt');
+    if(btn)btn.childNodes[0].textContent=c?'▶':'◀';
+    if(txt)txt.textContent=c?'Expandir':'Ocultar';
+    if(btn)btn.setAttribute('data-tooltip',c?'Expandir':'Ocultar');
+}
 /* ══ Gestión de Cuentas Bancarias ══
    Reutiliza la tabla per-record `tarjetas_credito` (datos JSONB). Una "cuenta"
    guarda: banco, alias, tipo (debito|credito), digitos, color, comisionTC,

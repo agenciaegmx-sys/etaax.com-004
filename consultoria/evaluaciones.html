@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<script src="/page-guard.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <title>ETAAX · Evaluaciones</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../styles.css">
+    <style>
+        .ev-wrap { max-width:920px;margin:0 auto;padding:64px 20px 100px; }
+        body.has-ctx .ev-wrap { padding-top:112px; }
+        .ev-head { display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:8px;flex-wrap:wrap; }
+        .ev-title { font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:2px;color:var(--text);line-height:1; }
+        .ev-title .g{color:var(--green);}
+        .ev-sub { font-size:12px;color:var(--text-dim);margin-top:4px; }
+        .ev-btn { background:var(--green);color:#0f0e0c;border:none;border-radius:9px;padding:10px 18px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap; }
+        .ev-btn:hover{filter:brightness(1.08);transform:translateY(-1px);}
+        .ev-btn.ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border);}
+        .ev-btn.danger{background:rgba(224,90,58,.12);color:#ff7a5c;border:1px solid rgba(224,90,58,.4);}
+        .ev-btn.sm{padding:6px 12px;font-size:12px;}
+        /* Lista por categoría */
+        .ev-cat { margin-top:26px; }
+        .ev-cat-hdr { display:flex;align-items:center;gap:9px;padding-bottom:8px;border-bottom:1px solid var(--border);margin-bottom:12px; }
+        .ev-cat-ic{font-size:18px;}
+        .ev-cat-nom{font-family:'Bebas Neue',sans-serif;font-size:19px;letter-spacing:1.5px;color:var(--text);}
+        .ev-cat-cnt{font-size:11px;color:var(--text-dim);margin-left:auto;}
+        .ev-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+        @media (max-width:640px){.ev-grid{grid-template-columns:1fr;}}
+        .ev-card{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:16px 16px 13px;display:flex;flex-direction:column;gap:6px;}
+        .ev-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
+        .ev-card-tit{font-weight:600;font-size:15px;color:var(--text);line-height:1.2;}
+        .ev-card-meta{font-size:11px;color:var(--text-dim);}
+        .ev-chip{font-size:9px;letter-spacing:1px;text-transform:uppercase;padding:2px 8px;border-radius:20px;white-space:nowrap;}
+        .ev-chip.on{background:rgba(61,190,122,.14);color:var(--green);border:1px solid rgba(61,190,122,.35);}
+        .ev-chip.off{background:rgba(74,72,68,.25);color:var(--text-dim);border:1px solid var(--border);}
+        .ev-card-acts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
+        .ev-empty{color:var(--text-dim);font-size:12px;padding:10px 2px;}
+        /* Editor */
+        .ev-field{margin-bottom:14px;}
+        .ev-lbl{display:block;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:5px;}
+        .ev-in{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:14px;box-sizing:border-box;outline:none;}
+        .ev-in:focus{border-color:var(--green);}
+        textarea.ev-in{resize:vertical;min-height:54px;}
+        .ev-row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+        @media (max-width:560px){.ev-row2{grid-template-columns:1fr;}}
+        .ev-q{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;}
+        .ev-q-top{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+        .ev-q-num{font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--green);letter-spacing:1px;min-width:30px;}
+        .ev-q-del{margin-left:auto;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:15px;}
+        .ev-q-del:hover{color:#ff7a5c;}
+        .ev-opt{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+        .ev-opt .ev-in{flex:1;}
+        .ev-opt-val{width:78px;flex:none;}
+        .ev-opt-del{background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;}
+        .ev-opt-del:hover{color:#ff7a5c;}
+        .ev-hint{font-size:10px;color:var(--text-dim);margin-top:3px;}
+        .ev-link-box{background:rgba(61,190,122,.06);border:1px solid rgba(61,190,122,.3);border-radius:10px;padding:12px 14px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+        .ev-link-url{flex:1;min-width:180px;font-size:12px;color:var(--green);font-family:monospace;word-break:break-all;}
+        .ev-toggle{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);user-select:none;}
+        .ev-toggle input{width:38px;height:20px;-webkit-appearance:none;appearance:none;background:var(--border);border-radius:20px;position:relative;cursor:pointer;outline:none;transition:.2s;}
+        .ev-toggle input:checked{background:var(--green);}
+        .ev-toggle input::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.2s;}
+        .ev-toggle input:checked::after{left:20px;}
+        /* Resultados */
+        .res-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0 18px;}
+        @media (max-width:560px){.res-stats{grid-template-columns:repeat(2,1fr);}}
+        .res-stat{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:13px;text-align:center;}
+        .res-stat-v{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:1px;color:var(--green);line-height:1;}
+        .res-stat-l{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin-top:4px;}
+        .res-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden;}
+        .res-card-top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 16px;cursor:pointer;}
+        .res-card-top:hover{background:var(--surface2);}
+        .res-nom{font-weight:600;font-size:14px;color:var(--text);}
+        .res-meta{font-size:11px;color:var(--text-dim);margin-top:2px;}
+        .res-score{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:1px;text-align:right;line-height:1;}
+        .res-score-sub{font-family:'DM Sans',sans-serif;font-size:10px;letter-spacing:.5px;color:var(--text-dim);margin-top:2px;}
+        .res-det{display:none;border-top:1px solid var(--border);padding:6px 16px 12px;}
+        .res-card.open .res-det{display:block;}
+        .res-ans{padding:9px 0;border-bottom:1px solid var(--border);}
+        .res-ans:last-child{border-bottom:none;}
+        .res-ans-q{font-size:12px;color:var(--text-dim);margin-bottom:2px;}
+        .res-ans-a{font-size:14px;color:var(--text);}
+        .ev-share-ov{display:none;position:fixed;inset:0;z-index:9200;background:rgba(0,0,0,.7);align-items:center;justify-content:center;padding:20px;}
+        .ev-share-ov.open{display:flex;}
+        .ev-share{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;max-width:460px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,.6);}
+        .ev-share-hdr{display:flex;align-items:center;justify-content:space-between;font-family:'Bebas Neue',sans-serif;font-size:19px;letter-spacing:1.5px;color:var(--text);margin-bottom:10px;}
+        .ev-share-x{background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;}
+        .ev-share-tit{font-size:14px;font-weight:600;color:var(--green);}
+        .ev-share-btns{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+        .ev-share-btns .ev-btn{flex:1;min-width:120px;}
+        .theme-toggle{position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);}
+        .theme-toggle:hover{border-color:var(--green);color:var(--green);}
+    </style>
+</head>
+<body>
+<div class="mod-grid-bg"></div>
+<div class="mod-glow"></div>
+
+<header class="top-bar">
+    <a href="index.html" class="topbar-home" title="Consultoría">←</a>
+    <div class="top-breadcrumb">
+        <span class="top-module-badge">Consultoría</span>
+        <span class="top-sep">|</span>
+        <span class="top-section-name">Evaluaciones</span>
+    </div>
+</header>
+<div id="ctxBar" class="ctx-bar" style="display:none"></div>
+
+<div class="ev-wrap">
+    <!-- LISTA -->
+    <div id="viewLista">
+        <div class="ev-head">
+            <div>
+                <div class="ev-title"><span class="g">Evaluaciones</span></div>
+                <div class="ev-sub">Crea evaluaciones tipo formulario, genera un link y mándaselo a tu staff o candidatos. Puntuación automática.</div>
+            </div>
+            <button class="ev-btn" onclick="nuevaEval()">+ Nueva evaluación</button>
+        </div>
+        <div id="listaCats"></div>
+    </div>
+
+    <!-- EDITOR -->
+    <div id="viewEditor" style="display:none">
+        <div class="ev-head">
+            <div class="ev-title" id="edTitulo2">Nueva evaluación</div>
+            <div style="display:flex;gap:8px">
+                <button class="ev-btn ghost" onclick="cancelarEdit()">← Volver</button>
+                <button class="ev-btn" onclick="guardarEval()">💾 Guardar</button>
+            </div>
+        </div>
+
+        <div id="edLinkBox"></div>
+
+        <div class="ev-row2">
+            <div class="ev-field" style="grid-column:span 2">
+                <label class="ev-lbl">Título de la evaluación</label>
+                <input type="text" class="ev-in" id="edTitulo" placeholder="Ej. Evaluación operativa de barra">
+            </div>
+            <div class="ev-field">
+                <label class="ev-lbl">Categoría</label>
+                <select class="ev-in" id="edCategoria"></select>
+            </div>
+            <div class="ev-field">
+                <label class="ev-lbl">Estado</label>
+                <label class="ev-toggle" style="margin-top:8px"><input type="checkbox" id="edActiva"><span id="edActivaTxt">Borrador</span></label>
+            </div>
+            <div class="ev-field" style="grid-column:span 2">
+                <label class="ev-lbl">Descripción / instrucciones (opcional)</label>
+                <textarea class="ev-in" id="edDescripcion" placeholder="Lo que verá quien conteste antes de empezar."></textarea>
+            </div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin:18px 0 10px">
+            <div class="ev-lbl" style="margin:0">Preguntas</div>
+            <div class="ev-card-meta" id="edPuntosTot"></div>
+        </div>
+        <div id="edPreguntas"></div>
+        <button class="ev-btn ghost" onclick="agregarPregunta()" style="width:100%;margin-top:4px">+ Agregar pregunta</button>
+
+        <div style="display:flex;justify-content:space-between;margin-top:24px;gap:8px">
+            <button class="ev-btn danger" id="edDelBtn" onclick="eliminarEval()" style="display:none">🗑️ Eliminar</button>
+            <div style="flex:1"></div>
+            <button class="ev-btn ghost" onclick="cancelarEdit()">Cancelar</button>
+            <button class="ev-btn" onclick="guardarEval()">💾 Guardar</button>
+        </div>
+    </div>
+
+    <!-- RESULTADOS -->
+    <div id="viewResultados" style="display:none">
+        <div class="ev-head">
+            <div>
+                <div class="ev-title" id="resTitulo">Resultados</div>
+                <div class="ev-sub" id="resSub"></div>
+            </div>
+            <button class="ev-btn ghost" onclick="cerrarResultados()">← Volver</button>
+        </div>
+        <div id="resStats" class="res-stats"></div>
+        <div id="resLista"></div>
+    </div>
+</div>
+
+<!-- Modal Compartir -->
+<div id="shareOverlay" class="ev-share-ov" onclick="if(event.target===this)cerrarShare()">
+    <div class="ev-share">
+        <div class="ev-share-hdr"><span>🔗 Compartir evaluación</span><button class="ev-share-x" onclick="cerrarShare()">✕</button></div>
+        <div class="ev-share-tit" id="shTitulo"></div>
+        <div class="ev-hint" style="margin:2px 0 8px">Cualquiera con este link puede contestar, sin iniciar sesión.</div>
+        <input class="ev-in" id="shUrl" readonly onclick="this.select()">
+        <div class="ev-share-btns">
+            <button class="ev-btn" id="shCopyBtn" onclick="shCopiar()">📋 Copiar link</button>
+            <button class="ev-btn ghost" onclick="shWhats()">💬 WhatsApp</button>
+            <button class="ev-btn ghost" onclick="shCorreo()">✉️ Correo</button>
+        </div>
+    </div>
+</div>
+
+<button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
+
+<script>
+(function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);document.addEventListener('DOMContentLoaded',function(){if(s==='light'){document.getElementById('themeIcon').textContent='🌙';document.getElementById('themeLabel').textContent='Modo oscuro';}});})();
+function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('etaax_theme',n);document.getElementById('themeIcon').textContent=n==='light'?'🌙':'☀️';document.getElementById('themeLabel').textContent=n==='light'?'Modo oscuro':'Modo claro';}
+
+function getNegocioActivo(){return localStorage.getItem('etaax_negocio_activo')||'';}
+function esc(s){return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function _token(){return (genId()+genId()+genId()).replace(/[^a-z0-9]/g,'');}
+
+var CATS=[
+    {id:'operativas',     nom:'Operativas',     ic:'⚙️', desc:'Cocina, barra, servicio'},
+    {id:'administrativas',nom:'Administrativas',ic:'📋', desc:'Gerencia, oficina, contabilidad'},
+    {id:'mensuales',      nom:'Mensuales',      ic:'📅', desc:'Seguimiento periódico'},
+    {id:'reclutamiento',  nom:'Reclutamiento',  ic:'🧑‍💼', desc:'Candidatos a vacantes'},
+    {id:'psicometrico',   nom:'Psicométrico',   ic:'🧠', desc:'Perfil y aptitudes'},
+    {id:'liderazgo',      nom:'Liderazgo',      ic:'🌟', desc:'Mandos y potencial'}
+];
+function _cat(id){for(var i=0;i<CATS.length;i++)if(CATS[i].id===id)return CATS[i];return CATS[0];}
+var TIPOS=[
+    {id:'opcion',  nom:'Opción única'},
+    {id:'multiple',nom:'Opción múltiple'},
+    {id:'escala',  nom:'Escala'},
+    {id:'sino',    nom:'Sí / No'},
+    {id:'abierta', nom:'Respuesta abierta'}
+];
+
+var _evals=[], _edit=null, _respuestas=[], _verResId=null;
+
+/* ── Carga ── */
+async function _sbInit(){
+    var negId=getNegocioActivo();
+    if(!negId||typeof _supabase==='undefined'){ renderLista(); return; }
+    var r=await Promise.all([
+        _supabase.from('evaluaciones').select('datos').eq('negocio_id',negId),
+        _supabase.from('evaluacion_respuestas').select('datos').eq('negocio_id',negId).order('created_at',{ascending:false})
+    ]);
+    if(!r[0].error) _evals=(r[0].data||[]).map(function(x){return x.datos;}).filter(Boolean);
+    if(!r[1].error) _respuestas=(r[1].data||[]).map(function(x){return x.datos;}).filter(Boolean);
+    renderLista();
+    _subRealtime(negId);
+    _subRespuestas(negId);
+}
+function _respDe(evalId){ return _respuestas.filter(function(x){return x.evaluacionId===evalId;}); }
+// Realtime de respuestas: cuando llega una nueva (desde un cel), refresca en vivo.
+var _rrCh=null,_rrNeg=null,_rrT=null;
+function _subRespuestas(negId){
+    if(!negId||_rrNeg===negId||typeof sbRealtime!=='function') return;
+    if(_rrCh&&_supabase.removeChannel){try{_supabase.removeChannel(_rrCh);}catch(e){}}
+    _rrNeg=negId;
+    _rrCh=sbRealtime('evaluacion_respuestas',negId,function(){
+        if(getNegocioActivo()!==negId) return;
+        clearTimeout(_rrT);
+        _rrT=setTimeout(async function(){
+            var r=await _supabase.from('evaluacion_respuestas').select('datos').eq('negocio_id',negId).order('created_at',{ascending:false});
+            if(r.error) return;
+            _respuestas=(r.data||[]).map(function(x){return x.datos;}).filter(Boolean);
+            if(document.getElementById('viewResultados').style.display!=='none' && _verResId) renderResultados();
+            else if(document.getElementById('viewLista').style.display!=='none') renderLista();
+        },400);
+    });
+}
+var _rtCh=null,_rtNeg=null,_rtT=null;
+function _subRealtime(negId){
+    if(!negId||_rtNeg===negId||typeof sbRealtime!=='function') return;
+    if(_rtCh&&_supabase.removeChannel){try{_supabase.removeChannel(_rtCh);}catch(e){}}
+    _rtNeg=negId;
+    _rtCh=sbRealtime('evaluaciones',negId,function(){
+        if(getNegocioActivo()!==negId) return;
+        if(document.getElementById('viewEditor').style.display!=='none') return; // editando
+        clearTimeout(_rtT);
+        _rtT=setTimeout(async function(){
+            var r=await _supabase.from('evaluaciones').select('datos').eq('negocio_id',negId);
+            if(!r.error){_evals=(r.data||[]).map(function(x){return x.datos;}).filter(Boolean);renderLista();}
+        },400);
+    });
+}
+
+/* ── Lista por categoría ── */
+function renderLista(){
+    var cont=document.getElementById('listaCats');
+    cont.innerHTML=CATS.map(function(c){
+        var items=_evals.filter(function(e){return e.categoria===c.id;})
+                        .sort(function(a,b){return (b.updatedAt||'').localeCompare(a.updatedAt||'');});
+        var cards=items.length ? items.map(cardHTML).join('') : '<div class="ev-empty">Sin evaluaciones en esta categoría.</div>';
+        return '<div class="ev-cat">'+
+            '<div class="ev-cat-hdr"><span class="ev-cat-ic">'+c.ic+'</span><span class="ev-cat-nom">'+c.nom+'</span>'+
+            '<span class="ev-cat-cnt">'+items.length+' evaluación'+(items.length!==1?'es':'')+'</span></div>'+
+            (items.length?'<div class="ev-grid">'+cards+'</div>':cards)+
+        '</div>';
+    }).join('');
+}
+function cardHTML(e){
+    var nq=(e.preguntas||[]).length;
+    return '<div class="ev-card">'+
+        '<div class="ev-card-top">'+
+            '<div class="ev-card-tit">'+esc(e.titulo||'Sin título')+'</div>'+
+            '<span class="ev-chip '+(e.activa?'on':'off')+'">'+(e.activa?'Activa':'Borrador')+'</span>'+
+        '</div>'+
+        '<div class="ev-card-meta">'+nq+' pregunta'+(nq!==1?'s':'')+(e.descripcion?' · '+esc(e.descripcion.slice(0,60)):'')+'</div>'+
+        '<div class="ev-card-acts">'+
+            '<button class="ev-btn ghost sm" onclick="editarEval(\''+e.id+'\')">✎ Editar</button>'+
+            '<button class="ev-btn sm" onclick="compartir(\''+e.id+'\')">🔗 Compartir</button>'+
+            '<button class="ev-btn ghost sm" onclick="verResultados(\''+e.id+'\')">📊 Respuestas ('+_respDe(e.id).length+')</button>'+
+        '</div>'+
+    '</div>';
+}
+
+/* ── Link público + Compartir ── */
+function _linkDe(e){ return location.origin+'/evaluacion.html?t='+(e.token||''); }
+var _shUrl='';
+function compartir(id){
+    var e=_evals.find(function(x){return x.id===id;}); if(!e)return;
+    if(!e.token){ e.token=_token(); }
+    if(!e.activa){
+        if(!confirm('Esta evaluación está en BORRADOR. Para que la puedan contestar con el link debe estar ACTIVA.\n\n¿Activarla ahora y compartir?')) return;
+        e.activa=true;
+        if(typeof sbUpsert==='function') sbUpsert('evaluaciones', e); // guarda en la nube + sync
+        renderLista();
+    }
+    _shUrl=_linkDe(e);
+    document.getElementById('shTitulo').textContent=e.titulo||'Evaluación';
+    document.getElementById('shUrl').value=_shUrl;
+    document.getElementById('shareOverlay').classList.add('open');
+}
+function cerrarShare(){ document.getElementById('shareOverlay').classList.remove('open'); }
+function shCopiar(){
+    var i=document.getElementById('shUrl'); i.select(); i.setSelectionRange(0,99999);
+    if(navigator.clipboard) navigator.clipboard.writeText(_shUrl);
+    else { try{document.execCommand('copy');}catch(e){} }
+    var b=document.getElementById('shCopyBtn'); var t=b.textContent; b.textContent='✓ Copiado'; setTimeout(function(){b.textContent=t;},1500);
+}
+function shWhats(){ window.open('https://wa.me/?text='+encodeURIComponent('Por favor contesta esta evaluación:\n'+_shUrl),'_blank'); }
+function shCorreo(){ window.location.href='mailto:?subject='+encodeURIComponent('Evaluación ETAAX')+'&body='+encodeURIComponent('Por favor contesta esta evaluación:\n'+_shUrl); }
+
+/* ── Editor ── */
+function nuevaEval(){
+    _edit={ id:'ev_'+genId(), titulo:'', categoria:CATS[0].id, descripcion:'', token:_token(), activa:false, preguntas:[] };
+    abrirEditor(false);
+}
+function editarEval(id){
+    var e=_evals.find(function(x){return x.id===id;}); if(!e)return;
+    _edit=JSON.parse(JSON.stringify(e));
+    if(!_edit.token) _edit.token=_token();
+    if(!_edit.preguntas) _edit.preguntas=[];
+    abrirEditor(true);
+}
+function abrirEditor(esEdicion){
+    document.getElementById('viewLista').style.display='none';
+    document.getElementById('viewEditor').style.display='';
+    document.getElementById('edDelBtn').style.display=esEdicion?'':'none';
+    document.getElementById('edTitulo2').textContent=esEdicion?'Editar evaluación':'Nueva evaluación';
+    document.getElementById('edCategoria').innerHTML=CATS.map(function(c){return '<option value="'+c.id+'">'+c.ic+' '+c.nom+'</option>';}).join('');
+    document.getElementById('edTitulo').value=_edit.titulo||'';
+    document.getElementById('edCategoria').value=_edit.categoria;
+    document.getElementById('edDescripcion').value=_edit.descripcion||'';
+    var chk=document.getElementById('edActiva'); chk.checked=!!_edit.activa; chk.onchange=_onActivaChange; _onActivaChange();
+    renderPreguntas();
+    renderLinkBox();
+    window.scrollTo(0,0);
+}
+function _onActivaChange(){
+    document.getElementById('edActivaTxt').textContent=document.getElementById('edActiva').checked?'Activa (link público abierto)':'Borrador';
+    renderLinkBox();
+}
+function renderLinkBox(){
+    var box=document.getElementById('edLinkBox');
+    if(!document.getElementById('edActiva').checked){ box.innerHTML=''; return; }
+    var url=location.origin+'/evaluacion.html?t='+(_edit.token||'');
+    box.innerHTML='<div class="ev-link-box"><span style="font-size:18px">🔗</span>'+
+        '<span class="ev-link-url">'+esc(url)+'</span>'+
+        '<button class="ev-btn sm" onclick="_copiarUrl(\''+esc(url)+'\')">Copiar</button></div>';
+}
+function _copiarUrl(u){ if(navigator.clipboard)navigator.clipboard.writeText(u); alert('Link copiado:\n'+u); }
+
+/* ── Preguntas (constructor) ── */
+function _capturar(){
+    // Lee el DOM del editor hacia el modelo, para no perder lo escrito al re-render.
+    _edit.titulo=document.getElementById('edTitulo').value.trim();
+    _edit.categoria=document.getElementById('edCategoria').value;
+    _edit.descripcion=document.getElementById('edDescripcion').value.trim();
+    _edit.activa=document.getElementById('edActiva').checked;
+    (_edit.preguntas||[]).forEach(function(q){
+        var tEl=document.querySelector('[data-q="'+q.id+'"][data-f="texto"]'); if(tEl)q.texto=tEl.value;
+        var rEl=document.querySelector('[data-q="'+q.id+'"][data-f="req"]'); if(rEl)q.requerida=rEl.checked;
+        if(q.tipo==='escala'){
+            var mn=document.querySelector('[data-q="'+q.id+'"][data-f="emin"]'); if(mn)q.escalaMin=parseInt(mn.value)||0;
+            var mx=document.querySelector('[data-q="'+q.id+'"][data-f="emax"]'); if(mx)q.escalaMax=parseInt(mx.value)||5;
+        } else if(q.tipo==='opcion'||q.tipo==='multiple'||q.tipo==='sino'){
+            (q.opciones||[]).forEach(function(o,i){
+                var oe=document.querySelector('[data-q="'+q.id+'"][data-o="'+i+'"][data-f="otxt"]'); if(oe)o.texto=oe.value;
+                var ov=document.querySelector('[data-q="'+q.id+'"][data-o="'+i+'"][data-f="oval"]'); if(ov)o.valor=parseFloat(ov.value)||0;
+            });
+        }
+    });
+}
+function renderPreguntas(){
+    var cont=document.getElementById('edPreguntas');
+    if(!_edit.preguntas.length){ cont.innerHTML='<div class="ev-empty">Aún no hay preguntas. Agrega la primera abajo.</div>'; _renderPuntos(); return; }
+    cont.innerHTML=_edit.preguntas.map(function(q,idx){ return qHTML(q,idx); }).join('');
+    _renderPuntos();
+}
+function qHTML(q,idx){
+    var tiposSel=TIPOS.map(function(t){return '<option value="'+t.id+'"'+(q.tipo===t.id?' selected':'')+'>'+t.nom+'</option>';}).join('');
+    var cuerpo='';
+    if(q.tipo==='opcion'||q.tipo==='multiple'){
+        cuerpo=(q.opciones||[]).map(function(o,i){ return optHTML(q.id,o,i); }).join('')+
+            '<button class="ev-btn ghost sm" onclick="agregarOpcion(\''+q.id+'\')" style="margin-top:4px">+ Opción</button>'+
+            '<div class="ev-hint">Cada opción suma sus puntos al score. La opción correcta/ideal lleva más puntos.</div>';
+    } else if(q.tipo==='sino'){
+        cuerpo=(q.opciones||[]).map(function(o,i){ return optHTML(q.id,o,i,true); }).join('')+
+            '<div class="ev-hint">Define cuántos puntos vale Sí y cuántos No.</div>';
+    } else if(q.tipo==='escala'){
+        cuerpo='<div class="ev-row2" style="max-width:280px">'+
+            '<div><label class="ev-lbl">Mínimo</label><input type="number" class="ev-in" data-q="'+q.id+'" data-f="emin" value="'+(q.escalaMin!=null?q.escalaMin:1)+'"></div>'+
+            '<div><label class="ev-lbl">Máximo</label><input type="number" class="ev-in" data-q="'+q.id+'" data-f="emax" value="'+(q.escalaMax!=null?q.escalaMax:5)+'"></div>'+
+            '</div><div class="ev-hint">El número que elija = sus puntos (máx = el valor más alto de la escala).</div>';
+    } else {
+        cuerpo='<div class="ev-hint">Respuesta de texto libre. No suma puntos automáticos (se revisa a mano).</div>';
+    }
+    return '<div class="ev-q">'+
+        '<div class="ev-q-top"><span class="ev-q-num">P'+(idx+1)+'</span>'+
+            '<select class="ev-in" style="max-width:170px" onchange="cambiarTipo(\''+q.id+'\',this.value)">'+tiposSel+'</select>'+
+            '<button class="ev-q-del" onclick="eliminarPregunta(\''+q.id+'\')" title="Eliminar">🗑️</button>'+
+        '</div>'+
+        '<input type="text" class="ev-in" data-q="'+q.id+'" data-f="texto" placeholder="Escribe la pregunta…" value="'+esc(q.texto||'')+'" style="margin-bottom:10px">'+
+        cuerpo+
+        '<label class="ev-toggle" style="margin-top:10px;font-size:12px"><input type="checkbox" data-q="'+q.id+'" data-f="req"'+(q.requerida?' checked':'')+'>Obligatoria</label>'+
+    '</div>';
+}
+function optHTML(qid,o,i,fija){
+    return '<div class="ev-opt">'+
+        '<input type="text" class="ev-in" data-q="'+qid+'" data-o="'+i+'" data-f="otxt" placeholder="Opción" value="'+esc(o.texto||'')+'"'+(fija?' readonly style="opacity:.7"':'')+'>'+
+        '<input type="number" class="ev-in ev-opt-val" data-q="'+qid+'" data-o="'+i+'" data-f="oval" title="Puntos" value="'+(o.valor!=null?o.valor:0)+'">'+
+        (fija?'':'<button class="ev-opt-del" onclick="eliminarOpcion(\''+qid+'\','+i+')">✕</button>')+
+    '</div>';
+}
+function _qById(id){return _edit.preguntas.find(function(q){return q.id===id;});}
+function agregarPregunta(){
+    _capturar();
+    _edit.preguntas.push({ id:'q_'+genId(), tipo:'opcion', texto:'', requerida:true, opciones:[{texto:'',valor:1},{texto:'',valor:0}] });
+    renderPreguntas();
+}
+function eliminarPregunta(id){
+    _capturar();
+    _edit.preguntas=_edit.preguntas.filter(function(q){return q.id!==id;});
+    renderPreguntas();
+}
+function cambiarTipo(id,tipo){
+    _capturar();
+    var q=_qById(id); if(!q)return;
+    q.tipo=tipo;
+    if(tipo==='sino') q.opciones=[{texto:'Sí',valor:1},{texto:'No',valor:0}];
+    else if(tipo==='opcion'||tipo==='multiple'){ if(!q.opciones||!q.opciones.length) q.opciones=[{texto:'',valor:1},{texto:'',valor:0}]; }
+    else if(tipo==='escala'){ if(q.escalaMin==null)q.escalaMin=1; if(q.escalaMax==null)q.escalaMax=5; }
+    renderPreguntas();
+}
+function agregarOpcion(id){
+    _capturar();
+    var q=_qById(id); if(!q)return;
+    if(!q.opciones)q.opciones=[];
+    q.opciones.push({texto:'',valor:0});
+    renderPreguntas();
+}
+function eliminarOpcion(id,i){
+    _capturar();
+    var q=_qById(id); if(!q)return;
+    q.opciones.splice(i,1);
+    renderPreguntas();
+}
+
+/* Puntos máximos (referencia) */
+function _puntosMaxPregunta(q){
+    if(q.tipo==='escala') return Math.max(parseInt(q.escalaMax)||0,0);
+    if(q.tipo==='opcion'||q.tipo==='sino') return (q.opciones||[]).reduce(function(m,o){return Math.max(m,parseFloat(o.valor)||0);},0);
+    if(q.tipo==='multiple') return (q.opciones||[]).reduce(function(s,o){return s+(parseFloat(o.valor)||0);},0);
+    return 0;
+}
+function _renderPuntos(){
+    _capturar();
+    var tot=_edit.preguntas.reduce(function(s,q){return s+_puntosMaxPregunta(q);},0);
+    document.getElementById('edPuntosTot').textContent='Puntaje máximo: '+tot+' pts';
+}
+
+/* ── Guardar / eliminar ── */
+async function guardarEval(){
+    _capturar();
+    if(!_edit.titulo){ alert('Ponle un título a la evaluación.'); document.getElementById('edTitulo').focus(); return; }
+    if(!_edit.preguntas.length){ alert('Agrega al menos una pregunta.'); return; }
+    var ahora=new Date().toISOString();
+    if(!_edit.createdAt)_edit.createdAt=ahora;
+    _edit.updatedAt=ahora;
+    _edit.puntajeMax=_edit.preguntas.reduce(function(s,q){return s+_puntosMaxPregunta(q);},0);
+    _evals=_evals.filter(function(e){return e.id!==_edit.id;});
+    _evals.push(_edit);
+    if(typeof sbUpsert==='function') sbUpsert('evaluaciones', _edit); // id + negocio activo + datos
+    cancelarEdit();
+}
+function eliminarEval(){
+    if(!_edit||!confirm('¿Eliminar esta evaluación y dejar de recibir respuestas? Esta acción no se puede deshacer.')) return;
+    var id=_edit.id;
+    _evals=_evals.filter(function(e){return e.id!==id;});
+    if(typeof sbDelete==='function') sbDelete('evaluaciones', id);
+    cancelarEdit();
+}
+function cancelarEdit(){
+    _edit=null;
+    document.getElementById('viewEditor').style.display='none';
+    document.getElementById('viewLista').style.display='';
+    renderLista();
+    window.scrollTo(0,0);
+}
+
+/* ── Resultados ── */
+function verResultados(id){
+    var e=_evals.find(function(x){return x.id===id;}); if(!e)return;
+    _verResId=id;
+    document.getElementById('viewLista').style.display='none';
+    document.getElementById('viewEditor').style.display='none';
+    document.getElementById('viewResultados').style.display='';
+    renderResultados();
+    window.scrollTo(0,0);
+}
+function cerrarResultados(){
+    _verResId=null;
+    document.getElementById('viewResultados').style.display='none';
+    document.getElementById('viewLista').style.display='';
+    renderLista();
+    window.scrollTo(0,0);
+}
+function renderResultados(){
+    var e=_evals.find(function(x){return x.id===_verResId;}); if(!e)return;
+    document.getElementById('resTitulo').textContent=e.titulo||'Resultados';
+    var rs=_respDe(e.id).slice().sort(function(a,b){return String(b.recibidoEn||'').localeCompare(String(a.recibidoEn||''));});
+    document.getElementById('resSub').textContent=rs.length+' respuesta'+(rs.length!==1?'s':'')+' · '+_cat(e.categoria).nom;
+    var stats='';
+    if(rs.length){
+        var pcts=rs.map(function(r){return r.scorePct||0;});
+        var prom=Math.round(pcts.reduce(function(s,p){return s+p;},0)/rs.length);
+        stats='<div class="res-stat"><div class="res-stat-v">'+rs.length+'</div><div class="res-stat-l">Respuestas</div></div>'+
+              '<div class="res-stat"><div class="res-stat-v">'+prom+'%</div><div class="res-stat-l">Promedio</div></div>'+
+              '<div class="res-stat"><div class="res-stat-v">'+Math.max.apply(null,pcts)+'%</div><div class="res-stat-l">Más alto</div></div>'+
+              '<div class="res-stat"><div class="res-stat-v">'+Math.min.apply(null,pcts)+'%</div><div class="res-stat-l">Más bajo</div></div>';
+    }
+    document.getElementById('resStats').innerHTML=stats;
+    document.getElementById('resLista').innerHTML = rs.length
+        ? rs.map(respHTML).join('')
+        : '<div class="ev-empty">Aún no hay respuestas. Comparte el link para empezar a recibirlas.</div>';
+}
+function respHTML(r){
+    var pct=r.scorePct!=null?r.scorePct:0;
+    var col=pct>=70?'var(--green)':pct>=40?'var(--accent)':'#ff7a5c';
+    var fecha=String(r.recibidoEn||'').slice(0,10);
+    var nom=(r.respondente&&r.respondente.nombre)||'Anónimo';
+    var puesto=(r.respondente&&r.respondente.puesto)||'';
+    var det=(r.respuestas||[]).map(function(a){
+        return '<div class="res-ans"><div class="res-ans-q">'+esc(a.texto||'')+'</div>'+
+            '<div class="res-ans-a">'+esc(a.respuesta||'—')+(a.puntos?' <span style="color:var(--green);font-weight:600">+'+a.puntos+'</span>':'')+'</div></div>';
+    }).join('');
+    return '<div class="res-card">'+
+        '<div class="res-card-top" onclick="this.parentNode.classList.toggle(\'open\')">'+
+            '<div><div class="res-nom">'+esc(nom)+'</div>'+
+            '<div class="res-meta">'+(puesto?esc(puesto)+' · ':'')+esc(fecha)+'</div></div>'+
+            '<div class="res-score" style="color:'+col+'">'+pct+'%<div class="res-score-sub">'+(r.score||0)+'/'+(r.scoreMax||0)+' pts</div></div>'+
+        '</div>'+
+        '<div class="res-det">'+det+'</div>'+
+    '</div>';
+}
+
+document.addEventListener('DOMContentLoaded',function(){ if(typeof _ctxBarInit==='function')_ctxBarInit(); if(typeof _sbInit==='function')_sbInit(); });
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
+<script src="/etaax-db.js"></script>
+<script src="../security.js"></script>
+<script src="../ctx-bar.js"></script>
+</body>
+</html>
