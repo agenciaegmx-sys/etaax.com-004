@@ -61,9 +61,19 @@
 
     function _join(arr) { return arr.filter(Boolean).join(' · '); }
 
+    function _esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
     window.insumoContenido = function (o) { return _contenido(_canon(o)); };
     window.insumoPartes    = _partes;
-    window.insumoEtiqueta  = function (o) { var p = _partes(o); return _join([p.sub, p.nombre, p.variedad, p.contenido, p.marca]); };
+    // Orden legible único pedido: nombre · variedad · envase contenido · marca (marca al final, lo menos relevante).
+    window.insumoEtiqueta  = function (o) { var p = _partes(o); return _join([p.nombre, p.variedad, p.contenido, p.marca]); };
     window.insumoTitulo    = function (o) { var p = _partes(o); return _join([p.nombre, p.variedad]); };
-    window.insumoMeta      = function (o) { var p = _partes(o); return _join([p.sub, p.contenido, p.marca]); };
+    window.insumoMeta      = function (o) { var p = _partes(o); return _join([p.contenido, p.marca]); };
+    // Variante HTML del subtítulo: envase+contenido normal y la MARCA en gris pequeño.
+    window.insumoMetaHTML  = function (o) {
+        var p = _partes(o);
+        var out = _esc(p.contenido);
+        if (p.marca) out += (out ? ' ' : '') + '<span style="color:var(--text-dim);font-size:.85em">' + (out ? '· ' : '') + _esc(p.marca) + '</span>';
+        return out;
+    };
 })();

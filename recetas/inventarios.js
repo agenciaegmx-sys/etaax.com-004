@@ -26,7 +26,7 @@ var _cacheInsumosInv = null; // insumos para uso interno de este módulo
 
 function getInsumos()     { return _cacheInsumosInv || (function(){ try { return JSON.parse(_skGet('insumos')) || []; } catch { return []; } }()); }
 // Resolver para la etiqueta canónica (insumo-label.js): id → insumo del catálogo.
-(function(){ var _ix=null,_n=-1; window._insumoResolver=function(id){ var a=getInsumos()||[]; if(!_ix||_n!==a.length){_ix={};a.forEach(function(x){if(x&&x.id)_ix[x.id]=x;});_n=a.length;} return _ix[id]||null; }; })();
+(function(){ var _ix=null,_lastArr=null; window._insumoResolver=function(id){ var a=getInsumos()||[]; if(a!==_lastArr){_ix={};a.forEach(function(x){if(x&&x.id)_ix[x.id]=x;});_lastArr=a;} return _ix[id]||null; }; })();
 // Insumos acotados a la SUCURSAL activa (regla "sin sucursal = matriz: ve todo").
 // Sin esto, el inventario leía los insumos de TODAS las sucursales y los duplicaba.
 function _scopeSucInsumos(lista) {
@@ -743,6 +743,36 @@ function costoCopa(fila) {
     return fila.copaML > 0 && cu > 0 ? cu * (fila.copaML / 1000) : cu;
 }
 
+// Devuelve la fila con los datos del insumo ACTUALIZADOS desde el catálogo (nombre, familia,
+// presentación y costos), conservando las CANTIDADES CONTADAS. Así, editar un insumo (costo,
+// presentación, nombre…) se refleja en cualquier inventario —incluso ya finalizado— sin recapturar.
+// Si el insumo ya no existe o es compuesto, regresa la fila tal cual (su dato congelado).
+function _filaLive(fila) {
+    if (!fila || !fila.insumoId || fila.esCompuesto) return fila;
+    var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(fila.insumoId) : null;
+    if (!ins || ins.esCompuesto) return fila;
+    var p = (ins.presentaciones && ins.presentaciones[0]) || {};
+    var esFood = (ins.familia || '').toLowerCase().indexOf('aliment') >= 0;
+    var esPza  = _esRefrescoCerveza(ins);
+    var umP = (p.umContenido || 'ML').toUpperCase();
+    var cn = parseFloat(p.contNeto) || 0;
+    var contBase = (umP === 'LT' || umP === 'KG') ? cn * 1000 : cn;
+    var m = Object.assign({}, fila); // conserva cerradas*, pesos, existenciaPeso, entradas, etc.
+    m.nombre = ins.nombre + (ins.variedad ? ' ' + ins.variedad : '');
+    m.categoria = ins.categoria || m.categoria || '';
+    m.subcategoria = ins.subcategoria || m.subcategoria || '';
+    m.familia = ins.familia || m.familia || '';
+    m.tipo = esFood ? 'peso' : (esPza ? 'pza' : 'copa');
+    var cml = _copaMLInsumo(ins); if (cml > 0) m.copaML = cml;
+    if (contBase > 0) m.contNeto = contBase;
+    m.pesoCristal = parseFloat(p.pesoCristal) || m.pesoCristal || 0;
+    if (esFood) m.baseUnit = unidadBaseInsumo(ins);
+    m.costoUnitario = parseFloat(p.costoUnitario) || parseFloat(p.precio) || m.costoUnitario || 0;
+    m.costoPieza = parseFloat(p.costoPieza) || m.costoPieza || 0;
+    m.precioCarta = parseFloat(p.precioCarta) || m.precioCarta || 0;
+    return m;
+}
+
 function tipoIcon(tipo) { return TIPOS_ICON[tipo] || '📋'; }
 
 function getFilasFiltradas(conRegistro = false) {
@@ -933,7 +963,7 @@ function _datosReporteExistencias(area) {
     // UNA fila por insumo, con su existencia en barra, en bodega y el total.
     var rows = [];
     Object.keys(porIns).forEach(function(id){
-        var o = porIns[id], f = o.fila, ins = insById[id];
+        var o = porIns[id], f = _filaLive(o.fila), ins = insById[id];
         var cc     = costoCopa(f);
         var barra  = _existenciaArea(f, 'barra',  ins);
         var bodega = _existenciaArea(f, 'bodega', ins);
@@ -1074,8 +1104,9 @@ function _renderReporteExistencias(){
 function _rowsDeInventario(inv) {
     var insById = {}; getInsumos().forEach(function(x){ if (x && x.id) insById[x.id] = x; });
     var rows = [];
-    (inv.filas || []).forEach(function(f){
-        if (!f || !f.insumoId) return;
+    (inv.filas || []).forEach(function(_f){
+        if (!_f || !_f.insumoId) return;
+        var f = _filaLive(_f);
         var ins = insById[f.insumoId];
         var cc = costoCopa(f);
         var barra = _existenciaArea(f, 'barra', ins);
@@ -2330,7 +2361,7 @@ function renderCardExist() {
                 <div>
                     <div style="font-weight:700;font-size:17px;color:var(--text)">${etx(insumoTitulo(fila))}</div>
                     <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap">
-                        ${insumoMeta(fila)?`<span class="inv-tag">${etx(insumoMeta(fila))}</span>`:''}
+                        ${insumoMeta(fila)?`<span class="inv-tag">${insumoMetaHTML(fila)}</span>`:''}
                         <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
                         <span style="font-size:11px;color:var(--text-dim);margin-left:4px">
                             Anterior: ${eaBot%1===0?eaBot.toFixed(0):eaBot.toFixed(1)} bot</span>
@@ -2583,7 +2614,7 @@ function renderStep1Lista(filas) {
             <td class="inv-td-prod">
                 <div class="inv-prod-name">${etx(insumoTitulo(fila))}</div>
                 <div class="inv-prod-meta">
-                    ${insumoMeta(fila) ? `<span class="inv-tag">${etx(insumoMeta(fila))}</span>` : ''}
+                    ${insumoMeta(fila) ? `<span class="inv-tag">${insumoMetaHTML(fila)}</span>` : ''}
                     <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
                     <span class="inv-metodo-toggle">
                         <button class="${metodo==='peso'?'on':''}" onclick="setMetodoCapturaExist('${fila.insumoId}','peso')" title="Peso">⚖️</button>
@@ -2648,7 +2679,7 @@ function renderStep1Galeria(filas) {
             <div class="inv-item-card-top">
                 <div class="inv-prod-name">${etx(insumoTitulo(fila))}</div>
                 <div class="inv-prod-meta" style="margin-top:6px">
-                    ${insumoMeta(fila) ? `<span class="inv-tag">${etx(insumoMeta(fila))}</span>` : ''}
+                    ${insumoMeta(fila) ? `<span class="inv-tag">${insumoMetaHTML(fila)}</span>` : ''}
                     <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
                 </div>
                 <div style="margin-top:8px;font-size:11px;color:var(--text-dim)">
@@ -2776,7 +2807,7 @@ function renderStep2Lista(filas) {
             <td class="inv-td-prod">
                 <div class="inv-prod-name">${etx(insumoTitulo(fila))}</div>
                 <div class="inv-prod-meta">
-                    ${insumoMeta(fila) ? `<span class="inv-tag">${etx(insumoMeta(fila))}</span>` : ''}
+                    ${insumoMeta(fila) ? `<span class="inv-tag">${insumoMetaHTML(fila)}</span>` : ''}
                     <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
                     <button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">📋 Ver</button>
                 </div>
@@ -2833,7 +2864,7 @@ function renderStep2Galeria(filas) {
             <div class="inv-item-card-top">
                 <div class="inv-prod-name">${etx(insumoTitulo(fila))}</div>
                 <div class="inv-prod-meta" style="margin-top:6px">
-                    ${insumoMeta(fila) ? `<span class="inv-tag">${etx(insumoMeta(fila))}</span>` : ''}
+                    ${insumoMeta(fila) ? `<span class="inv-tag">${insumoMetaHTML(fila)}</span>` : ''}
                     <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
                 </div>
                 <div style="margin-top:8px;font-size:11px;color:var(--text-dim)">
@@ -2971,7 +3002,7 @@ function renderStep3Insumos() {
                 <div class="inv-prod-meta">
                     ${esComp
                         ? `<span class="inv-tag" style="background:rgba(122,184,245,0.12);border-color:rgba(122,184,245,0.4);color:#7ab8f5">compuesto · ${_ncop(fila._existCopas)} cop disp.</span>`
-                        : (insumoMeta(fila)?`<span class="inv-tag">${etx(insumoMeta(fila))}</span>`:'')}
+                        : (insumoMeta(fila)?`<span class="inv-tag">${insumoMetaHTML(fila)}</span>`:'')}
                     <span class="inv-tag" style="${tipoSt}">${fila.tipo}</span>
                     ${esComp ? '' : `<button class="btn-ver-prod" onclick="abrirFichaTecnica('${fila.insumoId}')">📋 Ver</button>`}
                 </div>
@@ -5440,7 +5471,7 @@ function _renderEntLogChips(q) {
             border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit;
             text-align:left;transition:all .15s"
             onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border)'">
-            ${etx(ins.nombre)}${ins.variedad ? ' <span style="color:var(--text-muted)">' + etx(ins.variedad) + '</span>' : ''}
+            ${etx(insumoTitulo(ins))}${(insumoContenido(ins)||ins.marca) ? ` <span style="font-size:10px;color:var(--text-dim)">· ${insumoMetaHTML(ins)}</span>` : ''}
         </button>`
     ).join('');
 }
@@ -5450,7 +5481,7 @@ function seleccionarEntLogInsumo(id) {
     if (!ins) return;
     _entRapidaInsumoId = id;
     document.getElementById('entLogInsumoId').value = id;
-    document.getElementById('entLogInsumoNombre').textContent = ins.nombre + (ins.variedad ? ' ' + ins.variedad : '');
+    document.getElementById('entLogInsumoNombre').textContent = insumoEtiqueta(ins);
     // Autocompletar costo desde primera presentación
     const p0 = (ins.presentaciones||[])[0];
     if (p0 && p0.precio && !document.getElementById('entLogCosto').value) {
@@ -5500,7 +5531,7 @@ function guardarEntradaLog() {
         if (!invActual.entradasLog) invActual.entradasLog = [];
         invActual.entradasLog.push({
             insumoId,
-            nombreProducto: ins ? ins.nombre + (ins.variedad ? ' ' + ins.variedad : '') : '—',
+            nombreProducto: ins ? insumoEtiqueta(ins) : '—',
             cantidad,
             costo,
             tipo,
@@ -5581,7 +5612,7 @@ function renderFormEntrada() {
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
                 <div>
                     <div style="font-weight:700;font-size:17px;color:var(--text)">${etx(insumoTitulo(fila))}</div>
-                    ${insumoMeta(fila) ? `<div style="font-size:11px;color:var(--text-dim);margin-top:2px">${etx(insumoMeta(fila))}</div>` : ''}
+                    ${insumoMeta(fila) ? `<div style="font-size:11px;color:var(--text-dim);margin-top:2px">${insumoMetaHTML(fila)}</div>` : ''}
                     ${totalBot > 0 ? `<div style="font-size:12px;color:var(--green);margin-top:5px;font-weight:600">Ya registrado este período: +${totalBot % 1 ? totalBot.toFixed(1) : totalBot} bot</div>` : ''}
                 </div>
                 <div style="display:flex;align-items:center;gap:8px">
@@ -5895,7 +5926,7 @@ function abrirFichaTecnica(insumoId) {
 }
 
 function _ftRenderVer(ins) {
-    document.getElementById('ftNombre').textContent = ins.nombre + (ins.variedad ? ' ' + ins.variedad : '');
+    document.getElementById('ftNombre').textContent = insumoTitulo(ins);
     const pres = ins.presentaciones || [];
     document.getElementById('ftBody').innerHTML = `
         <div style="display:flex;gap:16px;align-items:flex-start;
@@ -5910,9 +5941,9 @@ function _ftRenderVer(ins) {
                     color:var(--accent);margin-bottom:4px">
                     ${[ins.familia, ins.categoria, ins.subcategoria].filter(Boolean).join(' · ')}
                 </div>
-                <div style="font-size:20px;font-weight:600;color:var(--text);margin-bottom:3px">${etx(ins.nombre)}</div>
+                <div style="font-size:20px;font-weight:600;color:var(--text);margin-bottom:3px">${etx(insumoTitulo(ins))}</div>
                 <div style="font-size:12px;color:var(--text-muted)">
-                    ${[ins.variedad || ins.maduracion, insumoContenido(ins), ins.marca].filter(Boolean).join(' · ')}
+                    ${insumoMetaHTML(ins)}
                 </div>
             </div>
             <span class="pill ${ins.activo==='1'?'pill-amber':'pill-red'}" style="flex-shrink:0">
@@ -5963,12 +5994,12 @@ function _ftRenderVer(ins) {
 }
 
 function _ftRenderEditar(ins) {
-    document.getElementById('ftNombre').textContent = ins.nombre + (ins.variedad ? ' ' + ins.variedad : '');
+    document.getElementById('ftNombre').textContent = insumoTitulo(ins);
     const p = (ins.presentaciones || [])[0] || {};
     document.getElementById('ftBody').innerHTML = `
         <div class="ft-grid">
             <div><label class="ft-lbl">Nombre</label><input id="ft_nombre" class="ft-input" value="${(ins.nombre||'').replace(/"/g,'&quot;')}"></div>
-            <div><label class="ft-lbl">Variedad</label><input id="ft_variedad" class="ft-input" value="${(ins.variedad||'').replace(/"/g,'&quot;')}"></div>
+            <div><label class="ft-lbl">Variedad</label><input id="ft_variedad" class="ft-input" placeholder="Lo que lo distingue. Ej. Ten, 7 años, Espadín" value="${(ins.variedad||'').replace(/"/g,'&quot;')}"></div>
             <div><label class="ft-lbl">Familia</label><input id="ft_familia" class="ft-input" value="${(ins.familia||'').replace(/"/g,'&quot;')}"></div>
             <div><label class="ft-lbl">Categoría</label><input id="ft_categoria" class="ft-input" value="${(ins.categoria||'').replace(/"/g,'&quot;')}"></div>
             <div><label class="ft-lbl">Subcategoría</label><input id="ft_subcategoria" class="ft-input" value="${(ins.subcategoria||'').replace(/"/g,'&quot;')}"></div>

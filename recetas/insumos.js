@@ -81,7 +81,7 @@
        return _insumosCache;
    }
    // Resolver para la etiqueta canónica (insumo-label.js): id → insumo del catálogo.
-   (function(){ var _ix=null,_n=-1; window._insumoResolver=function(id){ var a=getInsumos()||[]; if(!_ix||_n!==a.length){_ix={};a.forEach(function(x){if(x&&x.id)_ix[x.id]=x;});_n=a.length;} return _ix[id]||null; }; })();
+   (function(){ var _ix=null,_lastArr=null; window._insumoResolver=function(id){ var a=getInsumos()||[]; if(a!==_lastArr){_ix={};a.forEach(function(x){if(x&&x.id)_ix[x.id]=x;});_lastArr=a;} return _ix[id]||null; }; })();
 
    function setInsumos(data) {
        var negId = getNegocioActivo();
@@ -673,9 +673,8 @@
                            : `<div style="width:36px;height:36px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px">${ins.esSubReceta ? '🍳' : '📦'}</div>`
                        }
                        <div>
-                           <div style="font-weight:500">${etx(ins.nombre)}${ins.esSubReceta ? ' <span style="font-size:9px;background:rgba(245,200,66,.15);color:var(--accent);border:1px solid rgba(245,200,66,.3);border-radius:4px;padding:1px 6px;vertical-align:middle;white-space:nowrap">🍳 Sub-receta</span>' : ''}</div>
-                           ${(ins.maduracion||ins.variedad) ? `<div style="font-size:11px;color:var(--text-muted)">${etx([ins.maduracion,ins.variedad].filter(Boolean).join(' · '))}</div>` : ''}
-                           ${ins.marca ? `<div style="font-size:10px;color:var(--text-dim)">${etx(ins.marca)}</div>` : ''}
+                           <div style="font-weight:500">${etx(insumoTitulo(ins))}${ins.esSubReceta ? ' <span style="font-size:9px;background:rgba(245,200,66,.15);color:var(--accent);border:1px solid rgba(245,200,66,.3);border-radius:4px;padding:1px 6px;vertical-align:middle;white-space:nowrap">🍳 Sub-receta</span>' : ''}</div>
+                           ${(insumoContenido(ins)||ins.marca) ? `<div style="font-size:11px;color:var(--text-muted)">${insumoMetaHTML(ins)}</div>` : ''}
                        </div>
                    </div>
                </td>
@@ -772,10 +771,9 @@
                    tipoBadge +
                '</div>' +
                '<div class="insumo-card-body">' +
-                   '<div class="insumo-card-nombre" title="' + etx(ins.nombre) + '">' + etx(ins.nombre) + '</div>' +
+                   '<div class="insumo-card-nombre" title="' + etx(insumoEtiqueta(ins)) + '">' + etx(insumoTitulo(ins)) + '</div>' +
                    (ins.esSubReceta ? '<div style="font-size:9px;color:var(--accent);margin-top:2px">🍳 Sub-receta</div>' : '') +
-                   (variedadLine ? '<div class="insumo-card-variedad">' + variedadLine + '</div>' : '') +
-                   (ins.marca ? '<div style="font-size:10px;color:var(--text-dim);margin-top:1px">' + etx(ins.marca) + '</div>' : '') +
+                   ((insumoContenido(ins)||ins.marca) ? '<div class="insumo-card-variedad">' + insumoMetaHTML(ins) + '</div>' : '') +
                    (cat ? '<div class="insumo-card-cat">' + cat + '</div>' : '') +
                    '<div class="insumo-card-costo">' + etx(costo) + '</div>' +
                    (prov ? '<div class="insumo-card-prov">📍 ' + prov + '</div>' : '') +
@@ -1168,12 +1166,12 @@
        // Marca base
        var rowMarca = document.getElementById('row-marca');
        if (rowMarca) {
-        var ocultarMarca = ['destilado','licor','cerveza','cerveza_barril','refresco','abarrote'].includes(tipo);
+        var ocultarMarca = ['cerveza','cerveza_barril','refresco','abarrote'].includes(tipo);
            rowMarca.style.display = ocultarMarca ? 'none' : '';
            var lblMarca = rowMarca.querySelector('label');
-           if (lblMarca) lblMarca.textContent = tipo === 'vino' ? 'Bodega / Productor' : tipo === 'carne' ? 'Marca / Empacador' : 'Marca base';
+           if (lblMarca) lblMarca.textContent = tipo === 'vino' ? 'Bodega / Productor' : tipo === 'carne' ? 'Marca / Empacador' : (['destilado','licor'].includes(tipo) ? 'Marca del producto' : 'Marca base');
            var elMarca = document.getElementById('ins-marca');
-           if (elMarca) elMarca.placeholder = tipo === 'vino' ? 'Ej. Casillero del Diablo, Zuccardi' : tipo === 'carne' ? 'Ej. La Superior, Don Jorge, Rancho Campestre' : 'Ej. La Costeña';
+           if (elMarca) elMarca.placeholder = tipo === 'vino' ? 'Ej. Casillero del Diablo, Zuccardi' : tipo === 'carne' ? 'Ej. La Superior, Don Jorge, Rancho Campestre' : (['destilado','licor'].includes(tipo) ? 'Ej. Tanqueray, Havana, 400 Conejos' : 'Ej. La Costeña');
        }
 
        // ── Variedad / Tipo de uva (ins-variedad) ──────────────────
@@ -1218,7 +1216,7 @@
                }
                var lblV = document.getElementById('lbl-variedad');
                if (lblV) {
-                   if (['destilado','licor','cerveza','cerveza_barril','refresco'].includes(tipo)) lblV.textContent = 'Marca del producto';
+                   if (['cerveza','cerveza_barril','refresco'].includes(tipo)) lblV.textContent = 'Marca del producto';
                    else if (tipo === 'abarrote') lblV.textContent = 'Marca / Variedad';
                    else if (tipo === 'carne') lblV.textContent = 'Corte / Variedad';
                    else if (tipo === 'fruta') lblV.textContent = 'Variedad comercial';
@@ -1230,7 +1228,7 @@
        // ── Añejamiento / Tipo de vino / Tipo de compra (ins-maduracion) ──
        var rowMad = document.getElementById('row-maduracion');
        if (rowMad) {
-        rowMad.style.display = ['destilado','licor','vino','refresco','cerveza','cerveza_barril','carne','fruta'].includes(tipo) ? '' : 'none';
+        rowMad.style.display = ['vino','refresco','cerveza','cerveza_barril','carne','fruta'].includes(tipo) ? '' : 'none';
            var madEl = document.getElementById('ins-maduracion');
            var currentMad = madEl ? madEl.value || '' : '';
            if (tipo === 'vino') {
@@ -1291,13 +1289,13 @@
        var elMad2    = document.getElementById('ins-maduracion');
        var elVar2    = document.getElementById('ins-variedad');
        if (tipo === 'licor') {
-           if (elVar2 && elVar2.type !== 'hidden') elVar2.placeholder = 'Ej. Baileys, Aperol, Licor 43, Kahlúa';
-           if (elNombre)  elNombre.placeholder  = 'Ej. Original Irish Cream, Licor de Café, Bitter';
+           if (elVar2 && elVar2.type !== 'hidden') elVar2.placeholder = 'Ej. Original, Menta, Rosso, Seco';
+           if (elNombre)  elNombre.placeholder  = 'Ej. Baileys, Aperol, Licor 43, Kahlúa';
            if (elMad2 && elMad2.tagName !== 'SELECT') elMad2.placeholder = 'Ej. Original, Menta, Rosso, Seco';
            if (elEmpaque) elEmpaque.placeholder = 'Ej. Botella de vidrio, Garrafa, Lata';
        } else if (tipo === 'destilado') {
-           if (elVar2 && elVar2.type !== 'hidden') elVar2.placeholder = "Ej. Absolut, Jack Daniel's, Patrón";
-           if (elNombre)  elNombre.placeholder  = 'Ej. Vodka Absolut, Tequila Patrón';
+           if (elVar2 && elVar2.type !== 'hidden') elVar2.placeholder = 'Ej. Reposado, Añejo, Ten, 7 años';
+           if (elNombre)  elNombre.placeholder  = 'Ej. Tanqueray, Patrón, Havana, 400 Conejos';
            if (elMad2 && elMad2.tagName !== 'SELECT') elMad2.placeholder = 'Ej. Reposado, Original, 12 años...';
            if (elEmpaque) elEmpaque.placeholder = 'Ej. Botella vidrio, Garrafa, Lata';
        } else if (tipo === 'vino') {
@@ -2931,7 +2929,7 @@
 
    function _refrescosDelCatalogo() {
        return getInsumos().filter(_esRefresco).map(function(x) {
-           return { id: x.id, nombre: x.nombre + (x.marca ? ' · ' + x.marca : ''), pza: _refrescoCostoPorPieza(x) };
+           return { id: x.id, nombre: insumoEtiqueta(x), pza: _refrescoCostoPorPieza(x) };
        }).sort(function(a, b){ return a.nombre.localeCompare(b.nombre); });
    }
 
@@ -3128,15 +3126,8 @@
                        color:var(--accent);margin-bottom:4px">
                        ${[ins.familia, ins.categoria, ins.subcategoria].filter(Boolean).join(' · ')}
                    </div>
-                   <div style="font-size:22px;font-weight:600;color:var(--text);margin-bottom:2px">${ins.nombre}</div>
-                   <div style="display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-bottom:3px">
-                       ${ins.variedad ? `<span style="font-size:12px;color:var(--text-muted)">${ins.variedad}</span>` : ''}
-                       ${ins.maduracion ? `<span class="pill pill-amber" style="font-size:10px;padding:1px 8px">${ins.maduracion}</span>` : ''}
-                   </div>
-                   <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">
-                       ${ins.marca ? `<span style="font-size:12px;color:var(--text-dim)">${ins.marca}</span>` : ''}
-                       ${ins.empaque ? `<span style="font-size:11px;color:var(--text-dim)">· ${ins.empaque}</span>` : ''}
-                   </div>
+                   <div style="font-size:22px;font-weight:600;color:var(--text);margin-bottom:2px">${etx(insumoTitulo(ins))}</div>
+                   <div style="font-size:12px;color:var(--text-muted)">${insumoMetaHTML(ins)}</div>
                </div>
                <span class="pill ${ins.activo==='1'?'pill-amber':'pill-red'}" style="flex-shrink:0">
                    ${ins.activo==='1'?'Activo':'Inactivo'}
