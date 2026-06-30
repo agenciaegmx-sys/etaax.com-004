@@ -147,12 +147,12 @@
         .dif-neg{color:var(--red);}
 
         /* Caja fuerte overlay */
-        .cj-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9100;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;}
+        .cj-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9100;align-items:center;justify-content:center;padding:14px;box-sizing:border-box;}
         .cj-overlay.open{display:flex;}
-        .cj-panel{background:var(--surface);border:1px solid rgba(245,200,66,.3);border-radius:16px;width:100%;max-width:680px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.6);}
-        .cj-header{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid var(--border);}
+        .cj-panel{background:var(--surface);border:1px solid rgba(245,200,66,.3);border-radius:16px;width:100%;max-width:780px;max-height:94vh;height:94vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.6);}
+        .cj-header{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid var(--border);flex-shrink:0;}
         .cj-title{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:2px;color:var(--accent);}
-        .cj-body{overflow-y:auto;flex:1;padding:16px 22px;display:flex;flex-direction:column;gap:16px;}
+        .cj-body{overflow-y:auto;flex:1;min-height:0;padding:16px 22px 36px;display:flex;flex-direction:column;gap:16px;}
         .cj-acum{background:rgba(245,200,66,.08);border:1px solid rgba(245,200,66,.25);border-radius:10px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;}
         .cj-acum-lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);}
         .cj-acum-val{font-family:'Bebas Neue',sans-serif;font-size:32px;color:var(--accent);letter-spacing:1px;}
@@ -293,6 +293,18 @@
                             </tr>
                         </thead>
                         <tbody id="cortesTbody"></tbody>
+                        <tfoot id="cortesFoot" style="display:none">
+                            <tr style="border-top:2px solid var(--border);background:rgba(245,200,66,.04)">
+                                <td class="al" colspan="2" style="font-weight:700;letter-spacing:.5px;color:var(--text-dim);font-size:11px;text-transform:uppercase">Σ Totales del período</td>
+                                <td class="num-col" style="font-weight:800;color:var(--green)" id="ftVenta">—</td>
+                                <td class="num-col" style="font-weight:700;color:var(--accent)" id="ftProp">—</td>
+                                <td id="ftComensales" style="font-weight:700">—</td>
+                                <td class="num-col" id="ftCheque" style="color:var(--text-dim)">—</td>
+                                <td class="num-col" style="font-weight:700;color:var(--red)" id="ftGastos">—</td>
+                                <td class="num-col" style="font-weight:800;color:var(--accent)" id="ftResguardo">—</td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
                     </table>
                     <div id="cortesEmpty" class="empty-state" style="display:none">
                         <div class="empty-state-icon">📋</div>
@@ -1078,8 +1090,16 @@ function ventasBruta(c){return n(c.efectivo)+n(c.tarjeta)+n(c.transferencia);}
 function flujoNeto(c){return efNeto(c)+taBanco(c)+n(c.transferencia);}
 function propinas(c){return n(c.propEfectivo)+n(c.propTarjeta);}
 function cheque(c){var com=n(c.comensales);var ven=n(c.ventaDeclarada)||ventasBruta(c)||(n(c.comedor)+n(c.paraLlevar));return com>0?ven/com:0;}
-// Resguardo = Fondo inicial + Venta efectivo − Gastos caja chica − Fondo siguiente turno
-function resguardo(c){return n(c.fondoInicial)+n(c.efectivo)-n(c.gastosCajaChica)-n(c.retiros);}
+// Caja chica REAL de una fecha, EN VIVO desde el historial de gastos (no el snapshot del corte).
+// Así, al editar/agregar/borrar un gasto de caja chica, el resguardo (y el saldo de caja fuerte)
+// se actualiza solo, sin tener que reabrir y volver a guardar el corte.
+function _cajaChicaLive(fecha){
+    var negId=getNegocioActivo();
+    return _loadGastos().filter(function(g){ return g.fecha===fecha && g.metodoPago==='caja_chica' && (!negId||!g.negocioId||g.negocioId===negId); })
+        .reduce(function(s,g){ return s+n(g.monto); },0);
+}
+// Resguardo = Fondo inicial + Venta efectivo − Gastos caja chica (EN VIVO) − Fondo siguiente turno
+function resguardo(c){return n(c.fondoInicial)+n(c.efectivo)-_cajaChicaLive(c.fecha)-n(c.retiros);}
 function resultado(c){return flujoNeto(c)-n(c.gastos);}
 
 /* ── Period state ── */
@@ -1160,9 +1180,9 @@ function renderSummary(cur,prev){
 function turnoChip(t){var lbl={dia:'Día',manana:'Mañana',tarde:'Tarde',noche:'Noche'};return'<span class="turno-chip turno-'+t+'">'+(lbl[t]||t)+'</span>';}
 
 function renderTabla(cur){
-    var tbody=document.getElementById('cortesTbody'),empty=document.getElementById('cortesEmpty');
+    var tbody=document.getElementById('cortesTbody'),empty=document.getElementById('cortesEmpty'),foot=document.getElementById('cortesFoot');
     var lista=cur.slice().sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
-    if(!lista.length){tbody.innerHTML='';empty.style.display='block';return;}
+    if(!lista.length){tbody.innerHTML='';empty.style.display='block';if(foot)foot.style.display='none';return;}
     empty.style.display='none';
     // Pre-calcular totales de gastos por fecha desde localStorage
     // (solo métodos visibles para el rol — p.ej. gerente: solo caja chica)
@@ -1194,6 +1214,21 @@ function renderTabla(cur){
             '</td>'+
         '</tr>';
     }).join('');
+    // ── Totales del período (para no sumar corte por corte) ──
+    if(foot){
+        var tVenta=0,tProp=0,tComen=0,tGas=0,tRsg=0;
+        lista.forEach(function(c){
+            tVenta+=ventasBruta(c); tProp+=propinas(c); tComen+=n(c.comensales);
+            tGas+=(gastosPorFecha[c.fecha]||0); tRsg+=resguardo(c);
+        });
+        document.getElementById('ftVenta').textContent=fmtM(tVenta);
+        document.getElementById('ftProp').textContent=tProp>0?fmtM(tProp):'—';
+        document.getElementById('ftComensales').textContent=tComen>0?fmtN(tComen):'—';
+        document.getElementById('ftCheque').textContent=tComen>0?fmtM(tVenta/tComen):'—'; // cheque promedio global
+        document.getElementById('ftGastos').textContent=tGas>0?fmtM(tGas):'—';
+        document.getElementById('ftResguardo').textContent=fmtM(tRsg);
+        foot.style.display='';
+    }
 }
 
 /* ── Modal ── */
@@ -1527,8 +1562,18 @@ function _abrirCajaFuerteContenido(){
     // Tarjeta de crédito: gastos a crédito (deuda) − pagos hechos a la TC (reducen deuda)
     var saldoTarjetaCred = -gastosTarjetaCred + _efTcPago;
 
-    // ── Header: 2 cards fila 1 + tarjeta opcional fila 2 ────
+    // ── Header: saldo disponible + 2 cards fila 1 + tarjeta opcional fila 2 ────
+    var saldoDisponible = saldoCaja + saldoDebito; // efectivo resguardado + banco (sin deuda de TC)
     var headerHTML =
+        '<div class="cj-acum" style="margin:0 0 10px;border-color:rgba(245,200,66,.5);background:linear-gradient(135deg,rgba(245,200,66,.08),rgba(61,190,122,.05))">'+
+            '<div>'+
+                '<div class="cj-acum-lbl">💰 Saldo disponible total</div>'+
+                '<div style="margin-top:4px;font-size:10px;color:var(--text-dim);line-height:1.6">'+
+                    '🏦 Caja fuerte '+fmtM(saldoCaja)+' &nbsp;+&nbsp; 🏛️ Banco '+fmtM(saldoDebito)+
+                '</div>'+
+            '</div>'+
+            '<div class="cj-acum-val" style="font-size:26px">'+fmtM(saldoDisponible)+'</div>'+
+        '</div>'+
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
             '<div class="cj-acum" style="margin:0">'+
                 '<div>'+
@@ -1581,12 +1626,14 @@ function _abrirCajaFuerteContenido(){
                     '</div>'+
                     '<div style="font-size:9px;color:var(--text-dim);margin-top:3px;text-align:right">'+pct.toFixed(0)+'% usado · disponible '+fmtM(Math.max(lim-gastosTarjetaCred,0))+'</div>'
                     :'')+
+                    '<div style="margin-top:8px;text-align:right"><button class="btn-deposito" style="font-size:11px;padding:6px 12px;background:rgba(255,112,112,.12);border-color:rgba(255,112,112,.4);color:#ff9a9a" onclick="pagarTarjetaCredito(\''+tc.id+'\')">💳 Pagar tarjeta</button></div>'+
                 '</div>';
             }).join('')
             : '<div style="background:var(--surface2);border:1px solid rgba(255,90,90,.3);border-radius:8px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center">'+
                 '<div style="font-size:11px;color:var(--text-dim)">'+fmtM(gastosTarjetaCred)+' en gastos — saldo a pagar</div>'+
                 '<div style="font-size:16px;font-weight:700;color:#ff7070">'+fmtM(saldoTarjetaCred)+'</div>'+
-              '</div>')+
+              '</div>'+
+              '<div style="text-align:right;margin-top:6px"><button class="btn-deposito" style="font-size:11px;padding:6px 12px;background:rgba(255,112,112,.12);border-color:rgba(255,112,112,.4);color:#ff9a9a" onclick="pagarTarjetaCredito()">💳 Pagar tarjeta</button></div>')+
         '</div>':'');
 
     // ── Tabla cortes ─────────────────────────────────────────
@@ -1599,7 +1646,7 @@ function _abrirCajaFuerteContenido(){
                 '<td>'+turnoChip(c.turno||'dia')+'</td>'+
                 '<td style="text-align:right">'+fmtM(n(c.fondoInicial))+'</td>'+
                 '<td style="text-align:right;color:var(--green)">'+fmtM(efNeto(c))+'</td>'+
-                '<td style="text-align:right;color:var(--text-dim)">'+fmtM(n(c.gastosCajaChica))+'</td>'+
+                '<td style="text-align:right;color:var(--text-dim)">'+fmtM(_cajaChicaLive(c.fecha))+'</td>'+
                 '<td style="text-align:right;color:var(--red)">'+(n(c.retiros)>0?'−'+fmtM(c.retiros):'—')+'</td>'+
                 '<td style="text-align:right;font-weight:700;color:var(--accent)">'+fmtM(rsg)+'</td>'+
                 '<td style="text-align:right;color:var(--text-dim)">'+fmtM(acum)+'</td>'+
@@ -1723,7 +1770,7 @@ function verCorte(id) {
     var turnoLabel = {dia:'Día completo',manana:'Mañana',tarde:'Tarde',noche:'Noche'};
     var metLabel = {efectivo:'💵 Efectivo',transferencia:'🏛️ Transfer.',tarjeta:'💳 Tarjeta',mixto:'🔀 Mixto'};
     var fn = flujoNeto(c), pp = propinas(c), ck = cheque(c);
-    var rsg = n(c.fondoInicial)+n(c.efectivo)-n(c.gastosCajaChica)-n(c.retiros);
+    var rsg = resguardo(c);
     document.getElementById('verCorteTitulo').textContent = (c.nombre||('Corte · '+c.fecha));
     document.getElementById('verCorteHeader').style.background = '';
 
@@ -1876,7 +1923,7 @@ function verCorte(id) {
                 '<span style="font-size:16px;color:var(--text-dim)">+</span>'+
                 _vcInline(fmtM(n(c.efectivo)),'Venta ef.')+
                 '<span style="font-size:16px;color:var(--text-dim)">−</span>'+
-                _vcInline(fmtM(n(c.gastosCajaChica)),'Gs. caja chica')+
+                _vcInline(fmtM(_cajaChicaLive(c.fecha)),'Gs. caja chica')+
                 '<span style="font-size:16px;color:var(--text-dim)">−</span>'+
                 _vcInline(fmtM(n(c.retiros)),'Fondo sig.')+
                 '<span style="font-size:16px;color:var(--text-dim)">=</span>'+
@@ -1936,6 +1983,22 @@ function abrirModalDeposito(id){
     document.getElementById('modalDeposito').classList.add('open');
 }
 function cerrarModalDeposito(){document.getElementById('modalDeposito').classList.remove('open');}
+
+// Pago a tarjeta de crédito = MOVIMIENTO (no gasto): sale de caja fuerte → reduce la deuda de la TC.
+// Reusa el modal de depósitos preconfigurado (origen caja fuerte, destino la tarjeta elegida).
+function pagarTarjetaCredito(tcId){
+    abrirModalDeposito(); // abre limpio (corre _depPoblarSelects con defaults)
+    var dSel=document.getElementById('depDestino2');
+    if(dSel){
+        dSel.value='tc:'+(tcId||'');
+        if(dSel.selectedIndex<0){ // si no existe esa tarjeta, tomar la primera de crédito disponible
+            for(var i=0;i<dSel.options.length;i++){ if(dSel.options[i].value.indexOf('tc:')===0){ dSel.selectedIndex=i; break; } }
+        }
+    }
+    var oSel=document.getElementById('depOrigen'); if(oSel) oSel.value='caja_fuerte';
+    var cEl=document.getElementById('depConcepto'); if(cEl && !cEl.value) cEl.value='Pago tarjeta de crédito';
+    _depMov();
+}
 
 // Poblar selects de Origen/Destino con caja fuerte, cuentas de débito y pago de tarjeta de crédito.
 function _depPoblarSelects(d){

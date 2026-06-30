@@ -1352,9 +1352,13 @@ function editarGasto(id){
 }
 
 var _gastoFijoId=''; // si el gasto se generó pagando un gasto fijo, guarda su id (link al catálogo de fijos)
+var _gastoNomCat=''; // categoría de nómina (op/adm/socios) del colaborador, para split en KPIs
+var _gastoStaffId=''; // id del colaborador si el gasto es de nómina
 function _abrirModalGasto(g,tipo){
     var d=g||{};
     _gastoFijoId=(d.fijoId)||''; // pagar fijo → link; editar → conserva el del gasto; nuevo → vacío
+    _gastoNomCat=(d.categoriaNomina)||'';
+    _gastoStaffId=(d.staffId)||'';
     document.getElementById('modalTitulo').textContent=g?'Editar gasto':'Nuevo gasto';
     document.getElementById('gId').value=d.id||'';
     document.getElementById('gFecha').value=d.fecha||todayStr();
@@ -1436,7 +1440,9 @@ function cerrarModal(){
    Jalan los datos ya configurados y abren el modal de gasto
    precargado (monto editable) para registrarlo en su categoría.
    ══════════════════════════════════════════════════════════ */
-function _ggStaffCat(s){ if(s.categoriaNomina)return s.categoriaNomina; return (s.rol==='gerente'||s.rol==='administrativo'||s.rol==='admin')?'administrativa':'operativa'; }
+// Tipo de nómina (op/adm/socios), independiente del rol de LOGIN. Gerencia OPERA el negocio → operativa
+// (aunque tenga acceso admin al sistema). Solo administrativo (contador, redes, oficina) → administrativa.
+function _ggStaffCat(s){ if(s.categoriaNomina)return s.categoriaNomina; return (s.rol==='administrativo')?'administrativa':'operativa'; }
 function _ggMesActual(){ return todayStr().slice(0,7); }
 /* Monto a pagar = salario base TAL CUAL su periodicidad (lo que se le paga
    al colaborador ese periodo). El resumen financiero mensualiza aparte;
@@ -1794,6 +1800,7 @@ function _confirmarPagoNom(){
             fecha:(c.fecha||todayStr()), tipo:'menor',
             concepto:c.concepto+' — '+s.nombre,
             categoria:'Nómina y personal', proveedor:'', monto:n(c.monto),
+            categoriaNomina:_ggStaffCat(s), staffId:s.id, // op/adm para split en KPIs
             metodoPago:m.metodoPago||_metodoDefault(), metodoBanco:m.metodoBanco||'',
             facturado:false, autorizado:true, evidencias:[],
             notas:'Pago aparte de la nómina de '+s.nombre+' ('+m.lbl+')',
@@ -1808,7 +1815,7 @@ function _confirmarPagoNom(){
     if(montoPrincipal<=0 && aparte.length){
         return;
     }
-    var g={ concepto:'Nómina '+perLbl+' — '+s.nombre, categoria:'Nómina y personal', monto:montoPrincipal, proveedor:'', notas:desg };
+    var g={ concepto:'Nómina '+perLbl+' — '+s.nombre, categoria:'Nómina y personal', monto:montoPrincipal, proveedor:'', notas:desg, categoriaNomina:_ggStaffCat(s), staffId:s.id };
     _asegurarCategoria(g.categoria);
     _abrirModalGasto(g,'menor');
 }
@@ -1946,7 +1953,9 @@ function guardarGasto(){
         notas:document.getElementById('gNotas').value.trim(),
         estatus:document.getElementById('gEstatus').value||'pagado',
         fechaPago:document.getElementById('gFechaPago').value||'',
-        fijoId:_gastoFijoId||((_exG&&_exG.fijoId)||'') // link al gasto fijo si se pagó desde el catálogo
+        fijoId:_gastoFijoId||((_exG&&_exG.fijoId)||''), // link al gasto fijo si se pagó desde el catálogo
+        categoriaNomina:_gastoNomCat||((_exG&&_exG.categoriaNomina)||''), // op/adm de nómina (split KPIs)
+        staffId:_gastoStaffId||((_exG&&_exG.staffId)||'')
     };
     _cacheGastos = (_cacheGastos||[]).filter(function(g){return g.id!==id;});
     _cacheGastos.push(gasto);

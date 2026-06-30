@@ -367,6 +367,7 @@ async function _sbInit() {
         _supabase.from('gf_nominas').select('datos').eq('negocio_id', negId).maybeSingle(),
         _supabase.from('previsiones').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
         _supabase.from('kpi_targets').select('datos').eq('negocio_id', negId).maybeSingle(),
+        _supabase.from('staff').select('datos').eq('negocio_id', negId),
     ]);
     if (!r[0].error) _kCache.cortes  = (r[0].data||[]).map(function(x){return x.datos;});
     if (!r[1].error) _kCache.otros   = (r[1].data||[]).map(function(x){return x.datos;});
@@ -375,6 +376,7 @@ async function _sbInit() {
     if (!r[4].error && r[4].data) _kCache.nominas = r[4].data.datos || {};
     if (!r[5].error) _kCache.prevs   = (r[5].data||[]).map(function(x){return x.datos;});
     if (!r[6].error && r[6].data) _kCache.targets = r[6].data.datos || _KPI_DEFAULTS;
+    if (!r[7].error) _kCache.staff = (r[7].data||[]).map(function(x){return x.datos;});
     renderAll();
 }
 
@@ -391,6 +393,7 @@ function loadCortes(){ return _kCache.cortes || []; }
 function loadOtros() { return _kCache.otros  || []; }
 function loadGastos(){ return _kCache.gastos  || []; }
 function loadFijos() { return _kCache.fijos   || []; }
+function loadStaff() { return _kCache.staff   || []; }
 function loadNominasMes(mes){
     var all = _kCache.nominas || {};
     var d=all[mes]||{operativa:[],administrativa:[],socios:[]};
@@ -441,6 +444,32 @@ function _renderSucMenu(){
     });
 }
 
+/* ── Clasificación de costos (idéntica a Gastos Globales / Utilidades) ── */
+function _kEsIMSS(g){ return /\bimss\b|seguro\s*social|cargas\s*sociales/i.test((g.categoria||'')+' '+(g.concepto||'')); }
+function _kEsNominaCat(g){ return /n[oó]mina|personal/i.test(g.categoria||''); }
+function _kCatExcluida(g){ return /propina|gratificaci|contabilidad|impuesto/i.test(g.categoria||''); }
+function _kEsFijoPat(g){ return /renta|arrendamiento|servicio|\bagua\b|\bluz\b|electric|energ[ií]a|internet|telecom|tel[eé]fon|\bgas\b|predial|software|suscripci/i.test(g.categoria||''); }
+function _kCatsFijos(){ var s={}; loadFijos().forEach(function(f){ if(f.categoria) s[String(f.categoria).toLowerCase().trim()]=1; }); return s; }
+function _kNorm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
+// ¿El gasto es pago de un gasto fijo del catálogo? Por fijoId, o por concepto+proveedor (pagos viejos).
+function _kEsPagoFijo(g, fijos){
+    return fijos.some(function(f){
+        if(g.fijoId) return g.fijoId===f.id;
+        if(_kNorm(g.concepto)!==_kNorm(f.concepto)) return false;
+        return !f.proveedor || _kNorm(g.proveedor)===_kNorm(f.proveedor);
+    });
+}
+// Tipo de nómina de un colaborador (op/adm/socios) — gerencia OPERA → operativa (su login admin es otro eje).
+function _kStaffCat(s){ if(s.categoriaNomina) return s.categoriaNomina; return (s.rol==='administrativo')?'administrativa':'operativa'; }
+// Tipo de nómina de un GASTO: usa el campo guardado; si no (pagos viejos), casa por nombre en el concepto.
+function _kNomTipo(g, staff){
+    if(g.categoriaNomina) return g.categoriaNomina;
+    var c=String(g.concepto||''), ix=c.lastIndexOf('—');
+    var name=ix>=0 ? c.slice(ix+1).trim() : '';
+    if(name){ var s=staff.find(function(x){ return _kNorm(x.nombre)===_kNorm(name); }); if(s) return _kStaffCat(s); }
+    return 'operativa';
+}
+
 /* ── Data aggregation for a month ── */
 function flujoNeto(c){return n(c.efectivo)+n(c.tarjeta)+n(c.propTarjeta)+n(c.transferencia);}
 function getMesData(mes){
@@ -457,15 +486,32 @@ function getMesData(mes){
     var otrosT=otros.reduce(function(s,o){return s+n(o.monto);},0);
     var ingresos=ventas+otrosT;
 
-    var variables=gastos.reduce(function(s,g){return s+n(g.monto);},0);
-    var fijosM=loadFijos().reduce(function(s,f){return s+n(f.monto);},0);
-    var noms=loadNominasMes(mes);
+    // Clasificación real desde los GASTOS DIARIOS (igual que Gastos Globales):
+    //  FIJO = lo realmente pagado de fijos del catálogo · NÓMINA = nómina/personal + IMSS
+    //  VARIABLE = el resto, excluyendo nómina, IMSS, propinas, contabilidad y categorías fijas.
+    var fijos=loadFijos(), fijosCats=_kCatsFijos(), staff=loadStaff();
+    var fijoCost=0, varCost=0, imssCost=0, nomOpBase=0, nomAdmBase=0;
+    gastos.forEach(function(g){
+        if(g.fijoId || _kEsPagoFijo(g,fijos)){ fijoCost+=n(g.monto); return; }
+        if(_kEsIMSS(g)){ imssCost+=n(g.monto); return; }
+        if(_kEsNominaCat(g)){ // nómina real, separada por op/adm según el colaborador
+            if(_kNomTipo(g,staff)==='administrativa') nomAdmBase+=n(g.monto); else nomOpBase+=n(g.monto);
+            return;
+        }
+        var cat=String(g.categoria||'').toLowerCase().trim();
+        if(_kCatExcluida(g)||fijosCats[cat]||_kEsFijoPat(g)) return;
+        varCost+=n(g.monto);
+    });
+    // El IMSS se paga global (no por colaborador) → se carga a Operativa; así Nóm. Adm. = nómina
+    // administrativa pura (cuadra con lo pagado a administración, sin inflar con IMSS de operativos).
+    var nomOp = nomOpBase + imssCost;
+    var nomAdm= nomAdmBase;
     var prevs=loadPrevsMes(mes);
 
-    var egresos=fijosM+variables+noms.op+noms.adm+prevs;
+    var egresos=fijoCost+varCost+nomOp+nomAdm+prevs;
     var util=ingresos-egresos;
 
-    return{ingresos:ingresos,fijos:fijosM,variables:variables,nomOp:noms.op,nomAdm:noms.adm,prevs:prevs,egresos:egresos,util:util};
+    return{ingresos:ingresos,fijos:fijoCost,variables:varCost,nomOp:nomOp,nomAdm:nomAdm,prevs:prevs,egresos:egresos,util:util};
 }
 
 /* ── Targets ── */

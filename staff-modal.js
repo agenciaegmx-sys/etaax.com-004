@@ -106,10 +106,10 @@
               '<div class="sm-sec">Datos de nómina</div>' +
               '<div class="sm-grid">' +
                 '<div class="sm-grp full"><label>Categoría de nómina</label><select id="sm_categoriaNomina">' +
-                  '<option value="operativa">⚙️ Operativa — cocina, bar, servicio</option>' +
-                  '<option value="administrativa">📋 Administrativa — gerencia, oficina</option>' +
+                  '<option value="operativa">⚙️ Operativa — opera el negocio (cocina, bar, servicio, gerencia)</option>' +
+                  '<option value="administrativa">📋 Administrativa — NO opera (contador, redes, oficina)</option>' +
                   '<option value="socios">🤝 Socios Operativos</option></select>' +
-                  '<span class="sm-hint">Grupo en el que suma este colaborador en Gastos globales.</span></div>' +
+                  '<span class="sm-hint">Solo para nómina (aparte del acceso al sistema). Opera el negocio, incluida gerencia → Operativa. No opera (contador, redes) → Administrativa.</span></div>' +
                 '<div class="sm-grp"><label>Esquema de pago</label><select id="sm_esquemaSueldo" onchange="StaffModal._togEsq()"><option value="periodo">Sueldo fijo por periodo</option><option value="diario">Sueldo por día (× días trabajados)</option></select></div>' +
                 '<div class="sm-grp" id="grpSmDiario" style="display:none"><label>Sueldo diario</label><input type="number" id="sm_sueldoDiario" min="0" step="0.01" placeholder="0.00" oninput="StaffModal._updPrev();StaffModal._calcPrima()"><span class="sm-hint">Al pagar: sueldo diario × días trabajados.</span></div>' +
                 '<div class="sm-grp" id="grpSmBase"><label>Salario base (por periodo)</label><input type="number" id="sm_salarioBase" min="0" step="0.01" placeholder="0.00" oninput="StaffModal._calcPrima()"></div>' +
@@ -158,7 +158,8 @@
     }
 
     function _categoriaPorRol(rol) {
-        if (rol === 'gerente' || rol === 'administrativo' || rol === 'admin') return 'administrativa';
+        // Gerencia opera el negocio (con acceso admin) → operativa; solo administrativo (contador, redes) → administrativa.
+        if (rol === 'administrativo') return 'administrativa';
         return 'operativa';
     }
 

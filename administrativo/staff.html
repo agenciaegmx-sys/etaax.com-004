@@ -496,11 +496,11 @@
                 <div class="form-group full">
                     <label>Categoría de nómina</label>
                     <select id="fCategoriaNomina">
-                        <option value="operativa">⚙️ Operativa — cocina, bar, servicio</option>
-                        <option value="administrativa">📋 Administrativa — gerencia, oficina</option>
+                        <option value="operativa">⚙️ Operativa — opera el negocio (cocina, bar, servicio, gerencia)</option>
+                        <option value="administrativa">📋 Administrativa — NO opera (contador, redes, oficina)</option>
                         <option value="socios">🤝 Socios Operativos</option>
                     </select>
-                    <span class="form-hint">Define en qué grupo de nómina suma este colaborador en Gastos globales.</span>
+                    <span class="form-hint">Es solo para nómina, independiente del acceso al sistema. <b>Opera el negocio</b> (incluida gerencia, aunque tenga login admin) → <b>Operativa</b>. <b>No opera</b> (contador, redes, oficina) → <b>Administrativa</b>.</span>
                 </div>
                 <div class="form-group">
                     <label>Esquema de pago</label>
@@ -1093,9 +1093,11 @@ function _updateSueldoPreview() {
     prev.style.display = '';
 }
 
-/* Sugiere la categoría de nómina a partir del rol del sistema */
+/* Sugiere la categoría de nómina a partir del rol del sistema.
+   Gerencia OPERA el negocio (cocina/bar/servicio con acceso admin) → operativa para nómina.
+   Solo administrativo (contador, redes, oficina) que NO opera → administrativa. */
 function _categoriaPorRol(rol) {
-    if (rol === 'gerente' || rol === 'administrativo' || rol === 'admin') return 'administrativa';
+    if (rol === 'administrativo') return 'administrativa';
     return 'operativa';
 }
 function _sugerirCategoria() {
