@@ -5330,9 +5330,12 @@ function _esRegistrado(f) { return _filaConDatos(f); }
 function guardarInventario() {
     if (!invActual) return;
     // Solo guardar filas con datos capturados — evita guardar 1400+ filas vacías
-    invActual.filas = filasCaptura
-        .filter(_filaConDatos)
-        .map(f => ({...f, existenciaFisica: calcExistencia(f)}));
+    var _nuevas = filasCaptura.filter(_filaConDatos);
+    // 🛡️ Blindaje anti-borrado: si el resultado queda VACÍO (filasCaptura no cargada, o
+    // reconstruida desde otra sucursal → todo fresco) pero el inventario YA tenía datos,
+    // NO sobrescribir (antes esto borraba las existencias al abrirlo en la sucursal equivocada).
+    if (!_nuevas.length && (invActual.filas || []).some(_filaConDatos)) return;
+    invActual.filas = _nuevas.map(f => ({...f, existenciaFisica: calcExistencia(f)}));
     const lista = getInventarios();
     const idx   = lista.findIndex(x=>x.id===invActual.id);
     if (idx>=0) lista[idx]=invActual; else lista.push(invActual);
@@ -5349,7 +5352,10 @@ function guardarInventario() {
 function _persistirBorradorLocal() {
     if (!invActual || invActual.cerrado) return;
     try {
-        invActual.filas = filasCaptura.filter(_filaConDatos).map(function(f){ return Object.assign({}, f, { existenciaFisica: calcExistencia(f) }); });
+        // 🛡️ Mismo blindaje: no sobrescribir con vacío/fresco si el inventario ya tenía datos.
+        var _nuevas = filasCaptura.filter(_filaConDatos);
+        if (!_nuevas.length && (invActual.filas || []).some(_filaConDatos)) return;
+        invActual.filas = _nuevas.map(function(f){ return Object.assign({}, f, { existenciaFisica: calcExistencia(f) }); });
         var lista = getInventarios();
         var idx = lista.findIndex(function(x){ return x.id === invActual.id; });
         if (idx >= 0) lista[idx] = invActual; else lista.push(invActual);
