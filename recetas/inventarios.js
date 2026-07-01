@@ -648,6 +648,38 @@ function getEntradasBottles(insumoId) {
     return deFilas + deLog;
 }
 
+// ── Auto-importar las entradas del QR al inventario en curso (Opción A) ──────
+// Las entradas del QR viven en la tabla global (entradas_log/_cacheEL) con origen:'qr'.
+// El inventario calcula entradas desde invActual.entradasLog, así que hay que copiarlas.
+// Se importan SOLO las del QR (las manuales ya se guardan en ambos lados), SOLO las de esta
+// sucursal, y SOLO las no importadas aún (se marca importadoEnInv para no duplicar entre inventarios).
+function _importarEntradasQR() {
+    if (!invActual || invActual.cerrado) return 0;
+    if (!invActual.entradasLog) invActual.entradasLog = [];
+    var idsSuc = {}; _scopeSucInsumos(getInsumos()).forEach(function(x){ if (x && x.id) idsSuc[x.id] = 1; });
+    var yaEnInv = {}; invActual.entradasLog.forEach(function(e){ if (e && e.id) yaEnInv[e.id] = 1; });
+    var n = 0;
+    (getEntradasLog() || []).forEach(function(e) {
+        if (!e || e.origen !== 'qr') return;   // solo QR (las manuales ya están en el inventario)
+        if (e.importadoEnInv) return;          // ya importada a algún inventario
+        if (e.id && yaEnInv[e.id]) return;      // ya está en este inventario
+        if (!idsSuc[e.insumoId]) return;        // no es de esta sucursal
+        invActual.entradasLog.push({
+            id: e.id, insumoId: e.insumoId,
+            nombreProducto: e.nombre || '—',
+            cantidad: parseFloat(e.cantidad) || 0,
+            costo: parseFloat(e.costo) || 0,
+            tipo: e.tipo || '', notas: e.notas || '',
+            fecha: e.fecha || '', origen: 'qr'
+        });
+        e.importadoEnInv = invActual.id;        // marcar el registro global para no re-importar
+        try { _sbUpEL(e); } catch(err) {}
+        n++;
+    });
+    if (n) { try { guardarInventario(); } catch(err) {} } // persiste con el candado anti-borrado
+    return n;
+}
+
 // Unidad de la ENTRADA según la presentación de compra del insumo (no siempre "bot").
 // Granel→L, Garrafa→garrafa, Pieza→pza, Botella→bot, etc. Así la entrada se lee en su presentación real.
 var _UCOMPRA = { 'Botella':'bot', 'Garrafa':'garrafa', 'Lata':'lata', 'Pieza':'pza', 'Barril':'barril', 'Caja':'caja', 'Paquete':'paq', 'Costal':'costal', 'Bolsa':'bolsa' };
@@ -1661,6 +1693,7 @@ function abrirInventario(id) {
     // Siempre recarga desde insumos para mostrar el catálogo completo;
     // cargarProductosCaptura hace merge: usa filas guardadas si existen, default si no
     cargarProductosCaptura();
+    try { _importarEntradasQR(); } catch(e) { console.warn('[importar QR]', e); } // jala las entradas del QR de esta sucursal
     pasoActual = 1;
     busquedaCapt = ''; filtroFamActivo = ''; filtroCatActiva = ''; filtroSubcatActiva = ''; filtroRegistroActivo = 'pendientes';
     mostrarVista('vistaCaptura');
@@ -1925,6 +1958,7 @@ const PASO_LABELS = ['','Existencias','Entradas','Ventas','Cancelaciones','Resum
 
 function irAPaso(n) {
     pasoActual = n;
+    if (n === 2) { try { _importarEntradasQR(); } catch(e) {} } // al entrar a Entradas, jala lo del QR
     actualizarStepBar();
     actualizarNavBtns();
     renderStepContent();
