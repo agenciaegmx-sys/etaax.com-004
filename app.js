@@ -37,11 +37,22 @@ function getRecetas() {
 // SOLO para mostrar listas; getRecetas() sigue completo para lookups por id y
 // para reconstruir el cache (si filtráramos ahí, se borrarían recetas de otras
 // sucursales al hacer setRecetas(getRecetas().filter(...))).
+// Sucursales donde "vive" una receta. Membresía múltiple: usa el array `sucursales`
+// si existe; si no, cae al `sucursalId` único (backward-compatible). Vacío = Matriz (todas).
+function _recetaSucursales(r) {
+    if (r && r.sucursales && r.sucursales.length) return r.sucursales;
+    if (r && r.sucursalId) return [r.sucursalId];
+    return [];
+}
 function getRecetasScope() {
     var s = localStorage.getItem('etaax_sucursal_activa') || '';
     var l = getRecetas();
-    if (!s) return l;
-    return l.filter(function(r){ return (r && (r.sucursalId || 'suc_principal')) === s; });
+    if (!s) return l; // Matriz / catálogo global → todas
+    return l.filter(function(r){
+        var sucs = _recetaSucursales(r);
+        if (!sucs.length) return s === 'suc_principal'; // sin sucursal = vive en Matriz
+        return sucs.indexOf(s) >= 0;
+    });
 }
 function setRecetas(data) {
     _cacheRecetas = data;

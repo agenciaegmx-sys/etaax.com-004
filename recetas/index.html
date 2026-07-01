@@ -407,7 +407,7 @@
             </div>
 
             <!-- ══ Abastecimiento ══ -->
-            <div class="cf-section">
+            <div class="cf-section" id="secAbastecimiento">
                 <div class="cf-section-hdr">
                     <span class="cf-section-tag">Abastecimiento</span>
                     <div class="cf-section-title">Insumos y Compras</div>
@@ -610,6 +610,22 @@
                     <div class="cat-btn-desc">Jarabes, shrubs, purés, mixes...</div>
                 </button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ MODAL: Sucursales de la receta (catálogo global) ══ -->
+<div id="modalRecetaSuc" class="modal-overlay" style="display:none;z-index:600" onclick="if(event.target===this)cerrarRecetaSuc()">
+    <div class="modal" style="max-width:420px;width:100%">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px 8px">
+            <h2 style="font-size:14px;font-weight:600">🏪 Sucursales de la receta</h2>
+            <button class="modal-close" onclick="cerrarRecetaSuc()">✕</button>
+        </div>
+        <div style="padding:0 18px 8px;font-size:12px;color:var(--text-dim)">Elige en qué sucursales vive <b id="recetaSucNombre" style="color:var(--text)"></b>. No se duplica: es la misma receta compartida en las marcadas.</div>
+        <div id="recetaSucLista" style="padding:10px 18px;max-height:50vh;overflow-y:auto"></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;padding:8px 18px 18px">
+            <button class="btn-vista" onclick="cerrarRecetaSuc()">Cancelar</button>
+            <button class="btn-vista" style="color:var(--green);border-color:var(--green)" onclick="guardarRecetaSuc()">💾 Guardar</button>
         </div>
     </div>
 </div>
@@ -853,6 +869,20 @@ function toggleNav() {
 }
 
 // ── Módulo landing ───────────────────────────────────────────
+// Modo "catálogo global de recetas": deja SOLO recetas (oculta insumos/inventarios/requisiciones)
+// y abre directo la vista con buscador. Es data global del negocio; cada sucursal usa solo las suyas.
+function _aplicarModoCatalogoGlobalRecetas(){
+    var sec=document.getElementById('secAbastecimiento'); if(sec) sec.style.display='none';
+    ['insumos.html','inventarios.html','requisiciones.html'].forEach(function(h){
+        var a=document.querySelector('#nav a[href="'+h+'"]'); if(a){ var s2=a.closest('.nav-section'); (s2||a).style.display='none'; }
+    });
+    var t=document.querySelector('#moduloLanding .cf-hero-title'); if(t) t.innerHTML='Catálogo Global <span class="g">de Recetas</span>';
+    var sub=document.querySelector('#moduloLanding .cf-hero-sub'); if(sub) sub.textContent='Todas las recetas y sub-recetas del negocio. Búscalas, ve su carátula de costos y define en qué sucursales viven (cada sucursal usa solo las suyas).';
+    var card=document.querySelector('#moduloLanding .cf-section .cf-card.highlight .cf-card-title'); if(card) card.textContent='Catálogo de Recetas';
+    // Abrir directo la vista con buscador (el grid se rellena cuando cargan las recetas).
+    if(typeof entrarEscandallos==='function') entrarEscandallos();
+    if(typeof verRecetas==='function') verRecetas();
+}
 function entrarEscandallos() {
     document.getElementById('moduloLanding').style.display = 'none';
     var nav = document.getElementById('nav');
@@ -890,6 +920,10 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
         nav.style.display = 'none';
         document.getElementById('mainContent').classList.add('expandido');
+    }
+    // Catálogo global de recetas (abierto desde "Catálogos Globales" del hub): SOLO recetas.
+    if (typeof _esCatGlobalRecetas === 'function' && _esCatGlobalRecetas()) {
+        _aplicarModoCatalogoGlobalRecetas();
     }
     // Cargar recetas desde Supabase
     if (typeof _sbInitRecetas === 'function') _sbInitRecetas();
@@ -2437,8 +2471,49 @@ function cerrarVerRecetas(e) {
     }
 }
 
+// ── Catálogo global de recetas: rastrea en qué sucursales vive cada receta ──
+function _esCatGlobalRecetas(){ try{ return sessionStorage.getItem('etaax_cat_global')==='1'; }catch(e){ return false; } }
+function _sucursalesNeg(){ var negId=localStorage.getItem('etaax_negocio_activo')||''; try{ return JSON.parse(localStorage.getItem('etaax_'+negId+'_sucursales')||'[]'); }catch(e){ return []; } }
+function _sucNombre(id){ var s=_sucursalesNeg().find(function(x){return x.id===id;}); if(s) return s.nombre||id; return (!id||id==='suc_principal')?'Matriz':id; }
+function _recetaBadgesHTML(r){
+    var sucs=(typeof _recetaSucursales==='function')?_recetaSucursales(r):(r.sucursalId?[r.sucursalId]:[]);
+    if(!sucs.length) sucs=['suc_principal'];
+    return sucs.map(function(id){ return '<span style="font-size:8px;letter-spacing:.5px;text-transform:uppercase;background:rgba(61,190,122,.12);color:var(--green);border:1px solid rgba(61,190,122,.3);border-radius:10px;padding:1px 6px;white-space:nowrap">'+etx(_sucNombre(id))+'</span>'; }).join(' ');
+}
+var _recetaSucEditId=null;
+function abrirRecetaSuc(id){
+    _recetaSucEditId=id;
+    var r=getRecetas().find(function(x){return x.id===id;}); if(!r) return;
+    var vive=(typeof _recetaSucursales==='function')?_recetaSucursales(r):(r.sucursalId?[r.sucursalId]:[]);
+    if(!vive.length) vive=['suc_principal'];
+    var sucs=_sucursalesNeg(), opts=[];
+    if(!sucs.some(function(s){return s.id==='suc_principal';})) opts.push({id:'suc_principal',nombre:'Matriz'});
+    opts=opts.concat(sucs);
+    document.getElementById('recetaSucNombre').textContent=r.nombre||'Receta';
+    document.getElementById('recetaSucLista').innerHTML=opts.map(function(s){
+        var on=vive.indexOf(s.id)>=0;
+        return '<label style="display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid var(--border);border-radius:9px;margin-bottom:7px;cursor:pointer">'+
+            '<input type="checkbox" data-suc="'+etx(s.id)+'" '+(on?'checked':'')+' style="width:17px;height:17px;accent-color:var(--green)">'+
+            '<span style="font-size:13px;color:var(--text)">'+etx(s.nombre||s.id)+'</span></label>';
+    }).join('');
+    document.getElementById('modalRecetaSuc').style.display='flex';
+}
+function cerrarRecetaSuc(){ var m=document.getElementById('modalRecetaSuc'); if(m)m.style.display='none'; _recetaSucEditId=null; }
+function guardarRecetaSuc(){
+    var r=getRecetas().find(function(x){return x.id===_recetaSucEditId;}); if(!r){ cerrarRecetaSuc(); return; }
+    var sel=[];
+    document.querySelectorAll('#recetaSucLista input[type=checkbox]').forEach(function(c){ if(c.checked) sel.push(c.getAttribute('data-suc')); });
+    if(!sel.length){ alert('La receta debe vivir en al menos una sucursal.'); return; }
+    r.sucursales=sel; // membresía múltiple (manda sobre sucursalId)
+    setRecetas(getRecetas());
+    if(typeof _sbUpReceta==='function') _sbUpReceta(r); // guarda en la nube + sync
+    cerrarRecetaSuc();
+    renderGridRecetas();
+}
+
 function renderGridRecetas() {
     const q   = (document.getElementById('buscarReceta')?.value || '').toLowerCase();
+    const _catGlobal = _esCatGlobalRecetas();
     let lista = getRecetasScope();
     if (filtroRecetaTipo) lista = lista.filter(r => r.tipo === filtroRecetaTipo);
     if (q) lista = lista.filter(r =>
@@ -2482,11 +2557,14 @@ function renderGridRecetas() {
             <div style="font-size:10px;color:var(--text-dim);margin-bottom:8px;
                 white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
                 ${etx(r.grupo||'')}${r.categoria?' · '+etx(r.categoria):''}</div>
+            ${_catGlobal ? `<div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:8px">${_recetaBadgesHTML(r)}</div>` : ''}
             <div style="display:flex;justify-content:space-between;align-items:center">
                 <span style="font-family:inherit;font-size:16px;color:var(--accent)">
                     $${costo.toFixed(2)}</span>
                 <span style="font-size:9px;color:var(--text-dim)">${fecha}</span>
             </div>
+            ${_catGlobal ? `<button onclick="event.stopPropagation();abrirRecetaSuc('${r.id}')"
+                style="width:100%;margin-top:9px;background:var(--surface);border:1px solid var(--border);color:var(--green);border-radius:8px;padding:7px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">🏪 Copiar a sucursal</button>` : ''}
             <button onclick="event.stopPropagation();eliminarReceta('${r.id}')"
                 style="position:absolute;top:8px;right:8px;background:none;border:none;
                 color:var(--text-dim);cursor:pointer;font-size:11px;padding:2px 5px;

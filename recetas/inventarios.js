@@ -411,20 +411,42 @@ function _btnCopiarAnterior(idx, fila, estilo) {
         'style="width:100%;margin-bottom:14px;background:rgba(122,184,245,.10);border:1px solid rgba(122,184,245,.5);color:#7ab8f5;border-radius:8px;padding:9px 0;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">📋 Copiar existencia anterior (' + lbl + ')</button>';
 }
 
-function calcVentasCopasRecetas(insumoId, copaML) {
-    if (!copaML || copaML <= 0) return 0;
-    const recetas  = getRecetas().filter(r => r.tipo === 'bebidas');
-    const vendidos = (invActual && invActual.cocktailsVendidos) || {};
-    let total = 0;
-    recetas.forEach(r => {
-        const uds = parseFloat(vendidos[r.id]) || 0;
+// ── Índice inverso de consumo por insumo (rendimiento) ──────────────────────
+// Antes cada calcVentas*Recetas recorría TODAS las recetas por CADA insumo → O(insumos×recetas)
+// en cada render (lento con 200+ insumos). Ahora se recorren las recetas UNA vez y se acumula por
+// insumo; la consulta por fila es O(1). Se re-calcula solo si cambian recetas o lo vendido.
+var _consumoIdxCache = null, _consumoIdxKey = '';
+function _consumoIdx() {
+    var vendidos = (invActual && invActual.cocktailsVendidos) || {};
+    var recetas  = getRecetas();
+    var key = (invActual && invActual.id || '') + '|' + recetas.length + '|' + JSON.stringify(vendidos);
+    if (_consumoIdxCache && _consumoIdxKey === key) return _consumoIdxCache;
+    var idx = {};
+    function slot(id){ return idx[id] || (idx[id] = { mlBeb:0, baseAli:0, pzaDir:0, mlPza:0 }); }
+    recetas.forEach(function(r){
+        var uds = parseFloat(vendidos[r.id]) || 0;
         if (!uds) return;
-        (r.ingredientes || []).forEach(ing => {
-            if (ing.insumoId === insumoId)
-                total += (ingredienteML(parseFloat(ing.cantidad)||0, ing.unidad) * uds) / copaML;
+        var esBeb = r.tipo === 'bebidas', esAli = r.tipo === 'alimentos', activa = r.status !== 'inactiva';
+        if (!esBeb && !esAli) return;
+        (r.ingredientes || []).forEach(function(ing){
+            var id = ing.insumoId; if (!id) return;
+            var cant = parseFloat(ing.cantidad) || 0, u = (ing.unidad || '').toUpperCase();
+            var s = slot(id);
+            if (esBeb)            s.mlBeb   += ingredienteML(cant, ing.unidad) * uds;      // copas (bebidas, cualquier estatus)
+            if (esAli && activa)  s.baseAli += ingredienteBase(cant, ing.unidad) * uds;    // alimentos activos (unidad base)
+            if (activa) {                                                                   // pza (bebidas+alimentos activos)
+                if (u === 'PZA' || u === 'PZ' || u === '') s.pzaDir += cant * uds;
+                else                                       s.mlPza  += ingredienteML(cant, ing.unidad) * uds;
+            }
         });
     });
-    return total;
+    _consumoIdxCache = idx; _consumoIdxKey = key;
+    return idx;
+}
+function calcVentasCopasRecetas(insumoId, copaML) {
+    if (!copaML || copaML <= 0) return 0;
+    var s = _consumoIdx()[insumoId];
+    return s ? s.mlBeb / copaML : 0;
 }
 
 // ── INVENTARIO DE ALIMENTOS: consumo teórico en unidad base (g/ml/pza) ──
@@ -445,40 +467,18 @@ function unidadBaseInsumo(ins) {
 }
 // Consumo teórico de un insumo por las recetas de ALIMENTOS vendidas (en unidad base).
 function calcVentasBaseRecetas(insumoId) {
-    const recetas  = getRecetas().filter(r => r.tipo === 'alimentos' && r.status !== 'inactiva');
-    const vendidos = (invActual && invActual.cocktailsVendidos) || {};
-    let total = 0;
-    recetas.forEach(r => {
-        const uds = parseFloat(vendidos[r.id]) || 0;
-        if (!uds) return;
-        (r.ingredientes || []).forEach(ing => {
-            if (ing.insumoId === insumoId)
-                total += ingredienteBase(parseFloat(ing.cantidad) || 0, ing.unidad) * uds;
-        });
-    });
-    return total; // g / ml / pza
+    var s = _consumoIdx()[insumoId];
+    return s ? s.baseAli : 0; // g / ml / pza
 }
 
 // Consumo de un insumo PZA (refresco/cerveza/lata) por las recetas/menú vendidos, EN PIEZAS.
 // Antes no se contaba (calcVentasCopasRecetas devuelve 0 si no hay copaML) → no descontaba.
 function calcVentasPzaRecetas(insumoId) {
-    const recetas  = getRecetas().filter(r => (r.tipo === 'bebidas' || r.tipo === 'alimentos') && r.status !== 'inactiva');
-    const vendidos = (invActual && invActual.cocktailsVendidos) || {};
+    var s = _consumoIdx()[insumoId];
+    if (!s) return 0;
     const fila     = filasCaptura.find(f => f.insumoId === insumoId);
     const contNeto = fila ? (fila.contNeto || 0) : 0; // ml por pieza
-    let total = 0;
-    recetas.forEach(r => {
-        const uds = parseFloat(vendidos[r.id]) || 0;
-        if (!uds) return;
-        (r.ingredientes || []).forEach(ing => {
-            if (ing.insumoId !== insumoId) return;
-            const cant = parseFloat(ing.cantidad) || 0;
-            const u = (ing.unidad || '').toUpperCase();
-            if (u === 'PZA' || u === 'PZ' || u === '') total += cant * uds;                 // por pieza directa
-            else { const ml = ingredienteML(cant, ing.unidad); total += (contNeto > 0 ? ml / contNeto : 0) * uds; } // ml → piezas
-        });
-    });
-    return total;
+    return s.pzaDir + (contNeto > 0 ? s.mlPza / contNeto : 0); // pza directa + (ml → piezas)
 }
 
 // ── PREBATCH: producción de batches (sub-receta→insumo) ──────────
@@ -1460,12 +1460,13 @@ function renderHistorial() {
     const cont = document.getElementById('historialContent');
     if (!cont) return;
     if (modoHistorial === 'mes') { cont.innerHTML = renderCalendario(); return; }
-    // Acotar por sucursal, PERO siempre incluir los borradores abiertos (cerrado=false)
-    // aunque el scope no los muestre → un inventario en curso NUNCA se oculta/pierde.
+    // Acotar por sucursal. Se rescatan SOLO los borradores abiertos SIN sucursal
+    // asignada (para no perderlos); los que ya tienen sucursalId se muestran ÚNICAMENTE
+    // en la suya (antes se filtraban a TODAS las sucursales → bug de inventarios repetidos).
     const todos  = getInventarios();
     const scoped = _scopeSucInvs(todos);
     const _ids   = {}; scoped.forEach(function(x){ if (x && x.id) _ids[x.id] = 1; });
-    todos.forEach(function(x){ if (x && x.id && !x.cerrado && !_ids[x.id]) scoped.push(x); });
+    todos.forEach(function(x){ if (x && x.id && !x.cerrado && !_ids[x.id] && !((x.sucursalId||'').trim())) scoped.push(x); });
     const lista = [...scoped].reverse();
     if (!lista.length) {
         cont.innerHTML = `<div class="empty-state" style="margin-top:16px">
@@ -2053,8 +2054,10 @@ function onBusqueda(val) {
     busquedaCapt = val;
     // Actualizar SOLO la lista, no el input → no se pierde el foco al escribir.
     var cont = document.getElementById('step1ListaCont');
-    if (cont) cont.innerHTML = _step1ListaInner();
-    else rerenderCaptura();
+    if (cont) { cont.innerHTML = _step1ListaInner(); return; }
+    var cont3 = document.getElementById('step3VentasListaCont'); // Paso 3 · Lista completa (ventas)
+    if (cont3) { cont3.innerHTML = _step3VentasInner(); return; }
+    rerenderCaptura();
 }
 function onFiltroFam(val)    { filtroFamActivo    = val; filtroSubcatActiva = ''; rerenderCaptura(); }
 function onFiltroCat(val)    { filtroCatActiva    = val; filtroSubcatActiva = ''; rerenderCaptura(); }
@@ -2971,6 +2974,10 @@ function renderStep3() {
 }
 
 function renderStep3Insumos() {
+    // El buscador actualiza SOLO esta lista (no el toolbar) → no se pierde el foco al escribir.
+    return buildToolbar(true) + '<div id="step3VentasListaCont">' + _step3VentasInner() + '</div>';
+}
+function _step3VentasInner() {
     const b        = busquedaCapt.toLowerCase();
     const mapa     = _compDeInsumo();
     // Compuestos (virtuales) primero; luego las filas que NO son miembros.
@@ -3014,12 +3021,11 @@ function renderStep3Insumos() {
             </td>
             <td class="inv-td-input" style="width:95px">
                 <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">bot</div>
-                ${esComp
+                ${(esComp || fila.tipo === 'pza')
                     ? `<div style="text-align:center;color:var(--text-dim);font-size:18px;padding-top:4px">—</div>`
                     : `<input type="text" inputmode="decimal" class="inv-num-input" value="${fila.ventasBotella||0}"
                         oninput="this.value=this.value.replace(/[^0-9.]/g,'');updVentasDirectas(${idx},'ventasBotella',+this.value)">`}
             </td>
-            ${esCopa ? `
             <td class="inv-td-input" style="width:95px">
                 <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">cortesía</div>
                 <input type="text" inputmode="decimal" class="inv-num-input" style="border-color:rgba(155,141,232,.4)"
@@ -3029,10 +3035,10 @@ function renderStep3Insumos() {
                 <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">merma</div>
                 <input type="text" inputmode="decimal" class="inv-num-input" style="border-color:rgba(224,90,58,.35)"
                     value="${fila.mermaCopas||0}" oninput="this.value=this.value.replace(/[^0-9.]/g,'');${hM}">
-            </td>` : '<td colspan="2"></td>'}
+            </td>
         </tr>`;
     }).join('');
-    return buildToolbar(true) + `<div class="inv-table-wrap">
+    return `<div class="inv-table-wrap">
         <table class="inv-capture-table">
             <thead><tr>
                 <th class="inv-th">Producto</th>
@@ -3135,6 +3141,20 @@ function _renderProduccionPrebatch() {
     </div>`;
 }
 
+// Buscador de cocteles/recetas en la vista Menú del Paso 3 (filtra sin re-render → no pierde foco).
+var _menuBusquedaVentas = '';
+function _filtrarMenuVentas(q){
+    _menuBusquedaVentas = q || '';
+    var t = (q||'').toLowerCase().trim();
+    document.querySelectorAll('[data-menu-nom]').forEach(function(el){
+        el.style.display = (!t || el.getAttribute('data-menu-nom').indexOf(t) >= 0) ? '' : 'none';
+    });
+    document.querySelectorAll('[data-menu-grupo]').forEach(function(g){
+        var vis = false;
+        g.querySelectorAll('[data-menu-nom]').forEach(function(c){ if (c.style.display !== 'none') vis = true; });
+        g.style.display = vis ? '' : 'none';
+    });
+}
 function renderStep3Menu() {
     const recetas  = getRecetas().filter(r =>
         (r.tipo === 'alimentos' || r.tipo === 'bebidas') && r.status !== 'inactiva'
@@ -3154,12 +3174,18 @@ function renderStep3Menu() {
         grupos[g].push(r);
     });
     const totalItems = recetas.reduce((s, r) => s + (parseFloat(vendidos[r.id]) || 0), 0);
-    const resumenHtml = `<div style="padding:12px 16px;display:flex;align-items:center;gap:12px">
+    const resumenHtml = `<div style="padding:12px 16px 4px;display:flex;align-items:center;gap:12px">
         <span style="font-size:11px;color:var(--text-dim)">Total registrado:</span>
         <span id="step3MenuTotal" style="font-size:15px;font-weight:700;color:var(--green)">${totalItems} unidades</span>
+    </div>
+    <div style="padding:4px 16px 10px">
+        <input type="text" id="menuBuscarCoctel" placeholder="🔍 Buscar coctel o receta…"
+            value="${etx(_menuBusquedaVentas||'')}" oninput="_filtrarMenuVentas(this.value)"
+            style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 14px;border-radius:10px;font-family:inherit;font-size:14px;outline:none;box-sizing:border-box"
+            onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border)'">
     </div>`;
     const gruposHtml = Object.entries(grupos).map(([grp, items]) => `
-        <div style="padding:0 16px 16px">
+        <div style="padding:0 16px 16px" data-menu-grupo>
             <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1.5px;
                 color:var(--text-muted);padding:12px 0 8px;border-bottom:1px solid var(--border);margin-bottom:10px">
                 ${grp}
@@ -3172,7 +3198,7 @@ function renderStep3Menu() {
                         const ins = filasCaptura.find(f=>f.insumoId===ing.insumoId);
                         return ins ? ins.nombre.split(' ')[0] : '?';
                     }).slice(0,3).join(', ');
-                    return `<div class="step3-menu-item ${cnt>0?'has-cnt':''}">
+                    return `<div class="step3-menu-item ${cnt>0?'has-cnt':''}" data-menu-nom="${etx((r.nombre||'').toLowerCase())}">
                         <div style="flex:1;min-width:0">
                             <div style="display:flex;align-items:center;gap:6px;min-width:0">
                                 <div style="font-weight:600;font-size:14px;color:var(--text);
@@ -3409,20 +3435,19 @@ function renderCardVentas() {
                         style="width:100px" value="${fila.ventasCopasDirectas||0}" min="0" step="0.5"
                         oninput="updVentasDirectas(${idx},'ventasCopasDirectas',+this.value);renderResumenVentas()">
                 </div>
-                <div>
+                ${esCopa ? `<div>
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Botellas vendidas</div>
                     <input type="number" id="venta-bot-${idx}" class="inv-num-input"
                         style="width:100px" value="${fila.ventasBotella||0}" min="0" step="1"
                         oninput="updVentasDirectas(${idx},'ventasBotella',+this.value);renderResumenVentas()">
-                </div>
+                </div>` : ''}
             </div>
 
-            ${esCopa ? `
             <div style="border-top:1px solid var(--border);padding-top:14px;margin-bottom:14px">
                 <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600">Cortesía</div>
                 <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
                     <div>
-                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Copas</div>
+                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">${esCopa?'Copas':'Piezas'}</div>
                         <input type="number" class="inv-num-input"
                             style="width:100px;border-color:rgba(155,141,232,.5)"
                             value="${fila.cortesiaCopas||0}" min="0" step="0.5"
@@ -3442,7 +3467,7 @@ function renderCardVentas() {
                 <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600">Merma</div>
                 <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
                     <div>
-                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Copas</div>
+                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">${esCopa?'Copas':'Piezas'}</div>
                         <input type="number" class="inv-num-input"
                             style="width:100px;border-color:rgba(224,90,58,.4)"
                             value="${fila.mermaCopas||0}" min="0" step="0.5"
@@ -3456,7 +3481,7 @@ function renderCardVentas() {
                             oninput="updVentasConcepto(${idx},'mermaConcepto',this.value)">
                     </div>
                 </div>
-            </div>` : ''}
+            </div>
 
             ${fila.costoUnitario ? `<div style="margin-top:14px;font-size:11px;color:var(--text-dim);border-top:1px solid var(--border);padding-top:10px">
                 Costo referencia: <span style="color:var(--accent)">$${(fila.costoUnitario).toFixed(2)}/bot</span>
