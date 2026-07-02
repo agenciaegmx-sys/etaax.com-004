@@ -131,10 +131,18 @@
 
    function getInsumos() {
        var negId = getNegocioActivo();
-       if (_insumosCacheNegId !== negId) { _insumosCache = null; _insumosCacheNegId = negId; }
+       if (_insumosCacheNegId !== negId) { _insumosCache = null; _insumosCacheNegId = negId; if (typeof _tombRefresh === 'function') _tombRefresh(); }
        if (_insumosCache !== null) return _insumosCache;
        try { _insumosCache = JSON.parse(_skGet('insumos')) || []; }
        catch(e) { _insumosCache = []; }
+       // La clave localStorage 'insumos' la comparte la página de recetas (app.js).
+       // Si otro módulo la reescribió con insumos ya borrados, filtrarlos aquí para
+       // que la UI NUNCA muestre un tombstoneado (y limpiar la clave de paso).
+       if (_insumosCache.length && _insBorrados && Object.keys(_insBorrados).length) {
+           var _antes = _insumosCache.length;
+           _insumosCache = _insumosCache.filter(function(x){ return !(x && _insBorrados[x.id]); });
+           if (_insumosCache.length !== _antes) { try { localStorage.setItem(_sk('insumos'), JSON.stringify(_insumosCache)); } catch(e) {} }
+       }
        return _insumosCache;
    }
    // Resolver para la etiqueta canónica (insumo-label.js): id → insumo del catálogo.
@@ -142,6 +150,9 @@
 
    function setInsumos(data) {
        var negId = getNegocioActivo();
+       // Si un id vuelve a estar VIVO (re-agregado desde el catálogo ETAAX, que reusa
+       // el id), limpiar su tombstone → si no, la auto-reparación lo borraría de nuevo.
+       if (typeof _tombClear === 'function') _tombClear((data || []).map(function(x){ return x && x.id; }));
        _insumosCache      = data; // memoria: datos completos (con foto)
        _insumosCacheNegId = negId;
        // localStorage: sin fotos base64 para evitar QuotaExceededError
@@ -172,11 +183,28 @@
        }
    });
 
-   var _insBorrados = {}; // tombstones de insumos eliminados (evita que "reaparezcan")
+   // ── Tombstones PERSISTENTES de insumos eliminados (evita que "reaparezcan") ──
+   // Antes vivían solo en memoria y se liberaban a los 20s: si borrabas y navegabas
+   // (la recarga perdía los tombstones y CANCELABA el delete en vuelo), la nube
+   // conservaba los registros y el merge los revivía. Ahora se guardan en localStorage
+   // por negocio y, al cargar, si la nube devuelve un insumo tombstoneado se RE-BORRA
+   // (auto-reparación). Los ids se generan únicos (genId) → nunca se reusan, así que
+   // marcar uno como borrado para siempre es seguro (re-agregar crea un id nuevo).
+   var _TOMB_TTL = 90 * 864e5; // 90 días: margen amplio; luego se podan solos.
+   function _tombKey(){ return _sk('ins_borrados'); }
+   function _tombLoad(){ try { return JSON.parse(localStorage.getItem(_tombKey())) || {}; } catch(e){ return {}; } }
+   function _tombSave(){ try { localStorage.setItem(_tombKey(), JSON.stringify(_insBorrados)); } catch(e){} }
+   function _tombPrune(){ var now=Date.now(), ch=false; for (var k in _insBorrados){ if (now-_insBorrados[k] > _TOMB_TTL){ delete _insBorrados[k]; ch=true; } } if (ch) _tombSave(); }
+   function _tombRefresh(){ _insBorrados = _tombLoad(); _tombPrune(); } // recargar para el negocio activo
+   function _tombAdd(ids){ var now=Date.now(); (ids||[]).forEach(function(id){ if(id) _insBorrados[id]=now; }); _tombSave(); }
+   function _tombClear(ids){ var ch=false; (ids||[]).forEach(function(id){ if(id && _insBorrados[id]!==undefined){ delete _insBorrados[id]; ch=true; } }); if(ch) _tombSave(); }
+   var _insBorrados = _tombLoad(); _tombPrune();
+
    async function _cargarInsumosDeSupabase(opts) {
        opts = opts || {};
        var negId = getNegocioActivo();
        if (!negId || typeof _supabase === 'undefined') return;
+       _tombRefresh(); // tombstones persistentes del negocio activo (sobreviven a recargas)
        try {
            // Carga PAGINADA y resiliente. Una sola query de hasta 5000 trayendo el
            // `datos` completo (con fotos base64 viejas y pesadas) podía tardar o
@@ -207,18 +235,26 @@
            // Dedup defensivo por id (por si quedaron duplicados de versiones previas).
            // Tombstones: excluir insumos recién eliminados que aún no se reflejan en
            // remote (el delete podía estar en vuelo) → evita que "reaparezcan".
-           var _vistos = {}, _dedup = [];
+           var _vistos = {}, _dedup = [], _revividos = [];
            remote.forEach(function(x){
-               if (x && x.id && !_vistos[x.id] && !_insBorrados[x.id]) { _vistos[x.id] = 1; _dedup.push(x); }
+               if (!x || !x.id) return;
+               if (_insBorrados[x.id]) { _revividos.push(x.id); return; } // tombstoneado → no revivir
+               if (!_vistos[x.id]) { _vistos[x.id] = 1; _dedup.push(x); }
            });
            remote = _dedup;
+           // Auto-reparación: si la nube todavía tiene insumos que ya borramos (el delete
+           // se canceló al navegar, o falló), re-emitir el borrado para que sea durable.
+           if (_revividos.length) {
+               console.log('[insumos] auto-reparación: re-borrando', _revividos.length, 'insumos que resucitaron');
+               _borrarInsumosSupabase(negId, _revividos).catch(function(){});
+           }
 
            // MERGE: conservar las adiciones locales que aún no sincronizaron
            // (ej. agregar del catálogo y navegar de módulo antes del sync).
            // Antes esto sobreescribía con lo remoto y "perdía" los recién agregados.
            var local = _insumosCache;
            if (local === null) { try { local = JSON.parse(_skGet('insumos')) || []; } catch(e) { local = []; } }
-           var soloLocal = (local || []).filter(function(x){ return x && x.id && !_vistos[x.id]; });
+           var soloLocal = (local || []).filter(function(x){ return x && x.id && !_vistos[x.id] && !_insBorrados[x.id]; });
            var lista = remote.concat(soloLocal);
 
            _insumosCache      = lista;
@@ -947,15 +983,15 @@
        _pedirClaveAdmin('Eliminar ' + ids.length + ' insumo' + (ids.length !== 1 ? 's' : ''), async function() {
            // Tombstones ANTES de recargar → aunque un realtime/recarga llegue con el delete en
            // vuelo, NO reviven (igual que el borrado individual). Clave para el "reset".
-           ids.forEach(function(id){ _insBorrados[id] = Date.now(); });
+           _tombAdd(ids); // tombstones PERSISTENTES (sobreviven a recarga/navegación)
            setInsumos(getInsumos().filter(function(x){ return !idSet[x.id]; }));
            _seleccionados.clear();
            toggleModoSeleccion();
            try { filtrar(); renderStats(); } catch(e) {} // re-render local (sin recargar de Supabase → más rápido)
-           // Borrar en Supabase y ESPERAR confirmación (antes no se esperaba → posibles zombies).
+           // Borrar en Supabase y ESPERAR confirmación. Si la navegación cancela el
+           // delete en vuelo, el tombstone persistente lo re-borra en la próxima carga.
            try { await _borrarInsumosSupabase(getNegocioActivo(), ids); }
            catch(e){ console.warn('[eliminar masivo] ', e); }
-           setTimeout(function(){ ids.forEach(function(id){ delete _insBorrados[id]; }); }, 20000);
        });
    }
 
@@ -1848,16 +1884,14 @@
        const ins = getInsumos().find(x => x.id === id);
        if (!ins) return;
        _pedirClaveAdmin('Eliminar insumo "' + ins.nombre + '"', async function() {
-           _insBorrados[id] = Date.now();
+           _tombAdd([id]); // tombstone PERSISTENTE (sobrevive a recarga/navegación)
            // Quitar de local + render YA (UX inmediata).
            setInsumos(getInsumos().filter(x => x.id !== id));
            init();
-           // Borrar en Supabase y ESPERAR a que confirme: si no, una recarga/realtime
-           // que llegara con el delete aún en vuelo lo re-traía desde la nube (zombie).
+           // Borrar en Supabase y ESPERAR a que confirme. Si la navegación cancela el
+           // delete en vuelo, el tombstone persistente lo re-borra en la próxima carga.
            try { await _borrarInsumosSupabase(getNegocioActivo(), [id]); }
            catch(e) { console.warn('[eliminar] ', e); }
-           // Ya confirmado en la nube → liberar el tombstone tras un margen.
-           setTimeout(function(){ delete _insBorrados[id]; }, 20000);
        });
    }
 
