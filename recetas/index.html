@@ -1742,6 +1742,8 @@ function agregarSubRecetaComoInsumo(silent) {
         foto:          (typeof fotosReceta !== 'undefined' && fotosReceta.length) ? fotosReceta[0] : '',
         esSubReceta:   true,
         recetaId:      recetaActualId || null,
+        sucursalId:    (localStorage.getItem('etaax_sucursal_activa') || ''),
+        sucursales:    (function(){ var c = localStorage.getItem('etaax_sucursal_activa') || ''; return c ? [c] : []; })(), // membresía: vive en la sucursal donde se convirtió
         presentaciones: porciones,
     };
 

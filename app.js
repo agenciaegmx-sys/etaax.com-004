@@ -938,7 +938,10 @@ function getCatalogoInsumosScope() {
     if (catGlobal) return cat;
     var sucActiva = localStorage.getItem('etaax_sucursal_activa') || '';
     if (!sucActiva) return cat;
-    return cat.filter(function(x){ return (x.sucursalId || 'suc_principal') === sucActiva; });
+    // Membresía por sucursal (igual que recetas): el insumo aparece si VIVE en esta sucursal.
+    return cat.filter(function(x){ return (typeof window._insumoEnSuc === 'function')
+        ? window._insumoEnSuc(x, sucActiva)
+        : ((x.sucursalId || 'suc_principal') === sucActiva); });
 }
 
 // Devuelve el contenido real en ml/g de 1 pieza de un insumo.

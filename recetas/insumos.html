@@ -322,24 +322,10 @@
                 </div>
             </div>
 
-            <!-- Área del insumo (barra / bodega / cocina) — para separar existencias en reportes -->
-            <div style="margin-bottom:10px">
-                <label class="proc-label">📍 Área (dónde se guarda)</label>
-                <select id="ins-area" style="width:100%;margin-top:4px;font-size:13px">
-                    <option value="">— Sin área —</option>
-                    <option value="barra">Barra</option>
-                    <option value="bodega">Bodega</option>
-                    <option value="cocina">Cocina</option>
-                </select>
-            </div>
+            <!-- (El campo "Área" se quitó del editor a pedido; el valor existente se conserva al editar.) -->
 
-            <!-- Sucursal (solo visible si hay más de 1 sucursal) -->
-            <div id="row-ins-sucursal" style="display:none;margin-bottom:10px">
-                <label class="proc-label">Sucursal asignada</label>
-                <select id="ins-sucursal" style="width:100%;margin-top:4px;font-size:13px">
-                    <option value="">— Global / Todas las sucursales —</option>
-                </select>
-            </div>
+            <!-- (La sucursal ya no se elige aquí: el insumo nace en la sucursal activa y su
+                 membresía se administra desde el Catálogo Global con "Copiar a sucursal".) -->
 
             <!-- Descripción — ancho completo -->
             <div style="margin-bottom:6px">
@@ -802,7 +788,7 @@ var _ignEnSuc = {};
 function _negNombreActual() {
     try { var c = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); return (c && c.negNombre) || 'Negocio'; } catch(e) { return 'Negocio'; }
 }
-function _keyIns(x) { return ((x.nombre || '') + '|' + (x.marca || '')).toLowerCase().trim(); }
+function _keyIns(x) { return ((x.nombre || '') + '|' + (x.marca || '') + '|' + ((x.variedad || x.maduracion) || '')).toLowerCase().trim(); }
 function _sucNombreIgn(id) {
     if (!id || id === MATRIZ_ID_INS) return 'Matriz';
     var s = _getSucsIns().find(function(x){ return x.id === id; });
@@ -829,16 +815,17 @@ function cerrarInsumosNeg() {
 }
 function ignFiltrar() {
     var q = (document.getElementById('ignSearch').value || '').toLowerCase();
-    var curEff = _getSucActivaIns() || MATRIZ_ID_INS;
+    var curEff = _effSucIns(_getSucActivaIns());
     var todos = getInsumos();
-    // Lo que ya existe en la sucursal actual (por nombre+marca) → para marcar.
-    _ignEnSuc = {};
-    todos.forEach(function(x){ if (_effSucIns(x.sucursalId) === curEff) _ignEnSuc[_keyIns(x)] = true; });
-    // Candidatos: insumos de OTRAS sucursales, dedup por nombre+marca.
+    // Identidades (nombre+marca) que YA viven en esta sucursal (membresía).
+    var aqui = {};
+    todos.forEach(function(x){ if (window._insumoEnSuc(x, curEff)) aqui[_keyIns(x)] = true; });
+    _ignEnSuc = aqui;
+    // Candidatos: insumos cuya identidad NO vive aquí, dedup por identidad (uno por nombre+marca).
     var vistos = {}, cand = [];
     todos.forEach(function(x){
-        if (_effSucIns(x.sucursalId) === curEff) return;
         var k = _keyIns(x);
+        if (aqui[k]) return;              // esa identidad ya vive aquí
         if (vistos[k]) return; vistos[k] = 1;
         cand.push(x);
     });
@@ -880,17 +867,20 @@ function ignRender() {
 function ignAgregar(id) {
     var ins = getInsumos().find(function(x){ return x.id === id; });
     if (!ins) return;
-    var copia = JSON.parse(JSON.stringify(ins));
-    copia.id = genId();                                   // copia independiente
-    copia.sucursalId = _getSucActivaIns() || '';          // asignada a la sucursal actual (''=Matriz)
-    delete copia._csvRow;
-    var lista = getInsumos();
-    lista.push(copia);
-    setInsumos(lista);
+    var cur = _effSucIns(_getSucActivaIns()); // sucursal efectiva actual (matriz='suc_principal')
+    // MEMBRESÍA (igual que recetas): agrega la sucursal actual al array `sucursales` del MISMO
+    // registro → el insumo ahora vive también aquí, SIN duplicarlo en la base.
+    var s = (window._insumoSucursales ? window._insumoSucursales(ins) : (ins.sucursalId ? [ins.sucursalId] : []))
+        .map(function(v){ return v || 'suc_principal'; });
+    if (s.indexOf(cur) < 0) s.push(cur);
+    ins.sucursales = s;
+    setInsumos(getInsumos()); // persiste (ins es referencia del cache) + dispara sync
+    if (typeof _sincronizarInsumosSupabase === 'function') {
+        try { _sincronizarInsumosSupabase(getNegocioActivo(), [ins]); } catch(e){}
+    }
     var btn = document.getElementById('ignBtn_' + id);
-    if (btn) { btn.textContent = '✓ Copiado'; btn.disabled = true; btn.style.opacity = '.55'; btn.style.cursor = 'default'; btn.onclick = null; }
-    // Reflejar en el mapa para que un duplicado por nombre quede marcado también.
-    _ignEnSuc[_keyIns(copia)] = true;
+    if (btn) { btn.textContent = '✓ Copiado aquí'; btn.disabled = true; btn.style.opacity = '.55'; btn.style.cursor = 'default'; btn.onclick = null; }
+    _ignEnSuc[_keyIns(ins)] = true;
 }
 document.addEventListener('DOMContentLoaded', function(){
     var lbl = document.getElementById('lblInsumosNeg');
@@ -1192,6 +1182,9 @@ function _cgRender() {
     var desde    = _cgPagina * _cgPgSize;
     var pagina   = lista.slice(desde, desde + _cgPgSize);
     var actuales = getInsumos().map(function(x){ return x.id; });
+    // Membresía: "ya agregado" = el insumo VIVE en la sucursal activa (no solo en el negocio).
+    var _curEffCg = (localStorage.getItem('etaax_sucursal_activa') || '') || 'suc_principal';
+    var _enSucCg = {}; getInsumos().forEach(function(x){ if (window._insumoEnSuc && window._insumoEnSuc(x, _curEffCg)) _enSucCg[x.id] = true; });
 
     document.getElementById('cgTotal').textContent = total + ' insumos · página ' + (_cgPagina+1) + ' de ' + totalPgs;
 
@@ -1203,7 +1196,7 @@ function _cgRender() {
                 ? '$' + parseFloat(p0.precio).toFixed(2) + ' / ' + (p0.contNeto||'') + ' ' + (p0.umContenido||'')
                 : '—';
             var prov      = p0 && p0.proveedor ? etx(p0.proveedor) : '';
-            var yaEsta    = actuales.indexOf(ins.id) !== -1;
+            var yaEsta    = _enSucCg[ins.id] === true;
             var varLine   = etx([ins.maduracion, ins.variedad].filter(Boolean).join(' · '));
             var cat       = etx([ins.familia, ins.categoria, ins.subcategoria].filter(Boolean).join(' · '));
             var fotoEl    = ins.foto
@@ -1274,14 +1267,26 @@ async function cgAgregar(id) {
     var ins = _cgTodos.find(function(x){ return x.id === id; });
     if (!ins) return;
     var lista = getInsumos();
-    // Si ya existe, solo actualizar visual (pudo haberse guardado en intento previo)
-    if (lista.find(function(x){ return x.id === id; })) {
+    var _cur = localStorage.getItem('etaax_sucursal_activa') || '';
+    var _curEff = _cur || 'suc_principal';
+    // Si YA vive en el negocio → solo agrega esta sucursal a su membresía (NO duplica).
+    var _ex = lista.find(function(x){ return x.id === id; });
+    if (_ex) {
+        var s = (window._insumoSucursales ? window._insumoSucursales(_ex) : (_ex.sucursalId ? [_ex.sucursalId] : []))
+            .map(function(v){ return v || 'suc_principal'; });
+        if (s.indexOf(_curEff) < 0) s.push(_curEff);
+        _ex.sucursales = s;
+        setInsumos(lista);
+        if (typeof _sincronizarInsumosSupabase === 'function') { try { _sincronizarInsumosSupabase(getNegocioActivo(), [_ex]); } catch(e){} }
         _cgMarcarAgregado(id);
+        try { filtrar(); } catch(e) {}
         return;
     }
-    // Clonar y limpiar campos internos
+    // Nuevo en el negocio → clonar y hacerlo vivir en la sucursal activa (membresía).
     var copia = JSON.parse(JSON.stringify(ins));
     delete copia._csvRow;
+    copia.sucursales = _cur ? [_cur] : []; // vive en la sucursal activa (o Matriz)
+    copia.sucursalId = _cur;
     // Si la foto viene como base64 (insumo del catálogo aún sin migrar), súbela a
     // Storage y guarda solo la URL → el negocio queda LIVIANO (carga rápida) y no
     // se duplica la imagen pesada en cada negocio.
@@ -1322,5 +1327,21 @@ async function cgAgregar(id) {
     try { filtrar(); } catch(e) { console.warn('[cgAgregar] filtrar error:', e); }
 }
 </script>
+
+<!-- ── MODAL: Sucursales del insumo (catálogo global) — estilo recetas ── -->
+<div id="modalInsumoSuc" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10006;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)cerrarInsumoSuc()">
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;width:min(440px,96vw);max-height:86vh;display:flex;flex-direction:column;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--border)">
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;color:var(--text)">🏪 Sucursales del insumo</div>
+            <button onclick="cerrarInsumoSuc()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:4px 11px;cursor:pointer;font-family:inherit;font-size:13px">✕</button>
+        </div>
+        <div style="padding:12px 18px;font-size:12.5px;color:var(--text-muted);line-height:1.5">Elige en qué sucursales vive <b id="insumoSucNombre" style="color:var(--text)"></b>. No se duplica: es el mismo insumo compartido en las marcadas.</div>
+        <div id="insumoSucLista" style="padding:4px 18px;overflow-y:auto"></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--border)">
+            <button onclick="cerrarInsumoSuc()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:8px 16px;cursor:pointer;font-family:inherit;font-size:13px">Cancelar</button>
+            <button onclick="guardarInsumoSuc()" style="background:var(--green);border:none;color:#fff;border-radius:8px;padding:8px 18px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600">💾 Guardar</button>
+        </div>
+    </div>
+</div>
 </body>
 </html>

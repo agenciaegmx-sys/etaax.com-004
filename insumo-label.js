@@ -76,4 +76,22 @@
         if (p.marca) out += (out ? ' ' : '') + '<span style="color:var(--text-dim);font-size:.85em">' + (out ? '· ' : '') + _esc(p.marca) + '</span>';
         return out;
     };
+
+    // ── Membresía por sucursal (igual que recetas): en qué sucursales VIVE un insumo ──
+    // Usa el array `sucursales` si existe; si no, cae al `sucursalId` único (backward-compatible).
+    // Vacío = Matriz (todas). Así "Copiar aquí" agrega la sucursal SIN duplicar el registro.
+    window._insumoSucursales = function (x) {
+        if (x && x.sucursales && x.sucursales.length) return x.sucursales;
+        if (x && x.sucursalId) return [x.sucursalId];
+        return [];
+    };
+    // ¿El insumo x vive en la sucursal effSuc? (Matriz es una sucursal más = 'suc_principal').
+    // Sin `sucursales` = está en el ALMACÉN GLOBAL pero NO asignado a ninguna sucursal → no
+    // aparece en ninguna (ni en Matriz). Global (almacén) y Matriz (sucursal) son cosas distintas.
+    window._insumoEnSuc = function (x, effSuc) {
+        var s = window._insumoSucursales(x);
+        if (!s.length) return false; // sin asignar = solo en el catálogo global
+        for (var i = 0; i < s.length; i++) { if ((s[i] || 'suc_principal') === effSuc) return true; }
+        return false;
+    };
 })();

@@ -27,6 +27,63 @@
    // Sin sucursal = matriz (sucursal por defecto), no "global en todas".
    var MATRIZ_ID_INS = 'suc_principal';
    function _effSucIns(id) { return id || MATRIZ_ID_INS; }
+   // Nombre real de una sucursal (para los badges). Busca en la lista primero (así la Matriz
+   // muestra su nombre real, ej. "Mammut Pizza Madero", no un genérico "Matriz").
+   function _sucNomIns(id) {
+       try { var sucs = JSON.parse(localStorage.getItem('etaax_' + getNegocioActivo() + '_sucursales') || '[]');
+             var s = sucs.find(function(x){ return x.id === id; }); if (s) return s.nombre || id; } catch(e){}
+       return (!id || id === MATRIZ_ID_INS) ? 'Matriz' : id;
+   }
+   // Badges de dónde vive el insumo. Sin asignar = está en el ALMACÉN global pero en ninguna
+   // sucursal → badge gris "Global · sin asignar". Asignado → nombre real de cada sucursal.
+   function _insumoBadgesIns(ins) {
+       var s = (window._insumoSucursales ? window._insumoSucursales(ins) : (ins.sucursalId ? [ins.sucursalId] : []));
+       if (!s.length) return '<span style="font-size:8px;letter-spacing:.5px;text-transform:uppercase;background:rgba(155,149,138,.14);color:var(--text-dim);border:1px solid var(--border);border-radius:10px;padding:1px 6px;white-space:nowrap">🌐 Global · sin asignar</span>';
+       return s.map(function(id){ return '<span style="font-size:8px;letter-spacing:.5px;text-transform:uppercase;background:rgba(122,184,245,.12);color:#7ab8f5;border:1px solid rgba(122,184,245,.3);border-radius:10px;padding:1px 6px;white-space:nowrap;margin-right:3px">' + etx(_sucNomIns(id)) + '</span>'; }).join('');
+   }
+
+   // ── Modal "Copiar a sucursal" (igual que recetas): membresía por checkboxes ──
+   var _insumoSucEditId = null;
+   function abrirInsumoSuc(id) {
+       _insumoSucEditId = id;
+       var ins = getInsumos().find(function(x){ return x.id === id; }); if (!ins) return;
+       // Dónde vive = UNIÓN de la membresía de TODOS los registros con la misma identidad
+       // (por si aún hay duplicados viejos en otras sucursales) → el modal refleja la realidad.
+       var k = _keyInsLocal(ins), vive = [];
+       getInsumos().forEach(function(x){
+           if (_keyInsLocal(x) !== k) return;
+           (window._insumoSucursales ? window._insumoSucursales(x) : (x.sucursalId ? [x.sucursalId] : [])).forEach(function(v){
+               var e = v || MATRIZ_ID_INS; if (vive.indexOf(e) < 0) vive.push(e);
+           });
+       });
+       // Si queda vacío = insumo del almacén global SIN asignar → ninguna sucursal marcada.
+       var sucs = _getSucsIns(), opts = [];
+       if (!sucs.some(function(s){ return s.id === MATRIZ_ID_INS; })) opts.push({ id: MATRIZ_ID_INS, nombre: 'Matriz' });
+       opts = opts.concat(sucs);
+       document.getElementById('insumoSucNombre').textContent = (typeof insumoTitulo === 'function') ? insumoTitulo(ins) : (ins.nombre || 'Insumo');
+       document.getElementById('insumoSucLista').innerHTML = opts.map(function(s){
+           var on = vive.indexOf(s.id) >= 0;
+           return '<label style="display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid var(--border);border-radius:9px;margin-bottom:7px;cursor:pointer">' +
+               '<input type="checkbox" data-suc="' + etx(s.id) + '" ' + (on ? 'checked' : '') + ' style="width:17px;height:17px;accent-color:var(--green)">' +
+               '<span style="font-size:13px;color:var(--text)">' + etx(s.nombre || s.id) + '</span></label>';
+       }).join('');
+       document.getElementById('modalInsumoSuc').style.display = 'flex';
+   }
+   function cerrarInsumoSuc() { var m = document.getElementById('modalInsumoSuc'); if (m) m.style.display = 'none'; _insumoSucEditId = null; }
+   function guardarInsumoSuc() {
+       var ins = getInsumos().find(function(x){ return x.id === _insumoSucEditId; }); if (!ins) { cerrarInsumoSuc(); return; }
+       var sel = [];
+       document.querySelectorAll('#insumoSucLista input[type=checkbox]').forEach(function(c){ if (c.checked) sel.push(c.getAttribute('data-suc')); });
+       if (!sel.length) { alert('El insumo debe vivir en al menos una sucursal.'); return; }
+       ins.sucursales = sel; // membresía (manda sobre sucursalId)
+       setInsumos(getInsumos());
+       if (typeof _sincronizarInsumosSupabase === 'function') { try { _sincronizarInsumosSupabase(getNegocioActivo(), [ins]); } catch(e){} }
+       cerrarInsumoSuc();
+       try { filtrar(); } catch(e) {}
+   }
+   window.abrirInsumoSuc = abrirInsumoSuc;
+   window.cerrarInsumoSuc = cerrarInsumoSuc;
+   window.guardarInsumoSuc = guardarInsumoSuc;
    function _catGlobalIns() { return sessionStorage.getItem('etaax_cat_global') === '1'; }
    // Refleja en el header/banner si entramos en modo Catálogo Global del negocio
    // (se activa desde el menú "Catálogos Globales" del hub → flag etaax_cat_global).
@@ -278,7 +335,7 @@
 
    // ── Identidad y sincronización entre sucursales ──────────────
    // Mismo nombre+marca = el mismo insumo en otra sucursal (igual que _keyIns).
-   function _keyInsLocal(x){ return (((x && x.nombre) || '') + '|' + ((x && x.marca) || '')).toLowerCase().trim(); }
+   function _keyInsLocal(x){ return (((x && x.nombre) || '') + '|' + ((x && x.marca) || '') + '|' + ((x && (x.variedad || x.maduracion)) || '')).toLowerCase().trim(); }
    // Dedup para el catálogo global: un representante por identidad (prefiere el original).
    function _dedupGlobal(lista){
        var seen = {}, out = [];
@@ -319,7 +376,10 @@
    window.actualizarEnGlobal = actualizarEnGlobal;
 
    function renderStats() {
-       const insumos = _insumosScope();
+       // En el Catálogo Global cuenta INSUMOS ÚNICOS (deduplicados por identidad), igual que
+       // el contador de arriba → antes contaba los 400 registros crudos (con duplicados) y no cuadraba.
+       let insumos = _insumosScope();
+       if (_catGlobalIns()) insumos = _dedupGlobal(insumos);
        const cats    = [...new Set(insumos.map(x => x.categoria).filter(Boolean))];
        const provs   = [...new Set(insumos.flatMap(x =>
            (x.presentaciones||[]).map(p => p.proveedor).filter(Boolean)
@@ -381,8 +441,9 @@
        if (cat) lista = lista.filter(x => x.categoria === cat);
        // Sin sucursal = matriz. Con catálogo global, no se filtra por sucursal.
        if (!catGlobal) {
-           if (sucFil)        lista = lista.filter(x => _effSucIns(x.sucursalId) === sucFil);
-           else if (sucActiva) lista = lista.filter(x => _effSucIns(x.sucursalId) === sucActiva);
+           // Membresía: el insumo aparece si VIVE en esa sucursal (array `sucursales`), no por sucursalId único.
+           if (sucFil)        lista = lista.filter(x => window._insumoEnSuc(x, sucFil));
+           else if (sucActiva) lista = lista.filter(x => window._insumoEnSuc(x, sucActiva));
        } else {
            // Catálogo global del negocio: UN insumo por identidad (nombre+marca),
            // aunque exista en varias sucursales → sin duplicados. Se prefiere el
@@ -648,13 +709,9 @@
                        onclick="editarInsumo('${ins.id}')">
                        <span style="font-size:14px">✏️</span> Editar
                    </button>
-                   <button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;
-                       color:var(--green);border-color:var(--green);
-                       display:inline-flex;align-items:center;gap:5px"
-                       title="Actualizar este insumo (ficha + precios) en todas las sucursales / catálogo global"
-                       onclick="actualizarEnGlobal('${ins.id}')">
-                       <span style="font-size:14px">📤</span> Global
-                   </button>
+                   ${_catGlobalIns() ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;
+                       color:var(--green);border-color:var(--green);display:inline-flex;align-items:center;gap:5px"
+                       onclick="abrirInsumoSuc('${ins.id}')"><span style="font-size:14px">🏪</span> Sucursales</button>` : ''}
                    <button class="btn-vista" style="padding:6px 12px;font-size:12px;
                        color:var(--red);border-color:var(--red);
                        display:inline-flex;align-items:center;justify-content:center"
@@ -675,6 +732,7 @@
                        <div>
                            <div style="font-weight:500">${etx(insumoTitulo(ins))}${ins.esSubReceta ? ' <span style="font-size:9px;background:rgba(245,200,66,.15);color:var(--accent);border:1px solid rgba(245,200,66,.3);border-radius:4px;padding:1px 6px;vertical-align:middle;white-space:nowrap">🍳 Sub-receta</span>' : ''}</div>
                            ${(insumoContenido(ins)||ins.marca) ? `<div style="font-size:11px;color:var(--text-muted)">${insumoMetaHTML(ins)}</div>` : ''}
+                           ${_catGlobalIns() ? `<div style="margin-top:3px">${_insumoBadgesIns(ins)}</div>` : ''}
                        </div>
                    </div>
                </td>
@@ -760,7 +818,7 @@
                '<div class="insumo-card-actions">' +
                    '<button class="btn-ver" onclick="verFicha(\'' + ins.id + '\')">👁️ Ver</button>' +
                    '<button class="btn-edit" onclick="editarInsumo(\'' + ins.id + '\')">✏️ Editar</button>' +
-                   '<button class="btn-edit" style="color:var(--green);border-color:var(--green)" title="Actualizar en todas las sucursales / catálogo global" onclick="actualizarEnGlobal(\'' + ins.id + '\')">📤 Global</button>' +
+                   (_catGlobalIns() ? '<button class="btn-edit" style="color:var(--green);border-color:var(--green)" onclick="abrirInsumoSuc(\'' + ins.id + '\')">🏪 Sucursales</button>' : '') +
                    '<button class="btn-del" onclick="eliminarInsumo(\'' + ins.id + '\')">🗑️</button>' +
                '</div>';
 
@@ -877,12 +935,18 @@
    function _eliminarSeleccionados() {
        const ids = Array.from(_seleccionados);
        if (!ids.length) return;
-       _pedirClaveAdmin('Eliminar ' + ids.length + ' insumo' + (ids.length !== 1 ? 's' : ''), function() {
+       _pedirClaveAdmin('Eliminar ' + ids.length + ' insumo' + (ids.length !== 1 ? 's' : ''), async function() {
+           // Tombstones ANTES de recargar → aunque un realtime/recarga llegue con el delete
+           // en vuelo, NO reviven (igual que el borrado individual). Clave para el "reset".
+           ids.forEach(function(id){ _insBorrados[id] = Date.now(); });
            setInsumos(getInsumos().filter(function(x){ return !_seleccionados.has(x.id); }));
-           _borrarInsumosSupabase(getNegocioActivo(), ids).catch(function(e){ console.warn('[eliminar] ', e); });
            _seleccionados.clear();
            toggleModoSeleccion();
            init();
+           // Borrar en Supabase y ESPERAR confirmación (antes no se esperaba → posibles zombies).
+           try { await _borrarInsumosSupabase(getNegocioActivo(), ids); }
+           catch(e){ console.warn('[eliminar masivo] ', e); }
+           setTimeout(function(){ ids.forEach(function(id){ delete _insBorrados[id]; }); }, 20000);
        });
    }
 
@@ -3029,8 +3093,23 @@
            foto:         fotoInsumoBase64 || fotoAnterior,
            presentaciones: presentacionesTemp,
            area:         (function(){ var el = document.getElementById('ins-area'); return el ? el.value : ''; })(),
-           sucursalId:   (function(){ var el = document.getElementById('ins-sucursal'); return el ? el.value : ''; })()
+           sucursalId:   '' // ya no se elige aquí; se define por membresía abajo
        };
+
+       // Membresía por sucursal (igual que recetas): NUEVO → nace en la sucursal activa;
+       // EDICIÓN → conserva la membresía y el sucursalId que ya tenía (no los pisa el guardado).
+       if (editandoId) {
+           var _orig = getInsumos().find(function(x){ return x.id === editandoId; });
+           if (_orig && _orig.area && !insumo.area) insumo.area = _orig.area; // conservar área (campo ya no está en el editor)
+           insumo.sucursalId = _orig ? (_orig.sucursalId || '') : '';
+           insumo.sucursales = (_orig && _orig.sucursales && _orig.sucursales.length)
+               ? _orig.sucursales.slice()
+               : (_orig && _orig.sucursalId ? [_orig.sucursalId] : []);
+       } else {
+           var _curSuc = localStorage.getItem('etaax_sucursal_activa') || '';
+           insumo.sucursalId = _curSuc;
+           insumo.sucursales = _curSuc ? [_curSuc] : []; // '' = Matriz (vacío = todas)
+       }
 
        // #2 Storage: si la foto es base64, súbela a Storage y guarda solo la URL
        // (saca la imagen de adentro del dato → registros ligeros). Si falla, se

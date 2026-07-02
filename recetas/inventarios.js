@@ -32,7 +32,10 @@ function getInsumos()     { return _cacheInsumosInv || (function(){ try { return
 function _scopeSucInsumos(lista) {
     const s = localStorage.getItem('etaax_sucursal_activa') || '';
     if (!s) return lista || [];
-    return (lista || []).filter(x => (x && (x.sucursalId || 'suc_principal')) === s);
+    // Membresía: el insumo aparece si VIVE en esta sucursal (array `sucursales`), no solo por sucursalId.
+    return (lista || []).filter(x => (typeof window._insumoEnSuc === 'function')
+        ? window._insumoEnSuc(x, s)
+        : ((x && (x.sucursalId || 'suc_principal')) === s));
 }
 // Inventarios de la SUCURSAL activa (independientes por sucursal). "Sin sucursal = ve todo".
 function _scopeSucInvs(lista) {
