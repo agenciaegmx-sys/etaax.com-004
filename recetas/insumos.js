@@ -933,16 +933,25 @@
    }
 
    function _eliminarSeleccionados() {
-       const ids = Array.from(_seleccionados);
+       let ids = Array.from(_seleccionados);
        if (!ids.length) return;
+       // En el CATÁLOGO GLOBAL cada ítem es una IDENTIDAD (dedup) → al borrarlo hay que borrar
+       // TODOS los registros con esa identidad (incluye duplicados viejos), si no quedan zombies
+       // deduplicados y el conteo "baja pero no llega a 0".
+       if (_catGlobalIns()) {
+           var selKeys = {};
+           getInsumos().forEach(function(x){ if (_seleccionados.has(x.id)) selKeys[_keyInsLocal(x)] = 1; });
+           ids = getInsumos().filter(function(x){ return _seleccionados.has(x.id) || selKeys[_keyInsLocal(x)]; }).map(function(x){ return x.id; });
+       }
+       var idSet = {}; ids.forEach(function(id){ idSet[id] = 1; });
        _pedirClaveAdmin('Eliminar ' + ids.length + ' insumo' + (ids.length !== 1 ? 's' : ''), async function() {
-           // Tombstones ANTES de recargar → aunque un realtime/recarga llegue con el delete
-           // en vuelo, NO reviven (igual que el borrado individual). Clave para el "reset".
+           // Tombstones ANTES de recargar → aunque un realtime/recarga llegue con el delete en
+           // vuelo, NO reviven (igual que el borrado individual). Clave para el "reset".
            ids.forEach(function(id){ _insBorrados[id] = Date.now(); });
-           setInsumos(getInsumos().filter(function(x){ return !_seleccionados.has(x.id); }));
+           setInsumos(getInsumos().filter(function(x){ return !idSet[x.id]; }));
            _seleccionados.clear();
            toggleModoSeleccion();
-           init();
+           try { filtrar(); renderStats(); } catch(e) {} // re-render local (sin recargar de Supabase → más rápido)
            // Borrar en Supabase y ESPERAR confirmación (antes no se esperaba → posibles zombies).
            try { await _borrarInsumosSupabase(getNegocioActivo(), ids); }
            catch(e){ console.warn('[eliminar masivo] ', e); }
