@@ -788,7 +788,7 @@ var _ignEnSuc = {};
 function _negNombreActual() {
     try { var c = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); return (c && c.negNombre) || 'Negocio'; } catch(e) { return 'Negocio'; }
 }
-function _keyIns(x) { return ((x.nombre || '') + '|' + (x.marca || '') + '|' + ((x.variedad || x.maduracion) || '')).toLowerCase().trim(); }
+function _keyIns(x) { return window._keyInsumo(x); } // identidad canónica (insumo-label.js) — no duplicar la lógica
 function _sucNombreIgn(id) {
     if (!id || id === MATRIZ_ID_INS) return 'Matriz';
     var s = _getSucsIns().find(function(x){ return x.id === id; });

@@ -930,7 +930,9 @@ function getCatalogoInsumos() {
 // Cachea por FIRMA del localStorage (no por longitud): si cambia el PRECIO de un
 // insumo sin cambiar la cantidad de registros, igual se reconstruye el índice.
 // (El bug viejo comparaba solo `_n!==a.length` → quedaba stale ante cambios de precio.)
-(function(){ var _ix=null,_sig=null; window._insumoResolver=function(id){ var raw; try{ raw=_skGet('insumos')||''; }catch(e){ raw=''; } if(!_ix||_sig!==raw){ _ix={}; (getCatalogoInsumos()||[]).forEach(function(x){if(x&&x.id)_ix[x.id]=x;}); _sig=raw; } return _ix[id]||null; }; })();
+// Usa la fábrica compartida (insumo-label.js). Fuente: getCatalogoInsumos (localStorage
+// 'insumos'); firma: el string crudo del localStorage → se reindexa al cambiar precios.
+window._insumoResolver = window._makeInsumoResolver(getCatalogoInsumos, function(){ try{ return _skGet('insumos')||''; }catch(e){ return ''; } });
 
 // Costo POR unidad (kg/lt/pza) VIVO de un ingrediente vinculado: se recalcula
 // desde el insumo ACTUAL del catálogo, evitando el "drift" de costos congelados

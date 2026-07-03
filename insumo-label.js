@@ -77,6 +77,38 @@
         return out;
     };
 
+    // ── Identidad canónica del insumo (ÚNICA fuente de verdad) ──────────────────
+    // Dos insumos con la misma clave = "el mismo" (en otra sucursal, o duplicado).
+    // Antes estaba duplicada en insumos.html (_keyIns) e insumos.js (_keyInsLocal) y
+    // divergieron → colapsaba Hennessy V.S. con V.S.O.P. (faltaba variedad). Ahora
+    // ambas delegan aquí para que NUNCA vuelvan a desincronizarse.
+    // Clave = nombre | marca | (variedad ó maduración), en minúsculas y sin espacios extremos.
+    window._keyInsumo = function (x) {
+        return (((x && x.nombre) || '') + '|' +
+                ((x && x.marca) || '') + '|' +
+                ((x && (x.variedad || x.maduracion)) || '')).toLowerCase().trim();
+    };
+
+    // ── Fábrica de resolver id→insumo (misma LÓGICA en todas las páginas) ─────────
+    // Cada página tiene su propia FUENTE de datos (getInsumos / getCatalogoInsumos) y
+    // su propia clave de invalidación de caché, pero el algoritmo de indexado es uno
+    // solo → se acaban las 3 copias divergentes de _insumoResolver.
+    //   getArr : function() → array de insumos del catálogo.
+    //   getSig : function() → valor de firma; si cambia, se reconstruye el índice.
+    //            (por defecto usa la identidad del array — sirve cuando getArr cachea).
+    window._makeInsumoResolver = function (getArr, getSig) {
+        var _ix = null, _key = null;
+        return function (id) {
+            var k = getSig ? getSig() : getArr();
+            if (_ix === null || k !== _key) {
+                _ix = {};
+                (getArr() || []).forEach(function (x) { if (x && x.id) _ix[x.id] = x; });
+                _key = k;
+            }
+            return _ix[id] || null;
+        };
+    };
+
     // ── Membresía por sucursal (igual que recetas): en qué sucursales VIVE un insumo ──
     // Usa el array `sucursales` si existe; si no, cae al `sucursalId` único (backward-compatible).
     // Vacío = Matriz (todas). Así "Copiar aquí" agrega la sucursal SIN duplicar el registro.

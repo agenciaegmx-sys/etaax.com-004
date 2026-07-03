@@ -146,7 +146,9 @@
        return _insumosCache;
    }
    // Resolver para la etiqueta canónica (insumo-label.js): id → insumo del catálogo.
-   (function(){ var _ix=null,_lastArr=null; window._insumoResolver=function(id){ var a=getInsumos()||[]; if(a!==_lastArr){_ix={};a.forEach(function(x){if(x&&x.id)_ix[x.id]=x;});_lastArr=a;} return _ix[id]||null; }; })();
+   // Usa la fábrica compartida (insumo-label.js). Fuente: getInsumos (caché estable) →
+   // la firma por defecto (identidad del array) basta para reindexar al cambiar.
+   window._insumoResolver = window._makeInsumoResolver(getInsumos);
 
    function setInsumos(data) {
        var negId = getNegocioActivo();
@@ -371,7 +373,7 @@
 
    // ── Identidad y sincronización entre sucursales ──────────────
    // Mismo nombre+marca = el mismo insumo en otra sucursal (igual que _keyIns).
-   function _keyInsLocal(x){ return (((x && x.nombre) || '') + '|' + ((x && x.marca) || '') + '|' + ((x && (x.variedad || x.maduracion)) || '')).toLowerCase().trim(); }
+   function _keyInsLocal(x){ return window._keyInsumo(x); } // identidad canónica (insumo-label.js) — no duplicar la lógica
    // Dedup para el catálogo global: un representante por identidad (prefiere el original).
    function _dedupGlobal(lista){
        var seen = {}, out = [];

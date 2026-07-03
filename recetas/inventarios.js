@@ -25,8 +25,9 @@ var _cacheRecetasInv = null; // recetas para uso interno de este módulo
 var _cacheInsumosInv = null; // insumos para uso interno de este módulo
 
 function getInsumos()     { return _cacheInsumosInv || (function(){ try { return JSON.parse(_skGet('insumos')) || []; } catch { return []; } }()); }
-// Resolver para la etiqueta canónica (insumo-label.js): id → insumo del catálogo.
-(function(){ var _ix=null,_lastArr=null; window._insumoResolver=function(id){ var a=getInsumos()||[]; if(a!==_lastArr){_ix={};a.forEach(function(x){if(x&&x.id)_ix[x.id]=x;});_lastArr=a;} return _ix[id]||null; }; })();
+// Resolver id→insumo con la fábrica compartida (insumo-label.js): misma lógica que
+// insumos.js/app.js; fuente = getInsumos de este módulo.
+window._insumoResolver = window._makeInsumoResolver(getInsumos);
 // Insumos acotados a la SUCURSAL activa (regla "sin sucursal = matriz: ve todo").
 // Sin esto, el inventario leía los insumos de TODAS las sucursales y los duplicaba.
 function _scopeSucInsumos(lista) {
