@@ -1342,7 +1342,7 @@ function renderEvidenciasCorte(){
     if(!grid) return;
     grid.innerHTML = _evidenciasCorte.map(function(e,i){
         return '<div style="position:relative">'
-            +'<a href="'+_escV(e.url)+'" target="_blank"><img src="'+_escV(e.url)+'" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" alt="evidencia"></a>'
+            +'<img src="'+_escV(e.url)+'" onclick="event.stopPropagation();etaaxVerFoto(this.src)" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:zoom-in" alt="evidencia">'
             +'<button onclick="eliminarEvidenciaCorte('+i+')" title="Quitar" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1">✕</button>'
             +'</div>';
     }).join('');
@@ -2210,6 +2210,7 @@ function totalIngresosExtra(){
 }
 </script>
 <script src="../security.js"></script>
+<script src="/foto-zoom.js"></script>
 <script src="../ctx-bar.js"></script>
 <script src="../admin-guard.js"></script>
 </body>

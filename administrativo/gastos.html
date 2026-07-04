@@ -1163,7 +1163,7 @@ function evLink(g){
     var e0=ev[0];
     var thumb=e0.pdf
         ?'<a href="'+_esc(e0.url)+'" target="_blank" style="font-size:11px;color:var(--accent)">📄 PDF</a>'
-        :'<a href="'+_esc(e0.url)+'" target="_blank"><img src="'+_esc(e0.url)+'" style="width:28px;height:28px;object-fit:cover;border-radius:3px;border:1px solid var(--border)" alt="evidencia"></a>';
+        :'<img src="'+_esc(e0.url)+'" onclick="event.stopPropagation();etaaxVerFoto(this.src)" style="width:28px;height:28px;object-fit:cover;border-radius:3px;border:1px solid var(--border);cursor:zoom-in" alt="evidencia">';
     if(ev.length>1)thumb+='<span style="font-size:10px;color:var(--text-dim);margin-left:3px">+'+(ev.length-1)+'</span>';
     return'<span style="display:inline-flex;align-items:center">'+thumb+'</span>';
 }
@@ -1301,7 +1301,7 @@ function verGasto(id){
         evHTML='<div style="display:flex;flex-wrap:wrap;gap:8px">'+_evs.map(function(e){
             return e.pdf
                 ?'<a href="'+_esc(e.url)+'" target="_blank" style="display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:6px;border:1px solid var(--border,#2a2825);background:var(--surface2);font-size:24px;text-decoration:none" title="'+_esc(e.nombre||'PDF')+'">📄</a>'
-                :'<a href="'+_esc(e.url)+'" target="_blank"><img src="'+_esc(e.url)+'" loading="lazy" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border,#2a2825)" alt="evidencia"></a>';
+                :'<img src="'+_esc(e.url)+'" loading="lazy" onclick="event.stopPropagation();etaaxVerFoto(this.src)" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border,#2a2825);cursor:zoom-in" alt="evidencia">';
         }).join('')+'</div>';
     }
 
@@ -1916,7 +1916,7 @@ function renderEvidenciasGasto(){
     grid.innerHTML=_evidenciasGasto.map(function(e,i){
         var inner=e.pdf
             ?'<a href="'+_esc(e.url)+'" target="_blank" style="display:flex;align-items:center;justify-content:center;width:54px;height:54px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);font-size:22px;text-decoration:none">📄</a>'
-            :'<a href="'+_esc(e.url)+'" target="_blank"><img src="'+_esc(e.url)+'" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" alt="evidencia"></a>';
+            :'<img src="'+_esc(e.url)+'" onclick="event.stopPropagation();etaaxVerFoto(this.src)" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:zoom-in" alt="evidencia">';
         return '<div style="position:relative">'+inner
             +'<button onclick="eliminarEvidenciaGasto('+i+')" title="Quitar" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1">✕</button>'
             +'</div>';
@@ -2006,6 +2006,7 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="/etaax-db.js"></script>
 <script src="/qr-pairing.js"></script>
 <script src="../security.js"></script>
+<script src="/foto-zoom.js"></script>
 <script src="../ctx-bar.js"></script>
 <script src="../admin-guard.js"></script>
 <script src="/nomina-params.js"></script>
