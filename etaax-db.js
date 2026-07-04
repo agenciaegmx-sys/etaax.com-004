@@ -133,6 +133,9 @@
             return true;
         });
         item.tries = prev ? (prev.tries || 0) : 0;
+        // uid único por item: el flush lo usa para quitar de la cola SOLO lo que
+        // ejecutó (sin pisar items encolados mientras el flush estaba corriendo).
+        item.uid = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
         q.push(item);
         _obSave(q);
         _obIndicador();
@@ -159,25 +162,45 @@
         return !ru.error;
     }
 
-    var _obFlushing = false;
+    var _obFlushing = false, _obRepetir = false;
     async function _obFlush() {
-        if (_obFlushing || typeof _supabase === 'undefined') return;
+        if (_obFlushing) { _obRepetir = true; return; } // algo entró en pleno flush → correr otra vuelta al terminar
+        if (typeof _supabase === 'undefined') return;
         if (typeof navigator !== 'undefined' && navigator.onLine === false) return; // sin red
         _obFlushing = true;
         try {
-            var q = _obLoad(), quedan = [];
+            var q = _obLoad(), hechos = {}, triesUpd = {}, muertos = {};
+            // Items de una versión vieja sin uid: asignarles uno y PERSISTIRLO antes
+            // de ejecutar, para que el merge de abajo los identifique igual que al resto.
+            var _sinUid = false;
+            q.forEach(function (it) { if (it && !it.uid) { it.uid = Date.now().toString(36) + Math.random().toString(36).slice(2, 8); _sinUid = true; } });
+            if (_sinUid) _obSave(q);
             for (var i = 0; i < q.length; i++) {
                 var it = q[i], ok = false;
                 try { ok = await _obEjecutar(it); } catch (e) { ok = false; }
-                if (!ok) {
+                if (ok) { if (it.uid) hechos[it.uid] = 1; }
+                else {
                     it.tries = (it.tries || 0) + 1;
-                    if (it.tries < 8) quedan.push(it);
-                    else console.error('[outbox] descartado tras 8 intentos:', it.tabla, it.k);
+                    if (it.tries >= 8) { if (it.uid) muertos[it.uid] = 1; console.error('[outbox] descartado tras 8 intentos:', it.tabla, it.k); }
+                    else if (it.uid) triesUpd[it.uid] = it.tries;
                 }
             }
-            _obSave(quedan);
+            // ⚠️ NO pisar la cola con el snapshot: mientras el flush corría (awaits de
+            // red) pudieron ENCOLARSE items nuevos (ej. borrar varios gastos seguidos)
+            // y guardarse encima los perdía sin ejecutar → "los borrados revivían".
+            // Se re-lee la cola actual y solo se quita/actualiza lo que ESTE flush tocó.
+            var fresca = _obLoad().filter(function (x) {
+                if (!x || !x.uid) return false;
+                if (hechos[x.uid] || muertos[x.uid]) return false;           // ejecutado o descartado
+                if (triesUpd[x.uid] !== undefined) x.tries = triesUpd[x.uid]; // falló → conservar con sus intentos
+                return true;
+            });
+            _obSave(fresca);
             _obIndicador();
-        } finally { _obFlushing = false; }
+        } finally {
+            _obFlushing = false;
+            if (_obRepetir) { _obRepetir = false; setTimeout(_obFlush, 50); } // vuelta extra por lo encolado en pleno flush
+        }
     }
     window._sbFlush = _obFlush;
     window._sbPendientes = function () { return _obLoad().length; };
@@ -190,6 +213,16 @@
     };
     // _sbVaciarOutbox() — descarta la cola (último recurso si algo quedó roto).
     window._sbVaciarOutbox = function () { _obSave([]); _obIndicador(); return 'outbox vaciado'; };
+
+    // Ids con DELETE pendiente en el outbox para una tabla. Los reloads (realtime
+    // o carga inicial) deben IGNORAR esos registros: si la nube aún los tiene
+    // porque el delete va en camino, sin esto "revivían" en pantalla unos
+    // segundos (o para siempre, si el flush se perdía el delete).
+    window.sbDeletesPendientes = function (tabla) {
+        var s = {};
+        _obLoad().forEach(function (it) { if (it && it.op === 'delete' && it.tabla === tabla && it.id) s[it.id] = 1; });
+        return s;
+    };
 
     window.sbUpsert = function (tabla, record, negId) {
         var id = negId || _negId();

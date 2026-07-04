@@ -708,6 +708,12 @@ var _cacheFijos  = null; // gastos fijos (gf_fijos)
 var _cacheNominas= null; // {[mes]:{operativa:[],administrativa:[],socios:[]}}
 var _cacheStaff  = null; // catálogo de colaboradores
 
+// Quita de una lista los registros con DELETE pendiente en el outbox: si la nube
+// aún los trae (el delete va en camino), sin esto "revivían" al recargar.
+function _sinDelPend(tabla, lista){
+    var p = (typeof sbDeletesPendientes === 'function') ? sbDeletesPendientes(tabla) : {};
+    return (lista||[]).filter(function(x){ return !(x && p[x.id]); });
+}
 async function _sbInit() {
     var negId = getNegocioActivo();
     if (!negId) return;
@@ -719,7 +725,7 @@ async function _sbInit() {
         _supabase.from('gf_nominas').select('datos').eq('negocio_id', negId).maybeSingle(),
         _supabase.from('staff').select('datos').eq('negocio_id', negId),
     ]);
-    if (!r[0].error) _cacheGastos = (r[0].data||[]).map(function(x){return x.datos;});
+    if (!r[0].error) _cacheGastos = _sinDelPend('gastos', (r[0].data||[]).map(function(x){return x.datos;}));
     if (!r[1].error) _cacheProvs  = (r[1].data||[]).map(function(x){return x.datos;});
     if (!r[2].error && r[2].data) _cacheCats = r[2].data.datos || [];
     if (!r[3].error) _cacheFijos  = (r[3].data||[]).map(function(x){return x.datos;});
@@ -739,7 +745,7 @@ async function _reloadGastosRT() {
     if (!negId || typeof _supabase === 'undefined') return;
     var r = await _supabase.from('gastos').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false});
     if (r.error) return;
-    var remote = (r.data||[]).map(function(x){return x.datos;}).filter(Boolean);
+    var remote = _sinDelPend('gastos', (r.data||[]).map(function(x){return x.datos;}).filter(Boolean));
     // Conservar gastos locales aún sin sincronizar (en el outbox).
     var vistos = {}; remote.forEach(function(g){ if (g && g.id) vistos[g.id]=1; });
     var soloLocal = (_cacheGastos||[]).filter(function(g){ return g && g.id && !vistos[g.id]; });

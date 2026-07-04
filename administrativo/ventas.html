@@ -891,6 +891,12 @@ function _depMovTxt(d){
     return origen==='externo' ? ('➕ '+dst) : (lbl(origen,d.origenCuentaId)+' → '+dst);
 }
 
+// Quita de una lista los registros con DELETE pendiente en el outbox: si la nube
+// aún los trae (el delete va en camino), sin esto "revivían" al recargar.
+function _sinDelPend(tabla, lista){
+    var p = (typeof sbDeletesPendientes === 'function') ? sbDeletesPendientes(tabla) : {};
+    return (lista||[]).filter(function(x){ return !(x && p[x.id]); });
+}
 async function _sbInit() {
     var negId = getNegocioActivo();
     if (!negId) return;
@@ -901,9 +907,9 @@ async function _sbInit() {
         _supabase.from('gastos').select('datos').eq('negocio_id', negId),
         _supabase.from('tarjetas_credito').select('datos').eq('negocio_id', negId).order('created_at', {ascending:true}),
     ]);
-    if (!r[0].error) _cacheCortes = (r[0].data||[]).map(function(x){return x.datos;});
-    if (!r[1].error) _cacheDeps   = (r[1].data||[]).map(function(x){return x.datos;});
-    if (!r[2].error) _cacheVex    = (r[2].data||[]).map(function(x){return x.datos;});
+    if (!r[0].error) _cacheCortes = _sinDelPend('cortes', (r[0].data||[]).map(function(x){return x.datos;}));
+    if (!r[1].error) _cacheDeps   = _sinDelPend('depositos', (r[1].data||[]).map(function(x){return x.datos;}));
+    if (!r[2].error) _cacheVex    = _sinDelPend('ventas_extra', (r[2].data||[]).map(function(x){return x.datos;}));
     if (!r[3].error) _cacheGastosExt = (r[3].data||[]).map(function(x){return x.datos;});
     if (!r[4].error) _cuentasBancarias = (r[4].data||[]).map(function(x){return x.datos;});
     renderAll();
@@ -919,7 +925,7 @@ async function _reloadCortesRT() {
     if (!negId || typeof _supabase === 'undefined') return;
     var r = await _supabase.from('cortes').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false});
     if (r.error) return;
-    var remote = (r.data||[]).map(function(x){return x.datos;}).filter(Boolean);
+    var remote = _sinDelPend('cortes', (r.data||[]).map(function(x){return x.datos;}).filter(Boolean));
     // Conservar cortes locales aún sin sincronizar (en el outbox) para que no
     // desaparezcan si llega un realtime de otro dispositivo antes de subir.
     var vistos = {}; remote.forEach(function(c){ if (c && c.id) vistos[c.id]=1; });
