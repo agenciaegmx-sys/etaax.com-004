@@ -114,10 +114,16 @@ window._etaaxWipeCache = function () {
 
 /* ============================================================
    Hash de contraseñas de colaboradores (staff)
-   - _hashPwdStaff: SHA-256 (async), formato 'v2$<hex>'
-   - _hashPwdStaffLegacy: algoritmo anterior (reversible — contenía
-     base64 de la contraseña). Solo se usa para validar hashes viejos
-     y migrarlos al formato v2 en el siguiente login exitoso.
+   - _hashPwdStaff: SHA-256 (async), formato 'v2$<hex>' — el formato bueno.
+   - _hashPwdStaffLegacy: algoritmo anterior (REVERSIBLE — contenía base64 de
+     la contraseña). NUNCA se almacena ni se transmite ya: solo se usa en el
+     login para validar contraseñas de cuentas aún no migradas.
+   - _hashPwdStaffWrap: "envuelve" un hash legacy con SHA-256 → 'v2L$<hex>'.
+     Se calcula desde el hash almacenado SIN conocer la contraseña, así los
+     hashes legacy guardados (nube y localStorage) se sanean de inmediato
+     (dejan de ser decodificables). En el siguiente login exitoso, donde sí
+     hay contraseña, se migra a v2 definitivo. La migración v30 aplica esta
+     misma envoltura del lado del servidor (pgcrypto digest).
    Compartido por hub.html (login) y administrativo/staff.html (alta).
    ============================================================ */
 window._hashPwdStaffLegacy = function (s) {
@@ -125,11 +131,22 @@ window._hashPwdStaffLegacy = function (s) {
     for (var i = 0; i < s.length; i++) { h = (Math.imul(31, h) + s.charCodeAt(i)) | 0; }
     return (h >>> 0).toString(36) + btoa(unescape(encodeURIComponent(s))).slice(0, 16).replace(/[^a-z0-9]/gi, 'x');
 };
+function _etaaxSha256Hex(s) {
+    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)).then(function (buf) {
+        return Array.prototype.map.call(new Uint8Array(buf), function (b) {
+            return ('0' + b.toString(16)).slice(-2);
+        }).join('');
+    });
+}
 window._hashPwdStaff = async function (s) {
-    var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('etaax-staff|' + s));
-    return 'v2$' + Array.prototype.map.call(new Uint8Array(buf), function (b) {
-        return ('0' + b.toString(16)).slice(-2);
-    }).join('');
+    return 'v2$' + await _etaaxSha256Hex('etaax-staff|' + s);
+};
+window._hashPwdStaffWrap = async function (legacyHash) {
+    return 'v2L$' + await _etaaxSha256Hex('etaax-staff|' + legacyHash);
+};
+// ¿El hash almacenado es del formato viejo (reversible)? → hay que sanearlo.
+window._esHashStaffLegacy = function (h) {
+    return !!h && h.indexOf('v2$') !== 0 && h.indexOf('v2L$') !== 0;
 };
 
 /* ============================================================

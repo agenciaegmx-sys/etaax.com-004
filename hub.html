@@ -1362,24 +1362,46 @@ async function loginSubmit() {
     }
 
     // ── Intento 2: login de colaborador (usuario sin @) → localStorage ──
+    // Candidatos de hash: v2 (definitivo), y la ENVOLTURA SHA-256 del legacy
+    // (v2L$, ver security.js/v30). El hash legacy crudo (reversible) ya no se
+    // almacena ni se transmite: solo se calcula en memoria para la envoltura.
     var negocios = _getNegocios();
+    var _hV2   = await _hashPwdStaff(pwd);
+    var _hWrap = await _hashPwdStaffWrap(_hashPwdStaffLegacy(pwd));
     for (var i = 0; i < negocios.length; i++) {
         var neg = negocios[i];
         var staffRaw = localStorage.getItem('etaax_' + neg.id + '_staff');
         var staffList = [];
         try { staffList = JSON.parse(staffRaw) || []; } catch(e){}
+        // Saneo al vuelo: cualquier hash legacy (reversible) que siga guardado
+        // en este equipo se envuelve en SHA-256 → deja de ser decodificable.
+        var _sane = false;
+        for (var j = 0; j < staffList.length; j++) {
+            var _m = staffList[j];
+            if (_m && _m.passwordHash && _esHashStaffLegacy(_m.passwordHash)) {
+                _m.passwordHash = await _hashPwdStaffWrap(_m.passwordHash);
+                _sane = true;
+            }
+        }
+        if (_sane) { try { localStorage.setItem('etaax_' + neg.id + '_staff', JSON.stringify(staffList)); } catch(e){} }
         var miembro = staffList.find(function(s){ return s.usuario === input; });
         if (!miembro || !miembro.passwordHash) continue;
-        var ok = false;
+        var ok = false, _hashPrevio = null;
         if (miembro.passwordHash.indexOf('v2$') === 0) {
-            ok = miembro.passwordHash === await _hashPwdStaff(pwd);
-        } else if (miembro.passwordHash === _hashPwdStaffLegacy(pwd)) {
-            // Hash legacy válido → migrar al formato SHA-256
+            ok = miembro.passwordHash === _hV2;
+        } else if (miembro.passwordHash === _hWrap) {
+            // Envoltura del legacy válida → migrar al formato v2 definitivo.
             ok = true;
-            miembro.passwordHash = await _hashPwdStaff(pwd);
+            _hashPrevio = miembro.passwordHash;
+            miembro.passwordHash = _hV2;
             localStorage.setItem('etaax_' + neg.id + '_staff', JSON.stringify(staffList));
         }
         if (ok) {
+            // Sanar también el registro de la NUBE a v2 (best-effort, no bloquea):
+            // demuestra el hash anterior, igual que el propio login.
+            if (_hashPrevio && typeof _supabase !== 'undefined') {
+                try { _supabase.rpc('staff_actualizar_hash', { p_usuario: input, p_hash_viejo: _hashPrevio, p_hash_nuevo: _hV2 }).then(function(){}); } catch(e){}
+            }
             _iniciarSesionStaff(miembro, neg);
             return;
         }
@@ -1390,12 +1412,21 @@ async function loginSubmit() {
     // funciona en etaax.com aunque el caché local no tenga la lista de staff.
     if (typeof _supabase !== 'undefined' && typeof _hashPwdStaff === 'function') {
         try {
-            var hv2 = await _hashPwdStaff(pwd);
+            var hv2 = _hV2; // ya calculado arriba
+            var _esRateLimited = function (r) { return !!(r && r.error && /rate_limited/i.test(r.error.message || '')); };
             var rs = await _supabase.rpc('staff_login', { p_usuario: input, p_hash: hv2 });
+            if (_esRateLimited(rs)) { shakeError('Demasiados intentos. Espera 15 minutos y vuelve a intentar.'); return; }
             var row = (rs && !rs.error && rs.data && rs.data[0]) ? rs.data[0] : null;
-            if (!row) {  // fallback: hash legacy (cuentas viejas aún sin migrar en la nube)
-                var rl = await _supabase.rpc('staff_login', { p_usuario: input, p_hash: _hashPwdStaffLegacy(pwd) });
+            var _migrarNube = false;
+            if (!row) {  // fallback: envoltura SHA-256 del legacy (v2L$, saneado por v30) — el legacy crudo ya NO viaja
+                var rl = await _supabase.rpc('staff_login', { p_usuario: input, p_hash: _hWrap });
+                if (_esRateLimited(rl)) { shakeError('Demasiados intentos. Espera 15 minutos y vuelve a intentar.'); return; }
                 row = (rl && !rl.error && rl.data && rl.data[0]) ? rl.data[0] : null;
+                _migrarNube = !!row;
+            }
+            if (row && _migrarNube) {
+                // Entró con la envoltura → subir el hash v2 definitivo (best-effort).
+                try { _supabase.rpc('staff_actualizar_hash', { p_usuario: input, p_hash_viejo: _hWrap, p_hash_nuevo: hv2 }).then(function(){}); } catch(e){}
             }
             if (row) {
                 var negObj = _negFromDb({ id: row.negocio_id, usuario_id: null, datos: row.negocio_datos || {} });

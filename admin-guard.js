@@ -135,6 +135,12 @@
         if (m.passwordHash.indexOf('v2$') === 0 && typeof _hashPwdStaff === 'function') {
             return (m.passwordHash === await _hashPwdStaff(pass)) ? (m.nombre || 'colaborador') : null;
         }
+        // Formato v2L$ (hash legacy envuelto en SHA-256 por el saneo v30).
+        if (m.passwordHash.indexOf('v2L$') === 0 && typeof _hashPwdStaffWrap === 'function') {
+            return (m.passwordHash === await _hashPwdStaffWrap(_hashPwdStaffLegacy(pass))) ? (m.nombre || 'colaborador') : null;
+        }
+        // Último recurso: hash legacy crudo aún sin sanear en este equipo
+        // (comparación local solamente; se sanea en el siguiente login del hub).
         if (typeof _hashPwdStaffLegacy === 'function' && m.passwordHash === _hashPwdStaffLegacy(pass)) {
             return m.nombre || 'colaborador';
         }
