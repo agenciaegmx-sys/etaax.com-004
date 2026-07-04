@@ -807,6 +807,10 @@ async function _agregarAlCatalogo(idx){
             // el resolver de etiquetas al catálogo en memoria.
             _getSucActivaIns = function() { return ''; };
             if (window._makeInsumoResolver) window._insumoResolver = _makeInsumoResolver(function(){ return _catalogoMem || []; });
+            // Tampoco es el "catálogo global" de un negocio: si quedó el flag de
+            // sesión de navegar un negocio, aquí deduplicaría y mostraría botones
+            // de sucursales que no aplican al catálogo ETAAX.
+            _catGlobalIns = function() { return false; };
 
             var _syncTimer = null;
             setInsumos = function(data) {

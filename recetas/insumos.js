@@ -209,7 +209,10 @@
    async function _cargarInsumosDeSupabase(opts) {
        opts = opts || {};
        var negId = getNegocioActivo();
-       if (!negId || typeof _supabase === 'undefined') return;
+       // '__catalogo__' = catálogo ETAAX en admin-catalogo-insumos.html: SUS datos
+       // viven en la tabla catalogo_insumos (la página los maneja), NO en
+       // negocio_insumos → aquí no hay nada que cargar ni que empujar.
+       if (!negId || negId === '__catalogo__' || typeof _supabase === 'undefined') return;
        _tombRefresh(); // tombstones persistentes del negocio activo (sobreviven a recargas)
        try {
            // Carga PAGINADA y resiliente. Una sola query de hasta 5000 trayendo el
@@ -309,7 +312,8 @@
    }
 
    async function _sincronizarInsumosSupabase(negId, data) {
-       if (!negId || typeof _supabase === 'undefined') return;
+       if (!negId || negId === '__catalogo__' || typeof _supabase === 'undefined') return; // el catálogo ETAAX sync-ea aparte
+
        // ALIGERAR: subir las fotos base64 (incluidas las viejas y pesadas) a
        // Storage y dejar URL. Así el payload siempre es liviano → el upsert no
        // falla por tamaño ("Sin sincronizar") y se migra lo viejo de forma
@@ -347,7 +351,7 @@
 
    // Borrado explícito en Supabase (las eliminaciones ya no dependen del diff)
    async function _borrarInsumosSupabase(negId, ids) {
-       if (!negId || typeof _supabase === 'undefined' || !ids || !ids.length) return;
+       if (!negId || negId === '__catalogo__' || typeof _supabase === 'undefined' || !ids || !ids.length) return; // el catálogo ETAAX borra vía _syncCatalogToSupabase
        var BATCH = 100;
        for (var i = 0; i < ids.length; i += BATCH) {
            var r = await _supabase.from('negocio_insumos')
@@ -3155,7 +3159,9 @@
                ? _orig.sucursales.slice()
                : (_orig && _orig.sucursalId ? [_orig.sucursalId] : []);
        } else {
-           var _curSuc = localStorage.getItem('etaax_sucursal_activa') || '';
+           // _getSucActivaIns (no localStorage directo): el admin del catálogo ETAAX
+           // la sobreescribe a '' → sus insumos nuevos NO nacen atados a una sucursal.
+           var _curSuc = _getSucActivaIns();
            insumo.sucursalId = _curSuc;
            insumo.sucursales = _curSuc ? [_curSuc] : []; // '' = Matriz (vacío = todas)
        }
