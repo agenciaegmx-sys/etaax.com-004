@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <title>ETAAX Admin - Papelera</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .pap-wrap{max-width:1100px;margin:0 auto;padding:24px 20px 60px;}
+        .pap-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:6px;}
+        .pap-title{font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:1.5px;color:var(--text);}
+        .pap-sub{font-size:12px;color:var(--text-dim);margin-bottom:18px;}
+        .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text-muted);padding:9px 18px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;transition:all .2s;text-decoration:none;display:inline-block;}
+        .btn-ghost:hover{border-color:var(--border2);color:var(--text);}
+        .pap-selneg{width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 14px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;outline:none;margin-bottom:12px;}
+        .pap-chips{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0;}
+        .pap-chip{padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .15s;}
+        .pap-chip.on{border-color:var(--green);background:rgba(61,190,122,0.12);color:var(--green);font-weight:600;}
+        .pap-search{width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;outline:none;}
+        .pap-search:focus{border-color:var(--green);}
+        .pap-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:14px;}
+        .pap-table th{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);font-weight:500;padding:10px 12px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;}
+        .pap-table td{padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+        .pap-table tr:hover td{background:var(--surface2);}
+        .pap-tag{display:inline-block;font-size:10px;padding:2px 9px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);white-space:nowrap;}
+        .pap-folio{font-size:10px;color:var(--text-dim);font-family:monospace;}
+        .btn-row{background:transparent;border:1px solid var(--border);color:var(--text-dim);padding:5px 12px;border-radius:5px;font-family:'DM Sans',sans-serif;font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap;}
+        .btn-row.res:hover{border-color:var(--green);color:var(--green);}
+        .btn-row.del:hover{border-color:var(--red);color:var(--red);}
+        .pap-dias{font-size:10px;color:var(--text-dim);}
+        .pap-dias.poco{color:var(--red);}
+        @media (max-width:720px){ .pap-table th:nth-child(4),.pap-table td:nth-child(4){display:none;} }
+    </style>
+</head>
+<body>
+
+<div class="pap-wrap">
+    <div class="pap-head">
+        <div class="pap-title">🗑️ Papelera de reciclaje <span style="font-size:12px;color:var(--accent);letter-spacing:1px;font-family:'DM Sans',sans-serif">ADMIN</span></div>
+        <a href="admin.html" class="btn-ghost">← Panel Admin</a>
+    </div>
+    <div class="pap-sub">Registros eliminados de los negocios (cortes, gastos, depósitos, colaboradores, clientes, proveedores, recetas y sub-recetas). Se conservan <strong>60 días</strong>. Solo el admin maestro puede restaurarlos — el folio es el id original del registro.</div>
+
+    <div id="papLoading" style="text-align:center;padding:60px;color:var(--text-dim)">Verificando acceso…</div>
+
+    <div id="papContenido" style="display:none">
+        <select id="papNegocio" class="pap-selneg" onchange="cargarPapelera()"></select>
+        <input type="text" id="papBuscar" class="pap-search" placeholder="🔍 Buscar por nombre, concepto o folio…" oninput="renderPapelera()">
+        <div class="pap-chips" id="papChips"></div>
+        <div id="papLista"></div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="supabase-config.js"></script>
+<script src="security.js"></script>
+<script src="theme.js"></script>
+<script>
+var ADMIN_EMAIL = 'admin@etaax.com';
+var TABLAS = {
+    cortes:      { emoji:'💰', nombre:'Corte de venta' },
+    gastos:      { emoji:'🧾', nombre:'Gasto' },
+    depositos:   { emoji:'🏦', nombre:'Depósito' },
+    staff:       { emoji:'👥', nombre:'Colaborador' },
+    clientes:    { emoji:'🤝', nombre:'Cliente' },
+    proveedores: { emoji:'🚚', nombre:'Proveedor' },
+    recetas:     { emoji:'📖', nombre:'Receta' },
+};
+var RETENCION_DIAS = 60;
+var _items = [];
+var _filtroTabla = '';
+var _sucsNegocio = []; // sucursales del negocio elegido (para nombres)
+
+/* ── Guard: SOLO el admin maestro (mismo patrón que admin-catalogo-insumos) ── */
+(async function init() {
+    var sd = await _supabase.auth.getSession();
+    var session = sd.data && sd.data.session;
+    if (!session || session.user.email !== ADMIN_EMAIL) {
+        window.location.href = 'admin.html';
+        return;
+    }
+    // Selector de negocios (RLS admin_all permite verlos todos)
+    var r = await _supabase.from('negocios').select('id,datos').order('created_at', {ascending:true});
+    if (r.error) {
+        document.getElementById('papLoading').innerHTML = 'Error cargando negocios: ' + etx(r.error.message);
+        return;
+    }
+    var sel = document.getElementById('papNegocio');
+    sel.innerHTML = '<option value="">— Elige un negocio —</option>' +
+        (r.data || []).map(function(n){
+            var d = n.datos || {};
+            return '<option value="' + etx(n.id) + '">' + etx((d.emoji ? d.emoji + ' ' : '') + (d.nombre || n.id)) + '</option>';
+        }).join('');
+    document.getElementById('papLoading').style.display = 'none';
+    document.getElementById('papContenido').style.display = 'block';
+})();
+
+function _sucNombre(sucId){
+    if (!sucId) return 'Matriz';
+    var s = _sucsNegocio.find(function(x){ return x.id === sucId; });
+    if (s) return s.nombre || sucId;
+    return sucId === 'suc_principal' ? 'Matriz' : sucId;
+}
+function _tituloItem(it){
+    var d = it.datos || {};
+    if (it.tabla === 'cortes')   return 'Corte ' + (d.fecha || '') + (d.turno ? ' · ' + d.turno : '');
+    if (it.tabla === 'recetas')  return (d.nombre || '') + ((String(d.tipo||'').indexOf('sub') === 0) ? ' (sub-receta)' : '');
+    return d.concepto || d.nombre || d.titulo || d.usuario || it.registro_id;
+}
+function _montoItem(it){
+    var d = it.datos || {};
+    var v = parseFloat(d.monto || d.total || d.totalVenta || d.totalGeneral || d.cantidad) || 0;
+    return v > 0 ? ('$' + v.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2})) : '';
+}
+
+async function cargarPapelera(){
+    var negId = document.getElementById('papNegocio').value;
+    var lista = document.getElementById('papLista');
+    _items = []; _filtroTabla = '';
+    if (!negId) { lista.innerHTML = ''; document.getElementById('papChips').innerHTML = ''; return; }
+    lista.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-dim)">Cargando…</div>';
+    // Sucursales del negocio (para mostrar nombres reales)
+    _sucsNegocio = [];
+    try {
+        var rs = await _supabase.from('negocio_sucursales').select('datos').eq('negocio_id', negId).maybeSingle();
+        if (!rs.error && rs.data && rs.data.datos && Array.isArray(rs.data.datos.sucursales)) _sucsNegocio = rs.data.datos.sucursales;
+    } catch(e) {}
+    var r = await _supabase.from('papelera').select('*').eq('negocio_id', negId).order('eliminado_en', {ascending:false});
+    if (r.error) { lista.innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">Error: ' + etx(r.error.message) + '<br><span style="font-size:11px;color:var(--text-dim)">¿Ya corriste la migración v31 en Supabase?</span></div>'; return; }
+    _items = r.data || [];
+    renderChips();
+    renderPapelera();
+}
+
+function renderChips(){
+    var counts = {};
+    _items.forEach(function(it){ counts[it.tabla] = (counts[it.tabla] || 0) + 1; });
+    var html = '<button class="pap-chip ' + (!_filtroTabla ? 'on' : '') + '" onclick="_filtroTabla=\'\';renderChips();renderPapelera()">Todos (' + _items.length + ')</button>';
+    Object.keys(TABLAS).forEach(function(t){
+        if (!counts[t]) return;
+        html += '<button class="pap-chip ' + (_filtroTabla === t ? 'on' : '') + '" onclick="_filtroTabla=\'' + t + '\';renderChips();renderPapelera()">' +
+            TABLAS[t].emoji + ' ' + TABLAS[t].nombre + 's (' + counts[t] + ')</button>';
+    });
+    document.getElementById('papChips').innerHTML = html;
+}
+
+function renderPapelera(){
+    var q = (document.getElementById('papBuscar').value || '').toLowerCase();
+    var lista = _items;
+    if (_filtroTabla) lista = lista.filter(function(it){ return it.tabla === _filtroTabla; });
+    if (q) lista = lista.filter(function(it){
+        return _tituloItem(it).toLowerCase().indexOf(q) >= 0 || String(it.registro_id).toLowerCase().indexOf(q) >= 0;
+    });
+    var cont = document.getElementById('papLista');
+    if (!lista.length) {
+        cont.innerHTML = '<div style="text-align:center;padding:48px;color:var(--text-dim)"><div style="font-size:32px;margin-bottom:10px">🗑️</div><div>La papelera está vacía' + (q || _filtroTabla ? ' con este filtro' : '') + '.</div></div>';
+        return;
+    }
+    cont.innerHTML = '<table class="pap-table"><thead><tr>' +
+        '<th>Registro</th><th>Sucursal</th><th>Monto</th><th>Folio</th><th>Eliminado</th><th></th>' +
+        '</tr></thead><tbody>' +
+        lista.map(function(it){
+            var t = TABLAS[it.tabla] || { emoji:'📄', nombre: it.tabla };
+            var elim = new Date(it.eliminado_en);
+            var diasPasados = Math.floor((Date.now() - elim.getTime()) / 864e5);
+            var diasQuedan = Math.max(0, RETENCION_DIAS - diasPasados);
+            var d = it.datos || {};
+            return '<tr>' +
+                '<td><div style="font-weight:600;color:var(--text)">' + t.emoji + ' ' + etx(_tituloItem(it)) + '</div>' +
+                    '<div style="font-size:10px;color:var(--text-dim);margin-top:2px">' + t.nombre + (d.fecha && it.tabla !== 'cortes' ? ' · ' + etx(d.fecha) : '') + '</div></td>' +
+                '<td><span class="pap-tag">' + etx(_sucNombre(d.sucursalId)) + '</span></td>' +
+                '<td style="color:var(--accent);font-weight:600">' + _montoItem(it) + '</td>' +
+                '<td class="pap-folio">' + etx(it.registro_id) + '</td>' +
+                '<td><div style="font-size:11px;color:var(--text-muted)">' + elim.toLocaleDateString('es-MX', {day:'2-digit', month:'short'}) + ' ' + elim.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'}) + '</div>' +
+                    '<div class="pap-dias' + (diasQuedan <= 7 ? ' poco' : '') + '">quedan ' + diasQuedan + ' días</div></td>' +
+                '<td style="text-align:right;white-space:nowrap">' +
+                    '<button class="btn-row res" onclick="restaurarItem(' + it.id + ')">♻️ Restaurar</button> ' +
+                    '<button class="btn-row del" onclick="borrarDefinitivo(' + it.id + ')" title="Eliminar definitivamente">✕</button></td>' +
+            '</tr>';
+        }).join('') + '</tbody></table>';
+}
+
+async function restaurarItem(pid){
+    var it = _items.find(function(x){ return x.id === pid; });
+    if (!it) return;
+    if (!confirm('¿Restaurar "' + _tituloItem(it) + '" en el negocio?\n\nVolverá a aparecer en su módulo original.')) return;
+    var r = await _supabase.from(it.tabla).upsert({ id: it.registro_id, negocio_id: it.negocio_id, datos: it.datos });
+    if (r.error) { alert('No se pudo restaurar: ' + r.error.message); return; }
+    // El trigger papelera_revive limpia la entrada en el servidor; refrescar.
+    await cargarPapelera();
+    alert('✅ Restaurado. El negocio lo verá de vuelta en su módulo (realtime).');
+}
+
+async function borrarDefinitivo(pid){
+    var it = _items.find(function(x){ return x.id === pid; });
+    if (!it) return;
+    if (!confirm('⚠️ Eliminar DEFINITIVAMENTE "' + _tituloItem(it) + '" de la papelera?\n\nYa no se podrá recuperar.')) return;
+    var r = await _supabase.from('papelera').delete().eq('id', pid);
+    if (r.error) { alert('Error: ' + r.error.message); return; }
+    _items = _items.filter(function(x){ return x.id !== pid; });
+    renderChips(); renderPapelera();
+}
+</script>
+</body>
+</html>
