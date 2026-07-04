@@ -631,10 +631,18 @@ async function migrarFotosStorage() {
 
 /* ── Carga dinámica de insumos.js ──────────────────────────── */
 function _loadInsumosJS(callback) {
-    var s = document.createElement('script');
-    s.src = 'recetas/insumos.js';
-    s.onload = callback;
-    document.body.appendChild(s);
+    // insumo-label.js PRIMERO: insumos.js depende de él (etiqueta canónica,
+    // _makeInsumoResolver, _insumoEnSuc). Esta página no lo cargaba y el módulo
+    // moría a medias → "0 insumos" con stats llenos.
+    var l = document.createElement('script');
+    l.src = 'insumo-label.js';
+    l.onload = l.onerror = function () {
+        var s = document.createElement('script');
+        s.src = 'recetas/insumos.js';
+        s.onload = callback;
+        document.body.appendChild(s);
+    };
+    document.body.appendChild(l);
 }
 
 function _setLoadMsg(txt) {
@@ -793,6 +801,12 @@ async function _agregarAlCatalogo(idx){
 
             // Sobreescribir getInsumos/setInsumos para usar memoria en lugar de localStorage
             getInsumos = function() { return _catalogoMem || []; };
+
+            // El catálogo ETAAX no tiene sucursales: neutralizar la sucursal activa
+            // que haya quedado de navegar un negocio (filtraría todo a 0) y re-apuntar
+            // el resolver de etiquetas al catálogo en memoria.
+            _getSucActivaIns = function() { return ''; };
+            if (window._makeInsumoResolver) window._insumoResolver = _makeInsumoResolver(function(){ return _catalogoMem || []; });
 
             var _syncTimer = null;
             setInsumos = function(data) {

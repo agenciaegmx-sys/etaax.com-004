@@ -146,9 +146,13 @@
        return _insumosCache;
    }
    // Resolver para la etiqueta canónica (insumo-label.js): id → insumo del catálogo.
-   // Usa la fábrica compartida (insumo-label.js). Fuente: getInsumos (caché estable) →
-   // la firma por defecto (identidad del array) basta para reindexar al cambiar.
-   window._insumoResolver = window._makeInsumoResolver(getInsumos);
+   // Usa la fábrica compartida (insumo-label.js). Fuente: getInsumos resuelto al MOMENTO
+   // de la llamada (admin-catalogo-insumos.html lo sobreescribe después de cargar este
+   // script). Defensivo: si la página no cargó insumo-label.js, fallback simple en vez
+   // de morir con TypeError (eso dejaba el módulo a medias y la lista en 0).
+   window._insumoResolver = (typeof window._makeInsumoResolver === 'function')
+       ? window._makeInsumoResolver(function () { return getInsumos(); })
+       : function (id) { var a = getInsumos() || []; for (var i = 0; i < a.length; i++) { if (a[i] && a[i].id === id) return a[i]; } return null; };
 
    function setInsumos(data) {
        var negId = getNegocioActivo();
