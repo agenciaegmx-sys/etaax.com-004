@@ -71,7 +71,10 @@ REVOKE ALL ON FUNCTION _login_golpe(TEXT) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION _login_exito(TEXT) FROM PUBLIC, anon, authenticated;
 
 -- ── 3) staff_login con límite de intentos (misma firma que v22) ─────────────
-CREATE OR REPLACE FUNCTION staff_login(p_usuario TEXT, p_hash TEXT)
+-- DROP primero: si la versión instalada es la v21 (5 columnas, sin sucursal_id),
+-- Postgres no permite cambiar el tipo de retorno con CREATE OR REPLACE (42P13).
+DROP FUNCTION IF EXISTS staff_login(TEXT, TEXT);
+CREATE FUNCTION staff_login(p_usuario TEXT, p_hash TEXT)
 RETURNS TABLE (negocio_id TEXT, negocio_datos JSONB, staff_id TEXT, nombre TEXT, rol TEXT, sucursal_id TEXT)
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
 DECLARE v_clave TEXT := 'staff|' || lower(coalesce(p_usuario, ''));
