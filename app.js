@@ -49,6 +49,7 @@ function getRecetasScope() {
     var l = getRecetas();
     if (!s) return l; // Matriz / catálogo global → todas
     return l.filter(function(r){
+        if (r.status === 'inactiva') return false; // inactivas: SOLO en el catálogo global
         var sucs = _recetaSucursales(r);
         if (!sucs.length) return s === 'suc_principal'; // sin sucursal = vive en Matriz
         return sucs.indexOf(s) >= 0;
@@ -285,6 +286,8 @@ async function guardarReceta() {
         fotos:        JSON.parse(JSON.stringify(fotosReceta)),
         foto:         fotosReceta[0] || '',  // compatibilidad plantillas
         camposExtra:  typeof leerCamposExtra === 'function' ? leerCamposExtra(recetaTipoActual||'alimentos') : {},
+        // Activa/Inactiva desde la pastilla del editor (persistido de verdad).
+        status:       (document.getElementById('statusPill') && document.getElementById('statusPill').textContent === 'Inactiva') ? 'inactiva' : 'activa',
         fechaGuardado: new Date().toISOString(),
     });
 
@@ -360,6 +363,15 @@ function cargarReceta(id) {
     recetaTipoActual  = r.tipo || 'alimentos';
 
     if (typeof _pobSucursalReceta === 'function') _pobSucursalReceta(r.sucursalId || ''); // sucursal asignada
+    // Pastilla Activa/Inactiva: restaurar desde el status guardado (antes la
+    // pastilla no se restauraba ni se guardaba — el toggle era solo visual).
+    var _pillSt = document.getElementById('statusPill');
+    if (_pillSt) {
+        var _inact = r.status === 'inactiva';
+        _pillSt.textContent = _inact ? 'Inactiva' : 'Activa';
+        _pillSt.classList.toggle('pill-red',   _inact);
+        _pillSt.classList.toggle('pill-amber', !_inact);
+    }
     document.getElementById('nombreReceta').value  = r.nombre       || '';
     document.getElementById('grupo').value         = r.grupo        || '';
     document.getElementById('categoria').value     = r.categoria    || '';
