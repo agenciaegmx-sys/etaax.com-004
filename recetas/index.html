@@ -1773,6 +1773,17 @@ function agregarSubRecetaComoInsumo(silent) {
             actualizados.push(insumoNuevo);
         }
         localStorage.setItem(_sk('insumos'), JSON.stringify(catalogo));
+        // Si alguna copia estaba tombstoneada (borrada antes en el módulo de insumos),
+        // al re-crearla desde la sub-receta se limpia su tombstone → coherente con
+        // "guardar la sub-receta = este insumo debe existir" y evita que la
+        // auto-reparación del módulo de insumos lo re-borre (flip-flop).
+        try {
+            var _tk = _sk('ins_borrados');
+            var _tomb = JSON.parse(localStorage.getItem(_tk) || '{}');
+            var _tch = false;
+            actualizados.forEach(function(rec){ if (_tomb[rec.id] !== undefined) { delete _tomb[rec.id]; _tch = true; } });
+            if (_tch) localStorage.setItem(_tk, JSON.stringify(_tomb));
+        } catch(e) {}
         // Sync a Supabase negocio_insumos (cada copia actualizada)
         if (negId && typeof _supabase !== 'undefined') {
             actualizados.forEach(function(rec){
