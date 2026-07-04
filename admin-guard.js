@@ -23,12 +23,17 @@
               '<div style="padding:18px 22px">' +
                 '<div style="font-size:11px;color:var(--text-dim,#7a7570);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Confirma tu contraseña</div>' +
                 '<div style="position:relative">' +
+                  // Anti-autofill: la contraseña guardada del navegador es para INICIAR
+                  // SESIÓN, no para autorizar acciones de seguridad. autocomplete=new-password
+                  // + readonly-hasta-focus + señales a gestores (LastPass/1Password/Bitwarden).
                   '<input type="password" id="adminGuardInput" placeholder="Ingresa tu contraseña"' +
+                  '  autocomplete="new-password" name="etaax-guard-noautofill" readonly' +
+                  '  data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other"' +
                   '  onkeydown="if(event.key===\'Enter\')_confirmarAdminGuard()"' +
                   '  style="width:100%;box-sizing:border-box;height:46px;padding:0 44px 0 14px;border:1px solid var(--border,#2a2825);' +
                   '  border-radius:10px;background:var(--bg,#0f0e0c);color:var(--text,#f0ece6);' +
                   '  font-family:inherit;font-size:15px;outline:none;transition:border-color .15s"' +
-                  '  onfocus="this.style.borderColor=\'var(--accent,#f5c842)\'" onblur="this.style.borderColor=\'var(--border,#2a2825)\'">' +
+                  '  onfocus="this.removeAttribute(\'readonly\');this.style.borderColor=\'var(--accent,#f5c842)\'" onblur="this.style.borderColor=\'var(--border,#2a2825)\'">' +
                   '<button type="button" onclick="_toggleAdminGuardPass()" tabindex="-1"' +
                   '  id="adminGuardEye"' +
                   '  style="position:absolute;right:0;top:0;height:46px;width:42px;background:transparent;border:none;' +
@@ -60,6 +65,7 @@
         var inp = document.getElementById('adminGuardInput');
         inp.value = '';
         inp.type = 'password';
+        inp.setAttribute('readonly', ''); // re-armar el truco anti-autofill en cada apertura (se quita al enfocar)
         document.getElementById('adminGuardEye').textContent = '👁';
         var btn = document.getElementById('adminGuardBtn');
         btn.textContent = btnLabel || 'Eliminar';
