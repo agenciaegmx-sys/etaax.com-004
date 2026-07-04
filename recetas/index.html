@@ -1758,11 +1758,19 @@ function agregarSubRecetaComoInsumo(silent) {
         if (matches.length) {
             if (!silent && !confirm('Ya existe "' + catalogo[matches[0]].nombre + '" como insumo' +
                 (matches.length > 1 ? ' en ' + matches.length + ' sucursales' : '') + '. ¿Actualizar' + (matches.length > 1 ? 'los' : 'lo') + '?')) return;
-            // Actualizar cada copia conservando su id y su sucursalId (el precio/ficha
-            // de la sub-receta es el mismo; lo que cambia por sucursal es a qué sucursal pertenece).
+            // Actualizar cada copia conservando su id, su sucursalId y su MEMBRESÍA
+            // (`sucursales`): antes se pisaba con la sucursal actual y el insumo
+            // "desaparecía" de las sucursales donde ya vivía. Al convertir
+            // explícitamente (no silent) se AGREGA la sucursal actual sin quitar las demás.
             matches.forEach(function(idx){
-                var prev = catalogo[idx];
-                var upd  = Object.assign({}, insumoNuevo, { id: prev.id, sucursalId: prev.sucursalId || '' });
+                var prev  = catalogo[idx];
+                var _memb = (prev.sucursales && prev.sucursales.length) ? prev.sucursales.slice()
+                          : (prev.sucursalId ? [prev.sucursalId] : []);
+                if (!silent) {
+                    var _cSuc = localStorage.getItem('etaax_sucursal_activa') || '';
+                    if (_cSuc && _memb.indexOf(_cSuc) < 0) _memb.push(_cSuc);
+                }
+                var upd = Object.assign({}, insumoNuevo, { id: prev.id, sucursalId: prev.sucursalId || '', sucursales: _memb });
                 catalogo[idx] = upd;
                 actualizados.push(upd);
             });
@@ -2301,18 +2309,11 @@ function _puedeCambiarSucReceta(){
     return perms.cambiarSucursal!==false;
 }
 function _pobSucursalReceta(sucId){
-    var sel=document.getElementById('receta-sucursal');
+    // El selector de sucursal del editor se RETIRÓ (igual que en insumos):
+    // peleaba con la membresía multi-sucursal — en qué sucursales vive una
+    // receta se administra con "Copiar a sucursal" en el catálogo global.
     var row=document.getElementById('row-receta-sucursal');
-    if(!sel||!row) return;
-    var negId=localStorage.getItem('etaax_negocio_activo')||'';
-    var sucs=[]; try{ sucs=JSON.parse(localStorage.getItem('etaax_'+negId+'_sucursales')||'[]'); }catch(e){}
-    if(sucs.length<=1 || !_puedeCambiarSucReceta()){ row.style.display='none'; return; }
-    row.style.display='flex';
-    var tieneMatriz=sucs.some(function(s){return s.id==='suc_principal';});
-    sel.innerHTML='<option value="">— Sin asignar (Matriz) —</option>'+
-        (tieneMatriz?'':'<option value="suc_principal">Matriz</option>')+
-        sucs.map(function(s){return '<option value="'+(s.id||'')+'">'+etx(s.nombre||s.id)+'</option>';}).join('');
-    sel.value=sucId||'';
+    if(row) row.style.display='none';
 }
 function _showEscForm() {
     _ocultarCaratula();

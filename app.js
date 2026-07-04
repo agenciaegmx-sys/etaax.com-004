@@ -265,7 +265,12 @@ async function guardarReceta() {
             ? _exRec.sucursalId
             : (localStorage.getItem('etaax_sucursal_activa') || ''));
 
-    const receta = {
+    // MERGE con el registro existente: el objeto NO se reconstruye desde cero.
+    // Así se CONSERVAN los campos que el editor no maneja — sobre todo la
+    // membresía multi-sucursal (`sucursales`, se administra con "Copiar a
+    // sucursal" en el catálogo global) y `status` (inactiva). Antes, guardar
+    // desde una sucursal borraba `sucursales` → la receta "se iba" al global.
+    const receta = Object.assign({}, _exRec || {}, {
         id:           recetaActualId || genId(),
         sucursalId:   _sucRec,
         tipo:         recetaTipoActual || 'alimentos',
@@ -281,7 +286,7 @@ async function guardarReceta() {
         foto:         fotosReceta[0] || '',  // compatibilidad plantillas
         camposExtra:  typeof leerCamposExtra === 'function' ? leerCamposExtra(recetaTipoActual||'alimentos') : {},
         fechaGuardado: new Date().toISOString(),
-    };
+    });
 
     // Subir fotos base64 a Storage y dejar solo URLs (evita el payload gigante
     // que hacía fallar el upsert → la receta se "perdía" al recargar).
