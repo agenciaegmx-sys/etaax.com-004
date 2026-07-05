@@ -4986,9 +4986,14 @@ function verReporteDirectivo(gerencial) {
     const _tipoTxt   = ({ bebidas:'de bebidas', alimentos:'de alimentos', almacen:'de almacén', restaurante:'general', primer_lev:'— primer levantamiento', otro:'' })[inv.tipoInv] || '';
     const _estadoInv = inv.cerrado ? 'CERRADO' : 'BORRADOR';
 
-    // ── Encabezado y pie de página (estructura de recetas: marca ETAAX + negocio, borde verde) ──
+    // ── Encabezado y pie: marca COMPARTIDA de reportes (reporte-marca.js) →
+    //    nombre del negocio VIVO + sucursal del inventario + logo automático.
+    //    Fallback al formato anterior si el helper no está cargado.
     const brandGreen = '#3dbe7a';
-    const rdHeader = (subt) => `
+    const _rdDer = `${ger?'Reporte Gerencial':'Reporte Directivo'}<br>Generado: ${fecha}${inv.area?'<br>Área: '+etx(inv.area):''}`;
+    const rdHeader = (subt) => (typeof etaaxReporteHeader === 'function')
+      ? `<div class="rd-pagehead" style="margin-bottom:14px">${etaaxReporteHeader(subt, _rdDer, { sucursalId: inv.sucursalId || '' })}</div>`
+      : `
     <div class="rd-pagehead" style="display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:3px solid ${brandGreen};margin-bottom:14px">
       <div style="display:flex;align-items:center;gap:12px">
         <div style="font-family:'Bebas Neue',Arial,sans-serif;font-size:30px;font-weight:900;letter-spacing:2px;color:#1a1916;line-height:1">ETAAX<span style="color:${brandGreen}">.</span></div>
@@ -4997,11 +5002,11 @@ function verReporteDirectivo(gerencial) {
           <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;margin-top:2px">${subt}</div>
         </div>
       </div>
-      <div style="text-align:right;font-size:9px;color:#aaa;line-height:1.7">
-        ${ger?'Reporte Gerencial':'Reporte Directivo'}<br>Generado: ${fecha}${inv.area?'<br>Área: '+etx(inv.area):''}
-      </div>
+      <div style="text-align:right;font-size:9px;color:#aaa;line-height:1.7">${_rdDer}</div>
     </div>`;
-    const rdFoot = `<div class="rd-foot" style="display:flex;justify-content:space-between;align-items:center">
+    const rdFoot = (typeof etaaxReporteFooter === 'function')
+      ? `<div class="rd-foot" style="display:block;padding:0">${etaaxReporteFooter(etx(inv.nombre||'Inventario'))}</div>`
+      : `<div class="rd-foot" style="display:flex;justify-content:space-between;align-items:center">
       <span>etaax.com · EGMx Consultoría Estratégica a&amp;b</span>
       <span style="color:${brandGreen};font-weight:700">${etx(inv.nombre||'Inventario')}</span>
       <span>${fecha}</span>
