@@ -748,6 +748,7 @@ function buildPlantillaOperativa(recetas) {
                         '<div class="receta-nombre' + (sizeClass?' '+sizeClass:'') + '">' + r.nombre + '</div>' +
                     '</div>' +
                 '</div>' +
+                _recetaHeaderMarca() +
             '</div>' +
             '<div class="body-imp' + (sizeClass?' '+sizeClass:'') + '">' +
                 '<div class="sec-title">Ingredientes</div>' +
@@ -776,6 +777,21 @@ function buildPlantillaOperativa(recetas) {
     }).join('');
 
     return buildWrapperHTML(paginasHTML, 'Receta Operativa');
+}
+
+// Bloque DERECHO del encabezado de la hoja de receta: identidad del negocio
+// (nombre + sucursal + logo) automática desde reporte-marca.js. Vacío si no hay.
+function _recetaHeaderMarca() {
+    if (typeof etaaxMarca !== 'function') return '';
+    var m = etaaxMarca();
+    if (!m.negocio && !m.logo) return '';
+    return '<div style="display:flex;align-items:center;gap:10px;flex-shrink:0">' +
+        '<div style="text-align:right">' +
+            '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:17px;letter-spacing:1px;color:#1a1916;line-height:1">' + (m.emoji ? m.emoji + ' ' : '') + etx(m.negocio || '') + '</div>' +
+            (m.sucursal ? '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#999;margin-top:3px">' + etx(m.sucursal) + '</div>' : '') +
+        '</div>' +
+        (m.logo ? '<img src="' + m.logo + '" style="width:40px;height:40px;object-fit:contain;border:1px solid #eee;border-radius:6px" alt="logo">' : '') +
+    '</div>';
 }
 
 // ── VERSIÓN ADMINISTRATIVA ────────────────────────────────────
@@ -843,6 +859,7 @@ function buildPlantillaAdministrativa(recetas) {
                         '<div class="receta-nombre' + (sizeClass?' '+sizeClass:'') + '">' + r.nombre + '</div>' +
                     '</div>' +
                 '</div>' +
+                _recetaHeaderMarca() +
             '</div>' +
             '<div class="body-imp' + (sizeClass?' '+sizeClass:'') + '">' +
                 '<div class="sec-title">Ingredientes</div>' +

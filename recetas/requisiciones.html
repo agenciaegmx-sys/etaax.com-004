@@ -968,6 +968,7 @@ function verPedido() {
     ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9998;overflow-y:auto;background:#1a1916';
     ov.innerHTML = _pedSharedStyles() + _pedToolbar('pedOverlay', '📄 Pedido de Compra — ' + items.length + ' ítems') + `
     <div class="ped-paper">
+        ${typeof etaaxReporteHeader === 'function' ? '<div style="margin-bottom:12px">' + etaaxReporteHeader('Requisición · Pedido de compra') + '</div>' : ''}
         <div style="display:flex;justify-content:space-between;align-items:flex-start;
                     margin-bottom:14px;padding-bottom:12px;border-bottom:3px solid #1a1916">
             <div>
@@ -1047,6 +1048,7 @@ function verPedidoAdmin() {
     ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9998;overflow-y:auto;background:#1a1916';
     ov.innerHTML = _pedSharedStyles() + _pedToolbar('pedAdminOverlay', '🔒 Vista Admin — Costo del Pedido') + `
     <div class="ped-paper">
+        ${typeof etaaxReporteHeader === 'function' ? '<div style="margin-bottom:12px">' + etaaxReporteHeader('Requisición · Vista administrativa') + '</div>' : ''}
         <div style="display:flex;justify-content:space-between;align-items:flex-start;
                     margin-bottom:14px;padding-bottom:12px;border-bottom:3px solid #1a1916">
             <div>
@@ -1126,6 +1128,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="/reporte-marca.js"></script>
 <script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
