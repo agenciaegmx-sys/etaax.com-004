@@ -896,7 +896,8 @@ function _buildPedidoItems() {
 
 function _pedSharedStyles() {
     return `<style>
-.ped-paper{background:#fff;width:216mm;padding:16mm 18mm;margin:58px auto 24px;
+.ped-paper{background:#fff;width:216mm;min-height:279mm;display:flex;flex-direction:column;
+    padding:16mm 18mm;margin:58px auto 24px;
     box-shadow:0 4px 40px rgba(0,0,0,.55);font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#1a1916}
 .ped-t{width:100%;border-collapse:collapse;font-size:11px}
 .ped-t th{padding:5px 8px;text-align:left;background:#f5f5f0;border-bottom:2px solid #1a1916;
@@ -907,13 +908,14 @@ function _pedSharedStyles() {
     color:#444;padding:8px 8px 4px;border-top:2px solid #1a1916}
 .ped-subtotal td{background:#f9f9f6;font-size:10px;font-style:italic;color:#666}
 .tc{text-align:center!important}.tr{text-align:right!important}
-.ped-foot{margin-top:16px;padding-top:10px;border-top:1px solid #eee;
+.ped-foot{margin-top:auto;padding-top:10px;border-top:1px solid #eee; /* pie anclado al final de la hoja */
     font-size:9px;color:#bbb;display:flex;justify-content:space-between;align-items:center}
 @media print{
-    body>*:not(#pedOverlay){display:none!important}
-    #pedOverlay{position:static!important;overflow:visible!important;background:white!important}
+    /* :not con AMBOS overlays — antes el print de la vista admin (pedAdminOverlay) salía en blanco */
+    body>*:not(#pedOverlay):not(#pedAdminOverlay){display:none!important}
+    #pedOverlay,#pedAdminOverlay{position:static!important;overflow:visible!important;background:white!important}
     #pedToolbar{display:none!important}
-    .ped-paper{box-shadow:none!important;width:100%!important;margin:0!important;padding:10mm 12mm!important}
+    .ped-paper{box-shadow:none!important;width:100%!important;min-height:250mm!important;margin:0!important;padding:10mm 12mm!important}
 }
 </style>`;
 }
