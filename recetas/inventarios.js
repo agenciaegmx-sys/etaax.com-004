@@ -1717,6 +1717,17 @@ function _getNegocioNombre() {
     } catch { return ''; }
 }
 
+// Nombre para el campo "Sucursal activa" del formulario: la SUCURSAL real
+// (vía etaaxMarca, reporte-marca.js); si el negocio no maneja sucursales,
+// cae al nombre del negocio. Antes siempre ponía el nombre del negocio.
+function _getSucursalNombreInv() {
+    if (typeof etaaxMarca === 'function') {
+        var m = etaaxMarca();
+        return m.sucursal || m.negocio || _getNegocioNombre();
+    }
+    return _getNegocioNombre();
+}
+
 function _getUltimoInvFecha() {
     const lista = getInventarios();
     if (!lista.length) return null;
@@ -1813,7 +1824,7 @@ function _setFechaUltimo() {
 function poblarFormulario() {
     const tipo = invActual.tipoInv || 'bebidas';
     document.getElementById('invTipoInv').value = tipo;
-    document.getElementById('invNegocio').value = invActual.negocio || _getNegocioNombre();
+    document.getElementById('invNegocio').value = invActual.negocio || _getSucursalNombreInv();
     document.getElementById('invFecha').value   = invActual.fecha   || '';
     // Hora: si el valor guardado parece HH:MM lo usamos, si no dejamos vacío
     const t = invActual.turno || '';
@@ -1841,7 +1852,7 @@ function limpiarFormulario() {
     const hh   = String(hoy.getHours()).padStart(2,'0');
     const mm   = String(hoy.getMinutes()).padStart(2,'0');
     document.getElementById('invTipoInv').value = 'bebidas';
-    document.getElementById('invNegocio').value = _getNegocioNombre();
+    document.getElementById('invNegocio').value = _getSucursalNombreInv();
     document.getElementById('invFecha').value   = hoy.toISOString().slice(0,10);
     document.getElementById('invTurno').value   = hh + ':' + mm;
     document.getElementById('invArea').value    = 'barra';
