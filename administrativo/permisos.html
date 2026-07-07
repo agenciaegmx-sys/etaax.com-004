@@ -564,7 +564,11 @@ function _mostrarNavBar() {
         var color = ctx.negColor || '#3dbe7a';
         var tipo = (ctx.negTipo || '').split(' · ')[0];
         var _lgPer = '';
-        try { _lgPer = localStorage.getItem('etaax_' + (ctx.negId || '') + '_logo') || ''; } catch(e) {}
+        try {
+            var _scp = localStorage.getItem('etaax_sucursal_activa') || '';
+            if (_scp) _lgPer = localStorage.getItem('etaax_' + (ctx.negId || '') + '_suc_' + _scp + '_logo') || '';
+            if (!_lgPer) _lgPer = localStorage.getItem('etaax_' + (ctx.negId || '') + '_logo') || '';
+        } catch(e) {}
         bar.innerHTML =
             '<div class="ctx-bar-inner" style="border-color:'+color+'44">' +
             (_lgPer

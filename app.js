@@ -1793,9 +1793,13 @@ function initCtxBar() {
         : (ctx.sucNombre ? '<span class="ctx-suc-pill" style="background:' + color + '1f;color:' + color + ';border-color:' + color + '55">📍 ' + _esc(ctx.sucNombre) + '</span>' : '');
     bar.innerHTML =
         '<div class="ctx-bar-inner" style="border-color:' + (catGlobal ? '#7ab8f544' : (color + '44')) + '">' +
-        (function(){ // logo base de la marca en lugar del emoji (si está cargado)
+        (function(){ // jerarquía: logo de la sucursal activa → logo del negocio → emoji
             var _lg = '';
-            try { _lg = localStorage.getItem('etaax_' + (ctx.negId || '') + '_logo') || ''; } catch(e) {}
+            try {
+                var _scb = localStorage.getItem('etaax_sucursal_activa') || '';
+                if (_scb) _lg = localStorage.getItem('etaax_' + (ctx.negId || '') + '_suc_' + _scb + '_logo') || '';
+                if (!_lg) _lg = localStorage.getItem('etaax_' + (ctx.negId || '') + '_logo') || '';
+            } catch(e) {}
             return _lg
                 ? '<div class="ctx-neg-emoji-wrap" style="background:#fff;border-color:' + color + '33;overflow:hidden;padding:0"><img src="' + _esc(_lg) + '" alt="" style="width:100%;height:100%;object-fit:contain"></div>'
                 : '<div class="ctx-neg-emoji-wrap" style="background:' + color + '1a;border-color:' + color + '33">' + _esc(ctx.negEmoji) + '</div>';

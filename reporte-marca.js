@@ -41,11 +41,13 @@
                 sucNombre = (s && s.nombre) || (sucId === 'suc_principal' ? 'Matriz' : (ctx.sucNombre || ''));
             } catch (e) { sucNombre = ctx.sucNombre || ''; }
         }
-        // Identidad visual: UN solo logo (el de la MARCA, ajustes del negocio).
-        // La sucursal se distingue con su COLOR (puntito junto al nombre), no
-        // con un segundo logo (decisión de Edwin: dos imágenes se veían feo).
-        var logoNegocio = '';
+        // Identidad visual: UN solo logo con JERARQUÍA (caso corporativo multi-marca):
+        // el logo de la SUCURSAL si lo tiene (cada sucursal puede ser una marca
+        // distinta: 2 Mammut + 3 Xaneque + 1 Gainsburg) → si no, el del NEGOCIO
+        // (mono-marca: las sucursales heredan). Nunca dos imágenes juntas.
+        var logoNegocio = '', logoSucursal = '';
         try { logoNegocio = localStorage.getItem('etaax_' + negId + '_logo') || ''; } catch (e) {}
+        if (sucId) { try { logoSucursal = localStorage.getItem('etaax_' + negId + '_suc_' + sucId + '_logo') || ''; } catch (e) {} }
         var sucColor = '';
         if (sucId) {
             try { sucColor = (JSON.parse(localStorage.getItem('etaax_' + negId + '_suc_' + sucId) || '{}').color) || ''; } catch (e) {}
@@ -56,8 +58,9 @@
             emoji:         ctx.negEmoji || '',
             sucursal:      sucNombre,
             sucursalColor: sucColor,
-            logo:          logoNegocio, // compat
-            logoNegocio:   logoNegocio
+            logo:          logoSucursal || logoNegocio, // jerarquía: marca de la sucursal → marca del negocio
+            logoNegocio:   logoNegocio,
+            logoSucursal:  logoSucursal
         };
     };
 
@@ -74,10 +77,10 @@
             : '';
         var linea2 =
             (m.sucursal ? '<div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#555;font-weight:700;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _dot + _esc(m.sucursal) + '</div>' : '') +
-            (subtitulo ? '<div style="font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:#999;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(subtitulo) + '</div>' : '');
+            (subtitulo ? '<div style="font-size:7.5px;letter-spacing:1px;text-transform:uppercase;color:#999;margin-top:2px;line-height:1.5">' + _esc(subtitulo) + '</div>' : '');
         // Identidad junto al nombre: el logo BASE de la marca; sin logo → emoji.
-        var identidad = m.logoNegocio
-            ? '<img src="' + _esc(m.logoNegocio) + '" style="width:46px;height:46px;object-fit:contain;border:1px solid #eee;border-radius:8px;flex-shrink:0;background:#fff" alt="logo">'
+        var identidad = m.logo
+            ? '<img src="' + _esc(m.logo) + '" style="width:46px;height:46px;object-fit:contain;border:1px solid #eee;border-radius:8px;flex-shrink:0;background:#fff" alt="logo">'
             : (m.emoji ? '<span style="font-size:28px;line-height:1;flex-shrink:0">' + _esc(m.emoji) + '</span>' : '');
         return '<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;' +
                 'padding:12px 20px;border-bottom:3px solid #3dbe7a">' +
