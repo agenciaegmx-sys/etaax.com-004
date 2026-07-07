@@ -457,12 +457,16 @@ function _btnCopiarAnterior(idx, fila, estilo) {
 // Antes cada calcVentas*Recetas recorría TODAS las recetas por CADA insumo → O(insumos×recetas)
 // en cada render (lento con 200+ insumos). Ahora se recorren las recetas UNA vez y se acumula por
 // insumo; la consulta por fila es O(1). Se re-calcula solo si cambian recetas o lo vendido.
-var _consumoIdxCache = null, _consumoIdxKey = '';
+var _consumoIdxCache = null, _consumoIdxKey = '', _consumoDirty = true;
 function _consumoIdx() {
     var vendidos = (invActual && invActual.cocktailsVendidos) || {};
     var recetas  = getRecetas();
-    var key = (invActual && invActual.id || '') + '|' + recetas.length + '|' + JSON.stringify(vendidos);
-    if (_consumoIdxCache && _consumoIdxKey === key) return _consumoIdxCache;
+    // Llave BARATA + dirty-flag: antes la llave hacía JSON.stringify(vendidos) en
+    // CADA llamada (200 filas × varios cálculos por render = miles de stringify)
+    // — parte importante de la lentitud del Paso 5. Los 3 puntos que escriben
+    // cocktailsVendidos marcan _consumoDirty.
+    var key = (invActual && invActual.id || '') + '|' + recetas.length;
+    if (_consumoIdxCache && !_consumoDirty && _consumoIdxKey === key) return _consumoIdxCache;
     var idx = {};
     function slot(id){ return idx[id] || (idx[id] = { mlBeb:0, baseAli:0, pzaDir:0, mlPza:0 }); }
     recetas.forEach(function(r){
@@ -482,7 +486,7 @@ function _consumoIdx() {
             }
         });
     });
-    _consumoIdxCache = idx; _consumoIdxKey = key;
+    _consumoIdxCache = idx; _consumoIdxKey = key; _consumoDirty = false;
     return idx;
 }
 function calcVentasCopasRecetas(insumoId, copaML) {
@@ -1281,7 +1285,12 @@ function toggleBateo(insumoId) {
     var arr = getBateo(), i = arr.indexOf(insumoId);
     if (i >= 0) arr.splice(i, 1); else arr.push(insumoId);
     try { localStorage.setItem(_bateoKey(), JSON.stringify(arr)); } catch(e) {}
-    if (typeof renderStep5 === 'function') renderStep5();
+    // Refrescar EN VIVO: renderStep5() solo DEVUELVE html (no pinta — por eso el
+    // insumo no brincaba al grupo de bateo). Se repinta el contenedor de tablas
+    // directo (rápido y conserva la vista); fallback al re-render del paso.
+    var cont = document.getElementById('step5Tablas');
+    if (cont && typeof _step5TablasHTML === 'function') cont.innerHTML = _step5TablasHTML();
+    else if (typeof renderStepContent === 'function') renderStepContent();
 }
 
 // ── Compuestos en VENTAS (Paso 3) y RESULTADO ──────────────────────────────
@@ -2081,6 +2090,18 @@ function renderStepContent() {
     // Primer levantamiento solo captura existencias
     const paso = (invActual && invActual.tipoInv === 'primer_lev') ? 1 : pasoActual;
     const renders = [null, renderStep1, renderStep2, renderStep3, renderStep4, renderStep5];
+    if (paso === 5) {
+        // El resumen calcula y pinta TODO el inventario (KPIs + tablas por grupo):
+        // con 200+ insumos el innerHTML tarda. Feedback inmediato + render diferido
+        // → la navegación responde al instante y el resumen aparece enseguida.
+        cont.innerHTML = '<div style="text-align:center;padding:90px 20px;color:var(--text-dim)"><div style="font-size:32px;margin-bottom:12px">📊</div>Generando resumen de resultado…</div>';
+        clearTimeout(window._step5RenderT);
+        window._step5RenderT = setTimeout(function(){
+            if (pasoActual !== 5) return; // el usuario ya se movió a otro paso
+            cont.innerHTML = renderStep5();
+        }, 30);
+        return;
+    }
     cont.innerHTML = renders[paso]();
     // Restore filter selects
     const ffF = document.getElementById('filtroFamStep');
@@ -3156,7 +3177,7 @@ function updCntMenu(id, delta) {
     if (!invActual.cocktailsVendidos) invActual.cocktailsVendidos = {};
     const actual = parseFloat(invActual.cocktailsVendidos[id] || 0);
     const nuevo  = Math.max(0, actual + delta);
-    invActual.cocktailsVendidos[id] = nuevo;
+    invActual.cocktailsVendidos[id] = nuevo; _consumoDirty = true;
     const el = document.getElementById('cnt-' + id);
     if (el) {
         el.value = nuevo; // ahora es un input editable
@@ -3171,7 +3192,7 @@ function updCntMenu(id, delta) {
 function setCntMenu(id, val) {
     if (!invActual.cocktailsVendidos) invActual.cocktailsVendidos = {};
     const nuevo = Math.max(0, parseFloat(val) || 0);
-    invActual.cocktailsVendidos[id] = nuevo;
+    invActual.cocktailsVendidos[id] = nuevo; _consumoDirty = true;
     const el = document.getElementById('cnt-' + id);
     if (el) {
         el.classList.toggle('active', nuevo > 0);
@@ -3671,7 +3692,7 @@ function renderResumenVentas() {
 
 function updCoctelVendido(id, val) {
     if (!invActual.cocktailsVendidos) invActual.cocktailsVendidos = {};
-    invActual.cocktailsVendidos[id] = val;
+    invActual.cocktailsVendidos[id] = val; _consumoDirty = true;
 }
 function updVentasDirectas(idx, campo, val) { filasCaptura[idx][campo] = val; _autoGuardar(); }
 function updVentasConcepto(idx, campo, val) { filasCaptura[idx][campo] = val; _autoGuardar(); }
@@ -4885,11 +4906,18 @@ function _rdConstruirPaginas(src, pagesC, headHtml, footHtml) {
         if (node.classList && node.classList.contains('rd-break')) { if (body.children.length) newPage(); return; }
         // Evitar encabezado huérfano al pie de la hoja.
         if (isHeading(node) && body.children.length && room() < 90) newPage();
+        // Tablas que no caben completas: se PARTEN desde la hoja actual (llenando
+        // el espacio que queda) en vez de saltar enteras a la siguiente — eso
+        // dejaba hojas casi vacías (solo el título de sección y nada más).
+        // Si el espacio restante ya es mínimo (<140px), sí se pasa a hoja nueva.
         if (node.classList && node.classList.contains('rd-grp')) {
             body.appendChild(node);
             if (fits()) return;
             body.removeChild(node);
-            if (body.children.length) { newPage(); body.appendChild(node); if (fits()) return; body.removeChild(node); }
+            if (room() < 140 && body.children.length) newPage();
+            body.appendChild(node);
+            if (fits()) return;
+            body.removeChild(node);
             splitTable(node.querySelector('table'), node.querySelector('.rd-grptitle'));
             return;
         }
@@ -4897,7 +4925,10 @@ function _rdConstruirPaginas(src, pagesC, headHtml, footHtml) {
             body.appendChild(node);
             if (fits()) return;
             body.removeChild(node);
-            if (body.children.length) { newPage(); body.appendChild(node); if (fits()) return; body.removeChild(node); }
+            if (room() < 140 && body.children.length) newPage();
+            body.appendChild(node);
+            if (fits()) return;
+            body.removeChild(node);
             splitTable(node, null);
             return;
         }

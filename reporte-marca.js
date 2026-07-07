@@ -66,12 +66,15 @@
     window.etaaxReporteHeader = function (subtitulo, derechaHTML, opts) {
         var m = window.etaaxMarca(opts);
         var nombre = m.negocio || 'Negocio';
-        // Línea 2: [• color] Sucursal · Subtítulo — el puntito lleva el color
-        // designado a la sucursal (así se distingue de qué sucursal salió la hoja).
+        // Jerarquía de texto: nombre (grande) → sucursal (media, con su puntito de
+        // color) → subtítulo/fechas (pequeño). Antes sucursal y fechas iban juntas
+        // del mismo tamaño y se leía como un bloque plano de 3 renglones.
         var _dot = (m.sucursal && m.sucursalColor)
             ? '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + _esc(m.sucursalColor) + ';margin-right:5px;vertical-align:middle"></span>'
             : '';
-        var linea2 = [m.sucursal ? (_dot + _esc(m.sucursal)) : '', _esc(subtitulo || '')].filter(Boolean).join(' · ');
+        var linea2 =
+            (m.sucursal ? '<div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#555;font-weight:700;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _dot + _esc(m.sucursal) + '</div>' : '') +
+            (subtitulo ? '<div style="font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:#999;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(subtitulo) + '</div>' : '');
         // Identidad junto al nombre: el logo BASE de la marca; sin logo → emoji.
         var identidad = m.logoNegocio
             ? '<img src="' + _esc(m.logoNegocio) + '" style="width:46px;height:46px;object-fit:contain;border:1px solid #eee;border-radius:8px;flex-shrink:0;background:#fff" alt="logo">'
@@ -84,7 +87,7 @@
                     identidad +
                     '<div style="min-width:0">' +
                         '<div style="font-family:\'Bebas Neue\',Arial,sans-serif;font-size:26px;letter-spacing:1px;color:#1a1916;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(nombre) + '</div>' +
-                        (linea2 ? '<div style="font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#888;margin-top:3px">' + linea2 + '</div>' : '') + /* linea2 ya viene escapada (trae el puntito de color en HTML) */
+                        linea2 + /* ya viene con su propia jerarquía (sucursal + subtítulo) y escapada */
                     '</div>' +
                 '</div>' +
             '</div>' +
