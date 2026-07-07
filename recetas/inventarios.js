@@ -3260,6 +3260,8 @@ function updProduccionPrebatch(id, delta) {
     const actual = parseFloat(invActual.prebatchProducidos[id] || 0);
     const nuevo  = Math.max(0, actual + delta);
     invActual.prebatchProducidos[id] = nuevo;
+    window._step5Dirty = true; // la producción cambia la matemática del resumen
+    if (typeof _autoGuardar === 'function') _autoGuardar(); // persistir (antes solo quedaba en memoria)
     const el = document.getElementById('prod-' + id);
     if (el) {
         el.textContent = nuevo;
