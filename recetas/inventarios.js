@@ -4716,8 +4716,12 @@ function _step5TablasHTML() {
         const rows = items.map(fila => {
             const ea        = parseFloat(fila.existenciaAnterior) || 0;
             const entTotal  = getEntradasCopas(fila);
-            // Venta total en piezas: directa (botella + pza) + por menú/recetas.
-            const ventas    = (fila.ventasBotella || 0) + (parseFloat(fila.ventasCopasDirectas)||0) + calcVentasPzaRecetas(fila.insumoId);
+            // Venta en piezas DESGLOSADA: directa (botella + pza) y por menú/recetas
+            // (coctelería) en su propia columna — antes iban sumadas y parecía que
+            // los refrescos/cervezas no calculaban su uso en coctelería.
+            const ventaCoct = calcVentasPzaRecetas(fila.insumoId);
+            const ventasDir = (fila.ventasBotella || 0) + (parseFloat(fila.ventasCopasDirectas)||0);
+            const ventas    = ventasDir + ventaCoct;
             const cancelPza = getCancelacionesCopas(fila.insumoId);
             const teorico   = calcExistenciaTeorica(fila);
             const fisico    = calcExistencia(fila);
@@ -4737,7 +4741,8 @@ function _step5TablasHTML() {
                 </td>
                 <td style="text-align:center">${ea.toFixed(0)} pza</td>
                 <td style="text-align:center;color:var(--green)">${entTotal>0?'+'+entTotal.toFixed(0)+' pza':'—'}</td>
-                <td style="text-align:center;color:var(--accent)">${ventas>0?(ventas%1?ventas.toFixed(1):ventas)+' pza':'—'}</td>
+                <td style="text-align:center;color:#9b8de8">${ventaCoct>0?(ventaCoct%1?ventaCoct.toFixed(1):ventaCoct)+' pza':'—'}</td>
+                <td style="text-align:center;color:var(--accent)">${ventasDir>0?(ventasDir%1?ventasDir.toFixed(1):ventasDir)+' pza':'—'}</td>
                 <td style="text-align:center;color:var(--text-muted)">${cancelPza>0?cancelPza.toFixed(0)+' pza':'—'}</td>
                 <td style="text-align:center">${teorico.toFixed(0)} pza</td>
                 <td style="text-align:center;font-weight:600">${fisico.toFixed(0)} pza</td>
@@ -4757,6 +4762,7 @@ function _step5TablasHTML() {
                     <th>Producto</th>
                     <th style="text-align:center;width:70px">Exist. ant.</th>
                     <th style="text-align:center;width:65px">Entradas</th>
+                    <th style="text-align:center;width:70px">Coctelería</th>
                     <th style="text-align:center;width:65px">Ventas</th>
                     <th style="text-align:center;width:70px">Cancelac.</th>
                     <th style="text-align:center;width:70px">Teórico</th>
