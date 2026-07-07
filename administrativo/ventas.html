@@ -1662,7 +1662,12 @@ function _abrirCajaFuerteContenido(){
             (catalogoTc.length>0
             ? catalogoTc.map(function(tc){
                 var lim=parseFloat(tc.limite)||0;
-                var gastado=gastosTarjetaCred; // total compartido (sin desglose por tarjeta aún)
+                // Deuda NETA = gastos a crédito − pagos hechos a la TC (movimientos
+                // "Pagar tarjeta": origen caja fuerte o cuenta de débito → destino TC).
+                // Antes la tarjeta mostraba la deuda BRUTA y parecía que los pagos
+                // no gestionaban el saldo. (Total compartido — sin desglose por tarjeta aún.)
+                var pagosTc=_efTcPago||0;
+                var gastado=Math.max(0, gastosTarjetaCred - pagosTc);
                 var pct=lim>0?Math.min(gastado/lim*100,100):0;
                 var barColor=pct>=80?'#ff7070':pct>=50?'#f5c842':'var(--green)';
                 return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid '+tc.color+';border-radius:8px;padding:10px 12px;margin-bottom:6px">'+
@@ -1672,7 +1677,8 @@ function _abrirCajaFuerteContenido(){
                             '<div style="font-size:10px;color:var(--text-dim);letter-spacing:2px">···· '+(tc.digitos||'——')+'</div>'+
                         '</div>'+
                         '<div style="text-align:right">'+
-                            '<div style="font-size:13px;font-weight:700;color:#ff7070">'+fmtM(-gastosTarjetaCred)+'</div>'+
+                            '<div style="font-size:13px;font-weight:700;color:#ff7070">'+fmtM(-gastado)+'</div>'+
+                            (pagosTc>0?'<div style="font-size:9px;color:var(--green)">'+fmtM(gastosTarjetaCred)+' gastado − '+fmtM(pagosTc)+' pagado</div>':'')+
                             (lim>0?'<div style="font-size:9px;color:var(--text-dim)">de '+fmtM(lim)+' límite</div>':'<div style="font-size:9px;color:var(--text-dim)">sin límite def.</div>')+
                         '</div>'+
                     '</div>'+
