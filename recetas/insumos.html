@@ -1184,7 +1184,14 @@ function _cgRender() {
     var actuales = getInsumos().map(function(x){ return x.id; });
     // Membresía: "ya agregado" = el insumo VIVE en la sucursal activa (no solo en el negocio).
     var _curEffCg = (localStorage.getItem('etaax_sucursal_activa') || '') || 'suc_principal';
-    var _enSucCg = {}; getInsumos().forEach(function(x){ if (window._insumoEnSuc && window._insumoEnSuc(x, _curEffCg)) _enSucCg[x.id] = true; });
+    // Marca por id Y por identidad: si un registro con la misma identidad ya vive
+    // aquí (aunque tenga otro id), el ítem del catálogo ETAAX se ve "Agregado".
+    var _enSucCg = {}; getInsumos().forEach(function(x){
+        if (window._insumoEnSuc && window._insumoEnSuc(x, _curEffCg)) {
+            _enSucCg[x.id] = true;
+            if (typeof _keyIns === 'function') _enSucCg['k|' + _keyIns(x)] = true;
+        }
+    });
 
     document.getElementById('cgTotal').textContent = total + ' insumos · página ' + (_cgPagina+1) + ' de ' + totalPgs;
 
@@ -1196,7 +1203,7 @@ function _cgRender() {
                 ? '$' + parseFloat(p0.precio).toFixed(2) + ' / ' + (p0.contNeto||'') + ' ' + (p0.umContenido||'')
                 : '—';
             var prov      = p0 && p0.proveedor ? etx(p0.proveedor) : '';
-            var yaEsta    = _enSucCg[ins.id] === true;
+            var yaEsta    = _enSucCg[ins.id] === true || (typeof _keyIns === 'function' && _enSucCg['k|' + _keyIns(ins)] === true);
             var varLine   = etx([ins.maduracion, ins.variedad].filter(Boolean).join(' · '));
             var cat       = etx([ins.familia, ins.categoria, ins.subcategoria].filter(Boolean).join(' · '));
             var fotoEl    = ins.foto
@@ -1270,7 +1277,15 @@ async function cgAgregar(id) {
     var _cur = localStorage.getItem('etaax_sucursal_activa') || '';
     var _curEff = _cur || 'suc_principal';
     // Si YA vive en el negocio → solo agrega esta sucursal a su membresía (NO duplica).
+    // Primero por id; si no, por IDENTIDAD (nombre|marca|variedad): si ya existe con
+    // otro id (creado a mano o importado antes) TAMPOCO se clona — se le da membresía
+    // a ese registro. Antes esto creaba duplicados de identidad (sucursal contaba 106
+    // y el global deduplicado 105).
     var _ex = lista.find(function(x){ return x.id === id; });
+    if (!_ex && typeof _keyIns === 'function') {
+        var _kNew = _keyIns(ins);
+        _ex = lista.find(function(x){ return _keyIns(x) === _kNew; });
+    }
     if (_ex) {
         var s = (window._insumoSucursales ? window._insumoSucursales(_ex) : (_ex.sucursalId ? [_ex.sucursalId] : []))
             .map(function(v){ return v || 'suc_principal'; });

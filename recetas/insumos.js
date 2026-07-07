@@ -501,6 +501,41 @@
        _paginaActual  = 0;
        _renderPagina();
        renderStats(); // stats por sucursal (se actualiza al cambiar el filtro de sucursal)
+       _avisoDuplicadosGlobal();
+   }
+
+   // ── Aviso de duplicados de identidad (SOLO informa, no borra nada) ──────────
+   // En el catálogo global se deduplica la vista, así que un registro repetido
+   // (misma identidad nombre|marca|variedad con otro id) queda invisible y los
+   // contadores "no cuadran" (ej. sucursal 106 vs global 105). Este aviso lista
+   // las identidades repetidas para limpiarlas A MANO desde la vista de sucursal
+   // (ahí sí se ven los dos registros).
+   function _avisoDuplicadosGlobal() {
+       var contLista = document.getElementById('contenedorLista');
+       var el = document.getElementById('insDupAviso');
+       if (!_catGlobalIns()) { if (el) el.style.display = 'none'; return; }
+       var cnt = {}, nom = {};
+       getInsumos().forEach(function(x){
+           var k = _keyInsLocal(x);
+           cnt[k] = (cnt[k] || 0) + 1;
+           if (!nom[k]) nom[k] = [x.nombre, x.variedad || x.maduracion, x.marca].filter(Boolean).join(' · ');
+       });
+       var dups = Object.keys(cnt).filter(function(k){ return cnt[k] > 1; });
+       if (!dups.length) { if (el) el.style.display = 'none'; return; }
+       if (!el) {
+           el = document.createElement('div');
+           el.id = 'insDupAviso';
+           el.style.cssText = 'margin:0 0 12px;padding:10px 14px;border:1px solid rgba(245,200,66,.4);' +
+               'background:rgba(245,200,66,.08);border-radius:10px;font-size:12px;color:var(--text-muted);line-height:1.6';
+           if (contLista && contLista.parentNode) contLista.parentNode.insertBefore(el, contLista);
+           else return;
+       }
+       el.style.display = '';
+       el.innerHTML = '⚠️ <strong style="color:var(--accent)">' + dups.length + ' insumo' + (dups.length !== 1 ? 's' : '') +
+           ' con registros duplicados</strong> (misma identidad con distinto id — aquí se muestran unificados): ' +
+           dups.slice(0, 6).map(function(k){ return '<strong>' + etx(nom[k]) + '</strong> ×' + cnt[k]; }).join(', ') +
+           (dups.length > 6 ? ' y ' + (dups.length - 6) + ' más' : '') +
+           '.<br>Para limpiar: entra a la <strong>sucursal</strong>, búscalo (ahí se ven los repetidos) y elimina el que sobre.';
    }
    
    // ── Toggle vista lista / cuadrícula ───────────────────────────
