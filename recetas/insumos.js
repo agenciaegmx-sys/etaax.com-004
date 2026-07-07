@@ -621,9 +621,18 @@
    function _avisoDuplicadosGlobal() {
        var contLista = document.getElementById('contenedorLista');
        var el = document.getElementById('insDupAviso');
-       if (!_catGlobalIns()) { if (el) el.style.display = 'none'; return; }
+       // El aviso sale en el GLOBAL (donde los duplicados quedan unificados e
+       // invisibles) Y en la SUCURSAL (donde se ven como filas repetidas e inflan
+       // el contador — ej. sucursal 116 vs global 112).
+       var esGlobal = _catGlobalIns();
+       var base = getInsumos();
+       if (!esGlobal) {
+           var _sAct = _getSucActivaIns();
+           if (!_sAct) { if (el) el.style.display = 'none'; return; }
+           base = base.filter(function(x){ return window._insumoEnSuc && window._insumoEnSuc(x, _sAct); });
+       }
        var cnt = {}, nom = {};
-       getInsumos().forEach(function(x){
+       base.forEach(function(x){
            var k = _keyInsLocal(x);
            cnt[k] = (cnt[k] || 0) + 1;
            if (!nom[k]) nom[k] = [x.nombre, x.variedad || x.maduracion, x.marca].filter(Boolean).join(' · ');
@@ -641,7 +650,7 @@
        el.style.display = '';
        el.innerHTML = '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">' +
            '<div style="flex:1;min-width:200px">⚠️ <strong style="color:var(--accent)">' + dups.length + ' insumo' + (dups.length !== 1 ? 's' : '') +
-           ' con registros duplicados</strong> (misma identidad con distinto id — aquí se muestran unificados): ' +
+           ' con registros duplicados</strong> (misma identidad con distinto id — ' + (esGlobal ? 'aquí se muestran unificados' : 'aquí se ven como filas repetidas e inflan el contador') + '): ' +
            dups.slice(0, 6).map(function(k){ return '<strong>' + etx(nom[k]) + '</strong> ×' + cnt[k]; }).join(', ') +
            (dups.length > 6 ? ' y ' + (dups.length - 6) + ' más' : '') + '.</div>' +
            '<button onclick="abrirDuplicados()" style="background:var(--accent);color:#0f0e0c;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">⧉ Limpiar duplicados</button>' +
