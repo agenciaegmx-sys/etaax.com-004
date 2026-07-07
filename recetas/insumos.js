@@ -550,7 +550,11 @@
        // el dedup por texto colapsaba productos legítimos e invertía contadores).
 
        _listaFiltrada = lista;
-       _paginaActual  = 0;
+       // La página se resetea SOLO cuando cambia algún filtro/búsqueda. En los
+       // demás re-renders (guardar un insumo, pausar, eliminar, realtime) se
+       // CONSERVA la página actual — antes editar en la página 2 te regresaba a la 1.
+       var _firmaF = [q, fam, cat, sucFil, sucActiva, catGlobal, estadoIns, vistaInsumos].join('|');
+       if (_firmaF !== _filtroFirmaAnt) { _paginaActual = 0; _filtroFirmaAnt = _firmaF; }
        _renderPagina();
        renderStats(); // stats por sucursal (se actualiza al cambiar el filtro de sucursal)
    }
@@ -591,11 +595,13 @@
    const _PG_SIZE = 100;
    let _paginaActual = 0;
    let _listaFiltrada = [];
+   let _filtroFirmaAnt = null; // firma de filtros: si no cambia, se conserva la página
 
    function _renderPagina() {
        const lista    = _listaFiltrada;
        const total    = lista.length;
        const totalPgs = Math.max(1, Math.ceil(total / _PG_SIZE));
+       if (_paginaActual > totalPgs - 1) _paginaActual = totalPgs - 1; // la lista se encogió
        const desde    = _paginaActual * _PG_SIZE;
        const pagina   = lista.slice(desde, desde + _PG_SIZE);
 
