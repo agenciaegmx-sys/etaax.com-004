@@ -422,6 +422,9 @@
    window.actualizarEnGlobal = actualizarEnGlobal;
 
    function renderStats() {
+       // El stats footer se RETIRÓ de las páginas (2026-07-06); si los elementos
+       // no existen, no hay nada que pintar (muchos callers siguen llamando aquí).
+       if (!document.getElementById('statTotal')) return;
        // En el Catálogo Global cuenta INSUMOS ÚNICOS (deduplicados por identidad), igual que
        // el contador de arriba → antes contaba los 400 registros crudos (con duplicados) y no cuadraba.
        let insumos = _insumosScope();
@@ -592,16 +595,25 @@
    function _renderPaginacion(totalPgs) {
        var bar = document.getElementById('pgBar');
        if (!bar) return;
-       if (totalPgs <= 1) { bar.innerHTML = ''; return; }
-       var prev = _paginaActual > 0
-           ? `<button onclick="_irPagina(${_paginaActual-1})" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 14px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:12px">← Anterior</button>`
-           : `<button disabled style="background:transparent;border:1px solid var(--border);color:var(--text-dim);padding:5px 14px;border-radius:6px;font-family:inherit;font-size:12px;opacity:.35;cursor:default">← Anterior</button>`;
-       var next = _paginaActual < totalPgs - 1
-           ? `<button onclick="_irPagina(${_paginaActual+1})" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 14px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:12px">Siguiente →</button>`
-           : `<button disabled style="background:transparent;border:1px solid var(--border);color:var(--text-dim);padding:5px 14px;border-radius:6px;font-family:inherit;font-size:12px;opacity:.35;cursor:default">Siguiente →</button>`;
-       bar.innerHTML = prev
-           + `<span style="font-size:12px;color:var(--text-muted)">Página ${_paginaActual+1} de ${totalPgs}</span>`
-           + next;
+       // Botones de tamaño uniforme + texto con ancho fijo (antes se encimaban y
+       // "se veía raro"). El pager va centrado y a la derecha vive el botón de
+       // Seleccionar (misma función que el de arriba, refleja el estado actual).
+       var _b = function (lbl, pg, on) {
+           return on
+               ? `<button onclick="_irPagina(${pg})" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 0;width:110px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:500">${lbl}</button>`
+               : `<button disabled style="background:transparent;border:1px solid var(--border);color:var(--text-dim);padding:7px 0;width:110px;border-radius:8px;font-family:inherit;font-size:12px;opacity:.35;cursor:default">${lbl}</button>`;
+       };
+       var pager = totalPgs > 1
+           ? _b('← Anterior', _paginaActual - 1, _paginaActual > 0) +
+             `<span style="font-size:12px;color:var(--text-muted);min-width:96px;text-align:center;white-space:nowrap">Página ${_paginaActual+1} de ${totalPgs}</span>` +
+             _b('Siguiente →', _paginaActual + 1, _paginaActual < totalPgs - 1)
+           : '';
+       var selOn = (typeof _modoSeleccion !== 'undefined') && _modoSeleccion;
+       var sel = `<button onclick="toggleModoSeleccion()" style="background:${selOn ? 'var(--accent)' : 'transparent'};color:${selOn ? '#0f0e0c' : 'var(--text-muted)'};border:1px solid ${selOn ? 'var(--accent)' : 'var(--border)'};border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap" title="Selección múltiple">${selOn ? '✕ Cancelar selección' : '☐ Seleccionar'}</button>`;
+       bar.innerHTML =
+           `<div style="flex:1"></div>` +
+           `<div style="display:flex;align-items:center;gap:12px">${pager}</div>` +
+           `<div style="flex:1;display:flex;justify-content:flex-end">${sel}</div>`;
    }
 
    function _irPagina(n) {
