@@ -271,6 +271,7 @@ function render(){
                     +'<div class="cb-digits">···· '+_esc(c.digitos||'——')+'</div>'
                 +'</div>'
                 +'<span class="cb-badge '+tipo+'">'+(esCred?'Crédito':'Débito')+'</span>'
+                +(!esCred && c.predeterminada ? '<span style="font-size:9px;background:rgba(245,200,66,.15);color:var(--accent);border:1px solid rgba(245,200,66,.4);border-radius:10px;padding:2px 8px;margin-left:6px;white-space:nowrap">⭐ Predeterminada</span>' : '')
             +'</div>'
             +(!esCred
                 ? '<div class="cb-com">'
@@ -289,11 +290,25 @@ function render(){
                   +'</div>'
                 : '')
             +'<div class="cb-acts" style="margin-top:12px">'
+                +(!esCred && !c.predeterminada ? '<button class="cb-btn" onclick="marcarPredeterminada(\''+c.id+'\')" title="La venta con tarjeta de los cortes se registra en esta cuenta y sus comisiones son la base del cálculo">⭐ Hacer predeterminada</button>' : '')
                 +'<button class="cb-btn" onclick="abrirCb(\''+c.id+'\')">✏️ Editar</button>'
                 +'<button class="cb-btn del" onclick="eliminarCb(\''+c.id+'\')">✕ Eliminar</button>'
             +'</div>'
         +'</div>';
     }).join('');
+}
+
+// Marca una cuenta de DÉBITO como predeterminada (exclusiva): recibe la venta
+// con tarjeta de los cortes (es la "cuenta A") y sus comisiones son la base
+// para propinas y cortes viejos sin desglose.
+function marcarPredeterminada(id){
+    (_cache||[]).forEach(function(c){
+        if (!c || c.tipo!=='debito') return;
+        var antes = !!c.predeterminada;
+        c.predeterminada = (c.id === id);
+        if (antes !== c.predeterminada) _sbUp(c); // persiste solo las que cambiaron
+    });
+    render();
 }
 
 function setTipo(t){

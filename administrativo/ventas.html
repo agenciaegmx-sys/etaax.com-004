@@ -863,7 +863,13 @@ var _cacheVex    = null;
 var _cacheGastosExt = null; // gastos cargados para caja fuerte
 var _cuentasBancarias = []; // cuentas bancarias (tabla tarjetas_credito): débito/crédito + comisiones
 // Cuentas de DÉBITO (ahí se deposita la venta con tarjeta). Las viejas sin tipo eran crédito.
-function _cuentasDebito(){ return (_cuentasBancarias||[]).filter(function(c){ return c && c.tipo==='debito'; }); }
+function _cuentasDebito(){
+    // La cuenta PREDETERMINADA va primero → es la "cuenta A" del corte (recibe
+    // la venta con tarjeta capturada en la fila principal) y la que da las
+    // tasas de comisión para propinas y cortes viejos.
+    return (_cuentasBancarias||[]).filter(function(c){ return c && c.tipo==='debito'; })
+        .sort(function(a,b){ return (b.predeterminada?1:0)-(a.predeterminada?1:0); });
+}
 // Filas para el desglose del corte: las cuentas de débito, o una genérica si no hay ninguna
 // (así SIEMPRE se capturan venta con tarjeta crédito y débito; sin cuenta no hay comisión).
 function _ctasCorte(){ var d=_cuentasDebito(); return d.length?d:[{id:'_sin',banco:'Tarjeta (sin cuenta asignada)',comisionTC:null,comisionTD:null,aplicaIva:false}]; }
@@ -1090,7 +1096,26 @@ function togglePosIncluyeProp() {
    Tarjeta:  venta + propina → ambas van al banco (aparecen en estado de cuenta)
 */
 function efNeto(c){return n(c.efectivo);}                              // solo la venta
-function taBanco(c){return n(c.tarjeta)+n(c.propTarjeta);}            // venta + propina → banco
+function taBanco(c){return n(c.tarjeta)+n(c.propTarjeta);}            // venta + propina → banco (BRUTO)
+// NETO a banco: lo que el banco deposita de verdad = venta con tarjeta MENOS la
+// comisión bancaria (desglose por cuenta guardado en el corte). La propina en
+// tarjeta también pasa por la terminal → se le aplica la comisión TD de la
+// cuenta predeterminada. Cortes viejos sin desglose: comisión TD de la cuenta
+// predeterminada sobre el total (mejor aproximación al estado de cuenta real).
+function taBancoNeto(c){
+    var tarNeto;
+    if (c.tarjetaCuentas && c.tarjetaCuentas.length) {
+        tarNeto = c.tarjetaCuentas.reduce(function(s,t){ return s + (parseFloat(t.neto)||0); }, 0);
+    } else {
+        var cta0 = _cuentasDebito()[0] || null;
+        tarNeto = cta0 ? _netoCuenta(cta0, 0, n(c.tarjeta)) : n(c.tarjeta);
+    }
+    var ctaP = _cuentasDebito()[0] || null;
+    var propNeta = ctaP ? _netoCuenta(ctaP, 0, n(c.propTarjeta)) : n(c.propTarjeta);
+    return tarNeto + propNeta;
+}
+// Comisión bancaria de un corte (bruto − neto).
+function comisionBancoCorte(c){ return Math.max(0, taBanco(c) - taBancoNeto(c)); }
 function taNeto(c){return taBanco(c);}                                 // alias legacy
 function ventasBruta(c){return n(c.efectivo)+n(c.tarjeta)+n(c.transferencia);}
 function flujoNeto(c){return efNeto(c)+taBanco(c)+n(c.transferencia);}
@@ -1561,8 +1586,19 @@ function _abrirCajaFuerteContenido(){
     deps.forEach(function(d){ var e=_depEfecto(d); _efC+=e.caja; _efB+=e.banco; _efTcPago+=e.tcPago; if(e.caja>0)totDepCaja+=e.caja; if(e.caja<0)totDepBanco+=-e.caja; });
     // Caja fuerte: resguardos + efecto neto de movimientos − gastos efectivo caja
     var saldoCaja = totalResguardos + _efC - gastosCajaFuerte;
-    // Cuenta débito (total): tarjeta terminal + transferencias + efecto neto en banco − gastos débito
-    var totTarjeta  = lista.reduce(function(s,c){return s+taBanco(c);},0);
+    // Cuenta débito (total): tarjeta terminal NETA (menos comisión bancaria) +
+    // transferencias + efecto neto en banco − gastos débito → cuadra con el banco.
+    var totTarjetaBruto = lista.reduce(function(s,c){return s+taBanco(c);},0);
+    var totTarjeta  = lista.reduce(function(s,c){return s+taBancoNeto(c);},0);
+    var totComision = Math.max(0, totTarjetaBruto - totTarjeta);
+    // Desglose de comisiones por cuenta (de los cortes con desglose guardado).
+    var comPorCuenta = {};
+    lista.forEach(function(c){
+        (c.tarjetaCuentas||[]).forEach(function(t){
+            var brut=(parseFloat(t.ventaTC)||0)+(parseFloat(t.ventaTD)||0), net=parseFloat(t.neto)||0;
+            if (brut>net) comPorCuenta[t.banco||'Tarjeta'] = (comPorCuenta[t.banco||'Tarjeta']||0) + (brut-net);
+        });
+    });
     var totTransfer = lista.reduce(function(s,c){return s+n(c.transferencia);},0);
     var saldoDebito = totTarjeta + totTransfer + _efB - gastosDebito;
     // Tarjeta de crédito: gastos a crédito (deuda) − pagos hechos a la TC (reducen deuda)
@@ -1597,15 +1633,29 @@ function _abrirCajaFuerteContenido(){
                 '<div>'+
                     '<div class="cj-acum-lbl" style="color:var(--green)">🏛️ Cuenta Débito</div>'+
                     '<div style="margin-top:4px;font-size:10px;color:var(--text-dim);line-height:1.6">'+
-                        fmtM(totTarjeta)+' terminal'+
+                        fmtM(totTarjeta)+' terminal <span style="color:var(--text-dim)">(neto)</span>'+
                         (totTransfer?' + '+fmtM(totTransfer)+' transfer.':'')+
                         (totDepBanco?' + '+fmtM(totDepBanco)+' dep.':'')+'<br>'+
                         (gastosDebito?'− '+fmtM(gastosDebito)+' gs.banco':'sin gastos débito')+
+                        (totComision?' · <span style="color:#ff9a9a">− '+fmtM(totComision)+' comisión banco (ya descontada)</span>':'')+
                     '</div>'+
                 '</div>'+
                 '<div class="cj-acum-val" style="color:var(--green)">'+fmtM(saldoDebito)+'</div>'+
             '</div>'+
         '</div>'+
+        (totComision>0?
+        '<div class="cj-acum" style="margin:0 0 10px;border-color:rgba(255,112,112,.35)">'+
+            '<div>'+
+                '<div class="cj-acum-lbl" style="color:#ff9a9a">💳 Comisiones bancarias acumuladas</div>'+
+                '<div style="margin-top:4px;font-size:10px;color:var(--text-dim);line-height:1.6">'+
+                    (Object.keys(comPorCuenta).length
+                        ? Object.keys(comPorCuenta).map(function(b){ return etx(b)+' − '+fmtM(comPorCuenta[b]); }).join(' · ')
+                        : 'estimadas con la tasa de la cuenta predeterminada')+
+                    ' · ya descontadas del saldo de banco'+
+                '</div>'+
+            '</div>'+
+            '<div class="cj-acum-val" style="font-size:20px;color:#ff9a9a">− '+fmtM(totComision)+'</div>'+
+        '</div>':'')+
         (gastosTarjetaCred>0||catalogoTc.length>0?
         '<div style="margin:0 0 10px">'+
             '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px">💳 Tarjetas de Crédito</div>'+
@@ -1874,7 +1924,7 @@ function verCorte(id) {
             '</tbody>'+
         '</table>'+
         '<div style="margin-top:6px;font-size:11px;color:var(--text-dim)">'+
-            'Tarjeta →🏦 <strong style="color:var(--text)">'+fmtM(taBanco(c))+'</strong>'+
+            'Tarjeta →🏦 <strong style="color:var(--text)">'+fmtM(taBanco(c))+'</strong>'+(comisionBancoCorte(c)>0.005?' <span style="font-size:10px;color:var(--text-dim)">neto '+fmtM(taBancoNeto(c))+'</span>':'')+
             '<span style="margin-left:6px;opacity:.6">(venta + prop. tarjeta)</span>'+
             (c.ventaDeclarada?' &nbsp;·&nbsp; Declarado POS: <strong style="color:var(--text)">'+fmtM(n(c.ventaDeclarada))+'</strong>':'')+
         '</div>';
