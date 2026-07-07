@@ -85,8 +85,9 @@
                     <span class="brand-title">Inventarios</span>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
-                    <button class="btn-vista" onclick="abrirReporteExistencias()">📊 Reporte de existencias</button>
-                    <button class="btn-vista" onclick="abrirReporteFinal()">📋 Reporte final</button>
+                    <!-- Un solo reporte: la vista fusionada (antes "Reporte final") es la buena;
+                         la variante sin fusionar se retiró para no confundir. -->
+                    <button class="btn-vista" onclick="abrirReporteFinal()">📊 Reporte de existencias</button>
                     <button class="btn-vista" onclick="abrirParametros()">⚙️ Definir parámetros</button>
                     <button class="btn-vista" onclick="abrirQrEntradas()">📱 QR de entradas</button>
                     <button class="btn-vista" onclick="mostrarVista('vistaEntradas')">📋 Revisar entradas</button>

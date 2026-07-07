@@ -1081,7 +1081,7 @@ function _renderReporteExistencias(){
     // Encabezado branded ETAAX (estilo hoja de recetas)
     var html = '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px 12px;border-bottom:3px solid var(--green);margin-bottom:10px">'+
         '<div><div style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:1px;color:var(--text);line-height:1">'+etx(negNom||'Existencias')+'</div>'+
-        '<div style="font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--text-dim);margin-top:3px">'+(_repFusion?'Reporte final (fusionado)':'Existencias por área')+' · '+etx(areaTxt)+(op?' · Operativa':'')+'</div></div>'+
+        '<div style="font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--text-dim);margin-top:3px">'+(_repFusion?'Reporte de existencias':'Existencias por área')+' · '+etx(areaTxt)+(op?' · Operativa':'')+'</div></div>'+
         '<div style="text-align:right"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:2px;color:var(--text)">ET<span style="color:var(--green)">AA</span>X</div>'+
         '<div style="font-size:9px;color:var(--text-dim);margin-top:2px">'+fechaL+'</div></div></div>';
     // Resumen FIJO arriba (solo en vista ADMIN) → capital en barra, bodega y total
@@ -1431,7 +1431,8 @@ function imprimirReporteExistencias(){
     if (_repFusion) rows = _fusionarRows(rows); // Reporte final: fusiona productos compuestos
     if (!rows.length){ alert('No hay existencias para imprimir.'); return; }
     rows.sort(function(a,b){ return b.capital - a.capital; });
-    var negNom = (function(){ try { return (JSON.parse(localStorage.getItem('etaax_ctx')||'{}').negocio||{}).nombre || ''; } catch(e){ return ''; } })();
+    // Nombre para el <title> de la ventana (el encabezado usa la marca compartida).
+    var negNom = (typeof etaaxMarca === 'function') ? (etaaxMarca().negocio || '') : '';
     var totBarra = rows.reduce(function(s,r){ return s + r.capBarra;  }, 0);
     var totBodega= rows.reduce(function(s,r){ return s + r.capBodega; }, 0);
     var totCap   = rows.reduce(function(s,r){ return s + r.capital;   }, 0);
@@ -1459,6 +1460,9 @@ function imprimirReporteExistencias(){
         ".grp { font-size:8.5px; color:#aaa; margin-top:1px; }"+
         ".footer { display:flex; justify-content:space-between; padding:10px 22px; border-top:1px solid #e8e8e8; font-size:9px; color:#aaa; margin-top:10px; }"+
         ".footer strong { color:#3dbe7a; }"+
+        // Hoja carta horizontal: el pie queda ANCLADO al fondo de la hoja (no del contenido).
+        ".pagina { min-height:19.3cm; display:flex; flex-direction:column; }"+
+        ".pie-hoja { margin-top:auto; }"+
         "@page { size:letter landscape; margin:1cm; }";
 
     var op = _repModoOp;
@@ -1477,13 +1481,21 @@ function imprimirReporteExistencias(){
         '<span>📍 <b>Barra</b> '+_repMoney(totBarra)+'</span>'+
         '<span>📍 <b>Bodega</b> '+_repMoney(totBodega)+'</span>'+
         '<span style="color:#1a7a46;font-weight:700">TOTAL '+_repMoney(totCap)+' · '+nIns+' insumos</span></div>';
-    var pagina = '<div class="cab"><div><div class="neg-nombre">'+(negNom?etx(negNom):'Existencias')+'</div>'+
-        '<div class="neg-sub">Existencias por área · '+etx(areaTxt)+(op?' · Operativa':'')+'</div></div>'+
-        '<div><div class="etx-mark">ET<span>AA</span>X</div>'+
-        '<div class="fecha-txt">'+fechaLarga+'</div><div class="fecha-cnt">'+nIns+' insumos</div></div></div>'+
-        resumen + tabla +
-        '<div class="footer"><span>etaax.com · EGMx Consultoría Estratégica a&b</span>'+
-        '<strong>📊 Existencias por área</strong><span>'+fechaLarga+'</span></div>';
+    // Encabezado/pie con la marca COMPARTIDA (reporte-marca.js): negocio + sucursal
+    // + logo automáticos, mismo formato que carátula/recetas/requisiciones.
+    var _subRep  = 'Reporte de existencias · ' + areaTxt + (op ? ' · Operativa' : '');
+    var _hdrDer  = '<div class="fecha-txt">'+fechaLarga+'</div><div class="fecha-cnt">'+nIns+' insumos</div>';
+    var _hdrRep  = (typeof etaaxReporteHeader === 'function')
+        ? etaaxReporteHeader(_subRep, _hdrDer)
+        : '<div class="cab"><div><div class="neg-nombre">'+(negNom?etx(negNom):'Existencias')+'</div>'+
+          '<div class="neg-sub">'+etx(_subRep)+'</div></div>'+
+          '<div><div class="etx-mark">ET<span>AA</span>X</div>'+_hdrDer+'</div></div>';
+    var _ftrRep  = (typeof etaaxReporteFooter === 'function')
+        ? etaaxReporteFooter('📊 Reporte de existencias')
+        : '<div class="footer"><span>etaax.com · EGMx Consultoría Estratégica a&b</span>'+
+          '<strong>📊 Reporte de existencias</strong><span>'+fechaLarga+'</span></div>';
+    var pagina = '<div class="pagina">' + _hdrRep + resumen + tabla +
+        '<div class="pie-hoja">' + _ftrRep + '</div></div>';
 
     var w = window.open('', '_blank');
     w.document.write('<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Existencias por área — '+(negNom?etx(negNom):'ETAAX')+'</title>'+
