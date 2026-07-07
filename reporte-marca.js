@@ -41,15 +41,18 @@
                 sucNombre = (s && s.nombre) || (sucId === 'suc_principal' ? 'Matriz' : (ctx.sucNombre || ''));
             } catch (e) { sucNombre = ctx.sucNombre || ''; }
         }
-        // Logo: sucursal → negocio → nada
-        var logo = '';
-        if (sucId) { try { logo = localStorage.getItem('etaax_' + negId + '_suc_' + sucId + '_logo') || ''; } catch (e) {} }
-        if (!logo) { try { logo = localStorage.getItem('etaax_' + negId + '_logo') || ''; } catch (e) {} }
+        // Logos POR SEPARADO: el de la MARCA (negocio, ajustes generales) es la
+        // identidad principal; el de la SUCURSAL es su isotipo distintivo.
+        var logoNegocio = '', logoSucursal = '';
+        try { logoNegocio = localStorage.getItem('etaax_' + negId + '_logo') || ''; } catch (e) {}
+        if (sucId) { try { logoSucursal = localStorage.getItem('etaax_' + negId + '_suc_' + sucId + '_logo') || ''; } catch (e) {} }
         return {
-            negocio:  ctx.negNombre || '',
-            emoji:    ctx.negEmoji || '',
-            sucursal: sucNombre,
-            logo:     logo
+            negocio:      ctx.negNombre || '',
+            emoji:        ctx.negEmoji || '',
+            sucursal:     sucNombre,
+            logo:         logoSucursal || logoNegocio, // compat: "el" logo (sucursal → negocio)
+            logoNegocio:  logoNegocio,
+            logoSucursal: logoSucursal
         };
     };
 
@@ -59,20 +62,29 @@
         var m = window.etaaxMarca(opts);
         var nombre = m.negocio || 'Negocio';
         var linea2 = [m.sucursal, subtitulo].filter(Boolean).join(' · ');
+        // Identidad junto al nombre: el logo BASE de la marca (ajustes del negocio)
+        // como principal + el ISOTIPO de la sucursal como sello pequeño a su derecha
+        // (solo si la sucursal tiene el suyo). Sin logo de marca: el de sucursal
+        // toma el lugar principal; sin ninguno: el emoji del negocio.
+        var _principal = m.logoNegocio || m.logoSucursal || '';
+        var _sello     = (m.logoNegocio && m.logoSucursal) ? m.logoSucursal : '';
+        var identidad = _principal
+            ? '<img src="' + _esc(_principal) + '" style="width:46px;height:46px;object-fit:contain;border:1px solid #eee;border-radius:8px;flex-shrink:0;background:#fff" alt="logo">' +
+              (_sello ? '<img src="' + _esc(_sello) + '" title="Isotipo de la sucursal" style="width:26px;height:26px;object-fit:contain;border:1px solid #eee;border-radius:6px;flex-shrink:0;background:#fff;align-self:flex-end" alt="sucursal">' : '')
+            : (m.emoji ? '<span style="font-size:28px;line-height:1;flex-shrink:0">' + _esc(m.emoji) + '</span>' : '');
         return '<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;' +
                 'padding:12px 20px;border-bottom:3px solid #3dbe7a">' +
             '<div style="display:flex;align-items:center;gap:12px;min-width:0">' +
                 '<div style="font-family:\'Bebas Neue\',Arial,sans-serif;font-size:30px;font-weight:900;letter-spacing:2px;color:#1a1916;line-height:1">ETAAX<span style="color:#3dbe7a">.</span></div>' +
-                '<div style="border-left:1px solid #ddd;padding-left:12px;min-width:0">' +
-                    '<div style="font-family:\'Bebas Neue\',Arial,sans-serif;font-size:26px;letter-spacing:1px;color:#1a1916;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
-                        (m.emoji ? _esc(m.emoji) + ' ' : '') + _esc(nombre) + '</div>' +
-                    (linea2 ? '<div style="font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#888;margin-top:3px">' + _esc(linea2) + '</div>' : '') +
+                '<div style="border-left:1px solid #ddd;padding-left:12px;min-width:0;display:flex;align-items:center;gap:10px">' +
+                    identidad +
+                    '<div style="min-width:0">' +
+                        '<div style="font-family:\'Bebas Neue\',Arial,sans-serif;font-size:26px;letter-spacing:1px;color:#1a1916;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(nombre) + '</div>' +
+                        (linea2 ? '<div style="font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#888;margin-top:3px">' + _esc(linea2) + '</div>' : '') +
+                    '</div>' +
                 '</div>' +
             '</div>' +
-            '<div style="display:flex;align-items:center;gap:14px;flex-shrink:0">' +
-                (m.logo ? '<img src="' + _esc(m.logo) + '" style="width:52px;height:52px;object-fit:contain;border:1px solid #eee;border-radius:6px" alt="logo">' : '') +
-                (derechaHTML ? '<div style="text-align:right;font-size:9px;color:#aaa;line-height:1.7">' + derechaHTML + '</div>' : '') +
-            '</div>' +
+            (derechaHTML ? '<div style="text-align:right;font-size:9px;color:#aaa;line-height:1.7;flex-shrink:0">' + derechaHTML + '</div>' : '') +
         '</div>';
     };
 
