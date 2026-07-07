@@ -421,6 +421,111 @@
    }
    window.actualizarEnGlobal = actualizarEnGlobal;
 
+   /* ── BUSCADOR / LIMPIADOR DE DUPLICADOS ─────────────────────────────────────
+      Agrupa el catálogo por identidad (nombre|marca|variedad). Cada grupo con
+      más de un registro se lista con sus registros lado a lado para ELIMINAR el
+      que sobre. Al eliminar, sus sucursales se HEREDAN al registro conservado
+      (unión de membresías) → el insumo no desaparece de ninguna sucursal.
+      Contraseña de admin UNA vez por sesión del modal. Funciona también en el
+      catálogo ETAAX del admin (el modal se crea por JS). */
+   var _dupAuth = false;
+   function _gruposDuplicados() {
+       var g = {};
+       getInsumos().forEach(function (x) { var k = _keyInsLocal(x); (g[k] = g[k] || []).push(x); });
+       return Object.keys(g).filter(function (k) { return g[k].length > 1; })
+           .map(function (k) { return { key: k, items: g[k] }; });
+   }
+   function _ensureModalDuplicados() {
+       if (document.getElementById('modalDuplicados')) return;
+       var el = document.createElement('div');
+       el.id = 'modalDuplicados';
+       el.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10002;align-items:center;justify-content:center;padding:16px';
+       el.onclick = function (e) { if (e.target === el) cerrarDuplicados(); };
+       el.innerHTML =
+           '<div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;width:min(720px,96vw);max-height:86vh;display:flex;flex-direction:column;overflow:hidden">' +
+             '<div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--border)">' +
+               '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:1px;color:var(--text)">⧉ Duplicados del catálogo</div>' +
+               '<button onclick="cerrarDuplicados()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:4px 11px;cursor:pointer;font-family:inherit;font-size:13px">✕ Cerrar</button>' +
+             '</div>' +
+             '<div id="dupSub" style="padding:10px 18px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text-muted);line-height:1.5"></div>' +
+             '<div id="dupLista" style="flex:1;overflow-y:auto;padding:6px 18px 14px"></div>' +
+           '</div>';
+       document.body.appendChild(el);
+   }
+   function abrirDuplicados() {
+       _ensureModalDuplicados();
+       _dupAuth = false;
+       _renderDuplicados();
+       document.getElementById('modalDuplicados').style.display = 'flex';
+   }
+   function cerrarDuplicados() {
+       var m = document.getElementById('modalDuplicados');
+       if (m) m.style.display = 'none';
+       try { filtrar(); } catch (e) {}
+   }
+   window.abrirDuplicados = abrirDuplicados;
+   window.cerrarDuplicados = cerrarDuplicados;
+   function _renderDuplicados() {
+       var grupos = _gruposDuplicados();
+       var sub = document.getElementById('dupSub'), cont = document.getElementById('dupLista');
+       if (!sub || !cont) return;
+       if (!grupos.length) {
+           sub.textContent = 'Catálogo limpio: no hay identidades con registros duplicados. ✅';
+           cont.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:44px 20px;font-size:13px">Sin duplicados 🎉</div>';
+           return;
+       }
+       sub.innerHTML = '<strong style="color:var(--accent)">' + grupos.length + ' insumo' + (grupos.length !== 1 ? 's' : '') + ' con registros duplicados.</strong> ' +
+           'Al eliminar un registro, sus sucursales pasan al que conservas (no se pierde presencia en ninguna).';
+       cont.innerHTML = grupos.map(function (g) {
+           // Representante recomendado: el mismo que elige el catálogo global (prefiere el original).
+           var keep = _dedupGlobal(g.items)[0];
+           var titulo = (typeof insumoEtiqueta === 'function') ? insumoEtiqueta(keep) : (keep.nombre || '');
+           return '<div style="border:1px solid var(--border);border-radius:12px;margin-top:12px;overflow:hidden">' +
+               '<div style="padding:9px 14px;background:var(--surface2);font-size:13px;font-weight:600;color:var(--text)">' + etx(titulo) + ' <span style="color:var(--text-dim);font-weight:400">· ' + g.items.length + ' registros</span></div>' +
+               g.items.map(function (x) {
+                   var sucs = (window._insumoSucursales ? window._insumoSucursales(x) : []).map(function (v) { return _sucNomIns(v || MATRIZ_ID_INS); });
+                   var esKeep = x.id === keep.id;
+                   var fotoEl = x.foto
+                       ? '<img src="' + etx(x.foto) + '" style="width:34px;height:34px;border-radius:7px;object-fit:cover;border:1px solid var(--border);flex-shrink:0">'
+                       : '<div style="width:34px;height:34px;border-radius:7px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">📦</div>';
+                   return '<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--border)">' +
+                       fotoEl +
+                       '<div style="flex:1;min-width:0">' +
+                           '<div style="font-size:11px;color:var(--text-muted);font-family:monospace">' + etx(x.id) + (esKeep ? ' <span style="font-size:10px;background:rgba(61,190,122,.12);color:var(--green);border:1px solid rgba(61,190,122,.3);border-radius:4px;padding:1px 6px;font-family:\'DM Sans\',sans-serif">✓ recomendado conservar</span>' : '') + '</div>' +
+                           '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">' + (sucs.length ? '🏪 ' + etx(sucs.join(', ')) : '🌐 solo en global · sin asignar') + ' · ' + ((x.presentaciones || []).length) + ' presentación' + ((x.presentaciones || []).length !== 1 ? 'es' : '') + '</div>' +
+                       '</div>' +
+                       '<button onclick="eliminarDuplicado(\'' + etx(x.id) + '\')" style="background:transparent;border:1px solid ' + (esKeep ? 'var(--border)' : 'rgba(224,90,58,.5)') + ';color:' + (esKeep ? 'var(--text-dim)' : 'var(--red)') + ';border-radius:8px;padding:6px 12px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap">🗑 Eliminar' + (esKeep ? '' : ' este') + '</button>' +
+                   '</div>';
+               }).join('') +
+           '</div>';
+       }).join('');
+   }
+   function eliminarDuplicado(id) {
+       if (!_dupAuth) {
+           _pedirClaveAdmin('Limpiar duplicados del catálogo de insumos', function () { _dupAuth = true; eliminarDuplicado(id); }, '🔓 Autorizar');
+           return;
+       }
+       var lista = getInsumos();
+       var victima = lista.find(function (x) { return x.id === id; });
+       if (!victima) return;
+       // Heredar la membresía al primer hermano superviviente (unión de sucursales).
+       var k = _keyInsLocal(victima);
+       var dest = lista.find(function (x) { return x.id !== id && _keyInsLocal(x) === k; });
+       if (dest) {
+           var uni = {};
+           (window._insumoSucursales ? window._insumoSucursales(dest) : []).forEach(function (v) { uni[v || 'suc_principal'] = 1; });
+           (window._insumoSucursales ? window._insumoSucursales(victima) : []).forEach(function (v) { uni[v || 'suc_principal'] = 1; });
+           var arr = Object.keys(uni);
+           if (arr.length) dest.sucursales = arr;
+       }
+       _tombAdd([id]); // borrado durable (tombstone persistente)
+       setInsumos(lista.filter(function (x) { return x.id !== id; }));
+       try { _borrarInsumosSupabase(getNegocioActivo(), [id]); } catch (e) {}
+       try { renderStats(); } catch (e) {}
+       _renderDuplicados();
+   }
+   window.eliminarDuplicado = eliminarDuplicado;
+
    function renderStats() {
        // El stats footer se RETIRÓ de las páginas (2026-07-06); si los elementos
        // no existen, no hay nada que pintar (muchos callers siguen llamando aquí).
@@ -534,11 +639,13 @@
            else return;
        }
        el.style.display = '';
-       el.innerHTML = '⚠️ <strong style="color:var(--accent)">' + dups.length + ' insumo' + (dups.length !== 1 ? 's' : '') +
+       el.innerHTML = '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">' +
+           '<div style="flex:1;min-width:200px">⚠️ <strong style="color:var(--accent)">' + dups.length + ' insumo' + (dups.length !== 1 ? 's' : '') +
            ' con registros duplicados</strong> (misma identidad con distinto id — aquí se muestran unificados): ' +
            dups.slice(0, 6).map(function(k){ return '<strong>' + etx(nom[k]) + '</strong> ×' + cnt[k]; }).join(', ') +
-           (dups.length > 6 ? ' y ' + (dups.length - 6) + ' más' : '') +
-           '.<br>Para limpiar: entra a la <strong>sucursal</strong>, búscalo (ahí se ven los repetidos) y elimina el que sobre.';
+           (dups.length > 6 ? ' y ' + (dups.length - 6) + ' más' : '') + '.</div>' +
+           '<button onclick="abrirDuplicados()" style="background:var(--accent);color:#0f0e0c;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">⧉ Limpiar duplicados</button>' +
+           '</div>';
    }
    
    // ── Toggle vista lista / cuadrícula ───────────────────────────
