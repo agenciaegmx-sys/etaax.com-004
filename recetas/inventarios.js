@@ -1634,10 +1634,12 @@ function renderHistTabla(lista) {
         <div class="card-body" style="padding:0"><div class="tabla-wrap"><table>
             <thead><tr>
                 <th>Fecha</th><th>Inventario</th><th>Área</th><th>Productos</th>
-                <th>Capital costo</th><th>Capital carta</th><th>Diferencia</th><th>Estado</th><th></th>
+                <th>Capital costo</th><th>Capital carta</th><th>Faltante / Sobrante</th><th>Estado</th><th></th>
             </tr></thead>
             <tbody>${lista.map(inv => {
-                const dif = inv.diferenciaCosto || 0;
+                // Faltante/sobrante A COSTO proveedor (se guarda al visitar el Paso 5);
+                // inventarios viejos sin el dato caen al valor anterior (a carta).
+                const dif = (inv.difNetoCosto !== undefined ? inv.difNetoCosto : inv.diferenciaCosto) || 0;
                 const accionBtn = inv.cerrado
                     ? `<button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px;color:var(--accent);border-color:var(--accent)"
                         onclick="editarInventario('${inv.id}')">✏️ Editar</button>`
@@ -1668,7 +1670,7 @@ function renderHistTabla(lista) {
 }
 
 function renderHistCard(inv) {
-    const dif = inv.diferenciaCosto || 0;
+    const dif = (inv.difNetoCosto !== undefined ? inv.difNetoCosto : inv.diferenciaCosto) || 0;
     const accionBtn = inv.cerrado
         ? `<button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1;color:var(--accent);border-color:var(--accent)"
             onclick="editarInventario('${inv.id}')">✏️ Editar</button>`
@@ -1691,7 +1693,7 @@ function renderHistCard(inv) {
         <div style="border-top:1px solid var(--border);padding-top:10px">
             <div class="hist-card-stat"><span>Capital costo</span><span style="color:var(--accent);font-weight:500">$${_money2(inv.capitalCosto)}</span></div>
             <div class="hist-card-stat"><span>Capital carta</span><span style="color:var(--green);font-weight:500">$${_money2(inv.capitalCarta)}</span></div>
-            <div class="hist-card-stat"><span>Diferencia</span>
+            <div class="hist-card-stat"><span>${dif>=0?'Sobrante':'Faltante'} a costo</span>
                 <span style="color:${dif>=0?'var(--green)':'var(--red)'};font-weight:600">${dif>=0?'+':''}$${_money2(dif)}</span></div>
             <div class="hist-card-stat"><span>Productos</span><span>${(inv.filas||[]).length}</span></div>
         </div>
@@ -3273,7 +3275,17 @@ function updProduccionPrebatch(id, delta) {
 
 function _renderProduccionPrebatch() {
     const pres = prebatchesProducibles();
-    if (!pres.length) return '';
+    if (!pres.length) {
+        // Estado vacío INFORMATIVO (antes devolvía '' y la función parecía no existir).
+        // Diagnóstico: insumos de producción propia SIN liga a su sub-receta.
+        const rotos = _scopeSucInsumos(getInsumos()).filter(x => x.esSubReceta && !x.recetaId);
+        return `<div style="margin:0 16px 14px;padding:10px 14px;border:1px dashed var(--border);border-radius:10px;font-size:12px;color:var(--text-dim);line-height:1.6">
+            🍸 <strong style="color:var(--text-muted)">Producción de prebatch:</strong> convierte una sub-receta a insumo
+            (botón <strong style="color:var(--text-muted)">"Cargar como insumo"</strong> en el editor de la sub-receta) y aparecerá aquí
+            para registrar los batches hechos — suma existencia al prebatch y descuenta sus insumos base automáticamente.
+            ${rotos.length ? `<br>⚠️ <strong style="color:var(--accent)">${etx(rotos.map(x=>x.nombre).slice(0,4).join(', '))}</strong> ${rotos.length===1?'es producción propia pero no tiene':'son producción propia pero no tienen'} liga a su sub-receta — ábrela y vuelve a usar "Cargar como insumo" para ligarla.` : ''}
+        </div>`;
+    }
     const prod = invActual?.prebatchProducidos || {};
     const items = pres.map(p => {
         const n  = parseFloat(prod[p.id]) || 0;
@@ -4484,7 +4496,7 @@ function _resumenEjecutivo() {
 function renderStep5() {
     const mapaC5 = _compDeInsumo();
     const vcomps = _compuestosActivos().map(_virtualFilaCompuesto);
-    let capitalCosto=0, capitalCarta=0, difCostoTotal=0, conAlerta=0;
+    let capitalCosto=0, capitalCarta=0, difCostoTotal=0, difNetoCosto=0, conAlerta=0;
     // Capital: existencia real de TODAS las filas (los miembros cuentan su capital una vez).
     filasCaptura.forEach(fila => {
         const exist = calcExistencia(fila);
@@ -4495,6 +4507,7 @@ function renderStep5() {
         if (!mapaC5[fila.insumoId]) {
             const dif = calcDiferencia(fila);
             difCostoTotal += dif * (fila.precioCarta || 0); // diferencia valorada a precio de carta
+            difNetoCosto  += dif * cc;                      // faltante/sobrante a COSTO proveedor
             const ref = calcExistenciaTeorica(fila);
             if (ref>0 && Math.abs(dif/ref)*100>25) conAlerta++;
         }
@@ -4503,10 +4516,11 @@ function renderStep5() {
     vcomps.forEach(vf => {
         const dif = calcDiferencia(vf);
         difCostoTotal += dif * (vf.precioCarta || 0);
+        difNetoCosto  += dif * costoCopa(vf);
         const ref = calcExistenciaTeorica(vf);
         if (ref>0 && Math.abs(dif/ref)*100>25) conAlerta++;
     });
-    if (invActual) invActual.diferenciaCosto = difCostoTotal;
+    if (invActual) { invActual.diferenciaCosto = difCostoTotal; invActual.difNetoCosto = difNetoCosto; }
     const colorDif = difCostoTotal>=0 ? 'var(--green)' : 'var(--red)';
 
     const numCancel       = (invActual?.cancelaciones||[]).length;
