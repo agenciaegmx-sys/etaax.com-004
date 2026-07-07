@@ -3131,8 +3131,10 @@ function renderStep3() {
         <button class="exist-vista-btn ${vistaVentas==='lista'?'active':''}"   onclick="setVistaVentas('lista')">≡ Lista completa</button>
         <button class="exist-vista-btn ${vistaVentas==='busqueda'?'active':''}" onclick="setVistaVentas('busqueda')">🔍 Búsqueda rápida</button>
     </div>`;
-    if (vistaVentas === 'lista')    return switcher + renderStep3Insumos();
-    if (vistaVentas === 'busqueda') return switcher + renderStep3BusquedaScaffold();
+    // La sección de PREBATCH (batches hechos) va en las TRES vistas del Paso 3:
+    // antes solo salía en "Menú" y parecía que la función no existía.
+    if (vistaVentas === 'lista')    return switcher + _renderProduccionPrebatch() + renderStep3Insumos();
+    if (vistaVentas === 'busqueda') return switcher + _renderProduccionPrebatch() + renderStep3BusquedaScaffold();
     return switcher + _renderProduccionPrebatch() + renderStep3Menu();
 }
 
