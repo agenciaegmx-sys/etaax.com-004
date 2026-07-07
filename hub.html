@@ -2885,22 +2885,10 @@ window.onload = function() {
       <div>
         <div style="font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--dim);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--b1)">Identidad</div>
 
-        <!-- Logo -->
-        <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
-          <div id="ajSucLogoPrev"></div>
-          <div style="flex:1">
-            <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Logo de sucursal</div>
-            <div style="display:flex;gap:8px;align-items:center">
-              <label style="display:inline-flex;align-items:center;gap:6px;background:var(--s2);border:1px solid var(--b2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;padding:8px 14px;border-radius:8px;cursor:pointer;transition:border-color .2s"
-                     onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--b2)'">
-                📁 Subir imagen
-                <input id="ajSucLogoInput" type="file" accept="image/*" style="display:none" onchange="ajSucLogoChange(this)">
-              </label>
-              <button onclick="ajSucLogoEliminar()" style="background:transparent;border:1px solid var(--b1);color:var(--dim);font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 12px;border-radius:8px;cursor:pointer">Quitar</button>
-            </div>
-            <div style="font-size:11px;color:var(--dim);margin-top:5px">JPG, PNG · máx 5 MB · se comprimirá a 400px</div>
-          </div>
-        </div>
+        <!-- El logo de sucursal se RETIRÓ (decisión 2026-07-06): la identidad
+             visual es UNA (el logo de la marca); la sucursal se distingue por su
+             nombre, color y ubicación. El puntito de color la identifica en los
+             reportes impresos. -->
 
         <!-- Nombre + Giro -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">

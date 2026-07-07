@@ -563,9 +563,13 @@ function _mostrarNavBar() {
     if (ctx) {
         var color = ctx.negColor || '#3dbe7a';
         var tipo = (ctx.negTipo || '').split(' · ')[0];
+        var _lgPer = '';
+        try { _lgPer = localStorage.getItem('etaax_' + (ctx.negId || '') + '_logo') || ''; } catch(e) {}
         bar.innerHTML =
             '<div class="ctx-bar-inner" style="border-color:'+color+'44">' +
-            '<div class="ctx-neg-emoji-wrap" style="background:'+color+'1a;border-color:'+color+'33">'+_esc2(ctx.negEmoji)+'</div>' +
+            (_lgPer
+                ? '<div class="ctx-neg-emoji-wrap" style="background:#fff;border-color:'+color+'33;overflow:hidden;padding:0"><img src="'+_esc2(_lgPer)+'" alt="" style="width:100%;height:100%;object-fit:contain"></div>'
+                : '<div class="ctx-neg-emoji-wrap" style="background:'+color+'1a;border-color:'+color+'33">'+_esc2(ctx.negEmoji)+'</div>') +
             '<div class="ctx-neg-id"><div class="ctx-neg-name">'+_esc2(ctx.negNombre)+'</div><div class="ctx-neg-tipo">'+_esc2(tipo)+'</div></div>' +
             (ctx.sucNombre ? '<span class="ctx-suc-pill" style="background:'+color+'1f;color:'+color+';border-color:'+color+'55">📍 '+_esc2(ctx.sucNombre)+'</span>' : '') +
             '<div class="ctx-nav-btns">' +

@@ -41,18 +41,23 @@
                 sucNombre = (s && s.nombre) || (sucId === 'suc_principal' ? 'Matriz' : (ctx.sucNombre || ''));
             } catch (e) { sucNombre = ctx.sucNombre || ''; }
         }
-        // Logos POR SEPARADO: el de la MARCA (negocio, ajustes generales) es la
-        // identidad principal; el de la SUCURSAL es su isotipo distintivo.
-        var logoNegocio = '', logoSucursal = '';
+        // Identidad visual: UN solo logo (el de la MARCA, ajustes del negocio).
+        // La sucursal se distingue con su COLOR (puntito junto al nombre), no
+        // con un segundo logo (decisión de Edwin: dos imágenes se veían feo).
+        var logoNegocio = '';
         try { logoNegocio = localStorage.getItem('etaax_' + negId + '_logo') || ''; } catch (e) {}
-        if (sucId) { try { logoSucursal = localStorage.getItem('etaax_' + negId + '_suc_' + sucId + '_logo') || ''; } catch (e) {} }
+        var sucColor = '';
+        if (sucId) {
+            try { sucColor = (JSON.parse(localStorage.getItem('etaax_' + negId + '_suc_' + sucId) || '{}').color) || ''; } catch (e) {}
+            if (!sucColor) sucColor = ctx.negColor || '';
+        }
         return {
-            negocio:      ctx.negNombre || '',
-            emoji:        ctx.negEmoji || '',
-            sucursal:     sucNombre,
-            logo:         logoSucursal || logoNegocio, // compat: "el" logo (sucursal → negocio)
-            logoNegocio:  logoNegocio,
-            logoSucursal: logoSucursal
+            negocio:       ctx.negNombre || '',
+            emoji:         ctx.negEmoji || '',
+            sucursal:      sucNombre,
+            sucursalColor: sucColor,
+            logo:          logoNegocio, // compat
+            logoNegocio:   logoNegocio
         };
     };
 
@@ -61,16 +66,15 @@
     window.etaaxReporteHeader = function (subtitulo, derechaHTML, opts) {
         var m = window.etaaxMarca(opts);
         var nombre = m.negocio || 'Negocio';
-        var linea2 = [m.sucursal, subtitulo].filter(Boolean).join(' · ');
-        // Identidad junto al nombre: el logo BASE de la marca (ajustes del negocio)
-        // como principal + el ISOTIPO de la sucursal como sello pequeño a su derecha
-        // (solo si la sucursal tiene el suyo). Sin logo de marca: el de sucursal
-        // toma el lugar principal; sin ninguno: el emoji del negocio.
-        var _principal = m.logoNegocio || m.logoSucursal || '';
-        var _sello     = (m.logoNegocio && m.logoSucursal) ? m.logoSucursal : '';
-        var identidad = _principal
-            ? '<img src="' + _esc(_principal) + '" style="width:46px;height:46px;object-fit:contain;border:1px solid #eee;border-radius:8px;flex-shrink:0;background:#fff" alt="logo">' +
-              (_sello ? '<img src="' + _esc(_sello) + '" title="Isotipo de la sucursal" style="width:26px;height:26px;object-fit:contain;border:1px solid #eee;border-radius:6px;flex-shrink:0;background:#fff;align-self:flex-end" alt="sucursal">' : '')
+        // Línea 2: [• color] Sucursal · Subtítulo — el puntito lleva el color
+        // designado a la sucursal (así se distingue de qué sucursal salió la hoja).
+        var _dot = (m.sucursal && m.sucursalColor)
+            ? '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + _esc(m.sucursalColor) + ';margin-right:5px;vertical-align:middle"></span>'
+            : '';
+        var linea2 = [m.sucursal ? (_dot + _esc(m.sucursal)) : '', _esc(subtitulo || '')].filter(Boolean).join(' · ');
+        // Identidad junto al nombre: el logo BASE de la marca; sin logo → emoji.
+        var identidad = m.logoNegocio
+            ? '<img src="' + _esc(m.logoNegocio) + '" style="width:46px;height:46px;object-fit:contain;border:1px solid #eee;border-radius:8px;flex-shrink:0;background:#fff" alt="logo">'
             : (m.emoji ? '<span style="font-size:28px;line-height:1;flex-shrink:0">' + _esc(m.emoji) + '</span>' : '');
         return '<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;' +
                 'padding:12px 20px;border-bottom:3px solid #3dbe7a">' +
@@ -80,7 +84,7 @@
                     identidad +
                     '<div style="min-width:0">' +
                         '<div style="font-family:\'Bebas Neue\',Arial,sans-serif;font-size:26px;letter-spacing:1px;color:#1a1916;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(nombre) + '</div>' +
-                        (linea2 ? '<div style="font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#888;margin-top:3px">' + _esc(linea2) + '</div>' : '') +
+                        (linea2 ? '<div style="font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#888;margin-top:3px">' + linea2 + '</div>' : '') + /* linea2 ya viene escapada (trae el puntito de color en HTML) */
                     '</div>' +
                 '</div>' +
             '</div>' +

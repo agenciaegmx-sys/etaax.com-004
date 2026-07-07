@@ -784,24 +784,22 @@ function buildPlantillaOperativa(recetas) {
 }
 
 // Bloque DERECHO del encabezado de la hoja de receta: identidad del negocio
-// automática desde reporte-marca.js. Jerarquía: icono GRANDE = logo base de la
-// MARCA (ajustes del negocio); el isotipo de la SUCURSAL va pequeño junto al
-// nombre (donde antes salía el emoji del plato). Sin logos → emoji de respaldo.
+// automática desde reporte-marca.js. Logo GRANDE = marca base (ajustes del
+// negocio); la sucursal se distingue con su PUNTITO de color junto al nombre.
 function _recetaHeaderMarca() {
     if (typeof etaaxMarca !== 'function') return '';
     var m = etaaxMarca();
     if (!m.negocio && !m.logo) return '';
-    var principal = m.logoNegocio || m.logoSucursal || '';
-    var sello     = (m.logoNegocio && m.logoSucursal) ? m.logoSucursal : '';
+    var _dot = (m.sucursal && m.sucursalColor)
+        ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' + etx(m.sucursalColor) + ';margin-right:4px;vertical-align:middle"></span>'
+        : '';
     return '<div style="display:flex;align-items:center;gap:10px;flex-shrink:0">' +
-        (sello
-            ? '<img src="' + sello + '" title="Sucursal" style="width:26px;height:26px;object-fit:contain;border:1px solid #eee;border-radius:6px;background:#fff" alt="sucursal">'
-            : (!principal && m.emoji ? '<span style="font-size:20px;line-height:1">' + m.emoji + '</span>' : '')) +
+        (!m.logoNegocio && m.emoji ? '<span style="font-size:20px;line-height:1">' + m.emoji + '</span>' : '') +
         '<div style="text-align:right">' +
             '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:17px;letter-spacing:1px;color:#1a1916;line-height:1">' + etx(m.negocio || '') + '</div>' +
-            (m.sucursal ? '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#999;margin-top:3px">' + etx(m.sucursal) + '</div>' : '') +
+            (m.sucursal ? '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#999;margin-top:3px">' + _dot + etx(m.sucursal) + '</div>' : '') +
         '</div>' +
-        (principal ? '<img src="' + principal + '" style="width:40px;height:40px;object-fit:contain;border:1px solid #eee;border-radius:6px;background:#fff" alt="logo">' : '') +
+        (m.logoNegocio ? '<img src="' + m.logoNegocio + '" style="width:40px;height:40px;object-fit:contain;border:1px solid #eee;border-radius:6px;background:#fff" alt="logo">' : '') +
     '</div>';
 }
 
@@ -1790,7 +1788,13 @@ function initCtxBar() {
         : (ctx.sucNombre ? '<span class="ctx-suc-pill" style="background:' + color + '1f;color:' + color + ';border-color:' + color + '55">📍 ' + _esc(ctx.sucNombre) + '</span>' : '');
     bar.innerHTML =
         '<div class="ctx-bar-inner" style="border-color:' + (catGlobal ? '#7ab8f544' : (color + '44')) + '">' +
-        '<div class="ctx-neg-emoji-wrap" style="background:' + color + '1a;border-color:' + color + '33">' + _esc(ctx.negEmoji) + '</div>' +
+        (function(){ // logo base de la marca en lugar del emoji (si está cargado)
+            var _lg = '';
+            try { _lg = localStorage.getItem('etaax_' + (ctx.negId || '') + '_logo') || ''; } catch(e) {}
+            return _lg
+                ? '<div class="ctx-neg-emoji-wrap" style="background:#fff;border-color:' + color + '33;overflow:hidden;padding:0"><img src="' + _esc(_lg) + '" alt="" style="width:100%;height:100%;object-fit:contain"></div>'
+                : '<div class="ctx-neg-emoji-wrap" style="background:' + color + '1a;border-color:' + color + '33">' + _esc(ctx.negEmoji) + '</div>';
+        })() +
         '<div class="ctx-neg-id"><div class="ctx-neg-name">' + _esc(ctx.negNombre) + '</div><div class="ctx-neg-tipo">' + _esc(tipo) + '</div></div>' +
         pill +
         '<div class="ctx-nav-btns" id="ctxEditorNav">' +
