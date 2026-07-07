@@ -561,6 +561,7 @@ async function _sbInit() {
         _supabase.from('sf_otros').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
         _supabase.from('staff').select('datos').eq('negocio_id', negId),
         _supabase.from('depositos').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
+        _supabase.from('tarjetas_credito').select('datos').eq('negocio_id', negId).order('created_at', {ascending:true}),
     ]);
     if (!r[0].error) _cacheGG_Fijos   = (r[0].data||[]).map(function(x){return x.datos;});
     if (!r[1].error && r[1].data) _cacheGG_Nominas = r[1].data.datos || {};
@@ -568,6 +569,7 @@ async function _sbInit() {
     if (!r[3].error) _cacheGG_Cortes  = (r[3].data||[]).map(function(x){return x.datos;});
     if (!r[4].error) _cacheGG_Otros   = (r[4].data||[]).map(function(x){return x.datos;});
     if (r[6] && !r[6].error) _cacheGG_Depositos = (r[6].data||[]).map(function(x){return x.datos;});
+    if (r[7] && !r[7].error) _cacheGG_Ctas = (r[7].data||[]).map(function(x){return x.datos;});
     if (!r[5].error) {
         _cacheGG_Staff = (r[5].data||[]).map(function(x){return x.datos;});
         // Mantener localStorage consistente con el servidor (el modal de staff
@@ -687,6 +689,29 @@ function totalNominaGastosMes(mes){ return loadNominaGastosMes(mes).reduce(funct
 function loadCortesMonth(mes){
     return (_cacheGG_Cortes||[]).filter(function(c){return c.fecha&&c.fecha.slice(0,7)===mes;});
 }
+/* ── COMISIONES BANCARIAS del periodo — gasto variable AUTOMÁTICO ─────────────
+   Las ventas de los cortes se capturan BRUTAS; el banco deposita el neto. Para
+   que ventas vs gastos cuadren, la comisión aparece aquí como concepto auto
+   (ya no se captura a mano). ESPEJO de administrativo/ventas.html
+   (taBancoNeto/_netoCuenta/_comEf) — candidato a núcleo compartido. */
+var _cacheGG_Ctas = [];
+function _ctasDebGG(){
+    return (_cacheGG_Ctas||[]).filter(function(c){return c&&c.tipo==='debito';})
+        .sort(function(a,b){return (b.predeterminada?1:0)-(a.predeterminada?1:0);});
+}
+function _comEfGG(cta,cual){ var base=parseFloat(cual==='tc'?cta.comisionTC:cta.comisionTD); if(isNaN(base)) return 0; var f=cta.aplicaIva?(1+(parseFloat(cta.ivaPct)||0)/100):1; return base*f/100; }
+function _netoCtaGG(c,tc,td){ return c ? (tc*(1-_comEfGG(c,'tc'))+td*(1-_comEfGG(c,'td'))) : (tc+td); }
+function comisionCorteGG(c){
+    var bruto = n(c.tarjeta)+n(c.propTarjeta), neto;
+    if (c.tarjetaCuentas && c.tarjetaCuentas.length) {
+        neto = c.tarjetaCuentas.reduce(function(s,t){return s+(parseFloat(t.neto)||0);},0);
+    } else {
+        var c0=_ctasDebGG()[0]||null; neto = c0?_netoCtaGG(c0,0,n(c.tarjeta)):n(c.tarjeta);
+    }
+    var cP=_ctasDebGG()[0]||null; neto += cP?_netoCtaGG(cP,0,n(c.propTarjeta)):n(c.propTarjeta);
+    return Math.max(0, bruto-neto);
+}
+function comisionesBancoMes(mes){ return loadCortesMonth(mes).reduce(function(s,c){return s+comisionCorteGG(c);},0); }
 function loadOtrosMes(mes){
     return (_cacheGG_Otros||[]).filter(function(o){return o.fecha&&o.fecha.slice(0,7)===mes;});
 }
@@ -772,7 +797,8 @@ function renderKPIs(mes){
     var totalImssG=totalImssMes(mes);
     var totalNom=totalNomGastos+totalImssG;
 
-    var totalVar=loadVariablesMes(mes).reduce(function(s,g){return s+n(g.monto);},0);
+    var totalVar=loadVariablesMes(mes).reduce(function(s,g){return s+n(g.monto);},0)
+        + comisionesBancoMes(mes); // comisión bancaria del periodo (gasto auto, desde los cortes)
 
     var total=totalFijos+totalNom+totalVar;
 
@@ -1026,10 +1052,12 @@ function renderVariables(){
     var mes=_mesPicker||mesStr();
     renderRetiros(mes); // movimientos internos (informativo, no afecta utilidad)
     var gastos=loadVariablesMes(mes); // sin IMSS (ese cuenta en nóminas)
+    var comBanco=comisionesBancoMes(mes);
+    var cortesConTarjeta=loadCortesMonth(mes).filter(function(c){return comisionCorteGG(c)>0.005;}).length;
     var tbody=document.getElementById('varTbody');
     var empty=document.getElementById('varEmpty');
     var foot=document.getElementById('varFoot');
-    if(!gastos.length){tbody.innerHTML='';empty.style.display='block';foot.style.display='none';return;}
+    if(!gastos.length && comBanco<=0){tbody.innerHTML='';empty.style.display='block';foot.style.display='none';return;}
     empty.style.display='none'; foot.style.display='';
     var byCat={};
     gastos.forEach(function(g){
@@ -1037,13 +1065,17 @@ function renderVariables(){
         if(!byCat[cat])byCat[cat]={count:0,total:0};
         byCat[cat].count++; byCat[cat].total+=n(g.monto);
     });
-    var total=gastos.reduce(function(s,g){return s+n(g.monto);},0);
+    // Concepto AUTOMÁTICO: comisiones bancarias del periodo (desde los cortes).
+    var CAT_COM='💳 Comisiones bancarias';
+    if(comBanco>0) byCat[CAT_COM]={count:cortesConTarjeta,total:comBanco,auto:true};
+    var total=gastos.reduce(function(s,g){return s+n(g.monto);},0)+comBanco;
     document.getElementById('varTotal').textContent=fmtM(total);
-    document.getElementById('varCount').textContent=gastos.length;
+    document.getElementById('varCount').textContent=gastos.length+(comBanco>0?cortesConTarjeta:0);
     tbody.innerHTML=Object.keys(byCat).sort(function(a,b){return byCat[b].total-byCat[a].total;}).map(function(cat){
         var pct=total>0?(byCat[cat].total/total*100).toFixed(1):0;
+        var esAuto=!!byCat[cat].auto;
         return'<tr>'
-            +'<td><span class="cat-badge">'+_esc(cat)+'</span></td>'
+            +'<td><span class="cat-badge"'+(esAuto?' style="border-color:rgba(245,200,66,.4);color:var(--accent)" title="Calculado automático desde los cortes del mes (venta con tarjeta × comisión de la cuenta). Ya NO lo captures a mano."':'')+'>'+_esc(cat)+(esAuto?' <span style="font-size:9px;opacity:.8">auto</span>':'')+'</span></td>'
             +'<td class="ar" style="color:var(--text-muted)">'+byCat[cat].count+'</td>'
             +'<td class="ar" style="font-weight:600;color:var(--red)">'+fmtM(byCat[cat].total)+'</td>'
             +'<td class="ar">'
