@@ -1685,8 +1685,12 @@ function _renderBrandBar(neg) {
     var t = TIPOS[neg.tipo] || TIPOS.otro;
     var color = neg.color || '#3dbe7a';
     bar.style.borderColor = color + '44';
+    // Logo base de la marca en lugar del emoji (si el negocio lo tiene cargado).
+    var _logoBar = _getNegLogo(neg.id);
     bar.innerHTML =
-        '<div class="neg-activo-emoji-wrap" style="background:' + color + '1a;border:1px solid ' + color + '33">' + (neg.emoji || t.emoji) + '</div>' +
+        (_logoBar
+            ? '<div class="neg-activo-emoji-wrap" style="background:#fff;border:1px solid ' + color + '33;overflow:hidden;padding:0"><img src="' + _esc(_logoBar) + '" alt="" style="width:100%;height:100%;object-fit:contain"></div>'
+            : '<div class="neg-activo-emoji-wrap" style="background:' + color + '1a;border:1px solid ' + color + '33">' + (neg.emoji || t.emoji) + '</div>') +
         '<div><div class="neg-activo-nombre">' + _esc(neg.nombre) + '</div>' +
         '<div class="neg-activo-tipo">' + t.label + '</div></div>' +
         '<div class="brand-info-bar-btns">' +
@@ -2362,12 +2366,22 @@ function _showModulos(neg) {
     var sucCfg = sucId ? _getSucCfg(sucId, neg.id) : {};
     var color  = sucCfg.color || neg.color || '#3dbe7a';
     var sucNom = sucId ? (_getSucursales(neg.id).find(function(s){ return s.id === sucId; }) || {}).nombre || '' : '';
-    document.getElementById('chipEmoji').textContent          = neg.emoji || t.emoji;
+    // Logo base de la marca en lugar del emoji (si el negocio lo tiene cargado).
+    var _wrapChip = document.getElementById('negActEmojiWrap');
+    var _logoChip = _getNegLogo(neg.id);
+    if (_logoChip) {
+        _wrapChip.innerHTML = '<img src="' + _esc(_logoChip) + '" alt="" style="width:100%;height:100%;object-fit:contain">';
+        _wrapChip.style.background = '#fff';
+        _wrapChip.style.overflow = 'hidden';
+    } else {
+        _wrapChip.innerHTML = '<span id="chipEmoji">' + _esc(neg.emoji || t.emoji) + '</span>';
+        _wrapChip.style.background = color + '1a';
+        _wrapChip.style.overflow = '';
+    }
     document.getElementById('chipNombre').textContent         = neg.nombre;
     document.getElementById('chipTipo').textContent           = t.label;
     document.getElementById('negActBar').style.borderColor    = color + '44';
-    document.getElementById('negActEmojiWrap').style.background  = color + '1a';
-    document.getElementById('negActEmojiWrap').style.borderColor = color + '33';
+    _wrapChip.style.borderColor = color + '33';
 
     // Chip de sucursal activa en el header
     var chipSuc = document.getElementById('chipSucursalHub');

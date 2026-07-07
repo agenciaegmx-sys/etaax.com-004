@@ -784,17 +784,24 @@ function buildPlantillaOperativa(recetas) {
 }
 
 // Bloque DERECHO del encabezado de la hoja de receta: identidad del negocio
-// (nombre + sucursal + logo) automática desde reporte-marca.js. Vacío si no hay.
+// automática desde reporte-marca.js. Jerarquía: icono GRANDE = logo base de la
+// MARCA (ajustes del negocio); el isotipo de la SUCURSAL va pequeño junto al
+// nombre (donde antes salía el emoji del plato). Sin logos → emoji de respaldo.
 function _recetaHeaderMarca() {
     if (typeof etaaxMarca !== 'function') return '';
     var m = etaaxMarca();
     if (!m.negocio && !m.logo) return '';
+    var principal = m.logoNegocio || m.logoSucursal || '';
+    var sello     = (m.logoNegocio && m.logoSucursal) ? m.logoSucursal : '';
     return '<div style="display:flex;align-items:center;gap:10px;flex-shrink:0">' +
+        (sello
+            ? '<img src="' + sello + '" title="Sucursal" style="width:26px;height:26px;object-fit:contain;border:1px solid #eee;border-radius:6px;background:#fff" alt="sucursal">'
+            : (!principal && m.emoji ? '<span style="font-size:20px;line-height:1">' + m.emoji + '</span>' : '')) +
         '<div style="text-align:right">' +
-            '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:17px;letter-spacing:1px;color:#1a1916;line-height:1">' + (m.emoji ? m.emoji + ' ' : '') + etx(m.negocio || '') + '</div>' +
+            '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:17px;letter-spacing:1px;color:#1a1916;line-height:1">' + etx(m.negocio || '') + '</div>' +
             (m.sucursal ? '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#999;margin-top:3px">' + etx(m.sucursal) + '</div>' : '') +
         '</div>' +
-        (m.logo ? '<img src="' + m.logo + '" style="width:40px;height:40px;object-fit:contain;border:1px solid #eee;border-radius:6px" alt="logo">' : '') +
+        (principal ? '<img src="' + principal + '" style="width:40px;height:40px;object-fit:contain;border:1px solid #eee;border-radius:6px;background:#fff" alt="logo">' : '') +
     '</div>';
 }
 

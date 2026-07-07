@@ -20,9 +20,17 @@
         var pill = catGlobal
             ? '<span class="ctx-suc-pill" style="background:rgba(122,184,245,.15);color:#7ab8f5;border-color:#7ab8f5">🌐 Global · todas las sucursales</span>'
             : (ctx.sucNombre ? '<span class="ctx-suc-pill" style="background:' + color + '1f;color:' + color + ';border-color:' + color + '55">📍 ' + esc(ctx.sucNombre) + '</span>' : '');
+        // Identidad: el LOGO BASE de la marca (ajustes del negocio) en lugar del
+        // emoji del plato; si el negocio no tiene logo cargado, se queda el emoji.
+        var negLogo = '';
+        try { negLogo = localStorage.getItem('etaax_' + (ctx.negId || '') + '_logo') || ''; } catch (e) {}
+        var identidad = negLogo
+            ? '<div class="ctx-neg-emoji-wrap" style="background:#fff;border-color:' + color + '33;overflow:hidden;padding:0">' +
+              '<img src="' + esc(negLogo) + '" alt="" style="width:100%;height:100%;object-fit:contain"></div>'
+            : '<div class="ctx-neg-emoji-wrap" style="background:' + color + '1a;border-color:' + color + '33">' + esc(ctx.negEmoji) + '</div>';
         bar.innerHTML =
             '<div class="ctx-bar-inner" style="border-color:' + (catGlobal ? '#7ab8f544' : (color + '44')) + '">' +
-            '<div class="ctx-neg-emoji-wrap" style="background:' + color + '1a;border-color:' + color + '33">' + esc(ctx.negEmoji) + '</div>' +
+            identidad +
             '<div class="ctx-neg-id">' +
                 '<div class="ctx-neg-name">' + esc(ctx.negNombre) + '</div>' +
                 '<div class="ctx-neg-tipo">' + esc(tipo) + '</div>' +
