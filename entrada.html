@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<title>ETAAX – Registrar entrada</title>
+<title>ETAAX – Registro de barra/cocina</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 <style>
@@ -22,7 +22,7 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
 .cap-msg{font-size:13px;margin-top:12px;min-height:18px}
 .cap-msg.ok{color:var(--green)} .cap-msg.err{color:var(--red)}
 .row{display:flex;gap:10px}.row>*{flex:1}
-#insList{max-height:230px;overflow:auto;border:1px solid var(--border);border-radius:9px;margin-bottom:14px;text-align:left}
+.buscaList{max-height:230px;overflow:auto;border:1px solid var(--border);border-radius:9px;margin-bottom:14px;text-align:left}
 .ins-it{padding:11px 13px;border-bottom:1px solid var(--border);cursor:pointer;font-size:14px;color:var(--text)}
 .ins-it:active{background:var(--surface2)}
 .ins-sel{display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(61,190,122,.12);border:1px solid var(--green);border-radius:9px;padding:11px 13px;margin-bottom:14px;text-align:left}
@@ -31,6 +31,17 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
 #countBox{font-size:12px;color:var(--text-dim);margin:-6px 0 14px}
 .thumb{width:60px;height:60px;object-fit:cover;border-radius:8px;border:1px solid var(--border);margin:0 auto 12px;display:block}
 .quien{background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 13px;margin-bottom:14px;font-size:13px;color:var(--text);text-align:left}
+/* Menú de conceptos */
+.menu-btn{display:flex;align-items:center;gap:14px;width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:18px 16px;margin-bottom:12px;cursor:pointer;text-align:left;font-family:'DM Sans',sans-serif;transition:border-color .15s}
+.menu-btn:active{border-color:var(--green)}
+.menu-btn .mi{font-size:30px;flex-shrink:0}
+.menu-btn .mt{font-size:15px;font-weight:600;color:var(--text)}
+.menu-btn .md{font-size:12px;color:var(--text-dim);margin-top:2px}
+/* Chips de área y de tipo de merma */
+.chips{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.chips button{flex:1;min-width:90px;background:transparent;border:1.5px solid var(--border);color:var(--text-muted);border-radius:20px;padding:9px 8px;font-size:13px;cursor:pointer;font-family:inherit}
+.chips button.on{border-color:var(--green);background:rgba(61,190,122,.12);color:var(--green);font-weight:600}
+.volver{background:transparent;border:none;color:var(--text-dim);font-size:13px;cursor:pointer;font-family:inherit;padding:4px 0;margin-bottom:10px;display:block}
 </style>
 </head>
 <body>
@@ -43,7 +54,7 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
             <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
         </svg>
     </div>
-    <div class="cap-title">Registrar entrada</div>
+    <div class="cap-title" id="capTitle">Registro de barra / cocina</div>
     <div class="cap-sub" id="capSub">Identifícate con tu PIN</div>
 
     <!-- ── Pantalla PIN ── -->
@@ -54,15 +65,31 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
         <div class="cap-msg" id="pinMsg"></div>
     </div>
 
-    <!-- ── Pantalla formulario ── -->
-    <div id="formScreen" style="display:none">
+    <!-- ── Pantalla MENÚ: qué vas a registrar ── -->
+    <div id="menuScreen" style="display:none">
         <div class="quien">👤 Registra: <b id="quienNom">—</b></div>
         <div id="countBox">⏱️ Esta sesión expira en <b id="countVal" style="color:var(--text)">5:00</b></div>
+        <button class="menu-btn" onclick="irEntrada()">
+            <span class="mi">📦</span>
+            <span><span class="mt">Entrada de insumos</span><br><span class="md">Llegó mercancía: compra, bonificación o consignación</span></span>
+        </button>
+        <button class="menu-btn" onclick="irMerma()">
+            <span class="mi">🍷</span>
+            <span><span class="mt">Merma</span><br><span class="md">Se rompió, derramó o desperdició un insumo o un producto del menú</span></span>
+        </button>
+    </div>
+
+    <!-- ── Pantalla ENTRADA de insumos ── -->
+    <div id="formScreen" style="display:none">
+        <button class="volver" onclick="volverMenu()">← Menú</button>
+
+        <label class="lbl">Área</label>
+        <div class="chips" id="areaChipsEnt"></div>
 
         <label class="lbl">Insumo</label>
         <input id="insBusca" class="fld" placeholder="Buscar insumo…" oninput="filtrarIns(this.value)" autocomplete="off">
         <div id="insSelBox"></div>
-        <div id="insList"></div>
+        <div id="insList" class="buscaList"></div>
 
         <div class="row">
             <div>
@@ -93,6 +120,62 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
         <div class="cap-msg" id="formMsg"></div>
     </div>
 
+    <!-- ── Pantalla MERMA (insumo o producto del menú) ── -->
+    <div id="mermaScreen" style="display:none">
+        <button class="volver" onclick="volverMenu()">← Menú</button>
+
+        <label class="lbl">Área</label>
+        <div class="chips" id="areaChipsMer"></div>
+
+        <label class="lbl">¿Qué se mermó?</label>
+        <div class="chips" id="merTipoChips">
+            <button id="merTipoIns" class="on" onclick="setMermaTipo('insumo')">🧴 Insumo</button>
+            <button id="merTipoProd" onclick="setMermaTipo('producto')">🍹 Producto del menú</button>
+        </div>
+
+        <input id="merBusca" class="fld" placeholder="Buscar insumo…" oninput="filtrarMer(this.value)" autocomplete="off">
+        <div id="merSelBox"></div>
+        <div id="merList" class="buscaList"></div>
+
+        <div class="row">
+            <div>
+                <label class="lbl">Cantidad</label>
+                <input id="merCant" class="fld" type="number" inputmode="decimal" min="0" step="any" placeholder="0">
+            </div>
+            <div>
+                <label class="lbl">Unidad</label>
+                <select id="merUnidad" class="fld">
+                    <option value="copa">Copa(s)</option>
+                    <option value="oz">Onza(s)</option>
+                    <option value="ml">ml</option>
+                    <option value="botella">Botella(s)</option>
+                    <option value="pza">Pieza(s)</option>
+                    <option value="g">Gramos</option>
+                    <option value="porcion">Porción(es)</option>
+                </select>
+            </div>
+        </div>
+
+        <label class="lbl">Motivo</label>
+        <select id="merMotivo" class="fld">
+            <option value="se_rompio">Se rompió</option>
+            <option value="se_derramo">Se derramó</option>
+            <option value="mal_preparado">Mal preparado / regresado</option>
+            <option value="caducado">Caducado / en mal estado</option>
+            <option value="otro">Otro</option>
+        </select>
+
+        <label class="lbl">Nota (opcional)</label>
+        <input id="merNota" class="fld" placeholder="Detalle de lo que pasó…">
+
+        <img id="merFotoThumb" class="thumb" style="display:none">
+        <input type="file" id="merFotoInput" accept="image/*" style="display:none" onchange="onFotoMer(this)">
+        <button class="cap-btn ghost" onclick="document.getElementById('merFotoInput').click()">📷 Foto (opcional)</button>
+
+        <button class="cap-btn" id="merBtn" style="margin-top:12px;background:var(--red);color:#fff" onclick="registrarMerma()">✓ Registrar merma</button>
+        <div class="cap-msg" id="merMsg"></div>
+    </div>
+
     <!-- ── Pantalla error ── -->
     <div id="errScreen" style="display:none">
         <div style="font-size:38px;margin:10px 0">🔒</div>
@@ -118,9 +201,31 @@ var NEG = _q('n') || _q('neg');
 var TOKEN = _q('t');             // token secreto del negocio (va en el QR) — NO requiere login
 var VIDA_MS = 300000;            // la sesión / ventana para subir la foto dura 5 minutos
 var COLAB = '', _NIPHASH = '', INSUMOS = [], SEL = null, FOTO_URL = '', _countTimer = null, _t0 = 0;
+var RECETAS = null;              // menú del negocio (lazy: se carga al entrar a merma de producto)
+var AREA = 'barra';              // área elegida (aplica a entrada Y merma)
+var MERMA_TIPO = 'insumo';       // 'insumo' | 'producto'
+var MSEL = null, MFOTO_URL = '';
 
-function _show(id){ ['pinScreen','formScreen','errScreen'].forEach(function(x){ document.getElementById(x).style.display = x===id?'block':'none'; }); }
+var AREAS = [ ['barra','🍸 Barra'], ['cocina','🍳 Cocina'], ['almacen','📦 Almacén'] ];
+function _pintarAreas(){
+    ['areaChipsEnt','areaChipsMer'].forEach(function(cid){
+        var c = document.getElementById(cid); if (!c) return;
+        c.innerHTML = AREAS.map(function(a){
+            return '<button class="'+(AREA===a[0]?'on':'')+'" onclick="setArea(\''+a[0]+'\')">'+a[1]+'</button>';
+        }).join('');
+    });
+}
+function setArea(a){ AREA = a; _pintarAreas(); }
+
+function _show(id){ ['pinScreen','menuScreen','formScreen','mermaScreen','errScreen'].forEach(function(x){ document.getElementById(x).style.display = x===id?'block':'none'; }); }
 function _err(txt){ document.getElementById('errTxt').innerHTML = txt; document.getElementById('capSub').textContent = ''; _show('errScreen'); if(_countTimer){clearInterval(_countTimer);_countTimer=null;} }
+function volverMenu(){ document.getElementById('capSub').textContent='¿Qué vas a registrar?'; _show('menuScreen'); }
+function irEntrada(){ document.getElementById('capSub').textContent='Registra insumos que llegaron'; _pintarAreas(); _show('formScreen'); }
+async function irMerma(){
+    document.getElementById('capSub').textContent='Registra lo que se mermó';
+    _pintarAreas(); setMermaTipo(MERMA_TIPO);
+    _show('mermaScreen');
+}
 
 async function entrar(){
     var pin = (document.getElementById('pinInput').value || '').trim();
@@ -146,12 +251,11 @@ async function entrar(){
         var ri = await _supabase.rpc('entrada_insumos', { p_neg: NEG, p_token: TOKEN });
         INSUMOS = (ri.data || []).filter(function(x){ return x && x.id; });
         INSUMOS.sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
-        // 3) Mostrar formulario.
+        // 3) Menú de conceptos.
         document.getElementById('quienNom').textContent = COLAB;
         document.getElementById('entFecha').value = todayStr();
-        document.getElementById('capSub').textContent = 'Registra insumos que llegaron';
         filtrarIns('');
-        _show('formScreen');
+        volverMenu();
         _t0 = Date.now(); _tick(); _countTimer = setInterval(_tick, 1000);
     } catch (e) {
         btn.disabled=false; msg.className='cap-msg err'; msg.textContent='Error: '+((e&&e.message)||e);
@@ -165,6 +269,7 @@ function _tick(){
     if (rest <= 0) { _err('Tu sesión expiró (dura 5&nbsp;minutos).<br>Vuelve a escanear el QR e ingresa tu PIN.'); }
 }
 
+/* ── ENTRADA: buscador de insumos ── */
 function filtrarIns(q){
     q = (q||'').toLowerCase();
     var lista = INSUMOS.filter(function(x){
@@ -189,31 +294,88 @@ function selIns(id){
 }
 function limpiarIns(){ SEL=null; document.getElementById('insSelBox').innerHTML=''; filtrarIns(''); }
 
+/* ── MERMA: insumo o producto del menú ── */
+function setMermaTipo(t){
+    MERMA_TIPO = t; MSEL = null;
+    document.getElementById('merTipoIns').className  = t==='insumo'   ? 'on' : '';
+    document.getElementById('merTipoProd').className = t==='producto' ? 'on' : '';
+    document.getElementById('merBusca').placeholder = t==='insumo' ? 'Buscar insumo…' : 'Buscar producto del menú…';
+    document.getElementById('merBusca').value = '';
+    document.getElementById('merSelBox').innerHTML = '';
+    // Unidad default según tipo: producto = pza; insumo = copa.
+    document.getElementById('merUnidad').value = t==='producto' ? 'pza' : 'copa';
+    if (t === 'producto' && RECETAS === null) _cargarRecetas();
+    else filtrarMer('');
+}
+async function _cargarRecetas(){
+    document.getElementById('merList').innerHTML = '<div class="ins-it" style="color:var(--text-dim);cursor:default">Cargando menú…</div>';
+    try {
+        var rr = await _supabase.rpc('entrada_recetas', { p_neg: NEG, p_token: TOKEN });
+        RECETAS = (rr.data || []).filter(function(x){ return x && x.id; });
+        RECETAS.sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
+    } catch(e) { RECETAS = []; }
+    if (!RECETAS.length) {
+        document.getElementById('merList').innerHTML = '<div class="ins-it" style="color:var(--text-dim);cursor:default">No se pudo cargar el menú (¿se corrió la migración v32?)</div>';
+        return;
+    }
+    filtrarMer('');
+}
+function _mermaFuente(){ return MERMA_TIPO === 'producto' ? (RECETAS || []) : INSUMOS; }
+function filtrarMer(q){
+    q = (q||'').toLowerCase();
+    var lista = _mermaFuente().filter(function(x){
+        return !q || (x.nombre||'').toLowerCase().indexOf(q)>=0 || (x.marca||'').toLowerCase().indexOf(q)>=0 || (x.variedad||'').toLowerCase().indexOf(q)>=0 || (x.grupo||'').toLowerCase().indexOf(q)>=0;
+    }).slice(0, 60);
+    document.getElementById('merList').innerHTML = lista.length
+        ? lista.map(function(x){
+            var sub = MERMA_TIPO==='producto' ? (x.grupo||'') : [x.variedad, x.marca].filter(Boolean).join(' · ');
+            return '<div class="ins-it" onclick="selMer(\''+x.id+'\')">'+etx(x.nombre)+(sub?' <span class="chip">'+etx(sub)+'</span>':'')+'</div>';
+        }).join('')
+        : '<div class="ins-it" style="color:var(--text-dim);cursor:default">Sin resultados</div>';
+}
+function selMer(id){
+    MSEL = _mermaFuente().find(function(x){ return x.id===id; });
+    if (!MSEL) return;
+    var sub = MERMA_TIPO==='producto' ? (MSEL.grupo||'') : [MSEL.variedad, MSEL.marca].filter(Boolean).join(' · ');
+    document.getElementById('merSelBox').innerHTML =
+        '<div class="ins-sel"><div><b>'+etx(MSEL.nombre)+'</b>'+(sub?'<div class="chip">'+etx(sub)+'</div>':'')+'</div>'+
+        '<button class="cap-btn ghost" style="width:auto;margin:0;padding:6px 12px" onclick="limpiarMer()">cambiar</button></div>';
+    document.getElementById('merList').innerHTML = '';
+    document.getElementById('merBusca').value = '';
+}
+function limpiarMer(){ MSEL=null; document.getElementById('merSelBox').innerHTML=''; filtrarMer(''); }
+
+/* ── Foto (compartida): compresión agresiva para señal de cocina ── */
 function _comprimir(file){
     return new Promise(function(resolve){
         var r=new FileReader();
         r.onload=function(e){ var img=new Image(); img.onload=function(){
-            var w=img.width,h=img.height,M=1280; if(w>h){if(w>M){h=Math.round(h*M/w);w=M;}}else{if(h>M){w=Math.round(w*M/h);h=M;}}
+            // 1024px / 65%: mitad de peso que antes (1280/72) → sube al doble de rápido con señal débil.
+            var w=img.width,h=img.height,M=1024; if(w>h){if(w>M){h=Math.round(h*M/w);w=M;}}else{if(h>M){w=Math.round(w*M/h);h=M;}}
             var c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);
-            c.toBlob(function(b){resolve(b);},'image/jpeg',0.72);
+            c.toBlob(function(b){resolve(b);},'image/jpeg',0.65);
         }; img.onerror=function(){resolve(null);}; img.src=e.target.result; };
         r.onerror=function(){resolve(null);}; r.readAsDataURL(file);
     });
 }
-async function onFoto(input){
+async function _subirFoto(input, msgEl, thumbId){
     var f = input.files && input.files[0]; input.value='';
-    if (!f) return;
-    var msg=document.getElementById('formMsg'); msg.className='cap-msg'; msg.textContent='Subiendo foto…';
+    if (!f) return '';
+    msgEl.className='cap-msg'; msgEl.textContent='Subiendo foto…';
     var blob = await _comprimir(f);
-    if (!blob){ msg.className='cap-msg err'; msg.textContent='No se pudo procesar la imagen.'; return; }
+    if (!blob){ msgEl.className='cap-msg err'; msgEl.textContent='No se pudo procesar la imagen.'; return ''; }
     var path = NEG+'/entradas/'+TOKEN+'/'+genId()+'.jpg'; // path validado por la política de v28
     var up = await _supabase.storage.from('evidencias').upload(path, blob, {contentType:'image/jpeg'});
-    if (up.error){ msg.className='cap-msg err'; msg.textContent='Error al subir foto: '+up.error.message+' (¿corriste v28?)'; return; }
-    FOTO_URL = _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
-    var im=document.getElementById('fotoThumb'); im.src=FOTO_URL; im.style.display='block';
-    msg.className='cap-msg ok'; msg.textContent='✓ Foto lista';
+    if (up.error){ msgEl.className='cap-msg err'; msgEl.textContent='Error al subir foto: '+up.error.message+' (¿corriste v28?)'; return ''; }
+    var url = _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
+    var im=document.getElementById(thumbId); im.src=url; im.style.display='block';
+    msgEl.className='cap-msg ok'; msgEl.textContent='✓ Foto lista';
+    return url;
 }
+async function onFoto(input){ FOTO_URL = await _subirFoto(input, document.getElementById('formMsg'), 'fotoThumb') || FOTO_URL; }
+async function onFotoMer(input){ MFOTO_URL = await _subirFoto(input, document.getElementById('merMsg'), 'merFotoThumb') || MFOTO_URL; }
 
+/* ── Registrar ENTRADA ── */
 async function registrar(){
     var msg = document.getElementById('formMsg'); msg.className='cap-msg'; msg.textContent='';
     if (Date.now() - _t0 >= VIDA_MS) { _err('Tu sesión expiró.<br>Vuelve a escanear el QR.'); return; }
@@ -223,6 +385,8 @@ async function registrar(){
     var btn = document.getElementById('regBtn'); btn.disabled = true; msg.textContent = 'Registrando…';
     var entry = {
         id: genId()+genId(),
+        concepto: 'entrada',
+        area: AREA,
         insumoId: SEL.id,
         nombre: SEL.nombre + (SEL.variedad ? ' '+SEL.variedad : ''),
         familia: SEL.familia || SEL.categoria || '',
@@ -244,6 +408,42 @@ async function registrar(){
         FOTO_URL=''; var im=document.getElementById('fotoThumb'); im.style.display='none'; im.src='';
         btn.disabled=false;
         msg.className='cap-msg ok'; msg.textContent='✓ Entrada de '+etx(entry.nombre)+' registrada. Puedes capturar otra.';
+    } catch (e) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent='Error: '+((e&&e.message)||e); }
+}
+
+/* ── Registrar MERMA ── */
+async function registrarMerma(){
+    var msg = document.getElementById('merMsg'); msg.className='cap-msg'; msg.textContent='';
+    if (Date.now() - _t0 >= VIDA_MS) { _err('Tu sesión expiró.<br>Vuelve a escanear el QR.'); return; }
+    if (!MSEL) { msg.className='cap-msg err'; msg.textContent = MERMA_TIPO==='producto' ? 'Elige el producto del menú.' : 'Elige el insumo.'; return; }
+    var cant = parseFloat(document.getElementById('merCant').value) || 0;
+    if (cant <= 0) { msg.className='cap-msg err'; msg.textContent='Pon una cantidad mayor a 0.'; return; }
+    var btn = document.getElementById('merBtn'); btn.disabled = true; msg.textContent = 'Registrando…';
+    var entry = {
+        id: genId()+genId(),
+        concepto: 'merma',                     // ← NO se importa como entrada de stock (solo log)
+        mermaTipo: MERMA_TIPO,                 // 'insumo' | 'producto'
+        area: AREA,
+        insumoId: MERMA_TIPO==='insumo'   ? MSEL.id : '',
+        recetaId: MERMA_TIPO==='producto' ? MSEL.id : '',
+        nombre: MSEL.nombre + (MSEL.variedad ? ' '+MSEL.variedad : ''),
+        familia: MSEL.familia || MSEL.categoria || MSEL.grupo || '',
+        cantidad: cant,
+        unidad: document.getElementById('merUnidad').value,
+        motivo: document.getElementById('merMotivo').value,
+        notas: (document.getElementById('merNota').value||'').trim(),
+        fecha: todayStr(),
+        registrado: new Date().toISOString(),
+        foto_url: MFOTO_URL || ''
+    };
+    try {
+        var ins = await _supabase.rpc('entrada_registrar', { p_neg: NEG, p_token: TOKEN, p_niphash: _NIPHASH, p_datos: entry });
+        if (ins.error) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent='No se pudo guardar: '+ins.error.message; return; }
+        limpiarMer();
+        document.getElementById('merCant').value=''; document.getElementById('merNota').value='';
+        MFOTO_URL=''; var im=document.getElementById('merFotoThumb'); im.style.display='none'; im.src='';
+        btn.disabled=false;
+        msg.className='cap-msg ok'; msg.textContent='✓ Merma de '+etx(entry.nombre)+' registrada. Puedes capturar otra.';
     } catch (e) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent='Error: '+((e&&e.message)||e); }
 }
 

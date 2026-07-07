@@ -85,6 +85,42 @@ async function _sbInitInv() {
     }
     if (typeof init === 'function') init();
     _subInvRealtime(negId);
+    _subEntradasRealtime(negId); // el QR de entradas/mermas aparece SOLO (requiere v32)
+}
+
+// ── Realtime del QR (entradas_log): lo registrado desde el celular aparece SOLO ──
+// Antes había que refrescar la página. Requiere v32 (entradas_log en la publicación).
+var _elRtCh = null, _elRtNeg = null, _elRtT = null;
+function _subEntradasRealtime(negId) {
+    if (!negId || _elRtNeg === negId || typeof sbRealtime !== 'function') return;
+    if (_elRtCh && _supabase.removeChannel) { try { _supabase.removeChannel(_elRtCh); } catch(e) {} }
+    _elRtNeg = negId;
+    _elRtCh = sbRealtime('entradas_log', negId, function() {
+        clearTimeout(_elRtT);
+        _elRtT = setTimeout(_reloadEntradasRT, 400); // coalescer ráfagas en una recarga
+    });
+}
+async function _reloadEntradasRT() {
+    var negId = getNegocioActivo();
+    if (!negId || _elRtNeg !== negId || typeof _supabase === 'undefined') return;
+    var r = await _supabase.from('entradas_log').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true});
+    if (r.error) return;
+    var frescas = (r.data || []).map(function(x){ return x.datos; }).filter(Boolean);
+    // Conservar las locales aún sin sincronizar (outbox) para que no desaparezcan.
+    var vistos = {}; frescas.forEach(function(e){ if (e && e.id) vistos[e.id] = 1; });
+    (_cacheEL || []).forEach(function(e){ if (e && e.id && !vistos[e.id]) frescas.push(e); });
+    _cacheEL = frescas;
+    try { localStorage.setItem(_sk('el_local'), JSON.stringify(_cacheEL)); } catch(e) {}
+    // Refrescar lo que esté en pantalla: el registro de entradas, o el inventario
+    // abierto (importa las nuevas del QR al momento).
+    try {
+        var ve = document.getElementById('vistaEntradas');
+        if (ve && ve.style.display !== 'none') { renderVistaEntradas(); return; }
+        if (invActual && !invActual.cerrado) {
+            var n = _importarEntradasQR();
+            if (n && typeof renderStepContent === 'function') renderStepContent();
+        }
+    } catch(e) {}
 }
 
 // Realtime: si otro dispositivo registra/edita un inventario, el historial se
@@ -665,6 +701,7 @@ function _importarEntradasQR() {
     var n = 0;
     (getEntradasLog() || []).forEach(function(e) {
         if (!e || e.origen !== 'qr') return;   // solo QR (las manuales ya están en el inventario)
+        if (e.concepto === 'merma') return;    // las MERMAS del QR no son entradas de stock (solo log/auditoría)
         if (e.importadoEnInv) return;          // ya importada a algún inventario
         if (e.id && yaEnInv[e.id]) return;      // ya está en este inventario
         if (!idsSuc[e.insumoId]) return;        // no es de esta sucursal
@@ -5850,6 +5887,19 @@ function renderListadoEntradas() {
         const color   = tipoEntradaColor(e.tipo);
         const nombre  = etx(e.nombreProducto || e.nombre || '—');
         const cant    = (e.cantidad||0) % 1 ? (e.cantidad||0).toFixed(1) : (e.cantidad||0);
+        // MERMA del QR: se muestra distinta (badge rojo, cantidad negativa, área);
+        // NO entra al stock del inventario — es log/auditoría del turno.
+        if (e.concepto === 'merma') {
+            const areaTx = e.area ? ' · ' + etx(e.area) : '';
+            const motivo = { se_rompio:'se rompió', se_derramo:'se derramó', mal_preparado:'mal preparado', caducado:'caducado', otro:'otro' }[e.motivo] || '';
+            return `<div class="ent-log-fila">
+                <span class="ent-log-nombre">${nombre}${e.mermaTipo === 'producto' ? ' <span style="font-size:9px;color:var(--text-dim)">🍹 producto</span>' : ''}${motivo ? ' <span style="font-size:10px;color:var(--text-dim)">· ' + motivo + '</span>' : ''}</span>
+                <span class="ent-log-badge" style="color:var(--red);background:rgba(224,90,58,.12);border-color:rgba(224,90,58,.4)">Merma${areaTx}</span>
+                <span class="ent-log-fecha">${e.fecha || '—'}</span>
+                <span class="ent-log-cant" style="color:var(--red)">−${cant} ${etx(e.unidad || 'pza')}</span>
+                <button class="ent-log-del" title="Eliminar" onclick="eliminarEntradaPorId('${e.id}')">🗑️</button>
+            </div>`;
+        }
         if (_entEditId === e.id) {
             return `<div class="ent-log-fila" style="gap:8px;flex-wrap:wrap">
                 <span class="ent-log-nombre">${nombre}</span>
