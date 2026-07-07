@@ -249,7 +249,7 @@ async function entrar(){
         COLAB = rv.data; _NIPHASH = h;
         // 2) Cargar insumos (token-gated, también por RPC).
         var ri = await _supabase.rpc('entrada_insumos', { p_neg: NEG, p_token: TOKEN });
-        INSUMOS = (ri.data || []).filter(function(x){ return x && x.id; });
+        INSUMOS = (ri.data || []).filter(function(x){ return x && x.id && x.activo !== '0'; }); // sin los dados de baja del negocio
         INSUMOS.sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
         // 3) Menú de conceptos.
         document.getElementById('quienNom').textContent = COLAB;

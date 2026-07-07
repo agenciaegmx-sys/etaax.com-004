@@ -32,10 +32,12 @@ window._insumoResolver = window._makeInsumoResolver(getInsumos);
 // Sin esto, el inventario leía los insumos de TODAS las sucursales y los duplicaba.
 function _scopeSucInsumos(lista) {
     const s = localStorage.getItem('etaax_sucursal_activa') || '';
-    if (!s) return lista || [];
-    // Membresía: el insumo aparece si VIVE en esta sucursal (array `sucursales`), no solo por sucursalId.
-    return (lista || []).filter(x => (typeof window._insumoEnSuc === 'function')
-        ? window._insumoEnSuc(x, s)
+    // Inactivos GLOBALES fuera siempre (dados de baja en el negocio).
+    lista = (lista || []).filter(x => x && x.activo !== '0');
+    if (!s) return lista;
+    // Visibilidad por sucursal: vive aquí + no PAUSADO aquí (regla única, insumo-label.js).
+    return lista.filter(x => (typeof window._insumoActivoEnSuc === 'function')
+        ? window._insumoActivoEnSuc(x, s)
         : ((x && (x.sucursalId || 'suc_principal')) === s));
 }
 // Inventarios de la SUCURSAL activa (independientes por sucursal). "Sin sucursal = ve todo".
@@ -3254,8 +3256,14 @@ function _filtrarMenuVentas(q){
     });
 }
 function renderStep3Menu() {
+    // Visibilidad (regla única, insumo-label.js): activa global + vive en la
+    // sucursal + no pausada aquí. Sin sucursal activa → solo el status global.
+    const _sucP3 = localStorage.getItem('etaax_sucursal_activa') || '';
     const recetas  = getRecetas().filter(r =>
-        (r.tipo === 'alimentos' || r.tipo === 'bebidas') && r.status !== 'inactiva'
+        (r.tipo === 'alimentos' || r.tipo === 'bebidas') &&
+        ((_sucP3 && typeof window._recetaActivaEnSuc === 'function')
+            ? window._recetaActivaEnSuc(r, _sucP3)
+            : r.status !== 'inactiva')
     );
     const vendidos = invActual?.cocktailsVendidos || {};
     if (!recetas.length) {

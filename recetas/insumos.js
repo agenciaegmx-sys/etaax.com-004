@@ -422,6 +422,27 @@
       la identidad de un insumo es su ID — productos distintos pueden llamarse
       igual con variedad/presentación diferente. Ver memoria del proyecto.) */
 
+   // ── Pausar / reactivar un insumo EN LA SUCURSAL ACTIVA ───────────────────
+   // Pausado = sigue viviendo aquí (membresía e historial intactos) pero deja de
+   // aparecer en inventarios/escandallo/requisiciones/QR de ESTA sucursal.
+   // (Inactivo GLOBAL = pastilla "Activo/Inactivo" del editor → desaparece de
+   // todo el negocio y solo se ve en el catálogo global con filtro Inactivos.)
+   function togglePausaInsumo(id) {
+       var suc = _getSucActivaIns();
+       if (!suc) return; // solo tiene sentido dentro de una sucursal
+       var eff = _effSucIns(suc);
+       var ins = getInsumos().find(function(x){ return x.id === id; });
+       if (!ins) return;
+       var p = (ins.inactivoEn || []).slice();
+       var i = p.indexOf(eff);
+       if (i >= 0) p.splice(i, 1); else p.push(eff);
+       ins.inactivoEn = p;
+       setInsumos(getInsumos());
+       try { _sincronizarInsumosSupabase(getNegocioActivo(), [ins]); } catch(e) {}
+       try { filtrar(); } catch(e) {}
+   }
+   window.togglePausaInsumo = togglePausaInsumo;
+
    function renderStats() {
        // El stats footer se RETIRÓ de las páginas (2026-07-06); si los elementos
        // no existen, no hay nada que pintar (muchos callers siguen llamando aquí).
@@ -489,10 +510,26 @@
        if (fam) lista = lista.filter(x => _familiaIns(x) === fam);
        if (cat) lista = lista.filter(x => x.categoria === cat);
        // Sin sucursal = matriz. Con catálogo global, no se filtra por sucursal.
+       // Filtro Estado (regla única de visibilidad — ver insumo-label.js):
+       //  · Sucursal: default ACTIVOS (viven aquí, activos globales, no pausados);
+       //    "Inactivos" = los PAUSADOS en esta sucursal (para reactivarlos).
+       //    Los inactivos GLOBALES no aparecen en ninguna sucursal.
+       //  · Global: default activos; "Inactivos" = el grupo inactivo del negocio.
+       var fEstIns = document.getElementById('filtroEstadoIns');
+       var estadoIns = (fEstIns && fEstIns.value) || 'activos';
        if (!catGlobal) {
            // Membresía: el insumo aparece si VIVE en esa sucursal (array `sucursales`), no por sucursalId único.
-           if (sucFil)        lista = lista.filter(x => window._insumoEnSuc(x, sucFil));
-           else if (sucActiva) lista = lista.filter(x => window._insumoEnSuc(x, sucActiva));
+           var _sucVista = sucFil || sucActiva;
+           if (_sucVista) {
+               lista = lista.filter(x => window._insumoEnSuc(x, _sucVista) && x.activo !== '0');
+               lista = (estadoIns === 'inactivos')
+                   ? lista.filter(x => window._insumoPausadoEn && window._insumoPausadoEn(x, _effSucIns(_sucVista)))
+                   : lista.filter(x => !(window._insumoPausadoEn && window._insumoPausadoEn(x, _effSucIns(_sucVista))));
+           }
+       } else {
+           lista = (estadoIns === 'inactivos')
+               ? lista.filter(x => x.activo === '0')
+               : lista.filter(x => x.activo !== '0');
        }
        // Catálogo global del negocio: TODOS los registros, SIN deduplicar por
        // nombre/marca (identidad = id: productos distintos pueden llamarse igual;
@@ -770,6 +807,9 @@
                    ${_catGlobalIns() ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;
                        color:var(--green);border-color:var(--green);display:inline-flex;align-items:center;gap:5px"
                        onclick="abrirInsumoSuc('${ins.id}')"><span style="font-size:14px">🏪</span> Sucursales</button>` : ''}
+                   ${(!_catGlobalIns() && _getSucActivaIns()) ? (window._insumoPausadoEn && window._insumoPausadoEn(ins, _effSucIns(_getSucActivaIns()))
+                       ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;color:var(--green);border-color:var(--green);display:inline-flex;align-items:center;gap:5px" title="Reactivar en esta sucursal" onclick="togglePausaInsumo('${ins.id}')">▶ Reactivar</button>`
+                       : `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;display:inline-flex;align-items:center;justify-content:center" title="Pausar en esta sucursal (deja de aparecer en inventarios, recetas, requisiciones y QR de ESTA sucursal)" onclick="togglePausaInsumo('${ins.id}')">⏸</button>`) : ''}
                    <button class="btn-vista" style="padding:6px 12px;font-size:12px;
                        color:var(--red);border-color:var(--red);
                        display:inline-flex;align-items:center;justify-content:center"
@@ -877,6 +917,9 @@
                    '<button class="btn-ver" onclick="verFicha(\'' + ins.id + '\')">👁️ Ver</button>' +
                    '<button class="btn-edit" onclick="editarInsumo(\'' + ins.id + '\')">✏️ Editar</button>' +
                    (_catGlobalIns() ? '<button class="btn-edit" style="color:var(--green);border-color:var(--green)" onclick="abrirInsumoSuc(\'' + ins.id + '\')">🏪 Sucursales</button>' : '') +
+                   ((!_catGlobalIns() && _getSucActivaIns()) ? ((window._insumoPausadoEn && window._insumoPausadoEn(ins, _effSucIns(_getSucActivaIns())))
+                       ? '<button class="btn-ver" style="color:var(--green)" title="Reactivar en esta sucursal" onclick="togglePausaInsumo(\'' + ins.id + '\')">▶</button>'
+                       : '<button class="btn-ver" title="Pausar en esta sucursal" onclick="togglePausaInsumo(\'' + ins.id + '\')">⏸</button>') : '') +
                    '<button class="btn-del" onclick="eliminarInsumo(\'' + ins.id + '\')">🗑️</button>' +
                '</div>';
 

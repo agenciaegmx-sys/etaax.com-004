@@ -98,6 +98,11 @@
                         </div>
                         <select class="filtro-select" id="filtroFamilia" onchange="filtrar()"><option value="">Todas las familias</option></select>
                         <select class="filtro-select" id="filtroCategoria" onchange="filtrar()"><option value="">Todas las categorías</option></select>
+                        <!-- Estado: en sucursal "Inactivos" = pausados AQUÍ; en global = inactivos del negocio -->
+                        <select class="filtro-select" id="filtroEstadoIns" onchange="filtrar()">
+                            <option value="activos">✅ Activos</option>
+                            <option value="inactivos">⏸ Inactivos</option>
+                        </select>
                     </div>
                 </div>
             </div>

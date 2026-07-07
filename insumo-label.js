@@ -126,4 +126,40 @@
         for (var i = 0; i < s.length; i++) { if ((s[i] || 'suc_principal') === effSuc) return true; }
         return false;
     };
+
+    // ── VISIBILIDAD activo/pausado (regla ÚNICA para todo el ecosistema) ─────
+    // Dos niveles:
+    //  · activo === '0' (insumo) / status === 'inactiva' (receta) → INACTIVO
+    //    GLOBAL: desaparece de TODO el negocio; solo se ve en el catálogo global
+    //    con el filtro de inactivos.
+    //  · inactivoEn/inactivaEn: [sucId,…] → PAUSADO en esas sucursales: sigue
+    //    viviendo ahí (membresía intacta, historial intacto) pero no aparece en
+    //    su ecosistema (inventarios, escandallo, requisiciones, QR, menú).
+    function _enLista(arr, effSuc) {
+        arr = arr || [];
+        for (var i = 0; i < arr.length; i++) { if ((arr[i] || 'suc_principal') === effSuc) return true; }
+        return false;
+    }
+    window._insumoPausadoEn = function (x, effSuc) { return _enLista(x && x.inactivoEn, effSuc); };
+    // ¿El insumo es OPERABLE en la sucursal? (vive ahí + activo global + no pausado ahí)
+    window._insumoActivoEnSuc = function (x, effSuc) {
+        if (!x || x.activo === '0') return false;
+        if (!window._insumoEnSuc(x, effSuc)) return false;
+        return !window._insumoPausadoEn(x, effSuc);
+    };
+
+    // Recetas: mismas reglas (regla histórica: receta SIN sucursal vive en Matriz).
+    window._recetaEnSuc = function (r, suc) {
+        if (!r) return false;
+        var s = (r.sucursales && r.sucursales.length) ? r.sucursales : (r.sucursalId ? [r.sucursalId] : []);
+        if (!s.length) return suc === 'suc_principal' || !suc; // sin sucursal = Matriz
+        for (var i = 0; i < s.length; i++) { if ((s[i] || 'suc_principal') === (suc || 'suc_principal')) return true; }
+        return false;
+    };
+    window._recetaPausadaEn = function (r, suc) { return _enLista(r && r.inactivaEn, suc || 'suc_principal'); };
+    window._recetaActivaEnSuc = function (r, suc) {
+        if (!r || r.status === 'inactiva') return false;
+        if (!window._recetaEnSuc(r, suc)) return false;
+        return !window._recetaPausadaEn(r, suc);
+    };
 })();

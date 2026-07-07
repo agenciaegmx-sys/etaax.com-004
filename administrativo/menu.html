@@ -208,7 +208,18 @@ function toggleNav() {
 function getNegocioActivo() { return localStorage.getItem('etaax_negocio_activo') || ''; }
 var _cacheMenuRec = null;
 
-function getRecetas() { return _cacheMenuRec || []; }
+function getRecetas() {
+    // Visibilidad (regla única, insumo-label.js): fuera inactivas GLOBALES y,
+    // con sucursal activa, fuera las que no viven aquí o están PAUSADAS aquí.
+    // (Antes el menú ignoraba incluso el status global de la receta.)
+    var l = _cacheMenuRec || [];
+    var s = localStorage.getItem('etaax_sucursal_activa') || '';
+    return l.filter(function(r){
+        if (!r || r.status === 'inactiva') return false;
+        if (s && typeof window._recetaActivaEnSuc === 'function') return window._recetaActivaEnSuc(r, s);
+        return true;
+    });
+}
 function setRecetas(lista) {
     _cacheMenuRec = lista;
 }
@@ -401,6 +412,7 @@ document.addEventListener('DOMContentLoaded', function() { renderMenu(); _sbInit
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="/insumo-label.js"></script>
 <script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>

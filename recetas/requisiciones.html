@@ -430,7 +430,14 @@ async function _sbInitReq() {
 
 // Insumos del catálogo, excluyendo sub-recetas
 function getInsumosCatalogo() {
-    return getInsumos().filter(function(x) { return !x.esSubReceta && x.activo !== '0'; });
+    // Visibilidad (regla única, insumo-label.js): activo global + vive en la
+    // sucursal activa + no pausado aquí. Sin sucursal activa → solo activo global.
+    var _suc = localStorage.getItem('etaax_sucursal_activa') || '';
+    return getInsumos().filter(function(x) {
+        if (!x || x.esSubReceta || x.activo === '0') return false;
+        if (!_suc) return true;
+        return (typeof window._insumoActivoEnSuc === 'function') ? window._insumoActivoEnSuc(x, _suc) : true;
+    });
 }
 
 // ── Estado de un ítem ─────────────────────────────────────────
@@ -1131,6 +1138,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
 <script src="/reporte-marca.js"></script>
+<script src="/insumo-label.js"></script>
 <script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>

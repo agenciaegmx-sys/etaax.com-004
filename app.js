@@ -48,10 +48,13 @@ function getRecetasScope() {
     var s = localStorage.getItem('etaax_sucursal_activa') || '';
     var l = getRecetas();
     if (!s) return l; // Matriz / catálogo global → todas
+    // Regla única de visibilidad (insumo-label.js): vive aquí + activa global
+    // + no PAUSADA en esta sucursal (inactivaEn).
     return l.filter(function(r){
-        if (r.status === 'inactiva') return false; // inactivas: SOLO en el catálogo global
+        if (typeof window._recetaActivaEnSuc === 'function') return window._recetaActivaEnSuc(r, s);
+        if (r.status === 'inactiva') return false;
         var sucs = _recetaSucursales(r);
-        if (!sucs.length) return s === 'suc_principal'; // sin sucursal = vive en Matriz
+        if (!sucs.length) return s === 'suc_principal';
         return sucs.indexOf(s) >= 0;
     });
 }
@@ -998,14 +1001,16 @@ function costoIngredienteVivo(ing) {
 // negocio. En modo catálogo global (o sin sucursal activa) devuelve todo.
 function getCatalogoInsumosScope() {
     var cat = getCatalogoInsumos();
+    // Inactivos GLOBALES fuera SIEMPRE (una receta no debe usar un insumo dado de baja).
+    cat = cat.filter(function(x){ return x && x.activo !== '0'; });
     var catGlobal = false;
     try { catGlobal = sessionStorage.getItem('etaax_cat_global') === '1'; } catch(e) {}
     if (catGlobal) return cat;
     var sucActiva = localStorage.getItem('etaax_sucursal_activa') || '';
     if (!sucActiva) return cat;
-    // Membresía por sucursal (igual que recetas): el insumo aparece si VIVE en esta sucursal.
-    return cat.filter(function(x){ return (typeof window._insumoEnSuc === 'function')
-        ? window._insumoEnSuc(x, sucActiva)
+    // Visibilidad por sucursal: vive aquí + no pausado aquí (regla única, insumo-label.js).
+    return cat.filter(function(x){ return (typeof window._insumoActivoEnSuc === 'function')
+        ? window._insumoActivoEnSuc(x, sucActiva)
         : ((x.sucursalId || 'suc_principal') === sucActiva); });
 }
 

@@ -2527,17 +2527,45 @@ function guardarRecetaSuc(){
     renderGridRecetas();
 }
 
+// Pausar / reactivar la receta EN LA SUCURSAL ACTIVA (inactivaEn): sigue viviendo
+// aquí (membresía e historial intactos) pero sale del ecosistema de la sucursal.
+function togglePausaReceta(id) {
+    var s = localStorage.getItem('etaax_sucursal_activa') || '';
+    if (!s) return;
+    var r = getRecetas().find(function(x){ return x.id === id; });
+    if (!r) return;
+    var p = (r.inactivaEn || []).slice();
+    var i = p.indexOf(s);
+    if (i >= 0) p.splice(i, 1); else p.push(s);
+    r.inactivaEn = p;
+    setRecetas(getRecetas());
+    if (typeof _sbUpReceta === 'function') _sbUpReceta(r);
+    renderGridRecetas();
+}
+
 function renderGridRecetas() {
     const q   = (document.getElementById('buscarReceta')?.value || '').toLowerCase();
     const _catGlobal = _esCatGlobalRecetas();
-    let lista = getRecetasScope();
-    // Estado: en sucursal getRecetasScope YA excluye inactivas; en el catálogo
-    // global el selector decide (default = activas; las inactivas viven SOLO aquí).
+    // Estado (regla única de visibilidad, insumo-label.js):
+    //  · Global: Activas / Inactivas (las inactivas del negocio viven SOLO aquí).
+    //  · Sucursal: Activas (scope normal) / PAUSADAS aquí (inactivaEn) para reactivarlas.
     const _selEstado = document.getElementById('filtroEstadoReceta');
-    if (_selEstado) _selEstado.style.display = _catGlobal ? '' : 'none';
+    const _sucAct = localStorage.getItem('etaax_sucursal_activa') || '';
+    if (_selEstado) {
+        _selEstado.style.display = (_catGlobal || _sucAct) ? '' : 'none';
+        const _o2 = _selEstado.options[1];
+        if (_o2) _o2.text = _catGlobal ? '🚫 Inactivas' : '⏸ Pausadas aquí';
+    }
+    const _estado = (_selEstado && _selEstado.value) || 'activas';
+    let lista;
     if (_catGlobal) {
-        const _estado = (_selEstado && _selEstado.value) || 'activas';
-        lista = lista.filter(r => (_estado === 'inactivas') ? r.status === 'inactiva' : r.status !== 'inactiva');
+        lista = getRecetasScope().filter(r => (_estado === 'inactivas') ? r.status === 'inactiva' : r.status !== 'inactiva');
+    } else if (_estado === 'inactivas' && _sucAct) {
+        // Grupo de PAUSADAS en esta sucursal (viven aquí, activas globales, pausadas aquí).
+        lista = getRecetas().filter(r => window._recetaEnSuc && window._recetaEnSuc(r, _sucAct)
+            && r.status !== 'inactiva' && window._recetaPausadaEn && window._recetaPausadaEn(r, _sucAct));
+    } else {
+        lista = getRecetasScope();
     }
     if (filtroRecetaTipo) lista = lista.filter(r => r.tipo === filtroRecetaTipo);
     if (q) lista = lista.filter(r =>
@@ -2589,6 +2617,11 @@ function renderGridRecetas() {
             </div>
             ${_catGlobal ? `<button onclick="event.stopPropagation();abrirRecetaSuc('${r.id}')"
                 style="width:100%;margin-top:9px;background:var(--surface);border:1px solid var(--border);color:var(--green);border-radius:8px;padding:7px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">🏪 Copiar a sucursal</button>` : ''}
+            ${(!_catGlobal && _sucAct) ? ((window._recetaPausadaEn && window._recetaPausadaEn(r, _sucAct))
+                ? `<button onclick="event.stopPropagation();togglePausaReceta('${r.id}')" title="Vuelve a aparecer en el ecosistema de esta sucursal"
+                    style="width:100%;margin-top:9px;background:var(--surface);border:1px solid var(--green);color:var(--green);border-radius:8px;padding:7px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">▶ Reactivar aquí</button>`
+                : `<button onclick="event.stopPropagation();togglePausaReceta('${r.id}')" title="Deja de aparecer en inventarios y menú de ESTA sucursal (historial intacto)"
+                    style="width:100%;margin-top:9px;background:var(--surface);border:1px solid var(--border);color:var(--text-dim);border-radius:8px;padding:7px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">⏸ Pausar aquí</button>`) : ''}
             <button onclick="event.stopPropagation();eliminarReceta('${r.id}')"
                 style="position:absolute;top:8px;right:8px;background:none;border:none;
                 color:var(--text-dim);cursor:pointer;font-size:11px;padding:2px 5px;
