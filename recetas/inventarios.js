@@ -4473,6 +4473,8 @@ function renderStep5() {
                 onclick="verReporteDirectivo(true)">🔐 Reporte gerencial</button>
             <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)"
                 onclick="verReporteDirectivo()">📄 Reporte directivo</button>
+            <button class="btn-vista"
+                onclick="verReporteDirectivo(false,'desglose')" title="Solo las tablas por insumo — se exporta aparte del resumen">📑 Desglose por insumo</button>
         </div>
         <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
             <div class="stat-card"><div class="stat-label">Capital a costo</div><div class="stat-val">$${_M2(capitalCosto)}</div></div>
@@ -4939,9 +4941,10 @@ function _rdConstruirPaginas(src, pagesC, headHtml, footHtml) {
 }
 
 // ── Reporte directivo ─────────────────────────────────────────
-function verReporteDirectivo(gerencial) {
+function verReporteDirectivo(gerencial, modo) {
     if (!invActual) return;
     const ger = gerencial === true; // Reporte Gerencial: oculta los importes (solo % + neto + dif$ por insumo).
+    const desglose = modo === 'desglose'; // Reporte en DOS exportes: resumen general vs desglose por insumo (más orgánico de imprimir).
 
     // ── Analytics ──────────────────────────────────────────────────
     let capitalCosto = 0, capitalCarta = 0, difTotal = 0;
@@ -5182,10 +5185,9 @@ function verReporteDirectivo(gerencial) {
     const _gruposInvOrden = Object.entries(gruposTabla).sort((a,b)=>{const A=a[0]===GRUPO_BATEO,B=b[0]===GRUPO_BATEO;return A===B?String(a[0]).localeCompare(String(b[0])):(A?-1:1);});
     const inventarioHTML = `
       <div class="rd-sec">Inventario completo por grupo de categoría</div>
-      ${_gruposInvOrden.map(_grupoInvHTML).join('')}
-      ${_descuentosHTML}`;
+      ${_gruposInvOrden.map(_grupoInvHTML).join('')}`;
     // Encabezado grande y pie que un PAGINADOR (mide alturas) replica en cada hoja A4 discreta.
-    const _headHtml = rdHeader(`Inventario ${_tipoTxt} · ${periodoTxt} · ${_estadoInv}`);
+    const _headHtml = rdHeader(`Inventario ${_tipoTxt} · ${periodoTxt} · ${_estadoInv}${desglose ? ' · Desglose por insumo' : ''}`);
     const _footHtml = rdFoot;
 
     // Limpiar overlay anterior si existiera
@@ -5247,8 +5249,9 @@ function verReporteDirectivo(gerencial) {
 </style>
 
 <div id="rd-toolbar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#1a1916;padding:10px 20px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.5)">
-  <span style="color:#f5f0e8;font-size:14px;font-weight:700">${ger?'🔐 Reporte Gerencial':'📊 Reporte Directivo'} — ${etx(inv.nombre || 'Inventario')}</span>
+  <span style="color:#f5f0e8;font-size:14px;font-weight:700">${ger?'🔐 Reporte Gerencial':'📊 Reporte Directivo'}${desglose?' · Desglose por insumo':''} — ${etx(inv.nombre || 'Inventario')}</span>
   <div style="display:flex;gap:8px">
+    <button onclick="verReporteDirectivo(${ger?'true':'false'}, '${desglose ? '' : 'desglose'}')" style="padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;background:transparent;border:1px solid rgba(255,255,255,.3);color:#f5f0e8">${desglose ? '📊 Ver resumen' : '📑 Ver desglose por insumo'}</button>
     <button onclick="window.print()" style="padding:7px 18px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;background:#f5c842;color:#1a1916;border:none">🖨️ Imprimir / Exportar PDF</button>
     <button onclick="document.getElementById('rdOverlay').remove()" style="padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;background:transparent;border:1px solid rgba(255,255,255,.3);color:#f5f0e8">✕ Cerrar</button>
   </div>
@@ -5436,6 +5439,7 @@ function verReporteDirectivo(gerencial) {
 
   <div class="rd-break"></div>
   ${movimientosHTML}
+  ${_descuentosHTML}
 
   <div class="rd-break"></div>
   ${inventarioHTML}
@@ -5443,6 +5447,20 @@ function verReporteDirectivo(gerencial) {
 </div>`;
 
     document.body.appendChild(overlay);
+    // DOS exportes: el RESUMEN (todo lo general) y el DESGLOSE POR INSUMO (las
+    // tablas grandes) se imprimen por separado — juntos, el paginado forzaba
+    // huecos feos entre secciones. Se poda el contenido según el modo.
+    try {
+        const _srcPoda = overlay.querySelector('#rd-src');
+        let _enDesglose = false;
+        Array.from(_srcPoda.children).forEach(n => {
+            if (n.classList && n.classList.contains('rd-sec') && /Inventario completo/i.test(n.textContent)) _enDesglose = true;
+            if (desglose ? !_enDesglose : _enDesglose) n.remove();
+        });
+        // rd-breaks colgantes al inicio/fin (dejarían hojas vacías)
+        while (_srcPoda.firstElementChild && _srcPoda.firstElementChild.classList.contains('rd-break')) _srcPoda.firstElementChild.remove();
+        while (_srcPoda.lastElementChild && _srcPoda.lastElementChild.classList.contains('rd-break')) _srcPoda.lastElementChild.remove();
+    } catch(e) { console.warn('[reporte] poda por modo falló:', e); }
     // Paginar: medir alturas reales y repartir el contenido en hojas A4 discretas, cada una con
     // su encabezado y pie, sin cortar filas (cuando una tabla cruza de hoja, repite su cabecera).
     try {
