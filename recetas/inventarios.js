@@ -4520,7 +4520,21 @@ function renderStep5() {
         const ref = calcExistenciaTeorica(vf);
         if (ref>0 && Math.abs(dif/ref)*100>25) conAlerta++;
     });
-    if (invActual) { invActual.diferenciaCosto = difCostoTotal; invActual.difNetoCosto = difNetoCosto; }
+    if (invActual) {
+        invActual.diferenciaCosto = difCostoTotal; invActual.difNetoCosto = difNetoCosto;
+        // invActual es un CLON (abrirInventario hace deep-copy): propagar las cifras
+        // al registro del historial y persistirlo — si no, la lista seguía mostrando
+        // el valor viejo (a carta). No pasa por guardarInventario a propósito
+        // (marcaría _step5Dirty y anularía el caché de render del propio Paso 5).
+        try {
+            const _reg = getInventarios().find(x => x.id === invActual.id);
+            if (_reg && _reg !== invActual && (_reg.difNetoCosto !== difNetoCosto || _reg.diferenciaCosto !== difCostoTotal)) {
+                _reg.diferenciaCosto = difCostoTotal;
+                _reg.difNetoCosto    = difNetoCosto;
+                _sbUpInv(_reg);
+            }
+        } catch(e) {}
+    }
     const colorDif = difCostoTotal>=0 ? 'var(--green)' : 'var(--red)';
 
     const numCancel       = (invActual?.cancelaciones||[]).length;
