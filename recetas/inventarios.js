@@ -112,6 +112,7 @@ async function _reloadEntradasRT() {
     var vistos = {}; frescas.forEach(function(e){ if (e && e.id) vistos[e.id] = 1; });
     (_cacheEL || []).forEach(function(e){ if (e && e.id && !vistos[e.id]) frescas.push(e); });
     _cacheEL = frescas;
+    window._step5Dirty = true; // llegaron datos nuevos del QR → invalidar el resumen
     try { localStorage.setItem(_sk('el_local'), JSON.stringify(_cacheEL)); } catch(e) {}
     // Refrescar lo que esté en pantalla: el registro de entradas, o el inventario
     // abierto (importa las nuevas del QR al momento).
@@ -457,7 +458,7 @@ function _btnCopiarAnterior(idx, fila, estilo) {
 // Antes cada calcVentas*Recetas recorría TODAS las recetas por CADA insumo → O(insumos×recetas)
 // en cada render (lento con 200+ insumos). Ahora se recorren las recetas UNA vez y se acumula por
 // insumo; la consulta por fila es O(1). Se re-calcula solo si cambian recetas o lo vendido.
-var _consumoIdxCache = null, _consumoIdxKey = '', _consumoDirty = true;
+var _consumoIdxCache = null, _consumoIdxKey = '', _consumoDirty = true; window._step5Dirty = true;
 function _consumoIdx() {
     var vendidos = (invActual && invActual.cocktailsVendidos) || {};
     var recetas  = getRecetas();
@@ -2090,18 +2091,38 @@ function renderStepContent() {
     // Primer levantamiento solo captura existencias
     const paso = (invActual && invActual.tipoInv === 'primer_lev') ? 1 : pasoActual;
     const renders = [null, renderStep1, renderStep2, renderStep3, renderStep4, renderStep5];
+    // ── Paso 5 con CACHÉ DE RENDER (estilo Premiere) ─────────────────────────
+    // El resumen se renderiza UNA vez en un contenedor persistente (#step5Keep);
+    // al volver, solo se muestra (instantáneo). Se re-renderiza únicamente si
+    // hubo cambios (_step5Dirty: cualquier guardado/venta/realtime) o cambió el
+    // inventario. Las interacciones internas del paso 5 (búsqueda, bateo,
+    // galería) mutan el DOM vivo → no invalidan.
+    let _keep5 = document.getElementById('step5Keep');
     if (paso === 5) {
-        // El resumen calcula y pinta TODO el inventario (KPIs + tablas por grupo):
-        // con 200+ insumos el innerHTML tarda. Feedback inmediato + render diferido
-        // → la navegación responde al instante y el resumen aparece enseguida.
-        cont.innerHTML = '<div style="text-align:center;padding:90px 20px;color:var(--text-dim)"><div style="font-size:32px;margin-bottom:12px">📊</div>Generando resumen de resultado…</div>';
+        cont.style.display = 'none';
+        const _invId = (invActual && invActual.id) || '';
+        if (_keep5 && !window._step5Dirty && _keep5.dataset.inv === _invId && _keep5.innerHTML) {
+            _keep5.style.display = ''; // ya renderizado y sin cambios → instantáneo
+            return;
+        }
+        if (!_keep5) {
+            _keep5 = document.createElement('div');
+            _keep5.id = 'step5Keep';
+            cont.parentNode.insertBefore(_keep5, cont.nextSibling);
+        }
+        _keep5.dataset.inv = _invId;
+        _keep5.style.display = '';
+        _keep5.innerHTML = '<div style="text-align:center;padding:90px 20px;color:var(--text-dim)"><div style="font-size:32px;margin-bottom:12px">📊</div>Generando resumen de resultado…</div>';
         clearTimeout(window._step5RenderT);
         window._step5RenderT = setTimeout(function(){
             if (pasoActual !== 5) return; // el usuario ya se movió a otro paso
-            cont.innerHTML = renderStep5();
+            _keep5.innerHTML = renderStep5();
+            window._step5Dirty = false;
         }, 30);
         return;
     }
+    if (_keep5) _keep5.style.display = 'none';
+    cont.style.display = '';
     cont.innerHTML = renders[paso]();
     // Restore filter selects
     const ffF = document.getElementById('filtroFamStep');
@@ -3177,7 +3198,7 @@ function updCntMenu(id, delta) {
     if (!invActual.cocktailsVendidos) invActual.cocktailsVendidos = {};
     const actual = parseFloat(invActual.cocktailsVendidos[id] || 0);
     const nuevo  = Math.max(0, actual + delta);
-    invActual.cocktailsVendidos[id] = nuevo; _consumoDirty = true;
+    invActual.cocktailsVendidos[id] = nuevo; _consumoDirty = true; window._step5Dirty = true;
     const el = document.getElementById('cnt-' + id);
     if (el) {
         el.value = nuevo; // ahora es un input editable
@@ -3192,7 +3213,7 @@ function updCntMenu(id, delta) {
 function setCntMenu(id, val) {
     if (!invActual.cocktailsVendidos) invActual.cocktailsVendidos = {};
     const nuevo = Math.max(0, parseFloat(val) || 0);
-    invActual.cocktailsVendidos[id] = nuevo; _consumoDirty = true;
+    invActual.cocktailsVendidos[id] = nuevo; _consumoDirty = true; window._step5Dirty = true;
     const el = document.getElementById('cnt-' + id);
     if (el) {
         el.classList.toggle('active', nuevo > 0);
@@ -3692,7 +3713,7 @@ function renderResumenVentas() {
 
 function updCoctelVendido(id, val) {
     if (!invActual.cocktailsVendidos) invActual.cocktailsVendidos = {};
-    invActual.cocktailsVendidos[id] = val; _consumoDirty = true;
+    invActual.cocktailsVendidos[id] = val; _consumoDirty = true; window._step5Dirty = true;
 }
 function updVentasDirectas(idx, campo, val) { filasCaptura[idx][campo] = val; _autoGuardar(); }
 function updVentasConcepto(idx, campo, val) { filasCaptura[idx][campo] = val; _autoGuardar(); }
@@ -5489,6 +5510,7 @@ function _esRegistrado(f) { return _filaConDatos(f); }
 
 function guardarInventario() {
     if (!invActual) return;
+    window._step5Dirty = true; // hubo cambios → el resumen (Paso 5) se re-renderiza al volver
     // Solo guardar filas con datos capturados — evita guardar 1400+ filas vacías
     var _nuevas = filasCaptura.filter(_filaConDatos);
     // 🛡️ Blindaje anti-borrado: si el resultado queda VACÍO (filasCaptura no cargada, o
