@@ -594,18 +594,26 @@ function _matchInsumo(nombreProducto) {
     return bestScore > 0 ? best : null;
 }
 
+var _autoMatchFirma = '';
 function _autoMatchCancelaciones() {
-    (invActual?.cancelaciones || []).forEach(c => {
+    const lista = invActual?.cancelaciones || [];
+    // Guarda: si no hay cancelaciones sin insumoId nuevas, no hay nada que hacer.
+    // (Antes corría el matching de texto completo EN CADA llamada — y se llama
+    // por fila en el Paso 5/reporte → era el retraso de varios segundos.)
+    const firma = (invActual?.id || '') + '|' + lista.length + '|' + lista.reduce((s,c)=>s+(c.insumoId?0:1),0);
+    if (firma === _autoMatchFirma) return;
+    lista.forEach(c => {
         if (!c.insumoId) {
             const m = _matchInsumo(c.nombreProducto);
             if (m) { c.insumoId = m.insumoId; c.insumoNombre = m.nombre; }
         }
     });
+    _autoMatchFirma = (invActual?.id || '') + '|' + lista.length + '|' + lista.reduce((s,c)=>s+(c.insumoId?0:1),0);
 }
 
 function getCancelacionesCopas(insumoId) {
-    _autoMatchCancelaciones();
-    const fila = filasCaptura.find(f => f.insumoId === insumoId);
+    _autoMatchCancelaciones(); // idempotente y con guarda: solo trabaja si hay cancelaciones nuevas
+    const fila = _filaDe(insumoId);
     return (invActual?.cancelaciones || [])
         .filter(c => {
             if (c.insumoId) return c.insumoId === insumoId;
@@ -686,8 +694,21 @@ function calcExistenciaTeorica(fila) {
     return ea + entTotal + prodAdd - totalCopas - prodSub - (fila.ventasBotella || 0) * (fila.contNeto > 0 && fila.copaML > 0 ? fila.contNeto / fila.copaML : 0);
 }
 
+// Índice fila-por-insumo (se reconstruye si cambia el arreglo o su tamaño):
+// getEntradasBottles/getCancelacionesCopas se llaman POR FILA en el Paso 5 y el
+// reporte — con .find lineal eran O(filas²) y tardaban segundos con 200+ insumos.
+var _filaIdxCache = null, _filaIdxRef = null, _filaIdxLen = -1;
+function _filaDe(insumoId) {
+    if (_filaIdxRef !== filasCaptura || _filaIdxLen !== filasCaptura.length || !_filaIdxCache) {
+        _filaIdxCache = {};
+        filasCaptura.forEach(f => { if (f && f.insumoId) _filaIdxCache[f.insumoId] = f; });
+        _filaIdxRef = filasCaptura; _filaIdxLen = filasCaptura.length;
+    }
+    return _filaIdxCache[insumoId];
+}
+
 function getEntradasBottles(insumoId) {
-    const fila    = filasCaptura.find(f => f.insumoId === insumoId);
+    const fila    = _filaDe(insumoId);
     const deFilas = fila ? (fila.entradas || []).reduce((s, e) => s + (parseFloat(e)||0), 0) : 0;
     const deLog   = (invActual?.entradasLog || [])
         .filter(e => e.insumoId === insumoId)
