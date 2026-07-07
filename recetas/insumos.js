@@ -47,14 +47,11 @@
    function abrirInsumoSuc(id) {
        _insumoSucEditId = id;
        var ins = getInsumos().find(function(x){ return x.id === id; }); if (!ins) return;
-       // Dónde vive = UNIÓN de la membresía de TODOS los registros con la misma identidad
-       // (por si aún hay duplicados viejos en otras sucursales) → el modal refleja la realidad.
-       var k = _keyInsLocal(ins), vive = [];
-       getInsumos().forEach(function(x){
-           if (_keyInsLocal(x) !== k) return;
-           (window._insumoSucursales ? window._insumoSucursales(x) : (x.sucursalId ? [x.sucursalId] : [])).forEach(function(v){
-               var e = v || MATRIZ_ID_INS; if (vive.indexOf(e) < 0) vive.push(e);
-           });
+       // Dónde vive ESTE registro (identidad = id; nunca por nombre/marca —
+       // productos distintos pueden llamarse igual).
+       var vive = [];
+       (window._insumoSucursales ? window._insumoSucursales(ins) : (ins.sucursalId ? [ins.sucursalId] : [])).forEach(function(v){
+           var e = v || MATRIZ_ID_INS; if (vive.indexOf(e) < 0) vive.push(e);
        });
        // Si queda vacío = insumo del almacén global SIN asignar → ninguna sucursal marcada.
        var sucs = _getSucsIns(), opts = [];
@@ -421,110 +418,9 @@
    }
    window.actualizarEnGlobal = actualizarEnGlobal;
 
-   /* ── BUSCADOR / LIMPIADOR DE DUPLICADOS ─────────────────────────────────────
-      Agrupa el catálogo por identidad (nombre|marca|variedad). Cada grupo con
-      más de un registro se lista con sus registros lado a lado para ELIMINAR el
-      que sobre. Al eliminar, sus sucursales se HEREDAN al registro conservado
-      (unión de membresías) → el insumo no desaparece de ninguna sucursal.
-      Contraseña de admin UNA vez por sesión del modal. Funciona también en el
-      catálogo ETAAX del admin (el modal se crea por JS). */
-   var _dupAuth = false;
-   function _gruposDuplicados() {
-       var g = {};
-       getInsumos().forEach(function (x) { var k = _keyInsLocal(x); (g[k] = g[k] || []).push(x); });
-       return Object.keys(g).filter(function (k) { return g[k].length > 1; })
-           .map(function (k) { return { key: k, items: g[k] }; });
-   }
-   function _ensureModalDuplicados() {
-       if (document.getElementById('modalDuplicados')) return;
-       var el = document.createElement('div');
-       el.id = 'modalDuplicados';
-       el.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10002;align-items:center;justify-content:center;padding:16px';
-       el.onclick = function (e) { if (e.target === el) cerrarDuplicados(); };
-       el.innerHTML =
-           '<div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;width:min(720px,96vw);max-height:86vh;display:flex;flex-direction:column;overflow:hidden">' +
-             '<div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--border)">' +
-               '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:1px;color:var(--text)">⧉ Duplicados del catálogo</div>' +
-               '<button onclick="cerrarDuplicados()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:4px 11px;cursor:pointer;font-family:inherit;font-size:13px">✕ Cerrar</button>' +
-             '</div>' +
-             '<div id="dupSub" style="padding:10px 18px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text-muted);line-height:1.5"></div>' +
-             '<div id="dupLista" style="flex:1;overflow-y:auto;padding:6px 18px 14px"></div>' +
-           '</div>';
-       document.body.appendChild(el);
-   }
-   function abrirDuplicados() {
-       _ensureModalDuplicados();
-       _dupAuth = false;
-       _renderDuplicados();
-       document.getElementById('modalDuplicados').style.display = 'flex';
-   }
-   function cerrarDuplicados() {
-       var m = document.getElementById('modalDuplicados');
-       if (m) m.style.display = 'none';
-       try { filtrar(); } catch (e) {}
-   }
-   window.abrirDuplicados = abrirDuplicados;
-   window.cerrarDuplicados = cerrarDuplicados;
-   function _renderDuplicados() {
-       var grupos = _gruposDuplicados();
-       var sub = document.getElementById('dupSub'), cont = document.getElementById('dupLista');
-       if (!sub || !cont) return;
-       if (!grupos.length) {
-           sub.textContent = 'Catálogo limpio: no hay identidades con registros duplicados. ✅';
-           cont.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:44px 20px;font-size:13px">Sin duplicados 🎉</div>';
-           return;
-       }
-       sub.innerHTML = '<strong style="color:var(--accent)">' + grupos.length + ' insumo' + (grupos.length !== 1 ? 's' : '') + ' con registros duplicados.</strong> ' +
-           'Al eliminar un registro, sus sucursales pasan al que conservas (no se pierde presencia en ninguna).';
-       cont.innerHTML = grupos.map(function (g) {
-           // Representante recomendado: el mismo que elige el catálogo global (prefiere el original).
-           var keep = _dedupGlobal(g.items)[0];
-           var titulo = (typeof insumoEtiqueta === 'function') ? insumoEtiqueta(keep) : (keep.nombre || '');
-           return '<div style="border:1px solid var(--border);border-radius:12px;margin-top:12px;overflow:hidden">' +
-               '<div style="padding:9px 14px;background:var(--surface2);font-size:13px;font-weight:600;color:var(--text)">' + etx(titulo) + ' <span style="color:var(--text-dim);font-weight:400">· ' + g.items.length + ' registros</span></div>' +
-               g.items.map(function (x) {
-                   var sucs = (window._insumoSucursales ? window._insumoSucursales(x) : []).map(function (v) { return _sucNomIns(v || MATRIZ_ID_INS); });
-                   var esKeep = x.id === keep.id;
-                   var fotoEl = x.foto
-                       ? '<img src="' + etx(x.foto) + '" style="width:34px;height:34px;border-radius:7px;object-fit:cover;border:1px solid var(--border);flex-shrink:0">'
-                       : '<div style="width:34px;height:34px;border-radius:7px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">📦</div>';
-                   return '<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--border)">' +
-                       fotoEl +
-                       '<div style="flex:1;min-width:0">' +
-                           '<div style="font-size:11px;color:var(--text-muted);font-family:monospace">' + etx(x.id) + (esKeep ? ' <span style="font-size:10px;background:rgba(61,190,122,.12);color:var(--green);border:1px solid rgba(61,190,122,.3);border-radius:4px;padding:1px 6px;font-family:\'DM Sans\',sans-serif">✓ recomendado conservar</span>' : '') + '</div>' +
-                           '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">' + (sucs.length ? '🏪 ' + etx(sucs.join(', ')) : '🌐 solo en global · sin asignar') + ' · ' + ((x.presentaciones || []).length) + ' presentación' + ((x.presentaciones || []).length !== 1 ? 'es' : '') + '</div>' +
-                       '</div>' +
-                       '<button onclick="eliminarDuplicado(\'' + etx(x.id) + '\')" style="background:transparent;border:1px solid ' + (esKeep ? 'var(--border)' : 'rgba(224,90,58,.5)') + ';color:' + (esKeep ? 'var(--text-dim)' : 'var(--red)') + ';border-radius:8px;padding:6px 12px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap">🗑 Eliminar' + (esKeep ? '' : ' este') + '</button>' +
-                   '</div>';
-               }).join('') +
-           '</div>';
-       }).join('');
-   }
-   function eliminarDuplicado(id) {
-       if (!_dupAuth) {
-           _pedirClaveAdmin('Limpiar duplicados del catálogo de insumos', function () { _dupAuth = true; eliminarDuplicado(id); }, '🔓 Autorizar');
-           return;
-       }
-       var lista = getInsumos();
-       var victima = lista.find(function (x) { return x.id === id; });
-       if (!victima) return;
-       // Heredar la membresía al primer hermano superviviente (unión de sucursales).
-       var k = _keyInsLocal(victima);
-       var dest = lista.find(function (x) { return x.id !== id && _keyInsLocal(x) === k; });
-       if (dest) {
-           var uni = {};
-           (window._insumoSucursales ? window._insumoSucursales(dest) : []).forEach(function (v) { uni[v || 'suc_principal'] = 1; });
-           (window._insumoSucursales ? window._insumoSucursales(victima) : []).forEach(function (v) { uni[v || 'suc_principal'] = 1; });
-           var arr = Object.keys(uni);
-           if (arr.length) dest.sucursales = arr;
-       }
-       _tombAdd([id]); // borrado durable (tombstone persistente)
-       setInsumos(lista.filter(function (x) { return x.id !== id; }));
-       try { _borrarInsumosSupabase(getNegocioActivo(), [id]); } catch (e) {}
-       try { renderStats(); } catch (e) {}
-       _renderDuplicados();
-   }
-   window.eliminarDuplicado = eliminarDuplicado;
+   /* (El "limpiador de duplicados" por identidad de texto se ELIMINÓ 2026-07-06:
+      la identidad de un insumo es su ID — productos distintos pueden llamarse
+      igual con variedad/presentación diferente. Ver memoria del proyecto.) */
 
    function renderStats() {
        // El stats footer se RETIRÓ de las páginas (2026-07-06); si los elementos
@@ -533,7 +429,6 @@
        // En el Catálogo Global cuenta INSUMOS ÚNICOS (deduplicados por identidad), igual que
        // el contador de arriba → antes contaba los 400 registros crudos (con duplicados) y no cuadraba.
        let insumos = _insumosScope();
-       if (_catGlobalIns()) insumos = _dedupGlobal(insumos);
        const cats    = [...new Set(insumos.map(x => x.categoria).filter(Boolean))];
        const provs   = [...new Set(insumos.flatMap(x =>
            (x.presentaciones||[]).map(p => p.proveedor).filter(Boolean)
@@ -598,65 +493,19 @@
            // Membresía: el insumo aparece si VIVE en esa sucursal (array `sucursales`), no por sucursalId único.
            if (sucFil)        lista = lista.filter(x => window._insumoEnSuc(x, sucFil));
            else if (sucActiva) lista = lista.filter(x => window._insumoEnSuc(x, sucActiva));
-       } else {
-           // Catálogo global del negocio: UN insumo por identidad (nombre+marca),
-           // aunque exista en varias sucursales → sin duplicados. Se prefiere el
-           // "original" (sin origenId) como representante.
-           lista = _dedupGlobal(lista);
        }
+       // Catálogo global del negocio: TODOS los registros, SIN deduplicar por
+       // nombre/marca (identidad = id: productos distintos pueden llamarse igual;
+       // el dedup por texto colapsaba productos legítimos e invertía contadores).
 
        _listaFiltrada = lista;
        _paginaActual  = 0;
        _renderPagina();
        renderStats(); // stats por sucursal (se actualiza al cambiar el filtro de sucursal)
-       _avisoDuplicadosGlobal();
    }
 
-   // ── Aviso de duplicados de identidad (SOLO informa, no borra nada) ──────────
-   // En el catálogo global se deduplica la vista, así que un registro repetido
-   // (misma identidad nombre|marca|variedad con otro id) queda invisible y los
-   // contadores "no cuadran" (ej. sucursal 106 vs global 105). Este aviso lista
-   // las identidades repetidas para limpiarlas A MANO desde la vista de sucursal
-   // (ahí sí se ven los dos registros).
-   function _avisoDuplicadosGlobal() {
-       var contLista = document.getElementById('contenedorLista');
-       var el = document.getElementById('insDupAviso');
-       // El aviso sale en el GLOBAL (donde los duplicados quedan unificados e
-       // invisibles) Y en la SUCURSAL (donde se ven como filas repetidas e inflan
-       // el contador — ej. sucursal 116 vs global 112).
-       var esGlobal = _catGlobalIns();
-       var base = getInsumos();
-       if (!esGlobal) {
-           var _sAct = _getSucActivaIns();
-           if (!_sAct) { if (el) el.style.display = 'none'; return; }
-           base = base.filter(function(x){ return window._insumoEnSuc && window._insumoEnSuc(x, _sAct); });
-       }
-       var cnt = {}, nom = {};
-       base.forEach(function(x){
-           var k = _keyInsLocal(x);
-           cnt[k] = (cnt[k] || 0) + 1;
-           if (!nom[k]) nom[k] = [x.nombre, x.variedad || x.maduracion, x.marca].filter(Boolean).join(' · ');
-       });
-       var dups = Object.keys(cnt).filter(function(k){ return cnt[k] > 1; });
-       if (!dups.length) { if (el) el.style.display = 'none'; return; }
-       if (!el) {
-           el = document.createElement('div');
-           el.id = 'insDupAviso';
-           el.style.cssText = 'margin:0 0 12px;padding:10px 14px;border:1px solid rgba(245,200,66,.4);' +
-               'background:rgba(245,200,66,.08);border-radius:10px;font-size:12px;color:var(--text-muted);line-height:1.6';
-           if (contLista && contLista.parentNode) contLista.parentNode.insertBefore(el, contLista);
-           else return;
-       }
-       el.style.display = '';
-       el.innerHTML = '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">' +
-           '<div style="flex:1;min-width:200px">⚠️ <strong style="color:var(--accent)">' + dups.length + ' insumo' + (dups.length !== 1 ? 's' : '') +
-           ' con registros duplicados</strong> (misma identidad con distinto id — ' + (esGlobal ? 'aquí se muestran unificados' : 'aquí se ven como filas repetidas e inflan el contador') + '): ' +
-           dups.slice(0, 6).map(function(k){ return '<strong>' + etx(nom[k]) + '</strong> ×' + cnt[k]; }).join(', ') +
-           (dups.length > 6 ? ' y ' + (dups.length - 6) + ' más' : '') + '.</div>' +
-           '<button onclick="abrirDuplicados()" style="background:var(--accent);color:#0f0e0c;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">⧉ Limpiar duplicados</button>' +
-           '</div>';
-   }
-   
+   /* (Aviso de duplicados por texto eliminado 2026-07-06 — identidad = id.) */
+
    // ── Toggle vista lista / cuadrícula ───────────────────────────
    var vistaInsumos = 'lista'; // lista por default: más ligera que galería (imágenes)
 
@@ -1142,16 +991,11 @@
    }
 
    function _eliminarSeleccionados() {
+       // Se elimina EXACTAMENTE lo seleccionado (identidad = id). La vieja cascada
+       // "por identidad" en el global borraba productos distintos que se llamaban
+       // igual — eliminada 2026-07-06 (el global ya no deduplica la vista).
        let ids = Array.from(_seleccionados);
        if (!ids.length) return;
-       // En el CATÁLOGO GLOBAL cada ítem es una IDENTIDAD (dedup) → al borrarlo hay que borrar
-       // TODOS los registros con esa identidad (incluye duplicados viejos), si no quedan zombies
-       // deduplicados y el conteo "baja pero no llega a 0".
-       if (_catGlobalIns()) {
-           var selKeys = {};
-           getInsumos().forEach(function(x){ if (_seleccionados.has(x.id)) selKeys[_keyInsLocal(x)] = 1; });
-           ids = getInsumos().filter(function(x){ return _seleccionados.has(x.id) || selKeys[_keyInsLocal(x)]; }).map(function(x){ return x.id; });
-       }
        var idSet = {}; ids.forEach(function(id){ idSet[id] = 1; });
        _pedirClaveAdmin('Eliminar ' + ids.length + ' insumo' + (ids.length !== 1 ? 's' : ''), async function() {
            // Tombstones ANTES de recargar → aunque un realtime/recarga llegue con el delete en

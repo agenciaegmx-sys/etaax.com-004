@@ -127,10 +127,6 @@
                             style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
                             border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
                             font-family:inherit;transition:all .2s" title="Selección múltiple">☐ Seleccionar</button>
-                        <button onclick="abrirDuplicados()"
-                            style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
-                            border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
-                            font-family:inherit;transition:all .2s" title="Buscar y limpiar registros duplicados">⧉ Duplicados</button>
                     </div>
                 </div>
                 <div class="card-body" style="padding:0">
@@ -813,19 +809,9 @@ function cerrarInsumosNeg() {
 function ignFiltrar() {
     var q = (document.getElementById('ignSearch').value || '').toLowerCase();
     var curEff = _effSucIns(_getSucActivaIns());
-    var todos = getInsumos();
-    // Identidades (nombre+marca) que YA viven en esta sucursal (membresía).
-    var aqui = {};
-    todos.forEach(function(x){ if (window._insumoEnSuc(x, curEff)) aqui[_keyIns(x)] = true; });
-    _ignEnSuc = aqui;
-    // Candidatos: insumos cuya identidad NO vive aquí, dedup por identidad (uno por nombre+marca).
-    var vistos = {}, cand = [];
-    todos.forEach(function(x){
-        var k = _keyIns(x);
-        if (aqui[k]) return;              // esa identidad ya vive aquí
-        if (vistos[k]) return; vistos[k] = 1;
-        cand.push(x);
-    });
+    // Candidatos POR REGISTRO (identidad = id): los que NO viven en esta sucursal.
+    // Nada de agrupar por nombre/marca: productos distintos pueden llamarse igual.
+    var cand = getInsumos().filter(function(x){ return !window._insumoEnSuc(x, curEff); });
     if (q) cand = cand.filter(function(x){
         return (x.nombre || '').toLowerCase().includes(q) || (x.marca || '').toLowerCase().includes(q) || (x.categoria || '').toLowerCase().includes(q);
     });
@@ -841,7 +827,7 @@ function ignRender() {
             var p0     = (ins.presentaciones || [])[0];
             var precio = p0 && parseFloat(p0.precio) > 0 ? '$' + parseFloat(p0.precio).toFixed(2) : '';
             var cat    = etx([ins.familia, ins.categoria].filter(Boolean).join(' · '));
-            var ya     = _ignEnSuc[_keyIns(ins)];
+            var ya     = window._insumoEnSuc && window._insumoEnSuc(ins, _effSucIns(_getSucActivaIns()));
             var sucBadge = '<span style="font-size:10px;background:rgba(122,184,245,.12);color:#7ab8f5;border:1px solid rgba(122,184,245,.25);border-radius:4px;padding:1px 6px;white-space:nowrap">' + etx(_sucNombreIgn(ins.sucursalId)) + '</span>';
             var fotoEl = ins.foto
                 ? '<img src="' + etx(ins.foto) + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;border:1px solid var(--border);flex-shrink:0">'
@@ -877,7 +863,6 @@ function ignAgregar(id) {
     }
     var btn = document.getElementById('ignBtn_' + id);
     if (btn) { btn.textContent = '✓ Copiado aquí'; btn.disabled = true; btn.style.opacity = '.55'; btn.style.cursor = 'default'; btn.onclick = null; }
-    _ignEnSuc[_keyIns(ins)] = true;
 }
 document.addEventListener('DOMContentLoaded', function(){
     var lbl = document.getElementById('lblInsumosNeg');
@@ -912,6 +897,11 @@ document.addEventListener('DOMContentLoaded', function(){
 var _propInsumo = null, _propHermanos = [];
 var FICHA_FIELDS = ['nombre','familia','categoria','subcategoria','marca','variedad','maduracion','tempConservacion','vidaUtilAbrir','empaque','comoCongelar','vidaUtilCongelado','notas','foto','tipoInsumo','activo'];
 function _ofrecerPropagacion(insumo, origKey) {
+    // DESACTIVADO (2026-07-06): buscaba "hermanos" por texto (nombre|marca) y
+    // podía sobrescribir la ficha de un producto DISTINTO que se llame igual.
+    // Con la membresía multi-sucursal un insumo es UN registro (identidad = id)
+    // → no hay copias que propagar.
+    return;
     if (!insumo) return;
     var key = origKey || _keyIns(insumo); // identidad original (sobrevive al rename)
     _propHermanos = getInsumos().filter(function(x){ return x.id !== insumo.id && _keyIns(x) === key; });
@@ -1181,14 +1171,8 @@ function _cgRender() {
     var actuales = getInsumos().map(function(x){ return x.id; });
     // Membresía: "ya agregado" = el insumo VIVE en la sucursal activa (no solo en el negocio).
     var _curEffCg = (localStorage.getItem('etaax_sucursal_activa') || '') || 'suc_principal';
-    // Marca por id Y por identidad: si un registro con la misma identidad ya vive
-    // aquí (aunque tenga otro id), el ítem del catálogo ETAAX se ve "Agregado".
-    var _enSucCg = {}; getInsumos().forEach(function(x){
-        if (window._insumoEnSuc && window._insumoEnSuc(x, _curEffCg)) {
-            _enSucCg[x.id] = true;
-            if (typeof _keyIns === 'function') _enSucCg['k|' + _keyIns(x)] = true;
-        }
-    });
+    // "Agregado" = ese id ya vive en la sucursal (identidad = id).
+    var _enSucCg = {}; getInsumos().forEach(function(x){ if (window._insumoEnSuc && window._insumoEnSuc(x, _curEffCg)) _enSucCg[x.id] = true; });
 
     document.getElementById('cgTotal').textContent = total + ' insumos · página ' + (_cgPagina+1) + ' de ' + totalPgs;
 
@@ -1200,7 +1184,7 @@ function _cgRender() {
                 ? '$' + parseFloat(p0.precio).toFixed(2) + ' / ' + (p0.contNeto||'') + ' ' + (p0.umContenido||'')
                 : '—';
             var prov      = p0 && p0.proveedor ? etx(p0.proveedor) : '';
-            var yaEsta    = _enSucCg[ins.id] === true || (typeof _keyIns === 'function' && _enSucCg['k|' + _keyIns(ins)] === true);
+            var yaEsta    = _enSucCg[ins.id] === true;
             var varLine   = etx([ins.maduracion, ins.variedad].filter(Boolean).join(' · '));
             var cat       = etx([ins.familia, ins.categoria, ins.subcategoria].filter(Boolean).join(' · '));
             var fotoEl    = ins.foto
@@ -1273,16 +1257,10 @@ async function cgAgregar(id) {
     var lista = getInsumos();
     var _cur = localStorage.getItem('etaax_sucursal_activa') || '';
     var _curEff = _cur || 'suc_principal';
-    // Si YA vive en el negocio → solo agrega esta sucursal a su membresía (NO duplica).
-    // Primero por id; si no, por IDENTIDAD (nombre|marca|variedad): si ya existe con
-    // otro id (creado a mano o importado antes) TAMPOCO se clona — se le da membresía
-    // a ese registro. Antes esto creaba duplicados de identidad (sucursal contaba 106
-    // y el global deduplicado 105).
+    // Si YA vive en el negocio (mismo id: las copias de ETAAX conservan el id
+    // del catálogo maestro) → solo agrega esta sucursal a su membresía.
+    // Identidad = ID, nunca por nombre/marca (productos distintos se llaman igual).
     var _ex = lista.find(function(x){ return x.id === id; });
-    if (!_ex && typeof _keyIns === 'function') {
-        var _kNew = _keyIns(ins);
-        _ex = lista.find(function(x){ return _keyIns(x) === _kNew; });
-    }
     if (_ex) {
         var s = (window._insumoSucursales ? window._insumoSucursales(_ex) : (_ex.sucursalId ? [_ex.sucursalId] : []))
             .map(function(v){ return v || 'suc_principal'; });
