@@ -443,6 +443,17 @@
    }
    window.togglePausaInsumo = togglePausaInsumo;
 
+   // Reactivar un insumo INACTIVO GLOBAL (pastilla del editor) desde la lista.
+   function activarInsumoGlobal(id) {
+       var ins = getInsumos().find(function(x){ return x.id === id; });
+       if (!ins) return;
+       ins.activo = '1';
+       setInsumos(getInsumos());
+       try { _sincronizarInsumosSupabase(getNegocioActivo(), [ins]); } catch(e) {}
+       try { filtrar(); } catch(e) {}
+   }
+   window.activarInsumoGlobal = activarInsumoGlobal;
+
    function renderStats() {
        // El stats footer se RETIRÓ de las páginas (2026-07-06); si los elementos
        // no existen, no hay nada que pintar (muchos callers siguen llamando aquí).
@@ -521,10 +532,13 @@
            // Membresía: el insumo aparece si VIVE en esa sucursal (array `sucursales`), no por sucursalId único.
            var _sucVista = sucFil || sucActiva;
            if (_sucVista) {
-               lista = lista.filter(x => window._insumoEnSuc(x, _sucVista) && x.activo !== '0');
+               lista = lista.filter(x => window._insumoEnSuc(x, _sucVista));
+               var _pausado = x => window._insumoPausadoEn && window._insumoPausadoEn(x, _effSucIns(_sucVista));
+               // "Inactivos" de la sucursal = pausados AQUÍ (⏸) + inactivos GLOBALES
+               // (pastilla del editor) que viven aquí — cada uno con su botón.
                lista = (estadoIns === 'inactivos')
-                   ? lista.filter(x => window._insumoPausadoEn && window._insumoPausadoEn(x, _effSucIns(_sucVista)))
-                   : lista.filter(x => !(window._insumoPausadoEn && window._insumoPausadoEn(x, _effSucIns(_sucVista))));
+                   ? lista.filter(x => x.activo === '0' || _pausado(x))
+                   : lista.filter(x => x.activo !== '0' && !_pausado(x));
            }
        } else {
            lista = (estadoIns === 'inactivos')
@@ -807,9 +821,11 @@
                    ${_catGlobalIns() ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;
                        color:var(--green);border-color:var(--green);display:inline-flex;align-items:center;gap:5px"
                        onclick="abrirInsumoSuc('${ins.id}')"><span style="font-size:14px">🏪</span> Sucursales</button>` : ''}
-                   ${(!_catGlobalIns() && _getSucActivaIns()) ? (window._insumoPausadoEn && window._insumoPausadoEn(ins, _effSucIns(_getSucActivaIns()))
+                   ${(!_catGlobalIns() && _getSucActivaIns()) ? (ins.activo === '0'
+                       ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;color:var(--red);border-color:rgba(224,90,58,.5);display:inline-flex;align-items:center;gap:5px" title="Inactivo GLOBAL (pastilla del editor): no aparece en ningún lado. Este botón lo reactiva en TODO el negocio." onclick="activarInsumoGlobal('${ins.id}')">🚫 ▶ Activar</button>`
+                       : (window._insumoPausadoEn && window._insumoPausadoEn(ins, _effSucIns(_getSucActivaIns()))
                        ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;color:var(--green);border-color:var(--green);display:inline-flex;align-items:center;gap:5px" title="Reactivar en esta sucursal" onclick="togglePausaInsumo('${ins.id}')">▶ Reactivar</button>`
-                       : `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;display:inline-flex;align-items:center;justify-content:center" title="Pausar en esta sucursal (deja de aparecer en inventarios, recetas, requisiciones y QR de ESTA sucursal)" onclick="togglePausaInsumo('${ins.id}')">⏸</button>`) : ''}
+                       : `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;display:inline-flex;align-items:center;justify-content:center" title="Pausar en esta sucursal (deja de aparecer en inventarios, recetas, requisiciones y QR de ESTA sucursal)" onclick="togglePausaInsumo('${ins.id}')">⏸</button>`)) : ''}
                    <button class="btn-vista" style="padding:6px 12px;font-size:12px;
                        color:var(--red);border-color:var(--red);
                        display:inline-flex;align-items:center;justify-content:center"
@@ -917,9 +933,11 @@
                    '<button class="btn-ver" onclick="verFicha(\'' + ins.id + '\')">👁️ Ver</button>' +
                    '<button class="btn-edit" onclick="editarInsumo(\'' + ins.id + '\')">✏️ Editar</button>' +
                    (_catGlobalIns() ? '<button class="btn-edit" style="color:var(--green);border-color:var(--green)" onclick="abrirInsumoSuc(\'' + ins.id + '\')">🏪 Sucursales</button>' : '') +
-                   ((!_catGlobalIns() && _getSucActivaIns()) ? ((window._insumoPausadoEn && window._insumoPausadoEn(ins, _effSucIns(_getSucActivaIns())))
+                   ((!_catGlobalIns() && _getSucActivaIns()) ? (ins.activo === '0'
+                       ? '<button class="btn-ver" style="color:var(--red)" title="Inactivo global — activar en todo el negocio" onclick="activarInsumoGlobal(\'' + ins.id + '\')">▶</button>'
+                       : ((window._insumoPausadoEn && window._insumoPausadoEn(ins, _effSucIns(_getSucActivaIns())))
                        ? '<button class="btn-ver" style="color:var(--green)" title="Reactivar en esta sucursal" onclick="togglePausaInsumo(\'' + ins.id + '\')">▶</button>'
-                       : '<button class="btn-ver" title="Pausar en esta sucursal" onclick="togglePausaInsumo(\'' + ins.id + '\')">⏸</button>') : '') +
+                       : '<button class="btn-ver" title="Pausar en esta sucursal" onclick="togglePausaInsumo(\'' + ins.id + '\')">⏸</button>')) : '') +
                    '<button class="btn-del" onclick="eliminarInsumo(\'' + ins.id + '\')">🗑️</button>' +
                '</div>';
 
