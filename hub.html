@@ -1737,7 +1737,6 @@ function _renderSucursales(neg) {
             var inactiva = suc.activa === false;
             var sucCfg   = _getSucCfg(suc.id, neg.id);
             var sucColor = sucCfg.color || color;
-            var sucLogo  = _getSucLogo(suc.id, neg.id);
             var cardOp   = inactiva ? 'opacity:.45;' : '';
             var adminBtn = inactiva
                 ? '<button disabled style="background:var(--s2);border:1px solid var(--b1);color:var(--dim);' +
@@ -1752,8 +1751,11 @@ function _renderSucursales(neg) {
                       'onmouseover="this.style.background=\'' + sucColor + '1f\'" onmouseout="this.style.background=\'' + sucColor + '0d\'">' +
                       'Administrar negocio →' +
                   '</button>';
-            var iconHtml = sucLogo
-                ? '<img src="' + sucLogo + '" style="width:40px;height:40px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid ' + sucColor + '33">'
+            // Identidad única: logo de la MARCA con marco del color de la sucursal
+            // (los logos por sucursal se retiraron).
+            var _negLogoCard = _getNegLogo(neg.id);
+            var iconHtml = _negLogoCard
+                ? '<img src="' + _negLogoCard + '" style="width:40px;height:40px;object-fit:contain;background:#fff;border-radius:8px;flex-shrink:0;border:2px solid ' + sucColor + '66">'
                 : '<div class="neg-card-emoji" style="background:' + sucColor + '1a;border:1px solid ' + sucColor + '33;font-size:18px">' + (esMat ? '🏠' : '🏪') + '</div>';
             return '<div style="display:flex;flex-direction:column;gap:6px;animation:fadeUp .5s ' + (i * .06) + 's ease both">' +
                 '<div class="neg-card suc-card" style="margin:0;' + cardOp + '">' +
@@ -1861,28 +1863,16 @@ function _renderAjColores() {
 }
 function _selAjColor(c) { _ajColor = c; _renderAjColores(); }
 
+// Muestra el logo BASE de la marca (solo referencia — el logo por sucursal se retiró).
 function _renderAjLogo() {
     var prev = document.getElementById('ajSucLogoPrev');
     if (!prev) return;
-    var b64 = _getSucLogo(_ajSucId, _ajNegId);
+    var b64 = _getNegLogo(_ajNegId);
     if (b64) {
-        prev.innerHTML = '<img src="' + b64 + '" style="width:80px;height:80px;object-fit:cover;border-radius:10px;border:1px solid var(--b2)">';
+        prev.innerHTML = '<img src="' + b64 + '" style="width:72px;height:72px;object-fit:contain;background:#fff;border-radius:10px;border:1px solid var(--b2)">';
     } else {
-        prev.innerHTML = '<div style="width:80px;height:80px;border-radius:10px;border:2px dashed var(--b2);display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:22px">🏪</div>';
+        prev.innerHTML = '<div style="width:72px;height:72px;border-radius:10px;border:2px dashed var(--b2);display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:22px">🏪</div>';
     }
-}
-function ajSucLogoChange(input) {
-    if (!input.files || !input.files[0]) return;
-    _comprimirImg(input.files[0], function(b64) {
-        _setSucLogo(_ajSucId, _ajNegId, b64);
-        _renderAjLogo();
-    });
-}
-function ajSucLogoEliminar() {
-    _setSucLogo(_ajSucId, _ajNegId, '');
-    _renderAjLogo();
-    var inp = document.getElementById('ajSucLogoInput');
-    if (inp) inp.value = '';
 }
 
 function abrirAjustesSucursal(sucId, negId, event) {
@@ -1936,6 +1926,9 @@ function cerrarAjustesSuc() {
 }
 function guardarAjustesSucursal() {
     if (!_ajSucId || !_ajNegId) return;
+    // Limpieza: los logos POR SUCURSAL se retiraron (la identidad es el logo de
+    // la marca) → al guardar ajustes se elimina el que hubiera quedado subido.
+    try { _setSucLogo(_ajSucId, _ajNegId, ''); } catch (e) {}
     var nombre = document.getElementById('ajSucNombre').value.trim();
     if (nombre) {
         var sucs = _getSucursales(_ajNegId);
@@ -2628,7 +2621,7 @@ function abrirInfoSucursal() {
     var suc  = sucs.find(function(s){ return s.id === sucId; });
     if (!suc) return;
     var cfg  = _getSucCfg(sucId, negId);
-    var logo = _getSucLogo(sucId, negId);
+    var logo = _getNegLogo(negId); // identidad única: el logo de la marca
     var dias = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
     var diasStr = cfg.dias
         ? dias.filter(function(_,i){ return cfg.dias[i]; }).join(', ') || '—'
@@ -2885,10 +2878,13 @@ window.onload = function() {
       <div>
         <div style="font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--dim);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--b1)">Identidad</div>
 
-        <!-- El logo de sucursal se RETIRÓ (decisión 2026-07-06): la identidad
-             visual es UNA (el logo de la marca); la sucursal se distingue por su
-             nombre, color y ubicación. El puntito de color la identifica en los
-             reportes impresos. -->
+        <!-- El logo POR SUCURSAL se retiró (2026-07-06): la identidad visual es UNA,
+             el logo de la MARCA (se muestra aquí solo de referencia). La sucursal se
+             distingue por su COLOR (puntito en reportes), nombre y ubicación. -->
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+          <div id="ajSucLogoPrev"></div>
+          <div style="font-size:11px;color:var(--dim);line-height:1.7">La identidad visual es el <strong style="color:var(--text)">logo de la marca</strong> (se cambia en los datos generales del negocio).<br>Esta sucursal se distingue por su <strong style="color:var(--text)">color</strong>.</div>
+        </div>
 
         <!-- Nombre + Giro -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
