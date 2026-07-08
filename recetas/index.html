@@ -3208,11 +3208,64 @@ function eliminarRecetaActual() {
     });
 }
 
+// ── Producción propia: re-ligar sub-recetas convertidas a insumo que perdieron
+//    su recetaId (self-heal por nombre) + resolver ?subins=<insumoId> ──────────
+var _pendingSubIns = null;
+function _normNombreSR(s){ return (s||'').toString().toLowerCase().trim(); }
+function _sanarInsumosSubReceta() {
+    if (typeof getCatalogoInsumos !== 'function' || typeof getRecetas !== 'function') return;
+    var ins = getCatalogoInsumos(), recs = getRecetas();
+    if (!ins.length || !recs.length) return;
+    var subs = {};
+    recs.forEach(function(r){ if (String(r.tipo||'').indexOf('sub') === 0) subs[_normNombreSR(r.nombre)] = r; });
+    var sanados = [];
+    ins.forEach(function(x){
+        if (x && x.esSubReceta && !x.recetaId) {
+            var r = subs[_normNombreSR(x.nombre)];
+            if (r) { x.recetaId = r.id; sanados.push(x); }
+        }
+    });
+    if (!sanados.length) return;
+    // Persistir: localStorage (sin foto base64) + Supabase (negocio_insumos).
+    try { localStorage.setItem(_sk('insumos'), JSON.stringify(ins.map(function(i){
+        if (i && i.foto && String(i.foto).indexOf('data:') === 0){ var d=Object.assign({},i); d.foto=''; return d; } return i;
+    }))); } catch(e) {}
+    var negId = getNegocioActivo();
+    if (negId && typeof _supabase !== 'undefined') {
+        sanados.forEach(function(rec){ _supabase.from('negocio_insumos').upsert({ negocio_id: negId, insumo_id: rec.id, datos: rec }).then(function(){}); });
+    }
+    console.log('[recetas] re-ligadas', sanados.length, 'sub-recetas convertidas a insumo');
+}
+// Abre el ESCANDALLO de la sub-receta origen de un insumo de producción propia.
+function _abrirEscandalloDeInsumo(insumoId) {
+    var it = (typeof getCatalogoInsumos === 'function' ? getCatalogoInsumos() : []).find(function(x){ return x.id === insumoId; });
+    var rid = it && it.recetaId;
+    if (rid && getRecetas().find(function(r){ return r.id === rid; })) {
+        entrarEscandallos(); _showEscForm(); cargarReceta(rid);
+        return true;
+    }
+    return false;
+}
+// Hook llamado por app.js cuando las recetas terminan de cargar.
+window._onRecetasListas = function() {
+    _sanarInsumosSubReceta();
+    if (_pendingSubIns) {
+        if (_abrirEscandalloDeInsumo(_pendingSubIns)) { _pendingSubIns = null; }
+        else {
+            _pendingSubIns = null;
+            alert('No se encontró la sub-receta original de este insumo de producción propia. Ábrela desde el módulo de recetas.');
+            _showEscMenu();
+        }
+    }
+};
+
 // Mostrar menú al cargar la página
 window.addEventListener('load', function() {
     hookCalcularCosteos();
     if (typeof renderFormularioPorTipo === 'function') renderFormularioPorTipo('bebidas', {});
-    var urlR = new URLSearchParams(location.search).get('r');
+    var _params = new URLSearchParams(location.search);
+    var urlR = _params.get('r');
+    var urlSub = _params.get('subins');
     if (urlR && typeof cargarReceta === 'function') {
         // Entrar al escandallo (oculta el landing de submódulos) y abrir el editor.
         if (typeof entrarEscandallos === 'function') entrarEscandallos();
@@ -3224,9 +3277,18 @@ window.addEventListener('load', function() {
         } else {
             window._pendingOpenReceta = urlR;
         }
+    } else if (urlSub) {
+        // Insumo de producción propia que perdió su liga: abrir el escandallo
+        // resolviéndolo por nombre (self-heal). Espera a que carguen las recetas.
+        if (typeof entrarEscandallos === 'function') entrarEscandallos();
+        _showEscForm();
+        _sanarInsumosSubReceta();
+        if (!_abrirEscandalloDeInsumo(urlSub)) _pendingSubIns = urlSub;
     } else {
         _showEscMenu();
     }
+    // Sanar en cuanto haya datos locales (si ya venían cacheados).
+    _sanarInsumosSubReceta();
 });
 
 // Intercept guardarReceta so that saving from carátula-overlay auto-returns

@@ -320,7 +320,16 @@
                 </div>
             </div>
 
-            <!-- (El campo "Área" se quitó del editor a pedido; el valor existente se conserva al editar.) -->
+            <!-- Área del insumo (barra / bodega / cocina) — separa existencias por área en inventarios/reportes -->
+            <div style="margin-bottom:10px">
+                <label class="proc-label">📍 Área (dónde se guarda)</label>
+                <select id="ins-area" style="width:100%;margin-top:4px;font-size:13px">
+                    <option value="">— Sin área —</option>
+                    <option value="barra">Barra</option>
+                    <option value="bodega">Bodega</option>
+                    <option value="cocina">Cocina</option>
+                </select>
+            </div>
 
             <!-- (La sucursal ya no se elige aquí: el insumo nace en la sucursal activa y su
                  membresía se administra desde el Catálogo Global con "Copiar a sucursal".) -->

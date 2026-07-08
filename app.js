@@ -119,6 +119,8 @@ async function _sbInitRecetas() {
             if (typeof cargarReceta === 'function') cargarReceta(_rid);
         }
     }
+    // Recetas ya en memoria → re-ligar sub-recetas-insumo huérfanas y resolver ?subins=.
+    if (typeof window._onRecetasListas === 'function') { try { window._onRecetasListas(); } catch(e) {} }
     _subRecetasRealtime(negId);
 }
 

@@ -1955,10 +1955,14 @@
    function editarInsumo(id) {
        const ins = getInsumos().find(x => x.id === id);
        if (!ins) return;
-       // Las sub-recetas convertidas a insumo NO se editan como insumo: se abren
-       // en su editor de sub-receta (recetas), no en este modal.
-       if (ins.esSubReceta && ins.recetaId) {
-           window.location.href = 'index.html?r=' + encodeURIComponent(ins.recetaId);
+       // PRODUCCIÓN PROPIA (sub-receta convertida a insumo): NO se edita como
+       // insumo — se abre su ESCANDALLO en el módulo de recetas. Si conserva la
+       // liga (recetaId) se abre directo; si se perdió, se pasa el id del insumo
+       // y la página de recetas lo re-liga por nombre (self-healing).
+       if (ins.esSubReceta) {
+           window.location.href = ins.recetaId
+               ? 'index.html?r=' + encodeURIComponent(ins.recetaId)
+               : 'index.html?subins=' + encodeURIComponent(ins.id);
            return;
        }
        abrirModal(ins);
@@ -3227,7 +3231,16 @@
        // EDICIÓN → conserva la membresía y el sucursalId que ya tenía (no los pisa el guardado).
        if (editandoId) {
            var _orig = getInsumos().find(function(x){ return x.id === editandoId; });
-           if (_orig && _orig.area && !insumo.area) insumo.area = _orig.area; // conservar área (campo ya no está en el editor)
+           // El select de Área ya vive en el editor y se pobla al abrir → su valor
+           // manda (incluido vacío = "Sin área"). Solo se conserva el original si
+           // la página no tiene el campo (ej. algún contexto sin ese <select>).
+           if (_orig && _orig.area && !document.getElementById('ins-area')) insumo.area = _orig.area;
+           // Identidad de PRODUCCIÓN PROPIA: nunca destruir la liga a la sub-receta
+           // al guardar por el editor de insumo (si no, deja de abrir el escandallo).
+           if (_orig && _orig.esSubReceta) {
+               insumo.esSubReceta = true;
+               insumo.recetaId    = _orig.recetaId || insumo.recetaId || null;
+           }
            insumo.sucursalId = _orig ? (_orig.sucursalId || '') : '';
            insumo.sucursales = (_orig && _orig.sucursales && _orig.sucursales.length)
                ? _orig.sucursales.slice()
