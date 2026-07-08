@@ -1818,6 +1818,30 @@ function _btnNotaInsumo(id) {
         (n ? '<div style="font-size:10px;color:var(--accent);margin-top:3px;font-style:italic;max-width:200px">📝 ' + etx(n) + '</div>' : '');
 }
 
+// ── Menú COMPARTIR del reporte ───────────────────────────────────────────────
+function _toggleRdShare(e) {
+    if (e) e.stopPropagation();
+    var m = document.getElementById('rdShareMenu'); if (!m) return;
+    var abrir = m.style.display === 'none';
+    m.style.display = abrir ? 'block' : 'none';
+    if (abrir) setTimeout(function(){ document.addEventListener('click', _rdShareClose, { once: true }); }, 0);
+}
+function _rdShareClose() { var m = document.getElementById('rdShareMenu'); if (m) m.style.display = 'none'; }
+function _compartirWhatsApp() {
+    var t = window._rdShareTxt || 'Reporte de inventario · ETAAX';
+    window.open('https://wa.me/?text=' + encodeURIComponent(t), '_blank');
+}
+function _compartirCorreo() {
+    var t = window._rdShareTxt || 'Reporte de inventario · ETAAX';
+    var asunto = 'Reporte de inventario · ETAAX';
+    try { var l = t.split('\n'); if (l[2]) asunto = l[2] + ' · ETAAX'; } catch(e) {}
+    window.location.href = 'mailto:?subject=' + encodeURIComponent(asunto) + '&body=' + encodeURIComponent(t);
+}
+window._toggleRdShare = _toggleRdShare;
+window._rdShareClose = _rdShareClose;
+window._compartirWhatsApp = _compartirWhatsApp;
+window._compartirCorreo = _compartirCorreo;
+
 // Fuerza un render nuevo del Paso 5 (estilo "renderizar" de Premiere) — por si
 // el usuario editó pasos anteriores y quiere refrescar el resultado a mano.
 function recalcularResultado() {
@@ -5294,7 +5318,7 @@ function verReporteDirectivo(gerencial, modo) {
             <th>Producto</th><th class="tc">Grupo</th><th class="tc">Físico</th><th class="tc">Teórico</th>
             <th class="tc">Diferencia</th><th class="tc">Varianza %</th><th class="tr">Dif. $</th></tr></thead><tbody>${
             items.map(a=>{const u=a.f.tipo==='pza'?'pza':'cop';const col=vc(a.varPct);const dc=a.dif>=0?cOk:cCrit;
-            return `<tr><td style="font-weight:600">${etx(a.f.nombre)}</td>
+            return `<tr><td style="font-weight:600">${etx(a.f.nombre)}${_notaInsumo(a.f.insumoId)?`<div style="font-size:8.5px;color:#9a6f00;font-style:italic;margin-top:2px">📝 ${etx(_notaInsumo(a.f.insumoId))}</div>`:''}</td>
                 <td class="tc" style="color:#888">${_grupoCategoria(a.f)}</td>
                 <td class="tc">${_exFmt(a, a.fisico)}</td><td class="tc">${_exFmt(a, a.teorico)}</td>
                 <td class="tc" style="font-weight:700;color:${dc}">${a.dif>=0?'+':''}${a.dif.toFixed(1)} ${u}</td>
@@ -5351,7 +5375,7 @@ function verReporteDirectivo(gerencial, modo) {
             const coctStr    = a.ventaCoct>0 ? (a.f.tipo==='pza'?a.ventaCoct.toFixed(0)+' p':a.ventaCoct.toFixed(1)+' c') : '—';
             const vcol  = vc(a.varPct);
             return `<tr>
-              <td style="font-weight:600;max-width:200px;white-space:normal;word-break:break-word">${etx(a.f.nombre)}</td>
+              <td style="font-weight:600;max-width:200px;white-space:normal;word-break:break-word">${etx(a.f.nombre)}${_notaInsumo(a.f.insumoId)?`<div style="font-size:8.5px;color:#9a6f00;font-style:italic;margin-top:2px">📝 ${etx(_notaInsumo(a.f.insumoId))}</div>`:''}</td>
               <td class="tc" style="color:#888">${_exFmt(a, a.ea)}</td>
               <td class="tc" style="color:${cOk}">${entStr}</td>
               <td class="tc">${vtaCopaStr}</td>
@@ -5386,6 +5410,40 @@ function verReporteDirectivo(gerencial, modo) {
     const _uMC = a => a.f.tipo === 'pza' ? 'pza' : 'cop';
     const _movTit = t => `<div class="rd-grptitle" style="font-size:11px;font-weight:700;color:#1a1916;margin:12px 0 4px">${t}</div>`;
     const _movVacio = '<div style="font-size:10px;color:#aaa;padding:2px 0 10px">Ninguno en el período. ✅</div>';
+    // Desglose de ENTRADAS por insumo (cantidad + fecha) — del entradasLog (QR y
+    // manuales con fecha) + la captura directa del Paso 2 (5 slots, sin fecha).
+    const _entradasPorInsumoHTML = (function(){
+        const porIns = {};
+        (invActual.entradasLog || []).forEach(function(e){
+            if (!e || !e.insumoId || !(parseFloat(e.cantidad) > 0)) return;
+            (porIns[e.insumoId] = porIns[e.insumoId] || []).push({ cant: parseFloat(e.cantidad)||0, fecha: e.fecha || '', nota: e.notas || (e.origen === 'qr' ? 'QR' : '') });
+        });
+        filasCaptura.forEach(function(f){
+            if (!f || !f.insumoId) return;
+            const sum = (f.entradas || []).reduce(function(s,x){ return s + (parseFloat(x)||0); }, 0);
+            if (sum > 0) (porIns[f.insumoId] = porIns[f.insumoId] || []).push({ cant: sum, fecha: '', nota: 'captura directa' });
+        });
+        const ids = Object.keys(porIns);
+        if (!ids.length) return '';
+        const _nom = function(id){ const f = _filaInsD[id]; return f ? f.nombre : id; };
+        const _u = function(id){ const f = _filaInsD[id]; return (f && f.tipo === 'pza') ? 'pza' : 'bot'; };
+        const rows = ids.sort(function(a,b){ return _nom(a).localeCompare(_nom(b)); }).map(function(id){
+            const arr = porIns[id];
+            const tot = arr.reduce(function(s,e){ return s + e.cant; }, 0);
+            return arr.map(function(e, i){
+                return '<tr>' +
+                    '<td style="font-weight:'+(i===0?'600':'400')+'">' + (i===0 ? etx(_nom(id)) : '') + '</td>' +
+                    '<td class="tc" style="color:#1a7a4a;font-weight:600">+' + (e.cant % 1 ? e.cant.toFixed(1) : e.cant) + ' ' + _u(id) + '</td>' +
+                    '<td class="tc" style="color:#888">' + (e.fecha || '—') + '</td>' +
+                    '<td style="color:#888">' + etx(e.nota || '') + '</td>' +
+                    '<td class="tr" style="color:#888">' + (i===0 ? '<strong style="color:#1a7a4a">+'+(tot % 1 ? tot.toFixed(1) : tot)+' '+_u(id)+'</strong>' : '') + '</td>' +
+                '</tr>';
+            }).join('');
+        }).join('');
+        return '<div class="rd-break"></div><div class="rd-sec">📥 Entradas por insumo — cantidad y fecha</div>' +
+            '<table class="rd-t"><thead><tr><th>Insumo</th><th class="tc">Entrada</th><th class="tc">Fecha</th><th>Origen / nota</th><th class="tr">Total insumo</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    })();
+
     const movimientosHTML = `
       <div class="rd-sec">Movimientos especiales del período</div>
       ${_cancels.length ? `<div class="rd-grp">${_movTit('🚫 Productos cancelados (POS) — '+_cancels.length)}
@@ -5414,6 +5472,31 @@ function verReporteDirectivo(gerencial, modo) {
     // Encabezado grande y pie que un PAGINADOR (mide alturas) replica en cada hoja A4 discreta.
     const _headHtml = rdHeader(`Inventario ${_tipoTxt} · ${periodoTxt} · ${_estadoInv}${desglose ? ' · Desglose por insumo' : ''}`);
     const _footHtml = rdFoot;
+
+    // Digest de texto para COMPARTIR por WhatsApp/Correo (el PDF no se puede
+    // adjuntar desde el navegador; el resumen en texto es lo práctico para el cel).
+    (function(){
+        var m = (typeof etaaxMarca === 'function') ? etaaxMarca({ sucursalId: inv.sucursalId || '' }) : { negocio: inv.negocio || '', sucursal: '' };
+        var netNeto = (invActual && invActual.difNetoCosto !== undefined) ? invActual.difNetoCosto : difTotal;
+        var top = alertasCrit.slice(0, 5).map(function(a){
+            return '• ' + a.f.nombre + ': ' + a.varPct.toFixed(0) + '% ($' + _m0(a.difCosto) + ')';
+        }).join('\n');
+        var L = [];
+        L.push('📊 REPORTE DE INVENTARIO' + (ger ? ' (gerencial)' : ''));
+        L.push((m.emoji ? m.emoji + ' ' : '') + (m.negocio || 'Negocio') + (m.sucursal ? ' · ' + m.sucursal : ''));
+        L.push((inv.nombre || 'Inventario') + ' · ' + periodoTxt + ' · ' + _estadoInv);
+        L.push('');
+        if (!ger) {
+            L.push('💰 Capital a costo: $' + _m0(capitalCosto));
+            L.push('🏷️ Capital a carta: $' + _m0(capitalCarta));
+        }
+        L.push((netNeto >= 0 ? '🟢 Sobrante' : '🔴 Faltante') + (ger ? '' : ' a costo') + ': ' + (netNeto >= 0 ? '+' : '−') + '$' + _m0(Math.abs(netNeto)));
+        L.push('⚠️ Alertas críticas (>25%): ' + conAlerta);
+        if (top) { L.push(''); L.push('Top faltantes:'); L.push(top); }
+        L.push('');
+        L.push('Generado con ETAAX · etaax.com');
+        window._rdShareTxt = L.join('\n');
+    })();
 
     // Limpiar overlay anterior si existiera
     document.getElementById('rdOverlay')?.remove();
@@ -5477,7 +5560,14 @@ function verReporteDirectivo(gerencial, modo) {
   <span style="color:#f5f0e8;font-size:14px;font-weight:700">${ger?'🔐 Reporte Gerencial':'📊 Reporte Directivo'}${desglose?' · Desglose por insumo':''} — ${etx(inv.nombre || 'Inventario')}</span>
   <div style="display:flex;gap:8px">
     <button onclick="verReporteDirectivo(${ger?'true':'false'}, '${desglose ? '' : 'desglose'}')" style="padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;background:transparent;border:1px solid rgba(255,255,255,.3);color:#f5f0e8">${desglose ? '📊 Ver resumen' : '📑 Ver desglose por insumo'}</button>
-    <button onclick="window.print()" style="padding:7px 18px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;background:#f5c842;color:#1a1916;border:none">🖨️ Imprimir / Exportar PDF</button>
+    <div style="position:relative">
+      <button onclick="_toggleRdShare(event)" style="padding:7px 18px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;background:#f5c842;color:#1a1916;border:none">📤 Compartir ▾</button>
+      <div id="rdShareMenu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);background:#1a1916;border:1px solid rgba(255,255,255,.22);border-radius:10px;overflow:hidden;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.5)">
+        <button onclick="_rdShareClose();window.print()" style="display:flex;align-items:center;gap:8px;width:100%;padding:11px 16px;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.08);color:#f5f0e8;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">🖨️ Imprimir / PDF</button>
+        <button onclick="_rdShareClose();_compartirWhatsApp()" style="display:flex;align-items:center;gap:8px;width:100%;padding:11px 16px;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.08);color:#f5f0e8;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">💬 WhatsApp</button>
+        <button onclick="_rdShareClose();_compartirCorreo()" style="display:flex;align-items:center;gap:8px;width:100%;padding:11px 16px;background:transparent;border:none;color:#f5f0e8;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">✉️ Correo</button>
+      </div>
+    </div>
     <button onclick="document.getElementById('rdOverlay').remove()" style="padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;background:transparent;border:1px solid rgba(255,255,255,.3);color:#f5f0e8">✕ Cerrar</button>
   </div>
 </div>
@@ -5664,6 +5754,7 @@ function verReporteDirectivo(gerencial, modo) {
 
   <div class="rd-break"></div>
   ${movimientosHTML}
+  ${_entradasPorInsumoHTML}
   ${_descuentosHTML}
 
   <div class="rd-break"></div>
