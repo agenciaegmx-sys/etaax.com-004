@@ -1774,6 +1774,41 @@ function nuevoPrimerLev() {
 // Reutiliza TODO el wizard pero sin editar ni guardar: navegas los 5 pasos con
 // la info capturada. invActual es un clon y las mutaciones están bloqueadas por
 // window._soloVistaInv (guardarInventario/_autoGuardar/_persistir/_importarQR).
+// ── Notas por INSUMO en el reporte final (préstamo, venta cruzada, etc.) ─────
+// Se guardan en invActual.notasInsumo[insumoId] y se muestran en su fila.
+function _notaInsumo(id) { return (invActual && invActual.notasInsumo && invActual.notasInsumo[id]) || ''; }
+function editarNotaInsumo(id) {
+    if (!invActual) return;
+    if (!invActual.notasInsumo) invActual.notasInsumo = {};
+    var actual = invActual.notasInsumo[id] || '';
+    var txt = prompt('Nota para este insumo (préstamo, venta cruzada, ajuste…):', actual);
+    if (txt === null) return; // canceló
+    txt = txt.trim();
+    if (txt) invActual.notasInsumo[id] = txt; else delete invActual.notasInsumo[id];
+    _autoGuardar();
+    // Re-render del resultado (el nodo persistente #step5Keep o el contenedor).
+    var cont = document.getElementById('step5Tablas');
+    if (cont && typeof _step5TablasHTML === 'function') cont.innerHTML = _step5TablasHTML();
+    else if (typeof renderStepContent === 'function') { window._step5Dirty = true; renderStepContent(); }
+}
+window.editarNotaInsumo = editarNotaInsumo;
+// Botón + display de nota para la celda de nombre de una fila del reporte.
+function _btnNotaInsumo(id) {
+    var n = _notaInsumo(id);
+    return '<button onclick="event.stopPropagation();editarNotaInsumo(\'' + id + '\')" ' +
+        'style="margin-top:3px;margin-left:4px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;background:transparent;' +
+        'border:1px solid ' + (n?'var(--accent)':'#888') + ';color:' + (n?'var(--accent)':'#999') + '">📝 ' + (n?'Nota ✓':'Nota') + '</button>' +
+        (n ? '<div style="font-size:10px;color:var(--accent);margin-top:3px;font-style:italic;max-width:200px">📝 ' + etx(n) + '</div>' : '');
+}
+
+// Fuerza un render nuevo del Paso 5 (estilo "renderizar" de Premiere) — por si
+// el usuario editó pasos anteriores y quiere refrescar el resultado a mano.
+function recalcularResultado() {
+    window._step5Dirty = true;
+    if (pasoActual === 5 && typeof renderStepContent === 'function') renderStepContent();
+}
+window.recalcularResultado = recalcularResultado;
+
 function verInventarioTour(id) {
     const inv = getInventarios().find(x => x.id === id);
     if (!inv) return;
@@ -4632,7 +4667,9 @@ function renderStep5() {
 
     const _M2 = v => (v||0).toLocaleString('es-MX', { minimumFractionDigits:2, maximumFractionDigits:2 }); // $1,832,994.00
     const kpis = `<div class="wrap" style="padding-bottom:0">
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px">
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+            <button class="btn-vista" style="color:var(--text-muted)"
+                onclick="recalcularResultado()" title="Fuerza un render nuevo del resultado (por si editaste pasos anteriores)">🔄 Recalcular</button>
             <button class="btn-vista" style="color:#3dbe7a;border-color:#3dbe7a"
                 onclick="verReporteDirectivo(true)">🔐 Reporte gerencial</button>
             <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)"
@@ -4749,7 +4786,7 @@ function _step5TablasHTML() {
                 <td style="min-width:140px">
                     <div style="font-size:14px;font-weight:600">${etx(insumoTitulo(fila))}</div>
                     <div style="font-size:11.5px;color:var(--text-dim)">${fila.categoria||''}</div>
-                    <button onclick="event.stopPropagation();toggleBateo('${fila.insumoId}')" style="margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid ${esBateo(fila.insumoId)?'#3dbe7a':'#888'};background:${esBateo(fila.insumoId)?'#3dbe7a':'transparent'};color:${esBateo(fila.insumoId)?'#fff':'#999'}">🏏 ${esBateo(fila.insumoId)?'De bateo ✓':'Marcar bateo'}</button>
+                    <button onclick="event.stopPropagation();toggleBateo('${fila.insumoId}')" style="margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid ${esBateo(fila.insumoId)?'#3dbe7a':'#888'};background:${esBateo(fila.insumoId)?'#3dbe7a':'transparent'};color:${esBateo(fila.insumoId)?'#fff':'#999'}">🏏 ${esBateo(fila.insumoId)?'De bateo ✓':'Marcar bateo'}</button>${_btnNotaInsumo(fila.insumoId)}
                 </td>
                 <td style="text-align:center;white-space:nowrap">${eaBot} bot</td>
                 <td style="text-align:center;color:var(--green);white-space:nowrap">${entBotStr}</td>
@@ -4827,7 +4864,7 @@ function _step5TablasHTML() {
                 <td>
                     <div style="font-size:14px;font-weight:600">${etx(insumoTitulo(fila))}</div>
                     <div style="font-size:11.5px;color:var(--text-dim)">${fila.categoria||''}</div>
-                    <button onclick="event.stopPropagation();toggleBateo('${fila.insumoId}')" style="margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid ${esBateo(fila.insumoId)?'#3dbe7a':'#888'};background:${esBateo(fila.insumoId)?'#3dbe7a':'transparent'};color:${esBateo(fila.insumoId)?'#fff':'#999'}">🏏 ${esBateo(fila.insumoId)?'De bateo ✓':'Marcar bateo'}</button>
+                    <button onclick="event.stopPropagation();toggleBateo('${fila.insumoId}')" style="margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid ${esBateo(fila.insumoId)?'#3dbe7a':'#888'};background:${esBateo(fila.insumoId)?'#3dbe7a':'transparent'};color:${esBateo(fila.insumoId)?'#fff':'#999'}">🏏 ${esBateo(fila.insumoId)?'De bateo ✓':'Marcar bateo'}</button>${_btnNotaInsumo(fila.insumoId)}
                 </td>
                 <td style="text-align:center">${ea.toFixed(0)} pza</td>
                 <td style="text-align:center;color:var(--green)">${entTotal>0?'+'+entTotal.toFixed(0)+' pza':'—'}</td>
@@ -4895,6 +4932,7 @@ function _step5TablasHTML() {
             <td style="min-width:140px">
                 <div style="font-size:14px;font-weight:600">🧩 ${etx(comp.nombre||vf.nombre)}</div>
                 <div style="font-size:10px;color:var(--text-dim)">${members.map(m=>etx(insumoTitulo(m))).join(' + ')}</div>
+                ${_btnNotaInsumo(vf.compId||vf.insumoId)}
             </td>
             <td style="text-align:center;white-space:nowrap">${_nc(toF(ea))} ${uLbl}</td>
             <td style="text-align:center;color:var(--green);white-space:nowrap">${ent>0?'+'+_nc(toF(ent))+' '+uLbl:'—'}</td>
@@ -5711,6 +5749,7 @@ function _setGuardadoInd(estado) {
 let _autoGuardarTimer = null;
 function _autoGuardar() {
     if (!invActual || window._soloVistaInv) return; // 👁️ solo lectura: no guarda
+    window._step5Dirty = true; // invalidar el resumen YA (no esperar al guardado debounced)
     _persistirBorradorLocal(); // ← respaldo local INMEDIATO en cada cambio
     _setGuardadoInd('guardando');
     clearTimeout(_autoGuardarTimer);
@@ -5742,6 +5781,10 @@ function finalizarPrimerLev() {
         let ok = false;
         try { guardarInventario(); ok = true; } catch(e) {}
         if (!ok) { invActual.cerrado = false; alert('No se pudo guardar (almacenamiento lleno).'); return; }
+        // Salida LIMPIA: sin esto, invActual quedaba seteado y el siguiente
+        // inventario reusaba este objeto (iniciarInventario: esNuevo = !invActual)
+        // → "al abrir otro también se abría el primer levantamiento".
+        invActual = null; filasCaptura = [];
         mostrarVista('vistaLista');
     });
 }
@@ -5755,6 +5798,7 @@ function cerrarInventario() {
         try { guardarInventario(); ok = true; } catch(e) {}
         if (!ok) { invActual.cerrado = false; alert('No se pudo guardar (almacenamiento lleno).'); return; }
         actualizarNavBtns();
+        invActual = null; filasCaptura = []; // salida limpia (no reusar en el siguiente)
         mostrarVista('vistaLista');
     });
 }
