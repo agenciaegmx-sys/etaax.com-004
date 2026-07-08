@@ -377,18 +377,23 @@ function toggleNav() {
 .cal-mes-count.dim { color: var(--border); }
 
 /* ── Wizard header sticky ────────────────────────────────────── */
+/* Pila STICKY del inventario: header + pasos + toolbar quedan fijos bajo las
+   barras superiores (top-bar 48 + ctx-bar 48 = 96px). Los offsets de pasos y
+   toolbar los ajusta _ajustarStickyInv() según la altura real del header
+   (que puede envolver en pantallas chicas). --inv-top base = 96px. */
 .inv-wizard-header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 10px 20px; background: var(--bg); border-bottom: 1px solid var(--border);
-    position: sticky; top: 44px; z-index: 90; gap: 12px; flex-wrap: wrap;
+    position: sticky; top: 96px; z-index: 92; gap: 12px; flex-wrap: wrap;
     min-height: 60px;
 }
+body:not(.has-ctx) .inv-wizard-header { top: 48px; } /* sin ctx-bar (staff): solo top-bar */
 
 /* ── Step bar ────────────────────────────────────────────────── */
 .inv-steps {
     display: flex; overflow-x: auto; background: var(--surface);
     border-bottom: 1px solid var(--border); padding: 0 8px;
-    scrollbar-width: none; position: sticky; top: 104px; z-index: 89;
+    scrollbar-width: none; position: sticky; top: 156px; z-index: 91;
 }
 .inv-steps::-webkit-scrollbar { display: none; }
 .inv-step {
@@ -412,10 +417,11 @@ function toggleNav() {
 .inv-step.active .inv-step-label { color: var(--accent); font-weight: 600; }
 .inv-step.done .inv-step-label { color: var(--green); }
 
-/* ── Step toolbar (search + filters) ────────────────────────── */
+/* ── Step toolbar (search + filters) — también fija bajo los pasos ─────── */
 .step-toolbar {
     display: flex; align-items: center; gap: 10px; padding: 10px 16px;
     background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: wrap;
+    position: sticky; top: 201px; z-index: 90;
 }
 .inv-search { position: relative; }
 .inv-search input {

@@ -177,6 +177,9 @@ async function _sbInitInsumosCatalogo() {
             var escribiendo = act && act.getAttribute && act.getAttribute('data-ing') === 'nombre';
             if (!escribiendo) { try { renderTabla(); } catch(e) {} }
         }
+        // Ya con el catálogo cargado, re-evaluar el botón "Agregar como insumo"
+        // de la sub-receta abierta (por si venía sin datos al abrir).
+        if (typeof _actualizarBotonAgregarInsumo === 'function') { try { _actualizarBotonAgregarInsumo(); } catch(e) {} }
     } catch(e) { console.warn('[recetas] error al cargar insumos:', e); }
 }
 

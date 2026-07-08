@@ -908,6 +908,7 @@ function mostrarVista(id) {
     window._invEditando = (id !== 'vistaLista') && !!invActual && !invActual.cerrado;
     if (id === 'vistaLista')    init();
     if (id === 'vistaEntradas') renderVistaEntradas();
+    if (typeof _ajustarStickyInv === 'function') setTimeout(_ajustarStickyInv, 0); // reposicionar sticky de la vista visible
 }
 function volverForm() { mostrarVista('vistaForm'); }
 
@@ -2158,7 +2159,32 @@ function renderStepContent() {
     if (paso === 1 && vistaCapturaExist === 'busqueda') initExistBusquedaUI();
     if (paso === 3 && vistaVentas === 'busqueda') initVentasBusquedaUI();
     if (paso === 4) _initPaso4Tables();
+    _ajustarStickyInv(); // recolocar pasos + toolbar bajo el header (altura real)
 }
+
+// Ajusta los offsets STICKY del wizard según la altura REAL del header (que puede
+// envolver en pantallas chicas) → pasos y toolbar quedan pegados sin huecos ni
+// solaparse con las barras superiores fijas (top-bar + ctx-bar = 96px, o 48 sin ctx).
+function _ajustarStickyInv() {
+    try {
+        var base = document.body.classList.contains('has-ctx') ? 96 : 48;
+        // Header y pasos de la VISTA visible (captura o entradas).
+        var vistas = ['vistaCaptura', 'vistaEntradas'];
+        vistas.forEach(function(vid){
+            var v = document.getElementById(vid);
+            if (!v || v.style.display === 'none') return;
+            var hdr = v.querySelector('.inv-wizard-header');
+            var steps = v.querySelector('.inv-steps');
+            var hH = hdr ? hdr.offsetHeight : 60;
+            var topSteps = base + hH;
+            if (steps) steps.style.top = topSteps + 'px';
+            var sH = steps ? steps.offsetHeight : 0;
+            var topTool = topSteps + sH;
+            v.querySelectorAll('.step-toolbar').forEach(function(tb){ tb.style.top = topTool + 'px'; });
+        });
+    } catch(e) {}
+}
+window.addEventListener('resize', function(){ if (typeof _ajustarStickyInv === 'function') _ajustarStickyInv(); });
 
 // ── Toolbar para steps 1 y 2 ──────────────────────────────────
 function buildFiltroRegistroBar() {

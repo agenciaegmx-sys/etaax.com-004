@@ -1073,6 +1073,7 @@ function actualizarVistaCosteo(tipo) {
     if (cardRend)  cardRend.style.display  = esSub ? '' : 'none';
     var cardInsumo = document.getElementById('cardAgregarInsumo');
     if (cardInsumo) cardInsumo.style.display = esSub ? '' : 'none';
+    if (esSub) _actualizarBotonAgregarInsumo();
     if (barraRend) barraRend.style.display = esSub ? 'flex' : 'none';
     if (barraCosto) {
         // En sub-recetas ocupa columna derecha, en recetas span completo
@@ -1636,6 +1637,36 @@ function limpiarFilaPorciones() {
 }
 
 // ── Agregar sub-receta como insumo ──────────────────────────
+// ¿La sub-receta abierta ya está convertida a insumo? (identidad = recetaId)
+function _subRecetaYaEsInsumo() {
+    if (!recetaActualId || typeof getCatalogoInsumos !== 'function') return false;
+    return getCatalogoInsumos().some(function(x){ return x && x.esSubReceta && x.recetaId === recetaActualId; });
+}
+// Estado del botón "Agregar como insumo": si ya está agregada, se BLOQUEA y
+// muestra "✓ AGREGADO A INSUMOS" (el sync se hace solo al guardar la receta).
+function _actualizarBotonAgregarInsumo() {
+    var btn = document.querySelector('#cardAgregarInsumo button');
+    if (!btn) return;
+    if (_subRecetaYaEsInsumo()) {
+        btn.textContent = '✓ Agregado a insumos';
+        btn.disabled = true;
+        btn.style.background = 'var(--surface2)';
+        btn.style.color = 'var(--green)';
+        btn.style.border = '1px solid var(--green)';
+        btn.style.cursor = 'default';
+        btn.onmouseenter = null; btn.onmouseleave = null;
+    } else {
+        btn.textContent = '+ Agregar como insumo';
+        btn.disabled = false;
+        btn.style.background = 'var(--green)';
+        btn.style.color = '#0f0e0c';
+        btn.style.border = 'none';
+        btn.style.cursor = 'pointer';
+        btn.onmouseenter = function(){ this.style.opacity='0.85'; };
+        btn.onmouseleave = function(){ this.style.opacity='1'; };
+    }
+}
+
 function agregarSubRecetaComoInsumo(silent) {
     var nombre   = (document.getElementById('nombreReceta') || {}).value || '';
     var grupo    = (document.getElementById('grupo') || {}).value || '';
@@ -1754,8 +1785,9 @@ function agregarSubRecetaComoInsumo(silent) {
         catalogo.forEach(function(x, i){ if (x.esSubReceta && x.recetaId && x.recetaId === insumoNuevo.recetaId) matches.push(i); });
         var actualizados = [];
         if (matches.length) {
-            if (!silent && !confirm('Ya existe "' + catalogo[matches[0]].nombre + '" como insumo' +
-                (matches.length > 1 ? ' en ' + matches.length + ' sucursales' : '') + '. ¿Actualizar' + (matches.length > 1 ? 'los' : 'lo') + '?')) return;
+            // Ya existe como insumo → se ACTUALIZA sin preguntar (el botón queda
+            // bloqueado en "✓ Agregado"; el auto-sync al guardar la receta lo
+            // mantiene al día). Antes salía un confirm feo aquí.
             // Actualizar cada copia conservando su id, su sucursalId y su MEMBRESÍA
             // (`sucursales`): antes se pisaba con la sucursal actual y el insumo
             // "desaparecía" de las sucursales donde ya vivía. Al convertir
@@ -1799,21 +1831,9 @@ function agregarSubRecetaComoInsumo(silent) {
             });
         }
 
-        // Feedback visual (solo cuando el usuario lo pulsó, no en auto-update)
-        if (!silent) {
-            var btn = document.querySelector('#cardAgregarInsumo button');
-            if (btn) {
-                var original = btn.textContent;
-                btn.textContent = '✅ Guardado como insumo';
-                btn.style.background = 'var(--surface2)';
-                btn.style.color = 'var(--green)';
-                setTimeout(function() {
-                    btn.textContent = original;
-                    btn.style.background = 'var(--green)';
-                    btn.style.color = '#0f0e0c';
-                }, 2500);
-            }
-        }
+        // Feedback (solo cuando el usuario lo pulsó): el botón queda BLOQUEADO en
+        // "✓ Agregado a insumos" — ya no revierte (antes volvía a "+ Agregar").
+        if (!silent) _actualizarBotonAgregarInsumo();
     } catch(e) {
         if (!silent) alert('Error al guardar: ' + e.message);
     }
