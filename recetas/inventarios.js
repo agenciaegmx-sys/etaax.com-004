@@ -1777,21 +1777,38 @@ function nuevoPrimerLev() {
 // ── Notas por INSUMO en el reporte final (préstamo, venta cruzada, etc.) ─────
 // Se guardan en invActual.notasInsumo[insumoId] y se muestran en su fila.
 function _notaInsumo(id) { return (invActual && invActual.notasInsumo && invActual.notasInsumo[id]) || ''; }
+var _notaInsEditId = null;
 function editarNotaInsumo(id) {
     if (!invActual) return;
+    _notaInsEditId = id;
+    // Nombre bonito del insumo/compuesto para el encabezado del modal.
+    var fila = filasCaptura.find(function(f){ return f.insumoId === id; });
+    var nom = fila ? (typeof insumoTitulo === 'function' ? insumoTitulo(fila) : (fila.nombre||'')) : '';
+    if (!nom && typeof getCompuestos === 'function') { var c = getCompuestos().find(function(x){ return x.id === id; }); if (c) nom = '🧩 ' + (c.nombre||''); }
+    document.getElementById('notaInsNombre').textContent = nom || 'Insumo';
+    document.getElementById('notaInsInput').value = _notaInsumo(id);
+    document.getElementById('modalNotaInsumo').style.display = 'flex';
+    setTimeout(function(){ var t = document.getElementById('notaInsInput'); if (t) t.focus(); }, 60);
+}
+function _cerrarNotaInsumo() {
+    var m = document.getElementById('modalNotaInsumo'); if (m) m.style.display = 'none';
+    _notaInsEditId = null;
+}
+function _guardarNotaInsumo() {
+    if (!invActual || !_notaInsEditId) { _cerrarNotaInsumo(); return; }
     if (!invActual.notasInsumo) invActual.notasInsumo = {};
-    var actual = invActual.notasInsumo[id] || '';
-    var txt = prompt('Nota para este insumo (préstamo, venta cruzada, ajuste…):', actual);
-    if (txt === null) return; // canceló
-    txt = txt.trim();
-    if (txt) invActual.notasInsumo[id] = txt; else delete invActual.notasInsumo[id];
+    var txt = (document.getElementById('notaInsInput').value || '').trim();
+    if (txt) invActual.notasInsumo[_notaInsEditId] = txt; else delete invActual.notasInsumo[_notaInsEditId];
     _autoGuardar();
-    // Re-render del resultado (el nodo persistente #step5Keep o el contenedor).
+    _cerrarNotaInsumo();
+    // Re-render del resultado (nodo persistente #step5Keep o su contenedor).
     var cont = document.getElementById('step5Tablas');
     if (cont && typeof _step5TablasHTML === 'function') cont.innerHTML = _step5TablasHTML();
     else if (typeof renderStepContent === 'function') { window._step5Dirty = true; renderStepContent(); }
 }
 window.editarNotaInsumo = editarNotaInsumo;
+window._cerrarNotaInsumo = _cerrarNotaInsumo;
+window._guardarNotaInsumo = _guardarNotaInsumo;
 // Botón + display de nota para la celda de nombre de una fila del reporte.
 function _btnNotaInsumo(id) {
     var n = _notaInsumo(id);
