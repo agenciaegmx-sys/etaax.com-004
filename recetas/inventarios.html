@@ -417,6 +417,12 @@ body:not(.has-ctx) .inv-wizard-header { top: 48px; } /* sin ctx-bar (staff): sol
 .inv-step.active .inv-step-label { color: var(--accent); font-weight: 600; }
 .inv-step.done .inv-step-label { color: var(--green); }
 
+/* ── Vista de solo lectura (tour): inputs/acciones deshabilitados, navegación
+   entre pasos y cambios de vista (Lista/Galería/Menú) siguen funcionando ── */
+.inv-readonly input, .inv-readonly textarea, .inv-readonly select { pointer-events: none !important; opacity: .9; }
+.inv-readonly [onclick*="upd"], .inv-readonly [onclick*="eliminar"], .inv-readonly [onclick*="agregar"],
+.inv-readonly [onclick*="Cancelar"], .inv-readonly [onclick*="toggleBateo"], .inv-readonly [onclick*="Descuento"] { pointer-events: none !important; opacity: .55; }
+
 /* ── Step toolbar (search + filters) — también fija bajo los pasos ─────── */
 .step-toolbar {
     display: flex; align-items: center; gap: 10px; padding: 10px 16px;

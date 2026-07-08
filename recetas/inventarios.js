@@ -722,7 +722,7 @@ function getEntradasBottles(insumoId) {
 // Se importan SOLO las del QR (las manuales ya se guardan en ambos lados), SOLO las de esta
 // sucursal, y SOLO las no importadas aún (se marca importadoEnInv para no duplicar entre inventarios).
 function _importarEntradasQR() {
-    if (!invActual || invActual.cerrado) return 0;
+    if (!invActual || invActual.cerrado || window._soloVistaInv) return 0; // 👁️ solo lectura: no muta el inventario
     if (!invActual.entradasLog) invActual.entradasLog = [];
     var idsSuc = {}; _scopeSucInsumos(getInsumos()).forEach(function(x){ if (x && x.id) idsSuc[x.id] = 1; });
     var yaEnInv = {}; invActual.entradasLog.forEach(function(e){ if (e && e.id) yaEnInv[e.id] = 1; });
@@ -1659,7 +1659,7 @@ function renderHistTabla(lista) {
                     <td><span class="pill ${inv.cerrado?'pill-green':'pill-amber'}">${inv.cerrado?'Cerrado':'Abierto'}</span></td>
                     <td style="text-align:right;white-space:nowrap">
                         <button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px"
-                            onclick="verPreviewInventario('${inv.id}')">👁️ Ver</button>
+                            onclick="verInventarioTour('${inv.id}')">👁️ Ver</button>
                         ${accionBtn}
                         <button class="btn-vista" style="padding:4px 10px;font-size:11px;color:var(--red);border-color:var(--red)"
                             onclick="eliminarInventario('${inv.id}')">🗑️</button>
@@ -1700,7 +1700,7 @@ function renderHistCard(inv) {
         </div>
         <div class="hist-card-actions">
             <button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1"
-                onclick="verPreviewInventario('${inv.id}')">👁️ Ver</button>
+                onclick="verInventarioTour('${inv.id}')">👁️ Ver</button>
             ${accionBtn}
             <button class="btn-vista" style="padding:5px 10px;font-size:11px;color:var(--red);border-color:var(--red)"
                 onclick="eliminarInventario('${inv.id}')">🗑️</button>
@@ -1770,9 +1770,63 @@ function nuevoPrimerLev() {
     document.getElementById('btnIniciarInv').textContent = 'Iniciar levantamiento →';
 }
 
+// ── VISTA SOLO LECTURA (tour) ────────────────────────────────────────────────
+// Reutiliza TODO el wizard pero sin editar ni guardar: navegas los 5 pasos con
+// la info capturada. invActual es un clon y las mutaciones están bloqueadas por
+// window._soloVistaInv (guardarInventario/_autoGuardar/_persistir/_importarQR).
+function verInventarioTour(id) {
+    const inv = getInventarios().find(x => x.id === id);
+    if (!inv) return;
+    window._soloVistaInv = true;
+    invActual = JSON.parse(JSON.stringify(inv));
+    if (!invActual.cocktailsVendidos) invActual.cocktailsVendidos = {};
+    if (!invActual.ventasCompuesto)   invActual.ventasCompuesto   = {};
+    if (!invActual.cancelaciones)     invActual.cancelaciones     = [];
+    if (!invActual.descuentos)        invActual.descuentos        = [];
+    if (!invActual.entradasLog)       invActual.entradasLog       = [];
+    cargarProductosCaptura(); // (NO se importa QR: _importarEntradasQR está bloqueado)
+    pasoActual = 1;
+    busquedaCapt = ''; filtroFamActivo = ''; filtroCatActiva = ''; filtroSubcatActiva = ''; filtroRegistroActivo = 'registrados';
+    window._step5Dirty = true; // render fresco del resumen para este inventario
+    mostrarVista('vistaCaptura');
+    document.getElementById('captTitulo').textContent = invActual.nombre || 'Inventario';
+    actualizarStepBar();
+    actualizarNavBtns();
+    renderStepContent();
+    _aplicarSoloVista();
+}
+window.verInventarioTour = verInventarioTour;
+
+// Aplica el modo solo-lectura al wizard (se re-llama en cada render de paso).
+function _aplicarSoloVista() {
+    if (!window._soloVistaInv) return;
+    var ind = document.getElementById('autoGuardarInd');
+    if (ind) { ind.textContent = '👁️ Vista de solo lectura'; ind.style.color = 'var(--accent)'; }
+    ['btnInfoGeneral','btnFinalizarInv','btnFinalizarLev'].forEach(function(bid){
+        var b = document.getElementById(bid); if (b) b.style.display = 'none';
+    });
+    var salir = document.getElementById('btnGuardarInv');
+    if (salir) { salir.textContent = '✕ Cerrar vista'; salir.onclick = cerrarVistaInv; }
+    ['stepContent','step5Keep'].forEach(function(cid){
+        var c = document.getElementById(cid); if (c) c.classList.add('inv-readonly');
+    });
+}
+function cerrarVistaInv() {
+    window._soloVistaInv = false;
+    invActual = null; filasCaptura = [];
+    var salir = document.getElementById('btnGuardarInv');
+    if (salir) { salir.textContent = '🚪 Salir'; salir.onclick = pedirSalirInv; }
+    var ind = document.getElementById('autoGuardarInd');
+    if (ind) ind.style.color = 'var(--green)';
+    ['stepContent','step5Keep'].forEach(function(cid){ var c = document.getElementById(cid); if (c) c.classList.remove('inv-readonly'); });
+    mostrarVista('vistaLista');
+}
+window.cerrarVistaInv = cerrarVistaInv;
+
 function abrirInventario(id) {
     const inv = getInventarios().find(x => x.id === id);
     if (!inv) return;
+    window._soloVistaInv = false; // modo edición al abrir para editar/continuar
     invActual = JSON.parse(JSON.stringify(inv));
     if (!invActual.cocktailsVendidos) invActual.cocktailsVendidos = {};
     if (!invActual.ventasCompuesto)   invActual.ventasCompuesto   = {};
@@ -1823,6 +1877,7 @@ function onTipoInvChange(tipo) {
     const mapa = { primer_lev:'general', bebidas:'barra', alimentos:'cocina', almacen:'bodega', restaurante:'general', otro:'general' };
     const sel  = document.getElementById('invArea');
     if (sel) sel.value = mapa[tipo] || 'general';
+    _setFechaUltimo(); // repuebla/bloquea la referencia según el tipo (primer lev = sin referencia)
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1893,6 +1948,14 @@ async function _confirmarClave() {
 function _setFechaUltimo() {
     const el = document.getElementById('invRefSelect');
     if (!el) return;
+    // PRIMER LEVANTAMIENTO = es la primera existencia del negocio → NO tiene
+    // inventario de referencia. Se bloquea el select en ese estado.
+    const _tipoEl = document.getElementById('invTipoInv');
+    if (_tipoEl && _tipoEl.value === 'primer_lev') {
+        el.innerHTML = '<option value="">— Sin referencia · primer levantamiento —</option>';
+        el.value = ''; el.disabled = true;
+        return;
+    }
     const cerrados = _scopeSucInvs(getInventarios())
         .filter(x => x.cerrado && (!invActual || x.id !== invActual.id))
         .slice().sort((a,b) => String(b.fecha||'').localeCompare(String(a.fecha||''))); // más reciente primero
@@ -2160,6 +2223,7 @@ function renderStepContent() {
     if (paso === 3 && vistaVentas === 'busqueda') initVentasBusquedaUI();
     if (paso === 4) _initPaso4Tables();
     _ajustarStickyInv(); // recolocar pasos + toolbar bajo el header (altura real)
+    if (window._soloVistaInv) _aplicarSoloVista(); // reaplica solo-lectura (actualizarNavBtns re-muestra botones)
 }
 
 // Ajusta los offsets STICKY del wizard según la altura REAL del header (que puede
@@ -5595,6 +5659,7 @@ function _esRegistrado(f) { return _filaConDatos(f); }
 
 function guardarInventario() {
     if (!invActual) return;
+    if (window._soloVistaInv) return; // 👁️ vista de solo lectura: NUNCA persiste
     window._step5Dirty = true; // hubo cambios → el resumen (Paso 5) se re-renderiza al volver
     // Solo guardar filas con datos capturados — evita guardar 1400+ filas vacías
     var _nuevas = filasCaptura.filter(_filaConDatos);
@@ -5617,7 +5682,7 @@ function guardarInventario() {
 // Respaldo INMEDIATO del borrador en localStorage (síncrono, en cada cambio).
 // No espera el debounce ni a Supabase → aunque refresques al instante, no se pierde.
 function _persistirBorradorLocal() {
-    if (!invActual || invActual.cerrado) return;
+    if (!invActual || invActual.cerrado || window._soloVistaInv) return; // 👁️ solo lectura
     try {
         // 🛡️ Mismo blindaje: no sobrescribir con vacío/fresco si el inventario ya tenía datos.
         var _nuevas = filasCaptura.filter(_filaConDatos);
@@ -5645,7 +5710,7 @@ function _setGuardadoInd(estado) {
 }
 let _autoGuardarTimer = null;
 function _autoGuardar() {
-    if (!invActual) return;
+    if (!invActual || window._soloVistaInv) return; // 👁️ solo lectura: no guarda
     _persistirBorradorLocal(); // ← respaldo local INMEDIATO en cada cambio
     _setGuardadoInd('guardando');
     clearTimeout(_autoGuardarTimer);
