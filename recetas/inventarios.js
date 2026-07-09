@@ -5556,7 +5556,7 @@ function verReporteDirectivo(gerencial, modo) {
             L.push('💰 Capital a costo: $' + _m0(capitalCosto));
             L.push('🏷️ Capital a carta: $' + _m0(capitalCarta));
         }
-        L.push((netNeto >= 0 ? '🟢 Sobrante' : '🔴 Faltante') + (ger ? '' : ' a costo') + ': ' + (netNeto >= 0 ? '+' : '−') + '$' + _m0(Math.abs(netNeto)));
+        // Neto a costo oculto a propósito en el export (a revisar); solo se comparte a carta.
         L.push((netCarta >= 0 ? '🟢 Sobrante' : '🔴 Faltante') + ' a carta: ' + (netCarta >= 0 ? '+' : '−') + '$' + _m0(Math.abs(netCarta)));
         L.push('⚠️ Alertas críticas (>25%): ' + conAlerta);
         if (top) { L.push(''); L.push('Top faltantes:'); L.push(top); }
@@ -5711,13 +5711,9 @@ function verReporteDirectivo(gerencial, modo) {
     </div>
   </div>
 
-  <!-- Diferencia física neta: a costo y a precio de carta (cada una con su propio signo) -->
-  <div class="rd-kgrid" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px">
-    <div class="rd-kpi" style="border-left:4px solid ${netCosto>=0?cOk:cCrit}">
-      <div class="rd-kl">${netCosto>=0?'Sobrante':'Faltante'} neto a costo</div>
-      <div class="rd-kv" style="color:${netCosto>=0?cOk:cCrit}">${netCosto>=0?'+':'−'}$${_m0(Math.abs(netCosto))}</div>
-      <div class="rd-ks">sobrante − faltante · precio proveedor</div>
-    </div>
+  <!-- Diferencia física neta A CARTA. (El neto a COSTO se ocultó a propósito en el
+       reporte impreso hasta revisar bien ese dato; se sigue calculando internamente.) -->
+  <div class="rd-kgrid" style="grid-template-columns:1fr;margin-bottom:8px">
     <div class="rd-kpi" style="border-left:4px solid ${netCarta>=0?cOk:cCrit}">
       <div class="rd-kl">${netCarta>=0?'Sobrante':'Faltante'} neto a carta</div>
       <div class="rd-kv" style="color:${netCarta>=0?cOk:cCrit}">${netCarta>=0?'+':'−'}$${_m0(Math.abs(netCarta))}</div>
