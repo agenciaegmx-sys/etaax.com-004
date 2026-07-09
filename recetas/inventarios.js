@@ -5418,7 +5418,10 @@ function verReporteDirectivo(gerencial, modo) {
             const vtaCopaStr = a.f.tipo === 'pza' ? '—' : (a.ventaCopaDir>0?a.ventaCopaDir.toFixed(1)+' c':'—');
             const vtaBotStr  = a.f.tipo === 'pza' ? ((a.ventaBot+a.ventaCopaDir)>0?(a.ventaBot+a.ventaCopaDir).toFixed(0)+' p':'—') : (a.ventaBot>0?a.ventaBot+' b':'—');
             const coctStr    = a.ventaCoct>0 ? (a.f.tipo==='pza'?a.ventaCoct.toFixed(0)+' p':a.ventaCoct.toFixed(1)+' c') : '—';
-            const vcol  = vc(a.varPct);
+            // Color por SIGNO (no por severidad): rojo = FALTANTE (−), verde =
+            // SOBRANTE (+), gris = sin diferencia. Igual que el Paso 5 en pantalla.
+            const scol  = v => Math.abs(v) < 0.05 ? '#999' : (v > 0 ? cOk : cCrit);
+            const cDif  = scol(a.dif), cCost = scol(a.difCosto);
             return `<tr>
               <td style="font-weight:600;max-width:200px;white-space:normal;word-break:break-word">${etx(a.f.nombre)}${_notaInsumo(a.f.insumoId)?`<div style="font-size:8.5px;color:#9a6f00;font-style:italic;margin-top:2px">📝 ${etx(_notaInsumo(a.f.insumoId))}</div>`:''}</td>
               <td class="tc" style="color:#888">${_exFmt(a, a.ea)}</td>
@@ -5427,9 +5430,9 @@ function verReporteDirectivo(gerencial, modo) {
               <td class="tc">${vtaBotStr}</td>
               <td class="tc" style="color:#9b8de8">${coctStr}</td>
               <td class="tc" style="font-weight:600">${_exFmt(a, a.fisico)}</td>
-              <td class="tc" style="color:${vcol};font-weight:700">${a.dif>=0?'+':''}${a.dif.toFixed(1)} ${u}</td>
-              <td class="tc" style="color:${vcol}">${a.varPct.toFixed(0)}%</td>
-              <td class="tr" style="color:${vcol};font-weight:700">${a.difCosto>=0?'+':''}$${_m2(a.difCosto)}</td>
+              <td class="tc" style="color:${cDif};font-weight:700">${a.dif>=0?'+':''}${a.dif.toFixed(1)} ${u}</td>
+              <td class="tc" style="color:${cDif}">${a.varPct.toFixed(0)}%</td>
+              <td class="tr" style="color:${cCost};font-weight:700">${a.difCosto>=0?'+':''}$${_m2(a.difCosto)}</td>
             </tr>`;
         }).join('');
         const gc = gDif >= 0 ? cOk : cCrit;
