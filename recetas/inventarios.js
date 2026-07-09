@@ -4668,13 +4668,17 @@ function _resumenEjecutivo() {
             card('Stock actual en capital', M(capActual), (capActual<capStockMin?'var(--red)':'var(--green)'), _pct(capActual,capStockMax)+'% del máximo · precio proveedor')+
         '</div>' : '')+
         (function(){
-            // Diferencia NETA (sobrante − faltante): una sola cifra general.
-            var netCosto = sobrCosto - faltCosto, netCarta = sobrCarta - faltCarta, esSobr = netCosto >= 0;
+            // Diferencia NETA (sobrante − faltante). El TITULAR es a CARTA: coincide
+            // con la suma de la columna "Dif. $" del desglose. Cada cifra lleva su
+            // PROPIO signo (antes la de carta usaba el signo del costo → salía + en
+            // vez de − cuando a costo había sobrante pero a carta faltante).
+            var netCosto = sobrCosto - faltCosto, netCarta = sobrCarta - faltCarta;
+            var esSobrCarta = netCarta >= 0;
             return '<div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">'+
-                card(esSobr ? 'Sobrante a costo' : 'Faltante a costo',
-                    (esSobr?'+':'−')+M(Math.abs(netCosto)),
-                    esSobr ? 'var(--green)' : 'var(--red)',
-                    (faltU+sobrU)+' insumos con diferencia · '+(esSobr?'+':'−')+M(Math.abs(netCarta))+' a carta')+
+                card(esSobrCarta ? 'Sobrante (a carta)' : 'Faltante (a carta)',
+                    (esSobrCarta?'+':'−')+M(Math.abs(netCarta)),
+                    esSobrCarta ? 'var(--green)' : 'var(--red)',
+                    (faltU+sobrU)+' insumos con diferencia · '+(netCosto>=0?'+':'−')+M(Math.abs(netCosto))+' a costo')+
                 card('Merma del periodo', M(mermaCosto), 'var(--accent)', mermados.length+' productos')+
                 card('Insumos sin usar', String(sinUsar), sinUsar>0?'var(--accent)':'var(--green)', usados+' usados en el periodo')+
             '</div>';
