@@ -905,6 +905,11 @@ function mostrarVista(id) {
         const el = document.getElementById(v);
         if (el) el.style.display = v === id ? 'block' : 'none';
     });
+    // Al volver a la LISTA, ningún inventario está activo. Blindaje anti-"reabrir el
+    // primero": no importa por qué ruta se salga (finalizar, salir, cerrar tour, etc.),
+    // aquí se garantiza que no quede un invActual/filasCaptura/soloVista colgando que el
+    // siguiente "nuevo/continuar" pudiera reusar por error.
+    if (id === 'vistaLista') { invActual = null; filasCaptura = []; window._soloVistaInv = false; }
     window._invEditando = (id !== 'vistaLista') && !!invActual && !invActual.cerrado;
     if (id === 'vistaLista')    init();
     if (id === 'vistaEntradas') renderVistaEntradas();
@@ -1626,6 +1631,10 @@ function finalizarInventarioHistorial(id) {
         var idx = lista.findIndex(function(x){ return x.id === id; });
         if (idx >= 0) lista[idx] = inv;
         setInventarios(lista); // guarda local + nube
+        // Finalizar desde la LISTA no debe dejar colgando un invActual de una visita
+        // previa (tour/wizard abortado): si no, el siguiente "Nuevo/Continuar" lo reusaba
+        // y "reabría el primero". Estado limpio al terminar.
+        invActual = null; filasCaptura = []; window._soloVistaInv = false;
         renderStats(); renderHistorial();
     });
 }
@@ -5316,9 +5325,14 @@ function verReporteDirectivo(gerencial, modo) {
     });
     const _listaItems = obj => Object.keys(obj).map(n => `${etx(n)} (${obj[n]%1?obj[n].toFixed(1):obj[n]})`).join(' · ');
     filasCaptura.forEach(f => { const man=(f.entradas||[]).reduce((s,x)=>s+(parseFloat(x)||0),0); if(man>0){comprasU+=man;comprasCosto+=man*_costoCompraF(f);} });
-    let vendidoCosto=0, faltCosto=0, sobrCosto=0;
-    analisis.forEach(a => { if(a.consumo>0) vendidoCosto+=a.consumo*a.cc; if(a.dif<-0.001) faltCosto+=Math.abs(a.dif)*a.cc; else if(a.dif>0.001) sobrCosto+=a.dif*a.cc; });
-    const netCosto = sobrCosto - faltCosto;
+    let vendidoCosto=0, faltCosto=0, sobrCosto=0, faltCarta=0, sobrCarta=0;
+    analisis.forEach(a => {
+        if(a.consumo>0) vendidoCosto+=a.consumo*a.cc;
+        if(a.dif<-0.001){ faltCosto+=Math.abs(a.dif)*a.cc; faltCarta+=Math.abs(a.difCosto); }      // a.difCosto = dif × precio de carta
+        else if(a.dif>0.001){ sobrCosto+=a.dif*a.cc; sobrCarta+=a.difCosto; }
+    });
+    const netCosto = sobrCosto - faltCosto;    // sobrante − faltante, a COSTO
+    const netCarta = sobrCarta - faltCarta;    // sobrante − faltante, a CARTA (coincide con la suma de "Dif. $" del desglose)
     const pctMinD = capStockMax>0?Math.round(capStockMin/capStockMax*100):0;
     const pctActD = capStockMax>0?Math.round(capitalCosto/capStockMax*100):0;
 
@@ -5543,6 +5557,7 @@ function verReporteDirectivo(gerencial, modo) {
             L.push('🏷️ Capital a carta: $' + _m0(capitalCarta));
         }
         L.push((netNeto >= 0 ? '🟢 Sobrante' : '🔴 Faltante') + (ger ? '' : ' a costo') + ': ' + (netNeto >= 0 ? '+' : '−') + '$' + _m0(Math.abs(netNeto)));
+        L.push((netCarta >= 0 ? '🟢 Sobrante' : '🔴 Faltante') + ' a carta: ' + (netCarta >= 0 ? '+' : '−') + '$' + _m0(Math.abs(netCarta)));
         L.push('⚠️ Alertas críticas (>25%): ' + conAlerta);
         if (top) { L.push(''); L.push('Top faltantes:'); L.push(top); }
         L.push('');
@@ -5677,7 +5692,7 @@ function verReporteDirectivo(gerencial, modo) {
     </div>
   </div>
 
-  <!-- Movimiento del período: vendido vs compras + entradas por tipo -->
+  <!-- Movimiento del período: vendido vs compras -->
   <div class="rd-kgrid" style="grid-template-columns:repeat(3,1fr);margin-bottom:8px">
     <div class="rd-kpi">
       <div class="rd-kl">Vendido a precio proveedor</div>
@@ -5689,10 +5704,24 @@ function verReporteDirectivo(gerencial, modo) {
       <div class="rd-kv">${$g('$'+_m0(comprasCosto))}</div>
       <div class="rd-ks">${comprasU>0?(comprasU%1?comprasU.toFixed(1):comprasU)+' unid. compradas':'sin compras'}</div>
     </div>
+    <div class="rd-kpi" style="border-left:4px solid ${vendidoCosto-comprasCosto>=0?cOk:cCrit}">
+      <div class="rd-kl">Vendido vs Compras</div>
+      <div class="rd-kv" style="color:${vendidoCosto-comprasCosto>=0?cOk:cCrit}">${vendidoCosto-comprasCosto>=0?'+':'−'}$${_m0(Math.abs(vendidoCosto-comprasCosto))}</div>
+      <div class="rd-ks">${vendidoCosto>=comprasCosto?'compraste menos de lo que vendiste':'compraste más de lo que vendiste'}</div>
+    </div>
+  </div>
+
+  <!-- Diferencia física neta: a costo y a precio de carta (cada una con su propio signo) -->
+  <div class="rd-kgrid" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px">
     <div class="rd-kpi" style="border-left:4px solid ${netCosto>=0?cOk:cCrit}">
       <div class="rd-kl">${netCosto>=0?'Sobrante':'Faltante'} neto a costo</div>
       <div class="rd-kv" style="color:${netCosto>=0?cOk:cCrit}">${netCosto>=0?'+':'−'}$${_m0(Math.abs(netCosto))}</div>
-      <div class="rd-ks">sobrante − faltante</div>
+      <div class="rd-ks">sobrante − faltante · precio proveedor</div>
+    </div>
+    <div class="rd-kpi" style="border-left:4px solid ${netCarta>=0?cOk:cCrit}">
+      <div class="rd-kl">${netCarta>=0?'Sobrante':'Faltante'} neto a carta</div>
+      <div class="rd-kv" style="color:${netCarta>=0?cOk:cCrit}">${netCarta>=0?'+':'−'}$${_m0(Math.abs(netCarta))}</div>
+      <div class="rd-ks">sobrante − faltante · precio de carta</div>
     </div>
   </div>
   ${(bonifU>0||consigU>0)?`
