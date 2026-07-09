@@ -1837,10 +1837,67 @@ function _compartirCorreo() {
     try { var l = t.split('\n'); if (l[2]) asunto = l[2] + ' · ETAAX'; } catch(e) {}
     window.location.href = 'mailto:?subject=' + encodeURIComponent(asunto) + '&body=' + encodeURIComponent(t);
 }
+
+// ── Generar el PDF del reporte y COMPARTIRLO (Web Share) o descargarlo ────────
+// Carga html2canvas + jsPDF bajo demanda (jsdelivr, permitido por la CSP).
+var _libPDFCargada = false;
+function _cargarLibPDF() {
+    if (_libPDFCargada) return Promise.resolve();
+    function load(src){ return new Promise(function(res, rej){ var s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = function(){ rej(new Error('No se pudo cargar ' + src)); }; document.head.appendChild(s); }); }
+    return Promise.all([
+        load('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'),
+        load('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js')
+    ]).then(function(){ _libPDFCargada = true; });
+}
+function _nombrePDFReporte() {
+    var base = 'Reporte-inventario';
+    try { var l = (window._rdShareTxt || '').split('\n'); if (l[2]) base = l[2].replace(/[^\w\s·-]/g,'').replace(/\s+/g,'-').slice(0, 60); } catch(e) {}
+    return base + '.pdf';
+}
+// Cada .rd-paper (hoja A4) → una página del PDF (bordes limpios, sin cortes).
+async function _generarPDFReporte() {
+    await _cargarLibPDF();
+    var pages = Array.prototype.slice.call(document.querySelectorAll('#rdOverlay .rd-paper'));
+    if (!pages.length) return null;
+    var landscape = false; // el reporte de inventario es A4 vertical
+    var jsPDFctor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+    var pdf = new jsPDFctor({ unit: 'mm', format: 'a4', orientation: landscape ? 'landscape' : 'portrait' });
+    var W = landscape ? 297 : 210, H = landscape ? 210 : 297;
+    for (var i = 0; i < pages.length; i++) {
+        var canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
+        var img = canvas.toDataURL('image/jpeg', 0.92);
+        if (i > 0) pdf.addPage();
+        pdf.addImage(img, 'JPEG', 0, 0, W, H);
+    }
+    return pdf.output('blob');
+}
+async function _compartirPDF() {
+    var btn = document.getElementById('rdBtnCompartirPDF'); var txt0 = btn ? btn.textContent : '';
+    if (btn) { btn.textContent = '⏳ Generando PDF…'; btn.disabled = true; }
+    try {
+        var blob = await _generarPDFReporte();
+        if (!blob) { alert('No se pudo generar el PDF (abre el reporte primero).'); return; }
+        var file = new File([blob], _nombrePDFReporte(), { type: 'application/pdf' });
+        // Celular: hoja nativa de compartir CON el PDF adjunto (correo, WhatsApp…).
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: 'Reporte de inventario', text: window._rdShareTxt || '' });
+        } else {
+            // Escritorio: se descarga el PDF (el navegador no permite adjuntarlo solo).
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a'); a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
+            alert('📄 PDF descargado: ' + file.name + '\nAdjúntalo a tu correo o WhatsApp.');
+        }
+    } catch(e) {
+        if (e && e.name === 'AbortError') { /* el usuario canceló la hoja de compartir */ }
+        else alert('No se pudo compartir el PDF: ' + ((e && e.message) || e));
+    } finally { if (btn) { btn.textContent = txt0; btn.disabled = false; } }
+}
 window._toggleRdShare = _toggleRdShare;
 window._rdShareClose = _rdShareClose;
 window._compartirWhatsApp = _compartirWhatsApp;
 window._compartirCorreo = _compartirCorreo;
+window._compartirPDF = _compartirPDF;
 
 // Fuerza un render nuevo del Paso 5 (estilo "renderizar" de Premiere) — por si
 // el usuario editó pasos anteriores y quiere refrescar el resultado a mano.
@@ -5562,10 +5619,11 @@ function verReporteDirectivo(gerencial, modo) {
     <button onclick="verReporteDirectivo(${ger?'true':'false'}, '${desglose ? '' : 'desglose'}')" style="padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;background:transparent;border:1px solid rgba(255,255,255,.3);color:#f5f0e8">${desglose ? '📊 Ver resumen' : '📑 Ver desglose por insumo'}</button>
     <div style="position:relative">
       <button onclick="_toggleRdShare(event)" style="padding:7px 18px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;background:#f5c842;color:#1a1916;border:none">📤 Compartir ▾</button>
-      <div id="rdShareMenu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);background:#1a1916;border:1px solid rgba(255,255,255,.22);border-radius:10px;overflow:hidden;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.5)">
+      <div id="rdShareMenu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);background:#1a1916;border:1px solid rgba(255,255,255,.22);border-radius:10px;overflow:hidden;min-width:230px;box-shadow:0 8px 24px rgba(0,0,0,.5)">
+        <button id="rdBtnCompartirPDF" onclick="_rdShareClose();_compartirPDF()" style="display:flex;align-items:center;gap:8px;width:100%;padding:12px 16px;background:rgba(245,200,66,.14);border:none;border-bottom:1px solid rgba(255,255,255,.08);color:#f5c842;font-size:13px;font-weight:700;cursor:pointer;text-align:left" onmouseover="this.style.background='rgba(245,200,66,.22)'" onmouseout="this.style.background='rgba(245,200,66,.14)'">📄 Compartir PDF <span style="font-size:10px;opacity:.75;font-weight:400">(correo / WhatsApp)</span></button>
         <button onclick="_rdShareClose();window.print()" style="display:flex;align-items:center;gap:8px;width:100%;padding:11px 16px;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.08);color:#f5f0e8;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">🖨️ Imprimir / PDF</button>
-        <button onclick="_rdShareClose();_compartirWhatsApp()" style="display:flex;align-items:center;gap:8px;width:100%;padding:11px 16px;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.08);color:#f5f0e8;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">💬 WhatsApp</button>
-        <button onclick="_rdShareClose();_compartirCorreo()" style="display:flex;align-items:center;gap:8px;width:100%;padding:11px 16px;background:transparent;border:none;color:#f5f0e8;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">✉️ Correo</button>
+        <button onclick="_rdShareClose();_compartirWhatsApp()" style="display:flex;align-items:center;gap:8px;width:100%;padding:11px 16px;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.08);color:#f5f0e8;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">💬 WhatsApp <span style="font-size:10px;opacity:.6">(resumen)</span></button>
+        <button onclick="_rdShareClose();_compartirCorreo()" style="display:flex;align-items:center;gap:8px;width:100%;padding:11px 16px;background:transparent;border:none;color:#f5f0e8;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">✉️ Correo <span style="font-size:10px;opacity:.6">(resumen)</span></button>
       </div>
     </div>
     <button onclick="document.getElementById('rdOverlay').remove()" style="padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;background:transparent;border:1px solid rgba(255,255,255,.3);color:#f5f0e8">✕ Cerrar</button>
