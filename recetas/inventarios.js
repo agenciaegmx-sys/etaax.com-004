@@ -1827,16 +1827,6 @@ function _toggleRdShare(e) {
     if (abrir) setTimeout(function(){ document.addEventListener('click', _rdShareClose, { once: true }); }, 0);
 }
 function _rdShareClose() { var m = document.getElementById('rdShareMenu'); if (m) m.style.display = 'none'; }
-function _compartirWhatsApp() {
-    var t = window._rdShareTxt || 'Reporte de inventario · ETAAX';
-    window.open('https://wa.me/?text=' + encodeURIComponent(t), '_blank');
-}
-function _compartirCorreo() {
-    var t = window._rdShareTxt || 'Reporte de inventario · ETAAX';
-    var asunto = 'Reporte de inventario · ETAAX';
-    try { var l = t.split('\n'); if (l[2]) asunto = l[2] + ' · ETAAX'; } catch(e) {}
-    window.location.href = 'mailto:?subject=' + encodeURIComponent(asunto) + '&body=' + encodeURIComponent(t);
-}
 
 // ── Generar el PDF del reporte y COMPARTIRLO (Web Share) o descargarlo ────────
 // Carga html2canvas + jsPDF bajo demanda (jsdelivr, permitido por la CSP).
@@ -1895,8 +1885,6 @@ async function _compartirPDF() {
 }
 window._toggleRdShare = _toggleRdShare;
 window._rdShareClose = _rdShareClose;
-window._compartirWhatsApp = _compartirWhatsApp;
-window._compartirCorreo = _compartirCorreo;
 window._compartirPDF = _compartirPDF;
 
 // Fuerza un render nuevo del Paso 5 (estilo "renderizar" de Premiere) — por si
@@ -5621,9 +5609,7 @@ function verReporteDirectivo(gerencial, modo) {
       <button onclick="_toggleRdShare(event)" style="padding:7px 18px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;background:#f5c842;color:#1a1916;border:none">📤 Compartir ▾</button>
       <div id="rdShareMenu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);background:#1a1916;border:1px solid rgba(255,255,255,.22);border-radius:10px;overflow:hidden;min-width:230px;box-shadow:0 8px 24px rgba(0,0,0,.5)">
         <button id="rdBtnCompartirPDF" onclick="_rdShareClose();_compartirPDF()" style="display:flex;align-items:center;gap:8px;width:100%;padding:12px 16px;background:rgba(245,200,66,.14);border:none;border-bottom:1px solid rgba(255,255,255,.08);color:#f5c842;font-size:13px;font-weight:700;cursor:pointer;text-align:left" onmouseover="this.style.background='rgba(245,200,66,.22)'" onmouseout="this.style.background='rgba(245,200,66,.14)'">📄 Compartir PDF <span style="font-size:10px;opacity:.75;font-weight:400">(correo / WhatsApp)</span></button>
-        <button onclick="_rdShareClose();window.print()" style="display:flex;align-items:center;gap:8px;width:100%;padding:11px 16px;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.08);color:#f5f0e8;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">🖨️ Imprimir / PDF</button>
-        <button onclick="_rdShareClose();_compartirWhatsApp()" style="display:flex;align-items:center;gap:8px;width:100%;padding:11px 16px;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.08);color:#f5f0e8;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">💬 WhatsApp <span style="font-size:10px;opacity:.6">(resumen)</span></button>
-        <button onclick="_rdShareClose();_compartirCorreo()" style="display:flex;align-items:center;gap:8px;width:100%;padding:11px 16px;background:transparent;border:none;color:#f5f0e8;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">✉️ Correo <span style="font-size:10px;opacity:.6">(resumen)</span></button>
+        <button onclick="_rdShareClose();window.print()" style="display:flex;align-items:center;gap:8px;width:100%;padding:11px 16px;background:transparent;border:none;color:#f5f0e8;font-size:13px;cursor:pointer;text-align:left" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">🖨️ Imprimir / PDF</button>
       </div>
     </div>
     <button onclick="document.getElementById('rdOverlay').remove()" style="padding:7px 14px;border-radius:6px;cursor:pointer;font-size:12px;background:transparent;border:1px solid rgba(255,255,255,.3);color:#f5f0e8">✕ Cerrar</button>
