@@ -1012,8 +1012,8 @@
                     <tr>
                         <td class="pago-label" style="font-size:14px;font-weight:600">💳 Tarjeta<div style="font-size:10px;font-weight:400;color:var(--text-dim)">cuenta principal</div>
                             <div style="display:flex;gap:4px;margin-top:6px">
-                                <button id="taModoS" onclick="setTaModo('simple')" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:5px 8px;font-family:inherit;font-size:10.5px;cursor:pointer;letter-spacing:.4px">1 exhib.</button>
-                                <button id="taModoD" onclick="setTaModo('desglose')" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:5px 8px;font-family:inherit;font-size:10.5px;cursor:pointer;letter-spacing:.4px">Desglose</button>
+                                <button id="taModoS" onclick="setTaModoA('simple')" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:5px 8px;font-family:inherit;font-size:10.5px;cursor:pointer;letter-spacing:.4px">1 exhib.</button>
+                                <button id="taModoD" onclick="setTaModoA('desglose')" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:5px 8px;font-family:inherit;font-size:10.5px;cursor:pointer;letter-spacing:.4px">Desglose</button>
                             </div>
                         </td>
                         <td colspan="2">
@@ -1040,7 +1040,12 @@
                     </tr>
                     <!-- Fila 2b: TARJETA cuenta secundaria (solo si existe en el catálogo) -->
                     <tr id="rowTarB" style="display:none">
-                        <td class="pago-label" style="font-size:14px;font-weight:600">💳 Tarjeta<div style="font-size:10px;font-weight:400;color:var(--text-dim)">secundaria · opcional</div></td>
+                        <td class="pago-label" style="font-size:14px;font-weight:600">💳 Tarjeta<div style="font-size:10px;font-weight:400;color:var(--text-dim)">secundaria · opcional</div>
+                            <div style="display:flex;gap:4px;margin-top:6px">
+                                <button id="taModoBS" onclick="setTaModoB('simple')" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:5px 8px;font-family:inherit;font-size:10.5px;cursor:pointer;letter-spacing:.4px">1 exhib.</button>
+                                <button id="taModoBD" onclick="setTaModoB('desglose')" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:5px 8px;font-family:inherit;font-size:10.5px;cursor:pointer;letter-spacing:.4px">Desglose</button>
+                            </div>
+                        </td>
                         <td colspan="2">
                             <div id="taB_simple">
                                 <input type="number" class="pago-input" id="fTarUnicaB" min="0" step="0.01" placeholder="0.00" oninput="_taUnicaInput()" style="width:100%">
@@ -2579,11 +2584,11 @@ function abrirModal(id){
     var _savedTar={}; (d.tarjetaCuentas||[]).forEach(function(t){ _savedTar[t.cuentaId]={tc:t.ventaTC,td:t.ventaTD}; });
     renderTarjetaCuentas(_savedTar, parseFloat(d.tarjeta)||0);
     document.getElementById('fVentaOtros').value=d.ventaOtros||'';
-    // Modo tarjeta: respeta el guardado; si no hay, desglose solo cuando el corte trae credito o cuentas B/C
-    var _tieneDesg=(d.tarjetaCuentas||[]).some(function(t,i){ return (parseFloat(t.ventaTC)||0)>0 || i>0; });
-    var _modoIni=d.taModo||(_tieneDesg?'desglose':'simple');
-    _renderTaSimple();
-    setTaModo(_modoIni); // en modo simple pliega solo el desglose guardado a los campos A/B
+    // Modo tarjeta POR FILA: respeta el guardado; si no hay, desglose solo si esa cuenta trae crédito
+    var _ctasIni=_cuentasDebito();
+    var _tcDe=function(cta){ if(!cta) return 0; var t=(d.tarjetaCuentas||[]).find(function(x){ return x.cuentaId===cta.id; }); return t?(parseFloat(t.ventaTC)||0):0; };
+    setTaModoA(d.taModo ||(_tcDe(_ctasIni[0])>0?'desglose':'simple'));
+    setTaModoB(d.taModoB||(d.taModo&&!d.taModoB?d.taModo:(_tcDe(_ctasIni[1])>0?'desglose':'simple')));
     // Propinas de tarjeta por cuenta (A/B); compat: total viejo -> cuenta A
     _renderPropCuentas();
     var _pc=d.propTarjetaCuentas||null, _ctasD=_cuentasDebito();
@@ -2757,37 +2762,50 @@ function renderTarjetaCuentas(saved, fallbackTotal){
     }
     calcTarjeta();
 }
-/* -- Modo de captura de tarjeta: 'simple' (una exhibicion) o 'desglose' (cred/deb + cuentas B/C) -- */
-var _taModo='simple';
-function setTaModo(m){
-    _taModo=m;
-    var vis=function(id,on){ var e=document.getElementById(id); if(e) e.style.display=on?'':'none'; };
-    vis('taA_simple', m==='simple'); vis('taA_desg', m==='desglose');
-    vis('taB_simple', m==='simple'); vis('taB_desg', m==='desglose');
-    var box=document.getElementById('tarjetaCuentasBox');
-    if(box) box.style.display=(m==='desglose')?'':'none';
-    ['taModoS','taModoD'].forEach(function(id){
-        var b=document.getElementById(id); if(!b) return;
-        var on=(id==='taModoS')===(m==='simple');
+/* Modo por FILA de tarjeta: cada cuenta elige 1 exhibición o desglose por separado */
+var _taModoA='simple', _taModoB='simple';
+function _pintarModoBtns(idS,idD,m){
+    [[idS,'simple'],[idD,'desglose']].forEach(function(par){
+        var b=document.getElementById(par[0]); if(!b) return;
+        var on=(par[1]===m);
         b.style.background=on?'rgba(61,190,122,.15)':'var(--surface2)';
         b.style.borderColor=on?'rgba(61,190,122,.5)':'var(--border)';
         b.style.color=on?'var(--green)':'var(--text-dim)';
     });
+}
+function setTaModoA(m){
+    _taModoA=m;
+    var vis=function(id,on){ var e=document.getElementById(id); if(e) e.style.display=on?'':'none'; };
+    vis('taA_simple', m==='simple'); vis('taA_desg', m==='desglose');
+    _pintarModoBtns('taModoS','taModoD',m);
     if(m==='simple'){
-        // Plegar el desglose: A (cred+deb) → única A; B (credB+debB) + cuentas C+ → única B. Todo como DÉBITO.
+        // Plegar el desglose de la cuenta A: (créd+déb) → única A, todo como DÉBITO
         var g=function(id){ return parseFloat((document.getElementById(id)||{}).value)||0; };
         var totA=g('fTarCred')+g('fTarDeb');
-        var totB=g('fTarCredB')+g('fTarDebB');
-        document.querySelectorAll('.tcuenta').forEach(function(i){ totB+=(parseFloat(i.value)||0); i.value=''; });
-        ['fTarCred','fTarCredB'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
-        var u=document.getElementById('fTarUnica'), uB=document.getElementById('fTarUnicaB');
-        if(u) u.value=totA?totA.toFixed(2):'';
-        if(uB) uB.value=totB?totB.toFixed(2):'';
-        _taUnicaInput(); // espeja a los inputs reales (débito A / débito B)
-        return;
+        var cred=document.getElementById('fTarCred'); if(cred) cred.value='';
+        var u=document.getElementById('fTarUnica'); if(u) u.value=totA?totA.toFixed(2):'';
+        var deb=document.getElementById('fTarDeb'); if(deb) deb.value=totA?totA.toFixed(2):'';
     }
     calcTarjeta();
 }
+function setTaModoB(m){
+    _taModoB=m;
+    var vis=function(id,on){ var e=document.getElementById(id); if(e) e.style.display=on?'':'none'; };
+    vis('taB_simple', m==='simple'); vis('taB_desg', m==='desglose');
+    _pintarModoBtns('taModoBS','taModoBD',m);
+    if(m==='simple'){
+        // Plegar el desglose de la cuenta B (+ cuentas C+ del box) → única B, como DÉBITO
+        var g=function(id){ return parseFloat((document.getElementById(id)||{}).value)||0; };
+        var totB=g('fTarCredB')+g('fTarDebB');
+        document.querySelectorAll('.tcuenta').forEach(function(i){ totB+=(parseFloat(i.value)||0); i.value=''; });
+        var credB=document.getElementById('fTarCredB'); if(credB) credB.value='';
+        var uB=document.getElementById('fTarUnicaB'); if(uB) uB.value=totB?totB.toFixed(2):'';
+        var debB=document.getElementById('fTarDebB'); if(debB) debB.value=totB?totB.toFixed(2):'';
+    }
+    calcTarjeta();
+}
+/* Compat: setTaModo(m) aplica el mismo modo a ambas filas (rutas viejas) */
+function setTaModo(m){ setTaModoA(m); setTaModoB(m); }
 function _taUnicaInput(){
     // Una exhibición: cada campo se espeja como DÉBITO de su cuenta
     var g=function(id){ var e=document.getElementById(id); return (e&&e.value)?e.value:''; };
@@ -2959,7 +2977,7 @@ function guardarCorte(){
         propTarjeta:v('fPropTarjeta')+v('fPropTarjetaB'), // total (compat con todo lo existente)
         propTarjetaCuentas:_getPropCuentas(),             // desglose por cuenta A/B (aditivo)
         propRetiroCaja:_propRetiro?(v('fPropTarjeta')+v('fPropTarjetaB')):0, // retiro del cajon (no gasto)
-        taModo:_taModo,
+        taModo:_taModoA, taModoB:_taModoB,
         transferencia:v('fTransfer'),
         tarjetaCuentas:_getTarjetaCuentas(),
         comedor:v('fComedor'),paraLlevar:v('fParaLlevar'),comensales:v('fComensales'),
