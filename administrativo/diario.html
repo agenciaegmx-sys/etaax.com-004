@@ -113,6 +113,16 @@
             display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;
         }
         .theme-toggle:hover{border-color:var(--green);color:var(--green);}
+
+        /* ══ Impresión por card: solo se imprime #dxPrintArea ══ */
+        #dxPrintArea { display:none; }
+        @media print {
+            body > * { display:none !important; }
+            #dxPrintArea { display:block !important; color:#1a1916; background:#fff; }
+            #dxPrintArea table { width:100%; border-collapse:collapse; font-size:11px; font-family:Arial,sans-serif; }
+            #dxPrintArea th, #dxPrintArea td { border-bottom:1px solid #ddd; padding:6px 8px; text-align:left; color:#1a1916 !important; background:#fff !important; }
+            #dxPrintArea th { font-size:9px; text-transform:uppercase; letter-spacing:1px; color:#777 !important; }
+        }
     </style>
 <style>
 /* ══ Estilos heredados de Captura de Ventas ══ */
@@ -601,7 +611,7 @@
                 <div class="card-header" style="justify-content:space-between">
                     <h2>Cortes del período</h2>
                     <div style="display:flex;gap:8px">
-                        <button class="btn-primary" id="btnCapturarCorte" onclick="abrirModal()">+ Capturar corte</button>
+                        <button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxImprimir('Cortes de caja','cortesTable')">🖨️ Imprimir</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxCSV('Cortes de caja','cortesTable')">⬇️ CSV</button><button class="btn-primary" id="btnCapturarCorte" onclick="abrirModal()">+ Capturar corte</button>
                     </div>
                 </div>
                 <div class="card-body" style="padding:0;overflow-x:auto">
@@ -648,7 +658,7 @@
         <div class="dx-win-hdr"><div class="dx-win-title">📤 Gastos Diarios</div><button class="dx-win-close" onclick="dxCerrar('gastos')">✕ Cerrar</button></div>
         <div class="dx-win-body" id="dxPanel_gastos">
 <div class="dxp" id="gm_dxp"><div class="dxp-tabs"><button class="dxp-tab active" onclick="dxpTipo('gm','dia',this)">Día</button><button class="dxp-tab" onclick="dxpTipo('gm','semana',this)">Semana</button><button class="dxp-tab" onclick="dxpTipo('gm','mes',this)">Mes</button><button class="dxp-tab" onclick="dxpTipo('gm','rango',this)">Rango</button></div><input type="date" id="gm_val" onchange="dxpChange('gm')"><input type="date" id="gm_end" style="display:none" onchange="dxpChange('gm')"><span class="dxp-semana" id="gm_sem"></span></div>
-<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px"><button class="btn-primary" id="btnNuevoGasto" onclick="nuevoGasto('menor')">+ Gasto</button><button class="btn-ghost" id="btnLimiteGasto" onclick="abrirLimiteGasto()">🎚️ Delimitar gastos diarios</button><span id="limiteChip" style="font-size:11px;color:var(--text-dim);border:1px solid var(--border);border-radius:20px;padding:4px 11px">Sin límite por gasto</span></div>
+<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px"><button class="btn-primary" id="btnNuevoGasto" onclick="nuevoGasto('menor')">+ Gasto</button><button class="btn-ghost" id="btnLimiteGasto" onclick="abrirLimiteGasto()">🎚️ Delimitar gastos diarios</button><span id="limiteChip" style="font-size:11px;color:var(--text-dim);border:1px solid var(--border);border-radius:20px;padding:4px 11px">Sin límite por gasto</span><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxImprimir('Gastos diarios','tablaMenores')">🖨️ Imprimir</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxCSV('Gastos diarios','tablaMenores')">⬇️ CSV</button></div>
             <div class="summary-grid" id="summaryGrid">
                 <div class="sum-card">
                     <div class="sum-card-label">Total gastos período</div>
@@ -751,8 +761,8 @@
         <div class="dx-win-hdr"><div class="dx-win-title">💰 Pagar Nóminas</div><button class="dx-win-close" onclick="dxCerrar('nominas')">✕ Cerrar</button></div>
         <div class="dx-win-body" id="dxPanel_nominas">
 <div class="dxp" id="nom_dxp"><div class="dxp-tabs"><button class="dxp-tab" onclick="dxpTipo('nom','dia',this)">Día</button><button class="dxp-tab" onclick="dxpTipo('nom','semana',this)">Semana</button><button class="dxp-tab active" onclick="dxpTipo('nom','mes',this)">Mes</button><button class="dxp-tab" onclick="dxpTipo('nom','rango',this)">Rango</button></div><input type="date" id="nom_val" onchange="dxpChange('nom')"><input type="date" id="nom_end" style="display:none" onchange="dxpChange('nom')"><span class="dxp-semana" id="nom_sem"></span></div>
-<div style="margin-bottom:14px"><button class="btn-mayor" id="btnPagarNomina" style="background:rgba(120,160,240,.1);border:1px solid rgba(120,160,240,.3);color:#78a0f0" onclick="abrirSelectorPago('nomina')">💰 Pagar nómina</button></div>
-<div class="card"><div class="card-header" style="justify-content:space-between"><h2>💰 Pagos de nómina del periodo</h2><span id="totalNomLbl" style="font-size:12px;color:var(--text-dim)"></span></div><div class="card-body" style="padding:0;overflow-x:auto"><table class="gastos-table"><thead><tr><th>Fecha</th><th>Concepto</th><th>Método</th><th>Estatus</th><th class="ar">Monto</th><th></th></tr></thead><tbody id="tbodyNomPagos"></tbody></table><div id="emptyNomPagos" class="empty-state" style="display:none;padding:32px"><div class="empty-state-icon">💰</div><div>Sin pagos de nómina en este período.</div></div></div></div>
+<div style="margin-bottom:14px"><button class="btn-mayor" id="btnPagarNomina" style="background:rgba(120,160,240,.1);border:1px solid rgba(120,160,240,.3);color:#78a0f0" onclick="abrirSelectorPago('nomina')">💰 Pagar nómina</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxImprimir('Pagos de nómina','tablaNomPagos')">🖨️ Imprimir</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxCSV('Pagos de nómina','tablaNomPagos')">⬇️ CSV</button></div>
+<div class="card"><div class="card-header" style="justify-content:space-between"><h2>💰 Pagos de nómina del periodo</h2><span id="totalNomLbl" style="font-size:12px;color:var(--text-dim)"></span></div><div class="card-body" style="padding:0;overflow-x:auto"><table class="gastos-table" id="tablaNomPagos"><thead><tr><th>Fecha</th><th>Concepto</th><th>Método</th><th>Estatus</th><th class="ar">Monto</th><th></th></tr></thead><tbody id="tbodyNomPagos"></tbody></table><div id="emptyNomPagos" class="empty-state" style="display:none;padding:32px"><div class="empty-state-icon">💰</div><div>Sin pagos de nómina en este período.</div></div></div></div>
 </div>
     </div>
 </div>
@@ -762,8 +772,8 @@
         <div class="dx-win-hdr"><div class="dx-win-title">🏢 Gastos Fijos</div><button class="dx-win-close" onclick="dxCerrar('fijos')">✕ Cerrar</button></div>
         <div class="dx-win-body" id="dxPanel_fijos">
 <div class="dxp" id="fij_dxp"><div class="dxp-tabs"><button class="dxp-tab" onclick="dxpTipo('fij','dia',this)">Día</button><button class="dxp-tab" onclick="dxpTipo('fij','semana',this)">Semana</button><button class="dxp-tab active" onclick="dxpTipo('fij','mes',this)">Mes</button><button class="dxp-tab" onclick="dxpTipo('fij','rango',this)">Rango</button></div><input type="date" id="fij_val" onchange="dxpChange('fij')"><input type="date" id="fij_end" style="display:none" onchange="dxpChange('fij')"><span class="dxp-semana" id="fij_sem"></span></div>
-<div style="margin-bottom:14px"><button class="btn-mayor" id="btnPagarFijo" style="background:rgba(245,200,66,.1);border:1px solid rgba(245,200,66,.3);color:var(--accent)" onclick="abrirSelectorPago('fijo')">🏢 Pagar gasto fijo</button></div>
-<div class="card"><div class="card-header" style="justify-content:space-between"><h2>🏢 Pagos de gastos fijos del periodo</h2><span id="totalFijosLbl" style="font-size:12px;color:var(--text-dim)"></span></div><div class="card-body" style="padding:0;overflow-x:auto"><table class="gastos-table"><thead><tr><th>Fecha</th><th>Concepto</th><th>Método</th><th>Estatus</th><th class="ar">Monto</th><th></th></tr></thead><tbody id="tbodyFijosPag"></tbody></table><div id="emptyFijosPag" class="empty-state" style="display:none;padding:32px"><div class="empty-state-icon">🏢</div><div>Sin pagos de gastos fijos en este período.</div></div></div></div>
+<div style="margin-bottom:14px"><button class="btn-mayor" id="btnPagarFijo" style="background:rgba(245,200,66,.1);border:1px solid rgba(245,200,66,.3);color:var(--accent)" onclick="abrirSelectorPago('fijo')">🏢 Pagar gasto fijo</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxImprimir('Pagos de gastos fijos','tablaFijosPag')">🖨️ Imprimir</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxCSV('Pagos de gastos fijos','tablaFijosPag')">⬇️ CSV</button></div>
+<div class="card"><div class="card-header" style="justify-content:space-between"><h2>🏢 Pagos de gastos fijos del periodo</h2><span id="totalFijosLbl" style="font-size:12px;color:var(--text-dim)"></span></div><div class="card-body" style="padding:0;overflow-x:auto"><table class="gastos-table" id="tablaFijosPag"><thead><tr><th>Fecha</th><th>Concepto</th><th>Método</th><th>Estatus</th><th class="ar">Monto</th><th></th></tr></thead><tbody id="tbodyFijosPag"></tbody></table><div id="emptyFijosPag" class="empty-state" style="display:none;padding:32px"><div class="empty-state-icon">🏢</div><div>Sin pagos de gastos fijos en este período.</div></div></div></div>
 </div>
     </div>
 </div>
@@ -773,7 +783,7 @@
         <div class="dx-win-hdr"><div class="dx-win-title">💸 Depósitos y Retiros</div><button class="dx-win-close" onclick="dxCerrar('depositos')">✕ Cerrar</button></div>
         <div class="dx-win-body" id="dxPanel_depositos">
 <div class="dxp" id="dep_dxp"><div class="dxp-tabs"><button class="dxp-tab" onclick="dxpTipo('dep','dia',this)">Día</button><button class="dxp-tab" onclick="dxpTipo('dep','semana',this)">Semana</button><button class="dxp-tab active" onclick="dxpTipo('dep','mes',this)">Mes</button><button class="dxp-tab" onclick="dxpTipo('dep','rango',this)">Rango</button></div><input type="date" id="dep_val" onchange="dxpChange('dep')"><input type="date" id="dep_end" style="display:none" onchange="dxpChange('dep')"><span class="dxp-semana" id="dep_sem"></span></div>
-<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"><button class="btn-deposito" id="btnDepositar" onclick="abrirModalDeposito()">💸 Depositar</button><button class="btn-deposito" id="btnVerDepositos" style="background:rgba(120,160,240,.1);border-color:rgba(120,160,240,.3);color:#78a0f0" onclick="abrirVerDepositos()">📋 Vista completa</button></div>
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"><button class="btn-deposito" id="btnDepositar" onclick="abrirModalDeposito()">💸 Depositar</button><button class="btn-deposito" id="btnVerDepositos" style="background:rgba(120,160,240,.1);border-color:rgba(120,160,240,.3);color:#78a0f0" onclick="abrirVerDepositos()">📋 Vista completa</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxImprimir('Depósitos y retiros','tablaDepositos')">🖨️ Imprimir</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxCSV('Depósitos y retiros','tablaDepositos')">⬇️ CSV</button></div>
             <!-- Vistas: todos / solo depósitos / solo retiros -->
             <div class="dxp-tabs" style="display:inline-flex;margin-bottom:12px">
                 <button class="dxp-tab active" onclick="depVista('todos',this)">Todos</button>
@@ -786,7 +796,7 @@
                     <button class="btn-deposito" id="btnNuevoDepCard" onclick="abrirModalDeposito()">+ Nuevo movimiento</button>
                 </div>
                 <div class="card-body" style="padding:0;overflow-x:auto">
-                    <table class="cortes-table">
+                    <table class="cortes-table" id="tablaDepositos">
                         <thead>
                             <tr>
                                 <th class="al">Fecha</th>
@@ -823,7 +833,7 @@
         <div class="dx-win-hdr"><div class="dx-win-title">🔴 Gastos Mayores</div><button class="dx-win-close" onclick="dxCerrar('mayores')">✕ Cerrar</button></div>
         <div class="dx-win-body" id="dxPanel_mayores">
 <div class="dxp" id="gy_dxp"><div class="dxp-tabs"><button class="dxp-tab" onclick="dxpTipo('gy','dia',this)">Día</button><button class="dxp-tab" onclick="dxpTipo('gy','semana',this)">Semana</button><button class="dxp-tab active" onclick="dxpTipo('gy','mes',this)">Mes</button><button class="dxp-tab" onclick="dxpTipo('gy','rango',this)">Rango</button></div><input type="date" id="gy_val" onchange="dxpChange('gy')"><input type="date" id="gy_end" style="display:none" onchange="dxpChange('gy')"><span class="dxp-semana" id="gy_sem"></span></div>
-<div style="margin-bottom:14px"><button class="btn-mayor" id="btnGastoMayor" onclick="nuevoGasto('mayor')">🔴 Registrar gasto mayor</button></div>
+<div style="margin-bottom:14px"><button class="btn-mayor" id="btnGastoMayor" onclick="nuevoGasto('mayor')">🔴 Registrar gasto mayor</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxImprimir('Gastos mayores','tablaMayores')">🖨️ Imprimir</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxCSV('Gastos mayores','tablaMayores')">⬇️ CSV</button></div>
             <!-- Sección gastos mayores -->
             <div id="mayorSection">
                 <div class="mayor-wall" id="mayorWall">
@@ -1696,6 +1706,9 @@
     <span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span>
 </button>
 
+<!-- Área de impresión por card (solo visible al imprimir) -->
+<div id="dxPrintArea"></div>
+
 <script>
 /* ══════════════════════════════════════════════════════════════
    NÚCLEO DEL SUB-MÓDULO "VENTAS Y GASTOS DIARIOS"
@@ -1848,6 +1861,60 @@ function dxpHTML(pfx) {
         + '<input type="date" id="'+pfx+'_end" style="display:none" onchange="dxpChange(\''+pfx+'\')">'
         + '<span class="dxp-semana" id="'+pfx+'_sem"></span>'
         + '</div>';
+}
+
+// ── Exportar por card: imprimir (con marca del negocio) y CSV ──
+// Clona la tabla del card, quita la columna de acciones y manda a imprimir
+// usando un área que SOLO existe en el print (media query en el CSS).
+function _dxTablaLimpia(tablaId){
+    var t = document.getElementById(tablaId);
+    if (!t) return null;
+    var c = t.cloneNode(true);
+    // fuera la última columna (botones de acciones)
+    var filas = c.querySelectorAll('tr');
+    for (var i = 0; i < filas.length; i++) {
+        var celdas = filas[i].querySelectorAll('th,td');
+        if (celdas.length > 1) celdas[celdas.length - 1].remove();
+    }
+    return c;
+}
+function dxImprimir(titulo, tablaId){
+    var tabla = _dxTablaLimpia(tablaId);
+    if (!tabla) { alert('No hay tabla que exportar.'); return; }
+    var m = (typeof etaaxMarca === 'function') ? etaaxMarca() : {};
+    var area = document.getElementById('dxPrintArea');
+    var hoy = new Date().toLocaleDateString('es-MX', { day:'2-digit', month:'long', year:'numeric' });
+    area.innerHTML =
+        '<div style="display:flex;align-items:center;gap:12px;border-bottom:2px solid #3dbe7a;padding-bottom:10px;margin-bottom:14px">' +
+        (m.logo ? '<img src="' + m.logo + '" style="width:44px;height:44px;object-fit:cover;border-radius:8px">' : '') +
+        '<div><div style="font-family:Arial;font-weight:800;font-size:18px;letter-spacing:1px">' + etx(m.negocio || '') + '</div>' +
+        (m.sucursal ? '<div style="font-size:11px;color:#555">' + (m.sucursalColor ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + m.sucursalColor + ';margin-right:4px"></span>' : '') + etx(m.sucursal) + '</div>' : '') +
+        '</div>' +
+        '<div style="margin-left:auto;text-align:right;font-size:10px;color:#777">' + etx(titulo) + '<br>' + hoy + '</div>' +
+        '</div>' +
+        '<div style="font-family:Arial;font-weight:700;font-size:14px;margin-bottom:8px">' + etx(titulo) + '</div>';
+    area.appendChild(tabla);
+    window.print();
+}
+function dxCSV(nombre, tablaId){
+    var tabla = _dxTablaLimpia(tablaId);
+    if (!tabla) { alert('No hay tabla que exportar.'); return; }
+    var filas = [].map.call(tabla.querySelectorAll('tr'), function(tr){
+        return [].map.call(tr.querySelectorAll('th,td'), function(c){
+            return '"' + c.innerText.replace(/\s+/g, ' ').trim().replace(/"/g, '""') + '"';
+        }).join(',');
+    });
+    var blob = new Blob(['﻿' + filas.join('\n')], { type: 'text/csv;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = nombre.replace(/\s+/g, '-').toLowerCase() + '-' + _dxHoy() + '.csv';
+    a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+}
+// Botonera estándar de export por card
+function dxExportBtns(titulo, tablaId){
+    return '<button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxImprimir(\'' + titulo + '\',\'' + tablaId + '\')">🖨️ Imprimir</button>' +
+           '<button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxCSV(\'' + titulo + '\',\'' + tablaId + '\')">⬇️ CSV</button>';
 }
 
 // ── Reporte Directivo consolidado (fase 6) ──
@@ -4691,6 +4758,7 @@ function renderFijosPanel(){
 </script>
 <script src="../security.js"></script>
 <script src="/foto-zoom.js"></script>
+<script src="/reporte-marca.js"></script>
 <script src="../ctx-bar.js"></script>
 <script src="../admin-guard.js"></script>
 <script src="/nomina-params.js"></script>
