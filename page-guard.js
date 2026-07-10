@@ -125,6 +125,9 @@ window.etaaxPerm = function (negId, rol, path) {
         [/\/administrativo\/ventas-productos/,  'ventas_productos'],
         [/\/administrativo\/ventas/,            'ventas'],
         [/\/administrativo\/gastos/,            'gastos'],
+        // Sub-módulo unificado: pasa con ventas O gastos (los permisos finos
+        // ocultan adentro los cards/botones que no le tocan al rol).
+        [/\/administrativo\/diario/,            ['ventas','gastos']],
         [/\/administrativo\/menu/,              'menu'],
         [/\/administrativo\/proveedores/,       'proveedores'],
         [/\/administrativo\/clientes/,          'clientes'],

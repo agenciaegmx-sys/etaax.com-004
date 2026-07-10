@@ -524,49 +524,49 @@
 
             <!-- MENÚ DE FUNCIONES -->
             <div class="dx-grid">
-                <button class="dx-card" onclick="dxAbrir('cortes')">
+                <button class="dx-card" data-fn="cortes" onclick="dxAbrir('cortes')">
                     <div class="dx-card-hdr"><div class="dx-card-icon">🧾</div><span class="dx-badge">Activo</span></div>
                     <div class="dx-card-title">Registrar Corte de Caja</div>
                     <div class="dx-card-desc">Captura el corte del día por turno y sucursal: formas de pago, propinas, resguardo e ingresos extra.</div>
                     <div class="dx-card-cta">Abrir →</div>
                 </button>
-                <button class="dx-card" onclick="dxAbrir('gastos')">
+                <button class="dx-card" data-fn="gastos" onclick="dxAbrir('gastos')">
                     <div class="dx-card-hdr"><div class="dx-card-icon">📤</div><span class="dx-badge">Activo</span></div>
                     <div class="dx-card-title">Registrar Gastos Diarios</div>
                     <div class="dx-card-desc">Egresos operativos menores con evidencia, método de pago y límite configurable por gasto.</div>
                     <div class="dx-card-cta">Abrir →</div>
                 </button>
-                <button class="dx-card azul" onclick="dxAbrir('nominas')">
+                <button class="dx-card azul" data-fn="nominas" onclick="dxAbrir('nominas')">
                     <div class="dx-card-hdr"><div class="dx-card-icon">💰</div><span class="dx-badge">Activo</span></div>
                     <div class="dx-card-title">Pagar Nóminas</div>
                     <div class="dx-card-desc">Paga la nómina del staff por periodo, con prima dominical, conceptos extra y reporte exportable.</div>
                     <div class="dx-card-cta">Abrir →</div>
                 </button>
-                <button class="dx-card oro" onclick="dxAbrir('fijos')">
+                <button class="dx-card oro" data-fn="fijos" onclick="dxAbrir('fijos')">
                     <div class="dx-card-hdr"><div class="dx-card-icon">🏢</div><span class="dx-badge">Activo</span></div>
                     <div class="dx-card-title">Pagar Gasto Fijo</div>
                     <div class="dx-card-desc">Renta, servicios y obligaciones del mes. Historial con su propio buscador y export.</div>
                     <div class="dx-card-cta">Abrir →</div>
                 </button>
-                <button class="dx-card azul" onclick="dxAbrir('depositos')">
+                <button class="dx-card azul" data-fn="depositos" onclick="dxAbrir('depositos')">
                     <div class="dx-card-hdr"><div class="dx-card-icon">💸</div><span class="dx-badge">Activo</span></div>
                     <div class="dx-card-title">Depósitos y Retiros</div>
                     <div class="dx-card-desc">Movimientos entre caja, caja fuerte y bancos, con categoría y vistas separadas de depósitos y retiros.</div>
                     <div class="dx-card-cta">Abrir →</div>
                 </button>
-                <button class="dx-card rojo" onclick="dxAbrir('mayores')">
+                <button class="dx-card rojo" data-fn="mayores" onclick="dxAbrir('mayores')">
                     <div class="dx-card-hdr"><div class="dx-card-icon">🔴</div><span class="dx-badge">Activo</span></div>
                     <div class="dx-card-title">Registrar Gasto Mayor</div>
                     <div class="dx-card-desc">Egresos grandes con clave de administrador. Recibe automáticamente los gastos que rebasan el límite diario.</div>
                     <div class="dx-card-cta">Abrir →</div>
                 </button>
-                <button class="dx-card oro" onclick="dxAbrir('caja')">
+                <button class="dx-card oro" data-fn="caja" onclick="dxAbrir('caja')">
                     <div class="dx-card-hdr"><div class="dx-card-icon">🔒</div><span class="dx-badge">Activo</span></div>
                     <div class="dx-card-title">Ver Caja Fuerte</div>
                     <div class="dx-card-desc">Saldo del resguardo, comisiones bancarias acumuladas y movimientos hacia banco.</div>
                     <div class="dx-card-cta">Abrir →</div>
                 </button>
-                <button class="dx-card" onclick="dxAbrir('extras')">
+                <button class="dx-card" data-fn="extras" onclick="dxAbrir('extras')">
                     <div class="dx-card-hdr"><div class="dx-card-icon">🎪</div><span class="dx-badge">Activo</span></div>
                     <div class="dx-card-title">Ventas Especiales</div>
                     <div class="dx-card-desc">Eventos, banquetes y ventas fuera de la operación diaria. No se mezclan con los cortes.</div>
@@ -1702,6 +1702,33 @@
   </div>
 </div>
 
+<!-- ══ REPORTE DIRECTIVO CONSOLIDADO ══ -->
+<div class="dx-overlay" id="dxOv_reporte" onclick="if(event.target===this)dxCerrar('reporte')">
+    <div class="dx-win">
+        <div class="dx-win-hdr">
+            <div class="dx-win-title">📊 Reporte Directivo</div>
+            <div style="display:flex;gap:8px;align-items:center">
+                <button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="rdImprimir()">🖨️ Imprimir</button>
+                <button class="dx-win-close" onclick="dxCerrar('reporte')">✕ Cerrar</button>
+            </div>
+        </div>
+        <div class="dx-win-body">
+            <div class="dxp" id="rd_dxp">
+                <div class="dxp-tabs">
+                    <button class="dxp-tab" onclick="dxpTipo('rd','dia',this)">Día</button>
+                    <button class="dxp-tab" onclick="dxpTipo('rd','semana',this)">Semana</button>
+                    <button class="dxp-tab active" onclick="dxpTipo('rd','mes',this)">Mes</button>
+                    <button class="dxp-tab" onclick="dxpTipo('rd','rango',this)">Rango</button>
+                </div>
+                <input type="date" id="rd_val" onchange="dxpChange('rd')">
+                <input type="date" id="rd_end" style="display:none" onchange="dxpChange('rd')">
+                <span class="dxp-semana" id="rd_sem"></span>
+            </div>
+            <div id="rdBody"></div>
+        </div>
+    </div>
+</div>
+
 <button class="theme-toggle" onclick="toggleTheme()">
     <span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span>
 </button>
@@ -1917,10 +1944,97 @@ function dxExportBtns(titulo, tablaId){
            '<button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxCSV(\'' + titulo + '\',\'' + tablaId + '\')">⬇️ CSV</button>';
 }
 
-// ── Reporte Directivo consolidado (fase 6) ──
-function abrirReporteDirectivo() {
-    alert('El Reporte Directivo consolidado se conecta en la fase final de esta actualización.');
+// ── Reporte Directivo consolidado: jala los datos de TODOS los cards ──
+function abrirReporteDirectivo() { dxAbrir('reporte'); }
+window._dxOnAbrir_reporte = function(){ renderReporteDirectivo(); };
+function _rdKpi(lbl, val, col, sub){
+    return '<div class="sum-card"><div class="sum-card-label">'+lbl+'</div>'+
+        '<div class="sum-card-val" style="font-size:22px;color:'+(col||'var(--text)')+'">'+val+'</div>'+
+        (sub?'<div class="sum-card-sub">'+sub+'</div>':'')+'</div>';
 }
+function renderReporteDirectivo(){
+    var el = document.getElementById('rdBody'); if (!el) return;
+    // Si los lados aún no cargan (primer segundo), reintenta suave
+    if (typeof load !== 'function' || typeof gLoad !== 'function') { el.innerHTML = '<div class="dx-todo">Cargando…</div>'; return; }
+    var r = dxpRango('rd');
+    var dentro = function(x){ return inRange(x.fecha, r.from, r.to); };
+    // Ventas (cortes)
+    var cortes = load().filter(dentro);
+    var vtas = cortes.reduce(function(s,c){ return s + ventasBruta(c); }, 0);
+    var flujo = cortes.reduce(function(s,c){ return s + flujoNeto(c); }, 0);
+    var props = cortes.reduce(function(s,c){ return s + propinas(c); }, 0);
+    var coms = cortes.reduce(function(s,c){ return s + n(c.comensales); }, 0);
+    // Ventas especiales
+    var vex = loadVex().filter(dentro).reduce(function(s,v){ return s + n(v.monto); }, 0);
+    // Gastos (visibles para el rol)
+    var gs = gLoad().filter(dentro).filter(gGastoVisible);
+    var gTot = gs.reduce(function(s,g){ return s + n(g.monto); }, 0);
+    var gMen = gs.filter(function(g){ return g.tipo === 'menor'; }).reduce(function(s,g){ return s + n(g.monto); }, 0);
+    var gMay = gTot - gMen;
+    var nomTot = gs.filter(function(g){ return g.staffId || g.categoria === 'Nómina y personal'; }).reduce(function(s,g){ return s + n(g.monto); }, 0);
+    var fijTot = gs.filter(function(g){ return g.fijoId; }).reduce(function(s,g){ return s + n(g.monto); }, 0);
+    // Top 5 categorías de gasto
+    var cats = {};
+    gs.forEach(function(g){ if (g.categoria) cats[g.categoria] = (cats[g.categoria] || 0) + n(g.monto); });
+    var top = Object.keys(cats).sort(function(a,b){ return cats[b] - cats[a]; }).slice(0, 5);
+    // Depósitos y retiros
+    var deps = loadDep().filter(dentro);
+    var depTot = deps.filter(function(d){ return !_esRetiro(d); }).reduce(function(s,d){ return s + n(d.monto); }, 0);
+    var retTot = deps.filter(_esRetiro).reduce(function(s,d){ return s + n(d.monto); }, 0);
+    // Resultado del periodo
+    var resultado = vtas + vex - gTot;
+    var perTxt = r.from === r.to ? r.from : r.from + ' → ' + r.to;
+    el.innerHTML =
+        '<div style="font-size:11px;color:var(--text-dim);margin:4px 0 12px">Periodo: <b style="color:var(--text)">' + perTxt + '</b> · ' + cortes.length + ' corte' + (cortes.length !== 1 ? 's' : '') + ' · ' + gs.length + ' gasto' + (gs.length !== 1 ? 's' : '') + '</div>' +
+        '<div class="summary-grid" style="grid-template-columns:repeat(4,1fr)">' +
+            _rdKpi('Ventas (cortes)', fmtM(vtas), 'var(--green)', 'flujo neto ' + fmtM(flujo)) +
+            _rdKpi('Ventas especiales', fmtM(vex), '#7ba7ff', '') +
+            _rdKpi('Gastos del periodo', fmtM(gTot), 'var(--red)', 'menores ' + fmtM(gMen) + ' · mayores ' + fmtM(gMay)) +
+            _rdKpi('Resultado', (resultado >= 0 ? '+' : '−') + fmtM(Math.abs(resultado)), resultado >= 0 ? 'var(--green)' : 'var(--red)', 'ventas + especiales − gastos') +
+        '</div>' +
+        '<div class="summary-grid" style="grid-template-columns:repeat(4,1fr)">' +
+            _rdKpi('Nóminas pagadas', fmtM(nomTot), '#78a0f0', '') +
+            _rdKpi('Gastos fijos pagados', fmtM(fijTot), 'var(--accent)', '') +
+            _rdKpi('Depósitos', fmtM(depTot), 'var(--green)', '') +
+            _rdKpi('Retiros', retTot > 0 ? '−' + fmtM(retTot) : fmtM(0), retTot > 0 ? 'var(--red)' : 'var(--text)', '') +
+        '</div>' +
+        _rdKpi('Propinas del periodo', fmtM(props), 'var(--accent)', coms > 0 ? coms + ' comensales' : '') +
+        (top.length ? '<div class="card" style="margin-top:12px"><div class="card-header"><h2>Top categorías de gasto</h2></div>' +
+            '<div class="card-body" style="padding:0;overflow-x:auto"><table class="gastos-table" id="rdTablaTop"><thead><tr><th>Categoría</th><th class="ar">Monto</th><th class="ar">%</th></tr></thead><tbody>' +
+            top.map(function(c){ return '<tr><td>' + etx(c) + '</td><td class="ar" style="color:var(--red);font-weight:600">' + fmtM(cats[c]) + '</td><td class="ar" style="color:var(--text-dim)">' + (gTot > 0 ? Math.round(cats[c] / gTot * 100) : 0) + '%</td></tr>'; }).join('') +
+            '</tbody></table></div></div>' : '');
+}
+function rdImprimir(){
+    var body = document.getElementById('rdBody');
+    if (!body || !body.innerHTML) { alert('Abre primero el reporte.'); return; }
+    var m = (typeof etaaxMarca === 'function') ? etaaxMarca() : {};
+    var hoy = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
+    var area = document.getElementById('dxPrintArea');
+    area.innerHTML =
+        '<div style="display:flex;align-items:center;gap:12px;border-bottom:2px solid #3dbe7a;padding-bottom:10px;margin-bottom:14px">' +
+        (m.logo ? '<img src="' + m.logo + '" style="width:44px;height:44px;object-fit:cover;border-radius:8px">' : '') +
+        '<div><div style="font-family:Arial;font-weight:800;font-size:18px;letter-spacing:1px">' + etx(m.negocio || '') + '</div>' +
+        (m.sucursal ? '<div style="font-size:11px;color:#555">' + etx(m.sucursal) + '</div>' : '') + '</div>' +
+        '<div style="margin-left:auto;text-align:right;font-size:10px;color:#777">Reporte Directivo · Ventas y Gastos Diarios<br>' + hoy + '</div></div>' +
+        body.innerHTML;
+    window.print();
+}
+
+// ── Cards según permisos del rol (los permisos finos siguen dentro de cada panel) ──
+function _dxAplicarPermisosCards(){
+    var ctx; try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch(e) {}
+    if (!ctx || ctx.ctxType !== 'staff' || (ctx.rol || '') === 'admin') return;
+    if (typeof window.etaaxPermisosRol !== 'function') return;
+    var perms = etaaxPermisosRol(ctx.negId || localStorage.getItem('etaax_negocio_activo'), ctx.rol) || {};
+    function ocultar(lista){ lista.forEach(function(fn){ var b = document.querySelector('.dx-card[data-fn="' + fn + '"]'); if (b) b.style.display = 'none'; }); }
+    if (!perms.ventas) ocultar(['cortes', 'depositos', 'caja', 'extras']);
+    if (!perms.gastos) ocultar(['gastos', 'mayores', 'nominas', 'fijos']);
+    if (!perms.ventas || !perms.gastos) { var rd = document.getElementById('btnReporteDirectivo'); if (rd) rd.style.display = 'none'; }
+}
+document.addEventListener('DOMContentLoaded', function(){
+    dxpInit('rd', 'mes', function(){ renderReporteDirectivo(); });
+    _dxAplicarPermisosCards();
+});
 </script>
 <script>
 /* ══════════ LADO VENTAS (cortes, depósitos, extras, caja fuerte) — heredado de ventas.html ══════════ */
