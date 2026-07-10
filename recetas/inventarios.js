@@ -374,7 +374,7 @@ function _getRefInv() {
         const r = cerrados.find(x => x.id === invActual.refInventarioId);
         if (r) return r;
     }
-    return cerrados[cerrados.length - 1];
+    return cerrados.slice().sort(function(a,b){ return String(a.fecha||'').localeCompare(String(b.fecha||'')); }).pop();
 }
 function getExistenciaAnterior(insumoId) {
     const inv = _getRefInv();
@@ -879,6 +879,7 @@ function tipoIcon(tipo) { return TIPOS_ICON[tipo] || '📋'; }
 function getFilasFiltradas(conRegistro = false) {
     const b = busquedaCapt.toLowerCase();
     return filasCaptura.filter(f =>
+        !f._subReceta && // sub-recetas→insumo: solo en Producción de prebatch, no en la lista
         (!filtroFamActivo    || f.familia     === filtroFamActivo) &&
         (!filtroCatActiva    || f.categoria   === filtroCatActiva) &&
         (!filtroSubcatActiva || f.subcategoria === filtroSubcatActiva) &&
@@ -2180,6 +2181,9 @@ function cargarProductosCaptura() {
     filasCaptura = insumos.map(ins => {
         const existe = (invActual.filas || []).find(f => f.insumoId === ins.id);
         if (existe) {
+            // Sub-receta convertida a insumo: NO se lista en el Paso 1 (se gestiona en
+            // Producción de prebatch); su fila sigue viva para teórico/resultado.
+            existe._subReceta = !!ins.esSubReceta;
             if (!existe.entradas) existe.entradas = ['','','','',''];
             // Corregir refrescos/cervezas guardados como 'copa' por error → pza (conteo por pieza).
             if (existe.tipo === 'copa' && _esRefrescoCerveza(ins)) existe.tipo = 'pza';
@@ -2234,6 +2238,7 @@ function cargarProductosCaptura() {
 
         return {
             insumoId: ins.id,
+            _subReceta: !!ins.esSubReceta, // prebatch: oculto de la lista, vivo en la matemática
             nombre:   ins.nombre + (ins.variedad ? ' '+ins.variedad : ''),
             categoria: ins.categoria  || '',
             subcategoria: ins.subcategoria || '',
@@ -5912,15 +5917,20 @@ function guardarInventario() {
     // NO sobrescribir (antes esto borraba las existencias al abrirlo en la sucursal equivocada).
     if (!_nuevas.length && (invActual.filas || []).some(_filaConDatos)) return;
     invActual.filas = _nuevas.map(f => ({...f, existenciaFisica: calcExistencia(f)}));
+    // Si se está EDITANDO un inventario cerrado, se persiste como CERRADO (el flag
+    // _eraCerrado vive solo en memoria y nunca llega al disco/nube).
+    const _persist = Object.assign({}, invActual);
+    if (_persist._eraCerrado) _persist.cerrado = true;
+    delete _persist._eraCerrado;
     const lista = getInventarios();
     const idx   = lista.findIndex(x=>x.id===invActual.id);
-    if (idx>=0) lista[idx]=invActual; else lista.push(invActual);
+    if (idx>=0) lista[idx]=_persist; else lista.push(_persist);
     const ok = setInventarios(lista);
     if (!ok) throw new Error('storage-full');
     // FORZAR el upsert a la nube: el diff de setInventarios no detecta el cambio
     // porque _persistirBorradorLocal ya mutó _cacheInv (= prev). Sin esto, el
     // inventario solo vivía en localStorage y no sincronizaba entre dispositivos.
-    try { _sbUpInv(invActual); } catch(e) { console.warn('[guardarInventario upsert]', e); }
+    try { _sbUpInv(_persist); } catch(e) { console.warn('[guardarInventario upsert]', e); }
 }
 
 // Respaldo INMEDIATO del borrador en localStorage (síncrono, en cada cambio).
@@ -5932,9 +5942,12 @@ function _persistirBorradorLocal() {
         var _nuevas = filasCaptura.filter(_filaConDatos);
         if (!_nuevas.length && (invActual.filas || []).some(_filaConDatos)) return;
         invActual.filas = _nuevas.map(function(f){ return Object.assign({}, f, { existenciaFisica: calcExistencia(f) }); });
+        var _persistB = Object.assign({}, invActual);
+        if (_persistB._eraCerrado) _persistB.cerrado = true; // editar un cerrado no lo reabre
+        delete _persistB._eraCerrado;
         var lista = getInventarios();
         var idx = lista.findIndex(function(x){ return x.id === invActual.id; });
-        if (idx >= 0) lista[idx] = invActual; else lista.push(invActual);
+        if (idx >= 0) lista[idx] = _persistB; else lista.push(_persistB);
         _cacheInv = lista;
         _guardarDraftsLocal();
     } catch(e) { console.warn('[borrador local]', e); }
@@ -5967,7 +5980,7 @@ function _autoGuardar() {
 
 function guardarYSalir() {
     if (!invActual) return;
-    invActual.cerrado = true;
+    invActual.cerrado = true; delete invActual._eraCerrado;
     let guardado = false;
     try { guardarInventario(); guardado = true; } catch(e) { console.warn('[guardarYSalir]', e); }
     if (!guardado) {
@@ -5983,7 +5996,7 @@ function finalizarPrimerLev() {
     if (!invActual) return;
     if (invActual.cerrado) return;
     _solicitarClave('Guardar y cerrar levantamiento', function() {
-        invActual.cerrado = true;
+        invActual.cerrado = true; delete invActual._eraCerrado;
         let ok = false;
         try { guardarInventario(); ok = true; } catch(e) {}
         if (!ok) { invActual.cerrado = false; alert('No se pudo guardar (almacenamiento lleno).'); return; }
@@ -5999,7 +6012,7 @@ function cerrarInventario() {
     if (!invActual) return;
     if (invActual.cerrado) { alert('Este inventario ya está cerrado.'); return; }
     _solicitarClave('Cerrar y finalizar inventario', function() {
-        invActual.cerrado = true;
+        invActual.cerrado = true; delete invActual._eraCerrado;
         let ok = false;
         try { guardarInventario(); ok = true; } catch(e) {}
         if (!ok) { invActual.cerrado = false; alert('No se pudo guardar (almacenamiento lleno).'); return; }
@@ -6011,17 +6024,15 @@ function cerrarInventario() {
 
 function editarInventario(id) {
     _solicitarClave('Editar inventario', function() {
-        // Re-abrir si estaba cerrado
-        const lista = getInventarios();
-        const idx   = lista.findIndex(x=>x.id===id);
-        if (idx >= 0 && lista[idx].cerrado) {
-            lista[idx].cerrado = false;
-            setInventarios(lista);
-        }
         // Cargar el inventario en memoria
         const inv = getInventarios().find(x=>x.id===id);
         if (!inv) { alert('Inventario no encontrado'); return; }
         invActual = JSON.parse(JSON.stringify(inv));
+        // ✏️ Editar un CERRADO ya NO lo reabre en disco: se abre editable solo en
+        // MEMORIA y todo guardado lo persiste como CERRADO (_eraCerrado). Antes
+        // quedaba ABIERTO para siempre → el primer levantamiento "revivía" y el
+        // siguiente inventario perdía su referencia (existencia anterior en $0).
+        if (invActual.cerrado) { invActual.cerrado = false; invActual._eraCerrado = true; }
         if (!invActual.cocktailsVendidos) invActual.cocktailsVendidos = {};
         if (!invActual.cancelaciones)     invActual.cancelaciones     = [];
         if (!invActual.descuentos)        invActual.descuentos        = [];
