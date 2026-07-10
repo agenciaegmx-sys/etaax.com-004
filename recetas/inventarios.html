@@ -920,7 +920,11 @@ document.addEventListener('DOMContentLoaded', function() { _sbInitInv(); });
     <div style="font-size:12px;color:var(--text-dim);line-height:1.5;margin-bottom:16px">Pega este QR en la barra/bodega. El colaborador lo escanea, pone su <b>NIP de 5 dígitos</b> (el de Gestión de Staff) y registra entradas desde el celular.</div>
     <div id="qrEntradasBox" style="display:flex;justify-content:center;margin-bottom:12px"></div>
     <div id="qrEntradasUrl" style="font-size:10px;color:var(--text-dim);word-break:break-all;margin-bottom:16px"></div>
-    <button class="btn-vista" onclick="document.getElementById('modalQrEntradas').style.display='none'">✕ Cerrar</button>
+    <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <button class="btn-vista" style="color:var(--green);border-color:rgba(61,190,122,.4)" onclick="imprimirQrEntradas()">🖨️ Imprimir</button>
+        <button class="btn-vista" onclick="descargarQrEntradas()">⬇️ Descargar PNG</button>
+        <button class="btn-vista" onclick="document.getElementById('modalQrEntradas').style.display='none'">✕ Cerrar</button>
+    </div>
   </div>
 </div>
 

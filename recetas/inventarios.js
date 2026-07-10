@@ -1425,6 +1425,73 @@ async function abrirQrEntradas() {
         document.head.appendChild(s);
     }
 }
+// ── QR de entradas: exportar/imprimir ──────────────────────────
+// El QR generado (canvas del lib qrcodejs, con fallback a su <img>) como data URL.
+function _qrEntradasDataURL() {
+    var box = document.getElementById('qrEntradasBox');
+    if (!box) return '';
+    var canvas = box.querySelector('canvas');
+    if (canvas) { try { return canvas.toDataURL('image/png'); } catch(e) {} }
+    var img = box.querySelector('img');
+    return img ? img.src : '';
+}
+function descargarQrEntradas() {
+    var data = _qrEntradasDataURL();
+    if (!data) { alert('Primero espera a que se genere el QR.'); return; }
+    var m = (typeof etaaxMarca === 'function') ? etaaxMarca() : {};
+    var a = document.createElement('a');
+    a.href = data;
+    a.download = ('qr-entradas-' + (m.negocio || 'negocio') + (m.sucursal ? '-' + m.sucursal : ''))
+        .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') + '.png';
+    a.click();
+}
+// Hoja imprimible: marca del negocio + QR grande + instrucciones. Mismo patrón que el
+// reporte directivo: los estilos de impresión viven DENTRO del overlay y se destruyen
+// con él (no contaminan otros flujos de window.print de la página).
+function imprimirQrEntradas() {
+    var data = _qrEntradasDataURL();
+    if (!data) { alert('Primero espera a que se genere el QR.'); return; }
+    var url = (document.getElementById('qrEntradasUrl') || {}).textContent || '';
+    var m = (typeof etaaxMarca === 'function') ? etaaxMarca() : {};
+    var viejo = document.getElementById('qrPrintOverlay'); if (viejo) viejo.remove();
+    var ov = document.createElement('div');
+    ov.id = 'qrPrintOverlay';
+    ov.innerHTML =
+        '<style>' +
+        '#qrPrintOverlay{display:none}' +
+        '@media print{' +
+            '@page{size:letter;margin:14mm}' +
+            'body>*:not(#qrPrintOverlay){display:none!important}' +
+            '#qrPrintOverlay{display:block!important;background:#fff;color:#1a1916;font-family:Arial,Helvetica,sans-serif;text-align:center}' +
+        '}' +
+        '</style>' +
+        '<div style="display:flex;align-items:center;justify-content:center;gap:12px;border-bottom:3px solid #3dbe7a;padding-bottom:14px;margin-bottom:22px">' +
+            (m.logo ? '<img src="' + m.logo + '" style="width:52px;height:52px;object-fit:cover;border-radius:10px">' : '') +
+            '<div style="text-align:left">' +
+                '<div style="font-weight:800;font-size:22px;letter-spacing:1px">' + etx(m.negocio || '') + '</div>' +
+                (m.sucursal ? '<div style="font-size:13px;color:#555">' +
+                    (m.sucursalColor ? '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + m.sucursalColor + ';margin-right:5px"></span>' : '') +
+                    etx(m.sucursal) + '</div>' : '') +
+            '</div>' +
+        '</div>' +
+        '<div style="font-weight:800;font-size:26px;letter-spacing:2px;margin-bottom:4px">📱 QR DE ENTRADAS</div>' +
+        '<div style="font-size:13px;color:#555;margin-bottom:20px">Registro de entradas de insumos — cocina / barra / bodega</div>' +
+        '<img src="' + data + '" style="width:290px;height:290px;border:1px solid #ddd;border-radius:14px;padding:14px;background:#fff">' +
+        '<div style="max-width:430px;margin:22px auto 0;text-align:left;font-size:13px;color:#333;line-height:1.7">' +
+            '<b>Instrucciones:</b><br>' +
+            '1. Escanea el QR con la cámara del celular.<br>' +
+            '2. Escribe tu <b>NIP de 5 dígitos</b> (el de Gestión de Staff).<br>' +
+            '3. Registra el insumo, la cantidad y la foto de la entrada.' +
+        '</div>' +
+        '<div style="font-size:9px;color:#999;word-break:break-all;margin-top:18px">' + etx(url) + '</div>' +
+        '<div style="border-top:1px solid #eee;margin-top:14px;padding-top:8px;font-size:9px;color:#bbb">etaax.com · EGMx Consultoría Estratégica a&b</div>';
+    document.body.appendChild(ov);
+    var limpiar = function(){ var o = document.getElementById('qrPrintOverlay'); if (o) o.remove(); };
+    window.addEventListener('afterprint', limpiar, { once: true });
+    window.print();
+    setTimeout(limpiar, 2000); // respaldo por si afterprint no dispara (Safari viejo)
+}
+
 function _renderParamLista() {
     var comps = getCompuestos();
     var html = '<div style="padding:16px 18px">'+
