@@ -358,3 +358,42 @@ window.etx = function (s) {
         );
     }, true);
 })();
+
+/* ============================================================
+   AVISO DE MANTENIMIENTO — actualización de esta noche
+   Banner fijo en TODAS las páginas del sistema (security.js se
+   incluye en hub, módulos, admin y configuración). Se apaga solo
+   después de la hora de la actualización; se puede cerrar y no
+   vuelve a molestar en ese dispositivo.
+   ============================================================ */
+(function () {
+    var LIMITE = new Date('2026-07-10T00:00:00'); // hoy 12:00 a.m.
+    var KEY = 'etaax_aviso_upd_20260710';
+    if (new Date() >= LIMITE) return;               // ya pasó: no mostrar
+    try { if (localStorage.getItem(KEY)) return; } catch (e) {}
+
+    function pintar() {
+        if (document.getElementById('etaaxAvisoUpd')) return;
+        var b = document.createElement('div');
+        b.id = 'etaaxAvisoUpd';
+        b.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:99990;' +
+            'max-width:min(640px,94vw);box-sizing:border-box;display:flex;align-items:center;gap:12px;' +
+            'background:#1f1d18;border:1px solid rgba(245,200,66,.5);border-radius:12px;padding:12px 16px;' +
+            'box-shadow:0 12px 40px rgba(0,0,0,.55);font-family:"DM Sans",sans-serif;';
+        b.innerHTML =
+            '<span style="font-size:22px;line-height:1">🛠️</span>' +
+            '<div style="flex:1;min-width:0">' +
+                '<div style="font-size:13px;font-weight:700;color:#f5c842;letter-spacing:.3px">Actualización del sistema — hoy 12:00 a.m.</div>' +
+                '<div style="font-size:12px;color:#c9c4bb;line-height:1.5;margin-top:2px">ETAAX se actualizará esta noche por mejoras continuas. Puedes seguir trabajando normal; te recomendamos guardar tus capturas antes de esa hora.</div>' +
+            '</div>' +
+            '<button id="etaaxAvisoUpdX" style="background:none;border:1px solid rgba(245,200,66,.35);color:#f5c842;' +
+                'border-radius:8px;padding:6px 12px;cursor:pointer;font-family:inherit;font-size:12px;white-space:nowrap">Entendido</button>';
+        document.body.appendChild(b);
+        document.getElementById('etaaxAvisoUpdX').onclick = function () {
+            try { localStorage.setItem(KEY, '1'); } catch (e) {}
+            b.remove();
+        };
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pintar);
+    else pintar();
+})();
