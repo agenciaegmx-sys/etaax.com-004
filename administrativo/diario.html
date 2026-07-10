@@ -774,17 +774,24 @@
         <div class="dx-win-body" id="dxPanel_depositos">
 <div class="dxp" id="dep_dxp"><div class="dxp-tabs"><button class="dxp-tab" onclick="dxpTipo('dep','dia',this)">Día</button><button class="dxp-tab" onclick="dxpTipo('dep','semana',this)">Semana</button><button class="dxp-tab active" onclick="dxpTipo('dep','mes',this)">Mes</button><button class="dxp-tab" onclick="dxpTipo('dep','rango',this)">Rango</button></div><input type="date" id="dep_val" onchange="dxpChange('dep')"><input type="date" id="dep_end" style="display:none" onchange="dxpChange('dep')"><span class="dxp-semana" id="dep_sem"></span></div>
 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"><button class="btn-deposito" id="btnDepositar" onclick="abrirModalDeposito()">💸 Depositar</button><button class="btn-deposito" id="btnVerDepositos" style="background:rgba(120,160,240,.1);border-color:rgba(120,160,240,.3);color:#78a0f0" onclick="abrirVerDepositos()">📋 Vista completa</button></div>
-            <div class="card" id="cardDepositos" style="margin-top:16px">
+            <!-- Vistas: todos / solo depósitos / solo retiros -->
+            <div class="dxp-tabs" style="display:inline-flex;margin-bottom:12px">
+                <button class="dxp-tab active" onclick="depVista('todos',this)">Todos</button>
+                <button class="dxp-tab" onclick="depVista('dep',this)">➕ Ver depósitos</button>
+                <button class="dxp-tab" onclick="depVista('ret',this)">📤 Ver retiros</button>
+            </div>
+            <div class="card" id="cardDepositos" style="margin-top:4px">
                 <div class="card-header" style="justify-content:space-between">
-                    <h2>💸 Depósitos registrados</h2>
-                    <button class="btn-deposito" id="btnNuevoDepCard" onclick="abrirModalDeposito()">+ Nuevo depósito</button>
+                    <h2 id="depCardTitulo">💸 Movimientos registrados</h2>
+                    <button class="btn-deposito" id="btnNuevoDepCard" onclick="abrirModalDeposito()">+ Nuevo movimiento</button>
                 </div>
                 <div class="card-body" style="padding:0;overflow-x:auto">
                     <table class="cortes-table">
                         <thead>
                             <tr>
                                 <th class="al">Fecha</th>
-                                <th class="al">Destino</th>
+                                <th class="al">Movimiento</th>
+                                <th class="al">Categoría</th>
                                 <th class="al">Concepto</th>
                                 <th class="al">Finalidad</th>
                                 <th class="al">Deposita</th>
@@ -1259,12 +1266,12 @@
 <div class="modal-overlay" id="modalDeposito" onclick="if(event.target===this)cerrarModalDeposito()">
   <div class="modal-corte" style="max-width:600px">
     <div class="modal-header">
-        <h2>💸 Registrar depósito</h2>
+        <h2>💸 Depósito / Retiro</h2>
         <button class="modal-close" onclick="cerrarModalDeposito()">✕</button>
     </div>
     <div class="modal-body">
         <div class="corte-sec">
-            <div class="corte-sec-title">📋 Datos del depósito</div>
+            <div class="corte-sec-title">📋 Datos del movimiento</div>
             <div class="fg-row-2">
                 <div class="fg"><label>Fecha</label><input type="date" id="depFecha"></div>
                 <div class="fg"><label>Monto</label>
@@ -1280,6 +1287,19 @@
                 </div>
             </div>
             <div id="depMovHint" style="font-size:10.5px;color:var(--text-dim);margin:-4px 0 10px;line-height:1.5"></div>
+            <div class="fg"><label>Categoría</label>
+                <select id="depCategoria">
+                    <option value="">— Sin categoría —</option>
+                    <option>Venta del día</option>
+                    <option>Aportación de socio</option>
+                    <option>Préstamo</option>
+                    <option>Pago a proveedor</option>
+                    <option>Retiro de utilidades</option>
+                    <option>Retiro de socio</option>
+                    <option>Emergencia</option>
+                    <option>Otro</option>
+                </select>
+            </div>
             <div class="fg"><label>Concepto</label>
                 <input type="text" id="depConcepto" placeholder="Descripción del depósito…">
             </div>
@@ -1874,10 +1894,12 @@ function _depEfecto(d){
 // Texto legible del movimiento de un depósito: "origen → destino".
 function _depMovTxt(d){
     var origen=d.origen||(d.destino==='banco'?'caja_fuerte':'externo');
-    function lbl(t,id){ if(t==='externo')return 'Externo'; if(t==='caja_fuerte')return '🏦 Caja fuerte'; if(t==='banco')return '🏛️ '+_cuentaBancoLabel(id); if(t==='tarjeta_credito')return '💳 '+_cuentaBancoLabel(id); return t||'—'; }
+    function lbl(t,id){ if(t==='externo')return 'Externo'; if(t==='retiro')return '📤 Retiro'; if(t==='caja_fuerte')return '🏦 Caja fuerte'; if(t==='banco')return '🏛️ '+_cuentaBancoLabel(id); if(t==='tarjeta_credito')return '💳 '+_cuentaBancoLabel(id); return t||'—'; }
     var dst=lbl(d.destino, d.destino==='tarjeta_credito'?d.tcId:d.destinoCuentaId);
     return origen==='externo' ? ('➕ '+dst) : (lbl(origen,d.origenCuentaId)+' → '+dst);
 }
+// ¿El movimiento es un RETIRO (el dinero deja el negocio)?
+function _esRetiro(d){ return (d && d.destino)==='retiro'; }
 
 // Quita de una lista los registros con DELETE pendiente en el outbox: si la nube
 // aún los trae (el delete va en camino), sin esto "revivían" al recargar.
@@ -2130,15 +2152,27 @@ function prevData(){var st=_dxPer.cor||{};var pr=prevRange(st.tipo,st.val,st.end
 /* ── Render ── */
 function renderAll(){var cur=currentData(),prev=prevData();renderSummary(cur,prev);renderTabla(cur);renderVentasExtra(cur);renderDepositos();}
 
+// Vista del card de depósitos: 'todos' | 'dep' (solo depósitos) | 'ret' (solo retiros)
+var _depVista='todos';
+function depVista(v,btn){
+    _depVista=v;
+    if(btn&&btn.parentElement){ var t=btn.parentElement.querySelectorAll('.dxp-tab'); for(var i=0;i<t.length;i++)t[i].classList.remove('active'); btn.classList.add('active'); }
+    var tit=document.getElementById('depCardTitulo');
+    if(tit) tit.textContent = v==='dep' ? '➕ Depósitos registrados' : v==='ret' ? '📤 Retiros registrados' : '💸 Movimientos registrados';
+    renderDepositos();
+}
 function renderDepositos(){
     var _rd=dxpRango('dep');
-    var deps=loadDep().filter(function(d){return inRange(d.fecha,_rd.from,_rd.to);}).sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
+    var deps=loadDep().filter(function(d){return inRange(d.fecha,_rd.from,_rd.to);});
+    if(_depVista==='ret') deps=deps.filter(_esRetiro);
+    else if(_depVista==='dep') deps=deps.filter(function(d){return !_esRetiro(d);});
+    deps=deps.sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
     var tbody=document.getElementById('depTbody');
     var empty=document.getElementById('depEmpty');
     var footer=document.getElementById('depFooter');
     var totCaja=0, totBanco=0;
     deps.forEach(function(d){ var e=_depEfecto(d); totCaja+=e.caja; totBanco+=e.banco; });
-    var totAll=deps.reduce(function(s,d){return s+n(d.monto);},0);
+    var totAll=deps.reduce(function(s,d){return s+n(d.monto)*(_esRetiro(d)?-1:1);},0);
     if(!deps.length){
         tbody.innerHTML='';empty.style.display='block';footer.style.display='none';
         return;
@@ -2146,21 +2180,25 @@ function renderDepositos(){
     empty.style.display='none';footer.style.display='flex';
     document.getElementById('depTotCaja').textContent=fmtM(totCaja);
     document.getElementById('depTotBanco').textContent=fmtM(totBanco);
-    document.getElementById('depTotal').textContent=fmtM(totAll);
+    document.getElementById('depTotal').textContent=(totAll<0?'−':'')+fmtM(Math.abs(totAll));
     tbody.innerHTML=deps.map(function(d){
+        var esRet=_esRetiro(d);
         var destStyle=(d.destino==='caja_fuerte')
             ?'color:var(--accent);background:rgba(245,200,66,.08);padding:2px 8px;border-radius:4px;font-size:11px'
             :(d.destino==='tarjeta_credito'
               ?'color:#ff7070;background:rgba(255,112,112,.08);padding:2px 8px;border-radius:4px;font-size:11px'
-              :'color:var(--green);background:rgba(61,190,122,.08);padding:2px 8px;border-radius:4px;font-size:11px');
+              :(esRet
+                ?'color:var(--red);background:rgba(224,90,58,.08);padding:2px 8px;border-radius:4px;font-size:11px'
+                :'color:var(--green);background:rgba(61,190,122,.08);padding:2px 8px;border-radius:4px;font-size:11px'));
         return'<tr>'+
             '<td style="white-space:nowrap">'+d.fecha+'</td>'+
             '<td><span style="'+destStyle+'">'+_escV(_depMovTxt(d))+'</span></td>'+
+            '<td style="font-size:11px;color:var(--text-dim);white-space:nowrap">'+_escV(d.categoria||'—')+'</td>'+
             '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_escV(d.concepto||'—')+'</td>'+
             '<td style="font-size:11px;color:var(--text-dim);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_escV(d.finalidad||'—')+'</td>'+
             '<td style="font-size:11px;color:var(--text-dim)">'+_escV(d.depositadoPor||'—')+'</td>'+
             '<td style="font-size:11px;color:var(--text-dim)">'+_escV(d.autorizadoPor||'—')+'</td>'+
-            '<td style="text-align:right;font-weight:700;color:var(--green)">'+fmtM(n(d.monto))+'</td>'+
+            '<td style="text-align:right;font-weight:700;color:'+(esRet?'var(--red)':'var(--green)')+'">'+(esRet?'−':'')+fmtM(n(d.monto))+'</td>'+
             '<td style="display:flex;gap:4px;justify-content:flex-end">'+
                 '<button class="btn-row" onclick="abrirModalDeposito(\''+d.id+'\')" title="Editar">✏️</button>'+
                 '<button class="btn-row del" onclick="eliminarDeposito(\''+d.id+'\')">🗑️</button>'+
@@ -3023,6 +3061,7 @@ function abrirModalDeposito(id){
     document.getElementById('depFecha').value=d.fecha||todayStr();
     document.getElementById('depMonto').value=d.monto||'';
     _depPoblarSelects(d);
+    document.getElementById('depCategoria').value=d.categoria||'';
     document.getElementById('depConcepto').value=d.concepto||'';
     document.getElementById('depFinalidad').value=d.finalidad||'';
     document.getElementById('depAutoriza').value=d.autorizadoPor||'';
@@ -3060,6 +3099,7 @@ function _depPoblarSelects(d){
     var dOpts='<option value="caja_fuerte">🏦 Caja fuerte</option>';
     deb.forEach(function(c){ dOpts+='<option value="banco:'+c.id+'">🏛️ '+_escV(_cuentaBancoLabel(c.id))+'</option>'; });
     cred.forEach(function(c){ dOpts+='<option value="tc:'+c.id+'">💳 Pago tarjeta crédito · '+_escV(_cuentaBancoLabel(c.id))+'</option>'; });
+    dOpts+='<option value="retiro">📤 Retiro / salida (externo)</option>';
     dSel.innerHTML=dOpts;
     // Valores guardados (o compat con depósitos viejos que solo tenían `destino`)
     var oVal = d.origen ? (d.origen==='banco' ? 'banco:'+(d.origenCuentaId||'') : d.origen)
@@ -3074,10 +3114,11 @@ function _depPoblarSelects(d){
 function _depMov(){
     var oSel=document.getElementById('depOrigen'), dSel=document.getElementById('depDestino2'), h=document.getElementById('depMovHint');
     if(!oSel||!dSel||!h) return;
-    function lbl(val){ if(val==='externo')return 'una entrada externa'; if(val==='caja_fuerte')return 'Caja fuerte'; if(val.indexOf('banco:')===0)return _cuentaBancoLabel(val.slice(6)); if(val.indexOf('tc:')===0)return 'Tarjeta de crédito · '+_cuentaBancoLabel(val.slice(3)); return val; }
+    function lbl(val){ if(val==='externo')return 'una entrada externa'; if(val==='retiro')return 'fuera del negocio (retiro)'; if(val==='caja_fuerte')return 'Caja fuerte'; if(val.indexOf('banco:')===0)return _cuentaBancoLabel(val.slice(6)); if(val.indexOf('tc:')===0)return 'Tarjeta de crédito · '+_cuentaBancoLabel(val.slice(3)); return val; }
     var o=oSel.value, dd=dSel.value;
     var txt=(o==='externo')?('➕ Entra a '+lbl(dd)+' (no descuenta de ningún fondo).'):('Sale de '+lbl(o)+' → entra a '+lbl(dd)+'.');
     if(dd.indexOf('tc:')===0) txt+=' Reduce la deuda de la tarjeta de crédito.';
+    if(dd==='retiro') txt='📤 RETIRO: sale de '+lbl(o)+' y el dinero deja el negocio.';
     h.textContent=txt;
 }
 
@@ -3096,11 +3137,13 @@ function guardarDeposito(){
     else destino=dVal;
     if(origen==='banco' && destino==='banco' && origenCuentaId===destinoCuentaId){ alert('El origen y el destino son la misma cuenta.'); return; }
     if(origen==='caja_fuerte' && destino==='caja_fuerte'){ alert('El origen y el destino son caja fuerte.'); return; }
+    if(origen==='externo' && destino==='retiro'){ alert('Un retiro necesita un origen (caja fuerte o banco).'); return; }
     var id=document.getElementById('depId').value||genId();
     var dep={
         id:id, negocioId:getNegocioActivo(), fecha:fecha, monto:monto,
         origen:origen, origenCuentaId:origenCuentaId,
         destino:destino, destinoCuentaId:destinoCuentaId, tcId:tcId,
+        categoria:document.getElementById('depCategoria').value||'',
         concepto:concepto,
         finalidad:document.getElementById('depFinalidad').value.trim(),
         autorizadoPor:document.getElementById('depAutoriza').value.trim(),
