@@ -2187,6 +2187,28 @@ function cargarProductosCaptura() {
             if (existe.tipo === 'copa') existe.copaML = _copaMLInsumo(ins);
             // Asegurar subcategoría/categoría en filas viejas (para agrupar bien en el resultado).
             if (!existe.subcategoria && ins.subcategoria) existe.subcategoria = ins.subcategoria;
+            // ── Refrescar los PARÁMETROS del insumo VIVO (igual que _filaLive) ──
+            // Editar el insumo (peso de botella llena → pesoCristal, contenido neto,
+            // costos, nombre) se refleja al reabrir/continuar el inventario, SIN tocar
+            // lo ya contado (pesos capturados, cerradas, entradas, mermas…).
+            {
+                const pEx  = (ins.presentaciones || [])[0] || {};
+                const umEx = (pEx.umContenido || 'ML').toUpperCase();
+                const cnEx = parseFloat(pEx.contNeto) || 0;
+                const contBaseEx = (umEx === 'LT' || umEx === 'KG') ? cnEx * 1000 : cnEx;
+                if (contBaseEx > 0) existe.contNeto = contBaseEx;
+                const pcEx = parseFloat(pEx.pesoCristal);
+                if (!isNaN(pcEx)) existe.pesoCristal = pcEx; // puede bajar a 0 a propósito
+                existe.nombre = ins.nombre + (ins.variedad ? ' ' + ins.variedad : '');
+                if (ins.familia)  existe.familia  = ins.familia;
+                if (ins.categoria) existe.categoria = ins.categoria;
+                const cuEx = parseFloat(pEx.costoUnitario) || parseFloat(pEx.precio) || 0;
+                if (cuEx > 0) existe.costoUnitario = cuEx;
+                const cpEx = parseFloat(pEx.costoPieza) || 0;
+                if (cpEx > 0) existe.costoPieza = cpEx;
+                const pcaEx = parseFloat(pEx.precioCarta) || 0;
+                if (pcaEx > 0) existe.precioCarta = pcaEx;
+            }
             // Refrescar la "existencia anterior" desde el inventario de referencia actual:
             // si editaste el inventario anterior / primer levantamiento, se actualiza aquí.
             existe.existenciaAnterior = getExistenciaAnterior(ins.id);

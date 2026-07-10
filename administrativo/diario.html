@@ -3680,7 +3680,9 @@ var _ingresosExtra = []; // array temporal mientras el modal está abierto
 function agregarIngresoExtra(){
     var concepto=document.getElementById('iexConcepto').value.trim();
     var monto=parseFloat(document.getElementById('iexMonto').value);
-    if(!concepto||!(monto>0)){return;}
+    // Antes fallaba en silencio: ahora avisa qué falta y enfoca el campo
+    if(!concepto){ alert('Escribe el concepto del ingreso (ej. evento, venta, depósito).'); document.getElementById('iexConcepto').focus(); return; }
+    if(!(monto>0)){ alert('Captura el monto del ingreso (mayor a cero).'); document.getElementById('iexMonto').focus(); return; }
     var origen=document.getElementById('iexOrigen').value;
     _ingresosExtra.push({concepto:concepto,origen:origen,monto:monto});
     document.getElementById('iexConcepto').value='';
