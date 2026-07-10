@@ -996,19 +996,24 @@
                 </div>
             </div>
 
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:19px;letter-spacing:2px;color:var(--text);margin:12px 0 4px">Desglose de corte</div>
+
             <table class="pago-tbl">
                 <tbody>
                     <!-- Fila 1: VENTAS — efectivo + otros (informativo, NO suma) -->
                     <tr>
-                        <td class="pago-label">💰 Ventas</td>
-                        <td>
+                        <td class="pago-label" style="font-size:14px;font-weight:600;white-space:nowrap">💵 Venta en efectivo</td>
+                        <td colspan="2">
                             <input type="number" class="pago-input" id="fEfectivo" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()">
-                            <div style="font-size:9px;color:var(--text-dim);text-align:right;margin-top:2px;letter-spacing:.3px">efectivo</div>
                         </td>
-                        <td>
-                            <input type="number" class="pago-input" id="fVentaOtros" min="0" step="0.01" placeholder="Campo opcional" oninput="calcCorte()"
+                        <td class="pago-neto" style="color:var(--text-dim);font-size:12px">—</td>
+                    </tr>
+                    <tr>
+                        <td class="pago-label" style="font-size:14px;font-weight:600;white-space:nowrap">🧾 Otros</td>
+                        <td colspan="2">
+                            <input type="number" class="pago-input" id="fVentaOtros" min="0" step="0.01" placeholder="Opcional" oninput="calcCorte()"
                                 title="Cortesías, consumos de socios u otros conceptos — informativo, NO suma al total">
-                            <div style="font-size:9px;color:var(--text-dim);text-align:right;margin-top:2px;letter-spacing:.3px">otros · no suma</div>
+                            <div style="font-size:9px;color:var(--text-dim);text-align:right;margin-top:2px;letter-spacing:.3px">cortesías / consumo socios · no suma</div>
                         </td>
                         <td class="pago-neto" style="color:var(--text-dim);font-size:12px">—</td>
                     </tr>
@@ -1022,8 +1027,11 @@
                         </td>
                         <td colspan="2">
                             <div id="taSimpleWrap">
-                                <input type="number" class="pago-input" id="fTarUnica" min="0" step="0.01" placeholder="Total tarjeta en una exhibición" oninput="_taUnicaInput()">
-                                <div style="font-size:8.5px;color:var(--text-dim);text-align:center;margin-top:2px">se registra como débito de la cuenta principal</div>
+                                <div style="display:flex;gap:4px">
+                                    <input type="number" class="pago-input" id="fTarUnica" min="0" step="0.01" placeholder="Cuenta A" oninput="_taUnicaInput()">
+                                    <input type="number" class="pago-input" id="fTarUnicaB" min="0" step="0.01" placeholder="Cuenta B" oninput="_taUnicaInput()" style="display:none">
+                                </div>
+                                <div id="taSimpleLbl" style="font-size:8.5px;color:var(--text-dim);text-align:center;margin-top:2px">total en una exhibición · se registra como débito</div>
                             </div>
                             <div id="taDesgloseWrap" style="display:none">
                                 <div style="display:flex;gap:4px">
@@ -1048,7 +1056,7 @@
                     <tr>
                         <td class="pago-label" style="color:var(--accent)">★ Propinas</td>
                         <td>
-                            <input type="number" class="pago-input prop" id="fPropEfectivo" min="0" step="0.01" placeholder="Dato para KPI's" oninput="calcCorte()">
+                            <input type="number" class="pago-input prop" id="fPropEfectivo" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()">
                             <div style="font-size:9px;color:var(--text-dim);text-align:right;margin-top:2px;letter-spacing:.3px">efectivo · dato para KPI's</div>
                         </td>
                         <td>
@@ -2542,8 +2550,8 @@ function abrirModal(id){
     // Modo tarjeta: respeta el guardado; si no hay, desglose solo cuando el corte trae credito o cuentas B/C
     var _tieneDesg=(d.tarjetaCuentas||[]).some(function(t,i){ return (parseFloat(t.ventaTC)||0)>0 || i>0; });
     var _modoIni=d.taModo||(_tieneDesg?'desglose':'simple');
-    if(_modoIni==='simple'){ var _u=document.getElementById('fTarUnica'); if(_u) _u.value=(parseFloat(d.tarjeta)||0)||''; }
-    setTaModo(_modoIni);
+    _renderTaSimple();
+    setTaModo(_modoIni); // en modo simple pliega solo el desglose guardado a los campos A/B
     // Propinas de tarjeta por cuenta (A/B); compat: total viejo -> cuenta A
     _renderPropCuentas();
     var _pc=d.propTarjetaCuentas||null, _ctasD=_cuentasDebito();
@@ -2717,22 +2725,48 @@ function setTaModo(m){
         b.style.color=on?'var(--green)':'var(--text-dim)';
     });
     if(m==='simple'){
-        // Una exhibicion: todo como DEBITO de la cuenta A; el desglose se limpia
+        _renderTaSimple();
+        // Plegar el desglose: cuenta A (cred+deb) -> unica A; cuentas B/C -> unica B. Todo como DEBITO.
         var cred=document.getElementById('fTarCred'), deb=document.getElementById('fTarDeb');
-        var tot=(parseFloat((cred||{}).value)||0)+(parseFloat((deb||{}).value)||0);
-        document.querySelectorAll('.tcuenta').forEach(function(i){ tot+=(parseFloat(i.value)||0); i.value=''; });
+        var totA=(parseFloat((cred||{}).value)||0)+(parseFloat((deb||{}).value)||0);
+        var totB=0;
+        document.querySelectorAll('.tcuenta').forEach(function(i){ totB+=(parseFloat(i.value)||0); i.value=''; });
         if(cred) cred.value='';
-        var u=document.getElementById('fTarUnica');
-        if(u) u.value=tot?tot.toFixed(2):'';
-        if(deb) deb.value=tot?tot.toFixed(2):'';
+        var u=document.getElementById('fTarUnica'), uB=document.getElementById('fTarUnicaB');
+        if(u) u.value=totA?totA.toFixed(2):'';
+        if(uB && uB.style.display!=='none') uB.value=totB?totB.toFixed(2):'';
+        _taUnicaInput(); // espeja a los inputs reales (deb A + deb B)
+        return;
     }
     calcTarjeta();
 }
 function _taUnicaInput(){
-    // El total en una exhibicion se espeja como debito de la cuenta A
+    // Una exhibicion: A se espeja como debito de la cuenta A; B como debito de la cuenta B
     var u=document.getElementById('fTarUnica'), deb=document.getElementById('fTarDeb');
     if(deb) deb.value=(u&&u.value)?u.value:'';
+    var ctas=_cuentasDebito();
+    if(ctas[1]){
+        var uB=document.getElementById('fTarUnicaB');
+        var tdB=document.querySelector('.tcuenta[data-id="'+ctas[1].id+'"][data-k="td"]');
+        if(tdB) tdB.value=(uB&&uB.value)?uB.value:'';
+    }
     calcTarjeta();
+}
+/* Muestra el campo B del modo simple solo si hay 2+ cuentas de debito */
+function _renderTaSimple(){
+    var ctas=_cuentasDebito();
+    var uA=document.getElementById('fTarUnica'), uB=document.getElementById('fTarUnicaB');
+    var lbl=document.getElementById('taSimpleLbl');
+    if(ctas.length>1){
+        if(uB) uB.style.display='';
+        if(uA) uA.placeholder=(ctas[0].alias||ctas[0].banco||'Cuenta A');
+        if(uB) uB.placeholder=(ctas[1].alias||ctas[1].banco||'Cuenta B');
+        if(lbl) lbl.textContent='una exhibicion por cuenta \u00b7 se registra como d\u00e9bito';
+    } else {
+        if(uB){ uB.style.display='none'; uB.value=''; }
+        if(uA) uA.placeholder='Total';
+        if(lbl) lbl.textContent='total en una exhibici\u00f3n \u00b7 se registra como d\u00e9bito';
+    }
 }
 
 /* -- Retiro de propinas: pagar del cajon las propinas de TARJETA (retiro, no gasto) -- */
