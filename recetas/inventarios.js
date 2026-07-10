@@ -2248,9 +2248,10 @@ function cargarProductosCaptura() {
     filasCaptura = insumos.map(ins => {
         const existe = (invActual.filas || []).find(f => f.insumoId === ins.id);
         if (existe) {
-            // Sub-receta convertida a insumo: NO se lista en el Paso 1 (se gestiona en
-            // Producción de prebatch); su fila sigue viva para teórico/resultado.
-            existe._subReceta = !!ins.esSubReceta;
+            // Sub-receta convertida a insumo: visible por DEFAULT (se captura la
+            // existencia del prebatch); solo se oculta si el dueño lo marcó con el
+            // botón "Visible en inventario" del catálogo (ins.ocultoInventario).
+            existe._subReceta = !!(ins.esSubReceta && ins.ocultoInventario);
             if (!existe.entradas) existe.entradas = ['','','','',''];
             // Corregir refrescos/cervezas guardados como 'copa' por error → pza (conteo por pieza).
             if (existe.tipo === 'copa' && _esRefrescoCerveza(ins)) existe.tipo = 'pza';
@@ -2305,7 +2306,7 @@ function cargarProductosCaptura() {
 
         return {
             insumoId: ins.id,
-            _subReceta: !!ins.esSubReceta, // prebatch: oculto de la lista, vivo en la matemática
+            _subReceta: !!(ins.esSubReceta && ins.ocultoInventario), // oculto SOLO si el dueño lo marcó en el catálogo
             nombre:   ins.nombre + (ins.variedad ? ' '+ins.variedad : ''),
             categoria: ins.categoria  || '',
             subcategoria: ins.subcategoria || '',
