@@ -263,7 +263,10 @@
         /* Caja fuerte overlay */
         .cj-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9100;align-items:center;justify-content:center;padding:14px;box-sizing:border-box;}
         .cj-overlay.open{display:flex;}
-        .cj-panel{background:var(--surface);border:1px solid rgba(245,200,66,.3);border-radius:16px;width:100%;max-width:780px;max-height:94vh;height:94vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.6);}
+        .cj-panel{background:var(--surface);border:1px solid rgba(245,200,66,.3);border-radius:16px;width:100%;max-width:1100px;max-height:94vh;height:94vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.6);}
+        /* Secciones con scroll propio dentro de caja fuerte: cortes y depósitos siempre a la vista */
+        .cj-scrollsec{overflow:auto;border:1px solid var(--border);border-radius:10px;}
+        .cj-scrollsec thead th{position:sticky;top:0;background:var(--surface);z-index:2;}
         .cj-header{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid var(--border);flex-shrink:0;}
         .cj-title{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:2px;color:var(--accent);}
         .cj-body{overflow-y:auto;flex:1;min-height:0;padding:16px 22px 36px;display:flex;flex-direction:column;gap:16px;}
@@ -2954,7 +2957,7 @@ function _abrirCajaFuerteContenido(){
     body.innerHTML = headerHTML +
         // Cortes
         '<div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px">Detalle de cortes</div>'+
-        '<div style="overflow-x:auto;margin-bottom:20px">'+
+        '<div class="cj-scrollsec" style="max-height:38vh;margin-bottom:20px">'+
         '<table class="cj-table">'+
             '<thead><tr>'+
                 '<th>Fecha</th><th>Turno</th>'+
@@ -2966,7 +2969,7 @@ function _abrirCajaFuerteContenido(){
         '</table></div>'+
         // Depósitos
         '<div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px">Depósitos</div>'+
-        '<div style="overflow-x:auto">'+
+        '<div class="cj-scrollsec" style="max-height:32vh">'+
         '<table class="cj-table">'+
             '<thead><tr>'+
                 '<th>Fecha</th><th>Destino</th><th>Concepto</th><th>Deposita</th><th style="text-align:right">Monto</th>'+
