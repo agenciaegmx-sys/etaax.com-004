@@ -225,7 +225,7 @@
         .pago-input:focus{border-color:var(--green);}
         .pago-input.prop{border-color:rgba(245,200,66,.3);color:var(--accent);}
         .pago-input.prop:focus{border-color:var(--accent);}
-        .pago-tbl td:nth-child(2),.pago-tbl td:nth-child(3){width:130px;}
+        .pago-tbl td:nth-child(2),.pago-tbl td:nth-child(3){min-width:130px;}
 
         /* Resguardo box */
         .resguardo-box{background:rgba(245,200,66,.05);border:1px solid rgba(245,200,66,.25);border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
@@ -1027,11 +1027,16 @@
                         </td>
                         <td colspan="2">
                             <div id="taSimpleWrap">
-                                <div style="display:flex;gap:4px">
-                                    <input type="number" class="pago-input" id="fTarUnica" min="0" step="0.01" placeholder="Cuenta A" oninput="_taUnicaInput()">
-                                    <input type="number" class="pago-input" id="fTarUnicaB" min="0" step="0.01" placeholder="Cuenta B" oninput="_taUnicaInput()" style="display:none">
+                                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                                    <div style="flex:1;min-width:90px">
+                                        <input type="number" class="pago-input" id="fTarUnica" min="0" step="0.01" placeholder="0.00" oninput="_taUnicaInput()" style="width:100%">
+                                        <div id="taSimpleLblA" style="font-size:8.5px;color:var(--text-dim);text-align:center;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">total tarjeta</div>
+                                    </div>
+                                    <div id="taWrapB" style="flex:1;min-width:90px;display:none">
+                                        <input type="number" class="pago-input" id="fTarUnicaB" min="0" step="0.01" placeholder="0.00" oninput="_taUnicaInput()" style="width:100%">
+                                        <div id="taSimpleLblB" style="font-size:8.5px;color:var(--text-dim);text-align:center;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">cuenta B</div>
+                                    </div>
                                 </div>
-                                <div id="taSimpleLbl" style="font-size:8.5px;color:var(--text-dim);text-align:center;margin-top:2px">total en una exhibición · se registra como débito</div>
                             </div>
                             <div id="taDesgloseWrap" style="display:none">
                                 <div style="display:flex;gap:4px">
@@ -1060,11 +1065,16 @@
                             <div style="font-size:9px;color:var(--text-dim);text-align:right;margin-top:2px;letter-spacing:.3px">efectivo · dato para KPI's</div>
                         </td>
                         <td>
-                            <div style="display:flex;gap:4px">
-                                <input type="number" class="pago-input prop" id="fPropTarjeta" min="0" step="0.01" placeholder="Cuenta A" oninput="calcCorte()">
-                                <input type="number" class="pago-input prop" id="fPropTarjetaB" min="0" step="0.01" placeholder="Cuenta B" oninput="calcCorte()" style="display:none">
+                            <div style="display:flex;gap:6px;flex-wrap:wrap">
+                                <div style="flex:1;min-width:90px">
+                                    <input type="number" class="pago-input prop" id="fPropTarjeta" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()" style="width:100%">
+                                    <div id="propLblA" style="font-size:8.5px;color:var(--text-dim);text-align:center;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">tarjeta</div>
+                                </div>
+                                <div id="propWrapB" style="flex:1;min-width:90px;display:none">
+                                    <input type="number" class="pago-input prop" id="fPropTarjetaB" min="0" step="0.01" placeholder="0.00" oninput="calcCorte()" style="width:100%">
+                                    <div id="propLblB" style="font-size:8.5px;color:var(--text-dim);text-align:center;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">cuenta B</div>
+                                </div>
                             </div>
-                            <div id="propCtasLbl" style="font-size:8.5px;color:var(--text-dim);text-align:center;margin-top:2px;line-height:1.3">tarjeta</div>
                         </td>
                         <td class="pago-neto" id="totPropRow" style="color:var(--accent)">$0.00</td>
                     </tr>
@@ -2697,7 +2707,9 @@ function renderTarjetaCuentas(saved, fallbackTotal){
             var rows=extras.map(function(c){
                 var s=saved[c.id]||{};
                 return '<tr>'
-                    +'<td style="text-align:left;font-size:11px">'+_ctaLabel(c)+'<div style="font-size:8.5px;color:var(--text-dim)">'+_ctaComTxt(c)+'</div></td>'
+                    +'<td style="text-align:left;font-size:11px;max-width:170px;padding-right:10px">'
+                        +'<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+_ctaLabel(c)+'">'+_ctaLabel(c)+'</div>'
+                        +'<div style="font-size:8.5px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+_ctaComTxt(c)+'">'+_ctaComTxt(c)+'</div></td>'
                     +'<td><input type="number" class="pago-input tcuenta" data-id="'+c.id+'" data-k="tc" min="0" step="0.01" placeholder="Créd." value="'+(s.tc!=null?s.tc:'')+'" oninput="calcTarjeta()"></td>'
                     +'<td><input type="number" class="pago-input tcuenta" data-id="'+c.id+'" data-k="td" min="0" step="0.01" placeholder="Déb." value="'+(s.td!=null?s.td:'')+'" oninput="calcTarjeta()"></td>'
                     +'<td class="pago-neto" id="netoCta_'+c.id+'" style="color:var(--green)">$0.00</td></tr>';
@@ -2755,17 +2767,16 @@ function _taUnicaInput(){
 /* Muestra el campo B del modo simple solo si hay 2+ cuentas de debito */
 function _renderTaSimple(){
     var ctas=_cuentasDebito();
-    var uA=document.getElementById('fTarUnica'), uB=document.getElementById('fTarUnicaB');
-    var lbl=document.getElementById('taSimpleLbl');
+    var wB=document.getElementById('taWrapB'), uB=document.getElementById('fTarUnicaB');
+    var lA=document.getElementById('taSimpleLblA'), lB=document.getElementById('taSimpleLblB');
     if(ctas.length>1){
-        if(uB) uB.style.display='';
-        if(uA) uA.placeholder=(ctas[0].alias||ctas[0].banco||'Cuenta A');
-        if(uB) uB.placeholder=(ctas[1].alias||ctas[1].banco||'Cuenta B');
-        if(lbl) lbl.textContent='una exhibicion por cuenta \u00b7 se registra como d\u00e9bito';
+        if(wB) wB.style.display='';
+        if(lA) lA.textContent=(ctas[0].alias||ctas[0].banco||'Cuenta A');
+        if(lB) lB.textContent=(ctas[1].alias||ctas[1].banco||'Cuenta B');
     } else {
-        if(uB){ uB.style.display='none'; uB.value=''; }
-        if(uA) uA.placeholder='Total';
-        if(lbl) lbl.textContent='total en una exhibici\u00f3n \u00b7 se registra como d\u00e9bito';
+        if(wB) wB.style.display='none';
+        if(uB) uB.value='';
+        if(lA) lA.textContent='total tarjeta \u00b7 como d\u00e9bito';
     }
 }
 
@@ -2785,17 +2796,16 @@ function _pintarPropRetiro(){
 /* Propina de tarjeta por cuenta: muestra el campo B solo si hay 2+ cuentas de debito */
 function _renderPropCuentas(){
     var ctas=_cuentasDebito();
-    var inB=document.getElementById('fPropTarjetaB'), lbl=document.getElementById('propCtasLbl');
-    var inA=document.getElementById('fPropTarjeta');
+    var wB=document.getElementById('propWrapB'), inB=document.getElementById('fPropTarjetaB');
+    var lA=document.getElementById('propLblA'), lB=document.getElementById('propLblB');
     if(ctas.length>1){
-        if(inB) inB.style.display='';
-        if(inA) inA.placeholder=(ctas[0].alias||ctas[0].banco||'Cuenta A');
-        if(inB) inB.placeholder=(ctas[1].alias||ctas[1].banco||'Cuenta B');
-        if(lbl) lbl.textContent='tarjeta \u00b7 '+(ctas[0].alias||ctas[0].banco)+' / '+(ctas[1].alias||ctas[1].banco);
+        if(wB) wB.style.display='';
+        if(lA) lA.textContent=(ctas[0].alias||ctas[0].banco||'Cuenta A');
+        if(lB) lB.textContent=(ctas[1].alias||ctas[1].banco||'Cuenta B');
     } else {
-        if(inB){ inB.style.display='none'; inB.value=''; }
-        if(inA) inA.placeholder='0.00';
-        if(lbl) lbl.textContent='tarjeta';
+        if(wB) wB.style.display='none';
+        if(inB) inB.value='';
+        if(lA) lA.textContent='tarjeta';
     }
 }
 function _getPropCuentas(){
