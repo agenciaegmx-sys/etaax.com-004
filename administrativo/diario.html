@@ -493,6 +493,10 @@
             <a href="diario.html" class="nav-link active" data-tooltip="Ventas y Gastos"><span class="nav-icon">🧾</span><span class="nav-text">Ventas y Gastos</span></a>
         </div>
         <div class="nav-section">
+            <div class="nav-section-label">Análisis</div>
+            <a href="ventas-productos.html" class="nav-link" data-tooltip="Ventas por Producto"><span class="nav-icon">🧾</span><span class="nav-text">Ventas por Producto</span></a>
+        </div>
+        <div class="nav-section">
             <div class="nav-section-label">Catálogos</div>
             <a href="staff.html" class="nav-link" data-tooltip="Staff"><span class="nav-icon">👥</span><span class="nav-text">Staff</span></a>
             <a href="proveedores.html" class="nav-link" data-tooltip="Proveedores"><span class="nav-icon">🚚</span><span class="nav-text">Proveedores</span></a>
@@ -501,9 +505,6 @@
         <div class="nav-section">
             <div class="nav-section-label">Menús</div>
             <a href="menu.html" class="nav-link" data-tooltip="Menú"><span class="nav-icon">📋</span><span class="nav-text">Menú</span></a>
-        </div>
-        <div class="nav-section">
-            <a href="ventas-productos.html" class="nav-link" data-tooltip="Ventas por Producto"><span class="nav-icon">🧾</span><span class="nav-text">Ventas por Producto</span></a>
         </div>
     </nav>
 
@@ -524,16 +525,16 @@
 
             <!-- MENÚ DE FUNCIONES -->
             <div class="dx-grid">
-                <button class="dx-card" data-fn="cortes" onclick="dxAbrir('cortes')">
-                    <div class="dx-card-hdr"><div class="dx-card-icon">🧾</div><span class="dx-badge">Activo</span></div>
-                    <div class="dx-card-title">Registrar Corte de Caja</div>
-                    <div class="dx-card-desc">Captura el corte del día por turno y sucursal: formas de pago, propinas, resguardo e ingresos extra.</div>
-                    <div class="dx-card-cta">Abrir →</div>
-                </button>
                 <button class="dx-card" data-fn="gastos" onclick="dxAbrir('gastos')">
                     <div class="dx-card-hdr"><div class="dx-card-icon">📤</div><span class="dx-badge">Activo</span></div>
                     <div class="dx-card-title">Registrar Gastos Diarios</div>
                     <div class="dx-card-desc">Egresos operativos menores con evidencia, método de pago y límite configurable por gasto.</div>
+                    <div class="dx-card-cta">Abrir →</div>
+                </button>
+                <button class="dx-card" data-fn="cortes" onclick="dxAbrir('cortes')">
+                    <div class="dx-card-hdr"><div class="dx-card-icon">🧾</div><span class="dx-badge">Activo</span></div>
+                    <div class="dx-card-title">Registrar Corte de Caja</div>
+                    <div class="dx-card-desc">Captura el corte del día por turno y sucursal: formas de pago, propinas, resguardo e ingresos extra.</div>
                     <div class="dx-card-cta">Abrir →</div>
                 </button>
                 <button class="dx-card azul" data-fn="nominas" onclick="dxAbrir('nominas')">
@@ -745,6 +746,13 @@
                             </tr>
                         </thead>
                         <tbody id="tbodyMenores"></tbody>
+                        <tfoot id="menoresFoot" style="display:none">
+                            <tr style="background:var(--surface2);border-top:2px solid var(--border)">
+                                <td colspan="8" style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);font-weight:600">Σ Total del período</td>
+                                <td class="ar" style="font-weight:800;color:var(--red)" id="ftMenoresTotal">—</td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
                     </table>
                     <div id="emptyMenores" class="empty-state" style="display:none;padding:32px">
                         <div class="empty-state-icon">📋</div>
@@ -869,6 +877,13 @@
                                     </tr>
                                 </thead>
                                 <tbody id="tbodyMayores"></tbody>
+                                <tfoot id="mayoresFoot" style="display:none">
+                                    <tr style="background:var(--surface2);border-top:2px solid var(--border)">
+                                        <td colspan="9" style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);font-weight:600">Σ Total del período</td>
+                                        <td class="ar" style="font-weight:800;color:var(--red)" id="ftMayoresTotal">—</td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
                             </table>
                             <div id="emptyMayores" class="empty-state" style="display:none;padding:32px">
                                 <div class="empty-state-icon">🔴</div>
@@ -3984,6 +3999,8 @@ function gRenderTabla(menores, mayores){
     var tbM=document.getElementById('tbodyMenores'),emM=document.getElementById('emptyMenores');
     var totMenores=menores.reduce(function(s,g){return s+n(g.monto);},0);
     document.getElementById('totalMenoresLbl').textContent=menores.length+' registro'+(menores.length!==1?'s':'')+' · '+fmtM(totMenores);
+    var ftMe=document.getElementById('menoresFoot');
+    if(ftMe){ ftMe.style.display=menores.length?'table-footer-group':'none'; var ftMeT=document.getElementById('ftMenoresTotal'); if(ftMeT) ftMeT.textContent=fmtM(totMenores); }
     if(!menores.length){tbM.innerHTML='';emM.style.display='block';}
     else{
         emM.style.display='none';
@@ -4013,6 +4030,8 @@ function gRenderTabla(menores, mayores){
     var tbMy=document.getElementById('tbodyMayores'),emMy=document.getElementById('emptyMayores');
     var totMayores=mayores.reduce(function(s,g){return s+n(g.monto);},0);
     document.getElementById('totalMayoresLbl').textContent=mayores.length+' registro'+(mayores.length!==1?'s':'')+' · '+fmtM(totMayores);
+    var ftMy=document.getElementById('mayoresFoot');
+    if(ftMy){ ftMy.style.display=mayores.length?'table-footer-group':'none'; var ftMyT=document.getElementById('ftMayoresTotal'); if(ftMyT) ftMyT.textContent=fmtM(totMayores); }
     if(!mayores.length){tbMy.innerHTML='';emMy.style.display='block';}
     else{
         emMy.style.display='none';
