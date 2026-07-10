@@ -2863,8 +2863,10 @@ function _abrirCajaFuerteContenido(){
                 '<div class="cj-acum-val" style="color:var(--green)">'+fmtM(saldoDebito)+'</div>'+
             '</div>'+
         '</div>'+
+        // Comisiones y Tarjetas de crédito LADO A LADO (ahorra alto → los depósitos se ven abajo)
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px;align-items:start;margin:0 0 10px">'+
         (totComision>0?
-        '<div class="cj-acum" style="margin:0 0 10px;border-color:rgba(255,112,112,.35)">'+
+        '<div class="cj-acum" style="margin:0;border-color:rgba(255,112,112,.35)">'+
             '<div>'+
                 '<div class="cj-acum-lbl" style="color:#ff9a9a">💳 Comisiones bancarias acumuladas</div>'+
                 '<div style="margin-top:4px;font-size:10px;color:var(--text-dim);line-height:1.6">'+
@@ -2877,7 +2879,7 @@ function _abrirCajaFuerteContenido(){
             '<div class="cj-acum-val" style="font-size:20px;color:#ff9a9a">− '+fmtM(totComision)+'</div>'+
         '</div>':'')+
         (gastosTarjetaCred>0||catalogoTc.length>0?
-        '<div style="margin:0 0 10px">'+
+        '<div>'+
             '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px">💳 Tarjetas de Crédito</div>'+
             (catalogoTc.length>0
             ? catalogoTc.map(function(tc){
@@ -2896,10 +2898,13 @@ function _abrirCajaFuerteContenido(){
                             '<div style="font-size:12px;font-weight:600;color:var(--text)">'+tc.banco+'</div>'+
                             '<div style="font-size:10px;color:var(--text-dim);letter-spacing:2px">···· '+(tc.digitos||'——')+'</div>'+
                         '</div>'+
-                        '<div style="text-align:right">'+
-                            '<div style="font-size:13px;font-weight:700;color:#ff7070">'+fmtM(-gastado)+'</div>'+
-                            (pagosTc>0?'<div style="font-size:9px;color:var(--green)">'+fmtM(gastosTarjetaCred)+' gastado − '+fmtM(pagosTc)+' pagado</div>':'')+
-                            (lim>0?'<div style="font-size:9px;color:var(--text-dim)">de '+fmtM(lim)+' límite</div>':'<div style="font-size:9px;color:var(--text-dim)">sin límite def.</div>')+
+                        '<div style="display:flex;align-items:center;gap:12px">'+
+                            '<div style="text-align:right">'+
+                                '<div style="font-size:13px;font-weight:700;color:#ff7070">'+fmtM(-gastado)+'</div>'+
+                                (pagosTc>0?'<div style="font-size:9px;color:var(--green)">'+fmtM(gastosTarjetaCred)+' gastado − '+fmtM(pagosTc)+' pagado</div>':'')+
+                                (lim>0?'<div style="font-size:9px;color:var(--text-dim)">de '+fmtM(lim)+' límite</div>':'<div style="font-size:9px;color:var(--text-dim)">sin límite def.</div>')+
+                            '</div>'+
+                            '<button class="btn-deposito" style="font-size:11px;padding:6px 12px;background:rgba(255,112,112,.12);border-color:rgba(255,112,112,.4);color:#ff9a9a" onclick="pagarTarjetaCredito(\''+tc.id+'\')">💳 Pagar</button>'+
                         '</div>'+
                     '</div>'+
                     (lim>0?
@@ -2908,15 +2913,17 @@ function _abrirCajaFuerteContenido(){
                     '</div>'+
                     '<div style="font-size:9px;color:var(--text-dim);margin-top:3px;text-align:right">'+pct.toFixed(0)+'% usado · disponible '+fmtM(Math.max(lim-gastosTarjetaCred,0))+'</div>'
                     :'')+
-                    '<div style="margin-top:8px;text-align:right"><button class="btn-deposito" style="font-size:11px;padding:6px 12px;background:rgba(255,112,112,.12);border-color:rgba(255,112,112,.4);color:#ff9a9a" onclick="pagarTarjetaCredito(\''+tc.id+'\')">💳 Pagar tarjeta</button></div>'+
                 '</div>';
             }).join('')
-            : '<div style="background:var(--surface2);border:1px solid rgba(255,90,90,.3);border-radius:8px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center">'+
+            : '<div style="background:var(--surface2);border:1px solid rgba(255,90,90,.3);border-radius:8px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'+
                 '<div style="font-size:11px;color:var(--text-dim)">'+fmtM(gastosTarjetaCred)+' en gastos — saldo a pagar</div>'+
-                '<div style="font-size:16px;font-weight:700;color:#ff7070">'+fmtM(saldoTarjetaCred)+'</div>'+
-              '</div>'+
-              '<div style="text-align:right;margin-top:6px"><button class="btn-deposito" style="font-size:11px;padding:6px 12px;background:rgba(255,112,112,.12);border-color:rgba(255,112,112,.4);color:#ff9a9a" onclick="pagarTarjetaCredito()">💳 Pagar tarjeta</button></div>')+
-        '</div>':'');
+                '<div style="display:flex;align-items:center;gap:12px">'+
+                    '<div style="font-size:16px;font-weight:700;color:#ff7070">'+fmtM(saldoTarjetaCred)+'</div>'+
+                    '<button class="btn-deposito" style="font-size:11px;padding:6px 12px;background:rgba(255,112,112,.12);border-color:rgba(255,112,112,.4);color:#ff9a9a" onclick="pagarTarjetaCredito()">💳 Pagar tarjeta</button>'+
+                '</div>'+
+              '</div>')+
+        '</div>':'')+
+        '</div>';
 
     // ── Tabla cortes ─────────────────────────────────────────
     var rowsCortes = lista.length
