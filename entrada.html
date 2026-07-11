@@ -199,6 +199,15 @@ async function _hashNip(pin){
 
 var NEG = _q('n') || _q('neg');
 var TOKEN = _q('t');             // token secreto del negocio (va en el QR) — NO requiere login
+var SUC = _q('s') || '';         // sucursal del QR (cada sucursal imprime SU QR) — sella cada registro
+// ¿El insumo/receta pertenece a la sucursal del QR? (compat: sin lista de sucursales = visible)
+function _enSucQR(x){
+    if (!SUC || !x) return true;
+    if ((x.inactivoEn||[]).indexOf(SUC) >= 0 || (x.inactivaEn||[]).indexOf(SUC) >= 0) return false; // pausado ahí
+    var ss = (x.sucursales && x.sucursales.length) ? x.sucursales : (x.sucursalId ? [x.sucursalId] : null);
+    if (!ss || !ss.length) return true;
+    return ss.indexOf(SUC) >= 0;
+}
 var VIDA_MS = 300000;            // la sesión / ventana para subir la foto dura 5 minutos
 var COLAB = '', _NIPHASH = '', INSUMOS = [], SEL = null, FOTO_URL = '', _countTimer = null, _t0 = 0;
 var RECETAS = null;              // menú del negocio (lazy: se carga al entrar a merma de producto)
@@ -249,7 +258,7 @@ async function entrar(){
         COLAB = rv.data; _NIPHASH = h;
         // 2) Cargar insumos (token-gated, también por RPC).
         var ri = await _supabase.rpc('entrada_insumos', { p_neg: NEG, p_token: TOKEN });
-        INSUMOS = (ri.data || []).filter(function(x){ return x && x.id && x.activo !== '0'; }); // sin los dados de baja del negocio
+        INSUMOS = (ri.data || []).filter(function(x){ return x && x.id && x.activo !== '0' && _enSucQR(x); }); // solo los de ESTA sucursal
         INSUMOS.sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
         // 3) Menú de conceptos.
         document.getElementById('quienNom').textContent = COLAB;
@@ -311,7 +320,7 @@ async function _cargarRecetas(){
     document.getElementById('merList').innerHTML = '<div class="ins-it" style="color:var(--text-dim);cursor:default">Cargando menú…</div>';
     try {
         var rr = await _supabase.rpc('entrada_recetas', { p_neg: NEG, p_token: TOKEN });
-        RECETAS = (rr.data || []).filter(function(x){ return x && x.id; });
+        RECETAS = (rr.data || []).filter(function(x){ return x && x.id && _enSucQR(x); });
         RECETAS.sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
     } catch(e) { RECETAS = []; }
     if (!RECETAS.length) {
@@ -386,6 +395,7 @@ async function registrar(){
     var entry = {
         id: genId()+genId(),
         concepto: 'entrada',
+        sucursalId: SUC,
         area: AREA,
         insumoId: SEL.id,
         nombre: SEL.nombre + (SEL.variedad ? ' '+SEL.variedad : ''),
@@ -421,7 +431,8 @@ async function registrarMerma(){
     var btn = document.getElementById('merBtn'); btn.disabled = true; msg.textContent = 'Registrando…';
     var entry = {
         id: genId()+genId(),
-        concepto: 'merma',                     // ← NO se importa como entrada de stock (solo log)
+        concepto: 'merma',                     // se importa como MERMA del inventario de su sucursal
+        sucursalId: SUC,
         mermaTipo: MERMA_TIPO,                 // 'insumo' | 'producto'
         area: AREA,
         insumoId: MERMA_TIPO==='insumo'   ? MSEL.id : '',

@@ -729,6 +729,9 @@ function _importarEntradasQR() {
     var n = 0;
     (getEntradasLog() || []).forEach(function(e) {
         if (!e || e.origen !== 'qr') return;   // solo QR (las manuales ya están en el inventario)
+        // Sello de sucursal: si el registro trae sucursal y NO es la activa, no se importa aquí
+        var _sucImp = _sucActiva();
+        if (e.sucursalId && _sucImp && e.sucursalId !== _sucImp) return;
         if (e.importadoEnInv) return;          // ya importada a algún inventario
         if (e.id && yaEnInv[e.id]) return;      // ya está en este inventario
         // ── MERMAS del QR: entran a la merma del inventario (y por lo tanto al reporte) ──
@@ -1445,7 +1448,11 @@ async function abrirQrEntradas() {
         box.innerHTML = '<div style="color:var(--red);font-size:12px;line-height:1.5">No se pudo generar el token del QR.<br>¿Corriste la migración v27 en Supabase?<br><span style="color:var(--text-dim)">' + etx((e && e.message) || e) + '</span></div>';
         return;
     }
-    var url = location.origin + '/entrada.html?n=' + encodeURIComponent(negId) + '&t=' + encodeURIComponent(token);
+    // QR ÚNICO POR SUCURSAL: lleva la sucursal activa — los registros quedan sellados
+    // con ella y el colaborador solo ve insumos/menú de ESA sucursal.
+    var sucQR = localStorage.getItem('etaax_sucursal_activa') || '';
+    var url = location.origin + '/entrada.html?n=' + encodeURIComponent(negId) + '&t=' + encodeURIComponent(token)
+        + (sucQR ? '&s=' + encodeURIComponent(sucQR) : '');
     urlEl.textContent = url;
     function gen() {
         box.innerHTML = '';
@@ -5088,6 +5095,7 @@ function _step5TablasHTML() {
             const ventasDir = (fila.ventasBotella || 0) + (parseFloat(fila.ventasCopasDirectas)||0);
             const ventas    = ventasDir + ventaCoct;
             const cancelPza = getCancelacionesCopas(fila.insumoId);
+            const cortMerma = (parseFloat(fila.cortesiaCopas) || 0) + (parseFloat(fila.mermaCopas) || 0);
             const teorico   = calcExistenciaTeorica(fila);
             const fisico    = calcExistencia(fila);
             const dif       = fisico - teorico;
@@ -5109,6 +5117,7 @@ function _step5TablasHTML() {
                 <td style="text-align:center;color:#9b8de8">${ventaCoct>0?(ventaCoct%1?ventaCoct.toFixed(1):ventaCoct)+' pza':'—'}</td>
                 <td style="text-align:center;color:var(--accent)">${ventasDir>0?(ventasDir%1?ventasDir.toFixed(1):ventasDir)+' pza':'—'}</td>
                 <td style="text-align:center;color:var(--text-muted)">${cancelPza>0?cancelPza.toFixed(0)+' pza':'—'}</td>
+                <td style="text-align:center;color:var(--accent)">${cortMerma>0?(cortMerma%1?cortMerma.toFixed(1):cortMerma)+' pza':'—'}</td>
                 <td style="text-align:center">${teorico.toFixed(0)} pza</td>
                 <td style="text-align:center;font-weight:600">${fisico.toFixed(0)} pza</td>
                 <td style="text-align:center;font-weight:700;color:${color}">${dif>=0?'+':''}${dif.toFixed(0)} pza</td>
@@ -5130,6 +5139,7 @@ function _step5TablasHTML() {
                     <th style="text-align:center;width:70px">Coctelería</th>
                     <th style="text-align:center;width:65px">Ventas</th>
                     <th style="text-align:center;width:70px">Cancelac.</th>
+                    <th style="text-align:center;width:90px">Cortesía /<br>Merma</th>
                     <th style="text-align:center;width:70px">Teórico</th>
                     <th style="text-align:center;width:70px">Físico</th>
                     <th style="text-align:center;width:75px">Diferencia</th>
@@ -6485,7 +6495,16 @@ function renderListadoEntradas() {
     if (_ch) { if (invActual) { guardarEntradas(); } else { _guardarELLocal(); } }
 
     const rows = useGlobal ? log : [...log].reverse();
-    cont.innerHTML = rows.map((e) => {
+    // Solo los registros de la SUCURSAL activa (los viejos sin sello se muestran por compat)
+    const _sucHist = _sucActiva();
+    const visibles = rows.filter(e => !(e && e.sucursalId && _sucHist && e.sucursalId !== _sucHist));
+    var _sucNomH = '';
+    try {
+        var _ssH = JSON.parse(localStorage.getItem('etaax_' + getNegocioActivo() + '_sucursales') || '[]');
+        var _fH = _ssH.find(function(x){ return x.id === _sucHist; });
+        _sucNomH = _fH ? (_fH.nombre || '') : '';
+    } catch(err) {}
+    const rowHTML = (e) => {
         const color   = tipoEntradaColor(e.tipo);
         const nombre  = etx(e.nombreProducto || e.nombre || '—');
         const cant    = (e.cantidad||0) % 1 ? (e.cantidad||0).toFixed(1) : (e.cantidad||0);
@@ -6527,7 +6546,18 @@ const fotoTh = e.foto_url
             <button class="ent-log-del" title="Eliminar" onclick="eliminarEntradaPorId('${e.id}')"
                 onmouseenter="this.classList.add('hover')" onmouseleave="this.classList.remove('hover')">🗑️</button>
         </div>`;
-    }).join('');
+    };
+    // Dos secciones: 📦 Entradas y 🗑️ Mermas (funciones distintas, listas distintas)
+    const entradasArr = visibles.filter(e => e.concepto !== 'merma');
+    const mermasArr   = visibles.filter(e => e.concepto === 'merma');
+    if (countEl) countEl.textContent = entradasArr.length + ' entrada' + (entradasArr.length !== 1 ? 's' : '') +
+        ' · ' + mermasArr.length + ' merma' + (mermasArr.length !== 1 ? 's' : '') +
+        (_sucNomH ? ' · ' + _sucNomH : '');
+    const secHdr = t => `<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin:14px 2px 8px">${t}</div>`;
+    cont.innerHTML =
+        (entradasArr.length ? secHdr('📦 Entradas' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + entradasArr.map(rowHTML).join('') : '') +
+        (mermasArr.length   ? secHdr('🗑️ Mermas'   + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + mermasArr.map(rowHTML).join('') : '') +
+        (!visibles.length ? `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:24px 0">Sin registros de esta sucursal</div>` : '');
 }
 
 var _entEditId = null;
