@@ -1664,7 +1664,7 @@
                 <div onclick="document.getElementById('gEvidencia').click()" style="border:2px dashed var(--border);border-radius:8px;padding:16px;text-align:center;cursor:pointer;transition:border-color .2s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
                     <input type="file" id="gEvidencia" accept="image/*,application/pdf" multiple style="display:none" onchange="subirEvidenciasGasto(this)">
                     <div style="font-size:24px;margin-bottom:6px">📁</div>
-                    <div style="font-size:12px;color:var(--text-dim)">Toca para subir foto o PDF · <span id="evGastoCount">0</span>/3</div>
+                    <div style="font-size:12px;color:var(--text-dim)">Toca para subir foto o PDF · <span id="evGastoCount">0</span>/6</div>
                     <div style="font-size:10px;color:var(--text-dim);margin-top:4px;opacity:.6">Recibos, vouchers, comprobantes</div>
                     <div id="evGastoLoading" style="font-size:11px;color:var(--accent);margin-top:4px;display:none">Subiendo…</div>
                 </div>
@@ -4494,7 +4494,7 @@ function _abrirPuenteGasto(){
     var btn=document.getElementById('btnQrGasto');
     if(btn) btn.textContent='✕ Cerrar escaneo';
     QrPuente.abrir(getNegocioActivo(),'gasto',box,function(foto){
-        if(_evidenciasGasto.length>=3){ alert('Ya tienes 3 archivos en este gasto.'); return; }
+        if(_evidenciasGasto.length>=6){ alert('Ya tienes 6 archivos en este gasto.'); return; }
         _evidenciasGasto.push({url:foto.url, path:foto.path, pdf:false, nombre:'foto-celular.jpg'});
         renderEvidenciasGasto();
     });
@@ -4968,12 +4968,12 @@ function toggleFact(){
     document.getElementById('factLabel').textContent=next?'Con factura / Comprobante fiscal':'Sin factura / Sin comprobante';
 }
 
-var _evidenciasGasto = []; // [{url, path, pdf, nombre}] — hasta 3
+var _evidenciasGasto = []; // [{url, path, pdf, nombre}] — hasta 6
 async function subirEvidenciasGasto(input){
     var files=Array.prototype.slice.call(input.files);
     input.value='';
-    var disp=3-_evidenciasGasto.length;
-    if(disp<=0){ alert('Máximo 3 archivos por gasto.'); return; }
+    var disp=6-_evidenciasGasto.length;
+    if(disp<=0){ alert('Máximo 6 archivos por gasto.'); return; }
     files=files.slice(0,disp);
     var loading=document.getElementById('evGastoLoading');
     if(loading) loading.style.display='block';
