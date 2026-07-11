@@ -721,6 +721,10 @@ function getEntradasBottles(insumoId) {
 // El inventario calcula entradas desde invActual.entradasLog, así que hay que copiarlas.
 // Se importan SOLO las del QR (las manuales ya se guardan en ambos lados), SOLO las de esta
 // sucursal, y SOLO las no importadas aún (se marca importadoEnInv para no duplicar entre inventarios).
+// Sucursal activa ('' = matriz / sin sucursal). Helper local: inventarios.js no
+// carga los de ventas/gastos y las funciones de QR por sucursal lo necesitan.
+function _sucActiva() { return localStorage.getItem('etaax_sucursal_activa') || ''; }
+
 function _importarEntradasQR() {
     if (!invActual || invActual.cerrado || window._soloVistaInv) return 0; // 👁️ solo lectura: no muta el inventario
     if (!invActual.entradasLog) invActual.entradasLog = [];
