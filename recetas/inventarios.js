@@ -5067,7 +5067,7 @@ function _step5TablasHTML() {
                 <td style="text-align:center;color:var(--green);white-space:nowrap">${entBotStr}</td>
                 <td style="text-align:center;color:var(--accent)">${ventaBot > 0 ? ventaBot + ' bot' : '—'}</td>
                 <td style="text-align:center;color:var(--accent)">${ventaCopaDir > 0 ? ventaCopaDir.toFixed(1) + ' cop' : '—'}</td>
-                <td style="text-align:center;color:#9b8de8">${ventaCoct > 0 ? ventaCoct.toFixed(1) + ' cop' : '—'}</td>
+                <td style="text-align:center;color:var(--viol)">${ventaCoct > 0 ? ventaCoct.toFixed(1) + ' cop' : '—'}</td>
                 <td style="text-align:center">
                     ${cmTotal > 0
                         ? `<div style="color:var(--red);font-size:12px;font-weight:600">${cmTotal.toFixed(1)} cop</div>
@@ -5104,7 +5104,7 @@ function _step5TablasHTML() {
                     <tr>
                         <th style="text-align:center;width:65px;font-size:10px;color:var(--text-muted)">Botella</th>
                         <th style="text-align:center;width:65px;font-size:10px;color:var(--text-muted)">Copa</th>
-                        <th style="text-align:center;width:70px;font-size:10px;color:#9b8de8">Coctelería</th>
+                        <th style="text-align:center;width:70px;font-size:10px;color:var(--viol)">Coctelería</th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
@@ -5144,7 +5144,7 @@ function _step5TablasHTML() {
                 </td>
                 <td style="text-align:center">${ea.toFixed(0)} pza</td>
                 <td style="text-align:center;color:var(--green)">${entTotal>0?'+'+entTotal.toFixed(0)+' pza':'—'}</td>
-                <td style="text-align:center;color:#9b8de8">${ventaCoct>0?(ventaCoct%1?ventaCoct.toFixed(1):ventaCoct)+' pza':'—'}</td>
+                <td style="text-align:center;color:var(--viol)">${ventaCoct>0?(ventaCoct%1?ventaCoct.toFixed(1):ventaCoct)+' pza':'—'}</td>
                 <td style="text-align:center;color:var(--accent)">${ventasDir>0?(ventasDir%1?ventasDir.toFixed(1):ventasDir)+' pza':'—'}</td>
                 <td style="text-align:center;color:var(--text-muted)">${cancelPza>0?cancelPza.toFixed(0)+' pza':'—'}</td>
                 <td style="text-align:center;color:var(--accent)">${cortMerma>0?(cortMerma%1?cortMerma.toFixed(1):cortMerma)+' pza':'—'}</td>
@@ -5216,7 +5216,7 @@ function _step5TablasHTML() {
             <td style="text-align:center;color:var(--green);white-space:nowrap">${ent>0?'+'+_nc(toF(ent))+' '+uLbl:'—'}</td>
             <td style="text-align:center;color:var(--text-dim)">—</td>
             <td style="text-align:center;color:var(--accent)">${ventaCopa>0?_nc(ventaCopa)+' cop':'—'}</td>
-            <td style="text-align:center;color:#9b8de8">${ventaCoct>0?_nc(ventaCoct)+' cop':'—'}</td>
+            <td style="text-align:center;color:var(--viol)">${ventaCoct>0?_nc(ventaCoct)+' cop':'—'}</td>
             <td style="text-align:center">${cm>0?`<div style="color:var(--red);font-size:12px;font-weight:600">${_nc(cm)} cop</div>`:'—'}</td>
             <td style="text-align:center;color:var(--text-muted)">${cancel>0?_nc(cancel)+' cop':'—'}</td>
             <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(toF(fisico))} ${uLbl}</td>
@@ -5247,7 +5247,7 @@ function _step5TablasHTML() {
                 <tr>
                     <th style="text-align:center;width:65px;font-size:10px;color:var(--text-muted)">Botella</th>
                     <th style="text-align:center;width:65px;font-size:10px;color:var(--text-muted)">Copa</th>
-                    <th style="text-align:center;width:70px;font-size:10px;color:#9b8de8">Coctelería</th>
+                    <th style="text-align:center;width:70px;font-size:10px;color:var(--viol)">Coctelería</th>
                 </tr>
             </thead>
             <tbody>${_compRows}</tbody>
@@ -5321,7 +5321,7 @@ function _step5DesgloseCard(fila, refMap) {
     var fila2 = function(lbl, val, col){ return '<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;font-size:12px"><span style="color:var(--text-dim)">'+lbl+'</span><span style="color:'+(col||'var(--text)')+';font-weight:600;text-align:right">'+val+'</span></div>'; };
     var ventasParts = [];
     if (ventaDir>0)  ventasParts.push(_n1(ventaDir)+' copa');
-    if (ventaCoct>0) ventasParts.push('<span style="color:#9b8de8">'+_n1(ventaCoct)+' coct</span>');
+    if (ventaCoct>0) ventasParts.push('<span style="color:var(--viol)">'+_n1(ventaCoct)+' coct</span>');
     if (ventaBot>0)  ventasParts.push(_n1(ventaBot)+' bot');
     return '<div class="inv-item-card" style="padding:14px">'+
         '<div style="font-weight:700;font-size:14px;color:var(--text);margin-bottom:2px">'+(esComp?'🧩 ':'')+etx(esComp?fila.nombre:insumoTitulo(fila))+'</div>'+

@@ -33,7 +33,7 @@
                   '  style="width:100%;box-sizing:border-box;height:46px;padding:0 44px 0 14px;border:1px solid var(--border,#2a2825);' +
                   '  border-radius:10px;background:var(--bg,#0f0e0c);color:var(--text,#f0ece6);' +
                   '  font-family:inherit;font-size:15px;outline:none;transition:border-color .15s"' +
-                  '  onfocus="this.removeAttribute(\'readonly\');this.style.borderColor=\'var(--accent,#f5c842)\'" onblur="this.style.borderColor=\'var(--border,#2a2825)\'">' +
+                  '  onfocus="this.removeAttribute(\'readonly\');this.style.borderColor=\'var(--viol,#9b8de8)\'" onblur="this.style.borderColor=\'var(--border,#2a2825)\'">' +
                   '<button type="button" onclick="_toggleAdminGuardPass()" tabindex="-1"' +
                   '  id="adminGuardEye"' +
                   '  style="position:absolute;right:0;top:0;height:46px;width:42px;background:transparent;border:none;' +
@@ -69,7 +69,7 @@
         document.getElementById('adminGuardEye').textContent = '👁';
         var btn = document.getElementById('adminGuardBtn');
         btn.textContent = btnLabel || 'Eliminar';
-        btn.style.background = btnLabel ? 'var(--accent,#f5c842)' : 'var(--red,#e05a3a)';
+        btn.style.background = btnLabel ? 'var(--viol,#9b8de8)' : 'var(--red,#e05a3a)';
         btn.style.color = btnLabel ? '#000' : '#fff';
         btn.disabled = false;
         document.getElementById('modalAdminGuard').style.display = 'flex';

@@ -28,6 +28,14 @@
     --red:        #e05a3a;
     --red-dim:    rgba(224, 90, 58, 0.12);
 
+    /* Morado — identidad e interacción (resaltados, chips, botones especiales) */
+    --viol:       #9b8de8;
+    --viol-dim:   rgba(155, 141, 232, 0.12);
+
+    /* Azul claro — informativo / datos (coctelería, depósitos, análisis) */
+    --blue:       #78a0f0;
+    --blue-dim:   rgba(120, 160, 240, 0.12);
+
     /* Texto */
     --text:       #f0ece4;
     --text-muted: #7a7570;
@@ -53,6 +61,10 @@
 
     --red:        #cc3f22;
     --red-dim:    rgba(204, 63, 34, 0.10);
+    --viol:       #6d5bd0;
+    --viol-dim:   rgba(109, 91, 208, 0.10);
+    --blue:       #3f6cc9;
+    --blue-dim:   rgba(63, 108, 201, 0.10);
 
     --text:       #1a1916;
     --text-muted: #6b6560;

@@ -391,7 +391,7 @@
                             <tbody id="retTbody"></tbody>
                             <tfoot>
                                 <tr><td class="tot-lbl" colspan="3">Total movido (informativo)</td>
-                                    <td class="ar"><span class="tot-val" id="retTotal" style="color:#78a0f0"></span></td></tr>
+                                    <td class="ar"><span class="tot-val" id="retTotal" style="color:var(--blue)"></span></td></tr>
                             </tfoot>
                         </table>
                     </div>
@@ -1042,9 +1042,9 @@ function renderRetiros(mes){
     document.getElementById('retTbody').innerHTML=lista.map(function(d){
         return '<tr>'
             +'<td style="white-space:nowrap;color:var(--text-dim);font-size:12px">'+_esc(d.fecha||'—')+'</td>'
-            +'<td style="font-weight:500;color:#78a0f0">'+_esc(_retiroMovTxt(d))+'</td>'
+            +'<td style="font-weight:500;color:var(--blue)">'+_esc(_retiroMovTxt(d))+'</td>'
             +'<td style="color:var(--text-dim);font-size:12px">'+_esc(d.concepto||'—')+'</td>'
-            +'<td class="ar" style="font-weight:600;color:#78a0f0">'+fmtM(d.monto)+'</td>'
+            +'<td class="ar" style="font-weight:600;color:var(--blue)">'+fmtM(d.monto)+'</td>'
         +'</tr>';
     }).join('');
 }
