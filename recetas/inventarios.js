@@ -1459,7 +1459,10 @@ async function abrirQrEntradas() {
         var d = document.createElement('div');
         d.style.cssText = 'background:#fff;padding:14px;border-radius:12px;display:inline-block';
         box.appendChild(d);
-        try { new QRCode(d, { text: url, width: 210, height: 210, colorDark: '#0a0908', colorLight: '#ffffff' }); }
+        try {
+            new QRCode(d, { text: url, width: 210, height: 210, colorDark: '#0a0908', colorLight: '#ffffff' });
+            if (window.etaaxQrLogo) window.etaaxQrLogo(d);
+        }
         catch(e) { box.innerHTML = '<div style="color:var(--red);font-size:12px">No se pudo generar el QR.</div>'; }
     }
     if (window.QRCode) gen();
@@ -1471,6 +1474,29 @@ async function abrirQrEntradas() {
         document.head.appendChild(s);
     }
 }
+// ── Icono ETAAX al centro del QR (placa blanca + favicon; el corrector H lo tolera) ──
+if (!window.etaaxQrLogo) window.etaaxQrLogo = function (cont) {
+    try {
+        var canvas = cont && cont.querySelector('canvas');
+        if (!canvas) return;
+        var img = cont.querySelector('img');
+        var ctx = canvas.getContext('2d');
+        var s = canvas.width;
+        var logo = new Image();
+        logo.onload = function () {
+            var box = Math.round(s * 0.24), ico = Math.round(s * 0.19);
+            var x = (s - box) / 2, y = (s - box) / 2, r = Math.round(box * 0.2);
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            if (ctx.roundRect) ctx.roundRect(x, y, box, box, r); else ctx.rect(x, y, box, box);
+            ctx.fill();
+            ctx.drawImage(logo, (s - ico) / 2, (s - ico) / 2, ico, ico);
+            if (img) img.src = canvas.toDataURL('image/png'); // la lib muestra el <img>: sincronizarlo
+        };
+        logo.src = '/favicon.svg';
+    } catch (e) {}
+};
+
 // ── QR de entradas: exportar/imprimir ──────────────────────────
 // El QR generado (canvas del lib qrcodejs, con fallback a su <img>) como data URL.
 function _qrEntradasDataURL() {

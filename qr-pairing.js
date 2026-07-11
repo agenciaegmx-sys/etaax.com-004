@@ -1,3 +1,25 @@
+// ── Icono ETAAX al centro del QR (placa blanca + favicon; el corrector H lo tolera) ──
+if (!window.etaaxQrLogo) window.etaaxQrLogo = function (cont) {
+    try {
+        var canvas = cont && cont.querySelector('canvas');
+        if (!canvas) return;
+        var img = cont.querySelector('img');
+        var ctx = canvas.getContext('2d');
+        var s = canvas.width;
+        var logo = new Image();
+        logo.onload = function () {
+            var box = Math.round(s * 0.24), ico = Math.round(s * 0.19);
+            var x = (s - box) / 2, y = (s - box) / 2, r = Math.round(box * 0.2);
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            if (ctx.roundRect) ctx.roundRect(x, y, box, box, r); else ctx.rect(x, y, box, box);
+            ctx.fill();
+            ctx.drawImage(logo, (s - ico) / 2, (s - ico) / 2, ico, ico);
+            if (img) img.src = canvas.toDataURL('image/png'); // la lib muestra el <img>: sincronizarlo
+        };
+        logo.src = '/favicon.svg';
+    } catch (e) {}
+};
 /* ============================================================
    ETAAX — Puente QR de captura (lado computadora)
    Genera un token temporal, dibuja el QR y escucha (polling) las
@@ -66,6 +88,7 @@
             box.style.cssText = 'background:#fff;padding:8px;border-radius:8px;display:inline-block';
             _ctx.el.appendChild(box);
             new QRCode(box, { text: url, width: 116, height: 116, colorDark: '#0a0908', colorLight: '#ffffff' });
+            if (window.etaaxQrLogo) window.etaaxQrLogo(box);
             var hint = document.createElement('div');
             hint.style.cssText = 'font-size:10px;color:var(--text-dim);text-align:center;margin-top:6px;max-width:140px';
             hint.textContent = 'Escanea para subir foto · el código se renueva solo';
