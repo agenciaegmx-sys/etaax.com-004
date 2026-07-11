@@ -729,9 +729,47 @@ function _importarEntradasQR() {
     var n = 0;
     (getEntradasLog() || []).forEach(function(e) {
         if (!e || e.origen !== 'qr') return;   // solo QR (las manuales ya están en el inventario)
-        if (e.concepto === 'merma') return;    // las MERMAS del QR no son entradas de stock (solo log/auditoría)
         if (e.importadoEnInv) return;          // ya importada a algún inventario
         if (e.id && yaEnInv[e.id]) return;      // ya está en este inventario
+        // ── MERMAS del QR: entran a la merma del inventario (y por lo tanto al reporte) ──
+        if (e.concepto === 'merma') {
+            var cantM = parseFloat(e.cantidad) || 0;
+            if (!(cantM > 0)) return;
+            var uM = (e.unidad || '').toLowerCase();
+            if (e.mermaTipo === 'producto' || e.recetaId) {
+                // Producto del menú: se lista en el reporte (no descuenta insumos por ahora)
+                if (!invActual.mermasProductoQR) invActual.mermasProductoQR = [];
+                if (invActual.mermasProductoQR.some(function(x){ return x.id === e.id; })) return;
+                invActual.mermasProductoQR.push({ id: e.id, recetaId: e.recetaId || '',
+                    nombre: e.nombre || '—', cantidad: cantM, unidad: e.unidad || 'pza',
+                    motivo: e.motivo || '', fecha: e.fecha || '', foto_url: e.foto_url || '' });
+            } else {
+                // Insumo: convertir a la unidad de merma de su fila y sumarla
+                if (!idsSuc[e.insumoId]) return; // no es de esta sucursal
+                var filaM = filasCaptura.find(function(f){ return f.insumoId === e.insumoId; });
+                if (!filaM) return;
+                if (filaM.tipo === 'peso') {
+                    var baseM = cantM; // g / ml / pza directos en unidad base
+                    if (uM === 'botella') baseM = (filaM.contNeto > 0 ? cantM * filaM.contNeto : cantM);
+                    filaM.mermaBase = (parseFloat(filaM.mermaBase) || 0) + baseM;
+                } else if (filaM.tipo === 'pza') {
+                    var pzM = cantM; // pza / botella / lata = piezas
+                    if (uM === 'ml') pzM = (filaM.contNeto > 0 ? cantM / filaM.contNeto : cantM);
+                    filaM.mermaCopas = (parseFloat(filaM.mermaCopas) || 0) + pzM;
+                } else { // copa
+                    var copasBotM = (filaM.contNeto > 0 && filaM.copaML > 0) ? filaM.contNeto / filaM.copaML : 0;
+                    var copasM = cantM; // 'copa' y 'porcion' = copas directas
+                    if (uM === 'oz')  copasM = filaM.copaML > 0 ? cantM * OZ_ML / filaM.copaML : cantM;
+                    else if (uM === 'ml') copasM = filaM.copaML > 0 ? cantM / filaM.copaML : cantM;
+                    else if (uM === 'botella' || uM === 'pza') copasM = copasBotM ? cantM * copasBotM : cantM;
+                    filaM.mermaCopas = (parseFloat(filaM.mermaCopas) || 0) + copasM;
+                }
+            }
+            e.importadoEnInv = invActual.id;
+            try { _sbUpEL(e); } catch(err) {}
+            n++;
+            return;
+        }
         if (!idsSuc[e.insumoId]) return;        // no es de esta sucursal
         invActual.entradasLog.push({
             id: e.id, insumoId: e.insumoId,
@@ -739,7 +777,8 @@ function _importarEntradasQR() {
             cantidad: parseFloat(e.cantidad) || 0,
             costo: parseFloat(e.costo) || 0,
             tipo: e.tipo || '', notas: e.notas || '',
-            fecha: e.fecha || '', origen: 'qr'
+            fecha: e.fecha || '', origen: 'qr',
+            foto_url: e.foto_url || ''          // evidencia visual del QR
         });
         e.importadoEnInv = invActual.id;        // marcar el registro global para no re-importar
         try { _sbUpEL(e); } catch(err) {}
@@ -4712,6 +4751,11 @@ function _resumenEjecutivo() {
         var cons = _consumoPeriodo(f);
         if (cons > 0.001) { usados++; vendidoCosto += cons*cc; } else { sinUsar++; if (sinUsarLista.length<60) sinUsarLista.push(f.nombre); }
     });
+    // Mermas de PRODUCTO del menú registradas por QR (viven en el inventario)
+    ((invActual && invActual.mermasProductoQR) || []).forEach(function(mp){
+        mermados.push({ nombre: (mp.nombre || '—') + ' · 🍹 producto' + (mp.motivo ? ' (' + String(mp.motivo).replace(/_/g,' ') + ')' : ''),
+            costo: 0, esProd: true, m: parseFloat(mp.cantidad) || 0 });
+    });
     // Costo de COMPRA por unidad de entrada (botella/garrafa/pieza/base) según el insumo.
     function _costoCompraInsumo(f){
         var cc = costoCopa(f);
@@ -4802,7 +4846,7 @@ function _resumenEjecutivo() {
         '</tbody></table></div></div></div>') : '';
 
     var tablaMerma = mermados.length ? ('<div class="card" style="max-width:none;margin:0 16px 12px"><div class="card-body" style="padding:0"><div style="padding:12px 16px;font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:1px;color:var(--accent)">🗑️ Productos mermados — '+M(mermaCosto)+'</div><div class="tabla-wrap"><table style="font-size:12px"><thead><tr><th style="text-align:left">Producto</th><th style="text-align:right">Merma</th><th style="text-align:right">$ a costo</th></tr></thead><tbody>'+
-        mermados.sort(function(a,b){return b.costo-a.costo;}).map(function(x){ return '<tr><td style="font-weight:600">'+etx(x.nombre)+'</td><td style="text-align:right">'+_fmtBase(x.m)+'</td><td style="text-align:right;color:var(--accent);font-weight:600">'+M(x.costo)+'</td></tr>'; }).join('')+
+        mermados.sort(function(a,b){return b.costo-a.costo;}).map(function(x){ return '<tr><td style="font-weight:600">'+etx(x.nombre)+'</td><td style="text-align:right">'+(x.esProd?((x.m%1?x.m.toFixed(1):x.m)+' pza'):_fmtBase(x.m))+'</td><td style="text-align:right;color:var(--accent);font-weight:600">'+(x.esProd?'—':M(x.costo))+'</td></tr>'; }).join('')+
         '</tbody></table></div></div></div>') : '';
 
     var listaSinUsar = sinUsar ? ('<div class="card" style="max-width:none;margin:0 16px 12px"><div class="card-body" style="padding:12px 16px"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px">💤 Insumos sin usar en este periodo ('+sinUsar+')</div><div style="display:flex;flex-wrap:wrap;gap:6px">'+
@@ -6447,6 +6491,9 @@ function renderListadoEntradas() {
         const cant    = (e.cantidad||0) % 1 ? (e.cantidad||0).toFixed(1) : (e.cantidad||0);
         // MERMA del QR: se muestra distinta (badge rojo, cantidad negativa, área);
         // NO entra al stock del inventario — es log/auditoría del turno.
+const fotoTh = e.foto_url
+            ? `<img src="${etx(e.foto_url)}" onclick="event.stopPropagation();etaaxVerFoto(this.src)" title="Ver evidencia" style="width:28px;height:28px;object-fit:cover;border-radius:5px;border:1px solid var(--border);cursor:zoom-in;flex-shrink:0">`
+            : '';
         if (e.concepto === 'merma') {
             const areaTx = e.area ? ' · ' + etx(e.area) : '';
             const motivo = { se_rompio:'se rompió', se_derramo:'se derramó', mal_preparado:'mal preparado', caducado:'caducado', otro:'otro' }[e.motivo] || '';
@@ -6455,6 +6502,7 @@ function renderListadoEntradas() {
                 <span class="ent-log-badge" style="color:var(--red);background:rgba(224,90,58,.12);border-color:rgba(224,90,58,.4)">Merma${areaTx}</span>
                 <span class="ent-log-fecha">${e.fecha || '—'}</span>
                 <span class="ent-log-cant" style="color:var(--red)">−${cant} ${etx(e.unidad || 'pza')}</span>
+                ${fotoTh}
                 <button class="ent-log-del" title="Eliminar" onclick="eliminarEntradaPorId('${e.id}')">🗑️</button>
             </div>`;
         }
@@ -6474,6 +6522,7 @@ function renderListadoEntradas() {
             <span class="ent-log-badge" style="color:${color};background:${color}1a;border-color:${color}50">${tipoEntradaLabel(e.tipo)}</span>
             <span class="ent-log-fecha">${e.fecha || '—'}</span>
             <span class="ent-log-cant">+${cant} ${_unidadCompra(e)}</span>
+            ${fotoTh}
             <button class="ent-log-del" title="Editar" onclick="_entEditId='${e.id}';renderListadoEntradas()">✏️</button>
             <button class="ent-log-del" title="Eliminar" onclick="eliminarEntradaPorId('${e.id}')"
                 onmouseenter="this.classList.add('hover')" onmouseleave="this.classList.remove('hover')">🗑️</button>
