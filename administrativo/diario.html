@@ -114,6 +114,10 @@
         }
         .theme-toggle:hover{border-color:var(--green);color:var(--green);}
 
+        /* Pagar tarjeta desde caja fuerte: el modal de depósito debe quedar ENCIMA
+           del overlay de caja fuerte (9100) — si no, abre detrás y "no pasa nada". */
+        #modalDeposito { z-index: 9300; }
+
         /* ══ Impresión por card: solo se imprime #dxPrintArea ══ */
         #dxPrintArea { display:none; }
         @media print {
