@@ -44,8 +44,14 @@ body{min-height:100vh;display:flex;flex-direction:column;align-items:center;just
             <input type="date" id="capFecha">
         </div>
         <div class="cap-thumbs" id="capThumbs"></div>
+        <!-- Dos entradas separadas: capture abre la CÁMARA directo (Androids viejos
+             no muestran el menú del sistema); sin capture abre galería/archivos. -->
+        <input type="file" id="capInputCam" accept="image/*" capture="environment" style="display:none" onchange="onPick(this)">
         <input type="file" id="capInput" accept="image/*" multiple style="display:none" onchange="onPick(this)">
-        <button class="cap-btn" onclick="document.getElementById('capInput').click()">📷 Tomar / elegir foto</button>
+        <div style="display:flex;gap:8px">
+            <button class="cap-btn" style="flex:1" onclick="document.getElementById('capInputCam').click()">📷 Tomar foto</button>
+            <button class="cap-btn" style="flex:1" onclick="document.getElementById('capInput').click()">🖼️ De la galería</button>
+        </div>
         <div class="cap-msg" id="capMsg"></div>
     </div>
 

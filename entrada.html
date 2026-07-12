@@ -113,8 +113,12 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
         <input id="entNota" class="fld" placeholder="Proveedor, ticket, etc.">
 
         <img id="fotoThumb" class="thumb" style="display:none">
+        <input type="file" id="fotoInputCam" accept="image/*" capture="environment" style="display:none" onchange="onFoto(this)">
         <input type="file" id="fotoInput" accept="image/*" style="display:none" onchange="onFoto(this)">
-        <button class="cap-btn ghost" onclick="document.getElementById('fotoInput').click()">📷 Foto del ticket (cámara o galería)</button>
+        <div style="display:flex;gap:8px">
+            <button class="cap-btn ghost" style="flex:1" onclick="document.getElementById('fotoInputCam').click()">📷 Tomar foto</button>
+            <button class="cap-btn ghost" style="flex:1" onclick="document.getElementById('fotoInput').click()">🖼️ De la galería</button>
+        </div>
 
         <button class="cap-btn" id="regBtn" style="margin-top:12px" onclick="registrar()">✓ Registrar entrada</button>
         <div class="cap-msg" id="formMsg"></div>
@@ -169,8 +173,12 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
         <input id="merNota" class="fld" placeholder="Detalle de lo que pasó…">
 
         <img id="merFotoThumb" class="thumb" style="display:none">
+        <input type="file" id="merFotoInputCam" accept="image/*" capture="environment" style="display:none" onchange="onFotoMer(this)">
         <input type="file" id="merFotoInput" accept="image/*" style="display:none" onchange="onFotoMer(this)">
-        <button class="cap-btn ghost" onclick="document.getElementById('merFotoInput').click()">📷 Foto (opcional)</button>
+        <div style="display:flex;gap:8px">
+            <button class="cap-btn ghost" style="flex:1" onclick="document.getElementById('merFotoInputCam').click()">📷 Tomar foto</button>
+            <button class="cap-btn ghost" style="flex:1" onclick="document.getElementById('merFotoInput').click()">🖼️ De la galería</button>
+        </div>
 
         <button class="cap-btn" id="merBtn" style="margin-top:12px;background:var(--red);color:#fff" onclick="registrarMerma()">✓ Registrar merma</button>
         <div class="cap-msg" id="merMsg"></div>

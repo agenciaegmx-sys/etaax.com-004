@@ -3891,6 +3891,7 @@ async function _reloadGastosRT() {
     var soloLocal = (_cacheGastos||[]).filter(function(g){ return g && g.id && !vistos[g.id]; });
     _cacheGastos = remote.concat(soloLocal);
     gRenderAll();
+    _syncGastosCortes(); // realtime de otro equipo también refresca los cortes
 }
 function _subGastosRealtime(negId) {
     if (!negId || _gastosRtNeg === negId || typeof sbRealtime !== 'function') return;
@@ -3905,6 +3906,16 @@ function _subGastosRealtime(negId) {
 function _sbUp(tabla, record) { sbUpsert(tabla, record); }
 function _sbDel(tabla, id) { sbDelete(tabla, id); }
 function _sbSaveCats(cats) { sbUpsertDoc('gastos_cats_custom', { cats: cats, limite: _limiteGastoDiario }); }
+// Un gasto capturado/borrado aquí se refleja AL INSTANTE en el lado de cortes
+// (columna Gastos, resguardo y desglose del modal): mismo dato, cachés separados.
+function _syncGastosCortes(){
+    try {
+        window._cacheGastosExt = _cacheGastos;               // caché que lee el lado ventas
+        if (typeof renderAll === 'function') renderAll();    // re-pinta cortes/resumen
+        var mc = document.getElementById('modalCorte');      // modal de corte abierto: refrescar su desglose
+        if (mc && mc.classList && typeof jalarGastosFecha === 'function' && mc.className.indexOf('open') >= 0) jalarGastosFecha();
+    } catch(e) {}
+}
 /* ── Límite de gasto diario (POR GASTO INDIVIDUAL) ──
    Si un gasto menor rebasa el límite, exige clave de admin y se registra como
    GASTO MAYOR. Configurarlo también pide clave. Persiste junto a las categorías
@@ -4944,6 +4955,7 @@ function _pnGuardarGastoDirecto(g){
     _cacheGastos=(_cacheGastos||[]).filter(function(x){return x.id!==g.id;});
     _cacheGastos.push(g);
     _sbUp('gastos', g);
+    _syncGastosCortes(); // pagos de nómina "aparte" también cuentan en el corte
 }
 function _confirmarPagoNom(){
     var s=_pagoNomStaff; if(!s)return;
@@ -5147,6 +5159,7 @@ function guardarGasto(){
     _sbUp('gastos', gasto);
     gCerrarModal();
     gRenderAll();
+    _syncGastosCortes();
 }
 
 function eliminarGasto(id){
@@ -5159,6 +5172,7 @@ function eliminarGasto(id){
         _cacheGastos = (_cacheGastos||[]).filter(function(x){return x.id!==id;});
         _sbDel('gastos', id);
         gRenderAll();
+        _syncGastosCortes();
     });
 }
 
