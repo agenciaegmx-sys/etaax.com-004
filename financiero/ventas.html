@@ -488,6 +488,21 @@ function _sbDelOtro(id) { sbDelete('sf_otros', id); }
 /* ── Sucursal state ── */
 var _sucursalId = null; // null = vista global
 
+/* ── DOS CARAS del financiero ──────────────────────────────────────
+   Dueño / admin del negocio: selector completo (vista global + sucursales),
+   con la sucursal activa como punto de partida si viene navegando en una.
+   STAFF de sucursal: CLAVADO a su sucursal asignada — no ve las demás ni
+   la vista global (sin sucursal asignada → solo Matriz). */
+function _sucBloqueada(){
+    var ctx; try{ ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null'); }catch(e){}
+    if(!ctx || ctx.ctxType!=='staff') return '';   // dueño: libre
+    if((ctx.rol||'')==='admin') return '';          // admin del negocio: libre
+    return localStorage.getItem('etaax_sucursal_activa') || 'suc_principal';
+}
+var _SUC_LOCK = _sucBloqueada();
+if (_SUC_LOCK) { _sucursalId = _SUC_LOCK; }
+else { var _saIni = localStorage.getItem('etaax_sucursal_activa'); if (_saIni) _sucursalId = _saIni; }
+
 /* Sucursales REALES del negocio activo (etaax_<neg>_sucursales). El selector
    viejo listaba NEGOCIOS del dueño (legado multi-negocio) — por eso "no
    detectaba" las sucursales. Regla del sistema: registro sin sucursalId = Matriz. */
@@ -1058,7 +1073,12 @@ function _setPeriod(tipo,btn){
 document.addEventListener('DOMContentLoaded',function(){
     /* Sucursal chip */
     var chip=document.getElementById('sucChip');
-    if(chip){
+    if(chip && _SUC_LOCK){
+        // Staff de sucursal: chip informativo, sin menú (no ve otras sucursales)
+        chip.textContent=_sucursalLabel();
+        chip.style.cursor='default';
+        chip.title='Tu acceso está limitado a esta sucursal';
+    } else if(chip){
         chip.addEventListener('click',function(e){
             e.stopPropagation();
             var menu=document.getElementById('sucMenu');
@@ -1067,6 +1087,7 @@ document.addEventListener('DOMContentLoaded',function(){
             menu.classList.toggle('open');
             chip.classList.toggle('open');
         });
+        _updateSucChip(); // arranca mostrando la sucursal activa (o vista global)
     }
     document.addEventListener('click',function(e){
         if(!e.target.closest('#sucMenu')&&!e.target.closest('#sucChip')){
