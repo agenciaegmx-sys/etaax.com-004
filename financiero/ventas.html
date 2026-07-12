@@ -485,7 +485,26 @@ function _sbUpOtro(record) { sbUpsert('sf_otros', record); }
 function _sbDelOtro(id) { sbDelete('sf_otros', id); }
 
 /* ── Sucursal state ── */
-var _sucursalId = null; // null = todas
+var _sucursalId = null; // null = vista global
+
+/* Sucursales REALES del negocio activo (etaax_<neg>_sucursales). El selector
+   viejo listaba NEGOCIOS del dueño (legado multi-negocio) — por eso "no
+   detectaba" las sucursales. Regla del sistema: registro sin sucursalId = Matriz. */
+function _sucsNegSF(){
+    try{
+        var negId=getNegocioActivo(); if(!negId) return [];
+        return (JSON.parse(localStorage.getItem('etaax_'+negId+'_sucursales')||'[]')||[])
+            .filter(function(s){ return s && s.id && s.activa!==false; });
+    }catch(e){ return []; }
+}
+function _deSuc(x){
+    if(!_sucursalId) return true; // 🌐 vista global
+    return ((x && x.sucursalId) || 'suc_principal') === _sucursalId;
+}
+function _sucOptHTML(id,nombre,color){
+    var punto = color ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+color+';margin-right:6px;vertical-align:middle"></span>' : '';
+    return '<div class="suc-opt'+(_sucursalId===id?' active':'')+'" data-suc-id="'+_esc(id)+'">'+punto+_esc(nombre)+'</div>';
+}
 
 function _loadNegocios(){
     try{
@@ -499,20 +518,26 @@ function _loadNegocios(){
 }
 
 function _sucursalLabel(){
-    if(!_sucursalId) return '🌐 Todas las sucursales';
-    var neg=_loadNegocios().find(function(n){return n.id===_sucursalId;});
-    return neg?(neg.emoji||'🏢')+' '+neg.nombre:'Sucursal';
+    if(!_sucursalId) return '🌐 Vista global';
+    if(_sucursalId==='suc_principal'){
+        var m=_sucsNegSF().find(function(s){return s.id==='suc_principal';});
+        return '🏢 '+((m&&m.nombre)||'Matriz');
+    }
+    var suc=_sucsNegSF().find(function(s){return s.id===_sucursalId;});
+    return suc?('🏪 '+suc.nombre):'Sucursal';
 }
 
 function _renderSucMenu(){
     var menu=document.getElementById('sucMenu');
     if(!menu)return;
-    var negs=_loadNegocios();
-    var html='<div class="suc-opt'+(!_sucursalId?' active':'')+'" data-suc-id="">🌐 Todas las sucursales</div>';
-    if(negs.length) html+='<div class="suc-sep"></div>';
-    negs.forEach(function(neg){
-        html+='<div class="suc-opt'+(_sucursalId===neg.id?' active':'')+'" data-suc-id="'+_esc(neg.id)+'">'+(neg.emoji||'🏢')+' '+_esc(neg.nombre)+'</div>';
-    });
+    var sucs=_sucsNegSF();
+    var html='<div class="suc-opt'+(!_sucursalId?' active':'')+'" data-suc-id="">🌐 Vista global</div>';
+    if(sucs.length){
+        html+='<div class="suc-sep"></div>';
+        if(!sucs.some(function(s){return s.id==='suc_principal';}))
+            html+=_sucOptHTML('suc_principal','🏢 Matriz','');
+        sucs.forEach(function(s){ html+=_sucOptHTML(s.id, s.nombre||s.id, s.color||''); });
+    }
     menu.innerHTML=html;
     menu.querySelectorAll('.suc-opt').forEach(function(el){
         el.addEventListener('click',function(){
@@ -537,11 +562,10 @@ function saveMetas(d) {
     var negId = getNegocioActivo();
     sbUpsertDoc('sf_metas', d, negId);
 }
-function loadOtros() { return _cacheOtros || []; }
+function loadOtros() { return (_cacheOtros || []).filter(_deSuc); } // otros sin sucursal = Matriz
 function loadCortes() {
     var all = _cacheCortesSF || [];
-    if (!_sucursalId) return all;
-    return all.filter(function(c){return !c.negocioId||c.negocioId===_sucursalId;});
+    return all.filter(_deSuc); // por SUCURSAL del corte (sin sello = Matriz)
 }
 
 /* ── Helpers ── */
@@ -603,10 +627,11 @@ function getDiaFactores(){
    sucursales activas. Devuelve null si ninguna tiene días configurados
    (→ sin filtro: opera todos los días, como antes). */
 function _diasOperativos(){
-    var negId = _sucursalId || getNegocioActivo();
+    var negId = getNegocioActivo();
     if(!negId) return null;
     var sucs=[];
     try { sucs = JSON.parse(localStorage.getItem('etaax_'+negId+'_sucursales')||'[]'); } catch(e){}
+    if(_sucursalId) sucs = sucs.filter(function(s){ return s && s.id === _sucursalId; }); // días de ESA sucursal
     var operLD=[false,false,false,false,false,false,false]; // Lun..Dom
     var hayConfig=false;
     sucs.forEach(function(suc){
@@ -1056,7 +1081,8 @@ function guardarOtro(){
     if(!monto||monto<=0){alert('El monto debe ser mayor a cero.');return;}
     if(!concepto){alert('El concepto es obligatorio.');return;}
     var id=document.getElementById('oId').value||genId();
-    var record={id:id,fecha:fecha,concepto:concepto,monto:monto,metodo:document.getElementById('oMetodo').value};
+    var record={id:id,fecha:fecha,concepto:concepto,monto:monto,metodo:document.getElementById('oMetodo').value,
+        sucursalId:_sucursalId||''}; // sellado con la sucursal en pantalla ('' = Matriz)
     _cacheOtros = loadOtros().filter(function(o){return o.id!==id;});
     _cacheOtros.push(record);
     _sbUpOtro(record);
