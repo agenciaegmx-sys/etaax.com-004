@@ -18,6 +18,10 @@ body{min-height:100vh;display:flex;flex-direction:column;align-items:center;just
 .cap-fecha input{width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 14px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:15px;outline:none}
 .cap-btn{display:block;width:100%;box-sizing:border-box;background:var(--green);color:#0a0908;border:none;border-radius:10px;padding:16px;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;cursor:pointer;margin-top:8px}
 .cap-btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-weight:500}
+.cap-par{display:flex;gap:10px;margin-top:8px}
+.cap-par .cap-btn{flex:1;margin-top:0;display:flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;font-size:15px;padding:15px 8px;min-height:54px}
+@media(max-width:380px){.cap-par .cap-btn{font-size:13.5px;gap:5px}}
+
 .cap-thumbs{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:14px 0}
 .cap-thumbs img{width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border)}
 .cap-msg{font-size:13px;margin-top:14px;min-height:18px}
@@ -48,9 +52,9 @@ body{min-height:100vh;display:flex;flex-direction:column;align-items:center;just
              no muestran el menú del sistema); sin capture abre galería/archivos. -->
         <input type="file" id="capInputCam" accept="image/*" capture="environment" style="display:none" onchange="onPick(this)">
         <input type="file" id="capInput" accept="image/*" multiple style="display:none" onchange="onPick(this)">
-        <div style="display:flex;gap:8px">
-            <button class="cap-btn" style="flex:1" onclick="document.getElementById('capInputCam').click()">📷 Tomar foto</button>
-            <button class="cap-btn" style="flex:1" onclick="document.getElementById('capInput').click()">🖼️ De la galería</button>
+        <div class="cap-par">
+            <button class="cap-btn" onclick="document.getElementById('capInputCam').click()">📷 Tomar foto</button>
+            <button class="cap-btn" onclick="document.getElementById('capInput').click()">🖼️ Galería</button>
         </div>
         <div class="cap-msg" id="capMsg"></div>
     </div>
