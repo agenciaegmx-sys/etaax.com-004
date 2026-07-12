@@ -183,11 +183,11 @@
         </div>
         <div class="nav-section">
             <div class="nav-section-label">Ingresos</div>
-            <a href="ventas.html" class="nav-link" data-tooltip="Ventas Globales"><span class="nav-icon">💰</span><span class="nav-text">Ventas Globales</span></a>
+            <a href="ventas.html" class="nav-link" data-tooltip="Ventas Totales"><span class="nav-icon">💰</span><span class="nav-text">Ventas Totales</span></a>
         </div>
         <div class="nav-section">
             <div class="nav-section-label">Egresos</div>
-            <a href="gastos-globales.html" class="nav-link" data-tooltip="Gastos Globales"><span class="nav-icon">📤</span><span class="nav-text">Gastos Globales</span></a>
+            <a href="gastos-globales.html" class="nav-link" data-tooltip="Gastos Totales"><span class="nav-icon">📤</span><span class="nav-text">Gastos Totales</span></a>
         </div>
         <div class="nav-section">
             <div class="nav-section-label">Cuentas</div>
@@ -449,7 +449,7 @@ function _renderSucMenu(){
     });
 }
 
-/* ── Clasificación de costos (idéntica a Gastos Globales / Utilidades) ── */
+/* ── Clasificación de costos (idéntica a Gastos Totales / Utilidades) ── */
 function _kEsIMSS(g){ return /\bimss\b|seguro\s*social|cargas\s*sociales/i.test((g.categoria||'')+' '+(g.concepto||'')); }
 function _kEsNominaCat(g){ return /n[oó]mina|personal/i.test(g.categoria||''); }
 function _kCatExcluida(g){ return /propina|gratificaci|contabilidad|impuesto/i.test(g.categoria||''); }
@@ -491,7 +491,7 @@ function getMesData(mes){
     var otrosT=otros.reduce(function(s,o){return s+n(o.monto);},0);
     var ingresos=ventas+otrosT;
 
-    // Clasificación real desde los GASTOS DIARIOS (igual que Gastos Globales):
+    // Clasificación real desde los GASTOS DIARIOS (igual que Gastos Totales):
     //  FIJO = lo realmente pagado de fijos del catálogo · NÓMINA = nómina/personal + IMSS
     //  VARIABLE = el resto, excluyendo nómina, IMSS, propinas, contabilidad y categorías fijas.
     var fijos=loadFijos(), fijosCats=_kCatsFijos(), staff=loadStaff();

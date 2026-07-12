@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-    <title>ETAAX – Salud Financiera · Gastos Globales</title>
+    <title>ETAAX – Salud Financiera · Gastos Totales</title>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
 <script src="/etaax-core.js"></script>
@@ -130,7 +130,7 @@
     <div class="top-breadcrumb">
         <span class="top-module-badge">Financiero</span>
         <span class="top-sep">|</span>
-        <span class="top-section-name">Gastos Globales</span>
+        <span class="top-section-name">Gastos Totales</span>
     </div>
 </header>
 <div id="ctxBar" class="ctx-bar" style="display:none"></div>
@@ -146,11 +146,11 @@
         </div>
         <div class="nav-section">
             <div class="nav-section-label">Ingresos</div>
-            <a href="ventas.html" class="nav-link" data-tooltip="Ventas Globales"><span class="nav-icon">💰</span><span class="nav-text">Ventas Globales</span></a>
+            <a href="ventas.html" class="nav-link" data-tooltip="Ventas Totales"><span class="nav-icon">💰</span><span class="nav-text">Ventas Totales</span></a>
         </div>
         <div class="nav-section">
             <div class="nav-section-label">Egresos</div>
-            <a href="gastos-globales.html" class="nav-link active" data-tooltip="Gastos Globales"><span class="nav-icon">📤</span><span class="nav-text">Gastos Globales</span></a>
+            <a href="gastos-globales.html" class="nav-link active" data-tooltip="Gastos Totales"><span class="nav-icon">📤</span><span class="nav-text">Gastos Totales</span></a>
         </div>
         <div class="nav-section">
             <div class="nav-section-label">Cuentas</div>
@@ -168,7 +168,7 @@
         <div class="header">
             <div class="brand">
                 <span class="brand-label">Salud Financiera</span>
-                <span class="brand-title">Gastos Globales</span>
+                <span class="brand-title">Gastos Totales</span>
             </div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <div class="suc-wrap">
@@ -739,13 +739,15 @@ var _sucursalId=null;
    la vista global (sin sucursal asignada → solo Matriz). */
 function _sucBloqueada(){
     var ctx; try{ ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null'); }catch(e){}
-    if(!ctx || ctx.ctxType!=='staff') return '';   // dueño: libre
-    if((ctx.rol||'')==='admin') return '';          // admin del negocio: libre
-    return localStorage.getItem('etaax_sucursal_activa') || 'suc_principal';
+    var esStaff = ctx && ctx.ctxType==='staff' && (ctx.rol||'')!=='admin';
+    var sucAct = localStorage.getItem('etaax_sucursal_activa') || '';
+    if (esStaff) return sucAct || 'suc_principal';  // staff: SIEMPRE clavado a su sucursal
+    // Dueño/admin: DENTRO de una sucursal el financiero es de ESA sucursal;
+    // el consolidado multisucursal vive en 'Financiero Global' (hub, sin sucursal activa).
+    return sucAct;
 }
 var _SUC_LOCK = _sucBloqueada();
 if (_SUC_LOCK) { _sucursalId = _SUC_LOCK; }
-else { var _saIni = localStorage.getItem('etaax_sucursal_activa'); if (_saIni) _sucursalId = _saIni; }
 
 /* Sucursales REALES del negocio activo (etaax_<neg>_sucursales). El selector
    viejo listaba NEGOCIOS del dueño (legado multi-negocio) — por eso "no
