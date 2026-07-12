@@ -13,6 +13,9 @@ body{min-height:100vh;display:flex;flex-direction:column;align-items:center;just
 .cap-logo{margin-bottom:18px}
 .cap-title{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:1px;color:var(--text)}
 .cap-sub{font-size:13px;color:var(--text-dim);margin:4px 0 20px}
+/* iOS Safari: los input date usan ancho intrínseco y se salen del recuadro
+   si no se les quita la apariencia nativa */
+input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width:100%;text-align:left}
 .cap-fecha{margin-bottom:16px;text-align:left}
 .cap-fecha label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);display:block;margin-bottom:6px}
 .cap-fecha input{width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 14px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:15px;outline:none}

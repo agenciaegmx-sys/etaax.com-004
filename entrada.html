@@ -18,6 +18,9 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
 #pinInput{text-align:center;letter-spacing:10px;font-size:26px;font-weight:600}
 .cap-btn{display:block;width:100%;box-sizing:border-box;background:var(--green);color:#0a0908;border:none;border-radius:10px;padding:15px;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;cursor:pointer;margin-top:4px}
 .cap-btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-weight:500}
+/* iOS Safari: los input date usan ancho intrínseco y se salen del recuadro
+   si no se les quita la apariencia nativa */
+input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width:100%;text-align:left}
 .cap-par{display:flex;gap:10px;margin-top:8px}
 .cap-par .cap-btn{flex:1;margin-top:0;display:flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;font-size:15px;padding:15px 8px;min-height:54px}
 @media(max-width:380px){.cap-par .cap-btn{font-size:13.5px;gap:5px}}
