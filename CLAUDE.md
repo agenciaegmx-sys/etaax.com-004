@@ -8,11 +8,19 @@ ETAAX: plataforma SaaS multi-negocio para restaurantes (costeos de recetas, vent
 
 ## Comandos
 
-No hay build, lint ni tests. Para probar localmente sirve los archivos estáticos:
+No hay build ni lint. Para probar localmente sirve los archivos estáticos:
 
 ```bash
 python3 -m http.server 8000   # luego abrir http://localhost:8000/hub.html
 ```
+
+**Tests de fórmulas de dinero — correr SIEMPRE antes de push:**
+
+```bash
+node tests/money-tests.js   # sale con código 1 si alguna fórmula cambió
+```
+
+Ejecuta el código REAL de producción (los `<script>` de diario.html e inventarios.js) en Node con DOM simulado y verifica ~43 fórmulas (resguardo, comisiones bancarias, netos de tarjeta, existencias teórico/físico, metas por días operativos, efectos de depósitos/retiros…). Si un test falla, el test tiene razón hasta demostrar lo contrario. Al tocar una fórmula de dinero o crear una nueva, agregar/ajustar su test en el mismo commit.
 
 Deploy: push a `main` → Netlify publica la raíz del repo tal cual (`netlify.toml`).
 
