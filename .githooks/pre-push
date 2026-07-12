@@ -1,0 +1,15 @@
+#!/bin/sh
+# ETAAX — el candado de fórmulas corre SOLO antes de cada push.
+# Si una fórmula de dinero cambió, el push se bloquea.
+echo "🔒 Candado de fórmulas (tests/money-tests.js)…"
+RAIZ="$(git rev-parse --show-toplevel)"
+if node "$RAIZ/tests/money-tests.js" > /tmp/etaax-tests.log 2>&1; then
+    tail -1 /tmp/etaax-tests.log
+else
+    cat /tmp/etaax-tests.log
+    echo ""
+    echo "🚨 PUSH BLOQUEADO: una fórmula de dinero cambió o tronó."
+    echo "   Revisa arriba. Si el cambio es intencional, ajusta su test"
+    echo "   en tests/money-tests.js en el mismo commit."
+    exit 1
+fi

@@ -8,6 +8,7 @@
 <title>ETAAX – Simulador de Metas de Venta</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../styles.css">
+<script src="/etaax-core.js"></script>
 <style>
 .sim-wrap{max-width:1180px;margin:0 auto;padding:24px 22px 90px}
 .sim-head{margin-bottom:20px}
@@ -221,7 +222,7 @@ function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:0,
 function fmtN(v){return n(v).toLocaleString('es-MX');}
 function mesActual(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
 function diasMes(mes){var y=parseInt(mes.slice(0,4),10),m=parseInt(mes.slice(5,7),10);return new Date(y,m,0).getDate();}
-function flujoNeto(c){return n(c.efectivo)+n(c.tarjeta)+n(c.propTarjeta)+n(c.transferencia);}
+function flujoNeto(c){return EtaaxCore.flujoNeto(c);} // núcleo: MISMA fórmula que el corte
 
 var _cortes=[], _gastos=[], _fijos=[], _nominas={}, _staff=[], _metas={};
 var DEFAULT_META=150000, DEFAULT_CHEQUE=200, MAX_CHEQUE=1500, MAX_COM=8000;

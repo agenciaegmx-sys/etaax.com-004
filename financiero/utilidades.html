@@ -8,6 +8,7 @@
     <title>ETAAX – Salud Financiera · Utilidades</title>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
+<script src="/etaax-core.js"></script>
     <style>
         /* Period tabs */
         .period-tabs{display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:4px;}
@@ -284,7 +285,7 @@ function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMont
 function n(v){return parseFloat(v)||0;}
 function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function flujoNeto(c){return n(c.efectivo)+n(c.tarjeta)+n(c.propTarjeta)+n(c.transferencia);}
+function flujoNeto(c){return EtaaxCore.flujoNeto(c);} // núcleo: MISMA fórmula que el corte
 function daysInMonth(y,m){return new Date(y,m,0).getDate();}
 
 /* ── Sucursal ── */

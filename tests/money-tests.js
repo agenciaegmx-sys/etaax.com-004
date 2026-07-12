@@ -118,7 +118,9 @@ function eq(real, esperado, msg) {
 
 /* ═══════════════ SUITE A · CORTE DE CAJA (diario.html) ═══════════════ */
 console.log('\n══ SUITE A · Corte de caja (administrativo/diario.html) ══');
-const A = cargarInline(crearContexto(), 'administrativo/diario.html');
+const A = crearContexto();
+cargarJS(A, 'etaax-core.js');            // núcleo: las páginas delegan aquí
+cargarInline(A, 'administrativo/diario.html');
 A._storage['etaax_negocio_activo'] = 'negT';
 
 const corte = {
@@ -233,6 +235,7 @@ test('inRange incluye los extremos', () => {
 /* ═══════════════ SUITE B · INVENTARIO (recetas/inventarios.js) ═══════════════ */
 console.log('\n══ SUITE B · Inventario (recetas/inventarios.js) ══');
 const B = crearContexto();
+cargarJS(B, 'etaax-core.js');
 cargarJS(B, 'insumo-label.js');          // núcleo: _makeInsumoResolver y compañía
 cargarJS(B, 'recetas/inventarios.js');
 B._storage['etaax_negocio_activo'] = 'negT';
@@ -297,6 +300,40 @@ test('getEntradasBottles suma filas manuales + log del inventario', () => {
 });
 test('ingredienteML convierte onzas (2 oz = 59.147 ml)', () => eq(B.ingredienteML(2, 'OZ'), 2 * 29.5735));
 test('ingredienteML convierte litros', () => eq(B.ingredienteML(1.5, 'LT'), 1500));
+
+/* ═══════════════ SUITE C · NÚCLEO (etaax-core.js directo) ═══════════════ */
+console.log('\n══ SUITE C · Núcleo compartido (etaax-core.js) ══');
+const C = cargarJS(crearContexto(), 'etaax-core.js');
+const Core = C.EtaaxCore;
+
+test('núcleo expuesto en window.EtaaxCore', () => eq(typeof Core, 'object'));
+test('scopeSuc: sin sello = matriz', () => {
+    const l = [{ sucursalId: 'a' }, {}, { sucursalId: 'b' }];
+    eq(Core.scopeSuc(l, 'suc_principal').length, 1);
+    eq(Core.scopeSuc(l, 'a').length, 1);
+    eq(Core.scopeSuc(l, '').length, 3);
+});
+test('semanaISO: 2026-07-12 es semana 28', () => eq(Core.semanaISO('2026-07-12'), 28));
+test('resguardo del núcleo con caja chica por parámetro', () =>
+    eq(Core.resguardo({ fondoInicial: 2000, efectivo: 3000, propRetiroCaja: 300, retiros: 2000 }, 150), 2550));
+test('taBancoNeto del núcleo con cuentas por parámetro', () => {
+    const cta = { comisionTD: 2, comisionTC: 1.8, aplicaIva: true, ivaPct: 16 };
+    eq(Core.taBancoNeto({ tarjeta: 1000, propTarjeta: 500 }, [cta]),
+       1000 * (1 - 0.0232) + 500 * (1 - 0.0232));
+});
+test('calcMetaDiaria con FACTORES personalizados pondera por día', () => {
+    // factores: solo sábado (getDay 6) pesa — toda la meta cae en los sábados
+    const fac = [0, 0, 0, 0, 0, 0, 1];
+    const d = Core.calcMetaDiaria('2026-07', 4000, 'factores', null, null, fac);
+    eq(d['2026-07-11'], 1000);  // sábado (julio 2026 tiene 4 sábados)
+    eq(d['2026-07-10'], 0);     // viernes
+});
+test('calcMetaDiaria factores en cero cae a uniforme', () => {
+    const d = Core.calcMetaDiaria('2026-07', 3100, 'factores', null, null, [0,0,0,0,0,0,0]);
+    eq(d['2026-07-15'], 100);
+});
+test('flujoNeto núcleo = ef + tarjeta + propTarjeta + transfer (las 6 páginas heredan ESTA)', () =>
+    eq(Core.flujoNeto({ efectivo: 1, tarjeta: 2, propTarjeta: 3, transferencia: 4 }), 10));
 
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');

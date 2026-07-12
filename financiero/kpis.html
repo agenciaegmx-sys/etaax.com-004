@@ -8,6 +8,7 @@
     <title>ETAAX – Salud Financiera · KPIs</title>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
+<script src="/etaax-core.js"></script>
     <style>
         /* ── Category colors ── */
         :root{
@@ -475,7 +476,7 @@ function _kNomTipo(g, staff){
 }
 
 /* ── Data aggregation for a month ── */
-function flujoNeto(c){return n(c.efectivo)+n(c.tarjeta)+n(c.propTarjeta)+n(c.transferencia);}
+function flujoNeto(c){return EtaaxCore.flujoNeto(c);} // núcleo: MISMA fórmula que el corte
 function getMesData(mes){
     var mesStart=mes+'-01';
     var y=parseInt(mes.slice(0,4)),m=parseInt(mes.slice(5,7));

@@ -8,6 +8,7 @@
     <title>ETAAX – Salud Financiera · Gastos Globales</title>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
+<script src="/etaax-core.js"></script>
     <style>
         /* ── Tabs principales ── */
         .gg-tabs{display:flex;gap:0;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:20px;overflow-x:auto;}
@@ -699,18 +700,9 @@ function _ctasDebGG(){
     return (_cacheGG_Ctas||[]).filter(function(c){return c&&c.tipo==='debito';})
         .sort(function(a,b){return (b.predeterminada?1:0)-(a.predeterminada?1:0);});
 }
-function _comEfGG(cta,cual){ var base=parseFloat(cual==='tc'?cta.comisionTC:cta.comisionTD); if(isNaN(base)) return 0; var f=cta.aplicaIva?(1+(parseFloat(cta.ivaPct)||0)/100):1; return base*f/100; }
-function _netoCtaGG(c,tc,td){ return c ? (tc*(1-_comEfGG(c,'tc'))+td*(1-_comEfGG(c,'td'))) : (tc+td); }
-function comisionCorteGG(c){
-    var bruto = n(c.tarjeta)+n(c.propTarjeta), neto;
-    if (c.tarjetaCuentas && c.tarjetaCuentas.length) {
-        neto = c.tarjetaCuentas.reduce(function(s,t){return s+(parseFloat(t.neto)||0);},0);
-    } else {
-        var c0=_ctasDebGG()[0]||null; neto = c0?_netoCtaGG(c0,0,n(c.tarjeta)):n(c.tarjeta);
-    }
-    var cP=_ctasDebGG()[0]||null; neto += cP?_netoCtaGG(cP,0,n(c.propTarjeta)):n(c.propTarjeta);
-    return Math.max(0, bruto-neto);
-}
+function _comEfGG(cta,cual){ return EtaaxCore.comEf(cta,cual); } // núcleo: fin del espejo
+function _netoCtaGG(c,tc,td){ return EtaaxCore.netoCuenta(c,tc,td); }
+function comisionCorteGG(c){ return EtaaxCore.comisionBancoCorte(c, _ctasDebGG()); }
 function comisionesBancoMes(mes){ return loadCortesMonth(mes).reduce(function(s,c){return s+comisionCorteGG(c);},0); }
 function loadOtrosMes(mes){
     return (_cacheGG_Otros||[]).filter(function(o){return o.fecha&&o.fecha.slice(0,7)===mes;});
@@ -735,7 +727,7 @@ function mesStr(){return todayStr().slice(0,7);}
 function n(v){return parseFloat(v)||0;}
 function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function flujoNeto(c){return n(c.efectivo)+n(c.tarjeta)+n(c.propTarjeta)+n(c.transferencia);}
+function flujoNeto(c){return EtaaxCore.flujoNeto(c);} // núcleo: MISMA fórmula que el corte
 
 /* ── Sucursal state ── */
 var _sucursalId=null;

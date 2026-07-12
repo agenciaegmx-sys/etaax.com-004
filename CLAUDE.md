@@ -20,7 +20,11 @@ python3 -m http.server 8000   # luego abrir http://localhost:8000/hub.html
 node tests/money-tests.js   # sale con código 1 si alguna fórmula cambió
 ```
 
-Ejecuta el código REAL de producción (los `<script>` de diario.html e inventarios.js) en Node con DOM simulado y verifica ~43 fórmulas (resguardo, comisiones bancarias, netos de tarjeta, existencias teórico/físico, metas por días operativos, efectos de depósitos/retiros…). Si un test falla, el test tiene razón hasta demostrar lo contrario. Al tocar una fórmula de dinero o crear una nueva, agregar/ajustar su test en el mismo commit.
+Ejecuta el código REAL de producción (etaax-core.js + los `<script>` de diario.html e inventarios.js) en Node con DOM simulado y verifica ~51 fórmulas (resguardo, comisiones bancarias, netos de tarjeta, existencias teórico/físico, metas por días operativos, efectos de depósitos/retiros…). Si un test falla, el test tiene razón hasta demostrar lo contrario. Al tocar una fórmula de dinero o crear una nueva, agregar/ajustar su test en el mismo commit.
+
+Hay un hook pre-push que corre el candado y bloquea el push si falla (`.githooks/pre-push`; en una máquina nueva activarlo con `git config core.hooksPath .githooks`).
+
+**Núcleo de fórmulas `/etaax-core.js` (`window.EtaaxCore`):** una sola verdad para dinero de corte (flujoNeto, comisiones, netos, resguardo, depEfecto), periodos (getRange/semana ISO) y metas (calcMetaDiaria/diasOperativos). Las páginas lo cargan con `<script src="/etaax-core.js">` ANTES de su script y mantienen alias delgados (`function flujoNeto(c){return EtaaxCore.flujoNeto(c);}`). Al necesitar una de estas fórmulas en una página nueva, DELEGAR al núcleo — nunca copiar el cuerpo. Recibe datos por parámetro (cuentas, caja chica, factores), sin DOM.
 
 Deploy: push a `main` → Netlify publica la raíz del repo tal cual (`netlify.toml`).
 
