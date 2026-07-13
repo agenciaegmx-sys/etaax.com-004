@@ -367,8 +367,9 @@
                                 <th class="col-center">Estado</th>
                                 <th class="col-right">Pedido<br>sugerido</th>
                                 <th class="col-right" style="min-width:150px">Pedido final<br><span style="font-size:8px;opacity:.6;font-weight:400">✓ sugerido · ✏️ modificar · 🚫 no pedir</span></th>
+                                <th>Presentación<br><span style="font-size:8px;opacity:.6;font-weight:400">lo que se pide</span></th>
                                 <th class="col-right">Costo<br>pedido</th>
-                                <th>Presentación</th>
+                                <th class="col-center">Registrar</th>
                             </tr>
                         </thead>
                         <tbody id="tbodyReq"></tbody>
@@ -640,7 +641,8 @@ function calcItem(ins, reqItem) {
 
     pedSug = Math.max(0, Math.ceil(pedSug));
 
-    var costoUnitPieza = parseFloat(pres.costoPieza) || 0;
+    // Costo de compra por unidad: costoPieza, y si no, costoUnitario / precio
+    var costoUnitPieza = parseFloat(pres.costoPieza) || parseFloat(pres.costoUnitario) || parseFloat(pres.precio) || 0;
 
     return { estado: estado, pedidoSugerido: pedSug, costoUnitPieza: costoUnitPieza, pres: pres };
 }
@@ -665,6 +667,8 @@ var _regFiltro = 'pend';   // '' | 'pend' | 'reg'
 var _pasoReq   = 1;
 var _vistaCapt = 'rapida'; // 'rapida' | 'lista'
 var _rapidaSel = null;     // insumo enfocado en búsqueda rápida
+var _keepVisible = {};     // filas recién registradas: se quedan visibles en Pendientes
+                           // (antes desaparecían al instante y no se veía pedido/costo)
 
 function init() {
     insumos  = getInsumosCatalogo();
@@ -693,6 +697,7 @@ function setRegFiltro(v, btn) {
     _regFiltro = v;
     document.querySelectorAll('.req-chip').forEach(function(b){ b.classList.toggle('activo', b===btn); });
     _rapidaSel = null;
+    _keepVisible = {};
     renderReq();
 }
 function setVistaCapt(v) {
@@ -861,7 +866,7 @@ function setCapt(id, campo, val) {
     _recalcExist(id);
     setReqData(reqData);
 }
-function setCaptBlur(id) { setReqData(reqData); renderReq(); }
+function setCaptBlur(id) { _keepVisible[id] = 1; setReqData(reqData); renderReq(); }
 
 function renderReq() {
     var q         = (document.getElementById('buscarReq').value || '').toLowerCase();
@@ -896,8 +901,8 @@ function renderReq() {
         if (pFin > 0) { totalItems++; totalCosto += costoRow; }
         if (reg) nReg++; else nPend++;
 
-        // filtro registrados/pendientes
-        if (_regFiltro==='pend' && reg) return;
+        // filtro registrados/pendientes (las recién registradas se quedan a la vista)
+        if (_regFiltro==='pend' && reg && !_keepVisible[ins.id]) return;
         if (_regFiltro==='reg' && !reg) return;
         if (estadoFil === 'critico' && calc.estado !== 'critico' && calc.estado !== 'bajo') return;
         if (estadoFil === 'pedir'   && pFin === 0) return;
@@ -1029,16 +1034,26 @@ function renderReq() {
                 '</div>' +
                 '<div style="font-size:9px;color:var(--text-dim);margin-top:2px;text-align:right">'+_esc(unidadCompra)+'</div>' +
             '</td>' +
-            '<td class="col-right" style="font-weight:600;color:' + (costoRow > 0 ? 'var(--green)' : 'var(--text-dim)') + '">' +
-                (costoRow > 0 ? fmtMXN(costoRow) : (ri.noPedir ? '<span style="font-size:10px">No pedir</span>' : '—')) +
+            '<td style="white-space:nowrap">' +
+                '<div style="font-size:13px;font-weight:600;color:' + (pFin > 0 ? 'var(--text)' : 'var(--text-dim)') + '">' +
+                    (pFin > 0 ? pFin + ' ' + _esc(unidadCompra) : '—') + '</div>' +
+                (presArr.length > 1
+                    ? '<select class="pres-select" style="margin-top:4px" onchange="cambiarPres(\'' + ins.id + '\',this.value)">' +
+                        presArr.map(function(p, pi2) {
+                            return '<option value="' + pi2 + '"' + (pi2 === presIdx ? ' selected' : '') + '>' +
+                                _esc(p.nombre || ('Presentación ' + (pi2+1))) + '</option>';
+                        }).join('') + '</select>'
+                    : '<div style="font-size:10px;color:var(--text-dim);margin-top:2px">' + _esc(pres.nombre || pi.compra) + '</div>') +
             '</td>' +
-            '<td>' +
-                '<select class="pres-select" onchange="cambiarPres(\'' + ins.id + '\',this.value)">' +
-                    presArr.map(function(p, pi2) {
-                        return '<option value="' + pi2 + '"' + (pi2 === presIdx ? ' selected' : '') + '>' +
-                            _esc(p.nombre || ('Presentación ' + (pi2+1))) + '</option>';
-                    }).join('') +
-                '</select>' +
+            '<td class="col-right" style="font-weight:700;font-size:14px;color:' + (costoRow > 0 ? 'var(--green)' : 'var(--text-dim)') + '">' +
+                (costoRow > 0 ? fmtMXN(costoRow) : (ri.noPedir ? '<span style="font-size:10px">No pedir</span>' : '—')) +
+                (calc.costoUnitPieza > 0 && pFin > 0 ? '<div style="font-size:9px;color:var(--text-dim);font-weight:400">' + fmtMXN(calc.costoUnitPieza) + ' c/u</div>' : '') +
+            '</td>' +
+            '<td class="col-center">' +
+                (reg
+                    ? '<span class="chip chip-green" style="font-size:10px;white-space:nowrap">✓ Registrado</span>'
+                    : '<button class="btn-vista" style="font-size:11px;padding:6px 10px;white-space:nowrap" title="Registrar existencia EN CERO" ' +
+                        'onclick="registrarFila(\'' + ins.id + '\')">⊘ En cero</button>') +
             '</td>';
         tbody.appendChild(tr);
     });
@@ -1064,6 +1079,16 @@ function guardarExistSilent(id, val) {
 function actualizarExistencia(id, val) {
     if (!reqData[id]) reqData[id] = { presIdx: 0 };
     reqData[id].existencia = val === '' ? '' : parseFloat(val);
+    _keepVisible[id] = 1;
+    setReqData(reqData);
+    renderReq();
+}
+// Botón Registrar de la fila: sin existencia = registrar EN CERO (como inventarios)
+function registrarFila(id) {
+    if (!reqData[id]) reqData[id] = { presIdx: 0 };
+    var ri = reqData[id];
+    if (!esRegistrado(ri)) { ri.existencia = 0; ri.modoCapt = ri.modoCapt || 'simple'; }
+    _keepVisible[id] = 1;
     setReqData(reqData);
     renderReq();
 }
