@@ -178,6 +178,42 @@
         .p2-grupo summary::-webkit-details-marker{display:none}
         .p2-grupo[open] summary{border-bottom:1px solid var(--border)}
         .p2-grupo table{margin:0}
+        /* ══ Lista completa: filas e inputs GRANDES (legible en operación) ══ */
+        .req-table td{padding:16px 10px !important;font-size:14px}
+        .req-table .insumo-nombre{font-size:15.5px}
+        .req-table .insumo-sub{font-size:12px}
+        .req-table .req-input{font-size:16px;padding:10px 8px;min-width:64px}
+        .req-table .req-input.req-num{width:74px}
+        .req-table .pres-select{font-size:13px;padding:9px 8px}
+        .req-table .chip{font-size:11px;padding:4px 10px}
+        .capt-modo{font-size:10px;padding:3px 8px}
+        .acc-btn{width:34px;height:34px;font-size:15px}
+        .btn-cargar-ant{font-size:11px;padding:4px 9px}
+        /* ══ Modo búsqueda rápida (card enfocada, como inventarios) ══ */
+        .vista-chip{background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:10px;
+            padding:10px 20px;font-family:'DM Sans',sans-serif;font-size:13.5px;font-weight:600;cursor:pointer}
+        .vista-chip.activo{background:var(--viol);border-color:var(--viol);color:#fff}
+        .rapida-wrap{max-width:760px;margin:0 auto;padding:0 16px 60px}
+        .rapida-buscar{width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);color:var(--text);
+            border-radius:14px;padding:16px 18px;font-family:'DM Sans',sans-serif;font-size:16px;outline:none}
+        .rapida-buscar:focus{border-color:var(--viol)}
+        .rapida-res{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-top:8px;overflow:hidden}
+        .rapida-res-it{padding:13px 16px;font-size:14px;color:var(--text-muted);cursor:pointer;border-bottom:1px solid var(--border)}
+        .rapida-res-it:last-child{border-bottom:none}
+        .rapida-res-it:hover{background:var(--surface2);color:var(--text)}
+        .rapida-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px;margin-top:14px}
+        .rapida-card .rc-titulo{font-size:19px;font-weight:700;color:var(--text)}
+        .rapida-card .rc-lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin:16px 0 7px}
+        .rapida-card input.rc-in{width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);
+            border-radius:10px;padding:15px 14px;font-size:20px;font-weight:600;text-align:center;font-family:'DM Sans',sans-serif;outline:none}
+        .rapida-card input.rc-in:focus{border-color:var(--viol)}
+        .rc-modos{display:flex;gap:8px}
+        .rc-modo{flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);border-radius:10px;
+            padding:12px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer}
+        .rc-modo.on{background:rgba(155,141,232,.15);border-color:var(--viol);color:var(--viol)}
+        .rc-total{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);margin-top:18px;padding-top:14px}
+        .rc-sig{width:100%;margin-top:14px;background:rgba(61,190,122,.1);border:1px solid var(--green);color:var(--green);
+            border-radius:12px;padding:15px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer}
     </style>
 </head>
 <body>
@@ -278,14 +314,19 @@
                 </div>
             </div>
 
+            <!-- Toggle de vista (como inventarios) -->
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+                <button class="vista-chip activo" id="vChipRapida" onclick="setVistaCapt('rapida')">🔍 Búsqueda rápida</button>
+                <button class="vista-chip" id="vChipLista" onclick="setVistaCapt('lista')">≡ Lista completa</button>
+            </div>
             <!-- Chips registro + filtros -->
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
                 <button class="req-chip" id="chipTodos" onclick="setRegFiltro('',this)">Todos</button>
                 <button class="req-chip activo" id="chipPend" onclick="setRegFiltro('pend',this)">🔍 Pendientes (<span id="cntPend">0</span>)</button>
                 <button class="req-chip" id="chipReg" onclick="setRegFiltro('reg',this)">✅ Registrados (<span id="cntReg">0</span>)</button>
             </div>
-            <div class="filter-bar">
-                <input type="text" id="buscarReq" placeholder="🔍 Búsqueda rápida…" oninput="renderReq()">
+            <div class="filter-bar" id="filtrosLista">
+                <input type="text" id="buscarReq" placeholder="🔍 Buscar en la lista…" oninput="renderReq()">
                 <select id="filtroFamilia" onchange="renderReq()">
                     <option value="">Todas las familias</option>
                 </select>
@@ -306,7 +347,15 @@
                 </label>
             </div>
         </div>
-        <div class="card" style="overflow:visible;max-width:none;margin:0 16px;margin-bottom:60px">
+
+        <!-- ── MODO BÚSQUEDA RÁPIDA ── -->
+        <div class="rapida-wrap" id="vistaRapida">
+            <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px">Buscar insumo</div>
+            <input type="text" class="rapida-buscar" id="buscarRapida" placeholder="Escribe el nombre del insumo…" oninput="renderRapida()">
+            <div id="rapidaCont"></div>
+        </div>
+
+        <div class="card" id="listaWrap" style="overflow:visible;max-width:none;margin:0 16px;margin-bottom:60px;display:none">
                 <div id="tablaWrap">
                     <table class="req-table" id="tablaReq">
                         <thead>
@@ -614,6 +663,8 @@ var insumos   = [];
 var familias  = [];
 var _regFiltro = 'pend';   // '' | 'pend' | 'reg'
 var _pasoReq   = 1;
+var _vistaCapt = 'rapida'; // 'rapida' | 'lista'
+var _rapidaSel = null;     // insumo enfocado en búsqueda rápida
 
 function init() {
     insumos  = getInsumosCatalogo();
@@ -624,7 +675,7 @@ function init() {
         familias.map(function(f) { return '<option value="' + _esc(f) + '">' + _esc(f) + '</option>'; }).join('');
     document.getElementById('fechaReq').textContent =
         new Date().toLocaleDateString('es-MX', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
-    renderReq();
+    setVistaCapt(_vistaCapt);
 }
 
 function irPaso(n) {
@@ -641,7 +692,131 @@ function irPaso(n) {
 function setRegFiltro(v, btn) {
     _regFiltro = v;
     document.querySelectorAll('.req-chip').forEach(function(b){ b.classList.toggle('activo', b===btn); });
+    _rapidaSel = null;
     renderReq();
+}
+function setVistaCapt(v) {
+    _vistaCapt = v;
+    document.getElementById('vChipRapida').classList.toggle('activo', v==='rapida');
+    document.getElementById('vChipLista').classList.toggle('activo', v==='lista');
+    document.getElementById('vistaRapida').style.display = v==='rapida' ? '' : 'none';
+    document.getElementById('listaWrap').style.display  = v==='lista' ? '' : 'none';
+    document.getElementById('filtrosLista').style.display = v==='lista' ? '' : 'none';
+    renderReq();
+}
+
+/* ── MODO BÚSQUEDA RÁPIDA: card enfocada + "Registrado — Siguiente" ── */
+function _poolRapida() {
+    return insumos.filter(function(ins){
+        var ri = reqData[ins.id] || {};
+        if (_regFiltro==='pend' && esRegistrado(ri)) return false;
+        if (_regFiltro==='reg' && !esRegistrado(ri)) return false;
+        return true;
+    });
+}
+function renderRapida() {
+    var cont = document.getElementById('rapidaCont');
+    var q = (document.getElementById('buscarRapida').value||'').toLowerCase();
+    var pool = _poolRapida();
+    if (_rapidaSel) {
+        var ins = insumos.find(function(x){return x.id===_rapidaSel;});
+        if (ins) { cont.innerHTML=''; cont.appendChild(_cardRapida(ins)); return; }
+        _rapidaSel = null;
+    }
+    if (!q) {
+        cont.innerHTML = '<div class="empty-state" style="display:block;padding:34px 0"><div class="e-icon">🔍</div>'+
+            '<div>Busca un insumo para capturarlo — quedan <b>'+pool.length+'</b> en este filtro.</div>'+
+            (pool.length?'<button class="btn-vista" style="margin-top:12px" onclick="_rapidaSel=\''+pool[0].id+'\';renderRapida()">▶ Empezar con: '+_esc(pool[0].nombre)+'</button>':'')+
+            '</div>';
+        return;
+    }
+    var res = pool.filter(function(ins){
+        return (ins.nombre||'').toLowerCase().includes(q) || (ins.marca||'').toLowerCase().includes(q) || (ins.variedad||'').toLowerCase().includes(q);
+    }).slice(0,8);
+    if (!res.length) { cont.innerHTML = '<div class="empty-state" style="display:block;padding:30px 0"><div class="e-icon">🤷</div><div>Sin coincidencias en este filtro.</div></div>'; return; }
+    if (res.length===1) { _rapidaSel = res[0].id; renderRapida(); return; }
+    cont.innerHTML = '<div class="rapida-res">'+res.map(function(ins){
+        return '<div class="rapida-res-it" onclick="_rapidaSel=\''+ins.id+'\';renderRapida()">'+_esc(ins.nombre)+
+            (ins.variedad?' <span style="color:var(--text-dim)">'+_esc(ins.variedad)+'</span>':'')+
+            ' <span style="float:right;color:var(--text-dim);font-size:11px">'+_esc(ins.familia||'')+'</span></div>';
+    }).join('')+'</div>';
+}
+function _cardRapida(ins) {
+    var ri   = reqData[ins.id] || { presIdx: 0 };
+    var calc = calcItem(ins, ri);
+    var pres = calc.pres;
+    var pi   = presInfo(pres);
+    var modoCapt = ri.modoCapt || pi.modo;
+    var pFin = pedidoFinal(calc, ri);
+    var reg  = esRegistrado(ri);
+    var d = document.createElement('div');
+    d.className = 'rapida-card';
+    var modos = [['simple','# Directo'],['paq','📦 + piezas'],['niv','🧴 + %']].map(function(m){
+        return '<button class="rc-modo'+(modoCapt===m[0]?' on':'')+'" onclick="setCapt(\''+ins.id+'\',\'modoCapt\',\''+m[0]+'\');renderRapida()">'+m[1]+'</button>';
+    }).join('');
+    var captura = '';
+    if (modoCapt==='paq') {
+        captura =
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+
+            '<div><div class="rc-lbl" style="margin-top:0">'+_esc(pi.compra)+' cerradas</div>'+
+                '<input class="rc-in" type="text" inputmode="decimal" value="'+(ri.existCerr??'')+'" placeholder="0" oninput="setCapt(\''+ins.id+'\',\'existCerr\',this.value)" onblur="renderRapida()"></div>'+
+            '<div><div class="rc-lbl" style="margin-top:0">'+_esc(pi.umInt)+' sueltas <span style="text-transform:none;letter-spacing:0">('+pi.piezas+' por '+_esc(pi.compra)+')</span></div>'+
+                '<input class="rc-in" type="text" inputmode="decimal" value="'+(ri.existSuel??'')+'" placeholder="0" oninput="setCapt(\''+ins.id+'\',\'existSuel\',this.value)" onblur="renderRapida()"></div>'+
+            '</div>';
+    } else if (modoCapt==='niv') {
+        captura =
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+
+            '<div><div class="rc-lbl" style="margin-top:0">Llenos / cerrados</div>'+
+                '<input class="rc-in" type="text" inputmode="decimal" value="'+(ri.existCerr??'')+'" placeholder="0" oninput="setCapt(\''+ins.id+'\',\'existCerr\',this.value)" onblur="renderRapida()"></div>'+
+            '<div><div class="rc-lbl" style="margin-top:0">% del abierto</div>'+
+                '<input class="rc-in" type="text" inputmode="decimal" value="'+(ri.existPct??'')+'" placeholder="0-100" oninput="setCapt(\''+ins.id+'\',\'existPct\',this.value)" onblur="renderRapida()"></div>'+
+            '</div>';
+    } else {
+        var existVal = (ri.existencia!==''&&ri.existencia!==undefined&&ri.existencia!==null)?ri.existencia:'';
+        captura = '<input class="rc-in" type="text" inputmode="decimal" value="'+existVal+'" placeholder="Existencia en '+_esc(pi.compra)+'" '+
+            'oninput="guardarExistSilent(\''+ins.id+'\',this.value)" onblur="actualizarExistencia(\''+ins.id+'\',this.value);renderRapida()">';
+    }
+    var hist = getHistorial();
+    var antVal = hist.length ? (hist[0].items[ins.id]||{}).existencia : undefined;
+    var hayAnt = antVal!==undefined && antVal!=='' && antVal!==null;
+    var hasManual = (ri.pedidoManual!==''&&ri.pedidoManual!==null&&ri.pedidoManual!==undefined);
+    d.innerHTML =
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'+
+            '<div><div class="rc-titulo">'+_esc(ins.nombre)+(ins.variedad?' <span style="color:var(--text-dim);font-weight:400">'+_esc(ins.variedad)+'</span>':'')+'</div>'+
+            '<div style="font-size:12px;color:var(--text-dim);margin-top:4px">'+
+                '<span style="background:rgba(155,141,232,.1);border:1px solid rgba(155,141,232,.3);color:var(--viol);border-radius:5px;padding:2px 9px;font-weight:600">📦 '+
+                _esc(pres.nombre||pi.compra)+(pi.piezas>1?' · '+pi.piezas+' '+_esc(pi.umInt):'')+'</span>'+
+                (pres.stockMin||pres.stockMax?' <span style="margin-left:8px">min <b style="color:var(--red)">'+(pres.stockMin||'—')+'</b> · max <b style="color:var(--green)">'+(pres.stockMax||'—')+'</b></span>':'')+
+                (hayAnt?' <span style="margin-left:8px">anterior: <b>'+antVal+'</b></span>':'')+
+            '</div></div>'+
+            '<button class="btn-vista" style="flex-shrink:0" onclick="_rapidaSel=null;document.getElementById(\'buscarRapida\').value=\'\';renderRapida()">✕</button>'+
+        '</div>'+
+        '<div class="rc-lbl">Método de captura</div>'+
+        '<div class="rc-modos">'+modos+'</div>'+
+        '<div class="rc-lbl">Existencia actual</div>'+ captura +
+        (hayAnt?'<button class="btn-vista" style="width:100%;margin-top:10px;color:var(--blue);border-color:rgba(120,160,240,.4)" onclick="cargarExistenciaAnterior(\''+ins.id+'\');renderRapida()">📋 Copiar existencia anterior ('+antVal+')</button>':'')+
+        '<div class="rc-total"><span style="font-size:12px;color:var(--text-dim)">Existencia registrada</span>'+
+            '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:26px;color:var(--accent)">'+(reg?ri.existencia:'—')+' '+_esc(pi.compra)+'</span></div>'+
+        '<div class="rc-total" style="border-top:none;margin-top:4px;padding-top:0"><span style="font-size:12px;color:var(--text-dim)">Pedido '+(hasManual?'(modificado)':'sugerido')+'</span>'+
+            '<span style="font-size:18px;font-weight:700;color:'+(pFin>0?'var(--red)':'var(--text-dim)')+'">'+(ri.noPedir?'🚫 No pedir':(pFin>0?pFin+' '+_esc(pi.compra)+' · '+fmtMXN(pFin*calc.costoUnitPieza):'—'))+'</span></div>'+
+        '<div style="display:flex;gap:8px;margin-top:10px">'+
+            '<button class="btn-vista" style="flex:1" onclick="usarSugerido(\''+ins.id+'\');renderRapida()">✓ Sugerido</button>'+
+            '<input type="number" class="req-input req-num" style="width:90px;font-size:16px" min="0" placeholder="modificar" value="'+(hasManual?ri.pedidoManual:'')+'" onchange="modificarPedido(\''+ins.id+'\',this.value)">'+
+            '<button class="btn-vista" style="flex:1;color:'+(ri.noPedir?'var(--red)':'var(--text-muted)')+'" onclick="toggleNoPedirNota(\''+ins.id+'\')">🚫 No pedir</button>'+
+        '</div>'+
+        '<button class="rc-sig" onclick="rapidaSiguiente(\''+ins.id+'\')">'+(reg?'✓ Registrado — Siguiente →':'Siguiente pendiente →')+'</button>';
+    return d;
+}
+function rapidaSiguiente(idActual) {
+    var pool = _poolRapida().filter(function(x){ return x.id !== idActual; });
+    document.getElementById('buscarRapida').value = '';
+    _rapidaSel = pool.length ? pool[0].id : null;
+    renderRapida();
+    if (!pool.length) {
+        document.getElementById('rapidaCont').innerHTML =
+            '<div class="empty-state" style="display:block;padding:34px 0"><div class="e-icon">🎉</div><div>¡No quedan insumos en este filtro!</div></div>';
+    }
+    renderReq(); // refrescar contadores
 }
 // ¿La fila ya está REGISTRADA? (existencia capturada = pedido de insumo hecho)
 function esRegistrado(ri) {
@@ -877,6 +1052,7 @@ function renderReq() {
     document.getElementById('footerCosto').textContent = fmtMXN(totalCosto);
     document.getElementById('cntPend').textContent = nPend;
     document.getElementById('cntReg').textContent  = nReg;
+    if (_vistaCapt==='rapida') renderRapida();
 }
 
 // ── Acciones de fila ──────────────────────────────────────────
