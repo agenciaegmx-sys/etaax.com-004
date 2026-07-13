@@ -456,6 +456,16 @@
    }
    window.toggleVisibleInventario = toggleVisibleInventario;
 
+   // Llegada desde requisiciones (btn editar insumo): ?q=<nombre> prellena la busqueda.
+   document.addEventListener('DOMContentLoaded', function () {
+       try {
+           var q = new URLSearchParams(location.search).get('q');
+           if (!q) return;
+           var inp = document.getElementById('buscador') || document.querySelector('input[type="search"], input[placeholder*="uscar"]');
+           if (inp) { inp.value = q; inp.dispatchEvent(new Event('input', { bubbles: true })); try { filtrar(); } catch (e) {} }
+       } catch (e) {}
+   });
+
    // Reactivar un insumo INACTIVO GLOBAL (pastilla del editor) desde la lista.
    function activarInsumoGlobal(id) {
        var ins = getInsumos().find(function(x){ return x.id === id; });
