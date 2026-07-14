@@ -5,25 +5,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-    <title>ETAAX - Consultoría</title>
+    <title>ETAAX - Gestión de Staff</title>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
     <style>
         .cf-wrap { min-height:100vh;padding:48px 24px 100px;display:flex;flex-direction:column;align-items:center; }
-        .cf-hero { text-align:center;padding:52px 0 48px;animation:fadeUp .5s ease both;max-width:600px;width:100%; }
+        .cf-hero { text-align:center;padding:52px 0 40px;animation:fadeUp .5s ease both;max-width:640px;width:100%; }
         .cf-hero-eyebrow { font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px; }
         .cf-hero-title { font-family:'Bebas Neue',sans-serif;font-size:58px;letter-spacing:3px;line-height:.95;color:var(--text);margin-bottom:12px; }
-        .cf-hero-title .g { color:var(--green); }
+        .cf-hero-title .g { color:var(--viol); }
         .cf-hero-sub { font-size:13px;color:var(--text-dim);line-height:1.6; }
-        .cf-modules { width:100%;max-width:960px;display:flex;flex-direction:column;gap:40px; }
+        .cf-modules { width:100%;max-width:960px;display:flex;flex-direction:column;gap:36px; }
         .cf-section { animation:fadeUp .5s ease both; }
+        .cf-section:nth-child(2){animation-delay:.06s;}
         .cf-section-hdr { display:flex;align-items:flex-end;gap:14px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border); }
         .cf-section-tag { font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--text-dim);padding:3px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;white-space:nowrap;line-height:1.6; }
         .cf-section-title { font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:2px;color:var(--text);line-height:1; }
         .cf-section-desc { font-size:11px;color:var(--text-dim);line-height:1.5;margin-left:auto;text-align:right;max-width:280px; }
         .cf-grid { display:grid;gap:14px;grid-template-columns:1fr 1fr; }
         .cf-card { background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px 22px 20px;cursor:pointer;transition:all .2s;text-decoration:none;display:flex;flex-direction:column;align-items:flex-start;gap:7px;color:var(--text);font-family:'DM Sans',sans-serif;box-sizing:border-box; }
-        .cf-card:hover { border-color:rgba(61,190,122,.5);background:rgba(61,190,122,.05);transform:translateY(-3px);box-shadow:0 8px 32px rgba(61,190,122,.12); }
+        .cf-card:hover { border-color:rgba(155,141,232,.5);background:rgba(155,141,232,.06);transform:translateY(-3px);box-shadow:0 8px 32px rgba(155,141,232,.14); }
         .cf-card.coming-soon { opacity:.4;cursor:default;pointer-events:none; }
         .cf-card-hdr { display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:2px; }
         .cf-card-icon { font-size:28px;line-height:1; }
@@ -31,7 +32,8 @@
         .cf-badge-soon { font-size:9px;letter-spacing:1.5px;text-transform:uppercase;padding:3px 8px;border-radius:20px;background:rgba(74,72,68,.3);color:var(--text-dim);border:1px solid var(--border); }
         .cf-card-title { font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--text);line-height:1; }
         .cf-card-desc { font-size:11px;color:var(--text-dim);line-height:1.55;flex:1; }
-        .cf-card-cta { margin-top:8px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--green); }
+        .cf-card-cta { margin-top:8px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim); }
+        .cf-card:hover .cf-card-cta { color:var(--viol); }
         @media (max-width:640px){ .cf-grid{grid-template-columns:1fr;} .cf-section-desc{display:none;} }
         .theme-toggle { position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s; }
         .theme-toggle:hover{border-color:var(--green);color:var(--green);}
@@ -55,44 +57,93 @@
     </svg>
     <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🗃️</a>
     <div class="top-breadcrumb">
-        <span class="top-module-badge">Consultoría</span>
+        <span class="top-module-badge">Administrativo</span>
         <span class="top-sep">|</span>
-        <span class="top-section-name">Herramientas</span>
+        <span class="top-section-name">Gestión de Staff</span>
     </div>
+    <a href="index.html" class="topbar-home" title="Panel Administrativo" style="margin-left:auto">←</a>
 </header>
 <div id="ctxBar" class="ctx-bar" style="display:none"></div>
 
 <div class="cf-wrap">
     <div class="cf-hero">
-        <div class="cf-hero-eyebrow">Módulo</div>
-        <div class="cf-hero-title"><span class="g">Consultoría</span></div>
-        <div class="cf-hero-sub">Análisis ejecutivos y herramientas estratégicas para la toma de decisiones, conectadas con los datos reales de tu negocio.</div>
+        <div class="cf-hero-eyebrow">Módulo Administrativo</div>
+        <div class="cf-hero-title">Gestión de <span class="g">Staff</span></div>
+        <div class="cf-hero-sub">Todo tu personal en un solo lugar: catálogo y nóminas, horarios, organigrama, perfiles de puesto, evaluaciones y reglamento interno de la sucursal.</div>
     </div>
 
     <div class="cf-modules">
+        <!-- ══ EQUIPO ══ -->
         <div class="cf-section">
             <div class="cf-section-hdr">
-                <span class="cf-section-tag">Herramientas</span>
-                <div class="cf-section-title">Estrategia y análisis</div>
-                <div class="cf-section-desc">Simula, proyecta y planea con base en tus números reales.</div>
+                <span class="cf-section-tag">Equipo</span>
+                <div class="cf-section-title">Personal y turnos</div>
+                <div class="cf-section-desc">Alta de colaboradores, roles, nóminas y horarios operativos por sucursal.</div>
             </div>
             <div class="cf-grid">
-                <a href="simulador-kpis.html" class="cf-card">
+                <a href="staff.html" class="cf-card">
                     <div class="cf-card-hdr">
-                        <div class="cf-card-icon">🧮</div>
+                        <div class="cf-card-icon">👥</div>
                         <span class="cf-badge-active">Activo</span>
                     </div>
-                    <div class="cf-card-title">Simulador de Metas de Venta</div>
-                    <div class="cf-card-desc">Define tu meta y tus gastos (reales o manuales) y descubre en cascada cuántos comensales o qué cheque promedio necesitas, y la utilidad que tendrías.</div>
+                    <div class="cf-card-title">Catálogo de Staff</div>
+                    <div class="cf-card-desc">Personal, roles y permisos de acceso por colaborador y sucursal. Alimenta automáticamente las nóminas.</div>
                     <div class="cf-card-cta">Abrir →</div>
                 </a>
-                <a class="cf-card coming-soon">
+                <a href="horarios.html" class="cf-card coming-soon">
                     <div class="cf-card-hdr">
-                        <div class="cf-card-icon">📈</div>
+                        <div class="cf-card-icon">🗓️</div>
                         <span class="cf-badge-soon">Próximamente</span>
                     </div>
-                    <div class="cf-card-title">Ejercicios de Proyección</div>
-                    <div class="cf-card-desc">Escenarios de crecimiento, punto de equilibrio y proyecciones financieras guiadas, con base en tus números reales.</div>
+                    <div class="cf-card-title">Horarios Operativos</div>
+                    <div class="cf-card-desc">Turnos semanales por puesto y sucursal, cobertura del día y descanso. Cada colaborador consulta su horario desde su cuenta.</div>
+                    <div class="cf-card-cta">En desarrollo</div>
+                </a>
+            </div>
+        </div>
+
+        <!-- ══ ESTRUCTURA Y DESARROLLO ══ -->
+        <div class="cf-section">
+            <div class="cf-section-hdr">
+                <span class="cf-section-tag">Estructura y desarrollo</span>
+                <div class="cf-section-title">Organización</div>
+                <div class="cf-section-desc">La foto de tu equipo: quién es quién, qué se espera de cada puesto y cómo se mide.</div>
+            </div>
+            <div class="cf-grid">
+                <a href="organigrama.html" class="cf-card">
+                    <div class="cf-card-hdr">
+                        <div class="cf-card-icon">🧠</div>
+                        <span class="cf-badge-active">Activo</span>
+                    </div>
+                    <div class="cf-card-title">Organigrama</div>
+                    <div class="cf-card-desc">Mapa visual de tu organización tipo red neuronal: crea puestos, conéctalos y vincula cada nodo con su perfil.</div>
+                    <div class="cf-card-cta">Abrir →</div>
+                </a>
+                <a href="perfiles-puesto.html" class="cf-card">
+                    <div class="cf-card-hdr">
+                        <div class="cf-card-icon">📋</div>
+                        <span class="cf-badge-active">Activo</span>
+                    </div>
+                    <div class="cf-card-title">Perfiles de Puesto</div>
+                    <div class="cf-card-desc">Información general, competencias, salud y funciones de cada puesto. Listos para imprimir o exportar a PDF.</div>
+                    <div class="cf-card-cta">Abrir →</div>
+                </a>
+                <a href="evaluaciones.html" class="cf-card">
+                    <div class="cf-card-hdr">
+                        <div class="cf-card-icon">📝</div>
+                        <span class="cf-badge-active">Activo</span>
+                    </div>
+                    <div class="cf-card-title">Evaluaciones</div>
+                    <div class="cf-card-desc">Editor tipo formulario para evaluar operación, desempeño, reclutamiento o liderazgo. Genera un link, mándalo al staff y recibe respuestas con puntuación automática.</div>
+                    <div class="cf-card-cta">Abrir →</div>
+                </a>
+                <a href="reglamento.html" class="cf-card coming-soon">
+                    <div class="cf-card-hdr">
+                        <div class="cf-card-icon">📜</div>
+                        <span class="cf-badge-soon">Próximamente</span>
+                    </div>
+                    <div class="cf-card-title">Reglamento Interno</div>
+                    <div class="cf-card-desc">Documento editable de políticas y normas del negocio, con versión imprimible con tu marca para firma del colaborador.</div>
                     <div class="cf-card-cta">En desarrollo</div>
                 </a>
             </div>

@@ -131,6 +131,12 @@ window.etaaxPerm = function (negId, rol, path) {
         [/\/administrativo\/menu/,              'menu'],
         [/\/administrativo\/proveedores/,       'proveedores'],
         [/\/administrativo\/clientes/,          'clientes'],
+        // Gestión de Staff: organigrama, perfiles y evaluaciones (mudadas desde
+        // consultoría) comparten el permiso 'staff'. staff.html y staff-hub.html
+        // también caen en el patrón /administrativo/staff.
+        [/\/administrativo\/organigrama/,       'staff'],
+        [/\/administrativo\/perfiles-puesto/,   'staff'],
+        [/\/administrativo\/evaluaciones/,      'staff'],
         [/\/administrativo\/staff/,             'staff'],
         // permisos.html NO va aquí: la página se protege sola con el
         // candado de contraseña de administrador (solo dueño/admin)
