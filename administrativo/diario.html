@@ -2213,6 +2213,7 @@ async function _sbInit() {
     renderAll();
     renderDepositos();
     _subCortesRealtime(negId);
+    _subMovsRealtime(negId);
 }
 
 // Realtime: si otro dispositivo registra/edita un corte, este se actualiza solo
@@ -2238,6 +2239,45 @@ function _subCortesRealtime(negId) {
     _cortesRtCh = sbRealtime('cortes', negId, function() {
         if (document.querySelector('.modal-overlay.open, .pin-overlay.open')) return; // no interrumpir
         if (getNegocioActivo() === negId) _reloadCortesRT();
+    });
+}
+
+// Realtime de depósitos/movimientos y ventas extra (borrar o editar en un
+// dispositivo se refleja en el otro sin refrescar). Mismo patrón: conserva los
+// locales del outbox y no interrumpe modales abiertos.
+var _depsRtCh = null, _vexRtCh = null, _movsRtNeg = null;
+async function _reloadDepsRT() {
+    var negId = getNegocioActivo(); if (!negId) return;
+    var r = await _supabase.from('depositos').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false});
+    if (r.error) return;
+    var remote = _sinDelPend('depositos', (r.data||[]).map(function(x){return x.datos;}).filter(Boolean));
+    var vistos = {}; remote.forEach(function(d){ if (d && d.id) vistos[d.id]=1; });
+    var soloLocal = (_cacheDeps||[]).filter(function(d){ return d && d.id && !vistos[d.id]; });
+    _cacheDeps = remote.concat(soloLocal);
+    renderAll();
+}
+async function _reloadVexRT() {
+    var negId = getNegocioActivo(); if (!negId) return;
+    var r = await _supabase.from('ventas_extra').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false});
+    if (r.error) return;
+    var remote = _sinDelPend('ventas_extra', (r.data||[]).map(function(x){return x.datos;}).filter(Boolean));
+    var vistos = {}; remote.forEach(function(v){ if (v && v.id) vistos[v.id]=1; });
+    var soloLocal = (_cacheVex||[]).filter(function(v){ return v && v.id && !vistos[v.id]; });
+    _cacheVex = remote.concat(soloLocal);
+    renderAll();
+}
+function _subMovsRealtime(negId) {
+    if (!negId || _movsRtNeg === negId || typeof sbRealtime !== 'function') return;
+    if (_depsRtCh && _supabase.removeChannel) { try { _supabase.removeChannel(_depsRtCh); } catch(e){} }
+    if (_vexRtCh  && _supabase.removeChannel) { try { _supabase.removeChannel(_vexRtCh); } catch(e){} }
+    _movsRtNeg = negId;
+    _depsRtCh = sbRealtime('depositos', negId, function() {
+        if (document.querySelector('.modal-overlay.open, .pin-overlay.open')) return;
+        if (getNegocioActivo() === negId) _reloadDepsRT();
+    });
+    _vexRtCh = sbRealtime('ventas_extra', negId, function() {
+        if (document.querySelector('.modal-overlay.open, .pin-overlay.open')) return;
+        if (getNegocioActivo() === negId) _reloadVexRT();
     });
 }
 

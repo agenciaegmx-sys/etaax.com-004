@@ -229,6 +229,27 @@ async function _sbInit() {
 function _sbUp(record) { sbUpsert('clientes', record); }
 function _sbDel(id) { sbDelete('clientes', id); }
 
+/* ── Realtime: sync en vivo entre dispositivos (tabla publicada en v32) ── */
+var _cliRtNeg = null, _cliRtCh = null;
+function _subClientesRealtime() {
+    var negId = getNegocioActivo();
+    if (!negId || _cliRtNeg === negId || typeof sbRealtime !== 'function') return;
+    if (_cliRtCh && _supabase.removeChannel) { try { _supabase.removeChannel(_cliRtCh); } catch(e){} }
+    _cliRtNeg = negId;
+    _cliRtCh = sbRealtime('clientes', negId, function() {
+        if (getNegocioActivo() === negId) _reloadClientesRT();
+    });
+}
+async function _reloadClientesRT() {
+    var negId = getNegocioActivo();
+    var r = await _supabase.from('clientes').select('datos').eq('negocio_id', negId).order('datos->>nombre');
+    if (r.error || !r.data) return;
+    _cacheClientes = r.data.map(function(x){ return x.datos; });
+    var m = document.getElementById('modalCl');
+    if (m && m.classList.contains('open')) return; // no interrumpir edición
+    renderClientes();
+}
+
 // Acotar a la SUCURSAL activa ("sin sucursal = matriz: ve todo"). El cache completo
 // se mantiene para sync/borrado; solo el display filtra.
 function _sucActiva(){ return localStorage.getItem('etaax_sucursal_activa') || ''; }
@@ -341,7 +362,7 @@ function eliminarCliente(id){
     renderClientes();
 }
 
-document.addEventListener('DOMContentLoaded',function(){renderClientes();_sbInit();});
+document.addEventListener('DOMContentLoaded',function(){renderClientes();_sbInit();_subClientesRealtime();});
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>

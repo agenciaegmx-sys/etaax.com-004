@@ -1247,6 +1247,37 @@ async function initPage() {
     if (window.NominaParams) { try { await NominaParams.sync(negId); } catch(e){} }
     await syncFromDB();
     renderAll();
+    _subStaffRealtime();
+}
+/* ── Realtime: sync en vivo entre dispositivos (tabla publicada en v32) ──
+   Que un colaborador dado de alta/movido en una máquina aparezca en la otra
+   (y en las nóminas) sin refrescar ni duplicar. */
+var _staffRtNeg = null, _staffRtCh = null;
+function _subStaffRealtime() {
+    var negId = getNegocioActivo();
+    if (!negId || _staffRtNeg === negId || typeof sbRealtime !== 'function') return;
+    if (_staffRtCh && _supabase.removeChannel) { try { _supabase.removeChannel(_staffRtCh); } catch(e){} }
+    _staffRtNeg = negId;
+    _staffRtCh = sbRealtime('staff', negId, function() {
+        if (getNegocioActivo() !== negId) return;
+        var m = document.getElementById('modalStaff');
+        if (m && m.classList.contains('open')) return; // no interrumpir edición
+        _reloadStaffRT();
+    });
+}
+// Lector de solo-lectura para realtime: NUNCA re-sube (a diferencia de syncFromDB,
+// que resube si el server viene vacío). Así evita la carrera con el save()
+// delete-all+insert-all de otro dispositivo (ignora el vacío transitorio).
+async function _reloadStaffRT() {
+    var negId = getNegocioActivo();
+    try {
+        var sess = await _supabase.auth.getSession();
+        if (!sess.data || !sess.data.session) return;
+        var res = await _supabase.from('staff').select('datos').eq('negocio_id', negId);
+        if (res.error || !res.data || !res.data.length) return;
+        localStorage.setItem(_sk('staff'), JSON.stringify(res.data.map(function(r){ return r.datos; })));
+        renderAll();
+    } catch(e){}
 }
 function _abrirNomParams() {
     if (window.NominaParams) NominaParams.open(getNegocioActivo(), function(){ renderAll(); });

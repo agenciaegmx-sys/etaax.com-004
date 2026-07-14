@@ -536,6 +536,30 @@ function _sbDel(id) { sbDelete('proveedores', id); }
 function load() { return _cacheProvs || []; }
 function save(d) { /* no-op: cache is updated in-place */ }
 
+/* ── Realtime: sync en vivo entre dispositivos (efecto Google Drive) ──
+   El servidor empuja los cambios (tabla publicada en v32) y la otra máquina
+   se actualiza sola, sin refrescar ni duplicar. */
+var _provsRtNeg = null, _provsRtCh = null;
+function _subProvsRealtime() {
+    var negId = getNegocioActivo();
+    if (!negId || _provsRtNeg === negId || typeof sbRealtime !== 'function') return;
+    if (_provsRtCh && _supabase.removeChannel) { try { _supabase.removeChannel(_provsRtCh); } catch(e){} }
+    _provsRtNeg = negId;
+    _provsRtCh = sbRealtime('proveedores', negId, function() {
+        if (getNegocioActivo() === negId) _reloadProvsRT();
+    });
+}
+async function _reloadProvsRT() {
+    var negId = getNegocioActivo();
+    var r = await _supabase.from('proveedores').select('datos').eq('negocio_id', negId).order('datos->>nombre');
+    if (r.error || !r.data) return;
+    _cacheProvs = r.data.map(function(x){ return x.datos; });
+    // No re-render sobre el modal abierto (no interrumpir la edición); el cache queda fresco.
+    var m = document.getElementById('modalProv');
+    if (m && m.classList.contains('open')) return;
+    renderTable(); renderDescubrimiento();
+}
+
 /* ── SORT STATE ── */
 var sortField = 'nombre';
 var sortDir   = 1; // 1 asc, -1 desc
@@ -870,6 +894,7 @@ document.addEventListener('DOMContentLoaded', function() {
     renderTable();
     renderDescubrimiento();
     _sbInit();
+    _subProvsRealtime();
 });
 
 document.getElementById('modalProv').addEventListener('click', function(e){
