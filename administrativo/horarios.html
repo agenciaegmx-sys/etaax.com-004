@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<script src="/page-guard.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <title>ETAAX - Horarios Operativos</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../styles.css">
+    <style>
+        .hr-wrap { max-width:1180px;margin:0 auto;padding:28px 20px 120px; }
+        .hr-head { display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px; }
+        .hr-title { font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:2px;color:var(--text);line-height:1; }
+        .hr-title .g { color:var(--viol); }
+        .hr-sub { font-size:12px;color:var(--text-dim);margin-top:4px; }
+
+        /* Toolbar */
+        .hr-toolbar { display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:18px; }
+        .hr-weeknav { display:flex;align-items:center;gap:8px; }
+        .hr-wbtn { width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s; }
+        .hr-wbtn:hover { border-color:var(--viol);color:var(--viol); }
+        .hr-wlabel { min-width:200px;text-align:center; }
+        .hr-wlabel .wk { font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;color:var(--text);line-height:1; }
+        .hr-wlabel .wr { font-size:11px;color:var(--text-dim);margin-top:2px; }
+        .hr-wlabel .wr.hoy { color:var(--viol); }
+        .hr-sep { width:1px;height:30px;background:var(--border); }
+        .hr-select { background:var(--surface2);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:8px 10px;font-family:'DM Sans',sans-serif;font-size:12.5px;cursor:pointer; }
+        .hr-toolbar-right { margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap; }
+        .hr-btn { background:var(--surface2);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:8px 13px;font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer;transition:all .15s;white-space:nowrap; }
+        .hr-btn:hover { border-color:var(--viol);color:var(--viol); }
+        .hr-toggle { display:inline-flex;border:1px solid var(--border);border-radius:9px;overflow:hidden; }
+        .hr-toggle button { background:var(--surface2);border:none;color:var(--text-dim);padding:8px 12px;font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer;transition:all .15s; }
+        .hr-toggle button.on { background:var(--viol);color:#fff; }
+
+        /* Grid view */
+        .hr-scroll { overflow-x:auto;border:1px solid var(--border);border-radius:14px;background:var(--surface); }
+        table.hr-grid { border-collapse:collapse;width:100%;min-width:840px; }
+        table.hr-grid th, table.hr-grid td { border-bottom:1px solid var(--border);border-right:1px solid var(--border);padding:0;text-align:center;vertical-align:middle; }
+        table.hr-grid th { background:var(--surface2);font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-dim);font-weight:600;padding:10px 8px; }
+        table.hr-grid th.hoy { color:var(--viol);background:rgba(155,141,232,.08); }
+        table.hr-grid th:first-child, table.hr-grid td:first-child { text-align:left;border-right:2px solid var(--border);position:sticky;left:0;z-index:2; }
+        table.hr-grid th:first-child { background:var(--surface2); }
+        .hr-person { display:flex;flex-direction:column;gap:2px;padding:10px 12px;background:var(--surface); }
+        .hr-person .pn { font-size:13px;font-weight:600;color:var(--text);line-height:1.2; }
+        .hr-person .pp { font-size:10px;color:var(--text-dim); }
+        .hr-person .ph { font-size:10px;color:var(--viol);margin-top:2px; }
+        td.hr-cell { padding:6px;min-width:96px; }
+        td.hr-cell.hoy { background:rgba(155,141,232,.05); }
+        .hr-turno { display:block;border-radius:8px;padding:8px 6px;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;border:1px dashed transparent; }
+        .hr-turno:hover { background:var(--surface2);border-color:var(--border); }
+        .hr-turno.set { background:rgba(61,190,122,.1);border:1px solid rgba(61,190,122,.3); }
+        .hr-turno.set:hover { border-color:var(--green); }
+        .hr-turno.desc { background:rgba(74,72,68,.18);border:1px solid var(--border); }
+        .hr-turno .tt { font-size:13px;font-weight:600;color:var(--green);line-height:1.15; }
+        .hr-turno.desc .tt { color:var(--text-dim);font-size:11px;letter-spacing:1px;text-transform:uppercase; }
+        .hr-turno .td2 { font-size:9.5px;color:var(--text-dim);margin-top:1px; }
+        .hr-turno .plus { font-size:16px;color:var(--text-dim);opacity:.5; }
+        .hr-cover { font-size:10px;color:var(--text-dim);padding:6px;letter-spacing:.5px; }
+        .hr-cover strong { color:var(--text); }
+
+        /* Cards view */
+        .hr-cards { display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); }
+        .hr-card { background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden; }
+        .hr-card-hd { display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;background:var(--surface2);border-bottom:1px solid var(--border); }
+        .hr-card-hd .cn { font-size:14px;font-weight:600;color:var(--text); }
+        .hr-card-hd .cp { font-size:10px;color:var(--text-dim); }
+        .hr-card-hd .chh { font-size:11px;color:var(--viol);font-weight:600;white-space:nowrap; }
+        .hr-card-row { display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s; }
+        .hr-card-row:last-child { border-bottom:none; }
+        .hr-card-row:hover { background:var(--surface2); }
+        .hr-card-row.hoy { background:rgba(155,141,232,.06); }
+        .hr-card-row .dl { font-size:12px;color:var(--text-dim);min-width:44px; }
+        .hr-card-row .dl.hoy { color:var(--viol);font-weight:600; }
+        .hr-card-row .dv { font-size:13px;font-weight:600;color:var(--green); }
+        .hr-card-row .dv.desc { color:var(--text-dim);font-weight:400;font-size:11px;text-transform:uppercase;letter-spacing:1px; }
+        .hr-card-row .dv.empty { color:var(--text-dim);opacity:.5;font-weight:400; }
+
+        .hr-empty { text-align:center;padding:70px 20px;color:var(--text-dim); }
+        .hr-empty .ic { font-size:44px;margin-bottom:12px;opacity:.5; }
+
+        /* Editor modal */
+        .hr-modal-bg { position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);z-index:9200;display:none;align-items:center;justify-content:center;padding:20px; }
+        .hr-modal-bg.on { display:flex; }
+        .hr-modal { background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,.4); }
+        .hr-modal h3 { font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;color:var(--text);margin:0 0 2px; }
+        .hr-modal .msub { font-size:12px;color:var(--text-dim);margin-bottom:16px; }
+        .hr-times { display:flex;gap:12px;margin-bottom:14px; }
+        .hr-times label { flex:1;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);display:block; }
+        .hr-times input { width:100%;margin-top:5px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:10px;font-family:'DM Sans',sans-serif;font-size:15px;-webkit-appearance:none;appearance:none; }
+        .hr-presets { display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px; }
+        .hr-preset { font-size:11px;padding:6px 10px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--text-dim);cursor:pointer;transition:all .15s; }
+        .hr-preset:hover { border-color:var(--viol);color:var(--viol); }
+        .hr-modal-acts { display:flex;gap:8px; }
+        .hr-modal-acts button { flex:1;padding:11px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--border);transition:all .15s; }
+        .hr-mb-save { background:var(--viol);color:#fff;border-color:var(--viol); }
+        .hr-mb-save:hover { filter:brightness(1.08); }
+        .hr-mb-desc { background:var(--surface2);color:var(--text); }
+        .hr-mb-desc:hover { border-color:var(--text-muted); }
+        .hr-mb-clear { background:transparent;color:var(--text-dim); }
+        .hr-mb-clear:hover { border-color:#e05a3a;color:#e05a3a; }
+
+        .theme-toggle { position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s; }
+        .theme-toggle:hover{border-color:var(--green);color:var(--green);}
+        @media (max-width:600px){ .hr-toolbar-right{width:100%;} .hr-wlabel{min-width:150px;} }
+    </style>
+</head>
+<body>
+<div class="mod-grid-bg"></div>
+<div class="mod-glow"></div>
+
+<header class="top-bar">
+    <svg width="108" height="26" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
+        <path d="M14.5 28H37C35.5 23 31.5 20 25.5 20C19.5 20 16 23 14.5 28Z" fill="#1a1916"/>
+        <circle cx="45" cy="11" r="6" fill="#f5c842"/>
+        <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
+        <path d="M78 41C78 34.5 83.5 30.5 92.5 29.5L104 28.5V27.5C104 23.5 101.5 21 97 21C93 21 90 23 89 26.5L80.5 24C82.5 17.5 89 13 97 13C107.5 13 113 18.5 113 28.5V54.5H104V51C102 53.5 98.5 55 94 55C85.5 55 78 50.5 78 41Z" fill="#3dbe7a"/>
+        <path d="M104 37L95.5 38C92.5 38.5 90.5 40 90.5 42.5C90.5 45 92.5 46.5 95.5 46.5C101 46.5 104 43.5 104 39V37Z" fill="#1a1916"/>
+        <path d="M126 41C126 34.5 131.5 30.5 140.5 29.5L152 28.5V27.5C152 23.5 149.5 21 145 21C141 21 138 23 137 26.5L128.5 24C130.5 17.5 137 13 145 13C155.5 13 161 18.5 161 28.5V54.5H152V51C150 53.5 146.5 55 142 55C133.5 55 126 50.5 126 41Z" fill="#3dbe7a"/>
+        <path d="M152 37L143.5 38C140.5 38.5 138.5 40 138.5 42.5C138.5 45 140.5 46.5 143.5 46.5C149 46.5 152 43.5 152 39V37Z" fill="#1a1916"/>
+        <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+    </svg>
+    <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🗃️</a>
+    <div class="top-breadcrumb">
+        <span class="top-module-badge">Administrativo</span>
+        <span class="top-sep">|</span>
+        <span class="top-section-name">Gestión de Staff · Horarios</span>
+    </div>
+    <a href="staff-hub.html" class="topbar-home" title="Gestión de Staff" style="margin-left:auto">←</a>
+</header>
+<div id="ctxBar" class="ctx-bar" style="display:none"></div>
+
+<div class="hr-wrap">
+    <div class="hr-head">
+        <div>
+            <div class="hr-title">Horarios <span class="g">Operativos</span></div>
+            <div class="hr-sub" id="hrSub">Rol semanal de turnos por sucursal.</div>
+        </div>
+    </div>
+
+    <div class="hr-toolbar">
+        <div class="hr-weeknav">
+            <button class="hr-wbtn" onclick="cambiarSemana(-1)" title="Semana anterior">◀</button>
+            <div class="hr-wlabel">
+                <div class="wk" id="wkNum">—</div>
+                <div class="wr" id="wkRange">—</div>
+            </div>
+            <button class="hr-wbtn" onclick="cambiarSemana(1)" title="Semana siguiente">▶</button>
+        </div>
+        <button class="hr-btn" onclick="irHoy()" title="Ir a la semana actual">Hoy</button>
+        <div class="hr-sep"></div>
+        <select class="hr-select" id="sucSel" onchange="cambiarSuc(this.value)" style="display:none"></select>
+        <div class="hr-toolbar-right">
+            <button class="hr-btn" onclick="copiarSemanaAnterior()" title="Trae los turnos de la semana pasada a esta">⧉ Copiar semana anterior</button>
+            <div class="hr-toggle">
+                <button id="tgGrid" class="on" onclick="setVista('grid')">▦ Cuadrícula</button>
+                <button id="tgCards" onclick="setVista('cards')">▤ Tarjetas</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="hrContent"></div>
+</div>
+
+<!-- Editor de turno -->
+<div class="hr-modal-bg" id="hrModal">
+    <div class="hr-modal">
+        <h3 id="hrmTitle">Turno</h3>
+        <div class="msub" id="hrmSub">—</div>
+        <div class="hr-times">
+            <label>Entrada<input type="time" id="hrmIn"></label>
+            <label>Salida<input type="time" id="hrmOut"></label>
+        </div>
+        <div class="hr-presets" id="hrmPresets"></div>
+        <div class="hr-modal-acts">
+            <button class="hr-mb-clear" onclick="editorLimpiar()">Quitar</button>
+            <button class="hr-mb-desc" onclick="editorDescanso()">Descanso</button>
+            <button class="hr-mb-save" onclick="editorGuardar()">Guardar</button>
+        </div>
+    </div>
+</div>
+
+<button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
+
+<script>
+(function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);document.addEventListener('DOMContentLoaded',function(){if(s==='light'){document.getElementById('themeIcon').textContent='🌙';document.getElementById('themeLabel').textContent='Modo oscuro';}});})();
+function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('etaax_theme',n);document.getElementById('themeIcon').textContent=n==='light'?'🌙':'☀️';document.getElementById('themeLabel').textContent=n==='light'?'Modo oscuro':'Modo claro';}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
+<script src="/etaax-core.js"></script>
+<script src="/etaax-db.js"></script>
+<script src="../security.js"></script>
+<script src="../ctx-bar.js"></script>
+<script>
+/* ══════════════════════════════════════════════════════════════
+   HORARIOS OPERATIVOS — rol semana a semana, vista híbrida.
+   Datos: tabla per-record `horarios`. id estable por sucursal+semana.
+   record.datos = { sucursalId, semana, turnos:{ staffId:{ d0:{in,out}|{desc:1}, ... } }, updated }
+   ══════════════════════════════════════════════════════════════ */
+var DIAS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+var DIAS_L = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+var MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+var PRESETS = [
+    { l:'Apertura',  in:'09:00', out:'17:00' },
+    { l:'Intermedio',in:'12:00', out:'20:00' },
+    { l:'Cierre',    in:'16:00', out:'00:00' },
+    { l:'Matutino',  in:'07:00', out:'15:00' },
+    { l:'Completo',  in:'11:00', out:'22:00' }
+];
+
+var MATRIZ_ID = 'suc_principal';
+function getNegocioActivo() {
+    var id = localStorage.getItem('etaax_negocio_activo');
+    if (!id) { try { var ctx = JSON.parse(localStorage.getItem('etaax_ctx')||'null'); if (ctx && ctx.negId) id = ctx.negId; } catch(e){} }
+    return id;
+}
+function _sk(key){ var id=getNegocioActivo(); return id ? ('etaax_'+id+'_'+key) : ('etaax_'+key); }
+function _getSucs(){ var negId=getNegocioActivo(); try{ return JSON.parse(localStorage.getItem('etaax_'+negId+'_sucursales')||'[]'); }catch(e){ return []; } }
+function _getSucActiva(){ return localStorage.getItem('etaax_sucursal_activa') || ''; }
+function _catGlobalOn(){ return sessionStorage.getItem('etaax_cat_global') === '1'; }
+function _effSuc(sucursalId){ return sucursalId || MATRIZ_ID; }
+function _sucNombre(id){ if(!id||id===MATRIZ_ID) return 'Matriz'; var s=_getSucs().find(function(x){return x.id===id;}); return s?(s.nombre||s.id):id; }
+function esc(s){ return (window.etx?etx(String(s==null?'':s)):String(s==null?'':s)); }
+
+/* Estado */
+var _weekStr = EtaaxCore.getWeekStr(new Date());
+var _sucSel  = '';
+var _view    = localStorage.getItem('etaax_hor_vista') || (window.innerWidth < 720 ? 'cards' : 'grid');
+var _horCache = {};   // recordId -> datos
+var _staff = [];
+var _edit  = null;    // { staffId, dayIdx }
+
+function recordId(sucId, weekStr){ return 'hor_' + _effSuc(sucId) + '_' + weekStr; }
+function curRecId(){ return recordId(_sucSel, _weekStr); }
+function curRecord(){
+    var id = curRecId();
+    if (!_horCache[id]) _horCache[id] = { id:id, sucursalId:_effSuc(_sucSel), semana:_weekStr, turnos:{} };
+    return _horCache[id];
+}
+
+/* ── Persistencia ── */
+function _guardarLocal(){
+    try { localStorage.setItem(_sk('horarios'), JSON.stringify(_horCache)); } catch(e){}
+}
+function persist(rec){
+    rec.updated = Date.now();
+    rec.id = recordId(rec.sucursalId, rec.semana);
+    _horCache[rec.id] = rec;
+    _guardarLocal();
+    if (window.sbUpsert) sbUpsert('horarios', rec);
+}
+function _cargarLocal(){
+    try { var m = JSON.parse(localStorage.getItem(_sk('horarios'))||'{}'); if (m && typeof m==='object') _horCache = m; } catch(e){ _horCache = {}; }
+}
+async function _cargarStaff(){
+    // Supabase primero (con sesión); fallback a localStorage.
+    var negId = getNegocioActivo();
+    var list = [];
+    try {
+        var sess = await _supabase.auth.getSession();
+        if (sess.data && sess.data.session) {
+            var res = await _supabase.from('staff').select('datos').eq('negocio_id', negId);
+            if (!res.error && res.data && res.data.length) list = res.data.map(function(r){ return r.datos; });
+        }
+    } catch(e){}
+    if (!list.length) { try { list = JSON.parse(localStorage.getItem(_sk('staff'))||'[]'); } catch(e){ list = []; } }
+    _staff = (list||[]).filter(function(s){ return s && s.activo !== false; });
+}
+async function _syncHorariosDB(){
+    var negId = getNegocioActivo();
+    try {
+        var sess = await _supabase.auth.getSession();
+        if (!sess.data || !sess.data.session) return;
+        var res = await _supabase.from('horarios').select('datos').eq('negocio_id', negId);
+        if (res.error || !res.data) return;
+        res.data.forEach(function(row){ var d=row.datos; if (d && d.id) _horCache[d.id] = d; });
+        _guardarLocal();
+        render();
+    } catch(e){}
+}
+
+/* ── Scope de sucursal (dos caras, como staff.html) ── */
+function _resolverScope(){
+    var sucs = _getSucs();
+    var global = _catGlobalOn();
+    var sel = document.getElementById('sucSel');
+    if (global && sucs.length) {
+        // Vista global: se puede elegir la sucursal a editar.
+        var opts = [{ id:MATRIZ_ID, nombre:'Matriz' }].concat(sucs.filter(function(s){ return s.id!==MATRIZ_ID; }));
+        // dedup por si la matriz ya viene en la lista
+        var seen={}, clean=[]; opts.forEach(function(o){ if(!seen[o.id]){ seen[o.id]=1; clean.push(o); } });
+        sel.innerHTML = clean.map(function(o){ return '<option value="'+o.id+'">'+esc(_sucNombre(o.id))+'</option>'; }).join('');
+        sel.style.display = '';
+        if (!_sucSel) _sucSel = clean[0] ? clean[0].id : MATRIZ_ID;
+        sel.value = _sucSel;
+    } else {
+        // Dentro de una sucursal: clavado a ella (sin sucursal activa = Matriz).
+        _sucSel = _getSucActiva() || MATRIZ_ID;
+        sel.style.display = 'none';
+    }
+}
+function cambiarSuc(v){ _sucSel = v; render(); }
+
+/* ── Navegación de semana ── */
+function _mondayOf(weekStr){ var r = EtaaxCore.getRange('semana', weekStr); return new Date(r.from + 'T12:00:00'); }
+function cambiarSemana(delta){
+    var m = _mondayOf(_weekStr); m.setDate(m.getDate() + delta*7);
+    _weekStr = EtaaxCore.getWeekStr(m);
+    render();
+}
+function irHoy(){ _weekStr = EtaaxCore.getWeekStr(new Date()); render(); }
+function _fmtDia(d){ return d.getDate() + ' ' + MESES[d.getMonth()]; }
+function _diaDate(dayIdx){ var m=_mondayOf(_weekStr); m.setDate(m.getDate()+dayIdx); return m; }
+function _hoyIdx(){
+    if (EtaaxCore.getWeekStr(new Date()) !== _weekStr) return -1;
+    var dn = (new Date().getDay() + 6) % 7; return dn; // 0=Lun
+}
+
+/* ── Cálculos ── */
+function _durHoras(t){
+    if (!t || t.desc || !t.in || !t.out) return 0;
+    var a = t.in.split(':'), b = t.out.split(':');
+    var mi = (+a[0])*60 + (+a[1]), mo = (+b[0])*60 + (+b[1]);
+    if (mo <= mi) mo += 24*60; // cruza medianoche
+    return (mo - mi) / 60;
+}
+function _horasStaff(sid){
+    var rec = curRecord(); var t = rec.turnos[sid] || {}; var h=0;
+    for (var i=0;i<7;i++){ h += _durHoras(t['d'+i]); }
+    return h;
+}
+function _fmtH(h){ if (!h) return '0h'; var hh=Math.floor(h), mm=Math.round((h-hh)*60); return mm ? (hh+'h '+mm+'m') : (hh+'h'); }
+function _coberturaDia(dayIdx){
+    var rec = curRecord(); var n=0;
+    _staff.forEach(function(s){ var t=(rec.turnos[s.id]||{})['d'+dayIdx]; if (t && !t.desc && t.in && t.out) n++; });
+    return n;
+}
+
+/* ── Render ── */
+function _staffScope(){
+    return _staff.filter(function(s){ return _effSuc(s.sucursalId) === _effSuc(_sucSel); })
+                 .sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
+}
+function _turnoCellHTML(sid, dayIdx){
+    var t = (curRecord().turnos[sid]||{})['d'+dayIdx];
+    var oc = 'onclick="abrirEditor(\''+sid+'\','+dayIdx+')"';
+    if (!t) return '<span class="hr-turno" '+oc+'><span class="plus">+</span></span>';
+    if (t.desc) return '<span class="hr-turno desc" '+oc+'><span class="tt">Descanso</span></span>';
+    return '<span class="hr-turno set" '+oc+'><span class="tt">'+esc(t.in)+'–'+esc(t.out)+'</span><span class="td2">'+_fmtH(_durHoras(t))+'</span></span>';
+}
+function render(){
+    document.getElementById('wkNum').textContent = 'Semana ' + _weekStr.split('-W')[1];
+    var mon=_diaDate(0), sun=_diaDate(6);
+    var rl = document.getElementById('wkRange');
+    rl.textContent = _fmtDia(mon) + ' – ' + _fmtDia(sun) + ' ' + sun.getFullYear();
+    rl.className = 'wr' + (_hoyIdx()>=0 ? ' hoy' : '');
+    document.getElementById('hrSub').textContent = 'Rol semanal · ' + _sucNombre(_sucSel) + (_catGlobalOn() ? ' (vista global)' : '');
+    document.getElementById('tgGrid').className = _view==='grid' ? 'on' : '';
+    document.getElementById('tgCards').className = _view==='cards' ? 'on' : '';
+
+    var scope = _staffScope();
+    var cont = document.getElementById('hrContent');
+    if (!scope.length){
+        cont.innerHTML = '<div class="hr-empty"><div class="ic">🗓️</div><div style="font-size:15px;color:var(--text)">Sin colaboradores en '+esc(_sucNombre(_sucSel))+'</div><div style="margin-top:6px">Da de alta personal en el <a href="staff.html" style="color:var(--viol)">Catálogo de Staff</a> y asígnalo a esta sucursal.</div></div>';
+        return;
+    }
+    cont.innerHTML = _view==='grid' ? _renderGrid(scope) : _renderCards(scope);
+}
+function _renderGrid(scope){
+    var hoy = _hoyIdx();
+    var h = '<div class="hr-scroll"><table class="hr-grid"><thead><tr><th>Colaborador</th>';
+    for (var i=0;i<7;i++){ var d=_diaDate(i); h += '<th class="'+(i===hoy?'hoy':'')+'">'+DIAS[i]+'<br><span style="font-weight:400;opacity:.7">'+_fmtDia(d)+'</span></th>'; }
+    h += '</tr></thead><tbody>';
+    scope.forEach(function(s){
+        h += '<tr><td><div class="hr-person"><span class="pn">'+esc(s.nombre||'—')+'</span><span class="pp">'+esc(s.puesto||'')+'</span><span class="ph">'+_fmtH(_horasStaff(s.id))+' / sem</span></div></td>';
+        for (var i=0;i<7;i++){ h += '<td class="hr-cell '+(i===hoy?'hoy':'')+'">'+_turnoCellHTML(s.id,i)+'</td>'; }
+        h += '</tr>';
+    });
+    // fila de cobertura
+    h += '<tr><td><div class="hr-cover" style="padding:8px 12px"><strong>Cobertura</strong><br>personas por día</div></td>';
+    for (var i=0;i<7;i++){ h += '<td class="hr-cell '+(i===hoy?'hoy':'')+'"><div class="hr-cover"><strong>'+_coberturaDia(i)+'</strong></div></td>'; }
+    h += '</tr></tbody></table></div>';
+    return h;
+}
+function _renderCards(scope){
+    var hoy=_hoyIdx();
+    var h = '<div class="hr-cards">';
+    scope.forEach(function(s){
+        h += '<div class="hr-card"><div class="hr-card-hd"><div><div class="cn">'+esc(s.nombre||'—')+'</div><div class="cp">'+esc(s.puesto||'')+'</div></div><div class="chh">'+_fmtH(_horasStaff(s.id))+' / sem</div></div>';
+        for (var i=0;i<7;i++){
+            var t = (curRecord().turnos[s.id]||{})['d'+i];
+            var dv = !t ? '<span class="dv empty">+ asignar</span>'
+                   : t.desc ? '<span class="dv desc">Descanso</span>'
+                   : '<span class="dv">'+esc(t.in)+'–'+esc(t.out)+' <span style="color:var(--text-dim);font-weight:400;font-size:10px">'+_fmtH(_durHoras(t))+'</span></span>';
+            h += '<div class="hr-card-row'+(i===hoy?' hoy':'')+'" onclick="abrirEditor(\''+s.id+'\','+i+')"><span class="dl'+(i===hoy?' hoy':'')+'">'+DIAS[i]+'</span>'+dv+'</div>';
+        }
+        h += '</div>';
+    });
+    return h + '</div>';
+}
+function setVista(v){ _view=v; localStorage.setItem('etaax_hor_vista', v); render(); }
+
+/* ── Editor de turno ── */
+function abrirEditor(sid, dayIdx){
+    _edit = { staffId:sid, dayIdx:dayIdx };
+    var s = _staff.find(function(x){ return x.id===sid; }) || {};
+    var t = (curRecord().turnos[sid]||{})['d'+dayIdx] || {};
+    document.getElementById('hrmTitle').textContent = s.nombre || 'Turno';
+    document.getElementById('hrmSub').textContent = DIAS_L[dayIdx] + ' · ' + _fmtDia(_diaDate(dayIdx));
+    document.getElementById('hrmIn').value  = t.desc ? '' : (t.in || '');
+    document.getElementById('hrmOut').value = t.desc ? '' : (t.out || '');
+    document.getElementById('hrmPresets').innerHTML = PRESETS.map(function(p,i){
+        return '<span class="hr-preset" onclick="aplicarPreset('+i+')">'+p.l+'<br><span style="opacity:.6">'+p.in+'–'+p.out+'</span></span>';
+    }).join('');
+    document.getElementById('hrModal').classList.add('on');
+}
+function cerrarEditor(){ document.getElementById('hrModal').classList.remove('on'); _edit=null; }
+function aplicarPreset(i){ document.getElementById('hrmIn').value=PRESETS[i].in; document.getElementById('hrmOut').value=PRESETS[i].out; }
+function _setTurno(turno){
+    var rec = curRecord();
+    if (!rec.turnos[_edit.staffId]) rec.turnos[_edit.staffId] = {};
+    if (turno === null) delete rec.turnos[_edit.staffId]['d'+_edit.dayIdx];
+    else rec.turnos[_edit.staffId]['d'+_edit.dayIdx] = turno;
+    persist(rec);
+    cerrarEditor();
+    render();
+}
+function editorGuardar(){
+    var i = document.getElementById('hrmIn').value, o = document.getElementById('hrmOut').value;
+    if (!i || !o){ alert('Pon hora de entrada y de salida, o marca Descanso.'); return; }
+    _setTurno({ in:i, out:o });
+}
+function editorDescanso(){ _setTurno({ desc:1 }); }
+function editorLimpiar(){ _setTurno(null); }
+
+/* ── Copiar semana anterior ── */
+function copiarSemanaAnterior(){
+    var prevWk = EtaaxCore.getWeekStr((function(){ var m=_mondayOf(_weekStr); m.setDate(m.getDate()-7); return m; })());
+    var prev = _horCache[recordId(_sucSel, prevWk)];
+    if (!prev || !prev.turnos || !Object.keys(prev.turnos).length){ alert('La semana anterior ('+prevWk.split('-W')[1]+') no tiene turnos capturados en '+_sucNombre(_sucSel)+'.'); return; }
+    var rec = curRecord();
+    var tieneAlgo = Object.keys(rec.turnos).length;
+    if (tieneAlgo && !confirm('Esto reemplazará los turnos de esta semana con los de la semana '+prevWk.split('-W')[1]+'. ¿Continuar?')) return;
+    // Copia profunda solo del staff en scope
+    var nuevo = {};
+    _staffScope().forEach(function(s){ if (prev.turnos[s.id]) nuevo[s.id] = JSON.parse(JSON.stringify(prev.turnos[s.id])); });
+    rec.turnos = nuevo;
+    persist(rec);
+    render();
+}
+
+/* ── Init ── */
+document.getElementById('hrModal').addEventListener('click', function(e){ if (e.target===this) cerrarEditor(); });
+document.addEventListener('keydown', function(e){ if (e.key==='Escape') cerrarEditor(); });
+
+(async function init(){
+    _cargarLocal();
+    _resolverScope();
+    await _cargarStaff();
+    render();
+    _syncHorariosDB();
+    if (window.sbRealtime) {
+        sbRealtime('horarios', getNegocioActivo(), function(){ _syncHorariosDB(); });
+    }
+})();
+</script>
+</body>
+</html>
