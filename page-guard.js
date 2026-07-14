@@ -140,6 +140,7 @@ window.etaaxPerm = function (negId, rol, path) {
         // consultoría) comparten el permiso 'staff'. staff.html y staff-hub.html
         // también caen en el patrón /administrativo/staff.
         [/\/administrativo\/horarios/,          'staff'],
+        [/\/administrativo\/checklists/,        'staff'],
         [/\/administrativo\/organigrama/,       'staff'],
         [/\/administrativo\/perfiles-puesto/,   'staff'],
         [/\/administrativo\/evaluaciones/,      'staff'],

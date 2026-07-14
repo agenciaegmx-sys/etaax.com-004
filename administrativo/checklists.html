@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<script src="/embed.js"></script>
+<script src="/page-guard.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <title>ETAAX - Checklists Operativos</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../styles.css">
+    <style>
+        .ck-wrap { max-width:1180px;margin:0 auto;padding:24px 20px 120px; }
+        .ck-head { display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px; }
+        .ck-title { font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:2px;color:var(--text);line-height:1; }
+        .ck-title .g { color:var(--viol); }
+        .ck-sub { font-size:12px;color:var(--text-dim);margin-top:4px; }
+        .ck-tabs { display:inline-flex;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:18px; }
+        .ck-tabs button { background:var(--surface2);border:none;color:var(--text-dim);padding:9px 18px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;transition:all .15s; }
+        .ck-tabs button.on { background:var(--viol);color:#fff; }
+        .ck-btn { background:var(--surface2);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:9px 14px;font-family:'DM Sans',sans-serif;font-size:12.5px;cursor:pointer;transition:all .15s;white-space:nowrap; }
+        .ck-btn:hover { border-color:var(--viol);color:var(--viol); }
+        .ck-btn.primary { background:var(--green);border-color:var(--green);color:#0a0908;font-weight:600; }
+        .ck-btn.primary:hover { filter:brightness(1.08);color:#0a0908; }
+
+        /* Plantillas */
+        .ck-grid { display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); }
+        .ck-card { background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px; }
+        .ck-card-top { display:flex;align-items:center;gap:8px;margin-bottom:6px; }
+        .ck-tag { font-size:9px;letter-spacing:1px;text-transform:uppercase;padding:2px 8px;border-radius:20px;white-space:nowrap; }
+        .ck-tag.apertura { background:rgba(61,190,122,.14);color:var(--green);border:1px solid rgba(61,190,122,.3); }
+        .ck-tag.cierre { background:rgba(120,160,240,.14);color:var(--blue);border:1px solid rgba(120,160,240,.3); }
+        .ck-tag.intermedio { background:rgba(155,141,232,.14);color:var(--viol);border:1px solid rgba(155,141,232,.3); }
+        .ck-tag.limpieza { background:rgba(245,200,66,.12);color:var(--accent);border:1px solid rgba(245,200,66,.3); }
+        .ck-tag.otro { background:rgba(74,72,68,.3);color:var(--text-dim);border:1px solid var(--border); }
+        .ck-card-nom { font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;color:var(--text);line-height:1.1; }
+        .ck-card-meta { font-size:11px;color:var(--text-dim);margin:4px 0 10px; }
+        .ck-card-acts { display:flex;gap:6px;flex-wrap:wrap; }
+        .ck-card-acts .ck-btn { font-size:11px;padding:6px 10px; }
+
+        /* Ejecución */
+        .ck-toolbar { display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:16px; }
+        .ck-select { background:var(--surface2);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:9px 11px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;min-width:200px; }
+        .ck-weeknav { display:flex;align-items:center;gap:8px;margin-left:auto; }
+        .ck-wbtn { width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center; }
+        .ck-wbtn:hover { border-color:var(--viol);color:var(--viol); }
+        .ck-wlabel { min-width:150px;text-align:center; }
+        .ck-wlabel .wk { font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;color:var(--text);line-height:1; }
+        .ck-wlabel .wr { font-size:11px;color:var(--text-dim);margin-top:2px; }
+
+        .ck-scroll { overflow-x:auto;border:1px solid var(--border);border-radius:14px;background:var(--surface); }
+        table.ck-table { border-collapse:collapse;width:100%;min-width:820px; }
+        table.ck-table th, table.ck-table td { border-bottom:1px solid var(--border);border-right:1px solid var(--border);text-align:center;vertical-align:middle;padding:0; }
+        table.ck-table thead th { background:var(--surface2);font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-dim);font-weight:600;padding:9px 6px; }
+        table.ck-table th:first-child, table.ck-table td:first-child { text-align:left;border-right:2px solid var(--border);position:sticky;left:0;background:var(--surface);z-index:1;min-width:280px; }
+        table.ck-table thead th:first-child { background:var(--surface2); }
+        .ck-task { padding:9px 12px;font-size:12.5px;color:var(--text);line-height:1.3;display:flex;gap:8px;align-items:flex-start; }
+        .ck-freq { font-size:9px;font-weight:700;color:var(--viol);background:rgba(155,141,232,.12);border:1px solid rgba(155,141,232,.3);border-radius:5px;padding:1px 5px;flex-shrink:0;margin-top:1px; }
+        td.ck-cell { cursor:pointer;width:70px;height:40px;font-size:16px;transition:background .1s; }
+        td.ck-cell:hover { background:var(--surface2); }
+        td.ck-cell.ok { background:rgba(61,190,122,.14);color:var(--green); }
+        td.ck-cell.no { background:rgba(224,90,58,.14);color:#e05a3a; }
+        td.ck-cell.pend { background:rgba(245,200,66,.14);color:var(--accent); }
+        .ck-firma-row td { padding:6px; }
+        .ck-firma-row td:first-child { font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);padding:8px 12px; }
+        .ck-firma-in { width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px;font-family:'DM Sans',sans-serif;font-size:11px;text-align:center;outline:none; }
+        .ck-cumpl { display:flex;gap:16px;flex-wrap:wrap;margin:14px 0 4px;align-items:center; }
+        .ck-cumpl .cval { font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:1px; }
+        .ck-cumpl .clbl { font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim); }
+        .ck-legend { font-size:11px;color:var(--text-dim);display:flex;gap:14px;flex-wrap:wrap;margin-top:8px; }
+
+        .ck-empty { text-align:center;padding:60px 20px;color:var(--text-dim); }
+        .ck-empty .ic { font-size:42px;margin-bottom:10px;opacity:.5; }
+
+        /* Modal editor de plantilla */
+        .ck-modal-bg { position:fixed;inset:0;z-index:9300;background:rgba(0,0,0,.6);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:20px; }
+        .ck-modal-bg.on { display:flex; }
+        .ck-modal { background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:620px;max-height:92vh;overflow:auto;padding:22px; }
+        .ck-modal h3 { font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;color:var(--text);margin:0 0 16px; }
+        .ck-field { margin-bottom:13px; }
+        .ck-field label { display:block;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:5px; }
+        .ck-in { width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:14px;outline:none; }
+        .ck-in:focus { border-color:var(--viol); }
+        .ck-row3 { display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px; }
+        @media (max-width:560px){ .ck-row3{grid-template-columns:1fr;} }
+        .ck-tarea-row { display:flex;gap:8px;align-items:center;margin-bottom:7px; }
+        .ck-tarea-row .ck-in { flex:1; }
+        .ck-freq-sel { width:92px;flex-shrink:0; }
+        .ck-tarea-del { background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:16px;flex-shrink:0; }
+        .ck-tarea-del:hover { color:#e05a3a; }
+        .ck-modal-acts { display:flex;gap:8px;margin-top:18px; }
+        .ck-modal-acts button { flex:1;padding:11px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--border); }
+        .ck-mb-save { background:var(--viol);color:#fff;border-color:var(--viol); }
+        .ck-mb-cancel { background:transparent;color:var(--text-dim); }
+
+        .theme-toggle { position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15); }
+    </style>
+</head>
+<body>
+<div class="mod-grid-bg"></div>
+<div class="mod-glow"></div>
+
+<header class="top-bar">
+    <svg width="108" height="26" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
+        <circle cx="45" cy="11" r="6" fill="#f5c842"/>
+        <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
+        <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+    </svg>
+    <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🗃️</a>
+    <div class="top-breadcrumb">
+        <span class="top-module-badge">Administrativo</span>
+        <span class="top-sep">|</span>
+        <span class="top-section-name">Gestión de Staff · Checklists</span>
+    </div>
+    <a href="staff-hub.html" class="topbar-home" title="Gestión de Staff" style="margin-left:auto">←</a>
+</header>
+<div id="ctxBar" class="ctx-bar" style="display:none"></div>
+
+<div class="ck-wrap">
+    <div class="ck-head">
+        <div>
+            <div class="ck-title">Checklists <span class="g">Operativos</span></div>
+            <div class="ck-sub" id="ckSub">Apertura, cierre, intermedios y limpiezas por área y turno.</div>
+        </div>
+    </div>
+
+    <div class="ck-tabs">
+        <button id="tabPlant" class="on" onclick="setTab('plant')">📋 Plantillas</button>
+        <button id="tabEjec" onclick="setTab('ejec')">✅ Ejecución</button>
+    </div>
+
+    <div id="viewPlant"></div>
+    <div id="viewEjec" style="display:none"></div>
+</div>
+
+<!-- Editor de plantilla -->
+<div class="ck-modal-bg" id="ckModal">
+    <div class="ck-modal">
+        <h3 id="ckmTitle">Nueva plantilla</h3>
+        <div class="ck-row3">
+            <div class="ck-field"><label>Nombre</label><input class="ck-in" id="ckmNombre" placeholder="Apertura de barra"></div>
+            <div class="ck-field"><label>Tipo</label>
+                <select class="ck-in" id="ckmTipo">
+                    <option value="apertura">Apertura</option>
+                    <option value="cierre">Cierre</option>
+                    <option value="intermedio">Intermedio</option>
+                    <option value="limpieza">Limpieza</option>
+                    <option value="otro">Otro</option>
+                </select>
+            </div>
+            <div class="ck-field"><label>Área</label><input class="ck-in" id="ckmArea" placeholder="Barra / Cocina / Piso"></div>
+        </div>
+        <div class="ck-field" id="ckmSucWrap"><label>Sucursal</label><select class="ck-in" id="ckmSuc"></select></div>
+        <div class="ck-field">
+            <label>Tareas <span style="text-transform:none;letter-spacing:0;color:var(--text-dim)">· la etiqueta es la frecuencia (A = apertura, D/T = diaria/turno, SEM = semanal)</span></label>
+            <div id="ckmTareas"></div>
+            <button class="ck-btn" style="margin-top:6px;font-size:12px" onclick="addTareaRow()">+ Agregar tarea</button>
+        </div>
+        <div class="ck-modal-acts">
+            <button class="ck-mb-cancel" onclick="cerrarEditor()">Cancelar</button>
+            <button class="ck-mb-save" onclick="guardarPlantilla()">Guardar plantilla</button>
+        </div>
+    </div>
+</div>
+
+<button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
+
+<script>
+(function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);document.addEventListener('DOMContentLoaded',function(){if(s==='light'){document.getElementById('themeIcon').textContent='🌙';document.getElementById('themeLabel').textContent='Modo oscuro';}});})();
+function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('etaax_theme',n);document.getElementById('themeIcon').textContent=n==='light'?'🌙':'☀️';document.getElementById('themeLabel').textContent=n==='light'?'Modo oscuro':'Modo claro';}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
+<script src="/etaax-core.js"></script>
+<script src="/etaax-db.js"></script>
+<script src="/reporte-marca.js"></script>
+<script src="../security.js"></script>
+<script src="../ctx-bar.js"></script>
+<script>
+/* ══════════════════════════════════════════════════════════════
+   CHECKLISTS OPERATIVOS — Fase 1: plantillas + cuadrícula semanal + imprimible.
+   Fase 2 (pendiente): QR para que el colaborador la llene desde su celular
+   y % de cumplimiento → evaluaciones.
+   Datos per-record: `checklists` (plantillas) y `checklist_runs` (ejecución/semana).
+   ══════════════════════════════════════════════════════════════ */
+var DIAS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+var MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+var FREQS = ['A','D/T','SEM','MEN'];
+var TIPO_LBL = { apertura:'Apertura', cierre:'Cierre', intermedio:'Intermedio', limpieza:'Limpieza', otro:'Otro' };
+var MATRIZ_ID = 'suc_principal';
+
+function getNegocioActivo(){ var id=localStorage.getItem('etaax_negocio_activo'); if(!id){try{var c=JSON.parse(localStorage.getItem('etaax_ctx')||'null');if(c&&c.negId)id=c.negId;}catch(e){}} return id; }
+function _sk(k){ var id=getNegocioActivo(); return id?('etaax_'+id+'_'+k):('etaax_'+k); }
+function _getSucs(){ var n=getNegocioActivo(); try{return JSON.parse(localStorage.getItem('etaax_'+n+'_sucursales')||'[]');}catch(e){return[];} }
+function _getSucActiva(){ return localStorage.getItem('etaax_sucursal_activa')||''; }
+function _catGlobalOn(){ return sessionStorage.getItem('etaax_cat_global')==='1'; }
+function _effSuc(s){ return s||MATRIZ_ID; }
+function _sucNombre(id){ if(!id||id===MATRIZ_ID)return 'Matriz'; var s=_getSucs().find(function(x){return x.id===id;}); return s?(s.nombre||s.id):id; }
+function esc(s){ return window.etx?etx(String(s==null?'':s)):String(s==null?'':s); }
+function genId(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
+
+/* Estado */
+var _tab = 'plant';
+var _plantillas = [];      // cache plantillas
+var _runs = {};            // recordId -> run
+var _sucSel = '';
+var _ejecPlantId = '';     // plantilla seleccionada en Ejecución
+var _weekStr = EtaaxCore.getWeekStr(new Date());
+var _edit = null;          // plantilla en edición
+
+/* ── Scope de sucursal (dos caras, como staff/horarios) ── */
+function _resolverScope(){
+    _sucSel = _catGlobalOn() ? (_sucSel || (_getSucActiva()||MATRIZ_ID)) : (_getSucActiva()||MATRIZ_ID);
+}
+function _plantScope(){ return _plantillas.filter(function(p){ return p && p.activo!==false && _effSuc(p.sucursalId)===_effSuc(_sucSel); }); }
+
+/* ── Persistencia ── */
+function _guardarLocal(){ try{ localStorage.setItem(_sk('checklists'), JSON.stringify(_plantillas)); localStorage.setItem(_sk('checklist_runs'), JSON.stringify(_runs)); }catch(e){} }
+function persistPlant(p){ p.updated=Date.now(); var i=_plantillas.findIndex(function(x){return x.id===p.id;}); if(i>=0)_plantillas[i]=p; else _plantillas.push(p); _guardarLocal(); if(window.sbUpsert) sbUpsert('checklists', p); }
+function borrarPlant(id){ _plantillas=_plantillas.filter(function(x){return x.id!==id;}); _guardarLocal(); if(window.sbDelete) sbDelete('checklists', id); }
+function runId(pid, wk){ return 'clr_'+pid+'_'+wk; }
+function curRun(){ var id=runId(_ejecPlantId,_weekStr); if(!_runs[id]) _runs[id]={id:id,plantillaId:_ejecPlantId,sucursalId:_effSuc(_sucSel),semana:_weekStr,marcas:{},firmas:{}}; return _runs[id]; }
+function persistRun(r){ r.updated=Date.now(); r.id=runId(r.plantillaId,r.semana); _runs[r.id]=r; _guardarLocal(); if(window.sbUpsert) sbUpsert('checklist_runs', r); }
+
+async function _cargarDB(){
+    var negId=getNegocioActivo();
+    try{
+        var sess=await _supabase.auth.getSession();
+        if(sess.data&&sess.data.session){
+            var r=await Promise.all([
+                _supabase.from('checklists').select('datos').eq('negocio_id',negId),
+                _supabase.from('checklist_runs').select('datos').eq('negocio_id',negId)
+            ]);
+            if(!r[0].error&&r[0].data) _plantillas=r[0].data.map(function(x){return x.datos;});
+            if(!r[1].error&&r[1].data){ _runs={}; r[1].data.forEach(function(x){ if(x.datos&&x.datos.id)_runs[x.datos.id]=x.datos; }); }
+            _guardarLocal();
+        }
+    }catch(e){}
+}
+function _cargarLocal(){
+    try{ _plantillas=JSON.parse(localStorage.getItem(_sk('checklists'))||'[]'); }catch(e){ _plantillas=[]; }
+    try{ var m=JSON.parse(localStorage.getItem(_sk('checklist_runs'))||'{}'); if(m&&typeof m==='object')_runs=m; }catch(e){ _runs={}; }
+}
+
+/* ── Tabs ── */
+function setTab(t){ _tab=t; document.getElementById('tabPlant').className=t==='plant'?'on':''; document.getElementById('tabEjec').className=t==='ejec'?'on':''; document.getElementById('viewPlant').style.display=t==='plant'?'':'none'; document.getElementById('viewEjec').style.display=t==='ejec'?'':'none'; render(); }
+
+function render(){
+    document.getElementById('ckSub').textContent='Rutinas del turno · '+_sucNombre(_sucSel)+(_catGlobalOn()?' (vista global)':'');
+    if(_tab==='plant') renderPlantillas(); else renderEjecucion();
+}
+
+/* ── PLANTILLAS ── */
+function renderPlantillas(){
+    var cont=document.getElementById('viewPlant');
+    var lista=_plantScope().sort(function(a,b){return (a.tipo||'').localeCompare(b.tipo||'')||(a.nombre||'').localeCompare(b.nombre||'');});
+    var h='<div style="display:flex;justify-content:flex-end;margin-bottom:14px"><button class="ck-btn primary" onclick="nuevaPlantilla()">+ Nueva plantilla</button></div>';
+    if(!lista.length){ cont.innerHTML=h+'<div class="ck-empty"><div class="ic">📋</div><div style="font-size:15px;color:var(--text)">Sin checklists en '+esc(_sucNombre(_sucSel))+'</div><div style="margin-top:6px">Crea tu primera plantilla de apertura, cierre o limpieza.</div></div>'; return; }
+    h+='<div class="ck-grid">'+lista.map(function(p){
+        var tipo=p.tipo||'otro';
+        return '<div class="ck-card">'+
+            '<div class="ck-card-top"><span class="ck-tag '+tipo+'">'+esc(TIPO_LBL[tipo]||tipo)+'</span>'+(p.area?'<span class="ck-tag otro">'+esc(p.area)+'</span>':'')+'</div>'+
+            '<div class="ck-card-nom">'+esc(p.nombre||'—')+'</div>'+
+            '<div class="ck-card-meta">'+(p.tareas?p.tareas.length:0)+' tareas · '+esc(_sucNombre(p.sucursalId))+'</div>'+
+            '<div class="ck-card-acts">'+
+                '<button class="ck-btn" onclick="abrirEjecDe(\''+p.id+'\')">✅ Ejecutar</button>'+
+                '<button class="ck-btn" onclick="editarPlantilla(\''+p.id+'\')">✏️ Editar</button>'+
+                '<button class="ck-btn" onclick="eliminarPlantilla(\''+p.id+'\')">🗑️</button>'+
+            '</div>'+
+        '</div>';
+    }).join('')+'</div>';
+    cont.innerHTML=h;
+}
+function _pobSucSelect(sel, val){
+    var sucs=_getSucs(), tieneMatriz=sucs.some(function(s){return s.id===MATRIZ_ID;});
+    sel.innerHTML='<option value="">— Sin asignar (Matriz) —</option>'+(tieneMatriz?'':'<option value="suc_principal">Matriz</option>')+sucs.map(function(s){return '<option value="'+esc(s.id)+'">'+esc(s.nombre||s.id)+'</option>';}).join('');
+    sel.value=val||'';
+}
+function nuevaPlantilla(){ _edit={id:genId(),nombre:'',tipo:'apertura',area:'',sucursalId:(_getSucActiva()||''),tareas:[],activo:true}; _abrirEditor('Nueva plantilla'); }
+function editarPlantilla(id){ var p=_plantillas.find(function(x){return x.id===id;}); if(!p)return; _edit=JSON.parse(JSON.stringify(p)); _abrirEditor('Editar plantilla'); }
+function _abrirEditor(titulo){
+    document.getElementById('ckmTitle').textContent=titulo;
+    document.getElementById('ckmNombre').value=_edit.nombre||'';
+    document.getElementById('ckmTipo').value=_edit.tipo||'apertura';
+    document.getElementById('ckmArea').value=_edit.area||'';
+    _pobSucSelect(document.getElementById('ckmSuc'), _edit.sucursalId);
+    if(!_edit.tareas||!_edit.tareas.length) _edit.tareas=[{id:genId(),texto:'',freq:'A'}];
+    _renderTareasEditor();
+    document.getElementById('ckModal').classList.add('on');
+}
+function _renderTareasEditor(){
+    document.getElementById('ckmTareas').innerHTML=_edit.tareas.map(function(t,i){
+        return '<div class="ck-tarea-row">'+
+            '<select class="ck-in ck-freq-sel" onchange="_setTareaFreq('+i+',this.value)">'+FREQS.map(function(f){return '<option value="'+f+'"'+(t.freq===f?' selected':'')+'>'+f+'</option>';}).join('')+'</select>'+
+            '<input class="ck-in" placeholder="Descripción de la tarea" value="'+esc(t.texto)+'" oninput="_setTareaTxt('+i+',this.value)">'+
+            '<button class="ck-tarea-del" onclick="_delTarea('+i+')" title="Quitar">✕</button>'+
+        '</div>';
+    }).join('');
+}
+function _setTareaTxt(i,v){ _edit.tareas[i].texto=v; }
+function _setTareaFreq(i,v){ _edit.tareas[i].freq=v; }
+function _delTarea(i){ _edit.tareas.splice(i,1); if(!_edit.tareas.length)_edit.tareas=[{id:genId(),texto:'',freq:'A'}]; _renderTareasEditor(); }
+function addTareaRow(){ _edit.tareas.push({id:genId(),texto:'',freq:'A'}); _renderTareasEditor(); }
+function cerrarEditor(){ document.getElementById('ckModal').classList.remove('on'); _edit=null; }
+function guardarPlantilla(){
+    _edit.nombre=document.getElementById('ckmNombre').value.trim();
+    _edit.tipo=document.getElementById('ckmTipo').value;
+    _edit.area=document.getElementById('ckmArea').value.trim();
+    _edit.sucursalId=document.getElementById('ckmSuc').value;
+    _edit.tareas=(_edit.tareas||[]).filter(function(t){return (t.texto||'').trim();});
+    if(!_edit.nombre){ alert('Ponle un nombre a la plantilla.'); return; }
+    if(!_edit.tareas.length){ alert('Agrega al menos una tarea.'); return; }
+    persistPlant(_edit);
+    cerrarEditor();
+    render();
+}
+function eliminarPlantilla(id){ if(!confirm('¿Eliminar esta plantilla? Las ejecuciones ya registradas se conservan.')) return; borrarPlant(id); render(); }
+
+/* ── EJECUCIÓN ── */
+function abrirEjecDe(id){ _ejecPlantId=id; setTab('ejec'); }
+function _mondayOf(wk){ var r=EtaaxCore.getRange('semana',wk); return new Date(r.from+'T12:00:00'); }
+function _diaDate(i){ var m=_mondayOf(_weekStr); m.setDate(m.getDate()+i); return m; }
+function _fmtDia(d){ return d.getDate()+' '+MESES[d.getMonth()]; }
+function cambiarSemana(delta){ var m=_mondayOf(_weekStr); m.setDate(m.getDate()+delta*7); _weekStr=EtaaxCore.getWeekStr(m); renderEjecucion(); }
+function ejecSelChange(v){ _ejecPlantId=v; renderEjecucion(); }
+var CICLO={'':'ok','ok':'no','no':'pend','pend':''};
+var MARCA={ok:'✓',no:'✗',pend:'▲','':''};
+function ciclarCelda(tid,dia){
+    var r=curRun(); if(!r.marcas[tid])r.marcas[tid]={};
+    r.marcas[tid]['d'+dia]=CICLO[r.marcas[tid]['d'+dia]||''];
+    persistRun(r); renderEjecucion();
+}
+function setFirma(dia,v){ var r=curRun(); r.firmas['d'+dia]=v; persistRun(r); }
+function _cumpl(run, plant){
+    var ok=0, tot=0;
+    (plant.tareas||[]).forEach(function(t){ for(var i=0;i<7;i++){ var m=(run.marcas[t.id]||{})['d'+i]; if(m==='ok'){ok++;tot++;} else if(m==='no'||m==='pend'){tot++;} } });
+    return tot?Math.round(ok/tot*100):0;
+}
+function renderEjecucion(){
+    var cont=document.getElementById('viewEjec');
+    var lista=_plantScope();
+    if(!lista.length){ cont.innerHTML='<div class="ck-empty"><div class="ic">✅</div><div style="font-size:15px;color:var(--text)">No hay plantillas en '+esc(_sucNombre(_sucSel))+'</div><div style="margin-top:6px">Crea una en la pestaña Plantillas.</div></div>'; return; }
+    if(!_ejecPlantId || !lista.find(function(p){return p.id===_ejecPlantId;})) _ejecPlantId=lista[0].id;
+    var plant=_plantillas.find(function(p){return p.id===_ejecPlantId;});
+    var mon=_diaDate(0), sun=_diaDate(6);
+    var h='<div class="ck-toolbar">'+
+        '<select class="ck-select" onchange="ejecSelChange(this.value)">'+lista.map(function(p){return '<option value="'+p.id+'"'+(p.id===_ejecPlantId?' selected':'')+'>'+esc((TIPO_LBL[p.tipo]||'')+' · '+p.nombre)+'</option>';}).join('')+'</select>'+
+        '<button class="ck-btn" onclick="imprimirChecklist()">🖨️ Imprimir</button>'+
+        '<div class="ck-weeknav"><button class="ck-wbtn" onclick="cambiarSemana(-1)">◀</button>'+
+            '<div class="ck-wlabel"><div class="wk">Semana '+_weekStr.split('-W')[1]+'</div><div class="wr">'+_fmtDia(mon)+' – '+_fmtDia(sun)+' '+sun.getFullYear()+'</div></div>'+
+            '<button class="ck-wbtn" onclick="cambiarSemana(1)">▶</button></div>'+
+    '</div>';
+    var run=curRun();
+    h+='<div class="ck-scroll"><table class="ck-table"><thead><tr><th>Tarea</th>';
+    for(var i=0;i<7;i++){ var d=_diaDate(i); h+='<th>'+DIAS[i]+'<br><span style="font-weight:400;opacity:.7">'+_fmtDia(d)+'</span></th>'; }
+    h+='</tr></thead><tbody>';
+    (plant.tareas||[]).forEach(function(t){
+        h+='<tr><td><div class="ck-task"><span class="ck-freq">'+esc(t.freq||'')+'</span><span>'+esc(t.texto)+'</span></div></td>';
+        for(var i=0;i<7;i++){ var m=(run.marcas[t.id]||{})['d'+i]||''; h+='<td class="ck-cell '+m+'" onclick="ciclarCelda(\''+t.id+'\','+i+')">'+MARCA[m]+'</td>'; }
+        h+='</tr>';
+    });
+    h+='<tr class="ck-firma-row"><td>Firma</td>';
+    for(var i=0;i<7;i++){ h+='<td><input class="ck-firma-in" value="'+esc(run.firmas['d'+i]||'')+'" onchange="setFirma('+i+',this.value)" placeholder="—"></td>'; }
+    h+='</tr></tbody></table></div>';
+    var pct=_cumpl(run,plant);
+    var col=pct>=90?'var(--green)':pct>=70?'var(--accent)':'#e05a3a';
+    h+='<div class="ck-cumpl"><div><div class="cval" style="color:'+col+'">'+pct+'%</div><div class="clbl">Cumplimiento semana</div></div>'+
+       '<div class="ck-legend"><span style="color:var(--green)">✓ hecha</span><span style="color:#e05a3a">✗ no realizada</span><span style="color:var(--accent)">▲ pendiente</span><span>· toca una celda para marcar</span></div></div>';
+    cont.innerHTML=h;
+}
+
+/* ── Imprimible con marca (hoja tipo la de papel) ── */
+function imprimirChecklist(){
+    var plant=_plantillas.find(function(p){return p.id===_ejecPlantId;}); if(!plant)return;
+    var run=curRun(), mon=_diaDate(0), sun=_diaDate(6);
+    var head = window.etaaxReporteHeader
+        ? etaaxReporteHeader('Check list · '+(TIPO_LBL[plant.tipo]||plant.tipo)+(plant.area?' · '+plant.area:''),
+            'Semana '+_weekStr.split('-W')[1]+'<br>'+_fmtDia(mon)+' al '+_fmtDia(sun)+' '+sun.getFullYear(), {sucursalId:_effSuc(plant.sucursalId)})
+        : '<h2>'+esc(plant.nombre)+'</h2>';
+    var foot = window.etaaxReporteFooter ? etaaxReporteFooter('Check list') : '';
+    var rows=(plant.tareas||[]).map(function(t){
+        var cells=''; for(var i=0;i<7;i++){ var m=(run.marcas[t.id]||{})['d'+i]||''; cells+='<td style="text-align:center;border:1px solid #ccc;font-size:13px">'+({ok:'✓',no:'✗',pend:'▲'}[m]||'')+'</td>'; }
+        return '<tr><td style="border:1px solid #ccc;font-weight:700;text-align:center;width:34px">'+esc(t.freq||'')+'</td><td style="border:1px solid #ccc;padding:5px 8px;font-size:12px">'+esc(t.texto)+'</td>'+cells+'</tr>';
+    }).join('');
+    var firmas=''; for(var i=0;i<7;i++){ firmas+='<td style="border:1px solid #ccc;text-align:center;font-size:10px;color:#666">'+esc(run.firmas['d'+i]||'')+'</td>'; }
+    var thead='<tr style="background:#f3e8ea"><th style="border:1px solid #ccc;width:34px"></th><th style="border:1px solid #ccc;text-align:left;padding:5px 8px">'+esc(plant.nombre)+'</th>'+DIAS.map(function(d){return '<th style="border:1px solid #ccc;font-size:11px;padding:4px">'+d+'</th>';}).join('')+'</tr>';
+    var win=window.open('','_blank');
+    win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Check list</title>'+
+        '<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600&display=swap" rel="stylesheet">'+
+        '<style>body{font-family:\'DM Sans\',Arial,sans-serif;margin:0;color:#1a1916;background:#fff}table{border-collapse:collapse;width:100%}@media print{@page{size:letter landscape;margin:1cm}}</style></head><body>'+
+        head+
+        '<div style="padding:14px 20px"><table>'+thead+rows+
+        '<tr><td colspan="2" style="border:1px solid #ccc;text-align:right;padding:5px 8px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#888">Firma</td>'+firmas+'</tr>'+
+        '</table><div style="margin-top:8px;font-size:10px;color:#888">✓ realizada · ✗ no realizada · ▲ pendiente &nbsp;·&nbsp; A = apertura · D/T = diaria/turno · SEM = semanal</div></div>'+
+        foot+'</body></html>');
+    win.document.close(); win.focus(); setTimeout(function(){ win.print(); }, 400);
+}
+
+/* ── Init ── */
+document.getElementById('ckModal').addEventListener('click', function(e){ if(e.target===this) cerrarEditor(); });
+document.addEventListener('keydown', function(e){ if(e.key==='Escape') cerrarEditor(); });
+(async function init(){
+    _cargarLocal(); _resolverScope(); render();
+    await _cargarDB(); render();
+    var neg=getNegocioActivo();
+    if(window.sbRealtime && neg){
+        sbRealtime('checklists', neg, function(){ _cargarDB().then(render); });
+        sbRealtime('checklist_runs', neg, function(){ if(!document.getElementById('ckModal').classList.contains('on')) _cargarDB().then(render); });
+    }
+})();
+</script>
+</body>
+</html>
