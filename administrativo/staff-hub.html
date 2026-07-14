@@ -9,21 +9,22 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
     <style>
-        .cf-wrap { min-height:100vh;padding:48px 24px 100px;display:flex;flex-direction:column;align-items:center; }
-        .cf-hero { text-align:center;padding:52px 0 40px;animation:fadeUp .5s ease both;max-width:640px;width:100%; }
-        .cf-hero-eyebrow { font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px; }
-        .cf-hero-title { font-family:'Bebas Neue',sans-serif;font-size:58px;letter-spacing:3px;line-height:.95;color:var(--text);margin-bottom:12px; }
+        /* Mismas dimensiones que Ventas y Gastos Diarios (dx-wrap/dx-hero) */
+        .cf-wrap { max-width:1080px;margin:0 auto;padding:28px 24px 100px; }
+        .cf-hero { text-align:center;padding:18px 0 26px;animation:fadeUp .5s ease both;max-width:640px;margin:0 auto; }
+        .cf-hero-eyebrow { font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px; }
+        .cf-hero-title { font-family:'Bebas Neue',sans-serif;font-size:44px;letter-spacing:3px;line-height:.95;color:var(--text);margin-bottom:8px; }
         .cf-hero-title .g { color:var(--viol); }
-        .cf-hero-sub { font-size:13px;color:var(--text-dim);line-height:1.6; }
-        .cf-modules { width:100%;max-width:960px;display:flex;flex-direction:column;gap:36px; }
+        .cf-hero-sub { font-size:12px;color:var(--text-dim);line-height:1.6; }
+        .cf-modules { width:100%;display:flex;flex-direction:column;gap:28px; }
         .cf-section { animation:fadeUp .5s ease both; }
         .cf-section:nth-child(2){animation-delay:.06s;}
         .cf-section-hdr { display:flex;align-items:flex-end;gap:14px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border); }
         .cf-section-tag { font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--text-dim);padding:3px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;white-space:nowrap;line-height:1.6; }
         .cf-section-title { font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:2px;color:var(--text);line-height:1; }
         .cf-section-desc { font-size:11px;color:var(--text-dim);line-height:1.5;margin-left:auto;text-align:right;max-width:280px; }
-        .cf-grid { display:grid;gap:14px;grid-template-columns:1fr 1fr; }
-        .cf-card { background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px 22px 20px;cursor:pointer;transition:all .2s;text-decoration:none;display:flex;flex-direction:column;align-items:flex-start;gap:7px;color:var(--text);font-family:'DM Sans',sans-serif;box-sizing:border-box; }
+        .cf-grid { display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); }
+        .cf-card { background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px 20px 18px;cursor:pointer;transition:all .2s;text-decoration:none;display:flex;flex-direction:column;align-items:flex-start;gap:7px;color:var(--text);font-family:'DM Sans',sans-serif;box-sizing:border-box; }
         .cf-card:hover { border-color:rgba(155,141,232,.5);background:rgba(155,141,232,.06);transform:translateY(-3px);box-shadow:0 8px 32px rgba(155,141,232,.14); }
         .cf-card.coming-soon { opacity:.4;cursor:default;pointer-events:none; }
         .cf-card-hdr { display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:2px; }
@@ -75,10 +76,36 @@
         <span class="top-sep">|</span>
         <span class="top-section-name">Gestión de Staff</span>
     </div>
-    <a href="index.html" class="topbar-home" title="Panel Administrativo" style="margin-left:auto">←</a>
 </header>
 <div id="ctxBar" class="ctx-bar" style="display:none"></div>
 
+<div class="app-shell">
+    <nav class="nav cerrado" id="nav">
+        <div class="nav-top">
+            <div class="nav-brand"><span class="nav-brand-sub">Administrativo</span></div>
+            <div class="nav-top-actions">
+                <a href="index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Panel Admin" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1">🗃️</a>
+                <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
+            </div>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Admin</div>
+            <a href="diario.html" class="nav-link" data-tooltip="Ventas y Gastos"><span class="nav-icon">🧾</span><span class="nav-text">Ventas y Gastos</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Catálogos</div>
+            <a href="staff-hub.html" class="nav-link active" data-tooltip="Staff"><span class="nav-icon">👥</span><span class="nav-text">Staff</span></a>
+            <a href="proveedores.html" class="nav-link" data-tooltip="Proveedores"><span class="nav-icon">🚚</span><span class="nav-text">Proveedores</span></a>
+            <a href="clientes.html" class="nav-link" data-tooltip="Clientes"><span class="nav-icon">⭐</span><span class="nav-text">Clientes</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Menús</div>
+            <a href="menu.html" class="nav-link" data-tooltip="Menú"><span class="nav-icon">📋</span><span class="nav-text">Menú</span></a>
+            <a href="ventas-productos.html" class="nav-link" data-tooltip="Ventas por Producto"><span class="nav-icon">🧾</span><span class="nav-text">Ventas por Producto</span></a>
+        </div>
+    </nav>
+
+    <main class="main-content expandido" id="mainContent">
 <div class="cf-wrap">
     <div class="cf-hero">
         <div class="cf-hero-eyebrow">Módulo Administrativo</div>
@@ -164,6 +191,8 @@
         </div>
     </div>
 </div>
+    </main>
+</div><!-- /app-shell -->
 
 <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
 
@@ -185,6 +214,15 @@
 <script>
 (function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);document.addEventListener('DOMContentLoaded',function(){if(s==='light'){document.getElementById('themeIcon').textContent='🌙';document.getElementById('themeLabel').textContent='Modo oscuro';}});})();
 function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('etaax_theme',n);document.getElementById('themeIcon').textContent=n==='light'?'🌙':'☀️';document.getElementById('themeLabel').textContent=n==='light'?'Modo oscuro':'Modo claro';}
+/* Barra de navegación lateral (igual que Ventas y Gastos Diarios) */
+function toggleNav(){
+    var nav=document.getElementById('nav'), main=document.getElementById('mainContent');
+    var btn=document.getElementById('navToggleBtn'), txt=document.getElementById('navToggleTxt');
+    var cerrado=nav.classList.toggle('cerrado');
+    main.classList.toggle('expandido', cerrado);
+    if(btn){ btn.childNodes[0].textContent=cerrado?'▶':'◀'; btn.setAttribute('data-tooltip', cerrado?'Expandir':'Contraer'); }
+    if(txt) txt.textContent=cerrado?'Expandir':'Contraer';
+}
 
 /* ── Abrir una herramienta como modal flotante (iframe embebido) ──
    Reusa la página completa (organigrama, perfiles, etc.) en modo ?embed=1,
