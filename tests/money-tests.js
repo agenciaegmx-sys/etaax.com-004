@@ -134,6 +134,7 @@ A._cacheGastosExt = [
     { fecha: '2026-07-10', metodoPago: 'caja_chica', monto: 150 },
     { fecha: '2026-07-10', metodoPago: 'caja_fuerte', monto: 999 },  // NO es caja chica
     { fecha: '2026-07-09', metodoPago: 'caja_chica', monto: 777 },   // otro día
+    { fecha: '2026-07-10', metodoPago: 'caja_chica', monto: 500, sucursalId: 'sucB' }, // OTRA sucursal
 ];
 
 test('ventasBruta = efectivo + tarjeta + transferencia', () => eq(A.ventasBruta(corte), 5000));
@@ -148,6 +149,17 @@ test('resguardo = fondo + efectivo − caja chica − props retiradas − fondo 
     eq(A.resguardo(corte), 2000 + 3000 - 150 - 300 - 2000)); // 2550
 test('resguardo SIN retiro de propinas no las descuenta', () =>
     eq(A.resguardo({ ...corte, propRetiroCaja: 0 }), 2850));
+// Gastos NO cruzan entre sucursales (bug: la caja chica de otra sucursal inflaba el resguardo)
+test('_cajaChicaLive: Matriz solo ve su propia caja chica (no la de sucB)', () =>
+    eq(A._cajaChicaLive('2026-07-10', 'suc_principal'), 150));
+test('_cajaChicaLive: sucB ve su propia caja chica aparte', () =>
+    eq(A._cajaChicaLive('2026-07-10', 'sucB'), 500));
+test('resguardo de un corte de sucB usa la caja chica de sucB, no la de Matriz', () =>
+    eq(A.resguardo({ ...corte, sucursalId: 'sucB' }), 2000 + 3000 - 500 - 300 - 2000)); // 2200
+test('_gastosSuc filtra Matriz (3 gastos sin sucursal)', () =>
+    eq(A._gastosSuc('suc_principal').length, 3));
+test('_gastosSuc filtra sucB (1 gasto)', () =>
+    eq(A._gastosSuc('sucB').length, 1));
 
 // Comisiones bancarias por cuenta
 const ctaConIva = { id: 'a', tipo: 'debito', comisionTC: 1.8, comisionTD: 2, aplicaIva: true, ivaPct: 16 };

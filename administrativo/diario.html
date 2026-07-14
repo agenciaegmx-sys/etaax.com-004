@@ -19,7 +19,7 @@
         .dx-hero { text-align:center; padding: 18px 0 26px; animation: fadeUp .5s ease both; }
         .dx-hero-eyebrow { font-size:10px; letter-spacing:3px; text-transform:uppercase; color:var(--text-dim); margin-bottom:8px; }
         .dx-hero-title { font-family:'Bebas Neue',sans-serif; font-size:44px; letter-spacing:3px; line-height:.95; color:var(--text); }
-        .dx-hero-title .g { color: var(--green); }
+        .dx-hero-title .g { color: var(--viol); }
         .dx-hero-sub { font-size:12px; color:var(--text-dim); margin-top:8px; }
 
         /* Barra superior de acciones (Reporte Directivo) */
@@ -2353,11 +2353,11 @@ var _gastosCajaChica = 0; // solo caja chica — se usa en resguardo
 function _loadGastos() { return _cacheGastosExt || []; }
 function jalarGastosFecha() {
     var fecha  = document.getElementById('fFecha').value;
-    var negId  = getNegocioActivo();
     if (!fecha) return;
-    var todos  = _loadGastos().filter(function(g) {
-        return g.fecha === fecha && (!negId || !g.negocioId || g.negocioId === negId);
-    });
+    // Solo los gastos de la sucursal del corte que se está capturando (no cruzar sucursales).
+    var _selSuc = document.getElementById('fSucursal');
+    var _sucCorte = (_selSuc && _selSuc.value) ? _selSuc.value : _sucActiva();
+    var todos  = _gastosSuc(_sucCorte).filter(function(g) { return g.fecha === fecha; });
     var chica  = todos.filter(function(g){ return g.metodoPago==='caja_chica'; })
                       .reduce(function(s,g){ return s+n(g.monto); }, 0);
     var fuerte = todos.filter(function(g){ return g.metodoPago==='caja_fuerte'; })
@@ -2432,13 +2432,22 @@ function cheque(c){return EtaaxCore.cheque(c);}
 // Caja chica REAL de una fecha, EN VIVO desde el historial de gastos (no el snapshot del corte).
 // Así, al editar/agregar/borrar un gasto de caja chica, el resguardo (y el saldo de caja fuerte)
 // se actualiza solo, sin tener que reabrir y volver a guardar el corte.
-function _cajaChicaLive(fecha){
+// Gastos de UNA sucursal (NUNCA cruza entre sucursales). sucId undefined → sucursal activa.
+// Un gasto sin sucursalId pertenece a la Matriz ('suc_principal'), igual que los cortes.
+function _gastosSuc(sucId){
     var negId=getNegocioActivo();
-    return _loadGastos().filter(function(g){ return g.fecha===fecha && g.metodoPago==='caja_chica' && (!negId||!g.negocioId||g.negocioId===negId); })
+    var suc=((sucId!==undefined && sucId!==null) ? sucId : _sucActiva()) || 'suc_principal';
+    return _loadGastos().filter(function(g){
+        return (!negId||!g.negocioId||g.negocioId===negId) && ((g.sucursalId||'suc_principal')===suc);
+    });
+}
+function _cajaChicaLive(fecha, sucId){
+    return _gastosSuc(sucId).filter(function(g){ return g.fecha===fecha && g.metodoPago==='caja_chica'; })
         .reduce(function(s,g){ return s+n(g.monto); },0);
 }
-// Resguardo = Fondo inicial + Venta efectivo − Gastos caja chica (EN VIVO) − Fondo siguiente turno
-function resguardo(c){return EtaaxCore.resguardo(c, _cajaChicaLive(c.fecha));}
+// Resguardo = Fondo inicial + Venta efectivo − Gastos caja chica (EN VIVO) − Fondo siguiente turno.
+// La caja chica se toma SOLO de la sucursal del corte (no de otras sucursales).
+function resguardo(c){return EtaaxCore.resguardo(c, _cajaChicaLive(c.fecha, c.sucursalId));}
 function resultado(c){return EtaaxCore.resultado(c);}
 
 /* ── Period state ── */
@@ -2563,16 +2572,17 @@ function renderTabla(cur){
     empty.style.display='none';
     // Pre-calcular totales de gastos por fecha desde localStorage
     // (solo métodos visibles para el rol — p.ej. gerente: solo caja chica)
+    // Clave fecha|sucursal: los gastos de cada corte son SOLO los de su sucursal.
     var gastosPorFecha = {};
     _loadGastos().forEach(function(g){
         if (!_gastoVisible(g)) return;
-        if (!gastosPorFecha[g.fecha]) gastosPorFecha[g.fecha] = 0;
-        gastosPorFecha[g.fecha] += n(g.monto);
+        var k = g.fecha + '|' + (g.sucursalId || 'suc_principal');
+        gastosPorFecha[k] = (gastosPorFecha[k] || 0) + n(g.monto);
     });
 
     tbody.innerHTML=lista.map(function(c){
         var vt=ventasBruta(c), pp=propinas(c), ck=cheque(c);
-        var gas=gastosPorFecha[c.fecha]||0, rsg=resguardo(c);
+        var gas=gastosPorFecha[c.fecha+'|'+(c.sucursalId||'suc_principal')]||0, rsg=resguardo(c);
         var metaD=metaDelDiaDx(c.fecha), pctM=metaD>0?vt/metaD*100:null;
         var colM=pctM===null?'var(--text-dim)':pctM>=100?'var(--green)':pctM>=80?'var(--accent)':'var(--red)';
         return'<tr>'+
@@ -2601,7 +2611,7 @@ function renderTabla(cur){
         var tVenta=0,tProp=0,tComen=0,tGas=0,tRsg=0,tMeta=0;
         lista.forEach(function(c){
             tVenta+=ventasBruta(c); tProp+=propinas(c); tComen+=n(c.comensales);
-            tGas+=(gastosPorFecha[c.fecha]||0); tRsg+=resguardo(c); tMeta+=metaDelDiaDx(c.fecha);
+            tGas+=(gastosPorFecha[c.fecha+'|'+(c.sucursalId||'suc_principal')]||0); tRsg+=resguardo(c); tMeta+=metaDelDiaDx(c.fecha);
         });
         document.getElementById('ftVenta').textContent=fmtM(tVenta);
         var ftM=document.getElementById('ftMeta');
@@ -3072,7 +3082,8 @@ function _abrirCajaFuerteContenido(){
     var body=document.getElementById('cajBody');
 
     // ── Gastos desde etaax_gastos ────────────────────────────
-    var todosGastos = _loadGastos();
+    // Solo la sucursal activa (cuadra con `lista`=load(), que también está scopeada).
+    var todosGastos = _scopeSuc(_loadGastos());
     var gastosCajaFuerte = todosGastos.filter(function(g){return g.metodoPago==='caja_fuerte';})
                                       .reduce(function(s,g){return s+n(g.monto);},0);
     var gastosDebito     = todosGastos.filter(function(g){return g.metodoPago==='banco'&&g.metodoBanco!=='credito';})
@@ -3363,7 +3374,7 @@ function verCorte(id) {
 
     // Gastos del día desde localStorage (misma lógica que jalarGastosFecha)
     // Filtrado por permisos: solo métodos que el rol puede ver (p.ej. solo caja chica)
-    var gastosDelDia = _loadGastos().filter(function(g){ return g.fecha === c.fecha && _gastoVisible(g); });
+    var gastosDelDia = _loadGastos().filter(function(g){ return g.fecha === c.fecha && (g.sucursalId||'suc_principal')===(c.sucursalId||'suc_principal') && _gastoVisible(g); });
     var metIcon = {caja_chica:'💵',caja_fuerte:'🏦',banco:'🏛️'};
     var metLabel2 = {caja_chica:'Caja chica',caja_fuerte:'Caja fuerte',banco:'Banco'};
     var gChica  = gastosDelDia.filter(function(g){ return g.metodoPago==='caja_chica'; }).reduce(function(s,g){ return s+n(g.monto); },0);
