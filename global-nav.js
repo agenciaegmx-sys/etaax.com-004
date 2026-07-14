@@ -15,7 +15,7 @@
         if (!nav) return;
         var path = location.pathname;
         var items = [
-            { icon: '👥', label: 'Colaboradores', href: '/administrativo/staff.html',       match: 'staff.html' },
+            { icon: '👥', label: 'Colaboradores', href: '/administrativo/staff-hub.html',   match: 'staff' },
             { icon: '🍽️', label: 'Recetas',       href: '/recetas/index.html?escandallos=1',  match: 'recetas/index.html' },
             { icon: '📦', label: 'Insumos',       href: '/recetas/insumos.html',             match: 'insumos.html' },
             { icon: '🧾', label: 'Clientes',      href: '/administrativo/clientes.html',     match: 'clientes.html' },

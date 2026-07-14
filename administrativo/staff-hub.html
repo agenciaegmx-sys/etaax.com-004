@@ -37,6 +37,20 @@
         @media (max-width:640px){ .cf-grid{grid-template-columns:1fr;} .cf-section-desc{display:none;} }
         .theme-toggle { position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s; }
         .theme-toggle:hover{border-color:var(--green);color:var(--green);}
+        /* ── Modal flotante de herramienta (organigrama, perfiles, etc. embebidos) ── */
+        .tool-modal-bg { position:fixed;inset:0;z-index:9400;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:2vh 1.4vw; }
+        .tool-modal-bg.on { display:flex;animation:fadeUp .18s ease both; }
+        .tool-modal { background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:1280px;height:96vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 90px rgba(0,0,0,.5); }
+        .tool-modal-hd { display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface2);flex-shrink:0; }
+        .tool-modal-hd .tm-ic { font-size:20px;line-height:1; }
+        .tool-modal-hd .tm-tt { font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--text);line-height:1; }
+        .tool-modal-hd .tm-x { margin-left:auto;background:var(--surface);border:1px solid var(--border);border-radius:9px;color:var(--text-muted);padding:7px 14px;font-family:'DM Sans',sans-serif;font-size:12.5px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px; }
+        .tool-modal-hd .tm-x:hover { border-color:var(--viol);color:var(--viol); }
+        .tool-modal-hd .tm-open { background:var(--surface);border:1px solid var(--border);border-radius:9px;color:var(--text-dim);padding:7px 12px;font-size:12px;cursor:pointer;text-decoration:none;transition:all .15s; }
+        .tool-modal-hd .tm-open:hover { border-color:var(--green);color:var(--green); }
+        .tool-modal-body { flex:1;position:relative;background:var(--bg); }
+        .tool-modal-body iframe { position:absolute;inset:0;width:100%;height:100%;border:0;display:block; }
+        .tool-loading { position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:13px;pointer-events:none; }
     </style>
 </head>
 <body>
@@ -81,7 +95,7 @@
                 <div class="cf-section-desc">Alta de colaboradores, roles, nóminas y horarios operativos por sucursal.</div>
             </div>
             <div class="cf-grid">
-                <a href="staff.html" class="cf-card">
+                <a class="cf-card" style="cursor:pointer" onclick="abrirTool('staff.html','Catálogo de Staff','👥')">
                     <div class="cf-card-hdr">
                         <div class="cf-card-icon">👥</div>
                         <span class="cf-badge-active">Activo</span>
@@ -90,7 +104,7 @@
                     <div class="cf-card-desc">Personal, roles y permisos de acceso por colaborador y sucursal. Alimenta automáticamente las nóminas.</div>
                     <div class="cf-card-cta">Abrir →</div>
                 </a>
-                <a href="horarios.html" class="cf-card">
+                <a class="cf-card" style="cursor:pointer" onclick="abrirTool('horarios.html','Horarios Operativos','🗓️')">
                     <div class="cf-card-hdr">
                         <div class="cf-card-icon">🗓️</div>
                         <span class="cf-badge-active">Activo</span>
@@ -110,7 +124,7 @@
                 <div class="cf-section-desc">La foto de tu equipo: quién es quién, qué se espera de cada puesto y cómo se mide.</div>
             </div>
             <div class="cf-grid">
-                <a href="organigrama.html" class="cf-card">
+                <a class="cf-card" style="cursor:pointer" onclick="abrirTool('organigrama.html','Organigrama','🧠')">
                     <div class="cf-card-hdr">
                         <div class="cf-card-icon">🧠</div>
                         <span class="cf-badge-active">Activo</span>
@@ -119,7 +133,7 @@
                     <div class="cf-card-desc">Mapa visual de tu organización tipo red neuronal: crea puestos, conéctalos y vincula cada nodo con su perfil.</div>
                     <div class="cf-card-cta">Abrir →</div>
                 </a>
-                <a href="perfiles-puesto.html" class="cf-card">
+                <a class="cf-card" style="cursor:pointer" onclick="abrirTool('perfiles-puesto.html','Perfiles de Puesto','📋')">
                     <div class="cf-card-hdr">
                         <div class="cf-card-icon">📋</div>
                         <span class="cf-badge-active">Activo</span>
@@ -128,7 +142,7 @@
                     <div class="cf-card-desc">Información general, competencias, salud y funciones de cada puesto. Listos para imprimir o exportar a PDF.</div>
                     <div class="cf-card-cta">Abrir →</div>
                 </a>
-                <a href="evaluaciones.html" class="cf-card">
+                <a class="cf-card" style="cursor:pointer" onclick="abrirTool('evaluaciones.html','Evaluaciones','📝')">
                     <div class="cf-card-hdr">
                         <div class="cf-card-icon">📝</div>
                         <span class="cf-badge-active">Activo</span>
@@ -153,9 +167,52 @@
 
 <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
 
+<!-- Modal flotante que embebe la herramienta seleccionada -->
+<div class="tool-modal-bg" id="toolModal">
+    <div class="tool-modal">
+        <div class="tool-modal-hd">
+            <span class="tm-ic" id="tmIcon">🧠</span>
+            <span class="tm-tt" id="tmTitle">Herramienta</span>
+            <a class="tm-open" id="tmOpen" href="#" target="_blank" title="Abrir en pestaña nueva">Pantalla completa ↗</a>
+            <button class="tm-x" onclick="cerrarTool()">✕ Cerrar</button>
+        </div>
+        <div class="tool-modal-body">
+            <div class="tool-loading" id="tmLoading">Cargando…</div>
+            <iframe id="tmFrame" title="Herramienta de staff"></iframe>
+        </div>
+    </div>
+</div>
+
 <script>
 (function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);document.addEventListener('DOMContentLoaded',function(){if(s==='light'){document.getElementById('themeIcon').textContent='🌙';document.getElementById('themeLabel').textContent='Modo oscuro';}});})();
 function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('etaax_theme',n);document.getElementById('themeIcon').textContent=n==='light'?'🌙':'☀️';document.getElementById('themeLabel').textContent=n==='light'?'Modo oscuro':'Modo claro';}
+
+/* ── Abrir una herramienta como modal flotante (iframe embebido) ──
+   Reusa la página completa (organigrama, perfiles, etc.) en modo ?embed=1,
+   que oculta su barra de navegación. Misma origin → comparte sesión/negocio. */
+function abrirTool(page, titulo, icono){
+    var bg=document.getElementById('toolModal');
+    var frame=document.getElementById('tmFrame');
+    var loading=document.getElementById('tmLoading');
+    document.getElementById('tmTitle').textContent=titulo||'Herramienta';
+    document.getElementById('tmIcon').textContent=icono||'🧩';
+    document.getElementById('tmOpen').href=page; // pantalla completa = misma página SIN embed
+    loading.style.display='flex';
+    frame.onload=function(){ loading.style.display='none'; };
+    // El tema actual se pasa por la URL para que el iframe arranque igual (dark/light lo lee de localStorage compartido).
+    frame.src = page + (page.indexOf('?')>=0 ? '&' : '?') + 'embed=1';
+    bg.classList.add('on');
+    document.body.style.overflow='hidden';
+}
+function cerrarTool(){
+    var bg=document.getElementById('toolModal');
+    bg.classList.remove('on');
+    document.body.style.overflow='';
+    // Liberar el iframe (detiene la app embebida y resetea su estado para la próxima).
+    setTimeout(function(){ if(!bg.classList.contains('on')) document.getElementById('tmFrame').src='about:blank'; }, 180);
+}
+document.getElementById('toolModal').addEventListener('click', function(e){ if(e.target===this) cerrarTool(); });
+document.addEventListener('keydown', function(e){ if(e.key==='Escape' && document.getElementById('toolModal').classList.contains('on')) cerrarTool(); });
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
