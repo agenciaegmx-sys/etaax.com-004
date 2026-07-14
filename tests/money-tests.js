@@ -347,6 +347,45 @@ test('calcMetaDiaria factores en cero cae a uniforme', () => {
 test('flujoNeto núcleo = ef + tarjeta + propTarjeta + transfer (las 6 páginas heredan ESTA)', () =>
     eq(Core.flujoNeto({ efectivo: 1, tarjeta: 2, propTarjeta: 3, transferencia: 4 }), 10));
 
+/* ═══════════════ SUITE D · RECLASIFICACIÓN DE GASTOS (financiero/gastos-globales.html) ═══════════════ */
+console.log('\n══ SUITE D · Reclasificación de gastos (financiero/gastos-globales.html) ══');
+(function () {
+    // Se cargan SOLO las funciones de clasificación (de loadGastosMes a loadCortesMonth)
+    // con stubs mínimos, para blindar que ningún gasto se pierda del Total de Egresos.
+    const html = fs.readFileSync(path.join(RAIZ, 'financiero/gastos-globales.html'), 'utf8');
+    const src = html.slice(html.indexOf('function loadGastosMes'), html.indexOf('function loadCortesMonth'));
+    const D = { n: (v) => parseFloat(v) || 0, mesStr: () => '2026-07', _sucursalId: null,
+                _cacheGG_Gastos: [], _cacheGG_Fijos: [] };
+    D._deSuc = (x) => !D._sucursalId || ((x && x.sucursalId) || 'suc_principal') === D._sucursalId;
+    D.loadFijos = () => D._cacheGG_Fijos || [];
+    vm.createContext(D);
+    vm.runInContext(src, D);
+    D._cacheGG_Gastos = [
+        { id: '1', fecha: '2026-07-12', categoria: 'Nómina y personal', concepto: 'nómina', monto: 76210 },
+        { id: '2', fecha: '2026-07-13', categoria: 'Varios',            concepto: 'compras', monto: 105602 },
+        { id: '3', fecha: '2026-07-11', categoria: 'Internet y telecomunicaciones', concepto: 'internet', monto: 1100 },
+        { id: '4', fecha: '2026-07-10', categoria: 'Alimentos e ingredientes', concepto: 'fresa', monto: 1045 },
+        { id: '5', fecha: '2026-07-09', categoria: 'Impuestos',         concepto: 'isr', monto: 5000 },
+        { id: '6', fecha: '2026-07-09', categoria: 'IMSS',              concepto: 'cuota', monto: 800 },
+    ];
+    const mes = '2026-07';
+    const raw = D._cacheGG_Gastos.reduce((s, g) => s + D.n(g.monto), 0);
+    const nom = D.totalNominaGastosMes(mes);
+    const imss = D.loadGastosMes(mes).filter(D._esIMSS).reduce((s, g) => s + D.n(g.monto), 0);
+    const varb = D.loadVariablesMes(mes).reduce((s, g) => s + D.n(g.monto), 0);
+    const nc = D.totalFijosNoCatalogMes(mes);
+    const excl = D.loadGastosMes(mes).filter(D._catExcluidaVar).reduce((s, g) => s + D.n(g.monto), 0);
+    test('nómina = gastos categoría nómina (sin IMSS)', () => eq(nom, 76210));
+    test('variables = solo lo variable real (compras + alimentos)', () => eq(varb, 106647));
+    test('fijos NO catalogados capturan lo de naturaleza fija (internet)', () => eq(nc, 1100));
+    test('internet SALE de variables (no se cuenta doble)', () =>
+        eq(D.loadVariablesMes(mes).filter(g => g.id === '3').length, 0));
+    test('nómina NO entra a fijos no catalogados', () =>
+        eq(D.loadFijosNoCatalogMes(mes).filter(g => /n[oó]mina/i.test(g.categoria)).length, 0));
+    // La invariante clave: NADA se pierde. raw = nómina + IMSS + variables + fijosNoCat + excluidos.
+    test('INVARIANTE: ningún gasto se pierde del Total de Egresos', () => eq(nom + imss + varb + nc + excl, raw));
+})();
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0

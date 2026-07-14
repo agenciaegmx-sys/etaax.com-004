@@ -252,6 +252,8 @@
                         </div>
                     </div>
                 </div>
+                <!-- Gastos de naturaleza fija capturados en diarios pero SIN fijo configurado -->
+                <div id="fijosNoCatalog"></div>
             </div>
 
             <!-- ═══ SECCIÓN 2: NÓMINAS ═══ -->
@@ -687,6 +689,19 @@ function loadVariablesMes(mes){
 // se calcula desde los gastos diarios (sueldo final + bonos), no desde el catálogo de staff.
 function loadNominaGastosMes(mes){ return loadGastosMes(mes).filter(function(g){ return _esNominaCat(g) && !_esIMSS(g); }); }
 function totalNominaGastosMes(mes){ return loadNominaGastosMes(mes).reduce(function(s,g){return s+n(g.monto);},0); }
+// Gastos de naturaleza FIJA (renta, luz, internet, servicios…) capturados en diarios
+// pero que NO están casados con un fijo del catálogo. Antes se caían del P&L (salían
+// de Variables por su categoría, pero sin fijo configurado tampoco entraban a Fijos).
+// Ahora cuentan como "Fijos no catalogados" para que el Total de Egresos no pierda dinero.
+function loadFijosNoCatalogMes(mes){
+    var idsFijo=_idsPagosFijos(mes), fc=_catsFijos();
+    return loadGastosMes(mes).filter(function(g){
+        if(g.fijoId || idsFijo[g.id]) return false;                          // ya contado en Fijos (catalogado)
+        if(_esNominaCat(g) || _esIMSS(g) || _catExcluidaVar(g)) return false; // van a otro cubo
+        return _esFijoPat(g) || fc[String(g.categoria||'').toLowerCase().trim()];
+    });
+}
+function totalFijosNoCatalogMes(mes){ return loadFijosNoCatalogMes(mes).reduce(function(s,g){return s+n(g.monto);},0); }
 function loadCortesMonth(mes){
     return (_cacheGG_Cortes||[]).filter(function(c){return c.fecha&&c.fecha.slice(0,7)===mes;}).filter(_deSuc);
 }
@@ -819,7 +834,10 @@ function setTab(tab){
 /* ── KPIs ── */
 function renderKPIs(mes){
     // Gastos fijos = lo REALMENTE pagado del mes (Opción A), no el plan del catálogo.
-    var totalFijos=totalFijosPagado(mes);
+    // + los de naturaleza fija SIN catalogar (para que no se pierdan del Total de Egresos).
+    var totalFijosCat=totalFijosPagado(mes);
+    var totalFijosNC=totalFijosNoCatalogMes(mes);
+    var totalFijos=totalFijosCat+totalFijosNC;
 
     // Nómina REAL = lo pagado en gastos diarios por nómina/personal (sueldo final + bonos) + IMSS.
     // (No se jala del catálogo de staff: el sueldo final suele ajustarse al pagar.)
@@ -833,6 +851,8 @@ function renderKPIs(mes){
     var total=totalFijos+totalNom+totalVar;
 
     document.getElementById('kpiFijos').textContent=fmtM(totalFijos);
+    var _subF=document.getElementById('kpiFijosSub');
+    if(_subF) _subF.textContent = totalFijosNC>0 ? ('Incluye '+fmtM(totalFijosNC)+' no catalogados') : 'Mensuales recurrentes';
     document.getElementById('kpiNominas').textContent=fmtM(totalNom);
     document.getElementById('kpiVariables').textContent=fmtM(totalVar);
     document.getElementById('kpiTotal').textContent=fmtM(total);
@@ -853,14 +873,31 @@ function renderAll(){
 }
 
 /* ── GASTOS FIJOS ── */
+function _renderFijosNoCatalog(mes){
+    var cont=document.getElementById('fijosNoCatalog'); if(!cont) return;
+    var lista=loadFijosNoCatalogMes(mes);
+    if(!lista.length){ cont.innerHTML=''; return; }
+    var grp={}; lista.forEach(function(g){ var k=g.categoria||'Sin categoría'; grp[k]=(grp[k]||0)+n(g.monto); });
+    var tot=lista.reduce(function(s,g){return s+n(g.monto);},0);
+    var rows=Object.keys(grp).sort(function(a,b){return grp[b]-grp[a];}).map(function(k){
+        return '<tr><td style="font-weight:500">'+_esc(k)+'</td><td class="ar" style="color:var(--red);font-weight:700">'+fmtM(grp[k])+'</td></tr>';
+    }).join('');
+    cont.innerHTML=
+        '<div class="card" style="margin-top:14px">'
+        +'<div class="card-header"><h2>⚠️ Fijos no catalogados <span style="font-size:12px;color:var(--text-dim);font-weight:400">· '+fmtM(tot)+'</span></h2></div>'
+        +'<div style="padding:12px 20px;font-size:11px;color:var(--text-dim);background:rgba(245,200,66,.04);border-bottom:1px solid var(--border)">'
+        +'Gastos de naturaleza fija (internet, luz, servicios…) capturados en gastos diarios pero SIN un gasto fijo configurado. Ya cuentan en el Total de Egresos; da de alta el fijo para monitorearlo mes a mes.</div>'
+        +'<div class="card-body" style="padding:0;overflow-x:auto"><table class="gg-table"><thead><tr><th>Categoría</th><th class="ar">Pagado (mes)</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+}
 function renderFijos(){
+    var mes=_mesPicker||mesStr();
+    _renderFijosNoCatalog(mes);
     var lista=loadFijos();
     var tbody=document.getElementById('fijosTbody');
     var empty=document.getElementById('fijosEmpty');
     var foot=document.getElementById('fijosFoot');
     if(!lista.length){tbody.innerHTML='';empty.style.display='block';foot.style.display='none';return;}
     empty.style.display='none'; foot.style.display='';
-    var mes=_mesPicker||mesStr();
     var matches=_pagosFijosMes(mes);
     var totalPlan=lista.reduce(function(s,f){return s+n(f.monto);},0);
     var totalReal=matches.reduce(function(s,x){return s+x.pagado;},0);
