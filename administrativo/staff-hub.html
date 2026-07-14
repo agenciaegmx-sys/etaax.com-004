@@ -173,8 +173,7 @@
         <div class="tool-modal-hd">
             <span class="tm-ic" id="tmIcon">🧠</span>
             <span class="tm-tt" id="tmTitle">Herramienta</span>
-            <a class="tm-open" id="tmOpen" href="#" target="_blank" title="Abrir en pestaña nueva">Pantalla completa ↗</a>
-            <button class="tm-x" onclick="cerrarTool()">✕ Cerrar</button>
+            <button class="tm-x" style="margin-left:auto" onclick="cerrarTool()">✕ Cerrar</button>
         </div>
         <div class="tool-modal-body">
             <div class="tool-loading" id="tmLoading">Cargando…</div>
@@ -196,11 +195,20 @@ function abrirTool(page, titulo, icono){
     var loading=document.getElementById('tmLoading');
     document.getElementById('tmTitle').textContent=titulo||'Herramienta';
     document.getElementById('tmIcon').textContent=icono||'🧩';
-    document.getElementById('tmOpen').href=page; // pantalla completa = misma página SIN embed
     loading.style.display='flex';
     frame.onload=function(){ loading.style.display='none'; };
-    // El tema actual se pasa por la URL para que el iframe arranque igual (dark/light lo lee de localStorage compartido).
-    frame.src = page + (page.indexOf('?')>=0 ? '&' : '?') + 'embed=1';
+    // Pasamos el contexto de sesión por la URL para que el iframe funcione aunque
+    // el navegador aísle su storage (si no, page-guard rebotaría al hub adentro).
+    var q='embed=1';
+    try {
+        var neg=localStorage.getItem('etaax_negocio_activo')||'';
+        var suc=localStorage.getItem('etaax_sucursal_activa')||'';
+        var ctx=localStorage.getItem('etaax_ctx')||'';
+        if(neg) q+='&neg='+encodeURIComponent(neg);
+        if(suc) q+='&suc='+encodeURIComponent(suc);
+        if(ctx) q+='&ctx='+encodeURIComponent(ctx);
+    } catch(e){}
+    frame.src = page + (page.indexOf('?')>=0 ? '&' : '?') + q;
     bg.classList.add('on');
     document.body.style.overflow='hidden';
 }

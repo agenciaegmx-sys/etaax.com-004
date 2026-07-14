@@ -6,13 +6,24 @@
    que se vea solo el contenido de la herramienta — como los
    modales de Ventas y Gastos Diarios.
 
-   Incluir en el <head> de las páginas embebibles, DESPUÉS de
-   page-guard.js. No hace nada si la URL no trae ?embed.
+   Incluir en el <head> de las páginas embebibles ANTES de
+   page-guard.js (siembra el contexto por si el navegador aísla el
+   storage del iframe). No hace nada si la URL no trae ?embed.
    ============================================================ */
 (function () {
     try {
         var p = new URLSearchParams(window.location.search);
         if (!p.has('embed')) return;
+        // ── Sembrar el contexto de sesión desde la URL, ANTES de page-guard ──
+        // Algunos navegadores/ajustes de privacidad NO comparten el storage del
+        // iframe con la página padre; sin esto, page-guard rebotaría al hub.
+        // Solo se siembra lo que falte (no clobbea una sesión ya presente).
+        function seed(k, v) {
+            try { if (v != null && v !== '' && !localStorage.getItem(k)) localStorage.setItem(k, v); } catch (e) {}
+        }
+        if (p.get('neg')) seed('etaax_negocio_activo', p.get('neg'));
+        if (p.get('suc')) seed('etaax_sucursal_activa', p.get('suc'));
+        if (p.get('ctx')) { try { if (!localStorage.getItem('etaax_ctx')) localStorage.setItem('etaax_ctx', decodeURIComponent(p.get('ctx'))); } catch (e) {} }
         var root = document.documentElement;
         root.classList.add('embed');
         var css =

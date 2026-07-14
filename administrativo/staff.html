@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">
 <head>
-<script src="/page-guard.js"></script>
 <script src="/embed.js"></script>
+<script src="/page-guard.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -1242,7 +1242,9 @@ function esc(s) {
 /* ── INIT ── */
 async function initPage() {
     var negId = getNegocioActivo();
-    if (!negId) { window.location.href = '../hub.html'; return; }
+    // Embebido en un modal del hub: no rebotar al hub aunque falte el negocio
+    // (el padre ya validó; embed.js sembró el contexto desde la URL).
+    if (!negId) { if (!/[?&]embed=1/.test(window.location.search)) window.location.href = '../hub.html'; return; }
     // El alcance por sucursal lo aplica renderTable según la sucursal activa / modo
     // global (se eliminó el filtro por sucursal de la UI).
     if (window.NominaParams) { try { await NominaParams.sync(negId); } catch(e){} }

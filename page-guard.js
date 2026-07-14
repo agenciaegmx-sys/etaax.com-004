@@ -107,9 +107,14 @@ window.etaaxPerm = function (negId, rol, path) {
     // hub.html solo consume los helpers de arriba
     if (/hub\.html$/.test(window.location.pathname)) return;
 
+    // Embebido en un modal flotante del hub (?embed=1): la página padre ya
+    // validó la sesión. Nunca rebotar al hub aquí dentro (se vería el hub
+    // dentro del iframe). embed.js ya sembró el contexto desde la URL.
+    var _embed = /[?&]embed=1/.test(window.location.search);
+
     var ctx = null;
     try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch (e) {}
-    if (!ctx) { window.location.replace('/hub.html'); return; }
+    if (!ctx) { if (_embed) return; window.location.replace('/hub.html'); return; }
 
     // Dueño y admin maestro: acceso total
     if (ctx.ctxType !== 'staff') return;
@@ -158,5 +163,5 @@ window.etaaxPerm = function (negId, rol, path) {
     var perms = window.etaaxPermisosRol(ctx.negId, rol);
     var keys  = Array.isArray(key) ? key : [key];
     var ok    = keys.some(function (k) { return perms[k]; });
-    if (!ok) window.location.replace('/hub.html?denegado=' + keys[0]);
+    if (!ok && !_embed) window.location.replace('/hub.html?denegado=' + keys[0]);
 })();
