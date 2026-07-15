@@ -303,6 +303,31 @@ test('existencia física peso = lo contado en unidad base', () => {
 test('teórico peso: ea − merma en unidad base', () =>
     eq(B.calcExistenciaTeorica(filaPeso), 2800));
 
+// ── PREBATCH (sub-receta → insumo): producir batches descuenta los insumos base ──
+// El caso de Edwin: una sub-receta con 355 ml de Campari + 125 ml de Jerez por batch.
+setVar(B, '_cacheRecetasInv', [
+    { id: 'srNegroni', tipo: 'bebidas', status: 'activa', ingredientes: [
+        { insumoId: 'campari', cantidad: 355, unidad: 'ML' },
+        { insumoId: 'jerez',   cantidad: 125, unidad: 'ML' },
+    ] },
+]);
+setVar(B, '_cacheInsumosInv', [{ id: 'preNegroni', esSubReceta: true, recetaId: 'srNegroni', activo: '1' }]);
+vm.runInContext("invActual.prebatchProducidos = { preNegroni: 2 };", B); // 2 batches hechos
+const filaCampari = { insumoId: 'campari', tipo: 'copa', contNeto: 750, copaML: 45, existenciaAnterior: 100,
+    ventasCopasDirectas: 0, cortesiaCopas: 0, mermaCopas: 0, ventasBotella: 0, entradas: [] };
+setVar(B, 'filasCaptura', [filaCampari]);
+test('prebatch: producir 2 batches descuenta 355×2 = 710 ml de Campari (base)', () =>
+    eq(B.consumoBasesPorProduccion('campari'), 710));
+test('prebatch: el Jerez se descuenta aparte: 125×2 = 250 ml', () =>
+    eq(B.consumoBasesPorProduccion('jerez'), 250));
+test('prebatch: 710 ml de Campari → copas de 45 ml (base→copas)', () =>
+    eq(B._consumoBaseProd(filaCampari), 710 / 45));
+test('prebatch: teórico de Campari resta lo consumido al producir (100 − 710/45)', () =>
+    eq(B.calcExistenciaTeorica(filaCampari), 100 - 710 / 45));
+vm.runInContext("invActual.prebatchProducidos = {};", B);
+setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
+setVar(B, 'filasCaptura', [filaCopa]);
+
 test('getEntradasBottles suma filas manuales + log del inventario', () => {
     const f = { ...filaCopa, entradas: ['1', '2'] };
     setVar(B, 'filasCaptura', [f]);

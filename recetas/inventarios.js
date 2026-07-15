@@ -1950,14 +1950,18 @@ function _cerrarNotaInsumo() {
 function _guardarNotaInsumo() {
     if (!invActual || !_notaInsEditId) { _cerrarNotaInsumo(); return; }
     if (!invActual.notasInsumo) invActual.notasInsumo = {};
+    var id = _notaInsEditId;
     var txt = (document.getElementById('notaInsInput').value || '').trim();
-    if (txt) invActual.notasInsumo[_notaInsEditId] = txt; else delete invActual.notasInsumo[_notaInsEditId];
-    _autoGuardar();
+    if (txt) invActual.notasInsumo[id] = txt; else delete invActual.notasInsumo[id];
+    // Una nota NO cambia ningún número → no invalida el resumen (soloNota) y no dispara
+    // un recálculo pesado. El guardado local va debounced dentro de _autoGuardar.
+    _autoGuardar({ soloNota: true });
     _cerrarNotaInsumo();
-    // Re-render del resultado (nodo persistente #step5Keep o su contenedor).
+    // Actualizar SOLO la celda de la nota (antes re-renderizaba TODAS las tablas → lento).
+    var w = document.getElementById('notaWrap-' + id);
+    if (w) { w.outerHTML = _btnNotaInsumo(id); return; }
     var cont = document.getElementById('step5Tablas');
     if (cont && typeof _step5TablasHTML === 'function') cont.innerHTML = _step5TablasHTML();
-    else if (typeof renderStepContent === 'function') { window._step5Dirty = true; renderStepContent(); }
 }
 window.editarNotaInsumo = editarNotaInsumo;
 window._cerrarNotaInsumo = _cerrarNotaInsumo;
@@ -1965,10 +1969,14 @@ window._guardarNotaInsumo = _guardarNotaInsumo;
 // Botón + display de nota para la celda de nombre de una fila del reporte.
 function _btnNotaInsumo(id) {
     var n = _notaInsumo(id);
-    return '<button onclick="event.stopPropagation();editarNotaInsumo(\'' + id + '\')" ' +
+    // Envuelto en un span con id → al guardar la nota se actualiza SOLO esta celda
+    // (antes se re-renderizaban TODAS las tablas del reporte = lento).
+    return '<span id="notaWrap-' + id + '">' +
+        '<button onclick="event.stopPropagation();editarNotaInsumo(\'' + id + '\')" ' +
         'style="margin-top:3px;margin-left:4px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;background:transparent;' +
         'border:1px solid ' + (n?'var(--accent)':'#888') + ';color:' + (n?'var(--accent)':'#999') + '">📝 ' + (n?'Nota ✓':'Nota') + '</button>' +
-        (n ? '<div style="font-size:10px;color:var(--accent);margin-top:3px;font-style:italic;max-width:200px">📝 ' + etx(n) + '</div>' : '');
+        (n ? '<div style="font-size:10px;color:var(--accent);margin-top:3px;font-style:italic;max-width:200px">📝 ' + etx(n) + '</div>' : '') +
+    '</span>';
 }
 
 // ── Menú COMPARTIR del reporte ───────────────────────────────────────────────
@@ -2044,9 +2052,18 @@ window._compartirPDF = _compartirPDF;
 // el usuario editó pasos anteriores y quiere refrescar el resultado a mano.
 function recalcularResultado() {
     window._step5Dirty = true;
+    window._step5Force = true; // fuerza el recálculo aunque haya caché (el botón SÍ hace algo)
     if (pasoActual === 5 && typeof renderStepContent === 'function') renderStepContent();
 }
 window.recalcularResultado = recalcularResultado;
+// Avisa en el Paso 5 que los datos cambiaron y hay que recalcular (badge + botón resaltado).
+function _marcarStep5Stale(stale) {
+    var b = document.getElementById('step5StaleBadge');
+    if (b) b.style.display = stale ? 'inline-flex' : 'none';
+    var btn = document.getElementById('btnRecalc5');
+    if (btn) { btn.style.color = stale ? 'var(--accent)' : 'var(--text-muted)'; btn.style.borderColor = stale ? 'var(--accent)' : ''; }
+}
+window._marcarStep5Stale = _marcarStep5Stale;
 
 function verInventarioTour(id) {
     const inv = getInventarios().find(x => x.id === id);
@@ -2489,8 +2506,13 @@ function renderStepContent() {
     if (paso === 5) {
         cont.style.display = 'none';
         const _invId = (invActual && invActual.id) || '';
-        if (_keep5 && !window._step5Dirty && _keep5.dataset.inv === _invId && _keep5.innerHTML) {
-            _keep5.style.display = ''; // ya renderizado y sin cambios → instantáneo
+        // Ya hay resumen renderizado para este inventario → mostrarlo AL INSTANTE, sin
+        // recalcular en CADA navegación (era lento con 200+ insumos). Si hubo cambios,
+        // se AVISA para recalcular a mano con 🔄 (el botón deja de ser "de adorno").
+        // El reporte impreso (verReporteDirectivo) siempre recalcula fresco por su cuenta.
+        if (_keep5 && _keep5.dataset.inv === _invId && _keep5.innerHTML && !window._step5Force) {
+            _keep5.style.display = '';
+            _marcarStep5Stale(!!window._step5Dirty);
             return;
         }
         if (!_keep5) {
@@ -2506,6 +2528,8 @@ function renderStepContent() {
             if (pasoActual !== 5) return; // el usuario ya se movió a otro paso
             _keep5.innerHTML = renderStep5();
             window._step5Dirty = false;
+            window._step5Force = false;
+            if (typeof _marcarStep5Stale === 'function') _marcarStep5Stale(false);
         }, 30);
         return;
     }
@@ -4942,9 +4966,10 @@ function renderStep5() {
 
     const _M2 = v => (v||0).toLocaleString('es-MX', { minimumFractionDigits:2, maximumFractionDigits:2 }); // $1,832,994.00
     const kpis = `<div class="wrap" style="padding-bottom:0">
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-            <button class="btn-vista" style="color:var(--text-muted)"
-                onclick="recalcularResultado()" title="Fuerza un render nuevo del resultado (por si editaste pasos anteriores)">🔄 Recalcular</button>
+        <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+            <span id="step5StaleBadge" style="display:none;align-items:center;font-size:11px;color:var(--accent);margin-right:2px">⚠️ Los datos cambiaron</span>
+            <button id="btnRecalc5" class="btn-vista" style="color:var(--text-muted)"
+                onclick="recalcularResultado()" title="Recalcula el resultado con los últimos cambios (navegar ya no recalcula solo → más rápido)">🔄 Recalcular</button>
             <button class="btn-vista" style="color:#3dbe7a;border-color:#3dbe7a"
                 onclick="verReporteDirectivo(true)">🔐 Reporte gerencial</button>
             <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)"
@@ -6118,11 +6143,17 @@ function _setGuardadoInd(estado) {
     else { ind.textContent = '✓ Todos los cambios guardados'; ind.style.color = 'var(--green)'; }
 }
 let _autoGuardarTimer = null;
-function _autoGuardar() {
+let _persistLocalTimer = null;
+function _autoGuardar(opts) {
     if (!invActual || window._soloVistaInv) return; // 👁️ solo lectura: no guarda
-    window._step5Dirty = true; // invalidar el resumen YA (no esperar al guardado debounced)
-    _persistirBorradorLocal(); // ← respaldo local INMEDIATO en cada cambio
+    // Una NOTA/comentario no cambia números → no invalida el resumen del Paso 5.
+    if (!(opts && opts.soloNota)) window._step5Dirty = true;
     _setGuardadoInd('guardando');
+    // Respaldo local DEBOUNCED. Antes era SÍNCRONO en CADA tecla (mapea todas las
+    // filas + calcExistencia + JSON.stringify de todo) → lag al escribir. El flush
+    // inmediato al salir ya lo cubren pagehide/beforeunload/visibilitychange.
+    clearTimeout(_persistLocalTimer);
+    _persistLocalTimer = setTimeout(_persistirBorradorLocal, 300);
     clearTimeout(_autoGuardarTimer);
     _autoGuardarTimer = setTimeout(function() {
         try { guardarInventario(); } catch(e) { console.warn('[autoGuardar]', e); return; }
