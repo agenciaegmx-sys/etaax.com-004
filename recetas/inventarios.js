@@ -368,7 +368,9 @@ function ingredienteML(cantidad, unidad) {
 // Inventario cerrado que se toma como referencia para la "existencia anterior".
 // Por defecto el último cerrado; el usuario puede elegir otro (invActual.refInventarioId).
 function _getRefInv() {
-    const cerrados = _scopeSucInvs(getInventarios()).filter(x => x.cerrado && (!invActual || x.id !== invActual.id));
+    // El primer levantamiento (línea base) SIEMPRE es referencia válida de existencia
+    // anterior, aunque su estado no sea "cerrado" (es una línea base, no un conteo).
+    const cerrados = _scopeSucInvs(getInventarios()).filter(x => (x.cerrado || x.tipoInv === 'primer_lev') && (!invActual || x.id !== invActual.id));
     if (!cerrados.length) return null;
     if (invActual && invActual.refInventarioId) {
         const r = cerrados.find(x => x.id === invActual.refInventarioId);
@@ -411,7 +413,7 @@ function _filaAnteriorInsumo(insumoId) {
         var fr = (ref.filas || []).find(function(x){ return x && x.insumoId === insumoId; });
         if (fr) return fr;
     }
-    var cerrados = _scopeSucInvs(getInventarios()).filter(function(x){ return x && x.cerrado && (!invActual || x.id !== invActual.id); });
+    var cerrados = _scopeSucInvs(getInventarios()).filter(function(x){ return x && (x.cerrado || x.tipoInv === 'primer_lev') && (!invActual || x.id !== invActual.id); });
     for (var i = cerrados.length - 1; i >= 0; i--) {
         var f = (cerrados[i].filas || []).find(function(x){ return x && x.insumoId === insumoId; });
         if (f) return f;
@@ -1794,13 +1796,23 @@ function renderHistTabla(lista) {
                 // Faltante/sobrante A COSTO proveedor (se guarda al visitar el Paso 5);
                 // inventarios viejos sin el dato caen al valor anterior (a carta).
                 const dif = (inv.difNetoCosto !== undefined ? inv.difNetoCosto : inv.diferenciaCosto) || 0;
-                const accionBtn = inv.cerrado
+                // El PRIMER LEVANTAMIENTO es una LÍNEA BASE, no un conteo a reconciliar:
+                // no lleva Continuar/Finalizar (eso confundía y "revivía" el botón). Se abre
+                // para ajustarlo y siempre sirve de referencia de existencia anterior.
+                const esLev = inv.tipoInv === 'primer_lev';
+                const accionBtn = esLev
+                    ? `<button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px;color:var(--viol);border-color:var(--viol)"
+                        onclick="abrirInventario('${inv.id}')">✏️ Ajustar línea base</button>`
+                    : inv.cerrado
                     ? `<button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px;color:var(--accent);border-color:var(--accent)"
                         onclick="editarInventario('${inv.id}')">✏️ Editar</button>`
                     : `<button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px"
                         onclick="abrirInventario('${inv.id}')">▶ Continuar</button>
                        <button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px;color:var(--green);border-color:var(--green)"
                         onclick="finalizarInventarioHistorial('${inv.id}')">✅ Finalizar</button>`;
+                const estadoPill = esLev
+                    ? `<span class="pill" style="background:rgba(155,141,232,.15);color:var(--viol);border:1px solid rgba(155,141,232,.35)">Línea base</span>`
+                    : `<span class="pill ${inv.cerrado?'pill-green':'pill-amber'}">${inv.cerrado?'Cerrado':'Abierto'}</span>`;
                 return `<tr>
                     <td style="color:var(--text-muted)">${new Date(inv.fecha+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'})}</td>
                     <td style="font-weight:500">${tipoIcon(inv.tipoInv)} ${etx(inv.nombre||'Sin nombre')}</td>
@@ -1809,7 +1821,7 @@ function renderHistTabla(lista) {
                     <td style="color:var(--accent);font-weight:500">$${_money2(inv.capitalCosto)}</td>
                     <td style="color:var(--green);font-weight:500">$${_money2(inv.capitalCarta)}</td>
                     <td style="color:${dif>=0?'var(--green)':'var(--red)'};font-weight:500">${dif>=0?'+':''}$${_money2(dif)}</td>
-                    <td><span class="pill ${inv.cerrado?'pill-green':'pill-amber'}">${inv.cerrado?'Cerrado':'Abierto'}</span></td>
+                    <td>${estadoPill}</td>
                     <td style="text-align:right;white-space:nowrap">
                         <button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px"
                             onclick="verInventarioTour('${inv.id}')">👁️ Ver</button>
@@ -1825,19 +1837,25 @@ function renderHistTabla(lista) {
 
 function renderHistCard(inv) {
     const dif = (inv.difNetoCosto !== undefined ? inv.difNetoCosto : inv.diferenciaCosto) || 0;
-    const accionBtn = inv.cerrado
+    const esLev = inv.tipoInv === 'primer_lev'; // línea base: sin Continuar/Finalizar
+    const accionBtn = esLev
+        ? `<button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1;color:var(--viol);border-color:var(--viol)"
+            onclick="abrirInventario('${inv.id}')">✏️ Ajustar línea base</button>`
+        : inv.cerrado
         ? `<button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1;color:var(--accent);border-color:var(--accent)"
             onclick="editarInventario('${inv.id}')">✏️ Editar</button>`
         : `<button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1"
             onclick="abrirInventario('${inv.id}')">▶ Continuar</button>
            <button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1;color:var(--green);border-color:var(--green)"
             onclick="finalizarInventarioHistorial('${inv.id}')">✅ Finalizar</button>`;
+    const estadoPill = esLev
+        ? `<span class="pill" style="flex-shrink:0;margin-left:8px;background:rgba(155,141,232,.15);color:var(--viol);border:1px solid rgba(155,141,232,.35)">Línea base</span>`
+        : `<span class="pill ${inv.cerrado?'pill-green':'pill-amber'}" style="flex-shrink:0;margin-left:8px">${inv.cerrado?'Cerrado':'Abierto'}</span>`;
     return `<div class="hist-card ${inv.cerrado?'cerrado':''}">
         <div class="hist-card-icon">${tipoIcon(inv.tipoInv)}</div>
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
             <div class="hist-card-nombre">${etx(inv.nombre||'Sin nombre')}</div>
-            <span class="pill ${inv.cerrado?'pill-green':'pill-amber'}" style="flex-shrink:0;margin-left:8px">
-                ${inv.cerrado?'Cerrado':'Abierto'}</span>
+            ${estadoPill}
         </div>
         <div class="hist-card-meta">
             ${new Date(inv.fecha+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'})}

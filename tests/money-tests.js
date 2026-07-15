@@ -338,6 +338,17 @@ test('getEntradasBottles suma filas manuales + log del inventario', () => {
 test('ingredienteML convierte onzas (2 oz = 59.147 ml)', () => eq(B.ingredienteML(2, 'OZ'), 2 * 29.5735));
 test('ingredienteML convierte litros', () => eq(B.ingredienteML(1.5, 'LT'), 1500));
 
+// Primer levantamiento = LÍNEA BASE: sirve de referencia de existencia anterior
+// aunque su estado NO sea "cerrado" (antes solo contaba si cerrado → el siguiente
+// inventario se quedaba sin existencia anterior).
+setVar(B, '_cacheInv', [
+    { id: 'lev1', tipoInv: 'primer_lev', cerrado: false, fecha: '2026-06-01',
+      filas: [{ insumoId: 'ron1', tipo: 'copa', copaML: 50, contNeto: 750, existenciaFisica: 40 }] },
+]);
+test('primer levantamiento (no cerrado) SÍ sirve de existencia anterior', () =>
+    eq(B.getExistenciaAnterior('ron1'), 40));
+setVar(B, '_cacheInv', null);
+
 /* ═══════════════ SUITE C · NÚCLEO (etaax-core.js directo) ═══════════════ */
 console.log('\n══ SUITE C · Núcleo compartido (etaax-core.js) ══');
 const C = cargarJS(crearContexto(), 'etaax-core.js');
