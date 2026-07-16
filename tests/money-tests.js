@@ -349,6 +349,23 @@ test('primer levantamiento (no cerrado) SÍ sirve de existencia anterior', () =>
     eq(B.getExistenciaAnterior('ron1'), 40));
 setVar(B, '_cacheInv', null);
 
+// Referencia: un inventario intermedio ABIERTO con datos capturados SÍ vale como
+// referencia (no cae al primer levantamiento) y solo si es ANTERIOR por fecha.
+setVar(B, '_cacheInv', [
+    { id:'lev', tipoInv:'primer_lev', cerrado:false, fecha:'2026-06-04', filas:[{insumoId:'refx', tipo:'copa', copaML:50, contNeto:750, existenciaFisica:5, cerradasBodega:1, cerradasBarra:0, pesos:[]}] },
+    { id:'mid', tipoInv:'bebidas',    cerrado:false, fecha:'2026-06-25', filas:[{insumoId:'refx', tipo:'copa', copaML:50, contNeto:750, existenciaFisica:8, cerradasBodega:1, cerradasBarra:0, pesos:[]}] },
+]);
+setVar(B, 'invActual', { id:'nuevo', tipoInv:'bebidas', cerrado:false, fecha:'2026-07-16', filas:[], entradasLog:[] });
+test('referencia = el intermedio ABIERTO más reciente (no el primer levantamiento)', () =>
+    eq(B._getRefInv().id, 'mid'));
+test('existencia anterior del nuevo inv = la del intermedio (8), no la del primer lev (5)', () =>
+    eq(B.getExistenciaAnterior('refx'), 8));
+setVar(B, 'invActual', { id:'mid', tipoInv:'bebidas', cerrado:false, fecha:'2026-06-25', filas:[], entradasLog:[] });
+test('referencia del intermedio = el primer levantamiento (no un inventario futuro)', () =>
+    eq(B._getRefInv().id, 'lev'));
+setVar(B, '_cacheInv', null);
+setVar(B, 'invActual', { id: 'invT', entradasLog: [], prebatchProducidos: {}, cocktailsVendidos: {}, ventasCompuesto: {}, cancelaciones: [], descuentos: [], filas: [] });
+
 // _unidadCompra NO debe tronar si el insumo no resuelve (borrado / otra sucursal):
 // antes (p && (p.x||'')).toString() daba null.toString() → congelaba el reporte
 // y vaciaba la lista de entradas.

@@ -373,18 +373,28 @@ function ingredienteML(cantidad, unidad) {
     return cantidad;
 }
 
-// Inventario cerrado que se toma como referencia para la "existencia anterior".
-// Por defecto el último cerrado; el usuario puede elegir otro (invActual.refInventarioId).
+// ¿El inventario x puede servir de REFERENCIA (existencia anterior)?
+// Sirve cualquier inventario ANTERIOR con datos capturados: cerrado, primer
+// levantamiento (línea base), O un intermedio ABIERTO que ya se contó. Antes solo
+// valían los cerrados/línea base → un intermedio abierto se saltaba y caía al primer lev.
+function _esRefValida(x) {
+    if (!x) return false;
+    if (invActual && x.id === invActual.id) return false;                 // no a sí mismo
+    if (invActual && String(x.fecha||'') > String(invActual.fecha||'9999-99-99')) return false; // solo anteriores/mismo día
+    return x.cerrado || x.tipoInv === 'primer_lev' || (x.filas||[]).some(_filaConDatos);
+}
+function _refsDisponibles() {
+    return _scopeSucInvs(getInventarios()).filter(_esRefValida)
+        .slice().sort(function(a,b){ return String(a.fecha||'').localeCompare(String(b.fecha||'')); }); // viejo→nuevo
+}
 function _getRefInv() {
-    // El primer levantamiento (línea base) SIEMPRE es referencia válida de existencia
-    // anterior, aunque su estado no sea "cerrado" (es una línea base, no un conteo).
-    const cerrados = _scopeSucInvs(getInventarios()).filter(x => (x.cerrado || x.tipoInv === 'primer_lev') && (!invActual || x.id !== invActual.id));
-    if (!cerrados.length) return null;
+    const cands = _refsDisponibles();
+    if (!cands.length) return null;
     if (invActual && invActual.refInventarioId) {
-        const r = cerrados.find(x => x.id === invActual.refInventarioId);
+        const r = cands.find(x => x.id === invActual.refInventarioId);
         if (r) return r;
     }
-    return cerrados.slice().sort(function(a,b){ return String(a.fecha||'').localeCompare(String(b.fecha||'')); }).pop();
+    return cands[cands.length - 1]; // el más reciente ANTERIOR (no el primer lev si hay uno intermedio)
 }
 function getExistenciaAnterior(insumoId) {
     const inv = _getRefInv();
@@ -740,14 +750,34 @@ function _importarEntradasQR() {
     if (!invActual.entradasLog) invActual.entradasLog = [];
     var idsSuc = {}; _scopeSucInsumos(getInsumos()).forEach(function(x){ if (x && x.id) idsSuc[x.id] = 1; });
     var yaEnInv = {}; invActual.entradasLog.forEach(function(e){ if (e && e.id) yaEnInv[e.id] = 1; });
+    // ── PERIODO de este inventario: de la fecha de la REFERENCIA (exclusivo) a la
+    // fecha del inventario (inclusivo). Cada entrada del QR pertenece al inventario
+    // cuyo periodo cubre su fecha → así el primer inventario que abras no se traga TODO.
+    var _refI  = _getRefInv();
+    var _pFrom = _refI ? String(_refI.fecha || '') : '';
+    var _pTo   = String(invActual.fecha || '9999-99-99');
+    function _enPeriodoInv(fecha) {
+        var f = String(fecha || ''); if (!f) return true;   // sin fecha: no la excluimos (compat)
+        if (_pFrom && f <= _pFrom) return false;             // antes/igual que la referencia → de otro periodo
+        return f <= _pTo;                                     // hasta la fecha del inventario
+    }
+    // Sacar de ESTE inventario las entradas QR que se importaron mal (fuera de su
+    // periodo) → quedan libres para que el inventario correcto las reclame.
+    var _globalQR = {}; (getEntradasLog() || []).forEach(function(g){ if (g && g.id && g.origen === 'qr' && g.concepto !== 'merma') _globalQR[g.id] = 1; });
+    invActual.entradasLog = invActual.entradasLog.filter(function(le){
+        return !(le && le.id && _globalQR[le.id] && !_enPeriodoInv(le.fecha));
+    });
+    yaEnInv = {}; invActual.entradasLog.forEach(function(e){ if (e && e.id) yaEnInv[e.id] = 1; });
     var n = 0;
     (getEntradasLog() || []).forEach(function(e) {
         if (!e || e.origen !== 'qr') return;   // solo QR (las manuales ya están en el inventario)
         // Sello de sucursal: si el registro trae sucursal y NO es la activa, no se importa aquí
         var _sucImp = _sucActiva();
         if (e.sucursalId && _sucImp && e.sucursalId !== _sucImp) return;
-        if (e.importadoEnInv) return;          // ya importada a algún inventario
+        if (!_enPeriodoInv(e.fecha)) return;   // periodo: pertenece a OTRO inventario
         if (e.id && yaEnInv[e.id]) return;      // ya está en este inventario
+        if (e.importadoEnInv === invActual.id) return; // se borró de ESTE inventario a propósito → no re-importar
+        // (importadoEnInv de OTRO inventario + cae en ESTE periodo → se re-clama aquí)
         // ── MERMAS del QR: entran a la merma del inventario (y por lo tanto al reporte) ──
         if (e.concepto === 'merma') {
             var cantM = parseFloat(e.cantidad) || 0;
@@ -2283,16 +2313,15 @@ function _setFechaUltimo() {
         el.value = ''; el.disabled = true;
         return;
     }
-    const cerrados = _scopeSucInvs(getInventarios())
-        .filter(x => x.cerrado && (!invActual || x.id !== invActual.id))
-        .slice().sort((a,b) => String(b.fecha||'').localeCompare(String(a.fecha||''))); // más reciente primero
-    if (!cerrados.length) { el.innerHTML = '<option value="">Sin inventarios previos</option>'; el.disabled = true; return; }
+    const refs = _refsDisponibles().slice().reverse(); // más reciente primero (incluye intermedios ABIERTOS con datos)
+    if (!refs.length) { el.innerHTML = '<option value="">Sin inventarios previos</option>'; el.disabled = true; return; }
     el.disabled = false;
     const ref = _getRefInv();
-    const refId = ref ? ref.id : cerrados[0].id;
-    el.innerHTML = cerrados.map(inv => {
+    const refId = ref ? ref.id : refs[0].id;
+    el.innerHTML = refs.map(inv => {
         const fch = inv.fecha ? new Date(inv.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' }) : 's/f';
-        return `<option value="${inv.id}" ${refId === inv.id ? 'selected' : ''}>${etx(inv.nombre || 'Inventario')} · ${fch}</option>`;
+        const tag = inv.tipoInv === 'primer_lev' ? ' · línea base' : (!inv.cerrado ? ' · abierto' : '');
+        return `<option value="${inv.id}" ${refId === inv.id ? 'selected' : ''}>${etx(inv.nombre || 'Inventario')} · ${fch}${tag}</option>`;
     }).join('');
 }
 
