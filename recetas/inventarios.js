@@ -745,36 +745,38 @@ function getEntradasBottles(insumoId) {
 // carga los de ventas/gastos y las funciones de QR por sucursal lo necesitan.
 function _sucActiva() { return localStorage.getItem('etaax_sucursal_activa') || ''; }
 
+// PERIODO del inventario activo: de la fecha de la REFERENCIA (exclusivo) a la fecha
+// del inventario (inclusivo). Una entrada pertenece al inventario cuyo periodo cubre
+// su fecha → así el primer inventario que abras no se traga TODAS las entradas.
+function _enPeriodoInvActual(fecha) {
+    if (!invActual) return true;
+    var refI = _getRefInv();
+    var from = refI ? String(refI.fecha || '') : '';
+    var to   = String(invActual.fecha || '9999-99-99');
+    var f = String(fecha || ''); if (!f) return true;   // sin fecha: no la excluimos (compat)
+    if (from && f <= from) return false;                 // antes/igual que la referencia → de otro periodo
+    return f <= to;                                       // hasta la fecha del inventario
+}
+
 function _importarEntradasQR() {
     if (!invActual || invActual.cerrado || window._soloVistaInv) return 0; // 👁️ solo lectura: no muta el inventario
     if (!invActual.entradasLog) invActual.entradasLog = [];
     var idsSuc = {}; _scopeSucInsumos(getInsumos()).forEach(function(x){ if (x && x.id) idsSuc[x.id] = 1; });
     var yaEnInv = {}; invActual.entradasLog.forEach(function(e){ if (e && e.id) yaEnInv[e.id] = 1; });
-    // ── PERIODO de este inventario: de la fecha de la REFERENCIA (exclusivo) a la
-    // fecha del inventario (inclusivo). Cada entrada del QR pertenece al inventario
-    // cuyo periodo cubre su fecha → así el primer inventario que abras no se traga TODO.
-    var _refI  = _getRefInv();
-    var _pFrom = _refI ? String(_refI.fecha || '') : '';
-    var _pTo   = String(invActual.fecha || '9999-99-99');
-    function _enPeriodoInv(fecha) {
-        var f = String(fecha || ''); if (!f) return true;   // sin fecha: no la excluimos (compat)
-        if (_pFrom && f <= _pFrom) return false;             // antes/igual que la referencia → de otro periodo
-        return f <= _pTo;                                     // hasta la fecha del inventario
-    }
-    // Sacar de ESTE inventario las entradas QR que se importaron mal (fuera de su
-    // periodo) → quedan libres para que el inventario correcto las reclame.
-    var _globalQR = {}; (getEntradasLog() || []).forEach(function(g){ if (g && g.id && g.origen === 'qr' && g.concepto !== 'merma') _globalQR[g.id] = 1; });
+    // Sacar de ESTE inventario las entradas (QR o manuales del ERP) mal importadas
+    // (fuera de su periodo) → quedan libres para que el inventario correcto las reclame.
+    var _globalIds = {}; (getEntradasLog() || []).forEach(function(g){ if (g && g.id && g.concepto !== 'merma') _globalIds[g.id] = 1; });
     invActual.entradasLog = invActual.entradasLog.filter(function(le){
-        return !(le && le.id && _globalQR[le.id] && !_enPeriodoInv(le.fecha));
+        return !(le && le.id && _globalIds[le.id] && !_enPeriodoInvActual(le.fecha));
     });
     yaEnInv = {}; invActual.entradasLog.forEach(function(e){ if (e && e.id) yaEnInv[e.id] = 1; });
     var n = 0;
     (getEntradasLog() || []).forEach(function(e) {
-        if (!e || e.origen !== 'qr') return;   // solo QR (las manuales ya están en el inventario)
+        if (!e) return;                        // QR y manuales del ERP: ambas se importan por periodo
         // Sello de sucursal: si el registro trae sucursal y NO es la activa, no se importa aquí
         var _sucImp = _sucActiva();
         if (e.sucursalId && _sucImp && e.sucursalId !== _sucImp) return;
-        if (!_enPeriodoInv(e.fecha)) return;   // periodo: pertenece a OTRO inventario
+        if (!_enPeriodoInvActual(e.fecha)) return;   // periodo: pertenece a OTRO inventario
         if (e.id && yaEnInv[e.id]) return;      // ya está en este inventario
         if (e.importadoEnInv === invActual.id) return; // se borró de ESTE inventario a propósito → no re-importar
         // (importadoEnInv de OTRO inventario + cae en ESTE periodo → se re-clama aquí)
@@ -1824,7 +1826,11 @@ function finalizarInventarioHistorial(id) {
         var lista = getInventarios();
         var idx = lista.findIndex(function(x){ return x.id === id; });
         if (idx >= 0) lista[idx] = inv;
-        setInventarios(lista); // guarda local + nube
+        setInventarios(lista); // guarda local
+        // FORZAR el upsert a la nube: setInventarios compara el MISMO objeto (mutado
+        // in-place) → su diff NO detecta el cerrado → sin esto, "finalizar" solo vivía
+        // en localStorage y Supabase revertía el inventario a ABIERTO al recargar.
+        try { _sbUpInv(inv); } catch(e) { console.warn('[finalizar upsert]', e); }
         // Finalizar desde la LISTA no debe dejar colgando un invActual de una visita
         // previa (tour/wizard abortado): si no, el siguiente "Nuevo/Continuar" lo reusaba
         // y "reabría el primero". Estado limpio al terminar.
@@ -6408,6 +6414,7 @@ function guardarEntradaLog() {
         tipo,
         notas,
         fecha,
+        origen:   'manual',   // entrada capturada a mano en el ERP → se importa al inventario por PERIODO
         registrado: new Date().toISOString()
     };
     log.push(_nuevaEnt);
@@ -6418,16 +6425,14 @@ function guardarEntradaLog() {
     try { _sbUpEL(_nuevaEnt); } catch(e) { console.warn('[guardarEntradaLog upsert]', e); }
 
     // Also save to active inventory so it appears in vistaEntradas historial
-    if (invActual) {
+    // Copia inmediata al inventario activo (mismo id → el import por periodo no la
+    // duplica). Si su fecha cae fuera del periodo, el import la reubica al inventario correcto.
+    if (invActual && _enPeriodoInvActual(fecha)) {
         if (!invActual.entradasLog) invActual.entradasLog = [];
         invActual.entradasLog.push({
-            insumoId,
+            id: _nuevaEnt.id, insumoId,
             nombreProducto: ins ? insumoEtiqueta(ins) : '—',
-            cantidad,
-            costo,
-            tipo,
-            notas,
-            fecha
+            cantidad, costo, tipo, notas, fecha, origen: 'manual'
         });
         guardarEntradas();
     }
