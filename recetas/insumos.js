@@ -847,6 +847,7 @@
                        onclick="editarInsumo('${ins.id}')">
                        <span style="font-size:14px">✏️</span> Editar
                    </button>
+                   ${!ins.esSubReceta ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;display:inline-flex;align-items:center;gap:5px" title="Duplicar este insumo (crea una copia editable con sus presentaciones)" onclick="copiarInsumo('${ins.id}')"><span style="font-size:14px">📋</span> Copiar</button>` : ''}
                    ${_catGlobalIns() ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;
                        color:var(--green);border-color:var(--green);display:inline-flex;align-items:center;gap:5px"
                        onclick="abrirInsumoSuc('${ins.id}')"><span style="font-size:14px">🏪</span> Sucursales</button>` : ''}
@@ -1996,7 +1997,28 @@
        }
        abrirModal(ins);
    }
-   
+
+   // Duplicar un insumo (como el "copiar" de recetas/sub-recetas): copia profunda
+   // con id nuevo y presentaciones con ids nuevos, nombre "(copia)", y abre el
+   // editor para ajustar costos/nombre antes de que quede fijo. Hereda la misma
+   // membresía de sucursales que el original.
+   function copiarInsumo(id) {
+       const ins = getInsumos().find(x => x.id === id);
+       if (!ins) return;
+       if (ins.esSubReceta) { alert('Las producciones propias (sub-recetas) se copian desde su escandallo en Recetas, no aquí.'); return; }
+       const copia = JSON.parse(JSON.stringify(ins));
+       copia.id = genId();
+       copia.nombre = ((ins.nombre || 'Insumo') + ' (copia)').slice(0, 120);
+       delete copia.origenId; // es un insumo nuevo, no ligado a otro
+       (copia.presentaciones || []).forEach(function(p){ if (p) p.id = genId(); });
+       const lista = getInsumos();
+       lista.push(copia);
+       setInsumos(lista); // persiste local + sync a Supabase (mismo camino que guardar)
+       init();            // re-render de la lista
+       editarInsumo(copia.id); // abrir la copia para ajustarla
+   }
+   window.copiarInsumo = copiarInsumo;
+
    function eliminarInsumo(id) {
        const ins = getInsumos().find(x => x.id === id);
        if (!ins) return;
