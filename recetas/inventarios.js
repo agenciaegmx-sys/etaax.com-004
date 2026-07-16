@@ -842,6 +842,28 @@ function _importarEntradasQR() {
         n++;
     });
     if (n) { try { guardarInventario(); } catch(err) {} } // persiste con el candado anti-borrado
+    // BACK-FILL al log global: entradas que viven SOLO en el inventario (búsqueda rápida
+    // vieja, que no espejaba al log global) → subirlas para que aparezcan en el "Registro
+    // de entradas" global. Idempotente (dedupe por id); reconcilia la divergencia histórica.
+    try {
+        var _glob = {}; (getEntradasLog() || []).forEach(function(g){ if (g && g.id) _glob[g.id] = 1; });
+        var _gl = getEntradasLog(); var _added = false;
+        (invActual.entradasLog || []).forEach(function(le){
+            if (!le || !le.id || _glob[le.id]) return; // ya está en el log global
+            _gl.push({
+                id: le.id, insumoId: le.insumoId || '',
+                nombre: le.nombreProducto || le.nombre || '—', familia: '',
+                cantidad: parseFloat(le.cantidad) || 0, costo: parseFloat(le.costo) || 0,
+                tipo: le.tipo || '', notas: le.notas || '', fecha: le.fecha || '',
+                origen: le.origen || 'manual',
+                sucursalId: le.sucursalId || _sucActiva() || 'suc_principal',
+                importadoEnInv: invActual.id, registrado: new Date().toISOString()
+            });
+            _glob[le.id] = 1; _added = true;
+            try { _sbUpEL(_gl[_gl.length - 1]); } catch(e) {} // el diff no ve el push → forzar
+        });
+        if (_added) _guardarELLocal();
+    } catch(e) { console.warn('[backfill log global]', e); }
     return n;
 }
 
@@ -6581,15 +6603,35 @@ function agregarEntradaRapida() {
     if (cant <= 0) { document.getElementById('entRapidaCant')?.focus(); return; }
     const fecha = document.getElementById('entRapidaFecha')?.value || new Date().toISOString().slice(0,10);
     const fila  = filasCaptura.find(f => f.insumoId === _entRapidaInsumoId);
+    const ins   = (typeof window._insumoResolver === 'function') ? window._insumoResolver(_entRapidaInsumoId) : null;
+    const _id   = genId() + genId();
+    const _suc  = _sucActiva() || 'suc_principal';
     if (!invActual.entradasLog) invActual.entradasLog = [];
     invActual.entradasLog.push({
+        id:             _id,
         insumoId:       _entRapidaInsumoId,
-        nombreProducto: fila?.nombre || _entRapidaInsumoId,
+        nombreProducto: ins ? insumoEtiqueta(ins) : (fila?.nombre || _entRapidaInsumoId),
         tipo:           _entRapidaTipo,
         cantidad:       cant,
-        fecha
+        fecha,
+        origen:         'manual',
+        sucursalId:     _suc
     });
     guardarEntradas();
+    // ESPEJO al log global (fuente maestra) → aparece también en el "Registro de entradas".
+    // Antes la búsqueda rápida del inventario solo escribía aquí y ambas vistas divergían.
+    try {
+        const _gl = getEntradasLog();
+        _gl.push({
+            id: _id, insumoId: _entRapidaInsumoId,
+            nombre: ins ? ins.nombre : (fila?.nombre || ''),
+            familia: ins ? (ins.familia || '') : '',
+            cantidad: cant, costo: 0, tipo: _entRapidaTipo, notas: '',
+            fecha, origen: 'manual', sucursalId: _suc,
+            importadoEnInv: invActual.id, registrado: new Date().toISOString()
+        });
+        _guardarELLocal(); _sbUpEL(_gl[_gl.length - 1]); // diff no ve el push → forzar
+    } catch(e) { console.warn('[entRapida espejo global]', e); }
     const cantEl = document.getElementById('entRapidaCant');
     if (cantEl) { cantEl.value = ''; cantEl.focus(); }
     renderFormEntrada();
@@ -6600,8 +6642,14 @@ function agregarEntradaRapida() {
 function eliminarEntradaRapida(idx) {
     _pedirClaveAdmin('Eliminar entrada', function() {
         if (!invActual?.entradasLog) return;
+        var _rm = invActual.entradasLog[idx];
         invActual.entradasLog.splice(idx, 1);
         guardarEntradas();
+        // Marcar `borrada` en el log global para que el import/back-fill no la re-agregue.
+        if (_rm && _rm.id) {
+            var _g = getEntradasLog().find(function(x){ return x && x.id === _rm.id; });
+            if (_g) { _g.borrada = true; _guardarELLocal(); try { _sbUpEL(_g); } catch(e){} }
+        }
         renderFormEntrada();
         renderListadoEntradas();
         renderChipsEntrada();
