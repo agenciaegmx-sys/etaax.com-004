@@ -356,6 +356,23 @@ setVar(B, '_cacheInsumosInv', []);
 test('_unidadCompra null-safe cuando el insumo no existe', () =>
     eq(B._unidadCompra({ insumoId: 'no-existe-xyz' }), 'bot'));
 
+// PRODUCTOS COMPUESTOS (consolidación en el reporte): suma las presentaciones,
+// cada una con SUS propias ventas; el compuesto NO captura ventas ni doble-cuenta.
+const filaM1 = { insumoId:'mzcl-750',  tipo:'copa', contNeto:750,  copaML:50, existenciaAnterior:20, ventasCopasDirectas:5, cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[], cerradasBodega:2, cerradasBarra:0, pesos:[], pesoCristal:0 };
+const filaM2 = { insumoId:'mzcl-1000', tipo:'copa', contNeto:1000, copaML:50, existenciaAnterior:10, ventasCopasDirectas:3, cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[], cerradasBodega:1, cerradasBarra:0, pesos:[], pesoCristal:0 };
+setVar(B, 'filasCaptura', [filaM1, filaM2]);
+const _comp = { id:'c1', nombre:'Mezcal Casa', miembros:['mzcl-750','mzcl-1000'] };
+test('compuesto existencia = Σ existencia de las presentaciones', () =>
+    eq(B._existenciaCompuestoCopas(_comp), B.calcExistencia(filaM1) + B.calcExistencia(filaM2)));
+test('compuesto teórico = Σ teórico de las presentaciones (sin ventasCompuesto)', () =>
+    eq(B._teoricoCompuestoCopas(_comp), B.calcExistenciaTeorica(filaM1) + B.calcExistenciaTeorica(filaM2)));
+test('compuesto NO doble-cuenta: su diferencia = Σ diferencias de las presentaciones', () => {
+    const difComp = B._existenciaCompuestoCopas(_comp) - B._teoricoCompuestoCopas(_comp);
+    const difMs = (B.calcExistencia(filaM1)-B.calcExistenciaTeorica(filaM1)) + (B.calcExistencia(filaM2)-B.calcExistenciaTeorica(filaM2));
+    eq(difComp, difMs);
+});
+setVar(B, 'filasCaptura', [filaCopa]);
+
 /* ═══════════════ SUITE C · NÚCLEO (etaax-core.js directo) ═══════════════ */
 console.log('\n══ SUITE C · Núcleo compartido (etaax-core.js) ══');
 const C = cargarJS(crearContexto(), 'etaax-core.js');

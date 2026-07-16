@@ -1411,24 +1411,31 @@ function _existenciaCompuestoCopas(comp) {
 // Existencia TEÓRICA del compuesto en copas: suministro de los miembros
 // (anterior + entradas + producción, sin ventas porque van al compuesto) − ventas del compuesto.
 function _teoricoCompuestoCopas(comp) {
+    // Σ del teórico de cada presentación (cada miembro ya resta SUS propias ventas,
+    // cortesía y merma). El compuesto es solo la vista CONSOLIDADA — no captura
+    // ventas propias (modelo nuevo: ventas por presentación).
     var sup = 0;
     (comp.miembros||[]).forEach(function(mid){
         var f = filasCaptura.find(function(x){ return x.insumoId === mid; });
         if (f) sup += calcExistenciaTeorica(f);
     });
-    var v = (invActual && invActual.ventasCompuesto && invActual.ventasCompuesto[comp.id]) || {};
-    return sup - (parseFloat(v.ventas)||0) - (parseFloat(v.cortesia)||0) - (parseFloat(v.merma)||0);
+    return sup;
 }
 // Fila VIRTUAL del compuesto para renderizar como un insumo copa más.
 function _virtualFilaCompuesto(comp) {
-    var v = (invActual && invActual.ventasCompuesto && invActual.ventasCompuesto[comp.id]) || {};
-    var m0 = filasCaptura.find(function(x){ return (comp.miembros||[]).indexOf(x.insumoId) >= 0; });
+    var mems = (comp.miembros||[]).map(function(mid){ return filasCaptura.find(function(x){ return x.insumoId === mid; }); }).filter(Boolean);
+    var m0 = mems[0];
+    // Ventas del compuesto = Σ de las presentaciones (modelo nuevo, ya no ventasCompuesto).
+    // Son SOLO para mostrar; el teórico/existencia usan _teoricoCopas/_existCopas.
+    var vD = mems.reduce(function(s,m){ return s + (parseFloat(m.ventasCopasDirectas)||0); }, 0);
+    var cD = mems.reduce(function(s,m){ return s + (parseFloat(m.cortesiaCopas)||0); }, 0);
+    var mD = mems.reduce(function(s,m){ return s + (parseFloat(m.mermaCopas)||0); }, 0);
     return {
         esCompuesto: true, compId: comp.id, insumoId: '_comp_' + comp.id,
         nombre: comp.nombre, categoria: '🧩 Compuesto', subcategoria: '', familia: '🧩 Compuestos',
         tipo: 'copa', copaML: _copaMLCompuesto(comp), contNeto: 0,
         costoUnitario: m0 ? (m0.costoUnitario || 0) : 0, precioCarta: m0 ? (m0.precioCarta || 0) : 0,
-        ventasCopasDirectas: v.ventas || 0, cortesiaCopas: v.cortesia || 0, mermaCopas: v.merma || 0, ventasBotella: 0,
+        ventasCopasDirectas: vD, cortesiaCopas: cD, mermaCopas: mD, ventasBotella: 0,
         _existCopas: _existenciaCompuestoCopas(comp), _teoricoCopas: _teoricoCompuestoCopas(comp)
     };
 }
@@ -3601,18 +3608,14 @@ function renderStep3Insumos() {
 }
 function _step3VentasInner() {
     const b        = busquedaCapt.toLowerCase();
-    const mapa     = _compDeInsumo();
-    // Compuestos (virtuales) primero; luego las filas que NO son miembros.
-    const comps = _compuestosActivos()
-        .filter(c => !b || (c.nombre||'').toLowerCase().includes(b))
-        .map(_virtualFilaCompuesto);
+    // Modelo nuevo: cada PRESENTACIÓN (miembro) se vende por separado y aquí es una
+    // fila normal. El compuesto es solo consolidación en el reporte → no aparece aquí.
     const filtradas = filasCaptura.filter(f =>
-        !mapa[f.insumoId] &&                                   // miembros se ocultan (se venden en el compuesto)
         (!filtroFamActivo || f.familia === filtroFamActivo) &&
         (!filtroCatActiva || f.categoria === filtroCatActiva) &&
         (!b || f.nombre.toLowerCase().includes(b))
     );
-    const items = comps.concat(filtradas);
+    const items = filtradas;
     const _ncop = v => (v % 1 ? (Math.round(v*10)/10).toFixed(1) : v);
     const rows = items.map(fila => {
         const esComp = !!fila.esCompuesto;
@@ -3999,10 +4002,8 @@ function renderChipsVentas() {
     if (!cont) return;
     const q = _ventasBusqueda.trim().toLowerCase();
     if (!q) { cont.innerHTML = ''; return; }
-    const mapa = _compDeInsumo();
-    const comps = _compuestosActivos().filter(c => (c.nombre||'').toLowerCase().includes(q)).map(_virtualFilaCompuesto);
-    const matchesF = filasCaptura.filter(f => !mapa[f.insumoId] && f.nombre.toLowerCase().includes(q)); // miembros ocultos
-    const matches = comps.concat(matchesF);
+    // Cada presentación se vende como fila normal (el compuesto es solo consolidación en el reporte).
+    const matches = filasCaptura.filter(f => f.nombre.toLowerCase().includes(q));
     if (!matches.length) {
         cont.innerHTML = `<div style="color:var(--text-dim);font-size:13px;padding:8px 0">Sin resultados para "${etx(_ventasBusqueda)}"</div>`;
         return;
@@ -4037,11 +4038,7 @@ function renderCardVentas() {
     const cont = document.getElementById('ventasCardWrap');
     if (!cont) return;
     if (!_ventasInsumoId) { cont.innerHTML = ''; return; }
-    if (_ventasInsumoId.indexOf('_comp_') === 0) { // producto compuesto
-        const comp = getCompuestos().find(c => '_comp_' + c.id === _ventasInsumoId);
-        cont.innerHTML = comp ? _cardVentasCompuesto(comp) : '';
-        return;
-    }
+    // (Los compuestos ya no se venden: cada presentación se vende como fila normal.)
     const fila = filasCaptura.find(f => f.insumoId === _ventasInsumoId);
     if (!fila) { cont.innerHTML = ''; return; }
     const idx    = filasCaptura.indexOf(fila);
@@ -4175,15 +4172,11 @@ function _cardVentasCompuesto(comp) {
 function renderResumenVentas() {
     const cont = document.getElementById('ventasResumen');
     if (!cont) return;
-    const mapaC = _compDeInsumo();
-    const conVentas = filasCaptura.filter(f =>
-        !mapaC[f.insumoId] && (                                  // miembros se reportan en el compuesto
+    const conVentas = filasCaptura.filter(f =>                    // cada presentación con sus propias ventas
         (f.ventasCopasDirectas||0)>0 || (f.ventasBotella||0)>0 ||
-        (f.cortesiaCopas||0)>0 || (f.mermaCopas||0)>0)
+        (f.cortesiaCopas||0)>0 || (f.mermaCopas||0)>0
     );
-    const compsConVentas = _compuestosActivos().map(_virtualFilaCompuesto).filter(vf =>
-        (vf.ventasCopasDirectas||0)>0 || (vf.cortesiaCopas||0)>0 || (vf.mermaCopas||0)>0);
-    const todos = compsConVentas.concat(conVentas);
+    const todos = conVentas;
     if (!todos.length) {
         cont.innerHTML = `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:20px 0">Sin ventas capturadas aún</div>`;
         return;
@@ -5252,43 +5245,65 @@ function _step5TablasHTML() {
     const _compRows = vcomps.map(vf => {
         const comp = getCompuestos().find(c => c.id === vf.compId) || {};
         const members = (comp.miembros||[]).map(mid => filasCaptura.find(f=>f.insumoId===mid)).filter(Boolean);
-        let ea=0, ent=0, cancel=0;
-        members.forEach(m => { ea += (parseFloat(m.existenciaAnterior)||0); ent += getEntradasCopas(m); cancel += getCancelacionesCopas(m.insumoId); });
-        const ventaCopa = (vf.ventasCopasDirectas||0);
-        const ventaCoct = members.reduce((s,m)=>s+calcVentasCopasRecetas(m.insumoId, m.copaML), 0); // recetas del menú de los miembros
-        const cm        = (vf.cortesiaCopas||0) + (vf.mermaCopas||0);
-        const fisico    = calcExistencia(vf);
-        const teorico   = calcExistenciaTeorica(vf);
+        // TODO en COPAS (estándar). El compuesto suma sus presentaciones; cada
+        // presentación captura sus PROPIAS ventas (modelo nuevo).
+        let ea=0, ent=0, cancel=0, ventaBot=0, ventaCopa=0, ventaCoct=0, cm=0;
+        members.forEach(m => {
+            ea       += parseFloat(m.existenciaAnterior)||0;
+            ent      += getEntradasCopas(m);
+            cancel   += getCancelacionesCopas(m.insumoId);
+            const copasBot = m.contNeto>0 && m.copaML>0 ? m.contNeto/m.copaML : 0;
+            ventaBot += (parseFloat(m.ventasBotella)||0) * copasBot;
+            ventaCopa+= parseFloat(m.ventasCopasDirectas)||0;
+            ventaCoct+= calcVentasCopasRecetas(m.insumoId, m.copaML);
+            cm       += (parseFloat(m.cortesiaCopas)||0) + (parseFloat(m.mermaCopas)||0);
+        });
+        const fisico    = calcExistencia(vf);   // Σ existencia de miembros (copas)
+        const teorico   = calcExistenciaTeorica(vf); // Σ teórico de miembros (copas)
         const dif       = fisico - teorico;
-        const cc        = costoCopa(vf);
         const difCosto  = dif * (vf.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)
         const ref       = teorico>0 ? teorico : fisico;
         const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
         const pctStr    = ref>0 ? ((dif/ref*100>=0?'+':'')+(dif/ref*100).toFixed(1)+'%') : '—';
         _compGrpDif += difCosto;
-        // Columnas FÍSICAS en la unidad final definida (ej. L), no en copas. Ventas se quedan en copas (así se capturan).
-        const cml = vf.copaML || 0;
-        const uF  = comp.unidad || 'lt';
-        const uLbl = uF==='lt'?'L':uF==='botella'?'bot':uF;
-        const toF = c => { if (!cml) return c; const ml = c*cml; return (uF==='lt'||uF==='kg')?ml/1000:uF==='botella'?ml/750:(uF==='ml'||uF==='g')?ml:ml/1000; };
+        // Desglose por presentación (expandible) — cada miembro con SU dato individual.
+        const desgloseRows = members.map(m => {
+            const mfis = calcExistencia(m), mteo = calcExistenciaTeorica(m), mdif = mfis - mteo;
+            const mcol = Math.abs(mdif)<0.05?'var(--text-dim)':(mdif>0?'var(--green)':'var(--red)');
+            const ment = getEntradasCopas(m);
+            return `<tr>
+                <td style="padding:3px 8px;color:var(--text)">${etx(insumoTitulo(m))}</td>
+                <td style="text-align:center">${_nc(parseFloat(m.existenciaAnterior)||0)} cop</td>
+                <td style="text-align:center;color:var(--green)">${ment>0?'+'+_nc(ment)+' cop':'—'}</td>
+                <td style="text-align:center">${_nc(mteo)} cop</td>
+                <td style="text-align:center;font-weight:600">${_nc(mfis)} cop</td>
+                <td style="text-align:center;font-weight:700;color:${mcol}">${mdif>=0?'+':''}${_nc(mdif)} cop</td>
+            </tr>`;
+        }).join('');
+        const desglose = `<tr id="compDesg-${comp.id}" style="display:none"><td colspan="12" style="padding:0;background:var(--bg)">
+            <div style="padding:8px 20px 12px"><div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:5px">📐 Desglose por presentación</div>
+            <table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr style="color:var(--text-dim);font-size:10px;text-transform:uppercase;letter-spacing:.5px">
+                <th style="text-align:left;padding:2px 8px">Presentación</th><th style="text-align:center">Exist. ant.</th><th style="text-align:center">Entradas</th><th style="text-align:center">Teórico</th><th style="text-align:center">Físico</th><th style="text-align:center">Diferencia</th>
+            </tr></thead><tbody>${desgloseRows}</tbody></table></div></td></tr>`;
         return `<tr>
-            <td style="min-width:140px">
+            <td style="min-width:150px">
                 <div style="font-size:14px;font-weight:600">🧩 ${etx(comp.nombre||vf.nombre)}</div>
-                <div style="font-size:10px;color:var(--text-dim)">${members.map(m=>etx(insumoTitulo(m))).join(' + ')}</div>
+                <div style="font-size:10px;color:var(--text-dim)">${members.length} presentaciones</div>
+                <button onclick="var d=document.getElementById('compDesg-${comp.id}');d.style.display=d.style.display==='none'?'':'none';this.textContent=d.style.display==='none'?'▸ Ver desglose':'▾ Ocultar desglose'" style="margin-top:3px;font-size:9px;padding:1px 7px;border-radius:4px;cursor:pointer;border:1px solid var(--viol);background:transparent;color:var(--viol)">▸ Ver desglose</button>
                 ${_btnNotaInsumo(vf.compId||vf.insumoId)}
             </td>
-            <td style="text-align:center;white-space:nowrap">${_nc(toF(ea))} ${uLbl}</td>
-            <td style="text-align:center;color:var(--green);white-space:nowrap">${ent>0?'+'+_nc(toF(ent))+' '+uLbl:'—'}</td>
-            <td style="text-align:center;color:var(--text-dim)">—</td>
+            <td style="text-align:center;white-space:nowrap">${_nc(ea)} cop</td>
+            <td style="text-align:center;color:var(--green);white-space:nowrap">${ent>0?'+'+_nc(ent)+' cop':'—'}</td>
+            <td style="text-align:center;color:var(--text-dim)">${ventaBot>0?_nc(ventaBot)+' cop':'—'}</td>
             <td style="text-align:center;color:var(--accent)">${ventaCopa>0?_nc(ventaCopa)+' cop':'—'}</td>
             <td style="text-align:center;color:var(--viol)">${ventaCoct>0?_nc(ventaCoct)+' cop':'—'}</td>
             <td style="text-align:center">${cm>0?`<div style="color:var(--red);font-size:12px;font-weight:600">${_nc(cm)} cop</div>`:'—'}</td>
             <td style="text-align:center;color:var(--text-muted)">${cancel>0?_nc(cancel)+' cop':'—'}</td>
-            <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(toF(fisico))} ${uLbl}</td>
+            <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(fisico)} cop</td>
             <td style="text-align:center;font-weight:700;color:${color};white-space:nowrap">${dif>=0?'+':''}${_nc(dif)} cop</td>
             <td style="text-align:center;font-size:11px;color:${color}">${pctStr}</td>
             <td style="text-align:right;font-weight:600;color:${color};white-space:nowrap">${difCosto>=0?'+':''}$${difCosto.toFixed(2)}</td>
-        </tr>`;
+        </tr>${desglose}`;
     }).join('');
     const tablaComp = vcomps.length ? `<div class="card" style="max-width:none;margin:0 16px 12px">
         <div class="card-header">
