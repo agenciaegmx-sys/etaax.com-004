@@ -24,7 +24,15 @@ var _cacheEL   = null;
 var _cacheRecetasInv = null; // recetas para uso interno de este módulo
 var _cacheInsumosInv = null; // insumos para uso interno de este módulo
 
-function getInsumos()     { return _cacheInsumosInv || (function(){ try { return JSON.parse(_skGet('insumos')) || []; } catch { return []; } }()); }
+// OJO: devolver SIEMPRE la MISMA referencia de array. Antes, si _cacheInsumosInv
+// era null, cada llamada hacía un JSON.parse nuevo → el índice de _insumoResolver
+// (compara la referencia del array) se reconstruía en CADA resolve → con 179 filas
+// el reporte se CONGELABA. Memoizamos el parse en el propio caché.
+function getInsumos() {
+    if (_cacheInsumosInv) return _cacheInsumosInv;
+    try { _cacheInsumosInv = JSON.parse(_skGet('insumos')) || []; } catch (e) { _cacheInsumosInv = []; }
+    return _cacheInsumosInv;
+}
 // Resolver id→insumo con la fábrica compartida (insumo-label.js): misma lógica que
 // insumos.js/app.js; fuente = getInsumos de este módulo.
 window._insumoResolver = window._makeInsumoResolver(getInsumos);
@@ -2544,10 +2552,21 @@ function renderStepContent() {
         clearTimeout(window._step5RenderT);
         window._step5RenderT = setTimeout(function(){
             if (pasoActual !== 5) return; // el usuario ya se movió a otro paso
-            _keep5.innerHTML = renderStep5();
-            window._step5Dirty = false;
-            window._step5Force = false;
-            if (typeof _marcarStep5Stale === 'function') _marcarStep5Stale(false);
+            try {
+                _keep5.innerHTML = renderStep5();
+                window._step5Dirty = false;
+                window._step5Force = false;
+                if (typeof _marcarStep5Stale === 'function') _marcarStep5Stale(false);
+            } catch (e) {
+                // Antes, si renderStep5 lanzaba, la pantalla quedaba CONGELADA en el
+                // spinner. Ahora se muestra el error y un botón para reintentar.
+                console.error('[renderStep5]', e);
+                _keep5.innerHTML = '<div style="text-align:center;padding:70px 20px;color:var(--text-dim)">'+
+                    '<div style="font-size:32px;margin-bottom:10px">⚠️</div>'+
+                    '<div style="color:var(--text)">No se pudo generar el resumen</div>'+
+                    '<div style="font-size:12px;margin-top:6px;max-width:520px;margin-left:auto;margin-right:auto">'+etx((e&&e.message)||String(e))+'</div>'+
+                    '<button class="btn-vista" style="margin-top:14px" onclick="recalcularResultado()">🔄 Reintentar</button></div>';
+            }
         }, 30);
         return;
     }
@@ -6633,9 +6652,15 @@ const fotoTh = e.foto_url
         ' · ' + mermasArr.length + ' merma' + (mermasArr.length !== 1 ? 's' : '') +
         (_sucNomH ? ' · ' + _sucNomH : '');
     const secHdr = t => `<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin:14px 2px 8px">${t}</div>`;
+    // Mapeo SEGURO: si una entrada trae datos raros y rowHTML lanza, esa fila muestra
+    // "(error)" pero las demás SÍ se ven (antes un throw dejaba la lista entera en blanco).
+    const _safeRow = (e) => { try { return rowHTML(e); } catch (err) {
+        console.warn('[entrada rota]', err, e);
+        return `<div class="ent-log-fila"><span class="ent-log-nombre">${etx((e && (e.nombreProducto || e.nombre)) || '—')}</span><span class="ent-log-cant" style="color:var(--red)">(dato inválido)</span></div>`;
+    } };
     cont.innerHTML =
-        (entradasArr.length ? secHdr('📦 Entradas' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + entradasArr.map(rowHTML).join('') : '') +
-        (mermasArr.length   ? secHdr('🗑️ Mermas'   + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + mermasArr.map(rowHTML).join('') : '') +
+        (entradasArr.length ? secHdr('📦 Entradas' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + entradasArr.map(_safeRow).join('') : '') +
+        (mermasArr.length   ? secHdr('🗑️ Mermas'   + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + mermasArr.map(_safeRow).join('') : '') +
         (!visibles.length ? `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:24px 0">Sin registros de esta sucursal</div>` : '');
 }
 
