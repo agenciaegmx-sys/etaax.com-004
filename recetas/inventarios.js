@@ -1082,7 +1082,7 @@ function _rowsCompuestosActual() {
 function _seccionCompuestosDirectivo() {
     var rows = _rowsCompuestosActual();
     if (!rows.length) return '';
-    return '<div class="rd-sec">🧩 Productos compuestos (fusionados)</div>'+
+    return '<div class="rd-sec">🧩 Productos compuestos</div>'+
         '<table class="rd-t" style="margin-bottom:14px"><thead><tr><th>Producto</th><th class="tr">Existencia</th><th class="tr">Capital</th></tr></thead><tbody>'+
         rows.map(function(r){ return '<tr><td style="font-weight:600">'+etx(r.nombre)+'</td><td class="tr">'+_fmtCant(r.total,r)+'</td><td class="tr" style="color:#1a7a46;font-weight:700">'+_repMoney(r.capital)+'</td></tr>'; }).join('')+
         '</tbody></table>';
@@ -1589,7 +1589,7 @@ function _renderParamLista() {
         (comps.length ? comps.map(function(c){
             return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px">'+
                 '<div><div style="font-weight:600;color:var(--text)">🧩 '+etx(c.nombre)+'</div>'+
-                '<div style="font-size:11px;color:var(--text-dim)">'+(c.miembros||[]).length+' insumos · unidad final: '+(c.unidad||'—')+'</div></div>'+
+                '<div style="font-size:11px;color:var(--text-dim)">'+(c.miembros||[]).length+' presentaciones combinadas</div></div>'+
                 '<div style="display:flex;gap:6px"><button class="btn-vista" style="padding:4px 10px;font-size:11px" onclick="editarCompuesto(\''+c.id+'\')">✏️ Editar</button>'+
                 '<button class="btn-vista" style="padding:4px 10px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="eliminarCompuesto(\''+c.id+'\')">🗑️</button></div></div>';
         }).join('') : '<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:30px 0">Sin productos compuestos todavía.</div>')+
@@ -1605,7 +1605,7 @@ function editarCompuesto(id) {
 function _toggleMiembro(id) {
     var i = _compMiembros.indexOf(id);
     if (i >= 0) _compMiembros.splice(i,1); else _compMiembros.push(id);
-    var el = document.getElementById('compCount'); if (el) el.textContent = _compMiembros.length + ' seleccionados';
+    var el = document.getElementById('compCount'); if (el) el.textContent = _compMiembros.length + ' seleccionadas';
 }
 function _compChecklistHTML() {
     var insumos = _scopeSucInsumos(getInsumos());
@@ -1630,7 +1630,7 @@ function _renderCompForm(c) {
         '<label style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Unidad de la vista final</label>'+
         '<select id="compUnidad" style="'+inpSt+';margin:4px 0 12px">'+
         ['pza','botella','ml','lt','g','kg'].map(function(u){ return '<option value="'+u+'"'+((c.unidad||'lt')===u?' selected':'')+'>'+u+'</option>'; }).join('')+'</select>'+
-        '<label style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Insumos a fusionar · <span id="compCount">'+_compMiembros.length+' seleccionados</span></label>'+
+        '<label style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Presentaciones a combinar · <span id="compCount">'+_compMiembros.length+' seleccionadas</span></label>'+
         '<input placeholder="Buscar insumo…" value="'+etx(_compBusca)+'" oninput="onCompBusca(this.value)" style="'+inpSt.replace('14px','13px')+';margin:4px 0 8px">'+
         '<div id="compChecklist" style="max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px">'+
         _compChecklistHTML()+'</div>'+
@@ -1641,7 +1641,7 @@ function _renderCompForm(c) {
 function guardarCompuesto() {
     var nombre = (document.getElementById('compNombre').value || '').trim();
     if (!nombre) { alert('Ponle nombre al producto compuesto.'); return; }
-    if (_compMiembros.length < 2) { alert('Selecciona al menos 2 insumos para fusionar.'); return; }
+    if (_compMiembros.length < 2) { alert('Selecciona al menos 2 presentaciones a combinar.'); return; }
     var unidad = document.getElementById('compUnidad').value;
     var comps = getCompuestos();
     if (_compEditId) {
