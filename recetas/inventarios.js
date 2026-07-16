@@ -778,8 +778,12 @@ function _importarEntradasQR() {
         if (e.sucursalId && _sucImp && e.sucursalId !== _sucImp) return;
         if (!_enPeriodoInvActual(e.fecha)) return;   // periodo: pertenece a OTRO inventario
         if (e.id && yaEnInv[e.id]) return;      // ya está en este inventario
-        if (e.importadoEnInv === invActual.id) return; // se borró de ESTE inventario a propósito → no re-importar
-        // (importadoEnInv de OTRO inventario + cae en ESTE periodo → se re-clama aquí)
+        if (e.borrada) return; // borrada a propósito por el usuario (flag explícito).
+        // OJO: NO usamos importadoEnInv como candado — confundía "borrada" con "no
+        // persistió": tras finalizar/reabrir, el push al log a veces no se guardaba en
+        // Supabase y la entrada quedaba marcada importadoEnInv=<este inv> pero AUSENTE del
+        // log → se saltaba para siempre. Ahora el yaEnInv (arriba) evita duplicados cuando
+        // sí persistió, y si se perdió, se re-clama. El borrado real usa `borrada`.
         // ── MERMAS del QR: entran a la merma del inventario (y por lo tanto al reporte) ──
         if (e.concepto === 'merma') {
             var cantM = parseFloat(e.cantidad) || 0;
@@ -819,14 +823,18 @@ function _importarEntradasQR() {
             n++;
             return;
         }
-        if (!idsSuc[e.insumoId]) return;        // no es de esta sucursal
+        // (Ya pasó el SELLO de sucursal y el PERIODO). NO exigimos que el insumo esté
+        // en el scope activo (idsSuc): si su membresía cambió o quedó fuera del scope,
+        // ocultar una entrada YA capturada es peor que mostrarla. Si el insumo no es una
+        // fila de este inventario simplemente no se atribuye a ninguna existencia
+        // (getEntradasBottles filtra por insumoId); el sello de sucursal es la defensa.
         invActual.entradasLog.push({
             id: e.id, insumoId: e.insumoId,
             nombreProducto: e.nombre || '—',
             cantidad: parseFloat(e.cantidad) || 0,
             costo: parseFloat(e.costo) || 0,
             tipo: e.tipo || '', notas: e.notas || '',
-            fecha: e.fecha || '', origen: 'qr',
+            fecha: e.fecha || '', origen: e.origen || 'manual',
             foto_url: e.foto_url || ''          // evidencia visual del QR
         });
         e.importadoEnInv = invActual.id;        // marcar el registro global para no re-importar
@@ -6415,6 +6423,7 @@ function guardarEntradaLog() {
         notas,
         fecha,
         origen:   'manual',   // entrada capturada a mano en el ERP → se importa al inventario por PERIODO
+        sucursalId: _sucActiva() || 'suc_principal', // sello: el import a otra sucursal la ignora
         registrado: new Date().toISOString()
     };
     log.push(_nuevaEnt);
@@ -6432,7 +6441,8 @@ function guardarEntradaLog() {
         invActual.entradasLog.push({
             id: _nuevaEnt.id, insumoId,
             nombreProducto: ins ? insumoEtiqueta(ins) : '—',
-            cantidad, costo, tipo, notas, fecha, origen: 'manual'
+            cantidad, costo, tipo, notas, fecha, origen: 'manual',
+            sucursalId: _nuevaEnt.sucursalId
         });
         guardarEntradas();
     }
@@ -6628,7 +6638,7 @@ function renderListadoEntradas() {
         log = invActual.entradasLog || [];
         useGlobal = false;
     } else {
-        log = [...getEntradasLog()].filter(function(e){ return _entEnPeriodo(e.fecha); }).reverse();
+        log = [...getEntradasLog()].filter(function(e){ return e && !e.borrada && _entEnPeriodo(e.fecha); }).reverse();
         useGlobal = true;
     }
     const countEl = document.getElementById('entLogCount');
@@ -6722,8 +6732,14 @@ function eliminarEntradaPorId(id) {
         if (invActual) {
             invActual.entradasLog = (invActual.entradasLog || []).filter(e => e.id !== id);
             guardarEntradas();
+            // Si viene del log global (QR / manual del ERP), marcarla `borrada` para que
+            // el import por periodo NO la vuelva a jalar. Flag explícito (no borramos el
+            // registro: queda dormido en la nube, reversible — "nunca perder datos").
+            var _g = getEntradasLog().find(function(x){ return x && x.id === id; });
+            if (_g) { _g.borrada = true; _guardarELLocal(); try { _sbUpEL(_g); } catch(err){} }
         } else {
-            setEntradasLog(getEntradasLog().filter(e => e.id !== id));
+            var _g2 = getEntradasLog().find(function(x){ return x && x.id === id; });
+            if (_g2) { _g2.borrada = true; _guardarELLocal(); try { _sbUpEL(_g2); } catch(err){} }
         }
         _entEditId = null;
         renderListadoEntradas();
@@ -6814,6 +6830,10 @@ function guardarEntradas() {
     const idx   = lista.findIndex(x => x.id === invActual.id);
     if (idx >= 0) lista[idx] = invActual; else lista.push(invActual);
     setInventarios(lista);
+    // FORZAR el upsert a la nube: lista[idx] === invActual (misma referencia mutada en
+    // el lugar) → el diff de setInventarios NO lo detecta y solo guardaba en localStorage.
+    // Era la raíz de "en el ERP sí aparece la entrada pero en el inventario no persiste".
+    try { _sbUpInv(invActual); } catch(e) { console.warn('[guardarEntradas upsert]', e); }
 
     const btn = document.getElementById('btnGuardarEntradas');
     if (btn) {
