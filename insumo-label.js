@@ -140,7 +140,11 @@
         for (var i = 0; i < arr.length; i++) { if ((arr[i] || 'suc_principal') === effSuc) return true; }
         return false;
     }
-    window._insumoPausadoEn = function (x, effSuc) { return _enLista(x && x.inactivoEn, effSuc); };
+    // PAUSA POR SUCURSAL RETIRADA (Edwin): el "Pausar aquí" externo era redundante
+    // con el activar/desactivar del editor (activo global) + la membresía por
+    // sucursal. El helper queda neutralizado (nunca pausa) para no dejar insumos
+    // atorados ocultos; los datos inactivoEn quedan dormidos (reversible).
+    window._insumoPausadoEn = function () { return false; };
     // ¿El insumo es OPERABLE en la sucursal? (vive ahí + activo global + no pausado ahí)
     window._insumoActivoEnSuc = function (x, effSuc) {
         if (!x || x.activo === '0') return false;
@@ -156,7 +160,7 @@
         for (var i = 0; i < s.length; i++) { if ((s[i] || 'suc_principal') === (suc || 'suc_principal')) return true; }
         return false;
     };
-    window._recetaPausadaEn = function (r, suc) { return _enLista(r && r.inactivaEn, suc || 'suc_principal'); };
+    window._recetaPausadaEn = function () { return false; }; // pausa por sucursal RETIRADA (ver _insumoPausadoEn)
     window._recetaActivaEnSuc = function (r, suc) {
         if (!r || r.status === 'inactiva') return false;
         if (!window._recetaEnSuc(r, suc)) return false;

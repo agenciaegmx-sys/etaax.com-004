@@ -851,11 +851,8 @@
                    ${_catGlobalIns() ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;
                        color:var(--green);border-color:var(--green);display:inline-flex;align-items:center;gap:5px"
                        onclick="abrirInsumoSuc('${ins.id}')"><span style="font-size:14px">🏪</span> Sucursales</button>` : ''}
-                   ${(!_catGlobalIns() && _getSucActivaIns()) ? (ins.activo === '0'
-                       ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;color:var(--red);border-color:rgba(224,90,58,.5);display:inline-flex;align-items:center;gap:5px" title="Inactivo GLOBAL (pastilla del editor): no aparece en ningún lado. Este botón lo reactiva en TODO el negocio." onclick="activarInsumoGlobal('${ins.id}')">🚫 ▶ Activar</button>`
-                       : (window._insumoPausadoEn && window._insumoPausadoEn(ins, _effSucIns(_getSucActivaIns()))
-                       ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;color:var(--green);border-color:var(--green);display:inline-flex;align-items:center;gap:5px" title="Reactivar en esta sucursal" onclick="togglePausaInsumo('${ins.id}')">▶ Reactivar</button>`
-                       : `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;display:inline-flex;align-items:center;justify-content:center" title="Pausar en esta sucursal (deja de aparecer en inventarios, recetas, requisiciones y QR de ESTA sucursal)" onclick="togglePausaInsumo('${ins.id}')">⏸</button>`)) : ''}
+                   ${(!_catGlobalIns() && _getSucActivaIns() && ins.activo === '0')
+                       ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;color:var(--red);border-color:rgba(224,90,58,.5);display:inline-flex;align-items:center;gap:5px" title="Inactivo GLOBAL (pastilla del editor): no aparece en ningún lado. Este botón lo reactiva en TODO el negocio." onclick="activarInsumoGlobal('${ins.id}')">🚫 ▶ Activar</button>` : ''}
                    ${ins.esSubReceta ? (ins.ocultoInventario
                        ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;color:var(--text-dim);border-color:var(--border);display:inline-flex;align-items:center;gap:5px" title="Oculto del Paso 1 del inventario — clic para volverlo visible" onclick="toggleVisibleInventario('${ins.id}')">🚫 Oculto en inventario</button>`
                        : `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;color:var(--green);border-color:rgba(61,190,122,.4);display:inline-flex;align-items:center;gap:5px" title="Visible en el Paso 1 del inventario (se captura su existencia) — clic para ocultarlo" onclick="toggleVisibleInventario('${ins.id}')">📋 Visible en inventario</button>`) : ''}
@@ -966,11 +963,8 @@
                    '<button class="btn-ver" onclick="verFicha(\'' + ins.id + '\')">👁️ Ver</button>' +
                    '<button class="btn-edit" onclick="editarInsumo(\'' + ins.id + '\')">✏️ Editar</button>' +
                    (_catGlobalIns() ? '<button class="btn-edit" style="color:var(--green);border-color:var(--green)" onclick="abrirInsumoSuc(\'' + ins.id + '\')">🏪 Sucursales</button>' : '') +
-                   ((!_catGlobalIns() && _getSucActivaIns()) ? (ins.activo === '0'
-                       ? '<button class="btn-ver" style="color:var(--red)" title="Inactivo global — activar en todo el negocio" onclick="activarInsumoGlobal(\'' + ins.id + '\')">▶</button>'
-                       : ((window._insumoPausadoEn && window._insumoPausadoEn(ins, _effSucIns(_getSucActivaIns())))
-                       ? '<button class="btn-ver" style="color:var(--green)" title="Reactivar en esta sucursal" onclick="togglePausaInsumo(\'' + ins.id + '\')">▶</button>'
-                       : '<button class="btn-ver" title="Pausar en esta sucursal" onclick="togglePausaInsumo(\'' + ins.id + '\')">⏸</button>')) : '') +
+                   ((!_catGlobalIns() && _getSucActivaIns() && ins.activo === '0')
+                       ? '<button class="btn-ver" style="color:var(--red)" title="Inactivo global — activar en todo el negocio" onclick="activarInsumoGlobal(\'' + ins.id + '\')">▶</button>' : '') +
                    (ins.esSubReceta ? (ins.ocultoInventario
                        ? '<button class="btn-ver" style="color:var(--text-dim)" title="Oculto del inventario — clic para volverlo visible" onclick="toggleVisibleInventario(\'' + ins.id + '\')">🚫 Inv.</button>'
                        : '<button class="btn-ver" style="color:var(--green)" title="Visible en inventario — clic para ocultarlo" onclick="toggleVisibleInventario(\'' + ins.id + '\')">📋 Inv.</button>') : '') +
