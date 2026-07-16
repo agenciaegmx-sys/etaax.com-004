@@ -30,7 +30,7 @@
         } catch (e) {}
         var identidad = negLogo
             ? '<div class="ctx-neg-emoji-wrap" style="background:#fff;border-color:' + color + '33;overflow:hidden;padding:0">' +
-              '<img src="' + esc(negLogo) + '" alt="" style="width:100%;height:100%;object-fit:contain"></div>'
+              '<img src="' + esc(negLogo) + '" alt="" style="display:block;width:100%;height:100%;object-fit:contain"></div>'
             : '<div class="ctx-neg-emoji-wrap" style="background:' + color + '1a;border-color:' + color + '33">' + esc(ctx.negEmoji) + '</div>';
         bar.innerHTML =
             '<div class="ctx-bar-inner" style="border-color:' + (catGlobal ? '#7ab8f544' : (color + '44')) + '">' +
