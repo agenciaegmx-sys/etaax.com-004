@@ -349,6 +349,13 @@ test('primer levantamiento (no cerrado) SÍ sirve de existencia anterior', () =>
     eq(B.getExistenciaAnterior('ron1'), 40));
 setVar(B, '_cacheInv', null);
 
+// _unidadCompra NO debe tronar si el insumo no resuelve (borrado / otra sucursal):
+// antes (p && (p.x||'')).toString() daba null.toString() → congelaba el reporte
+// y vaciaba la lista de entradas.
+setVar(B, '_cacheInsumosInv', []);
+test('_unidadCompra null-safe cuando el insumo no existe', () =>
+    eq(B._unidadCompra({ insumoId: 'no-existe-xyz' }), 'bot'));
+
 /* ═══════════════ SUITE C · NÚCLEO (etaax-core.js directo) ═══════════════ */
 console.log('\n══ SUITE C · Núcleo compartido (etaax-core.js) ══');
 const C = cargarJS(crearContexto(), 'etaax-core.js');

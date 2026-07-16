@@ -814,13 +814,16 @@ function _unidadCompra(o) {
     var p   = ins && ins.presentaciones && ins.presentaciones[0];
     // 1) Unidad de COMPRA real (la "Unidad" junto a Cantidad en la presentación de compra).
     //    Si se compra por volumen/peso, ESA es la unidad de la entrada (ej. LT → litros).
-    var umP = (p && (p.umPresCompra || '')).toString().toUpperCase();
+    // OJO paréntesis: si p/ins es null (insumo borrado o de otra sucursal → no
+    // resuelve), (p && (p.x||'')) daba NULL y NULL.toString() lanzaba → congelaba
+    // el reporte y vaciaba la lista de entradas. ((p && p.x) || '') defaultea a ''.
+    var umP = ((p && p.umPresCompra) || '').toString().toUpperCase();
     if (umP === 'LT')  return 'L';
     if (umP === 'ML')  return 'ml';
     if (umP === 'KG')  return 'kg';
     if (umP === 'G' || umP === 'GR') return 'g';
     // 2) Se compra por pieza/contenedor → usar el empaque que ve el usuario (Garrafa, Botella, Lata…).
-    var emp = (ins && (ins.empaque || '')).toString().toLowerCase();
+    var emp = ((ins && ins.empaque) || '').toString().toLowerCase();
     if (emp.indexOf('garrafa') >= 0) return 'garrafa';
     if (emp.indexOf('botella') >= 0) return 'bot';
     if (emp.indexOf('lata')    >= 0) return 'lata';
@@ -828,7 +831,7 @@ function _unidadCompra(o) {
     if (emp.indexOf('bolsa')   >= 0) return 'bolsa';
     if (emp.indexOf('caja')    >= 0) return 'caja';
     // 3) Presentación de compra (dropdown) como respaldo.
-    var pc = (p && (p.presentacionCompra || '')).toString();
+    var pc = ((p && p.presentacionCompra) || '').toString();
     if (_UCOMPRA[pc]) return _UCOMPRA[pc];
     if (pc && pc !== 'Pieza') return pc.toLowerCase();
     return o.tipo === 'pza' ? 'pza' : (o.tipo === 'peso' ? (o.baseUnit || 'u').toLowerCase() : 'bot');
