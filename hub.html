@@ -926,6 +926,14 @@ async function _leerSuscripcion(negId) {
     try {
         var ses = await _supabase.auth.getSession();
         if (!ses.data || !ses.data.session) return { ok: true, indeterminado: true };
+        // Fuente AUTORITATIVA: RPC SECURITY DEFINER (v35). Devuelve el estado activo
+        // real saltándose la RLS de `suscripciones`, así un negocio ACTIVA no se
+        // falso-bloquea cuando la cuenta (dueño/staff/admin no-ADMIN_EMAIL) no alcanza
+        // a leer su propia fila por RLS. Si dice activo → pasar sin más.
+        try {
+            var act = await _supabase.rpc('negocio_esta_activo', { p_neg: negId });
+            if (!act.error && act.data === true) return { ok: true, estado: 'activa' };
+        } catch (e) { /* RPC no desplegada aún (pre-v35) → cae a la lógica de abajo */ }
         var r = await _supabase.from('suscripciones').select('estado,activa_hasta').eq('negocio_id', negId).maybeSingle();
         if (r.error) return { ok: true, indeterminado: true };           // error → fail-open
         if (!r.data) return { ok: false, estado: 'pendiente' };          // sin fila → nunca activado
