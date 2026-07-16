@@ -659,6 +659,13 @@
                             onfocus="this.style.borderColor='var(--green)'"
                             onblur="this.style.borderColor='var(--border)'">
                     </div>
+                    <!-- Filtros por Grupo y Categoría (se pueblan solos según lo que haya) -->
+                    <select id="filtroRecetaGrupoSel" onchange="filtroRecetaGrupo=this.value;filtroRecetaCat='';renderGridRecetas()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 12px;border-radius:10px;font-family:inherit;font-size:13px;outline:none;max-width:170px">
+                        <option value="">Todos los grupos</option>
+                    </select>
+                    <select id="filtroRecetaCatSel" onchange="filtroRecetaCat=this.value;renderGridRecetas()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 12px;border-radius:10px;font-family:inherit;font-size:13px;outline:none;max-width:170px">
+                        <option value="">Todas las categorías</option>
+                    </select>
                     <!-- Estado (solo catálogo global): las INACTIVAS viven únicamente aquí -->
                     <select id="filtroEstadoReceta" onchange="renderGridRecetas()" style="display:none;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 12px;border-radius:10px;font-family:inherit;font-size:13px;outline:none">
                         <option value="activas">✅ Activas</option>
@@ -667,15 +674,15 @@
                 </div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;padding:4px 20px 14px">
-                <button id="rp-todas" onclick="filtroRecetaTipo='';renderGridRecetas();_activarPillReceta('todas')"
+                <button id="rp-todas" onclick="filtroRecetaTipo='';filtroRecetaGrupo='';filtroRecetaCat='';renderGridRecetas();_activarPillReceta('todas')"
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--green);background:rgba(61,190,122,0.12);color:var(--green);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s">Todas</button>
-                <button id="rp-alimentos" onclick="filtroRecetaTipo='alimentos';renderGridRecetas();_activarPillReceta('alimentos')"
+                <button id="rp-alimentos" onclick="filtroRecetaTipo='alimentos';filtroRecetaGrupo='';filtroRecetaCat='';renderGridRecetas();_activarPillReceta('alimentos')"
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🍽️ Alimentos</button>
-                <button id="rp-sub-alimentos" onclick="filtroRecetaTipo='sub-alimentos';renderGridRecetas();_activarPillReceta('sub-alimentos')"
+                <button id="rp-sub-alimentos" onclick="filtroRecetaTipo='sub-alimentos';filtroRecetaGrupo='';filtroRecetaCat='';renderGridRecetas();_activarPillReceta('sub-alimentos')"
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🥣 Sub Alimentos</button>
-                <button id="rp-bebidas" onclick="filtroRecetaTipo='bebidas';renderGridRecetas();_activarPillReceta('bebidas')"
+                <button id="rp-bebidas" onclick="filtroRecetaTipo='bebidas';filtroRecetaGrupo='';filtroRecetaCat='';renderGridRecetas();_activarPillReceta('bebidas')"
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🥃 Bebidas</button>
-                <button id="rp-sub-bebidas" onclick="filtroRecetaTipo='sub-bebidas';renderGridRecetas();_activarPillReceta('sub-bebidas')"
+                <button id="rp-sub-bebidas" onclick="filtroRecetaTipo='sub-bebidas';filtroRecetaGrupo='';filtroRecetaCat='';renderGridRecetas();_activarPillReceta('sub-bebidas')"
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🧃 Sub Bebidas</button>
             </div>
         </div>
@@ -2474,6 +2481,8 @@ function crearReceta(tipo) {
 }
 
 let filtroRecetaTipo   = '';
+let filtroRecetaGrupo  = ''; // filtro por Grupo (ej. Coctelería, Panadería)
+let filtroRecetaCat    = ''; // filtro por Categoría (ej. Clásica, De temporada) — cascada del grupo
 let recetasSeleccionadas = new Set();
 let fichaRecetaActualId  = null;
 let _fichaSource         = 'verRecetas'; // 'verRecetas' | 'caratula'
@@ -2494,6 +2503,7 @@ function verRecetas() {
     if (typeof _ocultarCaratula === 'function') _ocultarCaratula(); // si venías de la carátula, destápala
     recetasSeleccionadas.clear();
     filtroRecetaTipo = '';
+    filtroRecetaGrupo = ''; filtroRecetaCat = '';
     _activarPillReceta('todas');
     renderGridRecetas();
     document.getElementById('modalVerRecetas').style.display = 'flex';
@@ -2599,6 +2609,25 @@ function renderGridRecetas() {
         lista = getRecetasScope();
     }
     if (filtroRecetaTipo) lista = lista.filter(r => r.tipo === filtroRecetaTipo);
+
+    // ── Filtros Grupo → Categoría (cascada). Los selects se pueblan con lo que HAY. ──
+    const _selG = document.getElementById('filtroRecetaGrupoSel');
+    if (_selG) {
+        const grupos = [...new Set(lista.map(r => (r.grupo||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+        if (filtroRecetaGrupo && grupos.indexOf(filtroRecetaGrupo) < 0) filtroRecetaGrupo = ''; // ese grupo ya no está en la vista
+        _selG.innerHTML = '<option value="">Todos los grupos</option>' +
+            grupos.map(g => `<option value="${etx(g)}" ${filtroRecetaGrupo===g?'selected':''}>${etx(g)}</option>`).join('');
+    }
+    if (filtroRecetaGrupo) lista = lista.filter(r => (r.grupo||'').trim() === filtroRecetaGrupo);
+    const _selC = document.getElementById('filtroRecetaCatSel');
+    if (_selC) {
+        const cats = [...new Set(lista.map(r => (r.categoria||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+        if (filtroRecetaCat && cats.indexOf(filtroRecetaCat) < 0) filtroRecetaCat = '';
+        _selC.innerHTML = '<option value="">Todas las categorías</option>' +
+            cats.map(c => `<option value="${etx(c)}" ${filtroRecetaCat===c?'selected':''}>${etx(c)}</option>`).join('');
+    }
+    if (filtroRecetaCat) lista = lista.filter(r => (r.categoria||'').trim() === filtroRecetaCat);
+
     if (q) lista = lista.filter(r =>
         r.nombre.toLowerCase().includes(q) ||
         (r.grupo||'').toLowerCase().includes(q) ||
