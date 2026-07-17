@@ -388,6 +388,17 @@ test('compuesto NO doble-cuenta: su diferencia = Σ diferencias de las presentac
     const difMs = (B.calcExistencia(filaM1)-B.calcExistenciaTeorica(filaM1)) + (B.calcExistencia(filaM2)-B.calcExistenciaTeorica(filaM2));
     eq(difComp, difMs);
 });
+
+// % de VARIANZA = diferencia vs VENTA NETA del periodo (definición de Edwin):
+// vendiste 10 copas, diferencia +1 copa → +10%. Sin ventas → null (se muestra '—').
+test('varianza: venta 10, dif +1 = +10%', () => eq(B._pctVarianza(1, 10), 10));
+test('varianza: venta 8, dif −2 = −25%', () => eq(B._pctVarianza(-2, 8), -25));
+test('varianza sin ventas = null (sin base de comparación)', () => eq(B._pctVarianza(3, 0), null));
+// Consumo del compuesto = Σ del consumo de sus presentaciones (con filaM1/M2 activos: 5+3 copas directas)
+B.setCompuestos([_comp]);
+test('consumo del compuesto = Σ consumo de sus presentaciones (5+3=8 copas)', () =>
+    eq(B._consumoPeriodo({ esCompuesto: true, compId: 'c1' }), 8));
+B.setCompuestos([]);
 setVar(B, 'filasCaptura', [filaCopa]);
 
 // MERMAS del QR: importar DOS veces NO debe doble-contar (candado importadoEnInv).

@@ -930,12 +930,7 @@ function updEntrada(idx, ei, val) {
 }
 
 function calcDiferencia(fila) { return calcExistencia(fila) - calcExistenciaTeorica(fila); }
-
-function semaforo(dif, ref) {
-    if (!ref) return 'var(--text-dim)';
-    const pct = Math.abs(dif / ref) * 100;
-    return pct <= 25 ? 'var(--green)' : pct <= 50 ? 'var(--accent)' : 'var(--red)';
-}
+// (semaforo() se eliminó: sin callers; el color por % vive en cada render con _pctVarianza.)
 
 // ¿El insumo es refresco/cerveza/soda/agua? Revisa tipoInsumo, categoría Y subcategoría
 // (algunos tienen categoría "No alcohólicas" y la pista está en la subcategoría).
@@ -1116,8 +1111,9 @@ function _fusionarRows(rows) {
         var c = compDe[r.insumoId];
         if (!c) { out.push(r); return; }
         var toBase = function(qty){ return r.tipo === 'copa' ? qty * (r.copaML || 0) : qty; }; // copas→ml; pza/peso ya en base
-        if (!acc[c.id]) { acc[c.id] = { _comp:c, barraB:0, bodegaB:0, totalB:0, capBarra:0, capBodega:0, capital:0, fecha:'' }; out.push(acc[c.id]); }
+        if (!acc[c.id]) { acc[c.id] = { _comp:c, copaML:0, barraB:0, bodegaB:0, totalB:0, capBarra:0, capBodega:0, capital:0, fecha:'' }; out.push(acc[c.id]); }
         var fc = acc[c.id];
+        if (!fc.copaML && r.copaML > 0) fc.copaML = r.copaML; // tamaño de copa del compuesto = el de sus presentaciones
         fc.barraB += toBase(r.barra); fc.bodegaB += toBase(r.bodega); fc.totalB += toBase(r.total);
         fc.capBarra += r.capBarra; fc.capBodega += r.capBodega; fc.capital += r.capital;
         if ((r.fecha||'') > fc.fecha) fc.fecha = r.fecha;
@@ -1125,9 +1121,11 @@ function _fusionarRows(rows) {
     return out.map(function(r){
         if (!r._comp) return r;
         var c = r._comp;
-        var conv = function(b){ return c.unidad==='lt'||c.unidad==='kg' ? b/1000 : c.unidad==='botella' ? b/750 : b; };
+        // Estándar único: el compuesto SIEMPRE se muestra en COPAS (ml acumulados ÷ copa),
+        // sin importar la unidad que tuviera guardada de antes (lt/botella/…).
+        var conv = function(b){ return r.copaML > 0 ? b / r.copaML : b; };
         var totU = conv(r.totalB);
-        return { insumoId:'_comp_'+c.id, nombre:c.nombre, familia:'🧩 Compuesto', tipo:'_comp', unidadComp:c.unidad,
+        return { insumoId:'_comp_'+c.id, nombre:c.nombre, familia:'🧩 Compuesto', tipo:'_comp', unidadComp:'cop',
             barra:conv(r.barraB), bodega:conv(r.bodegaB), total:totU,
             costoUnit: totU>0 ? r.capital/totU : 0, capital:r.capital, capBarra:r.capBarra, capBodega:r.capBodega, fecha:r.fecha };
     });
@@ -1703,9 +1701,9 @@ function _renderCompForm(c) {
     var inpSt = 'width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 12px;font-size:14px';
     var html = '<div style="padding:16px 18px">'+
         '<input id="compNombre" placeholder="Nombre (ej. Mezcal de la Casa)" value="'+etx(c.nombre||'')+'" style="'+inpSt+';margin-bottom:10px">'+
-        '<label style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Unidad de la vista final</label>'+
-        '<select id="compUnidad" style="'+inpSt+';margin:4px 0 12px">'+
-        ['pza','botella','ml','lt','g','kg'].map(function(u){ return '<option value="'+u+'"'+((c.unidad||'lt')===u?' selected':'')+'>'+u+'</option>'; }).join('')+'</select>'+
+        // Sin selector de unidad: el compuesto SIEMPRE consolida en COPAS (el parámetro
+        // de conteo ya está definido en la copa de cada presentación miembro).
+        '<div style="font-size:12px;color:var(--text-dim);margin:0 0 12px">📏 Resultado en <b style="color:var(--text)">copas</b> — usa el tamaño de copa definido en cada presentación.</div>'+
         '<label style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Presentaciones a combinar · <span id="compCount">'+_compMiembros.length+' seleccionadas</span></label>'+
         '<input placeholder="Buscar insumo…" value="'+etx(_compBusca)+'" oninput="onCompBusca(this.value)" style="'+inpSt.replace('14px','13px')+';margin:4px 0 8px">'+
         '<div id="compChecklist" style="max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px">'+
@@ -1718,7 +1716,7 @@ function guardarCompuesto() {
     var nombre = (document.getElementById('compNombre').value || '').trim();
     if (!nombre) { alert('Ponle nombre al producto compuesto.'); return; }
     if (_compMiembros.length < 2) { alert('Selecciona al menos 2 presentaciones a combinar.'); return; }
-    var unidad = document.getElementById('compUnidad').value;
+    var unidad = 'copa'; // estándar único: el compuesto consolida en copas (al re-guardar, normaliza los viejos)
     var comps = getCompuestos();
     if (_compEditId) {
         var c = comps.find(function(x){ return x.id === _compEditId; });
@@ -4855,12 +4853,29 @@ function _descargarCSV(content, filename) {
 // ═══════════════════════════════════════════════════════════════
 // PASO 5 — Resumen de Resultado
 // ═══════════════════════════════════════════════════════════════
-// ── Consumo (uso) de un insumo en el periodo, en la unidad de su fila ──
+// ── Consumo (uso/venta neta) de un insumo en el periodo, en la unidad de su fila ──
 function _consumoPeriodo(f) {
+    // Compuesto: Σ del consumo de sus presentaciones (el insumoId virtual '_comp_…'
+    // no resuelve recetas → sin esto salía "sin usar" aunque los miembros vendieran).
+    if (f.esCompuesto) {
+        var c = getCompuestos().find(function(x){ return x.id === f.compId; });
+        return ((c && c.miembros) || []).reduce(function(s, mid){
+            var m = filasCaptura.find(function(x){ return x.insumoId === mid; });
+            return m ? s + _consumoPeriodo(m) : s;
+        }, 0);
+    }
     if (f.tipo === 'peso') return calcVentasBaseRecetas(f.insumoId);
-    if (f.tipo === 'pza')  return (parseFloat(f.ventasBotella)||0) + (parseFloat(f.ventasCopasDirectas)||0);
+    // pza: directas + coctelería (antes faltaban las recetas → cerveza usada solo en cocteles salía "sin usar")
+    if (f.tipo === 'pza')  return calcVentasPzaRecetas(f.insumoId) + (parseFloat(f.ventasBotella)||0) + (parseFloat(f.ventasCopasDirectas)||0);
     var copasBot = f.contNeto>0 && f.copaML>0 ? f.contNeto/f.copaML : 0;
     return calcVentasCopasRecetas(f.insumoId, f.copaML) + (parseFloat(f.ventasCopasDirectas)||0) + (parseFloat(f.ventasBotella)||0)*copasBot;
+}
+// ── % de VARIANZA: diferencia vs VENTA NETA del periodo ──
+// Definición de Edwin: vendiste 10 copas y la diferencia es +1 copa → +10%.
+// Sin ventas en el periodo no hay base de comparación → null (se muestra '—').
+function _pctVarianza(dif, ventaNeta) {
+    var v = parseFloat(ventaNeta) || 0;
+    return v > 0 ? (dif / v) * 100 : null;
 }
 // ── FASE 1 — Resumen ejecutivo del inventario (faltantes/sobrantes, merma,
 //    vendidos por categoría, usados/sin usar, vendido vs compras) ──
@@ -4875,19 +4890,7 @@ function _resumenEjecutivo() {
         else if (dif > 0.001) { sobrU++; sobrCosto += dif*cc; sobrCarta += dif*(f.precioCarta||0); }
         var merma = (parseFloat(f.mermaCopas)||0) + (parseFloat(f.mermaBase)||0);
         if (merma > 0) { mermados.push({nombre:f.nombre, costo:merma*cc, f:f, m:merma}); mermaCosto += merma*cc; }
-        // Consumo del COMPUESTO = Σ del consumo de sus presentaciones (incluye sus
-        // ventas por recetas/cocteles). Con el insumoId virtual '_comp_…' las recetas
-        // no resuelven → salía "sin usar" aunque los miembros sí vendieran.
-        var cons;
-        if (f.esCompuesto) {
-            var _cRE = getCompuestos().find(function(x){ return x.id === f.compId; });
-            cons = ((_cRE && _cRE.miembros) || []).reduce(function(s, mid){
-                var m = filasCaptura.find(function(x){ return x.insumoId === mid; });
-                return m ? s + _consumoPeriodo(m) : s;
-            }, 0);
-        } else {
-            cons = _consumoPeriodo(f);
-        }
+        var cons = _consumoPeriodo(f); // compuesto-aware: Σ del consumo de sus presentaciones
         if (cons > 0.001) { usados++; vendidoCosto += cons*cc; } else { sinUsar++; if (sinUsarLista.length<60) sinUsarLista.push(f.nombre); }
     });
     // Mermas de PRODUCTO del menú registradas por QR (viven en el inventario)
@@ -5010,8 +5013,9 @@ function renderStep5() {
             const dif = calcDiferencia(fila);
             difCostoTotal += dif * (fila.precioCarta || 0); // diferencia valorada a precio de carta
             difNetoCosto  += dif * cc;                      // faltante/sobrante a COSTO proveedor
-            const ref = calcExistenciaTeorica(fila);
-            if (ref>0 && Math.abs(dif/ref)*100>25) conAlerta++;
+            // Alerta con la MISMA métrica que la columna %: dif vs venta neta del periodo
+            const pctA = _pctVarianza(dif, _consumoPeriodo(fila));
+            if (pctA !== null && Math.abs(pctA) > 25) conAlerta++;
         }
     });
     // Diferencia de los compuestos (existencia sumada − ventas en copas).
@@ -5019,8 +5023,8 @@ function renderStep5() {
         const dif = calcDiferencia(vf);
         difCostoTotal += dif * (vf.precioCarta || 0);
         difNetoCosto  += dif * costoCopa(vf);
-        const ref = calcExistenciaTeorica(vf);
-        if (ref>0 && Math.abs(dif/ref)*100>25) conAlerta++;
+        const pctA = _pctVarianza(dif, _consumoPeriodo(vf)); // compuesto-aware (Σ presentaciones)
+        if (pctA !== null && Math.abs(pctA) > 25) conAlerta++;
     });
     if (invActual) {
         invActual.diferenciaCosto = difCostoTotal; invActual.difNetoCosto = difNetoCosto;
@@ -5149,9 +5153,8 @@ function _step5TablasHTML() {
             const dif       = fisico - teorico;
             const cc        = costoCopa(fila);
             const difCosto  = dif * (fila.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)
-            const ref       = teorico > 0 ? teorico : fisico;
             const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
-            const pctVal    = ref > 0 ? (dif/ref*100) : null;
+            const pctVal    = _pctVarianza(dif, ventaCopa + ventaBot * copasBot); // dif vs venta neta (copas)
             const pctStr    = pctVal !== null ? (pctVal>=0?'+':'')+pctVal.toFixed(1)+'%' : '—';
             // Show existencia anterior and actual in bottles
             const eaBot     = copasBot > 0 ? (ea/copasBot).toFixed(1) : ea.toFixed(1);
@@ -5234,9 +5237,8 @@ function _step5TablasHTML() {
             const dif       = fisico - teorico;
             const cc        = costoCopa(fila);
             const difCosto  = dif * (fila.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)
-            const ref       = teorico > 0 ? teorico : fisico;
             const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
-            const pctVal    = ref > 0 ? (dif/ref*100) : null;
+            const pctVal    = _pctVarianza(dif, ventas); // dif vs venta neta (pza: directas + coctelería)
             const pctStr    = pctVal !== null ? (pctVal>=0?'+':'')+pctVal.toFixed(1)+'%' : '—';
             grpDif += difCosto;
             return `<tr>
@@ -5307,9 +5309,9 @@ function _step5TablasHTML() {
         const teorico   = calcExistenciaTeorica(vf); // Σ teórico de miembros (copas)
         const dif       = fisico - teorico;
         const difCosto  = dif * (vf.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)
-        const ref       = teorico>0 ? teorico : fisico;
+        const pctValC   = _pctVarianza(dif, ventaBot + ventaCopa + ventaCoct); // dif vs venta neta (Σ copas vendidas de las presentaciones)
         const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
-        const pctStr    = ref>0 ? ((dif/ref*100>=0?'+':'')+(dif/ref*100).toFixed(1)+'%') : '—';
+        const pctStr    = pctValC !== null ? ((pctValC>=0?'+':'')+pctValC.toFixed(1)+'%') : '—';
         _compGrpDif += difCosto;
         // Desglose por presentación (expandible) — cada miembro con SU dato individual.
         const desgloseRows = members.map(m => {
@@ -5415,10 +5417,10 @@ function _step5DesgloseCard(fila, refMap) {
     var fisico   = calcExistencia(fila);                    // copas
     var teorico  = calcExistenciaTeorica(fila);
     var dif      = fisico - teorico;
-    var ref      = teorico>0 ? teorico : fisico;
     var color    = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
     var difCarta = dif * (fila.precioCarta||0);
-    var pct      = ref>0 ? ((dif/ref*100>=0?'+':'')+(dif/ref*100).toFixed(1)+'%') : '—';
+    var pctVal   = _pctVarianza(dif, _consumoPeriodo(fila)); // dif vs venta neta (compuesto-aware)
+    var pct      = pctVal !== null ? ((pctVal>=0?'+':'')+pctVal.toFixed(1)+'%') : '—';
     var ventaCoct = esComp ? 0 : calcVentasCopasRecetas(fila.insumoId, fila.copaML);
     var ventaDir  = parseFloat(fila.ventasCopasDirectas)||0;
     var ventaBot  = parseFloat(fila.ventasBotella)||0;
@@ -5585,7 +5587,10 @@ function verReporteDirectivo(gerencial, modo) {
             : ventaCopa + ventaBot * copasBot + cortesia + merma + cancel;
         const disponible = ea + (f.tipo === 'pza' ? entBot : entBot * copasBot);
         const pctConsumo = disponible > 0 ? (consumo / disponible) * 100 : 0;
-        const varPct     = teorico > 0 ? (dif / teorico) * 100 : 0;
+        // % de varianza vs VENTA NETA del periodo (misma definición que la columna % del Resultado).
+        // Sin ventas → 0 (sin base de comparación, no dispara alerta).
+        const ventaNetaF = f.tipo === 'pza' ? ventaPzaTot : (ventaCopa + ventaBot * copasBot);
+        const varPct     = _pctVarianza(dif, ventaNetaF) ?? 0;
         const _bat       = esBateo(f.insumoId); // de bateo: su varianza no cuenta como crítico/riesgo
         capitalCosto += fisico * cc;
         capitalCarta += fisico * (f.precioCarta || 0);
