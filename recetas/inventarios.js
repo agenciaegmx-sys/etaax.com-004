@@ -5719,9 +5719,12 @@ function verReporteDirectivo(gerencial, modo) {
         if (!_bat && Math.abs(varPct) > 25) conAlerta++;
         else if (!_bat && Math.abs(varPct) > 10) conRiesgo++;
         else conOk++;
-        return { f, fisico, teorico, dif, cc, difCosto, ea, entBot, copasBot,
-                 ventaCopa, ventaCoct, ventaCopaDir, ventaBot, ventaPzaTot, cortesia, merma, cancel, consumo,
-                 disponible, pctConsumo, varPct, esBateo:_bat };
+        // Prebatch repartido: dif y consumo van en CERO aquí — ya viajan repartidos en
+        // sus insumos (si no, faltCosto/vendidoCosto los contarían DOBLE).
+        return { f, fisico, teorico, dif: esPBo ? 0 : dif, cc, difCosto, ea, entBot, copasBot,
+                 ventaCopa, ventaCoct, ventaCopaDir, ventaBot, ventaPzaTot, cortesia, merma, cancel,
+                 consumo: esPBo ? 0 : consumo,
+                 disponible, pctConsumo, varPct, esBateo:_bat, esPB: esPBo };
     });
 
     const totalProds = analisis.length;
@@ -5768,7 +5771,7 @@ function verReporteDirectivo(gerencial, modo) {
 
     // Rankings y grupos
     const top10      = [...analisis].sort((a, b) => b.consumo - a.consumo).slice(0, 10).filter(a => a.consumo > 0);
-    const estancados = analisis.filter(a => a.consumo === 0 && a.fisico > 0);
+    const estancados = analisis.filter(a => a.consumo === 0 && a.fisico > 0 && !a.esPB); // prebatch repartido no es "estancado": su consumo vive en sus insumos
     const alertasCrit= analisis.filter(a => !a.esBateo && a.varPct < -25).sort((a, b) => a.varPct - b.varPct);
     const alertasSob = analisis.filter(a => !a.esBateo && a.varPct > 25).sort((a, b) => b.varPct - a.varPct);
     const riesgos    = analisis.filter(a => !a.esBateo && Math.abs(a.varPct) > 10 && Math.abs(a.varPct) <= 25).sort((a, b) => Math.abs(b.varPct) - Math.abs(a.varPct));
