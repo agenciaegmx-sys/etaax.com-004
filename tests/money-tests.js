@@ -324,6 +324,18 @@ test('prebatch: 710 ml de Campari → copas de 45 ml (base→copas)', () =>
     eq(B._consumoBaseProd(filaCampari), 710 / 45));
 test('prebatch: teórico de Campari resta lo consumido al producir (100 − 710/45)', () =>
     eq(B.calcExistenciaTeorica(filaCampari), 100 - 710 / 45));
+// ENVASE FÍSICO del prebatch: contNeto pasa a ser la CAPACIDAD del envase (ej. botella
+// 750 ml) y el rendimiento POR BATCH vive en fila.rendimientoBatch (ej. 4000 ml).
+// La producción debe sumar por BATCH (rendimiento), NO por envase.
+vm.runInContext("invActual.prebatchProducidos = { preNegroni: 1 };", B);
+const filaPreEnv = { insumoId: 'preNegroni', tipo: 'copa', contNeto: 750, copaML: 50,
+    rendimientoBatch: 4000, existenciaAnterior: 0, ventasCopasDirectas: 0, cortesiaCopas: 0,
+    mermaCopas: 0, ventasBotella: 0, entradas: [] };
+setVar(B, 'filasCaptura', [filaPreEnv]);
+test('prebatch con envase: 1 batch = rendimiento 4000ml → 80 copas (no 15 del envase)', () =>
+    eq(B._prodPrebatchUnidades(filaPreEnv), 80));
+test('prebatch sin envase (legacy): fallback a contNeto → 15 copas', () =>
+    eq(B._prodPrebatchUnidades({ ...filaPreEnv, rendimientoBatch: 0 }), 15));
 vm.runInContext("invActual.prebatchProducidos = {};", B);
 setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
 setVar(B, 'filasCaptura', [filaCopa]);

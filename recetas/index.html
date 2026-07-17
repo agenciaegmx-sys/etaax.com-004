@@ -1764,6 +1764,34 @@ function agregarSubRecetaComoInsumo(silent) {
         });
     }
 
+    // ── Envase físico del prebatch (ficha técnica): si está definido, la presentación
+    // PRINCIPAL pasa a ser ese envase → contNeto = capacidad, pesoCristal = tara. Así el
+    // Paso 1 de inventarios lo PESA igual que cualquier botella (kg bruto − tara = ml).
+    // El rendimiento POR BATCH se conserva en `rendimiento` (la producción sigue por batch).
+    var envCap   = parseFloat((document.getElementById('envaseCapacidad') || {}).value) || 0;
+    var envUni   = ((document.getElementById('envaseCapUnidad') || {}).value || 'ml').toLowerCase();
+    var envTara  = parseFloat((document.getElementById('envaseTara') || {}).value) || 0;
+    var envCapMl = (envUni === 'l' || envUni === 'lt') ? envCap * 1000 : envCap;
+    var envTipo  = ((document.getElementById('cristaleria') || {}).value || '').trim(); // "Tipo de envasado"
+    if (envCapMl > 0 && rendFinalKg > 0) {
+        porciones.unshift({
+            contNeto:       envCapMl,
+            umContenido:    'ML',
+            pesoCristal:    envTara,                      // g — tara del envase vacío
+            rendimiento:    rendFinalKg * 1000,           // ml/g POR BATCH (para producciones)
+            umRendimiento:  (esBebida || unidadFinal === 'ML' || unidadFinal === 'LT') ? 'ML' : 'G',
+            precio:         Math.round(costoXkgFinal * envCapMl / 1000 * 100) / 100, // costo del envase lleno
+            costoUnitario:  costoXkgFinal,                // $/LT o $/KG (misma base que el batch)
+            umCosto:        (esBebida || unidadFinal === 'ML' || unidadFinal === 'LT') ? 'LT' : 'KG',
+            presentacionCompra: envTipo || 'Botella',
+            proveedor:      'Producción propia',
+            zona:           esBebida ? 'Barra' : 'Cocina',
+            fecha:          new Date().toISOString().split('T')[0],
+            esProduccionPropia: true,
+            esEnvasePrebatch:   true,
+        });
+    }
+
     // Construir objeto insumo
     var insumoNuevo = {
         id:            'prod_' + Date.now().toString(36),
@@ -1773,7 +1801,7 @@ function agregarSubRecetaComoInsumo(silent) {
         subcategoria:  grupo || 'Sub receta',
         variedad:      '',
         marca:         'Producción propia',
-        empaque:       '',
+        empaque:       (envCapMl > 0 ? (envTipo || 'Botella') : ''),
         activo:        true,
         foto:          (typeof fotosReceta !== 'undefined' && fotosReceta.length) ? fotosReceta[0] : '',
         esSubReceta:   true,
@@ -2272,6 +2300,23 @@ function renderFormularioPorTipo(tipo, datos) {
                 ${sel('almacenamiento',
                     ['Refrigeración 2-4°C','Congelación -18°C','Temperatura ambiente','Lugar fresco y seco'],
                     d.almacenamiento||'Refrigeración 2-4°C')}
+            </div>
+            <!-- Envase físico del prebatch: capacidad + tara → el inventario lo PESA
+                 como cualquier botella (kg bruto − tara = ml de prebatch). -->
+            <div class="meta-item" style="grid-column:span 3">
+                <label>Envase físico (para pesarlo en inventarios) <span style="font-size:10px;color:var(--text-dim)">(opcional)</span></label>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                    <input type="number" id="envaseCapacidad" value="${d.envaseCapacidad||''}"
+                        placeholder="750" min="0" step="1" style="width:90px;flex-shrink:0">
+                    <select id="envaseCapUnidad" style="width:70px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 8px;border-radius:6px;font-family:sans-serif;font-size:14px;outline:none">
+                        ${['ml','L'].map(u=>`<option value="${u}" ${(d.envaseCapUnidad||'ml')===u?'selected':''}>${u}</option>`).join('')}
+                    </select>
+                    <span style="font-size:12px;color:var(--text-dim)">capacidad ·</span>
+                    <input type="number" id="envaseTara" value="${d.envaseTara||''}"
+                        placeholder="500" min="0" step="1" style="width:90px;flex-shrink:0">
+                    <span style="font-size:12px;color:var(--text-dim)">g de tara (envase vacío)</span>
+                </div>
+                <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Ej. botella reutilizada 750 ml · tara 500 g, o garrafa 4 L · tara 1240 g. Al convertir a insumo, el inventario pesa el envase igual que una botella de destilado.</div>
             </div>
 ` : `
             <!-- Layout normal: cristaleria + tiempo ya están arriba -->

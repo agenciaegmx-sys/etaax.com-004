@@ -590,8 +590,12 @@ function consumoBasesPorProduccion(insumoId) {
 function _prodPrebatchUnidades(fila) {
     var n = (invActual && invActual.prebatchProducidos && parseFloat(invActual.prebatchProducidos[fila.insumoId])) || 0;
     if (!n) return 0;
-    if (fila.tipo === 'copa') return n * (fila.contNeto > 0 && fila.copaML > 0 ? fila.contNeto / fila.copaML : 0); // batches→copas
-    if (fila.tipo === 'peso') return n * (fila.contNeto || 0); // batches→unidad base
+    // ml/g POR BATCH = rendimiento de la sub-receta (fila.rendimientoBatch). Fallback a
+    // contNeto: antes de definir envase físico, contNeto ERA el rendimiento del batch.
+    // (Con envase: contNeto = capacidad de la botella/garrafa, ≠ rendimiento del batch.)
+    var rB = parseFloat(fila.rendimientoBatch) || fila.contNeto || 0;
+    if (fila.tipo === 'copa') return n * (rB > 0 && fila.copaML > 0 ? rB / fila.copaML : 0); // batches→copas
+    if (fila.tipo === 'peso') return n * rB; // batches→unidad base
     return n; // pza: 1 batch = 1 pza
 }
 // Consumo de ESTE insumo base por la producción de batches, en la unidad de su fila.
@@ -2490,6 +2494,7 @@ function cargarProductosCaptura() {
                 if (contBaseEx > 0) existe.contNeto = contBaseEx;
                 const pcEx = parseFloat(pEx.pesoCristal);
                 if (!isNaN(pcEx)) existe.pesoCristal = pcEx; // puede bajar a 0 a propósito
+                existe.rendimientoBatch = parseFloat(pEx.rendimiento) || 0; // sub-recetas: ml/g por batch
                 existe.nombre = ins.nombre + (ins.variedad ? ' ' + ins.variedad : '');
                 if (ins.familia)  existe.familia  = ins.familia;
                 if (ins.categoria) existe.categoria = ins.categoria;
@@ -2531,6 +2536,7 @@ function cargarProductosCaptura() {
             subcategoria: ins.subcategoria || '',
             familia:  ins.familia    || '',
             tipo, copaML, contNeto: contBase, pesoCristal,
+            rendimientoBatch: parseFloat(p?.rendimiento) || 0, // sub-recetas: ml/g POR BATCH (producciones)
             baseUnit: esFood ? unidadBaseInsumo(ins) : '',   // g / ml / pza (solo alimentos)
             costoUnitario:  parseFloat(p?.costoUnitario) || parseFloat(p?.precio) || 0,
             costoPieza:     parseFloat(p?.costoPieza) || 0,   // costo de compra por pieza (refrescos/latas por rejilla/caja)

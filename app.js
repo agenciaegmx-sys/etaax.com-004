@@ -227,6 +227,9 @@ function leerCamposExtra(tipo) {
                 vidaUtilNum:            get('vidaUtilNum'),
                 vidaUtilUnidad:         get('vidaUtilUnidad'),
                 almacenamiento:         get('almacenamiento'),
+                envaseCapacidad:        get('envaseCapacidad'),  // envase físico del prebatch
+                envaseCapUnidad:        get('envaseCapUnidad'),  // ml | L
+                envaseTara:             get('envaseTara'),       // g (envase vacío)
             };
         case 'bebidas':
             return { metodoPre: get('metodoPre'), garnish: get('garnish'),
@@ -250,6 +253,9 @@ function leerCamposExtra(tipo) {
                 vidaUtilNum:            get('vidaUtilNum'),
                 vidaUtilUnidad:         get('vidaUtilUnidad'),
                 almacenamiento:         get('almacenamiento'),
+                envaseCapacidad:        get('envaseCapacidad'),  // envase físico del prebatch
+                envaseCapUnidad:        get('envaseCapUnidad'),  // ml | L
+                envaseTara:             get('envaseTara'),       // g (envase vacío)
             };
         default: return {};
     }
