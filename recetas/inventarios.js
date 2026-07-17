@@ -606,6 +606,67 @@ function _consumoBaseProd(fila) {
     return u; // peso (g/ml) y pza: directo
 }
 
+// ══ REPARTO DEL PREBATCH A SUS INSUMOS (Resultado — modelo de Edwin) ══════════
+// El prebatch NO es una línea con diferencia propia en el Resultado: su contenido
+// pertenece proporcionalmente a sus insumos según la sub-receta (100 Campari +
+// 250 Aperol + 400 Vermouth). Cada insumo recibe su parte de TODO el prebatch:
+// EA, entradas, ventas (cocteles hechos del batch), teórico restante y físico
+// PESADO. La producción se cancela sola: el prodSub del insumo (base consumida
+// al producir) se compensa con su parte del prodAdd del batch → neto, el insumo
+// solo "pierde" lo que salió por ventas, y lo que sigue dentro de la botella
+// pesada NO genera falso faltante. El faltante real del batch aparece
+// proporcional en cada destilado.
+function _repartoPrebatch() {
+    var out = { porInsumo: {}, esPB: {}, lista: [] };
+    (filasCaptura || []).forEach(function(pf){
+        if (!pf || pf.tipo === 'pza' || pf.esCompuesto) return;
+        var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(pf.insumoId) : null;
+        if (!ins || !ins.esSubReceta || !ins.recetaId) return;
+        var sr = getRecetas().find(function(r){ return r.id === ins.recetaId; });
+        if (!sr || !(sr.ingredientes || []).length) return;
+        var partes = [], total = 0;
+        (sr.ingredientes || []).forEach(function(ing){
+            var b = ingredienteBase(parseFloat(ing.cantidad) || 0, ing.unidad); // → ml/g base
+            if (b > 0 && ing.insumoId) { partes.push({ id: ing.insumoId, b: b }); total += b; }
+        });
+        if (!total) return;
+        // Magnitudes del prebatch en unidad BASE (ml/g)
+        var toB = pf.tipo === 'copa' ? (parseFloat(pf.copaML) || 0) : 1;
+        if (pf.tipo === 'copa' && !toB) return;
+        var eaB    = (parseFloat(pf.existenciaAnterior) || 0) * toB;
+        var entB   = getEntradasCopas(pf) * toB;
+        var ventaB = (calcVentasCopasRecetas(pf.insumoId, pf.copaML) + (parseFloat(pf.ventasCopasDirectas) || 0)) * toB
+                   + (parseFloat(pf.ventasBotella) || 0) * (parseFloat(pf.contNeto) || 0);
+        var cmB    = ((parseFloat(pf.cortesiaCopas) || 0) + (parseFloat(pf.mermaCopas) || 0)) * toB + (parseFloat(pf.mermaBase) || 0);
+        var canB   = getCancelacionesCopas(pf.insumoId) * toB;
+        var teoB   = calcExistenciaTeorica(pf) * toB;
+        var fisB   = calcExistencia(pf) * toB;
+        out.esPB[pf.insumoId] = 1;
+        var desg = [];
+        partes.forEach(function(p){
+            var sh = p.b / total;
+            var fi = filasCaptura.find(function(x){ return x.insumoId === p.id; });
+            desg.push({ insumoId: p.id, nombre: fi ? fi.nombre : p.id, ml: fisB * sh });
+            if (!fi) return; // ingrediente sin fila en este inventario → solo informativo
+            var u = fi.tipo === 'copa' ? (parseFloat(fi.copaML) || 0) : (fi.tipo === 'pza' ? (parseFloat(fi.contNeto) || 0) : 1);
+            if (fi.tipo !== 'peso' && !(u > 0)) return;
+            var conv = function(v){ return (v * sh) / (fi.tipo === 'peso' ? 1 : u); }; // base → unidad de la fila
+            var a = out.porInsumo[p.id] || (out.porInsumo[p.id] = { ea:0, ent:0, vco:0, cm:0, can:0, teo:0, fis:0, dif:0, venta:0 });
+            a.ea  += conv(eaB);   a.ent += conv(entB);
+            a.vco += conv(ventaB); a.venta += conv(ventaB);
+            a.cm  += conv(cmB);   a.can += conv(canB);
+            a.teo += conv(teoB);  a.fis += conv(fisB);
+            a.dif += conv(fisB - teoB);
+        });
+        out.lista.push({ insumoId: pf.insumoId, nombre: pf.nombre, fisML: fisB, teoML: teoB, desglose: desg });
+    });
+    return out;
+}
+var _repCache = null;
+var _repZero  = { ea:0, ent:0, vco:0, cm:0, can:0, teo:0, fis:0, dif:0, venta:0 };
+function _repartoDe(id) { return (_repCache && _repCache.porInsumo[id]) || _repZero; }
+function _esPrebatchRepartido(id) { return !!(_repCache && _repCache.esPB[id]); }
+
 // ── Fuzzy match cancelación → insumo ─────────────────────────
 function _normMatch(s) {
     return (s || '').toString()
@@ -4909,14 +4970,17 @@ function _resumenEjecutivo() {
     var faltU=0, sobrU=0, faltCosto=0, sobrCosto=0, faltCarta=0, sobrCarta=0;
     var mermados=[], mermaCosto=0, usados=0, sinUsar=0, sinUsarLista=[], vendidoCosto=0;
     var _mapaRE = _compDeInsumo();
+    _repCache = _repartoPrebatch(); // reparto prebatch→insumos (resumen ejecutivo)
     // Miembros de un compuesto NO se evalúan sueltos (su venta va al compuesto) → evita falsos faltantes.
     filasCaptura.filter(function(f){ return !_mapaRE[f.insumoId]; }).concat(_compuestosActivos().map(_virtualFilaCompuesto)).forEach(function(f){
-        var cc = costoCopa(f), dif = calcDiferencia(f);
+        var _esPBr = !f.esCompuesto && _esPrebatchRepartido(f.insumoId);
+        var _aR = (_esPBr || f.esCompuesto) ? _repZero : _repartoDe(f.insumoId);
+        var cc = costoCopa(f), dif = _esPBr ? 0 : (calcDiferencia(f) + _aR.dif); // prebatch: dif repartida en sus insumos
         if (dif < -0.001) { faltU++; faltCosto += Math.abs(dif)*cc; faltCarta += Math.abs(dif)*(f.precioCarta||0); }
         else if (dif > 0.001) { sobrU++; sobrCosto += dif*cc; sobrCarta += dif*(f.precioCarta||0); }
         var merma = (parseFloat(f.mermaCopas)||0) + (parseFloat(f.mermaBase)||0);
         if (merma > 0) { mermados.push({nombre:f.nombre, costo:merma*cc, f:f, m:merma}); mermaCosto += merma*cc; }
-        var cons = _consumoPeriodo(f); // compuesto-aware: Σ del consumo de sus presentaciones
+        var cons = _consumoPeriodo(f) + _aR.venta; // compuesto-aware + su parte de ventas del prebatch
         if (cons > 0.001) { usados++; vendidoCosto += cons*cc; } else { sinUsar++; if (sinUsarLista.length<60) sinUsarLista.push(f.nombre); }
     });
     // Mermas de PRODUCTO del menú registradas por QR (viven en el inventario)
@@ -5027,20 +5091,24 @@ function _resumenEjecutivo() {
 function renderStep5() {
     const mapaC5 = _compDeInsumo();
     const vcomps = _compuestosActivos().map(_virtualFilaCompuesto);
+    _repCache = _repartoPrebatch(); // reparto del prebatch a sus insumos (una vez por render)
     let capitalCosto=0, capitalCarta=0, difCostoTotal=0, difNetoCosto=0, conAlerta=0;
     // Capital: existencia real de TODAS las filas (los miembros cuentan su capital una vez).
     filasCaptura.forEach(fila => {
-        const exist = calcExistencia(fila);
+        // Prebatch REPARTIDO: su capital/diferencia viven en sus insumos (parte proporcional).
+        if (_esPrebatchRepartido(fila.insumoId)) return;
+        const adj   = _repartoDe(fila.insumoId);
+        const exist = calcExistencia(fila) + adj.fis;
         const cc    = costoCopa(fila);
         capitalCosto  += exist * cc;
         capitalCarta  += exist * (fila.precioCarta||0);
         // La diferencia de los MIEMBROS se evalúa en su compuesto, no individual.
         if (!mapaC5[fila.insumoId]) {
-            const dif = calcDiferencia(fila);
+            const dif = calcDiferencia(fila) + adj.dif;
             difCostoTotal += dif * (fila.precioCarta || 0); // diferencia valorada a precio de carta
             difNetoCosto  += dif * cc;                      // faltante/sobrante a COSTO proveedor
             // Alerta con la MISMA métrica que la columna %: dif vs venta neta del periodo
-            const pctA = _pctVarianza(dif, _consumoPeriodo(fila));
+            const pctA = _pctVarianza(dif, _consumoPeriodo(fila) + adj.venta);
             if (pctA !== null && Math.abs(pctA) > 25) conAlerta++;
         }
     });
@@ -5137,6 +5205,7 @@ function setStep5Modo(m) {
 function _step5TablasHTML() {
     const q      = (_busqStep5 || '').toLowerCase();
     const mapaC5 = _compDeInsumo();
+    _repCache    = _repartoPrebatch(); // reparto prebatch→insumos (fresco por render)
     const vcomps = _compuestosActivos().map(_virtualFilaCompuesto)
         .filter(vf => !q || (vf.nombre||'').toLowerCase().includes(q));
     if (_step5Modo === 'galeria') return _step5GaleriaHTML(q, mapaC5, vcomps);
@@ -5162,32 +5231,36 @@ function _step5TablasHTML() {
     const tablasCopa = Object.entries(gruposCopa).sort(_ordGrupo).map(([grp, items]) => {
         let grpDif = 0;
         const rows = items.map(fila => {
-            const ea        = parseFloat(fila.existenciaAnterior) || 0;
+            // Reparto del prebatch: cada ingrediente suma su parte (en SUS copas); la fila
+            // del prebatch se muestra informativa (pesada) pero SIN diferencia propia.
+            const esPB      = _esPrebatchRepartido(fila.insumoId);
+            const adj       = esPB ? _repZero : _repartoDe(fila.insumoId);
+            const ea        = (parseFloat(fila.existenciaAnterior) || 0) + adj.ea;
             const copasBot  = fila.contNeto>0 && fila.copaML>0 ? fila.contNeto/fila.copaML : 0;
-            const entBot    = getEntradasBottles(fila.insumoId);
+            const entBot    = getEntradasBottles(fila.insumoId) + (copasBot > 0 ? adj.ent / copasBot : 0);
             const ventaBot  = parseFloat(fila.ventasBotella) || 0;
-            const ventaCoct    = calcVentasCopasRecetas(fila.insumoId, fila.copaML); // copas vendidas vía recetas del menú (Paso 3)
+            const ventaCoct    = calcVentasCopasRecetas(fila.insumoId, fila.copaML) + adj.vco; // copas vía recetas + su parte de cocteles del prebatch
             const ventaCopaDir = parseFloat(fila.ventasCopasDirectas) || 0;           // copas vendidas directas
             const ventaCopa    = ventaCoct + ventaCopaDir;                            // total (para cálculos)
             const cortesia  = parseFloat(fila.cortesiaCopas) || 0;
             const merma     = parseFloat(fila.mermaCopas)    || 0;
-            const cmTotal   = cortesia + merma;
+            const cmTotal   = cortesia + merma + adj.cm;
             const cmConc    = [fila.cortesiaConcepto, fila.mermaConcepto].filter(Boolean).join(' / ');
-            const cancelCop = getCancelacionesCopas(fila.insumoId);
-            const teorico   = calcExistenciaTeorica(fila);
-            const fisico    = calcExistencia(fila);
+            const cancelCop = getCancelacionesCopas(fila.insumoId) + adj.can;
+            const teorico   = calcExistenciaTeorica(fila) + adj.teo;
+            const fisico    = calcExistencia(fila) + adj.fis;
             const dif       = fisico - teorico;
             const cc        = costoCopa(fila);
-            const difCosto  = dif * (fila.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)
-            const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
-            const pctVal    = _pctVarianza(dif, ventaCopa + ventaBot * copasBot); // dif vs venta neta (copas)
+            const difCosto  = esPB ? 0 : dif * (fila.precioCarta || 0); // prebatch: su dif vive repartida en sus insumos
+            const color     = esPB ? 'var(--text-dim)' : (Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)'));
+            const pctVal    = esPB ? null : _pctVarianza(dif, ventaCopa + ventaBot * copasBot); // dif vs venta neta (copas)
             const pctStr    = pctVal !== null ? (pctVal>=0?'+':'')+pctVal.toFixed(1)+'%' : '—';
             // Show existencia anterior and actual in bottles
             const eaBot     = copasBot > 0 ? (ea/copasBot).toFixed(1) : ea.toFixed(1);
             const entBotStr = entBot > 0 ? `+${entBot % 1 ? entBot.toFixed(1) : entBot} ${_unidadCompra(fila)}` : '—';
             const fisicoBot = copasBot > 0 ? (fisico/copasBot).toFixed(2) : fisico.toFixed(1);
             // Diferencia in copas, with sign and unit label
-            const difStr    = `${dif>=0?'+':''}${dif.toFixed(1)} cop`;
+            const difStr    = esPB ? '↪ repartida' : `${dif>=0?'+':''}${dif.toFixed(1)} cop`;
             grpDif += difCosto;
             return `<tr>
                 <td style="min-width:140px">
@@ -5253,13 +5326,14 @@ function _step5TablasHTML() {
             // Venta en piezas DESGLOSADA: directa (botella + pza) y por menú/recetas
             // (coctelería) en su propia columna — antes iban sumadas y parecía que
             // los refrescos/cervezas no calculaban su uso en coctelería.
-            const ventaCoct = calcVentasPzaRecetas(fila.insumoId);
+            const adjP      = _repartoDe(fila.insumoId); // parte del prebatch (en pzas de esta fila)
+            const ventaCoct = calcVentasPzaRecetas(fila.insumoId) + adjP.vco;
             const ventasDir = (fila.ventasBotella || 0) + (parseFloat(fila.ventasCopasDirectas)||0);
             const ventas    = ventasDir + ventaCoct;
-            const cancelPza = getCancelacionesCopas(fila.insumoId);
-            const cortMerma = (parseFloat(fila.cortesiaCopas) || 0) + (parseFloat(fila.mermaCopas) || 0);
-            const teorico   = calcExistenciaTeorica(fila);
-            const fisico    = calcExistencia(fila);
+            const cancelPza = getCancelacionesCopas(fila.insumoId) + adjP.can;
+            const cortMerma = (parseFloat(fila.cortesiaCopas) || 0) + (parseFloat(fila.mermaCopas) || 0) + adjP.cm;
+            const teorico   = calcExistenciaTeorica(fila) + adjP.teo;
+            const fisico    = calcExistencia(fila) + adjP.fis;
             const dif       = fisico - teorico;
             const cc        = costoCopa(fila);
             const difCosto  = dif * (fila.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)
@@ -5411,7 +5485,23 @@ function _step5TablasHTML() {
         ? '<div style="text-align:center;padding:40px;color:var(--text-dim)">Sin productos capturados</div>'
         : '';
 
-    return `<div style="padding:16px 0 24px">${sinDatos}${tablaComp}${tablasCopa}${tablasPza}</div>`;
+    // 🧪 Prebatches repartidos: qué contiene cada botella/garrafa PESADA (proporcional a
+    // su sub-receta) y a qué insumos se repartió su existencia/diferencia.
+    const _repL = (_repCache && _repCache.lista) || [];
+    const tablaReparto = _repL.length ? `<div class="card" style="max-width:none;margin:0 16px 12px">
+        <div class="card-header"><div style="font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:1.5px;color:var(--viol)">🧪 PREBATCHES — contenido repartido a sus insumos</div></div>
+        <div style="padding:10px 16px 14px;font-size:12.5px">
+        ${_repL.map(function(r){
+            var difML = r.fisML - r.teoML;
+            var difTag = Math.abs(difML) < 1 ? '' : ` · dif ${difML>=0?'+':''}${Math.round(difML)} ml repartida`;
+            return `<div style="padding:7px 0;border-bottom:1px solid var(--border)">
+                <b>${etx(r.nombre)}</b> — ${Math.round(r.fisML)} ml pesados${difTag}
+                <div style="color:var(--text-dim);margin-top:2px">Contiene: ${r.desglose.map(function(d){ return etx(d.nombre) + ' ' + Math.round(d.ml) + ' ml'; }).join(' · ')}</div>
+            </div>`;
+        }).join('')}
+        </div></div>` : '';
+
+    return `<div style="padding:16px 0 24px">${sinDatos}${tablaReparto}${tablaComp}${tablasCopa}${tablasPza}</div>`;
 }
 
 // Entradas de un insumo, con fecha (de la cola de entradas del inventario).
@@ -5438,14 +5528,16 @@ function _step5GaleriaHTML(q, mapaC5, vcomps) {
 }
 function _step5DesgloseCard(fila, refMap) {
     var esComp   = !!fila.esCompuesto;
+    var esPB     = !esComp && _esPrebatchRepartido(fila.insumoId);
+    var adjG     = (esComp || esPB) ? _repZero : _repartoDe(fila.insumoId);
     var copasBot = (fila.contNeto>0 && fila.copaML>0) ? fila.contNeto/fila.copaML : 0;
-    var ea       = parseFloat(fila.existenciaAnterior)||0; // copas
-    var fisico   = calcExistencia(fila);                    // copas
-    var teorico  = calcExistenciaTeorica(fila);
+    var ea       = (parseFloat(fila.existenciaAnterior)||0) + adjG.ea; // copas
+    var fisico   = calcExistencia(fila) + adjG.fis;                    // copas
+    var teorico  = calcExistenciaTeorica(fila) + adjG.teo;
     var dif      = fisico - teorico;
-    var color    = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
-    var difCarta = dif * (fila.precioCarta||0);
-    var pctVal   = _pctVarianza(dif, _consumoPeriodo(fila)); // dif vs venta neta (compuesto-aware)
+    var color    = esPB ? 'var(--text-dim)' : (Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)'));
+    var difCarta = esPB ? 0 : dif * (fila.precioCarta||0);
+    var pctVal   = esPB ? null : _pctVarianza(dif, _consumoPeriodo(fila) + adjG.venta); // dif vs venta neta
     var pct      = pctVal !== null ? ((pctVal>=0?'+':'')+pctVal.toFixed(1)+'%') : '—';
     var ventaCoct = esComp ? 0 : calcVentasCopasRecetas(fila.insumoId, fila.copaML);
     var ventaDir  = parseFloat(fila.ventasCopasDirectas)||0;
@@ -5589,17 +5681,21 @@ function verReporteDirectivo(gerencial, modo) {
     let capitalCosto = 0, capitalCarta = 0, difTotal = 0;
     let conAlerta = 0, conRiesgo = 0, conOk = 0;
 
+    _repCache = _repartoPrebatch(); // reparto prebatch→insumos (vista operativa)
     const analisis = filasCaptura.map(f => {
-        const fisico    = calcExistencia(f);
-        const teorico   = calcExistenciaTeorica(f);
+        // Prebatch repartido: se excluye del análisis (su variancia vive en sus insumos).
+        const esPBo     = _esPrebatchRepartido(f.insumoId);
+        const adjO      = esPBo ? _repZero : _repartoDe(f.insumoId);
+        const fisico    = calcExistencia(f) + adjO.fis;
+        const teorico   = calcExistenciaTeorica(f) + adjO.teo;
         const dif       = fisico - teorico;
         const cc        = costoCopa(f);
-        const difCosto  = dif * (f.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)
-        const ea        = parseFloat(f.existenciaAnterior) || 0;
+        const difCosto  = esPBo ? 0 : dif * (f.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)
+        const ea        = (parseFloat(f.existenciaAnterior) || 0) + adjO.ea;
         const entBot    = getEntradasBottles(f.insumoId);
         const copasBot  = f.contNeto > 0 && f.copaML > 0 ? f.contNeto / f.copaML : 1;
         // Coctelería = consumo por recetas del menú; copa → en copas, pza → en piezas.
-        const ventaCoct    = f.tipo === 'pza' ? calcVentasPzaRecetas(f.insumoId) : calcVentasCopasRecetas(f.insumoId, f.copaML);
+        const ventaCoct    = (f.tipo === 'pza' ? calcVentasPzaRecetas(f.insumoId) : calcVentasCopasRecetas(f.insumoId, f.copaML)) + adjO.vco;
         const ventaCopaDir = parseFloat(f.ventasCopasDirectas) || 0; // venta directa por copa/pza
         const ventaCopa = ventaCoct + ventaCopaDir;
         const ventaBot  = parseFloat(f.ventasBotella) || 0;
@@ -5616,10 +5712,9 @@ function verReporteDirectivo(gerencial, modo) {
         // % de varianza vs VENTA NETA del periodo (misma definición que la columna % del Resultado).
         // Sin ventas → 0 (sin base de comparación, no dispara alerta).
         const ventaNetaF = f.tipo === 'pza' ? ventaPzaTot : (ventaCopa + ventaBot * copasBot);
-        const varPct     = _pctVarianza(dif, ventaNetaF) ?? 0;
-        const _bat       = esBateo(f.insumoId); // de bateo: su varianza no cuenta como crítico/riesgo
-        capitalCosto += fisico * cc;
-        capitalCarta += fisico * (f.precioCarta || 0);
+        const varPct     = esPBo ? 0 : (_pctVarianza(dif, ventaNetaF) ?? 0);
+        const _bat       = esBateo(f.insumoId) || esPBo; // de bateo / prebatch repartido: sin alerta propia
+        if (!esPBo) { capitalCosto += fisico * cc; capitalCarta += fisico * (f.precioCarta || 0); }
         difTotal     += difCosto;
         if (!_bat && Math.abs(varPct) > 25) conAlerta++;
         else if (!_bat && Math.abs(varPct) > 10) conRiesgo++;

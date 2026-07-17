@@ -337,6 +337,59 @@ test('prebatch con envase: 1 batch = rendimiento 4000ml → 80 copas (no 15 del 
 test('prebatch sin envase (legacy): fallback a contNeto → 15 copas', () =>
     eq(B._prodPrebatchUnidades({ ...filaPreEnv, rendimientoBatch: 0 }), 15));
 vm.runInContext("invActual.prebatchProducidos = {};", B);
+
+// ── REPARTO del prebatch a sus insumos (modelo de Edwin, ejemplo completo) ──
+// Batch 750 ml = 100 Campari + 250 Aperol + 400 Vermouth. Se produce 1 batch,
+// se venden cocteles por 375 ml (media botella) y se PESA media botella (375 ml).
+// Campari: EA 1000 ml (20 copas de 50), sin ventas propias. Su fila cuadra a CERO:
+// el teórico resta la producción (−100 ml) pero recupera su parte del batch
+// restante (+50 ml teórico) y el físico suma su parte pesada (+50 ml).
+setVar(B, '_cacheRecetasInv', [
+    { id: 'srNegMix', tipo: 'bebidas', status: 'activa', ingredientes: [
+        { insumoId: 'campari2',  cantidad: 100, unidad: 'ML' },
+        { insumoId: 'aperol2',   cantidad: 250, unidad: 'ML' },
+        { insumoId: 'vermut2',   cantidad: 400, unidad: 'ML' },
+    ] },
+]);
+setVar(B, '_cacheInsumosInv', [
+    { id: 'preNegMix', esSubReceta: true, recetaId: 'srNegMix', activo: '1' },
+    { id: 'campari2', activo: '1' }, { id: 'aperol2', activo: '1' }, { id: 'vermut2', activo: '1' },
+]);
+vm.runInContext("invActual.prebatchProducidos = { preNegMix: 1 };", B);
+// Fila del prebatch: envase 750 ml, copa 50 → pesada media botella (7.5 copas físicas).
+// Ventas: 7.5 copas directas (los 375 ml vendidos). Teórico: 0 EA + 15 prod − 7.5 = 7.5 ✓
+const filaPre2 = { insumoId: 'preNegMix', tipo: 'copa', contNeto: 750, copaML: 50, rendimientoBatch: 750,
+    existenciaAnterior: 0, ventasCopasDirectas: 7.5, cortesiaCopas: 0, mermaCopas: 0, ventasBotella: 0,
+    entradas: [], cerradasBodega: 0, cerradasBarra: 0, pesos: ['0.375'], pesoCristal: 0 };
+const filaCamp2 = { insumoId: 'campari2', tipo: 'copa', contNeto: 750, copaML: 50, existenciaAnterior: 20,
+    ventasCopasDirectas: 0, cortesiaCopas: 0, mermaCopas: 0, ventasBotella: 0, entradas: [],
+    cerradasBodega: 1, cerradasBarra: 0, pesos: ['0.150'], pesoCristal: 0 }; // físico: 15 + 3 = 18 copas = 900 ml
+setVar(B, 'filasCaptura', [filaPre2, filaCamp2]);
+vm.runInContext("_repCache = _repartoPrebatch();", B);
+test('reparto: el prebatch queda marcado como repartido', () =>
+    eq(B._esPrebatchRepartido('preNegMix'), true));
+test('reparto: Campari recibe su parte del físico pesado (375×13.3% = 50 ml = 1 copa)', () =>
+    eq(Math.round(B._repartoDe('campari2').fis * 100) / 100, 1));
+test('reparto: Campari cuadra a CERO (dif propia −2 copas por producción + 2 del batch… neto la parte vendida)', () => {
+    // dif fila Campari sola: físico 18 − teórico (20 − 100/50 prod) = 18 − 18 = 0
+    // adj.dif = share×(fisB−teoB) = 0.1333×(375−375) = 0 → dif final 0 ✓
+    const difFila = B.calcExistencia(filaCamp2) - B.calcExistenciaTeorica(filaCamp2);
+    eq(Math.round((difFila + B._repartoDe('campari2').dif) * 1000) / 1000, 0);
+});
+test('reparto: faltante del batch cae proporcional (pesa 300 en vez de 375 → Campari −0.2 copas)', () => {
+    const filaPreF = { ...filaPre2, pesos: ['0.300'] }; // faltan 75 ml del batch
+    setVar(B, 'filasCaptura', [filaPreF, filaCamp2]);
+    vm.runInContext("_repCache = _repartoPrebatch();", B);
+    // 75 ml × 13.33% = 10 ml de Campari = 0.2 copas de 50 ml
+    eq(Math.round(B._repartoDe('campari2').dif * 1000) / 1000, -0.2);
+    setVar(B, 'filasCaptura', [filaPre2, filaCamp2]);
+    vm.runInContext("_repCache = _repartoPrebatch();", B);
+});
+test('reparto: la venta del batch fluye a Campari como venta neta (375×13.3% = 1 copa)', () =>
+    eq(Math.round(B._repartoDe('campari2').venta * 100) / 100, 1));
+vm.runInContext("invActual.prebatchProducidos = {}; _repCache = null;", B);
+setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
+setVar(B, 'filasCaptura', [filaCopa]);
 setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
 setVar(B, 'filasCaptura', [filaCopa]);
 
