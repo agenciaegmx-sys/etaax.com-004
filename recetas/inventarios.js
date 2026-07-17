@@ -413,6 +413,21 @@ function getExistenciaAnterior(insumoId) {
     }
     return ea;
 }
+// Self-heal del ref guardado: inventarios creados durante el bug "solo el primer
+// levantamiento es referencia" quedaron con refInventarioId apuntando al primer lev
+// AUNQUE ya existan inventarios más recientes → la existencia anterior salía de la
+// línea base vieja y los cambios del inventario intermedio no se reflejaban.
+// Si el ref guardado es el primer lev y hay un candidato más reciente → automático.
+// Solo en inventarios ABIERTOS (los cerrados/históricos no se tocan).
+function _sanearRefInv() {
+    if (!invActual || !invActual.refInventarioId || invActual.cerrado || invActual._eraCerrado) return;
+    var cands = _refsDisponibles();
+    var sel  = cands.find(function(x){ return x.id === invActual.refInventarioId; });
+    var last = cands[cands.length - 1];
+    if (sel && last && sel.tipoInv === 'primer_lev' && last.id !== sel.id) {
+        invActual.refInventarioId = ''; // '' = automático (el anterior más reciente)
+    }
+}
 // Cambiar el inventario de referencia → recalcula la existencia anterior de todas las filas.
 function onCambiarRefInv(id) {
     if (!invActual) return;
@@ -2357,12 +2372,16 @@ function _setFechaUltimo() {
     const refs = _refsDisponibles().slice().reverse(); // más reciente primero (incluye intermedios ABIERTOS con datos)
     if (!refs.length) { el.innerHTML = '<option value="">Sin inventarios previos</option>'; el.disabled = true; return; }
     el.disabled = false;
-    const ref = _getRefInv();
-    const refId = ref ? ref.id : refs[0].id;
-    el.innerHTML = refs.map(inv => {
+    // '' = AUTOMÁTICO (el anterior más reciente). Solo se marca un inventario específico
+    // si el usuario lo eligió a propósito (invActual.refInventarioId).
+    const elegido = (invActual && invActual.refInventarioId) || '';
+    const auto = refs[0];
+    const fchA = auto.fecha ? new Date(auto.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' }) : 's/f';
+    el.innerHTML = `<option value="" ${!elegido ? 'selected' : ''}>🔄 Automático — ${etx(auto.nombre || 'Inventario')} · ${fchA}</option>` +
+        refs.map(inv => {
         const fch = inv.fecha ? new Date(inv.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' }) : 's/f';
         const tag = inv.tipoInv === 'primer_lev' ? ' · línea base' : (!inv.cerrado ? ' · abierto' : '');
-        return `<option value="${inv.id}" ${refId === inv.id ? 'selected' : ''}>${etx(inv.nombre || 'Inventario')} · ${fch}${tag}</option>`;
+        return `<option value="${inv.id}" ${elegido === inv.id ? 'selected' : ''}>${etx(inv.nombre || 'Inventario')} · ${fch}${tag}</option>`;
     }).join('');
 }
 
@@ -2443,6 +2462,7 @@ function iniciarInventario() {
 function cargarProductosCaptura() {
     const insumos = _scopeSucInsumos(getInsumos()); // solo los insumos de la sucursal activa (evita duplicados entre sucursales)
     if (!insumos.length) { filasCaptura = []; return; }
+    _sanearRefInv(); // ref guardado obsoleto (primer lev con intermedios más nuevos) → automático
 
     filasCaptura = insumos.map(ins => {
         const existe = (invActual.filas || []).find(f => f.insumoId === ins.id);

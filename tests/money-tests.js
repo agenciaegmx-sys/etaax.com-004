@@ -363,6 +363,20 @@ test('existencia anterior del nuevo inv = la del intermedio (8), no la del prime
 setVar(B, 'invActual', { id:'mid', tipoInv:'bebidas', cerrado:false, fecha:'2026-06-25', filas:[], entradasLog:[] });
 test('referencia del intermedio = el primer levantamiento (no un inventario futuro)', () =>
     eq(B._getRefInv().id, 'lev'));
+// Self-heal del ref guardado (residuo del bug "solo primer lev era referencia"):
+// refInventarioId apuntando al primer lev con un intermedio más nuevo → automático.
+const _invRefStale = { id:'nuevo', tipoInv:'bebidas', cerrado:false, fecha:'2026-07-16', filas:[], entradasLog:[], refInventarioId:'lev' };
+setVar(B, 'invActual', _invRefStale);
+B._sanearRefInv();
+test('ref guardado al primer lev (obsoleto) se sanea → usa el intermedio más reciente', () => {
+    eq(_invRefStale.refInventarioId, '');
+    eq(B._getRefInv().id, 'mid');
+});
+// Un ref elegido que NO es primer lev se respeta (elección deliberada del usuario).
+const _invRefOk = { id:'nuevo2', tipoInv:'bebidas', cerrado:false, fecha:'2026-07-16', filas:[], entradasLog:[], refInventarioId:'mid' };
+setVar(B, 'invActual', _invRefOk);
+B._sanearRefInv();
+test('ref elegido a un inventario normal NO se toca', () => eq(_invRefOk.refInventarioId, 'mid'));
 setVar(B, '_cacheInv', null);
 setVar(B, 'invActual', { id: 'invT', entradasLog: [], prebatchProducidos: {}, cocktailsVendidos: {}, ventasCompuesto: {}, cancelaciones: [], descuentos: [], filas: [] });
 
