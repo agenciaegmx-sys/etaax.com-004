@@ -229,7 +229,9 @@ function leerCamposExtra(tipo) {
                 almacenamiento:         get('almacenamiento'),
                 envaseCapacidad:        get('envaseCapacidad'),  // envase físico del prebatch
                 envaseCapUnidad:        get('envaseCapUnidad'),  // ml | L
-                envaseTara:             get('envaseTara'),       // g (envase vacío)
+                envasePesoLleno:        get('envasePesoLleno'),  // peso del envase LLENO
+                envasePesoUnidad:       get('envasePesoUnidad'), // g | kg
+                envaseTara:             get('envaseTara'),       // g (auto: lleno − contenido; editable)
             };
         case 'bebidas':
             return { metodoPre: get('metodoPre'), garnish: get('garnish'),
@@ -255,7 +257,9 @@ function leerCamposExtra(tipo) {
                 almacenamiento:         get('almacenamiento'),
                 envaseCapacidad:        get('envaseCapacidad'),  // envase físico del prebatch
                 envaseCapUnidad:        get('envaseCapUnidad'),  // ml | L
-                envaseTara:             get('envaseTara'),       // g (envase vacío)
+                envasePesoLleno:        get('envasePesoLleno'),  // peso del envase LLENO
+                envasePesoUnidad:       get('envasePesoUnidad'), // g | kg
+                envaseTara:             get('envaseTara'),       // g (auto: lleno − contenido; editable)
             };
         default: return {};
     }

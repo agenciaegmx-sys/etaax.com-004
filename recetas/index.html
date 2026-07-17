@@ -2045,6 +2045,21 @@ const TIPO_RECETA_CFG = {
     },
 };
 
+// Tara AUTO del envase del prebatch — misma lógica que el "PESO CRISTAL (AUTO)" de
+// insumos: peso del envase LLENO − contenido = tara (1 ml ≈ 1 g, convención del sistema).
+// El campo tara sigue editable por si pesaron el envase vacío directamente.
+function _envaseTaraAuto() {
+    var cap = parseFloat((document.getElementById('envaseCapacidad') || {}).value) || 0;
+    var cu  = ((document.getElementById('envaseCapUnidad')  || {}).value || 'ml').toLowerCase();
+    var pl  = parseFloat((document.getElementById('envasePesoLleno')  || {}).value) || 0;
+    var pu  = ((document.getElementById('envasePesoUnidad') || {}).value || 'g').toLowerCase();
+    var el  = document.getElementById('envaseTara');
+    if (!el || !(pl > 0) || !(cap > 0)) return; // sin peso lleno o capacidad no hay auto
+    var capMl  = (cu === 'l' || cu === 'lt') ? cap * 1000 : cap;
+    var llenoG = pu === 'kg' ? pl * 1000 : pl;
+    el.value = Math.max(0, Math.round(llenoG - capMl));
+}
+
 function renderFormularioPorTipo(tipo, datos) {
     const cfg  = TIPO_RECETA_CFG[tipo] || TIPO_RECETA_CFG['alimentos'];
     const d    = datos || {};
@@ -2306,17 +2321,23 @@ function renderFormularioPorTipo(tipo, datos) {
             <div class="meta-item" style="grid-column:span 3">
                 <label>Envase físico (para pesarlo en inventarios) <span style="font-size:10px;color:var(--text-dim)">(opcional)</span></label>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-                    <input type="number" id="envaseCapacidad" value="${d.envaseCapacidad||''}"
-                        placeholder="750" min="0" step="1" style="width:90px;flex-shrink:0">
-                    <select id="envaseCapUnidad" style="width:70px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 8px;border-radius:6px;font-family:sans-serif;font-size:14px;outline:none">
+                    <input type="number" id="envaseCapacidad" value="${d.envaseCapacidad||''}" oninput="_envaseTaraAuto()"
+                        placeholder="750" min="0" step="1" style="width:84px;flex-shrink:0">
+                    <select id="envaseCapUnidad" onchange="_envaseTaraAuto()" style="width:64px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 8px;border-radius:6px;font-family:sans-serif;font-size:14px;outline:none">
                         ${['ml','L'].map(u=>`<option value="${u}" ${(d.envaseCapUnidad||'ml')===u?'selected':''}>${u}</option>`).join('')}
                     </select>
                     <span style="font-size:12px;color:var(--text-dim)">capacidad ·</span>
+                    <input type="number" id="envasePesoLleno" value="${d.envasePesoLleno||''}" oninput="_envaseTaraAuto()"
+                        placeholder="1250" min="0" step="1" style="width:84px;flex-shrink:0">
+                    <select id="envasePesoUnidad" onchange="_envaseTaraAuto()" style="width:64px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 8px;border-radius:6px;font-family:sans-serif;font-size:14px;outline:none">
+                        ${['g','kg'].map(u=>`<option value="${u}" ${(d.envasePesoUnidad||'g')===u?'selected':''}>${u}</option>`).join('')}
+                    </select>
+                    <span style="font-size:12px;color:var(--text-dim)">envase LLENO ·</span>
                     <input type="number" id="envaseTara" value="${d.envaseTara||''}"
-                        placeholder="500" min="0" step="1" style="width:90px;flex-shrink:0">
-                    <span style="font-size:12px;color:var(--text-dim)">g de tara (envase vacío)</span>
+                        placeholder="—" min="0" step="1" style="width:80px;flex-shrink:0;color:var(--green)">
+                    <span style="font-size:12px;color:var(--text-dim)">g de tara (auto)</span>
                 </div>
-                <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Ej. botella reutilizada 750 ml · tara 500 g, o garrafa 4 L · tara 1240 g. Al convertir a insumo, el inventario pesa el envase igual que una botella de destilado.</div>
+                <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Pesa el envase LLENO y la tara se calcula sola (lleno − contenido, como en insumos). Ej. garrafa 4 L llena 5.240 kg → tara 1240 g. También puedes escribir la tara directo.</div>
             </div>
 ` : `
             <!-- Layout normal: cristaleria + tiempo ya están arriba -->
