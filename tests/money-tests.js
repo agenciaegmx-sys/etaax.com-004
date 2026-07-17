@@ -390,6 +390,23 @@ test('compuesto NO doble-cuenta: su diferencia = Σ diferencias de las presentac
 });
 setVar(B, 'filasCaptura', [filaCopa]);
 
+// MERMAS del QR: importar DOS veces NO debe doble-contar (candado importadoEnInv).
+// Las mermas de insumo SUMAN a la fila (no dejan id en entradasLog), así que el
+// dedupe por yaEnInv no las protege — sin el candado, cada corrida del import
+// re-sumaba la misma merma y corrompía la existencia teórica / diferencia.
+setVar(B, '_cacheInsumosInv', [{ id: 'ron1', activo: '1' }]);
+setVar(B, '_cacheEL', [{ id: 'mQR1', concepto: 'merma', insumoId: 'ron1', cantidad: 2, unidad: 'copa', fecha: '2026-07-10', origen: 'qr' }]);
+setVar(B, 'invActual', { id: 'invT', cerrado: false, fecha: '2026-07-16', filas: [], entradasLog: [] });
+const filaMerma = { ...filaCopa, mermaCopas: 0 };   // misma referencia dentro y fuera del VM
+setVar(B, 'filasCaptura', [filaMerma]);
+B._importarEntradasQR();
+test('merma QR del periodo se importa y suma UNA vez (2 copas)', () => eq(filaMerma.mermaCopas, 2));
+B._importarEntradasQR();
+test('re-importar NO doble-cuenta la merma (sigue en 2, candado importadoEnInv)', () => eq(filaMerma.mermaCopas, 2));
+setVar(B, '_cacheEL', null); setVar(B, '_cacheInsumosInv', []);
+setVar(B, 'invActual', { id: 'invT', entradasLog: [], prebatchProducidos: {}, cocktailsVendidos: {}, ventasCompuesto: {}, cancelaciones: [], descuentos: [], filas: [] });
+setVar(B, 'filasCaptura', [filaCopa]);
+
 /* ═══════════════ SUITE C · NÚCLEO (etaax-core.js directo) ═══════════════ */
 console.log('\n══ SUITE C · Núcleo compartido (etaax-core.js) ══');
 const C = cargarJS(crearContexto(), 'etaax-core.js');

@@ -786,6 +786,13 @@ function _importarEntradasQR() {
         // sí persistió, y si se perdió, se re-clama. El borrado real usa `borrada`.
         // ── MERMAS del QR: entran a la merma del inventario (y por lo tanto al reporte) ──
         if (e.concepto === 'merma') {
+            // Dedupe de MERMAS: aquí importadoEnInv SÍ es el candado. Las mermas de
+            // insumo no dejan rastro con id en el inventario (SUMAN a filaM.mermaBase/
+            // mermaCopas), así que yaEnInv no las protege — sin este check, cada corrida
+            // del import re-sumaba la misma merma (doble conteo). Se quedan en el
+            // inventario que las importó primero (no aplica re-clamo por periodo:
+            // una suma no se puede des-sumar).
+            if (e.importadoEnInv) return;
             var cantM = parseFloat(e.cantidad) || 0;
             if (!(cantM > 0)) return;
             var uM = (e.unidad || '').toLowerCase();
@@ -4191,48 +4198,9 @@ function renderCardVentas() {
         </div>`;
 }
 
-function _cardVentasCompuesto(comp) {
-    const vf = _virtualFilaCompuesto(comp);
-    const _n = v => (v % 1 ? (Math.round(v*10)/10).toFixed(1) : v);
-    const members = (comp.miembros||[]).map(mid => filasCaptura.find(f => f.insumoId === mid)).filter(Boolean);
-    const inp = 'type="text" inputmode="decimal" class="inv-num-input"';
-    return `
-        <div class="ent-form-card">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
-                <div>
-                    <div style="font-weight:700;font-size:17px;color:var(--text)">🧩 ${etx(comp.nombre)}</div>
-                    <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap">
-                        <span class="inv-tag" style="background:rgba(122,184,245,0.12);border-color:rgba(122,184,245,0.4);color:#7ab8f5">Compuesto · ${members.length} presentaciones</span>
-                        <span class="inv-tag" style="background:rgba(245,200,66,0.12);border-color:rgba(245,200,66,0.45);color:var(--accent)">copa</span>
-                    </div>
-                    <div style="font-size:11px;color:var(--text-dim);margin-top:6px">${members.map(m => etx(insumoTitulo(m))).join('  +  ')}</div>
-                </div>
-                <button onclick="limpiarSeleccionVentas()" style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:20px;padding:0;line-height:1">✕</button>
-            </div>
-            <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;font-size:12px">
-                <span style="color:var(--text-dim)">Existencia disponible: <b style="color:var(--text)">${_n(vf._existCopas)} cop</b></span>
-                <span style="color:var(--text-dim)">Teórico tras ventas: <b id="compTeo-${comp.id}" style="color:${vf._teoricoCopas<0?'var(--red)':'var(--green)'}">${_n(vf._teoricoCopas)} cop</b></span>
-            </div>
-            <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600">Ventas (en copas)</div>
-            <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px">
-                <div>
-                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Copas vendidas</div>
-                    <input ${inp} style="width:110px" value="${vf.ventasCopasDirectas||0}"
-                        oninput="this.value=this.value.replace(/[^0-9.]/g,'');updVentasCompuesto('${comp.id}','ventas',+this.value);renderResumenVentas()">
-                </div>
-                <div>
-                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Cortesía (copas)</div>
-                    <input ${inp} style="width:110px;border-color:rgba(155,141,232,.5)" value="${vf.cortesiaCopas||0}"
-                        oninput="this.value=this.value.replace(/[^0-9.]/g,'');updVentasCompuesto('${comp.id}','cortesia',+this.value);renderResumenVentas()">
-                </div>
-                <div>
-                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Merma (copas)</div>
-                    <input ${inp} style="width:110px;border-color:rgba(224,90,58,.4)" value="${vf.mermaCopas||0}"
-                        oninput="this.value=this.value.replace(/[^0-9.]/g,'');updVentasCompuesto('${comp.id}','merma',+this.value);renderResumenVentas()">
-                </div>
-            </div>
-        </div>`;
-}
+// (_cardVentasCompuesto se eliminó: en el modelo nuevo cada presentación se vende
+//  como fila normal y el compuesto es solo consolidación de lectura en el Paso 5.
+//  updVentasCompuesto queda como writer dormido de invActual.ventasCompuesto.)
 
 function renderResumenVentas() {
     const cont = document.getElementById('ventasResumen');
@@ -4907,7 +4875,19 @@ function _resumenEjecutivo() {
         else if (dif > 0.001) { sobrU++; sobrCosto += dif*cc; sobrCarta += dif*(f.precioCarta||0); }
         var merma = (parseFloat(f.mermaCopas)||0) + (parseFloat(f.mermaBase)||0);
         if (merma > 0) { mermados.push({nombre:f.nombre, costo:merma*cc, f:f, m:merma}); mermaCosto += merma*cc; }
-        var cons = _consumoPeriodo(f);
+        // Consumo del COMPUESTO = Σ del consumo de sus presentaciones (incluye sus
+        // ventas por recetas/cocteles). Con el insumoId virtual '_comp_…' las recetas
+        // no resuelven → salía "sin usar" aunque los miembros sí vendieran.
+        var cons;
+        if (f.esCompuesto) {
+            var _cRE = getCompuestos().find(function(x){ return x.id === f.compId; });
+            cons = ((_cRE && _cRE.miembros) || []).reduce(function(s, mid){
+                var m = filasCaptura.find(function(x){ return x.insumoId === mid; });
+                return m ? s + _consumoPeriodo(m) : s;
+            }, 0);
+        } else {
+            cons = _consumoPeriodo(f);
+        }
         if (cons > 0.001) { usados++; vendidoCosto += cons*cc; } else { sinUsar++; if (sinUsarLista.length<60) sinUsarLista.push(f.nombre); }
     });
     // Mermas de PRODUCTO del menú registradas por QR (viven en el inventario)
