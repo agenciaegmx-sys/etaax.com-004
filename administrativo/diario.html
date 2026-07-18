@@ -3122,27 +3122,51 @@ function abrirCajaFuerte(){
    cortes viejos sin desglose, transferencias, gastos de débito, depósitos legacy)
    va a la cuenta PREDETERMINADA → la suma de cuentas SIEMPRE cuadra con el total. */
 function _debitoPorCuenta(cortes, depositos, ctasDeb, gastosDebito){
-    var porCta={}; (ctasDeb||[]).forEach(function(c){ porCta[c.id]=0; });
+    var porCta={}; (ctasDeb||[]).forEach(function(c){ porCta[c.id]={term:0,dep:0,resto:0,total:0}; });
     if(!ctasDeb||!ctasDeb.length) return porCta;
     var defId=ctasDeb[0].id; // la predeterminada va primero (_cuentasDebito la ordena)
-    var add=function(id,v){ porCta[porCta.hasOwnProperty(id)?id:defId]+=v; };
+    var add=function(id,campo,v){ var k=porCta.hasOwnProperty(id)?id:defId; porCta[k][campo]+=v; porCta[k].total+=v; };
     (cortes||[]).forEach(function(c){
         var sumDes=0;
-        (c.tarjetaCuentas||[]).forEach(function(t){ var nt=parseFloat(t.neto)||0; sumDes+=nt; add(t.cuentaId,nt); });
-        add(defId, taBancoNeto(c)-sumDes);   // propina neta + cortes sin desglose
-        add(defId, n(c.transferencia));
+        (c.tarjetaCuentas||[]).forEach(function(t){ var nt=parseFloat(t.neto)||0; sumDes+=nt; add(t.cuentaId,'term',nt); });
+        add(defId,'term', taBancoNeto(c)-sumDes);   // propina neta + cortes sin desglose
+        add(defId,'resto', n(c.transferencia));
     });
     (depositos||[]).forEach(function(d){
         var m=n(d.monto);
         var org=d.origen||(d.destino==='banco'?'caja_fuerte':'externo');
-        if(d.destino==='banco') add(d.destinoCuentaId||'',m);
-        if(org==='banco') add(d.origenCuentaId||'',-m);
+        if(d.destino==='banco') add(d.destinoCuentaId||'','dep',m);
+        if(org==='banco') add(d.origenCuentaId||'','dep',-m);
     });
-    add(defId,-(gastosDebito||0));
-    return porCta;
+    add(defId,'resto',-(gastosDebito||0));
+    return porCta; // {term: terminal neta, dep: depósitos/traspasos/retiros, resto: transfer+propinas−gastos, total}
 }
 
-function _abrirCajaFuerteContenido(){
+// Datos FRESCOS al abrir Caja Fuerte: los saldos salen del HISTÓRICO completo
+// (cortes + depósitos + gastos + comisiones). Un caché en memoria puede quedar
+// viejo (otra pestaña/dispositivo, realtime pausado por un modal abierto) → se
+// re-pintan los saldos con lo que de verdad hay en la nube.
+var _cajRefrescando=false;
+async function _refrescarCajaFuerte(){
+    if(_cajRefrescando) return; _cajRefrescando=true;
+    try{
+        var negId=getNegocioActivo(); if(!negId) return;
+        var r=await Promise.all([
+            _supabase.from('cortes').select('datos').eq('negocio_id',negId),
+            _supabase.from('depositos').select('datos').eq('negocio_id',negId),
+            _supabase.from('gastos').select('datos').eq('negocio_id',negId),
+            _supabase.from('tarjetas_credito').select('datos').eq('negocio_id',negId).order('created_at',{ascending:true}),
+        ]);
+        if(!r[0].error) _cacheCortes=_sinDelPend('cortes',(r[0].data||[]).map(function(x){return x.datos;}));
+        if(!r[1].error) _cacheDeps=_sinDelPend('depositos',(r[1].data||[]).map(function(x){return x.datos;}));
+        if(!r[2].error) _cacheGastosExt=(r[2].data||[]).map(function(x){return x.datos;});
+        if(!r[3].error) _cuentasBancarias=(r[3].data||[]).map(function(x){return x.datos;});
+        var cajEl=document.getElementById('cajOverlay');
+        if(cajEl&&cajEl.classList.contains('open')) _abrirCajaFuerteContenido(true); // repintar con lo fresco
+    }catch(e){} finally{ _cajRefrescando=false; }
+}
+function _abrirCajaFuerteContenido(_yaFresco){
+    if(!_yaFresco) _refrescarCajaFuerte(); // pinta al instante con caché y refresca solo
     var lista=load().slice().sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
     var deps=loadDep().slice().sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
     var body=document.getElementById('cajBody');
@@ -3193,13 +3217,19 @@ function _abrirCajaFuerteContenido(){
             '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin:0 0 6px">🏛️ Saldo por cuenta de débito</div>'+
             '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin-bottom:4px">'+
             _ctasDebCF.map(function(c){
-                var s=_pcCF[c.id]||0;
+                var s=_pcCF[c.id]||{term:0,dep:0,resto:0,total:0};
+                // Desglose auditable: de dónde sale el saldo de ESTA cuenta.
+                var det=[];
+                if(s.term) det.push('terminal '+fmtM(s.term));
+                if(s.dep)  det.push('movimientos '+(s.dep>0?'+':'−')+fmtM(Math.abs(s.dep)));
+                if(s.resto)det.push((s.resto>0?'+':'−')+fmtM(Math.abs(s.resto))+' transfer/propinas/gastos');
                 return '<div class="cj-acum" style="margin:0;border-color:rgba(61,190,122,.25)">'+
                     '<div>'+
                         '<div style="font-size:13px;font-weight:600;color:var(--text)">🏛️ '+_escV(_cuentaBancoLabel(c.id))+'</div>'+
+                        (det.length?'<div style="font-size:10px;color:var(--text-dim);margin-top:2px">'+det.join(' · ')+'</div>':'')+
                         (c.predeterminada?'<div style="font-size:10px;color:var(--text-dim);margin-top:2px">predeterminada · recibe transferencias, propinas netas, gastos de débito y movimientos sin cuenta</div>':'')+
                     '</div>'+
-                    '<div class="cj-acum-val" style="font-size:20px;color:'+(s<0?'#ff9a9a':'var(--green)')+'">'+fmtM(s)+'</div>'+
+                    '<div class="cj-acum-val" style="font-size:20px;color:'+(s.total<0?'#ff9a9a':'var(--green)')+'">'+fmtM(s.total)+'</div>'+
                 '</div>';
             }).join('')+
             '</div>'+

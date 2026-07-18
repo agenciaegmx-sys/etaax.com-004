@@ -192,17 +192,21 @@ test('comisionBancoCorte = bruto − neto (nunca negativa)', () =>
     ];
     const _pc = A._debitoPorCuenta([{ ...corteDesglose, transferencia: 400 }], _depsCta, _ctas, 250);
     test('débito por cuenta: el depósito caja→cuenta B SÍ cae en B (5000 + 1200 − 300 = 5900)', () =>
-        eq(Math.round(_pc.b * 100) / 100, 5900));
+        eq(Math.round(_pc.b.total * 100) / 100, 5900));
     test('débito por cuenta: A = terminal neta + propina + transfer − traspaso − gastos', () =>
-        eq(Math.round(_pc.a * 100) / 100,
+        eq(Math.round(_pc.a.total * 100) / 100,
            Math.round((A._netoCuenta(ctaConIva, 1000, 2000) + 1000 * (1 - 0.0232) + 400 - 1200 - 250) * 100) / 100));
     test('INVARIANTE: la suma de cuentas = saldo total de débito', () => {
         const total = A.taBancoNeto(corteDesglose) + 400 /*transfer*/ + (5000 - 300) /*efecto banco deps*/ - 250 /*gastos*/;
-        eq(Math.round((_pc.a + _pc.b) * 100) / 100, Math.round(total * 100) / 100);
+        eq(Math.round((_pc.a.total + _pc.b.total) * 100) / 100, Math.round(total * 100) / 100);
+    });
+    test('desglose por cuenta: un TRASPASO banco→banco resta en origen y suma en destino (movs)', () => {
+        eq(_pc.a.dep, -1200);          // traspaso a→b sale de A
+        eq(_pc.b.dep, 5000 + 1200 - 300); // entra depósito + traspaso − retiro
     });
     test('cuenta desconocida/legacy cae a la predeterminada (no se pierde dinero)', () => {
         const _pc2 = A._debitoPorCuenta([], [{ monto: 700, origen: 'externo', destino: 'banco', destinoCuentaId: 'zz-borrada' }], _ctas, 0);
-        eq(_pc2.a, 700); eq(_pc2.b, 0);
+        eq(_pc2.a.total, 700); eq(_pc2.b.total, 0);
     });
 }
 
