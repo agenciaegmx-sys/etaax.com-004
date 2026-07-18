@@ -1358,6 +1358,17 @@
 </div>
 
 <!-- ══ OVERLAY DEPÓSITOS ══ -->
+<!-- ══ MODAL 📜 HISTORIAL DE CONCILIACIONES ══ -->
+<div class="cj-overlay" id="concHistOverlay" style="z-index:9350" onclick="if(event.target===this)cerrarHistConciliaciones()">
+    <div class="cj-panel" style="max-width:640px">
+        <div class="cj-header">
+            <span class="cj-title">📜 Historial de conciliaciones</span>
+            <button class="modal-close" onclick="cerrarHistConciliaciones()">✕</button>
+        </div>
+        <div class="cj-body" id="concHistBody" style="padding:14px 18px 18px"></div>
+    </div>
+</div>
+
 <!-- ══ MODAL ⚖️ CONCILIACIÓN BANCARIA (por cuenta) ══ -->
 <div class="cj-overlay" id="concOverlay" style="z-index:9400" onclick="if(event.target===this)cerrarConciliar()">
     <div class="cj-panel" style="max-width:460px">
@@ -1378,6 +1389,19 @@
             <input type="number" id="concReal" step="0.01" placeholder="0.00" oninput="_concPreview()"
                 style="width:100%;box-sizing:border-box;background:var(--surface2,#1a1a1a);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:12px 14px;font-size:18px;font-weight:700;outline:none;font-family:inherit">
             <div id="concDelta" style="min-height:38px;display:flex;align-items:center;font-size:13px;color:var(--text-dim);padding:8px 2px 0">Escribe el saldo de tu app del banco y te muestro el ajuste.</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:6px 0 0">
+                <div>
+                    <label style="display:block;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin:0 0 6px">Fecha de conciliación</label>
+                    <input type="date" id="concFecha"
+                        style="width:100%;box-sizing:border-box;background:var(--surface2,#1a1a1a);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 12px;font-size:13px;outline:none;font-family:inherit">
+                </div>
+                <div>
+                    <label style="display:block;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin:0 0 6px">Verificado por</label>
+                    <input id="concVerifica" list="concStaffList" placeholder="Colaborador que verifica" oninput="_concPreview()"
+                        style="width:100%;box-sizing:border-box;background:var(--surface2,#1a1a1a);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 12px;font-size:13px;outline:none;font-family:inherit">
+                    <datalist id="concStaffList"></datalist>
+                </div>
+            </div>
             <div style="font-size:10px;color:var(--text-dim);margin:2px 0 14px">La diferencia se registra como movimiento de ajuste (visible en el historial). Tus cortes y gastos no se tocan.</div>
             <div style="display:flex;gap:10px;justify-content:flex-end">
                 <button class="btn-ghost" style="padding:10px 18px" onclick="cerrarConciliar()">Cancelar</button>
@@ -3244,7 +3268,10 @@ function _abrirCajaFuerteContenido(_yaFresco){
         window._ultimoPorCuenta = _pcCF; // para "⚖️ Conciliar" (saldo calculado por cuenta)
         // Fila propia de cards — un card por cuenta, mismo estilo que los saldos de arriba.
         debPorCuentaHTML =
-            '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin:0 0 6px">🏛️ Saldo por cuenta de débito</div>'+
+            '<div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 6px">'+
+                '<span style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)">🏛️ Saldo por cuenta de débito</span>'+
+                '<button onclick="abrirHistConciliaciones()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:3px 10px;font-size:10px;cursor:pointer;font-family:inherit">📜 Historial de conciliaciones</button>'+
+            '</div>'+
             '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin-bottom:4px">'+
             _ctasDebCF.map(function(c){
                 var s=_pcCF[c.id]||{term:0,dep:0,resto:0,total:0};
@@ -3821,6 +3848,12 @@ function conciliarCuenta(cuentaId){
     document.getElementById('concCuentaNombre').textContent='🏛️ '+_cuentaBancoLabel(cuentaId);
     document.getElementById('concCalc').textContent=fmtM(_concCalc);
     document.getElementById('concReal').value='';
+    document.getElementById('concFecha').value=new Date().toISOString().slice(0,10);
+    document.getElementById('concVerifica').value='';
+    // Sugerencias: colaboradores activos del catálogo de staff
+    var dl=document.getElementById('concStaffList');
+    if(dl) dl.innerHTML=(_cacheStaff||[]).filter(function(s){return s&&s.nombre&&s.estado!=='Baja definitiva';})
+        .map(function(s){return '<option value="'+_escV(s.nombre)+'">';}).join('');
     document.getElementById('concDelta').innerHTML='<span style="color:var(--text-dim)">Escribe el saldo de tu app del banco y te muestro el ajuste.</span>';
     document.getElementById('concBtnGuardar').disabled=true;
     document.getElementById('concOverlay').classList.add('open');
@@ -3829,13 +3862,15 @@ function conciliarCuenta(cuentaId){
 function cerrarConciliar(){ document.getElementById('concOverlay').classList.remove('open'); }
 function _concPreview(){
     var real=parseFloat(document.getElementById('concReal').value);
+    var quien=(document.getElementById('concVerifica').value||'').trim();
     var el=document.getElementById('concDelta'), btn=document.getElementById('concBtnGuardar');
     if(isNaN(real)){ el.innerHTML='<span style="color:var(--text-dim)">Escribe el saldo de tu app del banco y te muestro el ajuste.</span>'; btn.disabled=true; return; }
     var delta=Math.round((real-_concCalc)*100)/100;
     if(Math.abs(delta)<0.01){ el.innerHTML='<span style="color:var(--green)">✅ Ya cuadra con tu banca — no hay nada que ajustar.</span>'; btn.disabled=true; return; }
     el.innerHTML='Ajuste a registrar: <b style="color:'+(delta>0?'var(--green)':'#ff9a9a')+';font-size:16px;margin-left:6px">'+(delta>0?'+':'−')+fmtM(Math.abs(delta))+'</b>'+
-        '<span style="color:var(--text-dim);margin-left:8px;font-size:11px">'+(delta>0?'entrada a la cuenta':'salida de la cuenta')+'</span>';
-    btn.disabled=false;
+        '<span style="color:var(--text-dim);margin-left:8px;font-size:11px">'+(delta>0?'entrada a la cuenta':'salida de la cuenta')+'</span>'+
+        (!quien?'<span style="color:var(--accent);margin-left:8px;font-size:11px">· falta quién verifica</span>':'');
+    btn.disabled=!quien; // quién verifica es OBLIGATORIO (control administrativo)
 }
 function _concGuardar(){
     var cuentaId=_concCuentaId, calc=_concCalc;
@@ -3843,16 +3878,20 @@ function _concGuardar(){
     if(isNaN(real)) return;
     var delta=Math.round((real-calc)*100)/100;
     if(Math.abs(delta)<0.01) return;
-    var hoy=new Date().toISOString().slice(0,10);
+    var fecha=document.getElementById('concFecha').value||new Date().toISOString().slice(0,10);
+    var quien=(document.getElementById('concVerifica').value||'').trim();
+    if(!quien){ document.getElementById('concVerifica').focus(); return; }
     var dep={
-        id:genId(), negocioId:getNegocioActivo(), fecha:hoy, monto:Math.abs(delta),
+        id:genId(), negocioId:getNegocioActivo(), fecha:fecha, monto:Math.abs(delta),
         origen: delta>0?'externo':'banco', origenCuentaId: delta>0?'':cuentaId,
         destino: delta>0?'banco':'retiro', destinoCuentaId: delta>0?cuentaId:'', tcId:'',
         categoria:'ajuste',
         concepto:'⚖️ Conciliación bancaria — '+_cuentaBancoLabel(cuentaId),
         finalidad:'Ajuste al saldo real de la banca (cashback / comisiones promocionales / cobros del banco)',
-        autorizadoPor:'', depositadoPor:'',
-        notas:'Saldo ETAAX '+fmtM(calc)+' → saldo real '+fmtM(real)+' (ajuste '+(delta>0?'+':'')+fmtM(delta)+')'
+        autorizadoPor:quien, depositadoPor:'',
+        // Datos ESTRUCTURADOS de la conciliación (para la vista histórica)
+        cuentaConcId:cuentaId, concCalc:calc, concReal:real, verificadoPor:quien,
+        notas:'Saldo ETAAX '+fmtM(calc)+' → saldo real '+fmtM(real)+' (ajuste '+(delta>0?'+':'')+fmtM(delta)+') · verificó: '+quien
     };
     _cacheDeps=(_cacheDeps||[]).filter(function(x){return x.id!==dep.id;});
     _cacheDeps.push(dep);
@@ -3861,6 +3900,40 @@ function _concGuardar(){
     renderDepositos();
     _abrirCajaFuerteContenido(true); // repintar con el ajuste ya aplicado
 }
+
+/* 📜 Vista histórica de conciliaciones (movimientos categoria 'ajuste') */
+function abrirHistConciliaciones(){
+    var lista=(_cacheDeps||[]).filter(function(d){return d&&d.categoria==='ajuste';})
+        .slice().sort(function(a,b){return String(b.fecha||'').localeCompare(String(a.fecha||''));});
+    var body=document.getElementById('concHistBody');
+    if(!lista.length){
+        body.innerHTML='<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:34px 0">Sin conciliaciones registradas todavía.<br><span style="font-size:11px">Usa ⚖️ Conciliar en una cuenta para registrar la primera.</span></div>';
+    } else {
+        var rows=lista.map(function(d){
+            var cta=d.cuentaConcId||d.destinoCuentaId||d.origenCuentaId||'';
+            var esEntrada=d.destino==='banco';
+            var aj=(esEntrada?'+':'−')+fmtM(n(d.monto));
+            var fch=d.fecha?new Date(d.fecha+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}):'—';
+            var detalle=(d.concCalc!==undefined&&d.concReal!==undefined)
+                ? 'ETAAX '+fmtM(n(d.concCalc))+' → real '+fmtM(n(d.concReal))
+                : (d.notas||'');
+            return '<tr>'+
+                '<td style="padding:8px 10px;white-space:nowrap">'+fch+'</td>'+
+                '<td style="padding:8px 10px">🏛️ '+_escV(_cuentaBancoLabel(cta))+'</td>'+
+                '<td style="padding:8px 10px;font-size:11px;color:var(--text-dim)">'+_escV(detalle)+'</td>'+
+                '<td style="padding:8px 10px;text-align:right;font-weight:700;color:'+(esEntrada?'var(--green)':'#ff9a9a')+';white-space:nowrap">'+aj+'</td>'+
+                '<td style="padding:8px 10px;font-size:12px">'+_escV(d.verificadoPor||d.autorizadoPor||'—')+'</td>'+
+            '</tr>';
+        }).join('');
+        body.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:13px">'+
+            '<thead><tr style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);text-align:left">'+
+            '<th style="padding:6px 10px">Fecha</th><th style="padding:6px 10px">Cuenta</th><th style="padding:6px 10px">Detalle</th><th style="padding:6px 10px;text-align:right">Ajuste</th><th style="padding:6px 10px">Verificó</th></tr></thead>'+
+            '<tbody>'+rows+'</tbody></table>'+
+            '<div style="font-size:10px;color:var(--text-dim);margin-top:10px">Cada conciliación es un movimiento (categoría "ajuste") — también se puede editar o eliminar desde el historial de depósitos.</div>';
+    }
+    document.getElementById('concHistOverlay').classList.add('open');
+}
+function cerrarHistConciliaciones(){ document.getElementById('concHistOverlay').classList.remove('open'); }
 
 function eliminarDeposito(id){
     if(!confirm('¿Eliminar este depósito?'))return;
