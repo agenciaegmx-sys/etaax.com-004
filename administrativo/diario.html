@@ -3116,6 +3116,32 @@ function abrirCajaFuerte(){
         _abrirCajaFuerteContenido();
     }, '🔒 Acceder');
 }
+/* ── Saldo de débito POR CUENTA (pura, testeable en el candado) ──────────────
+   Atribución EXACTA: terminal neta por cuenta (desglose tarjetaCuentas del corte),
+   depósitos por su cuenta origen/destino. Lo que NO trae cuenta (propinas netas,
+   cortes viejos sin desglose, transferencias, gastos de débito, depósitos legacy)
+   va a la cuenta PREDETERMINADA → la suma de cuentas SIEMPRE cuadra con el total. */
+function _debitoPorCuenta(cortes, depositos, ctasDeb, gastosDebito){
+    var porCta={}; (ctasDeb||[]).forEach(function(c){ porCta[c.id]=0; });
+    if(!ctasDeb||!ctasDeb.length) return porCta;
+    var defId=ctasDeb[0].id; // la predeterminada va primero (_cuentasDebito la ordena)
+    var add=function(id,v){ porCta[porCta.hasOwnProperty(id)?id:defId]+=v; };
+    (cortes||[]).forEach(function(c){
+        var sumDes=0;
+        (c.tarjetaCuentas||[]).forEach(function(t){ var nt=parseFloat(t.neto)||0; sumDes+=nt; add(t.cuentaId,nt); });
+        add(defId, taBancoNeto(c)-sumDes);   // propina neta + cortes sin desglose
+        add(defId, n(c.transferencia));
+    });
+    (depositos||[]).forEach(function(d){
+        var m=n(d.monto);
+        var org=d.origen||(d.destino==='banco'?'caja_fuerte':'externo');
+        if(d.destino==='banco') add(d.destinoCuentaId||'',m);
+        if(org==='banco') add(d.origenCuentaId||'',-m);
+    });
+    add(defId,-(gastosDebito||0));
+    return porCta;
+}
+
 function _abrirCajaFuerteContenido(){
     var lista=load().slice().sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
     var deps=loadDep().slice().sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
@@ -3157,6 +3183,21 @@ function _abrirCajaFuerteContenido(){
     });
     var totTransfer = lista.reduce(function(s,c){return s+n(c.transferencia);},0);
     var saldoDebito = totTarjeta + totTransfer + _efB - gastosDebito;
+    // Desglose por CUENTA de débito (solo se muestra si hay 2+ cuentas).
+    var _ctasDebCF = _cuentasDebito();
+    var debPorCuentaHTML = '';
+    if (_ctasDebCF.length > 1) {
+        var _pcCF = _debitoPorCuenta(lista, deps, _ctasDebCF, gastosDebito);
+        debPorCuentaHTML = '<div style="margin-top:8px;border-top:1px dashed var(--border);padding-top:7px">'+
+            _ctasDebCF.map(function(c){
+                var s=_pcCF[c.id]||0;
+                return '<div style="display:flex;justify-content:space-between;gap:10px;font-size:11px;padding:2px 0">'+
+                    '<span style="color:var(--text-dim)">🏛️ '+_escV(_cuentaBancoLabel(c.id))+(c.predeterminada?' <span style="font-size:9px">· predeterminada</span>':'')+'</span>'+
+                    '<b style="color:'+(s<0?'#ff9a9a':'var(--green)')+'">'+fmtM(s)+'</b></div>';
+            }).join('')+
+            '<div style="font-size:9px;color:var(--text-dim);margin-top:3px">Transferencias, propinas netas, gastos de débito y movimientos sin cuenta van a la predeterminada.</div>'+
+        '</div>';
+    }
     // Tarjeta de crédito: gastos a crédito (deuda) − pagos hechos a la TC (reducen deuda)
     var saldoTarjetaCred = -gastosTarjetaCred + _efTcPago;
 
@@ -3195,6 +3236,7 @@ function _abrirCajaFuerteContenido(){
                         (gastosDebito?'− '+fmtM(gastosDebito)+' gs.banco':'sin gastos débito')+
                         (totComision?' · <span style="color:#ff9a9a">− '+fmtM(totComision)+' comisión banco (ya descontada)</span>':'')+
                     '</div>'+
+                    debPorCuentaHTML+
                 '</div>'+
                 '<div class="cj-acum-val" style="color:var(--green)">'+fmtM(saldoDebito)+'</div>'+
             '</div>'+

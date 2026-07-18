@@ -180,6 +180,32 @@ test('taBancoNeto = neto de cuentas + propina con TD de la predeterminada', () =
 test('comisionBancoCorte = bruto − neto (nunca negativa)', () =>
     eq(A.comisionBancoCorte(corteDesglose), (3000 + 1000) - A.taBancoNeto(corteDesglose)));
 
+// Saldo de débito POR CUENTA (_debitoPorCuenta): atribución exacta + invariante.
+// La terminal del desglose va a SU cuenta; propina neta, transferencia y gastos a
+// la PREDETERMINADA; los depósitos a su cuenta origen/destino.
+{
+    const _ctas = [ctaConIva, ctaSinIva]; // 'a' predeterminada (va primera)
+    const _depsCta = [
+        { monto: 5000, origen: 'caja_fuerte', destino: 'banco', destinoCuentaId: 'b' }, // caja → cuenta NUEVA b
+        { monto: 1200, origen: 'banco', origenCuentaId: 'a', destino: 'banco', destinoCuentaId: 'b' }, // traspaso a→b
+        { monto: 300,  origen: 'banco', origenCuentaId: 'b', destino: 'retiro' },       // retiro desde b
+    ];
+    const _pc = A._debitoPorCuenta([{ ...corteDesglose, transferencia: 400 }], _depsCta, _ctas, 250);
+    test('débito por cuenta: el depósito caja→cuenta B SÍ cae en B (5000 + 1200 − 300 = 5900)', () =>
+        eq(Math.round(_pc.b * 100) / 100, 5900));
+    test('débito por cuenta: A = terminal neta + propina + transfer − traspaso − gastos', () =>
+        eq(Math.round(_pc.a * 100) / 100,
+           Math.round((A._netoCuenta(ctaConIva, 1000, 2000) + 1000 * (1 - 0.0232) + 400 - 1200 - 250) * 100) / 100));
+    test('INVARIANTE: la suma de cuentas = saldo total de débito', () => {
+        const total = A.taBancoNeto(corteDesglose) + 400 /*transfer*/ + (5000 - 300) /*efecto banco deps*/ - 250 /*gastos*/;
+        eq(Math.round((_pc.a + _pc.b) * 100) / 100, Math.round(total * 100) / 100);
+    });
+    test('cuenta desconocida/legacy cae a la predeterminada (no se pierde dinero)', () => {
+        const _pc2 = A._debitoPorCuenta([], [{ monto: 700, origen: 'externo', destino: 'banco', destinoCuentaId: 'zz-borrada' }], _ctas, 0);
+        eq(_pc2.a, 700); eq(_pc2.b, 0);
+    });
+}
+
 // Depósitos y retiros: efecto sobre los fondos
 test('_depEfecto: entrada externa a caja fuerte suma a caja', () => {
     const e = A._depEfecto({ monto: 500, origen: 'externo', destino: 'caja_fuerte' });
