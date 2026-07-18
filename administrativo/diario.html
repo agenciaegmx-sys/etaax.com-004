@@ -1358,6 +1358,35 @@
 </div>
 
 <!-- ══ OVERLAY DEPÓSITOS ══ -->
+<!-- ══ MODAL ⚖️ CONCILIACIÓN BANCARIA (por cuenta) ══ -->
+<div class="cj-overlay" id="concOverlay" style="z-index:9400" onclick="if(event.target===this)cerrarConciliar()">
+    <div class="cj-panel" style="max-width:460px">
+        <div class="cj-header">
+            <span class="cj-title">⚖️ Conciliación bancaria</span>
+            <button class="modal-close" onclick="cerrarConciliar()">✕</button>
+        </div>
+        <div class="cj-body" style="padding:18px 20px 20px">
+            <div id="concCuentaNombre" style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px"></div>
+            <div class="cj-acum" style="margin:0 0 14px">
+                <div>
+                    <div class="cj-acum-lbl">Saldo calculado por ETAAX</div>
+                    <div style="font-size:10px;color:var(--text-dim);margin-top:3px">cortes + movimientos + gastos del histórico</div>
+                </div>
+                <div class="cj-acum-val" id="concCalc" style="font-size:20px">$0.00</div>
+            </div>
+            <label style="display:block;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin:0 0 6px">Saldo REAL en tu banca</label>
+            <input type="number" id="concReal" step="0.01" placeholder="0.00" oninput="_concPreview()"
+                style="width:100%;box-sizing:border-box;background:var(--surface2,#1a1a1a);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:12px 14px;font-size:18px;font-weight:700;outline:none;font-family:inherit">
+            <div id="concDelta" style="min-height:38px;display:flex;align-items:center;font-size:13px;color:var(--text-dim);padding:8px 2px 0">Escribe el saldo de tu app del banco y te muestro el ajuste.</div>
+            <div style="font-size:10px;color:var(--text-dim);margin:2px 0 14px">La diferencia se registra como movimiento de ajuste (visible en el historial). Tus cortes y gastos no se tocan.</div>
+            <div style="display:flex;gap:10px;justify-content:flex-end">
+                <button class="btn-ghost" style="padding:10px 18px" onclick="cerrarConciliar()">Cancelar</button>
+                <button class="btn-deposito" id="concBtnGuardar" style="padding:10px 18px" onclick="_concGuardar()" disabled>⚖️ Registrar ajuste</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="cj-overlay" id="depOverlay" onclick="if(event.target===this)cerrarVerDepositos()">
     <div class="cj-panel">
         <div class="cj-header">
@@ -3785,16 +3814,35 @@ function guardarDeposito(){
    REAL y la diferencia se registra como MOVIMIENTO de ajuste (visible, editable,
    con historial) — sin tocar cortes ni gastos. delta>0 = entrada externa a la
    cuenta; delta<0 = salida (retiro) desde la cuenta. */
+var _concCuentaId=null, _concCalc=0;
 function conciliarCuenta(cuentaId){
     var pc=(window._ultimoPorCuenta||{})[cuentaId];
-    var calc=pc?pc.total:0;
-    var raw=prompt('⚖️ Conciliación — '+_cuentaBancoLabel(cuentaId)+'\n\nSaldo calculado por ETAAX: '+fmtM(calc)+'\n\nEscribe el saldo REAL que ves en tu banca:');
-    if(raw===null) return;
-    var real=parseFloat(String(raw).replace(/[^0-9.\-]/g,''));
-    if(isNaN(real)){ alert('Escribe un número válido.'); return; }
+    _concCuentaId=cuentaId; _concCalc=pc?pc.total:0;
+    document.getElementById('concCuentaNombre').textContent='🏛️ '+_cuentaBancoLabel(cuentaId);
+    document.getElementById('concCalc').textContent=fmtM(_concCalc);
+    document.getElementById('concReal').value='';
+    document.getElementById('concDelta').innerHTML='<span style="color:var(--text-dim)">Escribe el saldo de tu app del banco y te muestro el ajuste.</span>';
+    document.getElementById('concBtnGuardar').disabled=true;
+    document.getElementById('concOverlay').classList.add('open');
+    setTimeout(function(){ document.getElementById('concReal').focus(); },60);
+}
+function cerrarConciliar(){ document.getElementById('concOverlay').classList.remove('open'); }
+function _concPreview(){
+    var real=parseFloat(document.getElementById('concReal').value);
+    var el=document.getElementById('concDelta'), btn=document.getElementById('concBtnGuardar');
+    if(isNaN(real)){ el.innerHTML='<span style="color:var(--text-dim)">Escribe el saldo de tu app del banco y te muestro el ajuste.</span>'; btn.disabled=true; return; }
+    var delta=Math.round((real-_concCalc)*100)/100;
+    if(Math.abs(delta)<0.01){ el.innerHTML='<span style="color:var(--green)">✅ Ya cuadra con tu banca — no hay nada que ajustar.</span>'; btn.disabled=true; return; }
+    el.innerHTML='Ajuste a registrar: <b style="color:'+(delta>0?'var(--green)':'#ff9a9a')+';font-size:16px;margin-left:6px">'+(delta>0?'+':'−')+fmtM(Math.abs(delta))+'</b>'+
+        '<span style="color:var(--text-dim);margin-left:8px;font-size:11px">'+(delta>0?'entrada a la cuenta':'salida de la cuenta')+'</span>';
+    btn.disabled=false;
+}
+function _concGuardar(){
+    var cuentaId=_concCuentaId, calc=_concCalc;
+    var real=parseFloat(document.getElementById('concReal').value);
+    if(isNaN(real)) return;
     var delta=Math.round((real-calc)*100)/100;
-    if(Math.abs(delta)<0.01){ alert('✅ El saldo ya cuadra con tu banca ('+fmtM(real)+'). No hay nada que ajustar.'); return; }
-    if(!confirm('Saldo ETAAX: '+fmtM(calc)+'\nSaldo real banca: '+fmtM(real)+'\nAjuste a registrar: '+(delta>0?'+':'')+fmtM(delta)+'\n\n¿Registrar el movimiento de conciliación?')) return;
+    if(Math.abs(delta)<0.01) return;
     var hoy=new Date().toISOString().slice(0,10);
     var dep={
         id:genId(), negocioId:getNegocioActivo(), fecha:hoy, monto:Math.abs(delta),
@@ -3809,6 +3857,7 @@ function conciliarCuenta(cuentaId){
     _cacheDeps=(_cacheDeps||[]).filter(function(x){return x.id!==dep.id;});
     _cacheDeps.push(dep);
     _sbUp('depositos',dep);
+    cerrarConciliar();
     renderDepositos();
     _abrirCajaFuerteContenido(true); // repintar con el ajuste ya aplicado
 }

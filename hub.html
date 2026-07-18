@@ -1615,8 +1615,35 @@ async function registroSubmit() {
 /* ════════════════════════════════════════════════════════
    LOGOUT
 ════════════════════════════════════════════════════════ */
+// Confirm ESTILIZADO de cerrar sesión (adiós al confirm() nativo del navegador).
+function _confirmSalir() {
+    return new Promise(function (resolve) {
+        var old = document.getElementById('salirOverlay');
+        if (old) old.remove();
+        var ov = document.createElement('div');
+        ov.id = 'salirOverlay';
+        ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9800;display:flex;align-items:center;justify-content:center;padding:20px';
+        ov.innerHTML =
+            '<div style="background:var(--surface,#141414);border:1px solid var(--border,#2a2a2a);border-radius:16px;padding:26px 26px 22px;max-width:360px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)">' +
+                '<div style="font-size:34px;margin-bottom:10px">👋</div>' +
+                '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:1.5px;color:var(--text,#eee);margin-bottom:6px">¿CERRAR SESIÓN?</div>' +
+                '<div style="font-size:13px;color:var(--text-dim,#888);margin-bottom:20px">Tu información queda guardada. Al volver, inicia sesión de nuevo.</div>' +
+                '<div style="display:flex;gap:10px;justify-content:center">' +
+                    '<button id="salirCancelBtn" style="flex:1;background:var(--surface2,#1d1d1d);border:1px solid var(--border,#2a2a2a);color:var(--text,#eee);border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Cancelar</button>' +
+                    '<button id="salirOkBtn" style="flex:1;background:rgba(224,90,58,.12);border:1px solid rgba(224,90,58,.55);color:#ff8a6a;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Cerrar sesión</button>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(ov);
+        function done(v) { ov.remove(); resolve(v); }
+        document.getElementById('salirCancelBtn').onclick = function () { done(false); };
+        document.getElementById('salirOkBtn').onclick = function () { done(true); };
+        ov.addEventListener('click', function (e) { if (e.target === ov) done(false); });
+        document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { document.removeEventListener('keydown', esc); done(false); } });
+    });
+}
 async function logout() {
-    if (!confirm('¿Cerrar sesión?')) return;
+    var ok = await _confirmSalir();
+    if (!ok) return;
     // Admin en modo negocio: volver al panel sin cerrar sesión Supabase
     if (_sesion && _sesion.isAdmin) {
         volverAlAdmin();
