@@ -3188,15 +3188,22 @@ function _abrirCajaFuerteContenido(){
     var debPorCuentaHTML = '';
     if (_ctasDebCF.length > 1) {
         var _pcCF = _debitoPorCuenta(lista, deps, _ctasDebCF, gastosDebito);
-        debPorCuentaHTML = '<div style="margin-top:8px;border-top:1px dashed var(--border);padding-top:7px">'+
+        // Fila propia de cards — un card por cuenta, mismo estilo que los saldos de arriba.
+        debPorCuentaHTML =
+            '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin:0 0 6px">🏛️ Saldo por cuenta de débito</div>'+
+            '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin-bottom:4px">'+
             _ctasDebCF.map(function(c){
                 var s=_pcCF[c.id]||0;
-                return '<div style="display:flex;justify-content:space-between;gap:10px;font-size:11px;padding:2px 0">'+
-                    '<span style="color:var(--text-dim)">🏛️ '+_escV(_cuentaBancoLabel(c.id))+(c.predeterminada?' <span style="font-size:9px">· predeterminada</span>':'')+'</span>'+
-                    '<b style="color:'+(s<0?'#ff9a9a':'var(--green)')+'">'+fmtM(s)+'</b></div>';
+                return '<div class="cj-acum" style="margin:0;border-color:rgba(61,190,122,.25)">'+
+                    '<div>'+
+                        '<div style="font-size:13px;font-weight:600;color:var(--text)">🏛️ '+_escV(_cuentaBancoLabel(c.id))+'</div>'+
+                        (c.predeterminada?'<div style="font-size:10px;color:var(--text-dim);margin-top:2px">predeterminada · recibe transferencias, propinas netas, gastos de débito y movimientos sin cuenta</div>':'')+
+                    '</div>'+
+                    '<div class="cj-acum-val" style="font-size:20px;color:'+(s<0?'#ff9a9a':'var(--green)')+'">'+fmtM(s)+'</div>'+
+                '</div>';
             }).join('')+
-            '<div style="font-size:9px;color:var(--text-dim);margin-top:3px">Transferencias, propinas netas, gastos de débito y movimientos sin cuenta van a la predeterminada.</div>'+
-        '</div>';
+            '</div>'+
+            '<div style="font-size:10px;color:var(--text-dim);margin:0 0 10px">La suma de las cuentas cuadra con el saldo total de débito.</div>';
     }
     // Tarjeta de crédito: gastos a crédito (deuda) − pagos hechos a la TC (reducen deuda)
     var saldoTarjetaCred = -gastosTarjetaCred + _efTcPago;
@@ -3236,11 +3243,11 @@ function _abrirCajaFuerteContenido(){
                         (gastosDebito?'− '+fmtM(gastosDebito)+' gs.banco':'sin gastos débito')+
                         (totComision?' · <span style="color:#ff9a9a">− '+fmtM(totComision)+' comisión banco (ya descontada)</span>':'')+
                     '</div>'+
-                    debPorCuentaHTML+
                 '</div>'+
                 '<div class="cj-acum-val" style="color:var(--green)">'+fmtM(saldoDebito)+'</div>'+
             '</div>'+
         '</div>'+
+        debPorCuentaHTML+
         // Comisiones y Tarjetas de crédito LADO A LADO (ahorra alto → los depósitos se ven abajo)
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px;align-items:start;margin:0 0 10px">'+
         (totComision>0?
