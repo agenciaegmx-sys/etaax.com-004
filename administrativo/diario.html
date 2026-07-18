@@ -3212,6 +3212,7 @@ function _abrirCajaFuerteContenido(_yaFresco){
     var debPorCuentaHTML = '';
     if (_ctasDebCF.length > 1) {
         var _pcCF = _debitoPorCuenta(lista, deps, _ctasDebCF, gastosDebito);
+        window._ultimoPorCuenta = _pcCF; // para "⚖️ Conciliar" (saldo calculado por cuenta)
         // Fila propia de cards — un card por cuenta, mismo estilo que los saldos de arriba.
         debPorCuentaHTML =
             '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin:0 0 6px">🏛️ Saldo por cuenta de débito</div>'+
@@ -3229,11 +3230,14 @@ function _abrirCajaFuerteContenido(_yaFresco){
                         (det.length?'<div style="font-size:10px;color:var(--text-dim);margin-top:2px">'+det.join(' · ')+'</div>':'')+
                         (c.predeterminada?'<div style="font-size:10px;color:var(--text-dim);margin-top:2px">predeterminada · recibe transferencias, propinas netas, gastos de débito y movimientos sin cuenta</div>':'')+
                     '</div>'+
-                    '<div class="cj-acum-val" style="font-size:20px;color:'+(s.total<0?'#ff9a9a':'var(--green)')+'">'+fmtM(s.total)+'</div>'+
+                    '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">'+
+                        '<div class="cj-acum-val" style="font-size:20px;color:'+(s.total<0?'#ff9a9a':'var(--green)')+'">'+fmtM(s.total)+'</div>'+
+                        '<button onclick="conciliarCuenta(\''+c.id+'\')" title="Ajustar al saldo REAL del banco (cashback, promos de comisión, cobros del banco…)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:3px 9px;font-size:10px;cursor:pointer;font-family:inherit">⚖️ Conciliar</button>'+
+                    '</div>'+
                 '</div>';
             }).join('')+
             '</div>'+
-            '<div style="font-size:10px;color:var(--text-dim);margin:0 0 10px">La suma de las cuentas cuadra con el saldo total de débito.</div>';
+            '<div style="font-size:10px;color:var(--text-dim);margin:0 0 10px">La suma de las cuentas cuadra con el saldo total de débito. ⚖️ Conciliar registra la diferencia contra tu banca real como un movimiento de ajuste (queda en el historial).</div>';
     }
     // Tarjeta de crédito: gastos a crédito (deuda) − pagos hechos a la TC (reducen deuda)
     var saldoTarjetaCred = -gastosTarjetaCred + _efTcPago;
@@ -3773,6 +3777,40 @@ function guardarDeposito(){
     renderDepositos();
     var cajEl=document.getElementById('cajOverlay');
     if(cajEl&&cajEl.classList.contains('open'))_abrirCajaFuerteContenido();
+}
+
+/* ── ⚖️ Conciliación bancaria por cuenta ─────────────────────────────────────
+   El saldo CALCULADO nunca cuadra al centavo con la banca real (cashback, promos
+   de comisión, cobros del banco, redondeos de terminal). Aquí capturas el saldo
+   REAL y la diferencia se registra como MOVIMIENTO de ajuste (visible, editable,
+   con historial) — sin tocar cortes ni gastos. delta>0 = entrada externa a la
+   cuenta; delta<0 = salida (retiro) desde la cuenta. */
+function conciliarCuenta(cuentaId){
+    var pc=(window._ultimoPorCuenta||{})[cuentaId];
+    var calc=pc?pc.total:0;
+    var raw=prompt('⚖️ Conciliación — '+_cuentaBancoLabel(cuentaId)+'\n\nSaldo calculado por ETAAX: '+fmtM(calc)+'\n\nEscribe el saldo REAL que ves en tu banca:');
+    if(raw===null) return;
+    var real=parseFloat(String(raw).replace(/[^0-9.\-]/g,''));
+    if(isNaN(real)){ alert('Escribe un número válido.'); return; }
+    var delta=Math.round((real-calc)*100)/100;
+    if(Math.abs(delta)<0.01){ alert('✅ El saldo ya cuadra con tu banca ('+fmtM(real)+'). No hay nada que ajustar.'); return; }
+    if(!confirm('Saldo ETAAX: '+fmtM(calc)+'\nSaldo real banca: '+fmtM(real)+'\nAjuste a registrar: '+(delta>0?'+':'')+fmtM(delta)+'\n\n¿Registrar el movimiento de conciliación?')) return;
+    var hoy=new Date().toISOString().slice(0,10);
+    var dep={
+        id:genId(), negocioId:getNegocioActivo(), fecha:hoy, monto:Math.abs(delta),
+        origen: delta>0?'externo':'banco', origenCuentaId: delta>0?'':cuentaId,
+        destino: delta>0?'banco':'retiro', destinoCuentaId: delta>0?cuentaId:'', tcId:'',
+        categoria:'ajuste',
+        concepto:'⚖️ Conciliación bancaria — '+_cuentaBancoLabel(cuentaId),
+        finalidad:'Ajuste al saldo real de la banca (cashback / comisiones promocionales / cobros del banco)',
+        autorizadoPor:'', depositadoPor:'',
+        notas:'Saldo ETAAX '+fmtM(calc)+' → saldo real '+fmtM(real)+' (ajuste '+(delta>0?'+':'')+fmtM(delta)+')'
+    };
+    _cacheDeps=(_cacheDeps||[]).filter(function(x){return x.id!==dep.id;});
+    _cacheDeps.push(dep);
+    _sbUp('depositos',dep);
+    renderDepositos();
+    _abrirCajaFuerteContenido(true); // repintar con el ajuste ya aplicado
 }
 
 function eliminarDeposito(id){
