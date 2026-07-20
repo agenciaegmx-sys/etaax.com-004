@@ -515,14 +515,21 @@
     </div>
 </div>
 
-<!-- ══ MODAL DETALLE DE GASTOS POR CATEGORÍA (con evidencias) ══ -->
+<!-- ══ MODAL LISTA DE GASTOS POR CATEGORÍA (variables) ══ -->
 <div class="modal-overlay" id="modalCatGastos" onclick="if(event.target===this)cerrarGastosCat()">
-    <div class="modal-gg" style="max-width:680px;max-height:88vh;display:flex;flex-direction:column">
+    <div class="modal-gg" style="max-width:600px;max-height:88vh;display:flex;flex-direction:column">
         <div class="modal-header">
             <h2 id="catGastosTitle">📋 Gastos</h2>
             <button class="modal-close" onclick="cerrarGastosCat()">✕</button>
         </div>
-        <div class="modal-body" id="catGastosBody" style="overflow:auto"></div>
+        <div class="modal-body" id="catGastosBody" style="overflow:auto;gap:8px"></div>
+    </div>
+</div>
+<!-- ══ MODAL DETALLE DE UN GASTO (vista tipo diario) ══ -->
+<div class="modal-overlay" id="modalGastoDetalle" style="z-index:9300" onclick="if(event.target===this)cerrarGastoDetalle()">
+    <div class="modal-gg" style="max-width:460px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">
+        <div id="gastoDetalleBody" style="overflow:auto;flex:1"></div>
+        <div class="modal-footer"><button class="btn-ghost" onclick="cerrarGastoDetalle()">Cerrar</button></div>
     </div>
 </div>
 <!-- Lightbox de evidencia -->
@@ -938,10 +945,14 @@ function renderFijos(){
             +'<td class="ar" style="color:var(--text-dim)">'+fmtM(f.monto)+'</td>'
             +'<td class="ar">'+realCell+'</td>'
             +'<td style="text-align:right;white-space:nowrap">'
+            +'<button class="btn-row" data-ver-fijo="'+f.id+'" title="Ver detalle">👁️</button> '
             +'<button class="btn-row" data-edit-fijo="'+f.id+'">✏️</button> '
             +'<button class="btn-row del" data-del-fijo="'+f.id+'">🗑️</button>'
             +'</td></tr>';
     }).join('');
+    tbody.querySelectorAll('[data-ver-fijo]').forEach(function(btn){
+        btn.addEventListener('click',function(){_ggVerFijo(btn.dataset.verFijo);});
+    });
     tbody.querySelectorAll('[data-edit-fijo]').forEach(function(btn){
         btn.addEventListener('click',function(){abrirFijo(btn.dataset.editFijo);});
     });
@@ -1056,6 +1067,7 @@ function renderNominas(){
     renderNomGastos(mes); // nómina realmente pagada (gastos diarios)
     renderImss(mes); // desglose de pagos de IMSS (cargas sociales) del mes
     var lista=_nominaItems(_nomCat,mes);
+    _ggNomList=lista; // para el 👁️ de nómina (referencia por índice)
     var tbody=document.getElementById('nominasTbody');
     var empty=document.getElementById('nominasEmpty');
     var foot=document.getElementById('nominasFoot');
@@ -1063,13 +1075,13 @@ function renderNominas(){
     if(!lista.length){tbody.innerHTML='';empty.style.display='block';foot.style.display='none';return;}
     empty.style.display='none'; foot.style.display='';
     var totBase=0,totBonos=0,totImss=0,totPrima=0;
-    tbody.innerHTML=lista.map(function(p){
+    tbody.innerHTML=lista.map(function(p,_i){
         var tot=n(p.base)+n(p.bonos)+n(p.imss)+n(p.prima);
         totBase+=n(p.base); totBonos+=n(p.bonos); totImss+=n(p.imss); totPrima+=n(p.prima);
         var autoBadge=p.staffId?' <span style="font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--green);background:rgba(61,190,122,.1);border:1px solid rgba(61,190,122,.25);border-radius:10px;padding:1px 7px;vertical-align:middle">Catálogo</span>':'';
-        var acc=p._auto
+        var acc='<button class="btn-row" data-ver-nom="'+_i+'" title="Ver detalle">👁️</button> '+(p._auto
             ? '<button class="btn-row" data-edit-staff="'+_esc(p.staffId)+'" title="Capturar bonos / IMSS / prima del mes">✏️</button>'
-            : '<button class="btn-row" data-edit-nom="'+p.id+'">✏️</button> <button class="btn-row del" data-del-nom="'+p.id+'">🗑️</button>';
+            : '<button class="btn-row" data-edit-nom="'+p.id+'">✏️</button> <button class="btn-row del" data-del-nom="'+p.id+'">🗑️</button>');
         return'<tr>'
             +'<td style="font-weight:500">'+_esc(p.nombre)+autoBadge+'</td>'
             +'<td class="ar">'+fmtM(p.base)+'</td>'
@@ -1084,6 +1096,9 @@ function renderNominas(){
     document.getElementById('nomImssTotal').textContent=fmtM(totImss);
     document.getElementById('nomPrimaTotal').textContent=fmtM(totPrima);
     document.getElementById('nominasTotal').textContent=fmtM(totBase+totBonos+totImss+totPrima);
+    tbody.querySelectorAll('[data-ver-nom]').forEach(function(btn){
+        btn.addEventListener('click',function(){_ggVerNomina(parseInt(btn.dataset.verNom,10));});
+    });
     tbody.querySelectorAll('[data-edit-nom]').forEach(function(btn){
         btn.addEventListener('click',function(){abrirNomina(btn.dataset.editNom);});
     });
@@ -1177,16 +1192,81 @@ function renderVariables(){
     }).join('');
 }
 
-/* ── Detalle de gastos de una categoría (modal flotante con evidencias) ── */
+/* ── Lista de gastos de una categoría (variables) → 👁️ abre el detalle ── */
 var _varItemsByCat={};
+var _ggCurrentList=[];   // lista visible en el modal de categoría (para el 👁️ por índice)
 function abrirGastosCat(cat){
     var items=(_varItemsByCat[cat]||[]).slice().sort(function(a,b){return String(b.fecha||'').localeCompare(String(a.fecha||''));});
+    _ggCurrentList=items;
     var tot=items.reduce(function(s,g){return s+n(g.monto);},0);
     document.getElementById('catGastosTitle').innerHTML='📋 '+_esc(cat)+' <span style="font-size:13px;color:var(--text-dim);font-family:\'DM Sans\',sans-serif;letter-spacing:0">· '+items.length+' registro'+(items.length!==1?'s':'')+' · '+fmtM(tot)+'</span>';
     var body=document.getElementById('catGastosBody');
-    if(!items.length){ body.innerHTML='<div style="text-align:center;color:var(--text-dim);padding:30px 0">Sin registros.</div>'; return; }
-    body.innerHTML=items.map(_ggTarjetaGasto).join('');
+    if(!items.length){ body.innerHTML='<div style="text-align:center;color:var(--text-dim);padding:30px 0">Sin registros.</div>'; document.getElementById('modalCatGastos').classList.add('open'); return; }
+    body.innerHTML=items.map(function(g,i){
+        var conFoto=(g.evidencias||[]).length;
+        var fch=g.fecha?new Date(g.fecha+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short'}):'—';
+        return '<div class="gg-list-row" onclick="_ggVerGasto('+i+')" style="display:flex;align-items:center;gap:12px;padding:11px 13px;border:1px solid var(--border);border-radius:10px;cursor:pointer">'+
+            '<div style="flex:1;min-width:0">'+
+                '<div style="font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_esc(g.concepto||'—')+'</div>'+
+                '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">'+fch+(g.proveedor?' · '+_esc(g.proveedor):'')+(conFoto?' · 📷':'')+'</div>'+
+            '</div>'+
+            '<div style="font-weight:700;color:var(--red);white-space:nowrap">'+fmtM(n(g.monto))+'</div>'+
+            '<span style="font-size:16px;opacity:.7" title="Ver detalle">👁️</span>'+
+        '</div>';
+    }).join('');
     document.getElementById('modalCatGastos').classList.add('open');
+}
+function _ggVerGasto(i){ var g=_ggCurrentList[i]; if(g) _ggVerGastoObj(g); }
+// Abre el modal de detalle (vista tipo diario) para UN gasto (o cualquier objeto gasto-like).
+function _ggVerGastoObj(g){
+    document.getElementById('gastoDetalleBody').innerHTML=_ggTarjetaGasto(g);
+    document.getElementById('modalGastoDetalle').classList.add('open');
+}
+function cerrarGastoDetalle(){ document.getElementById('modalGastoDetalle').classList.remove('open'); }
+
+// 👁️ Ver un GASTO FIJO: muestra el plan + el pago real (con evidencias del pago).
+function _ggVerFijo(id){
+    var mes=_mesPicker||mesStr();
+    var x=_pagosFijosMes(mes).find(function(m){return m.fijo&&m.fijo.id===id;});
+    if(!x){ var f0=(loadFijos()||[]).find(function(f){return f.id===id;}); if(!f0)return; x={fijo:f0,pagado:0,estaPagado:false,pagos:[]}; }
+    var f=x.fijo;
+    var evid=[]; (x.pagos||[]).forEach(function(p){ (p.evidencias||[]).forEach(function(e){evid.push(e);}); });
+    var pago0=(x.pagos||[])[0]||{};
+    _ggVerGastoObj({
+        _tipoLbl:'🏢 Gasto fijo', concepto:f.concepto||'—', monto:x.estaPagado?x.pagado:n(f.monto),
+        fecha:pago0.fecha||('Plan '+mes), categoria:f.categoria||'—', proveedor:f.proveedor||'—',
+        metodoPago:x.metodo||pago0.metodoPago||'', metodoBanco:x.metodoBanco||pago0.metodoBanco||'',
+        facturado:!!pago0.facturado, estatus:x.estaPagado?'pagado':'pendiente',
+        notas:(x.estaPagado?'':'Aún no pagado este mes (monto = plan).')+(pago0.notas?(' '+pago0.notas):''),
+        evidencias:evid
+    });
+}
+// 👁️ Ver una NÓMINA: desglose base / bonos / IMSS / prima.
+var _ggNomList=[];
+function _ggVerNomina(i){
+    var p=_ggNomList[i]; if(!p) return;
+    var tot=n(p.base)+n(p.bonos)+n(p.imss)+n(p.prima);
+    function fila(lbl,val,col){
+        return'<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border,#2a2825)">'+
+            '<span style="font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-dim,#7a7570)">'+lbl+'</span>'+
+            '<span style="font-size:14px;font-weight:600;color:'+(col||'var(--text,#f0ece6)')+'">'+val+'</span></div>';
+    }
+    document.getElementById('gastoDetalleBody').innerHTML=
+        '<div style="padding:16px 20px;border-bottom:1px solid var(--border,#2a2825)">'+
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">'+
+                '<div style="min-width:0"><div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-dim,#7a7570)">👥 Nómina'+(p.staffId?' · catálogo':'')+'</div>'+
+                    '<div style="font-size:18px;font-weight:700;color:var(--text,#f0ece6);margin-top:3px">'+_esc(p.nombre||'—')+'</div></div>'+
+                '<div style="font-size:20px;font-weight:700;color:var(--red);white-space:nowrap">'+fmtM(tot)+'</div>'+
+            '</div>'+
+        '</div>'+
+        '<div style="padding:10px 20px 16px">'+
+            fila('Sueldo base',fmtM(p.base))+
+            fila('Bonos / extras',fmtM(p.bonos),'var(--accent)')+
+            fila('IMSS / cargas',fmtM(p.imss),'var(--text-muted)')+
+            fila('Prima dominical',fmtM(p.prima),'var(--text-muted)')+
+            fila('Total del mes',fmtM(tot),'var(--red)')+
+        '</div>';
+    document.getElementById('modalGastoDetalle').classList.add('open');
 }
 // Réplica de la tarjeta de detalle de gasto de diario.html (misma vista pedida por Edwin).
 function _ggTarjetaGasto(g){
@@ -1210,29 +1290,27 @@ function _ggTarjetaGasto(g){
             ?'<a href="'+u+'" target="_blank" style="display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:6px;border:1px solid var(--border,#2a2825);background:var(--surface2);font-size:24px;text-decoration:none" title="Comprobante PDF">📄</a>'
             :'<img src="'+u+'" loading="lazy" onclick="_ggLightbox(this.src)" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border,#2a2825);cursor:zoom-in" alt="evidencia">';
     }).join('');
-    return '<div style="border:1px solid '+(esMayor?'rgba(224,90,58,.35)':'var(--border,#2a2825)')+';border-radius:14px;overflow:hidden;background:var(--surface2)">'+
-        '<div style="padding:14px 16px;border-bottom:1px solid var(--border,#2a2825)">'+
+    return '<div style="padding:16px 20px;border-bottom:1px solid var(--border,#2a2825)'+(esMayor?';border-top:3px solid rgba(224,90,58,.5)':'')+'">'+
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">'+
                 '<div style="min-width:0">'+
-                    '<div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-dim,#7a7570)">'+(esMayor?'🔴 Gasto mayor':'🟢 Gasto menor')+'</div>'+
-                    '<div style="font-size:17px;font-weight:700;color:var(--text,#f0ece6);margin-top:3px">'+_esc(g.concepto||'—')+'</div>'+
+                    '<div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-dim,#7a7570)">'+(g._tipoLbl||(esMayor?'🔴 Gasto mayor':'🟢 Gasto menor'))+'</div>'+
+                    '<div style="font-size:18px;font-weight:700;color:var(--text,#f0ece6);margin-top:3px">'+_esc(g.concepto||'—')+'</div>'+
                 '</div>'+
                 '<div style="text-align:right;white-space:nowrap">'+
-                    '<div style="font-size:19px;font-weight:700;color:var(--red)">'+fmtM(n(g.monto))+'</div>'+
+                    '<div style="font-size:20px;font-weight:700;color:var(--red)">'+fmtM(n(g.monto))+'</div>'+
                     '<div style="font-size:11px;color:var(--text-dim,#7a7570);margin-top:2px">'+_esc(g.fecha||'—')+'</div>'+
                 '</div>'+
             '</div>'+
         '</div>'+
-        '<div style="padding:8px 16px 14px">'+
+        '<div style="padding:10px 20px 16px">'+
             fila('Categoría',_esc(g.categoria||'—'))+
             fila('Proveedor',_esc(g.proveedor||'—'))+
             fila('Método de pago',metTxt)+
             fila('Facturado',g.facturado?'<span style="color:var(--green,#3dbe7a)">✔ Con factura</span>':'<span style="color:var(--text-dim,#7a7570)">✗ Sin factura</span>')+
             fila('Estatus',estatusVal)+
             (g.notas?fila('Notas',_esc(g.notas)):'')+
-            (evHTML?'<div style="padding:10px 0 2px"><div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-dim,#7a7570);margin-bottom:6px">Evidencia</div><div style="display:flex;flex-wrap:wrap;gap:8px">'+evHTML+'</div></div>':'')+
-        '</div>'+
-    '</div>';
+            (evHTML?'<div style="padding:12px 0 2px"><div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-dim,#7a7570);margin-bottom:6px">Evidencia</div><div style="display:flex;flex-wrap:wrap;gap:8px">'+evHTML+'</div></div>':'')+
+        '</div>';
 }
 function cerrarGastosCat(){ document.getElementById('modalCatGastos').classList.remove('open'); }
 function _ggLightbox(src){ var lb=document.getElementById('ggLightbox'); document.getElementById('ggLightboxImg').src=src; lb.style.display='flex'; }
