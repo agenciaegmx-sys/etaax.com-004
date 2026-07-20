@@ -76,6 +76,8 @@
         .btn-row.del:hover{border-color:var(--red);color:var(--red);}
 
         /* ── Modal ── */
+        .cat-row{transition:background .12s;}
+        .cat-row:hover{background:rgba(255,255,255,.04);}
         .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9000;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;}
         .modal-overlay.open{display:flex;}
         .modal-gg{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:520px;box-shadow:0 24px 60px rgba(0,0,0,.5);}
@@ -353,7 +355,7 @@
                         <h2>Gastos Variables del Mes</h2>
                     </div>
                     <div style="padding:12px 20px;font-size:11px;color:var(--text-dim);background:rgba(30,80,220,.04);border-bottom:1px solid var(--border)">
-                        📊 Datos del módulo <strong>Captura de Gastos</strong> consolidados aquí. <strong>Excluye nómina, IMSS, gastos fijos, propinas y contabilidad/impuestos</strong> (cada uno cuenta aparte, para no duplicar).
+                        📊 Datos del módulo <strong>Captura de Gastos</strong> consolidados aquí. <strong>Excluye nómina, IMSS, gastos fijos y propinas</strong> (cada uno cuenta aparte, para no duplicar). Impuestos y contabilidad SÍ cuentan como variable.
                     </div>
                     <div class="card-body" style="padding:0;overflow-x:auto">
                         <table class="gg-table">
@@ -513,6 +515,21 @@
     </div>
 </div>
 
+<!-- ══ MODAL DETALLE DE GASTOS POR CATEGORÍA (con evidencias) ══ -->
+<div class="modal-overlay" id="modalCatGastos" onclick="if(event.target===this)cerrarGastosCat()">
+    <div class="modal-gg" style="max-width:680px;max-height:88vh;display:flex;flex-direction:column">
+        <div class="modal-header">
+            <h2 id="catGastosTitle">📋 Gastos</h2>
+            <button class="modal-close" onclick="cerrarGastosCat()">✕</button>
+        </div>
+        <div class="modal-body" id="catGastosBody" style="overflow:auto"></div>
+    </div>
+</div>
+<!-- Lightbox de evidencia -->
+<div id="ggLightbox" onclick="this.style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:9600;align-items:center;justify-content:center;padding:24px;cursor:zoom-out">
+    <img id="ggLightboxImg" src="" alt="" style="max-width:100%;max-height:100%;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.6)">
+</div>
+
 <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
 
 <script>
@@ -642,8 +659,10 @@ function loadImssMes(mes){ return loadGastosMes(mes).filter(_esIMSS); }
 function totalImssMes(mes){ return loadImssMes(mes).reduce(function(s,g){return s+n(g.monto);},0); }
 // Un gasto es categoría de NÓMINA (pago de sueldo/personal capturado como gasto → ya cuenta en Nóminas).
 function _esNominaCat(g){ return /n[oó]mina|personal/i.test(g.categoria||''); }
-// Categorías que NO son gasto variable real (propinas pasan al personal; contabilidad/impuestos van aparte).
-function _catExcluidaVar(g){ return /propina|gratificaci|contabilidad|impuesto/i.test(g.categoria||''); }
+// Categorías que NO son gasto variable real: SOLO propinas/gratificaciones (pass-through
+// al personal, no las paga el negocio). Contabilidad e impuestos SÍ son gasto operativo
+// real y cuentan como variables (antes se excluían y desaparecían del P&L → dinero perdido).
+function _catExcluidaVar(g){ return /propina|gratificaci/i.test(g.categoria||''); }
 // Categoría de naturaleza FIJA (renta/servicios/agua/luz/internet…) → cuenta en Gastos Fijos, no en variables.
 function _esFijoPat(g){ return /renta|arrendamiento|servicio|\bagua\b|\bluz\b|electric|energ[ií]a|internet|telecom|tel[eé]fon|\bgas\b|predial|software|suscripci/i.test(g.categoria||''); }
 // Categorías definidas como GASTO FIJO (en gf_fijos) → no deben recontarse en variables.
@@ -1127,10 +1146,12 @@ function renderVariables(){
     if(!gastos.length && comBanco<=0){tbody.innerHTML='';empty.style.display='block';foot.style.display='none';return;}
     empty.style.display='none'; foot.style.display='';
     var byCat={};
+    _varItemsByCat={}; // para el modal de detalle por categoría
     gastos.forEach(function(g){
         var cat=g.categoria||'Sin categoría';
-        if(!byCat[cat])byCat[cat]={count:0,total:0};
+        if(!byCat[cat]){byCat[cat]={count:0,total:0};_varItemsByCat[cat]=[];}
         byCat[cat].count++; byCat[cat].total+=n(g.monto);
+        _varItemsByCat[cat].push(g);
     });
     // Concepto AUTOMÁTICO: comisiones bancarias del periodo (desde los cortes).
     var CAT_COM='💳 Comisiones bancarias';
@@ -1141,8 +1162,9 @@ function renderVariables(){
     tbody.innerHTML=Object.keys(byCat).sort(function(a,b){return byCat[b].total-byCat[a].total;}).map(function(cat){
         var pct=total>0?(byCat[cat].total/total*100).toFixed(1):0;
         var esAuto=!!byCat[cat].auto;
-        return'<tr>'
-            +'<td><span class="cat-badge"'+(esAuto?' style="border-color:rgba(245,200,66,.4);color:var(--accent)" title="Calculado automático desde los cortes del mes (venta con tarjeta × comisión de la cuenta). Ya NO lo captures a mano."':'')+'>'+_esc(cat)+(esAuto?' <span style="font-size:9px;opacity:.8">auto</span>':'')+'</span></td>'
+        var conFoto=!esAuto && (_varItemsByCat[cat]||[]).some(function(g){return (g.evidencias||[]).length;});
+        return'<tr'+(esAuto?'':' class="cat-row" data-cat="'+_esc(cat)+'" onclick="abrirGastosCat(this.getAttribute(\'data-cat\'))" style="cursor:pointer"')+'>'
+            +'<td><span class="cat-badge"'+(esAuto?' style="border-color:rgba(245,200,66,.4);color:var(--accent)" title="Calculado automático desde los cortes del mes (venta con tarjeta × comisión de la cuenta). Ya NO lo captures a mano."':'')+'>'+_esc(cat)+(esAuto?' <span style="font-size:9px;opacity:.8">auto</span>':'')+'</span>'+(conFoto?' <span style="font-size:11px" title="Tiene evidencias">📷</span>':'')+(esAuto?'':' <span style="font-size:10px;color:var(--text-dim)">›</span>')+'</td>'
             +'<td class="ar" style="color:var(--text-muted)">'+byCat[cat].count+'</td>'
             +'<td class="ar" style="font-weight:600;color:var(--red)">'+fmtM(byCat[cat].total)+'</td>'
             +'<td class="ar">'
@@ -1154,6 +1176,36 @@ function renderVariables(){
             +'</tr>';
     }).join('');
 }
+
+/* ── Detalle de gastos de una categoría (modal flotante con evidencias) ── */
+var _varItemsByCat={};
+function abrirGastosCat(cat){
+    var items=(_varItemsByCat[cat]||[]).slice().sort(function(a,b){return String(b.fecha||'').localeCompare(String(a.fecha||''));});
+    var tot=items.reduce(function(s,g){return s+n(g.monto);},0);
+    document.getElementById('catGastosTitle').innerHTML='📋 '+_esc(cat)+' <span style="font-size:13px;color:var(--text-dim);font-family:\'DM Sans\',sans-serif;letter-spacing:0">· '+items.length+' registro'+(items.length!==1?'s':'')+' · '+fmtM(tot)+'</span>';
+    var body=document.getElementById('catGastosBody');
+    if(!items.length){ body.innerHTML='<div style="text-align:center;color:var(--text-dim);padding:30px 0">Sin registros.</div>'; }
+    else body.innerHTML=items.map(function(g){
+        var evs=(g.evidencias||[]);
+        var metodo=g.metodoPago==='caja_fuerte'?'🏦 Caja fuerte':g.metodoPago==='caja_chica'?'💼 Caja chica':g.metodoPago==='banco'?('🏛️ '+(g.metodoBanco==='debito'?'T. débito':g.metodoBanco==='credito'?'T. crédito':'Transfer.')):(g.metodoPago||'');
+        var fch=g.fecha?new Date(g.fecha+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}):'—';
+        var fotos=evs.map(function(e){var u=_esc(e&&(e.url||e)||'');return u?'<img src="'+u+'" onclick="_ggLightbox(this.src)" style="width:60px;height:60px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in">':'';}).join('');
+        return '<div style="border:1px solid var(--border);border-radius:12px;padding:13px 15px;display:flex;flex-direction:column;gap:8px">'+
+            '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">'+
+                '<div style="min-width:0">'+
+                    '<div style="font-weight:600;color:var(--text)">'+_esc(g.concepto||'—')+'</div>'+
+                    '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">'+fch+(g.proveedor?' · '+_esc(g.proveedor):'')+(metodo?' · '+metodo:'')+(g.tipo==='mayor'?' · <span style="color:var(--accent)">mayor</span>':'')+'</div>'+
+                    (g.notas?'<div style="font-size:11px;color:var(--text-muted);margin-top:3px">📝 '+_esc(g.notas)+'</div>':'')+
+                '</div>'+
+                '<div style="font-weight:700;color:var(--red);white-space:nowrap">'+fmtM(n(g.monto))+'</div>'+
+            '</div>'+
+            (fotos?'<div style="display:flex;gap:6px;flex-wrap:wrap">'+fotos+'</div>':'<div style="font-size:10px;color:var(--text-dim)">Sin evidencia fotográfica</div>')+
+        '</div>';
+    }).join('');
+    document.getElementById('modalCatGastos').classList.add('open');
+}
+function cerrarGastosCat(){ document.getElementById('modalCatGastos').classList.remove('open'); }
+function _ggLightbox(src){ var lb=document.getElementById('ggLightbox'); document.getElementById('ggLightboxImg').src=src; lb.style.display='flex'; }
 
 /* ── RESUMEN P&L ── */
 function renderResumen(){

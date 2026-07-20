@@ -591,6 +591,8 @@ console.log('\n══ SUITE D · Reclasificación de gastos (financiero/gastos-g
         { id: '4', fecha: '2026-07-10', categoria: 'Alimentos e ingredientes', concepto: 'fresa', monto: 1045 },
         { id: '5', fecha: '2026-07-09', categoria: 'Impuestos',         concepto: 'isr', monto: 5000 },
         { id: '6', fecha: '2026-07-09', categoria: 'IMSS',              concepto: 'cuota', monto: 800 },
+        { id: '7', fecha: '2026-07-08', categoria: 'Propinas',          concepto: 'propina staff', monto: 500 },
+        { id: '8', fecha: '2026-07-08', categoria: 'Contabilidad',      concepto: 'honorarios contador', monto: 2500 },
     ];
     const mes = '2026-07';
     const raw = D._cacheGG_Gastos.reduce((s, g) => s + D.n(g.monto), 0);
@@ -600,13 +602,20 @@ console.log('\n══ SUITE D · Reclasificación de gastos (financiero/gastos-g
     const nc = D.totalFijosNoCatalogMes(mes);
     const excl = D.loadGastosMes(mes).filter(D._catExcluidaVar).reduce((s, g) => s + D.n(g.monto), 0);
     test('nómina = gastos categoría nómina (sin IMSS)', () => eq(nom, 76210));
-    test('variables = solo lo variable real (compras + alimentos)', () => eq(varb, 106647));
+    // variables = compras 105602 + alimentos 1045 + impuestos 5000 + contabilidad 2500
+    test('variables = variable real + impuestos + contabilidad', () => eq(varb, 114147));
+    test('impuestos AHORA cuenta como variable (antes desaparecía del P&L)', () =>
+        eq(D.loadVariablesMes(mes).filter(g => g.id === '5').length, 1));
+    test('contabilidad AHORA cuenta como variable', () =>
+        eq(D.loadVariablesMes(mes).filter(g => g.id === '8').length, 1));
+    test('propinas SÍ se excluyen (pass-through al staff)', () =>
+        eq(D.loadVariablesMes(mes).filter(g => g.id === '7').length, 0));
     test('fijos NO catalogados capturan lo de naturaleza fija (internet)', () => eq(nc, 1100));
     test('internet SALE de variables (no se cuenta doble)', () =>
         eq(D.loadVariablesMes(mes).filter(g => g.id === '3').length, 0));
     test('nómina NO entra a fijos no catalogados', () =>
         eq(D.loadFijosNoCatalogMes(mes).filter(g => /n[oó]mina/i.test(g.categoria)).length, 0));
-    // La invariante clave: NADA se pierde. raw = nómina + IMSS + variables + fijosNoCat + excluidos.
+    // La invariante clave: NADA se pierde. raw = nómina + IMSS + variables + fijosNoCat + excluidos (propinas).
     test('INVARIANTE: ningún gasto se pierde del Total de Egresos', () => eq(nom + imss + varb + nc + excl, raw));
 })();
 
