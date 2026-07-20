@@ -654,6 +654,32 @@ function _escN(s){ return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/
 function _keyN(x){ return (((x&&x.nombre)||'')+'|'+((x&&x.marca)||'')).toLowerCase().trim(); }
 function _costoN(ins){ var p=((ins&&ins.presentaciones)||[])[0]||{}; return Math.round((parseFloat(p.costoUnitario)||parseFloat(p.precio)||0)*100)/100; }
 function _fmtMN(v){ return '$'+(parseFloat(v)||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+// Desglose legible de las presentaciones de un insumo (para comparar versiones).
+function _presDesglose(ins){
+    var ps=(ins&&ins.presentaciones)||[];
+    if(!ps.length) return '';
+    var li=ps.map(function(p){
+        var cont=(parseFloat(p.contNeto)||0), um=(p.umContenido||'').toString().toLowerCase();
+        var emp=(p.empaque||p.presentacionCompra||'').toString();
+        var cu=parseFloat(p.costoUnitario)||parseFloat(p.precio)||0;
+        var umc=(p.umCosto||'').toString().toLowerCase();
+        var carta=parseFloat(p.precioCarta)||0;
+        var partes=[];
+        if(emp) partes.push(_escN(emp));
+        if(cont) partes.push(cont+(um?' '+um:''));
+        if(cu) partes.push(_fmtMN(cu)+(umc?'/'+umc:''));
+        if(carta) partes.push('carta '+_fmtMN(carta));
+        return '<li style="margin:2px 0">'+(partes.join(' · ')||'—')+'</li>';
+    }).join('');
+    return '<ul style="margin:5px 0 0;padding-left:16px;font-size:11px;color:var(--text-dim);list-style:disc">'+li+'</ul>';
+}
+function _novToggle(insumoId){
+    var det=document.getElementById('novDet-'+insumoId), btn=document.getElementById('novBtn-'+insumoId);
+    if(!det) return;
+    var abrir=det.style.display==='none';
+    det.style.display=abrir?'block':'none';
+    if(btn) btn.textContent=abrir?'▾ Ocultar desglose':'▸ Ver desglose';
+}
 
 function cerrarNovedades(){ document.getElementById('modalNovedades').style.display='none'; }
 
@@ -712,18 +738,46 @@ function _renderNovedades(){
         return;
     }
     var html='';
-    // Actualizaciones
-    html += '<div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin:4px 0 10px">📈 Actualizaciones de costo / presentación ('+_novActu.length+')</div>';
-    if (!_novActu.length) html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:18px">Sin cambios de costo pendientes.</div>';
+    // Actualizaciones — AGRUPADAS por insumo del catálogo, con desglose por negocio.
+    // Un mismo insumo puede diferir en VARIOS negocios (distinto costo/presentación) →
+    // se listan todas las versiones para ELEGIR cuál se aplica al catálogo ETAAX.
+    var grupos={}, orden=[];
     _novActu.forEach(function(it, idx){
-        var diff = it.costoNeg - it.costoCat;
-        var col = diff>0?'var(--red)':(diff<0?'var(--green)':'var(--text-dim)');
-        html += '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">'+
-            '<div style="flex:1;min-width:0">'+
-              '<div style="font-weight:600;font-size:13.5px">'+_escN(it.nombre)+(it.marca?' <span style="color:var(--text-muted);font-weight:400">'+_escN(it.marca)+'</span>':'')+'</div>'+
-              '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">'+_escN(it.negNombre)+' · catálogo '+_fmtMN(it.costoCat)+' → <b style="color:'+col+'">'+_fmtMN(it.costoNeg)+'</b>'+(it.presCambio?' · presentaciones cambiaron':'')+'</div>'+
+        var g=grupos[it.insumoId];
+        if(!g){ g=grupos[it.insumoId]={insumoId:it.insumoId,nombre:it.nombre,marca:it.marca,costoCat:it.costoCat,versiones:[]}; orden.push(it.insumoId); }
+        g.versiones.push({ idx:idx, negNombre:it.negNombre, costoNeg:it.costoNeg, presCambio:it.presCambio, datosNeg:it.datosNeg });
+    });
+    var nGrupos=orden.length;
+    html += '<div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin:4px 0 10px">📈 Actualizaciones de costo / presentación ('+nGrupos+' insumo'+(nGrupos!==1?'s':'')+')</div>';
+    if (!nGrupos) html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:18px">Sin cambios de costo pendientes.</div>';
+    orden.forEach(function(insumoId){
+        var g=grupos[insumoId];
+        var cat=(_catalogoMem||[]).find(function(c){ return c.id===insumoId; });
+        var multi=g.versiones.length>1;
+        var negs=g.versiones.map(function(v){ return _escN(v.negNombre); }).join(', ');
+        html += '<div style="padding:10px 0;border-bottom:1px solid var(--border)">'+
+            '<div style="display:flex;align-items:center;gap:12px">'+
+              '<div style="flex:1;min-width:0">'+
+                '<div style="font-weight:600;font-size:13.5px">'+_escN(g.nombre)+(g.marca?' <span style="color:var(--text-muted);font-weight:400">'+_escN(g.marca)+'</span>':'')+'</div>'+
+                '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">'+g.versiones.length+' versión'+(multi?'es':'')+' en negocios: '+negs+'</div>'+
+              '</div>'+
+              '<button class="btn-vista" style="white-space:nowrap" onclick="_novToggle(\''+_escN(insumoId)+'\')" id="novBtn-'+_escN(insumoId)+'">▸ Ver desglose</button>'+
             '</div>'+
-            '<button class="btn-vista" style="color:var(--green);border-color:var(--green);white-space:nowrap" onclick="_aplicarActualizacion('+idx+')">↑ Actualizar catálogo</button>'+
+            '<div id="novDet-'+_escN(insumoId)+'" style="display:none;margin-top:10px;padding:12px;background:var(--surface2,rgba(255,255,255,.03));border:1px solid var(--border);border-radius:10px">'+
+              '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px">📗 Catálogo ETAAX actual</div>'+
+              '<div style="font-size:12px;margin-bottom:12px">'+_fmtMN(g.costoCat)+_presDesglose(cat)+'</div>'+
+              g.versiones.map(function(v){
+                  var diff=v.costoNeg-g.costoCat;
+                  var col=diff>0?'var(--red)':(diff<0?'var(--green)':'var(--text-dim)');
+                  return '<div style="border-top:1px dashed var(--border);padding-top:10px;margin-top:8px;display:flex;gap:12px;align-items:flex-start">'+
+                      '<div style="flex:1;min-width:0">'+
+                        '<div style="font-size:11px;font-weight:600;color:var(--text)">🏢 '+_escN(v.negNombre)+'</div>'+
+                        '<div style="font-size:12px;margin-top:3px">costo <b style="color:'+col+'">'+_fmtMN(v.costoNeg)+'</b>'+(diff!==0?' <span style="color:'+col+';font-size:10px">('+(diff>0?'+':'')+_fmtMN(diff)+')</span>':'')+(v.presCambio?' · <span style="color:var(--accent)">presentaciones cambiaron</span>':'')+_presDesglose(v.datosNeg)+'</div>'+
+                      '</div>'+
+                      '<button class="btn-vista" style="color:var(--green);border-color:var(--green);white-space:nowrap" onclick="_aplicarActualizacion('+v.idx+')">↑ Aplicar esta versión</button>'+
+                  '</div>';
+              }).join('')+
+            '</div>'+
         '</div>';
     });
     // Nuevos
