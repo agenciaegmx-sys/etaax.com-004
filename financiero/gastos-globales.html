@@ -1184,25 +1184,55 @@ function abrirGastosCat(cat){
     var tot=items.reduce(function(s,g){return s+n(g.monto);},0);
     document.getElementById('catGastosTitle').innerHTML='📋 '+_esc(cat)+' <span style="font-size:13px;color:var(--text-dim);font-family:\'DM Sans\',sans-serif;letter-spacing:0">· '+items.length+' registro'+(items.length!==1?'s':'')+' · '+fmtM(tot)+'</span>';
     var body=document.getElementById('catGastosBody');
-    if(!items.length){ body.innerHTML='<div style="text-align:center;color:var(--text-dim);padding:30px 0">Sin registros.</div>'; }
-    else body.innerHTML=items.map(function(g){
-        var evs=(g.evidencias||[]);
-        var metodo=g.metodoPago==='caja_fuerte'?'🏦 Caja fuerte':g.metodoPago==='caja_chica'?'💼 Caja chica':g.metodoPago==='banco'?('🏛️ '+(g.metodoBanco==='debito'?'T. débito':g.metodoBanco==='credito'?'T. crédito':'Transfer.')):(g.metodoPago||'');
-        var fch=g.fecha?new Date(g.fecha+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}):'—';
-        var fotos=evs.map(function(e){var u=_esc(e&&(e.url||e)||'');return u?'<img src="'+u+'" onclick="_ggLightbox(this.src)" style="width:60px;height:60px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in">':'';}).join('');
-        return '<div style="border:1px solid var(--border);border-radius:12px;padding:13px 15px;display:flex;flex-direction:column;gap:8px">'+
-            '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">'+
-                '<div style="min-width:0">'+
-                    '<div style="font-weight:600;color:var(--text)">'+_esc(g.concepto||'—')+'</div>'+
-                    '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">'+fch+(g.proveedor?' · '+_esc(g.proveedor):'')+(metodo?' · '+metodo:'')+(g.tipo==='mayor'?' · <span style="color:var(--accent)">mayor</span>':'')+'</div>'+
-                    (g.notas?'<div style="font-size:11px;color:var(--text-muted);margin-top:3px">📝 '+_esc(g.notas)+'</div>':'')+
-                '</div>'+
-                '<div style="font-weight:700;color:var(--red);white-space:nowrap">'+fmtM(n(g.monto))+'</div>'+
-            '</div>'+
-            (fotos?'<div style="display:flex;gap:6px;flex-wrap:wrap">'+fotos+'</div>':'<div style="font-size:10px;color:var(--text-dim)">Sin evidencia fotográfica</div>')+
-        '</div>';
-    }).join('');
+    if(!items.length){ body.innerHTML='<div style="text-align:center;color:var(--text-dim);padding:30px 0">Sin registros.</div>'; return; }
+    body.innerHTML=items.map(_ggTarjetaGasto).join('');
     document.getElementById('modalCatGastos').classList.add('open');
+}
+// Réplica de la tarjeta de detalle de gasto de diario.html (misma vista pedida por Edwin).
+function _ggTarjetaGasto(g){
+    function fila(lbl,val){
+        return'<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border,#2a2825)">'+
+            '<span style="font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-dim,#7a7570)">'+lbl+'</span>'+
+            '<span style="font-size:13px;color:var(--text,#f0ece6);text-align:right">'+val+'</span>'+
+        '</div>';
+    }
+    var esMayor=g.tipo==='mayor';
+    var sub=g.metodoBanco==='debito'?'T. débito':g.metodoBanco==='credito'?'T. crédito':'Transfer.';
+    var metTxt=g.metodoPago==='caja_fuerte'?'🏦 Caja fuerte':g.metodoPago==='caja_chica'?'💼 Caja chica':'🏛️ '+sub;
+    var sCfg={pagado:{lbl:'✅ Pagado',c:'#3dbe7a'},pendiente:{lbl:'⏳ Pendiente',c:'#f5c842'},programado:{lbl:'📅 Programado',c:'var(--blue)'}};
+    var sc=sCfg[g.estatus||'pagado']||sCfg.pagado;
+    var estatusVal='<span style="color:'+sc.c+'">'+sc.lbl+'</span>'+(g.fechaPago&&g.estatus!=='pagado'?' · <span style="font-size:11px;color:var(--text-dim,#7a7570)">'+_esc(g.fechaPago)+'</span>':'');
+    var evs=(g.evidencias||[]);
+    var evHTML=evs.map(function(e){
+        var u=_esc((e&&(e.url||e))||''); if(!u) return '';
+        var esPdf=(e&&e.pdf)||/\.pdf($|\?)/i.test(u);
+        return esPdf
+            ?'<a href="'+u+'" target="_blank" style="display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:6px;border:1px solid var(--border,#2a2825);background:var(--surface2);font-size:24px;text-decoration:none" title="Comprobante PDF">📄</a>'
+            :'<img src="'+u+'" loading="lazy" onclick="_ggLightbox(this.src)" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border,#2a2825);cursor:zoom-in" alt="evidencia">';
+    }).join('');
+    return '<div style="border:1px solid '+(esMayor?'rgba(224,90,58,.35)':'var(--border,#2a2825)')+';border-radius:14px;overflow:hidden;background:var(--surface2)">'+
+        '<div style="padding:14px 16px;border-bottom:1px solid var(--border,#2a2825)">'+
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">'+
+                '<div style="min-width:0">'+
+                    '<div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-dim,#7a7570)">'+(esMayor?'🔴 Gasto mayor':'🟢 Gasto menor')+'</div>'+
+                    '<div style="font-size:17px;font-weight:700;color:var(--text,#f0ece6);margin-top:3px">'+_esc(g.concepto||'—')+'</div>'+
+                '</div>'+
+                '<div style="text-align:right;white-space:nowrap">'+
+                    '<div style="font-size:19px;font-weight:700;color:var(--red)">'+fmtM(n(g.monto))+'</div>'+
+                    '<div style="font-size:11px;color:var(--text-dim,#7a7570);margin-top:2px">'+_esc(g.fecha||'—')+'</div>'+
+                '</div>'+
+            '</div>'+
+        '</div>'+
+        '<div style="padding:8px 16px 14px">'+
+            fila('Categoría',_esc(g.categoria||'—'))+
+            fila('Proveedor',_esc(g.proveedor||'—'))+
+            fila('Método de pago',metTxt)+
+            fila('Facturado',g.facturado?'<span style="color:var(--green,#3dbe7a)">✔ Con factura</span>':'<span style="color:var(--text-dim,#7a7570)">✗ Sin factura</span>')+
+            fila('Estatus',estatusVal)+
+            (g.notas?fila('Notas',_esc(g.notas)):'')+
+            (evHTML?'<div style="padding:10px 0 2px"><div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-dim,#7a7570);margin-bottom:6px">Evidencia</div><div style="display:flex;flex-wrap:wrap;gap:8px">'+evHTML+'</div></div>':'')+
+        '</div>'+
+    '</div>';
 }
 function cerrarGastosCat(){ document.getElementById('modalCatGastos').classList.remove('open'); }
 function _ggLightbox(src){ var lb=document.getElementById('ggLightbox'); document.getElementById('ggLightboxImg').src=src; lb.style.display='flex'; }
