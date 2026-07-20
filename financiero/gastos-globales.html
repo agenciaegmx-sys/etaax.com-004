@@ -1040,10 +1040,12 @@ function renderNomGastos(mes){
     document.getElementById('nomGImss').textContent='+ '+fmtM(imss);
     document.getElementById('nomGTotalConImss').textContent=fmtM(nom+imss);
     document.getElementById('nomGTbody').innerHTML=lista.map(function(g){
-        return '<tr>'
+        if(g.id) _ggGastoReg[g.id]=g;
+        var foto=(g.evidencias||[]).length?' 📷':'';
+        return '<tr class="cat-row"'+(g.id?' onclick="_ggVerGastoReg(\''+g.id+'\')" style="cursor:pointer"':'')+'>'
             +'<td style="white-space:nowrap;color:var(--text-dim);font-size:12px">'+_esc(g.fecha||'—')+'</td>'
-            +'<td style="font-weight:500">'+_esc(g.concepto||'—')+'</td>'
-            +'<td class="ar" style="font-weight:600;color:var(--green)">'+fmtM(g.monto)+'</td>'
+            +'<td style="font-weight:500">'+_esc(g.concepto||'—')+foto+'</td>'
+            +'<td class="ar" style="font-weight:600;color:var(--green);white-space:nowrap">'+fmtM(g.monto)+' <span style="font-size:14px;opacity:.6" title="Ver detalle">👁️</span></td>'
         +'</tr>';
     }).join('');
 }
@@ -1054,11 +1056,13 @@ function renderImss(mes){
     card.style.display='';
     document.getElementById('imssTotal').textContent=fmtM(lista.reduce(function(s,g){return s+n(g.monto);},0));
     document.getElementById('imssTbody').innerHTML=lista.map(function(g){
-        return '<tr>'
+        if(g.id) _ggGastoReg[g.id]=g;
+        var foto=(g.evidencias||[]).length?' 📷':'';
+        return '<tr class="cat-row"'+(g.id?' onclick="_ggVerGastoReg(\''+g.id+'\')" style="cursor:pointer"':'')+'>'
             +'<td style="white-space:nowrap;color:var(--text-dim);font-size:12px">'+_esc(g.fecha||'—')+'</td>'
-            +'<td style="font-weight:500">'+_esc(g.concepto||'—')+'</td>'
+            +'<td style="font-weight:500">'+_esc(g.concepto||'—')+foto+'</td>'
             +'<td style="color:var(--text-dim);font-size:12px">'+_esc(g.proveedor||'—')+'</td>'
-            +'<td class="ar" style="font-weight:600;color:var(--accent)">'+fmtM(g.monto)+'</td>'
+            +'<td class="ar" style="font-weight:600;color:var(--accent);white-space:nowrap">'+fmtM(g.monto)+' <span style="font-size:14px;opacity:.6" title="Ver detalle">👁️</span></td>'
         +'</tr>';
     }).join('');
 }
@@ -1067,7 +1071,6 @@ function renderNominas(){
     renderNomGastos(mes); // nómina realmente pagada (gastos diarios)
     renderImss(mes); // desglose de pagos de IMSS (cargas sociales) del mes
     var lista=_nominaItems(_nomCat,mes);
-    _ggNomList=lista; // para el 👁️ de nómina (referencia por índice)
     var tbody=document.getElementById('nominasTbody');
     var empty=document.getElementById('nominasEmpty');
     var foot=document.getElementById('nominasFoot');
@@ -1075,13 +1078,13 @@ function renderNominas(){
     if(!lista.length){tbody.innerHTML='';empty.style.display='block';foot.style.display='none';return;}
     empty.style.display='none'; foot.style.display='';
     var totBase=0,totBonos=0,totImss=0,totPrima=0;
-    tbody.innerHTML=lista.map(function(p,_i){
+    tbody.innerHTML=lista.map(function(p){
         var tot=n(p.base)+n(p.bonos)+n(p.imss)+n(p.prima);
         totBase+=n(p.base); totBonos+=n(p.bonos); totImss+=n(p.imss); totPrima+=n(p.prima);
         var autoBadge=p.staffId?' <span style="font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--green);background:rgba(61,190,122,.1);border:1px solid rgba(61,190,122,.25);border-radius:10px;padding:1px 7px;vertical-align:middle">Catálogo</span>':'';
-        var acc='<button class="btn-row" data-ver-nom="'+_i+'" title="Ver detalle">👁️</button> '+(p._auto
+        var acc=p._auto
             ? '<button class="btn-row" data-edit-staff="'+_esc(p.staffId)+'" title="Capturar bonos / IMSS / prima del mes">✏️</button>'
-            : '<button class="btn-row" data-edit-nom="'+p.id+'">✏️</button> <button class="btn-row del" data-del-nom="'+p.id+'">🗑️</button>');
+            : '<button class="btn-row" data-edit-nom="'+p.id+'">✏️</button> <button class="btn-row del" data-del-nom="'+p.id+'">🗑️</button>';
         return'<tr>'
             +'<td style="font-weight:500">'+_esc(p.nombre)+autoBadge+'</td>'
             +'<td class="ar">'+fmtM(p.base)+'</td>'
@@ -1096,9 +1099,6 @@ function renderNominas(){
     document.getElementById('nomImssTotal').textContent=fmtM(totImss);
     document.getElementById('nomPrimaTotal').textContent=fmtM(totPrima);
     document.getElementById('nominasTotal').textContent=fmtM(totBase+totBonos+totImss+totPrima);
-    tbody.querySelectorAll('[data-ver-nom]').forEach(function(btn){
-        btn.addEventListener('click',function(){_ggVerNomina(parseInt(btn.dataset.verNom,10));});
-    });
     tbody.querySelectorAll('[data-edit-nom]').forEach(function(btn){
         btn.addEventListener('click',function(){abrirNomina(btn.dataset.editNom);});
     });
@@ -1217,6 +1217,9 @@ function abrirGastosCat(cat){
     document.getElementById('modalCatGastos').classList.add('open');
 }
 function _ggVerGasto(i){ var g=_ggCurrentList[i]; if(g) _ggVerGastoObj(g); }
+// Registro de gastos reales por id (nómina pagada, IMSS…) → 👁️ desde tablas inline.
+var _ggGastoReg={};
+function _ggVerGastoReg(id){ var g=_ggGastoReg[id]; if(g) _ggVerGastoObj(g); }
 // Abre el modal de detalle (vista tipo diario) para UN gasto (o cualquier objeto gasto-like).
 function _ggVerGastoObj(g){
     document.getElementById('gastoDetalleBody').innerHTML=_ggTarjetaGasto(g);
@@ -1240,33 +1243,6 @@ function _ggVerFijo(id){
         notas:(x.estaPagado?'':'Aún no pagado este mes (monto = plan).')+(pago0.notas?(' '+pago0.notas):''),
         evidencias:evid
     });
-}
-// 👁️ Ver una NÓMINA: desglose base / bonos / IMSS / prima.
-var _ggNomList=[];
-function _ggVerNomina(i){
-    var p=_ggNomList[i]; if(!p) return;
-    var tot=n(p.base)+n(p.bonos)+n(p.imss)+n(p.prima);
-    function fila(lbl,val,col){
-        return'<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border,#2a2825)">'+
-            '<span style="font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-dim,#7a7570)">'+lbl+'</span>'+
-            '<span style="font-size:14px;font-weight:600;color:'+(col||'var(--text,#f0ece6)')+'">'+val+'</span></div>';
-    }
-    document.getElementById('gastoDetalleBody').innerHTML=
-        '<div style="padding:16px 20px;border-bottom:1px solid var(--border,#2a2825)">'+
-            '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">'+
-                '<div style="min-width:0"><div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-dim,#7a7570)">👥 Nómina'+(p.staffId?' · catálogo':'')+'</div>'+
-                    '<div style="font-size:18px;font-weight:700;color:var(--text,#f0ece6);margin-top:3px">'+_esc(p.nombre||'—')+'</div></div>'+
-                '<div style="font-size:20px;font-weight:700;color:var(--red);white-space:nowrap">'+fmtM(tot)+'</div>'+
-            '</div>'+
-        '</div>'+
-        '<div style="padding:10px 20px 16px">'+
-            fila('Sueldo base',fmtM(p.base))+
-            fila('Bonos / extras',fmtM(p.bonos),'var(--accent)')+
-            fila('IMSS / cargas',fmtM(p.imss),'var(--text-muted)')+
-            fila('Prima dominical',fmtM(p.prima),'var(--text-muted)')+
-            fila('Total del mes',fmtM(tot),'var(--red)')+
-        '</div>';
-    document.getElementById('modalGastoDetalle').classList.add('open');
 }
 // Réplica de la tarjeta de detalle de gasto de diario.html (misma vista pedida por Edwin).
 function _ggTarjetaGasto(g){
