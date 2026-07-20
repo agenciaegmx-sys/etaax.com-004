@@ -1705,6 +1705,11 @@
                     <button class="metodo-btn" onclick="setMetodoBanco('debito',this)">💳 Tarjeta débito</button>
                     <button class="metodo-btn" onclick="setMetodoBanco('credito',this)">💳 Tarjeta crédito</button>
                 </div>
+                <!-- Cuenta de débito de la que sale el gasto (solo transferencia/débito, si hay 2+ cuentas) -->
+                <div id="gCuentaBancoWrap" style="display:none;margin-top:8px">
+                    <label style="display:block;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin:0 0 5px">🏛️ Sale de la cuenta</label>
+                    <select id="gCuentaBanco" style="width:100%;box-sizing:border-box;background:var(--surface2,#1a1a1a);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:10px 12px;font-size:13px;outline:none;font-family:inherit"></select>
+                </div>
             </div>
             <input type="hidden" id="gMetodo" value="caja_fuerte">
             <input type="hidden" id="gMetodoBanco" value="">
@@ -3174,7 +3179,7 @@ function abrirCajaFuerte(){
    depósitos por su cuenta origen/destino. Lo que NO trae cuenta (propinas netas,
    cortes viejos sin desglose, transferencias, gastos de débito, depósitos legacy)
    va a la cuenta PREDETERMINADA → la suma de cuentas SIEMPRE cuadra con el total. */
-function _debitoPorCuenta(cortes, depositos, ctasDeb, gastosDebito){
+function _debitoPorCuenta(cortes, depositos, ctasDeb, gastosDebito, gastosDebitoLista){
     var porCta={}; (ctasDeb||[]).forEach(function(c){ porCta[c.id]={term:0,dep:0,resto:0,total:0}; });
     if(!ctasDeb||!ctasDeb.length) return porCta;
     var defId=ctasDeb[0].id; // la predeterminada va primero (_cuentasDebito la ordena)
@@ -3191,7 +3196,14 @@ function _debitoPorCuenta(cortes, depositos, ctasDeb, gastosDebito){
         if(d.destino==='banco') add(d.destinoCuentaId||'','dep',m);
         if(org==='banco') add(d.origenCuentaId||'','dep',-m);
     });
-    add(defId,'resto',-(gastosDebito||0));
+    // Gastos de débito: cada uno sale de SU cuenta (cuentaBancoId); los sin cuenta,
+    // de la predeterminada. Si llega la lista se atribuye por cuenta; si no (compat),
+    // el total va a la predeterminada.
+    if(gastosDebitoLista && gastosDebitoLista.length){
+        gastosDebitoLista.forEach(function(g){ add(g.cuentaBancoId||defId,'resto',-n(g.monto)); });
+    } else {
+        add(defId,'resto',-(gastosDebito||0));
+    }
     return porCta; // {term: terminal neta, dep: depósitos/traspasos/retiros, resto: transfer+propinas−gastos, total}
 }
 
@@ -3229,8 +3241,8 @@ function _abrirCajaFuerteContenido(_yaFresco){
     var todosGastos = _scopeSuc(_loadGastos());
     var gastosCajaFuerte = todosGastos.filter(function(g){return g.metodoPago==='caja_fuerte';})
                                       .reduce(function(s,g){return s+n(g.monto);},0);
-    var gastosDebito     = todosGastos.filter(function(g){return g.metodoPago==='banco'&&g.metodoBanco!=='credito';})
-                                      .reduce(function(s,g){return s+n(g.monto);},0);
+    var gastosDebitoLista= todosGastos.filter(function(g){return g.metodoPago==='banco'&&g.metodoBanco!=='credito';});
+    var gastosDebito     = gastosDebitoLista.reduce(function(s,g){return s+n(g.monto);},0);
     var gastosTarjetaCred= todosGastos.filter(function(g){return g.metodoPago==='banco'&&g.metodoBanco==='credito';})
                                       .reduce(function(s,g){return s+n(g.monto);},0);
     // ── Catálogo tarjetas de crédito ─────────────────────────
@@ -3264,7 +3276,7 @@ function _abrirCajaFuerteContenido(_yaFresco){
     var _ctasDebCF = _cuentasDebito();
     var debPorCuentaHTML = '';
     if (_ctasDebCF.length > 1) {
-        var _pcCF = _debitoPorCuenta(lista, deps, _ctasDebCF, gastosDebito);
+        var _pcCF = _debitoPorCuenta(lista, deps, _ctasDebCF, gastosDebito, gastosDebitoLista);
         window._ultimoPorCuenta = _pcCF; // para "⚖️ Conciliar" (saldo calculado por cuenta)
         // Fila propia de cards — un card por cuenta, mismo estilo que los saldos de arriba.
         debPorCuentaHTML =
@@ -4813,9 +4825,12 @@ function _abrirModalGasto(g,tipo){
     if(met==='banco'&&d.metodoBanco){
         document.getElementById('gMetodoBanco').value=d.metodoBanco;
         document.querySelectorAll('#bancoOpts .metodo-btn').forEach(function(b){b.classList.remove('active');});
-        var bLabels={transfer:'Transferencia',debito:'T. débito',credito:'T. crédito'};
+        var bLabels={transfer:'Transferencia',debito:'débito',credito:'crédito'};
         document.querySelectorAll('#bancoOpts .metodo-btn').forEach(function(b){if(b.textContent.includes(bLabels[d.metodoBanco]||''))b.classList.add('active');});
     }
+    // Cuenta de débito del gasto (mostrar selector y seleccionar la guardada)
+    _gCuentaBancoUI();
+    if(d.cuentaBancoId){ var _cbSel=document.getElementById('gCuentaBanco'); if(_cbSel) _cbSel.value=d.cuentaBancoId; }
     // Factura
     var fact=d.facturado?true:false;
     document.getElementById('gFacturado').value=fact?'1':'0';
@@ -5298,12 +5313,29 @@ function setMetodo(met,btn){
     document.getElementById('bancoSubtipo').style.display=met==='banco'?'block':'none';
     if(met==='banco'){document.getElementById('gMetodoBanco').value='transfer';document.querySelectorAll('#bancoOpts .metodo-btn')[0].classList.add('active');}
     else{document.getElementById('gMetodoBanco').value='';}
+    _gCuentaBancoUI();
 }
 
 function setMetodoBanco(sub,btn){
     document.querySelectorAll('#bancoOpts .metodo-btn').forEach(function(b){b.classList.remove('active');});
     btn.classList.add('active');
     document.getElementById('gMetodoBanco').value=sub;
+    _gCuentaBancoUI();
+}
+
+// Selector de cuenta de débito para el gasto: aparece SOLO en transferencia/débito
+// y SOLO si el negocio tiene 2+ cuentas de débito (con una sola no hay qué elegir).
+function _gCuentaBancoUI(){
+    var wrap=document.getElementById('gCuentaBancoWrap'), sel=document.getElementById('gCuentaBanco');
+    if(!wrap||!sel) return;
+    var met=document.getElementById('gMetodo').value, sub=document.getElementById('gMetodoBanco').value;
+    var ctas=_cuentasDebito();
+    var mostrar=(met==='banco' && (sub==='transfer'||sub==='debito') && ctas.length>1);
+    wrap.style.display=mostrar?'block':'none';
+    if(!mostrar){ return; }
+    var prev=sel.value;
+    sel.innerHTML=ctas.map(function(c){ return '<option value="'+c.id+'">🏛️ '+_escV(_cuentaBancoLabel(c.id))+(c.predeterminada?' · predeterminada':'')+'</option>'; }).join('');
+    if(prev && ctas.some(function(c){return c.id===prev;})) sel.value=prev; // conservar selección
 }
 
 function toggleFact(){
@@ -5386,6 +5418,13 @@ function guardarGasto(){
         monto:monto,
         metodoPago:document.getElementById('gMetodo').value,
         metodoBanco:document.getElementById('gMetodoBanco').value,
+        // Cuenta de débito de la que sale el gasto (transferencia/débito con 2+ cuentas).
+        // Vacío = predeterminada (compat con gastos viejos sin cuenta).
+        cuentaBancoId:(function(){
+            var m=document.getElementById('gMetodo').value, s=document.getElementById('gMetodoBanco').value;
+            var sel=document.getElementById('gCuentaBanco');
+            return (m==='banco'&&(s==='transfer'||s==='debito')&&sel&&document.getElementById('gCuentaBancoWrap').style.display!=='none')?sel.value:'';
+        })(),
         facturado:document.getElementById('gFacturado').value==='1',
         autorizado:tipo==='mayor'?mayorDesbloqueado:true,
         evidencias:_evidenciasGasto.slice(),

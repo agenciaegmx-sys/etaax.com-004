@@ -208,6 +208,16 @@ test('comisionBancoCorte = bruto − neto (nunca negativa)', () =>
         const _pc2 = A._debitoPorCuenta([], [{ monto: 700, origen: 'externo', destino: 'banco', destinoCuentaId: 'zz-borrada' }], _ctas, 0);
         eq(_pc2.a.total, 700); eq(_pc2.b.total, 0);
     });
+    test('gasto de débito sale de SU cuenta elegida (cuentaBancoId), no siempre de la predeterminada', () => {
+        const _gd = [{ monto: 300, cuentaBancoId: 'b' }, { monto: 100 /*sin cuenta → predeterminada*/ }];
+        const _pc3 = A._debitoPorCuenta([], [], _ctas, 400, _gd);
+        eq(_pc3.b.total, -300); // el gasto con cuenta B baja de B
+        eq(_pc3.a.total, -100); // el sin cuenta baja de la predeterminada A
+    });
+    test('sin lista de gastos (compat) el total baja de la predeterminada', () => {
+        const _pc4 = A._debitoPorCuenta([], [], _ctas, 400);
+        eq(_pc4.a.total, -400); eq(_pc4.b.total, 0);
+    });
 }
 
 // Depósitos y retiros: efecto sobre los fondos
