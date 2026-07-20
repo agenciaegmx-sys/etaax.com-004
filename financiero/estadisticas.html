@@ -13,7 +13,12 @@
     <script src="../supabase-config.js"></script>
 <script src="/etaax-db.js"></script>
     <style>
-        .est-wrap{max-width:1180px;margin:0 auto;padding:20px 20px 90px}
+        /* Sidebar fijo (mismo que el resto del financiero) → desplaza el contenido. */
+        .est-wrap{max-width:1180px;margin:0 auto;padding:20px 20px 90px;transition:margin-left .2s ease}
+        @media(min-width:820px){
+            .est-wrap{margin-left:76px}
+            body.nav-open .est-wrap{margin-left:224px}
+        }
         .est-header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
         .est-brand .brand-label{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--accent)}
         .est-brand .brand-title{font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:2px;color:var(--text);line-height:1}
@@ -116,6 +121,34 @@
     </div>
 </header>
 <div id="ctxBar" class="ctx-bar" style="display:none"></div>
+
+<nav class="nav cerrado" id="nav">
+    <div class="nav-top">
+        <div class="nav-brand"><span class="nav-brand-sub">Salud Financiera</span></div>
+        <div class="nav-top-actions">
+            <a href="index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Panel Financiero" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1">🗃️</a>
+            <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
+        </div>
+    </div>
+    <div class="nav-section">
+        <div class="nav-section-label">Ingresos</div>
+        <a href="ventas.html" class="nav-link" data-tooltip="Ventas Totales"><span class="nav-icon">💰</span><span class="nav-text">Ventas Totales</span></a>
+    </div>
+    <div class="nav-section">
+        <div class="nav-section-label">Egresos</div>
+        <a href="gastos-globales.html" class="nav-link" data-tooltip="Gastos Totales"><span class="nav-icon">📤</span><span class="nav-text">Gastos Totales</span></a>
+    </div>
+    <div class="nav-section">
+        <div class="nav-section-label">Cuentas</div>
+        <a href="cuentas-bancarias.html" class="nav-link" data-tooltip="Cuentas Bancarias"><span class="nav-icon">🏦</span><span class="nav-text">Cuentas Bancarias</span></a>
+    </div>
+    <div class="nav-section">
+        <div class="nav-section-label">Análisis</div>
+        <a href="previsiones.html" class="nav-link" data-tooltip="Previsiones"><span class="nav-icon">🔮</span><span class="nav-text">Previsiones</span></a>
+        <a href="estadisticas.html" class="nav-link active" data-tooltip="Estadísticas"><span class="nav-icon">📊</span><span class="nav-text">Estadísticas</span></a>
+        <a href="kpis.html" class="nav-link" data-tooltip="KPIs Financieros"><span class="nav-icon">🎯</span><span class="nav-text">KPIs</span></a>
+    </div>
+</nav>
 
 <div class="est-wrap">
     <div class="est-header">
@@ -895,6 +928,17 @@ function renderInsumos(){
     var rows=_modoIns==='top'?lista.slice(0,10):_modoIns==='peor'?lista.slice(-10).reverse():lista;
     barHChart(el,rows,null,function(x){return x.toFixed(1)+'%';},
         {porSigno:true,colPos:p.green,colNeg:p.red,serie:'Margen %',xCol:'Insumo'});
+}
+
+function toggleNav(){
+    var nav=document.getElementById('nav');
+    nav.classList.toggle('cerrado');
+    var open=!nav.classList.contains('cerrado');
+    document.body.classList.toggle('nav-open',open);
+    var btn=document.getElementById('navToggleBtn'),txt=document.getElementById('navToggleTxt');
+    if(btn&&btn.childNodes[0])btn.childNodes[0].textContent=open?'◀':'▶';
+    if(txt)txt.textContent=open?'Ocultar':'Expandir';
+    if(btn)btn.setAttribute('data-tooltip',open?'Ocultar':'Expandir');
 }
 
 document.addEventListener('DOMContentLoaded',function(){
