@@ -1022,6 +1022,20 @@ var _modoRec='top';
 function modoRecetas(m,btn){ _modoRec=m;
     btn.parentElement.querySelectorAll('.ch-chip').forEach(function(b){b.classList.toggle('active',b===btn);});
     renderRecetas(); }
+/* Recetas del universo evaluable: activas, NO sub-recetas, y de la sucursal
+   elegida en el chip (misma regla de membresía que _recetaEnSuc: sin sucursal
+   asignada = Matriz; con lista de sucursales = debe incluir la elegida). */
+function _recEnSucStat(r){
+    if(!_sucursalId) return true; // vista global: todas
+    var s=(r.sucursales&&r.sucursales.length)?r.sucursales:(r.sucursalId?[r.sucursalId]:[]);
+    if(!s.length) return _sucursalId==='suc_principal';
+    for(var i=0;i<s.length;i++){ if((s[i]||'suc_principal')===_sucursalId) return true; }
+    return false;
+}
+function _recetasBaseStat(){
+    return (_recetas||[]).filter(function(r){ return r&&r.status!=='inactiva'&&!r.esSubReceta
+        &&String(r.tipo||'').indexOf('sub')!==0&&_recEnSucStat(r); });
+}
 function _margenRecetas(){
     function getFactor(cantidad,unidad){ var u=(unidad||'').toUpperCase(); if(u==='ML'||u==='G') return cantidad/1000; return cantidad; }
     // Misma regla que costoUnitEfectivo() de app.js: el costo MANUAL (sin insumoId)
@@ -1029,7 +1043,7 @@ function _margenRecetas(){
     // el vinculado ya viene convertido a la unidad. Sin esto salían márgenes de −1300%.
     function costoUnit(i){ var c=parseFloat(i.costoPorKgLt)||0;
         if(!i.insumoId&&(i.unidad||'').toUpperCase()==='OZ') return c*29.5735/1000; return c; }
-    return (_recetas||[]).filter(function(r){ return r&&r.status!=='inactiva'&&!r.esSubReceta&&parseFloat(r.precioEnCarta)>0&&(r.ingredientes||[]).length; })
+    return _recetasBaseStat().filter(function(r){ return parseFloat(r.precioEnCarta)>0&&(r.ingredientes||[]).length; })
         .map(function(r){
             var costo=(r.ingredientes||[]).reduce(function(s,i){ return s+getFactor(parseFloat(i.cantidad)||0,i.unidad)*costoUnit(i); },0);
             var psi=parseFloat(r.precioEnCarta)/1.16;
@@ -1068,11 +1082,29 @@ function renderRecetas(){
     if(cSel) lista=lista.filter(function(x){return (x.categoria||'Sin categoría')===cSel;});
     if(q) lista=lista.filter(function(x){return x.label.toLowerCase().indexOf(q)>=0;});
 
-    /* Nota de cobertura: que se vea POR QUÉ una receta no aparece */
-    var activas=(_recetas||[]).filter(function(r){return r&&r.status!=='inactiva'&&!r.esSubReceta;}).length;
+    /* Nota de cobertura: que se vea POR QUÉ una receta no aparece, con lista */
+    var base=_recetasBaseStat();
+    var sinPrecio=base.filter(function(r){return !(parseFloat(r.precioEnCarta)>0);});
+    var sinIng=base.filter(function(r){return parseFloat(r.precioEnCarta)>0&&!(r.ingredientes||[]).length;});
     var nota=document.getElementById('recNota');
-    if(nota) nota.textContent='Evaluables: '+evaluables+' de '+activas+' recetas activas'+
-        (activas>evaluables?' — las '+(activas-evaluables)+' restantes no tienen precio en carta o ingredientes costeados, por eso no aparecen.':'.');
+    if(nota){
+        nota.innerHTML='';
+        var txt=document.createElement('span');
+        txt.textContent='Evaluables: '+evaluables+' de '+base.length+' recetas activas'+(_sucursalId?' de esta sucursal':'')+
+            (sinPrecio.length||sinIng.length
+                ? ' — '+(sinPrecio.length?sinPrecio.length+' sin precio en carta':'')+
+                  (sinPrecio.length&&sinIng.length?' · ':'')+(sinIng.length?sinIng.length+' sin ingredientes':'')+'.'
+                : '.');
+        nota.appendChild(txt);
+        if(sinPrecio.length||sinIng.length){
+            var det=document.createElement('details'); det.style.marginTop='3px';
+            var su=document.createElement('summary'); su.textContent='Ver cuáles no aparecen'; su.style.cursor='pointer'; det.appendChild(su);
+            var ul=document.createElement('div'); ul.style.cssText='font-size:11px;color:var(--text-dim);columns:2;margin-top:5px;line-height:1.7';
+            sinPrecio.forEach(function(r){ var d2=document.createElement('div'); d2.textContent='• '+(r.nombre||'—')+' — sin precio en carta'; ul.appendChild(d2); });
+            sinIng.forEach(function(r){ var d2=document.createElement('div'); d2.textContent='• '+(r.nombre||'—')+' — sin ingredientes'; ul.appendChild(d2); });
+            det.appendChild(ul); nota.appendChild(det);
+        }
+    }
 
     if(!lista.length) return vacio(el,q?'Sin recetas que coincidan con "'+_escHtml(q)+'".':'Necesitas recetas con ingredientes costeados y precio en carta.');
     var topN=parseInt((document.getElementById('topNRecetas')||{}).value)||10;

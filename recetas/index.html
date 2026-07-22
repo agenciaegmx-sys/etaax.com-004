@@ -2705,6 +2705,20 @@ function renderGridRecetas() {
     } else {
         lista = getRecetasScope();
     }
+    // Conteo por tipo junto a las pastillas (del scope/estado actual, antes del filtro de tipo)
+    (function(){
+        var tot={'':lista.length,'alimentos':0,'sub-alimentos':0,'bebidas':0,'sub-bebidas':0};
+        lista.forEach(function(r){ if (tot[r.tipo] !== undefined) tot[r.tipo]++; });
+        [['rp-todas',''],['rp-alimentos','alimentos'],['rp-sub-alimentos','sub-alimentos'],
+         ['rp-bebidas','bebidas'],['rp-sub-bebidas','sub-bebidas']].forEach(function(par){
+            var b=document.getElementById(par[0]); if(!b) return;
+            var sp=b.querySelector('.rp-count');
+            if(!sp){ sp=document.createElement('span'); sp.className='rp-count';
+                sp.style.cssText='margin-left:6px;font-size:10px;font-weight:700;opacity:.7'; b.appendChild(sp); }
+            sp.textContent=tot[par[1]]||0;
+        });
+    })();
+
     if (filtroRecetaTipo) lista = lista.filter(r => r.tipo === filtroRecetaTipo);
 
     // ── Filtros Grupo → Categoría (cascada). Los selects se pueblan con lo que HAY. ──
