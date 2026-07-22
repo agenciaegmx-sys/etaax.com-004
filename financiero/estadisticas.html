@@ -296,6 +296,8 @@
             <div class="ch-sub">Utilidad neta = 100% − costo% − 40% de gasto operativo, igual que el costeo aplicado de tu escandallo · semáforo: ≥25% sano.</div>
             <div class="ch-filtros">
                 <input type="text" id="qRecetas" placeholder="🔍 Buscar receta…" oninput="renderRecetas()">
+                <select id="selGrupoRec" class="ch-chip" onchange="renderRecetas()" title="Filtrar por grupo"></select>
+                <select id="selCatRec" class="ch-chip" onchange="renderRecetas()" title="Filtrar por categoría"></select>
                 <button class="ch-chip active" data-m="top" onclick="modoRecetas('top',this)">Top</button>
                 <button class="ch-chip" data-m="peor" onclick="modoRecetas('peor',this)">Menos rentables</button>
                 <button class="ch-chip" data-m="todas" onclick="modoRecetas('todas',this)">Todas</button>
@@ -306,6 +308,7 @@
                     <option value="100">100</option>
                 </select>
             </div>
+            <div class="ch-sub" id="recNota" style="margin-top:2px"></div>
             <div id="chRecetas"></div>
         </div>
 
@@ -1032,7 +1035,8 @@ function _margenRecetas(){
             var psi=parseFloat(r.precioEnCarta)/1.16;
             // Utilidad neta % = 100 − costo% − 40 (gasto operativo), MISMA fórmula
             // que el "Costeo aplicado" del escandallo (aUtilidadP en app.js).
-            return {label:r.nombre||'—',value:psi>0?Math.round((100-(costo/psi*100)-40)*10)/10:0,costo:costo};
+            return {label:r.nombre||'—',value:psi>0?Math.round((100-(costo/psi*100)-40)*10)/10:0,costo:costo,
+                grupo:(r.grupo||'').trim(),categoria:(r.categoria||'').trim()};
         })
         .filter(function(x){ return isFinite(x.value)&&x.costo>0; })
         .sort(function(a,b){ return b.value-a.value; });
@@ -1040,8 +1044,36 @@ function _margenRecetas(){
 function renderRecetas(){
     var el=document.getElementById('chRecetas'); if(!el||!_recetas) return; el.innerHTML='';
     var p=pal(), q=(document.getElementById('qRecetas').value||'').toLowerCase();
-    var lista=_margenRecetas();
+    var esc=window.etx||_escHtml;
+    var lista=_margenRecetas(), evaluables=lista.length;
+
+    /* Filtros Grupo → Categoría con CONTEO (cascada, como en el módulo de recetas) */
+    var selG=document.getElementById('selGrupoRec'), selC=document.getElementById('selCatRec');
+    var gSel=selG?selG.value:'', cSel=selC?selC.value:'';
+    if(selG){
+        var cg={}; lista.forEach(function(x){ var g2=x.grupo||'Sin grupo'; cg[g2]=(cg[g2]||0)+1; });
+        var gs=Object.keys(cg).sort(function(a,b){return a.localeCompare(b);});
+        if(gSel&&gs.indexOf(gSel)<0) gSel='';
+        selG.innerHTML='<option value="">Todos los grupos · '+lista.length+'</option>'+
+            gs.map(function(g2){return '<option value="'+esc(g2)+'"'+(gSel===g2?' selected':'')+'>'+esc(g2)+' · '+cg[g2]+'</option>';}).join('');
+    }
+    if(gSel) lista=lista.filter(function(x){return (x.grupo||'Sin grupo')===gSel;});
+    if(selC){
+        var cc={}; lista.forEach(function(x){ var c2=x.categoria||'Sin categoría'; cc[c2]=(cc[c2]||0)+1; });
+        var cs=Object.keys(cc).sort(function(a,b){return a.localeCompare(b);});
+        if(cSel&&cs.indexOf(cSel)<0) cSel='';
+        selC.innerHTML='<option value="">Todas las categorías</option>'+
+            cs.map(function(c2){return '<option value="'+esc(c2)+'"'+(cSel===c2?' selected':'')+'>'+esc(c2)+' · '+cc[c2]+'</option>';}).join('');
+    }
+    if(cSel) lista=lista.filter(function(x){return (x.categoria||'Sin categoría')===cSel;});
     if(q) lista=lista.filter(function(x){return x.label.toLowerCase().indexOf(q)>=0;});
+
+    /* Nota de cobertura: que se vea POR QUÉ una receta no aparece */
+    var activas=(_recetas||[]).filter(function(r){return r&&r.status!=='inactiva'&&!r.esSubReceta;}).length;
+    var nota=document.getElementById('recNota');
+    if(nota) nota.textContent='Evaluables: '+evaluables+' de '+activas+' recetas activas'+
+        (activas>evaluables?' — las '+(activas-evaluables)+' restantes no tienen precio en carta o ingredientes costeados, por eso no aparecen.':'.');
+
     if(!lista.length) return vacio(el,q?'Sin recetas que coincidan con "'+_escHtml(q)+'".':'Necesitas recetas con ingredientes costeados y precio en carta.');
     var topN=parseInt((document.getElementById('topNRecetas')||{}).value)||10;
     var rows=_modoRec==='top'?lista.slice(0,topN):_modoRec==='peor'?lista.slice(-topN).reverse():lista;
