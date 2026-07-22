@@ -259,7 +259,8 @@
             <div id="chGastosCat"></div>
         </div>
 
-        <div class="chart-card">
+        <!-- Solo aparece si los cortes capturan el desglose opcional (alimentos/bebidas, comedor/para llevar) -->
+        <div class="chart-card" id="cardMezcla" style="display:none">
             <div class="ch-title">🍽️ Mezcla de venta</div>
             <div class="ch-sub">Composición de la venta del periodo (desglose capturado en los cortes).</div>
             <div id="chMezcla"></div>
@@ -273,7 +274,8 @@
 
         <div class="chart-card">
             <div class="ch-title">⭐ Propinas vs Ventas</div>
-            <div class="ch-sub" id="sPropVs">% que representan las propinas sobre la venta bruta, por corte de tiempo.</div>
+            <div class="ch-sub" id="sPropVs">Propinas contra venta bruta, por corte de tiempo.</div>
+            <div class="ch-legend" id="lgPropVs"></div>
             <div id="chPropsVs"></div>
         </div>
 
@@ -946,12 +948,14 @@ function renderAll(){
         barHChart(el,rows,p.red,fmtM,{serie:'Gasto',xCol:'Categoría'});
     })();
 
-    /* 8 · Mezcla de venta */
+    /* 8 · Mezcla de venta — la card entera se oculta si nadie captura el desglose */
     (function(){
         var el=document.getElementById('chMezcla'); el.innerHTML='';
+        var card=document.getElementById('cardMezcla');
         var ali=0,beb=0,com=0,llev=0;
         cortesR(rF).forEach(function(c){ ali+=n(c.alimentos); beb+=n(c.bebidas); com+=n(c.comedor); llev+=n(c.paraLlevar); });
-        if(!(ali+beb+com+llev)) return vacio(el,'Captura el desglose opcional en los cortes para ver la mezcla.');
+        if(!(ali+beb+com+llev)){ if(card)card.style.display='none'; return; }
+        if(card)card.style.display='';
         stack100(el,'Alimentos vs Bebidas',[{label:'Alimentos',value:ali,color:p.green},{label:'Bebidas',value:beb,color:p.blue}]);
         stack100(el,'Comedor vs Para llevar',[{label:'Comedor',value:com,color:p.green},{label:'Para llevar',value:llev,color:p.blue}]);
     })();
@@ -961,7 +965,7 @@ function renderAll(){
         colChart(document.getElementById('chProps'),bk.labels,
             [{name:'Propinas',color:p.viol,values:serieBuckets(bk,cortesR(rF),EtaaxCore.propinas)}],fmtK,{});
 
-        /* Propinas vs Ventas: % de propina sobre venta bruta por bucket */
+        /* Propinas vs Ventas: columnas agrupadas, mismo formato que Ventas vs Gastos */
         var elPV=document.getElementById('chPropsVs');
         if(elPV){
             elPV.innerHTML='';
@@ -974,8 +978,11 @@ function renderAll(){
             var sub=document.getElementById('sPropVs');
             if(sub) sub.textContent=vTot>0
                 ? 'Del periodo: '+fmtM(pTot)+' de propinas sobre '+fmtM(vTot)+' de venta = '+(pTot/vTot*100).toFixed(1)+'% de propina promedio.'
-                : '% que representan las propinas sobre la venta bruta, por corte de tiempo.';
-            lineChart(elPV,bk.labels,[{name:'% propina sobre venta',color:p.viol,values:pctPV}],fmtPct,{xCol:xColPV});
+                : 'Propinas contra venta bruta, por corte de tiempo.';
+            legend('lgPropVs',[{name:'Ventas',color:p.green},{name:'Propinas',color:p.viol}]);
+            colChart(elPV,bk.labels,
+                [{name:'Ventas',color:p.green,values:svPV},
+                 {name:'Propinas',color:p.viol,values:spPV}],fmtK,{xCol:xColPV});
             // El 🔍 de esta card lleva el desglose completo: ventas, propinas y %.
             _detRegistrar(elPV,bk.labels,[
                 {name:'Ventas',values:svPV,fmt:fmtM},
