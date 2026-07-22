@@ -2778,9 +2778,8 @@ function renderGridRecetas() {
                 ? `<button onclick="event.stopPropagation();reactivarRecetaGlobal('${r.id}')" title="Inactiva GLOBAL (pastilla del editor): no aparece en ningún lado. Este botón la reactiva en TODO el negocio."
                     style="width:100%;margin-top:9px;background:var(--surface);border:1px solid rgba(224,90,58,.5);color:var(--red);border-radius:8px;padding:7px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">🚫 Inactiva global · ▶ Activar</button>` : ''}
             <button onclick="event.stopPropagation();duplicarRecetaDesdeLista('${r.id}')"
-                style="position:absolute;top:8px;right:28px;background:none;border:none;
-                color:var(--text-dim);cursor:pointer;font-size:11px;padding:2px 5px;
-                border-radius:4px;z-index:2" title="Hacer copia">📋</button>
+                title="Crea una copia independiente de esta receta (pide contraseña)"
+                style="width:100%;margin-top:9px;background:var(--surface);border:1px solid var(--border);color:var(--text-dim);border-radius:8px;padding:7px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">📋 Copiar</button>
             <button onclick="event.stopPropagation();eliminarReceta('${r.id}')"
                 style="position:absolute;top:8px;right:8px;background:none;border:none;
                 color:var(--text-dim);cursor:pointer;font-size:11px;padding:2px 5px;
