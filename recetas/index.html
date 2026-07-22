@@ -1300,7 +1300,7 @@ function calcSubRecetaCostos() {
 
     // Costo total ingredientes
     var costoTotal = ingredientes.reduce(function(s, ing) {
-        return s + getFactor(ing.cantidad, ing.unidad) * (ing.costoPorKgLt || 0);
+        return s + getFactor(ing.cantidad, ing.unidad) * costoUnitEfectivo(ing);
     }, 0);
 
     // Suma de ingredientes en gramos/ml base
@@ -1681,7 +1681,7 @@ function agregarSubRecetaComoInsumo(silent) {
 
     // Calcular costo total
     var costoTotal = ingredientes.reduce(function(s, ing) {
-        return s + getFactor(ing.cantidad, ing.unidad) * (ing.costoPorKgLt || 0);
+        return s + getFactor(ing.cantidad, ing.unidad) * costoUnitEfectivo(ing);
     }, 0);
 
     // Una sub-receta de bebida es líquida: su rendimiento va en LT/ML, no KG.

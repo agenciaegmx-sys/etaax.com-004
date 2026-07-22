@@ -619,7 +619,7 @@ function buildSubRecetaInfoBlock(r) {
     // Calcular % merma si hay rendimiento final
     if (cx.rendimientoFinal && cx.unidadRendimientoFinal) {
         var fU = { G:1, KG:1000, ML:1, LT:1000 };
-        var costoTotal = (r.ingredientes||[]).reduce(function(s,i){ return s + getFactor(i.cantidad,i.unidad)*(i.costoPorKgLt||0); }, 0);
+        var costoTotal = (r.ingredientes||[]).reduce(function(s,i){ return s + getFactor(i.cantidad,i.unidad)*costoUnitEfectivo(i); }, 0);
         var sumaBase = (r.ingredientes||[]).reduce(function(s,i){
             return s + i.cantidad * getPesoBrutoPorUnidad(i);
         }, 0);
@@ -1004,7 +1004,7 @@ function costoUnitVivo(ing) {
         var ins = window._insumoResolver(ing.insumoId);
         if (ins) return _redondeaCosto(getCostoParaUnidad(ins, ing.unidad));
     }
-    return parseFloat(ing && ing.costoPorKgLt) || 0;
+    return costoUnitEfectivo(ing);
 }
 // Costo total (línea) de un ingrediente: su cantidad × costo/unidad VIVO.
 function costoIngredienteVivo(ing) {
@@ -1163,6 +1163,19 @@ function getFactor(cantidad, unidad) {
     return cantidad;
 }
 
+// Costo por unidad EFECTIVO de un ingrediente, listo para multiplicar por
+// getFactor(). Vinculado al catálogo: costoPorKgLt ya viene convertido a la
+// unidad del escandallo por getCostoParaUnidad ($/OZ, $/LT, $/KG, $/PZA).
+// Manual (sin insumoId): el usuario captura $/KG-LT-PZ (así lo dice la columna)
+// y OZ era el hueco — getFactor devuelve las oz directas, así que el precio
+// capturado por litro debe pasarse a $/OZ (× 29.5735/1000). Las demás unidades
+// ya cuadran con getFactor (ML/G ÷1000; LT/KG/PZA/PORCION/CARGA directas).
+function costoUnitEfectivo(ing) {
+    var c = parseFloat(ing && ing.costoPorKgLt) || 0;
+    if (ing && !ing.insumoId && (ing.unidad || '').toUpperCase() === 'OZ') return c * 29.5735 / 1000;
+    return c;
+}
+
 // ── Autocomplete ─────────────────────────────────────────────
 function buscarInsumos(query) {
     if (!query || query.length < 2) return [];
@@ -1309,7 +1322,7 @@ function renderTabla() {
     tbody.innerHTML = '';
 
     ingredientes.forEach((ing, i) => {
-        const costoU   = getFactor(ing.cantidad, ing.unidad) * ing.costoPorKgLt;
+        const costoU   = getFactor(ing.cantidad, ing.unidad) * costoUnitEfectivo(ing);
         const vinculado = !!ing.insumoId;
 
         const tr = document.createElement('tr');
@@ -1350,7 +1363,7 @@ function renderTabla() {
 function updateIng(i, campo, val) {
     ingredientes[i][campo] = val;
     if (campo === 'nombre') ingredientes[i].insumoId = '';
-    const costoU = getFactor(ingredientes[i].cantidad, ingredientes[i].unidad) * ingredientes[i].costoPorKgLt;
+    const costoU = getFactor(ingredientes[i].cantidad, ingredientes[i].unidad) * costoUnitEfectivo(ingredientes[i]);
     const rows = document.querySelectorAll('#tbodyIngredientes tr');
     if (rows[i]) rows[i].querySelector('.costo-u').textContent = '$'+costoU.toFixed(2);
     calcularCosteos();
@@ -1520,7 +1533,7 @@ window.addEventListener('message', function(e) {
 // ── Cálculos principales ─────────────────────────────────────
 function calcularCosteos() {
     const costoTotal = ingredientes.reduce(function(sum, ing) {
-        return sum + getFactor(ing.cantidad, ing.unidad) * ing.costoPorKgLt;
+        return sum + getFactor(ing.cantidad, ing.unidad) * costoUnitEfectivo(ing);
     }, 0);
 
     document.getElementById('costoTotalDisplay').textContent = '$'+costoTotal.toFixed(2);

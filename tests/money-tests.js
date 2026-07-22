@@ -619,6 +619,37 @@ console.log('\n══ SUITE D · Reclasificación de gastos (financiero/gastos-g
     test('INVARIANTE: ningún gasto se pierde del Total de Egresos', () => eq(nom + imss + varb + nc + excl, raw));
 })();
 
+/* ═══════════════ SUITE E · ESCANDALLO (app.js) ═══════════════ */
+console.log('\n══ SUITE E · Escandallo de recetas (app.js) ══');
+
+(function () {
+    // app.js truena a medias con los stubs (arranque de UI), pero las funciones
+    // declaradas quedan izadas — igual que en las otras suites. insumo-label.js
+    // va primero porque app.js usa window._makeInsumoResolver al cargar.
+    const E = crearContexto();
+    cargarJS(E, 'insumo-label.js');
+    cargarJS(E, 'app.js');
+
+    // Bug 2026-07-22: insumo MANUAL (sin insumoId) a $80/lt con 1 OZ daba $80
+    // (como si fuera pieza). 1 oz = 29.5735 ml → debe dar $2.37.
+    const manualOz = { nombre: 'x', insumoId: '', unidad: 'OZ', costoPorKgLt: 80, cantidad: 1 };
+    test('manual OZ: $80/lt × 1 oz = $2.37 (no $80)', () =>
+        eq(E.getFactor(1, 'OZ') * E.costoUnitEfectivo(manualOz), 2.366));
+    test('manual ML: $80/lt × 30 ml = $2.40 (sin cambio)', () =>
+        eq(E.getFactor(30, 'ML') * E.costoUnitEfectivo({ insumoId: '', unidad: 'ML', costoPorKgLt: 80 }), 2.40));
+    test('manual KG: $80/kg × 0.5 kg = $40 (sin cambio)', () =>
+        eq(E.getFactor(0.5, 'KG') * E.costoUnitEfectivo({ insumoId: '', unidad: 'KG', costoPorKgLt: 80 }), 40));
+    test('manual PZA: $80/pz × 2 pza = $160 (sin cambio)', () =>
+        eq(E.getFactor(2, 'PZA') * E.costoUnitEfectivo({ insumoId: '', unidad: 'PZA', costoPorKgLt: 80 }), 160));
+    // VINCULADO: costoPorKgLt ya viene convertido a $/OZ por getCostoParaUnidad —
+    // NO debe re-convertirse (doble conversión lo haría casi cero).
+    test('vinculado OZ: $2.37/oz se respeta tal cual (sin doble conversión)', () =>
+        eq(E.getFactor(1, 'OZ') * E.costoUnitEfectivo({ insumoId: 'ins1', unidad: 'OZ', costoPorKgLt: 2.37 }), 2.37));
+    // costoUnitVivo delega en costoUnitEfectivo cuando NO hay vínculo.
+    test('costoUnitVivo manual OZ delega la conversión', () =>
+        eq(E.costoUnitVivo(manualOz), 2.366));
+})();
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0
