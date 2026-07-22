@@ -79,8 +79,6 @@
                 </span>
                 <button class="btn-vista" onclick="guardarReceta()"
                     style="color:var(--green);border-color:var(--green)">💾 Guardar</button>
-                <button class="btn-vista" onclick="duplicarReceta()"
-                    style="color:var(--accent);border-color:var(--accent)">📋 Hacer copia</button>
                 <button class="btn-vista" onclick="eliminarRecetaActual()"
                     style="color:var(--red);border-color:var(--red)">🗑️ Eliminar</button>
                 <button class="btn-vista" id="btnImprimirHeader" onclick="abrirMenuImpresion(null)"
@@ -2060,6 +2058,37 @@ function _envaseTaraAuto() {
     el.value = Math.max(0, Math.round(llenoG - capMl));
 }
 
+// ── Métodos de preparación (bebidas): base + conceptos propios del negocio ──
+// Mismo patrón que las subcategorías de insumos: la lista custom vive en
+// localStorage por negocio y el select ofrece "➕ Agregar nueva…".
+var METODOS_PREP_BASE = ['Built','Stirred','Shaken','Blended','Layered','Thrown','Espresso','Prensa francesa','Filtrado','Otro'];
+function _metodosPrepLista(actual) {
+    var out = METODOS_PREP_BASE.slice();
+    try { (JSON.parse(_skGet('metodos_prep_custom')) || []).forEach(function(m){ if (m && out.indexOf(m) === -1) out.push(m); }); } catch(e) {}
+    if (actual && out.indexOf(actual) === -1) out.push(actual);
+    return out;
+}
+function _metodoPreOptions(val) {
+    var opts = _metodosPrepLista(val).map(function(m){
+        return '<option value="' + etx(m) + '"' + (val === m ? ' selected' : '') + '>' + etx(m) + '</option>';
+    }).join('');
+    return opts + '<option value="__add__">➕ Agregar nueva…</option>';
+}
+function _onMetodoPreChange(sel) {
+    if (sel.value !== '__add__') return;
+    var previo = 'Built';
+    sel.value = previo; // reset mientras se captura
+    var _ask = window.etaaxPrompt || function(t, d, cb){ cb(window.prompt(t) || ''); };
+    _ask('Nuevo método de preparación', '', function(val){
+        var nombre = (val || '').trim();
+        if (!nombre) return;
+        var lista; try { lista = JSON.parse(_skGet('metodos_prep_custom')) || []; } catch(e) { lista = []; }
+        if (lista.indexOf(nombre) === -1) lista.push(nombre);
+        try { localStorage.setItem(_sk('metodos_prep_custom'), JSON.stringify(lista)); } catch(e) {}
+        sel.innerHTML = _metodoPreOptions(nombre);
+    }, { icon:'🍸', placeholder:'Ej. Macerado, Carbonatado…' });
+}
+
 function renderFormularioPorTipo(tipo, datos) {
     const cfg  = TIPO_RECETA_CFG[tipo] || TIPO_RECETA_CFG['alimentos'];
     const d    = datos || {};
@@ -2222,9 +2251,11 @@ function renderFormularioPorTipo(tipo, datos) {
         metodo: `
             <div class="meta-item">
                 <label>Método de preparación</label>
-                ${sel('metodoPre',
-                    ['Built','Stirred','Shaken','Blended','Layered','Thrown','Espresso','Prensa francesa','Filtrado','Otro'],
-                    d.metodoPre||'Built')}
+                <select id="metodoPre" onchange="_onMetodoPreChange(this)" style="width:100%;background:var(--surface2);
+                    border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:6px;
+                    font-family:sans-serif;font-size:14px;outline:none">
+                    ${_metodoPreOptions(d.metodoPre||'Built')}
+                </select>
             </div>`,
         garnish: `
             <div class="meta-item">
@@ -2746,6 +2777,10 @@ function renderGridRecetas() {
             ${(!_catGlobal && _sucAct && r.status === 'inactiva')
                 ? `<button onclick="event.stopPropagation();reactivarRecetaGlobal('${r.id}')" title="Inactiva GLOBAL (pastilla del editor): no aparece en ningún lado. Este botón la reactiva en TODO el negocio."
                     style="width:100%;margin-top:9px;background:var(--surface);border:1px solid rgba(224,90,58,.5);color:var(--red);border-radius:8px;padding:7px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">🚫 Inactiva global · ▶ Activar</button>` : ''}
+            <button onclick="event.stopPropagation();duplicarRecetaDesdeLista('${r.id}')"
+                style="position:absolute;top:8px;right:28px;background:none;border:none;
+                color:var(--text-dim);cursor:pointer;font-size:11px;padding:2px 5px;
+                border-radius:4px;z-index:2" title="Hacer copia">📋</button>
             <button onclick="event.stopPropagation();eliminarReceta('${r.id}')"
                 style="position:absolute;top:8px;right:8px;background:none;border:none;
                 color:var(--text-dim);cursor:pointer;font-size:11px;padding:2px 5px;
@@ -3295,6 +3330,26 @@ function renderCaratulaTablaRecetas(recetas,g){var sU=0,cU=0;var filas=recetas.m
 function _fmtNum(n){if(n===0)return '0';return parseFloat(n.toFixed(3))+'';}
 function renderCaratulaTablaSubRecetas(recetas,g){var filas=recetas.map(function(r){var c=(r.ingredientes||[]).reduce(function(s,i){return s+costoIngredienteVivo(i);},0),cx=r.camposExtra||{};var rN=parseFloat(cx.rendimientoFinal)||0,rU=(cx.unidadRendimientoFinal||'').toUpperCase();var rS=rN>0?_fmtNum(rN)+' '+rU.toLowerCase():'—';var rB=rN;if(rU==='G'||rU==='ML')rB=rN/1000;var cKL=rB>0?c/rB:0,uB=(rU==='G'||rU==='KG')?'kg':(rU==='ML'||rU==='LT')?'lts':rU.toLowerCase();var pQ=parseFloat(cx.porcionesQty)||0,pUn=(cx.porcionesUnidad||'pzs').toLowerCase(),pP=parseFloat(cx.pesoPorcion)||0,uP=(cx.unidadPesoPorcion||'').toLowerCase(),pD='—',uPD='—',cP=0;if(pQ>0){pD=pQ.toFixed(0)+' porciones';cP=c/pQ;if(rN>0)uPD=_fmtNum(rN/pQ)+' '+rU.toLowerCase();else if(pP>0)uPD=_fmtNum(pP)+' '+uP;}else if(pP>0&&rN>0){var pC=rN/pP;pD=pC.toFixed(0)+' porciones';cP=c/pC;uPD=_fmtNum(pP)+' '+uP;}var in2=r.status==='inactiva',gr=r.grupo||'';return '<tr style="opacity:'+(in2?'0.5':'1')+'"><td style="font-size:12px;font-weight:600"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><button class="btn-ver-ficha" onclick="abrirFichaDesdeCaratula(\''+r.id+'\')">📋 Ver</button>'+r.nombre+(in2?'<span style="font-size:9px;color:var(--text-dim);background:var(--surface2);padding:1px 6px;border-radius:4px">inactiva</span>':'')+'</div>'+(gr?'<div style="font-size:10px;color:var(--text-dim);font-weight:400;margin-top:2px">'+etx(gr)+'</div>':'')+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+rS+'</td><td style="text-align:right;color:var(--accent);font-weight:600">$'+c.toFixed(2)+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+pD+'</td><td style="text-align:center;font-size:11px;color:var(--text-muted)">'+uPD+'</td><td style="text-align:right;color:var(--green);font-weight:600">'+(cP>0?'$'+cP.toFixed(2):'—')+'</td><td style="text-align:right;font-weight:600;color:var(--text-muted)">'+(cKL>0?'$'+cKL.toFixed(2)+'<span style="font-size:9px;margin-left:2px;color:var(--text-dim)">/'+uB+'</span>':'—')+'</td></tr>';}).join('');return '<div class="tabla-wrap"><table><thead><tr><th style="text-align:left">NOMBRE DE SUB RECETA</th><th style="text-align:center">RENDIMIENTO NETO</th><th style="text-align:right">COSTO BRUTO</th><th style="text-align:center">RENDIMIENTO x PORCIONES</th><th style="text-align:center">UNIDAD DE MEDIDA x PORCIÓN</th><th style="text-align:right">COSTO POR PORCIÓN</th><th style="text-align:right">COSTO POR kg o LT</th></tr></thead><tbody>'+filas+'</tbody></table></div>';}
 function imprimirCaratula(){if(!caratulaTipoActual)return;var q=(document.getElementById('caratulaBuscar')?.value||'').toLowerCase(),gF=document.getElementById('caratulaFiltroGrupo')?.value||'',sF=document.getElementById('caratulaFiltroStatus')?.value||'';var recetas=getRecetasScope().filter(function(r){return r.tipo===caratulaTipoActual;});if(q)recetas=recetas.filter(function(r){return r.nombre.toLowerCase().includes(q)||(r.grupo||'').toLowerCase().includes(q)||(r.categoria||'').toLowerCase().includes(q);});if(gF)recetas=recetas.filter(function(r){return r.grupo===gF;});if(sF==='activa')recetas=recetas.filter(function(r){return r.status!=='inactiva';});if(sF==='inactiva')recetas=recetas.filter(function(r){return r.status==='inactiva';});if(!recetas.length){alert('No hay recetas para imprimir.');return;}var g=CARATULA_GRUPOS.find(function(x){return x.key===caratulaTipoActual;});abrirVentanaImpresion(buildPlantillaCaratula(recetas,g));}
+
+// Copiar receta/sub-receta DESDE LA LISTA (el botón 📋 de la card, como en
+// insumos): confirmación + contraseña de admin, duplicado independiente con
+// id nuevo y nombre "(copia)". El original queda intacto; no abre el editor.
+function duplicarRecetaDesdeLista(id) {
+    var src = getRecetas().find(function(r){ return r.id === id; });
+    if (!src) return;
+    var _conf = window.etaaxConfirm || function(t, m, onYes){ if (window.confirm(t + '\n' + m)) onYes(); };
+    _conf('¿Copiar receta?', '¿Deseas hacer una copia de "' + (src.nombre || 'esta receta') + '"?', function(){
+        _pedirClaveAdmin('Copiar receta "' + (src.nombre || '') + '"', function(){
+            var copia = JSON.parse(JSON.stringify(src));
+            copia.id     = genId();
+            copia.nombre = (src.nombre || 'Receta') + ' (copia)';
+            var lista = getRecetas(); lista.push(copia); setRecetas(lista);
+            if (typeof _sbUpReceta === 'function') _sbUpReceta(copia);
+            renderGridRecetas();
+            alert('✅ Copia creada: "' + copia.nombre + '". El original quedó intacto.');
+        });
+    }, null, { icon:'📋', yesLabel:'Sí, copiar', noLabel:'No', danger:false });
+}
 
 function eliminarReceta(id) {
     var rec = getRecetas().find(function(r){ return r.id === id; });

@@ -2000,6 +2000,14 @@
        const ins = getInsumos().find(x => x.id === id);
        if (!ins) return;
        if (ins.esSubReceta) { alert('Las producciones propias (sub-recetas) se copian desde su escandallo en Recetas, no aquí.'); return; }
+       // Confirmación + contraseña de admin: una copia accidental ensucia el
+       // catálogo (y sus costos alimentan escandallos e inventarios).
+       var _conf = window.etaaxConfirm || function(t, m, onYes){ if (window.confirm(t + '\n' + m)) onYes(); };
+       _conf('¿Copiar insumo?', '¿Deseas hacer una copia de "' + (ins.nombre || 'este insumo') + '"?', function(){
+           _pedirClaveAdmin('Copiar insumo "' + (ins.nombre || '') + '"', function(){ _hacerCopiaInsumo(ins); });
+       }, null, { icon:'📋', yesLabel:'Sí, copiar', noLabel:'No', danger:false });
+   }
+   function _hacerCopiaInsumo(ins) {
        const copia = JSON.parse(JSON.stringify(ins));
        copia.id = genId();
        copia.nombre = ((ins.nombre || 'Insumo') + ' (copia)').slice(0, 120);
