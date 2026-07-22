@@ -18,7 +18,9 @@
 .pp-btn:hover{border-color:var(--green);color:var(--green)}
 .pp-btn-primary{background:var(--green);border:none;color:#0a0908;font-weight:600}
 .pp-btn-danger{border-color:rgba(224,90,58,.4);color:var(--salmon,#e05a3a)}
-.pp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.pp-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+@media (max-width:1000px){.pp-grid{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:540px){.pp-grid{grid-template-columns:1fr}}
 .pp-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;cursor:pointer;transition:all .2s}
 .pp-card:hover{border-color:rgba(61,190,122,.5);transform:translateY(-2px)}
 .pp-card-tit{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:.5px;color:var(--text);line-height:1.1}

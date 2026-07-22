@@ -36,6 +36,11 @@
             'html.embed body{padding-top:0!important}' +
             /* Reset de offsets que dejaban espacio para la top-bar */
             'html.embed .pp-wrap,html.embed .hr-wrap{padding-top:16px!important}' +
+            /* El header sticky de páginas tipo catálogo (staff) se pegaba a 48/96px
+               como si el top-bar/ctx-bar existieran → banda muerta arriba y contenido
+               visible ENCIMA del título al hacer scroll en la tablet. En el iframe
+               no hay cromo: se pega al tope real. */
+            'html.embed .header,html.embed body.has-ctx .header{top:0!important}' +
             'html.embed .ev-wrap,html.embed body.has-ctx .ev-wrap{padding-top:16px!important}' +
             'html.embed body.has-ctx .pp-wrap{padding-top:16px!important}' +
             /* Organigrama: sin nav lateral, el lienzo y su toolbar van a la izquierda/arriba */

@@ -41,7 +41,10 @@
         /* ── Modal flotante de herramienta (organigrama, perfiles, etc. embebidos) ── */
         .tool-modal-bg { position:fixed;inset:0;z-index:9400;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:2vh 1.4vw; }
         .tool-modal-bg.on { display:flex;animation:fadeUp .18s ease both; }
-        .tool-modal { background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:1280px;height:96vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 90px rgba(0,0,0,.5); }
+        /* height:100% (no 96vh): en tablet los vh se miden con la barra del navegador
+           oculta y el modal quedaba más alto que lo visible → header cortado arriba.
+           El overlay fixed SÍ se ajusta al viewport real; 100% de él siempre cabe. */
+        .tool-modal { background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:1280px;height:100%;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 90px rgba(0,0,0,.5); }
         .tool-modal-hd { display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface2);flex-shrink:0; }
         .tool-modal-hd .tm-ic { font-size:20px;line-height:1; }
         .tool-modal-hd .tm-tt { font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--text);line-height:1; }
