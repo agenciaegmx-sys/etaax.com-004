@@ -296,14 +296,16 @@
             <div class="ch-sub">(Precio en carta sin IVA − costo de ingredientes) ÷ precio sin IVA · semáforo: ≥30% sano.</div>
             <div class="ch-filtros">
                 <input type="text" id="qRecetas" placeholder="🔍 Buscar receta…" oninput="renderRecetas()">
-                <button class="ch-chip active" data-m="top" onclick="modoRecetas('top',this)">Top 10</button>
+                <button class="ch-chip active" data-m="top" onclick="modoRecetas('top',this)">Top 100</button>
                 <button class="ch-chip" data-m="peor" onclick="modoRecetas('peor',this)">Menos rentables</button>
                 <button class="ch-chip" data-m="todas" onclick="modoRecetas('todas',this)">Todas</button>
             </div>
             <div id="chRecetas"></div>
         </div>
 
-        <div class="chart-card wide">
+        <!-- Omitida por ahora (Edwin 2026-07-22): nos quedamos solo con la de recetas.
+             Para revivirla basta quitar el display:none. -->
+        <div class="chart-card wide" style="display:none">
             <div class="ch-title">📦 Rentabilidad de insumos de venta directa — margen % estimado</div>
             <div class="ch-sub">Insumos con precio en carta (cervezas, refrescos, botellas…): (precio sin IVA − costo) ÷ precio sin IVA.</div>
             <div class="ch-filtros">
@@ -1033,7 +1035,7 @@ function renderRecetas(){
     var lista=_margenRecetas();
     if(q) lista=lista.filter(function(x){return x.label.toLowerCase().indexOf(q)>=0;});
     if(!lista.length) return vacio(el,q?'Sin recetas que coincidan con "'+_escHtml(q)+'".':'Necesitas recetas con ingredientes costeados y precio en carta.');
-    var rows=_modoRec==='top'?lista.slice(0,10):_modoRec==='peor'?lista.slice(-10).reverse():lista;
+    var rows=_modoRec==='top'?lista.slice(0,100):_modoRec==='peor'?lista.slice(-100).reverse():lista;
     barHChart(el,rows,null,function(x){return x.toFixed(1)+'%';},
         {porSigno:true,colPos:p.green,colNeg:p.red,serie:'Margen %',xCol:'Receta'});
 }
