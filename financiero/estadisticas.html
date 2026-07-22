@@ -292,13 +292,19 @@
         </div>
 
         <div class="chart-card wide">
-            <div class="ch-title">🍸 Rentabilidad de recetas — margen % estimado</div>
-            <div class="ch-sub">(Precio en carta sin IVA − costo de ingredientes) ÷ precio sin IVA · semáforo: ≥30% sano.</div>
+            <div class="ch-title">🍸 Rentabilidad de recetas — utilidad neta % estimada</div>
+            <div class="ch-sub">Utilidad neta = 100% − costo% − 40% de gasto operativo, igual que el costeo aplicado de tu escandallo · semáforo: ≥25% sano.</div>
             <div class="ch-filtros">
                 <input type="text" id="qRecetas" placeholder="🔍 Buscar receta…" oninput="renderRecetas()">
-                <button class="ch-chip active" data-m="top" onclick="modoRecetas('top',this)">Top 100</button>
+                <button class="ch-chip active" data-m="top" onclick="modoRecetas('top',this)">Top</button>
                 <button class="ch-chip" data-m="peor" onclick="modoRecetas('peor',this)">Menos rentables</button>
                 <button class="ch-chip" data-m="todas" onclick="modoRecetas('todas',this)">Todas</button>
+                <select id="topNRecetas" class="ch-chip" onchange="renderRecetas()" title="Cuántas mostrar en Top / Menos rentables">
+                    <option value="10" selected>10</option><option value="20">20</option><option value="30">30</option>
+                    <option value="40">40</option><option value="50">50</option><option value="60">60</option>
+                    <option value="70">70</option><option value="80">80</option><option value="90">90</option>
+                    <option value="100">100</option>
+                </select>
             </div>
             <div id="chRecetas"></div>
         </div>
@@ -1024,7 +1030,9 @@ function _margenRecetas(){
         .map(function(r){
             var costo=(r.ingredientes||[]).reduce(function(s,i){ return s+getFactor(parseFloat(i.cantidad)||0,i.unidad)*costoUnit(i); },0);
             var psi=parseFloat(r.precioEnCarta)/1.16;
-            return {label:r.nombre||'—',value:psi>0?Math.round((psi-costo)/psi*1000)/10:0,costo:costo};
+            // Utilidad neta % = 100 − costo% − 40 (gasto operativo), MISMA fórmula
+            // que el "Costeo aplicado" del escandallo (aUtilidadP en app.js).
+            return {label:r.nombre||'—',value:psi>0?Math.round((100-(costo/psi*100)-40)*10)/10:0,costo:costo};
         })
         .filter(function(x){ return isFinite(x.value)&&x.costo>0; })
         .sort(function(a,b){ return b.value-a.value; });
@@ -1035,9 +1043,10 @@ function renderRecetas(){
     var lista=_margenRecetas();
     if(q) lista=lista.filter(function(x){return x.label.toLowerCase().indexOf(q)>=0;});
     if(!lista.length) return vacio(el,q?'Sin recetas que coincidan con "'+_escHtml(q)+'".':'Necesitas recetas con ingredientes costeados y precio en carta.');
-    var rows=_modoRec==='top'?lista.slice(0,100):_modoRec==='peor'?lista.slice(-100).reverse():lista;
+    var topN=parseInt((document.getElementById('topNRecetas')||{}).value)||10;
+    var rows=_modoRec==='top'?lista.slice(0,topN):_modoRec==='peor'?lista.slice(-topN).reverse():lista;
     barHChart(el,rows,null,function(x){return x.toFixed(1)+'%';},
-        {porSigno:true,colPos:p.green,colNeg:p.red,serie:'Margen %',xCol:'Receta'});
+        {porSigno:true,colPos:p.green,colNeg:p.red,serie:'Utilidad neta %',xCol:'Receta'});
 }
 
 /* ── Rentabilidad de INSUMOS de venta directa ── */
