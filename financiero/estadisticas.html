@@ -1013,9 +1013,14 @@ function modoRecetas(m,btn){ _modoRec=m;
     renderRecetas(); }
 function _margenRecetas(){
     function getFactor(cantidad,unidad){ var u=(unidad||'').toUpperCase(); if(u==='ML'||u==='G') return cantidad/1000; return cantidad; }
+    // Misma regla que costoUnitEfectivo() de app.js: el costo MANUAL (sin insumoId)
+    // se captura en $/KG-LT-PZ, y con OZ hay que convertirlo (× 29.5735/1000);
+    // el vinculado ya viene convertido a la unidad. Sin esto salían márgenes de −1300%.
+    function costoUnit(i){ var c=parseFloat(i.costoPorKgLt)||0;
+        if(!i.insumoId&&(i.unidad||'').toUpperCase()==='OZ') return c*29.5735/1000; return c; }
     return (_recetas||[]).filter(function(r){ return r&&r.status!=='inactiva'&&!r.esSubReceta&&parseFloat(r.precioEnCarta)>0&&(r.ingredientes||[]).length; })
         .map(function(r){
-            var costo=(r.ingredientes||[]).reduce(function(s,i){ return s+getFactor(parseFloat(i.cantidad)||0,i.unidad)*(parseFloat(i.costoPorKgLt)||0); },0);
+            var costo=(r.ingredientes||[]).reduce(function(s,i){ return s+getFactor(parseFloat(i.cantidad)||0,i.unidad)*costoUnit(i); },0);
             var psi=parseFloat(r.precioEnCarta)/1.16;
             return {label:r.nombre||'—',value:psi>0?Math.round((psi-costo)/psi*1000)/10:0,costo:costo};
         })
@@ -1039,6 +1044,7 @@ function modoInsumos(m,btn){ _modoIns=m;
     btn.parentElement.querySelectorAll('.ch-chip').forEach(function(b){b.classList.toggle('active',b===btn);});
     renderInsumos(); }
 function _margenInsumos(){
+    _margenInsumos._seen={};
     return (_insumos||[]).filter(function(x){ return x&&x.activo!=='0'&&!x.esSubReceta&&(x.presentaciones||[]).length; })
         .map(function(x){
             var pz=x.presentaciones[0]||{};
@@ -1049,6 +1055,9 @@ function _margenInsumos(){
             return {label:(x.nombre||'—')+(x.variedad?' '+x.variedad:''),value:Math.round((psi-costo)/psi*1000)/10};
         })
         .filter(function(x){ return x&&isFinite(x.value); })
+        // Copias por sucursal del MISMO insumo con el mismo margen = una sola fila
+        .filter(function(x){ var k=x.label+'|'+x.value;
+            if(_margenInsumos._seen[k]) return false; _margenInsumos._seen[k]=1; return true; })
         .sort(function(a,b){ return b.value-a.value; });
 }
 function renderInsumos(){
