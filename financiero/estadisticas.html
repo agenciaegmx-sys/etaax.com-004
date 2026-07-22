@@ -267,12 +267,6 @@
         </div>
 
         <div class="chart-card">
-            <div class="ch-title">⭐ Propinas</div>
-            <div class="ch-sub">Efectivo + tarjeta, por corte de tiempo del periodo.</div>
-            <div id="chProps"></div>
-        </div>
-
-        <div class="chart-card">
             <div class="ch-title">⭐ Propinas vs Ventas</div>
             <div class="ch-sub" id="sPropVs">Propinas contra venta bruta, por corte de tiempo.</div>
             <div class="ch-legend" id="lgPropVs"></div>
@@ -960,11 +954,8 @@ function renderAll(){
         stack100(el,'Comedor vs Para llevar',[{label:'Comedor',value:com,color:p.green},{label:'Para llevar',value:llev,color:p.blue}]);
     })();
 
-    /* 9-11 · Propinas / Comisiones / Nómina por bucket */
+    /* 9-11 · Propinas vs Ventas / Comisiones / Nómina por bucket */
     (function(){
-        colChart(document.getElementById('chProps'),bk.labels,
-            [{name:'Propinas',color:p.viol,values:serieBuckets(bk,cortesR(rF),EtaaxCore.propinas)}],fmtK,{});
-
         /* Propinas vs Ventas: columnas agrupadas, mismo formato que Ventas vs Gastos */
         var elPV=document.getElementById('chPropsVs');
         if(elPV){
