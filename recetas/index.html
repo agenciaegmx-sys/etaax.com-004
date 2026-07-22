@@ -3356,6 +3356,8 @@ function eliminarReceta(id) {
     _pedirClaveAdmin('Eliminar "' + nombre + '"', function() {
         setRecetas(getRecetas().filter(function(r){ return r.id !== id; }));
         if (typeof _sbDelReceta === 'function') _sbDelReceta(id);
+        recetasSeleccionadas.delete(id);
+        renderGridRecetas(); // la card desaparece al instante, sin cerrar/abrir el catálogo
         if (typeof renderMenuReceta === 'function') renderMenuReceta();
     });
 }

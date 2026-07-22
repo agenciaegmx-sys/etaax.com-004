@@ -97,6 +97,32 @@
             border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);
             display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15)}
         .theme-toggle:hover{border-color:var(--green);color:var(--green)}
+        /* ── Botón 🔍 y modal de desglose detallado por card ── */
+        .ch-det-btn{margin-left:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);
+            border-radius:20px;padding:3px 11px;font-family:'DM Sans',sans-serif;font-size:10.5px;letter-spacing:.3px;
+            cursor:pointer;transition:all .15s;vertical-align:2px}
+        .ch-det-btn:hover{border-color:var(--viol);color:var(--viol)}
+        .det-ov{display:none;position:fixed;inset:0;z-index:9200;background:rgba(0,0,0,.65);backdrop-filter:blur(3px);
+            align-items:center;justify-content:center;padding:16px}
+        .det-ov.on{display:flex;animation:fadeUp .18s ease both}
+        .det-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:760px;
+            max-height:100%;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.5)}
+        .det-hd{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0}
+        .det-hd .dh-t{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--text)}
+        .det-hd .dh-p{font-size:11px;color:var(--text-dim);margin-left:auto}
+        .det-hd button{background:var(--surface2);border:1px solid var(--border);border-radius:9px;color:var(--text-muted);
+            padding:6px 13px;font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer}
+        .det-body{padding:16px 18px;overflow-y:auto}
+        .det-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:14px}
+        .det-tile{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+        .det-tile .dt-n{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--viol);margin-bottom:7px}
+        .det-tile .dt-row{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--text-muted);padding:2px 0}
+        .det-tile .dt-row b{color:var(--text);font-weight:600;white-space:nowrap}
+        .det-tbl{width:100%;border-collapse:collapse;font-size:12px}
+        .det-tbl th{text-align:left;font-size:9.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);
+            padding:6px 8px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface)}
+        .det-tbl td{padding:5px 8px;border-bottom:1px solid var(--border);color:var(--text-muted)}
+        .det-tbl tr.det-total td{color:var(--text);font-weight:700;border-top:2px solid var(--border)}
     </style>
 </head>
 <body>
@@ -246,6 +272,12 @@
         </div>
 
         <div class="chart-card">
+            <div class="ch-title">⭐ Propinas vs Ventas</div>
+            <div class="ch-sub" id="sPropVs">% que representan las propinas sobre la venta bruta, por corte de tiempo.</div>
+            <div id="chPropsVs"></div>
+        </div>
+
+        <div class="chart-card">
             <div class="ch-title">💳 Comisiones bancarias</div>
             <div class="ch-sub">Lo que el banco descontó (comisión + IVA por cuenta), por corte de tiempo.</div>
             <div id="chComis"></div>
@@ -286,6 +318,18 @@
             </div>
             <div id="chInsumos"></div>
         </div>
+    </div>
+</div>
+
+<!-- Modal de desglose detallado (🔍 de cada recuadro) -->
+<div class="det-ov" id="detOv" onclick="if(event.target===this)cerrarDesglose()">
+    <div class="det-card">
+        <div class="det-hd">
+            <span class="dh-t" id="detTitulo">Desglose</span>
+            <span class="dh-p" id="detPeriodo"></span>
+            <button onclick="cerrarDesglose()">✕ Cerrar</button>
+        </div>
+        <div class="det-body" id="detBody"></div>
     </div>
 </div>
 
@@ -535,6 +579,69 @@ function _ticks(max){ if(max<=0) return {top:100,step:50};
     var step=(norm<=1?1:norm<=2?2:norm<=5?5:10)*mag;
     return {top:step*2>=max?step*2:step*3,step:step}; }
 function vacio(el,msg){ el.innerHTML='<div class="ch-empty">'+(msg||'Sin datos en este periodo.')+'</div>'; }
+/* ── Desglose detallado por card (botón 🔍) ──
+   Cada gráfica registra sus datos CRUDOS al renderizar; el botón del título
+   abre un modal con totales, promedio, mejor/peor periodo y la tabla completa.
+   Las series pueden traer su propio fmt (para mezclar $ y %). */
+var _detReg={};
+function _detRegistrar(el,labels,series,fmt,xCol){
+    if(!el||!el.id) return;
+    _detReg[el.id]={labels:labels,series:series,fmt:fmt||fmtM,xCol:xCol||'Periodo'};
+    var card=el.closest?el.closest('.chart-card'):null;
+    if(card&&!card.querySelector('.ch-det-btn')){
+        var t=card.querySelector('.ch-title');
+        if(t){ var b=document.createElement('button'); b.className='ch-det-btn'; b.textContent='🔍 Desglose';
+            b.onclick=(function(id){return function(){abrirDesglose(id);};})(el.id);
+            t.appendChild(b); }
+    }
+}
+function abrirDesglose(id){
+    var d=_detReg[id],h='';
+    var elc=document.getElementById(id),card=elc?elc.closest('.chart-card'):null;
+    var titulo=card?(card.querySelector('.ch-title').childNodes[0].textContent||'Desglose'):'Desglose';
+    if(!d||!d.labels||!d.labels.length){ h='<div class="ch-empty">Sin datos en este periodo.</div>'; }
+    else{
+        h+='<div class="det-tiles">';
+        d.series.forEach(function(s){
+            var f=s.fmt||d.fmt, esPct=/%/.test(String(f(1)));
+            var vals=s.values.map(function(v){return v||0;});
+            var tot=vals.reduce(function(a,b){return a+b;},0);
+            var nz=vals.filter(function(v){return v!==0;});
+            var prom=nz.length?tot/nz.length:0;
+            var vMax=Math.max.apply(null,vals),iMax=vals.indexOf(vMax);
+            var vMin=nz.length?Math.min.apply(null,nz):0,iMin=vals.indexOf(vMin);
+            h+='<div class="det-tile"><div class="dt-n">'+_escHtml(s.name)+'</div>'+
+               (esPct?'':'<div class="dt-row"><span>Total del periodo</span><b>'+f(tot)+'</b></div>')+
+               '<div class="dt-row"><span>Promedio ('+nz.length+' con dato)</span><b>'+f(prom)+'</b></div>'+
+               (vMax>0?'<div class="dt-row"><span>Mejor · '+_escHtml(String(d.labels[iMax]||''))+'</span><b>'+f(vMax)+'</b></div>':'')+
+               (nz.length>1?'<div class="dt-row"><span>Más bajo · '+_escHtml(String(d.labels[iMin]||''))+'</span><b>'+f(vMin)+'</b></div>':'')+
+               '</div>';
+        });
+        h+='</div>';
+        var una=d.series.length===1&&!/%/.test(String((d.series[0].fmt||d.fmt)(1)));
+        var tot1=una?d.series[0].values.reduce(function(a,b){return a+(b||0);},0):0;
+        h+='<table class="det-tbl"><tr><th>'+_escHtml(d.xCol)+'</th>'+
+            d.series.map(function(s){return '<th>'+_escHtml(s.name)+'</th>';}).join('')+
+            (una&&tot1?'<th>% del total</th>':'')+'</tr>';
+        d.labels.forEach(function(l,i){
+            h+='<tr><td>'+_escHtml(String(l))+'</td>'+
+               d.series.map(function(s){return '<td>'+(s.fmt||d.fmt)(s.values[i]||0)+'</td>';}).join('')+
+               (una&&tot1?'<td>'+((d.series[0].values[i]||0)/tot1*100).toFixed(1)+'%</td>':'')+'</tr>';
+        });
+        h+='<tr class="det-total"><td>Total</td>'+d.series.map(function(s){
+                var f=s.fmt||d.fmt;
+                if(/%/.test(String(f(1)))) return '<td>—</td>';
+                return '<td>'+f(s.values.reduce(function(a,b){return a+(b||0);},0))+'</td>';
+            }).join('')+(una&&tot1?'<td>100%</td>':'')+'</tr></table>';
+    }
+    document.getElementById('detTitulo').textContent=(titulo||'').trim();
+    document.getElementById('detPeriodo').textContent=fmtRango(rangoF());
+    document.getElementById('detBody').innerHTML=h;
+    document.getElementById('detOv').classList.add('on');
+}
+function cerrarDesglose(){ document.getElementById('detOv').classList.remove('on'); }
+document.addEventListener('keydown',function(e){ if(e.key==='Escape')cerrarDesglose(); });
+
 function tabla(el,cols,filas){
     var d=document.createElement('details'); d.className='ch-tbl';
     var su=document.createElement('summary'); su.textContent='Ver tabla'; d.appendChild(su);
@@ -582,6 +689,7 @@ function lineChart(el,labels,series,fmt,opts){
     svg.addEventListener('pointerleave',function(){ cross.setAttribute('opacity',0); tipHide(); });
     tabla(el,[opts.xCol||'Periodo'].concat(series.map(function(s){return s.name;})),
         labels.map(function(l,i){ return [l].concat(series.map(function(s){return fmt(s.values[i]||0);})); }));
+    _detRegistrar(el,labels,series,fmt,opts.xCol);
 }
 function colChart(el,labels,series,fmt,opts){
     opts=opts||{}; fmt=fmt||fmtK;
@@ -631,6 +739,7 @@ function colChart(el,labels,series,fmt,opts){
             _el(svg,'text',{x:W-padR,y:ry-4,'text-anchor':'end','font-size':9,fill:p.muted}).textContent=opts.refLabel||''; } }
     tabla(el,[opts.xCol||'Periodo'].concat(series.map(function(s){return s.name;})),
         labels.map(function(l,i){ return [l].concat(series.map(function(s){return fmt(s.values[i]||0);})); }));
+    _detRegistrar(el,labels,series,fmt,opts.xCol);
 }
 function _barPath(x,y,w,h,arriba){ var r=Math.min(4,w/2,h);
     return arriba
@@ -658,6 +767,8 @@ function barHChart(el,rows,color,fmt,opts){
         barra.addEventListener('pointerleave',function(){ barra.setAttribute('opacity',1); tipHide(); });
     });
     tabla(el,[opts.xCol||'Concepto',opts.serie||'Valor'],rows.map(function(r){return [r.label,fmt(r.value)];}));
+    _detRegistrar(el,rows.map(function(r){return r.label;}),
+        [{name:opts.serie||'Valor',values:rows.map(function(r){return r.value;})}],fmt,opts.xCol||'Concepto');
 }
 function stack100(el,titulo,segs){
     var total=segs.reduce(function(s,x){return s+x.value;},0);
@@ -700,6 +811,7 @@ function delta(cur,prev,vsTxt){
 
 function renderAll(){
     if(!_cortes) return;
+    _detReg={}; // sin datos frescos no hay desglose viejo que enseñar
     var p=pal(), rF=rangoF(), rC=rangoC(), comp=!!rC;
     var rBase=comp?rC:rangoPrevio(rF);
     var vsTxt=comp?'vs periodo B':'vs periodo anterior';
@@ -848,6 +960,28 @@ function renderAll(){
     (function(){
         colChart(document.getElementById('chProps'),bk.labels,
             [{name:'Propinas',color:p.viol,values:serieBuckets(bk,cortesR(rF),EtaaxCore.propinas)}],fmtK,{});
+
+        /* Propinas vs Ventas: % de propina sobre venta bruta por bucket */
+        var elPV=document.getElementById('chPropsVs');
+        if(elPV){
+            elPV.innerHTML='';
+            var xColPV=bk.modo==='dia'?'Día':bk.modo==='semana'?'Semana':'Mes';
+            var svPV=serieBuckets(bk,cortesR(rF),EtaaxCore.ventasBruta);
+            var spPV=serieBuckets(bk,cortesR(rF),EtaaxCore.propinas);
+            var pctPV=svPV.map(function(v2,i){ return v2>0?Math.round((spPV[i]||0)/v2*1000)/10:0; });
+            var fmtPct=function(x){ return (Math.round(x*10)/10)+'%'; };
+            var vTot=svPV.reduce(function(a,b){return a+b;},0),pTot=spPV.reduce(function(a,b){return a+b;},0);
+            var sub=document.getElementById('sPropVs');
+            if(sub) sub.textContent=vTot>0
+                ? 'Del periodo: '+fmtM(pTot)+' de propinas sobre '+fmtM(vTot)+' de venta = '+(pTot/vTot*100).toFixed(1)+'% de propina promedio.'
+                : '% que representan las propinas sobre la venta bruta, por corte de tiempo.';
+            lineChart(elPV,bk.labels,[{name:'% propina sobre venta',color:p.viol,values:pctPV}],fmtPct,{xCol:xColPV});
+            // El 🔍 de esta card lleva el desglose completo: ventas, propinas y %.
+            _detRegistrar(elPV,bk.labels,[
+                {name:'Ventas',values:svPV,fmt:fmtM},
+                {name:'Propinas',values:spPV,fmt:fmtM},
+                {name:'% propina',values:pctPV,fmt:fmtPct}],fmtM,xColPV);
+        }
         var deb=ctasDeb();
         colChart(document.getElementById('chComis'),bk.labels,
             [{name:'Comisiones',color:p.red,values:serieBuckets(bk,cortesR(rF),function(c){return EtaaxCore.comisionBancoCorte(c,deb);})}],fmtK,{});
