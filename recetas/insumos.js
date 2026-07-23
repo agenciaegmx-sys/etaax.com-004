@@ -263,6 +263,20 @@
            var soloLocal = (local || []).filter(function(x){ return x && x.id && !_vistos[x.id] && !_insBorrados[x.id]; });
            var lista = remote.concat(soloLocal);
 
+           // MEMBRESÍAS PENDIENTES ("+ Copiar aquí" de Insumos Globales): el pull
+           // podía traer un snapshot ANTERIOR al push de la membresía y pisarla —
+           // el insumo "desaparecía" de la sucursal recién agregada. Se re-aplican
+           // hasta que la nube ya las traiga (entonces se dan por confirmadas).
+           var _pend = window._insMembPend || {};
+           lista.forEach(function(x){
+               var p = x && x.id && _pend[x.id];
+               if (!p) return;
+               var s = (window._insumoSucursales ? window._insumoSucursales(x) : (x.sucursalId ? [x.sucursalId] : []))
+                   .map(function(v){ return v || 'suc_principal'; });
+               if (s.indexOf(p.suc) < 0) { s.push(p.suc); x.sucursales = s; }
+               else delete _pend[x.id]; // la nube ya la trae → confirmada
+           });
+
            _insumosCache      = lista;
            _insumosCacheNegId = negId;
            // localStorage: versión sin fotos base64

@@ -840,7 +840,10 @@ function ignRender() {
         : _ignTodos.map(function(ins){
             var p0     = (ins.presentaciones || [])[0];
             var precio = p0 && parseFloat(p0.precio) > 0 ? '$' + parseFloat(p0.precio).toFixed(2) : '';
-            var cat    = etx([ins.familia, ins.categoria].filter(Boolean).join(' · '));
+            // Identidad completa: subcategoría · contenido (el título ya lleva nombre · variedad —
+            // varios insumos comparten nombre+marca y eran indistinguibles).
+            var contIgn = p0 && parseFloat(p0.contNeto) > 0 ? (parseFloat(p0.contNeto) + ' ' + String(p0.umContenido || '').toLowerCase()) : '';
+            var cat    = etx([ins.subcategoria || ins.categoria || ins.familia, contIgn].filter(Boolean).join(' · '));
             var ya     = window._insumoEnSuc && window._insumoEnSuc(ins, _effSucIns(_getSucActivaIns()));
             var sucBadge = '<span style="font-size:10px;background:rgba(122,184,245,.12);color:#7ab8f5;border:1px solid rgba(122,184,245,.25);border-radius:4px;padding:1px 6px;white-space:nowrap">' + etx(_sucNombreIgn(ins.sucursalId)) + '</span>';
             var fotoEl = ins.foto
@@ -849,7 +852,7 @@ function ignRender() {
             return '<div style="display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--border)">' +
                 fotoEl +
                 '<div style="flex:1;min-width:0">' +
-                    '<div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + etx(ins.nombre) + (ins.marca ? ' <span style="color:var(--text-muted);font-weight:400">' + etx(ins.marca) + '</span>' : '') + '</div>' +
+                    '<div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + etx(typeof insumoTitulo === 'function' ? insumoTitulo(ins) : ins.nombre) + (ins.marca ? ' <span style="color:var(--text-muted);font-weight:400">' + etx(ins.marca) + '</span>' : '') + '</div>' +
                     '<div style="font-size:10px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;gap:6px;align-items:center;margin-top:2px">' + sucBadge + (cat ? '<span>' + cat + '</span>' : '') + '</div>' +
                 '</div>' +
                 (precio ? '<div style="font-size:12px;color:var(--green);white-space:nowrap;flex-shrink:0;margin-right:8px">' + precio + '</div>' : '') +
@@ -871,6 +874,11 @@ function ignAgregar(id) {
         .map(function(v){ return v || 'suc_principal'; });
     if (s.indexOf(cur) < 0) s.push(cur);
     ins.sucursales = s;
+    // Membresía pendiente: si un pull de la nube llega con un snapshot viejo,
+    // insumos.js la re-aplica hasta que Supabase la confirme (fix del "de
+    // repente ya no aparece el insumo agregado a la nueva sucursal").
+    window._insMembPend = window._insMembPend || {};
+    window._insMembPend[ins.id] = { suc: cur, t: Date.now() };
     setInsumos(getInsumos()); // persiste (ins es referencia del cache) + dispara sync
     if (typeof _sincronizarInsumosSupabase === 'function') {
         try { _sincronizarInsumosSupabase(getNegocioActivo(), [ins]); } catch(e){}

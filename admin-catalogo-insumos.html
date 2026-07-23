@@ -653,6 +653,18 @@ var _novActu = [], _novNuevos = [];
 function _escN(s){ return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function _keyN(x){ return (((x&&x.nombre)||'')+'|'+((x&&x.marca)||'')).toLowerCase().trim(); }
 function _costoN(ins){ var p=((ins&&ins.presentaciones)||[])[0]||{}; return Math.round((parseFloat(p.costoUnitario)||parseFloat(p.precio)||0)*100)/100; }
+// Firma SEMÁNTICA de presentaciones: solo lo que el admin ve y le importa
+// (empaque, contenido, costo, carta). El JSON crudo comparaba también ids de
+// presentación y orden de llaves → todo se re-flaggeaba eternamente aunque
+// los números fueran idénticos (por eso lo aplicado "revivía").
+function _presFirmaSem(ps){
+    return JSON.stringify((ps||[]).map(function(p){ p=p||{};
+        return [ String(p.empaque||p.presentacionCompra||''), String(p.presentacion||''),
+                 Math.round((parseFloat(p.contNeto)||0)*100)/100, String(p.umContenido||'').toUpperCase(),
+                 Math.round((parseFloat(p.costoUnitario)||parseFloat(p.precio)||0)*100)/100, String(p.umCosto||'').toUpperCase(),
+                 Math.round((parseFloat(p.precioCarta)||0)*100)/100 ];
+    }));
+}
 function _fmtMN(v){ return '$'+(parseFloat(v)||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 // Desglose legible de las presentaciones de un insumo (para comparar versiones).
 function _presDesglose(ins){
@@ -675,7 +687,7 @@ function _presDesglose(ins){
 }
 /* Descartes persistentes ("No actualizar"): la firma incluye costo y forma de
    las presentaciones — si el negocio vuelve a cambiar algo, la novedad REAPARECE. */
-function _novFirmaActu(it){ return 'a|'+it.insumoId+'|'+it.negId+'|'+it.costoNeg+'|'+JSON.stringify((it.datosNeg||{}).presentaciones||[]).length; }
+function _novFirmaActu(it){ return 'a|'+it.insumoId+'|'+it.negId+'|'+it.costoNeg+'|'+_presFirmaSem((it.datosNeg||{}).presentaciones); }
 function _novFirmaNuevo(it){ return 'n|'+it.key+'|'+it.costo; }
 function _novDescartes(){ try { return JSON.parse(localStorage.getItem('etaax_admin_nov_descartes'))||{}; } catch(e){ return {}; } }
 function _novDescartar(firmas){
@@ -759,7 +771,7 @@ async function _cargarNovedades(){
         var cat = catById[row.insumo_id];
         if (cat){
             var cN=_costoN(ins), cC=_costoN(cat);
-            var presN=JSON.stringify(ins.presentaciones||[]), presC=JSON.stringify(cat.presentaciones||[]);
+            var presN=_presFirmaSem(ins.presentaciones), presC=_presFirmaSem(cat.presentaciones);
             if (cN!==cC || presN!==presC)
                 actu.push({ insumoId:row.insumo_id, negId:row.negocio_id, negNombre:negNombre, nombre:ins.nombre, marca:ins.marca, costoCat:cC, costoNeg:cN, presCambio:(presN!==presC), datosNeg:ins });
         } else {
@@ -865,10 +877,11 @@ async function _aplicarActualizacion(idx){
     var r=await _supabase.from('catalogo_insumos').upsert([{ id:upd.id, datos:upd }]);
     if (r.error){ alert('Error al actualizar: '+r.error.message); return; }
     _catalogoMem[i]=upd;
-    // Ya se eligió LA versión ganadora: las demás versiones de este insumo se
-    // descartan (desaparecen y no vuelven a salir salvo que el negocio cambie algo).
-    var otras=_novActu.filter(function(x){ return x.insumoId===it.insumoId && x!==it; });
-    _novDescartar(otras.map(_novFirmaActu));
+    // Ya se eligió LA versión ganadora: TODAS las versiones de este insumo (la
+    // aplicada incluida, cinturón por si quedara alguna diferencia residual) se
+    // descartan — desaparecen y no vuelven salvo que el negocio cambie algo.
+    var todas=_novActu.filter(function(x){ return x.insumoId===it.insumoId; });
+    _novDescartar(todas.map(_novFirmaActu));
     _novActu=_novActu.filter(function(x){ return x.insumoId!==it.insumoId; });
     _renderNovedades();
     if (typeof init==='function') init();
