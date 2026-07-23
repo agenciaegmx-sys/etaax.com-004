@@ -2332,6 +2332,13 @@ function crearSucursal() {
         setTimeout(function(){ inp.style.borderColor = ''; }, 1500);
         return;
     }
+    // Sin plataforma de cobro todavía: agregar sucursal pasa por un ASESOR.
+    // Solo el admin maestro (o la primera sucursal de la cuenta) crea directo.
+    if (!(_sesion.isAdmin || sucs.length === 0)) { _solicitarNuevaSucursal(marca, sucs, nombre); return; }
+    _crearSucursalDirecto(marca, sucs, nombre);
+}
+function _crearSucursalDirecto(marca, sucs, nombre) {
+    var inp = document.getElementById('inSucNombre');
     var btn = document.getElementById('btnCrearSuc');
     if (btn && btn.disabled) return;
     if (btn) { btn.disabled = true; btn.textContent = 'Creando...'; }
@@ -2341,7 +2348,7 @@ function crearSucursal() {
     };
     sucs.push(suc);
     _setSucursales(marca.id, sucs);
-    inp.value = '';
+    if (inp) inp.value = '';
     if (btn) { btn.disabled = false; btn.textContent = 'Crear sucursal →'; }
     if (sucs.length === 1) {
         seleccionarSucursal(suc.id, marca.id);
@@ -2350,6 +2357,79 @@ function crearSucursal() {
         document.getElementById('formNuevaSuc').style.display = 'none';
         document.getElementById('btnNuevaSucWrap').style.display = '';
     }
+}
+
+/* ── Solicitud de nueva sucursal (flujo con asesor, pre-Stripe) ──
+   Leyenda con el costo → al aceptar se guarda la solicitud en Supabase
+   (tabla solicitudes_plan, v36) y el admin maestro la activa a mano. */
+function _dlgHub(html) { // overlay estilo _confirmSalir, contenido libre
+    var old = document.getElementById('hubDlgOverlay');
+    if (old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'hubDlgOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9800;display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.innerHTML = '<div style="background:var(--surface,#141414);border:1px solid var(--border,#2a2a2a);border-radius:16px;padding:26px 26px 22px;max-width:400px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)">' + html + '</div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+    document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { document.removeEventListener('keydown', esc); ov.remove(); } });
+    return ov;
+}
+async function _solicitarNuevaSucursal(marca, sucs, nombre) {
+    // ¿Ya hay una solicitud pendiente? No duplicar.
+    try {
+        var rq = await _supabase.from('solicitudes_plan').select('id,datos').eq('negocio_id', marca.id);
+        var pendiente = !rq.error && (rq.data || []).some(function (s) { return s.datos && s.datos.estado === 'pendiente'; });
+        if (pendiente) {
+            _dlgHub('<div style="font-size:34px;margin-bottom:10px">📨</div>' +
+                '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:1.5px;color:var(--text,#eee);margin-bottom:6px">SOLICITUD EN CURSO</div>' +
+                '<div style="font-size:13px;color:var(--text-dim,#888);margin-bottom:20px">Ya tienes una solicitud de sucursal pendiente. Un asesor se comunicará contigo para activarla.</div>' +
+                '<button onclick="document.getElementById(\'hubDlgOverlay\').remove()" style="width:100%;background:var(--surface2,#1d1d1d);border:1px solid var(--border,#2a2a2a);color:var(--text,#eee);border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Entendido</button>');
+            return;
+        }
+    } catch (e) { /* si falla la consulta, se permite intentar */ }
+
+    var costoNuevo = precioMensual(sucs.length + 1);
+    var ov = _dlgHub(
+        '<div style="font-size:34px;margin-bottom:10px">🏪</div>' +
+        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:1.5px;color:var(--text,#eee);margin-bottom:10px">¿AGREGAR UNA NUEVA SUCURSAL?</div>' +
+        '<div style="font-size:13px;color:var(--text-dim,#888);line-height:1.6;margin-bottom:8px">El costo mensual por sucursal adicional es de <b style="color:var(--gold,#f5c842)">' + _fmtPrecio(PRECIO_SUC_EXTRA) + ' MXN</b>.</div>' +
+        '<div style="background:var(--s2,#1d1d1d);border:1px solid var(--b1,#2a2a2a);border-radius:10px;padding:12px;margin-bottom:18px;font-size:13px;color:var(--text,#eee)">Tu nuevo costo mensual sería de <b style="color:#3dbe7a">' + _fmtPrecio(costoNuevo) + ' MXN</b> <span style="color:var(--dim,#777)">(' + (sucs.length + 1) + ' sucursales)</span></div>' +
+        '<div style="display:flex;gap:10px">' +
+            '<button id="solSucCancel" style="flex:1;background:var(--surface2,#1d1d1d);border:1px solid var(--border,#2a2a2a);color:var(--text,#eee);border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Cancelar</button>' +
+            '<button id="solSucOk" style="flex:1;background:rgba(61,190,122,.14);border:1px solid rgba(61,190,122,.55);color:#3dbe7a;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Aceptar</button>' +
+        '</div>');
+    document.getElementById('solSucCancel').onclick = function () { ov.remove(); };
+    document.getElementById('solSucOk').onclick = async function () {
+        var b = document.getElementById('solSucOk');
+        b.disabled = true; b.textContent = 'Enviando…';
+        var reg = {
+            id: 'sol_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+            negocio_id: marca.id,
+            datos: {
+                tipo: 'nueva_sucursal', estado: 'pendiente',
+                nombreSucursal: nombre, negocioNombre: marca.nombre || '',
+                sucursalesActivas: sucs.length,
+                costoActual: precioMensual(sucs.length), costoNuevo: costoNuevo,
+                solicitante: _sesion.nombre || '', email: _sesion.email || '',
+                fecha: new Date().toISOString()
+            }
+        };
+        var r = await _supabase.from('solicitudes_plan').upsert(reg);
+        ov.remove();
+        if (r.error) {
+            _dlgHub('<div style="font-size:34px;margin-bottom:10px">⚠️</div>' +
+                '<div style="font-size:13px;color:var(--text-dim,#888);margin-bottom:18px">No se pudo enviar la solicitud (' + _esc(r.error.message) + '). Intenta de nuevo o escríbenos directamente.</div>' +
+                '<button onclick="document.getElementById(\'hubDlgOverlay\').remove()" style="width:100%;background:var(--surface2,#1d1d1d);border:1px solid var(--border,#2a2a2a);color:var(--text,#eee);border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Cerrar</button>');
+            return;
+        }
+        var inp = document.getElementById('inSucNombre'); if (inp) inp.value = '';
+        document.getElementById('formNuevaSuc').style.display = 'none';
+        document.getElementById('btnNuevaSucWrap').style.display = '';
+        _dlgHub('<div style="font-size:34px;margin-bottom:10px">✅</div>' +
+            '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:1.5px;color:var(--text,#eee);margin-bottom:6px">SOLICITUD ENVIADA</div>' +
+            '<div style="font-size:13px;color:var(--text-dim,#888);margin-bottom:20px">Se envió tu solicitud. Un asesor se comunicará contigo para activar tu nueva sucursal <b style="color:var(--text,#eee)">' + _esc(nombre) + '</b>.</div>' +
+            '<button onclick="document.getElementById(\'hubDlgOverlay\').remove()" style="width:100%;background:rgba(61,190,122,.14);border:1px solid rgba(61,190,122,.55);color:#3dbe7a;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Entendido</button>');
+    };
 }
 
 function eliminarSucursal(sucId, negId, e) {

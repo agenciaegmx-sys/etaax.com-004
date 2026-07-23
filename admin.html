@@ -330,6 +330,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   <div class="tabs">
     <button class="tab active" onclick="switchTab('usuarios')">👥 Usuarios</button>
     <button class="tab" onclick="switchTab('negocios')">🏪 Negocios</button>
+    <button class="tab" onclick="switchTab('solicitudes')">📨 Solicitudes<span id="tabSolBadge" style="display:none;margin-left:6px;background:#e0a93d;color:#1a1916;border-radius:20px;padding:1px 7px;font-size:10px;font-weight:700"></span></button>
     <button class="tab" onclick="switchTab('staff')">🎯 Staff global</button>
     <button class="tab" onclick="switchTab('proveedores')">🚚 Proveedores</button>
     <button class="tab" onclick="switchTab('insumos')">🗄️ Insumos</button>
@@ -381,6 +382,35 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
           </thead>
           <tbody id="tbodyNegocios">
             <tr><td colspan="5" class="empty-state">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: SOLICITUDES DE PLAN (nueva sucursal vía asesor) -->
+  <div id="tab-solicitudes" class="tab-panel">
+    <div class="admin-section">
+      <div class="section-head">
+        <div class="section-title">Solicitudes de cambio de plan</div>
+        <div class="section-count" id="countSolicitudes">—</div>
+      </div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Negocio</th>
+              <th>Solicitante</th>
+              <th>Sucursal solicitada</th>
+              <th>Sucursales activas</th>
+              <th>Plan actual → nuevo</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tbodySolicitudes">
+            <tr><td colspan="8" class="empty-state">Cargando...</td></tr>
           </tbody>
         </table>
       </div>
@@ -655,12 +685,14 @@ async function adminLogin() {
 
 /* ── CARGA DE DATOS ── */
 async function cargarDatos() {
-    var [resU, resN, resS, resP, resSub] = await Promise.all([
+    var [resU, resN, resS, resP, resSub, resSol, resSucs] = await Promise.all([
         _supabase.from('usuarios').select('*'),
         _supabase.from('negocios').select('*'),
         _supabase.from('staff').select('*'),
         _supabase.from('catalogo_proveedores').select('*').order('created_at', { ascending: true }),
-        _supabase.from('suscripciones').select('*')
+        _supabase.from('suscripciones').select('*'),
+        _supabase.from('solicitudes_plan').select('*').order('created_at', { ascending: false }),
+        _supabase.from('negocio_sucursales').select('negocio_id,datos')
     ]);
 
     _data.usuarios    = (resU.data || []).filter(function(u){ return u.id !== ADMIN_EMAIL; });
@@ -669,12 +701,106 @@ async function cargarDatos() {
     _data.proveedores = resP.data || [];
     _data.suscripciones = {};
     (resSub.data || []).forEach(function(s){ _data.suscripciones[s.negocio_id] = s; });
+    _data.solicitudes = resSol.error ? [] : (resSol.data || []); // tabla v36 (si no existe aún, bandeja vacía)
+    _data.sucsNeg = {};
+    (resSucs.data || []).forEach(function(r){
+        _data.sucsNeg[r.negocio_id] = ((r.datos || {}).sucursales || []).filter(function(s){ return s && s.activa !== false; }).length;
+    });
 
     renderStats();
     renderUsuarios();
     renderNegocios();
     renderStaff();
     renderProveedores();
+    renderSolicitudes();
+}
+
+/* ── Solicitudes de plan (nueva sucursal vía asesor, pre-Stripe) ── */
+function _solFmt(v){ return '$' + Number(v || 0).toLocaleString('en-US'); }
+function renderSolicitudes() {
+    var tb = document.getElementById('tbodySolicitudes'); if (!tb) return;
+    var lista = _data.solicitudes || [];
+    var pend = lista.filter(function(s){ return (s.datos || {}).estado === 'pendiente'; }).length;
+    var badge = document.getElementById('tabSolBadge');
+    if (badge) { badge.style.display = pend ? '' : 'none'; badge.textContent = pend; }
+    var cnt = document.getElementById('countSolicitudes');
+    if (cnt) cnt.textContent = lista.length + ' solicitud' + (lista.length !== 1 ? 'es' : '') + (pend ? ' · ' + pend + ' pendiente' + (pend > 1 ? 's' : '') : '');
+    if (!lista.length) {
+        tb.innerHTML = '<tr><td colspan="8" class="empty-state">Sin solicitudes. Cuando un negocio pida agregar una sucursal, aparecerá aquí.</td></tr>';
+        return;
+    }
+    var EST = {
+        pendiente: { l:'Pendiente', c:'#e0a93d' },
+        activada:  { l:'Activada',  c:'#3dbe7a' },
+        rechazada: { l:'Rechazada', c:'#e85a5a' }
+    };
+    tb.innerHTML = lista.map(function(s){
+        var d = s.datos || {};
+        var neg = _data.negocios.find(function(n){ return n.id === s.negocio_id; });
+        var negNombre = (neg && neg.datos && neg.datos.nombre) || d.negocioNombre || s.negocio_id;
+        var est = EST[d.estado] || EST.pendiente;
+        var fecha = d.fecha ? new Date(d.fecha).toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' }) : '—';
+        var sucsHoy = _data.sucsNeg[s.negocio_id];
+        var btnB = 'border:none;border-radius:6px;padding:5px 9px;font-family:inherit;font-size:11px;cursor:pointer;margin-right:4px;';
+        var acciones = d.estado === 'pendiente'
+            ? '<button style="' + btnB + 'background:rgba(61,190,122,.15);color:#3dbe7a" onclick="activarSolicitud(\'' + s.id + '\')">✅ Activar sucursal</button>' +
+              '<button style="' + btnB + 'background:rgba(232,90,90,.14);color:#e85a5a" title="Rechazar" onclick="rechazarSolicitud(\'' + s.id + '\')">✖</button>'
+            : (d.atendidaAt ? '<span style="font-size:11px;color:var(--muted)">' + new Date(d.atendidaAt).toLocaleDateString('es-MX') + '</span>' : '—');
+        return '<tr>' +
+            '<td>' + fecha + '</td>' +
+            '<td><b>' + esc(negNombre) + '</b></td>' +
+            '<td>' + esc(d.solicitante || '—') + '<div style="font-size:11px;color:var(--muted)">' + esc(d.email || '') + '</div></td>' +
+            '<td>🏪 ' + esc(d.nombreSucursal || '—') + '</td>' +
+            '<td>' + (sucsHoy != null ? sucsHoy + ' hoy' : '') + ' <span style="color:var(--muted);font-size:11px">(' + (d.sucursalesActivas || 0) + ' al solicitar)</span></td>' +
+            '<td>' + _solFmt(d.costoActual) + ' → <b style="color:#3dbe7a">' + _solFmt(d.costoNuevo) + '</b>/mes</td>' +
+            '<td><span style="background:' + est.c + '22;color:' + est.c + ';border-radius:20px;padding:2px 10px;font-size:11px;font-weight:600">' + est.l + '</span></td>' +
+            '<td style="white-space:nowrap">' + acciones + '</td>' +
+        '</tr>';
+    }).join('');
+}
+async function activarSolicitud(id) {
+    var s = (_data.solicitudes || []).find(function(x){ return x.id === id; });
+    if (!s) return;
+    var d = s.datos || {};
+    admConfirm('Activar sucursal',
+        'Se creará la sucursal "' + (d.nombreSucursal || 'Sucursal nueva') + '" en el negocio y la solicitud quedará como activada. Hazlo cuando el cobro esté acordado. ¿Continuar?',
+        async function(){
+            // 1. Agregar la sucursal al doc del negocio (el hub la ve por realtime/pull)
+            var res = await _supabase.from('negocio_sucursales').select('datos').eq('negocio_id', s.negocio_id).maybeSingle();
+            var doc = (res.data && res.data.datos) || {};
+            var sucs = Array.isArray(doc.sucursales) ? doc.sucursales : [];
+            sucs.push({
+                id: 'suc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+                negocioId: s.negocio_id, nombre: d.nombreSucursal || 'Sucursal nueva',
+                activa: true, fechaCreado: new Date().toISOString()
+            });
+            doc.sucursales = sucs;
+            var up = await _supabase.from('negocio_sucursales')
+                .upsert({ negocio_id: s.negocio_id, datos: doc, updated_at: new Date().toISOString() }, { onConflict: 'negocio_id' });
+            if (up.error) { admAlert('No se pudo crear la sucursal: ' + up.error.message); return; }
+            // 2. Marcar la solicitud como atendida
+            var nd = Object.assign({}, d, { estado:'activada', atendidaAt: new Date().toISOString() });
+            await _supabase.from('solicitudes_plan').update({ datos: nd, updated_at: new Date().toISOString() }).eq('id', s.id);
+            s.datos = nd;
+            _data.sucsNeg[s.negocio_id] = sucs.filter(function(x){ return x && x.activa !== false; }).length;
+            renderSolicitudes();
+            admAlert('Sucursal activada ✅ — el negocio la verá en su hub (sincroniza sola).');
+        },
+        { yesLabel:'Sí, activar' });
+}
+function rechazarSolicitud(id) {
+    var s = (_data.solicitudes || []).find(function(x){ return x.id === id; });
+    if (!s) return;
+    admConfirm('Rechazar solicitud',
+        'La solicitud quedará como rechazada (el negocio puede volver a pedirla). ¿Continuar?',
+        async function(){
+            var nd = Object.assign({}, s.datos || {}, { estado:'rechazada', atendidaAt: new Date().toISOString() });
+            var r = await _supabase.from('solicitudes_plan').update({ datos: nd, updated_at: new Date().toISOString() }).eq('id', s.id);
+            if (r.error) { admAlert('No se pudo actualizar: ' + r.error.message); return; }
+            s.datos = nd;
+            renderSolicitudes();
+        },
+        { yesLabel:'Sí, rechazar', danger:true });
 }
 
 /* ── STATS ── */
@@ -985,7 +1111,7 @@ function switchTab(tab) {
     if (tab === 'insumos') { window.location.href = 'admin-catalogo-insumos.html'; return; }
     if (tab === 'papelera') { window.location.href = 'admin-papelera.html'; return; }
     _tabActivo = tab;
-    var tabs = ['usuarios','negocios','staff','proveedores','insumos'];
+    var tabs = ['usuarios','negocios','solicitudes','staff','proveedores','insumos'];
     document.querySelectorAll('.tab').forEach(function(b,i){
         b.classList.toggle('active', tabs[i] === tab);
     });
