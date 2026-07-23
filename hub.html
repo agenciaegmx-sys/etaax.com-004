@@ -288,6 +288,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 }
 .plan-pyme{background:var(--goldd);color:var(--gold);}
 .plan-gran{background:rgba(200,122,106,.15);color:var(--salmon);}
+.plan-corp{background:rgba(155,127,212,.15);color:#9b7fd4;}
 
 /* MODULE GRID */
 .hub-grid{
@@ -501,7 +502,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
     <div class="auth-wrap" style="max-width:560px">
       <div class="auth-card">
         <div class="auth-title">Registro</div>
-        <div class="auth-sub">Elige tu plan y crea tu cuenta</div>
+        <div class="auth-sub">Comienza a profesionalizar tu negocio desde $1,799 al mes</div>
 
         <!-- Plan selector -->
         <div class="auth-label" style="margin-bottom:12px">Selecciona tu plan</div>
@@ -527,7 +528,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
           </div>
         </div>
         <div class="auth-error" id="regError"></div>
-        <div class="plan-confirm" id="planConfirm">Estás creando una cuenta en el plan <strong>Pequeña Pyme</strong></div>
+        <div class="plan-confirm" id="planConfirm">Estás creando tu cuenta: <strong>1 negocio · 1 sucursal — $1,799 MXN/mes</strong></div>
         <div class="priv-check-wrap">
           <input type="checkbox" id="chkPrivacidad">
           <label class="priv-check-label" for="chkPrivacidad">
@@ -640,15 +641,16 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
         <div class="plan-limit-icon">🔒</div>
         <div>
           <div class="plan-limit-text" id="planLimitTextSuc">Límite de sucursales alcanzado</div>
-          <div class="plan-limit-sub">Actualiza tu plan para agregar más sucursales</div>
+          <div class="plan-limit-sub">¿Tu operación es más grande? Contáctanos para un plan corporativo a la medida.</div>
         </div>
       </div>
 
-      <!-- Btn nueva sucursal -->
+      <!-- Btn nueva sucursal + publicidad del modelo por sucursal -->
       <div id="btnNuevaSucWrap" style="text-align:center;max-width:960px;margin:0 auto 20px">
         <button class="btn-nuevo-neg" onclick="mostrarFormNuevaSuc()">
-          <span style="font-size:16px">＋</span> Nueva sucursal
+          <span style="font-size:16px">＋</span> Añade una nueva sucursal
         </button>
+        <div id="sucPitch" style="margin-top:8px;font-size:11.5px;color:var(--dim);letter-spacing:.2px"></div>
       </div>
 
       <!-- Form nueva sucursal -->
@@ -990,27 +992,32 @@ function _mostrarBloqueo(neg, estado) {
 /* ════════════════════════════════════════════════════════
    PLANES
 ════════════════════════════════════════════════════════ */
+/* ── Modelo de cobro POR SUCURSAL (jul 2026) ──
+   1ª sucursal $1,799/mes + $1,599/mes por cada adicional; 10 sucursales se
+   redondean a $15,000. Primer año de producción: tope de 10 sucursales.
+   La CATEGORÍA (leyenda del badge) ya no se elige: se deriva del número de
+   sucursales del negocio — 1-3 Pequeña Pyme · 4-7 Gran Pyme · 8+ Corporativo. */
+var PRECIO_PRIMERA_SUC = 1799, PRECIO_SUC_EXTRA = 1599, MAX_SUCURSALES = 10;
+function precioMensual(nSucs) {
+    if (nSucs >= 10) return 15000;
+    return nSucs > 0 ? PRECIO_PRIMERA_SUC + (nSucs - 1) * PRECIO_SUC_EXTRA : 0;
+}
+function _fmtPrecio(v) { return '$' + Number(v || 0).toLocaleString('en-US'); }
+function categoriaNegocio(nSucs) {
+    if (nSucs > 7) return { nombre:'Corporativo',  icon:'🏦', color:'#9b7fd4', planClass:'plan-corp' };
+    if (nSucs > 3) return { nombre:'Gran Pyme',    icon:'🏢', color:'#c87a6a', planClass:'plan-gran' };
+    return              { nombre:'Pequeña Pyme', icon:'🏬', color:'#f5c842', planClass:'plan-pyme' };
+}
+// Categoría de la sesión = por las sucursales de su negocio (marca única por cuenta).
+function _categoriaSesion() {
+    try { var m = _misNegocios()[0]; if (m) return categoriaNegocio(_getSucursales(m.id).length || 1); } catch (e) {}
+    return categoriaNegocio(1);
+}
+// Legacy: el campo `plan` guardado en usuarios ya no gobierna precio ni límites,
+// pero se conserva para no romper cuentas/lecturas viejas (admin lo muestra).
 var PLANES = {
-    pyme: {
-        nombre:        'Pequeña Pyme',
-        subtitulo:     'Entrada',
-        icon:          '🏬',
-        maxSucursales: 3,
-        precio:        '$5,499',
-        activo:        true,
-        color:         '#f5c842',
-        planClass:     'plan-pyme'
-    },
-    gran: {
-        nombre:        'Gran Pyme',
-        subtitulo:     'En expansión',
-        icon:          '🏢',
-        maxSucursales: 10,
-        precio:        '$12,499',
-        activo:        true,
-        color:         '#c87a6a',
-        planClass:     'plan-gran'
-    }
+    pyme: { nombre:'Pequeña Pyme', icon:'🏬', maxSucursales: MAX_SUCURSALES, precio:'$1,799', activo:true, color:'#f5c842', planClass:'plan-pyme' },
+    gran: { nombre:'Gran Pyme',    icon:'🏢', maxSucursales: MAX_SUCURSALES, precio:'$1,799', activo:true, color:'#c87a6a', planClass:'plan-gran' }
 };
 
 var TIPOS = {
@@ -1321,7 +1328,7 @@ async function _bgVerify() {
 
 function _updateTopbar() {
     if (!_sesion) return;
-    var p = PLANES[_sesion.plan] || PLANES.pyme;
+    var p = _categoriaSesion();
     document.getElementById('topbarUser').innerHTML =
         '<div class="hub-user-dot"></div><span>' + _esc(_sesion.nombre.split(' ')[0]) + '</span>' +
         '<span class="user-badge-plan ' + p.planClass + '">' + p.nombre + '</span>';
@@ -1329,7 +1336,7 @@ function _updateTopbar() {
 
 function _updateNegociosBar() {
     if (!_sesion) return;
-    var p = PLANES[_sesion.plan] || PLANES.pyme;
+    var p = _categoriaSesion();
     document.getElementById('negViewUserNombre').textContent = _sesion.nombre.split(' ')[0];
     document.getElementById('negViewUserPlan').textContent   = p.nombre;
     document.getElementById('negViewUserPlan').className     = 'user-badge-plan ' + p.planClass;
@@ -1517,22 +1524,20 @@ async function _iniciarSesion(usr) {
    REGISTRO
 ════════════════════════════════════════════════════════ */
 function _renderPlanGrid() {
+    // Ya no se elige plan: todos entran con 1 negocio · 1 sucursal y el precio
+    // crece por sucursal ($1,599 c/adicional). La categoría se deriva sola.
     var grid = document.getElementById('planGrid');
-    grid.innerHTML = Object.keys(PLANES).map(function(key) {
-        var p = PLANES[key];
-        var isFirst = key === 'pyme';
-        return '<div class="plan-card-sel' + (isFirst?' selected':'') + '" ' +
-            'onclick="selectPlan(\'' + key + '\')" id="planCard_' + key + '" ' +
-            'style="' + (isFirst ? 'border-color:' + p.color + ';background:' + p.color + '0d;' : '') + '">' +
-            '<div class="plan-badge-sel plan-badge-free" style="background:' + p.color + '22;color:' + p.color + '">Mensual</div>' +
-            '<div class="plan-icon-big">' + p.icon + '</div>' +
-            '<div class="plan-nombre">' + p.nombre + '</div>' +
-            (p.subtitulo ? '<div class="plan-sub">' + p.subtitulo + '</div>' : '') +
-            '<div class="plan-precio">' + p.precio + ' <span style="font-size:11px;font-weight:400;color:var(--dim)">MXN</span></div>' +
+    var c = '#f5c842';
+    grid.innerHTML =
+        '<div class="plan-card-sel selected" style="border-color:' + c + ';background:' + c + '0d;cursor:default;grid-column:1/-1">' +
+            '<div class="plan-badge-sel plan-badge-free" style="background:' + c + '22;color:' + c + '">Mensual</div>' +
+            '<div class="plan-icon-big">🏬</div>' +
+            '<div class="plan-nombre">Tu negocio · 1 sucursal</div>' +
+            '<div class="plan-sub">Comienza a profesionalizar tu negocio</div>' +
+            '<div class="plan-precio">' + _fmtPrecio(PRECIO_PRIMERA_SUC) + ' <span style="font-size:11px;font-weight:400;color:var(--dim)">MXN</span></div>' +
             '<div class="plan-precio-sub">/ mes</div>' +
-            '<div class="plan-maxnegs" style="color:' + p.color + '">' + p.maxSucursales + ' sucursal' + (p.maxSucursales>1?'es':'') + '</div>' +
+            '<div class="plan-maxnegs" style="color:' + c + '">Agrega sucursales cuando quieras: +' + _fmtPrecio(PRECIO_SUC_EXTRA) + '/mes cada una</div>' +
         '</div>';
-    }).join('');
 }
 
 function togglePwd(inputId, btn) {
@@ -1762,12 +1767,13 @@ function _migrarSucursalesLegacy(neg) {
 
 function _renderSucursales(neg) {
     var sucs  = _migrarSucursalesLegacy(neg);
-    var plan  = PLANES[_sesion ? _sesion.plan : 'pyme'] || PLANES.pyme;
-    var lleno = sucs.length >= plan.maxSucursales;
+    var lleno = sucs.length >= MAX_SUCURSALES;
     var color = neg.color || '#3dbe7a';
 
+    var cat = categoriaNegocio(sucs.length || 1);
     var planSub = document.getElementById('sucPlanSub');
-    if (planSub) planSub.textContent = sucs.length + ' / ' + plan.maxSucursales + ' sucursal' + (plan.maxSucursales > 1 ? 'es' : '');
+    if (planSub) planSub.textContent = sucs.length + ' sucursal' + (sucs.length !== 1 ? 'es' : '') +
+        ' · ' + cat.nombre + ' · plan actual: ' + _fmtPrecio(precioMensual(sucs.length)) + ' MXN/mes';
 
     var cont = document.getElementById('listSucursales');
     if (!sucs.length) {
@@ -1836,7 +1842,14 @@ function _renderSucursales(neg) {
     document.getElementById('formNuevaSuc').style.display     = 'none';
     if (lleno) {
         document.getElementById('planLimitTextSuc').textContent =
-            'Plan ' + plan.nombre + ': máximo ' + plan.maxSucursales + ' sucursal' + (plan.maxSucursales > 1 ? 'es' : '');
+            'Máximo ' + MAX_SUCURSALES + ' sucursales por negocio en esta etapa de ETAAX';
+    } else {
+        // Publicidad del modelo por sucursal dentro del negocio
+        var pitch = document.getElementById('sucPitch');
+        if (pitch) pitch.textContent = sucs.length >= 9
+            ? 'Con 10 sucursales tu plan se redondea a $15,000 MXN/mes.'
+            : 'Administra una nueva sucursal por solo +' + _fmtPrecio(PRECIO_SUC_EXTRA) +
+              ' MXN/mes a tu plan actual (subiría a ' + _fmtPrecio(precioMensual(sucs.length + 1)) + '/mes).';
     }
 }
 
@@ -2310,9 +2323,8 @@ function mostrarFormNuevaSuc() {
 function crearSucursal() {
     var marca = _misNegocios()[0];
     if (!marca || !_sesion) return;
-    var plan = PLANES[_sesion.plan] || PLANES.pyme;
     var sucs = _getSucursales(marca.id);
-    if (sucs.length >= plan.maxSucursales) return;
+    if (sucs.length >= MAX_SUCURSALES) return;
     var inp    = document.getElementById('inSucNombre');
     var nombre = (inp.value || '').trim();
     if (!nombre) {
@@ -2374,7 +2386,8 @@ function _guardarCtx(neg, suc) {
     } else if (_sesion.isAdmin) {
         ctx.userBadge = '⚡ Admin'; ctx.userColor = '#f5c842';
     } else {
-        var p = PLANES[_sesion.plan] || PLANES.pyme;
+        // Leyenda por TAMAÑO real del negocio (n° de sucursales), ya no por plan elegido
+        var p = categoriaNegocio(_getSucursales(neg.id).length || 1);
         ctx.userBadge = p.nombre; ctx.userColor = p.color || '#3dbe7a';
         // El admin-guard usa este correo para aceptar la contraseña del
         // dueño en sesiones de staff sin pedir el correo
@@ -2489,7 +2502,7 @@ function _showModulos(neg) {
             if (btnInfo)    btnInfo.style.display    = '';
             if (btnVolver)  btnVolver.style.display  = '';
         } else {
-            var p = PLANES[_sesion.plan] || PLANES.pyme;
+            var p = _categoriaSesion();
             planChip.textContent      = p.nombre;
             planChip.className        = 'user-badge-plan ' + p.planClass;
             planChip.style.background = '';
