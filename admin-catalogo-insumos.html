@@ -673,6 +673,40 @@ function _presDesglose(ins){
     }).join('');
     return '<ul style="margin:5px 0 0;padding-left:16px;font-size:11px;color:var(--text-dim);list-style:disc">'+li+'</ul>';
 }
+/* Descartes persistentes ("No actualizar"): la firma incluye costo y forma de
+   las presentaciones — si el negocio vuelve a cambiar algo, la novedad REAPARECE. */
+function _novFirmaActu(it){ return 'a|'+it.insumoId+'|'+it.negId+'|'+it.costoNeg+'|'+JSON.stringify((it.datosNeg||{}).presentaciones||[]).length; }
+function _novFirmaNuevo(it){ return 'n|'+it.key+'|'+it.costo; }
+function _novDescartes(){ try { return JSON.parse(localStorage.getItem('etaax_admin_nov_descartes'))||{}; } catch(e){ return {}; } }
+function _novDescartar(firmas){
+    var d=_novDescartes();
+    firmas.forEach(function(f){ d[f]=Date.now(); });
+    try { localStorage.setItem('etaax_admin_nov_descartes', JSON.stringify(d)); } catch(e){}
+}
+function _novDescartarGrupo(insumoId){
+    var mias=_novActu.filter(function(x){ return x.insumoId===insumoId; });
+    _novDescartar(mias.map(_novFirmaActu));
+    _novActu=_novActu.filter(function(x){ return x.insumoId!==insumoId; });
+    _renderNovedades();
+}
+function _novDescartarNuevo(idx){
+    var it=_novNuevos[idx]; if(!it) return;
+    _novDescartar([_novFirmaNuevo(it)]);
+    _novNuevos.splice(idx,1);
+    _renderNovedades();
+}
+// Identidad legible de un insumo (título canónico + meta) para las filas.
+function _novTitulo(base){
+    return (typeof insumoTitulo==='function' && base) ? (insumoTitulo(base)||base.nombre||'—') : ((base&&base.nombre)||'—');
+}
+function _novMeta(base){
+    if (!base) return '';
+    var bits=[];
+    if (base.subcategoria) bits.push(base.subcategoria);
+    if (typeof insumoMeta==='function'){ var m=insumoMeta(base); if(m) bits.push(m); }
+    else if (base.marca) bits.push(base.marca);
+    return bits.join(' · ');
+}
 function _novToggle(insumoId){
     var det=document.getElementById('novDet-'+insumoId), btn=document.getElementById('novBtn-'+insumoId);
     if(!det) return;
@@ -691,9 +725,18 @@ async function abrirNovedades(){
 }
 
 async function _cargarNovedades(){
-    // Nombres de negocios
+    // Nombres de negocios y de sus sucursales (para decir QUIÉN modificó, no la clave)
     var rn = await _supabase.from('negocios').select('id, datos');
-    var negMap = {}; (rn.data||[]).forEach(function(n){ negMap[n.id]=(n.datos&&n.datos.nombre)||n.id; });
+    var negMap = {}; (rn.data||[]).forEach(function(n){
+        negMap[n.id]=(n.datos&&n.datos.nombre)||('Negocio sin nombre ('+String(n.id).slice(-6)+')');
+    });
+    var sucMap = {};
+    try {
+        var rs = await _supabase.from('negocio_sucursales').select('negocio_id, datos');
+        (rs.data||[]).forEach(function(r){
+            (((r.datos||{}).sucursales)||[]).forEach(function(s){ if(s&&s.id) sucMap[r.negocio_id+'|'+s.id]=s.nombre||''; });
+        });
+    } catch(e) {}
     // Todos los negocio_insumos (paginado)
     var all=[], from=0, BATCH=1000;
     while (true){
@@ -710,7 +753,9 @@ async function _cargarNovedades(){
     all.forEach(function(row){
         var ins=row.datos; if(!ins) return;
         if (ins.esSubReceta) return; // producción propia, no es material de catálogo
-        var negNombre = negMap[row.negocio_id]||row.negocio_id;
+        var negNombre = negMap[row.negocio_id]||('Negocio eliminado ('+String(row.negocio_id||'').slice(-6)+')');
+        var sucNombre = ins.sucursalId ? (sucMap[row.negocio_id+'|'+ins.sucursalId]||'') : '';
+        if (sucNombre) negNombre += ' · ' + sucNombre;
         var cat = catById[row.insumo_id];
         if (cat){
             var cN=_costoN(ins), cC=_costoN(cat);
@@ -724,10 +769,14 @@ async function _cargarNovedades(){
             nuevosMap[k].negs[negNombre]=1;
         }
     });
+    // Fuera lo ya descartado ("No actualizar") — reaparece solo si el negocio vuelve a cambiar algo
+    var desc=_novDescartes();
+    actu = actu.filter(function(it){ return !desc[_novFirmaActu(it)]; });
     // Ordenar actualizaciones por nombre
     actu.sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
     _novActu = actu;
     _novNuevos = Object.keys(nuevosMap).map(function(k){ var o=nuevosMap[k]; o.negsArr=Object.keys(o.negs); return o; })
+        .filter(function(it){ return !desc[_novFirmaNuevo(it)]; })
         .sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
 }
 
@@ -755,13 +804,19 @@ function _renderNovedades(){
         var cat=(_catalogoMem||[]).find(function(c){ return c.id===insumoId; });
         var multi=g.versiones.length>1;
         var negs=g.versiones.map(function(v){ return _escN(v.negNombre); }).join(', ');
+        // Identidad COMPLETA (título canónico + subcategoría·contenido·marca):
+        // varios insumos comparten nombre y sin esto eran indistinguibles.
+        var base = cat || (g.versiones[0]&&g.versiones[0].datosNeg) || { nombre:g.nombre, marca:g.marca };
+        var meta = _novMeta(base);
         html += '<div style="padding:10px 0;border-bottom:1px solid var(--border)">'+
             '<div style="display:flex;align-items:center;gap:12px">'+
               '<div style="flex:1;min-width:0">'+
-                '<div style="font-weight:600;font-size:13.5px">'+_escN(g.nombre)+(g.marca?' <span style="color:var(--text-muted);font-weight:400">'+_escN(g.marca)+'</span>':'')+'</div>'+
-                '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">'+g.versiones.length+' versión'+(multi?'es':'')+' en negocios: '+negs+'</div>'+
+                '<div style="font-weight:600;font-size:13.5px">'+_escN(_novTitulo(base))+'</div>'+
+                (meta?'<div style="font-size:11px;color:var(--text-muted);margin-top:1px">'+_escN(meta)+'</div>':'')+
+                '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">'+g.versiones.length+' versión'+(multi?'es':'')+' en: '+negs+'</div>'+
               '</div>'+
               '<button class="btn-vista" style="white-space:nowrap" onclick="_novToggle(\''+_escN(insumoId)+'\')" id="novBtn-'+_escN(insumoId)+'">▸ Ver desglose</button>'+
+              '<button class="btn-vista" style="white-space:nowrap;color:var(--text-dim)" title="Descartar esta novedad (reaparece si el negocio vuelve a cambiar algo)" onclick="_novDescartarGrupo(\''+_escN(insumoId)+'\')">✕ No actualizar</button>'+
             '</div>'+
             '<div id="novDet-'+_escN(insumoId)+'" style="display:none;margin-top:10px;padding:12px;background:var(--surface2,rgba(255,255,255,.03));border:1px solid var(--border);border-radius:10px">'+
               '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px">📗 Catálogo ETAAX actual</div>'+
@@ -784,12 +839,15 @@ function _renderNovedades(){
     html += '<div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--green);margin:22px 0 10px">🆕 Insumos nuevos en negocios ('+_novNuevos.length+')</div>';
     if (!_novNuevos.length) html += '<div style="font-size:12px;color:var(--text-dim)">Sin insumos nuevos por agregar.</div>';
     _novNuevos.forEach(function(it, idx){
+        var metaN=_novMeta(it.datosNeg);
         html += '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">'+
             '<div style="flex:1;min-width:0">'+
-              '<div style="font-weight:600;font-size:13.5px">'+_escN(it.nombre)+(it.marca?' <span style="color:var(--text-muted);font-weight:400">'+_escN(it.marca)+'</span>':'')+'</div>'+
+              '<div style="font-weight:600;font-size:13.5px">'+_escN(_novTitulo(it.datosNeg||it))+'</div>'+
+              (metaN?'<div style="font-size:11px;color:var(--text-muted);margin-top:1px">'+_escN(metaN)+'</div>':'')+
               '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">'+_fmtMN(it.costo)+' · en: '+_escN(it.negsArr.join(', '))+'</div>'+
             '</div>'+
             '<button class="btn-vista" style="color:var(--accent);border-color:var(--accent);white-space:nowrap" onclick="_agregarAlCatalogo('+idx+')">+ Agregar al catálogo</button>'+
+            '<button class="btn-vista" style="white-space:nowrap;color:var(--text-dim)" title="Descartar (reaparece si cambia)" onclick="_novDescartarNuevo('+idx+')">✕</button>'+
         '</div>';
     });
     body.innerHTML=html;
@@ -807,7 +865,11 @@ async function _aplicarActualizacion(idx){
     var r=await _supabase.from('catalogo_insumos').upsert([{ id:upd.id, datos:upd }]);
     if (r.error){ alert('Error al actualizar: '+r.error.message); return; }
     _catalogoMem[i]=upd;
-    _novActu.splice(idx,1);
+    // Ya se eligió LA versión ganadora: las demás versiones de este insumo se
+    // descartan (desaparecen y no vuelven a salir salvo que el negocio cambie algo).
+    var otras=_novActu.filter(function(x){ return x.insumoId===it.insumoId && x!==it; });
+    _novDescartar(otras.map(_novFirmaActu));
+    _novActu=_novActu.filter(function(x){ return x.insumoId!==it.insumoId; });
     _renderNovedades();
     if (typeof init==='function') init();
 }
