@@ -70,6 +70,9 @@
                         letter-spacing:2px;line-height:1;color:var(--text);
                         border-bottom:2px solid var(--green);padding-bottom:2px;
                         display:inline-block">Escandallo</div>
+                    <!-- Nombre vivo de la receta: se ve al hacer scroll (el header es sticky) -->
+                    <div id="brandRecetaNombre" style="font-family:'DM Sans',sans-serif;font-size:13px;
+                        font-weight:600;letter-spacing:.5px;color:var(--accent);margin-top:6px"></div>
                 </div>
             </div>
             <div style="display:flex;gap:8px;align-items:center">
@@ -2396,6 +2399,7 @@ function renderFormularioPorTipo(tipo, datos) {
     if (iconEl)   iconEl.textContent   = cfg.icon;
     if (tituloEl) tituloEl.textContent = cfg.titulo;
     if (brandEl)  brandEl.textContent  = cfg.titulo;
+    _syncBrandNombre();
 
     // Mostrar costeo correcto
     actualizarVistaCosteo(tipo);
@@ -2403,6 +2407,17 @@ function renderFormularioPorTipo(tipo, datos) {
     if (typeof bindHistorialInputs === 'function') bindHistorialInputs();
 }
 
+
+// El nombre de la receta se refleja bajo el título sticky del header —
+// al hacer scroll siempre se ve QUÉ receta se está editando.
+function _syncBrandNombre() {
+    var el = document.getElementById('brandRecetaNombre');
+    var n  = document.getElementById('nombreReceta');
+    if (el) el.textContent = (n && n.value.trim()) || '';
+}
+document.addEventListener('input', function (e) {
+    if (e.target && e.target.id === 'nombreReceta') _syncBrandNombre();
+});
 
 // ── Helpers pantalla principal Escandallo ─────────────────────
 function _ocultarCaratula() {

@@ -369,6 +369,7 @@ function duplicarReceta() {
     // El editor ya muestra el mismo contenido → solo lo "reapuntamos" a la copia.
     recetaActualId = copia.id;
     nEl.value = copia.nombre;
+    if (typeof _syncBrandNombre === 'function') _syncBrandNombre();
     window._escDirty = false;
     alert('✅ Copia creada: "' + copia.nombre + '". Ya la estás editando; el original quedó intacto.');
 }
@@ -391,6 +392,7 @@ function cargarReceta(id) {
         _pillSt.classList.toggle('pill-amber', !_inact);
     }
     document.getElementById('nombreReceta').value  = r.nombre       || '';
+    if (typeof _syncBrandNombre === 'function') _syncBrandNombre(); // nombre vivo bajo el título sticky
     document.getElementById('grupo').value         = r.grupo        || '';
     document.getElementById('categoria').value     = r.categoria    || '';
     document.getElementById('cristaleria').value   = r.cristaleria  || '';
