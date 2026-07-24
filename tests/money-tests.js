@@ -648,6 +648,48 @@ console.log('\n══ SUITE E · Escandallo de recetas (app.js) ══');
     // costoUnitVivo delega en costoUnitEfectivo cuando NO hay vínculo.
     test('costoUnitVivo manual OZ delega la conversión', () =>
         eq(E.costoUnitVivo(manualOz), 2.366));
+
+    /* ── VINCULADOS: getCostoParaUnidad convierte desde el catálogo ──
+       Matriz completa de unidades (auditoría 2026-07-24). */
+    const bot = { presentaciones: [{ costoUnitario: 400, umCosto: 'LT', contNeto: 750, umContenido: 'ML', precio: 300 }] };
+    test('vinculado ML: $400/lt → 30 ml = $12', () => eq(E.getFactor(30, 'ML') * E.getCostoParaUnidad(bot, 'ML'), 12));
+    test('vinculado LT: 0.5 lt = $200', () => eq(E.getFactor(0.5, 'LT') * E.getCostoParaUnidad(bot, 'LT'), 200));
+    test('vinculado G/KG con densidad ≈1: 30 g = $12', () => eq(E.getFactor(30, 'G') * E.getCostoParaUnidad(bot, 'G'), 12));
+    test('vinculado OZ: $400/lt → 1.5 oz = $17.74', () => eq(E.getFactor(1.5, 'OZ') * E.getCostoParaUnidad(bot, 'OZ'), 17.744));
+    test('vinculado PZA: botella completa (750 ml × $400/lt) = $300', () => eq(E.getCostoParaUnidad(bot, 'PZA'), 300));
+    test('vinculado PORCION líquida = 1 oz = $11.83', () => eq(E.getCostoParaUnidad(bot, 'PORCION'), 11.8294));
+    test('vinculado CARGA = precio de compra directo', () => eq(E.getCostoParaUnidad(bot, 'CARGA'), 300));
+    test('umCosto en ML se normaliza: $0.40/ml → $400/lt', () =>
+        eq(E.getCostoParaUnidad({ presentaciones: [{ costoUnitario: 0.4, umCosto: 'ML' }] }, 'LT'), 400));
+    test('umCosto en OZ se normaliza: $11.83/oz → $400/lt', () =>
+        eq(E.getCostoParaUnidad({ presentaciones: [{ costoUnitario: 11.8294, umCosto: 'OZ' }] }, 'LT'), 400));
+
+    // Pieza usada por PESO (fix 2026-07-24): huevo $3/pza de 60 g → $50/kg,
+    // antes el $3 de la pieza se usaba como si fuera $/kg.
+    const huevo = { presentaciones: [{ precio: 3, umCosto: 'PZA', contNeto: 60, umContenido: 'G' }] };
+    test('pieza por PESO deriva $/KG del contenido: 30 g de huevo = $1.50', () =>
+        eq(E.getFactor(30, 'G') * E.getCostoParaUnidad(huevo, 'G'), 1.5));
+    test('pieza por PZA: $3/pza directo (antes $/pza × litros daba centavos)', () =>
+        eq(E.getCostoParaUnidad(huevo, 'PZA'), 3));
+
+    // Sub-receta: granel $/KG + porción $/PZA
+    const sub = { esSubReceta: true, presentaciones: [
+        { umContenido: 'KG', umCosto: 'KG', costoUnitario: 120 },
+        { umContenido: 'PZA', umCosto: 'PZA', costoUnitario: 4.67 }] };
+    test('sub-receta por G usa el granel: 500 g × $120/kg = $60', () =>
+        eq(E.getFactor(500, 'G') * E.getCostoParaUnidad(sub, 'G'), 60));
+    test('sub-receta por PZA usa el costo por porción', () => eq(E.getCostoParaUnidad(sub, 'PZA'), 4.67));
+    test('sub-receta por PORCION = PZA (equivalentes)', () => eq(E.getCostoParaUnidad(sub, 'PORCION'), 4.67));
+
+    // Prebatch con ENVASE como presentación 0 (700 ml, $180/lt, botella llena $126)
+    const pb = { esSubReceta: true, presentaciones: [
+        { esEnvasePrebatch: true, contNeto: 700, umContenido: 'ML', umCosto: 'LT', costoUnitario: 180, precio: 126 },
+        { umContenido: 'PZA', umCosto: 'PZA', costoUnitario: 9 }] };
+    test('prebatch por ML usa el $/LT del envase: 50 ml = $9', () =>
+        eq(E.getFactor(50, 'ML') * E.getCostoParaUnidad(pb, 'ML'), 9));
+    test('prebatch por OZ convierte del $/LT: $5.32/oz', () => eq(E.getCostoParaUnidad(pb, 'OZ'), 5.3232));
+    test('prebatch por PZA = su PORCIÓN ($9), no la botella (regla sub-receta)', () =>
+        eq(E.getCostoParaUnidad(pb, 'PZA'), 9));
 })();
 
 /* ═══════════════ RESUMEN ═══════════════ */

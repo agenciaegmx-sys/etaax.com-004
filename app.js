@@ -1099,7 +1099,19 @@ function getCostoParaUnidad(insumo, unidadEscandallo) {
     else if (umCu === 'KG')  cuPorLt = cu;        // densidad ≈1 para líquidos
     else if (umCu === 'G')   cuPorLt = cu * 1000;
     else if (umCu === 'OZ')  cuPorLt = cu * (1000 / OZ_ML);
-    else cuPorLt = cu; // PZA, CARGA, PORCION → ya es $/unidad, se devuelve directo
+    else {
+        // umCosto PZA/CARGA/PORCION = $/unidad. Si el escandallo pide PESO o
+        // VOLUMEN, derivar $/LT-KG del contenido real de la pieza — antes el
+        // precio de la pieza COMPLETA se usaba como si fuera $/kg-lt.
+        cuPorLt = cu;
+        if (['ML','LT','G','KG','OZ'].indexOf(umEs) >= 0) {
+            const _cont = parseFloat(p.contNeto) || 0;
+            const _umC2 = (p.umContenido || 'ML').toUpperCase();
+            const _toLt2 = { ML: 1/1000, LT: 1, G: 1/1000, KG: 1, OZ: OZ_ML/1000 };
+            const _enLt2 = _cont * (_toLt2[_umC2] || 1/1000);
+            if (_enLt2 > 0) cuPorLt = cu / _enLt2;
+        }
+    }
 
     // Para unidades de escandallo que getFactor divide entre 1000 → necesitan $/LT o $/KG
     if (umEs === 'ML' || umEs === 'LT') return cuPorLt;       // $/LT
@@ -1110,6 +1122,10 @@ function getCostoParaUnidad(insumo, unidadEscandallo) {
         // 1. Si ya tenemos costoPieza calculado (refrescos/cervezas), usarlo directo
         const costoPiezaCalc = parseFloat(p.costoPieza);
         if (costoPiezaCalc > 0) return costoPiezaCalc;
+
+        // 1b. El costo ya está POR PIEZA (umCosto PZA/CARGA/PORCION): directo —
+        // antes caía al paso 2 y multiplicaba $/pza × litros (daba centavos).
+        if (umCu === 'PZA' || umCu === 'CARGA' || umCu === 'PORCION') return cu;
 
         // 2. Destilados/vinos/licores: costoUnitario ($/LT) × contenido en LT
         const contNeto = parseFloat(p.contNeto) || 0;
