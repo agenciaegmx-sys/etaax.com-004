@@ -344,6 +344,12 @@ async function guardarReceta() {
         var _hayConvertido = getCatalogoInsumos().some(function(x){ return x.esSubReceta && x.recetaId === receta.id; });
         if (_hayConvertido) { try { agregarSubRecetaComoInsumo(true); } catch(e) { console.warn('[auto-update sub-receta→insumo]', e); } }
     }
+    // Modal embebido (escandallo abierto DENTRO de otro escandallo): guardar
+    // cierra el modal y el padre refresca costos — no regresar al menú de recetas.
+    if (window.parent !== window && /[?&]embed=1/.test(window.location.search)) {
+        try { window.parent.postMessage({ type: 'recetaGuardada', recetaId: receta.id }, window.location.origin); } catch (e) {}
+        return true;
+    }
     alert('✅ Receta "' + nombre + '" guardada');
     var btnImp = document.getElementById('btnImprimirHeader');
     if (btnImp) btnImp.style.display = '';
@@ -1470,7 +1476,7 @@ function verFichaInsumo(insumoId) {
 
     html += '<div style="display:flex;gap:10px;margin-top:20px">';
     if (esSub && ins.recetaId) {
-        html += '<button onclick="abrirEditorEnModal(\'index.html?r=' + _fichaEsc(ins.recetaId) + '\',\'Escandallo · ' + _fichaEsc(ins.nombre) + '\')" ' +
+        html += '<button onclick="abrirEditorEnModal(\'index.html?embed=1&r=' + _fichaEsc(ins.recetaId) + '\',\'Escandallo · ' + _fichaEsc(ins.nombre) + '\')" ' +
                 'style="flex:1;padding:10px;background:var(--green);color:#fff;border:none;' +
                 'border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Ver escandallo</button>';
     } else {
@@ -1526,6 +1532,10 @@ window.addEventListener('message', function(e) {
             recalcularCostoDesdeInsumo(i);
         });
         try { renderTabla(); } catch (err) {}
+        cerrarIframeInsumo();
+    } else if (e.data.type === 'recetaGuardada') {
+        // Sub-escandallo guardado en el modal embebido: cerrar y refrescar costos
+        // (cerrarIframeInsumo ya recalcula los ingredientes y re-pinta la tabla).
         cerrarIframeInsumo();
     } else if (e.data.type === 'cerrarEditor') {
         cerrarIframeInsumo();

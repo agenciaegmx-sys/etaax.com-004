@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">
 <head>
+<script src="/embed.js"></script>
 <script src="/page-guard.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,6 +9,12 @@
     <title>ETAAX - Escandallo</title>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
+    <style>
+        /* Modo embebido (?embed=1: escandallo abierto en modal dentro de otro
+           escandallo): solo el escandallo — sin acciones que naveguen a otro lado. */
+        html.embed .header button[onclick*="abrirModalNuevaReceta"],
+        html.embed .header button[onclick*="eliminarRecetaActual"] { display:none !important; }
+    </style>
 </head>
 <body>
 <header class="top-bar">
