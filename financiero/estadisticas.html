@@ -13,12 +13,9 @@
     <script src="../supabase-config.js"></script>
 <script src="/etaax-db.js"></script>
     <style>
-        /* Sidebar fijo (mismo que el resto del financiero) → desplaza el contenido. */
-        .est-wrap{max-width:1180px;margin:0 auto;padding:20px 20px 90px;transition:margin-left .2s ease}
-        @media(min-width:820px){
-            .est-wrap{margin-left:76px}
-            body.nav-open .est-wrap{margin-left:224px}
-        }
+        /* Contenido centrado en el shell estándar (app-shell + main-content + wrap),
+           igual que KPIs: la nav fija desplaza y .wrap centra en el resto. */
+        .main-content{padding-bottom:90px}
         .est-header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
         .est-brand .brand-label{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--accent)}
         .est-brand .brand-title{font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:2px;color:var(--text);line-height:1}
@@ -148,7 +145,8 @@
 </header>
 <div id="ctxBar" class="ctx-bar" style="display:none"></div>
 
-<nav class="nav cerrado" id="nav">
+<div class="app-shell">
+<nav class="nav" id="nav">
     <div class="nav-top">
         <div class="nav-brand"><span class="nav-brand-sub">Salud Financiera</span></div>
         <div class="nav-top-actions">
@@ -176,7 +174,8 @@
     </div>
 </nav>
 
-<div class="est-wrap">
+<main class="main-content" id="mainContent">
+<div class="wrap">
     <div class="est-header">
         <div class="est-brand">
             <div class="brand-label">Salud Financiera</div>
@@ -326,7 +325,9 @@
             <div id="chInsumos"></div>
         </div>
     </div>
-</div>
+</div><!-- /wrap -->
+</main>
+</div><!-- /app-shell -->
 
 <!-- Modal de desglose detallado (🔍 de cada recuadro) -->
 <div class="det-ov" id="detOv" onclick="if(event.target===this)cerrarDesglose()">
@@ -1146,18 +1147,26 @@ function renderInsumos(){
         {porSigno:true,colPos:p.green,colNeg:p.red,serie:'Margen %',xCol:'Insumo'});
 }
 
+// Nav lateral: ABIERTA por default, y recuerda la preferencia del usuario
+// (compartida en todo el financiero vía localStorage 'etaax_nav_abierta').
+function _aplicarNavPref(){
+    var abierta=(localStorage.getItem('etaax_nav_abierta')||'1')==='1';
+    var nav=document.getElementById('nav'), main=document.getElementById('mainContent');
+    var btn=document.getElementById('navToggleBtn'), txt=document.getElementById('navToggleTxt');
+    if(nav) nav.classList.toggle('cerrado', !abierta);
+    if(main) main.classList.toggle('expandido', !abierta);
+    if(btn&&btn.childNodes[0]) btn.childNodes[0].textContent=abierta?'◀':'▶';
+    if(txt) txt.textContent=abierta?'Ocultar':'Expandir';
+    if(btn) btn.setAttribute('data-tooltip',abierta?'Ocultar':'Expandir');
+}
 function toggleNav(){
-    var nav=document.getElementById('nav');
-    nav.classList.toggle('cerrado');
-    var open=!nav.classList.contains('cerrado');
-    document.body.classList.toggle('nav-open',open);
-    var btn=document.getElementById('navToggleBtn'),txt=document.getElementById('navToggleTxt');
-    if(btn&&btn.childNodes[0])btn.childNodes[0].textContent=open?'◀':'▶';
-    if(txt)txt.textContent=open?'Ocultar':'Expandir';
-    if(btn)btn.setAttribute('data-tooltip',open?'Ocultar':'Expandir');
+    var abiertaAhora=!document.getElementById('nav').classList.contains('cerrado');
+    localStorage.setItem('etaax_nav_abierta', abiertaAhora?'0':'1');
+    _aplicarNavPref();
 }
 
 document.addEventListener('DOMContentLoaded',function(){
+    _aplicarNavPref();
     _inputTipo(document.getElementById('fVal'),'mes',EtaaxCore.todayStr());
     _sbInit();
 });

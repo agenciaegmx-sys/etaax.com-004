@@ -173,7 +173,7 @@
 <div id="ctxBar" class="ctx-bar" style="display:none"></div>
 
 <div class="app-shell">
-    <nav class="nav cerrado" id="nav">
+    <nav class="nav" id="nav">
         <div class="nav-top">
             <div class="nav-brand"><span class="nav-brand-sub">Salud Financiera</span></div>
             <div class="nav-top-actions">
@@ -201,7 +201,7 @@
         </div>
     </nav>
 
-    <main class="main-content expandido" id="mainContent">
+    <main class="main-content" id="mainContent">
         <div class="header">
             <div class="brand">
                 <span class="brand-label">Salud Financiera</span>
@@ -350,7 +350,22 @@
 <script>
 (function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);document.addEventListener('DOMContentLoaded',function(){var ti=document.getElementById('themeIcon'),tl=document.getElementById('themeLabel');if(s==='light'){if(ti)ti.textContent='🌙';if(tl)tl.textContent='Modo oscuro';}});})();
 function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('etaax_theme',n);document.getElementById('themeIcon').textContent=n==='light'?'🌙':'☀️';document.getElementById('themeLabel').textContent=n==='light'?'Modo oscuro':'Modo claro';}
-function toggleNav(){var nav=document.getElementById('nav'),main=document.getElementById('mainContent');nav.classList.toggle('cerrado');if(main)main.classList.toggle('expandido');var c=nav.classList.contains('cerrado');var btn=document.getElementById('navToggleBtn'),txt=document.getElementById('navToggleTxt');if(btn)btn.childNodes[0].textContent=c?'▶':'◀';if(txt)txt.textContent=c?'Expandir':'Ocultar';if(btn)btn.setAttribute('data-tooltip',c?'Expandir':'Ocultar');}
+// Nav lateral: ABIERTA por default + preferencia recordada (compartida en financiero).
+function _aplicarNavPref(){
+    var abierta=(localStorage.getItem('etaax_nav_abierta')||'1')==='1';
+    var nav=document.getElementById('nav'), main=document.getElementById('mainContent');
+    var btn=document.getElementById('navToggleBtn'), txt=document.getElementById('navToggleTxt');
+    if(nav) nav.classList.toggle('cerrado', !abierta);
+    if(main) main.classList.toggle('expandido', !abierta);
+    if(btn&&btn.childNodes[0]) btn.childNodes[0].textContent=abierta?'◀':'▶';
+    if(txt) txt.textContent=abierta?'Ocultar':'Expandir';
+    if(btn) btn.setAttribute('data-tooltip',abierta?'Ocultar':'Expandir');
+}
+function toggleNav(){
+    var abiertaAhora=!document.getElementById('nav').classList.contains('cerrado');
+    localStorage.setItem('etaax_nav_abierta', abiertaAhora?'0':'1');
+    _aplicarNavPref();
+}
 
 /* ── Supabase cache ── */
 var _kCache = {
@@ -487,7 +502,12 @@ function getMesData(mes){
     var otros=loadOtros().filter(function(o){return inMes(o.fecha);});
     var gastos=loadGastos().filter(function(g){return inMes(g.fecha)&&(!_sucursalId||!g.negocioId||g.negocioId===_sucursalId);});
 
-    var ventas=cortes.reduce(function(s,c){return s+flujoNeto(c);},0);
+    // VENTA = venta bruta (efectivo+tarjeta+transfer), SIN propinas. Igual que
+    // Estadísticas. Antes usaba flujoNeto, que suma la propina de tarjeta
+    // (propTarjeta): esa propina es del staff (pass-through, ya se excluye de los
+    // gastos), así que contarla como ingreso inflaba la utilidad y descuadraba
+    // la venta contra Estadísticas.
+    var ventas=cortes.reduce(function(s,c){return s+EtaaxCore.ventasBruta(c);},0);
     var otrosT=otros.reduce(function(s,o){return s+n(o.monto);},0);
     var ingresos=ventas+otrosT;
 
@@ -684,6 +704,7 @@ function renderHistorial(mesSel, t){
 
 /* ── INIT ── */
 document.addEventListener('DOMContentLoaded',function(){
+    _aplicarNavPref();
     // Load saved targets
     var t=loadTargets();
     document.getElementById('tgtFijos').value=t.fijos;
