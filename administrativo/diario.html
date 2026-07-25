@@ -598,7 +598,7 @@
 <div class="dxp" id="cor_dxp"><div class="dxp-tabs"><button class="dxp-tab active" onclick="dxpTipo('cor','dia',this)">Día</button><button class="dxp-tab" onclick="dxpTipo('cor','semana',this)">Semana</button><button class="dxp-tab" onclick="dxpTipo('cor','mes',this)">Mes</button><button class="dxp-tab" onclick="dxpTipo('cor','rango',this)">Rango</button></div><input type="date" id="cor_val" onchange="dxpChange('cor')"><input type="date" id="cor_end" style="display:none" onchange="dxpChange('cor')"><span class="dxp-semana" id="cor_sem"></span></div>
             <div class="summary-grid" style="grid-template-columns:repeat(5,1fr)">
                 <div class="sum-card">
-                    <div class="sum-card-label">Flujo neto del período</div>
+                    <div class="sum-card-label">Venta neta del período</div>
                     <div class="sum-card-val" id="sumTotal">$0.00</div>
                     <div class="sum-card-sub" id="sumPeriodo">—</div>
                 </div>
@@ -2623,8 +2623,12 @@ function renderDepositos(){
 function _escV(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 function renderSummary(cur,prev){
-    var totCur=cur.reduce(function(s,c){return s+flujoNeto(c);},0);
-    var totPrev=prev.reduce(function(s,c){return s+flujoNeto(c);},0);
+    // VENTA NETA = venta bruta (efectivo+tarjeta+transfer), SIN propinas: las
+    // propinas solo hacen un "paseo" por la cuenta y se le dan al colaborador,
+    // no son venta del negocio. Antes esta tarjeta usaba flujoNeto (que suma la
+    // propina de tarjeta) y descuadraba contra Ventas Totales / KPIs.
+    var totCur=cur.reduce(function(s,c){return s+ventasBruta(c);},0);
+    var totPrev=prev.reduce(function(s,c){return s+ventasBruta(c);},0);
     var comCur=cur.reduce(function(s,c){return s+n(c.comensales);},0);
     var propCur=cur.reduce(function(s,c){return s+propinas(c);},0);
     var resCur=cur.reduce(function(s,c){return s+resultado(c);},0);
