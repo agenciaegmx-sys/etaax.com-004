@@ -1529,10 +1529,19 @@ function abrirEditorEnModal(url, label) {
 function cerrarIframeInsumo() {
     const modal = document.getElementById('modalIframeInsumo');
     const frame = document.getElementById('iframeInsumo');
-    if (frame) frame.src = '';
     if (modal) modal.style.display = 'none';
+    // Recalcular YA desde localStorage: el iframe lo actualizó de forma síncrona,
+    // así que el costo nuevo del insumo/sub-receta ya está disponible al instante.
     ingredientes.forEach((ing, i) => recalcularCostoDesdeInsumo(i));
     renderTabla();
+    // Blanquear el iframe con RETRASO. Hacerlo al instante destruía su documento y
+    // CANCELABA las escrituras a Supabase en vuelo (guardar la sub-receta + upsert
+    // del insumo con el costo nuevo). localStorage sí quedaba al día, pero la nube
+    // conservaba el costo viejo → al recargar, el pull de Supabase lo revertía y el
+    // escandallo padre "perdía" el precio. El retraso deja que esos writes terminen.
+    if (frame) setTimeout(function(){
+        if (modal && modal.style.display === 'none') frame.src = 'about:blank';
+    }, 4000);
 }
 
 window.addEventListener('message', function(e) {
