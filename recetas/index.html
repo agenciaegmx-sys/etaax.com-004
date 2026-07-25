@@ -1686,6 +1686,13 @@ function agregarSubRecetaComoInsumo(silent) {
     var nombre   = (document.getElementById('nombreReceta') || {}).value || '';
     var grupo    = (document.getElementById('grupo') || {}).value || '';
     if (!nombre) { if (!silent) alert('Primero agrega el nombre de la sub receta'); return; }
+    // Una sub-receta SIN GUARDAR no tiene identidad (recetaId null): el dedupe
+    // no encontraba nada, cada clic creaba OTRO insumo 'prod_...' y el botón
+    // nunca se bloqueaba en "✓ Agregado". Se exige guardar primero.
+    if (!recetaActualId) {
+        if (!silent) alert('💾 Guarda la sub receta primero.\nAl guardarla obtiene su identidad y ya se puede agregar a insumos sin duplicarse.');
+        return;
+    }
 
     // Calcular costo total
     var costoTotal = ingredientes.reduce(function(s, ing) {
