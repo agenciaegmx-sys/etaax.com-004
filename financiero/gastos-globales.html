@@ -768,7 +768,7 @@ function mesStr(){return todayStr().slice(0,7);}
 function n(v){return parseFloat(v)||0;}
 function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function flujoNeto(c){return EtaaxCore.flujoNeto(c);} // núcleo: MISMA fórmula que el corte
+function ventaBruta(c){return EtaaxCore.ventasBruta(c);} // venta bruta SIN propinas (antes flujoNeto: contaba propina de tarjeta) // núcleo: MISMA fórmula que el corte
 
 /* ── Sucursal state ── */
 var _sucursalId=null;
@@ -1297,7 +1297,7 @@ function renderResumen(){
     var kpis=renderKPIs(mes);
     var cortes=loadCortesMonth(mes);
     var otros=loadOtrosMes(mes);
-    var totalVentas=cortes.reduce(function(s,c){return s+flujoNeto(c);},0);
+    var totalVentas=cortes.reduce(function(s,c){return s+ventaBruta(c);},0);
     var totalOtros=otros.reduce(function(s,o){return s+n(o.monto);},0);
     var totalIngresos=totalVentas+totalOtros;
     var resultado=totalIngresos-kpis.total;
@@ -1533,5 +1533,6 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="../admin-guard.js"></script>
 <script src="/staff-modal.js"></script>
 <script src="/nomina-params.js"></script>
+<script src="/nav-pref.js"></script>
 </body>
 </html>

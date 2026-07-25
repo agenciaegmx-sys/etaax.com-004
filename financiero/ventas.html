@@ -595,7 +595,7 @@ function todayStr(){
 function n(v){return parseFloat(v)||0;}
 function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function flujoNeto(c){return EtaaxCore.flujoNeto(c);} // núcleo: MISMA fórmula que el corte
+function ventaBruta(c){return EtaaxCore.ventasBruta(c);} // venta bruta SIN propinas (antes flujoNeto: contaba propina de tarjeta) // núcleo: MISMA fórmula que el corte
 
 /* ── Period state ── */
 var periodoTipo='mes';
@@ -632,7 +632,7 @@ function getDiaFactores(){
     var sumas=[0,0,0,0,0,0,0],conteos=[0,0,0,0,0,0,0];
     cortes.forEach(function(c){
         var dow=new Date(c.fecha+'T12:00:00').getDay();
-        sumas[dow]+=flujoNeto(c); conteos[dow]++;
+        sumas[dow]+=ventaBruta(c); conteos[dow]++;
     });
     var avgs=sumas.map(function(s,i){return conteos[i]>0?s/conteos[i]:0;});
     var maxAvg=Math.max.apply(null,avgs.filter(function(a){return a>0;}));
@@ -660,7 +660,7 @@ function calcSugerencias(){
     var cortes=loadCortes();
     if(!cortes.length){box.style.display='none';return;}
     var byMes={};
-    cortes.forEach(function(c){var mm=c.fecha.slice(0,7);byMes[mm]=(byMes[mm]||0)+flujoNeto(c);});
+    cortes.forEach(function(c){var mm=c.fecha.slice(0,7);byMes[mm]=(byMes[mm]||0)+ventaBruta(c);});
     var meses=Object.keys(byMes).sort();
     if(meses.length<2){box.style.display='none';return;}
     var mesActual=_pickerVal().slice(0,7);
@@ -709,7 +709,7 @@ function calcSugerencias(){
 function _getMejoresDias(){
     var cortes=loadCortes();
     var sumas=[0,0,0,0,0,0,0],conteos=[0,0,0,0,0,0,0];
-    cortes.forEach(function(c){var dow=new Date(c.fecha+'T12:00:00').getDay();sumas[dow]+=flujoNeto(c);conteos[dow]++;});
+    cortes.forEach(function(c){var dow=new Date(c.fecha+'T12:00:00').getDay();sumas[dow]+=ventaBruta(c);conteos[dow]++;});
     var avgs=sumas.map(function(s,i){return conteos[i]>0?s/conteos[i]:0;});
     var dias=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
     return avgs.map(function(a,i){return{a:a,d:dias[i]};}).sort(function(a,b){return b.a-a.a;}).slice(0,3).map(function(x){return x.d;}).join(', ');
@@ -720,7 +720,7 @@ function renderAll(){
     var r=getRange();
     var cortesMap={};
     loadCortes().filter(function(c){return inRange(c.fecha,r);}).forEach(function(c){
-        cortesMap[c.fecha]=(cortesMap[c.fecha]||0)+flujoNeto(c);
+        cortesMap[c.fecha]=(cortesMap[c.fecha]||0)+ventaBruta(c);
     });
     var otrosMap={};
     loadOtros().filter(function(o){return inRange(o.fecha,r);}).forEach(function(o){
@@ -1182,5 +1182,6 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="../security.js"></script>
 <script src="../admin-guard.js"></script>
 <script src="../ctx-bar.js"></script>
+<script src="/nav-pref.js"></script>
 </body>
 </html>
