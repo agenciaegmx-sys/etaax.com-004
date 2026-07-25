@@ -1830,9 +1830,21 @@ function agregarSubRecetaComoInsumo(silent) {
     try {
         var negId = getNegocioActivo ? getNegocioActivo() : (localStorage.getItem('etaax_negocio_activo') || '');
         var catalogo = JSON.parse(localStorage.getItem(_sk('insumos'))) || [];
-        // TODAS las copias de esta sub-receta (puede haber una por sucursal).
-        var matches = [];
-        catalogo.forEach(function(x, i){ if (x.esSubReceta && x.recetaId && x.recetaId === insumoNuevo.recetaId) matches.push(i); });
+        // Identidad por recetaId (puede haber una copia por sucursal). Además,
+        // HUÉRFANOS: sub-recetas del MISMO nombre creadas sin recetaId (sesiones
+        // previas que duplicaban al presionar varias veces con la receta sin
+        // guardar) → se adopta UNA como oficial y las sobrantes se eliminan.
+        var _nomN = _normNombreSR(nombre);
+        var matches = [], _huerfanos = [];
+        catalogo.forEach(function(x, i){
+            if (!x || !x.esSubReceta) return;
+            if (x.recetaId && x.recetaId === insumoNuevo.recetaId) matches.push(i);
+            else if (!x.recetaId && _normNombreSR(x.nombre) === _nomN) _huerfanos.push(i);
+        });
+        // Sin copia oficial pero con huérfanos → el primero se adopta (hereda recetaId).
+        if (!matches.length && _huerfanos.length) matches.push(_huerfanos.shift());
+        // Los huérfanos restantes son duplicados basura → se borran (ids, no índices).
+        var _idsBorrar = _huerfanos.map(function(i){ return catalogo[i].id; });
         var actualizados = [];
         if (matches.length) {
             // Ya existe como insumo → se ACTUALIZA sin preguntar (el botón queda
@@ -1850,7 +1862,10 @@ function agregarSubRecetaComoInsumo(silent) {
                     var _cSuc = localStorage.getItem('etaax_sucursal_activa') || '';
                     if (_cSuc && _memb.indexOf(_cSuc) < 0) _memb.push(_cSuc);
                 }
-                var upd = Object.assign({}, insumoNuevo, { id: prev.id, sucursalId: prev.sucursalId || '', sucursales: _memb });
+                // Huérfano adoptado sin sucursal: hereda la sucursal activa para que SÍ se vea.
+                var _cur = localStorage.getItem('etaax_sucursal_activa') || '';
+                if (!_memb.length && _cur) _memb.push(_cur);
+                var upd = Object.assign({}, insumoNuevo, { id: prev.id, sucursalId: prev.sucursalId || _cur, sucursales: _memb });
                 catalogo[idx] = upd;
                 actualizados.push(upd);
             });
@@ -1860,6 +1875,8 @@ function agregarSubRecetaComoInsumo(silent) {
             catalogo.push(insumoNuevo);
             actualizados.push(insumoNuevo);
         }
+        // Eliminar del catálogo local los huérfanos duplicados sobrantes.
+        if (_idsBorrar.length) catalogo = catalogo.filter(function(x){ return _idsBorrar.indexOf(x.id) < 0; });
         localStorage.setItem(_sk('insumos'), JSON.stringify(catalogo));
         // Si alguna copia estaba tombstoneada (borrada antes en el módulo de insumos),
         // al re-crearla desde la sub-receta se limpia su tombstone → coherente con
@@ -1872,6 +1889,20 @@ function agregarSubRecetaComoInsumo(silent) {
             actualizados.forEach(function(rec){ if (_tomb[rec.id] !== undefined) { delete _tomb[rec.id]; _tch = true; } });
             if (_tch) localStorage.setItem(_tk, JSON.stringify(_tomb));
         } catch(e) {}
+        // Huérfanos duplicados: tombstone local (para que el módulo de insumos no
+        // los reviva) + borrado en Supabase.
+        if (_idsBorrar.length) {
+            try {
+                var _tk2 = _sk('ins_borrados');
+                var _tomb2 = JSON.parse(localStorage.getItem(_tk2) || '{}');
+                _idsBorrar.forEach(function(id){ _tomb2[id] = Date.now(); });
+                localStorage.setItem(_tk2, JSON.stringify(_tomb2));
+            } catch(e) {}
+            if (negId && typeof _supabase !== 'undefined') {
+                _supabase.from('negocio_insumos').delete().eq('negocio_id', negId).in('insumo_id', _idsBorrar)
+                    .then(function(r){ if (r.error) console.warn('[sub-receta] limpiar huérfanos:', r.error.message); });
+            }
+        }
         // Sync a Supabase negocio_insumos (cada copia actualizada)
         if (negId && typeof _supabase !== 'undefined') {
             actualizados.forEach(function(rec){
