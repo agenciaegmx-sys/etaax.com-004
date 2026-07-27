@@ -447,16 +447,28 @@
                     <input type="number" id="fijoMonto" min="0" step="100" placeholder="0.00">
                 </div>
             </div>
+            <div class="fg">
+                <label>Proveedor (opcional)</label>
+                <input type="text" id="fijoProveedor" placeholder="Nombre del proveedor o empresa">
+            </div>
             <div class="fg-row-2">
                 <div class="fg">
-                    <label>Proveedor (opcional)</label>
-                    <input type="text" id="fijoProveedor" placeholder="Nombre del proveedor o empresa">
+                    <label>Periodicidad</label>
+                    <select id="fijoPeriodicidad">
+                        <option value="quincenal">Quincenal</option>
+                        <option value="mensual" selected>Mensual</option>
+                        <option value="bimestral">Bimestral</option>
+                        <option value="trimestral">Trimestral</option>
+                        <option value="semestral">Semestral</option>
+                        <option value="anual">Anual</option>
+                    </select>
                 </div>
                 <div class="fg">
-                    <label>Día de pago <span style="font-size:9px;color:var(--text-dim);text-transform:none;letter-spacing:0">(del mes, opcional)</span></label>
-                    <input type="number" id="fijoDiaPago" min="1" max="31" placeholder="Ej: 5">
+                    <label>Fecha de pago <span style="font-size:9px;color:var(--text-dim);text-transform:none;letter-spacing:0">(referencia, opcional)</span></label>
+                    <input type="date" id="fijoFechaRef">
                 </div>
             </div>
+            <div style="font-size:10.5px;color:var(--text-dim);margin-top:-6px;line-height:1.5">📅 Pon un pago de referencia (ej. la última vez que lo pagaste) y el sistema calcula el próximo vencimiento según la periodicidad.</div>
             <input type="hidden" id="fijoId">
         </div>
         <div class="modal-footer">
@@ -922,24 +934,36 @@ function _renderFijosNoCatalog(mes){
         +'Gastos de naturaleza fija (internet, luz, servicios…) capturados en gastos diarios pero SIN un gasto fijo configurado. Ya cuentan en el Total de Egresos; da de alta el fijo para monitorearlo mes a mes.</div>'
         +'<div class="card-body" style="padding:0;overflow-x:auto"><table class="gg-table"><thead><tr><th>Categoría</th><th class="ar">Pagado (mes)</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
 }
-// Estatus del fijo en el MES visto, cruzando pago real (x.estaPagado) con el
-// día de pago (f.diaPago) y la fecha de HOY. Devuelve badge + severidad para la
-// alerta. Severidad: 0 pagado · 1 vencido/hoy · 2 por pagar/pendiente · 3 futuro.
-function _estatusFijo(x, mes){
-    var f=x.fijo, dia=parseInt(f.diaPago,10)||0;
-    if(x.estaPagado)
-        return {txt:'✓ Pagado'+(x.fecha?' '+x.fecha:''), color:'var(--green)', bg:'rgba(61,190,122,.12)', bd:'rgba(61,190,122,.3)', sev:0};
-    if(!dia)
-        return {txt:'⏳ Pendiente', color:'var(--accent)', bg:'rgba(245,200,66,.1)', bd:'rgba(245,200,66,.3)', sev:2};
-    var hoy=new Date(), hoyMes=hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0'), hoyDia=hoy.getDate();
-    if(mes>hoyMes)  // mes futuro
-        return {txt:'📅 Programado · día '+dia, color:'var(--text-dim)', bg:'rgba(255,255,255,.03)', bd:'var(--border)', sev:3};
-    if(mes<hoyMes)  // mes pasado sin pagar
-        return {txt:'🔴 No pagado · vencía día '+dia, color:'var(--red)', bg:'rgba(224,90,58,.1)', bd:'rgba(224,90,58,.35)', sev:1};
-    // mes actual
-    if(hoyDia<dia)  return {txt:'⏳ Por pagar · vence día '+dia+' (en '+(dia-hoyDia)+'d)', color:'var(--accent)', bg:'rgba(245,200,66,.1)', bd:'rgba(245,200,66,.3)', sev:2};
-    if(hoyDia===dia) return {txt:'⚠️ Vence HOY (día '+dia+')', color:'#e0a93d', bg:'rgba(224,169,61,.14)', bd:'rgba(224,169,61,.45)', sev:1};
-    return {txt:'🔴 Vencido · venció día '+dia+' (hace '+(hoyDia-dia)+'d)', color:'var(--red)', bg:'rgba(224,90,58,.1)', bd:'rgba(224,90,58,.35)', sev:1};
+// ── Estatus del fijo por PLAN de pago (fecha de referencia + periodicidad) ──
+// Usa EtaaxCore.planFijoPago (mismo motor que el candado) + el último pago real.
+// Severidad para la alerta: 0 pagado · 1 vencido/hoy · 2 por pagar/pendiente · 3 futuro.
+function _fechaDeDia(dia){ var d=new Date(); var ult=new Date(d.getFullYear(),d.getMonth()+1,0).getDate(); d.setDate(Math.min(parseInt(dia,10)||1,ult)); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function _fijoRefPer(f){ return { ref:(f.fechaRef||(f.diaPago?_fechaDeDia(f.diaPago):'')), per:(f.periodicidad||'mensual') }; }
+function _fmtFechaCorta(s){ if(!s) return ''; var M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; var p=String(s).split('-'); return parseInt(p[2],10)+' '+M[parseInt(p[1],10)-1]; }
+function _ultimoPagoFijo(f){
+    var pagos=(_cacheGG_Gastos||[]).filter(_deSuc).filter(function(g){
+        if(g.fijoId) return g.fijoId===f.id;
+        if(_norm(g.concepto)!==_norm(f.concepto)) return false;
+        return !f.proveedor || _norm(g.proveedor)===_norm(f.proveedor);
+    });
+    var fechas=pagos.map(function(g){return String(g.fechaPago||g.fecha||'').slice(0,10);}).filter(Boolean).sort();
+    return fechas.length?fechas[fechas.length-1]:'';
+}
+function _badgePlan(p){
+    if(!p||!p.programado) return {txt:'⏳ Pendiente', color:'var(--accent)', bg:'rgba(245,200,66,.1)', bd:'rgba(245,200,66,.3)', sev:2};
+    if(p.estado==='pagado')    return {txt:'✓ Pagado · próx '+_fmtFechaCorta(p.proximo), color:'var(--green)', bg:'rgba(61,190,122,.12)', bd:'rgba(61,190,122,.3)', sev:0};
+    if(p.estado==='programado')return {txt:'📅 Programado · '+_fmtFechaCorta(p.proximo), color:'var(--text-dim)', bg:'rgba(255,255,255,.03)', bd:'var(--border)', sev:3};
+    if(p.estado==='vence_hoy') return {txt:'⚠️ Vence HOY', color:'#e0a93d', bg:'rgba(224,169,61,.14)', bd:'rgba(224,169,61,.45)', sev:1};
+    if(p.estado==='vencido')   return {txt:'🔴 Vencido · '+_fmtFechaCorta(p.venceEste)+' (hace '+(-p.dias)+'d)', color:'var(--red)', bg:'rgba(224,90,58,.1)', bd:'rgba(224,90,58,.35)', sev:1};
+    return {txt:'⏳ Por pagar · '+_fmtFechaCorta(p.objetivo), color:'var(--accent)', bg:'rgba(245,200,66,.1)', bd:'rgba(245,200,66,.3)', sev:2};
+}
+function _estatusFijo(x){
+    var f=x.fijo, rp=_fijoRefPer(f);
+    if(!rp.ref) // sin fecha de referencia → solo pagado/pendiente del mes visto
+        return x.estaPagado
+          ? {txt:'✓ Pagado'+(x.fecha?' '+x.fecha:''), color:'var(--green)', bg:'rgba(61,190,122,.12)', bd:'rgba(61,190,122,.3)', sev:0}
+          : {txt:'⏳ Pendiente', color:'var(--accent)', bg:'rgba(245,200,66,.1)', bd:'rgba(245,200,66,.3)', sev:2};
+    return _badgePlan(EtaaxCore.planFijoPago(rp.ref, rp.per, EtaaxCore.todayStr(), _ultimoPagoFijo(f)));
 }
 function renderFijos(){
     var mes=_mesPicker||mesStr();
@@ -957,7 +981,7 @@ function renderFijos(){
     document.getElementById('fijosTotal').textContent=fmtM(totalReal); // Opción A: lo realmente pagado
     var planEl=document.getElementById('fijosPlan'); if(planEl) planEl.textContent=nPag+'/'+lista.length+' pagados · plan '+fmtM(totalPlan);
     // Banner de alerta del mes: vencidos / vencen hoy / por pagar
-    var est=matches.map(function(x){return _estatusFijo(x,mes);});
+    var est=matches.map(function(x){return _estatusFijo(x);});
     var nVenc=est.filter(function(e){return e.sev===1;}).length;
     var nPorPagar=est.filter(function(e){return e.sev===2;}).length;
     var alertaEl=document.getElementById('fijosAlerta');
@@ -1273,12 +1297,19 @@ function _ggVerFijo(id){
     var f=x.fijo;
     var evid=[]; (x.pagos||[]).forEach(function(p){ (p.evidencias||[]).forEach(function(e){evid.push(e);}); });
     var pago0=(x.pagos||[])[0]||{};
+    // Resumen del plan de pago (periodicidad + próximo vencimiento + último pago)
+    var rp=_fijoRefPer(f), planTxt='';
+    if(rp.ref){
+        var pl=EtaaxCore.planFijoPago(rp.ref, rp.per, EtaaxCore.todayStr(), _ultimoPagoFijo(f));
+        var perLbl={quincenal:'Quincenal',mensual:'Mensual',bimestral:'Bimestral',trimestral:'Trimestral',semestral:'Semestral',anual:'Anual'}[rp.per]||rp.per;
+        planTxt='📅 '+perLbl+' · próximo pago: '+_fmtFechaCorta(pl.proximo)+(pl.ultimoPago?(' · último pago: '+_fmtFechaCorta(pl.ultimoPago)):'')+'. ';
+    }
     _ggVerGastoObj({
         _tipoLbl:'🏢 Gasto fijo', concepto:f.concepto||'—', monto:x.estaPagado?x.pagado:n(f.monto),
         fecha:pago0.fecha||('Plan '+mes), categoria:f.categoria||'—', proveedor:f.proveedor||'—',
         metodoPago:x.metodo||pago0.metodoPago||'', metodoBanco:x.metodoBanco||pago0.metodoBanco||'',
         facturado:!!pago0.facturado, estatus:x.estaPagado?'pagado':'pendiente',
-        notas:(x.estaPagado?'':'Aún no pagado este mes (monto = plan).')+(pago0.notas?(' '+pago0.notas):''),
+        notas:planTxt+(x.estaPagado?'':'Aún no pagado este mes (monto = plan).')+(pago0.notas?(' '+pago0.notas):''),
         evidencias:evid
     });
 }
@@ -1373,7 +1404,9 @@ function _abrirFijoModal(id){
     document.getElementById('fijoCategoria').value=d.categoria||'Renta';
     document.getElementById('fijoMonto').value=d.monto||'';
     document.getElementById('fijoProveedor').value=d.proveedor||'';
-    document.getElementById('fijoDiaPago').value=d.diaPago||'';
+    document.getElementById('fijoPeriodicidad').value=d.periodicidad||'mensual';
+    // Retrocompat: si un fijo viejo solo tenía diaPago, sugerir una fecha ref con ese día este mes.
+    document.getElementById('fijoFechaRef').value=d.fechaRef||(d.diaPago?_fechaDeDia(d.diaPago):'');
     document.getElementById('modalFijoTitle').textContent=id?'✏️ Editar Gasto Fijo':'🏢 Nuevo Gasto Fijo';
     document.getElementById('modalFijo').classList.add('open');
     setTimeout(function(){document.getElementById('fijoConcepto').focus();},60);
@@ -1385,9 +1418,9 @@ function guardarFijo(){
     if(!concepto){alert('El concepto es obligatorio.');return;}
     if(!monto||monto<=0){alert('El monto debe ser mayor a cero.');return;}
     var id=document.getElementById('fijoId').value||genId();
-    var diaPago=parseInt(document.getElementById('fijoDiaPago').value,10);
-    if(!(diaPago>=1&&diaPago<=31)) diaPago=''; // vacío = sin día de pago definido
-    var record={id:id,concepto:concepto,categoria:document.getElementById('fijoCategoria').value,proveedor:document.getElementById('fijoProveedor').value.trim(),monto:monto,diaPago:diaPago};
+    var record={id:id,concepto:concepto,categoria:document.getElementById('fijoCategoria').value,proveedor:document.getElementById('fijoProveedor').value.trim(),monto:monto,
+        periodicidad:document.getElementById('fijoPeriodicidad').value||'mensual',
+        fechaRef:document.getElementById('fijoFechaRef').value||''};
     _cacheGG_Fijos = loadFijos().filter(function(f){return f.id!==id;});
     _cacheGG_Fijos.push(record);
     _sbUpFijo(record); cerrarFijo(); renderAll();

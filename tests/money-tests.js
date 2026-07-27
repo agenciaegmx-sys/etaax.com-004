@@ -571,6 +571,41 @@ test('calcMetaDiaria factores en cero cae a uniforme', () => {
 test('flujoNeto núcleo = ef + tarjeta + propTarjeta + transfer (las 6 páginas heredan ESTA)', () =>
     eq(Core.flujoNeto({ efectivo: 1, tarjeta: 2, propTarjeta: 3, transferencia: 4 }), 10));
 
+/* planFijoPago — plan de pago de gastos fijos recurrentes (día de pago + periodicidad) */
+test('mensual pagado el ciclo → estado pagado, próximo mes', () => {
+    var p = Core.planFijoPago('2026-07-01', 'mensual', '2026-07-10', '2026-07-01');
+    eq(p.estado, 'pagado'); eq(p.proximo, '2026-08-01'); eq(p.dias, 22);
+});
+test('mensual sin pagar y ya pasó el día → vencido', () => {
+    var p = Core.planFijoPago('2026-07-01', 'mensual', '2026-07-10', '');
+    eq(p.estado, 'vencido'); eq(p.venceEste, '2026-07-01'); eq(p.dias, -9);
+});
+test('mensual con fecha ref futura → programado', () => {
+    var p = Core.planFijoPago('2026-07-15', 'mensual', '2026-07-10', '');
+    eq(p.estado, 'programado'); eq(p.proximo, '2026-07-15'); eq(p.dias, 5);
+});
+test('mensual vence HOY sin pagar', () => {
+    var p = Core.planFijoPago('2026-07-15', 'mensual', '2026-07-15', '');
+    eq(p.estado, 'vence_hoy'); eq(p.dias, 0);
+});
+test('bimestral: pagó julio, agosto NO toca → pagado, próximo septiembre', () => {
+    var p = Core.planFijoPago('2026-07-01', 'bimestral', '2026-08-10', '2026-07-01');
+    eq(p.estado, 'pagado'); eq(p.proximo, '2026-09-01');
+});
+test('bimestral: septiembre sin pagar (pagó julio) → vencido', () => {
+    var p = Core.planFijoPago('2026-07-01', 'bimestral', '2026-09-10', '2026-07-01');
+    eq(p.estado, 'vencido'); eq(p.venceEste, '2026-09-01');
+});
+test('quincenal: cada 15 días desde ref', () => {
+    var p = Core.planFijoPago('2026-07-01', 'quincenal', '2026-07-20', '');
+    eq(p.estado, 'vencido'); eq(p.venceEste, '2026-07-16'); eq(p.dias, -4);
+});
+test('anual: clamp de día (ref 31 ene → próximo respeta fin de mes)', () => {
+    var p = Core.planFijoPago('2026-01-31', 'mensual', '2026-02-15', '2026-01-31');
+    eq(p.estado, 'pagado'); eq(p.proximo, '2026-02-28'); // febrero no tiene 31
+});
+test('fecha ref vacía → no programado', () => eq(Core.planFijoPago('', 'mensual', '2026-07-10', '').programado, false));
+
 /* ═══════════════ SUITE D · RECLASIFICACIÓN DE GASTOS (financiero/gastos-globales.html) ═══════════════ */
 console.log('\n══ SUITE D · Reclasificación de gastos (financiero/gastos-globales.html) ══');
 (function () {

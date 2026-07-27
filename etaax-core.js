@@ -148,8 +148,41 @@
         return result;
     }
 
+    /* ── Plan de pago de un GASTO FIJO recurrente ──────────────────
+       fechaRef 'YYYY-MM-DD' = pago de referencia / inicio del ciclo.
+       per: quincenal|mensual|bimestral|trimestral|semestral|anual.
+       hoy 'YYYY-MM-DD'; ultimoPago 'YYYY-MM-DD' o '' (pago real más reciente).
+       Calcula el vencimiento del ciclo vigente, si ya se pagó y la próxima fecha.
+       `dias` = días hasta el pago que TOCA hacer (≤0 vencido/hoy; >0 por venir). */
+    var PERIODO_MESES = { mensual:1, bimestral:2, trimestral:3, semestral:6, anual:12 };
+    function _pfParse(s){ if(!s) return null; var p=String(s).slice(0,10).split('-'); if(p.length<3) return null; var d=new Date(+p[0],+p[1]-1,+p[2],12,0,0); return isNaN(d.getTime())?null:d; }
+    function _pfFmt(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+    function _pfAddMonths(ref, k){ var dia=ref.getDate(), m=ref.getMonth()+k, yy=ref.getFullYear()+Math.floor(m/12), mm=((m%12)+12)%12, ult=new Date(yy,mm+1,0).getDate(); return new Date(yy,mm,Math.min(dia,ult),12,0,0); }
+    function _pfDias(a,b){ return Math.round((a-b)/86400000); }
+    function planFijoPago(fechaRef, per, hoy, ultimoPago){
+        var ref=_pfParse(fechaRef); if(!ref) return { programado:false };
+        var h=_pfParse(hoy)||_pfParse(todayStr()); per=(per||'mensual').toLowerCase();
+        var up=_pfParse(ultimoPago);
+        var venceEste=null, proximo=null, cur=new Date(ref), guard=0;
+        if(per==='quincenal'){
+            if(cur>h){ proximo=new Date(cur); }
+            else { while(cur<=h && guard++<6000){ venceEste=new Date(cur); cur=new Date(cur.getTime()+15*86400000); } proximo=cur; }
+        } else {
+            var step=PERIODO_MESES[per]||1, k=0;
+            if(cur>h){ proximo=new Date(cur); }
+            else { while(cur<=h && guard++<6000){ venceEste=new Date(cur); k+=step; cur=_pfAddMonths(ref,k); } proximo=cur; }
+        }
+        var pagadoEste = !!(venceEste && up && up>=venceEste);
+        var objetivo = (venceEste && !pagadoEste) ? venceEste : proximo;
+        var dias = _pfDias(objetivo, h);
+        var estado = !venceEste ? 'programado' : (pagadoEste ? 'pagado' : (dias===0 ? 'vence_hoy' : (dias<0 ? 'vencido' : 'por_pagar')));
+        return { programado:true, estado:estado, pagado:pagadoEste, dias:dias,
+                 objetivo:_pfFmt(objetivo), venceEste:venceEste?_pfFmt(venceEste):'', proximo:_pfFmt(proximo), ultimoPago:up?_pfFmt(up):'' };
+    }
+
     window.EtaaxCore = {
         n: n, fmtM: fmtM, fmtN: fmtN, genId: genId, todayStr: todayStr,
+        planFijoPago: planFijoPago,
         getNegocioActivo: getNegocioActivo, sucActiva: sucActiva, scopeSuc: scopeSuc,
         getWeekStr: getWeekStr, semanaISO: semanaISO, getRange: getRange, prevRange: prevRange, inRange: inRange,
         efNeto: efNeto, taBanco: taBanco, ventasBruta: ventasBruta, flujoNeto: flujoNeto,
