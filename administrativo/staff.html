@@ -336,7 +336,7 @@
                             title="Acceso restringido — requiere contraseña de administrador"
                             style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">🔐 Permisos y Roles</button>
                         <button class="btn-ghost" onclick="_abrirNomParams()"
-                            style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">⚙️ Parámetros de nómina</button>
+                            style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">💵 Definir salario mínimo</button>
                         <button class="btn-primary" onclick="openModal()">+ Agregar colaborador</button>
                     </div>
                 </div>
@@ -999,8 +999,11 @@ function clearForm() {
     document.getElementById('fEstado').value = 'Activo';
     document.getElementById('fRol').value = '';
     document.getElementById('fCategoriaNomina').value = 'operativa';
-    document.getElementById('fEsquemaSueldo').value = 'periodo';
-    document.getElementById('fSueldoDiario').value = '';
+    // Estandarizar el staff NUEVO al salario mínimo diario definido (si hay):
+    // arranca con esquema "por día" y el sueldo precargado al mínimo.
+    var _defMin = (window.NominaParams ? (NominaParams.get(getNegocioActivo()).salarioDiarioDefault || 0) : 0);
+    document.getElementById('fEsquemaSueldo').value = _defMin > 0 ? 'diario' : 'periodo';
+    document.getElementById('fSueldoDiario').value = _defMin > 0 ? _defMin : '';
     document.getElementById('fPrimaVacacionalEnPago').checked = false;
     _toggleEsquemaSueldo();
     document.getElementById('fileInput').value = '';

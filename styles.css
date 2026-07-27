@@ -1160,7 +1160,12 @@ textarea:focus {
     width: 100%;
     max-width: 940px;
     max-height: 92vh;
-    overflow-y: auto;
+    /* Redimensionable libremente por la esquina inferior derecha (como el modal
+       de Ventas por Producto). Acotado entre min y el max del modal / viewport. */
+    overflow: auto;
+    resize: both;
+    min-width: 300px;
+    min-height: 180px;
 }
 
 .modal-header {

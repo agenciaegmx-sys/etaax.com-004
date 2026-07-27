@@ -59,6 +59,11 @@
             '.np-grp label{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim)}' +
             '.np-grp input{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;font-family:"DM Sans",sans-serif;font-size:14px;outline:none;width:100%;box-sizing:border-box}' +
             '.np-grp input:focus{border-color:var(--green)}' +
+            '.np-inw{position:relative;display:flex;align-items:center}' +
+            '.np-suf{position:absolute;right:12px;color:var(--text-dim);font-size:13px;pointer-events:none}' +
+            '.np-pre{position:absolute;left:12px;color:var(--text-dim);font-size:14px;pointer-events:none}' +
+            '.np-inw.suf input{padding-right:46px}' +
+            '.np-inw.pre input{padding-left:24px}' +
             '.np-hint{font-size:11px;color:var(--text-dim)}' +
             '.np-btn{font-family:"DM Sans",sans-serif;font-size:13px;padding:9px 18px;border-radius:6px;cursor:pointer}' +
             '.np-btn-primary{background:var(--green);border:none;color:#0a0908;font-weight:600}' +
@@ -75,12 +80,12 @@
         el.addEventListener('click', function (e) { if (e.target === el) _close(); });
         el.innerHTML =
           '<div class="modal">' +
-            '<div class="modal-header"><h2>⚙️ Parámetros de nómina</h2><button class="modal-close" onclick="NominaParams._close()">✕</button></div>' +
+            '<div class="modal-header"><h2>💵 Definir salario mínimo</h2><button class="modal-close" onclick="NominaParams._close()">✕</button></div>' +
             '<div class="modal-body">' +
               '<p style="font-size:12px;color:var(--text-dim);margin:0 0 16px;line-height:1.6">Se definen una vez y aplican a todos los colaboradores del negocio. Cada quien puede ajustar su sueldo en su propio expediente.</p>' +
-              '<div class="np-grp"><label>Prima dominical (%)</label><input type="number" id="np_prima" min="0" step="1" placeholder="25"><span class="np-hint">Por ley es 25% sobre el sueldo de los domingos trabajados.</span></div>' +
-              '<div class="np-grp"><label>Jornada (horas por día)</label><input type="number" id="np_jornada" min="1" max="24" step="0.5" placeholder="8"><span class="np-hint">Base para el pago por hora de las horas extra (sueldo diario ÷ jornada).</span></div>' +
-              '<div class="np-grp"><label>Sueldo diario estándar (default $)</label><input type="number" id="np_diario" min="0" step="0.01" placeholder="0.00"><span class="np-hint">Se precarga a cada colaborador nuevo con esquema "por día". Cada quien puede cambiarlo.</span></div>' +
+              '<div class="np-grp"><label>Prima dominical</label><div class="np-inw suf"><input type="number" id="np_prima" min="0" step="1" placeholder="25"><span class="np-suf">%</span></div><span class="np-hint">Por ley es 25% sobre el sueldo de los domingos trabajados.</span></div>' +
+              '<div class="np-grp"><label>Jornada (horas por día)</label><div class="np-inw suf"><input type="number" id="np_jornada" min="1" max="24" step="0.5" placeholder="8"><span class="np-suf">hrs</span></div><span class="np-hint">Base para el pago por hora de las horas extra (sueldo diario ÷ jornada).</span></div>' +
+              '<div class="np-grp"><label>Salario mínimo diario (default)</label><div class="np-inw pre"><span class="np-pre">$</span><input type="number" id="np_diario" min="0" step="0.01" placeholder="0.00"></div><span class="np-hint">Se precarga a cada colaborador nuevo con esquema "por día". Cada quien puede cambiarlo.</span></div>' +
             '</div>' +
             '<div class="modal-footer"><button class="np-btn np-btn-ghost" onclick="NominaParams._close()">Cancelar</button>' +
               '<button class="np-btn np-btn-primary" onclick="NominaParams._save()">Guardar parámetros</button></div>' +
@@ -98,8 +103,8 @@
             var self = this;
             // Los parámetros de nómina afectan todos los pagos: requiere autorización.
             if (window._pedirClaveAdmin) {
-                _pedirClaveAdmin('Parámetros de nómina — Autorización requerida',
-                    function () { self._openReal(negId, onSaved); }, '⚙️ Continuar');
+                _pedirClaveAdmin('Definir salario mínimo — Autorización requerida',
+                    function () { self._openReal(negId, onSaved); }, '💵 Continuar');
             } else { this._openReal(negId, onSaved); }
         },
         _openReal: function (negId, onSaved) {
