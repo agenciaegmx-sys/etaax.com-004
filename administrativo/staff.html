@@ -508,13 +508,19 @@
                     </select>
                 </div>
                 <div class="form-group" id="grpSueldoDiario" style="display:none">
-                    <label>Sueldo diario</label>
-                    <input type="number" id="fSueldoDiario" min="0" step="0.01" placeholder="0.00" oninput="_updateSueldoPreview();_calcPrimaVacacional()">
-                    <span class="form-hint">Al pagar, el monto = sueldo diario × días trabajados.</span>
+                    <label style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                        <span>Sueldo diario</span>
+                        <button type="button" id="btnModSueldoDiario" onclick="_desbloquearSueldo('fSueldoDiario','btnModSueldoDiario')" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:3px 9px;font-family:inherit;font-size:10px;cursor:pointer;letter-spacing:.3px">🔒 Modificar</button>
+                    </label>
+                    <input type="number" id="fSueldoDiario" min="0" step="0.01" placeholder="0.00" readonly oninput="_updateSueldoPreview();_calcPrimaVacacional()">
+                    <span class="form-hint" id="hintSueldoDiario">Estándar = salario mínimo. Modificar requiere clave.</span>
                 </div>
                 <div class="form-group" id="grpSalarioBase">
-                    <label>Salario base (por periodo)</label>
-                    <input type="number" id="fSalarioBase" min="0" step="0.01" placeholder="0.00" oninput="_calcPrimaVacacional()">
+                    <label style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                        <span>Salario base (por periodo)</span>
+                        <button type="button" id="btnModSalarioBase" onclick="_desbloquearSueldo('fSalarioBase','btnModSalarioBase')" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:3px 9px;font-family:inherit;font-size:10px;cursor:pointer;letter-spacing:.3px">🔒 Modificar</button>
+                    </label>
+                    <input type="number" id="fSalarioBase" min="0" step="0.01" placeholder="0.00" readonly oninput="_calcPrimaVacacional()">
                 </div>
                 <div class="form-group full" id="sueldoPreview" style="display:none">
                     <div style="background:var(--surface2);border:1px solid var(--green);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text-muted)" id="sueldoPreviewTxt"></div>
@@ -986,7 +992,35 @@ function _openModalReal(id) {
     _togAccesoStaff(); // mostrar credenciales o NIP según el rol
     _calcPrimaVacacional(); // recalcular con todos los datos ya cargados
     renderChips();
+    _lockSueldos(); // salario = regla estándar (mínimo); modificar pide clave
     document.getElementById('modalStaff').classList.add('open');
+}
+
+/* ── Salario como REGLA ESTÁNDAR: el campo arranca bloqueado (referencia =
+   salario mínimo). Modificarlo requiere clave de administrador. Si el valor
+   guardado quedó por DEBAJO del mínimo, se avisa en el hint. ── */
+function _lockSueldos(){
+    var def=(window.NominaParams?(NominaParams.get(getNegocioActivo()).salarioDiarioDefault||0):0);
+    [['fSueldoDiario','btnModSueldoDiario'],['fSalarioBase','btnModSalarioBase']].forEach(function(par){
+        var el=document.getElementById(par[0]), b=document.getElementById(par[1]);
+        if(el){ el.readOnly=true; el.style.opacity='.7'; el.style.cursor='not-allowed'; }
+        if(b){ b.textContent='🔒 Modificar'; b.style.borderColor='var(--border)'; b.style.color='var(--text-muted)'; }
+    });
+    var h=document.getElementById('hintSueldoDiario');
+    if(h){
+        var v=parseFloat(document.getElementById('fSueldoDiario').value)||0;
+        if(def>0 && v>0 && v<def){ h.textContent='⚠️ Por debajo del salario mínimo ($'+def+'). Modificar requiere clave.'; h.style.color='var(--red)'; }
+        else if(def>0){ h.textContent='Estándar (salario mínimo): $'+def+'. Modificar requiere clave.'; h.style.color=''; }
+        else { h.textContent='Modificar requiere clave.'; h.style.color=''; }
+    }
+}
+function _desbloquearSueldo(inputId, btnId){
+    if(!window._pedirClaveAdmin){ var e0=document.getElementById(inputId); if(e0){e0.readOnly=false;e0.focus();} return; }
+    _pedirClaveAdmin('Modificar referencia de salario', function(){
+        var el=document.getElementById(inputId);
+        if(el){ el.readOnly=false; el.style.opacity='1'; el.style.cursor=''; el.focus(); }
+        var b=document.getElementById(btnId); if(b){ b.textContent='🔓 Editable'; b.style.borderColor='var(--green)'; b.style.color='var(--green)'; }
+    }, '🔓 Modificar');
 }
 
 function clearForm() {
@@ -1300,5 +1334,6 @@ document.getElementById('modalStaff').addEventListener('click', function(e){
 <script src="/nomina-params.js"></script>
 <script src="/global-nav.js"></script>
 <script src="/nav-pref.js"></script>
+<script src="/modal-drag.js"></script>
 </body>
 </html>
