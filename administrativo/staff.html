@@ -461,12 +461,18 @@
             <div class="modal-section" id="accesoSec">Acceso al sistema</div>
             <div class="form-grid" id="accesoAdmin">
                 <div class="form-group">
-                    <label>Usuario</label>
+                    <label style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                        <span>Usuario</span>
+                        <button type="button" id="btnModUsuario" onclick="_desbloquearCampo('fUsuario','btnModUsuario','Modificar datos de acceso')" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:3px 9px;font-family:inherit;font-size:10px;cursor:pointer;letter-spacing:.3px">🔒 Modificar</button>
+                    </label>
                     <input type="text" id="fUsuario" placeholder="ej. juan.garcia" autocomplete="off">
                     <span class="form-hint">Único por negocio, sin espacios</span>
                 </div>
                 <div class="form-group">
-                    <label>Contraseña</label>
+                    <label style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                        <span>Contraseña</span>
+                        <button type="button" id="btnModPwd" onclick="_desbloquearCampo('fPwd','btnModPwd','Modificar datos de acceso')" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:3px 9px;font-family:inherit;font-size:10px;cursor:pointer;letter-spacing:.3px">🔒 Modificar</button>
+                    </label>
                     <div class="pwd-wrap">
                         <input type="password" id="fPwd" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
                         <button type="button" class="pwd-toggle-btn" onclick="toggleStaffPwd(this)" tabindex="-1">
@@ -1002,6 +1008,7 @@ function _openModalReal(id) {
     _calcPrimaVacacional(); // recalcular con todos los datos ya cargados
     renderChips();
     _lockSueldos(); // salario = regla estándar (mínimo); modificar pide clave
+    _lockAcceso(!!id); // credenciales bloqueadas al editar; libres al dar de alta
     _updateBonoPreview();
     document.getElementById('modalStaff').classList.add('open');
 }
@@ -1024,13 +1031,24 @@ function _lockSueldos(){
         else { h.textContent='Modificar requiere clave.'; h.style.color=''; }
     }
 }
-function _desbloquearSueldo(inputId, btnId){
+// Desbloqueo genérico de un campo protegido (pide clave de admin).
+function _desbloquearCampo(inputId, btnId, titulo){
     if(!window._pedirClaveAdmin){ var e0=document.getElementById(inputId); if(e0){e0.readOnly=false;e0.focus();} return; }
-    _pedirClaveAdmin('Modificar referencia de salario', function(){
+    _pedirClaveAdmin(titulo||'Modificar campo protegido', function(){
         var el=document.getElementById(inputId);
         if(el){ el.readOnly=false; el.style.opacity='1'; el.style.cursor=''; el.focus(); }
         var b=document.getElementById(btnId); if(b){ b.textContent='🔓 Editable'; b.style.borderColor='var(--green)'; b.style.color='var(--green)'; }
     }, '🔓 Modificar');
+}
+function _desbloquearSueldo(inputId, btnId){ _desbloquearCampo(inputId, btnId, 'Modificar referencia de salario'); }
+// Datos de acceso (usuario/contraseña): bloqueados al EDITAR un colaborador
+// existente (proteger credenciales); libres al dar de alta uno nuevo.
+function _lockAcceso(isEdit){
+    [['fUsuario','btnModUsuario'],['fPwd','btnModPwd']].forEach(function(par){
+        var el=document.getElementById(par[0]), b=document.getElementById(par[1]);
+        if(el){ el.readOnly=!!isEdit; el.style.opacity=isEdit?'.7':'1'; el.style.cursor=isEdit?'not-allowed':''; }
+        if(b){ b.style.display=isEdit?'':'none'; b.textContent='🔒 Modificar'; b.style.borderColor='var(--border)'; b.style.color='var(--text-muted)'; }
+    });
 }
 
 function clearForm() {
