@@ -226,8 +226,9 @@
                         <button class="btn-accent" id="btnAddFijo">+ Agregar gasto fijo</button>
                     </div>
                     <div style="padding:12px 20px;font-size:11px;color:var(--text-dim);background:rgba(245,200,66,.04);border-bottom:1px solid var(--border)">
-                        💡 Estos gastos se capturan una vez y se monitean mes a mes. Renta, servicios, seguros, internet, etc.
+                        💡 Estos gastos se capturan una vez y se monitorean mes a mes. Renta, servicios, seguros, internet, etc. Define el <b>día de pago</b> para que el sistema te avise cuándo toca.
                     </div>
+                    <div id="fijosAlerta" style="display:none;padding:11px 20px;font-size:12.5px;color:var(--text);background:rgba(224,90,58,.07);border-bottom:1px solid rgba(224,90,58,.25);line-height:1.5"></div>
                     <div class="card-body" style="padding:0;overflow-x:auto">
                         <table class="gg-table">
                             <thead>
@@ -446,9 +447,15 @@
                     <input type="number" id="fijoMonto" min="0" step="100" placeholder="0.00">
                 </div>
             </div>
-            <div class="fg">
-                <label>Proveedor (opcional)</label>
-                <input type="text" id="fijoProveedor" placeholder="Nombre del proveedor o empresa">
+            <div class="fg-row-2">
+                <div class="fg">
+                    <label>Proveedor (opcional)</label>
+                    <input type="text" id="fijoProveedor" placeholder="Nombre del proveedor o empresa">
+                </div>
+                <div class="fg">
+                    <label>Día de pago <span style="font-size:9px;color:var(--text-dim);text-transform:none;letter-spacing:0">(del mes, opcional)</span></label>
+                    <input type="number" id="fijoDiaPago" min="1" max="31" placeholder="Ej: 5">
+                </div>
             </div>
             <input type="hidden" id="fijoId">
         </div>
@@ -915,6 +922,25 @@ function _renderFijosNoCatalog(mes){
         +'Gastos de naturaleza fija (internet, luz, servicios…) capturados en gastos diarios pero SIN un gasto fijo configurado. Ya cuentan en el Total de Egresos; da de alta el fijo para monitorearlo mes a mes.</div>'
         +'<div class="card-body" style="padding:0;overflow-x:auto"><table class="gg-table"><thead><tr><th>Categoría</th><th class="ar">Pagado (mes)</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
 }
+// Estatus del fijo en el MES visto, cruzando pago real (x.estaPagado) con el
+// día de pago (f.diaPago) y la fecha de HOY. Devuelve badge + severidad para la
+// alerta. Severidad: 0 pagado · 1 vencido/hoy · 2 por pagar/pendiente · 3 futuro.
+function _estatusFijo(x, mes){
+    var f=x.fijo, dia=parseInt(f.diaPago,10)||0;
+    if(x.estaPagado)
+        return {txt:'✓ Pagado'+(x.fecha?' '+x.fecha:''), color:'var(--green)', bg:'rgba(61,190,122,.12)', bd:'rgba(61,190,122,.3)', sev:0};
+    if(!dia)
+        return {txt:'⏳ Pendiente', color:'var(--accent)', bg:'rgba(245,200,66,.1)', bd:'rgba(245,200,66,.3)', sev:2};
+    var hoy=new Date(), hoyMes=hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0'), hoyDia=hoy.getDate();
+    if(mes>hoyMes)  // mes futuro
+        return {txt:'📅 Programado · día '+dia, color:'var(--text-dim)', bg:'rgba(255,255,255,.03)', bd:'var(--border)', sev:3};
+    if(mes<hoyMes)  // mes pasado sin pagar
+        return {txt:'🔴 No pagado · vencía día '+dia, color:'var(--red)', bg:'rgba(224,90,58,.1)', bd:'rgba(224,90,58,.35)', sev:1};
+    // mes actual
+    if(hoyDia<dia)  return {txt:'⏳ Por pagar · vence día '+dia+' (en '+(dia-hoyDia)+'d)', color:'var(--accent)', bg:'rgba(245,200,66,.1)', bd:'rgba(245,200,66,.3)', sev:2};
+    if(hoyDia===dia) return {txt:'⚠️ Vence HOY (día '+dia+')', color:'#e0a93d', bg:'rgba(224,169,61,.14)', bd:'rgba(224,169,61,.45)', sev:1};
+    return {txt:'🔴 Vencido · venció día '+dia+' (hace '+(hoyDia-dia)+'d)', color:'var(--red)', bg:'rgba(224,90,58,.1)', bd:'rgba(224,90,58,.35)', sev:1};
+}
 function renderFijos(){
     var mes=_mesPicker||mesStr();
     _renderFijosNoCatalog(mes);
@@ -930,11 +956,23 @@ function renderFijos(){
     var nPag=matches.filter(function(x){return x.estaPagado;}).length;
     document.getElementById('fijosTotal').textContent=fmtM(totalReal); // Opción A: lo realmente pagado
     var planEl=document.getElementById('fijosPlan'); if(planEl) planEl.textContent=nPag+'/'+lista.length+' pagados · plan '+fmtM(totalPlan);
-    tbody.innerHTML=matches.map(function(x){
-        var f=x.fijo, dif=x.pagado-n(f.monto);
-        var estatus=x.estaPagado
-            ? '<span style="font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--green);background:rgba(61,190,122,.12);border:1px solid rgba(61,190,122,.3);border-radius:10px;padding:1px 8px;white-space:nowrap">✓ Pagado'+(x.fecha?' '+x.fecha:'')+'</span>'
-            : '<span style="font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--accent);background:rgba(245,200,66,.1);border:1px solid rgba(245,200,66,.3);border-radius:10px;padding:1px 8px;white-space:nowrap">⏳ Pendiente</span>';
+    // Banner de alerta del mes: vencidos / vencen hoy / por pagar
+    var est=matches.map(function(x){return _estatusFijo(x,mes);});
+    var nVenc=est.filter(function(e){return e.sev===1;}).length;
+    var nPorPagar=est.filter(function(e){return e.sev===2;}).length;
+    var alertaEl=document.getElementById('fijosAlerta');
+    if(alertaEl){
+        if(nVenc>0||nPorPagar>0){
+            var partes=[];
+            if(nVenc>0) partes.push('<b style="color:var(--red)">🔴 '+nVenc+'</b> '+(nVenc===1?'vencido / vence hoy':'vencidos / vencen hoy'));
+            if(nPorPagar>0) partes.push('<b style="color:var(--accent)">⏳ '+nPorPagar+'</b> por pagar');
+            alertaEl.style.display='';
+            alertaEl.innerHTML='<span style="font-size:16px">🔔</span> '+partes.join(' · ')+' <span style="color:var(--text-dim)">este mes.</span>';
+        } else { alertaEl.style.display='none'; alertaEl.innerHTML=''; }
+    }
+    tbody.innerHTML=matches.map(function(x,i){
+        var f=x.fijo, dif=x.pagado-n(f.monto), e=est[i];
+        var estatus='<span style="font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:'+e.color+';background:'+e.bg+';border:1px solid '+e.bd+';border-radius:10px;padding:1px 8px;white-space:nowrap">'+e.txt+'</span>';
         var fondo=x.estaPagado?_fondoLbl(x.metodo,x.metodoBanco):'';
         var realCell=x.estaPagado
             ? '<span style="font-weight:700;color:var(--red)">'+fmtM(x.pagado)+'</span>'+(Math.abs(dif)>0.01?' <span title="Difiere del plan: '+(dif>0?'+':'')+fmtM(dif)+'" style="color:var(--accent);cursor:help">⚠️</span>':'')
@@ -1335,6 +1373,7 @@ function _abrirFijoModal(id){
     document.getElementById('fijoCategoria').value=d.categoria||'Renta';
     document.getElementById('fijoMonto').value=d.monto||'';
     document.getElementById('fijoProveedor').value=d.proveedor||'';
+    document.getElementById('fijoDiaPago').value=d.diaPago||'';
     document.getElementById('modalFijoTitle').textContent=id?'✏️ Editar Gasto Fijo':'🏢 Nuevo Gasto Fijo';
     document.getElementById('modalFijo').classList.add('open');
     setTimeout(function(){document.getElementById('fijoConcepto').focus();},60);
@@ -1346,7 +1385,9 @@ function guardarFijo(){
     if(!concepto){alert('El concepto es obligatorio.');return;}
     if(!monto||monto<=0){alert('El monto debe ser mayor a cero.');return;}
     var id=document.getElementById('fijoId').value||genId();
-    var record={id:id,concepto:concepto,categoria:document.getElementById('fijoCategoria').value,proveedor:document.getElementById('fijoProveedor').value.trim(),monto:monto};
+    var diaPago=parseInt(document.getElementById('fijoDiaPago').value,10);
+    if(!(diaPago>=1&&diaPago<=31)) diaPago=''; // vacío = sin día de pago definido
+    var record={id:id,concepto:concepto,categoria:document.getElementById('fijoCategoria').value,proveedor:document.getElementById('fijoProveedor').value.trim(),monto:monto,diaPago:diaPago};
     _cacheGG_Fijos = loadFijos().filter(function(f){return f.id!==id;});
     _cacheGG_Fijos.push(record);
     _sbUpFijo(record); cerrarFijo(); renderAll();
