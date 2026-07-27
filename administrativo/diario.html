@@ -528,6 +528,9 @@
                 <div class="dx-hero-sub">Cortes, gastos, nóminas, depósitos y caja fuerte — todo en un solo lugar.</div>
             </div>
 
+            <!-- Recordatorio central de pagos próximos/vencidos (gastos fijos con día de pago) -->
+            <div id="dxRecordatorio" style="display:none"></div>
+
             <!-- BARRA: Reporte directivo (consolida los datos de todos los cards) -->
             <div class="dx-toolbar">
                 <button class="btn-directivo" id="btnReporteDirectivo" onclick="abrirReporteDirectivo()">📊 Reporte Directivo</button>
@@ -4542,6 +4545,7 @@ function gRenderAll(){
     gRenderTabla(filtered.filter(function(g){return g.tipo==='menor';}), mayores);
     renderNominasPanel();
     renderFijosPanel();
+    _renderRecordatorioPagos();
 }
 
 function gRenderSummary(all,prev){
@@ -4951,7 +4955,9 @@ function _abrirSelectorPagoReal(tipo){
         if(!fijos.length){ body.innerHTML='<div style="padding:28px;text-align:center;color:var(--text-dim)">Sin gastos fijos configurados en Gastos globales.</div>'; }
         else {
             body.innerHTML=fijos.map(function(f){
-                var sub=_esc(f.categoria||'—')+(f.proveedor?' · '+_esc(f.proveedor):'');
+                var e=_estatusFijoDx(f);
+                var badge='<span style="display:inline-block;margin-top:4px;font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:'+e.color+';background:'+e.bg+';border:1px solid '+e.bd+';border-radius:10px;padding:1px 8px;white-space:nowrap">'+e.txt+'</span>';
+                var sub=_esc(f.categoria||'—')+(f.proveedor?' · '+_esc(f.proveedor):'')+'<br>'+badge;
                 return _selRow('pagarFijo(\''+f.id+'\')', _esc(f.concepto), sub, fmtM(f.monto), '');
             }).join('');
         }
@@ -5515,6 +5521,59 @@ function renderNominasPanel(){
     if(em)em.style.display='none';
     tb.innerHTML=lista.map(_filaPagoPanel).join('');
 }
+
+/* ── Estatus de un gasto fijo en el MES ACTUAL (mismo criterio que Gastos globales) ──
+   Cruza el pago real (gasto con fijoId, o casado por concepto/proveedor) con el día
+   de pago (f.diaPago) y la fecha de HOY. */
+function _mesActualDx(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function _fijoPagosMesDx(f, mes){
+    var nc=function(s){return String(s||'').toLowerCase().trim();};
+    var gs=gLoad().filter(function(g){
+        if((g.fecha||'').slice(0,7)!==mes) return false;
+        if(g.fijoId) return g.fijoId===f.id;
+        if(nc(g.concepto)!==nc(f.concepto)) return false;   // legacy sin link
+        return !f.proveedor || nc(g.proveedor)===nc(f.proveedor);
+    });
+    var first=gs.slice().sort(function(a,b){return String(a.fecha||'').localeCompare(String(b.fecha||''));})[0];
+    return { estaPagado:gs.length>0, fecha:(first&&(first.fechaPago||first.fecha))||'' };
+}
+// Devuelve badge + severidad + días para el recordatorio. faltan: >0 futuro, 0 hoy, <0 vencido.
+function _estatusFijoDx(f){
+    var p=_fijoPagosMesDx(f,_mesActualDx()), dia=parseInt(f.diaPago,10)||0;
+    if(p.estaPagado) return {txt:'✓ Pagado'+(p.fecha?' '+p.fecha:''), color:'var(--green)', bg:'rgba(61,190,122,.12)', bd:'rgba(61,190,122,.3)', pagado:true};
+    if(!dia)         return {txt:'⏳ Pendiente', color:'var(--accent)', bg:'rgba(245,200,66,.1)', bd:'rgba(245,200,66,.3)', pagado:false, dia:0};
+    var hoyDia=new Date().getDate();
+    if(hoyDia<dia)   return {txt:'⏳ Vence día '+dia+' (en '+(dia-hoyDia)+'d)', color:'var(--accent)', bg:'rgba(245,200,66,.1)', bd:'rgba(245,200,66,.3)', pagado:false, dia:dia, faltan:dia-hoyDia};
+    if(hoyDia===dia) return {txt:'⚠️ Vence HOY', color:'#e0a93d', bg:'rgba(224,169,61,.14)', bd:'rgba(224,169,61,.45)', pagado:false, dia:dia, faltan:0};
+    return {txt:'🔴 Vencido (hace '+(hoyDia-dia)+'d)', color:'var(--red)', bg:'rgba(224,90,58,.1)', bd:'rgba(224,90,58,.35)', pagado:false, dia:dia, faltan:-(hoyDia-dia)};
+}
+// Recordatorio central: fijos NO pagados este mes que vencen en ≤5 días o ya vencieron.
+function _renderRecordatorioPagos(){
+    var el=document.getElementById('dxRecordatorio'); if(!el) return;
+    if(sessionStorage.getItem('dxRecordCerrado')==='1'){ el.style.display='none'; return; }
+    var pend=[];
+    (_cacheFijos||[]).forEach(function(f){
+        var e=_estatusFijoDx(f);
+        if(e.pagado || !e.dia) return;
+        if(e.faltan<=5) pend.push({f:f,e:e}); // vence en ≤5d o vencido
+    });
+    if(!pend.length){ el.style.display='none'; el.innerHTML=''; return; }
+    pend.sort(function(a,b){return a.e.faltan-b.e.faltan;}); // vencidos primero
+    var filas=pend.map(function(x){
+        var t = x.e.faltan<0 ? '🔴 <b>'+_escV(x.f.concepto)+'</b> — vencido hace '+(-x.e.faltan)+' día(s)'
+              : x.e.faltan===0 ? '⚠️ <b>'+_escV(x.f.concepto)+'</b> — vence HOY'
+              : '⏳ <b>'+_escV(x.f.concepto)+'</b> — faltan '+x.e.faltan+' día(s) para pagar';
+        return '<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px"><span>'+t+'</span><span style="font-weight:700;color:var(--accent);white-space:nowrap">'+fmtM(n(x.f.monto))+'</span></div>';
+    }).join('');
+    el.style.display='';
+    el.innerHTML='<div style="max-width:660px;margin:4px auto 20px;background:rgba(224,90,58,.06);border:1px solid rgba(224,169,61,.45);border-radius:14px;padding:16px 20px 14px;position:relative;box-shadow:0 10px 34px rgba(0,0,0,.28)">'
+      +'<button onclick="_cerrarRecordatorio()" title="Cerrar por hoy" style="position:absolute;top:9px;right:12px;background:none;border:none;color:var(--text-dim);font-size:16px;cursor:pointer;line-height:1">✕</button>'
+      +'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1px;color:var(--text);margin-bottom:10px">🔔 Recordatorio de pagos</div>'
+      +filas
+      +'<div style="margin-top:13px;text-align:right"><button style="background:rgba(245,200,66,.12);border:1px solid rgba(245,200,66,.35);color:var(--accent);border-radius:8px;padding:8px 16px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer" onclick="_cerrarRecordatorio();dxAbrir(\'fijos\')">🏢 Ir a pagar</button></div>'
+      +'</div>';
+}
+function _cerrarRecordatorio(){ try{sessionStorage.setItem('dxRecordCerrado','1');}catch(e){} var el=document.getElementById('dxRecordatorio'); if(el)el.style.display='none'; }
 
 /* ── Panel Gastos fijos: pagos ligados al catálogo de fijos (g.fijoId) ── */
 function renderFijosPanel(){
