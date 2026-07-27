@@ -38,8 +38,11 @@
 
     /* Texto */
     --text:       #f0ece4;
-    --text-muted: #7a7570;
-    --text-dim:   #4a4844;
+    /* Grises secundarios subidos hacia el blanco: el --text-dim viejo (#4a4844)
+       daba 2.08:1 sobre las superficies oscuras (ilegible). Ahora muted 6.3:1 y
+       dim 5.25:1 — legibles y aún claramente secundarios frente al texto (16:1). */
+    --text-muted: #9a948b;
+    --text-dim:   #8b867e;
 }
 
 /* ── Modo claro ── */
@@ -84,7 +87,10 @@
     color: #1a1916;
     border-color: var(--border);
 }
-[data-theme="light"] input::placeholder { color: #b0ada8; }
+/* Placeholders legibles en oscuro (antes se perdían): gris ~4.6:1, aún más
+   tenue que el valor escrito (--text) para no confundirse con datos reales. */
+input::placeholder, textarea::placeholder { color: #837d74; opacity: 1; }
+[data-theme="light"] input::placeholder, [data-theme="light"] textarea::placeholder { color: #b0ada8; }
 
 /* Cards y superficies */
 [data-theme="light"] .card { box-shadow: 0 1px 4px rgba(0,0,0,0.07); }

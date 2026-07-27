@@ -581,7 +581,15 @@
                 </div>
                 <div class="form-group">
                     <label>Bono / incentivo extra ($)</label>
-                    <input type="number" id="fBonoIncentivo" min="0" step="0.01" placeholder="0.00">
+                    <div style="display:flex;gap:8px">
+                        <input type="number" id="fBonoIncentivo" min="0" step="0.01" placeholder="0.00" style="flex:1" oninput="_updateBonoPreview()">
+                        <select id="fBonoPeriodicidad" onchange="_updateBonoPreview()" style="max-width:150px">
+                            <option value="mensual">Mensual</option>
+                            <option value="quincenal">Quincenal</option>
+                            <option value="semanal">Semanal</option>
+                        </select>
+                    </div>
+                    <span class="form-hint" id="bonoPreview" style="display:none"></span>
                 </div>
             </div>
 
@@ -984,6 +992,7 @@ function _openModalReal(id) {
             document.getElementById('fDatosBancarios').value = s.datosBancarios || '';
             document.getElementById('fPrimaVacacionalEnPago').checked = !!s.primaVacacionalEnPago;
             document.getElementById('fBonoIncentivo').value  = s.bonoIncentivo || '';
+            document.getElementById('fBonoPeriodicidad').value = s.bonoPeriodicidad || 'mensual';
             document.getElementById('fReferencias').value = s.referencias || '';
             document.getElementById('fNotas').value       = s.notas || '';
             tmpDocs = (s.documentos || []).slice();
@@ -993,6 +1002,7 @@ function _openModalReal(id) {
     _calcPrimaVacacional(); // recalcular con todos los datos ya cargados
     renderChips();
     _lockSueldos(); // salario = regla estándar (mínimo); modificar pide clave
+    _updateBonoPreview();
     document.getElementById('modalStaff').classList.add('open');
 }
 
@@ -1033,6 +1043,7 @@ function clearForm() {
     document.getElementById('fEstado').value = 'Activo';
     document.getElementById('fRol').value = '';
     document.getElementById('fCategoriaNomina').value = 'operativa';
+    document.getElementById('fBonoPeriodicidad').value = 'mensual';
     // Estandarizar el staff NUEVO al salario mínimo diario definido (si hay):
     // arranca con esquema "por día" y el sueldo precargado al mínimo.
     var _defMin = (window.NominaParams ? (NominaParams.get(getNegocioActivo()).salarioDiarioDefault || 0) : 0);
@@ -1128,6 +1139,24 @@ function _updateSueldoPreview() {
     prev.style.display = '';
 }
 
+/* Bono con periodicidad: normaliza a diario y muestra su equivalente por semana/
+   quincena/mes (como el sueldo), usando los días reales del mes. */
+function _updateBonoPreview() {
+    var el = document.getElementById('bonoPreview');
+    if (!el) return;
+    var bono = parseFloat(document.getElementById('fBonoIncentivo').value) || 0;
+    if (bono <= 0) { el.style.display = 'none'; return; }
+    var per = document.getElementById('fBonoPeriodicidad').value || 'mensual';
+    var dias = _diasMesActual();
+    var perDias = per === 'semanal' ? 7 : per === 'quincenal' ? 15 : dias;
+    var diario = bono / perDias;
+    var fmt = function(v){ return '$' + v.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2}); };
+    el.innerHTML = '🎁 Bono ' + per + ' — equivale a: Semana <strong style="color:var(--text)">' + fmt(diario*7) +
+        '</strong> · Quincena <strong style="color:var(--text)">' + fmt(diario*15) +
+        '</strong> · Mes (' + dias + 'd) <strong style="color:var(--text)">' + fmt(diario*dias) + '</strong>';
+    el.style.display = '';
+}
+
 /* Sugiere la categoría de nómina a partir del rol del sistema.
    Gerencia OPERA el negocio (cocina/bar/servicio con acceso admin) → operativa para nómina.
    Solo administrativo (contador, redes, oficina) que NO opera → administrativa. */
@@ -1209,6 +1238,7 @@ async function saveStaff() {
         primaVacacional: parseFloat(document.getElementById('fPrimaVacacional').value)||0,
         primaVacacionalEnPago: document.getElementById('fPrimaVacacionalEnPago').checked,
         bonoIncentivo:   parseFloat(document.getElementById('fBonoIncentivo').value)||0,
+        bonoPeriodicidad: document.getElementById('fBonoPeriodicidad').value||'mensual',
         referencias:     document.getElementById('fReferencias').value.trim(),
         notas:           document.getElementById('fNotas').value.trim(),
         documentos:      tmpDocs.slice()
