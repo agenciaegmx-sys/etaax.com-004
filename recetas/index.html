@@ -475,14 +475,14 @@
                     <div class="cat-btn-title" style="color:var(--green);font-size:15px">Ver recetas</div>
                     <div class="cat-btn-desc">Consultar el recetario completo</div>
                 </button>
-                <button onclick="verCaratula()" class="cat-btn" style="border-color:var(--accent);padding:22px 16px">
+                <button onclick="abrirCaratulaModal()" class="cat-btn" style="border-color:var(--accent);padding:22px 16px">
                     <span style="font-size:34px">📊</span>
                     <div class="cat-btn-title" style="color:var(--accent);font-size:15px">Carátula de costos</div>
                     <div class="cat-btn-desc">Resumen ejecutivo de costeo</div>
                 </button>
             </div>
             <div style="height:1px;background:var(--border);margin-bottom:18px"></div>
-            <button onclick="crearRecetaSimple()" class="cat-btn"
+            <button onclick="abrirEscModal('simple')" class="cat-btn"
                 style="width:100%;padding:16px 20px;display:flex;align-items:center;gap:16px;
                     text-align:left;border-color:var(--border);margin-bottom:18px">
                 <span style="font-size:28px;flex-shrink:0">📝</span>
@@ -494,24 +494,24 @@
             </button>
             <div style="height:1px;background:var(--border);margin-bottom:18px"></div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-                <button onclick="crearReceta('alimentos')" class="cat-btn" style="padding:22px 16px">
+                <button onclick="abrirEscModal('alimentos')" class="cat-btn" style="padding:22px 16px">
                     <span style="font-size:34px">🍽️</span>
                     <div class="cat-btn-title" style="font-size:15px">Receta Alimentos</div>
                     <div class="cat-btn-desc">Platillos, entradas, postres, guarniciones...</div>
                 </button>
-                <button onclick="crearReceta('bebidas')" class="cat-btn" style="padding:22px 16px">
+                <button onclick="abrirEscModal('bebidas')" class="cat-btn" style="padding:22px 16px">
                     <span style="font-size:34px">🥃</span>
                     <div class="cat-btn-title" style="font-size:15px">Receta Bebidas</div>
                     <div class="cat-btn-desc">Cócteles, mocktails, bebidas de la carta...</div>
                 </button>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-                <button onclick="crearReceta('sub-alimentos')" class="cat-btn" style="padding:22px 16px">
+                <button onclick="abrirEscModal('sub-alimentos')" class="cat-btn" style="padding:22px 16px">
                     <span style="font-size:34px">🥣</span>
                     <div class="cat-btn-title" style="font-size:15px">Sub Receta Alimentos</div>
                     <div class="cat-btn-desc">Salsas, fondos, masas, bases, rellenos...</div>
                 </button>
-                <button onclick="crearReceta('sub-bebidas')" class="cat-btn" style="padding:22px 16px">
+                <button onclick="abrirEscModal('sub-bebidas')" class="cat-btn" style="padding:22px 16px">
                     <span style="font-size:34px">🧃</span>
                     <div class="cat-btn-title" style="font-size:15px">Sub Receta Bebidas</div>
                     <div class="cat-btn-desc">Jarabes, shrubs, purés, mixes, infusiones...</div>
@@ -2601,6 +2601,23 @@ function convertirRecetaSimple(tipo) {
     renderTabla();
 }
 
+// ── Abrir escandallos / carátula como VENTANA FLOTANTE (reusa el modal iframe
+//    del sub-escandallo). Consistente con Staff/Gastos; redimensionable y movible.
+//    En el iframe (?embed=1) el load handler arma la receta nueva o la carátula. ──
+function abrirEscModal(tipo) {
+    var lbl = {alimentos:'Receta · Alimentos', bebidas:'Receta · Bebidas',
+        'sub-alimentos':'Sub Receta · Alimentos', 'sub-bebidas':'Sub Receta · Bebidas',
+        simple:'Receta Simple'}[tipo] || 'Escandallo';
+    if (typeof abrirEditorEnModal === 'function')
+        abrirEditorEnModal('index.html?embed=1&nuevo=' + encodeURIComponent(tipo), '🧾 ' + lbl);
+    else if (tipo === 'simple') crearRecetaSimple(); else crearReceta(tipo); // fallback en página
+}
+function abrirCaratulaModal() {
+    if (typeof abrirEditorEnModal === 'function')
+        abrirEditorEnModal('index.html?embed=1&caratula=1', '📊 Carátula de costos');
+    else verCaratula();
+}
+
 function crearReceta(tipo) {
     _showEscForm(); // ocultar pantalla principal si estaba visible
     if (window.etaaxNav) etaaxNav.go(_showEscForm); // historial: pantalla editor
@@ -3506,7 +3523,16 @@ window.addEventListener('load', function() {
     var _params = new URLSearchParams(location.search);
     var urlR = _params.get('r');
     var urlSub = _params.get('subins');
-    if (urlR && typeof cargarReceta === 'function') {
+    var urlNuevo = _params.get('nuevo');     // abrir editor de receta NUEVA en modal
+    var urlCaratula = _params.get('caratula'); // abrir carátula de costos en modal
+    if (urlNuevo) {
+        if (typeof entrarEscandallos === 'function') entrarEscandallos();
+        if (urlNuevo === 'simple') { if (typeof crearRecetaSimple === 'function') crearRecetaSimple(); }
+        else if (typeof crearReceta === 'function') crearReceta(urlNuevo);
+    } else if (urlCaratula) {
+        if (typeof entrarEscandallos === 'function') entrarEscandallos();
+        if (typeof verCaratula === 'function') verCaratula();
+    } else if (urlR && typeof cargarReceta === 'function') {
         // Entrar al escandallo (oculta el landing de submódulos) y abrir el editor.
         if (typeof entrarEscandallos === 'function') entrarEscandallos();
         _showEscForm();
