@@ -852,7 +852,7 @@ function _importarEntradasQR() {
     var yaEnInv = {}; invActual.entradasLog.forEach(function(e){ if (e && e.id) yaEnInv[e.id] = 1; });
     // Sacar de ESTE inventario las entradas (QR o manuales del ERP) mal importadas
     // (fuera de su periodo) → quedan libres para que el inventario correcto las reclame.
-    var _globalIds = {}; (getEntradasLog() || []).forEach(function(g){ if (g && g.id && g.concepto !== 'merma') _globalIds[g.id] = 1; });
+    var _globalIds = {}; (getEntradasLog() || []).forEach(function(g){ if (g && g.id && g.concepto !== 'merma' && g.concepto !== 'salida') _globalIds[g.id] = 1; });
     invActual.entradasLog = invActual.entradasLog.filter(function(le){
         return !(le && le.id && _globalIds[le.id] && !_enPeriodoInvActual(le.fecha));
     });
@@ -911,6 +911,44 @@ function _importarEntradasQR() {
                     else if (uM === 'botella' || uM === 'pza') copasM = copasBotM ? cantM * copasBotM : cantM;
                     filaM.mermaCopas = (parseFloat(filaM.mermaCopas) || 0) + copasM;
                 }
+            }
+            e.importadoEnInv = invActual.id;
+            try { _sbUpEL(e); } catch(err) {}
+            n++;
+            return;
+        }
+        // ── SALIDAS del QR (cortesía / préstamo): entran como CORTESÍA del inventario ──
+        // Misma lógica que una merma de insumo, pero suman a cortesiaCopas (bucket de
+        // salida justificada que ya resta del teórico). El tipo (cortesía/préstamo) y su
+        // motivo se guardan en cortesiaConcepto → se leen en la sección "Cortesías" del reporte.
+        if (e.concepto === 'salida') {
+            if (e.importadoEnInv) return;            // dedupe (suma → no se puede des-sumar)
+            var cantS = parseFloat(e.cantidad) || 0;
+            if (!(cantS > 0)) return;
+            if (!e.insumoId || !idsSuc[e.insumoId]) return; // solo insumos de esta sucursal
+            var filaS = filasCaptura.find(function(f){ return f.insumoId === e.insumoId; });
+            if (!filaS) return;
+            var uSa  = (e.unidad || '').toLowerCase();
+            var _tip = e.salidaTipo === 'prestamo' ? '🔁 Préstamo' : '🎁 Cortesía';
+            var _conc = _tip + (e.notas ? ': ' + e.notas : '');
+            if (filaS.tipo === 'peso') {
+                var baseS = cantS; // g / ml / pza directos en unidad base
+                if (uSa === 'botella') baseS = (filaS.contNeto > 0 ? cantS * filaS.contNeto : cantS);
+                filaS.mermaBase = (parseFloat(filaS.mermaBase) || 0) + baseS; // peso: único bucket de salida
+                filaS.mermaConcepto = [filaS.mermaConcepto, _conc].filter(Boolean).join(' · ');
+            } else if (filaS.tipo === 'pza') {
+                var pzS = cantS; // pza / botella / lata = piezas
+                if (uSa === 'ml') pzS = (filaS.contNeto > 0 ? cantS / filaS.contNeto : cantS);
+                filaS.cortesiaCopas = (parseFloat(filaS.cortesiaCopas) || 0) + pzS;
+                filaS.cortesiaConcepto = [filaS.cortesiaConcepto, _conc].filter(Boolean).join(' · ');
+            } else { // copa
+                var copasBotS = (filaS.contNeto > 0 && filaS.copaML > 0) ? filaS.contNeto / filaS.copaML : 0;
+                var copasS = cantS; // 'copa' y 'porcion' = copas directas
+                if (uSa === 'oz')  copasS = filaS.copaML > 0 ? cantS * OZ_ML / filaS.copaML : cantS;
+                else if (uSa === 'ml') copasS = filaS.copaML > 0 ? cantS / filaS.copaML : cantS;
+                else if (uSa === 'botella' || uSa === 'pza') copasS = copasBotS ? cantS * copasBotS : cantS;
+                filaS.cortesiaCopas = (parseFloat(filaS.cortesiaCopas) || 0) + copasS;
+                filaS.cortesiaConcepto = [filaS.cortesiaConcepto, _conc].filter(Boolean).join(' · ');
             }
             e.importadoEnInv = invActual.id;
             try { _sbUpEL(e); } catch(err) {}
@@ -7002,6 +7040,20 @@ const fotoTh = e.foto_url
                 <button class="ent-log-del" title="Eliminar" onclick="eliminarEntradaPorId('${e.id}')">🗑️</button>
             </div>`;
         }
+        if (e.concepto === 'salida') {
+            const areaTx = e.area ? ' · ' + etx(e.area) : '';
+            const esPrest = e.salidaTipo === 'prestamo';
+            const lbl = esPrest ? '🔁 Préstamo' : '🎁 Cortesía';
+            const notaTx = e.notas ? ' <span style="font-size:10px;color:var(--text-dim)">· ' + etx(e.notas) + '</span>' : '';
+            return `<div class="ent-log-fila">
+                <span class="ent-log-nombre">${nombre}${notaTx}</span>
+                <span class="ent-log-badge" style="color:#9b7fe0;background:rgba(124,95,211,.12);border-color:rgba(124,95,211,.4)">${lbl}${areaTx}</span>
+                <span class="ent-log-fecha">${e.fecha || '—'}</span>
+                <span class="ent-log-cant" style="color:#9b7fe0">−${cant} ${etx(e.unidad || 'pza')}</span>
+                ${fotoTh}
+                <button class="ent-log-del" title="Eliminar" onclick="eliminarEntradaPorId('${e.id}')">🗑️</button>
+            </div>`;
+        }
         if (_entEditId === e.id) {
             return `<div class="ent-log-fila" style="gap:8px;flex-wrap:wrap">
                 <span class="ent-log-nombre">${nombre}</span>
@@ -7024,11 +7076,13 @@ const fotoTh = e.foto_url
                 onmouseenter="this.classList.add('hover')" onmouseleave="this.classList.remove('hover')">🗑️</button>
         </div>`;
     };
-    // Dos secciones: 📦 Entradas y 🗑️ Mermas (funciones distintas, listas distintas)
-    const entradasArr = visibles.filter(e => e.concepto !== 'merma');
+    // Tres secciones: 📦 Entradas, 🗑️ Mermas y 🎁 Cortesías/Préstamos (listas distintas)
+    const entradasArr = visibles.filter(e => e.concepto !== 'merma' && e.concepto !== 'salida');
     const mermasArr   = visibles.filter(e => e.concepto === 'merma');
+    const salidasArr  = visibles.filter(e => e.concepto === 'salida');
     if (countEl) countEl.textContent = entradasArr.length + ' entrada' + (entradasArr.length !== 1 ? 's' : '') +
         ' · ' + mermasArr.length + ' merma' + (mermasArr.length !== 1 ? 's' : '') +
+        (salidasArr.length ? ' · ' + salidasArr.length + ' cortesía/préstamo' + (salidasArr.length !== 1 ? 's' : '') : '') +
         (_sucNomH ? ' · ' + _sucNomH : '');
     const secHdr = t => `<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin:14px 2px 8px">${t}</div>`;
     // Mapeo SEGURO: si una entrada trae datos raros y rowHTML lanza, esa fila muestra
@@ -7040,6 +7094,7 @@ const fotoTh = e.foto_url
     cont.innerHTML =
         (entradasArr.length ? secHdr('📦 Entradas' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + entradasArr.map(_safeRow).join('') : '') +
         (mermasArr.length   ? secHdr('🗑️ Mermas'   + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + mermasArr.map(_safeRow).join('') : '') +
+        (salidasArr.length  ? secHdr('🎁 Cortesías / Préstamos' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + salidasArr.map(_safeRow).join('') : '') +
         (!visibles.length ? `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:24px 0">Sin registros de esta sucursal</div>` : '');
 }
 

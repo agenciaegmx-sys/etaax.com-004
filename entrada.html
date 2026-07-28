@@ -84,6 +84,10 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
             <span class="mi">🍷</span>
             <span><span class="mt">Merma</span><br><span class="md">Se rompió, derramó o desperdició un insumo o un producto del menú</span></span>
         </button>
+        <button class="menu-btn" onclick="irSalida()">
+            <span class="mi">🎁</span>
+            <span><span class="mt">Cortesía o préstamo</span><br><span class="md">Salió un insumo sin ser venta: cortesía a un cliente o préstamo a otra área/sucursal</span></span>
+        </button>
     </div>
 
     <!-- ── Pantalla ENTRADA de insumos ── -->
@@ -191,6 +195,58 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
         <div class="cap-msg" id="merMsg"></div>
     </div>
 
+    <!-- ── Pantalla SALIDA de insumo (cortesía / préstamo) ── -->
+    <div id="salidaScreen" style="display:none">
+        <button class="volver" onclick="volverMenu()">← Menú</button>
+
+        <label class="lbl">Área</label>
+        <div class="chips" id="areaChipsSal"></div>
+
+        <label class="lbl">Tipo de salida</label>
+        <div class="chips" id="salTipoChips">
+            <button id="salTipoCort" class="on" onclick="setSalidaTipo('cortesia')">🎁 Cortesía</button>
+            <button id="salTipoPres" onclick="setSalidaTipo('prestamo')">🔁 Préstamo</button>
+        </div>
+
+        <label class="lbl">Insumo</label>
+        <input id="salBusca" class="fld" placeholder="Buscar insumo…" oninput="filtrarSal(this.value)" autocomplete="off">
+        <div id="salSelBox"></div>
+        <div id="salList" class="buscaList"></div>
+
+        <div class="row">
+            <div>
+                <label class="lbl">Cantidad</label>
+                <input id="salCant" class="fld" type="number" inputmode="decimal" min="0" step="any" placeholder="0">
+            </div>
+            <div>
+                <label class="lbl">Unidad</label>
+                <select id="salUnidad" class="fld">
+                    <option value="copa">Copa(s)</option>
+                    <option value="oz">Onza(s)</option>
+                    <option value="ml">ml</option>
+                    <option value="botella">Botella(s)</option>
+                    <option value="pza">Pieza(s)</option>
+                    <option value="g">Gramos</option>
+                    <option value="porcion">Porción(es)</option>
+                </select>
+            </div>
+        </div>
+
+        <label class="lbl" id="salNotaLbl">Motivo (opcional)</label>
+        <input id="salNota" class="fld" placeholder="Ej. cortesía VIP, degustación…">
+
+        <img id="salFotoThumb" class="thumb" style="display:none">
+        <input type="file" id="salFotoInputCam" accept="image/*" capture="environment" style="display:none" onchange="onFotoSal(this)">
+        <input type="file" id="salFotoInput" accept="image/*" style="display:none" onchange="onFotoSal(this)">
+        <div class="cap-par">
+            <button class="cap-btn ghost" onclick="document.getElementById('salFotoInputCam').click()">📷 Tomar foto</button>
+            <button class="cap-btn ghost" onclick="document.getElementById('salFotoInput').click()">🖼️ Galería</button>
+        </div>
+
+        <button class="cap-btn" id="salBtn" style="margin-top:12px;background:#7c5fd3;color:#fff" onclick="registrarSalida()">✓ Registrar salida</button>
+        <div class="cap-msg" id="salMsg"></div>
+    </div>
+
     <!-- ── Pantalla error ── -->
     <div id="errScreen" style="display:none">
         <div style="font-size:38px;margin:10px 0">🔒</div>
@@ -206,6 +262,26 @@ function _q(k){var m=new RegExp('[?&]'+k+'=([^&]*)').exec(location.search);retur
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function etx(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// Contenido por envase del insumo (750 ml, 1 L, 235 ml, 1 kg…) — de su 1ª presentación.
+function _fmtContenidoQR(x){
+    var p = (x && x.presentaciones && x.presentaciones[0]) || {};
+    var cn = parseFloat(p.contNeto) || 0;
+    if (cn <= 0) return '';
+    var um = (p.umContenido || 'ml').toString().toLowerCase();
+    var uMap = { lt:'L', ml:'ml', kg:'kg', g:'g', pza:'pza', oz:'oz' };
+    var nn = (cn % 1) ? (Math.round(cn*100)/100) : cn;
+    return nn + ' ' + (uMap[um] || um);
+}
+// Chip de meta del insumo (📦 contenido · variedad · marca) — lista y seleccionado.
+function _insMetaParts(x){
+    var parts = []; var cont = _fmtContenidoQR(x);
+    if (cont) parts.push('📦 ' + cont);
+    var sub = [x.variedad, x.marca].filter(Boolean).join(' · ');
+    if (sub) parts.push(sub);
+    return parts.join(' · ');
+}
+function _insMetaHTML(x){ var m = _insMetaParts(x); return m ? ' <span class="chip">'+etx(m)+'</span>' : ''; }
+function _insMetaChip(x){ var m = _insMetaParts(x); return m ? '<div class="chip">'+etx(m)+'</div>' : ''; }
 // Mismo hash que security.js (_hashPwdStaff): el NIP del staff se guarda como nipHash = v2$sha256('etaax-staff|nip|'+pin)
 async function _hashNip(pin){
     var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('etaax-staff|nip|' + pin));
@@ -229,10 +305,12 @@ var RECETAS = null;              // menú del negocio (lazy: se carga al entrar 
 var AREA = 'barra';              // área elegida (aplica a entrada Y merma)
 var MERMA_TIPO = 'insumo';       // 'insumo' | 'producto'
 var MSEL = null, MFOTO_URL = '';
+var SALIDA_TIPO = 'cortesia';    // 'cortesia' | 'prestamo'
+var SSEL = null, SFOTO_URL = '';
 
 var AREAS = [ ['barra','🍸 Barra'], ['cocina','🍳 Cocina'], ['almacen','📦 Almacén'] ];
 function _pintarAreas(){
-    ['areaChipsEnt','areaChipsMer'].forEach(function(cid){
+    ['areaChipsEnt','areaChipsMer','areaChipsSal'].forEach(function(cid){
         var c = document.getElementById(cid); if (!c) return;
         c.innerHTML = AREAS.map(function(a){
             return '<button class="'+(AREA===a[0]?'on':'')+'" onclick="setArea(\''+a[0]+'\')">'+a[1]+'</button>';
@@ -241,7 +319,7 @@ function _pintarAreas(){
 }
 function setArea(a){ AREA = a; _pintarAreas(); }
 
-function _show(id){ ['pinScreen','menuScreen','formScreen','mermaScreen','errScreen'].forEach(function(x){ document.getElementById(x).style.display = x===id?'block':'none'; }); }
+function _show(id){ ['pinScreen','menuScreen','formScreen','mermaScreen','salidaScreen','errScreen'].forEach(function(x){ document.getElementById(x).style.display = x===id?'block':'none'; }); }
 function _err(txt){ document.getElementById('errTxt').innerHTML = txt; document.getElementById('capSub').textContent = ''; _show('errScreen'); if(_countTimer){clearInterval(_countTimer);_countTimer=null;} }
 function volverMenu(){ document.getElementById('capSub').textContent='¿Qué vas a registrar?'; _show('menuScreen'); }
 function irEntrada(){ document.getElementById('capSub').textContent='Registra insumos que llegaron'; _pintarAreas(); _show('formScreen'); }
@@ -301,17 +379,15 @@ function filtrarIns(q){
     }).slice(0, 60);
     document.getElementById('insList').innerHTML = lista.length
         ? lista.map(function(x){
-            var sub = [x.variedad, x.marca].filter(Boolean).join(' · ');
-            return '<div class="ins-it" onclick="selIns(\''+x.id+'\')">'+etx(x.nombre)+(sub?' <span class="chip">'+etx(sub)+'</span>':'')+'</div>';
+            return '<div class="ins-it" onclick="selIns(\''+x.id+'\')">'+etx(x.nombre)+_insMetaHTML(x)+'</div>';
         }).join('')
         : '<div class="ins-it" style="color:var(--text-dim);cursor:default">Sin resultados</div>';
 }
 function selIns(id){
     SEL = INSUMOS.find(function(x){ return x.id===id; });
     if (!SEL) return;
-    var sub = [SEL.variedad, SEL.marca].filter(Boolean).join(' · ');
     document.getElementById('insSelBox').innerHTML =
-        '<div class="ins-sel"><div><b>'+etx(SEL.nombre)+'</b>'+(sub?'<div class="chip">'+etx(sub)+'</div>':'')+'</div>'+
+        '<div class="ins-sel"><div><b>'+etx(SEL.nombre)+'</b>'+_insMetaChip(SEL)+'</div>'+
         '<button class="cap-btn ghost" style="width:auto;margin:0;padding:6px 12px" onclick="limpiarIns()">cambiar</button></div>';
     document.getElementById('insList').innerHTML = '';
     document.getElementById('insBusca').value = '';
@@ -352,22 +428,55 @@ function filtrarMer(q){
     }).slice(0, 60);
     document.getElementById('merList').innerHTML = lista.length
         ? lista.map(function(x){
-            var sub = MERMA_TIPO==='producto' ? (x.grupo||'') : [x.variedad, x.marca].filter(Boolean).join(' · ');
-            return '<div class="ins-it" onclick="selMer(\''+x.id+'\')">'+etx(x.nombre)+(sub?' <span class="chip">'+etx(sub)+'</span>':'')+'</div>';
+            if (MERMA_TIPO==='producto') { var g=x.grupo||''; return '<div class="ins-it" onclick="selMer(\''+x.id+'\')">'+etx(x.nombre)+(g?' <span class="chip">'+etx(g)+'</span>':'')+'</div>'; }
+            return '<div class="ins-it" onclick="selMer(\''+x.id+'\')">'+etx(x.nombre)+_insMetaHTML(x)+'</div>';
         }).join('')
         : '<div class="ins-it" style="color:var(--text-dim);cursor:default">Sin resultados</div>';
 }
 function selMer(id){
     MSEL = _mermaFuente().find(function(x){ return x.id===id; });
     if (!MSEL) return;
-    var sub = MERMA_TIPO==='producto' ? (MSEL.grupo||'') : [MSEL.variedad, MSEL.marca].filter(Boolean).join(' · ');
+    var chip = MERMA_TIPO==='producto' ? ((MSEL.grupo||'') ? '<div class="chip">'+etx(MSEL.grupo)+'</div>' : '') : _insMetaChip(MSEL);
     document.getElementById('merSelBox').innerHTML =
-        '<div class="ins-sel"><div><b>'+etx(MSEL.nombre)+'</b>'+(sub?'<div class="chip">'+etx(sub)+'</div>':'')+'</div>'+
+        '<div class="ins-sel"><div><b>'+etx(MSEL.nombre)+'</b>'+chip+'</div>'+
         '<button class="cap-btn ghost" style="width:auto;margin:0;padding:6px 12px" onclick="limpiarMer()">cambiar</button></div>';
     document.getElementById('merList').innerHTML = '';
     document.getElementById('merBusca').value = '';
 }
 function limpiarMer(){ MSEL=null; document.getElementById('merSelBox').innerHTML=''; filtrarMer(''); }
+
+/* ── SALIDA de insumo: cortesía o préstamo (misma lógica, es una salida más) ── */
+function irSalida(){
+    document.getElementById('capSub').textContent='Registra una cortesía o préstamo';
+    _pintarAreas(); setSalidaTipo(SALIDA_TIPO); filtrarSal('');
+    _show('salidaScreen');
+}
+function setSalidaTipo(t){
+    SALIDA_TIPO = t;
+    document.getElementById('salTipoCort').className = t==='cortesia' ? 'on' : '';
+    document.getElementById('salTipoPres').className = t==='prestamo' ? 'on' : '';
+    document.getElementById('salNotaLbl').textContent = t==='cortesia' ? 'Motivo (opcional)' : '¿A quién / qué sucursal?';
+    document.getElementById('salNota').placeholder = t==='cortesia' ? 'Ej. cortesía VIP, degustación…' : 'Ej. préstamo a sucursal Centro, a Juan…';
+}
+function filtrarSal(q){
+    q = (q||'').toLowerCase();
+    var lista = INSUMOS.filter(function(x){
+        return !q || (x.nombre||'').toLowerCase().indexOf(q)>=0 || (x.marca||'').toLowerCase().indexOf(q)>=0 || (x.variedad||'').toLowerCase().indexOf(q)>=0;
+    }).slice(0, 60);
+    document.getElementById('salList').innerHTML = lista.length
+        ? lista.map(function(x){ return '<div class="ins-it" onclick="selSal(\''+x.id+'\')">'+etx(x.nombre)+_insMetaHTML(x)+'</div>'; }).join('')
+        : '<div class="ins-it" style="color:var(--text-dim);cursor:default">Sin resultados</div>';
+}
+function selSal(id){
+    SSEL = INSUMOS.find(function(x){ return x.id===id; });
+    if (!SSEL) return;
+    document.getElementById('salSelBox').innerHTML =
+        '<div class="ins-sel"><div><b>'+etx(SSEL.nombre)+'</b>'+_insMetaChip(SSEL)+'</div>'+
+        '<button class="cap-btn ghost" style="width:auto;margin:0;padding:6px 12px" onclick="limpiarSal()">cambiar</button></div>';
+    document.getElementById('salList').innerHTML=''; document.getElementById('salBusca').value='';
+}
+function limpiarSal(){ SSEL=null; document.getElementById('salSelBox').innerHTML=''; filtrarSal(''); }
+async function onFotoSal(input){ SFOTO_URL = await _subirFoto(input, document.getElementById('salMsg'), 'salFotoThumb') || SFOTO_URL; }
 
 /* ── Foto (compartida): compresión agresiva para señal de cocina ── */
 function _comprimir(file){
@@ -470,6 +579,42 @@ async function registrarMerma(){
         MFOTO_URL=''; var im=document.getElementById('merFotoThumb'); im.style.display='none'; im.src='';
         btn.disabled=false;
         msg.className='cap-msg ok'; msg.textContent='✓ Merma de '+etx(entry.nombre)+' registrada. Puedes capturar otra.';
+    } catch (e) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent='Error: '+((e&&e.message)||e); }
+}
+
+/* ── Registrar SALIDA (cortesía / préstamo) ── */
+async function registrarSalida(){
+    var msg = document.getElementById('salMsg'); msg.className='cap-msg'; msg.textContent='';
+    if (Date.now() - _t0 >= VIDA_MS) { _err('Tu sesión expiró.<br>Vuelve a escanear el QR.'); return; }
+    if (!SSEL) { msg.className='cap-msg err'; msg.textContent='Elige un insumo.'; return; }
+    var cant = parseFloat(document.getElementById('salCant').value) || 0;
+    if (cant <= 0) { msg.className='cap-msg err'; msg.textContent='Pon una cantidad mayor a 0.'; return; }
+    var btn = document.getElementById('salBtn'); btn.disabled = true; msg.textContent = 'Registrando…';
+    var entry = {
+        id: genId()+genId(),
+        concepto: 'salida',                    // salida de insumo (cortesía / préstamo) → cortesiaCopas del inventario
+        salidaTipo: SALIDA_TIPO,               // 'cortesia' | 'prestamo'
+        sucursalId: SUC,
+        area: AREA,
+        insumoId: SSEL.id,
+        nombre: SSEL.nombre + (SSEL.variedad ? ' '+SSEL.variedad : ''),
+        familia: SSEL.familia || SSEL.categoria || '',
+        cantidad: cant,
+        unidad: document.getElementById('salUnidad').value,
+        notas: (document.getElementById('salNota').value||'').trim(),
+        fecha: todayStr(),
+        registrado: new Date().toISOString(),
+        foto_url: SFOTO_URL || ''
+    };
+    try {
+        var ins = await _supabase.rpc('entrada_registrar', { p_neg: NEG, p_token: TOKEN, p_niphash: _NIPHASH, p_datos: entry });
+        if (ins.error) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent='No se pudo guardar: '+ins.error.message; return; }
+        limpiarSal();
+        document.getElementById('salCant').value=''; document.getElementById('salNota').value='';
+        SFOTO_URL=''; var im=document.getElementById('salFotoThumb'); im.style.display='none'; im.src='';
+        btn.disabled=false;
+        var ttl = SALIDA_TIPO==='prestamo' ? 'Préstamo' : 'Cortesía';
+        msg.className='cap-msg ok'; msg.textContent='✓ '+ttl+' de '+etx(entry.nombre)+' registrada. Puedes capturar otra.';
     } catch (e) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent='Error: '+((e&&e.message)||e); }
 }
 
