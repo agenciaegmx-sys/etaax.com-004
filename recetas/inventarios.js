@@ -88,6 +88,7 @@ async function _sbInitInv() {
     if (!r[1].error) _cacheEL   = (r[1].data || []).map(function(x){ return x.datos; });
     _mergeELLocal(); // recuperar entradas que aún no sincronizaron a la nube
     if (!r[2].error) _cacheRecetasInv = (r[2].data || []).map(function(x){ return x.datos; });
+    await _pullInvAjustes(negId); // compuestos + bateo desde la nube → localStorage
     if (!r[3].error) {
         _cacheInsumosInv = (r[3].data || []).map(function(x){ return x.datos; });
         // actualizar localStorage para compatibilidad con insumos.js
@@ -1510,7 +1511,35 @@ function _compuestosKey() {
     return 'etaax_' + neg + '_inv_compuestos_' + suc;
 }
 function getCompuestos() { try { return JSON.parse(localStorage.getItem(_compuestosKey()) || '[]') || []; } catch(e) { return []; } }
-function setCompuestos(arr) { try { localStorage.setItem(_compuestosKey(), JSON.stringify(arr)); } catch(e) {} }
+function setCompuestos(arr) { try { localStorage.setItem(_compuestosKey(), JSON.stringify(arr)); } catch(e) {} _pushInvAjustes(); }
+
+// ── Sincronización en la nube de los ajustes de inventario (compuestos + bateo) ──
+// Antes vivían SOLO en localStorage (se perdían al cambiar de dispositivo/caché).
+// Doc por negocio en la tabla inv_ajustes (v37): { compuestos:{[suc]:[]}, bateo:{[suc]:[]} }.
+var _invAjustesCache = null;
+async function _pullInvAjustes(negId) {
+    if (!negId || typeof _supabase === 'undefined') return;
+    try {
+        var r = await _supabase.from('inv_ajustes').select('datos').eq('negocio_id', negId).maybeSingle();
+        if (r.error || !r.data) { if (!_invAjustesCache) _invAjustesCache = { compuestos:{}, bateo:{} }; return; }
+        var d = r.data.datos || {};
+        _invAjustesCache = { compuestos: d.compuestos || {}, bateo: d.bateo || {} };
+        Object.keys(_invAjustesCache.compuestos).forEach(function(suc){
+            try { localStorage.setItem('etaax_' + negId + '_inv_compuestos_' + suc, JSON.stringify(_invAjustesCache.compuestos[suc] || [])); } catch(e){}
+        });
+        Object.keys(_invAjustesCache.bateo).forEach(function(suc){
+            try { localStorage.setItem('etaax_' + negId + '_inv_bateo_' + suc, JSON.stringify(_invAjustesCache.bateo[suc] || [])); } catch(e){}
+        });
+    } catch(e) {}
+}
+function _pushInvAjustes() {
+    var negId = getNegocioActivo(); if (!negId || typeof sbUpsertDoc !== 'function') return;
+    var suc = localStorage.getItem('etaax_sucursal_activa') || 'matriz';
+    if (!_invAjustesCache) _invAjustesCache = { compuestos:{}, bateo:{} };
+    try { _invAjustesCache.compuestos[suc] = JSON.parse(localStorage.getItem(_compuestosKey()) || '[]'); } catch(e){}
+    try { _invAjustesCache.bateo[suc]      = JSON.parse(localStorage.getItem(_bateoKey()) || '[]'); } catch(e){}
+    sbUpsertDoc('inv_ajustes', _invAjustesCache, negId);
+}
 
 // ── Insumos "de bateo": alta varianza es normal (se sirve a ojo / barra libre).
 // Se separan en su propio grupo arriba del resultado y NO cuentan como crítico/riesgo.
@@ -1526,6 +1555,7 @@ function toggleBateo(insumoId) {
     var arr = getBateo(), i = arr.indexOf(insumoId);
     if (i >= 0) arr.splice(i, 1); else arr.push(insumoId);
     try { localStorage.setItem(_bateoKey(), JSON.stringify(arr)); } catch(e) {}
+    _pushInvAjustes(); // respaldo en la nube (inv_ajustes)
     // Refrescar EN VIVO: renderStep5() solo DEVUELVE html (no pinta — por eso el
     // insumo no brincaba al grupo de bateo). Se repinta el contenedor de tablas
     // directo (rápido y conserva la vista); fallback al re-render del paso.
