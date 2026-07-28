@@ -1523,7 +1523,11 @@ async function _pullInvAjustes(negId) {
         var r = await _supabase.from('inv_ajustes').select('datos').eq('negocio_id', negId).maybeSingle();
         if (r.error || !r.data) { if (!_invAjustesCache) _invAjustesCache = { compuestos:{}, bateo:{} }; return; }
         var d = r.data.datos || {};
-        _invAjustesCache = { compuestos: d.compuestos || {}, bateo: d.bateo || {} };
+        // Conservar TODAS las llaves del doc (para no pisar futuras configs) y
+        // garantizar compuestos/bateo.
+        _invAjustesCache = d;
+        if (!_invAjustesCache.compuestos) _invAjustesCache.compuestos = {};
+        if (!_invAjustesCache.bateo)      _invAjustesCache.bateo = {};
         Object.keys(_invAjustesCache.compuestos).forEach(function(suc){
             try { localStorage.setItem('etaax_' + negId + '_inv_compuestos_' + suc, JSON.stringify(_invAjustesCache.compuestos[suc] || [])); } catch(e){}
         });
