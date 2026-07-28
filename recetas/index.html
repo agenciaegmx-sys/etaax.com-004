@@ -292,6 +292,10 @@
                             + Agregar como insumo
                         </button>
                     </div>
+                    <label style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:9px;cursor:pointer">
+                        <input type="checkbox" id="chkIncluirInventario" style="width:16px;height:16px;accent-color:var(--green);flex-shrink:0" onchange="_toggleIncluirInv()">
+                        <span style="font-size:12px;color:var(--text)">📦 Incluir en el inventario <span style="color:var(--text-dim);font-size:11px">— aparece en la lista de captura (prebatches sí; bases de cocina normalmente no)</span></span>
+                    </label>
                 </div>
             </div>
 
@@ -1690,6 +1694,36 @@ function _actualizarBotonAgregarInsumo() {
         btn.onmouseenter = function(){ this.style.opacity='0.85'; };
         btn.onmouseleave = function(){ this.style.opacity='1'; };
     }
+    _setChkIncluirInv();
+}
+// El insumo convertido de la sub-receta (para leer/escribir ocultoInventario).
+function _insumoDeSubReceta() {
+    if (!recetaActualId || typeof getCatalogoInsumos !== 'function') return null;
+    return getCatalogoInsumos().find(function(x){ return x && x.esSubReceta && x.recetaId === recetaActualId; }) || null;
+}
+// Estado del checkbox "Incluir en el inventario": del insumo convertido si existe;
+// si no, default por tipo (bebidas SÍ = prebatch; alimentos NO = base de cocina).
+function _setChkIncluirInv() {
+    var chk = document.getElementById('chkIncluirInventario'); if (!chk) return;
+    var ins = _insumoDeSubReceta();
+    if (ins) chk.checked = !ins.ocultoInventario;
+    else chk.checked = (recetaTipoActual === 'sub-bebidas' || recetaTipoActual === 'bebidas');
+}
+// Toggle en vivo: si ya está convertida, actualiza el insumo en el catálogo + nube.
+function _toggleIncluirInv() {
+    var chk = document.getElementById('chkIncluirInventario'); if (!chk) return;
+    var ins = _insumoDeSubReceta();
+    if (!ins) return; // aún sin convertir → se aplicará al "Agregar como insumo"
+    ins.ocultoInventario = !chk.checked;
+    try {
+        var cat = getCatalogoInsumos();
+        localStorage.setItem(_sk('insumos'), JSON.stringify(cat));
+        var negId = getNegocioActivo ? getNegocioActivo() : (localStorage.getItem('etaax_negocio_activo') || '');
+        if (negId && typeof _supabase !== 'undefined') {
+            _supabase.from('negocio_insumos').upsert({ insumo_id: ins.id, negocio_id: negId, datos: ins, updated_at: new Date().toISOString() })
+                .then(function(r){ if (r.error && typeof _sbToastError === 'function') _sbToastError('inventario: ' + r.error.message); });
+        }
+    } catch(e) {}
 }
 
 function agregarSubRecetaComoInsumo(silent) {
@@ -1830,6 +1864,13 @@ function agregarSubRecetaComoInsumo(silent) {
         activo:        true,
         foto:          (typeof fotosReceta !== 'undefined' && fotosReceta.length) ? fotosReceta[0] : '',
         esSubReceta:   true,
+        // Visible en el inventario según el checkbox "Incluir en el inventario":
+        // bebidas (prebatch) sí por default, alimentos (bases de cocina) no.
+        ocultoInventario: (function(){
+            var chk = document.getElementById('chkIncluirInventario');
+            if (chk) return !chk.checked;
+            return !(recetaTipoActual === 'sub-bebidas' || recetaTipoActual === 'bebidas');
+        })(),
         recetaId:      recetaActualId || null,
         sucursalId:    (localStorage.getItem('etaax_sucursal_activa') || ''),
         sucursales:    (function(){ var c = localStorage.getItem('etaax_sucursal_activa') || ''; return c ? [c] : []; })(), // membresía: vive en la sucursal donde se convirtió
