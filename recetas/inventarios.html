@@ -230,6 +230,14 @@
                     <span id="autoGuardarInd" style="font-size:12px;color:var(--green);display:inline-flex;align-items:center;gap:4px">✓ Todos los cambios guardados</span>
                     <button class="btn-vista" onclick="abrirInfoGeneral()" id="btnInfoGeneral" title="Editar la configuración del inventario">ℹ️ Info general</button>
                     <button class="btn-vista" onclick="verPreviewActual()" id="btnPreviewActual" title="Reporte de existencias del inventario en curso">📊 Existencias</button>
+                    <!-- Acciones del RESULTADO (Paso 5): fijas en el header, solo visibles en el paso 5 -->
+                    <span id="step5HeaderBtns" style="display:none;gap:8px;align-items:center">
+                        <span id="step5StaleBadge" style="display:none;align-items:center;font-size:11px;color:var(--accent)">⚠️ Los datos cambiaron</span>
+                        <button id="btnRecalc5" class="btn-vista" style="color:var(--text-muted)" onclick="recalcularResultado()" title="Recalcula el resultado con los últimos cambios">🔄 Recalcular</button>
+                        <button class="btn-vista" style="color:#3dbe7a;border-color:#3dbe7a" onclick="verReporteDirectivo(true)">🔐 Reporte gerencial</button>
+                        <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)" onclick="verReporteDirectivo()">📄 Reporte directivo</button>
+                        <button class="btn-vista" onclick="verReporteDirectivo(false,'desglose')" title="Solo las tablas por insumo — se exporta aparte del resumen">📑 Desglose por insumo</button>
+                    </span>
                     <button class="btn-vista" onclick="pasoAnterior()" id="btnPasoAnt" style="display:none">← Anterior</button>
                     <button class="btn-vista" onclick="pasoSiguiente()" id="btnPasoSig">Siguiente →</button>
                     <button class="btn-vista" id="btnGuardarInv" onclick="pedirSalirInv()">🚪 Salir</button>

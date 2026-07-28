@@ -2161,6 +2161,14 @@ var _notaInsEditId = null;
 function editarNotaInsumo(id) {
     if (!invActual) return;
     _notaInsEditId = id;
+    // Caso especial: nota del sobrante/faltante NETO del inventario (no es un insumo).
+    if (id === '__neto__') {
+        document.getElementById('notaInsNombre').textContent = '📊 Sobrante / Faltante neto del inventario';
+        document.getElementById('notaInsInput').value = invActual.comentarioNeto || '';
+        document.getElementById('modalNotaInsumo').style.display = 'flex';
+        setTimeout(function(){ var t = document.getElementById('notaInsInput'); if (t) t.focus(); }, 60);
+        return;
+    }
     // Nombre bonito del insumo/compuesto para el encabezado del modal.
     var fila = filasCaptura.find(function(f){ return f.insumoId === id; });
     var nom = fila ? (typeof insumoTitulo === 'function' ? insumoTitulo(fila) : (fila.nombre||'')) : '';
@@ -2176,9 +2184,20 @@ function _cerrarNotaInsumo() {
 }
 function _guardarNotaInsumo() {
     if (!invActual || !_notaInsEditId) { _cerrarNotaInsumo(); return; }
-    if (!invActual.notasInsumo) invActual.notasInsumo = {};
     var id = _notaInsEditId;
     var txt = (document.getElementById('notaInsInput').value || '').trim();
+    // Caso especial: comentario del sobrante/faltante neto (vive en invActual.comentarioNeto).
+    if (id === '__neto__') {
+        invActual.comentarioNeto = txt;
+        _autoGuardar({ soloNota: true });
+        _cerrarNotaInsumo();
+        var wN = document.getElementById('notaWrap-__neto__');
+        if (wN) { wN.outerHTML = _btnNotaNeto(); return; }
+        var contN = document.getElementById('step5Tablas');
+        if (contN && typeof renderStepContent === 'function') renderStepContent();
+        return;
+    }
+    if (!invActual.notasInsumo) invActual.notasInsumo = {};
     if (txt) invActual.notasInsumo[id] = txt; else delete invActual.notasInsumo[id];
     // Una nota NO cambia ningún número → no invalida el resumen (soloNota) y no dispara
     // un recálculo pesado. El guardado local va debounced dentro de _autoGuardar.
@@ -2205,6 +2224,17 @@ function _btnNotaInsumo(id) {
         (n ? '<div style="font-size:10px;color:var(--accent);margin-top:3px;font-style:italic;max-width:200px">📝 ' + etx(n) + '</div>' : '') +
     '</span>';
 }
+// Botón + display de la nota del sobrante/faltante NETO (mismo estilo que la nota de insumo).
+function _btnNotaNeto() {
+    var n = (invActual && invActual.comentarioNeto) || '';
+    return '<span id="notaWrap-__neto__" style="display:inline-block">' +
+        '<button onclick="event.stopPropagation();editarNotaInsumo(\'__neto__\')" ' +
+        'style="font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;background:transparent;' +
+        'border:1px solid ' + (n?'var(--accent)':'#888') + ';color:' + (n?'var(--accent)':'#999') + '">📝 ' + (n?'Nota ✓':'Agregar nota') + '</button>' +
+        (n ? '<div style="font-size:11px;color:var(--accent);margin-top:5px;font-style:italic;line-height:1.5">📝 ' + etx(n) + '</div>' : '') +
+    '</span>';
+}
+window._btnNotaNeto = _btnNotaNeto;
 
 // ── Menú COMPARTIR del reporte ───────────────────────────────────────────────
 function _toggleRdShare(e) {
@@ -2719,6 +2749,10 @@ function actualizarNavBtns() {
         if (btnAnt) btnAnt.style.display = pasoActual > 1 ? 'inline-flex' : 'none';
         if (btnSig) btnSig.style.display = pasoActual < 5 ? 'inline-flex' : 'none';
     }
+    // Acciones del Resultado (Recalcular / reportes): fijas en el header, solo en el Paso 5.
+    var s5b = document.getElementById('step5HeaderBtns');
+    if (s5b) s5b.style.display = (!esLev && pasoActual === 5) ? 'inline-flex' : 'none';
+    if (typeof _ajustarStickyInv === 'function') setTimeout(_ajustarStickyInv, 0); // el header pudo crecer/encoger
 }
 // Finalizar el inventario actual desde el wizard (cierra: ABIERTO → CERRADO).
 function finalizarInventarioActual() {
@@ -5099,11 +5133,12 @@ function _resumenEjecutivo() {
             // vez de − cuando a costo había sobrante pero a carta faltante).
             var netCosto = sobrCosto - faltCosto, netCarta = sobrCarta - faltCarta;
             var esSobrCarta = netCarta >= 0;
+            var _subNeto = (faltU+sobrU)+' insumos con diferencia · '+(netCosto>=0?'+':'−')+M(Math.abs(netCosto))+' a costo'+
+                '<div style="margin-top:6px">'+(typeof _btnNotaNeto==='function'?_btnNotaNeto():'')+'</div>';
             return '<div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">'+
                 card(esSobrCarta ? 'Sobrante (a carta)' : 'Faltante (a carta)',
                     (esSobrCarta?'+':'−')+M(Math.abs(netCarta)),
-                    esSobrCarta ? 'var(--green)' : 'var(--red)',
-                    (faltU+sobrU)+' insumos con diferencia · '+(netCosto>=0?'+':'−')+M(Math.abs(netCosto))+' a costo')+
+                    esSobrCarta ? 'var(--green)' : 'var(--red)', _subNeto)+
                 card('Merma del periodo', M(mermaCosto), 'var(--accent)', mermados.length+' productos')+
                 card('Insumos sin usar', String(sinUsar), sinUsar>0?'var(--accent)':'var(--green)', usados+' usados en el periodo')+
             '</div>';
@@ -5187,17 +5222,6 @@ function renderStep5() {
 
     const _M2 = v => (v||0).toLocaleString('es-MX', { minimumFractionDigits:2, maximumFractionDigits:2 }); // $1,832,994.00
     const kpis = `<div class="wrap" style="padding-bottom:0">
-        <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-            <span id="step5StaleBadge" style="display:none;align-items:center;font-size:11px;color:var(--accent);margin-right:2px">⚠️ Los datos cambiaron</span>
-            <button id="btnRecalc5" class="btn-vista" style="color:var(--text-muted)"
-                onclick="recalcularResultado()" title="Recalcula el resultado con los últimos cambios (navegar ya no recalcula solo → más rápido)">🔄 Recalcular</button>
-            <button class="btn-vista" style="color:#3dbe7a;border-color:#3dbe7a"
-                onclick="verReporteDirectivo(true)">🔐 Reporte gerencial</button>
-            <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)"
-                onclick="verReporteDirectivo()">📄 Reporte directivo</button>
-            <button class="btn-vista"
-                onclick="verReporteDirectivo(false,'desglose')" title="Solo las tablas por insumo — se exporta aparte del resumen">📑 Desglose por insumo</button>
-        </div>
         <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
             <div class="stat-card"><div class="stat-label">Capital a costo</div><div class="stat-val">$${_M2(capitalCosto)}</div></div>
             <div class="stat-card"><div class="stat-label">Capital a carta</div><div class="stat-val green">$${_M2(capitalCarta)}</div></div>
@@ -5316,10 +5340,12 @@ function _step5TablasHTML() {
         const entBotStr = entBot > 0 ? `+${entBot % 1 ? entBot.toFixed(1) : entBot} ${_unidadCompra(fila)}` : '—';
         const fisicoBot = copasBot > 0 ? (fisico/copasBot).toFixed(2) : fisico.toFixed(1);
         const difStr    = `${dif>=0?'+':''}${dif.toFixed(1)} cop`;
+        const _contC = _fmtContenido(fila);
         const html = `<tr>
                 <td style="min-width:140px">
                     <div style="font-size:14px;font-weight:600">${etx(insumoTitulo(fila))}</div>
                     <div style="font-size:11.5px;color:var(--text-dim)">${fila.categoria||''}</div>
+                    ${_contC?`<div style="font-size:9.5px;color:#7ab8f5">📦 ${_contC}</div>`:''}
                     <button onclick="event.stopPropagation();toggleBateo('${fila.insumoId}')" style="margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid ${esBateo(fila.insumoId)?'#3dbe7a':'#888'};background:${esBateo(fila.insumoId)?'#3dbe7a':'transparent'};color:${esBateo(fila.insumoId)?'#fff':'#999'}">🏏 ${esBateo(fila.insumoId)?'De bateo ✓':'Marcar bateo'}</button>${_btnNotaInsumo(fila.insumoId)}
                 </td>
                 <td style="text-align:center;white-space:nowrap">${eaBot} bot</td>
@@ -5359,10 +5385,12 @@ function _step5TablasHTML() {
         const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
         const pctVal    = _pctVarianza(dif, ventas);
         const pctStr    = pctVal !== null ? (pctVal>=0?'+':'')+pctVal.toFixed(1)+'%' : '—';
+        const _contP = _fmtContenido(fila);
         const html = `<tr>
                 <td>
                     <div style="font-size:14px;font-weight:600">${etx(insumoTitulo(fila))}</div>
                     <div style="font-size:11.5px;color:var(--text-dim)">${fila.categoria||''}</div>
+                    ${_contP?`<div style="font-size:9.5px;color:#7ab8f5">📦 ${_contP}</div>`:''}
                     <button onclick="event.stopPropagation();toggleBateo('${fila.insumoId}')" style="margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid ${esBateo(fila.insumoId)?'#3dbe7a':'#888'};background:${esBateo(fila.insumoId)?'#3dbe7a':'transparent'};color:${esBateo(fila.insumoId)?'#fff':'#999'}">🏏 ${esBateo(fila.insumoId)?'De bateo ✓':'Marcar bateo'}</button>${_btnNotaInsumo(fila.insumoId)}
                 </td>
                 <td style="text-align:center">${ea.toFixed(0)} pza</td>
@@ -5384,7 +5412,7 @@ function _step5TablasHTML() {
     function _rowComp(vf) {
         const comp = getCompuestos().find(c => c.id === vf.compId) || {};
         const members = (comp.miembros||[]).map(mid => filasCaptura.find(f=>f.insumoId===mid)).filter(Boolean);
-        let ea=0, ent=0, cancel=0, ventaBot=0, ventaCopa=0, ventaCoct=0, cm=0;
+        let ea=0, ent=0, cancel=0, ventaBot=0, ventaCopa=0, ventaCoct=0, cm=0, eaBot=0, fisBot=0;
         members.forEach(m => {
             ea       += parseFloat(m.existenciaAnterior)||0;
             ent      += getEntradasCopas(m);
@@ -5394,6 +5422,10 @@ function _step5TablasHTML() {
             ventaCopa+= parseFloat(m.ventasCopasDirectas)||0;
             ventaCoct+= calcVentasCopasRecetas(m.insumoId, m.copaML);
             cm       += (parseFloat(m.cortesiaCopas)||0) + (parseFloat(m.mermaCopas)||0);
+            // Existencia en BOTELLAS: cada presentación aporta sus propias botellas
+            // (su copaML/contNeto). El compuesto suma botellas; la diferencia queda en copas.
+            eaBot    += copasBot>0 ? (parseFloat(m.existenciaAnterior)||0)/copasBot : (parseFloat(m.existenciaAnterior)||0);
+            fisBot   += copasBot>0 ? calcExistencia(m)/copasBot : calcExistencia(m);
         });
         const fisico    = calcExistencia(vf);
         const teorico   = calcExistenciaTeorica(vf);
@@ -5415,16 +5447,19 @@ function _step5TablasHTML() {
             const mDifCosto = mdif * (m.precioCarta || 0);
             const mpct = _pctVarianza(mdif, mVentaBot + mVentaCopa + mVentaCoct);
             const mcol = Math.abs(mdif)<0.05?'var(--text-dim)':(mdif>0?'var(--green)':'var(--red)');
+            const meaBot = mCopasBot>0 ? mea/mCopasBot : mea;   // existencia en botellas (su propia presentación)
+            const mfisBot = mCopasBot>0 ? mfis/mCopasBot : mfis;
+            const mCont   = _fmtContenido(m); // 📦 contenido por botella (ml/pza) de la presentación
             return `<tr>
-                <td style="padding:4px 8px;color:var(--text);min-width:150px">${etx(insumoTitulo(m))}${insumoMeta(m)?`<div style="font-size:10px;color:var(--text-dim);margin-top:1px">${insumoMetaHTML(m)}</div>`:''}</td>
-                <td style="text-align:center;white-space:nowrap">${_nc(mea)} cop</td>
+                <td style="padding:4px 8px;color:var(--text);min-width:150px">${etx(insumoTitulo(m))}${insumoMeta(m)?`<div style="font-size:10px;color:var(--text-dim);margin-top:1px">${insumoMetaHTML(m)}</div>`:''}${mCont?`<div style="font-size:9.5px;color:#7ab8f5;margin-top:1px">📦 ${mCont}</div>`:''}</td>
+                <td style="text-align:center;white-space:nowrap">${_nc(meaBot)} bot</td>
                 <td style="text-align:center;color:var(--green)">${ment>0?'+'+_nc(ment)+' cop':'—'}</td>
                 <td style="text-align:center;color:var(--text-dim)">${mVentaBot>0?_nc(mVentaBot)+' cop':'—'}</td>
                 <td style="text-align:center;color:var(--accent)">${mVentaCopa>0?_nc(mVentaCopa)+' cop':'—'}</td>
                 <td style="text-align:center;color:var(--viol)">${mVentaCoct>0?_nc(mVentaCoct)+' cop':'—'}</td>
                 <td style="text-align:center;color:var(--red)">${mcm>0?_nc(mcm)+' cop':'—'}</td>
                 <td style="text-align:center;color:var(--text-muted)">${mcancel>0?_nc(mcancel)+' cop':'—'}</td>
-                <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(mfis)} cop</td>
+                <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(mfisBot)} bot</td>
                 <td style="text-align:center;font-weight:700;color:${mcol};white-space:nowrap">${mdif>=0?'+':''}${_nc(mdif)} cop</td>
                 <td style="text-align:center;font-size:11px;color:${mcol}">${mpct!==null?((mpct>=0?'+':'')+mpct.toFixed(1)+'%'):'—'}</td>
                 <td style="text-align:right;font-weight:600;color:${mcol};white-space:nowrap">${mDifCosto>=0?'+':''}$${mDifCosto.toFixed(2)}</td>
@@ -5443,14 +5478,14 @@ function _step5TablasHTML() {
                 <button onclick="var d=document.getElementById('compDesg-${comp.id}');d.style.display=d.style.display==='none'?'':'none';this.textContent=d.style.display==='none'?'▸ Ver desglose':'▾ Ocultar desglose'" style="margin-top:3px;margin-left:4px;font-size:9px;padding:1px 7px;border-radius:4px;cursor:pointer;border:1px solid var(--viol);background:transparent;color:var(--viol)">▸ Ver desglose</button>
                 ${_btnNotaInsumo(vf.compId||vf.insumoId)}
             </td>
-            <td style="text-align:center;white-space:nowrap">${_nc(ea)} cop</td>
+            <td style="text-align:center;white-space:nowrap">${_nc(eaBot)} bot</td>
             <td style="text-align:center;color:var(--green);white-space:nowrap">${ent>0?'+'+_nc(ent)+' cop':'—'}</td>
             <td style="text-align:center;color:var(--text-dim)">${ventaBot>0?_nc(ventaBot)+' cop':'—'}</td>
             <td style="text-align:center;color:var(--accent)">${ventaCopa>0?_nc(ventaCopa)+' cop':'—'}</td>
             <td style="text-align:center;color:var(--viol)">${ventaCoct>0?_nc(ventaCoct)+' cop':'—'}</td>
             <td style="text-align:center">${cm>0?`<div style="color:var(--red);font-size:12px;font-weight:600">${_nc(cm)} cop</div>`:'—'}</td>
             <td style="text-align:center;color:var(--text-muted)">${cancel>0?_nc(cancel)+' cop':'—'}</td>
-            <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(fisico)} cop</td>
+            <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(fisBot)} bot</td>
             <td style="text-align:center;font-weight:700;color:${color};white-space:nowrap">${dif>=0?'+':''}${_nc(dif)} cop</td>
             <td style="text-align:center;font-size:11px;color:${color}">${pctStr}</td>
             <td style="text-align:right;font-weight:600;color:${color};white-space:nowrap">${difCosto>=0?'+':''}$${difCosto.toFixed(2)}</td>
@@ -5722,16 +5757,6 @@ function _rdConstruirPaginas(src, pagesC, headHtml, footHtml) {
 }
 
 // ── Reporte directivo ─────────────────────────────────────────
-// Comentario de dirección sobre el sobrante/faltante neto — se guarda en el
-// inventario y se imprime en el reporte. Persiste en el registro + nube.
-function _rdGuardarComentarioNeto(txt) {
-    if (!invActual) return;
-    invActual.comentarioNeto = txt;
-    try {
-        var _reg = getInventarios().find(function(x){ return x.id === invActual.id; });
-        if (_reg) { if (_reg !== invActual) _reg.comentarioNeto = txt; _sbUpInv(_reg); }
-    } catch(e) { console.warn('[reporte] guardar comentario neto falló:', e); }
-}
 function verReporteDirectivo(gerencial, modo) {
     if (!invActual) return;
     const ger = gerencial === true; // Reporte Gerencial: oculta los importes (solo % + neto + dif$ por insumo).
@@ -5836,13 +5861,37 @@ function verReporteDirectivo(gerencial, modo) {
     const alertasSob = analisis.filter(a => !a.esBateo && a.varPct > 25).sort((a, b) => b.varPct - a.varPct);
     const riesgos    = analisis.filter(a => !a.esBateo && Math.abs(a.varPct) > 10 && Math.abs(a.varPct) <= 25).sort((a, b) => Math.abs(b.varPct) - Math.abs(a.varPct));
     const GPROD_RD = '🏭 Producción propia';
+    const _mapaComp = _compDeInsumo();                 // insumoId miembro → compuesto
+    const _aById = {}; analisis.forEach(a => { _aById[a.f.insumoId] = a; });
     const gruposTabla = {};
+    const _pushG = (g, e) => { (gruposTabla[g] || (gruposTabla[g] = [])).push(e); };
     analisis.forEach(a => {
-        // Igual que el Resultado en pantalla: bateo NO va aparte (vive en su categoría con
-        // su chip); prebatch repartido → "Producción propia" (su varianza vive en sus insumos).
-        const g = a.esPB ? GPROD_RD : _grupoCategoria(a.f);
-        if (!gruposTabla[g]) gruposTabla[g] = [];
-        gruposTabla[g].push(a);
+        if (_mapaComp[a.f.insumoId]) return; // miembro de compuesto → va DENTRO de su compuesto
+        // Igual que el Resultado: bateo NO va aparte (vive en su categoría con su chip);
+        // prebatch repartido → "Producción propia" (su varianza vive en sus insumos).
+        _pushG(a.esPB ? GPROD_RD : _grupoCategoria(a.f), a);
+    });
+    // Compuestos activos: entrada AGREGADA con su desglose por presentación (igual que el Resultado).
+    _compuestosActivos().forEach(comp => {
+        const mem = (comp.miembros||[]).map(id => _aById[id]).filter(Boolean);
+        if (!mem.length) return;
+        let ea=0,entBot=0,vCopaDir=0,vBot=0,vCoct=0,cm=0,cancel=0,fisico=0,teorico=0,dif=0,difCosto=0,eaBot=0,fisBot=0,vendCopas=0,consumo=0;
+        mem.forEach(m => {
+            ea+=m.ea; entBot+=m.entBot; vCopaDir+=m.ventaCopaDir; vBot+=m.ventaBot; vCoct+=m.ventaCoct;
+            cm+=(m.cortesia+m.merma); cancel+=m.cancel; fisico+=m.fisico; teorico+=m.teorico;
+            dif+=m.dif; difCosto+=m.difCosto; consumo+=m.consumo;
+            eaBot  += m.copasBot>0 ? m.ea/m.copasBot : m.ea;
+            fisBot += m.copasBot>0 ? m.fisico/m.copasBot : m.fisico;
+            vendCopas += (m.ventaCopa||0) + (m.ventaBot||0)*(m.copasBot||0);
+        });
+        const varPct = _pctVarianza(dif, vendCopas) ?? 0;
+        const nombre = comp.nombre || (mem[0] && mem[0].f.nombre) || 'Compuesto';
+        _pushG(_grupoCategoria(mem[0].f), {
+            esComp:true, comp, nombre, members:mem,
+            ea, entBot, ventaCopaDir:vCopaDir, ventaBot:vBot, ventaCoct:vCoct, cmTotal:cm, cancel,
+            fisico, teorico, dif, difCosto, eaBot, fisBot, varPct, vendCopas, consumo,
+            f:{ tipo:'copa', nombre, insumoId:'_comp_'+comp.id }
+        });
     });
 
     // Recomendaciones automáticas
@@ -5927,7 +5976,46 @@ function verReporteDirectivo(gerencial, modo) {
     const _grupoInvHTML = ([grp, items]) => {
         let gDif = 0, gVend = 0, gNet = 0;
         const _pzaGrupo = items.length > 0 && items.every(a => a.f.tipo === 'pza');
+        // Color por SIGNO (no por severidad): rojo = FALTANTE (−), verde =
+        // SOBRANTE (+), gris = sin diferencia. Igual que el Paso 5 en pantalla.
+        const scol = v => Math.abs(v) < 0.05 ? '#999' : (v > 0 ? cOk : cCrit);
         const rows = items.map(a => {
+            // ── Compuesto: fila agregada (existencias en BOTELLAS, diferencia en copas)
+            //    + una sub-fila por presentación (mismo desglose que el Resultado). ──
+            if (a.esComp) {
+                gDif += a.difCosto; gNet += a.dif; gVend += a.vendCopas;
+                const cDifC = scol(a.dif), cCostC = scol(a.difCosto);
+                const mainRow = `<tr style="background:#faf7ff">
+              <td style="font-weight:700">🧩 ${etx(a.nombre)} <span style="font-weight:400;color:#999;font-size:8.5px">(${a.members.length} present.)</span>${_notaInsumo(a.f.insumoId)?`<div style="font-size:8.5px;color:#9a6f00;font-style:italic;margin-top:2px">📝 ${etx(_notaInsumo(a.f.insumoId))}</div>`:''}</td>
+              <td class="tc" style="color:#888">${_ncRd(a.eaBot)} bot</td>
+              <td class="tc" style="color:${cOk}">${a.entBot>0?'+'+_ncRd(a.entBot)+' b':'—'}</td>
+              <td class="tc">${a.ventaCopaDir>0?_ncRd(a.ventaCopaDir)+' c':'—'}</td>
+              <td class="tc">${a.ventaBot>0?_ncRd(a.ventaBot)+' b':'—'}</td>
+              <td class="tc" style="color:#9b8de8">${a.ventaCoct>0?_ncRd(a.ventaCoct)+' c':'—'}</td>
+              <td class="tc" style="font-weight:600">${_ncRd(a.fisBot)} bot</td>
+              <td class="tc" style="color:${cDifC};font-weight:700">${a.dif>=0?'+':''}${a.dif.toFixed(1)} cop</td>
+              <td class="tc" style="color:${cDifC}">${a.varPct.toFixed(0)}%</td>
+              <td class="tr" style="color:${cCostC};font-weight:700">${a.difCosto>=0?'+':''}$${_m2(a.difCosto)}</td>
+            </tr>`;
+                const subRows = a.members.map(m => {
+                    const mEaBot  = m.copasBot>0 ? m.ea/m.copasBot : m.ea;
+                    const mFisBot = m.copasBot>0 ? m.fisico/m.copasBot : m.fisico;
+                    const mcD = scol(m.dif), mcC = scol(m.difCosto), mCont = _fmtContenido(m.f);
+                    return `<tr style="background:#fbfaff">
+              <td style="padding-left:22px;color:#666;font-size:9px">↳ ${etx(m.f.nombre)}${mCont?` · <span style="color:#2471a3">📦 ${mCont}</span>`:''}</td>
+              <td class="tc" style="color:#999">${_ncRd(mEaBot)} bot</td>
+              <td class="tc" style="color:${cOk}">${m.entBot>0?'+'+_ncRd(m.entBot)+' b':'—'}</td>
+              <td class="tc">${m.ventaCopaDir>0?_ncRd(m.ventaCopaDir)+' c':'—'}</td>
+              <td class="tc">${m.ventaBot>0?_ncRd(m.ventaBot)+' b':'—'}</td>
+              <td class="tc" style="color:#9b8de8">${m.ventaCoct>0?_ncRd(m.ventaCoct)+' c':'—'}</td>
+              <td class="tc">${_ncRd(mFisBot)} bot</td>
+              <td class="tc" style="color:${mcD};font-weight:600">${m.dif>=0?'+':''}${m.dif.toFixed(1)} cop</td>
+              <td class="tc" style="color:${mcD}">${m.varPct.toFixed(0)}%</td>
+              <td class="tr" style="color:${mcC}">${m.difCosto>=0?'+':''}$${_m2(m.difCosto)}</td>
+            </tr>`;
+                }).join('');
+                return mainRow + subRows;
+            }
             gDif += a.difCosto;
             gNet += a.dif;
             gVend += a.f.tipo === 'pza' ? (a.ventaPzaTot || 0) : ((a.ventaCopa || 0) + (a.ventaBot || 0) * (a.copasBot || 0));
@@ -5936,12 +6024,9 @@ function verReporteDirectivo(gerencial, modo) {
             const vtaCopaStr = a.f.tipo === 'pza' ? '—' : (a.ventaCopaDir>0?a.ventaCopaDir.toFixed(1)+' c':'—');
             const vtaBotStr  = a.f.tipo === 'pza' ? ((a.ventaBot+a.ventaCopaDir)>0?(a.ventaBot+a.ventaCopaDir).toFixed(0)+' p':'—') : (a.ventaBot>0?a.ventaBot+' b':'—');
             const coctStr    = a.ventaCoct>0 ? (a.f.tipo==='pza'?a.ventaCoct.toFixed(0)+' p':a.ventaCoct.toFixed(1)+' c') : '—';
-            // Color por SIGNO (no por severidad): rojo = FALTANTE (−), verde =
-            // SOBRANTE (+), gris = sin diferencia. Igual que el Paso 5 en pantalla.
-            const scol  = v => Math.abs(v) < 0.05 ? '#999' : (v > 0 ? cOk : cCrit);
             const cDif  = scol(a.dif), cCost = scol(a.difCosto);
             return `<tr>
-              <td style="font-weight:600;max-width:200px;white-space:normal;word-break:break-word">${etx(a.f.nombre)}${_notaInsumo(a.f.insumoId)?`<div style="font-size:8.5px;color:#9a6f00;font-style:italic;margin-top:2px">📝 ${etx(_notaInsumo(a.f.insumoId))}</div>`:''}</td>
+              <td style="font-weight:600;max-width:200px;white-space:normal;word-break:break-word">${etx(a.f.nombre)}${_fmtContenido(a.f)?`<div style="font-size:8.5px;color:#2471a3;margin-top:1px">📦 ${_fmtContenido(a.f)}</div>`:''}${_notaInsumo(a.f.insumoId)?`<div style="font-size:8.5px;color:#9a6f00;font-style:italic;margin-top:2px">📝 ${etx(_notaInsumo(a.f.insumoId))}</div>`:''}</td>
               <td class="tc" style="color:#888">${_exFmt(a, a.ea)}</td>
               <td class="tc" style="color:${cOk}">${entStr}</td>
               <td class="tc">${vtaCopaStr}</td>
@@ -6224,10 +6309,10 @@ function verReporteDirectivo(gerencial, modo) {
       <div class="rd-kl">${netCarta>=0?'Sobrante':'Faltante'} neto a carta</div>
       <div class="rd-kv" style="color:${netCarta>=0?cOk:cCrit}">${netCarta>=0?'+':'−'}$${_m0(Math.abs(netCarta))}</div>
       <div class="rd-ks">sobrante − faltante · precio de carta</div>
-      <div style="margin-top:8px;border-top:1px dashed #ddd;padding-top:7px">
+      ${invActual.comentarioNeto ? `<div style="margin-top:8px;border-top:1px dashed #ddd;padding-top:7px">
         <div style="font-size:9px;color:#999;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">📝 Comentario de dirección</div>
-        <textarea onchange="_rdGuardarComentarioNeto(this.value)" placeholder="Escribe una nota sobre el sobrante / faltante del período…" style="width:100%;box-sizing:border-box;border:1px solid #e0e0d8;border-radius:6px;padding:6px 8px;font-size:11px;font-family:Arial,Helvetica,sans-serif;color:#1a1916;resize:vertical;min-height:34px">${etx(invActual.comentarioNeto||'')}</textarea>
-      </div>
+        <div style="font-size:11px;color:#1a1916;line-height:1.5;white-space:pre-wrap">${etx(invActual.comentarioNeto)}</div>
+      </div>` : ''}
     </div>
   </div>
   ${(bonifU>0||consigU>0)?`
