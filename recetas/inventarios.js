@@ -2305,6 +2305,11 @@ function abrirInventario(id) {
     const inv = getInventarios().find(x => x.id === id);
     if (!inv) return;
     window._soloVistaInv = false; // modo edición al abrir para editar/continuar
+    // Limpiar residuos de la vista de solo lectura (el indicador y el bloqueo se
+    // quedaban al pasar de "👁️ solo lectura" a edición).
+    var _indE = document.getElementById('autoGuardarInd');
+    if (_indE && /solo lectura/i.test(_indE.textContent)) { _indE.textContent = '✓ Todos los cambios guardados'; _indE.style.color = 'var(--green)'; }
+    ['stepContent','step5Keep'].forEach(function(cid){ var c = document.getElementById(cid); if (c) c.classList.remove('inv-readonly'); });
     invActual = JSON.parse(JSON.stringify(inv));
     if (!invActual.cocktailsVendidos) invActual.cocktailsVendidos = {};
     if (!invActual.ventasCompuesto)   invActual.ventasCompuesto   = {};
@@ -5419,7 +5424,7 @@ function _step5TablasHTML() {
             const mcol = Math.abs(mdif)<0.05?'var(--text-dim)':(mdif>0?'var(--green)':'var(--red)');
             const ment = getEntradasCopas(m);
             return `<tr>
-                <td style="padding:3px 8px;color:var(--text)">${etx(insumoTitulo(m))}</td>
+                <td style="padding:3px 8px;color:var(--text)">${etx(insumoTitulo(m))}${insumoMeta(m)?`<div style="font-size:10px;color:var(--text-dim);margin-top:1px">${insumoMetaHTML(m)}</div>`:''}</td>
                 <td style="text-align:center">${_nc(parseFloat(m.existenciaAnterior)||0)} cop</td>
                 <td style="text-align:center;color:var(--green)">${ment>0?'+'+_nc(ment)+' cop':'—'}</td>
                 <td style="text-align:center">${_nc(mteo)} cop</td>

@@ -45,6 +45,8 @@
             'html.embed body.has-ctx .pp-wrap{padding-top:16px!important}' +
             /* Carátula de costos (recetas) abierta en modal: sin topbar ni nav → pegada al tope/izquierda */
             'html.embed #vistaCaratula{top:0!important;left:0!important}' +
+            /* Su header interno es redundante con el header del modal → ocultar título y cerrar propios */
+            'html.embed #caratulaTituloHeader,html.embed #caratulaBtnCerrar{display:none!important}' +
             /* Organigrama: sin nav lateral, el lienzo y su toolbar van a la izquierda/arriba */
             'html.embed .org-top{left:0!important;top:0!important}' +
             'html.embed #viewport{left:0!important}' +
