@@ -49,6 +49,23 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
 .chips button{flex:1;min-width:90px;background:transparent;border:1.5px solid var(--border);color:var(--text-muted);border-radius:20px;padding:9px 8px;font-size:13px;cursor:pointer;font-family:inherit}
 .chips button.on{border-color:var(--green);background:rgba(61,190,122,.12);color:var(--green);font-weight:600}
 .volver{background:transparent;border:none;color:var(--text-dim);font-size:13px;cursor:pointer;font-family:inherit;padding:4px 0;margin-bottom:10px;display:block}
+/* Lista (carrito) de registro múltiple */
+.cart-box{border:1px solid var(--border);border-radius:10px;margin-bottom:14px;text-align:left;overflow:hidden}
+.cart-it{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px}
+.cart-it:last-child{border-bottom:none}
+.cart-it .ci-nom{flex:1;color:var(--text);min-width:0}
+.cart-it .ci-nom b{font-weight:600}
+.cart-it .ci-cant{color:var(--green);font-weight:600;white-space:nowrap}
+.cart-it .ci-cant.out{color:#9b7fe0}
+.cart-it .ci-cant.mer{color:var(--red)}
+.cart-it .ci-del{background:none;border:none;color:var(--text-dim);font-size:16px;cursor:pointer;padding:0 2px;flex-shrink:0}
+.cart-empty{padding:14px;text-align:center;color:var(--text-dim);font-size:12.5px}
+.add-btn{display:block;width:100%;box-sizing:border-box;background:var(--surface2);border:1px dashed var(--border);color:var(--text);border-radius:9px;padding:12px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:14px}
+.foto-strip{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.foto-strip .fs-it{position:relative;width:56px;height:56px}
+.foto-strip .fs-it img{width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--border)}
+.foto-strip .fs-del{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:12px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.foto-cnt{font-size:11px;color:var(--text-dim);margin:-4px 0 10px}
 </style>
 </head>
 <body>
@@ -117,22 +134,29 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
             </div>
         </div>
 
-        <label class="lbl">Fecha</label>
-        <input id="entFecha" class="fld" type="date">
+        <button class="add-btn" onclick="_addItem('entrada')">➕ Agregar a la lista</button>
 
-        <label class="lbl">Nota (opcional)</label>
-        <input id="entNota" class="fld" placeholder="Proveedor, ticket, etc.">
+        <label class="lbl">Lista de entradas (<span id="entradaCartN">0</span>/15)</label>
+        <div class="cart-box" id="entradaCartList"></div>
 
-        <img id="fotoThumb" class="thumb" style="display:none">
-        <input type="file" id="fotoInputCam" accept="image/*" capture="environment" style="display:none" onchange="onFoto(this)">
-        <input type="file" id="fotoInput" accept="image/*" style="display:none" onchange="onFoto(this)">
+        <label class="lbl">Fecha (para todo el lote)</label>
+        <input id="entradaFecha" class="fld" type="date">
+
+        <label class="lbl">Nota (opcional, para todo el lote)</label>
+        <input id="entradaNota" class="fld" placeholder="Proveedor, ticket, etc.">
+
+        <label class="lbl">Evidencia (fotos, hasta 10)</label>
+        <div class="foto-strip" id="entradaFotoStrip"></div>
+        <div class="foto-cnt" id="entradaFotoCnt">0 / 10 fotos</div>
+        <input type="file" id="entradaFotoCam" accept="image/*" capture="environment" style="display:none" onchange="_addFotoBatch('entrada',this)">
+        <input type="file" id="entradaFotoGal" accept="image/*" multiple style="display:none" onchange="_addFotoBatch('entrada',this)">
         <div class="cap-par">
-            <button class="cap-btn ghost" onclick="document.getElementById('fotoInputCam').click()">📷 Tomar foto</button>
-            <button class="cap-btn ghost" onclick="document.getElementById('fotoInput').click()">🖼️ Galería</button>
+            <button class="cap-btn ghost" onclick="document.getElementById('entradaFotoCam').click()">📷 Tomar foto</button>
+            <button class="cap-btn ghost" onclick="document.getElementById('entradaFotoGal').click()">🖼️ Galería</button>
         </div>
 
-        <button class="cap-btn" id="regBtn" style="margin-top:12px" onclick="registrar()">✓ Registrar entrada</button>
-        <div class="cap-msg" id="formMsg"></div>
+        <button class="cap-btn" id="entradaSubmitBtn" style="margin-top:12px" onclick="_registrarBatch('entrada')">✓ Registrar todo (0)</button>
+        <div class="cap-msg" id="entradaMsg"></div>
     </div>
 
     <!-- ── Pantalla MERMA (insumo o producto del menú) ── -->
@@ -180,19 +204,26 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
             <option value="otro">Otro</option>
         </select>
 
-        <label class="lbl">Nota (opcional)</label>
-        <input id="merNota" class="fld" placeholder="Detalle de lo que pasó…">
+        <button class="add-btn" onclick="_addItem('merma')">➕ Agregar a la lista</button>
 
-        <img id="merFotoThumb" class="thumb" style="display:none">
-        <input type="file" id="merFotoInputCam" accept="image/*" capture="environment" style="display:none" onchange="onFotoMer(this)">
-        <input type="file" id="merFotoInput" accept="image/*" style="display:none" onchange="onFotoMer(this)">
+        <label class="lbl">Lista de mermas (<span id="mermaCartN">0</span>/15)</label>
+        <div class="cart-box" id="mermaCartList"></div>
+
+        <label class="lbl">Nota (opcional, para todo el lote)</label>
+        <input id="mermaNota" class="fld" placeholder="Detalle de lo que pasó…">
+
+        <label class="lbl">Evidencia (fotos, hasta 10)</label>
+        <div class="foto-strip" id="mermaFotoStrip"></div>
+        <div class="foto-cnt" id="mermaFotoCnt">0 / 10 fotos</div>
+        <input type="file" id="mermaFotoCam" accept="image/*" capture="environment" style="display:none" onchange="_addFotoBatch('merma',this)">
+        <input type="file" id="mermaFotoGal" accept="image/*" multiple style="display:none" onchange="_addFotoBatch('merma',this)">
         <div class="cap-par">
-            <button class="cap-btn ghost" onclick="document.getElementById('merFotoInputCam').click()">📷 Tomar foto</button>
-            <button class="cap-btn ghost" onclick="document.getElementById('merFotoInput').click()">🖼️ Galería</button>
+            <button class="cap-btn ghost" onclick="document.getElementById('mermaFotoCam').click()">📷 Tomar foto</button>
+            <button class="cap-btn ghost" onclick="document.getElementById('mermaFotoGal').click()">🖼️ Galería</button>
         </div>
 
-        <button class="cap-btn" id="merBtn" style="margin-top:12px;background:var(--red);color:#fff" onclick="registrarMerma()">✓ Registrar merma</button>
-        <div class="cap-msg" id="merMsg"></div>
+        <button class="cap-btn" id="mermaSubmitBtn" style="margin-top:12px;background:var(--red);color:#fff" onclick="_registrarBatch('merma')">✓ Registrar todo (0)</button>
+        <div class="cap-msg" id="mermaMsg"></div>
     </div>
 
     <!-- ── Pantalla SALIDA de insumo (cortesía / préstamo) ── -->
@@ -232,19 +263,26 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
             </div>
         </div>
 
-        <label class="lbl" id="salNotaLbl">Motivo (opcional)</label>
-        <input id="salNota" class="fld" placeholder="Ej. cortesía VIP, degustación…">
+        <button class="add-btn" onclick="_addItem('salida')">➕ Agregar a la lista</button>
 
-        <img id="salFotoThumb" class="thumb" style="display:none">
-        <input type="file" id="salFotoInputCam" accept="image/*" capture="environment" style="display:none" onchange="onFotoSal(this)">
-        <input type="file" id="salFotoInput" accept="image/*" style="display:none" onchange="onFotoSal(this)">
+        <label class="lbl">Lista de salidas (<span id="salidaCartN">0</span>/15)</label>
+        <div class="cart-box" id="salidaCartList"></div>
+
+        <label class="lbl" id="salidaNotaLbl">Motivo / a quién (para todo el lote)</label>
+        <input id="salidaNota" class="fld" placeholder="Ej. cortesía VIP, préstamo a sucursal Centro…">
+
+        <label class="lbl">Evidencia (fotos, hasta 10)</label>
+        <div class="foto-strip" id="salidaFotoStrip"></div>
+        <div class="foto-cnt" id="salidaFotoCnt">0 / 10 fotos</div>
+        <input type="file" id="salidaFotoCam" accept="image/*" capture="environment" style="display:none" onchange="_addFotoBatch('salida',this)">
+        <input type="file" id="salidaFotoGal" accept="image/*" multiple style="display:none" onchange="_addFotoBatch('salida',this)">
         <div class="cap-par">
-            <button class="cap-btn ghost" onclick="document.getElementById('salFotoInputCam').click()">📷 Tomar foto</button>
-            <button class="cap-btn ghost" onclick="document.getElementById('salFotoInput').click()">🖼️ Galería</button>
+            <button class="cap-btn ghost" onclick="document.getElementById('salidaFotoCam').click()">📷 Tomar foto</button>
+            <button class="cap-btn ghost" onclick="document.getElementById('salidaFotoGal').click()">🖼️ Galería</button>
         </div>
 
-        <button class="cap-btn" id="salBtn" style="margin-top:12px;background:#7c5fd3;color:#fff" onclick="registrarSalida()">✓ Registrar salida</button>
-        <div class="cap-msg" id="salMsg"></div>
+        <button class="cap-btn" id="salidaSubmitBtn" style="margin-top:12px;background:#7c5fd3;color:#fff" onclick="_registrarBatch('salida')">✓ Registrar todo (0)</button>
+        <div class="cap-msg" id="salidaMsg"></div>
     </div>
 
     <!-- ── Pantalla error ── -->
@@ -307,6 +345,9 @@ var MERMA_TIPO = 'insumo';       // 'insumo' | 'producto'
 var MSEL = null, MFOTO_URL = '';
 var SALIDA_TIPO = 'cortesia';    // 'cortesia' | 'prestamo'
 var SSEL = null, SFOTO_URL = '';
+// ── Registro MÚLTIPLE (lote): hasta 15 insumos y 10 fotos por lote, en cada flujo ──
+var MAX_ITEMS = 15, MAX_FOTOS = 10;
+var CART = { entrada:{items:[],fotos:[]}, merma:{items:[],fotos:[]}, salida:{items:[],fotos:[]} };
 
 var AREAS = [ ['barra','🍸 Barra'], ['cocina','🍳 Cocina'], ['almacen','📦 Almacén'] ];
 function _pintarAreas(){
@@ -322,10 +363,13 @@ function setArea(a){ AREA = a; _pintarAreas(); }
 function _show(id){ ['pinScreen','menuScreen','formScreen','mermaScreen','salidaScreen','errScreen'].forEach(function(x){ document.getElementById(x).style.display = x===id?'block':'none'; }); }
 function _err(txt){ document.getElementById('errTxt').innerHTML = txt; document.getElementById('capSub').textContent = ''; _show('errScreen'); if(_countTimer){clearInterval(_countTimer);_countTimer=null;} }
 function volverMenu(){ document.getElementById('capSub').textContent='¿Qué vas a registrar?'; _show('menuScreen'); }
-function irEntrada(){ document.getElementById('capSub').textContent='Registra insumos que llegaron'; _pintarAreas(); _show('formScreen'); }
+function irEntrada(){
+    document.getElementById('capSub').textContent='Agrega los insumos que llegaron y registra el lote';
+    _pintarAreas(); filtrarIns(''); _renderCart('entrada'); _renderFotos('entrada'); _show('formScreen');
+}
 async function irMerma(){
-    document.getElementById('capSub').textContent='Registra lo que se mermó';
-    _pintarAreas(); setMermaTipo(MERMA_TIPO);
+    document.getElementById('capSub').textContent='Agrega las mermas y registra el lote';
+    _pintarAreas(); setMermaTipo(MERMA_TIPO); _renderCart('merma'); _renderFotos('merma');
     _show('mermaScreen');
 }
 
@@ -355,7 +399,7 @@ async function entrar(){
         INSUMOS.sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
         // 3) Menú de conceptos.
         document.getElementById('quienNom').textContent = COLAB;
-        document.getElementById('entFecha').value = todayStr();
+        document.getElementById('entradaFecha').value = todayStr();
         filtrarIns('');
         volverMenu();
         _t0 = Date.now(); _tick(); _countTimer = setInterval(_tick, 1000);
@@ -447,16 +491,14 @@ function limpiarMer(){ MSEL=null; document.getElementById('merSelBox').innerHTML
 
 /* ── SALIDA de insumo: cortesía o préstamo (misma lógica, es una salida más) ── */
 function irSalida(){
-    document.getElementById('capSub').textContent='Registra una cortesía o préstamo';
-    _pintarAreas(); setSalidaTipo(SALIDA_TIPO); filtrarSal('');
+    document.getElementById('capSub').textContent='Agrega cortesías o préstamos y registra el lote';
+    _pintarAreas(); setSalidaTipo(SALIDA_TIPO); filtrarSal(''); _renderCart('salida'); _renderFotos('salida');
     _show('salidaScreen');
 }
 function setSalidaTipo(t){
     SALIDA_TIPO = t;
     document.getElementById('salTipoCort').className = t==='cortesia' ? 'on' : '';
     document.getElementById('salTipoPres').className = t==='prestamo' ? 'on' : '';
-    document.getElementById('salNotaLbl').textContent = t==='cortesia' ? 'Motivo (opcional)' : '¿A quién / qué sucursal?';
-    document.getElementById('salNota').placeholder = t==='cortesia' ? 'Ej. cortesía VIP, degustación…' : 'Ej. préstamo a sucursal Centro, a Juan…';
 }
 function filtrarSal(q){
     q = (q||'').toLowerCase();
@@ -476,7 +518,119 @@ function selSal(id){
     document.getElementById('salList').innerHTML=''; document.getElementById('salBusca').value='';
 }
 function limpiarSal(){ SSEL=null; document.getElementById('salSelBox').innerHTML=''; filtrarSal(''); }
-async function onFotoSal(input){ SFOTO_URL = await _subirFoto(input, document.getElementById('salMsg'), 'salFotoThumb') || SFOTO_URL; }
+
+/* ══ Motor de REGISTRO MÚLTIPLE (lista/carrito + fotos), común a los 3 flujos ══ */
+function _cartMsg(flujo, txt, cls){
+    var m = document.getElementById(flujo+'Msg'); if(!m) return;
+    m.className = 'cap-msg' + (cls==='err'?' err':cls==='ok'?' ok':'');
+    m.textContent = txt;
+}
+function _entTipoLbl(t){ return {compra:'compra',bonificacion:'bonificación',consignacion:'consignación'}[t]||t; }
+function _merMotivoLbl(m){ return {se_rompio:'se rompió',se_derramo:'se derramó',mal_preparado:'mal preparado',caducado:'caducado',otro:'otro'}[m]||''; }
+
+// Agregar el insumo seleccionado (con su cantidad) a la lista del lote.
+function _addItem(flujo){
+    var st = CART[flujo];
+    if (st.items.length >= MAX_ITEMS){ _cartMsg(flujo,'Máximo '+MAX_ITEMS+' por lote. Registra este y arma otro.','err'); return; }
+    var it;
+    if (flujo==='entrada'){
+        if (!SEL){ _cartMsg(flujo,'Elige un insumo.','err'); return; }
+        var c = parseFloat(document.getElementById('entCant').value)||0;
+        if (c<=0){ _cartMsg(flujo,'Pon una cantidad mayor a 0.','err'); return; }
+        it = { id:genId()+genId(), insumoId:SEL.id, nombre:SEL.nombre+(SEL.variedad?' '+SEL.variedad:''), familia:SEL.familia||SEL.categoria||'', cantidad:c, tipo:document.getElementById('entTipo').value };
+        limpiarIns(); document.getElementById('entCant').value='';
+    } else if (flujo==='merma'){
+        if (!MSEL){ _cartMsg(flujo, MERMA_TIPO==='producto'?'Elige el producto del menú.':'Elige el insumo.','err'); return; }
+        var cm = parseFloat(document.getElementById('merCant').value)||0;
+        if (cm<=0){ _cartMsg(flujo,'Pon una cantidad mayor a 0.','err'); return; }
+        it = { id:genId()+genId(), mermaTipo:MERMA_TIPO, insumoId:MSEL.id, nombre:MSEL.nombre+(MSEL.variedad?' '+MSEL.variedad:''), familia:MSEL.familia||MSEL.categoria||MSEL.grupo||'', cantidad:cm, unidad:document.getElementById('merUnidad').value, motivo:document.getElementById('merMotivo').value };
+        limpiarMer(); document.getElementById('merCant').value='';
+    } else { // salida
+        if (!SSEL){ _cartMsg(flujo,'Elige un insumo.','err'); return; }
+        var cs = parseFloat(document.getElementById('salCant').value)||0;
+        if (cs<=0){ _cartMsg(flujo,'Pon una cantidad mayor a 0.','err'); return; }
+        it = { id:genId()+genId(), salidaTipo:SALIDA_TIPO, insumoId:SSEL.id, nombre:SSEL.nombre+(SSEL.variedad?' '+SSEL.variedad:''), familia:SSEL.familia||SSEL.categoria||'', cantidad:cs, unidad:document.getElementById('salUnidad').value };
+        limpiarSal(); document.getElementById('salCant').value='';
+    }
+    st.items.push(it); _renderCart(flujo); _cartMsg(flujo,'','');
+}
+function _delItem(flujo, i){ CART[flujo].items.splice(i,1); _renderCart(flujo); }
+function _renderCart(flujo){
+    var st = CART[flujo];
+    var nEl = document.getElementById(flujo+'CartN'); if (nEl) nEl.textContent = st.items.length;
+    var btn = document.getElementById(flujo+'SubmitBtn'); if (btn) btn.textContent = '✓ Registrar todo ('+st.items.length+')';
+    var box = document.getElementById(flujo+'CartList'); if (!box) return;
+    if (!st.items.length){ box.innerHTML = '<div class="cart-empty">Aún no agregas nada. Elige un insumo, pon su cantidad y toca «Agregar».</div>'; return; }
+    box.innerHTML = st.items.map(function(it, i){
+        var cls = flujo==='entrada' ? '' : (flujo==='salida' ? 'out' : 'mer');
+        var sign = flujo==='entrada' ? '+' : '−';
+        var extra = flujo==='entrada' ? _entTipoLbl(it.tipo)
+                  : (flujo==='salida' ? (it.salidaTipo==='prestamo'?'🔁 préstamo':'🎁 cortesía')
+                  : (it.mermaTipo==='producto'?'🍹 producto':_merMotivoLbl(it.motivo)));
+        var unidad = flujo==='entrada' ? '' : (' '+etx(it.unidad||''));
+        var cc = it.cantidad % 1 ? it.cantidad.toFixed(1) : it.cantidad;
+        return '<div class="cart-it"><span class="ci-nom"><b>'+etx(it.nombre)+'</b>'+(extra?' <span style="color:var(--text-dim);font-size:11px">· '+etx(extra)+'</span>':'')+'</span>'+
+            '<span class="ci-cant '+cls+'">'+sign+cc+unidad+'</span>'+
+            '<button class="ci-del" onclick="_delItem(\''+flujo+'\','+i+')">✕</button></div>';
+    }).join('');
+}
+// Fotos del lote (varias): sube cada archivo elegido y arma la tira de miniaturas.
+async function _addFotoBatch(flujo, input){
+    var files = Array.prototype.slice.call(input.files||[]); input.value='';
+    if (!files.length) return;
+    var st = CART[flujo], msg = document.getElementById(flujo+'Msg');
+    for (var i=0;i<files.length;i++){
+        if (st.fotos.length >= MAX_FOTOS){ _cartMsg(flujo,'Máximo '+MAX_FOTOS+' fotos por lote.','err'); break; }
+        if (msg){ msg.className='cap-msg'; msg.textContent='Subiendo foto '+(st.fotos.length+1)+'…'; }
+        var url = await _subirFotoBlob(files[i], msg);
+        if (url){ st.fotos.push(url); _renderFotos(flujo); }
+    }
+    if (st.fotos.length){ _cartMsg(flujo,'✓ '+st.fotos.length+' foto(s) listas','ok'); }
+}
+function _delFoto(flujo, i){ CART[flujo].fotos.splice(i,1); _renderFotos(flujo); }
+function _renderFotos(flujo){
+    var st = CART[flujo];
+    var cnt = document.getElementById(flujo+'FotoCnt'); if (cnt) cnt.textContent = st.fotos.length+' / '+MAX_FOTOS+' fotos';
+    var strip = document.getElementById(flujo+'FotoStrip'); if (!strip) return;
+    strip.innerHTML = st.fotos.map(function(u,i){
+        return '<div class="fs-it"><img src="'+etx(u)+'"><button class="fs-del" onclick="_delFoto(\''+flujo+'\','+i+')">✕</button></div>';
+    }).join('');
+}
+// Arma el registro (misma forma que antes) de un item del lote, con las fotos y nota compartidas.
+function _buildEntry(flujo, it){
+    var fotos = CART[flujo].fotos.slice();
+    var nota = (document.getElementById(flujo+'Nota').value||'').trim();
+    var fecha = flujo==='entrada' ? (document.getElementById('entradaFecha').value || todayStr()) : todayStr();
+    var base = { id:it.id, sucursalId:SUC, area:AREA, fecha:fecha, registrado:new Date().toISOString(), foto_url:fotos[0]||'', foto_urls:fotos, notas:nota };
+    if (flujo==='entrada') return Object.assign(base,{ concepto:'entrada', insumoId:it.insumoId, nombre:it.nombre, familia:it.familia, cantidad:it.cantidad, costo:0, tipo:it.tipo });
+    if (flujo==='merma')   return Object.assign(base,{ concepto:'merma', mermaTipo:it.mermaTipo, insumoId: it.mermaTipo==='insumo'?it.insumoId:'', recetaId: it.mermaTipo==='producto'?it.insumoId:'', nombre:it.nombre, familia:it.familia, cantidad:it.cantidad, unidad:it.unidad, motivo:it.motivo });
+    return Object.assign(base,{ concepto:'salida', salidaTipo:it.salidaTipo, insumoId:it.insumoId, nombre:it.nombre, familia:it.familia, cantidad:it.cantidad, unidad:it.unidad });
+}
+// Registra TODO el lote (un RPC por item). Los que fallen quedan en la lista para reintentar.
+async function _registrarBatch(flujo){
+    var st = CART[flujo];
+    if (Date.now()-_t0 >= VIDA_MS){ _err('Tu sesión expiró.<br>Vuelve a escanear el QR.'); return; }
+    if (!st.items.length){ _cartMsg(flujo,'Agrega al menos un insumo a la lista.','err'); return; }
+    var btn = document.getElementById(flujo+'SubmitBtn'); if (btn) btn.disabled=true;
+    var total = st.items.length, ok=0, fallidos=[];
+    for (var i=0;i<st.items.length;i++){
+        var it = st.items[i];
+        _cartMsg(flujo,'Registrando '+(ok+1)+' de '+total+'…','');
+        try {
+            var r = await _supabase.rpc('entrada_registrar', { p_neg:NEG, p_token:TOKEN, p_niphash:_NIPHASH, p_datos:_buildEntry(flujo, it) });
+            if (r.error) fallidos.push(it); else ok++;
+        } catch(e){ fallidos.push(it); }
+    }
+    if (btn) btn.disabled=false;
+    st.items = fallidos; _renderCart(flujo);
+    if (!fallidos.length){
+        st.fotos = []; _renderFotos(flujo);
+        document.getElementById(flujo+'Nota').value='';
+        _cartMsg(flujo,'✓ '+ok+' registro(s) guardados. Puedes armar otro lote.','ok');
+    } else {
+        _cartMsg(flujo, ok+' guardados · '+fallidos.length+' fallaron (quedan en la lista, reintenta).','err');
+    }
+}
 
 /* ── Foto (compartida): compresión agresiva para señal de cocina ── */
 function _comprimir(file){
@@ -491,131 +645,15 @@ function _comprimir(file){
         r.onerror=function(){resolve(null);}; r.readAsDataURL(file);
     });
 }
-async function _subirFoto(input, msgEl, thumbId){
-    var f = input.files && input.files[0]; input.value='';
-    if (!f) return '';
-    msgEl.className='cap-msg'; msgEl.textContent='Subiendo foto…';
-    var blob = await _comprimir(f);
-    if (!blob){ msgEl.className='cap-msg err'; msgEl.textContent='No se pudo procesar la imagen.'; return ''; }
+// Sube UN archivo (comprimido) a Storage y devuelve su URL pública ('' si falla).
+async function _subirFotoBlob(file, msgEl){
+    if (!file) return '';
+    var blob = await _comprimir(file);
+    if (!blob){ if(msgEl){msgEl.className='cap-msg err';msgEl.textContent='No se pudo procesar la imagen.';} return ''; }
     var path = NEG+'/entradas/'+TOKEN+'/'+genId()+'.jpg'; // path validado por la política de v28
     var up = await _supabase.storage.from('evidencias').upload(path, blob, {contentType:'image/jpeg'});
-    if (up.error){ msgEl.className='cap-msg err'; msgEl.textContent='Error al subir foto: '+up.error.message+' (¿corriste v28?)'; return ''; }
-    var url = _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
-    var im=document.getElementById(thumbId); im.src=url; im.style.display='block';
-    msgEl.className='cap-msg ok'; msgEl.textContent='✓ Foto lista';
-    return url;
-}
-async function onFoto(input){ FOTO_URL = await _subirFoto(input, document.getElementById('formMsg'), 'fotoThumb') || FOTO_URL; }
-async function onFotoMer(input){ MFOTO_URL = await _subirFoto(input, document.getElementById('merMsg'), 'merFotoThumb') || MFOTO_URL; }
-
-/* ── Registrar ENTRADA ── */
-async function registrar(){
-    var msg = document.getElementById('formMsg'); msg.className='cap-msg'; msg.textContent='';
-    if (Date.now() - _t0 >= VIDA_MS) { _err('Tu sesión expiró.<br>Vuelve a escanear el QR.'); return; }
-    if (!SEL) { msg.className='cap-msg err'; msg.textContent='Elige un insumo.'; return; }
-    var cant = parseFloat(document.getElementById('entCant').value) || 0;
-    if (cant <= 0) { msg.className='cap-msg err'; msg.textContent='Pon una cantidad mayor a 0.'; return; }
-    var btn = document.getElementById('regBtn'); btn.disabled = true; msg.textContent = 'Registrando…';
-    var entry = {
-        id: genId()+genId(),
-        concepto: 'entrada',
-        sucursalId: SUC,
-        area: AREA,
-        insumoId: SEL.id,
-        nombre: SEL.nombre + (SEL.variedad ? ' '+SEL.variedad : ''),
-        familia: SEL.familia || SEL.categoria || '',
-        cantidad: cant,
-        costo: 0,
-        tipo: document.getElementById('entTipo').value,
-        notas: (document.getElementById('entNota').value||'').trim(),
-        fecha: document.getElementById('entFecha').value || todayStr(),
-        registrado: new Date().toISOString(),
-        foto_url: FOTO_URL || ''
-        // registradoPor lo sella el servidor (RPC) a partir del NIP validado
-    };
-    try {
-        var ins = await _supabase.rpc('entrada_registrar', { p_neg: NEG, p_token: TOKEN, p_niphash: _NIPHASH, p_datos: entry });
-        if (ins.error) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent='No se pudo guardar: '+ins.error.message; return; }
-        // Reset para la siguiente entrada (la sesión sigue viva).
-        limpiarIns();
-        document.getElementById('entCant').value=''; document.getElementById('entNota').value='';
-        FOTO_URL=''; var im=document.getElementById('fotoThumb'); im.style.display='none'; im.src='';
-        btn.disabled=false;
-        msg.className='cap-msg ok'; msg.textContent='✓ Entrada de '+etx(entry.nombre)+' registrada. Puedes capturar otra.';
-    } catch (e) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent='Error: '+((e&&e.message)||e); }
-}
-
-/* ── Registrar MERMA ── */
-async function registrarMerma(){
-    var msg = document.getElementById('merMsg'); msg.className='cap-msg'; msg.textContent='';
-    if (Date.now() - _t0 >= VIDA_MS) { _err('Tu sesión expiró.<br>Vuelve a escanear el QR.'); return; }
-    if (!MSEL) { msg.className='cap-msg err'; msg.textContent = MERMA_TIPO==='producto' ? 'Elige el producto del menú.' : 'Elige el insumo.'; return; }
-    var cant = parseFloat(document.getElementById('merCant').value) || 0;
-    if (cant <= 0) { msg.className='cap-msg err'; msg.textContent='Pon una cantidad mayor a 0.'; return; }
-    var btn = document.getElementById('merBtn'); btn.disabled = true; msg.textContent = 'Registrando…';
-    var entry = {
-        id: genId()+genId(),
-        concepto: 'merma',                     // se importa como MERMA del inventario de su sucursal
-        sucursalId: SUC,
-        mermaTipo: MERMA_TIPO,                 // 'insumo' | 'producto'
-        area: AREA,
-        insumoId: MERMA_TIPO==='insumo'   ? MSEL.id : '',
-        recetaId: MERMA_TIPO==='producto' ? MSEL.id : '',
-        nombre: MSEL.nombre + (MSEL.variedad ? ' '+MSEL.variedad : ''),
-        familia: MSEL.familia || MSEL.categoria || MSEL.grupo || '',
-        cantidad: cant,
-        unidad: document.getElementById('merUnidad').value,
-        motivo: document.getElementById('merMotivo').value,
-        notas: (document.getElementById('merNota').value||'').trim(),
-        fecha: todayStr(),
-        registrado: new Date().toISOString(),
-        foto_url: MFOTO_URL || ''
-    };
-    try {
-        var ins = await _supabase.rpc('entrada_registrar', { p_neg: NEG, p_token: TOKEN, p_niphash: _NIPHASH, p_datos: entry });
-        if (ins.error) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent='No se pudo guardar: '+ins.error.message; return; }
-        limpiarMer();
-        document.getElementById('merCant').value=''; document.getElementById('merNota').value='';
-        MFOTO_URL=''; var im=document.getElementById('merFotoThumb'); im.style.display='none'; im.src='';
-        btn.disabled=false;
-        msg.className='cap-msg ok'; msg.textContent='✓ Merma de '+etx(entry.nombre)+' registrada. Puedes capturar otra.';
-    } catch (e) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent='Error: '+((e&&e.message)||e); }
-}
-
-/* ── Registrar SALIDA (cortesía / préstamo) ── */
-async function registrarSalida(){
-    var msg = document.getElementById('salMsg'); msg.className='cap-msg'; msg.textContent='';
-    if (Date.now() - _t0 >= VIDA_MS) { _err('Tu sesión expiró.<br>Vuelve a escanear el QR.'); return; }
-    if (!SSEL) { msg.className='cap-msg err'; msg.textContent='Elige un insumo.'; return; }
-    var cant = parseFloat(document.getElementById('salCant').value) || 0;
-    if (cant <= 0) { msg.className='cap-msg err'; msg.textContent='Pon una cantidad mayor a 0.'; return; }
-    var btn = document.getElementById('salBtn'); btn.disabled = true; msg.textContent = 'Registrando…';
-    var entry = {
-        id: genId()+genId(),
-        concepto: 'salida',                    // salida de insumo (cortesía / préstamo) → cortesiaCopas del inventario
-        salidaTipo: SALIDA_TIPO,               // 'cortesia' | 'prestamo'
-        sucursalId: SUC,
-        area: AREA,
-        insumoId: SSEL.id,
-        nombre: SSEL.nombre + (SSEL.variedad ? ' '+SSEL.variedad : ''),
-        familia: SSEL.familia || SSEL.categoria || '',
-        cantidad: cant,
-        unidad: document.getElementById('salUnidad').value,
-        notas: (document.getElementById('salNota').value||'').trim(),
-        fecha: todayStr(),
-        registrado: new Date().toISOString(),
-        foto_url: SFOTO_URL || ''
-    };
-    try {
-        var ins = await _supabase.rpc('entrada_registrar', { p_neg: NEG, p_token: TOKEN, p_niphash: _NIPHASH, p_datos: entry });
-        if (ins.error) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent='No se pudo guardar: '+ins.error.message; return; }
-        limpiarSal();
-        document.getElementById('salCant').value=''; document.getElementById('salNota').value='';
-        SFOTO_URL=''; var im=document.getElementById('salFotoThumb'); im.style.display='none'; im.src='';
-        btn.disabled=false;
-        var ttl = SALIDA_TIPO==='prestamo' ? 'Préstamo' : 'Cortesía';
-        msg.className='cap-msg ok'; msg.textContent='✓ '+ttl+' de '+etx(entry.nombre)+' registrada. Puedes capturar otra.';
-    } catch (e) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent='Error: '+((e&&e.message)||e); }
+    if (up.error){ if(msgEl){msgEl.className='cap-msg err';msgEl.textContent='Error al subir foto: '+up.error.message+' (¿corriste v28?)';} return ''; }
+    return _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
 }
 
 document.addEventListener('DOMContentLoaded', function(){

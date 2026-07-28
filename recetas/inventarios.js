@@ -889,7 +889,7 @@ function _importarEntradasQR() {
                 if (invActual.mermasProductoQR.some(function(x){ return x.id === e.id; })) return;
                 invActual.mermasProductoQR.push({ id: e.id, recetaId: e.recetaId || '',
                     nombre: e.nombre || '—', cantidad: cantM, unidad: e.unidad || 'pza',
-                    motivo: e.motivo || '', fecha: e.fecha || '', foto_url: e.foto_url || '' });
+                    motivo: e.motivo || '', fecha: e.fecha || '', foto_url: e.foto_url || '', foto_urls: e.foto_urls || [] });
             } else {
                 // Insumo: convertir a la unidad de merma de su fila y sumarla
                 if (!idsSuc[e.insumoId]) return; // no es de esta sucursal
@@ -967,7 +967,8 @@ function _importarEntradasQR() {
             costo: parseFloat(e.costo) || 0,
             tipo: e.tipo || '', notas: e.notas || '',
             fecha: e.fecha || '', origen: e.origen || 'manual',
-            foto_url: e.foto_url || ''          // evidencia visual del QR
+            foto_url: e.foto_url || '',         // evidencia visual del QR (1ª foto)
+            foto_urls: e.foto_urls || []        // lote: varias fotos de evidencia
         });
         e.importadoEnInv = invActual.id;        // marcar el registro global para no re-importar
         try { _sbUpEL(e); } catch(err) {}
@@ -988,6 +989,7 @@ function _importarEntradasQR() {
                 cantidad: parseFloat(le.cantidad) || 0, costo: parseFloat(le.costo) || 0,
                 tipo: le.tipo || '', notas: le.notas || '', fecha: le.fecha || '',
                 origen: le.origen || 'manual',
+                foto_url: le.foto_url || '', foto_urls: le.foto_urls || [],
                 sucursalId: le.sucursalId || _sucActiva() || 'suc_principal',
                 importadoEnInv: invActual.id, registrado: new Date().toISOString()
             });
@@ -6984,6 +6986,18 @@ function setEntRango() {
     renderListadoEntradas();
 }
 
+// Miniaturas de evidencia (una o varias fotos del registro / lote): muestra hasta 3
+// y "+N" si hay más. Cada una abre el visor. Compat: foto_url (una) o foto_urls (varias).
+function _fotosThumbHTML(e) {
+    var arr = (e && e.foto_urls && e.foto_urls.length) ? e.foto_urls : ((e && e.foto_url) ? [e.foto_url] : []);
+    if (!arr.length) return '';
+    var thumbs = arr.slice(0, 3).map(function(u){
+        return '<img src="' + etx(u) + '" onclick="event.stopPropagation();etaaxVerFoto(this.src)" title="Ver evidencia" style="width:28px;height:28px;object-fit:cover;border-radius:5px;border:1px solid var(--border);cursor:zoom-in;flex-shrink:0">';
+    }).join('');
+    var more = arr.length > 3 ? '<span style="font-size:10px;color:var(--text-dim);align-self:center">+' + (arr.length - 3) + '</span>' : '';
+    return '<span style="display:inline-flex;gap:3px;align-items:center">' + thumbs + more + '</span>';
+}
+
 function renderListadoEntradas() {
     const cont = document.getElementById('entLogList');
     if (!cont) return;
@@ -7025,9 +7039,7 @@ function renderListadoEntradas() {
         const cant    = (e.cantidad||0) % 1 ? (e.cantidad||0).toFixed(1) : (e.cantidad||0);
         // MERMA del QR: se muestra distinta (badge rojo, cantidad negativa, área);
         // NO entra al stock del inventario — es log/auditoría del turno.
-const fotoTh = e.foto_url
-            ? `<img src="${etx(e.foto_url)}" onclick="event.stopPropagation();etaaxVerFoto(this.src)" title="Ver evidencia" style="width:28px;height:28px;object-fit:cover;border-radius:5px;border:1px solid var(--border);cursor:zoom-in;flex-shrink:0">`
-            : '';
+const fotoTh = _fotosThumbHTML(e);
         if (e.concepto === 'merma') {
             const areaTx = e.area ? ' · ' + etx(e.area) : '';
             const motivo = { se_rompio:'se rompió', se_derramo:'se derramó', mal_preparado:'mal preparado', caducado:'caducado', otro:'otro' }[e.motivo] || '';
