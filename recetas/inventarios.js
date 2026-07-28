@@ -5226,6 +5226,18 @@ function renderStep5() {
 var _busqStep5 = '';
 var _step5Modo = 'lista';
 var _subcatStep5 = '';
+// Grupos del resultado abiertos (colapsados por defecto). Keyed por nombre de grupo
+// para sobrevivir a re-renders de búsqueda/filtro.
+var _s5Abiertos = {};
+function _s5Toggle(gid, el) {
+    var body = document.getElementById('s5body-' + gid), car = document.getElementById('s5car-' + gid);
+    if (!body) return;
+    var abrir = body.style.display === 'none';
+    body.style.display = abrir ? '' : 'none';
+    if (car) car.textContent = abrir ? '▾' : '▸';
+    var grp = el && el.getAttribute('data-grp');
+    if (grp) { if (abrir) _s5Abiertos[grp] = 1; else delete _s5Abiertos[grp]; }
+}
 function setSubcatStep5(v) {
     _subcatStep5 = v;
     const cont = document.getElementById('step5Tablas');
@@ -5254,60 +5266,57 @@ function _step5TablasHTML() {
     const vcomps = _compuestosActivos().map(_virtualFilaCompuesto)
         .filter(vf => !q || (vf.nombre||'').toLowerCase().includes(q));
     if (_step5Modo === 'galeria') return _step5GaleriaHTML(q, mapaC5, vcomps);
-    // Split filas into copa-type (bebidas con botella y copa) and pza-type groups
-    const gruposCopa = {};
-    const gruposPza  = {};
+
+    const _nc  = v => (v % 1 ? (Math.round(v*10)/10).toFixed(1) : v);
+    const GPROD = '🏭 Producción propia';
+
+    // ── Agrupar TODO por categoría. Bebidas con copa → tabla "copa"; secos/pza →
+    //    tabla "pza"; compuestos → la categoría de su primer miembro. Los prebatch
+    //    repartidos NO entran aquí: van al grupo "Producción propia" (opción A).
+    const grupos = {};
+    const _ens = g => (grupos[g] || (grupos[g] = { copa:[], pza:[], comp:[] }));
     filasCaptura.forEach(f => {
-        if (mapaC5[f.insumoId]) return; // miembros de un compuesto: salen en la sección de compuestos
-        if (q && !(f.nombre||'').toLowerCase().includes(q)) return; // buscador del Paso 5
-        if (_subcatStep5 && (f.subcategoria||f.categoria) !== _subcatStep5) return; // filtro de categoría
-        const g = esBateo(f.insumoId) ? GRUPO_BATEO : _grupoCategoria(f); // bateo → su propio grupo; resto por grupo grande
-        if (f.tipo === 'pza') {
-            if (!gruposPza[g])  gruposPza[g]  = [];
-            gruposPza[g].push(f);
-        } else {
-            if (!gruposCopa[g]) gruposCopa[g] = [];
-            gruposCopa[g].push(f);
-        }
+        if (mapaC5[f.insumoId]) return;                 // miembro de compuesto → sale en su compuesto
+        if (_esPrebatchRepartido(f.insumoId)) return;   // prebatch → Producción propia
+        if (q && !(f.nombre||'').toLowerCase().includes(q)) return;
+        if (_subcatStep5 && (f.subcategoria||f.categoria) !== _subcatStep5) return;
+        const b = _ens(_grupoCategoria(f));
+        (f.tipo === 'pza' ? b.pza : b.copa).push(f);
+    });
+    vcomps.forEach(vf => {
+        const comp = getCompuestos().find(c => c.id === vf.compId) || {};
+        const m0   = (comp.miembros||[]).map(id => filasCaptura.find(f=>f.insumoId===id)).find(Boolean);
+        if (_subcatStep5 && m0 && (m0.subcategoria||m0.categoria) !== _subcatStep5) return;
+        _ens(m0 ? _grupoCategoria(m0) : '🧩 Compuestos').comp.push(vf);
     });
 
-    // ── Copa block: columnas separadas para venta bot, venta copa, cortesía/merma, cancelac. ──
-    const _ordGrupo = (a,b) => { const A=a[0]===GRUPO_BATEO, B=b[0]===GRUPO_BATEO; return A===B ? String(a[0]).localeCompare(String(b[0])) : (A?-1:1); }; // bateo primero
-    const tablasCopa = Object.entries(gruposCopa).sort(_ordGrupo).map(([grp, items]) => {
-        let grpDif = 0;
-        const rows = items.map(fila => {
-            // Reparto del prebatch: cada ingrediente suma su parte (en SUS copas); la fila
-            // del prebatch se muestra informativa (pesada) pero SIN diferencia propia.
-            const esPB      = _esPrebatchRepartido(fila.insumoId);
-            const adj       = esPB ? _repZero : _repartoDe(fila.insumoId);
-            const ea        = (parseFloat(fila.existenciaAnterior) || 0) + adj.ea;
-            const copasBot  = fila.contNeto>0 && fila.copaML>0 ? fila.contNeto/fila.copaML : 0;
-            const entBot    = getEntradasBottles(fila.insumoId) + (copasBot > 0 ? adj.ent / copasBot : 0);
-            const ventaBot  = parseFloat(fila.ventasBotella) || 0;
-            const ventaCoct    = calcVentasCopasRecetas(fila.insumoId, fila.copaML) + adj.vco; // copas vía recetas + su parte de cocteles del prebatch
-            const ventaCopaDir = parseFloat(fila.ventasCopasDirectas) || 0;           // copas vendidas directas
-            const ventaCopa    = ventaCoct + ventaCopaDir;                            // total (para cálculos)
-            const cortesia  = parseFloat(fila.cortesiaCopas) || 0;
-            const merma     = parseFloat(fila.mermaCopas)    || 0;
-            const cmTotal   = cortesia + merma + adj.cm;
-            const cmConc    = [fila.cortesiaConcepto, fila.mermaConcepto].filter(Boolean).join(' / ');
-            const cancelCop = getCancelacionesCopas(fila.insumoId) + adj.can;
-            const teorico   = calcExistenciaTeorica(fila) + adj.teo;
-            const fisico    = calcExistencia(fila) + adj.fis;
-            const dif       = fisico - teorico;
-            const cc        = costoCopa(fila);
-            const difCosto  = esPB ? 0 : dif * (fila.precioCarta || 0); // prebatch: su dif vive repartida en sus insumos
-            const color     = esPB ? 'var(--text-dim)' : (Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)'));
-            const pctVal    = esPB ? null : _pctVarianza(dif, ventaCopa + ventaBot * copasBot); // dif vs venta neta (copas)
-            const pctStr    = pctVal !== null ? (pctVal>=0?'+':'')+pctVal.toFixed(1)+'%' : '—';
-            // Show existencia anterior and actual in bottles
-            const eaBot     = copasBot > 0 ? (ea/copasBot).toFixed(1) : ea.toFixed(1);
-            const entBotStr = entBot > 0 ? `+${entBot % 1 ? entBot.toFixed(1) : entBot} ${_unidadCompra(fila)}` : '—';
-            const fisicoBot = copasBot > 0 ? (fisico/copasBot).toFixed(2) : fisico.toFixed(1);
-            // Diferencia in copas, with sign and unit label
-            const difStr    = esPB ? '↪ repartida' : `${dif>=0?'+':''}${dif.toFixed(1)} cop`;
-            grpDif += difCosto;
-            return `<tr>
+    // ── Constructor de fila COPA (bebida con botella y copa) ──
+    function _rowCopa(fila) {
+        const adj       = _repartoDe(fila.insumoId);
+        const ea        = (parseFloat(fila.existenciaAnterior) || 0) + adj.ea;
+        const copasBot  = fila.contNeto>0 && fila.copaML>0 ? fila.contNeto/fila.copaML : 0;
+        const entBot    = getEntradasBottles(fila.insumoId) + (copasBot > 0 ? adj.ent / copasBot : 0);
+        const ventaBot  = parseFloat(fila.ventasBotella) || 0;
+        const ventaCoct    = calcVentasCopasRecetas(fila.insumoId, fila.copaML) + adj.vco;
+        const ventaCopaDir = parseFloat(fila.ventasCopasDirectas) || 0;
+        const ventaCopa    = ventaCoct + ventaCopaDir;
+        const cortesia  = parseFloat(fila.cortesiaCopas) || 0;
+        const merma     = parseFloat(fila.mermaCopas)    || 0;
+        const cmTotal   = cortesia + merma + adj.cm;
+        const cmConc    = [fila.cortesiaConcepto, fila.mermaConcepto].filter(Boolean).join(' / ');
+        const cancelCop = getCancelacionesCopas(fila.insumoId) + adj.can;
+        const teorico   = calcExistenciaTeorica(fila) + adj.teo;
+        const fisico    = calcExistencia(fila) + adj.fis;
+        const dif       = fisico - teorico;
+        const difCosto  = dif * (fila.precioCarta || 0);
+        const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
+        const pctVal    = _pctVarianza(dif, ventaCopa + ventaBot * copasBot);
+        const pctStr    = pctVal !== null ? (pctVal>=0?'+':'')+pctVal.toFixed(1)+'%' : '—';
+        const eaBot     = copasBot > 0 ? (ea/copasBot).toFixed(1) : ea.toFixed(1);
+        const entBotStr = entBot > 0 ? `+${entBot % 1 ? entBot.toFixed(1) : entBot} ${_unidadCompra(fila)}` : '—';
+        const fisicoBot = copasBot > 0 ? (fisico/copasBot).toFixed(2) : fisico.toFixed(1);
+        const difStr    = `${dif>=0?'+':''}${dif.toFixed(1)} cop`;
+        const html = `<tr>
                 <td style="min-width:140px">
                     <div style="font-size:14px;font-weight:600">${etx(insumoTitulo(fila))}</div>
                     <div style="font-size:11.5px;color:var(--text-dim)">${fila.categoria||''}</div>
@@ -5330,63 +5339,27 @@ function _step5TablasHTML() {
                 <td style="text-align:center;font-size:11px;color:${color}">${pctStr}</td>
                 <td style="text-align:right;font-weight:600;color:${color};white-space:nowrap">${difCosto>=0?'+':''}$${difCosto.toFixed(2)}</td>
             </tr>`;
-        }).join('');
-        return `<div class="card" style="max-width:none;margin:0 16px 12px">
-            <div class="card-header">
-                <h2>${grp}</h2>
-                <span class="pill ${grpDif>=0?'pill-green':'pill-red'}" style="font-size:11px">
-                    ${grpDif>=0?'+':''}$${grpDif.toFixed(2)}</span>
-            </div>
-            <div class="card-body" style="padding:0"><div class="tabla-wrap" style="overflow-x:auto"><table style="min-width:900px;font-size:13.5px">
-                <thead>
-                    <tr>
-                        <th rowspan="2" style="text-align:left;vertical-align:bottom">Producto</th>
-                        <th rowspan="2" style="text-align:center;width:70px;vertical-align:bottom">Exist.<br>anterior</th>
-                        <th rowspan="2" style="text-align:center;width:65px;vertical-align:bottom">Entradas</th>
-                        <th colspan="3" style="text-align:center;border-bottom:1px solid var(--border);padding-bottom:4px">Ventas</th>
-                        <th rowspan="2" style="text-align:center;width:95px;vertical-align:bottom">Cortesía /<br>Merma</th>
-                        <th rowspan="2" style="text-align:center;width:70px;vertical-align:bottom">Cancelac.<br>POS</th>
-                        <th rowspan="2" style="text-align:center;width:80px;vertical-align:bottom">Exist.<br>actual</th>
-                        <th rowspan="2" style="text-align:center;width:80px;vertical-align:bottom">Diferencia</th>
-                        <th rowspan="2" style="text-align:center;width:50px;vertical-align:bottom">%</th>
-                        <th rowspan="2" style="text-align:right;width:80px;vertical-align:bottom">Dif. $<br><span style="font-size:8px;font-weight:400">a carta</span></th>
-                    </tr>
-                    <tr>
-                        <th style="text-align:center;width:65px;font-size:10px;color:var(--text-muted)">Botella</th>
-                        <th style="text-align:center;width:65px;font-size:10px;color:var(--text-muted)">Copa</th>
-                        <th style="text-align:center;width:70px;font-size:10px;color:var(--viol)">Coctelería</th>
-                    </tr>
-                </thead>
-                <tbody>${rows}</tbody>
-            </table></div></div>
-        </div>`;
-    }).join('');
+        return { html, dif, difCosto, vend: ventaCopa + ventaBot * copasBot };
+    }
 
-    // ── Pza block: layout original (una sola columna ventas) ──
-    const tablasPza = Object.entries(gruposPza).sort(_ordGrupo).map(([grp, items]) => {
-        let grpDif = 0;
-        const rows = items.map(fila => {
-            const ea        = parseFloat(fila.existenciaAnterior) || 0;
-            const entTotal  = getEntradasCopas(fila);
-            // Venta en piezas DESGLOSADA: directa (botella + pza) y por menú/recetas
-            // (coctelería) en su propia columna — antes iban sumadas y parecía que
-            // los refrescos/cervezas no calculaban su uso en coctelería.
-            const adjP      = _repartoDe(fila.insumoId); // parte del prebatch (en pzas de esta fila)
-            const ventaCoct = calcVentasPzaRecetas(fila.insumoId) + adjP.vco;
-            const ventasDir = (fila.ventasBotella || 0) + (parseFloat(fila.ventasCopasDirectas)||0);
-            const ventas    = ventasDir + ventaCoct;
-            const cancelPza = getCancelacionesCopas(fila.insumoId) + adjP.can;
-            const cortMerma = (parseFloat(fila.cortesiaCopas) || 0) + (parseFloat(fila.mermaCopas) || 0) + adjP.cm;
-            const teorico   = calcExistenciaTeorica(fila) + adjP.teo;
-            const fisico    = calcExistencia(fila) + adjP.fis;
-            const dif       = fisico - teorico;
-            const cc        = costoCopa(fila);
-            const difCosto  = dif * (fila.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)
-            const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
-            const pctVal    = _pctVarianza(dif, ventas); // dif vs venta neta (pza: directas + coctelería)
-            const pctStr    = pctVal !== null ? (pctVal>=0?'+':'')+pctVal.toFixed(1)+'%' : '—';
-            grpDif += difCosto;
-            return `<tr>
+    // ── Constructor de fila PZA (secos: refrescos en lata, cervezas, etc.) ──
+    function _rowPza(fila) {
+        const ea        = parseFloat(fila.existenciaAnterior) || 0;
+        const entTotal  = getEntradasCopas(fila);
+        const adjP      = _repartoDe(fila.insumoId);
+        const ventaCoct = calcVentasPzaRecetas(fila.insumoId) + adjP.vco;
+        const ventasDir = (fila.ventasBotella || 0) + (parseFloat(fila.ventasCopasDirectas)||0);
+        const ventas    = ventasDir + ventaCoct;
+        const cancelPza = getCancelacionesCopas(fila.insumoId) + adjP.can;
+        const cortMerma = (parseFloat(fila.cortesiaCopas) || 0) + (parseFloat(fila.mermaCopas) || 0) + adjP.cm;
+        const teorico   = calcExistenciaTeorica(fila) + adjP.teo;
+        const fisico    = calcExistencia(fila) + adjP.fis;
+        const dif       = fisico - teorico;
+        const difCosto  = dif * (fila.precioCarta || 0);
+        const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
+        const pctVal    = _pctVarianza(dif, ventas);
+        const pctStr    = pctVal !== null ? (pctVal>=0?'+':'')+pctVal.toFixed(1)+'%' : '—';
+        const html = `<tr>
                 <td>
                     <div style="font-size:14px;font-weight:600">${etx(insumoTitulo(fila))}</div>
                     <div style="font-size:11.5px;color:var(--text-dim)">${fila.categoria||''}</div>
@@ -5404,41 +5377,13 @@ function _step5TablasHTML() {
                 <td style="text-align:center;font-size:11px;color:${color}">${pctStr}</td>
                 <td style="text-align:right;font-weight:600;color:${color}">${difCosto>=0?'+':''}$${difCosto.toFixed(2)}</td>
             </tr>`;
-        }).join('');
-        return `<div class="card" style="max-width:none;margin:0 16px 12px">
-            <div class="card-header">
-                <h2>${grp}</h2>
-                <span class="pill ${grpDif>=0?'pill-green':'pill-red'}" style="font-size:11px">
-                    ${grpDif>=0?'+':''}$${grpDif.toFixed(2)}</span>
-            </div>
-            <div class="card-body" style="padding:0"><div class="tabla-wrap"><table style="font-size:13.5px">
-                <thead><tr>
-                    <th>Producto</th>
-                    <th style="text-align:center;width:70px">Exist. ant.</th>
-                    <th style="text-align:center;width:65px">Entradas</th>
-                    <th style="text-align:center;width:70px">Coctelería</th>
-                    <th style="text-align:center;width:65px">Ventas</th>
-                    <th style="text-align:center;width:70px">Cancelac.</th>
-                    <th style="text-align:center;width:90px">Cortesía /<br>Merma</th>
-                    <th style="text-align:center;width:70px">Teórico</th>
-                    <th style="text-align:center;width:70px">Físico</th>
-                    <th style="text-align:center;width:75px">Diferencia</th>
-                    <th style="text-align:center;width:50px">%</th>
-                    <th style="text-align:right;width:80px">Dif. $</th>
-                </tr></thead>
-                <tbody>${rows}</tbody>
-            </table></div></div>
-        </div>`;
-    }).join('');
+        return { html, dif, difCosto, vend: ventas };
+    }
 
-    // ── Sección de PRODUCTOS COMPUESTOS: una línea por compuesto (copas) ──
-    const _nc = v => (v % 1 ? (Math.round(v*10)/10).toFixed(1) : v);
-    let _compGrpDif = 0;
-    const _compRows = vcomps.map(vf => {
+    // ── Constructor de fila COMPUESTO (misma columna que copa; con desglose) ──
+    function _rowComp(vf) {
         const comp = getCompuestos().find(c => c.id === vf.compId) || {};
         const members = (comp.miembros||[]).map(mid => filasCaptura.find(f=>f.insumoId===mid)).filter(Boolean);
-        // TODO en COPAS (estándar). El compuesto suma sus presentaciones; cada
-        // presentación captura sus PROPIAS ventas (modelo nuevo).
         let ea=0, ent=0, cancel=0, ventaBot=0, ventaCopa=0, ventaCoct=0, cm=0;
         members.forEach(m => {
             ea       += parseFloat(m.existenciaAnterior)||0;
@@ -5450,18 +5395,13 @@ function _step5TablasHTML() {
             ventaCoct+= calcVentasCopasRecetas(m.insumoId, m.copaML);
             cm       += (parseFloat(m.cortesiaCopas)||0) + (parseFloat(m.mermaCopas)||0);
         });
-        const fisico    = calcExistencia(vf);   // Σ existencia de miembros (copas)
-        const teorico   = calcExistenciaTeorica(vf); // Σ teórico de miembros (copas)
+        const fisico    = calcExistencia(vf);
+        const teorico   = calcExistenciaTeorica(vf);
         const dif       = fisico - teorico;
-        const difCosto  = dif * (vf.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)
-        const pctValC   = _pctVarianza(dif, ventaBot + ventaCopa + ventaCoct); // dif vs venta neta (Σ copas vendidas de las presentaciones)
+        const difCosto  = dif * (vf.precioCarta || 0);
+        const pctValC   = _pctVarianza(dif, ventaBot + ventaCopa + ventaCoct);
         const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
         const pctStr    = pctValC !== null ? ((pctValC>=0?'+':'')+pctValC.toFixed(1)+'%') : '—';
-        _compGrpDif += difCosto;
-        // Desglose por presentación (expandible) — cada miembro con TODAS sus columnas
-        // (mismo detalle que un insumo normal): el compuesto solo UNE la info; aquí se ve
-        // por presentación: ant, entradas, ventas (botella/copa/coctelería), merma/cortesía,
-        // cancelaciones, actual, diferencia, %, dif $ a carta.
         const desgloseRows = members.map(m => {
             const mea = parseFloat(m.existenciaAnterior)||0;
             const ment = getEntradasCopas(m);
@@ -5495,11 +5435,12 @@ function _step5TablasHTML() {
             <table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr style="color:var(--text-dim);font-size:10px;text-transform:uppercase;letter-spacing:.5px">
                 <th style="text-align:left;padding:2px 8px">Presentación</th><th style="text-align:center">Anterior</th><th style="text-align:center">Entradas</th><th style="text-align:center">Botella</th><th style="text-align:center">Copa</th><th style="text-align:center">Coctelería</th><th style="text-align:center">Cortesía/<br>Merma</th><th style="text-align:center">Cancelac.</th><th style="text-align:center">Actual</th><th style="text-align:center">Diferencia</th><th style="text-align:center">%</th><th style="text-align:right">Dif. $</th>
             </tr></thead><tbody>${desgloseRows}</tbody></table></div></td></tr>`;
-        return `<tr>
+        const html = `<tr>
             <td style="min-width:150px">
                 <div style="font-size:14px;font-weight:600">🧩 ${etx(comp.nombre||vf.nombre)}</div>
                 <div style="font-size:10px;color:var(--text-dim)">${members.length} presentaciones</div>
-                <button onclick="var d=document.getElementById('compDesg-${comp.id}');d.style.display=d.style.display==='none'?'':'none';this.textContent=d.style.display==='none'?'▸ Ver desglose':'▾ Ocultar desglose'" style="margin-top:3px;font-size:9px;padding:1px 7px;border-radius:4px;cursor:pointer;border:1px solid var(--viol);background:transparent;color:var(--viol)">▸ Ver desglose</button>
+                <span style="display:inline-block;margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;border:1px solid var(--viol);color:var(--viol)">🧩 compuesto</span>
+                <button onclick="var d=document.getElementById('compDesg-${comp.id}');d.style.display=d.style.display==='none'?'':'none';this.textContent=d.style.display==='none'?'▸ Ver desglose':'▾ Ocultar desglose'" style="margin-top:3px;margin-left:4px;font-size:9px;padding:1px 7px;border-radius:4px;cursor:pointer;border:1px solid var(--viol);background:transparent;color:var(--viol)">▸ Ver desglose</button>
                 ${_btnNotaInsumo(vf.compId||vf.insumoId)}
             </td>
             <td style="text-align:center;white-space:nowrap">${_nc(ea)} cop</td>
@@ -5514,59 +5455,105 @@ function _step5TablasHTML() {
             <td style="text-align:center;font-size:11px;color:${color}">${pctStr}</td>
             <td style="text-align:right;font-weight:600;color:${color};white-space:nowrap">${difCosto>=0?'+':''}$${difCosto.toFixed(2)}</td>
         </tr>${desglose}`;
+        return { html, dif, difCosto, vend: ventaBot + ventaCopa + ventaCoct };
+    }
+
+    const COPA_THEAD = `<thead>
+                    <tr>
+                        <th rowspan="2" style="text-align:left;vertical-align:bottom">Producto</th>
+                        <th rowspan="2" style="text-align:center;width:70px;vertical-align:bottom">Exist.<br>anterior</th>
+                        <th rowspan="2" style="text-align:center;width:65px;vertical-align:bottom">Entradas</th>
+                        <th colspan="3" style="text-align:center;border-bottom:1px solid var(--border);padding-bottom:4px">Ventas</th>
+                        <th rowspan="2" style="text-align:center;width:95px;vertical-align:bottom">Cortesía /<br>Merma</th>
+                        <th rowspan="2" style="text-align:center;width:70px;vertical-align:bottom">Cancelac.<br>POS</th>
+                        <th rowspan="2" style="text-align:center;width:80px;vertical-align:bottom">Exist.<br>actual</th>
+                        <th rowspan="2" style="text-align:center;width:80px;vertical-align:bottom">Diferencia</th>
+                        <th rowspan="2" style="text-align:center;width:50px;vertical-align:bottom">%</th>
+                        <th rowspan="2" style="text-align:right;width:80px;vertical-align:bottom">Dif. $<br><span style="font-size:8px;font-weight:400">a carta</span></th>
+                    </tr>
+                    <tr>
+                        <th style="text-align:center;width:65px;font-size:10px;color:var(--text-muted)">Botella</th>
+                        <th style="text-align:center;width:65px;font-size:10px;color:var(--text-muted)">Copa</th>
+                        <th style="text-align:center;width:70px;font-size:10px;color:var(--viol)">Coctelería</th>
+                    </tr>
+                </thead>`;
+    const PZA_THEAD = `<thead><tr>
+                    <th>Producto</th>
+                    <th style="text-align:center;width:70px">Exist. ant.</th>
+                    <th style="text-align:center;width:65px">Entradas</th>
+                    <th style="text-align:center;width:70px">Coctelería</th>
+                    <th style="text-align:center;width:65px">Ventas</th>
+                    <th style="text-align:center;width:70px">Cancelac.</th>
+                    <th style="text-align:center;width:90px">Cortesía /<br>Merma</th>
+                    <th style="text-align:center;width:70px">Teórico</th>
+                    <th style="text-align:center;width:70px">Físico</th>
+                    <th style="text-align:center;width:75px">Diferencia</th>
+                    <th style="text-align:center;width:50px">%</th>
+                    <th style="text-align:right;width:80px">Dif. $</th>
+                </tr></thead>`;
+
+    // ── Una tarjeta COLAPSABLE por grupo (colapsadas por defecto) con indicadores ──
+    const _ordCat = (a,b) => String(a[0]).localeCompare(String(b[0]), 'es');
+    let idx = 0;
+    const cards = Object.entries(grupos).sort(_ordCat).map(([grp, b]) => {
+        idx++;
+        const gid = 's5g' + idx;
+        let dif = 0, difCosto = 0, vend = 0, copaBody = '', pzaBody = '';
+        b.copa.forEach(f  => { const r=_rowCopa(f);  copaBody+=r.html; dif+=r.dif; difCosto+=r.difCosto; vend+=r.vend; });
+        b.comp.forEach(vf => { const r=_rowComp(vf); copaBody+=r.html; dif+=r.dif; difCosto+=r.difCosto; vend+=r.vend; });
+        b.pza.forEach(f   => { const r=_rowPza(f);   pzaBody+=r.html; dif+=r.dif; difCosto+=r.difCosto; vend+=r.vend; });
+        const unidad    = (!copaBody && pzaBody) ? 'pza' : 'cop';
+        const copaTable = copaBody ? `<div class="tabla-wrap" style="overflow-x:auto"><table style="min-width:900px;font-size:13.5px">${COPA_THEAD}<tbody>${copaBody}</tbody></table></div>` : '';
+        const pzaTable  = pzaBody  ? `<div class="tabla-wrap" style="overflow-x:auto"><table style="font-size:13.5px">${PZA_THEAD}<tbody>${pzaBody}</tbody></table></div>` : '';
+        const abierto   = !!_s5Abiertos[grp];
+        const faltTxt   = dif < -0.05 ? `faltan ${_nc(Math.abs(dif))} ${unidad}` : (dif > 0.05 ? `sobran ${_nc(dif)} ${unidad}` : 'cuadra');
+        const faltCol   = dif < -0.05 ? 'var(--red)' : (dif > 0.05 ? 'var(--green)' : 'var(--text-dim)');
+        return `<div class="card" style="max-width:none;margin:0 16px 12px">
+            <div class="card-header" data-grp="${etx(grp)}" style="cursor:pointer;user-select:none" onclick="_s5Toggle('${gid}', this)">
+                <h2 style="display:flex;align-items:center;gap:8px"><span id="s5car-${gid}" style="font-size:12px;color:var(--text-muted)">${abierto?'▾':'▸'}</span> ${grp}</h2>
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--text-dim)">
+                    <span>🥃 <b style="color:var(--text)">${_nc(vend)}</b> ${unidad} vendidas</span>
+                    <span style="color:${faltCol}">${faltTxt}</span>
+                    <span class="pill ${difCosto>=0?'pill-green':'pill-red'}" style="font-size:11px">${difCosto>=0?'+':''}$${difCosto.toFixed(2)}</span>
+                </div>
+            </div>
+            <div id="s5body-${gid}" class="card-body" style="padding:0;display:${abierto?'':'none'}">${copaTable}${pzaTable}</div>
+        </div>`;
     }).join('');
-    const tablaComp = vcomps.length ? `<div class="card" style="max-width:none;margin:0 16px 12px">
-        <div class="card-header">
-            <h2>🧩 Productos compuestos</h2>
-            <span class="pill ${_compGrpDif>=0?'pill-green':'pill-red'}" style="font-size:11px">${_compGrpDif>=0?'+':''}$${_compGrpDif.toFixed(2)}</span>
-        </div>
-        <div class="card-body" style="padding:0"><div class="tabla-wrap" style="overflow-x:auto"><table style="min-width:900px;font-size:13.5px">
-            <thead>
-                <tr>
-                    <th rowspan="2" style="text-align:left;vertical-align:bottom">Producto</th>
-                    <th rowspan="2" style="text-align:center;width:70px;vertical-align:bottom">Exist.<br>anterior</th>
-                    <th rowspan="2" style="text-align:center;width:65px;vertical-align:bottom">Entradas</th>
-                    <th colspan="3" style="text-align:center;border-bottom:1px solid var(--border);padding-bottom:4px">Ventas</th>
-                    <th rowspan="2" style="text-align:center;width:95px;vertical-align:bottom">Cortesía /<br>Merma</th>
-                    <th rowspan="2" style="text-align:center;width:70px;vertical-align:bottom">Cancelac.<br>POS</th>
-                    <th rowspan="2" style="text-align:center;width:80px;vertical-align:bottom">Exist.<br>actual</th>
-                    <th rowspan="2" style="text-align:center;width:80px;vertical-align:bottom">Diferencia</th>
-                    <th rowspan="2" style="text-align:center;width:50px;vertical-align:bottom">%</th>
-                    <th rowspan="2" style="text-align:right;width:80px;vertical-align:bottom">Dif. $<br><span style="font-size:8px;font-weight:400">a carta</span></th>
-                </tr>
-                <tr>
-                    <th style="text-align:center;width:65px;font-size:10px;color:var(--text-muted)">Botella</th>
-                    <th style="text-align:center;width:65px;font-size:10px;color:var(--text-muted)">Copa</th>
-                    <th style="text-align:center;width:70px;font-size:10px;color:var(--viol)">Coctelería</th>
-                </tr>
-            </thead>
-            <tbody>${_compRows}</tbody>
-        </table></div></div>
-    </div>` : '';
 
-    const sinDatos = !tablasCopa && !tablasPza && !tablaComp
-        ? '<div style="text-align:center;padding:40px;color:var(--text-dim)">Sin productos capturados</div>'
-        : '';
-
-    // 🧪 Prebatches repartidos: qué contiene cada botella/garrafa PESADA (proporcional a
-    // su sub-receta) y a qué insumos se repartió su existencia/diferencia.
+    // ── Producción propia: prebatch repartido a sus insumos (opción A) ──
     const _repL = (_repCache && _repCache.lista) || [];
-    const tablaReparto = _repL.length ? `<div class="card" style="max-width:none;margin:0 16px 12px">
-        <div class="card-header"><div style="font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:1.5px;color:var(--viol)">🧪 PREBATCHES — contenido repartido a sus insumos</div></div>
-        <div style="padding:10px 16px 14px;font-size:12.5px">
-        ${_repL.map(function(r){
+    let prodCard = '';
+    const _prodMatch = !q || GPROD.toLowerCase().includes(q) || _repL.some(r => (r.nombre||'').toLowerCase().includes(q));
+    if (_repL.length && !_subcatStep5 && _prodMatch) {
+        idx++;
+        const gid = 's5g' + idx;
+        const abierto = !!_s5Abiertos[GPROD];
+        const body = _repL.map(function(r){
             var difML = r.fisML - r.teoML;
             var difTag = Math.abs(difML) < 1 ? '' : ` · dif ${difML>=0?'+':''}${Math.round(difML)} ml repartida`;
             return `<div style="padding:7px 0;border-bottom:1px solid var(--border)">
                 <b>${etx(r.nombre)}</b> — ${Math.round(r.fisML)} ml pesados${difTag}
                 <div style="color:var(--text-dim);margin-top:2px">Contiene: ${r.desglose.map(function(d){ return etx(d.nombre) + ' ' + Math.round(d.ml) + ' ml'; }).join(' · ')}</div>
             </div>`;
-        }).join('')}
-        </div></div>` : '';
+        }).join('');
+        prodCard = `<div class="card" style="max-width:none;margin:0 16px 12px">
+            <div class="card-header" data-grp="${etx(GPROD)}" style="cursor:pointer;user-select:none" onclick="_s5Toggle('${gid}', this)">
+                <h2 style="display:flex;align-items:center;gap:8px"><span id="s5car-${gid}" style="font-size:12px;color:var(--text-muted)">${abierto?'▾':'▸'}</span> ${GPROD}</h2>
+                <div style="font-size:11.5px;color:var(--text-dim)">${_repL.length} sub-recetas · su existencia y diferencia se reparten a sus insumos</div>
+            </div>
+            <div id="s5body-${gid}" class="card-body" style="padding:10px 16px 14px;font-size:12.5px;display:${abierto?'':'none'}">
+                <div style="font-size:10px;color:var(--text-dim);margin-bottom:6px">🧪 Cada botella/garrafa pesada se reparte, proporcional a su sub-receta, a los insumos que la componen. La diferencia vive en esos insumos (en sus grupos de categoría).</div>
+                ${body}
+            </div>
+        </div>`;
+    }
 
-    return `<div style="padding:16px 0 24px">${sinDatos}${tablaReparto}${tablaComp}${tablasCopa}${tablasPza}</div>`;
+    const sinDatos = !cards && !prodCard
+        ? '<div style="text-align:center;padding:40px;color:var(--text-dim)">Sin productos capturados</div>'
+        : '';
+    return `<div style="padding:16px 0 24px">${sinDatos}${cards}${prodCard}</div>`;
 }
-
 // Entradas de un insumo, con fecha (de la cola de entradas del inventario).
 function _entradasDeInsumo(insumoId) {
     return ((invActual && invActual.entradasLog) || []).filter(function(e){ return e.insumoId === insumoId; })
