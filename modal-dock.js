@@ -23,7 +23,8 @@
         '.etx-chip .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}' +
         '.etx-chip .x{background:none;border:none;color:var(--text-dim,#8b867e);cursor:pointer;font-size:13px;line-height:1;padding:2px 2px;flex-shrink:0}' +
         '.etx-chip .x:hover{color:var(--red,#e05a3a)}' +
-        '.etx-min-btn{background:transparent;border:1px solid var(--border,#2e2c29);color:var(--text-muted,#9a948b);border-radius:7px;min-width:26px;height:24px;cursor:pointer;font-size:15px;line-height:1;margin-right:6px;flex-shrink:0;font-family:inherit}' +
+        '.etx-min-btn{background:transparent;border:1px solid var(--border,#2e2c29);color:var(--text-muted,#9a948b);border-radius:7px;min-width:26px;height:24px;cursor:pointer;font-size:15px;line-height:1;flex-shrink:0;font-family:inherit}' +
+        '.etx-hd-btns{display:inline-flex;align-items:center;gap:6px;flex-shrink:0}' +
         '.etx-min-btn:hover{border-color:var(--green,#3dbe7a);color:var(--green,#3dbe7a)}';
     (document.head || document.documentElement).appendChild(st);
 
@@ -72,9 +73,13 @@
         b.className = 'etx-min-btn'; b.type = 'button'; b.title = 'Minimizar (segundo plano)'; b.textContent = '—';
         b.addEventListener('click', function (e) { e.stopPropagation(); minimize(header); });
         var close = header.querySelector(CLOSE);
-        if (close && close.parentNode === header) header.insertBefore(b, close);
-        else if (close) close.parentNode.insertBefore(b, close);
-        else header.appendChild(b);
+        if (close) {
+            // Agrupar minimizar + cerrar JUNTOS a la derecha (evita que el
+            // space-between del header los separe).
+            var wrap = document.createElement('span'); wrap.className = 'etx-hd-btns';
+            close.parentNode.insertBefore(wrap, close);
+            wrap.appendChild(b); wrap.appendChild(close);
+        } else header.appendChild(b);
     }
     function scan(root) { try { (root || document).querySelectorAll(HEADERS).forEach(inject); } catch (e) {} }
 

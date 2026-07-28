@@ -12,8 +12,22 @@
     if (window._etxModalDrag) return; window._etxModalDrag = true;
 
     var MODAL  = '.modal,.dx-win,.cj-panel,.modal-gg,.tool-modal,.vp-mbox';
-    var HANDLE = '.modal-header,.dx-win-hdr,.cj-header,.tool-modal-hd';
+    var HANDLE = '.modal-header,.dx-win-hdr,.cj-header,.tool-modal-hd,.etx-modal-hd';
     var SKIP   = 'button,a,input,select,textarea,label,.modal-close';
+
+    // Caja del modal a mover: si el encabezado no está dentro de una clase de
+    // modal conocida, se sube genéricamente hasta el hijo directo del overlay
+    // fijo (cubre modales custom: escandallo, insumos globales, etc.).
+    function boxOf(handle) {
+        var m = handle.closest(MODAL); if (m) return m;
+        var el = handle, prev = handle;
+        while (el && el !== document.body) {
+            var p; try { p = getComputedStyle(el).position; } catch (e) {}
+            if (p === 'fixed') return prev;
+            prev = el; el = el.parentElement;
+        }
+        return null;
+    }
 
     var st = document.createElement('style');
     st.textContent =
@@ -30,7 +44,7 @@
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         var handle = e.target.closest(HANDLE);
         if (!handle || e.target.closest(SKIP)) return;
-        var modal = handle.closest(MODAL);
+        var modal = boxOf(handle);
         if (!modal) return;
         drag = modal; handleEl = handle; moved = false;
         var p = pos(modal); bx = p.x; by = p.y; sx = e.clientX; sy = e.clientY;
@@ -56,7 +70,7 @@
     document.addEventListener('dblclick', function (e) {
         var handle = e.target.closest(HANDLE);
         if (!handle || e.target.closest(SKIP)) return;
-        var modal = handle.closest(MODAL);
+        var modal = boxOf(handle);
         if (modal) modal.style.transform = '';
     });
 })();

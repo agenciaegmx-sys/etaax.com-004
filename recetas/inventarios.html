@@ -881,8 +881,8 @@ document.addEventListener('DOMContentLoaded', function() { _sbInitInv(); });
 
 <!-- ── Reporte de existencias por área ── -->
 <div id="modalReporteExist" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:700;align-items:flex-start;justify-content:center;padding:30px 16px;overflow:auto">
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;max-width:960px;width:100%;margin:auto">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;max-width:960px;width:100%;margin:auto;resize:both;overflow:auto;min-width:360px;min-height:300px">
+    <div class="etx-modal-hd" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap">
       <div style="font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:1.5px;color:var(--text)">📊 Existencias por área</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="btn-vista" id="repVistaBtn" onclick="toggleReporteVista()">👁️ Vista admin</button>
@@ -931,8 +931,8 @@ document.addEventListener('DOMContentLoaded', function() { _sbInitInv(); });
 
 <!-- ── Definir parámetros (productos compuestos) ── -->
 <div id="modalParametros" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:715;align-items:flex-start;justify-content:center;padding:30px 16px;overflow:auto">
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;max-width:680px;width:100%;margin:auto">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;max-width:680px;width:100%;margin:auto;resize:both;overflow:auto;min-width:340px;min-height:280px">
+    <div class="etx-modal-hd" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)">
       <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--text)">🧩 Productos compuestos</div>
       <button class="btn-vista" onclick="document.getElementById('modalParametros').style.display='none'">✕ Cerrar</button>
     </div>

@@ -135,7 +135,14 @@
                     </div>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
                         <button class="btn-add" onclick="agregarIngrediente()">+ Agregar ingrediente</button>
-                        <button class="btn-add" onclick="abrirNuevoInsumoModal()" style="border-color:var(--viol);color:var(--viol)" title="Crea un insumo en el catálogo sin salir del escandallo">📦 Nuevo insumo al catálogo</button>
+                        <div style="position:relative;display:inline-block">
+                            <button class="btn-add" onclick="_toggleInsumoMenu(event)" style="border-color:var(--viol);color:var(--viol)" title="Traer o crear un insumo sin salir del escandallo">📦 Insumo ▾</button>
+                            <div id="insumoMenu" style="display:none;position:absolute;bottom:calc(100% + 6px);left:0;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:5px;min-width:240px;box-shadow:0 12px 34px rgba(0,0,0,.45);z-index:60">
+                                <button type="button" onclick="abrirInsumoDesde('globalneg')" style="display:block;width:100%;text-align:left;background:none;border:none;color:var(--text);font-family:inherit;font-size:13px;padding:9px 11px;border-radius:7px;cursor:pointer" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">🏢 Del catálogo del negocio</button>
+                                <button type="button" onclick="abrirInsumoDesde('etaax')" style="display:block;width:100%;text-align:left;background:none;border:none;color:var(--text);font-family:inherit;font-size:13px;padding:9px 11px;border-radius:7px;cursor:pointer" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">🌐 Del catálogo ETAAX</button>
+                                <button type="button" onclick="abrirInsumoDesde('nuevo')" style="display:block;width:100%;text-align:left;background:none;border:none;color:var(--green);font-family:inherit;font-size:13px;padding:9px 11px;border-radius:7px;cursor:pointer;font-weight:600" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">➕ Crear nuevo insumo</button>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Barra inferior: Rendimiento Bruto + Costo Total -->
@@ -646,7 +653,7 @@
     style="align-items:flex-start;padding:20px">
     <div class="modal" style="max-width:1060px;width:100%;margin-top:16px">
         <div style="padding:0;border-bottom:1px solid var(--border)">
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 0">
+            <div class="etx-modal-hd" style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 0">
                 <h2 style="font-size:14px;font-weight:600">📚 Mis Recetas</h2>
                 <div style="display:flex;gap:8px;align-items:center">
                     <button class="btn-vista" id="btnImprimirSeleccion" onclick="imprimirSeleccionadas()"
@@ -2620,13 +2627,21 @@ function abrirCaratulaModal() {
         abrirEditorEnModal('index.html?embed=1&caratula=1', '📊 Carátula de costos');
     else verCaratula();
 }
-// Modal-sobre-modal: crear un insumo del catálogo SIN salir del escandallo.
-// insumos.js (?solo=1&nuevo=1) abre el form nuevo; al guardar avisa al padre
-// (insumoGuardado) → se cierra el modal y se refrescan los costos del escandallo.
-function abrirNuevoInsumoModal() {
-    if (typeof abrirEditorEnModal === 'function')
-        abrirEditorEnModal('insumos.html?solo=1&nuevo=1', '📦 Nuevo insumo al catálogo');
-    else window.open('insumos.html', '_blank');
+// Menú de 3 fuentes de insumo SIN salir del escandallo (modal-sobre-modal):
+// catálogo del negocio (otras sucursales), catálogo ETAAX (importar) o nuevo.
+function _toggleInsumoMenu(e) {
+    if (e) e.stopPropagation();
+    var m = document.getElementById('insumoMenu');
+    if (m) m.style.display = m.style.display === 'none' ? 'block' : 'none';
+}
+document.addEventListener('click', function () { var m = document.getElementById('insumoMenu'); if (m) m.style.display = 'none'; });
+function abrirInsumoDesde(modo) {
+    var m = document.getElementById('insumoMenu'); if (m) m.style.display = 'none';
+    var url = { globalneg:'insumos.html?solo=1&globalneg=1', etaax:'insumos.html?solo=1&etaax=1', nuevo:'insumos.html?solo=1&nuevo=1' }[modo];
+    var lbl = { globalneg:'🏢 Catálogo del negocio', etaax:'🌐 Catálogo ETAAX', nuevo:'📦 Nuevo insumo' }[modo];
+    if (!url) return;
+    if (typeof abrirEditorEnModal === 'function') abrirEditorEnModal(url, lbl);
+    else window.open(url.split('?')[0], '_blank');
 }
 
 function crearReceta(tipo) {
@@ -3636,7 +3651,7 @@ function toggleTheme() {
             align-items:center;justify-content:center;padding:16px;box-sizing:border-box">
     <div style="background:var(--surface);border-radius:16px;width:94vw;height:92vh;
                 max-width:1200px;display:flex;flex-direction:column;overflow:hidden;
-                box-shadow:0 24px 64px rgba(0,0,0,0.6)">
+                box-shadow:0 24px 64px rgba(0,0,0,0.6);resize:both;min-width:400px;min-height:300px">
         <div class="etx-modal-hd" style="display:flex;align-items:center;justify-content:space-between;
                     padding:12px 18px;border-bottom:1px solid var(--border);flex-shrink:0">
             <div id="iframeInsumoLabel"

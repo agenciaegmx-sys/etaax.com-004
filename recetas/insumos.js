@@ -1823,8 +1823,10 @@
        const _q = new URLSearchParams(location.search);
        const urlId = _q.get('id');
        if (urlId) setTimeout(() => editarInsumo(urlId), 150);
-       // ?nuevo=1 (embed): abrir directo el formulario de insumo NUEVO
-       else if (_q.get('nuevo') === '1') setTimeout(() => { if (typeof abrirModal === 'function') abrirModal(); }, 150);
+       // Embed: abrir directo la fuente pedida desde el escandallo
+       else if (_q.get('nuevo') === '1')     setTimeout(() => { if (typeof abrirModal === 'function') abrirModal(); }, 150);
+       else if (_q.get('globalneg') === '1') setTimeout(() => { if (typeof abrirInsumosGlobalNeg === 'function') abrirInsumosGlobalNeg(); }, 200);
+       else if (_q.get('etaax') === '1')     setTimeout(() => { if (typeof abrirCatalogoGlobal === 'function') abrirCatalogoGlobal(); }, 200);
 
        if (_soloMode) {
            const s = document.createElement('style');

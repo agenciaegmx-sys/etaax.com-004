@@ -769,8 +769,8 @@ function toggleTheme() {
 
 <!-- ── MODAL INSUMOS GLOBALES DEL NEGOCIO (copiar entre sucursales) ── -->
 <div id="modalInsumosNeg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)cerrarInsumosNeg()">
-    <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;width:min(820px,96vw);height:84vh;display:flex;flex-direction:column;overflow:hidden">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0">
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;width:min(820px,96vw);height:84vh;display:flex;flex-direction:column;overflow:hidden;resize:both;min-width:360px;min-height:300px">
+        <div class="etx-modal-hd" style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0">
             <div>
                 <div id="ignTitulo" style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--text)">Insumos Globales</div>
                 <div id="ignTotal" style="font-size:11px;color:var(--text-muted);letter-spacing:.5px">—</div>
