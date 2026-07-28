@@ -949,7 +949,10 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('mainContent').classList.add('expandido');
     }
     // Catálogo global de recetas (abierto desde "Catálogos Globales" del hub): SOLO recetas.
-    if (typeof _esCatGlobalRecetas === 'function' && _esCatGlobalRecetas()) {
+    // En modo embed (?embed=1) NO se aplica: el iframe es solo para el overlay (carátula /
+    // escandallo) que arma el load handler — si no, abriría "Mis Recetas" anidado detrás.
+    var _embedIF = /[?&]embed=1/.test(window.location.search);
+    if (!_embedIF && typeof _esCatGlobalRecetas === 'function' && _esCatGlobalRecetas()) {
         _aplicarModoCatalogoGlobalRecetas();
     }
     // Cargar recetas desde Supabase

@@ -5722,6 +5722,16 @@ function _rdConstruirPaginas(src, pagesC, headHtml, footHtml) {
 }
 
 // ── Reporte directivo ─────────────────────────────────────────
+// Comentario de dirección sobre el sobrante/faltante neto — se guarda en el
+// inventario y se imprime en el reporte. Persiste en el registro + nube.
+function _rdGuardarComentarioNeto(txt) {
+    if (!invActual) return;
+    invActual.comentarioNeto = txt;
+    try {
+        var _reg = getInventarios().find(function(x){ return x.id === invActual.id; });
+        if (_reg) { if (_reg !== invActual) _reg.comentarioNeto = txt; _sbUpInv(_reg); }
+    } catch(e) { console.warn('[reporte] guardar comentario neto falló:', e); }
+}
 function verReporteDirectivo(gerencial, modo) {
     if (!invActual) return;
     const ger = gerencial === true; // Reporte Gerencial: oculta los importes (solo % + neto + dif$ por insumo).
@@ -5825,9 +5835,12 @@ function verReporteDirectivo(gerencial, modo) {
     const alertasCrit= analisis.filter(a => !a.esBateo && a.varPct < -25).sort((a, b) => a.varPct - b.varPct);
     const alertasSob = analisis.filter(a => !a.esBateo && a.varPct > 25).sort((a, b) => b.varPct - a.varPct);
     const riesgos    = analisis.filter(a => !a.esBateo && Math.abs(a.varPct) > 10 && Math.abs(a.varPct) <= 25).sort((a, b) => Math.abs(b.varPct) - Math.abs(a.varPct));
+    const GPROD_RD = '🏭 Producción propia';
     const gruposTabla = {};
     analisis.forEach(a => {
-        const g = a.esBateo ? GRUPO_BATEO : _grupoCategoria(a.f); // bateo → su propio grupo
+        // Igual que el Resultado en pantalla: bateo NO va aparte (vive en su categoría con
+        // su chip); prebatch repartido → "Producción propia" (su varianza vive en sus insumos).
+        const g = a.esPB ? GPROD_RD : _grupoCategoria(a.f);
         if (!gruposTabla[g]) gruposTabla[g] = [];
         gruposTabla[g].push(a);
     });
@@ -5910,10 +5923,14 @@ function verReporteDirectivo(gerencial, modo) {
     </div>`;
 
     // ── Inventario completo: render por grupo y PAGINADO en hojas A4 (~26 filas por hoja) ──
+    const _ncRd = v => (v % 1 ? (Math.round(v*10)/10).toFixed(1) : v);
     const _grupoInvHTML = ([grp, items]) => {
-        let gDif = 0;
+        let gDif = 0, gVend = 0, gNet = 0;
+        const _pzaGrupo = items.length > 0 && items.every(a => a.f.tipo === 'pza');
         const rows = items.map(a => {
             gDif += a.difCosto;
+            gNet += a.dif;
+            gVend += a.f.tipo === 'pza' ? (a.ventaPzaTot || 0) : ((a.ventaCopa || 0) + (a.ventaBot || 0) * (a.copasBot || 0));
             const u = a.f.tipo === 'pza' ? 'pza' : 'cop';
             const entStr = a.f.tipo === 'pza' ? (a.entBot>0?'+'+a.entBot+' p':'—') : (a.entBot>0?'+'+a.entBot.toFixed(1)+' b':'—');
             const vtaCopaStr = a.f.tipo === 'pza' ? '—' : (a.ventaCopaDir>0?a.ventaCopaDir.toFixed(1)+' c':'—');
@@ -5937,9 +5954,15 @@ function verReporteDirectivo(gerencial, modo) {
             </tr>`;
         }).join('');
         const gc = gDif >= 0 ? cOk : cCrit;
+        const _gU = _pzaGrupo ? 'pza' : 'cop';
+        const _netCol = gNet < -0.05 ? cCrit : (gNet > 0.05 ? cOk : '#999');
+        const _faltTxt = gNet < -0.05 ? `faltan ${_ncRd(Math.abs(gNet))} ${_gU}` : (gNet > 0.05 ? `sobran ${_ncRd(gNet)} ${_gU}` : 'cuadra');
         return `<div class="rd-grp">
-        <div class="rd-grptitle" style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 4px">
+        <div class="rd-grptitle" style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin:12px 0 4px">
           <span style="font-size:11px;font-weight:700;color:#1a1916">${grp}</span>
+          <span style="flex:1"></span>
+          <span style="font-size:9.5px;color:#888">🥃 ${_ncRd(gVend)} ${_gU} vendidas</span>
+          <span style="font-size:9.5px;font-weight:600;color:${_netCol}">${_faltTxt}</span>
           <span style="font-size:11px;font-weight:700;color:${gc}">${gDif>=0?'+':''}$${_m2(gDif)}</span>
         </div>
         <table class="rd-t" style="margin-bottom:6px">
@@ -6014,7 +6037,7 @@ function verReporteDirectivo(gerencial, modo) {
         <tbody>${(invActual.descuentos || []).map(d => `<tr><td style="white-space:nowrap;color:#888">${d.fechaHora||'—'}</td><td class="tc">${d.porcentaje != null ? d.porcentaje + '%' : '—'}</td><td class="tr" style="color:${cCrit};font-weight:700">$${_m2((parseFloat(d.monto)||0))}</td><td>${etx(d.folio||'—')}</td><td style="color:#888">${etx(d.motivo||'—')}</td><td>${etx(d.autorizo||'—')}</td></tr>`).join('')}</tbody></table>` : ''}`;
     // Inventario completo: todos los grupos (bateo primero). El encabezado grande se repite por
     // hoja automáticamente porque TODO el reporte va dentro de una tabla con <thead> (ver abajo).
-    const _gruposInvOrden = Object.entries(gruposTabla).sort((a,b)=>{const A=a[0]===GRUPO_BATEO,B=b[0]===GRUPO_BATEO;return A===B?String(a[0]).localeCompare(String(b[0])):(A?-1:1);});
+    const _gruposInvOrden = Object.entries(gruposTabla).sort((a,b)=>{const A=a[0]===GPROD_RD,B=b[0]===GPROD_RD;return A===B?String(a[0]).localeCompare(String(b[0]),'es'):(A?1:-1);});
     const inventarioHTML = `
       <div class="rd-sec">Inventario completo por grupo de categoría</div>
       ${_gruposInvOrden.map(_grupoInvHTML).join('')}`;
@@ -6201,6 +6224,10 @@ function verReporteDirectivo(gerencial, modo) {
       <div class="rd-kl">${netCarta>=0?'Sobrante':'Faltante'} neto a carta</div>
       <div class="rd-kv" style="color:${netCarta>=0?cOk:cCrit}">${netCarta>=0?'+':'−'}$${_m0(Math.abs(netCarta))}</div>
       <div class="rd-ks">sobrante − faltante · precio de carta</div>
+      <div style="margin-top:8px;border-top:1px dashed #ddd;padding-top:7px">
+        <div style="font-size:9px;color:#999;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">📝 Comentario de dirección</div>
+        <textarea onchange="_rdGuardarComentarioNeto(this.value)" placeholder="Escribe una nota sobre el sobrante / faltante del período…" style="width:100%;box-sizing:border-box;border:1px solid #e0e0d8;border-radius:6px;padding:6px 8px;font-size:11px;font-family:Arial,Helvetica,sans-serif;color:#1a1916;resize:vertical;min-height:34px">${etx(invActual.comentarioNeto||'')}</textarea>
+      </div>
     </div>
   </div>
   ${(bonifU>0||consigU>0)?`
@@ -6308,8 +6335,6 @@ function verReporteDirectivo(gerencial, modo) {
   </table>
   <div style="font-size:9px;color:#aaa;margin-top:5px">% consumo = total consumido ÷ (existencia anterior + entradas). &gt;70% alta rotación · &lt;30% baja rotación.</div>
   ` : '<div style="font-size:11px;color:#aaa;padding:8px 0">Sin ventas registradas en el período.</div>'}
-
-  ${_seccionCompuestosDirectivo()}
 
   <div class="rd-break"></div>
   ${movimientosHTML}
