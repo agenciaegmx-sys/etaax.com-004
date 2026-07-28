@@ -14,6 +14,18 @@
     var HEADERS = '.modal-header,.dx-win-hdr,.cj-header,.tool-modal-hd,.etx-modal-hd';
     var CLOSE   = '.modal-close,.dx-win-close,.tm-x';
 
+    // Botón de cerrar: por clase conocida, o por heurística (texto ✕/× o
+    // onclick que menciona cerrar/close) — muchos modales usan un ✕ sin clase.
+    function findClose(header) {
+        var c = header.querySelector(CLOSE); if (c) return c;
+        var btns = header.querySelectorAll('button');
+        for (var i = 0; i < btns.length; i++) {
+            var b = btns[i], t = (b.textContent || '').trim(), oc = (b.getAttribute('onclick') || '');
+            if (/^[✕✖×⨯]/.test(t) || /cerrar|close/i.test(oc)) return b;
+        }
+        return null;
+    }
+
     var st = document.createElement('style');
     st.textContent =
         '#etx-dock{position:fixed;left:14px;bottom:14px;z-index:2147482000;display:flex;gap:8px;flex-wrap:wrap;max-width:74vw}' +
@@ -60,7 +72,7 @@
         xb.addEventListener('click', function (e) {
             e.stopPropagation();
             ov.style.display = ov.__dockPrev || 'flex';   // mostrar para cerrar con su propia lógica
-            var cl = header.querySelector(CLOSE) || ov.querySelector(CLOSE);
+            var cl = findClose(header) || ov.querySelector(CLOSE);
             if (cl) cl.click(); else ov.style.display = 'none';
             chip.remove();
         });
@@ -72,7 +84,7 @@
         var b = document.createElement('button');
         b.className = 'etx-min-btn'; b.type = 'button'; b.title = 'Minimizar (segundo plano)'; b.textContent = '—';
         b.addEventListener('click', function (e) { e.stopPropagation(); minimize(header); });
-        var close = header.querySelector(CLOSE);
+        var close = findClose(header);
         if (close) {
             // Agrupar minimizar + cerrar JUNTOS a la derecha (evita que el
             // space-between del header los separe).
