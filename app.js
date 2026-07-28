@@ -109,6 +109,16 @@ async function _sbInitRecetas() {
     // upsert pasa) para que aparezcan en los demás dispositivos.
     soloLocal.forEach(function(r){ if (typeof _sbUpReceta === 'function') _sbUpReceta(r); });
     if (typeof renderGridRecetas === 'function') renderGridRecetas();
+    // Carátula abierta en modal (embed): renderizó ANTES de que cargaran las recetas
+    // (async) → mostraba "0 recetas". Al terminar la carga, re-renderizar la vista.
+    var _vc = document.getElementById('vistaCaratula');
+    if (_vc && _vc.style.display !== 'none') {
+        try {
+            if (typeof caratulaTipoActual !== 'undefined' && caratulaTipoActual) {
+                if (typeof renderCaratulaDetalleTabla === 'function') renderCaratulaDetalleTabla();
+            } else if (typeof renderCaratulaSelector === 'function') { renderCaratulaSelector(); }
+        } catch(e) {}
+    }
     // Si se entró con ?r=<id> y la receta no estaba cargada todavía, abrirla ahora.
     if (window._pendingOpenReceta) {
         var _rid = window._pendingOpenReceta;
