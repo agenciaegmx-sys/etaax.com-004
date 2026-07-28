@@ -1820,8 +1820,11 @@
            overlay.addEventListener('input',  e => { if (e.target.closest('.modal')) modalDirty = true; });
            overlay.addEventListener('change', e => { if (e.target.closest('.modal')) modalDirty = true; });
        }
-       const urlId = new URLSearchParams(location.search).get('id');
+       const _q = new URLSearchParams(location.search);
+       const urlId = _q.get('id');
        if (urlId) setTimeout(() => editarInsumo(urlId), 150);
+       // ?nuevo=1 (embed): abrir directo el formulario de insumo NUEVO
+       else if (_q.get('nuevo') === '1') setTimeout(() => { if (typeof abrirModal === 'function') abrirModal(); }, 150);
 
        if (_soloMode) {
            const s = document.createElement('style');

@@ -133,7 +133,10 @@
                             <tbody id="tbodyIngredientes"></tbody>
                         </table>
                     </div>
-                    <button class="btn-add" onclick="agregarIngrediente()">+ Agregar ingrediente</button>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+                        <button class="btn-add" onclick="agregarIngrediente()">+ Agregar ingrediente</button>
+                        <button class="btn-add" onclick="abrirNuevoInsumoModal()" style="border-color:var(--viol);color:var(--viol)" title="Crea un insumo en el catálogo sin salir del escandallo">📦 Nuevo insumo al catálogo</button>
+                    </div>
 
                     <!-- Barra inferior: Rendimiento Bruto + Costo Total -->
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
@@ -2617,6 +2620,14 @@ function abrirCaratulaModal() {
         abrirEditorEnModal('index.html?embed=1&caratula=1', '📊 Carátula de costos');
     else verCaratula();
 }
+// Modal-sobre-modal: crear un insumo del catálogo SIN salir del escandallo.
+// insumos.js (?solo=1&nuevo=1) abre el form nuevo; al guardar avisa al padre
+// (insumoGuardado) → se cierra el modal y se refrescan los costos del escandallo.
+function abrirNuevoInsumoModal() {
+    if (typeof abrirEditorEnModal === 'function')
+        abrirEditorEnModal('insumos.html?solo=1&nuevo=1', '📦 Nuevo insumo al catálogo');
+    else window.open('insumos.html', '_blank');
+}
 
 function crearReceta(tipo) {
     _showEscForm(); // ocultar pantalla principal si estaba visible
@@ -3626,7 +3637,7 @@ function toggleTheme() {
     <div style="background:var(--surface);border-radius:16px;width:94vw;height:92vh;
                 max-width:1200px;display:flex;flex-direction:column;overflow:hidden;
                 box-shadow:0 24px 64px rgba(0,0,0,0.6)">
-        <div style="display:flex;align-items:center;justify-content:space-between;
+        <div class="etx-modal-hd" style="display:flex;align-items:center;justify-content:space-between;
                     padding:12px 18px;border-bottom:1px solid var(--border);flex-shrink:0">
             <div id="iframeInsumoLabel"
                  style="font-size:12px;font-weight:600;color:var(--text);letter-spacing:0.3px"></div>
@@ -3680,5 +3691,6 @@ function toggleTheme() {
 <script src="/global-nav.js"></script>
 <script src="/nav-pref.js"></script>
 <script src="/modal-drag.js"></script>
+<script src="/modal-dock.js"></script>
 </body>
 </html>
