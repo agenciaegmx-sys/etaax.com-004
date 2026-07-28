@@ -210,6 +210,7 @@
        // viven en la tabla catalogo_insumos (la página los maneja), NO en
        // negocio_insumos → aquí no hay nada que cargar ni que empujar.
        if (!negId || negId === '__catalogo__' || typeof _supabase === 'undefined') return;
+       _pullSubcatsCloud(negId); // subcategorías propias desde la nube (fire-and-forget)
        _tombRefresh(); // tombstones persistentes del negocio activo (sobreviven a recargas)
        try {
            // Carga PAGINADA y resiliente. Una sola query de hasta 5000 trayendo el
@@ -1321,6 +1322,31 @@
    }
    function _saveSubcatsCustom() {
        try { localStorage.setItem(_sk('subcats_custom'), JSON.stringify(_subcatsCustom || {})); } catch (e) {}
+       _pushSubcatsCloud(); // respaldo en la nube (inv_ajustes.subcats)
+   }
+   // Sincronización en la nube de las subcategorías propias (antes solo localStorage).
+   // Read-modify-write del doc inv_ajustes para no pisar compuestos/bateo/metodos.
+   async function _pushSubcatsCloud() {
+       var negId = (typeof getNegocioActivo === 'function' && getNegocioActivo()) || '';
+       if (!negId || typeof _supabase === 'undefined' || typeof sbUpsertDoc !== 'function') return;
+       try {
+           var r = await _supabase.from('inv_ajustes').select('datos').eq('negocio_id', negId).maybeSingle();
+           var d = (r && r.data && r.data.datos) || {};
+           d.subcats = _subcatsCustom || {};
+           sbUpsertDoc('inv_ajustes', d, negId);
+       } catch (e) {}
+   }
+   async function _pullSubcatsCloud(negId) {
+       if (!negId || typeof _supabase === 'undefined') return;
+       try {
+           var r = await _supabase.from('inv_ajustes').select('datos').eq('negocio_id', negId).maybeSingle();
+           if (r.error || !r.data) return;
+           var sc = (r.data.datos || {}).subcats;
+           if (sc && typeof sc === 'object') {
+               _subcatsCustom = sc;
+               try { localStorage.setItem(_sk('subcats_custom'), JSON.stringify(sc)); } catch (e) {}
+           }
+       } catch (e) {}
    }
 
    function _subcatsLista(tipo) {

@@ -2143,8 +2143,32 @@ function _onMetodoPreChange(sel) {
         var lista; try { lista = JSON.parse(_skGet('metodos_prep_custom')) || []; } catch(e) { lista = []; }
         if (lista.indexOf(nombre) === -1) lista.push(nombre);
         try { localStorage.setItem(_sk('metodos_prep_custom'), JSON.stringify(lista)); } catch(e) {}
+        _pushMetodosCloud(); // respaldo en la nube (inv_ajustes.metodosPrep)
         sel.innerHTML = _metodoPreOptions(nombre);
     }, { icon:'🍸', placeholder:'Ej. Macerado, Carbonatado…' });
+}
+// Sincronización en la nube de los métodos de preparación propios (antes solo
+// localStorage). Read-modify-write de inv_ajustes para no pisar otras llaves.
+async function _pushMetodosCloud() {
+    var negId = (typeof getNegocioActivo === 'function' && getNegocioActivo()) || '';
+    if (!negId || typeof _supabase === 'undefined' || typeof sbUpsertDoc !== 'function') return;
+    try {
+        var r = await _supabase.from('inv_ajustes').select('datos').eq('negocio_id', negId).maybeSingle();
+        var d = (r && r.data && r.data.datos) || {};
+        var lista; try { lista = JSON.parse(_skGet('metodos_prep_custom')) || []; } catch(e) { lista = []; }
+        d.metodosPrep = lista;
+        sbUpsertDoc('inv_ajustes', d, negId);
+    } catch (e) {}
+}
+async function _pullMetodosCloud(negId) {
+    negId = negId || ((typeof getNegocioActivo === 'function' && getNegocioActivo()) || '');
+    if (!negId || typeof _supabase === 'undefined') return;
+    try {
+        var r = await _supabase.from('inv_ajustes').select('datos').eq('negocio_id', negId).maybeSingle();
+        if (r.error || !r.data) return;
+        var mp = (r.data.datos || {}).metodosPrep;
+        if (Array.isArray(mp)) { try { localStorage.setItem(_sk('metodos_prep_custom'), JSON.stringify(mp)); } catch(e) {} }
+    } catch (e) {}
 }
 
 function renderFormularioPorTipo(tipo, datos) {
@@ -3552,6 +3576,7 @@ window._onRecetasListas = function() {
 // Mostrar menú al cargar la página
 window.addEventListener('load', function() {
     hookCalcularCosteos();
+    if (typeof _pullMetodosCloud === 'function') _pullMetodosCloud(); // métodos propios desde la nube
     if (typeof renderFormularioPorTipo === 'function') renderFormularioPorTipo('bebidas', {});
     var _params = new URLSearchParams(location.search);
     var urlR = _params.get('r');

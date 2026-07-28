@@ -1,10 +1,13 @@
 -- ═══════════════════════════════════════════════════════════════════
 -- ETAAX — Migración v37: ajustes de inventario en la nube
 --
--- Los PRODUCTOS COMPUESTOS y las marcas "DE BATEO" vivían solo en
--- localStorage del navegador (se perdían al cambiar de dispositivo, limpiar
--- caché o llenar la cuota). Ahora se respaldan en Supabase como un doc por
--- negocio: { compuestos: {[sucursalId]: [...]}, bateo: {[sucursalId]: [...]} }.
+-- Varias cosas vivían solo en localStorage del navegador (se perdían al
+-- cambiar de dispositivo, limpiar caché o llenar la cuota). Ahora se respaldan
+-- en Supabase como un doc por negocio:
+--   { compuestos: {[sucursalId]: [...]},   ← productos compuestos (inventario)
+--     bateo:      {[sucursalId]: [...]},   ← insumos "de bateo" (inventario)
+--     subcats:    {[tipo]: [...]},         ← subcategorías propias de insumos
+--     metodosPrep:[...] }                  ← métodos de preparación propios (recetas)
 --
 -- Correr a mano en Supabase → SQL Editor. Idempotente.
 -- ═══════════════════════════════════════════════════════════════════
