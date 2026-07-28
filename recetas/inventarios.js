@@ -624,10 +624,16 @@ function _repartoPrebatch() {
         if (!ins || !ins.esSubReceta || !ins.recetaId) return;
         var sr = getRecetas().find(function(r){ return r.id === ins.recetaId; });
         if (!sr || !(sr.ingredientes || []).length) return;
+        // TOTAL = suma de TODOS los ingredientes de la sub-receta (rendimiento base),
+        // no solo los ligados a un insumo. Así cada insumo recibe su proporción real
+        // dentro del batch completo (ej. Aperol 60 de 1180 ml), no dentro del subconjunto
+        // de alcoholes (bug: repartía 2500 entre 120 → 1250 c/u en vez de ~127 c/u).
         var partes = [], total = 0;
         (sr.ingredientes || []).forEach(function(ing){
             var b = ingredienteBase(parseFloat(ing.cantidad) || 0, ing.unidad); // → ml/g base
-            if (b > 0 && ing.insumoId) { partes.push({ id: ing.insumoId, b: b }); total += b; }
+            if (b <= 0) return;
+            total += b;                                        // todos cuentan para el rendimiento
+            if (ing.insumoId) partes.push({ id: ing.insumoId, b: b }); // solo los ligados se reparten
         });
         if (!total) return;
         // Magnitudes del prebatch en unidad BASE (ml/g)

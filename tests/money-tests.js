@@ -427,6 +427,33 @@ test('reparto: faltante del batch cae proporcional (pesa 300 en vez de 375 → C
 });
 test('reparto: la venta del batch fluye a Campari como venta neta (375×13.3% = 1 copa)', () =>
     eq(Math.round(B._repartoDe('campari2').venta * 100) / 100, 1));
+
+// Fix 2026-07: el TOTAL del reparto debe sumar TODOS los ingredientes, no solo los
+// ligados a un insumo. Cordial: Aperol 60 + Vodka 60 (ligados) + Sandía 600 + Azúcar 240
+// (sin insumo). Aperol es 60/960 del batch, NO 60/120 (bug: repartía entre alcoholes).
+setVar(B, '_cacheRecetasInv', [
+    { id: 'srCordial', tipo: 'sub-bebidas', status: 'activa', ingredientes: [
+        { insumoId: 'aperol3', cantidad: 60,  unidad: 'ML' },
+        { insumoId: 'vodka3',  cantidad: 60,  unidad: 'ML' },
+        { insumoId: '',        cantidad: 600, unidad: 'G' },   // Sandía — no ligada
+        { insumoId: '',        cantidad: 240, unidad: 'G' },   // Azúcar — no ligada
+    ] },
+]);
+setVar(B, '_cacheInsumosInv', [
+    { id: 'preCordial', esSubReceta: true, recetaId: 'srCordial', activo: '1' },
+    { id: 'aperol3', activo: '1' }, { id: 'vodka3', activo: '1' },
+]);
+vm.runInContext("invActual.prebatchProducidos = { preCordial: 1 };", B);
+const filaPreC = { insumoId:'preCordial', tipo:'copa', contNeto:960, copaML:50, rendimientoBatch:960,
+    existenciaAnterior:0, ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0,
+    entradas:[], cerradasBodega:0, cerradasBarra:0, pesos:['0.960'], pesoCristal:0 }; // físico 19.2 copas = 960 ml
+const filaAper = { insumoId:'aperol3', tipo:'copa', contNeto:750, copaML:50, existenciaAnterior:0,
+    ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[], cerradasBodega:0, cerradasBarra:0, pesos:[], pesoCristal:0 };
+setVar(B, 'filasCaptura', [filaPreC, filaAper]);
+vm.runInContext("_repCache = _repartoPrebatch();", B);
+test('reparto usa TODOS los ingredientes: Aperol 60/960 del físico (= 1.2 copas, no 9.6)', () =>
+    eq(Math.round(B._repartoDe('aperol3').fis * 100) / 100, 1.2));
+
 vm.runInContext("invActual.prebatchProducidos = {}; _repCache = null;", B);
 setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
 setVar(B, 'filasCaptura', [filaCopa]);
