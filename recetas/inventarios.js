@@ -5424,24 +5424,42 @@ function _step5TablasHTML() {
         const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
         const pctStr    = pctValC !== null ? ((pctValC>=0?'+':'')+pctValC.toFixed(1)+'%') : '—';
         _compGrpDif += difCosto;
-        // Desglose por presentación (expandible) — cada miembro con SU dato individual.
+        // Desglose por presentación (expandible) — cada miembro con TODAS sus columnas
+        // (mismo detalle que un insumo normal): el compuesto solo UNE la info; aquí se ve
+        // por presentación: ant, entradas, ventas (botella/copa/coctelería), merma/cortesía,
+        // cancelaciones, actual, diferencia, %, dif $ a carta.
         const desgloseRows = members.map(m => {
-            const mfis = calcExistencia(m), mteo = calcExistenciaTeorica(m), mdif = mfis - mteo;
-            const mcol = Math.abs(mdif)<0.05?'var(--text-dim)':(mdif>0?'var(--green)':'var(--red)');
+            const mea = parseFloat(m.existenciaAnterior)||0;
             const ment = getEntradasCopas(m);
+            const mcancel = getCancelacionesCopas(m.insumoId);
+            const mCopasBot = m.contNeto>0 && m.copaML>0 ? m.contNeto/m.copaML : 0;
+            const mVentaBot = (parseFloat(m.ventasBotella)||0) * mCopasBot;
+            const mVentaCopa = parseFloat(m.ventasCopasDirectas)||0;
+            const mVentaCoct = calcVentasCopasRecetas(m.insumoId, m.copaML);
+            const mcm = (parseFloat(m.cortesiaCopas)||0) + (parseFloat(m.mermaCopas)||0);
+            const mfis = calcExistencia(m), mteo = calcExistenciaTeorica(m), mdif = mfis - mteo;
+            const mDifCosto = mdif * (m.precioCarta || 0);
+            const mpct = _pctVarianza(mdif, mVentaBot + mVentaCopa + mVentaCoct);
+            const mcol = Math.abs(mdif)<0.05?'var(--text-dim)':(mdif>0?'var(--green)':'var(--red)');
             return `<tr>
-                <td style="padding:3px 8px;color:var(--text)">${etx(insumoTitulo(m))}${insumoMeta(m)?`<div style="font-size:10px;color:var(--text-dim);margin-top:1px">${insumoMetaHTML(m)}</div>`:''}</td>
-                <td style="text-align:center">${_nc(parseFloat(m.existenciaAnterior)||0)} cop</td>
+                <td style="padding:4px 8px;color:var(--text);min-width:150px">${etx(insumoTitulo(m))}${insumoMeta(m)?`<div style="font-size:10px;color:var(--text-dim);margin-top:1px">${insumoMetaHTML(m)}</div>`:''}</td>
+                <td style="text-align:center;white-space:nowrap">${_nc(mea)} cop</td>
                 <td style="text-align:center;color:var(--green)">${ment>0?'+'+_nc(ment)+' cop':'—'}</td>
-                <td style="text-align:center">${_nc(mteo)} cop</td>
-                <td style="text-align:center;font-weight:600">${_nc(mfis)} cop</td>
-                <td style="text-align:center;font-weight:700;color:${mcol}">${mdif>=0?'+':''}${_nc(mdif)} cop</td>
+                <td style="text-align:center;color:var(--text-dim)">${mVentaBot>0?_nc(mVentaBot)+' cop':'—'}</td>
+                <td style="text-align:center;color:var(--accent)">${mVentaCopa>0?_nc(mVentaCopa)+' cop':'—'}</td>
+                <td style="text-align:center;color:var(--viol)">${mVentaCoct>0?_nc(mVentaCoct)+' cop':'—'}</td>
+                <td style="text-align:center;color:var(--red)">${mcm>0?_nc(mcm)+' cop':'—'}</td>
+                <td style="text-align:center;color:var(--text-muted)">${mcancel>0?_nc(mcancel)+' cop':'—'}</td>
+                <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(mfis)} cop</td>
+                <td style="text-align:center;font-weight:700;color:${mcol};white-space:nowrap">${mdif>=0?'+':''}${_nc(mdif)} cop</td>
+                <td style="text-align:center;font-size:11px;color:${mcol}">${mpct!==null?((mpct>=0?'+':'')+mpct.toFixed(1)+'%'):'—'}</td>
+                <td style="text-align:right;font-weight:600;color:${mcol};white-space:nowrap">${mDifCosto>=0?'+':''}$${mDifCosto.toFixed(2)}</td>
             </tr>`;
         }).join('');
         const desglose = `<tr id="compDesg-${comp.id}" style="display:none"><td colspan="12" style="padding:0;background:var(--bg)">
             <div style="padding:8px 20px 12px"><div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:5px">📐 Desglose por presentación</div>
             <table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr style="color:var(--text-dim);font-size:10px;text-transform:uppercase;letter-spacing:.5px">
-                <th style="text-align:left;padding:2px 8px">Presentación</th><th style="text-align:center">Exist. ant.</th><th style="text-align:center">Entradas</th><th style="text-align:center">Teórico</th><th style="text-align:center">Físico</th><th style="text-align:center">Diferencia</th>
+                <th style="text-align:left;padding:2px 8px">Presentación</th><th style="text-align:center">Anterior</th><th style="text-align:center">Entradas</th><th style="text-align:center">Botella</th><th style="text-align:center">Copa</th><th style="text-align:center">Coctelería</th><th style="text-align:center">Cortesía/<br>Merma</th><th style="text-align:center">Cancelac.</th><th style="text-align:center">Actual</th><th style="text-align:center">Diferencia</th><th style="text-align:center">%</th><th style="text-align:right">Dif. $</th>
             </tr></thead><tbody>${desgloseRows}</tbody></table></div></td></tr>`;
         return `<tr>
             <td style="min-width:150px">
