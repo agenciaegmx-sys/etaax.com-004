@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>ETAAX – Check list operativo</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+body{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:24px 16px 40px;box-sizing:border-box}
+.cap-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:460px;padding:24px 22px;text-align:center}
+.cap-logo{margin-bottom:14px}
+.cap-title{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:1px;color:var(--text)}
+.cap-sub{font-size:13px;color:var(--text-dim);margin:4px 0 18px}
+label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);display:block;margin:0 0 6px;text-align:left}
+.fld{width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:12px 14px;border-radius:9px;font-family:'DM Sans',sans-serif;font-size:15px;outline:none;margin-bottom:14px}
+#pinInput{text-align:center;letter-spacing:10px;font-size:26px;font-weight:600}
+.cap-btn{display:block;width:100%;box-sizing:border-box;background:var(--green);color:#0a0908;border:none;border-radius:10px;padding:15px;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;cursor:pointer;margin-top:4px}
+.cap-btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-weight:500}
+.cap-btn:disabled{opacity:.5}
+.cap-msg{font-size:13px;margin-top:12px;min-height:18px}
+.cap-msg.ok{color:var(--green)} .cap-msg.err{color:var(--red)}
+.quien{background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 13px;margin-bottom:14px;font-size:13px;color:var(--text);text-align:left}
+#countBox{font-size:12px;color:var(--text-dim);margin:-6px 0 14px}
+.volver{background:transparent;border:none;color:var(--text-dim);font-size:13px;cursor:pointer;font-family:inherit;padding:4px 0;margin-bottom:10px;display:block}
+/* Tarjetas de plantilla */
+.pl-btn{display:flex;align-items:center;gap:14px;width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px;cursor:pointer;text-align:left;font-family:'DM Sans',sans-serif}
+.pl-btn:active{border-color:var(--green)}
+.pl-btn .pi{font-size:26px;flex-shrink:0}
+.pl-btn .pt{font-size:15px;font-weight:600;color:var(--text)}
+.pl-btn .pd{font-size:12px;color:var(--text-dim);margin-top:2px}
+/* Tareas del checklist */
+.tk-row{display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:13px 14px;margin-bottom:9px;text-align:left;cursor:pointer;user-select:none}
+.tk-row .tk-freq{font-size:9px;font-weight:700;color:var(--text-dim);border:1px solid var(--border);border-radius:5px;padding:2px 6px;flex-shrink:0}
+.tk-row .tk-txt{flex:1;font-size:13.5px;color:var(--text);line-height:1.3}
+.tk-mark{width:34px;height:34px;border-radius:9px;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;flex-shrink:0;background:var(--bg);color:var(--text-dim)}
+.tk-row.ok   .tk-mark{border-color:var(--green);color:var(--green);background:rgba(61,190,122,.14)}
+.tk-row.no   .tk-mark{border-color:#e05a3a;color:#e05a3a;background:rgba(224,90,58,.14)}
+.tk-row.pend .tk-mark{border-color:#e0a52e;color:#e0a52e;background:rgba(224,165,46,.14)}
+.tk-hint{font-size:11px;color:var(--text-dim);margin:-2px 0 12px;text-align:left}
+.prog-wrap{position:sticky;top:0;z-index:2;background:var(--surface);padding:8px 0 10px;margin-bottom:6px}
+.prog-bar{height:9px;border-radius:5px;background:var(--surface2);overflow:hidden}
+.prog-fill{height:100%;background:var(--green);transition:width .2s}
+.prog-lbl{font-size:12px;color:var(--text-dim);margin-top:6px;display:flex;justify-content:space-between}
+/* Fotos evidencia */
+.foto-strip{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.foto-strip .fs-it{position:relative;width:56px;height:56px}
+.foto-strip .fs-it img{width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--border)}
+.foto-strip .fs-del{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:12px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.foto-cnt{font-size:11px;color:var(--text-dim);margin:-4px 0 10px}
+.cap-par{display:flex;gap:10px;margin-top:8px}
+.cap-par .cap-btn{flex:1;margin-top:0;display:flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;font-size:15px;padding:15px 8px;min-height:54px}
+.done-big{font-family:'Bebas Neue',sans-serif;font-size:64px;line-height:1;margin:6px 0}
+</style>
+</head>
+<body>
+<div class="cap-card">
+    <div class="cap-logo">
+        <svg width="120" height="29" viewBox="0 0 300 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 31C4 19.5 12.5 10.5 25 10.5C37.5 10.5 45.5 19.5 45.5 30.5C45.5 32 45.3 33.5 45 35H14C15.5 40.5 19.5 44 25 44C29.5 44 33 42 35 39.5L43.5 43.5C40 49.5 33 53 25 53C12.5 53 4 44 4 31Z" fill="#f0ece4"/>
+            <circle cx="45" cy="11" r="6" fill="#f5c842"/>
+            <path d="M52 12H61V21H72V30H61V42C61 44.8 62.5 46 65 46H72V54.5H64.5C57 54.5 52 50.5 52 43V30H46V21H52V12Z" fill="#f0ece4"/>
+            <path d="M168 13H179L190 30L201 13H212L196.5 34.5L213 54.5H202L190 38.5L178 54.5H167L183.5 34.5L168 13Z" fill="#f0ece4"/>
+        </svg>
+    </div>
+    <div class="cap-title" id="capTitle">Check list operativo</div>
+    <div class="cap-sub" id="capSub">Identifícate con tu PIN</div>
+
+    <!-- ── PIN ── -->
+    <div id="pinScreen">
+        <label class="lbl">PIN de 5 dígitos</label>
+        <input id="pinInput" class="fld" type="tel" inputmode="numeric" maxlength="5" placeholder="•••••" autocomplete="off">
+        <button class="cap-btn" id="pinBtn" onclick="entrar()">Entrar</button>
+        <div class="cap-msg" id="pinMsg"></div>
+    </div>
+
+    <!-- ── Lista de checklists ── -->
+    <div id="listScreen" style="display:none">
+        <div class="quien">👤 Registra: <b id="quienNom">—</b></div>
+        <div id="countBox">⏱️ Esta sesión expira en <b id="countVal" style="color:var(--text)">5:00</b></div>
+        <label class="lbl">Elige el check list a realizar</label>
+        <div id="plantList"></div>
+    </div>
+
+    <!-- ── Ejecución del checklist ── -->
+    <div id="runScreen" style="display:none">
+        <button class="volver" onclick="volverLista()">← Otros check lists</button>
+        <div class="prog-wrap">
+            <div class="prog-bar"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+            <div class="prog-lbl"><span id="progTxt">0 de 0 hechas</span><span id="progPct">0%</span></div>
+        </div>
+        <div class="tk-hint">Toca cada tarea para marcarla: 1 toque = ✓ hecha · 2 = ✗ no realizada · 3 = ▲ pendiente · 4 = sin marcar.</div>
+        <div id="tareasList"></div>
+
+        <label class="lbl" style="margin-top:6px">Nota (opcional)</label>
+        <input id="runNota" class="fld" placeholder="Novedad, pendiente, incidencia…">
+
+        <label class="lbl">Evidencia (fotos, hasta 6)</label>
+        <div class="foto-strip" id="runFotoStrip"></div>
+        <div class="foto-cnt" id="runFotoCnt">0 / 6 fotos</div>
+        <input type="file" id="runFotoCam" accept="image/*" capture="environment" style="display:none" onchange="_addFoto(this)">
+        <input type="file" id="runFotoGal" accept="image/*" multiple style="display:none" onchange="_addFoto(this)">
+        <div class="cap-par">
+            <button class="cap-btn ghost" onclick="document.getElementById('runFotoCam').click()">📷 Tomar foto</button>
+            <button class="cap-btn ghost" onclick="document.getElementById('runFotoGal').click()">🖼️ Galería</button>
+        </div>
+
+        <button class="cap-btn" id="runBtn" style="margin-top:12px" onclick="registrarCumplimiento()">✓ Registrar cumplimiento</button>
+        <div class="cap-msg" id="runMsg"></div>
+    </div>
+
+    <!-- ── Resultado ── -->
+    <div id="doneScreen" style="display:none">
+        <div class="done-big" id="donedPct" style="color:var(--green)">0%</div>
+        <div style="font-size:14px;color:var(--text);font-weight:600" id="doneTitle">Check list registrado</div>
+        <div style="font-size:12.5px;color:var(--text-dim);margin:6px 0 18px" id="doneSub">—</div>
+        <button class="cap-btn" onclick="volverLista()">Hacer otro check list</button>
+    </div>
+
+    <!-- ── Error ── -->
+    <div id="errScreen" style="display:none">
+        <div style="font-size:38px;margin:10px 0">🔒</div>
+        <div id="errTxt" style="font-size:13px;color:var(--text-dim);line-height:1.6"></div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="supabase-config.js"></script>
+<script>
+(function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);})();
+function _q(k){var m=new RegExp('[?&]'+k+'=([^&]*)').exec(location.search);return m?decodeURIComponent(m[1]):'';}
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function nowHora(){var d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
+function etx(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+async function _hashNip(pin){
+    var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('etaax-staff|nip|' + pin));
+    return 'v2$' + Array.prototype.map.call(new Uint8Array(buf), function(b){ return ('0'+b.toString(16)).slice(-2); }).join('');
+}
+
+var NEG = _q('n') || _q('neg');
+var TOKEN = _q('t');
+var SUC = _q('s') || '';
+var VIDA_MS = 300000;
+var COLAB = '', _NIPHASH = '', PLANTILLAS = [], _countTimer = null, _t0 = 0;
+var TIPO = { apertura:['🌅','Apertura'], cierre:['🌙','Cierre'], intermedio:['🔄','Intermedio'], limpieza:['🧽','Limpieza'], otro:['📋','Check list'] };
+var MARCA = { '':'', ok:'✓', no:'✗', pend:'▲' };
+var CICLO = { '':'ok', ok:'no', no:'pend', pend:'' };
+
+var RUN = null;   // { plant, marcas:{tareaId:estado}, fotos:[] }
+
+function _show(id){ ['pinScreen','listScreen','runScreen','doneScreen','errScreen'].forEach(function(x){ document.getElementById(x).style.display = x===id?'block':'none'; }); }
+function _err(txt){ document.getElementById('errTxt').innerHTML = txt; document.getElementById('capSub').textContent = ''; _show('errScreen'); if(_countTimer){clearInterval(_countTimer);_countTimer=null;} }
+
+async function entrar(){
+    var pin = (document.getElementById('pinInput').value || '').trim();
+    var msg = document.getElementById('pinMsg'); msg.className = 'cap-msg'; msg.textContent = '';
+    if (!/^\d{4,6}$/.test(pin)) { msg.className='cap-msg err'; msg.textContent='Pon tu NIP (5 dígitos).'; return; }
+    var btn = document.getElementById('pinBtn'); btn.disabled = true; msg.textContent = 'Validando…';
+    try {
+        var h = await _hashNip(pin);
+        var rv = await _supabase.rpc('entrada_validar_nip', { p_neg: NEG, p_token: TOKEN, p_niphash: h });
+        if (rv.error) {
+            btn.disabled = false; msg.className = 'cap-msg err';
+            msg.innerHTML = 'No se pudo validar.<br><span style="font-size:11px;color:var(--text-dim)">' + etx(rv.error.message) + ' — ¿se corrió la migración v27 en Supabase?</span>';
+            return;
+        }
+        if (!rv.data) {
+            btn.disabled = false; msg.className = 'cap-msg err';
+            msg.innerHTML = 'NIP no reconocido.<br><span style="font-size:11px;color:var(--text-dim)">Verifica con tu encargado tu NIP de 5 dígitos (Gestión de Staff).</span>';
+            return;
+        }
+        COLAB = rv.data; _NIPHASH = h;
+        var rp = await _supabase.rpc('checklist_plantillas', { p_neg: NEG, p_token: TOKEN });
+        if (rp.error) {
+            btn.disabled = false; msg.className='cap-msg err';
+            msg.innerHTML = 'No se pudieron cargar los check lists.<br><span style="font-size:11px;color:var(--text-dim)">' + etx(rp.error.message) + ' — ¿se corrió la migración v38?</span>';
+            return;
+        }
+        PLANTILLAS = (rp.data || []).filter(function(p){
+            if (!p || !p.id || p.activo === false) return false;
+            if (!SUC || !p.sucursalId) return true;   // sin sucursal en el QR o plantilla global → visible
+            return p.sucursalId === SUC;
+        });
+        PLANTILLAS.sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
+        document.getElementById('quienNom').textContent = COLAB;
+        volverLista();
+        _t0 = Date.now(); _tick(); _countTimer = setInterval(_tick, 1000);
+    } catch (e) {
+        btn.disabled=false; msg.className='cap-msg err'; msg.textContent='Error: '+((e&&e.message)||e);
+    }
+}
+
+function _tick(){
+    var rest = Math.max(0, _t0 + VIDA_MS - Date.now());
+    var s = Math.ceil(rest/1000);
+    var el = document.getElementById('countVal'); if (el) el.textContent = Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+    if (rest <= 0) { _err('Tu sesión expiró (dura 5&nbsp;minutos).<br>Vuelve a escanear el QR e ingresa tu PIN.'); }
+}
+
+function volverLista(){
+    document.getElementById('capSub').textContent = '¿Qué check list vas a realizar?';
+    RUN = null;
+    var cont = document.getElementById('plantList');
+    if (!PLANTILLAS.length){
+        cont.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:20px 0">No hay check lists para esta sucursal. Créalos en Administrativo → Checklists.</div>';
+    } else {
+        cont.innerHTML = PLANTILLAS.map(function(p){
+            var t = TIPO[p.tipo] || TIPO.otro;
+            var nT = (p.tareas||[]).length;
+            var meta = (t[1]) + (p.area ? ' · ' + etx(p.area) : '') + ' · ' + nT + ' tarea' + (nT!==1?'s':'');
+            return '<button class="pl-btn" onclick="abrirRun(\''+p.id+'\')"><span class="pi">'+t[0]+'</span>'+
+                '<span><span class="pt">'+etx(p.nombre||'Check list')+'</span><br><span class="pd">'+meta+'</span></span></button>';
+        }).join('');
+    }
+    _show('listScreen');
+}
+
+function abrirRun(id){
+    var p = PLANTILLAS.find(function(x){ return x.id===id; });
+    if (!p) return;
+    RUN = { plant: p, marcas: {}, fotos: [] };
+    document.getElementById('capSub').textContent = (TIPO[p.tipo]?TIPO[p.tipo][1]:'') + ' · ' + (p.nombre||'');
+    document.getElementById('runNota').value = '';
+    document.getElementById('runMsg').textContent = '';
+    _renderTareas(); _renderFotos();
+    _show('runScreen');
+    window.scrollTo(0,0);
+}
+
+function _renderTareas(){
+    var cont = document.getElementById('tareasList');
+    var tareas = (RUN.plant.tareas||[]);
+    cont.innerHTML = tareas.map(function(t){
+        var est = RUN.marcas[t.id] || '';
+        return '<div class="tk-row '+est+'" onclick="ciclar(\''+t.id+'\')">'+
+            (t.freq ? '<span class="tk-freq">'+etx(t.freq)+'</span>' : '')+
+            '<span class="tk-txt">'+etx(t.texto)+'</span>'+
+            '<span class="tk-mark">'+(MARCA[est]||'')+'</span></div>';
+    }).join('');
+    _renderProg();
+}
+function ciclar(tid){
+    RUN.marcas[tid] = CICLO[RUN.marcas[tid] || ''];
+    _renderTareas();
+}
+function _renderProg(){
+    var tareas = (RUN.plant.tareas||[]), tot = tareas.length;
+    var ok = tareas.filter(function(t){ return RUN.marcas[t.id]==='ok'; }).length;
+    var pct = tot ? Math.round(ok/tot*100) : 0;
+    document.getElementById('progFill').style.width = pct+'%';
+    document.getElementById('progTxt').textContent = ok+' de '+tot+' hechas';
+    document.getElementById('progPct').textContent = pct+'%';
+    var col = pct>=90?'var(--green)':pct>=70?'#e0a52e':'#e05a3a';
+    document.getElementById('progFill').style.background = col;
+    document.getElementById('progPct').style.color = col;
+}
+
+/* ── Fotos (evidencia, hasta 6) ── */
+var MAX_FOTOS = 6;
+function _comprimir(file){
+    return new Promise(function(resolve){
+        var r=new FileReader();
+        r.onload=function(e){ var img=new Image(); img.onload=function(){
+            var w=img.width,h=img.height,M=1024; if(w>h){if(w>M){h=Math.round(h*M/w);w=M;}}else{if(h>M){w=Math.round(w*M/h);h=M;}}
+            var c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);
+            c.toBlob(function(b){resolve(b);},'image/jpeg',0.65);
+        }; img.onerror=function(){resolve(null);}; img.src=e.target.result; };
+        r.onerror=function(){resolve(null);}; r.readAsDataURL(file);
+    });
+}
+async function _subirFotoBlob(file, msgEl){
+    if (!file) return '';
+    var blob = await _comprimir(file);
+    if (!blob){ if(msgEl){msgEl.className='cap-msg err';msgEl.textContent='No se pudo procesar la imagen.';} return ''; }
+    var path = NEG+'/entradas/'+TOKEN+'/'+genId()+'.jpg'; // mismo prefijo permitido para subida anónima (v28)
+    var up = await _supabase.storage.from('evidencias').upload(path, blob, {contentType:'image/jpeg'});
+    if (up.error){ if(msgEl){msgEl.className='cap-msg err';msgEl.textContent='Error al subir foto: '+up.error.message;} return ''; }
+    return _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
+}
+async function _addFoto(input){
+    var files = Array.prototype.slice.call(input.files||[]); input.value='';
+    if (!files.length || !RUN) return;
+    var msg = document.getElementById('runMsg');
+    for (var i=0;i<files.length;i++){
+        if (RUN.fotos.length >= MAX_FOTOS){ msg.className='cap-msg err'; msg.textContent='Máximo '+MAX_FOTOS+' fotos.'; break; }
+        msg.className='cap-msg'; msg.textContent='Subiendo foto '+(RUN.fotos.length+1)+'…';
+        var url = await _subirFotoBlob(files[i], msg);
+        if (url){ RUN.fotos.push(url); _renderFotos(); }
+    }
+    if (RUN.fotos.length){ msg.className='cap-msg ok'; msg.textContent='✓ '+RUN.fotos.length+' foto(s) listas'; }
+}
+function _delFoto(i){ RUN.fotos.splice(i,1); _renderFotos(); }
+function _renderFotos(){
+    document.getElementById('runFotoCnt').textContent = RUN.fotos.length+' / '+MAX_FOTOS+' fotos';
+    document.getElementById('runFotoStrip').innerHTML = RUN.fotos.map(function(u,i){
+        return '<div class="fs-it"><img src="'+etx(u)+'"><button class="fs-del" onclick="_delFoto('+i+')">✕</button></div>';
+    }).join('');
+}
+
+/* ── Registrar cumplimiento ── */
+async function registrarCumplimiento(){
+    var msg = document.getElementById('runMsg'); msg.className='cap-msg'; msg.textContent='';
+    if (Date.now() - _t0 >= VIDA_MS) { _err('Tu sesión expiró.<br>Vuelve a escanear el QR.'); return; }
+    if (!RUN) return;
+    var tareas = (RUN.plant.tareas||[]), tot = tareas.length;
+    var ok=0, no=0, pend=0;
+    tareas.forEach(function(t){ var m=RUN.marcas[t.id]; if(m==='ok')ok++; else if(m==='no')no++; else if(m==='pend')pend++; });
+    if (ok+no+pend === 0){ msg.className='cap-msg err'; msg.textContent='Marca al menos una tarea.'; return; }
+    var pct = tot ? Math.round(ok/tot*100) : 0;
+    var btn = document.getElementById('runBtn'); btn.disabled = true; msg.textContent = 'Registrando…';
+    var entry = {
+        id: genId()+genId(),
+        plantillaId: RUN.plant.id,
+        plantillaNombre: RUN.plant.nombre || '',
+        tipo: RUN.plant.tipo || 'otro',
+        area: RUN.plant.area || '',
+        sucursalId: SUC,
+        fecha: todayStr(),
+        hora: nowHora(),
+        marcas: RUN.marcas,
+        totalTareas: tot,
+        cumplidas: ok,
+        noRealizadas: no,
+        pendientes: pend,
+        pct: pct,
+        notas: (document.getElementById('runNota').value||'').trim(),
+        foto_url: RUN.fotos[0] || '',
+        foto_urls: RUN.fotos.slice(),
+        registrado: new Date().toISOString()
+        // colaborador lo sella el servidor (RPC) desde el NIP validado
+    };
+    try {
+        var r = await _supabase.rpc('checklist_registrar', { p_neg: NEG, p_token: TOKEN, p_niphash: _NIPHASH, p_datos: entry });
+        if (r.error) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent='No se pudo guardar: '+r.error.message; return; }
+        btn.disabled=false;
+        var col = pct>=90?'var(--green)':pct>=70?'#e0a52e':'#e05a3a';
+        var d = document.getElementById('donedPct'); d.textContent = pct+'%'; d.style.color = col;
+        document.getElementById('doneTitle').textContent = '✓ ' + (RUN.plant.nombre||'Check list') + ' registrado';
+        document.getElementById('doneSub').innerHTML = '<b>'+etx(COLAB)+'</b> · '+ok+' hechas · '+no+' no · '+pend+' pendientes<br>'+todayStr()+' '+nowHora();
+        document.getElementById('capSub').textContent = '';
+        _show('doneScreen');
+        window.scrollTo(0,0);
+    } catch (e) { btn.disabled=false; msg.className='cap-msg err'; msg.textContent='Error: '+((e&&e.message)||e); }
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+    if (!NEG || !TOKEN) { _err('Este QR no es válido o está incompleto.<br>Genera uno nuevo desde Checklists → 📱 QR de check list.'); return; }
+    document.getElementById('pinInput').focus();
+    document.getElementById('pinInput').addEventListener('keydown', function(e){ if (e.key==='Enter') entrar(); });
+});
+</script>
+</body>
+</html>

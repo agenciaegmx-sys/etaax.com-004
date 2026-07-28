@@ -123,15 +123,32 @@
             <div class="ck-title">Checklists <span class="g">Operativos</span></div>
             <div class="ck-sub" id="ckSub">Apertura, cierre, intermedios y limpiezas por área y turno.</div>
         </div>
+        <button class="ck-btn primary" onclick="abrirQrChecklist()">📱 QR de check list</button>
     </div>
 
     <div class="ck-tabs">
         <button id="tabPlant" class="on" onclick="setTab('plant')">📋 Plantillas</button>
         <button id="tabEjec" onclick="setTab('ejec')">✅ Ejecución</button>
+        <button id="tabCumpl" onclick="setTab('cumpl')">📱 Cumplimiento (QR)</button>
     </div>
 
     <div id="viewPlant"></div>
     <div id="viewEjec" style="display:none"></div>
+    <div id="viewCumpl" style="display:none"></div>
+</div>
+
+<!-- QR de check list -->
+<div id="qrCkModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9400;align-items:center;justify-content:center;padding:24px">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;max-width:420px;width:100%;text-align:center;padding:24px">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;color:var(--text);margin-bottom:6px">📱 QR de check list</div>
+    <div style="font-size:12px;color:var(--text-dim);line-height:1.5;margin-bottom:16px">Pégalo en barra/cocina. El colaborador lo escanea, pone su <b>NIP de 5 dígitos</b> (Gestión de Staff), elige el check list y marca sus tareas. Cada ejecución queda en el <b>historial de cumplimiento</b> con su nombre.</div>
+    <div id="qrCkBox" style="display:flex;justify-content:center;margin-bottom:12px"></div>
+    <div id="qrCkUrl" style="font-size:10px;color:var(--text-dim);word-break:break-all;margin-bottom:16px"></div>
+    <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <button class="ck-btn" onclick="descargarQrCk()">⬇️ Descargar PNG</button>
+        <button class="ck-btn" onclick="document.getElementById('qrCkModal').style.display='none'">✕ Cerrar</button>
+    </div>
+  </div>
 </div>
 
 <!-- Editor de plantilla -->
@@ -204,6 +221,7 @@ function genId(){ return Date.now().toString(36)+Math.random().toString(36).slic
 var _tab = 'plant';
 var _plantillas = [];      // cache plantillas
 var _runs = {};            // recordId -> run
+var _ejec = [];            // ejecuciones del QR (historial de cumplimiento por colaborador)
 var _sucSel = '';
 var _ejecPlantId = '';     // plantilla seleccionada en Ejecución
 var _weekStr = EtaaxCore.getWeekStr(new Date());
@@ -230,10 +248,12 @@ async function _cargarDB(){
         if(sess.data&&sess.data.session){
             var r=await Promise.all([
                 _supabase.from('checklists').select('datos').eq('negocio_id',negId),
-                _supabase.from('checklist_runs').select('datos').eq('negocio_id',negId)
+                _supabase.from('checklist_runs').select('datos').eq('negocio_id',negId),
+                _supabase.from('checklist_ejecuciones').select('datos').eq('negocio_id',negId)
             ]);
             if(!r[0].error&&r[0].data) _plantillas=r[0].data.map(function(x){return x.datos;});
             if(!r[1].error&&r[1].data){ _runs={}; r[1].data.forEach(function(x){ if(x.datos&&x.datos.id)_runs[x.datos.id]=x.datos; }); }
+            if(!r[2].error&&r[2].data) _ejec=r[2].data.map(function(x){return x.datos;}).filter(Boolean);
             _guardarLocal();
         }
     }catch(e){}
@@ -244,11 +264,21 @@ function _cargarLocal(){
 }
 
 /* ── Tabs ── */
-function setTab(t){ _tab=t; document.getElementById('tabPlant').className=t==='plant'?'on':''; document.getElementById('tabEjec').className=t==='ejec'?'on':''; document.getElementById('viewPlant').style.display=t==='plant'?'':'none'; document.getElementById('viewEjec').style.display=t==='ejec'?'':'none'; render(); }
+function setTab(t){ _tab=t;
+    document.getElementById('tabPlant').className=t==='plant'?'on':'';
+    document.getElementById('tabEjec').className=t==='ejec'?'on':'';
+    document.getElementById('tabCumpl').className=t==='cumpl'?'on':'';
+    document.getElementById('viewPlant').style.display=t==='plant'?'':'none';
+    document.getElementById('viewEjec').style.display=t==='ejec'?'':'none';
+    document.getElementById('viewCumpl').style.display=t==='cumpl'?'':'none';
+    render();
+}
 
 function render(){
     document.getElementById('ckSub').textContent='Rutinas del turno · '+_sucNombre(_sucSel)+(_catGlobalOn()?' (vista global)':'');
-    if(_tab==='plant') renderPlantillas(); else renderEjecucion();
+    if(_tab==='plant') renderPlantillas();
+    else if(_tab==='cumpl') renderCumplimiento();
+    else renderEjecucion();
 }
 
 /* ── PLANTILLAS ── */
@@ -403,6 +433,73 @@ function imprimirChecklist(){
     win.focus(); setTimeout(function(){ try{ win.print(); }catch(e){} }, 500);
 }
 
+/* ── CUMPLIMIENTO (QR): historial por colaborador ── */
+function _ejecScope(){ return _ejec.filter(function(e){ return e && _effSuc(e.sucursalId)===_effSuc(_sucSel); }); }
+function renderCumplimiento(){
+    var cont=document.getElementById('viewCumpl');
+    var lista=_ejecScope().slice().sort(function(a,b){ return ((b.fecha||'')+' '+(b.hora||'')).localeCompare((a.fecha||'')+' '+(a.hora||'')); });
+    if(!lista.length){
+        cont.innerHTML='<div style="display:flex;justify-content:flex-end;margin-bottom:14px"><button class="ck-btn primary" onclick="abrirQrChecklist()">📱 QR de check list</button></div>'+
+            '<div class="ck-empty"><div class="ic">📱</div><div style="font-size:15px;color:var(--text)">Aún no hay ejecuciones desde el QR</div><div style="margin-top:6px">Genera el <b>QR de check list</b> y pídele a tu equipo escanearlo al abrir/cerrar. Cada ejecución aparece aquí con el nombre del colaborador.</div></div>';
+        return;
+    }
+    var byCol={};
+    lista.forEach(function(e){ var c=e.colaborador||'—'; if(!byCol[c])byCol[c]={n:0,sum:0}; byCol[c].n++; byCol[c].sum+=(e.pct||0); });
+    var cols=Object.keys(byCol).sort();
+    var resumen='<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px">'+cols.map(function(c){
+        var avg=Math.round(byCol[c].sum/byCol[c].n);
+        var col=avg>=90?'var(--green)':avg>=70?'var(--accent)':'#e05a3a';
+        return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;min-width:150px">'+
+            '<div style="font-size:13px;font-weight:600;color:var(--text)">👤 '+esc(c)+'</div>'+
+            '<div style="font-size:22px;font-weight:800;color:'+col+';line-height:1.1;margin-top:2px">'+avg+'%</div>'+
+            '<div style="font-size:11px;color:var(--text-dim)">'+byCol[c].n+' ejecución'+(byCol[c].n!==1?'es':'')+' · cumplimiento prom.</div></div>';
+    }).join('')+'</div>';
+    var filas=lista.slice(0,120).map(function(e){
+        var pct=e.pct||0, col=pct>=90?'var(--green)':pct>=70?'var(--accent)':'#e05a3a';
+        var t=TIPO_LBL[e.tipo]||e.tipo||'';
+        var nf=(e.foto_urls&&e.foto_urls.length)||(e.foto_url?1:0);
+        return '<div style="display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:11px 13px;margin-bottom:8px">'+
+            '<div style="width:46px;height:46px;border-radius:10px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:'+col+';flex-shrink:0">'+pct+'%</div>'+
+            '<div style="flex:1;min-width:0">'+
+                '<div style="font-size:13.5px;font-weight:600;color:var(--text)">'+esc(e.plantillaNombre||'Check list')+' <span style="font-weight:400;color:var(--text-dim);font-size:11px">· '+esc(t)+'</span></div>'+
+                '<div style="font-size:11.5px;color:var(--text-dim);margin-top:1px">👤 '+esc(e.colaborador||'—')+' · '+esc(e.fecha||'')+' '+esc(e.hora||'')+'</div>'+
+                '<div style="font-size:11px;color:var(--text-dim);margin-top:1px">'+(e.cumplidas||0)+' hechas · '+(e.noRealizadas||0)+' no · '+(e.pendientes||0)+' pend'+(e.notas?' · 📝 '+esc(e.notas):'')+(nf?' · 📷 '+nf:'')+'</div>'+
+            '</div></div>';
+    }).join('');
+    cont.innerHTML='<div style="display:flex;justify-content:flex-end;margin-bottom:14px"><button class="ck-btn primary" onclick="abrirQrChecklist()">📱 QR de check list</button></div>'+
+        resumen+'<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin:0 2px 8px">Ejecuciones recientes</div>'+filas;
+}
+
+/* ── QR de check list (mismo token por negocio que el QR de entradas) ── */
+async function abrirQrChecklist(){
+    var negId=getNegocioActivo();
+    if(!negId){ alert('No hay negocio activo.'); return; }
+    document.getElementById('qrCkModal').style.display='flex';
+    var box=document.getElementById('qrCkBox'), urlEl=document.getElementById('qrCkUrl');
+    box.innerHTML='<div style="color:var(--text-dim);font-size:12px">Generando…</div>'; urlEl.textContent='';
+    var token='';
+    try{ var r=await _supabase.rpc('entrada_token_asegurar',{p_neg:negId}); if(r.error)throw r.error; token=r.data||''; }
+    catch(e){ box.innerHTML='<div style="color:#e05a3a;font-size:12px;line-height:1.5">No se pudo generar el token del QR.<br>¿Corriste la migración v27 en Supabase?<br><span style="color:var(--text-dim)">'+esc((e&&e.message)||e)+'</span></div>'; return; }
+    var suc=(typeof _getSucActiva==='function'?_getSucActiva():'')||'';
+    var url=location.origin+'/checklist.html?n='+encodeURIComponent(negId)+'&t='+encodeURIComponent(token)+(suc?'&s='+encodeURIComponent(suc):'');
+    urlEl.textContent=url;
+    function gen(){
+        box.innerHTML='';
+        var d=document.createElement('div'); d.style.cssText='background:#fff;padding:14px;border-radius:12px;display:inline-block'; box.appendChild(d);
+        try{ new QRCode(d,{text:url,width:210,height:210,colorDark:'#0a0908',colorLight:'#ffffff'}); if(window.etaaxQrLogo)window.etaaxQrLogo(d); }
+        catch(e){ box.innerHTML='<div style="color:#e05a3a;font-size:12px">No se pudo generar el QR.</div>'; }
+    }
+    if(window.QRCode) gen();
+    else { var s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js'; s.onload=gen; s.onerror=function(){ box.innerHTML='<div style="color:#e05a3a;font-size:12px">No se pudo cargar el generador de QR.</div>'; }; document.head.appendChild(s); }
+}
+function descargarQrCk(){
+    var box=document.getElementById('qrCkBox'), data='';
+    var canvas=box.querySelector('canvas'); if(canvas){ try{ data=canvas.toDataURL('image/png'); }catch(e){} }
+    if(!data){ var img=box.querySelector('img'); data=img?img.src:''; }
+    if(!data){ alert('Primero espera a que se genere el QR.'); return; }
+    var a=document.createElement('a'); a.href=data; a.download='qr-checklist.png'; a.click();
+}
+
 /* ── Init ── */
 document.getElementById('ckModal').addEventListener('click', function(e){ if(e.target===this) cerrarEditor(); });
 document.addEventListener('keydown', function(e){ if(e.key==='Escape') cerrarEditor(); });
@@ -413,6 +510,7 @@ document.addEventListener('keydown', function(e){ if(e.key==='Escape') cerrarEdi
     if(window.sbRealtime && neg){
         sbRealtime('checklists', neg, function(){ _cargarDB().then(render); });
         sbRealtime('checklist_runs', neg, function(){ if(!document.getElementById('ckModal').classList.contains('on')) _cargarDB().then(render); });
+        sbRealtime('checklist_ejecuciones', neg, function(){ _cargarDB().then(render); });
     }
 })();
 </script>
