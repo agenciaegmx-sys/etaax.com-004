@@ -601,10 +601,10 @@ function calcVentasPzaRecetas(insumoId) {
 
 // ── PREBATCH: producción de batches (sub-receta→insumo) ──────────
 // Insumos prebatch disponibles = sub-recetas convertidas a insumo.
-// Respeta "incluir en inventario": si el dueño la marcó ocultoInventario (no incluida),
-// NO aparece en la Producción de prebatch del Paso 3 (antes salían TODAS).
+// Respeta "incluir en inventario" (ocultoInventario) Y el ÁREA del inventario:
+// sin área asignada, o de otra área, NO aparece en la Producción de prebatch (Paso 3).
 function prebatchesProducibles() {
-    return _scopeSucInsumos(getInsumos()).filter(function(x){ return x.esSubReceta && x.recetaId && !x.ocultoInventario; });
+    return _scopeSucInsumos(getInsumos()).filter(function(x){ return x.esSubReceta && x.recetaId && !x.ocultoInventario && _insumoEnAreaInv(x); });
 }
 // Cuánto de un insumo BASE se consumió al producir batches (en su unidad base ml/g/pza).
 function consumoBasesPorProduccion(insumoId) {
@@ -2676,8 +2676,28 @@ function iniciarInventario() {
 }
 
 // ── Cargar productos ──────────────────────────────────────────
+// ¿El insumo/sub-receta pertenece al ÁREA de este inventario?
+// Regla: SIN área asignada NO aparece en ningún inventario; con área, solo en el
+// inventario de esa misma área (el inventario 'general' incluye todas las que SÍ
+// tengan área). Aplica igual a insumos y a sub-recetas-como-insumo.
+function _insumoEnAreaInv(ins) {
+    if (!ins) return false;
+    var insA = (ins.area || '').toString().trim().toLowerCase();
+    if (!insA) return false;                       // sin área → nunca aparece
+    var invA = ((invActual && invActual.area) || '').toString().trim().toLowerCase();
+    if (!invA || invA === 'general') return true;  // inventario general → todas las que tengan área
+    return insA === invA;                          // área del insumo == área del inventario
+}
+
 function cargarProductosCaptura() {
-    const insumos = _scopeSucInsumos(getInsumos()); // solo los insumos de la sucursal activa (evita duplicados entre sucursales)
+    // Solo insumos de la sucursal activa Y del ÁREA de este inventario. Sin área → no
+    // entra (qué hace la canela en un inventario de barra 😅). Se conserva lo YA capturado
+    // en este inventario aunque el insumo no tenga área, para no esconder trabajo hecho.
+    const insumos = _scopeSucInsumos(getInsumos()).filter(function(ins){
+        if (_insumoEnAreaInv(ins)) return true;
+        var f = (invActual && (invActual.filas || []).find(function(x){ return x.insumoId === ins.id; }));
+        return !!(f && _filaConDatos(f));
+    });
     if (!insumos.length) { filasCaptura = []; return; }
     _sanearRefInv(); // ref guardado obsoleto (primer lev con intermedios más nuevos) → automático
 
@@ -3062,13 +3082,32 @@ function setVistaExist(modo) {
     renderStepContent();
 }
 
+// Aviso: cuántos insumos no aparecen por no tener área (o ser de otra área).
+// Guía al usuario a asignarles su área en el catálogo para incluirlos.
+function _avisoAreaHTML() {
+    var invA = ((invActual && invActual.area) || '').toString().trim().toLowerCase();
+    var scope = _scopeSucInsumos(getInsumos());
+    var sinArea = 0, otraArea = 0;
+    scope.forEach(function(x){
+        var a = (x && x.area || '').toString().trim().toLowerCase();
+        if (!a) sinArea++;
+        else if (invA && invA !== 'general' && a !== invA) otraArea++;
+    });
+    if (!sinArea && !otraArea) return '';
+    var parts = [];
+    if (sinArea)  parts.push('<b style="color:var(--text)">'+sinArea+'</b> sin área');
+    if (otraArea) parts.push('<b style="color:var(--text)">'+otraArea+'</b> de otra área');
+    return '<div class="wrap" style="padding-top:0"><div style="padding:10px 14px;border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;background:var(--surface);font-size:12.5px;color:var(--text-dim);line-height:1.5">'+
+        '📍 '+parts.join(' · ')+' no aparecen en este inventario de <b style="color:var(--text)">'+etx(invA||'—')+'</b>. Asígnales su área en el <b>Catálogo de insumos</b> (campo «📍 Área — dónde se guarda») para incluirlas aquí.</div></div>';
+}
+
 function renderStep1() {
     if (vistaCapturaExist === 'busqueda') {
         const nReg  = filasCaptura.filter(_esRegistrado).length;
         const nPend = filasCaptura.length - nReg;
         const placeholder = filtroRegistroActivo === 'registrados'
             ? 'Buscar en registrados…' : 'Buscar producto pendiente…';
-        return buildVistaSwitcherExist() + buildFiltroRegistroBar() + `
+        return buildVistaSwitcherExist() + _avisoAreaHTML() + buildFiltroRegistroBar() + `
             <div class="ent-rapida-wrap">
                 <div>
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Buscar producto</div>
@@ -3105,7 +3144,7 @@ function renderStep1() {
 
     // La lista va en su propio contenedor → la búsqueda actualiza SOLO esto (no el
     // input del toolbar) para no perder el foco al escribir.
-    return buildVistaSwitcherExist() + buildFiltroRegistroBar() + buildToolbar(true) +
+    return buildVistaSwitcherExist() + _avisoAreaHTML() + buildFiltroRegistroBar() + buildToolbar(true) +
         '<div id="step1ListaCont">' + _step1ListaInner() + '</div>';
 }
 

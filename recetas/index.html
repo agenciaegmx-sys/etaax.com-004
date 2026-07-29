@@ -296,6 +296,15 @@
                         <input type="checkbox" id="chkIncluirInventario" style="width:16px;height:16px;accent-color:var(--green);flex-shrink:0" onchange="_toggleIncluirInv()">
                         <span style="font-size:12px;color:var(--text)">📦 Incluir en el inventario <span style="color:var(--text-dim);font-size:11px">— aparece en la lista de captura (prebatches sí; bases de cocina normalmente no)</span></span>
                     </label>
+                    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+                        <label style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);display:block;margin-bottom:5px">📍 Área del inventario <span style="text-transform:none;letter-spacing:0">— sin área NO aparece en ningún inventario</span></label>
+                        <select id="selAreaSubReceta" onchange="_setAreaSubReceta()" style="width:100%;font-size:13px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 10px">
+                            <option value="">— Sin área (no aparece) —</option>
+                            <option value="barra">Barra</option>
+                            <option value="bodega">Bodega</option>
+                            <option value="cocina">Cocina</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -1707,10 +1716,29 @@ function _insumoDeSubReceta() {
 // Estado del checkbox "Incluir en el inventario": del insumo convertido si existe;
 // si no, default por tipo (bebidas SÍ = prebatch; alimentos NO = base de cocina).
 function _setChkIncluirInv() {
-    var chk = document.getElementById('chkIncluirInventario'); if (!chk) return;
+    var chk = document.getElementById('chkIncluirInventario');
+    var sel = document.getElementById('selAreaSubReceta');
     var ins = _insumoDeSubReceta();
-    if (ins) chk.checked = !ins.ocultoInventario;
-    else chk.checked = (recetaTipoActual === 'sub-bebidas' || recetaTipoActual === 'bebidas');
+    if (chk) {
+        if (ins) chk.checked = !ins.ocultoInventario;
+        else chk.checked = (recetaTipoActual === 'sub-bebidas' || recetaTipoActual === 'bebidas');
+    }
+    if (sel) sel.value = (ins && ins.area) || '';
+}
+// Área de la sub-receta: si ya está convertida a insumo, la actualiza en vivo (catálogo + nube).
+function _setAreaSubReceta() {
+    var sel = document.getElementById('selAreaSubReceta'); if (!sel) return;
+    var ins = _insumoDeSubReceta();
+    if (!ins) return; // aún sin convertir → se aplica al "Agregar como insumo"
+    ins.area = sel.value || '';
+    try {
+        var cat = getCatalogoInsumos();
+        localStorage.setItem(_sk('insumos'), JSON.stringify(cat));
+        if (typeof sbUpsert === 'function') {
+            var negId = getNegocioActivo ? getNegocioActivo() : (localStorage.getItem('etaax_negocio_activo') || '');
+            if (negId) sbUpsert('insumos', ins, negId);
+        }
+    } catch(e) { console.warn('[area sub-receta]', e); }
 }
 // Toggle en vivo: si ya está convertida, actualiza el insumo en el catálogo + nube.
 function _toggleIncluirInv() {
@@ -1875,6 +1903,8 @@ function agregarSubRecetaComoInsumo(silent) {
             return !(recetaTipoActual === 'sub-bebidas' || recetaTipoActual === 'bebidas');
         })(),
         recetaId:      recetaActualId || null,
+        // Área del inventario: sin área NO aparece en ningún inventario (misma regla que insumos).
+        area:          (function(){ var el = document.getElementById('selAreaSubReceta'); return el ? el.value : ''; })(),
         sucursalId:    (localStorage.getItem('etaax_sucursal_activa') || ''),
         sucursales:    (function(){ var c = localStorage.getItem('etaax_sucursal_activa') || ''; return c ? [c] : []; })(), // membresía: vive en la sucursal donde se convirtió
         presentaciones: porciones,
