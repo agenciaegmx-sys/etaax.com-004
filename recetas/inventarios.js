@@ -83,20 +83,23 @@ async function _sbInitInv() {
         _supabase.from('recetas').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true}),
         _supabase.from('negocio_insumos').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true}),
     ]);
-    if (!r[0].error) { _cacheInv = (r[0].data || []).map(function(x){ return x.datos; }); _marcarSynced(_cacheInv.map(function(c){ return c && c.id; })); }
+    // .filter(Boolean): si una fila viene con datos:null NO debe entrar al cache —
+    // un null en _cacheEL reventaba el render del historial de entradas (TypeError).
+    if (!r[0].error) { _cacheInv = (r[0].data || []).map(function(x){ return x.datos; }).filter(Boolean); _marcarSynced(_cacheInv.map(function(c){ return c && c.id; })); }
     _mergeDraftsLocal(); // recuperar borradores que aún no sincronizaron a la nube
-    if (!r[1].error) _cacheEL   = (r[1].data || []).map(function(x){ return x.datos; });
+    if (!r[1].error) _cacheEL   = (r[1].data || []).map(function(x){ return x.datos; }).filter(Boolean);
     _mergeELLocal(); // recuperar entradas que aún no sincronizaron a la nube
-    if (!r[2].error) _cacheRecetasInv = (r[2].data || []).map(function(x){ return x.datos; });
+    if (!r[2].error) _cacheRecetasInv = (r[2].data || []).map(function(x){ return x.datos; }).filter(Boolean);
     await _pullInvAjustes(negId); // compuestos + bateo desde la nube → localStorage
     if (!r[3].error) {
-        _cacheInsumosInv = (r[3].data || []).map(function(x){ return x.datos; });
+        _cacheInsumosInv = (r[3].data || []).map(function(x){ return x.datos; }).filter(Boolean);
         // actualizar localStorage para compatibilidad con insumos.js
         try { localStorage.setItem(_sk('insumos'), JSON.stringify(_cacheInsumosInv.map(function(ins){ var c=Object.assign({},ins); c.foto=''; c.fotoUrl=''; return c; }))); } catch(e) {}
     }
     if (typeof init === 'function') init();
     _subInvRealtime(negId);
     _subEntradasRealtime(negId); // el QR de entradas/mermas aparece SOLO (requiere v32)
+    _subAjustesRealtime(negId);  // compuestos + bateo en vivo entre dispositivos (v37 + v39)
 }
 
 // ── Realtime del QR (entradas_log): lo registrado desde el celular aparece SOLO ──
@@ -132,6 +135,32 @@ async function _reloadEntradasRT() {
             var n = _importarEntradasQR();
             if (n && typeof renderStepContent === 'function') renderStepContent();
         }
+    } catch(e) {}
+}
+
+// ── Realtime de AJUSTES (compuestos + bateo, tabla inv_ajustes v37): al crearlos
+//    en otro dispositivo aparecen SOLO. Requiere inv_ajustes en la publicación
+//    realtime (v39) y la tabla creada (v37). Sin realtime, solo sincronizan al recargar.
+var _ajRtCh = null, _ajRtNeg = null, _ajRtT = null;
+function _subAjustesRealtime(negId) {
+    if (!negId || _ajRtNeg === negId || typeof sbRealtime !== 'function') return;
+    if (_ajRtCh && _supabase.removeChannel) { try { _supabase.removeChannel(_ajRtCh); } catch(e) {} }
+    _ajRtNeg = negId;
+    _ajRtCh = sbRealtime('inv_ajustes', negId, function() {
+        clearTimeout(_ajRtT);
+        _ajRtT = setTimeout(_reloadAjustesRT, 400); // coalescer ráfagas
+    });
+}
+async function _reloadAjustesRT() {
+    var negId = getNegocioActivo();
+    if (!negId || _ajRtNeg !== negId || typeof _pullInvAjustes !== 'function') return;
+    await _pullInvAjustes(negId);   // refresca compuestos/bateo en localStorage
+    window._step5Dirty = true;      // el resumen depende de los compuestos
+    try {
+        // Repintar en vivo: el modal de compuestos si está abierto, y el paso actual.
+        var mp = document.getElementById('modalParametros');
+        if (mp && mp.style.display !== 'none' && typeof _renderParamLista === 'function') _renderParamLista();
+        if (invActual && !invActual.cerrado && typeof renderStepContent === 'function') renderStepContent();
     } catch(e) {}
 }
 
@@ -7024,9 +7053,15 @@ function renderListadoEntradas() {
     if (_ch) { if (invActual) { guardarEntradas(); } else { _guardarELLocal(); } }
 
     const rows = useGlobal ? log : [...log].reverse();
-    // Solo los registros de la SUCURSAL activa (los viejos sin sello se muestran por compat)
+    // Solo los registros de la SUCURSAL activa (los viejos sin sello se muestran por compat).
+    // OJO: excluir entradas null/undefined — antes `!(e && …)` las DEJABA pasar y luego
+    // `e.concepto` reventaba (TypeError) → abortaba el render y la lista salía EN BLANCO
+    // (con el contador viejo "N registros"). Esto ocultaba TODAS las entradas, incl. las del QR.
     const _sucHist = _sucActiva();
-    const visibles = rows.filter(e => !(e && e.sucursalId && _sucHist && e.sucursalId !== _sucHist));
+    const visibles = rows.filter(function(e){
+        if (!e) return false;
+        return !(e.sucursalId && _sucHist && e.sucursalId !== _sucHist);
+    });
     var _sucNomH = '';
     try {
         var _ssH = JSON.parse(localStorage.getItem('etaax_' + getNegocioActivo() + '_sucursales') || '[]');
