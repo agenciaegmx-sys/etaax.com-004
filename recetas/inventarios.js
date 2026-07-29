@@ -56,7 +56,13 @@ function _scopeSucInvs(lista) {
 }
 function getRecetas()     { return _cacheRecetasInv || []; }
 function getInventarios() { return _cacheInv || []; }
-function getEntradasLog() { return _cacheEL || []; }
+function getEntradasLog() {
+    // Sanea nulos IN-PLACE (misma referencia → el backfill que hace _gl.push() sigue
+    // escribiendo sobre _cacheEL). Un solo null en el cache reventaba el render del
+    // historial (null.concepto); esto lo blinda en el origen, para todos los callers.
+    if (_cacheEL) { for (var i = _cacheEL.length - 1; i >= 0; i--) { if (!_cacheEL[i]) _cacheEL.splice(i, 1); } }
+    return _cacheEL || [];
+}
 
 // ── Helpers Supabase inventarios ──────────────────────────────
 function _sbUpInv(inv) {
