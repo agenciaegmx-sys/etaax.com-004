@@ -595,8 +595,10 @@ function calcVentasPzaRecetas(insumoId) {
 
 // ── PREBATCH: producción de batches (sub-receta→insumo) ──────────
 // Insumos prebatch disponibles = sub-recetas convertidas a insumo.
+// Respeta "incluir en inventario": si el dueño la marcó ocultoInventario (no incluida),
+// NO aparece en la Producción de prebatch del Paso 3 (antes salían TODAS).
 function prebatchesProducibles() {
-    return _scopeSucInsumos(getInsumos()).filter(function(x){ return x.esSubReceta && x.recetaId; });
+    return _scopeSucInsumos(getInsumos()).filter(function(x){ return x.esSubReceta && x.recetaId && !x.ocultoInventario; });
 }
 // Cuánto de un insumo BASE se consumió al producir batches (en su unidad base ml/g/pza).
 function consumoBasesPorProduccion(insumoId) {
@@ -7123,26 +7125,37 @@ const fotoTh = _fotosThumbHTML(e);
                 onmouseenter="this.classList.add('hover')" onmouseleave="this.classList.remove('hover')">🗑️</button>
         </div>`;
     };
-    // Tres secciones: 📦 Entradas, 🗑️ Mermas y 🎁 Cortesías/Préstamos (listas distintas)
-    const entradasArr = visibles.filter(e => e.concepto !== 'merma' && e.concepto !== 'salida');
-    const mermasArr   = visibles.filter(e => e.concepto === 'merma');
-    const salidasArr  = visibles.filter(e => e.concepto === 'salida');
-    if (countEl) countEl.textContent = entradasArr.length + ' entrada' + (entradasArr.length !== 1 ? 's' : '') +
-        ' · ' + mermasArr.length + ' merma' + (mermasArr.length !== 1 ? 's' : '') +
-        (salidasArr.length ? ' · ' + salidasArr.length + ' cortesía/préstamo' + (salidasArr.length !== 1 ? 's' : '') : '') +
-        (_sucNomH ? ' · ' + _sucNomH : '');
-    const secHdr = t => `<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin:14px 2px 8px">${t}</div>`;
     // Mapeo SEGURO: si una entrada trae datos raros y rowHTML lanza, esa fila muestra
     // "(error)" pero las demás SÍ se ven (antes un throw dejaba la lista entera en blanco).
     const _safeRow = (e) => { try { return rowHTML(e); } catch (err) {
         console.warn('[entrada rota]', err, e);
         return `<div class="ent-log-fila"><span class="ent-log-nombre">${etx((e && (e.nombreProducto || e.nombre)) || '—')}</span><span class="ent-log-cant" style="color:var(--red)">(dato inválido)</span></div>`;
     } };
-    cont.innerHTML =
-        (entradasArr.length ? secHdr('📦 Entradas' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + entradasArr.map(_safeRow).join('') : '') +
-        (mermasArr.length   ? secHdr('🗑️ Mermas'   + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + mermasArr.map(_safeRow).join('') : '') +
-        (salidasArr.length  ? secHdr('🎁 Cortesías / Préstamos' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + salidasArr.map(_safeRow).join('') : '') +
-        (!visibles.length ? `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:24px 0">Sin registros de esta sucursal</div>` : '');
+    // BLINDAJE: TODO el armado de secciones va en try/catch. Si algo revienta (un dato
+    // raro que no habíamos previsto), en vez de dejar la lista EN BLANCO se cae a un
+    // listado plano con _safeRow — así las entradas SIEMPRE se ven.
+    try {
+        const secHdr = t => `<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin:14px 2px 8px">${t}</div>`;
+        // Tres secciones: 📦 Entradas, 🗑️ Mermas y 🎁 Cortesías/Préstamos (listas distintas)
+        const entradasArr = visibles.filter(e => e && e.concepto !== 'merma' && e.concepto !== 'salida');
+        const mermasArr   = visibles.filter(e => e && e.concepto === 'merma');
+        const salidasArr  = visibles.filter(e => e && e.concepto === 'salida');
+        if (countEl) countEl.textContent = entradasArr.length + ' entrada' + (entradasArr.length !== 1 ? 's' : '') +
+            ' · ' + mermasArr.length + ' merma' + (mermasArr.length !== 1 ? 's' : '') +
+            (salidasArr.length ? ' · ' + salidasArr.length + ' cortesía/préstamo' + (salidasArr.length !== 1 ? 's' : '') : '') +
+            (_sucNomH ? ' · ' + _sucNomH : '');
+        cont.innerHTML =
+            (entradasArr.length ? secHdr('📦 Entradas' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + entradasArr.map(_safeRow).join('') : '') +
+            (mermasArr.length   ? secHdr('🗑️ Mermas'   + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + mermasArr.map(_safeRow).join('') : '') +
+            (salidasArr.length  ? secHdr('🎁 Cortesías / Préstamos' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + salidasArr.map(_safeRow).join('') : '') +
+            (!visibles.length ? `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:24px 0">Sin registros de esta sucursal</div>` : '');
+    } catch (err) {
+        console.warn('[registro entradas] render por secciones falló, fallback plano:', err);
+        if (countEl) countEl.textContent = visibles.length + ' registro' + (visibles.length !== 1 ? 's' : '');
+        cont.innerHTML = visibles.length
+            ? visibles.map(_safeRow).join('')
+            : `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:24px 0">Sin registros de esta sucursal</div>`;
+    }
 }
 
 var _entEditId = null;
