@@ -537,19 +537,19 @@ function _addItem(flujo){
         if (!SEL){ _cartMsg(flujo,'Elige un insumo.','err'); return; }
         var c = parseFloat(document.getElementById('entCant').value)||0;
         if (c<=0){ _cartMsg(flujo,'Pon una cantidad mayor a 0.','err'); return; }
-        it = { id:genId()+genId(), insumoId:SEL.id, nombre:SEL.nombre+(SEL.variedad?' '+SEL.variedad:''), familia:SEL.familia||SEL.categoria||'', cantidad:c, tipo:document.getElementById('entTipo').value };
+        it = { id:genId()+genId(), insumoId:(SEL.origenId||SEL.id), nombre:SEL.nombre+(SEL.variedad?' '+SEL.variedad:''), familia:SEL.familia||SEL.categoria||'', cantidad:c, tipo:document.getElementById('entTipo').value };
         limpiarIns(); document.getElementById('entCant').value='';
     } else if (flujo==='merma'){
         if (!MSEL){ _cartMsg(flujo, MERMA_TIPO==='producto'?'Elige el producto del menú.':'Elige el insumo.','err'); return; }
         var cm = parseFloat(document.getElementById('merCant').value)||0;
         if (cm<=0){ _cartMsg(flujo,'Pon una cantidad mayor a 0.','err'); return; }
-        it = { id:genId()+genId(), mermaTipo:MERMA_TIPO, insumoId:MSEL.id, nombre:MSEL.nombre+(MSEL.variedad?' '+MSEL.variedad:''), familia:MSEL.familia||MSEL.categoria||MSEL.grupo||'', cantidad:cm, unidad:document.getElementById('merUnidad').value, motivo:document.getElementById('merMotivo').value };
+        it = { id:genId()+genId(), mermaTipo:MERMA_TIPO, insumoId:(MSEL.origenId||MSEL.id), nombre:MSEL.nombre+(MSEL.variedad?' '+MSEL.variedad:''), familia:MSEL.familia||MSEL.categoria||MSEL.grupo||'', cantidad:cm, unidad:document.getElementById('merUnidad').value, motivo:document.getElementById('merMotivo').value };
         limpiarMer(); document.getElementById('merCant').value='';
     } else { // salida
         if (!SSEL){ _cartMsg(flujo,'Elige un insumo.','err'); return; }
         var cs = parseFloat(document.getElementById('salCant').value)||0;
         if (cs<=0){ _cartMsg(flujo,'Pon una cantidad mayor a 0.','err'); return; }
-        it = { id:genId()+genId(), salidaTipo:SALIDA_TIPO, insumoId:SSEL.id, nombre:SSEL.nombre+(SSEL.variedad?' '+SSEL.variedad:''), familia:SSEL.familia||SSEL.categoria||'', cantidad:cs, unidad:document.getElementById('salUnidad').value };
+        it = { id:genId()+genId(), salidaTipo:SALIDA_TIPO, insumoId:(SSEL.origenId||SSEL.id), nombre:SSEL.nombre+(SSEL.variedad?' '+SSEL.variedad:''), familia:SSEL.familia||SSEL.categoria||'', cantidad:cs, unidad:document.getElementById('salUnidad').value };
         limpiarSal(); document.getElementById('salCant').value='';
     }
     st.items.push(it); _renderCart(flujo); _cartMsg(flujo,'','');

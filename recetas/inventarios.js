@@ -39,6 +39,14 @@ window._insumoResolver = window._makeInsumoResolver(getInsumos);
 // Resolver id→receta CANÓNICO por sucursal (mismo patrón): recetas/sub-recetas guardan el
 // id del maestro; si hay copia de receta para la sucursal activa, la devuelve transparente.
 if (typeof window._makeRecetaResolver === 'function') window._recetaResolver = window._makeRecetaResolver(getRecetas);
+// Id CANÓNICO de un insumo (maestro): si el id pertenece a una COPIA por sucursal, devuelve
+// el id del maestro (origenId); si no, el mismo id. Así las filas del inventario, las recetas
+// y los registros del QR empatan SIEMPRE por la misma identidad, aunque existan copias.
+function _canonInsumoId(id) {
+    if (!id) return id;
+    var r = (typeof window._insumoResolver === 'function') ? window._insumoResolver(id) : null;
+    return (r && r.origenId) || id;
+}
 // Insumos acotados a la SUCURSAL activa (regla "sin sucursal = matriz: ve todo").
 // Sin esto, el inventario leía los insumos de TODAS las sucursales y los duplicaba.
 function _scopeSucInsumos(lista) {
@@ -900,7 +908,8 @@ function _recomputarMovsQR() {
         if (e.mermaTipo === 'producto' || e.recetaId) return; // productos → mermasProductoQR
         if (e.sucursalId && suc && e.sucursalId !== suc) return; // sello de sucursal
         if (!_enPeriodoInvActual(e.fecha)) return;               // periodo de este inventario
-        (byIns[e.insumoId] = byIns[e.insumoId] || []).push(e);
+        var _cid = _canonInsumoId(e.insumoId);                   // por id canónico (empata con la fila)
+        (byIns[_cid] = byIns[_cid] || []).push(e);
     });
     filasCaptura.forEach(function(f){
         var arr = byIns[f.insumoId] || [];
@@ -992,7 +1001,7 @@ function _importarEntradasQR() {
         // fila de este inventario simplemente no se atribuye a ninguna existencia
         // (getEntradasBottles filtra por insumoId); el sello de sucursal es la defensa.
         invActual.entradasLog.push({
-            id: e.id, insumoId: e.insumoId,
+            id: e.id, insumoId: _canonInsumoId(e.insumoId), // id canónico → empata con la fila
             nombreProducto: e.nombre || '—',
             cantidad: parseFloat(e.cantidad) || 0,
             costo: parseFloat(e.costo) || 0,
@@ -2698,7 +2707,7 @@ function _insumosConMovimientoQR() {
         if (!e || e.borrada || !e.insumoId) return;
         if (e.sucursalId && suc && e.sucursalId !== suc) return; // sello de sucursal
         if (!_enPeriodoInvActual(e.fecha)) return;               // periodo de este inventario
-        set[e.insumoId] = 1;
+        set[_canonInsumoId(e.insumoId)] = 1;                     // por id canónico (empata con la fila)
     });
     return set;
 }
@@ -2710,16 +2719,20 @@ function cargarProductosCaptura() {
     // salida) en su periodo+sucursal — así su merma siempre se refleja en el reporte.
     const _movQR = _insumosConMovimientoQR();
     const insumos = _scopeSucInsumos(getInsumos()).filter(function(ins){
+        var _cid = ins.origenId || ins.id; // id canónico (copia → maestro)
         if (_insumoEnAreaInv(ins)) return true;
-        if (_movQR[ins.id]) return true; // tiene merma/entrada del QR en este periodo → incluir
-        var f = (invActual && (invActual.filas || []).find(function(x){ return x.insumoId === ins.id; }));
+        if (_movQR[_cid]) return true; // tiene merma/entrada del QR en este periodo → incluir
+        var f = (invActual && (invActual.filas || []).find(function(x){ return x.insumoId === _cid; }));
         return !!(f && _filaConDatos(f));
     });
     if (!insumos.length) { filasCaptura = []; return; }
     _sanearRefInv(); // ref guardado obsoleto (primer lev con intermedios más nuevos) → automático
 
     filasCaptura = insumos.map(ins => {
-        const existe = (invActual.filas || []).find(f => f.insumoId === ins.id);
+        // Id CANÓNICO: la fila SIEMPRE se llavea por el maestro (origenId||id), así empata
+        // con lo ya capturado y con las recetas, aunque `ins` sea una copia por sucursal.
+        const _cid = ins.origenId || ins.id;
+        const existe = (invActual.filas || []).find(f => f.insumoId === _cid);
         if (existe) {
             // Sub-receta convertida a insumo: visible por DEFAULT (se captura la
             // existencia del prebatch); solo se oculta si el dueño lo marcó con el
@@ -2757,7 +2770,7 @@ function cargarProductosCaptura() {
             }
             // Refrescar la "existencia anterior" desde el inventario de referencia actual:
             // si editaste el inventario anterior / primer levantamiento, se actualiza aquí.
-            existe.existenciaAnterior = getExistenciaAnterior(ins.id);
+            existe.existenciaAnterior = getExistenciaAnterior(_cid);
             return existe;
         }
 
@@ -2779,7 +2792,7 @@ function cargarProductosCaptura() {
         })();
 
         return {
-            insumoId: ins.id,
+            insumoId: _cid, // id canónico (maestro), aunque `ins` sea copia por sucursal
             _subReceta: !!(ins.esSubReceta && ins.ocultoInventario), // oculto SOLO si el dueño lo marcó en el catálogo
             nombre:   ins.nombre + (ins.variedad ? ' '+ins.variedad : ''),
             categoria: ins.categoria  || '',
@@ -2793,7 +2806,7 @@ function cargarProductosCaptura() {
             precioCarta:    parseFloat(p?.precioCarta)   || 0,
             precioCartaBot: parseFloat(p?.precioCartaBot)|| 0,
             stockMin:       parseFloat(ins.stockMin)     || 0,
-            existenciaAnterior: getExistenciaAnterior(ins.id),
+            existenciaAnterior: getExistenciaAnterior(_cid),
             // Paso 1: existencias físicas
             cerradasBodega: 0, cerradasBarra: 0,
             pesos: ['','','',''],   // 4 botellas abiertas (kg)
@@ -3943,7 +3956,7 @@ function guardarEntrada() {
     // no se sale de esta sucursal ni al respaldarse al log global. id estable para editar/borrar.
     invActual.entradasLog.push({
         id: genId() + genId(),
-        insumoId: _entradaInsumoId, cantidad, costo, fecha, notas,
+        insumoId: _canonInsumoId(_entradaInsumoId), cantidad, costo, fecha, notas,
         sucursalId: (invActual && invActual.sucursalId) || _sucActiva() || 'suc_principal',
         origen: 'manual'
     });
