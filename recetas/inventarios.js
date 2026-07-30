@@ -1741,7 +1741,9 @@ async function abrirQrEntradas() {
     var sucQR = localStorage.getItem('etaax_sucursal_activa') || '';
     var url = location.origin + '/entrada.html?n=' + encodeURIComponent(negId) + '&t=' + encodeURIComponent(token)
         + (sucQR ? '&s=' + encodeURIComponent(sucQR) : '');
-    urlEl.textContent = url;
+    // Blindaje multi-sucursal: sin sucursal activa, las entradas quedan SIN sello y no
+    // aparecen en el historial de ninguna sucursal (se acabó el "historial global").
+    urlEl.innerHTML = etx(url) + (sucQR ? '' : '<div style="color:var(--accent);margin-top:8px;font-size:11px;line-height:1.5;text-align:left">⚠️ Estás en <b>vista global (sin sucursal)</b>. Las entradas de este QR quedarían <b>sin sucursal</b> y NO se verían en el historial de una sucursal específica. Entra a una <b>sucursal</b> antes de generar el QR para que queden selladas.</div>');
     function gen() {
         box.innerHTML = '';
         var d = document.createElement('div');
@@ -7100,14 +7102,18 @@ function renderListadoEntradas() {
     if (_ch) { if (invActual) { guardarEntradas(); } else { _guardarELLocal(); } }
 
     const rows = useGlobal ? log : [...log].reverse();
-    // Solo los registros de la SUCURSAL activa (los viejos sin sello se muestran por compat).
-    // OJO: excluir entradas null/undefined — antes `!(e && …)` las DEJABA pasar y luego
-    // `e.concepto` reventaba (TypeError) → abortaba el render y la lista salía EN BLANCO
-    // (con el contador viejo "N registros"). Esto ocultaba TODAS las entradas, incl. las del QR.
+    // Independencia por sucursal (BLINDADO): el "Historial global" es global en el TIEMPO,
+    // pero SOLO de la sucursal activa — cada sucursal trabaja aislada. Antes las entradas
+    // SIN sucursalId (QR sin sello / legacy) se colaban a TODAS las sucursales → parecía
+    // global del negocio. Ahora, en una sucursal específica se muestran EXCLUSIVAMENTE las
+    // de esa sucursal (las sin sello quedan solo en la vista matriz). Dentro de un inventario
+    // (Paso 2) no se filtra: sus entradas ya están acotadas a él (y no llevan sucursalId).
     const _sucHist = _sucActiva();
     const visibles = rows.filter(function(e){
-        if (!e) return false;
-        return !(e.sucursalId && _sucHist && e.sucursalId !== _sucHist);
+        if (!e) return false;                        // excluir null/undefined (reventaba el render)
+        if (!useGlobal) return true;                 // dentro del inventario → ya acotadas
+        if (!_sucHist) return true;                  // matriz / sin sucursal → historial global real
+        return (e.sucursalId || '') === _sucHist;    // sucursal específica → SOLO sus entradas
     });
     var _sucNomH = '';
     try {
@@ -7258,7 +7264,11 @@ function renderVistaEntradas() {
         }
     } else {
         if (tituloEl)  tituloEl.textContent = 'Registro de entradas';
-        if (periodoEl) periodoEl.textContent = 'Historial global';
+        if (periodoEl) {
+            var _sH = _sucActiva(), _snH = '';
+            if (_sH) { try { var _ssH = JSON.parse(localStorage.getItem('etaax_' + getNegocioActivo() + '_sucursales') || '[]'); var _fH = _ssH.find(function(x){ return x.id === _sH; }); _snH = _fH ? (_fH.nombre || '') : ''; } catch(e) {} }
+            periodoEl.textContent = _sH ? ('Historial · ' + (_snH || 'sucursal activa')) : 'Historial global · todas las sucursales';
+        }
     }
 
     const searchSection = invActual ? `
