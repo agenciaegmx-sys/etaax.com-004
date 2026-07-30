@@ -1004,6 +1004,7 @@ function _importarEntradasQR() {
             costo: parseFloat(e.costo) || 0,
             tipo: e.tipo || '', notas: e.notas || '',
             fecha: e.fecha || '', origen: e.origen || 'manual',
+            sucursalId: e.sucursalId || _sucActiva() || '', // sello: hereda la sucursal del registro
             foto_url: e.foto_url || '',         // evidencia visual del QR (1ª foto)
             foto_urls: e.foto_urls || []        // lote: varias fotos de evidencia
         });
@@ -2691,12 +2692,29 @@ function _insumoEnAreaInv(ins) {
     return insA === invA;                          // área del insumo == área del inventario
 }
 
+// insumoIds con movimiento del QR (entrada/merma/salida) en el periodo+sucursal de
+// ESTE inventario. Deben aparecer aunque no tengan área asignada, para poder atribuir
+// su merma/entrada (si no, una merma de cerveza sin área se caía del reporte).
+function _insumosConMovimientoQR() {
+    var set = {}, suc = _sucActiva();
+    (getEntradasLog() || []).forEach(function(e){
+        if (!e || e.borrada || !e.insumoId) return;
+        if (e.sucursalId && suc && e.sucursalId !== suc) return; // sello de sucursal
+        if (!_enPeriodoInvActual(e.fecha)) return;               // periodo de este inventario
+        set[e.insumoId] = 1;
+    });
+    return set;
+}
+
 function cargarProductosCaptura() {
     // Solo insumos de la sucursal activa Y del ÁREA de este inventario. Sin área → no
-    // entra (qué hace la canela en un inventario de barra 😅). Se conserva lo YA capturado
-    // en este inventario aunque el insumo no tenga área, para no esconder trabajo hecho.
+    // entra (qué hace la canela en un inventario de barra 😅). PERO sí entran: lo YA
+    // capturado en este inventario, y los que tienen un MOVIMIENTO del QR (merma/entrada/
+    // salida) en su periodo+sucursal — así su merma siempre se refleja en el reporte.
+    const _movQR = _insumosConMovimientoQR();
     const insumos = _scopeSucInsumos(getInsumos()).filter(function(ins){
         if (_insumoEnAreaInv(ins)) return true;
+        if (_movQR[ins.id]) return true; // tiene merma/entrada del QR en este periodo → incluir
         var f = (invActual && (invActual.filas || []).find(function(x){ return x.insumoId === ins.id; }));
         return !!(f && _filaConDatos(f));
     });
@@ -3919,7 +3937,14 @@ function guardarEntrada() {
     const fecha  = document.getElementById('entFecha').value || '';
     const notas  = document.getElementById('entNotas').value.trim();
     if (!invActual.entradasLog) invActual.entradasLog = [];
-    invActual.entradasLog.push({ insumoId: _entradaInsumoId, cantidad, costo, fecha, notas });
+    // Sella con la sucursal del inventario (independencia multi-sucursal): así la entrada
+    // no se sale de esta sucursal ni al respaldarse al log global. id estable para editar/borrar.
+    invActual.entradasLog.push({
+        id: genId() + genId(),
+        insumoId: _entradaInsumoId, cantidad, costo, fecha, notas,
+        sucursalId: (invActual && invActual.sucursalId) || _sucActiva() || 'suc_principal',
+        origen: 'manual'
+    });
     cerrarModalEntrada();
     renderStepContent();
 }
@@ -6586,7 +6611,9 @@ function _filaConDatos(f) {
         || (f.ventasCopasDirectas || 0) > 0
         || (f.ventasBotella || 0) > 0
         || parseFloat(f.existenciaPeso) > 0   // alimentos: conteo físico
-        || parseFloat(f.mermaBase) > 0;
+        || parseFloat(f.mermaBase) > 0
+        || parseFloat(f.mermaCopas) > 0       // merma de bebidas (QR) → cuenta como dato
+        || parseFloat(f.cortesiaCopas) > 0;   // cortesía/préstamo de bebidas (QR) → cuenta como dato
 }
 function _esRegistrado(f) { return _filaConDatos(f); }
 
