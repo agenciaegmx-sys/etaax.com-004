@@ -1345,10 +1345,10 @@ async function cgAgregar(id) {
 <div id="modalInsumoSuc" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10006;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)cerrarInsumoSuc()">
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;width:min(440px,96vw);max-height:86vh;display:flex;flex-direction:column;overflow:hidden">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--border)">
-            <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;color:var(--text)">🏪 Sucursales del insumo</div>
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;color:var(--text)">🔗 Vincular a sucursal</div>
             <button onclick="cerrarInsumoSuc()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:4px 11px;cursor:pointer;font-family:inherit;font-size:13px">✕</button>
         </div>
-        <div style="padding:12px 18px;font-size:12.5px;color:var(--text-muted);line-height:1.5">Elige en qué sucursales vive <b id="insumoSucNombre" style="color:var(--text)"></b>. No se duplica: es el mismo insumo compartido en las marcadas.</div>
+        <div style="padding:12px 18px;font-size:12.5px;color:var(--text-muted);line-height:1.5">Cada sucursal marcada tendrá una <b style="color:var(--green)">copia independiente</b> de <b id="insumoSucNombre" style="color:var(--text)"></b>, ligada a este maestro. Editar en una sucursal NO afecta a las demás. Desmarcar quita el vínculo (borra esa copia).</div>
         <div id="insumoSucLista" style="padding:4px 18px;overflow-y:auto"></div>
         <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--border)">
             <button onclick="cerrarInsumoSuc()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:8px 16px;cursor:pointer;font-family:inherit;font-size:13px">Cancelar</button>

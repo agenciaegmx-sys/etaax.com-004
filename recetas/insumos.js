@@ -61,39 +61,64 @@
        return s.map(function(id){ return '<span style="font-size:8px;letter-spacing:.5px;text-transform:uppercase;background:rgba(122,184,245,.12);color:#7ab8f5;border:1px solid rgba(122,184,245,.3);border-radius:10px;padding:1px 6px;white-space:nowrap;margin-right:3px">' + etx(_sucNomIns(id)) + '</span>'; }).join('');
    }
 
-   // ── Modal "Copiar a sucursal" (igual que recetas): membresía por checkboxes ──
+   // ── Modal "VINCULAR a sucursal": cada sucursal marcada tiene una COPIA independiente
+   //    ligada al maestro (origenId). Marcar = crear el vínculo (copia); desmarcar = quitarlo.
+   //    (Antes se compartía el MISMO registro entre sucursales → rompía la independencia.)
    var _insumoSucEditId = null;
    function abrirInsumoSuc(id) {
-       _insumoSucEditId = id;
        var ins = getInsumos().find(function(x){ return x.id === id; }); if (!ins) return;
-       // Dónde vive ESTE registro (identidad = id; nunca por nombre/marca —
-       // productos distintos pueden llamarse igual).
-       var vive = [];
-       (window._insumoSucursales ? window._insumoSucursales(ins) : (ins.sucursalId ? [ins.sucursalId] : [])).forEach(function(v){
-           var e = v || MATRIZ_ID_INS; if (vive.indexOf(e) < 0) vive.push(e);
-       });
-       // Si queda vacío = insumo del almacén global SIN asignar → ninguna sucursal marcada.
+       // Operar SIEMPRE sobre el maestro (si abriste una copia, sube a su origen).
+       var master = ins.origenId ? (getInsumos().find(function(x){ return x.id === ins.origenId; }) || ins) : ins;
+       _insumoSucEditId = master.id;
+       // Sucursales con vínculo: las que ya tienen COPIA + (legacy) la membresía propia del maestro.
+       var vinc = {};
+       _copiasDe(master.id).forEach(function(c){ (window._insumoSucursales(c) || []).forEach(function(s){ vinc[s || MATRIZ_ID_INS] = 1; }); });
+       (window._insumoSucursales(master) || []).forEach(function(s){ vinc[s || MATRIZ_ID_INS] = 1; });
        var sucs = _getSucsIns(), opts = [];
        if (!sucs.some(function(s){ return s.id === MATRIZ_ID_INS; })) opts.push({ id: MATRIZ_ID_INS, nombre: 'Matriz' });
        opts = opts.concat(sucs);
-       document.getElementById('insumoSucNombre').textContent = (typeof insumoTitulo === 'function') ? insumoTitulo(ins) : (ins.nombre || 'Insumo');
+       document.getElementById('insumoSucNombre').textContent = (typeof insumoTitulo === 'function') ? insumoTitulo(master) : (master.nombre || 'Insumo');
        document.getElementById('insumoSucLista').innerHTML = opts.map(function(s){
-           var on = vive.indexOf(s.id) >= 0;
-           return '<label style="display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid var(--border);border-radius:9px;margin-bottom:7px;cursor:pointer">' +
+           var on = !!vinc[s.id];
+           return '<label style="display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid ' + (on ? 'rgba(61,190,122,.4)' : 'var(--border)') + ';border-radius:9px;margin-bottom:7px;cursor:pointer">' +
                '<input type="checkbox" data-suc="' + etx(s.id) + '" ' + (on ? 'checked' : '') + ' style="width:17px;height:17px;accent-color:var(--green)">' +
-               '<span style="font-size:13px;color:var(--text)">' + etx(s.nombre || s.id) + '</span></label>';
+               '<span style="font-size:13px;color:var(--text)">' + (on ? '🔗 ' : '') + etx(s.nombre || s.id) + '</span></label>';
        }).join('');
        document.getElementById('modalInsumoSuc').style.display = 'flex';
    }
    function cerrarInsumoSuc() { var m = document.getElementById('modalInsumoSuc'); if (m) m.style.display = 'none'; _insumoSucEditId = null; }
-   function guardarInsumoSuc() {
-       var ins = getInsumos().find(function(x){ return x.id === _insumoSucEditId; }); if (!ins) { cerrarInsumoSuc(); return; }
+   async function guardarInsumoSuc() {
+       var lista = getInsumos();
+       var master = lista.find(function(x){ return x.id === _insumoSucEditId; }); if (!master) { cerrarInsumoSuc(); return; }
        var sel = [];
        document.querySelectorAll('#insumoSucLista input[type=checkbox]').forEach(function(c){ if (c.checked) sel.push(c.getAttribute('data-suc')); });
-       if (!sel.length) { alert('El insumo debe vivir en al menos una sucursal.'); return; }
-       ins.sucursales = sel; // membresía (manda sobre sucursalId)
-       setInsumos(getInsumos());
-       if (typeof _sincronizarInsumosSupabase === 'function') { try { _sincronizarInsumosSupabase(getNegocioActivo(), [ins]); } catch(e){} }
+       // Copias vinculadas actuales, por sucursal.
+       var copPorSuc = {};
+       _copiasDe(master.id).forEach(function(c){ (window._insumoSucursales(c) || []).forEach(function(s){ copPorSuc[s || MATRIZ_ID_INS] = c; }); });
+       var nuevas = [], borrar = [];
+       // CREAR vínculo (copia ligada) para las marcadas que aún no tienen copia — incluye
+       // convertir la membresía LEGACY del maestro en copias reales.
+       sel.forEach(function(suc){
+           if (copPorSuc[suc]) return;
+           var real = (suc === MATRIZ_ID_INS) ? '' : suc;
+           var copia = JSON.parse(JSON.stringify(master));
+           copia.id = genId(); copia.origenId = master.id; copia.sucursales = [real]; copia.sucursalId = real;
+           delete copia._memPreMigra;
+           nuevas.push(copia);
+       });
+       // QUITAR vínculo (borrar copia) de las DESMARCADAS que tenían copia.
+       var quitadas = Object.keys(copPorSuc).filter(function(suc){ return sel.indexOf(suc) < 0; });
+       if (quitadas.length) {
+           var noms = quitadas.map(function(s){ return _sucNomIns(s === MATRIZ_ID_INS ? '' : s); }).join(', ');
+           if (!confirm('Vas a QUITAR el vínculo (y borrar la copia) de: ' + noms + '.\nSe perderán los ajustes propios de esa(s) sucursal(es). ¿Continuar?')) return;
+           quitadas.forEach(function(suc){ borrar.push(copPorSuc[suc].id); });
+       }
+       // El maestro queda GLOBAL (sin membresía propia); las copias sirven a cada sucursal.
+       master.sucursales = []; master.sucursalId = '';
+       var all = lista.filter(function(x){ return borrar.indexOf(x.id) < 0; }).concat(nuevas);
+       setInsumos(all);
+       try { if (typeof _sincronizarInsumosSupabase === 'function') await _sincronizarInsumosSupabase(getNegocioActivo(), nuevas.concat([master])); } catch(e){}
+       try { if (borrar.length && typeof _borrarInsumosSupabase === 'function') await _borrarInsumosSupabase(getNegocioActivo(), borrar); } catch(e){}
        cerrarInsumoSuc();
        try { filtrar(); } catch(e) {}
    }
@@ -953,7 +978,7 @@
                    ${!ins.esSubReceta ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;display:inline-flex;align-items:center;gap:5px" title="Duplicar este insumo (crea una copia editable con sus presentaciones)" onclick="copiarInsumo('${ins.id}')"><span style="font-size:14px">📋</span> Copiar</button>` : ''}
                    ${_catGlobalIns() ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;
                        color:var(--green);border-color:var(--green);display:inline-flex;align-items:center;gap:5px"
-                       onclick="abrirInsumoSuc('${ins.id}')"><span style="font-size:14px">🏪</span> Sucursales</button>` : ''}
+                       onclick="abrirInsumoSuc('${ins.id}')"><span style="font-size:14px">🔗</span> Vincular</button>` : ''}
                    ${(!_catGlobalIns() && _getSucActivaIns() && ins.activo === '0')
                        ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;color:var(--red);border-color:rgba(224,90,58,.5);display:inline-flex;align-items:center;gap:5px" title="Inactivo GLOBAL (pastilla del editor): no aparece en ningún lado. Este botón lo reactiva en TODO el negocio." onclick="activarInsumoGlobal('${ins.id}')">🚫 ▶ Activar</button>` : ''}
                    ${ins.esSubReceta ? (ins.ocultoInventario
@@ -1065,7 +1090,7 @@
                '<div class="insumo-card-actions">' +
                    '<button class="btn-ver" onclick="verFicha(\'' + ins.id + '\')">👁️ Ver</button>' +
                    '<button class="btn-edit" onclick="editarInsumo(\'' + ins.id + '\')">✏️ Editar</button>' +
-                   (_catGlobalIns() ? '<button class="btn-edit" style="color:var(--green);border-color:var(--green)" onclick="abrirInsumoSuc(\'' + ins.id + '\')">🏪 Sucursales</button>' : '') +
+                   (_catGlobalIns() ? '<button class="btn-edit" style="color:var(--green);border-color:var(--green)" onclick="abrirInsumoSuc(\'' + ins.id + '\')">🔗 Vincular</button>' : '') +
                    ((!_catGlobalIns() && _getSucActivaIns() && ins.activo === '0')
                        ? '<button class="btn-ver" style="color:var(--red)" title="Inactivo global — activar en todo el negocio" onclick="activarInsumoGlobal(\'' + ins.id + '\')">▶</button>' : '') +
                    (ins.esSubReceta ? (ins.ocultoInventario
