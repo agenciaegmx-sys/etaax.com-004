@@ -36,7 +36,26 @@
    }
    // Badges de dónde vive el insumo. Sin asignar = está en el ALMACÉN global pero en ninguna
    // sucursal → badge gris "Global · sin asignar". Asignado → nombre real de cada sucursal.
+   // Copias por sucursal ligadas a un maestro (origenId) — índice cacheado por referencia.
+   var _copiasIdxRef = null, _copiasIdx = null;
+   function _copiasDe(masterId) {
+       var arr = getInsumos();
+       if (_copiasIdxRef !== arr) {
+           _copiasIdx = {};
+           arr.forEach(function(c){ if (c && c.origenId) { (_copiasIdx[c.origenId] = _copiasIdx[c.origenId] || []).push(c); } });
+           _copiasIdxRef = arr;
+       }
+       return _copiasIdx[masterId] || [];
+   }
    function _insumoBadgesIns(ins) {
+       // MAESTRO con copias por sucursal (origenId) → mostrar la VINCULACIÓN (🔗 N sucursales).
+       if (ins && !ins.origenId) {
+           var cop = _copiasDe(ins.id);
+           if (cop.length) {
+               var noms = cop.map(function(c){ var m = window._insumoSucursales(c); return _sucNomIns(m[0]||''); }).filter(Boolean);
+               return '<span style="font-size:8px;letter-spacing:.5px;text-transform:uppercase;background:rgba(61,190,122,.14);color:var(--green);border:1px solid rgba(61,190,122,.35);border-radius:10px;padding:1px 6px;white-space:nowrap" title="Copias independientes en: ' + etx(noms.join(', ')) + '">🔗 ' + cop.length + ' sucursal' + (cop.length !== 1 ? 'es' : '') + '</span>';
+           }
+       }
        var s = (window._insumoSucursales ? window._insumoSucursales(ins) : (ins.sucursalId ? [ins.sucursalId] : []));
        if (!s.length) return '<span style="font-size:8px;letter-spacing:.5px;text-transform:uppercase;background:rgba(155,149,138,.14);color:var(--text-dim);border:1px solid var(--border);border-radius:10px;padding:1px 6px;white-space:nowrap">🌐 Global · sin asignar</span>';
        return s.map(function(id){ return '<span style="font-size:8px;letter-spacing:.5px;text-transform:uppercase;background:rgba(122,184,245,.12);color:#7ab8f5;border:1px solid rgba(122,184,245,.3);border-radius:10px;padding:1px 6px;white-space:nowrap;margin-right:3px">' + etx(_sucNomIns(id)) + '</span>'; }).join('');
