@@ -882,6 +882,64 @@ function _enPeriodoInvActual(fecha) {
     return f <= to;                                       // hasta la fecha del inventario
 }
 
+// Recalcula FRESCO (idempotente) la merma/cortesía-préstamo del QR por insumo, en su
+// PROPIO tracking (_qrMerma/_qrCort/_qrBase). El total que leen todos y la fórmula del
+// candado (mermaCopas/cortesiaCopas/mermaBase) = MANUAL + QR. Reemplaza el viejo dedupe
+// por importadoEnInv que dejaba mermas ATORADAS (una vez importadas a un inventario, si su
+// suma se perdía —p.ej. la fila se cayó por el filtro de área— ya nunca reaparecían).
+function _recomputarMovsQR() {
+    if (!invActual || !Array.isArray(filasCaptura) || !filasCaptura.length) return;
+    var suc = _sucActiva();
+    var byIns = {};
+    (getEntradasLog() || []).forEach(function(e){
+        if (!e || e.borrada || !e.insumoId) return;
+        if (e.concepto !== 'merma' && e.concepto !== 'salida') return;
+        if (e.mermaTipo === 'producto' || e.recetaId) return; // productos → mermasProductoQR
+        if (e.sucursalId && suc && e.sucursalId !== suc) return; // sello de sucursal
+        if (!_enPeriodoInvActual(e.fecha)) return;               // periodo de este inventario
+        (byIns[e.insumoId] = byIns[e.insumoId] || []).push(e);
+    });
+    filasCaptura.forEach(function(f){
+        var arr = byIns[f.insumoId] || [];
+        var m = 0, c = 0, b = 0, concQR = [];
+        arr.forEach(function(e){
+            var cant = parseFloat(e.cantidad) || 0; if (!(cant > 0)) return;
+            var u = (e.unidad || '').toLowerCase();
+            var esMerma = e.concepto === 'merma';
+            var val;
+            if (f.tipo === 'peso') {
+                val = cant; if (u === 'botella') val = f.contNeto > 0 ? cant * f.contNeto : cant;
+                b += val; // peso: merma y salida van a la unidad base
+            } else if (f.tipo === 'pza') {
+                val = cant; if (u === 'ml') val = f.contNeto > 0 ? cant / f.contNeto : cant;
+                if (esMerma) m += val; else c += val;
+            } else { // copa
+                var copasBot = (f.contNeto > 0 && f.copaML > 0) ? f.contNeto / f.copaML : 0;
+                val = cant;
+                if (u === 'oz') val = f.copaML > 0 ? cant * OZ_ML / f.copaML : cant;
+                else if (u === 'ml') val = f.copaML > 0 ? cant / f.copaML : cant;
+                else if (u === 'botella' || u === 'pza') val = copasBot ? cant * copasBot : cant;
+                if (esMerma) m += val; else c += val;
+            }
+            if (!esMerma) concQR.push((e.salidaTipo === 'prestamo' ? '🔁 Préstamo' : '🎁 Cortesía') + (e.notas ? ': ' + e.notas : ''));
+        });
+        if (concQR.length) f.cortesiaConcepto = concQR.join(' · '); // concepto de cortesías/préstamos del QR
+        // Derivar el MANUAL quitando la contribución PREVIA del QR. En la 1ª pasada (migración)
+        // el QR previo aún no existe → se usa el FRESCO (= lo que la vieja lógica ya había sumado),
+        // así NO se duplica lo antes importado y SÍ reaparece lo que se había perdido/atorado.
+        var prevM = (f._qrMerma !== undefined) ? (parseFloat(f._qrMerma) || 0) : m;
+        var prevC = (f._qrCort  !== undefined) ? (parseFloat(f._qrCort)  || 0) : c;
+        var prevB = (f._qrBase  !== undefined) ? (parseFloat(f._qrBase)  || 0) : b;
+        f.mermaManual     = Math.max(0, (parseFloat(f.mermaCopas)    || 0) - prevM);
+        f.cortesiaManual  = Math.max(0, (parseFloat(f.cortesiaCopas) || 0) - prevC);
+        f.mermaBaseManual = Math.max(0, (parseFloat(f.mermaBase)     || 0) - prevB);
+        f._qrMerma = m; f._qrCort = c; f._qrBase = b;
+        f.mermaCopas    = f.mermaManual     + m;
+        f.cortesiaCopas = f.cortesiaManual  + c;
+        f.mermaBase     = f.mermaBaseManual + b;
+    });
+}
+
 function _importarEntradasQR() {
     if (!invActual || invActual.cerrado || window._soloVistaInv) return 0; // 👁️ solo lectura: no muta el inventario
     if (!invActual.entradasLog) invActual.entradasLog = [];
@@ -908,90 +966,23 @@ function _importarEntradasQR() {
         // Supabase y la entrada quedaba marcada importadoEnInv=<este inv> pero AUSENTE del
         // log → se saltaba para siempre. Ahora el yaEnInv (arriba) evita duplicados cuando
         // sí persistió, y si se perdió, se re-clama. El borrado real usa `borrada`.
-        // ── MERMAS del QR: entran a la merma del inventario (y por lo tanto al reporte) ──
+        // ── MERMAS de PRODUCTO del menú (QR): se listan en el reporte (no descuentan
+        //    insumos). Las mermas de INSUMO y las SALIDAS (cortesía/préstamo) las recalcula
+        //    _recomputarMovsQR() fresco por render (abajo) → ya no se atoran ni se pierden.
         if (e.concepto === 'merma') {
-            // Dedupe de MERMAS: aquí importadoEnInv SÍ es el candado. Las mermas de
-            // insumo no dejan rastro con id en el inventario (SUMAN a filaM.mermaBase/
-            // mermaCopas), así que yaEnInv no las protege — sin este check, cada corrida
-            // del import re-sumaba la misma merma (doble conteo). Se quedan en el
-            // inventario que las importó primero (no aplica re-clamo por periodo:
-            // una suma no se puede des-sumar).
-            if (e.importadoEnInv) return;
-            var cantM = parseFloat(e.cantidad) || 0;
-            if (!(cantM > 0)) return;
-            var uM = (e.unidad || '').toLowerCase();
-            if (e.mermaTipo === 'producto' || e.recetaId) {
-                // Producto del menú: se lista en el reporte (no descuenta insumos por ahora)
+            var cantMP = parseFloat(e.cantidad) || 0;
+            if (cantMP > 0 && (e.mermaTipo === 'producto' || e.recetaId)) {
                 if (!invActual.mermasProductoQR) invActual.mermasProductoQR = [];
-                if (invActual.mermasProductoQR.some(function(x){ return x.id === e.id; })) return;
-                invActual.mermasProductoQR.push({ id: e.id, recetaId: e.recetaId || '',
-                    nombre: e.nombre || '—', cantidad: cantM, unidad: e.unidad || 'pza',
-                    motivo: e.motivo || '', fecha: e.fecha || '', foto_url: e.foto_url || '', foto_urls: e.foto_urls || [] });
-            } else {
-                // Insumo: convertir a la unidad de merma de su fila y sumarla
-                if (!idsSuc[e.insumoId]) return; // no es de esta sucursal
-                var filaM = filasCaptura.find(function(f){ return f.insumoId === e.insumoId; });
-                if (!filaM) return;
-                if (filaM.tipo === 'peso') {
-                    var baseM = cantM; // g / ml / pza directos en unidad base
-                    if (uM === 'botella') baseM = (filaM.contNeto > 0 ? cantM * filaM.contNeto : cantM);
-                    filaM.mermaBase = (parseFloat(filaM.mermaBase) || 0) + baseM;
-                } else if (filaM.tipo === 'pza') {
-                    var pzM = cantM; // pza / botella / lata = piezas
-                    if (uM === 'ml') pzM = (filaM.contNeto > 0 ? cantM / filaM.contNeto : cantM);
-                    filaM.mermaCopas = (parseFloat(filaM.mermaCopas) || 0) + pzM;
-                } else { // copa
-                    var copasBotM = (filaM.contNeto > 0 && filaM.copaML > 0) ? filaM.contNeto / filaM.copaML : 0;
-                    var copasM = cantM; // 'copa' y 'porcion' = copas directas
-                    if (uM === 'oz')  copasM = filaM.copaML > 0 ? cantM * OZ_ML / filaM.copaML : cantM;
-                    else if (uM === 'ml') copasM = filaM.copaML > 0 ? cantM / filaM.copaML : cantM;
-                    else if (uM === 'botella' || uM === 'pza') copasM = copasBotM ? cantM * copasBotM : cantM;
-                    filaM.mermaCopas = (parseFloat(filaM.mermaCopas) || 0) + copasM;
+                if (!invActual.mermasProductoQR.some(function(x){ return x.id === e.id; })) {
+                    invActual.mermasProductoQR.push({ id: e.id, recetaId: e.recetaId || '',
+                        nombre: e.nombre || '—', cantidad: cantMP, unidad: e.unidad || 'pza',
+                        motivo: e.motivo || '', fecha: e.fecha || '', foto_url: e.foto_url || '', foto_urls: e.foto_urls || [] });
+                    n++;
                 }
             }
-            e.importadoEnInv = invActual.id;
-            try { _sbUpEL(e); } catch(err) {}
-            n++;
-            return;
+            return; // mermas de INSUMO → _recomputarMovsQR
         }
-        // ── SALIDAS del QR (cortesía / préstamo): entran como CORTESÍA del inventario ──
-        // Misma lógica que una merma de insumo, pero suman a cortesiaCopas (bucket de
-        // salida justificada que ya resta del teórico). El tipo (cortesía/préstamo) y su
-        // motivo se guardan en cortesiaConcepto → se leen en la sección "Cortesías" del reporte.
-        if (e.concepto === 'salida') {
-            if (e.importadoEnInv) return;            // dedupe (suma → no se puede des-sumar)
-            var cantS = parseFloat(e.cantidad) || 0;
-            if (!(cantS > 0)) return;
-            if (!e.insumoId || !idsSuc[e.insumoId]) return; // solo insumos de esta sucursal
-            var filaS = filasCaptura.find(function(f){ return f.insumoId === e.insumoId; });
-            if (!filaS) return;
-            var uSa  = (e.unidad || '').toLowerCase();
-            var _tip = e.salidaTipo === 'prestamo' ? '🔁 Préstamo' : '🎁 Cortesía';
-            var _conc = _tip + (e.notas ? ': ' + e.notas : '');
-            if (filaS.tipo === 'peso') {
-                var baseS = cantS; // g / ml / pza directos en unidad base
-                if (uSa === 'botella') baseS = (filaS.contNeto > 0 ? cantS * filaS.contNeto : cantS);
-                filaS.mermaBase = (parseFloat(filaS.mermaBase) || 0) + baseS; // peso: único bucket de salida
-                filaS.mermaConcepto = [filaS.mermaConcepto, _conc].filter(Boolean).join(' · ');
-            } else if (filaS.tipo === 'pza') {
-                var pzS = cantS; // pza / botella / lata = piezas
-                if (uSa === 'ml') pzS = (filaS.contNeto > 0 ? cantS / filaS.contNeto : cantS);
-                filaS.cortesiaCopas = (parseFloat(filaS.cortesiaCopas) || 0) + pzS;
-                filaS.cortesiaConcepto = [filaS.cortesiaConcepto, _conc].filter(Boolean).join(' · ');
-            } else { // copa
-                var copasBotS = (filaS.contNeto > 0 && filaS.copaML > 0) ? filaS.contNeto / filaS.copaML : 0;
-                var copasS = cantS; // 'copa' y 'porcion' = copas directas
-                if (uSa === 'oz')  copasS = filaS.copaML > 0 ? cantS * OZ_ML / filaS.copaML : cantS;
-                else if (uSa === 'ml') copasS = filaS.copaML > 0 ? cantS / filaS.copaML : cantS;
-                else if (uSa === 'botella' || uSa === 'pza') copasS = copasBotS ? cantS * copasBotS : cantS;
-                filaS.cortesiaCopas = (parseFloat(filaS.cortesiaCopas) || 0) + copasS;
-                filaS.cortesiaConcepto = [filaS.cortesiaConcepto, _conc].filter(Boolean).join(' · ');
-            }
-            e.importadoEnInv = invActual.id;
-            try { _sbUpEL(e); } catch(err) {}
-            n++;
-            return;
-        }
+        if (e.concepto === 'salida') return; // salidas de insumo → _recomputarMovsQR
         // (Ya pasó el SELLO de sucursal y el PERIODO). NO exigimos que el insumo esté
         // en el scope activo (idsSuc): si su membresía cambió o quedó fuera del scope,
         // ocultar una entrada YA capturada es peor que mostrarla. Si el insumo no es una
@@ -1012,6 +1003,9 @@ function _importarEntradasQR() {
         try { _sbUpEL(e); } catch(err) {}
         n++;
     });
+    // Merma/cortesía-préstamo de INSUMO (QR): se recalculan frescas por render (idempotente),
+    // así siempre se reflejan en el reporte aunque el insumo entre después (por área, etc.).
+    try { _recomputarMovsQR(); } catch(err) { console.warn('[recomputar movs QR]', err); }
     if (n) { try { guardarInventario(); } catch(err) {} } // persiste con el candado anti-borrado
     // BACK-FILL al log global: entradas que viven SOLO en el inventario (búsqueda rápida
     // vieja, que no espejaba al log global) → subirlas para que aparezcan en el "Registro
@@ -3508,6 +3502,11 @@ function _cardExistPeso(fila, idx) {
 function updCapturaPeso(idx, campo, val) {
     const fila = filasCaptura[idx]; if (!fila) return;
     if (campo === 'entrada0') { if (!fila.entradas) fila.entradas = ['','','','','']; fila.entradas[0] = val; }
+    else if (campo === 'mermaBase') {
+        // Input muestra el TOTAL (manual + QR); manual = total − QR (peso).
+        fila.mermaBaseManual = Math.max(0, (parseFloat(val) || 0) - (parseFloat(fila._qrBase) || 0));
+        fila.mermaBase = (parseFloat(fila.mermaBaseManual) || 0) + (parseFloat(fila._qrBase) || 0);
+    }
     else fila[campo] = val;
     // Actualizar teórica + diferencia sin re-render (no perder el foco del input).
     const u   = (fila.baseUnit || 'G').toLowerCase();
@@ -4540,7 +4539,21 @@ function updCoctelVendido(id, val) {
     if (!invActual.cocktailsVendidos) invActual.cocktailsVendidos = {};
     invActual.cocktailsVendidos[id] = val; _consumoDirty = true; window._step5Dirty = true;
 }
-function updVentasDirectas(idx, campo, val) { filasCaptura[idx][campo] = val; _autoGuardar(); }
+function updVentasDirectas(idx, campo, val) {
+    var f = filasCaptura[idx]; if (!f) return;
+    // Merma/cortesía: el input muestra el TOTAL (manual + QR). Guardamos el MANUAL = total − QR
+    // para no perder la parte del QR al recalcular (_recomputarMovsQR).
+    if (campo === 'mermaCopas') {
+        f.mermaManual = Math.max(0, (parseFloat(val) || 0) - (parseFloat(f._qrMerma) || 0));
+        f.mermaCopas  = (parseFloat(f.mermaManual) || 0) + (parseFloat(f._qrMerma) || 0);
+    } else if (campo === 'cortesiaCopas') {
+        f.cortesiaManual = Math.max(0, (parseFloat(val) || 0) - (parseFloat(f._qrCort) || 0));
+        f.cortesiaCopas  = (parseFloat(f.cortesiaManual) || 0) + (parseFloat(f._qrCort) || 0);
+    } else {
+        f[campo] = val;
+    }
+    _autoGuardar();
+}
 function updVentasConcepto(idx, campo, val) { filasCaptura[idx][campo] = val; _autoGuardar(); }
 
 // ═══════════════════════════════════════════════════════════════
