@@ -33,6 +33,12 @@ var _cacheRecetas = null;
 function getRecetas() {
     return _cacheRecetas || [];
 }
+// Resolver id→receta CANÓNICO por sucursal (insumo-label.js): recetas/sub-recetas guardan
+// el id del maestro; si hay una copia de receta para la sucursal activa, la devuelve
+// transparente. Sin copias, equivale a getRecetas().find por id.
+if (typeof window !== 'undefined' && typeof window._makeRecetaResolver === 'function' && !window._recetaResolver) {
+    window._recetaResolver = window._makeRecetaResolver(getRecetas);
+}
 // Recetas acotadas a la SUCURSAL activa (regla "sin sucursal = matriz: ve todo").
 // SOLO para mostrar listas; getRecetas() sigue completo para lookups por id y
 // para reconstruir el cache (si filtráramos ahí, se borrarían recetas de otras

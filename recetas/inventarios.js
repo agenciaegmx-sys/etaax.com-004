@@ -36,6 +36,9 @@ function getInsumos() {
 // Resolver id→insumo con la fábrica compartida (insumo-label.js): misma lógica que
 // insumos.js/app.js; fuente = getInsumos de este módulo.
 window._insumoResolver = window._makeInsumoResolver(getInsumos);
+// Resolver id→receta CANÓNICO por sucursal (mismo patrón): recetas/sub-recetas guardan el
+// id del maestro; si hay copia de receta para la sucursal activa, la devuelve transparente.
+if (typeof window._makeRecetaResolver === 'function') window._recetaResolver = window._makeRecetaResolver(getRecetas);
 // Insumos acotados a la SUCURSAL activa (regla "sin sucursal = matriz: ve todo").
 // Sin esto, el inventario leía los insumos de TODAS las sucursales y los duplicaba.
 function _scopeSucInsumos(lista) {

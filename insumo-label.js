@@ -131,6 +131,38 @@
         };
     };
 
+    // Resolver CANÓNICO de RECETAS por sucursal — misma mecánica que insumos, pero la
+    // membresía usa `sucursales`/`sucursalId` de la receta. Recetas/inventarios guardan el
+    // id del MAESTRO; si hay una copia de receta para la sucursal activa (origenId = ese
+    // canónico), la devuelve transparente. Sin copias, idéntico a un find por id.
+    window._makeRecetaResolver = function (getArr, getSig) {
+        var _ix = null, _byCanon = null, _key = null;
+        function _sucAct() { try { return localStorage.getItem('etaax_sucursal_activa') || ''; } catch (e) { return ''; } }
+        function _eff(s) { return s || 'suc_principal'; }
+        function _mem(r) { return (r && r.sucursales && r.sucursales.length) ? r.sucursales : (r && r.sucursalId ? [r.sucursalId] : []); }
+        return function (id) {
+            var k = getSig ? getSig() : getArr();
+            if (_ix === null || k !== _key) {
+                _ix = {}; _byCanon = {};
+                (getArr() || []).forEach(function (r) {
+                    if (!r || !r.id) return;
+                    _ix[r.id] = r;
+                    if (r.origenId) {
+                        var bag = (_byCanon[r.origenId] = _byCanon[r.origenId] || {});
+                        _mem(r).forEach(function (m) { bag[_eff(m)] = r; });
+                    }
+                });
+                _key = k;
+            }
+            if (!id) return null;
+            var base = _ix[id] || null;
+            var canonical = (base && base.origenId) || id;
+            var byS = _byCanon[canonical];
+            if (byS) { var v = byS[_eff(_sucAct())]; if (v) return v; }
+            return _ix[canonical] || base;
+        };
+    };
+
     // ── Membresía por sucursal (igual que recetas): en qué sucursales VIVE un insumo ──
     // Usa el array `sucursales` si existe; si no, cae al `sucursalId` único (backward-compatible).
     // Vacío = Matriz (todas). Así "Copiar aquí" agrega la sucursal SIN duplicar el registro.
