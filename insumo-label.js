@@ -96,16 +96,38 @@
     //   getArr : function() → array de insumos del catálogo.
     //   getSig : function() → valor de firma; si cambia, se reconstruye el índice.
     //            (por defecto usa la identidad del array — sirve cuando getArr cachea).
+    // ── Resolver CANÓNICO por sucursal (independencia insumo/receta por sucursal) ──
+    // Las recetas e inventarios guardan el id del MAESTRO (id canónico). Si existe una
+    // COPIA para la sucursal activa (registro con `origenId` = ese canónico y que vive en
+    // esa sucursal), el resolver devuelve la COPIA de forma TRANSPARENTE — así el mismo id
+    // referenciado por todos ve el dato de su sucursal. Sin copias, se comporta idéntico a
+    // antes (100% backward-compatible). El índice de copias es independiente de la sucursal;
+    // la variante se elige en cada llamada según la sucursal activa (no requiere reindexar).
     window._makeInsumoResolver = function (getArr, getSig) {
-        var _ix = null, _key = null;
+        var _ix = null, _byCanon = null, _key = null;
+        function _sucAct() { try { return localStorage.getItem('etaax_sucursal_activa') || ''; } catch (e) { return ''; } }
+        function _eff(s) { return s || 'suc_principal'; }
         return function (id) {
             var k = getSig ? getSig() : getArr();
             if (_ix === null || k !== _key) {
-                _ix = {};
-                (getArr() || []).forEach(function (x) { if (x && x.id) _ix[x.id] = x; });
+                _ix = {}; _byCanon = {};
+                (getArr() || []).forEach(function (x) {
+                    if (!x || !x.id) return;
+                    _ix[x.id] = x;
+                    if (x.origenId) { // COPIA por sucursal → indexar canónico → {sucursal: copia}
+                        var mem = window._insumoSucursales ? window._insumoSucursales(x) : (x.sucursalId ? [x.sucursalId] : []);
+                        var bag = (_byCanon[x.origenId] = _byCanon[x.origenId] || {});
+                        mem.forEach(function (m) { bag[_eff(m)] = x; });
+                    }
+                });
                 _key = k;
             }
-            return _ix[id] || null;
+            if (!id) return null;
+            var base = _ix[id] || null;
+            var canonical = (base && base.origenId) || id; // si te pasan el id de una copia, usa su canónico
+            var byS = _byCanon[canonical];
+            if (byS) { var v = byS[_eff(_sucAct())]; if (v) return v; } // copia de la sucursal activa
+            return _ix[canonical] || base;                              // si no, el maestro
         };
     };
 
