@@ -81,6 +81,69 @@
    window.abrirInsumoSuc = abrirInsumoSuc;
    window.cerrarInsumoSuc = cerrarInsumoSuc;
    window.guardarInsumoSuc = guardarInsumoSuc;
+
+   // ── INDEPENDIZAR POR SUCURSAL (paso 4): auto-detecta insumos COMPARTIDOS (viven en >1
+   //    sucursal) y crea una COPIA independiente por sucursal, ligada al maestro (origenId).
+   //    Aditivo, idempotente y reversible. NO toca inventarios/mermas ya capturados (esos
+   //    referencian el id CANÓNICO = el del maestro, que se conserva; el resolver por sucursal
+   //    hace ver la copia). Respaldo automático antes de ejecutar. ──────────────────────────
+   function _respaldarCatalogoIns() {
+       try {
+           var data = JSON.stringify({ tipo:'respaldo-insumos', negocio:getNegocioActivo(), fecha:new Date().toISOString(), insumos:getInsumos() }, null, 2);
+           var a = document.createElement('a');
+           a.href = URL.createObjectURL(new Blob([data], {type:'application/json'}));
+           a.download = 'respaldo-insumos-' + (getNegocioActivo()||'negocio') + '-' + new Date().toISOString().slice(0,10) + '.json';
+           document.body.appendChild(a); a.click(); a.remove();
+           setTimeout(function(){ try{ URL.revokeObjectURL(a.href); }catch(e){} }, 3000);
+           return true;
+       } catch(e) { console.warn('[respaldo insumos]', e); return false; }
+   }
+   function _independizarInsumosPorSuc(dryRun) {
+       var lista = getInsumos();
+       var toFork = [];
+       lista.forEach(function(ins){
+           if (!ins || ins.origenId) return; // ya es una copia
+           var mem = window._insumoSucursales ? window._insumoSucursales(ins) : (ins.sucursalId ? [ins.sucursalId] : []);
+           if (mem.length <= 1) return; // no compartido (0 o 1 sucursal) → ya es independiente
+           toFork.push({ ins: ins, mem: mem.slice() });
+       });
+       if (dryRun) return { maestros: toFork.length, copias: toFork.reduce(function(s,p){ return s + p.mem.length; }, 0) };
+       var nuevas = [];
+       toFork.forEach(function(p){
+           p.ins._memPreMigra = p.mem.slice(); // huella para revertir si hiciera falta
+           p.mem.forEach(function(suc){
+               var copia = JSON.parse(JSON.stringify(p.ins));
+               copia.id        = genId();
+               copia.origenId  = p.ins.id;        // liga al maestro (canónico)
+               copia.sucursales = [suc];
+               copia.sucursalId = suc || '';
+               delete copia._memPreMigra;
+               nuevas.push(copia);
+           });
+           p.ins.sucursales = []; // el maestro queda global-only (sin sucursal); las copias sirven a cada una
+           p.ins.sucursalId = '';
+       });
+       var all = getInsumos().concat(nuevas);
+       setInsumos(all);
+       try { _sincronizarInsumosSupabase(getNegocioActivo(), nuevas.concat(toFork.map(function(p){ return p.ins; }))); } catch(e){}
+       return { maestros: toFork.length, copias: nuevas.length };
+   }
+   function abrirIndependizarSucIns() {
+       var plan = _independizarInsumosPorSuc(true);
+       if (!plan.maestros) { alert('✅ No hay insumos compartidos entre sucursales. Ya trabajan independientes.'); return; }
+       if (!_respaldarCatalogoIns()) { if (!confirm('⚠️ No se pudo descargar el respaldo automático. ¿Continuar de todas formas?')) return; }
+       var ok = confirm('🔗 INDEPENDIZAR INSUMOS POR SUCURSAL\n\n' +
+           'Detectados: ' + plan.maestros + ' insumo(s) compartido(s) entre sucursales.\n' +
+           'Se crearán ' + plan.copias + ' copia(s) independiente(s) (una por sucursal), ligadas a su maestro.\n\n' +
+           '✔ Tus inventarios/mermas YA capturados NO se tocan (referencian el id del maestro).\n' +
+           '✔ Es reversible (ya se descargó un respaldo .json).\n\n' +
+           'Ya se descargó el respaldo. ¿Ejecutar ahora?');
+       if (!ok) return;
+       var res = _independizarInsumosPorSuc(false);
+       alert('✅ Listo: ' + res.copias + ' copia(s) creadas de ' + res.maestros + ' insumo(s).\nCada sucursal ahora edita la suya de forma independiente.');
+       try { init(); } catch(e){}
+   }
+   window.abrirIndependizarSucIns = abrirIndependizarSucIns;
    function _catGlobalIns() { return sessionStorage.getItem('etaax_cat_global') === '1'; }
    // Refleja en el header/banner si entramos en modo Catálogo Global del negocio
    // (se activa desde el menú "Catálogos Globales" del hub → flag etaax_cat_global).
@@ -93,6 +156,9 @@
        if (ttl) ttl.innerHTML   = on ? 'Insumos <span style="color:#7ab8f5">· Global</span>' : 'Insumos';
        // En modo global no tiene sentido el botón de copiar entre sucursales.
        if (bn) bn.style.display = on ? 'none' : '';
+       // Independizar por sucursal: operación a nivel negocio → solo en el catálogo global.
+       var bi = document.getElementById('btnIndepSucIns');
+       if (bi) bi.style.display = on ? '' : 'none';
    }
    function _poblarFiltroSucIns() {
        var sucs = _getSucsIns();
@@ -579,6 +645,9 @@
                    : lista.filter(x => x.activo !== '0' && !_pausado(x));
            }
        } else {
+           // Catálogo GLOBAL = maestros. Las COPIAS por sucursal (origenId) NO se listan aquí
+           // (viven en su sucursal); se administran/actualizan vía el botón de Novedades.
+           lista = lista.filter(x => !x.origenId);
            lista = (estadoIns === 'inactivos')
                ? lista.filter(x => x.activo === '0')
                : lista.filter(x => x.activo !== '0');

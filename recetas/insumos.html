@@ -76,6 +76,7 @@
             <div style="display:flex;gap:10px">
                 <button class="btn-vista" id="btnOptFotosNeg" onclick="migrarFotosNegocio()" title="Mueve las fotos base64 de este negocio a Storage (carga más fluida)">🗜️ Optimizar fotos</button>
                 <button class="btn-vista" id="btnInsumosNegGlobal" onclick="abrirInsumosGlobalNeg()" title="Insumos de todas las sucursales de este negocio — cópialos a esta sucursal">🏢 <span id="lblInsumosNeg">Insumos Globales</span></button>
+                <button class="btn-vista" id="btnIndepSucIns" style="display:none;color:#7ab8f5;border-color:#7ab8f5" onclick="abrirIndependizarSucIns()" title="Detecta insumos compartidos entre sucursales y crea una copia independiente por sucursal (con respaldo previo). Tus datos capturados no se tocan.">🔗 Independizar sucursales</button>
                 <button class="btn-vista" onclick="abrirCatalogoGlobal()" title="Importar del catálogo maestro de ETAAX">🌐 Insumos ETAAX</button>
                 <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)" onclick="abrirSelectorCategoria()">+ Agregar insumo</button>
             </div>
