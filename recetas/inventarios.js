@@ -1007,6 +1007,7 @@ function _importarEntradasQR() {
             costo: parseFloat(e.costo) || 0,
             tipo: e.tipo || '', notas: e.notas || '',
             fecha: e.fecha || '', origen: e.origen || 'manual',
+            registradoPor: e.registradoPor || '', // quién lo registró en el QR (sello del RPC)
             sucursalId: e.sucursalId || _sucActiva() || '', // sello: hereda la sucursal del registro
             foto_url: e.foto_url || '',         // evidencia visual del QR (1ª foto)
             foto_urls: e.foto_urls || []        // lote: varias fotos de evidencia
@@ -7132,6 +7133,21 @@ function _fotosThumbHTML(e) {
     return '<span style="display:inline-flex;gap:3px;align-items:center">' + thumbs + more + '</span>';
 }
 
+// Badge "📱 QR" (con quién lo registró) para registros hechos desde el QR de sucursal.
+function _qrOrigenHTML(e) {
+    if (!e || e.origen !== 'qr') return '';
+    var quien = e.registradoPor ? (' · ' + etx(e.registradoPor)) : '';
+    return '<span style="font-size:9px;letter-spacing:.3px;background:rgba(122,184,245,.14);color:#7ab8f5;border:1px solid rgba(122,184,245,.35);border-radius:8px;padding:1px 6px;white-space:nowrap;margin-left:5px" title="Registrado desde el QR' + (e.registradoPor ? ' por ' + etx(e.registradoPor) : '') + '">📱 QR' + quien + '</span>';
+}
+// Celda de nombre: nombre + extra inline (merma/producto/motivo) + badge QR, y debajo el
+// COMENTARIO que se capturó al subir el registro (si trae notas).
+function _entNombreCell(e, nombre, extraInline) {
+    return '<span class="ent-log-nombre" style="display:flex;flex-direction:column;gap:2px">' +
+        '<span>' + nombre + (extraInline || '') + _qrOrigenHTML(e) + '</span>' +
+        (e && e.notas ? '<span style="font-size:10.5px;color:var(--text-dim);font-style:italic">📝 ' + etx(e.notas) + '</span>' : '') +
+    '</span>';
+}
+
 function renderListadoEntradas() {
     const cont = document.getElementById('entLogList');
     if (!cont) return;
@@ -7188,7 +7204,7 @@ const fotoTh = _fotosThumbHTML(e);
             const areaTx = e.area ? ' · ' + etx(e.area) : '';
             const motivo = { se_rompio:'se rompió', se_derramo:'se derramó', mal_preparado:'mal preparado', caducado:'caducado', otro:'otro' }[e.motivo] || '';
             return `<div class="ent-log-fila">
-                <span class="ent-log-nombre">${nombre}${e.mermaTipo === 'producto' ? ' <span style="font-size:9px;color:var(--text-dim)">🍹 producto</span>' : ''}${motivo ? ' <span style="font-size:10px;color:var(--text-dim)">· ' + motivo + '</span>' : ''}</span>
+                ${_entNombreCell(e, nombre, (e.mermaTipo === 'producto' ? ' <span style="font-size:9px;color:var(--text-dim)">🍹 producto</span>' : '') + (motivo ? ' <span style="font-size:10px;color:var(--text-dim)">· ' + motivo + '</span>' : ''))}
                 <span class="ent-log-badge" style="color:var(--red);background:rgba(224,90,58,.12);border-color:rgba(224,90,58,.4)">Merma${areaTx}</span>
                 <span class="ent-log-fecha">${e.fecha || '—'}</span>
                 <span class="ent-log-cant" style="color:var(--red)">−${cant} ${etx(e.unidad || 'pza')}</span>
@@ -7200,9 +7216,8 @@ const fotoTh = _fotosThumbHTML(e);
             const areaTx = e.area ? ' · ' + etx(e.area) : '';
             const esPrest = e.salidaTipo === 'prestamo';
             const lbl = esPrest ? '🔁 Préstamo' : '🎁 Cortesía';
-            const notaTx = e.notas ? ' <span style="font-size:10px;color:var(--text-dim)">· ' + etx(e.notas) + '</span>' : '';
             return `<div class="ent-log-fila">
-                <span class="ent-log-nombre">${nombre}${notaTx}</span>
+                ${_entNombreCell(e, nombre, '')}
                 <span class="ent-log-badge" style="color:#9b7fe0;background:rgba(124,95,211,.12);border-color:rgba(124,95,211,.4)">${lbl}${areaTx}</span>
                 <span class="ent-log-fecha">${e.fecha || '—'}</span>
                 <span class="ent-log-cant" style="color:#9b7fe0">−${cant} ${etx(e.unidad || 'pza')}</span>
@@ -7222,7 +7237,7 @@ const fotoTh = _fotosThumbHTML(e);
             </div>`;
         }
         return `<div class="ent-log-fila">
-            <span class="ent-log-nombre">${nombre}</span>
+            ${_entNombreCell(e, nombre, '')}
             <span class="ent-log-badge" style="color:${color};background:${color}1a;border-color:${color}50">${tipoEntradaLabel(e.tipo)}</span>
             <span class="ent-log-fecha">${e.fecha || '—'}</span>
             <span class="ent-log-cant">+${cant} ${_unidadCompra(e)}</span>
