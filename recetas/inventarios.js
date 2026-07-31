@@ -431,8 +431,19 @@ function _esRefValida(x) {
     return x.cerrado || x.tipoInv === 'primer_lev' || (x.filas||[]).some(_filaConDatos);
 }
 function _refsDisponibles() {
-    return _scopeSucInvs(getInventarios()).filter(_esRefValida)
+    var all = _scopeSucInvs(getInventarios()).filter(_esRefValida)
         .slice().sort(function(a,b){ return String(a.fecha||'').localeCompare(String(b.fecha||'')); }); // viejo→nuevo
+    // La existencia anterior debe venir de un inventario de la MISMA área: una BARRA se
+    // compara contra la barra anterior, no contra una cocina/bodega que no tiene sus
+    // insumos (si no, todos los insumos de barra salían con "anterior 0"). Vacío/general
+    // = comodín. Si ningún ref coincide en área, no romper → devolver todos (previo).
+    var invA = ((invActual && invActual.area) || '').toString().trim().toLowerCase();
+    if (!invA || invA === 'general') return all;
+    var mismos = all.filter(function(x){
+        var a = (x && x.area || '').toString().trim().toLowerCase();
+        return !a || a === 'general' || a === invA;
+    });
+    return mismos.length ? mismos : all;
 }
 function _getRefInv() {
     const cands = _refsDisponibles();
@@ -443,13 +454,27 @@ function _getRefInv() {
     }
     return cands[cands.length - 1]; // el más reciente ANTERIOR (no el primer lev si hay uno intermedio)
 }
+// Fila de referencia para la "existencia anterior" de un insumo. Prioriza el ref
+// ELEGIDO (o el más reciente); si ese ref no CONTIENE el insumo (p.ej. se saltó ese
+// conteo, o venía de otra área), cae al inventario anterior más reciente —misma
+// área/sucursal— que SÍ lo contó. Empata por id exacto o canónico (copias por sucursal).
+function _refFilaInsumo(insumoId) {
+    const refs = _refsDisponibles();            // viejo→nuevo (misma área/sucursal)
+    if (!refs.length) return null;
+    const pref = _getRefInv();                  // el elegido, o el más reciente
+    const orden = [];
+    if (pref) orden.push(pref);
+    for (let i = refs.length - 1; i >= 0; i--) { if (!pref || refs[i].id !== pref.id) orden.push(refs[i]); }
+    for (let k = 0; k < orden.length; k++) {
+        const fs = (orden[k].filas || []);
+        const f = fs.find(x => x && x.insumoId === insumoId)
+               || fs.find(x => x && _canonInsumoId(x.insumoId) === insumoId);
+        if (f) return f;
+    }
+    return null;
+}
 function getExistenciaAnterior(insumoId) {
-    const inv = _getRefInv();
-    if (!inv) return 0;
-    let fila = (inv.filas || []).find(f => f.insumoId === insumoId);
-    // Fallback: el inventario de referencia pudo guardar la fila con OTRO id de la MISMA
-    // identidad (una copia/variante por sucursal, o un id previo). Empatar por id canónico.
-    if (!fila) fila = (inv.filas || []).find(f => f && _canonInsumoId(f.insumoId) === insumoId);
+    const fila = _refFilaInsumo(insumoId);
     if (!fila) return 0;
     const ea = fila.existenciaFisica !== undefined ? fila.existenciaFisica : calcExistencia(fila);
     // Las copas dependen del tamaño de copa. Si la copa del insumo cambió desde el
@@ -490,13 +515,10 @@ function onCambiarRefInv(id) {
 // Última fila de un inventario CERRADO previo (misma sucursal, distinto del actual)
 // que contó este insumo → para copiar su existencia (desglose bodega/barra/pesos).
 function _filaAnteriorInsumo(insumoId) {
-    // Prioriza el inventario de referencia elegido; si ahí no está el insumo, busca el más reciente que sí lo tenga.
-    var ref = _getRefInv();
-    if (ref) {
-        var fr = (ref.filas || []).find(function(x){ return x && x.insumoId === insumoId; })
-              || (ref.filas || []).find(function(x){ return x && _canonInsumoId(x.insumoId) === insumoId; });
-        if (fr) return fr;
-    }
+    // Misma lógica que la etiqueta "Anterior": ref elegido → anteriores de la misma área
+    // con datos (incluye ABIERTOS) → cerrados históricos como último respaldo.
+    var fr = _refFilaInsumo(insumoId);
+    if (fr) return fr;
     var cerrados = _scopeSucInvs(getInventarios()).filter(function(x){ return x && (x.cerrado || x.tipoInv === 'primer_lev') && (!invActual || x.id !== invActual.id); });
     for (var i = cerrados.length - 1; i >= 0; i--) {
         var f = (cerrados[i].filas || []).find(function(x){ return x && x.insumoId === insumoId; })
