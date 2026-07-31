@@ -142,31 +142,43 @@
         _obFlush();
     }
 
+    // Devuelve el ERROR (o null si ok). Una EXCEPCIÓN (fetch caído) se devuelve como error
+    // de red → el flush NO la cuenta como intento (no descarta el dato en offline real).
     async function _obEjecutar(it) {
-        if (it.op === 'delete') {
-            var rd = await _supabase.from(it.tabla).delete().eq('id', it.id);
-            if (rd.error) console.warn('[outbox] delete falló', it.tabla, it.id, '→', rd.error.message);
-            return !rd.error;
-        }
-        // Aligerar al momento de subir (requiere red): base64 → Storage URL
         try {
-            if (it.payload && it.payload.datos && window.sbAligerarRecord) {
-                await window.sbAligerarRecord(it.payload.datos, it.tabla, it.payload.negocio_id);
+            if (it.op === 'delete') {
+                var rd = await _supabase.from(it.tabla).delete().eq('id', it.id);
+                if (rd.error) console.warn('[outbox] delete falló', it.tabla, it.id, '→', rd.error.message);
+                return rd.error || null;
             }
-        } catch (e) { console.warn('[outbox] aligerar falló', it.tabla, it.k, '→', (e && e.message) || e); }
-        var ru = await _supabase.from(it.tabla).upsert(it.payload, it.opts);
-        if (ru.error) {
-            var kb = '?'; try { kb = Math.round(JSON.stringify(it.payload).length / 1024) + 'KB'; } catch (e) {}
-            console.warn('[outbox] upsert falló', it.tabla, it.k, '(' + kb + ') →', ru.error.message);
-        }
-        return !ru.error;
+            // Aligerar al momento de subir (requiere red): base64 → Storage URL
+            try {
+                if (it.payload && it.payload.datos && window.sbAligerarRecord) {
+                    await window.sbAligerarRecord(it.payload.datos, it.tabla, it.payload.negocio_id);
+                }
+            } catch (e) { console.warn('[outbox] aligerar falló', it.tabla, it.k, '→', (e && e.message) || e); }
+            var ru = await _supabase.from(it.tabla).upsert(it.payload, it.opts);
+            if (ru.error) {
+                var kb = '?'; try { kb = Math.round(JSON.stringify(it.payload).length / 1024) + 'KB'; } catch (e) {}
+                console.warn('[outbox] upsert falló', it.tabla, it.k, '(' + kb + ') →', ru.error.message);
+            }
+            return ru.error || null;
+        } catch (e) { return e || new Error('network'); } // excepción = red caída
+    }
+    // ¿El error parece FALTA DE RED (no un error de datos/RLS)? → no descartar, reintentar.
+    function _esErrRed(err) {
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+        var m = ((err && (err.message || err.msg || err)) + '').toLowerCase();
+        return /fetch|network|failed to fetch|networkerror|load failed|timeout|timed out|econn|dns|offline|abort/.test(m);
     }
 
     var _obFlushing = false, _obRepetir = false;
     async function _obFlush() {
         if (_obFlushing) { _obRepetir = true; return; } // algo entró en pleno flush → correr otra vuelta al terminar
         if (typeof _supabase === 'undefined') return;
-        if (typeof navigator !== 'undefined' && navigator.onLine === false) return; // sin red
+        // OJO: ya NO cortamos por navigator.onLine — muchas tablets/webviews lo reportan MAL
+        // como offline aunque haya red, y el outbox se quedaba atorado TODO el día. Ahora
+        // SIEMPRE intenta; si de verdad no hay red, _esErrRed evita descartar (solo reintenta).
         _obFlushing = true;
         try {
             var q = _obLoad(), hechos = {}, triesUpd = {}, muertos = {};
@@ -176,10 +188,13 @@
             q.forEach(function (it) { if (it && !it.uid) { it.uid = Date.now().toString(36) + Math.random().toString(36).slice(2, 8); _sinUid = true; } });
             if (_sinUid) _obSave(q);
             for (var i = 0; i < q.length; i++) {
-                var it = q[i], ok = false;
-                try { ok = await _obEjecutar(it); } catch (e) { ok = false; }
-                if (ok) { if (it.uid) hechos[it.uid] = 1; }
-                else {
+                var it = q[i], err = null;
+                try { err = await _obEjecutar(it); } catch (e) { err = e || new Error('network'); }
+                if (!err) { if (it.uid) hechos[it.uid] = 1; }
+                else if (_esErrRed(err)) {
+                    // Falta de red (o tablet que se reporta offline por error): NO cuenta como
+                    // intento → el dato NO se descarta, se reintenta en la próxima vuelta.
+                } else {
                     it.tries = (it.tries || 0) + 1;
                     if (it.tries >= 8) { if (it.uid) muertos[it.uid] = 1; console.error('[outbox] descartado tras 8 intentos:', it.tabla, it.k); }
                     else if (it.uid) triesUpd[it.uid] = it.tries;
@@ -245,9 +260,15 @@
         _obAdd({ op: 'delete', tabla: tabla, k: id, id: id });
     };
 
-    // Disparadores del flush: al cargar, al reconectar, y cada 20s.
+    // Disparadores del flush: al cargar, al reconectar, cada 20s, y al VOLVER la pestaña
+    // visible (las tablets throttlean/pausan los timers en 2do plano → al reabrir la app se
+    // fuerza el vaciado, para que no se queden movimientos atorados todo el día).
     if (typeof window !== 'undefined') {
         window.addEventListener('online', _obFlush);
+        window.addEventListener('focus', _obFlush);
+        if (typeof document !== 'undefined') {
+            document.addEventListener('visibilitychange', function () { if (!document.hidden) _obFlush(); });
+        }
         setInterval(_obFlush, 20000);
         setTimeout(function () { _obIndicador(); _obFlush(); }, 1500);
     }

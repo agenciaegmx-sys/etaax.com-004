@@ -446,7 +446,10 @@ function _getRefInv() {
 function getExistenciaAnterior(insumoId) {
     const inv = _getRefInv();
     if (!inv) return 0;
-    const fila = (inv.filas || []).find(f => f.insumoId === insumoId);
+    let fila = (inv.filas || []).find(f => f.insumoId === insumoId);
+    // Fallback: el inventario de referencia pudo guardar la fila con OTRO id de la MISMA
+    // identidad (una copia/variante por sucursal, o un id previo). Empatar por id canónico.
+    if (!fila) fila = (inv.filas || []).find(f => f && _canonInsumoId(f.insumoId) === insumoId);
     if (!fila) return 0;
     const ea = fila.existenciaFisica !== undefined ? fila.existenciaFisica : calcExistencia(fila);
     // Las copas dependen del tamaño de copa. Si la copa del insumo cambió desde el
@@ -490,12 +493,14 @@ function _filaAnteriorInsumo(insumoId) {
     // Prioriza el inventario de referencia elegido; si ahí no está el insumo, busca el más reciente que sí lo tenga.
     var ref = _getRefInv();
     if (ref) {
-        var fr = (ref.filas || []).find(function(x){ return x && x.insumoId === insumoId; });
+        var fr = (ref.filas || []).find(function(x){ return x && x.insumoId === insumoId; })
+              || (ref.filas || []).find(function(x){ return x && _canonInsumoId(x.insumoId) === insumoId; });
         if (fr) return fr;
     }
     var cerrados = _scopeSucInvs(getInventarios()).filter(function(x){ return x && (x.cerrado || x.tipoInv === 'primer_lev') && (!invActual || x.id !== invActual.id); });
     for (var i = cerrados.length - 1; i >= 0; i--) {
-        var f = (cerrados[i].filas || []).find(function(x){ return x && x.insumoId === insumoId; });
+        var f = (cerrados[i].filas || []).find(function(x){ return x && x.insumoId === insumoId; })
+             || (cerrados[i].filas || []).find(function(x){ return x && _canonInsumoId(x.insumoId) === insumoId; });
         if (f) return f;
     }
     return null;
