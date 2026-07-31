@@ -715,6 +715,8 @@
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🥃 Bebidas</button>
                 <button id="rp-sub-bebidas" onclick="filtroRecetaTipo='sub-bebidas';filtroRecetaGrupo='';filtroRecetaCat='';renderGridRecetas();_activarPillReceta('sub-bebidas')"
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🧃 Sub Bebidas</button>
+                <button id="btnIndepSucRec" onclick="abrirIndependizarSucRec()" title="Detecta recetas compartidas entre sucursales y crea una copia independiente por sucursal (con respaldo previo)."
+                    style="display:none;margin-left:auto;padding:6px 16px;border-radius:20px;border:1.5px solid #7ab8f5;background:transparent;color:#7ab8f5;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">🔗 Independizar sucursales</button>
             </div>
         </div>
         <div class="modal-body" style="max-height:68vh;overflow-y:auto;padding:20px">
@@ -2819,39 +2821,136 @@ function cerrarVerRecetas(e) {
 function _esCatGlobalRecetas(){ try{ return sessionStorage.getItem('etaax_cat_global')==='1'; }catch(e){ return false; } }
 function _sucursalesNeg(){ var negId=localStorage.getItem('etaax_negocio_activo')||''; try{ return JSON.parse(localStorage.getItem('etaax_'+negId+'_sucursales')||'[]'); }catch(e){ return []; } }
 function _sucNombre(id){ var s=_sucursalesNeg().find(function(x){return x.id===id;}); if(s) return s.nombre||id; return (!id||id==='suc_principal')?'Matriz':id; }
+// Copias de receta ligadas a un maestro (origenId) — índice cacheado por referencia.
+var _copRecIdxRef=null,_copRecIdx=null;
+function _copiasDeReceta(masterId){
+    var arr=getRecetas();
+    if(_copRecIdxRef!==arr){ _copRecIdx={}; arr.forEach(function(c){ if(c&&c.origenId){(_copRecIdx[c.origenId]=_copRecIdx[c.origenId]||[]).push(c);} }); _copRecIdxRef=arr; }
+    return _copRecIdx[masterId]||[];
+}
+function _recetaMem(r){ return (typeof _recetaSucursales==='function')?_recetaSucursales(r):(r.sucursalId?[r.sucursalId]:[]); }
 function _recetaBadgesHTML(r){
-    var sucs=(typeof _recetaSucursales==='function')?_recetaSucursales(r):(r.sucursalId?[r.sucursalId]:[]);
+    // MAESTRO con copias por sucursal (origenId) → mostrar la VINCULACIÓN (🔗 N sucursales).
+    if(r&&!r.origenId){
+        var cop=_copiasDeReceta(r.id);
+        if(cop.length){
+            var noms=cop.map(function(c){ var m=_recetaMem(c); return _sucNombre(m[0]||''); }).filter(Boolean);
+            return '<span style="font-size:8px;letter-spacing:.5px;text-transform:uppercase;background:rgba(61,190,122,.14);color:var(--green);border:1px solid rgba(61,190,122,.35);border-radius:10px;padding:1px 6px;white-space:nowrap" title="Copias independientes en: '+etx(noms.join(', '))+'">🔗 '+cop.length+' sucursal'+(cop.length!==1?'es':'')+'</span>';
+        }
+    }
+    var sucs=_recetaMem(r);
     if(!sucs.length) sucs=['suc_principal'];
     return sucs.map(function(id){ return '<span style="font-size:8px;letter-spacing:.5px;text-transform:uppercase;background:rgba(61,190,122,.12);color:var(--green);border:1px solid rgba(61,190,122,.3);border-radius:10px;padding:1px 6px;white-space:nowrap">'+etx(_sucNombre(id))+'</span>'; }).join(' ');
 }
 var _recetaSucEditId=null;
+// Modal "VINCULAR a sucursal": marcar = crea una COPIA independiente ligada al maestro
+// (origenId); desmarcar = quita el vínculo (borra esa copia). Antes compartía el mismo
+// registro → rompía la independencia. Opera siempre sobre el maestro.
 function abrirRecetaSuc(id){
-    _recetaSucEditId=id;
     var r=getRecetas().find(function(x){return x.id===id;}); if(!r) return;
-    var vive=(typeof _recetaSucursales==='function')?_recetaSucursales(r):(r.sucursalId?[r.sucursalId]:[]);
-    if(!vive.length) vive=['suc_principal'];
+    var master=r.origenId?(getRecetas().find(function(x){return x.id===r.origenId;})||r):r;
+    _recetaSucEditId=master.id;
+    var vinc={};
+    _copiasDeReceta(master.id).forEach(function(c){ _recetaMem(c).forEach(function(s){ vinc[s||'suc_principal']=1; }); });
+    _recetaMem(master).forEach(function(s){ vinc[s||'suc_principal']=1; }); // legacy compartido
     var sucs=_sucursalesNeg(), opts=[];
     if(!sucs.some(function(s){return s.id==='suc_principal';})) opts.push({id:'suc_principal',nombre:'Matriz'});
     opts=opts.concat(sucs);
-    document.getElementById('recetaSucNombre').textContent=r.nombre||'Receta';
+    document.getElementById('recetaSucNombre').textContent=master.nombre||'Receta';
     document.getElementById('recetaSucLista').innerHTML=opts.map(function(s){
-        var on=vive.indexOf(s.id)>=0;
-        return '<label style="display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid var(--border);border-radius:9px;margin-bottom:7px;cursor:pointer">'+
+        var on=!!vinc[s.id];
+        return '<label style="display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid '+(on?'rgba(61,190,122,.4)':'var(--border)')+';border-radius:9px;margin-bottom:7px;cursor:pointer">'+
             '<input type="checkbox" data-suc="'+etx(s.id)+'" '+(on?'checked':'')+' style="width:17px;height:17px;accent-color:var(--green)">'+
-            '<span style="font-size:13px;color:var(--text)">'+etx(s.nombre||s.id)+'</span></label>';
+            '<span style="font-size:13px;color:var(--text)">'+(on?'🔗 ':'')+etx(s.nombre||s.id)+'</span></label>';
     }).join('');
     document.getElementById('modalRecetaSuc').style.display='flex';
 }
 function cerrarRecetaSuc(){ var m=document.getElementById('modalRecetaSuc'); if(m)m.style.display='none'; _recetaSucEditId=null; }
 function guardarRecetaSuc(){
-    var r=getRecetas().find(function(x){return x.id===_recetaSucEditId;}); if(!r){ cerrarRecetaSuc(); return; }
+    var lista=getRecetas();
+    var master=lista.find(function(x){return x.id===_recetaSucEditId;}); if(!master){ cerrarRecetaSuc(); return; }
     var sel=[];
     document.querySelectorAll('#recetaSucLista input[type=checkbox]').forEach(function(c){ if(c.checked) sel.push(c.getAttribute('data-suc')); });
-    if(!sel.length){ alert('La receta debe vivir en al menos una sucursal.'); return; }
-    r.sucursales=sel; // membresía múltiple (manda sobre sucursalId)
-    setRecetas(getRecetas());
-    if(typeof _sbUpReceta==='function') _sbUpReceta(r); // guarda en la nube + sync
+    var copPorSuc={};
+    _copiasDeReceta(master.id).forEach(function(c){ _recetaMem(c).forEach(function(s){ copPorSuc[s||'suc_principal']=c; }); });
+    var nuevas=[],borrar=[];
+    sel.forEach(function(suc){
+        if(copPorSuc[suc]) return;
+        var real=(suc==='suc_principal')?'':suc;
+        var copia=JSON.parse(JSON.stringify(master));
+        copia.id=genId(); copia.origenId=master.id; copia.sucursales=[real]; copia.sucursalId=real;
+        delete copia._memPreMigra;
+        nuevas.push(copia);
+    });
+    var quitadas=Object.keys(copPorSuc).filter(function(suc){ return sel.indexOf(suc)<0; });
+    if(quitadas.length){
+        var noms=quitadas.map(function(s){ return _sucNombre(s==='suc_principal'?'':s); }).join(', ');
+        if(!confirm('Vas a QUITAR el vínculo (y borrar la copia) de: '+noms+'.\nSe perderán los ajustes propios de esa(s) sucursal(es). ¿Continuar?')) return;
+        quitadas.forEach(function(suc){ borrar.push(copPorSuc[suc].id); });
+    }
+    master.sucursales=[]; master.sucursalId='';
+    var all=lista.filter(function(x){ return borrar.indexOf(x.id)<0; }).concat(nuevas);
+    setRecetas(all);
+    if(typeof _sbUpReceta==='function'){ nuevas.concat([master]).forEach(function(x){ try{ _sbUpReceta(x); }catch(e){} }); }
+    if(typeof _sbDelReceta==='function'){ borrar.forEach(function(idd){ try{ _sbDelReceta(idd); }catch(e){} }); }
     cerrarRecetaSuc();
+    renderGridRecetas();
+}
+
+// ── INDEPENDIZAR RECETAS POR SUCURSAL (paso 4, recetas): auto-detecta recetas COMPARTIDAS
+//    (viven en >1 sucursal) y crea una COPIA independiente por sucursal, ligada al maestro
+//    (origenId). Aditivo, idempotente, reversible. Respaldo automático antes. ─────────────
+function _respaldarCatalogoRec(){
+    try {
+        var neg=localStorage.getItem('etaax_negocio_activo')||'negocio';
+        var data=JSON.stringify({ tipo:'respaldo-recetas', negocio:neg, fecha:new Date().toISOString(), recetas:getRecetas() }, null, 2);
+        var a=document.createElement('a');
+        a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));
+        a.download='respaldo-recetas-'+neg+'-'+new Date().toISOString().slice(0,10)+'.json';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function(){ try{ URL.revokeObjectURL(a.href); }catch(e){} }, 3000);
+        return true;
+    } catch(e){ console.warn('[respaldo recetas]', e); return false; }
+}
+function _independizarRecetasPorSuc(dryRun){
+    var lista=getRecetas(), toFork=[];
+    lista.forEach(function(r){
+        if(!r||r.origenId) return;                 // ya es copia
+        var mem=_recetaMem(r);
+        if(mem.length<=1) return;                  // no compartida → ya independiente
+        toFork.push({ r:r, mem:mem.slice() });
+    });
+    if(dryRun) return { maestros:toFork.length, copias:toFork.reduce(function(s,p){ return s+p.mem.length; },0) };
+    var nuevas=[];
+    toFork.forEach(function(p){
+        p.r._memPreMigra=p.mem.slice();
+        p.mem.forEach(function(suc){
+            var copia=JSON.parse(JSON.stringify(p.r));
+            copia.id=genId(); copia.origenId=p.r.id; copia.sucursales=[suc||'']; copia.sucursalId=suc||'';
+            delete copia._memPreMigra;
+            nuevas.push(copia);
+        });
+        p.r.sucursales=[]; p.r.sucursalId=''; // maestro global
+    });
+    var all=getRecetas().concat(nuevas);
+    setRecetas(all);
+    if(typeof _sbUpReceta==='function'){ nuevas.concat(toFork.map(function(p){ return p.r; })).forEach(function(x){ try{ _sbUpReceta(x); }catch(e){} }); }
+    return { maestros:toFork.length, copias:nuevas.length };
+}
+function abrirIndependizarSucRec(){
+    if(!_esCatGlobalRecetas()){ alert('Abre el Catálogo Global de recetas para independizar por sucursal.'); return; }
+    var plan=_independizarRecetasPorSuc(true);
+    if(!plan.maestros){ alert('✅ No hay recetas compartidas entre sucursales. Ya trabajan independientes.'); return; }
+    if(!_respaldarCatalogoRec()){ if(!confirm('⚠️ No se pudo descargar el respaldo automático. ¿Continuar de todas formas?')) return; }
+    var ok=confirm('🔗 INDEPENDIZAR RECETAS POR SUCURSAL\n\n'+
+        'Detectadas: '+plan.maestros+' receta(s) compartida(s) entre sucursales.\n'+
+        'Se crearán '+plan.copias+' copia(s) independiente(s) (una por sucursal), ligadas a su maestro.\n\n'+
+        '✔ El costo ya se independiza solo (sus insumos resuelven por sucursal).\n'+
+        '✔ Reversible (ya se descargó un respaldo .json).\n\n'+
+        'Ya se descargó el respaldo. ¿Ejecutar ahora?');
+    if(!ok) return;
+    var res=_independizarRecetasPorSuc(false);
+    alert('✅ Listo: '+res.copias+' copia(s) creadas de '+res.maestros+' receta(s).\nCada sucursal ahora edita la suya de forma independiente.');
     renderGridRecetas();
 }
 
@@ -2884,6 +2983,8 @@ function reactivarRecetaGlobal(id) {
 function renderGridRecetas() {
     const q   = (document.getElementById('buscarReceta')?.value || '').toLowerCase();
     const _catGlobal = _esCatGlobalRecetas();
+    // Independizar por sucursal: operación a nivel negocio → solo en el catálogo global.
+    (function(){ var b=document.getElementById('btnIndepSucRec'); if(b) b.style.display=_catGlobal?'':'none'; })();
     // Estado (regla única de visibilidad, insumo-label.js):
     //  · Global: Activas / Inactivas (las inactivas del negocio viven SOLO aquí).
     //  · Sucursal: Activas (scope normal) / PAUSADAS aquí (inactivaEn) para reactivarlas.
@@ -2897,7 +2998,9 @@ function renderGridRecetas() {
     const _estado = (_selEstado && _selEstado.value) || 'activas';
     let lista;
     if (_catGlobal) {
-        lista = getRecetasScope().filter(r => (_estado === 'inactivas') ? r.status === 'inactiva' : r.status !== 'inactiva');
+        // Catálogo GLOBAL = maestros. Las COPIAS por sucursal (origenId) NO se listan aquí.
+        lista = getRecetasScope().filter(r => !r.origenId)
+            .filter(r => (_estado === 'inactivas') ? r.status === 'inactiva' : r.status !== 'inactiva');
     } else if (_estado === 'inactivas' && _sucAct) {
         // Inactivas DE ESTA SUCURSAL = las pausadas aquí (⏸) + las inactivas
         // GLOBALES (pastilla del editor) que viven aquí — cada una con su badge.
@@ -2988,7 +3091,7 @@ function renderGridRecetas() {
                 <span style="font-size:9px;color:var(--text-dim)">${fecha}</span>
             </div>
             ${_catGlobal ? `<button onclick="event.stopPropagation();abrirRecetaSuc('${r.id}')"
-                style="width:100%;margin-top:9px;background:var(--surface);border:1px solid var(--border);color:var(--green);border-radius:8px;padding:7px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">🏪 Copiar a sucursal</button>` : ''}
+                style="width:100%;margin-top:9px;background:var(--surface);border:1px solid var(--border);color:var(--green);border-radius:8px;padding:7px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">🔗 Vincular a sucursal</button>` : ''}
             ${(!_catGlobal && _sucAct && r.status === 'inactiva')
                 ? `<button onclick="event.stopPropagation();reactivarRecetaGlobal('${r.id}')" title="Inactiva GLOBAL (pastilla del editor): no aparece en ningún lado. Este botón la reactiva en TODO el negocio."
                     style="width:100%;margin-top:9px;background:var(--surface);border:1px solid rgba(224,90,58,.5);color:var(--red);border-radius:8px;padding:7px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">🚫 Inactiva global · ▶ Activar</button>` : ''}

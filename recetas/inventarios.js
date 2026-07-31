@@ -626,7 +626,7 @@ function consumoBasesPorProduccion(insumoId) {
         if (!n) return;
         var pre = getInsumos().find(function(x){ return x.id === pid; });
         if (!pre || !pre.recetaId) return;
-        var sr = getRecetas().find(function(r){ return r.id === pre.recetaId; });
+        var sr = (window._recetaResolver ? window._recetaResolver(pre.recetaId) : getRecetas().find(function(r){ return r.id === pre.recetaId; }));
         if (!sr) return;
         (sr.ingredientes || []).forEach(function(ing){
             if (ing.insumoId === insumoId)
@@ -671,7 +671,7 @@ function _repartoPrebatch() {
         if (!pf || pf.tipo === 'pza' || pf.esCompuesto) return;
         var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(pf.insumoId) : null;
         if (!ins || !ins.esSubReceta || !ins.recetaId) return;
-        var sr = getRecetas().find(function(r){ return r.id === ins.recetaId; });
+        var sr = (window._recetaResolver ? window._recetaResolver(ins.recetaId) : getRecetas().find(function(r){ return r.id === ins.recetaId; }));
         if (!sr || !(sr.ingredientes || []).length) return;
         // TOTAL = suma de TODOS los ingredientes de la sub-receta (rendimiento base),
         // no solo los ligados a un insumo. Así cada insumo recibe su proporción real
@@ -4141,7 +4141,7 @@ function _renderProduccionPrebatch() {
     const prod = invActual?.prebatchProducidos || {};
     const items = pres.map(p => {
         const n  = parseFloat(prod[p.id]) || 0;
-        const sr = getRecetas().find(r => r.id === p.recetaId);
+        const sr = (window._recetaResolver ? window._recetaResolver(p.recetaId) : getRecetas().find(r => r.id === p.recetaId));
         const bases = sr ? (sr.ingredientes||[]).map(ing => {
             const ins = getInsumos().find(x => x.id === ing.insumoId);
             return ins ? ins.nombre.split(' ')[0] : '?';
