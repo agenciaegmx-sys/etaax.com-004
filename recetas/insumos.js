@@ -106,19 +106,18 @@
            delete copia._memPreMigra;
            nuevas.push(copia);
        });
-       // QUITAR vínculo (borrar copia) de las DESMARCADAS que tenían copia.
-       var quitadas = Object.keys(copPorSuc).filter(function(suc){ return sel.indexOf(suc) < 0; });
-       if (quitadas.length) {
-           var noms = quitadas.map(function(s){ return _sucNomIns(s === MATRIZ_ID_INS ? '' : s); }).join(', ');
-           if (!confirm('Vas a QUITAR el vínculo (y borrar la copia) de: ' + noms + '.\nSe perderán los ajustes propios de esa(s) sucursal(es). ¿Continuar?')) return;
-           quitadas.forEach(function(suc){ borrar.push(copPorSuc[suc].id); });
-       }
+       // DESLIGAR (no borrar) las DESMARCADAS que tenían copia: la copia SE QUEDA en su
+       // sucursal pero deja de estar ligada al maestro (independiente, ya sin novedades).
+       var desligadas = [];
+       Object.keys(copPorSuc).forEach(function(suc){
+           if (sel.indexOf(suc) >= 0) return;
+           var c = copPorSuc[suc]; if (c && c.origenId) { delete c.origenId; desligadas.push(c); }
+       });
        // El maestro queda GLOBAL (sin membresía propia); las copias sirven a cada sucursal.
        master.sucursales = []; master.sucursalId = '';
-       var all = lista.filter(function(x){ return borrar.indexOf(x.id) < 0; }).concat(nuevas);
+       var all = lista.concat(nuevas); // nada se borra; las desligadas ya están en `lista` (mutadas)
        setInsumos(all);
-       try { if (typeof _sincronizarInsumosSupabase === 'function') await _sincronizarInsumosSupabase(getNegocioActivo(), nuevas.concat([master])); } catch(e){}
-       try { if (borrar.length && typeof _borrarInsumosSupabase === 'function') await _borrarInsumosSupabase(getNegocioActivo(), borrar); } catch(e){}
+       try { if (typeof _sincronizarInsumosSupabase === 'function') await _sincronizarInsumosSupabase(getNegocioActivo(), nuevas.concat([master]).concat(desligadas)); } catch(e){}
        cerrarInsumoSuc();
        try { filtrar(); } catch(e) {}
    }
@@ -2182,6 +2181,12 @@
    function eliminarInsumo(id) {
        const ins = getInsumos().find(x => x.id === id);
        if (!ins) return;
+       // Aviso si es un MAESTRO con copias vinculadas: al borrarlo, las copias siguen vivas
+       // en sus sucursales pero quedan independientes (ya sin novedades).
+       if (!ins.origenId) {
+           var _cop = _copiasDe(id);
+           if (_cop.length && !confirm('⚠️ "' + (ins.nombre||'insumo') + '" es un MAESTRO con ' + _cop.length + ' copia(s) en sucursales.\n\nAl borrarlo, esas copias SIGUEN funcionando en sus sucursales (con lo capturado), pero quedan INDEPENDIENTES (ya no reciben novedades).\n\n¿Continuar?')) return;
+       }
        _pedirClaveAdmin('Eliminar insumo "' + ins.nombre + '"', async function() {
            _tombAdd([id]); // tombstone PERSISTENTE (sobrevive a recarga/navegación)
            // Quitar de local + render YA (UX inmediata).

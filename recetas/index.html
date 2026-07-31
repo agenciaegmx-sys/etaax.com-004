@@ -649,10 +649,10 @@
 <div id="modalRecetaSuc" class="modal-overlay" style="display:none;z-index:600" onclick="if(event.target===this)cerrarRecetaSuc()">
     <div class="modal" style="max-width:420px;width:100%">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px 8px">
-            <h2 style="font-size:14px;font-weight:600">🏪 Sucursales de la receta</h2>
+            <h2 style="font-size:14px;font-weight:600">🔗 Vincular a sucursal</h2>
             <button class="modal-close" onclick="cerrarRecetaSuc()">✕</button>
         </div>
-        <div style="padding:0 18px 8px;font-size:12px;color:var(--text-dim)">Elige en qué sucursales vive <b id="recetaSucNombre" style="color:var(--text)"></b>. No se duplica: es la misma receta compartida en las marcadas.</div>
+        <div style="padding:0 18px 8px;font-size:12px;color:var(--text-dim)">Cada sucursal marcada tendrá una <b style="color:var(--green)">copia independiente</b> de <b id="recetaSucNombre" style="color:var(--text)"></b>, ligada a este maestro. Editar en una sucursal NO afecta a las demás. Desmarcar deja esa copia <b>independiente</b> (se queda, pero ya no recibe novedades).</div>
         <div id="recetaSucLista" style="padding:10px 18px;max-height:50vh;overflow-y:auto"></div>
         <div style="display:flex;justify-content:flex-end;gap:8px;padding:8px 18px 18px">
             <button class="btn-vista" onclick="cerrarRecetaSuc()">Cancelar</button>
@@ -2882,17 +2882,17 @@ function guardarRecetaSuc(){
         delete copia._memPreMigra;
         nuevas.push(copia);
     });
-    var quitadas=Object.keys(copPorSuc).filter(function(suc){ return sel.indexOf(suc)<0; });
-    if(quitadas.length){
-        var noms=quitadas.map(function(s){ return _sucNombre(s==='suc_principal'?'':s); }).join(', ');
-        if(!confirm('Vas a QUITAR el vínculo (y borrar la copia) de: '+noms+'.\nSe perderán los ajustes propios de esa(s) sucursal(es). ¿Continuar?')) return;
-        quitadas.forEach(function(suc){ borrar.push(copPorSuc[suc].id); });
-    }
+    // DESLIGAR (no borrar) las DESMARCADAS: la copia SE QUEDA en su sucursal pero deja de
+    // estar ligada al maestro (independiente, ya sin novedades).
+    var desligadas=[];
+    Object.keys(copPorSuc).forEach(function(suc){
+        if(sel.indexOf(suc)>=0) return;
+        var c=copPorSuc[suc]; if(c&&c.origenId){ delete c.origenId; desligadas.push(c); }
+    });
     master.sucursales=[]; master.sucursalId='';
-    var all=lista.filter(function(x){ return borrar.indexOf(x.id)<0; }).concat(nuevas);
+    var all=lista.concat(nuevas); // nada se borra; las desligadas ya están en `lista` (mutadas)
     setRecetas(all);
-    if(typeof _sbUpReceta==='function'){ nuevas.concat([master]).forEach(function(x){ try{ _sbUpReceta(x); }catch(e){} }); }
-    if(typeof _sbDelReceta==='function'){ borrar.forEach(function(idd){ try{ _sbDelReceta(idd); }catch(e){} }); }
+    if(typeof _sbUpReceta==='function'){ nuevas.concat([master]).concat(desligadas).forEach(function(x){ try{ _sbUpReceta(x); }catch(e){} }); }
     cerrarRecetaSuc();
     renderGridRecetas();
 }
@@ -3678,6 +3678,12 @@ function duplicarRecetaDesdeLista(id) {
 function eliminarReceta(id) {
     var rec = getRecetas().find(function(r){ return r.id === id; });
     var nombre = rec ? rec.nombre : 'esta receta';
+    // Aviso si es un MAESTRO con copias vinculadas: al borrarlo, las copias siguen vivas en
+    // sus sucursales pero quedan independientes (ya sin novedades).
+    if (rec && !rec.origenId) {
+        var _copR = _copiasDeReceta(id);
+        if (_copR.length && !confirm('⚠️ "' + nombre + '" es un MAESTRO con ' + _copR.length + ' copia(s) en sucursales.\n\nAl borrarlo, esas copias SIGUEN funcionando en sus sucursales, pero quedan INDEPENDIENTES (ya no reciben novedades).\n\n¿Continuar?')) return;
+    }
     _pedirClaveAdmin('Eliminar "' + nombre + '"', function() {
         setRecetas(getRecetas().filter(function(r){ return r.id !== id; }));
         if (typeof _sbDelReceta === 'function') _sbDelReceta(id);
