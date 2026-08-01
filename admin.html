@@ -251,7 +251,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 <!-- ── LOGIN ── -->
 <div id="viewLogin" class="view-center" style="display:none">
   <div class="login-card fade-up">
-    <div class="login-logo">eta<span>ax</span></div>
+    <div class="login-logo"><img src="/marca/etaax-logo-oscuro.svg" alt="ETAAX" style="height:28px;display:block;margin:0 auto"></div>
     <div class="login-sub">Panel de administración</div>
 
     <div class="login-field">
@@ -292,7 +292,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   <!-- TOPBAR -->
   <div class="admin-top">
     <div style="display:flex;align-items:center;gap:14px">
-      <div class="admin-logo">eta<span>ax</span></div>
+      <div class="admin-logo"><img src="/marca/etaax-logo-oscuro.svg" alt="ETAAX" style="height:22px;display:block"></div>
       <div class="admin-badge">⚡ Admin Master</div>
     </div>
     <div class="admin-user">
@@ -504,6 +504,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
+<script src="/reporte-marca.js"></script>
 <script>
 var ADMIN_EMAIL = 'admin@etaax.com';
 
@@ -1110,7 +1111,9 @@ function imprimirRecibo(n, dueno, plan, nSuc, r) {
     '<div class="hoja">' +
         // Encabezado
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:22px 40px;border-bottom:3px solid #3dbe7a">' +
-            '<div style="font-family:\'Bebas Neue\',Arial,sans-serif;font-size:44px;font-weight:900;letter-spacing:3px;color:#1a1916;line-height:1">ETAAX<span style="color:#3dbe7a">.</span></div>' +
+            (typeof window.etaaxLogoSVG === 'function'
+                ? window.etaaxLogoSVG({ variant:'claro', height:40, style:'display:block' })
+                : '<div style="font-family:\'Bebas Neue\',Arial,sans-serif;font-size:44px;font-weight:900;letter-spacing:3px;color:#1a1916;line-height:1">ETAAX<span style="color:#3dbe7a">.</span></div>') +
             '<div style="text-align:right">' +
                 '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:26px;letter-spacing:2px;color:#1a1916;line-height:1">Recibo de cobro</div>' +
                 '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#3dbe7a;font-weight:700;margin-top:3px">' + e(r.folio) + '</div>' +

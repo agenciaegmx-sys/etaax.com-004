@@ -64,6 +64,32 @@
         };
     };
 
+    // ── Logo oficial ETAAX (wordmark eta·ax) como SVG inline, recolorable ──────
+    // variant 'claro' (default): letras tinta + punto verde (para blanco/impresión).
+    // variant 'oscuro': letras crema + punto verde (para fondos oscuros).
+    // `hole` pinta las contras (huecos de e/a) con el color de la superficie.
+    window.etaaxLogoSVG = function (opts) {
+        opts = opts || {};
+        var oscuro = (opts.variant === 'oscuro' || opts.variant === 'dark');
+        var ink  = opts.ink  || (oscuro ? '#f0ece4' : '#0f0e0c');
+        var hole = opts.hole || (oscuro ? '#0f0e0c' : '#ffffff');
+        var dot  = opts.dot  || '#3dbe7a';
+        var h    = opts.height || 30;
+        var extra = (opts.style ? ' style="' + opts.style + '"' : '');
+        return '<svg xmlns="http://www.w3.org/2000/svg" height="' + h + '" viewBox="4650 98600 244400 53400" role="img" aria-label="ETAAX"' + extra + '>' +
+            '<g transform="matrix(1172.115912,0,0,1172.115912,3418.038957,87250.941841)">' +
+                '<g transform="matrix(1,0,0,1.05042,-2.857143,-0.529412)"><path d="M4,31C4,19.5 12.5,10.5 25,10.5C37.5,10.5 45.5,19.5 45.5,30.5C45.5,32 45.3,33.5 45,35L14,35C15.5,40.5 19.5,44 25,44C29.5,44 33,42 35,39.5L43.5,43.5C40,49.5 33,53 25,53C12.5,53 4,44 4,31Z" fill="' + ink + '"/></g>' +
+                '<g transform="matrix(1,0,0,1,-2.857143,0)"><path d="M14.5,28L37,28C35.5,23 31.5,20 25.5,20C19.5,20 16,23 14.5,28Z" fill="' + hole + '"/></g>' +
+                '<path d="M52,12L61,12L61,21L72,21L72,30L61,30L61,42C61,44.8 62.5,46 65,46L72,46L72,54.5L64.5,54.5C57,54.5 52,50.5 52,43L52,30L46,30L46,21L52,21L52,12Z" fill="' + ink + '"/>' +
+                '<g transform="matrix(1,0,0,1,-3.571429,0)"><path d="M78,41C78,34.5 83.5,30.5 92.5,29.5L104,28.5L104,27.5C104,23.5 101.5,21 97,21C93,21 90,23 89,26.5L80.5,24C82.5,17.5 89,13 97,13C107.5,13 113,18.5 113,28.5L113,54.5L104,54.5L104,51C102,53.5 98.5,55 94,55C85.5,55 78,50.5 78,41Z" fill="' + ink + '"/></g>' +
+                '<g transform="matrix(1,0,0,1,-2.857143,0)"><path d="M104,37L95.5,38C92.5,38.5 90.5,40 90.5,42.5C90.5,45 92.5,46.5 95.5,46.5C101,46.5 104,43.5 104,39L104,37Z" fill="' + hole + '"/></g>' +
+                '<path d="M126,41C126,34.5 131.5,30.5 140.5,29.5L152,28.5L152,27.5C152,23.5 149.5,21 145,21C141,21 138,23 137,26.5L128.5,24C130.5,17.5 137,13 145,13C155.5,13 161,18.5 161,28.5L161,54.5L152,54.5L152,51C150,53.5 146.5,55 142,55C133.5,55 126,50.5 126,41Z" fill="' + ink + '"/>' +
+                '<path d="M152,37L143.5,38C140.5,38.5 138.5,40 138.5,42.5C138.5,45 140.5,46.5 143.5,46.5C149,46.5 152,43.5 152,39L152,37Z" fill="' + hole + '"/>' +
+                '<g transform="matrix(1,0,0,1,-3.571429,0)"><path d="M168,13L179,13L190,30L201,13L212,13L196.5,34.5L213,54.5L202,54.5L190,38.5L178,54.5L167,54.5L183.5,34.5L168,13Z" fill="' + ink + '"/></g>' +
+                '<g transform="matrix(1.086406,0,0,1.086406,70.712678,4.362883)"><circle cx="45" cy="11" r="6" fill="' + dot + '"/></g>' +
+            '</g></svg>';
+    };
+
     // Encabezado estándar de reporte (para hojas impresas: fondo blanco).
     // derechaHTML: bloque libre a la derecha (fecha, conteos, tipo de reporte…).
     window.etaaxReporteHeader = function (subtitulo, derechaHTML, opts) {
@@ -85,7 +111,7 @@
         return '<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;' +
                 'padding:12px 20px;border-bottom:3px solid #3dbe7a">' +
             '<div style="display:flex;align-items:center;gap:12px;min-width:0">' +
-                '<div style="font-family:\'Bebas Neue\',Arial,sans-serif;font-size:30px;font-weight:900;letter-spacing:2px;color:#1a1916;line-height:1">ETAAX<span style="color:#3dbe7a">.</span></div>' +
+                window.etaaxLogoSVG({ variant:'claro', height:26, style:'display:block;flex-shrink:0' }) +
                 '<div style="border-left:1px solid #ddd;padding-left:12px;min-width:0;display:flex;align-items:center;gap:10px">' +
                     identidad +
                     '<div style="min-width:0">' +
