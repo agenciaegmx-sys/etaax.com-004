@@ -3443,8 +3443,10 @@
            sucursalId:   '' // ya no se elige aquí; se define por membresía abajo
        };
 
-       // Membresía por sucursal (igual que recetas): NUEVO → nace en la sucursal activa;
-       // EDICIÓN → conserva la membresía y el sucursalId que ya tenía (no los pisa el guardado).
+       // Membresía por sucursal. NUEVO → nace como MAESTRO global (sin sucursal) y, si se
+       // crea DENTRO de una sucursal, se genera además su COPIA vinculada ahí (abajo, en
+       // la persistencia). EDICIÓN → conserva la membresía y el sucursalId que ya tenía.
+       var _sucCopiaNueva = ''; // sucursal donde nace la copia vinculada del insumo nuevo ('' = ninguna)
        if (editandoId) {
            var _orig = getInsumos().find(function(x){ return x.id === editandoId; });
            // El select de Área ya vive en el editor y se pobla al abrir → su valor
@@ -3462,11 +3464,12 @@
                ? _orig.sucursales.slice()
                : (_orig && _orig.sucursalId ? [_orig.sucursalId] : []);
        } else {
-           // _getSucActivaIns (no localStorage directo): el admin del catálogo ETAAX
-           // la sobreescribe a '' → sus insumos nuevos NO nacen atados a una sucursal.
-           var _curSuc = _getSucActivaIns();
-           insumo.sucursalId = _curSuc;
-           insumo.sucursales = _curSuc ? [_curSuc] : []; // '' = Matriz (vacío = todas)
+           // El registro que se edita/guarda ES el MAESTRO global (sin sucursal). La copia
+           // vinculada de la sucursal activa se crea aparte en la persistencia. El admin del
+           // catálogo ETAAX tiene _getSucActivaIns()='' → solo maestro (sin copia).
+           insumo.sucursalId = '';
+           insumo.sucursales = [];
+           _sucCopiaNueva = _getSucActivaIns();
        }
 
        // #2 Storage: si la foto es base64, súbela a Storage y guarda solo la URL
@@ -3484,13 +3487,24 @@
        }
 
        const lista = getInsumos();
+       var _copiaNueva = null;
        if (editandoId) {
            const i = lista.findIndex(x => x.id === editandoId);
            if (i >= 0) lista[i] = insumo; else lista.push(insumo);
        } else {
            lista.push(insumo);
+           // Copia vinculada en la sucursal donde se creó (maestro global + copia ligada
+           // por origenId). Se clona DESPUÉS de subir la foto → hereda la misma URL.
+           if (_sucCopiaNueva) {
+               _copiaNueva = JSON.parse(JSON.stringify(insumo));
+               _copiaNueva.id = genId();
+               _copiaNueva.origenId = insumo.id;
+               _copiaNueva.sucursales = [_sucCopiaNueva];
+               _copiaNueva.sucursalId = _sucCopiaNueva;
+               lista.push(_copiaNueva);
+           }
        }
-   
+
        setInsumos(lista);
        modalDirty = false;
        // Forzar el upsert de ESTE insumo a Supabase AHORA (no esperar el debounce de
@@ -3500,7 +3514,7 @@
        // modo iframe; ahora también en el flujo normal.)
        clearTimeout(_insumosSyncTimer);
        _insumosSyncPend = null;
-       try { await _sincronizarInsumosSupabase(getNegocioActivo(), [insumo]); } catch(e) {}
+       try { await _sincronizarInsumosSupabase(getNegocioActivo(), _copiaNueva ? [insumo, _copiaNueva] : [insumo]); } catch(e) {}
        if (_soloMode) {
            window.parent.postMessage({ type: 'insumoGuardado', insumoId: insumo.id }, '*');
            return;

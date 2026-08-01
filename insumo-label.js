@@ -210,7 +210,10 @@
     window._recetaEnSuc = function (r, suc) {
         if (!r) return false;
         var s = (r.sucursales && r.sucursales.length) ? r.sucursales : (r.sucursalId ? [r.sucursalId] : []);
-        if (!s.length) return suc === 'suc_principal' || !suc; // sin sucursal = Matriz
+        // MAESTRO del catálogo global (_global): vive solo en el catálogo, no aparece en
+        // ninguna sucursal (sus copias por sucursal sirven a cada una). Sin ese flag,
+        // regla legacy: receta sin sucursal = Matriz (no ocultar datos viejos).
+        if (!s.length) return r._global ? false : (suc === 'suc_principal' || !suc);
         for (var i = 0; i < s.length; i++) { if ((s[i] || 'suc_principal') === (suc || 'suc_principal')) return true; }
         return false;
     };

@@ -346,11 +346,30 @@ async function guardarReceta() {
 
     const lista = getRecetas();
     const idx   = lista.findIndex(r => r.id === receta.id);
+    // NUEVA receta creada DENTRO de una sucursal → generar su MAESTRO global (sin
+    // sucursal) y dejar ESTA receta como la COPIA vinculada de la sucursal (origenId →
+    // maestro). Así queda el maestro en el catálogo global + la copia independiente donde
+    // se creó, ligadas por origenId. El editor sigue sobre la copia (lo que ve la
+    // sucursal). Sin sucursal activa (admin ETAAX / catálogo global) → nace maestro, sin copia.
+    var _masterRec = null;
+    if (idx < 0 && !receta.origenId && _sucRec) {
+        _masterRec = JSON.parse(JSON.stringify(receta));
+        _masterRec.id = genId();
+        _masterRec.sucursales = []; _masterRec.sucursalId = '';
+        _masterRec._global = true; // maestro del catálogo global: NO aparece operativamente
+                                   // en Matriz (sus copias sirven a cada sucursal). Recetas
+                                   // legacy "sin sucursal" (sin _global) siguen viéndose en Matriz.
+        delete _masterRec.origenId;
+        receta.origenId   = _masterRec.id;
+        receta.sucursales = [_sucRec];
+        receta.sucursalId = _sucRec;
+        lista.push(_masterRec);
+    }
     if (idx >= 0) lista[idx] = receta;
     else lista.push(receta);
 
     setRecetas(lista);
-    if (typeof _sbUpReceta === 'function') _sbUpReceta(receta);
+    if (typeof _sbUpReceta === 'function') { if (_masterRec) _sbUpReceta(_masterRec); _sbUpReceta(receta); }
     recetaActualId = receta.id;
     window._escDirty = false; // ya se guardó → sin cambios pendientes
     // Si es una sub-receta con insumo convertido, refrescarlo (y sus copias por

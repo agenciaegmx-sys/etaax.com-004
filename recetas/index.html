@@ -2839,7 +2839,12 @@ function _recetaBadgesHTML(r){
         }
     }
     var sucs=_recetaMem(r);
-    if(!sucs.length) sucs=['suc_principal'];
+    // Maestro global sin copias (todas desligadas) → badge "Global · sin asignar" (como
+    // insumos). Receta legacy sin sucursal (sin _global) conserva el badge "Matriz".
+    if(!sucs.length){
+        if(r&&r._global) return '<span style="font-size:8px;letter-spacing:.5px;text-transform:uppercase;background:rgba(155,149,138,.14);color:var(--text-dim);border:1px solid var(--border);border-radius:10px;padding:1px 6px;white-space:nowrap">🌐 Global · sin asignar</span>';
+        sucs=['suc_principal'];
+    }
     return sucs.map(function(id){ return '<span style="font-size:8px;letter-spacing:.5px;text-transform:uppercase;background:rgba(61,190,122,.12);color:var(--green);border:1px solid rgba(61,190,122,.3);border-radius:10px;padding:1px 6px;white-space:nowrap">'+etx(_sucNombre(id))+'</span>'; }).join(' ');
 }
 var _recetaSucEditId=null;
@@ -2889,7 +2894,7 @@ function guardarRecetaSuc(){
         if(sel.indexOf(suc)>=0) return;
         var c=copPorSuc[suc]; if(c&&c.origenId){ delete c.origenId; desligadas.push(c); }
     });
-    master.sucursales=[]; master.sucursalId='';
+    master.sucursales=[]; master.sucursalId=''; master._global=true; // maestro global (no aparece en Matriz)
     var all=lista.concat(nuevas); // nada se borra; las desligadas ya están en `lista` (mutadas)
     setRecetas(all);
     if(typeof _sbUpReceta==='function'){ nuevas.concat([master]).concat(desligadas).forEach(function(x){ try{ _sbUpReceta(x); }catch(e){} }); }
@@ -2930,7 +2935,7 @@ function _independizarRecetasPorSuc(dryRun){
             delete copia._memPreMigra;
             nuevas.push(copia);
         });
-        p.r.sucursales=[]; p.r.sucursalId=''; // maestro global
+        p.r.sucursales=[]; p.r.sucursalId=''; p.r._global=true; // maestro global (no aparece en Matriz)
     });
     var all=getRecetas().concat(nuevas);
     setRecetas(all);
