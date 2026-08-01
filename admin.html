@@ -512,6 +512,19 @@ var PLANES = {
     gran:  { nombre:'Gran Pyme',    color:'#c87a6a', cls:'badge-gran'  }
 };
 
+/* ── Datos del EMISOR (ETAAX) para el recibo de cobro. Editar aquí si cambian. ── */
+var ETAAX_EMISOR = {
+    marca:    'ETAAX',
+    razon:    'EGMx Consultoría Estratégica A&B',
+    concepto: 'Plataforma de gestión para restaurantes (software SaaS)',
+    web:      'etaax.com',
+    correo:   'agencia.egmx@gmail.com',
+    tel:      '',
+    rfc:      ''
+};
+/* Precios de referencia (software solo) para SUGERIR el importe; siempre editable. */
+var PRECIO_1RA_SUC = 1799, PRECIO_SUC_ADIC = 1599;
+
 var ROLES_LABEL = {
     admin:'Administrador', gerente:'Gerente', jefe_cocina:'Jefe de Cocina',
     chef:'Chef', cocinero:'Cocinero', barman:'Barman', barista:'Barista',
@@ -883,6 +896,7 @@ function renderNegocios() {
         var btnCancelar = st.estado !== 'cancelada' && st.estado !== 'pendiente'
             ? '<button onclick="event.stopPropagation();cancelarSuscripcion(\'' + n.id + '\')" style="' + btnBase + 'background:rgba(232,90,90,.14);color:#e85a5a">Cancelar</button>'
             : '';
+        var btnRecibo = '<button title="Generar recibo de cobro" onclick="event.stopPropagation();abrirReciboModal(\'' + n.id + '\')" style="' + btnBase + 'background:rgba(245,200,66,.14);color:#f5c842">🧾</button>';
         var btnRespaldo = '<button title="Descargar respaldo del negocio" onclick="event.stopPropagation();descargarRespaldoNegocio(\'' + n.id + '\')" style="' + btnBase + 'background:var(--s2);color:var(--muted)">⬇️</button>';
         var btnEliminar = '<button title="Eliminar negocio" onclick="event.stopPropagation();eliminarNegocio(\'' + n.id + '\')" style="' + btnBase + 'background:rgba(232,90,90,.10);color:#e85a5a">🗑️</button>';
         return '<tr class="clickable" onclick="abrirDetalleNegocio(\'' + n.id + '\')">' +
@@ -891,7 +905,7 @@ function renderNegocios() {
             '<td class="text-dim">' + esc(dueno ? (dueno.nombre||'—') : '—') + '</td>' +
             '<td>' + badge + '</td>' +
             '<td class="text-dim">' + vence + '</td>' +
-            '<td style="white-space:nowrap">' + btnActivar + btnCancelar + btnRespaldo + btnEliminar + '</td>' +
+            '<td style="white-space:nowrap">' + btnActivar + btnCancelar + btnRecibo + btnRespaldo + btnEliminar + '</td>' +
         '</tr>';
     }).join('');
 }
@@ -938,6 +952,217 @@ function cancelarSuscripcion(negId) {
             renderNegocios();
         },
         { yesLabel:'Sí, cancelar', danger:true });
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   RECIBO DE COBRO (por negocio) — mismo lenguaje visual que los reportes
+   impresos: wordmark ETAAX, verde #3dbe7a, fondo blanco, Bebas/DM Sans.
+   El admin captura a mano periodo, importe y fechas; el resto se llena solo.
+   ══════════════════════════════════════════════════════════════════════ */
+function _fMon(v){ return '$' + Number(v||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function _fFechaLarga(iso){
+    if (!iso) return '—';
+    // iso 'YYYY-MM-DD' → fecha local sin corrimiento de zona horaria.
+    var p = String(iso).split('-');
+    var dt = (p.length===3) ? new Date(+p[0], +p[1]-1, +p[2]) : new Date(iso);
+    return dt.toLocaleDateString('es-MX',{ day:'2-digit', month:'long', year:'numeric' });
+}
+
+function abrirReciboModal(negId) {
+    var n = _data.negocios.find(function(x){ return x.id === negId; });
+    if (!n) return;
+    var d     = n.datos || {};
+    var dueno = _data.usuarios.find(function(u){ return u.id === n.usuario_id; });
+    var plan  = dueno ? (PLANES[dueno.plan] || PLANES.pyme) : PLANES.pyme;
+    var nSuc  = _data.sucsNeg[negId] || 1;
+    var sugerido = PRECIO_1RA_SUC + Math.max(0, nSuc - 1) * PRECIO_SUC_ADIC;
+    var hoy   = new Date().toISOString().slice(0,10);
+    var periodoDef = new Date().toLocaleDateString('es-MX',{ month:'long', year:'numeric' });
+    periodoDef = periodoDef.charAt(0).toUpperCase() + periodoDef.slice(1);
+    var folioDef = 'REC-' + hoy.replace(/-/g,'') + '-' + (Date.now().toString(36).slice(-4)).toUpperCase();
+    var conceptoDef = 'Suscripción ETAAX · Plan ' + plan.nombre + ' · ' + nSuc + ' sucursal' + (nSuc!==1?'es':'');
+
+    var _in = 'width:100%;background:var(--s2);border:1px solid var(--b1);color:var(--text);padding:10px 12px;border-radius:9px;font-family:inherit;font-size:13px;box-sizing:border-box';
+    var _lb = 'display:block;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-weight:600';
+    var _campo = function(lbl, html){ return '<div style="margin-bottom:14px">' + '<label style="'+_lb+'">'+lbl+'</label>' + html + '</div>'; };
+    var _metodos = ['Transferencia','Depósito','Efectivo','Tarjeta','Otro'];
+
+    var ov = document.createElement('div');
+    ov.setAttribute('data-adm-dialog','1');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.62);display:flex;align-items:flex-start;justify-content:center;padding:28px 20px;overflow:auto';
+    ov.innerHTML =
+        '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;max-width:520px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.5)">' +
+            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">' +
+                '<span style="font-size:26px">🧾</span>' +
+                '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:.5px;color:var(--text)">Recibo de cobro</div>' +
+            '</div>' +
+            '<div style="font-size:12.5px;color:var(--muted);margin-bottom:20px">' + esc((d.emoji||'🏢')+' '+(d.nombre||'—')) + ' · ' + esc(dueno?(dueno.nombre||''):'') + '</div>' +
+
+            _campo('Folio', '<input id="rc_folio" style="'+_in+'" value="'+esc(folioDef)+'">') +
+            _campo('Periodo pagado', '<input id="rc_periodo" style="'+_in+'" value="'+esc(periodoDef)+'" placeholder="Ej. Julio 2026 o 01–31 Jul 2026">') +
+            _campo('Concepto del servicio', '<input id="rc_concepto" style="'+_in+'" value="'+esc(conceptoDef)+'">') +
+            '<div style="display:flex;gap:12px">' +
+                '<div style="flex:1">' + _campo('Importe pagado (MXN)', '<input id="rc_monto" type="number" step="0.01" min="0" style="'+_in+'" value="'+sugerido.toFixed(2)+'">') + '</div>' +
+                '<div style="flex:1">' + _campo('Método de pago', '<select id="rc_metodo" style="'+_in+'">' + _metodos.map(function(m){ return '<option>'+m+'</option>'; }).join('') + '</select>') + '</div>' +
+            '</div>' +
+            '<div style="margin:-4px 0 14px"><label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);cursor:pointer"><input type="checkbox" id="rc_iva" style="width:16px;height:16px;accent-color:var(--green)"> Desglosar IVA 16% (incluido en el importe)</label></div>' +
+            _campo('Referencia de pago (opcional)', '<input id="rc_ref" style="'+_in+'" placeholder="No. de operación, últimos 4 dígitos, etc.">') +
+            '<div style="display:flex;gap:12px">' +
+                '<div style="flex:1">' + _campo('Fecha de emisión', '<input id="rc_emision" type="date" style="'+_in+'" value="'+hoy+'">') + '</div>' +
+                '<div style="flex:1">' + _campo('Fecha de pago', '<input id="rc_pago" type="date" style="'+_in+'" value="'+hoy+'">') + '</div>' +
+            '</div>' +
+            _campo('Notas (opcional)', '<textarea id="rc_notas" rows="2" style="'+_in+';resize:vertical" placeholder="Gracias por su preferencia…"></textarea>') +
+
+            '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">' +
+                '<button data-act="no" style="background:var(--s2);border:1px solid var(--b1);color:var(--muted);padding:11px 20px;border-radius:9px;font-family:inherit;font-size:13px;cursor:pointer">Cancelar</button>' +
+                '<button data-act="gen" style="background:var(--green);border:none;color:#0a0908;padding:11px 22px;border-radius:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">🖨️ Generar recibo</button>' +
+            '</div>' +
+        '</div>';
+    function cerrar(){ try { ov.remove(); } catch(e){} }
+    ov.addEventListener('click', function(e){
+        var act = e.target.getAttribute && e.target.getAttribute('data-act');
+        if (e.target === ov || act === 'no') { cerrar(); return; }
+        if (act === 'gen') {
+            var monto = parseFloat(document.getElementById('rc_monto').value) || 0;
+            if (monto <= 0) { admAlert('Captura un importe válido.'); return; }
+            var datos = {
+                folio:    document.getElementById('rc_folio').value.trim(),
+                periodo:  document.getElementById('rc_periodo').value.trim(),
+                concepto: document.getElementById('rc_concepto').value.trim(),
+                monto:    monto,
+                iva:      document.getElementById('rc_iva').checked,
+                metodo:   document.getElementById('rc_metodo').value,
+                ref:      document.getElementById('rc_ref').value.trim(),
+                emision:  document.getElementById('rc_emision').value,
+                pago:     document.getElementById('rc_pago').value,
+                notas:    document.getElementById('rc_notas').value.trim()
+            };
+            cerrar();
+            imprimirRecibo(n, dueno, plan, nSuc, datos);
+        }
+    });
+    document.body.appendChild(ov);
+    setTimeout(function(){ var f = document.getElementById('rc_periodo'); if (f) f.focus(); }, 60);
+}
+
+// Construye el HTML del recibo y lo abre en una ventana para imprimir / guardar PDF.
+function imprimirRecibo(n, dueno, plan, nSuc, r) {
+    var E = ETAAX_EMISOR, d = n.datos || {};
+    var e = function(s){ return esc(s == null ? '' : String(s)); };
+    // Desglose de IVA (importe con IVA incluido).
+    var total = r.monto, subtotal = total, iva = 0;
+    if (r.iva) { subtotal = total / 1.16; iva = total - subtotal; }
+
+    var filaMonto = '<tr><td style="padding:12px 14px;font-size:12.5px;color:#1a1916">' + e(r.concepto || 'Suscripción ETAAX') +
+        '<div style="font-size:10px;color:#999;margin-top:3px">Periodo: ' + e(r.periodo || '—') + '</div></td>' +
+        '<td style="padding:12px 14px;text-align:right;font-size:13px;font-weight:700;color:#1a1916;white-space:nowrap">' + _fMon(subtotal) + '</td></tr>';
+
+    var totalesHTML = '';
+    if (r.iva) {
+        totalesHTML =
+            '<tr><td style="padding:7px 14px;text-align:right;font-size:11px;color:#777">Subtotal</td><td style="padding:7px 14px;text-align:right;font-size:12px;color:#555;white-space:nowrap">' + _fMon(subtotal) + '</td></tr>' +
+            '<tr><td style="padding:7px 14px;text-align:right;font-size:11px;color:#777">IVA 16%</td><td style="padding:7px 14px;text-align:right;font-size:12px;color:#555;white-space:nowrap">' + _fMon(iva) + '</td></tr>';
+    }
+    totalesHTML +=
+        '<tr><td style="padding:11px 14px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#1a7a46;border-top:2px solid #3dbe7a">Total pagado</td>' +
+        '<td style="padding:11px 14px;text-align:right;font-size:17px;font-weight:800;color:#1a7a46;border-top:2px solid #3dbe7a;white-space:nowrap">' + _fMon(total) + '</td></tr>';
+
+    var emisorLineas = [
+        E.razon,
+        E.rfc ? 'RFC: ' + E.rfc : '',
+        E.web,
+        E.correo,
+        E.tel ? 'Tel. ' + E.tel : ''
+    ].filter(Boolean).map(function(x){ return '<div>' + e(x) + '</div>'; }).join('');
+
+    var duenoNom = dueno ? (dueno.nombre || '') : '';
+    var duenoMail = dueno ? (dueno.email || (String(dueno.id||'').indexOf('@')>=0 ? dueno.id : '')) : '';
+    var receptorLineas = [
+        (d.emoji ? d.emoji + ' ' : '') + (d.nombre || '—'),
+        d.tipo ? d.tipo : '',
+        duenoNom ? 'Titular: ' + duenoNom : '',
+        duenoMail ? duenoMail : '',
+        'Plan: ' + plan.nombre + ' · ' + nSuc + ' sucursal' + (nSuc!==1?'es':'')
+    ].filter(Boolean).map(function(x){ return '<div>' + e(x) + '</div>'; }).join('');
+
+    var metaFilas = [
+        ['Folio', r.folio || '—'],
+        ['Fecha de emisión', _fFechaLarga(r.emision)],
+        ['Fecha de pago', _fFechaLarga(r.pago)],
+        ['Método de pago', r.metodo + (r.ref ? ' · ' + r.ref : '')]
+    ].map(function(f){
+        return '<tr><td style="padding:4px 0;font-size:10.5px;color:#999;letter-spacing:.5px">' + e(f[0]) + '</td>' +
+               '<td style="padding:4px 0 4px 16px;font-size:11.5px;color:#1a1916;font-weight:600;text-align:right">' + e(f[1]) + '</td></tr>';
+    }).join('');
+
+    var html =
+    '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">' +
+    '<title>Recibo ' + e(r.folio) + ' — ' + e(d.nombre||'ETAAX') + '</title>' +
+    '<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">' +
+    '<style>' +
+    '*{margin:0;padding:0;box-sizing:border-box}' +
+    'body{font-family:\'DM Sans\',sans-serif;background:#eee;color:#1a1916;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:24px}' +
+    '.hoja{width:21cm;max-width:100%;min-height:27cm;margin:0 auto;background:#fff;box-shadow:0 6px 30px rgba(0,0,0,.15);display:flex;flex-direction:column}' +
+    '.cont{padding:34px 40px;flex:1}' +
+    '.pie{margin-top:auto}' +
+    '@media print{@page{size:letter portrait;margin:0}body{background:#fff;padding:0}.hoja{box-shadow:none;width:100%;min-height:auto}}' +
+    '</style></head><body>' +
+    '<div class="hoja">' +
+        // Encabezado
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:22px 40px;border-bottom:3px solid #3dbe7a">' +
+            '<div style="font-family:\'Bebas Neue\',Arial,sans-serif;font-size:44px;font-weight:900;letter-spacing:3px;color:#1a1916;line-height:1">ETAAX<span style="color:#3dbe7a">.</span></div>' +
+            '<div style="text-align:right">' +
+                '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:26px;letter-spacing:2px;color:#1a1916;line-height:1">Recibo de cobro</div>' +
+                '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#3dbe7a;font-weight:700;margin-top:3px">' + e(r.folio) + '</div>' +
+            '</div>' +
+        '</div>' +
+        '<div class="cont">' +
+            // Emisor / Receptor
+            '<div style="display:flex;gap:24px;margin-bottom:26px">' +
+                '<div style="flex:1">' +
+                    '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#aaa;margin-bottom:7px;font-weight:700">Emisor</div>' +
+                    '<div style="font-size:14px;font-weight:700;color:#1a1916;margin-bottom:4px">' + e(E.marca) + '</div>' +
+                    '<div style="font-size:11px;color:#666;line-height:1.7">' + emisorLineas + '</div>' +
+                '</div>' +
+                '<div style="flex:1">' +
+                    '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#aaa;margin-bottom:7px;font-weight:700">Cliente</div>' +
+                    '<div style="font-size:14px;font-weight:700;color:#1a1916;margin-bottom:4px">' + e(d.nombre||'—') + '</div>' +
+                    '<div style="font-size:11px;color:#666;line-height:1.7">' + receptorLineas + '</div>' +
+                '</div>' +
+            '</div>' +
+            // Meta (folio / fechas / método)
+            '<table style="width:100%;border-collapse:collapse;margin-bottom:22px;background:#fafafa;border:1px solid #eee;border-radius:8px;overflow:hidden">' +
+                '<tbody>' + metaFilas + '</tbody></table>' +
+            // Concepto + totales
+            '<table style="width:100%;border-collapse:collapse;border:1px solid #eee;border-radius:8px;overflow:hidden">' +
+                '<thead><tr style="background:#f5f5f5">' +
+                    '<th style="text-align:left;padding:9px 14px;font-size:8.5px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:1.5px;border-bottom:2px solid #e0e0e0">Concepto</th>' +
+                    '<th style="text-align:right;padding:9px 14px;font-size:8.5px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:1.5px;border-bottom:2px solid #e0e0e0">Importe</th>' +
+                '</tr></thead>' +
+                '<tbody>' + filaMonto + '</tbody>' +
+                '<tfoot>' + totalesHTML + '</tfoot>' +
+            '</table>' +
+            // Sello PAGADO
+            '<div style="margin-top:22px;display:flex;align-items:center;gap:14px">' +
+                '<div style="display:inline-block;border:2.5px solid #1a7a46;color:#1a7a46;font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:3px;padding:5px 18px;border-radius:8px;transform:rotate(-4deg)">PAGADO</div>' +
+                '<div style="font-size:10.5px;color:#999;line-height:1.6">Recibo por concepto de suscripción al servicio.<br>Este documento ampara el pago del periodo indicado.</div>' +
+            '</div>' +
+            (r.notas ? '<div style="margin-top:22px;padding:12px 14px;background:#f8faf8;border-left:3px solid #3dbe7a;border-radius:6px;font-size:11.5px;color:#555;line-height:1.6">' + e(r.notas) + '</div>' : '') +
+        '</div>' +
+        // Pie
+        '<div class="pie"><div style="display:flex;justify-content:space-between;align-items:center;padding:12px 40px;border-top:1px solid #e8e8e8;font-size:9px;color:#aaa">' +
+            '<span>etaax.com · EGMx Consultoría Estratégica a&amp;b</span>' +
+            '<span style="color:#3dbe7a;font-weight:700">Gracias por su preferencia</span>' +
+            '<span>Emitido: ' + _fFechaLarga(r.emision) + '</span>' +
+        '</div></div>' +
+    '</div>' +
+    '<scr'+'ipt>window.onload=function(){setTimeout(function(){window.print();},250);}<\/scr'+'ipt>' +
+    '</body></html>';
+
+    var w = window.open('', '_blank');
+    if (!w) { admAlert('El navegador bloqueó la ventana. Permite las ventanas emergentes para imprimir el recibo.'); return; }
+    w.document.write(html);
+    w.document.close();
 }
 
 /* ── TABLA STAFF ── */
