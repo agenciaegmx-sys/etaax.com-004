@@ -258,15 +258,16 @@
         </div>
 
         <div class="chart-card">
-            <div class="ch-title">💳 Comisiones bancarias</div>
-            <div class="ch-sub">Lo que el banco descontó (comisión + IVA por cuenta), por corte de tiempo.</div>
-            <div id="chComis"></div>
+            <div class="ch-title">⭐ Propinas vs Ventas</div>
+            <div class="ch-sub" id="sPropVs">Propinas contra venta bruta, por corte de tiempo.</div>
+            <div class="ch-legend" id="lgPropVs"></div>
+            <div id="chPropsVs"></div>
         </div>
 
         <div class="chart-card">
-            <div class="ch-title">👥 Nómina pagada</div>
-            <div class="ch-sub">Pagos de nómina y personal registrados en gastos, por corte de tiempo.</div>
-            <div id="chNomina"></div>
+            <div class="ch-title">💳 Comisiones bancarias</div>
+            <div class="ch-sub">Lo que el banco descontó (comisión + IVA por cuenta), por corte de tiempo.</div>
+            <div id="chComis"></div>
         </div>
 
         <div class="chart-card">
@@ -1073,13 +1074,34 @@ function renderAll(){
         stack100(el,'Comedor vs Para llevar',[{label:'Comedor',value:com,color:p.green},{label:'Para llevar',value:llev,color:p.blue}]);
     })();
 
-    /* 10-11 · Comisiones / Nómina por bucket (Propinas vs Ventas retirada: no aporta) */
+    /* 9-10 · Propinas vs Ventas / Comisiones por bucket (Nómina pagada por día retirada) */
     (function(){
+        /* Propinas vs Ventas: columnas agrupadas, mismo formato que Ventas vs Gastos */
+        var elPV=document.getElementById('chPropsVs');
+        if(elPV){
+            elPV.innerHTML='';
+            var xColPV=bk.modo==='dia'?'Día':bk.modo==='semana'?'Semana':'Mes';
+            var svPV=serieBuckets(bk,cortesR(rF),EtaaxCore.ventasBruta);
+            var spPV=serieBuckets(bk,cortesR(rF),EtaaxCore.propinas);
+            var pctPV=svPV.map(function(v2,i){ return v2>0?Math.round((spPV[i]||0)/v2*1000)/10:0; });
+            var fmtPct=function(x){ return (Math.round(x*10)/10)+'%'; };
+            var vTot=svPV.reduce(function(a,b){return a+b;},0),pTot=spPV.reduce(function(a,b){return a+b;},0);
+            var sub=document.getElementById('sPropVs');
+            if(sub) sub.textContent=vTot>0
+                ? 'Del periodo: '+fmtM(pTot)+' de propinas sobre '+fmtM(vTot)+' de venta = '+(pTot/vTot*100).toFixed(1)+'% de propina promedio.'
+                : 'Propinas contra venta bruta, por corte de tiempo.';
+            legend('lgPropVs',[{name:'Ventas',color:p.green},{name:'Propinas',color:p.viol}]);
+            colChart(elPV,bk.labels,
+                [{name:'Ventas',color:p.green,values:svPV},
+                 {name:'Propinas',color:p.viol,values:spPV}],fmtK,{xCol:xColPV});
+            _detRegistrar(elPV,bk.labels,[
+                {name:'Ventas',values:svPV,fmt:fmtM},
+                {name:'Propinas',values:spPV,fmt:fmtM},
+                {name:'% propina',values:pctPV,fmt:fmtPct}],fmtM,xColPV);
+        }
         var deb=ctasDeb();
         colChart(document.getElementById('chComis'),bk.labels,
             [{name:'Comisiones',color:p.red,values:serieBuckets(bk,cortesR(rF),function(c){return EtaaxCore.comisionBancoCorte(c,deb);})}],fmtK,{});
-        colChart(document.getElementById('chNomina'),bk.labels,
-            [{name:'Nómina',color:p.blue,values:serieBuckets(bk,gastosR(rF).filter(_esNom),function(g2){return n(g2.monto);})}],fmtK,{});
     })();
 
     /* 12 · Pagos por colaborador */
