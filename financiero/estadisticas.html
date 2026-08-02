@@ -652,7 +652,7 @@ function tabla(el,cols,filas){
 function lineChart(el,labels,series,fmt,opts){
     opts=opts||{}; fmt=fmt||fmtK;
     if(!labels.length||series.every(function(s){return s.values.every(function(v){return !v;});})) return vacio(el);
-    var W=560,H=200,padL=46,padR=10,padT=12,padB=24,p=pal();
+    var many=labels.length>14,W=560,H=many?216:200,padL=46,padR=10,padT=12,padB=many?40:24,p=pal();
     var svg=_svg(el,W,H);
     var max=0; series.forEach(function(s){ s.values.forEach(function(v){ if(v>max)max=v; }); });
     var tk=_ticks(max),top=tk.top;
@@ -663,9 +663,11 @@ function lineChart(el,labels,series,fmt,opts){
         _el(svg,'text',{x:padL-6,y:gy+3,'text-anchor':'end','font-size':9,fill:p.muted}).textContent=fmt(gv); }
     // Guía vertical MUY tenue por cada día → ayuda a seguir cada punto contra su fecha.
     if(labels.length<=40) labels.forEach(function(l,i){ _el(svg,'line',{x1:X(i),x2:X(i),y1:padT,y2:H-padB,stroke:p.grid,'stroke-width':1,opacity:0.22}); });
-    var stepLbl=Math.ceil(labels.length/8);
+    var stepLbl=labels.length<=31?1:Math.ceil(labels.length/16);
     labels.forEach(function(l,i){ if(i%stepLbl)return;
-        _el(svg,'text',{x:X(i),y:H-8,'text-anchor':'middle','font-size':9,fill:p.muted}).textContent=l; });
+        var tx=X(i),ty=H-(many?7:8),a={x:tx,y:ty,'font-size':many?7.5:9,fill:p.muted};
+        if(many){ a['text-anchor']='end'; a.transform='rotate(-55 '+tx+' '+ty+')'; } else a['text-anchor']='middle';
+        _el(svg,'text',a).textContent=l; });
     series.forEach(function(s){
         var dP=''; s.values.forEach(function(v,i){ dP+=(i?'L':'M')+X(i).toFixed(1)+' '+Y(v||0).toFixed(1)+' '; });
         _el(svg,'path',{d:dP,fill:'none',stroke:s.color,'stroke-width':2,'stroke-linejoin':'round','stroke-linecap':'round',
@@ -693,7 +695,7 @@ function lineChart(el,labels,series,fmt,opts){
 function colChart(el,labels,series,fmt,opts){
     opts=opts||{}; fmt=fmt||fmtK;
     if(!labels.length||series.every(function(s){return s.values.every(function(v){return !v;});})) return vacio(el);
-    var W=560,H=200,padL=46,padR=10,padT=14,padB=24,p=pal();
+    var many=labels.length>14,W=560,H=many?216:200,padL=46,padR=10,padT=14,padB=many?40:24,p=pal();
     var svg=_svg(el,W,H);
     var vals=[]; series.forEach(function(s){ vals=vals.concat(s.values); });
     var maxAbs=Math.max.apply(null,vals.map(function(v){return Math.abs(v||0);}));
@@ -710,9 +712,11 @@ function colChart(el,labels,series,fmt,opts){
     _el(svg,'text',{x:padL-6,y:gy+3,'text-anchor':'end','font-size':9,fill:p.muted}).textContent=fmt(tk.step*2);
     // Guía vertical MUY tenue por cada día (columna) → seguir cada barra contra su fecha.
     if(labels.length<=40) labels.forEach(function(l,i){ var vx=padL+slot*i+slot/2; _el(svg,'line',{x1:vx,x2:vx,y1:padT,y2:H-padB,stroke:p.grid,'stroke-width':1,opacity:0.16}); });
-    var stepLbl=Math.ceil(labels.length/10);
+    var stepLbl=labels.length<=31?1:Math.ceil(labels.length/16);
     labels.forEach(function(l,i){ if(i%stepLbl)return;
-        _el(svg,'text',{x:padL+slot*i+slot/2,y:H-8,'text-anchor':'middle','font-size':9,fill:p.muted}).textContent=l; });
+        var tx=padL+slot*i+slot/2,ty=H-(many?7:8),a={x:tx,y:ty,'font-size':many?7.5:9,fill:p.muted};
+        if(many){ a['text-anchor']='end'; a.transform='rotate(-55 '+tx+' '+ty+')'; } else a['text-anchor']='middle';
+        _el(svg,'text',a).textContent=l; });
     labels.forEach(function(l,i){
         series.forEach(function(s,si){
             var v=s.values[i]||0;
@@ -734,6 +738,10 @@ function colChart(el,labels,series,fmt,opts){
                 _el(svg,'text',{x:x+bw/2,y:v>=0?Math.max(y-4,10):Math.min(y+h+11,H-12),'text-anchor':'middle','font-size':9.5,'font-weight':700,fill:p.ink}).textContent=fmt(v);
         });
     });
+    // Etiqueta por barra (ej. % de propina sobre la venta) — rotada para no encimarse.
+    if(opts.barLabels){ labels.forEach(function(l,i){ var t=opts.barLabels[i]; if(!t) return;
+        var v=series[0].values[i]||0,cx=padL+slot*i+slot/2,hb=Math.abs(v)*esc,by=Math.max((v>=0?Y0-hb:Y0)-4,10);
+        _el(svg,'text',{x:cx,y:by,'text-anchor':'start','font-size':8,'font-weight':700,fill:opts.barLabelColor||p.ink,transform:'rotate(-90 '+cx+' '+by+')'}).textContent=t; }); }
     if(opts.refLine!==undefined){ var ry=Y0-opts.refLine*esc;
         if(ry>padT-2&&ry<H-padB+2){
             _el(svg,'line',{x1:padL,x2:W-padR,y1:ry,y2:ry,stroke:p.muted,'stroke-width':1.5});
@@ -833,7 +841,8 @@ function _repLineChart(labels,series,fmt,opts){
 }
 function _repColChart(labels,series,fmt,opts){
     opts=opts||{};
-    var W=960,padL=68,padR=22,padB=42,padT=opts.labelEach?46:18,H=opts.labelEach?326:290;
+    var lblTop=opts.labelEach||opts.barLabels;
+    var W=960,padL=68,padR=22,padB=42,padT=lblTop?46:18,H=lblTop?326:290;
     var vals=[]; series.forEach(function(s){ vals=vals.concat(s.values); });
     var maxAbs=Math.max.apply(null,vals.map(function(v){return Math.abs(v||0);}))||1;
     if(opts.refLine!==undefined&&opts.refLine>maxAbs) maxAbs=opts.refLine;
@@ -850,6 +859,7 @@ function _repColChart(labels,series,fmt,opts){
     labels.forEach(function(l,i){ series.forEach(function(se,si){ var v=se.values[i]||0; var x=padL+slot*i+slot/2-(bw*series.length+2*(series.length-1))/2+si*(bw+2); var h=Math.abs(v)*escY,y=v>=0?Y0-h:Y0; var col=opts.diverging?(v>=0?opts.colPos:opts.colNeg):se.color; if(h>0.4) s+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="2.5" fill="'+col+'"/>'; }); });
     if(opts.refLine!==undefined){ var ry=Y0-opts.refLine*escY; if(ry>padT&&ry<H-padB) s+='<line x1="'+padL+'" y1="'+ry.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+ry.toFixed(1)+'" stroke="#9a6f00" stroke-width="1.4" stroke-dasharray="5 4"/><text x="'+(W-padR)+'" y="'+(ry-5).toFixed(1)+'" text-anchor="end" font-size="10" fill="#9a6f00">'+(opts.refLabel||'')+'</text>'; }
     if(opts.labelEach&&series.length===1){ series[0].values.forEach(function(v,i){ if(!v) return; var cx=(padL+slot*i+slot/2).toFixed(1),by=(v>=0?(Y0-Math.abs(v)*escY-5):(Y0+Math.abs(v)*escY+5)).toFixed(1); s+='<text x="'+cx+'" y="'+by+'" text-anchor="'+(v>=0?'start':'end')+'" font-size="8" font-weight="600" fill="#1a1916" transform="rotate(-90 '+cx+' '+by+')">'+fmt(v)+'</text>'; }); }
+    if(opts.barLabels&&series.length===1){ series[0].values.forEach(function(v,i){ var t=opts.barLabels[i]; if(!t) return; var cx=(padL+slot*i+slot/2).toFixed(1),by=((v>=0?Y0-Math.abs(v)*escY:Y0)-5).toFixed(1); s+='<text x="'+cx+'" y="'+by+'" text-anchor="start" font-size="7.5" font-weight="600" fill="'+(opts.barLabelColor||'#1a1916')+'" transform="rotate(-90 '+cx+' '+by+')">'+_repEscTxt(t)+'</text>'; }); }
     return _repSvg(W,H,s);
 }
 function _repBarsH(rows,fmt){
@@ -905,8 +915,9 @@ function imprimirEstadisticas(){
     var ventasSeries=[{name:'Ventas',color:'#1a7a46',values:serieV}];
     if(esDia){ var metaVals=bk.keys.map(function(f){return aMeta({from:f,to:f});}); if(metaVals.some(function(x){return x>0;})) ventasSeries.push({name:'Meta',color:'#bbb',values:metaVals,dash:true,sinPuntos:true}); }
 
-    // Cumplimiento de meta — últimos 6 meses (comparativo).
-    var metaMeses=[],dref=new Date(rF.to+'T12:00:00');
+    // Cumplimiento de meta — últimos 6 meses (comparativo). Día 1 del mes para que restar
+    // meses no se desborde (junio 31 → julio) y NO se repita el mes.
+    var metaMeses=[],dref=new Date(rF.to.slice(0,7)+'-01T12:00:00');
     for(var mi=0;mi<6;mi++){ metaMeses.unshift(dref.getFullYear()+'-'+String(dref.getMonth()+1).padStart(2,'0')); dref.setMonth(dref.getMonth()-1); }
     var metaPct=metaMeses.map(function(m2){ var mm=(_metas||{})[m2],mv=mm?parseFloat(mm.meta)||0:0; return mv>0?Math.round(aVentasCortes(EtaaxCore.getRange('mes',m2,null))/mv*100):0; });
     var metaLbls=metaMeses.map(function(m2){ return MES_L[parseInt(m2.slice(5,7))-1]+' '+m2.slice(2,4); });
@@ -926,10 +937,12 @@ function imprimirEstadisticas(){
 
     function totTag(txt,color){ return '<span style="color:'+(color||'#1a1916')+'">'+txt+'</span> <span style="font-family:\'DM Sans\',sans-serif;font-size:9.5px;font-weight:400;letter-spacing:1px;color:#aaa;text-transform:uppercase">total del periodo</span>'; }
     function chBlock(tit,totHTML,svg,leg){
-        return '<div class="rsec">'+tit+'</div>'+
+        // Envuelve TÍTULO+TOTAL+LEYENDA+GRÁFICA juntos → nunca se parte la gráfica del
+        // título en un salto de página (antes el título quedaba solo al pie de la hoja).
+        return '<div style="break-inside:avoid;page-break-inside:avoid;margin-bottom:10px">'+
+            '<div class="rsec">'+tit+'</div>'+
             (totHTML?'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:.5px;line-height:1;margin:-2px 0 '+(leg?'4px':'10px')+'">'+totHTML+'</div>':'')+
-            (leg||'')+
-            '<div style="break-inside:avoid;page-break-inside:avoid;margin-bottom:8px">'+svg+'</div>';
+            (leg||'')+svg+'</div>';
     }
     var metaColor=cumpl===null?'#1a1916':(cumpl>=100?'#1a7a46':cumpl>=80?'#9a6f00':'#b52a1a');
 
@@ -940,7 +953,7 @@ function imprimirEstadisticas(){
         chBlock('Ventas vs Gastos', '<span style="color:#1a7a46">'+fmtM(v)+'</span> <span style="font-size:11px;font-family:\'DM Sans\',sans-serif;color:#aaa">ventas</span>&nbsp;&nbsp;·&nbsp;&nbsp;<span style="color:#b52a1a">'+fmtM(g)+'</span> <span style="font-size:11px;font-family:\'DM Sans\',sans-serif;color:#aaa">gastos</span>', _repColChart(bk.labels,[{name:'Ventas',color:'#1a7a46',values:serieV},{name:'Gastos',color:'#b52a1a',values:serieG}],fmtK,{wide:true}), _repLeg([{c:'#1a7a46',n:'Ventas'},{c:'#b52a1a',n:'Gastos'}])) +
         chBlock('Utilidad por '+lblMode, totTag(fmtM(u), u>=0?'#1a7a46':'#b52a1a'), _repColChart(bk.labels,[{name:'Utilidad',values:utilVals}],fmtK,{diverging:true,colPos:'#1a7a46',colNeg:'#b52a1a',labelEach:true})) +
         chBlock('Cheque promedio por '+lblMode, totTag(ck>0?fmtM(ck):'—','#2563c4'), _repLineChart(bk.labels,[{name:'Cheque',color:'#2563c4',values:serieCheque}],fmt$,{labelEach:true})) +
-        chBlock('Propinas vs Ventas', totTag(fmtM(pr),'#7a5cff'), _repColChart(bk.labels,[{name:'Ventas',color:'#1a7a46',values:serieV},{name:'Propinas',color:'#7a5cff',values:serieProp}],fmtK,{wide:true}), _repLeg([{c:'#1a7a46',n:'Ventas'},{c:'#7a5cff',n:'Propinas'}])) +
+        chBlock('Propina sobre ventas (por '+lblMode+')', totTag(fmtM(pr)+' · '+(v>0?(pr/v*100).toFixed(1):'0')+'% prom.','#7a5cff'), _repColChart(bk.labels,[{name:'Ventas',color:'#1a7a46',values:serieV}],fmtK,{wide:true,barLabels:serieV.map(function(vv,i){ return vv>0?fmtK(vv)+' · '+Math.round((serieProp[i]||0)/vv*100)+'%':''; }),barLabelColor:'#5b3fc4'}), _repLeg([{c:'#1a7a46',n:'Venta (barra)'},{c:'#5b3fc4',n:'% propina (etiqueta)'}])) +
         chBlock('Comisiones bancarias', totTag('−'+fmtM(co),'#b52a1a'), _repColChart(bk.labels,[{name:'Comisiones',color:'#b52a1a',values:serieComis}],fmt$,{labelEach:true})) +
         (hayMeta ? chBlock('Cumplimiento de meta · comparativo mensual', totTag(cumpl!==null?cumpl.toFixed(0)+'%':'—', metaColor), _repColChart(metaLbls,[{name:'% meta',color:'#7a5cff',values:metaPct}], function(x){return Math.round(x)+'%';}, {wide:true,labelEach:true,refLine:100,refLabel:'meta 100%'})) : '') +
         (staffBars.length ? chBlock('Pagos por colaborador', totTag(fmtM(nom),'#2563c4'), _repBarsH(staffBars, fmtM)) : '') +
@@ -1038,7 +1051,8 @@ function renderAll(){
        barra; % logrado arriba; línea punteada al 100%. */
     (function(){
         var el=document.getElementById('chMeta'); el.innerHTML='';
-        var meses=[],dref=new Date(rF.to+'T12:00:00');
+        // Día 1 del mes: restar meses desde el día 31 se desbordaba (jun 31 → jul) y repetía mes.
+        var meses=[],dref=new Date(rF.to.slice(0,7)+'-01T12:00:00');
         for(var mi=0;mi<6;mi++){ meses.unshift(dref.getFullYear()+'-'+String(dref.getMonth()+1).padStart(2,'0')); dref.setMonth(dref.getMonth()-1); }
         var enPer={},fp=new Date(rF.from+'T12:00:00'),tp=new Date(rF.to+'T12:00:00');
         for(var dd=new Date(fp);dd<=tp;dd.setDate(dd.getDate()+1)){ enPer[dd.getFullYear()+'-'+String(dd.getMonth()+1).padStart(2,'0')]=1; }
@@ -1131,15 +1145,14 @@ function renderAll(){
             var spPV=serieBuckets(bk,cortesR(rF),EtaaxCore.propinas);
             var pctPV=svPV.map(function(v2,i){ return v2>0?Math.round((spPV[i]||0)/v2*1000)/10:0; });
             var fmtPct=function(x){ return (Math.round(x*10)/10)+'%'; };
+            var lblPV=svPV.map(function(v2,i){ return v2>0?Math.round(pctPV[i])+'%':''; });
             var vTot=svPV.reduce(function(a,b){return a+b;},0),pTot=spPV.reduce(function(a,b){return a+b;},0);
             var sub=document.getElementById('sPropVs');
             if(sub) sub.textContent=vTot>0
-                ? 'Del periodo: '+fmtM(pTot)+' de propinas sobre '+fmtM(vTot)+' de venta = '+(pTot/vTot*100).toFixed(1)+'% de propina promedio.'
-                : 'Propinas contra venta bruta, por corte de tiempo.';
-            legend('lgPropVs',[{name:'Ventas',color:p.green},{name:'Propinas',color:p.viol}]);
-            colChart(elPV,bk.labels,
-                [{name:'Ventas',color:p.green,values:svPV},
-                 {name:'Propinas',color:p.viol,values:spPV}],fmtK,{xCol:xColPV});
+                ? 'Barras = venta del día; la etiqueta morada es el % de propina sobre esa venta. Promedio: '+(pTot/vTot*100).toFixed(1)+'% ('+fmtM(pTot)+' sobre '+fmtM(vTot)+').'
+                : 'Propina como % de la venta, por corte de tiempo.';
+            legend('lgPropVs',[{name:'Venta (barra)',color:p.green},{name:'% propina (etiqueta)',color:p.viol}]);
+            colChart(elPV,bk.labels,[{name:'Ventas',color:p.green,values:svPV}],fmtK,{xCol:xColPV,barLabels:lblPV,barLabelColor:p.viol});
             _detRegistrar(elPV,bk.labels,[
                 {name:'Ventas',values:svPV,fmt:fmtM},
                 {name:'Propinas',values:spPV,fmt:fmtM},

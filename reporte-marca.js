@@ -169,7 +169,7 @@
             // al imprimir → siempre hasta abajo, aunque el contenido no llene la página. El
             // margen inferior de @page le reserva el espacio para que no lo tape el contenido.
             '@media screen{body{background:#eee;padding:20px 20px 0}.rep{max-width:21.6cm;margin:0 auto;background:#fff;box-shadow:0 6px 30px rgba(0,0,0,.15)}.rfoot{max-width:21.6cm;margin:0 auto 24px;background:#fff;box-shadow:0 12px 30px rgba(0,0,0,.15)}}' +
-            '@media print{@page{size:letter portrait;margin:1.1cm 0 1.4cm}.rfoot{position:fixed;left:0;right:0;bottom:0;background:#fff}}' +
+            '@media print{@page{size:letter portrait;margin:0.5cm 0 1cm}.rfoot{position:fixed;left:0;right:0;bottom:0;background:#fff}}' +
             '</style></head><body>' +
             '<table class="rep">' +
                 '<thead><tr><td>' + header + '</td></tr></thead>' +
