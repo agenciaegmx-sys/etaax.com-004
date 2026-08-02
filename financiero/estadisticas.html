@@ -531,7 +531,10 @@ function ctasDeb(){ return (_ctas||[]).filter(function(c){return c&&c.tipo==='de
 /* ── Agregadores por rango (todo el dinero vía núcleo) ── */
 function aVentas(r){ return cortesR(r).reduce(function(s,c){return s+EtaaxCore.ventasBruta(c);},0)+otrosR(r).reduce(function(s,o){return s+n(o.monto);},0); }
 function aVentasCortes(r){ return cortesR(r).reduce(function(s,c){return s+EtaaxCore.ventasBruta(c);},0); }
-function aGastos(r){ return gastosR(r).reduce(function(s,g){return s+n(g.monto);},0); }
+// GASTO REAL del periodo = clasificación única del núcleo: todos los gastos MENOS
+// propinas (pass-through) MÁS comisión bancaria. Mismo número que Gastos Totales y KPIs.
+// (El total no depende del split fijo/variable, así que no necesita el catálogo de fijos.)
+function aGastos(r){ return EtaaxCore.clasificarGastos(gastosR(r), { staff:_staff||[], comisionBanco:aComis(r) }).egresos; }
 function aProps(r){ return cortesR(r).reduce(function(s,c){return s+EtaaxCore.propinas(c);},0); }
 function aComis(r){ var deb=ctasDeb(); return cortesR(r).reduce(function(s,c){return s+EtaaxCore.comisionBancoCorte(c,deb);},0); }
 function aCheque(r){ var v=0,co=0; cortesR(r).forEach(function(c){ v+=EtaaxCore.ventasBruta(c); co+=n(c.comensales); }); return co>0?v/co:0; }

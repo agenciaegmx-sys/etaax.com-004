@@ -180,8 +180,65 @@
                  objetivo:_pfFmt(objetivo), venceEste:venceEste?_pfFmt(venceEste):'', proximo:_pfFmt(proximo), ultimoPago:up?_pfFmt(up):'' };
     }
 
+    /* ── Clasificación de GASTOS — UNA sola verdad para los 4 módulos ──────────
+       (Gastos Totales, KPIs, Estadísticas, Gastos Diarios). Reglas confirmadas:
+        · propinas/gratificaciones = pass-through (NUNCA gasto → cubo aparte).
+        · nómina/personal + IMSS = cubo Nómina (IMSS a operativa por convención del caller).
+        · pagos de fijos del catálogo + categorías de naturaleza fija (renta, luz,
+          internet, agua, gas, servicios, software…) = cubo Fijo.
+        · el resto (INCLUIDOS impuestos y contabilidad) = Variable.
+        · la comisión bancaria de los cortes se SUMA como Variable (opts.comisionBanco).
+        · Previsiones NO entran (son reserva; van aparte del egreso del mes).
+       `gastos` llega YA filtrado por periodo y sucursal. */
+    function _catKey(s){ return String(s == null ? '' : s).toLowerCase().trim(); }
+    function _gnorm(s){ return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(); }
+    function gastoEsIMSS(g){ return /\bimss\b|seguro\s*social|cargas\s*sociales/i.test(((g && g.categoria) || '') + ' ' + ((g && g.concepto) || '')); }
+    function gastoEsNomina(g){ return /n[oó]mina|personal/i.test((g && g.categoria) || ''); }
+    function gastoEsPropina(g){ return /propina|gratificaci/i.test((g && g.categoria) || ''); }
+    function gastoEsFijoPat(g){ return /renta|arrendamiento|servicio|\bagua\b|\bluz\b|electric|energ[ií]a|internet|telecom|tel[eé]fon|\bgas\b|predial|software|suscripci/i.test((g && g.categoria) || ''); }
+    function gastoEsPagoFijo(g, fijos){
+        fijos = fijos || [];
+        for (var i = 0; i < fijos.length; i++) {
+            var f = fijos[i]; if (!f) continue;
+            if (g.fijoId) { if (g.fijoId === f.id) return true; continue; }
+            if (_gnorm(g.concepto) !== _gnorm(f.concepto)) continue;
+            if (!f.proveedor || _gnorm(g.proveedor) === _gnorm(f.proveedor)) return true;
+        }
+        return false;
+    }
+    function nomTipoGasto(g, staff){
+        if (g.categoriaNomina) return g.categoriaNomina;
+        var c = String(g.concepto || ''), ix = c.lastIndexOf('—');
+        var name = ix >= 0 ? c.slice(ix + 1).trim() : '';
+        if (name && staff) { for (var i = 0; i < staff.length; i++) { var s = staff[i]; if (s && _gnorm(s.nombre) === _gnorm(name)) return s.categoriaNomina || (s.rol === 'administrativo' ? 'administrativa' : 'operativa'); } }
+        return 'operativa';
+    }
+    function clasificarGastos(gastos, opts){
+        opts = opts || {};
+        var fijos = opts.fijos || [], staff = opts.staff || [], catsFijos = {};
+        for (var k = 0; k < fijos.length; k++) { if (fijos[k] && fijos[k].categoria) catsFijos[_catKey(fijos[k].categoria)] = 1; }
+        var r = { fijo: 0, nomOp: 0, nomAdm: 0, imss: 0, variable: 0, propina: 0 };
+        (gastos || []).forEach(function (g) {
+            if (!g) return;
+            var m = n(g.monto);
+            if (gastoEsPropina(g)) { r.propina += m; return; }                 // pass-through: fuera del gasto
+            if (gastoEsPagoFijo(g, fijos)) { r.fijo += m; return; }             // pago de un fijo del catálogo
+            if (gastoEsIMSS(g)) { r.imss += m; return; }
+            if (gastoEsNomina(g)) { if (nomTipoGasto(g, staff) === 'administrativa') r.nomAdm += m; else r.nomOp += m; return; }
+            if (catsFijos[_catKey(g.categoria)] || gastoEsFijoPat(g)) { r.fijo += m; return; } // fijo no catalogado
+            r.variable += m;                                                    // resto (incl. impuestos/contabilidad)
+        });
+        r.variable += n(opts.comisionBanco);                                   // comisión bancaria = variable
+        r.nom = r.nomOp + r.nomAdm + r.imss;                                   // nómina total (IMSS incluido)
+        r.egresos = r.fijo + r.nom + r.variable;                              // egreso del mes (SIN previsiones)
+        return r;
+    }
+
     window.EtaaxCore = {
         n: n, fmtM: fmtM, fmtN: fmtN, genId: genId, todayStr: todayStr,
+        gastoEsIMSS: gastoEsIMSS, gastoEsNomina: gastoEsNomina, gastoEsPropina: gastoEsPropina,
+        gastoEsFijoPat: gastoEsFijoPat, gastoEsPagoFijo: gastoEsPagoFijo, nomTipoGasto: nomTipoGasto,
+        clasificarGastos: clasificarGastos,
         planFijoPago: planFijoPago,
         getNegocioActivo: getNegocioActivo, sucActiva: sucActiva, scopeSuc: scopeSuc,
         getWeekStr: getWeekStr, semanaISO: semanaISO, getRange: getRange, prevRange: prevRange, inRange: inRange,

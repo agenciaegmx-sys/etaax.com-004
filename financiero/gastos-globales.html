@@ -878,22 +878,12 @@ function setTab(tab){
 
 /* ── KPIs ── */
 function renderKPIs(mes){
-    // Gastos fijos = lo REALMENTE pagado del mes (Opción A), no el plan del catálogo.
-    // + los de naturaleza fija SIN catalogar (para que no se pierdan del Total de Egresos).
-    var totalFijosCat=totalFijosPagado(mes);
-    var totalFijosNC=totalFijosNoCatalogMes(mes);
-    var totalFijos=totalFijosCat+totalFijosNC;
-
-    // Nómina REAL = lo pagado en gastos diarios por nómina/personal (sueldo final + bonos) + IMSS.
-    // (No se jala del catálogo de staff: el sueldo final suele ajustarse al pagar.)
-    var totalNomGastos=totalNominaGastosMes(mes);
-    var totalImssG=totalImssMes(mes);
-    var totalNom=totalNomGastos+totalImssG;
-
-    var totalVar=loadVariablesMes(mes).reduce(function(s,g){return s+n(g.monto);},0)
-        + comisionesBancoMes(mes); // comisión bancaria del periodo (gasto auto, desde los cortes)
-
-    var total=totalFijos+totalNom+totalVar;
+    // Clasificación ÚNICA desde el núcleo (misma verdad para KPIs, Estadísticas y Diario).
+    // Fijo = pagos de fijos + naturaleza fija · Nómina = nómina/personal + IMSS ·
+    // Variable = resto (incl. impuestos/contabilidad) + comisión bancaria · Propina fuera.
+    var cl=EtaaxCore.clasificarGastos(loadGastosMes(mes),{ fijos:loadFijos(), staff:_loadStaff(), comisionBanco:comisionesBancoMes(mes) });
+    var totalFijos=cl.fijo, totalNom=cl.nom, totalVar=cl.variable, total=cl.egresos;
+    var totalFijosNC=totalFijosNoCatalogMes(mes); // solo para el sublabel "Incluye $X no catalogados"
 
     document.getElementById('kpiFijos').textContent=fmtM(totalFijos);
     var _subF=document.getElementById('kpiFijosSub');

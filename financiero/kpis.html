@@ -388,6 +388,7 @@ async function _sbInit() {
         _supabase.from('previsiones').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
         _supabase.from('kpi_targets').select('datos').eq('negocio_id', negId).maybeSingle(),
         _supabase.from('staff').select('datos').eq('negocio_id', negId),
+        _supabase.from('tarjetas_credito').select('datos').eq('negocio_id', negId),
     ]);
     if (!r[0].error) _kCache.cortes  = (r[0].data||[]).map(function(x){return x.datos;});
     if (!r[1].error) _kCache.otros   = (r[1].data||[]).map(function(x){return x.datos;});
@@ -397,6 +398,7 @@ async function _sbInit() {
     if (!r[5].error) _kCache.prevs   = (r[5].data||[]).map(function(x){return x.datos;});
     if (!r[6].error && r[6].data) _kCache.targets = r[6].data.datos || _KPI_DEFAULTS;
     if (!r[7].error) _kCache.staff = (r[7].data||[]).map(function(x){return x.datos;});
+    if (!r[8].error) _kCache.ctas  = (r[8].data||[]).map(function(x){return x.datos;});
     renderAll();
 }
 
@@ -511,32 +513,23 @@ function getMesData(mes){
     var otrosT=otros.reduce(function(s,o){return s+n(o.monto);},0);
     var ingresos=ventas+otrosT;
 
-    // Clasificación real desde los GASTOS DIARIOS (igual que Gastos Totales):
-    //  FIJO = lo realmente pagado de fijos del catálogo · NÓMINA = nómina/personal + IMSS
-    //  VARIABLE = el resto, excluyendo nómina, IMSS, propinas, contabilidad y categorías fijas.
-    var fijos=loadFijos(), fijosCats=_kCatsFijos(), staff=loadStaff();
-    var fijoCost=0, varCost=0, imssCost=0, nomOpBase=0, nomAdmBase=0;
-    gastos.forEach(function(g){
-        if(g.fijoId || _kEsPagoFijo(g,fijos)){ fijoCost+=n(g.monto); return; }
-        if(_kEsIMSS(g)){ imssCost+=n(g.monto); return; }
-        if(_kEsNominaCat(g)){ // nómina real, separada por op/adm según el colaborador
-            if(_kNomTipo(g,staff)==='administrativa') nomAdmBase+=n(g.monto); else nomOpBase+=n(g.monto);
-            return;
-        }
-        var cat=String(g.categoria||'').toLowerCase().trim();
-        if(_kCatExcluida(g)||fijosCats[cat]||_kEsFijoPat(g)) return;
-        varCost+=n(g.monto);
-    });
-    // El IMSS se paga global (no por colaborador) → se carga a Operativa; así Nóm. Adm. = nómina
-    // administrativa pura (cuadra con lo pagado a administración, sin inflar con IMSS de operativos).
-    var nomOp = nomOpBase + imssCost;
-    var nomAdm= nomAdmBase;
+    // Clasificación ÚNICA desde el núcleo (misma verdad que Gastos Totales y Estadísticas):
+    //  FIJO = pagos de fijos + naturaleza fija · NÓMINA = nómina/personal + IMSS ·
+    //  VARIABLE = resto (incl. impuestos/contabilidad) + comisión bancaria · Propina fuera.
+    var ctasDeb=(_kCache.ctas||[]).filter(function(c){return c&&c.tipo==='debito';})
+        .sort(function(a,b){return (b.predeterminada?1:0)-(a.predeterminada?1:0);});
+    var comisionBanco=cortes.reduce(function(s,c){return s+EtaaxCore.comisionBancoCorte(c,ctasDeb);},0);
+    var cl=EtaaxCore.clasificarGastos(gastos,{ fijos:loadFijos(), staff:loadStaff(), comisionBanco:comisionBanco });
+    // IMSS a Operativa (se paga global, no por colaborador) → Nóm. Adm. = nómina administrativa pura.
+    var nomOp=cl.nomOp+cl.imss, nomAdm=cl.nomAdm;
+
+    // PREVISIONES = reserva, NO cuenta como egreso del mes (decisión Edwin) → va aparte;
+    // la utilidad NETA sí la descuenta (es dinero apartado de la utilidad).
     var prevs=loadPrevsMes(mes);
+    var egresos=cl.egresos;                 // Fijos + Nóminas + Variables (SIN previsiones)
+    var util=ingresos-egresos-prevs;        // utilidad neta tras apartar la reserva
 
-    var egresos=fijoCost+varCost+nomOp+nomAdm+prevs;
-    var util=ingresos-egresos;
-
-    return{ingresos:ingresos,fijos:fijoCost,variables:varCost,nomOp:nomOp,nomAdm:nomAdm,prevs:prevs,egresos:egresos,util:util};
+    return{ingresos:ingresos,fijos:cl.fijo,variables:cl.variable,nomOp:nomOp,nomAdm:nomAdm,prevs:prevs,egresos:egresos,util:util};
 }
 
 /* ── Targets ── */

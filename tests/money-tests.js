@@ -633,6 +633,57 @@ test('anual: clamp de día (ref 31 ene → próximo respeta fin de mes)', () => 
 });
 test('fecha ref vacía → no programado', () => eq(Core.planFijoPago('', 'mensual', '2026-07-10', '').programado, false));
 
+/* clasificarGastos — UNA sola verdad de gastos para los 4 módulos (Gastos Totales,
+   KPIs, Estadísticas, Diario). Misma data que SUITE D → debe dar los mismos cubos. */
+const _gsCanon = [
+    { id: '1', categoria: 'Nómina y personal', concepto: 'nómina', monto: 76210 },
+    { id: '2', categoria: 'Varios',            concepto: 'compras', monto: 105602 },
+    { id: '3', categoria: 'Internet y telecomunicaciones', concepto: 'internet', monto: 1100 },
+    { id: '4', categoria: 'Alimentos e ingredientes', concepto: 'fresa', monto: 1045 },
+    { id: '5', categoria: 'Impuestos',         concepto: 'isr', monto: 5000 },
+    { id: '6', categoria: 'IMSS',              concepto: 'cuota', monto: 800 },
+    { id: '7', categoria: 'Propinas',          concepto: 'propina staff', monto: 500 },
+    { id: '8', categoria: 'Contabilidad',      concepto: 'honorarios contador', monto: 2500 },
+];
+test('clasificarGastos: mismos cubos que Gastos Totales (fijo/nom/var/propina)', () => {
+    const r = Core.clasificarGastos(_gsCanon, {});
+    eq(r.fijo, 1100);          // internet (fijo no catalogado)
+    eq(r.nom, 77010);          // nómina 76210 + IMSS 800
+    eq(r.variable, 114147);    // compras + alimentos + impuestos + contabilidad
+    eq(r.propina, 500);        // pass-through, FUERA del egreso
+    eq(r.egresos, 192257);     // fijo + nom + variable (SIN propina, SIN previsiones)
+});
+test('clasificarGastos INVARIANTE: egresos + propina = suma cruda (nada se pierde)', () => {
+    const raw = _gsCanon.reduce((s, g) => s + g.monto, 0);
+    const r = Core.clasificarGastos(_gsCanon, {});
+    eq(r.egresos + r.propina, raw);
+});
+test('clasificarGastos: propina es pass-through (NO entra al egreso)', () => {
+    const r = Core.clasificarGastos([{ categoria: 'Propinas', monto: 500 }], {});
+    eq(r.egresos, 0); eq(r.propina, 500);
+});
+test('clasificarGastos: comisión bancaria se suma a variable', () => {
+    const r = Core.clasificarGastos([{ categoria: 'Varios', monto: 100 }], { comisionBanco: 50 });
+    eq(r.variable, 150); eq(r.egresos, 150);
+});
+test('clasificarGastos: impuestos y contabilidad SÍ cuentan como variable', () =>
+    eq(Core.clasificarGastos([{ categoria: 'Impuestos', monto: 1000 }, { categoria: 'Contabilidad', monto: 2000 }], {}).variable, 3000));
+test('clasificarGastos: nómina op/adm por staff + IMSS aparte', () => {
+    const staff = [{ nombre: 'Ana', rol: 'administrativo' }];
+    const gs = [
+        { categoria: 'Nómina y personal', concepto: 'sueldo — Ana', monto: 1000 },
+        { categoria: 'Nómina y personal', concepto: 'sueldo — Beto', monto: 2000 },
+        { categoria: 'IMSS', monto: 300 },
+    ];
+    const r = Core.clasificarGastos(gs, { staff });
+    eq(r.nomAdm, 1000); eq(r.nomOp, 2000); eq(r.imss, 300); eq(r.nom, 3300);
+});
+test('clasificarGastos: pago de fijo del catálogo → fijo (no variable)', () => {
+    const fijos = [{ id: 'f1', concepto: 'x' }];
+    const r = Core.clasificarGastos([{ fijoId: 'f1', categoria: 'Mantenimiento', monto: 8000 }, { categoria: 'Varios', monto: 500 }], { fijos });
+    eq(r.fijo, 8000); eq(r.variable, 500);
+});
+
 /* ═══════════════ SUITE D · RECLASIFICACIÓN DE GASTOS (financiero/gastos-globales.html) ═══════════════ */
 console.log('\n══ SUITE D · Reclasificación de gastos (financiero/gastos-globales.html) ══');
 (function () {
