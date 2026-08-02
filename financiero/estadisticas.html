@@ -57,11 +57,12 @@
         .tile .t-sub{font-size:10.5px;color:var(--text-dim);margin-top:4px}
         .tile .up{color:var(--green)} .tile .down{color:var(--red)}
         /* Chart cards */
-        .charts{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+        /* dense: al expandir/contraer cards, las de media hoja rellenan los huecos solas */
+        .charts{display:grid;grid-template-columns:1fr 1fr;gap:14px;grid-auto-flow:dense}
         @media(max-width:900px){.charts{grid-template-columns:1fr}}
         .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 16px 10px;min-width:0}
         .chart-card.wide{grid-column:1 / -1}
-        .ch-title{font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:1.2px;color:var(--text)}
+        .ch-title{font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:1.2px;color:var(--text);overflow:hidden}
         .ch-sub{font-size:11px;color:var(--text-dim);margin:2px 0 10px}
         .ch-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--text-muted);margin-bottom:6px}
         .ch-legend .k{display:inline-flex;align-items:center;gap:6px}
@@ -100,6 +101,12 @@
             border-radius:20px;padding:3px 11px;font-family:'DM Sans',sans-serif;font-size:10.5px;letter-spacing:.3px;
             cursor:pointer;transition:all .15s;vertical-align:2px}
         .ch-det-btn:hover{border-color:var(--viol);color:var(--viol)}
+        /* ── Botón ⤢ expandir/contraer card (flota a la derecha del título) ── */
+        .ch-exp-btn{float:right;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);
+            border-radius:20px;padding:3px 10px;font-family:'DM Sans',sans-serif;font-size:11px;letter-spacing:.3px;
+            cursor:pointer;transition:all .15s;line-height:1.3}
+        .ch-exp-btn:hover{border-color:var(--blue);color:var(--blue)}
+        @media(max-width:900px){.ch-exp-btn{display:none}}
         .det-ov{display:none;position:fixed;inset:0;z-index:9200;background:rgba(0,0,0,.65);backdrop-filter:blur(3px);
             align-items:center;justify-content:center;padding:16px}
         .det-ov.on{display:flex;animation:fadeUp .18s ease both}
@@ -205,78 +212,78 @@
     <div class="tiles" id="tilesRow"></div>
 
     <div class="charts">
-        <div class="chart-card wide">
+        <div class="chart-card wide" data-k="ventas">
             <div class="ch-title">📈 Ventas del periodo<span id="tCompNota" style="font-size:12px;color:var(--text-dim);letter-spacing:0"></span></div>
             <div class="ch-sub" id="sVentas">Venta bruta de los cortes por día/semana/mes según el tamaño del periodo, con la meta cuando aplica.</div>
             <div class="ch-legend" id="lgVentas"></div>
             <div id="chVentas"></div>
         </div>
 
-        <div class="chart-card">
+        <div class="chart-card wide" data-k="vsg">
             <div class="ch-title" id="tVsG">📊 Ventas vs Gastos</div>
             <div class="ch-sub">Del periodo seleccionado, en cortes de tiempo automáticos.</div>
             <div class="ch-legend" id="lgVsG"></div>
             <div id="chVsG"></div>
         </div>
 
-        <div class="chart-card">
+        <div class="chart-card wide" data-k="util">
             <div class="ch-title">💹 Utilidad</div>
             <div class="ch-sub">Ventas + ingresos − gastos, por corte de tiempo. Verde ganas, rojo pierdes.</div>
             <div id="chUtil"></div>
         </div>
 
-        <div class="chart-card">
+        <div class="chart-card" data-k="meta">
             <div class="ch-title">🎯 Cumplimiento de meta</div>
             <div class="ch-sub">Comparativo de los últimos 6 meses; el mes del periodo va resaltado y los demás en tono bajito. La meta estipulada va dentro de cada barra.</div>
             <div id="chMeta"></div>
         </div>
 
-        <div class="chart-card">
+        <div class="chart-card wide" data-k="cheque">
             <div class="ch-title">🧾 Cheque promedio</div>
             <div class="ch-sub">Venta ÷ comensales por corte de tiempo del periodo.</div>
             <div class="ch-legend" id="lgCheque"></div>
             <div id="chCheque"></div>
         </div>
 
-        <div class="chart-card">
+        <div class="chart-card" data-k="topcheq">
             <div class="ch-title">🏆 Mejores cheques promedio</div>
             <div class="ch-sub">Los 10 días del periodo con el cheque promedio más alto.</div>
             <div id="chTopCheques"></div>
         </div>
 
-        <div class="chart-card">
+        <div class="chart-card" data-k="gastoscat">
             <div class="ch-title">📤 Gastos por categoría</div>
             <div class="ch-sub">Top 7 del periodo; el resto se pliega en "Otras".</div>
             <div id="chGastosCat"></div>
         </div>
 
         <!-- Solo aparece si los cortes capturan el desglose opcional (alimentos/bebidas, comedor/para llevar) -->
-        <div class="chart-card" id="cardMezcla" style="display:none">
+        <div class="chart-card" id="cardMezcla" data-k="mezcla" style="display:none">
             <div class="ch-title">🍽️ Mezcla de venta</div>
             <div class="ch-sub">Composición de la venta del periodo (desglose capturado en los cortes).</div>
             <div id="chMezcla"></div>
         </div>
 
-        <div class="chart-card">
+        <div class="chart-card wide" data-k="propvs">
             <div class="ch-title">⭐ Propinas vs Ventas</div>
             <div class="ch-sub" id="sPropVs">Propinas contra venta bruta, por corte de tiempo.</div>
             <div class="ch-legend" id="lgPropVs"></div>
             <div id="chPropsVs"></div>
         </div>
 
-        <div class="chart-card">
+        <div class="chart-card wide" data-k="comis">
             <div class="ch-title">💳 Comisiones bancarias</div>
             <div class="ch-sub">Lo que el banco descontó (comisión + IVA por cuenta), por corte de tiempo.</div>
             <div id="chComis"></div>
         </div>
 
-        <div class="chart-card">
+        <div class="chart-card" data-k="staff">
             <div class="ch-title">🧑‍🍳 Pagos por colaborador</div>
             <div class="ch-sub">A quién se le pagó más en el periodo (gastos ligados a staff).</div>
             <div id="chStaff"></div>
         </div>
 
-        <div class="chart-card wide">
+        <div class="chart-card wide" data-k="recetas">
             <div class="ch-title">🍸 Rentabilidad de recetas — utilidad neta % estimada</div>
             <div class="ch-sub">Utilidad neta = 100% − costo% − 40% de gasto operativo, igual que el costeo aplicado de tu escandallo · semáforo: ≥25% sano.</div>
             <div class="ch-filtros">
@@ -299,7 +306,7 @@
 
         <!-- Omitida por ahora (Edwin 2026-07-22): nos quedamos solo con la de recetas.
              Para revivirla basta quitar el display:none. -->
-        <div class="chart-card wide" style="display:none">
+        <div class="chart-card wide" data-k="insumos" style="display:none">
             <div class="ch-title">📦 Rentabilidad de insumos de venta directa — margen % estimado</div>
             <div class="ch-sub">Insumos con precio en carta (cervezas, refrescos, botellas…): (precio sin IVA − costo) ÷ precio sin IVA.</div>
             <div class="ch-filtros">
@@ -580,6 +587,46 @@ function vacio(el,msg){ el.innerHTML='<div class="ch-empty">'+(msg||'Sin datos e
    Cada gráfica registra sus datos CRUDOS al renderizar; el botón del título
    abre un modal con totales, promedio, mejor/peor periodo y la tabla completa.
    Las series pueden traer su propio fmt (para mezclar $ y %). */
+/* ── Expandir / contraer cards (botón ⤢) ──
+   Las gráficas de serie por día nacen a ancho completo (se saturan con 31 barras);
+   las listas de barras horizontales nacen a media hoja. El botón deja mover
+   cualquiera y la preferencia se recuerda por negocio. Las cards traen su tamaño
+   de origen en data-k + la clase wide del HTML. */
+function _expKey(){ return 'etaax_stat_cards_'+(getNegocioActivo()||'x'); }
+function _expPrefs(){ try{ return JSON.parse(localStorage.getItem(_expKey())||'{}')||{}; }catch(e){ return {}; } }
+function _expInit(){
+    var prefs=_expPrefs();
+    document.querySelectorAll('.chart-card[data-k]').forEach(function(card){
+        var k=card.getAttribute('data-k');
+        if(card.dataset.defWide===undefined) card.dataset.defWide=card.classList.contains('wide')?'1':'0';
+        var quiere=(prefs[k]===undefined)?(card.dataset.defWide==='1'):!!prefs[k];
+        card.classList.toggle('wide',quiere);
+        var t=card.querySelector('.ch-title');
+        if(t&&!card.querySelector('.ch-exp-btn')){
+            var b=document.createElement('button'); b.className='ch-exp-btn';
+            b.onclick=function(){ _expToggle(k); };
+            t.appendChild(b); // al final: el título sigue siendo childNodes[0] (lo usa abrirDesglose)
+        }
+        _expBtnTxt(card);
+    });
+}
+function _expBtnTxt(card){
+    var b=card.querySelector('.ch-exp-btn'); if(!b) return;
+    var w=card.classList.contains('wide');
+    b.textContent=w?'⤡ Contraer':'⤢ Expandir';
+    b.title=w?'Volver a media pantalla':'Ver a todo lo ancho';
+}
+function _expToggle(k){
+    var card=document.querySelector('.chart-card[data-k="'+k+'"]'); if(!card) return;
+    var w=!card.classList.contains('wide');
+    card.classList.toggle('wide',w);
+    _expBtnTxt(card);
+    var prefs=_expPrefs(); prefs[k]=w?1:0;
+    try{ localStorage.setItem(_expKey(),JSON.stringify(prefs)); }catch(e){}
+    // El SVG tiene viewBox fijo: al cambiar el ancho del card se re-escala solo,
+    // pero re-render deja el tooltip/tabla consistentes con el nuevo tamaño.
+    if(_cortes) renderAll();
+}
 var _detReg={};
 function _detRegistrar(el,labels,series,fmt,xCol){
     if(!el||!el.id) return;
@@ -1370,6 +1417,7 @@ function toggleNav(){
 
 document.addEventListener('DOMContentLoaded',function(){
     _aplicarNavPref();
+    _expInit();
     _inputTipo(document.getElementById('fVal'),'mes',EtaaxCore.todayStr());
     _sbInit();
 });
