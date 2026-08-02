@@ -108,10 +108,13 @@
         var identidad = m.logo
             ? '<img src="' + _esc(m.logo) + '" style="width:46px;height:46px;object-fit:contain;border:1px solid #eee;border-radius:8px;flex-shrink:0;background:#fff" alt="logo">'
             : (m.emoji ? '<span style="font-size:28px;line-height:1;flex-shrink:0">' + _esc(m.emoji) + '</span>' : '');
+        // Logo como <img> con data-URI (NO svg inline): así se re-pinta en CADA hoja al
+        // imprimir. Chrome no vuelve a pintar un <svg> inline dentro de un <thead> repetido.
+        var _logoImg = '<img src="data:image/svg+xml;charset=utf-8,' + encodeURIComponent(window.etaaxLogoSVG({ variant:'claro', height:26 })) + '" alt="ETAAX" style="height:26px;width:auto;display:block;flex-shrink:0">';
         return '<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;' +
                 'padding:12px 20px;border-bottom:3px solid #3dbe7a">' +
             '<div style="display:flex;align-items:center;gap:12px;min-width:0">' +
-                window.etaaxLogoSVG({ variant:'claro', height:26, style:'display:block;flex-shrink:0' }) +
+                _logoImg +
                 '<div style="border-left:1px solid #ddd;padding-left:12px;min-width:0;display:flex;align-items:center;gap:10px">' +
                     identidad +
                     '<div style="min-width:0">' +
@@ -162,14 +165,17 @@
             'table.rt tfoot td{background:#f8f8f8;border-top:2px solid #3dbe7a;padding:9px 10px;font-size:12px;font-weight:700;text-align:right}' +
             'table.rt tfoot td:first-child{text-align:left}' +
             '.rbadge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.5px;padding:2px 9px;border-radius:20px}' +
-            '@media screen{body{background:#eee;padding:20px}.rep{max-width:21.6cm;margin:0 auto;background:#fff;box-shadow:0 6px 30px rgba(0,0,0,.15)}}' +
-            '@media print{@page{size:letter portrait;margin:1.1cm 0}}' +
+            // El PIE va como elemento aparte y se FIJA (position:fixed) al fondo de CADA hoja
+            // al imprimir → siempre hasta abajo, aunque el contenido no llene la página. El
+            // margen inferior de @page le reserva el espacio para que no lo tape el contenido.
+            '@media screen{body{background:#eee;padding:20px 20px 0}.rep{max-width:21.6cm;margin:0 auto;background:#fff;box-shadow:0 6px 30px rgba(0,0,0,.15)}.rfoot{max-width:21.6cm;margin:0 auto 24px;background:#fff;box-shadow:0 12px 30px rgba(0,0,0,.15)}}' +
+            '@media print{@page{size:letter portrait;margin:1.1cm 0 1.4cm}.rfoot{position:fixed;left:0;right:0;bottom:0;background:#fff}}' +
             '</style></head><body>' +
             '<table class="rep">' +
                 '<thead><tr><td>' + header + '</td></tr></thead>' +
-                '<tfoot><tr><td>' + footer + '</td></tr></tfoot>' +
                 '<tbody><tr><td><div class="rbody">' + (cfg.cuerpo || '') + '</div></td></tr></tbody>' +
             '</table>' +
+            '<div class="rfoot">' + footer + '</div>' +
             '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.print();},300);}<\/scr' + 'ipt></body></html>';
     };
 

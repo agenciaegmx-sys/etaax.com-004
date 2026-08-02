@@ -595,11 +595,35 @@ function imprimirKPIs(){
             '<td><span class="rbadge" style="color:'+SEMCOL[sem.cls]+';background:'+SEMBG[sem.cls]+'">'+sem.label+'</span></td></tr>';
     }).join('');
 
+    // Historial mensual (últimos 6 meses hasta el mes seleccionado) — % sobre ingresos.
+    var MES_NAMES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    var hd=new Date(mes+'-01T12:00:00'), _meses=[];
+    for(var _i=0;_i<6;_i++){ _meses.unshift(hd.getFullYear()+'-'+String(hd.getMonth()+1).padStart(2,'0')); hd.setMonth(hd.getMonth()-1); }
+    var histRows=_meses.map(function(mm){
+        var md=getMesData(mm); if(md.ingresos<=0) return null;
+        function pp(x){ return md.ingresos>0?(x/md.ingresos*100):0; }
+        var semU=getSem(pp(md.util),t.util,true), act=(mm===mes);
+        return '<tr'+(act?' style="background:#f0faf4"':'')+'>'+
+            '<td>'+MES_NAMES[parseInt(mm.slice(5,7))-1]+' '+mm.slice(0,4)+(act?' ◀':'')+'</td>'+
+            '<td style="color:#1a7a46;font-weight:700">'+fmtM(md.ingresos)+'</td>'+
+            '<td>'+fmtPct(pp(md.fijos))+'</td><td>'+fmtPct(pp(md.variables))+'</td>'+
+            '<td>'+fmtPct(pp(md.nomOp))+'</td><td>'+fmtPct(pp(md.nomAdm))+'</td>'+
+            '<td>'+fmtPct(pp(md.prevs))+'</td>'+
+            '<td style="color:'+(md.util>=0?'#1a7a46':'#b52a1a')+';font-weight:700">'+fmtPct(pp(md.util))+'</td>'+
+            '<td><span class="rbadge" style="color:'+SEMCOL[semU.cls]+';background:'+SEMBG[semU.cls]+'">'+semU.label+'</span></td>'+
+            '</tr>';
+    }).filter(Boolean).join('');
+    var histSec = histRows
+        ? '<div class="rsec">Historial mensual · últimos 6 meses (% sobre ingresos)</div>' +
+          '<table class="rt" style="font-size:10px"><thead><tr><th>Mes</th><th>Ingresos</th><th>Fijos</th><th>Var.</th><th>N.Op</th><th>N.Adm</th><th>Prev</th><th>Utilidad</th><th>Estado</th></tr></thead><tbody>'+histRows+'</tbody></table>'
+        : '';
+
     var cuerpo =
         '<div class="rsec">Resumen del mes</div>' +
         '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">'+cards+'</div>' +
         '<div class="rsec">Distribución de egresos + utilidad (% sobre ingresos)</div>' +
         '<table class="rt"><thead><tr><th>Concepto</th><th>Monto</th><th>Porcentaje</th><th>Meta saludable</th><th>Estado</th></tr></thead><tbody>'+rows+'</tbody></table>' +
+        histSec +
         '<div style="font-size:9.5px;color:#8a8a8a;margin-top:9px;line-height:1.55">Las <b>previsiones</b> son una reserva apartada de la utilidad: no cuentan como egreso del mes. La <b>comisión bancaria</b> de los cortes ya está incluida en Gastos Variables. Las propinas se excluyen (pass-through al personal).</div>';
 
     var mesTxt=new Date(mes+'-01T12:00:00').toLocaleDateString('es-MX',{month:'long',year:'numeric'});
