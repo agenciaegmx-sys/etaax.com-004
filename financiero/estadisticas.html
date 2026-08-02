@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
 <script src="/etaax-core.js"></script>
+    <script src="/reporte-marca.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
     <script src="../supabase-config.js"></script>
 <script src="/etaax-db.js"></script>
@@ -175,6 +176,7 @@
             <button class="suc-chip" id="sucChip">🌐 Vista global ▾</button>
             <div class="suc-menu" id="sucMenu"></div>
         </div>
+        <button class="suc-chip" id="btnImprimirEst" onclick="imprimirEstadisticas()" title="Imprimir / PDF del periodo">🖨️ Reporte</button>
         <a href="index.html" class="suc-chip" style="text-decoration:none;color:var(--text-dim);border-color:var(--border)">← Panel</a>
     </div>
 
@@ -808,6 +810,67 @@ function delta(cur,prev,vsTxt){
     if(!prev) return {txt:'—',cls:''};
     var d=(cur-prev)/Math.abs(prev)*100;
     return {txt:(d>=0?'▲ +':'▼ ')+d.toFixed(1)+'% '+vsTxt,cls:d>=0?'up':'down'};
+}
+
+/* ── Reporte imprimible del periodo (header con logo real + pie anclado al fondo) ── */
+function imprimirEstadisticas(){
+    if(typeof etaaxReporteDoc!=='function'){ alert('No se pudo cargar el módulo de reportes. Recarga la página.'); return; }
+    var rF=rangoF(), rC=rangoC(), comp=!!rC, rBase=comp?rC:rangoPrevio(rF);
+    var vsTxt=comp?'vs B':'vs anterior';
+    var v=aVentas(rF), g=aGastos(rF), u=v-g, ck=aCheque(rF), pr=aProps(rF), co=aComis(rF);
+    var vB=aVentas(rBase), gB=aGastos(rBase);
+    var dv=delta(v,vB,vsTxt), dg=delta(g,gB,vsTxt), du=delta(u,vB-gB,vsTxt),
+        dck=delta(ck,aCheque(rBase),vsTxt), dp=delta(pr,aProps(rBase),vsTxt), dco=delta(co,aComis(rBase),vsTxt);
+    var meta=aMeta(rF), cumpl=meta>0?aVentasCortes(rF)/meta*100:null;
+    var esc=(typeof etx==='function')?etx:function(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});};
+
+    function card(l,val,color,sub){ return '<div class="rcard"><div class="l">'+l+'</div><div class="v"'+(color?' style="color:'+color+'"':'')+'>'+val+'</div>'+(sub?'<div class="s">'+esc(sub)+'</div>':'')+'</div>'; }
+    var cards =
+        card('Ventas + ingresos', fmtM(v), '#1a7a46', dv.txt) +
+        card('Gastos del periodo', fmtM(g), '#b52a1a', dg.txt) +
+        card('Utilidad', fmtM(u), u>=0?'#1a7a46':'#b52a1a', du.txt) +
+        card('Cheque promedio', ck>0?fmtM(ck):'—', '', dck.txt) +
+        card('Propinas (no es gasto)', fmtM(pr), '#9a6f00', dp.txt) +
+        (cumpl!==null
+            ? card('Cumplimiento de meta', cumpl.toFixed(0)+'%', cumpl>=100?'#1a7a46':cumpl>=80?'#9a6f00':'#b52a1a', 'de '+fmtM(meta))
+            : card('Comisiones banco', '−'+fmtM(co), '#b52a1a', dco.txt));
+
+    // Ventas por bucket (día/semana/mes según el periodo) + meta si es vista diaria.
+    var bk=bucketsDe(rF), esDia=bk.modo==='dia';
+    var serieV=serieBuckets(bk,cortesR(rF),EtaaxCore.ventasBruta);
+    var metaVals=esDia?bk.keys.map(function(f){return aMeta({from:f,to:f});}):null;
+    var ventasRows=bk.labels.map(function(lab,i){
+        var vv=serieV[i]||0, cols='<td>'+esc(lab)+'</td><td>'+fmtM(vv)+'</td>';
+        if(esDia){ var mt=metaVals[i]||0; cols+='<td>'+(mt>0?fmtM(mt):'—')+'</td><td>'+(mt>0?(vv/mt*100).toFixed(0)+'%':'—')+'</td>'; }
+        return '<tr>'+cols+'</tr>';
+    }).join('');
+    var colLbl=bk.modo==='dia'?'Día':bk.modo==='semana'?'Semana':'Mes';
+    var ventasTot=serieV.reduce(function(s,x){return s+x;},0);
+
+    // Gastos por categoría CANÓNICO: sin propinas (pass-through) + comisión bancaria como
+    // línea propia → el total cuadra con el card "Gastos del periodo".
+    var cats={}; gastosR(rF).forEach(function(g2){ if(EtaaxCore.gastoEsPropina(g2)) return; var c=g2.categoria||'Sin categoría'; cats[c]=(cats[c]||0)+n(g2.monto); });
+    if(co>0) cats['Comisión bancaria (auto)']=(cats['Comisión bancaria (auto)']||0)+co;
+    var orden=Object.keys(cats).sort(function(a,b){return cats[b]-cats[a];});
+    var catTot=orden.reduce(function(s,c){return s+cats[c];},0);
+    var catRows=orden.map(function(c){ var m=cats[c]; return '<tr><td>'+esc(c)+'</td><td>'+fmtM(m)+'</td><td>'+(catTot>0?Math.round(m/catTot*100):0)+'%</td></tr>'; }).join('');
+
+    var cuerpo =
+        '<div class="rsec">Indicadores del periodo</div>' +
+        '<div class="rgrid" style="grid-template-columns:repeat(3,1fr)">'+cards+'</div>' +
+        '<div class="rsec">Ventas por '+(esDia?'día':bk.modo==='semana'?'semana':'mes')+'</div>' +
+        '<table class="rt"><thead><tr><th>'+colLbl+'</th><th>Ventas</th>'+(esDia?'<th>Meta</th><th>Cumpl.</th>':'')+'</tr></thead><tbody>'+ventasRows+'</tbody>' +
+        '<tfoot><tr><td>Total</td><td>'+fmtM(ventasTot)+'</td>'+(esDia?'<td></td><td></td>':'')+'</tr></tfoot></table>' +
+        '<div class="rsec">Gastos por categoría</div>' +
+        (catRows
+            ? '<table class="rt"><thead><tr><th>Categoría</th><th>Monto</th><th>%</th></tr></thead><tbody>'+catRows+'</tbody><tfoot><tr><td>Gasto real del periodo</td><td>'+fmtM(catTot)+'</td><td>100%</td></tr></tfoot></table>'
+            : '<div style="font-size:11px;color:#999">Sin gastos en el periodo.</div>');
+
+    var fecha=new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'});
+    var derecha='<div style="font-family:\'Bebas Neue\',sans-serif;font-size:14px;letter-spacing:1px;color:#1a1916">Estadísticas</div><div>'+esc(fmtRango(rF))+'</div><div>Generado: '+fecha+'</div>'+(comp?'<div>Comparado vs '+esc(fmtRango(rC))+'</div>':'');
+    var html=etaaxReporteDoc({ titulo:'Estadísticas — '+fmtRango(rF), subtitulo:'Reporte de Estadísticas', derecha:derecha, cuerpo:cuerpo, pie:'Salud Financiera · Estadísticas' });
+    var w=window.open('','_blank'); if(!w){ alert('Permite las ventanas emergentes para imprimir el reporte.'); return; }
+    w.document.write(html); w.document.close();
 }
 
 function renderAll(){

@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
 <script src="/etaax-core.js"></script>
+    <script src="/reporte-marca.js"></script>
     <style>
         /* ── Category colors ── */
         :root{
@@ -206,6 +207,7 @@
                     <label>Mes</label>
                     <input type="month" id="mesInput">
                 </div>
+                <button class="suc-chip" id="btnImprimirKpis" onclick="imprimirKPIs()" title="Imprimir / PDF del mes" style="font-size:11px;padding:7px 14px">🖨️ Reporte</button>
                 <button class="btn-primary" id="btnGuardarTargets" style="font-size:11px;padding:7px 14px">💾 Guardar metas</button>
             </div>
         </div>
@@ -558,6 +560,54 @@ function getSem(actual, target, isUtil){
         if(actual<=target*1.25) return{cls:'naranja',label:'ALTO'};
         return{cls:'rojo',label:'CRÍTICO'};
     }
+}
+
+/* ── Reporte imprimible del mes (header con logo real + pie anclado al fondo) ── */
+function imprimirKPIs(){
+    if(typeof etaaxReporteDoc!=='function'){ alert('No se pudo cargar el módulo de reportes. Recarga la página.'); return; }
+    var mes=(document.getElementById('mesInput').value)||mesStr();
+    var d=getMesData(mes), t=loadTargets();
+    function pc(x){ return d.ingresos>0?(x/d.ingresos*100):0; }
+    var margen=pc(d.util), semMrg=getSem(margen,t.util,true);
+    var SEMCOL={verde:'#1a7a46',amarillo:'#9a6f00',naranja:'#c8621a',rojo:'#b52a1a'};
+    var SEMBG ={verde:'#e8faf2',amarillo:'#fef9e7',naranja:'#fdf0e6',rojo:'#fdecea'};
+    var margenColor=SEMCOL[semMrg.cls]||'#1a1916';
+
+    function card(l,val,color,sub){ return '<div class="rcard"><div class="l">'+l+'</div><div class="v"'+(color?' style="color:'+color+'"':'')+'>'+val+'</div>'+(sub?'<div class="s">'+sub+'</div>':'')+'</div>'; }
+    var cards =
+        card('Ingresos del mes', fmtM(d.ingresos), '#1a7a46', 'Ventas + otros ingresos') +
+        card('Egresos totales', fmtM(d.egresos), '#b52a1a', 'Fijos + Nóminas + Variables') +
+        card('Utilidad neta', fmtM(d.util), d.util>=0?'#1a7a46':'#b52a1a', fmtPct(margen)+' sobre ingresos') +
+        card('Margen operativo', d.ingresos>0?fmtPct(margen):'—', margenColor, 'Meta: '+t.util+'%');
+
+    var CATS=[
+        {label:'Gastos Fijos',          val:d.fijos,     tgt:t.fijos,     isUtil:false},
+        {label:'Gastos Variables',      val:d.variables, tgt:t.variables, isUtil:false},
+        {label:'Nómina Operativa',      val:d.nomOp,     tgt:t.nomOp,     isUtil:false},
+        {label:'Nómina Administrativa', val:d.nomAdm,    tgt:t.nomAdm,    isUtil:false},
+        {label:'Previsiones (reserva)', val:d.prevs,     tgt:t.prev,      isUtil:false},
+        {label:'Utilidad neta',         val:d.util,      tgt:t.util,      isUtil:true}
+    ];
+    var rows=CATS.map(function(c){
+        var pct=pc(c.val), sem=getSem(pct,c.tgt,c.isUtil);
+        var valColor=c.isUtil&&c.val<0?'#b52a1a':'#1a1916';
+        return '<tr><td>'+c.label+'</td><td style="color:'+valColor+'">'+fmtM(c.val)+'</td><td>'+fmtPct(pct)+'</td><td>'+c.tgt+'%</td>'+
+            '<td><span class="rbadge" style="color:'+SEMCOL[sem.cls]+';background:'+SEMBG[sem.cls]+'">'+sem.label+'</span></td></tr>';
+    }).join('');
+
+    var cuerpo =
+        '<div class="rsec">Resumen del mes</div>' +
+        '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">'+cards+'</div>' +
+        '<div class="rsec">Distribución de egresos + utilidad (% sobre ingresos)</div>' +
+        '<table class="rt"><thead><tr><th>Concepto</th><th>Monto</th><th>% ingresos</th><th>Meta</th><th>Estado</th></tr></thead><tbody>'+rows+'</tbody></table>' +
+        '<div style="font-size:9.5px;color:#8a8a8a;margin-top:9px;line-height:1.55">Las <b>previsiones</b> son una reserva apartada de la utilidad: no cuentan como egreso del mes. La <b>comisión bancaria</b> de los cortes ya está incluida en Gastos Variables. Las propinas se excluyen (pass-through al personal).</div>';
+
+    var mesTxt=new Date(mes+'-01T12:00:00').toLocaleDateString('es-MX',{month:'long',year:'numeric'});
+    var fecha=new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'});
+    var derecha='<div style="font-family:\'Bebas Neue\',sans-serif;font-size:14px;letter-spacing:1px;color:#1a1916">KPIs financieros</div><div>'+mesTxt+'</div><div>Generado: '+fecha+'</div>';
+    var html=etaaxReporteDoc({ titulo:'KPIs — '+mesTxt, subtitulo:'Reporte de KPIs financieros', derecha:derecha, cuerpo:cuerpo, pie:'Salud Financiera · KPIs' });
+    var w=window.open('','_blank'); if(!w){ alert('Permite las ventanas emergentes para imprimir el reporte.'); return; }
+    w.document.write(html); w.document.close();
 }
 
 /* ── RENDER ── */

@@ -124,6 +124,45 @@
         '</div>';
     };
 
+    // Documento de reporte COMPLETO listo para imprimir/PDF (hoja carta vertical,
+    // fondo blanco, header con logo real arriba y PIE ANCLADO al fondo de la hoja
+    // aunque el contenido no la llene). cfg: { titulo, subtitulo, derecha, cuerpo, pie, opts }.
+    window.etaaxReporteDoc = function (cfg) {
+        cfg = cfg || {};
+        var header = window.etaaxReporteHeader(cfg.subtitulo || '', cfg.derecha || '', cfg.opts);
+        var footer = window.etaaxReporteFooter(cfg.pie || '');
+        var titulo = _esc(cfg.titulo || 'Reporte ETAAX');
+        return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>' + titulo + '</title>' +
+            '<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">' +
+            '<style>' +
+            '*{margin:0;padding:0;box-sizing:border-box}' +
+            'body{font-family:\'DM Sans\',sans-serif;background:#eee;color:#1a1916;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:20px}' +
+            '.hoja{width:21.6cm;max-width:100%;min-height:27.9cm;margin:0 auto;background:#fff;box-shadow:0 6px 30px rgba(0,0,0,.15);display:flex;flex-direction:column}' +
+            '.rcont{padding:20px 30px;flex:1}' +
+            '.rpie{margin-top:auto}' +
+            '.rsec{font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:2px;color:#1a1916;margin:22px 0 11px;padding-bottom:5px;border-bottom:2px solid #3dbe7a}' +
+            '.rsec:first-of-type{margin-top:8px}' +
+            '.rgrid{display:grid;gap:10px}' +
+            '.rcard{border:1px solid #ececec;border-radius:9px;padding:12px 14px;background:#fafafa}' +
+            '.rcard .l{font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#999;margin-bottom:6px;font-weight:700}' +
+            '.rcard .v{font-family:\'Bebas Neue\',sans-serif;font-size:25px;letter-spacing:1px;line-height:1;color:#1a1916}' +
+            '.rcard .s{font-size:9.5px;color:#8a8a8a;margin-top:5px;line-height:1.4}' +
+            'table.rt{width:100%;border-collapse:collapse}' +
+            'table.rt thead th{background:#f5f5f5;padding:8px 10px;font-size:8px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:1.2px;border-bottom:2px solid #e0e0e0;text-align:right}' +
+            'table.rt thead th:first-child{text-align:left}' +
+            'table.rt tbody td{padding:7px 10px;font-size:11.5px;border-bottom:1px solid #f1f1f1;text-align:right;font-variant-numeric:tabular-nums}' +
+            'table.rt tbody td:first-child{text-align:left;font-weight:600}' +
+            'table.rt tbody tr:nth-child(even){background:#fafafa}' +
+            'table.rt tfoot td{background:#f8f8f8;border-top:2px solid #3dbe7a;padding:9px 10px;font-size:12px;font-weight:700;text-align:right}' +
+            'table.rt tfoot td:first-child{text-align:left}' +
+            '.rbadge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.5px;padding:2px 9px;border-radius:20px}' +
+            '@media print{@page{size:letter portrait;margin:0}body{background:#fff;padding:0}.hoja{box-shadow:none;width:100%;min-height:100vh}}' +
+            '</style></head><body><div class="hoja">' + header +
+            '<div class="rcont">' + (cfg.cuerpo || '') + '</div>' +
+            '<div class="rpie">' + footer + '</div>' +
+            '</div><scr' + 'ipt>window.onload=function(){setTimeout(function(){window.print();},280);}<\/scr' + 'ipt></body></html>';
+    };
+
     // Pie estándar de reporte.
     window.etaaxReporteFooter = function (centroHTML) {
         return '<div style="display:flex;justify-content:space-between;align-items:center;' +
