@@ -227,7 +227,7 @@
 
         <div class="chart-card">
             <div class="ch-title">🎯 Cumplimiento de meta</div>
-            <div class="ch-sub">% de la meta mensual lograda en los meses que toca el periodo (línea al 100%).</div>
+            <div class="ch-sub">Comparativo de los últimos 6 meses; el mes del periodo va resaltado y los demás en tono bajito. La meta estipulada va dentro de cada barra.</div>
             <div id="chMeta"></div>
         </div>
 
@@ -1033,18 +1033,36 @@ function renderAll(){
             {diverging:true,colPos:p.green,colNeg:p.red});
     })();
 
-    /* 4 · Cumplimiento de meta por mes (meses del rango) */
+    /* 4 · Cumplimiento de meta — últimos 6 meses (comparativo). El/los mes(es) del
+       periodo van RESALTADOS; los demás en tono bajito. Meta estipulada DENTRO de la
+       barra; % logrado arriba; línea punteada al 100%. */
     (function(){
         var el=document.getElementById('chMeta'); el.innerHTML='';
-        var meses=[],seen={};
-        var f=new Date(rF.from+'T12:00:00'),t=new Date(rF.to+'T12:00:00');
-        for(var d=new Date(f);d<=t;d.setDate(d.getDate()+1)){ var m2=d.toISOString().slice(0,7); if(!seen[m2]){seen[m2]=1;meses.push(m2);} }
-        var vals=meses.map(function(m2){ var mm=(_metas||{})[m2],mv=mm?parseFloat(mm.meta)||0:0;
-            return mv>0?aVentasCortes(EtaaxCore.getRange('mes',m2,null))/mv*100:0; });
-        if(vals.every(function(x){return !x;})) return vacio(el,'Sin metas configuradas — defínelas en Ventas Totales.');
-        colChart(el,meses.map(function(m2){return MES_L[parseInt(m2.slice(5,7))-1]+' '+m2.slice(2,4);}),
-            [{name:'% de meta',color:p.viol,values:vals.map(function(x){return Math.round(x);})}],
-            function(x){return Math.round(x)+'%';},{refLine:100,refLabel:'100%',xCol:'Mes'});
+        var meses=[],dref=new Date(rF.to+'T12:00:00');
+        for(var mi=0;mi<6;mi++){ meses.unshift(dref.getFullYear()+'-'+String(dref.getMonth()+1).padStart(2,'0')); dref.setMonth(dref.getMonth()-1); }
+        var enPer={},fp=new Date(rF.from+'T12:00:00'),tp=new Date(rF.to+'T12:00:00');
+        for(var dd=new Date(fp);dd<=tp;dd.setDate(dd.getDate()+1)){ enPer[dd.getFullYear()+'-'+String(dd.getMonth()+1).padStart(2,'0')]=1; }
+        var data=meses.map(function(m2){ var mm=(_metas||{})[m2],mv=mm?parseFloat(mm.meta)||0:0,vt=aVentasCortes(EtaaxCore.getRange('mes',m2,null));
+            return {mes:m2,meta:mv,ventas:vt,pct:mv>0?vt/mv*100:0,on:!!enPer[m2]}; });
+        if(data.every(function(d){return !d.pct&&!d.meta;})) return vacio(el,'Sin metas configuradas — defínelas en Ventas Totales.');
+        var W=560,H=210,padL=30,padR=14,padT=24,padB=32,svg=_svg(el,W,H);
+        var top=Math.max(120,Math.ceil(Math.max.apply(null,data.map(function(d){return d.pct;}))/20)*20);
+        var Y=function(pct){ return padT+(H-padT-padB)*(1-Math.min(pct,top)/top); };
+        var slot=(W-padL-padR)/data.length,bw=Math.min(60,slot*0.58);
+        var y100=Y(100); _el(svg,'line',{x1:padL,x2:W-padR,y1:y100,y2:y100,stroke:p.muted,'stroke-width':1,'stroke-dasharray':'5 4'});
+        _el(svg,'text',{x:W-padR,y:y100-4,'text-anchor':'end','font-size':9,fill:p.muted}).textContent='meta 100%';
+        _el(svg,'line',{x1:padL,x2:W-padR,y1:H-padB,y2:H-padB,stroke:p.grid,'stroke-width':1});
+        data.forEach(function(d,i){
+            var cx=padL+slot*i+slot/2,x=cx-bw/2,yb=Y(d.pct),h=(H-padB)-yb,col=d.on?p.viol:'rgba(122,92,255,.30)';
+            if(h>0){ var r=_el(svg,'path',{d:_barPath(x,yb,bw,h,true),fill:col}); r.style.cursor='pointer';
+                r.addEventListener('pointermove',function(ev){ r.setAttribute('opacity',.82);
+                    tipShow(ev.clientX,ev.clientY,MES_L[parseInt(d.mes.slice(5,7))-1]+' '+d.mes.slice(0,4),
+                        [{k:col,nombre:'% de meta',valor:Math.round(d.pct)+'%'},{k:'',nombre:'Meta',valor:fmtM(d.meta)},{k:'',nombre:'Vendido',valor:fmtM(d.ventas)}]); });
+                r.addEventListener('pointerleave',function(){ r.setAttribute('opacity',1); tipHide(); }); }
+            if(d.pct>0) _el(svg,'text',{x:cx,y:Math.max(yb-5,12),'text-anchor':'middle','font-size':11,'font-weight':700,fill:d.on?p.ink:p.muted}).textContent=Math.round(d.pct)+'%';
+            if(d.meta>0&&h>36){ _el(svg,'text',{x:cx,y:(H-padB)-6,'text-anchor':'start','font-size':8.5,'font-weight':600,fill:'#fff',transform:'rotate(-90 '+cx+' '+((H-padB)-6)+')'}).textContent='meta '+fmtK(d.meta); }
+            _el(svg,'text',{x:cx,y:H-11,'text-anchor':'middle','font-size':10,fill:d.on?p.ink:p.muted}).textContent=MES_L[parseInt(d.mes.slice(5,7))-1]+' '+d.mes.slice(2,4);
+        });
     })();
 
     /* 5 · Cheque promedio por bucket (+B gris) */
