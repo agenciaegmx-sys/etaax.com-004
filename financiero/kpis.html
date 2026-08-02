@@ -599,7 +599,7 @@ function imprimirKPIs(){
         '<div class="rsec">Resumen del mes</div>' +
         '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">'+cards+'</div>' +
         '<div class="rsec">Distribución de egresos + utilidad (% sobre ingresos)</div>' +
-        '<table class="rt"><thead><tr><th>Concepto</th><th>Monto</th><th>% ingresos</th><th>Meta</th><th>Estado</th></tr></thead><tbody>'+rows+'</tbody></table>' +
+        '<table class="rt"><thead><tr><th>Concepto</th><th>Monto</th><th>Porcentaje</th><th>Meta saludable</th><th>Estado</th></tr></thead><tbody>'+rows+'</tbody></table>' +
         '<div style="font-size:9.5px;color:#8a8a8a;margin-top:9px;line-height:1.55">Las <b>previsiones</b> son una reserva apartada de la utilidad: no cuentan como egreso del mes. La <b>comisión bancaria</b> de los cortes ya está incluida en Gastos Variables. Las propinas se excluyen (pass-through al personal).</div>';
 
     var mesTxt=new Date(mes+'-01T12:00:00').toLocaleDateString('es-MX',{month:'long',year:'numeric'});

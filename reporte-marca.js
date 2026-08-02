@@ -124,9 +124,10 @@
         '</div>';
     };
 
-    // Documento de reporte COMPLETO listo para imprimir/PDF (hoja carta vertical,
-    // fondo blanco, header con logo real arriba y PIE ANCLADO al fondo de la hoja
-    // aunque el contenido no la llene). cfg: { titulo, subtitulo, derecha, cuerpo, pie, opts }.
+    // Documento de reporte COMPLETO listo para imprimir/PDF (carta vertical). Usa una
+    // tabla contenedora: el <thead> (header ETAAX) y el <tfoot> (pie) se REPITEN en cada
+    // hoja al imprimir; el contenido va en <tbody>. Los <table class="rt"> de datos también
+    // repiten sus títulos de columna por hoja. cfg: { titulo, subtitulo, derecha, cuerpo, pie, opts }.
     window.etaaxReporteDoc = function (cfg) {
         cfg = cfg || {};
         var header = window.etaaxReporteHeader(cfg.subtitulo || '', cfg.derecha || '', cfg.opts);
@@ -136,31 +137,40 @@
             '<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">' +
             '<style>' +
             '*{margin:0;padding:0;box-sizing:border-box}' +
-            'body{font-family:\'DM Sans\',sans-serif;background:#eee;color:#1a1916;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:20px}' +
-            '.hoja{width:21.6cm;max-width:100%;min-height:27.9cm;margin:0 auto;background:#fff;box-shadow:0 6px 30px rgba(0,0,0,.15);display:flex;flex-direction:column}' +
-            '.rcont{padding:20px 30px;flex:1}' +
-            '.rpie{margin-top:auto}' +
-            '.rsec{font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:2px;color:#1a1916;margin:22px 0 11px;padding-bottom:5px;border-bottom:2px solid #3dbe7a}' +
-            '.rsec:first-of-type{margin-top:8px}' +
-            '.rgrid{display:grid;gap:10px}' +
+            'body{font-family:\'DM Sans\',sans-serif;color:#1a1916;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+            '.rep{width:100%;border-collapse:collapse}' +
+            '.rep>thead{display:table-header-group}' +   /* header se repite ARRIBA de cada hoja */
+            '.rep>tfoot{display:table-footer-group}' +   /* pie se repite ABAJO de cada hoja */
+            '.rep>thead>tr>td,.rep>tfoot>tr>td{padding:0}' +
+            '.rbody{padding:16px 30px 20px}' +
+            '.rsec{font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:2px;color:#1a1916;margin:20px 0 11px;padding-bottom:5px;border-bottom:2px solid #3dbe7a;break-after:avoid;page-break-after:avoid}' +
+            '.rsec:first-of-type{margin-top:2px}' +
+            '.rgrid{display:grid;gap:10px;break-inside:avoid;page-break-inside:avoid}' +
             '.rcard{border:1px solid #ececec;border-radius:9px;padding:12px 14px;background:#fafafa}' +
             '.rcard .l{font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#999;margin-bottom:6px;font-weight:700}' +
             '.rcard .v{font-family:\'Bebas Neue\',sans-serif;font-size:25px;letter-spacing:1px;line-height:1;color:#1a1916}' +
             '.rcard .s{font-size:9.5px;color:#8a8a8a;margin-top:5px;line-height:1.4}' +
             'table.rt{width:100%;border-collapse:collapse}' +
+            'table.rt thead{display:table-header-group}' +   /* títulos de columna se repiten por hoja */
+            'table.rt tr{break-inside:avoid;page-break-inside:avoid}' +
             'table.rt thead th{background:#f5f5f5;padding:8px 10px;font-size:8px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:1.2px;border-bottom:2px solid #e0e0e0;text-align:right}' +
             'table.rt thead th:first-child{text-align:left}' +
             'table.rt tbody td{padding:7px 10px;font-size:11.5px;border-bottom:1px solid #f1f1f1;text-align:right;font-variant-numeric:tabular-nums}' +
             'table.rt tbody td:first-child{text-align:left;font-weight:600}' +
             'table.rt tbody tr:nth-child(even){background:#fafafa}' +
+            'table.rt tfoot{display:table-row-group}' +   /* el Total va UNA vez al final (no se repite por hoja) */
             'table.rt tfoot td{background:#f8f8f8;border-top:2px solid #3dbe7a;padding:9px 10px;font-size:12px;font-weight:700;text-align:right}' +
             'table.rt tfoot td:first-child{text-align:left}' +
             '.rbadge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.5px;padding:2px 9px;border-radius:20px}' +
-            '@media print{@page{size:letter portrait;margin:0}body{background:#fff;padding:0}.hoja{box-shadow:none;width:100%;min-height:100vh}}' +
-            '</style></head><body><div class="hoja">' + header +
-            '<div class="rcont">' + (cfg.cuerpo || '') + '</div>' +
-            '<div class="rpie">' + footer + '</div>' +
-            '</div><scr' + 'ipt>window.onload=function(){setTimeout(function(){window.print();},280);}<\/scr' + 'ipt></body></html>';
+            '@media screen{body{background:#eee;padding:20px}.rep{max-width:21.6cm;margin:0 auto;background:#fff;box-shadow:0 6px 30px rgba(0,0,0,.15)}}' +
+            '@media print{@page{size:letter portrait;margin:1.1cm 0}}' +
+            '</style></head><body>' +
+            '<table class="rep">' +
+                '<thead><tr><td>' + header + '</td></tr></thead>' +
+                '<tfoot><tr><td>' + footer + '</td></tr></tfoot>' +
+                '<tbody><tr><td><div class="rbody">' + (cfg.cuerpo || '') + '</div></td></tr></tbody>' +
+            '</table>' +
+            '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.print();},300);}<\/scr' + 'ipt></body></html>';
     };
 
     // Pie estándar de reporte.
