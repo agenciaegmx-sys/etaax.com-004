@@ -258,13 +258,6 @@
         </div>
 
         <div class="chart-card">
-            <div class="ch-title">⭐ Propinas vs Ventas</div>
-            <div class="ch-sub" id="sPropVs">Propinas contra venta bruta, por corte de tiempo.</div>
-            <div class="ch-legend" id="lgPropVs"></div>
-            <div id="chPropsVs"></div>
-        </div>
-
-        <div class="chart-card">
             <div class="ch-title">💳 Comisiones bancarias</div>
             <div class="ch-sub">Lo que el banco descontó (comisión + IVA por cuenta), por corte de tiempo.</div>
             <div id="chComis"></div>
@@ -667,6 +660,8 @@ function lineChart(el,labels,series,fmt,opts){
     for(var g2=0;g2<=2;g2++){ var gv=tk.step*g2,gy=Y(gv);
         _el(svg,'line',{x1:padL,x2:W-padR,y1:gy,y2:gy,stroke:p.grid,'stroke-width':1});
         _el(svg,'text',{x:padL-6,y:gy+3,'text-anchor':'end','font-size':9,fill:p.muted}).textContent=fmt(gv); }
+    // Guía vertical MUY tenue por cada día → ayuda a seguir cada punto contra su fecha.
+    if(labels.length<=40) labels.forEach(function(l,i){ _el(svg,'line',{x1:X(i),x2:X(i),y1:padT,y2:H-padB,stroke:p.grid,'stroke-width':1,opacity:0.22}); });
     var stepLbl=Math.ceil(labels.length/8);
     labels.forEach(function(l,i){ if(i%stepLbl)return;
         _el(svg,'text',{x:X(i),y:H-8,'text-anchor':'middle','font-size':9,fill:p.muted}).textContent=l; });
@@ -712,6 +707,8 @@ function colChart(el,labels,series,fmt,opts){
     var gy=Y0-esc*tk.step*2;
     _el(svg,'line',{x1:padL,x2:W-padR,y1:gy,y2:gy,stroke:p.grid,'stroke-width':1});
     _el(svg,'text',{x:padL-6,y:gy+3,'text-anchor':'end','font-size':9,fill:p.muted}).textContent=fmt(tk.step*2);
+    // Guía vertical MUY tenue por cada día (columna) → seguir cada barra contra su fecha.
+    if(labels.length<=40) labels.forEach(function(l,i){ var vx=padL+slot*i+slot/2; _el(svg,'line',{x1:vx,x2:vx,y1:padT,y2:H-padB,stroke:p.grid,'stroke-width':1,opacity:0.16}); });
     var stepLbl=Math.ceil(labels.length/10);
     labels.forEach(function(l,i){ if(i%stepLbl)return;
         _el(svg,'text',{x:padL+slot*i+slot/2,y:H-8,'text-anchor':'middle','font-size':9,fill:p.muted}).textContent=l; });
@@ -813,6 +810,58 @@ function delta(cur,prev,vsTxt){
 }
 
 /* ── Reporte imprimible del periodo (header con logo real + pie anclado al fondo) ── */
+/* ── Gráficas para el REPORTE impreso (SVG light, ancho completo de la hoja) ── */
+function _repEscTxt(s){ return String(s==null?'':s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
+function _repSvg(w,h,inner){ return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg">'+inner+'</svg>'; }
+function _repLineChart(labels,series,fmt){
+    var W=960,H=290,padL=68,padR=20,padT=18,padB=36;
+    var max=0; series.forEach(function(s){ s.values.forEach(function(v){ if(v>max)max=v; }); });
+    var tk=_ticks(max),top=tk.top||1;
+    var X=function(i){ return labels.length<2?padL+(W-padL-padR)/2:padL+(W-padL-padR)*i/(labels.length-1); };
+    var Y=function(v){ return padT+(H-padT-padB)*(1-v/top); };
+    var s='';
+    if(labels.length<=40) labels.forEach(function(l,i){ var x=X(i).toFixed(1); s+='<line x1="'+x+'" y1="'+padT+'" x2="'+x+'" y2="'+(H-padB)+'" stroke="#eee" stroke-width="1"/>'; });
+    for(var g=0;g<=2;g++){ var gv=tk.step*g,gy=Y(gv); s+='<line x1="'+padL+'" y1="'+gy.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+gy.toFixed(1)+'" stroke="#e4e4e4" stroke-width="1"/><text x="'+(padL-9)+'" y="'+(gy+4).toFixed(1)+'" text-anchor="end" font-size="12" fill="#999">'+fmt(gv)+'</text>'; }
+    var st=Math.ceil(labels.length/14);
+    labels.forEach(function(l,i){ if(i%st) return; s+='<text x="'+X(i).toFixed(1)+'" y="'+(H-11)+'" text-anchor="middle" font-size="11" fill="#999">'+_repEscTxt(l)+'</text>'; });
+    series.forEach(function(se){ var d=''; se.values.forEach(function(v,i){ d+=(i?'L':'M')+X(i).toFixed(1)+' '+Y(v||0).toFixed(1)+' '; }); s+='<path d="'+d+'" fill="none" stroke="'+se.color+'" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"'+(se.dash?' stroke-dasharray="6 5"':'')+'/>'; if(!se.sinPuntos&&labels.length<=40) se.values.forEach(function(v,i){ s+='<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(v||0).toFixed(1)+'" r="3" fill="'+se.color+'" stroke="#fff" stroke-width="1.4"/>'; }); });
+    var vm=Math.max.apply(null,series[0].values),im=series[0].values.indexOf(vm);
+    if(vm>0) s+='<text x="'+Math.min(Math.max(X(im),padL+28),W-padR-36).toFixed(1)+'" y="'+Math.max(Y(vm)-10,12).toFixed(1)+'" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1916">'+fmt(vm)+'</text>';
+    return _repSvg(W,H,s);
+}
+function _repColChart(labels,series,fmt,opts){
+    opts=opts||{};
+    var W=960,H=290,padL=68,padR=20,padT=18,padB=36;
+    var vals=[]; series.forEach(function(s){ vals=vals.concat(s.values); });
+    var maxAbs=Math.max.apply(null,vals.map(function(v){return Math.abs(v||0);}))||1;
+    var tk=_ticks(maxAbs),top=tk.top||1;
+    var hayNeg=vals.some(function(v){return v<0;});
+    var Y0=hayNeg?(padT+(H-padT-padB)/2):(H-padB);
+    var esc=hayNeg?((H-padT-padB)/2)/top:(H-padT-padB)/top;
+    var slot=(W-padL-padR)/labels.length, bw=Math.max(3,Math.min(30,(slot-6)/series.length-2));
+    var s='';
+    if(labels.length<=40) labels.forEach(function(l,i){ var vx=(padL+slot*i+slot/2).toFixed(1); s+='<line x1="'+vx+'" y1="'+padT+'" x2="'+vx+'" y2="'+(H-padB)+'" stroke="#f0f0f0" stroke-width="1"/>'; });
+    s+='<line x1="'+padL+'" y1="'+Y0.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+Y0.toFixed(1)+'" stroke="#d6d6d6" stroke-width="1"/><text x="'+(padL-9)+'" y="'+(Y0+4).toFixed(1)+'" text-anchor="end" font-size="12" fill="#999">'+(hayNeg?'$0':fmt(0))+'</text>';
+    var gy=Y0-esc*tk.step*2; s+='<line x1="'+padL+'" y1="'+gy.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+gy.toFixed(1)+'" stroke="#e6e6e6" stroke-width="1"/><text x="'+(padL-9)+'" y="'+(gy+4).toFixed(1)+'" text-anchor="end" font-size="12" fill="#999">'+fmt(tk.step*2)+'</text>';
+    var st=Math.ceil(labels.length/14);
+    labels.forEach(function(l,i){ if(i%st) return; s+='<text x="'+(padL+slot*i+slot/2).toFixed(1)+'" y="'+(H-11)+'" text-anchor="middle" font-size="11" fill="#999">'+_repEscTxt(l)+'</text>'; });
+    labels.forEach(function(l,i){ series.forEach(function(se,si){ var v=se.values[i]||0; var x=padL+slot*i+slot/2-(bw*series.length+2*(series.length-1))/2+si*(bw+2); var h=Math.abs(v)*esc,y=v>=0?Y0-h:Y0; var col=opts.diverging?(v>=0?opts.colPos:opts.colNeg):se.color; if(h>0.4) s+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="2.5" fill="'+col+'"/>'; }); });
+    return _repSvg(W,H,s);
+}
+function _repBarsH(rows,fmt){
+    rows=rows.filter(function(r){return r.value!==0;});
+    if(!rows.length) return '<div style="font-size:11px;color:#999">Sin datos en el periodo.</div>';
+    var W=960,rowH=30,padT=6,H=padT+rows.length*rowH+6;
+    var maxAbs=Math.max.apply(null,rows.map(function(r){return Math.abs(r.value);}))||1;
+    var lblW=250,valW=112,barMax=W-lblW-valW,s='';
+    rows.forEach(function(r,i){ var y=padT+i*rowH,bw=Math.max(2,Math.abs(r.value)/maxAbs*barMax),nm=r.label.length>36?r.label.slice(0,35)+'…':r.label;
+        s+='<text x="0" y="'+(y+20)+'" font-size="12.5" fill="#1a1916">'+_repEscTxt(nm)+'</text>'+
+           '<rect x="'+lblW+'" y="'+(y+7)+'" width="'+bw.toFixed(1)+'" height="16" rx="3" fill="'+(r.color||'#b52a1a')+'"/>'+
+           '<text x="'+(lblW+bw+8).toFixed(1)+'" y="'+(y+20)+'" font-size="12" font-weight="700" fill="#1a1916">'+fmt(r.value)+'</text>';
+    });
+    return _repSvg(W,H,s);
+}
+
 function imprimirEstadisticas(){
     if(typeof etaaxReporteDoc!=='function'){ alert('No se pudo cargar el módulo de reportes. Recarga la página.'); return; }
     var rF=rangoF(), rC=rangoC(), comp=!!rC, rBase=comp?rC:rangoPrevio(rF);
@@ -835,36 +884,38 @@ function imprimirEstadisticas(){
             ? card('Cumplimiento de meta', cumpl.toFixed(0)+'%', cumpl>=100?'#1a7a46':cumpl>=80?'#9a6f00':'#b52a1a', 'de '+fmtM(meta))
             : card('Comisiones banco', '−'+fmtM(co), '#b52a1a', dco.txt));
 
-    // Ventas por bucket (día/semana/mes según el periodo) + meta si es vista diaria.
-    var bk=bucketsDe(rF), esDia=bk.modo==='dia';
+    // Series por bucket (día/semana/mes) para las GRÁFICAS.
+    var bk=bucketsDe(rF), esDia=bk.modo==='dia', lblMode=esDia?'día':bk.modo==='semana'?'semana':'mes';
     var serieV=serieBuckets(bk,cortesR(rF),EtaaxCore.ventasBruta);
-    var metaVals=esDia?bk.keys.map(function(f){return aMeta({from:f,to:f});}):null;
-    var ventasRows=bk.labels.map(function(lab,i){
-        var vv=serieV[i]||0, cols='<td>'+esc(lab)+'</td><td>'+fmtM(vv)+'</td>';
-        if(esDia){ var mt=metaVals[i]||0; cols+='<td>'+(mt>0?fmtM(mt):'—')+'</td><td>'+(mt>0?(vv/mt*100).toFixed(0)+'%':'—')+'</td>'; }
-        return '<tr>'+cols+'</tr>';
-    }).join('');
-    var colLbl=bk.modo==='dia'?'Día':bk.modo==='semana'?'Semana':'Mes';
-    var ventasTot=serieV.reduce(function(s,x){return s+x;},0);
+    var gastosNoProp=gastosR(rF).filter(function(g2){ return !EtaaxCore.gastoEsPropina(g2); });
+    var serieG=serieBuckets(bk,gastosNoProp,function(g2){return n(g2.monto);});
+    var serieO=serieBuckets(bk,otrosR(rF),function(o){return n(o.monto);});
+    var utilVals=serieV.map(function(x,i){ return x+(serieO[i]||0)-(serieG[i]||0); });
+    var ventasSeries=[{name:'Ventas',color:'#1a7a46',values:serieV}];
+    if(esDia){ var metaVals=bk.keys.map(function(f){return aMeta({from:f,to:f});}); if(metaVals.some(function(x){return x>0;})) ventasSeries.push({name:'Meta',color:'#bbb',values:metaVals,dash:true,sinPuntos:true}); }
 
-    // Gastos por categoría CANÓNICO: sin propinas (pass-through) + comisión bancaria como
-    // línea propia → el total cuadra con el card "Gastos del periodo".
+    // Gastos por categoría CANÓNICO (sin propinas + comisión), top 8 + "Otras".
     var cats={}; gastosR(rF).forEach(function(g2){ if(EtaaxCore.gastoEsPropina(g2)) return; var c=g2.categoria||'Sin categoría'; cats[c]=(cats[c]||0)+n(g2.monto); });
     if(co>0) cats['Comisión bancaria (auto)']=(cats['Comisión bancaria (auto)']||0)+co;
     var orden=Object.keys(cats).sort(function(a,b){return cats[b]-cats[a];});
-    var catTot=orden.reduce(function(s,c){return s+cats[c];},0);
-    var catRows=orden.map(function(c){ var m=cats[c]; return '<tr><td>'+esc(c)+'</td><td>'+fmtM(m)+'</td><td>'+(catTot>0?Math.round(m/catTot*100):0)+'%</td></tr>'; }).join('');
+    var catBars=orden.slice(0,8).map(function(c){ return {label:c,value:cats[c],color:'#c0492b'}; });
+    if(orden.length>8){ var otras=orden.slice(8).reduce(function(s,c){return s+cats[c];},0); if(otras>0) catBars.push({label:'Otras categorías',value:otras,color:'#d08a72'}); }
+
+    function chBlock(tit,tot,totColor,svg){
+        return '<div class="rsec">'+tit+'</div>'+
+            (tot?'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:23px;letter-spacing:.5px;line-height:1;margin:-2px 0 12px;color:'+(totColor||'#1a1916')+'">'+tot+' <span style="font-family:\'DM Sans\',sans-serif;font-size:9.5px;font-weight:400;letter-spacing:1px;color:#aaa;text-transform:uppercase">total del periodo</span></div>':'')+
+            '<div style="break-inside:avoid;page-break-inside:avoid;margin-bottom:6px">'+svg+'</div>';
+    }
+    var leyVsG='<div style="font-size:10px;color:#888;margin:-6px 0 8px"><span style="display:inline-block;width:9px;height:9px;background:#1a7a46;border-radius:2px;margin-right:4px"></span>Ventas &nbsp;&nbsp;<span style="display:inline-block;width:9px;height:9px;background:#b52a1a;border-radius:2px;margin:0 4px 0 8px"></span>Gastos</div>';
 
     var cuerpo =
         '<div class="rsec">Indicadores del periodo</div>' +
         '<div class="rgrid" style="grid-template-columns:repeat(3,1fr)">'+cards+'</div>' +
-        '<div class="rsec">Ventas por '+(esDia?'día':bk.modo==='semana'?'semana':'mes')+'</div>' +
-        '<table class="rt"><thead><tr><th>'+colLbl+'</th><th>Ventas</th>'+(esDia?'<th>Meta</th><th>Cumpl.</th>':'')+'</tr></thead><tbody>'+ventasRows+'</tbody>' +
-        '<tfoot><tr><td>Total</td><td>'+fmtM(ventasTot)+'</td>'+(esDia?'<td></td><td></td>':'')+'</tr></tfoot></table>' +
-        '<div class="rsec">Gastos por categoría</div>' +
-        (catRows
-            ? '<table class="rt"><thead><tr><th>Categoría</th><th>Monto</th><th>%</th></tr></thead><tbody>'+catRows+'</tbody><tfoot><tr><td>Gasto real del periodo</td><td>'+fmtM(catTot)+'</td><td>100%</td></tr></tfoot></table>'
-            : '<div style="font-size:11px;color:#999">Sin gastos en el periodo.</div>');
+        chBlock('Ventas por '+lblMode, fmtM(v), '#1a7a46', _repLineChart(bk.labels, ventasSeries, fmtK)) +
+        '<div class="rsec">Ventas vs Gastos</div>'+leyVsG+
+        '<div style="break-inside:avoid;page-break-inside:avoid;margin-bottom:6px">'+_repColChart(bk.labels,[{name:'Ventas',color:'#1a7a46',values:serieV},{name:'Gastos',color:'#b52a1a',values:serieG}],fmtK)+'</div>' +
+        chBlock('Utilidad por '+lblMode, fmtM(u), u>=0?'#1a7a46':'#b52a1a', _repColChart(bk.labels,[{name:'Utilidad',values:utilVals}],fmtK,{diverging:true,colPos:'#1a7a46',colNeg:'#b52a1a'})) +
+        chBlock('Gastos por categoría', fmtM(g), '#b52a1a', _repBarsH(catBars, fmtM));
 
     var fecha=new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'});
     var derecha='<div style="font-family:\'Bebas Neue\',sans-serif;font-size:14px;letter-spacing:1px;color:#1a1916">Estadísticas</div><div>'+esc(fmtRango(rF))+'</div><div>Generado: '+fecha+'</div>'+(comp?'<div>Comparado vs '+esc(fmtRango(rC))+'</div>':'');
@@ -1022,32 +1073,8 @@ function renderAll(){
         stack100(el,'Comedor vs Para llevar',[{label:'Comedor',value:com,color:p.green},{label:'Para llevar',value:llev,color:p.blue}]);
     })();
 
-    /* 9-11 · Propinas vs Ventas / Comisiones / Nómina por bucket */
+    /* 10-11 · Comisiones / Nómina por bucket (Propinas vs Ventas retirada: no aporta) */
     (function(){
-        /* Propinas vs Ventas: columnas agrupadas, mismo formato que Ventas vs Gastos */
-        var elPV=document.getElementById('chPropsVs');
-        if(elPV){
-            elPV.innerHTML='';
-            var xColPV=bk.modo==='dia'?'Día':bk.modo==='semana'?'Semana':'Mes';
-            var svPV=serieBuckets(bk,cortesR(rF),EtaaxCore.ventasBruta);
-            var spPV=serieBuckets(bk,cortesR(rF),EtaaxCore.propinas);
-            var pctPV=svPV.map(function(v2,i){ return v2>0?Math.round((spPV[i]||0)/v2*1000)/10:0; });
-            var fmtPct=function(x){ return (Math.round(x*10)/10)+'%'; };
-            var vTot=svPV.reduce(function(a,b){return a+b;},0),pTot=spPV.reduce(function(a,b){return a+b;},0);
-            var sub=document.getElementById('sPropVs');
-            if(sub) sub.textContent=vTot>0
-                ? 'Del periodo: '+fmtM(pTot)+' de propinas sobre '+fmtM(vTot)+' de venta = '+(pTot/vTot*100).toFixed(1)+'% de propina promedio.'
-                : 'Propinas contra venta bruta, por corte de tiempo.';
-            legend('lgPropVs',[{name:'Ventas',color:p.green},{name:'Propinas',color:p.viol}]);
-            colChart(elPV,bk.labels,
-                [{name:'Ventas',color:p.green,values:svPV},
-                 {name:'Propinas',color:p.viol,values:spPV}],fmtK,{xCol:xColPV});
-            // El 🔍 de esta card lleva el desglose completo: ventas, propinas y %.
-            _detRegistrar(elPV,bk.labels,[
-                {name:'Ventas',values:svPV,fmt:fmtM},
-                {name:'Propinas',values:spPV,fmt:fmtM},
-                {name:'% propina',values:pctPV,fmt:fmtPct}],fmtM,xColPV);
-        }
         var deb=ctasDeb();
         colChart(document.getElementById('chComis'),bk.labels,
             [{name:'Comisiones',color:p.red,values:serieBuckets(bk,cortesR(rF),function(c){return EtaaxCore.comisionBancoCorte(c,deb);})}],fmtK,{});
