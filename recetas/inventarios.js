@@ -5273,9 +5273,11 @@ function _resumenEjecutivo() {
         if (f.tipo === 'copa') { var cb = (f.contNeto>0 && f.copaML>0) ? f.contNeto/f.copaML : 0; return cc*cb; }
         return cc; // pza: por pieza · peso: por unidad base
     }
-    // Entradas del período, desglosadas por tipo (compra / bonificación / consignación).
-    var comprasU=0, comprasCosto=0, bonifU=0, bonifCosto=0, consigU=0, consigCosto=0;
-    var bonifItems={}, consigItems={};
+    // Entradas del período por tipo. SOLO la compra suma a "Compras del período"
+    // (entEsCompra): bonificación, consignación y préstamo pagado entran al stock
+    // pero no son dinero que salió.
+    var comprasU=0, comprasCosto=0, bonifU=0, bonifCosto=0, consigU=0, consigCosto=0, prestU=0, prestCosto=0;
+    var bonifItems={}, consigItems={}, prestItems={};
     var _filaIns = {}; filasCaptura.forEach(function(f){ if (f && f.insumoId) _filaIns[f.insumoId] = f; });
     ((invActual && invActual.entradasLog) || []).forEach(function(e){
         var f = _filaIns[e.insumoId]; if (!f) return;
@@ -5283,9 +5285,10 @@ function _resumenEjecutivo() {
         var costo = cant * _costoCompraInsumo(f);
         var t = (e.tipo||'compra').toLowerCase();
         var nm = (f.nombre)||e.nombre||'';
-        if (t === 'bonificacion')      { bonifU  += cant; bonifCosto  += costo; if(nm) bonifItems[nm]=(bonifItems[nm]||0)+cant; }
-        else if (t === 'consignacion') { consigU += cant; consigCosto += costo; if(nm) consigItems[nm]=(consigItems[nm]||0)+cant; }
-        else                           { comprasU += cant; comprasCosto += costo; }
+        if (t === 'bonificacion')          { bonifU  += cant; bonifCosto  += costo; if(nm) bonifItems[nm]=(bonifItems[nm]||0)+cant; }
+        else if (t === 'consignacion')     { consigU += cant; consigCosto += costo; if(nm) consigItems[nm]=(consigItems[nm]||0)+cant; }
+        else if (t === 'prestamo_pagado')  { prestU  += cant; prestCosto  += costo; if(nm) prestItems[nm]=(prestItems[nm]||0)+cant; }
+        else if (entEsCompra(t))           { comprasU += cant; comprasCosto += costo; }
     });
     var _listaItems = function(obj){ return Object.keys(obj).map(function(n){ return etx(n)+' ('+(obj[n]%1?obj[n].toFixed(1):obj[n])+')'; }).join(' · '); };
     // Entradas manuales (5 slots por fila del Paso 2) = compra.
@@ -5348,10 +5351,17 @@ function _resumenEjecutivo() {
         card('Compras del periodo', M(comprasCosto), 'var(--text)', comprasU>0 ? (comprasU%1?comprasU.toFixed(1):comprasU)+' unid. compradas' : 'sin compras registradas')+
         card('Vendido vs Compras', (vendidoCosto-comprasCosto>=0?'+':'−')+M(Math.abs(vendidoCosto-comprasCosto)), (vendidoCosto-comprasCosto>=0?'var(--green)':'var(--red)'), vendidoCosto>=comprasCosto?'compraste menos de lo que vendiste':'compraste más de lo que vendiste')+
         '</div>'+
-        ((bonifU>0 || consigU>0) ? '<div class="stats-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:14px">'+
-            card('🎁 Bonificación', (bonifU%1?bonifU.toFixed(1):bonifU)+' unid.', 'var(--green)', 'valor '+M(bonifCosto)+' (sin costo)'+(bonifU>0?'<br><span style="color:var(--text)"><b>Productos:</b> '+_listaItems(bonifItems)+'</span>':''))+
-            card('📦 Consignación', (consigU%1?consigU.toFixed(1):consigU)+' unid.', '#7c7cff', 'valor '+M(consigCosto)+(consigU>0?'<br><span style="color:var(--text)"><b>Productos:</b> '+_listaItems(consigItems)+'</span>':''))+
-        '</div>' : '');
+        (function(){
+            // Entradas que NO son compra: cada una con su card, solo si hubo.
+            var _u = function(x){ return (x%1?x.toFixed(1):x)+' unid.'; };
+            var noCompra = [];
+            if (bonifU>0)  noCompra.push(card('🎁 Bonificación', _u(bonifU), 'var(--green)', 'valor '+M(bonifCosto)+' (sin costo)<br><span style="color:var(--text)"><b>Productos:</b> '+_listaItems(bonifItems)+'</span>'));
+            if (consigU>0) noCompra.push(card('📦 Consignación', _u(consigU), '#7c7cff', 'valor '+M(consigCosto)+'<br><span style="color:var(--text)"><b>Productos:</b> '+_listaItems(consigItems)+'</span>'));
+            if (prestU>0)  noCompra.push(card('🔁 Préstamo pagado', _u(prestU), '#e0a45a', 'valor '+M(prestCosto)+' (no es compra)<br><span style="color:var(--text)"><b>Productos:</b> '+_listaItems(prestItems)+'</span>'));
+            return noCompra.length
+                ? '<div class="stats-grid" style="grid-template-columns:repeat('+noCompra.length+',1fr);margin-bottom:14px">'+noCompra.join('')+'</div>'
+                : '';
+        })();
 
     var tablaCat = cats.length ? ('<div class="card" style="max-width:none;margin:0 16px 12px"><div class="card-body" style="padding:0"><div style="padding:12px 16px;font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:1px;color:var(--accent)">🍽️ Vendidos por categoría — '+M(totVendCarta)+' a carta</div><div class="tabla-wrap"><table style="font-size:12px"><thead><tr><th style="text-align:left">Categoría</th><th style="text-align:right">Unidades</th><th style="text-align:right">$ a carta</th><th style="text-align:right">%</th></tr></thead><tbody>'+
         cats.map(function(c){ var p=totVendCarta>0?(porCat[c].carta/totVendCarta*100):0; return '<tr><td style="font-weight:600">'+etx(c)+'</td><td style="text-align:right">'+porCat[c].u+'</td><td style="text-align:right;color:var(--green);font-weight:600">'+M(porCat[c].carta)+'</td><td style="text-align:right;color:var(--text-dim)">'+p.toFixed(0)+'%</td></tr>'; }).join('')+
@@ -6029,8 +6039,9 @@ function verReporteDirectivo(gerencial, modo) {
         capStockMin += (parseFloat((_p&&_p.stockMin)||(_ins&&_ins.stockMin)||f.stockMin)||0)*costoCompra;
         capStockMax += (parseFloat((_p&&_p.stockMax)||(_ins&&_ins.stockMax)||f.stockMax)||0)*costoCompra;
     });
-    let comprasU=0, comprasCosto=0, bonifU=0, bonifCosto=0, consigU=0, consigCosto=0;
-    const bonifItems={}, consigItems={}; // nombre → unidades acumuladas
+    // Mismo criterio que la pantalla: solo la COMPRA suma a compras (entEsCompra).
+    let comprasU=0, comprasCosto=0, bonifU=0, bonifCosto=0, consigU=0, consigCosto=0, prestU=0, prestCosto=0;
+    const bonifItems={}, consigItems={}, prestItems={}; // nombre → unidades acumuladas
     const _filaInsD={}; filasCaptura.forEach(f => { if(f&&f.insumoId) _filaInsD[f.insumoId]=f; });
     ((invActual.entradasLog)||[]).forEach(e => {
         const f=_filaInsD[e.insumoId]; if(!f) return;
@@ -6039,7 +6050,8 @@ function verReporteDirectivo(gerencial, modo) {
         const nm=(f.nombre)||e.nombre||'';
         if(t==='bonificacion'){bonifU+=cant;bonifCosto+=costo; if(nm) bonifItems[nm]=(bonifItems[nm]||0)+cant;}
         else if(t==='consignacion'){consigU+=cant;consigCosto+=costo; if(nm) consigItems[nm]=(consigItems[nm]||0)+cant;}
-        else{comprasU+=cant;comprasCosto+=costo;}
+        else if(t==='prestamo_pagado'){prestU+=cant;prestCosto+=costo; if(nm) prestItems[nm]=(prestItems[nm]||0)+cant;}
+        else if(entEsCompra(t)){comprasU+=cant;comprasCosto+=costo;}
     });
     const _listaItems = obj => Object.keys(obj).map(n => `${etx(n)} (${obj[n]%1?obj[n].toFixed(1):obj[n]})`).join(' · ');
     filasCaptura.forEach(f => { const man=(f.entradas||[]).reduce((s,x)=>s+(parseFloat(x)||0),0); if(man>0){comprasU+=man;comprasCosto+=man*_costoCompraF(f);} });
@@ -6515,21 +6527,23 @@ function verReporteDirectivo(gerencial, modo) {
       </div>` : ''}
     </div>
   </div>
-  ${(bonifU>0||consigU>0)?`
-  <div class="rd-kgrid" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px">
-    <div class="rd-kpi" style="border-left:4px solid ${cOk}">
-      <div class="rd-kl">🎁 Bonificación</div>
-      <div class="rd-kv" style="color:${cOk}">${bonifU%1?bonifU.toFixed(1):bonifU} unid.</div>
-      <div class="rd-ks">${ger?'sin costo':'valor $'+_m0(bonifCosto)+' (sin costo)'}</div>
-      ${bonifU>0?`<div style="font-size:9px;color:#666;margin-top:4px;line-height:1.5"><strong>Productos:</strong> ${_listaItems(bonifItems)}</div>`:''}
-    </div>
-    <div class="rd-kpi" style="border-left:4px solid #2471a3">
-      <div class="rd-kl">📦 Consignación</div>
-      <div class="rd-kv" style="color:#2471a3">${consigU%1?consigU.toFixed(1):consigU} unid.</div>
-      <div class="rd-ks">${ger?'en consignación':'valor $'+_m0(consigCosto)}</div>
-      ${consigU>0?`<div style="font-size:9px;color:#666;margin-top:4px;line-height:1.5"><strong>Productos:</strong> ${_listaItems(consigItems)}</div>`:''}
-    </div>
-  </div>`:''}
+  ${(function(){
+      // Entradas que NO son compra (no entran a "Compras del período"): una card por tipo con dato.
+      const _u = x => (x%1?x.toFixed(1):x)+' unid.';
+      const kpi = (borde, titulo, valor, color, sub, items) => `
+    <div class="rd-kpi" style="border-left:4px solid ${borde}">
+      <div class="rd-kl">${titulo}</div>
+      <div class="rd-kv" style="color:${color}">${valor}</div>
+      <div class="rd-ks">${sub}</div>
+      <div style="font-size:9px;color:#666;margin-top:4px;line-height:1.5"><strong>Productos:</strong> ${items}</div>
+    </div>`;
+      const cards = [];
+      if (bonifU>0)  cards.push(kpi(cOk, '🎁 Bonificación', _u(bonifU), cOk, ger?'sin costo':'valor $'+_m0(bonifCosto)+' (sin costo)', _listaItems(bonifItems)));
+      if (consigU>0) cards.push(kpi('#2471a3', '📦 Consignación', _u(consigU), '#2471a3', ger?'en consignación':'valor $'+_m0(consigCosto), _listaItems(consigItems)));
+      if (prestU>0)  cards.push(kpi('#b5762a', '🔁 Préstamo pagado', _u(prestU), '#b5762a', ger?'préstamo liquidado':'valor $'+_m0(prestCosto)+' (no es compra)', _listaItems(prestItems)));
+      return cards.length ? `
+  <div class="rd-kgrid" style="grid-template-columns:repeat(${cards.length},1fr);margin-bottom:8px">${cards.join('')}</div>` : '';
+  })()}
 
   <!-- Semáforo de control -->
   <div class="rd-sec">Control de inventario — ${totalProds} insumos inventariados</div>
@@ -6957,18 +6971,41 @@ function cerrarEntradaLog() {
 }
 
 
-function tipoEntradaLabel(tipo) {
-    if (tipo === 'compra')       return 'Compra';
-    if (tipo === 'bonificacion') return 'Bonificación';
-    if (tipo === 'consignacion') return 'Consignación';
-    return tipo;
+/* ── TIPOS DE ENTRADA · una sola verdad ───────────────────────────────────
+   Todos ENTRAN al stock (llegó mercancía), pero solo la COMPRA es dinero que
+   salió: bonificación, consignación y préstamo pagado NO suman a "Compras del
+   período" ni a "Vendido vs Compras". Antes la regla era un `else` implícito
+   (cualquier tipo desconocido caía en compras) — por eso vive aquí y todos los
+   contadores preguntan con entEsCompra(), nunca comparando strings a mano. */
+// Va como FUNCIÓN (no solo `var`): las declaraciones se hoistean, así la regla
+// está disponible aunque alguien la consulte antes de que corra este tramo.
+function entTipos() {
+    return [
+        { id:'compra',          lbl:'Compra',          emoji:'🛒', color:'var(--accent)', suma:true  },
+        { id:'bonificacion',    lbl:'Bonificación',    emoji:'🎁', color:'var(--green)',  suma:false },
+        { id:'consignacion',    lbl:'Consignación',    emoji:'📦', color:'#7c7cff',       suma:false },
+        { id:'prestamo_pagado', lbl:'Préstamo pagado', emoji:'🔁', color:'#e0a45a',       suma:false }
+    ];
 }
-
+var ENT_TIPOS = entTipos();   // atajo para pintar los botones/selects
+function entTipoDef(tipo) {
+    var t = String(tipo || 'compra').toLowerCase();
+    var lista = entTipos();
+    for (var i = 0; i < lista.length; i++) if (lista[i].id === t) return lista[i];
+    return null;
+}
+// ¿Esta entrada suma a Compras? Solo la compra (y el legacy sin tipo, que era compra).
+function entEsCompra(tipo) {
+    var d = entTipoDef(tipo);
+    return d ? !!d.suma : false;
+}
+function tipoEntradaLabel(tipo) {
+    var d = entTipoDef(tipo);
+    return d ? d.lbl : (tipo || '—');
+}
 function tipoEntradaColor(tipo) {
-    if (tipo === 'compra')       return 'var(--accent)';
-    if (tipo === 'bonificacion') return 'var(--green)';
-    if (tipo === 'consignacion') return '#7c7cff';
-    return 'var(--text-muted)';
+    var d = entTipoDef(tipo);
+    return d ? d.color : 'var(--text-muted)';
 }
 
 function buscarInsumoEntrada(val) {
@@ -7021,9 +7058,7 @@ function renderFormEntrada() {
                 </div>
             </div>
             <div class="ent-tipo-row">
-                <button class="ent-tipo-btn ${_entRapidaTipo === 'compra'       ? 'active' : ''}" onclick="setTipoEntrada('compra')">🛒 Compra</button>
-                <button class="ent-tipo-btn ${_entRapidaTipo === 'bonificacion' ? 'active' : ''}" onclick="setTipoEntrada('bonificacion')">🎁 Bonificación</button>
-                <button class="ent-tipo-btn ${_entRapidaTipo === 'consignacion' ? 'active' : ''}" onclick="setTipoEntrada('consignacion')">📦 Consignación</button>
+                ${ENT_TIPOS.map(t => `<button class="ent-tipo-btn ${_entRapidaTipo === t.id ? 'active' : ''}" onclick="setTipoEntrada('${t.id}')">${t.emoji} ${t.lbl}</button>`).join('')}
             </div>
             <div style="display:flex;gap:12px;align-items:flex-end;margin-top:16px;flex-wrap:wrap">
                 <div>
@@ -7252,24 +7287,13 @@ const fotoTh = _fotosThumbHTML(e);
                 <button class="ent-log-del" title="Eliminar" onclick="eliminarEntradaPorId('${e.id}')">🗑️</button>
             </div>`;
         }
-        if (_entEditId === e.id) {
-            return `<div class="ent-log-fila" style="gap:8px;flex-wrap:wrap">
-                <span class="ent-log-nombre">${nombre}</span>
-                <input id="entEdCant" type="text" inputmode="decimal" value="${cant}" oninput="this.value=this.value.replace(/[^0-9.]/g,'')"
-                    style="width:70px;background:var(--surface2);border:1px solid var(--accent);color:var(--text);border-radius:6px;padding:5px 8px;font-size:13px;text-align:center">
-                <input id="entEdFecha" type="date" value="${e.fecha||''}"
-                    style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 8px;font-size:13px">
-                <button class="ent-log-del" style="color:var(--green)" onclick="guardarEdicionEntrada('${e.id}')">✓</button>
-                <button class="ent-log-del" onclick="_entEditId=null;renderListadoEntradas()">✕</button>
-            </div>`;
-        }
         return `<div class="ent-log-fila">
             ${_entNombreCell(e, nombre, '')}
             <span class="ent-log-badge" style="color:${color};background:${color}1a;border-color:${color}50">${tipoEntradaLabel(e.tipo)}</span>
             <span class="ent-log-fecha">${e.fecha || '—'}</span>
             <span class="ent-log-cant">+${cant} ${_unidadCompra(e)}</span>
             ${fotoTh}
-            <button class="ent-log-del" title="Editar" onclick="_entEditId='${e.id}';renderListadoEntradas()">✏️</button>
+            <button class="ent-log-del" title="Editar registro completo" onclick="abrirEditorEntrada('${e.id}')">✏️</button>
             <button class="ent-log-del" title="Eliminar" onclick="eliminarEntradaPorId('${e.id}')"
                 onmouseenter="this.classList.add('hover')" onmouseleave="this.classList.remove('hover')">🗑️</button>
         </div>`;
@@ -7307,7 +7331,6 @@ const fotoTh = _fotosThumbHTML(e);
     }
 }
 
-var _entEditId = null;
 function eliminarEntradaPorId(id) {
     _pedirClaveAdmin('Eliminar entrada', function() {
         if (invActual) {
@@ -7322,25 +7345,219 @@ function eliminarEntradaPorId(id) {
             var _g2 = getEntradasLog().find(function(x){ return x && x.id === id; });
             if (_g2) { _g2.borrada = true; _guardarELLocal(); try { _sbUpEL(_g2); } catch(err){} }
         }
-        _entEditId = null;
+        cerrarEditorEntrada();
         renderListadoEntradas();
     });
 }
-function guardarEdicionEntrada(id) {
-    const cant  = parseFloat((document.getElementById('entEdCant')||{}).value) || 0;
-    const fecha = (document.getElementById('entEdFecha')||{}).value || '';
-    if (cant <= 0) { alert('La cantidad debe ser mayor a 0.'); return; }
+/* ══ EDITOR DE ENTRADA (✏️) ══════════════════════════════════════════════
+   Antes solo se corregían cantidad y fecha en la propia fila. Ahora se edita el
+   registro COMPLETO — concepto, insumo, cantidad, fecha, comentario y fotos —
+   venga del QR o del inventario.
+   OJO con la doble residencia: una entrada vive en el log GLOBAL (maestro, el
+   que sincroniza a Supabase) y, si ya se importó, también como COPIA dentro de
+   invActual.entradasLog. Se escribe en AMBOS por id — antes editar desde el
+   historial global dejaba al inventario con el dato viejo. Ojo también con el
+   nombre: la copia del inventario lo guarda en `nombreProducto` y el global en
+   `nombre`. */
+var _entEd = null;   // borrador de edición
+
+function _entBuscarPorId(id) {
+    var e = null;
+    if (invActual) e = (invActual.entradasLog || []).find(function(x){ return x && x.id === id; });
+    if (!e) e = getEntradasLog().find(function(x){ return x && x.id === id; });
+    return e || null;
+}
+// Escribe los mismos campos en las dos residencias del registro.
+function _entAplicarCambios(id, campos, ins) {
+    var etiqueta = ins ? insumoEtiqueta(ins) : '';
     if (invActual) {
-        const e = (invActual.entradasLog || []).find(x => x.id === id);
-        if (e) { e.cantidad = cant; if (fecha) e.fecha = fecha; }
-        guardarEntradas();
-    } else {
-        const arr = getEntradasLog();
-        const e = arr.find(x => x.id === id);
-        if (e) { e.cantidad = cant; if (fecha) e.fecha = fecha; _guardarELLocal(); try { _sbUpEL(e); } catch(err){} } // forzar sync (el diff no detecta updates)
+        var a = (invActual.entradasLog || []).find(function(x){ return x && x.id === id; });
+        if (a) {
+            Object.assign(a, campos);
+            if (ins) { a.nombreProducto = etiqueta; if (a.nombre !== undefined) a.nombre = ins.nombre || etiqueta; }
+            guardarEntradas();
+        }
     }
-    _entEditId = null;
+    var g = getEntradasLog().find(function(x){ return x && x.id === id; });
+    if (g) {
+        Object.assign(g, campos);
+        if (ins) { g.nombre = ins.nombre || etiqueta; g.familia = ins.familia || ins.categoria || g.familia || ''; }
+        _guardarELLocal();
+        try { _sbUpEL(g); } catch(err){}   // el diff no ve updates in-place → forzar
+    }
+    return !!(g || invActual);
+}
+
+function abrirEditorEntrada(id) {
+    var e = _entBuscarPorId(id);
+    if (!e) { alert('No se encontró la entrada.'); return; }
+    _entEd = {
+        id: id,
+        tipo: String(e.tipo || 'compra').toLowerCase(),
+        insumoId: e.insumoId || '',
+        cantidad: parseFloat(e.cantidad) || 0,
+        fecha: e.fecha || '',
+        notas: e.notas || '',
+        fotos: (e.foto_urls && e.foto_urls.length) ? e.foto_urls.slice() : (e.foto_url ? [e.foto_url] : []),
+        busca: '',
+        subiendo: false
+    };
+    _entEdPintar();
+}
+function cerrarEditorEntrada() {
+    _entEd = null;
+    var ov = document.getElementById('entEdOv');
+    if (ov) ov.remove();
+}
+// Insumos elegibles: catálogo de la sucursal activa (misma regla que el resto del módulo).
+function _entEdInsumos() {
+    try { return _scopeSucInsumos(getInsumos()); } catch (e) { return getInsumos() || []; }
+}
+function _entEdPintar() {
+    if (!_entEd) return;
+    var ov = document.getElementById('entEdOv');
+    if (!ov) {
+        ov = document.createElement('div');
+        ov.id = 'entEdOv';
+        ov.className = 'ent-ed-ov';
+        ov.onclick = function(ev){ if (ev.target === ov) cerrarEditorEntrada(); };
+        document.body.appendChild(ov);
+    }
+    var ins = _entEd.insumoId && typeof window._insumoResolver === 'function'
+        ? window._insumoResolver(_entEd.insumoId) : null;
+    var q = (_entEd.busca || '').trim().toLowerCase();
+    var lista = q ? _entEdInsumos().filter(function(x){
+        return x && (insumoEtiqueta(x) || '').toLowerCase().indexOf(q) >= 0;
+    }).slice(0, 12) : [];
+
+    ov.innerHTML =
+        '<div class="ent-ed-card" onclick="event.stopPropagation()">' +
+            '<div class="ent-ed-hd">' +
+                '<span>✏️ Editar entrada</span>' +
+                '<button onclick="cerrarEditorEntrada()">✕</button>' +
+            '</div>' +
+            '<div class="ent-ed-body">' +
+                '<div class="ent-ed-lbl">Concepto</div>' +
+                '<div class="ent-tipo-row">' +
+                    ENT_TIPOS.map(function(t){
+                        return '<button class="ent-tipo-btn ' + (_entEd.tipo === t.id ? 'active' : '') + '" ' +
+                            'onclick="_entEd.tipo=\'' + t.id + '\';_entEdPintar()">' + t.emoji + ' ' + t.lbl + '</button>';
+                    }).join('') +
+                '</div>' +
+                '<div style="font-size:11px;color:var(--text-dim);margin-top:6px">' +
+                    (entEsCompra(_entEd.tipo)
+                        ? 'Suma a “Compras del período”.'
+                        : 'Entra al stock pero <b>no</b> suma a “Compras del período”.') +
+                '</div>' +
+
+                '<div class="ent-ed-lbl" style="margin-top:16px">Insumo</div>' +
+                '<div class="ent-ed-ins">' + etx(ins ? insumoEtiqueta(ins) : (_entEd.insumoId || '— sin insumo —')) + '</div>' +
+                '<input class="ent-ed-inp" type="text" placeholder="Buscar otro insumo…" value="' + etx(_entEd.busca) + '" ' +
+                    'oninput="_entEd.busca=this.value;_entEdPintar();var i=document.getElementById(\'entEdBusca\');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}" id="entEdBusca">' +
+                (q ? ('<div class="ent-ed-lista">' + (lista.length
+                    ? lista.map(function(x){
+                        return '<div class="ent-ed-op" onclick="_entEd.insumoId=\'' + x.id + '\';_entEd.busca=\'\';_entEdPintar()">' + etx(insumoEtiqueta(x)) + '</div>';
+                      }).join('')
+                    : '<div class="ent-ed-op" style="color:var(--text-dim);cursor:default">Sin resultados</div>') + '</div>') : '') +
+
+                '<div style="display:flex;gap:12px;margin-top:16px;flex-wrap:wrap">' +
+                    '<div><div class="ent-ed-lbl">Cantidad</div>' +
+                        '<input class="ent-ed-inp" style="width:120px" type="text" inputmode="decimal" value="' + _entEd.cantidad + '" ' +
+                            'oninput="this.value=this.value.replace(/[^0-9.]/g,\'\');_entEd.cantidad=parseFloat(this.value)||0"></div>' +
+                    '<div><div class="ent-ed-lbl">Fecha</div>' +
+                        '<input class="ent-ed-inp" type="date" value="' + etx(_entEd.fecha) + '" onchange="_entEd.fecha=this.value"></div>' +
+                '</div>' +
+
+                '<div class="ent-ed-lbl" style="margin-top:16px">Comentario</div>' +
+                '<textarea class="ent-ed-inp" rows="2" placeholder="Proveedor, ticket, observación…" ' +
+                    'oninput="_entEd.notas=this.value">' + etx(_entEd.notas) + '</textarea>' +
+
+                '<div class="ent-ed-lbl" style="margin-top:16px">Evidencia (' + _entEd.fotos.length + ' foto' + (_entEd.fotos.length === 1 ? '' : 's') + ')</div>' +
+                '<div class="ent-ed-fotos">' +
+                    _entEd.fotos.map(function(u, i){
+                        return '<span class="ent-ed-foto">' +
+                            '<img src="' + etx(u) + '" onclick="etaaxVerFoto(this.src)">' +
+                            '<button title="Quitar foto" onclick="_entEd.fotos.splice(' + i + ',1);_entEdPintar()">✕</button>' +
+                        '</span>';
+                    }).join('') +
+                    '<label class="ent-ed-addfoto">' + (_entEd.subiendo ? '⏳' : '＋') +
+                        '<input type="file" accept="image/*" multiple style="display:none" onchange="_entEdSubirFotos(this)">' +
+                    '</label>' +
+                '</div>' +
+
+                '<div class="ent-ed-acc">' +
+                    '<button class="ent-ed-btn" onclick="cerrarEditorEntrada()">Cancelar</button>' +
+                    '<button class="ent-ed-btn ok" onclick="guardarEditorEntrada()">Guardar cambios</button>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+}
+// Comprime y sube las fotos nuevas a Storage (bucket 'evidencias', igual que el QR).
+async function _entEdSubirFotos(input) {
+    if (!_entEd || !input.files || !input.files.length) return;
+    var files = Array.prototype.slice.call(input.files);
+    input.value = '';
+    _entEd.subiendo = true; _entEdPintar();
+    for (var i = 0; i < files.length; i++) {
+        try {
+            var url = await _entEdSubirUna(files[i]);
+            if (url) _entEd.fotos.push(url);
+        } catch (e) { console.warn('[foto entrada]', e); }
+    }
+    _entEd.subiendo = false; _entEdPintar();
+}
+function _entEdComprimir(file) {
+    return new Promise(function(resolve){
+        var r = new FileReader();
+        r.onload = function(e){
+            var img = new Image();
+            img.onload = function(){
+                var w = img.width, h = img.height, M = 1024;
+                if (w > h) { if (w > M) { h = Math.round(h * M / w); w = M; } }
+                else       { if (h > M) { w = Math.round(w * M / h); h = M; } }
+                var c = document.createElement('canvas'); c.width = w; c.height = h;
+                c.getContext('2d').drawImage(img, 0, 0, w, h);
+                c.toBlob(function(b){ resolve(b); }, 'image/jpeg', 0.65);
+            };
+            img.onerror = function(){ resolve(null); };
+            img.src = e.target.result;
+        };
+        r.onerror = function(){ resolve(null); };
+        r.readAsDataURL(file);
+    });
+}
+async function _entEdSubirUna(file) {
+    var blob = await _entEdComprimir(file);
+    if (!blob || typeof _supabase === 'undefined') return '';
+    var neg = getNegocioActivo() || 'sin-negocio';
+    var path = neg + '/entradas/erp/' + genId() + genId() + '.jpg';
+    var up = await _supabase.storage.from('evidencias').upload(path, blob, { contentType:'image/jpeg' });
+    if (up.error) { alert('No se pudo subir la foto: ' + up.error.message); return ''; }
+    return _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
+}
+function guardarEditorEntrada() {
+    if (!_entEd) return;
+    if (!(_entEd.cantidad > 0)) { alert('La cantidad debe ser mayor a 0.'); return; }
+    if (!_entEd.insumoId)       { alert('Elige un insumo.'); return; }
+    var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(_entEd.insumoId) : null;
+    _entAplicarCambios(_entEd.id, {
+        tipo:      _entEd.tipo,
+        insumoId:  _entEd.insumoId,
+        cantidad:  _entEd.cantidad,
+        fecha:     _entEd.fecha,
+        notas:     _entEd.notas,
+        foto_urls: _entEd.fotos.slice(),
+        foto_url:  _entEd.fotos[0] || '',   // compat con lectores viejos (una sola foto)
+        editadoEn: new Date().toISOString()
+    }, ins);
+    cerrarEditorEntrada();
     renderListadoEntradas();
+    // Dentro del inventario, la ficha del insumo muestra "ya registrado este período":
+    // se repinta igual que al agregar una entrada, para que no quede el número viejo.
+    if (invActual) {
+        try { if (typeof renderFormEntrada === 'function' && _entRapidaInsumoId) renderFormEntrada(); } catch(e){}
+        try { if (typeof renderChipsEntrada === 'function') renderChipsEntrada(); } catch(e){}
+    }
 }
 // Compat: viejos llamados
 function eliminarEntradaGlobal(id) { eliminarEntradaPorId(id); }
@@ -7390,7 +7607,7 @@ function renderVistaEntradas() {
                 <input type="date" id="entHasta" value="${_entHasta}" onchange="setEntRango()" style="${_inpDate}">` : ''}
         </div>`;
     cont.innerHTML = `
-        <div class="ent-rapida-wrap">
+        <div class="ent-rapida-wrap${invActual ? '' : ' ent-ancho'}">
             ${searchSection}
             <div>
                 ${filtroFechas}

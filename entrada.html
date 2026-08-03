@@ -90,7 +90,7 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
         <div id="countBox">⏱️ Esta sesión expira en <b id="countVal" style="color:var(--text)">5:00</b></div>
         <button class="menu-btn" onclick="irEntrada()">
             <span class="mi">📦</span>
-            <span><span class="mt">Entrada de insumos</span><br><span class="md">Llegó mercancía: compra, bonificación o consignación</span></span>
+            <span><span class="mt">Entrada de insumos</span><br><span class="md">Llegó mercancía: compra, bonificación, consignación o préstamo pagado</span></span>
         </button>
         <button class="menu-btn" onclick="irMerma()">
             <span class="mi">🍷</span>
@@ -121,6 +121,7 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
                     <option value="compra">Compra</option>
                     <option value="bonificacion">Bonificación</option>
                     <option value="consignacion">Consignación</option>
+                    <option value="prestamo_pagado">Préstamo pagado</option>
                 </select>
             </div>
             <div>
@@ -520,7 +521,7 @@ function _cartMsg(flujo, txt, cls){
     m.className = 'cap-msg' + (cls==='err'?' err':cls==='ok'?' ok':'');
     m.textContent = txt;
 }
-function _entTipoLbl(t){ return {compra:'compra',bonificacion:'bonificación',consignacion:'consignación'}[t]||t; }
+function _entTipoLbl(t){ return {compra:'compra',bonificacion:'bonificación',consignacion:'consignación',prestamo_pagado:'préstamo pagado'}[t]||t; }
 function _merMotivoLbl(m){ return {se_rompio:'se rompió',se_derramo:'se derramó',mal_preparado:'mal preparado',caducado:'caducado',otro:'otro'}[m]||''; }
 
 // Agregar el insumo seleccionado (con su cantidad) a la lista del lote.

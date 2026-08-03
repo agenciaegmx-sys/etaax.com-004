@@ -467,6 +467,22 @@ test('getEntradasBottles suma filas manuales + log del inventario', () => {
     eq(B.getEntradasBottles('ron1'), 6);
     vm.runInContext('invActual.entradasLog = [];', B); setVar(B, 'filasCaptura', [filaCopa]);
 });
+// Qué entrada SUMA a "Compras del período". Todas entran al stock, pero solo la
+// compra es dinero que salió: si esto se rompe, el reporte infla las compras y
+// "Vendido vs Compras" miente.
+test('compra SÍ suma a compras', () => eq(B.entEsCompra('compra'), true));
+test('sin tipo (legacy) cuenta como compra', () => eq(B.entEsCompra(''), true));
+test('bonificación NO suma a compras', () => eq(B.entEsCompra('bonificacion'), false));
+test('consignación NO suma a compras', () => eq(B.entEsCompra('consignacion'), false));
+test('préstamo pagado NO suma a compras', () => eq(B.entEsCompra('prestamo_pagado'), false));
+test('un tipo desconocido NO se cuela a compras', () => eq(B.entEsCompra('lo_que_sea'), false));
+test('etiqueta del préstamo pagado', () => eq(B.tipoEntradaLabel('prestamo_pagado'), 'Préstamo pagado'));
+test('getEntradasBottles suma TODOS los tipos (todo entra al stock)', () => {
+    setVar(B, 'filasCaptura', [filaCopa]);
+    vm.runInContext("invActual.entradasLog = [{insumoId:'ron1',cantidad:2,tipo:'compra'},{insumoId:'ron1',cantidad:1,tipo:'consignacion'},{insumoId:'ron1',cantidad:1,tipo:'prestamo_pagado'}];", B);
+    eq(B.getEntradasBottles('ron1'), 4);
+    vm.runInContext('invActual.entradasLog = [];', B);
+});
 test('ingredienteML convierte onzas (2 oz = 59.147 ml)', () => eq(B.ingredienteML(2, 'OZ'), 2 * 29.5735));
 test('ingredienteML convierte litros', () => eq(B.ingredienteML(1.5, 'LT'), 1500));
 
