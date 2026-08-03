@@ -166,14 +166,22 @@
             'table.rt tfoot td:first-child{text-align:left}' +
             '.rbadge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.5px;padding:2px 9px;border-radius:20px}' +
             // El PIE va como elemento aparte y se FIJA (position:fixed) al fondo de CADA hoja
-            // al imprimir → siempre hasta abajo, aunque el contenido no llene la página. El
-            // margen inferior de @page le reserva el espacio para que no lo tape el contenido.
+            // al imprimir → siempre hasta abajo, aunque el contenido no llene la página.
+            // OJO: en impresión, bottom:0 de un fixed es el borde del ÁREA DE CONTENIDO, no
+            // el del papel: el pie se pintaba ENCIMA de la última franja de cada hoja y
+            // cortaba lo de abajo (se comían los rótulos de día de las gráficas). La banda
+            // se reserva ahora en el FLUJO con un <tfoot> espaciador (Chrome lo repite y le
+            // aparta el alto en cada hoja) y el margen inferior de @page baja a 0.5cm → el
+            // pie queda más abajo y el contenido gana ~0.6cm de alto útil por hoja.
+            '.rfoot-sp{height:0;padding:0;border:0}' +
             '@media screen{body{background:#eee;padding:20px 20px 0}.rep{max-width:21.6cm;margin:0 auto;background:#fff;box-shadow:0 6px 30px rgba(0,0,0,.15)}.rfoot{max-width:21.6cm;margin:0 auto 24px;background:#fff;box-shadow:0 12px 30px rgba(0,0,0,.15)}}' +
-            '@media print{@page{size:letter portrait;margin:0.5cm 0 1cm}.rfoot{position:fixed;left:0;right:0;bottom:0;background:#fff}}' +
+            '@media print{@page{size:letter portrait;margin:0.5cm 0}.rfoot{position:fixed;left:0;right:0;bottom:0;background:#fff}.rfoot-sp{height:30px}}' +
             '</style></head><body>' +
             '<table class="rep">' +
                 '<thead><tr><td>' + header + '</td></tr></thead>' +
                 '<tbody><tr><td><div class="rbody">' + (cfg.cuerpo || '') + '</div></td></tr></tbody>' +
+                /* espaciador: le aparta al pie fijo su franja en CADA hoja impresa */
+                '<tfoot><tr><td class="rfoot-sp"></td></tr></tfoot>' +
             '</table>' +
             '<div class="rfoot">' + footer + '</div>' +
             '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.print();},300);}<\/scr' + 'ipt></body></html>';
@@ -182,7 +190,7 @@
     // Pie estándar de reporte.
     window.etaaxReporteFooter = function (centroHTML) {
         return '<div style="display:flex;justify-content:space-between;align-items:center;' +
-                'padding:10px 20px;border-top:1px solid #e8e8e8;font-size:9px;color:#aaa">' +
+                'padding:7px 20px;border-top:1px solid #e8e8e8;font-size:9px;color:#aaa">' +
             '<span>etaax.com · EGMx Consultoría Estratégica a&amp;b</span>' +
             '<span style="color:#3dbe7a;font-weight:700">' + (centroHTML || '') + '</span>' +
             '<span>' + new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' }) + '</span>' +
