@@ -805,6 +805,48 @@ console.log('\n══ SUITE E · Escandallo de recetas (app.js) ══');
         eq(E.getCostoParaUnidad(pb, 'PZA'), 9));
 })();
 
+/* ═══════════ SUITE D · MODELO DE COBRO POR SUCURSAL (precios.js) ═══════════
+   El precio que ve el cliente en hub.html y el importe sugerido del recibo en
+   admin.html salen de aquí. Si alguien mueve la tabla, estos números cantan. */
+console.log('\n══ SUITE D · Cobro por sucursal (precios.js) ══');
+(() => {
+    const P = require(path.join(RAIZ, 'precios.js'));
+
+    test('costo unitario base = $1,799', () => eq(P.BASE, 1799));
+    test('tope de 10 sucursales', () => eq(P.TOPE, 10));
+
+    // Precio individual de cada posición (la tabla que definió Edwin).
+    const TABLA = [1799, 1699, 1669, 1639, 1609, 1579, 1549, 1519, 1489, 1449];
+    TABLA.forEach((p, i) => test('la sucursal ' + (i + 1) + ' cuesta $' + p,
+        () => eq(P.precioSucursal(i + 1), p)));
+
+    // Descuentos contra la base (los % de la tabla de referencia).
+    test('2ª sucursal = 5.56% de descuento', () => eq(P.descuentoSucursal(2), 5.5586, 'desc 2ª'));
+    test('5ª sucursal = 10.56% de descuento', () => eq(P.descuentoSucursal(5), 10.5614, 'desc 5ª'));
+    test('10ª sucursal = 19.46% de descuento', () => eq(P.descuentoSucursal(10), 19.4552, 'desc 10ª'));
+    test('la 1ª no tiene descuento', () => eq(P.descuentoSucursal(1), 0));
+    test('ahorro de la 10ª = $350 contra la base', () => eq(P.ahorroSucursal(10), 350));
+
+    // Mensual ESCALONADO: suma de los precios de cada posición (no retroactivo).
+    const ACUM = [1799, 3498, 5167, 6806, 8415, 9994, 11543, 13062, 14551, 16000];
+    ACUM.forEach((t, i) => test('mensual con ' + (i + 1) + ' sucursal(es) = $' + t,
+        () => eq(P.precioMensual(i + 1), t)));
+    test('el paquete de 10 cae en $16,000 redondos', () => eq(P.precioMensual(10), 16000));
+    test('sin sucursales no se cobra', () => eq(P.precioMensual(0), 0));
+
+    // Lo que sube al agregar la siguiente = el precio de ESA sucursal.
+    test('con 3 sucursales, la siguiente (la 4ª) suma $1,639',
+        () => eq(P.precioSiguiente(3), 1639));
+    test('el salto de mensual al pasar de 3 a 4 = precio de la 4ª',
+        () => eq(P.precioMensual(4) - P.precioMensual(3), P.precioSucursal(4)));
+
+    // Tope: pedir arriba de 10 no inventa precios ni sigue sumando.
+    test('la 11ª no se cobra sola (se cotiza a mano)', () => eq(P.precioSiguiente(10), 0));
+    test('mensual con 12 sucursales se corta en el de 10', () => eq(P.precioMensual(12), 16000));
+    test('descuento promedio del paquete de 10 = 11.06%',
+        () => eq(P.descuentoMensual(10), 11.0617, 'desc promedio'));
+})();
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0

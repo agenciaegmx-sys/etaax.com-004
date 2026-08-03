@@ -7,6 +7,7 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <title>etaax – Acceso</title>
 <script src="/page-guard.js"></script><!-- solo helpers de permisos; el guard no aplica en hub -->
+<script src="/precios.js"></script><!-- tabla de precios por sucursal (una sola verdad) -->
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -992,17 +993,19 @@ function _mostrarBloqueo(neg, estado) {
 /* ════════════════════════════════════════════════════════
    PLANES
 ════════════════════════════════════════════════════════ */
-/* ── Modelo de cobro POR SUCURSAL (jul 2026) ──
-   1ª sucursal $1,799/mes + $1,599/mes por cada adicional; 10 sucursales se
-   redondean a $15,000. Primer año de producción: tope de 10 sucursales.
+/* ── Modelo de cobro POR SUCURSAL (ago 2026) ──
+   La tabla de precios vive en /precios.js (window.EtaaxPrecios) — una sola
+   verdad compartida con admin.html. Aquí solo se DELEGA, nunca se recalcula:
+   costo unitario $1,799 y cada sucursal nueva entra con un descuento mayor
+   sobre esa base (la 2ª $1,699, la 3ª $1,669 … la 10ª $1,449 = $16,000 el
+   paquete de 10). El descuento no es retroactivo: cada sucursal conserva el
+   precio de su posición. Tope de 10 sucursales en esta etapa.
    La CATEGORÍA (leyenda del badge) ya no se elige: se deriva del número de
    sucursales del negocio — 1-3 Pequeña Pyme · 4-7 Gran Pyme · 8+ Corporativo. */
-var PRECIO_PRIMERA_SUC = 1799, PRECIO_SUC_EXTRA = 1599, MAX_SUCURSALES = 10;
-function precioMensual(nSucs) {
-    if (nSucs >= 10) return 15000;
-    return nSucs > 0 ? PRECIO_PRIMERA_SUC + (nSucs - 1) * PRECIO_SUC_EXTRA : 0;
-}
-function _fmtPrecio(v) { return '$' + Number(v || 0).toLocaleString('en-US'); }
+var PRECIO_PRIMERA_SUC = EtaaxPrecios.BASE, MAX_SUCURSALES = EtaaxPrecios.TOPE;
+function precioMensual(nSucs) { return EtaaxPrecios.precioMensual(nSucs); }
+function precioSucursalN(n) { return EtaaxPrecios.precioSucursal(n); }
+function _fmtPrecio(v) { return EtaaxPrecios.fmt(v); }
 function categoriaNegocio(nSucs) {
     if (nSucs > 7) return { nombre:'Corporativo',  icon:'🏦', color:'#9b7fd4', planClass:'plan-corp' };
     if (nSucs > 3) return { nombre:'Gran Pyme',    icon:'🏢', color:'#c87a6a', planClass:'plan-gran' };
@@ -1525,7 +1528,8 @@ async function _iniciarSesion(usr) {
 ════════════════════════════════════════════════════════ */
 function _renderPlanGrid() {
     // Ya no se elige plan: todos entran con 1 negocio · 1 sucursal y el precio
-    // crece por sucursal ($1,599 c/adicional). La categoría se deriva sola.
+    // crece por sucursal, cada una con más descuento (ver /precios.js).
+    // La categoría se deriva sola del número de sucursales.
     var grid = document.getElementById('planGrid');
     var c = '#f5c842';
     grid.innerHTML =
@@ -1536,7 +1540,8 @@ function _renderPlanGrid() {
             '<div class="plan-sub">Comienza a profesionalizar tu negocio</div>' +
             '<div class="plan-precio">' + _fmtPrecio(PRECIO_PRIMERA_SUC) + ' <span style="font-size:11px;font-weight:400;color:var(--dim)">MXN</span></div>' +
             '<div class="plan-precio-sub">/ mes</div>' +
-            '<div class="plan-maxnegs" style="color:' + c + '">Agrega sucursales cuando quieras: +' + _fmtPrecio(PRECIO_SUC_EXTRA) + '/mes cada una</div>' +
+            '<div class="plan-maxnegs" style="color:' + c + '">Agrega sucursales cuando quieras: la 2ª desde ' +
+                _fmtPrecio(EtaaxPrecios.precioSucursal(2)) + '/mes (' + EtaaxPrecios.fmtPct(EtaaxPrecios.descuentoSucursal(2)) + ' menos) y cada nueva con más descuento</div>' +
         '</div>';
 }
 
@@ -1845,11 +1850,14 @@ function _renderSucursales(neg) {
             'Máximo ' + MAX_SUCURSALES + ' sucursales por negocio en esta etapa de ETAAX';
     } else {
         // Publicidad del modelo por sucursal dentro del negocio
+        // Cada sucursal nueva tiene SU precio (descuento creciente): se anuncia el
+        // de la que sigue, no un "+$X fijo".
         var pitch = document.getElementById('sucPitch');
-        if (pitch) pitch.textContent = sucs.length >= 9
-            ? 'Con 10 sucursales tu plan se redondea a $15,000 MXN/mes.'
-            : 'Administra una nueva sucursal por solo +' + _fmtPrecio(PRECIO_SUC_EXTRA) +
-              ' MXN/mes a tu plan actual (subiría a ' + _fmtPrecio(precioMensual(sucs.length + 1)) + '/mes).';
+        var nSig = sucs.length + 1, pSig = EtaaxPrecios.precioSucursal(nSig);
+        if (pitch) pitch.textContent =
+            'Tu ' + nSig + 'ª sucursal cuesta +' + _fmtPrecio(pSig) + ' MXN/mes' +
+            (nSig > 1 ? ' (' + EtaaxPrecios.fmtPct(EtaaxPrecios.descuentoSucursal(nSig)) + ' menos que el costo unitario de ' + _fmtPrecio(EtaaxPrecios.BASE) + ')' : '') +
+            ' · tu plan subiría a ' + _fmtPrecio(precioMensual(nSig)) + '/mes.';
     }
 }
 
@@ -2388,12 +2396,18 @@ async function _solicitarNuevaSucursal(marca, sucs, nombre) {
         }
     } catch (e) { /* si falla la consulta, se permite intentar */ }
 
-    var costoNuevo = precioMensual(sucs.length + 1);
+    // El precio depende de QUÉ sucursal es: la 2ª $1,699, la 3ª $1,669… (descuento
+    // creciente sobre el costo unitario de $1,799, sin retroactividad).
+    var nSucNueva = sucs.length + 1;
+    var costoNuevo = precioMensual(nSucNueva);
+    var precioNueva = EtaaxPrecios.precioSucursal(nSucNueva);
+    var descNueva = EtaaxPrecios.descuentoSucursal(nSucNueva);
     var ov = _dlgHub(
         '<div style="font-size:34px;margin-bottom:10px">🏪</div>' +
         '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:1.5px;color:var(--text,#eee);margin-bottom:10px">¿AGREGAR UNA NUEVA SUCURSAL?</div>' +
-        '<div style="font-size:13px;color:var(--text-dim,#888);line-height:1.6;margin-bottom:8px">El costo mensual por sucursal adicional es de <b style="color:var(--gold,#f5c842)">' + _fmtPrecio(PRECIO_SUC_EXTRA) + ' MXN</b>.</div>' +
-        '<div style="background:var(--s2,#1d1d1d);border:1px solid var(--b1,#2a2a2a);border-radius:10px;padding:12px;margin-bottom:18px;font-size:13px;color:var(--text,#eee)">Tu nuevo costo mensual sería de <b style="color:#3dbe7a">' + _fmtPrecio(costoNuevo) + ' MXN</b> <span style="color:var(--dim,#777)">(' + (sucs.length + 1) + ' sucursales)</span></div>' +
+        '<div style="font-size:13px;color:var(--text-dim,#888);line-height:1.6;margin-bottom:8px">Tu <b style="color:var(--text,#eee)">' + nSucNueva + 'ª sucursal</b> cuesta <b style="color:var(--gold,#f5c842)">' + _fmtPrecio(precioNueva) + ' MXN/mes</b>' +
+            (descNueva > 0 ? ' <span style="color:#3dbe7a">(' + EtaaxPrecios.fmtPct(descNueva) + ' menos que el costo unitario de ' + _fmtPrecio(EtaaxPrecios.BASE) + ')</span>' : '') + '.</div>' +
+        '<div style="background:var(--s2,#1d1d1d);border:1px solid var(--b1,#2a2a2a);border-radius:10px;padding:12px;margin-bottom:18px;font-size:13px;color:var(--text,#eee)">Tu nuevo costo mensual sería de <b style="color:#3dbe7a">' + _fmtPrecio(costoNuevo) + ' MXN</b> <span style="color:var(--dim,#777)">(' + nSucNueva + ' sucursales)</span></div>' +
         '<div style="display:flex;gap:10px">' +
             '<button id="solSucCancel" style="flex:1;background:var(--surface2,#1d1d1d);border:1px solid var(--border,#2a2a2a);color:var(--text,#eee);border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Cancelar</button>' +
             '<button id="solSucOk" style="flex:1;background:rgba(61,190,122,.14);border:1px solid rgba(61,190,122,.55);color:#3dbe7a;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Aceptar</button>' +

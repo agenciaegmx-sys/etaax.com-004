@@ -505,6 +505,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
 <script src="/reporte-marca.js"></script>
+<script src="/precios.js"></script><!-- tabla de precios por sucursal (una sola verdad) -->
 <script>
 var ADMIN_EMAIL = 'admin@etaax.com';
 
@@ -523,8 +524,8 @@ var ETAAX_EMISOR = {
     tel:      '',
     rfc:      ''
 };
-/* Precios de referencia (software solo) para SUGERIR el importe; siempre editable. */
-var PRECIO_1RA_SUC = 1799, PRECIO_SUC_ADIC = 1599;
+/* Precios de referencia (software solo) para SUGERIR el importe; siempre editable:
+   la tabla por sucursal vive en /precios.js (EtaaxPrecios) — aquí se DELEGA. */
 
 var ROLES_LABEL = {
     admin:'Administrador', gerente:'Gerente', jefe_cocina:'Jefe de Cocina',
@@ -976,7 +977,8 @@ function abrirReciboModal(negId) {
     var dueno = _data.usuarios.find(function(u){ return u.id === n.usuario_id; });
     var plan  = dueno ? (PLANES[dueno.plan] || PLANES.pyme) : PLANES.pyme;
     var nSuc  = _data.sucsNeg[negId] || 1;
-    var sugerido = PRECIO_1RA_SUC + Math.max(0, nSuc - 1) * PRECIO_SUC_ADIC;
+    // Escalonado: suma del precio de cada sucursal (la 2a $1,699, la 3a $1,669...).
+    var sugerido = EtaaxPrecios.precioMensual(nSuc);
     var hoy   = new Date().toISOString().slice(0,10);
     var periodoDef = new Date().toLocaleDateString('es-MX',{ month:'long', year:'numeric' });
     periodoDef = periodoDef.charAt(0).toUpperCase() + periodoDef.slice(1);
