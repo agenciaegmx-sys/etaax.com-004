@@ -558,7 +558,7 @@ function serieBuckets(bk,lista,valorDe){
 /* ═══════════ MINI LIB SVG (línea/columnas/barras/apilada) ═══════════ */
 var _tip=null;
 function tip(){ if(!_tip)_tip=document.getElementById('chTip'); return _tip; }
-function tipShow(x,y,tituloX,filas){
+function tipShow(x,y,tituloX,filas,esTouch){
     var t=tip(); while(t.firstChild)t.removeChild(t.firstChild);
     var hx=document.createElement('div'); hx.className='tt-x'; hx.textContent=tituloX; t.appendChild(hx);
     filas.forEach(function(f){
@@ -570,12 +570,66 @@ function tipShow(x,y,tituloX,filas){
     });
     t.style.display='block';
     var W=t.offsetWidth,H=t.offsetHeight;
-    t.style.left=Math.min(x+14,window.innerWidth-W-8)+'px';
-    t.style.top=Math.max(8,y-H-12)+'px';
+    if(esTouch){
+        // El dedo tapa el punto: el globo va centrado y bien arriba (o abajo si no cabe).
+        t.style.left=Math.max(8,Math.min(x-W/2,window.innerWidth-W-8))+'px';
+        t.style.top=(y-H-38>=8?(y-H-38):Math.min(y+34,window.innerHeight-H-8))+'px';
+    } else {
+        t.style.left=Math.min(x+14,window.innerWidth-W-8)+'px';
+        t.style.top=Math.max(8,y-H-12)+'px';
+    }
 }
 function tipHide(){ tip().style.display='none'; }
+/* ── Táctil = mouse ──────────────────────────────────────────────────────────
+   En tablet no hay "hover": el dedo tiene que hacer lo mismo que el cursor al
+   acercarse. Regla en toda la mini-lib de gráficas:
+   · pointerdown además de pointermove → un toque simple ya muestra el dato,
+   · setPointerCapture → puedes deslizar el dedo por la gráfica sin perderla,
+   · pointerup/pointercancel → suelta el dato al levantar el dedo,
+   · touch-action:pan-y en el SVG → el scroll vertical de la página sigue vivo,
+     y el arrastre horizontal se lo queda la gráfica.  */
+function _esTouch(ev){ return !!ev&&ev.pointerType&&ev.pointerType!=='mouse'; }
+function _tipBind(el,mostrar,ocultar){
+    el.style.cursor='pointer';
+    function on(ev){ if(_esTouch(ev)){ try{ el.setPointerCapture(ev.pointerId); }catch(e){} } mostrar(ev); }
+    function off(){ ocultar(); }
+    el.addEventListener('pointerdown',on);
+    el.addEventListener('pointermove',on);
+    el.addEventListener('pointerup',off);
+    el.addEventListener('pointercancel',off);
+    el.addEventListener('pointerleave',off);
+}
+/* Guía por columna para dedo: barras de 3px son imposibles de atinar, así que
+   en táctil manda la POSICIÓN X (el bucket más cercano), no el rectángulo. */
+function _tipScrub(svg,W,padL,padR,padT,padB,H,n_,alTocar,soloTouch){
+    var cur=_el(svg,'rect',{x:0,y:padT,width:1,height:Math.max(0,H-padT-padB),fill:'#888',opacity:0});
+    cur.style.pointerEvents='none';
+    svg.style.touchAction='pan-y';
+    var slot=(W-padL-padR)/Math.max(1,n_);
+    function ir(ev){
+        if(soloTouch&&!_esTouch(ev)) return;
+        var r=svg.getBoundingClientRect(); if(!r.width) return;
+        var fx=(ev.clientX-r.left)*(W/r.width);
+        var i=Math.max(0,Math.min(n_-1,Math.floor((fx-padL)/slot)));
+        cur.setAttribute('x',padL+slot*i); cur.setAttribute('width',slot); cur.setAttribute('opacity',.12);
+        alTocar(i,ev);
+    }
+    svg.addEventListener('pointerdown',function(ev){
+        if(_esTouch(ev)){ try{ svg.setPointerCapture(ev.pointerId); }catch(e){} }
+        ir(ev);
+    });
+    svg.addEventListener('pointermove',ir);
+    function salir(){ cur.setAttribute('opacity',0); tipHide(); }
+    svg.addEventListener('pointerup',salir);
+    svg.addEventListener('pointercancel',salir);
+    svg.addEventListener('pointerleave',salir);
+}
+// Al hacer scroll (típico en tablet) el globo se queda colgado: se suelta solo.
+window.addEventListener('scroll',function(){ if(_tip&&_tip.style.display==='block') tipHide(); },{passive:true});
 function _svg(el,w,h){ el.innerHTML=''; var s=document.createElementNS('http://www.w3.org/2000/svg','svg');
-    s.setAttribute('viewBox','0 0 '+w+' '+h); s.setAttribute('class','ch-svg'); el.appendChild(s); return s; }
+    s.setAttribute('viewBox','0 0 '+w+' '+h); s.setAttribute('class','ch-svg');
+    s.style.touchAction='pan-y'; // el dedo puede tocar la gráfica sin matar el scroll vertical
+    el.appendChild(s); return s; }
 function _el(svg,tag,attrs){ var e=document.createElementNS('http://www.w3.org/2000/svg',tag);
     for(var k in attrs) e.setAttribute(k,attrs[k]); svg.appendChild(e); return e; }
 function _ticks(max){ if(max<=0) return {top:100,step:50};
@@ -725,16 +779,26 @@ function lineChart(el,labels,series,fmt,opts){
     var vm=Math.max.apply(null,series[0].values),im=series[0].values.indexOf(vm);
     if(vm>0)_el(svg,'text',{x:Math.min(Math.max(X(im),padL+22),W-padR-24),y:Math.max(Y(vm)-8,10),'text-anchor':'middle','font-size':10,'font-weight':700,fill:p.ink}).textContent=fmt(vm);
     var cross=_el(svg,'line',{x1:0,x2:0,y1:padT,y2:H-padB,stroke:p.muted,'stroke-width':1,opacity:0});
+    cross.style.pointerEvents='none';
     svg.style.touchAction='pan-y';
-    svg.addEventListener('pointermove',function(ev){
-        var r=svg.getBoundingClientRect(),fx=(ev.clientX-r.left)*(W/r.width);
+    function seguir(ev){
+        var r=svg.getBoundingClientRect(); if(!r.width) return;
+        var fx=(ev.clientX-r.left)*(W/r.width);
         var i=Math.round((fx-padL)/((W-padL-padR)/Math.max(1,labels.length-1)));
         i=Math.max(0,Math.min(labels.length-1,i));
         cross.setAttribute('x1',X(i)); cross.setAttribute('x2',X(i)); cross.setAttribute('opacity',.6);
         tipShow(ev.clientX,ev.clientY,(opts.xPrefix||'')+labels[i],
-            series.map(function(s){ return {k:s.color,nombre:s.name,valor:fmt(s.values[i]||0)}; }));
+            series.map(function(s){ return {k:s.color,nombre:s.name,valor:fmt(s.values[i]||0)}; }),_esTouch(ev));
+    }
+    svg.addEventListener('pointerdown',function(ev){
+        if(_esTouch(ev)){ try{ svg.setPointerCapture(ev.pointerId); }catch(e){} }
+        seguir(ev);
     });
-    svg.addEventListener('pointerleave',function(){ cross.setAttribute('opacity',0); tipHide(); });
+    svg.addEventListener('pointermove',seguir);
+    function soltar(){ cross.setAttribute('opacity',0); tipHide(); }
+    svg.addEventListener('pointerup',soltar);
+    svg.addEventListener('pointercancel',soltar);
+    svg.addEventListener('pointerleave',soltar);
     tabla(el,[opts.xCol||'Periodo'].concat(series.map(function(s){return s.name;})),
         labels.map(function(l,i){ return [l].concat(series.map(function(s){return fmt(s.values[i]||0);})); }));
     _detRegistrar(el,labels,series,fmt,opts.xCol);
@@ -773,7 +837,10 @@ function colChart(el,labels,series,fmt,opts){
             if(h>0){
                 var rct=_el(svg,'path',{d:_barPath(x,y,bw,h,v>=0),fill:col});
                 rct.style.cursor='pointer';
+                // Con el dedo manda el scrub por columna (abajo); aquí solo el mouse,
+                // para no pelearse los dos por el mismo toque.
                 rct.addEventListener('pointermove',function(ev){
+                    if(_esTouch(ev)) return;
                     rct.setAttribute('opacity',.82);
                     tipShow(ev.clientX,ev.clientY,(opts.xPrefix||'')+l,
                         series.map(function(s2){ var v2=s2.values[i]||0;
@@ -793,6 +860,12 @@ function colChart(el,labels,series,fmt,opts){
         if(ry>padT-2&&ry<H-padB+2){
             _el(svg,'line',{x1:padL,x2:W-padR,y1:ry,y2:ry,stroke:p.muted,'stroke-width':1.5});
             _el(svg,'text',{x:W-padR,y:ry-4,'text-anchor':'end','font-size':9,fill:p.muted}).textContent=opts.refLabel||''; } }
+    // Táctil: toca (o desliza) en cualquier parte de la columna del día.
+    _tipScrub(svg,W,padL,padR,padT,padB,H,labels.length,function(i,ev){
+        tipShow(ev.clientX,ev.clientY,(opts.xPrefix||'')+labels[i],
+            series.map(function(s2){ var v2=s2.values[i]||0;
+                return {k:opts.diverging?(v2>=0?opts.colPos:opts.colNeg):s2.color,nombre:s2.name,valor:fmt(v2)}; }),true);
+    },true);
     tabla(el,[opts.xCol||'Periodo'].concat(series.map(function(s){return s.name;})),
         labels.map(function(l,i){ return [l].concat(series.map(function(s){return fmt(s.values[i]||0);})); }));
     _detRegistrar(el,labels,series,fmt,opts.xCol);
@@ -819,10 +892,9 @@ function barHChart(el,rows,color,fmt,opts){
         var bx=lblW,bwv=Math.max(2,bw);
         var barra=_el(svg,'path',{d:'M'+bx+' '+(y+4)+' L'+(bx+bwv-4)+' '+(y+4)+' Q'+(bx+bwv)+' '+(y+4)+' '+(bx+bwv)+' '+(y+8)+' L'+(bx+bwv)+' '+(y+14)+' Q'+(bx+bwv)+' '+(y+18)+' '+(bx+bwv-4)+' '+(y+18)+' L'+bx+' '+(y+18)+' Z',fill:col});
         _el(svg,'text',{x:bx+bwv+6,y:y+15,'font-size':10,'font-weight':700,fill:p.ink}).textContent=fmt(r.value);
-        barra.style.cursor='pointer';
-        barra.addEventListener('pointermove',function(ev){ barra.setAttribute('opacity',.82);
-            tipShow(ev.clientX,ev.clientY,r.label,[{k:col,nombre:opts.serie||'',valor:fmt(r.value)}].concat(r.extra?[{k:'',nombre:r.extra,valor:''}]:[])); });
-        barra.addEventListener('pointerleave',function(){ barra.setAttribute('opacity',1); tipHide(); });
+        _tipBind(barra,function(ev){ barra.setAttribute('opacity',.82);
+            tipShow(ev.clientX,ev.clientY,r.label,[{k:col,nombre:opts.serie||'',valor:fmt(r.value)}].concat(r.extra?[{k:'',nombre:r.extra,valor:''}]:[]),_esTouch(ev)); },
+            function(){ barra.setAttribute('opacity',1); tipHide(); });
         if(r.sub){ var st=_el(svg,'text',{x:8,y:y+29,'font-size':8.5,fill:p.muted});
             st.textContent=r.sub.length>78?r.sub.slice(0,77)+'…':r.sub; }
     });
@@ -842,8 +914,8 @@ function stack100(el,titulo,segs){
         var seg=document.createElement('div');
         seg.style.cssText='background:'+sg.color+';flex:'+Math.max(pct,0.5)+' 0 0;display:flex;align-items:center;justify-content:center';
         if(pct>=14){ var st=document.createElement('span'); st.style.cssText='font-size:10.5px;font-weight:700;color:#fff'; st.textContent=pct.toFixed(0)+'%'; seg.appendChild(st); }
-        seg.addEventListener('pointermove',function(ev){ tipShow(ev.clientX,ev.clientY,titulo,[{k:sg.color,nombre:sg.label,valor:fmtM(sg.value)+' · '+pct.toFixed(1)+'%'}]); });
-        seg.addEventListener('pointerleave',tipHide);
+        seg.style.touchAction='pan-y';
+        _tipBind(seg,function(ev){ tipShow(ev.clientX,ev.clientY,titulo,[{k:sg.color,nombre:sg.label,valor:fmtM(sg.value)+' · '+pct.toFixed(1)+'%'}],_esTouch(ev)); },tipHide);
         bar.appendChild(seg);
         var k=document.createElement('span');
         var sw=document.createElement('span'); sw.style.cssText='width:11px;height:11px;border-radius:3px;background:'+sg.color+';display:inline-block;margin-right:5px;vertical-align:-1px';
@@ -1150,11 +1222,11 @@ function renderAll(){
         _el(svg,'line',{x1:padL,x2:W-padR,y1:H-padB,y2:H-padB,stroke:p.grid,'stroke-width':1});
         data.forEach(function(d,i){
             var cx=padL+slot*i+slot/2,x=cx-bw/2,yb=Y(d.pct),h=(H-padB)-yb,col=d.on?p.viol:'rgba(122,92,255,.30)';
-            if(h>0){ var r=_el(svg,'path',{d:_barPath(x,yb,bw,h,true),fill:col}); r.style.cursor='pointer';
-                r.addEventListener('pointermove',function(ev){ r.setAttribute('opacity',.82);
+            if(h>0){ var r=_el(svg,'path',{d:_barPath(x,yb,bw,h,true),fill:col});
+                _tipBind(r,function(ev){ r.setAttribute('opacity',.82);
                     tipShow(ev.clientX,ev.clientY,MES_L[parseInt(d.mes.slice(5,7))-1]+' '+d.mes.slice(0,4),
-                        [{k:col,nombre:'% de meta',valor:Math.round(d.pct)+'%'},{k:'',nombre:'Meta',valor:fmtM(d.meta)},{k:'',nombre:'Vendido',valor:fmtM(d.ventas)}]); });
-                r.addEventListener('pointerleave',function(){ r.setAttribute('opacity',1); tipHide(); }); }
+                        [{k:col,nombre:'% de meta',valor:Math.round(d.pct)+'%'},{k:'',nombre:'Meta',valor:fmtM(d.meta)},{k:'',nombre:'Vendido',valor:fmtM(d.ventas)}],_esTouch(ev)); },
+                    function(){ r.setAttribute('opacity',1); tipHide(); }); }
             if(d.pct>0) _el(svg,'text',{x:cx,y:Math.max(yb-5,12),'text-anchor':'middle','font-size':11,'font-weight':700,fill:d.on?p.ink:p.muted}).textContent=Math.round(d.pct)+'%';
             // Meta estipulada + venta acumulada, en dos columnas verticales dentro de la barra.
             if(d.meta>0&&h>44){ var by=(H-padB)-6,dos=h>44&&bw>=34;
