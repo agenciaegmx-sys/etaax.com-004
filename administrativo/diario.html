@@ -2348,6 +2348,14 @@ function _scopeSuc(lista){
     var s=_sucActiva(); if(!s) return lista||[];
     return (lista||[]).filter(function(x){ return (x && (x.sucursalId || 'suc_principal')) === s; });
 }
+// Nombre legible de una sucursal (sin id = Matriz), para etiquetar listas mezcladas.
+function _sucNombreDx(id){
+    id = id || 'suc_principal';
+    var negId=getNegocioActivo()||'', sucs=[];
+    try{ sucs=JSON.parse(localStorage.getItem('etaax_'+negId+'_sucursales')||'[]'); }catch(e){}
+    var f=sucs.find(function(x){ return x && x.id===id; });
+    return (f && f.nombre) || (id==='suc_principal' ? 'Matriz' : id);
+}
 function load()    { return _scopeSuc(_cacheCortes || []); }
 // Permiso "cambiar de sucursal": permitido salvo que el dueño lo apague (fail-open).
 function _puedeCambiarSuc(){
@@ -4942,12 +4950,27 @@ function _abrirSelectorPagoReal(tipo){
     var title=document.getElementById('selPagoTitle');
     if(tipo==='nomina'){
         title.textContent='💰 Pagar nómina — elige colaborador';
-        var staff=(_cacheStaff||[]).filter(function(s){ return s.estado!=='Baja definitiva'; });
-        if(!staff.length){ body.innerHTML='<div style="padding:28px;text-align:center;color:var(--text-dim)">Sin colaboradores en el catálogo de staff.</div>'; }
+        var activos=(_cacheStaff||[]).filter(function(s){ return s.estado!=='Baja definitiva'; });
+        // La nómina se paga POR SUCURSAL: la caja de la que sale el pago es la de esta
+        // sucursal. Antes se listaba a TODO el negocio y se colaban colaboradores de
+        // otras plazas (mismo nombre repetido). Sin sucursal activa (vista matriz/global)
+        // se muestran todos, pero etiquetados con su sucursal para no confundirlos.
+        var _sucAct=_sucActiva();
+        var staff=_scopeSuc(activos);
+        if(!staff.length){
+            var otros=activos.length;
+            body.innerHTML='<div style="padding:28px;text-align:center;color:var(--text-dim);line-height:1.6">'+
+                (otros
+                    ? 'Sin colaboradores en <b style="color:var(--text)">'+_esc(_sucNombreDx(_sucAct))+'</b>.<br>'+
+                      '<span style="font-size:12px">Hay '+otros+' en otras sucursales: cámbiate a esa sucursal para pagarles, o asígnalos aquí desde el catálogo de Staff.</span>'
+                    : 'Sin colaboradores en el catálogo de staff.')+
+                '</div>';
+        }
         else {
             var catLbl={operativa:'Operativa',administrativa:'Administrativa',socios:'Socios'};
             body.innerHTML=staff.map(function(s){
                 var sub=(s.puesto?_esc(s.puesto)+' · ':'')+(catLbl[_ggStaffCat(s)]||'');
+                if(!_sucAct) sub+=' · <span style="color:#7ab8f5">'+_esc(_sucNombreDx(s.sucursalId))+'</span>';
                 return _selRow('abrirPagoNomina(\''+s.id+'\')', _esc(s.nombre), sub, fmtM(_sueldoDiarioEfectivo(s)), '≈ sueldo diario');
             }).join('');
         }

@@ -43,8 +43,13 @@
             'html.embed .header,html.embed body.has-ctx .header{top:0!important}' +
             'html.embed .ev-wrap,html.embed body.has-ctx .ev-wrap{padding-top:16px!important}' +
             'html.embed body.has-ctx .pp-wrap{padding-top:16px!important}' +
-            /* Carátula de costos (recetas) abierta en modal: sin topbar ni nav → pegada al tope/izquierda */
-            'html.embed #vistaCaratula{top:0!important;left:0!important}' +
+            /* Carátula de costos (recetas) abierta en modal: sin topbar ni nav → pegada al tope/izquierda.
+               OJO con la especificidad: styles.css trae `body.has-ctx #vistaCaratula{top:96px!important}`
+               (misma especificidad 1-1-1) y GANA por orden, porque embed.js corre en el <head> ANTES
+               del <link> de styles.css. Con la barra de contexto presente quedaba una franja muerta de
+               96px arriba. Por eso va la variante con body.has-ctx, que sube a 1-1-2 y sí manda. */
+            'html.embed #vistaCaratula,html.embed body.has-ctx #vistaCaratula{top:0!important;left:0!important}' +
+            'html.embed #vistaMenuReceta,html.embed body.has-ctx #vistaMenuReceta{top:0!important;left:0!important}' +
             /* Su ✕ propio es redundante con el de la ventana → fuera. El TÍTULO sí se
                queda: al ocultarlo, la barra conservaba su alto y dejaba una franja
                muerta arriba (vacía por completo en la vista de selector de grupos). */
