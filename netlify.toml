@@ -34,3 +34,21 @@
       base-uri 'self';
       form-action 'self';
     """
+
+# ── Archivos internos fuera del alcance público ───────────────
+# Netlify publica la raíz del repo TAL CUAL, así que las migraciones y la
+# documentación operativa quedaban descargables desde el sitio
+# (etaax.com/supabase-migration-v40.sql). No exponen datos —de eso se encarga
+# RLS— pero sí el esquema completo, las políticas y los procedimientos internos.
+# Con clientes reales en la plataforma, eso se cierra.
+[[redirects]]
+  from = "/*.sql"
+  to = "/index.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/docs/*"
+  to = "/index.html"
+  status = 404
+  force = true

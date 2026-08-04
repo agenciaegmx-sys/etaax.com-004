@@ -3344,16 +3344,40 @@ async function guardarNuevaPassword(){
     if (nueva !== conf) { msg.textContent = 'Las contraseñas no coinciden.'; return; }
     var btn = document.getElementById('btnNuevaPwd'); var t0 = btn.textContent;
     btn.disabled = true; btn.textContent = 'Guardando…';
+    // El correo se lee ANTES de cerrar sesión: sirve para precargarlo en el login.
+    var _correo = '';
+    try { var _g = await _supabase.auth.getUser(); _correo = (_g.data && _g.data.user && _g.data.user.email) || ''; } catch (e) {}
     var r = await _supabase.auth.updateUser({ password: nueva });
     btn.disabled = false; btn.textContent = t0;
     if (r.error) { msg.textContent = 'No se pudo: ' + r.error.message; return; }
-    msg.style.color = 'var(--green)'; msg.textContent = '✓ Contraseña actualizada. Ya puedes iniciar sesión.';
-    setTimeout(function(){
+    msg.style.color = 'var(--green)'; msg.textContent = '✓ Contraseña actualizada. Vuelve a entrar con tu contraseña nueva.';
+    setTimeout(async function(){
         document.getElementById('modalNuevaPwd').style.display = 'none';
         try { history.replaceState(null, '', window.location.pathname); } catch (e) {}
+        // El enlace de recuperación deja una sesión abierta y el dueño entraría directo
+        // sin volver a teclear nada. A propósito la cerramos: que escriba su contraseña
+        // NUEVA una vez más confirma que quedó bien guardada antes de ponerse a trabajar.
+        try { sessionStorage.setItem('etaax_pwd_ok', _correo || '1'); } catch (e) {}
+        try { await _supabase.auth.signOut(); } catch (e) {}
+        try { _clearSesion(); } catch (e) {}
         window.location.reload();
     }, 1600);
 }
+/* Al volver del cambio de contraseña: login con el correo ya puesto y el aviso en verde.
+   Va en 'load' (no en DOMContentLoaded) para correr DESPUÉS de init() y de que Chrome
+   restaure los campos del formulario al recargar — si no, se pisaba el correo. */
+(function(){
+    window.addEventListener('load', function(){
+        var v; try { v = sessionStorage.getItem('etaax_pwd_ok'); } catch (e) {}
+        if (!v) return;
+        try { sessionStorage.removeItem('etaax_pwd_ok'); } catch (e) {}
+        var inp = document.getElementById('loginEmail');
+        if (inp && v !== '1') inp.value = v;
+        var err = document.getElementById('loginError');
+        if (err) { err.style.color = 'var(--green)'; err.textContent = '✓ Contraseña actualizada. Entra con tu contraseña nueva.'; }
+        var pwd = document.getElementById('loginPwd'); if (pwd) setTimeout(function(){ pwd.focus(); }, 120);
+    });
+})();
 
 /* Detecta el regreso desde el enlace del correo → pedir nueva contraseña */
 (function(){
