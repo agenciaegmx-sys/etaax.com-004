@@ -968,27 +968,7 @@
                        onclick="verFicha('${ins.id}')">
                        <span style="font-size:14px">👁️</span> Ver
                    </button>
-                   <button class="btn-vista" style="padding:6px 14px;font-size:12px;margin-right:6px;
-                       color:var(--accent);border-color:var(--accent);
-                       display:inline-flex;align-items:center;gap:5px"
-                       onclick="editarInsumo('${ins.id}')">
-                       <span style="font-size:14px">✏️</span> Editar
-                   </button>
-                   ${!ins.esSubReceta ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;display:inline-flex;align-items:center;gap:5px" title="Duplicar este insumo (crea una copia editable con sus presentaciones)" onclick="copiarInsumo('${ins.id}')"><span style="font-size:14px">📋</span> Copiar</button>` : ''}
-                   ${_catGlobalIns() ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;
-                       color:var(--green);border-color:var(--green);display:inline-flex;align-items:center;gap:5px"
-                       onclick="abrirInsumoSuc('${ins.id}')"><span style="font-size:14px">🔗</span> Vincular</button>` : ''}
-                   ${(!_catGlobalIns() && _getSucActivaIns() && ins.activo === '0')
-                       ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;color:var(--red);border-color:rgba(224,90,58,.5);display:inline-flex;align-items:center;gap:5px" title="Inactivo GLOBAL (pastilla del editor): no aparece en ningún lado. Este botón lo reactiva en TODO el negocio." onclick="activarInsumoGlobal('${ins.id}')">🚫 ▶ Activar</button>` : ''}
-                   ${ins.esSubReceta ? (ins.ocultoInventario
-                       ? `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;color:var(--text-dim);border-color:var(--border);display:inline-flex;align-items:center;gap:5px" title="Oculto del Paso 1 del inventario — clic para volverlo visible" onclick="toggleVisibleInventario('${ins.id}')">🚫 Oculto en inventario</button>`
-                       : `<button class="btn-vista" style="padding:6px 12px;font-size:12px;margin-right:6px;color:var(--green);border-color:rgba(61,190,122,.4);display:inline-flex;align-items:center;gap:5px" title="Visible en el Paso 1 del inventario (se captura su existencia) — clic para ocultarlo" onclick="toggleVisibleInventario('${ins.id}')">📋 Visible en inventario</button>`) : ''}
-                   <button class="btn-vista" style="padding:6px 12px;font-size:12px;
-                       color:var(--red);border-color:var(--red);
-                       display:inline-flex;align-items:center;justify-content:center"
-                       onclick="eliminarInsumo('${ins.id}')">
-                       <span style="font-size:14px">🗑️</span>
-                   </button>
+                   ${_insMasBtn(ins.id)}
                </td>`;
 
            return `<tr data-sel-id="${ins.id}" style="${rowBg}cursor:${_modoSeleccion?'pointer':'default'}"
@@ -1088,14 +1068,7 @@
            var actionsHtml = _modoSeleccion ? '' :
                '<div class="insumo-card-actions">' +
                    '<button class="btn-ver" onclick="verFicha(\'' + ins.id + '\')">👁️ Ver</button>' +
-                   '<button class="btn-edit" onclick="editarInsumo(\'' + ins.id + '\')">✏️ Editar</button>' +
-                   (_catGlobalIns() ? '<button class="btn-edit" style="color:var(--green);border-color:var(--green)" onclick="abrirInsumoSuc(\'' + ins.id + '\')">🔗 Vincular</button>' : '') +
-                   ((!_catGlobalIns() && _getSucActivaIns() && ins.activo === '0')
-                       ? '<button class="btn-ver" style="color:var(--red)" title="Inactivo global — activar en todo el negocio" onclick="activarInsumoGlobal(\'' + ins.id + '\')">▶</button>' : '') +
-                   (ins.esSubReceta ? (ins.ocultoInventario
-                       ? '<button class="btn-ver" style="color:var(--text-dim)" title="Oculto del inventario — clic para volverlo visible" onclick="toggleVisibleInventario(\'' + ins.id + '\')">🚫 Inv.</button>'
-                       : '<button class="btn-ver" style="color:var(--green)" title="Visible en inventario — clic para ocultarlo" onclick="toggleVisibleInventario(\'' + ins.id + '\')">📋 Inv.</button>') : '') +
-                   '<button class="btn-del" onclick="eliminarInsumo(\'' + ins.id + '\')">🗑️</button>' +
+                   _insMasBtn(ins.id, 'en-card') +
                '</div>';
 
            return '<div class="insumo-card" data-sel-id="' + ins.id + '" ' + cardClick + '>' +
@@ -2133,6 +2106,78 @@
        if (_soloMode) window.parent.postMessage({ type: 'cerrarEditor' }, '*');
    }
    
+   /* ── Menú "⋯" de acciones del insumo ────────────────────────────────
+      Editar, Copiar, Vincular, Inventario y Eliminar viven aquí: en la lista
+      solo queda "Ver" y todo se ve más limpio. El menú se pinta en
+      position:fixed sobre <body> — dentro de la tabla lo recortaba el overflow
+      del contenedor y quedaba a medias. */
+   var _insMenuEl = null;
+   function _insMenuCerrar() { if (_insMenuEl) { _insMenuEl.remove(); _insMenuEl = null; } }
+   window._insMenuCerrar = _insMenuCerrar;
+   document.addEventListener('click', function (e) {
+       if (!_insMenuEl || !e.target.closest) return;
+       if (e.target.closest('.ins-menu-pop') || e.target.closest('.ins-mas-btn')) return;
+       _insMenuCerrar();
+   });
+   window.addEventListener('scroll', _insMenuCerrar, true);
+   window.addEventListener('resize', _insMenuCerrar);
+   function _insMenuItem(icono, texto, accion, clase) {
+       return '<button type="button" class="' + (clase || '') + '" onclick="_insMenuCerrar();' + accion + '">' +
+           '<span class="ic">' + icono + '</span>' + texto + '</button>';
+   }
+   function _insMenuAbrir(ev, id) {
+       ev.stopPropagation();
+       var yaAbierto = _insMenuEl && _insMenuEl.getAttribute('data-id') === id;
+       _insMenuCerrar();
+       if (yaAbierto) return;   // segundo clic en el mismo botón = cerrar
+       var ins = getInsumos().find(function (x) { return x.id === id; });
+       if (!ins) return;
+       var q = "'" + id + "'";
+       var items = [_insMenuItem('✏️', 'Editar', 'editarInsumo(' + q + ')')];
+       if (!ins.esSubReceta)
+           items.push(_insMenuItem('📋', 'Copiar', 'copiarInsumo(' + q + ')'));
+       if (_catGlobalIns())
+           items.push(_insMenuItem('🔗', 'Vincular a sucursal', 'abrirInsumoSuc(' + q + ')'));
+       if (!_catGlobalIns() && _getSucActivaIns() && ins.activo === '0')
+           items.push(_insMenuItem('▶', 'Activar en el negocio', 'activarInsumoGlobal(' + q + ')'));
+       if (ins.esSubReceta)
+           items.push(_insMenuItem(ins.ocultoInventario ? '📋' : '🚫',
+               ins.ocultoInventario ? 'Mostrar en inventario' : 'Ocultar del inventario',
+               'toggleVisibleInventario(' + q + ')'));
+       items.push('<div class="sep"></div>');
+       items.push(_insMenuItem('🗑️', 'Eliminar', 'eliminarInsumo(' + q + ')', 'peligro'));
+
+       var pop = document.createElement('div');
+       pop.className = 'ins-menu-pop';
+       pop.setAttribute('data-id', id);
+       pop.innerHTML = items.join('');
+       document.body.appendChild(pop);
+       // Anclaje: si la lista se re-renderizó, el botón del evento puede haber
+       // quedado huérfano y su rect sale en ceros → el menú se iba a la esquina.
+       // Se vuelve a buscar por id y, en última instancia, se ancla arriba a la derecha.
+       var btn = ev.currentTarget;
+       var r = btn && btn.getBoundingClientRect ? btn.getBoundingClientRect() : null;
+       if (!r || (!r.width && !r.height)) {
+           // Tabla y galería conviven en el DOM (una oculta): buscar el botón VISIBLE.
+           var cands = document.querySelectorAll('.ins-mas-btn[data-id="' + id + '"]');
+           for (var ci = 0; ci < cands.length; ci++) {
+               var rr = cands[ci].getBoundingClientRect();
+               if (rr.width || rr.height) { btn = cands[ci]; r = rr; break; }
+           }
+       }
+       var w = pop.offsetWidth, h = pop.offsetHeight;
+       if (!r || (!r.width && !r.height)) r = { right: window.innerWidth - 20, bottom: 70, top: 70 };
+       pop.style.left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8) + 'px';
+       pop.style.top  = (r.bottom + h + 8 > window.innerHeight ? Math.max(8, r.top - h - 6) : r.bottom + 6) + 'px';
+       _insMenuEl = pop;
+   }
+   window._insMenuAbrir = _insMenuAbrir;
+   // Botón "⋯" (mismo en tabla y en tarjetas).
+   function _insMasBtn(id, clase) {
+       return '<button type="button" class="ins-mas-btn ' + (clase || '') + '" title="Más acciones" ' +
+           'data-id="' + id + '" onclick="_insMenuAbrir(event,\'' + id + '\')">⋯</button>';
+   }
+
    function editarInsumo(id) {
        const ins = getInsumos().find(x => x.id === id);
        if (!ins) return;

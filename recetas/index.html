@@ -2704,10 +2704,15 @@ function convertirRecetaSimple(tipo) {
 // ── Abrir escandallos / carátula como VENTANA FLOTANTE (reusa el modal iframe
 //    del sub-escandallo). Consistente con Staff/Gastos; redimensionable y movible.
 //    En el iframe (?embed=1) el load handler arma la receta nueva o la carátula. ──
-function abrirEscModal(tipo) {
-    var lbl = {alimentos:'Receta · Alimentos', bebidas:'Receta · Bebidas',
+function _escLabelTipo(tipo) {
+    return {alimentos:'Receta · Alimentos', bebidas:'Receta · Bebidas',
         'sub-alimentos':'Sub Receta · Alimentos', 'sub-bebidas':'Sub Receta · Bebidas',
         simple:'Receta Simple'}[tipo] || 'Escandallo';
+}
+// ¿Ya estamos dentro de una ventana flotante? Abrir otra anidaría iframes.
+function _enEmbed() { return /[?&]embed=1/.test(window.location.search); }
+function abrirEscModal(tipo) {
+    var lbl = _escLabelTipo(tipo);
     if (typeof abrirEditorEnModal === 'function')
         abrirEditorEnModal('index.html?embed=1&nuevo=' + encodeURIComponent(tipo), '🧾 ' + lbl);
     else if (tipo === 'simple') crearRecetaSimple(); else crearReceta(tipo); // fallback en página
@@ -3321,6 +3326,17 @@ function editarDesdeficha() {
     } else {
         _volverACaratula = false;
         document.getElementById('modalVerRecetas').style.display = 'none';
+        // Editar abre la MISMA ventana flotante que "+ Nueva receta" (redimensionable,
+        // movible y minimizable). Antes se iba a pantalla completa y se perdía el
+        // contexto de la lista. Dentro de un embed se edita en la propia página para
+        // no anidar iframes.
+        var _rEd = (typeof getRecetas === 'function')
+            ? getRecetas().find(function(x){ return x.id === fichaRecetaActualId; }) : null;
+        if (!_enEmbed() && typeof abrirEditorEnModal === 'function') {
+            abrirEditorEnModal('index.html?embed=1&r=' + encodeURIComponent(fichaRecetaActualId),
+                '🧾 ' + _escLabelTipo(_rEd && _rEd.tipo));
+            return;
+        }
         _showEscForm();
         cargarReceta(fichaRecetaActualId);
         if (window.etaaxNav) etaaxNav.go(_showEscForm); // historial: pantalla editor

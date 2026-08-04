@@ -45,8 +45,12 @@
             'html.embed body.has-ctx .pp-wrap{padding-top:16px!important}' +
             /* Carátula de costos (recetas) abierta en modal: sin topbar ni nav → pegada al tope/izquierda */
             'html.embed #vistaCaratula{top:0!important;left:0!important}' +
-            /* Su header interno es redundante con el header del modal → ocultar título y cerrar propios */
-            'html.embed #caratulaTituloHeader,html.embed #caratulaBtnCerrar{display:none!important}' +
+            /* Su ✕ propio es redundante con el de la ventana → fuera. El TÍTULO sí se
+               queda: al ocultarlo, la barra conservaba su alto y dejaba una franja
+               muerta arriba (vacía por completo en la vista de selector de grupos). */
+            'html.embed #caratulaBtnCerrar{display:none!important}' +
+            'html.embed #caratulaTituloHeader{font-size:17px!important}' +
+            'html.embed #vistaCaratula > div:first-child{padding:9px 20px!important}' +
             /* Organigrama: sin nav lateral, el lienzo y su toolbar van a la izquierda/arriba */
             'html.embed .org-top{left:0!important;top:0!important}' +
             'html.embed #viewport{left:0!important}' +

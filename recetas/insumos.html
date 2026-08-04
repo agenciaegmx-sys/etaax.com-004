@@ -688,6 +688,33 @@ function toggleTheme() {
 }
 .btn-ver:hover { border-color:var(--green);color:var(--green); }
 .btn-edit:hover { border-color:var(--accent);color:var(--accent); }
+/* ── Menú "⋯" de acciones del insumo ──────────────────────────────
+   Editar/Copiar/Eliminar salen de la lista y viven aquí. El desplegable va
+   position:fixed (lo pinta el JS sobre <body>) porque dentro de la tabla el
+   overflow del contenedor lo recortaba. */
+.ins-mas-btn {
+    border:1px solid var(--border); background:transparent; color:var(--text-dim);
+    border-radius:6px; padding:5px 11px; font-size:15px; line-height:1.1; cursor:pointer;
+    font-family:inherit; transition:all .15s; letter-spacing:1px;
+}
+.ins-mas-btn:hover { border-color:var(--accent); color:var(--accent); }
+.ins-mas-btn.en-card { flex:0 0 auto; padding:5px 10px; font-size:13px; }
+.ins-menu-pop {
+    position:fixed; z-index:10500; min-width:212px; padding:6px;
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    box-shadow:0 16px 44px rgba(0,0,0,.45); display:flex; flex-direction:column; gap:2px;
+    animation:insMenuIn .12s ease both;
+}
+@keyframes insMenuIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
+.ins-menu-pop button {
+    display:flex; align-items:center; gap:9px; width:100%; text-align:left;
+    background:none; border:none; color:var(--text); font-family:inherit; font-size:12.5px;
+    padding:8px 10px; border-radius:7px; cursor:pointer;
+}
+.ins-menu-pop button:hover { background:var(--surface2); color:var(--accent); }
+.ins-menu-pop button.peligro:hover { background:rgba(224,90,58,.10); color:var(--red); }
+.ins-menu-pop .ic { width:16px; text-align:center; flex-shrink:0; }
+.ins-menu-pop .sep { height:1px; background:var(--border); margin:4px 2px; }
 .btn-del:hover { border-color:var(--red);color:var(--red); }
 </style>
 
