@@ -41,8 +41,18 @@
 # (etaax.com/supabase-migration-v40.sql). No exponen datos —de eso se encarga
 # RLS— pero sí el esquema completo, las políticas y los procedimientos internos.
 # Con clientes reales en la plataforma, eso se cierra.
+# OJO: Netlify solo admite el asterisco al FINAL de la ruta — un patrón como
+# "/*.sql" NUNCA hace match y el archivo se sigue sirviendo. Por eso el bloqueo
+# va por PREFIJO. Cuidado de no ampliarlo a "/supabase-*": eso tumbaría
+# supabase-config.js, que la app sí necesita.
 [[redirects]]
-  from = "/*.sql"
+  from = "/supabase-migration-*"
+  to = "/index.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/sql_*"
   to = "/index.html"
   status = 404
   force = true
