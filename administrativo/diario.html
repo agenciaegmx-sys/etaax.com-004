@@ -299,6 +299,13 @@
         .cj-body{overflow-y:auto;flex:1;min-height:0;padding:16px 22px 36px;display:flex;flex-direction:column;gap:16px;}
         .cj-acum{background:rgba(245,200,66,.08);border:1px solid rgba(245,200,66,.25);border-radius:10px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;}
         .cj-acum-lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);}
+        /* Saldo por cuenta bancaria: SIEMPRE de dos en dos, mismo tamaño. Con auto-fit,
+           al agregar una 3ª cuenta se recolocaban en 3 columnas y los cards encogían;
+           así se van acumulando en parejas sin cambiar de tamaño ni de diseño. */
+        .cj-ctas-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px;align-items:stretch;}
+        .cj-ctas-grid > div{min-width:0;}                 /* nombres largos no estiran la columna */
+        .cj-ctas-grid .cj-acum{height:100%;align-items:flex-start;gap:12px;}
+        @media(max-width:720px){ .cj-ctas-grid{grid-template-columns:1fr;} }
         .cj-acum-val{font-family:'Bebas Neue',sans-serif;font-size:32px;color:var(--accent);letter-spacing:1px;}
         .cj-table{width:100%;border-collapse:collapse;font-size:12px;}
         .cj-table th{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);font-weight:500;padding:8px 10px;border-bottom:1px solid var(--border);text-align:right;}
@@ -3354,15 +3361,13 @@ function _abrirCajaFuerteContenido(_yaFresco){
     var totTarjetaBruto = lista.reduce(function(s,c){return s+taBanco(c);},0);
     var totTarjeta  = lista.reduce(function(s,c){return s+taBancoNeto(c);},0);
     var totComision = Math.max(0, totTarjetaBruto - totTarjeta);
-    // Desglose de comisiones por cuenta (de los cortes con desglose guardado).
-    // comPorCuenta: por nombre de banco (card resumen). comComCta: por cuentaId CON
-    // PERIODO, para la tira que va bajo el saldo de cada cuenta.
-    var comPorCuenta = {}, comComCta = {};
+    // Comisiones por CUENTA con su PERIODO, para la tira que va bajo cada saldo
+    // (el card del total desapareció: se leía duplicado y sin desglosar).
+    var comComCta = {};
     lista.forEach(function(c){
         (c.tarjetaCuentas||[]).forEach(function(t){
             var brut=(parseFloat(t.ventaTC)||0)+(parseFloat(t.ventaTD)||0), net=parseFloat(t.neto)||0;
             var com=brut-net; if(!(com>0)) return;
-            comPorCuenta[t.banco||'Tarjeta'] = (comPorCuenta[t.banco||'Tarjeta']||0) + com;
             var k=t.cuentaId||'_sin', f=c.fecha||'';
             if(!comComCta[k]) comComCta[k]={monto:0,desde:f,hasta:f,cortes:0};
             comComCta[k].monto+=com; comComCta[k].cortes++;
@@ -3384,7 +3389,7 @@ function _abrirCajaFuerteContenido(_yaFresco){
                 '<span style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)">🏛️ Saldo por cuenta de débito</span>'+
                 '<button onclick="abrirHistConciliaciones()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:3px 10px;font-size:10px;cursor:pointer;font-family:inherit">📜 Historial de conciliaciones</button>'+
             '</div>'+
-            '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin-bottom:4px">'+
+            '<div class="cj-ctas-grid">'+
             _ctasDebCF.map(function(c){
                 var s=_pcCF[c.id]||{term:0,dep:0,resto:0,total:0};
                 // Desglose auditable: de dónde sale el saldo de ESTA cuenta.
@@ -3452,7 +3457,7 @@ function _abrirCajaFuerteContenido(_yaFresco){
             '</div>'+
             '<div class="cj-acum" style="margin:0;border-color:rgba(61,190,122,.3)">'+
                 '<div>'+
-                    '<div class="cj-acum-lbl" style="color:var(--green)">🏛️ Cuenta Débito</div>'+
+                    '<div class="cj-acum-lbl" style="color:var(--green)">🏛️ Cuentas Bancarias</div>'+
                     '<div style="margin-top:4px;font-size:10px;color:var(--text-dim);line-height:1.6">'+
                         fmtM(totTarjeta)+' terminal <span style="color:var(--text-dim)">(neto)</span>'+
                         (totTransfer?' + '+fmtM(totTransfer)+' transfer.':'')+
@@ -3467,19 +3472,8 @@ function _abrirCajaFuerteContenido(_yaFresco){
         debPorCuentaHTML+
         // Comisiones y Tarjetas de crédito LADO A LADO (ahorra alto → los depósitos se ven abajo)
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px;align-items:start;margin:0 0 10px">'+
-        (totComision>0?
-        '<div class="cj-acum" style="margin:0;border-color:rgba(255,112,112,.35)">'+
-            '<div>'+
-                '<div class="cj-acum-lbl" style="color:#ff9a9a">💳 Comisiones bancarias acumuladas</div>'+
-                '<div style="margin-top:4px;font-size:10px;color:var(--text-dim);line-height:1.6">'+
-                    (Object.keys(comPorCuenta).length
-                        ? Object.keys(comPorCuenta).map(function(b){ return etx(b)+' − '+fmtM(comPorCuenta[b]); }).join(' · ')
-                        : 'estimadas con la tasa de la cuenta predeterminada')+
-                    ' · ya descontadas del saldo de banco'+
-                '</div>'+
-            '</div>'+
-            '<div class="cj-acum-val" style="font-size:20px;color:#ff9a9a">− '+fmtM(totComision)+'</div>'+
-        '</div>':'')+
+        // (el total de comisiones se quitó: cada cuenta ya lleva su tira desglosada)
+
         (gastosTarjetaCred>0||catalogoTc.length>0?
         '<div>'+
             '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px">💳 Tarjetas de Crédito</div>'+
