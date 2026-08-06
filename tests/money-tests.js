@@ -180,6 +180,39 @@ test('taBancoNeto = neto de cuentas + propina con TD de la predeterminada', () =
 test('comisionBancoCorte = bruto − neto (nunca negativa)', () =>
     eq(A.comisionBancoCorte(corteDesglose), (3000 + 1000) - A.taBancoNeto(corteDesglose)));
 
+// PROPINAS POR CUENTA (propTarjetaCuentas): el corte guarda en qué cuenta cayó cada
+// propina desde hace tiempo, pero el saldo las neteaba TODAS con la tasa de la
+// predeterminada y se las cargaba a ella.
+{
+    const _ctas2 = [ctaConIva, ctaSinIva]; // 'a' predeterminada (2.32% efectivo), 'b' sin IVA
+    const corteProp = {
+        tarjeta: 3000, propTarjeta: 1000,
+        tarjetaCuentas: [{ cuentaId: 'a', ventaTC: 1000, ventaTD: 2000, neto: A._netoCuenta(ctaConIva, 1000, 2000) }],
+        propTarjetaCuentas: { b: 1000 },   // la propina cayó en la cuenta B
+    };
+    test('propina con desglose usa la comisión de SU cuenta, no la de la predeterminada', () =>
+        eq(A.taBancoNeto(corteProp, _ctas2),
+           A._netoCuenta(ctaConIva, 1000, 2000) + A._netoCuenta(ctaSinIva, 0, 1000)));
+    test('propina SIN desglose (corte viejo) sigue neteando con la predeterminada', () =>
+        eq(A.taBancoNeto(corteDesglose, _ctas2),
+           A._netoCuenta(ctaConIva, 1000, 2000) + 1000 * (1 - 0.0232)));
+    test('detalle: la propina de B cae en B y nada queda sin cuenta', () => {
+        const d = A.EtaaxCore.taBancoNetoDetalle(corteProp, _ctas2);
+        eq(Math.round(d.porCuenta.b * 100) / 100, Math.round(A._netoCuenta(ctaSinIva, 0, 1000) * 100) / 100);
+        eq(Math.round(d.sinCuenta * 100) / 100, 0);
+    });
+    test('propina desglosada PARCIAL: el resto se netea con la predeterminada', () => {
+        const parcial = { ...corteProp, propTarjeta: 1500, propTarjetaCuentas: { b: 1000 } };
+        const d = A.EtaaxCore.taBancoNetoDetalle(parcial, _ctas2);
+        eq(Math.round(d.sinCuenta * 100) / 100, Math.round(500 * (1 - 0.0232) * 100) / 100);
+    });
+    test('saldo por cuenta: la propina de B suma en B, no en la predeterminada', () => {
+        const pc = A._debitoPorCuenta([corteProp], [], _ctas2, 0);
+        eq(Math.round(pc.b.total * 100) / 100, Math.round(A._netoCuenta(ctaSinIva, 0, 1000) * 100) / 100);
+        eq(Math.round(pc.a.total * 100) / 100, Math.round(A._netoCuenta(ctaConIva, 1000, 2000) * 100) / 100);
+    });
+}
+
 // Saldo de débito POR CUENTA (_debitoPorCuenta): atribución exacta + invariante.
 // La terminal del desglose va a SU cuenta; propina neta, transferencia y gastos a
 // la PREDETERMINADA; los depósitos a su cuenta origen/destino.

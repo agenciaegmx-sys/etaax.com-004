@@ -77,18 +77,48 @@
     function netoCuenta(cta, tc, td) { return cta ? (tc * (1 - comEf(cta, 'tc')) + td * (1 - comEf(cta, 'td'))) : (tc + td); }
     // Neto que llega al banco por un corte. cuentasDebito = cuentas de débito ordenadas
     // (la predeterminada primero); su [0] da la tasa de la propina y de cortes viejos.
-    function taBancoNeto(c, cuentasDebito) {
+    /* Lo NETO que llega al banco por este corte, DESGLOSADO por cuenta.
+       Una sola verdad para el total (taBancoNeto) y para el saldo por cuenta:
+       · terminal → del desglose `tarjetaCuentas` (cada cuenta con su comisión);
+       · propinas de tarjeta → del desglose `propTarjetaCuentas` si el corte lo trae
+         (antes TODAS se neteaban con la tasa de la predeterminada y se le cargaban);
+       · lo que no traiga cuenta (cortes viejos, captura parcial) se netea con la
+         predeterminada y queda en `sinCuenta` — nunca se pierde ni se duplica. */
+    function taBancoNetoDetalle(c, cuentasDebito) {
         var ctas = cuentasDebito || [];
-        var tarNeto;
-        if (c.tarjetaCuentas && c.tarjetaCuentas.length) {
-            tarNeto = c.tarjetaCuentas.reduce(function (s, t) { return s + (parseFloat(t.neto) || 0); }, 0);
-        } else {
-            var cta0 = ctas[0] || null;
-            tarNeto = cta0 ? netoCuenta(cta0, 0, n(c.tarjeta)) : n(c.tarjeta);
+        var det = { porCuenta: {}, sinCuenta: 0 };
+        var buscar = function (id) { for (var i = 0; i < ctas.length; i++) if (ctas[i].id === id) return ctas[i]; return null; };
+        var addC = function (id, v) { if (!v) return; det.porCuenta[id] = (det.porCuenta[id] || 0) + v; };
+        var cta0 = ctas[0] || null;
+
+        // ── Terminal ──
+        var brutoDes = 0;
+        (c.tarjetaCuentas || []).forEach(function (t) {
+            addC(t.cuentaId, parseFloat(t.neto) || 0);
+            brutoDes += (parseFloat(t.ventaTC) || 0) + (parseFloat(t.ventaTD) || 0);
+        });
+        var restoBruto = n(c.tarjeta) - brutoDes;   // sin desglose (corte viejo) o captura parcial
+        if (restoBruto > 0.005) det.sinCuenta += cta0 ? netoCuenta(cta0, 0, restoBruto) : restoBruto;
+
+        // ── Propinas de tarjeta ──
+        var pc = c.propTarjetaCuentas, propDes = 0;
+        if (pc && typeof pc === 'object') {
+            Object.keys(pc).forEach(function (id) {
+                var m = n(pc[id]); if (!m) return;
+                propDes += m;
+                var cta = buscar(id);
+                addC(id, cta ? netoCuenta(cta, 0, m) : m);
+            });
         }
-        var ctaP = ctas[0] || null;
-        var propNeta = ctaP ? netoCuenta(ctaP, 0, n(c.propTarjeta)) : n(c.propTarjeta);
-        return tarNeto + propNeta;
+        var propResto = n(c.propTarjeta) - propDes;
+        if (propResto > 0.005) det.sinCuenta += cta0 ? netoCuenta(cta0, 0, propResto) : propResto;
+
+        return det;
+    }
+    function taBancoNeto(c, cuentasDebito) {
+        var d = taBancoNetoDetalle(c, cuentasDebito), t = d.sinCuenta;
+        for (var k in d.porCuenta) if (d.porCuenta.hasOwnProperty(k)) t += d.porCuenta[k];
+        return t;
     }
     function comisionBancoCorte(c, cuentasDebito) { return Math.max(0, taBanco(c) - taBancoNeto(c, cuentasDebito)); }
 
@@ -244,7 +274,8 @@
         getWeekStr: getWeekStr, semanaISO: semanaISO, getRange: getRange, prevRange: prevRange, inRange: inRange,
         efNeto: efNeto, taBanco: taBanco, ventasBruta: ventasBruta, flujoNeto: flujoNeto,
         propinas: propinas, cheque: cheque, resultado: resultado, resguardo: resguardo,
-        comEf: comEf, netoCuenta: netoCuenta, taBancoNeto: taBancoNeto, comisionBancoCorte: comisionBancoCorte,
+        comEf: comEf, netoCuenta: netoCuenta, taBancoNeto: taBancoNeto, taBancoNetoDetalle: taBancoNetoDetalle,
+        comisionBancoCorte: comisionBancoCorte,
         depEfecto: depEfecto, esRetiro: esRetiro,
         DIA_FACTORES_DEFAULT: DIA_FACTORES_DEFAULT, diasOperativos: diasOperativos, operaDow: operaDow, calcMetaDiaria: calcMetaDiaria,
     };

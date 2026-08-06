@@ -3275,9 +3275,10 @@ function _debitoPorCuenta(cortes, depositos, ctasDeb, gastosDebito, gastosDebito
     var defId=ctasDeb[0].id; // la predeterminada va primero (_cuentasDebito la ordena)
     var add=function(id,campo,v){ var k=porCta.hasOwnProperty(id)?id:defId; porCta[k][campo]+=v; porCta[k].total+=v; };
     (cortes||[]).forEach(function(c){
-        var sumDes=0;
-        (c.tarjetaCuentas||[]).forEach(function(t){ var nt=parseFloat(t.neto)||0; sumDes+=nt; add(t.cuentaId,'term',nt); });
-        add(defId,'term', taBancoNeto(c)-sumDes);   // propina neta + cortes sin desglose
+        // Terminal + propinas, cada una en SU cuenta (núcleo: una sola verdad).
+        var _det=EtaaxCore.taBancoNetoDetalle(c, ctasDeb);
+        Object.keys(_det.porCuenta).forEach(function(id){ add(id,'term',_det.porCuenta[id]); });
+        add(defId,'term', _det.sinCuenta);          // cortes viejos / captura parcial
         var sumTr=0;
         (c.transferCuentas||[]).forEach(function(t){ var m=parseFloat(t.monto)||0; sumTr+=m; add(t.cuentaId,'resto',m); });
         add(defId,'resto', n(c.transferencia)-sumTr);   // sin desglose (cortes viejos) → predeterminada
