@@ -3301,6 +3301,13 @@ async function _refrescarCajaFuerte(){
         if(cajEl&&cajEl.classList.contains('open')) _abrirCajaFuerteContenido(true); // repintar con lo fresco
     }catch(e){} finally{ _cajRefrescando=false; }
 }
+// Fecha corta para las tiras de periodo: '2026-08-05' → '5 ago'
+function _fCorta(f){
+    if(!f) return '—';
+    var M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    var p=String(f).split('-');
+    return p.length===3 ? (parseInt(p[2],10)+' '+(M[parseInt(p[1],10)-1]||'')) : String(f);
+}
 function _abrirCajaFuerteContenido(_yaFresco){
     if(!_yaFresco) _refrescarCajaFuerte(); // pinta al instante con caché y refresca solo
     var lista=load().slice().sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
@@ -3334,11 +3341,19 @@ function _abrirCajaFuerteContenido(_yaFresco){
     var totTarjeta  = lista.reduce(function(s,c){return s+taBancoNeto(c);},0);
     var totComision = Math.max(0, totTarjetaBruto - totTarjeta);
     // Desglose de comisiones por cuenta (de los cortes con desglose guardado).
-    var comPorCuenta = {};
+    // comPorCuenta: por nombre de banco (card resumen). comComCta: por cuentaId CON
+    // PERIODO, para la tira que va bajo el saldo de cada cuenta.
+    var comPorCuenta = {}, comComCta = {};
     lista.forEach(function(c){
         (c.tarjetaCuentas||[]).forEach(function(t){
             var brut=(parseFloat(t.ventaTC)||0)+(parseFloat(t.ventaTD)||0), net=parseFloat(t.neto)||0;
-            if (brut>net) comPorCuenta[t.banco||'Tarjeta'] = (comPorCuenta[t.banco||'Tarjeta']||0) + (brut-net);
+            var com=brut-net; if(!(com>0)) return;
+            comPorCuenta[t.banco||'Tarjeta'] = (comPorCuenta[t.banco||'Tarjeta']||0) + com;
+            var k=t.cuentaId||'_sin', f=c.fecha||'';
+            if(!comComCta[k]) comComCta[k]={monto:0,desde:f,hasta:f,cortes:0};
+            comComCta[k].monto+=com; comComCta[k].cortes++;
+            if(f && (!comComCta[k].desde || f<comComCta[k].desde)) comComCta[k].desde=f;
+            if(f && (!comComCta[k].hasta || f>comComCta[k].hasta)) comComCta[k].hasta=f;
         });
     });
     var totTransfer = lista.reduce(function(s,c){return s+n(c.transferencia);},0);
@@ -3363,7 +3378,17 @@ function _abrirCajaFuerteContenido(_yaFresco){
                 if(s.term) det.push('terminal '+fmtM(s.term));
                 if(s.dep)  det.push('movimientos '+(s.dep>0?'+':'−')+fmtM(Math.abs(s.dep)));
                 if(s.resto)det.push((s.resto>0?'+':'−')+fmtM(Math.abs(s.resto))+' transfer/propinas/gastos');
-                return '<div class="cj-acum" style="margin:0;border-color:rgba(61,190,122,.25)">'+
+                // Tira delgada: comisiones que generó ESTA cuenta y el periodo contado.
+                var cc=comComCta[c.id];
+                var tiraCom='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;'+
+                    'background:rgba(224,90,58,.06);border:1px solid rgba(224,90,58,.20);border-radius:8px;padding:5px 11px">'+
+                    '<span style="font-size:10px;color:var(--text-dim);letter-spacing:.3px">💳 Comisiones'+
+                        (cc?' · '+_fCorta(cc.desde)+' → '+_fCorta(cc.hasta)+' <span style="opacity:.7">('+cc.cortes+' cortes)</span>':' · sin registros')+
+                    '</span>'+
+                    '<span style="font-size:12.5px;font-weight:700;color:'+(cc?'#ff9a9a':'var(--text-dim)')+'">'+(cc?'−'+fmtM(cc.monto):'—')+'</span>'+
+                '</div>';
+                return '<div style="display:flex;flex-direction:column;gap:6px">'+
+                    '<div class="cj-acum" style="margin:0;border-color:rgba(61,190,122,.25)">'+
                     '<div>'+
                         '<div style="font-size:13px;font-weight:600;color:var(--text)">🏛️ '+_escV(_cuentaBancoLabel(c.id))+'</div>'+
                         (det.length?'<div style="font-size:10px;color:var(--text-dim);margin-top:2px">'+det.join(' · ')+'</div>':'')+
@@ -3373,6 +3398,8 @@ function _abrirCajaFuerteContenido(_yaFresco){
                         '<div class="cj-acum-val" style="font-size:20px;color:'+(s.total<0?'#ff9a9a':'var(--green)')+'">'+fmtM(s.total)+'</div>'+
                         '<button onclick="conciliarCuenta(\''+c.id+'\')" title="Ajustar al saldo REAL del banco (cashback, promos de comisión, cobros del banco…)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:3px 9px;font-size:10px;cursor:pointer;font-family:inherit">⚖️ Conciliar</button>'+
                     '</div>'+
+                    '</div>'+
+                    tiraCom+
                 '</div>';
             }).join('')+
             '</div>'+
