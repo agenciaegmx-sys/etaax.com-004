@@ -368,7 +368,11 @@ function guardarCb(){
     var id=document.getElementById('cbId').value || (Date.now().toString(36)+Math.random().toString(36).slice(2,5));
     var comTC=parseFloat(document.getElementById('cbComTC').value);
     var comTD=parseFloat(document.getElementById('cbComTD').value);
-    var rec={
+    // Se parte del registro ANTERIOR y solo se pisan los campos del formulario.
+    // Antes se reconstruía desde cero y cada edición borraba lo que no estuviera en
+    // pantalla — entre otras cosas la marca de PREDETERMINADA, que se perdía sola.
+    var _prev=(_cache||[]).find(function(x){return x.id===id;})||{};
+    var rec=Object.assign({}, _prev, {
         id:id, banco:banco,
         alias:document.getElementById('cbAlias').value.trim(),
         tipo:_tipoActual,
@@ -387,7 +391,7 @@ function guardarCb(){
         // Una cuenta que se deja de usar se DESACTIVA, no se borra: su historial sigue
         // contando en los saldos, pero ya no aparece para capturar movimientos nuevos.
         activo:(_prevActivo(id)===false?'0':'1')
-    };
+    });
     _cache=(_cache||[]).filter(function(x){return x.id!==id;});
     _cache.push(rec);
     _sbUp(rec);
