@@ -96,12 +96,29 @@
          no dice de qué cuenta es, porque era la única que existía entonces.
        Antes ese historial seguía a la predeterminada de turno y cambiarla lo mudaba
        de cuenta. Una cuenta nueva empieza su propia historia el día que se registra. */
+    // Una cuenta que se dejó de usar se DESACTIVA (activo:'0'), no se borra: su
+    // historial sigue contando en los saldos, pero ya no se ofrece para capturar.
+    function ctaActiva(c) { return !c || c.activo === undefined || (c.activo !== '0' && c.activo !== false); }
     function cuentasDebito(cuentasBancarias) {
         var todas = (cuentasBancarias || []).filter(function (c) { return c && c.tipo === 'debito'; });
-        var baseId = todas.length ? todas[0].id : '';
+        // La BASE es la de alta más antigua. Con fechaAlta se decide con el dato real;
+        // sin ella (cuentas viejas) manda el orden de creación con el que llegan.
+        var base = null;
+        todas.forEach(function (c, i) {
+            if (!base) { base = { c: c, f: c.fechaAlta || '', i: i }; return; }
+            var f = c.fechaAlta || '';
+            if (base.f && f) { if (f < base.f) base = { c: c, f: f, i: i }; }
+            else if (!base.f && f) { /* la que SÍ tiene fecha no desbanca a una sin fecha: la sin fecha es más vieja */ }
+            else if (base.f && !f) { base = { c: c, f: '', i: i }; }   // sin fecha = de antes de que existiera el campo
+        });
+        var baseId = base ? base.c.id : '';
         return todas.slice()
             .sort(function (a, b) { return (b.predeterminada ? 1 : 0) - (a.predeterminada ? 1 : 0); })
             .map(function (c) { return c.id === baseId ? Object.assign({}, c, { esBase: true }) : c; });
+    }
+    // Solo las que se pueden usar HOY (para los selectores de captura).
+    function cuentasDebitoActivas(cuentasBancarias) {
+        return cuentasDebito(cuentasBancarias).filter(ctaActiva);
     }
     // La cuenta a la que pertenece lo NO atribuido: la marcada `esBase` (la más
     // antigua) y, si el catálogo no viene marcado, la primera de la lista.
@@ -309,7 +326,8 @@
         efNeto: efNeto, taBanco: taBanco, ventasBruta: ventasBruta, flujoNeto: flujoNeto,
         propinas: propinas, cheque: cheque, resultado: resultado, resguardo: resguardo,
         comEf: comEf, netoCuenta: netoCuenta, taBancoNeto: taBancoNeto, taBancoNetoDetalle: taBancoNetoDetalle,
-        ctaBaseCorte: ctaBaseCorte, ctaBaseCatalogo: ctaBaseCatalogo, cuentasDebito: cuentasDebito,
+        ctaBaseCorte: ctaBaseCorte, ctaBaseCatalogo: ctaBaseCatalogo,
+        cuentasDebito: cuentasDebito, cuentasDebitoActivas: cuentasDebitoActivas, ctaActiva: ctaActiva,
         comisionBancoCorte: comisionBancoCorte,
         depEfecto: depEfecto, esRetiro: esRetiro,
         DIA_FACTORES_DEFAULT: DIA_FACTORES_DEFAULT, diasOperativos: diasOperativos, operaDow: operaDow, calcMetaDiaria: calcMetaDiaria,

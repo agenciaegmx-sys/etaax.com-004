@@ -260,6 +260,37 @@ test('comisionBancoCorte = bruto − neto (nunca negativa)', () =>
         const pc = A._debitoPorCuenta([], [], _ctasCat, 900);
         eq(pc.a.total, -900); eq(pc.b.total, 0);
     });
+
+    // FECHA DE ALTA: con el dato explícito, la base se decide por fecha y no por el
+    // orden con que llegan del servidor.
+    test('la base se decide por fechaAlta, no por el orden de llegada', () => {
+        const cat = [
+            { ...ctaSinIva, tipo: 'debito', fechaAlta: '2026-07-23', predeterminada: true },  // 'b' llega primero pero es NUEVA
+            { ...ctaConIva, tipo: 'debito', fechaAlta: '2026-05-01' },                        // 'a' es la vieja
+        ];
+        eq(A.EtaaxCore.ctaBaseCatalogo(A.EtaaxCore.cuentasDebito(cat)).id, 'a');
+    });
+    test('una cuenta sin fechaAlta se considera más antigua que una con fecha', () => {
+        const cat = [
+            { ...ctaSinIva, tipo: 'debito', fechaAlta: '2026-07-23' },
+            { ...ctaConIva, tipo: 'debito' },   // sin fecha = de antes de que existiera el campo
+        ];
+        eq(A.EtaaxCore.ctaBaseCatalogo(A.EtaaxCore.cuentasDebito(cat)).id, 'a');
+    });
+
+    // CUENTA INACTIVA: se deja de usar pero su historial y su saldo siguen contando.
+    {
+        const cat = [
+            { ...ctaConIva, tipo: 'debito', fechaAlta: '2026-05-01', activo: '0' },  // 'a' desactivada
+            { ...ctaSinIva, tipo: 'debito', fechaAlta: '2026-07-23', predeterminada: true },
+        ];
+        test('la cuenta inactiva NO se ofrece para capturar', () =>
+            eq(A.EtaaxCore.cuentasDebitoActivas(cat).length, 1));
+        test('la cuenta inactiva SÍ sigue en el cálculo de saldos', () =>
+            eq(A.EtaaxCore.cuentasDebito(cat).length, 2));
+        test('la inactiva puede seguir siendo la base (su historial es suyo)', () =>
+            eq(A.EtaaxCore.ctaBaseCatalogo(A.EtaaxCore.cuentasDebito(cat)).id, 'a'));
+    }
 }
 
 // Saldo de débito POR CUENTA (_debitoPorCuenta): atribución exacta + invariante.

@@ -2258,9 +2258,15 @@ var _cacheGastosExt = null; // gastos cargados para caja fuerte
 var _cuentasBancarias = []; // cuentas bancarias (tabla tarjetas_credito): débito/crédito + comisiones
 // Cuentas de DÉBITO (ahí se deposita la venta con tarjeta). Las viejas sin tipo eran crédito.
 function _cuentasDebito(){
-    // Delegado al núcleo: predeterminada primero (cuenta A del corte) y la más
-    // ANTIGUA marcada `esBase` — dueña del historial sin cuenta asignada.
+    // TODAS las de débito (incluidas las desactivadas): sus saldos y su historial
+    // siguen contando. Predeterminada primero (cuenta A del corte) y la más ANTIGUA
+    // marcada `esBase` — dueña de lo que no dice de qué cuenta es.
     return EtaaxCore.cuentasDebito(_cuentasBancarias||[]);
+}
+// Las que se ofrecen para CAPTURAR (corte, gastos, movimientos): sin las inactivas.
+function _ctasCaptura(){
+    var act=EtaaxCore.cuentasDebitoActivas(_cuentasBancarias||[]);
+    return act.length?act:_cuentasDebito();   // si todas están inactivas, no dejar la captura sin cuentas
 }
 // Filas para el desglose del corte: las cuentas de débito, o una genérica si no hay ninguna
 // (así SIEMPRE se capturan venta con tarjeta crédito y débito; sin cuenta no hay comisión).
@@ -3018,7 +3024,7 @@ function _ctaLabel(c){ return (c.banco||'Cuenta') + (c.alias?' · '+c.alias:'') 
 function _ctaComTxt(c){ var tc=parseFloat(c.comisionTC),td=parseFloat(c.comisionTD),iva=c.aplicaIva?'+IVA':''; return 'com. TC '+(isNaN(tc)?'—':tc+'%'+iva)+' · TD '+(isNaN(td)?'—':td+'%'+iva); }
 function _netoCuenta(c, tc, td){ return EtaaxCore.netoCuenta(c, tc, td); }
 function renderTarjetaCuentas(saved, fallbackTotal){
-    var ctas=_cuentasDebito(), ctaA=ctas[0]||null, ctaB=ctas[1]||null, extras=ctas.slice(2), keyA=ctaA?ctaA.id:'_sin';
+    var ctas=_ctasCaptura(), ctaA=ctas[0]||null, ctaB=ctas[1]||null, extras=ctas.slice(2), keyA=ctaA?ctaA.id:'_sin';
     saved = saved || {}; // { cuentaId: {tc, td} }
     // Corte viejo (total de tarjeta sin desglose): migrar todo a la cuenta A como débito.
     if(!Object.keys(saved).length && parseFloat(fallbackTotal)>0){ saved[keyA]={td:parseFloat(fallbackTotal)}; }
@@ -3150,7 +3156,7 @@ function _renderPropCuentas(){
     }
 }
 function _getPropCuentas(){
-    var ctas=_cuentasDebito(), out={};
+    var ctas=_ctasCaptura(), out={};
     var a=parseFloat((document.getElementById('fPropTarjeta')||{}).value)||0;
     var b=parseFloat((document.getElementById('fPropTarjetaB')||{}).value)||0;
     if(a&&ctas[0]) out[ctas[0].id]=a;
@@ -3159,7 +3165,7 @@ function _getPropCuentas(){
 }
 
 function calcTarjeta(){
-    var ctas=_cuentasDebito(), ctaA=ctas[0]||null, ctaB=ctas[1]||null, keyA=ctaA?ctaA.id:'_sin';
+    var ctas=_ctasCaptura(), ctaA=ctas[0]||null, ctaB=ctas[1]||null, keyA=ctaA?ctaA.id:'_sin';
     var sumGross=0;
     var tcA=parseFloat((document.getElementById('fTarCred')||{}).value)||0;
     var tdA=parseFloat((document.getElementById('fTarDeb')||{}).value)||0;
@@ -3192,7 +3198,7 @@ function calcTarjeta(){
    viejo sin desglose sigue cayendo en la predeterminada: nada se mueve hacia atrás. */
 function renderTransferCuentas(saved, fallbackTotal){
     var wrap=document.getElementById('transferCuentasWrap'); if(!wrap) return;
-    var ctas=_cuentasDebito();
+    var ctas=_ctasCaptura();
     saved = saved || {};   // { cuentaId: monto }
     var keyDef = ctas.length ? ctas[0].id : '_sin';
     if(!Object.keys(saved).length && parseFloat(fallbackTotal)>0) saved[keyDef]=parseFloat(fallbackTotal);
@@ -3214,7 +3220,7 @@ function calcTransfer(){
     calcCorte();
 }
 function _getTransferCuentas(){
-    var ctas=_cuentasDebito(), out=[];
+    var ctas=_ctasCaptura(), out=[];
     document.querySelectorAll('.tr-cta').forEach(function(i){
         var m=parseFloat(i.value)||0; if(!m) return;
         var c=ctas.find(function(x){ return x.id===i.getAttribute('data-id'); });
@@ -3224,7 +3230,7 @@ function _getTransferCuentas(){
 }
 
 function _getTarjetaCuentas(){
-    var ctas=_cuentasDebito(), out=[], ctaA=ctas[0]||null, ctaB=ctas[1]||null, keyA=ctaA?ctaA.id:'_sin';
+    var ctas=_ctasCaptura(), out=[], ctaA=ctas[0]||null, ctaB=ctas[1]||null, keyA=ctaA?ctaA.id:'_sin';
     var tcA=parseFloat((document.getElementById('fTarCred')||{}).value)||0;
     var tdA=parseFloat((document.getElementById('fTarDeb')||{}).value)||0;
     if(tcA||tdA) out.push({cuentaId:keyA,banco:ctaA?ctaA.banco:'Tarjeta',alias:ctaA?(ctaA.alias||''):'',ventaTC:tcA,ventaTD:tdA,neto:_netoCuenta(ctaA,tcA,tdA)});
@@ -3564,6 +3570,7 @@ function _abrirCajaFuerteContenido(_yaFresco){
                         '<div style="font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:7px;flex-wrap:wrap">'+
                             '<span>🏛️ '+_escV(_cuentaBancoLabel(c.id))+'</span>'+
                             (c.predeterminada?'<span style="font-size:9px;background:rgba(245,200,66,.15);color:var(--accent);border:1px solid rgba(245,200,66,.4);border-radius:10px;padding:2px 8px;white-space:nowrap;font-weight:600">⭐ Predeterminada</span>':'')+
+                            (EtaaxCore.ctaActiva(c)?'':'<span style="font-size:9px;background:rgba(224,90,58,.12);color:#ff9a9a;border:1px solid rgba(224,90,58,.35);border-radius:10px;padding:2px 8px;white-space:nowrap;font-weight:600" title="Ya no se usa para capturar, pero su saldo e historial siguen contando">⏸️ Inactiva</span>')+
                         '</div>'+
                         (det.length?'<div style="font-size:10px;color:var(--text-dim);margin-top:2px">'+det.join(' · ')+'</div>':'')+
                         (c.predeterminada?'<div style="font-size:10px;color:var(--text-dim);margin-top:3px">recibe propinas netas, gastos sin cuenta y todo movimiento sin desglose</div>':'')+

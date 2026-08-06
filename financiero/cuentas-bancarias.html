@@ -174,6 +174,13 @@
             </div>
         </div>
 
+        <div class="fg"><label>Cuenta activa desde</label>
+            <input id="cbAlta" type="date">
+            <div style="font-size:10.5px;color:var(--text-dim);margin-top:5px;line-height:1.5">
+                Desde cuándo se usa esta cuenta. El sistema atribuye los movimientos viejos
+                que no dicen de qué cuenta son a la cuenta <b>más antigua</b>: esta fecha es la
+                que decide cuál es.</div>
+        </div>
         <div class="fg"><label>Color</label><input id="cbColor" type="color" value="#3dbe7a"></div>
 
         <input type="hidden" id="cbId">
@@ -253,15 +260,17 @@ function render(){
     cont.innerHTML=lista.map(function(c){
         var tipo=_tipoDe(c), esCred=tipo==='credito';
         var color=c.color||'#3dbe7a';
-        return '<div class="cb-card" style="border-left-color:'+color+'">'
+        return '<div class="cb-card" style="border-left-color:'+color+(_esActiva(c)?'':';opacity:.55')+'">'
             +'<div class="cb-card-top">'
                 +'<div>'
                     +'<div class="cb-bank">'+_esc(c.banco)+'</div>'
                     +(c.alias?'<div class="cb-alias">'+_esc(c.alias)+'</div>':'')
                     +'<div class="cb-digits">···· '+_esc(c.digitos||'——')+'</div>'
+                    +(c.fechaAlta?'<div style="font-size:10px;color:var(--text-dim);margin-top:4px">activa desde '+_esc(c.fechaAlta)+'</div>':'')
                 +'</div>'
                 +'<span class="cb-badge '+tipo+'">'+(esCred?'Crédito':'Débito')+'</span>'
                 +(!esCred && c.predeterminada ? '<span style="font-size:9px;background:rgba(245,200,66,.15);color:var(--accent);border:1px solid rgba(245,200,66,.4);border-radius:10px;padding:2px 8px;margin-left:6px;white-space:nowrap">⭐ Predeterminada</span>' : '')
+                +(!_esActiva(c) ? '<span style="font-size:9px;background:rgba(224,90,58,.12);color:#ff9a9a;border:1px solid rgba(224,90,58,.35);border-radius:10px;padding:2px 8px;margin-left:6px;white-space:nowrap">⏸️ Inactiva</span>' : '')
             +'</div>'
             +(!esCred
                 ? '<div class="cb-com">'
@@ -280,7 +289,8 @@ function render(){
                   +'</div>'
                 : '')
             +'<div class="cb-acts" style="margin-top:12px">'
-                +(!esCred && !c.predeterminada ? '<button class="cb-btn" onclick="marcarPredeterminada(\''+c.id+'\')" title="La venta con tarjeta de los cortes se registra en esta cuenta y sus comisiones son la base del cálculo">⭐ Hacer predeterminada</button>' : '')
+                +(!esCred && !c.predeterminada && _esActiva(c) ? '<button class="cb-btn" onclick="marcarPredeterminada(\''+c.id+'\')" title="La venta con tarjeta de los cortes se registra en esta cuenta y sus comisiones son la base del cálculo">⭐ Hacer predeterminada</button>' : '')
+                +'<button class="cb-btn" onclick="toggleActivaCuenta(\''+c.id+'\')" title="'+(_esActiva(c)?'Dejar de usarla sin borrar su historial':'Volver a usarla')+'">'+(_esActiva(c)?'⏸️ Desactivar':'▶️ Activar')+'</button>'
                 +'<button class="cb-btn" onclick="abrirCb(\''+c.id+'\')">✏️ Editar</button>'
                 +'<button class="cb-btn del" onclick="eliminarCb(\''+c.id+'\')">✕ Eliminar</button>'
             +'</div>'
@@ -333,10 +343,24 @@ function abrirCb(id){
     document.getElementById('cbCorte').value=c.corte||'';
     document.getElementById('cbPago').value=c.pago||'';
     document.getElementById('cbColor').value=c.color||'#3dbe7a';
+    document.getElementById('cbAlta').value=c.fechaAlta||(id?'':new Date().toISOString().slice(0,10));
     document.getElementById('cbModalTitle').textContent=id?'✏️ Editar cuenta':'🏦 Nueva cuenta';
     document.getElementById('cbModal').classList.add('open');
 }
 function cerrarCb(){ document.getElementById('cbModal').classList.remove('open'); }
+
+// Una cuenta se DESACTIVA, nunca se borra si tiene historial: sus movimientos
+// siguen contando en los saldos, pero deja de ofrecerse para capturar cosas nuevas.
+function _esActiva(c){ return !c || c.activo===undefined || (c.activo!=='0' && c.activo!==false); }
+function _prevActivo(id){ var c=(_cache||[]).find(function(x){return x.id===id;}); return c?_esActiva(c):true; }
+function toggleActivaCuenta(id){
+    var c=(_cache||[]).find(function(x){return x.id===id;}); if(!c) return;
+    var activa=_esActiva(c);
+    if(activa && c.predeterminada){ alert('Esta cuenta es la predeterminada. Marca otra como predeterminada antes de desactivarla.'); return; }
+    if(activa && !confirm('¿Desactivar «'+(c.alias||c.banco)+'»?\n\nSu historial y su saldo se conservan; solo deja de aparecer al capturar cortes, gastos y movimientos nuevos.')) return;
+    c.activo = activa ? '0' : '1';
+    _sbUp(c); render();
+}
 
 function guardarCb(){
     var banco=document.getElementById('cbBanco').value.trim();
@@ -356,7 +380,13 @@ function guardarCb(){
         color:document.getElementById('cbColor').value,
         limite:(_tipoActual==='credito')?(parseFloat(document.getElementById('cbLimite').value)||0):0,
         corte:(_tipoActual==='credito')?(parseInt(document.getElementById('cbCorte').value)||0):0,
-        pago:(_tipoActual==='credito')?(parseInt(document.getElementById('cbPago').value)||0):0
+        pago:(_tipoActual==='credito')?(parseInt(document.getElementById('cbPago').value)||0):0,
+        // Desde cuándo se usa. Decide cuál es la cuenta "base" (la más antigua), dueña
+        // del historial que no dice de qué cuenta es.
+        fechaAlta:document.getElementById('cbAlta').value||'',
+        // Una cuenta que se deja de usar se DESACTIVA, no se borra: su historial sigue
+        // contando en los saldos, pero ya no aparece para capturar movimientos nuevos.
+        activo:(_prevActivo(id)===false?'0':'1')
     };
     _cache=(_cache||[]).filter(function(x){return x.id!==id;});
     _cache.push(rec);
