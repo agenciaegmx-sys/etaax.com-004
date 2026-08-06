@@ -299,6 +299,20 @@
         .cj-body{overflow-y:auto;flex:1;min-height:0;padding:16px 22px 36px;display:flex;flex-direction:column;gap:16px;}
         .cj-acum{background:rgba(245,200,66,.08);border:1px solid rgba(245,200,66,.25);border-radius:10px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;}
         .cj-acum-lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);}
+        /* Desglose por método (venta / gastos) del período elegido */
+        .dx-metodos{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 0 14px;}
+        @media(max-width:820px){ .dx-metodos{grid-template-columns:1fr;} }
+        .dxm{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;}
+        .dxm-hd{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px;}
+        .dxm-lbl{font-size:9.5px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);}
+        .dxm-tot{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:.5px;line-height:1;}
+        .dxm-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--border);font-size:12.5px;}
+        .dxm-row:first-of-type{border-top:none;}
+        .dxm-row .n{flex:1;color:var(--text-muted);display:flex;align-items:center;gap:7px;min-width:0;}
+        .dxm-row .v{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;}
+        .dxm-row .p{font-size:10.5px;color:var(--text-dim);width:42px;text-align:right;font-variant-numeric:tabular-nums;}
+        .dxm-sub{font-size:10.5px;color:var(--text-dim);padding:2px 0 2px 20px;display:flex;justify-content:space-between;gap:8px;}
+        .dxm-sub b{color:var(--text-muted);font-weight:600;font-variant-numeric:tabular-nums;}
         /* Saldo por cuenta bancaria: SIEMPRE de dos en dos, mismo tamaño. Con auto-fit,
            al agregar una 3ª cuenta se recolocaban en 3 columnas y los cards encogían;
            así se van acumulando en parejas sin cambiar de tamaño ni de diseño. */
@@ -640,6 +654,9 @@
                     <div class="sum-card-sub" id="sumMetaSemPct">—</div>
                 </div>
             </div>
+            <!-- Desglose del período por MÉTODO: es lo que permite cotejar a mano
+                 contra el banco (venta con tarjeta por cuenta) y contra la caja. -->
+            <div class="dx-metodos" id="dxMetodos"></div>
             <div class="card">
                 <div class="card-header" style="justify-content:space-between">
                     <h2>Cortes del período</h2>
@@ -2773,6 +2790,84 @@ function renderTabla(cur){
         document.getElementById('ftResguardo').textContent=fmtM(tRsg);
         foot.style.display='';
     }
+    _renderMetodos(lista);
+}
+
+/* ── Desglose del período por MÉTODO ─────────────────────────────────────────
+   Lo que se cobró (efectivo / tarjeta / transferencia) y lo que se pagó
+   (efectivo de caja / banco / tarjeta de crédito). La venta con tarjeta y la
+   transferencia se abren por CUENTA: es el número con el que se cotejan a mano
+   los saldos de Caja Fuerte contra la banca real. */
+function _renderMetodos(lista){
+    var cont=document.getElementById('dxMetodos'); if(!cont) return;
+    if(!lista||!lista.length){ cont.innerHTML=''; return; }
+    var ctas=_cuentasDebito();
+    var nomCta=function(id){ if(!id||id==='_sin') return 'sin cuenta asignada';
+        var c=ctas.find(function(x){return x.id===id;});
+        return c?(c.alias||c.banco||id):'cuenta dada de baja'; };
+
+    // ── Ventas ──
+    var vEf=0,vTa=0,vTr=0, taPorCta={}, trPorCta={};
+    lista.forEach(function(c){
+        vEf+=n(c.efectivo); vTa+=n(c.tarjeta); vTr+=n(c.transferencia);
+        var brutoDes=0;
+        (c.tarjetaCuentas||[]).forEach(function(t){
+            var b=(parseFloat(t.ventaTC)||0)+(parseFloat(t.ventaTD)||0); brutoDes+=b;
+            if(b) taPorCta[t.cuentaId]=(taPorCta[t.cuentaId]||0)+b;
+        });
+        var restoTa=n(c.tarjeta)-brutoDes;
+        if(restoTa>0.005) taPorCta['_sin']=(taPorCta['_sin']||0)+restoTa;
+        var sumTr=0;
+        (c.transferCuentas||[]).forEach(function(t){ var m=parseFloat(t.monto)||0; sumTr+=m; if(m) trPorCta[t.cuentaId]=(trPorCta[t.cuentaId]||0)+m; });
+        var restoTr=n(c.transferencia)-sumTr;
+        if(restoTr>0.005) trPorCta['_sin']=(trPorCta['_sin']||0)+restoTr;
+    });
+    var vTot=vEf+vTa+vTr;
+
+    // ── Gastos del MISMO periodo y sucursales que los cortes ──
+    var fechas={}; lista.forEach(function(c){ fechas[c.fecha+'|'+(c.sucursalId||'suc_principal')]=1; });
+    var gEfC=0,gEfF=0,gBanco=0,gCred=0, gBancoPorCta={};
+    _loadGastos().forEach(function(g){
+        if(!_gastoVisible(g)) return;
+        if(!fechas[g.fecha+'|'+(g.sucursalId||'suc_principal')]) return;
+        var m=n(g.monto);
+        if(g.metodoPago==='caja_chica') gEfC+=m;
+        else if(g.metodoPago==='caja_fuerte') gEfF+=m;
+        else if(g.metodoPago==='banco'){
+            if(g.metodoBanco==='credito') gCred+=m;
+            else { gBanco+=m; gBancoPorCta[g.cuentaBancoId||'_sin']=(gBancoPorCta[g.cuentaBancoId||'_sin']||0)+m; }
+        }
+    });
+    var gTot=gEfC+gEfF+gBanco+gCred;
+
+    var pct=function(v,t){ return t>0?((v/t*100).toFixed(1)+'%'):'—'; };
+    var fila=function(icono,nombre,val,tot,color){
+        return '<div class="dxm-row"><span class="n">'+icono+' '+nombre+'</span>'+
+            '<span class="p">'+pct(val,tot)+'</span>'+
+            '<span class="v" style="color:'+color+'">'+fmtM(val)+'</span></div>';
+    };
+    var subs=function(mapa){
+        return Object.keys(mapa).sort(function(a,b){return mapa[b]-mapa[a];}).map(function(id){
+            return '<div class="dxm-sub"><span>↳ '+_escV(nomCta(id))+'</span><b>'+fmtM(mapa[id])+'</b></div>';
+        }).join('');
+    };
+
+    cont.innerHTML =
+        '<div class="dxm">'+
+            '<div class="dxm-hd"><span class="dxm-lbl">💰 Venta por método</span>'+
+                '<span class="dxm-tot" style="color:var(--green)">'+fmtM(vTot)+'</span></div>'+
+            fila('💵','Efectivo',vEf,vTot,'var(--green)')+
+            fila('💳','Tarjeta',vTa,vTot,'var(--green)')+ (vTa?subs(taPorCta):'')+
+            fila('🏦','Transferencia',vTr,vTot,'var(--green)')+ (vTr?subs(trPorCta):'')+
+        '</div>'+
+        '<div class="dxm">'+
+            '<div class="dxm-hd"><span class="dxm-lbl">📤 Gastos por método</span>'+
+                '<span class="dxm-tot" style="color:var(--red)">'+fmtM(gTot)+'</span></div>'+
+            fila('💵','Efectivo · caja chica',gEfC,gTot,'var(--red)')+
+            fila('🏦','Efectivo · caja fuerte',gEfF,gTot,'var(--red)')+
+            fila('🏛️','Banco (débito/transfer)',gBanco,gTot,'var(--red)')+ (gBanco?subs(gBancoPorCta):'')+
+            fila('💳','Tarjeta de crédito',gCred,gTot,'var(--red)')+
+        '</div>';
 }
 
 /* ── Modal ── */
