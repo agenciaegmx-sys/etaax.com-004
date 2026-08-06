@@ -218,6 +218,34 @@ test('comisionBancoCorte = bruto − neto (nunca negativa)', () =>
         const _pc4 = A._debitoPorCuenta([], [], _ctas, 400);
         eq(_pc4.a.total, -400); eq(_pc4.b.total, 0);
     });
+
+    // TRANSFERENCIA POR CUENTA (transferCuentas): antes TODA transferencia caía en la
+    // predeterminada y el saldo por cuenta no cuadraba con el banco.
+    test('transferencia con desglose cae en SU cuenta', () => {
+        const _c = [{ transferencia: 900, transferCuentas: [{ cuentaId: 'b', monto: 900 }] }];
+        const _pc5 = A._debitoPorCuenta(_c, [], _ctas, 0);
+        eq(_pc5.b.total, 900); eq(_pc5.a.total, 0);
+    });
+    test('transferencia repartida entre dos cuentas', () => {
+        const _c = [{ transferencia: 1500, transferCuentas: [{ cuentaId: 'a', monto: 1000 }, { cuentaId: 'b', monto: 500 }] }];
+        const _pc6 = A._debitoPorCuenta(_c, [], _ctas, 0);
+        eq(_pc6.a.total, 1000); eq(_pc6.b.total, 500);
+    });
+    test('corte VIEJO sin desglose: la transferencia sigue en la predeterminada', () => {
+        const _pc7 = A._debitoPorCuenta([{ transferencia: 700 }], [], _ctas, 0);
+        eq(_pc7.a.total, 700); eq(_pc7.b.total, 0);
+    });
+    test('desglose PARCIAL: lo no desglosado se va a la predeterminada (nunca se pierde)', () => {
+        const _c = [{ transferencia: 1000, transferCuentas: [{ cuentaId: 'b', monto: 600 }] }];
+        const _pc8 = A._debitoPorCuenta(_c, [], _ctas, 0);
+        eq(_pc8.b.total, 600); eq(_pc8.a.total, 400);
+        eq(_pc8.a.total + _pc8.b.total, 1000);   // INVARIANTE: la suma = el total del corte
+    });
+    test('transferencia a una cuenta BORRADA cae en la predeterminada', () => {
+        const _c = [{ transferencia: 500, transferCuentas: [{ cuentaId: 'zz-borrada', monto: 500 }] }];
+        const _pc9 = A._debitoPorCuenta(_c, [], _ctas, 0);
+        eq(_pc9.a.total, 500); eq(_pc9.b.total, 0);
+    });
 }
 
 // Depósitos y retiros: efecto sobre los fondos
