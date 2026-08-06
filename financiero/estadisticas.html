@@ -519,7 +519,10 @@ async function _sbInit(){
 function cortesR(r){ return (_cortes||[]).filter(_deSuc).filter(function(c){return c.fecha&&EtaaxCore.inRange(c.fecha,r.from,r.to);}); }
 function gastosR(r){ return (_gastos||[]).filter(_deSuc).filter(function(g){return g.fecha&&EtaaxCore.inRange(g.fecha,r.from,r.to);}); }
 function otrosR(r){ return (_otros||[]).filter(_deSuc).filter(function(o){return o.fecha&&EtaaxCore.inRange(o.fecha,r.from,r.to);}); }
-function ctasDeb(){ return (_ctas||[]).filter(function(c){return c&&c.tipo==='debito';}).sort(function(a,b){return (b.predeterminada?1:0)-(a.predeterminada?1:0);}); }
+// Delegado al núcleo (misma verdad que Diario): predeterminada primero y la más
+// antigua marcada `esBase` — sin esto, la comisión de los cortes viejos se
+// calculaba con una tasa distinta aquí que en Caja Fuerte.
+function ctasDeb(){ return EtaaxCore.cuentasDebito(_ctas||[]); }
 
 /* ── Agregadores por rango (todo el dinero vía núcleo) ── */
 function aVentas(r){ return cortesR(r).reduce(function(s,c){return s+EtaaxCore.ventasBruta(c);},0)+otrosR(r).reduce(function(s,o){return s+n(o.monto);},0); }

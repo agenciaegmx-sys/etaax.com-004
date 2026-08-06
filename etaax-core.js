@@ -89,12 +89,33 @@
        pasado (se llevaba la atribución y recalculaba comisiones de meses viejos).
        Orden: el sello del corte → la cuenta A de su propio desglose (el formulario
        siempre pone la predeterminada primero) → la predeterminada actual. */
+    /* Cuentas de débito listas para las fórmulas, a partir del catálogo tal como
+       viene de la nube (ORDEN DE CREACIÓN):
+       · la PREDETERMINADA va primero → es la "cuenta A" del corte;
+       · la más ANTIGUA queda marcada `esBase` → a ella pertenece el historial que
+         no dice de qué cuenta es, porque era la única que existía entonces.
+       Antes ese historial seguía a la predeterminada de turno y cambiarla lo mudaba
+       de cuenta. Una cuenta nueva empieza su propia historia el día que se registra. */
+    function cuentasDebito(cuentasBancarias) {
+        var todas = (cuentasBancarias || []).filter(function (c) { return c && c.tipo === 'debito'; });
+        var baseId = todas.length ? todas[0].id : '';
+        return todas.slice()
+            .sort(function (a, b) { return (b.predeterminada ? 1 : 0) - (a.predeterminada ? 1 : 0); })
+            .map(function (c) { return c.id === baseId ? Object.assign({}, c, { esBase: true }) : c; });
+    }
+    // La cuenta a la que pertenece lo NO atribuido: la marcada `esBase` (la más
+    // antigua) y, si el catálogo no viene marcado, la primera de la lista.
+    function ctaBaseCatalogo(cuentasDebito) {
+        var ctas = cuentasDebito || [];
+        for (var i = 0; i < ctas.length; i++) if (ctas[i] && ctas[i].esBase) return ctas[i];
+        return ctas[0] || null;
+    }
     function ctaBaseCorte(c, cuentasDebito) {
         var ctas = cuentasDebito || [];
         var buscar = function (id) { for (var i = 0; i < ctas.length; i++) if (ctas[i].id === id) return ctas[i]; return null; };
         var cta = c && c.ctaDefaultId ? buscar(c.ctaDefaultId) : null;
         if (!cta && c && c.tarjetaCuentas && c.tarjetaCuentas.length) cta = buscar(c.tarjetaCuentas[0].cuentaId);
-        return cta || ctas[0] || null;
+        return cta || ctaBaseCatalogo(ctas);
     }
     function taBancoNetoDetalle(c, cuentasDebito) {
         var ctas = cuentasDebito || [];
@@ -288,7 +309,7 @@
         efNeto: efNeto, taBanco: taBanco, ventasBruta: ventasBruta, flujoNeto: flujoNeto,
         propinas: propinas, cheque: cheque, resultado: resultado, resguardo: resguardo,
         comEf: comEf, netoCuenta: netoCuenta, taBancoNeto: taBancoNeto, taBancoNetoDetalle: taBancoNetoDetalle,
-        ctaBaseCorte: ctaBaseCorte,
+        ctaBaseCorte: ctaBaseCorte, ctaBaseCatalogo: ctaBaseCatalogo, cuentasDebito: cuentasDebito,
         comisionBancoCorte: comisionBancoCorte,
         depEfecto: depEfecto, esRetiro: esRetiro,
         DIA_FACTORES_DEFAULT: DIA_FACTORES_DEFAULT, diasOperativos: diasOperativos, operaDow: operaDow, calcMetaDiaria: calcMetaDiaria,

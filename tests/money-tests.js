@@ -242,8 +242,24 @@ test('comisionBancoCorte = bruto − neto (nunca negativa)', () =>
         eq(Math.round(pc.a.total * 100) / 100,
            Math.round((A._netoCuenta(ctaConIva, 0, 3000) + A._netoCuenta(ctaConIva, 0, 200)) * 100) / 100);
     });
-    test('corte sin sello NI desglose (muy viejo) cae en la predeterminada actual', () =>
-        eq(A.EtaaxCore.ctaBaseCorte({ tarjeta: 500 }, _ctasAF).id, 'b'));
+    // Regla de Edwin: el historial sin cuenta pertenece a la PRIMERA cuenta
+    // registrada (la única que existía entonces), no a la predeterminada de turno.
+    // Una cuenta nueva empieza su propia historia el día que se da de alta.
+    const _catalogo = [                                   // orden de creación, como llega de la nube
+        { ...ctaConIva, tipo: 'debito', predeterminada: false },   // 'a' — la primera registrada
+        { ...ctaSinIva, tipo: 'debito', predeterminada: true },    // 'b' — nueva y predeterminada hoy
+    ];
+    const _ctasCat = A.EtaaxCore.cuentasDebito(_catalogo);
+    test('cuentasDebito: la predeterminada va primero (cuenta A del corte)', () =>
+        eq(_ctasCat[0].id, 'b'));
+    test('cuentasDebito: la más antigua queda marcada como base', () =>
+        eq(A.EtaaxCore.ctaBaseCatalogo(_ctasCat).id, 'a'));
+    test('corte sin sello NI desglose (muy viejo) cae en la PRIMERA cuenta, no en la nueva', () =>
+        eq(A.EtaaxCore.ctaBaseCorte({ tarjeta: 500 }, _ctasCat).id, 'a'));
+    test('un gasto sin cuenta baja de la primera cuenta, aunque otra sea predeterminada', () => {
+        const pc = A._debitoPorCuenta([], [], _ctasCat, 900);
+        eq(pc.a.total, -900); eq(pc.b.total, 0);
+    });
 }
 
 // Saldo de débito POR CUENTA (_debitoPorCuenta): atribución exacta + invariante.

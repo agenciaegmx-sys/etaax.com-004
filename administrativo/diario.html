@@ -2258,11 +2258,9 @@ var _cacheGastosExt = null; // gastos cargados para caja fuerte
 var _cuentasBancarias = []; // cuentas bancarias (tabla tarjetas_credito): débito/crédito + comisiones
 // Cuentas de DÉBITO (ahí se deposita la venta con tarjeta). Las viejas sin tipo eran crédito.
 function _cuentasDebito(){
-    // La cuenta PREDETERMINADA va primero → es la "cuenta A" del corte (recibe
-    // la venta con tarjeta capturada en la fila principal) y la que da las
-    // tasas de comisión para propinas y cortes viejos.
-    return (_cuentasBancarias||[]).filter(function(c){ return c && c.tipo==='debito'; })
-        .sort(function(a,b){ return (b.predeterminada?1:0)-(a.predeterminada?1:0); });
+    // Delegado al núcleo: predeterminada primero (cuenta A del corte) y la más
+    // ANTIGUA marcada `esBase` — dueña del historial sin cuenta asignada.
+    return EtaaxCore.cuentasDebito(_cuentasBancarias||[]);
 }
 // Filas para el desglose del corte: las cuentas de débito, o una genérica si no hay ninguna
 // (así SIEMPRE se capturan venta con tarjeta crédito y débito; sin cuenta no hay comisión).
@@ -3370,7 +3368,11 @@ function abrirCajaFuerte(){
 function _debitoPorCuenta(cortes, depositos, ctasDeb, gastosDebito, gastosDebitoLista){
     var porCta={}; (ctasDeb||[]).forEach(function(c){ porCta[c.id]={term:0,dep:0,resto:0,total:0}; });
     if(!ctasDeb||!ctasDeb.length) return porCta;
-    var defId=ctasDeb[0].id; // la predeterminada va primero (_cuentasDebito la ordena)
+    // Lo que no dice de qué cuenta es pertenece a la cuenta BASE (la más antigua):
+    // era la única que existía cuando se capturó. Antes caía en la predeterminada
+    // de turno y cambiarla mudaba meses de historia de una cuenta a otra.
+    var _base0=EtaaxCore.ctaBaseCatalogo(ctasDeb)||ctasDeb[0];
+    var defId=_base0.id;
     var add=function(id,campo,v){ var k=porCta.hasOwnProperty(id)?id:defId; porCta[k][campo]+=v; porCta[k].total+=v; };
     (cortes||[]).forEach(function(c){
         // Terminal + propinas, cada una en SU cuenta (núcleo: una sola verdad).
