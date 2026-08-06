@@ -3352,8 +3352,11 @@ function _abrirCajaFuerteContenido(_yaFresco){
     // ── Saldos ──────────────────────────────────────────────
     var totalResguardos = lista.reduce(function(s,c){return s+resguardo(c);},0);
     // Efecto neto de TODOS los depósitos/movimientos sobre los fondos (origen → destino).
-    var _efC=0,_efB=0,_efTcPago=0, totDepCaja=0, totDepBanco=0;
-    deps.forEach(function(d){ var e=_depEfecto(d); _efC+=e.caja; _efB+=e.banco; _efTcPago+=e.tcPago; if(e.caja>0)totDepCaja+=e.caja; if(e.caja<0)totDepBanco+=-e.caja; });
+    // Efecto NETO de todos los movimientos sobre cada fondo. Los pies de los cards
+    // usan esto (no solo los depósitos de entrada): si no, un retiro o un pago de
+    // tarjeta desde el banco quedaba invisible y el desglose no sumaba el total.
+    var _efC=0,_efB=0,_efTcPago=0;
+    deps.forEach(function(d){ var e=_depEfecto(d); _efC+=e.caja; _efB+=e.banco; _efTcPago+=e.tcPago; });
     // Caja fuerte: resguardos + efecto neto de movimientos − gastos efectivo caja
     var saldoCaja = totalResguardos + _efC - gastosCajaFuerte;
     // Cuenta débito (total): tarjeta terminal NETA (menos comisión bancaria) +
@@ -3448,9 +3451,8 @@ function _abrirCajaFuerteContenido(_yaFresco){
                     '<div class="cj-acum-lbl">🏦 Caja Fuerte</div>'+
                     '<div style="margin-top:4px;font-size:10px;color:var(--text-dim);line-height:1.6">'+
                         fmtM(totalResguardos)+' resguardos'+
-                        (totDepCaja?' + '+fmtM(totDepCaja)+' dep.':'')+'<br>'+
-                        (gastosCajaFuerte?'− '+fmtM(gastosCajaFuerte)+' gs.caja':'')+
-                        (totDepBanco?(gastosCajaFuerte?' · ':'')+'− '+fmtM(totDepBanco)+' banco':'')+
+                        (_efC?(_efC>0?' + ':' − ')+fmtM(Math.abs(_efC))+' movimientos':'')+'<br>'+
+                        (gastosCajaFuerte?'− '+fmtM(gastosCajaFuerte)+' gs.caja':'sin gastos de caja')+
                     '</div>'+
                 '</div>'+
                 '<div class="cj-acum-val">'+fmtM(saldoCaja)+'</div>'+
@@ -3461,7 +3463,7 @@ function _abrirCajaFuerteContenido(_yaFresco){
                     '<div style="margin-top:4px;font-size:10px;color:var(--text-dim);line-height:1.6">'+
                         fmtM(totTarjeta)+' terminal <span style="color:var(--text-dim)">(neto)</span>'+
                         (totTransfer?' + '+fmtM(totTransfer)+' transfer.':'')+
-                        (totDepBanco?' + '+fmtM(totDepBanco)+' dep.':'')+'<br>'+
+                        (_efB?(_efB>0?' + ':' − ')+fmtM(Math.abs(_efB))+' movimientos':'')+'<br>'+
                         (gastosDebito?'− '+fmtM(gastosDebito)+' gs.banco':'sin gastos débito')+
                         (totComision?' · <span style="color:#ff9a9a">− '+fmtM(totComision)+' comisión banco (ya descontada)</span>':'')+
                     '</div>'+
