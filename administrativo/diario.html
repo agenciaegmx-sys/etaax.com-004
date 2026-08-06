@@ -2319,7 +2319,7 @@ function _subCortesRealtime(negId) {
 // Realtime de depósitos/movimientos y ventas extra (borrar o editar en un
 // dispositivo se refleja en el otro sin refrescar). Mismo patrón: conserva los
 // locales del outbox y no interrumpe modales abiertos.
-var _depsRtCh = null, _vexRtCh = null, _movsRtNeg = null;
+var _depsRtCh = null, _vexRtCh = null, _ctasRtCh = null, _movsRtNeg = null;
 async function _reloadDepsRT() {
     var negId = getNegocioActivo(); if (!negId) return;
     var r = await _supabase.from('depositos').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false});
@@ -2344,6 +2344,7 @@ function _subMovsRealtime(negId) {
     if (!negId || _movsRtNeg === negId || typeof sbRealtime !== 'function') return;
     if (_depsRtCh && _supabase.removeChannel) { try { _supabase.removeChannel(_depsRtCh); } catch(e){} }
     if (_vexRtCh  && _supabase.removeChannel) { try { _supabase.removeChannel(_vexRtCh); } catch(e){} }
+    if (_ctasRtCh && _supabase.removeChannel) { try { _supabase.removeChannel(_ctasRtCh); } catch(e){} }
     _movsRtNeg = negId;
     _depsRtCh = sbRealtime('depositos', negId, function() {
         if (document.querySelector('.modal-overlay.open, .pin-overlay.open')) return;
@@ -2352,6 +2353,19 @@ function _subMovsRealtime(negId) {
     _vexRtCh = sbRealtime('ventas_extra', negId, function() {
         if (document.querySelector('.modal-overlay.open, .pin-overlay.open')) return;
         if (getNegocioActivo() === negId) _reloadVexRT();
+    });
+    // Cuentas bancarias: sin esto, cambiar la PREDETERMINADA desde Cuentas Bancarias
+    // (otra pantalla/pestaña) dejaba el caché viejo aquí y los cards de Caja Fuerte
+    // seguían con el orden y el indicador anteriores hasta recargar la página.
+    _ctasRtCh = sbRealtime('tarjetas_credito', negId, async function() {
+        if (getNegocioActivo() !== negId) return;
+        try {
+            var rc = await _supabase.from('tarjetas_credito').select('datos')
+                .eq('negocio_id', negId).order('created_at', {ascending:true});
+            if (!rc.error) _cuentasBancarias = (rc.data||[]).map(function(x){ return x.datos; });
+        } catch(e) { return; }
+        var cajEl = document.getElementById('cajOverlay');
+        if (cajEl && cajEl.classList.contains('open')) _abrirCajaFuerteContenido(true);
     });
 }
 
@@ -3390,9 +3404,12 @@ function _abrirCajaFuerteContenido(_yaFresco){
                 return '<div style="display:flex;flex-direction:column;gap:6px">'+
                     '<div class="cj-acum" style="margin:0;border-color:rgba(61,190,122,.25)">'+
                     '<div>'+
-                        '<div style="font-size:13px;font-weight:600;color:var(--text)">🏛️ '+_escV(_cuentaBancoLabel(c.id))+'</div>'+
+                        '<div style="font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:7px;flex-wrap:wrap">'+
+                            '<span>🏛️ '+_escV(_cuentaBancoLabel(c.id))+'</span>'+
+                            (c.predeterminada?'<span style="font-size:9px;background:rgba(245,200,66,.15);color:var(--accent);border:1px solid rgba(245,200,66,.4);border-radius:10px;padding:2px 8px;white-space:nowrap;font-weight:600">⭐ Predeterminada</span>':'')+
+                        '</div>'+
                         (det.length?'<div style="font-size:10px;color:var(--text-dim);margin-top:2px">'+det.join(' · ')+'</div>':'')+
-                        (c.predeterminada?'<div style="font-size:10px;color:var(--text-dim);margin-top:2px">predeterminada · recibe propinas netas, gastos sin cuenta y todo movimiento sin desglose</div>':'')+
+                        (c.predeterminada?'<div style="font-size:10px;color:var(--text-dim);margin-top:3px">recibe propinas netas, gastos sin cuenta y todo movimiento sin desglose</div>':'')+
                     '</div>'+
                     '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">'+
                         '<div class="cj-acum-val" style="font-size:20px;color:'+(s.total<0?'#ff9a9a':'var(--green)')+'">'+fmtM(s.total)+'</div>'+
