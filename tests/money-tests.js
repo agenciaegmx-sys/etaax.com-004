@@ -213,6 +213,39 @@ test('comisionBancoCorte = bruto − neto (nunca negativa)', () =>
     });
 }
 
+// CAMBIAR LA PREDETERMINADA NO DEBE REESCRIBIR EL PASADO. Cada corte se queda con
+// la cuenta que era predeterminada al capturarlo (sello ctaDefaultId, o inferida de
+// su propio desglose). Antes, al cambiarla, se mudaba la atribución de meses viejos
+// y además se recalculaban sus comisiones con la tasa de la cuenta nueva.
+{
+    const _ctasMP = [ctaConIva, ctaSinIva];   // 'a' (Mercado Pago) predeterminada
+    const _ctasAF = [ctaSinIva, ctaConIva];   // 'b' (Afirme) predeterminada
+    // Corte viejo capturado cuando 'a' era la predeterminada, sin desglose de tarjeta.
+    const viejoSellado = { tarjeta: 15000, propTarjeta: 500, transferencia: 400, ctaDefaultId: 'a' };
+    test('corte sellado: su neto NO cambia al cambiar la predeterminada', () =>
+        eq(Math.round(A.taBancoNeto(viejoSellado, _ctasMP) * 100) / 100,
+           Math.round(A.taBancoNeto(viejoSellado, _ctasAF) * 100) / 100));
+    test('corte sellado: su saldo sigue en SU cuenta al cambiar la predeterminada', () => {
+        const conMP = A._debitoPorCuenta([viejoSellado], [], _ctasMP, 0);
+        const conAF = A._debitoPorCuenta([viejoSellado], [], _ctasAF, 0);
+        eq(Math.round(conMP.a.total * 100) / 100, Math.round(conAF.a.total * 100) / 100);
+        eq(Math.round(conAF.b.total * 100) / 100, 0);   // Afirme NO hereda nada viejo
+    });
+    // Sin sello (cortes previos a esta versión) se infiere de su propio desglose.
+    const viejoInferido = { tarjeta: 3000, propTarjeta: 200,
+        tarjetaCuentas: [{ cuentaId: 'a', ventaTC: 0, ventaTD: 3000, neto: A._netoCuenta(ctaConIva, 0, 3000) }] };
+    test('sin sello, la cuenta base se infiere del desglose del propio corte', () =>
+        eq(A.EtaaxCore.ctaBaseCorte(viejoInferido, _ctasAF).id, 'a'));
+    test('la propina sin desglose sigue a la cuenta base, no a la predeterminada nueva', () => {
+        const pc = A._debitoPorCuenta([viejoInferido], [], _ctasAF, 0);
+        eq(Math.round(pc.b.total * 100) / 100, 0);
+        eq(Math.round(pc.a.total * 100) / 100,
+           Math.round((A._netoCuenta(ctaConIva, 0, 3000) + A._netoCuenta(ctaConIva, 0, 200)) * 100) / 100);
+    });
+    test('corte sin sello NI desglose (muy viejo) cae en la predeterminada actual', () =>
+        eq(A.EtaaxCore.ctaBaseCorte({ tarjeta: 500 }, _ctasAF).id, 'b'));
+}
+
 // Saldo de débito POR CUENTA (_debitoPorCuenta): atribución exacta + invariante.
 // La terminal del desglose va a SU cuenta; propina neta, transferencia y gastos a
 // la PREDETERMINADA; los depósitos a su cuenta origen/destino.

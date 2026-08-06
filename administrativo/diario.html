@@ -3326,6 +3326,9 @@ function guardarCorte(){
         transferencia:v('fTransfer'),
         tarjetaCuentas:_getTarjetaCuentas(),
         transferCuentas:_getTransferCuentas(),   // a qué cuenta llegó cada transferencia
+        // Sello: con qué cuenta se capturó este corte. Congela su atribución y sus
+        // comisiones aunque mañana se cambie la predeterminada del negocio.
+        ctaDefaultId:(function(){ var _cc=_cuentasDebito(); return _cc.length?_cc[0].id:''; })(),
         comedor:v('fComedor'),paraLlevar:v('fParaLlevar'),comensales:v('fComensales'),
         alimentos:v('fAlimentos'),bebidas:v('fBebidas'),otros:v('fOtros'),
         gastos:v('fGastos'),gastosCajaChica:_gastosCajaChica,retiros:v('fRetiros'),
@@ -3372,11 +3375,15 @@ function _debitoPorCuenta(cortes, depositos, ctasDeb, gastosDebito, gastosDebito
     (cortes||[]).forEach(function(c){
         // Terminal + propinas, cada una en SU cuenta (núcleo: una sola verdad).
         var _det=EtaaxCore.taBancoNetoDetalle(c, ctasDeb);
+        // La cuenta BASE del corte = la que era predeterminada cuando se capturó
+        // (sellada, o inferida de su propio desglose). Lo no desglosado se queda ahí
+        // para siempre: cambiar hoy la predeterminada ya no reescribe el pasado.
+        var _base=_det.ctaBaseId||defId;
         Object.keys(_det.porCuenta).forEach(function(id){ add(id,'term',_det.porCuenta[id]); });
-        add(defId,'term', _det.sinCuenta);          // cortes viejos / captura parcial
+        add(_base,'term', _det.sinCuenta);          // cortes viejos / captura parcial
         var sumTr=0;
         (c.transferCuentas||[]).forEach(function(t){ var m=parseFloat(t.monto)||0; sumTr+=m; add(t.cuentaId,'resto',m); });
-        add(defId,'resto', n(c.transferencia)-sumTr);   // sin desglose (cortes viejos) → predeterminada
+        add(_base,'resto', n(c.transferencia)-sumTr);   // transferencia sin desglose
     });
     (depositos||[]).forEach(function(d){
         var m=n(d.monto);
@@ -3425,6 +3432,47 @@ function _fCorta(f){
     var p=String(f).split('-');
     return p.length===3 ? (parseInt(p[2],10)+' '+(M[parseInt(p[1],10)-1]||'')) : String(f);
 }
+/* ── Congelar historial ──────────────────────────────────────────────────────
+   Los movimientos viejos que no dicen de qué cuenta son (cortes sin desglose,
+   gastos por banco y depósitos previos a tener 2 cuentas) SIGUEN a la cuenta
+   predeterminada: al cambiarla, meses de historia se mudan de cuenta y los saldos
+   dejan de cuadrar con la banca. Esto les escribe la cuenta que tienen HOY —que es
+   donde de verdad cayó ese dinero— y a partir de ahí quedan fijos.
+   Solo rellena vacíos: nunca reasigna algo que ya tiene cuenta. */
+function congelarHistorialCuentas(){
+    var ctas=_cuentasDebito();
+    if(!ctas.length){ alert('Primero registra al menos una cuenta de débito.'); return; }
+    var def=ctas[0], nom=(def.alias||def.banco||def.id);
+    // Inventario de lo que falta por sellar (solo la sucursal activa, como todo el panel).
+    var cortes=load().filter(function(c){ return !c.ctaDefaultId; });
+    var gastos=_scopeSuc(_loadGastos()).filter(function(g){
+        return g.metodoPago==='banco' && g.metodoBanco!=='credito' && !g.cuentaBancoId; });
+    var deps=loadDep().filter(function(d){
+        return (d.origen==='banco' && !d.origenCuentaId) || (d.destino==='banco' && !d.destinoCuentaId); });
+    var total=cortes.length+gastos.length+deps.length;
+    if(!total){ alert('✅ Nada que congelar: todos los movimientos ya traen su cuenta.'); return; }
+    var montoG=gastos.reduce(function(s,g){return s+n(g.monto);},0);
+    var montoD=deps.reduce(function(s,d){return s+n(d.monto);},0);
+    var msg='Se va a escribir «'+nom+'» en los movimientos que hoy no dicen de qué cuenta son:\n\n'+
+        '• '+cortes.length+' cortes (su venta con tarjeta sin desglose)\n'+
+        '• '+gastos.length+' gastos por banco — '+fmtM(montoG)+'\n'+
+        '• '+deps.length+' depósitos/retiros — '+fmtM(montoD)+'\n\n'+
+        'Los saldos de hoy NO cambian: se congelan donde están. Lo que cambia es que a '+
+        'partir de ahora cambiar la cuenta predeterminada ya no los moverá.\n\n¿Continuar?';
+    if(!confirm(msg)) return;
+    _pedirClaveAdmin('Congelar historial en «'+nom+'»', function(){
+        cortes.forEach(function(c){ c.ctaDefaultId=def.id; _sbUp('cortes', c); });
+        gastos.forEach(function(g){ g.cuentaBancoId=def.id; _sbUp('gastos', g); });
+        deps.forEach(function(d){
+            if(d.origen==='banco' && !d.origenCuentaId) d.origenCuentaId=def.id;
+            if(d.destino==='banco' && !d.destinoCuentaId) d.destinoCuentaId=def.id;
+            _sbUp('depositos', d);
+        });
+        alert('🔒 Listo: '+total+' movimientos quedaron fijados a «'+nom+'».\n\nYa puedes cambiar la cuenta predeterminada sin que se muevan los saldos del pasado.');
+        _abrirCajaFuerteContenido(true);
+    }, '🔒 Congelar');
+}
+
 function _abrirCajaFuerteContenido(_yaFresco){
     if(!_yaFresco) _refrescarCajaFuerte(); // pinta al instante con caché y refresca solo
     var lista=load().slice().sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
@@ -3486,7 +3534,10 @@ function _abrirCajaFuerteContenido(_yaFresco){
         debPorCuentaHTML =
             '<div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 6px">'+
                 '<span style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)">🏛️ Saldo por cuenta de débito</span>'+
-                '<button onclick="abrirHistConciliaciones()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:3px 10px;font-size:10px;cursor:pointer;font-family:inherit">📜 Historial de conciliaciones</button>'+
+                '<span style="display:flex;gap:6px">'+
+                    '<button onclick="congelarHistorialCuentas()" title="Escribe la cuenta actual en los movimientos viejos que no la traen, para que cambiar la predeterminada deje de moverlos" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:3px 10px;font-size:10px;cursor:pointer;font-family:inherit">🔒 Congelar historial</button>'+
+                    '<button onclick="abrirHistConciliaciones()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:3px 10px;font-size:10px;cursor:pointer;font-family:inherit">📜 Historial de conciliaciones</button>'+
+                '</span>'+
             '</div>'+
             '<div class="cj-ctas-grid">'+
             _ctasDebCF.map(function(c){
@@ -4030,6 +4081,12 @@ function guardarDeposito(){
     if(dVal.indexOf('banco:')===0){ destino='banco'; destinoCuentaId=dVal.slice(6); }
     else if(dVal.indexOf('tc:')===0){ destino='tarjeta_credito'; tcId=dVal.slice(3); }
     else destino=dVal;
+    // Sellar la cuenta cuando el selector no la pide (una sola cuenta registrada):
+    // un movimiento de banco sin cuenta seguía a la predeterminada de turno y al
+    // cambiarla se mudaba de cuenta solo.
+    var _ccDep=_cuentasDebito();
+    if(origen==='banco' && !origenCuentaId && _ccDep.length) origenCuentaId=_ccDep[0].id;
+    if(destino==='banco' && !destinoCuentaId && _ccDep.length) destinoCuentaId=_ccDep[0].id;
     if(origen==='banco' && destino==='banco' && origenCuentaId===destinoCuentaId){ alert('El origen y el destino son la misma cuenta.'); return; }
     if(origen==='caja_fuerte' && destino==='caja_fuerte'){ alert('El origen y el destino son caja fuerte.'); return; }
     if(origen==='externo' && destino==='retiro'){ alert('Un retiro necesita un origen (caja fuerte o banco).'); return; }
@@ -5655,10 +5712,16 @@ function guardarGasto(){
         metodoBanco:document.getElementById('gMetodoBanco').value,
         // Cuenta de débito de la que sale el gasto (transferencia/débito con 2+ cuentas).
         // Vacío = predeterminada (compat con gastos viejos sin cuenta).
+        // Cuenta de la que sale el gasto. Si el selector no está a la vista (una sola
+        // cuenta) se SELLA con la predeterminada del momento: dejarlo vacío hacía que
+        // el gasto siguiera para siempre a quien fuera predeterminada, y al cambiarla
+        // se mudaban meses de gastos de una cuenta a otra.
         cuentaBancoId:(function(){
-            var m=document.getElementById('gMetodo').value, s=document.getElementById('gMetodoBanco').value;
-            var sel=document.getElementById('gCuentaBanco');
-            return (m==='banco'&&(s==='transfer'||s==='debito')&&sel&&document.getElementById('gCuentaBancoWrap').style.display!=='none')?sel.value:'';
+            var m=document.getElementById('gMetodo').value, sb=document.getElementById('gMetodoBanco').value;
+            if(!(m==='banco'&&(sb==='transfer'||sb==='debito'))) return '';
+            var sel=document.getElementById('gCuentaBanco'), wrap=document.getElementById('gCuentaBancoWrap');
+            if(sel&&wrap&&wrap.style.display!=='none'&&sel.value) return sel.value;
+            var _cc=_cuentasDebito(); return _cc.length?_cc[0].id:'';
         })(),
         facturado:document.getElementById('gFacturado').value==='1',
         autorizado:tipo==='mayor'?mayorDesbloqueado:true,

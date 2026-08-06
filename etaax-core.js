@@ -84,12 +84,25 @@
          (antes TODAS se neteaban con la tasa de la predeterminada y se le cargaban);
        · lo que no traiga cuenta (cortes viejos, captura parcial) se netea con la
          predeterminada y queda en `sinCuenta` — nunca se pierde ni se duplica. */
+    /* Cuenta "de la casa" de UN corte: la que estaba predeterminada cuando se
+       capturó, NO la de hoy. Sin esto, cambiar la predeterminada reescribía el
+       pasado (se llevaba la atribución y recalculaba comisiones de meses viejos).
+       Orden: el sello del corte → la cuenta A de su propio desglose (el formulario
+       siempre pone la predeterminada primero) → la predeterminada actual. */
+    function ctaBaseCorte(c, cuentasDebito) {
+        var ctas = cuentasDebito || [];
+        var buscar = function (id) { for (var i = 0; i < ctas.length; i++) if (ctas[i].id === id) return ctas[i]; return null; };
+        var cta = c && c.ctaDefaultId ? buscar(c.ctaDefaultId) : null;
+        if (!cta && c && c.tarjetaCuentas && c.tarjetaCuentas.length) cta = buscar(c.tarjetaCuentas[0].cuentaId);
+        return cta || ctas[0] || null;
+    }
     function taBancoNetoDetalle(c, cuentasDebito) {
         var ctas = cuentasDebito || [];
-        var det = { porCuenta: {}, sinCuenta: 0 };
+        var det = { porCuenta: {}, sinCuenta: 0, ctaBaseId: '' };
         var buscar = function (id) { for (var i = 0; i < ctas.length; i++) if (ctas[i].id === id) return ctas[i]; return null; };
         var addC = function (id, v) { if (!v) return; det.porCuenta[id] = (det.porCuenta[id] || 0) + v; };
-        var cta0 = ctas[0] || null;
+        var cta0 = ctaBaseCorte(c, ctas);
+        det.ctaBaseId = cta0 ? cta0.id : '';
 
         // ── Terminal ──
         var brutoDes = 0;
@@ -275,6 +288,7 @@
         efNeto: efNeto, taBanco: taBanco, ventasBruta: ventasBruta, flujoNeto: flujoNeto,
         propinas: propinas, cheque: cheque, resultado: resultado, resguardo: resguardo,
         comEf: comEf, netoCuenta: netoCuenta, taBancoNeto: taBancoNeto, taBancoNetoDetalle: taBancoNetoDetalle,
+        ctaBaseCorte: ctaBaseCorte,
         comisionBancoCorte: comisionBancoCorte,
         depEfecto: depEfecto, esRetiro: esRetiro,
         DIA_FACTORES_DEFAULT: DIA_FACTORES_DEFAULT, diasOperativos: diasOperativos, operaDow: operaDow, calcMetaDiaria: calcMetaDiaria,
