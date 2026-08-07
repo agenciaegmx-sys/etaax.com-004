@@ -294,20 +294,37 @@
         if (name && staff) { for (var i = 0; i < staff.length; i++) { var s = staff[i]; if (s && _gnorm(s.nombre) === _gnorm(name)) return s.categoriaNomina || (s.rol === 'administrativo' ? 'administrativa' : 'operativa'); } }
         return 'operativa';
     }
+    /* Grupo al que pertenece UN gasto. Es la regla de clasificarGastos extraída para
+       poder desglosar (reportes, tablas) sin recalcular a mano y sin divergir:
+       'propina' | 'fijo' | 'nomOp' | 'nomAdm' | 'imss' | 'variable'. */
+    function grupoGasto(g, opts) {
+        opts = opts || {};
+        var fijos = opts.fijos || [], staff = opts.staff || [];
+        if (!g) return 'variable';
+        if (gastoEsPropina(g)) return 'propina';                    // pass-through: fuera del gasto
+        if (gastoEsPagoFijo(g, fijos)) return 'fijo';               // pago de un fijo del catálogo
+        if (gastoEsIMSS(g)) return 'imss';
+        if (gastoEsNomina(g)) return nomTipoGasto(g, staff) === 'administrativa' ? 'nomAdm' : 'nomOp';
+        if (!opts._catsFijos) {                                     // memo: se arma una sola vez por llamada
+            var cf = {};
+            for (var k = 0; k < fijos.length; k++) if (fijos[k] && fijos[k].categoria) cf[_catKey(fijos[k].categoria)] = 1;
+            opts._catsFijos = cf;
+        }
+        if (opts._catsFijos[_catKey(g.categoria)] || gastoEsFijoPat(g)) return 'fijo'; // fijo no catalogado
+        return 'variable';                                          // resto (incl. impuestos/contabilidad)
+    }
+    // Grupo "grueso" para mostrar: fijo | nom | variable | propina
+    function grupoGastoUI(g, opts) {
+        var t = grupoGasto(g, opts);
+        return (t === 'nomOp' || t === 'nomAdm' || t === 'imss') ? 'nom' : t;
+    }
     function clasificarGastos(gastos, opts){
         opts = opts || {};
-        var fijos = opts.fijos || [], staff = opts.staff || [], catsFijos = {};
-        for (var k = 0; k < fijos.length; k++) { if (fijos[k] && fijos[k].categoria) catsFijos[_catKey(fijos[k].categoria)] = 1; }
         var r = { fijo: 0, nomOp: 0, nomAdm: 0, imss: 0, variable: 0, propina: 0 };
         (gastos || []).forEach(function (g) {
             if (!g) return;
             var m = n(g.monto);
-            if (gastoEsPropina(g)) { r.propina += m; return; }                 // pass-through: fuera del gasto
-            if (gastoEsPagoFijo(g, fijos)) { r.fijo += m; return; }             // pago de un fijo del catálogo
-            if (gastoEsIMSS(g)) { r.imss += m; return; }
-            if (gastoEsNomina(g)) { if (nomTipoGasto(g, staff) === 'administrativa') r.nomAdm += m; else r.nomOp += m; return; }
-            if (catsFijos[_catKey(g.categoria)] || gastoEsFijoPat(g)) { r.fijo += m; return; } // fijo no catalogado
-            r.variable += m;                                                    // resto (incl. impuestos/contabilidad)
+            r[grupoGasto(g, opts)] += m;   // una sola regla, compartida con los reportes
         });
         r.variable += n(opts.comisionBanco);                                   // comisión bancaria = variable
         r.nom = r.nomOp + r.nomAdm + r.imss;                                   // nómina total (IMSS incluido)
@@ -319,7 +336,7 @@
         n: n, fmtM: fmtM, fmtN: fmtN, genId: genId, todayStr: todayStr,
         gastoEsIMSS: gastoEsIMSS, gastoEsNomina: gastoEsNomina, gastoEsPropina: gastoEsPropina,
         gastoEsFijoPat: gastoEsFijoPat, gastoEsPagoFijo: gastoEsPagoFijo, nomTipoGasto: nomTipoGasto,
-        clasificarGastos: clasificarGastos,
+        clasificarGastos: clasificarGastos, grupoGasto: grupoGasto, grupoGastoUI: grupoGastoUI,
         planFijoPago: planFijoPago,
         getNegocioActivo: getNegocioActivo, sucActiva: sucActiva, scopeSuc: scopeSuc,
         getWeekStr: getWeekStr, semanaISO: semanaISO, getRange: getRange, prevRange: prevRange, inRange: inRange,

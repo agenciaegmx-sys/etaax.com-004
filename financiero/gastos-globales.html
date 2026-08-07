@@ -17,6 +17,9 @@
         .gg-tab.active{background:var(--surface);color:var(--text);font-weight:600;border:1px solid var(--border);box-shadow:0 1px 4px rgba(0,0,0,.2);}
         .gg-tab:hover:not(.active){color:var(--text);}
         .gg-tab-icon{font-size:15px;}
+        .gg-tabs-acts{margin-left:auto;display:flex;gap:8px;align-items:center;padding-left:12px;}
+        .gg-tabs-acts .btn-accent{padding:7px 14px;font-size:12px;}
+        @media(max-width:900px){ .gg-tabs{flex-wrap:wrap;} .gg-tabs-acts{margin-left:0;padding-left:0;width:100%;padding-top:6px;} }
 
         /* ── Sub-tabs nóminas ── */
         .nom-tabs{display:flex;gap:4px;margin-bottom:16px;}
@@ -207,6 +210,12 @@
                 <button class="gg-tab" id="tabNominas"><span class="gg-tab-icon">👥</span> Nóminas</button>
                 <button class="gg-tab" id="tabVariables"><span class="gg-tab-icon">📊</span> Gastos Variables</button>
                 <button class="gg-tab" id="tabResumen"><span class="gg-tab-icon">📈</span> Resumen P&amp;L</button>
+                <!-- Reportes de TODO el gasto (no de una pestaña): van al final de la
+                     barra, separados por un margen automático. -->
+                <span class="gg-tabs-acts">
+                    <button class="btn-accent" onclick="imprimirGastos()" title="Reporte del mes en pantalla, con el desglose por grupo y por categoría">🖨️ Imprimir</button>
+                    <button class="btn-accent" onclick="abrirHistSemGastos()" title="Elige las semanas y arma un reporte histórico">📅 Histórico semanal</button>
+                </span>
             </div>
 
             <!-- ═══ SECCIÓN 1: GASTOS FIJOS ═══ -->
@@ -214,8 +223,6 @@
                 <div class="card">
                     <div class="card-header" style="justify-content:space-between">
                         <h2>Gastos Fijos del Negocio</h2>
-                        <button class="btn-accent" onclick="imprimirGastos()">🖨️ Imprimir</button>
-                        <button class="btn-accent" onclick="abrirHistSemGastos()">📅 Histórico semanal</button>
                         <button class="btn-accent" id="btnAddFijo">+ Agregar gasto fijo</button>
                     </div>
                     <div style="padding:12px 20px;font-size:11px;color:var(--text-dim);background:rgba(245,200,66,.04);border-bottom:1px solid var(--border)">
@@ -926,9 +933,9 @@ function _sucTxtGG(){ return _sucursalId ? _sucursalLabel() : 'Todas las sucursa
 function _abrirReporteGG(titulo, subtitulo, cuerpo, derecha){
     if(typeof etaaxReporteDoc!=='function'){ alert('No se pudo cargar el módulo de reportes. Recarga la página.'); return; }
     var html=etaaxReporteDoc({ titulo:titulo, subtitulo:subtitulo, derecha:derecha, cuerpo:cuerpo, pie:'Salud Financiera · Gastos Totales' });
-    var w=window.open('','_blank');
-    if(!w){ alert('Permite las ventanas emergentes para imprimir el reporte.'); return; }
-    w.document.write(html); w.document.close();
+    // Con respaldo: si el navegador bloquea la ventana emergente, imprime desde un
+    // iframe oculto en vez de no hacer nada (que es como se veía el bloqueo).
+    if(!etaaxAbrirReporte(html)) alert('No se pudo abrir el reporte. Revisa si el navegador está bloqueando ventanas emergentes.');
 }
 // Gastos del negocio en un rango, con la misma clasificación del núcleo.
 function _gastosRangoGG(from,to){
@@ -938,34 +945,56 @@ function _clasifRangoGG(from,to){
     return EtaaxCore.clasificarGastos(_gastosRangoGG(from,to), { fijos:loadFijos(), staff:_loadStaff(), comisionBanco:0 });
 }
 
-// ── Reporte del MES en pantalla ──
+// ── Reporte del MES en pantalla: TODO el gasto, separado por grupo ──
 function imprimirGastos(){
     var mes=document.getElementById('mesInput').value||mesStr();
     var ini=mes+'-01', fin=new Date(parseInt(mes.slice(0,4)), parseInt(mes.slice(5,7)), 0).toISOString().slice(0,10);
-    var cl=EtaaxCore.clasificarGastos(loadGastosMes(mes),{ fijos:loadFijos(), staff:_loadStaff(), comisionBanco:comisionesBancoMes(mes) });
-    // Desglose por categoría (lo que de verdad se pagó, sin propinas)
-    var cats={};
-    loadGastosMes(mes).forEach(function(g){
-        if(EtaaxCore.gastoEsPropina&&EtaaxCore.gastoEsPropina(g)) return;
-        var k=g.categoria||'Sin categoría'; cats[k]=(cats[k]||0)+n(g.monto);
+    var gastos=loadGastosMes(mes);
+    var comBanco=comisionesBancoMes(mes);
+    var opts={ fijos:loadFijos(), staff:_loadStaff(), comisionBanco:comBanco };
+    var cl=EtaaxCore.clasificarGastos(gastos, opts);
+    // Cada gasto a su grupo con la MISMA regla del núcleo (grupoGastoUI), y dentro
+    // de cada grupo, por categoría. Así el reporte cuadra con los KPIs de arriba.
+    var G={fijo:{}, nom:{}, variable:{}};
+    gastos.forEach(function(g){
+        var gr=EtaaxCore.grupoGastoUI(g, opts);
+        if(gr==='propina') return;                       // pass-through: no es gasto
+        var k=g.categoria||'Sin categoría';
+        G[gr][k]=(G[gr][k]||0)+n(g.monto);
     });
-    var orden=Object.keys(cats).sort(function(a,b){return cats[b]-cats[a];});
-    var filas=orden.map(function(k){
-        var pct=cl.egresos>0?(cats[k]/cl.egresos*100):0;
-        return '<tr><td style="text-align:left">'+_esc(k)+'</td><td>'+fmtM(cats[k])+'</td><td>'+pct.toFixed(1)+'%</td></tr>';
+    if(comBanco>0) G.variable['Comisión bancaria (auto)']=(G.variable['Comisión bancaria (auto)']||0)+comBanco;
+    var GRUPOS=[
+        {k:'fijo',     lbl:'🏢 Gastos fijos',       tot:cl.fijo},
+        {k:'nom',      lbl:'👥 Nómina y personal',  tot:cl.nom},
+        {k:'variable', lbl:'📊 Gastos variables',   tot:cl.variable}
+    ];
+    var filas=GRUPOS.map(function(gr){
+        var cats=Object.keys(G[gr.k]).sort(function(a,b){return G[gr.k][b]-G[gr.k][a];});
+        var pctG=cl.egresos>0?(gr.tot/cl.egresos*100):0;
+        var head='<tr style="background:#f5f5f5"><td style="text-align:left;font-weight:700">'+gr.lbl+'</td>'+
+            '<td style="font-weight:700">'+fmtM(gr.tot)+'</td><td style="font-weight:700">'+pctG.toFixed(1)+'%</td></tr>';
+        var det=cats.length
+            ? cats.map(function(k){
+                var pct=cl.egresos>0?(G[gr.k][k]/cl.egresos*100):0;
+                return '<tr><td style="text-align:left;padding-left:26px;font-weight:400">'+_esc(k)+'</td>'+
+                    '<td>'+fmtM(G[gr.k][k])+'</td><td>'+pct.toFixed(1)+'%</td></tr>';
+              }).join('')
+            : '<tr><td style="text-align:left;padding-left:26px;font-weight:400;color:#999">Sin gastos en este grupo</td><td>—</td><td>—</td></tr>';
+        return head+det;
     }).join('');
     var cuerpo=
         '<div class="rsec">Gastos del mes</div>'+
         '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">'+
             '<div class="rcard"><div class="l">Gasto total</div><div class="v" style="color:#b52a1a">'+fmtM(cl.egresos)+'</div><div class="s">'+ini+' → '+fin+'</div></div>'+
-            '<div class="rcard"><div class="l">Fijos</div><div class="v">'+fmtM(cl.fijo)+'</div><div class="s">recurrentes del mes</div></div>'+
+            '<div class="rcard"><div class="l">Fijos</div><div class="v">'+fmtM(cl.fijo)+'</div><div class="s">'+(cl.egresos>0?(cl.fijo/cl.egresos*100).toFixed(1)+'% del gasto':'—')+'</div></div>'+
             '<div class="rcard"><div class="l">Nómina y personal</div><div class="v">'+fmtM(cl.nom)+'</div><div class="s">incluye IMSS</div></div>'+
             '<div class="rcard"><div class="l">Variables</div><div class="v">'+fmtM(cl.variable)+'</div><div class="s">incluye comisión bancaria</div></div>'+
         '</div>'+
-        '<div class="rsec">Por categoría</div>'+
-        '<table class="rt"><thead><tr><th style="text-align:left">Categoría</th><th>Monto</th><th>% del total</th></tr></thead>'+
-        '<tbody>'+(filas||'<tr><td colspan="3" style="text-align:center">Sin gastos en el mes.</td></tr>')+'</tbody>'+
-        '<tfoot><tr><td>Total</td><td>'+fmtM(cl.egresos)+'</td><td>100%</td></tr></tfoot></table>';
+        '<div class="rsec">Desglose por grupo y categoría</div>'+
+        '<table class="rt"><thead><tr><th style="text-align:left">Grupo / categoría</th><th>Monto</th><th>% del total</th></tr></thead>'+
+        '<tbody>'+filas+'</tbody>'+
+        '<tfoot><tr><td>Total de egresos</td><td>'+fmtM(cl.egresos)+'</td><td>100%</td></tr></tfoot></table>'+
+        (cl.propina>0?'<div style="font-size:10px;color:#8a8a8a;margin-top:8px">Las propinas ('+fmtM(cl.propina)+') no se cuentan como gasto: son dinero del personal que solo pasa por la caja.</div>':'');
     _abrirReporteGG('Gastos Totales — '+mes, 'Gastos totales', cuerpo,
         '<div>'+_esc(_sucTxtGG())+'</div><div>'+ini+' → '+fin+'</div>');
 }

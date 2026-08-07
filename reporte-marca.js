@@ -187,6 +187,33 @@
             '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.print();},300);}<\/scr' + 'ipt></body></html>';
     };
 
+    /* Abre un reporte ya armado para imprimir. Primero intenta la ventana nueva
+       (lo de siempre); si el navegador la BLOQUEA —y lo hace sin avisar, así que
+       desde la app parece que el botón no sirve— cae a un iframe oculto de la
+       misma página: se imprime igual, sin depender de las ventanas emergentes. */
+    window.etaaxAbrirReporte = function (html) {
+        var w = null;
+        try { w = window.open('', '_blank'); } catch (e) {}
+        if (w && w.document) { w.document.write(html); w.document.close(); return true; }
+        var ifr = document.createElement('iframe');
+        ifr.setAttribute('aria-hidden', 'true');
+        ifr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+        document.body.appendChild(ifr);
+        try {
+            var d = ifr.contentWindow.document;
+            d.open();
+            // El documento se auto-imprime al cargar; en el iframe lo disparamos
+            // nosotros para controlar el momento y no imprimir dos veces.
+            d.write(String(html).replace('window.print();', ''));
+            d.close();
+        } catch (e) { try { ifr.remove(); } catch (e2) {} return false; }
+        setTimeout(function () {
+            try { ifr.contentWindow.focus(); ifr.contentWindow.print(); } catch (e) {}
+            setTimeout(function () { try { ifr.remove(); } catch (e) {} }, 60000);
+        }, 450);
+        return true;
+    };
+
     // Pie estándar de reporte.
     window.etaaxReporteFooter = function (centroHTML) {
         return '<div style="display:flex;justify-content:space-between;align-items:center;' +

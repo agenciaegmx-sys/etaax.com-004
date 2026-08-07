@@ -1172,9 +1172,9 @@ function imprimirHistSemanal(){
 }
 function _abrirReporte(titulo, subtitulo, cuerpo, derecha){
     var html=etaaxReporteDoc({ titulo:titulo, subtitulo:subtitulo, derecha:derecha, cuerpo:cuerpo, pie:'Salud Financiera · Ventas Totales' });
-    var w=window.open('','_blank');
-    if(!w){ alert('Permite las ventanas emergentes para imprimir el reporte.'); return; }
-    w.document.write(html); w.document.close();
+    // Con respaldo: si el navegador bloquea la ventana emergente, imprime desde un
+    // iframe oculto en vez de no hacer nada (que es como se veía el bloqueo).
+    if(!etaaxAbrirReporte(html)) alert('No se pudo abrir el reporte. Revisa si el navegador está bloqueando ventanas emergentes.');
 }
 
 function _setPeriod(tipo,btn){
