@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
 <script src="/etaax-core.js"></script>
+<script src="/reporte-marca.js"></script>
     <style>
         /* Period tabs */
         .period-tabs{display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:4px;}
@@ -213,6 +214,8 @@
                     <input type="month" id="pickerInput">
                     <input type="date" id="pickerEnd" style="display:none">
                 </div>
+                <button class="btn-accent" onclick="imprimirVentas()">🖨️ Imprimir</button>
+                <button class="btn-accent" onclick="abrirHistSemanal()">📅 Histórico semanal</button>
                 <button class="btn-accent" id="btnMetas">🎯 Definir metas</button>
                 <button class="btn-primary" id="btnOtros">+ Otros ingresos</button>
             </div>
@@ -1049,6 +1052,131 @@ function guardarOtro(){
 }
 
 /* ── Period tab handler ── */
+/* ══════════ REPORTES IMPRESOS ══════════════════════════════════════════════
+   Mismo formato que el resto de la plataforma (reporte-marca.js): encabezado con
+   la marca del negocio y la sucursal, y el pie de EGMx. */
+function _mdCacheVentas(){ if(!window.__mdCache) window.__mdCache={}; return window.__mdCache; }
+function _metaDelDiaSF(f){
+    var mes=f.slice(0,7), cache=_mdCacheVentas();
+    if(!cache[mes]){
+        var md=getMetaMes(mes);
+        cache[mes]= md ? calcMetaDiaria(mes, md.meta, md.dist||'uniforme', md.manualDays||null) : {};
+    }
+    return cache[mes][f]||0;
+}
+function _sucTxtSF(){ return _sucursalId ? _sucursalLabel() : 'Todas las sucursales'; }
+function _pctColor(p){ return p>=100?'#1a7a46':p>=70?'#9a6f00':'#b52a1a'; }
+
+// ── Reporte del PERIODO seleccionado ──
+function imprimirVentas(){
+    if(typeof etaaxReporteDoc!=='function'){ alert('No se pudo cargar el módulo de reportes. Recarga la página.'); return; }
+    var r=getRange();
+    var cortesMap={}, otrosMap={};
+    loadCortes().filter(function(c){return inRange(c.fecha,r);}).forEach(function(c){ cortesMap[c.fecha]=(cortesMap[c.fecha]||0)+ventaBruta(c); });
+    loadOtros().filter(function(o){return inRange(o.fecha,r);}).forEach(function(o){ otrosMap[o.fecha]=(otrosMap[o.fecha]||0)+n(o.monto); });
+    var dias=[], d0=new Date(r.from+'T12:00:00'), d1=new Date(r.to+'T12:00:00');
+    for(var d=new Date(d0); d<=d1; d.setDate(d.getDate()+1)) dias.push(d.toISOString().slice(0,10));
+    var DOW=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+    var tV=0,tO=0,tM=0;
+    var filas=dias.map(function(f){
+        var v=cortesMap[f]||0, o=otrosMap[f]||0, m=_metaDelDiaSF(f), t=v+o;
+        tV+=v; tO+=o; tM+=m;
+        var pct=m>0?(t/m*100):null;
+        return '<tr><td>'+f+'</td><td style="text-align:left">'+DOW[new Date(f+'T12:00:00').getDay()]+'</td>'+
+            '<td>'+(m>0?fmtM(m):'—')+'</td><td>'+(v?fmtM(v):'—')+'</td><td>'+(o?fmtM(o):'—')+'</td>'+
+            '<td><b>'+(t?fmtM(t):'—')+'</b></td>'+
+            '<td>'+(pct===null?'—':'<span style="color:'+_pctColor(pct)+';font-weight:700">'+pct.toFixed(0)+'%</span>')+'</td></tr>';
+    }).join('');
+    var total=tV+tO, cumpl=tM>0?(total/tM*100):null;
+    var cards=
+        '<div class="rcard"><div class="l">Total ventas + ingresos</div><div class="v" style="color:#1a7a46">'+fmtM(total)+'</div><div class="s">'+r.from+' → '+r.to+'</div></div>'+
+        '<div class="rcard"><div class="l">Meta del período</div><div class="v">'+(tM>0?fmtM(tM):'—')+'</div><div class="s">'+(tM>0?'distribuida por días operativos':'sin meta definida')+'</div></div>'+
+        '<div class="rcard"><div class="l">Cumplimiento</div><div class="v" style="color:'+(cumpl===null?'#8a8a8a':_pctColor(cumpl))+'">'+(cumpl===null?'—':cumpl.toFixed(1)+'%')+'</div><div class="s">'+(cumpl===null?'—':(cumpl>=100?'meta alcanzada':'faltan '+fmtM(Math.max(0,tM-total))))+'</div></div>'+
+        '<div class="rcard"><div class="l">Venta de cortes</div><div class="v">'+fmtM(tV)+'</div><div class="s">sin otros ingresos</div></div>'+
+        '<div class="rcard"><div class="l">Otros ingresos</div><div class="v">'+fmtM(tO)+'</div><div class="s">capturados aparte</div></div>'+
+        '<div class="rcard"><div class="l">Días con venta</div><div class="v">'+Object.keys(cortesMap).length+'</div><div class="s">de '+dias.length+' del período</div></div>';
+    var cuerpo=
+        '<div class="rsec">Resumen del período</div>'+
+        '<div class="rgrid" style="grid-template-columns:repeat(3,1fr)">'+cards+'</div>'+
+        '<div class="rsec">Detalle día por día</div>'+
+        '<table class="rt"><thead><tr><th style="text-align:left">Fecha</th><th style="text-align:left">Día</th><th>Meta</th><th>Ventas</th><th>Otros</th><th>Total</th><th>Cumpl.</th></tr></thead>'+
+        '<tbody>'+filas+'</tbody>'+
+        '<tfoot><tr><td colspan="2">Total del período</td><td>'+(tM>0?fmtM(tM):'—')+'</td><td>'+fmtM(tV)+'</td><td>'+fmtM(tO)+'</td><td>'+fmtM(total)+'</td><td>'+(cumpl===null?'—':cumpl.toFixed(1)+'%')+'</td></tr></tfoot></table>';
+    _abrirReporte('Ventas Totales — '+r.from+' → '+r.to, 'Ventas totales', cuerpo,
+        '<div>'+_esc(_sucTxtSF())+'</div><div>'+r.from+' → '+r.to+'</div>');
+}
+
+// ── Histórico por SEMANAS (se eligen cuáles) ──
+var _semCache=[];
+function _semanasDisponibles(nSem){
+    var out=[], hoy=new Date();
+    for(var i=0;i<nSem;i++){
+        var d=new Date(hoy); d.setDate(hoy.getDate()-i*7);
+        var wk=EtaaxCore.getWeekStr(d), rg=EtaaxCore.getRange('semana',wk,null);
+        var v=0,o=0,m=0;
+        loadCortes().forEach(function(c){ if(c.fecha>=rg.from&&c.fecha<=rg.to) v+=ventaBruta(c); });
+        loadOtros().forEach(function(x){ if(x.fecha>=rg.from&&x.fecha<=rg.to) o+=n(x.monto); });
+        for(var dd=new Date(rg.from+'T12:00:00'); dd<=new Date(rg.to+'T12:00:00'); dd.setDate(dd.getDate()+1)) m+=_metaDelDiaSF(dd.toISOString().slice(0,10));
+        out.push({wk:wk, from:rg.from, to:rg.to, venta:v, otros:o, meta:m});
+    }
+    return out;
+}
+function abrirHistSemanal(){
+    _semCache=_semanasDisponibles(26);
+    var conDatos=_semCache.filter(function(s){ return (s.venta+s.otros)>0; });
+    var lista=(conDatos.length?conDatos:_semCache).map(function(s,i){
+        var t=s.venta+s.otros, pct=s.meta>0?(t/s.meta*100):null;
+        return '<label class="hs-row">'+
+            '<input type="checkbox" class="hs-chk" value="'+s.wk+'" '+(i<8?'checked':'')+'>'+
+            '<span class="hs-sem">Sem '+parseInt(s.wk.slice(6),10)+'</span>'+
+            '<span class="hs-per">'+s.from+' → '+s.to+'</span>'+
+            '<span class="hs-val">'+fmtM(t)+'</span>'+
+            '<span class="hs-pct" style="color:'+(pct===null?'var(--text-dim)':(pct>=100?'var(--green)':pct>=70?'var(--accent)':'var(--red)'))+'">'+(pct===null?'—':pct.toFixed(0)+'%')+'</span>'+
+        '</label>';
+    }).join('');
+    document.getElementById('hsBody').innerHTML=lista||'<div style="padding:24px;text-align:center;color:var(--text-dim)">Sin semanas con venta registrada.</div>';
+    document.getElementById('modalHistSem').classList.add('open');
+}
+function cerrarHistSemanal(){ document.getElementById('modalHistSem').classList.remove('open'); }
+function _hsMarcar(todas){ document.querySelectorAll('.hs-chk').forEach(function(c){ c.checked=todas; }); }
+function imprimirHistSemanal(){
+    var sel={}; document.querySelectorAll('.hs-chk:checked').forEach(function(c){ sel[c.value]=1; });
+    var semanas=_semCache.filter(function(s){ return sel[s.wk]; }).slice().reverse(); // de la más vieja a la más nueva
+    if(!semanas.length){ alert('Elige al menos una semana.'); return; }
+    var tV=0,tO=0,tM=0;
+    var filas=semanas.map(function(s){
+        var t=s.venta+s.otros, pct=s.meta>0?(t/s.meta*100):null;
+        tV+=s.venta; tO+=s.otros; tM+=s.meta;
+        return '<tr><td>Semana '+parseInt(s.wk.slice(6),10)+'</td><td style="text-align:left">'+s.from+' → '+s.to+'</td>'+
+            '<td>'+(s.meta>0?fmtM(s.meta):'—')+'</td><td>'+fmtM(s.venta)+'</td><td>'+(s.otros?fmtM(s.otros):'—')+'</td>'+
+            '<td><b>'+fmtM(t)+'</b></td>'+
+            '<td>'+(pct===null?'—':'<span style="color:'+_pctColor(pct)+';font-weight:700">'+pct.toFixed(0)+'%</span>')+'</td></tr>';
+    }).join('');
+    var total=tV+tO, cumpl=tM>0?(total/tM*100):null;
+    var prom=total/semanas.length;
+    var mejor=semanas.slice().sort(function(a,b){return (b.venta+b.otros)-(a.venta+a.otros);})[0];
+    var cuerpo=
+        '<div class="rsec">Resumen del histórico</div>'+
+        '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">'+
+            '<div class="rcard"><div class="l">Semanas</div><div class="v">'+semanas.length+'</div><div class="s">'+semanas[0].from+' → '+semanas[semanas.length-1].to+'</div></div>'+
+            '<div class="rcard"><div class="l">Venta total</div><div class="v" style="color:#1a7a46">'+fmtM(total)+'</div><div class="s">incluye otros ingresos</div></div>'+
+            '<div class="rcard"><div class="l">Promedio semanal</div><div class="v">'+fmtM(prom)+'</div><div class="s">de las semanas elegidas</div></div>'+
+            '<div class="rcard"><div class="l">Mejor semana</div><div class="v">'+fmtM(mejor.venta+mejor.otros)+'</div><div class="s">sem '+parseInt(mejor.wk.slice(6),10)+' · '+mejor.from+'</div></div>'+
+        '</div>'+
+        '<div class="rsec">Semana por semana</div>'+
+        '<table class="rt"><thead><tr><th style="text-align:left">Semana</th><th style="text-align:left">Período</th><th>Meta</th><th>Ventas</th><th>Otros</th><th>Total</th><th>Cumpl.</th></tr></thead>'+
+        '<tbody>'+filas+'</tbody>'+
+        '<tfoot><tr><td colspan="2">Total</td><td>'+(tM>0?fmtM(tM):'—')+'</td><td>'+fmtM(tV)+'</td><td>'+fmtM(tO)+'</td><td>'+fmtM(total)+'</td><td>'+(cumpl===null?'—':cumpl.toFixed(1)+'%')+'</td></tr></tfoot></table>';
+    _abrirReporte('Histórico semanal de ventas', 'Histórico semanal', cuerpo,
+        '<div>'+_esc(_sucTxtSF())+'</div><div>'+semanas.length+' semanas</div>');
+}
+function _abrirReporte(titulo, subtitulo, cuerpo, derecha){
+    var html=etaaxReporteDoc({ titulo:titulo, subtitulo:subtitulo, derecha:derecha, cuerpo:cuerpo, pie:'Salud Financiera · Ventas Totales' });
+    var w=window.open('','_blank');
+    if(!w){ alert('Permite las ventanas emergentes para imprimir el reporte.'); return; }
+    w.document.write(html); w.document.close();
+}
+
 function _setPeriod(tipo,btn){
     periodoTipo=tipo;
     document.querySelectorAll('.period-tab').forEach(function(b){b.classList.remove('active');});
@@ -1166,6 +1294,39 @@ document.addEventListener('DOMContentLoaded',function(){
     _sbInit();
 });
 </script>
+<!-- ══ MODAL: histórico semanal para imprimir ══ -->
+<style>
+.hs-row{display:flex;align-items:center;gap:12px;padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px}
+.hs-row:hover{background:var(--surface2)}
+.hs-row input{width:16px;height:16px;accent-color:var(--green);cursor:pointer;flex-shrink:0}
+.hs-sem{width:70px;font-weight:600;color:var(--text)}
+.hs-per{flex:1;color:var(--text-muted);font-size:12px}
+.hs-val{font-weight:700;color:var(--green);font-variant-numeric:tabular-nums}
+.hs-pct{width:52px;text-align:right;font-weight:700;font-size:12px;font-variant-numeric:tabular-nums}
+</style>
+<div class="modal-overlay" id="modalHistSem" onclick="if(event.target===this)cerrarHistSemanal()">
+  <div class="modal-sf" style="max-width:640px">
+    <div class="modal-header">
+      <h2>📅 Histórico semanal</h2>
+      <button class="modal-close" onclick="cerrarHistSemanal()">✕</button>
+    </div>
+    <div class="modal-body" style="padding:0">
+      <div style="padding:14px 18px;font-size:12.5px;color:var(--text-muted);border-bottom:1px solid var(--border)">
+        Elige las semanas que quieres en el reporte. Vienen marcadas las últimas 8.
+        <div style="margin-top:9px;display:flex;gap:8px">
+          <button class="btn-accent" style="padding:5px 12px;font-size:11.5px" onclick="_hsMarcar(true)">Todas</button>
+          <button class="btn-accent" style="padding:5px 12px;font-size:11.5px" onclick="_hsMarcar(false)">Ninguna</button>
+        </div>
+      </div>
+      <div id="hsBody" style="max-height:52vh;overflow-y:auto"></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;padding:14px 18px;border-top:1px solid var(--border)">
+      <button class="btn-accent" onclick="cerrarHistSemanal()">Cancelar</button>
+      <button class="btn-primary" onclick="imprimirHistSemanal()">🖨️ Imprimir seleccionadas</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
 <script src="/etaax-db.js"></script>

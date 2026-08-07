@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
 <script src="/etaax-core.js"></script>
+<script src="/reporte-marca.js"></script>
     <style>
         /* ── Tabs principales ── */
         .gg-tabs{display:flex;gap:0;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:20px;overflow-x:auto;}
@@ -213,6 +214,8 @@
                 <div class="card">
                     <div class="card-header" style="justify-content:space-between">
                         <h2>Gastos Fijos del Negocio</h2>
+                        <button class="btn-accent" onclick="imprimirGastos()">🖨️ Imprimir</button>
+                        <button class="btn-accent" onclick="abrirHistSemGastos()">📅 Histórico semanal</button>
                         <button class="btn-accent" id="btnAddFijo">+ Agregar gasto fijo</button>
                     </div>
                     <div style="padding:12px 20px;font-size:11px;color:var(--text-dim);background:rgba(245,200,66,.04);border-bottom:1px solid var(--border)">
@@ -407,6 +410,38 @@
 </div>
 
 <!-- ══ MODAL GASTO FIJO ══ -->
+<!-- ══ MODAL: histórico semanal de gastos ══ -->
+<style>
+.hs-row{display:flex;align-items:center;gap:12px;padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px}
+.hs-row:hover{background:var(--surface2)}
+.hs-row input{width:16px;height:16px;accent-color:var(--green);cursor:pointer;flex-shrink:0}
+.hs-sem{width:70px;font-weight:600;color:var(--text)}
+.hs-per{flex:1;color:var(--text-muted);font-size:12px}
+.hs-val{font-weight:700;font-variant-numeric:tabular-nums}
+</style>
+<div class="modal-overlay" id="modalHistSemGG" onclick="if(event.target===this)cerrarHistSemGastos()">
+  <div class="modal-gg" style="max-width:640px">
+    <div class="modal-header">
+      <h2>📅 Histórico semanal de gastos</h2>
+      <button class="modal-close" onclick="cerrarHistSemGastos()">✕</button>
+    </div>
+    <div class="modal-body" style="padding:0">
+      <div style="padding:14px 18px;font-size:12.5px;color:var(--text-muted);border-bottom:1px solid var(--border)">
+        Elige las semanas del reporte. Vienen marcadas las últimas 8.
+        <div style="margin-top:9px;display:flex;gap:8px">
+          <button class="btn-accent" style="padding:5px 12px;font-size:11.5px" onclick="_hsMarcarGG(true)">Todas</button>
+          <button class="btn-accent" style="padding:5px 12px;font-size:11.5px" onclick="_hsMarcarGG(false)">Ninguna</button>
+        </div>
+      </div>
+      <div id="hsBodyGG" style="max-height:52vh;overflow-y:auto"></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;padding:14px 18px;border-top:1px solid var(--border)">
+      <button class="btn-accent" onclick="cerrarHistSemGastos()">Cancelar</button>
+      <button class="btn-primary" onclick="imprimirHistSemGastos()">🖨️ Imprimir seleccionadas</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modalFijo">
     <div class="modal-gg">
         <div class="modal-header">
@@ -884,6 +919,112 @@ function renderKPIs(mes){
     document.getElementById('kpiTotalCard').className='kpi-card '+(total>0?'danger':'');
 
     return{fijos:totalFijos,nominas:totalNom,variables:totalVar,total:total};
+}
+
+/* ══════════ REPORTES IMPRESOS (mismo formato que el resto) ══════════════════ */
+function _sucTxtGG(){ return _sucursalId ? _sucursalLabel() : 'Todas las sucursales'; }
+function _abrirReporteGG(titulo, subtitulo, cuerpo, derecha){
+    if(typeof etaaxReporteDoc!=='function'){ alert('No se pudo cargar el módulo de reportes. Recarga la página.'); return; }
+    var html=etaaxReporteDoc({ titulo:titulo, subtitulo:subtitulo, derecha:derecha, cuerpo:cuerpo, pie:'Salud Financiera · Gastos Totales' });
+    var w=window.open('','_blank');
+    if(!w){ alert('Permite las ventanas emergentes para imprimir el reporte.'); return; }
+    w.document.write(html); w.document.close();
+}
+// Gastos del negocio en un rango, con la misma clasificación del núcleo.
+function _gastosRangoGG(from,to){
+    return (_cacheGG_Gastos||[]).filter(function(g){ return g.fecha && g.fecha>=from && g.fecha<=to; }).filter(_deSuc);
+}
+function _clasifRangoGG(from,to){
+    return EtaaxCore.clasificarGastos(_gastosRangoGG(from,to), { fijos:loadFijos(), staff:_loadStaff(), comisionBanco:0 });
+}
+
+// ── Reporte del MES en pantalla ──
+function imprimirGastos(){
+    var mes=document.getElementById('mesInput').value||mesStr();
+    var ini=mes+'-01', fin=new Date(parseInt(mes.slice(0,4)), parseInt(mes.slice(5,7)), 0).toISOString().slice(0,10);
+    var cl=EtaaxCore.clasificarGastos(loadGastosMes(mes),{ fijos:loadFijos(), staff:_loadStaff(), comisionBanco:comisionesBancoMes(mes) });
+    // Desglose por categoría (lo que de verdad se pagó, sin propinas)
+    var cats={};
+    loadGastosMes(mes).forEach(function(g){
+        if(EtaaxCore.gastoEsPropina&&EtaaxCore.gastoEsPropina(g)) return;
+        var k=g.categoria||'Sin categoría'; cats[k]=(cats[k]||0)+n(g.monto);
+    });
+    var orden=Object.keys(cats).sort(function(a,b){return cats[b]-cats[a];});
+    var filas=orden.map(function(k){
+        var pct=cl.egresos>0?(cats[k]/cl.egresos*100):0;
+        return '<tr><td style="text-align:left">'+_esc(k)+'</td><td>'+fmtM(cats[k])+'</td><td>'+pct.toFixed(1)+'%</td></tr>';
+    }).join('');
+    var cuerpo=
+        '<div class="rsec">Gastos del mes</div>'+
+        '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">'+
+            '<div class="rcard"><div class="l">Gasto total</div><div class="v" style="color:#b52a1a">'+fmtM(cl.egresos)+'</div><div class="s">'+ini+' → '+fin+'</div></div>'+
+            '<div class="rcard"><div class="l">Fijos</div><div class="v">'+fmtM(cl.fijo)+'</div><div class="s">recurrentes del mes</div></div>'+
+            '<div class="rcard"><div class="l">Nómina y personal</div><div class="v">'+fmtM(cl.nom)+'</div><div class="s">incluye IMSS</div></div>'+
+            '<div class="rcard"><div class="l">Variables</div><div class="v">'+fmtM(cl.variable)+'</div><div class="s">incluye comisión bancaria</div></div>'+
+        '</div>'+
+        '<div class="rsec">Por categoría</div>'+
+        '<table class="rt"><thead><tr><th style="text-align:left">Categoría</th><th>Monto</th><th>% del total</th></tr></thead>'+
+        '<tbody>'+(filas||'<tr><td colspan="3" style="text-align:center">Sin gastos en el mes.</td></tr>')+'</tbody>'+
+        '<tfoot><tr><td>Total</td><td>'+fmtM(cl.egresos)+'</td><td>100%</td></tr></tfoot></table>';
+    _abrirReporteGG('Gastos Totales — '+mes, 'Gastos totales', cuerpo,
+        '<div>'+_esc(_sucTxtGG())+'</div><div>'+ini+' → '+fin+'</div>');
+}
+
+// ── Histórico por SEMANAS ──
+var _semGG=[];
+function _semanasGG(nSem){
+    var out=[], hoy=new Date();
+    for(var i=0;i<nSem;i++){
+        var d=new Date(hoy); d.setDate(hoy.getDate()-i*7);
+        var wk=EtaaxCore.getWeekStr(d), rg=EtaaxCore.getRange('semana',wk,null);
+        var cl=_clasifRangoGG(rg.from,rg.to);
+        out.push({wk:wk, from:rg.from, to:rg.to, fijo:cl.fijo, nom:cl.nom, variable:cl.variable, total:cl.egresos});
+    }
+    return out;
+}
+function abrirHistSemGastos(){
+    _semGG=_semanasGG(26);
+    var conDatos=_semGG.filter(function(s){ return s.total>0; });
+    var lista=(conDatos.length?conDatos:_semGG).map(function(s,i){
+        return '<label class="hs-row">'+
+            '<input type="checkbox" class="hs-chk" value="'+s.wk+'" '+(i<8?'checked':'')+'>'+
+            '<span class="hs-sem">Sem '+parseInt(s.wk.slice(6),10)+'</span>'+
+            '<span class="hs-per">'+s.from+' → '+s.to+'</span>'+
+            '<span class="hs-val" style="color:var(--red)">'+fmtM(s.total)+'</span>'+
+        '</label>';
+    }).join('');
+    document.getElementById('hsBodyGG').innerHTML=lista||'<div style="padding:24px;text-align:center;color:var(--text-dim)">Sin semanas con gasto registrado.</div>';
+    document.getElementById('modalHistSemGG').classList.add('open');
+}
+function cerrarHistSemGastos(){ document.getElementById('modalHistSemGG').classList.remove('open'); }
+function _hsMarcarGG(todas){ document.querySelectorAll('#hsBodyGG .hs-chk').forEach(function(c){ c.checked=todas; }); }
+function imprimirHistSemGastos(){
+    var sel={}; document.querySelectorAll('#hsBodyGG .hs-chk:checked').forEach(function(c){ sel[c.value]=1; });
+    var sem=_semGG.filter(function(s){ return sel[s.wk]; }).slice().reverse();
+    if(!sem.length){ alert('Elige al menos una semana.'); return; }
+    var tF=0,tN=0,tV=0,tT=0;
+    var filas=sem.map(function(s){
+        tF+=s.fijo; tN+=s.nom; tV+=s.variable; tT+=s.total;
+        return '<tr><td>Semana '+parseInt(s.wk.slice(6),10)+'</td><td style="text-align:left">'+s.from+' → '+s.to+'</td>'+
+            '<td>'+fmtM(s.fijo)+'</td><td>'+fmtM(s.nom)+'</td><td>'+fmtM(s.variable)+'</td>'+
+            '<td><b>'+fmtM(s.total)+'</b></td></tr>';
+    }).join('');
+    var prom=tT/sem.length;
+    var peor=sem.slice().sort(function(a,b){return b.total-a.total;})[0];
+    var cuerpo=
+        '<div class="rsec">Resumen del histórico</div>'+
+        '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">'+
+            '<div class="rcard"><div class="l">Semanas</div><div class="v">'+sem.length+'</div><div class="s">'+sem[0].from+' → '+sem[sem.length-1].to+'</div></div>'+
+            '<div class="rcard"><div class="l">Gasto total</div><div class="v" style="color:#b52a1a">'+fmtM(tT)+'</div><div class="s">de las semanas elegidas</div></div>'+
+            '<div class="rcard"><div class="l">Promedio semanal</div><div class="v">'+fmtM(prom)+'</div><div class="s">gasto por semana</div></div>'+
+            '<div class="rcard"><div class="l">Semana más cara</div><div class="v">'+fmtM(peor.total)+'</div><div class="s">sem '+parseInt(peor.wk.slice(6),10)+' · '+peor.from+'</div></div>'+
+        '</div>'+
+        '<div class="rsec">Semana por semana</div>'+
+        '<table class="rt"><thead><tr><th style="text-align:left">Semana</th><th style="text-align:left">Período</th><th>Fijos</th><th>Nómina</th><th>Variables</th><th>Total</th></tr></thead>'+
+        '<tbody>'+filas+'</tbody>'+
+        '<tfoot><tr><td colspan="2">Total</td><td>'+fmtM(tF)+'</td><td>'+fmtM(tN)+'</td><td>'+fmtM(tV)+'</td><td>'+fmtM(tT)+'</td></tr></tfoot></table>';
+    _abrirReporteGG('Histórico semanal de gastos', 'Histórico semanal', cuerpo,
+        '<div>'+_esc(_sucTxtGG())+'</div><div>'+sem.length+' semanas</div>');
 }
 
 /* ── RENDER ALL ── */
