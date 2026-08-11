@@ -88,11 +88,8 @@ function render(){
             '<h1>'+esc(e.titulo||'Evaluación')+'</h1>'+
             (e.descripcion?'<div class="desc">'+esc(e.descripcion)+'</div>':'')+
         '</div>'+
-        // Datos de quien contesta
-        '<div class="card">'+
-            '<div class="field"><label class="lbl">Tu nombre *</label><input class="txt" id="rNombre" placeholder="Nombre y apellido"></div>'+
-            '<div class="field"><label class="lbl">Puesto / área (opcional)</label><input class="txt" id="rPuesto" placeholder="Ej. Barra, Cocina, Candidato"></div>'+
-        '</div>';
+        // Ficha de quien contesta: la arma la evaluación (campos y obligatorios)
+        '<div class="card">'+ camposFicha(e) +'</div>';
     (e.preguntas||[]).forEach(function(q,idx){
         html+='<div class="card" data-qcard="'+q.id+'">'+
             '<div class="qnum">Pregunta '+(idx+1)+'</div>'+
@@ -104,6 +101,74 @@ function render(){
     html+='<button class="sub-btn" id="btnEnviar" onclick="enviar()">Enviar respuestas</button>'+
         '<div class="foot">Tus respuestas se envían de forma privada a ETAAX.</div>';
     document.getElementById('root').innerHTML=html;
+}
+
+/* ── Ficha de quien contesta ────────────────────────────────────────────
+   Los campos los define cada evaluación (bloque "Datos de quien contesta").
+   Son datos de identificación, no preguntas: no suman puntos. Las
+   evaluaciones creadas antes de esto no traen `ficha` → nombre y puesto,
+   que es exactamente lo que pedían. */
+var FICHA_CAMPOS=[
+    {id:'nombre', nom:'Nombre completo',    ph:'Nombre y apellido',        tipo:'text',   ac:'name'},
+    {id:'puesto', nom:'Puesto / área',      ph:'Ej. Barra, Cocina, Candidato', tipo:'text' },
+    {id:'edad',   nom:'Edad',               ph:'Ej. 28',                   tipo:'number', min:14, max:99},
+    {id:'tel',    nom:'Celular / WhatsApp', ph:'10 dígitos',               tipo:'tel',    ac:'tel'},
+    {id:'correo', nom:'Correo',             ph:'tucorreo@ejemplo.com',     tipo:'email',  ac:'email'}
+];
+var FICHA_DEFAULT={ nombre:{on:true,req:true}, puesto:{on:true,req:false},
+                    edad:{on:false,req:false}, tel:{on:false,req:false}, correo:{on:false,req:false} };
+function fichaDe(e){
+    var f=(e&&e.ficha)||{}, out={};
+    FICHA_CAMPOS.forEach(function(c){
+        var v=f[c.id]||FICHA_DEFAULT[c.id]||{on:false,req:false};
+        var on=(c.id==='nombre')?true:!!v.on;
+        out[c.id]={ on:on, req:(c.id==='nombre')?true:(on&&!!v.req) };
+    });
+    return out;
+}
+function camposFicha(e){
+    var f=fichaDe(e);
+    return FICHA_CAMPOS.filter(function(c){ return f[c.id].on; }).map(function(c){
+        var req=f[c.id].req;
+        return '<div class="field">'+
+            '<label class="lbl">'+esc(c.nom)+(req?' *':' (opcional)')+'</label>'+
+            '<input class="txt" id="rf_'+c.id+'" type="'+c.tipo+'" placeholder="'+esc(c.ph)+'"'+
+                (c.ac?' autocomplete="'+c.ac+'"':'')+
+                (c.min!=null?' min="'+c.min+'"':'')+(c.max!=null?' max="'+c.max+'"':'')+
+                (c.tipo==='tel'?' inputmode="numeric"':'')+'>'+
+            '<div class="err-note" data-ferr="'+c.id+'"></div>'+
+        '</div>';
+    }).join('');
+}
+// Devuelve {ok, datos} — valida obligatorios y formato de correo/celular/edad.
+function leerFicha(e){
+    var f=fichaDe(e), datos={}, malo=null;
+    function falla(id,msg){ if(!malo)malo={id:id,msg:msg}; var el=document.querySelector('[data-ferr="'+id+'"]'); if(el){ el.textContent=msg; el.style.display='block'; } }
+    FICHA_CAMPOS.forEach(function(c){
+        if(!f[c.id].on) return;
+        var el=document.getElementById('rf_'+c.id); if(!el) return;
+        var el2=document.querySelector('[data-ferr="'+c.id+'"]'); if(el2) el2.style.display='none';
+        var v=(el.value||'').trim();
+        if(!v){ if(f[c.id].req) falla(c.id,'Este dato es obligatorio.'); return; }
+        if(c.id==='correo' && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) { falla(c.id,'Revisa el correo.'); return; }
+        if(c.id==='tel'){
+            var d=v.replace(/\D/g,'');
+            if(d.length<10){ falla(c.id,'El celular debe traer 10 dígitos.'); return; }
+            v=d;
+        }
+        if(c.id==='edad'){
+            var n=parseInt(v,10);
+            if(isNaN(n)||n<14||n>99){ falla(c.id,'Escribe una edad entre 14 y 99.'); return; }
+            v=n;
+        }
+        datos[c.id]=v;
+    });
+    if(malo){
+        var campo=document.getElementById('rf_'+malo.id);
+        if(campo){ campo.focus(); campo.scrollIntoView({behavior:'smooth',block:'center'}); }
+        return {ok:false};
+    }
+    return {ok:true, datos:datos};
 }
 
 function cuerpoPregunta(q){
@@ -160,8 +225,9 @@ function _puntosMaxPregunta(q){
 
 async function enviar(){
     var e=_eval;
-    var nombre=(document.getElementById('rNombre').value||'').trim();
-    if(!nombre){ document.getElementById('rNombre').focus(); alert('Escribe tu nombre para continuar.'); return; }
+    var _f=leerFicha(e);
+    if(!_f.ok) return;                       // el propio campo dice qué falta
+    var nombre=_f.datos.nombre||'';
     // Validar obligatorias + recoger respuestas abiertas
     var faltan=false, primeraFalta=null, respuestas=[], score=0, scoreMax=0;
     (e.preguntas||[]).forEach(function(q){
@@ -183,7 +249,7 @@ async function enviar(){
 
     var btn=document.getElementById('btnEnviar'); btn.disabled=true; btn.textContent='Enviando…';
     var datos={
-        respondente:{ nombre:nombre, puesto:(document.getElementById('rPuesto').value||'').trim() },
+        respondente:_f.datos,                // nombre + los campos que pida la evaluación
         respuestas:respuestas,
         score:score, scoreMax:scoreMax, scorePct: scoreMax>0?Math.round(score/scoreMax*100):0,
         evaluacionTitulo:e.titulo, categoria:e.categoria

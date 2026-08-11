@@ -76,6 +76,11 @@
         .res-card-top:hover{background:var(--surface2);}
         .res-nom{font-weight:600;font-size:14px;color:var(--text);}
         .res-meta{font-size:11px;color:var(--text-dim);margin-top:2px;}
+        .res-contacto{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;}
+        .res-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 9px;border-radius:20px;
+            border:1px solid var(--border);color:var(--text-muted);background:var(--surface2);text-decoration:none;white-space:nowrap;}
+        .res-chip.act{border-color:rgba(61,190,122,.4);color:var(--green);cursor:pointer;}
+        .res-chip.act:hover{background:rgba(61,190,122,.12);border-color:var(--green);}
         .res-score{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:1px;text-align:right;line-height:1;}
         .res-score-sub{font-family:'DM Sans',sans-serif;font-size:10px;letter-spacing:.5px;color:var(--text-dim);margin-top:2px;}
         .res-det{display:none;border-top:1px solid var(--border);padding:6px 16px 12px;}
@@ -154,6 +159,20 @@
             </div>
         </div>
 
+        <!-- Ficha de quien contesta: datos de identificación, NO preguntas.
+             No suman puntos; sirven para saber quién contestó y poder contactarlo. -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin:18px 0 10px">
+            <div class="ev-lbl" style="margin:0">Datos de quien contesta</div>
+            <div class="ev-card-meta">No suman puntos</div>
+        </div>
+        <div class="ev-card" style="padding:14px 16px">
+            <div id="edFicha" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px"></div>
+            <div style="font-size:11px;color:var(--text-dim);margin-top:10px;line-height:1.5">
+                Para una evaluación interna basta el nombre. Para candidatos, pide celular y correo:
+                aparecen como botones de WhatsApp y correo en los resultados.
+            </div>
+        </div>
+
         <div style="display:flex;align-items:center;justify-content:space-between;margin:18px 0 10px">
             <div class="ev-lbl" style="margin:0">Preguntas</div>
             <div class="ev-card-meta" id="edPuntosTot"></div>
@@ -225,6 +244,31 @@ var TIPOS=[
     {id:'sino',    nom:'Sí / No'},
     {id:'abierta', nom:'Respuesta abierta'}
 ];
+
+/* ── Ficha de quien contesta ────────────────────────────────────────────
+   Campos de identificación, NO preguntas: no entran al puntaje. Cada
+   evaluación decide cuáles pide y cuáles son obligatorios. El nombre es fijo
+   (sin él una respuesta no sirve de nada). Las evaluaciones viejas, sin
+   `ficha`, siguen pidiendo nombre y puesto — que era lo que había. */
+var FICHA_CAMPOS=[
+    {id:'nombre', nom:'Nombre completo',   ic:'👤', fijo:true,  tipo:'text'},
+    {id:'puesto', nom:'Puesto / área',     ic:'💼', tipo:'text'},
+    {id:'edad',   nom:'Edad',              ic:'🎂', tipo:'number'},
+    {id:'tel',    nom:'Celular / WhatsApp',ic:'📱', tipo:'tel'},
+    {id:'correo', nom:'Correo',            ic:'✉️', tipo:'email'}
+];
+var FICHA_DEFAULT={ nombre:{on:true,req:true}, puesto:{on:true,req:false},
+                    edad:{on:false,req:false}, tel:{on:false,req:false}, correo:{on:false,req:false} };
+// Configuración efectiva de una evaluación (rellena lo que falte con el default).
+function fichaDe(e){
+    var f=(e&&e.ficha)||{}, out={};
+    FICHA_CAMPOS.forEach(function(c){
+        var v=f[c.id]||FICHA_DEFAULT[c.id]||{on:false,req:false};
+        out[c.id]={ on:c.fijo?true:!!v.on, req:c.fijo?true:(!!v.on&&!!v.req) };
+    });
+    return out;
+}
+if(typeof window!=='undefined'){ window.FICHA_CAMPOS=FICHA_CAMPOS; window.fichaDe=fichaDe; }
 
 var _evals=[], _edit=null, _respuestas=[], _verResId=null;
 
@@ -356,6 +400,7 @@ function abrirEditor(esEdicion){
     document.getElementById('edCategoria').value=_edit.categoria;
     document.getElementById('edDescripcion').value=_edit.descripcion||'';
     var chk=document.getElementById('edActiva'); chk.checked=!!_edit.activa; chk.onchange=_onActivaChange; _onActivaChange();
+    renderFicha();
     renderPreguntas();
     renderLinkBox();
     window.scrollTo(0,0);
@@ -374,8 +419,40 @@ function renderLinkBox(){
 }
 function _copiarUrl(u){ if(navigator.clipboard)navigator.clipboard.writeText(u); alert('Link copiado:\n'+u); }
 
+/* ── Ficha (constructor) ── */
+function renderFicha(){
+    var cont=document.getElementById('edFicha'); if(!cont) return;
+    var f=fichaDe(_edit);
+    cont.innerHTML=FICHA_CAMPOS.map(function(c){
+        var v=f[c.id];
+        return '<div style="background:var(--surface2);border:1px solid '+(v.on?'rgba(61,190,122,.35)':'var(--border)')+';border-radius:10px;padding:10px 12px">'+
+            '<label style="display:flex;align-items:center;gap:8px;cursor:'+(c.fijo?'default':'pointer')+';font-size:13px;color:var(--text)">'+
+                '<input type="checkbox" data-fich="'+c.id+'" data-f="on" '+(v.on?'checked':'')+(c.fijo?' disabled':'')+
+                    ' onchange="_fichaCambio()" style="width:16px;height:16px;accent-color:var(--green)">'+
+                '<span>'+c.ic+' '+esc(c.nom)+'</span>'+
+            '</label>'+
+            (c.fijo
+                ? '<div style="font-size:10.5px;color:var(--text-dim);margin:6px 0 0 24px">Siempre se pide</div>'
+                : '<label style="display:flex;align-items:center;gap:7px;margin:7px 0 0 24px;font-size:11.5px;color:var(--text-muted);cursor:pointer'+(v.on?'':';opacity:.4')+'">'+
+                    '<input type="checkbox" data-fich="'+c.id+'" data-f="req" '+(v.req?'checked':'')+(v.on?'':' disabled')+
+                        ' onchange="_fichaCambio()" style="width:14px;height:14px;accent-color:var(--accent)">Obligatorio</label>')+
+        '</div>';
+    }).join('');
+}
+function _capturarFicha(){
+    var f={};
+    FICHA_CAMPOS.forEach(function(c){
+        var on=document.querySelector('[data-fich="'+c.id+'"][data-f="on"]');
+        var rq=document.querySelector('[data-fich="'+c.id+'"][data-f="req"]');
+        f[c.id]={ on:c.fijo?true:!!(on&&on.checked), req:c.fijo?true:!!(rq&&rq.checked) };
+    });
+    _edit.ficha=f;
+}
+function _fichaCambio(){ _capturarFicha(); renderFicha(); }
+
 /* ── Preguntas (constructor) ── */
 function _capturar(){
+    _capturarFicha();
     // Lee el DOM del editor hacia el modelo, para no perder lo escrito al re-render.
     _edit.titulo=document.getElementById('edTitulo').value.trim();
     _edit.categoria=document.getElementById('edCategoria').value;
@@ -552,8 +629,20 @@ function respHTML(r){
     var pct=r.scorePct!=null?r.scorePct:0;
     var col=pct>=70?'var(--green)':pct>=40?'var(--accent)':'#ff7a5c';
     var fecha=String(r.recibidoEn||'').slice(0,10);
-    var nom=(r.respondente&&r.respondente.nombre)||'Anónimo';
-    var puesto=(r.respondente&&r.respondente.puesto)||'';
+    var rp=r.respondente||{};
+    var nom=rp.nombre||'Anónimo';
+    var puesto=rp.puesto||'';
+    // Contacto directo: el celular abre WhatsApp y el correo el cliente de correo.
+    // Sin esto, capturarlos no sirve de nada — habría que copiarlos a mano.
+    // wa.me pide el número con lada de país. 10 dígitos = México → 52 adelante;
+    // si ya viene con lada (12+), se respeta tal cual (clientes fuera de México).
+    var _tel=String(rp.tel||'').replace(/\D/g,'');
+    if(_tel.length===10) _tel='52'+_tel;
+    var contacto='';
+    if(rp.edad)  contacto+='<span class="res-chip">🎂 '+esc(rp.edad)+' años</span>';
+    if(_tel)     contacto+='<a class="res-chip act" href="https://wa.me/'+_tel+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Abrir WhatsApp">📱 '+esc(rp.tel)+'</a>';
+    if(rp.correo)contacto+='<a class="res-chip act" href="mailto:'+esc(rp.correo)+'" onclick="event.stopPropagation()" title="Enviar correo">✉️ '+esc(rp.correo)+'</a>';
+    if(contacto) contacto='<div class="res-contacto">'+contacto+'</div>';
     var det=(r.respuestas||[]).map(function(a){
         return '<div class="res-ans"><div class="res-ans-q">'+esc(a.texto||'')+'</div>'+
             '<div class="res-ans-a">'+esc(a.respuesta||'—')+(a.puntos?' <span style="color:var(--green);font-weight:600">+'+a.puntos+'</span>':'')+'</div></div>';
@@ -561,7 +650,7 @@ function respHTML(r){
     return '<div class="res-card">'+
         '<div class="res-card-top" onclick="this.parentNode.classList.toggle(\'open\')">'+
             '<div><div class="res-nom">'+esc(nom)+'</div>'+
-            '<div class="res-meta">'+(puesto?esc(puesto)+' · ':'')+esc(fecha)+'</div></div>'+
+            '<div class="res-meta">'+(puesto?esc(puesto)+' · ':'')+esc(fecha)+'</div>'+contacto+'</div>'+
             '<div class="res-score" style="color:'+col+'">'+pct+'%<div class="res-score-sub">'+(r.score||0)+'/'+(r.scoreMax||0)+' pts</div></div>'+
         '</div>'+
         '<div class="res-det">'+det+'</div>'+
