@@ -206,6 +206,101 @@ body.has-ctx .header { top: 96px; }
     color: var(--text);
 }
 
+/* ══ KIT DEL HEADER DE SUB-MÓDULO ═══════════════════════════════════════
+   UNA sola verdad para la barra de título de todos los sub-módulos
+   (Financiero, Recetas, Administrativo): marca + sucursal + buscador de
+   periodo + acciones. Todo va a la MISMA altura (32px), misma tipografía
+   y los mismos tres roles de color:
+     · chip de sucursal → morado (identidad)
+     · acción secundaria (.btn-accent/.btn-vista/.btn-ghost) → contorno neutro
+     · acción principal (.btn-primary) → verde sólido
+   Las reglas van acotadas a `.header` a propósito: así ganan por
+   especificidad sobre las copias locales de cada página sin tener que
+   editarlas una por una. */
+.hdr-acts {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* Chip de sucursal (y su menú) */
+.header .suc-wrap { position: relative; }
+.header .suc-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 32px; padding: 0 14px;
+    background: var(--surface); border: 1px solid rgba(155,141,232,.4); color: var(--viol);
+    border-radius: 20px;
+    font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 600; line-height: 1;
+    white-space: nowrap; cursor: pointer; text-decoration: none;
+    transition: border-color .15s, background .15s;
+}
+.header .suc-chip:hover, .header .suc-chip.open { border-color: var(--viol); background: var(--viol-dim); }
+.header .suc-menu {
+    display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    min-width: 230px; padding: 6px; box-shadow: 0 14px 40px rgba(0,0,0,.45);
+}
+.header .suc-menu.open { display: block; }
+.header .suc-opt { padding: 9px 12px; border-radius: 7px; font-size: 12.5px; color: var(--text-muted); cursor: pointer; }
+.header .suc-opt:hover { background: var(--surface2); color: var(--text); }
+.header .suc-opt.active { color: var(--viol); font-weight: 600; }
+.header .suc-sep { height: 1px; background: var(--border); margin: 5px 6px; }
+
+/* Buscador de periodo: pestañas + picker */
+.header .period-tabs {
+    display: flex; align-items: center; gap: 4px; height: 32px; padding: 0 4px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+}
+.header .period-tab {
+    background: transparent; border: 1px solid transparent; color: var(--text-muted);
+    height: 24px; padding: 0 13px; border-radius: 6px;
+    font-family: 'DM Sans', sans-serif; font-size: 12.5px; line-height: 1; cursor: pointer;
+    white-space: nowrap; transition: color .15s, background .15s;
+}
+.header .period-tab.active { background: var(--surface); color: var(--green); font-weight: 500; border-color: var(--border); }
+.header .period-tab:hover:not(.active) { color: var(--text); }
+.header .period-picker { display: flex; align-items: center; gap: 8px; }
+.header .period-picker label {
+    font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-dim);
+}
+.header input[type="month"], .header input[type="date"], .header input[type="week"], .header input[type="search"] {
+    height: 32px; padding: 0 11px;
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 12.5px;
+    outline: none; cursor: pointer;
+}
+.header input:focus { border-color: var(--green); }
+
+/* Botones de acción — mismas medidas, tres roles de color */
+.header .btn-accent, .header .btn-vista, .header .btn-ghost,
+.header .btn-primary, .header .btn-save, .header .btn-reset, .header .btn-danger {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 32px; padding: 0 14px; border-radius: 8px;
+    font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 500; line-height: 1;
+    white-space: nowrap; cursor: pointer; text-decoration: none;
+    transition: border-color .15s, background .15s, color .15s;
+}
+.header .btn-vista, .header .btn-ghost, .header .btn-reset {
+    background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+}
+.header .btn-vista:hover, .header .btn-ghost:hover, .header .btn-reset:hover {
+    border-color: var(--green); color: var(--green);
+}
+.header .btn-accent {
+    background: rgba(245,200,66,.10); border: 1px solid rgba(245,200,66,.35); color: var(--accent);
+}
+.header .btn-accent:hover { background: rgba(245,200,66,.18); border-color: var(--accent); }
+.header .btn-primary, .header .btn-save {
+    background: var(--green); border: 1px solid var(--green); color: #fff;
+}
+.header .btn-primary:hover, .header .btn-save:hover { opacity: .88; }
+/* Acción destructiva / de cierre (archivar, eliminar) */
+.header .btn-danger {
+    background: rgba(224,90,58,.08); border: 1px solid rgba(224,90,58,.35); color: var(--red);
+}
+.header .btn-danger:hover { background: rgba(224,90,58,.16); border-color: var(--red); }
+
 /* Botón principal — hover en dorado */
 .btn-vista {
     background: transparent;
@@ -1416,7 +1511,6 @@ textarea:focus {
     display: flex; align-items: center; gap: 4px; flex-shrink: 0;
     padding-left: 10px; margin-left: 2px; border-left: 1px solid var(--border);
 }
-.ctx-btn-icon { padding: 4px 9px; }
 .ctx-right { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .ctx-user-badge {
     display: flex; align-items: center; gap: 6px;
@@ -1427,14 +1521,24 @@ textarea:focus {
     font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase;
     padding: 2px 7px; border-radius: 20px; font-weight: 600;
 }
+/* Salidas de la barra de contexto (Ir a Módulos / Salir): son botones de
+   navegación real, no adornos — van legibles de entrada, con SU color puesto
+   (verde para volver, rojo para salir), no solo al pasar el mouse. */
 .ctx-btn {
-    background: transparent; border: 1px solid var(--border); color: var(--text-dim);
-    font-family: 'DM Sans', sans-serif; font-size: 10px; padding: 4px 12px;
-    border-radius: 6px; cursor: pointer; transition: all .15s; letter-spacing: .3px;
+    background: rgba(61,190,122,.08); border: 1px solid rgba(61,190,122,.35); color: var(--green);
+    font-family: 'DM Sans', sans-serif; font-size: 11.5px; font-weight: 500; padding: 6px 14px;
+    border-radius: 7px; cursor: pointer; transition: all .15s; letter-spacing: .3px;
     text-decoration: none; display: inline-flex; align-items: center; white-space: nowrap;
 }
-.ctx-btn:hover { border-color: var(--green); color: var(--green); }
-.ctx-btn-danger:hover { border-color: var(--red); color: var(--red); }
+.ctx-btn:hover { background: rgba(61,190,122,.16); border-color: var(--green); }
+.ctx-btn-danger { background: rgba(224,90,58,.08); border-color: rgba(224,90,58,.35); color: var(--red); }
+.ctx-btn-danger:hover { background: rgba(224,90,58,.16); border-color: var(--red); color: var(--red); }
+/* Las flechas atrás/adelante siguen siendo secundarias: neutras hasta el hover. */
+.ctx-btn-icon {
+    padding: 5px 10px; font-size: 12px; background: transparent;
+    border-color: var(--border); color: var(--text-dim);
+}
+.ctx-btn-icon:hover { background: transparent; border-color: var(--green); color: var(--green); }
 
 /* Ajustes de layout cuando ctx-bar está visible */
 body.has-ctx .nav { top: 96px; height: calc(100vh - 96px); }

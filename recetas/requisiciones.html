@@ -264,12 +264,12 @@
                 <span class="brand-label">Sistema de</span>
                 <span class="brand-title">Requisición</span>
             </div>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <div class="hdr-acts">
                 <span id="fechaReq" style="font-size:12px;color:var(--text-dim);padding:0 4px"></span>
-                <button class="btn-vista" onclick="abrirHistorial()" style="color:var(--text-muted)">📋 Historial</button>
-                <button class="btn-vista" onclick="cargarTodasAnteriores()" style="color:var(--text-muted)" title="Cargar existencias vacías desde la última requisición archivada">↩ Cargar anteriores</button>
-                <button class="btn-vista" onclick="guardarExistencias()" style="color:var(--green);border-color:var(--green)">💾 Guardar</button>
-                <button class="btn-vista" onclick="cerrarRequisicion()" style="color:var(--red);border-color:var(--red)">✅ Cerrar y archivar</button>
+                <button class="btn-vista" onclick="abrirHistorial()">📋 Historial</button>
+                <button class="btn-vista" onclick="cargarTodasAnteriores()" title="Cargar existencias vacías desde la última requisición archivada">↩ Cargar anteriores</button>
+                <button class="btn-primary" onclick="guardarExistencias()">💾 Guardar</button>
+                <button class="btn-danger" onclick="cerrarRequisicion()">✅ Cerrar y archivar</button>
             </div>
         </div>
 

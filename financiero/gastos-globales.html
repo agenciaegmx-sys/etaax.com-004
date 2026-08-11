@@ -166,15 +166,24 @@
                 <span class="brand-label">Salud Financiera</span>
                 <span class="brand-title">Gastos Totales</span>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <div class="hdr-acts">
                 <div class="suc-wrap">
-                    <button class="suc-chip" id="sucChip">🌐 Todas las sucursales ▾</button>
+                    <button class="suc-chip" id="sucChip">🌐 Vista global ▾</button>
                     <div class="suc-menu" id="sucMenu"></div>
                 </div>
-                <div style="display:flex;align-items:center;gap:8px">
-                    <label style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim)">Mes</label>
-                    <input type="month" id="mesInput" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;cursor:pointer;">
+                <div class="period-tabs">
+                    <button class="period-tab" id="tabDia">Día</button>
+                    <button class="period-tab" id="tabSemana">Semana</button>
+                    <button class="period-tab active" id="tabMes">Mes</button>
+                    <button class="period-tab" id="tabRango">Rango</button>
                 </div>
+                <div class="period-picker">
+                    <label id="pickerLabel">Mes</label>
+                    <input type="month" id="mesInput">
+                    <input type="date" id="pickerEnd" style="display:none">
+                </div>
+                <button class="btn-accent" onclick="imprimirGastos()" title="Reporte del periodo en pantalla, con el desglose por grupo y por categoría">🖨️ Imprimir</button>
+                <button class="btn-accent" onclick="abrirHistSemGastos()" title="Elige las semanas y arma un reporte histórico">📅 Histórico semanal</button>
             </div>
         </div>
 
@@ -198,7 +207,7 @@
                     <div class="kpi-sub">Del módulo de gastos diarios</div>
                 </div>
                 <div class="kpi-card" id="kpiTotalCard">
-                    <div class="kpi-lbl">Total Egresos del Mes</div>
+                    <div class="kpi-lbl">Total Egresos del periodo</div>
                     <div class="kpi-val" id="kpiTotal">$0.00</div>
                     <div class="kpi-sub" id="kpiTotalSub">Fijos + Nóminas + Variables</div>
                 </div>
@@ -210,12 +219,6 @@
                 <button class="gg-tab" id="tabNominas"><span class="gg-tab-icon">👥</span> Nóminas</button>
                 <button class="gg-tab" id="tabVariables"><span class="gg-tab-icon">📊</span> Gastos Variables</button>
                 <button class="gg-tab" id="tabResumen"><span class="gg-tab-icon">📈</span> Resumen P&amp;L</button>
-                <!-- Reportes de TODO el gasto (no de una pestaña): van al final de la
-                     barra, separados por un margen automático. -->
-                <span class="gg-tabs-acts">
-                    <button class="btn-accent" onclick="imprimirGastos()" title="Reporte del mes en pantalla, con el desglose por grupo y por categoría">🖨️ Imprimir</button>
-                    <button class="btn-accent" onclick="abrirHistSemGastos()" title="Elige las semanas y arma un reporte histórico">📅 Histórico semanal</button>
-                </span>
             </div>
 
             <!-- ═══ SECCIÓN 1: GASTOS FIJOS ═══ -->
@@ -236,14 +239,14 @@
                                     <th>Concepto / estatus del mes</th>
                                     <th>Categoría</th>
                                     <th class="ar">Plan</th>
-                                    <th class="ar">Pagado (mes)</th>
+                                    <th class="ar">Pagado (periodo)</th>
                                     <th></th>
                                 </tr>
                             </thead>
                             <tbody id="fijosTbody"></tbody>
                             <tfoot id="fijosFoot" style="display:none">
                                 <tr>
-                                    <td colspan="3" class="tot-lbl">Total pagado del mes · <span id="fijosPlan" style="color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0"></span></td>
+                                    <td colspan="3" class="tot-lbl">Total pagado del periodo · <span id="fijosPlan" style="color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0"></span></td>
                                     <td class="ar"><span class="tot-val" id="fijosTotal"></span></td>
                                     <td></td>
                                 </tr>
@@ -313,7 +316,7 @@
                 <!-- Desglose de pagos de IMSS / cargas sociales (cuenta en nóminas, no en variables) -->
                 <!-- Nómina pagada del mes (gastos diarios categoría nómina) — de aquí sale el total de nóminas -->
                 <div class="card" id="cardNomGastos" style="margin-top:16px;display:none">
-                    <div class="card-header"><h2>💵 Nómina pagada del mes (gastos)</h2></div>
+                    <div class="card-header"><h2>💵 Nómina pagada del periodo (gastos)</h2></div>
                     <div style="padding:12px 20px;font-size:11px;color:var(--text-dim);background:rgba(61,190,122,.05);border-bottom:1px solid var(--border)">
                         El total de nóminas se calcula desde lo realmente <strong>pagado</strong> (sueldo final + bonos) en el módulo de gastos, no del catálogo de staff. La plantilla de arriba es referencia.
                     </div>
@@ -353,7 +356,7 @@
             <div id="secVariables" style="display:none">
                 <div class="card">
                     <div class="card-header">
-                        <h2>Gastos Variables del Mes</h2>
+                        <h2>Gastos Variables del periodo</h2>
                     </div>
                     <div style="padding:12px 20px;font-size:11px;color:var(--text-dim);background:rgba(30,80,220,.04);border-bottom:1px solid var(--border)">
                         📊 Datos del módulo <strong>Captura de Gastos</strong> consolidados aquí. <strong>Excluye nómina, IMSS, gastos fijos y propinas</strong> (cada uno cuenta aparte, para no duplicar). Impuestos y contabilidad SÍ cuentan como variable.
@@ -380,7 +383,7 @@
                         </table>
                         <div id="varEmpty" class="empty-state" style="display:none">
                             <div style="font-size:28px;margin-bottom:8px">📊</div>
-                            <div>Sin gastos variables capturados para este mes.<br><span style="opacity:.6">Regístralos desde el módulo Captura de Gastos en Administrativo.</span></div>
+                            <div>Sin gastos variables capturados en este periodo.<br><span style="opacity:.6">Regístralos desde el módulo Captura de Gastos en Administrativo.</span></div>
                         </div>
                     </div>
                 </div>
@@ -407,7 +410,7 @@
             <!-- ═══ SECCIÓN 4: RESUMEN P&L ═══ -->
             <div id="secResumen" style="display:none">
                 <div class="card">
-                    <div class="card-header"><h2>📈 Resumen Financiero del Mes</h2></div>
+                    <div class="card-header"><h2>📈 Resumen Financiero del periodo</h2></div>
                     <div class="card-body" id="plBody" style="max-width:700px"></div>
                 </div>
             </div>
@@ -708,8 +711,46 @@ function saveNominas(mes,d){
     _cacheGG_Nominas = all;
     _sbSaveNominas(all);
 }
+/* ── PERIODO: día · semana · mes · rango ───────────────────────────────
+   La página nació mensual. Para no partirla en dos, el periodo activo vive
+   en `_rgGG` y los cargadores por mes preguntan `_rgDe(mes)`: si les piden
+   el MES DEL PERIODO devuelven el rango exacto (un día, una semana, un
+   rango libre); si les piden otro mes —histórico, comparativas— devuelven
+   ese mes completo. Lo que es mensual por naturaleza (el plan de gastos
+   fijos y el documento de nóminas) sigue anclado al mes del periodo. */
+var periodoTipoGG='mes';
+var _rgGG=null;
+function _finMesGG(mes){ return new Date(parseInt(mes.slice(0,4),10), parseInt(mes.slice(5,7),10), 0).toISOString().slice(0,10); }
+function _rangoGG(){
+    var pi=document.getElementById('mesInput'), pe=document.getElementById('pickerEnd');
+    var val=(pi&&pi.value)||mesStr(), end=(pe&&pe.value)||todayStr();
+    return EtaaxCore.getRange(periodoTipoGG, val, end);
+}
+function _rgDe(mes){
+    if(_rgGG && mes && mes===_mesPicker) return _rgGG;
+    var m=mes||mesStr();
+    return { from:m+'-01', to:_finMesGG(m) };
+}
+function _setPeriodoGG(tipo,btn){
+    periodoTipoGG=tipo;
+    document.querySelectorAll('.period-tab').forEach(function(b){b.classList.remove('active');});
+    if(btn) btn.classList.add('active');
+    var pi=document.getElementById('mesInput'),pe=document.getElementById('pickerEnd'),pl=document.getElementById('pickerLabel');
+    if(tipo==='dia'){ pi.type='date'; pe.style.display='none'; pl.textContent='Fecha'; pi.value=todayStr(); }
+    else if(tipo==='semana'){ pi.type='week'; pe.style.display='none'; pl.textContent='Semana'; pi.value=EtaaxCore.getWeekStr(new Date()); }
+    else if(tipo==='mes'){ pi.type='month'; pe.style.display='none'; pl.textContent='Mes'; pi.value=mesStr(); }
+    else { pi.type='date'; pe.style.display=''; pl.textContent='Desde'; pi.value=mesStr()+'-01'; pe.value=todayStr(); }
+    renderAll();
+}
+function _periodoTxtGG(){
+    var r=_rgDe(_mesPicker);
+    if(periodoTipoGG==='mes') return new Date(r.from+'T12:00:00').toLocaleDateString('es-MX',{month:'long',year:'numeric'});
+    if(periodoTipoGG==='dia') return new Date(r.from+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'});
+    return r.from+' → '+r.to;
+}
 function loadGastosMes(mes){
-    return (_cacheGG_Gastos||[]).filter(function(g){return g.fecha&&g.fecha.slice(0,7)===mes;}).filter(_deSuc);
+    var r=_rgDe(mes);
+    return (_cacheGG_Gastos||[]).filter(function(g){return g.fecha&&g.fecha>=r.from&&g.fecha<=r.to;}).filter(_deSuc);
 }
 // IMSS / cargas sociales: aunque se capture como gasto, cuenta en NÓMINAS, no en variables.
 function _esIMSS(g){ return /\bimss\b|seguro\s*social|cargas\s*sociales/i.test((g.categoria||'')+' '+(g.concepto||'')); }
@@ -780,7 +821,8 @@ function loadFijosNoCatalogMes(mes){
 }
 function totalFijosNoCatalogMes(mes){ return loadFijosNoCatalogMes(mes).reduce(function(s,g){return s+n(g.monto);},0); }
 function loadCortesMonth(mes){
-    return (_cacheGG_Cortes||[]).filter(function(c){return c.fecha&&c.fecha.slice(0,7)===mes;}).filter(_deSuc);
+    var r=_rgDe(mes);
+    return (_cacheGG_Cortes||[]).filter(function(c){return c.fecha&&c.fecha>=r.from&&c.fecha<=r.to;}).filter(_deSuc);
 }
 /* ── COMISIONES BANCARIAS del periodo — gasto variable AUTOMÁTICO ─────────────
    Las ventas de los cortes se capturan BRUTAS; el banco deposita el neto. Para
@@ -797,7 +839,8 @@ function _netoCtaGG(c,tc,td){ return EtaaxCore.netoCuenta(c,tc,td); }
 function comisionCorteGG(c){ return EtaaxCore.comisionBancoCorte(c, _ctasDebGG()); }
 function comisionesBancoMes(mes){ return loadCortesMonth(mes).reduce(function(s,c){return s+comisionCorteGG(c);},0); }
 function loadOtrosMes(mes){
-    return (_cacheGG_Otros||[]).filter(function(o){return o.fecha&&o.fecha.slice(0,7)===mes;});
+    var r=_rgDe(mes);
+    return (_cacheGG_Otros||[]).filter(function(o){return o.fecha&&o.fecha>=r.from&&o.fecha<=r.to;});
 }
 // Un depósito es RETIRO/TRASPASO interno si el dinero SALE de un fondo (caja fuerte o banco).
 // Compat: deps viejos solo tenían `destino` (banco implicaba salir de caja fuerte).
@@ -956,8 +999,8 @@ function _clasifRangoGG(from,to){
 // ── Reporte del MES en pantalla: TODO el gasto, separado por grupo ──
 function imprimirGastos(){ try{ _imprimirGastos(); }catch(e){ console.error(e); alert('No se pudo generar el reporte:\n'+(e&&e.message||e)); } }
 function _imprimirGastos(){
-    var mes=document.getElementById('mesInput').value||mesStr();
-    var ini=mes+'-01', fin=new Date(parseInt(mes.slice(0,4)), parseInt(mes.slice(5,7)), 0).toISOString().slice(0,10);
+    var mes=_mesPicker||mesStr(), _r=_rgDe(mes);
+    var ini=_r.from, fin=_r.to;
     var gastos=loadGastosMes(mes);
     var comBanco=comisionesBancoMes(mes);
     var opts={ fijos:loadFijos(), staff:_loadStaff(), comisionBanco:comBanco };
@@ -992,7 +1035,7 @@ function _imprimirGastos(){
         return head+det;
     }).join('');
     var cuerpo=
-        '<div class="rsec">Gastos del mes</div>'+
+        '<div class="rsec">Gastos del periodo</div>'+
         '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">'+
             '<div class="rcard"><div class="l">Gasto total</div><div class="v" style="color:#b52a1a">'+fmtM(cl.egresos)+'</div><div class="s">'+ini+' → '+fin+'</div></div>'+
             '<div class="rcard"><div class="l">Fijos</div><div class="v">'+fmtM(cl.fijo)+'</div><div class="s">'+(cl.egresos>0?(cl.fijo/cl.egresos*100).toFixed(1)+'% del gasto':'—')+'</div></div>'+
@@ -1004,7 +1047,7 @@ function _imprimirGastos(){
         '<tbody>'+filas+'</tbody>'+
         '<tfoot><tr><td>Total de egresos</td><td>'+fmtM(cl.egresos)+'</td><td>100%</td></tr></tfoot></table>'+
         (cl.propina>0?'<div style="font-size:10px;color:#8a8a8a;margin-top:8px">Las propinas ('+fmtM(cl.propina)+') no se cuentan como gasto: son dinero del personal que solo pasa por la caja.</div>':'');
-    _abrirReporteGG('Gastos Totales — '+mes, 'Gastos totales', cuerpo,
+    _abrirReporteGG('Gastos Totales — '+_periodoTxtGG(), 'Gastos totales', cuerpo,
         '<div>'+_esc(_sucTxtGG())+'</div><div>'+ini+' → '+fin+'</div>');
 }
 
@@ -1068,7 +1111,8 @@ function _imprimirHistSemGastos(){
 
 /* ── RENDER ALL ── */
 function renderAll(){
-    _mesPicker=document.getElementById('mesInput').value||mesStr();
+    _rgGG=_rangoGG();
+    _mesPicker=_rgGG.to.slice(0,7);      // el mes del periodo: ancla lo mensual (plan de fijos, nóminas)
     var kpis=renderKPIs(_mesPicker);
     if(_activeTab==='fijos') renderFijos();
     else if(_activeTab==='nominas') renderNominas();
@@ -1092,7 +1136,7 @@ function _renderFijosNoCatalog(mes){
         +'<div class="card-header"><h2>⚠️ Fijos no catalogados <span style="font-size:12px;color:var(--text-dim);font-weight:400">· '+fmtM(tot)+'</span></h2></div>'
         +'<div style="padding:12px 20px;font-size:11px;color:var(--text-dim);background:rgba(245,200,66,.04);border-bottom:1px solid var(--border)">'
         +'Gastos de naturaleza fija (internet, luz, servicios…) capturados en gastos diarios pero SIN un gasto fijo configurado. Ya cuentan en el Total de Egresos; da de alta el fijo para monitorearlo mes a mes.</div>'
-        +'<div class="card-body" style="padding:0;overflow-x:auto"><table class="gg-table"><thead><tr><th>Categoría</th><th class="ar">Pagado (mes)</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+        +'<div class="card-body" style="padding:0;overflow-x:auto"><table class="gg-table"><thead><tr><th>Categoría</th><th class="ar">Pagado (periodo)</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
 }
 // ── Estatus del fijo por PLAN de pago (fecha de referencia + periodicidad) ──
 // Usa EtaaxCore.planFijoPago (mismo motor que el candado) + el último pago real.
@@ -1678,10 +1722,17 @@ document.addEventListener('DOMContentLoaded',function(){
     var _q={}; try{ new URLSearchParams(location.search).forEach(function(v,k){_q[k]=v;}); }catch(e){}
     if(_q.suc!==undefined && !_SUC_LOCK) _sucursalId=_q.suc||null;
 
-    /* Mes picker */
+    /* Buscador de periodo: día · semana · mes · rango */
     var mi=document.getElementById('mesInput');
     mi.value=(/^\d{4}-\d{2}$/.test(_q.mes||'')?_q.mes:mesStr());
     mi.addEventListener('change',renderAll);
+    var pe=document.getElementById('pickerEnd');
+    if(pe) pe.addEventListener('change',renderAll);
+    var _tabsGG={tabDia:'dia',tabSemana:'semana',tabMes:'mes',tabRango:'rango'};
+    Object.keys(_tabsGG).forEach(function(id){
+        var b=document.getElementById(id);
+        if(b) b.addEventListener('click',function(){_setPeriodoGG(_tabsGG[id],b);});
+    });
     if(['fijos','nominas','variables','resumen'].indexOf(_q.tab)>=0) setTimeout(function(){setTab(_q.tab);},0);
 
     /* Sucursal chip */

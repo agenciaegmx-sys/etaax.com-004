@@ -105,15 +105,21 @@
     </nav>
 
     <main class="main-content expandido" id="mainContent">
-    <div class="wrap" style="max-width:1100px;margin:0 auto;padding:22px 20px 60px">
-
-        <div class="cb-head">
-            <div>
-                <div class="cb-title">🏦 Gestión de Cuentas Bancarias</div>
-                <div class="cb-sub">Cuentas de débito y crédito del negocio, con la comisión que cobra el banco por transacción con tarjeta.</div>
+        <!-- Header estándar del sub-módulo (mismo de Ventas / Gastos / KPIs) -->
+        <div class="header">
+            <div class="brand">
+                <span class="brand-label">Salud Financiera</span>
+                <span class="brand-title">Cuentas Bancarias</span>
             </div>
-            <button class="cb-add" onclick="abrirCb()">+ Agregar cuenta</button>
+            <div class="hdr-acts">
+                <button class="btn-primary" onclick="abrirCb()">+ Agregar cuenta</button>
+                <a href="index.html" class="btn-vista">← Panel</a>
+            </div>
         </div>
+
+    <div class="wrap" style="max-width:1100px;margin:0 auto;padding:0 20px 60px">
+
+        <div class="cb-sub" style="margin-bottom:20px">Cuentas de débito y crédito del negocio, con la comisión que cobra el banco por transacción con tarjeta.</div>
 
         <div class="kpi-grid">
             <div class="kpi-card"><div class="kpi-lbl">Cuentas registradas</div><div class="kpi-val" id="kpiTotal">0</div><div class="kpi-sub" id="kpiTipos">— débito · — crédito</div></div>

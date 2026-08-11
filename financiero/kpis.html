@@ -223,7 +223,7 @@
                 <span class="brand-label">Salud Financiera</span>
                 <span class="brand-title">KPIs Financieros</span>
             </div>
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <div class="hdr-acts">
                 <div class="suc-wrap">
                     <button class="suc-chip" id="sucChip">🌐 Vista global ▾</button>
                     <div class="suc-menu" id="sucMenu"></div>
@@ -240,8 +240,9 @@
                     <input type="date" id="pickerEnd" style="display:none">
                 </div>
                 <span class="rango-lbl" id="rangoLbl"></span>
-                <button class="suc-chip" id="btnImprimirKpis" onclick="imprimirKPIs()" title="Imprimir / PDF del mes" style="font-size:11px;padding:7px 14px">🖨️ Reporte</button>
-                <button class="btn-primary" id="btnGuardarTargets" style="font-size:11px;padding:7px 14px">💾 Guardar metas</button>
+                <button class="btn-accent" id="btnImprimirKpis" onclick="imprimirKPIs()" title="Imprimir / PDF del periodo">🖨️ Reporte</button>
+                <button class="btn-primary" id="btnGuardarTargets">💾 Guardar metas</button>
+                <a href="index.html" class="btn-vista">← Panel</a>
             </div>
         </div>
 
@@ -381,7 +382,7 @@
         <div class="modal-footer" style="justify-content:space-between;gap:10px;flex-wrap:wrap">
             <span id="ddNota" style="font-size:10.5px;color:var(--text-dim);flex:1;min-width:180px;line-height:1.5"></span>
             <span style="display:flex;gap:8px">
-                <button class="suc-chip" onclick="cerrarDesglose()">Cerrar</button>
+                <button class="btn-vista" onclick="cerrarDesglose()">Cerrar</button>
                 <a class="btn-primary" id="ddIr" href="#" style="text-decoration:none;display:inline-flex;align-items:center">📤 Ver en Gastos Totales</a>
             </span>
         </div>

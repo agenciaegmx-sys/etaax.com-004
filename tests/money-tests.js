@@ -888,8 +888,12 @@ console.log('\n══ SUITE D · Reclasificación de gastos (financiero/gastos-g
     // Se cargan SOLO las funciones de clasificación (de loadGastosMes a loadCortesMonth)
     // con stubs mínimos, para blindar que ningún gasto se pierda del Total de Egresos.
     const html = fs.readFileSync(path.join(RAIZ, 'financiero/gastos-globales.html'), 'utf8');
-    const src = html.slice(html.indexOf('function loadGastosMes'), html.indexOf('function loadCortesMonth'));
+    // Desde el bloque de PERIODO (día/semana/mes/rango) hasta loadCortesMonth: así el
+    // candado corre el MISMO recorte de periodo que usa la página, no una copia.
+    const src = html.slice(html.indexOf('/* ── PERIODO'), html.indexOf('function loadCortesMonth'));
     const D = { n: (v) => parseFloat(v) || 0, mesStr: () => '2026-07', _sucursalId: null,
+                _mesPicker: '', todayStr: () => '2026-07-15', EtaaxCore: Core,
+                document: { getElementById: () => null }, querySelectorAll: () => [],
                 _cacheGG_Gastos: [], _cacheGG_Fijos: [] };
     D._deSuc = (x) => !D._sucursalId || ((x && x.sucursalId) || 'suc_principal') === D._sucursalId;
     D.loadFijos = () => D._cacheGG_Fijos || [];
@@ -928,6 +932,26 @@ console.log('\n══ SUITE D · Reclasificación de gastos (financiero/gastos-g
         eq(D.loadFijosNoCatalogMes(mes).filter(g => /n[oó]mina/i.test(g.categoria)).length, 0));
     // La invariante clave: NADA se pierde. raw = nómina + IMSS + variables + fijosNoCat + excluidos (propinas).
     test('INVARIANTE: ningún gasto se pierde del Total de Egresos', () => eq(nom + imss + varb + nc + excl, raw));
+
+    /* Buscador de periodo: sin periodo activo manda el mes completo; con un
+       periodo activo (día/semana/rango) el corte es EXACTAMENTE ese rango. */
+    test('sin periodo activo: loadGastosMes = el mes completo', () =>
+        eq(D.loadGastosMes(mes).length, 8));
+    test('periodo activo de 2 días: solo esos gastos', () => {
+        D._mesPicker = mes;
+        D._rgGG = { from: '2026-07-08', to: '2026-07-09' };
+        const l = D.loadGastosMes(mes);
+        D._rgGG = null; D._mesPicker = '';
+        eq(l.length, 4);                                   // ids 5,6,7,8
+        eq(l.reduce((s, g) => s + D.n(g.monto), 0), 8800); // 5000+800+500+2500
+    });
+    test('otro mes distinto al del periodo sigue saliendo completo', () => {
+        D._mesPicker = mes;
+        D._rgGG = { from: '2026-07-08', to: '2026-07-09' };
+        const l = D.loadGastosMes('2026-06');
+        D._rgGG = null; D._mesPicker = '';
+        eq(l.length, 0);                                   // junio no tiene gastos, pero NO usa el rango de julio
+    });
 })();
 
 /* ═══════════════ SUITE E · ESCANDALLO (app.js) ═══════════════ */

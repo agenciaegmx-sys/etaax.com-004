@@ -32,10 +32,6 @@
             display:flex;gap:14px;align-items:center;flex-wrap:wrap}
         .f-grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
         .f-lbl{font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:var(--text-dim)}
-        .f-tabs{display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:3px}
-        .f-tab{background:transparent;border:none;color:var(--text-muted);padding:6px 12px;border-radius:6px;
-            font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer}
-        .f-tab.active{background:var(--surface);color:var(--viol);font-weight:600;border:1px solid var(--border)}
         .filtros input[type=date],.filtros input[type=week],.filtros input[type=month],.filtros input[type=number]{
             background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 11px;border-radius:7px;
             font-family:'DM Sans',sans-serif;font-size:12.5px;outline:none;-webkit-appearance:none;appearance:none;min-width:0;max-width:100%}
@@ -178,13 +174,24 @@
             <span class="brand-label">Salud Financiera</span>
             <span class="brand-title">Estadísticas</span>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <div style="position:relative">
+        <div class="hdr-acts">
+            <div class="suc-wrap">
                 <button class="suc-chip" id="sucChip">🌐 Vista global ▾</button>
                 <div class="suc-menu" id="sucMenu"></div>
             </div>
-            <button class="suc-chip" id="btnImprimirEst" onclick="imprimirEstadisticas()" title="Imprimir / PDF del periodo">🖨️ Reporte</button>
-            <a href="index.html" class="suc-chip" style="text-decoration:none;color:var(--text-dim);border-color:var(--border)">← Panel</a>
+            <div class="period-tabs" id="fTabs">
+                <button class="period-tab" data-t="dia" onclick="setTipoF('dia',this)">Día</button>
+                <button class="period-tab" data-t="semana" onclick="setTipoF('semana',this)">Semana</button>
+                <button class="period-tab active" data-t="mes" onclick="setTipoF('mes',this)">Mes</button>
+                <button class="period-tab" data-t="ano" onclick="setTipoF('ano',this)">Año</button>
+                <button class="period-tab" data-t="rango" onclick="setTipoF('rango',this)">Rango</button>
+            </div>
+            <div class="period-picker">
+                <input type="month" id="fVal" onchange="renderAll()">
+                <input type="date" id="fEnd" style="display:none" onchange="renderAll()">
+            </div>
+            <button class="btn-accent" id="btnImprimirEst" onclick="imprimirEstadisticas()" title="Imprimir / PDF del periodo">🖨️ Reporte</button>
+            <a href="index.html" class="btn-vista">← Panel</a>
         </div>
     </div>
 
@@ -192,19 +199,7 @@
 
     <!-- ── FILTROS GLOBALES: periodo + comparativa ── -->
     <div class="filtros">
-        <div class="f-grp">
-            <span class="f-lbl">Periodo</span>
-            <div class="f-tabs" id="fTabs">
-                <button class="f-tab" data-t="dia" onclick="setTipoF('dia',this)">Día</button>
-                <button class="f-tab" data-t="semana" onclick="setTipoF('semana',this)">Semana</button>
-                <button class="f-tab active" data-t="mes" onclick="setTipoF('mes',this)">Mes</button>
-                <button class="f-tab" data-t="ano" onclick="setTipoF('ano',this)">Año</button>
-                <button class="f-tab" data-t="rango" onclick="setTipoF('rango',this)">Rango</button>
-            </div>
-            <input type="month" id="fVal" onchange="renderAll()">
-            <input type="date" id="fEnd" style="display:none" onchange="renderAll()">
-        </div>
-        <div class="f-comp">
+        <div class="f-comp" style="padding-left:0;border-left:none">
             <label><input type="checkbox" id="fCompOn" onchange="toggleComp()"> Comparar con</label>
             <input type="month" id="fCompVal" style="display:none" onchange="renderAll()">
             <input type="date" id="fCompEnd" style="display:none" onchange="renderAll()">
@@ -431,7 +426,7 @@ function _inputTipo(inp,tipo,hoy){
 }
 function setTipoF(tipo,btn){
     _tipoF=tipo;
-    document.querySelectorAll('#fTabs .f-tab').forEach(function(b){ b.classList.toggle('active',b===btn); });
+    document.querySelectorAll('#fTabs .period-tab').forEach(function(b){ b.classList.toggle('active',b===btn); });
     var hoy=EtaaxCore.todayStr();
     _inputTipo(document.getElementById('fVal'),tipo,hoy);
     document.getElementById('fEnd').style.display=(tipo==='rango')?'':'none';

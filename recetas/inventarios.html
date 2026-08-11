@@ -75,7 +75,7 @@
                     <span class="brand-label">Control de existencias</span>
                     <span class="brand-title">Inventarios</span>
                 </div>
-                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <div class="hdr-acts">
                     <!-- Un solo reporte: la vista fusionada (antes "Reporte final") es la buena;
                          la variante sin fusionar se retiró para no confundir. -->
                     <button class="btn-vista" onclick="abrirReporteExistencias()">📊 Reporte de existencias</button>
@@ -83,8 +83,7 @@
                     <button class="btn-vista" onclick="abrirQrEntradas()">📱 QR de entradas</button>
                     <button class="btn-vista" onclick="mostrarVista('vistaEntradas')">📋 Revisar entradas</button>
                     <button class="btn-vista" onclick="nuevoPrimerLev()">📋 Primer levantamiento</button>
-                    <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)"
-                        onclick="nuevoInventario()">+ Nuevo inventario</button>
+                    <button class="btn-primary" onclick="nuevoInventario()">+ Nuevo inventario</button>
                 </div>
             </div>
 
