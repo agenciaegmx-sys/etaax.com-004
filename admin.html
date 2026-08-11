@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">
 <head>
+<script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
     <script src="/theme.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -297,6 +298,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
     </div>
     <div class="admin-user">
       <span id="adminNombre">—</span>
+      <button class="btn-logout-adm" style="border-color:var(--salmon);color:var(--salmon)" onclick="auditarCruces()" title="Busca recetas que quedaron en el negocio equivocado (solo lectura)">🔎 Auditar cruces</button>
       <button class="btn-logout-adm" style="border-color:var(--green);color:var(--green)" onclick="abrirPresupuestoModal()" title="Proyección de pago mensual por número de sucursales">🧾 Presupuesto</button>
       <a href="hub.html" class="btn-logout-adm" style="text-decoration:none;border-color:var(--gold);color:var(--gold)" title="Explorar el hub de módulos como admin">⚡ Hub</a>
       <button class="btn-logout-adm" onclick="adminLogout()">Cerrar sesión</button>
@@ -955,6 +957,173 @@ function cancelarSuscripcion(negId) {
             renderNegocios();
         },
         { yesLabel:'Sí, cancelar', danger:true });
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   AUDITORÍA DE CRUCES ENTRE NEGOCIOS — SOLO LECTURA, no borra nada.
+
+   Con varias pestañas abiertas en negocios distintos, el negocio activo vivía
+   en localStorage (compartido por TODO el navegador): al guardar, la receta se
+   escribía con el negocio_id de la última pestaña que eligió negocio. Esta
+   auditoría busca las que quedaron del lado equivocado usando dos evidencias
+   que no dependen de la memoria de nadie:
+
+     1. SUCURSAL AJENA — la receta dice vivir en una sucursal que no existe en
+        su negocio, pero sí en otro. Los ids de sucursal se generan por negocio,
+        así que no hay coincidencia posible por azar.
+     2. INSUMOS AJENOS — sus ingredientes resuelven mejor en el catálogo de otro
+        negocio que en el propio.
+
+   El resultado es una LISTA para que la revises: qué receta, en qué negocio
+   está, a cuál parece pertenecer y por qué. Ninguna acción destructiva.
+   ══════════════════════════════════════════════════════════════════════ */
+// Velo de "trabajando…" mientras se leen tablas grandes. Devuelve su cerrador.
+function admCargando(texto) {
+    var ov = document.createElement('div');
+    ov.setAttribute('data-adm-dialog','1');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.62);display:flex;align-items:center;justify-content:center';
+    ov.innerHTML = '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:14px;padding:22px 28px;display:flex;align-items:center;gap:12px;font-size:13px;color:var(--muted)">' +
+        '<span class="loading-dots"><span></span><span></span><span></span></span>' + esc(texto || 'Trabajando…') + '</div>';
+    document.body.appendChild(ov);
+    return function(){ try { ov.remove(); } catch(e){} };
+}
+
+async function _selTodo(tabla, cols, orderCol) {
+    var out = [], from = 0, BATCH = 500, guard = 0;
+    while (guard++ < 400) {
+        var q = _supabase.from(tabla).select(cols);
+        if (orderCol) q = q.order(orderCol, { ascending: true });
+        var res = await q.range(from, from + BATCH - 1);
+        if (res.error) throw new Error(tabla + ': ' + res.error.message);
+        var chunk = res.data || [];
+        out = out.concat(chunk);
+        if (chunk.length < BATCH) break;
+        from += chunk.length;
+    }
+    return out;
+}
+
+async function auditarCruces() {
+    var cerrar = admCargando('Leyendo recetas, insumos y sucursales…');
+    var recetas, insumos, sucs;
+    try {
+        recetas = await _selTodo('recetas', 'id,negocio_id,datos,updated_at', 'id');
+        insumos = await _selTodo('negocio_insumos', 'negocio_id,insumo_id', 'insumo_id');
+        sucs    = await _selTodo('negocio_sucursales', 'negocio_id,datos', 'negocio_id');
+    } catch (err) {
+        cerrar(); admAlert('No se pudo leer la información:\n' + err.message); return;
+    }
+    cerrar();
+
+    var nombreNeg = {};
+    (_data.negocios || []).forEach(function(n){ nombreNeg[n.id] = ((n.datos||{}).nombre) || n.id; });
+
+    // Índices: sucursal → negocio dueño · negocio → set de insumos
+    var duenoSuc = {}, sucNombre = {};
+    sucs.forEach(function(r){
+        (((r.datos||{}).sucursales)||[]).forEach(function(s){
+            if (!s || !s.id || s.id === 'suc_principal') return;   // 'suc_principal' existe en todos
+            duenoSuc[s.id] = r.negocio_id;
+            sucNombre[s.id] = s.nombre || s.id;
+        });
+    });
+    var insDe = {};
+    insumos.forEach(function(r){ (insDe[r.negocio_id] = insDe[r.negocio_id] || {})[r.insumo_id] = 1; });
+
+    var hallazgos = [];
+    recetas.forEach(function(row){
+        var d = row.datos || {}, neg = row.negocio_id, motivos = [], sospechoso = {};
+
+        // 1) ¿vive en una sucursal que no es de su negocio?
+        var refs = (d.sucursales && d.sucursales.length) ? d.sucursales : (d.sucursalId ? [d.sucursalId] : []);
+        refs.forEach(function(sid){
+            var dueno = duenoSuc[sid];
+            if (dueno && dueno !== neg) {
+                motivos.push('vive en la sucursal «' + (sucNombre[sid]||sid) + '», que es de ' + (nombreNeg[dueno]||dueno));
+                sospechoso[dueno] = (sospechoso[dueno] || 0) + 100;   // evidencia fuerte
+            }
+        });
+
+        // 2) ¿sus ingredientes resuelven mejor en otro catálogo?
+        var ids = (d.ingredientes || []).map(function(i){ return i && i.insumoId; }).filter(Boolean);
+        if (ids.length) {
+            var propio = 0, mejorNeg = '', mejorN = 0;
+            ids.forEach(function(id){ if ((insDe[neg]||{})[id]) propio++; });
+            Object.keys(insDe).forEach(function(nid){
+                if (nid === neg) return;
+                var c = 0;
+                ids.forEach(function(id){ if (insDe[nid][id]) c++; });
+                if (c > mejorN) { mejorN = c; mejorNeg = nid; }
+            });
+            if (mejorN > propio) {
+                motivos.push(mejorN + ' de ' + ids.length + ' ingredientes son del catálogo de ' +
+                             (nombreNeg[mejorNeg]||mejorNeg) + ' (en el suyo solo ' + propio + ')');
+                sospechoso[mejorNeg] = (sospechoso[mejorNeg] || 0) + (mejorN - propio);
+            }
+        }
+
+        if (!motivos.length) return;
+        var destino = Object.keys(sospechoso).sort(function(a,b){ return sospechoso[b]-sospechoso[a]; })[0];
+        hallazgos.push({
+            id: row.id, nombre: d.nombre || d.titulo || '(sin nombre)',
+            neg: neg, negNom: nombreNeg[neg] || neg,
+            destino: destino, destinoNom: nombreNeg[destino] || destino,
+            motivos: motivos, fecha: (row.updated_at || '').slice(0,10)
+        });
+    });
+
+    _mostrarAuditoria(hallazgos, recetas.length, Object.keys(insDe).length);
+}
+
+function _mostrarAuditoria(h, totalRecetas, negsConInsumos) {
+    var filas = h.length
+        ? h.map(function(x){
+            return '<tr>' +
+                '<td style="padding:9px 10px;border-bottom:1px solid var(--b1)">' +
+                    '<div style="font-weight:600;color:var(--text)">' + esc(x.nombre) + '</div>' +
+                    '<div style="font-size:10px;color:var(--dim);font-family:monospace">' + esc(x.id) + (x.fecha ? ' · ' + esc(x.fecha) : '') + '</div>' +
+                '</td>' +
+                '<td style="padding:9px 10px;border-bottom:1px solid var(--b1);color:var(--salmon)">' + esc(x.negNom) + '</td>' +
+                '<td style="padding:9px 10px;border-bottom:1px solid var(--b1);color:var(--green)">' + esc(x.destinoNom) + '</td>' +
+                '<td style="padding:9px 10px;border-bottom:1px solid var(--b1);font-size:11.5px;color:var(--muted);line-height:1.5">' +
+                    x.motivos.map(function(m){ return '· ' + esc(m); }).join('<br>') + '</td>' +
+            '</tr>';
+          }).join('')
+        : '<tr><td colspan="4" style="padding:26px;text-align:center;color:var(--muted)">Ninguna receta muestra señales de haber quedado en el negocio equivocado. 🎉</td></tr>';
+
+    var ov = document.createElement('div');
+    ov.setAttribute('data-adm-dialog','1');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.62);display:flex;align-items:flex-start;justify-content:center;padding:28px 20px;overflow:auto';
+    ov.innerHTML =
+        '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;max-width:1000px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.5)">' +
+            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">' +
+                '<span style="font-size:26px">🔎</span>' +
+                '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:.5px;color:var(--text)">Cruces entre negocios</div>' +
+            '</div>' +
+            '<div style="font-size:12.5px;color:var(--muted);margin-bottom:18px">' +
+                'Se revisaron <b>' + totalRecetas + '</b> recetas contra los catálogos de <b>' + negsConInsumos + '</b> negocios. ' +
+                '<b style="color:' + (h.length ? 'var(--salmon)' : 'var(--green)') + '">' + h.length + ' sospechosa' + (h.length!==1?'s':'') + '</b>. ' +
+                'Esta vista <b>no borra ni mueve nada</b>: es para que decidas.' +
+            '</div>' +
+            '<div style="max-height:60vh;overflow:auto;border:1px solid var(--b1);border-radius:12px">' +
+                '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+                    '<thead><tr style="position:sticky;top:0;background:var(--s2)">' +
+                        '<th style="text-align:left;padding:9px 10px;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Receta</th>' +
+                        '<th style="text-align:left;padding:9px 10px;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Está en</th>' +
+                        '<th style="text-align:left;padding:9px 10px;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Parece de</th>' +
+                        '<th style="text-align:left;padding:9px 10px;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Por qué</th>' +
+                    '</tr></thead><tbody>' + filas + '</tbody>' +
+                '</table>' +
+            '</div>' +
+            '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">' +
+                '<button data-act="no" style="background:var(--s2);border:1px solid var(--b1);color:var(--muted);padding:11px 20px;border-radius:9px;font-family:inherit;font-size:13px;cursor:pointer">Cerrar</button>' +
+            '</div>' +
+        '</div>';
+    ov.addEventListener('click', function(e){
+        var act = e.target.getAttribute && e.target.getAttribute('data-act');
+        if (e.target === ov || act === 'no') { try { ov.remove(); } catch(err){} }
+    });
+    document.body.appendChild(ov);
 }
 
 /* ══════════════════════════════════════════════════════════════════════
