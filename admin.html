@@ -297,6 +297,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
     </div>
     <div class="admin-user">
       <span id="adminNombre">—</span>
+      <button class="btn-logout-adm" style="border-color:var(--green);color:var(--green)" onclick="abrirPresupuestoModal()" title="Proyección de pago mensual por número de sucursales">🧾 Presupuesto</button>
       <a href="hub.html" class="btn-logout-adm" style="text-decoration:none;border-color:var(--gold);color:var(--gold)" title="Explorar el hub de módulos como admin">⚡ Hub</a>
       <button class="btn-logout-adm" onclick="adminLogout()">Cerrar sesión</button>
     </div>
@@ -954,6 +955,168 @@ function cancelarSuscripcion(negId) {
             renderNegocios();
         },
         { yesLabel:'Sí, cancelar', danger:true });
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   PRESUPUESTO — proyección de pago mensual por número de sucursales.
+   Sale del MISMO documento de reporte que todo lo impreso (etaaxReporteDoc:
+   wordmark ETAAX, franja verde, pie de página), pero sin negocio ni sucursal:
+   la segunda línea del encabezado dice "Sistema de gestión empresarial".
+   Los precios NO se escriben aquí: se piden a /precios.js (EtaaxPrecios), que
+   es la única verdad del modelo escalonado ($1,799 de base, descuento creciente
+   por cada sucursal nueva, tope 10).
+   Primera versión: solo la proyección. Encima de esto irán las propuestas y
+   cotizaciones con presentación.
+   ══════════════════════════════════════════════════════════════════════ */
+function abrirPresupuestoModal() {
+    if (typeof EtaaxPrecios === 'undefined' || typeof etaaxReporteDoc !== 'function') {
+        admAlert('No se pudieron cargar los precios o el formato de reporte. Recarga la página.');
+        return;
+    }
+    var TOPE = EtaaxPrecios.TOPE;
+    var hoy = new Date().toISOString().slice(0,10);
+    var _in = 'width:100%;background:var(--s2);border:1px solid var(--b1);color:var(--text);padding:10px 12px;border-radius:9px;font-family:inherit;font-size:13px;box-sizing:border-box';
+    var _lb = 'display:block;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-weight:600';
+    var _campo = function(lbl, html){ return '<div style="margin-bottom:14px"><label style="'+_lb+'">'+lbl+'</label>'+html+'</div>'; };
+    var opciones = '';
+    for (var i = 1; i <= TOPE; i++) opciones += '<option value="'+i+'"'+(i===TOPE?' selected':'')+'>'+i+' sucursal'+(i!==1?'es':'')+'</option>';
+
+    var ov = document.createElement('div');
+    ov.setAttribute('data-adm-dialog','1');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.62);display:flex;align-items:flex-start;justify-content:center;padding:28px 20px;overflow:auto';
+    ov.innerHTML =
+        '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;max-width:520px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.5)">' +
+            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">' +
+                '<span style="font-size:26px">🧾</span>' +
+                '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:.5px;color:var(--text)">Presupuesto</div>' +
+            '</div>' +
+            '<div style="font-size:12.5px;color:var(--muted);margin-bottom:20px">Proyección de pago mensual · precio base ' + EtaaxPrecios.fmt(EtaaxPrecios.BASE) + ' por sucursal</div>' +
+
+            _campo('Cliente / prospecto (opcional)', '<input id="pp_cliente" style="'+_in+'" placeholder="Ej. Grupo Xaneque">') +
+            '<div style="display:flex;gap:12px">' +
+                '<div style="flex:1">' + _campo('Sucursales a proyectar', '<select id="pp_sucs" style="'+_in+'">'+opciones+'</select>') + '</div>' +
+                '<div style="flex:1">' + _campo('Vigencia (días)', '<input id="pp_vig" type="number" min="1" max="180" style="'+_in+'" value="30">') + '</div>' +
+            '</div>' +
+            _campo('Fecha de emisión', '<input id="pp_fecha" type="date" style="'+_in+'" value="'+hoy+'">') +
+            '<div style="margin:-4px 0 14px;display:flex;flex-direction:column;gap:9px">' +
+                '<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);cursor:pointer"><input type="checkbox" id="pp_anual" checked style="width:16px;height:16px;accent-color:var(--green)"> Incluir comparativo anual y ahorro contra precio de lista</label>' +
+                '<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);cursor:pointer"><input type="checkbox" id="pp_iva" checked style="width:16px;height:16px;accent-color:var(--green)"> Los precios ya incluyen IVA</label>' +
+            '</div>' +
+            _campo('Notas (opcional)', '<textarea id="pp_notas" rows="2" style="'+_in+';resize:vertical" placeholder="Implementación, capacitación, condiciones…"></textarea>') +
+
+            '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">' +
+                '<button data-act="no" style="background:var(--s2);border:1px solid var(--b1);color:var(--muted);padding:11px 20px;border-radius:9px;font-family:inherit;font-size:13px;cursor:pointer">Cancelar</button>' +
+                '<button data-act="gen" style="background:var(--green);border:none;color:#0a0908;padding:11px 22px;border-radius:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">🖨️ Generar presupuesto</button>' +
+            '</div>' +
+        '</div>';
+    function cerrar(){ try { ov.remove(); } catch(e){} }
+    ov.addEventListener('click', function(e){
+        var act = e.target.getAttribute && e.target.getAttribute('data-act');
+        if (e.target === ov || act === 'no') { cerrar(); return; }
+        if (act !== 'gen') return;
+        var cfg = {
+            cliente: document.getElementById('pp_cliente').value.trim(),
+            sucs:    parseInt(document.getElementById('pp_sucs').value, 10) || TOPE,
+            vig:     parseInt(document.getElementById('pp_vig').value, 10) || 30,
+            fecha:   document.getElementById('pp_fecha').value || hoy,
+            anual:   document.getElementById('pp_anual').checked,
+            iva:     document.getElementById('pp_iva').checked,
+            notas:   document.getElementById('pp_notas').value.trim()
+        };
+        cerrar();
+        try { imprimirPresupuesto(cfg); }
+        catch (err) { admAlert('No se pudo generar el presupuesto:\n' + (err && err.message || err)); }
+    });
+    document.body.appendChild(ov);
+    setTimeout(function(){ var f = document.getElementById('pp_cliente'); if (f) f.focus(); }, 60);
+}
+
+function imprimirPresupuesto(cfg) {
+    var P = EtaaxPrecios, N = Math.max(1, Math.min(cfg.sucs, P.TOPE));
+    var e = function(s){ return esc(s == null ? '' : String(s)); };
+    var mensual = P.precioMensual(N), lista = P.BASE * N;
+
+    // Una fila por sucursal: lo que cuesta ESA sucursal y en cuánto deja el mensual.
+    var acum = 0;
+    var filas = '';
+    for (var i = 1; i <= N; i++) {
+        var costo = P.precioSucursal(i); acum += costo;
+        filas +=
+            '<tr>' +
+                '<td>' + i + (i === 1 ? 'ª (matriz)' : 'ª sucursal') + '</td>' +
+                '<td>' + P.fmt(costo) + '</td>' +
+                '<td>' + (i === 1 ? '—' : P.fmtPct(P.descuentoSucursal(i))) + '</td>' +
+                '<td>' + (i === 1 ? '—' : P.fmt(P.ahorroSucursal(i))) + '</td>' +
+                '<td style="font-weight:700">' + P.fmt(acum) + '</td>' +
+                (cfg.anual ? '<td>' + P.fmt(acum * 12) + '</td>' : '') +
+            '</tr>';
+    }
+    var thAnual = cfg.anual ? '<th>Anual (×12)</th>' : '';
+    var tdAnual = cfg.anual ? '<td>' + P.fmt(mensual * 12) + '</td>' : '';
+
+    function card(l, v, s, color) {
+        return '<div class="rcard"><div class="l">' + l + '</div>' +
+               '<div class="v"' + (color ? ' style="color:' + color + '"' : '') + '>' + v + '</div>' +
+               (s ? '<div class="s">' + s + '</div>' : '') + '</div>';
+    }
+    var cards =
+        card('Precio base por sucursal', P.fmt(P.BASE), 'Costo unitario, sin descuento') +
+        card('Sucursales proyectadas', String(N), N === P.TOPE ? 'Paquete completo' : 'De 1 a ' + P.TOPE) +
+        card('Pago mensual', P.fmt(mensual), N === 1 ? 'Una sola sucursal, sin descuento' : 'Suma escalonada de las ' + N + ' sucursales', '#1a7a46') +
+        card('Descuento promedio', P.fmtPct(P.descuentoMensual(N)), 'Contra ' + P.fmt(lista) + ' de lista');
+
+    var ahorroSec = '';
+    if (cfg.anual) {
+        var ahorroMes = lista - mensual;
+        ahorroSec =
+            '<div class="rsec">Ahorro contra precio de lista</div>' +
+            '<table class="rt"><thead><tr><th>Concepto</th><th>Mensual</th><th>Anual</th></tr></thead><tbody>' +
+                '<tr><td>' + N + ' sucursal' + (N !== 1 ? 'es' : '') + ' a precio unitario (' + P.fmt(P.BASE) + ')</td><td>' + P.fmt(lista) + '</td><td>' + P.fmt(lista * 12) + '</td></tr>' +
+                '<tr><td>Con el esquema ETAAX por volumen</td><td>' + P.fmt(mensual) + '</td><td>' + P.fmt(mensual * 12) + '</td></tr>' +
+            '</tbody><tfoot><tr><td>Ahorro</td><td>' + P.fmt(ahorroMes) + '</td><td>' + P.fmt(ahorroMes * 12) + '</td></tr></tfoot></table>';
+    }
+
+    var vigDate = new Date(cfg.fecha + 'T12:00:00');
+    vigDate.setDate(vigDate.getDate() + cfg.vig);
+
+    var cuerpo =
+        '<div class="rsec">Resumen de la propuesta</div>' +
+        '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">' + cards + '</div>' +
+        '<div class="rsec">Proyección de pago mensual</div>' +
+        '<table class="rt"><thead><tr><th>Sucursal</th><th>Costo de esa sucursal</th><th>Descuento</th><th>Ahorro</th><th>Pago mensual</th>' + thAnual + '</tr></thead>' +
+        '<tbody>' + filas + '</tbody>' +
+        '<tfoot><tr><td>Total con ' + N + ' sucursal' + (N !== 1 ? 'es' : '') + '</td><td></td><td>' + P.fmtPct(P.descuentoMensual(N)) + '</td><td>' + P.fmt(lista - mensual) + '</td><td>' + P.fmt(mensual) + '</td>' + tdAnual + '</tr></tfoot></table>' +
+        ahorroSec +
+        (cfg.notas ? '<div class="rsec">Notas</div><div style="font-size:11.5px;line-height:1.7;white-space:pre-wrap">' + e(cfg.notas) + '</div>' : '') +
+        '<div class="rsec">Cómo se calcula</div>' +
+        '<div style="font-size:10.5px;color:#666;line-height:1.75">' +
+            '<div>· El costo unitario de una sucursal es <b>' + P.fmt(P.BASE) + '</b> al mes. Cada sucursal nueva entra con un descuento <b>más grande</b> sobre esa base.</div>' +
+            '<div>· El descuento <b>no es retroactivo</b>: cada sucursal conserva el precio de su posición y el pago mensual es la suma de esos precios.</div>' +
+            '<div>· El esquema llega hasta <b>' + P.TOPE + ' sucursales</b> (' + P.fmt(P.precioMensual(P.TOPE)) + ' al mes). Arriba de ' + P.TOPE + ' se cotiza a la medida.</div>' +
+            '<div>· Precios en pesos mexicanos' + (cfg.iva ? ', <b>IVA incluido</b>' : ' <b>más IVA</b>') + '. Vigencia de esta propuesta: <b>' + cfg.vig + ' días</b> (al ' + vigDate.toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'}) + ').</div>' +
+            '<div>· La suscripción incluye la plataforma completa y sus actualizaciones. Implementación, capacitación y consultoría se cotizan aparte.</div>' +
+        '</div>';
+
+    var fechaTxt = _fFechaLarga(cfg.fecha);
+    var derecha =
+        '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:14px;letter-spacing:1px;color:#1a1916">Presupuesto</div>' +
+        (cfg.cliente ? '<div>Para: ' + e(cfg.cliente) + '</div>' : '') +
+        '<div>' + N + ' sucursal' + (N !== 1 ? 'es' : '') + ' · ' + P.fmt(mensual) + '/mes</div>' +
+        '<div>Emitido: ' + e(fechaTxt) + '</div>';
+
+    var html = etaaxReporteDoc({
+        titulo:    'Presupuesto ETAAX' + (cfg.cliente ? ' — ' + cfg.cliente : ''),
+        subtitulo: 'Proyección de pago mensual por número de sucursales',
+        derecha:   derecha,
+        cuerpo:    cuerpo,
+        pie:       'ETAAX · Presupuesto',
+        // Sin negocio ni sucursal: el encabezado lo dicta el presupuesto.
+        opts: { negocio: cfg.cliente || ETAAX_EMISOR.marca, sucursal: 'Sistema de gestión empresarial', sucursalId: '', logo: '', emoji: '' }
+    });
+    if (typeof etaaxAbrirReporte === 'function') { etaaxAbrirReporte(html); return; }
+    var w = window.open('', '_blank');
+    if (!w) { admAlert('Permite las ventanas emergentes para ver el presupuesto.'); return; }
+    w.document.write(html); w.document.close();
 }
 
 /* ══════════════════════════════════════════════════════════════════════

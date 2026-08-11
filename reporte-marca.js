@@ -53,12 +53,14 @@
             try { sucColor = (JSON.parse(localStorage.getItem('etaax_' + negId + '_suc_' + sucId) || '{}').color) || ''; } catch (e) {}
             if (!sucColor) sucColor = ctx.negColor || '';
         }
+        // Overrides: reportes que NO salen de un negocio (p.ej. el presupuesto del
+        // panel admin) pueden dictar el nombre, la segunda línea y el logo.
         return {
-            negocio:       ctx.negNombre || '',
-            emoji:         ctx.negEmoji || '',
-            sucursal:      sucNombre,
+            negocio:       opts.negocio  !== undefined ? opts.negocio  : (ctx.negNombre || ''),
+            emoji:         opts.emoji    !== undefined ? opts.emoji    : (ctx.negEmoji || ''),
+            sucursal:      opts.sucursal !== undefined ? opts.sucursal : sucNombre,
             sucursalColor: sucColor,
-            logo:          logoSucursal || logoNegocio, // jerarquía: marca de la sucursal → marca del negocio
+            logo:          opts.logo     !== undefined ? opts.logo     : (logoSucursal || logoNegocio), // jerarquía: marca de la sucursal → marca del negocio
             logoNegocio:   logoNegocio,
             logoSucursal:  logoSucursal
         };
