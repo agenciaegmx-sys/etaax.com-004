@@ -35,9 +35,18 @@
         '.etx-chip .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}' +
         '.etx-chip .x{background:none;border:none;color:var(--text-dim,#8b867e);cursor:pointer;font-size:13px;line-height:1;padding:2px 2px;flex-shrink:0}' +
         '.etx-chip .x:hover{color:var(--red,#e05a3a)}' +
-        '.etx-min-btn{background:transparent;border:1px solid var(--border,#2e2c29);color:var(--text-muted,#9a948b);border-radius:7px;min-width:26px;height:24px;cursor:pointer;font-size:15px;line-height:1;flex-shrink:0;font-family:inherit}' +
-        '.etx-hd-btns{display:inline-flex;align-items:center;gap:6px;flex-shrink:0}' +
-        '.etx-min-btn:hover{border-color:var(--green,#3dbe7a);color:var(--green,#3dbe7a)}';
+        '.etx-hd-btns{display:inline-flex;align-items:center;gap:8px;flex-shrink:0}' +
+        // Minimizar (morado) y Cerrar (rojo): con su palabra, no solo el símbolo.
+        // Van con !important porque cada página trae su propio estilo de ✕.
+        '.etx-min-btn,.etx-close-btn{display:inline-flex!important;align-items:center;gap:6px;height:28px;padding:0 12px!important;' +
+            'border-radius:8px!important;font-family:inherit!important;font-size:12px!important;font-weight:600!important;' +
+            'line-height:1!important;letter-spacing:.2px;cursor:pointer;flex-shrink:0;white-space:nowrap;position:static!important;' +
+            'text-transform:none!important;transition:background .15s,border-color .15s}' +
+        '.etx-min-btn{background:rgba(155,141,232,.12)!important;border:1px solid rgba(155,141,232,.45)!important;color:var(--viol,#9b8de8)!important}' +
+        '.etx-min-btn:hover{background:rgba(155,141,232,.22)!important;border-color:var(--viol,#9b8de8)!important}' +
+        '.etx-close-btn{background:rgba(224,90,58,.12)!important;border:1px solid rgba(224,90,58,.45)!important;color:var(--red,#e05a3a)!important}' +
+        '.etx-close-btn:hover{background:rgba(224,90,58,.22)!important;border-color:var(--red,#e05a3a)!important}' +
+        '@media(max-width:560px){.etx-min-btn .etx-txt,.etx-close-btn .etx-txt{display:none}}';
     (document.head || document.documentElement).appendChild(st);
 
     var dock = document.createElement('div'); dock.id = 'etx-dock';
@@ -79,13 +88,26 @@
         dock.appendChild(chip);
     }
 
+    // El ✕ pelón no se leía como botón. Se le pone su palabra, conservando
+    // el onclick de la página (solo cambia el contenido, no los listeners).
+    function rotular(btn, simbolo, palabra) {
+        var t = (btn.textContent || '').trim();
+        if (/^[✕✖×⨯🗕—-]?$/.test(t) || t.length <= 2) {
+            btn.innerHTML = '<span aria-hidden="true">' + simbolo + '</span><span class="etx-txt">' + palabra + '</span>';
+        }
+        if (!btn.title) btn.title = palabra;
+    }
+
     function inject(header) {
         if (!header || header.querySelector('.etx-min-btn')) return;
         var b = document.createElement('button');
-        b.className = 'etx-min-btn'; b.type = 'button'; b.title = 'Minimizar (segundo plano)'; b.textContent = '—';
+        b.className = 'etx-min-btn'; b.type = 'button'; b.title = 'Minimizar (segundo plano)';
+        b.innerHTML = '<span aria-hidden="true">—</span><span class="etx-txt">Minimizar</span>';
         b.addEventListener('click', function (e) { e.stopPropagation(); minimize(header); });
         var close = findClose(header);
         if (close) {
+            close.classList.add('etx-close-btn');
+            rotular(close, '✕', 'Cerrar');
             // Agrupar minimizar + cerrar JUNTOS a la derecha (evita que el
             // space-between del header los separe).
             var wrap = document.createElement('span'); wrap.className = 'etx-hd-btns';

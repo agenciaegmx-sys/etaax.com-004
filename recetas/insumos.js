@@ -760,7 +760,15 @@
        } else {
            renderTabla(pagina);
        }
-       document.getElementById('countLabel').textContent = `${total} insumos`;
+       // El conteo separa lo que se COMPRA de lo que se PRODUCE: las sub-recetas
+       // convertidas a insumo (esSubReceta) no son compras, son producción propia,
+       // y mezclarlas inflaba el número del catálogo.
+       const subs   = lista.filter(function (x) { return x && x.esSubReceta; }).length;
+       const compra = total - subs;
+       const cl = document.getElementById('countLabel');
+       if (cl) cl.textContent = subs
+           ? `${compra} insumo${compra !== 1 ? 's' : ''} · ${subs} sub-receta${subs !== 1 ? 's' : ''}`
+           : `${total} insumo${total !== 1 ? 's' : ''}`;
        _renderPaginacion(totalPgs);
    }
 

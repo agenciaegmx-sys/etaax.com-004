@@ -73,4 +73,31 @@
         var modal = boxOf(handle);
         if (modal) modal.style.transform = '';
     });
+
+    /* ── Redimensionar LIBRE, a lo ancho y a lo alto ────────────────────
+       Cada modal abre con su ancho de diseño (max-width) y su alto tope
+       (max-height). Eso está bien para abrir, pero al arrastrar la esquina
+       la ventana chocaba con esos topes y se sentía atorada. Al agarrar la
+       esquina se congela el tamaño actual y se sueltan los topes: de ahí en
+       adelante crece hasta donde la arrastres. */
+    function cajaResizable(el) {
+        while (el && el !== document.body) {
+            var r; try { r = getComputedStyle(el).resize; } catch (e) {}
+            if (r === 'both' || r === 'horizontal' || r === 'vertical') return el;
+            el = el.parentElement;
+        }
+        return null;
+    }
+    document.addEventListener('pointerdown', function (e) {
+        var caja = cajaResizable(e.target);
+        if (!caja || caja.__libre) return;
+        var r = caja.getBoundingClientRect();
+        // Solo la esquina inferior derecha (la manija del navegador).
+        if (e.clientX < r.right - 24 || e.clientY < r.bottom - 24) return;
+        caja.style.width  = Math.round(r.width) + 'px';
+        caja.style.height = Math.round(r.height) + 'px';
+        caja.style.maxWidth  = 'none';
+        caja.style.maxHeight = 'none';
+        caja.__libre = true;
+    }, true);
 })();

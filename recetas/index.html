@@ -707,7 +707,14 @@
                 <button id="rp-sub-bebidas" onclick="filtroRecetaTipo='sub-bebidas';filtroRecetaGrupo='';filtroRecetaCat='';renderGridRecetas();_activarPillReceta('sub-bebidas')"
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🧃 Sub Bebidas</button>
                 <button id="btnIndepSucRec" onclick="abrirIndependizarSucRec()" title="Detecta recetas compartidas entre sucursales y crea una copia independiente por sucursal (con respaldo previo)."
-                    style="display:none;margin-left:auto;padding:6px 16px;border-radius:20px;border:1.5px solid #7ab8f5;background:transparent;color:#7ab8f5;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">🔗 Independizar sucursales</button>
+                    style="display:none;padding:6px 16px;border-radius:20px;border:1.5px solid #7ab8f5;background:transparent;color:#7ab8f5;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">🔗 Independizar sucursales</button>
+                <!-- Galería / Lista (mismo par que el catálogo de insumos) -->
+                <span id="vistaRecetasBtns" style="display:flex;gap:6px;margin-left:auto">
+                    <button id="btnVistaRecGrid" onclick="setVistaRecetas('grid')" title="Vista galería"
+                        style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">⊞ Galería</button>
+                    <button id="btnVistaRecLista" onclick="setVistaRecetas('lista')" title="Vista lista"
+                        style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">☰ Lista</button>
+                </span>
             </div>
         </div>
         <div class="modal-body" style="max-height:68vh;overflow-y:auto;padding:20px">
@@ -3053,12 +3060,21 @@ function renderGridRecetas() {
     const iconos = { alimentos:'🍽️', 'sub-alimentos':'🥣', bebidas:'🥃', 'sub-bebidas':'🧃' };
     const grid   = document.getElementById('gridRecetas');
     const btnImp = document.getElementById('btnImprimirSeleccion');
+    _pintarBtnsVistaRecetas();
 
     if (!lista.length) {
+        grid.style.display = 'grid';
         grid.innerHTML = '<div style="grid-column:span 4;text-align:center;padding:48px;color:var(--text-dim)">' +
             '<div style="font-size:32px;margin-bottom:10px">📋</div><div>Sin recetas guardadas</div></div>';
         return;
     }
+
+    if (vistaRecetas === 'lista') {
+        renderListaRecetas(lista, iconos, _catGlobal, _sucAct);
+        if (btnImp) btnImp.style.display = recetasSeleccionadas.size > 0 ? 'inline-flex' : 'none';
+        return;
+    }
+    grid.style.display = 'grid';
 
     grid.innerHTML = lista.map(r => {
         const icono  = iconos[r.tipo] || '📋';
@@ -3109,6 +3125,75 @@ function renderGridRecetas() {
     // Mostrar botón imprimir selección
     if (btnImp) btnImp.style.display = recetasSeleccionadas.size > 0
         ? 'inline-flex' : 'none';
+}
+
+/* ── Vista del catálogo de recetas: galería o lista ─────────────────────
+   La galería es cómoda para reconocer platillos de vista; la lista es la que
+   sirve cuando son cientos y lo que quieres es comparar costos y barrer rápido.
+   La preferencia se recuerda por negocio. */
+var vistaRecetas = (function(){
+    try { return localStorage.getItem('etaax_vista_recetas') || 'grid'; } catch(e) { return 'grid'; }
+})();
+function setVistaRecetas(v) {
+    vistaRecetas = (v === 'lista') ? 'lista' : 'grid';
+    try { localStorage.setItem('etaax_vista_recetas', vistaRecetas); } catch(e) {}
+    renderGridRecetas();
+}
+function _pintarBtnsVistaRecetas() {
+    [['btnVistaRecGrid','grid'],['btnVistaRecLista','lista']].forEach(function(par){
+        var b = document.getElementById(par[0]); if (!b) return;
+        var on = (vistaRecetas === par[1]);
+        b.style.background  = on ? 'rgba(61,190,122,.12)' : 'transparent';
+        b.style.borderColor = on ? 'var(--green)' : 'var(--border)';
+        b.style.color       = on ? 'var(--green)' : 'var(--text-muted)';
+    });
+}
+function renderListaRecetas(lista, iconos, catGlobal, sucAct) {
+    var grid = document.getElementById('gridRecetas');
+    grid.style.display = 'block';
+    var th = 'padding:9px 10px;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);font-weight:500;text-align:left;white-space:nowrap;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:1';
+    var td = 'padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:middle';
+    var filas = lista.map(function(r){
+        var icono = iconos[r.tipo] || '📋';
+        var costo = (r.ingredientes||[]).reduce(function(s,i){ return s + costoIngredienteVivo(i); }, 0);
+        var fecha = r.fechaGuardado ? new Date(r.fechaGuardado).toLocaleDateString('es-MX',{day:'2-digit',month:'short'}) : '';
+        var sel   = recetasSeleccionadas.has(r.id);
+        var badges = catGlobal ? _recetaBadgesHTML(r) : '';
+        var acciones =
+            (catGlobal ? '<button onclick="event.stopPropagation();abrirRecetaSuc(\''+r.id+'\')" title="Vincular a sucursal" style="background:var(--surface2);border:1px solid var(--border);color:var(--green);border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer;font-family:inherit">🔗</button> ' : '') +
+            ((!catGlobal && sucAct && r.status === 'inactiva')
+                ? '<button onclick="event.stopPropagation();reactivarRecetaGlobal(\''+r.id+'\')" title="Inactiva global · activar" style="background:var(--surface2);border:1px solid rgba(224,90,58,.5);color:var(--red);border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer;font-family:inherit">▶</button> ' : '') +
+            '<button onclick="event.stopPropagation();duplicarRecetaDesdeLista(\''+r.id+'\')" title="Copiar" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer;font-family:inherit">📋</button> ' +
+            '<button onclick="event.stopPropagation();eliminarReceta(\''+r.id+'\')" title="Eliminar" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer;font-family:inherit">✕</button>';
+        return '<tr onclick="abrirFichaReceta(\''+r.id+'\')" style="cursor:pointer;'+(sel?'background:rgba(61,190,122,.07)':'')+'"' +
+                ' onmouseenter="this.style.background=\'var(--surface2)\'"' +
+                ' onmouseleave="this.style.background=\''+(sel?'rgba(61,190,122,.07)':'transparent')+'\'">' +
+            '<td style="'+td+';width:34px" onclick="event.stopPropagation();toggleSeleccion(\''+r.id+'\')">' +
+                '<span style="display:flex;width:18px;height:18px;border-radius:4px;align-items:center;justify-content:center;' +
+                'border:1.5px solid '+(sel?'var(--green)':'var(--border)')+';background:'+(sel?'var(--green)':'transparent')+'">' +
+                (sel ? '<span style="color:#0a0908;font-size:10px;font-weight:700">✓</span>' : '') + '</span></td>' +
+            '<td style="'+td+'"><span style="margin-right:7px">'+icono+'</span>' +
+                '<span style="font-size:13px;font-weight:600;color:var(--text)">'+etx(r.nombre)+'</span>' +
+                (badges ? '<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px">'+badges+'</div>' : '') + '</td>' +
+            '<td style="'+td+';font-size:12px;color:var(--text-dim)">'+etx(r.grupo||'—')+'</td>' +
+            '<td style="'+td+';font-size:12px;color:var(--text-dim)">'+etx(r.categoria||'—')+'</td>' +
+            '<td style="'+td+';text-align:right;font-size:14px;color:var(--accent);white-space:nowrap;font-variant-numeric:tabular-nums">$'+costo.toFixed(2)+'</td>' +
+            '<td style="'+td+';font-size:11px;color:var(--text-dim);white-space:nowrap">'+fecha+'</td>' +
+            '<td style="'+td+';text-align:right;white-space:nowrap">'+acciones+'</td>' +
+        '</tr>';
+    }).join('');
+    grid.innerHTML =
+        '<table style="width:100%;border-collapse:collapse">' +
+            '<thead><tr>' +
+                '<th style="'+th+'"></th>' +
+                '<th style="'+th+'">Receta</th>' +
+                '<th style="'+th+'">Grupo</th>' +
+                '<th style="'+th+'">Categoría</th>' +
+                '<th style="'+th+';text-align:right">Costo</th>' +
+                '<th style="'+th+'">Guardada</th>' +
+                '<th style="'+th+';text-align:right">Acciones</th>' +
+            '</tr></thead><tbody>' + filas + '</tbody>' +
+        '</table>';
 }
 
 function toggleSeleccion(id, card) {
