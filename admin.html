@@ -337,6 +337,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
     <button class="tab" onclick="switchTab('staff')">🎯 Staff global</button>
     <button class="tab" onclick="switchTab('proveedores')">🚚 Proveedores</button>
     <button class="tab" onclick="switchTab('insumos')">🗄️ Insumos</button>
+    <button class="tab" onclick="switchTab('rrhh')">🧑‍🍳 Perfiles y evaluaciones</button>
     <button class="tab" onclick="switchTab('papelera')">🗑️ Papelera</button>
   </div>
 
@@ -1688,6 +1689,7 @@ function cerrarDetail() {
 function switchTab(tab) {
     if (tab === 'insumos') { window.location.href = 'admin-catalogo-insumos.html'; return; }
     if (tab === 'papelera') { window.location.href = 'admin-papelera.html'; return; }
+    if (tab === 'rrhh')     { window.location.href = 'admin-catalogo-rrhh.html'; return; }
     _tabActivo = tab;
     var tabs = ['usuarios','negocios','solicitudes','staff','proveedores','insumos'];
     document.querySelectorAll('.tab').forEach(function(b,i){

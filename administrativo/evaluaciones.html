@@ -123,7 +123,10 @@
                 <div class="ev-title"><span class="g">Evaluaciones</span></div>
                 <div class="ev-sub">Crea evaluaciones tipo formulario, genera un link y mándaselo a tu staff o candidatos. Puntuación automática.</div>
             </div>
-            <button class="ev-btn" onclick="nuevaEval()">+ Nueva evaluación</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button class="ev-btn ghost" onclick="abrirEvalsEtaax()" title="Plantillas de evaluación sugeridas por ETAAX — cópialas a tu negocio y edítalas">🌐 Evaluaciones ETAAX</button>
+                <button class="ev-btn" onclick="nuevaEval()">+ Nueva evaluación</button>
+            </div>
         </div>
         <div id="listaCats"></div>
     </div>
@@ -383,6 +386,43 @@ function nuevaEval(){
     _edit={ id:'ev_'+genId(), titulo:'', categoria:CATS[0].id, descripcion:'', token:_token(), activa:false, preguntas:[] };
     abrirEditor(false);
 }
+/* ── Catálogo ETAAX: jalar una plantilla ───────────────────────────────
+   Llega como BORRADOR y con token propio: nunca se hereda el link público de
+   la plantilla, y nadie puede contestarla hasta que el negocio la revise y la
+   active. Tampoco viajan respuestas: el catálogo solo guarda plantillas. */
+function abrirEvalsEtaax(){
+    if(!window.etaaxCatalogo){ alert('No se pudo cargar el catálogo. Recarga la página.'); return; }
+    etaaxCatalogo.abrir({
+        tabla:'catalogo_evaluaciones',
+        titulo:'Evaluaciones ETAAX',
+        icono:'📝',
+        vacio:'Todavía no hay plantillas en el catálogo de ETAAX.',
+        nombre:function(d){ return d.titulo||'Sin título'; },
+        sub:function(d){ var c=CATS.find(function(x){return x.id===d.categoria;}); return c?c.nom:''; },
+        detalle:function(d){ var n=(d.preguntas||[]).length; return n+' pregunta'+(n!==1?'s':''); },
+        yaEsta:function(d){
+            var t=String(d.titulo||'').toLowerCase().trim();
+            return _evals.some(function(e){
+                return e.origenCatalogoId===d.id || String(e.titulo||'').toLowerCase().trim()===t;
+            });
+        },
+        agregar:function(d){
+            var nueva=Object.assign({}, d, {
+                id:'ev_'+genId(),
+                origenCatalogoId:d.id,
+                token:_token(),          // link propio, no el de la plantilla
+                activa:false,            // entra como borrador: la revisas y tú la abres
+                createdAt:new Date().toISOString(),
+                updatedAt:new Date().toISOString()
+            });
+            delete nueva.respuestas;     // el catálogo no las trae, pero por si acaso
+            _evals.push(nueva);
+            if(typeof sbUpsert==='function') sbUpsert('evaluaciones', nueva);
+            renderLista();
+        }
+    });
+}
+
 function editarEval(id){
     var e=_evals.find(function(x){return x.id===id;}); if(!e)return;
     _edit=JSON.parse(JSON.stringify(e));
@@ -664,5 +704,6 @@ document.addEventListener('DOMContentLoaded',function(){ if(typeof _ctxBarInit==
 <script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
+<script src="/catalogo-etaax.js"></script>
 </body>
 </html>

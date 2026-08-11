@@ -114,7 +114,10 @@
                 <div class="pp-eyebrow">Gestión de Staff</div>
                 <div class="pp-title">Perfiles de Puesto</div>
             </div>
-            <button class="pp-btn pp-btn-primary" onclick="nuevoPerfil()">+ Nuevo perfil</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button class="pp-btn" onclick="abrirPerfilesEtaax()" title="Perfiles de puesto sugeridos por ETAAX — cópialos a tu negocio y edítalos">🌐 Perfiles ETAAX</button>
+                <button class="pp-btn pp-btn-primary" onclick="nuevoPerfil()">+ Nuevo perfil</button>
+            </div>
         </div>
         <div class="pp-grid" id="listaPerfiles"></div>
     </div>
@@ -239,6 +242,43 @@ function _subPerfilesRealtime(negId){
             if(document.getElementById('viewLista').style.display!=='none') renderLista();
             else if(document.getElementById('viewPreview').style.display!=='none' && _verId) verPerfil(_verId);
         },400);
+    });
+}
+
+/* ── Catálogo ETAAX: jalar un perfil sugerido ──────────────────────────
+   Copia con id NUEVO (no el del maestro): el perfil pasa a ser del negocio y
+   lo puede editar sin que nada lo pise. `origenCatalogoId` deja el rastro de
+   qué plantilla lo originó. */
+function abrirPerfilesEtaax(){
+    if(!window.etaaxCatalogo){ alert('No se pudo cargar el catálogo. Recarga la página.'); return; }
+    etaaxCatalogo.abrir({
+        tabla:'catalogo_perfiles',
+        titulo:'Perfiles de puesto ETAAX',
+        icono:'🧑‍🍳',
+        vacio:'Todavía no hay perfiles en el catálogo de ETAAX.',
+        nombre:function(d){ return d.puesto||'Sin título'; },
+        sub:function(d){ return (d.general&&d.general.concepto)||''; },
+        detalle:function(d){
+            var f=(d.funciones||[]).length, r=(d.requisitos||[]).length;
+            return [f?f+' funciones':'', r?r+' requisitos':''].filter(Boolean).join(' · ');
+        },
+        yaEsta:function(d){
+            var n=String(d.puesto||'').toLowerCase().trim();
+            return _perfiles.some(function(p){
+                return p.origenCatalogoId===d.id || String(p.puesto||'').toLowerCase().trim()===n;
+            });
+        },
+        agregar:function(d){
+            var nuevo=Object.assign({}, d, {
+                id:'pp_'+genId(),
+                origenCatalogoId:d.id,
+                createdAt:new Date().toISOString(),
+                updatedAt:new Date().toISOString()
+            });
+            _perfiles.push(nuevo);
+            if(typeof sbUpsert==='function') sbUpsert('perfiles_puesto', nuevo);
+            renderLista();
+        }
     });
 }
 
@@ -374,6 +414,7 @@ document.addEventListener('DOMContentLoaded', _sbInit);
 </script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
+<script src="/catalogo-etaax.js"></script>
 <script src="/nav-pref.js"></script>
 <script src="/modal-drag.js"></script>
 <script src="/modal-dock.js"></script>
