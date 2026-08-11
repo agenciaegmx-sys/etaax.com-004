@@ -847,13 +847,17 @@ function _recetaHeaderMarca() {
     var _dot = (m.sucursal && m.sucursalColor)
         ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' + etx(m.sucursalColor) + ';margin-right:4px;vertical-align:middle"></span>'
         : '';
+    // Logo con la MISMA jerarquía que los reportes financieros (etaaxMarca):
+    // el de la SUCURSAL activa si lo tiene → si no, el del NEGOCIO → si no,
+    // el emoji. Antes esto leía `logoNegocio` a secas, así que una sucursal con
+    // marca propia (Tata, Mammut…) imprimía sus recetas sin logo.
     return '<div style="display:flex;align-items:center;gap:10px;flex-shrink:0">' +
-        (!m.logoNegocio && m.emoji ? '<span style="font-size:20px;line-height:1">' + m.emoji + '</span>' : '') +
+        (!m.logo && m.emoji ? '<span style="font-size:20px;line-height:1">' + m.emoji + '</span>' : '') +
         '<div style="text-align:right">' +
             '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:17px;letter-spacing:1px;color:#1a1916;line-height:1">' + etx(m.negocio || '') + '</div>' +
             (m.sucursal ? '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#999;margin-top:3px">' + _dot + etx(m.sucursal) + '</div>' : '') +
         '</div>' +
-        (m.logoNegocio ? '<img src="' + m.logoNegocio + '" style="width:40px;height:40px;object-fit:contain;border:1px solid #eee;border-radius:6px;background:#fff" alt="logo">' : '') +
+        (m.logo ? '<img src="' + m.logo + '" style="width:40px;height:40px;object-fit:contain;border:1px solid #eee;border-radius:6px;background:#fff" alt="logo">' : '') +
     '</div>';
 }
 
