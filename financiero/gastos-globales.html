@@ -933,9 +933,17 @@ function _sucTxtGG(){ return _sucursalId ? _sucursalLabel() : 'Todas las sucursa
 function _abrirReporteGG(titulo, subtitulo, cuerpo, derecha){
     if(typeof etaaxReporteDoc!=='function'){ alert('No se pudo cargar el módulo de reportes. Recarga la página.'); return; }
     var html=etaaxReporteDoc({ titulo:titulo, subtitulo:subtitulo, derecha:derecha, cuerpo:cuerpo, pie:'Salud Financiera · Gastos Totales' });
-    // Con respaldo: si el navegador bloquea la ventana emergente, imprime desde un
-    // iframe oculto en vez de no hacer nada (que es como se veía el bloqueo).
-    if(!etaaxAbrirReporte(html)) alert('No se pudo abrir el reporte. Revisa si el navegador está bloqueando ventanas emergentes.');
+    // Ventana emergente y, si la bloquean, iframe oculto. Si el helper no está
+    // (reporte-marca.js viejo en caché) se hace aquí mismo: el botón NUNCA debe
+    // quedarse en silencio.
+    if(typeof etaaxAbrirReporte==='function'){ etaaxAbrirReporte(html); return; }
+    var w=null; try{ w=window.open('','_blank'); }catch(e){}
+    if(w&&w.document){ w.document.write(html); w.document.close(); return; }
+    var ifr=document.createElement('iframe');
+    ifr.style.cssText='position:fixed;left:-10000px;top:0;width:900px;height:1200px;border:0;opacity:0';
+    document.body.appendChild(ifr);
+    var d=ifr.contentWindow.document; d.open(); d.write(String(html).replace('window.print();','')); d.close();
+    setTimeout(function(){ try{ ifr.contentWindow.focus(); ifr.contentWindow.print(); }catch(e){} }, 450);
 }
 // Gastos del negocio en un rango, con la misma clasificación del núcleo.
 function _gastosRangoGG(from,to){
@@ -946,7 +954,8 @@ function _clasifRangoGG(from,to){
 }
 
 // ── Reporte del MES en pantalla: TODO el gasto, separado por grupo ──
-function imprimirGastos(){
+function imprimirGastos(){ try{ _imprimirGastos(); }catch(e){ console.error(e); alert('No se pudo generar el reporte:\n'+(e&&e.message||e)); } }
+function _imprimirGastos(){
     var mes=document.getElementById('mesInput').value||mesStr();
     var ini=mes+'-01', fin=new Date(parseInt(mes.slice(0,4)), parseInt(mes.slice(5,7)), 0).toISOString().slice(0,10);
     var gastos=loadGastosMes(mes);
@@ -1027,7 +1036,8 @@ function abrirHistSemGastos(){
 }
 function cerrarHistSemGastos(){ document.getElementById('modalHistSemGG').classList.remove('open'); }
 function _hsMarcarGG(todas){ document.querySelectorAll('#hsBodyGG .hs-chk').forEach(function(c){ c.checked=todas; }); }
-function imprimirHistSemGastos(){
+function imprimirHistSemGastos(){ try{ _imprimirHistSemGastos(); }catch(e){ console.error(e); alert('No se pudo generar el reporte:\n'+(e&&e.message||e)); } }
+function _imprimirHistSemGastos(){
     var sel={}; document.querySelectorAll('#hsBodyGG .hs-chk:checked').forEach(function(c){ sel[c.value]=1; });
     var sem=_semGG.filter(function(s){ return sel[s.wk]; }).slice().reverse();
     if(!sem.length){ alert('Elige al menos una semana.'); return; }

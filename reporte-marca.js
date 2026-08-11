@@ -194,10 +194,19 @@
     window.etaaxAbrirReporte = function (html) {
         var w = null;
         try { w = window.open('', '_blank'); } catch (e) {}
-        if (w && w.document) { w.document.write(html); w.document.close(); return true; }
+        if (w && w.document) {
+            w.document.write(html); w.document.close();
+            // Al frente: si el navegador la abre en segundo plano, el diálogo de
+            // impresión se queda esperando y desde la app parece que no pasó nada.
+            try { w.focus(); } catch (e) {}
+            return true;
+        }
         var ifr = document.createElement('iframe');
         ifr.setAttribute('aria-hidden', 'true');
-        ifr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+        // FUERA de la pantalla pero CON TAMAÑO REAL: un iframe de 0×0 (o con
+        // display:none) se imprime en blanco en varios navegadores porque nunca
+        // llega a maquetar el documento.
+        ifr.style.cssText = 'position:fixed;left:-10000px;top:0;width:900px;height:1200px;border:0;opacity:0;pointer-events:none';
         document.body.appendChild(ifr);
         try {
             var d = ifr.contentWindow.document;

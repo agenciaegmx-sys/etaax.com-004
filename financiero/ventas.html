@@ -1068,7 +1068,8 @@ function _sucTxtSF(){ return _sucursalId ? _sucursalLabel() : 'Todas las sucursa
 function _pctColor(p){ return p>=100?'#1a7a46':p>=70?'#9a6f00':'#b52a1a'; }
 
 // ── Reporte del PERIODO seleccionado ──
-function imprimirVentas(){
+function imprimirVentas(){ try{ _imprimirVentas(); }catch(e){ console.error(e); alert('No se pudo generar el reporte:\n'+(e&&e.message||e)); } }
+function _imprimirVentas(){
     if(typeof etaaxReporteDoc!=='function'){ alert('No se pudo cargar el módulo de reportes. Recarga la página.'); return; }
     var r=getRange();
     var cortesMap={}, otrosMap={};
@@ -1139,7 +1140,8 @@ function abrirHistSemanal(){
 }
 function cerrarHistSemanal(){ document.getElementById('modalHistSem').classList.remove('open'); }
 function _hsMarcar(todas){ document.querySelectorAll('.hs-chk').forEach(function(c){ c.checked=todas; }); }
-function imprimirHistSemanal(){
+function imprimirHistSemanal(){ try{ _imprimirHistSemanal(); }catch(e){ console.error(e); alert('No se pudo generar el reporte:\n'+(e&&e.message||e)); } }
+function _imprimirHistSemanal(){
     var sel={}; document.querySelectorAll('.hs-chk:checked').forEach(function(c){ sel[c.value]=1; });
     var semanas=_semCache.filter(function(s){ return sel[s.wk]; }).slice().reverse(); // de la más vieja a la más nueva
     if(!semanas.length){ alert('Elige al menos una semana.'); return; }
@@ -1172,9 +1174,17 @@ function imprimirHistSemanal(){
 }
 function _abrirReporte(titulo, subtitulo, cuerpo, derecha){
     var html=etaaxReporteDoc({ titulo:titulo, subtitulo:subtitulo, derecha:derecha, cuerpo:cuerpo, pie:'Salud Financiera · Ventas Totales' });
-    // Con respaldo: si el navegador bloquea la ventana emergente, imprime desde un
-    // iframe oculto en vez de no hacer nada (que es como se veía el bloqueo).
-    if(!etaaxAbrirReporte(html)) alert('No se pudo abrir el reporte. Revisa si el navegador está bloqueando ventanas emergentes.');
+    // Ventana emergente y, si la bloquean, iframe oculto. Si el helper no está
+    // (reporte-marca.js viejo en caché) se hace aquí mismo: el botón NUNCA debe
+    // quedarse en silencio.
+    if(typeof etaaxAbrirReporte==='function'){ etaaxAbrirReporte(html); return; }
+    var w=null; try{ w=window.open('','_blank'); }catch(e){}
+    if(w&&w.document){ w.document.write(html); w.document.close(); return; }
+    var ifr=document.createElement('iframe');
+    ifr.style.cssText='position:fixed;left:-10000px;top:0;width:900px;height:1200px;border:0;opacity:0';
+    document.body.appendChild(ifr);
+    var d=ifr.contentWindow.document; d.open(); d.write(String(html).replace('window.print();','')); d.close();
+    setTimeout(function(){ try{ ifr.contentWindow.focus(); ifr.contentWindow.print(); }catch(e){} }, 450);
 }
 
 function _setPeriod(tipo,btn){
