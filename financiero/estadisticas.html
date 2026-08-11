@@ -17,9 +17,7 @@
         /* Contenido centrado en el shell estándar (app-shell + main-content + wrap),
            igual que KPIs: la nav fija desplaza y .wrap centra en el resto. */
         .main-content{padding-bottom:90px}
-        .est-header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
-        .est-brand .brand-label{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--accent)}
-        .est-brand .brand-title{font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:2px;color:var(--text);line-height:1}
+        /* El header usa .header/.brand de styles.css (igual que los demás sub-módulos). */
         .suc-chip{background:var(--surface);border:1px solid rgba(155,141,232,.4);color:var(--viol);border-radius:20px;
             padding:8px 16px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer}
         .suc-menu{display:none;position:absolute;top:calc(100% + 6px);left:0;background:var(--surface);border:1px solid var(--border);
@@ -173,19 +171,24 @@
 </nav>
 
 <main class="main-content" id="mainContent">
-<div class="wrap">
-    <div class="est-header">
-        <div class="est-brand">
-            <div class="brand-label">Salud Financiera</div>
-            <div class="brand-title">Estadísticas</div>
+    <!-- Header estándar del sub-módulo (mismo de Ventas/Gastos/KPIs): barra sticky
+         a todo lo ancho, con la línea alineada con la de la nav lateral. -->
+    <div class="header">
+        <div class="brand">
+            <span class="brand-label">Salud Financiera</span>
+            <span class="brand-title">Estadísticas</span>
         </div>
-        <div style="position:relative;margin-left:auto">
-            <button class="suc-chip" id="sucChip">🌐 Vista global ▾</button>
-            <div class="suc-menu" id="sucMenu"></div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <div style="position:relative">
+                <button class="suc-chip" id="sucChip">🌐 Vista global ▾</button>
+                <div class="suc-menu" id="sucMenu"></div>
+            </div>
+            <button class="suc-chip" id="btnImprimirEst" onclick="imprimirEstadisticas()" title="Imprimir / PDF del periodo">🖨️ Reporte</button>
+            <a href="index.html" class="suc-chip" style="text-decoration:none;color:var(--text-dim);border-color:var(--border)">← Panel</a>
         </div>
-        <button class="suc-chip" id="btnImprimirEst" onclick="imprimirEstadisticas()" title="Imprimir / PDF del periodo">🖨️ Reporte</button>
-        <a href="index.html" class="suc-chip" style="text-decoration:none;color:var(--text-dim);border-color:var(--border)">← Panel</a>
     </div>
+
+<div class="wrap">
 
     <!-- ── FILTROS GLOBALES: periodo + comparativa ── -->
     <div class="filtros">

@@ -137,6 +137,31 @@
         .hist-table tr:hover td{background:var(--surface2);}
         .hist-table tr.current-month td{background:rgba(245,200,66,.04);}
 
+        /* Period tabs — mismo control que Ventas Totales y Gastos Totales */
+        .period-tabs{display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:4px;}
+        .period-tab{background:transparent;border:none;color:var(--text-muted);padding:6px 13px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:12.5px;cursor:pointer;transition:all .15s;white-space:nowrap;}
+        .period-tab.active{background:var(--surface);color:var(--green);font-weight:500;border:1px solid var(--border);}
+        .period-tab:hover:not(.active){color:var(--text);}
+        .rango-lbl{font-size:10px;color:var(--text-dim);letter-spacing:.3px;white-space:nowrap;}
+
+        /* Desglose por concepto (ventana flotante) */
+        .dist-col{cursor:pointer;transition:background .15s;}
+        .dist-col:hover{background:var(--surface2);}
+        .dist-ver{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);text-align:center;padding:0 6px 9px;}
+        .dist-col:hover .dist-ver{color:var(--green);}
+        .dd-table{width:100%;border-collapse:collapse;font-size:12px;}
+        .dd-table th{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);font-weight:500;padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;}
+        .dd-table td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top;}
+        .dd-table tr:last-child td{border-bottom:none;}
+        .dd-table tr:hover td{background:var(--surface2);}
+        .dd-table .ar{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+        .dd-det{font-size:10.5px;color:var(--text-dim);}
+        .dd-chip{display:inline-block;font-size:9.5px;padding:2px 7px;border-radius:20px;border:1px solid var(--border);color:var(--text-muted);}
+        .dd-resumen{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;}
+        .dd-r{flex:1;min-width:150px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 13px;}
+        .dd-r .l{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:5px;}
+        .dd-r .v{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:.5px;line-height:1;}
+
         /* Period picker */
         .period-picker{display:flex;align-items:center;gap:8px;}
         .period-picker input{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;cursor:pointer;}
@@ -200,13 +225,21 @@
             </div>
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
                 <div class="suc-wrap">
-                    <button class="suc-chip" id="sucChip">🌐 Todas las sucursales ▾</button>
+                    <button class="suc-chip" id="sucChip">🌐 Vista global ▾</button>
                     <div class="suc-menu" id="sucMenu"></div>
                 </div>
-                <div class="period-picker">
-                    <label>Mes</label>
-                    <input type="month" id="mesInput">
+                <div class="period-tabs">
+                    <button class="period-tab" id="tabDia">Día</button>
+                    <button class="period-tab" id="tabSemana">Semana</button>
+                    <button class="period-tab active" id="tabMes">Mes</button>
+                    <button class="period-tab" id="tabRango">Rango</button>
                 </div>
+                <div class="period-picker">
+                    <label id="pickerLabel">Mes</label>
+                    <input type="month" id="pickerInput">
+                    <input type="date" id="pickerEnd" style="display:none">
+                </div>
+                <span class="rango-lbl" id="rangoLbl"></span>
                 <button class="suc-chip" id="btnImprimirKpis" onclick="imprimirKPIs()" title="Imprimir / PDF del mes" style="font-size:11px;padding:7px 14px">🖨️ Reporte</button>
                 <button class="btn-primary" id="btnGuardarTargets" style="font-size:11px;padding:7px 14px">💾 Guardar metas</button>
             </div>
@@ -217,7 +250,7 @@
             <!-- KPI Summary Cards -->
             <div class="kpi-grid">
                 <div class="kpi-card g">
-                    <div class="kpi-lbl">Ingresos del mes</div>
+                    <div class="kpi-lbl">Ingresos del periodo</div>
                     <div class="kpi-val" id="kpiIngresos" style="color:var(--green)">$0</div>
                     <div class="kpi-sub" id="kpiIngresosSub">Ventas + otros ingresos</div>
                 </div>
@@ -337,6 +370,24 @@
     </main>
 </div>
 
+<!-- ── Desglose de un concepto: los movimientos que arman su porcentaje ── -->
+<div class="modal-overlay" id="modalDrill">
+    <div class="modal" style="max-width:860px">
+        <div class="modal-header">
+            <h2 id="ddTitulo">Desglose</h2>
+            <button class="modal-close" onclick="cerrarDesglose()">✕</button>
+        </div>
+        <div class="modal-body" id="ddBody"></div>
+        <div class="modal-footer" style="justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <span id="ddNota" style="font-size:10.5px;color:var(--text-dim);flex:1;min-width:180px;line-height:1.5"></span>
+            <span style="display:flex;gap:8px">
+                <button class="suc-chip" onclick="cerrarDesglose()">Cerrar</button>
+                <a class="btn-primary" id="ddIr" href="#" style="text-decoration:none;display:inline-flex;align-items:center">📤 Ver en Gastos Totales</a>
+            </span>
+        </div>
+    </div>
+</div>
+
 <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
 
 <script>
@@ -417,42 +468,87 @@ function loadNominasMes(mes){
     (d.socios||[]).forEach(function(p){adm+=n(p.base)+n(p.bonos)+n(p.imss);});
     return{op:op,adm:adm};
 }
-function loadPrevsMes(mes){
-    var all = _kCache.prevs || [];
-    var mesStart=mes+'-01';
-    var y=parseInt(mes.slice(0,4)),m=parseInt(mes.slice(5,7));
-    var mesEnd=new Date(y,m,0).toISOString().slice(0,10);
-    return all.filter(function(p){
+// Previsiones vigentes dentro del periodo (misma regla de siempre, ahora sobre un rango).
+function prevsRango(from,to){
+    return (_kCache.prevs||[]).filter(function(p){
         if(p.estado==='cancelada') return false;
-        if(p.fechaInicio&&p.fechaFin) return p.fechaInicio<=mesEnd&&p.fechaFin>=mesStart;
-        return p.fechaInicio&&p.fechaInicio.slice(0,7)===mes;
-    }).reduce(function(s,p){return s+n(p.montoEstimado);},0);
+        if(p.fechaInicio&&p.fechaFin) return p.fechaInicio<=to&&p.fechaFin>=from;
+        return p.fechaInicio&&p.fechaInicio>=from&&p.fechaInicio<=to;
+    });
+}
+function loadPrevsRango(from,to){ return prevsRango(from,to).reduce(function(s,p){return s+n(p.montoEstimado);},0); }
+
+/* ── Periodo: día · semana · mes · rango (mismo control que Ventas y Gastos) ── */
+var periodoTipo='mes';
+function _pVal(){ var e=document.getElementById('pickerInput'); return (e&&e.value)||mesStr(); }
+function _pEnd(){ var e=document.getElementById('pickerEnd'); return (e&&e.value)||todayStr(); }
+function getRangoSel(){ return EtaaxCore.getRange(periodoTipo,_pVal(),_pEnd()); }
+function _fLarga(s){ try{ return new Date(s+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}); }catch(e){ return s; } }
+// Texto del periodo para títulos y reportes ("agosto de 2026", "6 ago 2026", "1 – 7 ago…").
+function periodoTxt(){
+    var r=getRangoSel();
+    if(periodoTipo==='mes') return new Date(r.from+'T12:00:00').toLocaleDateString('es-MX',{month:'long',year:'numeric'});
+    if(periodoTipo==='dia') return _fLarga(r.from);
+    if(periodoTipo==='semana') return 'Semana '+_pVal().replace('-W',' · ')+' ('+_fLarga(r.from)+' → '+_fLarga(r.to)+')';
+    return _fLarga(r.from)+' → '+_fLarga(r.to);
+}
+function _setPeriodo(tipo,btn){
+    periodoTipo=tipo;
+    document.querySelectorAll('.period-tab').forEach(function(b){b.classList.remove('active');});
+    if(btn) btn.classList.add('active');
+    var pi=document.getElementById('pickerInput'),pe=document.getElementById('pickerEnd'),pl=document.getElementById('pickerLabel');
+    if(tipo==='dia'){ pi.type='date'; pe.style.display='none'; pl.textContent='Fecha'; pi.value=todayStr(); }
+    else if(tipo==='semana'){ pi.type='week'; pe.style.display='none'; pl.textContent='Semana'; pi.value=EtaaxCore.getWeekStr(new Date()); }
+    else if(tipo==='mes'){ pi.type='month'; pe.style.display='none'; pl.textContent='Mes'; pi.value=mesStr(); }
+    else { pi.type='date'; pe.style.display=''; pl.textContent='Desde'; pi.value=mesStr()+'-01'; pe.value=todayStr(); }
+    renderAll();
 }
 
-/* ── Sucursal ── */
+/* ── Sucursal ──────────────────────────────────────────────────────
+   MISMO modelo que Ventas / Gastos Totales / Estadísticas: las sucursales
+   viven DENTRO del negocio y cada registro trae `sucursalId` (sin él =
+   Matriz). Antes esta página filtraba por `negocioId` (otros negocios del
+   usuario): ese campo no existe en los registros, así que el filtro nunca
+   quitaba nada y todas las "sucursales" mostraban el mismo número. */
 var _sucursalId=null;
-function _loadNegocios(){
-    try{
-        var all=JSON.parse(localStorage.getItem('etaax_negocios')||'[]');
-        var activoId=localStorage.getItem('etaax_negocio_activo')||'';
-        if(!activoId)return all;
-        var activo=all.find(function(n){return n.id===activoId;});
-        if(!activo||!activo.usuarioId)return all;
-        return all.filter(function(n){return n.usuarioId===activo.usuarioId;});
-    }catch(e){return[];}
+function _sucBloqueada(){
+    var ctx; try{ ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null'); }catch(e){}
+    var esStaff=ctx&&ctx.ctxType==='staff'&&(ctx.rol||'')!=='admin';
+    var sucAct=localStorage.getItem('etaax_sucursal_activa')||'';
+    if(esStaff) return sucAct||'suc_principal';
+    return sucAct;
+}
+var _SUC_LOCK=_sucBloqueada();
+if(_SUC_LOCK) _sucursalId=_SUC_LOCK;
+function _sucsNeg(){
+    try{ var negId=getNegocioActivo(); if(!negId) return [];
+        return (JSON.parse(localStorage.getItem('etaax_'+negId+'_sucursales')||'[]')||[])
+            .filter(function(s){return s&&s.id&&s.activa!==false;});
+    }catch(e){ return []; }
+}
+function _deSuc(x){ if(!_sucursalId) return true; return ((x&&x.sucursalId)||'suc_principal')===_sucursalId; }
+function _sucLabel(){
+    if(!_sucursalId) return '🌐 Vista global';
+    if(_sucursalId==='suc_principal'){ var m=_sucsNeg().find(function(s){return s.id==='suc_principal';}); return '🏢 '+((m&&m.nombre)||'Matriz'); }
+    var s=_sucsNeg().find(function(x){return x.id===_sucursalId;});
+    return s?('🏪 '+s.nombre):'Sucursal';
 }
 function _renderSucMenu(){
     var menu=document.getElementById('sucMenu');
-    var negs=_loadNegocios();
-    var html='<div class="suc-opt'+(!_sucursalId?' active':'')+'" data-suc="">🌐 Todas</div>';
-    if(negs.length)html+='<div class="suc-sep"></div>';
-    negs.forEach(function(neg){html+='<div class="suc-opt'+(_sucursalId===neg.id?' active':'')+'" data-suc="'+_esc(neg.id)+'">'+(neg.emoji||'🏢')+' '+_esc(neg.nombre)+'</div>';});
+    var sucs=_sucsNeg();
+    var html='<div class="suc-opt'+(!_sucursalId?' active':'')+'" data-suc="">🌐 Vista global</div>';
+    if(sucs.length){
+        html+='<div class="suc-sep"></div>';
+        if(!sucs.some(function(s){return s.id==='suc_principal';}))
+            html+='<div class="suc-opt'+(_sucursalId==='suc_principal'?' active':'')+'" data-suc="suc_principal">🏢 Matriz</div>';
+        sucs.forEach(function(s){ html+='<div class="suc-opt'+(_sucursalId===s.id?' active':'')+'" data-suc="'+_esc(s.id)+'">🏪 '+_esc(s.nombre||s.id)+'</div>'; });
+    }
     menu.innerHTML=html;
     menu.querySelectorAll('.suc-opt').forEach(function(el){
         el.addEventListener('click',function(){
             _sucursalId=el.dataset.suc||null;
             var chip=document.getElementById('sucChip');
-            chip.textContent=(_sucursalId?(_loadNegocios().find(function(x){return x.id===_sucursalId;})||{nombre:'Sucursal'}).nombre:'🌐 Todas las sucursales')+' ▾';
+            chip.textContent=_sucLabel()+' ▾';
             menu.classList.remove('open'); chip.classList.remove('open'); renderAll();
         });
     });
@@ -484,17 +580,16 @@ function _kNomTipo(g, staff){
     return 'operativa';
 }
 
-/* ── Data aggregation for a month ── */
+/* ── Data aggregation de un PERIODO (día · semana · mes · rango) ── */
 function flujoNeto(c){return EtaaxCore.flujoNeto(c);} // núcleo: MISMA fórmula que el corte
-function getMesData(mes){
-    var mesStart=mes+'-01';
-    var y=parseInt(mes.slice(0,4)),m=parseInt(mes.slice(5,7));
-    var mesEnd=new Date(y,m,0).toISOString().slice(0,10);
-    function inMes(f){return f>=mesStart&&f<=mesEnd;}
+// El historial mensual y los reportes por mes siguen pidiendo un mes: envuelve el rango.
+function getMesData(mes){ var r=EtaaxCore.getRange('mes',mes,null); return getPeriodoData(r.from,r.to); }
+function getPeriodoData(desde,hasta){
+    function inMes(f){return f>=desde&&f<=hasta;}
 
-    var cortes=loadCortes().filter(function(c){return inMes(c.fecha)&&(!_sucursalId||!c.negocioId||c.negocioId===_sucursalId);});
-    var otros=loadOtros().filter(function(o){return inMes(o.fecha);});
-    var gastos=loadGastos().filter(function(g){return inMes(g.fecha)&&(!_sucursalId||!g.negocioId||g.negocioId===_sucursalId);});
+    var cortes=loadCortes().filter(_deSuc).filter(function(c){return inMes(c.fecha);});
+    var otros =loadOtros().filter(_deSuc).filter(function(o){return inMes(o.fecha);});
+    var gastos=loadGastos().filter(_deSuc).filter(function(g){return inMes(g.fecha);});
 
     // VENTA = venta bruta (efectivo+tarjeta+transfer), SIN propinas. Igual que
     // Estadísticas. Antes usaba flujoNeto, que suma la propina de tarjeta
@@ -517,11 +612,13 @@ function getMesData(mes){
 
     // PREVISIONES = reserva, NO cuenta como egreso del mes (decisión Edwin) → va aparte;
     // la utilidad NETA sí la descuenta (es dinero apartado de la utilidad).
-    var prevs=loadPrevsMes(mes);
+    var prevs=loadPrevsRango(desde,hasta);
     var egresos=cl.egresos;                 // Fijos + Nóminas + Variables (SIN previsiones)
     var util=ingresos-egresos-prevs;        // utilidad neta tras apartar la reserva
 
-    return{ingresos:ingresos,fijos:cl.fijo,variables:cl.variable,nomOp:nomOp,nomAdm:nomAdm,prevs:prevs,egresos:egresos,util:util};
+    return{ingresos:ingresos,fijos:cl.fijo,variables:cl.variable,nomOp:nomOp,nomAdm:nomAdm,prevs:prevs,egresos:egresos,util:util,
+           // crudo para el desglose por concepto (misma data, sin recalcular)
+           desde:desde,hasta:hasta,ventas:ventas,otros:otrosT,gastos:gastos,cortes:cortes,otrosLista:otros,comisionBanco:comisionBanco};
 }
 
 /* ── Targets ── */
@@ -562,11 +659,11 @@ function getSem(actual, target, isUtil){
     }
 }
 
-/* ── Reporte imprimible del mes (header con logo real + pie anclado al fondo) ── */
+/* ── Reporte imprimible del periodo (header con logo real + pie anclado al fondo) ── */
 function imprimirKPIs(){
     if(typeof etaaxReporteDoc!=='function'){ alert('No se pudo cargar el módulo de reportes. Recarga la página.'); return; }
-    var mes=(document.getElementById('mesInput').value)||mesStr();
-    var d=getMesData(mes), t=loadTargets();
+    var rg=getRangoSel(), mes=rg.to.slice(0,7);   // el historial de abajo sigue siendo mensual
+    var d=getPeriodoData(rg.from,rg.to), t=loadTargets();
     function pc(x){ return d.ingresos>0?(x/d.ingresos*100):0; }
     var margen=pc(d.util), semMrg=getSem(margen,t.util,true);
     var SEMCOL={verde:'#1a7a46',amarillo:'#9a6f00',naranja:'#c8621a',rojo:'#b52a1a'};
@@ -575,7 +672,7 @@ function imprimirKPIs(){
 
     function card(l,val,color,sub){ return '<div class="rcard"><div class="l">'+l+'</div><div class="v"'+(color?' style="color:'+color+'"':'')+'>'+val+'</div>'+(sub?'<div class="s">'+sub+'</div>':'')+'</div>'; }
     var cards =
-        card('Ingresos del mes', fmtM(d.ingresos), '#1a7a46', 'Ventas + otros ingresos') +
+        card('Ingresos del periodo', fmtM(d.ingresos), '#1a7a46', 'Ventas + otros ingresos') +
         card('Egresos totales', fmtM(d.egresos), '#b52a1a', 'Fijos + Nóminas + Variables') +
         card('Utilidad neta', fmtM(d.util), d.util>=0?'#1a7a46':'#b52a1a', fmtPct(margen)+' sobre ingresos') +
         card('Margen operativo', d.ingresos>0?fmtPct(margen):'—', margenColor, 'Meta: '+t.util+'%');
@@ -619,16 +716,16 @@ function imprimirKPIs(){
         : '';
 
     var cuerpo =
-        '<div class="rsec">Resumen del mes</div>' +
+        '<div class="rsec">Resumen del periodo</div>' +
         '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">'+cards+'</div>' +
         '<div class="rsec">Distribución de egresos + utilidad (% sobre ingresos)</div>' +
         '<table class="rt"><thead><tr><th>Concepto</th><th>Monto</th><th>Porcentaje</th><th>Meta saludable</th><th>Estado</th></tr></thead><tbody>'+rows+'</tbody></table>' +
         histSec +
         '<div style="font-size:9.5px;color:#8a8a8a;margin-top:9px;line-height:1.55">Las <b>previsiones</b> son una reserva apartada de la utilidad: no cuentan como egreso del mes. La <b>comisión bancaria</b> de los cortes ya está incluida en Gastos Variables. Las propinas se excluyen (pass-through al personal).</div>';
 
-    var mesTxt=new Date(mes+'-01T12:00:00').toLocaleDateString('es-MX',{month:'long',year:'numeric'});
+    var mesTxt=periodoTxt();
     var fecha=new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'});
-    var derecha='<div style="font-family:\'Bebas Neue\',sans-serif;font-size:14px;letter-spacing:1px;color:#1a1916">KPIs financieros</div><div>'+mesTxt+'</div><div>Generado: '+fecha+'</div>';
+    var derecha='<div style="font-family:\'Bebas Neue\',sans-serif;font-size:14px;letter-spacing:1px;color:#1a1916">KPIs financieros</div><div>'+mesTxt+'</div><div>'+rg.from+' → '+rg.to+'</div><div>Generado: '+fecha+'</div>';
     var html=etaaxReporteDoc({ titulo:'KPIs — '+mesTxt, subtitulo:'Reporte de KPIs financieros', derecha:derecha, cuerpo:cuerpo, pie:'Salud Financiera · KPIs' });
     var w=window.open('','_blank'); if(!w){ alert('Permite las ventanas emergentes para imprimir el reporte.'); return; }
     w.document.write(html); w.document.close();
@@ -636,9 +733,13 @@ function imprimirKPIs(){
 
 /* ── RENDER ── */
 function renderAll(){
-    var mes=document.getElementById('mesInput').value||mesStr();
-    var d=getMesData(mes);
+    var r=getRangoSel();
+    var mes=r.to.slice(0,7);              // el historial mensual se ancla al mes del periodo
+    var d=getPeriodoData(r.from,r.to);
     var t=loadTargets();
+    _dd={d:d,r:r};                        // data viva para el desglose por concepto
+    var rl=document.getElementById('rangoLbl');
+    if(rl) rl.textContent=r.from+' → '+r.to;
 
     // Percentages
     var pFijos   =d.ingresos>0?(d.fijos/d.ingresos)*100:0;
@@ -679,10 +780,11 @@ function renderAll(){
         var blocksHtml='';
         for(var i=0;i<Math.min(blocks,25);i++) blocksHtml+='<div class="blk '+cat.cls+'"></div>';
         if(blocks===0&&d.ingresos>0) blocksHtml='<span style="font-size:10px;color:var(--text-dim)">0%</span>';
-        return'<div class="dist-col">'
+        return'<div class="dist-col" onclick="abrirDesglose(\''+cat.id+'\')" title="Ver el desglose de los movimientos que arman este porcentaje">'
             +'<div class="dist-col-hdr '+cat.cls+'">'+cat.label+'</div>'
             +'<div class="dist-val '+cat.cls+(cat.isUtil&&cat.val<0?' neg':'')+'">'+fmtPct(cat.pct)+'</div>'
             +'<div class="dist-sub">'+fmtM(cat.val)+'</div>'
+            +'<div class="dist-ver">🔍 Ver desglose</div>'
             +'<div class="dist-bars-row">'
             +'<div class="blocks-wrap">'+blocksHtml+'</div>'
             +'<div class="bars-label" style="margin-top:4px;opacity:.6">meta: '+cat.tgt+'%</div>'
@@ -714,6 +816,81 @@ function renderAll(){
     renderHistorial(mes,t);
     updateSumTargets();
 }
+
+/* ══ DESGLOSE POR CONCEPTO ═══════════════════════════════════════════
+   Cada columna de la distribución abre la lista de movimientos REALES que
+   arman su porcentaje. Usa EtaaxCore.grupoGasto — la MISMA regla que suma
+   la tarjeta — así que el total del desglose siempre cuadra con la tarjeta.
+   El botón lleva a Gastos Totales, con el mes y la pestaña ya puestos. */
+var _dd={};
+var _DD_CFG={
+    fijos: {t:'🏢 Gastos Fijos',           grupos:['fijo'],           tab:'fijos',     nota:'Pagos de gastos fijos del catálogo + categorías de naturaleza fija (renta, servicios, internet…).'},
+    vars:  {t:'📊 Gastos Variables',       grupos:['variable'],       tab:'variables', nota:'Todo lo que no es fijo ni nómina (incluye impuestos y contabilidad) más la comisión bancaria de los cortes.'},
+    nomop: {t:'👥 Nómina Operativa',       grupos:['nomOp','imss'],   tab:'nominas',   nota:'Nómina del personal operativo. El IMSS se paga global, no por colaborador, y por convención cuenta aquí.'},
+    nomadm:{t:'👥 Nómina Administrativa',  grupos:['nomAdm'],         tab:'nominas',   nota:'Nómina administrativa y de socios.'},
+    prev:  {t:'🔮 Previsiones',            grupos:[],                 tab:'resumen',   nota:'Reserva apartada de la utilidad: NO cuenta como egreso del periodo, pero sí se descuenta de la utilidad neta.'},
+    util:  {t:'💹 Utilidad neta',          grupos:[],                 tab:'resumen',   nota:'Ingresos − egresos − previsiones. Toca cualquier otra columna para ver de dónde sale cada resta.'}
+};
+function _ddFila(f,concepto,det,monto,chip){
+    return '<tr><td style="white-space:nowrap;color:var(--text-muted)">'+_esc(f||'—')+'</td>'
+        +'<td>'+_esc(concepto)+(det?'<div class="dd-det">'+_esc(det)+'</div>':'')+'</td>'
+        +'<td>'+(chip?'<span class="dd-chip">'+_esc(chip)+'</span>':'')+'</td>'
+        +'<td class="ar" style="font-weight:600">'+fmtM(monto)+'</td></tr>';
+}
+function _ddMovs(catId){
+    var d=_dd.d||{}, cfg=_DD_CFG[catId]||{}, filas=[], total=0;
+    if(catId==='prev'){
+        prevsRango(d.desde,d.hasta).forEach(function(p){
+            total+=n(p.montoEstimado);
+            filas.push(_ddFila(p.fechaInicio||'—', p.concepto||p.nombre||'Previsión', (p.fechaFin?('vigente hasta '+p.fechaFin):''), n(p.montoEstimado), p.tipo||''));
+        });
+    } else if(catId==='util'){
+        var lineas=[
+            {c:'Ventas de los cortes', v:d.ventas,  s:'Venta bruta, sin propinas'},
+            {c:'Otros ingresos',       v:d.otros,   s:'Ingresos capturados aparte de los cortes'},
+            {c:'− Gastos fijos',       v:-d.fijos,  s:''},
+            {c:'− Gastos variables',   v:-d.variables, s:''},
+            {c:'− Nómina operativa',   v:-d.nomOp,  s:''},
+            {c:'− Nómina administrativa', v:-d.nomAdm, s:''},
+            {c:'− Previsiones',        v:-d.prevs,  s:'Reserva apartada'}
+        ];
+        lineas.forEach(function(l){ if(l.v!==0) filas.push(_ddFila('', l.c, l.s, l.v, '')); });
+        total=d.util;
+    } else {
+        var opts={fijos:loadFijos(), staff:loadStaff()};
+        (d.gastos||[]).forEach(function(g){
+            var gr=EtaaxCore.grupoGasto(g,opts);
+            if((cfg.grupos||[]).indexOf(gr)<0) return;
+            total+=n(g.monto);
+            filas.push(_ddFila(g.fecha, g.concepto||'—', g.proveedor||'', n(g.monto), gr==='imss'?'IMSS':(g.categoria||'')));
+        });
+        if(catId==='vars' && n(d.comisionBanco)>0){
+            total+=n(d.comisionBanco);
+            filas.push(_ddFila('', 'Comisión bancaria de los cortes', 'Calculada de la venta con tarjeta del periodo, por cuenta', n(d.comisionBanco), 'Automático'));
+        }
+    }
+    return {filas:filas, total:total};
+}
+function abrirDesglose(catId){
+    var cfg=_DD_CFG[catId]; if(!cfg||!_dd.d) return;
+    var d=_dd.d, m=_ddMovs(catId);
+    var pct=d.ingresos>0?(m.total/d.ingresos*100):0;
+    document.getElementById('ddTitulo').textContent=cfg.t+' · '+periodoTxt();
+    var resumen='<div class="dd-resumen">'
+        +'<div class="dd-r"><div class="l">Total del periodo</div><div class="v" style="color:'+(m.total<0?'var(--red)':'var(--text)')+'">'+fmtM(m.total)+'</div></div>'
+        +'<div class="dd-r"><div class="l">% sobre ingresos</div><div class="v" style="color:var(--accent)">'+fmtPct(pct)+'</div></div>'
+        +'<div class="dd-r"><div class="l">Movimientos</div><div class="v">'+m.filas.length+'</div></div>'
+        +'</div>';
+    var tabla=m.filas.length
+        ? '<table class="dd-table"><thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th class="ar">Monto</th></tr></thead><tbody>'+m.filas.join('')+'</tbody></table>'
+        : '<div class="empty-state" style="padding:30px"><div style="font-size:12px">Sin movimientos en este periodo.</div></div>';
+    document.getElementById('ddBody').innerHTML=resumen+tabla;
+    document.getElementById('ddNota').textContent=cfg.nota;
+    var ir=document.getElementById('ddIr');
+    ir.href='gastos-globales.html?mes='+encodeURIComponent(d.hasta.slice(0,7))+'&tab='+cfg.tab+(_sucursalId?('&suc='+encodeURIComponent(_sucursalId)):'');
+    document.getElementById('modalDrill').classList.add('open');
+}
+function cerrarDesglose(){ document.getElementById('modalDrill').classList.remove('open'); }
 
 /* ── Historial ── */
 function renderHistorial(mesSel, t){
@@ -771,10 +948,19 @@ document.addEventListener('DOMContentLoaded',function(){
     document.getElementById('tgtPrev').value=t.prev;
     document.getElementById('tgtUtil').value=t.util;
 
-    document.getElementById('mesInput').value=mesStr();
-    document.getElementById('mesInput').addEventListener('change',renderAll);
+    // Periodo: día · semana · mes · rango
+    document.getElementById('pickerInput').value=mesStr();
+    document.getElementById('pickerInput').addEventListener('change',renderAll);
+    document.getElementById('pickerEnd').addEventListener('change',renderAll);
+    var _tabs={tabDia:'dia',tabSemana:'semana',tabMes:'mes',tabRango:'rango'};
+    Object.keys(_tabs).forEach(function(id){
+        var b=document.getElementById(id);
+        if(b) b.addEventListener('click',function(){_setPeriodo(_tabs[id],b);});
+    });
 
     document.getElementById('btnGuardarTargets').addEventListener('click',saveTargets);
+    document.getElementById('modalDrill').addEventListener('click',function(e){ if(e.target===this) cerrarDesglose(); });
+    document.addEventListener('keydown',function(e){ if(e.key==='Escape') cerrarDesglose(); });
 
     // Live sum of targets
     ['tgtFijos','tgtVariables','tgtNomOp','tgtNomAdm','tgtPrev','tgtUtil'].forEach(function(id){
@@ -783,7 +969,9 @@ document.addEventListener('DOMContentLoaded',function(){
 
     // Sucursal
     var chip=document.getElementById('sucChip');
-    chip.addEventListener('click',function(e){e.stopPropagation();_renderSucMenu();var menu=document.getElementById('sucMenu');menu.classList.toggle('open');chip.classList.toggle('open');});
+    chip.textContent=_sucLabel()+(_SUC_LOCK?'':' ▾');
+    if(_SUC_LOCK){ chip.style.cursor='default'; chip.title='Tu acceso está limitado a esta sucursal'; }
+    else chip.addEventListener('click',function(e){e.stopPropagation();_renderSucMenu();var menu=document.getElementById('sucMenu');menu.classList.toggle('open');chip.classList.toggle('open');});
     document.addEventListener('click',function(e){if(!e.target.closest('#sucMenu')&&!e.target.closest('#sucChip')){var m=document.getElementById('sucMenu');if(m)m.classList.remove('open');chip.classList.remove('open');}});
 
     renderAll();

@@ -1674,10 +1674,15 @@ function guardarNomina(){
 
 /* ── INIT ── */
 document.addEventListener('DOMContentLoaded',function(){
+    /* Llegada desde otro módulo (p.ej. el desglose de KPIs): ?mes=&tab=&suc= */
+    var _q={}; try{ new URLSearchParams(location.search).forEach(function(v,k){_q[k]=v;}); }catch(e){}
+    if(_q.suc!==undefined && !_SUC_LOCK) _sucursalId=_q.suc||null;
+
     /* Mes picker */
     var mi=document.getElementById('mesInput');
-    mi.value=mesStr();
+    mi.value=(/^\d{4}-\d{2}$/.test(_q.mes||'')?_q.mes:mesStr());
     mi.addEventListener('change',renderAll);
+    if(['fijos','nominas','variables','resumen'].indexOf(_q.tab)>=0) setTimeout(function(){setTab(_q.tab);},0);
 
     /* Sucursal chip */
     var chip=document.getElementById('sucChip');

@@ -80,6 +80,32 @@
     document.addEventListener('DOMContentLoaded', initCtxBar);
     // Expose so pages with PIN gates can re-call after unlock
     window._ctxBarInit = initCtxBar;
+
+    /* ── Línea del sub-header ↔ línea de la nav lateral ────────────────
+       .nav-top toma su alto de --subhead-h (81px por defecto en styles.css).
+       Si el header del sub-módulo crece —porque sus chips se van a dos
+       renglones en pantallas angostas— se sincroniza aquí para que las dos
+       líneas SIGAN coincidiendo. Solo lee alturas; no toca el layout. */
+    function syncSubhead() {
+        var h = document.querySelector('.header');
+        if (!h || !document.querySelector('.nav-top')) return;
+        var alto = Math.round(h.getBoundingClientRect().height);
+        if (alto > 0) document.documentElement.style.setProperty('--subhead-h', alto + 'px');
+    }
+    var _rafSub = 0;
+    function syncSubheadThrottled() {
+        if (_rafSub) return;
+        _rafSub = requestAnimationFrame(function () { _rafSub = 0; syncSubhead(); });
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+        syncSubhead();
+        setTimeout(syncSubhead, 400);          // tras cargar fuentes/chips
+        window.addEventListener('resize', syncSubheadThrottled);
+        if (window.ResizeObserver) {
+            var h = document.querySelector('.header');
+            if (h) new ResizeObserver(syncSubheadThrottled).observe(h);
+        }
+    });
 })();
 
 function ctxSalir() {

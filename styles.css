@@ -43,6 +43,10 @@
        dim 5.25:1 — legibles y aún claramente secundarios frente al texto (16:1). */
     --text-muted: #9a948b;
     --text-dim:   #8b867e;
+
+    /* Alto del sub-header: lo comparten .header (sub-módulo) y .nav-top (nav
+       lateral) para que sus dos líneas queden a la MISMA altura. */
+    --subhead-h:  81px;
 }
 
 /* ── Modo claro ── */
@@ -170,6 +174,10 @@ body:has(.app-shell) { padding: 0; }
     /* Full-bleed: cancela el padding lateral de main-content */
     margin: 0 -16px 40px;
     padding: 14px 16px 18px;
+
+    /* La línea de la nav lateral se alinea con ESTA: .nav-top toma --subhead-h,
+       que ctx-bar.js sincroniza con el alto real de este header. Sin min-height
+       aquí a propósito: el header manda y la nav lo sigue, nunca al revés. */
 }
 
 body.has-ctx .header { top: 96px; }
@@ -813,9 +821,9 @@ textarea:focus {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 10px 4px;
+    padding: 8px 4px;
     gap: 6px;
-    min-height: auto;
+    min-height: var(--subhead-h);   /* la línea sigue alineada con la del header */
 }
 
 .nav.cerrado .nav-top-actions {
@@ -864,9 +872,12 @@ textarea:focus {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
+    justify-content: center;
     padding: 14px 14px 10px;
     border-bottom: 1px solid var(--border);
     gap: 10px;
+    /* Misma altura que .header → las dos líneas coinciden. */
+    min-height: var(--subhead-h);
 }
 
 .nav-brand {
