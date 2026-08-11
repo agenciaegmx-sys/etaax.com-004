@@ -1079,7 +1079,23 @@ function imprimirPresupuesto(cfg) {
     var vigDate = new Date(cfg.fecha + 'T12:00:00');
     vigDate.setDate(vigDate.getDate() + cfg.vig);
 
-    var cuerpo =
+    // Compacta SOLO este reporte: con 10 sucursales la última línea se pasaba a una
+    // segunda hoja. Tarjetas más bajas, títulos de sección más juntos y renglones de
+    // tabla más apretados → el presupuesto completo cabe en UNA página.
+    var compacto =
+        '<style>' +
+            '.rbody{padding:12px 30px 14px}' +
+            '.rsec{font-size:14px;margin:13px 0 7px;padding-bottom:4px}' +
+            '.rcard{padding:8px 11px}' +
+            '.rcard .l{margin-bottom:4px}' +
+            '.rcard .v{font-size:20px}' +
+            '.rcard .s{font-size:9px;margin-top:3px;line-height:1.35}' +
+            'table.rt thead th{padding:6px 10px}' +
+            'table.rt tbody td{padding:4.5px 10px;font-size:11px}' +
+            'table.rt tfoot td{padding:7px 10px;font-size:11.5px}' +
+        '</style>';
+
+    var cuerpo = compacto +
         '<div class="rsec">Resumen de la propuesta</div>' +
         '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">' + cards + '</div>' +
         '<div class="rsec">Proyección de pago mensual</div>' +
@@ -1089,7 +1105,7 @@ function imprimirPresupuesto(cfg) {
         ahorroSec +
         (cfg.notas ? '<div class="rsec">Notas</div><div style="font-size:11.5px;line-height:1.7;white-space:pre-wrap">' + e(cfg.notas) + '</div>' : '') +
         '<div class="rsec">Cómo se calcula</div>' +
-        '<div style="font-size:10.5px;color:#666;line-height:1.75">' +
+        '<div style="font-size:10.5px;color:#666;line-height:1.6">' +
             '<div>· El costo unitario de una sucursal es <b>' + P.fmt(P.BASE) + '</b> al mes. Cada sucursal nueva entra con un descuento <b>más grande</b> sobre esa base.</div>' +
             '<div>· El descuento <b>no es retroactivo</b>: cada sucursal conserva el precio de su posición y el pago mensual es la suma de esos precios.</div>' +
             '<div>· El esquema llega hasta <b>' + P.TOPE + ' sucursales</b> (' + P.fmt(P.precioMensual(P.TOPE)) + ' al mes). Arriba de ' + P.TOPE + ' se cotiza a la medida.</div>' +
