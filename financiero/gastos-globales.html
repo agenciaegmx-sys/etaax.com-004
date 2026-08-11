@@ -929,7 +929,7 @@ function renderKPIs(mes){
 }
 
 /* ══════════ REPORTES IMPRESOS (mismo formato que el resto) ══════════════════ */
-function _sucTxtGG(){ return _sucursalId ? _sucursalLabel() : 'Todas las sucursales'; }
+function _sucTxtGG(){ return _sucursalId ? _sucLabelGG() : 'Todas las sucursales'; }
 function _abrirReporteGG(titulo, subtitulo, cuerpo, derecha){
     if(typeof etaaxReporteDoc!=='function'){ alert('No se pudo cargar el módulo de reportes. Recarga la página.'); return; }
     var html=etaaxReporteDoc({ titulo:titulo, subtitulo:subtitulo, derecha:derecha, cuerpo:cuerpo, pie:'Salud Financiera · Gastos Totales' });
