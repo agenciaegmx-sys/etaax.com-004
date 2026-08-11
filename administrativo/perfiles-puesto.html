@@ -115,7 +115,7 @@
                 <div class="pp-title">Perfiles de Puesto</div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-                <button class="pp-btn" onclick="abrirPerfilesEtaax()" title="Perfiles de puesto sugeridos por ETAAX — cópialos a tu negocio y edítalos">🌐 Perfiles ETAAX</button>
+                <button class="pp-btn" id="btnPerfEtaax" onclick="abrirPerfilesEtaax()" title="Perfiles de puesto sugeridos por ETAAX — cópialos a tu negocio y edítalos">🌐 Perfiles ETAAX</button>
                 <button class="pp-btn pp-btn-primary" onclick="nuevoPerfil()">+ Nuevo perfil</button>
             </div>
         </div>
@@ -211,10 +211,28 @@ function _ctx(){try{return JSON.parse(localStorage.getItem('etaax_ctx')||'null')
 
 var _perfiles=[], _verId=null;
 
+/* ── MODO CATÁLOGO (?catalogo=1) ────────────────────────────────────────
+   La misma página, apuntando al catálogo MAESTRO de ETAAX en vez de a los
+   perfiles del negocio. Se usa desde el panel admin dentro de un iframe:
+   así el catálogo se edita con ESTE editor y no hay que mantener dos.
+   Solo el admin de plataforma puede escribir ahí (RLS de catalogo_perfiles). */
+var _CAT=/[?&]catalogo=1/.test(location.search);
+var TABLA_PERF=_CAT?'catalogo_perfiles':'perfiles_puesto';
+
 /* ── Carga ── */
 async function _sbInit(){
     var negId=getNegocioActivo();
-    if(!negId||typeof _supabase==='undefined'){ renderLista(); return; }
+    if(typeof _supabase==='undefined'||(!negId&&!_CAT)){ renderLista(); return; }
+    if(_CAT){
+        var rc=await _supabase.from(TABLA_PERF).select('datos').order('created_at',{ascending:true});
+        if(rc.error){ document.getElementById('listaPerfiles').innerHTML='<div class="pp-empty">No se pudo leer el catálogo.<br><span style="font-size:12px">'+esc(rc.error.message)+'</span></div>'; return; }
+        _perfiles=(rc.data||[]).map(function(x){return x.datos;}).filter(Boolean);
+        renderLista();
+        var mc=/[?&]ver=([^&]+)/.exec(location.search);
+        if(mc) verPerfil(decodeURIComponent(mc[1]));
+        else if(/[?&]nuevo=1/.test(location.search)) nuevoPerfil();
+        return;                                   // sin realtime: el catálogo lo toca solo el admin
+    }
     var r=await _supabase.from('perfiles_puesto').select('datos').eq('negocio_id',negId);
     if(!r.error) _perfiles=(r.data||[]).map(function(x){return x.datos;}).filter(Boolean);
     renderLista();
@@ -244,6 +262,13 @@ function _subPerfilesRealtime(negId){
         },400);
     });
 }
+
+// Modo catálogo: esta página ES el catálogo, así que importar de él no aplica.
+document.addEventListener('DOMContentLoaded',function(){
+    if(!_CAT) return;
+    var b=document.getElementById('btnPerfEtaax'); if(b) b.style.display='none';
+    var t=document.querySelector('#viewLista .pp-eyebrow'); if(t) t.textContent='Catálogo maestro ETAAX';
+});
 
 /* ── Catálogo ETAAX: jalar un perfil sugerido ──────────────────────────
    Copia con id NUEVO (no el del maestro): el perfil pasa a ser del negocio y
@@ -358,14 +383,19 @@ function guardarPerfil(){
     };
     var idx=_perfiles.findIndex(function(x){return x.id===p.id;});
     if(idx>=0) _perfiles[idx]=p; else _perfiles.push(p);
-    if(typeof sbUpsert==='function') sbUpsert('perfiles_puesto', p);
+    if(_CAT){
+        _supabase.from(TABLA_PERF).upsert([{id:p.id, datos:p, updated_at:p.updatedAt}]).then(function(r){
+            if(r.error) alert('No se pudo guardar en el catálogo: '+r.error.message);
+        });
+    } else if(typeof sbUpsert==='function') sbUpsert('perfiles_puesto', p);
     verPerfil(p.id);
 }
 function eliminarPerfil(id){
     var p=_perfiles.find(function(x){return x.id===id;}); if(!p) return;
     var go=function(){
         _perfiles=_perfiles.filter(function(x){return x.id!==id;});
-        if(typeof sbDelete==='function') sbDelete('perfiles_puesto', id);
+        if(_CAT) _supabase.from(TABLA_PERF).delete().eq('id',id).then(function(r){ if(r.error) alert('No se pudo quitar: '+r.error.message); });
+        else if(typeof sbDelete==='function') sbDelete('perfiles_puesto', id);
         renderLista();
     };
     if(window.etaaxConfirm) etaaxConfirm('Eliminar perfil','¿Eliminar el perfil «'+esc(p.puesto||'')+'»? No se puede deshacer.',go,null,{yesLabel:'Sí, eliminar'});

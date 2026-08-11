@@ -124,7 +124,7 @@
                 <div class="ev-sub">Crea evaluaciones tipo formulario, genera un link y mándaselo a tu staff o candidatos. Puntuación automática.</div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-                <button class="ev-btn ghost" onclick="abrirEvalsEtaax()" title="Plantillas de evaluación sugeridas por ETAAX — cópialas a tu negocio y edítalas">🌐 Evaluaciones ETAAX</button>
+                <button class="ev-btn ghost" id="btnEvEtaax" onclick="abrirEvalsEtaax()" title="Plantillas de evaluación sugeridas por ETAAX — cópialas a tu negocio y edítalas">🌐 Evaluaciones ETAAX</button>
                 <button class="ev-btn" onclick="nuevaEval()">+ Nueva evaluación</button>
             </div>
         </div>
@@ -275,10 +275,29 @@ if(typeof window!=='undefined'){ window.FICHA_CAMPOS=FICHA_CAMPOS; window.fichaD
 
 var _evals=[], _edit=null, _respuestas=[], _verResId=null;
 
+/* ── MODO CATÁLOGO (?catalogo=1) ────────────────────────────────────────
+   La misma página apuntando al catálogo MAESTRO de ETAAX. Se abre desde el
+   panel admin dentro de un iframe: así las plantillas se editan con ESTE
+   constructor y no hay dos editores que mantener. En el catálogo no hay
+   link público ni respuestas — solo la plantilla. */
+var _CAT=/[?&]catalogo=1/.test(location.search);
+var TABLA_EV=_CAT?'catalogo_evaluaciones':'evaluaciones';
+
 /* ── Carga ── */
 async function _sbInit(){
     var negId=getNegocioActivo();
-    if(!negId||typeof _supabase==='undefined'){ renderLista(); return; }
+    if(typeof _supabase==='undefined'||(!negId&&!_CAT)){ renderLista(); return; }
+    if(_CAT){
+        var rc=await _supabase.from(TABLA_EV).select('datos').order('created_at',{ascending:true});
+        if(rc.error){ alert('No se pudo leer el catálogo: '+rc.error.message); return; }
+        _evals=(rc.data||[]).map(function(x){return x.datos;}).filter(Boolean);
+        _respuestas=[];                            // el catálogo no tiene respuestas, por diseño
+        renderLista();
+        var mc=/[?&]ver=([^&]+)/.exec(location.search);
+        if(mc) editarEval(decodeURIComponent(mc[1]));
+        else if(/[?&]nuevo=1/.test(location.search)) nuevaEval();
+        return;
+    }
     var r=await Promise.all([
         _supabase.from('evaluaciones').select('datos').eq('negocio_id',negId),
         _supabase.from('evaluacion_respuestas').select('datos').eq('negocio_id',negId).order('created_at',{ascending:false})
@@ -386,6 +405,14 @@ function nuevaEval(){
     _edit={ id:'ev_'+genId(), titulo:'', categoria:CATS[0].id, descripcion:'', token:_token(), activa:false, preguntas:[] };
     abrirEditor(false);
 }
+// Modo catálogo: esta página ES el catálogo → nada que importar aquí.
+document.addEventListener('DOMContentLoaded',function(){
+    if(!_CAT) return;
+    var b=document.getElementById('btnEvEtaax'); if(b) b.style.display='none';
+    var t=document.querySelector('#viewLista .ev-sub');
+    if(t) t.textContent='Plantillas que cualquier negocio puede jalar con el botón 🌐 Evaluaciones ETAAX. Aquí no hay respuestas ni link público.';
+});
+
 /* ── Catálogo ETAAX: jalar una plantilla ───────────────────────────────
    Llega como BORRADOR y con token propio: nunca se hereda el link público de
    la plantilla, y nadie puede contestarla hasta que el negocio la revise y la
@@ -451,6 +478,9 @@ function _onActivaChange(){
 }
 function renderLinkBox(){
     var box=document.getElementById('edLinkBox');
+    if(_CAT){ box.innerHTML='<div class="ev-link-box" style="background:rgba(155,141,232,.07);border-color:rgba(155,141,232,.3)">'+
+        '<span style="font-size:18px">🌐</span><span class="ev-link-url" style="color:var(--viol)">Plantilla del catálogo ETAAX · sin link público. '+
+        'El link lo genera cada negocio cuando la jala.</span></div>'; return; }
     if(!document.getElementById('edActiva').checked){ box.innerHTML=''; return; }
     var url=location.origin+'/evaluacion.html?t='+(_edit.token||'');
     box.innerHTML='<div class="ev-link-box"><span style="font-size:18px">🔗</span>'+
@@ -611,14 +641,19 @@ async function guardarEval(){
     _edit.puntajeMax=_edit.preguntas.reduce(function(s,q){return s+_puntosMaxPregunta(q);},0);
     _evals=_evals.filter(function(e){return e.id!==_edit.id;});
     _evals.push(_edit);
-    if(typeof sbUpsert==='function') sbUpsert('evaluaciones', _edit); // id + negocio activo + datos
+    if(_CAT){
+        _edit.activa=false; delete _edit.token; delete _edit.respuestas;   // plantilla pura
+        var r=await _supabase.from(TABLA_EV).upsert([{id:_edit.id, datos:_edit, updated_at:ahora}]);
+        if(r.error){ alert('No se pudo guardar en el catálogo: '+r.error.message); return; }
+    } else if(typeof sbUpsert==='function') sbUpsert('evaluaciones', _edit); // id + negocio activo + datos
     cancelarEdit();
 }
 function eliminarEval(){
     if(!_edit||!confirm('¿Eliminar esta evaluación y dejar de recibir respuestas? Esta acción no se puede deshacer.')) return;
     var id=_edit.id;
     _evals=_evals.filter(function(e){return e.id!==id;});
-    if(typeof sbDelete==='function') sbDelete('evaluaciones', id);
+    if(_CAT) _supabase.from(TABLA_EV).delete().eq('id',id).then(function(r){ if(r.error) alert('No se pudo quitar: '+r.error.message); });
+    else if(typeof sbDelete==='function') sbDelete('evaluaciones', id);
     cancelarEdit();
 }
 function cancelarEdit(){

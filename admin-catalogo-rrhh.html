@@ -47,6 +47,7 @@
                 <span class="brand-title">Perfiles y Evaluaciones</span>
             </div>
             <div class="hdr-acts">
+                <button class="btn-primary" id="btnNuevo" onclick="nuevoItem()">+ Nuevo perfil</button>
                 <button class="btn-vista" onclick="abrirTraer()" title="Copia perfiles o evaluaciones de un negocio al catálogo maestro">📥 Traer de un negocio</button>
                 <a class="btn-vista" href="admin-catalogo-insumos.html">🗄️ Catálogo de insumos</a>
             </div>
@@ -79,17 +80,51 @@ function genId(){return Date.now().toString(36)+Math.random().toString(36).slice
 function nombreDe(d){ return _tab==='perfiles' ? (d.puesto||'Sin título') : (d.titulo||'Sin título'); }
 function metaDe(d){
     if(_tab==='perfiles'){
-        var f=(d.funciones||[]).length, r=(d.requisitos||[]).length;
-        return [(d.general&&d.general.concepto)||'', f?f+' funciones':'', r?r+' requisitos':''].filter(Boolean).join(' · ')||'—';
+        var fn=d.funciones||{}, co=d.competencias||{};
+        var resp=(fn.responsabilidades||[]).length, hab=(co.habilidades||[]).length;
+        return [(d.general&&d.general.concepto)||'', resp?resp+' responsabilidades':'', hab?hab+' habilidades':'']
+            .filter(Boolean).join(' · ')||'—';
     }
     var n=(d.preguntas||[]).length;
     return [d.categoria||'', n+' pregunta'+(n!==1?'s':'')].filter(Boolean).join(' · ');
+}
+
+/* ── Editor: la MISMA página del módulo, en modo catálogo ──────────────
+   Se abre en un iframe con ?catalogo=1: lee y escribe catalogo_perfiles /
+   catalogo_evaluaciones en vez de las tablas del negocio. Así el catálogo se
+   edita con el editor bueno y no hay dos que mantener. */
+function _urlEditor(extra){
+    var base=_tab==='perfiles' ? 'administrativo/perfiles-puesto.html' : 'administrativo/evaluaciones.html';
+    return base+'?embed=1&catalogo=1'+(extra||'');
+}
+function abrirEditor(extra){
+    var ov=document.createElement('div'); ov.className='rh-ov'; ov.style.padding='18px';
+    ov.innerHTML='<div class="rh-box" style="max-width:1100px;height:88vh;display:flex;flex-direction:column;padding:0;resize:both">'+
+        '<div class="modal-header" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0">'+
+            '<h2 style="font-size:14px;font-weight:600;color:var(--text)">'+
+                (_tab==='perfiles'?'🧑‍🍳 Perfiles del catálogo ETAAX':'📝 Evaluaciones del catálogo ETAAX')+'</h2>'+
+            '<button class="rh-btn" data-act="cerrar">✕</button>'+
+        '</div>'+
+        '<iframe src="'+_urlEditor(extra)+'" style="flex:1;width:100%;border:0;border-radius:0 0 16px 16px;background:var(--bg)"></iframe>'+
+    '</div>';
+    document.body.appendChild(ov);
+    function cerrar(){ try{ov.remove();}catch(e){} cargar(); }   // al cerrar, refrescar la lista
+    ov.addEventListener('click',function(e){
+        if(e.target===ov || (e.target.getAttribute&&e.target.getAttribute('data-act')==='cerrar')) cerrar();
+    });
+}
+function nuevoItem(){ abrirEditor('&nuevo=1'); }
+function verItem(i){
+    var d=(_cat[_tab]||[])[i]; if(!d) return;
+    abrirEditor('&ver='+encodeURIComponent(d.id));
 }
 
 function setTab(t){
     _tab=t;
     document.getElementById('tabPerfiles').classList.toggle('active', t==='perfiles');
     document.getElementById('tabEvals').classList.toggle('active', t==='evals');
+    var bn=document.getElementById('btnNuevo');
+    if(bn) bn.textContent = t==='perfiles' ? '+ Nuevo perfil' : '+ Nueva evaluación';
     render();
 }
 
@@ -97,7 +132,7 @@ function render(){
     var cont=document.getElementById('lista'), lista=_cat[_tab]||[];
     if(!lista.length){
         cont.innerHTML='<div class="rh-vacio">Todavía no hay nada en este catálogo.<br>' +
-            'Crea el contenido en un negocio (donde está el editor completo) y tráelo con <b>📥 Traer de un negocio</b>.</div>';
+            'Créalo aquí con <b>+ Nuevo</b>, o tráete lo que ya exista en un negocio con <b>📥 Traer de un negocio</b>.</div>';
         return;
     }
     cont.innerHTML=lista.map(function(d,i){
@@ -106,6 +141,7 @@ function render(){
                 '<div class="rh-nom">'+esc(nombreDe(d))+'</div>'+
                 '<div class="rh-meta">'+esc(metaDe(d))+'</div>'+
             '</div>'+
+            '<button class="rh-btn" onclick="verItem('+i+')">✎ Ver / editar</button>'+
             '<button class="rh-btn del" onclick="quitar('+i+')">🗑 Quitar</button>'+
         '</div>';
     }).join('');
