@@ -234,8 +234,12 @@
        per: quincenal|mensual|bimestral|trimestral|semestral|anual.
        hoy 'YYYY-MM-DD'; ultimoPago 'YYYY-MM-DD' o '' (pago real más reciente).
        Calcula el vencimiento del ciclo vigente, si ya se pagó y la próxima fecha.
-       `dias` = días hasta el pago que TOCA hacer (≤0 vencido/hoy; >0 por venir). */
+       `dias` = días hasta el pago que TOCA hacer (≤0 vencido/hoy; >0 por venir).
+       PAGO ANTICIPADO: pagar unos días ANTES del vencimiento sigue siendo el pago
+       de ESE ciclo. Se acepta hasta ANTICIPO_DIAS antes, nunca más de la mitad del
+       ciclo, para no confundirlo con un pago tardío del ciclo anterior. */
     var PERIODO_MESES = { mensual:1, bimestral:2, trimestral:3, semestral:6, anual:12 };
+    var ANTICIPO_DIAS = 10;
     function _pfParse(s){ if(!s) return null; var p=String(s).slice(0,10).split('-'); if(p.length<3) return null; var d=new Date(+p[0],+p[1]-1,+p[2],12,0,0); return isNaN(d.getTime())?null:d; }
     function _pfFmt(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
     function _pfAddMonths(ref, k){ var dia=ref.getDate(), m=ref.getMonth()+k, yy=ref.getFullYear()+Math.floor(m/12), mm=((m%12)+12)%12, ult=new Date(yy,mm+1,0).getDate(); return new Date(yy,mm,Math.min(dia,ult),12,0,0); }
@@ -244,21 +248,28 @@
         var ref=_pfParse(fechaRef); if(!ref) return { programado:false };
         var h=_pfParse(hoy)||_pfParse(todayStr()); per=(per||'mensual').toLowerCase();
         var up=_pfParse(ultimoPago);
-        var venceEste=null, proximo=null, cur=new Date(ref), guard=0;
-        if(per==='quincenal'){
-            if(cur>h){ proximo=new Date(cur); }
-            else { while(cur<=h && guard++<6000){ venceEste=new Date(cur); cur=new Date(cur.getTime()+15*86400000); } proximo=cur; }
-        } else {
-            var step=PERIODO_MESES[per]||1, k=0;
-            if(cur>h){ proximo=new Date(cur); }
-            else { while(cur<=h && guard++<6000){ venceEste=new Date(cur); k+=step; cur=_pfAddMonths(ref,k); } proximo=cur; }
-        }
-        var pagadoEste = !!(venceEste && up && up>=venceEste);
+        var quinc=(per==='quincenal'), step=PERIODO_MESES[per]||1;
+        // ocurrencia i-ésima del calendario de pagos (i puede ser 0,1,2…)
+        var occ=function(i){ return quinc ? new Date(ref.getTime()+i*15*86400000) : _pfAddMonths(ref, i*step); };
+        var i=0, guard=0; while(occ(i+1)<=h && guard++<6000) i++;
+        var idx = (occ(0)<=h) ? i : -1;                 // -1 = la referencia aún no llega
+        var venceEste = idx>=0 ? occ(idx) : null;       // el vencimiento del ciclo vigente
+        var proximo   = occ(idx+1);                     // el siguiente del calendario
+        var menos=function(d,n){ return new Date(d.getTime()-n*86400000); };
+        var ciclo = Math.max(1, _pfDias(venceEste?proximo:occ(idx+2), venceEste||proximo));
+        var antic = Math.max(0, Math.min(ANTICIPO_DIAS, Math.floor(ciclo/2)));
+        var desde = menos(venceEste||proximo, antic);   // desde aquí un pago ya cuenta para ese ciclo
+        var pagadoEste = !!(venceEste && up && up>=desde);
+        // Ref futura (aún no vence) pero YA se pagó por adelantado → el pendiente es el de después.
+        var pagadoProx = !!(!venceEste && up && up>=desde);
+        if(pagadoProx) proximo = occ(idx+2);
         var objetivo = (venceEste && !pagadoEste) ? venceEste : proximo;
         var dias = _pfDias(objetivo, h);
-        var estado = !venceEste ? 'programado' : (pagadoEste ? 'pagado' : (dias===0 ? 'vence_hoy' : (dias<0 ? 'vencido' : 'por_pagar')));
-        return { programado:true, estado:estado, pagado:pagadoEste, dias:dias,
-                 objetivo:_pfFmt(objetivo), venceEste:venceEste?_pfFmt(venceEste):'', proximo:_pfFmt(proximo), ultimoPago:up?_pfFmt(up):'' };
+        var pagado = pagadoEste || pagadoProx;
+        var estado = pagado ? 'pagado' : (!venceEste ? 'programado' : (dias===0 ? 'vence_hoy' : (dias<0 ? 'vencido' : 'por_pagar')));
+        return { programado:true, estado:estado, pagado:pagado, dias:dias,
+                 objetivo:_pfFmt(objetivo), venceEste:venceEste?_pfFmt(venceEste):'', proximo:_pfFmt(proximo), ultimoPago:up?_pfFmt(up):'',
+                 aceptaDesde:_pfFmt(desde), anticipado:!!(pagado && up<(venceEste||occ(idx+1))) };
     }
 
     /* ── Clasificación de GASTOS — UNA sola verdad para los 4 módulos ──────────

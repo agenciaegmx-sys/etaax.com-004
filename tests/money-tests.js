@@ -789,6 +789,47 @@ test('anual: clamp de día (ref 31 ene → próximo respeta fin de mes)', () => 
     eq(p.estado, 'pagado'); eq(p.proximo, '2026-02-28'); // febrero no tiene 31
 });
 test('fecha ref vacía → no programado', () => eq(Core.planFijoPago('', 'mensual', '2026-07-10', '').programado, false));
+/* Pago ANTICIPADO: pagar antes del vencimiento sigue siendo el pago de ese ciclo.
+   Caso real: agua vence el 8, se pagó el 6, hoy es 10 → NO debe salir vencido. */
+test('mensual pagado 2 días ANTES del vencimiento → pagado (no vencido)', () => {
+    var p = Core.planFijoPago('2026-08-08', 'mensual', '2026-08-10', '2026-08-06');
+    eq(p.estado, 'pagado'); eq(p.anticipado, true); eq(p.proximo, '2026-09-08');
+});
+test('mensual: el pago del ciclo ANTERIOR no cuenta como anticipo → vencido', () => {
+    var p = Core.planFijoPago('2026-07-08', 'mensual', '2026-08-10', '2026-07-08');
+    eq(p.estado, 'vencido'); eq(p.venceEste, '2026-08-08'); eq(p.aceptaDesde, '2026-07-29');
+});
+test('quincenal: la ventana de anticipo se recorta a media quincena (7 días)', () => {
+    eq(Core.planFijoPago('2026-07-01', 'quincenal', '2026-08-05', '2026-07-25').estado, 'pagado');
+    eq(Core.planFijoPago('2026-07-01', 'quincenal', '2026-08-05', '2026-07-23').estado, 'vencido');
+});
+test('pago adelantado ANTES de que llegue el día → pagado, ya no molesta', () => {
+    // vence el 8, hoy es 6 y ya se pagó el 6 → el pendiente es el del mes que sigue
+    var p = Core.planFijoPago('2026-08-08', 'mensual', '2026-08-06', '2026-08-06');
+    eq(p.estado, 'pagado'); eq(p.proximo, '2026-09-08'); eq(p.dias, 33);
+});
+test('sin pagar y el día aún no llega → programado (recordatorio de aviso)', () => {
+    var p = Core.planFijoPago('2026-08-08', 'mensual', '2026-08-06', '');
+    eq(p.estado, 'programado'); eq(p.dias, 2);
+});
+/* La otra mitad del recordatorio: encontrar el pago real que corresponde al fijo. */
+(function () {
+    const _prevG = A._cacheGastos;
+    A._cacheGastos = [
+        { fecha: '2026-07-08', concepto: 'Servicio de Agua', proveedor: 'OOAPAS', monto: 363 },
+        { fecha: '2026-08-06', concepto: 'Servicio de Agua', proveedor: 'OOAPAS', monto: 360, fijoId: 'fj_agua' },
+        { fecha: '2026-08-09', concepto: 'Servicio de Agua', proveedor: 'OOAPAS', monto: 99, fijoId: 'fj_otro' },
+        { fecha: '2026-08-01', concepto: 'Renta', proveedor: 'Casero', monto: 17000 },
+    ];
+    const fAgua = { id: 'fj_agua', concepto: 'Servicio de Agua', proveedor: 'OOAPAS' };
+    test('_ultimoPagoFijoDx: casa por fijoId o por concepto+proveedor y toma el más reciente', () =>
+        eq(A._ultimoPagoFijoDx(fAgua), '2026-08-06'));
+    test('_ultimoPagoFijoDx: un pago con el fijoId de OTRO fijo no cuenta', () =>
+        eq(A._ultimoPagoFijoDx({ id: 'fj_otro', concepto: 'Servicio de Agua', proveedor: 'OOAPAS' }), '2026-08-09'));
+    test('_ultimoPagoFijoDx: fijo sin pagos → vacío', () =>
+        eq(A._ultimoPagoFijoDx({ id: 'fj_luz', concepto: 'Servicio de Electricidad', proveedor: 'CFE' }), ''));
+    A._cacheGastos = _prevG;
+})();
 
 /* clasificarGastos — UNA sola verdad de gastos para los 4 módulos (Gastos Totales,
    KPIs, Estadísticas, Diario). Misma data que SUITE D → debe dar los mismos cubos. */

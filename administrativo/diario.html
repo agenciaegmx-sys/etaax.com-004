@@ -5842,7 +5842,7 @@ function _estatusFijoDx(f){
           ? {txt:'✓ Pagado', color:'var(--green)', bg:'rgba(61,190,122,.12)', bd:'rgba(61,190,122,.3)'}
           : {txt:'⏳ Pendiente', color:'var(--accent)', bg:'rgba(245,200,66,.1)', bd:'rgba(245,200,66,.3)'};
     }
-    if(p.estado==='pagado')    return {txt:'✓ Pagado · próx '+_fmtFechaCortaDx(p.proximo), color:'var(--green)', bg:'rgba(61,190,122,.12)', bd:'rgba(61,190,122,.3)'};
+    if(p.estado==='pagado')    return {txt:'✓ Pagado'+(p.anticipado?' (adelantado)':'')+' · próx '+_fmtFechaCortaDx(p.proximo), color:'var(--green)', bg:'rgba(61,190,122,.12)', bd:'rgba(61,190,122,.3)'};
     if(p.estado==='programado')return {txt:'📅 Programado · '+_fmtFechaCortaDx(p.proximo), color:'var(--text-dim)', bg:'rgba(255,255,255,.03)', bd:'var(--border)'};
     if(p.estado==='vence_hoy') return {txt:'⚠️ Vence HOY', color:'#e0a93d', bg:'rgba(224,169,61,.14)', bd:'rgba(224,169,61,.45)'};
     if(p.estado==='vencido')   return {txt:'🔴 Vencido · '+_fmtFechaCortaDx(p.venceEste)+' (hace '+(-p.dias)+'d)', color:'var(--red)', bg:'rgba(224,90,58,.1)', bd:'rgba(224,90,58,.35)'};
