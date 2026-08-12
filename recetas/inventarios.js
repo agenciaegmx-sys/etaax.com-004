@@ -3471,11 +3471,16 @@ function renderCardExist() {
 // ── ALIMENTOS: tarjeta de captura por peso (unidad base) ──────
 function _fmtBase(v){ v = parseFloat(v)||0; return v % 1 === 0 ? v.toFixed(0) : v.toFixed(1); }
 // Contenido de la presentación (ej. 750 ml, 1 L, 350 pza) para la info del producto.
+/* Contenido de UNA unidad (la lata, la botella, el paquete). OJO: `contNeto`
+   siempre viene en unidad BASE (ml para bebidas, g/ml/pza para alimentos) —
+   `baseUnit` solo se llena en alimentos. Antes, un refresco (tipo 'pza', sin
+   baseUnit) caía al literal 'pza' y se leía "355 pza": la lata trae 355 ML,
+   lo que se cuenta por pieza es la lata, no su contenido. */
 function _fmtContenido(fila){
     var cn = parseFloat(fila && fila.contNeto) || 0;
     if (cn <= 0) return '';
-    if (fila.tipo === 'pza') return _fmtBase(cn) + ' ' + (fila.baseUnit || 'pza');
     if (fila.tipo === 'peso') return _fmtBase(cn) + ' ' + (fila.baseUnit || 'g');
+    if (fila.tipo === 'pza' && fila.baseUnit) return _fmtBase(cn) + ' ' + fila.baseUnit;
     return cn >= 1000 ? _fmtBase(cn/1000) + ' L' : _fmtBase(cn) + ' ml';
 }
 function _cardExistPeso(fila, idx) {
@@ -7765,7 +7770,8 @@ function _ftRenderEditar(ins) {
             <div><label class="ft-lbl">Familia</label><input id="ft_familia" class="ft-input" value="${(ins.familia||'').replace(/"/g,'&quot;')}"></div>
             <div><label class="ft-lbl">Categoría</label><input id="ft_categoria" class="ft-input" value="${(ins.categoria||'').replace(/"/g,'&quot;')}"></div>
             <div><label class="ft-lbl">Subcategoría</label><input id="ft_subcategoria" class="ft-input" value="${(ins.subcategoria||'').replace(/"/g,'&quot;')}"></div>
-            <div><label class="ft-lbl">Stock mínimo</label><input id="ft_stockMin" type="number" class="ft-input" value="${ins.stockMin||0}" min="0"></div>
+            <div><label class="ft-lbl">Stock mínimo</label><input id="ft_stockMin" type="number" class="ft-input" value="${(p.stockMin!=null&&p.stockMin!=='')?p.stockMin:(ins.stockMin||0)}" min="0"></div>
+            <div><label class="ft-lbl">Stock máximo</label><input id="ft_stockMax" type="number" class="ft-input" value="${(p.stockMax!=null&&p.stockMax!=='')?p.stockMax:(ins.stockMax||0)}" min="0"></div>
         </div>
         <div class="ft-section-title">Presentación principal</div>
         <div class="ft-grid">
@@ -7844,6 +7850,7 @@ function guardarFichaTecnica() {
     ins.categoria    = document.getElementById('ft_categoria')?.value.trim()   || '';
     ins.subcategoria = document.getElementById('ft_subcategoria')?.value.trim()|| '';
     ins.stockMin     = parseFloat(document.getElementById('ft_stockMin')?.value)|| 0;
+    ins.stockMax     = parseFloat(document.getElementById('ft_stockMax')?.value)|| 0;
     ins.tamanoCopa   = document.getElementById('ft_tamanoCopa')?.value          || '';
     ins.umTamanoCopa = document.getElementById('ft_umTamanoCopa')?.value        || 'ML';
     ins.notas        = document.getElementById('ft_notas')?.value.trim()        || '';
@@ -7858,6 +7865,11 @@ function guardarFichaTecnica() {
     p.precioCartaBot    = parseFloat(document.getElementById('ft_precioCartaBot')?.value) || 0;
     p.rendimiento       = document.getElementById('ft_rendimiento')?.value                || p.rendimiento || '';
     p.umRendimiento     = document.getElementById('ft_umRendimiento')?.value              || 'OZ';
+    // Los lectores de stock miran PRIMERO la presentación (_p.stockMin) y solo
+    // después el insumo: si aquí se escribiera nada más el insumo, editar el
+    // stock desde la ficha no cambiaría nada. Se escriben los dos.
+    p.stockMin          = ins.stockMin;
+    p.stockMax          = ins.stockMax;
     try { localStorage.setItem(_sk('insumos'), JSON.stringify(lista)); } catch(e) {}
     // Sync fila en inventario activo
     const fila = filasCaptura.find(f => f.insumoId === _ftInsumoId);

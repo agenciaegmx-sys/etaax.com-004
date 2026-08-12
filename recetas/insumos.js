@@ -2994,11 +2994,39 @@
        </div>`;
    }
 
+   /* ── Stock mínimo y máximo — para TODAS las familias ──────────────────
+      Antes vivían dentro del bloque de "Precio carta", que solo se dibuja para
+      lo que se vende directo (destilados, licores, vinos, cervezas, refrescos):
+      abarrotes, proteínas, frutas y verduras se quedaban SIN poder definir
+      stocks, y son justo las que más se piden. El stock es planeación de
+      compra, no precio de venta — por eso va en su propio bloque. */
+   function _renderStockBlock(p, i, tieneCopa) {
+       var unidad = tieneCopa ? 'botellas' : 'unidades de compra';
+       return `<div style="padding-top:12px;border-top:1px solid var(--border)">
+           <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--blue);margin-bottom:8px">Stock · para requisiciones y alertas</div>
+           <div class="meta-grid" style="grid-template-columns:1fr 1fr;gap:8px">
+               <div class="meta-item">
+                   <label>Stock mínimo</label>
+                   <input type="number" value="${p.stockMin||''}" placeholder="0" min="0" step="1"
+                       oninput="updPres(${i},'stockMin',this.value)">
+               </div>
+               <div class="meta-item">
+                   <label>Stock máximo</label>
+                   <input type="number" value="${p.stockMax||''}" placeholder="0" min="0" step="1"
+                       oninput="updPres(${i},'stockMax',this.value)">
+               </div>
+           </div>
+           <div style="font-size:10.5px;color:var(--text-dim);margin-top:7px;line-height:1.5">
+               En ${unidad}. El mínimo dispara la alerta de "hay que pedir"; el máximo es hasta dónde surtir.
+           </div>
+       </div>`;
+   }
+
    function _renderPrecioManualBlock(p, i, campos, tieneCopa) {
        if (!campos.includes('precioManual')) return '';
        return `<div style="padding-top:12px;border-top:1px solid var(--border)">
            <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--green);margin-bottom:8px">Precio carta (dato del negocio)</div>
-           <div class="meta-grid" style="grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
+           <div class="meta-grid" style="grid-template-columns:1fr 1fr;gap:8px">
                <div class="meta-item">
                    <label>${tieneCopa ? 'Precio copa' : 'Precio unitario'} <span style="font-size:9px;letter-spacing:1px;color:var(--text-muted);font-weight:400;margin-left:4px">MXN</span></label>
                    <div style="display:flex;align-items:center;gap:4px">
@@ -3021,17 +3049,7 @@
                            onblur="blurCurrency(this,${i},'precioCartaBot')"
                            style="border-color:var(--green-dim);color:var(--green)">
                    </div>
-               </div>` : '<div class="meta-item"></div>'}
-               <div class="meta-item">
-                   <label>Stock mínimo</label>
-                   <input type="number" value="${p.stockMin||''}" placeholder="0" min="0" step="1"
-                       oninput="updPres(${i},'stockMin',this.value)">
-               </div>
-               <div class="meta-item">
-                   <label>Stock máximo</label>
-                   <input type="number" value="${p.stockMax||''}" placeholder="0" min="0" step="1"
-                       oninput="updPres(${i},'stockMax',this.value)">
-               </div>
+               </div>` : ''}
            </div>
            <div id="utilidad-${i}">${_utilidadHTML(p)}</div>
        </div>`;
@@ -3362,6 +3380,7 @@
    
                    <!-- ── PRECIO CARTA (dato manual) ──────────── -->
                    ${_renderPrecioManualBlock(p, i, campos, tieneCopa)}
+                   ${_renderStockBlock(p, i, tieneCopa)}
    
                </div>`;
            }).join('');
