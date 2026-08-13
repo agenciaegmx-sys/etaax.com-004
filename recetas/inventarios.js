@@ -5657,17 +5657,38 @@ function _step5TablasHTML() {
         return { html, dif, difCosto, vend: ventas };
     }
 
+    /* ── Unidades de una presentación ───────────────────────────────────
+       Una LATA no tiene copas ni botellas: se cuenta y se vende por pieza.
+       `copaML` trae el tamaño de copa por default (45 ml) aunque el insumo sea
+       de pieza, así que dividir por copasBot convertía 86 latas en "10.7 bot".
+       Solo las de tipo copa (destilados, licores, vinos) se cuentan en botellas
+       y se venden en copas. */
+    function _uDe(m) {
+        if (!m) return { exist:'u', mov:'u', copasBot:0 };
+        if (m.tipo === 'pza')  return { exist:'pza', mov:'pza', copasBot:0 };
+        if (m.tipo === 'peso') { var u = m.baseUnit || 'u'; return { exist:u, mov:u, copasBot:0 }; }
+        return { exist:'bot', mov:'cop', copasBot:(m.contNeto>0 && m.copaML>0 ? m.contNeto/m.copaML : 0) };
+    }
+    // Unidad del compuesto = la de sus miembros cuando todos coinciden.
+    function _uComp(members) {
+        var us = members.map(_uDe);
+        var ex = us.length ? us[0].exist : 'u', mv = us.length ? us[0].mov : 'u';
+        for (var k=1; k<us.length; k++) { if (us[k].exist !== ex) ex = 'u'; if (us[k].mov !== mv) mv = 'u'; }
+        return { exist:ex, mov:mv };
+    }
+
     // ── Constructor de fila COMPUESTO (misma columna que copa; con desglose) ──
     function _rowComp(vf) {
         const comp = getCompuestos().find(c => c.id === vf.compId) || {};
         const members = (comp.miembros||[]).map(mid => filasCaptura.find(f=>f.insumoId===mid)).filter(Boolean);
         let ea=0, ent=0, cancel=0, ventaBot=0, ventaCopa=0, ventaCoct=0, cm=0, eaBot=0, fisBot=0;
+        const uC = _uComp(members);
         members.forEach(m => {
             ea       += parseFloat(m.existenciaAnterior)||0;
             ent      += getEntradasCopas(m);
             cancel   += getCancelacionesCopas(m.insumoId);
-            const copasBot = m.contNeto>0 && m.copaML>0 ? m.contNeto/m.copaML : 0;
-            ventaBot += (parseFloat(m.ventasBotella)||0) * copasBot;
+            const copasBot = _uDe(m).copasBot;
+            ventaBot += (parseFloat(m.ventasBotella)||0) * (copasBot || 1);
             ventaCopa+= parseFloat(m.ventasCopasDirectas)||0;
             ventaCoct+= calcVentasCopasRecetas(m.insumoId, m.copaML);
             cm       += (parseFloat(m.cortesiaCopas)||0) + (parseFloat(m.mermaCopas)||0);
@@ -5687,8 +5708,9 @@ function _step5TablasHTML() {
             const mea = parseFloat(m.existenciaAnterior)||0;
             const ment = getEntradasCopas(m);
             const mcancel = getCancelacionesCopas(m.insumoId);
-            const mCopasBot = m.contNeto>0 && m.copaML>0 ? m.contNeto/m.copaML : 0;
-            const mVentaBot = (parseFloat(m.ventasBotella)||0) * mCopasBot;
+            const mU = _uDe(m);
+            const mCopasBot = mU.copasBot;
+            const mVentaBot = (parseFloat(m.ventasBotella)||0) * (mCopasBot || 1);
             const mVentaCopa = parseFloat(m.ventasCopasDirectas)||0;
             const mVentaCoct = calcVentasCopasRecetas(m.insumoId, m.copaML);
             const mcm = (parseFloat(m.cortesiaCopas)||0) + (parseFloat(m.mermaCopas)||0);
@@ -5701,15 +5723,15 @@ function _step5TablasHTML() {
             const mCont   = _fmtContenido(m); // 📦 contenido por botella (ml/pza) de la presentación
             return `<tr>
                 <td style="padding:4px 8px;color:var(--text);min-width:150px">${etx(insumoTitulo(m))}${insumoMeta(m)?`<div style="font-size:10px;color:var(--text-dim);margin-top:1px">${insumoMetaHTML(m)}</div>`:''}${mCont?`<div style="font-size:9.5px;color:#7ab8f5;margin-top:1px">📦 ${mCont}</div>`:''}</td>
-                <td style="text-align:center;white-space:nowrap">${_nc(meaBot)} bot</td>
-                <td style="text-align:center;color:var(--green)">${ment>0?'+'+_nc(ment)+' cop':'—'}</td>
-                <td style="text-align:center;color:var(--text-dim)">${mVentaBot>0?_nc(mVentaBot)+' cop':'—'}</td>
-                <td style="text-align:center;color:var(--accent)">${mVentaCopa>0?_nc(mVentaCopa)+' cop':'—'}</td>
-                <td style="text-align:center;color:var(--viol)">${mVentaCoct>0?_nc(mVentaCoct)+' cop':'—'}</td>
-                <td style="text-align:center;color:var(--red)">${mcm>0?_nc(mcm)+' cop':'—'}</td>
-                <td style="text-align:center;color:var(--text-muted)">${mcancel>0?_nc(mcancel)+' cop':'—'}</td>
-                <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(mfisBot)} bot</td>
-                <td style="text-align:center;font-weight:700;color:${mcol};white-space:nowrap">${mdif>=0?'+':''}${_nc(mdif)} cop</td>
+                <td style="text-align:center;white-space:nowrap">${_nc(meaBot)} ${mU.exist}</td>
+                <td style="text-align:center;color:var(--green)">${ment>0?'+'+_nc(ment)+' '+mU.mov:'—'}</td>
+                <td style="text-align:center;color:var(--text-dim)">${mVentaBot>0?_nc(mVentaBot)+' '+mU.mov:'—'}</td>
+                <td style="text-align:center;color:var(--accent)">${mVentaCopa>0?_nc(mVentaCopa)+' '+mU.mov:'—'}</td>
+                <td style="text-align:center;color:var(--viol)">${mVentaCoct>0?_nc(mVentaCoct)+' '+mU.mov:'—'}</td>
+                <td style="text-align:center;color:var(--red)">${mcm>0?_nc(mcm)+' '+mU.mov:'—'}</td>
+                <td style="text-align:center;color:var(--text-muted)">${mcancel>0?_nc(mcancel)+' '+mU.mov:'—'}</td>
+                <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(mfisBot)} ${mU.exist}</td>
+                <td style="text-align:center;font-weight:700;color:${mcol};white-space:nowrap">${mdif>=0?'+':''}${_nc(mdif)} ${mU.mov}</td>
                 <td style="text-align:center;font-size:11px;color:${mcol}">${mpct!==null?((mpct>=0?'+':'')+mpct.toFixed(1)+'%'):'—'}</td>
                 <td style="text-align:right;font-weight:600;color:${mcol};white-space:nowrap">${mDifCosto>=0?'+':''}$${mDifCosto.toFixed(2)}</td>
             </tr>`;
@@ -5727,15 +5749,15 @@ function _step5TablasHTML() {
                 <button onclick="var d=document.getElementById('compDesg-${comp.id}');d.style.display=d.style.display==='none'?'':'none';this.textContent=d.style.display==='none'?'▸ Ver desglose':'▾ Ocultar desglose'" style="margin-top:3px;margin-left:4px;font-size:9px;padding:1px 7px;border-radius:4px;cursor:pointer;border:1px solid var(--viol);background:transparent;color:var(--viol)">▸ Ver desglose</button>
                 ${_btnNotaInsumo(vf.compId||vf.insumoId)}
             </td>
-            <td style="text-align:center;white-space:nowrap">${_nc(eaBot)} bot</td>
-            <td style="text-align:center;color:var(--green);white-space:nowrap">${ent>0?'+'+_nc(ent)+' cop':'—'}</td>
-            <td style="text-align:center;color:var(--text-dim)">${ventaBot>0?_nc(ventaBot)+' cop':'—'}</td>
-            <td style="text-align:center;color:var(--accent)">${ventaCopa>0?_nc(ventaCopa)+' cop':'—'}</td>
-            <td style="text-align:center;color:var(--viol)">${ventaCoct>0?_nc(ventaCoct)+' cop':'—'}</td>
-            <td style="text-align:center">${cm>0?`<div style="color:var(--red);font-size:12px;font-weight:600">${_nc(cm)} cop</div>`:'—'}</td>
-            <td style="text-align:center;color:var(--text-muted)">${cancel>0?_nc(cancel)+' cop':'—'}</td>
-            <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(fisBot)} bot</td>
-            <td style="text-align:center;font-weight:700;color:${color};white-space:nowrap">${dif>=0?'+':''}${_nc(dif)} cop</td>
+            <td style="text-align:center;white-space:nowrap">${_nc(eaBot)} ${uC.exist}</td>
+            <td style="text-align:center;color:var(--green);white-space:nowrap">${ent>0?'+'+_nc(ent)+' '+uC.mov:'—'}</td>
+            <td style="text-align:center;color:var(--text-dim)">${ventaBot>0?_nc(ventaBot)+' '+uC.mov:'—'}</td>
+            <td style="text-align:center;color:var(--accent)">${ventaCopa>0?_nc(ventaCopa)+' '+uC.mov:'—'}</td>
+            <td style="text-align:center;color:var(--viol)">${ventaCoct>0?_nc(ventaCoct)+' '+uC.mov:'—'}</td>
+            <td style="text-align:center">${cm>0?`<div style="color:var(--red);font-size:12px;font-weight:600">${_nc(cm)} ${uC.mov}</div>`:'—'}</td>
+            <td style="text-align:center;color:var(--text-muted)">${cancel>0?_nc(cancel)+' '+uC.mov:'—'}</td>
+            <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(fisBot)} ${uC.exist}</td>
+            <td style="text-align:center;font-weight:700;color:${color};white-space:nowrap">${dif>=0?'+':''}${_nc(dif)} ${uC.mov}</td>
             <td style="text-align:center;font-size:11px;color:${color}">${pctStr}</td>
             <td style="text-align:right;font-weight:600;color:${color};white-space:nowrap">${difCosto>=0?'+':''}$${difCosto.toFixed(2)}</td>
         </tr>${desglose}`;
