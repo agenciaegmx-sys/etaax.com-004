@@ -1962,8 +1962,11 @@
                '.modal-overlay,#modalCatalogoGlobal,#modalInsumosNeg{background:transparent!important;padding:0!important;align-items:stretch!important}' +
                '.modal-overlay > *,#modalCatalogoGlobal > *,#modalInsumosNeg > *{max-width:none!important;width:100%!important;height:100vh!important;' +
                    'max-height:100vh!important;border-radius:0!important;border:0!important;resize:none!important;margin:0!important}' +
-               // La ventana de afuera ya trae Minimizar/Cerrar: adentro sobran.
-               '.etx-hd-btns{display:none!important}';
+               // La ventana de afuera ya trae Minimizar/Cerrar: adentro sobran,
+               // incluido el "✕ Cerrar" gris propio de cada catálogo.
+               '.etx-hd-btns{display:none!important}' +
+               '#modalCatalogoGlobal [onclick*="cerrarCatalogoGlobal"],' +
+               '#modalInsumosNeg [onclick*="cerrarInsumosNeg"]{display:none!important}';
            document.head.appendChild(s);
            /* Cerrar el modal = cerrar la VENTANA. Antes el ✕ dejaba el iframe en
               blanco con la ventana abierta, y había que cerrarla otra vez. Se

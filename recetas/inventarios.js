@@ -1314,10 +1314,10 @@ var _repFusion = false; // true = Reporte FINAL (fusiona los productos compuesto
 function _fusionarRows(rows) {
     var comps = getCompuestos();
     if (!comps.length) return rows;
-    var compDe = {}; comps.forEach(function(c){ (c.miembros||[]).forEach(function(m){ compDe[m] = c; }); });
+    var compDe = {}; comps.forEach(function(c){ (c.miembros||[]).forEach(function(m){ compDe[m] = c; compDe[_midCanon(m)] = c; }); });
     var acc = {}, out = [];
     rows.forEach(function(r){
-        var c = compDe[r.insumoId];
+        var c = compDe[r.insumoId] || compDe[_midCanon(r.insumoId)];
         if (!c) { out.push(r); return; }
         // A UNIDADES DE CONTEO (botellas/piezas), cada miembro con SU envase.
         // Antes se pasaba todo a ml y se devolvía en copas: el compuesto salía
@@ -1695,26 +1695,41 @@ function toggleBateo(insumoId) {
 // ── Compuestos en VENTAS (Paso 3) y RESULTADO ──────────────────────────────
 // El compuesto REEMPLAZA a sus presentaciones miembro: se vende en copas contra
 // el compuesto (un solo ítem) y el resultado sale en una sola línea.
+/* ── Miembros de un compuesto: SIEMPRE por id canónico ──────────────────
+   Las filas del inventario guardan el id del insumo MAESTRO (`_cid`), pero el
+   selector de compuestos guardaba el id de la COPIA por sucursal. En un negocio
+   con insumos independizados por sucursal esos ids no son el mismo, así que el
+   compuesto no encontraba a ninguno de sus miembros y simplemente no aparecía
+   —el mismo compuesto funcionaba en un negocio sin copias y en otro no—. Aquí
+   se comparan los dos lados en canónico, y así siguen sirviendo los compuestos
+   ya guardados con el id de la copia. */
+function _midCanon(mid) { return _canonInsumoId(mid) || mid; }
+function _filaDeMiembro(mid) {
+    var c = _midCanon(mid);
+    return filasCaptura.find(function(f){ return f.insumoId === mid || _midCanon(f.insumoId) === c; }) || null;
+}
 function _compDeInsumo() {
     var map = {};
-    getCompuestos().forEach(function(c){ (c.miembros||[]).forEach(function(m){ map[m] = c; }); });
+    getCompuestos().forEach(function(c){
+        (c.miembros||[]).forEach(function(m){ map[m] = c; map[_midCanon(m)] = c; });
+    });
     return map;
 }
 // Compuestos que tienen al menos un miembro presente en la captura actual.
 function _compuestosActivos() {
     return getCompuestos().filter(function(c){
-        return (c.miembros||[]).some(function(mid){ return filasCaptura.some(function(f){ return f.insumoId === mid; }); });
+        return (c.miembros||[]).some(function(mid){ return !!_filaDeMiembro(mid); });
     });
 }
 function _copaMLCompuesto(comp) {
-    var f = filasCaptura.find(function(x){ return (comp.miembros||[]).indexOf(x.insumoId) >= 0 && x.copaML > 0; });
+    var f = (comp.miembros||[]).map(_filaDeMiembro).find(function(x){ return x && x.copaML > 0; });
     return f ? f.copaML : 0;
 }
 // Existencia FÍSICA total del compuesto en copas (suma de miembros).
 function _existenciaCompuestoCopas(comp) {
     var total = 0;
     (comp.miembros||[]).forEach(function(mid){
-        var f = filasCaptura.find(function(x){ return x.insumoId === mid; });
+        var f = _filaDeMiembro(mid);
         if (f) total += calcExistencia(f); // tipo copa → ya en copas
     });
     return total;
@@ -1727,7 +1742,7 @@ function _teoricoCompuestoCopas(comp) {
     // ventas propias (modelo nuevo: ventas por presentación).
     var sup = 0;
     (comp.miembros||[]).forEach(function(mid){
-        var f = filasCaptura.find(function(x){ return x.insumoId === mid; });
+        var f = _filaDeMiembro(mid);
         if (f) sup += calcExistenciaTeorica(f);
     });
     return sup;
@@ -1743,9 +1758,7 @@ function _botellasDeFila(f, copas) {
     return cb > 0 ? (copas || 0) / cb : (copas || 0);
 }
 function _miembrosFila(comp) {
-    return ((comp && comp.miembros) || [])
-        .map(function (mid) { return filasCaptura.find(function (x) { return x.insumoId === mid; }); })
-        .filter(Boolean);
+    return ((comp && comp.miembros) || []).map(_filaDeMiembro).filter(Boolean);
 }
 // Σ sobre los miembros, en BOTELLAS de cada quien.
 function _compSumaBot(comp, fn) {
@@ -1754,7 +1767,7 @@ function _compSumaBot(comp, fn) {
 
 // Fila VIRTUAL del compuesto para renderizar como un insumo copa más.
 function _virtualFilaCompuesto(comp) {
-    var mems = (comp.miembros||[]).map(function(mid){ return filasCaptura.find(function(x){ return x.insumoId === mid; }); }).filter(Boolean);
+    var mems = (comp.miembros||[]).map(_filaDeMiembro).filter(Boolean);
     var m0 = mems[0];
     // Ventas del compuesto = Σ de las presentaciones (modelo nuevo, ya no ventasCompuesto).
     // Son SOLO para mostrar; el teórico/existencia usan _teoricoCopas/_existCopas.
@@ -1963,9 +1976,9 @@ function _compChecklistHTML() {
     var insumos = _scopeSucInsumos(getInsumos());
     var q = _compBusca.toLowerCase();
     var lista = insumos.filter(function(x){ return !q || (x.nombre||'').toLowerCase().indexOf(q) >= 0 || (x.marca||'').toLowerCase().indexOf(q) >= 0; });
-    return lista.slice(0,120).map(function(x){ var sel=_compMiembros.indexOf(x.id)>=0;
+    return lista.slice(0,120).map(function(x){ var _cid=_midCanon(x.id); var sel=_compMiembros.indexOf(_cid)>=0||_compMiembros.indexOf(x.id)>=0;
         return '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-radius:6px;'+(sel?'background:rgba(61,190,122,.1)':'')+'">'+
-        '<input type="checkbox" '+(sel?'checked':'')+' onchange="_toggleMiembro(\''+x.id+'\')"><span style="font-size:13px;color:var(--text)">'+etx(insumoEtiqueta(x))+'</span></label>';
+        '<input type="checkbox" '+(sel?'checked':'')+' onchange="_toggleMiembro(\''+_cid+'\')"><span style="font-size:13px;color:var(--text)">'+etx(insumoEtiqueta(x))+'</span></label>';
     }).join('');
 }
 // La búsqueda actualiza SOLO la lista (no el input) → no se pierde el foco al escribir.
@@ -5570,7 +5583,7 @@ function _step5TablasHTML() {
     });
     vcomps.forEach(vf => {
         const comp = getCompuestos().find(c => c.id === vf.compId) || {};
-        const m0   = (comp.miembros||[]).map(id => filasCaptura.find(f=>f.insumoId===id)).find(Boolean);
+        const m0   = (comp.miembros||[]).map(_filaDeMiembro).find(Boolean);
         if (_subcatStep5 && m0 && (m0.subcategoria||m0.categoria) !== _subcatStep5) return;
         _ens(m0 ? _grupoCategoria(m0) : '🧩 Compuestos').comp.push(vf);
     });
@@ -5692,7 +5705,7 @@ function _step5TablasHTML() {
     // ── Constructor de fila COMPUESTO (misma columna que copa; con desglose) ──
     function _rowComp(vf) {
         const comp = getCompuestos().find(c => c.id === vf.compId) || {};
-        const members = (comp.miembros||[]).map(mid => filasCaptura.find(f=>f.insumoId===mid)).filter(Boolean);
+        const members = (comp.miembros||[]).map(_filaDeMiembro).filter(Boolean);
         let ea=0, ent=0, cancel=0, ventaBot=0, ventaCopa=0, ventaCoct=0, cm=0, eaBot=0, fisBot=0;
         // Entradas y venta por botella también EN BOTELLAS, como en las filas
         // individuales de la misma tabla: ahí dicen "+2 bot" y "1 bot", y el
