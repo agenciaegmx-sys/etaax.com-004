@@ -2399,7 +2399,8 @@
            precio: '', costoUnitario: '', umCosto: 'LT',
            incluyeImpuesto: '0', ivaCheck: '0', iepsCheck: '0', iepsTasa: '26.5', notas: '',
            precioCarta: '', precioCartaBot: '',
-           stockMin: '', stockMax: ''
+           stockMin: '', stockMax: '',
+           unidadesPorPieza: '', nombreSubUnidad: '', costoSubUnidad: ''
        });
        renderPresentaciones();
    }
@@ -2410,15 +2411,50 @@
        renderPresentaciones();
    }
    
+   /* ── Tercer nivel: sub-unidades dentro de cada pieza ───────────────────
+      Caja de 16 bolsas · cada bolsa trae 40 tostadas. El costo por bolsa ya lo
+      da `costoPieza`; esto agrega el costo de LA TOSTADA, que es la unidad con
+      la que de verdad se cocina y se cuesta una receta. Sin esto había que
+      sacar la división a mano cada vez. */
+   // Tarjeta "Costo por tostada / rebanada / lo que sea". Solo aparece cuando el
+   // insumo declaró cuántas sub-unidades trae cada pieza.
+   function _subUnidadNombre(p) {
+       var n = String(p.nombreSubUnidad || '').trim();
+       return n || 'unidad';
+   }
+   function _subUnidadCardHTML(p, i) {
+       if (!(parseFloat(p.unidadesPorPieza) > 1)) return '';
+       var v = parseFloat(p.costoSubUnidad) || 0;
+       return '<div class="meta-item"><label id="lbl-subun-'+i+'">Costo por '+etx(_subUnidadNombre(p))+' '+_MXN+'</label>'
+           + '<div id="ref-subun-'+i+'" style="background:var(--surface);border:1px solid var(--blue);border-radius:6px;'
+           + 'padding:8px 12px;font-size:14px;color:var(--blue);font-weight:700">'+fmtMXN(v, 3)+'</div></div>';
+   }
+
+   function _calcCostoSubUnidad(p, costoPieza) {
+       const n = parseFloat(p.unidadesPorPieza) || 0;
+       p.costoSubUnidad = (n > 1 && costoPieza > 0) ? (costoPieza / n).toFixed(4) : '';
+   }
+
    // ── Auxiliares de cálculo para updPres ────────────────────────────────────
+   // ¿La presentación de compra se cobra por PESO/VOLUMEN? Ahí la cantidad son
+   // kilos o litros, no piezas, y dividir sería incorrecto.
+   const _PRES_A_GRANEL = ['kilo','kilos','litro','litros','gramo','gramos','a granel — kg','granel','a granel'];
+   function _presEsGranel(nom) {
+       return _PRES_A_GRANEL.indexOf(String(nom || '').toLowerCase().trim()) >= 0;
+   }
    function _calcCostosAbarrote(p, precioEfectivo, contML) {
        const cantPres = parseFloat(p.cantPresCompra) || 1;
        const presCompra = p.presentacionCompra || 'Pieza';
 
-       const piezasEnPack = ['Caja','Paquete','Costal'].includes(presCompra) && cantPres > 1
-           ? cantPres : 1;
+       // Antes solo dividían Caja, Paquete y Costal. Una BOLSA de 16 piezas, una
+       // rejilla, un tarro — o cualquier concepto que el negocio agregue con
+       // "＋ Agregar concepto" — se quedaban sin dividir y el costo por pieza
+       // salía igual al precio de TODA la caja. Lo que manda es la cantidad, no
+       // cómo se llame el empaque; se excluye solo lo que se compra a granel.
+       const piezasEnPack = (cantPres > 1 && !_presEsGranel(presCompra)) ? cantPres : 1;
        const costoPieza = precioEfectivo / piezasEnPack;
        p.costoPieza = costoPieza.toFixed(2);
+       _calcCostoSubUnidad(p, costoPieza);
 
        // Si hay masa drenada usar ese contenido para el costo, si no el contenido del producto
        const masaDrena  = parseFloat(p.masaDrenada) || 0;
@@ -2466,6 +2502,7 @@
        if (!isPiezas && cantPres > 0) {
            // Compra por peso/volumen total (Rack 24 KG, Bolsa 5 KG, Granel 10 KG, etc.)
            p.costoPieza = precioEfectivo.toFixed(2);
+           _calcCostoSubUnidad(p, precioEfectivo);
            const totalML  = toML(cantPres, umPres); // KG→1000 G→1 LT→1000 ML→1
            const isWeight = ['KG','G'].includes(umPres);
            if (totalML > 0) {
@@ -2481,6 +2518,7 @@
            const piezas     = cantPres > 0 ? cantPres : 1;
            const costoPieza = precioEfectivo / piezas;
            p.costoPieza = costoPieza.toFixed(2);
+           _calcCostoSubUnidad(p, costoPieza);
            const contML2 = toML(p.contNeto, p.umContenido || 'G');
            const umCont  = (p.umContenido || 'G').toUpperCase();
            const isWeight = ['KG','G'].includes(umCont);
@@ -2555,7 +2593,7 @@
        const precioEfectivo = precio * calcImpFactor(p);
        const contML         = toML(p.contNeto, p.umContenido || 'ML');
    
-       const _triggerCosto = ['precio','contNeto','umContenido','cantPresCompra','presentacionCompra','umPresCompra','factorPieza','tamanoCopa','ivaCheck','iepsCheck','iepsTasa','incluyeImpuesto','masaDrenada','umMasaDrenada'];
+       const _triggerCosto = ['precio','contNeto','umContenido','cantPresCompra','presentacionCompra','umPresCompra','factorPieza','tamanoCopa','ivaCheck','iepsCheck','iepsTasa','incluyeImpuesto','masaDrenada','umMasaDrenada','unidadesPorPieza','nombreSubUnidad'];
        if (_triggerCosto.includes(campo) && precioEfectivo > 0) {
            if (tipoInsumoActual === 'cerveza_barril') {
                _calcCostosBarril(p, precioEfectivo, contML);
@@ -2602,6 +2640,12 @@
                if (_elP) _elP.textContent = fmtMXN(_cp);
                if (_elC) _elC.textContent = fmtMXN(_cuBig2);
                if (_elS) _elS.textContent = fmtMXN(_cuSmall2, 3);
+               const _elU = document.getElementById('ref-subun-'+i);
+               const _elUL= document.getElementById('lbl-subun-'+i);
+               if (_elU) _elU.textContent = fmtMXN(parseFloat(p.costoSubUnidad)||0, 3);
+               if (_elUL) _elUL.textContent = 'Costo por '+_subUnidadNombre(p)+' '+_MXN.replace(/<[^>]+>/g,'');
+               // La tarjeta aparece/desaparece al declarar (o borrar) las sub-unidades
+               if ((campo === 'unidadesPorPieza' || campo === 'nombreSubUnidad') && !_elU) renderPresentaciones();
            }
        }
    
@@ -2895,7 +2939,8 @@
                + (!_esPieza ? '<div class="meta-item"><label>Costo por KG/LT '+_MXN+'</label>'
                + '<div id="ref-costoum-'+i+'" style="background:var(--surface);border:1px solid var(--accent);border-radius:6px;padding:8px 12px;font-size:14px;color:var(--accent);font-weight:700">'+fmtMXN(_cuBig)+'</div></div>' : '')
                + (!_esPieza ? '<div class="meta-item"><label>Costo por ML/GR '+_MXN+'</label>'
-               + '<div id="ref-costomlgr-'+i+'" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:13px;color:var(--text-dim);font-weight:600">'+fmtMXN(_cuSmall, 3)+'</div></div>' : '');
+               + '<div id="ref-costomlgr-'+i+'" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:13px;color:var(--text-dim);font-weight:600">'+fmtMXN(_cuSmall, 3)+'</div></div>' : '')
+               + _subUnidadCardHTML(p, i);
        } else {
            innerHtml = `<div class="meta-item">
                <label>Rendimiento</label>
@@ -3169,7 +3214,25 @@
                                   </select>`
                            }
                        </div>
-                   </div>` : ''}
+                   </div>
+                   ${esBarril ? '' : `
+                   <!-- Tercer nivel: lo que trae CADA pieza (caja → bolsa → tostada) -->
+                   <div class="mg-2" style="margin-top:2px">
+                       <div class="meta-item">
+                           <label>Cada pieza trae (opcional)</label>
+                           <input type="number" value="${p.unidadesPorPieza||''}" placeholder="Ej. 40" min="0" step="1"
+                               oninput="updPres(${i},'unidadesPorPieza',this.value)">
+                       </div>
+                       <div class="meta-item">
+                           <label>¿De qué? </label>
+                           <input type="text" value="${(p.nombreSubUnidad||'').replace(/"/g,'&quot;')}" placeholder="Ej. tostadas, rebanadas, bolsitas"
+                               oninput="updPres(${i},'nombreSubUnidad',this.value)">
+                       </div>
+                   </div>
+                   <div style="font-size:10.5px;color:var(--text-dim);margin:-4px 0 4px;line-height:1.5">
+                       Para empaques de tres niveles: una caja de 16 bolsas y cada bolsa con 40 tostadas
+                       → te da el costo de la bolsa <b>y</b> el de cada tostada.
+                   </div>`}` : ''}
 
                    <!-- Proveedor/Zona (todos los tipos) -->
                    <div class="mg-2">
