@@ -372,6 +372,7 @@ async function guardarReceta() {
     if (typeof _sbUpReceta === 'function') { if (_masterRec) _sbUpReceta(_masterRec); _sbUpReceta(receta); }
     recetaActualId = receta.id;
     window._escDirty = false; // ya se guardó → sin cambios pendientes
+    if (typeof window._avisarDirty === 'function') window._avisarDirty();
     // Si es una sub-receta con insumo convertido, refrescarlo (y sus copias por
     // sucursal) para que el costo/ficha se actualice en TODOS lados sin re-convertir.
     var _esSubR = (recetaTipoActual === 'sub-alimentos' || recetaTipoActual === 'sub-bebidas' || (String(receta.tipo||'').indexOf('sub') === 0));
@@ -412,6 +413,7 @@ function duplicarReceta() {
     nEl.value = copia.nombre;
     if (typeof _syncBrandNombre === 'function') _syncBrandNombre();
     window._escDirty = false;
+    if (typeof window._avisarDirty === 'function') window._avisarDirty();
     alert('✅ Copia creada: "' + copia.nombre + '". Ya la estás editando; el original quedó intacto.');
 }
 
@@ -497,6 +499,7 @@ function cargarReceta(id) {
     if (typeof guardarEnHistorial === 'function') guardarEnHistorial();
     // Recién cargada → sin cambios pendientes (las cargas programáticas no disparan input).
     window._escDirty = false;
+    if (typeof window._avisarDirty === 'function') window._avisarDirty();
     // Show print button for saved recipe
     var btnImp = document.getElementById('btnImprimirHeader');
     if (btnImp) btnImp.style.display = '';
@@ -1558,9 +1561,37 @@ function abrirEditorEnModal(url, label) {
     modal.style.display = 'flex';
 }
 
-function cerrarIframeInsumo() {
+// ¿La ventana flotante tiene un editor con cambios sin guardar? Lo dice el hijo.
+var _iframeDirty = false;
+
+/* Cerrar la ventana flotante. Si adentro hay un escandallo con cambios sin
+   guardar, NO se cierra de golpe: el botón queda a la vista detrás de las otras
+   ventanas y es facilísimo darle por error. Mismas tres salidas que el resto
+   del editor: seguir editando, guardar y cerrar, o cerrar sin guardar. */
+function cerrarIframeInsumo(forzar) {
     const modal = document.getElementById('modalIframeInsumo');
     const frame = document.getElementById('iframeInsumo');
+    if (!forzar && _iframeDirty && modal && modal.style.display !== 'none') {
+        var _cerrar = function(){ _iframeDirty = false; cerrarIframeInsumo(true); };
+        var _guardar = function(){
+            try { frame.contentWindow.postMessage({ type:'guardarYCerrar' }, window.location.origin); }
+            catch (e) { _cerrar(); }
+        };
+        if (typeof etaaxDialog === 'function') {
+            etaaxDialog({
+                icon: '❓',
+                title: '¿Cerrar la ventana?',
+                msg: 'Tienes cambios sin guardar en esta receta.',
+                buttons: [
+                    { label: 'Seguir editando',   kind: 'ghost',   onClick: null },
+                    { label: 'Guardar y cerrar',  kind: 'primary', onClick: _guardar },
+                    { label: 'Cerrar sin guardar',kind: 'danger',  onClick: _cerrar }
+                ]
+            });
+        } else if (confirm('¿Cerrar sin guardar? Los cambios se perderán.')) _cerrar();
+        return;
+    }
+    _iframeDirty = false;
     if (modal) modal.style.display = 'none';
     // Recalcular YA desde localStorage: el iframe lo actualizó de forma síncrona,
     // así que el costo nuevo del insumo/sub-receta ya está disponible al instante.
@@ -1595,7 +1626,19 @@ window.addEventListener('message', function(e) {
         // (cerrarIframeInsumo ya recalcula los ingredientes y re-pinta la tabla).
         cerrarIframeInsumo();
     } else if (e.data.type === 'cerrarEditor') {
-        cerrarIframeInsumo();
+        cerrarIframeInsumo(true);          // la pidió el propio hijo: ya decidió
+    } else if (e.data.type === 'escDirty') {
+        _iframeDirty = !!e.data.dirty;     // el hijo reporta si tiene cambios
+    } else if (e.data.type === 'guardarYCerrar') {
+        // Lo manda el padre: guardar aquí dentro y avisar que ya se puede cerrar.
+        if (typeof guardarReceta === 'function') {
+            Promise.resolve(guardarReceta()).then(function(ok){
+                if (ok === false) return;  // la validación falló: quedarse a corregir
+                window._escDirty = false;
+                if (typeof window._avisarDirty === 'function') window._avisarDirty();
+                try { window.parent.postMessage({ type:'cerrarEditor' }, window.location.origin); } catch (err) {}
+            }).catch(function(){});
+        }
     }
 });
 
@@ -1964,9 +2007,18 @@ document.addEventListener('DOMContentLoaded', initCtxBar);
         return !!(ew && ew.style.display !== 'none' && ew.offsetParent !== null);
     }
     window._escEditorAbierto = _escEditorAbierto;
+    // El escandallo vive dentro de una ventana flotante cuyo botón "Cerrar" es del
+    // padre: si no le avisamos que hay cambios, cierra y se pierde el trabajo.
+    function _avisarDirty() {
+        if (window.parent === window) return;
+        try { window.parent.postMessage({ type:'escDirty', dirty: !!window._escDirty }, window.location.origin); } catch (e) {}
+    }
+    window._avisarDirty = _avisarDirty;
     function _marcarSucio(e) {
         if (_escEditorAbierto() && e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) {
+            var antes = window._escDirty;
             window._escDirty = true;
+            if (!antes) _avisarDirty();
         }
     }
     document.addEventListener('input',  _marcarSucio, true);

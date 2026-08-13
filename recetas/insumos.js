@@ -1947,12 +1947,39 @@
        else if (_q.get('globalneg') === '1') setTimeout(() => { if (typeof abrirInsumosGlobalNeg === 'function') abrirInsumosGlobalNeg(); }, 200);
        else if (_q.get('etaax') === '1')     setTimeout(() => { if (typeof abrirCatalogoGlobal === 'function') abrirCatalogoGlobal(); }, 200);
 
+       /* Modo SOLO (abierto desde el escandallo): la página no debe verse como
+          una página. Antes quedaba una "ventana de en medio" con la barra de
+          contexto del negocio y el fondo del módulo, y encima el modal del
+          catálogo: tres marcos con tres botones de cerrar para una sola cosa.
+          Aquí el modal ES la ventana: ocupa todo el iframe, sin cromo detrás. */
        if (_soloMode) {
            const s = document.createElement('style');
-           s.textContent = '.top-bar,.app-shell{display:none!important}' +
-                           'html,body{background:transparent!important}' +
-                           '#modalOverlay{background:transparent!important}';
+           s.textContent =
+               '.top-bar,.app-shell,#ctxBar,.ctx-bar,.theme-toggle,.global-nav{display:none!important}' +
+               'html,body{background:transparent!important;padding:0!important;margin:0!important;overflow:hidden}' +
+               // Los tres modales que abre el escandallo: el editor (.modal-overlay),
+               // el catálogo del negocio y el de ETAAX (con estilos en línea).
+               '.modal-overlay,#modalCatalogoGlobal,#modalInsumosNeg{background:transparent!important;padding:0!important;align-items:stretch!important}' +
+               '.modal-overlay > *,#modalCatalogoGlobal > *,#modalInsumosNeg > *{max-width:none!important;width:100%!important;height:100vh!important;' +
+                   'max-height:100vh!important;border-radius:0!important;border:0!important;resize:none!important;margin:0!important}' +
+               // La ventana de afuera ya trae Minimizar/Cerrar: adentro sobran.
+               '.etx-hd-btns{display:none!important}';
            document.head.appendChild(s);
+           /* Cerrar el modal = cerrar la VENTANA. Antes el ✕ dejaba el iframe en
+              blanco con la ventana abierta, y había que cerrarla otra vez. Se
+              envuelven las funciones de cierre en vez de escuchar clics: cada
+              modal tiene su botón con su propio onclick, sin clase común. */
+           ['cerrarCatalogoGlobal', 'cerrarInsumosNeg', 'cerrarModal'].forEach(function (fn) {
+               var orig = window[fn];
+               if (typeof orig !== 'function') return;
+               window[fn] = function () {
+                   var r = orig.apply(this, arguments);
+                   setTimeout(function () {
+                       try { window.parent.postMessage({ type: 'cerrarEditor' }, window.location.origin); } catch (e) {}
+                   }, 60);
+                   return r;
+               };
+           });
        }
    });
 
