@@ -126,9 +126,12 @@
                     </div>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
                         <button class="btn-add" onclick="agregarIngrediente()">+ Agregar ingrediente</button>
-                        <div style="position:relative;display:inline-block">
+                        <!-- z-index alto en el CONTENEDOR: sin él, la tarjeta de datos de
+                             arriba pinta encima y el menú se ve cortado a la mitad cuando
+                             la receta todavía no tiene ingredientes. -->
+                        <div style="position:relative;display:inline-block;z-index:400">
                             <button class="btn-add" onclick="_toggleInsumoMenu(event)" style="border-color:var(--viol);color:var(--viol)" title="Traer o crear un insumo sin salir del escandallo">📦 Insumo ▾</button>
-                            <div id="insumoMenu" style="display:none;position:absolute;bottom:calc(100% + 6px);left:0;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:5px;min-width:240px;box-shadow:0 12px 34px rgba(0,0,0,.45);z-index:60">
+                            <div id="insumoMenu" style="display:none;position:absolute;bottom:calc(100% + 6px);left:0;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:5px;min-width:240px;box-shadow:0 12px 34px rgba(0,0,0,.45);z-index:401">
                                 <button type="button" onclick="abrirInsumoDesde('globalneg')" style="display:block;width:100%;text-align:left;background:none;border:none;color:var(--text);font-family:inherit;font-size:13px;padding:9px 11px;border-radius:7px;cursor:pointer" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">🏢 Del catálogo del negocio</button>
                                 <button type="button" onclick="abrirInsumoDesde('etaax')" style="display:block;width:100%;text-align:left;background:none;border:none;color:var(--text);font-family:inherit;font-size:13px;padding:9px 11px;border-radius:7px;cursor:pointer" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">🌐 Del catálogo ETAAX</button>
                                 <button type="button" onclick="abrirInsumoDesde('nuevo')" style="display:block;width:100%;text-align:left;background:none;border:none;color:var(--green);font-family:inherit;font-size:13px;padding:9px 11px;border-radius:7px;cursor:pointer;font-weight:600" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">➕ Crear nuevo insumo</button>
@@ -2732,10 +2735,30 @@ function abrirCaratulaModal() {
 }
 // Menú de 3 fuentes de insumo SIN salir del escandallo (modal-sobre-modal):
 // catálogo del negocio (otras sucursales), catálogo ETAAX (importar) o nuevo.
+/* El menú se saca a position:fixed anclado al botón. Dentro de la tarjeta
+   quedaba atrapado en su contexto de apilamiento y la tarjeta de datos de
+   arriba lo tapaba a la mitad — subirle el z-index no alcanzaba. Fijo contra
+   la ventana no depende de ningún ancestro, y si no cabe arriba, abre hacia
+   abajo. */
 function _toggleInsumoMenu(e) {
     if (e) e.stopPropagation();
     var m = document.getElementById('insumoMenu');
-    if (m) m.style.display = m.style.display === 'none' ? 'block' : 'none';
+    if (!m) return;
+    if (m.style.display !== 'none') { m.style.display = 'none'; return; }
+    var btn = e && e.currentTarget && e.currentTarget.tagName === 'BUTTON'
+        ? e.currentTarget
+        : document.querySelector('[onclick*="_toggleInsumoMenu"]');
+    m.style.display = 'block';
+    if (!btn) return;
+    if (m.parentNode !== document.body) document.body.appendChild(m);
+    var r = btn.getBoundingClientRect();
+    var alto = m.offsetHeight || 150;
+    var arriba = r.top > alto + 14;                       // ¿cabe encima del botón?
+    m.style.position = 'fixed';
+    m.style.zIndex   = '9999';
+    m.style.left     = Math.max(8, Math.min(r.left, window.innerWidth - m.offsetWidth - 8)) + 'px';
+    m.style.top      = (arriba ? r.top - alto - 6 : r.bottom + 6) + 'px';
+    m.style.bottom   = 'auto';
 }
 document.addEventListener('click', function () { var m = document.getElementById('insumoMenu'); if (m) m.style.display = 'none'; });
 function abrirInsumoDesde(modo) {

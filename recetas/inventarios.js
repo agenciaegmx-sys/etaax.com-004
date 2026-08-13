@@ -112,6 +112,20 @@ async function _sbInitInv() {
         _cacheInsumosInv = (r[3].data || []).map(function(x){ return x.datos; }).filter(Boolean);
         // actualizar localStorage para compatibilidad con insumos.js
         try { localStorage.setItem(_sk('insumos'), JSON.stringify(_cacheInsumosInv.map(function(ins){ var c=Object.assign({},ins); c.foto=''; c.fotoUrl=''; return c; }))); } catch(e) {}
+        /* Entrar al negocio e ir DIRECTO a editar un inventario ganaba la carrera
+           contra esta carga: las filas se armaban con el catálogo vacío y el
+           inventario salía sin insumos (había que ir a Insumos y volver). Si el
+           inventario ya se abrió y quedó sin filas, se rearma ahora que sí hay
+           catálogo. */
+        try {
+            if (typeof invActual !== 'undefined' && invActual && _cacheInsumosInv.length &&
+                typeof filasCaptura !== 'undefined' && (!filasCaptura || !filasCaptura.length) &&
+                typeof cargarProductosCaptura === 'function') {
+                cargarProductosCaptura();
+                if (typeof pasoActual !== 'undefined' && typeof irAPaso === 'function') irAPaso(pasoActual || 1);
+                else if (typeof renderStep1 === 'function') renderStep1();
+            }
+        } catch(e) { console.warn('[inv] re-armado de filas tras cargar insumos:', e); }
     }
     if (typeof init === 'function') init();
     _subInvRealtime(negId);
@@ -1585,6 +1599,14 @@ function verPreviewInventario(id) {
     document.getElementById('modalPreviewInv').style.display = 'flex';
     var body = document.getElementById('previewInvBody'); if (body) body.scrollTop = 0;
 }
+function imprimirPreviewInv(){
+    var inv = _previewInv; if (!inv) { alert('No hay inventario abierto en la vista previa.'); return; }
+    var q = (_previewBusq||'').toLowerCase();
+    var rows = (_previewRows||[]).filter(function(r){
+        return (!q || (r.nombre||'').toLowerCase().includes(q)) && (!_previewSubcat || (r.subcat||r.familia) === _previewSubcat);
+    });
+    imprimirReporteExistencias({ rows: rows, areaTxt: (inv.nombre || _areaNom(inv.area||'general')) + ' · ' + _repFecha(inv.fecha) });
+}
 function onPreviewBusq(v){ _previewBusq = v; _renderPreviewTabla(); }     // solo re-renderiza la tabla → no pierde foco
 function setPreviewSubcat(v){ _previewSubcat = v; _renderPreviewTabla(); }
 function _renderPreviewInv() {
@@ -1602,7 +1624,10 @@ function _renderPreviewInv() {
         '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px 10px;border-bottom:3px solid var(--green)">'+
             '<div><div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:1px;color:var(--text);line-height:1">'+etx(inv.nombre||negNom||'Inventario')+'</div>'+
             '<div style="font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--text-dim);margin-top:3px">'+etx(negNom)+' · '+(inv.area||'general')+' · '+fechaInv+' · '+estado+'</div></div>'+
-            '<div style="text-align:right"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:2px;color:var(--text)">ET<span style="color:var(--green)">AA</span>X</div>'+
+            '<div style="text-align:right">'+
+            (typeof etaaxLogoSVG === 'function'
+                ? '<img src="data:image/svg+xml;charset=utf-8,'+encodeURIComponent(etaaxLogoSVG({variant:'oscuro',height:18}))+'" alt="ETAAX" style="height:18px;display:inline-block">'
+                : '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:18px;letter-spacing:2px;color:var(--text)">ETAAX</div>')+
             '<div style="font-size:9px;color:var(--text-dim);margin-top:2px">'+all.length+' insumos</div></div></div>'+
         '<div style="display:flex;gap:10px;flex-wrap:wrap;padding:10px 14px 8px">'+_chip('📍 Barra',capB,'var(--accent)')+_chip('📍 Bodega',capBo,'var(--accent)')+
             '<div style="background:rgba(61,190,122,.12);border:1px solid rgba(61,190,122,.35);border-radius:10px;padding:8px 14px;min-width:110px"><div style="font-size:10px;color:var(--green);text-transform:uppercase;letter-spacing:1px">TOTAL</div><div style="font-size:17px;font-weight:800;color:var(--green);margin-top:2px">'+_repMoney(capT)+'</div></div></div>'+
@@ -2023,10 +2048,12 @@ function eliminarCompuesto(id) {
     _renderParamLista();
 }
 
-function imprimirReporteExistencias(){
-    var rows = _datosReporteExistencias(_repArea);
-    rows = _filtraSubcatRep(rows); // filtro por subcategoría (Mezcal, Licor, Refresco…)
-    if (_repFusion) rows = _fusionarRows(rows); // Reporte final: fusiona productos compuestos
+/* `opts` permite imprimir OTRA lista con el mismo formato — lo usa la vista
+   previa de un inventario, que antes no tenía cómo imprimirse. */
+function imprimirReporteExistencias(opts){
+    opts = opts || {};
+    var rows = opts.rows ? opts.rows.slice() : _filtraSubcatRep(_datosReporteExistencias(_repArea));
+    if (!opts.rows && _repFusion) rows = _fusionarRows(rows); // Reporte final: fusiona compuestos
     if (!rows.length){ alert('No hay existencias para imprimir.'); return; }
     rows.sort(function(a,b){ return b.capital - a.capital; });
     // Nombre para el <title> de la ventana (el encabezado usa la marca compartida).
@@ -2036,7 +2063,7 @@ function imprimirReporteExistencias(){
     var totCap   = rows.reduce(function(s,r){ return s + r.capital;   }, 0);
     var fechaLarga = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'});
     var nIns = (new Set(rows.map(function(r){return r.insumoId;}))).size;
-    var areaTxt = _repArea === 'todas' ? 'Todas las áreas' : _areaNom(_repArea);
+    var areaTxt = opts.areaTxt || (_repArea === 'todas' ? 'Todas las áreas' : _areaNom(_repArea));
 
     var CSS = "* { margin:0; padding:0; box-sizing:border-box; }"+
         "body { font-family:'DM Sans',sans-serif; background:#fff; color:#1a1916; -webkit-print-color-adjust:exact; print-color-adjust:exact; }"+
@@ -2061,17 +2088,33 @@ function imprimirReporteExistencias(){
         // Hoja carta horizontal: el pie queda ANCLADO al fondo de la hoja (no del contenido).
         ".pagina { min-height:19.3cm; display:flex; flex-direction:column; }"+
         ".pie-hoja { margin-top:auto; }"+
+        "table.ct tbody tr.grp-h td { background:#eef4f0; border-top:2px solid #3dbe7a; padding:7px 10px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:1.2px; color:#1a7a46; }"+
+        "table.ct tbody tr.grp-h { break-inside:avoid; break-after:avoid; }"+
         "@page { size:letter landscape; margin:1cm; }";
 
     var op = _repModoOp;
+    // ── Separado POR GRUPO de producto, con su subtotal ──
+    // Una lista corrida de 260 insumos no se puede leer ni cotejar contra la
+    // bodega; agrupada, cada familia se cuenta y se cierra por su cuenta.
+    var _grupos = {};
+    rows.forEach(function(r){ var g = r.familia || 'Sin grupo'; (_grupos[g] = _grupos[g] || []).push(r); });
+    var _nCols = op ? 7 : 8;
+    var _cuerpo = Object.keys(_grupos).sort(function(a,b){ return String(a).localeCompare(String(b),'es'); }).map(function(g){
+        var lista = _grupos[g];
+        var sub = lista.reduce(function(t,r){ return t + (r.capital||0); }, 0);
+        var head = '<tr class="grp-h"><td colspan="'+_nCols+'">'+etx(g)+
+            ' <span style="font-weight:400;color:#888">· '+lista.length+' insumo'+(lista.length!==1?'s':'')+
+            (op?'':' · '+_repMoney(sub))+'</span></td></tr>';
+        return head + lista.map(function(r){ var cont=_fmtContenido(r); return '<tr><td style="font-weight:600;padding-left:18px">'+etx(r.nombre)+(cont?'<div class="grp" style="color:#5a8fc7">📦 '+cont+'</div>':'')+'</td><td style="color:#888">'+etx(r.familia)+'</td>'+
+            '<td class="r">'+_fmtCant(r.barra,r)+'</td><td class="r">'+_fmtCant(r.bodega,r)+'</td>'+
+            '<td class="r b" style="color:#1a1916">'+_fmtCant(r.total,r)+'</td><td class="r" style="color:#888">'+_repMoney(r.costoUnit)+'</td>'+
+            (op?'':'<td class="r b">'+_repMoney(r.capital)+'</td>')+'<td class="c" style="color:#aaa">'+_repFecha(r.fecha)+'</td></tr>'; }).join('');
+    }).join('');
     var tabla = '<table class="ct"><thead><tr>'+
         '<th style="text-align:left">Insumo</th><th style="text-align:left">Familia</th>'+
         '<th class="r">Exist. Barra</th><th class="r">Exist. Bodega</th><th class="r">Total exist.</th>'+
         '<th class="r">Costo prov.</th>'+(op?'':'<th class="r">Capital</th>')+'<th class="c">Última existencia</th></tr></thead><tbody>'+
-        rows.map(function(r){ var cont=_fmtContenido(r); return '<tr><td style="font-weight:600">'+etx(r.nombre)+(cont?'<div class="grp" style="color:#5a8fc7">📦 '+cont+'</div>':'')+'</td><td style="color:#888">'+etx(r.familia)+'</td>'+
-            '<td class="r">'+_fmtCant(r.barra,r)+'</td><td class="r">'+_fmtCant(r.bodega,r)+'</td>'+
-            '<td class="r b" style="color:#1a1916">'+_fmtCant(r.total,r)+'</td><td class="r" style="color:#888">'+_repMoney(r.costoUnit)+'</td>'+
-            (op?'':'<td class="r b">'+_repMoney(r.capital)+'</td>')+'<td class="c" style="color:#aaa">'+_repFecha(r.fecha)+'</td></tr>'; }).join('')+
+        _cuerpo+
         '</tbody>'+(op?'':'<tfoot><tr><td colspan="6" class="r" style="text-transform:uppercase;font-size:9px;letter-spacing:1.5px;color:#888">Capital · Barra '+_repMoney(totBarra)+' &nbsp;·&nbsp; Bodega '+_repMoney(totBodega)+'</td>'+
         '<td class="r b" style="font-size:13px">'+_repMoney(totCap)+'</td><td></td></tr></tfoot>')+'</table>';
 
