@@ -599,6 +599,16 @@ function _consumoIdx() {
     _consumoIdxCache = idx; _consumoIdxKey = key; _consumoDirty = false;
     return idx;
 }
+/* Consumo por recetas EN LA UNIDAD DE LA FILA. Una lata de 355 ml usada en un
+   coctel es 1 PIEZA, no 7.9 copas: dividir entre el tamaño de copa (45 ml por
+   default, aunque el insumo sea de pieza) inflaba la columna de coctelería
+   casi ocho veces. El teórico ya lo hacía bien; era la vista la que mentía. */
+function consumoRecetasFila(f) {
+    if (!f) return 0;
+    if (f.tipo === 'pza')  return calcVentasPzaRecetas(f.insumoId);
+    if (f.tipo === 'peso') return calcVentasBaseRecetas(f.insumoId);
+    return calcVentasCopasRecetas(f.insumoId, f.copaML);
+}
 function calcVentasCopasRecetas(insumoId, copaML) {
     if (!copaML || copaML <= 0) return 0;
     var s = _consumoIdx()[insumoId];
@@ -1765,7 +1775,7 @@ function _virtualFilaCompuesto(comp) {
         _entBot:   mems.reduce(function(s,m){ return s + (getEntradasBottles(m.insumoId)||0); }, 0),
         _entLista: mems.reduce(function(a,m){ return a.concat((_entradasDeInsumo(m.insumoId)||[]).map(function(e){
                        return Object.assign({}, e, { _de: m.nombre }); })); }, []),
-        _ventaCoct: mems.reduce(function(s,m){ return s + (calcVentasCopasRecetas(m.insumoId, m.copaML)||0); }, 0),
+        _ventaCoct: mems.reduce(function(s,m){ return s + (consumoRecetasFila(m)||0); }, 0),
         _cancel:    mems.reduce(function(s,m){ return s + (getCancelacionesCopas(m.insumoId)||0); }, 0),
         _eaBot:     mems.reduce(function(s,m){ return s + _botellasDeFila(m, parseFloat(m.existenciaAnterior)||0); }, 0),
         _existBot:  _compSumaBot(comp, function(m){ return calcExistencia(m); }),
@@ -5570,7 +5580,7 @@ function _step5TablasHTML() {
         const copasBot  = fila.contNeto>0 && fila.copaML>0 ? fila.contNeto/fila.copaML : 0;
         const entBot    = getEntradasBottles(fila.insumoId) + (copasBot > 0 ? adj.ent / copasBot : 0);
         const ventaBot  = parseFloat(fila.ventasBotella) || 0;
-        const ventaCoct    = calcVentasCopasRecetas(fila.insumoId, fila.copaML) + adj.vco;
+        const ventaCoct    = consumoRecetasFila(fila) + adj.vco;
         const ventaCopaDir = parseFloat(fila.ventasCopasDirectas) || 0;
         const ventaCopa    = ventaCoct + ventaCopaDir;
         const cortesia  = parseFloat(fila.cortesiaCopas) || 0;
@@ -5690,7 +5700,7 @@ function _step5TablasHTML() {
             const copasBot = _uDe(m).copasBot;
             ventaBot += (parseFloat(m.ventasBotella)||0) * (copasBot || 1);
             ventaCopa+= parseFloat(m.ventasCopasDirectas)||0;
-            ventaCoct+= calcVentasCopasRecetas(m.insumoId, m.copaML);
+            ventaCoct+= consumoRecetasFila(m);
             cm       += (parseFloat(m.cortesiaCopas)||0) + (parseFloat(m.mermaCopas)||0);
             // Existencia en BOTELLAS: cada presentación aporta sus propias botellas
             // (su copaML/contNeto). El compuesto suma botellas; la diferencia queda en copas.
@@ -5704,6 +5714,7 @@ function _step5TablasHTML() {
         const pctValC   = _pctVarianza(dif, ventaBot + ventaCopa + ventaCoct);
         const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
         const pctStr    = pctValC !== null ? ((pctValC>=0?'+':'')+pctValC.toFixed(1)+'%') : '—';
+        const esPzaComp0 = members.length > 0 && members.every(m => m.tipo === 'pza');
         const desgloseRows = members.map(m => {
             const mea = parseFloat(m.existenciaAnterior)||0;
             const ment = getEntradasCopas(m);
@@ -5712,7 +5723,7 @@ function _step5TablasHTML() {
             const mCopasBot = mU.copasBot;
             const mVentaBot = (parseFloat(m.ventasBotella)||0) * (mCopasBot || 1);
             const mVentaCopa = parseFloat(m.ventasCopasDirectas)||0;
-            const mVentaCoct = calcVentasCopasRecetas(m.insumoId, m.copaML);
+            const mVentaCoct = consumoRecetasFila(m);
             const mcm = (parseFloat(m.cortesiaCopas)||0) + (parseFloat(m.mermaCopas)||0);
             const mfis = calcExistencia(m), mteo = calcExistenciaTeorica(m), mdif = mfis - mteo;
             const mDifCosto = mdif * (m.precioCarta || 0);
@@ -5721,8 +5732,26 @@ function _step5TablasHTML() {
             const meaBot = mCopasBot>0 ? mea/mCopasBot : mea;   // existencia en botellas (su propia presentación)
             const mfisBot = mCopasBot>0 ? mfis/mCopasBot : mfis;
             const mCont   = _fmtContenido(m); // 📦 contenido por botella (ml/pza) de la presentación
-            return `<tr>
-                <td style="padding:4px 8px;color:var(--text);min-width:150px">${etx(insumoTitulo(m))}${insumoMeta(m)?`<div style="font-size:10px;color:var(--text-dim);margin-top:1px">${insumoMetaHTML(m)}</div>`:''}${mCont?`<div style="font-size:9.5px;color:#7ab8f5;margin-top:1px">📦 ${mCont}</div>`:''}</td>
+            const mNom = `<td style="padding:4px 8px;color:var(--text);min-width:150px">${etx(insumoTitulo(m))}${insumoMeta(m)?`<div style="font-size:10px;color:var(--text-dim);margin-top:1px">${insumoMetaHTML(m)}</div>`:''}${mCont?`<div style="font-size:9.5px;color:#7ab8f5;margin-top:1px">📦 ${mCont}</div>`:''}</td>`;
+            // Miembros de pieza: mismas columnas que la tabla de piezas (con
+            // teórico y físico), sin "Botella" ni "Copa", que ahí no existen.
+            if (esPzaComp0) {
+                const mVent = mVentaCopa + mVentaBot;
+                return `<tr>${mNom}
+                <td style="text-align:center;white-space:nowrap">${_nc(meaBot)} pza</td>
+                <td style="text-align:center;color:var(--green)">${ment>0?'+'+_nc(ment)+' pza':'—'}</td>
+                <td style="text-align:center;color:var(--viol)">${mVentaCoct>0?_nc(mVentaCoct)+' pza':'—'}</td>
+                <td style="text-align:center;color:var(--accent)">${mVent>0?_nc(mVent)+' pza':'—'}</td>
+                <td style="text-align:center;color:var(--text-muted)">${mcancel>0?_nc(mcancel)+' pza':'—'}</td>
+                <td style="text-align:center;color:var(--red)">${mcm>0?_nc(mcm)+' pza':'—'}</td>
+                <td style="text-align:center;white-space:nowrap">${_nc(mteo)} pza</td>
+                <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(mfisBot)} pza</td>
+                <td style="text-align:center;font-weight:700;color:${mcol};white-space:nowrap">${mdif>=0?'+':''}${_nc(mdif)} pza</td>
+                <td style="text-align:center;font-size:11px;color:${mcol}">${mpct!==null?((mpct>=0?'+':'')+mpct.toFixed(1)+'%'):'—'}</td>
+                <td style="text-align:right;font-weight:600;color:${mcol};white-space:nowrap">${mDifCosto>=0?'+':''}$${mDifCosto.toFixed(2)}</td>
+            </tr>`;
+            }
+            return `<tr>${mNom}
                 <td style="text-align:center;white-space:nowrap">${_nc(meaBot)} ${mU.exist}</td>
                 <td style="text-align:center;color:var(--green)">${ment>0?'+'+_nc(ment)+' '+mU.mov:'—'}</td>
                 <td style="text-align:center;color:var(--text-dim)">${mVentaBot>0?_nc(mVentaBot)+' '+mU.mov:'—'}</td>
@@ -5736,19 +5765,37 @@ function _step5TablasHTML() {
                 <td style="text-align:right;font-weight:600;color:${mcol};white-space:nowrap">${mDifCosto>=0?'+':''}$${mDifCosto.toFixed(2)}</td>
             </tr>`;
         }).join('');
+        const esPzaComp = esPzaComp0;
         const desglose = `<tr id="compDesg-${comp.id}" style="display:none"><td colspan="12" style="padding:0;background:var(--bg)">
             <div style="padding:8px 20px 12px"><div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:5px">📐 Desglose por presentación</div>
             <table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr style="color:var(--text-dim);font-size:10px;text-transform:uppercase;letter-spacing:.5px">
-                <th style="text-align:left;padding:2px 8px">Presentación</th><th style="text-align:center">Anterior</th><th style="text-align:center">Entradas</th><th style="text-align:center">Botella</th><th style="text-align:center">Copa</th><th style="text-align:center">Coctelería</th><th style="text-align:center">Cortesía/<br>Merma</th><th style="text-align:center">Cancelac.</th><th style="text-align:center">Actual</th><th style="text-align:center">Diferencia</th><th style="text-align:center">%</th><th style="text-align:right">Dif. $</th>
+                ${esPzaComp0
+                    ? `<th style="text-align:left;padding:2px 8px">Presentación</th><th style="text-align:center">Anterior</th><th style="text-align:center">Entradas</th><th style="text-align:center">Coctelería</th><th style="text-align:center">Ventas</th><th style="text-align:center">Cancelac.</th><th style="text-align:center">Cortesía/<br>Merma</th><th style="text-align:center">Teórico</th><th style="text-align:center">Físico</th><th style="text-align:center">Diferencia</th><th style="text-align:center">%</th><th style="text-align:right">Dif. $</th>`
+                    : `<th style="text-align:left;padding:2px 8px">Presentación</th><th style="text-align:center">Anterior</th><th style="text-align:center">Entradas</th><th style="text-align:center">Botella</th><th style="text-align:center">Copa</th><th style="text-align:center">Coctelería</th><th style="text-align:center">Cortesía/<br>Merma</th><th style="text-align:center">Cancelac.</th><th style="text-align:center">Actual</th><th style="text-align:center">Diferencia</th><th style="text-align:center">%</th><th style="text-align:right">Dif. $</th>`}
             </tr></thead><tbody>${desgloseRows}</tbody></table></div></td></tr>`;
-        const html = `<tr>
-            <td style="min-width:150px">
+        const _tdNom = `<td style="min-width:150px">
                 <div style="font-size:14px;font-weight:600">🧩 ${etx(comp.nombre||vf.nombre)}</div>
                 <div style="font-size:10px;color:var(--text-dim)">${members.length} presentaciones</div>
                 <span style="display:inline-block;margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;border:1px solid var(--viol);color:var(--viol)">🧩 compuesto</span>
                 <button onclick="var d=document.getElementById('compDesg-${comp.id}');d.style.display=d.style.display==='none'?'':'none';this.textContent=d.style.display==='none'?'▸ Ver desglose':'▾ Ocultar desglose'" style="margin-top:3px;margin-left:4px;font-size:9px;padding:1px 7px;border-radius:4px;cursor:pointer;border:1px solid var(--viol);background:transparent;color:var(--viol)">▸ Ver desglose</button>
                 ${_btnNotaInsumo(vf.compId||vf.insumoId)}
-            </td>
+            </td>`;
+        // Compuesto de PIEZAS: mismas columnas que sus vecinos de la tabla de
+        // piezas (teórico y físico), no las de botella/copa.
+        const htmlPza = `<tr>${_tdNom}
+            <td style="text-align:center;white-space:nowrap">${_nc(eaBot)} pza</td>
+            <td style="text-align:center;color:var(--green);white-space:nowrap">${ent>0?'+'+_nc(ent)+' pza':'—'}</td>
+            <td style="text-align:center;color:var(--viol)">${ventaCoct>0?_nc(ventaCoct)+' pza':'—'}</td>
+            <td style="text-align:center;color:var(--accent)">${(ventaCopa+ventaBot)>0?_nc(ventaCopa+ventaBot)+' pza':'—'}</td>
+            <td style="text-align:center;color:var(--text-muted)">${cancel>0?_nc(cancel)+' pza':'—'}</td>
+            <td style="text-align:center;color:var(--red)">${cm>0?_nc(cm)+' pza':'—'}</td>
+            <td style="text-align:center;white-space:nowrap">${_nc(teorico)} pza</td>
+            <td style="text-align:center;font-weight:600;white-space:nowrap">${_nc(fisBot)} pza</td>
+            <td style="text-align:center;font-weight:700;color:${color};white-space:nowrap">${dif>=0?'+':''}${_nc(dif)} pza</td>
+            <td style="text-align:center;font-size:11px;color:${color}">${pctStr}</td>
+            <td style="text-align:right;font-weight:600;color:${color};white-space:nowrap">${difCosto>=0?'+':''}$${difCosto.toFixed(2)}</td>
+        </tr>${desglose}`;
+        const html = `<tr>${_tdNom}
             <td style="text-align:center;white-space:nowrap">${_nc(eaBot)} ${uC.exist}</td>
             <td style="text-align:center;color:var(--green);white-space:nowrap">${ent>0?'+'+_nc(ent)+' '+uC.mov:'—'}</td>
             <td style="text-align:center;color:var(--text-dim)">${ventaBot>0?_nc(ventaBot)+' '+uC.mov:'—'}</td>
@@ -5761,7 +5808,7 @@ function _step5TablasHTML() {
             <td style="text-align:center;font-size:11px;color:${color}">${pctStr}</td>
             <td style="text-align:right;font-weight:600;color:${color};white-space:nowrap">${difCosto>=0?'+':''}$${difCosto.toFixed(2)}</td>
         </tr>${desglose}`;
-        return { html, dif, difCosto, vend: ventaBot + ventaCopa + ventaCoct };
+        return { html: esPzaComp ? htmlPza : html, dif, difCosto, vend: ventaBot + ventaCopa + ventaCoct, esPza: esPzaComp };
     }
 
     const COPA_THEAD = `<thead>
@@ -5806,7 +5853,14 @@ function _step5TablasHTML() {
         const gid = 's5g' + idx;
         let dif = 0, difCosto = 0, vend = 0, copaBody = '', pzaBody = '';
         b.copa.forEach(f  => { const r=_rowCopa(f);  copaBody+=r.html; dif+=r.dif; difCosto+=r.difCosto; vend+=r.vend; });
-        b.comp.forEach(vf => { const r=_rowComp(vf); copaBody+=r.html; dif+=r.dif; difCosto+=r.difCosto; vend+=r.vend; });
+        // Un compuesto de latas pertenece a la tabla de PIEZAS: en la de copas
+        // heredaba las columnas "Botella" y "Copa", que no existen para un envase
+        // que solo se vende por pieza.
+        b.comp.forEach(vf => {
+            const r = _rowComp(vf);
+            if (r.esPza) pzaBody += r.html; else copaBody += r.html;
+            dif+=r.dif; difCosto+=r.difCosto; vend+=r.vend;
+        });
         b.pza.forEach(f   => { const r=_rowPza(f);   pzaBody+=r.html; dif+=r.dif; difCosto+=r.difCosto; vend+=r.vend; });
         const unidad    = (!copaBody && pzaBody) ? 'pza' : 'cop';
         const copaTable = copaBody ? `<div class="tabla-wrap" style="overflow-x:auto"><table style="min-width:900px;font-size:13.5px">${COPA_THEAD}<tbody>${copaBody}</tbody></table></div>` : '';
@@ -5895,7 +5949,7 @@ function _step5DesgloseCard(fila, refMap) {
     var difCarta = esPB ? 0 : dif * (fila.precioCarta||0);
     var pctVal   = esPB ? null : _pctVarianza(dif, _consumoPeriodo(fila) + adjG.venta); // dif vs venta neta
     var pct      = pctVal !== null ? ((pctVal>=0?'+':'')+pctVal.toFixed(1)+'%') : '—';
-    var ventaCoct = esComp ? (fila._ventaCoct||0) : calcVentasCopasRecetas(fila.insumoId, fila.copaML);
+    var ventaCoct = esComp ? (fila._ventaCoct||0) : consumoRecetasFila(fila);
     var ventaDir  = parseFloat(fila.ventasCopasDirectas)||0;
     var ventaBot  = parseFloat(fila.ventasBotella)||0;
     var cort = parseFloat(fila.cortesiaCopas)||0, merma = parseFloat(fila.mermaCopas)||0;
