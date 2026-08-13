@@ -1309,24 +1309,26 @@ function _fusionarRows(rows) {
     rows.forEach(function(r){
         var c = compDe[r.insumoId];
         if (!c) { out.push(r); return; }
-        var toBase = function(qty){ return r.tipo === 'copa' ? qty * (r.copaML || 0) : qty; }; // copas→ml; pza/peso ya en base
-        if (!acc[c.id]) { acc[c.id] = { _comp:c, copaML:0, barraB:0, bodegaB:0, totalB:0, capBarra:0, capBodega:0, capital:0, fecha:'' }; out.push(acc[c.id]); }
+        // A UNIDADES DE CONTEO (botellas/piezas), cada miembro con SU envase.
+        // Antes se pasaba todo a ml y se devolvía en copas: el compuesto salía
+        // en una unidad que no era la de ninguna de sus columnas vecinas.
+        var copasBot = (r.contNeto > 0 && r.copaML > 0) ? r.contNeto / r.copaML : 0;
+        var aUnid = function(qty){ return (r.tipo === 'copa' && copasBot > 0) ? qty / copasBot : qty; };
+        if (!acc[c.id]) { acc[c.id] = { _comp:c, barra:0, bodega:0, total:0, capBarra:0, capBodega:0, capital:0, fecha:'', _u:'' }; out.push(acc[c.id]); }
         var fc = acc[c.id];
-        if (!fc.copaML && r.copaML > 0) fc.copaML = r.copaML; // tamaño de copa del compuesto = el de sus presentaciones
-        fc.barraB += toBase(r.barra); fc.bodegaB += toBase(r.bodega); fc.totalB += toBase(r.total);
+        if (!fc._u) fc._u = r.tipo === 'peso' ? (r.baseUnit || 'u') : (r.tipo === 'pza' ? 'pza' : 'bot');
+        fc.barra += aUnid(r.barra); fc.bodega += aUnid(r.bodega); fc.total += aUnid(r.total);
         fc.capBarra += r.capBarra; fc.capBodega += r.capBodega; fc.capital += r.capital;
         if ((r.fecha||'') > fc.fecha) fc.fecha = r.fecha;
     });
     return out.map(function(r){
         if (!r._comp) return r;
         var c = r._comp;
-        // Estándar único: el compuesto SIEMPRE se muestra en COPAS (ml acumulados ÷ copa),
-        // sin importar la unidad que tuviera guardada de antes (lt/botella/…).
-        var conv = function(b){ return r.copaML > 0 ? b / r.copaML : b; };
-        var totU = conv(r.totalB);
-        return { insumoId:'_comp_'+c.id, nombre:c.nombre, familia:'🧩 Compuesto', tipo:'_comp', unidadComp:'cop',
-            barra:conv(r.barraB), bodega:conv(r.bodegaB), total:totU,
-            costoUnit: totU>0 ? r.capital/totU : 0, capital:r.capital, capBarra:r.capBarra, capBodega:r.capBodega, fecha:r.fecha };
+        // Mismas columnas que cualquier otra fila: existencias en unidades de
+        // conteo y costo promedio por unidad (capital ÷ total).
+        return { insumoId:'_comp_'+c.id, nombre:c.nombre, familia:'🧩 Compuesto', tipo:'_comp', unidadComp:r._u||'bot',
+            barra:r.barra, bodega:r.bodega, total:r.total,
+            costoUnit: r.total>0 ? r.capital/r.total : 0, capital:r.capital, capBarra:r.capBarra, capBodega:r.capBodega, fecha:r.fecha };
     });
 }
 // Compuestos del inventario ACTUAL (filasCaptura) → para el Reporte Directivo.
@@ -1720,6 +1722,26 @@ function _teoricoCompuestoCopas(comp) {
     });
     return sup;
 }
+/* ── Un compuesto es una SUMA, no una conversión ────────────────────────
+   Junta 2-6 productos (mismo destilado en 750 ml, 1 L, etc.) y muestra el
+   total. Cada miembro conserva SU envase: las botellas de uno no valen lo
+   mismo que las del otro, así que se convierte miembro por miembro con su
+   propio contNeto/copaML — antes se dividía todo entre 750 ml parejo y de ahí
+   salían las "cantidades raras". */
+function _botellasDeFila(f, copas) {
+    var cb = (f && f.contNeto > 0 && f.copaML > 0) ? f.contNeto / f.copaML : 0;
+    return cb > 0 ? (copas || 0) / cb : (copas || 0);
+}
+function _miembrosFila(comp) {
+    return ((comp && comp.miembros) || [])
+        .map(function (mid) { return filasCaptura.find(function (x) { return x.insumoId === mid; }); })
+        .filter(Boolean);
+}
+// Σ sobre los miembros, en BOTELLAS de cada quien.
+function _compSumaBot(comp, fn) {
+    return _miembrosFila(comp).reduce(function (s, m) { return s + _botellasDeFila(m, fn(m)); }, 0);
+}
+
 // Fila VIRTUAL del compuesto para renderizar como un insumo copa más.
 function _virtualFilaCompuesto(comp) {
     var mems = (comp.miembros||[]).map(function(mid){ return filasCaptura.find(function(x){ return x.insumoId === mid; }); }).filter(Boolean);
@@ -1734,8 +1756,20 @@ function _virtualFilaCompuesto(comp) {
         nombre: comp.nombre, categoria: '🧩 Compuesto', subcategoria: '', familia: '🧩 Compuestos',
         tipo: 'copa', copaML: _copaMLCompuesto(comp), contNeto: 0,
         costoUnitario: m0 ? (m0.costoUnitario || 0) : 0, precioCarta: m0 ? (m0.precioCarta || 0) : 0,
-        ventasCopasDirectas: vD, cortesiaCopas: cD, mermaCopas: mD, ventasBotella: 0,
-        _existCopas: _existenciaCompuestoCopas(comp), _teoricoCopas: _teoricoCompuestoCopas(comp)
+        ventasCopasDirectas: vD, cortesiaCopas: cD, mermaCopas: mD,
+        // Antes iba en 0: si un miembro vendía botellas completas, el compuesto
+        // no las mostraba y el resultado no cuadraba con la suma de sus partes.
+        ventasBotella: mems.reduce(function(s,m){ return s + (parseFloat(m.ventasBotella)||0); }, 0),
+        _existCopas: _existenciaCompuestoCopas(comp), _teoricoCopas: _teoricoCompuestoCopas(comp),
+        // Datos que SÍ viven en los miembros y el compuesto solo suma:
+        _entBot:   mems.reduce(function(s,m){ return s + (getEntradasBottles(m.insumoId)||0); }, 0),
+        _entLista: mems.reduce(function(a,m){ return a.concat((_entradasDeInsumo(m.insumoId)||[]).map(function(e){
+                       return Object.assign({}, e, { _de: m.nombre }); })); }, []),
+        _ventaCoct: mems.reduce(function(s,m){ return s + (calcVentasCopasRecetas(m.insumoId, m.copaML)||0); }, 0),
+        _cancel:    mems.reduce(function(s,m){ return s + (getCancelacionesCopas(m.insumoId)||0); }, 0),
+        _eaBot:     mems.reduce(function(s,m){ return s + _botellasDeFila(m, parseFloat(m.existenciaAnterior)||0); }, 0),
+        _existBot:  _compSumaBot(comp, function(m){ return calcExistencia(m); }),
+        _teoBot:    _compSumaBot(comp, function(m){ return calcExistenciaTeorica(m); })
     };
 }
 function updVentasCompuesto(compId, campo, val) {
@@ -5839,19 +5873,19 @@ function _step5DesgloseCard(fila, refMap) {
     var difCarta = esPB ? 0 : dif * (fila.precioCarta||0);
     var pctVal   = esPB ? null : _pctVarianza(dif, _consumoPeriodo(fila) + adjG.venta); // dif vs venta neta
     var pct      = pctVal !== null ? ((pctVal>=0?'+':'')+pctVal.toFixed(1)+'%') : '—';
-    var ventaCoct = esComp ? 0 : calcVentasCopasRecetas(fila.insumoId, fila.copaML);
+    var ventaCoct = esComp ? (fila._ventaCoct||0) : calcVentasCopasRecetas(fila.insumoId, fila.copaML);
     var ventaDir  = parseFloat(fila.ventasCopasDirectas)||0;
     var ventaBot  = parseFloat(fila.ventasBotella)||0;
     var cort = parseFloat(fila.cortesiaCopas)||0, merma = parseFloat(fila.mermaCopas)||0;
-    var cancel = esComp ? 0 : getCancelacionesCopas(fila.insumoId);
+    var cancel = esComp ? (fila._cancel||0) : getCancelacionesCopas(fila.insumoId);
     var _n1 = function(v){ return v%1 ? (Math.round(v*10)/10).toFixed(1) : v; };
     var eaDisp, fiDisp, uEx;
     if (esComp) {
-        var uF = (getCompuestos().find(function(c){return c.id===fila.compId;})||{}).unidad || 'lt';
-        uEx = uF==='lt'?'L':uF==='botella'?'bot':uF;
-        var cml = fila.copaML||0;
-        var toF = function(c){ if(!cml) return c; var ml=c*cml; return (uF==='lt'||uF==='kg')?ml/1000:uF==='botella'?ml/750:(uF==='ml'||uF==='g')?ml:ml/1000; };
-        eaDisp = _n1(toF(ea)); fiDisp = _n1(toF(fisico));
+        // El compuesto se lee en BOTELLAS: es la suma de las botellas de sus
+        // miembros, cada uno con su propio envase. Antes convertía a litros o
+        // dividía entre 750 ml fijos y el número no se parecía a nada.
+        uEx = 'bot';
+        eaDisp = _n1(fila._eaBot||0); fiDisp = _n1(fila._existBot||0);
     } else {
         uEx = fila.tipo==='pza'?'pza':(fila.tipo==='peso'?(fila.baseUnit||'u'):'bot');
         eaDisp = copasBot>0 ? _n1(ea/copasBot) : _n1(ea);
@@ -5860,9 +5894,11 @@ function _step5DesgloseCard(fila, refMap) {
     var pesosAct = (fila.pesos||[]).filter(function(p){return parseFloat(p)>0;}).map(function(p){return (Math.round(parseFloat(p)*1000)/1000)+' kg';});
     var prevFila = esComp ? null : (refMap ? refMap[fila.insumoId] : _filaAnteriorInsumo(fila.insumoId));
     var pesosAnt = prevFila ? (prevFila.pesos||[]).filter(function(p){return parseFloat(p)>0;}).map(function(p){return (Math.round(parseFloat(p)*1000)/1000)+' kg';}) : [];
-    var entradas = esComp ? [] : _entradasDeInsumo(fila.insumoId);
-    var entTotal = esComp ? 0 : getEntradasBottles(fila.insumoId);
-    var uEnt = esComp ? uEx : _unidadCompra(fila);
+    // Las entradas del compuesto son las de sus miembros sumadas — antes iban
+    // en 0 por código, así que compraste 12 botellas y el compuesto decía "—".
+    var entradas = esComp ? (fila._entLista||[]) : _entradasDeInsumo(fila.insumoId);
+    var entTotal = esComp ? (fila._entBot||0)   : getEntradasBottles(fila.insumoId);
+    var uEnt = esComp ? 'bot' : _unidadCompra(fila);
     var fila2 = function(lbl, val, col){ return '<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;font-size:12px"><span style="color:var(--text-dim)">'+lbl+'</span><span style="color:'+(col||'var(--text)')+';font-weight:600;text-align:right">'+val+'</span></div>'; };
     var ventasParts = [];
     if (ventaDir>0)  ventasParts.push(_n1(ventaDir)+' copa');
@@ -5873,7 +5909,7 @@ function _step5DesgloseCard(fila, refMap) {
         '<div style="font-size:10px;color:var(--text-dim);margin-bottom:10px">'+etx(esComp?'Compuesto':insumoMeta(fila))+'</div>'+
         fila2('Exist. anterior', eaDisp+' '+uEx+(pesosAnt.length?' <span style="font-size:10px;color:var(--text-dim)">('+pesosAnt.join(', ')+')</span>':''))+
         fila2('Entradas', entTotal>0?'+'+_n1(entTotal)+' '+uEnt:'—', entTotal>0?'var(--green)':'var(--text-dim)')+
-        (entradas.length?'<div style="font-size:10px;color:var(--text-dim);padding:1px 0 4px 10px;line-height:1.6">'+entradas.map(function(e){return '• '+_n1(e.cantidad)+' '+uEnt+(e.fecha?' · '+e.fecha:'')+(e.tipo?' ('+tipoEntradaLabel(e.tipo)+')':'');}).join('<br>')+'</div>':'')+
+        (entradas.length?'<div style="font-size:10px;color:var(--text-dim);padding:1px 0 4px 10px;line-height:1.6">'+entradas.map(function(e){return '• '+_n1(e.cantidad)+' '+uEnt+(e._de?' · '+etx(e._de):'')+(e.fecha?' · '+e.fecha:'')+(e.tipo?' ('+tipoEntradaLabel(e.tipo)+')':'');}).join('<br>')+'</div>':'')+
         fila2('Ventas', ventasParts.length?ventasParts.join(' · '):'—', 'var(--accent)')+
         fila2('Cortesía / Merma', (cort+merma)>0?_n1(cort+merma)+' cop':'—', (cort+merma)>0?'var(--red)':'var(--text-dim)')+
         fila2('Cancelaciones', cancel>0?_n1(cancel)+' cop':'—', 'var(--text-muted)')+
