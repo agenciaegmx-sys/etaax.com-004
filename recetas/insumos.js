@@ -2423,11 +2423,37 @@
        return n || 'unidad';
    }
    function _subUnidadCardHTML(p, i) {
-       if (!(parseFloat(p.unidadesPorPieza) > 1)) return '';
+       var hay = parseFloat(p.unidadesPorPieza) > 1;
        var v = parseFloat(p.costoSubUnidad) || 0;
-       return '<div class="meta-item"><label id="lbl-subun-'+i+'">Costo por '+etx(_subUnidadNombre(p))+' '+_MXN+'</label>'
+       return '<div class="meta-item" id="box-subun-'+i+'"'+(hay?'':' style="display:none"')+'>'
+           + '<label id="lbl-subun-'+i+'">Costo por '+etx(_subUnidadNombre(p))+' '+_MXN+'</label>'
            + '<div id="ref-subun-'+i+'" style="background:var(--surface);border:1px solid var(--blue);border-radius:6px;'
            + 'padding:8px 12px;font-size:14px;color:var(--blue);font-weight:700">'+fmtMXN(v, 3)+'</div></div>';
+   }
+
+   /* El contenido se captura POR PIEZA (la bolsa completa), no por sub-unidad.
+      Es donde se confunde cualquiera: "cada pieza trae 40 tostadas" invita a
+      escribir el peso de UNA tostada, y entonces el costo por kilo sale 40
+      veces más caro. Esta línea muestra la división en vivo para que el error
+      salte a la vista. */
+   function _hintSubUnidadHTML(p, i) {
+       return '<div id="hint-subun-'+i+'" style="font-size:10.5px;color:var(--blue);margin:-6px 0 8px;line-height:1.5">'
+           + _hintSubUnidadTexto(p) + '</div>';
+   }
+   function _hintSubUnidadTexto(p) {
+       var n = parseFloat(p.unidadesPorPieza) || 0;
+       var c = parseFloat(p.contNeto) || 0;
+       if (!(n > 1) || c <= 0) return '';
+       var um = (p.umContenido || 'G').toUpperCase();
+       var cada = c / n;
+       var nom = _subUnidadNombre(p);
+       return '📐 El contenido es de la PIEZA completa: ' + c + ' ' + um + ' ÷ ' + n + ' ' + etx(nom)
+            + ' = <b>' + (cada < 1 ? cada.toFixed(3) : (Math.round(cada*100)/100)) + ' ' + um + '</b> cada ' + etx(nom.replace(/s$/,''))
+            + '. Si lo que capturaste es lo que pesa una sola, multiplícalo por ' + n + '.';
+   }
+   function _pintarHintSubUnidad(p, i) {
+       var el = document.getElementById('hint-subun-'+i);
+       if (el) el.innerHTML = _hintSubUnidadTexto(p);
    }
 
    function _calcCostoSubUnidad(p, costoPieza) {
@@ -2640,12 +2666,17 @@
                if (_elP) _elP.textContent = fmtMXN(_cp);
                if (_elC) _elC.textContent = fmtMXN(_cuBig2);
                if (_elS) _elS.textContent = fmtMXN(_cuSmall2, 3);
-               const _elU = document.getElementById('ref-subun-'+i);
-               const _elUL= document.getElementById('lbl-subun-'+i);
-               if (_elU) _elU.textContent = fmtMXN(parseFloat(p.costoSubUnidad)||0, 3);
-               if (_elUL) _elUL.textContent = 'Costo por '+_subUnidadNombre(p)+' '+_MXN.replace(/<[^>]+>/g,'');
-               // La tarjeta aparece/desaparece al declarar (o borrar) las sub-unidades
-               if ((campo === 'unidadesPorPieza' || campo === 'nombreSubUnidad') && !_elU) renderPresentaciones();
+               // La tarjeta SIEMPRE está en el DOM y solo se muestra/oculta: volver a
+               // pintar el formulario en cada tecla mataba el foco y solo dejaba
+               // escribir un dígito en "Cada pieza trae".
+               const _elUW = document.getElementById('box-subun-'+i);
+               const _elU  = document.getElementById('ref-subun-'+i);
+               const _elUL = document.getElementById('lbl-subun-'+i);
+               const _hay  = parseFloat(p.unidadesPorPieza) > 1;
+               if (_elUW) _elUW.style.display = _hay ? '' : 'none';
+               if (_elU)  _elU.textContent  = fmtMXN(parseFloat(p.costoSubUnidad)||0, 3);
+               if (_elUL) _elUL.textContent = 'Costo por '+_subUnidadNombre(p)+' MXN';
+               _pintarHintSubUnidad(p, i);
            }
        }
    
@@ -3259,7 +3290,10 @@
                    <!-- FILA 1: Contenido / Peso compra · Unidad -->
                    <div class="mg-2">
                        <div class="meta-item">
-                           <label>${esBarril ? 'Contenido por vaso/jarra' : 'Contenido por pieza'}</label>
+                           <label>${esBarril ? 'Contenido por vaso/jarra'
+                               : (parseFloat(p.unidadesPorPieza) > 1
+                                   ? 'Contenido por pieza <span style="text-transform:none;letter-spacing:0;color:var(--blue)">(las '+(parseFloat(p.unidadesPorPieza)||0)+' '+etx(_subUnidadNombre(p))+' juntas)</span>'
+                                   : 'Contenido por pieza')}</label>
                            <input type="number" value="${p.contNeto}" placeholder="${esCarne?'1000':esAbarrote?'500':'700'}"
                                oninput="updPres(${i},'contNeto',this.value)">
                        </div>
@@ -3272,6 +3306,7 @@
                            </select>
                        </div>
                    </div>
+                   ${_hintSubUnidadHTML(p, i)}
 
                    <!-- Masa drenada (solo abarrotes) -->
                    ${esAbarrote ? `<div class="mg-2">
