@@ -5550,7 +5550,9 @@ function _step5TablasHTML() {
         .filter(vf => !q || (vf.nombre||'').toLowerCase().includes(q));
     if (_step5Modo === 'galeria') return _step5GaleriaHTML(q, mapaC5, vcomps);
 
-    const _nc  = v => (v % 1 ? (Math.round(v*10)/10).toFixed(1) : v);
+    // 5.5 · 2.4 · 3 — un decimal cuando hace falta, entero cuando no. El módulo
+    // sobre el crudo dejaba pasar la basura de punto flotante (6.0000001 → "6.0").
+    const _nc  = v => { const r = Math.round((parseFloat(v)||0) * 10) / 10; return r % 1 ? r.toFixed(1) : String(r); };
     const GPROD = '🏭 Producción propia';
 
     // ── Agrupar TODO por categoría. Bebidas con copa → tabla "copa"; secos/pza →
@@ -5692,12 +5694,19 @@ function _step5TablasHTML() {
         const comp = getCompuestos().find(c => c.id === vf.compId) || {};
         const members = (comp.miembros||[]).map(mid => filasCaptura.find(f=>f.insumoId===mid)).filter(Boolean);
         let ea=0, ent=0, cancel=0, ventaBot=0, ventaCopa=0, ventaCoct=0, cm=0, eaBot=0, fisBot=0;
+        // Entradas y venta por botella también EN BOTELLAS, como en las filas
+        // individuales de la misma tabla: ahí dicen "+2 bot" y "1 bot", y el
+        // compuesto decía "+98 cop" y "15.6 cop" — el mismo dato en otra unidad,
+        // que es justo lo que hacía ilegible el renglón.
+        let entU=0, ventaBotU=0;
         const uC = _uComp(members);
         members.forEach(m => {
             ea       += parseFloat(m.existenciaAnterior)||0;
             ent      += getEntradasCopas(m);
+            entU     += getEntradasBottles(m.insumoId);
             cancel   += getCancelacionesCopas(m.insumoId);
             const copasBot = _uDe(m).copasBot;
+            ventaBotU+= parseFloat(m.ventasBotella)||0;
             ventaBot += (parseFloat(m.ventasBotella)||0) * (copasBot || 1);
             ventaCopa+= parseFloat(m.ventasCopasDirectas)||0;
             ventaCoct+= consumoRecetasFila(m);
@@ -5721,7 +5730,9 @@ function _step5TablasHTML() {
             const mcancel = getCancelacionesCopas(m.insumoId);
             const mU = _uDe(m);
             const mCopasBot = mU.copasBot;
-            const mVentaBot = (parseFloat(m.ventasBotella)||0) * (mCopasBot || 1);
+            const mVentaBotU = parseFloat(m.ventasBotella)||0;           // botellas, como se venden
+            const mVentaBot = mVentaBotU * (mCopasBot || 1);             // en copas, para el % y los totales
+            const mentU = getEntradasBottles(m.insumoId);                // entradas: se compran botellas
             const mVentaCopa = parseFloat(m.ventasCopasDirectas)||0;
             const mVentaCoct = consumoRecetasFila(m);
             const mcm = (parseFloat(m.cortesiaCopas)||0) + (parseFloat(m.mermaCopas)||0);
@@ -5753,8 +5764,8 @@ function _step5TablasHTML() {
             }
             return `<tr>${mNom}
                 <td style="text-align:center;white-space:nowrap">${_nc(meaBot)} ${mU.exist}</td>
-                <td style="text-align:center;color:var(--green)">${ment>0?'+'+_nc(ment)+' '+mU.mov:'—'}</td>
-                <td style="text-align:center;color:var(--text-dim)">${mVentaBot>0?_nc(mVentaBot)+' '+mU.mov:'—'}</td>
+                <td style="text-align:center;color:var(--green)">${mentU>0?'+'+_nc(mentU)+' '+mU.exist:'—'}</td>
+                <td style="text-align:center;color:var(--accent)">${mVentaBotU>0?_nc(mVentaBotU)+' '+mU.exist:'—'}</td>
                 <td style="text-align:center;color:var(--accent)">${mVentaCopa>0?_nc(mVentaCopa)+' '+mU.mov:'—'}</td>
                 <td style="text-align:center;color:var(--viol)">${mVentaCoct>0?_nc(mVentaCoct)+' '+mU.mov:'—'}</td>
                 <td style="text-align:center;color:var(--red)">${mcm>0?_nc(mcm)+' '+mU.mov:'—'}</td>
@@ -5797,8 +5808,8 @@ function _step5TablasHTML() {
         </tr>${desglose}`;
         const html = `<tr>${_tdNom}
             <td style="text-align:center;white-space:nowrap">${_nc(eaBot)} ${uC.exist}</td>
-            <td style="text-align:center;color:var(--green);white-space:nowrap">${ent>0?'+'+_nc(ent)+' '+uC.mov:'—'}</td>
-            <td style="text-align:center;color:var(--text-dim)">${ventaBot>0?_nc(ventaBot)+' '+uC.mov:'—'}</td>
+            <td style="text-align:center;color:var(--green);white-space:nowrap">${entU>0?'+'+_nc(entU)+' '+uC.exist:'—'}</td>
+            <td style="text-align:center;color:var(--accent)">${ventaBotU>0?_nc(ventaBotU)+' '+uC.exist:'—'}</td>
             <td style="text-align:center;color:var(--accent)">${ventaCopa>0?_nc(ventaCopa)+' '+uC.mov:'—'}</td>
             <td style="text-align:center;color:var(--viol)">${ventaCoct>0?_nc(ventaCoct)+' '+uC.mov:'—'}</td>
             <td style="text-align:center">${cm>0?`<div style="color:var(--red);font-size:12px;font-weight:600">${_nc(cm)} ${uC.mov}</div>`:'—'}</td>
