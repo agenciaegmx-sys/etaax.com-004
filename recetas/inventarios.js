@@ -1528,27 +1528,42 @@ function _renderReporteExistencias(){
         html += '<div style="padding:10px 16px 4px;font-size:11px;color:var(--text-dim)">🔒 Vista operativa · existencias y costo por producto (sin totales en dinero)</div>';
     }
 
-    // Tabla: UNA fila por insumo con Barra | Bodega | Total
+    // Tabla: UNA fila por insumo, SEPARADA POR GRUPO de producto (igual que el
+    // desglose del inventario y que este mismo reporte impreso). Corrida, con
+    // 260 renglones, no hay forma de cotejarla contra la bodega.
     rows.sort(function(a,b){ return b.total - a.total; });
     var totBarra = rows.reduce(function(s,r){ return s + r.capBarra;  }, 0);
     var totBodega= rows.reduce(function(s,r){ return s + r.capBodega; }, 0);
     var totCap   = rows.reduce(function(s,r){ return s + r.capital;   }, 0);
+    var _nColsRep = op ? 7 : 8;
+    var _gruposRep = {};
+    rows.forEach(function(r){ var g = r.familia || 'Sin grupo'; (_gruposRep[g] = _gruposRep[g] || []).push(r); });
+    var _filaRep = function(r){
+        var cont = _fmtContenido(r);
+        return '<tr><td style="font-weight:600;padding-left:16px">'+etx(r.nombre)+(cont?'<div style="font-size:10px;color:#7ab8f5;font-weight:400">📦 '+cont+'</div>':'')+'</td>'+
+            '<td style="color:var(--text-dim)">'+etx(r.familia)+'</td>'+
+            '<td style="text-align:right">'+_fmtCant(r.barra, r)+'</td>'+
+            '<td style="text-align:right">'+_fmtCant(r.bodega, r)+'</td>'+
+            '<td style="text-align:right;font-weight:700;color:var(--text)">'+_fmtCant(r.total, r)+'</td>'+
+            '<td style="text-align:right;color:var(--text-muted)">'+_repMoney(r.costoUnit)+'</td>'+
+            (op ? '' : '<td style="text-align:right;color:var(--accent);font-weight:600">'+_repMoney(r.capital)+'</td>')+
+            '<td style="text-align:center;color:var(--text-dim);font-size:11px">'+_repFecha(r.fecha)+'</td></tr>';
+    };
+    var _cuerpoRep = Object.keys(_gruposRep).sort(function(a,b){ return String(a).localeCompare(String(b),'es'); }).map(function(g){
+        var lista = _gruposRep[g];
+        var sub = lista.reduce(function(t,r){ return t + (r.capital||0); }, 0);
+        return '<tr><td colspan="'+_nColsRep+'" style="background:rgba(61,190,122,.08);border-top:2px solid rgba(61,190,122,.35);'+
+            'padding:8px 12px;font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--green)">'+
+            etx(g)+' <span style="font-weight:400;color:var(--text-dim);letter-spacing:.5px;text-transform:none">· '+lista.length+
+            ' insumo'+(lista.length!==1?'s':'')+(op?'':' · '+_repMoney(sub))+'</span></td></tr>' +
+            lista.map(_filaRep).join('');
+    }).join('');
     html += '<div class="tabla-wrap" style="padding:0 8px"><table style="font-size:12px"><thead><tr>'+
         '<th style="text-align:left">Insumo</th><th style="text-align:left">Familia</th>'+
         '<th style="text-align:right">Exist. Barra</th><th style="text-align:right">Exist. Bodega</th>'+
         '<th style="text-align:right">Total exist.</th><th style="text-align:right">Costo prov.</th>'+
         (op ? '' : '<th style="text-align:right">Capital</th>')+'<th style="text-align:center">Última existencia</th></tr></thead><tbody>'+
-        rows.map(function(r){
-            var cont = _fmtContenido(r);
-            return '<tr><td style="font-weight:600">'+etx(r.nombre)+(cont?'<div style="font-size:10px;color:#7ab8f5;font-weight:400">📦 '+cont+'</div>':'')+'</td>'+
-                '<td style="color:var(--text-dim)">'+etx(r.familia)+'</td>'+
-                '<td style="text-align:right">'+_fmtCant(r.barra, r)+'</td>'+
-                '<td style="text-align:right">'+_fmtCant(r.bodega, r)+'</td>'+
-                '<td style="text-align:right;font-weight:700;color:var(--text)">'+_fmtCant(r.total, r)+'</td>'+
-                '<td style="text-align:right;color:var(--text-muted)">'+_repMoney(r.costoUnit)+'</td>'+
-                (op ? '' : '<td style="text-align:right;color:var(--accent);font-weight:600">'+_repMoney(r.capital)+'</td>')+
-                '<td style="text-align:center;color:var(--text-dim);font-size:11px">'+_repFecha(r.fecha)+'</td></tr>';
-        }).join('')+
+        _cuerpoRep+
         (op ? '' :
         '<tr style="border-top:2px solid var(--border)"><td colspan="6" style="text-align:right;font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:1px;color:var(--text-muted)">'+
         'Capital · Barra '+_repMoney(totBarra)+' · Bodega '+_repMoney(totBodega)+'</td>'+
