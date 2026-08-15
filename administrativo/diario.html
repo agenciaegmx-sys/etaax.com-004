@@ -4387,6 +4387,7 @@ async function _gSbInit() {
         _supabase.from('gf_fijos').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
         _supabase.from('gf_nominas').select('datos').eq('negocio_id', negId).maybeSingle(),
         _supabase.from('staff').select('datos').eq('negocio_id', negId),
+        _supabase.from('horarios').select('datos').eq('negocio_id', negId),
     ]);
     if (!r[0].error) _cacheGastos = _sinDelPend('gastos', (r[0].data||[]).map(function(x){return x.datos;}));
     if (!r[1].error) _cacheProvs  = (r[1].data||[]).map(function(x){return x.datos;});
@@ -4399,6 +4400,11 @@ async function _gSbInit() {
     if (!r[3].error) _cacheFijos  = (r[3].data||[]).map(function(x){return x.datos;});
     if (!r[4].error && r[4].data) _cacheNominas = r[4].data.datos || {};
     if (!r[5].error) _cacheStaff  = (r[5].data||[]).map(function(x){return x.datos;});
+    // Horarios: de aquí salen los días asistidos y los retardos del periodo.
+    if (!r[6].error) {
+        _cacheHorarios = {};
+        (r[6].data||[]).forEach(function(x){ var d=x.datos; if (d && d.id) _cacheHorarios[d.id] = d; });
+    }
     if (window.NominaParams) { try { await NominaParams.sync(negId); } catch(e){} }
     initCategorias();
     gRenderAll();
@@ -5291,6 +5297,84 @@ function _diffDias(desde,hasta){
     return n2>0?n2:0;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   ASISTENCIA DESDE HORARIOS
+   El rol vive en la tabla `horarios`, un registro por sucursal+semana ISO con
+   turnos[staffId].dN = { in, out, asis:'si'|'no', ret:true }. Aquí se recorre el
+   rango del pago semana por semana y se cuenta lo que de verdad pasó: días
+   asistidos, faltas, retardos y horas efectivas. Es lo que precarga el modal para
+   que nadie teclee los días de memoria.
+   ══════════════════════════════════════════════════════════════════════════════ */
+var _cacheHorarios = null;
+/* Nube + respaldo local, con la nube ganando. Si la consulta trae 0 filas —o no hay
+   sesión— el caché queda en {} y quedarse ahí dejaba el rol invisible aunque
+   estuviera capturado en este equipo. */
+function _horLocal(){
+    // OJO: diario.html no tiene _sk() —es de las páginas de recetas—, así que la
+    // llave se arma aquí. Con _sk el try se comía el ReferenceError y el respaldo
+    // local nunca se leía.
+    var loc = {}, negId = getNegocioActivo();
+    try { loc = JSON.parse(localStorage.getItem('etaax_'+negId+'_horarios')||'{}') || {}; } catch(e){}
+    if (_cacheHorarios && Object.keys(_cacheHorarios).length) return Object.assign({}, loc, _cacheHorarios);
+    return loc;
+}
+function _horRecId(sucId, weekStr){ return 'hor_' + (sucId || 'suc_principal') + '_' + weekStr; }
+function _durTurno(t){
+    if (!t || !t.in || !t.out) return 0;
+    var a = t.in.split(':'), b = t.out.split(':');
+    var mi = (+a[0])*60 + (+a[1]), mo = (+b[0])*60 + (+b[1]);
+    if (mo <= mi) mo += 1440;                    // turno que cruza la medianoche
+    return (mo - mi) / 60;
+}
+/* Recorre día por día entre desde y hasta (inclusive) y lee el turno de ese día en
+   el registro de SU semana. Así un periodo quincenal o mensual cruza semanas sin
+   que haya que pensarlo. */
+function _asistenciaRango(staffId, desde, hasta){
+    var res = { asistidos:0, faltas:0, sinMarcar:0, retardos:0, horas:0, conRol:0, semanas:{} };
+    if (!staffId || !desde || !hasta) return res;
+    var st = (_cacheStaff||[]).find(function(x){ return x.id===staffId; }) || {};
+    var suc = st.sucursalId || 'suc_principal';
+    var recs = _horLocal();
+    var d = new Date(desde+'T12:00:00'), fin = new Date(hasta+'T12:00:00'), guard = 0;
+    while (d <= fin && guard++ < 400){
+        var wk = getWeekStr(d);
+        var rec = recs[_horRecId(suc, wk)] || recs[_horRecId('suc_principal', wk)];
+        if (rec && rec.turnos && rec.turnos[staffId]){
+            var idx = (d.getDay() + 6) % 7;      // lunes = 0
+            var t = rec.turnos[staffId]['d'+idx];
+            if (t && !t.desc && t.in){
+                res.conRol++;
+                res.semanas[wk] = 1;
+                if (t.ret) res.retardos++;
+                if (t.asis === 'si'){ res.asistidos++; res.horas += _durTurno(t); }
+                else if (t.asis === 'no') res.faltas++;
+                else res.sinMarcar++;
+            }
+        }
+        d.setDate(d.getDate()+1);
+    }
+    return res;
+}
+/* Periodo sugerido según la periodicidad del colaborador, anclado al CALENDARIO:
+   semanal = la semana que corre (lunes a domingo), quincenal = 1–15 o 16–fin,
+   mensual = el mes en curso. Antes se ofrecía "hoy + 6 días", que casi nunca es
+   el periodo real que se paga. */
+function _periodoSugerido(tipo){
+    var hoy = new Date(), y = hoy.getFullYear(), m = hoy.getMonth(), day = hoy.getDate();
+    if (tipo === 'semana'){
+        var lun = new Date(y, m, day - ((hoy.getDay()+6)%7));
+        var dom = new Date(lun); dom.setDate(lun.getDate()+6);
+        return { desde:_pnISO(lun), hasta:_pnISO(dom) };
+    }
+    if (tipo === 'quincena'){
+        return day <= 15
+            ? { desde:_pnISO(new Date(y,m,1)),  hasta:_pnISO(new Date(y,m,15)) }
+            : { desde:_pnISO(new Date(y,m,16)), hasta:_pnISO(new Date(y,m+1,0)) };
+    }
+    if (tipo === 'mes') return { desde:_pnISO(new Date(y,m,1)), hasta:_pnISO(new Date(y,m+1,0)) };
+    return null;   // personalizado: se respeta lo que haya
+}
+
 function _ensurePagoNomModal(){
     if(document.getElementById('modalPagoNom'))return;
     var el=document.createElement('div');
@@ -5314,6 +5398,7 @@ function _ensurePagoNomModal(){
             +'<div class="fg"><label>Subtotal sueldo</label><input type="text" id="pnSubtotal" readonly style="opacity:.85"></div>'
           +'</div>'
           +'<div id="pnPrimaDom" style="display:none;margin-top:8px;font-size:12px;color:var(--accent);background:rgba(245,200,66,.08);border:1px solid rgba(245,200,66,.25);border-radius:6px;padding:8px 12px"></div>'
+          +'<div id="pnAsisBox" style="margin-top:8px;font-size:12px;color:var(--text-muted);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;line-height:1.5"></div>'
         +'</div>'
         +'<div class="gs-sec"><div class="gs-sec-title">Conceptos adicionales</div>'
           +'<div class="fg-row-3" style="align-items:end">'
@@ -5376,29 +5461,50 @@ function abrirPagoNomina(staffId){
 
 function _pnISO(dt){ return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); }
 function _pnTipoChange(){
-    // Las fechas SIEMPRE son editables; al elegir un tipo se prellenan sugeridas.
+    // Las fechas SIEMPRE son editables; al elegir un tipo se prellena el periodo del
+    // CALENDARIO (la semana que corre, la quincena en curso, el mes), no "hoy + N días",
+    // que casi nunca es el periodo que de verdad se paga.
     var tipo=document.getElementById('pnTipo').value;
-    var hoy=new Date(), y=hoy.getFullYear(), m=hoy.getMonth(), day=hoy.getDate();
-    if(tipo==='semana'){
-        document.getElementById('pnDesde').value=_pnISO(new Date(y,m,day));
-        document.getElementById('pnHasta').value=_pnISO(new Date(y,m,day+6));
-    } else if(tipo==='quincena'){
-        document.getElementById('pnDesde').value=_pnISO(new Date(y,m,day));
-        document.getElementById('pnHasta').value=_pnISO(new Date(y,m,day+14));
-    } else if(tipo==='mes'){
-        var ult=new Date(y,m+1,0).getDate(), mm=String(m+1).padStart(2,'0');
-        document.getElementById('pnDesde').value=y+'-'+mm+'-01';
-        document.getElementById('pnHasta').value=y+'-'+mm+'-'+String(ult).padStart(2,'0');
+    var sug=_periodoSugerido(tipo);
+    if(sug){
+        document.getElementById('pnDesde').value=sug.desde;
+        document.getElementById('pnHasta').value=sug.hasta;
     }
     // 'personalizado': se respetan las fechas que ya estén puestas
     _pnRangoChange();
 }
 function _pnRangoChange(){
-    // Editar cualquier fecha recalcula los días trabajados (en todos los tipos)
     var d=document.getElementById('pnDesde').value, h=document.getElementById('pnHasta').value;
-    if(d && h){ document.getElementById('pnDias').value=_diffDias(d,h); }
+    if(d && h){
+        // Los días a pagar salen de las ASISTENCIAS marcadas en Horarios. Si el periodo
+        // no tiene rol capturado, se cae a los días del calendario (lo de antes) para
+        // no dejar el campo en cero sin explicación.
+        var a=_pagoNomStaff ? _asistenciaRango(_pagoNomStaff.id, d, h) : null;
+        document.getElementById('pnDias').value = (a && a.conRol) ? a.asistidos : _diffDias(d,h);
+        _pnPintarAsistencia(a);
+    }
     _pnCalc();
 }
+/* Panel de asistencia: de dónde salió el número. Sin esto el usuario ve un dato que
+   no puso y no sabe si confiar en él. */
+function _pnPintarAsistencia(a){
+    var box=document.getElementById('pnAsisBox'); if(!box) return;
+    if(!a || !a.conRol){
+        box.innerHTML='<span style="color:var(--text-dim)">Sin rol capturado en este periodo · los días vienen del calendario. '
+            + 'Captúralo en <b>Horarios operativos</b> para que se llenen solos.</span>';
+        box.style.borderColor='var(--border)';
+        return;
+    }
+    var partes=['<b style="color:var(--green)">'+a.asistidos+'</b> día'+(a.asistidos!==1?'s':'')+' asistido'+(a.asistidos!==1?'s':'')];
+    if(a.faltas)    partes.push('<b style="color:#ff9a9a">'+a.faltas+'</b> falta'+(a.faltas!==1?'s':''));
+    if(a.retardos)  partes.push('<b style="color:var(--accent)">'+a.retardos+'</b> retardo'+(a.retardos!==1?'s':''));
+    if(a.sinMarcar) partes.push('<b>'+a.sinMarcar+'</b> sin pasar lista');
+    box.innerHTML='🗓️ <b>Desde Horarios:</b> '+partes.join(' · ')
+        + ' · <span style="color:var(--text-dim)">'+_fmtHNom(a.horas)+' efectivas de '+a.conRol+' turno'+(a.conRol!==1?'s':'')+'</span>'
+        + (a.sinMarcar ? '<div style="margin-top:4px;color:var(--accent);font-size:11px">Hay días con turno sin pasar lista: no cuentan como asistidos.</div>' : '');
+    box.style.borderColor='rgba(61,190,122,.35)';
+}
+function _fmtHNom(h){ var hh=Math.floor(h), mm=Math.round((h-hh)*60); return mm ? (hh+'h '+mm+'m') : (hh+'h'); }
 function _pnSueldo(){ return n(document.getElementById('pnDiario').value)*n(document.getElementById('pnDias').value); }
 /* Domingos dentro del rango del periodo [desde, hasta] */
 function _pnDomingosEnRango(desde,hasta){
@@ -5642,7 +5748,12 @@ function _confirmarPagoNom(){
     if(montoPrincipal<0){ alert('El total a pagar es menor que los conceptos pagados aparte. Ajusta el total.'); return; }
 
     // Desglose del gasto principal (sueldo + prima dominical + conceptos del mismo método)
+    var _asis=_pagoNomStaff ? _asistenciaRango(_pagoNomStaff.id, document.getElementById('pnDesde').value, document.getElementById('pnHasta').value) : null;
     var desg='Sueldo: '+fmtM(n(document.getElementById('pnDiario').value))+' × '+dias+' días = '+fmtM(_pnSueldo());
+    // Queda escrito en el gasto de dónde salieron los días: si mañana alguien revisa
+    // el pago, el dato está ahí y no hay que reconstruirlo.
+    if(_asis && _asis.conRol) desg+='\n(Horarios: '+_asis.asistidos+' asistidos, '+_asis.faltas+' faltas, '
+        +_asis.retardos+' retardos, '+_fmtHNom(_asis.horas)+' efectivas)';
     var prima=_pnPrimaDom();
     if(_pnPrimaInclude && prima.monto>0) desg+='\n+ Prima dominical ('+prima.domingos+' domingo'+(prima.domingos!==1?'s':'')+'): '+fmtM(prima.monto);
     mismos.forEach(function(c){ desg+='\n+ '+c.concepto+': '+fmtM(c.monto); });
