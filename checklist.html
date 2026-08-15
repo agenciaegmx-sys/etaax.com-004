@@ -92,7 +92,7 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
         <label class="lbl" style="margin-top:6px">Nota (opcional)</label>
         <input id="runNota" class="fld" placeholder="Novedad, pendiente, incidencia…">
 
-        <label class="lbl">Evidencia · hasta 7 fotos o un video de 5 min</label>
+        <label class="lbl">Evidencia · hasta 7 fotos o un video de 1 min</label>
         <div class="foto-strip" id="runFotoStrip"></div>
         <div class="foto-cnt" id="runFotoCnt">0 / 7 fotos</div>
         <input type="file" id="runFotoCam" accept="image/*" capture="environment" style="display:none" onchange="_addFoto(this)">
@@ -299,7 +299,13 @@ async function _addFoto(input){
     if (RUN.fotos.length){ msg.className='cap-msg ok'; msg.textContent='✓ '+RUN.fotos.length+' foto(s) listas'; }
 }
 function _delFoto(i){ RUN.fotos.splice(i,1); _renderFotos(); }
-var MAX_VIDEO_SEG = 300;   // 5 minutos
+/* 60 segundos, no 5 minutos. La razón es dura: Supabase rechaza archivos de más de
+   50 MB por defecto y un video de teléfono pesa ~60 MB POR MINUTO en 1080p (y ~190 MB
+   en 4K). Con 5 minutos el colaborador grababa, esperaba la subida y recibía un error
+   al final. Se valida la duración Y el peso, porque un clip corto en 4K también revienta
+   el límite: la duración sola no basta. */
+var MAX_VIDEO_SEG = 60;
+var MAX_VIDEO_MB  = 45;    // margen bajo el tope de 50 MB de Storage
 /* Se mide la duración ANTES de subir: rechazar después de gastar los datos del
    colaborador sería peor que no aceptar video. */
 function _duracionVideo(file){
@@ -321,7 +327,14 @@ async function _addVideo(input){
     var seg = await _duracionVideo(f);
     if (seg > MAX_VIDEO_SEG + 2){
         msg.className='cap-msg err';
-        msg.textContent = 'El video dura '+Math.round(seg/60*10)/10+' min. El máximo son 5 minutos.';
+        msg.textContent = 'El video dura '+Math.round(seg)+' s. El máximo es 1 minuto — graba uno más corto.';
+        return;
+    }
+    var mb = f.size / 1048576;
+    if (mb > MAX_VIDEO_MB){
+        msg.className='cap-msg err';
+        msg.textContent = 'El video pesa '+Math.round(mb)+' MB y el máximo son '+MAX_VIDEO_MB+' MB. '
+            + 'Graba en menor calidad (Ajustes → Cámara → 1080p) o más corto.';
         return;
     }
     msg.className='cap-msg'; msg.textContent = 'Subiendo video… (puede tardar)';

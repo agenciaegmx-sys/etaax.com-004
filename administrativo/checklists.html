@@ -471,7 +471,95 @@ function renderCumplimiento(){
             '</div></div>';
     }).join('');
     cont.innerHTML='<div style="display:flex;justify-content:flex-end;margin-bottom:14px"><button class="ck-btn primary" onclick="abrirQrChecklist()">📱 QR de check list</button></div>'+
+        _bannerRetencionHTML()+
         resumen+'<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin:0 2px 8px">Ejecuciones recientes</div>'+filas;
+}
+
+/* ══ RETENCIÓN DE EVIDENCIA · 90 DÍAS ═══════════════════════════════════════
+   Las fotos y videos de los checks se borran de Storage a los 3 meses. Lo que NO
+   se borra es la ejecución: quién, cuándo, cuánto tardó, qué marcó y su porcentaje
+   siguen ahí para siempre — eso pesa unos bytes. Lo que cuesta almacenamiento es la
+   imagen, y a los 3 meses ya cumplió su función.
+
+   No se hace en automático a espaldas del usuario: se avisa cuánto hay para liberar
+   y él decide cuándo. Borrar evidencia es irreversible y puede hacer falta en un
+   conflicto laboral; esa decisión no la toma sola una app.                        */
+var RETENCION_DIAS = 90;
+function _evidenciasVencidas(){
+    var corte = Date.now() - RETENCION_DIAS*864e5;
+    return (_ejec||[]).filter(function(e){
+        if(!e) return false;
+        var t = Date.parse(e.registrado || ((e.fecha||'')+'T12:00:00'));
+        if (isNaN(t) || t >= corte) return false;
+        var f = (e.foto_urls&&e.foto_urls.length) || e.foto_url || e.video_url;
+        return !!f;
+    });
+}
+// URL pública → ruta dentro del bucket (que es lo que pide remove()).
+function _rutaDeUrl(u){
+    var m = String(u||'').match(/\/object\/public\/evidencias\/(.+)$/);
+    return m ? decodeURIComponent(m[1]) : '';
+}
+function _pesoAprox(lista){
+    // Sin llamar a Storage por cada archivo: foto ~120 KB, video ~30 MB. Es un orden
+    // de magnitud para decidir, no una factura.
+    var mb = 0;
+    lista.forEach(function(e){
+        var nf = (e.foto_urls&&e.foto_urls.length) || (e.foto_url?1:0);
+        mb += nf*0.12 + (e.video_url ? 30 : 0);
+    });
+    return mb;
+}
+function _bannerRetencionHTML(){
+    var v = _evidenciasVencidas();
+    if (!v.length) return '';
+    var mb = _pesoAprox(v);
+    return '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:rgba(245,200,66,.07);border:1px solid rgba(245,200,66,.3);border-radius:11px;padding:11px 14px;margin-bottom:14px">'
+        +'<span style="font-size:18px">🧹</span>'
+        +'<div style="flex:1;min-width:200px;font-size:12.5px;color:var(--text-muted);line-height:1.5">'
+            +'<b style="color:var(--text)">'+v.length+' ejecución'+(v.length!==1?'es':'')+' con evidencia de más de '+RETENCION_DIAS+' días</b>'
+            +' · ~'+(mb>=1?Math.round(mb):'<1')+' MB en fotos y video.<br>'
+            +'<span style="color:var(--text-dim)">Al liberar se borran las imágenes; el registro del check (quién, cuándo, qué marcó) se conserva.</span>'
+        +'</div>'
+        +'<button class="ck-btn" style="color:var(--accent);border-color:var(--accent)" onclick="purgarEvidencias()">Liberar espacio</button>'
+    +'</div>';
+}
+async function purgarEvidencias(){
+    var v = _evidenciasVencidas();
+    if (!v.length) return;
+    var mb = _pesoAprox(v);
+    var msg = 'Se borrarán las fotos y videos de '+v.length+' ejecución'+(v.length!==1?'es':'')
+            + ' con más de '+RETENCION_DIAS+' días (~'+(mb>=1?Math.round(mb):'<1')+' MB).\n\n'
+            + 'El registro del check se conserva: quién lo hizo, cuándo, cuánto tardó y qué marcó.\n\n'
+            + 'Las imágenes NO se pueden recuperar.';
+    var _hacer = async function(){
+        var rutas = [], tocadas = [];
+        v.forEach(function(e){
+            var us = (e.foto_urls&&e.foto_urls.length ? e.foto_urls.slice() : (e.foto_url?[e.foto_url]:[]));
+            if (e.video_url) us.push(e.video_url);
+            us.forEach(function(u){ var r=_rutaDeUrl(u); if(r) rutas.push(r); });
+            tocadas.push(e);
+        });
+        try {
+            // Storage acepta lotes; se parte para no mandar una lista enorme de un golpe.
+            for (var i=0;i<rutas.length;i+=100){
+                var lote = rutas.slice(i, i+100);
+                var r = await _supabase.storage.from('evidencias').remove(lote);
+                if (r.error) console.warn('[retención] no se borró un lote:', r.error.message);
+            }
+        } catch(e){ console.warn('[retención]', e); }
+        // El registro se conserva, marcado, para que la ficha explique por qué no hay fotos.
+        for (var j=0;j<tocadas.length;j++){
+            var e2 = tocadas[j];
+            e2.foto_url = ''; e2.foto_urls = []; e2.video_url = ''; e2.video_seg = 0;
+            e2.evidenciaPurgada = new Date().toISOString();
+            try { await _supabase.from('checklist_ejecuciones').update({ datos: e2 }).eq('id', e2.id); } catch(err){}
+        }
+        if (window.etaaxAlert) etaaxAlert('Listo: se liberó la evidencia de '+tocadas.length+' ejecución'+(tocadas.length!==1?'es':'')+'.');
+        render();
+    };
+    if (window.etaaxConfirm) etaaxConfirm('Liberar evidencia de más de '+RETENCION_DIAS+' días', msg, _hacer, null, { yesLabel:'Borrar imágenes' });
+    else if (confirm(msg)) _hacer();
 }
 
 /* ══ DETALLE DE UNA EJECUCIÓN ═══════════════════════════════════════════════
@@ -503,7 +591,10 @@ function verEjecucion(id){
     }).join('')+'</div>';
     if(e.video_url) ev+='<div style="margin-top:8px"><video src="'+esc(e.video_url)+'" controls preload="metadata" '
         +'style="width:100%;max-height:280px;border-radius:10px;border:1px solid var(--border);background:#000"></video></div>';
-    if(!ev) ev='<div style="font-size:12px;color:var(--text-dim);margin-top:6px">Sin evidencia adjunta.</div>';
+    if(!ev) ev = e.evidenciaPurgada
+        ? '<div style="font-size:12px;color:var(--text-dim);margin-top:6px">🧹 Las imágenes se liberaron por la política de '+RETENCION_DIAS+' días ('
+          + esc(String(e.evidenciaPurgada).slice(0,10)) + '). El registro del check se conserva completo.</div>'
+        : '<div style="font-size:12px;color:var(--text-dim);margin-top:6px">Sin evidencia adjunta.</div>';
     var dato=function(l,v){ return '<div><div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim)">'+l+'</div>'
         +'<div style="font-size:13px;color:var(--text);font-weight:600;margin-top:2px">'+v+'</div></div>'; };
     var lapso = e.horaInicio ? (esc(e.horaInicio)+' → '+esc(e.hora||'—')) : esc(e.hora||'—');
