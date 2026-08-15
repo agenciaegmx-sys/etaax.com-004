@@ -188,6 +188,7 @@ function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')
 <script src="/etaax-core.js"></script>
 <script src="/etaax-db.js"></script>
 <script src="/reporte-marca.js"></script>
+<script src="/qr-pairing.js"></script><!-- trae etaaxQrLogo: el ícono al centro del QR -->
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 <script>
@@ -454,7 +455,7 @@ function renderCumplimiento(){
         var pct=e.pct||0, col=pct>=90?'var(--green)':pct>=70?'var(--accent)':'#e05a3a';
         var t=TIPO_LBL[e.tipo]||e.tipo||'';
         var nf=(e.foto_urls&&e.foto_urls.length)||(e.foto_url?1:0);
-        return '<div style="display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:11px 13px;margin-bottom:8px">'+
+        return '<div onclick="verEjecucion(\''+esc(e.id)+'\')" style="display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:11px 13px;margin-bottom:8px;cursor:pointer" title="Ver el detalle de este check">'+
             '<div style="width:46px;height:46px;border-radius:10px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:'+col+';flex-shrink:0">'+pct+'%</div>'+
             '<div style="flex:1;min-width:0">'+
                 '<div style="font-size:13.5px;font-weight:600;color:var(--text)">'+esc(e.plantillaNombre||'Check list')+' <span style="font-weight:400;color:var(--text-dim);font-size:11px">· '+esc(t)+'</span></div>'+
@@ -471,6 +472,68 @@ function renderCumplimiento(){
     }).join('');
     cont.innerHTML='<div style="display:flex;justify-content:flex-end;margin-bottom:14px"><button class="ck-btn primary" onclick="abrirQrChecklist()">📱 QR de check list</button></div>'+
         resumen+'<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin:0 2px 8px">Ejecuciones recientes</div>'+filas;
+}
+
+/* ══ DETALLE DE UNA EJECUCIÓN ═══════════════════════════════════════════════
+   Quién lo hizo, en qué área, cuánto tardó, qué marcó tarea por tarea y su
+   evidencia. Los nombres de las tareas salen de la plantilla —la ejecución solo
+   guarda los ids— y si la plantilla cambió después, se avisa en vez de inventar. */
+function verEjecucion(id){
+    var e=(_ejec||[]).find(function(x){ return x.id===id; }); if(!e) return;
+    var pl=(_plantillas||[]).find(function(p){ return p.id===e.plantillaId; });
+    var pct=e.pct||0, col=pct>=90?'var(--green)':pct>=70?'var(--accent)':'#e05a3a';
+    var EST={ ok:['✓','Hecha','var(--green)'], no:['✕','No realizada','#e05a3a'], pend:['○','Pendiente','var(--accent)'] };
+    var tareas='';
+    if(pl && pl.tareas && pl.tareas.length){
+        tareas=pl.tareas.map(function(t){
+            var m=(e.marcas||{})[t.id], d=EST[m]||['·','Sin marcar','var(--text-dim)'];
+            return '<div style="display:flex;align-items:center;gap:9px;padding:6px 0;border-top:1px solid var(--border);font-size:13px">'+
+                '<span style="color:'+d[2]+';font-weight:800;width:16px;text-align:center">'+d[0]+'</span>'+
+                '<span style="flex:1;color:var(--text)">'+esc(t.txt||t.nombre||'—')+(t.freq?' <span style="color:var(--text-dim);font-size:11px">'+esc(t.freq)+'</span>':'')+'</span>'+
+                '<span style="font-size:11px;color:'+d[2]+'">'+d[1]+'</span></div>';
+        }).join('');
+    } else {
+        tareas='<div style="font-size:12px;color:var(--text-dim);padding-top:6px">La plantilla ya no existe o cambió: se conserva el conteo '
+            +'('+(e.cumplidas||0)+' hechas · '+(e.noRealizadas||0)+' no · '+(e.pendientes||0)+' pendientes), pero no los nombres de las tareas.</div>';
+    }
+    var fotos=(e.foto_urls&&e.foto_urls.length?e.foto_urls:(e.foto_url?[e.foto_url]:[]));
+    var ev='';
+    if(fotos.length) ev+='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:8px">'+fotos.map(function(u){
+        return '<a href="'+esc(u)+'" target="_blank" rel="noopener"><img src="'+esc(u)+'" style="width:78px;height:78px;object-fit:cover;border-radius:9px;border:1px solid var(--border)"></a>';
+    }).join('')+'</div>';
+    if(e.video_url) ev+='<div style="margin-top:8px"><video src="'+esc(e.video_url)+'" controls preload="metadata" '
+        +'style="width:100%;max-height:280px;border-radius:10px;border:1px solid var(--border);background:#000"></video></div>';
+    if(!ev) ev='<div style="font-size:12px;color:var(--text-dim);margin-top:6px">Sin evidencia adjunta.</div>';
+    var dato=function(l,v){ return '<div><div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim)">'+l+'</div>'
+        +'<div style="font-size:13px;color:var(--text);font-weight:600;margin-top:2px">'+v+'</div></div>'; };
+    var lapso = e.horaInicio ? (esc(e.horaInicio)+' → '+esc(e.hora||'—')) : esc(e.hora||'—');
+    var dur = (e.duracionMin!=null) ? (e.duracionMin+' min') : '—';
+    var ov=document.createElement('div');
+    ov.id='ckDetOv';
+    ov.style.cssText='position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.onclick=function(ev2){ if(ev2.target===ov) ov.remove(); };
+    ov.innerHTML='<div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;max-width:620px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">'
+        +'<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border)">'
+            +'<div><div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1px;color:var(--text)">'+esc(e.plantillaNombre||'Check list')+'</div>'
+            +'<div style="font-size:11px;color:var(--text-dim)">'+esc(TIPO_LBL[e.tipo]||e.tipo||'')+(e.area?' · '+esc(e.area):'')+' · '+esc(_sucNombre(e.sucursalId))+'</div></div>'
+            +'<div style="font-size:26px;font-weight:800;color:'+col+'">'+pct+'%</div></div>'
+        +'<div style="flex:1;overflow-y:auto;padding:16px 18px">'
+            +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:14px">'
+                +dato('Colaborador', esc(e.colaborador||'—'))
+                +dato('Fecha', esc(e.fecha||'—'))
+                +dato('Inicio → envío', lapso)
+                +dato('Duración', dur)
+            +'</div>'
+            +'<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:2px">Tareas</div>'
+            + tareas
+            + (e.notas ? '<div style="margin-top:12px;padding:10px 12px;background:var(--surface2);border-radius:9px;font-size:12.5px;color:var(--text-muted)"><b>📝 Nota:</b> '+esc(e.notas)+'</div>' : '')
+            +'<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin:14px 0 2px">Evidencia</div>'
+            + ev
+        +'</div>'
+        +'<div style="padding:12px 18px;border-top:1px solid var(--border);text-align:right">'
+            +'<button class="ck-btn" onclick="document.getElementById(\'ckDetOv\').remove()">Cerrar</button></div>'
+    +'</div>';
+    document.body.appendChild(ov);
 }
 
 /* ── QR de check list (mismo token por negocio que el QR de entradas) ── */

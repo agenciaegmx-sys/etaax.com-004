@@ -74,7 +74,7 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
     <!-- ── Lista de checklists ── -->
     <div id="listScreen" style="display:none">
         <div class="quien">👤 Registra: <b id="quienNom">—</b></div>
-        <div id="countBox">⏱️ Esta sesión expira en <b id="countVal" style="color:var(--text)">5:00</b></div>
+        <div id="countBox">⏱️ Tiempo en el check list: <b id="countVal" style="color:var(--text)">0:00</b></div>
         <label class="lbl">Elige el check list a realizar</label>
         <div id="plantList"></div>
     </div>
@@ -143,7 +143,10 @@ async function _hashNip(pin){
 var NEG = _q('n') || _q('neg');
 var TOKEN = _q('t');
 var SUC = _q('s') || '';
-var VIDA_MS = 300000;
+/* El QR ya NO expira mientras se llena: un check de cierre puede tomar media hora y
+   no tiene sentido echar al colaborador a media captura. El cronómetro ahora cuenta
+   HACIA ARRIBA, desde que entra hasta que envía, y ese lapso es justo el dato que se
+   guarda. La sesión sigue atada al NIP validado por la RPC en cada registro. */
 var COLAB = '', _NIPHASH = '', PLANTILLAS = [], _countTimer = null, _t0 = 0;
 var TIPO = { apertura:['🌅','Apertura'], cierre:['🌙','Cierre'], intermedio:['🔄','Intermedio'], limpieza:['🧽','Limpieza'], otro:['📋','Check list'] };
 var MARCA = { '':'', ok:'✓', no:'✗', pend:'▲' };
@@ -194,11 +197,11 @@ async function entrar(){
 }
 
 function _tick(){
-    var rest = Math.max(0, _t0 + VIDA_MS - Date.now());
-    var s = Math.ceil(rest/1000);
-    var el = document.getElementById('countVal'); if (el) el.textContent = Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
-    if (rest <= 0) { _err('Tu sesión expiró (dura 5&nbsp;minutos).<br>Vuelve a escanear el QR e ingresa tu PIN.'); }
+    var seg = Math.max(0, Math.round((Date.now() - _t0) / 1000));
+    var el = document.getElementById('countVal');
+    if (el) el.textContent = Math.floor(seg/60) + ':' + String(seg%60).padStart(2,'0');
 }
+
 
 function volverLista(){
     document.getElementById('capSub').textContent = '¿Qué check list vas a realizar?';
@@ -224,6 +227,7 @@ function abrirRun(id){
     // Se sella CUÁNDO empezó: la hora de envío sola no dice si el check tomó tres
     // minutos o dos horas, que es justo lo que interesa revisar.
     RUN = { plant: p, marcas: {}, fotos: [], video: '', inicioTs: new Date().toISOString(), horaInicio: nowHora() };
+    _t0 = Date.now();   // el cronómetro en pantalla mide ESTE check, igual que lo guardado
     document.getElementById('capSub').textContent = (TIPO[p.tipo]?TIPO[p.tipo][1]:'') + ' · ' + (p.nombre||'');
     document.getElementById('runNota').value = '';
     document.getElementById('runMsg').textContent = '';
@@ -357,7 +361,8 @@ function _renderFotos(){
 /* ── Registrar cumplimiento ── */
 async function registrarCumplimiento(){
     var msg = document.getElementById('runMsg'); msg.className='cap-msg'; msg.textContent='';
-    if (Date.now() - _t0 >= VIDA_MS) { _err('Tu sesión expiró.<br>Vuelve a escanear el QR.'); return; }
+    // (Sin corte por tiempo: el check puede tomar lo que tome. El NIP se revalida
+    //  en la RPC en cada registro, que es lo que de verdad autoriza.)
     if (!RUN) return;
     var tareas = (RUN.plant.tareas||[]), tot = tareas.length;
     var ok=0, no=0, pend=0;
