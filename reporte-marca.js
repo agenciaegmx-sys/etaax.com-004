@@ -53,6 +53,23 @@
             try { sucColor = (JSON.parse(localStorage.getItem('etaax_' + negId + '_suc_' + sucId) || '{}').color) || ''; } catch (e) {}
             if (!sucColor) sucColor = ctx.negColor || '';
         }
+        /* Último recurso: sin logo de la sucursal activa y sin logo del negocio, mirar
+           los logos de LAS DEMÁS sucursales. Si todas comparten el mismo, ese ES la
+           marca del negocio (caso mono-marca: se subió en una sucursal y nunca en la
+           configuración) → se usa. Si hay DOS distintos, el negocio es multi-marca y
+           adivinar pondría la marca equivocada en el documento: mejor el emoji. */
+        var logoHermano = '';
+        if (!logoSucursal && !logoNegocio && negId) {
+            try {
+                var distintos = {};
+                JSON.parse(localStorage.getItem('etaax_' + negId + '_sucursales') || '[]').forEach(function (x) {
+                    var v = localStorage.getItem('etaax_' + negId + '_suc_' + x.id + '_logo') || '';
+                    if (v) distintos[v] = 1;
+                });
+                var claves = Object.keys(distintos);
+                if (claves.length === 1) logoHermano = claves[0];
+            } catch (e) {}
+        }
         // Overrides: reportes que NO salen de un negocio (p.ej. el presupuesto del
         // panel admin) pueden dictar el nombre, la segunda línea y el logo.
         return {
@@ -60,7 +77,7 @@
             emoji:         opts.emoji    !== undefined ? opts.emoji    : (ctx.negEmoji || ''),
             sucursal:      opts.sucursal !== undefined ? opts.sucursal : sucNombre,
             sucursalColor: sucColor,
-            logo:          opts.logo     !== undefined ? opts.logo     : (logoSucursal || logoNegocio), // jerarquía: marca de la sucursal → marca del negocio
+            logo:          opts.logo     !== undefined ? opts.logo     : (logoSucursal || logoNegocio || logoHermano), // jerarquía: sucursal → negocio → marca única del negocio
             logoNegocio:   logoNegocio,
             logoSucursal:  logoSucursal
         };
@@ -90,7 +107,9 @@
         console.log((vSuc ? '✔' : '✘') + ' logo de la SUCURSAL  →  ' + kSuc);
         console.log((vNeg ? '✔' : '✘') + ' logo del NEGOCIO     →  ' + kNeg);
         if (otras.length) { console.log('logos por sucursal:'); otras.forEach(function (l) { console.log(l); }); }
-        console.log('el reporte usará:', vSuc ? 'el de la sucursal' : (vNeg ? 'el del negocio' : 'NINGUNO → el emoji ' + (ctx.negEmoji || '')));
+        var usa = window.etaaxMarca().logo;
+        console.log('el reporte usará:', vSuc ? 'el de la sucursal' : (vNeg ? 'el del negocio'
+            : (usa ? 'el de otra sucursal (marca única del negocio)' : 'NINGUNO → el emoji ' + (ctx.negEmoji || ''))));
         console.log('OJO: los logos viven solo en ESTE navegador; no se sincronizan entre dispositivos.');
         return { negId: negId, sucId: sucId, logoSucursal: !!vSuc, logoNegocio: !!vNeg };
     };
