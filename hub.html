@@ -191,12 +191,6 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .neg-card-nombre{font-size:15px;font-weight:600;color:var(--text);}
 .neg-card-meta{font-size:10px;color:var(--dim);margin-top:3px;letter-spacing:1px;text-transform:uppercase;}
 .neg-card-arrow{margin-left:auto;font-size:18px;flex-shrink:0;}
-.neg-card-del{
-  background:transparent;border:none;color:var(--dim);cursor:pointer;
-  font-size:14px;padding:5px 7px;border-radius:5px;
-  transition:color .2s,background .2s;flex-shrink:0;
-}
-.neg-card-del:hover{color:var(--red);background:rgba(224,90,58,.12);}
 
 .btn-nuevo-neg{
   background:transparent;border:1px dashed var(--b2);color:var(--muted);
@@ -1756,8 +1750,8 @@ function _renderBrandBar(neg) {
             'style="font-size:11px;padding:5px 14px;border:1px solid var(--b2);border-radius:6px;letter-spacing:.3px;background:var(--s2);color:var(--muted);cursor:pointer;font-family:\'DM Sans\',sans-serif;transition:all .2s" ' +
             'onmouseover="this.style.borderColor=\''+( neg.color||'#3dbe7a' )+'\';this.style.color=\''+( neg.color||'#3dbe7a' )+'\'" ' +
             'onmouseout="this.style.borderColor=\'var(--b2)\';this.style.color=\'var(--muted)\'">⚙️ Configurar negocio</button>' +
-        '<button class="neg-card-del" onclick="eliminarNegocio(\'' + neg.id + '\',event)" title="Eliminar negocio" ' +
-            'style="font-size:11px;padding:5px 12px;border:1px solid var(--b2);border-radius:6px;letter-spacing:.3px">✕ Eliminar</button>' +
+        // Eliminar negocio ya NO vive aquí: se movió al fondo del modal
+        // "⚙️ Configurar negocio" (zona de peligro), fuera del clic accidental.
         '</div>';
 }
 
@@ -1826,7 +1820,6 @@ function _renderSucursales(neg) {
                         '</div>' +
                         '<div class="neg-card-meta">Sucursal · ' + fecha + '</div>' +
                     '</div>' +
-                    '<button class="neg-card-del" onclick="eliminarSucursal(\'' + suc.id + '\',\'' + neg.id + '\',event)" title="Eliminar sucursal">✕</button>' +
                 '</div>' +
                 '<div style="display:grid;grid-template-columns:auto 1fr;gap:6px">' +
                     '<button onclick="abrirAjustesSucursal(\'' + suc.id + '\',\'' + neg.id + '\',event)" ' +
@@ -2707,8 +2700,21 @@ async function crearNegocio() {
     });
 }
 
+// Borrado desde el modal: el modal se cierra ANTES de pedir la clave para que el
+// diálogo de admin no quede detrás de la ventana de configuración.
+function eliminarNegocioDesdeConfig() {
+    var id = _cfgNegId; if (!id) return;
+    cerrarConfigNeg();
+    eliminarNegocio(id, null);
+}
+function eliminarSucursalDesdeAjustes() {
+    var sucId = _ajSucId, negId = _ajNegId; if (!sucId || !negId) return;
+    cerrarAjustesSuc();
+    eliminarSucursal(sucId, negId, null);
+}
+
 function eliminarNegocio(id, event) {
-    event.stopPropagation();
+    if (event) event.stopPropagation();
     var neg = _misNegocios().find(function(n){ return n.id === id; });
     if (!neg) return;
     _pedirClaveAdmin('Eliminar negocio "' + neg.nombre + '"', function() {
@@ -3024,6 +3030,19 @@ window.onload = function() {
         <div style="font-size:11px;color:var(--dim);margin-top:8px">Los detalles de cada sucursal se editan desde ⚙️ Ajustes en cada tarjeta.</div>
       </div>
 
+      <!-- ── ZONA DE PELIGRO ─────────────────────────── -->
+      <div style="border:1px solid rgba(224,90,58,.35);background:rgba(224,90,58,.05);border-radius:10px;padding:13px 15px">
+        <div style="font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#e05a3a;margin-bottom:6px">Zona de peligro</div>
+        <div style="font-size:12px;color:var(--dim);line-height:1.5;margin-bottom:10px">
+          Eliminar el negocio borra sus sucursales, insumos, recetas, inventarios y staff. No se puede deshacer.
+        </div>
+        <button onclick="eliminarNegocioDesdeConfig()"
+                style="background:transparent;border:1px solid rgba(224,90,58,.5);color:#e05a3a;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:10px 16px;border-radius:8px;cursor:pointer;transition:all .2s"
+                onmouseover="this.style.background='rgba(224,90,58,.12)'" onmouseout="this.style.background='transparent'">
+          ✕ Eliminar este negocio
+        </button>
+      </div>
+
       <!-- ── BOTONES ─────────────────────────────────── -->
       <div style="display:grid;grid-template-columns:auto 1fr;gap:10px;flex-shrink:0">
         <button onclick="cerrarConfigNeg()"
@@ -3231,6 +3250,19 @@ window.onload = function() {
         <textarea id="ajSucNotas" placeholder="Instrucciones para el equipo, observaciones operativas…"
                   style="width:100%;background:var(--s2);border:1px solid var(--b2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;padding:11px 14px;border-radius:8px;outline:none;min-height:72px;resize:vertical;transition:border-color .2s;box-sizing:border-box"
                   onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--b2)'"></textarea>
+      </div>
+
+      <!-- ── ZONA DE PELIGRO ─────────────────────────── -->
+      <div style="border:1px solid rgba(224,90,58,.35);background:rgba(224,90,58,.05);border-radius:10px;padding:13px 15px">
+        <div style="font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#e05a3a;margin-bottom:6px">Zona de peligro</div>
+        <div style="font-size:12px;color:var(--dim);line-height:1.5;margin-bottom:10px">
+          Eliminar la sucursal la saca del negocio. Su histórico deja de verse en los módulos.
+        </div>
+        <button onclick="eliminarSucursalDesdeAjustes()"
+                style="background:transparent;border:1px solid rgba(224,90,58,.5);color:#e05a3a;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;padding:10px 16px;border-radius:8px;cursor:pointer;transition:all .2s"
+                onmouseover="this.style.background='rgba(224,90,58,.12)'" onmouseout="this.style.background='transparent'">
+          ✕ Eliminar esta sucursal
+        </button>
       </div>
 
       <div style="display:grid;grid-template-columns:auto 1fr;gap:10px;flex-shrink:0">
