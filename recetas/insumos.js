@@ -1604,12 +1604,17 @@
            } else {
                varWrap.style.gridColumn = '';
                if (document.getElementById('uva-picker')) {
-                   varWrap.innerHTML = '<label id="lbl-variedad">Marca del producto</label>'
+                   varWrap.innerHTML = '<label id="lbl-variedad">Variedad</label>'
                        + '<input type="text" id="ins-variedad" value="' + currentVar + '" placeholder="Ej. Absolut">';
                }
                var lblV = document.getElementById('lbl-variedad');
                if (lblV) {
-                   if (['cerveza','cerveza_barril','refresco'].includes(tipo)) lblV.textContent = 'Marca del producto';
+                   // Este campo guarda `variedad`, que es lo que el sistema lee como
+                   // variedad en la etiqueta canónica. Decía "Marca del producto" y el
+                   // de abajo (que guarda `maduracion`) decía "Estilo / Variedad": los
+                   // rótulos estaban cruzados y por eso se capturaba al revés.
+                   if (['cerveza','cerveza_barril'].includes(tipo)) lblV.textContent = 'Estilo / Variedad';
+                   else if (tipo === 'refresco') lblV.textContent = 'Sabor / Variedad';
                    else if (tipo === 'abarrote') lblV.textContent = 'Marca / Variedad';
                    else if (tipo === 'carne') lblV.textContent = 'Corte / Variedad';
                    else if (tipo === 'fruta') lblV.textContent = 'Variedad comercial';
@@ -1629,24 +1634,25 @@
                    '<input type="text" id="ins-maduracion" value="' + currentMad + '" ' +
                    'placeholder="Ej. 10 años en roble, Reserva, Crianza, Sin roble">';
            } else if (tipo === 'refresco') {
+               // Guarda `maduracion`: aquí va la MARCA (el sabor va arriba, en variedad).
                if (madEl && madEl.tagName === 'SELECT') {
-                   rowMad.innerHTML = '<label id="lbl-maduracion">Sabor / Variedad</label>' +
+                   rowMad.innerHTML = '<label id="lbl-maduracion">Marca del producto</label>' +
                        '<input type="text" id="ins-maduracion" value="' + currentMad + '" ' +
-                       'placeholder="Ej. Original, Light, Zero, Sin Azúcar">';
+                       'placeholder="Ej. Coca-Cola, Peñafiel, Schweppes">';
                } else if (madEl) {
                    var lblMadR = document.getElementById('lbl-maduracion');
-                   if (lblMadR) lblMadR.textContent = 'Sabor / Variedad';
-                   madEl.placeholder = 'Ej. Original, Light, Zero, Sin Azúcar';
+                   if (lblMadR) lblMadR.textContent = 'Marca del producto';
+                   madEl.placeholder = 'Ej. Coca-Cola, Peñafiel, Schweppes';
                }
            } else if (['cerveza','cerveza_barril'].includes(tipo)) {
                if (madEl && madEl.tagName === 'SELECT') {
-                   rowMad.innerHTML = '<label id="lbl-maduracion">Estilo / Variedad</label>' +
+                   rowMad.innerHTML = '<label id="lbl-maduracion">Marca del producto</label>' +
                        '<input type="text" id="ins-maduracion" value="' + currentMad + '" ' +
-                       'placeholder="Ej. Clara, Oscura, Stout, IPA, Weizen, Artesanal">';
+                       'placeholder="Ej. La Brü, Modelo, Heineken">';
                } else if (madEl) {
                    var lblMadC = document.getElementById('lbl-maduracion');
-                   if (lblMadC) lblMadC.textContent = 'Estilo / Variedad';
-                   madEl.placeholder = 'Ej. Clara, Oscura, Stout, IPA, Weizen, Artesanal';
+                   if (lblMadC) lblMadC.textContent = 'Marca del producto';
+                   madEl.placeholder = 'Ej. La Brü, Modelo, Heineken';
                }
            } else if (tipo === 'carne') {
                var currentMadC = madEl ? madEl.value || '' : '';
@@ -2793,6 +2799,9 @@
    window._novAplicar = _novAplicar;
    window._novDejar = _novDejar;
 
+   // Bebidas embotelladas: caja → botella → contenido. Dos niveles, sin sub-unidad.
+   function _esBebida(t) { return ['destilado','licor','vino','cerveza','refresco'].indexOf(t) >= 0; }
+
    function _subUnidadNombre(p) {
        var n = String(p.nombreSubUnidad || '').trim();
        return n || 'unidad';
@@ -2956,7 +2965,11 @@
    function _calcCostosRefrescoCerveza(p, precioEfectivo, contML) {
        const presCompra = p.presentacionCompra || 'Pieza';
        const cantPres   = parseFloat(p.cantPresCompra) || 1;
-       const costoPieza = ['Caja','Rejilla'].includes(presCompra) && cantPres > 0
+       // Lo que manda es la CANTIDAD, no cómo se llame el empaque. Antes solo dividían
+       // 'Caja' y 'Rejilla' por nombre: un "Six pack" o una "Charola" —conceptos que el
+       // negocio puede crear— dejaban cada botella al precio de la caja completa.
+       // Se excluye solo lo que se compra a granel (ahí la cantidad son kilos o litros).
+       const costoPieza = (cantPres > 1 && !_presEsGranel(presCompra))
            ? precioEfectivo / cantPres
            : precioEfectivo;
        p.costoPieza = costoPieza.toFixed(2);
@@ -3661,16 +3674,31 @@
                        <div class="meta-item"><label>Unidad</label>
                            ${esBarril
                                ? `<div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:9px 12px;font-size:14px;color:var(--text-dim)">LT</div>`
-                               : `<select onchange="updPres(${i},'umPresCompra',this.value);renderPresentaciones()">
-                                   ${(esFruta ? ['KG','G','PZA','CARGA','PORCION'] : ['PZA','G','KG','ML','LT','PORCION']).map(u =>
-                                       `<option value="${u}" ${(p.umPresCompra||(esFruta?'KG':'PZA'))===u?'selected':''}>${u}</option>`
-                                   ).join('')}
+                               : `<select onchange="onUmPresChange(${i},this)">
+                                   ${(function(){
+                                       // Lo que hay DENTRO del empaque, dicho como se dice: una caja trae
+                                       // 24 botellas, no "24 PZA". En bebidas se ofrecen esos conceptos
+                                       // (y el negocio puede agregar los suyos: charola, six pack…).
+                                       var base = esFruta ? ['KG','G','PZA','CARGA','PORCION']
+                                           : _esBebida(tipoInsumoActual)
+                                               ? ['Botellas','Latas','Piezas','Bolsas','Sobres','Cajas','PZA','ML','LT']
+                                               : ['PZA','G','KG','ML','LT','PORCION'];
+                                       var customs = _getConceptos('umPresCompra').filter(function(c){ return base.indexOf(c) === -1; });
+                                       var all = base.concat(customs);
+                                       var cur = p.umPresCompra || (esFruta ? 'KG' : (_esBebida(tipoInsumoActual) ? 'Botellas' : 'PZA'));
+                                       if (cur && all.indexOf(cur) === -1) all.push(cur);
+                                       return all.map(function(u){
+                                           return '<option value="' + String(u).replace(/"/g,'&quot;') + '" ' + (cur === u ? 'selected' : '') + '>' + u + '</option>';
+                                       }).join('') + '<option value="__nuevo__">＋ Agregar concepto…</option>';
+                                   })()}
                                   </select>`
                            }
                        </div>
                    </div>
-                   ${esBarril ? '' : `
-                   <!-- Tercer nivel: lo que trae CADA pieza (caja → bolsa → tostada) -->
+                   ${(esBarril || _esBebida(tipoInsumoActual)) ? '' : `
+                   <!-- Tercer nivel: lo que trae CADA pieza (caja → bolsa → tostada).
+                        No aplica en bebidas: ahí la caja trae botellas y la botella su
+                        contenido — dos niveles, que "Cantidad" ya cubre. -->
                    <div class="mg-2" style="margin-top:2px">
                        <div class="meta-item">
                            <label>Cada pieza trae (opcional)</label>
@@ -4774,20 +4802,24 @@
        _flashBtnConcepto(btn, true);
    }
    // Cambio en el select de presentación de compra (intercepta "＋ Agregar concepto").
-   function onPresCompraChange(i, sel) {
+   function onPresCompraChange(i, sel) { _onSelConcepto(i, sel, 'presentacionCompra', '📦', 'Ej. Bote, Caja, Costal…'); }
+   // Lo mismo para la UNIDAD de lo que trae el empaque (botellas, latas, charolas…).
+   function onUmPresChange(i, sel) { _onSelConcepto(i, sel, 'umPresCompra', '🍾', 'Ej. Six pack, Charola, Cartón…'); }
+   function _onSelConcepto(i, sel, campo, icon, ph) {
        if (sel.value === '__nuevo__') {
            sel.value = ''; // reset mientras se captura
            var _ask = window.etaaxPrompt || function(t,d,cb){ cb(window.prompt(t) || ''); };
-           _ask('Nuevo concepto de presentación de compra', '', function(val){
+           _ask('Nuevo concepto', '', function(val){
                var v = (val || '').trim();
-               if (v) { _addConcepto('presentacionCompra', v); updPres(i, 'presentacionCompra', v); }
+               if (v) { _addConcepto(campo, v); updPres(i, campo, v); }
                renderPresentaciones();
-           }, { icon:'📦', placeholder:'Ej. Bote, Caja, Costal…' });
+           }, { icon: icon, placeholder: ph });
            return;
        }
-       updPres(i, 'presentacionCompra', sel.value);
+       updPres(i, campo, sel.value);
        renderPresentaciones();
    }
+   window.onUmPresChange = onUmPresChange;
 
    // ── Datalist de proveedores (catálogo global + usados en insumos) ──
    function _actualizarDatalistProveedores() {
