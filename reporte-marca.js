@@ -66,6 +66,35 @@
         };
     };
 
+    /* Diagnóstico: qué logo encontró y en qué llaves buscó. Se corre en la consola
+       de cualquier página del negocio → etaaxDiagMarca(). Los logos viven SOLO en
+       este navegador (no se sincronizan), así que esto dice de inmediato si falta
+       el archivo o si la sucursal activa no es la que tiene el logo cargado. */
+    window.etaaxDiagMarca = function () {
+        var negId = _negId(), ctx = _ctx();
+        var sucId = localStorage.getItem('etaax_sucursal_activa') || '';
+        var kNeg = 'etaax_' + negId + '_logo';
+        var kSuc = sucId ? ('etaax_' + negId + '_suc_' + sucId + '_logo') : '(sin sucursal activa)';
+        var vNeg = localStorage.getItem(kNeg) || '';
+        var vSuc = sucId ? (localStorage.getItem(kSuc) || '') : '';
+        var otras = [];
+        try {
+            JSON.parse(localStorage.getItem('etaax_' + negId + '_sucursales') || '[]').forEach(function (x) {
+                var v = localStorage.getItem('etaax_' + negId + '_suc_' + x.id + '_logo') || '';
+                otras.push('   ' + (v ? '✔' : '✘') + ' ' + (x.nombre || x.id) + '  →  etaax_' + negId + '_suc_' + x.id + '_logo');
+            });
+        } catch (e) {}
+        console.log('── DIAGNÓSTICO DE MARCA ──────────────────────────────');
+        console.log('negocio activo :', negId, '·', ctx.negNombre || '(sin nombre)');
+        console.log('sucursal activa:', sucId || '(ninguna)');
+        console.log((vSuc ? '✔' : '✘') + ' logo de la SUCURSAL  →  ' + kSuc);
+        console.log((vNeg ? '✔' : '✘') + ' logo del NEGOCIO     →  ' + kNeg);
+        if (otras.length) { console.log('logos por sucursal:'); otras.forEach(function (l) { console.log(l); }); }
+        console.log('el reporte usará:', vSuc ? 'el de la sucursal' : (vNeg ? 'el del negocio' : 'NINGUNO → el emoji ' + (ctx.negEmoji || '')));
+        console.log('OJO: los logos viven solo en ESTE navegador; no se sincronizan entre dispositivos.');
+        return { negId: negId, sucId: sucId, logoSucursal: !!vSuc, logoNegocio: !!vNeg };
+    };
+
     // ── Logo oficial ETAAX (wordmark eta·ax) como SVG inline, recolorable ──────
     // variant 'claro' (default): letras tinta + punto verde (para blanco/impresión).
     // variant 'oscuro': letras crema + punto verde (para fondos oscuros).

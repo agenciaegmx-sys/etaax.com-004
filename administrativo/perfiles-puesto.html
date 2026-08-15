@@ -63,19 +63,29 @@
 .pp-doc-foot strong{color:#3dbe7a}
 .theme-toggle{position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15)}
 @media print{
-    /* Tamaño carta + margen inferior reservado para el pie repetido */
-    @page{size:letter;margin:1.4cm 1.3cm 1.9cm}
+    /* Carta. Margen superior chico: la franja del encabezado llega casi al borde,
+       como en los demás reportes. El inferior reserva la banda del pie. */
+    @page{size:letter;margin:0.9cm 1.2cm 1.6cm}
+    /* El tema oscuro se estaba IMPRIMIENDO: salía un marco negro alrededor de la
+       hoja. Todo lo que envuelve al documento se fuerza a blanco. */
+    html,body,.main-content,.pp-wrap,.pp-doc{background:#fff!important;color:#1a1916!important}
     .top-bar,.ctx-bar,.nav,.theme-toggle,.pp-head,.pp-noprint{display:none!important}
-    .main-content{margin:0!important}
+    .main-content{margin:0!important;padding:0!important}
     body.has-ctx .pp-wrap{padding-top:0}
     .pp-wrap{padding:0!important}
-    .pp-doc{box-shadow:none;max-width:100%;padding:0}
-    /* Pie de página fijo: se repite en TODAS las hojas, dentro del margen inferior */
+    /* padding-bottom = la banda del pie fijo: sin esto el texto corría POR DEBAJO
+       del pie y las últimas líneas de cada hoja salían tachadas por él. */
+    .pp-doc{box-shadow:none;border-radius:0;max-width:100%;padding:0 0 1.15cm}
+    .pp-doc-hdr{margin:0}
+    /* Pie fijo: se repite en TODAS las hojas, dentro del margen inferior */
     .pp-doc-foot{
-        position:fixed;left:1.3cm;right:1.3cm;bottom:0.6cm;
+        position:fixed;left:1.2cm;right:1.2cm;bottom:0.45cm;
         margin:0;padding-top:8px;
         border-top:1px solid #ececec;background:#fff;
     }
+    /* Que un título no quede solo al final de la hoja */
+    .pp-doc h2{break-after:avoid;page-break-after:avoid}
+    .pp-doc ul,.pp-doc .pp-td{break-inside:avoid;page-break-inside:avoid}
 }
 </style>
 </head>
@@ -420,10 +430,13 @@ function verPerfil(id){
     // negocio o de la sucursal + su nombre. Antes era un "ET AA X" escrito a mano
     // aquí, sin el logo del negocio — el único documento de ETAAX que no traía la
     // identidad. En el catálogo maestro no hay negocio: se rotula como ETAAX.
+    // En el CATÁLOGO MAESTRO no hay negocio: ni el nombre de la empresa del perfil
+    // (es una plantilla, no es de nadie) ni un "ETAAX" escrito al lado del logo,
+    // que ya dice ETAAX. Queda logo + "Catálogo maestro" + "Perfil de Puesto".
     var _hdr = (typeof etaaxReporteHeader === 'function')
-        ? etaaxReporteHeader('Perfil de Puesto' + (g.empresa ? ' · ' + g.empresa : ''),
+        ? etaaxReporteHeader(_CAT ? 'Perfil de Puesto' : ('Perfil de Puesto' + (g.empresa ? ' · ' + g.empresa : '')),
             '<div style="font-size:9px;color:#aaa;letter-spacing:1px">' + esc(fecha) + '</div>',
-            _CAT ? { negocio:'ETAAX', sucursal:'Catálogo maestro', emoji:'', logo:'' } : undefined)
+            _CAT ? { negocio:'Catálogo maestro', sucursal:'', emoji:'', logo:'' } : undefined)
         : ('<div class="pp-doc-head"><div><div class="pp-doc-eyebrow">Perfil de Puesto</div>' +
            '<div class="pp-doc-empresa">' + esc(g.empresa||'Empresa') + '</div></div>' +
            '<div class="pp-doc-mark">ET<span>AA</span>X</div></div>');
