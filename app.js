@@ -1065,11 +1065,34 @@ function getCatalogoInsumosScope() {
     try { catGlobal = sessionStorage.getItem('etaax_cat_global') === '1'; } catch(e) {}
     if (catGlobal) return cat;
     var sucActiva = localStorage.getItem('etaax_sucursal_activa') || '';
-    if (!sucActiva) return cat;
-    // Visibilidad por sucursal: vive aquí + no pausado aquí (regla única, insumo-label.js).
-    return cat.filter(function(x){ return (typeof window._insumoActivoEnSuc === 'function')
-        ? window._insumoActivoEnSuc(x, sucActiva)
-        : ((x.sucursalId || 'suc_principal') === sucActiva); });
+    if (sucActiva) {
+        // Visibilidad por sucursal: vive aquí + no pausado aquí (regla única, insumo-label.js).
+        cat = cat.filter(function(x){ return (typeof window._insumoActivoEnSuc === 'function')
+            ? window._insumoActivoEnSuc(x, sucActiva)
+            : ((x.sucursalId || 'suc_principal') === sucActiva); });
+    }
+    return _unoPorProducto(cat);
+}
+
+/* Un renglón por PRODUCTO, no por copia ────────────────────────────────
+   Al independizar los insumos por sucursal, cada producto queda como un
+   maestro + una copia por sucursal. Todas comparten `origenId`, así que el
+   buscador de ingredientes mostraba el mismo Disaronno cuatro veces y no había
+   forma de saber cuál elegir. Se colapsa por id canónico y se deja el que
+   aplica al contexto (la copia de la sucursal activa; si no, el maestro).
+   OJO: dos insumos DISTINTOS con el mismo nombre siguen apareciendo los dos —
+   eso no son copias, son duplicados del catálogo y hay que arreglarlos ahí. */
+function _unoPorProducto(cat) {
+    var vistos = {}, out = [];
+    (cat || []).forEach(function (x) {
+        if (!x || !x.id) return;
+        var k = x.origenId || x.id;
+        if (vistos[k]) return;
+        vistos[k] = 1;
+        var elegido = (typeof window._insumoResolver === 'function' && window._insumoResolver(k)) || x;
+        out.push(elegido);
+    });
+    return out;
 }
 
 // Devuelve el contenido real en ml/g de 1 pieza de un insumo.
