@@ -5640,6 +5640,37 @@ function setStep5Modo(m) {
     const l = document.getElementById('s5ModoLista'), g = document.getElementById('s5ModoGal');
     if (l && g) { l.classList.toggle('active', m==='lista'); g.classList.toggle('active', m==='galeria'); }
 }
+/* ── Las "copas" se leen en la unidad que declara el insumo ─────────────
+   Si el insumo define su medida en OZ, ML o LT, el resultado debe hablar en
+   ESA unidad y no en "copas" genéricas: un vino con medida de 1 L usado en
+   sub-recetas salía como "50.3 cop" cuando lo que se gastaron fueron 7.4
+   litros, y nadie puede cotejar eso contra una caja de 5 L. Cuando el insumo
+   NO declara medida (usa la copa estándar de su categoría) se sigue leyendo en
+   copas, que ahí sí es la unidad de venta. */
+function _medidaInsumo(fila) {
+    if (!fila || fila.tipo !== 'copa') return null;
+    var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(fila.insumoId) : null;
+    var tc  = ins ? (parseFloat(ins.tamanoCopa) || 0) : 0;
+    if (!(tc > 0)) return null;                       // sin medida propia → copas
+    return { um: (ins.umTamanoCopa || 'ML').toUpperCase(), tc: tc };
+}
+// Formatea una cantidad en COPAS usando la medida declarada del insumo.
+function _fmtCop(copas, fila) {
+    var v = parseFloat(copas) || 0;
+    var m = _medidaInsumo(fila);
+    var n1 = function (x) { var r = Math.round(x * 10) / 10; return r % 1 ? r.toFixed(1) : String(r); };
+    if (!m) return n1(v) + ' cop';
+    var ml = v * (parseFloat(fila.copaML) || 0);
+    if (m.um === 'OZ') return n1(ml / OZ_ML) + ' oz';
+    if (m.um === 'LT') return n1(ml / 1000) + ' L';
+    return Math.abs(ml) >= 1000 ? n1(ml / 1000) + ' L' : n1(ml) + ' ml';   // ML (el umbral mira la magnitud: −2500 también es −2.5 L)
+}
+// Igual, pero con signo (para diferencias).
+function _fmtCopSgn(copas, fila) {
+    var v = parseFloat(copas) || 0;
+    return (v >= 0 ? '+' : '') + _fmtCop(v, fila);
+}
+
 /* Diagnóstico manual: en la consola del Paso 5, `diagInsumo('vodka')` imprime
    toda la cadena de un insumo — su fila, qué recetas lo llevan y con qué id,
    cuántas se vendieron, si entra por una sub-receta y qué le tocó del batch.
@@ -5799,7 +5830,7 @@ function _step5TablasHTML() {
         const eaBot     = copasBot > 0 ? (ea/copasBot).toFixed(1) : ea.toFixed(1);
         const entBotStr = entBot > 0 ? `+${entBot % 1 ? entBot.toFixed(1) : entBot} ${_unidadCompra(fila)}` : '—';
         const fisicoBot = copasBot > 0 ? (fisico/copasBot).toFixed(2) : fisico.toFixed(1);
-        const difStr    = `${dif>=0?'+':''}${dif.toFixed(1)} cop`;
+        const difStr    = _fmtCopSgn(dif, fila);
         const _contC = _fmtContenido(fila);
         const html = `<tr>
                 <td style="min-width:140px">
@@ -5811,15 +5842,15 @@ function _step5TablasHTML() {
                 <td style="text-align:center;white-space:nowrap">${eaBot} bot</td>
                 <td style="text-align:center;color:var(--green);white-space:nowrap">${entBotStr}</td>
                 <td style="text-align:center;color:var(--accent)">${ventaBot > 0 ? ventaBot + ' bot' : '—'}</td>
-                <td style="text-align:center;color:var(--accent)">${ventaCopaDir > 0 ? ventaCopaDir.toFixed(1) + ' cop' : '—'}</td>
-                <td style="text-align:center;color:var(--viol)${ventaCoct > 0 ? '' : ';cursor:help'}" title="${etx(_origenConsumo(fila))}">${ventaCoct > 0 ? ventaCoct.toFixed(1) + ' cop' : '—'}</td>
+                <td style="text-align:center;color:var(--accent)">${ventaCopaDir > 0 ? _fmtCop(ventaCopaDir, fila) : '—'}</td>
+                <td style="text-align:center;color:var(--viol)${ventaCoct > 0 ? '' : ';cursor:help'}" title="${etx(_origenConsumo(fila))}">${ventaCoct > 0 ? _fmtCop(ventaCoct, fila) : '—'}</td>
                 <td style="text-align:center">
                     ${cmTotal > 0
-                        ? `<div style="color:var(--red);font-size:12px;font-weight:600">${cmTotal.toFixed(1)} cop</div>
+                        ? `<div style="color:var(--red);font-size:12px;font-weight:600">${_fmtCop(cmTotal, fila)}</div>
                            ${cmConc ? `<div style="font-size:10px;color:var(--text-dim);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${cmConc}">${cmConc}</div>` : ''}`
                         : '—'}
                 </td>
-                <td style="text-align:center;color:var(--text-muted)">${cancelCop > 0 ? cancelCop.toFixed(1) + ' cop' : '—'}</td>
+                <td style="text-align:center;color:var(--text-muted)">${cancelCop > 0 ? _fmtCop(cancelCop, fila) : '—'}</td>
                 <td style="text-align:center;font-weight:600;white-space:nowrap">${fisicoBot} bot</td>
                 <td style="text-align:center;font-weight:700;color:${color};white-space:nowrap">${difStr}</td>
                 <td style="text-align:center;font-size:11px;color:${color}">${pctStr}</td>
