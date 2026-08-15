@@ -205,7 +205,11 @@
 <div class="modal-overlay" id="modalOverlay">
     <div class="modal">
         <div class="modal-header">
-            <h2 id="modalTitulo">Nuevo insumo</h2>
+            <div style="min-width:0">
+                <h2 id="modalTitulo">Nuevo insumo</h2>
+                <!-- Sello de auditoría: cuándo se tocó por última vez y quién -->
+                <div id="insSello" style="margin-top:2px"></div>
+            </div>
             <div style="display:flex;align-items:center;gap:10px">
                 <span class="pill pill-green" id="ins-activo-pill"
                     onclick="toggleActivoInsumo()"

@@ -2019,6 +2019,8 @@
        const cfg = TIPO_CONFIG[tipoInsumoActual] || TIPO_CONFIG['destilado'];
        const tituloTipo = ins ? 'Editar insumo' : `Nuevo insumo · ${cfg.icon} ${cfg.label}`;
        document.getElementById('modalTitulo').textContent = tituloTipo;
+       var _sl = document.getElementById('insSello');
+       if (_sl) _sl.innerHTML = ins ? _selloHTML(ins) : '';
    
        document.getElementById('ins-nombre').value       = ins?.nombre       || '';
        document.getElementById('ins-familia').value      = ins?.familia      || familiaDefault;
@@ -2458,7 +2460,7 @@
            incluyeImpuesto: '0', ivaCheck: '0', iepsCheck: '0', iepsTasa: '26.5', notas: '',
            precioCarta: '', precioCartaBot: '',
            stockMin: '', stockMax: '',
-           unidadesPorPieza: '', nombreSubUnidad: '', costoSubUnidad: '',
+           unidadesPorPieza: '', nombreSubUnidad: '', costoSubUnidad: '', contSub: '',
            costeos: []
        });
        renderPresentaciones();
@@ -2477,6 +2479,35 @@
       sacar la división a mano cada vez. */
    // Tarjeta "Costo por tostada / rebanada / lo que sea". Solo aparece cuando el
    // insumo declaró cuántas sub-unidades trae cada pieza.
+   /* Quién está trabajando: el colaborador si entró con su cuenta, si no el dueño.
+      Va junto a la fecha para que "lo actualizó alguien" tenga nombre y apellido. */
+   function _usuarioActual() {
+       try {
+           var c = JSON.parse(localStorage.getItem('etaax_ctx') || '{}');
+           return c.userName || c.staffNombre || c.negNombre || '';
+       } catch (e) { return ''; }
+   }
+   /* "hace 3 días · Edwin" — relativo porque es lo que se lee de un golpe; la fecha
+      exacta queda en el title del elemento. */
+   function _selloActualizacion(o) {
+       if (!o) return '';
+       var iso = o.updatedAt || o.createdAt || '';
+       if (!iso) return '';
+       var d = new Date(iso); if (isNaN(d)) return '';
+       var dias = Math.floor((Date.now() - d.getTime()) / 86400000);
+       var rel = dias <= 0 ? 'hoy' : dias === 1 ? 'ayer' : dias < 30 ? ('hace ' + dias + ' días')
+               : dias < 365 ? ('hace ' + Math.floor(dias / 30) + ' mes' + (dias < 60 ? '' : 'es'))
+               : ('hace ' + Math.floor(dias / 365) + ' año' + (dias < 730 ? '' : 's'));
+       return { rel: rel, quien: o.updatedBy || '', fecha: d.toLocaleString('es-MX', { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' }) };
+   }
+   function _selloHTML(o, estilo) {
+       var s = _selloActualizacion(o);
+       if (!s) return '';
+       return '<div title="Última actualización: ' + etx(s.fecha) + '" style="font-size:10.5px;color:var(--text-dim);' + (estilo || '') + '">'
+            + '🕒 Actualizado ' + etx(s.rel) + (s.quien ? ' · <span style="color:var(--text-muted)">' + etx(s.quien) + '</span>' : '') + '</div>';
+   }
+   window._selloHTML = _selloHTML;
+
    function _subUnidadNombre(p) {
        var n = String(p.nombreSubUnidad || '').trim();
        return n || 'unidad';
@@ -2490,25 +2521,45 @@
            + 'padding:8px 12px;font-size:14px;color:var(--blue);font-weight:700">'+fmtMXN(v, 3)+'</div></div>';
    }
 
-   /* El contenido se captura POR PIEZA (la bolsa completa), no por sub-unidad.
-      Es donde se confunde cualquiera: "cada pieza trae 40 tostadas" invita a
-      escribir el peso de UNA tostada, y entonces el costo por kilo sale 40
-      veces más caro. Esta línea muestra la división en vivo para que el error
-      salte a la vista. */
+   /* CONTENIDO: se captura el de UNA sub-unidad (una tostada, una vara, una lata),
+      que es lo que la gente tiene a la mano. El sistema multiplica por cuántas trae
+      la pieza y guarda el TOTAL en contNeto — la llave que leen inventarios y
+      recetas, que no cambia de significado. Antes se pedía el peso del paquete
+      completo y había que dividir a mano; ahora es al revés.
+        paquete de 14 varas · 30 G cada una  →  contNeto = 420 G la pieza
+        caja de 11 paquetes · 40 tostadas c/u · 25 G cada tostada
+              →  costo por paquete = precio/11 · por tostada = ese ÷ 40
+              →  contNeto = 25 × 40 = 1000 G por paquete → $/kg y $/g correctos   */
+   function _contSubDe(p) {
+       // Valor que va en la ventanilla: el de la sub-unidad. Sin sub-unidades, el de
+       // la pieza. Registros viejos (guardaron el total) se convierten al vuelo.
+       var n = parseFloat(p.unidadesPorPieza) || 0;
+       if (!(n > 1)) return p.contNeto || '';
+       if (p.contSub !== undefined && p.contSub !== '') return p.contSub;
+       var c = parseFloat(p.contNeto) || 0;
+       return c > 0 ? String(Math.round((c / n) * 1000) / 1000) : '';
+   }
+   // Guarda lo tecleado como sub-unidad y recalcula el TOTAL de la pieza.
+   function _setContSub(p, val) {
+       p.contSub = val;
+       var n = parseFloat(p.unidadesPorPieza) || 0;
+       var v = parseFloat(val) || 0;
+       p.contNeto = (n > 1) ? String(Math.round(v * n * 10000) / 10000) : val;
+   }
    function _hintSubUnidadHTML(p, i) {
        return '<div id="hint-subun-'+i+'" style="font-size:10.5px;color:var(--blue);margin:-6px 0 8px;line-height:1.5">'
            + _hintSubUnidadTexto(p) + '</div>';
    }
    function _hintSubUnidadTexto(p) {
        var n = parseFloat(p.unidadesPorPieza) || 0;
-       var c = parseFloat(p.contNeto) || 0;
-       if (!(n > 1) || c <= 0) return '';
+       var cada = parseFloat(_contSubDe(p)) || 0;
+       if (!(n > 1) || cada <= 0) return '';
        var um = (p.umContenido || 'G').toUpperCase();
-       var cada = c / n;
-       var nom = _subUnidadNombre(p);
-       return '📐 El contenido es de la PIEZA completa: ' + c + ' ' + um + ' ÷ ' + n + ' ' + etx(nom)
-            + ' = <b>' + (cada < 1 ? cada.toFixed(3) : (Math.round(cada*100)/100)) + ' ' + um + '</b> cada ' + etx(nom.replace(/s$/,''))
-            + '. Si lo que capturaste es lo que pesa una sola, multiplícalo por ' + n + '.';
+       var tot = Math.round(cada * n * 1000) / 1000;
+       var nom = _subUnidadNombre(p), sing = nom.replace(/s$/, '');
+       return '📐 ' + n + ' ' + etx(nom) + ' × ' + cada + ' ' + um + ' cada ' + etx(sing)
+            + ' = <b>' + tot + ' ' + um + '</b> por pieza. De ahí salen el costo por '
+            + etx(sing) + ', por pieza y por kilo/litro.';
    }
    function _pintarHintSubUnidad(p, i) {
        var el = document.getElementById('hint-subun-'+i);
@@ -2671,6 +2722,11 @@
    function updPres(i, campo, val) {
        presentacionesTemp[i][campo] = val;
        const p = presentacionesTemp[i];
+       // El contenido se teclea POR SUB-UNIDAD; contNeto guarda el total de la pieza.
+       if (campo === 'contSub') _setContSub(p, val);
+       // Cambiar cuántas sub-unidades trae la pieza recalcula el total con el mismo
+       // contenido unitario (14 varas → 20 varas, sin volver a teclear los gramos).
+       if (campo === 'unidadesPorPieza') _setContSub(p, _contSubDe(p));
    
        // ── 1. Auto-calcular costoUnitario desde precio + contenido ──
        // Solo si el usuario no lo ha llenado manualmente o si cambia precio/contenido
@@ -2678,7 +2734,7 @@
        const precioEfectivo = precio * calcImpFactor(p);
        const contML         = toML(p.contNeto, p.umContenido || 'ML');
    
-       const _triggerCosto = ['precio','contNeto','umContenido','cantPresCompra','presentacionCompra','umPresCompra','factorPieza','tamanoCopa','ivaCheck','iepsCheck','iepsTasa','incluyeImpuesto','masaDrenada','umMasaDrenada','unidadesPorPieza','nombreSubUnidad'];
+       const _triggerCosto = ['precio','contNeto','contSub','umContenido','cantPresCompra','presentacionCompra','umPresCompra','factorPieza','tamanoCopa','ivaCheck','iepsCheck','iepsTasa','incluyeImpuesto','masaDrenada','umMasaDrenada','unidadesPorPieza','nombreSubUnidad'];
        if (_triggerCosto.includes(campo) && precioEfectivo > 0) {
            if (tipoInsumoActual === 'cerveza_barril') {
                _calcCostosBarril(p, precioEfectivo, contML);
@@ -3374,10 +3430,10 @@
                        <div class="meta-item">
                            <label>${esBarril ? 'Contenido por vaso/jarra'
                                : (parseFloat(p.unidadesPorPieza) > 1
-                                   ? 'Contenido por pieza <span style="text-transform:none;letter-spacing:0;color:var(--blue)">(las '+(parseFloat(p.unidadesPorPieza)||0)+' '+etx(_subUnidadNombre(p))+' juntas)</span>'
+                                   ? 'Contenido de cada <span style="text-transform:none;letter-spacing:0;color:var(--blue)">'+etx(_subUnidadNombre(p).replace(/s$/,''))+'</span>'
                                    : 'Contenido por pieza')}</label>
-                           <input type="number" value="${p.contNeto}" placeholder="${esCarne?'1000':esAbarrote?'500':'700'}"
-                               oninput="updPres(${i},'contNeto',this.value)">
+                           <input type="number" value="${_contSubDe(p)}" placeholder="${esCarne?'1000':esAbarrote?'500':'700'}"
+                               oninput="updPres(${i},'contSub',this.value)">
                        </div>
                        <div class="meta-item">
                            <label>Unidad</label>
@@ -3811,6 +3867,12 @@
            } catch (e) { /* fallback: base64 comprimido */ }
            if (_btnG) { _btnG.textContent = _btnTxt; _btnG.disabled = false; }
        }
+
+       // Sello de auditoría: cuándo y quién. Se pinta en la ficha y en el editor para
+       // saber de un vistazo si el costo que estás leyendo es de ayer o de hace un año.
+       insumo.updatedAt = new Date().toISOString();
+       insumo.updatedBy = _usuarioActual();
+       if (!insumo.createdAt) insumo.createdAt = insumo.updatedAt;
 
        const lista = getInsumos();
        var _copiaNueva = null;

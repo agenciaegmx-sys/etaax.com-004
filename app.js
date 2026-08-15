@@ -370,6 +370,7 @@ async function guardarReceta() {
         // Activa/Inactiva desde la pastilla del editor (persistido de verdad).
         status:       (document.getElementById('statusPill') && document.getElementById('statusPill').textContent === 'Inactiva') ? 'inactiva' : 'activa',
         fechaGuardado: new Date().toISOString(),
+        updatedBy:     _usuarioActualRec(),   // quién dejó así el costeo
     });
 
     // Subir fotos base64 a Storage y dejar solo URLs (evita el payload gigante
@@ -493,6 +494,7 @@ function cargarReceta(id) {
     document.getElementById('precioEnCarta').value = r.precioEnCarta|| '';
     var _multEl = document.getElementById('s-multiplo');
     if (_multEl) _multEl.value = r.multiploCosteo || '';   // vacío = 3.33 de siempre
+    _pintarSelloReceta(r);
 
     // Tiempo
     if (r.tiempo) {
@@ -1810,6 +1812,31 @@ function calcularCosteos() {
         document.getElementById('a-costobruto-pct').textContent = '—%';
         document.getElementById('a-utilidad-pct').textContent   = '—%';
     }
+}
+
+/* Sello de auditoría de la receta: cuándo y quién. Se pinta bajo el nombre en el
+   encabezado del escandallo — sirve para saber si el costeo que estás leyendo es de
+   ayer o del año pasado, y a quién preguntarle. */
+function _usuarioActualRec() {
+    try {
+        var c = JSON.parse(localStorage.getItem('etaax_ctx') || '{}');
+        return c.userName || c.staffNombre || c.negNombre || '';
+    } catch (e) { return ''; }
+}
+function _pintarSelloReceta(r) {
+    var el = document.getElementById('recSello');
+    if (!el) return;
+    var iso = (r && (r.fechaGuardado || r.createdAt)) || '';
+    var d = iso ? new Date(iso) : null;
+    if (!d || isNaN(d)) { el.innerHTML = ''; return; }
+    var dias = Math.floor((Date.now() - d.getTime()) / 86400000);
+    var rel = dias <= 0 ? 'hoy' : dias === 1 ? 'ayer' : dias < 30 ? ('hace ' + dias + ' días')
+            : dias < 365 ? ('hace ' + Math.floor(dias / 30) + ' mes' + (dias < 60 ? '' : 'es'))
+            : ('hace ' + Math.floor(dias / 365) + ' año' + (dias < 730 ? '' : 's'));
+    var quien = (r && r.updatedBy) || '';
+    el.title = 'Última actualización: ' + d.toLocaleString('es-MX', { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    el.style.cssText = 'margin-top:3px;font-size:10.5px;color:var(--text-dim)';
+    el.innerHTML = '🕒 Actualizado ' + etx(rel) + (quien ? ' · <span style="color:var(--text-muted)">' + etx(quien) + '</span>' : '');
 }
 
 // Múltiplo tecleado en el escandallo (vacío/0 → null = default del núcleo).

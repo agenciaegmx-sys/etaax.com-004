@@ -71,6 +71,8 @@
                     <!-- Nombre vivo de la receta: se ve al hacer scroll (el header es sticky) -->
                     <div id="brandRecetaNombre" style="font-family:'DM Sans',sans-serif;font-size:13px;
                         font-weight:600;letter-spacing:.5px;color:var(--accent);margin-top:6px"></div>
+                    <!-- Sello de auditoría: cuándo se guardó por última vez y quién -->
+                    <div id="recSello" style="margin-top:3px"></div>
                 </div>
             </div>
             <div style="display:flex;gap:8px;align-items:center">
@@ -2809,6 +2811,8 @@ function crearReceta(tipo) {
     if (_pillN) { _pillN.textContent = 'Activa'; _pillN.classList.remove('pill-red'); _pillN.classList.add('pill-amber'); }
     var _multN = document.getElementById('s-multiplo');
     if (_multN) _multN.value = '';                          // receta nueva → múltiplo default
+    var _selloN = document.getElementById('recSello');
+    if (_selloN) _selloN.innerHTML = '';                    // receta nueva → sin sello
     window._escDirty = false; // editor nuevo en blanco → sin cambios pendientes
     if (typeof _cerrarPuenteReceta === 'function') _cerrarPuenteReceta(); // QR cerrado al iniciar
     renderFormularioPorTipo(tipo, {});
