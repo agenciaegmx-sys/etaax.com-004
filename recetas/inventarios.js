@@ -2544,9 +2544,22 @@ window._compartirPDF = _compartirPDF;
 // Fuerza un render nuevo del Paso 5 (estilo "renderizar" de Premiere) — por si
 // el usuario editó pasos anteriores y quiere refrescar el resultado a mano.
 function recalcularResultado() {
+    /* Antes solo re-pintaba: los parámetros del insumo (tamaño de copa, peso de
+       la botella, contenido, costos) se quedaban como estaban cuando se creó la
+       fila, y solo se refrescaban al CERRAR y volver a abrir el inventario. Por
+       eso cambiar la copa de un vino a 1 L y darle Recalcular no movía nada: el
+       consumo se seguía dividiendo entre la copa vieja. El botón dice "recalcula
+       con los últimos cambios", así que ahora sí relee el catálogo. */
+    _cacheInsumosInv = null;                       // relee insumos (los pudo editar otra pantalla)
+    if (typeof _consumoIdxCache !== 'undefined') { _consumoIdxCache = null; _consumoDirty = true; }
+    try {
+        if (invActual && typeof cargarProductosCaptura === 'function') cargarProductosCaptura();
+    } catch (e) { console.warn('[inv] recalcular: no se pudo re-sincronizar con el catálogo', e); }
     window._step5Dirty = true;
     window._step5Force = true; // fuerza el recálculo aunque haya caché (el botón SÍ hace algo)
+    if (typeof _marcarStep5Stale === 'function') _marcarStep5Stale(false);
     if (pasoActual === 5 && typeof renderStepContent === 'function') renderStepContent();
+    else if (typeof renderStepContent === 'function') renderStepContent();
 }
 window.recalcularResultado = recalcularResultado;
 // Avisa en el Paso 5 que los datos cambiaron y hay que recalcular (badge + botón resaltado).
