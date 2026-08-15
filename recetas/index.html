@@ -2873,6 +2873,22 @@ function _recetaBadgesHTML(r){
     }
     return sucs.map(function(id){ return '<span style="font-size:8px;letter-spacing:.5px;text-transform:uppercase;background:rgba(61,190,122,.12);color:var(--green);border:1px solid rgba(61,190,122,.3);border-radius:10px;padding:1px 6px;white-space:nowrap">'+etx(_sucNombre(id))+'</span>'; }).join(' ');
 }
+// ADOPCIÓN: nombre normalizado (sin acentos ni dobles espacios) + tipo. Sirve para
+// reconocer que la receta propia de una sucursal y el maestro son "la misma".
+function _normRecNom(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim(); }
+// Recetas PROPIAS de cada sucursal (sin vínculo) que coinciden con el maestro → {suc: receta}.
+// Se excluyen las copias (origenId) y los maestros globales: solo recetas operativas sueltas.
+function _candAdopcionRec(master, lista){
+    var k=_normRecNom(master&&master.nombre), t=String((master&&master.tipo)||''), out={};
+    if(!k) return out;
+    (lista||[]).forEach(function(r){
+        if(!r||r.origenId||r._global||r.id===master.id) return;
+        if(_normRecNom(r.nombre)!==k) return;
+        if(String(r.tipo||'')!==t) return;
+        _recetaMem(r).forEach(function(sc){ var e=sc||'suc_principal'; if(!out[e]) out[e]=r; });
+    });
+    return out;
+}
 var _recetaSucEditId=null;
 // Modal "VINCULAR a sucursal": marcar = crea una COPIA independiente ligada al maestro
 // (origenId); desmarcar = quita el vínculo (borra esa copia). Antes compartía el mismo
@@ -2904,9 +2920,23 @@ function guardarRecetaSuc(){
     document.querySelectorAll('#recetaSucLista input[type=checkbox]').forEach(function(c){ if(c.checked) sel.push(c.getAttribute('data-suc')); });
     var copPorSuc={};
     _copiasDeReceta(master.id).forEach(function(c){ _recetaMem(c).forEach(function(s){ copPorSuc[s||'suc_principal']=c; }); });
-    var nuevas=[],borrar=[];
+    var nuevas=[],borrar=[],adoptadas=[];
+    // ADOPTAR EN VEZ DE DUPLICAR: si la sucursal ya tiene SU PROPIA receta con el mismo
+    // nombre y tipo, se liga esa al maestro (conserva sus datos) en vez de crear otra.
+    // Antes solo miraba las copias ya ligadas → la receta propia era invisible y quedaban dos.
+    var _cand=_candAdopcionRec(master,lista), _adoptar={};
+    var _pend=sel.filter(function(sc){ return !copPorSuc[sc] && _cand[sc]; });
+    if(_pend.length){
+        var _txt=_pend.map(function(sc){ return '   • '+_sucNombre(sc)+' → "'+(_cand[sc].nombre||'')+'"'; }).join('\n');
+        if(confirm('🔗 ESA SUCURSAL YA TIENE SU PROPIA RECETA:\n\n'+_txt+'\n\n'+
+            'ACEPTAR = adoptarla como la copia vinculada.\n'+
+            '   Conserva SUS ingredientes y precios — no se sobreescribe con los del maestro.\n\n'+
+            'CANCELAR = crear una copia nueva del maestro (la sucursal quedará con DOS).'))
+            _pend.forEach(function(sc){ _adoptar[sc]=_cand[sc]; });
+    }
     sel.forEach(function(suc){
         if(copPorSuc[suc]) return;
+        if(_adoptar[suc]){ _adoptar[suc].origenId=master.id; adoptadas.push(_adoptar[suc]); return; }
         var real=(suc==='suc_principal')?'':suc;
         var copia=JSON.parse(JSON.stringify(master));
         copia.id=genId(); copia.origenId=master.id; copia.sucursales=[real]; copia.sucursalId=real;
@@ -2923,7 +2953,7 @@ function guardarRecetaSuc(){
     master.sucursales=[]; master.sucursalId=''; master._global=true; // maestro global (no aparece en Matriz)
     var all=lista.concat(nuevas); // nada se borra; las desligadas ya están en `lista` (mutadas)
     setRecetas(all);
-    if(typeof _sbUpReceta==='function'){ nuevas.concat([master]).concat(desligadas).forEach(function(x){ try{ _sbUpReceta(x); }catch(e){} }); }
+    if(typeof _sbUpReceta==='function'){ nuevas.concat([master]).concat(desligadas).concat(adoptadas).forEach(function(x){ try{ _sbUpReceta(x); }catch(e){} }); }
     cerrarRecetaSuc();
     renderGridRecetas();
 }

@@ -64,6 +64,21 @@
    // ── Modal "VINCULAR a sucursal": cada sucursal marcada tiene una COPIA independiente
    //    ligada al maestro (origenId). Marcar = crear el vínculo (copia); desmarcar = quitarlo.
    //    (Antes se compartía el MISMO registro entre sucursales → rompía la independencia.)
+   // Insumos PROPIOS de cada sucursal (sin vínculo) que coinciden con el maestro → {suc: insumo}.
+   // La identidad es la clave canónica (_keyInsumo: nombre|marca|variedad), la misma que usa
+   // el resto del sistema para decir "es el mismo insumo".
+   function _candAdopcionIns(master, lista) {
+       var k = window._keyInsumo ? window._keyInsumo(master) : '', out = {};
+       if (!k || k === '||') return out;
+       (lista || []).forEach(function(x){
+           if (!x || x.origenId || x.id === master.id) return;
+           if ((window._keyInsumo ? window._keyInsumo(x) : '') !== k) return;
+           var mem = window._insumoSucursales(x) || [];
+           if (!mem.length) return;                       // maestro global sin asignar → no es "propio de una sucursal"
+           mem.forEach(function(sc){ var e = sc || MATRIZ_ID_INS; if (!out[e]) out[e] = x; });
+       });
+       return out;
+   }
    var _insumoSucEditId = null;
    function abrirInsumoSuc(id) {
        var ins = getInsumos().find(function(x){ return x.id === id; }); if (!ins) return;
@@ -95,11 +110,24 @@
        // Copias vinculadas actuales, por sucursal.
        var copPorSuc = {};
        _copiasDe(master.id).forEach(function(c){ (window._insumoSucursales(c) || []).forEach(function(s){ copPorSuc[s || MATRIZ_ID_INS] = c; }); });
-       var nuevas = [], borrar = [];
+       var nuevas = [], borrar = [], adoptadas = [];
+       // ADOPTAR EN VEZ DE DUPLICAR: si la sucursal ya tiene SU PROPIO insumo con la misma
+       // identidad canónica, se liga ese al maestro (conserva sus datos) en vez de crear otro.
+       var _cand = _candAdopcionIns(master, lista), _adoptar = {};
+       var _pend = sel.filter(function(sc){ return !copPorSuc[sc] && _cand[sc]; });
+       if (_pend.length) {
+           var _txt = _pend.map(function(sc){ return '   • ' + _sucNomIns(sc) + ' → "' + ((typeof insumoTitulo==='function') ? insumoTitulo(_cand[sc]) : (_cand[sc].nombre||'')) + '"'; }).join('\n');
+           if (confirm('🔗 ESA SUCURSAL YA TIENE SU PROPIO INSUMO:\n\n' + _txt + '\n\n' +
+               'ACEPTAR = adoptarlo como la copia vinculada.\n' +
+               '   Conserva SUS presentaciones y costos — no se sobreescribe con los del maestro.\n\n' +
+               'CANCELAR = crear una copia nueva del maestro (la sucursal quedará con DOS).'))
+               _pend.forEach(function(sc){ _adoptar[sc] = _cand[sc]; });
+       }
        // CREAR vínculo (copia ligada) para las marcadas que aún no tienen copia — incluye
        // convertir la membresía LEGACY del maestro en copias reales.
        sel.forEach(function(suc){
            if (copPorSuc[suc]) return;
+           if (_adoptar[suc]) { _adoptar[suc].origenId = master.id; adoptadas.push(_adoptar[suc]); return; }
            var real = (suc === MATRIZ_ID_INS) ? '' : suc;
            var copia = JSON.parse(JSON.stringify(master));
            copia.id = genId(); copia.origenId = master.id; copia.sucursales = [real]; copia.sucursalId = real;
@@ -117,7 +145,7 @@
        master.sucursales = []; master.sucursalId = '';
        var all = lista.concat(nuevas); // nada se borra; las desligadas ya están en `lista` (mutadas)
        setInsumos(all);
-       try { if (typeof _sincronizarInsumosSupabase === 'function') await _sincronizarInsumosSupabase(getNegocioActivo(), nuevas.concat([master]).concat(desligadas)); } catch(e){}
+       try { if (typeof _sincronizarInsumosSupabase === 'function') await _sincronizarInsumosSupabase(getNegocioActivo(), nuevas.concat([master]).concat(desligadas).concat(adoptadas)); } catch(e){}
        cerrarInsumoSuc();
        try { filtrar(); } catch(e) {}
    }
@@ -3689,7 +3717,9 @@
            // catálogo ETAAX tiene _getSucActivaIns()='' → solo maestro (sin copia).
            insumo.sucursalId = '';
            insumo.sucursales = [];
-           _sucCopiaNueva = _getSucActivaIns();
+           // En el Catálogo Global no hay sucursal de trabajo: nace SOLO el maestro.
+           // (Sin esto heredaba `etaax_sucursal_activa` y nacían dos registros.)
+           _sucCopiaNueva = _catGlobalIns() ? '' : _getSucActivaIns();
        }
 
        // #2 Storage: si la foto es base64, súbela a Storage y guarda solo la URL

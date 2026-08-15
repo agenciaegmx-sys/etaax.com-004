@@ -299,6 +299,12 @@ async function guardarReceta() {
         : ((_exRec && _exRec.sucursalId !== undefined)
             ? _exRec.sucursalId
             : (localStorage.getItem('etaax_sucursal_activa') || ''));
+    // CATÁLOGO GLOBAL: la receta NUEVA nace solo como maestro global (igual que el
+    // insumo), sin copia de sucursal. Antes heredaba `etaax_sucursal_activa` — la
+    // sucursal donde estuviste por última vez — y nacían dos registros de golpe.
+    var _catGlobRec = false;
+    try { _catGlobRec = sessionStorage.getItem('etaax_cat_global') === '1'; } catch (e) {}
+    if (_catGlobRec && !_exRec) _sucRec = '';
 
     // MERGE con el registro existente: el objeto NO se reconstruye desde cero.
     // Así se CONSERVAN los campos que el editor no maneja — sobre todo la
@@ -365,6 +371,9 @@ async function guardarReceta() {
         receta.sucursalId = _sucRec;
         lista.push(_masterRec);
     }
+    // Nacida en el catálogo global (sin sucursal) → marcarla como maestro global para
+    // que muestre "🌐 Global · sin asignar" y NO se cuele como receta operativa de Matriz.
+    if (idx < 0 && !receta.origenId && !_sucRec && _catGlobRec) receta._global = true;
     if (idx >= 0) lista[idx] = receta;
     else lista.push(receta);
 
