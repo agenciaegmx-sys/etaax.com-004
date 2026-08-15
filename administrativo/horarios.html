@@ -53,6 +53,23 @@
         .hr-turno:hover { background:var(--surface2);border-color:var(--border); }
         .hr-turno.set { background:rgba(61,190,122,.1);border:1px solid rgba(61,190,122,.3); }
         .hr-turno.set:hover { border-color:var(--green); }
+        /* Asistencia: el turno se tiñe y debajo van las dos marcas. Verde = asistió,
+           rojo = faltó, sin color = todavía no se pasa lista. */
+        .hr-turno.set.asis-si { background:rgba(61,190,122,.2);border-color:var(--green); }
+        .hr-turno.set.asis-no { background:rgba(224,90,58,.14);border-color:rgba(224,90,58,.5);opacity:.75; }
+        .hr-asis { display:flex;gap:4px;justify-content:center;margin-top:4px; }
+        .hr-asis button { background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);
+            border-radius:6px;padding:2px 9px;font-size:11px;line-height:1.4;cursor:pointer;font-family:inherit; }
+        .hr-asis button:hover { border-color:var(--text-muted);color:var(--text-muted); }
+        .hr-asis button.ok.on { background:rgba(61,190,122,.22);border-color:var(--green);color:var(--green);font-weight:700; }
+        .hr-asis button.no.on { background:rgba(224,90,58,.18);border-color:#e05a3a;color:#e05a3a;font-weight:700; }
+        .hr-asis-res { display:block;font-size:10px;color:var(--text-dim);margin-top:3px;line-height:1.5; }
+        .hr-asis-res b { color:var(--green); }
+        /* Vista global: un bloque por sucursal */
+        .hr-suc-blk { margin-bottom:22px; }
+        .hr-suc-hd { display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 8px;padding-bottom:7px;border-bottom:1px solid var(--border); }
+        .hr-suc-hd .nm { font-family:'Bebas Neue',sans-serif;font-size:19px;letter-spacing:1.5px;color:var(--viol); }
+        .hr-suc-hd .mt { font-size:11px;color:var(--text-dim);flex:1; }
         .hr-turno.desc { background:rgba(74,72,68,.18);border:1px solid var(--border); }
         .hr-turno .tt { font-size:13px;font-weight:600;color:var(--green);line-height:1.15; }
         .hr-turno.desc .tt { color:var(--text-dim);font-size:11px;letter-spacing:1px;text-transform:uppercase; }
@@ -145,6 +162,7 @@
         <select class="hr-select" id="sucSel" onchange="cambiarSuc(this.value)" style="display:none"></select>
         <div class="hr-toolbar-right">
             <button class="hr-btn" onclick="copiarSemanaAnterior()" title="Trae los turnos de la semana pasada a esta">⧉ Copiar semana anterior</button>
+            <button class="hr-btn" onclick="imprimirHorario()" title="Rol de la semana en PDF, carta horizontal">🖨️ PDF</button>
             <div class="hr-toggle">
                 <button id="tgGrid" class="on" onclick="setVista('grid')">▦ Cuadrícula</button>
                 <button id="tgCards" onclick="setVista('cards')">▤ Tarjetas</button>
@@ -183,6 +201,7 @@ function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')
 <script src="../supabase-config.js"></script>
 <script src="/etaax-core.js"></script>
 <script src="/etaax-db.js"></script>
+<script src="/reporte-marca.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 <script>
@@ -283,10 +302,13 @@ function _resolverScope(){
         var opts = [{ id:MATRIZ_ID, nombre:'Matriz' }].concat(sucs.filter(function(s){ return s.id!==MATRIZ_ID; }));
         // dedup por si la matriz ya viene en la lista
         var seen={}, clean=[]; opts.forEach(function(o){ if(!seen[o.id]){ seen[o.id]=1; clean.push(o); } });
-        sel.innerHTML = clean.map(function(o){ return '<option value="'+o.id+'">'+esc(_sucNombre(o.id))+'</option>'; }).join('');
+        // "Todas las sucursales" es el DEFAULT del catálogo global: se entra viendo el
+        // panorama completo y de ahí se baja a una sucursal.
+        sel.innerHTML = '<option value="">🌐 Todas las sucursales</option>'
+            + clean.map(function(o){ return '<option value="'+o.id+'">'+esc(_sucNombre(o.id))+'</option>'; }).join('');
         sel.style.display = '';
-        if (!_sucSel) _sucSel = clean[0] ? clean[0].id : MATRIZ_ID;
-        sel.value = _sucSel;
+        if (_sucSel === undefined) _sucSel = '';
+        sel.value = _sucSel || '';
     } else {
         // Dentro de una sucursal: clavado a ella (sin sucursal activa = Matriz).
         _sucSel = _getSucActiva() || MATRIZ_ID;
@@ -340,7 +362,10 @@ function _turnoCellHTML(sid, dayIdx){
     var oc = 'onclick="abrirEditor(\''+sid+'\','+dayIdx+')"';
     if (!t) return '<span class="hr-turno" '+oc+'><span class="plus">+</span></span>';
     if (t.desc) return '<span class="hr-turno desc" '+oc+'><span class="tt">Descanso</span></span>';
-    return '<span class="hr-turno set" '+oc+'><span class="tt">'+esc(t.in)+'–'+esc(t.out)+'</span><span class="td2">'+_fmtH(_durHoras(t))+'</span></span>';
+    var a = t.asis || '';
+    return '<span class="hr-turno set'+(a==='si'?' asis-si':a==='no'?' asis-no':'')+'" '+oc+'>'
+         + '<span class="tt">'+esc(t.in)+'–'+esc(t.out)+'</span><span class="td2">'+_fmtH(_durHoras(t))+'</span></span>'
+         + _asisBotonesHTML(sid, dayIdx);
 }
 function render(){
     document.getElementById('wkNum').textContent = 'Semana ' + _weekStr.split('-W')[1];
@@ -348,17 +373,55 @@ function render(){
     var rl = document.getElementById('wkRange');
     rl.textContent = _fmtDia(mon) + ' – ' + _fmtDia(sun) + ' ' + sun.getFullYear();
     rl.className = 'wr' + (_hoyIdx()>=0 ? ' hoy' : '');
-    document.getElementById('hrSub').textContent = 'Rol semanal · ' + _sucNombre(_sucSel) + (_catGlobalOn() ? ' (vista global)' : '');
+    var _esGlobalTodas = _catGlobalOn() && !_sucSel;
+    document.getElementById('hrSub').textContent = 'Rol semanal · '
+        + (_esGlobalTodas ? 'todas las sucursales' : _sucNombre(_sucSel))
+        + (_catGlobalOn() ? ' · vista global' : '');
+    var _selSuc = document.getElementById('sucSel');
+    if (_selSuc && _catGlobalOn()) _selSuc.value = _sucSel || '';
     document.getElementById('tgGrid').className = _view==='grid' ? 'on' : '';
     document.getElementById('tgCards').className = _view==='cards' ? 'on' : '';
 
-    var scope = _staffScope();
     var cont = document.getElementById('hrContent');
+    // VISTA GLOBAL: el rol de TODAS las sucursales, una tabla por cada una. Se ve
+    // completo de un golpe y sigue permitiendo entrar a una sola con el selector.
+    if (_catGlobalOn() && !_sucSel){
+        cont.innerHTML = _renderGlobal();
+        return;
+    }
+    var scope = _staffScope();
     if (!scope.length){
         cont.innerHTML = '<div class="hr-empty"><div class="ic">🗓️</div><div style="font-size:15px;color:var(--text)">Sin colaboradores en '+esc(_sucNombre(_sucSel))+'</div><div style="margin-top:6px">Da de alta personal en el <a href="staff.html" style="color:var(--viol)">Catálogo de Staff</a> y asígnalo a esta sucursal.</div></div>';
         return;
     }
     cont.innerHTML = _view==='grid' ? _renderGrid(scope) : _renderCards(scope);
+}
+/* Vista global: se recorre sucursal por sucursal reutilizando el MISMO render de
+   siempre. Para que las funciones internas (turnos, cobertura, horas) lean la
+   sucursal correcta, se apunta _sucSel a cada una y se devuelve al final — así no
+   hay dos motores de dibujo que mantener. */
+function _renderGlobal(){
+    var sucs = _sucsConStaff();
+    if (!sucs.length){
+        return '<div class="hr-empty"><div class="ic">🗓️</div><div style="font-size:15px;color:var(--text)">Sin colaboradores dados de alta</div><div style="margin-top:6px">Da de alta personal en el <a href="staff.html" style="color:var(--viol)">Catálogo de Staff</a>.</div></div>';
+    }
+    var guardado = _sucSel, out = '';
+    sucs.forEach(function(sid){
+        _sucSel = (sid === MATRIZ_ID) ? '' : sid;
+        var lista = _staffScope();
+        if (!lista.length) return;
+        var res = { h:0, si:0, no:0 };
+        lista.forEach(function(x){ res.h += _horasStaff(x.id); var a=_asisResumen(x.id); res.si+=a.si; res.no+=a.no; });
+        out += '<div class="hr-suc-blk">'
+            + '<div class="hr-suc-hd"><span class="nm">'+esc(_sucNombre(sid))+'</span>'
+            + '<span class="mt">'+lista.length+' colaborador'+(lista.length!==1?'es':'')+' · '+_fmtH(res.h)+' programadas'
+            + ((res.si||res.no) ? ' · ✓'+res.si+' ✕'+res.no : '')+'</span>'
+            + '<button class="hr-btn" onclick="cambiarSuc(\''+(sid===MATRIZ_ID?'':sid)+'\')">Abrir sucursal →</button></div>'
+            + (_view==='grid' ? _renderGrid(lista) : _renderCards(lista))
+            + '</div>';
+    });
+    _sucSel = guardado;
+    return out;
 }
 function _renderGrid(scope){
     var hoy = _hoyIdx();
@@ -366,7 +429,12 @@ function _renderGrid(scope){
     for (var i=0;i<7;i++){ var d=_diaDate(i); h += '<th class="'+(i===hoy?'hoy':'')+'">'+DIAS[i]+'<br><span style="font-weight:400;opacity:.7">'+_fmtDia(d)+'</span></th>'; }
     h += '</tr></thead><tbody>';
     scope.forEach(function(s){
-        h += '<tr><td><div class="hr-person"><span class="pn">'+esc(s.nombre||'—')+'</span><span class="pp">'+esc(s.puesto||'')+'</span><span class="ph">'+_fmtH(_horasStaff(s.id))+' / sem</span></div></td>';
+        var _ar = _asisResumen(s.id);
+        h += '<tr><td><div class="hr-person"><span class="pn">'+esc(s.nombre||'—')+'</span><span class="pp">'+esc(s.puesto||'')+'</span>'
+           + '<span class="ph">'+_fmtH(_horasStaff(s.id))+' / sem</span>'
+           + (_ar.turnos ? '<span class="hr-asis-res">✓ '+_ar.si+'  ✕ '+_ar.no+(_ar.sinMarcar?'  · '+_ar.sinMarcar+' sin marcar':'')
+                          + (_ar.si?'<br><b>'+_fmtH(_horasAsistidas(s.id))+'</b> asistidas':'') + '</span>' : '')
+           + '</div></td>';
         for (var i=0;i<7;i++){ h += '<td class="hr-cell '+(i===hoy?'hoy':'')+'">'+_turnoCellHTML(s.id,i)+'</td>'; }
         h += '</tr>';
     });
@@ -386,13 +454,149 @@ function _renderCards(scope){
             var dv = !t ? '<span class="dv empty">+ asignar</span>'
                    : t.desc ? '<span class="dv desc">Descanso</span>'
                    : '<span class="dv">'+esc(t.in)+'–'+esc(t.out)+' <span style="color:var(--text-dim);font-weight:400;font-size:10px">'+_fmtH(_durHoras(t))+'</span></span>';
-            h += '<div class="hr-card-row'+(i===hoy?' hoy':'')+'" onclick="abrirEditor(\''+s.id+'\','+i+')"><span class="dl'+(i===hoy?' hoy':'')+'">'+DIAS[i]+'</span>'+dv+'</div>';
+            h += '<div class="hr-card-row'+(i===hoy?' hoy':'')+'"><span class="dl'+(i===hoy?' hoy':'')+'" onclick="abrirEditor(\''+s.id+'\','+i+')">'+DIAS[i]+'</span>'
+               + '<span style="flex:1" onclick="abrirEditor(\''+s.id+'\','+i+')">'+dv+'</span>'+_asisBotonesHTML(s.id,i)+'</div>';
         }
         h += '</div>';
     });
     return h + '</div>';
 }
 function setVista(v){ _view=v; localStorage.setItem('etaax_hor_vista', v); render(); }
+
+/* ══ ASISTENCIA ══════════════════════════════════════════════════════════════
+   Vive en el mismo turno: t.asis = 'si' | 'no' | undefined (sin marcar). Así el
+   registro no se parte en dos lugares y la nómina podrá leer las horas y la
+   asistencia del mismo renglón. Solo tiene sentido en días con turno: un
+   descanso no se "asiste". */
+function _asisDe(sid, dayIdx){
+    var t = (curRecord().turnos[sid]||{})['d'+dayIdx];
+    return (t && !t.desc && t.in) ? (t.asis || '') : '';
+}
+function marcarAsistencia(sid, dayIdx, val, ev){
+    if (ev) ev.stopPropagation();      // no abrir el editor de turno al marcar
+    var rec = curRecord();
+    var t = (rec.turnos[sid]||{})['d'+dayIdx];
+    if (!t || t.desc || !t.in) return;  // sin turno no hay asistencia que marcar
+    t.asis = (t.asis === val) ? '' : val;   // volver a picar la misma = desmarcar
+    t.asisTs = t.asis ? new Date().toISOString() : '';
+    t.asisPor = t.asis ? _usuarioActualHor() : '';
+    persist(rec);
+    render();
+}
+function _usuarioActualHor(){
+    try { var c = JSON.parse(localStorage.getItem('etaax_ctx')||'{}'); return c.userName || c.negNombre || ''; }
+    catch(e){ return ''; }
+}
+// Resumen de la semana: días con turno, asistidos y faltas.
+function _asisResumen(sid){
+    var r = { turnos:0, si:0, no:0, sinMarcar:0 };
+    for (var i=0;i<7;i++){
+        var t = (curRecord().turnos[sid]||{})['d'+i];
+        if (!t || t.desc || !t.in) continue;
+        r.turnos++;
+        if (t.asis === 'si') r.si++;
+        else if (t.asis === 'no') r.no++;
+        else r.sinMarcar++;
+    }
+    return r;
+}
+// Horas EFECTIVAS: las de los días con asistencia confirmada. Es lo que la nómina
+// va a querer leer — no las programadas.
+function _horasAsistidas(sid){
+    var h = 0;
+    for (var i=0;i<7;i++){
+        var t = (curRecord().turnos[sid]||{})['d'+i];
+        if (t && !t.desc && t.in && t.asis === 'si') h += _durHoras(t);
+    }
+    return h;
+}
+function _asisBotonesHTML(sid, dayIdx){
+    var a = _asisDe(sid, dayIdx);
+    if (!(curRecord().turnos[sid]||{})['d'+dayIdx]) return '';
+    var t = (curRecord().turnos[sid]||{})['d'+dayIdx];
+    if (t.desc || !t.in) return '';
+    return '<span class="hr-asis">'
+        + '<button class="ok'+(a==='si'?' on':'')+'" title="Asistió" onclick="marcarAsistencia(\''+sid+'\','+dayIdx+',\'si\',event)">✓</button>'
+        + '<button class="no'+(a==='no'?' on':'')+'" title="No asistió" onclick="marcarAsistencia(\''+sid+'\','+dayIdx+',\'no\',event)">✕</button>'
+        + '</span>';
+}
+
+/* ══ EXPORTAR A PDF (carta HORIZONTAL) ═══════════════════════════════════════
+   El rol es ancho —7 días— así que vertical no cabe. Usa la marca compartida
+   (reporte-marca.js) con su propio @page landscape. En vista global sale una
+   tabla por sucursal, cada una con su encabezado. */
+function _turnoTxtPDF(t){
+    if (!t) return '<span style="color:#ccc">—</span>';
+    if (t.desc) return '<span style="color:#888">Descanso</span>';
+    var a = t.asis === 'si' ? ' <b style="color:#1a7a46">✓</b>' : t.asis === 'no' ? ' <b style="color:#b52a1a">✕</b>' : '';
+    return '<b>' + esc(t.in) + '–' + esc(t.out) + '</b>' + a
+         + '<div style="font-size:8px;color:#999">' + _fmtH(_durHoras(t)) + '</div>';
+}
+function _tablaPDF(rec, staffList){
+    var ths = '';
+    for (var i = 0; i < 7; i++) ths += '<th style="text-align:center">' + DIAS[i] + '<div style="font-weight:400;color:#999;font-size:8px">' + _fmtDia(_diaDate(i)) + '</div></th>';
+    var filas = staffList.map(function (s) {
+        var tds = '', hSem = 0, si = 0, no = 0;
+        for (var i = 0; i < 7; i++) {
+            var t = (rec.turnos[s.id] || {})['d' + i];
+            if (t && !t.desc && t.in) { hSem += _durHoras(t); if (t.asis === 'si') si++; else if (t.asis === 'no') no++; }
+            tds += '<td style="text-align:center;font-size:10px">' + _turnoTxtPDF(t) + '</td>';
+        }
+        return '<tr><td><b>' + esc(s.nombre || '—') + '</b><div style="font-size:8.5px;color:#888">' + esc(s.puesto || '') + '</div></td>'
+            + tds + '<td style="text-align:center"><b>' + _fmtH(hSem) + '</b>'
+            + ((si || no) ? '<div style="font-size:8.5px;color:#888">✓' + si + ' ✕' + no + '</div>' : '') + '</td></tr>';
+    }).join('');
+    var cob = '';
+    for (var d = 0; d < 7; d++) {
+        var n = 0;
+        staffList.forEach(function (s) { var t = (rec.turnos[s.id] || {})['d' + d]; if (t && !t.desc && t.in) n++; });
+        cob += '<td style="text-align:center">' + n + '</td>';
+    }
+    return '<table class="rt"><thead><tr><th style="text-align:left;width:20%">Colaborador</th>' + ths + '<th style="text-align:center">Semana</th></tr></thead>'
+        + '<tbody>' + filas + '</tbody>'
+        + '<tfoot><tr><td>Cobertura · personas por día</td>' + cob + '<td></td></tr></tfoot></table>';
+}
+function imprimirHorario(){
+    var mon = _diaDate(0), sun = _diaDate(6);
+    var rango = _fmtDia(mon) + ' – ' + _fmtDia(sun) + ' ' + sun.getFullYear();
+    var cuerpo = '';
+    if (_catGlobalOn()){
+        // Vista global: una tabla por sucursal, con el rol de cada una.
+        var sucs = _sucsConStaff();
+        if (!sucs.length){ alert('No hay colaboradores con turnos esta semana.'); return; }
+        sucs.forEach(function (sid) {
+            var lista = _staff.filter(function (x) { return _effSuc(x.sucursalId) === _effSuc(sid); })
+                              .sort(function (a, b) { return (a.nombre || '').localeCompare(b.nombre || ''); });
+            if (!lista.length) return;
+            var rec = _horCache[recordId(sid, _weekStr)] || { turnos: {} };
+            cuerpo += '<div class="rsec">' + esc(_sucNombre(sid)) + '</div>' + _tablaPDF(rec, lista);
+        });
+    } else {
+        var scope = _staffScope();
+        if (!scope.length){ alert('No hay colaboradores en '+_sucNombre(_sucSel)+'.'); return; }
+        cuerpo = _tablaPDF(curRecord(), scope);
+    }
+    var html = etaaxReporteDoc({
+        titulo: 'Horarios · Semana ' + _weekStr.split('-W')[1],
+        subtitulo: 'Horarios Operativos · Semana ' + _weekStr.split('-W')[1] + (_catGlobalOn() ? ' · Todas las sucursales' : ''),
+        derecha: '<div style="font-size:9px;color:#aaa;letter-spacing:1px">' + esc(rango) + '</div>',
+        pie: 'Rol semanal · ✓ asistió · ✕ falta',
+        cuerpo: cuerpo,
+        opts: _catGlobalOn() ? { sucursal: 'Todas las sucursales' } : { sucursalId: _effSuc(_sucSel) === MATRIZ_ID ? '' : _sucSel }
+    });
+    // Carta HORIZONTAL: 7 columnas no caben en vertical.
+    html = html.replace('@page{size:letter portrait;margin:0.5cm 0}', '@page{size:letter landscape;margin:0.5cm 0}');
+    etaaxAbrirReporte(html);
+}
+// Sucursales que tienen colaboradores (para la vista global).
+function _sucsConStaff(){
+    var vistas = {}, out = [];
+    _staff.forEach(function (s) {
+        var k = _effSuc(s.sucursalId);
+        if (!vistas[k]) { vistas[k] = 1; out.push(k); }
+    });
+    return out.sort(function (a, b) { return _sucNombre(a).localeCompare(_sucNombre(b)); });
+}
 
 /* ── Editor de turno ── */
 function abrirEditor(sid, dayIdx){
