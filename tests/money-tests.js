@@ -1027,6 +1027,49 @@ console.log('\n══ SUITE E · Escandallo de recetas (app.js) ══');
         eq(E.getCostoParaUnidad(pb, 'PZA'), 9));
 })();
 
+/* ═══════ SUITE G · IMPORTE CON LETRA (etaax-core.js) ═══════
+   Va en el recibo de nómina: es lo que impide que alguien le agregue un dígito
+   al número. Un error aquí sale impreso y firmado. */
+console.log('\n══ SUITE G · Importe con letra (etaax-core.js) ══');
+(function () {
+    const L = Core.importeLetra;
+    const t = (m, esp) => test(`${m} → ${esp}`, () => eq(L(m) === esp, true, L(m)));
+
+    t(0, 'CERO PESOS 00/100 M.N.');
+    t(1, 'UN PESOS 00/100 M.N.');
+    t(15, 'QUINCE PESOS 00/100 M.N.');
+    t(16, 'DIECISÉIS PESOS 00/100 M.N.');
+    t(21, 'VEINTIUN PESOS 00/100 M.N.');
+    t(28, 'VEINTIOCHO PESOS 00/100 M.N.');
+    t(31, 'TREINTA Y UN PESOS 00/100 M.N.');
+    t(99, 'NOVENTA Y NUEVE PESOS 00/100 M.N.');
+    t(100, 'CIEN PESOS 00/100 M.N.');
+    t(101, 'CIENTO UN PESOS 00/100 M.N.');
+    t(115, 'CIENTO QUINCE PESOS 00/100 M.N.');
+    t(200, 'DOSCIENTOS PESOS 00/100 M.N.');
+    t(500, 'QUINIENTOS PESOS 00/100 M.N.');
+    t(999, 'NOVECIENTOS NOVENTA Y NUEVE PESOS 00/100 M.N.');
+    t(1000, 'MIL PESOS 00/100 M.N.');
+    t(1001, 'MIL UN PESOS 00/100 M.N.');
+    t(2000, 'DOS MIL PESOS 00/100 M.N.');
+    t(21000, 'VEINTIUN MIL PESOS 00/100 M.N.');
+    t(100000, 'CIEN MIL PESOS 00/100 M.N.');
+    t(999999, 'NOVECIENTOS NOVENTA Y NUEVE MIL NOVECIENTOS NOVENTA Y NUEVE PESOS 00/100 M.N.');
+    t(1000000, 'UN MILLÓN PESOS 00/100 M.N.');
+    t(2000000, 'DOS MILLONES PESOS 00/100 M.N.');
+
+    /* Centavos: es donde se cuelan los errores de redondeo */
+    t(1234.56, 'MIL DOSCIENTOS TREINTA Y CUATRO PESOS 56/100 M.N.');
+    t(0.5, 'CERO PESOS 50/100 M.N.');
+    t(0.05, 'CERO PESOS 05/100 M.N.');
+    t(9.999, 'DIEZ PESOS 00/100 M.N.');          // el centavo carga al entero, no "9 PESOS 100/100"
+    t(1500.999, 'MIL QUINIENTOS UN PESOS 00/100 M.N.');
+    test('nómina real: 3,847.50', () => eq(L(3847.5), 'TRES MIL OCHOCIENTOS CUARENTA Y SIETE PESOS 50/100 M.N.'));
+    test('negativo se marca', () => eq(L(-100).indexOf('MENOS') === 0, true));
+    test('basura → cero', () => eq(L('abc'), 'CERO PESOS 00/100 M.N.'));
+    test('moneda configurable', () => eq(L(1, 'DÓLARES'), 'UN DÓLARES 00/100 M.N.'));
+})();
+
 /* ═══════ SUITE F · MÚLTIPLO DE COSTEO DE RECETA (etaax-core.js) ═══════
    El precio sugerido de TODO escandallo (alimentos y bebidas) sale de aquí.
    La regla histórica 30/40/30 debe seguir dando el mismo centavo cuando la

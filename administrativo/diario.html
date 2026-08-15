@@ -5344,6 +5344,7 @@ function _ensurePagoNomModal(){
         +'</div>'
       +'</div>'
       +'<div class="modal-footer"><button class="btn-ghost" onclick="_cerrarPagoNom()">Cancelar</button>'
+        +'<button class="btn-ghost" onclick="imprimirReciboNomina()" title="Comprobante interno — no es un CFDI">🧾 Recibo</button>'
         +'<button class="btn-primary" onclick="_confirmarPagoNom()">Continuar a registrar pago →</button></div>'
       +'</div>';
     document.body.appendChild(el);
@@ -5516,6 +5517,114 @@ function _pnGuardarGastoDirecto(g){
     _sbUp('gastos', g);
     _syncGastosCortes(); // pagos de nómina "aparte" también cuentan en el corte
 }
+/* ══════════════════════════════════════════════════════════════════════════════
+   RECIBO DE NÓMINA (comprobante INTERNO, no fiscal)
+   Sirve como comprobante de gasto para el negocio y de ingreso para el
+   colaborador. NO es un CFDI ni sustituye el recibo timbrado ante el SAT — lo dice
+   impreso en el propio recibo para que nadie lo presente como tal.
+   Mismo lenguaje visual que los reportes y las recetas (reporte-marca.js).
+   ══════════════════════════════════════════════════════════════════════════════ */
+function _pnFechaLarga(iso){
+    if(!iso) return '—';
+    var d=new Date(iso+'T12:00:00');
+    return isNaN(d) ? iso : d.toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'});
+}
+/* Folio estable por colaborador+periodo: el mismo pago reimpreso da el mismo folio
+   (si fuera aleatorio, dos copias del mismo recibo parecerían dos pagos). */
+function _pnFolio(staffId, desde, hasta){
+    var base=(staffId||'')+'|'+(desde||'')+'|'+(hasta||'');
+    var h=0; for(var i=0;i<base.length;i++){ h=((h<<5)-h+base.charCodeAt(i))|0; }
+    return 'N-'+String(Math.abs(h)%100000).padStart(5,'0');
+}
+function _reciboNominaDatos(){
+    var s=_pagoNomStaff; if(!s) return null;
+    var desde=document.getElementById('pnDesde').value, hasta=document.getElementById('pnHasta').value;
+    var diario=n(document.getElementById('pnDiario').value), dias=n(document.getElementById('pnDias').value);
+    var prima=_pnPrimaDom();
+    var perLbl={semana:'Semanal',quincena:'Quincenal',mes:'Mensual',personalizado:'Periodo'}[document.getElementById('pnTipo').value]||'Periodo';
+    var percepciones=[{ concepto:'Sueldo del periodo', detalle:fmtM(diario)+' × '+dias+' día'+(dias!==1?'s':''), monto:_pnSueldo() }];
+    if(_pnPrimaInclude && prima.monto>0)
+        percepciones.push({ concepto:'Prima dominical', detalle:prima.domingos+' domingo'+(prima.domingos!==1?'s':'')+' · '+prima.pct+'%', monto:prima.monto });
+    (_pagoNomConceptos||[]).forEach(function(c){
+        var m=_PN_METODOS[c.pago]||{};
+        percepciones.push({ concepto:c.concepto, detalle:(c.pago && c.pago!=='mismo') ? 'Pagado aparte · '+m.lbl : '—', monto:n(c.monto) });
+    });
+    return {
+        folio:_pnFolio(s.id,desde,hasta), staff:s, periodicidad:perLbl,
+        desde:desde, hasta:hasta, dias:dias, diario:diario,
+        percepciones:percepciones, total:n(document.getElementById('pnTotal').value)
+    };
+}
+function _reciboNominaHTML(d){
+    var _e=(typeof etx==='function')?etx:function(x){ return String(x==null?'':x); };
+    var filas=d.percepciones.map(function(p){
+        return '<tr><td>'+_e(p.concepto)+'</td>'+
+               '<td style="text-align:left;color:#8a8a8a;font-weight:400">'+_e(p.detalle)+'</td>'+
+               '<td>'+fmtM(p.monto)+'</td></tr>';
+    }).join('');
+    var dato=function(l,v){
+        return '<div class="rcard" style="padding:10px 13px"><div class="l">'+_e(l)+'</div>'+
+               '<div style="font-size:13px;font-weight:600;color:#1a1916;line-height:1.35">'+_e(v)+'</div></div>';
+    };
+    var cuerpo=
+        '<div class="rsec">Datos del pago</div>'+
+        '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">'+
+            dato('Colaborador', d.staff.nombre||'—')+
+            dato('Puesto', d.staff.puesto||'—')+
+            dato('Periodicidad', d.periodicidad)+
+            dato('Días pagados', d.dias)+
+        '</div>'+
+        '<div class="rgrid" style="grid-template-columns:repeat(3,1fr);margin-top:10px">'+
+            dato('Periodo', _pnFechaLarga(d.desde)+'  —  '+_pnFechaLarga(d.hasta))+
+            dato('Fecha de pago', _pnFechaLarga(todayStr()))+
+            dato('Folio interno', d.folio)+
+        '</div>'+
+
+        '<div class="rsec">Percepciones</div>'+
+        '<table class="rt"><thead><tr>'+
+            '<th style="width:42%">Concepto</th>'+
+            '<th style="text-align:left;width:33%">Detalle</th>'+
+            '<th>Importe</th></tr></thead>'+
+        '<tbody>'+filas+'</tbody>'+
+        '<tfoot><tr><td colspan="2">Total pagado</td><td>'+fmtM(d.total)+'</td></tr></tfoot></table>'+
+        '<div style="margin-top:9px;padding:10px 13px;background:#f8f8f8;border-left:3px solid #3dbe7a;border-radius:0 6px 6px 0">'+
+            '<div style="font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#999;font-weight:700;margin-bottom:3px">Importe con letra</div>'+
+            '<div style="font-size:11.5px;font-weight:600;color:#1a1916;line-height:1.4">'+_e(EtaaxCore.importeLetra(d.total))+'</div>'+
+        '</div>'+
+
+        '<div class="rsec">Firmas</div>'+
+        '<div class="rgrid" style="grid-template-columns:1fr 1fr;gap:26px;margin-top:26px">'+
+            '<div style="text-align:center"><div style="border-top:1px solid #1a1916;margin:0 10px 6px"></div>'+
+                '<div style="font-size:11px;font-weight:600">'+_e(d.staff.nombre||'')+'</div>'+
+                '<div style="font-size:9px;color:#8a8a8a;margin-top:2px">Recibí de conformidad</div></div>'+
+            '<div style="text-align:center"><div style="border-top:1px solid #1a1916;margin:0 10px 6px"></div>'+
+                '<div style="font-size:11px;font-weight:600">Entregó</div>'+
+                '<div style="font-size:9px;color:#8a8a8a;margin-top:2px">Por el negocio</div></div>'+
+        '</div>'+
+
+        '<div style="margin-top:24px;padding:9px 12px;border:1px solid #e8d8a8;background:#fdfaef;border-radius:7px">'+
+            '<div style="font-size:9.5px;color:#8a7a4a;line-height:1.5">'+
+            '<b>Comprobante interno.</b> Este documento respalda el pago entre el negocio y la persona '+
+            'colaboradora. <b>No es un CFDI</b> ni sustituye al recibo de nómina timbrado ante el SAT, '+
+            'y no tiene validez fiscal.</div>'+
+        '</div>';
+
+    return etaaxReporteDoc({
+        titulo:'Recibo de nómina — '+(d.staff.nombre||''),
+        subtitulo:'Recibo de Nómina · '+d.folio,
+        derecha:'<div style="font-size:9px;color:#aaa;letter-spacing:1px;text-align:right">'+_pnFechaLarga(todayStr())+'</div>'+
+                '<div style="font-size:10px;color:#888;margin-top:2px;text-align:right">'+_e(d.periodicidad)+'</div>',
+        pie:'Recibo de nómina · comprobante interno',
+        cuerpo:cuerpo
+    });
+}
+function imprimirReciboNomina(){
+    var d=_reciboNominaDatos();
+    if(!d){ alert('Abre el pago de un colaborador para generar su recibo.'); return; }
+    if(!(d.total>0)){ alert('El total a pagar debe ser mayor a cero para generar el recibo.'); return; }
+    etaaxAbrirReporte(_reciboNominaHTML(d));
+}
+
 function _confirmarPagoNom(){
     var s=_pagoNomStaff; if(!s)return;
     var total=_pnCalc();

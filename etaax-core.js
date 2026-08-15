@@ -375,6 +375,45 @@
         };
     }
 
+    /* ── IMPORTE CON LETRA (recibos) ───────────────────────────────────────────────
+       Todo recibo lleva el monto escrito: es lo que impide que alguien le agregue un
+       dígito al número. Formato mexicano: "MIL DOSCIENTOS PESOS 50/100 M.N.".        */
+    var _LT_U = ['', 'UN', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE',
+                 'DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISÉIS', 'DIECISIETE',
+                 'DIECIOCHO', 'DIECINUEVE', 'VEINTE'];
+    var _LT_D = ['', '', 'VEINTE', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA'];
+    var _LT_C = ['', 'CIENTO', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS', 'QUINIENTOS',
+                 'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS'];
+    function _letraCentena(x) {                       // 0..999
+        if (x === 0) return '';
+        if (x === 100) return 'CIEN';
+        var c = Math.floor(x / 100), r = x % 100, out = _LT_C[c];
+        if (r === 0) return out;
+        var dec;
+        if (r <= 20) dec = _LT_U[r];
+        else if (r < 30) dec = 'VEINTI' + _LT_U[r - 20];
+        else { var d = Math.floor(r / 10), u = r % 10; dec = _LT_D[d] + (u ? ' Y ' + _LT_U[u] : ''); }
+        return (out ? out + ' ' : '') + dec;
+    }
+    function importeLetra(monto, moneda) {
+        var v = Math.abs(n(monto));
+        var ent = Math.floor(v + 1e-9);
+        var cent = Math.round((v - ent) * 100);
+        if (cent === 100) { cent = 0; ent += 1; }      // 9.999 → DIEZ PESOS 00/100
+        var txt;
+        if (ent === 0) txt = 'CERO';
+        else {
+            var mill = Math.floor(ent / 1000000), miles = Math.floor((ent % 1000000) / 1000), resto = ent % 1000;
+            var p = [];
+            if (mill) p.push(mill === 1 ? 'UN MILLÓN' : _letraCentena(mill) + ' MILLONES');
+            if (miles) p.push(miles === 1 ? 'MIL' : _letraCentena(miles) + ' MIL');
+            if (resto) p.push(_letraCentena(resto));
+            txt = p.join(' ');
+        }
+        var neg = n(monto) < 0 ? 'MENOS ' : '';
+        return neg + txt + ' ' + (moneda || 'PESOS') + ' ' + String(cent).padStart(2, '0') + '/100 M.N.';
+    }
+
     window.EtaaxCore = {
         n: n, fmtM: fmtM, fmtN: fmtN, genId: genId, todayStr: todayStr,
         gastoEsIMSS: gastoEsIMSS, gastoEsNomina: gastoEsNomina, gastoEsPropina: gastoEsPropina,
@@ -390,6 +429,7 @@
         cuentasDebito: cuentasDebito, cuentasDebitoActivas: cuentasDebitoActivas, ctaActiva: ctaActiva,
         comisionBancoCorte: comisionBancoCorte,
         depEfecto: depEfecto, esRetiro: esRetiro,
+        importeLetra: importeLetra,
         multiploReceta: multiploReceta, costeoReceta: costeoReceta,
         COSTEO_MULT_DEFAULT: COSTEO_MULT_DEFAULT, COSTEO_GASTO_OP_PCT: COSTEO_GASTO_OP_PCT,
         DIA_FACTORES_DEFAULT: DIA_FACTORES_DEFAULT, diasOperativos: diasOperativos, operaDow: operaDow, calcMetaDiaria: calcMetaDiaria,
