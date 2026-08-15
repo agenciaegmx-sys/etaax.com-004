@@ -410,6 +410,12 @@ body.has-ctx .header { top: 96px; }
     margin-bottom: 22px;
 }
 
+/* Los campos se alinean por ABAJO: una etiqueta de dos renglones ("Leer consumo en
+   (inventario)") empujaba su input más abajo que los vecinos y la fila se veía chueca.
+   Con la etiqueta creciendo hacia arriba, todos los inputs quedan a la misma altura. */
+.meta-grid, .mg-3 { align-items: end; }
+.meta-item { display: flex; flex-direction: column; justify-content: flex-end; }
+
 .meta-item label {
     display: block;
     font-size: 10px;
@@ -417,6 +423,7 @@ body.has-ctx .header { top: 96px; }
     text-transform: uppercase;
     color: var(--text-dim);
     margin-bottom: 4px;
+    line-height: 1.35;
 }
 
 .meta-item input,

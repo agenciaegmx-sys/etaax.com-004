@@ -589,7 +589,28 @@ body { font-family:'DM Sans',sans-serif; background:#fff; color:#1a1916; }
 .header-left { display:flex; align-items:center; gap:12px; }
 .receta-tipo { font-size:10px; letter-spacing:3px; text-transform:uppercase; color:#888; margin-bottom:2px; }
 .receta-nombre { font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:1px; color:#1a1916; line-height:1; }
-.body-imp { display:flex; flex-direction:column; gap:12px; }
+.body-imp { display:flex; flex-direction:column; gap:12px; flex:1 1 auto; min-height:0; }
+/* Fotos: se reparten el alto que sobra de la hoja en vez de un 160px fijo — una
+   sola foto se veía diminuta en media página vacía. Máximo 4 por renglón; con
+   menos, cada una crece hasta llenar el ancho disponible. object-fit:contain
+   mantiene la proporción (nada se recorta). */
+.fotos-imp {
+    flex:1 1 auto; min-height:6cm;
+    display:flex; flex-wrap:wrap; gap:8px;
+    justify-content:center; align-items:stretch; align-content:stretch;
+    margin-top:14px;
+}
+/* Cada foto va en su CELDA: la celda se reparte el espacio y la imagen se centra
+   dentro sin pasarse. Absoluta a propósito — con la imagen en flujo, una foto
+   vertical a todo el ancho se volvía altísima y se brincaba a la hoja siguiente. */
+.foto-cell { position:relative; min-width:0; }
+.foto-cell img {
+    position:absolute; top:0; right:0; bottom:0; left:0; margin:auto;
+    max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain;
+    border-radius:8px; border:1px solid #e8e8e8; background:#fafafa;
+}
+.body-imp.compact .fotos-imp { min-height:4.5cm; }
+.body-imp.mini .fotos-imp    { min-height:3.5cm; }
 .sec-title {
     font-size:9px; letter-spacing:3px; text-transform:uppercase;
     color:#3dbe7a; font-weight:600; margin-bottom:5px;
@@ -829,10 +850,18 @@ function buildPlantillaOperativa(recetas) {
         }).join('');
 
         var fotos = r.fotos && r.fotos.length ? r.fotos : (r.foto && r.foto.startsWith('data:') ? [r.foto] : []);
+        // Reparto: hasta 4 por renglón; con 1, 2 o 3 fotos cada una toma la parte
+        // proporcional del ancho libre (no un tamaño fijo). Con 5+ se acomodan en
+        // renglones de 4 y el bloque crece hacia abajo.
+        var _porFila = Math.min(fotos.length, 4);
+        var _anchoFoto = _porFila > 0
+            ? 'calc((100% - ' + ((_porFila - 1) * 8) + 'px) / ' + _porFila + ')'
+            : '100%';
         var fotoHTML = fotos.length
-            ? '<div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">' +
+            ? '<div class="fotos-imp">' +
               fotos.map(function(src) {
-                  return '<img src="' + src + '" style="max-height:160px;max-width:' + (fotos.length===1?'100%':'48%') + ';border-radius:8px;border:1px solid #e8e8e8;object-fit:cover">';
+                  return '<div class="foto-cell" style="flex:1 1 ' + _anchoFoto + ';max-width:' + _anchoFoto + '">' +
+                         '<img src="' + src + '"></div>';
               }).join('') +
               '</div>'
             : '';
