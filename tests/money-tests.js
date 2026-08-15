@@ -1027,6 +1027,60 @@ console.log('\n══ SUITE E · Escandallo de recetas (app.js) ══');
         eq(E.getCostoParaUnidad(pb, 'PZA'), 9));
 })();
 
+/* ═══════ SUITE F · MÚLTIPLO DE COSTEO DE RECETA (etaax-core.js) ═══════
+   El precio sugerido de TODO escandallo (alimentos y bebidas) sale de aquí.
+   La regla histórica 30/40/30 debe seguir dando el mismo centavo cuando la
+   receta no trae múltiplo propio. */
+console.log('\n══ SUITE F · Múltiplo de costeo de receta (etaax-core.js) ══');
+(function () {
+    const K = Core.costeoReceta;
+
+    /* ── Default: sin múltiplo guardado = la regla de siempre ── */
+    test('sin múltiplo → 30% costo bruto (idéntico a costo/0.30)', () => eq(K(120).platillo, 400));
+    test('sin múltiplo → gasto operativo 40% = $160', () => eq(K(120).gastoOp, 160));
+    test('sin múltiplo → utilidad neta 30% = $120', () => eq(K(120).utilidad, 120));
+    test('sin múltiplo → los porcentajes son 30 / 40 / 30', () => {
+        const r = K(120); eq(r.brutoPct, 30); eq(r.gastoOpPct, 40); eq(r.utilidadPct, 30);
+    });
+    test('sin múltiplo → precio en comedor = platillo × 1.16', () => eq(K(120).comedor, 464));
+    test('sin múltiplo → precio en delivery = platillo × 1.56', () => eq(K(120).delivery, 624));
+    test('sin múltiplo → IVA 16% = $64', () => eq(K(120).iva, 64));
+    test('múltiplo 0 / vacío / basura caen al default', () => {
+        eq(K(120, 0).platillo, 400); eq(K(120, null).platillo, 400);
+        eq(K(120, '').platillo, 400); eq(K(120, 'abc').platillo, 400);
+    });
+
+    /* ── Múltiplo propio: el pastel para llevar ── */
+    test('múltiplo 2.5 → platillo = costo × 2.5', () => eq(K(120, 2.5).platillo, 300));
+    test('múltiplo 2.5 → costo bruto sube a 40%', () => eq(K(120, 2.5).brutoPct, 40));
+    test('múltiplo 2.5 → utilidad neta baja a 20% ($60)', () => {
+        eq(K(120, 2.5).utilidadPct, 20); eq(K(120, 2.5).utilidad, 60);
+    });
+    test('múltiplo 2.5 → gasto operativo SIGUE en 40% ($120)', () => {
+        eq(K(120, 2.5).gastoOpPct, 40); eq(K(120, 2.5).gastoOp, 120);
+    });
+    test('múltiplo 2.5 → comedor $348 y delivery $468', () => {
+        eq(K(120, 2.5).comedor, 348); eq(K(120, 2.5).delivery, 468);
+    });
+    test('múltiplo 4 → costo bruto 25%, utilidad neta 35%', () => {
+        const r = K(120, 4); eq(r.brutoPct, 25); eq(r.utilidadPct, 35); eq(r.platillo, 480);
+    });
+    test('las tres partes suman el precio de platillo', () => {
+        const r = K(87.5, 2.8); eq(r.costoBruto + r.gastoOp + r.utilidad, r.platillo);
+        const d = K(87.5); eq(d.costoBruto + d.gastoOp + d.utilidad, d.platillo);
+    });
+    test('múltiplo 1.6 → utilidad NEGATIVA (avisa que no da): −2.5%', () =>
+        eq(K(120, 1.6).utilidadPct, -2.5));
+    test('costo 0 → todo en 0 (no divide entre nada)', () => {
+        const r = K(0, 2.5); eq(r.platillo, 0); eq(r.utilidad, 0); eq(r.comedor, 0);
+    });
+
+    /* ── Acepta la receta completa, no solo el número ── */
+    test('lee multiploCosteo desde la receta', () => eq(K(120, { multiploCosteo: 2.5 }).platillo, 300));
+    test('receta sin multiploCosteo → default', () => eq(K(120, { nombre: 'x' }).platillo, 400));
+    test('multiploReceta: default exacto = 1/0.30', () => eq(Core.multiploReceta({}), 1 / 0.30));
+})();
+
 /* ═══════════ SUITE D · MODELO DE COBRO POR SUCURSAL (precios.js) ═══════════
    El precio que ve el cliente en hub.html y el importe sugerido del recibo en
    admin.html salen de aquí. Si alguien mueve la tabla, estos números cantan. */

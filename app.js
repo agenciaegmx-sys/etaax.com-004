@@ -322,6 +322,9 @@ async function guardarReceta() {
         tiempo:       tiempoNum ? tiempoNum + ' ' + tiempoUnidad : '',
         procedimiento:document.getElementById('procedimiento')?.value || '',
         precioEnCarta:(document.getElementById('precioFormulario') || document.getElementById('precioEnCarta') || {value:''}).value || '',
+        // Múltiplo del costeo sugerido ('' = default 3.33). Se guarda como número
+        // para que reportes y carátula lo lean sin parsear.
+        multiploCosteo: _multiploDelEditor(),
         ingredientes: JSON.parse(JSON.stringify(ingredientes)),
         fotos:        JSON.parse(JSON.stringify(fotosReceta)),
         foto:         fotosReceta[0] || '',  // compatibilidad plantillas
@@ -450,6 +453,8 @@ function cargarReceta(id) {
     document.getElementById('cristaleria').value   = r.cristaleria  || '';
     document.getElementById('procedimiento').value = r.procedimiento|| '';
     document.getElementById('precioEnCarta').value = r.precioEnCarta|| '';
+    var _multEl = document.getElementById('s-multiplo');
+    if (_multEl) _multEl.value = r.multiploCosteo || '';   // vacío = 3.33 de siempre
 
     // Tiempo
     if (r.tiempo) {
@@ -581,7 +586,7 @@ body { font-family:'DM Sans',sans-serif; background:#fff; color:#1a1916; }
 const LOGO_SVG_DARK_BG='<svg xmlns="http://www.w3.org/2000/svg" height="27" viewBox="4650 98600 244400 53400"><g transform="matrix(1172.115912,0,0,1172.115912,3418.038957,87250.941841)"><g transform="matrix(1,0,0,1.05042,-2.857143,-0.529412)"><path d="M4,31C4,19.5 12.5,10.5 25,10.5C37.5,10.5 45.5,19.5 45.5,30.5C45.5,32 45.3,33.5 45,35L14,35C15.5,40.5 19.5,44 25,44C29.5,44 33,42 35,39.5L43.5,43.5C40,49.5 33,53 25,53C12.5,53 4,44 4,31Z" fill="#f0ece4"/></g><g transform="matrix(1,0,0,1,-2.857143,0)"><path d="M14.5,28L37,28C35.5,23 31.5,20 25.5,20C19.5,20 16,23 14.5,28Z" fill="#0f0e0c"/></g><path d="M52,12L61,12L61,21L72,21L72,30L61,30L61,42C61,44.8 62.5,46 65,46L72,46L72,54.5L64.5,54.5C57,54.5 52,50.5 52,43L52,30L46,30L46,21L52,21L52,12Z" fill="#f0ece4"/><g transform="matrix(1,0,0,1,-3.571429,0)"><path d="M78,41C78,34.5 83.5,30.5 92.5,29.5L104,28.5L104,27.5C104,23.5 101.5,21 97,21C93,21 90,23 89,26.5L80.5,24C82.5,17.5 89,13 97,13C107.5,13 113,18.5 113,28.5L113,54.5L104,54.5L104,51C102,53.5 98.5,55 94,55C85.5,55 78,50.5 78,41Z" fill="#f0ece4"/></g><g transform="matrix(1,0,0,1,-2.857143,0)"><path d="M104,37L95.5,38C92.5,38.5 90.5,40 90.5,42.5C90.5,45 92.5,46.5 95.5,46.5C101,46.5 104,43.5 104,39L104,37Z" fill="#0f0e0c"/></g><path d="M126,41C126,34.5 131.5,30.5 140.5,29.5L152,28.5L152,27.5C152,23.5 149.5,21 145,21C141,21 138,23 137,26.5L128.5,24C130.5,17.5 137,13 145,13C155.5,13 161,18.5 161,28.5L161,54.5L152,54.5L152,51C150,53.5 146.5,55 142,55C133.5,55 126,50.5 126,41Z" fill="#f0ece4"/><path d="M152,37L143.5,38C140.5,38.5 138.5,40 138.5,42.5C138.5,45 140.5,46.5 143.5,46.5C149,46.5 152,43.5 152,39L152,37Z" fill="#0f0e0c"/><g transform="matrix(1,0,0,1,-3.571429,0)"><path d="M168,13L179,13L190,30L201,13L212,13L196.5,34.5L213,54.5L202,54.5L190,38.5L178,54.5L167,54.5L183.5,34.5L168,13Z" fill="#f0ece4"/></g><g transform="matrix(1.086406,0,0,1.086406,70.712678,4.362883)"><circle cx="45" cy="11" r="6" fill="#3dbe7a"/></g></g></svg>';
 function _getRendNeto(r,g){var cx=r.camposExtra||{};if(g.key==='alimentos')return (parseFloat(cx.porciones)||1)+' '+(cx.unidadPorcion||'PLATILLO').toUpperCase();if(g.key==='bebidas'){if(cx.rendimientoBebida&&cx.unidadRendimientoBebida)return cx.rendimientoBebida+' '+cx.unidadRendimientoBebida.toUpperCase();return '1 BEBIDA';}return '1 '+g.rendDefault;}
 function _fmtNumP(n){if(n===0)return '0';return parseFloat(n.toFixed(3))+'';}
-function buildPlantillaCaratula(recetas,grupo){var _mk=(typeof etaaxMarca==='function')?etaaxMarca():{negocio:'',emoji:'',sucursal:'',logo:''};var estab=_mk.negocio||'Establecimiento',g=grupo||{label:'Recetas',tipo:'normal',rendDefault:'PLATILLO',emoji:'',key:'alimentos',subtitulo:'Carátula de Costos'};var esSub=g.tipo==='sub',fecha=new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'}),subtitulo=g.subtitulo||'Carátula de Costos';var CSS=`* { margin:0; padding:0; box-sizing:border-box; }body { font-family:'DM Sans',sans-serif; background:#fff; color:#1a1916; -webkit-print-color-adjust:exact; print-color-adjust:exact; }.pagina { width:27.9cm; min-height:20.9cm; display:flex; flex-direction:column; }.pie-hoja { margin-top:auto; }.cab { display:flex; align-items:center; justify-content:space-between; padding:12px 20px; border-bottom:3px solid #3dbe7a; }.cab-left { display:flex; align-items:center; gap:12px; }.cab-right { display:flex; align-items:center; gap:14px; }.neg-nombre { font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:1px; color:#1a1916; line-height:1; }.neg-sub { font-size:9px; letter-spacing:3px; text-transform:uppercase; color:#888; margin-top:2px; }.neg-logo { width:52px; height:52px; object-fit:contain; border:1px solid #eee; border-radius:6px; }.fecha-txt { font-size:9px; color:#aaa; letter-spacing:1px; text-align:right; }.fecha-cnt { font-size:10px; color:#888; margin-top:2px; text-align:right; }table.ct { width:100%; border-collapse:collapse; }table.ct thead tr { background:#f5f5f5; }table.ct thead th { padding:8px 10px; font-size:8.5px; font-weight:700; color:#666; text-transform:uppercase; letter-spacing:1.5px; border-bottom:2px solid #e0e0e0; }table.ct tbody tr { border-bottom:1px solid #f0f0f0; } table.ct tbody tr:nth-child(even) { background:#fafafa; }table.ct tbody td { padding:7px 10px; font-size:11px; }table.ct tfoot td { background:#f8f8f8; border-top:2px solid #3dbe7a; padding:9px 10px; }.pill { display:inline-block; border-radius:20px; padding:3px 11px; font-size:11px; font-weight:700; }.pg { background:#e8faf2; color:#1a7a46; } .pa { background:#fef9e7; color:#9a6f00; } .pr { background:#fdecea; color:#b52a1a; }.grp { font-size:8.5px; color:#aaa; margin-top:1px; }.footer { display:flex; justify-content:space-between; padding:10px 20px; border-top:1px solid #e8e8e8; font-size:9px; color:#aaa; }.footer strong { color:#3dbe7a; }@media print { @page { size:letter landscape; margin:0; } }`;function cc(r){return (r.ingredientes||[]).reduce(function(s,i){return s+costoIngredienteVivo(i);},0);}var tablaHTML;if(!esSub){var sU=0,cU=0;var filas=recetas.map(function(r){var c=cc(r),sC=c>0?c/0.30*1.16:0,p=parseFloat(r.precioEnCarta)||0,si=p>0?p/1.16:0,cP=si>0?(c/si)*100:0,uP=si>0?100-cP-40:0,uM=si*(uP/100),tP=p>0,in2=r.status==='inactiva',gr=r.grupo||'',rend=_getRendNeto(r,g);if(tP){sU+=uP;cU++;}var pc=uP>=30?'pg':uP>=15?'pa':'pr';return '<tr style="'+(in2?'opacity:0.55':'')+'"><td style="font-weight:600">'+r.nombre+(in2?' <span style="font-size:8px;color:#aaa;border:1px solid #ddd;padding:1px 4px;border-radius:3px">inactiva</span>':'')+(gr?'<div class="grp">'+gr+'</div>':'')+'</td><td style="text-align:center;color:#777">'+rend+'</td><td style="text-align:right;color:#b8860b;font-weight:700">$'+c.toFixed(2)+'</td><td style="text-align:right;color:#888">$'+sC.toFixed(2)+'</td><td style="text-align:right;font-weight:700;color:'+(tP?'#1a7a46':'#bbb')+'">'+(tP?'$'+p.toFixed(2):'—')+'</td><td style="text-align:right;color:#555">'+(tP?'$'+uM.toFixed(2):'—')+'</td><td style="text-align:center">'+(tP?'<span class="pill '+pc+'">'+uP.toFixed(0)+'%</span>':'<span style="color:#ccc">—</span>')+'</td></tr>';}).join('');var prom=cU>0?sU/cU:null,pc2=prom!==null?(prom>=30?'pg':prom>=15?'pa':'pr'):'';tablaHTML='<table class="ct"><thead><tr><th style="text-align:left">NOMBRE DE RECETA</th><th style="text-align:center">RENDIMIENTO NETO</th><th style="text-align:right">COSTO BRUTO</th><th style="text-align:right">PRECIO SUGERIDO CON IVA</th><th style="text-align:right">PRECIO EN CARTA</th><th style="text-align:right">$ DE UTILIDAD NETA</th><th style="text-align:center">% DE UTILIDAD NETA</th></tr></thead><tbody>'+filas+'</tbody><tfoot><tr><td colspan="6" style="text-align:right;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#888">Porcentaje promedio de utilidad neta</td><td style="text-align:center">'+(prom!==null?'<span class="pill '+pc2+'" style="font-size:13px;padding:4px 16px">'+prom.toFixed(2)+'%</span>':'<span style="color:#ccc">—</span>')+'</td></tr></tfoot></table>';}else{var fS=recetas.map(function(r){var c=cc(r),cx=r.camposExtra||{},rN=parseFloat(cx.rendimientoFinal)||0,rU=(cx.unidadRendimientoFinal||'').toUpperCase();var rS=rN>0?_fmtNumP(rN)+' '+rU.toLowerCase():'—';var rB=rN;if(rU==='G'||rU==='ML')rB=rN/1000;var cKL=rB>0?c/rB:0,uBase=(rU==='G'||rU==='KG')?'kg':(rU==='ML'||rU==='LT')?'lts':rU.toLowerCase();var pQ=parseFloat(cx.porcionesQty)||0,pUn=(cx.porcionesUnidad||'pzs').toLowerCase(),pP=parseFloat(cx.pesoPorcion)||0,uPor=(cx.unidadPesoPorcion||'').toLowerCase(),pD='—',uPD='—',cP=0;if(pQ>0){pD=pQ.toFixed(0)+' porciones';cP=c/pQ;if(rN>0)uPD=_fmtNumP(rN/pQ)+' '+rU.toLowerCase();else if(pP>0)uPD=_fmtNumP(pP)+' '+uPor;}else if(pP>0&&rN>0){var pC=rN/pP;pD=pC.toFixed(0)+' porciones';cP=c/pC;uPD=_fmtNumP(pP)+' '+uPor;}var in2=r.status==='inactiva',gr=r.grupo||'';return '<tr style="'+(in2?'opacity:0.55':'')+'"><td style="font-weight:600">'+r.nombre+(in2?' <span style="font-size:8px;color:#aaa;border:1px solid #ddd;padding:1px 4px;border-radius:3px">inactiva</span>':'')+(gr?'<div class="grp">'+gr+'</div>':'')+'</td><td style="text-align:center;color:#555">'+rS+'</td><td style="text-align:right;color:#b8860b;font-weight:700">$'+c.toFixed(2)+'</td><td style="text-align:center;color:#555">'+pD+'</td><td style="text-align:center;color:#555">'+uPD+'</td><td style="text-align:right;color:#1a7a46;font-weight:700">'+(cP>0?'$'+cP.toFixed(2):'—')+'</td><td style="text-align:right;color:#555;font-weight:600">'+(cKL>0?'$'+cKL.toFixed(2)+' <span style="font-size:8px;color:#aaa">/'+uBase+'</span>':'—')+'</td></tr>';}).join('');tablaHTML='<table class="ct"><thead><tr><th style="text-align:left">NOMBRE DE SUB RECETA</th><th style="text-align:center">RENDIMIENTO NETO</th><th style="text-align:right">COSTO BRUTO</th><th style="text-align:center">RENDIMIENTO x PORCIONES</th><th style="text-align:center">UNIDAD DE MEDIDA x PORCIÓN</th><th style="text-align:right">COSTO POR PORCIÓN</th><th style="text-align:right">COSTO POR kg o LT</th></tr></thead><tbody>'+fS+'</tbody></table>';}var _hdrDer='<div class="fecha-txt">'+fecha+'</div><div class="fecha-cnt">'+recetas.length+' recetas</div>';var _hdr=(typeof etaaxReporteHeader==='function')?etaaxReporteHeader(subtitulo,_hdrDer):'<div class="cab"><div class="cab-left"><div><div class="neg-nombre">'+estab+'</div><div class="neg-sub">'+subtitulo+'</div></div></div><div class="cab-right"><div>'+_hdrDer+'</div></div></div>';var _ftr=(typeof etaaxReporteFooter==='function')?etaaxReporteFooter(g.emoji+' '+g.label):'<div class="footer"><span>etaax.com · EGMx Consultoría Estratégica a&b</span><strong>'+g.emoji+' '+g.label+'</strong><span>'+fecha+'</span></div>';var pagina='<div class="pagina">'+_hdr+tablaHTML+'<div class="pie-hoja">'+_ftr+'</div></div>';return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>'+subtitulo+' — '+estab+'</title><link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"><style>'+CSS+'</style></head><body>'+pagina+'<scr'+'ipt>window.onload=function(){window.print();}<\/scr'+'ipt></body></html>';}
+function buildPlantillaCaratula(recetas,grupo){var _mk=(typeof etaaxMarca==='function')?etaaxMarca():{negocio:'',emoji:'',sucursal:'',logo:''};var estab=_mk.negocio||'Establecimiento',g=grupo||{label:'Recetas',tipo:'normal',rendDefault:'PLATILLO',emoji:'',key:'alimentos',subtitulo:'Carátula de Costos'};var esSub=g.tipo==='sub',fecha=new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'}),subtitulo=g.subtitulo||'Carátula de Costos';var CSS=`* { margin:0; padding:0; box-sizing:border-box; }body { font-family:'DM Sans',sans-serif; background:#fff; color:#1a1916; -webkit-print-color-adjust:exact; print-color-adjust:exact; }.pagina { width:27.9cm; min-height:20.9cm; display:flex; flex-direction:column; }.pie-hoja { margin-top:auto; }.cab { display:flex; align-items:center; justify-content:space-between; padding:12px 20px; border-bottom:3px solid #3dbe7a; }.cab-left { display:flex; align-items:center; gap:12px; }.cab-right { display:flex; align-items:center; gap:14px; }.neg-nombre { font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:1px; color:#1a1916; line-height:1; }.neg-sub { font-size:9px; letter-spacing:3px; text-transform:uppercase; color:#888; margin-top:2px; }.neg-logo { width:52px; height:52px; object-fit:contain; border:1px solid #eee; border-radius:6px; }.fecha-txt { font-size:9px; color:#aaa; letter-spacing:1px; text-align:right; }.fecha-cnt { font-size:10px; color:#888; margin-top:2px; text-align:right; }table.ct { width:100%; border-collapse:collapse; }table.ct thead tr { background:#f5f5f5; }table.ct thead th { padding:8px 10px; font-size:8.5px; font-weight:700; color:#666; text-transform:uppercase; letter-spacing:1.5px; border-bottom:2px solid #e0e0e0; }table.ct tbody tr { border-bottom:1px solid #f0f0f0; } table.ct tbody tr:nth-child(even) { background:#fafafa; }table.ct tbody td { padding:7px 10px; font-size:11px; }table.ct tfoot td { background:#f8f8f8; border-top:2px solid #3dbe7a; padding:9px 10px; }.pill { display:inline-block; border-radius:20px; padding:3px 11px; font-size:11px; font-weight:700; }.pg { background:#e8faf2; color:#1a7a46; } .pa { background:#fef9e7; color:#9a6f00; } .pr { background:#fdecea; color:#b52a1a; }.grp { font-size:8.5px; color:#aaa; margin-top:1px; }.footer { display:flex; justify-content:space-between; padding:10px 20px; border-top:1px solid #e8e8e8; font-size:9px; color:#aaa; }.footer strong { color:#3dbe7a; }@media print { @page { size:letter landscape; margin:0; } }`;function cc(r){return (r.ingredientes||[]).reduce(function(s,i){return s+costoIngredienteVivo(i);},0);}var tablaHTML;if(!esSub){var sU=0,cU=0;var filas=recetas.map(function(r){var c=cc(r),sC=EtaaxCore.costeoReceta(c,r).comedor,p=parseFloat(r.precioEnCarta)||0,si=p>0?p/1.16:0,cP=si>0?(c/si)*100:0,uP=si>0?100-cP-40:0,uM=si*(uP/100),tP=p>0,in2=r.status==='inactiva',gr=r.grupo||'',rend=_getRendNeto(r,g);if(tP){sU+=uP;cU++;}var pc=uP>=30?'pg':uP>=15?'pa':'pr';return '<tr style="'+(in2?'opacity:0.55':'')+'"><td style="font-weight:600">'+r.nombre+(in2?' <span style="font-size:8px;color:#aaa;border:1px solid #ddd;padding:1px 4px;border-radius:3px">inactiva</span>':'')+(gr?'<div class="grp">'+gr+'</div>':'')+'</td><td style="text-align:center;color:#777">'+rend+'</td><td style="text-align:right;color:#b8860b;font-weight:700">$'+c.toFixed(2)+'</td><td style="text-align:right;color:#888">$'+sC.toFixed(2)+'</td><td style="text-align:right;font-weight:700;color:'+(tP?'#1a7a46':'#bbb')+'">'+(tP?'$'+p.toFixed(2):'—')+'</td><td style="text-align:right;color:#555">'+(tP?'$'+uM.toFixed(2):'—')+'</td><td style="text-align:center">'+(tP?'<span class="pill '+pc+'">'+uP.toFixed(0)+'%</span>':'<span style="color:#ccc">—</span>')+'</td></tr>';}).join('');var prom=cU>0?sU/cU:null,pc2=prom!==null?(prom>=30?'pg':prom>=15?'pa':'pr'):'';tablaHTML='<table class="ct"><thead><tr><th style="text-align:left">NOMBRE DE RECETA</th><th style="text-align:center">RENDIMIENTO NETO</th><th style="text-align:right">COSTO BRUTO</th><th style="text-align:right">PRECIO SUGERIDO CON IVA</th><th style="text-align:right">PRECIO EN CARTA</th><th style="text-align:right">$ DE UTILIDAD NETA</th><th style="text-align:center">% DE UTILIDAD NETA</th></tr></thead><tbody>'+filas+'</tbody><tfoot><tr><td colspan="6" style="text-align:right;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#888">Porcentaje promedio de utilidad neta</td><td style="text-align:center">'+(prom!==null?'<span class="pill '+pc2+'" style="font-size:13px;padding:4px 16px">'+prom.toFixed(2)+'%</span>':'<span style="color:#ccc">—</span>')+'</td></tr></tfoot></table>';}else{var fS=recetas.map(function(r){var c=cc(r),cx=r.camposExtra||{},rN=parseFloat(cx.rendimientoFinal)||0,rU=(cx.unidadRendimientoFinal||'').toUpperCase();var rS=rN>0?_fmtNumP(rN)+' '+rU.toLowerCase():'—';var rB=rN;if(rU==='G'||rU==='ML')rB=rN/1000;var cKL=rB>0?c/rB:0,uBase=(rU==='G'||rU==='KG')?'kg':(rU==='ML'||rU==='LT')?'lts':rU.toLowerCase();var pQ=parseFloat(cx.porcionesQty)||0,pUn=(cx.porcionesUnidad||'pzs').toLowerCase(),pP=parseFloat(cx.pesoPorcion)||0,uPor=(cx.unidadPesoPorcion||'').toLowerCase(),pD='—',uPD='—',cP=0;if(pQ>0){pD=pQ.toFixed(0)+' porciones';cP=c/pQ;if(rN>0)uPD=_fmtNumP(rN/pQ)+' '+rU.toLowerCase();else if(pP>0)uPD=_fmtNumP(pP)+' '+uPor;}else if(pP>0&&rN>0){var pC=rN/pP;pD=pC.toFixed(0)+' porciones';cP=c/pC;uPD=_fmtNumP(pP)+' '+uPor;}var in2=r.status==='inactiva',gr=r.grupo||'';return '<tr style="'+(in2?'opacity:0.55':'')+'"><td style="font-weight:600">'+r.nombre+(in2?' <span style="font-size:8px;color:#aaa;border:1px solid #ddd;padding:1px 4px;border-radius:3px">inactiva</span>':'')+(gr?'<div class="grp">'+gr+'</div>':'')+'</td><td style="text-align:center;color:#555">'+rS+'</td><td style="text-align:right;color:#b8860b;font-weight:700">$'+c.toFixed(2)+'</td><td style="text-align:center;color:#555">'+pD+'</td><td style="text-align:center;color:#555">'+uPD+'</td><td style="text-align:right;color:#1a7a46;font-weight:700">'+(cP>0?'$'+cP.toFixed(2):'—')+'</td><td style="text-align:right;color:#555;font-weight:600">'+(cKL>0?'$'+cKL.toFixed(2)+' <span style="font-size:8px;color:#aaa">/'+uBase+'</span>':'—')+'</td></tr>';}).join('');tablaHTML='<table class="ct"><thead><tr><th style="text-align:left">NOMBRE DE SUB RECETA</th><th style="text-align:center">RENDIMIENTO NETO</th><th style="text-align:right">COSTO BRUTO</th><th style="text-align:center">RENDIMIENTO x PORCIONES</th><th style="text-align:center">UNIDAD DE MEDIDA x PORCIÓN</th><th style="text-align:right">COSTO POR PORCIÓN</th><th style="text-align:right">COSTO POR kg o LT</th></tr></thead><tbody>'+fS+'</tbody></table>';}var _hdrDer='<div class="fecha-txt">'+fecha+'</div><div class="fecha-cnt">'+recetas.length+' recetas</div>';var _hdr=(typeof etaaxReporteHeader==='function')?etaaxReporteHeader(subtitulo,_hdrDer):'<div class="cab"><div class="cab-left"><div><div class="neg-nombre">'+estab+'</div><div class="neg-sub">'+subtitulo+'</div></div></div><div class="cab-right"><div>'+_hdrDer+'</div></div></div>';var _ftr=(typeof etaaxReporteFooter==='function')?etaaxReporteFooter(g.emoji+' '+g.label):'<div class="footer"><span>etaax.com · EGMx Consultoría Estratégica a&b</span><strong>'+g.emoji+' '+g.label+'</strong><span>'+fecha+'</span></div>';var pagina='<div class="pagina">'+_hdr+tablaHTML+'<div class="pie-hoja">'+_ftr+'</div></div>';return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>'+subtitulo+' — '+estab+'</title><link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"><style>'+CSS+'</style></head><body>'+pagina+'<scr'+'ipt>window.onload=function(){window.print();}<\/scr'+'ipt></body></html>';}
 
 
 function buildWrapperHTML(paginasHTML, titulo) {
@@ -882,9 +887,10 @@ function buildPlantillaAdministrativa(recetas) {
         var costo = (r.ingredientes||[]).reduce(function(s,i) {
             return s + costoIngredienteVivo(i);
         }, 0);
-        var sPlatillo    = costo > 0 ? costo / 0.30 : 0;
-        var sComedor     = sPlatillo * 1.16;
-        var sDelivery    = sPlatillo * 1.56;
+        var _sug         = EtaaxCore.costeoReceta(costo, r);   // múltiplo propio de la receta
+        var sPlatillo    = _sug.platillo;
+        var sComedor     = _sug.comedor;
+        var sDelivery    = _sug.delivery;
         var precioEnCarta = parseFloat(r.precioEnCarta) || 0;
         var aSinIva      = precioEnCarta > 0 ? precioEnCarta / 1.16 : 0;
         var aCostoP      = aSinIva > 0 ? (costo/aSinIva)*100 : 0;
@@ -984,11 +990,12 @@ function buildPlantillaAdministrativa(recetas) {
                     // SUGERIDO
                     R += '<div style="background:#fafafa;border:1px solid #f5c842;border-radius:6px;padding:8px 10px">';
                     R += '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#f5c842;margin-bottom:5px">📐 Costeo Sugerido</div>';
-                    R += cr('Costo Bruto 30%','$'+costo.toFixed(2),true,'#c8960a');
-                    R += cr('Gasto Operativo 40%','$'+(sPlatillo*0.40).toFixed(2),false);
-                    R += cr('Utilidad Neta 30%','$'+(sPlatillo*0.30).toFixed(2),false);
+                    var _p1 = function(v){ return (Math.round(v*10)/10).toFixed(1).replace(/\.0$/,''); };
+                    R += cr('Costo Bruto '+_p1(_sug.brutoPct)+'%','$'+costo.toFixed(2),true,'#c8960a');
+                    R += cr('Gasto Operativo '+_p1(_sug.gastoOpPct)+'%','$'+_sug.gastoOp.toFixed(2),false);
+                    R += cr('Utilidad Neta '+_p1(_sug.utilidadPct)+'%','$'+_sug.utilidad.toFixed(2),false);
                     R += cr('Precio platillo','$'+sPlatillo.toFixed(2),false,'#555');
-                    R += cr('+ IVA 16%','$'+(sPlatillo*0.16).toFixed(2),false,'#888');
+                    R += cr('+ IVA 16%','$'+_sug.iva.toFixed(2),false,'#888');
                     R += priceRow('Precio Comedor 116%','$'+sComedor.toFixed(2),'#fff8e1','#c8960a');
                     R += '</div>';
                     // APLICADO
@@ -1695,14 +1702,17 @@ function calcularCosteos() {
 
     document.getElementById('costoTotalDisplay').textContent = '$'+costoTotal.toFixed(2);
 
-    const sPlatillo = costoTotal > 0 ? costoTotal / 0.30 : 0;
+    // Costeo sugerido: el múltiplo del escandallo manda (vacío = 3.33 de siempre).
+    // La fórmula vive en el núcleo — aquí solo se pinta.
+    var _sug = EtaaxCore.costeoReceta(costoTotal, _multiploDelEditor());
     setVal('s-costobruto', costoTotal);
-    setVal('s-gasto',      sPlatillo * 0.40);
-    setVal('s-utilidad',   sPlatillo * 0.30);
-    setVal('s-platillo',   sPlatillo);
-    setVal('s-iva',        sPlatillo * 0.16);
-    setVal('s-comedor',    sPlatillo * 1.16);
-    setVal('s-delivery',   sPlatillo * 1.56);
+    setVal('s-gasto',      _sug.gastoOp);
+    setVal('s-utilidad',   _sug.utilidad);
+    setVal('s-platillo',   _sug.platillo);
+    setVal('s-iva',        _sug.iva);
+    setVal('s-comedor',    _sug.comedor);
+    setVal('s-delivery',   _sug.delivery);
+    _pintarPctSugerido(_sug);
 
     const precioEnCarta = parseFloat(document.getElementById('precioEnCarta').value) || 0;
     if (precioEnCarta > 0) {
@@ -1733,6 +1743,38 @@ function calcularCosteos() {
         document.getElementById('a-costobruto-pct').textContent = '—%';
         document.getElementById('a-utilidad-pct').textContent   = '—%';
     }
+}
+
+// Múltiplo tecleado en el escandallo (vacío/0 → null = default del núcleo).
+function _multiploDelEditor() {
+    var el = document.getElementById('s-multiplo');
+    var v = el ? parseFloat(el.value) : NaN;
+    return (v > 0) ? v : null;
+}
+// Los porcentajes del costeo sugerido dejan de ser fijos: los dicta el múltiplo.
+// La utilidad se pinta en rojo cuando el múltiplo no alcanza a pagar el 40% de gasto.
+function _pintarPctSugerido(sug) {
+    var _txt = function (id, t, cls) {
+        var el = document.getElementById(id); if (!el) return;
+        el.textContent = t;
+        if (cls !== undefined) el.className = cls;
+    };
+    var _pct = function (v) { return (Math.round(v * 10) / 10).toFixed(1).replace(/\.0$/, '') + '%'; };
+    _txt('s-pct-bruto',    _pct(sug.brutoPct));
+    _txt('s-pct-gasto',    _pct(sug.gastoOpPct));
+    _txt('s-pct-utilidad', _pct(sug.utilidadPct),
+         sug.utilidadPct < 0 ? 'costeo-pct val-red' : sug.utilidadPct < 15 ? 'costeo-pct val-amber' : 'costeo-pct');
+    var hint = document.getElementById('s-mult-hint');
+    if (hint) {
+        hint.textContent = _pct(sug.brutoPct) + ' de costo bruto' +
+            (sug.utilidadPct < 0 ? ' · no cubre el gasto operativo' : '');
+        hint.style.color = sug.utilidadPct < 0 ? 'var(--red)' : '';
+    }
+}
+// Volver al múltiplo de siempre (3.33 = 30% de costo bruto).
+function resetMultiploReceta() {
+    var el = document.getElementById('s-multiplo');
+    if (el) { el.value = ''; calcularCosteos(); window._escDirty = true; if (window._avisarDirty) _avisarDirty(); }
 }
 
 function setVal(id, val) {

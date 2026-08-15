@@ -643,6 +643,33 @@ textarea:focus {
 .costeo-label { color: var(--text-muted); }
 .costeo-pct   { color: var(--text-dim); font-size: 11px; margin-left: 6px; }
 
+/* Múltiplo del costeo sugerido — mismo lenguaje visual que los FACTORES de insumos */
+.costeo-mult {
+    display: flex; align-items: center; gap: 8px;
+    margin: 0 0 10px; padding: 7px 9px;
+    background: rgba(245, 200, 66, 0.06);
+    border: 1px solid rgba(245, 200, 66, 0.28);
+    border-radius: 7px;
+}
+.costeo-mult-lbl {
+    font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--text-dim); white-space: nowrap;
+}
+.costeo-mult input {
+    width: 68px; padding: 4px 7px;
+    background: var(--surface); border: 1px solid rgba(245, 200, 66, 0.45);
+    border-radius: 5px; color: #f5c842;
+    font-family: inherit; font-size: 14px; font-weight: 700;
+    font-variant-numeric: tabular-nums; text-align: center;
+}
+.costeo-mult input:focus { outline: none; border-color: #f5c842; }
+.costeo-mult-hint { font-size: 10px; color: var(--text-dim); flex: 1; }
+.costeo-mult button {
+    background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+    border-radius: 5px; padding: 3px 8px; font-size: 12px; cursor: pointer; font-family: inherit;
+}
+.costeo-mult button:hover { color: #f5c842; border-color: rgba(245, 200, 66, 0.45); }
+
 .costeo-val {
     font-weight: 600;
     font-variant-numeric: tabular-nums;

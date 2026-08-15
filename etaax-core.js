@@ -343,6 +343,38 @@
         return r;
     }
 
+    /* ── COSTEO DE RECETA: múltiplo sobre el costo bruto ───────────────────────────
+       Regla histórica: costo bruto 30% → precio de platillo = costo / 0.30 (múltiplo
+       3.333…), gasto operativo 40%, utilidad neta el resto. El múltiplo ahora es
+       EDITABLE por receta (un pastel para llevar lleva un múltiplo menor), pero el
+       gasto operativo se mantiene fijo en 40% y la utilidad neta sale de la resta.
+       Sin múltiplo guardado se usa el default exacto 1/0.30 — así las recetas viejas
+       no cambian ni un centavo.
+         m = 2.5  →  costo bruto 40% · gasto op 40% · utilidad neta 20%              */
+    var COSTEO_GASTO_OP_PCT = 40;    // fijo (por ahora no editable)
+    var COSTEO_IVA_PCT      = 16;
+    var COSTEO_DELIVERY_PCT = 40;    // recargo de delivery sobre el precio de platillo
+    var COSTEO_MULT_DEFAULT = 1 / 0.30;
+    function multiploReceta(r) {
+        var m = n(r && (r.multiploCosteo != null ? r.multiploCosteo : r));   // acepta receta o número
+        return m > 0 ? m : COSTEO_MULT_DEFAULT;
+    }
+    function costeoReceta(costo, multiplo) {
+        var c = n(costo), m = multiploReceta(multiplo);
+        var platillo = c > 0 ? c * m : 0;
+        var brutoPct = 100 / m;                                    // el múltiplo ES el inverso del % de costo
+        var utilPct  = 100 - brutoPct - COSTEO_GASTO_OP_PCT;       // puede salir negativa: es el aviso de que el múltiplo no da
+        return {
+            multiplo: m, costoBruto: c, platillo: platillo,
+            brutoPct: brutoPct, gastoOpPct: COSTEO_GASTO_OP_PCT, utilidadPct: utilPct,
+            gastoOp:  platillo * (COSTEO_GASTO_OP_PCT / 100),
+            utilidad: platillo * (utilPct / 100),
+            iva:      platillo * (COSTEO_IVA_PCT / 100),
+            comedor:  platillo * (1 + COSTEO_IVA_PCT / 100),
+            delivery: platillo * (1 + (COSTEO_IVA_PCT + COSTEO_DELIVERY_PCT) / 100),
+        };
+    }
+
     window.EtaaxCore = {
         n: n, fmtM: fmtM, fmtN: fmtN, genId: genId, todayStr: todayStr,
         gastoEsIMSS: gastoEsIMSS, gastoEsNomina: gastoEsNomina, gastoEsPropina: gastoEsPropina,
@@ -358,6 +390,8 @@
         cuentasDebito: cuentasDebito, cuentasDebitoActivas: cuentasDebitoActivas, ctaActiva: ctaActiva,
         comisionBancoCorte: comisionBancoCorte,
         depEfecto: depEfecto, esRetiro: esRetiro,
+        multiploReceta: multiploReceta, costeoReceta: costeoReceta,
+        COSTEO_MULT_DEFAULT: COSTEO_MULT_DEFAULT, COSTEO_GASTO_OP_PCT: COSTEO_GASTO_OP_PCT,
         DIA_FACTORES_DEFAULT: DIA_FACTORES_DEFAULT, diasOperativos: diasOperativos, operaDow: operaDow, calcMetaDiaria: calcMetaDiaria,
     };
 })();
