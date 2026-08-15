@@ -5633,6 +5633,36 @@ function setStep5Modo(m) {
     const l = document.getElementById('s5ModoLista'), g = document.getElementById('s5ModoGal');
     if (l && g) { l.classList.toggle('active', m==='lista'); g.classList.toggle('active', m==='galeria'); }
 }
+/* ── ¿De dónde sale (o por qué NO sale) el consumo de un insumo? ────────
+   Cuando la coctelería marca "—" no hay forma de saber si es que ningún coctel
+   lo lleva, si los cocteles que lo llevan no se vendieron, o si el ingrediente
+   quedó desligado. Esto lo dice en el propio renglón, al pasar el mouse. */
+function _origenConsumo(fila) {
+    if (!fila || !fila.insumoId) return '';
+    var cid = _midCanon(fila.insumoId);
+    var vendidos = (invActual && invActual.cocktailsVendidos) || {};
+    var usan = [], usanSinVenta = [], viaSub = [];
+    (getRecetas() || []).forEach(function (r) {
+        if (!r || !(r.ingredientes || []).length) return;
+        var lleva = (r.ingredientes || []).some(function (ing) {
+            return ing && ing.insumoId && _midCanon(ing.insumoId) === cid;
+        });
+        if (!lleva) return;
+        var uds = parseFloat(vendidos[r.id]) || 0;
+        var esSub = /^sub/.test(r.tipo || '');
+        if (esSub) viaSub.push(r.nombre || 'sub-receta');
+        else if (uds > 0) usan.push((r.nombre || 'receta') + ' ×' + uds);
+        else usanSinVenta.push(r.nombre || 'receta');
+    });
+    if (!usan.length && !usanSinVenta.length && !viaSub.length)
+        return 'Ninguna receta lo lleva como ingrediente.';
+    var partes = [];
+    if (usan.length)        partes.push('Vendidos: ' + usan.slice(0, 6).join(', ') + (usan.length > 6 ? '…' : ''));
+    if (usanSinVenta.length)partes.push('Sin ventas capturadas en este inventario: ' + usanSinVenta.slice(0, 6).join(', ') + (usanSinVenta.length > 6 ? '…' : ''));
+    if (viaSub.length)      partes.push('Entra por la sub-receta: ' + viaSub.slice(0, 4).join(', ') + ' (su consumo se reparte al producir el batch)');
+    return partes.join(' · ');
+}
+
 /* ── Ingredientes de receta que no apuntan a ningún insumo ─────────────
    Si un ingrediente quedó apuntando a un insumo que ya no existe en este
    negocio/sucursal, su consumo NO se descuenta del inventario: la coctelería
@@ -5745,7 +5775,7 @@ function _step5TablasHTML() {
                 <td style="text-align:center;color:var(--green);white-space:nowrap">${entBotStr}</td>
                 <td style="text-align:center;color:var(--accent)">${ventaBot > 0 ? ventaBot + ' bot' : '—'}</td>
                 <td style="text-align:center;color:var(--accent)">${ventaCopaDir > 0 ? ventaCopaDir.toFixed(1) + ' cop' : '—'}</td>
-                <td style="text-align:center;color:var(--viol)">${ventaCoct > 0 ? ventaCoct.toFixed(1) + ' cop' : '—'}</td>
+                <td style="text-align:center;color:var(--viol)${ventaCoct > 0 ? '' : ';cursor:help'}" title="${etx(_origenConsumo(fila))}">${ventaCoct > 0 ? ventaCoct.toFixed(1) + ' cop' : '—'}</td>
                 <td style="text-align:center">
                     ${cmTotal > 0
                         ? `<div style="color:var(--red);font-size:12px;font-weight:600">${cmTotal.toFixed(1)} cop</div>
@@ -5788,7 +5818,7 @@ function _step5TablasHTML() {
                 </td>
                 <td style="text-align:center">${ea.toFixed(0)} pza</td>
                 <td style="text-align:center;color:var(--green)">${entTotal>0?'+'+entTotal.toFixed(0)+' pza':'—'}</td>
-                <td style="text-align:center;color:var(--viol)">${ventaCoct>0?(ventaCoct%1?ventaCoct.toFixed(1):ventaCoct)+' pza':'—'}</td>
+                <td style="text-align:center;color:var(--viol)${ventaCoct>0?'':';cursor:help'}" title="${etx(_origenConsumo(fila))}">${ventaCoct>0?(ventaCoct%1?ventaCoct.toFixed(1):ventaCoct)+' pza':'—'}</td>
                 <td style="text-align:center;color:var(--accent)">${ventasDir>0?(ventasDir%1?ventasDir.toFixed(1):ventasDir)+' pza':'—'}</td>
                 <td style="text-align:center;color:var(--text-muted)">${cancelPza>0?cancelPza.toFixed(0)+' pza':'—'}</td>
                 <td style="text-align:center;color:var(--accent)">${cortMerma>0?(cortMerma%1?cortMerma.toFixed(1):cortMerma)+' pza':'—'}</td>
