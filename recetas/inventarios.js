@@ -593,6 +593,12 @@ function _consumoIdx() {
     if (_consumoIdxCache && !_consumoDirty && _consumoIdxKey === key) return _consumoIdxCache;
     var idx = {};
     function slot(id){ return idx[id] || (idx[id] = { mlBeb:0, baseAli:0, pzaDir:0, mlPza:0 }); }
+    /* La receta guarda el id del insumo TAL COMO estaba al agregarlo: si el
+       negocio independizó sus insumos por sucursal, ahí quedó el id de la COPIA.
+       Las filas del inventario usan el id MAESTRO, así que el consumo por
+       recetas no encontraba a su insumo y la coctelería salía en cero — con el
+       costo del ingrediente también en $0.00, que es la otra cara del mismo
+       desajuste. Se acumula y se consulta en canónico. */
     recetas.forEach(function(r){
         var uds = parseFloat(vendidos[r.id]) || 0;
         if (!uds) return;
@@ -600,6 +606,7 @@ function _consumoIdx() {
         if (!esBeb && !esAli) return;
         (r.ingredientes || []).forEach(function(ing){
             var id = ing.insumoId; if (!id) return;
+            id = _canonInsumoId(id) || id;
             var cant = parseFloat(ing.cantidad) || 0, u = (ing.unidad || '').toUpperCase();
             var s = slot(id);
             if (esBeb)            s.mlBeb   += ingredienteML(cant, ing.unidad) * uds;      // copas (bebidas, cualquier estatus)
@@ -625,7 +632,7 @@ function consumoRecetasFila(f) {
 }
 function calcVentasCopasRecetas(insumoId, copaML) {
     if (!copaML || copaML <= 0) return 0;
-    var s = _consumoIdx()[insumoId];
+    var s = _consumoIdx()[insumoId] || _consumoIdx()[_canonInsumoId(insumoId)];
     return s ? s.mlBeb / copaML : 0;
 }
 
@@ -647,14 +654,14 @@ function unidadBaseInsumo(ins) {
 }
 // Consumo teórico de un insumo por las recetas de ALIMENTOS vendidas (en unidad base).
 function calcVentasBaseRecetas(insumoId) {
-    var s = _consumoIdx()[insumoId];
+    var s = _consumoIdx()[insumoId] || _consumoIdx()[_canonInsumoId(insumoId)];
     return s ? s.baseAli : 0; // g / ml / pza
 }
 
 // Consumo de un insumo PZA (refresco/cerveza/lata) por las recetas/menú vendidos, EN PIEZAS.
 // Antes no se contaba (calcVentasCopasRecetas devuelve 0 si no hay copaML) → no descontaba.
 function calcVentasPzaRecetas(insumoId) {
-    var s = _consumoIdx()[insumoId];
+    var s = _consumoIdx()[insumoId] || _consumoIdx()[_canonInsumoId(insumoId)];
     if (!s) return 0;
     const fila     = filasCaptura.find(f => f.insumoId === insumoId);
     const contNeto = fila ? (fila.contNeto || 0) : 0; // ml por pieza

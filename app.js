@@ -1366,7 +1366,12 @@ function seleccionarInsumo(idx, insumoId) {
 function recalcularCostoDesdeInsumo(idx) {
     const ing = ingredientes[idx];
     if (!ing.insumoId) return;
-    const ins = getCatalogoInsumos().find(x => x.id === ing.insumoId);
+    // Por el resolver, no por .find directo: si el negocio independizó sus
+    // insumos por sucursal, la receta puede traer el id del maestro y el
+    // catálogo tener solo la copia (o al revés) — con el .find crudo el
+    // ingrediente se quedaba en $0.00 aunque el insumo sí existiera.
+    const ins = (typeof window._insumoResolver === 'function' ? window._insumoResolver(ing.insumoId) : null)
+             || getCatalogoInsumos().find(x => x.id === ing.insumoId);
     if (ins) ing.costoPorKgLt = _redondeaCosto(getCostoParaUnidad(ins, ing.unidad));
 }
 
