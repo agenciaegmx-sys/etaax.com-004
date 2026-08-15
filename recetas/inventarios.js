@@ -3869,7 +3869,7 @@ function renderStep1Galeria(filas) {
         const idx    = filasCaptura.indexOf(fila);
         const mlReal = calcMLReales(fila);
         const exist  = calcExistencia(fila);
-        const unidad = esComp ? (fila.tipo === 'pza' ? 'pza' : 'cop') : _umCapLbl(fila);
+        const unidad = fila.tipo === 'pza' ? 'pza' : 'cop';
         const tipoSt = fila.tipo === 'pza'
             ? 'background:rgba(61,190,122,0.15);border-color:rgba(61,190,122,0.45);color:var(--green)'
             : 'background:rgba(245,200,66,0.12);border-color:rgba(245,200,66,0.45);color:var(--accent)';
@@ -4195,7 +4195,7 @@ function _step3VentasInner() {
     const rows = items.map(fila => {
         const esComp = !!fila.esCompuesto;
         const idx    = esComp ? -1 : filasCaptura.indexOf(fila);
-        const unidad = fila.tipo === 'pza' ? 'pza' : 'cop';
+        const unidad = esComp ? (fila.tipo === 'pza' ? 'pza' : 'cop') : _umCapLbl(fila);
         const tipoSt = fila.tipo === 'pza'
             ? 'background:rgba(61,190,122,0.15);border-color:rgba(61,190,122,0.45);color:var(--green)'
             : 'background:rgba(245,200,66,0.12);border-color:rgba(245,200,66,0.45);color:var(--accent)';
@@ -4625,7 +4625,6 @@ function renderCardVentas() {
     const fila = filasCaptura.find(f => f.insumoId === _ventasInsumoId);
     if (!fila) { cont.innerHTML = ''; return; }
     const idx    = filasCaptura.indexOf(fila);
-    const unidad = fila.tipo === 'pza' ? 'pza' : 'cop';
     const tipoSt = fila.tipo === 'pza'
         ? 'background:rgba(61,190,122,0.15);border-color:rgba(61,190,122,0.45);color:var(--green)'
         : 'background:rgba(245,200,66,0.12);border-color:rgba(245,200,66,0.45);color:var(--accent)';
@@ -4653,7 +4652,7 @@ function renderCardVentas() {
                     <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Capturar en</span>
                     <select onchange="updCapturaUM(${idx},this.value)"
                         style="background:var(--surface);border:1px solid ${_capturaOZ(fila)?'rgba(122,184,245,.5)':'var(--border)'};color:${_capturaOZ(fila)?'#7ab8f5':'var(--text)'};border-radius:6px;padding:4px 8px;font-family:inherit;font-size:12px">
-                        <option value=""   ${!_capturaOZ(fila)?'selected':''}>Copas de ${_ncop(fila.copaML||0)} ml</option>
+                        <option value=""   ${!_capturaOZ(fila)?'selected':''}>Copas${(parseFloat(fila.copaML)||0) > 0 ? ' de ' + _n1(fila.copaML) + ' ml' : ''}</option>
                         <option value="OZ" ${ _capturaOZ(fila)?'selected':''}>Onzas</option>
                     </select>
                 </span>` : ''}
@@ -5678,6 +5677,9 @@ function setStep5Modo(m) {
    ventanilla de captura: si el insumo pide onzas, se teclea en onzas y se convierte
    al entrar y al salir. Así nadie tiene que migrar un solo inventario viejo.
    Se define en el insumo ("Capturar ventas en"), junto al "Leer consumo en". */
+// Redondeo a 1 decimal, sin ".0" de adorno. Global: antes vivía como const local
+// dentro de un render y usarlo fuera tronaba (ese fue el bug de la búsqueda rápida).
+function _n1(v) { var r = Math.round((parseFloat(v) || 0) * 10) / 10; return r % 1 ? r.toFixed(1) : String(r); }
 function _capturaOZ(fila) {
     if (!fila || fila.tipo === 'pza') return false;
     return String(fila.umCaptura || '').toUpperCase() === 'OZ';
