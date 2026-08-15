@@ -56,12 +56,17 @@
         .ev-sec-del{background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:4px 6px;border-radius:5px;}
         .ev-sec-del:hover{color:var(--red);background:rgba(224,90,58,.12);}
         .ev-sec-pts{font-size:11px;color:var(--text-dim);white-space:nowrap;}
+        .ev-q-sec{max-width:150px;font-size:12px;padding:7px 9px;}
+        .ev-q-mov{display:inline-flex;gap:3px;margin-left:auto;}
+        .ev-q-mov button{background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);
+            cursor:pointer;font-size:13px;line-height:1;padding:5px 9px;border-radius:6px;font-family:inherit;}
+        .ev-q-mov button:hover{border-color:var(--green);color:var(--green);}
         .ev-row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
         @media (max-width:560px){.ev-row2{grid-template-columns:1fr;}}
         .ev-q{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;}
         .ev-q-top{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
         .ev-q-num{font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--green);letter-spacing:1px;min-width:30px;}
-        .ev-q-del{margin-left:auto;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:15px;}
+        .ev-q-del{background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:15px;}
         .ev-q-del:hover{color:#ff7a5c;}
         .ev-opt{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
         .ev-opt .ev-in{flex:1;}
@@ -637,9 +642,23 @@ function qHTML(q,idx){
     } else {
         cuerpo='<div class="ev-hint">Respuesta de texto libre. No suma puntos automáticos (se revisa a mano).</div>';
     }
+    // Selector de sección: solo aparece si la evaluación tiene secciones.
+    var secSel='';
+    if(_secciones().length){
+        secSel='<select class="ev-in ev-q-sec" title="Mover a otra sección" onchange="moverAseccion(\''+q.id+'\',this.value)">'+
+            '<option value=""'+(!q.seccionId?' selected':'')+'>Sin sección</option>'+
+            _secciones().map(function(sec){
+                return '<option value="'+sec.id+'"'+(q.seccionId===sec.id?' selected':'')+'>'+esc(sec.nombre||'Sección')+'</option>';
+            }).join('')+'</select>';
+    }
     return '<div class="ev-q">'+
         '<div class="ev-q-top"><span class="ev-q-num">P'+(idx+1)+'</span>'+
-            '<select class="ev-in" style="max-width:170px" onchange="cambiarTipo(\''+q.id+'\',this.value)">'+tiposSel+'</select>'+
+            '<select class="ev-in" style="max-width:150px" onchange="cambiarTipo(\''+q.id+'\',this.value)">'+tiposSel+'</select>'+
+            secSel+
+            '<span class="ev-q-mov">'+
+                '<button onclick="moverPregunta(\''+q.id+'\',-1)" title="Subir">↑</button>'+
+                '<button onclick="moverPregunta(\''+q.id+'\',1)" title="Bajar">↓</button>'+
+            '</span>'+
             '<button class="ev-q-del" onclick="eliminarPregunta(\''+q.id+'\')" title="Eliminar">🗑️</button>'+
         '</div>'+
         '<textarea class="ev-in ev-grow" rows="1" data-q="'+q.id+'" data-f="texto" placeholder="Escribe la pregunta…" oninput="_autoGrow(this)" style="margin-bottom:10px">'+esc(q.texto||'')+'</textarea>'+
@@ -655,6 +674,33 @@ function optHTML(qid,o,i,fija){
     '</div>';
 }
 function _qById(id){return _edit.preguntas.find(function(q){return q.id===id;});}
+/* ── MOVER PREGUNTAS ──────────────────────────────────────────────────────────
+   Dentro de su bloque (↑ ↓) y de un bloque a otro (selector de sección). Se opera
+   sobre el ORDEN VISIBLE: el arreglo _edit.preguntas se reescribe con los grupos
+   concatenados, que es el mismo orden con el que se guarda y con el que sale el
+   reporte — así lo que ves es lo que queda. */
+function _reordenar(grupos){
+    _edit.preguntas = grupos.reduce(function(acc,g){ return acc.concat(g.qs); }, []);
+}
+function moverPregunta(id, dir){
+    _capturar();
+    var grupos=_gruposPreguntas();
+    for(var i=0;i<grupos.length;i++){
+        var qs=grupos[i].qs, j=qs.findIndex(function(q){ return q.id===id; });
+        if(j<0) continue;
+        var k=j+dir;
+        if(k<0||k>=qs.length) return;            // ya está en el extremo de su bloque
+        var t=qs[j]; qs[j]=qs[k]; qs[k]=t;
+        _reordenar(grupos); renderPreguntas(); return;
+    }
+}
+function moverAseccion(id, seccionId){
+    _capturar();
+    var q=_qById(id); if(!q) return;
+    q.seccionId = seccionId || '';
+    _reordenar(_gruposPreguntas());              // se va al final de su nuevo bloque
+    renderPreguntas();
+}
 function agregarPregunta(seccionId){
     _capturar();
     // Sin sección explícita, cae en la última creada (es donde se está trabajando).

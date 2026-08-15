@@ -42,6 +42,10 @@
 /* preview tipo documento — estilo de impresión ETAAX (verde #3dbe7a, no naranja) */
 .pp-doc{background:#fff;color:#1a1916;border-radius:14px;padding:40px 44px;max-width:820px;margin:0 auto;box-shadow:0 10px 40px rgba(0,0,0,.3);font-family:'DM Sans',sans-serif}
 .pp-doc-head{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:3px solid #3dbe7a;padding-bottom:12px}
+/* El encabezado de marca trae su propio padding lateral: se saca de la caja del
+   documento para que la franja verde llegue de orilla a orilla, como en los reportes. */
+.pp-doc-hdr{margin:-40px -44px 0}
+@media print{.pp-doc-hdr{margin:0 0 0}}
 .pp-doc-eyebrow{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#888}
 .pp-doc-empresa{font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:1px;color:#1a1916;line-height:1;margin-top:3px}
 .pp-doc-mark{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px;color:#1a1916}
@@ -412,12 +416,19 @@ function verPerfil(id){
     var gen=function(l,v){return v?('<div><b>'+l+':</b> '+esc(v)+'</div>'):'';};
     var edad=(sa.edadMin||sa.edadMax)?('<div class="pp-age">Salud y condición física: <span>'+esc(sa.edadMin||'?')+' a '+esc(sa.edadMax||'?')+' años</span></div>'):'';
     var fecha=new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'});
+    // Encabezado ESTÁNDAR de la marca (reporte-marca.js): logo ETAAX + logo del
+    // negocio o de la sucursal + su nombre. Antes era un "ET AA X" escrito a mano
+    // aquí, sin el logo del negocio — el único documento de ETAAX que no traía la
+    // identidad. En el catálogo maestro no hay negocio: se rotula como ETAAX.
+    var _hdr = (typeof etaaxReporteHeader === 'function')
+        ? etaaxReporteHeader('Perfil de Puesto' + (g.empresa ? ' · ' + g.empresa : ''),
+            '<div style="font-size:9px;color:#aaa;letter-spacing:1px">' + esc(fecha) + '</div>',
+            _CAT ? { negocio:'ETAAX', sucursal:'Catálogo maestro', emoji:'', logo:'' } : undefined)
+        : ('<div class="pp-doc-head"><div><div class="pp-doc-eyebrow">Perfil de Puesto</div>' +
+           '<div class="pp-doc-empresa">' + esc(g.empresa||'Empresa') + '</div></div>' +
+           '<div class="pp-doc-mark">ET<span>AA</span>X</div></div>');
     var html=
-        '<div class="pp-doc-head">'+
-            '<div><div class="pp-doc-eyebrow">Perfil de Puesto</div>'+
-                '<div class="pp-doc-empresa">'+esc(g.empresa||'Empresa')+'</div></div>'+
-            '<div class="pp-doc-mark">ET<span>AA</span>X</div>'+
-        '</div>'+
+        '<div class="pp-doc-hdr">'+_hdr+'</div>'+
         '<div class="pp-doc-puesto">'+esc(p.puesto||'')+'</div>'+
         '<h2>Información general</h2>'+
         '<div class="pp-gen">'+
@@ -444,6 +455,7 @@ document.addEventListener('DOMContentLoaded', _sbInit);
 </script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
+<script src="/reporte-marca.js"></script>
 <script src="/catalogo-etaax.js"></script>
 <script src="/nav-pref.js"></script>
 <script src="/modal-drag.js"></script>
