@@ -2583,6 +2583,9 @@
        { k:'proveedor',        lbl:'Proveedor' }
    ];
    function _valTxt(v) { return (v === undefined || v === null || v === '') ? '—' : String(v); }
+   /* Cada cambio guarda además el valor CRUDO anterior (deRaw) y dónde vive (raíz o
+      presentación). Con el texto formateado —"$ 480.00"— no se puede revertir: hay que
+      volver a poner 480. Es lo que hace posible el botón "Revertir". */
    function _diffInsumo(nuevo, viejo) {
        var out = [];
        if (!viejo) return out;                        // insumo nuevo: sin comparación
@@ -2591,14 +2594,16 @@
            // editor en registros viejos que no traían el campo. Ensucia el historial.
            if (c.k === 'activo' && viejo[c.k] === undefined) return;
            if (_valTxt(nuevo[c.k]) !== _valTxt(viejo[c.k]))
-               out.push({ campo: c.lbl, de: _valTxt(viejo[c.k]), a: _valTxt(nuevo[c.k]) });
+               out.push({ campo: c.lbl, de: _valTxt(viejo[c.k]), a: _valTxt(nuevo[c.k]),
+                          k: c.k, pres: false, deRaw: viejo[c.k], aRaw: nuevo[c.k] });
        });
        var pn = (nuevo.presentaciones || [])[0] || {}, pv = (viejo.presentaciones || [])[0] || {};
        _HIST_PRES.forEach(function (c) {
            var a = _valTxt(pn[c.k]), b = _valTxt(pv[c.k]);
            if (a === b) return;
            if (c.money) { a = a === '—' ? a : fmtMXN(parseFloat(a) || 0); b = b === '—' ? b : fmtMXN(parseFloat(b) || 0); }
-           out.push({ campo: c.lbl, de: b, a: a });
+           out.push({ campo: c.lbl, de: b, a: a,
+                      k: c.k, pres: true, deRaw: pv[c.k], aRaw: pn[c.k] });
        });
        return out;
    }
@@ -2671,7 +2676,7 @@
            }).join('') || '<div style="font-size:11.5px;color:var(--text-dim);padding-top:2px">Alta del insumo.</div>';
            return '<div style="padding:9px 0;border-top:1px solid var(--border)">'
                + '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--text-dim)">'
-                   + '<span>' + (h.tipo === 'alta' ? '🆕 Alta' : '✏️ Edición') + (h.sucNom ? ' · <b style="color:#7ab8f5">' + etx(h.sucNom) + '</b>' : '') + (h.quien ? ' · ' + etx(h.quien) : '') + '</span>'
+                   + '<span>' + (h.tipo === 'alta' ? '🆕 Alta' : h.tipo === 'reversion' ? '↩️ Reversión' : '✏️ Edición') + (h.sucNom ? ' · <b style="color:#7ab8f5">' + etx(h.sucNom) + '</b>' : '') + (h.quien ? ' · ' + etx(h.quien) : '') + '</span>'
                    + '<span>' + etx(fch) + '</span>'
                + '</div>' + det + '</div>';
        }).join('');
@@ -2725,10 +2730,20 @@
        var dias = Math.floor((Date.now() - d.getTime()) / 86400000);
        return dias <= 0 ? 'hoy' : dias === 1 ? 'ayer' : 'hace ' + dias + ' días';
    }
-   // ¿En cuántas sucursales más vive este insumo? Es lo que se actualizaría.
+   /* ¿En qué otros registros vive este mismo producto? Manda el VÍNCULO maestro–copia
+      (origenId), no el nombre: al renombrar el insumo la búsqueda por nombre dejaba de
+      encontrar a sus copias y el botón de actualizar desaparecía justo cuando más se
+      necesitaba. El nombre queda como respaldo para insumos sueltos, sin vínculo. */
    function _novHermanos(ins) {
+       var canon = ins.origenId || ins.id;
+       var porVinculo = (getInsumos() || []).filter(function (x) {
+           return x.id !== ins.id && (x.origenId || x.id) === canon;
+       });
+       if (porVinculo.length) return porVinculo;
        var k = _keyInsLocal(ins);
-       return (getInsumos() || []).filter(function (x) { return x.id !== ins.id && _keyInsLocal(x) === k; });
+       return (getInsumos() || []).filter(function (x) {
+           return x.id !== ins.id && !x.origenId && !ins.origenId && _keyInsLocal(x) === k;
+       });
    }
    function abrirNovedadesIns() {
        var ov = document.createElement('div');
@@ -2771,24 +2786,129 @@
                    + '<div style="min-width:0">'
                        + '<div style="font-weight:700;font-size:14px;color:var(--text)">' + etx(insumoTitulo(n.ins)) + '</div>'
                        + '<div style="font-size:11px;color:var(--text-dim);margin-top:3px">'
-                           + (n.h.tipo === 'alta' ? '🆕 Alta' : '✏️ Edición') + ' · ' + etx(_novFecha(n.h.ts))
+                           + (n.h.tipo === 'alta' ? '🆕 Alta' : n.h.tipo === 'reversion' ? '↩️ Reversión' : '✏️ Edición') + ' · ' + etx(_novFecha(n.h.ts))
                            + (n.h.sucNom ? ' · <b style="color:#7ab8f5">' + etx(n.h.sucNom) + '</b>' : '')
                            + (n.h.quien ? ' · ' + etx(n.h.quien) : '') + '</div>'
                    + '</div>'
                    + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
-                       + '<button class="btn-vista" style="font-size:11px;padding:5px 10px" onclick="verFicha(\'' + n.ins.id + '\')">📋 Ficha</button>'
-                       + ((herm && _catGlobalIns()) ? '<button class="btn-vista" style="font-size:11px;padding:5px 10px;color:var(--green);border-color:var(--green)" onclick="_novAplicar(\'' + n.key + '\',\'' + n.ins.id + '\')">⬆️ Subir al global (' + herm + ')</button>' : '')
+                       + '<button class="btn-vista" style="font-size:11px;padding:5px 10px" onclick="_novFicha(\'' + n.ins.id + '\')">📋 Ficha</button>'
+                       + ((herm && _catGlobalIns()) ? '<button class="btn-vista" style="font-size:11px;padding:5px 10px;color:var(--green);border-color:var(--green)" onclick="_novAplicar(\'' + n.key + '\',\'' + n.ins.id + '\')">⬆️ Actualizar en…</button>' : '')
+                       + ((n.h.cambios && n.h.cambios.length) ? '<button class="btn-vista" style="font-size:11px;padding:5px 10px;color:var(--red);border-color:rgba(224,90,58,.5)" onclick="_novRevertir(\'' + n.key + '\',\'' + n.ins.id + '\')" title="Devolver los valores anteriores">↩️ Revertir</button>' : '')
                        + '<button class="btn-vista" style="font-size:11px;padding:5px 10px" onclick="_novDejar(\'' + n.key + '\')">Dejar así</button>'
                    + '</div>'
                + '</div>' + filas + '</div>';
        }).join('');
    }
-   // Subir al global: propaga a las demás sucursales y da la novedad por resuelta.
+   /* La ficha se abre POR ENCIMA del panel: los modales viven en z-index 200 y este
+      overlay en 9998, así que salía detrás y parecía que el botón no hacía nada. */
+   function _novFicha(id) {
+       verFicha(id);
+       var m = document.getElementById('modalFicha');
+       if (!m) return;
+       m.style.zIndex = 9999;
+       // Al cerrarla vuelve a su capa normal: si se queda en 9999, tapa cualquier
+       // otro modal que se abra después.
+       var _restore = function () { m.style.zIndex = ''; };
+       m.addEventListener('click', function h(e) {
+           if (e.target === m || (e.target.closest && e.target.closest('[onclick*="modalFicha"]'))) { _restore(); m.removeEventListener('click', h); }
+       });
+   }
+   /* Actualizar en…: en vez de empujar a TODAS las sucursales de un golpe, se eligen.
+      Un cambio de precio puede aplicar a dos sucursales y a la tercera no. */
    function _novAplicar(key, insId) {
-       actualizarEnGlobal(insId);
+       var lista = getInsumos();
+       var src = lista.find(function (x) { return x.id === insId; }); if (!src) return;
+       var hermanos = _novHermanos(src);
+       if (!hermanos.length) return;
+       var filas = hermanos.map(function (h, i) {
+           var sucs = (window._insumoSucursales(h) || []).map(function (x) { return _sucNomIns(x || MATRIZ_ID_INS); });
+           var nom = sucs.join(', ') || (h.origenId ? 'Sin sucursal' : 'Maestro del catálogo');
+           return '<label style="display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer">'
+               + '<input type="checkbox" data-hid="' + h.id + '" checked style="width:16px;height:16px;accent-color:var(--green)">'
+               + '<span style="font-size:13px;color:var(--text)">' + etx(nom) + '</span></label>';
+       }).join('');
+       var ov = document.createElement('div');
+       ov.id = 'novSucOverlay';
+       ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:20px';
+       ov.onclick = function (e) { if (e.target === ov) ov.remove(); };
+       ov.innerHTML = '<div class="modal" style="max-width:460px;width:100%">'
+           + '<div class="modal-header"><h2>⬆️ Actualizar en…</h2></div>'
+           + '<div class="modal-body">'
+               + '<div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">Elige a dónde llevar la ficha, presentaciones y precios de <b style="color:var(--text)">' + etx(insumoTitulo(src)) + '</b>. Lo que no marques se queda como está.</div>'
+               + filas
+           + '</div>'
+           + '<div class="modal-footer">'
+               + '<button class="btn-vista" onclick="document.getElementById(\'novSucOverlay\').remove()">Cancelar</button>'
+               + '<button class="btn-vista" style="color:var(--green);border-color:var(--green)" onclick="_novAplicarSel(\'' + key + '\',\'' + insId + '\')">Actualizar</button>'
+           + '</div></div>';
+       document.body.appendChild(ov);
+   }
+   function _novAplicarSel(key, insId) {
+       var ids = [];
+       document.querySelectorAll('#novSucOverlay input[type=checkbox]').forEach(function (c) {
+           if (c.checked) ids.push(c.getAttribute('data-hid'));
+       });
+       var ov = document.getElementById('novSucOverlay'); if (ov) ov.remove();
+       if (!ids.length) return;
+       var lista = getInsumos();
+       var src = lista.find(function (x) { return x.id === insId; }); if (!src) return;
+       ids.forEach(function (hid) {
+           var i = lista.findIndex(function (x) { return x.id === hid; });
+           if (i < 0) return;
+           var h = lista[i];
+           var upd = JSON.parse(JSON.stringify(src));
+           upd.id = h.id; upd.sucursalId = h.sucursalId; upd.origenId = h.origenId;
+           upd.sucursales = h.sucursales; upd.historial = h.historial;   // cada uno con SU bitácora
+           lista[i] = upd;
+       });
+       setInsumos(lista);
+       try { _sincronizarInsumosSupabase(getNegocioActivo(), lista.filter(function (x) { return ids.indexOf(x.id) >= 0; })); } catch (e) {}
+       if (window.etaaxAlert) etaaxAlert('Actualizado en ' + ids.length + ' registro' + (ids.length !== 1 ? 's' : '') + '.');
        _NOV_VISTAS[key] = 1; _novGuardarVistas();
        _novRender(document.getElementById('novBuscar') ? document.getElementById('novBuscar').value : '');
+       try { filtrar(); } catch (e) {}
    }
+   /* Revertir: devuelve los valores anteriores usando los crudos que guarda el diff.
+      No borra el renglón del historial —lo que pasó, pasó— y además deja su propio
+      registro de la reversión al guardar. */
+   function _novRevertir(key, insId) {
+       var lista = getInsumos();
+       var ins = lista.find(function (x) { return x.id === insId; }); if (!ins) return;
+       var nov = _novLista().find(function (n) { return n.key === key; }); if (!nov) return;
+       var cambios = (nov.h.cambios || []).filter(function (c) { return c.k; });
+       if (!cambios.length) {
+           if (window.etaaxAlert) etaaxAlert('Este movimiento es de antes de que se guardaran los valores anteriores: no se puede revertir solo.');
+           return;
+       }
+       var _hacer = function () {
+           var i = lista.findIndex(function (x) { return x.id === insId; });
+           var p0 = (ins.presentaciones || [])[0];
+           cambios.forEach(function (c) {
+               if (c.pres) { if (p0) p0[c.k] = (c.deRaw === undefined ? '' : c.deRaw); }
+               else ins[c.k] = (c.deRaw === undefined ? '' : c.deRaw);
+           });
+           ins.updatedAt = new Date().toISOString();
+           ins.updatedBy = _usuarioActual();
+           (ins.historial = ins.historial || []).unshift({
+               ts: ins.updatedAt, quien: ins.updatedBy, suc: _catGlobalIns() ? '' : (_getSucActivaIns() || ''),
+               sucNom: _catGlobalIns() ? 'Catálogo global' : _sucNomIns(_getSucActivaIns() || ''),
+               global: _catGlobalIns() || undefined, tipo: 'reversion',
+               cambios: cambios.map(function (c) { return { campo: c.campo, de: c.a, a: c.de, k: c.k, pres: c.pres, deRaw: c.aRaw, aRaw: c.deRaw }; })
+           });
+           if (i >= 0) lista[i] = ins;
+           setInsumos(lista);
+           try { _sincronizarInsumosSupabase(getNegocioActivo(), [ins]); } catch (e) {}
+           _NOV_VISTAS[key] = 1; _novGuardarVistas();
+           _novRender(document.getElementById('novBuscar') ? document.getElementById('novBuscar').value : '');
+           try { filtrar(); } catch (e) {}
+       };
+       var det = cambios.map(function (c) { return '• ' + c.campo + ': ' + c.a + ' → ' + c.de; }).join('\n');
+       if (window.etaaxConfirm) etaaxConfirm('Revertir el cambio', 'Se devolverán estos valores:\n\n' + det, _hacer, null, { yesLabel: 'Revertir' });
+       else if (confirm('Se devolverán estos valores:\n\n' + det)) _hacer();
+   }
+   window._novFicha = _novFicha;
+   window._novAplicarSel = _novAplicarSel;
+   window._novRevertir = _novRevertir;
    // Dejar así: se queda como cambio local de esa sucursal y sale de la lista.
    function _novDejar(key) {
        _NOV_VISTAS[key] = 1; _novGuardarVistas();
