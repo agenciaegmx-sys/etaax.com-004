@@ -92,14 +92,19 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
         <label class="lbl" style="margin-top:6px">Nota (opcional)</label>
         <input id="runNota" class="fld" placeholder="Novedad, pendiente, incidencia…">
 
-        <label class="lbl">Evidencia (fotos, hasta 6)</label>
+        <label class="lbl">Evidencia · hasta 7 fotos o un video de 5 min</label>
         <div class="foto-strip" id="runFotoStrip"></div>
-        <div class="foto-cnt" id="runFotoCnt">0 / 6 fotos</div>
+        <div class="foto-cnt" id="runFotoCnt">0 / 7 fotos</div>
         <input type="file" id="runFotoCam" accept="image/*" capture="environment" style="display:none" onchange="_addFoto(this)">
+        <!-- Video: se abre la cámara del teléfono. Máximo 5 minutos; se valida el
+             archivo antes de subirlo para no gastar datos en algo que se rechaza. -->
+        <input type="file" id="runVidCam" accept="video/*" capture="environment" style="display:none" onchange="_addVideo(this)">
+        <div id="runVidBox" style="margin-top:8px"></div>
         <input type="file" id="runFotoGal" accept="image/*" multiple style="display:none" onchange="_addFoto(this)">
         <div class="cap-par">
             <button class="cap-btn ghost" onclick="document.getElementById('runFotoCam').click()">📷 Tomar foto</button>
             <button class="cap-btn ghost" onclick="document.getElementById('runFotoGal').click()">🖼️ Galería</button>
+            <button class="cap-btn ghost" onclick="document.getElementById('runVidCam').click()">🎥 Video</button>
         </div>
 
         <button class="cap-btn" id="runBtn" style="margin-top:12px" onclick="registrarCumplimiento()">✓ Registrar cumplimiento</button>
@@ -216,7 +221,9 @@ function volverLista(){
 function abrirRun(id){
     var p = PLANTILLAS.find(function(x){ return x.id===id; });
     if (!p) return;
-    RUN = { plant: p, marcas: {}, fotos: [] };
+    // Se sella CUÁNDO empezó: la hora de envío sola no dice si el check tomó tres
+    // minutos o dos horas, que es justo lo que interesa revisar.
+    RUN = { plant: p, marcas: {}, fotos: [], video: '', inicioTs: new Date().toISOString(), horaInicio: nowHora() };
     document.getElementById('capSub').textContent = (TIPO[p.tipo]?TIPO[p.tipo][1]:'') + ' · ' + (p.nombre||'');
     document.getElementById('runNota').value = '';
     document.getElementById('runMsg').textContent = '';
@@ -254,7 +261,7 @@ function _renderProg(){
 }
 
 /* ── Fotos (evidencia, hasta 6) ── */
-var MAX_FOTOS = 6;
+var MAX_FOTOS = 7;
 function _comprimir(file){
     return new Promise(function(resolve){
         var r=new FileReader();
@@ -288,6 +295,58 @@ async function _addFoto(input){
     if (RUN.fotos.length){ msg.className='cap-msg ok'; msg.textContent='✓ '+RUN.fotos.length+' foto(s) listas'; }
 }
 function _delFoto(i){ RUN.fotos.splice(i,1); _renderFotos(); }
+var MAX_VIDEO_SEG = 300;   // 5 minutos
+/* Se mide la duración ANTES de subir: rechazar después de gastar los datos del
+   colaborador sería peor que no aceptar video. */
+function _duracionVideo(file){
+    return new Promise(function(res){
+        try {
+            var v = document.createElement('video');
+            v.preload = 'metadata';
+            v.onloadedmetadata = function(){ URL.revokeObjectURL(v.src); res(v.duration || 0); };
+            v.onerror = function(){ res(0); };
+            v.src = URL.createObjectURL(file);
+        } catch(e){ res(0); }
+    });
+}
+async function _addVideo(input){
+    var f = input.files && input.files[0];
+    input.value = '';
+    if (!f) return;
+    var msg = document.getElementById('runMsg');
+    var seg = await _duracionVideo(f);
+    if (seg > MAX_VIDEO_SEG + 2){
+        msg.className='cap-msg err';
+        msg.textContent = 'El video dura '+Math.round(seg/60*10)/10+' min. El máximo son 5 minutos.';
+        return;
+    }
+    msg.className='cap-msg'; msg.textContent = 'Subiendo video… (puede tardar)';
+    // MISMO prefijo que las fotos: es el único que la política de Storage permite
+    // subir sin sesión (v28). Con otra ruta el colaborador recibiría un 403.
+    var url = '';
+    try {
+        var path = NEG+'/entradas/'+TOKEN+'/'+genId()+'.'+((f.name||'').split('.').pop()||'mp4').toLowerCase();
+        var up = await _supabase.storage.from('evidencias').upload(path, f, { contentType: f.type || 'video/mp4' });
+        if (!up.error) url = _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
+        else { msg.className='cap-msg err'; msg.textContent='Error al subir el video: '+up.error.message; return; }
+    } catch(e){ msg.className='cap-msg err'; msg.textContent='Error al subir el video.'; return; }
+    if (!url){ msg.className='cap-msg err'; msg.textContent='No se pudo subir el video. Intenta de nuevo.'; return; }
+    RUN.video = url;
+    RUN.videoSeg = Math.round(seg);
+    _renderVideo();
+    msg.className='cap-msg ok'; msg.textContent = '✓ Video listo ('+_mmss(seg)+')';
+}
+function _mmss(seg){ var m=Math.floor(seg/60), s=Math.round(seg%60); return m+':'+String(s).padStart(2,'0'); }
+function _delVideo(){ RUN.video=''; RUN.videoSeg=0; _renderVideo(); }
+function _renderVideo(){
+    var box = document.getElementById('runVidBox'); if (!box) return;
+    box.innerHTML = RUN.video
+        ? '<div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:9px 12px">'
+          + '<span style="font-size:18px">🎥</span>'
+          + '<span style="flex:1;font-size:13px;color:var(--text)">Video adjunto <span style="color:var(--dim)">· '+_mmss(RUN.videoSeg||0)+'</span></span>'
+          + '<button onclick="_delVideo()" style="background:none;border:none;color:#e05a3a;font-size:18px;cursor:pointer">✕</button></div>'
+        : '';
+}
 function _renderFotos(){
     document.getElementById('runFotoCnt').textContent = RUN.fotos.length+' / '+MAX_FOTOS+' fotos';
     document.getElementById('runFotoStrip').innerHTML = RUN.fotos.map(function(u,i){
@@ -314,7 +373,11 @@ async function registrarCumplimiento(){
         area: RUN.plant.area || '',
         sucursalId: SUC,
         fecha: todayStr(),
-        hora: nowHora(),
+        hora: nowHora(),                 // hora de ENVÍO (se conserva el nombre de siempre)
+        horaInicio: RUN.horaInicio || '',
+        inicioTs: RUN.inicioTs || '',
+        finTs: new Date().toISOString(),
+        duracionMin: RUN.inicioTs ? Math.max(0, Math.round((Date.now() - Date.parse(RUN.inicioTs)) / 60000)) : null,
         marcas: RUN.marcas,
         totalTareas: tot,
         cumplidas: ok,
@@ -324,6 +387,8 @@ async function registrarCumplimiento(){
         notas: (document.getElementById('runNota').value||'').trim(),
         foto_url: RUN.fotos[0] || '',
         foto_urls: RUN.fotos.slice(),
+        video_url: RUN.video || '',
+        video_seg: RUN.videoSeg || 0,
         registrado: new Date().toISOString()
         // colaborador lo sella el servidor (RPC) desde el NIP validado
     };
@@ -334,7 +399,9 @@ async function registrarCumplimiento(){
         var col = pct>=90?'var(--green)':pct>=70?'#e0a52e':'#e05a3a';
         var d = document.getElementById('donedPct'); d.textContent = pct+'%'; d.style.color = col;
         document.getElementById('doneTitle').textContent = '✓ ' + (RUN.plant.nombre||'Check list') + ' registrado';
-        document.getElementById('doneSub').innerHTML = '<b>'+etx(COLAB)+'</b> · '+ok+' hechas · '+no+' no · '+pend+' pendientes<br>'+todayStr()+' '+nowHora();
+        document.getElementById('doneSub').innerHTML = '<b>'+etx(COLAB)+'</b> · '+ok+' hechas · '+no+' no · '+pend+' pendientes<br>'
+            + todayStr()+' · inicio '+etx(entry.horaInicio||'—')+' → envío '+entry.hora
+            + (entry.duracionMin!=null ? ' <span style="opacity:.7">('+entry.duracionMin+' min)</span>' : '');
         document.getElementById('capSub').textContent = '';
         _show('doneScreen');
         window.scrollTo(0,0);

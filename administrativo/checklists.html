@@ -458,8 +458,15 @@ function renderCumplimiento(){
             '<div style="width:46px;height:46px;border-radius:10px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:'+col+';flex-shrink:0">'+pct+'%</div>'+
             '<div style="flex:1;min-width:0">'+
                 '<div style="font-size:13.5px;font-weight:600;color:var(--text)">'+esc(e.plantillaNombre||'Check list')+' <span style="font-weight:400;color:var(--text-dim);font-size:11px">· '+esc(t)+'</span></div>'+
-                '<div style="font-size:11.5px;color:var(--text-dim);margin-top:1px">👤 '+esc(e.colaborador||'—')+' · '+esc(e.fecha||'')+' '+esc(e.hora||'')+'</div>'+
-                '<div style="font-size:11px;color:var(--text-dim);margin-top:1px">'+(e.cumplidas||0)+' hechas · '+(e.noRealizadas||0)+' no · '+(e.pendientes||0)+' pend'+(e.notas?' · 📝 '+esc(e.notas):'')+(nf?' · 📷 '+nf:'')+'</div>'+
+                // Quién, dónde y CUÁNDO: inicio → envío y cuánto tardó. La hora de envío
+                // sola no dice si el check se hizo o se rellenó al vuelo al final.
+                '<div style="font-size:11.5px;color:var(--text-dim);margin-top:1px">👤 '+esc(e.colaborador||'—')
+                    +(e.area?' · 📍 '+esc(e.area):'')+' · '+esc(e.fecha||'')
+                    +(e.horaInicio ? ' · ⏱ '+esc(e.horaInicio)+' → '+esc(e.hora||'') : ' '+esc(e.hora||''))
+                    +(e.duracionMin!=null ? ' <span style="color:var(--text-muted)">('+e.duracionMin+' min)</span>' : '')+'</div>'+
+                '<div style="font-size:11px;color:var(--text-dim);margin-top:1px">'+(e.cumplidas||0)+' hechas · '+(e.noRealizadas||0)+' no · '+(e.pendientes||0)+' pend'
+                    +(e.notas?' · 📝 '+esc(e.notas):'')+(nf?' · 📷 '+nf:'')
+                    +(e.video_url?' · <a href="'+esc(e.video_url)+'" target="_blank" rel="noopener" style="color:var(--viol)">🎥 video'+(e.video_seg?' '+Math.floor(e.video_seg/60)+':'+String(e.video_seg%60).padStart(2,'0'):'')+'</a>':'')+'</div>'+
             '</div></div>';
     }).join('');
     cont.innerHTML='<div style="display:flex;justify-content:flex-end;margin-bottom:14px"><button class="ck-btn primary" onclick="abrirQrChecklist()">📱 QR de check list</button></div>'+

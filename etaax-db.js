@@ -367,6 +367,21 @@
         return pub.data.publicUrl;
     };
 
+    // sbSubirArchivo(carpeta, file [, scope]) → Promise<url|null>
+    // Sube un File TAL CUAL a Storage, sin pasar por base64. Para video no hay
+    // alternativa: un clip de minutos en base64 crece ~33% y revienta la memoria
+    // del teléfono antes de salir.
+    window.sbSubirArchivo = async function (carpeta, file, scope) {
+        if (!file || typeof _supabase === 'undefined') return null;
+        var id   = scope || _negId() || 'catalogo';
+        var ext  = (file.name && file.name.indexOf('.') >= 0) ? file.name.split('.').pop().toLowerCase() : 'bin';
+        var base = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        var path = id + '/' + carpeta + '/' + base + '.' + ext;
+        var r = await _supabase.storage.from('evidencias').upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
+        if (r.error) { window._sbToastError && window._sbToastError('subir archivo: ' + r.error.message); return null; }
+        return _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
+    };
+
     /* ── Sucursales en Supabase (antes solo localStorage → no sincronizaban) ──
        Doc por negocio en negocio_sucursales: { sucursales:[...], cfg:{[id]:{...}} }.
        sbUpsertDoc aligera los logos base64 a Storage automáticamente. */
