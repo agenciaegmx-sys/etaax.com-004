@@ -1063,7 +1063,10 @@ function getCatalogoInsumosScope() {
     cat = cat.filter(function(x){ return x && x.activo !== '0'; });
     var catGlobal = false;
     try { catGlobal = sessionStorage.getItem('etaax_cat_global') === '1'; } catch(e) {}
-    if (catGlobal) return cat;
+    // Catálogo GLOBAL: no hay sucursal, así que el representante es el MAESTRO.
+    // (Esta salida anticipada se saltaba el colapso de copias: por eso el
+    // buscador seguía mostrando el mismo insumo una vez por sucursal.)
+    if (catGlobal) return _unoPorProducto(cat, true);
     var sucActiva = localStorage.getItem('etaax_sucursal_activa') || '';
     if (sucActiva) {
         // Visibilidad por sucursal: vive aquí + no pausado aquí (regla única, insumo-label.js).
@@ -1082,17 +1085,22 @@ function getCatalogoInsumosScope() {
    aplica al contexto (la copia de la sucursal activa; si no, el maestro).
    OJO: dos insumos DISTINTOS con el mismo nombre siguen apareciendo los dos —
    eso no son copias, son duplicados del catálogo y hay que arreglarlos ahí. */
-function _unoPorProducto(cat) {
-    var vistos = {}, out = [];
+function _unoPorProducto(cat, preferirMaestro) {
+    var porK = {}, orden = [];
     (cat || []).forEach(function (x) {
         if (!x || !x.id) return;
         var k = x.origenId || x.id;
-        if (vistos[k]) return;
-        vistos[k] = 1;
-        var elegido = (typeof window._insumoResolver === 'function' && window._insumoResolver(k)) || x;
-        out.push(elegido);
+        if (!porK[k]) { porK[k] = []; orden.push(k); }
+        porK[k].push(x);
     });
-    return out;
+    return orden.map(function (k) {
+        var grupo = porK[k];
+        // En el catálogo global mandamos el maestro (el que NO es copia); en una
+        // sucursal, el resolver devuelve la copia que aplica ahí.
+        var maestro = grupo.find(function (x) { return !x.origenId; });
+        if (preferirMaestro) return maestro || grupo[0];
+        return (typeof window._insumoResolver === 'function' && window._insumoResolver(k)) || maestro || grupo[0];
+    });
 }
 
 // Devuelve el contenido real en ml/g de 1 pieza de un insumo.
