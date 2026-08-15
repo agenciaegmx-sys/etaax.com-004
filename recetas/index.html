@@ -3014,7 +3014,8 @@ function _novrLista(){
     getRecetas().forEach(function(r){
         (r.historial||[]).forEach(function(h){
             if(!h||!h.ts) return;
-            if(sucAct && (h.suc||'') !== sucAct) return;      // no es de esta sucursal
+            // Dentro de una sucursal: sus cambios + los hechos en el catálogo global.
+            if(sucAct && (h.suc||'') !== sucAct && !h.global) return;
             var t = Date.parse(h.ts);
             if(isNaN(t) || t < corte) return;
             var k = r.id+'|'+h.ts;
@@ -3542,8 +3543,19 @@ function abrirFichaReceta(id) {
 /* Bitácora de la receta dentro de su ficha: quién la tocó, cuándo, desde qué
    sucursal y qué cambió. Mismo formato que el historial de conciliaciones y que
    el de los insumos: una línea por evento, lo más reciente arriba, 90 días. */
+/* Historial COMPLETO de la receta: el suyo + el de sus hermanas (maestro y copias
+   por sucursal). En el catálogo global se ve el MAESTRO pero se edita la COPIA. */
+function _historialDeReceta(r){
+    if(!r) return [];
+    var canon = r.origenId || r.id, todos = [];
+    getRecetas().forEach(function(x){
+        if(!x || (x.origenId||x.id) !== canon) return;
+        (x.historial||[]).forEach(function(h){ todos.push(h); });
+    });
+    return todos.sort(function(a,b){ return String(b.ts).localeCompare(String(a.ts)); });
+}
 function _historialRecetaHTML(r){
-    var hist=((r&&r.historial)||[]).filter(function(h){
+    var hist=_historialDeReceta(r).filter(function(h){
         var t=Date.parse((h&&h.ts)||''); return !isNaN(t) && t >= Date.now()-90*864e5;
     });
     var ult = r && (r.fechaGuardado||r.createdAt) ? new Date(r.fechaGuardado||r.createdAt) : null;

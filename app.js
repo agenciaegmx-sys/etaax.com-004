@@ -1883,10 +1883,14 @@ function _registrarCambiosReceta(nueva, vieja) {
     var esNueva = !vieja;
     if (!esNueva && !cambios.length) return;
     var hist = ((vieja && vieja.historial) || nueva.historial || []).slice();
-    var suc = localStorage.getItem('etaax_sucursal_activa') || '';
+    // Editada DESDE el catálogo global = cambio del maestro, no de una sucursal.
+    var enGlobal = false;
+    try { enGlobal = sessionStorage.getItem('etaax_cat_global') === '1'; } catch (e) {}
+    var suc = enGlobal ? '' : (localStorage.getItem('etaax_sucursal_activa') || '');
     hist.unshift({
         ts: nueva.fechaGuardado, quien: nueva.updatedBy || '',
-        suc: suc, sucNom: _sucNomRec(suc),
+        suc: suc, sucNom: enGlobal ? 'Catálogo global' : _sucNomRec(suc),
+        global: enGlobal || undefined,
         tipo: esNueva ? 'alta' : 'edicion',
         cambios: cambios.slice(0, 12)
     });

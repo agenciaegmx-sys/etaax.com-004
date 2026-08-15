@@ -2528,14 +2528,17 @@
       exacta queda en el title del elemento. */
    function _selloActualizacion(o) {
        if (!o) return '';
-       var iso = o.updatedAt || o.createdAt || '';
+       // El movimiento más reciente puede estar en una copia de sucursal, no aquí.
+       var ultimo = (_historialDe(o)[0] || {}).ts || '';
+       var iso = ultimo || o.updatedAt || o.createdAt || '';
        if (!iso) return '';
        var d = new Date(iso); if (isNaN(d)) return '';
        var dias = Math.floor((Date.now() - d.getTime()) / 86400000);
        var rel = dias <= 0 ? 'hoy' : dias === 1 ? 'ayer' : dias < 30 ? ('hace ' + dias + ' días')
                : dias < 365 ? ('hace ' + Math.floor(dias / 30) + ' mes' + (dias < 60 ? '' : 'es'))
                : ('hace ' + Math.floor(dias / 365) + ' año' + (dias < 730 ? '' : 's'));
-       return { rel: rel, quien: o.updatedBy || '', fecha: d.toLocaleString('es-MX', { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' }) };
+       var quien = ultimo ? ((_historialDe(o)[0] || {}).quien || o.updatedBy || '') : (o.updatedBy || '');
+       return { rel: rel, quien: quien, fecha: d.toLocaleString('es-MX', { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' }) };
    }
    function _selloHTML(o, estilo) {
        var s = _selloActualizacion(o);
@@ -2599,11 +2602,17 @@
        if (!esNuevo && !cambios.length) return;       // guardó sin tocar nada
        var hist = (previo && previo.historial) || insumo.historial || [];
        hist = hist.slice();
+       // Editado DESDE el catálogo global = cambio del maestro, no de una sucursal.
+       // Sin esto se sellaba con la sucursal que la pestaña trajera fijada y el
+       // renglón mentía sobre dónde se hizo el cambio.
+       var _enGlobal = _catGlobalIns();
+       var _sucEd = _enGlobal ? '' : (_getSucActivaIns() || '');
        hist.unshift({
            ts: insumo.updatedAt,
            quien: insumo.updatedBy || '',
-           suc: _getSucActivaIns() || '',
-           sucNom: _sucNomIns(_getSucActivaIns() || ''),
+           suc: _sucEd,
+           sucNom: _enGlobal ? 'Catálogo global' : _sucNomIns(_sucEd),
+           global: _enGlobal || undefined,
            tipo: esNuevo ? 'alta' : 'edicion',
            cambios: cambios.slice(0, 12)              // 12 renglones bastan para leerlo
        });
@@ -2617,8 +2626,23 @@
    /* Bitácora del insumo dentro de su ficha técnica: quién lo tocó, cuándo, desde
       qué sucursal y qué cambió. Mismo formato que el historial de conciliaciones
       bancarias: una línea por evento, lo más reciente arriba. 90 días. */
+   /* Historial COMPLETO del producto: el suyo + el de sus hermanos (maestro y copias
+      por sucursal). En el catálogo global se ve el MAESTRO, pero quien se edita es la
+      COPIA de la sucursal — mirando solo el registro abierto, la ficha del maestro
+      salía siempre vacía aunque hubiera movimiento en las sucursales. */
+   function _historialDe(ins) {
+       if (!ins) return [];
+       var canon = ins.origenId || ins.id;
+       var todos = [];
+       (getInsumos() || []).forEach(function (x) {
+           if (!x) return;
+           if ((x.origenId || x.id) !== canon) return;
+           (x.historial || []).forEach(function (h) { todos.push(h); });
+       });
+       return todos.sort(function (a, b) { return String(b.ts).localeCompare(String(a.ts)); });
+   }
    function _historialHTML(ins) {
-       var hist = (ins && ins.historial) || [];
+       var hist = _historialDe(ins);
        var corte = Date.now() - _HIST_DIAS * 864e5;
        hist = hist.filter(function (h) { var t = Date.parse((h && h.ts) || ''); return !isNaN(t) && t >= corte; });
        var sello = _selloActualizacion(ins);
@@ -2677,7 +2701,9 @@
        (getInsumos() || []).forEach(function (ins) {
            (ins.historial || []).forEach(function (h) {
                if (!h || !h.ts) return;
-               if (sucAct && (h.suc || '') !== sucAct) return;   // no es de esta sucursal
+               // Dentro de una sucursal se ven SUS cambios y los del catálogo global
+               // (esos le llegaron a ella, así que también son novedad suya).
+               if (sucAct && (h.suc || '') !== sucAct && !h.global) return;
                var t = Date.parse(h.ts);
                if (isNaN(t) || t < corte) return;             // la poda también al leer:
                var k = ins.id + '|' + h.ts;                   // datos viejos no se cuelan
