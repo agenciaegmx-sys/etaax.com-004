@@ -3009,9 +3009,12 @@ function _novrHermanas(r){
 function _novrLista(){
     _novrCargar();
     var corte = Date.now() - 90*864e5, out = [];
+    // Fuera del catálogo global se ven SOLO los cambios de esta sucursal.
+    var sucAct = _esCatGlobalRecetas() ? '' : (localStorage.getItem('etaax_sucursal_activa')||'');
     getRecetas().forEach(function(r){
         (r.historial||[]).forEach(function(h){
             if(!h||!h.ts) return;
+            if(sucAct && (h.suc||'') !== sucAct) return;      // no es de esta sucursal
             var t = Date.parse(h.ts);
             if(isNaN(t) || t < corte) return;
             var k = r.id+'|'+h.ts;
@@ -3038,7 +3041,7 @@ function abrirNovedadesRec(){
     ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
     ov.innerHTML='<div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;max-width:880px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">'
         +'<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)">'
-            +'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--text)">🔔 Novedades de recetas</div>'
+            +'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--text)">'+(_esCatGlobalRecetas()?'🔔 Novedades de recetas':'🔔 Cambios recientes de esta sucursal')+'</div>'
             +'<button onclick="document.getElementById(\'novrOverlay\').remove()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:5px 11px;cursor:pointer;font-family:inherit">✕</button></div>'
         +'<div style="padding:12px 18px 8px"><input id="novrBuscar" placeholder="🔍 Buscar por receta, sucursal o quién la cambió…" oninput="_novrRender(this.value)" '
             +'style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 13px;font-family:inherit;font-size:13px;outline:none"></div>'
@@ -3079,7 +3082,7 @@ function _novrRender(q){
                 +'</div>'
                 +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
                     +'<button onclick="_novrFicha(\''+n.rec.id+'\')" style="background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit">📋 Ficha</button>'
-                    +(herm?'<button onclick="_novrAplicar(\''+n.key+'\',\''+n.rec.id+'\')" style="background:transparent;border:1px solid var(--green);color:var(--green);border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit">⬆️ Subir al global ('+herm+')</button>':'')
+                    +((herm&&_esCatGlobalRecetas())?'<button onclick="_novrAplicar(\''+n.key+'\',\''+n.rec.id+'\')" style="background:transparent;border:1px solid var(--green);color:var(--green);border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit">⬆️ Subir al global ('+herm+')</button>':'')
                     +'<button onclick="_novrDejar(\''+n.key+'\')" style="background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit">Dejar así</button>'
                 +'</div>'
             +'</div>'+filas+'</div>';
@@ -3214,8 +3217,13 @@ function renderGridRecetas() {
     // Independizar por sucursal: operación a nivel negocio → solo en el catálogo global.
     // El botón de independizar ya no se muestra (el modelo maestro + copia lo resuelve solo).
     (function(){ var b=document.getElementById('btnIndepSucRec'); if(b) b.style.display='none'; })();
-    // Novedades: solo en el catálogo global, que es el que mira todas las sucursales.
-    (function(){ var b=document.getElementById('btnNovedadesRec'); if(b) b.style.display=_catGlobal?'':'none'; })();
+    // Novedades: en el GLOBAL, los cambios de todas las sucursales; dentro de una
+    // sucursal, solo los suyos.
+    (function(){
+        var b=document.getElementById('btnNovedadesRec'); if(!b) return;
+        b.style.display='';
+        b.textContent=_catGlobal?'🔔 Novedades':'🔔 Cambios recientes';
+    })();
     // Estado (regla única de visibilidad, insumo-label.js):
     //  · Global: Activas / Inactivas (las inactivas del negocio viven SOLO aquí).
     //  · Sucursal: Activas (scope normal) / PAUSADAS aquí (inactivaEn) para reactivarlas.
@@ -3525,9 +3533,49 @@ function abrirFichaReceta(id) {
                 </div>
             </div>`;
         })()}
+        ${_historialRecetaHTML(r)}
     `;
 
     document.getElementById('modalFichaReceta').style.display = 'flex';
+}
+
+/* Bitácora de la receta dentro de su ficha: quién la tocó, cuándo, desde qué
+   sucursal y qué cambió. Mismo formato que el historial de conciliaciones y que
+   el de los insumos: una línea por evento, lo más reciente arriba, 90 días. */
+function _historialRecetaHTML(r){
+    var hist=((r&&r.historial)||[]).filter(function(h){
+        var t=Date.parse((h&&h.ts)||''); return !isNaN(t) && t >= Date.now()-90*864e5;
+    });
+    var ult = r && (r.fechaGuardado||r.createdAt) ? new Date(r.fechaGuardado||r.createdAt) : null;
+    if(!hist.length){
+        var txt = (ult && !isNaN(ult))
+            ? 'Última actualización: '+ult.toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'})
+              +(r.updatedBy?' · '+etx(r.updatedBy):'')+'. Sin cambios registrados en los últimos 90 días.'
+            : 'Todavía no hay cambios registrados. Se van guardando cada vez que se edita la receta.';
+        return '<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">'
+            +'<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px">📜 Historial de cambios</div>'
+            +'<div style="font-size:12px;color:var(--text-dim)">'+txt+'</div></div>';
+    }
+    var filas=hist.map(function(h){
+        var d=new Date(h.ts);
+        var fch=isNaN(d)?'—':d.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'})
+              +' · '+d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+        var det=(h.cambios||[]).map(function(c){
+            return '<div style="font-size:11.5px;color:var(--text-muted);padding-top:2px">'
+                +etx(c.campo)+': <span style="color:var(--text-dim);text-decoration:line-through">'+etx(c.de)+'</span>'
+                +' → <span style="color:var(--green);font-weight:600">'+etx(c.a)+'</span></div>';
+        }).join('') || '<div style="font-size:11.5px;color:var(--text-dim);padding-top:2px">Alta de la receta.</div>';
+        return '<div style="padding:9px 0;border-top:1px solid var(--border)">'
+            +'<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--text-dim)">'
+                +'<span>'+(h.tipo==='alta'?'🆕 Alta':'✏️ Edición')+(h.sucNom?' · <b style="color:#7ab8f5">'+etx(h.sucNom)+'</b>':'')+(h.quien?' · '+etx(h.quien):'')+'</span>'
+                +'<span>'+etx(fch)+'</span>'
+            +'</div>'+det+'</div>';
+    }).join('');
+    return '<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">'
+        +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">'
+            +'<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)">📜 Historial de cambios</div>'
+            +'<div style="font-size:10.5px;color:var(--text-dim)">últimos 90 días · '+hist.length+' movimiento'+(hist.length!==1?'s':'')+'</div>'
+        +'</div>'+filas+'</div>';
 }
 
 function cerrarFichaReceta(e) {

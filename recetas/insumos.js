@@ -231,9 +231,16 @@
        // ya deja cada sucursal independiente al crear o al vincular.
        var bi = document.getElementById('btnIndepSucIns');
        if (bi) bi.style.display = 'none';
-       // Novedades: solo tiene sentido en el catálogo global (mira todas las sucursales).
+       // Novedades: en el GLOBAL muestra los cambios de TODAS las sucursales; dentro
+       // de una sucursal, solo los suyos (que es lo que ahí importa).
        var bnv = document.getElementById('btnNovedadesIns');
-       if (bnv) bnv.style.display = on ? '' : 'none';
+       if (bnv) {
+           bnv.style.display = '';
+           bnv.textContent = on ? '🔔 Novedades' : '🔔 Cambios recientes';
+           bnv.title = on
+               ? 'Cambios recientes de insumos por sucursal: decide si suben al catálogo global o se quedan en su sucursal'
+               : 'Cambios recientes de los insumos de esta sucursal';
+       }
    }
    function _poblarFiltroSucIns() {
        var sucs = _getSucsIns();
@@ -2607,6 +2614,44 @@
        }).slice(0, 40);
    }
 
+   /* Bitácora del insumo dentro de su ficha técnica: quién lo tocó, cuándo, desde
+      qué sucursal y qué cambió. Mismo formato que el historial de conciliaciones
+      bancarias: una línea por evento, lo más reciente arriba. 90 días. */
+   function _historialHTML(ins) {
+       var hist = (ins && ins.historial) || [];
+       var corte = Date.now() - _HIST_DIAS * 864e5;
+       hist = hist.filter(function (h) { var t = Date.parse((h && h.ts) || ''); return !isNaN(t) && t >= corte; });
+       var sello = _selloActualizacion(ins);
+       if (!hist.length) {
+           return '<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">'
+               + '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px">Historial de cambios</div>'
+               + '<div style="font-size:12px;color:var(--text-dim)">'
+               + (sello ? 'Última actualización ' + etx(sello.rel) + (sello.quien ? ' · ' + etx(sello.quien) : '') + '. Sin cambios registrados en los últimos 90 días.'
+                        : 'Todavía no hay cambios registrados. Se van guardando cada vez que se edita el insumo.')
+               + '</div></div>';
+       }
+       var filas = hist.map(function (h) {
+           var d = new Date(h.ts);
+           var fch = isNaN(d) ? '—' : d.toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' })
+                   + ' · ' + d.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' });
+           var det = (h.cambios || []).map(function (c) {
+               return '<div style="font-size:11.5px;color:var(--text-muted);padding-top:2px">'
+                   + etx(c.campo) + ': <span style="color:var(--text-dim);text-decoration:line-through">' + etx(c.de) + '</span>'
+                   + ' → <span style="color:var(--green);font-weight:600">' + etx(c.a) + '</span></div>';
+           }).join('') || '<div style="font-size:11.5px;color:var(--text-dim);padding-top:2px">Alta del insumo.</div>';
+           return '<div style="padding:9px 0;border-top:1px solid var(--border)">'
+               + '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--text-dim)">'
+                   + '<span>' + (h.tipo === 'alta' ? '🆕 Alta' : '✏️ Edición') + (h.sucNom ? ' · <b style="color:#7ab8f5">' + etx(h.sucNom) + '</b>' : '') + (h.quien ? ' · ' + etx(h.quien) : '') + '</span>'
+                   + '<span>' + etx(fch) + '</span>'
+               + '</div>' + det + '</div>';
+       }).join('');
+       return '<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">'
+           + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:2px">'
+               + '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)">📜 Historial de cambios</div>'
+               + '<div style="font-size:10.5px;color:var(--text-dim)">últimos 90 días · ' + hist.length + ' movimiento' + (hist.length !== 1 ? 's' : '') + '</div>'
+           + '</div>' + filas + '</div>';
+   }
+
    /* ══════════════════════════════════════════════════════════════════════════
       NOVEDADES — cambios recientes en las sucursales, vistos desde el global
       Junta el historial de TODOS los insumos y lo ordena por fecha. Por cada
@@ -2627,9 +2672,12 @@
        _novCargarVistas();
        var out = [];
        var corte = Date.now() - _HIST_DIAS * 864e5;
+       // Fuera del catálogo global se ven SOLO los cambios hechos en esta sucursal.
+       var sucAct = _catGlobalIns() ? '' : (_getSucActivaIns() || '');
        (getInsumos() || []).forEach(function (ins) {
            (ins.historial || []).forEach(function (h) {
                if (!h || !h.ts) return;
+               if (sucAct && (h.suc || '') !== sucAct) return;   // no es de esta sucursal
                var t = Date.parse(h.ts);
                if (isNaN(t) || t < corte) return;             // la poda también al leer:
                var k = ins.id + '|' + h.ts;                   // datos viejos no se cuelan
@@ -2656,7 +2704,7 @@
        ov.style.cssText = 'position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:20px';
        ov.onclick = function (e) { if (e.target === ov) ov.remove(); };
        ov.innerHTML = '<div class="modal" style="max-width:860px;width:100%;max-height:88vh;display:flex;flex-direction:column">'
-           + '<div class="modal-header"><h2>🔔 Novedades del catálogo</h2>'
+           + '<div class="modal-header"><h2>' + (_catGlobalIns() ? '🔔 Novedades del catálogo' : '🔔 Cambios recientes · ' + etx(_sucNomIns(_getSucActivaIns() || ''))) + '</h2>'
            + '<button class="modal-close" onclick="document.getElementById(\'novOverlay\').remove()">✕</button></div>'
            + '<div style="padding:0 18px 10px"><input id="novBuscar" class="ins-buscador" placeholder="🔍 Buscar por insumo, sucursal o quién lo cambió…" '
            + 'oninput="_novRender(this.value)" style="width:100%;box-sizing:border-box"></div>'
@@ -2697,7 +2745,7 @@
                    + '</div>'
                    + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
                        + '<button class="btn-vista" style="font-size:11px;padding:5px 10px" onclick="verFicha(\'' + n.ins.id + '\')">📋 Ficha</button>'
-                       + (herm ? '<button class="btn-vista" style="font-size:11px;padding:5px 10px;color:var(--green);border-color:var(--green)" onclick="_novAplicar(\'' + n.key + '\',\'' + n.ins.id + '\')">⬆️ Subir al global (' + herm + ')</button>' : '')
+                       + ((herm && _catGlobalIns()) ? '<button class="btn-vista" style="font-size:11px;padding:5px 10px;color:var(--green);border-color:var(--green)" onclick="_novAplicar(\'' + n.key + '\',\'' + n.ins.id + '\')">⬆️ Subir al global (' + herm + ')</button>' : '')
                        + '<button class="btn-vista" style="font-size:11px;padding:5px 10px" onclick="_novDejar(\'' + n.key + '\')">Dejar así</button>'
                    + '</div>'
                + '</div>' + filas + '</div>';
@@ -4251,6 +4299,7 @@
                        color:var(--text-dim);margin-bottom:6px">Notas</div>
                    <p style="font-size:13px;color:var(--text-muted);line-height:1.7">${ins.notas}</p>
                </div>` : ''}
+           ${_historialHTML(insRaw)}
        `;
    
        document.getElementById('modalFicha').style.display = 'flex';
