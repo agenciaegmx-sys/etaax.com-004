@@ -1052,12 +1052,13 @@ function _negToDb(neg) {
     return {
         id:         neg.id,
         usuario_id: neg.usuarioId,
-        datos:      { nombre: neg.nombre, tipo: neg.tipo, emoji: neg.emoji, color: neg.color, fechaCreado: neg.fechaCreado }
+        datos:      { nombre: neg.nombre, tipo: neg.tipo, emoji: neg.emoji, color: neg.color, fechaCreado: neg.fechaCreado,
+                      logo: neg.logo || '' }   // URL de Storage, nunca base64 (mantiene la fila ligera)
     };
 }
 function _negFromDb(row) {
     var d = row.datos || {};
-    return { id: row.id, usuarioId: row.usuario_id, nombre: d.nombre, tipo: d.tipo, emoji: d.emoji, color: d.color, fechaCreado: d.fechaCreado };
+    return { id: row.id, usuarioId: row.usuario_id, nombre: d.nombre, tipo: d.tipo, emoji: d.emoji, color: d.color, fechaCreado: d.fechaCreado, logo: d.logo || '' };
 }
 
 // Sync Supabase → localStorage (se llama al iniciar sesión y al cargar)
@@ -1081,6 +1082,41 @@ async function _syncNegociosDB() {
     _negocios = fromDB.concat(localOnly);
     var others = _getNegocios().filter(function(n){ return n.usuarioId !== _sesion.usuarioId; });
     _setNegocios(others.concat(_negocios));
+    // Logos del negocio a localStorage: es de donde los leen los reportes. Sin esto,
+    // el logo solo existía en la computadora donde se subió. No se pisa un base64
+    // local: puede ser uno recién elegido que todavía no alcanzó a subir.
+    fromDB.forEach(function(n){
+        if (!n.logo) return;
+        var actual = _getNegLogo(n.id);
+        if (actual && actual.indexOf('data:') === 0) return;   // pendiente de subir → gana el local
+        if (actual === n.logo) return;
+        try { localStorage.setItem('etaax_' + n.id + '_logo', n.logo); } catch (e) {}
+    });
+}
+
+/* ── Logo del negocio a la nube ────────────────────────────────────────────────
+   Sube la imagen a Storage y guarda la URL en negocios.datos.logo. Antes vivía
+   SOLO en localStorage: se veía en la computadora donde se subió y en ninguna otra
+   (el logo de sucursal ya viajaba por el outbox de negocio_sucursales; este no).
+   Si no hay red, el base64 se queda local y funciona aquí; al volver a guardar la
+   configuración se reintenta. */
+async function _pushNegLogoNube(negId, b64) {
+    if (!negId || typeof _supabase === 'undefined') return;
+    var url = b64 || '';
+    try {
+        if (url && url.indexOf('data:') === 0 && window.sbSubirFotoBase64) {
+            var subido = await sbSubirFotoBase64('logos', url, negId);
+            if (!subido) return;                       // sin red: se queda el base64 local
+            url = subido;
+            try { localStorage.setItem('etaax_' + negId + '_logo', url); } catch (e) {}
+        }
+        var negs = _getNegocios(), i = negs.findIndex(function(n){ return n.id === negId; });
+        if (i === -1) return;
+        negs[i].logo = url;
+        _setNegocios(negs);
+        _negocios = _misNegocios();
+        await _supabase.from('negocios').update({ datos: _negToDb(negs[i]).datos }).eq('id', negId);
+    } catch (e) { console.warn('[logo negocio] no se pudo sincronizar:', (e && e.message) || e); }
 }
 
 /* ════════════════════════════════════════════════════════
@@ -2075,12 +2111,15 @@ function _renderCfgNegLogo() {
 }
 function cfgNegLogoChange(input) {
     if (!input.files || !input.files[0]) return;
+    var negId = _cfgNegId;
     _comprimirImg(input.files[0], function(b64) {
-        _setNegLogo(_cfgNegId, b64);
+        _setNegLogo(negId, b64);
         _renderCfgNegLogo();
+        _pushNegLogoNube(negId, b64);   // a Storage + a la fila del negocio
     });
 }
 function cfgNegLogoEliminar() {
+    _pushNegLogoNube(_cfgNegId, '');
     _setNegLogo(_cfgNegId, '');
     _renderCfgNegLogo();
     var inp = document.getElementById('cfgNegLogoInput');
@@ -2260,9 +2299,12 @@ function guardarConfigNeg() {
     });
     if (idx !== -1) {
         var neg = negs[idx];
-        _supabase.from('negocios').update({
-            datos: { nombre: neg.nombre, tipo: neg.tipo, emoji: neg.emoji, color: neg.color, fechaCreado: neg.fechaCreado }
-        }).eq('id', _cfgNegId).then(function(){});
+        // _negToDb incluye el logo: sin esto, guardar la configuración lo borraba
+        // de la fila (el update reescribe `datos` completo).
+        _supabase.from('negocios').update({ datos: _negToDb(neg).datos }).eq('id', _cfgNegId).then(function(){});
+        // Reintento: si el logo quedó en base64 (se subió sin red), ahora sí sube.
+        var _lg = _getNegLogo(_cfgNegId);
+        if (_lg && _lg.indexOf('data:') === 0) _pushNegLogoNube(_cfgNegId, _lg);
     }
     _showToast('✓ Configuración guardada');
     setTimeout(function() {
