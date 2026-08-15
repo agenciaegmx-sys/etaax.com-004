@@ -1737,7 +1737,13 @@ function _setChkIncluirInv() {
         if (ins) chk.checked = !ins.ocultoInventario;
         else chk.checked = (recetaTipoActual === 'sub-bebidas' || recetaTipoActual === 'bebidas');
     }
-    if (sel) sel.value = (ins && ins.area) || '';
+    // Área por DEFAULT según el tipo: una sub-receta de alimentos es de cocina y una
+    // de bebidas (prebatch) es de barra. Antes nacían sin área — o sea invisibles en
+    // TODO inventario — y había que acordarse de asignarla a mano.
+    if (sel) sel.value = (ins && ins.area) || _areaDefaultSubReceta();
+}
+function _areaDefaultSubReceta() {
+    return (recetaTipoActual === 'sub-bebidas' || recetaTipoActual === 'bebidas') ? 'barra' : 'cocina';
 }
 // Área de la sub-receta: si ya está convertida a insumo, la actualiza en vivo (catálogo + nube).
 function _setAreaSubReceta() {
@@ -1918,7 +1924,7 @@ function agregarSubRecetaComoInsumo(silent) {
         })(),
         recetaId:      recetaActualId || null,
         // Área del inventario: sin área NO aparece en ningún inventario (misma regla que insumos).
-        area:          (function(){ var el = document.getElementById('selAreaSubReceta'); return el ? el.value : ''; })(),
+        area:          (function(){ var el = document.getElementById('selAreaSubReceta'); return el ? el.value : _areaDefaultSubReceta(); })(),
         sucursalId:    (localStorage.getItem('etaax_sucursal_activa') || ''),
         sucursales:    (function(){ var c = localStorage.getItem('etaax_sucursal_activa') || ''; return c ? [c] : []; })(), // membresía: vive en la sucursal donde se convirtió
         presentaciones: porciones,

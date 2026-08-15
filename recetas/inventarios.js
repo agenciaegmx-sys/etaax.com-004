@@ -4375,17 +4375,64 @@ function _filtrarMenuVentas(q){
         g.style.display = vis ? '' : 'none';
     });
 }
+/* ── ¿Esta receta consume algo de ESTE inventario? ────────────────────────────
+   El menú del Paso 3 listaba alimentos Y bebidas sin mirar el área: en un
+   inventario de barra salían todos los platillos de cocina. La regla correcta no es
+   "esconder los alimentos" —un platillo con vino SÍ descuenta de barra— sino
+   mostrar la receta donde de verdad toca algo: si alguno de sus ingredientes es una
+   fila de este inventario. Es exactamente la resolución que usa el consumo
+   (id canónico), así que lo que se ve y lo que se descuenta coinciden. */
+var _idsInvCache = null, _idsInvKey = '';
+function _idsInvSet() {
+    var key = (invActual && invActual.id || '') + '|' + filasCaptura.length;
+    if (_idsInvCache && _idsInvKey === key) return _idsInvCache;
+    var set = {};
+    (filasCaptura || []).forEach(function (f) {
+        if (!f || !f.insumoId) return;
+        set[_canonInsumoId(f.insumoId) || f.insumoId] = 1;
+        set[f.insumoId] = 1;
+    });
+    _idsInvCache = set; _idsInvKey = key;
+    return set;
+}
+function _recetaTocaInv(r) {
+    var set = _idsInvSet();
+    return (r && r.ingredientes || []).some(function (ing) {
+        var id = ing && ing.insumoId; if (!id) return false;
+        return !!(set[id] || set[_canonInsumoId(id) || id]);
+    });
+}
+var _menuVerTodas = false;
+function toggleMenuVerTodas() { _menuVerTodas = !_menuVerTodas; renderStep3(); }
+window.toggleMenuVerTodas = toggleMenuVerTodas;
+
 function renderStep3Menu() {
     // Visibilidad (regla única, insumo-label.js): activa global + vive en la
     // sucursal + no pausada aquí. Sin sucursal activa → solo el status global.
     const _sucP3 = localStorage.getItem('etaax_sucursal_activa') || '';
-    const recetas  = getRecetas().filter(r =>
+    let recetas  = getRecetas().filter(r =>
         (r.tipo === 'alimentos' || r.tipo === 'bebidas') &&
         ((_sucP3 && typeof window._recetaActivaEnSuc === 'function')
             ? window._recetaActivaEnSuc(r, _sucP3)
             : r.status !== 'inactiva')
     );
     const vendidos = invActual?.cocktailsVendidos || {};
+    // Las que YA tienen unidades capturadas se muestran siempre, toquen o no: si no,
+    // lo registrado se volvería invisible y no habría cómo corregirlo.
+    const _ocultas = _menuVerTodas ? [] : recetas.filter(r => !_recetaTocaInv(r) && !(parseFloat(vendidos[r.id]) || 0));
+    if (_ocultas.length) {
+        const _fuera = {};
+        _ocultas.forEach(r => { _fuera[r.id] = 1; });
+        recetas = recetas.filter(r => !_fuera[r.id]);
+    }
+    if (!recetas.length && !_menuVerTodas) {
+        return `<div class="empty-state" style="padding:60px">
+            <div class="empty-icon">📋</div>
+            <div class="empty-title">Ninguna receta consume de esta área</div>
+            <div class="empty-desc">Este inventario es de ${etx((invActual && invActual.area) || 'esta área')} y ninguna receta activa usa sus insumos.</div>
+            <button class="btn-vista" style="margin-top:14px" onclick="toggleMenuVerTodas()">Ver todas las recetas</button>
+        </div>`;
+    }
     if (!recetas.length) {
         return `<div class="empty-state" style="padding:60px">
             <div class="empty-icon">📋</div>
@@ -4404,6 +4451,10 @@ function renderStep3Menu() {
         <span style="font-size:11px;color:var(--text-dim)">Total registrado:</span>
         <span id="step3MenuTotal" style="font-size:15px;font-weight:700;color:var(--green)">${totalItems} unidades</span>
     </div>
+    ${(_ocultas.length || _menuVerTodas) ? `<div style="padding:0 16px 8px;font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span>${_menuVerTodas ? 'Mostrando TODAS las recetas, incluidas las que no consumen de esta área.' : _ocultas.length + ' receta' + (_ocultas.length !== 1 ? 's' : '') + ' oculta' + (_ocultas.length !== 1 ? 's' : '') + ': no usan ningún insumo de esta área.'}</span>
+        <button onclick="toggleMenuVerTodas()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;font-family:inherit">${_menuVerTodas ? 'Ver solo las de esta área' : 'Ver todas'}</button>
+    </div>` : ''}
     <div style="padding:4px 16px 10px">
         <input type="text" id="menuBuscarCoctel" placeholder="🔍 Buscar coctel o receta…"
             value="${etx(_menuBusquedaVentas||'')}" oninput="_filtrarMenuVentas(this.value)"
@@ -4420,9 +4471,16 @@ function renderStep3Menu() {
                 ${items.map(r => {
                     const p   = parseFloat(r.precioEnCarta) || 0;
                     const cnt = parseFloat(vendidos[r.id]) || 0;
+                    // Los "?" de estas pistas eran una búsqueda ESTRICTA de id: la receta
+                    // guarda el id de la copia por sucursal y la fila el del maestro. Se
+                    // resuelve en canónico —igual que el consumo— y si el insumo no está
+                    // en este inventario, se usa su nombre del catálogo.
                     const ingStr = (r.ingredientes||[]).map(ing => {
-                        const ins = filasCaptura.find(f=>f.insumoId===ing.insumoId);
-                        return ins ? ins.nombre.split(' ')[0] : '?';
+                        const f = _filaDeMiembro(ing.insumoId);
+                        if (f && f.nombre) return f.nombre.split(' ')[0];
+                        const ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(ing.insumoId) : null;
+                        if (ins && ins.nombre) return ins.nombre.split(' ')[0];
+                        return ing.nombre ? String(ing.nombre).split(' ')[0] : '?';
                     }).slice(0,3).join(', ');
                     return `<div class="step3-menu-item ${cnt>0?'has-cnt':''}" data-menu-nom="${etx((r.nombre||'').toLowerCase())}">
                         <div style="flex:1;min-width:0">
