@@ -45,6 +45,17 @@
         .ev-in{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:14px;box-sizing:border-box;outline:none;}
         .ev-in:focus{border-color:var(--green);}
         textarea.ev-in{resize:vertical;min-height:54px;}
+        /* Pregunta y opciones: crecen con el texto. Antes eran <input> de un renglón
+           y una pregunta larga se cortaba a media frase (no se podía releer). */
+        textarea.ev-grow{resize:none;overflow:hidden;min-height:0;line-height:1.45;}
+        .ev-sec{border:1px solid rgba(155,141,232,.35);background:rgba(155,141,232,.05);border-radius:12px;padding:12px 14px;margin:0 0 12px;}
+        .ev-sec-top{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+        .ev-sec-tag{font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:1.5px;color:#9b8de8;white-space:nowrap;}
+        .ev-sec-nom{flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 11px;border-radius:7px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;outline:none;}
+        .ev-sec-nom:focus{border-color:#9b8de8;}
+        .ev-sec-del{background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:4px 6px;border-radius:5px;}
+        .ev-sec-del:hover{color:var(--red);background:rgba(224,90,58,.12);}
+        .ev-sec-pts{font-size:11px;color:var(--text-dim);white-space:nowrap;}
         .ev-row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
         @media (max-width:560px){.ev-row2{grid-template-columns:1fr;}}
         .ev-q{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;}
@@ -181,7 +192,11 @@
             <div class="ev-card-meta" id="edPuntosTot"></div>
         </div>
         <div id="edPreguntas"></div>
-        <button class="ev-btn ghost" onclick="agregarPregunta()" style="width:100%;margin-top:4px">+ Agregar pregunta</button>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:4px">
+            <button class="ev-btn ghost" onclick="agregarPregunta()">+ Agregar pregunta</button>
+            <button class="ev-btn ghost" onclick="agregarSeccion()" title="Agrupa preguntas para evaluarlas por bloque. Quien contesta no ve la separación.">⊞ Nueva sección</button>
+        </div>
+        <div class="ev-hint" style="margin-top:6px">Las secciones sirven para calificar por bloque (psicométrico, técnico…). Quien contesta ve las preguntas seguidas, sin separación.</div>
 
         <div style="display:flex;justify-content:space-between;margin-top:24px;gap:8px">
             <button class="ev-btn danger" id="edDelBtn" onclick="eliminarEval()" style="display:none">🗑️ Eliminar</button>
@@ -528,6 +543,9 @@ function _capturar(){
     _edit.categoria=document.getElementById('edCategoria').value;
     _edit.descripcion=document.getElementById('edDescripcion').value.trim();
     _edit.activa=document.getElementById('edActiva').checked;
+    (_edit.secciones||[]).forEach(function(sec){
+        var sEl=document.querySelector('[data-sec="'+sec.id+'"]'); if(sEl)sec.nombre=sEl.value;
+    });
     (_edit.preguntas||[]).forEach(function(q){
         var tEl=document.querySelector('[data-q="'+q.id+'"][data-f="texto"]'); if(tEl)q.texto=tEl.value;
         var rEl=document.querySelector('[data-q="'+q.id+'"][data-f="req"]'); if(rEl)q.requerida=rEl.checked;
@@ -542,12 +560,65 @@ function _capturar(){
         }
     });
 }
+/* ── SECCIONES ────────────────────────────────────────────────────────────────
+   Agrupan preguntas para EVALUAR por bloque (psicométrico, técnico…). Quien
+   contesta NO las ve: el formulario público sigue mostrando una lista corrida de
+   preguntas. La separación existe solo para el reporte interno. */
+function _secciones(){ if(!_edit.secciones) _edit.secciones=[]; return _edit.secciones; }
+function _secNombre(id){
+    var s=_secciones().find(function(x){ return x.id===id; });
+    return s ? (s.nombre||'Sección') : 'General';
+}
+/* Preguntas agrupadas EN ORDEN: primero las sueltas (sin sección), luego cada
+   sección con las suyas. Es el mismo orden en que se guardan y en que las ve
+   quien contesta. */
+function _gruposPreguntas(){
+    var grupos=[], sueltas=_edit.preguntas.filter(function(q){ return !q.seccionId || !_secciones().some(function(s){return s.id===q.seccionId;}); });
+    if(sueltas.length || !_secciones().length) grupos.push({ sec:null, qs:sueltas });
+    _secciones().forEach(function(sec){
+        grupos.push({ sec:sec, qs:_edit.preguntas.filter(function(q){ return q.seccionId===sec.id; }) });
+    });
+    return grupos;
+}
+function agregarSeccion(){
+    _capturar();
+    _secciones().push({ id:'s_'+genId(), nombre:'' });
+    renderPreguntas();
+}
+function eliminarSeccion(id){
+    _capturar();
+    var qs=_edit.preguntas.filter(function(q){ return q.seccionId===id; });
+    if(qs.length && !confirm('Esta sección tiene '+qs.length+' pregunta'+(qs.length!==1?'s':'')+'.\n\nAl quitarla, esas preguntas NO se borran: pasan a quedar sin sección.\n\n¿Continuar?')) return;
+    _edit.preguntas.forEach(function(q){ if(q.seccionId===id) q.seccionId=''; });
+    _edit.secciones=_secciones().filter(function(s){ return s.id!==id; });
+    renderPreguntas();
+}
 function renderPreguntas(){
     var cont=document.getElementById('edPreguntas');
-    if(!_edit.preguntas.length){ cont.innerHTML='<div class="ev-empty">Aún no hay preguntas. Agrega la primera abajo.</div>'; _renderPuntos(); return; }
-    cont.innerHTML=_edit.preguntas.map(function(q,idx){ return qHTML(q,idx); }).join('');
+    if(!_edit.preguntas.length && !_secciones().length){ cont.innerHTML='<div class="ev-empty">Aún no hay preguntas. Agrega la primera abajo.</div>'; _renderPuntos(); return; }
+    var num=0, html='';
+    _gruposPreguntas().forEach(function(g){
+        var qsHTML=g.qs.map(function(q){ num++; return qHTML(q,num-1); }).join('') ||
+            '<div class="ev-hint" style="padding:6px 0">Sin preguntas en esta sección todavía.</div>';
+        if(!g.sec){ html+=qsHTML; return; }
+        var pts=g.qs.reduce(function(t,q){ return t+_puntosMaxPregunta(q); },0);
+        html+='<div class="ev-sec">'+
+            '<div class="ev-sec-top">'+
+                '<span class="ev-sec-tag">Sección</span>'+
+                '<input class="ev-sec-nom" data-sec="'+g.sec.id+'" placeholder="Ej. Psicométrico, Técnico, Servicio…" value="'+esc(g.sec.nombre||'')+'">'+
+                '<span class="ev-sec-pts">'+g.qs.length+' preg · '+pts+' pts</span>'+
+                '<button class="ev-sec-del" onclick="eliminarSeccion(\''+g.sec.id+'\')" title="Quitar sección (las preguntas se conservan)">🗑️</button>'+
+            '</div>'+ qsHTML +
+            '<button class="ev-btn ghost sm" onclick="agregarPregunta(\''+g.sec.id+'\')">+ Pregunta en esta sección</button>'+
+        '</div>';
+    });
+    cont.innerHTML=html;
+    _autoGrowTodos();
     _renderPuntos();
 }
+/* Ajusta el alto de cada textarea a su contenido (al pintar y al teclear). */
+function _autoGrow(el){ if(!el) return; el.style.height='auto'; el.style.height=(el.scrollHeight)+'px'; }
+function _autoGrowTodos(){ document.querySelectorAll('#edPreguntas textarea.ev-grow').forEach(_autoGrow); }
 function qHTML(q,idx){
     var tiposSel=TIPOS.map(function(t){return '<option value="'+t.id+'"'+(q.tipo===t.id?' selected':'')+'>'+t.nom+'</option>';}).join('');
     var cuerpo='';
@@ -571,22 +642,24 @@ function qHTML(q,idx){
             '<select class="ev-in" style="max-width:170px" onchange="cambiarTipo(\''+q.id+'\',this.value)">'+tiposSel+'</select>'+
             '<button class="ev-q-del" onclick="eliminarPregunta(\''+q.id+'\')" title="Eliminar">🗑️</button>'+
         '</div>'+
-        '<input type="text" class="ev-in" data-q="'+q.id+'" data-f="texto" placeholder="Escribe la pregunta…" value="'+esc(q.texto||'')+'" style="margin-bottom:10px">'+
+        '<textarea class="ev-in ev-grow" rows="1" data-q="'+q.id+'" data-f="texto" placeholder="Escribe la pregunta…" oninput="_autoGrow(this)" style="margin-bottom:10px">'+esc(q.texto||'')+'</textarea>'+
         cuerpo+
         '<label class="ev-toggle" style="margin-top:10px;font-size:12px"><input type="checkbox" data-q="'+q.id+'" data-f="req"'+(q.requerida?' checked':'')+'>Obligatoria</label>'+
     '</div>';
 }
 function optHTML(qid,o,i,fija){
     return '<div class="ev-opt">'+
-        '<input type="text" class="ev-in" data-q="'+qid+'" data-o="'+i+'" data-f="otxt" placeholder="Opción" value="'+esc(o.texto||'')+'"'+(fija?' readonly style="opacity:.7"':'')+'>'+
+        '<textarea class="ev-in ev-grow" rows="1" data-q="'+qid+'" data-o="'+i+'" data-f="otxt" placeholder="Opción" oninput="_autoGrow(this)"'+(fija?' readonly style="opacity:.7"':'')+'>'+esc(o.texto||'')+'</textarea>'+
         '<input type="number" class="ev-in ev-opt-val" data-q="'+qid+'" data-o="'+i+'" data-f="oval" title="Puntos" value="'+(o.valor!=null?o.valor:0)+'">'+
         (fija?'':'<button class="ev-opt-del" onclick="eliminarOpcion(\''+qid+'\','+i+')">✕</button>')+
     '</div>';
 }
 function _qById(id){return _edit.preguntas.find(function(q){return q.id===id;});}
-function agregarPregunta(){
+function agregarPregunta(seccionId){
     _capturar();
-    _edit.preguntas.push({ id:'q_'+genId(), tipo:'opcion', texto:'', requerida:true, opciones:[{texto:'',valor:1},{texto:'',valor:0}] });
+    // Sin sección explícita, cae en la última creada (es donde se está trabajando).
+    var sid = seccionId || (_secciones().length ? _secciones()[_secciones().length-1].id : '');
+    _edit.preguntas.push({ id:'q_'+genId(), tipo:'opcion', texto:'', requerida:true, seccionId:sid, opciones:[{texto:'',valor:1},{texto:'',valor:0}] });
     renderPreguntas();
 }
 function eliminarPregunta(id){
@@ -633,6 +706,9 @@ function _renderPuntos(){
 /* ── Guardar / eliminar ── */
 async function guardarEval(){
     _capturar();
+    // Reordenar por sección: quien contesta no ve los rótulos, pero sí conviene que
+    // las preguntas de un mismo bloque vayan juntas y en el mismo orden del reporte.
+    _edit.preguntas=_gruposPreguntas().reduce(function(acc,g){ return acc.concat(g.qs); },[]);
     if(!_edit.titulo){ alert('Ponle un título a la evaluación.'); document.getElementById('edTitulo').focus(); return; }
     if(!_edit.preguntas.length){ alert('Agrega al menos una pregunta.'); return; }
     var ahora=new Date().toISOString();
@@ -696,11 +772,15 @@ function renderResultados(){
               '<div class="res-stat"><div class="res-stat-v">'+Math.min.apply(null,pcts)+'%</div><div class="res-stat-l">Más bajo</div></div>';
     }
     document.getElementById('resStats').innerHTML=stats;
+    // Las respuestas llegan como JSON y no traen un id garantizado: se referencian
+    // por su posición en ESTA lista ya ordenada (la misma que se está pintando).
+    _resOrden=rs;
     document.getElementById('resLista').innerHTML = rs.length
-        ? rs.map(respHTML).join('')
+        ? rs.map(function(r,i){ return respHTML(r,i); }).join('')
         : '<div class="ev-empty">Aún no hay respuestas. Comparte el link para empezar a recibirlas.</div>';
 }
-function respHTML(r){
+var _resOrden=[];
+function respHTML(r,idx){
     var pct=r.scorePct!=null?r.scorePct:0;
     var col=pct>=70?'var(--green)':pct>=40?'var(--accent)':'#ff7a5c';
     var fecha=String(r.recibidoEn||'').slice(0,10);
@@ -726,10 +806,103 @@ function respHTML(r){
         '<div class="res-card-top" onclick="this.parentNode.classList.toggle(\'open\')">'+
             '<div><div class="res-nom">'+esc(nom)+'</div>'+
             '<div class="res-meta">'+(puesto?esc(puesto)+' · ':'')+esc(fecha)+'</div>'+contacto+'</div>'+
-            '<div class="res-score" style="color:'+col+'">'+pct+'%<div class="res-score-sub">'+(r.score||0)+'/'+(r.scoreMax||0)+' pts</div></div>'+
+            '<div style="display:flex;align-items:center;gap:10px">'+
+                '<button class="ev-btn ghost sm" onclick="event.stopPropagation();imprimirResultado('+idx+')" title="Reporte con el desglose por sección">🖨️ Reporte</button>'+
+                '<div class="res-score" style="color:'+col+'">'+pct+'%<div class="res-score-sub">'+(r.score||0)+'/'+(r.scoreMax||0)+' pts</div></div>'+
+            '</div>'+
         '</div>'+
         '<div class="res-det">'+det+'</div>'+
     '</div>';
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   REPORTE DE RESULTADO (una respuesta) — diseño ETAAX, separado por sección
+   Las secciones se leen de la evaluación, no de la respuesta: así los formularios
+   contestados ANTES de que existieran las secciones también salen agrupados.
+   ══════════════════════════════════════════════════════════════════════════════ */
+function _secsDeEval(e){
+    var secs=(e.secciones||[]).map(function(sec){ return { id:sec.id, nombre:sec.nombre||'Sección', qs:[] }; });
+    var gen={ id:'', nombre:'General', qs:[] };
+    (e.preguntas||[]).forEach(function(q){
+        var t=secs.find(function(x){ return x.id===q.seccionId; });
+        (t||gen).qs.push(q);
+    });
+    var out=[];
+    if(gen.qs.length) out.push(gen);
+    secs.forEach(function(x){ if(x.qs.length) out.push(x); });
+    return out;
+}
+/* Suma por sección a partir de las respuestas (match por preguntaId). */
+function _scorePorSeccion(e,r){
+    var porId={}; (r.respuestas||[]).forEach(function(a){ porId[a.preguntaId]=a; });
+    return _secsDeEval(e).map(function(sec){
+        var score=0,max=0,filas=[];
+        sec.qs.forEach(function(q){
+            var a=porId[q.id]||{};
+            var pts=parseFloat(a.puntos)||0, mx=_puntosMaxPregunta(q);
+            score+=pts; max+=mx;
+            filas.push({ q:q.texto||'', resp:a.respuesta||'—', pts:pts, max:mx });
+        });
+        return { nombre:sec.nombre, score:score, max:max,
+                 pct: max>0?Math.round(score/max*100):0, filas:filas };
+    });
+}
+function _repEvalHTML(e,r){
+    var secs=_scorePorSeccion(e,r);
+    var rp=r.respondente||{};
+    var pct=r.scorePct!=null?r.scorePct:0;
+    var _col=function(p){ return p>=70?'#3dbe7a':p>=40?'#c8960a':'#e05a3a'; };
+    var dato=function(l,v){
+        return '<div class="rcard" style="padding:10px 13px"><div class="l">'+esc(l)+'</div>'+
+               '<div style="font-size:13px;font-weight:600;color:#1a1916;line-height:1.35">'+esc(v||'—')+'</div></div>';
+    };
+    var cuerpo=
+        '<div class="rsec">Quien contestó</div>'+
+        '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">'+
+            dato('Nombre', rp.nombre||'Anónimo')+
+            dato('Puesto', rp.puesto)+
+            dato('Edad', rp.edad?rp.edad+' años':'')+
+            dato('Fecha', String(r.recibidoEn||'').slice(0,10))+
+        '</div>'+
+        (rp.tel||rp.correo ? '<div class="rgrid" style="grid-template-columns:repeat(2,1fr);margin-top:10px">'+
+            dato('Teléfono', rp.tel)+dato('Correo', rp.correo)+'</div>' : '')+
+
+        '<div class="rsec">Resultado por sección</div>'+
+        '<table class="rt"><thead><tr>'+
+            '<th style="width:52%">Sección</th><th>Puntos</th><th>Máximo</th><th>%</th></tr></thead><tbody>'+
+        secs.map(function(sc){
+            return '<tr><td>'+esc(sc.nombre)+'</td><td>'+sc.score+'</td><td>'+sc.max+'</td>'+
+                   '<td style="color:'+_col(sc.pct)+';font-weight:700">'+sc.pct+'%</td></tr>';
+        }).join('')+
+        '</tbody><tfoot><tr><td>Total</td><td>'+(r.score||0)+'</td><td>'+(r.scoreMax||0)+'</td>'+
+        '<td style="color:'+_col(pct)+'">'+pct+'%</td></tr></tfoot></table>'+
+
+        secs.map(function(sc){
+            return '<div class="rsec">'+esc(sc.nombre)+' · '+sc.score+'/'+sc.max+' pts <span style="color:'+_col(sc.pct)+'">('+sc.pct+'%)</span></div>'+
+            '<table class="rt"><thead><tr>'+
+                '<th style="width:46%">Pregunta</th><th style="text-align:left;width:38%">Respuesta</th><th>Puntos</th></tr></thead><tbody>'+
+            sc.filas.map(function(f){
+                return '<tr><td>'+esc(f.q)+'</td>'+
+                       '<td style="text-align:left;font-weight:400;color:#555">'+esc(f.resp)+'</td>'+
+                       '<td>'+f.pts+(f.max?' <span style="color:#aaa;font-weight:400">/ '+f.max+'</span>':'')+'</td></tr>';
+            }).join('')+
+            '</tbody></table>';
+        }).join('');
+
+    return etaaxReporteDoc({
+        titulo:'Evaluación — '+(rp.nombre||'Respuesta'),
+        subtitulo:'Resultado de Evaluación · '+(e.titulo||''),
+        derecha:'<div style="font-size:9px;color:#aaa;letter-spacing:1px;text-align:right">'+esc(String(r.recibidoEn||'').slice(0,10))+'</div>'+
+                '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:26px;line-height:1;margin-top:3px;text-align:right;color:'+_col(pct)+'">'+pct+'%</div>',
+        pie:esc(e.titulo||'Evaluación'),
+        cuerpo:cuerpo
+    });
+}
+function imprimirResultado(idx){
+    var e=_evals.find(function(x){return x.id===_verResId;}); if(!e)return;
+    var r=_resOrden[idx];
+    if(!r){ alert('No se encontró esa respuesta.'); return; }
+    etaaxAbrirReporte(_repEvalHTML(e,r));
 }
 
 document.addEventListener('DOMContentLoaded',function(){ if(typeof _ctxBarInit==='function')_ctxBarInit(); if(typeof _sbInit==='function')_sbInit(); });
@@ -739,6 +912,7 @@ document.addEventListener('DOMContentLoaded',function(){ if(typeof _ctxBarInit==
 <script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
+<script src="/reporte-marca.js"></script>
 <script src="/catalogo-etaax.js"></script>
 </body>
 </html>
