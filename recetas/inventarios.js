@@ -758,13 +758,20 @@ function _repartoPrebatch() {
         var desg = [];
         partes.forEach(function(p){
             var sh = p.b / total;
-            var fi = filasCaptura.find(function(x){ return x.insumoId === p.id; });
-            desg.push({ insumoId: p.id, nombre: fi ? fi.nombre : p.id, ml: fisB * sh });
+            // Por id canónico: si el ingrediente de la sub-receta apunta a la COPIA
+            // por sucursal y la fila del inventario usa el MAESTRO, el .find crudo
+            // no encontraba nada y ese insumo se quedaba SIN su parte del batch
+            // (coctelería en cero aunque el prebatch sí se hubiera consumido).
+            var fi = _filaDeMiembro(p.id);
+            desg.push({ insumoId: (fi && fi.insumoId) || p.id, nombre: fi ? fi.nombre : p.id, ml: fisB * sh });
             if (!fi) return; // ingrediente sin fila en este inventario → solo informativo
             var u = fi.tipo === 'copa' ? (parseFloat(fi.copaML) || 0) : (fi.tipo === 'pza' ? (parseFloat(fi.contNeto) || 0) : 1);
             if (fi.tipo !== 'peso' && !(u > 0)) return;
             var conv = function(v){ return (v * sh) / (fi.tipo === 'peso' ? 1 : u); }; // base → unidad de la fila
-            var a = out.porInsumo[p.id] || (out.porInsumo[p.id] = { ea:0, ent:0, vco:0, cm:0, can:0, teo:0, fis:0, dif:0, venta:0 });
+            // Se guarda bajo el id de la FILA (canónico): _repartoDe() se consulta
+            // con ese id, y guardarlo bajo el de la copia lo dejaba inalcanzable.
+            var _k = fi.insumoId;
+            var a = out.porInsumo[_k] || (out.porInsumo[_k] = { ea:0, ent:0, vco:0, cm:0, can:0, teo:0, fis:0, dif:0, venta:0 });
             a.ea  += conv(eaB);   a.ent += conv(entB);
             a.vco += conv(ventaB); a.venta += conv(ventaB);
             a.cm  += conv(cmB);   a.can += conv(canB);
