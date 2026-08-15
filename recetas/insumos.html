@@ -339,8 +339,11 @@
                     <span style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)">Presentaciones y costos</span>
                 </div>
                 <div id="listaPresentaciones"></div>
-                <button class="btn-add" style="width:100%;margin-top:8px;padding:10px;font-size:12px;text-align:center"
-                    onclick="agregarPresentacion()">+ Agregar presentación</button>
+                <!-- Antes era "+ Agregar presentación". Ya no se crean presentaciones de
+                     compra nuevas: lo que se agrega ahora es un COSTEO (copa sencilla,
+                     copa doble, caballito). Solo aparece en lo que se sirve por copa. -->
+                <button id="btnAgregarCosteo" class="btn-add" style="width:100%;margin-top:8px;padding:10px;font-size:12px;text-align:center;display:none"
+                    onclick="agregarCosteo()">+ Agregar costeo</button>
             </div>
         </div>
         <div class="modal-footer">

@@ -2458,7 +2458,8 @@
            incluyeImpuesto: '0', ivaCheck: '0', iepsCheck: '0', iepsTasa: '26.5', notas: '',
            precioCarta: '', precioCartaBot: '',
            stockMin: '', stockMax: '',
-           unidadesPorPieza: '', nombreSubUnidad: '', costoSubUnidad: ''
+           unidadesPorPieza: '', nombreSubUnidad: '', costoSubUnidad: '',
+           costeos: []
        });
        renderPresentaciones();
    }
@@ -3145,6 +3146,7 @@
                </div>
            </div>
            <div id="copa-cards-${i}">${cardsHtml}</div>
+           ${_costeosExtraHTML(p, i)}
        </div>`;
    }
 
@@ -3262,6 +3264,8 @@
        const tieneCopa        = campos.includes('copa');
        const tienePresCompra  = campos.includes('presentacionCompra');
    
+       var _btnC = document.getElementById('btnAgregarCosteo');
+       if (_btnC) _btnC.style.display = tieneCopa ? '' : 'none';
        document.getElementById('listaPresentaciones').innerHTML =
            presentacionesTemp.map((pRaw, i) => {
                const p = _escCampos(pRaw);
@@ -3610,6 +3614,78 @@
    }
 
    // Tarjetas de costeo automático (compartidas por el render inicial y el live)
+   /* ── COSTEOS EXTRA (copa sencilla / copa doble / caballito…) ───────────────
+      El costeo base de la presentación (tamanoCopa + factorCopa) es el que lee el
+      INVENTARIO y el que usan las recetas. Estos costeos adicionales son dato de
+      CARTA: sirven para saber qué cobrar por una copa doble sin inventar otro
+      insumo. Viven en p.costeos[] y no tocan el conteo. */
+   function _costeosExtraHTML(p, i) {
+       var lista = p.costeos || [];
+       var filas = lista.map(function (c, j) {
+           var calc = calcCostoCopa(p.costoUnitario, p.umCosto || 'LT', c.tamano, c.um || 'ML');
+           var costo = calc ? (parseFloat(calc.costoCopa) || 0) : 0;
+           var f     = parseFloat(c.factor) || parseFloat(p.factorCopa) || 3.3;
+           var sug   = costo * f;
+           var pc    = parseFloat(c.precioCarta) || 0;
+           var util  = (pc > 0 && costo > 0) ? ((pc - costo) / costo) * 100 : null;
+           return '<div style="display:grid;grid-template-columns:1.3fr .8fr .7fr .8fr .9fr .9fr 28px;gap:7px;align-items:end;' +
+               'padding:8px;margin-bottom:6px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:7px">' +
+               '<div class="meta-item"><label>Nombre</label><input type="text" value="' + etx(c.nombre || '') + '" placeholder="Copa doble" ' +
+                   'oninput="updCosteo(' + i + ',' + j + ',\'nombre\',this.value)"></div>' +
+               '<div class="meta-item"><label>Tamaño</label><input type="number" value="' + etx(c.tamano || '') + '" placeholder="90" min="0" step="0.5" ' +
+                   'oninput="updCosteo(' + i + ',' + j + ',\'tamano\',this.value)"></div>' +
+               '<div class="meta-item"><label>Unidad</label><select onchange="updCosteo(' + i + ',' + j + ',\'um\',this.value)">' +
+                   '<option value="ML"' + ((c.um || 'ML') === 'ML' ? ' selected' : '') + '>ML</option>' +
+                   '<option value="OZ"' + ((c.um || 'ML') === 'OZ' ? ' selected' : '') + '>OZ</option></select></div>' +
+               '<div class="meta-item"><label>Factor \xd7</label><input type="number" value="' + etx(c.factor || '') + '" placeholder="' + (p.factorCopa || '3.3') + '" min="0.1" step="0.1" ' +
+                   'style="color:var(--accent)" oninput="updCosteo(' + i + ',' + j + ',\'factor\',this.value)"></div>' +
+               '<div class="meta-item"><label>Precio carta</label><input type="number" value="' + etx(c.precioCarta || '') + '" placeholder="0.00" min="0" step="0.5" ' +
+                   'style="color:var(--green)" oninput="updCosteo(' + i + ',' + j + ',\'precioCarta\',this.value)"></div>' +
+               '<div style="font-size:11px;line-height:1.5;padding-bottom:4px">' +
+                   '<div style="color:var(--text-dim)">costo <b style="color:var(--text)">' + (costo > 0 ? fmtMXN(costo) : '—') + '</b></div>' +
+                   '<div style="color:var(--text-dim)">sug. <b style="color:var(--accent)">' + (sug > 0 ? fmtMXN(sug) : '—') + '</b>' +
+                   (util !== null ? ' <span style="color:' + (util >= 200 ? 'var(--green)' : 'var(--accent)') + '">+' + util.toFixed(0) + '%</span>' : '') + '</div>' +
+               '</div>' +
+               '<button onclick="eliminarCosteo(' + i + ',' + j + ')" title="Quitar costeo" ' +
+                   'style="background:transparent;border:1px solid var(--border);color:var(--red);border-radius:6px;padding:5px 0;cursor:pointer;font-family:inherit">\u2715</button>' +
+           '</div>';
+       }).join('');
+       if (!filas) return '';
+       return '<div style="margin-top:10px">' + filas +
+           '<div style="font-size:10px;color:var(--text-dim);margin-top:2px">Dato de carta (copa doble, caballito\u2026). El inventario sigue contando con la copa de arriba.</div>' +
+       '</div>';
+   }
+   function agregarCosteo(i) {
+       var idx = (i == null) ? _presConCopa() : i;
+       if (idx < 0) return;
+       var p = presentacionesTemp[idx]; if (!p) return;
+       if (!p.costeos) p.costeos = [];
+       p.costeos.push({ id: genId(), nombre: p.costeos.length ? '' : 'Copa doble', tamano: '', um: p.umTamanoCopa || 'ML', factor: '', precioCarta: '' });
+       renderPresentaciones();
+   }
+   function updCosteo(i, j, campo, valor) {
+       var p = presentacionesTemp[i]; if (!p || !p.costeos || !p.costeos[j]) return;
+       p.costeos[j][campo] = valor;
+       modalDirty = true;
+       if (campo === 'nombre' || campo === 'precioCarta') return;   // no re-render: no perder el foco al teclear
+       renderPresentaciones();
+   }
+   function eliminarCosteo(i, j) {
+       var p = presentacionesTemp[i]; if (!p || !p.costeos) return;
+       p.costeos.splice(j, 1);
+       modalDirty = true;
+       renderPresentaciones();
+   }
+   // Primera presentación que dibuja bloque de copa (destilados, licores, vinos).
+   function _presConCopa() {
+       var cfg = TIPO_CONFIG[tipoInsumoActual] || TIPO_CONFIG['destilado'];
+       if (!(cfg.campos || []).includes('copa')) return -1;
+       return presentacionesTemp.length ? 0 : -1;
+   }
+   window.agregarCosteo = agregarCosteo;
+   window.updCosteo = updCosteo;
+   window.eliminarCosteo = eliminarCosteo;
+
    function _costeoCardsHTML(p) {
        var copa = calcCostoCopa(p.costoUnitario, p.umCosto||'LT', p.tamanoCopa, p.umTamanoCopa||'ML');
        if (!copa) return '<div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">Ingresa costo unitario y tamaño de copa para ver el costeo automático</div>';
