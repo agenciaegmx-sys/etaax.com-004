@@ -3059,7 +3059,7 @@
        if (!tieneCopa) return '';
 
        const copaInputs = esVino ? `
-           <div class="mg-3" style="grid-template-columns:repeat(4,1fr)">
+           <div class="mg-3" style="grid-template-columns:repeat(5,1fr)">
                <div class="meta-item">
                    <label>Tamaño de copa</label>
                    <input type="number" value="${p.tamanoCopa||''}" placeholder="150" min="0" step="0.5"
@@ -3080,6 +3080,13 @@
                        <option value="OZ" ${p.umLectura==='OZ'?'selected':''}>Onzas</option>
                        <option value="ML" ${p.umLectura==='ML'?'selected':''}>Mililitros</option>
                        <option value="LT" ${p.umLectura==='LT'?'selected':''}>Litros</option>
+                   </select>
+               </div>
+               <div class="meta-item">
+                   <label>Capturar ventas en <span style="text-transform:none;letter-spacing:0;color:var(--text-dim)">(inventario)</span></label>
+                   <select onchange="updPres(${i},'umCaptura',this.value)">
+                       <option value="" ${!p.umCaptura?'selected':''}>Copas</option>
+                       <option value="OZ" ${p.umCaptura==='OZ'?'selected':''}>Onzas</option>
                    </select>
                </div>
                <div class="meta-item">
@@ -3110,6 +3117,13 @@
                        <option value="OZ" ${p.umLectura==='OZ'?'selected':''}>Onzas</option>
                        <option value="ML" ${p.umLectura==='ML'?'selected':''}>Mililitros</option>
                        <option value="LT" ${p.umLectura==='LT'?'selected':''}>Litros</option>
+                   </select>
+               </div>
+               <div class="meta-item">
+                   <label>Capturar ventas en <span style="text-transform:none;letter-spacing:0;color:var(--text-dim)">(inventario)</span></label>
+                   <select onchange="updPres(${i},'umCaptura',this.value)">
+                       <option value="" ${!p.umCaptura?'selected':''}>Copas</option>
+                       <option value="OZ" ${p.umCaptura==='OZ'?'selected':''}>Onzas</option>
                    </select>
                </div>
                <div class="meta-item">

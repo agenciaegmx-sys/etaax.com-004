@@ -3869,7 +3869,7 @@ function renderStep1Galeria(filas) {
         const idx    = filasCaptura.indexOf(fila);
         const mlReal = calcMLReales(fila);
         const exist  = calcExistencia(fila);
-        const unidad = fila.tipo === 'pza' ? 'pza' : 'cop';
+        const unidad = esComp ? (fila.tipo === 'pza' ? 'pza' : 'cop') : _umCapLbl(fila);
         const tipoSt = fila.tipo === 'pza'
             ? 'background:rgba(61,190,122,0.15);border-color:rgba(61,190,122,0.45);color:var(--green)'
             : 'background:rgba(245,200,66,0.12);border-color:rgba(245,200,66,0.45);color:var(--accent)';
@@ -4200,9 +4200,11 @@ function _step3VentasInner() {
             ? 'background:rgba(61,190,122,0.15);border-color:rgba(61,190,122,0.45);color:var(--green)'
             : 'background:rgba(245,200,66,0.12);border-color:rgba(245,200,66,0.45);color:var(--accent)';
         const esCopa = fila.tipo !== 'pza';
-        const hV = esComp ? `updVentasCompuesto('${fila.compId}','ventas',+this.value)`   : `updVentasDirectas(${idx},'ventasCopasDirectas',+this.value)`;
-        const hC = esComp ? `updVentasCompuesto('${fila.compId}','cortesia',+this.value)` : `updVentasDirectas(${idx},'cortesiaCopas',+this.value)`;
-        const hM = esComp ? `updVentasCompuesto('${fila.compId}','merma',+this.value)`    : `updVentasDirectas(${idx},'mermaCopas',+this.value)`;
+        // Compuestos: siempre en copas (agrupan varios insumos y no tienen una copa propia).
+        const hV = esComp ? `updVentasCompuesto('${fila.compId}','ventas',+this.value)`   : `updVentasUM(${idx},'ventasCopasDirectas',this.value)`;
+        const hC = esComp ? `updVentasCompuesto('${fila.compId}','cortesia',+this.value)` : `updVentasUM(${idx},'cortesiaCopas',this.value)`;
+        const hM = esComp ? `updVentasCompuesto('${fila.compId}','merma',+this.value)`    : `updVentasUM(${idx},'mermaCopas',this.value)`;
+        const vV = esComp ? (fila.ventasCopasDirectas||0) : (_copAUm(fila, fila.ventasCopasDirectas)||0);
         return `<tr class="inv-row">
             <td class="inv-td-prod">
                 <div class="inv-prod-name">${esComp ? '🧩 ' + etx(fila.nombre) : etx(insumoTitulo(fila))}</div>
@@ -4216,7 +4218,7 @@ function _step3VentasInner() {
             </td>
             <td class="inv-td-input" style="width:95px">
                 <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">${unidad}</div>
-                <input type="text" inputmode="decimal" class="inv-num-input" value="${fila.ventasCopasDirectas||0}"
+                <input type="text" inputmode="decimal" class="inv-num-input" value="${vV}"
                     oninput="this.value=this.value.replace(/[^0-9.]/g,'');${hV}">
             </td>
             <td class="inv-td-input" style="width:95px">
@@ -4229,12 +4231,12 @@ function _step3VentasInner() {
             <td class="inv-td-input" style="width:95px">
                 <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">cortesía</div>
                 <input type="text" inputmode="decimal" class="inv-num-input" style="border-color:rgba(155,141,232,.4)"
-                    value="${fila.cortesiaCopas||0}" oninput="this.value=this.value.replace(/[^0-9.]/g,'');${hC}">
+                    value="${esComp ? (fila.cortesiaCopas||0) : (_copAUm(fila, fila.cortesiaCopas)||0)}" oninput="this.value=this.value.replace(/[^0-9.]/g,'');${hC}">
             </td>
             <td class="inv-td-input" style="width:95px">
                 <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">merma</div>
                 <input type="text" inputmode="decimal" class="inv-num-input" style="border-color:rgba(224,90,58,.35)"
-                    value="${fila.mermaCopas||0}" oninput="this.value=this.value.replace(/[^0-9.]/g,'');${hM}">
+                    value="${esComp ? (fila.mermaCopas||0) : (_copAUm(fila, fila.mermaCopas)||0)}" oninput="this.value=this.value.replace(/[^0-9.]/g,'');${hM}">
             </td>
         </tr>`;
     }).join('');
@@ -4642,10 +4644,10 @@ function renderCardVentas() {
             <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600">Ventas</div>
             <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
                 <div>
-                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">${unidad} vendidas</div>
+                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">${_umCapLbl(fila)} vendidas</div>
                     <input type="number" id="venta-copas-${idx}" class="inv-num-input"
-                        style="width:100px" value="${fila.ventasCopasDirectas||0}" min="0" step="0.5"
-                        oninput="updVentasDirectas(${idx},'ventasCopasDirectas',+this.value);renderResumenVentas()">
+                        style="width:100px" value="${_copAUm(fila, fila.ventasCopasDirectas)||0}" min="0" step="0.5"
+                        oninput="updVentasUM(${idx},'ventasCopasDirectas',this.value);renderResumenVentas()">
                 </div>
                 ${esCopa ? `<div>
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Botellas vendidas</div>
@@ -4659,11 +4661,11 @@ function renderCardVentas() {
                 <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600">Cortesía</div>
                 <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
                     <div>
-                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">${esCopa?'Copas':'Piezas'}</div>
+                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">${_umCapLbl(fila, true)}</div>
                         <input type="number" class="inv-num-input"
                             style="width:100px;border-color:rgba(155,141,232,.5)"
-                            value="${fila.cortesiaCopas||0}" min="0" step="0.5"
-                            oninput="updVentasDirectas(${idx},'cortesiaCopas',+this.value);renderResumenVentas()">
+                            value="${_copAUm(fila, fila.cortesiaCopas)||0}" min="0" step="0.5"
+                            oninput="updVentasUM(${idx},'cortesiaCopas',this.value);renderResumenVentas()">
                     </div>
                     <div style="flex:1;min-width:140px">
                         <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Concepto</div>
@@ -4679,11 +4681,11 @@ function renderCardVentas() {
                 <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600">Merma</div>
                 <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
                     <div>
-                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">${esCopa?'Copas':'Piezas'}</div>
+                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">${_umCapLbl(fila, true)}</div>
                         <input type="number" class="inv-num-input"
                             style="width:100px;border-color:rgba(224,90,58,.4)"
-                            value="${fila.mermaCopas||0}" min="0" step="0.5"
-                            oninput="updVentasDirectas(${idx},'mermaCopas',+this.value);renderResumenVentas()">
+                            value="${_copAUm(fila, fila.mermaCopas)||0}" min="0" step="0.5"
+                            oninput="updVentasUM(${idx},'mermaCopas',this.value);renderResumenVentas()">
                     </div>
                     <div style="flex:1;min-width:140px">
                         <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Concepto</div>
@@ -4719,12 +4721,13 @@ function renderResumenVentas() {
     }
     cont.innerHTML = todos.map(fila => {
         const esComp = !!fila.esCompuesto;
-        const unidad = fila.tipo==='pza'?'pza':'cop';
+        const unidad = esComp ? (fila.tipo==='pza'?'pza':'cop') : _umCapLbl(fila);
+        const _u = v => esComp ? (parseFloat(v)||0) : (_copAUm(fila, v)||0);
         const partes = [];
-        if ((fila.ventasCopasDirectas||0)>0)  partes.push(`${fila.ventasCopasDirectas} ${unidad}`);
+        if ((fila.ventasCopasDirectas||0)>0)  partes.push(`${_u(fila.ventasCopasDirectas)} ${unidad}`);
         if (!esComp && (fila.ventasBotella||0)>0) partes.push(`${fila.ventasBotella} bot`);
-        if ((fila.cortesiaCopas||0)>0)        partes.push(`${fila.cortesiaCopas} cortesía`);
-        if ((fila.mermaCopas||0)>0)           partes.push(`${fila.mermaCopas} merma`);
+        if ((fila.cortesiaCopas||0)>0)        partes.push(`${_u(fila.cortesiaCopas)} cortesía`);
+        if ((fila.mermaCopas||0)>0)           partes.push(`${_u(fila.mermaCopas)} merma`);
         return `<div class="ent-log-fila" onclick="seleccionarProductoVentas('${fila.insumoId}')" style="cursor:pointer">
             <span class="ent-log-nombre">${esComp ? '🧩 ' + etx(fila.nombre) : etx(insumoTitulo(fila))}</span>
             <span class="ent-log-cant" style="color:var(--accent)">${partes.join(' · ')}</span>
@@ -5653,6 +5656,47 @@ function setStep5Modo(m) {
    litros, y nadie puede cotejar eso contra una caja de 5 L. Cuando el insumo
    NO declara medida (usa la copa estándar de su categoría) se sigue leyendo en
    copas, que ahí sí es la unidad de venta. */
+/* ── UNIDAD DE CAPTURA: copas u onzas ─────────────────────────────────────────
+   El inventario SIEMPRE guarda COPAS: es la unidad en la que están escritas todas
+   las fórmulas (teórico, variancia, costo, coctelería). Lo único que cambia es la
+   ventanilla de captura: si el insumo pide onzas, se teclea en onzas y se convierte
+   al entrar y al salir. Así nadie tiene que migrar un solo inventario viejo.
+   Se define en el insumo ("Capturar ventas en"), junto al "Leer consumo en". */
+function _capturaOZ(fila) {
+    if (!fila || fila.tipo === 'pza') return false;
+    var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(fila.insumoId) : null;
+    if (!ins) return false;
+    var p0 = (ins.presentaciones && ins.presentaciones[0]) || {};
+    return String(ins.umCaptura || p0.umCaptura || '').toUpperCase() === 'OZ';
+}
+// Etiqueta de la ventanilla: "oz" u "cop" / "Onzas" u "Copas".
+function _umCapLbl(fila, largo) {
+    if (fila && fila.tipo === 'pza') return largo ? 'Piezas' : 'pza';
+    return _capturaOZ(fila) ? (largo ? 'Onzas' : 'oz') : (largo ? 'Copas' : 'cop');
+}
+// copas guardadas → número que se muestra en la ventanilla
+function _copAUm(fila, copas) {
+    var v = parseFloat(copas) || 0;
+    if (!v || !_capturaOZ(fila)) return v;
+    var cml = parseFloat(fila.copaML) || 0;
+    if (!cml) return v;
+    return Math.round((v * cml / OZ_ML) * 100) / 100;
+}
+// número tecleado en la ventanilla → copas que se guardan
+function _umACop(fila, val) {
+    var v = parseFloat(val) || 0;
+    if (!v || !_capturaOZ(fila)) return v;
+    var cml = parseFloat(fila.copaML) || 0;
+    if (!cml) return v;
+    return (v * OZ_ML) / cml;
+}
+// Captura convertida: recibe lo tecleado en la unidad del insumo y guarda copas.
+function updVentasUM(idx, campo, val) {
+    var fila = filasCaptura[idx];
+    updVentasDirectas(idx, campo, _umACop(fila, val));
+}
+window.updVentasUM = updVentasUM;
+
 function _medidaInsumo(fila) {
     if (!fila || fila.tipo !== 'copa') return null;
     var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(fila.insumoId) : null;
