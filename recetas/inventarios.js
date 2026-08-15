@@ -5620,6 +5620,47 @@ function setStep5Modo(m) {
     const l = document.getElementById('s5ModoLista'), g = document.getElementById('s5ModoGal');
     if (l && g) { l.classList.toggle('active', m==='lista'); g.classList.toggle('active', m==='galeria'); }
 }
+/* ── Ingredientes de receta que no apuntan a ningún insumo ─────────────
+   Si un ingrediente quedó apuntando a un insumo que ya no existe en este
+   negocio/sucursal, su consumo NO se descuenta del inventario: la coctelería
+   sale en cero y el teórico queda inflado, sin ninguna señal de por qué. Esto
+   los junta para poder arreglarlos de una, en vez de ir receta por receta.
+   Solo mira las recetas que SE VENDIERON en este inventario: las demás no
+   afectan el resultado. */
+function _ingredientesSinEnlace() {
+    var vendidos = (invActual && invActual.cocktailsVendidos) || {};
+    var porIns = {};
+    (getRecetas() || []).forEach(function (r) {
+        if (!r || !(parseFloat(vendidos[r.id]) > 0)) return;
+        (r.ingredientes || []).forEach(function (ing) {
+            if (!ing || !ing.insumoId) return;
+            var res = (typeof window._insumoResolver === 'function') ? window._insumoResolver(ing.insumoId) : null;
+            if (res) return;                       // resuelve: todo bien
+            if (_filaDeMiembro(ing.insumoId)) return; // está en la captura por id canónico
+            var k = ing.insumoId;
+            if (!porIns[k]) porIns[k] = { nombre: ing.nombre || '(sin nombre)', recetas: [] };
+            if (porIns[k].recetas.indexOf(r.nombre) < 0) porIns[k].recetas.push(r.nombre);
+        });
+    });
+    return Object.keys(porIns).map(function (k) { return porIns[k]; });
+}
+function _avisoEnlacesHTML() {
+    var rotos;
+    try { rotos = _ingredientesSinEnlace(); } catch (e) { return ''; }
+    if (!rotos.length) return '';
+    var lista = rotos.slice(0, 6).map(function (x) {
+        return '<li style="margin-top:3px"><b>' + etx(x.nombre) + '</b> — en ' +
+            etx(x.recetas.slice(0, 3).join(', ')) + (x.recetas.length > 3 ? ' y ' + (x.recetas.length - 3) + ' más' : '') + '</li>';
+    }).join('');
+    return '<div style="margin:8px 16px 4px;padding:12px 14px;border:1px solid rgba(245,200,66,.45);' +
+        'background:rgba(245,200,66,.07);border-radius:10px;font-size:12.5px;color:var(--text);line-height:1.55">' +
+        '<b>⚠️ ' + rotos.length + ' ingrediente' + (rotos.length !== 1 ? 's' : '') + ' de receta sin insumo</b>' +
+        '<div style="color:var(--text-dim);font-size:11.5px;margin-top:3px">Su consumo NO se está descontando: la coctelería sale en cero y el teórico queda alto. ' +
+        'Ábrelos en la receta y vuelve a elegir el insumo del catálogo (una vez por ingrediente, no por receta).</div>' +
+        '<ul style="margin:6px 0 0 18px;color:var(--text-muted)">' + lista +
+        (rotos.length > 6 ? '<li style="margin-top:3px;opacity:.7">…y ' + (rotos.length - 6) + ' más</li>' : '') + '</ul></div>';
+}
+
 function _step5TablasHTML() {
     const q      = (_busqStep5 || '').toLowerCase();
     const mapaC5 = _compDeInsumo();
@@ -6001,7 +6042,7 @@ function _step5TablasHTML() {
     const sinDatos = !cards && !prodCard
         ? '<div style="text-align:center;padding:40px;color:var(--text-dim)">Sin productos capturados</div>'
         : '';
-    return `<div style="padding:16px 0 24px">${sinDatos}${cards}${prodCard}</div>`;
+    return `<div style="padding:16px 0 24px">${_avisoEnlacesHTML()}${sinDatos}${cards}${prodCard}</div>`;
 }
 // Entradas de un insumo, con fecha (de la cola de entradas del inventario).
 function _entradasDeInsumo(insumoId) {
