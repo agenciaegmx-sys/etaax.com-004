@@ -4217,7 +4217,13 @@ function _step3VentasInner() {
                 </div>
             </td>
             <td class="inv-td-input" style="width:95px">
-                <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">${unidad}</div>
+                ${(esComp || fila.tipo === 'pza')
+                    ? `<div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">${unidad}</div>`
+                    : `<select onchange="updCapturaUM(${idx},this.value)" title="Unidad en la que capturas ventas, cortesía y merma de este producto"
+                        style="display:block;margin:0 auto 3px;background:transparent;border:none;color:${_capturaOZ(fila)?'#7ab8f5':'var(--text-dim)'};font-family:inherit;font-size:10px;text-align:center;cursor:pointer;padding:0">
+                        <option value=""   ${!_capturaOZ(fila)?'selected':''}>cop</option>
+                        <option value="OZ" ${ _capturaOZ(fila)?'selected':''}>oz</option>
+                    </select>`}
                 <input type="text" inputmode="decimal" class="inv-num-input" value="${vV}"
                     oninput="this.value=this.value.replace(/[^0-9.]/g,'');${hV}">
             </td>
@@ -4641,7 +4647,17 @@ function renderCardVentas() {
                 </div>
             </div>
 
-            <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600">Ventas</div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+                <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;font-weight:600">Ventas</span>
+                ${esCopa ? `<span style="display:inline-flex;align-items:center;gap:6px;margin-left:auto">
+                    <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Capturar en</span>
+                    <select onchange="updCapturaUM(${idx},this.value)"
+                        style="background:var(--surface);border:1px solid ${_capturaOZ(fila)?'rgba(122,184,245,.5)':'var(--border)'};color:${_capturaOZ(fila)?'#7ab8f5':'var(--text)'};border-radius:6px;padding:4px 8px;font-family:inherit;font-size:12px">
+                        <option value=""   ${!_capturaOZ(fila)?'selected':''}>Copas de ${_ncop(fila.copaML||0)} ml</option>
+                        <option value="OZ" ${ _capturaOZ(fila)?'selected':''}>Onzas</option>
+                    </select>
+                </span>` : ''}
+            </div>
             <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
                 <div>
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">${_umCapLbl(fila)} vendidas</div>
@@ -5664,11 +5680,18 @@ function setStep5Modo(m) {
    Se define en el insumo ("Capturar ventas en"), junto al "Leer consumo en". */
 function _capturaOZ(fila) {
     if (!fila || fila.tipo === 'pza') return false;
-    var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(fila.insumoId) : null;
-    if (!ins) return false;
-    var p0 = (ins.presentaciones && ins.presentaciones[0]) || {};
-    return String(ins.umCaptura || p0.umCaptura || '').toUpperCase() === 'OZ';
+    return String(fila.umCaptura || '').toUpperCase() === 'OZ';
 }
+// Cambiar la unidad de captura de ESTE producto en ESTE inventario. Lo tecleado se
+// conserva: el valor guardado son copas, solo cambia la ventanilla que lo muestra.
+function updCapturaUM(idx, um) {
+    var f = filasCaptura[idx]; if (!f) return;
+    f.umCaptura = (um === 'OZ') ? 'OZ' : '';
+    _autoGuardar();
+    renderCardVentas();
+    renderResumenVentas();
+}
+window.updCapturaUM = updCapturaUM;
 // Etiqueta de la ventanilla: "oz" u "cop" / "Onzas" u "Copas".
 function _umCapLbl(fila, largo) {
     if (fila && fila.tipo === 'pza') return largo ? 'Piezas' : 'pza';
