@@ -227,9 +227,13 @@
        if (ttl) ttl.innerHTML   = on ? 'Insumos <span style="color:#7ab8f5">· Global</span>' : 'Insumos';
        // En modo global no tiene sentido el botón de copiar entre sucursales.
        if (bn) bn.style.display = on ? 'none' : '';
-       // Independizar por sucursal: operación a nivel negocio → solo en el catálogo global.
+       // Independizar por sucursal: retirado de la vista. El modelo maestro + copia
+       // ya deja cada sucursal independiente al crear o al vincular.
        var bi = document.getElementById('btnIndepSucIns');
-       if (bi) bi.style.display = on ? '' : 'none';
+       if (bi) bi.style.display = 'none';
+       // Novedades: solo tiene sentido en el catálogo global (mira todas las sucursales).
+       var bnv = document.getElementById('btnNovedadesIns');
+       if (bnv) bnv.style.display = on ? '' : 'none';
    }
    function _poblarFiltroSucIns() {
        var sucs = _getSucsIns();
@@ -553,8 +557,7 @@
            alert('«' + (src.nombre || 'Este insumo') + '» ya es único en el catálogo global (no está en otras sucursales).');
            return;
        }
-       if (!confirm('Actualizar «' + (src.nombre || '') + '» (ficha técnica, presentaciones y precios) en ' +
-                    hermanos.length + ' sucursal' + (hermanos.length > 1 ? 'es' : '') + ' más?\n\nSus datos quedarán iguales a este insumo.')) return;
+       var _aplicar = function () {
        hermanos.forEach(function(h){
            var i = lista.findIndex(function(x){ return x.id === h.id; });
            if (i < 0) return;
@@ -565,8 +568,13 @@
            lista[i] = upd;
        });
        setInsumos(lista);
-       alert('✅ Actualizado en ' + hermanos.length + ' sucursal' + (hermanos.length > 1 ? 'es' : '') + '.');
+       if (window.etaaxAlert) etaaxAlert('Actualizado en ' + hermanos.length + ' sucursal' + (hermanos.length > 1 ? 'es' : '') + '.');
        filtrar();
+       };
+       var _msg = 'Su ficha técnica, presentaciones y precios quedarán iguales a este insumo en ' +
+                  hermanos.length + ' sucursal' + (hermanos.length > 1 ? 'es' : '') + ' más.';
+       if (window.etaaxConfirm) etaaxConfirm('Actualizar «' + (src.nombre || '') + '» en el global', _msg, _aplicar, null, { yesLabel: 'Actualizar', danger: false });
+       else if (confirm(_msg)) _aplicar();
    }
    window.actualizarEnGlobal = actualizarEnGlobal;
 
@@ -2158,20 +2166,42 @@
    
    var modalDirty = false;
 
-   function cerrarModal(e) {
-       if (e.target !== document.getElementById('modalOverlay')) return;
-       if (modalDirty && !confirm('¿Salir sin guardar? Los cambios se perderán.')) return;
+   /* Cerrar con cambios pendientes: mismo candado de 3 botones que el escandallo,
+      con el diálogo de la casa. El confirm() del navegador salía como "etaax.com
+      dice" y solo ofrecía aceptar o cancelar — no dejaba guardar. */
+   function _cerrarConCandado(continuar) {
+       if (!modalDirty) { continuar(); return; }
+       if (typeof window.etaaxDialog !== 'function') {   // sin security.js cargado
+           if (confirm('¿Salir sin guardar? Los cambios se perderán.')) continuar();
+           return;
+       }
+       etaaxDialog({
+           icon: '💾', title: 'Tienes cambios sin guardar',
+           msg: 'Este insumo tiene cambios que todavía no se guardan.',
+           buttons: [
+               { label: 'Seguir editando', kind: 'ghost' },
+               { label: 'Cerrar sin guardar', kind: 'danger', onClick: function () { modalDirty = false; continuar(); } },
+               { label: '💾 Guardar y cerrar', kind: 'primary', onClick: function () {
+                   Promise.resolve(guardarInsumo()).then(function () { modalDirty = false; }).catch(function () {});
+               } }
+           ]
+       });
+   }
+   function _cerrarModalYa() {
        modalDirty = false;
        _cerrarPuenteInsumo();
        document.getElementById('modalOverlay').style.display = 'none';
    }
+   function cerrarModal(e) {
+       if (e.target !== document.getElementById('modalOverlay')) return;
+       _cerrarConCandado(_cerrarModalYa);
+   }
 
    function cerrarModalBtn() {
-       if (modalDirty && !confirm('¿Salir sin guardar? Los cambios se perderán.')) return;
-       modalDirty = false;
-       _cerrarPuenteInsumo();
-       document.getElementById('modalOverlay').style.display = 'none';
-       if (_soloMode) window.parent.postMessage({ type: 'cerrarEditor' }, '*');
+       _cerrarConCandado(function () {
+           _cerrarModalYa();
+           if (_soloMode) window.parent.postMessage({ type: 'cerrarEditor' }, '*');
+       });
    }
    
    /* ── Menú "⋯" de acciones del insumo ────────────────────────────────
@@ -2507,6 +2537,187 @@
             + '🕒 Actualizado ' + etx(s.rel) + (s.quien ? ' · <span style="color:var(--text-muted)">' + etx(s.quien) + '</span>' : '') + '</div>';
    }
    window._selloHTML = _selloHTML;
+
+   /* ── HISTÓRICO DE CAMBIOS ──────────────────────────────────────────────────
+      Un renglón por guardado, con lo que de verdad cambió (nombre, costo, copa,
+      stock…), quién y en qué sucursal. Vive en el propio insumo (ins.historial) y
+      se poda a 90 DÍAS: es metadato de consulta, no un libro contable.
+      De aquí come el buscador de NOVEDADES del catálogo global. */
+   var _HIST_DIAS = 90;
+   // Campos que vale la pena registrar: los que cambian una decisión.
+   var _HIST_CAMPOS = [
+       { k:'nombre',       lbl:'Nombre' },
+       { k:'marca',        lbl:'Marca' },
+       { k:'variedad',     lbl:'Variedad' },
+       { k:'categoria',    lbl:'Categoría' },
+       { k:'subcategoria', lbl:'Subcategoría' },
+       { k:'area',         lbl:'Área' },
+       { k:'activo',       lbl:'Activo' }
+   ];
+   var _HIST_PRES = [
+       { k:'precio',           lbl:'Precio de compra',  money:true },
+       { k:'costoUnitario',    lbl:'Costo unitario',    money:true },
+       { k:'contNeto',         lbl:'Contenido' },
+       { k:'umContenido',      lbl:'Unidad' },
+       { k:'tamanoCopa',       lbl:'Tamaño de copa' },
+       { k:'precioCarta',      lbl:'Precio carta',      money:true },
+       { k:'unidadesPorPieza', lbl:'Piezas por unidad' },
+       { k:'stockMin',         lbl:'Stock mínimo' },
+       { k:'stockMax',         lbl:'Stock máximo' },
+       { k:'proveedor',        lbl:'Proveedor' }
+   ];
+   function _valTxt(v) { return (v === undefined || v === null || v === '') ? '—' : String(v); }
+   function _diffInsumo(nuevo, viejo) {
+       var out = [];
+       if (!viejo) return out;                        // insumo nuevo: sin comparación
+       _HIST_CAMPOS.forEach(function (c) {
+           // "Activo: — → 1" no es un cambio del usuario: es el default que rellena el
+           // editor en registros viejos que no traían el campo. Ensucia el historial.
+           if (c.k === 'activo' && viejo[c.k] === undefined) return;
+           if (_valTxt(nuevo[c.k]) !== _valTxt(viejo[c.k]))
+               out.push({ campo: c.lbl, de: _valTxt(viejo[c.k]), a: _valTxt(nuevo[c.k]) });
+       });
+       var pn = (nuevo.presentaciones || [])[0] || {}, pv = (viejo.presentaciones || [])[0] || {};
+       _HIST_PRES.forEach(function (c) {
+           var a = _valTxt(pn[c.k]), b = _valTxt(pv[c.k]);
+           if (a === b) return;
+           if (c.money) { a = a === '—' ? a : fmtMXN(parseFloat(a) || 0); b = b === '—' ? b : fmtMXN(parseFloat(b) || 0); }
+           out.push({ campo: c.lbl, de: b, a: a });
+       });
+       return out;
+   }
+   function _registrarCambios(insumo, previo) {
+       var cambios = _diffInsumo(insumo, previo);
+       var esNuevo = !previo;
+       if (!esNuevo && !cambios.length) return;       // guardó sin tocar nada
+       var hist = (previo && previo.historial) || insumo.historial || [];
+       hist = hist.slice();
+       hist.unshift({
+           ts: insumo.updatedAt,
+           quien: insumo.updatedBy || '',
+           suc: _getSucActivaIns() || '',
+           sucNom: _sucNomIns(_getSucActivaIns() || ''),
+           tipo: esNuevo ? 'alta' : 'edicion',
+           cambios: cambios.slice(0, 12)              // 12 renglones bastan para leerlo
+       });
+       var corte = Date.now() - _HIST_DIAS * 864e5;
+       insumo.historial = hist.filter(function (h) {
+           var t = Date.parse(h && h.ts || '');
+           return isNaN(t) ? false : t >= corte;
+       }).slice(0, 40);
+   }
+
+   /* ══════════════════════════════════════════════════════════════════════════
+      NOVEDADES — cambios recientes en las sucursales, vistos desde el global
+      Junta el historial de TODOS los insumos y lo ordena por fecha. Por cada
+      novedad se decide: subirla al catálogo global (queda igual en todas las
+      sucursales que tienen ese insumo) o dejarla donde está. Al decidir, la
+      novedad se marca como vista y desaparece de la lista — no se borra el
+      historial, solo deja de pedir atención.
+      ══════════════════════════════════════════════════════════════════════════ */
+   var _NOV_VISTAS = {};   // { insumoId|ts : 1 } — decisiones ya tomadas
+   function _novKeyStore() { return _sk('nov_vistas_ins'); }
+   function _novCargarVistas() {
+       try { _NOV_VISTAS = JSON.parse(localStorage.getItem(_novKeyStore()) || '{}'); } catch (e) { _NOV_VISTAS = {}; }
+   }
+   function _novGuardarVistas() {
+       try { localStorage.setItem(_novKeyStore(), JSON.stringify(_NOV_VISTAS)); } catch (e) {}
+   }
+   function _novLista() {
+       _novCargarVistas();
+       var out = [];
+       var corte = Date.now() - _HIST_DIAS * 864e5;
+       (getInsumos() || []).forEach(function (ins) {
+           (ins.historial || []).forEach(function (h) {
+               if (!h || !h.ts) return;
+               var t = Date.parse(h.ts);
+               if (isNaN(t) || t < corte) return;             // la poda también al leer:
+               var k = ins.id + '|' + h.ts;                   // datos viejos no se cuelan
+               if (_NOV_VISTAS[k]) return;                    // ya se decidió
+               out.push({ key: k, ins: ins, h: h });
+           });
+       });
+       out.sort(function (a, b) { return String(b.h.ts).localeCompare(String(a.h.ts)); });
+       return out;
+   }
+   function _novFecha(iso) {
+       var d = new Date(iso); if (isNaN(d)) return '';
+       var dias = Math.floor((Date.now() - d.getTime()) / 86400000);
+       return dias <= 0 ? 'hoy' : dias === 1 ? 'ayer' : 'hace ' + dias + ' días';
+   }
+   // ¿En cuántas sucursales más vive este insumo? Es lo que se actualizaría.
+   function _novHermanos(ins) {
+       var k = _keyInsLocal(ins);
+       return (getInsumos() || []).filter(function (x) { return x.id !== ins.id && _keyInsLocal(x) === k; });
+   }
+   function abrirNovedadesIns() {
+       var ov = document.createElement('div');
+       ov.id = 'novOverlay';
+       ov.style.cssText = 'position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:20px';
+       ov.onclick = function (e) { if (e.target === ov) ov.remove(); };
+       ov.innerHTML = '<div class="modal" style="max-width:860px;width:100%;max-height:88vh;display:flex;flex-direction:column">'
+           + '<div class="modal-header"><h2>🔔 Novedades del catálogo</h2>'
+           + '<button class="modal-close" onclick="document.getElementById(\'novOverlay\').remove()">✕</button></div>'
+           + '<div style="padding:0 18px 10px"><input id="novBuscar" class="ins-buscador" placeholder="🔍 Buscar por insumo, sucursal o quién lo cambió…" '
+           + 'oninput="_novRender(this.value)" style="width:100%;box-sizing:border-box"></div>'
+           + '<div id="novLista" class="modal-body" style="flex:1;overflow-y:auto;padding:0 18px 18px"></div></div>';
+       document.body.appendChild(ov);
+       _novRender('');
+   }
+   function _novRender(q) {
+       var cont = document.getElementById('novLista'); if (!cont) return;
+       q = String(q || '').toLowerCase().trim();
+       var lista = _novLista().filter(function (n) {
+           if (!q) return true;
+           return ((insumoTitulo(n.ins) || '') + ' ' + (n.h.sucNom || '') + ' ' + (n.h.quien || '')).toLowerCase().indexOf(q) >= 0;
+       });
+       if (!lista.length) {
+           cont.innerHTML = '<div style="text-align:center;padding:44px 20px;color:var(--text-dim)">'
+               + '<div style="font-size:34px;margin-bottom:8px">✅</div>'
+               + '<div style="font-size:14px;color:var(--text-muted)">' + (q ? 'Sin resultados para «' + etx(q) + '»' : 'Todo al día: no hay cambios pendientes de revisar.') + '</div></div>';
+           return;
+       }
+       cont.innerHTML = lista.map(function (n) {
+           var herm = _novHermanos(n.ins).length;
+           var filas = (n.h.cambios || []).map(function (c) {
+               return '<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;font-size:12px;padding:4px 0;border-top:1px solid var(--border)">'
+                   + '<span style="color:var(--text-muted)">' + etx(c.campo) + '</span>'
+                   + '<span style="color:var(--text-dim);text-decoration:line-through">' + etx(c.de) + '</span>'
+                   + '<span style="color:var(--text-dim)">→</span>'
+                   + '<span style="color:var(--green);font-weight:600">' + etx(c.a) + '</span></div>';
+           }).join('') || '<div style="font-size:12px;color:var(--text-dim);padding-top:5px">Alta del insumo.</div>';
+           return '<div class="ins-card" style="padding:13px 15px;margin-bottom:10px">'
+               + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">'
+                   + '<div style="min-width:0">'
+                       + '<div style="font-weight:700;font-size:14px;color:var(--text)">' + etx(insumoTitulo(n.ins)) + '</div>'
+                       + '<div style="font-size:11px;color:var(--text-dim);margin-top:3px">'
+                           + (n.h.tipo === 'alta' ? '🆕 Alta' : '✏️ Edición') + ' · ' + etx(_novFecha(n.h.ts))
+                           + (n.h.sucNom ? ' · <b style="color:#7ab8f5">' + etx(n.h.sucNom) + '</b>' : '')
+                           + (n.h.quien ? ' · ' + etx(n.h.quien) : '') + '</div>'
+                   + '</div>'
+                   + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+                       + '<button class="btn-vista" style="font-size:11px;padding:5px 10px" onclick="verFicha(\'' + n.ins.id + '\')">📋 Ficha</button>'
+                       + (herm ? '<button class="btn-vista" style="font-size:11px;padding:5px 10px;color:var(--green);border-color:var(--green)" onclick="_novAplicar(\'' + n.key + '\',\'' + n.ins.id + '\')">⬆️ Subir al global (' + herm + ')</button>' : '')
+                       + '<button class="btn-vista" style="font-size:11px;padding:5px 10px" onclick="_novDejar(\'' + n.key + '\')">Dejar así</button>'
+                   + '</div>'
+               + '</div>' + filas + '</div>';
+       }).join('');
+   }
+   // Subir al global: propaga a las demás sucursales y da la novedad por resuelta.
+   function _novAplicar(key, insId) {
+       actualizarEnGlobal(insId);
+       _NOV_VISTAS[key] = 1; _novGuardarVistas();
+       _novRender(document.getElementById('novBuscar') ? document.getElementById('novBuscar').value : '');
+   }
+   // Dejar así: se queda como cambio local de esa sucursal y sale de la lista.
+   function _novDejar(key) {
+       _NOV_VISTAS[key] = 1; _novGuardarVistas();
+       _novRender(document.getElementById('novBuscar') ? document.getElementById('novBuscar').value : '');
+   }
+   window.abrirNovedadesIns = abrirNovedadesIns;
+   window._novRender = _novRender;
+   window._novAplicar = _novAplicar;
+   window._novDejar = _novDejar;
 
    function _subUnidadNombre(p) {
        var n = String(p.nombreSubUnidad || '').trim();
@@ -3873,6 +4084,9 @@
        insumo.updatedAt = new Date().toISOString();
        insumo.updatedBy = _usuarioActual();
        if (!insumo.createdAt) insumo.createdAt = insumo.updatedAt;
+       // Histórico: qué cambió respecto de lo que había, quién y desde qué sucursal.
+       // Se poda a 90 días para que el registro no engorde el JSON del insumo.
+       _registrarCambios(insumo, editandoId ? getInsumos().find(function(x){ return x.id === editandoId; }) : null);
 
        const lista = getInsumos();
        var _copiaNueva = null;

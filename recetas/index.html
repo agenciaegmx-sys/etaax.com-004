@@ -721,7 +721,8 @@
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🥃 Bebidas</button>
                 <button id="rp-sub-bebidas" onclick="filtroRecetaTipo='sub-bebidas';filtroRecetaGrupo='';filtroRecetaCat='';renderGridRecetas();_activarPillReceta('sub-bebidas')"
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🧃 Sub Bebidas</button>
-                <button id="btnIndepSucRec" onclick="abrirIndependizarSucRec()" title="Detecta recetas compartidas entre sucursales y crea una copia independiente por sucursal (con respaldo previo)."
+                <!-- Independizar sucursales: retirado de la vista (el modelo maestro + copia ya lo resuelve al crear o vincular). -->
+                    <button hidden id="btnIndepSucRec" onclick="abrirIndependizarSucRec()" title="Detecta recetas compartidas entre sucursales y crea una copia independiente por sucursal (con respaldo previo)."
                     style="display:none;padding:6px 16px;border-radius:20px;border:1.5px solid #7ab8f5;background:transparent;color:#7ab8f5;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">🔗 Independizar sucursales</button>
                 <!-- Galería / Lista (mismo par que el catálogo de insumos) -->
                 <span id="vistaRecetasBtns" style="display:flex;gap:6px;margin-left:auto">
@@ -3070,7 +3071,8 @@ function renderGridRecetas() {
     const q   = (document.getElementById('buscarReceta')?.value || '').toLowerCase();
     const _catGlobal = _esCatGlobalRecetas();
     // Independizar por sucursal: operación a nivel negocio → solo en el catálogo global.
-    (function(){ var b=document.getElementById('btnIndepSucRec'); if(b) b.style.display=_catGlobal?'':'none'; })();
+    // El botón de independizar ya no se muestra (el modelo maestro + copia lo resuelve solo).
+    (function(){ var b=document.getElementById('btnIndepSucRec'); if(b) b.style.display='none'; })();
     // Estado (regla única de visibilidad, insumo-label.js):
     //  · Global: Activas / Inactivas (las inactivas del negocio viven SOLO aquí).
     //  · Sucursal: Activas (scope normal) / PAUSADAS aquí (inactivaEn) para reactivarlas.

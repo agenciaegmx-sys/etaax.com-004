@@ -67,7 +67,12 @@
             <div class="hdr-acts">
                 <button class="btn-vista" id="btnOptFotosNeg" onclick="migrarFotosNegocio()" title="Mueve las fotos base64 de este negocio a Storage (carga más fluida)">🗜️ Optimizar fotos</button>
                 <button class="btn-vista" id="btnInsumosNegGlobal" onclick="abrirInsumosGlobalNeg()" title="Insumos de todas las sucursales de este negocio — cópialos a esta sucursal">🏢 <span id="lblInsumosNeg">Insumos Globales</span></button>
-                <button class="btn-vista" id="btnIndepSucIns" style="display:none;color:var(--blue);border-color:var(--blue)" onclick="abrirIndependizarSucIns()" title="Detecta insumos compartidos entre sucursales y crea una copia independiente por sucursal (con respaldo previo). Tus datos capturados no se tocan.">🔗 Independizar sucursales</button>
+                <button class="btn-vista" id="btnNovedadesIns" style="display:none;color:var(--accent);border-color:var(--accent)" onclick="abrirNovedadesIns()" title="Cambios recientes de insumos por sucursal: decide si suben al catálogo global o se quedan en su sucursal">🔔 Novedades</button>
+                <!-- Independizar sucursales: retirado de la vista. Con el modelo
+                     maestro + copia por sucursal ya no hace falta correrlo a mano;
+                     la función sigue existiendo (abrirIndependizarSucIns) por si
+                     algún catálogo viejo lo necesita. -->
+                <button class="btn-vista" id="btnIndepSucIns" hidden style="display:none;color:var(--blue);border-color:var(--blue)" onclick="abrirIndependizarSucIns()" title="Detecta insumos compartidos entre sucursales y crea una copia independiente por sucursal (con respaldo previo). Tus datos capturados no se tocan.">🔗 Independizar sucursales</button>
                 <button class="btn-vista" onclick="abrirCatalogoGlobal()" title="Importar del catálogo maestro de ETAAX">🌐 Insumos ETAAX</button>
                 <button class="btn-primary" onclick="abrirSelectorCategoria()">+ Agregar insumo</button>
             </div>
