@@ -5640,6 +5640,36 @@ function setStep5Modo(m) {
     const l = document.getElementById('s5ModoLista'), g = document.getElementById('s5ModoGal');
     if (l && g) { l.classList.toggle('active', m==='lista'); g.classList.toggle('active', m==='galeria'); }
 }
+/* Diagnóstico manual: en la consola del Paso 5, `diagInsumo('vodka')` imprime
+   toda la cadena de un insumo — su fila, qué recetas lo llevan y con qué id,
+   cuántas se vendieron, si entra por una sub-receta y qué le tocó del batch.
+   Es para no adivinar desde capturas cuando una columna sale en cero. */
+window.diagInsumo = function (q) {
+    q = String(q || '').toLowerCase();
+    var f = (filasCaptura || []).find(function (x) { return (x.nombre || '').toLowerCase().indexOf(q) >= 0; });
+    if (!f) return '❌ Ninguna fila del inventario se llama así. Filas: ' +
+        (filasCaptura || []).slice(0, 10).map(function (x) { return x.nombre; }).join(' · ');
+    var cid = _midCanon(f.insumoId);
+    var vendidos = (invActual && invActual.cocktailsVendidos) || {};
+    var usan = (getRecetas() || []).filter(function (r) {
+        return (r.ingredientes || []).some(function (i) { return i && i.insumoId && _midCanon(i.insumoId) === cid; });
+    }).map(function (r) {
+        var ing = (r.ingredientes || []).find(function (i) { return i && i.insumoId && _midCanon(i.insumoId) === cid; }) || {};
+        return { receta: r.nombre, tipo: r.tipo, vendidos: parseFloat(vendidos[r.id]) || 0,
+                 cantidad: ing.cantidad + ' ' + (ing.unidad || ''), idEnLaReceta: ing.insumoId,
+                 mismoIdQueLaFila: ing.insumoId === f.insumoId };
+    });
+    if (!_repCache) { try { _repCache = _repartoPrebatch(); } catch (e) {} }
+    return {
+        fila: { nombre: f.nombre, id: f.insumoId, idCanonico: cid, tipo: f.tipo, copaML: f.copaML, contNeto: f.contNeto },
+        consumoDirectoPorRecetas: (function () { try { return consumoRecetasFila(f); } catch (e) { return 'error'; } })(),
+        loQueLeTocaDeAlgunBatch: _repartoDe(f.insumoId),
+        recetasQueLoLlevan: usan.length ? usan : 'NINGUNA receta lo lleva como ingrediente',
+        prebatchesContadosEnEsteInventario: ((_repCache && _repCache.lista) || []).map(function (x) { return x.nombre; }),
+        nota: 'Si "recetasQueLoLlevan" tiene la sub-receta pero "prebatchesContadosEnEsteInventario" NO la incluye, el batch no se está contando en este inventario y por eso no reparte.'
+    };
+};
+
 /* ── ¿De dónde sale (o por qué NO sale) el consumo de un insumo? ────────
    Cuando la coctelería marca "—" no hay forma de saber si es que ningún coctel
    lo lleva, si los cocteles que lo llevan no se vendieron, o si el ingrediente
