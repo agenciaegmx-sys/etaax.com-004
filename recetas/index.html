@@ -721,6 +721,8 @@
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🥃 Bebidas</button>
                 <button id="rp-sub-bebidas" onclick="filtroRecetaTipo='sub-bebidas';filtroRecetaGrupo='';filtroRecetaCat='';renderGridRecetas();_activarPillReceta('sub-bebidas')"
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🧃 Sub Bebidas</button>
+                <button id="btnNovedadesRec" onclick="abrirNovedadesRec()" title="Cambios recientes de recetas por sucursal: decide si suben al catálogo global o se quedan en su sucursal"
+                    style="display:none;padding:6px 16px;border-radius:20px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">🔔 Novedades</button>
                 <!-- Independizar sucursales: retirado de la vista (el modelo maestro + copia ya lo resuelve al crear o vincular). -->
                     <button hidden id="btnIndepSucRec" onclick="abrirIndependizarSucRec()" title="Detecta recetas compartidas entre sucursales y crea una copia independiente por sucursal (con respaldo previo)."
                     style="display:none;padding:6px 16px;border-radius:20px;border:1.5px solid #7ab8f5;background:transparent;color:#7ab8f5;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">🔗 Independizar sucursales</button>
@@ -2984,6 +2986,145 @@ function guardarRecetaSuc(){
     renderGridRecetas();
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   NOVEDADES DE RECETAS — cambios recientes de las sucursales, vistos del global
+   Mismo trato que el 🔔 de insumos: junta el historial de todas las recetas por
+   fecha, con buscador por receta, sucursal o persona. Por cada novedad se decide
+   si sube al catálogo global (la receta se copia a sus hermanas: el MAESTRO y las
+   copias de las demás sucursales) o se queda donde está. Al decidir, la novedad
+   sale de la lista; el historial NO se borra.
+   ══════════════════════════════════════════════════════════════════════════════ */
+var _NOVR_VISTAS = {};
+function _novrKey(){ var n=localStorage.getItem('etaax_negocio_activo')||''; return 'etaax_'+n+'_nov_vistas_rec'; }
+function _novrCargar(){ try{ _NOVR_VISTAS=JSON.parse(localStorage.getItem(_novrKey())||'{}'); }catch(e){ _NOVR_VISTAS={}; } }
+function _novrGuardar(){ try{ localStorage.setItem(_novrKey(), JSON.stringify(_NOVR_VISTAS)); }catch(e){} }
+/* Hermanas de una receta: el maestro y todas las copias del mismo maestro. Es a
+   quienes llega el cambio si se sube al global. */
+function _novrHermanas(r){
+    var masterId = r.origenId || r.id;
+    return getRecetas().filter(function(x){
+        return x.id !== r.id && (x.id === masterId || x.origenId === masterId);
+    });
+}
+function _novrLista(){
+    _novrCargar();
+    var corte = Date.now() - 90*864e5, out = [];
+    getRecetas().forEach(function(r){
+        (r.historial||[]).forEach(function(h){
+            if(!h||!h.ts) return;
+            var t = Date.parse(h.ts);
+            if(isNaN(t) || t < corte) return;
+            var k = r.id+'|'+h.ts;
+            if(_NOVR_VISTAS[k]) return;
+            out.push({ key:k, rec:r, h:h });
+        });
+    });
+    out.sort(function(a,b){ return String(b.h.ts).localeCompare(String(a.h.ts)); });
+    return out;
+}
+function _novrFecha(iso){
+    var d=new Date(iso); if(isNaN(d)) return '';
+    var dias=Math.floor((Date.now()-d.getTime())/86400000);
+    return dias<=0?'hoy':dias===1?'ayer':'hace '+dias+' días';
+}
+function _novrTipoLbl(t){
+    return t==='sub-alimentos'?'🥣 Sub Alimentos':t==='sub-bebidas'?'🧃 Sub Bebidas'
+         : t==='bebidas'?'🥃 Bebidas':'🍽️ Alimentos';
+}
+function abrirNovedadesRec(){
+    var ov=document.createElement('div');
+    ov.id='novrOverlay';
+    ov.style.cssText='position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+    ov.innerHTML='<div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;max-width:880px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">'
+        +'<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)">'
+            +'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--text)">🔔 Novedades de recetas</div>'
+            +'<button onclick="document.getElementById(\'novrOverlay\').remove()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:5px 11px;cursor:pointer;font-family:inherit">✕</button></div>'
+        +'<div style="padding:12px 18px 8px"><input id="novrBuscar" placeholder="🔍 Buscar por receta, sucursal o quién la cambió…" oninput="_novrRender(this.value)" '
+            +'style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 13px;font-family:inherit;font-size:13px;outline:none"></div>'
+        +'<div id="novrLista" style="flex:1;overflow-y:auto;padding:6px 18px 18px"></div></div>';
+    document.body.appendChild(ov);
+    _novrRender('');
+}
+function _novrRender(q){
+    var cont=document.getElementById('novrLista'); if(!cont) return;
+    q=String(q||'').toLowerCase().trim();
+    var lista=_novrLista().filter(function(n){
+        if(!q) return true;
+        return ((n.rec.nombre||'')+' '+(n.h.sucNom||'')+' '+(n.h.quien||'')).toLowerCase().indexOf(q)>=0;
+    });
+    if(!lista.length){
+        cont.innerHTML='<div style="text-align:center;padding:44px 20px;color:var(--text-dim)">'
+            +'<div style="font-size:34px;margin-bottom:8px">✅</div>'
+            +'<div style="font-size:14px;color:var(--text-muted)">'+(q?'Sin resultados para «'+etx(q)+'»':'Todo al día: no hay cambios pendientes de revisar.')+'</div></div>';
+        return;
+    }
+    cont.innerHTML=lista.map(function(n){
+        var herm=_novrHermanas(n.rec).length;
+        var filas=(n.h.cambios||[]).map(function(c){
+            return '<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;font-size:12px;padding:4px 0;border-top:1px solid var(--border)">'
+                +'<span style="color:var(--text-muted)">'+etx(c.campo)+'</span>'
+                +'<span style="color:var(--text-dim);text-decoration:line-through">'+etx(c.de)+'</span>'
+                +'<span style="color:var(--text-dim)">→</span>'
+                +'<span style="color:var(--green);font-weight:600">'+etx(c.a)+'</span></div>';
+        }).join('') || '<div style="font-size:12px;color:var(--text-dim);padding-top:5px">Alta de la receta.</div>';
+        return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:13px 15px;margin-bottom:10px">'
+            +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">'
+                +'<div style="min-width:0">'
+                    +'<div style="font-weight:700;font-size:14px;color:var(--text)">'+etx(n.rec.nombre||'(sin nombre)')+'</div>'
+                    +'<div style="font-size:11px;color:var(--text-dim);margin-top:3px">'
+                        +_novrTipoLbl(n.rec.tipo)+' · '+(n.h.tipo==='alta'?'🆕 Alta':'✏️ Edición')+' · '+etx(_novrFecha(n.h.ts))
+                        +(n.h.sucNom?' · <b style="color:#7ab8f5">'+etx(n.h.sucNom)+'</b>':'')
+                        +(n.h.quien?' · '+etx(n.h.quien):'')+'</div>'
+                +'</div>'
+                +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+                    +'<button onclick="_novrFicha(\''+n.rec.id+'\')" style="background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit">📋 Ficha</button>'
+                    +(herm?'<button onclick="_novrAplicar(\''+n.key+'\',\''+n.rec.id+'\')" style="background:transparent;border:1px solid var(--green);color:var(--green);border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit">⬆️ Subir al global ('+herm+')</button>':'')
+                    +'<button onclick="_novrDejar(\''+n.key+'\')" style="background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit">Dejar así</button>'
+                +'</div>'
+            +'</div>'+filas+'</div>';
+    }).join('');
+}
+function _novrFicha(id){
+    var ov=document.getElementById('novrOverlay'); if(ov) ov.remove();
+    // La ficha técnica de la receta (no el editor): es para revisar antes de decidir.
+    if(typeof abrirFichaReceta==='function') abrirFichaReceta(id);
+    else if(typeof cargarReceta==='function') cargarReceta(id);
+}
+/* Subir al global: la receta manda su contenido a sus hermanas (maestro + copias),
+   conservando de cada una su identidad: id, sucursal y vínculo. */
+function _novrAplicar(key, recId){
+    var lista=getRecetas();
+    var src=lista.find(function(x){ return x.id===recId; }); if(!src) return;
+    var hermanas=_novrHermanas(src);
+    if(!hermanas.length) return;
+    var _hacer=function(){
+        hermanas.forEach(function(h){
+            var i=lista.findIndex(function(x){ return x.id===h.id; });
+            if(i<0) return;
+            var upd=JSON.parse(JSON.stringify(src));
+            upd.id=h.id; upd.origenId=h.origenId; upd.sucursalId=h.sucursalId;
+            upd.sucursales=h.sucursales; upd._global=h._global;
+            upd.historial=h.historial;              // cada una conserva SU bitácora
+            lista[i]=upd;
+        });
+        setRecetas(lista);
+        if(typeof _sbUpReceta==='function') hermanas.forEach(function(h){
+            var x=lista.find(function(y){ return y.id===h.id; }); if(x){ try{ _sbUpReceta(x); }catch(e){} }
+        });
+        _NOVR_VISTAS[key]=1; _novrGuardar();
+        _novrRender(document.getElementById('novrBuscar')?document.getElementById('novrBuscar').value:'');
+        renderGridRecetas();
+    };
+    var msg='Sus ingredientes, precios y procedimiento quedarán iguales en '+hermanas.length+' receta'+(hermanas.length>1?'s':'')+' más (maestro y copias de otras sucursales).';
+    if(window.etaaxConfirm) etaaxConfirm('Subir «'+(src.nombre||'')+'» al catálogo global', msg, _hacer, null, {yesLabel:'Actualizar', danger:false});
+    else if(confirm(msg)) _hacer();
+}
+function _novrDejar(key){
+    _novrCargar(); _NOVR_VISTAS[key]=1; _novrGuardar();
+    _novrRender(document.getElementById('novrBuscar')?document.getElementById('novrBuscar').value:'');
+}
+
 // ── INDEPENDIZAR RECETAS POR SUCURSAL (paso 4, recetas): auto-detecta recetas COMPARTIDAS
 //    (viven en >1 sucursal) y crea una COPIA independiente por sucursal, ligada al maestro
 //    (origenId). Aditivo, idempotente, reversible. Respaldo automático antes. ─────────────
@@ -3073,6 +3214,8 @@ function renderGridRecetas() {
     // Independizar por sucursal: operación a nivel negocio → solo en el catálogo global.
     // El botón de independizar ya no se muestra (el modelo maestro + copia lo resuelve solo).
     (function(){ var b=document.getElementById('btnIndepSucRec'); if(b) b.style.display='none'; })();
+    // Novedades: solo en el catálogo global, que es el que mira todas las sucursales.
+    (function(){ var b=document.getElementById('btnNovedadesRec'); if(b) b.style.display=_catGlobal?'':'none'; })();
     // Estado (regla única de visibilidad, insumo-label.js):
     //  · Global: Activas / Inactivas (las inactivas del negocio viven SOLO aquí).
     //  · Sucursal: Activas (scope normal) / PAUSADAS aquí (inactivaEn) para reactivarlas.

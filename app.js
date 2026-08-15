@@ -394,6 +394,7 @@ async function guardarReceta() {
 
     const lista = getRecetas();
     const idx   = lista.findIndex(r => r.id === receta.id);
+    _registrarCambiosReceta(receta, idx >= 0 ? lista[idx] : null);
     // NUEVA receta creada DENTRO de una sucursal → generar su MAESTRO global (sin
     // sucursal) y dejar ESTA receta como la COPIA vinculada de la sucursal (origenId →
     // maestro). Así queda el maestro en el catálogo global + la copia independiente donde
@@ -1823,6 +1824,78 @@ function _usuarioActualRec() {
         return c.userName || c.staffNombre || c.negNombre || '';
     } catch (e) { return ''; }
 }
+/* ── HISTÓRICO DE CAMBIOS DE RECETA ───────────────────────────────────────────
+   Mismo trato que los insumos: un renglón por guardado con lo que cambió, quién y
+   desde qué sucursal, podado a 90 días. De aquí come el 🔔 Novedades del catálogo
+   global de recetas. Los ingredientes se comparan aparte: es el cambio que de
+   verdad mueve el costo, y decir "cambiaron los ingredientes" no sirve de nada. */
+var _REC_HIST_DIAS = 90;
+var _REC_HIST_CAMPOS = [
+    { k:'nombre',        lbl:'Nombre' },
+    { k:'grupo',         lbl:'Grupo' },
+    { k:'categoria',     lbl:'Categoría' },
+    { k:'cristaleria',   lbl:'Cristalería' },
+    { k:'tiempo',        lbl:'Tiempo' },
+    { k:'precioEnCarta', lbl:'Precio en carta', money:true },
+    { k:'multiploCosteo',lbl:'Múltiplo de costeo' },
+    { k:'status',        lbl:'Estatus' }
+];
+function _rvTxt(v) { return (v === undefined || v === null || v === '') ? '—' : String(v); }
+function _ingLabel(i) { return (i && (i.nombre || i.insumoId)) || '(ingrediente)'; }
+function _diffReceta(nueva, vieja) {
+    var out = [];
+    if (!vieja) return out;
+    _REC_HIST_CAMPOS.forEach(function (c) {
+        var a = _rvTxt(nueva[c.k]), b = _rvTxt(vieja[c.k]);
+        if (a === b) return;
+        if (c.money) { a = a === '—' ? a : '$' + (parseFloat(a) || 0).toFixed(2); b = b === '—' ? b : '$' + (parseFloat(b) || 0).toFixed(2); }
+        out.push({ campo: c.lbl, de: b, a: a });
+    });
+    // Ingredientes: alta, baja y cambio de cantidad, por nombre.
+    var mapV = {}, mapN = {};
+    (vieja.ingredientes || []).forEach(function (i) { mapV[_ingLabel(i)] = i; });
+    (nueva.ingredientes || []).forEach(function (i) { mapN[_ingLabel(i)] = i; });
+    Object.keys(mapN).forEach(function (k) {
+        if (!mapV[k]) { out.push({ campo: 'Ingrediente nuevo', de: '—', a: k }); return; }
+        var cv = _rvTxt(mapV[k].cantidad) + ' ' + _rvTxt(mapV[k].unidad);
+        var cn = _rvTxt(mapN[k].cantidad) + ' ' + _rvTxt(mapN[k].unidad);
+        if (cv !== cn) out.push({ campo: k, de: cv, a: cn });
+    });
+    Object.keys(mapV).forEach(function (k) {
+        if (!mapN[k]) out.push({ campo: 'Ingrediente quitado', de: k, a: '—' });
+    });
+    // El procedimiento se registra como "sí cambió": pegarlo entero no se lee.
+    if (_rvTxt(nueva.procedimiento) !== _rvTxt(vieja.procedimiento))
+        out.push({ campo: 'Procedimiento', de: 'versión anterior', a: 'actualizado' });
+    return out;
+}
+function _sucNomRec(id) {
+    if (!id) return '';
+    try {
+        var negId = localStorage.getItem('etaax_negocio_activo') || '';
+        var s = JSON.parse(localStorage.getItem('etaax_' + negId + '_sucursales') || '[]')
+            .find(function (x) { return x.id === id; });
+        return (s && s.nombre) || (id === 'suc_principal' ? 'Matriz' : id);
+    } catch (e) { return id; }
+}
+function _registrarCambiosReceta(nueva, vieja) {
+    var cambios = _diffReceta(nueva, vieja);
+    var esNueva = !vieja;
+    if (!esNueva && !cambios.length) return;
+    var hist = ((vieja && vieja.historial) || nueva.historial || []).slice();
+    var suc = localStorage.getItem('etaax_sucursal_activa') || '';
+    hist.unshift({
+        ts: nueva.fechaGuardado, quien: nueva.updatedBy || '',
+        suc: suc, sucNom: _sucNomRec(suc),
+        tipo: esNueva ? 'alta' : 'edicion',
+        cambios: cambios.slice(0, 12)
+    });
+    var corte = Date.now() - _REC_HIST_DIAS * 864e5;
+    nueva.historial = hist.filter(function (h) {
+        var t = Date.parse((h && h.ts) || ''); return !isNaN(t) && t >= corte;
+    }).slice(0, 40);
+}
+
 function _pintarSelloReceta(r) {
     var el = document.getElementById('recSello');
     if (!el) return;
