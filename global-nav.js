@@ -2,7 +2,7 @@
    ETAAX · global-nav.js
    En modo "Catálogo Global del negocio" (sessionStorage etaax_cat_global=1),
    reemplaza el contenido del nav lateral (#nav) por los catálogos globales:
-   Colaboradores · Recetas · Insumos · Clientes · Proveedores.
+   Colaboradores · Horarios · Recetas · Insumos · Clientes · Proveedores.
    Se incluye en todas las páginas de catálogo. En modo normal no hace nada.
    ============================================================ */
 (function () {
@@ -19,6 +19,8 @@
             // trae la barra lateral de Administrativo y saca al usuario del modo global.
             // El catálogo sí respeta el global y muestra la columna de sucursal.
             { icon: '👥', label: 'Colaboradores', href: '/administrativo/staff.html',      match: 'staff.html' },
+            // Horarios en global = el rol de TODAS las sucursales, una tabla por cada una.
+            { icon: '🗓️', label: 'Horarios',      href: '/administrativo/horarios.html',     match: 'horarios.html' },
             { icon: '🍽️', label: 'Recetas',       href: '/recetas/index.html?escandallos=1',  match: 'recetas/index.html' },
             { icon: '📦', label: 'Insumos',       href: '/recetas/insumos.html',             match: 'insumos.html' },
             { icon: '🧾', label: 'Clientes',      href: '/administrativo/clientes.html',     match: 'clientes.html' },

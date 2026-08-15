@@ -63,6 +63,8 @@
         .hr-asis button:hover { border-color:var(--text-muted);color:var(--text-muted); }
         .hr-asis button.ok.on { background:rgba(61,190,122,.22);border-color:var(--green);color:var(--green);font-weight:700; }
         .hr-asis button.no.on { background:rgba(224,90,58,.18);border-color:#e05a3a;color:#e05a3a;font-weight:700; }
+        .hr-asis button.ret.on { background:rgba(245,200,66,.2);border-color:var(--accent);color:var(--accent);font-weight:700; }
+        .hr-turno.set.con-ret { box-shadow:inset 0 -3px 0 var(--accent); }
         .hr-asis-res { display:block;font-size:10px;color:var(--text-dim);margin-top:3px;line-height:1.5; }
         .hr-asis-res b { color:var(--green); }
         /* Vista global: un bloque por sucursal */
@@ -363,7 +365,7 @@ function _turnoCellHTML(sid, dayIdx){
     if (!t) return '<span class="hr-turno" '+oc+'><span class="plus">+</span></span>';
     if (t.desc) return '<span class="hr-turno desc" '+oc+'><span class="tt">Descanso</span></span>';
     var a = t.asis || '';
-    return '<span class="hr-turno set'+(a==='si'?' asis-si':a==='no'?' asis-no':'')+'" '+oc+'>'
+    return '<span class="hr-turno set'+(a==='si'?' asis-si':a==='no'?' asis-no':'')+(t.ret?' con-ret':'')+'" '+oc+'>'
          + '<span class="tt">'+esc(t.in)+'–'+esc(t.out)+'</span><span class="td2">'+_fmtH(_durHoras(t))+'</span></span>'
          + _asisBotonesHTML(sid, dayIdx);
 }
@@ -432,7 +434,7 @@ function _renderGrid(scope){
         var _ar = _asisResumen(s.id);
         h += '<tr><td><div class="hr-person"><span class="pn">'+esc(s.nombre||'—')+'</span><span class="pp">'+esc(s.puesto||'')+'</span>'
            + '<span class="ph">'+_fmtH(_horasStaff(s.id))+' / sem</span>'
-           + (_ar.turnos ? '<span class="hr-asis-res">✓ '+_ar.si+'  ✕ '+_ar.no+(_ar.sinMarcar?'  · '+_ar.sinMarcar+' sin marcar':'')
+           + (_ar.turnos ? '<span class="hr-asis-res">✓ '+_ar.si+'  ✕ '+_ar.no+(_retardosSemana(s.id)?'  ⏱ '+_retardosSemana(s.id):'')+(_ar.sinMarcar?'  · '+_ar.sinMarcar+' sin marcar':'')
                           + (_ar.si?'<br><b>'+_fmtH(_horasAsistidas(s.id))+'</b> asistidas':'') + '</span>' : '')
            + '</div></td>';
         for (var i=0;i<7;i++){ h += '<td class="hr-cell '+(i===hoy?'hoy':'')+'">'+_turnoCellHTML(s.id,i)+'</td>'; }
@@ -480,8 +482,36 @@ function marcarAsistencia(sid, dayIdx, val, ev){
     t.asis = (t.asis === val) ? '' : val;   // volver a picar la misma = desmarcar
     t.asisTs = t.asis ? new Date().toISOString() : '';
     t.asisPor = t.asis ? _usuarioActualHor() : '';
+    if (t.asis === 'no') t.ret = false;      // si faltó, no hay retardo que contar
     persist(rec);
     render();
+}
+/* RETARDO: llegó, pero tarde. Es independiente de la asistencia —se puede asistir
+   con retardo— y NO sale en el PDF: el rol impreso es para operar, no para exhibir
+   a nadie. Es dato interno que leerá el modal de Pagar nómina. */
+function marcarRetardo(sid, dayIdx, ev){
+    if (ev) ev.stopPropagation();
+    var rec = curRecord();
+    var t = (rec.turnos[sid]||{})['d'+dayIdx];
+    if (!t || t.desc || !t.in) return;
+    t.ret = !t.ret;
+    if (t.ret){
+        t.retTs = new Date().toISOString();
+        t.retPor = _usuarioActualHor();
+        if (!t.asis) t.asis = 'si';           // un retardo implica que sí vino
+        if (t.asis === 'no') t.asis = 'si';
+    } else { t.retTs = ''; t.retPor = ''; }
+    persist(rec);
+    render();
+}
+// Retardos de la semana (para el resumen y, más adelante, para la nómina).
+function _retardosSemana(sid){
+    var n = 0;
+    for (var i=0;i<7;i++){
+        var t = (curRecord().turnos[sid]||{})['d'+i];
+        if (t && !t.desc && t.in && t.ret) n++;
+    }
+    return n;
 }
 function _usuarioActualHor(){
     try { var c = JSON.parse(localStorage.getItem('etaax_ctx')||'{}'); return c.userName || c.negNombre || ''; }
@@ -518,6 +548,7 @@ function _asisBotonesHTML(sid, dayIdx){
     return '<span class="hr-asis">'
         + '<button class="ok'+(a==='si'?' on':'')+'" title="Asistió" onclick="marcarAsistencia(\''+sid+'\','+dayIdx+',\'si\',event)">✓</button>'
         + '<button class="no'+(a==='no'?' on':'')+'" title="No asistió" onclick="marcarAsistencia(\''+sid+'\','+dayIdx+',\'no\',event)">✕</button>'
+        + '<button class="ret'+(t.ret?' on':'')+'" title="Retardo — no sale en el rol impreso" onclick="marcarRetardo(\''+sid+'\','+dayIdx+',event)">⏱</button>'
         + '</span>';
 }
 
@@ -526,6 +557,8 @@ function _asisBotonesHTML(sid, dayIdx){
    (reporte-marca.js) con su propio @page landscape. En vista global sale una
    tabla por sucursal, cada una con su encabezado. */
 function _turnoTxtPDF(t){
+    // OJO: el RETARDO no se imprime a propósito. El rol impreso se pega en la pared
+    // para operar; los retardos son dato interno que solo mira Pagar nómina.
     if (!t) return '<span style="color:#ccc">—</span>';
     if (t.desc) return '<span style="color:#888">Descanso</span>';
     var a = t.asis === 'si' ? ' <b style="color:#1a7a46">✓</b>' : t.asis === 'no' ? ' <b style="color:#b52a1a">✕</b>' : '';
@@ -539,7 +572,7 @@ function _tablaPDF(rec, staffList){
         var tds = '', hSem = 0, si = 0, no = 0;
         for (var i = 0; i < 7; i++) {
             var t = (rec.turnos[s.id] || {})['d' + i];
-            if (t && !t.desc && t.in) { hSem += _durHoras(t); if (t.asis === 'si') si++; else if (t.asis === 'no') no++; }
+            if (t && !t.desc && t.in) { hSem += _durHoras(t); if (t.asis === 'si') si++; else if (t.asis === 'no') no++; }   // sin retardos: ver nota arriba
             tds += '<td style="text-align:center;font-size:10px">' + _turnoTxtPDF(t) + '</td>';
         }
         return '<tr><td><b>' + esc(s.nombre || '—') + '</b><div style="font-size:8.5px;color:#888">' + esc(s.puesto || '') + '</div></td>'
