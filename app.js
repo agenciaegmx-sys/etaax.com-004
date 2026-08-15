@@ -64,7 +64,34 @@ function getRecetasScope() {
         return sucs.indexOf(s) >= 0;
     });
 }
+/* ── TOMBSTONES de recetas borradas ───────────────────────────────────────────
+   Insumos ya tenía esto (ins_borrados) justo porque "los borrados revivían"; a
+   recetas nunca se le aplicó. El merge de _sbInitRecetas conserva y RE-SUBE lo que
+   está en localStorage y no en Supabase — pensado para rescatar lo que no alcanzó a
+   sincronizar, pero también resucita lo borrado: basta que otra pestaña con la lista
+   vieja en memoria guarde cualquier receta para que reescriba localStorage con las
+   borradas dentro, y en la siguiente carga se re-suben a la nube.
+   Los ids salen de genId() y nunca se reusan → marcar uno como borrado es seguro. */
+var _REC_TOMB_TTL = 90 * 864e5;   // 90 días y se podan solas
+function _recTombKey(){ return _sk('rec_borradas'); }
+function _recTombLoad(){ try { return JSON.parse(localStorage.getItem(_recTombKey())) || {}; } catch(e){ return {}; } }
+var _recBorradas = _recTombLoad();
+function _recTombSave(){ try { localStorage.setItem(_recTombKey(), JSON.stringify(_recBorradas)); } catch(e){} }
+function _recTombPrune(){ var now=Date.now(), ch=false; for (var k in _recBorradas){ if (now-_recBorradas[k] > _REC_TOMB_TTL){ delete _recBorradas[k]; ch=true; } } if (ch) _recTombSave(); }
+function _recTombRefresh(){ _recBorradas = _recTombLoad(); _recTombPrune(); }
+function _recTombAdd(ids){ var now=Date.now(); (ids||[]).forEach(function(id){ if(id) _recBorradas[id]=now; }); _recTombSave(); }
+function _recTombHas(id){ return !!(id && _recBorradas[id]); }
+window._recTombAdd = _recTombAdd;
+window._recTombRefresh = _recTombRefresh;
+_recTombPrune();
+
 function setRecetas(data) {
+    // Filtro de entrada: aunque otra pestaña (o un módulo con la lista vieja en
+    // memoria) intente escribir una receta ya borrada, aquí no pasa. Se releen las
+    // lápidas de localStorage —no la copia en memoria— porque la pestaña que escribe
+    // pudo cargarse ANTES del borrado y tendría el mapa vacío.
+    _recBorradas = _recTombLoad();
+    if (Object.keys(_recBorradas).length) data = (data || []).filter(function(r){ return !(r && _recTombHas(r.id)); });
     _cacheRecetas = data;
     // localStorage fallback (sin fotos base64 para evitar quota)
     try {
@@ -99,16 +126,27 @@ async function _sbInitRecetas() {
         return;
     }
     var remote = (res.data || []).map(function(x){ return x.datos; }).filter(Boolean);
-    // dedup defensivo por id
-    var vistos = {}, dedup = [];
-    remote.forEach(function(r){ if (r && r.id && !vistos[r.id]) { vistos[r.id] = 1; dedup.push(r); } });
+    _recTombRefresh();   // lápidas del negocio activo (sobreviven a la recarga)
+    // dedup defensivo por id + descartar lo que ya se borró
+    var vistos = {}, dedup = [], revividas = [];
+    remote.forEach(function(r){
+        if (!r || !r.id) return;
+        if (_recTombHas(r.id)) { revividas.push(r.id); return; }
+        if (!vistos[r.id]) { vistos[r.id] = 1; dedup.push(r); }
+    });
     remote = dedup;
+    // Auto-reparación: si la nube todavía trae recetas que ya borramos (el delete se
+    // canceló al navegar, o lo revivió otra pestaña), re-emitir el borrado.
+    if (revividas.length) {
+        console.log('[recetas] auto-reparación: re-borrando', revividas.length, 'receta(s) que resucitaron');
+        revividas.forEach(function(id){ try { _sbDelReceta(id); } catch(e) {} });
+    }
     // MERGE: conservar las recetas locales que NO están en Supabase. Antes esto
     // SOBREESCRIBÍA con lo remoto → si una receta no había sincronizado (ej. el
     // upsert falló por foto base64 pesada) se "perdía" al abrir en otro dispositivo.
     var local = [];
     try { local = JSON.parse(_skGet('recetas')) || []; } catch(e) {}
-    var soloLocal = (local || []).filter(function(r){ return r && r.id && !vistos[r.id]; });
+    var soloLocal = (local || []).filter(function(r){ return r && r.id && !vistos[r.id] && !_recTombHas(r.id); });
     console.log('[recetas] init · neg', negId, '· Supabase:', remote.length, '· solo-local (re-subir):', soloLocal.length);
     _cacheRecetas = remote.concat(soloLocal);
     // Re-empujar a Supabase las que solo existían localmente (ya sin base64 → el

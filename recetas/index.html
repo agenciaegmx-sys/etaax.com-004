@@ -3853,6 +3853,7 @@ function eliminarReceta(id) {
         if (_copR.length && !confirm('⚠️ "' + nombre + '" es un MAESTRO con ' + _copR.length + ' copia(s) en sucursales.\n\nAl borrarlo, esas copias SIGUEN funcionando en sus sucursales, pero quedan INDEPENDIENTES (ya no reciben novedades).\n\n¿Continuar?')) return;
     }
     _pedirClaveAdmin('Eliminar "' + nombre + '"', function() {
+        if (typeof _recTombAdd === 'function') _recTombAdd([id]);   // lápida ANTES de escribir
         setRecetas(getRecetas().filter(function(r){ return r.id !== id; }));
         if (typeof _sbDelReceta === 'function') _sbDelReceta(id);
         recetasSeleccionadas.delete(id);
@@ -3866,6 +3867,7 @@ function eliminarRecetaActual() {
     const nombre = document.getElementById('nombreReceta').value.trim() || 'esta receta';
     const id = recetaActualId;
     _pedirClaveAdmin('Eliminar "' + nombre + '"', function() {
+        if (typeof _recTombAdd === 'function') _recTombAdd([id]);   // lápida ANTES de escribir
         setRecetas(getRecetas().filter(r => r.id !== id));
         if (typeof _sbDelReceta === 'function') _sbDelReceta(id);
         recetaActualId = null;
