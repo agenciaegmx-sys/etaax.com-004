@@ -387,7 +387,13 @@ const COPA_STD = {
 // categoría "Blanco/Tinto" caían al default de licor y descuadraban las copas.
 function _copaMLInsumo(ins) {
     if (!ins) return COPA_STD.default;
-    if (ins.tamanoCopa) { var tc = parseFloat(ins.tamanoCopa)||0; if (tc > 0) return (ins.umTamanoCopa||'ML').toUpperCase()==='OZ' ? tc*OZ_ML : tc; }
+    // El editor de insumos guarda la copa en la PRESENTACIÓN; la ficha técnica de
+    // inventarios la guarda en la raíz del insumo. Se miran las dos: leyendo solo
+    // la raíz, definir la copa desde el catálogo no llegaba nunca al inventario.
+    var _p0 = (ins.presentaciones && ins.presentaciones[0]) || {};
+    var _tc = parseFloat(ins.tamanoCopa) || parseFloat(_p0.tamanoCopa) || 0;
+    var _um = ((ins.tamanoCopa ? ins.umTamanoCopa : _p0.umTamanoCopa) || 'ML').toUpperCase();
+    if (_tc > 0) return _um === 'OZ' ? _tc * OZ_ML : _tc;
     var t = (ins.tipoInsumo||'').toLowerCase();
     if (t === 'vino')      return COPA_STD.vinos;
     if (t === 'licor')     return COPA_STD.licores;
@@ -5650,9 +5656,16 @@ function setStep5Modo(m) {
 function _medidaInsumo(fila) {
     if (!fila || fila.tipo !== 'copa') return null;
     var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(fila.insumoId) : null;
-    var tc  = ins ? (parseFloat(ins.tamanoCopa) || 0) : 0;
-    if (!(tc > 0)) return null;                       // sin medida propia → copas
-    return { um: (ins.umTamanoCopa || 'ML').toUpperCase(), tc: tc };
+    if (!ins) return null;
+    var p0 = (ins.presentaciones && ins.presentaciones[0]) || {};
+    // 1) Lo que el insumo diga EXPLÍCITAMENTE que quiere leer ("umLectura").
+    var lec = String(ins.umLectura || p0.umLectura || '').toUpperCase();
+    if (lec === 'COPA') return null;                  // se lee en copas, aunque mida 1.5 oz
+    if (lec === 'OZ' || lec === 'ML' || lec === 'LT') return { um: lec };
+    // 2) Sin elección: una medida grande (≥500 ml) no es un trago, es volumen —
+    //    ahí leer "copas" no dice nada. Un trago de bar se sigue leyendo en copas.
+    var cml = parseFloat(fila.copaML) || 0;
+    return cml >= 500 ? { um: 'ML' } : null;
 }
 // Formatea una cantidad en COPAS usando la medida declarada del insumo.
 function _fmtCop(copas, fila) {

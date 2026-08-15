@@ -2423,7 +2423,7 @@
            id: genId(), contNeto: '', umContenido: 'ML',
            pesoUnidad: '', umPeso: 'G', pesoCristal: '',
            masaDrenada: '', umMasaDrenada: 'G', rendimiento: '', umRendimiento: 'OZ',
-           tamanoCopa: '', umTamanoCopa: 'ML',
+           tamanoCopa: '', umTamanoCopa: 'ML', umLectura: '',
            factorCopa: '3.3', factorBotella: '2.5', factorPieza: '2.0', costoPieza: '',
            proveedor: '', zona: '', fecha: hoy,
            precio: '', costoUnitario: '', umCosto: 'LT',
@@ -3030,7 +3030,7 @@
        if (!tieneCopa) return '';
 
        const copaInputs = esVino ? `
-           <div class="mg-3">
+           <div class="mg-3" style="grid-template-columns:repeat(4,1fr)">
                <div class="meta-item">
                    <label>Tamaño de copa</label>
                    <input type="number" value="${p.tamanoCopa||''}" placeholder="150" min="0" step="0.5"
@@ -3044,13 +3044,23 @@
                    </select>
                </div>
                <div class="meta-item">
+                   <label>Leer consumo en <span style="text-transform:none;letter-spacing:0;color:var(--text-dim)">(inventario)</span></label>
+                   <select onchange="updPres(${i},'umLectura',this.value)">
+                       <option value="" ${!p.umLectura?'selected':''}>Automático</option>
+                       <option value="COPA" ${p.umLectura==='COPA'?'selected':''}>Copas</option>
+                       <option value="OZ" ${p.umLectura==='OZ'?'selected':''}>Onzas</option>
+                       <option value="ML" ${p.umLectura==='ML'?'selected':''}>Mililitros</option>
+                       <option value="LT" ${p.umLectura==='LT'?'selected':''}>Litros</option>
+                   </select>
+               </div>
+               <div class="meta-item">
                    <label>Rendimiento en copas</label>
                    <div id="copas-rend-${i}" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:14px;color:var(--accent);font-weight:600">
                        ${(()=>{ const cML=toML(p.contNeto,p.umContenido||'ML'); const tML=toML(p.tamanoCopa,p.umTamanoCopa||'ML'); return (cML>0&&tML>0)?Math.floor(cML/tML)+' copas':'\u2014'; })()}
                    </div>
                </div>
            </div>` : `
-           <div class="meta-grid" style="grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+           <div class="meta-grid" style="grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:10px">
                <div class="meta-item">
                    <label>Tamaño de copa</label>
                    <input type="number" value="${p.tamanoCopa||''}" placeholder="45" min="0" step="0.5"
@@ -3061,6 +3071,16 @@
                    <select onchange="updPres(${i},'umTamanoCopa',this.value);renderPresentaciones()">
                        <option value="ML" ${(p.umTamanoCopa||'ML')==='ML'?'selected':''}>ML</option>
                        <option value="OZ" ${(p.umTamanoCopa||'ML')==='OZ'?'selected':''}>OZ</option>
+                   </select>
+               </div>
+               <div class="meta-item">
+                   <label>Leer consumo en <span style="text-transform:none;letter-spacing:0;color:var(--text-dim)">(inventario)</span></label>
+                   <select onchange="updPres(${i},'umLectura',this.value)">
+                       <option value="" ${!p.umLectura?'selected':''}>Automático</option>
+                       <option value="COPA" ${p.umLectura==='COPA'?'selected':''}>Copas</option>
+                       <option value="OZ" ${p.umLectura==='OZ'?'selected':''}>Onzas</option>
+                       <option value="ML" ${p.umLectura==='ML'?'selected':''}>Mililitros</option>
+                       <option value="LT" ${p.umLectura==='LT'?'selected':''}>Litros</option>
                    </select>
                </div>
                <div class="meta-item">
