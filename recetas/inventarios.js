@@ -3513,8 +3513,9 @@ function buildInputsExist(fila, idx) {
             ${(fila.pesos||['','','','']).map((p,pi)=>`
             <div class="inv-peso-cell">
                 <div class="inv-peso-lbl">B${pi+1}</div>
-                <input type="number" class="inv-peso-input" value="${p||''}" placeholder="kg" min="0" step="0.001"
-                    oninput="updPeso(${idx},${pi},this.value)">
+                <input type="text" inputmode="decimal" class="inv-peso-input" value="${p||''}" placeholder="kg"
+                    title="Puedes escribir operaciones: 0.9+0.75" onkeydown="_celdaKey(event,this)"
+                    onblur="updPesoCalc(${idx},${pi},this)">
             </div>`).join('')}
         </div>
         <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center">
@@ -3579,15 +3580,17 @@ function renderCardExist() {
             <div style="display:flex;gap:12px;margin-bottom:16px">
                 <div style="flex:1">
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Cerradas Bodega</div>
-                    <input type="number" class="inv-num-input" style="width:100%;box-sizing:border-box"
-                        value="${fila.cerradasBodega||0}" min="0" step="1"
-                        oninput="updCaptura(${idx},'cerradasBodega',+this.value)">
+                    <input type="text" inputmode="decimal" class="inv-num-input" style="width:100%;box-sizing:border-box"
+                        value="${fila.cerradasBodega!=null&&fila.cerradasBodega!==''?fila.cerradasBodega:''}" placeholder="—"
+                        title="Puedes escribir operaciones: 3*24+5" onkeydown="_celdaKey(event,this)"
+                        onblur="updCapturaCalc(${idx},'cerradasBodega',this)">
                 </div>
                 <div style="flex:1">
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Cerradas Barra</div>
-                    <input type="number" class="inv-num-input" style="width:100%;box-sizing:border-box"
-                        value="${fila.cerradasBarra||0}" min="0" step="1"
-                        oninput="updCaptura(${idx},'cerradasBarra',+this.value)">
+                    <input type="text" inputmode="decimal" class="inv-num-input" style="width:100%;box-sizing:border-box"
+                        value="${fila.cerradasBarra!=null&&fila.cerradasBarra!==''?fila.cerradasBarra:''}" placeholder="—"
+                        title="Puedes escribir operaciones: 3*24+5" onkeydown="_celdaKey(event,this)"
+                        onblur="updCapturaCalc(${idx},'cerradasBarra',this)">
                 </div>
             </div>
 
@@ -3804,8 +3807,9 @@ function renderStep1Lista(filas) {
                 ${(fila.pesos||['','','','']).map((p,pi)=>`
                     <div class="inv-peso-cell">
                         <div class="inv-peso-lbl">B${pi+1}</div>
-                        <input type="number" class="inv-peso-input" value="${p||''}" placeholder="kg" min="0" step="0.001"
-                            oninput="updPeso(${idx},${pi},this.value)">
+                        <input type="text" inputmode="decimal" class="inv-peso-input" value="${p||''}" placeholder="kg"
+                            title="Puedes escribir operaciones: 0.9+0.75" onkeydown="_celdaKey(event,this)"
+                            onblur="updPesoCalc(${idx},${pi},this)">
                     </div>`).join('')}
                 </div>
             </td>`;
@@ -3918,8 +3922,9 @@ function renderStep1Galeria(filas) {
                         ${(fila.pesos||['','','','']).map((p,pi)=>`
                         <div>
                             <div style="font-size:9px;color:var(--text-dim);text-align:center;margin-bottom:3px">Bot ${pi+1}</div>
-                            <input type="number" value="${p||''}" placeholder="kg" min="0" step="0.001"
-                                oninput="updPeso(${idx},${pi},this.value)">
+                            <input type="text" inputmode="decimal" value="${p||''}" placeholder="kg"
+                                title="Puedes escribir operaciones: 0.9+0.75" onkeydown="_celdaKey(event,this)"
+                                onblur="updPesoCalc(${idx},${pi},this)">
                         </div>`).join('')}
                     </div>
                 </div>
@@ -4718,15 +4723,17 @@ function renderCardVentas() {
                 <div>
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;display:flex;align-items:center">
                         <span>Vendidas</span>${esCopa ? _selUM(idx, 'ventasCopasDirectas', "background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:3px 6px;font-family:inherit;font-size:11px;margin-left:6px") : ''}</div>
-                    <input type="number" id="venta-copas-${idx}" class="inv-num-input"
-                        style="width:100px" value="${_copAUm(fila, fila.ventasCopasDirectas, 'ventasCopasDirectas')||0}" min="0" step="0.5"
-                        oninput="updVentasUM(${idx},'ventasCopasDirectas',this.value);renderResumenVentas()">
+                    <input type="text" inputmode="decimal" id="venta-copas-${idx}" class="inv-num-input"
+                        style="width:100px" value="${_copAUm(fila, fila.ventasCopasDirectas, 'ventasCopasDirectas')||''}" placeholder="—"
+                        title="Puedes escribir operaciones: 3*24+5" onkeydown="_celdaKey(event,this)"
+                        onblur="updVentasCalc(${idx},'ventasCopasDirectas',this);renderResumenVentas()">
                 </div>
                 ${esCopa ? `<div>
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Botellas vendidas</div>
-                    <input type="number" id="venta-bot-${idx}" class="inv-num-input"
-                        style="width:100px" value="${fila.ventasBotella||0}" min="0" step="1"
-                        oninput="updVentasDirectas(${idx},'ventasBotella',+this.value);renderResumenVentas()">
+                    <input type="text" inputmode="decimal" id="venta-bot-${idx}" class="inv-num-input"
+                        style="width:100px" value="${fila.ventasBotella||''}" placeholder="—"
+                        title="Puedes escribir operaciones: 3*24+5" onkeydown="_celdaKey(event,this)"
+                        onblur="updVentasDirCalc(${idx},'ventasBotella',this);renderResumenVentas()">
                 </div>` : ''}
             </div>
 
@@ -4736,10 +4743,11 @@ function renderCardVentas() {
                     <div>
                         <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;display:flex;align-items:center">
                             <span>Cantidad</span>${esCopa ? _selUM(idx, 'cortesiaCopas', "background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:3px 6px;font-family:inherit;font-size:11px;margin-left:6px") : ''}</div>
-                        <input type="number" class="inv-num-input"
-                            style="width:100px;border-color:rgba(155,141,232,.5)"
-                            value="${_copAUm(fila, fila.cortesiaCopas, 'cortesiaCopas')||0}" min="0" step="0.5"
-                            oninput="updVentasUM(${idx},'cortesiaCopas',this.value);renderResumenVentas()">
+                        <input type="text" inputmode="decimal" class="inv-num-input"
+                            style="width:100px;border-color:rgba(155,141,232,.5)" placeholder="—"
+                            value="${_copAUm(fila, fila.cortesiaCopas, 'cortesiaCopas')||''}"
+                            title="Puedes escribir operaciones: 3*24+5" onkeydown="_celdaKey(event,this)"
+                            onblur="updVentasCalc(${idx},'cortesiaCopas',this);renderResumenVentas()">
                     </div>
                     <div style="flex:1;min-width:140px">
                         <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Concepto</div>
@@ -4757,10 +4765,11 @@ function renderCardVentas() {
                     <div>
                         <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;display:flex;align-items:center">
                             <span>Cantidad</span>${esCopa ? _selUM(idx, 'mermaCopas', "background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:3px 6px;font-family:inherit;font-size:11px;margin-left:6px") : ''}</div>
-                        <input type="number" class="inv-num-input"
-                            style="width:100px;border-color:rgba(224,90,58,.4)"
-                            value="${_copAUm(fila, fila.mermaCopas, 'mermaCopas')||0}" min="0" step="0.5"
-                            oninput="updVentasUM(${idx},'mermaCopas',this.value);renderResumenVentas()">
+                        <input type="text" inputmode="decimal" class="inv-num-input"
+                            style="width:100px;border-color:rgba(224,90,58,.4)" placeholder="—"
+                            value="${_copAUm(fila, fila.mermaCopas, 'mermaCopas')||''}"
+                            title="Puedes escribir operaciones: 3*24+5" onkeydown="_celdaKey(event,this)"
+                            onblur="updVentasCalc(${idx},'mermaCopas',this);renderResumenVentas()">
                     </div>
                     <div style="flex:1;min-width:140px">
                         <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Concepto</div>
@@ -5761,6 +5770,9 @@ function _celdaCalc(el, aplicar) {
 function updCapturaCalc(idx, campo, el) { _celdaCalc(el, function (v) { updCaptura(idx, campo, v); }); }
 function updCapturaPesoCalc(idx, campo, el) { _celdaCalc(el, function (v) { updCapturaPeso(idx, campo, v); }); }
 window.updCapturaPesoCalc = updCapturaPesoCalc;
+// Peso de cada botella abierta: "0.9+0.75" para dos botellas en la misma báscula.
+function updPesoCalc(idx, pi, el) { _celdaCalc(el, function (v) { updPeso(idx, pi, v === 0 && !el.value ? '' : v); }); }
+window.updPesoCalc = updPesoCalc;
 function updVentasCalc(idx, campo, el)  { _celdaCalc(el, function (v) { updVentasUM(idx, campo, v); }); }
 function updVentasDirCalc(idx, campo, el){ _celdaCalc(el, function (v) { updVentasDirectas(idx, campo, v); }); }
 function _celdaKey(ev, el) { if (ev.key === 'Enter') { el.blur(); } }
