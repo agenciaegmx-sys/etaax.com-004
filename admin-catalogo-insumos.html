@@ -138,6 +138,7 @@
             </div>
             <div class="hdr-acts">
                 <button class="btn-vista" onclick="abrirNovedades()" title="Rastrea insumos nuevos y cambios de costo/presentación en los negocios para actualizar el catálogo ETAAX">🔔 Novedades de negocios</button>
+                <button class="btn-vista" onclick="abrirDuplicados()" title="Encuentra insumos repetidos en el catálogo ETAAX por identidad (nombre · marca · variedad)">🔍 Detectar duplicados</button>
                 <button class="btn-vista" id="btnMigrarFotos" onclick="migrarFotosStorage()" title="Mueve las fotos base64 existentes a Storage (URLs ligeras)">🗜️ Optimizar fotos</button>
                 <button class="btn-vista" onclick="abrirImportar()">⬆ Importar CSV</button>
                 <button class="btn-primary" onclick="abrirSelectorCategoria()">+ Agregar insumo</button>
@@ -885,7 +886,13 @@ async function _cargarNovedades(){
     all.forEach(function(row){
         var ins=row.datos; if(!ins) return;
         if (ins.esSubReceta) return; // producción propia, no es material de catálogo
-        var negNombre = negMap[row.negocio_id]||('Negocio eliminado ('+String(row.negocio_id||'').slice(-6)+')');
+        // Negocio BORRADO: sus insumos quedaron huérfanos y NUNCA van a cambiar (nadie
+        // puede editarlos). Comparados contra el catálogo generan una novedad eterna:
+        // aplicas la del negocio vivo y el huérfano sigue distinto; aplicas la del
+        // huérfano y el vivo sigue distinto. Ese ping-pong es la razón por la que
+        // "400 Conejos" reaparecía por más veces que se actualizara. Fuera del escaneo.
+        if (!negMap[row.negocio_id]) return;
+        var negNombre = negMap[row.negocio_id];
         var sucNombre = ins.sucursalId ? (sucMap[row.negocio_id+'|'+ins.sucursalId]||'') : '';
         if (sucNombre) negNombre += ' · ' + sucNombre;
         var cat = catById[row.insumo_id];
@@ -979,7 +986,13 @@ function _renderNovedades(){
                         // Diff campo por campo, igual que las Novedades del negocio.
                         _novDiffHTML(cat, v.datosNeg)+
                       '</div>'+
-                      '<button class="btn-vista" style="color:var(--green);border-color:var(--green);white-space:nowrap" onclick="_aplicarActualizacion('+v.idx+')">↑ Aplicar esta versión</button>'+
+                      '<div style="display:flex;flex-direction:column;gap:6px">'+
+                        '<button class="btn-vista" style="color:var(--green);border-color:var(--green);white-space:nowrap" onclick="_aplicarActualizacion('+v.idx+')">↑ Aplicar esta versión</button>'+
+                        // Cuando NO es el mismo producto sino otra presentación (700 ml vs
+                        // 750 ml), pisar el catálogo pierde una de las dos. Esto la conserva
+                        // como insumo aparte.
+                        '<button class="btn-vista" style="white-space:nowrap;color:#7ab8f5;border-color:#7ab8f5" title="Conservar ambas: crea un insumo NUEVO en el catálogo con esta presentación" onclick="_crearComoNuevo('+v.idx+')">+ Crear aparte</button>'+
+                      '</div>'+
                   '</div>';
               }).join('')+
             '</div>'+
@@ -1020,10 +1033,129 @@ async function _aplicarActualizacion(idx){
     // aplicada incluida, cinturón por si quedara alguna diferencia residual) se
     // descartan — desaparecen y no vuelven salvo que el negocio cambie algo.
     var todas=_novActu.filter(function(x){ return x.insumoId===it.insumoId; });
-    _novDescartar(todas.map(_novFirmaActu));
+    _novDescartarItems(todas, _novClave, _novFirmaActu);   // formato nuevo: guarda el estado
     _novActu=_novActu.filter(function(x){ return x.insumoId!==it.insumoId; });
     _renderNovedades();
     if (typeof init==='function') init();
+}
+
+/* Crear como insumo NUEVO en vez de pisar el del catálogo.
+   Caso real: el catálogo tiene 400 Conejos de 700 ml y un negocio maneja el de 750 ml.
+   No es un cambio de costo — son dos productos. "Aplicar" borraría uno de los dos;
+   esto conserva ambos. El id es nuevo (no se reusa el del negocio: ese ya apunta al
+   insumo del catálogo y reusarlo los fundiría otra vez). */
+async function _crearComoNuevo(idx){
+    var it=_novActu[idx]; if(!it) return;
+    var base=(_catalogoMem||[]).find(function(c){ return c.id===it.insumoId; });
+    var nuevo=JSON.parse(JSON.stringify(it.datosNeg||{}));
+    // Ficha curada del catálogo + presentaciones del negocio: lo que cambia es la
+    // presentación, no la identidad del producto.
+    if (base){
+        ['nombre','marca','variedad','categoria','subcategoria','familia','foto','area','tipoInsumo']
+            .forEach(function(k){ if (base[k] !== undefined && !nuevo[k]) nuevo[k]=base[k]; });
+    }
+    delete nuevo.sucursalId; delete nuevo.origenId; delete nuevo.historial;
+    nuevo.id = 'cat_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+    nuevo.creadoDesde = { negocio: it.negNombre||'', insumoBase: it.insumoId, ts: new Date().toISOString() };
+
+    var p0=(nuevo.presentaciones||[])[0]||{};
+    var det=[nuevo.nombre||'', p0.contNeto?(p0.contNeto+' '+(p0.umContenido||'')):'' ].filter(Boolean).join(' · ');
+    var _hacer = async function(){
+        var r=await _supabase.from('catalogo_insumos').upsert([{ id:nuevo.id, datos:nuevo }]);
+        if (r.error){ alert('Error al crear: '+r.error.message); return; }
+        _catalogoMem.push(nuevo);
+        // Este negocio ya quedó representado: se descarta SU versión (no las demás).
+        _novDescartarItems([it], _novClave, _novFirmaActu);
+        _novActu=_novActu.filter(function(x){ return !(x.insumoId===it.insumoId && x.negId===it.negId); });
+        _renderNovedades();
+        if (typeof init==='function') init();
+    };
+    var msg='Se agregará al catálogo ETAAX como un insumo APARTE, conservando el que ya existe.\n\n'+det+
+            '\n\nÚsalo cuando sean dos productos distintos (otra presentación), no un cambio de precio.';
+    if (window.etaaxConfirm) etaaxConfirm('Crear «'+(nuevo.nombre||'insumo')+'» aparte', msg, _hacer, null, { yesLabel:'Crear', danger:false });
+    else if (confirm(msg)) _hacer();
+}
+
+/* ══ DETECTAR DUPLICADOS DEL CATÁLOGO ETAAX ══════════════════════════════════
+   Agrupa por identidad canónica (nombre · marca · variedad) y muestra los grupos
+   con más de un registro. NO borra nada solo: enseña cada versión con su contenido
+   y costo para que el admin decida cuál conservar — dos entradas con el mismo
+   nombre pueden ser productos distintos (700 ml y 750 ml), y ahí lo correcto es
+   dejarlas. Por eso se muestran los datos, no un botón de "fusionar todo". */
+function _dupKey(x){
+    return [ (x.nombre||''), (x.marca||''), (x.variedad||x.maduracion||'') ]
+        .join('|').toLowerCase().replace(/\s+/g,' ').trim();
+}
+function _dupGrupos(){
+    var m={};
+    (_catalogoMem||[]).forEach(function(c){
+        if (!c || !c.id) return;
+        var k=_dupKey(c);
+        if (k==='||') return;
+        (m[k]=m[k]||[]).push(c);
+    });
+    return Object.keys(m).filter(function(k){ return m[k].length>1; })
+        .map(function(k){ return { key:k, items:m[k] }; })
+        .sort(function(a,b){ return (a.items[0].nombre||'').localeCompare(b.items[0].nombre||''); });
+}
+function _dupResumenIns(c){
+    var p=(c.presentaciones||[])[0]||{};
+    var bits=[];
+    if (p.contNeto) bits.push(p.contNeto+' '+String(p.umContenido||'').toLowerCase());
+    var cu=parseFloat(p.costoUnitario)||parseFloat(p.precio)||0;
+    if (cu) bits.push(_fmtMN(cu)+(p.umCosto?'/'+String(p.umCosto).toLowerCase():''));
+    if ((c.presentaciones||[]).length>1) bits.push((c.presentaciones||[]).length+' presentaciones');
+    return bits.join(' · ')||'sin presentación';
+}
+function abrirDuplicados(){
+    var g=_dupGrupos();
+    var ov=document.createElement('div');
+    ov.id='dupOv';
+    ov.style.cssText='position:fixed;inset:0;z-index:9600;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+    var cuerpo = !g.length
+        ? '<div style="text-align:center;padding:48px;color:var(--text-dim)"><div style="font-size:40px;margin-bottom:8px">✓</div>Sin duplicados por identidad en el catálogo.</div>'
+        : '<div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.6">'
+          + '<b style="color:var(--text)">'+g.length+' grupo'+(g.length!==1?'s':'')+'</b> con el mismo nombre · marca · variedad. '
+          + 'OJO: dos entradas iguales pueden ser productos distintos (700 ml y 750 ml). Compara el contenido antes de borrar.</div>'
+          + g.map(function(gr){
+              return '<div style="border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:10px">'
+                + '<div style="font-weight:600;font-size:13.5px;margin-bottom:6px">'+_escN(_novTitulo(gr.items[0]))+' <span style="font-size:11px;color:var(--text-dim);font-weight:400">· '+gr.items.length+' registros</span></div>'
+                + gr.items.map(function(c){
+                    return '<div style="display:flex;align-items:center;gap:10px;font-size:12px;padding:5px 0;border-top:1px solid var(--border)">'
+                      + '<span style="flex:1;color:var(--text-muted)">'+_escN(_dupResumenIns(c))+'</span>'
+                      + '<span style="font-size:10px;color:var(--text-dim)">'+_escN(String(c.id).slice(-8))+'</span>'
+                      + '<button class="btn-vista" style="font-size:11px;padding:3px 9px" onclick="_dupVer(\''+_escN(c.id)+'\')">Ver</button>'
+                      + '<button class="btn-vista" style="font-size:11px;padding:3px 9px;color:var(--red);border-color:rgba(224,90,58,.5)" onclick="_dupBorrar(\''+_escN(c.id)+'\')">Borrar</button>'
+                      + '</div>';
+                  }).join('')
+                + '</div>';
+            }).join('');
+    ov.innerHTML='<div class="modal" style="max-width:760px;width:100%;max-height:88vh;display:flex;flex-direction:column">'
+        +'<div class="modal-header"><h2>🔍 Duplicados del catálogo</h2>'
+        +'<button class="modal-close" onclick="document.getElementById(\'dupOv\').remove()">✕</button></div>'
+        +'<div class="modal-body" style="flex:1;overflow-y:auto">'+cuerpo+'</div></div>';
+    document.body.appendChild(ov);
+}
+function _dupVer(id){
+    var ov=document.getElementById('dupOv'); if(ov) ov.remove();
+    if (typeof verFicha==='function') verFicha(id);
+    else if (typeof editarInsumo==='function') editarInsumo(id);
+}
+async function _dupBorrar(id){
+    var c=(_catalogoMem||[]).find(function(x){ return x.id===id; }); if(!c) return;
+    var _hacer=async function(){
+        var r=await _supabase.from('catalogo_insumos').delete().eq('id', id);
+        if (r.error){ alert('Error al borrar: '+r.error.message); return; }
+        _catalogoMem=_catalogoMem.filter(function(x){ return x.id!==id; });
+        var ov=document.getElementById('dupOv'); if(ov) ov.remove();
+        abrirDuplicados();
+        if (typeof init==='function') init();
+    };
+    var msg='Se borrará del catálogo ETAAX:\n\n'+(c.nombre||'')+' · '+_dupResumenIns(c)+
+            '\n\nLos negocios que YA lo importaron conservan su copia; solo desaparece del catálogo maestro.';
+    if (window.etaaxConfirm) etaaxConfirm('Borrar del catálogo', msg, _hacer, null, { yesLabel:'Borrar' });
+    else if (confirm(msg)) _hacer();
 }
 
 async function _agregarAlCatalogo(idx){
