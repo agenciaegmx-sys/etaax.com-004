@@ -2652,6 +2652,8 @@ function abrirInventario(id) {
     // cargarProductosCaptura hace merge: usa filas guardadas si existen, default si no
     cargarProductosCaptura();
     try { _importarEntradasQR(); } catch(e) { console.warn('[importar QR]', e); } // jala las entradas del QR de esta sucursal
+    // Conteos capturados desde el celular (v42): llegan como propuesta, no se aplican solos.
+    cargarConteosQR().then(function(){ if (pasoActual === 1) renderStepContent(); });
     pasoActual = 1;
     busquedaCapt = ''; filtroFamActivo = ''; filtroCatActiva = ''; filtroSubcatActiva = ''; filtroRegistroActivo = 'pendientes';
     mostrarVista('vistaCaptura');
@@ -3315,7 +3317,7 @@ function renderStep1() {
         const nPend = filasCaptura.length - nReg;
         const placeholder = filtroRegistroActivo === 'registrados'
             ? 'Buscar en registrados…' : 'Buscar producto pendiente…';
-        return buildVistaSwitcherExist() + _avisoAreaHTML() + buildFiltroRegistroBar() + `
+        return buildVistaSwitcherExist() + _avisoAreaHTML() + bannerConteosQR() + buildFiltroRegistroBar() + `
             <div class="ent-rapida-wrap">
                 <div>
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Buscar producto</div>
@@ -3352,7 +3354,7 @@ function renderStep1() {
 
     // La lista va en su propio contenedor → la búsqueda actualiza SOLO esto (no el
     // input del toolbar) para no perder el foco al escribir.
-    return buildVistaSwitcherExist() + _avisoAreaHTML() + buildFiltroRegistroBar() + buildToolbar(true) +
+    return buildVistaSwitcherExist() + _avisoAreaHTML() + bannerConteosQR() + buildFiltroRegistroBar() + buildToolbar(true) +
         '<div id="step1ListaCont">' + _step1ListaInner() + '</div>';
 }
 
@@ -3565,6 +3567,7 @@ function renderCardExist() {
                 </div>
             </div>
 
+            ${chipConteoQR(fila, idx)}
             <!-- Método de captura -->
             <div style="margin-bottom:16px">
                 <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;font-weight:500">Método de captura</div>
@@ -5745,6 +5748,118 @@ function setStep5Modo(m) {
    litros, y nadie puede cotejar eso contra una caja de 5 L. Cuando el insumo
    NO declara medida (usa la copa estándar de su categoría) se sigue leyendo en
    copas, que ahí sí es la unidad de venta. */
+/* ══ CONTEOS DESDE EL QR (v42) ════════════════════════════════════════════════
+   Barra cuenta con el celular la noche anterior; esos conteos llegan a
+   `inventario_conteos` marcados con quién contó. Aquí se muestran como PROPUESTA
+   sobre el inventario abierto: se ve qué contó cada quien, y se aplica —todo o de
+   uno en uno— cuando el encargado está de acuerdo. Nunca entran solos: un
+   inventario es documento contable y un dedo a las 2 AM no debería moverlo. */
+var _conteosQR = [];
+async function cargarConteosQR() {
+    if (typeof _supabase === 'undefined' || !invActual) return;
+    var negId = getNegocioActivo(); if (!negId) return;
+    try {
+        var r = await _supabase.from('inventario_conteos').select('datos').eq('negocio_id', negId);
+        if (r.error) { _conteosQR = []; return; }          // sin migración v42 → simplemente no hay
+        var suc = (invActual.sucursalId || '');
+        var area = (invActual.area || '').toLowerCase();
+        _conteosQR = (r.data || []).map(function (x) { return x.datos; }).filter(function (c) {
+            if (!c || c.aplicado) return false;
+            if ((c.sucursalId || '') !== suc) return false;
+            if (area && area !== 'general' && (c.area || '').toLowerCase() !== area) return false;
+            // Solo conteos frescos: uno de hace dos semanas no es de este inventario.
+            var t = Date.parse((c.fecha || '') + 'T12:00:00');
+            return !isNaN(t) && (Date.now() - t) < 7 * 864e5;
+        });
+    } catch (e) { _conteosQR = []; }
+}
+function _conteoDeFila(fila) {
+    if (!fila || !_conteosQR.length) return null;
+    var canon = _canonInsumoId(fila.insumoId) || fila.insumoId;
+    return _conteosQR.find(function (c) {
+        var k = _canonInsumoId(c.insumoId) || c.insumoId;
+        return k === canon;
+    }) || null;
+}
+function _conteoResumen(c) {
+    var p = [];
+    if (c.cerradasBodega !== '' && c.cerradasBodega != null) p.push(c.cerradasBodega + ' bodega');
+    if (c.cerradasBarra !== '' && c.cerradasBarra != null) p.push(c.cerradasBarra + ' barra');
+    var np = (c.pesos || []).filter(function (x) { return x !== '' && x != null; }).length;
+    if (np) p.push(np + ' abierta' + (np !== 1 ? 's' : '') + ' pesada' + (np !== 1 ? 's' : ''));
+    return p.join(' · ') || 'sin datos';
+}
+function bannerConteosQR() {
+    if (!_conteosQR.length) return '';
+    var quienes = {};
+    _conteosQR.forEach(function (c) { if (c.contadoPor) quienes[c.contadoPor] = 1; });
+    var nombres = Object.keys(quienes);
+    return '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:rgba(122,184,245,.07);border:1px solid rgba(122,184,245,.35);border-radius:11px;padding:11px 14px;margin-bottom:14px">'
+        + '<span style="font-size:18px">📋</span>'
+        + '<div style="flex:1;min-width:220px;font-size:12.5px;color:var(--text-muted);line-height:1.5">'
+            + '<b style="color:var(--text)">' + _conteosQR.length + ' producto' + (_conteosQR.length !== 1 ? 's' : '') + ' contado' + (_conteosQR.length !== 1 ? 's' : '') + ' desde el QR</b>'
+            + (nombres.length ? ' · por ' + etx(nombres.join(', ')) : '') + '<br>'
+            + '<span style="color:var(--text-dim)">Revisa cada uno en su tarjeta, o aplícalos todos de una vez.</span>'
+        + '</div>'
+        + '<button class="btn-vista" style="color:#7ab8f5;border-color:#7ab8f5" onclick="aplicarConteosQR()">Aplicar todos</button>'
+    + '</div>';
+}
+/* Chip dentro de la fila: qué contó el colaborador y el botón para tomarlo. */
+function chipConteoQR(fila, idx) {
+    var c = _conteoDeFila(fila); if (!c) return '';
+    return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(122,184,245,.08);border:1px solid rgba(122,184,245,.3);border-radius:8px;padding:6px 10px;margin-bottom:8px">'
+        + '<span style="font-size:11px;color:#7ab8f5">📋 ' + etx(_conteoResumen(c)) + '</span>'
+        + '<span style="font-size:10.5px;color:var(--text-dim)">' + etx(c.contadoPor || '') + ' · ' + etx(c.hora || '') + '</span>'
+        + '<button class="btn-vista" style="font-size:10.5px;padding:3px 9px;margin-left:auto" onclick="aplicarConteoQR(' + idx + ')">Usar</button>'
+    + '</div>';
+}
+function _aplicarConteoAFila(fila, c) {
+    if (c.cerradasBodega !== '' && c.cerradasBodega != null) fila.cerradasBodega = c.cerradasBodega;
+    if (c.cerradasBarra  !== '' && c.cerradasBarra  != null) fila.cerradasBarra  = c.cerradasBarra;
+    var ps = (c.pesos || []).filter(function (x) { return x !== '' && x != null; });
+    if (ps.length) { fila.pesos = ['', '', '', '']; ps.slice(0, 4).forEach(function (v, i) { fila.pesos[i] = v; }); fila.metodoCaptura = 'peso'; }
+    // Queda escrito de dónde salió el número.
+    fila.conteoQR = { por: c.contadoPor || '', fecha: c.fecha || '', hora: c.hora || '', nota: c.nota || '' };
+}
+async function _marcarConteoAplicado(c) {
+    c.aplicado = true;
+    c.aplicadoPor = (function () { try { return (JSON.parse(localStorage.getItem('etaax_ctx') || '{}').userName) || ''; } catch (e) { return ''; } })();
+    c.aplicadoTs = new Date().toISOString();
+    try { await _supabase.from('inventario_conteos').update({ datos: c }).eq('id', c.id); } catch (e) {}
+}
+async function aplicarConteoQR(idx) {
+    var fila = filasCaptura[idx]; if (!fila) return;
+    var c = _conteoDeFila(fila); if (!c) return;
+    _aplicarConteoAFila(fila, c);
+    await _marcarConteoAplicado(c);
+    _conteosQR = _conteosQR.filter(function (x) { return x.id !== c.id; });
+    _autoGuardar(); renderStepContent();
+}
+async function aplicarConteosQR() {
+    if (!_conteosQR.length) return;
+    var n = _conteosQR.length;
+    var _hacer = async function () {
+        var pend = _conteosQR.slice();
+        for (var i = 0; i < pend.length; i++) {
+            var c = pend[i];
+            var fila = filasCaptura.find(function (f) {
+                return (_canonInsumoId(f.insumoId) || f.insumoId) === (_canonInsumoId(c.insumoId) || c.insumoId);
+            });
+            if (!fila) continue;                       // contaron algo que no está en este inventario
+            _aplicarConteoAFila(fila, c);
+            await _marcarConteoAplicado(c);
+            _conteosQR = _conteosQR.filter(function (x) { return x.id !== c.id; });
+        }
+        _autoGuardar(); renderStepContent();
+    };
+    var msg = 'Se tomarán los conteos de ' + n + ' producto' + (n !== 1 ? 's' : '') + ' y se escribirán en las existencias de este inventario.\n\n'
+            + 'Lo que ya tengas capturado en esos productos se reemplaza.';
+    if (window.etaaxConfirm) etaaxConfirm('Aplicar conteos del QR', msg, _hacer, null, { yesLabel: 'Aplicar', danger: false });
+    else if (confirm(msg)) _hacer();
+}
+window.aplicarConteoQR = aplicarConteoQR;
+window.aplicarConteosQR = aplicarConteosQR;
+
 /* ══ CELDAS CON OPERACIONES (tipo Excel) ═══════════════════════════════════════
    En una celda de existencias o ventas se puede escribir "12+8", "3*24" o "144/12"
    y al salir queda el resultado. Es lo que de verdad pasa contando: "tres cajas de

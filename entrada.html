@@ -97,10 +97,62 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
             <span class="mi">🍷</span>
             <span><span class="mt">Merma</span><br><span class="md">Se rompió, derramó o desperdició un insumo o un producto del menú</span></span>
         </button>
+        <button class="menu-btn" onclick="irConteo()">
+            <span class="mi">📋</span>
+            <span><span class="mt">Contar existencias</span><br><span class="md">Cuenta tus botellas o pésalas antes del inventario: el conteo llega al sistema y solo se aplica</span></span>
+        </button>
         <button class="menu-btn" onclick="irSalida()">
             <span class="mi">🎁</span>
             <span><span class="mt">Cortesía o préstamo</span><br><span class="md">Salió un insumo sin ser venta: cortesía a un cliente o préstamo a otra área/sucursal</span></span>
         </button>
+    </div>
+
+    <!-- ── Pantalla CONTAR EXISTENCIAS ── -->
+    <div id="conteoScreen" style="display:none">
+        <button class="volver" onclick="volverMenu()">← Menú</button>
+
+        <label class="lbl">Área</label>
+        <div class="chips" id="areaChipsCnt"></div>
+
+        <label class="lbl">Producto</label>
+        <input type="text" class="fld" id="cntBuscar" placeholder="Escribe el nombre…" oninput="filtrarCnt(this.value)" autocomplete="off">
+        <div id="cntLista" class="ins-list"></div>
+
+        <div id="cntForm" style="display:none">
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin:10px 0 14px">
+                <div style="font-size:15px;font-weight:600;color:var(--text)" id="cntNom">—</div>
+                <div style="font-size:11px;color:var(--dim);margin-top:2px" id="cntMeta">—</div>
+            </div>
+
+            <label class="lbl">Botellas / piezas cerradas</label>
+            <div style="display:flex;gap:10px">
+                <div style="flex:1">
+                    <div style="font-size:11px;color:var(--dim);margin-bottom:5px">Bodega</div>
+                    <input type="text" inputmode="decimal" class="fld" id="cntBodega" placeholder="—" style="margin-bottom:0">
+                </div>
+                <div style="flex:1">
+                    <div style="font-size:11px;color:var(--dim);margin-bottom:5px">Barra</div>
+                    <input type="text" inputmode="decimal" class="fld" id="cntBarra" placeholder="—" style="margin-bottom:0">
+                </div>
+            </div>
+            <div style="font-size:11px;color:var(--dim);margin:6px 0 14px">Puedes escribir operaciones: <b>3*24+5</b></div>
+
+            <label class="lbl">Botellas abiertas · peso con envase (kg)</label>
+            <div style="display:flex;gap:8px;margin-bottom:14px">
+                <input type="text" inputmode="decimal" class="fld" id="cntP0" placeholder="B1" style="margin-bottom:0;text-align:center">
+                <input type="text" inputmode="decimal" class="fld" id="cntP1" placeholder="B2" style="margin-bottom:0;text-align:center">
+                <input type="text" inputmode="decimal" class="fld" id="cntP2" placeholder="B3" style="margin-bottom:0;text-align:center">
+                <input type="text" inputmode="decimal" class="fld" id="cntP3" placeholder="B4" style="margin-bottom:0;text-align:center">
+            </div>
+
+            <label class="lbl">Nota (opcional)</label>
+            <input type="text" class="fld" id="cntNota" placeholder="Ej. quedaron 2 cajas en bodega chica">
+
+            <button class="cap-btn" id="cntBtn" onclick="enviarConteo()">Guardar conteo</button>
+            <div class="cap-msg" id="cntMsg"></div>
+        </div>
+
+        <div id="cntHechos" style="margin-top:16px"></div>
     </div>
 
     <!-- ── Pantalla ENTRADA de insumos ── -->
@@ -351,7 +403,7 @@ var CART = { entrada:{items:[],fotos:[]}, merma:{items:[],fotos:[]}, salida:{ite
 
 var AREAS = [ ['barra','🍸 Barra'], ['cocina','🍳 Cocina'], ['almacen','📦 Almacén'] ];
 function _pintarAreas(){
-    ['areaChipsEnt','areaChipsMer','areaChipsSal'].forEach(function(cid){
+    ['areaChipsEnt','areaChipsMer','areaChipsSal','areaChipsCnt'].forEach(function(cid){
         var c = document.getElementById(cid); if (!c) return;
         c.innerHTML = AREAS.map(function(a){
             return '<button class="'+(AREA===a[0]?'on':'')+'" onclick="setArea(\''+a[0]+'\')">'+a[1]+'</button>';
@@ -360,7 +412,7 @@ function _pintarAreas(){
 }
 function setArea(a){ AREA = a; _pintarAreas(); }
 
-function _show(id){ ['pinScreen','menuScreen','formScreen','mermaScreen','salidaScreen','errScreen'].forEach(function(x){ document.getElementById(x).style.display = x===id?'block':'none'; }); }
+function _show(id){ ['pinScreen','menuScreen','formScreen','mermaScreen','salidaScreen','conteoScreen','errScreen'].forEach(function(x){ var el=document.getElementById(x); if(el) el.style.display = x===id?'block':'none'; }); }
 function _err(txt){ document.getElementById('errTxt').innerHTML = txt; document.getElementById('capSub').textContent = ''; _show('errScreen'); if(_countTimer){clearInterval(_countTimer);_countTimer=null;} }
 function volverMenu(){ document.getElementById('capSub').textContent='¿Qué vas a registrar?'; _show('menuScreen'); }
 function irEntrada(){
@@ -518,6 +570,107 @@ function selSal(id){
     document.getElementById('salList').innerHTML=''; document.getElementById('salBusca').value='';
 }
 function limpiarSal(){ SSEL=null; document.getElementById('salSelBox').innerHTML=''; filtrarSal(''); }
+
+/* ══ CONTAR EXISTENCIAS ═══════════════════════════════════════════════════════
+   Barra cuenta sus botellas la noche anterior. El conteo NO entra al inventario:
+   aterriza en su propia tabla marcado con quién contó, y quien abre el inventario
+   decide si lo aplica. Un inventario es documento contable — no se toca desde un
+   teléfono sin sesión. */
+var CNT_SEL = null, CNT_HECHOS = [];
+function irConteo(){
+    document.getElementById('capSub').textContent = 'Cuenta tus productos: el conteo llega al sistema';
+    _pintarAreas(); filtrarCnt(''); _renderCntHechos();
+    document.getElementById('cntForm').style.display = 'none';
+    CNT_SEL = null;
+    _show('conteoScreen');
+}
+function filtrarCnt(q){
+    q = (q||'').toLowerCase();
+    var lista = INSUMOS.filter(function(x){
+        return !q || (x.nombre||'').toLowerCase().indexOf(q)>=0 || (x.marca||'').toLowerCase().indexOf(q)>=0 || (x.variedad||'').toLowerCase().indexOf(q)>=0;
+    }).slice(0, 60);
+    document.getElementById('cntLista').innerHTML = lista.length
+        ? lista.map(function(x){
+            var ya = CNT_HECHOS.some(function(h){ return h.insumoId===x.id; });
+            return '<div class="ins-it" onclick="selCnt(\''+x.id+'\')">'+(ya?'✓ ':'')+etx(x.nombre)+_insMetaHTML(x)+'</div>';
+        }).join('')
+        : '<div class="ins-it" style="color:var(--text-dim);cursor:default">Sin resultados</div>';
+}
+function selCnt(id){
+    CNT_SEL = INSUMOS.find(function(x){ return x.id===id; });
+    if (!CNT_SEL) return;
+    document.getElementById('cntNom').textContent = CNT_SEL.nombre || '—';
+    var cont = CNT_SEL.contNeto ? (CNT_SEL.contNeto+' '+(CNT_SEL.umContenido||'ML')) : '';
+    document.getElementById('cntMeta').textContent = [CNT_SEL.categoria, cont].filter(Boolean).join(' · ') || '—';
+    // Si ya lo contó antes en esta sesión, se precargan sus números para corregir.
+    var prev = CNT_HECHOS.find(function(h){ return h.insumoId===id; }) || {};
+    document.getElementById('cntBodega').value = prev.cerradasBodega != null ? prev.cerradasBodega : '';
+    document.getElementById('cntBarra').value  = prev.cerradasBarra  != null ? prev.cerradasBarra  : '';
+    [0,1,2,3].forEach(function(i){ document.getElementById('cntP'+i).value = (prev.pesos && prev.pesos[i]) || ''; });
+    document.getElementById('cntNota').value = prev.nota || '';
+    document.getElementById('cntForm').style.display = 'block';
+    document.getElementById('cntMsg').textContent = '';
+    document.getElementById('cntForm').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+/* Mismo evaluador que las celdas del sistema: "3*24+5" es como se cuenta de verdad. */
+function _evalCnt(txt){
+    var t = String(txt==null?'':txt).trim();
+    if (!t) return '';
+    if (/^-?\d*\.?\d*$/.test(t)) return parseFloat(t);
+    if (!/^[0-9+\-*/(). ]+$/.test(t) || /[+\-*/]{2,}/.test(t)) return '';
+    try { var v = Function('"use strict";return ('+t+')')(); return (typeof v==='number'&&isFinite(v)) ? Math.round(v*10000)/10000 : ''; }
+    catch(e){ return ''; }
+}
+async function enviarConteo(){
+    var msg = document.getElementById('cntMsg');
+    if (!CNT_SEL){ msg.className='cap-msg err'; msg.textContent='Elige un producto.'; return; }
+    var bod = _evalCnt(document.getElementById('cntBodega').value);
+    var bar = _evalCnt(document.getElementById('cntBarra').value);
+    var pesos = [0,1,2,3].map(function(i){ return _evalCnt(document.getElementById('cntP'+i).value); });
+    if (bod==='' && bar==='' && !pesos.some(function(p){ return p!==''; })){
+        msg.className='cap-msg err'; msg.textContent='Pon al menos una cantidad o un peso.'; return;
+    }
+    var btn = document.getElementById('cntBtn'); btn.disabled = true;
+    msg.className='cap-msg'; msg.textContent='Guardando…';
+    var hoy = todayStr();
+    var entry = {
+        // id estable: si vuelve a contar el mismo producto hoy, CORRIGE su conteo
+        // en vez de dejar dos verdades en la tabla.
+        id: 'cnt_'+NEG+'_'+(SUC||'suc_principal')+'_'+AREA+'_'+hoy+'_'+CNT_SEL.id,
+        insumoId: CNT_SEL.id, nombre: CNT_SEL.nombre || '',
+        sucursalId: SUC || '', area: AREA, fecha: hoy, hora: nowHora(),
+        cerradasBodega: bod, cerradasBarra: bar,
+        pesos: pesos,
+        nota: (document.getElementById('cntNota').value||'').trim(),
+        aplicado: false
+    };
+    try {
+        var r = await _supabase.rpc('inventario_conteo_registrar', { p_neg:NEG, p_token:TOKEN, p_niphash:_NIPHASH, p_datos:entry });
+        if (r.error){ btn.disabled=false; msg.className='cap-msg err'; msg.textContent='No se pudo guardar: '+r.error.message; return; }
+        btn.disabled = false;
+        CNT_HECHOS = CNT_HECHOS.filter(function(h){ return h.insumoId!==entry.insumoId; });
+        CNT_HECHOS.unshift(entry);
+        msg.className='cap-msg ok'; msg.textContent='✓ '+(CNT_SEL.nombre||'Producto')+' contado';
+        document.getElementById('cntForm').style.display='none';
+        document.getElementById('cntBuscar').value=''; CNT_SEL=null;
+        filtrarCnt(''); _renderCntHechos();
+    } catch(e){ btn.disabled=false; msg.className='cap-msg err'; msg.textContent='Error: '+((e&&e.message)||e); }
+}
+function _renderCntHechos(){
+    var c = document.getElementById('cntHechos'); if (!c) return;
+    if (!CNT_HECHOS.length){ c.innerHTML=''; return; }
+    c.innerHTML = '<div class="lbl">Contados en esta sesión ('+CNT_HECHOS.length+')</div>'
+        + CNT_HECHOS.map(function(h){
+            var partes = [];
+            if (h.cerradasBodega!=='') partes.push(h.cerradasBodega+' bodega');
+            if (h.cerradasBarra!=='')  partes.push(h.cerradasBarra+' barra');
+            var np = (h.pesos||[]).filter(function(p){ return p!==''; }).length;
+            if (np) partes.push(np+' abierta'+(np!==1?'s':'')+' pesada'+(np!==1?'s':''));
+            return '<div style="display:flex;justify-content:space-between;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:9px 12px;margin-bottom:7px">'
+                + '<span style="font-size:13px;color:var(--text)">'+etx(h.nombre)+'</span>'
+                + '<span style="font-size:11.5px;color:var(--dim);text-align:right">'+etx(partes.join(' · '))+'</span></div>';
+        }).join('');
+}
 
 /* ══ Motor de REGISTRO MÚLTIPLE (lista/carrito + fotos), común a los 3 flujos ══ */
 function _cartMsg(flujo, txt, cls){
