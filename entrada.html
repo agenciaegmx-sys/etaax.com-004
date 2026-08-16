@@ -88,7 +88,7 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
     <!-- ── Pantalla MENÚ: qué vas a registrar ── -->
     <div id="menuScreen" style="display:none">
         <div class="quien">👤 Registra: <b id="quienNom">—</b></div>
-        <div id="countBox">⏱️ Esta sesión expira en <b id="countVal" style="color:var(--text)">5:00</b></div>
+        <div id="countBox">⏱️ Tiempo en sesión: <b id="countVal" style="color:var(--text)">0:00</b></div>
         <button class="menu-btn" onclick="irEntrada()">
             <span class="mi">📦</span>
             <span><span class="mt">Entrada de insumos</span><br><span class="md">Llegó mercancía: compra, bonificación, consignación o préstamo pagado</span></span>
@@ -334,7 +334,10 @@ function _enSucQR(x){
     if (!ss || !ss.length) return true;
     return ss.indexOf(SUC) >= 0;
 }
-var VIDA_MS = 300000;            // la sesión / ventana para subir la foto dura 5 minutos
+/* La sesión ya NO expira: registrar entradas o contar existencias puede tomar lo que
+   tome, y echar al colaborador a media captura no protege nada. El contador pasa a ser
+   CRONÓMETRO (cuenta hacia arriba). Lo que autoriza es el NIP, revalidado por la RPC en
+   cada registro. */
 var COLAB = '', _NIPHASH = '', INSUMOS = [], SEL = null, FOTO_URL = '', _countTimer = null, _t0 = 0;
 var RECETAS = null;              // menú del negocio (lazy: se carga al entrar a merma de producto)
 var AREA = 'barra';              // área elegida (aplica a entrada Y merma)
@@ -406,11 +409,11 @@ async function entrar(){
 }
 
 function _tick(){
-    var rest = Math.max(0, _t0 + VIDA_MS - Date.now());
-    var s = Math.ceil(rest/1000);
-    var el = document.getElementById('countVal'); if (el) el.textContent = Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
-    if (rest <= 0) { _err('Tu sesión expiró (dura 5&nbsp;minutos).<br>Vuelve a escanear el QR e ingresa tu PIN.'); }
+    var seg = Math.max(0, Math.round((Date.now() - _t0) / 1000));
+    var el = document.getElementById('countVal');
+    if (el) el.textContent = Math.floor(seg/60) + ':' + String(seg%60).padStart(2,'0');
 }
+
 
 /* ── ENTRADA: buscador de insumos ── */
 function filtrarIns(q){
@@ -606,7 +609,7 @@ function _buildEntry(flujo, it){
 // Registra TODO el lote (un RPC por item). Los que fallen quedan en la lista para reintentar.
 async function _registrarBatch(flujo){
     var st = CART[flujo];
-    if (Date.now()-_t0 >= VIDA_MS){ _err('Tu sesión expiró.<br>Vuelve a escanear el QR.'); return; }
+    // (Sin corte por tiempo: el NIP se revalida en la RPC, que es lo que autoriza.)
     if (!st.items.length){ _cartMsg(flujo,'Agrega al menos un insumo a la lista.','err'); return; }
     var btn = document.getElementById(flujo+'SubmitBtn'); if (btn) btn.disabled=true;
     var total = st.items.length, ok=0, fallidos=[];

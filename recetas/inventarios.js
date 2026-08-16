@@ -3671,18 +3671,21 @@ function _cardExistPeso(fila, idx) {
             <div style="display:flex;gap:10px;margin-bottom:8px">
                 <div style="flex:1.3">
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Existencia física (${u})</div>
-                    <input type="number" class="inv-num-input" style="width:100%;box-sizing:border-box" value="${fila.existenciaPeso||''}" min="0" step="any" placeholder="0"
-                        oninput="updCapturaPeso(${idx},'existenciaPeso',this.value)">
+                    <input type="text" inputmode="decimal" class="inv-num-input" style="width:100%;box-sizing:border-box" value="${fila.existenciaPeso||''}" placeholder="—"
+                        title="Puedes escribir operaciones: 1200+340"
+                        onblur="updCapturaPesoCalc(${idx},'existenciaPeso',this)" onkeydown="_celdaKey(event,this)">
                 </div>
                 <div style="flex:1">
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Entradas (${u})</div>
-                    <input type="number" class="inv-num-input" style="width:100%;box-sizing:border-box" value="${(fila.entradas&&fila.entradas[0])||''}" min="0" step="any" placeholder="0"
-                        oninput="updCapturaPeso(${idx},'entrada0',this.value)">
+                    <input type="text" inputmode="decimal" class="inv-num-input" style="width:100%;box-sizing:border-box" value="${(fila.entradas&&fila.entradas[0])||''}" placeholder="—"
+                        title="Puedes escribir operaciones: 1200+340"
+                        onblur="updCapturaPesoCalc(${idx},'entrada0',this)" onkeydown="_celdaKey(event,this)">
                 </div>
                 <div style="flex:1">
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Merma (${u})</div>
-                    <input type="number" class="inv-num-input" style="width:100%;box-sizing:border-box" value="${fila.mermaBase||''}" min="0" step="any" placeholder="0"
-                        oninput="updCapturaPeso(${idx},'mermaBase',this.value)">
+                    <input type="text" inputmode="decimal" class="inv-num-input" style="width:100%;box-sizing:border-box" value="${fila.mermaBase||''}" placeholder="—"
+                        title="Puedes escribir operaciones: 1200+340"
+                        onblur="updCapturaPesoCalc(${idx},'mermaBase',this)" onkeydown="_celdaKey(event,this)">
                 </div>
             </div>
 
@@ -3827,12 +3830,14 @@ function renderStep1Lista(filas) {
                 <span class="inv-ant-unit"> ${eaUnit}</span>
             </td>
             <td class="inv-td-input">
-                <input type="number" class="inv-num-input" value="${fila.cerradasBodega||0}" min="0" step="1"
-                    oninput="updCaptura(${idx},'cerradasBodega',+this.value)">
+                <input type="text" inputmode="decimal" class="inv-num-input" value="${fila.cerradasBodega!=null&&fila.cerradasBodega!==''?fila.cerradasBodega:''}" placeholder="—"
+                    title="Puedes escribir operaciones: 3*24+5"
+                    onblur="updCapturaCalc(${idx},'cerradasBodega',this)" onkeydown="_celdaKey(event,this)">
             </td>
             <td class="inv-td-input">
-                <input type="number" class="inv-num-input" value="${fila.cerradasBarra||0}" min="0" step="1"
-                    oninput="updCaptura(${idx},'cerradasBarra',+this.value)">
+                <input type="text" inputmode="decimal" class="inv-num-input" value="${fila.cerradasBarra!=null&&fila.cerradasBarra!==''?fila.cerradasBarra:''}" placeholder="—"
+                    title="Puedes escribir operaciones: 3*24+5"
+                    onblur="updCapturaCalc(${idx},'cerradasBarra',this)" onkeydown="_celdaKey(event,this)">
             </td>
             ${inputCell}
             <td class="inv-td-result" ${metodo !== 'peso' ? 'style="display:none"' : ''}>
@@ -3894,15 +3899,17 @@ function renderStep1Galeria(filas) {
                 <div style="display:flex;gap:8px">
                     <div style="flex:1">
                         <div class="inv-gal-label">Bodega</div>
-                        <input type="number" class="inv-num-input" style="width:100%;box-sizing:border-box"
-                            value="${fila.cerradasBodega||0}" min="0"
-                            oninput="updCaptura(${idx},'cerradasBodega',+this.value)">
+                        <input type="text" inputmode="decimal" class="inv-num-input" style="width:100%;box-sizing:border-box"
+                            value="${fila.cerradasBodega!=null&&fila.cerradasBodega!==''?fila.cerradasBodega:''}" placeholder="—"
+                            title="Puedes escribir operaciones: 3*24+5"
+                            onblur="updCapturaCalc(${idx},'cerradasBodega',this)" onkeydown="_celdaKey(event,this)">
                     </div>
                     <div style="flex:1">
                         <div class="inv-gal-label">Barra</div>
-                        <input type="number" class="inv-num-input" style="width:100%;box-sizing:border-box"
-                            value="${fila.cerradasBarra||0}" min="0"
-                            oninput="updCaptura(${idx},'cerradasBarra',+this.value)">
+                        <input type="text" inputmode="decimal" class="inv-num-input" style="width:100%;box-sizing:border-box"
+                            value="${fila.cerradasBarra!=null&&fila.cerradasBarra!==''?fila.cerradasBarra:''}" placeholder="—"
+                            title="Puedes escribir operaciones: 3*24+5"
+                            onblur="updCapturaCalc(${idx},'cerradasBarra',this)" onkeydown="_celdaKey(event,this)">
                     </div>
                 </div>
                 <div>
@@ -4220,25 +4227,31 @@ function _step3VentasInner() {
                 ${(esComp || fila.tipo === 'pza')
                     ? `<div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">${unidad}</div>`
                     : `<div style="text-align:center;margin-bottom:3px">${_selUM(idx, 'ventasCopasDirectas', "background:transparent;border:none;color:var(--text-dim);font-family:inherit;font-size:10px;text-align:center;cursor:pointer;padding:0;max-width:78px")}</div>`}
-                <input type="text" inputmode="decimal" class="inv-num-input" value="${vV}"
-                    oninput="this.value=this.value.replace(/[^0-9.]/g,'');${hV}">
+                <input type="text" inputmode="decimal" class="inv-num-input" value="${vV||''}" placeholder="—"
+                    title="Puedes escribir operaciones: 6+4" onkeydown="_celdaKey(event,this)"
+                    onblur="${esComp ? `updVentasCompuesto('${fila.compId}','ventas',_evalCelda(this.value)||0);this.value=_evalCelda(this.value)||''` : `updVentasCalc(${idx},'ventasCopasDirectas',this)`}">
             </td>
             <td class="inv-td-input" style="width:95px">
                 <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">bot</div>
                 ${(esComp || fila.tipo === 'pza')
                     ? `<div style="text-align:center;color:var(--text-dim);font-size:18px;padding-top:4px">—</div>`
-                    : `<input type="text" inputmode="decimal" class="inv-num-input" value="${fila.ventasBotella||0}"
-                        oninput="this.value=this.value.replace(/[^0-9.]/g,'');updVentasDirectas(${idx},'ventasBotella',+this.value)">`}
+                    : `<input type="text" inputmode="decimal" class="inv-num-input" value="${fila.ventasBotella||''}" placeholder="—"
+                        title="Puedes escribir operaciones" onkeydown="_celdaKey(event,this)"
+                        onblur="updVentasDirCalc(${idx},'ventasBotella',this)">`}
             </td>
             <td class="inv-td-input" style="width:95px">
                 <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">cortesía${(esComp || fila.tipo === 'pza') ? '' : _selUM(idx, 'cortesiaCopas', "background:transparent;border:none;color:var(--text-dim);font-family:inherit;font-size:10px;text-align:center;cursor:pointer;padding:0;max-width:78px")}</div>
-                <input type="text" inputmode="decimal" class="inv-num-input" style="border-color:rgba(155,141,232,.4)"
-                    value="${esComp ? (fila.cortesiaCopas||0) : (_copAUm(fila, fila.cortesiaCopas, 'cortesiaCopas')||0)}" oninput="this.value=this.value.replace(/[^0-9.]/g,'');${hC}">
+                <input type="text" inputmode="decimal" class="inv-num-input" style="border-color:rgba(155,141,232,.4)" placeholder="—"
+                    title="Puedes escribir operaciones" onkeydown="_celdaKey(event,this)"
+                    value="${(esComp ? (fila.cortesiaCopas||0) : (_copAUm(fila, fila.cortesiaCopas, 'cortesiaCopas')||0))||''}"
+                    onblur="${esComp ? `updVentasCompuesto('${fila.compId}','cortesia',_evalCelda(this.value)||0);this.value=_evalCelda(this.value)||''` : `updVentasCalc(${idx},'cortesiaCopas',this)`}">
             </td>
             <td class="inv-td-input" style="width:95px">
                 <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:3px">merma${(esComp || fila.tipo === 'pza') ? '' : _selUM(idx, 'mermaCopas', "background:transparent;border:none;color:var(--text-dim);font-family:inherit;font-size:10px;text-align:center;cursor:pointer;padding:0;max-width:78px")}</div>
-                <input type="text" inputmode="decimal" class="inv-num-input" style="border-color:rgba(224,90,58,.35)"
-                    value="${esComp ? (fila.mermaCopas||0) : (_copAUm(fila, fila.mermaCopas, 'mermaCopas')||0)}" oninput="this.value=this.value.replace(/[^0-9.]/g,'');${hM}">
+                <input type="text" inputmode="decimal" class="inv-num-input" style="border-color:rgba(224,90,58,.35)" placeholder="—"
+                    title="Puedes escribir operaciones" onkeydown="_celdaKey(event,this)"
+                    value="${(esComp ? (fila.mermaCopas||0) : (_copAUm(fila, fila.mermaCopas, 'mermaCopas')||0))||''}"
+                    onblur="${esComp ? `updVentasCompuesto('${fila.compId}','merma',_evalCelda(this.value)||0);this.value=_evalCelda(this.value)||''` : `updVentasCalc(${idx},'mermaCopas',this)`}">
             </td>
         </tr>`;
     }).join('');
@@ -5719,6 +5732,43 @@ function setStep5Modo(m) {
    litros, y nadie puede cotejar eso contra una caja de 5 L. Cuando el insumo
    NO declara medida (usa la copa estándar de su categoría) se sigue leyendo en
    copas, que ahí sí es la unidad de venta. */
+/* ══ CELDAS CON OPERACIONES (tipo Excel) ═══════════════════════════════════════
+   En una celda de existencias o ventas se puede escribir "12+8", "3*24" o "144/12"
+   y al salir queda el resultado. Es lo que de verdad pasa contando: "tres cajas de
+   24 más 5 sueltas" — obligar a sacar la cuenta aparte es donde se cuelan los errores.
+   Se evalúa SOLO si el texto trae exclusivamente números y + - * / ( ) . y espacios;
+   cualquier otra cosa se ignora. Nunca se ejecuta lo que el usuario escriba tal cual. */
+function _evalCelda(txt) {
+    var t = String(txt == null ? '' : txt).trim();
+    if (!t) return null;                                  // vacío = vacío, no cero
+    if (/^-?\d*\.?\d*$/.test(t)) return parseFloat(t);   // número simple
+    if (!/^[0-9+\-*/(). ]+$/.test(t)) return null;        // fuera cualquier otro carácter
+    if (/[+\-*/]{2,}/.test(t)) return null;               // "5++3" y similares
+    try {
+        var v = Function('"use strict";return (' + t + ')')();
+        return (typeof v === 'number' && isFinite(v)) ? Math.round(v * 10000) / 10000 : null;
+    } catch (e) { return null; }
+}
+/* Handler de celda: evalúa al salir (blur) o con Enter, escribe el resultado en la
+   ventanilla y lo manda al modelo con el mismo `upd*` de siempre. */
+function _celdaCalc(el, aplicar) {
+    var v = _evalCelda(el.value);
+    el.value = (v === null) ? '' : String(v);
+    el.classList.remove('calc-err');
+    if (v === null && String(el.value || '').trim()) el.classList.add('calc-err');
+    aplicar(v === null ? 0 : v);
+}
+function updCapturaCalc(idx, campo, el) { _celdaCalc(el, function (v) { updCaptura(idx, campo, v); }); }
+function updCapturaPesoCalc(idx, campo, el) { _celdaCalc(el, function (v) { updCapturaPeso(idx, campo, v); }); }
+window.updCapturaPesoCalc = updCapturaPesoCalc;
+function updVentasCalc(idx, campo, el)  { _celdaCalc(el, function (v) { updVentasUM(idx, campo, v); }); }
+function updVentasDirCalc(idx, campo, el){ _celdaCalc(el, function (v) { updVentasDirectas(idx, campo, v); }); }
+function _celdaKey(ev, el) { if (ev.key === 'Enter') { el.blur(); } }
+window.updCapturaCalc = updCapturaCalc;
+window.updVentasCalc = updVentasCalc;
+window.updVentasDirCalc = updVentasDirCalc;
+window._celdaKey = _celdaKey;
+
 /* ── UNIDAD DE CAPTURA: copas u onzas ─────────────────────────────────────────
    El inventario SIEMPRE guarda COPAS: es la unidad en la que están escritas todas
    las fórmulas (teórico, variancia, costo, coctelería). Lo único que cambia es la
