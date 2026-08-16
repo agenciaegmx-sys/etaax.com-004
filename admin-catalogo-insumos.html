@@ -686,6 +686,57 @@ function _presDesglose(ins){
     }).join('');
     return '<ul style="margin:5px 0 0;padding-left:16px;font-size:11px;color:var(--text-dim);list-style:disc">'+li+'</ul>';
 }
+/* ══ DIFF CAMPO POR CAMPO (mismo lenguaje que las Novedades del negocio) ══════
+   El desglose decía "costo $778.57 · presentaciones cambiaron", que obliga a
+   comparar dos listas a ojo. Aquí se dice exactamente QUÉ cambió: contenido
+   750 ml → 700 ml, costo $726.67 → $778.57, y qué se quedó igual ni se menciona. */
+var _NOV_CAMPOS_PRES = [
+    { k:'empaque',      lbl:'Empaque' },
+    { k:'contNeto',     lbl:'Contenido', um:'umContenido' },
+    { k:'costoUnitario',lbl:'Costo unitario', money:true, um:'umCosto' },
+    { k:'precio',       lbl:'Precio de compra', money:true },
+    { k:'precioCarta',  lbl:'Precio carta', money:true },
+    { k:'tamanoCopa',   lbl:'Tamaño de copa', um:'umTamanoCopa' },
+    { k:'stockMin',     lbl:'Stock mínimo' },
+    { k:'stockMax',     lbl:'Stock máximo' },
+    { k:'proveedor',    lbl:'Proveedor' }
+];
+function _novVal(p, c){
+    if (!p) return '—';
+    var v = p[c.k];
+    if (c.k === 'empaque') v = p.empaque || p.presentacionCompra;
+    if (v === undefined || v === null || v === '') return '—';
+    if (c.money) return _fmtMN(v);
+    var um = c.um ? (p[c.um] || '') : '';
+    return String(v) + (um ? ' ' + String(um).toLowerCase() : '');
+}
+/* Filas de diferencia entre el catálogo ETAAX y lo que trae el negocio. */
+function _novDiffFilas(cat, ins){
+    var pc = ((cat && cat.presentaciones) || [])[0] || null;
+    var pn = ((ins && ins.presentaciones) || [])[0] || null;
+    var filas = [];
+    _NOV_CAMPOS_PRES.forEach(function(c){
+        var a = _novVal(pc, c), b = _novVal(pn, c);
+        if (a === b) return;
+        filas.push({ campo:c.lbl, de:a, a:b });
+    });
+    // Cuántas presentaciones tiene cada uno: un cambio estructural que no se ve campo a campo.
+    var nc = ((cat&&cat.presentaciones)||[]).length, nn = ((ins&&ins.presentaciones)||[]).length;
+    if (nc !== nn) filas.push({ campo:'Presentaciones', de:nc+'', a:nn+'' });
+    return filas;
+}
+function _novDiffHTML(cat, ins){
+    var filas = _novDiffFilas(cat, ins);
+    if (!filas.length) return '<div style="font-size:11.5px;color:var(--text-dim);padding-top:4px">Sin diferencias de campo (cambió el orden o algún dato no comparado).</div>';
+    return filas.map(function(f){
+        return '<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;font-size:12px;padding:4px 0;border-top:1px solid var(--border)">'
+            + '<span style="color:var(--text-muted)">'+_escN(f.campo)+'</span>'
+            + '<span style="color:var(--text-dim);text-decoration:line-through">'+_escN(f.de)+'</span>'
+            + '<span style="color:var(--text-dim)">→</span>'
+            + '<span style="color:var(--green);font-weight:600">'+_escN(f.a)+'</span></div>';
+    }).join('');
+}
+
 /* Descartes persistentes ("No actualizar"): la firma incluye costo y forma de
    las presentaciones — si el negocio vuelve a cambiar algo, la novedad REAPARECE. */
 function _novFirmaActu(it){ return 'a|'+it.insumoId+'|'+it.negId+'|'+it.costoNeg+'|'+_presFirmaSem((it.datosNeg||{}).presentaciones); }
@@ -921,8 +972,12 @@ function _renderNovedades(){
                   var col=diff>0?'var(--red)':(diff<0?'var(--green)':'var(--text-dim)');
                   return '<div style="border-top:1px dashed var(--border);padding-top:10px;margin-top:8px;display:flex;gap:12px;align-items:flex-start">'+
                       '<div style="flex:1;min-width:0">'+
-                        '<div style="font-size:11px;font-weight:600;color:var(--text)">🏢 '+_escN(v.negNombre)+'</div>'+
-                        '<div style="font-size:12px;margin-top:3px">costo <b style="color:'+col+'">'+_fmtMN(v.costoNeg)+'</b>'+(diff!==0?' <span style="color:'+col+';font-size:10px">('+(diff>0?'+':'')+_fmtMN(diff)+')</span>':'')+(v.presCambio?' · <span style="color:var(--accent)">presentaciones cambiaron</span>':'')+_presDesglose(v.datosNeg)+'</div>'+
+                        '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+                          '<span style="font-size:11px;font-weight:600;color:var(--text)">🏢 '+_escN(v.negNombre)+'</span>'+
+                          (diff!==0?'<span style="font-size:10px;color:'+col+'">'+(diff>0?'+':'')+_fmtMN(diff)+' vs catálogo</span>':'')+
+                        '</div>'+
+                        // Diff campo por campo, igual que las Novedades del negocio.
+                        _novDiffHTML(cat, v.datosNeg)+
                       '</div>'+
                       '<button class="btn-vista" style="color:var(--green);border-color:var(--green);white-space:nowrap" onclick="_aplicarActualizacion('+v.idx+')">↑ Aplicar esta versión</button>'+
                   '</div>';
