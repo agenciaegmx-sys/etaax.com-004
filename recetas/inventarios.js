@@ -557,8 +557,8 @@ function copiarExistenciaAnterior(idx) {
         fila.existenciaPeso = (prev.existenciaPeso != null && prev.existenciaPeso !== '') ? prev.existenciaPeso
                             : (prev.existenciaFisica != null ? prev.existenciaFisica : '');
     } else {
-        fila.cerradasBodega = prev.cerradasBodega || 0;
-        fila.cerradasBarra  = prev.cerradasBarra  || 0;
+        fila.cerradasBodega = (prev.cerradasBodega != null && prev.cerradasBodega !== '') ? prev.cerradasBodega : '';
+        fila.cerradasBarra  = (prev.cerradasBarra  != null && prev.cerradasBarra  !== '') ? prev.cerradasBarra  : '';
         fila.pesos          = Array.isArray(prev.pesos) ? prev.pesos.slice() : (fila.pesos || ['','','','']);
         if (prev.metodoCaptura)    fila.metodoCaptura = prev.metodoCaptura;
         if (prev.nivelPct != null) fila.nivelPct      = prev.nivelPct;
@@ -2984,7 +2984,9 @@ function cargarProductosCaptura() {
             stockMin:       parseFloat(ins.stockMin)     || 0,
             existenciaAnterior: getExistenciaAnterior(_cid),
             // Paso 1: existencias físicas
-            cerradasBodega: 0, cerradasBarra: 0,
+            // Vacías, no 0: un cero escrito significa "conté y no hay"; uno puesto por el
+            // sistema no significa nada. La aritmética sigue igual porque '' || 0 = 0.
+            cerradasBodega: '', cerradasBarra: '',
             pesos: ['','','',''],   // 4 botellas abiertas (kg)
             existenciaPeso: '',     // alimentos: conteo físico en unidad base
             // Paso 2: entradas (hasta 5 por producto)
@@ -4509,9 +4511,11 @@ function renderStep3Menu() {
                         </div>
                         <div class="step3-counter">
                             <button onclick="updCntMenu('${r.id}',-1)">−</button>
-                            <input id="cnt-${r.id}" type="text" inputmode="numeric"
-                                class="step3-cnt-val ${cnt>0?'active':''}" value="${cnt}"
-                                oninput="this.value=this.value.replace(/[^0-9.]/g,'');setCntMenu('${r.id}',this.value)"
+                            <input id="cnt-${r.id}" type="text" inputmode="decimal"
+                                class="step3-cnt-val ${cnt>0?'active':''}" value="${cnt>0?cnt:''}" placeholder="—"
+                                title="Puedes escribir operaciones: 6+4"
+                                onkeydown="_celdaKey(event,this)"
+                                onblur="_celdaCalc(this,function(v){ setCntMenu('${r.id}', v); }); if(!(+this.value>0)) this.value='';"
                                 style="width:42px;text-align:center;background:transparent;border:none;outline:none;font-family:inherit">
                             <button onclick="updCntMenu('${r.id}',1)">+</button>
                         </div>
@@ -5767,14 +5771,25 @@ function _celdaCalc(el, aplicar) {
     if (v === null && String(el.value || '').trim()) el.classList.add('calc-err');
     aplicar(v === null ? 0 : v);
 }
-function updCapturaCalc(idx, campo, el) { _celdaCalc(el, function (v) { updCaptura(idx, campo, v); }); }
-function updCapturaPesoCalc(idx, campo, el) { _celdaCalc(el, function (v) { updCapturaPeso(idx, campo, v); }); }
+/* Al vaciar la celda se guarda '' (no 0): si se guardara 0, al volver a dibujar la
+   fila reaparecería el cero que justamente se quería quitar. */
+function updCapturaCalc(idx, campo, el) {
+    var vacio = !String(el.value || '').trim();
+    _celdaCalc(el, function (v) { updCaptura(idx, campo, vacio ? '' : v); });
+}
+function updCapturaPesoCalc(idx, campo, el) {
+    var vacio = !String(el.value || '').trim();
+    _celdaCalc(el, function (v) { updCapturaPeso(idx, campo, vacio ? '' : v); });
+}
 window.updCapturaPesoCalc = updCapturaPesoCalc;
 // Peso de cada botella abierta: "0.9+0.75" para dos botellas en la misma báscula.
 function updPesoCalc(idx, pi, el) { _celdaCalc(el, function (v) { updPeso(idx, pi, v === 0 && !el.value ? '' : v); }); }
 window.updPesoCalc = updPesoCalc;
 function updVentasCalc(idx, campo, el)  { _celdaCalc(el, function (v) { updVentasUM(idx, campo, v); }); }
-function updVentasDirCalc(idx, campo, el){ _celdaCalc(el, function (v) { updVentasDirectas(idx, campo, v); }); }
+function updVentasDirCalc(idx, campo, el){
+    var vacio = !String(el.value || '').trim();
+    _celdaCalc(el, function (v) { updVentasDirectas(idx, campo, vacio ? '' : v); });
+}
 function _celdaKey(ev, el) { if (ev.key === 'Enter') { el.blur(); } }
 window.updCapturaCalc = updCapturaCalc;
 window.updVentasCalc = updVentasCalc;
