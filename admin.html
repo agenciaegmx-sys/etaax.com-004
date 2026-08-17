@@ -1156,13 +1156,25 @@ function _mostrarAuditoria(h, totalRecetas, negsConInsumos) {
    los extras y el total — y es la base sobre la que después sale la factura.
    ══════════════════════════════════════════════════════════════════════════════ */
 var _docExtras = [];   // [{ concepto, monto }]
-/* El RFC del emisor no cambia entre documentos: se teclea una vez y se recuerda.
-   Vive en localStorage porque es dato de quien emite, no del negocio del cliente. */
-function _rfcEmisorGuardado(){
-    try { return localStorage.getItem('etaax_admin_rfc_emisor') || (typeof ETAAX_EMISOR!=='undefined' ? (ETAAX_EMISOR.rfc||'') : ''); }
-    catch(e){ return ''; }
+/* Datos del emisor y de quien atiende: se teclean una vez y se recuerdan. Estaban
+   clavados en el código (ETAAX_EMISOR) y un correo o un teléfono cambian sin que
+   nadie quiera tocar un archivo para eso. El código solo pone los valores iniciales. */
+function _emisorGuardado(){
+    var base = (typeof ETAAX_EMISOR !== 'undefined') ? ETAAX_EMISOR : {};
+    var d = {};
+    try { d = JSON.parse(localStorage.getItem('etaax_admin_emisor') || '{}') || {}; } catch(e){}
+    return {
+        razon:     d.razon     !== undefined ? d.razon     : (base.razon || ''),
+        rfc:       d.rfc       !== undefined ? d.rfc       : (base.rfc || ''),
+        web:       d.web       !== undefined ? d.web       : (base.web || ''),
+        correo:    d.correo    !== undefined ? d.correo    : (base.correo || ''),
+        tel:       d.tel       !== undefined ? d.tel       : (base.tel || ''),
+        consultor: d.consultor || '',
+        conTel:    d.conTel    || '',
+        conCorreo: d.conCorreo || ''
+    };
 }
-function _guardarRfcEmisor(v){ try { localStorage.setItem('etaax_admin_rfc_emisor', v||''); } catch(e){} }
+function _guardarEmisor(o){ try { localStorage.setItem('etaax_admin_emisor', JSON.stringify(o||{})); } catch(e){} }
 
 function abrirDocumentoModal(tipoIni, negIdIni) {
     if (typeof EtaaxPrecios === 'undefined' || typeof etaaxReporteDoc !== 'function') {
@@ -1171,6 +1183,7 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
     }
     var P = EtaaxPrecios, TOPE = P.TOPE;
     var hoy = new Date().toISOString().slice(0,10);
+    var _EM = _emisorGuardado();
     _docExtras = [];
 
     var _in = 'width:100%;background:var(--s2);border:1px solid var(--b1);color:var(--text);padding:10px 12px;border-radius:9px;font-family:inherit;font-size:13px;box-sizing:border-box';
@@ -1253,10 +1266,29 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
 
             // ── Campos por tipo ──
             '<div id="doc_soloRecibo">' +
-                '<div style="display:flex;gap:12px">' +
-                    '<div style="flex:1">' + _campo('RFC emisor (ETAAX)', '<input id="doc_rfcEmisor" style="'+_in+'" placeholder="Tu RFC" value="'+esc(_rfcEmisorGuardado())+'">') + '</div>' +
-                    '<div style="flex:1">' + _campo('RFC receptor (opcional)', '<input id="doc_rfcReceptor" style="'+_in+'" placeholder="RFC del cliente">') + '</div>' +
-                '</div>' +
+                // Emisor y contacto: plegado porque casi nunca se cambia, pero a la mano.
+                '<details style="border:1px solid var(--b1);border-radius:11px;padding:11px 13px;margin-bottom:14px">' +
+                    '<summary style="cursor:pointer;font-size:13px;color:var(--text);font-weight:600">Datos del emisor y de contacto</summary>' +
+                    '<div style="margin-top:12px">' +
+                        _campo('Razón social', '<input id="doc_emRazon" style="'+_in+'" value="'+esc(_EM.razon)+'">') +
+                        '<div style="display:flex;gap:12px">' +
+                            '<div style="flex:1">' + _campo('RFC emisor', '<input id="doc_rfcEmisor" style="'+_in+'" placeholder="Tu RFC" value="'+esc(_EM.rfc)+'">') + '</div>' +
+                            '<div style="flex:1">' + _campo('Sitio web', '<input id="doc_emWeb" style="'+_in+'" value="'+esc(_EM.web)+'">') + '</div>' +
+                        '</div>' +
+                        '<div style="display:flex;gap:12px">' +
+                            '<div style="flex:1">' + _campo('Correo', '<input id="doc_emCorreo" style="'+_in+'" value="'+esc(_EM.correo)+'">') + '</div>' +
+                            '<div style="flex:1">' + _campo('Teléfono', '<input id="doc_emTel" style="'+_in+'" value="'+esc(_EM.tel)+'">') + '</div>' +
+                        '</div>' +
+                        '<div style="height:1px;background:var(--b1);margin:4px 0 14px"></div>' +
+                        _campo('Auditor / consultor que atiende', '<input id="doc_consultor" style="'+_in+'" placeholder="Nombre de quien da el servicio" value="'+esc(_EM.consultor)+'">') +
+                        '<div style="display:flex;gap:12px">' +
+                            '<div style="flex:1">' + _campo('Su teléfono', '<input id="doc_conTel" style="'+_in+'" value="'+esc(_EM.conTel)+'">') + '</div>' +
+                            '<div style="flex:1">' + _campo('Su correo', '<input id="doc_conCorreo" style="'+_in+'" value="'+esc(_EM.conCorreo)+'">') + '</div>' +
+                        '</div>' +
+                        '<div style="font-size:11px;color:var(--muted);margin-top:-4px">Se recuerdan para el siguiente documento.</div>' +
+                    '</div>' +
+                '</details>' +
+                _campo('RFC receptor (opcional)', '<input id="doc_rfcReceptor" style="'+_in+'" placeholder="RFC del cliente">') +
                 '<div style="display:flex;gap:12px">' +
                     '<div style="flex:1">' + _campo('Folio', '<input id="doc_folio" style="'+_in+'">') + '</div>' +
                     '<div style="flex:1">' + _campo('Periodo pagado', '<input id="doc_periodo" style="'+_in+'" placeholder="Ej. Agosto 2026">') + '</div>' +
@@ -1419,11 +1451,20 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
             ref: (document.getElementById('doc_ref')||{}).value || '',
             rfcEmisor: ((document.getElementById('doc_rfcEmisor')||{}).value || '').trim().toUpperCase(),
             rfcReceptor: ((document.getElementById('doc_rfcReceptor')||{}).value || '').trim().toUpperCase(),
+            emRazon:  ((document.getElementById('doc_emRazon')||{}).value  || '').trim(),
+            emWeb:    ((document.getElementById('doc_emWeb')||{}).value    || '').trim(),
+            emCorreo: ((document.getElementById('doc_emCorreo')||{}).value || '').trim(),
+            emTel:    ((document.getElementById('doc_emTel')||{}).value    || '').trim(),
+            consultor:((document.getElementById('doc_consultor')||{}).value|| '').trim(),
+            conTel:   ((document.getElementById('doc_conTel')||{}).value   || '').trim(),
+            conCorreo:((document.getElementById('doc_conCorreo')||{}).value|| '').trim(),
             vig: parseInt((document.getElementById('doc_vig')||{}).value,10) || 30,
             anual: !!(document.getElementById('doc_anual')||{}).checked
         };
         if (!cfg.total) { admAlert('El total no puede ser cero. Agrega la suscripción o un servicio.'); return; }
-        if (cfg.rfcEmisor) _guardarRfcEmisor(cfg.rfcEmisor);   // se recuerda para el siguiente
+        // Se recuerdan para el siguiente documento (sin volver a teclearlos).
+        _guardarEmisor({ razon:cfg.emRazon, rfc:cfg.rfcEmisor, web:cfg.emWeb, correo:cfg.emCorreo,
+                         tel:cfg.emTel, consultor:cfg.consultor, conTel:cfg.conTel, conCorreo:cfg.conCorreo });
         cerrar();
         try { imprimirDocumento(cfg); }
         catch (err) { admAlert('No se pudo generar el documento:\n' + (err && err.message || err)); }
@@ -1463,7 +1504,9 @@ function imprimirDocumento(cfg) {
        ahí el colaborador acusa de recibido en papel.) El total sale del encabezado
        porque en un documento fiscal se lee al final, después de los conceptos. */
     if (esRec) {
-        var E = (typeof ETAAX_EMISOR !== 'undefined') ? ETAAX_EMISOR : { razon:'EGMx Consultoría Estratégica A&B', web:'etaax.com', correo:'' };
+        // Todo lo del emisor viene del formulario: un correo o un teléfono cambian sin
+        // que nadie deba editar código. El objeto del código es solo el valor inicial.
+        var E = { razon: cfg.emRazon || '', web: cfg.emWeb || '', correo: cfg.emCorreo || '', tel: cfg.emTel || '' };
         var _parte = function(rot, nom, lineas){
             return '<div style="flex:1;min-width:0">' +
                 '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#3dbe7a;font-weight:700;margin-bottom:5px">' + rot + '</div>' +
@@ -1477,10 +1520,12 @@ function imprimirDocumento(cfg) {
             '<div style="display:flex;gap:28px;padding-bottom:16px;border-bottom:2px solid #3dbe7a">' +
                 _parte('Emisor', e(E.razon || 'EGMx Consultoría'), [
                     cfg.rfcEmisor ? '<b>RFC:</b> ' + e(cfg.rfcEmisor) : '',
-                    e(E.web || ''), e(E.correo || '')
+                    e(E.web || ''), e(E.correo || ''), e(E.tel || '')
                 ]) +
-                _parte('Receptor', e(cfg.cliente || cfg.negocio || '—'), [
-                    cfg.sucursal ? e(cfg.sucursal) : '',
+                // El receptor es la SUCURSAL cuando hay una: el nombre del negocio es la
+                // clave interna del sistema, no a quién se le cobra.
+                _parte('Receptor', e(cfg.cliente || cfg.sucursal || cfg.negocio || '—'), [
+                    (cfg.cliente && cfg.sucursal) ? e(cfg.sucursal) : '',
                     cfg.rfcReceptor ? '<b>RFC:</b> ' + e(cfg.rfcReceptor) : ''
                 ]) +
             '</div>' +
@@ -1520,6 +1565,15 @@ function imprimirDocumento(cfg) {
             (cfg.totalManual && Math.abs(cfg.total - subtotal) > 0.005
                 ? '<div style="font-size:9.5px;color:#8a8a8a;margin-top:5px">Total ajustado (suma de conceptos: ' + P.fmt(subtotal) + ').</div>' : '') +
             (cfg.notas ? '<div class="rsec">Notas</div><div style="font-size:12.5px;line-height:1.6;color:#555">' + e(cfg.notas) + '</div>' : '') +
+            // Quién atendió: a él le marca el cliente si tiene una duda del servicio.
+            ((cfg.consultor || cfg.conTel || cfg.conCorreo)
+                ? '<div style="margin-top:20px;padding-top:12px;border-top:1px solid #ececec">' +
+                    '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;font-weight:700;margin-bottom:4px">Te atendió</div>' +
+                    '<div style="font-size:13px;font-weight:600;color:#1a1916">' + e(cfg.consultor || '—') + '</div>' +
+                    '<div style="font-size:12px;color:#555;margin-top:2px">' +
+                        [cfg.conTel ? e(cfg.conTel) : '', cfg.conCorreo ? e(cfg.conCorreo) : ''].filter(Boolean).join(' · ') +
+                    '</div></div>'
+                : '') +
             '<div style="margin-top:24px;padding:9px 12px;border:1px solid #e8d8a8;background:#fdfaef;border-radius:7px">' +
                 '<div style="font-size:9.5px;color:#8a7a4a;line-height:1.5"><b>Comprobante interno.</b> Este documento ampara la operación entre ETAAX ' +
                 '(EGMx Consultoría) y el cliente. <b>No es un CFDI</b> ni sustituye a la factura fiscal.</div>' +
