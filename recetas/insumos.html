@@ -14,6 +14,8 @@
 <script src="/etaax-db.js"></script>
 <script src="/insumo-label.js"></script>
 <script src="/reporte-marca.js"></script><!-- encabezado de marca para catálogo y costeo impresos -->
+<script src="/multi-select.js"></script><!-- filtros de familia/categoría con palomitas -->
+<script src="/reordenar.js"></script><!-- orden manual del catálogo (arrastrar filas) -->
 <script src="/qr-pairing.js"></script>
 </head>
 <body>
@@ -130,6 +132,11 @@
                             style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
                             border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
                             font-family:inherit;transition:all .2s" title="Selección múltiple">☐ Seleccionar</button>
+                        <button id="btnModoOrden" onclick="toggleModoOrden()"
+                            style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
+                            border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
+                            font-family:inherit;transition:all .2s"
+                            title="Arrastra las filas para dejar el catálogo en el orden en el que trabajas">↕ Ordenar</button>
                         <button id="btnImprimirIns" onclick="imprimirInsumos()"
                             style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
                             border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
@@ -138,6 +145,10 @@
                     </div>
                 </div>
                 <div class="card-body" style="padding:0">
+                    <div id="ordenAviso" style="display:none;padding:9px 16px;background:rgba(245,200,66,.08);
+                        border-bottom:1px solid var(--border);font-size:12px;color:var(--accent)">
+                        ⠿ Arrastra las filas para cambiar el orden. Queda guardado para todo el negocio.
+                    </div>
                     <!-- Vista lista -->
                     <div id="contenedorLista" style="display:none">
                         <div class="tabla-wrap">

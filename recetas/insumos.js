@@ -685,6 +685,11 @@
            familias.map(f => `<option value="${etx(f)}" ${f===selFam?'selected':''}>${etx(f)}</option>`).join('');
        fCat.innerHTML = '<option value="">Todas las categorías</option>' +
            cats.map(c => `<option value="${etx(c)}" ${c===selCat?'selected':''}>${etx(c)}</option>`).join('');
+       // Selección múltiple: se re-monta para que suelte lo que ya no existe.
+       if (window.etaaxMulti) {
+           etaaxMulti.montar('filtroFamilia',   { label:'familias' });
+           etaaxMulti.montar('filtroCategoria', { label:'categorías' });
+       }
    }
 
    function filtrar() {
@@ -695,21 +700,29 @@
        _poblarFiltroSucIns();
 
        const q      = (fFam ? document.getElementById('searchInput').value : '').toLowerCase();
-       const fam    = fFam ? fFam.value : '';
-       const cat    = fCat ? fCat.value : '';
+       // Con selección múltiple, mandan los arreglos; el .value del <select> queda
+       // como respaldo para cuando el control aún no está montado.
+       const fams   = (window.etaaxMulti ? etaaxMulti.vals('filtroFamilia')   : []);
+       const cats2  = (window.etaaxMulti ? etaaxMulti.vals('filtroCategoria') : []);
+       const fam    = fams.length ? '' : (fFam ? fFam.value : '');
+       const cat    = cats2.length ? '' : (fCat ? fCat.value : '');
        const fSucEl = document.getElementById('filtroSucursalIns');
        const sucFil = fSucEl ? fSucEl.value : '';
        const catGlobal  = _catGlobalIns();
        const sucActiva  = _getSucActivaIns();
 
-       var lista = getInsumos();
+       var lista = (typeof etaaxReordenar !== 'undefined')
+           ? etaaxReordenar.ordenar(getInsumos().slice())   // orden manual primero
+           : getInsumos();
        if (q)   lista = lista.filter(x =>
            x.nombre.toLowerCase().includes(q) ||
            (x.marca||'').toLowerCase().includes(q) ||
            (x.categoria||'').toLowerCase().includes(q)
        );
-       if (fam) lista = lista.filter(x => _familiaIns(x) === fam);
-       if (cat) lista = lista.filter(x => x.categoria === cat);
+       if (fams.length) lista = lista.filter(x => fams.indexOf(_familiaIns(x)) >= 0);
+       else if (fam)    lista = lista.filter(x => _familiaIns(x) === fam);
+       if (cats2.length) lista = lista.filter(x => cats2.indexOf(x.categoria) >= 0);
+       else if (cat)     lista = lista.filter(x => x.categoria === cat);
        // Sin sucursal = matriz. Con catálogo global, no se filtra por sucursal.
        // Filtro Estado (regla única de visibilidad — ver insumo-label.js):
        //  · Sucursal: default ACTIVOS (viven aquí, activos globales, no pausados);
@@ -746,7 +759,7 @@
        // La página se resetea SOLO cuando cambia algún filtro/búsqueda. En los
        // demás re-renders (guardar un insumo, pausar, eliminar, realtime) se
        // CONSERVA la página actual — antes editar en la página 2 te regresaba a la 1.
-       var _firmaF = [q, fam, cat, sucFil, sucActiva, catGlobal, estadoIns, vistaInsumos].join('|');
+       var _firmaF = [q, fam, cat, fams.join(','), cats2.join(','), sucFil, sucActiva, catGlobal, estadoIns, vistaInsumos].join('|');
        if (_firmaF !== _filtroFirmaAnt) { _paginaActual = 0; _filtroFirmaAnt = _firmaF; }
        _renderPagina();
        renderStats(); // stats por sucursal (se actualiza al cambiar el filtro de sucursal)
@@ -790,6 +803,45 @@
    let _listaFiltrada = [];
    let _filtroFirmaAnt = null; // firma de filtros: si no cambia, se conserva la página
 
+   /* ══ ORDEN MANUAL DEL CATÁLOGO ═══════════════════════════════════════════
+      El orden de captura no es el orden en el que se trabaja: la barra quiere sus
+      destilados arriba y la cocina sus proteínas primero. Con el modo prendido se
+      arrastran las filas (o las tarjetas) y el catálogo queda así para todos.
+      Apagado no se toca nada — un clic sigue abriendo la ficha. */
+   var _modoOrden = false;
+   function toggleModoOrden() {
+       _modoOrden = !_modoOrden;
+       if (_modoOrden && _modoSeleccion) toggleModoSeleccion();   // no conviven
+       var b = document.getElementById('btnModoOrden');
+       if (b) {
+           b.style.background  = _modoOrden ? 'var(--accent)' : 'transparent';
+           b.style.color       = _modoOrden ? '#0f0e0c' : 'var(--text-muted)';
+           b.style.borderColor = _modoOrden ? 'var(--accent)' : 'var(--border)';
+           b.textContent       = _modoOrden ? '✓ Listo' : '↕ Ordenar';
+       }
+       var av = document.getElementById('ordenAviso');
+       if (av) av.style.display = _modoOrden ? 'block' : 'none';
+       _renderPagina();
+   }
+   window.toggleModoOrden = toggleModoOrden;
+
+   // Engancha el arrastre a la vista que esté visible (tabla o galería).
+   function _engancharOrden() {
+       if (typeof etaaxReordenar === 'undefined') return;
+       var tb   = document.getElementById('tbodyInsumos');
+       var grid = document.getElementById('gridInsumos');
+       [tb, grid].forEach(function (c) { if (c) etaaxReordenar.quitar(c); });
+       if (!_modoOrden) return;
+       var cb = function (a, b, antes) {
+           var lista = getInsumos().slice();
+           if (!etaaxReordenar.mover(lista, a, b, antes)) return;
+           setInsumos(lista);
+           filtrar();
+       };
+       if (tb)   etaaxReordenar.aplicar(tb,   { item:'tr[data-ord-id]',  onMover: cb });
+       if (grid) etaaxReordenar.aplicar(grid, { item:'div[data-ord-id]', onMover: cb });
+   }
+
    function _renderPagina() {
        const lista    = _listaFiltrada;
        const total    = lista.length;
@@ -808,6 +860,7 @@
        } else {
            renderTabla(pagina);
        }
+       _engancharOrden();
        // El conteo separa lo que se COMPRA de lo que se PRODUCE: las sub-recetas
        // convertidas a insumo (esSubReceta) no son compras, son producción propia,
        // y mezclarlas inflaba el número del catálogo.
@@ -1025,8 +1078,10 @@
    function _alcanceImpresion(n){
        var v = function(id){ var el = document.getElementById(id); return (el && el.value) || ''; };
        var partes = [];
-       if (v('filtroFamilia'))    partes.push(v('filtroFamilia'));
-       if (v('filtroCategoria'))  partes.push(v('filtroCategoria'));
+       var mFam = window.etaaxMulti ? etaaxMulti.txt('filtroFamilia')   : '';
+       var mCat = window.etaaxMulti ? etaaxMulti.txt('filtroCategoria') : '';
+       if (mFam || v('filtroFamilia'))   partes.push(mFam || v('filtroFamilia'));
+       if (mCat || v('filtroCategoria')) partes.push(mCat || v('filtroCategoria'));
        if (v('searchInput'))      partes.push('búsqueda “' + v('searchInput') + '”');
        if (v('filtroEstadoIns') === 'inactivos') partes.push('solo inactivos');
        if (_modoSeleccion && _seleccionados.size) partes.push('selección manual');
@@ -1270,11 +1325,12 @@
                    ${_insMasBtn(ins.id)}
                </td>`;
 
-           return `<tr data-sel-id="${ins.id}" style="${rowBg}cursor:${_modoSeleccion?'pointer':'default'}"
+           return `<tr data-sel-id="${ins.id}" data-ord-id="${ins.id}" style="${rowBg}cursor:${_modoSeleccion?'pointer':'default'}"
                ${_modoSeleccion ? `onclick="_toggleSeleccionCard('${ins.id}',event)"` : ''}>
                ${tdSel}
                <td>
                    <div style="display:flex;align-items:center;gap:10px">
+                       ${_modoOrden ? '<span class="ord-grip" title="Arrastra para cambiar el orden">⠿</span>' : ''}
                        ${ins.foto
                            ? `<img src="${etx(ins.foto)}" loading="lazy" decoding="async" style="width:36px;height:36px;border-radius:6px;object-fit:cover;border:1px solid var(--border)">`
                            : `<div style="width:36px;height:36px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px">${ins.esSubReceta ? '🍳' : '📦'}</div>`
@@ -1370,7 +1426,7 @@
                    _insMasBtn(ins.id, 'en-card') +
                '</div>';
 
-           return '<div class="insumo-card" data-sel-id="' + ins.id + '" ' + cardClick + '>' +
+           return '<div class="insumo-card" data-sel-id="' + ins.id + '" data-ord-id="' + ins.id + '" ' + cardClick + '>' +
                selOverlay +
                '<div class="insumo-card-foto">' +
                    fotoHTML +

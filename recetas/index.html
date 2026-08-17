@@ -611,6 +611,32 @@
 .cat-btn:hover { border-color:var(--green); background:rgba(61,190,122,0.06); transform:translateY(-2px); }
 .cat-btn-title { font-size:13px; font-weight:600; color:var(--text); }
 .cat-btn-desc  { font-size:10px; color:var(--text-dim); line-height:1.4; }
+/* ── Menú "⋯" de cada receta ────────────────────────────────────────────
+   Copiar / Editar / Vincular / Eliminar salían todos como botones en la
+   tarjeta y la llenaban. El desplegable va position:fixed (lo pinta el JS
+   sobre <body>) porque dentro de la lista el overflow lo recortaba. */
+.rec-mas-btn {
+    border:1px solid var(--border); background:var(--surface2); color:var(--text-dim);
+    border-radius:6px; padding:4px 10px; font-size:14px; line-height:1.1; cursor:pointer;
+    font-family:inherit; transition:all .15s; letter-spacing:1px;
+}
+.rec-mas-btn:hover { border-color:var(--green); color:var(--green); }
+.rec-menu-pop {
+    position:fixed; z-index:10500; min-width:214px; padding:6px;
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    box-shadow:0 16px 44px rgba(0,0,0,.45); display:flex; flex-direction:column; gap:2px;
+    animation:recMenuIn .12s ease both;
+}
+@keyframes recMenuIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
+.rec-menu-pop button {
+    display:flex; align-items:center; gap:9px; width:100%; text-align:left;
+    background:none; border:none; color:var(--text); font-family:inherit; font-size:12.5px;
+    padding:8px 10px; border-radius:7px; cursor:pointer;
+}
+.rec-menu-pop button:hover { background:var(--surface2); color:var(--green); }
+.rec-menu-pop button.peligro:hover { background:rgba(224,90,58,.10); color:var(--red); }
+.rec-menu-pop .ic { width:16px; text-align:center; flex-shrink:0; }
+.rec-menu-pop .sep { height:1px; background:var(--border); margin:4px 2px; }
 </style>
 
 <!-- ══ MODAL CONVERTIR RECETA SIMPLE ══════════════════════ -->
@@ -711,15 +737,15 @@
                 </div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;padding:4px 20px 14px">
-                <button id="rp-todas" onclick="filtroRecetaTipo='';filtroRecetaGrupo='';filtroRecetaCat='';renderGridRecetas();_activarPillReceta('todas')"
+                <button id="rp-todas" onclick="filtroRecetaTipo='';filtroRecetaGrupo='';filtroRecetaCat='';_limpiarMultiRec();renderGridRecetas();_activarPillReceta('todas')"
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--green);background:rgba(61,190,122,0.12);color:var(--green);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s">Todas</button>
-                <button id="rp-alimentos" onclick="filtroRecetaTipo='alimentos';filtroRecetaGrupo='';filtroRecetaCat='';renderGridRecetas();_activarPillReceta('alimentos')"
+                <button id="rp-alimentos" onclick="filtroRecetaTipo='alimentos';filtroRecetaGrupo='';filtroRecetaCat='';_limpiarMultiRec();renderGridRecetas();_activarPillReceta('alimentos')"
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🍽️ Alimentos</button>
-                <button id="rp-sub-alimentos" onclick="filtroRecetaTipo='sub-alimentos';filtroRecetaGrupo='';filtroRecetaCat='';renderGridRecetas();_activarPillReceta('sub-alimentos')"
+                <button id="rp-sub-alimentos" onclick="filtroRecetaTipo='sub-alimentos';filtroRecetaGrupo='';filtroRecetaCat='';_limpiarMultiRec();renderGridRecetas();_activarPillReceta('sub-alimentos')"
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🥣 Sub Alimentos</button>
-                <button id="rp-bebidas" onclick="filtroRecetaTipo='bebidas';filtroRecetaGrupo='';filtroRecetaCat='';renderGridRecetas();_activarPillReceta('bebidas')"
+                <button id="rp-bebidas" onclick="filtroRecetaTipo='bebidas';filtroRecetaGrupo='';filtroRecetaCat='';_limpiarMultiRec();renderGridRecetas();_activarPillReceta('bebidas')"
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🥃 Bebidas</button>
-                <button id="rp-sub-bebidas" onclick="filtroRecetaTipo='sub-bebidas';filtroRecetaGrupo='';filtroRecetaCat='';renderGridRecetas();_activarPillReceta('sub-bebidas')"
+                <button id="rp-sub-bebidas" onclick="filtroRecetaTipo='sub-bebidas';filtroRecetaGrupo='';filtroRecetaCat='';_limpiarMultiRec();renderGridRecetas();_activarPillReceta('sub-bebidas')"
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🧃 Sub Bebidas</button>
                 <button id="btnNovedadesRec" onclick="abrirNovedadesRec()" title="Cambios recientes de recetas por sucursal: decide si suben al catálogo global o se quedan en su sucursal"
                     style="display:none;padding:6px 16px;border-radius:20px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">🔔 Novedades</button>
@@ -732,10 +758,16 @@
                         style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">⊞ Galería</button>
                     <button id="btnVistaRecLista" onclick="setVistaRecetas('lista')" title="Vista lista"
                         style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">☰ Lista</button>
+                    <button id="btnModoOrdenRec" onclick="toggleModoOrdenRec()" title="Arrastra las recetas para dejarlas en el orden en el que las ocupas"
+                        style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">↕ Ordenar</button>
                 </span>
             </div>
         </div>
         <div class="modal-body" style="max-height:68vh;overflow-y:auto;padding:20px">
+            <div id="ordenAvisoRec" style="display:none;margin-bottom:12px;padding:9px 13px;border-radius:9px;
+                background:rgba(61,190,122,.08);border:1px solid rgba(61,190,122,.3);font-size:12px;color:var(--green)">
+                ⠿ Arrastra las recetas para cambiar el orden. Queda guardado para todo el negocio.
+            </div>
             <div id="gridRecetas" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px"></div>
         </div>
     </div>
@@ -901,6 +933,8 @@
 <script src="/etaax-db.js"></script>
 <script src="/etaax-core.js"></script><!-- fórmulas de dinero: antes de app.js -->
 <script src="/insumo-label.js"></script>
+<script src="/multi-select.js"></script><!-- filtros de grupo/categoría con palomitas -->
+<script src="/reordenar.js"></script><!-- orden manual del catálogo (arrastrar filas) -->
 <script src="/reporte-marca.js"></script>
 <script src="/etaax-nav.js"></script>
 <script src="/qr-pairing.js"></script>
@@ -2833,6 +2867,12 @@ function crearReceta(tipo) {
 }
 
 let filtroRecetaTipo   = '';
+function _limpiarMultiRec(){
+    if (!window.etaaxMulti) return;
+    ['filtroRecetaGrupoSel','filtroRecetaCatSel'].forEach(function(id){
+        if (document.getElementById(id)) etaaxMulti.limpiar(id);
+    });
+}
 let filtroRecetaGrupo  = ''; // filtro por Grupo (ej. Coctelería, Panadería)
 let filtroRecetaCat    = ''; // filtro por Categoría (ej. Clásica, De temporada) — cascada del grupo
 let recetasSeleccionadas = new Set();
@@ -3212,6 +3252,41 @@ function reactivarRecetaGlobal(id) {
     renderGridRecetas();
 }
 
+/* ══ ORDEN MANUAL DEL CATÁLOGO DE RECETAS ═════════════════════════════════
+   Mismo trato que el catálogo de insumos: con el modo prendido se arrastran las
+   recetas y quedan en ese orden para todo el negocio. Apagado, un clic sigue
+   abriendo la ficha. */
+var _modoOrdenRec = false;
+function toggleModoOrdenRec() {
+    _modoOrdenRec = !_modoOrdenRec;
+    var b = document.getElementById('btnModoOrdenRec');
+    if (b) {
+        b.style.background  = _modoOrdenRec ? 'var(--green)' : 'transparent';
+        b.style.color       = _modoOrdenRec ? '#0a0908' : 'var(--text-muted)';
+        b.style.borderColor = _modoOrdenRec ? 'var(--green)' : 'var(--border)';
+        b.textContent       = _modoOrdenRec ? '✓ Listo' : '↕ Ordenar';
+    }
+    var av = document.getElementById('ordenAvisoRec');
+    if (av) av.style.display = _modoOrdenRec ? 'block' : 'none';
+    renderGridRecetas();
+}
+function _engancharOrdenRec() {
+    if (typeof etaaxReordenar === 'undefined') return;
+    var cont = document.getElementById('gridRecetas');
+    if (!cont) return;
+    etaaxReordenar.quitar(cont);
+    if (!_modoOrdenRec) return;
+    etaaxReordenar.aplicar(cont, {
+        item: '[data-ord-id]',
+        onMover: function (a, b, antes) {
+            var lista = getRecetas().slice();
+            if (!etaaxReordenar.mover(lista, a, b, antes)) return;
+            setRecetas(lista);
+            renderGridRecetas();
+        }
+    });
+}
+
 function renderGridRecetas() {
     const q   = (document.getElementById('buscarReceta')?.value || '').toLowerCase();
     const _catGlobal = _esCatGlobalRecetas();
@@ -3272,22 +3347,32 @@ function renderGridRecetas() {
         if (filtroRecetaGrupo && grupos.indexOf(filtroRecetaGrupo) < 0) filtroRecetaGrupo = ''; // ese grupo ya no está en la vista
         _selG.innerHTML = '<option value="">Todos los grupos</option>' +
             grupos.map(g => `<option value="${etx(g)}" ${filtroRecetaGrupo===g?'selected':''}>${etx(g)}</option>`).join('');
+        if (window.etaaxMulti) etaaxMulti.montar('filtroRecetaGrupoSel', { label:'grupos' });
     }
-    if (filtroRecetaGrupo) lista = lista.filter(r => (r.grupo||'').trim() === filtroRecetaGrupo);
+    // Con palomitas mandan los arreglos; el valor único queda de respaldo por si
+    // el control todavía no está montado.
+    const _mGrupos = (window.etaaxMulti ? etaaxMulti.vals('filtroRecetaGrupoSel') : []);
+    if (_mGrupos.length)        lista = lista.filter(r => _mGrupos.indexOf((r.grupo||'').trim()) >= 0);
+    else if (filtroRecetaGrupo) lista = lista.filter(r => (r.grupo||'').trim() === filtroRecetaGrupo);
     const _selC = document.getElementById('filtroRecetaCatSel');
     if (_selC) {
         const cats = [...new Set(lista.map(r => (r.categoria||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
         if (filtroRecetaCat && cats.indexOf(filtroRecetaCat) < 0) filtroRecetaCat = '';
         _selC.innerHTML = '<option value="">Todas las categorías</option>' +
             cats.map(c => `<option value="${etx(c)}" ${filtroRecetaCat===c?'selected':''}>${etx(c)}</option>`).join('');
+        if (window.etaaxMulti) etaaxMulti.montar('filtroRecetaCatSel', { label:'categorías' });
     }
-    if (filtroRecetaCat) lista = lista.filter(r => (r.categoria||'').trim() === filtroRecetaCat);
+    const _mCats = (window.etaaxMulti ? etaaxMulti.vals('filtroRecetaCatSel') : []);
+    if (_mCats.length)        lista = lista.filter(r => _mCats.indexOf((r.categoria||'').trim()) >= 0);
+    else if (filtroRecetaCat) lista = lista.filter(r => (r.categoria||'').trim() === filtroRecetaCat);
 
     if (q) lista = lista.filter(r =>
         r.nombre.toLowerCase().includes(q) ||
         (r.grupo||'').toLowerCase().includes(q) ||
         (r.categoria||'').toLowerCase().includes(q)
     );
+
+    if (typeof etaaxReordenar !== 'undefined') lista = etaaxReordenar.ordenar(lista.slice());
 
     const iconos = { alimentos:'🍽️', 'sub-alimentos':'🥣', bebidas:'🥃', 'sub-bebidas':'🧃' };
     const grid   = document.getElementById('gridRecetas');
@@ -3313,7 +3398,7 @@ function renderGridRecetas() {
         const costo  = (r.ingredientes||[]).reduce((s,i) => s + costoIngredienteVivo(i), 0);
         const fecha  = r.fechaGuardado ? new Date(r.fechaGuardado).toLocaleDateString('es-MX',{day:'2-digit',month:'short'}) : '';
         const sel    = recetasSeleccionadas.has(r.id);
-        return `<div style="background:var(--surface2);border:2px solid ${sel?'var(--green)':'var(--border)'};
+        return `<div data-ord-id="${r.id}" style="background:var(--surface2);border:2px solid ${sel?'var(--green)':'var(--border)'};
                 border-radius:12px;padding:14px;cursor:pointer;transition:all 0.2s;position:relative;
                 ${sel?'background:rgba(61,190,122,0.07)':''}"
             onmouseenter="if(!${sel})this.style.borderColor='var(--green)'"
@@ -3339,24 +3424,17 @@ function renderGridRecetas() {
                     $${costo.toFixed(2)}</span>
                 <span style="font-size:9px;color:var(--text-dim)">${fecha}</span>
             </div>
-            ${_catGlobal ? `<button onclick="event.stopPropagation();abrirRecetaSuc('${r.id}')"
-                style="width:100%;margin-top:9px;background:var(--surface);border:1px solid var(--border);color:var(--green);border-radius:8px;padding:7px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">🔗 Vincular a sucursal</button>` : ''}
             ${(!_catGlobal && _sucAct && r.status === 'inactiva')
-                ? `<button onclick="event.stopPropagation();reactivarRecetaGlobal('${r.id}')" title="Inactiva GLOBAL (pastilla del editor): no aparece en ningún lado. Este botón la reactiva en TODO el negocio."
-                    style="width:100%;margin-top:9px;background:var(--surface);border:1px solid rgba(224,90,58,.5);color:var(--red);border-radius:8px;padding:7px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">🚫 Inactiva global · ▶ Activar</button>` : ''}
-            <button onclick="event.stopPropagation();duplicarRecetaDesdeLista('${r.id}')"
-                title="Crea una copia independiente de esta receta (pide contraseña)"
-                style="width:100%;margin-top:9px;background:var(--surface);border:1px solid var(--border);color:var(--text-dim);border-radius:8px;padding:7px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">📋 Copiar</button>
-            <button onclick="event.stopPropagation();eliminarReceta('${r.id}')"
-                style="position:absolute;top:8px;right:8px;background:none;border:none;
-                color:var(--text-dim);cursor:pointer;font-size:11px;padding:2px 5px;
-                border-radius:4px;z-index:2" title="Eliminar">✕</button>
+                ? `<div title="Inactiva GLOBAL (pastilla del editor): no aparece en ningún lado. Se reactiva desde el menú ⋯."
+                    style="margin-top:8px;font-size:10px;color:var(--red);text-align:center">🚫 Inactiva global</div>` : ''}
+            ${_recMasBtn(r.id, 'position:absolute;top:6px;right:6px;z-index:2;padding:2px 8px;font-size:13px;background:transparent;border-color:transparent')}
         </div>`;
     }).join('');
 
     // Mostrar botón imprimir selección
     if (btnImp) btnImp.style.display = recetasSeleccionadas.size > 0
         ? 'inline-flex' : 'none';
+    _engancharOrdenRec();
 }
 
 /* ── Vista del catálogo de recetas: galería o lista ─────────────────────
@@ -3392,12 +3470,10 @@ function renderListaRecetas(lista, iconos, catGlobal, sucAct) {
         var sel   = recetasSeleccionadas.has(r.id);
         var badges = catGlobal ? _recetaBadgesHTML(r) : '';
         var acciones =
-            (catGlobal ? '<button onclick="event.stopPropagation();abrirRecetaSuc(\''+r.id+'\')" title="Vincular a sucursal" style="background:var(--surface2);border:1px solid var(--border);color:var(--green);border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer;font-family:inherit">🔗</button> ' : '') +
             ((!catGlobal && sucAct && r.status === 'inactiva')
-                ? '<button onclick="event.stopPropagation();reactivarRecetaGlobal(\''+r.id+'\')" title="Inactiva global · activar" style="background:var(--surface2);border:1px solid rgba(224,90,58,.5);color:var(--red);border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer;font-family:inherit">▶</button> ' : '') +
-            '<button onclick="event.stopPropagation();duplicarRecetaDesdeLista(\''+r.id+'\')" title="Copiar" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer;font-family:inherit">📋</button> ' +
-            '<button onclick="event.stopPropagation();eliminarReceta(\''+r.id+'\')" title="Eliminar" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer;font-family:inherit">✕</button>';
-        return '<tr onclick="abrirFichaReceta(\''+r.id+'\')" style="cursor:pointer;'+(sel?'background:rgba(61,190,122,.07)':'')+'"' +
+                ? '<span title="Inactiva global" style="color:var(--red);font-size:11px;margin-right:6px">🚫</span>' : '') +
+            _recMasBtn(r.id);
+        return '<tr data-ord-id="'+r.id+'" onclick="abrirFichaReceta(\''+r.id+'\')" style="cursor:pointer;'+(sel?'background:rgba(61,190,122,.07)':'')+'"' +
                 ' onmouseenter="this.style.background=\'var(--surface2)\'"' +
                 ' onmouseleave="this.style.background=\''+(sel?'rgba(61,190,122,.07)':'transparent')+'\'">' +
             '<td style="'+td+';width:34px" onclick="event.stopPropagation();toggleSeleccion(\''+r.id+'\')">' +
@@ -4041,6 +4117,83 @@ function imprimirCaratula(){if(!caratulaTipoActual)return;var q=(document.getEle
 // Copiar receta/sub-receta DESDE LA LISTA (el botón 📋 de la card, como en
 // insumos): confirmación + contraseña de admin, duplicado independiente con
 // id nuevo y nombre "(copia)". El original queda intacto; no abre el editor.
+/* ══ MENÚ "⋯" DE CADA RECETA ══════════════════════════════════════════════
+   Mismo patrón que el catálogo de insumos: la tarjeta enseña la receta y su
+   costo, y las acciones (editar, copiar, vincular, eliminar) se guardan en un
+   desplegable. Cuatro botones por tarjeta en una galería de 200 recetas es
+   ruido, y el ✕ de eliminar pegado a la esquina se pulsa sin querer. */
+var _recMenuEl = null;
+function _recMenuCerrar() { if (_recMenuEl) { _recMenuEl.remove(); _recMenuEl = null; } }
+document.addEventListener('click', function (e) {
+    if (!_recMenuEl || !e.target.closest) return;
+    if (e.target.closest('.rec-menu-pop') || e.target.closest('.rec-mas-btn')) return;
+    _recMenuCerrar();
+});
+window.addEventListener('scroll', _recMenuCerrar, true);
+window.addEventListener('resize', _recMenuCerrar);
+
+function _recMenuItem(icono, texto, accion, clase) {
+    return '<button type="button" class="' + (clase || '') + '" onclick="_recMenuCerrar();' + accion + '">' +
+        '<span class="ic">' + icono + '</span>' + texto + '</button>';
+}
+function _recMasBtn(id, estilo) {
+    return '<button type="button" class="rec-mas-btn" title="Más acciones" data-id="' + id + '"' +
+        (estilo ? ' style="' + estilo + '"' : '') +
+        ' onclick="event.stopPropagation();_recMenuAbrir(event,\'' + id + '\')">⋯</button>';
+}
+function _recMenuAbrir(ev, id) {
+    ev.stopPropagation();
+    var yaAbierto = _recMenuEl && _recMenuEl.getAttribute('data-id') === id;
+    _recMenuCerrar();
+    if (yaAbierto) return;            // segundo clic en el mismo botón = cerrar
+    var r = (typeof getRecetas === 'function') ? getRecetas().find(function (x) { return x.id === id; }) : null;
+    if (!r) return;
+    var q = "'" + id + "'";
+    var esGlobal = (typeof _esCatGlobalRecetas === 'function') ? _esCatGlobalRecetas() : false;
+    var sucAct   = localStorage.getItem('etaax_sucursal_activa') || '';
+
+    var items = [
+        _recMenuItem('👁️', 'Ver ficha técnica', 'abrirFichaReceta(' + q + ')'),
+        _recMenuItem('✏️', 'Editar', 'editarRecetaDesdeLista(' + q + ')'),
+        _recMenuItem('📋', 'Copiar', 'duplicarRecetaDesdeLista(' + q + ')')
+    ];
+    if (esGlobal) items.push(_recMenuItem('🔗', 'Vincular a sucursal', 'abrirRecetaSuc(' + q + ')'));
+    if (!esGlobal && sucAct && r.status === 'inactiva')
+        items.push(_recMenuItem('▶', 'Activar en el negocio', 'reactivarRecetaGlobal(' + q + ')'));
+    items.push('<div class="sep"></div>');
+    items.push(_recMenuItem('🗑️', 'Eliminar', 'eliminarReceta(' + q + ')', 'peligro'));
+
+    var pop = document.createElement('div');
+    pop.className = 'rec-menu-pop';
+    pop.setAttribute('data-id', id);
+    pop.innerHTML = items.join('');
+    document.body.appendChild(pop);
+    // Si la lista se re-pintó, el botón del evento puede haber quedado huérfano y
+    // su rect sale en ceros: se vuelve a buscar el VISIBLE por id (galería y lista
+    // conviven en el DOM) y, en última instancia, se ancla arriba a la derecha.
+    var btn = ev.currentTarget;
+    var rc = btn && btn.getBoundingClientRect ? btn.getBoundingClientRect() : null;
+    if (!rc || (!rc.width && !rc.height)) {
+        var cands = document.querySelectorAll('.rec-mas-btn[data-id="' + id + '"]');
+        for (var ci = 0; ci < cands.length; ci++) {
+            var rr = cands[ci].getBoundingClientRect();
+            if (rr.width || rr.height) { btn = cands[ci]; rc = rr; break; }
+        }
+    }
+    var w = pop.offsetWidth, h = pop.offsetHeight;
+    if (!rc || (!rc.width && !rc.height)) rc = { right: window.innerWidth - 20, bottom: 70, top: 70 };
+    pop.style.left = Math.min(Math.max(8, rc.right - w), window.innerWidth - w - 8) + 'px';
+    pop.style.top  = (rc.bottom + h + 8 > window.innerHeight ? Math.max(8, rc.top - h - 6) : rc.bottom + 6) + 'px';
+    _recMenuEl = pop;
+}
+/* Editar sin pasar por la ficha: reusa el MISMO camino que el botón Editar de la
+   ficha técnica (ventana flotante, o la página completa dentro de un embed). */
+function editarRecetaDesdeLista(id) {
+    fichaRecetaActualId = id;
+    _fichaSource = 'verRecetas';
+    editarDesdeficha();
+}
+
 function duplicarRecetaDesdeLista(id) {
     var src = getRecetas().find(function(r){ return r.id === id; });
     if (!src) return;
