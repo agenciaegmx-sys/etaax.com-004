@@ -1181,6 +1181,9 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
         admAlert('No se pudieron cargar los precios o el formato de reporte. Recarga la página.');
         return;
     }
+    // Si quedó uno abierto, se va: dos modales a la vez duplican los ids y
+    // getElementById empezaría a leer los campos del viejo.
+    var _viejo = document.getElementById('docOv'); if (_viejo) { try { _viejo.remove(); } catch(e){} }
     var P = EtaaxPrecios, TOPE = P.TOPE;
     var hoy = new Date().toISOString().slice(0,10);
     var _EM = _emisorGuardado();
@@ -1224,7 +1227,16 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
 
             _campo('Negocio', '<select id="doc_neg" style="'+_in+'">'+optNegs+'</select>') +
             // Se llena al elegir el negocio: hasta entonces no se sabe qué sucursales tiene.
-            '<div id="doc_wrapSuc" style="display:none">' + _campo('Sucursal', '<select id="doc_suc" style="'+_in+'"></select>') + '</div>' +
+            // Varias a la vez: un recibo del grupo cubre las sucursales que se palomeen.
+            '<div id="doc_wrapSuc" style="display:none">' +
+                '<label style="'+_lb+'">Sucursales</label>' +
+                '<div style="border:1px solid var(--b1);border-radius:11px;padding:11px 13px;margin-bottom:14px">' +
+                    '<label style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--text);cursor:pointer;font-weight:600;padding-bottom:9px;border-bottom:1px solid var(--b1);margin-bottom:7px">' +
+                        '<input type="checkbox" id="doc_sucTodas" style="width:16px;height:16px;accent-color:var(--green)"> Todo el negocio</label>' +
+                    '<div id="doc_sucLista"></div>' +
+                    '<div id="doc_sucHint" style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">—</div>' +
+                '</div>' +
+            '</div>' +
             _campo('Cliente / prospecto (opcional)', '<input id="doc_cliente" style="'+_in+'" placeholder="Se toma del negocio o la sucursal si lo dejas vacío">') +
 
             // ── Suscripción ──
@@ -1265,8 +1277,7 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
             '</div>' +
 
             // ── Campos por tipo ──
-            '<div id="doc_soloRecibo">' +
-                // Emisor y contacto: plegado porque casi nunca se cambia, pero a la mano.
+            // Emisor y contacto: plegado porque casi nunca se cambia, pero a la mano.
                 '<details style="border:1px solid var(--b1);border-radius:11px;padding:11px 13px;margin-bottom:14px">' +
                     '<summary style="cursor:pointer;font-size:13px;color:var(--text);font-weight:600">Datos del emisor y de contacto</summary>' +
                     '<div style="margin-top:12px">' +
@@ -1287,7 +1298,8 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
                         '</div>' +
                         '<div style="font-size:11px;color:var(--muted);margin-top:-4px">Se recuerdan para el siguiente documento.</div>' +
                     '</div>' +
-                '</details>' +
+            '</details>' +
+            '<div id="doc_soloRecibo">' +
                 // La razón social del receptor se escribe, no se hereda: lo que importa en un
                 // recibo es el nombre fiscal del cliente, que rara vez coincide con el
                 // nombre del negocio en el sistema.
@@ -1354,6 +1366,7 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
         });
         document.getElementById('doc_wrapPaq').style.display = _modo === 'paquete' ? '' : 'none';
         document.getElementById('doc_wrapInd').style.display = _modo === 'individual' ? '' : 'none';
+        if (document.getElementById('doc_sucLista')) _sincSucs();
     }
     /* Sucursales del negocio elegido. Si el negocio no tiene sucursales registradas,
        el selector ni aparece: un desplegable vacío solo confunde. */
@@ -1361,12 +1374,50 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
         var negId = document.getElementById('doc_neg').value;
         var lista = (negId && _data.sucursales) ? (_data.sucursales[negId] || []) : [];
         var wrap = document.getElementById('doc_wrapSuc');
-        var sel  = document.getElementById('doc_suc');
-        if (!lista.length) { wrap.style.display = 'none'; sel.innerHTML = ''; return; }
-        sel.innerHTML = '<option value="">— Todo el negocio —</option>' + lista.map(function(x){
-            return '<option value="'+esc(x.id)+'">'+esc(x.nombre)+(x.logo?' 🖼️':'')+'</option>';
+        var cont = document.getElementById('doc_sucLista');
+        if (!lista.length) { wrap.style.display = 'none'; cont.innerHTML = ''; _sincSucs(); return; }
+        // Al elegir un negocio se palomean TODAS: cobrar el grupo completo es el caso
+        // normal, y quitar las que no van es un clic más barato que ponerlas una a una.
+        cont.innerHTML = lista.map(function(x){
+            return '<label style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--text);cursor:pointer;padding:4px 0">' +
+                '<input type="checkbox" class="doc-suc" data-id="'+esc(x.id)+'" checked style="width:15px;height:15px;accent-color:#7ab8f5">' +
+                esc(x.nombre) + (x.logo ? ' <span title="tiene logo cargado">🖼️</span>' : '') + '</label>';
         }).join('');
+        document.getElementById('doc_sucTodas').checked = true;
         wrap.style.display = '';
+        _sincSucs();
+    }
+    function _sucsSel(){
+        var negId = document.getElementById('doc_neg').value;
+        var lista = (negId && _data.sucursales) ? (_data.sucursales[negId] || []) : [];
+        return Array.prototype.slice.call(ov.querySelectorAll('.doc-suc'))
+            .filter(function(c){ return c.checked; })
+            .map(function(c){ var id = c.getAttribute('data-id');
+                              return lista.find(function(x){ return x.id === id; }) || null; })
+            .filter(Boolean);
+    }
+    /* El precio se sigue solo: N sucursales palomeadas = paquete de N. Nadie debería
+       recontar a mano lo que ya eligió, y un paquete que no cuadra con la lista de
+       sucursales del recibo es justo el error que nadie revisa. */
+    function _sincSucs(){
+        var total = ov.querySelectorAll('.doc-suc').length, sel = _sucsSel();
+        var chk = document.getElementById('doc_sucTodas');
+        if (chk) chk.checked = total > 0 && sel.length === total;
+        if (_modo === 'paquete' && sel.length) {
+            var n = Math.min(sel.length, TOPE);
+            var paq = document.getElementById('doc_paq');
+            if (paq && parseInt(paq.value,10) !== n) paq.value = n;
+        }
+        var hint = document.getElementById('doc_sucHint');
+        if (hint) {
+            hint.textContent = !sel.length
+                ? 'Ninguna elegida: el documento va a nombre del negocio.'
+                : (_modo === 'paquete'
+                    ? sel.length + ' elegida' + (sel.length!==1?'s':'') + ' → paquete de ' + Math.min(sel.length,TOPE) +
+                      ' · ' + P.fmt(P.precioMensual(Math.min(sel.length,TOPE))) + '/mes'
+                    : 'Precio individual: lo fija el número de sucursal, no cuántas palomees.');
+        }
+        _recalc();
     }
     function _subtotalSus(){
         if (!document.getElementById('doc_susOn').checked) return 0;
@@ -1408,6 +1459,12 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
     });
     ov.addEventListener('change', function(e){
         if (e.target.id === 'doc_neg') { _pintarSucs(); return; }
+        if (e.target.id === 'doc_sucTodas') {
+            var on = e.target.checked;
+            Array.prototype.forEach.call(ov.querySelectorAll('.doc-suc'), function(c){ c.checked = on; });
+            _sincSucs(); return;
+        }
+        if (e.target.className === 'doc-suc') { _sincSucs(); return; }
         if (['doc_paq','doc_ind','doc_susOn'].indexOf(e.target.id) >= 0) {
             document.getElementById('doc_susBox').style.display = document.getElementById('doc_susOn').checked ? '' : 'none';
             _recalc();
@@ -1427,14 +1484,14 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
         var negId = document.getElementById('doc_neg').value;
         var neg = negId ? (_data.negocios||[]).find(function(x){ return x.id===negId; }) : null;
         var sus = _subtotalSus();
-        var sucId = (document.getElementById('doc_suc')||{}).value || '';
-        var sucObj = sucId ? ((_data.sucursales&&_data.sucursales[negId]||[]).find(function(x){ return x.id===sucId; })||null) : null;
+        var selSucs = _sucsSel();
         var cfg = {
             tipo: _tipo,
             negocio: neg ? ((neg.datos||{}).nombre || '') : '',
             emoji: neg ? ((neg.datos||{}).emoji || '') : '',
-            sucursal: sucObj ? sucObj.nombre : '',
-            sucLogo:  sucObj ? (sucObj.logo || '') : '',
+            sucursal: selSucs.length === 1 ? selSucs[0].nombre : '',
+            sucLogo:  selSucs.length === 1 ? (selSucs[0].logo || '') : '',
+            sucs: selSucs.map(function(x){ return { id:x.id, nombre:x.nombre, logo:x.logo||'' }; }),
             cliente: document.getElementById('doc_cliente').value.trim(),
             susOn: document.getElementById('doc_susOn').checked,
             modo: _modo,
@@ -1480,17 +1537,22 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
 function abrirPresupuestoModal2() { abrirDocumentoModal('presupuesto', ''); }
 function abrirReciboModal2(negId) { abrirDocumentoModal('recibo', negId); }
 
-/* Un documento, dos tiempos verbales. Recibo: "se pagó", con folio, método y fecha
-   de pago. Presupuesto: "costaría", con vigencia y el comparativo anual. La tabla de
-   conceptos y el total son los mismos — de ahí saldrá después la factura. */
+/* UN SOLO FORMATO para recibo y presupuesto — estructura de factura: quién emite y
+   quién recibe arriba, el desglose en medio, el TOTAL hasta abajo y los datos de
+   contacto al final. Lo único que cambia entre los dos es el tiempo verbal: el recibo
+   dice "se pagó" (folio, método, fecha de pago), el presupuesto "costaría" (vigencia y
+   comparativo anual). De aquí saldrá después la factura.
+   Sin firmas: el comprobante de un pago es la transferencia, no un garabato. */
 function imprimirDocumento(cfg) {
     var P = EtaaxPrecios, e = function(x){ return esc(x == null ? '' : String(x)); };
     var esRec = cfg.tipo === 'recibo';
+    var sucs = cfg.sucs || [];
     var fFecha = function(iso){
         if (!iso) return '—';
         var d = new Date(iso + 'T12:00:00');
         return isNaN(d) ? iso : d.toLocaleDateString('es-MX',{ day:'2-digit', month:'long', year:'numeric' });
     };
+    var _nomSuc = function(i){ return (sucs[i] && sucs[i].nombre) ? sucs[i].nombre : ''; };
 
     // ── Conceptos ──
     var filas = [], subtotal = 0;
@@ -1498,197 +1560,158 @@ function imprimirDocumento(cfg) {
         var det = cfg.modo === 'paquete'
             ? cfg.nSucs + ' sucursal' + (cfg.nSucs!==1?'es':'') + ' · precio escalonado'
             : 'Sucursal n.º ' + cfg.indice + ' · ' + P.fmtPct(P.descuentoSucursal(cfg.indice)) + ' de descuento';
+        // Con sucursales elegidas se nombran: el cliente ve exactamente qué está pagando.
+        var nombres = sucs.map(function(x){ return x.nombre; }).filter(Boolean);
+        if (nombres.length) det += ' · ' + nombres.join(', ');
         filas.push({ c:'Suscripción ETAAX', d:det, m:cfg.susMonto });
         subtotal += cfg.susMonto;
     }
     (cfg.extras||[]).forEach(function(x){ filas.push({ c:x.concepto, d:'Servicio', m:x.monto }); subtotal += x.monto; });
 
-    /* RECIBO con estructura de factura: quién emite y quién recibe arriba, el desglose
-       en medio y el TOTAL hasta abajo. Sin firmas: en un recibo de pago no aportan —
-       el comprobante es la transferencia, no un garabato. (En el de nómina sí importan:
-       ahí el colaborador acusa de recibido en papel.) El total sale del encabezado
-       porque en un documento fiscal se lee al final, después de los conceptos. */
-    if (esRec) {
-        // Todo lo del emisor viene del formulario: un correo o un teléfono cambian sin
-        // que nadie deba editar código. El objeto del código es solo el valor inicial.
-        var E = { razon: cfg.emRazon || '', web: cfg.emWeb || '', correo: cfg.emCorreo || '', tel: cfg.emTel || '' };
-        var _parte = function(rot, nom, lineas){
-            return '<div style="flex:1;min-width:0">' +
-                '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#3dbe7a;font-weight:700;margin-bottom:5px">' + rot + '</div>' +
-                '<div style="font-size:15px;font-weight:700;color:#1a1916;line-height:1.3">' + nom + '</div>' +
-                lineas.filter(Boolean).map(function(l){
-                    return '<div style="font-size:12px;color:#555;margin-top:2px">' + l + '</div>';
-                }).join('') +
-            '</div>';
-        };
-        var cuerpo =
-            '<div style="display:flex;gap:28px;padding-bottom:16px;border-bottom:2px solid #3dbe7a">' +
-                _parte('Emisor', e(E.razon || 'EGMx Consultoría'), [
-                    cfg.rfcEmisor ? '<b>RFC:</b> ' + e(cfg.rfcEmisor) : '',
-                    e(E.web || ''), e(E.correo || ''), e(E.tel || '')
-                ]) +
-                // El receptor es la SUCURSAL cuando hay una: el nombre del negocio es la
-                // clave interna del sistema, no a quién se le cobra.
-                // Manda la razón social capturada; si no hay, el cliente, y si tampoco, la
-                // sucursal. El nombre del negocio es el último recurso.
-                (function(){
-                    var nom = cfg.razonRec || cfg.cliente || cfg.sucursal || cfg.negocio || '—';
-                    var seg = (cfg.sucursal && cfg.sucursal !== nom) ? e(cfg.sucursal) : '';
-                    return _parte('Receptor', e(nom), [ seg, cfg.rfcReceptor ? '<b>RFC:</b> ' + e(cfg.rfcReceptor) : '' ]);
-                })() +
-            '</div>' +
-
-            '<div style="display:flex;gap:28px;flex-wrap:wrap;padding:14px 0 4px;font-size:12.5px;color:#555">' +
-                '<div><b style="color:#1a1916">Folio:</b> ' + e(cfg.folio || '—') + '</div>' +
-                '<div><b style="color:#1a1916">Fecha de pago:</b> ' + e(fFecha(cfg.fpago)) + '</div>' +
-                (cfg.periodo ? '<div><b style="color:#1a1916">Periodo:</b> ' + e(cfg.periodo) + '</div>' : '') +
-                (cfg.metodo  ? '<div><b style="color:#1a1916">Forma de pago:</b> ' + e(cfg.metodo) + '</div>' : '') +
-                (cfg.ref     ? '<div><b style="color:#1a1916">Referencia:</b> ' + e(cfg.ref) + '</div>' : '') +
-            '</div>' +
-
-            '<div class="rsec">Conceptos</div>' +
-            '<table class="rt" style="font-size:13px"><thead><tr><th style="width:46%">Concepto</th><th style="text-align:left">Detalle</th><th>Importe</th></tr></thead><tbody>' +
-            filas.map(function(f){
-                return '<tr><td style="font-size:13px">' + e(f.c) + '</td>' +
-                       '<td style="text-align:left;color:#777;font-weight:400;font-size:12.5px">' + e(f.d) + '</td>' +
-                       '<td style="font-size:13px">' + P.fmt(f.m) + '</td></tr>';
-            }).join('') +
-            '</tbody></table>' +
-
-            // TOTAL al final, que es donde se lee en un documento de cobro.
-            '<div style="display:flex;justify-content:flex-end;margin-top:14px">' +
-                '<div style="min-width:280px;border-top:2px solid #3dbe7a;padding-top:10px">' +
-                    '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px">' +
-                        '<span style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#777;font-weight:700">Total pagado</span>' +
-                        '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:30px;letter-spacing:1px;color:#1a7a46;line-height:1">' + P.fmt(cfg.total) + '</span>' +
-                    '</div>' +
-                    '<div style="font-size:11px;color:#8a8a8a;text-align:right;margin-top:3px">' + (cfg.iva ? 'IVA incluido' : 'No incluye IVA') + '</div>' +
-                '</div>' +
-            '</div>' +
-            '<div style="margin-top:12px;padding:10px 13px;background:#f8f8f8;border-left:3px solid #3dbe7a;border-radius:0 6px 6px 0">' +
-                '<div style="font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#999;font-weight:700;margin-bottom:3px">Importe con letra</div>' +
-                '<div style="font-size:12.5px;font-weight:600;line-height:1.4">' +
-                    e(typeof EtaaxCore !== 'undefined' ? EtaaxCore.importeLetra(cfg.total) : '') + '</div>' +
-            '</div>' +
-            (cfg.totalManual && Math.abs(cfg.total - subtotal) > 0.005
-                ? '<div style="font-size:9.5px;color:#8a8a8a;margin-top:5px">Total ajustado (suma de conceptos: ' + P.fmt(subtotal) + ').</div>' : '') +
-            (cfg.notas ? '<div class="rsec">Notas</div><div style="font-size:12.5px;line-height:1.6;color:#555">' + e(cfg.notas) + '</div>' : '') +
-            // Quién atendió: a él le marca el cliente si tiene una duda del servicio.
-            ((cfg.consultor || cfg.conTel || cfg.conCorreo)
-                ? '<div style="margin-top:20px;padding-top:12px;border-top:1px solid #ececec">' +
-                    '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;font-weight:700;margin-bottom:4px">Te atendió</div>' +
-                    '<div style="font-size:13px;font-weight:600;color:#1a1916">' + e(cfg.consultor || '—') + '</div>' +
-                    '<div style="font-size:12px;color:#555;margin-top:2px">' +
-                        [cfg.conTel ? e(cfg.conTel) : '', cfg.conCorreo ? e(cfg.conCorreo) : ''].filter(Boolean).join(' · ') +
-                    '</div></div>'
-                : '') +
-            '<div style="margin-top:24px;padding:9px 12px;border:1px solid #e8d8a8;background:#fdfaef;border-radius:7px">' +
-                '<div style="font-size:9.5px;color:#8a7a4a;line-height:1.5"><b>Comprobante interno.</b> Este documento ampara la operación entre ETAAX ' +
-                '(EGMx Consultoría) y el cliente. <b>No es un CFDI</b> ni sustituye a la factura fiscal.</div>' +
-            '</div>';
-
-        var html = etaaxReporteDoc({
-            titulo: 'Recibo · ' + (cfg.razonRec || cfg.cliente || cfg.sucursal || cfg.negocio || 'ETAAX'),
-            subtitulo: 'Recibo de Pago' + (cfg.folio ? ' · ' + cfg.folio : ''),
-            // Sin el total en el encabezado: se lee abajo, con los conceptos.
-            derecha: '<div style="font-size:9px;color:#aaa;letter-spacing:1px;text-align:right">' + e(fFecha(cfg.fecha)) + '</div>',
-            pie: 'Recibo de pago · comprobante interno',
-            cuerpo: cuerpo,
-            // Con sucursal elegida, ELLA es la identidad del documento: su logo y su
-            // nombre. El nombre del negocio ("EGMX") sale del encabezado — es la clave
-            // interna del sistema, no la marca que el cliente reconoce. Sigue estando
-            // donde importa: en el bloque de Receptor.
-            opts: cfg.sucursal
-                ? { negocio: cfg.sucursal, sucursal: '', emoji: cfg.emoji || '', logo: cfg.sucLogo || '' }
-                : (cfg.negocio
-                    ? { negocio: cfg.negocio, sucursal: '', emoji: cfg.emoji || '', logo: '' }
-                    : { negocio: 'ETAAX', sucursal: 'Sistema de Gestión Empresarial', emoji: '', logo: '' })
-        });
-        etaaxAbrirReporte(html);
-        return;
+    /* DESGLOSE POR SUCURSAL: de dónde sale el precio. La 1.ª cuesta lista, la 2.ª menos,
+       la 6.ª menos todavía — el descuento crece con cada una. Solo aparece cuando hay
+       algo que explicar: con una sola sucursal a precio de lista no hay nada que ver. */
+    function _desglose(){
+        if (!cfg.susOn || !cfg.susMonto) return '';
+        var rows = [];
+        if (cfg.modo === 'paquete') {
+            if (cfg.nSucs < 2) return '';
+            for (var i = 1; i <= cfg.nSucs; i++) rows.push({ n:i, nom:_nomSuc(i-1) || ('Sucursal ' + i) });
+        } else {
+            if (cfg.indice < 2) return '';   // la primera no lleva descuento
+            rows.push({ n:cfg.indice, nom:_nomSuc(0) || ('Sucursal n.º ' + cfg.indice) });
+        }
+        var suma = 0;
+        var cuerpoT = rows.map(function(r){
+            var pr = P.precioSucursal(r.n), ds = P.descuentoSucursal(r.n);
+            suma += pr;
+            return '<tr><td style="text-align:left;font-weight:400;color:#777">' + r.n + '</td>' +
+                   '<td style="text-align:left">' + e(r.nom) + '</td>' +
+                   '<td style="color:#8a8a8a;font-weight:400">' + P.fmt(P.BASE) + '</td>' +
+                   '<td style="color:#1a7a46">' + (ds > 0 ? '−' + P.fmtPct(ds) : '—') + '</td>' +
+                   '<td>' + P.fmt(pr) + '</td></tr>';
+        }).join('');
+        return '<div class="rsec">Desglose por sucursal</div>' +
+            '<table class="rt" style="font-size:12.5px"><thead><tr>' +
+                '<th style="text-align:left;width:34px">#</th><th style="text-align:left">Sucursal</th>' +
+                '<th>Precio de lista</th><th>Descuento</th><th>Precio</th></tr></thead><tbody>' +
+            cuerpoT + '</tbody>' +
+            (rows.length > 1 ? '<tfoot><tr><td colspan="4" style="text-align:left">Suscripción mensual</td><td>' + P.fmt(suma) + '</td></tr></tfoot>' : '') +
+            '</table>';
     }
 
+    // ── Emisor / receptor ──
+    var E = { razon: cfg.emRazon || '', web: cfg.emWeb || '', correo: cfg.emCorreo || '', tel: cfg.emTel || '' };
+    var _parte = function(rot, nom, lineas){
+        return '<div style="flex:1;min-width:0">' +
+            '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#3dbe7a;font-weight:700;margin-bottom:5px">' + rot + '</div>' +
+            '<div style="font-size:15px;font-weight:700;color:#1a1916;line-height:1.3">' + nom + '</div>' +
+            lineas.filter(Boolean).map(function(l){
+                return '<div style="font-size:12px;color:#555;margin-top:2px">' + l + '</div>';
+            }).join('') +
+        '</div>';
+    };
+    // Manda la razón social capturada; si no, el cliente; si no, la sucursal (una sola).
+    // El nombre del negocio es la clave interna del sistema: último recurso.
+    var nomRec = cfg.razonRec || cfg.cliente || (sucs.length === 1 ? sucs[0].nombre : '') || cfg.negocio || '—';
+    var subRec = sucs.length === 1
+        ? (sucs[0].nombre !== nomRec ? e(sucs[0].nombre) : '')
+        : (sucs.length > 1 ? e(sucs.map(function(x){ return x.nombre; }).join(' · ')) : '');
+
     var cuerpo =
-        '<div class="rsec">' + (esRec ? 'Datos del pago' : 'Datos del presupuesto') + '</div>' +
-        '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">' +
-            '<div class="rcard" style="padding:10px 13px"><div class="l">Cliente</div><div style="font-size:13px;font-weight:600">' +
-                e(cfg.cliente || cfg.negocio || '—') +
-                (cfg.sucursal ? '<div style="font-size:10.5px;color:#8a8a8a;font-weight:400;margin-top:2px">' + e(cfg.sucursal) + '</div>' : '') +
-            '</div></div>' +
-            '<div class="rcard" style="padding:10px 13px"><div class="l">Folio</div><div style="font-size:13px;font-weight:600">' + e(cfg.folio || '—') + '</div></div>' +
-            '<div class="rcard" style="padding:10px 13px"><div class="l">' + (esRec ? 'Periodo' : 'Vigencia') + '</div><div style="font-size:13px;font-weight:600">' +
-                e(esRec ? (cfg.periodo || '—') : (cfg.vig + ' días')) + '</div></div>' +
-            '<div class="rcard" style="padding:10px 13px"><div class="l">' + (esRec ? 'Fecha de pago' : 'Emisión') + '</div><div style="font-size:13px;font-weight:600">' +
-                e(fFecha(esRec ? cfg.fpago : cfg.fecha)) + '</div></div>' +
+        '<div style="break-inside:avoid;page-break-inside:avoid;display:flex;gap:28px;padding-bottom:16px;border-bottom:2px solid #3dbe7a">' +
+            _parte('Emisor', e(E.razon || 'EGMx Consultoría'), [
+                cfg.rfcEmisor ? '<b>RFC:</b> ' + e(cfg.rfcEmisor) : '',
+                e(E.web || ''), e(E.correo || ''), e(E.tel || '')
+            ]) +
+            _parte('Receptor', e(nomRec), [ subRec, cfg.rfcReceptor ? '<b>RFC:</b> ' + e(cfg.rfcReceptor) : '' ]) +
         '</div>' +
-        (esRec && (cfg.metodo || cfg.ref) ?
-            '<div class="rgrid" style="grid-template-columns:repeat(2,1fr);margin-top:10px">' +
-                '<div class="rcard" style="padding:10px 13px"><div class="l">Método de pago</div><div style="font-size:13px;font-weight:600">' + e(cfg.metodo||'—') + '</div></div>' +
-                '<div class="rcard" style="padding:10px 13px"><div class="l">Referencia</div><div style="font-size:13px;font-weight:600">' + e(cfg.ref||'—') + '</div></div>' +
-            '</div>' : '') +
+
+        '<div style="display:flex;gap:28px;flex-wrap:wrap;padding:14px 0 4px;font-size:12.5px;color:#555">' +
+            '<div><b style="color:#1a1916">Folio:</b> ' + e(cfg.folio || '—') + '</div>' +
+            (esRec
+                ? '<div><b style="color:#1a1916">Fecha de pago:</b> ' + e(fFecha(cfg.fpago)) + '</div>' +
+                  (cfg.periodo ? '<div><b style="color:#1a1916">Periodo:</b> ' + e(cfg.periodo) + '</div>' : '') +
+                  (cfg.metodo  ? '<div><b style="color:#1a1916">Forma de pago:</b> ' + e(cfg.metodo) + '</div>' : '') +
+                  (cfg.ref     ? '<div><b style="color:#1a1916">Referencia:</b> ' + e(cfg.ref) + '</div>' : '')
+                : '<div><b style="color:#1a1916">Emisión:</b> ' + e(fFecha(cfg.fecha)) + '</div>' +
+                  '<div><b style="color:#1a1916">Vigencia:</b> ' + cfg.vig + ' días</div>') +
+        '</div>' +
 
         '<div class="rsec">Conceptos</div>' +
-        '<table class="rt"><thead><tr><th style="width:46%">Concepto</th><th style="text-align:left">Detalle</th><th>Importe</th></tr></thead><tbody>' +
+        '<table class="rt" style="font-size:13px"><thead><tr><th style="width:46%">Concepto</th><th style="text-align:left">Detalle</th><th>Importe</th></tr></thead><tbody>' +
         filas.map(function(f){
-            return '<tr><td>' + e(f.c) + '</td>' +
-                   '<td style="text-align:left;color:#8a8a8a;font-weight:400">' + e(f.d) + '</td>' +
-                   '<td>' + P.fmt(f.m) + '</td></tr>';
+            return '<tr><td style="font-size:13px">' + e(f.c) + '</td>' +
+                   '<td style="text-align:left;color:#777;font-weight:400;font-size:12.5px">' + e(f.d) + '</td>' +
+                   '<td style="font-size:13px">' + P.fmt(f.m) + '</td></tr>';
         }).join('') +
-        '</tbody><tfoot><tr><td colspan="2">' + (esRec ? 'Total pagado' : 'Total mensual') + '</td><td>' + P.fmt(cfg.total) + '</td></tr></tfoot></table>' +
-        (cfg.totalManual && Math.abs(cfg.total - subtotal) > 0.005
-            ? '<div style="font-size:9.5px;color:#8a8a8a;margin-top:5px">Total ajustado (suma de conceptos: ' + P.fmt(subtotal) + ').</div>' : '') +
-        '<div style="margin-top:9px;padding:10px 13px;background:#f8f8f8;border-left:3px solid #3dbe7a;border-radius:0 6px 6px 0">' +
-            '<div style="font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#999;font-weight:700;margin-bottom:3px">Importe con letra</div>' +
-            '<div style="font-size:11.5px;font-weight:600;line-height:1.4">' +
-                e(typeof EtaaxCore !== 'undefined' ? EtaaxCore.importeLetra(cfg.total) : '') + '</div>' +
-            '<div style="font-size:9.5px;color:#8a8a8a;margin-top:3px">' + (cfg.iva ? 'Los importes incluyen IVA.' : 'Los importes NO incluyen IVA.') + '</div>' +
-        '</div>' +
+        '</tbody></table>' +
 
-        // Comparativo anual: solo en presupuesto y solo si hay suscripción que comparar.
+        _desglose() +
+
+        // Comparativo anual: solo en presupuesto, y solo si hay paquete que comparar.
         ((!esRec && cfg.anual && cfg.susOn && cfg.modo === 'paquete') ? (function(){
             var lista = P.BASE * cfg.nSucs, ahorroMes = lista - cfg.susMonto;
             return '<div class="rsec">Comparativo anual</div>' +
-                '<table class="rt"><thead><tr><th>Concepto</th><th>Mensual</th><th>Anual</th></tr></thead><tbody>' +
-                '<tr><td>Precio de lista (' + cfg.nSucs + ' × ' + P.fmt(P.BASE) + ')</td><td>' + P.fmt(lista) + '</td><td>' + P.fmt(lista*12) + '</td></tr>' +
-                '<tr><td>Tu precio ETAAX</td><td>' + P.fmt(cfg.susMonto) + '</td><td>' + P.fmt(cfg.susMonto*12) + '</td></tr>' +
-                '</tbody><tfoot><tr><td>Ahorro</td><td>' + P.fmt(ahorroMes) + '</td><td>' + P.fmt(ahorroMes*12) + '</td></tr></tfoot></table>';
+                '<table class="rt" style="font-size:12.5px"><thead><tr><th style="text-align:left">Concepto</th><th>Mensual</th><th>Anual</th></tr></thead><tbody>' +
+                '<tr><td style="text-align:left">Precio de lista (' + cfg.nSucs + ' × ' + P.fmt(P.BASE) + ')</td><td>' + P.fmt(lista) + '</td><td>' + P.fmt(lista*12) + '</td></tr>' +
+                '<tr><td style="text-align:left">Tu precio ETAAX</td><td>' + P.fmt(cfg.susMonto) + '</td><td>' + P.fmt(cfg.susMonto*12) + '</td></tr>' +
+                '</tbody><tfoot><tr><td style="text-align:left">Ahorro</td><td>' + P.fmt(ahorroMes) + '</td><td>' + P.fmt(ahorroMes*12) + '</td></tr></tfoot></table>';
         })() : '') +
 
-        (cfg.notas ? '<div class="rsec">Notas</div><div style="font-size:11.5px;line-height:1.6;color:#555">' + e(cfg.notas) + '</div>' : '') +
-
-        (esRec
-            ? '<div class="rgrid" style="grid-template-columns:1fr 1fr;gap:26px;margin-top:30px">' +
-                '<div style="text-align:center"><div style="border-top:1px solid #1a1916;margin:0 10px 6px"></div>' +
-                    '<div style="font-size:11px;font-weight:600">Recibió</div>' +
-                    '<div style="font-size:9px;color:#8a8a8a;margin-top:2px">EGMx Consultoría</div></div>' +
-                '<div style="text-align:center"><div style="border-top:1px solid #1a1916;margin:0 10px 6px"></div>' +
-                    '<div style="font-size:11px;font-weight:600">' + e(cfg.cliente || cfg.negocio || 'Cliente') + '</div>' +
-                    '<div style="font-size:9px;color:#8a8a8a;margin-top:2px">Conforme</div></div>' +
-              '</div>'
-            : '<div style="margin-top:22px;font-size:11px;color:#8a8a8a;line-height:1.6">Este presupuesto es válido por <b>' + cfg.vig +
-              ' días</b> a partir del ' + e(fFecha(cfg.fecha)) + '. Los precios pueden cambiar después de esa fecha.</div>') +
-
-        '<div style="margin-top:22px;padding:9px 12px;border:1px solid #e8d8a8;background:#fdfaef;border-radius:7px">' +
+        // TOTAL al final: es donde se lee en un documento de cobro.
+        '<div style="break-inside:avoid;page-break-inside:avoid;display:flex;justify-content:flex-end;margin-top:14px">' +
+            '<div style="min-width:280px;border-top:2px solid #3dbe7a;padding-top:10px">' +
+                '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px">' +
+                    '<span style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#777;font-weight:700">' + (esRec ? 'Total pagado' : 'Total mensual') + '</span>' +
+                    '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:30px;letter-spacing:1px;color:#1a7a46;line-height:1">' + P.fmt(cfg.total) + '</span>' +
+                '</div>' +
+                '<div style="font-size:11px;color:#8a8a8a;text-align:right;margin-top:3px">' + (cfg.iva ? 'IVA incluido' : 'No incluye IVA') + '</div>' +
+            '</div>' +
+        '</div>' +
+        '<div style="break-inside:avoid;page-break-inside:avoid;margin-top:12px;padding:10px 13px;background:#f8f8f8;border-left:3px solid #3dbe7a;border-radius:0 6px 6px 0">' +
+            '<div style="font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#999;font-weight:700;margin-bottom:3px">Importe con letra</div>' +
+            '<div style="font-size:12.5px;font-weight:600;line-height:1.4">' +
+                e(typeof EtaaxCore !== 'undefined' ? EtaaxCore.importeLetra(cfg.total) : '') + '</div>' +
+        '</div>' +
+        (cfg.totalManual && Math.abs(cfg.total - subtotal) > 0.005
+            ? '<div style="font-size:9.5px;color:#8a8a8a;margin-top:5px">Total ajustado (suma de conceptos: ' + P.fmt(subtotal) + ').</div>' : '') +
+        (cfg.notas ? '<div class="rsec">Notas</div><div style="font-size:12.5px;line-height:1.6;color:#555">' + e(cfg.notas) + '</div>' : '') +
+        (!esRec ? '<div style="margin-top:18px;font-size:11px;color:#8a8a8a;line-height:1.6">Este presupuesto es válido por <b>' + cfg.vig +
+                  ' días</b> a partir del ' + e(fFecha(cfg.fecha)) + '. Los precios pueden cambiar después de esa fecha.</div>' : '') +
+        // Quién atendió: a él le marca el cliente si tiene una duda del servicio.
+        ((cfg.consultor || cfg.conTel || cfg.conCorreo)
+            ? '<div style="break-inside:avoid;page-break-inside:avoid;margin-top:16px;padding-top:12px;border-top:1px solid #ececec">' +
+                '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;font-weight:700;margin-bottom:4px">Te atendió</div>' +
+                '<div style="font-size:13px;font-weight:600;color:#1a1916">' + e(cfg.consultor || '—') + '</div>' +
+                '<div style="font-size:12px;color:#555;margin-top:2px">' +
+                    [cfg.conTel ? e(cfg.conTel) : '', cfg.conCorreo ? e(cfg.conCorreo) : ''].filter(Boolean).join(' · ') +
+                '</div></div>'
+            : '') +
+        '<div style="break-inside:avoid;page-break-inside:avoid;margin-top:16px;padding:9px 12px;border:1px solid #e8d8a8;background:#fdfaef;border-radius:7px">' +
             '<div style="font-size:9.5px;color:#8a7a4a;line-height:1.5"><b>Comprobante interno.</b> Este documento ampara la operación entre ETAAX ' +
             '(EGMx Consultoría) y el cliente. <b>No es un CFDI</b> ni sustituye a la factura fiscal.</div>' +
         '</div>';
 
-    var html = etaaxReporteDoc({
-        titulo: (esRec ? 'Recibo' : 'Presupuesto') + ' · ' + (cfg.cliente || cfg.negocio || 'ETAAX') + (cfg.sucursal ? ' · ' + cfg.sucursal : ''),
+    /* Identidad del papel. Con UNA sucursal elegida, ella es la cara del documento: su
+       nombre y su logo. Con varias, manda la razón social del cliente y las sucursales
+       se resumen debajo. El nombre del negocio en el sistema queda de último recurso. */
+    var ident;
+    if (sucs.length === 1)      ident = { negocio: sucs[0].nombre, sucursal: '', emoji: cfg.emoji || '', logo: sucs[0].logo || '' };
+    else if (sucs.length > 1)   ident = { negocio: nomRec, sucursal: sucs.length + ' sucursales', emoji: cfg.emoji || '', logo: '' };
+    else if (cfg.negocio || cfg.razonRec || cfg.cliente)
+                                ident = { negocio: nomRec, sucursal: '', emoji: cfg.emoji || '', logo: '' };
+    else                        ident = { negocio: 'ETAAX', sucursal: 'Sistema de Gestión Empresarial', emoji: '', logo: '' };
+
+    etaaxAbrirReporte(etaaxReporteDoc({
+        titulo: (esRec ? 'Recibo' : 'Presupuesto') + ' · ' + (nomRec === '—' ? 'ETAAX' : nomRec),
         subtitulo: (esRec ? 'Recibo de Pago' : 'Presupuesto') + (cfg.folio ? ' · ' + cfg.folio : ''),
-        derecha: '<div style="font-size:9px;color:#aaa;letter-spacing:1px;text-align:right">' + e(fFecha(cfg.fecha)) + '</div>' +
-                 '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;line-height:1;margin-top:3px;text-align:right;color:#1a1916">' + P.fmt(cfg.total) + '</div>',
+        // Sin el total en el encabezado: se lee abajo, después de los conceptos.
+        derecha: '<div style="font-size:9px;color:#aaa;letter-spacing:1px;text-align:right">' + e(fFecha(cfg.fecha)) + '</div>',
         pie: esRec ? 'Recibo de pago · comprobante interno' : 'Presupuesto · Sistema de Gestión Empresarial',
         cuerpo: cuerpo,
-        // Si el documento es de una sucursal concreta, el encabezado lleva SU nombre y
-        // SU logo (si lo tiene cargado): el papel se ve del cliente, no genérico.
-        opts: cfg.sucursal
-            ? { negocio: cfg.negocio || 'ETAAX', sucursal: cfg.sucursal, emoji: cfg.emoji || '', logo: cfg.sucLogo || '' }
-            : (cfg.negocio
-                ? { negocio: cfg.negocio, sucursal: 'Sistema de Gestión Empresarial', emoji: cfg.emoji || '', logo: '' }
-                : { negocio: 'ETAAX', sucursal: 'Sistema de Gestión Empresarial', emoji: '', logo: '' })
-    });
-    etaaxAbrirReporte(html);
+        opts: ident
+    }));
 }
 
 function abrirPresupuestoModal() {
