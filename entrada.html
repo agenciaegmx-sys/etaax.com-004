@@ -114,10 +114,6 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
         <label class="lbl">Área</label>
         <div class="chips" id="areaChipsCnt"></div>
 
-        <label class="lbl">Producto</label>
-        <input type="text" class="fld" id="cntBuscar" placeholder="Escribe el nombre…" oninput="filtrarCnt(this.value)" autocomplete="off">
-        <div id="cntLista" class="ins-list"></div>
-
         <div id="cntForm" style="display:none">
             <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin:10px 0 14px">
                 <div style="font-size:15px;font-weight:600;color:var(--text)" id="cntNom">—</div>
@@ -151,6 +147,10 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
             <button class="cap-btn" id="cntBtn" onclick="enviarConteo()">Guardar conteo</button>
             <div class="cap-msg" id="cntMsg"></div>
         </div>
+
+        <label class="lbl">Producto</label>
+        <input type="text" class="fld" id="cntBuscar" placeholder="Escribe el nombre…" oninput="filtrarCnt(this.value)" autocomplete="off">
+        <div id="cntLista" class="ins-list"></div>
 
         <div id="cntHechos" style="margin-top:16px"></div>
     </div>
@@ -348,6 +348,7 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
 function _q(k){var m=new RegExp('[?&]'+k+'=([^&]*)').exec(location.search);return m?decodeURIComponent(m[1]):'';}
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function nowHora(){var d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
 function etx(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 // Contenido por envase del insumo (750 ml, 1 L, 235 ml, 1 kg…) — de su 1ª presentación.
 function _fmtContenidoQR(x){
@@ -610,7 +611,7 @@ function selCnt(id){
     document.getElementById('cntNota').value = prev.nota || '';
     document.getElementById('cntForm').style.display = 'block';
     document.getElementById('cntMsg').textContent = '';
-    document.getElementById('cntForm').scrollIntoView({behavior:'smooth', block:'nearest'});
+    document.getElementById('cntForm').scrollIntoView({behavior:'smooth', block:'start'});
 }
 /* Mismo evaluador que las celdas del sistema: "3*24+5" es como se cuenta de verdad. */
 function _evalCnt(txt){
@@ -632,29 +633,29 @@ async function enviarConteo(){
     }
     var btn = document.getElementById('cntBtn'); btn.disabled = true;
     msg.className='cap-msg'; msg.textContent='Guardando…';
-    var hoy = todayStr();
-    var entry = {
-        // id estable: si vuelve a contar el mismo producto hoy, CORRIGE su conteo
-        // en vez de dejar dos verdades en la tabla.
-        id: 'cnt_'+NEG+'_'+(SUC||'suc_principal')+'_'+AREA+'_'+hoy+'_'+CNT_SEL.id,
-        insumoId: CNT_SEL.id, nombre: CNT_SEL.nombre || '',
-        sucursalId: SUC || '', area: AREA, fecha: hoy, hora: nowHora(),
-        cerradasBodega: bod, cerradasBarra: bar,
-        pesos: pesos,
-        nota: (document.getElementById('cntNota').value||'').trim(),
-        aplicado: false
-    };
     try {
+        var hoy = todayStr();
+        var entry = {
+            // id estable: si vuelve a contar el mismo producto hoy, CORRIGE su conteo
+            // en vez de dejar dos verdades en la tabla.
+            id: 'cnt_'+NEG+'_'+(SUC||'suc_principal')+'_'+AREA+'_'+hoy+'_'+CNT_SEL.id,
+            insumoId: CNT_SEL.id, nombre: CNT_SEL.nombre || '',
+            sucursalId: SUC || '', area: AREA, fecha: hoy, hora: nowHora(),
+            cerradasBodega: bod, cerradasBarra: bar,
+            pesos: pesos,
+            nota: (document.getElementById('cntNota').value||'').trim(),
+            aplicado: false
+        };
         var r = await _supabase.rpc('inventario_conteo_registrar', { p_neg:NEG, p_token:TOKEN, p_niphash:_NIPHASH, p_datos:entry });
-        if (r.error){ btn.disabled=false; msg.className='cap-msg err'; msg.textContent='No se pudo guardar: '+r.error.message; return; }
-        btn.disabled = false;
+        if (r.error){ msg.className='cap-msg err'; msg.textContent='No se pudo guardar: '+r.error.message; return; }
         CNT_HECHOS = CNT_HECHOS.filter(function(h){ return h.insumoId!==entry.insumoId; });
         CNT_HECHOS.unshift(entry);
         msg.className='cap-msg ok'; msg.textContent='✓ '+(CNT_SEL.nombre||'Producto')+' contado';
         document.getElementById('cntForm').style.display='none';
         document.getElementById('cntBuscar').value=''; CNT_SEL=null;
         filtrarCnt(''); _renderCntHechos();
-    } catch(e){ btn.disabled=false; msg.className='cap-msg err'; msg.textContent='Error: '+((e&&e.message)||e); }
+    } catch(e){ msg.className='cap-msg err'; msg.textContent='Error: '+((e&&e.message)||e); }
+    finally { btn.disabled = false; }   // pase lo que pase, el botón vuelve a servir
 }
 function _renderCntHechos(){
     var c = document.getElementById('cntHechos'); if (!c) return;
