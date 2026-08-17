@@ -180,7 +180,8 @@
     // Documento de reporte COMPLETO listo para imprimir/PDF (carta vertical). Usa una
     // tabla contenedora: el <thead> (header ETAAX) y el <tfoot> (pie) se REPITEN en cada
     // hoja al imprimir; el contenido va en <tbody>. Los <table class="rt"> de datos también
-    // repiten sus títulos de columna por hoja. cfg: { titulo, subtitulo, derecha, cuerpo, pie, opts }.
+    // repiten sus títulos de columna por hoja. cfg: { titulo, subtitulo, derecha, cuerpo, pie,
+    // opts, encabezadoUnaVez }.
     window.etaaxReporteDoc = function (cfg) {
         cfg = cfg || {};
         var header = window.etaaxReporteHeader(cfg.subtitulo || '', cfg.derecha || '', cfg.opts);
@@ -192,7 +193,12 @@
             '*{margin:0;padding:0;box-sizing:border-box}' +
             'body{font-family:\'DM Sans\',sans-serif;color:#1a1916;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
             '.rep{width:100%;border-collapse:collapse}' +
-            '.rep>thead{display:table-header-group}' +   /* header se repite ARRIBA de cada hoja */
+            /* El membrete se repite en cada hoja porque quien hojea la página 4 de un
+               catálogo necesita saber de qué negocio es lo que está mirando. Un
+               COMPROBANTE es al revés: la factura se lee como un documento, con su
+               membrete UNA vez arriba y las hojas siguientes como continuación.
+               cfg.encabezadoUnaVez lo apaga. */
+            '.rep>thead{display:' + (cfg.encabezadoUnaVez ? 'table-row-group' : 'table-header-group') + '}' +
             '.rep>tfoot{display:table-footer-group}' +   /* pie se repite ABAJO de cada hoja */
             '.rep>thead>tr>td,.rep>tfoot>tr>td{padding:0}' +
             '.rbody{padding:16px 30px 20px}' +

@@ -1064,20 +1064,41 @@
    }
 
    var _CSS_TABLA_PDF = '<style>table.tnum td,table.tnum th{white-space:nowrap}' +
-       'table.tnum td.w,table.tnum th.w{white-space:normal}</style>';
+       'table.tnum td.w,table.tnum th.w{white-space:normal}' +
+       // Mismo renglón de grupo que el reporte de existencias de inventarios: una
+       // lista corrida de 500 insumos no se puede cotejar contra la bodega;
+       // agrupada, cada familia se cuenta y se cierra por su cuenta.
+       'table.rt tbody tr.grp-h td{background:#eef4f0;border-top:2px solid #3dbe7a;' +
+           'padding:7px 10px;font-size:10px;font-weight:800;text-transform:uppercase;' +
+           'letter-spacing:1.2px;color:#1a7a46;text-align:left}' +
+       'table.rt tbody tr.grp-h{break-inside:avoid;break-after:avoid}' +
+       'table.rt tbody td.ind{padding-left:18px}' +
+       // Más renglones por hoja: un catálogo de 500 insumos con celdas de reporte
+       // financiero se va a 30 páginas. Aquí se viene a cotejar, no a leer.
+       'table.rt tbody td{padding:4px 8px;font-size:10.5px}' +
+       'table.rt thead th{padding:6px 8px}</style>';
+   // Renglón de título de grupo, a lo ancho de la tabla.
+   function _filaGrupoPDF(nombre, n, extra, cols){
+       return '<tr class="grp-h"><td colspan="' + cols + '">' + etx(nombre) +
+           ' <span style="font-weight:400;color:#888;text-transform:none;letter-spacing:0">· ' +
+           n + ' insumo' + (n !== 1 ? 's' : '') + (extra ? ' · ' + extra : '') + '</span></td></tr>';
+   }
+   // Agrupa conservando el orden alfabético de los grupos.
+   function _agruparPDF(lista, clave){
+       var g = {};
+       lista.forEach(function(x){ var k = clave(x) || 'Sin grupo'; (g[k] = g[k] || []).push(x); });
+       return Object.keys(g).sort(function(a,b){ return String(a).localeCompare(String(b),'es'); })
+                    .map(function(k){ return { nombre:k, items:g[k] }; });
+   }
 
    function _imprimirCatalogoPDF(lista){
-       var grupos = {}, orden = [];
-       lista.slice().sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); })
-            .forEach(function(ins){
-                var k = _familiaIns(ins) || 'Sin familia';
-                if (!grupos[k]) { grupos[k] = []; orden.push(k); }
-                grupos[k].push(ins);
-            });
-       orden.sort(function(a,b){ return a.localeCompare(b); });
+       var grupos = _agruparPDF(
+           lista.slice().sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); }),
+           function(ins){ return _familiaIns(ins); });
 
-       var cuerpo = _CSS_TABLA_PDF + _notaAlcance(lista.length) + orden.map(function(fam){
-           var filas = grupos[fam].map(function(ins){
+       var COLS = 9;
+       var filas = grupos.map(function(g){
+           return _filaGrupoPDF(g.nombre, g.items.length, '', COLS) + g.items.map(function(ins){
                var p = (ins.presentaciones || [])[0] || null;
                var sello = _selloActualizacion(ins);
                var act = sello ? (sello.rel + (sello.quien ? ' · ' + sello.quien : '')) : '—';
@@ -1085,7 +1106,7 @@
                var cu  = (p && parseFloat(p.costoUnitario) > 0)
                    ? fmtMXN(parseFloat(p.costoUnitario)) + '/' + (p.umCosto || 'LT') : '—';
                return '<tr>' +
-                   '<td class="w">' + etx(insumoTitulo(ins)) + (ins.esSubReceta ? ' 🍳' : '') +
+                   '<td class="w ind">' + etx(insumoTitulo(ins)) + (ins.esSubReceta ? ' 🍳' : '') +
                        (ins.marca ? '<div style="font-size:10px;color:#8a8a8a;font-weight:400">' + etx(ins.marca) + '</div>' : '') + '</td>' +
                    '<td class="w" style="text-align:left;font-weight:400;color:#666">' + etx([ins.categoria, ins.subcategoria].filter(Boolean).join(' · ') || '—') + '</td>' +
                    '<td class="w" style="text-align:left;font-weight:400;color:#666">' + etx(_presTxtPDF(ins, p)) + '</td>' +
@@ -1097,13 +1118,14 @@
                    '<td style="font-weight:400;color:#8a8a8a;font-size:10.5px">' + etx(act) + '</td>' +
                '</tr>';
            }).join('');
-           return '<div class="rsec">' + etx(fam) + ' · ' + grupos[fam].length + '</div>' +
-               '<table class="rt tnum" style="font-size:11px"><thead><tr>' +
-                   '<th class="w" style="width:19%">Insumo</th><th class="w" style="text-align:left">Categoría</th>' +
-                   '<th class="w" style="text-align:left">Presentación de compra</th><th>Precio</th><th>Costo unit.</th>' +
-                   '<th>Rendimiento</th><th class="w" style="text-align:left">Proveedor</th><th>Estado</th><th>Actualizado</th>' +
-               '</tr></thead><tbody>' + filas + '</tbody></table>';
        }).join('');
+
+       var cuerpo = _CSS_TABLA_PDF + _notaAlcance(lista.length) +
+           '<table class="rt tnum" style="font-size:11px"><thead><tr>' +
+               '<th class="w" style="width:17%">Insumo</th><th class="w" style="width:11%;text-align:left">Categoría</th>' +
+               '<th class="w" style="width:21%;text-align:left">Presentación</th><th>Precio</th><th>Costo unit.</th>' +
+               '<th>Rend.</th><th class="w" style="width:10%;text-align:left">Proveedor</th><th>Estado</th><th>Actualizado</th>' +
+           '</tr></thead><tbody>' + filas + '</tbody></table>';
 
        _abrirHorizontal(etaaxReporteDoc({
            titulo: 'Catálogo de insumos',
@@ -1138,17 +1160,17 @@
        if (g1.length) {
            cuerpo += '<div class="rsec">Destilados · Licores · Vinos · ' + g1.length + '</div>' +
                '<table class="rt tnum" style="font-size:10.5px"><thead><tr>' +
-                   '<th class="w" style="width:17%">Bebida</th><th class="w" style="text-align:left">Grupo</th>' +
+                   '<th class="w" style="width:20%">Bebida</th>' +
                    '<th>Costo unit.</th><th>Costo/oz</th><th>Costo/copa</th><th>Sug. copa</th><th>Carta copa</th><th>Utilidad copa</th>' +
                    '<th>Costo bot.</th><th>Sug. bot.</th><th>Carta bot.</th><th>Utilidad bot.</th>' +
                '</tr></thead><tbody>' +
-               g1.map(function(ins){
+               _agruparPDF(g1, _grupoIns).map(function(G){
+               return _filaGrupoPDF(G.nombre, G.items.length, '', 11) + G.items.map(function(ins){
                    var D = _costeoCopaDatos(ins, todos), p = D.p;
                    var cu = (parseFloat(p.costoUnitario) > 0)
                        ? fmtMXN(parseFloat(p.costoUnitario)) + '/' + (p.umCosto || 'LT') : '—';
                    return '<tr>' +
-                       '<td class="w">' + etx(ins.nombre) + (D.tieneMez ? ' 🥤' : '') + '</td>' +
-                       '<td class="w" style="text-align:left;font-weight:400;color:#666">' + etx(_grupoIns(ins)) + '</td>' +
+                       '<td class="w ind">' + etx(ins.nombre) + (D.tieneMez ? ' 🥤' : '') + '</td>' +
                        '<td>' + cu + '</td><td>' + _u(D.costoOz) + '</td><td>' + _u(D.costoCopa) + '</td>' +
                        '<td>' + _u(D.sugCopa) + '<span style="color:#aaa;font-size:9.5px"> ×' + D.fCopa + '</span></td>' +
                        '<td style="font-weight:700">' + _u(D.cartaCopa) + '</td><td>' + _ut(D.cartaCopa, D.costoTrago) + '</td>' +
@@ -1156,26 +1178,26 @@
                        '<td>' + _u(D.sugBot) + '<span style="color:#aaa;font-size:9.5px"> ×' + D.fBot + '</span></td>' +
                        '<td style="font-weight:700">' + _u(D.cartaBot) + '</td><td>' + _ut(D.cartaBot, D.costoBot) + '</td>' +
                    '</tr>';
-               }).join('') + '</tbody></table>';
+               }).join(''); }).join('') + '</tbody></table>';
        }
        if (g2.length) {
            cuerpo += '<div class="rsec">Cervezas · Refrescos y Sodas · ' + g2.length + '</div>' +
                '<table class="rt tnum" style="font-size:10.5px"><thead><tr>' +
-                   '<th class="w" style="width:22%">Bebida</th><th class="w" style="text-align:left">Grupo</th>' +
+                   '<th class="w" style="width:26%">Bebida</th>' +
                    '<th>Costo unit.</th><th>Costo/oz</th><th>Costo/pza</th><th>Sug. pza</th><th>Carta</th><th>Utilidad</th>' +
                '</tr></thead><tbody>' +
-               g2.map(function(ins){
+               _agruparPDF(g2, _grupoIns).map(function(G){
+               return _filaGrupoPDF(G.nombre, G.items.length, '', 7) + G.items.map(function(ins){
                    var D = _costeoPiezaDatos(ins), p = D.p;
                    var cu = (parseFloat(p.costoUnitario) > 0)
                        ? fmtMXN(parseFloat(p.costoUnitario)) + '/' + (p.umCosto || 'LT') : '—';
                    return '<tr>' +
-                       '<td class="w">' + etx(ins.nombre) + '</td>' +
-                       '<td class="w" style="text-align:left;font-weight:400;color:#666">' + etx(_grupoIns(ins)) + '</td>' +
+                       '<td class="w ind">' + etx(ins.nombre) + '</td>' +
                        '<td>' + cu + '</td><td>' + _u(D.costoOz) + '</td><td>' + _u(D.costoPieza) + '</td>' +
                        '<td>' + _u(D.sugPza) + '<span style="color:#aaa;font-size:9.5px"> ×' + D.fP + '</span></td>' +
                        '<td style="font-weight:700">' + _u(D.carta) + '</td><td>' + _ut(D.carta, D.costoPieza) + '</td>' +
                    '</tr>';
-               }).join('') + '</tbody></table>';
+               }).join(''); }).join('') + '</tbody></table>';
        }
        _abrirHorizontal(etaaxReporteDoc({
            titulo: 'Costeo de bebidas',

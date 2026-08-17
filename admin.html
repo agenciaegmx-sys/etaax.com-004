@@ -1709,6 +1709,10 @@ function imprimirDocumento(cfg) {
         // Sin el total en el encabezado: se lee abajo, después de los conceptos.
         derecha: '<div style="font-size:9px;color:#aaa;letter-spacing:1px;text-align:right">' + e(fFecha(cfg.fecha)) + '</div>',
         pie: esRec ? 'Recibo de pago · comprobante interno' : 'Presupuesto · Sistema de Gestión Empresarial',
+        // El recibo lleva membrete UNA vez, como una factura: la segunda hoja es
+        // continuación del mismo documento. El presupuesto sí lo repite — se hojea
+        // y se compara, y cada hoja debe decir de quién es.
+        encabezadoUnaVez: esRec,
         cuerpo: cuerpo,
         opts: ident
     }));
