@@ -1156,6 +1156,13 @@ function _mostrarAuditoria(h, totalRecetas, negsConInsumos) {
    los extras y el total — y es la base sobre la que después sale la factura.
    ══════════════════════════════════════════════════════════════════════════════ */
 var _docExtras = [];   // [{ concepto, monto }]
+/* El RFC del emisor no cambia entre documentos: se teclea una vez y se recuerda.
+   Vive en localStorage porque es dato de quien emite, no del negocio del cliente. */
+function _rfcEmisorGuardado(){
+    try { return localStorage.getItem('etaax_admin_rfc_emisor') || (typeof ETAAX_EMISOR!=='undefined' ? (ETAAX_EMISOR.rfc||'') : ''); }
+    catch(e){ return ''; }
+}
+function _guardarRfcEmisor(v){ try { localStorage.setItem('etaax_admin_rfc_emisor', v||''); } catch(e){} }
 
 function abrirDocumentoModal(tipoIni, negIdIni) {
     if (typeof EtaaxPrecios === 'undefined' || typeof etaaxReporteDoc !== 'function') {
@@ -1246,6 +1253,10 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
 
             // ── Campos por tipo ──
             '<div id="doc_soloRecibo">' +
+                '<div style="display:flex;gap:12px">' +
+                    '<div style="flex:1">' + _campo('RFC emisor (ETAAX)', '<input id="doc_rfcEmisor" style="'+_in+'" placeholder="Tu RFC" value="'+esc(_rfcEmisorGuardado())+'">') + '</div>' +
+                    '<div style="flex:1">' + _campo('RFC receptor (opcional)', '<input id="doc_rfcReceptor" style="'+_in+'" placeholder="RFC del cliente">') + '</div>' +
+                '</div>' +
                 '<div style="display:flex;gap:12px">' +
                     '<div style="flex:1">' + _campo('Folio', '<input id="doc_folio" style="'+_in+'">') + '</div>' +
                     '<div style="flex:1">' + _campo('Periodo pagado', '<input id="doc_periodo" style="'+_in+'" placeholder="Ej. Agosto 2026">') + '</div>' +
@@ -1406,10 +1417,13 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
             metodo: (document.getElementById('doc_metodo')||{}).value || '',
             fpago: (document.getElementById('doc_fpago')||{}).value || '',
             ref: (document.getElementById('doc_ref')||{}).value || '',
+            rfcEmisor: ((document.getElementById('doc_rfcEmisor')||{}).value || '').trim().toUpperCase(),
+            rfcReceptor: ((document.getElementById('doc_rfcReceptor')||{}).value || '').trim().toUpperCase(),
             vig: parseInt((document.getElementById('doc_vig')||{}).value,10) || 30,
             anual: !!(document.getElementById('doc_anual')||{}).checked
         };
         if (!cfg.total) { admAlert('El total no puede ser cero. Agrega la suscripción o un servicio.'); return; }
+        if (cfg.rfcEmisor) _guardarRfcEmisor(cfg.rfcEmisor);   // se recuerda para el siguiente
         cerrar();
         try { imprimirDocumento(cfg); }
         catch (err) { admAlert('No se pudo generar el documento:\n' + (err && err.message || err)); }
@@ -1442,6 +1456,95 @@ function imprimirDocumento(cfg) {
         subtotal += cfg.susMonto;
     }
     (cfg.extras||[]).forEach(function(x){ filas.push({ c:x.concepto, d:'Servicio', m:x.monto }); subtotal += x.monto; });
+
+    /* RECIBO con estructura de factura: quién emite y quién recibe arriba, el desglose
+       en medio y el TOTAL hasta abajo. Sin firmas: en un recibo de pago no aportan —
+       el comprobante es la transferencia, no un garabato. (En el de nómina sí importan:
+       ahí el colaborador acusa de recibido en papel.) El total sale del encabezado
+       porque en un documento fiscal se lee al final, después de los conceptos. */
+    if (esRec) {
+        var E = (typeof ETAAX_EMISOR !== 'undefined') ? ETAAX_EMISOR : { razon:'EGMx Consultoría Estratégica A&B', web:'etaax.com', correo:'' };
+        var _parte = function(rot, nom, lineas){
+            return '<div style="flex:1;min-width:0">' +
+                '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#3dbe7a;font-weight:700;margin-bottom:5px">' + rot + '</div>' +
+                '<div style="font-size:15px;font-weight:700;color:#1a1916;line-height:1.3">' + nom + '</div>' +
+                lineas.filter(Boolean).map(function(l){
+                    return '<div style="font-size:12px;color:#555;margin-top:2px">' + l + '</div>';
+                }).join('') +
+            '</div>';
+        };
+        var cuerpo =
+            '<div style="display:flex;gap:28px;padding-bottom:16px;border-bottom:2px solid #3dbe7a">' +
+                _parte('Emisor', e(E.razon || 'EGMx Consultoría'), [
+                    cfg.rfcEmisor ? '<b>RFC:</b> ' + e(cfg.rfcEmisor) : '',
+                    e(E.web || ''), e(E.correo || '')
+                ]) +
+                _parte('Receptor', e(cfg.cliente || cfg.negocio || '—'), [
+                    cfg.sucursal ? e(cfg.sucursal) : '',
+                    cfg.rfcReceptor ? '<b>RFC:</b> ' + e(cfg.rfcReceptor) : ''
+                ]) +
+            '</div>' +
+
+            '<div style="display:flex;gap:28px;flex-wrap:wrap;padding:14px 0 4px;font-size:12.5px;color:#555">' +
+                '<div><b style="color:#1a1916">Folio:</b> ' + e(cfg.folio || '—') + '</div>' +
+                '<div><b style="color:#1a1916">Fecha de pago:</b> ' + e(fFecha(cfg.fpago)) + '</div>' +
+                (cfg.periodo ? '<div><b style="color:#1a1916">Periodo:</b> ' + e(cfg.periodo) + '</div>' : '') +
+                (cfg.metodo  ? '<div><b style="color:#1a1916">Forma de pago:</b> ' + e(cfg.metodo) + '</div>' : '') +
+                (cfg.ref     ? '<div><b style="color:#1a1916">Referencia:</b> ' + e(cfg.ref) + '</div>' : '') +
+            '</div>' +
+
+            '<div class="rsec">Conceptos</div>' +
+            '<table class="rt" style="font-size:13px"><thead><tr><th style="width:46%">Concepto</th><th style="text-align:left">Detalle</th><th>Importe</th></tr></thead><tbody>' +
+            filas.map(function(f){
+                return '<tr><td style="font-size:13px">' + e(f.c) + '</td>' +
+                       '<td style="text-align:left;color:#777;font-weight:400;font-size:12.5px">' + e(f.d) + '</td>' +
+                       '<td style="font-size:13px">' + P.fmt(f.m) + '</td></tr>';
+            }).join('') +
+            '</tbody></table>' +
+
+            // TOTAL al final, que es donde se lee en un documento de cobro.
+            '<div style="display:flex;justify-content:flex-end;margin-top:14px">' +
+                '<div style="min-width:280px;border-top:2px solid #3dbe7a;padding-top:10px">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px">' +
+                        '<span style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#777;font-weight:700">Total pagado</span>' +
+                        '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:30px;letter-spacing:1px;color:#1a7a46;line-height:1">' + P.fmt(cfg.total) + '</span>' +
+                    '</div>' +
+                    '<div style="font-size:11px;color:#8a8a8a;text-align:right;margin-top:3px">' + (cfg.iva ? 'IVA incluido' : 'No incluye IVA') + '</div>' +
+                '</div>' +
+            '</div>' +
+            '<div style="margin-top:12px;padding:10px 13px;background:#f8f8f8;border-left:3px solid #3dbe7a;border-radius:0 6px 6px 0">' +
+                '<div style="font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#999;font-weight:700;margin-bottom:3px">Importe con letra</div>' +
+                '<div style="font-size:12.5px;font-weight:600;line-height:1.4">' +
+                    e(typeof EtaaxCore !== 'undefined' ? EtaaxCore.importeLetra(cfg.total) : '') + '</div>' +
+            '</div>' +
+            (cfg.totalManual && Math.abs(cfg.total - subtotal) > 0.005
+                ? '<div style="font-size:9.5px;color:#8a8a8a;margin-top:5px">Total ajustado (suma de conceptos: ' + P.fmt(subtotal) + ').</div>' : '') +
+            (cfg.notas ? '<div class="rsec">Notas</div><div style="font-size:12.5px;line-height:1.6;color:#555">' + e(cfg.notas) + '</div>' : '') +
+            '<div style="margin-top:24px;padding:9px 12px;border:1px solid #e8d8a8;background:#fdfaef;border-radius:7px">' +
+                '<div style="font-size:9.5px;color:#8a7a4a;line-height:1.5"><b>Comprobante interno.</b> Este documento ampara la operación entre ETAAX ' +
+                '(EGMx Consultoría) y el cliente. <b>No es un CFDI</b> ni sustituye a la factura fiscal.</div>' +
+            '</div>';
+
+        var html = etaaxReporteDoc({
+            titulo: 'Recibo · ' + (cfg.cliente || cfg.negocio || 'ETAAX') + (cfg.sucursal ? ' · ' + cfg.sucursal : ''),
+            subtitulo: 'Recibo de Pago' + (cfg.folio ? ' · ' + cfg.folio : ''),
+            // Sin el total en el encabezado: se lee abajo, con los conceptos.
+            derecha: '<div style="font-size:9px;color:#aaa;letter-spacing:1px;text-align:right">' + e(fFecha(cfg.fecha)) + '</div>',
+            pie: 'Recibo de pago · comprobante interno',
+            cuerpo: cuerpo,
+            // Con sucursal elegida, ELLA es la identidad del documento: su logo y su
+            // nombre. El nombre del negocio ("EGMX") sale del encabezado — es la clave
+            // interna del sistema, no la marca que el cliente reconoce. Sigue estando
+            // donde importa: en el bloque de Receptor.
+            opts: cfg.sucursal
+                ? { negocio: cfg.sucursal, sucursal: '', emoji: cfg.emoji || '', logo: cfg.sucLogo || '' }
+                : (cfg.negocio
+                    ? { negocio: cfg.negocio, sucursal: '', emoji: cfg.emoji || '', logo: '' }
+                    : { negocio: 'ETAAX', sucursal: 'Sistema de Gestión Empresarial', emoji: '', logo: '' })
+        });
+        etaaxAbrirReporte(html);
+        return;
+    }
 
     var cuerpo =
         '<div class="rsec">' + (esRec ? 'Datos del pago' : 'Datos del presupuesto') + '</div>' +
