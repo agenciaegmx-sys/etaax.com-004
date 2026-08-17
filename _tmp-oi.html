@@ -1,0 +1,49 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>
+<input id="searchInput" value="">
+<select class="filtro-select" id="filtroFamilia" onchange="filtrar()"><option value="">Todas las familias</option></select>
+<select class="filtro-select" id="filtroCategoria" onchange="filtrar()"><option value="">Todas las categorías</option></select>
+<select id="filtroEstadoIns"><option value="activos"></option></select>
+<select id="ordenModoIns" onchange="setOrdenModoIns(this.value)">
+ <option value="libre">A mano</option><option value="alfa">A–Z</option>
+ <option value="grupo">Por familia</option><option value="nuevo">Más recientes</option></select>
+<button id="btnModoOrden">↕ Ordenar</button><div id="ordenAviso" style="display:none"></div>
+<button id="btnModoSeleccion"></button><div id="seleccionBar"></div>
+<div id="contenedorCosteo"></div><div id="countLabel"></div><div id="pgBar"></div>
+<table><tbody id="tbodyInsumos"></tbody></table><div id="emptyState"></div>
+<div id="gridInsumos"></div><div id="emptyStateGrid"></div><pre id="out"></pre>
+<script src="/insumo-label.js"></script><script src="/reporte-marca.js"></script>
+<script src="/multi-select.js"></script><script src="/reordenar.js"></script>
+<script>var etx=function(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');};
+localStorage.removeItem('etaax_orden_insumos');</script>
+<script src="/recetas/insumos.js"></script>
+<script>
+var log=[];function L(s){log.push(s);document.getElementById('out').textContent='RES\n'+log.join('\n')+'\nFIN';}
+var hoy=Date.now();
+var CAT=[
+ {id:'i0',nombre:'Zanahoria',familia:'Verduras',categoria:'Raíz',activo:'1',presentaciones:[{precio:'10'}],createdAt:new Date(hoy-5*864e5).toISOString()},
+ {id:'i1',nombre:'Aceite',familia:'Abarrotes',categoria:'Grasas',activo:'1',presentaciones:[{precio:'10'}],createdAt:new Date(hoy-1*864e5).toISOString()},
+ {id:'i2',nombre:'Mezcal',familia:'Bebidas',categoria:'Destilados',activo:'1',presentaciones:[{precio:'10'}],createdAt:new Date(hoy-9*864e5).toISOString()},
+ {id:'i3',nombre:'Azúcar',familia:'Abarrotes',categoria:'Dulces',activo:'1',presentaciones:[{precio:'10'}],createdAt:new Date(hoy-3*864e5).toISOString()}];
+getInsumos=function(){return CAT;}; setInsumos=function(d){CAT=d;};
+_catGlobalIns=function(){return false;}; _getSucActivaIns=function(){return '';};
+renderStats=function(){}; _poblarFiltroSucIns=function(){}; init=function(){};
+function noms(){ return Array.prototype.map.call(document.querySelectorAll('#tbodyInsumos tr[data-ord-id]'),function(t){
+  return (CAT.find(function(x){return x.id===t.getAttribute('data-ord-id');})||{}).nombre; }).join(' · '); }
+try{
+ cargarFiltros(); vistaInsumos='lista'; filtrar();
+ L('── Modos de orden en insumos ──');
+ setOrdenModoIns('alfa');   L('  A–Z:            '+noms());
+ setOrdenModoIns('grupo');  L('  Por familia:    '+noms());
+ setOrdenModoIns('nuevo');  L('  Más recientes:  '+noms());
+ setOrdenModoIns('libre');  L('  A mano:         '+noms());
+ L('  el selector refleja: "'+document.getElementById('ordenModoIns').value+'"');
+ L('');
+ L('── Arrastrar solo "a mano" ──');
+ setOrdenModoIns('alfa'); toggleModoOrden();
+ L('  prender arrastre desde A–Z pasa a: "'+document.getElementById('ordenModoIns').value+'"');
+ L('  engancha:            '+(document.querySelectorAll('#tbodyInsumos tr.ord-mov').length===4));
+ L('  agarraderas:         '+document.querySelectorAll('.ord-grip').length);
+ setOrdenModoIns('grupo');
+ L('  cambiar a "por familia" apaga el arrastre: '+(document.querySelectorAll('#tbodyInsumos tr.ord-mov').length===0));
+}catch(e){ L('THROW '+e.message+'\n'+(e.stack||'').split('\n').slice(0,3).join('\n')); }
+</script></body></html>

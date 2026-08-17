@@ -758,6 +758,13 @@
                         style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">⊞ Galería</button>
                     <button id="btnVistaRecLista" onclick="setVistaRecetas('lista')" title="Vista lista"
                         style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">☰ Lista</button>
+                    <select id="ordenModoRec" onchange="setOrdenModoRec(this.value)" title="Cómo se acomodan las recetas en el catálogo"
+                        style="padding:6px 10px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text-muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;outline:none">
+                        <option value="libre">↕ A mano</option>
+                        <option value="alfa">A–Z</option>
+                        <option value="grupo">Por grupo</option>
+                        <option value="nuevo">Más recientes</option>
+                    </select>
                     <button id="btnModoOrdenRec" onclick="toggleModoOrdenRec()" title="Arrastra las recetas para dejarlas en el orden en el que las ocupas"
                         style="padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">↕ Ordenar</button>
                 </span>
@@ -3257,7 +3264,45 @@ function reactivarRecetaGlobal(id) {
    recetas y quedan en ese orden para todo el negocio. Apagado, un clic sigue
    abriendo la ficha. */
 var _modoOrdenRec = false;
+
+/* Cuatro maneras de ver el catálogo. "A mano" es la única en la que se arrastra:
+   en A–Z o por grupo el orden lo decide el criterio, no el dedo, y dejar arrastrar
+   ahí sería mentir —al siguiente re-pintado todo volvería a su sitio. */
+var _ordenModoRec = (function () {
+    try { return localStorage.getItem('etaax_orden_recetas') || 'libre'; } catch (e) { return 'libre'; }
+})();
+function setOrdenModoRec(v) {
+    _ordenModoRec = v || 'libre';
+    try { localStorage.setItem('etaax_orden_recetas', _ordenModoRec); } catch (e) {}
+    if (_ordenModoRec !== 'libre' && _modoOrdenRec) { toggleModoOrdenRec(); return; }
+    renderGridRecetas();
+}
+function _tsRec(r) {
+    // Cuándo entró al catálogo; si el registro es viejo y no lo trae, su último guardado.
+    var t = Date.parse((r && (r.createdAt || r.fechaGuardado)) || '');
+    return isNaN(t) ? 0 : t;
+}
+function _ordenarRecetas(lista) {
+    var L = lista.slice();
+    if (_ordenModoRec === 'alfa')
+        return L.sort(function (a, b) { return (a.nombre || '').localeCompare(b.nombre || '', 'es'); });
+    if (_ordenModoRec === 'grupo')
+        return L.sort(function (a, b) {
+            var g = (a.grupo || '').localeCompare(b.grupo || '', 'es'); if (g) return g;
+            var c = (a.categoria || '').localeCompare(b.categoria || '', 'es'); if (c) return c;
+            return (a.nombre || '').localeCompare(b.nombre || '', 'es');
+        });
+    if (_ordenModoRec === 'nuevo')
+        return L.sort(function (a, b) { return _tsRec(b) - _tsRec(a); });
+    return (typeof etaaxReordenar !== 'undefined') ? etaaxReordenar.ordenar(L) : L;
+}
 function toggleModoOrdenRec() {
+    // Arrastrar implica orden a mano: si venías en A–Z, se cambia solo en vez de
+    // dejarte mover filas que iban a rebotar a su lugar.
+    if (!_modoOrdenRec && _ordenModoRec !== 'libre') {
+        _ordenModoRec = 'libre';
+        try { localStorage.setItem('etaax_orden_recetas', 'libre'); } catch (e) {}
+    }
     _modoOrdenRec = !_modoOrdenRec;
     var b = document.getElementById('btnModoOrdenRec');
     if (b) {
@@ -3270,12 +3315,20 @@ function toggleModoOrdenRec() {
     if (av) av.style.display = _modoOrdenRec ? 'block' : 'none';
     renderGridRecetas();
 }
+function _pintarOrdenRec() {
+    var s = document.getElementById('ordenModoRec');
+    if (s && s.value !== _ordenModoRec) s.value = _ordenModoRec;
+    var b = document.getElementById('btnModoOrdenRec');
+    if (b) b.title = (_ordenModoRec === 'libre')
+        ? 'Arrastra las recetas para dejarlas en el orden en el que las ocupas'
+        : 'Cambia el orden a "A mano" y te deja arrastrar';
+}
 function _engancharOrdenRec() {
     if (typeof etaaxReordenar === 'undefined') return;
     var cont = document.getElementById('gridRecetas');
     if (!cont) return;
     etaaxReordenar.quitar(cont);
-    if (!_modoOrdenRec) return;
+    if (!_modoOrdenRec || _ordenModoRec !== 'libre') return;
     etaaxReordenar.aplicar(cont, {
         item: '[data-ord-id]',
         onMover: function (a, b, antes) {
@@ -3372,7 +3425,8 @@ function renderGridRecetas() {
         (r.categoria||'').toLowerCase().includes(q)
     );
 
-    if (typeof etaaxReordenar !== 'undefined') lista = etaaxReordenar.ordenar(lista.slice());
+    lista = _ordenarRecetas(lista);
+    _pintarOrdenRec();
 
     const iconos = { alimentos:'🍽️', 'sub-alimentos':'🥣', bebidas:'🥃', 'sub-bebidas':'🧃' };
     const grid   = document.getElementById('gridRecetas');
@@ -3398,20 +3452,20 @@ function renderGridRecetas() {
         const costo  = (r.ingredientes||[]).reduce((s,i) => s + costoIngredienteVivo(i), 0);
         const fecha  = r.fechaGuardado ? new Date(r.fechaGuardado).toLocaleDateString('es-MX',{day:'2-digit',month:'short'}) : '';
         const sel    = recetasSeleccionadas.has(r.id);
-        return `<div data-ord-id="${r.id}" style="background:var(--surface2);border:2px solid ${sel?'var(--green)':'var(--border)'};
-                border-radius:12px;padding:14px;cursor:pointer;transition:all 0.2s;position:relative;
+        return `<div data-ord-id="${r.id}" data-rec-card="${r.id}" style="background:var(--surface2);border:2px solid ${sel?'var(--green)':'var(--border)'};
+                border-radius:12px;padding:14px;transition:all 0.2s;position:relative;
                 ${sel?'background:rgba(61,190,122,0.07)':''}"
             onmouseenter="if(!${sel})this.style.borderColor='var(--green)'"
-            onmouseleave="if(!${recetasSeleccionadas.has(r.id)})this.style.borderColor='var(--border)'"
-            onclick="abrirFichaReceta('${r.id}')">
+            onmouseleave="if(!${recetasSeleccionadas.has(r.id)})this.style.borderColor='var(--border)'">
             <!-- Checkbox selección -->
-            <div onclick="event.stopPropagation();toggleSeleccion('${r.id}',this.closest('div[onclick]'))"
+            <div onclick="event.stopPropagation();toggleSeleccion('${r.id}')"
                 style="position:absolute;top:8px;left:8px;width:18px;height:18px;
                 border-radius:4px;border:1.5px solid ${sel?'var(--green)':'var(--border)'};
                 background:${sel?'var(--green)':'transparent'};
                 display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2">
                 ${sel?'<span style="color:#0a0908;font-size:10px;font-weight:700">✓</span>':''}
             </div>
+            ${_modoOrdenRec ? '<span class="ord-grip" style="position:absolute;top:8px;left:30px;z-index:2" title="Arrastra para cambiar el orden">⠿</span>' : ''}
             <div style="font-size:20px;margin-bottom:6px;margin-top:4px;text-align:center">${icono}</div>
             <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:3px;
                 white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${etx(r.nombre)}</div>
@@ -3473,14 +3527,16 @@ function renderListaRecetas(lista, iconos, catGlobal, sucAct) {
             ((!catGlobal && sucAct && r.status === 'inactiva')
                 ? '<span title="Inactiva global" style="color:var(--red);font-size:11px;margin-right:6px">🚫</span>' : '') +
             _recMasBtn(r.id);
-        return '<tr data-ord-id="'+r.id+'" onclick="abrirFichaReceta(\''+r.id+'\')" style="cursor:pointer;'+(sel?'background:rgba(61,190,122,.07)':'')+'"' +
+        return '<tr data-ord-id="'+r.id+'" style="'+(sel?'background:rgba(61,190,122,.07)':'')+'"' +
                 ' onmouseenter="this.style.background=\'var(--surface2)\'"' +
                 ' onmouseleave="this.style.background=\''+(sel?'rgba(61,190,122,.07)':'transparent')+'\'">' +
             '<td style="'+td+';width:34px" onclick="event.stopPropagation();toggleSeleccion(\''+r.id+'\')">' +
                 '<span style="display:flex;width:18px;height:18px;border-radius:4px;align-items:center;justify-content:center;' +
                 'border:1.5px solid '+(sel?'var(--green)':'var(--border)')+';background:'+(sel?'var(--green)':'transparent')+'">' +
                 (sel ? '<span style="color:#0a0908;font-size:10px;font-weight:700">✓</span>' : '') + '</span></td>' +
-            '<td style="'+td+'"><span style="margin-right:7px">'+icono+'</span>' +
+            '<td style="'+td+'">' +
+                (_modoOrdenRec ? '<span class="ord-grip" title="Arrastra para cambiar el orden">⠿</span>' : '') +
+                '<span style="margin-right:7px">'+icono+'</span>' +
                 '<span style="font-size:13px;font-weight:600;color:var(--text)">'+etx(r.nombre)+'</span>' +
                 (badges ? '<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px">'+badges+'</div>' : '') + '</td>' +
             '<td style="'+td+';font-size:12px;color:var(--text-dim)">'+etx(r.grupo||'—')+'</td>' +

@@ -1,0 +1,82 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>
+<pre id="out"></pre><div id="host"></div>
+<script>
+var log=[];function L(s){log.push(s);document.getElementById('out').textContent='RES\n'+log.join('\n')+'\nFIN';}
+localStorage.setItem('etaax_negocio_activo','negX');
+localStorage.setItem('etaax_ctx', JSON.stringify({negNombre:'Prueba',negEmoji:'🍕'}));
+localStorage.removeItem('etaax_orden_recetas');
+var hoy=Date.now();
+localStorage.setItem('etaax_negX_recetas', JSON.stringify([
+ {id:'r1',nombre:'Zacahuil',tipo:'alimentos',grupo:'Tamales',categoria:'Clásica',ingredientes:[],status:'activa',createdAt:new Date(hoy-5*864e5).toISOString()},
+ {id:'r2',nombre:'Aperol Spritz',tipo:'bebidas',grupo:'Coctelería',categoria:'Spritz',ingredientes:[],status:'activa',createdAt:new Date(hoy-1*864e5).toISOString()},
+ {id:'r3',nombre:'Margarita',tipo:'bebidas',grupo:'Coctelería',categoria:'Clásica',ingredientes:[],status:'activa',createdAt:new Date(hoy-3*864e5).toISOString()},
+ {id:'r4',nombre:'Birria',tipo:'alimentos',grupo:'Guisos',categoria:'Clásica',ingredientes:[],status:'activa',createdAt:new Date(hoy-9*864e5).toISOString()}
+]));
+var f=document.createElement('iframe');
+f.src='/recetas/index.html'; f.style.cssText='width:1200px;height:800px';
+f.onload=function(){ setTimeout(function(){
+  var w=f.contentWindow, d=f.contentDocument;
+  function nombres(){ return Array.prototype.map.call(d.querySelectorAll('#gridRecetas [data-ord-id]'), function(e){
+     return (w.getRecetas().find(function(x){return x.id===e.getAttribute('data-ord-id');})||{}).nombre; }).join(' · '); }
+  try{
+   w.setVistaRecetas('grid'); w.renderGridRecetas();
+   L('── 1) Agarradera para arrastrar ──');
+   L('  sin modo, grips:      '+d.querySelectorAll('#gridRecetas .ord-grip').length+' (esperado 0)');
+   w.toggleModoOrdenRec();
+   L('  con modo, grips:      '+d.querySelectorAll('#gridRecetas .ord-grip').length+' (esperado 4)');
+   w.setVistaRecetas('lista');
+   L('  en vista lista:       '+d.querySelectorAll('#gridRecetas .ord-grip').length+' (esperado 4)');
+   w.toggleModoOrdenRec(); w.setVistaRecetas('grid');
+
+   L('');
+   L('── 2) Modos de orden ──');
+   w.setOrdenModoRec('alfa');   L('  A–Z:            '+nombres());
+   w.setOrdenModoRec('grupo');  L('  Por grupo:      '+nombres());
+   w.setOrdenModoRec('nuevo');  L('  Más recientes:  '+nombres());
+   w.setOrdenModoRec('libre');  L('  A mano:         '+nombres());
+   L('  el selector refleja: "'+d.getElementById('ordenModoRec').value+'"');
+   L('  se recuerda:         '+(localStorage.getItem('etaax_orden_recetas')==='libre'));
+
+   L('');
+   L('── Arrastrar solo tiene sentido "a mano" ──');
+   w.setOrdenModoRec('alfa'); w.toggleModoOrdenRec();
+   L('  al prender arrastre desde A–Z, pasa a: "'+d.getElementById('ordenModoRec').value+'"');
+   L('  y sí engancha:        '+(d.querySelectorAll('#gridRecetas .ord-mov').length===4));
+   w.setOrdenModoRec('alfa');
+   L('  cambiar a A–Z apaga el arrastre: '+(d.querySelectorAll('#gridRecetas .ord-mov').length===0));
+   w.setOrdenModoRec('libre');
+
+   L('');
+   L('── 3) El clic en la tarjeta ya no abre la ficha ──');
+   var card=d.querySelector('#gridRecetas [data-rec-card]');
+   L('  tarjeta sin onclick:  '+(!card.getAttribute('onclick')));
+   L('  sin cursor de liga:   '+(card.style.cursor!=='pointer'));
+   var abierta=false; var orig=w.abrirFichaReceta; w.abrirFichaReceta=function(){ abierta=true; };
+   card.click();
+   L('  clic NO abre ficha:   '+!abierta);
+   w.setVistaRecetas('lista');
+   var fila=d.querySelector('#gridRecetas tr[data-ord-id]');
+   L('  fila sin onclick:     '+(!fila.getAttribute('onclick')));
+   fila.click();
+   L('  clic en fila tampoco: '+!abierta);
+   L('  el ⋯ sigue ahí:       '+(d.querySelectorAll('#gridRecetas .rec-mas-btn').length===4));
+   d.querySelector('#gridRecetas .rec-mas-btn').click();
+   var pop=d.querySelector('.rec-menu-pop');
+   L('  y abre su menú:       '+Array.prototype.map.call(pop.querySelectorAll('button'),function(b){return b.textContent.trim();}).join(' · '));
+   pop.querySelectorAll('button')[0].click();
+   L('  "Ver ficha" sí abre:  '+abierta);
+   w.abrirFichaReceta=orig;
+
+   L('');
+   L('── La selección con palomita sigue viva ──');
+   w.setVistaRecetas('grid');
+   var chk=d.querySelector('#gridRecetas [data-rec-card] div[onclick*="toggleSeleccion"]');
+   chk.click();
+   var card2=d.querySelector('#gridRecetas [data-rec-card]');
+   L('  la tarjeta se marca:  '+(card2.getAttribute('style').indexOf('61,190,122')>=0));
+   L('  palomita visible:     '+(card2.textContent.indexOf('✓')>=0));
+   L('  botón imprimir sale:  '+(d.getElementById('btnImprimirSeleccion').style.display!=='none'));
+  }catch(e){ L('THROW '+e.message+'\n'+(e.stack||'').split('\n').slice(0,3).join('\n')); }
+},2500); };
+document.getElementById('host').appendChild(f);
+</script></body></html>

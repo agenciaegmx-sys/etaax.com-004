@@ -711,9 +711,8 @@
        const catGlobal  = _catGlobalIns();
        const sucActiva  = _getSucActivaIns();
 
-       var lista = (typeof etaaxReordenar !== 'undefined')
-           ? etaaxReordenar.ordenar(getInsumos().slice())   // orden manual primero
-           : getInsumos();
+       var lista = _ordenarInsumos(getInsumos());
+       _pintarOrdenIns();
        if (q)   lista = lista.filter(x =>
            x.nombre.toLowerCase().includes(q) ||
            (x.marca||'').toLowerCase().includes(q) ||
@@ -759,7 +758,7 @@
        // La página se resetea SOLO cuando cambia algún filtro/búsqueda. En los
        // demás re-renders (guardar un insumo, pausar, eliminar, realtime) se
        // CONSERVA la página actual — antes editar en la página 2 te regresaba a la 1.
-       var _firmaF = [q, fam, cat, fams.join(','), cats2.join(','), sucFil, sucActiva, catGlobal, estadoIns, vistaInsumos].join('|');
+       var _firmaF = [q, fam, cat, fams.join(','), cats2.join(','), sucFil, sucActiva, catGlobal, estadoIns, vistaInsumos, _ordenModoIns].join('|');
        if (_firmaF !== _filtroFirmaAnt) { _paginaActual = 0; _filtroFirmaAnt = _firmaF; }
        _renderPagina();
        renderStats(); // stats por sucursal (se actualiza al cambiar el filtro de sucursal)
@@ -809,7 +808,54 @@
       arrastran las filas (o las tarjetas) y el catálogo queda así para todos.
       Apagado no se toca nada — un clic sigue abriendo la ficha. */
    var _modoOrden = false;
+
+   /* Cuatro maneras de ver el catálogo. "A mano" es la única en la que se arrastra:
+      en A–Z o por familia el orden lo decide el criterio, no el dedo, y dejar
+      arrastrar ahí sería mentir — al siguiente re-pintado todo volvería a su sitio. */
+   var _ordenModoIns = (function () {
+       try { return localStorage.getItem('etaax_orden_insumos') || 'libre'; } catch (e) { return 'libre'; }
+   })();
+   function setOrdenModoIns(v) {
+       _ordenModoIns = v || 'libre';
+       try { localStorage.setItem('etaax_orden_insumos', _ordenModoIns); } catch (e) {}
+       if (_ordenModoIns !== 'libre' && _modoOrden) { toggleModoOrden(); return; }
+       filtrar();
+   }
+   window.setOrdenModoIns = setOrdenModoIns;
+   function _tsIns(x) {
+       // Cuándo entró al catálogo; si el registro es viejo y no lo trae, su último guardado.
+       var t = Date.parse((x && (x.createdAt || x.updatedAt)) || '');
+       return isNaN(t) ? 0 : t;
+   }
+   function _ordenarInsumos(lista) {
+       var L = lista.slice();
+       if (_ordenModoIns === 'alfa')
+           return L.sort(function (a, b) { return (a.nombre || '').localeCompare(b.nombre || '', 'es'); });
+       if (_ordenModoIns === 'grupo')
+           return L.sort(function (a, b) {
+               var f = (_familiaIns(a) || '').localeCompare(_familiaIns(b) || '', 'es'); if (f) return f;
+               var c = (a.categoria || '').localeCompare(b.categoria || '', 'es'); if (c) return c;
+               return (a.nombre || '').localeCompare(b.nombre || '', 'es');
+           });
+       if (_ordenModoIns === 'nuevo')
+           return L.sort(function (a, b) { return _tsIns(b) - _tsIns(a); });
+       return (typeof etaaxReordenar !== 'undefined') ? etaaxReordenar.ordenar(L) : L;
+   }
+   function _pintarOrdenIns() {
+       var s = document.getElementById('ordenModoIns');
+       if (s && s.value !== _ordenModoIns) s.value = _ordenModoIns;
+       var b = document.getElementById('btnModoOrden');
+       if (b) b.title = (_ordenModoIns === 'libre')
+           ? 'Arrastra las filas para dejar el catálogo en el orden en el que trabajas'
+           : 'Cambia el orden a "A mano" y te deja arrastrar';
+   }
    function toggleModoOrden() {
+       // Arrastrar implica orden a mano: si venías en A–Z, se cambia solo en vez de
+       // dejarte mover filas que iban a rebotar a su lugar.
+       if (!_modoOrden && _ordenModoIns !== 'libre') {
+           _ordenModoIns = 'libre';
+           try { localStorage.setItem('etaax_orden_insumos', 'libre'); } catch (e) {}
+       }
        _modoOrden = !_modoOrden;
        if (_modoOrden && _modoSeleccion) toggleModoSeleccion();   // no conviven
        var b = document.getElementById('btnModoOrden');
@@ -821,7 +867,9 @@
        }
        var av = document.getElementById('ordenAviso');
        if (av) av.style.display = _modoOrden ? 'block' : 'none';
-       _renderPagina();
+       // filtrar() y no _renderPagina(): prender el arrastre puede haber cambiado el
+       // modo a "a mano", y la lista tiene que RE-ORDENARSE, no solo re-pintarse.
+       filtrar();
    }
    window.toggleModoOrden = toggleModoOrden;
 
@@ -831,7 +879,7 @@
        var tb   = document.getElementById('tbodyInsumos');
        var grid = document.getElementById('gridInsumos');
        [tb, grid].forEach(function (c) { if (c) etaaxReordenar.quitar(c); });
-       if (!_modoOrden) return;
+       if (!_modoOrden || _ordenModoIns !== 'libre') return;
        var cb = function (a, b, antes) {
            var lista = getInsumos().slice();
            if (!etaaxReordenar.mover(lista, a, b, antes)) return;
