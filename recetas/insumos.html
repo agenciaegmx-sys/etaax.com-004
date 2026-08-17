@@ -13,6 +13,7 @@
     <script src="../supabase-config.js"></script>
 <script src="/etaax-db.js"></script>
 <script src="/insumo-label.js"></script>
+<script src="/reporte-marca.js"></script><!-- encabezado de marca para catálogo y costeo impresos -->
 <script src="/qr-pairing.js"></script>
 </head>
 <body>
@@ -129,6 +130,11 @@
                             style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
                             border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
                             font-family:inherit;transition:all .2s" title="Selección múltiple">☐ Seleccionar</button>
+                        <button id="btnImprimirIns" onclick="imprimirInsumos()"
+                            style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
+                            border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;
+                            font-family:inherit;transition:all .2s"
+                            title="Imprime lo que estás viendo: el catálogo en filas o la carátula de costeo, con los filtros y la selección actuales">🖨️ Imprimir</button>
                     </div>
                 </div>
                 <div class="card-body" style="padding:0">
@@ -191,6 +197,10 @@
                             style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
                             border-radius:6px;padding:4px 12px;font-size:11px;cursor:pointer;font-family:inherit">
                             Cancelar</button>
+                        <button onclick="imprimirInsumos()"
+                            style="background:transparent;color:var(--text-muted);border:1px solid var(--border);
+                            border-radius:6px;padding:4px 12px;font-size:11px;cursor:pointer;font-family:inherit"
+                            title="Imprime solo los insumos palomeados">🖨️ Imprimir selección</button>
                         <button id="btnEliminarSelec" onclick="_eliminarSeleccionados()" disabled
                             style="background:rgba(224,90,58,.1);color:var(--red);border:1px solid var(--red);
                             border-radius:6px;padding:4px 14px;font-size:12px;font-weight:600;cursor:pointer;

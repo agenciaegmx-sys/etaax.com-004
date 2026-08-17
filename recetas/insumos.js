@@ -798,6 +798,11 @@
        const desde    = _paginaActual * _PG_SIZE;
        const pagina   = lista.slice(desde, desde + _PG_SIZE);
 
+       if (vistaInsumos === 'costeo') {
+           renderCosteoBebidas();   // filtrar() estando en costeo debe repintarlo
+           _renderPaginacion(1);
+           return;
+       }
        if (vistaInsumos === 'grid') {
            renderGrid(pagina);
        } else {
@@ -882,13 +887,62 @@
            : '<span style="color:var(--text-dim)">—</span>';
    }
 
+   /* La matemática del costeo vive AQUÍ y en ningún otro lado. La pantalla y el
+      reporte impreso leen los mismos números: si el papel dijera otra cosa que la
+      tabla, no habría forma de saber cuál de las dos miente. */
+   function _costeoCopaDatos(ins, todos){
+       var p = (ins.presentaciones||[])[0] || {};
+       var cml = _costoPorMLp(p);
+       var copaCalc = calcCostoCopa(p.costoUnitario, p.umCosto||'LT', p.tamanoCopa, p.umTamanoCopa||'ML');
+       var costoCopa = copaCalc ? parseFloat(copaCalc.costoCopa)||0 : 0;
+       var refIns = p.mezcladorId ? (todos||[]).find(function(x){return x.id===p.mezcladorId;}) : null;
+       var mezPiezas = parseFloat(p.mezcladores)||0;
+       var mezCost = (refIns&&mezPiezas>0) ? mezPiezas*_refrescoCostoPorPieza(refIns) : 0;
+       var fCopa = parseFloat(p.factorCopa)||3.3;
+       var costoBot = cml*toML(p.contNeto, p.umContenido||'ML');
+       var fBot = parseFloat(p.factorBotella)||2.5;
+       return {
+           p: p,
+           costoOz:   cml*OZ_ML,
+           costoCopa: costoCopa,
+           fCopa:     fCopa,
+           sugCopa:   costoCopa*fCopa,
+           cartaCopa: parseFloat(String(p.precioCarta||'').replace(/,/g,''))||0,
+           // La utilidad de la copa se mide contra el trago COMPLETO: si lleva
+           // refresco, ese refresco cuesta y sale de otro insumo.
+           costoTrago: costoCopa+mezCost,
+           tieneMez:  !!p.mezcladorId,
+           costoBot:  costoBot,
+           fBot:      fBot,
+           sugBot:    costoBot*fBot,
+           cartaBot:  parseFloat(String(p.precioCartaBot||'').replace(/,/g,''))||0
+       };
+   }
+   function _costeoPiezaDatos(ins){
+       var p = (ins.presentaciones||[])[0] || {};
+       var costoPieza = parseFloat(p.costoPieza) || (parseFloat(p.precio)||0);
+       var fP = parseFloat(p.factorPieza)||2.0;
+       return {
+           p: p,
+           costoOz:    _costoPorMLp(p)*OZ_ML,
+           costoPieza: costoPieza,
+           fP:         fP,
+           sugPza:     costoPieza*fP,
+           carta:      parseFloat(String(p.precioCarta||'').replace(/,/g,''))||0
+       };
+   }
+
    function renderCosteoBebidas(){
        var cont = document.getElementById('contenedorCosteo');
        if (!cont) return;
        var todos = getInsumos();
+       // La carátula obedece los mismos filtros que el catálogo: si buscas
+       // "mezcal", el costeo enseña mezcales — y eso es lo que se imprime.
+       // `todos` sigue completo: de ahí sale el costo del refresco mezclador.
+       var base = (_listaFiltrada && _listaFiltrada.length) ? _listaFiltrada : todos;
        var byN = function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); };
-       var g1 = todos.filter(function(x){ return ['destilado','licor','vino'].indexOf(x.tipoInsumo)!==-1; }).sort(byN);
-       var g2 = todos.filter(function(x){ return ['cerveza','cerveza_barril','refresco'].indexOf(x.tipoInsumo)!==-1; }).sort(byN);
+       var g1 = base.filter(function(x){ return ['destilado','licor','vino'].indexOf(x.tipoInsumo)!==-1; }).sort(byN);
+       var g2 = base.filter(function(x){ return ['cerveza','cerveza_barril','refresco'].indexOf(x.tipoInsumo)!==-1; }).sort(byN);
        var html = '';
        if (g1.length) html += _costeoTablaCopa(g1, todos);
        if (g2.length) html += _costeoTablaPieza(g2);
@@ -906,23 +960,10 @@
            '<th style="'+_CTH+';text-align:center">Mezcl.</th>'+
            '<th style="'+_CTH+'">Costo bot.</th><th style="'+_CTH+'">Sug. bot.</th><th style="'+_CTH+'">Carta bot.</th><th style="'+_CTH+'">Utilidad bot.</th></tr>';
        var rows = lista.map(function(ins){
-           var p = (ins.presentaciones||[])[0] || {};
-           var cml = _costoPorMLp(p);
-           var costoOz = cml*OZ_ML;
-           var copaCalc = calcCostoCopa(p.costoUnitario, p.umCosto||'LT', p.tamanoCopa, p.umTamanoCopa||'ML');
-           var costoCopa = copaCalc ? parseFloat(copaCalc.costoCopa)||0 : 0;
-           var fCopa = parseFloat(p.factorCopa)||3.3;
-           var sugCopa = costoCopa*fCopa;
-           var cartaCopa = parseFloat(String(p.precioCarta||'').replace(/,/g,''))||0;
-           var refIns = p.mezcladorId ? todos.find(function(x){return x.id===p.mezcladorId;}) : null;
-           var mezPiezas = parseFloat(p.mezcladores)||0;
-           var mezCost = (refIns&&mezPiezas>0) ? mezPiezas*_refrescoCostoPorPieza(refIns) : 0;
-           var costoTrago = costoCopa+mezCost;
-           var contML = toML(p.contNeto, p.umContenido||'ML');
-           var costoBot = cml*contML;
-           var fBot = parseFloat(p.factorBotella)||2.5;
-           var sugBot = costoBot*fBot;
-           var cartaBot = parseFloat(String(p.precioCartaBot||'').replace(/,/g,''))||0;
+           var D = _costeoCopaDatos(ins, todos), p = D.p;
+           var costoOz = D.costoOz, costoCopa = D.costoCopa, fCopa = D.fCopa, sugCopa = D.sugCopa;
+           var cartaCopa = D.cartaCopa, costoTrago = D.costoTrago;
+           var costoBot = D.costoBot, fBot = D.fBot, sugBot = D.sugBot, cartaBot = D.cartaBot;
            return '<tr>'+
                '<td style="'+_CTDL+';font-weight:600">'+etx(ins.nombre)+'</td>'+
                '<td style="'+_CTDL+';color:var(--text-muted)">'+etx(_grupoIns(ins))+'</td>'+
@@ -949,13 +990,8 @@
            '<th style="'+_CTH+'">Costo unit.</th><th style="'+_CTH+'">Costo/oz</th><th style="'+_CTH+'">Costo/pza</th>'+
            '<th style="'+_CTH+'">Sug. pza</th><th style="'+_CTH+'">Carta</th><th style="'+_CTH+'">Utilidad</th></tr>';
        var rows = lista.map(function(ins){
-           var p = (ins.presentaciones||[])[0] || {};
-           var cml = _costoPorMLp(p);
-           var costoOz = cml*OZ_ML;
-           var costoPieza = parseFloat(p.costoPieza) || (parseFloat(p.precio)||0);
-           var fP = parseFloat(p.factorPieza)||2.0;
-           var sugPza = costoPieza*fP;
-           var carta = parseFloat(String(p.precioCarta||'').replace(/,/g,''))||0;
+           var D = _costeoPiezaDatos(ins), p = D.p;
+           var costoOz = D.costoOz, costoPieza = D.costoPieza, fP = D.fP, sugPza = D.sugPza, carta = D.carta;
            return '<tr>'+
                '<td style="'+_CTDL+';font-weight:600">'+etx(ins.nombre)+'</td>'+
                '<td style="'+_CTDL+';color:var(--text-muted)">'+etx(_grupoIns(ins))+'</td>'+
@@ -969,6 +1005,196 @@
        }).join('');
        return _costeoSecTitle('🍺 Cervezas · Refrescos y Sodas', lista.length)+
            '<div class="tabla-wrap"><table style="min-width:780px"><thead>'+head+'</thead><tbody>'+rows+'</tbody></table></div>';
+   }
+
+
+   /* ══ IMPRESIÓN DEL CATÁLOGO ═══════════════════════════════════════════════
+      Dos formatos, y manda la vista en la que estés:
+        · Catálogo (lista o galería) → una FILA por insumo con sus metadatos.
+        · Costeo                     → la misma carátula de precios de pantalla.
+      En los dos se imprime LO QUE SE VE: si filtraste, sale lo filtrado; si
+      palomeaste, solo lo palomeado. Un reporte que no coincide con la pantalla
+      de la que salió es un reporte en el que nadie vuelve a confiar. */
+   function _insumosAImprimir(){
+       var base = (_listaFiltrada && _listaFiltrada.length) ? _listaFiltrada.slice() : (getInsumos()||[]).slice();
+       if (_modoSeleccion && _seleccionados.size)
+           base = base.filter(function(x){ return _seleccionados.has(x.id); });
+       return base;
+   }
+   // Qué se está viendo, en una línea, para que el papel diga de dónde salió.
+   function _alcanceImpresion(n){
+       var v = function(id){ var el = document.getElementById(id); return (el && el.value) || ''; };
+       var partes = [];
+       if (v('filtroFamilia'))    partes.push(v('filtroFamilia'));
+       if (v('filtroCategoria'))  partes.push(v('filtroCategoria'));
+       if (v('searchInput'))      partes.push('búsqueda “' + v('searchInput') + '”');
+       if (v('filtroEstadoIns') === 'inactivos') partes.push('solo inactivos');
+       if (_modoSeleccion && _seleccionados.size) partes.push('selección manual');
+       var total = (getInsumos()||[]).length;
+       return (partes.length ? partes.join(' · ') : 'catálogo completo') +
+              ' · ' + n + ' de ' + total + (total === 1 ? ' insumo' : ' insumos');
+   }
+   function _notaAlcance(n){
+       return '<div style="font-size:10.5px;color:#8a8a8a;margin:-2px 0 10px">' + etx(_alcanceImpresion(n)) + '</div>';
+   }
+   function _optsReporteIns(){
+       return _catGlobalIns() ? { sucursal: 'Catálogo global' } : {};
+   }
+   // Carta HORIZONTAL: ni el catálogo ni el costeo caben en vertical.
+   function _abrirHorizontal(html){
+       etaaxAbrirReporte(html.replace('@page{size:letter portrait;margin:0.5cm 0}',
+                                      '@page{size:letter landscape;margin:0.5cm 0}'));
+   }
+   function _mx(v){ var n = parseFloat(v); return (n > 0) ? fmtMXN(n) : '—'; }
+   function _estadoIns(ins){
+       if (!ins) return '—';
+       if (ins.activo === '0') return 'Inactivo';
+       var suc = _getSucActivaIns();
+       if (suc && window._insumoPausadoEn && window._insumoPausadoEn(ins, _effSucIns(suc))) return 'Pausado';
+       return 'Activo';
+   }
+   // "Caja · Botella vidrio 750 ml (14 × 30 g)" — el paréntesis solo cuando el
+   // empaque trae sub-unidades, que es donde la cuenta se presta a confusión.
+   function _presTxtPDF(ins, p){
+       if (!p) return '—';
+       var cont = [p.contNeto, (p.umContenido || '')].filter(Boolean).join(' ');
+       var n    = parseFloat(p.unidadesPorPieza) || 0;
+       var sub  = (n > 1) ? (' (' + n + ' × ' + _contSubDe(p) + ' ' + (p.umContenido || '') + ')') : '';
+       return ([p.presentacionCompra || '', ins.empaque || '', cont].filter(Boolean).join(' · ') || '—') + sub;
+   }
+
+   var _CSS_TABLA_PDF = '<style>table.tnum td,table.tnum th{white-space:nowrap}' +
+       'table.tnum td.w,table.tnum th.w{white-space:normal}</style>';
+
+   function _imprimirCatalogoPDF(lista){
+       var grupos = {}, orden = [];
+       lista.slice().sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); })
+            .forEach(function(ins){
+                var k = _familiaIns(ins) || 'Sin familia';
+                if (!grupos[k]) { grupos[k] = []; orden.push(k); }
+                grupos[k].push(ins);
+            });
+       orden.sort(function(a,b){ return a.localeCompare(b); });
+
+       var cuerpo = _CSS_TABLA_PDF + _notaAlcance(lista.length) + orden.map(function(fam){
+           var filas = grupos[fam].map(function(ins){
+               var p = (ins.presentaciones || [])[0] || null;
+               var sello = _selloActualizacion(ins);
+               var act = sello ? (sello.rel + (sello.quien ? ' · ' + sello.quien : '')) : '—';
+               var ren = (p && p.rendimiento) ? (p.rendimiento + ' ' + (p.umRendimiento || 'OZ')) : '—';
+               var cu  = (p && parseFloat(p.costoUnitario) > 0)
+                   ? fmtMXN(parseFloat(p.costoUnitario)) + '/' + (p.umCosto || 'LT') : '—';
+               return '<tr>' +
+                   '<td class="w">' + etx(insumoTitulo(ins)) + (ins.esSubReceta ? ' 🍳' : '') +
+                       (ins.marca ? '<div style="font-size:10px;color:#8a8a8a;font-weight:400">' + etx(ins.marca) + '</div>' : '') + '</td>' +
+                   '<td class="w" style="text-align:left;font-weight:400;color:#666">' + etx([ins.categoria, ins.subcategoria].filter(Boolean).join(' · ') || '—') + '</td>' +
+                   '<td class="w" style="text-align:left;font-weight:400;color:#666">' + etx(_presTxtPDF(ins, p)) + '</td>' +
+                   '<td>' + (p ? _mx(p.precio) : '—') + '</td>' +
+                   '<td>' + cu + '</td>' +
+                   '<td>' + etx(ren) + '</td>' +
+                   '<td class="w" style="text-align:left;font-weight:400;color:#666">' + etx((p && p.proveedor) || '—') + '</td>' +
+                   '<td>' + etx(_estadoIns(ins)) + '</td>' +
+                   '<td style="font-weight:400;color:#8a8a8a;font-size:10.5px">' + etx(act) + '</td>' +
+               '</tr>';
+           }).join('');
+           return '<div class="rsec">' + etx(fam) + ' · ' + grupos[fam].length + '</div>' +
+               '<table class="rt tnum" style="font-size:11px"><thead><tr>' +
+                   '<th class="w" style="width:19%">Insumo</th><th class="w" style="text-align:left">Categoría</th>' +
+                   '<th class="w" style="text-align:left">Presentación de compra</th><th>Precio</th><th>Costo unit.</th>' +
+                   '<th>Rendimiento</th><th class="w" style="text-align:left">Proveedor</th><th>Estado</th><th>Actualizado</th>' +
+               '</tr></thead><tbody>' + filas + '</tbody></table>';
+       }).join('');
+
+       _abrirHorizontal(etaaxReporteDoc({
+           titulo: 'Catálogo de insumos',
+           subtitulo: 'Catálogo de Insumos',
+           derecha: '<div style="font-size:9px;color:#aaa;letter-spacing:1px;text-align:right">' +
+                    etx(lista.length + (lista.length === 1 ? ' insumo' : ' insumos')) + '</div>',
+           pie: 'Catálogo de insumos · ' + _alcanceImpresion(lista.length),
+           cuerpo: cuerpo,
+           opts: _optsReporteIns()
+       }));
+   }
+
+   /* El costeo impreso es la carátula de precios de la pantalla, con los MISMOS
+      números (salen de _costeoCopaDatos / _costeoPiezaDatos, no de una copia). */
+   function _imprimirCosteoPDF(lista){
+       var todos = getInsumos() || [];
+       var byN = function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); };
+       var g1 = lista.filter(function(x){ return ['destilado','licor','vino'].indexOf(x.tipoInsumo)!==-1; }).sort(byN);
+       var g2 = lista.filter(function(x){ return ['cerveza','cerveza_barril','refresco'].indexOf(x.tipoInsumo)!==-1; }).sort(byN);
+       if (!g1.length && !g2.length){ alert('Con este filtro no hay bebidas que costear.'); return; }
+
+       var _u = function(v, suf){ return v > 0 ? fmtMXN(v) + (suf||'') : '—'; };
+       var _ut = function(precio, costo){
+           if (!(precio > 0) || !(costo > 0)) return '—';
+           var pct = (precio-costo)/costo*100, mult = precio/costo;
+           return '<span style="color:' + (pct>=0 ? '#1a7a46' : '#c0392b') + ';font-weight:700">' +
+                  (pct>=0?'+':'') + pct.toFixed(0) + '%</span>' +
+                  '<span style="color:#aaa;font-size:9.5px"> · ' + mult.toFixed(1) + 'x</span>';
+       };
+       var cuerpo = _CSS_TABLA_PDF + _notaAlcance(g1.length + g2.length);
+
+       if (g1.length) {
+           cuerpo += '<div class="rsec">Destilados · Licores · Vinos · ' + g1.length + '</div>' +
+               '<table class="rt tnum" style="font-size:10.5px"><thead><tr>' +
+                   '<th class="w" style="width:17%">Bebida</th><th class="w" style="text-align:left">Grupo</th>' +
+                   '<th>Costo unit.</th><th>Costo/oz</th><th>Costo/copa</th><th>Sug. copa</th><th>Carta copa</th><th>Utilidad copa</th>' +
+                   '<th>Costo bot.</th><th>Sug. bot.</th><th>Carta bot.</th><th>Utilidad bot.</th>' +
+               '</tr></thead><tbody>' +
+               g1.map(function(ins){
+                   var D = _costeoCopaDatos(ins, todos), p = D.p;
+                   var cu = (parseFloat(p.costoUnitario) > 0)
+                       ? fmtMXN(parseFloat(p.costoUnitario)) + '/' + (p.umCosto || 'LT') : '—';
+                   return '<tr>' +
+                       '<td class="w">' + etx(ins.nombre) + (D.tieneMez ? ' 🥤' : '') + '</td>' +
+                       '<td class="w" style="text-align:left;font-weight:400;color:#666">' + etx(_grupoIns(ins)) + '</td>' +
+                       '<td>' + cu + '</td><td>' + _u(D.costoOz) + '</td><td>' + _u(D.costoCopa) + '</td>' +
+                       '<td>' + _u(D.sugCopa) + '<span style="color:#aaa;font-size:9.5px"> ×' + D.fCopa + '</span></td>' +
+                       '<td style="font-weight:700">' + _u(D.cartaCopa) + '</td><td>' + _ut(D.cartaCopa, D.costoTrago) + '</td>' +
+                       '<td>' + _u(D.costoBot) + '</td>' +
+                       '<td>' + _u(D.sugBot) + '<span style="color:#aaa;font-size:9.5px"> ×' + D.fBot + '</span></td>' +
+                       '<td style="font-weight:700">' + _u(D.cartaBot) + '</td><td>' + _ut(D.cartaBot, D.costoBot) + '</td>' +
+                   '</tr>';
+               }).join('') + '</tbody></table>';
+       }
+       if (g2.length) {
+           cuerpo += '<div class="rsec">Cervezas · Refrescos y Sodas · ' + g2.length + '</div>' +
+               '<table class="rt tnum" style="font-size:10.5px"><thead><tr>' +
+                   '<th class="w" style="width:22%">Bebida</th><th class="w" style="text-align:left">Grupo</th>' +
+                   '<th>Costo unit.</th><th>Costo/oz</th><th>Costo/pza</th><th>Sug. pza</th><th>Carta</th><th>Utilidad</th>' +
+               '</tr></thead><tbody>' +
+               g2.map(function(ins){
+                   var D = _costeoPiezaDatos(ins), p = D.p;
+                   var cu = (parseFloat(p.costoUnitario) > 0)
+                       ? fmtMXN(parseFloat(p.costoUnitario)) + '/' + (p.umCosto || 'LT') : '—';
+                   return '<tr>' +
+                       '<td class="w">' + etx(ins.nombre) + '</td>' +
+                       '<td class="w" style="text-align:left;font-weight:400;color:#666">' + etx(_grupoIns(ins)) + '</td>' +
+                       '<td>' + cu + '</td><td>' + _u(D.costoOz) + '</td><td>' + _u(D.costoPieza) + '</td>' +
+                       '<td>' + _u(D.sugPza) + '<span style="color:#aaa;font-size:9.5px"> ×' + D.fP + '</span></td>' +
+                       '<td style="font-weight:700">' + _u(D.carta) + '</td><td>' + _ut(D.carta, D.costoPieza) + '</td>' +
+                   '</tr>';
+               }).join('') + '</tbody></table>';
+       }
+       _abrirHorizontal(etaaxReporteDoc({
+           titulo: 'Costeo de bebidas',
+           subtitulo: 'Costeo de Bebidas',
+           derecha: '<div style="font-size:9px;color:#aaa;letter-spacing:1px;text-align:right">' + (g1.length+g2.length) + ' bebidas</div>',
+           pie: 'Costeo de bebidas · precios de carta y utilidad',
+           cuerpo: cuerpo,
+           opts: _optsReporteIns()
+       }));
+   }
+
+   function imprimirInsumos(){
+       if (typeof etaaxReporteDoc !== 'function'){
+           alert('No se pudo cargar el formato de reporte. Recarga la página.'); return;
+       }
+       var lista = _insumosAImprimir();
+       if (!lista.length){ alert('No hay insumos que imprimir con lo que está en pantalla.'); return; }
+       if (vistaInsumos === 'costeo') _imprimirCosteoPDF(lista);
+       else                           _imprimirCatalogoPDF(lista);
    }
 
    // ── Tabla ─────────────────────────────────────────────────────
