@@ -299,7 +299,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
     <div class="admin-user">
       <span id="adminNombre">—</span>
       <button class="btn-logout-adm" style="border-color:var(--salmon);color:var(--salmon)" onclick="auditarCruces()" title="Busca recetas que quedaron en el negocio equivocado (solo lectura)">🔎 Auditar cruces</button>
-      <button class="btn-logout-adm" style="border-color:var(--green);color:var(--green)" onclick="abrirPresupuestoModal()" title="Proyección de pago mensual por número de sucursales">🧾 Presupuesto</button>
+      <button class="btn-logout-adm" style="border-color:var(--green);color:var(--green)" onclick="abrirDocumentoModal('presupuesto','')" title="Genera presupuestos y recibos de pago: suscripción por sucursales y servicios adicionales">🧾 Presupuesto / Recibo</button>
       <a href="hub.html" class="btn-logout-adm" style="text-decoration:none;border-color:var(--gold);color:var(--gold)" title="Explorar el hub de módulos como admin">⚡ Hub</a>
       <button class="btn-logout-adm" onclick="adminLogout()">Cerrar sesión</button>
     </div>
@@ -902,7 +902,7 @@ function renderNegocios() {
         var btnCancelar = st.estado !== 'cancelada' && st.estado !== 'pendiente'
             ? '<button onclick="event.stopPropagation();cancelarSuscripcion(\'' + n.id + '\')" style="' + btnBase + 'background:rgba(232,90,90,.14);color:#e85a5a">Cancelar</button>'
             : '';
-        var btnRecibo = '<button title="Generar recibo de cobro" onclick="event.stopPropagation();abrirReciboModal(\'' + n.id + '\')" style="' + btnBase + 'background:rgba(245,200,66,.14);color:#f5c842">🧾</button>';
+        var btnRecibo = '<button title="Generar recibo de pago o presupuesto de este negocio" onclick="event.stopPropagation();abrirDocumentoModal(\'recibo\',\'' + n.id + '\')" style="' + btnBase + 'background:rgba(245,200,66,.14);color:#f5c842">🧾</button>';
         var btnRespaldo = '<button title="Descargar respaldo del negocio" onclick="event.stopPropagation();descargarRespaldoNegocio(\'' + n.id + '\')" style="' + btnBase + 'background:var(--s2);color:var(--muted)">⬇️</button>';
         var btnEliminar = '<button title="Eliminar negocio" onclick="event.stopPropagation();eliminarNegocio(\'' + n.id + '\')" style="' + btnBase + 'background:rgba(232,90,90,.10);color:#e85a5a">🗑️</button>';
         return '<tr class="clickable" onclick="abrirDetalleNegocio(\'' + n.id + '\')">' +
@@ -1138,6 +1138,355 @@ function _mostrarAuditoria(h, totalRecetas, negsConInsumos) {
    Primera versión: solo la proyección. Encima de esto irán las propuestas y
    cotizaciones con presentación.
    ══════════════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════════════════
+   GENERADOR DE DOCUMENTOS · Recibo de pago y Presupuesto en un solo lugar
+   Eran dos modales con campos casi iguales y matemáticas separadas. Un recibo y un
+   presupuesto son el MISMO documento con distinto tiempo verbal: el recibo dice "se
+   pagó", el presupuesto "costaría". Unirlos deja una sola verdad para los conceptos,
+   los extras y el total — y es la base sobre la que después sale la factura.
+   ══════════════════════════════════════════════════════════════════════════════ */
+var _docExtras = [];   // [{ concepto, monto }]
+
+function abrirDocumentoModal(tipoIni, negIdIni) {
+    if (typeof EtaaxPrecios === 'undefined' || typeof etaaxReporteDoc !== 'function') {
+        admAlert('No se pudieron cargar los precios o el formato de reporte. Recarga la página.');
+        return;
+    }
+    var P = EtaaxPrecios, TOPE = P.TOPE;
+    var hoy = new Date().toISOString().slice(0,10);
+    _docExtras = [];
+
+    var _in = 'width:100%;background:var(--s2);border:1px solid var(--b1);color:var(--text);padding:10px 12px;border-radius:9px;font-family:inherit;font-size:13px;box-sizing:border-box';
+    var _lb = 'display:block;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-weight:600';
+    var _campo = function(lbl, html){ return '<div style="margin-bottom:14px"><label style="'+_lb+'">'+lbl+'</label>'+html+'</div>'; };
+
+    // Negocios para elegir (opcional: un presupuesto puede ser para un prospecto).
+    var negs = (_data.negocios||[]).slice().sort(function(a,b){
+        return ((a.datos||{}).nombre||'').localeCompare(((b.datos||{}).nombre||''));
+    });
+    var optNegs = '<option value="">— Sin negocio (prospecto) —</option>' + negs.map(function(n){
+        var d=n.datos||{};
+        return '<option value="'+esc(n.id)+'"'+(n.id===negIdIni?' selected':'')+'>'+esc((d.emoji||'🏢')+' '+(d.nombre||n.id))+'</option>';
+    }).join('');
+    var optPaquete = '', optIndiv = '';
+    for (var i = 1; i <= TOPE; i++) {
+        optPaquete += '<option value="'+i+'">'+i+' sucursal'+(i!==1?'es':'')+' — '+P.fmt(P.precioMensual(i))+'/mes</option>';
+        optIndiv   += '<option value="'+i+'">Sucursal n.º '+i+' — '+P.fmt(P.precioSucursal(i))+'/mes</option>';
+    }
+    var _metodos = ['Transferencia','Depósito','Efectivo','Tarjeta','Otro'];
+
+    var ov = document.createElement('div');
+    ov.setAttribute('data-adm-dialog','1');
+    ov.id = 'docOv';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.62);display:flex;align-items:flex-start;justify-content:center;padding:28px 20px;overflow:auto';
+    ov.innerHTML =
+        '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;max-width:600px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.5)">' +
+            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">' +
+                '<span style="font-size:26px">🧾</span>' +
+                '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:.5px;color:var(--text)" id="doc_titulo">Documento</div>' +
+            '</div>' +
+
+            // Tipo: cambia el tiempo verbal del documento y qué campos se piden.
+            '<div style="display:flex;gap:8px;margin-bottom:18px">' +
+                '<button type="button" data-tipo="recibo" class="doc-tipo" style="flex:1;padding:11px;border-radius:9px;border:1px solid var(--b1);background:var(--s2);color:var(--muted);font-family:inherit;font-size:13px;cursor:pointer">🧾 Recibo de pago</button>' +
+                '<button type="button" data-tipo="presupuesto" class="doc-tipo" style="flex:1;padding:11px;border-radius:9px;border:1px solid var(--b1);background:var(--s2);color:var(--muted);font-family:inherit;font-size:13px;cursor:pointer">📋 Presupuesto</button>' +
+            '</div>' +
+
+            _campo('Negocio', '<select id="doc_neg" style="'+_in+'">'+optNegs+'</select>') +
+            _campo('Cliente / razón social (opcional)', '<input id="doc_cliente" style="'+_in+'" placeholder="Se toma del negocio si lo dejas vacío">') +
+
+            // ── Suscripción ──
+            '<div style="border:1px solid var(--b1);border-radius:11px;padding:13px 14px;margin-bottom:14px">' +
+                '<label style="display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text);cursor:pointer;font-weight:600">' +
+                    '<input type="checkbox" id="doc_susOn" checked style="width:16px;height:16px;accent-color:var(--green)"> Incluir suscripción ETAAX</label>' +
+                '<div id="doc_susBox" style="margin-top:12px">' +
+                    '<div style="display:flex;gap:8px;margin-bottom:10px">' +
+                        '<button type="button" data-modo="paquete" class="doc-modo" style="flex:1;padding:9px;border-radius:8px;border:1px solid var(--b1);background:var(--s2);color:var(--muted);font-family:inherit;font-size:12px;cursor:pointer">Paquete completo</button>' +
+                        '<button type="button" data-modo="individual" class="doc-modo" style="flex:1;padding:9px;border-radius:8px;border:1px solid var(--b1);background:var(--s2);color:var(--muted);font-family:inherit;font-size:12px;cursor:pointer">Una sucursal</button>' +
+                    '</div>' +
+                    '<div id="doc_wrapPaq">' + _campo('Cuántas sucursales (precio escalonado)', '<select id="doc_paq" style="'+_in+'">'+optPaquete+'</select>') + '</div>' +
+                    '<div id="doc_wrapInd" style="display:none">' + _campo('Cuál sucursal (su precio individual)', '<select id="doc_ind" style="'+_in+'">'+optIndiv+'</select>') +
+                        '<div style="font-size:11px;color:var(--muted);margin:-8px 0 12px;line-height:1.5">La n.º 6 cuesta menos que la n.º 2: el descuento crece con cada sucursal. Sirve para cobrar una sola por separado.</div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+
+            // ── Servicios extra ──
+            '<div style="border:1px solid var(--b1);border-radius:11px;padding:13px 14px;margin-bottom:14px">' +
+                '<div style="font-size:13px;color:var(--text);font-weight:600;margin-bottom:4px">Servicios adicionales</div>' +
+                '<div style="font-size:11.5px;color:var(--muted);margin-bottom:10px">Consultoría, costeo, asesoría, implementación… Se suman al total.</div>' +
+                '<div id="doc_extras"></div>' +
+                '<button type="button" data-act="addExtra" style="width:100%;padding:9px;border-radius:8px;border:1px dashed var(--b2);background:transparent;color:var(--muted);font-family:inherit;font-size:12px;cursor:pointer">+ Agregar servicio</button>' +
+            '</div>' +
+
+            // ── Total ──
+            '<div style="background:var(--s2);border:1px solid var(--b1);border-radius:11px;padding:13px 15px;margin-bottom:14px">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">' +
+                    '<div><div style="'+_lb+';margin:0">Total</div>' +
+                        '<div id="doc_totalHint" style="font-size:11px;color:var(--muted);margin-top:3px">—</div></div>' +
+                    '<div style="display:flex;align-items:center;gap:4px">' +
+                        '<span style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;color:var(--green)">$</span>' +
+                        '<input id="doc_total" type="number" step="0.01" min="0" style="width:150px;text-align:right;font-family:\'Bebas Neue\',sans-serif;font-size:24px;letter-spacing:1px;color:var(--green);background:transparent;border:none;border-bottom:2px solid var(--green);padding:0 2px 2px;outline:none">' +
+                    '</div>' +
+                '</div>' +
+                '<div id="doc_manual" style="display:none;font-size:11px;color:#f5c842;margin-top:6px">✏️ Ajustado a mano · <span data-act="totalAuto" style="cursor:pointer;text-decoration:underline">volver al automático</span></div>' +
+            '</div>' +
+
+            // ── Campos por tipo ──
+            '<div id="doc_soloRecibo">' +
+                '<div style="display:flex;gap:12px">' +
+                    '<div style="flex:1">' + _campo('Folio', '<input id="doc_folio" style="'+_in+'">') + '</div>' +
+                    '<div style="flex:1">' + _campo('Periodo pagado', '<input id="doc_periodo" style="'+_in+'" placeholder="Ej. Agosto 2026">') + '</div>' +
+                '</div>' +
+                '<div style="display:flex;gap:12px">' +
+                    '<div style="flex:1">' + _campo('Método de pago', '<select id="doc_metodo" style="'+_in+'">'+_metodos.map(function(m){return '<option>'+m+'</option>';}).join('')+'</select>') + '</div>' +
+                    '<div style="flex:1">' + _campo('Fecha de pago', '<input id="doc_fpago" type="date" style="'+_in+'" value="'+hoy+'">') + '</div>' +
+                '</div>' +
+                _campo('Referencia (opcional)', '<input id="doc_ref" style="'+_in+'" placeholder="No. de operación, últimos 4 dígitos…">') +
+            '</div>' +
+            '<div id="doc_soloPresu" style="display:none">' +
+                _campo('Vigencia (días)', '<input id="doc_vig" type="number" min="1" max="180" style="'+_in+'" value="30">') +
+                '<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);cursor:pointer;margin:-6px 0 14px"><input type="checkbox" id="doc_anual" checked style="width:16px;height:16px;accent-color:var(--green)"> Incluir comparativo anual y ahorro contra precio de lista</label>' +
+            '</div>' +
+
+            '<div style="display:flex;gap:12px">' +
+                '<div style="flex:1">' + _campo('Fecha de emisión', '<input id="doc_fecha" type="date" style="'+_in+'" value="'+hoy+'">') + '</div>' +
+                '<div style="flex:1;display:flex;align-items:flex-end;padding-bottom:14px">' +
+                    '<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);cursor:pointer"><input type="checkbox" id="doc_iva" checked style="width:16px;height:16px;accent-color:var(--green)"> Precios con IVA incluido</label>' +
+                '</div>' +
+            '</div>' +
+            _campo('Notas (opcional)', '<textarea id="doc_notas" rows="2" style="'+_in+';resize:vertical" placeholder="Condiciones, alcance, agradecimiento…"></textarea>') +
+
+            '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">' +
+                '<button data-act="no" style="background:var(--s2);border:1px solid var(--b1);color:var(--muted);padding:11px 20px;border-radius:9px;font-family:inherit;font-size:13px;cursor:pointer">Cancelar</button>' +
+                '<button data-act="gen" style="background:var(--green);border:none;color:#0a0908;padding:11px 22px;border-radius:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer" id="doc_btnGen">🖨️ Generar</button>' +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(ov);
+
+    var _tipo = (tipoIni === 'presupuesto') ? 'presupuesto' : 'recibo';
+    var _modo = 'paquete';
+    var _totalManual = null;
+
+    function _folioNuevo(){
+        var pre = _tipo === 'recibo' ? 'REC-' : 'PRE-';
+        return pre + hoy.replace(/-/g,'') + '-' + (Date.now().toString(36).slice(-4)).toUpperCase();
+    }
+    function _pintarTipo(){
+        ov.querySelectorAll('.doc-tipo').forEach(function(b){
+            var on = b.getAttribute('data-tipo') === _tipo;
+            b.style.background = on ? 'rgba(61,190,122,.14)' : 'var(--s2)';
+            b.style.borderColor = on ? 'var(--green)' : 'var(--b1)';
+            b.style.color = on ? 'var(--green)' : 'var(--muted)';
+            b.style.fontWeight = on ? '700' : '400';
+        });
+        document.getElementById('doc_titulo').textContent = _tipo === 'recibo' ? 'Recibo de pago' : 'Presupuesto';
+        document.getElementById('doc_soloRecibo').style.display = _tipo === 'recibo' ? '' : 'none';
+        document.getElementById('doc_soloPresu').style.display  = _tipo === 'recibo' ? 'none' : '';
+        document.getElementById('doc_btnGen').textContent = _tipo === 'recibo' ? '🖨️ Generar recibo' : '🖨️ Generar presupuesto';
+        var f = document.getElementById('doc_folio'); if (f) f.value = _folioNuevo();
+    }
+    function _pintarModo(){
+        ov.querySelectorAll('.doc-modo').forEach(function(b){
+            var on = b.getAttribute('data-modo') === _modo;
+            b.style.background = on ? 'rgba(122,184,245,.14)' : 'var(--s2)';
+            b.style.borderColor = on ? '#7ab8f5' : 'var(--b1)';
+            b.style.color = on ? '#7ab8f5' : 'var(--muted)';
+        });
+        document.getElementById('doc_wrapPaq').style.display = _modo === 'paquete' ? '' : 'none';
+        document.getElementById('doc_wrapInd').style.display = _modo === 'individual' ? '' : 'none';
+    }
+    function _subtotalSus(){
+        if (!document.getElementById('doc_susOn').checked) return 0;
+        return _modo === 'paquete'
+            ? P.precioMensual(parseInt(document.getElementById('doc_paq').value,10) || 1)
+            : P.precioSucursal(parseInt(document.getElementById('doc_ind').value,10) || 1);
+    }
+    function _sumaExtras(){ return _docExtras.reduce(function(a,x){ return a + (parseFloat(x.monto)||0); }, 0); }
+    function _recalc(){
+        var sus = _subtotalSus(), ext = _sumaExtras(), auto = sus + ext;
+        var hint = [];
+        if (sus) hint.push('suscripción ' + P.fmt(sus));
+        if (ext) hint.push((_docExtras.filter(function(x){return parseFloat(x.monto);}).length) + ' servicio(s) ' + P.fmt(ext));
+        document.getElementById('doc_totalHint').textContent = hint.join(' + ') || 'sin conceptos todavía';
+        document.getElementById('doc_manual').style.display = (_totalManual !== null) ? '' : 'none';
+        if (_totalManual === null) document.getElementById('doc_total').value = auto.toFixed(2);
+    }
+    function _renderExtras(){
+        var c = document.getElementById('doc_extras');
+        c.innerHTML = _docExtras.map(function(x,i){
+            return '<div style="display:flex;gap:8px;margin-bottom:7px">' +
+                '<input data-ex="'+i+'" data-f="concepto" value="'+esc(x.concepto||'')+'" placeholder="Ej. Consultoría mensual" style="'+_in+';flex:1">' +
+                '<input data-ex="'+i+'" data-f="monto" type="number" step="0.01" min="0" value="'+(x.monto||'')+'" placeholder="0.00" style="'+_in+';width:120px">' +
+                '<button type="button" data-act="delExtra" data-i="'+i+'" style="background:transparent;border:1px solid var(--b1);color:#e05a3a;border-radius:8px;padding:0 11px;cursor:pointer;font-family:inherit">✕</button>' +
+            '</div>';
+        }).join('');
+        _recalc();
+    }
+
+    _pintarTipo(); _pintarModo(); _renderExtras();
+
+    ov.addEventListener('input', function(e){
+        var ex = e.target.getAttribute && e.target.getAttribute('data-ex');
+        if (ex !== null && ex !== undefined) {
+            _docExtras[+ex][e.target.getAttribute('data-f')] = e.target.value;
+            _recalc(); return;
+        }
+        if (e.target.id === 'doc_total') { _totalManual = e.target.value; document.getElementById('doc_manual').style.display=''; return; }
+    });
+    ov.addEventListener('change', function(e){
+        if (['doc_paq','doc_ind','doc_susOn'].indexOf(e.target.id) >= 0) {
+            document.getElementById('doc_susBox').style.display = document.getElementById('doc_susOn').checked ? '' : 'none';
+            _recalc();
+        }
+    });
+    function cerrar(){ try { ov.remove(); } catch(e){} }
+    ov.addEventListener('click', function(e){
+        var t = e.target, act = t.getAttribute && t.getAttribute('data-act');
+        if (t === ov || act === 'no') { cerrar(); return; }
+        if (t.getAttribute && t.getAttribute('data-tipo')) { _tipo = t.getAttribute('data-tipo'); _pintarTipo(); return; }
+        if (t.getAttribute && t.getAttribute('data-modo')) { _modo = t.getAttribute('data-modo'); _pintarModo(); _recalc(); return; }
+        if (act === 'addExtra') { _docExtras.push({ concepto:'', monto:'' }); _renderExtras(); return; }
+        if (act === 'delExtra') { _docExtras.splice(+t.getAttribute('data-i'),1); _renderExtras(); return; }
+        if (act === 'totalAuto') { _totalManual = null; _recalc(); return; }
+        if (act !== 'gen') return;
+
+        var negId = document.getElementById('doc_neg').value;
+        var neg = negId ? (_data.negocios||[]).find(function(x){ return x.id===negId; }) : null;
+        var sus = _subtotalSus();
+        var cfg = {
+            tipo: _tipo,
+            negocio: neg ? ((neg.datos||{}).nombre || '') : '',
+            emoji: neg ? ((neg.datos||{}).emoji || '') : '',
+            cliente: document.getElementById('doc_cliente').value.trim(),
+            susOn: document.getElementById('doc_susOn').checked,
+            modo: _modo,
+            nSucs: parseInt(document.getElementById('doc_paq').value,10) || 1,
+            indice: parseInt(document.getElementById('doc_ind').value,10) || 1,
+            susMonto: sus,
+            extras: _docExtras.filter(function(x){ return (x.concepto||'').trim() || parseFloat(x.monto); })
+                              .map(function(x){ return { concepto:(x.concepto||'Servicio').trim(), monto:parseFloat(x.monto)||0 }; }),
+            total: parseFloat(document.getElementById('doc_total').value) || 0,
+            totalManual: _totalManual !== null,
+            fecha: document.getElementById('doc_fecha').value || hoy,
+            iva: document.getElementById('doc_iva').checked,
+            notas: document.getElementById('doc_notas').value.trim(),
+            folio: (document.getElementById('doc_folio')||{}).value || '',
+            periodo: (document.getElementById('doc_periodo')||{}).value || '',
+            metodo: (document.getElementById('doc_metodo')||{}).value || '',
+            fpago: (document.getElementById('doc_fpago')||{}).value || '',
+            ref: (document.getElementById('doc_ref')||{}).value || '',
+            vig: parseInt((document.getElementById('doc_vig')||{}).value,10) || 30,
+            anual: !!(document.getElementById('doc_anual')||{}).checked
+        };
+        if (!cfg.total) { admAlert('El total no puede ser cero. Agrega la suscripción o un servicio.'); return; }
+        cerrar();
+        try { imprimirDocumento(cfg); }
+        catch (err) { admAlert('No se pudo generar el documento:\n' + (err && err.message || err)); }
+    });
+    setTimeout(function(){ var f=document.getElementById('doc_neg'); if(f) f.focus(); }, 60);
+}
+// Los botones de siempre siguen funcionando, ahora sobre el generador unificado.
+function abrirPresupuestoModal2() { abrirDocumentoModal('presupuesto', ''); }
+function abrirReciboModal2(negId) { abrirDocumentoModal('recibo', negId); }
+
+/* Un documento, dos tiempos verbales. Recibo: "se pagó", con folio, método y fecha
+   de pago. Presupuesto: "costaría", con vigencia y el comparativo anual. La tabla de
+   conceptos y el total son los mismos — de ahí saldrá después la factura. */
+function imprimirDocumento(cfg) {
+    var P = EtaaxPrecios, e = function(x){ return esc(x == null ? '' : String(x)); };
+    var esRec = cfg.tipo === 'recibo';
+    var fFecha = function(iso){
+        if (!iso) return '—';
+        var d = new Date(iso + 'T12:00:00');
+        return isNaN(d) ? iso : d.toLocaleDateString('es-MX',{ day:'2-digit', month:'long', year:'numeric' });
+    };
+
+    // ── Conceptos ──
+    var filas = [], subtotal = 0;
+    if (cfg.susOn && cfg.susMonto > 0) {
+        var det = cfg.modo === 'paquete'
+            ? cfg.nSucs + ' sucursal' + (cfg.nSucs!==1?'es':'') + ' · precio escalonado'
+            : 'Sucursal n.º ' + cfg.indice + ' · ' + P.fmtPct(P.descuentoSucursal(cfg.indice)) + ' de descuento';
+        filas.push({ c:'Suscripción ETAAX', d:det, m:cfg.susMonto });
+        subtotal += cfg.susMonto;
+    }
+    (cfg.extras||[]).forEach(function(x){ filas.push({ c:x.concepto, d:'Servicio', m:x.monto }); subtotal += x.monto; });
+
+    var cuerpo =
+        '<div class="rsec">' + (esRec ? 'Datos del pago' : 'Datos del presupuesto') + '</div>' +
+        '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">' +
+            '<div class="rcard" style="padding:10px 13px"><div class="l">Cliente</div><div style="font-size:13px;font-weight:600">' +
+                e(cfg.cliente || cfg.negocio || '—') + '</div></div>' +
+            '<div class="rcard" style="padding:10px 13px"><div class="l">Folio</div><div style="font-size:13px;font-weight:600">' + e(cfg.folio || '—') + '</div></div>' +
+            '<div class="rcard" style="padding:10px 13px"><div class="l">' + (esRec ? 'Periodo' : 'Vigencia') + '</div><div style="font-size:13px;font-weight:600">' +
+                e(esRec ? (cfg.periodo || '—') : (cfg.vig + ' días')) + '</div></div>' +
+            '<div class="rcard" style="padding:10px 13px"><div class="l">' + (esRec ? 'Fecha de pago' : 'Emisión') + '</div><div style="font-size:13px;font-weight:600">' +
+                e(fFecha(esRec ? cfg.fpago : cfg.fecha)) + '</div></div>' +
+        '</div>' +
+        (esRec && (cfg.metodo || cfg.ref) ?
+            '<div class="rgrid" style="grid-template-columns:repeat(2,1fr);margin-top:10px">' +
+                '<div class="rcard" style="padding:10px 13px"><div class="l">Método de pago</div><div style="font-size:13px;font-weight:600">' + e(cfg.metodo||'—') + '</div></div>' +
+                '<div class="rcard" style="padding:10px 13px"><div class="l">Referencia</div><div style="font-size:13px;font-weight:600">' + e(cfg.ref||'—') + '</div></div>' +
+            '</div>' : '') +
+
+        '<div class="rsec">Conceptos</div>' +
+        '<table class="rt"><thead><tr><th style="width:46%">Concepto</th><th style="text-align:left">Detalle</th><th>Importe</th></tr></thead><tbody>' +
+        filas.map(function(f){
+            return '<tr><td>' + e(f.c) + '</td>' +
+                   '<td style="text-align:left;color:#8a8a8a;font-weight:400">' + e(f.d) + '</td>' +
+                   '<td>' + P.fmt(f.m) + '</td></tr>';
+        }).join('') +
+        '</tbody><tfoot><tr><td colspan="2">' + (esRec ? 'Total pagado' : 'Total mensual') + '</td><td>' + P.fmt(cfg.total) + '</td></tr></tfoot></table>' +
+        (cfg.totalManual && Math.abs(cfg.total - subtotal) > 0.005
+            ? '<div style="font-size:9.5px;color:#8a8a8a;margin-top:5px">Total ajustado (suma de conceptos: ' + P.fmt(subtotal) + ').</div>' : '') +
+        '<div style="margin-top:9px;padding:10px 13px;background:#f8f8f8;border-left:3px solid #3dbe7a;border-radius:0 6px 6px 0">' +
+            '<div style="font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#999;font-weight:700;margin-bottom:3px">Importe con letra</div>' +
+            '<div style="font-size:11.5px;font-weight:600;line-height:1.4">' + e(EtaaxCore.importeLetra(cfg.total)) + '</div>' +
+            '<div style="font-size:9.5px;color:#8a8a8a;margin-top:3px">' + (cfg.iva ? 'Los importes incluyen IVA.' : 'Los importes NO incluyen IVA.') + '</div>' +
+        '</div>' +
+
+        // Comparativo anual: solo en presupuesto y solo si hay suscripción que comparar.
+        ((!esRec && cfg.anual && cfg.susOn && cfg.modo === 'paquete') ? (function(){
+            var lista = P.BASE * cfg.nSucs, ahorroMes = lista - cfg.susMonto;
+            return '<div class="rsec">Comparativo anual</div>' +
+                '<table class="rt"><thead><tr><th>Concepto</th><th>Mensual</th><th>Anual</th></tr></thead><tbody>' +
+                '<tr><td>Precio de lista (' + cfg.nSucs + ' × ' + P.fmt(P.BASE) + ')</td><td>' + P.fmt(lista) + '</td><td>' + P.fmt(lista*12) + '</td></tr>' +
+                '<tr><td>Tu precio ETAAX</td><td>' + P.fmt(cfg.susMonto) + '</td><td>' + P.fmt(cfg.susMonto*12) + '</td></tr>' +
+                '</tbody><tfoot><tr><td>Ahorro</td><td>' + P.fmt(ahorroMes) + '</td><td>' + P.fmt(ahorroMes*12) + '</td></tr></tfoot></table>';
+        })() : '') +
+
+        (cfg.notas ? '<div class="rsec">Notas</div><div style="font-size:11.5px;line-height:1.6;color:#555">' + e(cfg.notas) + '</div>' : '') +
+
+        (esRec
+            ? '<div class="rgrid" style="grid-template-columns:1fr 1fr;gap:26px;margin-top:30px">' +
+                '<div style="text-align:center"><div style="border-top:1px solid #1a1916;margin:0 10px 6px"></div>' +
+                    '<div style="font-size:11px;font-weight:600">Recibió</div>' +
+                    '<div style="font-size:9px;color:#8a8a8a;margin-top:2px">EGMx Consultoría</div></div>' +
+                '<div style="text-align:center"><div style="border-top:1px solid #1a1916;margin:0 10px 6px"></div>' +
+                    '<div style="font-size:11px;font-weight:600">' + e(cfg.cliente || cfg.negocio || 'Cliente') + '</div>' +
+                    '<div style="font-size:9px;color:#8a8a8a;margin-top:2px">Conforme</div></div>' +
+              '</div>'
+            : '<div style="margin-top:22px;font-size:11px;color:#8a8a8a;line-height:1.6">Este presupuesto es válido por <b>' + cfg.vig +
+              ' días</b> a partir del ' + e(fFecha(cfg.fecha)) + '. Los precios pueden cambiar después de esa fecha.</div>') +
+
+        '<div style="margin-top:22px;padding:9px 12px;border:1px solid #e8d8a8;background:#fdfaef;border-radius:7px">' +
+            '<div style="font-size:9.5px;color:#8a7a4a;line-height:1.5"><b>Comprobante interno.</b> Este documento ampara la operación entre ETAAX ' +
+            '(EGMx Consultoría) y el cliente. <b>No es un CFDI</b> ni sustituye a la factura fiscal.</div>' +
+        '</div>';
+
+    var html = etaaxReporteDoc({
+        titulo: (esRec ? 'Recibo' : 'Presupuesto') + ' · ' + (cfg.cliente || cfg.negocio || 'ETAAX'),
+        subtitulo: (esRec ? 'Recibo de Pago' : 'Presupuesto') + (cfg.folio ? ' · ' + cfg.folio : ''),
+        derecha: '<div style="font-size:9px;color:#aaa;letter-spacing:1px;text-align:right">' + e(fFecha(cfg.fecha)) + '</div>' +
+                 '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;line-height:1;margin-top:3px;text-align:right;color:#1a1916">' + P.fmt(cfg.total) + '</div>',
+        pie: esRec ? 'Recibo de pago · comprobante interno' : 'Presupuesto · Sistema de Gestión Empresarial',
+        cuerpo: cuerpo,
+        opts: { negocio: 'ETAAX', sucursal: 'Sistema de Gestión Empresarial', emoji: '', logo: '' }
+    });
+    etaaxAbrirReporte(html);
+}
+
 function abrirPresupuestoModal() {
     if (typeof EtaaxPrecios === 'undefined' || typeof etaaxReporteDoc !== 'function') {
         admAlert('No se pudieron cargar los precios o el formato de reporte. Recarga la página.');
