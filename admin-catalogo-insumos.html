@@ -742,7 +742,41 @@ function _novDiffHTML(cat, ins){
    las presentaciones — si el negocio vuelve a cambiar algo, la novedad REAPARECE. */
 function _novFirmaActu(it){ return 'a|'+it.insumoId+'|'+it.negId+'|'+it.costoNeg+'|'+_presFirmaSem((it.datosNeg||{}).presentaciones); }
 function _novFirmaNuevo(it){ return 'n|'+it.key+'|'+it.costo; }
+/* La firma se guarda HASHEADA, no completa. Antes se guardaba el JSON entero de las
+   presentaciones por cada descarte: ~220 bytes × 190 insumos × 2 negocios ≈ 190 KB en
+   localStorage, que ya está cargado con el catálogo (1500+ insumos), recetas e
+   inventarios. Al llenarse la cuota, el setItem tronaba, el catch se lo tragaba y TODAS
+   las decisiones se perdían: por eso al dar "Volver a revisar" reaparecía lo ya
+   atendido. Ahora cada descarte pesa ~60 bytes y, si aun así falla, se avisa. */
+function _hashN(str){
+    var h = 5381, s = String(str||'');
+    for (var i=0;i<s.length;i++) h = ((h*33) ^ s.charCodeAt(i)) >>> 0;
+    return h.toString(36);
+}
+var _NOV_DESC_DIAS = 180;   // medio año: más allá, el dato ya no dice nada
 function _novDescartes(){ try { return JSON.parse(localStorage.getItem('etaax_admin_nov_descartes'))||{}; } catch(e){ return {}; } }
+function _novGuardarDescartes(d){
+    // Poda antes de escribir: sin esto el registro solo crece.
+    var corte = Date.now() - _NOV_DESC_DIAS*864e5, limpio = {};
+    Object.keys(d).forEach(function(k){
+        var r = d[k];
+        // El campo cambió de `ts` a `t` al compactar: se leen los dos o la poda
+        // borraría TODOS los descartes nuevos por creerlos de 1970.
+        var ts = (typeof r === 'number') ? r : ((r && (r.t || r.ts)) || 0);
+        if (ts >= corte) limpio[k] = r;
+    });
+    try {
+        localStorage.setItem('etaax_admin_nov_descartes', JSON.stringify(limpio));
+        return true;
+    } catch(e){
+        // NO se traga el error: perder los descartes en silencio es justo lo que hacía
+        // reaparecer lo ya resuelto sin explicación.
+        console.warn('[novedades] no se pudieron guardar los descartes:', e && e.message);
+        if (window.etaaxAlert) etaaxAlert('No se pudieron guardar tus decisiones: el almacenamiento del navegador está lleno. Libera espacio (o usa "Optimizar fotos") o volverán a aparecer.');
+        else alert('No se pudieron guardar tus decisiones: el almacenamiento del navegador está lleno.');
+        return false;
+    }
+}
 /* Al descartar se guarda una FOTO del estado con su fecha, no solo un "visto".
    Así, si el negocio vuelve a mover el insumo, la novedad reaparece diciendo QUÉ
    cambió desde que lo descartaste, cuándo, en qué sucursal y de qué negocio — en
@@ -755,18 +789,18 @@ function _novDescartarItems(items, claveFn, firmaFn){
     var d=_novDescartes();
     items.forEach(function(it){
         d[claveFn(it)] = {
-            ts: Date.now(),
-            firma: firmaFn(it),
-            costo: it.costoNeg != null ? it.costoNeg : it.costo,
-            neg: it.negNombre || (it.negsArr||[]).join(', ') || ''
+            t: Date.now(),
+            f: _hashN(firmaFn(it)),                                  // hash, no el JSON entero
+            c: it.costoNeg != null ? it.costoNeg : it.costo,
+            n: (it.negNombre || (it.negsArr||[]).join(', ') || '').slice(0, 40)
         };
     });
-    try { localStorage.setItem('etaax_admin_nov_descartes', JSON.stringify(d)); } catch(e){}
+    _novGuardarDescartes(d);
 }
 function _novDescartar(firmas){   // compatibilidad con descartes viejos (solo firma)
     var d=_novDescartes();
-    firmas.forEach(function(f){ d[f]={ ts:Date.now(), firma:f }; });
-    try { localStorage.setItem('etaax_admin_nov_descartes', JSON.stringify(d)); } catch(e){}
+    firmas.forEach(function(f){ d[f]={ t:Date.now(), f:_hashN(f) }; });
+    _novGuardarDescartes(d);
 }
 /* ¿Este item sigue descartado? Solo si su estado NO ha cambiado desde entonces.
    Devuelve el descarte si cambió, para poder contar la historia. */
@@ -774,12 +808,15 @@ function _novEstadoDescarte(it, claveFn, firmaFn){
     var d=_novDescartes();
     var reg = d[claveFn(it)];
     if (!reg) {
-        // Descartes del formato viejo: la clave ERA la firma completa.
+        // Formato v1: la clave ERA la firma completa.
         return d[firmaFn(it)] ? { oculto:true } : null;
     }
-    if (typeof reg === 'number') return { oculto:true };          // formato viejo
-    if (reg.firma === firmaFn(it)) return { oculto:true };        // nada cambió
-    return { oculto:false, desde:reg };                            // cambió → reaparece
+    if (typeof reg === 'number') return { oculto:true };            // formato v1
+    var firmaHoy = firmaFn(it);
+    // v3 (hash corto) o v2 (firma completa): se aceptan las dos.
+    var igual = (reg.f !== undefined) ? (reg.f === _hashN(firmaHoy)) : (reg.firma === firmaHoy);
+    if (igual) return { oculto:true };
+    return { oculto:false, desde:{ ts: reg.t || reg.ts, costo: (reg.c !== undefined ? reg.c : reg.costo), neg: reg.n || reg.neg } };
 }
 function _novDescartarGrupo(insumoId){
     var mias=_novActu.filter(function(x){ return x.insumoId===insumoId; });
