@@ -510,6 +510,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 <script src="supabase-config.js"></script>
 <script src="/reporte-marca.js"></script>
 <script src="/precios.js"></script><!-- tabla de precios por sucursal (una sola verdad) -->
+<script src="/etaax-core.js"></script><!-- importeLetra para recibos y presupuestos -->
 <script>
 var ADMIN_EMAIL = 'admin@etaax.com';
 
@@ -1473,7 +1474,8 @@ function imprimirDocumento(cfg) {
             ? '<div style="font-size:9.5px;color:#8a8a8a;margin-top:5px">Total ajustado (suma de conceptos: ' + P.fmt(subtotal) + ').</div>' : '') +
         '<div style="margin-top:9px;padding:10px 13px;background:#f8f8f8;border-left:3px solid #3dbe7a;border-radius:0 6px 6px 0">' +
             '<div style="font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#999;font-weight:700;margin-bottom:3px">Importe con letra</div>' +
-            '<div style="font-size:11.5px;font-weight:600;line-height:1.4">' + e(EtaaxCore.importeLetra(cfg.total)) + '</div>' +
+            '<div style="font-size:11.5px;font-weight:600;line-height:1.4">' +
+                e(typeof EtaaxCore !== 'undefined' ? EtaaxCore.importeLetra(cfg.total) : '') + '</div>' +
             '<div style="font-size:9.5px;color:#8a8a8a;margin-top:3px">' + (cfg.iva ? 'Los importes incluyen IVA.' : 'Los importes NO incluyen IVA.') + '</div>' +
         '</div>' +
 
