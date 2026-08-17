@@ -1225,7 +1225,7 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
             _campo('Negocio', '<select id="doc_neg" style="'+_in+'">'+optNegs+'</select>') +
             // Se llena al elegir el negocio: hasta entonces no se sabe qué sucursales tiene.
             '<div id="doc_wrapSuc" style="display:none">' + _campo('Sucursal', '<select id="doc_suc" style="'+_in+'"></select>') + '</div>' +
-            _campo('Cliente / razón social (opcional)', '<input id="doc_cliente" style="'+_in+'" placeholder="Se toma del negocio si lo dejas vacío">') +
+            _campo('Cliente / prospecto (opcional)', '<input id="doc_cliente" style="'+_in+'" placeholder="Se toma del negocio o la sucursal si lo dejas vacío">') +
 
             // ── Suscripción ──
             '<div style="border:1px solid var(--b1);border-radius:11px;padding:13px 14px;margin-bottom:14px">' +
@@ -1288,6 +1288,10 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
                         '<div style="font-size:11px;color:var(--muted);margin-top:-4px">Se recuerdan para el siguiente documento.</div>' +
                     '</div>' +
                 '</details>' +
+                // La razón social del receptor se escribe, no se hereda: lo que importa en un
+                // recibo es el nombre fiscal del cliente, que rara vez coincide con el
+                // nombre del negocio en el sistema.
+                _campo('Razón social del receptor', '<input id="doc_razonRec" style="'+_in+'" placeholder="Nombre fiscal del cliente">') +
                 _campo('RFC receptor (opcional)', '<input id="doc_rfcReceptor" style="'+_in+'" placeholder="RFC del cliente">') +
                 '<div style="display:flex;gap:12px">' +
                     '<div style="flex:1">' + _campo('Folio', '<input id="doc_folio" style="'+_in+'">') + '</div>' +
@@ -1451,6 +1455,7 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
             ref: (document.getElementById('doc_ref')||{}).value || '',
             rfcEmisor: ((document.getElementById('doc_rfcEmisor')||{}).value || '').trim().toUpperCase(),
             rfcReceptor: ((document.getElementById('doc_rfcReceptor')||{}).value || '').trim().toUpperCase(),
+            razonRec: ((document.getElementById('doc_razonRec')||{}).value || '').trim(),
             emRazon:  ((document.getElementById('doc_emRazon')||{}).value  || '').trim(),
             emWeb:    ((document.getElementById('doc_emWeb')||{}).value    || '').trim(),
             emCorreo: ((document.getElementById('doc_emCorreo')||{}).value || '').trim(),
@@ -1524,10 +1529,13 @@ function imprimirDocumento(cfg) {
                 ]) +
                 // El receptor es la SUCURSAL cuando hay una: el nombre del negocio es la
                 // clave interna del sistema, no a quién se le cobra.
-                _parte('Receptor', e(cfg.cliente || cfg.sucursal || cfg.negocio || '—'), [
-                    (cfg.cliente && cfg.sucursal) ? e(cfg.sucursal) : '',
-                    cfg.rfcReceptor ? '<b>RFC:</b> ' + e(cfg.rfcReceptor) : ''
-                ]) +
+                // Manda la razón social capturada; si no hay, el cliente, y si tampoco, la
+                // sucursal. El nombre del negocio es el último recurso.
+                (function(){
+                    var nom = cfg.razonRec || cfg.cliente || cfg.sucursal || cfg.negocio || '—';
+                    var seg = (cfg.sucursal && cfg.sucursal !== nom) ? e(cfg.sucursal) : '';
+                    return _parte('Receptor', e(nom), [ seg, cfg.rfcReceptor ? '<b>RFC:</b> ' + e(cfg.rfcReceptor) : '' ]);
+                })() +
             '</div>' +
 
             '<div style="display:flex;gap:28px;flex-wrap:wrap;padding:14px 0 4px;font-size:12.5px;color:#555">' +
@@ -1580,7 +1588,7 @@ function imprimirDocumento(cfg) {
             '</div>';
 
         var html = etaaxReporteDoc({
-            titulo: 'Recibo · ' + (cfg.cliente || cfg.negocio || 'ETAAX') + (cfg.sucursal ? ' · ' + cfg.sucursal : ''),
+            titulo: 'Recibo · ' + (cfg.razonRec || cfg.cliente || cfg.sucursal || cfg.negocio || 'ETAAX'),
             subtitulo: 'Recibo de Pago' + (cfg.folio ? ' · ' + cfg.folio : ''),
             // Sin el total en el encabezado: se lee abajo, con los conceptos.
             derecha: '<div style="font-size:9px;color:#aaa;letter-spacing:1px;text-align:right">' + e(fFecha(cfg.fecha)) + '</div>',
