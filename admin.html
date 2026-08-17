@@ -722,8 +722,17 @@ async function cargarDatos() {
     (resSub.data || []).forEach(function(s){ _data.suscripciones[s.negocio_id] = s; });
     _data.solicitudes = resSol.error ? [] : (resSol.data || []); // tabla v36 (si no existe aún, bandeja vacía)
     _data.sucsNeg = {};
+    // Antes solo se guardaba el CONTEO. La lista completa (con nombre y logo) hace
+    // falta para poder emitir un recibo a nombre de una sucursal concreta.
+    // El logo vive en cfg[sucId]._logo, que es donde lo deja sbSucPush.
+    _data.sucursales = {};
     (resSucs.data || []).forEach(function(r){
-        _data.sucsNeg[r.negocio_id] = ((r.datos || {}).sucursales || []).filter(function(s){ return s && s.activa !== false; }).length;
+        var d = r.datos || {}, cfg = d.cfg || {};
+        var activas = (d.sucursales || []).filter(function(s){ return s && s.activa !== false; });
+        _data.sucsNeg[r.negocio_id] = activas.length;
+        _data.sucursales[r.negocio_id] = activas.map(function(s){
+            return { id: s.id, nombre: s.nombre || s.id, logo: (cfg[s.id] || {})._logo || '' };
+        });
     });
 
     renderStats();
@@ -1193,6 +1202,8 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
             '</div>' +
 
             _campo('Negocio', '<select id="doc_neg" style="'+_in+'">'+optNegs+'</select>') +
+            // Se llena al elegir el negocio: hasta entonces no se sabe qué sucursales tiene.
+            '<div id="doc_wrapSuc" style="display:none">' + _campo('Sucursal', '<select id="doc_suc" style="'+_in+'"></select>') + '</div>' +
             _campo('Cliente / razón social (opcional)', '<input id="doc_cliente" style="'+_in+'" placeholder="Se toma del negocio si lo dejas vacío">') +
 
             // ── Suscripción ──
@@ -1296,6 +1307,19 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
         document.getElementById('doc_wrapPaq').style.display = _modo === 'paquete' ? '' : 'none';
         document.getElementById('doc_wrapInd').style.display = _modo === 'individual' ? '' : 'none';
     }
+    /* Sucursales del negocio elegido. Si el negocio no tiene sucursales registradas,
+       el selector ni aparece: un desplegable vacío solo confunde. */
+    function _pintarSucs(){
+        var negId = document.getElementById('doc_neg').value;
+        var lista = (negId && _data.sucursales) ? (_data.sucursales[negId] || []) : [];
+        var wrap = document.getElementById('doc_wrapSuc');
+        var sel  = document.getElementById('doc_suc');
+        if (!lista.length) { wrap.style.display = 'none'; sel.innerHTML = ''; return; }
+        sel.innerHTML = '<option value="">— Todo el negocio —</option>' + lista.map(function(x){
+            return '<option value="'+esc(x.id)+'">'+esc(x.nombre)+(x.logo?' 🖼️':'')+'</option>';
+        }).join('');
+        wrap.style.display = '';
+    }
     function _subtotalSus(){
         if (!document.getElementById('doc_susOn').checked) return 0;
         return _modo === 'paquete'
@@ -1324,7 +1348,7 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
         _recalc();
     }
 
-    _pintarTipo(); _pintarModo(); _renderExtras();
+    _pintarTipo(); _pintarModo(); _renderExtras(); _pintarSucs();
 
     ov.addEventListener('input', function(e){
         var ex = e.target.getAttribute && e.target.getAttribute('data-ex');
@@ -1335,6 +1359,7 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
         if (e.target.id === 'doc_total') { _totalManual = e.target.value; document.getElementById('doc_manual').style.display=''; return; }
     });
     ov.addEventListener('change', function(e){
+        if (e.target.id === 'doc_neg') { _pintarSucs(); return; }
         if (['doc_paq','doc_ind','doc_susOn'].indexOf(e.target.id) >= 0) {
             document.getElementById('doc_susBox').style.display = document.getElementById('doc_susOn').checked ? '' : 'none';
             _recalc();
@@ -1354,10 +1379,14 @@ function abrirDocumentoModal(tipoIni, negIdIni) {
         var negId = document.getElementById('doc_neg').value;
         var neg = negId ? (_data.negocios||[]).find(function(x){ return x.id===negId; }) : null;
         var sus = _subtotalSus();
+        var sucId = (document.getElementById('doc_suc')||{}).value || '';
+        var sucObj = sucId ? ((_data.sucursales&&_data.sucursales[negId]||[]).find(function(x){ return x.id===sucId; })||null) : null;
         var cfg = {
             tipo: _tipo,
             negocio: neg ? ((neg.datos||{}).nombre || '') : '',
             emoji: neg ? ((neg.datos||{}).emoji || '') : '',
+            sucursal: sucObj ? sucObj.nombre : '',
+            sucLogo:  sucObj ? (sucObj.logo || '') : '',
             cliente: document.getElementById('doc_cliente').value.trim(),
             susOn: document.getElementById('doc_susOn').checked,
             modo: _modo,
@@ -1417,7 +1446,9 @@ function imprimirDocumento(cfg) {
         '<div class="rsec">' + (esRec ? 'Datos del pago' : 'Datos del presupuesto') + '</div>' +
         '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">' +
             '<div class="rcard" style="padding:10px 13px"><div class="l">Cliente</div><div style="font-size:13px;font-weight:600">' +
-                e(cfg.cliente || cfg.negocio || '—') + '</div></div>' +
+                e(cfg.cliente || cfg.negocio || '—') +
+                (cfg.sucursal ? '<div style="font-size:10.5px;color:#8a8a8a;font-weight:400;margin-top:2px">' + e(cfg.sucursal) + '</div>' : '') +
+            '</div></div>' +
             '<div class="rcard" style="padding:10px 13px"><div class="l">Folio</div><div style="font-size:13px;font-weight:600">' + e(cfg.folio || '—') + '</div></div>' +
             '<div class="rcard" style="padding:10px 13px"><div class="l">' + (esRec ? 'Periodo' : 'Vigencia') + '</div><div style="font-size:13px;font-weight:600">' +
                 e(esRec ? (cfg.periodo || '—') : (cfg.vig + ' días')) + '</div></div>' +
@@ -1476,13 +1507,19 @@ function imprimirDocumento(cfg) {
         '</div>';
 
     var html = etaaxReporteDoc({
-        titulo: (esRec ? 'Recibo' : 'Presupuesto') + ' · ' + (cfg.cliente || cfg.negocio || 'ETAAX'),
+        titulo: (esRec ? 'Recibo' : 'Presupuesto') + ' · ' + (cfg.cliente || cfg.negocio || 'ETAAX') + (cfg.sucursal ? ' · ' + cfg.sucursal : ''),
         subtitulo: (esRec ? 'Recibo de Pago' : 'Presupuesto') + (cfg.folio ? ' · ' + cfg.folio : ''),
         derecha: '<div style="font-size:9px;color:#aaa;letter-spacing:1px;text-align:right">' + e(fFecha(cfg.fecha)) + '</div>' +
                  '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;line-height:1;margin-top:3px;text-align:right;color:#1a1916">' + P.fmt(cfg.total) + '</div>',
         pie: esRec ? 'Recibo de pago · comprobante interno' : 'Presupuesto · Sistema de Gestión Empresarial',
         cuerpo: cuerpo,
-        opts: { negocio: 'ETAAX', sucursal: 'Sistema de Gestión Empresarial', emoji: '', logo: '' }
+        // Si el documento es de una sucursal concreta, el encabezado lleva SU nombre y
+        // SU logo (si lo tiene cargado): el papel se ve del cliente, no genérico.
+        opts: cfg.sucursal
+            ? { negocio: cfg.negocio || 'ETAAX', sucursal: cfg.sucursal, emoji: cfg.emoji || '', logo: cfg.sucLogo || '' }
+            : (cfg.negocio
+                ? { negocio: cfg.negocio, sucursal: 'Sistema de Gestión Empresarial', emoji: cfg.emoji || '', logo: '' }
+                : { negocio: 'ETAAX', sucursal: 'Sistema de Gestión Empresarial', emoji: '', logo: '' })
     });
     etaaxAbrirReporte(html);
 }
