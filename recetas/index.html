@@ -3827,18 +3827,22 @@ function editarDesdeficha() {
         }, 80);
     } else {
         _volverACaratula = false;
-        document.getElementById('modalVerRecetas').style.display = 'none';
         // Editar abre la MISMA ventana flotante que "+ Nueva receta" (redimensionable,
-        // movible y minimizable). Antes se iba a pantalla completa y se perdía el
-        // contexto de la lista. Dentro de un embed se edita en la propia página para
+        // movible y minimizable). Dentro de un embed se edita en la propia página para
         // no anidar iframes.
         var _rEd = (typeof getRecetas === 'function')
             ? getRecetas().find(function(x){ return x.id === fichaRecetaActualId; }) : null;
         if (!_enEmbed() && typeof abrirEditorEnModal === 'function') {
+            // El catálogo se QUEDA abierto detrás (la ventana flotante va muy por
+            // encima). Así al cerrar o guardar se vuelve a la lista donde ibas, en
+            // vez de aterrizar en la pantalla principal: las ventanas se apilan y se
+            // cierran en el orden en que se abrieron, como el resto del módulo.
             abrirEditorEnModal('index.html?embed=1&r=' + encodeURIComponent(fichaRecetaActualId),
                 '🧾 ' + _escLabelTipo(_rEd && _rEd.tipo));
             return;
         }
+        // Editor a página completa (fallback): ahí sí hay que soltar el catálogo.
+        document.getElementById('modalVerRecetas').style.display = 'none';
         _showEscForm();
         cargarReceta(fichaRecetaActualId);
         if (window.etaaxNav) etaaxNav.go(_showEscForm); // historial: pantalla editor

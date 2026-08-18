@@ -1715,6 +1715,14 @@ function cerrarIframeInsumo(forzar) {
     }
     _iframeDirty = false;
     if (modal) modal.style.display = 'none';
+    // Si el catálogo de recetas quedó abierto detrás, se repinta: la receta recién
+    // editada pudo cambiar de nombre, de grupo o de costo, y la tarjeta seguiría
+    // enseñando lo viejo.
+    var _catRec = document.getElementById('modalVerRecetas');
+    if (_catRec && typeof renderGridRecetas === 'function' &&
+        getComputedStyle(_catRec).display !== 'none') {
+        try { renderGridRecetas(); } catch (e) {}
+    }
     // Recalcular YA desde localStorage: el iframe lo actualizó de forma síncrona,
     // así que el costo nuevo del insumo/sub-receta ya está disponible al instante.
     ingredientes.forEach((ing, i) => recalcularCostoDesdeInsumo(i));
