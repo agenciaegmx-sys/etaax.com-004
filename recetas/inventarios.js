@@ -2890,6 +2890,158 @@ function _insumosConMovimientoQR() {
     return set;
 }
 
+/* ══ CONTAR POR EMPAQUE DE COMPRA ════════════════════════════════════════════
+   La barra no cuenta 72 botellas: cuenta 3 rejillas. El insumo ya sabe en qué
+   viene ("Caja de 24 Botellas" = presentacionCompra + cantPresCompra + umPresCompra),
+   así que el capturista elige la unidad y el sistema multiplica.
+
+   REGLA: el inventario SIEMPRE guarda PIEZAS. La conversión vive solo en la
+   ventanilla de captura — igual que copa/onza. Así ninguna fórmula de abajo
+   (resguardo, costo, variancia) tiene que saber que existen las rejillas, y los
+   inventarios viejos siguen leyéndose igual. */
+function _empaqueCompra(ins) {
+    var p = (ins && (ins.presentaciones || [])[0]) || {};
+    var n = parseFloat(p.cantPresCompra) || 0;
+    if (!(n > 1)) return null;                       // "caja de 1" no ahorra nada
+    var pres = (p.presentacionCompra || '').toString().trim();
+    if (!pres || /^(pieza|piezas|botella|botellas)$/i.test(pres)) return null;
+    return { label: pres, factor: n, um: (p.umPresCompra || 'Piezas') };
+}
+function _empaqueDeFila(fila) {
+    if (!fila) return null;
+    var cid = _canonInsumoId(fila.insumoId) || fila.insumoId;
+    var ins = (getInsumos() || []).find(function (x) {
+        return x && (_canonInsumoId(x.id) || x.id) === cid;
+    });
+    return _empaqueCompra(ins);
+}
+// ¿Esta fila se está capturando por empaque?
+function _porEmpaque(fila) { return !!(fila && fila.umCerr === 'pres' && _empaqueDeFila(fila)); }
+
+// Piezas guardadas → lo que se ENSEÑA en la casilla (cajas, si así se eligió).
+function _cerrMostrar(fila, v) {
+    if (v == null || v === '') return '';
+    var e = _porEmpaque(fila) ? _empaqueDeFila(fila) : null;
+    if (!e) return v;
+    var n = (parseFloat(v) || 0) / e.factor;
+    return String(Math.round(n * 1000) / 1000);
+}
+// Lo tecleado (cajas) → PIEZAS, que es lo único que se guarda.
+function _cerrAPiezas(fila, v) {
+    if (v === '' || v == null) return '';
+    var e = _porEmpaque(fila) ? _empaqueDeFila(fila) : null;
+    if (!e) return v;
+    return Math.round((parseFloat(v) || 0) * e.factor * 1000) / 1000;
+}
+function updCerradasCalc(idx, campo, el) {
+    var vacio = !String(el.value || '').trim();
+    var fila = filasCaptura[idx];
+    _celdaCalc(el, function (v) { updCaptura(idx, campo, vacio ? '' : _cerrAPiezas(fila, v)); });
+    // La casilla se queda mostrando lo tecleado (cajas), no las piezas.
+    if (!vacio && _porEmpaque(fila)) el.value = _cerrMostrar(fila, filasCaptura[idx][campo]);
+}
+window.updCerradasCalc = updCerradasCalc;
+
+// Sufijo del rótulo: "Cerradas Bodega (cajas)" mientras se cuenta por empaque.
+function _sufEmpaque(fila) {
+    var e = _porEmpaque(fila) ? _empaqueDeFila(fila) : null;
+    return e ? ' <span style="color:var(--accent);text-transform:none">(' + etx(e.label.toLowerCase()) + ')</span>' : '';
+}
+function _tipEmpaque(fila) {
+    var e = _empaqueDeFila(fila);
+    var base = 'Puedes escribir operaciones: 3*24+5';
+    if (!e) return base;
+    return _porEmpaque(fila)
+        ? 'Contando en ' + etx(e.label.toLowerCase()) + ' · 1 = ' + e.factor + ' ' + etx((e.um || 'piezas').toLowerCase()) + '. ' + base
+        : base;
+}
+/* En la tabla no cabe el selector completo: va un chip que alterna la unidad. */
+function _chipEmpaque(fila, idx) {
+    var e = _empaqueDeFila(fila); if (!e) return '';
+    var porEmp = _porEmpaque(fila);
+    return '<button type="button" onclick="setUmCerradas(' + idx + ',\'' + (porEmp ? 'pza' : 'pres') + '\')" ' +
+        'title="Cambiar a ' + (porEmp ? etx(e.um || 'piezas') : etx(e.label) + ' de ' + e.factor) + '" ' +
+        'style="display:block;margin:3px auto 0;padding:1px 7px;border-radius:10px;font-size:9.5px;cursor:pointer;font-family:inherit;border:1px solid ' +
+        (porEmp ? 'var(--accent);background:rgba(245,200,66,.14);color:var(--accent)' : 'var(--border);background:transparent;color:var(--text-dim)') + '">' +
+        (porEmp ? etx(e.label.toLowerCase()) + ' ×' + e.factor : etx((e.um || 'pza').toLowerCase())) + '</button>';
+}
+
+/* Mismo trato para las ENTRADAS: llega el proveedor con 3 rejillas, no con 72
+   botellas. Se teclea en rejillas y se guardan piezas — las entradas alimentan el
+   resguardo y el costo, y esas fórmulas siguen hablando de piezas. */
+function _porEmpaqueEnt(fila) { return !!(fila && fila.umEnt === 'pres' && _empaqueDeFila(fila)); }
+function _entMostrar(fila, v) {
+    if (v == null || v === '') return '';
+    var e = _porEmpaqueEnt(fila) ? _empaqueDeFila(fila) : null;
+    if (!e) return v;
+    return String(Math.round(((parseFloat(v) || 0) / e.factor) * 1000) / 1000);
+}
+function updEntradaEmp(idx, ei, val) {
+    var fila = filasCaptura[idx];
+    var e = _porEmpaqueEnt(fila) ? _empaqueDeFila(fila) : null;
+    var piezas = (val === '' || val == null) ? ''
+        : (e ? Math.round((parseFloat(val) || 0) * e.factor * 1000) / 1000 : val);
+    updEntrada(idx, ei, piezas);
+}
+window.updEntradaEmp = updEntradaEmp;
+function setUmEntradas(idx, modo) {
+    var fila = filasCaptura[idx]; if (!fila) return;
+    fila.umEnt = (modo === 'pres') ? 'pres' : 'pza';
+    _autoGuardar();
+    renderStepContent();
+}
+window.setUmEntradas = setUmEntradas;
+// Selector de las entradas (mismo look que el del Paso 1).
+function selectorEmpaqueEnt(fila, idx, compacto) {
+    var e = _empaqueDeFila(fila);
+    if (!e) return '';
+    var porEmp = _porEmpaqueEnt(fila);
+    var lblPza = (e.um || 'Piezas');
+    return '<div style="display:flex;align-items:center;gap:7px;margin-bottom:' + (compacto ? '6px' : '8px') + '">' +
+        '<span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px">Reciben en</span>' +
+        '<div style="display:flex;gap:4px">' +
+            '<button type="button" onclick="setUmEntradas(' + idx + ',\'pza\')" ' +
+                'style="padding:2px 9px;border-radius:12px;font-size:10.5px;cursor:pointer;font-family:inherit;border:1px solid ' +
+                (!porEmp ? 'var(--accent);background:rgba(245,200,66,.14);color:var(--accent)' : 'var(--border);background:transparent;color:var(--text-dim)') + '">' +
+                etx(lblPza) + '</button>' +
+            '<button type="button" onclick="setUmEntradas(' + idx + ',\'pres\')" ' +
+                'title="1 ' + etx(e.label) + ' = ' + e.factor + ' ' + etx(lblPza).toLowerCase() + '" ' +
+                'style="padding:2px 9px;border-radius:12px;font-size:10.5px;cursor:pointer;font-family:inherit;border:1px solid ' +
+                (porEmp ? 'var(--accent);background:rgba(245,200,66,.14);color:var(--accent)' : 'var(--border);background:transparent;color:var(--text-dim)') + '">' +
+                etx(e.label) + ' <span style="opacity:.65">×' + e.factor + '</span></button>' +
+        '</div></div>';
+}
+
+// Selector "Contar en": solo aparece si el insumo viene en un empaque de más de 1.
+function selectorEmpaque(fila, idx, compacto) {
+    var e = _empaqueDeFila(fila);
+    if (!e) return '';
+    var porEmp = _porEmpaque(fila);
+    var lblPza = (e.um || 'Piezas');
+    return '<div style="display:flex;align-items:center;gap:7px;margin-bottom:' + (compacto ? '7px' : '9px') + '">' +
+        '<span style="font-size:' + (compacto ? '10px' : '11px') + ';color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px">Contar en</span>' +
+        '<div style="display:flex;gap:4px">' +
+            '<button type="button" onclick="setUmCerradas(' + idx + ',\'pza\')" ' +
+                'style="padding:3px 10px;border-radius:14px;font-size:11px;cursor:pointer;font-family:inherit;border:1px solid ' +
+                (!porEmp ? 'var(--accent);background:rgba(245,200,66,.14);color:var(--accent)' : 'var(--border);background:transparent;color:var(--text-dim)') + '">' +
+                etx(lblPza) + '</button>' +
+            '<button type="button" onclick="setUmCerradas(' + idx + ',\'pres\')" ' +
+                'title="1 ' + etx(e.label) + ' = ' + e.factor + ' ' + etx(lblPza).toLowerCase() + '" ' +
+                'style="padding:3px 10px;border-radius:14px;font-size:11px;cursor:pointer;font-family:inherit;border:1px solid ' +
+                (porEmp ? 'var(--accent);background:rgba(245,200,66,.14);color:var(--accent)' : 'var(--border);background:transparent;color:var(--text-dim)') + '">' +
+                etx(e.label) + ' <span style="opacity:.65">×' + e.factor + '</span></button>' +
+        '</div></div>';
+}
+/* Cambiar de unidad NO cambia lo contado: las piezas guardadas son las mismas y
+   solo se re-expresan. Si contaste 72 botellas y cambias a Caja, ves 3. */
+function setUmCerradas(idx, modo) {
+    var fila = filasCaptura[idx]; if (!fila) return;
+    fila.umCerr = (modo === 'pres') ? 'pres' : 'pza';
+    _autoGuardar();
+    renderStepContent();
+}
+window.setUmCerradas = setUmCerradas;
+
 /* Trae el catálogo de insumos de la nube si todavía no está en memoria. Es la red
    de seguridad de la carga inicial: no importa por qué camino se abrió el
    inventario, si no hay insumos se piden y punto. */
@@ -3623,20 +3775,21 @@ function renderCardExist() {
             ${_btnCopiarAnterior(idx, fila)}
 
             <!-- Botellas cerradas -->
+            ${selectorEmpaque(fila, idx)}
             <div style="display:flex;gap:12px;margin-bottom:16px">
                 <div style="flex:1">
-                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Cerradas Bodega</div>
+                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Cerradas Bodega${_sufEmpaque(fila)}</div>
                     <input type="text" inputmode="decimal" class="inv-num-input" style="width:100%;box-sizing:border-box"
-                        value="${fila.cerradasBodega!=null&&fila.cerradasBodega!==''?fila.cerradasBodega:''}" placeholder="—"
+                        value="${_cerrMostrar(fila, fila.cerradasBodega)}" placeholder="—"
                         title="Puedes escribir operaciones: 3*24+5" onkeydown="_celdaKey(event,this)"
-                        onblur="updCapturaCalc(${idx},'cerradasBodega',this)">
+                        onblur="updCerradasCalc(${idx},'cerradasBodega',this)">
                 </div>
                 <div style="flex:1">
-                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Cerradas Barra</div>
+                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Cerradas Barra${_sufEmpaque(fila)}</div>
                     <input type="text" inputmode="decimal" class="inv-num-input" style="width:100%;box-sizing:border-box"
-                        value="${fila.cerradasBarra!=null&&fila.cerradasBarra!==''?fila.cerradasBarra:''}" placeholder="—"
+                        value="${_cerrMostrar(fila, fila.cerradasBarra)}" placeholder="—"
                         title="Puedes escribir operaciones: 3*24+5" onkeydown="_celdaKey(event,this)"
-                        onblur="updCapturaCalc(${idx},'cerradasBarra',this)">
+                        onblur="updCerradasCalc(${idx},'cerradasBarra',this)">
                 </div>
             </div>
 
@@ -3880,14 +4033,15 @@ function renderStep1Lista(filas) {
                 <span class="inv-ant-unit"> ${eaUnit}</span>
             </td>
             <td class="inv-td-input">
-                <input type="text" inputmode="decimal" class="inv-num-input" value="${fila.cerradasBodega!=null&&fila.cerradasBodega!==''?fila.cerradasBodega:''}" placeholder="—"
-                    title="Puedes escribir operaciones: 3*24+5"
-                    onblur="updCapturaCalc(${idx},'cerradasBodega',this)" onkeydown="_celdaKey(event,this)">
+                <input type="text" inputmode="decimal" class="inv-num-input" value="${_cerrMostrar(fila, fila.cerradasBodega)}" placeholder="—"
+                    title="${_tipEmpaque(fila)}"
+                    onblur="updCerradasCalc(${idx},'cerradasBodega',this)" onkeydown="_celdaKey(event,this)">
+                ${_chipEmpaque(fila, idx)}
             </td>
             <td class="inv-td-input">
-                <input type="text" inputmode="decimal" class="inv-num-input" value="${fila.cerradasBarra!=null&&fila.cerradasBarra!==''?fila.cerradasBarra:''}" placeholder="—"
-                    title="Puedes escribir operaciones: 3*24+5"
-                    onblur="updCapturaCalc(${idx},'cerradasBarra',this)" onkeydown="_celdaKey(event,this)">
+                <input type="text" inputmode="decimal" class="inv-num-input" value="${_cerrMostrar(fila, fila.cerradasBarra)}" placeholder="—"
+                    title="${_tipEmpaque(fila)}"
+                    onblur="updCerradasCalc(${idx},'cerradasBarra',this)" onkeydown="_celdaKey(event,this)">
             </td>
             ${inputCell}
             <td class="inv-td-result" ${metodo !== 'peso' ? 'style="display:none"' : ''}>
@@ -3946,20 +4100,21 @@ function renderStep1Galeria(filas) {
                 </div>
             </div>
             <div class="inv-item-card-body">
+                ${selectorEmpaque(fila, idx, true)}
                 <div style="display:flex;gap:8px">
                     <div style="flex:1">
-                        <div class="inv-gal-label">Bodega</div>
+                        <div class="inv-gal-label">Bodega${_sufEmpaque(fila)}</div>
                         <input type="text" inputmode="decimal" class="inv-num-input" style="width:100%;box-sizing:border-box"
-                            value="${fila.cerradasBodega!=null&&fila.cerradasBodega!==''?fila.cerradasBodega:''}" placeholder="—"
-                            title="Puedes escribir operaciones: 3*24+5"
-                            onblur="updCapturaCalc(${idx},'cerradasBodega',this)" onkeydown="_celdaKey(event,this)">
+                            value="${_cerrMostrar(fila, fila.cerradasBodega)}" placeholder="—"
+                            title="${_tipEmpaque(fila)}"
+                            onblur="updCerradasCalc(${idx},'cerradasBodega',this)" onkeydown="_celdaKey(event,this)">
                     </div>
                     <div style="flex:1">
-                        <div class="inv-gal-label">Barra</div>
+                        <div class="inv-gal-label">Barra${_sufEmpaque(fila)}</div>
                         <input type="text" inputmode="decimal" class="inv-num-input" style="width:100%;box-sizing:border-box"
-                            value="${fila.cerradasBarra!=null&&fila.cerradasBarra!==''?fila.cerradasBarra:''}" placeholder="—"
-                            title="Puedes escribir operaciones: 3*24+5"
-                            onblur="updCapturaCalc(${idx},'cerradasBarra',this)" onkeydown="_celdaKey(event,this)">
+                            value="${_cerrMostrar(fila, fila.cerradasBarra)}" placeholder="—"
+                            title="${_tipEmpaque(fila)}"
+                            onblur="updCerradasCalc(${idx},'cerradasBarra',this)" onkeydown="_celdaKey(event,this)">
                     </div>
                 </div>
                 <div>
@@ -4076,12 +4231,13 @@ function renderStep2Lista(filas) {
                 ${precio > 0 ? '$' + precio.toFixed(2) : '—'}
             </td>
             <td class="inv-td-pesos">
+                ${selectorEmpaqueEnt(fila, idx, true)}
                 <div class="inv-pesos-row">
                 ${(fila.entradas||['','','','','']).map((e,ei)=>`
                     <div class="inv-peso-cell">
                         <div class="inv-peso-lbl">E${ei+1}</div>
-                        <input type="text" inputmode="decimal" class="inv-peso-input" value="${e||''}" placeholder="0"
-                            oninput="this.value=this.value.replace(/[^0-9.]/g,'');updEntrada(${idx},${ei},this.value)">
+                        <input type="text" inputmode="decimal" class="inv-peso-input" value="${_entMostrar(fila, e)}" placeholder="0"
+                            oninput="this.value=this.value.replace(/[^0-9.]/g,'');updEntradaEmp(${idx},${ei},this.value)">
                     </div>`).join('')}
                 </div>
             </td>
@@ -4130,12 +4286,13 @@ function renderStep2Galeria(filas) {
             </div>
             <div class="inv-item-card-body">
                 <div class="inv-gal-label" style="margin-bottom:6px">Entradas (en su presentación)</div>
+                ${selectorEmpaqueEnt(fila, idx, true)}
                 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px">
                     ${(fila.entradas||['','','','','']).map((e,ei)=>`
                     <div>
                         <div style="font-size:9px;color:var(--text-dim);text-align:center;margin-bottom:3px">E${ei+1}</div>
-                        <input type="text" inputmode="decimal" class="inv-pesos-grid-input" value="${e||''}" placeholder="0"
-                            oninput="this.value=this.value.replace(/[^0-9.]/g,'');updEntrada(${idx},${ei},this.value)"
+                        <input type="text" inputmode="decimal" class="inv-pesos-grid-input" value="${_entMostrar(fila, e)}" placeholder="0"
+                            oninput="this.value=this.value.replace(/[^0-9.]/g,'');updEntradaEmp(${idx},${ei},this.value)"
                             style="height:42px;font-size:16px;text-align:center;border:1px solid var(--border);
                                    border-radius:8px;background:var(--bg);color:var(--text);width:100%;
                                    font-family:'DM Sans',sans-serif;transition:border-color 0.15s;box-sizing:border-box">

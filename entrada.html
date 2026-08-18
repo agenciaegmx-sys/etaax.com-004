@@ -120,6 +120,8 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
                 <div style="font-size:11px;color:var(--dim);margin-top:2px" id="cntMeta">—</div>
             </div>
 
+            <div id="cntEmpaque" style="display:none"></div>
+
             <label class="lbl">Botellas / piezas cerradas</label>
             <div style="display:flex;gap:10px">
                 <div style="flex:1">
@@ -182,6 +184,7 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
                 <input id="entCant" class="fld" type="number" inputmode="decimal" min="0" step="any" placeholder="0">
             </div>
         </div>
+        <div id="entEmpaque" style="display:none"></div>
 
         <button class="add-btn" onclick="_addItem('entrada')">➕ Agregar a la lista</button>
 
@@ -510,6 +513,8 @@ function selIns(id){
         '<button class="cap-btn ghost" style="width:auto;margin:0;padding:6px 12px" onclick="limpiarIns()">cambiar</button></div>';
     document.getElementById('insList').innerHTML = '';
     document.getElementById('insBusca').value = '';
+    _UM_ENT = 'pza';
+    _pintarSelEmpaque('entEmpaque', SEL, _UM_ENT, 'setUmEnt');
 }
 function limpiarIns(){ SEL=null; document.getElementById('insSelBox').innerHTML=''; filtrarIns(''); }
 
@@ -631,10 +636,53 @@ function selCnt(id){
     document.getElementById('cntBarra').value  = prev.cerradasBarra  != null ? prev.cerradasBarra  : '';
     [0,1,2,3].forEach(function(i){ document.getElementById('cntP'+i).value = (prev.pesos && prev.pesos[i]) || ''; });
     document.getElementById('cntNota').value = prev.nota || '';
+    _UM_CNT = 'pza';
+    _pintarSelEmpaque('cntEmpaque', CNT_SEL, _UM_CNT, 'setUmCnt');
     document.getElementById('cntForm').style.display = 'block';
     document.getElementById('cntMsg').textContent = '';
     document.getElementById('cntForm').scrollIntoView({behavior:'smooth', block:'start'});
 }
+/* ══ CONTAR / RECIBIR POR EMPAQUE ═══════════════════════════════════════════
+   La barra no cuenta 72 botellas: cuenta 3 rejillas. El insumo ya trae en qué
+   viene ("Caja de 24 Botellas"), así que se elige la unidad y el sistema
+   multiplica. Se GUARDAN PIEZAS siempre — el inventario que recibe el conteo
+   habla en piezas y no tiene por qué enterarse de las rejillas. */
+function _empaqueQR(ins){
+    var p = (ins && (ins.presentaciones||[])[0]) || {};
+    var n = parseFloat(p.cantPresCompra) || 0;
+    if (!(n > 1)) return null;                        // "caja de 1" no ahorra nada
+    var pres = (p.presentacionCompra || '').toString().trim();
+    if (!pres || /^(pieza|piezas|botella|botellas)$/i.test(pres)) return null;
+    return { label: pres, factor: n, um: (p.umPresCompra || 'Piezas') };
+}
+var _UM_CNT = 'pza';           // unidad elegida en el conteo (por producto)
+var _UM_ENT = 'pza';           // unidad elegida en la entrada
+function _pintarSelEmpaque(cont, ins, modo, onSet){
+    var el = document.getElementById(cont); if (!el) return;
+    var e = _empaqueQR(ins);
+    if (!e) { el.innerHTML = ''; el.style.display = 'none'; return; }
+    el.style.display = '';
+    var pza = (e.um || 'Piezas');
+    var b = function(v, txt, on){
+        return '<button type="button" onclick="'+onSet+'(\''+v+'\')" style="flex:1;padding:9px;border-radius:10px;'
+            + 'font-size:13px;font-family:inherit;cursor:pointer;border:1px solid '
+            + (on ? 'var(--green);background:rgba(61,190,122,.14);color:var(--green)'
+                  : 'var(--border);background:var(--surface2);color:var(--text-dim)') + '">' + txt + '</button>';
+    };
+    el.innerHTML = '<div class="lbl">Contar en</div><div style="display:flex;gap:8px;margin-bottom:12px">'
+        + b('pza', etx(pza), modo !== 'pres')
+        + b('pres', etx(e.label) + ' ×' + e.factor, modo === 'pres') + '</div>';
+}
+// Lo tecleado (cajas) → piezas, que es lo único que viaja al sistema.
+function _aPiezas(v, ins, modo){
+    if (v === '' || v == null) return v;
+    var e = (modo === 'pres') ? _empaqueQR(ins) : null;
+    if (!e) return v;
+    return Math.round((parseFloat(v)||0) * e.factor * 1000) / 1000;
+}
+function setUmCnt(m){ _UM_CNT = m; _pintarSelEmpaque('cntEmpaque', CNT_SEL, _UM_CNT, 'setUmCnt'); }
+function setUmEnt(m){ _UM_ENT = m; _pintarSelEmpaque('entEmpaque', SEL, _UM_ENT, 'setUmEnt'); }
+
 /* Mismo evaluador que las celdas del sistema: "3*24+5" es como se cuenta de verdad. */
 function _evalCnt(txt){
     var t = String(txt==null?'':txt).trim();
@@ -647,8 +695,8 @@ function _evalCnt(txt){
 async function enviarConteo(){
     var msg = document.getElementById('cntMsg');
     if (!CNT_SEL){ msg.className='cap-msg err'; msg.textContent='Elige un producto.'; return; }
-    var bod = _evalCnt(document.getElementById('cntBodega').value);
-    var bar = _evalCnt(document.getElementById('cntBarra').value);
+    var bod = _aPiezas(_evalCnt(document.getElementById('cntBodega').value), CNT_SEL, _UM_CNT);
+    var bar = _aPiezas(_evalCnt(document.getElementById('cntBarra').value),  CNT_SEL, _UM_CNT);
     var pesos = [0,1,2,3].map(function(i){ return _evalCnt(document.getElementById('cntP'+i).value); });
     if (bod==='' && bar==='' && !pesos.some(function(p){ return p!==''; })){
         msg.className='cap-msg err'; msg.textContent='Pon al menos una cantidad o un peso.'; return;
@@ -713,6 +761,7 @@ function _addItem(flujo){
         if (!SEL){ _cartMsg(flujo,'Elige un insumo.','err'); return; }
         var c = parseFloat(document.getElementById('entCant').value)||0;
         if (c<=0){ _cartMsg(flujo,'Pon una cantidad mayor a 0.','err'); return; }
+        c = parseFloat(_aPiezas(c, SEL, _UM_ENT)) || c;   // rejillas → piezas
         it = { id:genId()+genId(), insumoId:(SEL.origenId||SEL.id), nombre:SEL.nombre+(SEL.variedad?' '+SEL.variedad:''), familia:SEL.familia||SEL.categoria||'', cantidad:c, tipo:document.getElementById('entTipo').value };
         limpiarIns(); document.getElementById('entCant').value='';
     } else if (flujo==='merma'){
