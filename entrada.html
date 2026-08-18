@@ -380,6 +380,26 @@ var NEG = _q('n') || _q('neg');
 var TOKEN = _q('t');             // token secreto del negocio (va en el QR) — NO requiere login
 var SUC = _q('s') || '';         // sucursal del QR (cada sucursal imprime SU QR) — sella cada registro
 // ¿El insumo/receta pertenece a la sucursal del QR? (compat: sin lista de sucursales = visible)
+/* UN RENGLÓN POR PRODUCTO. El catálogo guarda un maestro global y una copia por
+   sucursal del mismo producto (misma botella, dos registros). Sin esto, la barra ve
+   "400 Conejos" dos veces y no hay manera de saber cuál tocar — y dos personas
+   podrían contar la misma botella en registros distintos.
+   Manda la COPIA de esta sucursal (es la que trae sus costos); si no existe, el
+   maestro. Da igual cuál se elija para el conteo: al aplicarlo, el inventario
+   resuelve el id canónico de las dos. */
+function _unoPorProductoQR(lista){
+    var por = {}, orden = [];
+    (lista||[]).forEach(function(x){
+        if (!x || !x.id) return;
+        var k = x.origenId || x.id;             // id canónico (copia → maestro)
+        if (!por[k]) { por[k] = x; orden.push(k); return; }
+        var gana = SUC ? !!x.origenId           // en sucursal manda la copia
+                       : !x.origenId;           // sin sucursal manda el maestro
+        var actualEsCopia = !!por[k].origenId;
+        if (gana && (SUC ? !actualEsCopia : actualEsCopia)) por[k] = x;
+    });
+    return orden.map(function(k){ return por[k]; });
+}
 function _enSucQR(x){
     if (!SUC || !x) return true;
     if ((x.inactivoEn||[]).indexOf(SUC) >= 0 || (x.inactivaEn||[]).indexOf(SUC) >= 0) return false; // pausado ahí
@@ -448,7 +468,9 @@ async function entrar(){
         COLAB = rv.data; _NIPHASH = h;
         // 2) Cargar insumos (token-gated, también por RPC).
         var ri = await _supabase.rpc('entrada_insumos', { p_neg: NEG, p_token: TOKEN });
-        INSUMOS = (ri.data || []).filter(function(x){ return x && x.id && x.activo !== '0' && _enSucQR(x); }); // solo los de ESTA sucursal
+        INSUMOS = _unoPorProductoQR(                                    // sin duplicados maestro/copia
+            (ri.data || []).filter(function(x){ return x && x.id && x.activo !== '0' && _enSucQR(x); })  // solo los de ESTA sucursal
+        );
         INSUMOS.sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
         // 3) Menú de conceptos.
         document.getElementById('quienNom').textContent = COLAB;

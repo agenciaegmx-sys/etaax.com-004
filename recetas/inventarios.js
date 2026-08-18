@@ -2890,6 +2890,32 @@ function _insumosConMovimientoQR() {
     return set;
 }
 
+/* Trae el catálogo de insumos de la nube si todavía no está en memoria. Es la red
+   de seguridad de la carga inicial: no importa por qué camino se abrió el
+   inventario, si no hay insumos se piden y punto. */
+var _catInvPidiendo = false;
+async function _asegurarCatalogoInv() {
+    if (getInsumos().length || _catInvPidiendo) return false;
+    if (typeof _supabase === 'undefined') return false;
+    var negId = getNegocioActivo(); if (!negId) return false;
+    _catInvPidiendo = true;
+    try {
+        var r = await _supabase.from('negocio_insumos').select('datos').eq('negocio_id', negId);
+        if (r.error) return false;
+        var lista = (r.data || []).map(function (x) { return x.datos; }).filter(Boolean);
+        if (!lista.length) return false;
+        _cacheInsumosInv = lista;
+        // Espejo en localStorage, igual que _sbInitInv (sin fotos, por la cuota).
+        try {
+            localStorage.setItem(_sk('insumos'), JSON.stringify(lista.map(function (ins) {
+                var c = Object.assign({}, ins); c.foto = ''; c.fotoUrl = ''; return c;
+            })));
+        } catch (e) {}
+        return true;
+    } catch (e) { return false; }
+    finally { _catInvPidiendo = false; }
+}
+
 function cargarProductosCaptura() {
     // Solo insumos de la sucursal activa Y del ÁREA de este inventario. Sin área → no
     // entra (qué hace la canela en un inventario de barra 😅). PERO sí entran: lo YA
@@ -2903,7 +2929,22 @@ function cargarProductosCaptura() {
         var f = (invActual && (invActual.filas || []).find(function(x){ return x.insumoId === _cid; }));
         return !!(f && _filaConDatos(f));
     });
-    if (!insumos.length) { filasCaptura = []; return; }
+    if (!insumos.length) {
+        filasCaptura = [];
+        // El catálogo puede no haber llegado todavía: entrar al negocio e ir DIRECTO
+        // a un inventario le gana la carrera al pull de Supabase y el Paso 1 salía
+        // vacío ("Sin insumos en catálogo") hasta que ibas a Insumos y volvías. Si de
+        // plano no hay catálogo, se pide AHORA y las filas se rearman al llegar.
+        if (!getInsumos().length) {
+            _asegurarCatalogoInv().then(function (llego) {
+                if (!llego || typeof invActual === 'undefined' || !invActual) return;
+                cargarProductosCaptura();
+                if (typeof irAPaso === 'function') irAPaso(typeof pasoActual !== 'undefined' ? (pasoActual || 1) : 1);
+                else if (typeof renderStepContent === 'function') renderStepContent();
+            });
+        }
+        return;
+    }
     _sanearRefInv(); // ref guardado obsoleto (primer lev con intermedios más nuevos) → automático
 
     filasCaptura = insumos.map(ins => {
