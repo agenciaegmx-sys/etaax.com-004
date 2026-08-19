@@ -4643,6 +4643,27 @@ function _recetaTocaInv(r) {
         return !!(set[id] || set[_canonInsumoId(id) || id]);
     });
 }
+/* A QUÉ INVENTARIO PERTENECE UNA RECETA.
+   Manda su TIPO: una receta de bebidas es del inventario de barra y una de
+   alimentos es del de cocina, por sí solas. Eso no se discute — un coctel no
+   puede desaparecer del inventario de barra porque a uno de sus insumos (la
+   canela, un jarabe) se le olvidó marcarle el área. Antes esa era la ÚNICA
+   condición y por eso los cocteles se esfumaban sin explicación.
+   "Tocar el inventario" queda como puerta EXTRA, no como requisito: así una
+   receta de alimentos que usa un destilado también sale en barra. */
+function _areaDeTipoReceta(tipo) {
+    if (tipo === 'bebidas'   || tipo === 'sub-bebidas')   return 'barra';
+    if (tipo === 'alimentos' || tipo === 'sub-alimentos') return 'cocina';
+    return '';
+}
+function _recetaPerteneceInv(r) {
+    if (!r) return false;
+    var invA = ((invActual && invActual.area) || '').toString().trim().toLowerCase();
+    if (!invA || invA === 'general') return true;           // inventario general: todas
+    if (_areaDeTipoReceta(r.tipo) === invA) return true;    // su tipo la ancla aquí
+    return _recetaTocaInv(r);                                // o usa insumos de esta área
+}
+
 /* POR QUÉ se ocultó una receta. No es lo mismo "usa insumos de la cocina"
    —correcto, ese coctel no se cuenta aquí— que "sus insumos no tienen ÁREA
    asignada", que es un hueco de captura: el insumo sin área nunca genera fila en
@@ -4663,29 +4684,31 @@ var _menuVerTodas = false;
 function toggleMenuVerTodas() { _menuVerTodas = !_menuVerTodas; renderStep3(); }
 window.toggleMenuVerTodas = toggleMenuVerTodas;
 
-/* Aviso accionable: si una receta se ocultó porque a SUS insumos les falta el
-   área, se nombran. Sin esto, el coctel simplemente no está y no hay pista de
-   por qué ni de dónde arreglarlo. */
-function _avisoSinArea(ocultas) {
-    if (!ocultas || !ocultas.length) return '';
-    var culpables = {}, recetas = [];
-    ocultas.forEach(function (r) {
+/* Aviso accionable. La receta YA NO se esconde por esto, pero el hueco sigue
+   costando: un insumo sin área no tiene fila en ningún inventario, así que lo que
+   se vende de él no se le descuenta a nadie y su merma no aparece. Se nombra el
+   insumo y las recetas que lo usan, para que se arregle en el catálogo. */
+function _avisoSinArea(lista) {
+    if (!lista || !lista.length) return '';
+    var culpables = {}, recetas = {}, vistas = {};
+    lista.forEach(function (r) {
+        if (!r || vistas[r.id]) return;
+        vistas[r.id] = 1;
         var sa = _insumosSinAreaDe(r);
         if (!sa.length) return;
-        recetas.push(r.nombre || '—');
+        recetas[r.nombre || '—'] = 1;
         sa.forEach(function (n) { culpables[n] = 1; });
     });
-    var nom = Object.keys(culpables);
+    var nom = Object.keys(culpables), recs = Object.keys(recetas);
     if (!nom.length) return '';
-    var lista = nom.slice(0, 8).map(etx).join(', ') + (nom.length > 8 ? ' y ' + (nom.length - 8) + ' más' : '');
+    var insTxt = nom.slice(0, 8).map(etx).join(', ') + (nom.length > 8 ? ' y ' + (nom.length - 8) + ' más' : '');
+    var recTxt = recs.slice(0, 4).map(etx).join(', ') + (recs.length > 4 ? '…' : '');
     return '<div style="margin:0 16px 10px;padding:10px 13px;border:1px solid rgba(245,200,66,.35);' +
         'background:rgba(245,200,66,.07);border-radius:9px;font-size:11.5px;color:var(--text-muted);line-height:1.6">' +
-        '<b style="color:var(--accent)">Faltan áreas en el catálogo.</b> ' +
-        recetas.length + ' receta' + (recetas.length !== 1 ? 's' : '') + ' (' + etx(recetas.slice(0, 4).join(', ')) +
-        (recetas.length > 4 ? '…' : '') + ') no aparece' + (recetas.length !== 1 ? 'n' : '') +
-        ' aquí porque a estos insumos no se les asignó área: <b style="color:var(--text)">' + lista + '</b>. ' +
-        'Un insumo sin área no entra a NINGÚN inventario. Asígnasela en Catálogo → Insumos y volverá' +
-        (recetas.length !== 1 ? 'n' : '') + ' a salir.</div>';
+        '<b style="color:var(--accent)">Faltan áreas en el catálogo.</b> Estos insumos no tienen área asignada: ' +
+        '<b style="color:var(--text)">' + insTxt + '</b>. No entran a NINGÚN inventario, así que lo que se venda ' +
+        'de ellos no se le descuenta a nadie y su merma no va a aparecer. Los usa' +
+        (recs.length !== 1 ? 'n' : '') + ': ' + recTxt + '. Asígnales área en Catálogo → Insumos.</div>';
 }
 
 function renderStep3Menu() {
@@ -4701,7 +4724,7 @@ function renderStep3Menu() {
     const vendidos = invActual?.cocktailsVendidos || {};
     // Las que YA tienen unidades capturadas se muestran siempre, toquen o no: si no,
     // lo registrado se volvería invisible y no habría cómo corregirlo.
-    const _ocultas = _menuVerTodas ? [] : recetas.filter(r => !_recetaTocaInv(r) && !(parseFloat(vendidos[r.id]) || 0));
+    const _ocultas = _menuVerTodas ? [] : recetas.filter(r => !_recetaPerteneceInv(r) && !(parseFloat(vendidos[r.id]) || 0));
     if (_ocultas.length) {
         const _fuera = {};
         _ocultas.forEach(r => { _fuera[r.id] = 1; });
@@ -4710,8 +4733,8 @@ function renderStep3Menu() {
     if (!recetas.length && !_menuVerTodas) {
         return `<div class="empty-state" style="padding:60px">
             <div class="empty-icon">📋</div>
-            <div class="empty-title">Ninguna receta consume de esta área</div>
-            <div class="empty-desc">Este inventario es de ${etx((invActual && invActual.area) || 'esta área')} y ninguna receta activa usa sus insumos.</div>
+            <div class="empty-title">Ninguna receta de esta área</div>
+            <div class="empty-desc">Este inventario es de ${etx((invActual && invActual.area) || 'esta área')}: salen sus recetas (bebidas en barra, alimentos en cocina) y cualquier otra que use sus insumos.</div>
             <button class="btn-vista" style="margin-top:14px" onclick="toggleMenuVerTodas()">Ver todas las recetas</button>
         </div>`;
     }
@@ -4737,7 +4760,7 @@ function renderStep3Menu() {
         <span>${_menuVerTodas ? 'Mostrando TODAS las recetas, incluidas las que no consumen de esta área.' : _ocultas.length + ' receta' + (_ocultas.length !== 1 ? 's' : '') + ' oculta' + (_ocultas.length !== 1 ? 's' : '') + ': no usan ningún insumo de esta área.'}</span>
         <button onclick="toggleMenuVerTodas()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;font-family:inherit">${_menuVerTodas ? 'Ver solo las de esta área' : 'Ver todas'}</button>
     </div>` : ''}
-    ${_avisoSinArea(_ocultas)}
+    ${_avisoSinArea(recetas.concat(_ocultas))}
     <div style="padding:4px 16px 10px">
         <input type="text" id="menuBuscarCoctel" placeholder="🔍 Buscar coctel o receta…"
             value="${etx(_menuBusquedaVentas||'')}" oninput="_filtrarMenuVentas(this.value)"
