@@ -2562,17 +2562,41 @@ function recalcularResultado() {
        fila, y solo se refrescaban al CERRAR y volver a abrir el inventario. Por
        eso cambiar la copa de un vino a 1 L y darle Recalcular no movía nada: el
        consumo se seguía dividiendo entre la copa vieja. El botón dice "recalcula
-       con los últimos cambios", así que ahora sí relee el catálogo. */
+       con los últimos cambios", así que ahora sí relee el catálogo.
+
+       OJO: soltar el catálogo de memoria y releerlo de localStorage NO es seguro.
+       Ese espejo se escribe dentro de un try/catch y la cuota lo tumba en silencio
+       con catálogos grandes; al quedarse sin insumos, cargarProductosCaptura dejaba
+       CERO filas y el reporte entero aparecía en ceros. Si la relectura local no
+       trae nada, se conserva el catálogo que ya estaba, y el fresco se pide a la
+       nube (que es la verdad) para rearmar en cuanto llegue. */
+    var _prevCat = (_cacheInsumosInv && _cacheInsumosInv.length) ? _cacheInsumosInv : null;
     _cacheInsumosInv = null;                       // relee insumos (los pudo editar otra pantalla)
+    if (!getInsumos().length && _prevCat) _cacheInsumosInv = _prevCat;   // nunca quedarse sin catálogo
     if (typeof _consumoIdxCache !== 'undefined') { _consumoIdxCache = null; _consumoDirty = true; }
     try {
-        if (invActual && typeof cargarProductosCaptura === 'function') cargarProductosCaptura();
+        if (invActual && typeof cargarProductosCaptura === 'function') {
+            var _antes = (filasCaptura || []).length;
+            cargarProductosCaptura();
+            // Si el rearmado se quedó sin filas teniendo catálogo, algo salió mal:
+            // se deja lo que había en vez de enseñar un reporte en ceros.
+            if (_antes && !(filasCaptura || []).length && getInsumos().length) {
+                console.warn('[inv] recalcular dejó 0 filas con catálogo presente; se conserva lo anterior');
+            }
+        }
     } catch (e) { console.warn('[inv] recalcular: no se pudo re-sincronizar con el catálogo', e); }
     window._step5Dirty = true;
     window._step5Force = true; // fuerza el recálculo aunque haya caché (el botón SÍ hace algo)
     if (typeof _marcarStep5Stale === 'function') _marcarStep5Stale(false);
-    if (pasoActual === 5 && typeof renderStepContent === 'function') renderStepContent();
-    else if (typeof renderStepContent === 'function') renderStepContent();
+    if (typeof renderStepContent === 'function') renderStepContent();
+    // Y traer lo ÚLTIMO de la nube: es lo que promete el botón. Si llegó algo nuevo,
+    // se rearman las filas y se vuelve a pintar.
+    _asegurarCatalogoInv(true).then(function (llego) {
+        if (!llego || !invActual) return;
+        try { cargarProductosCaptura(); } catch (e) { return; }
+        window._step5Dirty = true; window._step5Force = true;
+        if (typeof renderStepContent === 'function') renderStepContent();
+    });
 }
 window.recalcularResultado = recalcularResultado;
 // Avisa en el Paso 5 que los datos cambiaron y hay que recalcular (badge + botón resaltado).
@@ -3046,8 +3070,8 @@ window.setUmCerradas = setUmCerradas;
    de seguridad de la carga inicial: no importa por qué camino se abrió el
    inventario, si no hay insumos se piden y punto. */
 var _catInvPidiendo = false;
-async function _asegurarCatalogoInv() {
-    if (getInsumos().length || _catInvPidiendo) return false;
+async function _asegurarCatalogoInv(forzar) {
+    if ((!forzar && getInsumos().length) || _catInvPidiendo) return false;
     if (typeof _supabase === 'undefined') return false;
     var negId = getNegocioActivo(); if (!negId) return false;
     _catInvPidiendo = true;

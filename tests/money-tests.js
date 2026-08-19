@@ -595,9 +595,96 @@ vm.runInContext("_repCache = _repartoPrebatch();", B);
 test('reparto usa TODOS los ingredientes: Aperol 60/960 del físico (= 1.2 copas, no 9.6)', () =>
     eq(Math.round(B._repartoDe('aperol3').fis * 100) / 100, 1.2));
 
-vm.runInContext("invActual.prebatchProducidos = {}; _repCache = null;", B);
-setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
-setVar(B, 'filasCaptura', [filaCopa]);
+/* ── CADENA DE DOS NIVELES: coctel → sub-receta (prebatch) → insumos base ──
+   Es la pregunta de Edwin: si vendo cocteles hechos con un prebatch, ¿se descuenta
+   el uso de los insumos de esa sub-receta, y el sobrante del prebatch se reparte
+   proporcionalmente a cada uno?
+
+   El modelo NO carga dos veces: producir el batch descuenta los insumos base, y
+   vender el coctel descuenta el PREBATCH (no otra vez el Campari). Lo que queda
+   del batch al final se devuelve a sus insumos en proporción a la receta.
+
+   Escenario: batch de 1000 ml = Ginebra 400 + Campari 300 + Vermut 300.
+   Se producen 3 batches (3000 ml). Un coctel usa 100 ml del prebatch y se venden
+   12 → 1200 ml. Al cierre se pesan 1800 ml de prebatch (3000 − 1200 ✓ cuadra). */
+setVar(B, '_cacheRecetasInv', [
+    { id: 'srNeg2', tipo: 'sub-bebidas', status: 'activa', ingredientes: [
+        { insumoId: 'gin4',    cantidad: 400, unidad: 'ML' },
+        { insumoId: 'campari4',cantidad: 300, unidad: 'ML' },
+        { insumoId: 'vermut4', cantidad: 300, unidad: 'ML' },
+    ] },
+    // El coctel que se vende: gasta 100 ml del PREBATCH, no de los insumos sueltos.
+    { id: 'ctlNegroni', tipo: 'bebidas', status: 'activa', ingredientes: [
+        { insumoId: 'preNeg2', cantidad: 100, unidad: 'ML' },
+    ] },
+]);
+setVar(B, '_cacheInsumosInv', [
+    { id: 'preNeg2', esSubReceta: true, recetaId: 'srNeg2', activo: '1' },
+    { id: 'gin4', activo: '1' }, { id: 'campari4', activo: '1' }, { id: 'vermut4', activo: '1' },
+]);
+vm.runInContext("invActual.prebatchProducidos = { preNeg2: 3 }; invActual.cocktailsVendidos = { ctlNegroni: 12 }; _consumoIdxCache = null; _consumoDirty = true;", B);
+
+const filaPreN = { insumoId:'preNeg2', tipo:'copa', contNeto:1000, copaML:100, rendimientoBatch:1000,
+    existenciaAnterior:0, ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0,
+    entradas:[], cerradasBodega:1, cerradasBarra:0, pesos:['0.800'], pesoCristal:0 }; // 1000 + 800 = 1800 ml
+const _filaIng = (id) => ({ insumoId:id, tipo:'copa', contNeto:750, copaML:50, existenciaAnterior:0,
+    ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[],
+    cerradasBodega:0, cerradasBarra:0, pesos:[], pesoCristal:0 });
+const filaGin4 = _filaIng('gin4'), filaCam4 = _filaIng('campari4'), filaVer4 = _filaIng('vermut4');
+setVar(B, 'filasCaptura', [filaPreN, filaGin4, filaCam4, filaVer4]);
+
+// 1) PRODUCIR carga los insumos de la sub-receta (1 y 2 y 3 batches).
+test('2 niveles · producir 3 batches carga 400×3 = 1200 ml de Ginebra', () =>
+    eq(B.consumoBasesPorProduccion('gin4'), 1200));
+test('2 niveles · producir 3 batches carga 300×3 = 900 ml de Campari', () =>
+    eq(B.consumoBasesPorProduccion('campari4'), 900));
+test('2 niveles · con 1 batch serían 400 ml (la carga escala con los batches)', () => {
+    vm.runInContext("invActual.prebatchProducidos = { preNeg2: 1 };", B);
+    const r = B.consumoBasesPorProduccion('gin4');
+    vm.runInContext("invActual.prebatchProducidos = { preNeg2: 3 };", B);
+    eq(r, 400);
+});
+test('2 niveles · la Ginebra descuenta la producción de su teórico (0 EA − 1200/50 copas)', () =>
+    eq(B.calcExistenciaTeorica(filaGin4), -1200 / 50));
+
+// 2) VENDER el coctel carga el PREBATCH (no otra vez los insumos base).
+test('2 niveles · vender 12 cocteles gasta 1200 ml del prebatch (12 copas de 100)', () =>
+    eq(B.calcVentasCopasRecetas('preNeg2', 100), 12));
+test('2 niveles · el coctel NO vuelve a cargar la Ginebra (ya se cargó al producir)', () =>
+    eq(B.calcVentasCopasRecetas('gin4', 50), 0));
+test('2 niveles · teórico del prebatch: 3 batches − 12 copas vendidas = 18 copas', () =>
+    eq(B.calcExistenciaTeorica(filaPreN), 30 - 12));
+
+// 3) El SOBRANTE del prebatch se reparte proporcional a cada insumo.
+vm.runInContext("_repCache = _repartoPrebatch();", B);
+test('2 niveles · el prebatch queda marcado como repartido', () =>
+    eq(B._esPrebatchRepartido('preNeg2'), true));
+test('2 niveles · Ginebra recibe 40% del físico del batch (1800×0.4 = 720 ml = 14.4 copas)', () =>
+    eq(Math.round(B._repartoDe('gin4').fis * 100) / 100, 14.4));
+test('2 niveles · la venta del batch fluye a Ginebra como venta neta (1200×0.4 = 480 ml = 9.6 copas)', () =>
+    eq(Math.round(B._repartoDe('gin4').venta * 100) / 100, 9.6));
+test('2 niveles · sin faltante en el batch, la Ginebra no arrastra diferencia', () =>
+    eq(Math.round(B._repartoDe('gin4').dif * 1000) / 1000, 0));
+test('2 niveles · si faltan 200 ml del batch, a Ginebra le tocan 80 ml (−1.6 copas)', () => {
+    setVar(B, 'filasCaptura', [{ ...filaPreN, pesos:['0.600'] }, filaGin4, filaCam4, filaVer4]);  // 1600 en vez de 1800
+    vm.runInContext("_repCache = _repartoPrebatch();", B);
+    const d = B._repartoDe('gin4').dif;
+    setVar(B, 'filasCaptura', [filaPreN, filaGin4, filaCam4, filaVer4]);
+    vm.runInContext("_repCache = _repartoPrebatch();", B);
+    eq(Math.round(d * 1000) / 1000, -1.6);
+});
+/* Que la suma cierre es la prueba de que el reparto es PROPORCIONAL de verdad y no
+   se pierde ni se inventa producto por el camino. */
+test('2 niveles · el reparto cuadra: lo repartido a los 3 insumos = el físico del batch', () => {
+    const suma = ['gin4','campari4','vermut4'].reduce((t, id) => {
+        const r = B._repartoDe(id) || { fis: 0 };
+        // cada uno en SUS copas: gin/campari/vermut usan 50 ml → a ml para sumar
+        return t + r.fis * 50;
+    }, 0);
+    eq(Math.round(suma), 1800);
+});
+
+vm.runInContext("invActual.prebatchProducidos = {}; invActual.cocktailsVendidos = {}; _repCache = null; _consumoIdxCache = null; _consumoDirty = true;", B);
 setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
 setVar(B, 'filasCaptura', [filaCopa]);
 
