@@ -4643,9 +4643,50 @@ function _recetaTocaInv(r) {
         return !!(set[id] || set[_canonInsumoId(id) || id]);
     });
 }
+/* POR QUÉ se ocultó una receta. No es lo mismo "usa insumos de la cocina"
+   —correcto, ese coctel no se cuenta aquí— que "sus insumos no tienen ÁREA
+   asignada", que es un hueco de captura: el insumo sin área nunca genera fila en
+   ningún inventario, así que el coctel desaparece de todos y el aviso mandaba a
+   buscar al lugar equivocado. Este devuelve los insumos culpables, por nombre. */
+function _insumosSinAreaDe(r) {
+    var out = [], cat = getInsumos() || [];
+    (r && r.ingredientes || []).forEach(function (ing) {
+        var id = ing && ing.insumoId; if (!id) return;
+        var cid = _canonInsumoId(id) || id;
+        var ins = cat.find(function (x) { return x && ((_canonInsumoId(x.id) || x.id) === cid); });
+        if (ins && !((ins.area || '').toString().trim())) out.push(ins.nombre || '—');
+    });
+    return out;
+}
+
 var _menuVerTodas = false;
 function toggleMenuVerTodas() { _menuVerTodas = !_menuVerTodas; renderStep3(); }
 window.toggleMenuVerTodas = toggleMenuVerTodas;
+
+/* Aviso accionable: si una receta se ocultó porque a SUS insumos les falta el
+   área, se nombran. Sin esto, el coctel simplemente no está y no hay pista de
+   por qué ni de dónde arreglarlo. */
+function _avisoSinArea(ocultas) {
+    if (!ocultas || !ocultas.length) return '';
+    var culpables = {}, recetas = [];
+    ocultas.forEach(function (r) {
+        var sa = _insumosSinAreaDe(r);
+        if (!sa.length) return;
+        recetas.push(r.nombre || '—');
+        sa.forEach(function (n) { culpables[n] = 1; });
+    });
+    var nom = Object.keys(culpables);
+    if (!nom.length) return '';
+    var lista = nom.slice(0, 8).map(etx).join(', ') + (nom.length > 8 ? ' y ' + (nom.length - 8) + ' más' : '');
+    return '<div style="margin:0 16px 10px;padding:10px 13px;border:1px solid rgba(245,200,66,.35);' +
+        'background:rgba(245,200,66,.07);border-radius:9px;font-size:11.5px;color:var(--text-muted);line-height:1.6">' +
+        '<b style="color:var(--accent)">Faltan áreas en el catálogo.</b> ' +
+        recetas.length + ' receta' + (recetas.length !== 1 ? 's' : '') + ' (' + etx(recetas.slice(0, 4).join(', ')) +
+        (recetas.length > 4 ? '…' : '') + ') no aparece' + (recetas.length !== 1 ? 'n' : '') +
+        ' aquí porque a estos insumos no se les asignó área: <b style="color:var(--text)">' + lista + '</b>. ' +
+        'Un insumo sin área no entra a NINGÚN inventario. Asígnasela en Catálogo → Insumos y volverá' +
+        (recetas.length !== 1 ? 'n' : '') + ' a salir.</div>';
+}
 
 function renderStep3Menu() {
     // Visibilidad (regla única, insumo-label.js): activa global + vive en la
@@ -4696,6 +4737,7 @@ function renderStep3Menu() {
         <span>${_menuVerTodas ? 'Mostrando TODAS las recetas, incluidas las que no consumen de esta área.' : _ocultas.length + ' receta' + (_ocultas.length !== 1 ? 's' : '') + ' oculta' + (_ocultas.length !== 1 ? 's' : '') + ': no usan ningún insumo de esta área.'}</span>
         <button onclick="toggleMenuVerTodas()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;font-family:inherit">${_menuVerTodas ? 'Ver solo las de esta área' : 'Ver todas'}</button>
     </div>` : ''}
+    ${_avisoSinArea(_ocultas)}
     <div style="padding:4px 16px 10px">
         <input type="text" id="menuBuscarCoctel" placeholder="🔍 Buscar coctel o receta…"
             value="${etx(_menuBusquedaVentas||'')}" oninput="_filtrarMenuVentas(this.value)"
