@@ -7061,8 +7061,8 @@ function verReporteDirectivo(gerencial, modo) {
         /* Lo que se fue en PRODUCIR batches. El teórico ya lo restaba, pero no se
            enseñaba en ninguna columna: el renglón no cuadraba a la vista y parecía
            que al insumo le faltaba producto sin razón. Va aparte de ventaCoct para
-           no ensuciar el dinero (producir no es vender: no entra a "vendido a precio
-           proveedor" ni a la venta neta). */
+           sumarse a ventaCoct, que es venta. Sí entra al CONSUMO (es uso de insumo
+           a precio proveedor); no entra a la venta neta, que mide lo que se cobró. */
         const prodPB       = (function () { try { return _consumoBaseProd(f) || 0; } catch (e) { return 0; } })();
         const ventaCopaDir = parseFloat(f.ventasCopasDirectas) || 0; // venta directa por copa/pza
         const ventaCopa = ventaCoct + ventaCopaDir;
@@ -7072,9 +7072,13 @@ function verReporteDirectivo(gerencial, modo) {
         const cancel    = getCancelacionesCopas(f.insumoId);
         // pza: venta total en piezas = botella + directa + por menú/recetas (igual que el Resultado).
         const ventaPzaTot = f.tipo === 'pza' ? (ventaBot + (parseFloat(f.ventasCopasDirectas)||0) + calcVentasPzaRecetas(f.insumoId)) : 0;
-        const consumo   = f.tipo === 'pza'
+        /* prodPB entra al CONSUMO: producir un batch gasta el insumo tal cual, así
+           que cuenta como uso a precio proveedor igual que una venta. Lo que NO es
+           es una venta —no se le cobró a nadie—, por eso vive fuera de ventaNeta y
+           del % de varianza, que se miden contra lo vendido. */
+        const consumo   = (f.tipo === 'pza'
             ? ventaPzaTot + cortesia + merma + cancel
-            : ventaCopa + ventaBot * copasBot + cortesia + merma + cancel;
+            : ventaCopa + ventaBot * copasBot + cortesia + merma + cancel) + prodPB;
         const disponible = ea + (f.tipo === 'pza' ? entBot : entBot * copasBot);
         const pctConsumo = disponible > 0 ? (consumo / disponible) * 100 : 0;
         // % de varianza vs VENTA NETA del periodo (misma definición que la columna % del Resultado).
