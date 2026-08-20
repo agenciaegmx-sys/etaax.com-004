@@ -222,8 +222,14 @@ async function _sbInitInsumosCatalogo() {
             }
             return ins;
         });
-        try { localStorage.setItem(_sk('insumos'), JSON.stringify(paraLocal)); } catch(e) {}
-        console.log('[recetas] catálogo de insumos cargado · negocio_insumos:', dedup.length, '· solo-local:', soloLocal.length);
+        // Primero a memoria: aunque localStorage reviente por cuota, el editor ya
+        // tiene su catálogo y el buscador de ingredientes funciona.
+        setCatalogoInsumosMem(lista);
+        var _espejoOk = true;
+        try { localStorage.setItem(_sk('insumos'), JSON.stringify(paraLocal)); }
+        catch (e) { _espejoOk = false; console.warn('[recetas] el catálogo no cupo en localStorage (cuota); queda solo en memoria esta sesión:', e && e.message); }
+        console.log('[recetas] catálogo de insumos cargado · negocio_insumos:', dedup.length,
+                    '· solo-local:', soloLocal.length, '· espejo local:', _espejoOk ? 'ok' : 'NO (cuota)');
         // Refrescar la tabla del editor si ya está abierta, pero SIN interrumpir si
         // el usuario está escribiendo un ingrediente en ese momento (perdería foco).
         if (typeof renderTabla === 'function') {
@@ -1112,7 +1118,21 @@ function abrirVentanaImpresion(html) {
 
 
 // ── Catálogo de insumos ──────────────────────────────────────
+/* Catálogo de insumos EN MEMORIA. Antes esto salía solo de localStorage, y ese
+   espejo se escribe dentro de un try/catch que la CUOTA tumba en silencio: con
+   un catálogo grande (o varios negocios cacheados en el mismo navegador) el
+   setItem falla, nadie se entera, y el buscador de ingredientes del editor de
+   recetas aparece VACÍO — en esa computadora sí y en la tablet no, según lo que
+   cada navegador alcanzó a guardar. La memoria manda; localStorage queda como
+   respaldo entre recargas. */
+var _catInsMem = null;
+var _catInsSig = 0;   // cambia en cada refresco → el resolver reindexa
+function setCatalogoInsumosMem(lista) {
+    _catInsMem = (lista && lista.length) ? lista : null;
+    _catInsSig++;
+}
 function getCatalogoInsumos() {
+    if (_catInsMem && _catInsMem.length) return _catInsMem;
     try { return JSON.parse(_skGet('insumos')) || []; }
     catch { return []; }
 }
@@ -1122,7 +1142,11 @@ function getCatalogoInsumos() {
 // (El bug viejo comparaba solo `_n!==a.length` → quedaba stale ante cambios de precio.)
 // Usa la fábrica compartida (insumo-label.js). Fuente: getCatalogoInsumos (localStorage
 // 'insumos'); firma: el string crudo del localStorage → se reindexa al cambiar precios.
-window._insumoResolver = window._makeInsumoResolver(getCatalogoInsumos, function(){ try{ return _skGet('insumos')||''; }catch(e){ return ''; } });
+window._insumoResolver = window._makeInsumoResolver(getCatalogoInsumos, function(){
+    // La firma incluye el contador de memoria: si localStorage no pudo guardar
+    // (cuota), su string no cambia y el índice se quedaba con el catálogo viejo.
+    try { return _catInsSig + '|' + (_skGet('insumos') || ''); } catch (e) { return _catInsSig + '|'; }
+});
 
 // Costo POR unidad (kg/lt/pza) VIVO de un ingrediente vinculado: se recalcula
 // desde el insumo ACTUAL del catálogo, evitando el "drift" de costos congelados

@@ -519,6 +519,42 @@ test('prebatch sin envase (legacy): fallback a contNeto → 15 copas', () =>
     eq(B._prodPrebatchUnidades({ ...filaPreEnv, rendimientoBatch: 0 }), 15));
 vm.runInContext("invActual.prebatchProducidos = {};", B);
 
+/* ── PREBATCH con insumo de PIEZA (refresco/lata) ──
+   Bug real: una sub-receta que pide 300 ML de un refresco de 3 L restaba 7200
+   PIEZAS del teórico (la unidad base son mililitros, no piezas) y el insumo se
+   iba a −7,189. Debe convertirse igual que el consumo por recetas. */
+setVar(B, '_cacheRecetasInv', [
+    { id: 'srTV', tipo: 'sub-bebidas', status: 'activa', ingredientes: [
+        { insumoId: 'tinto5', cantidad: 600, unidad: 'ML' },   // vino de 5 L, fila copa
+        { insumoId: 'sidral', cantidad: 300, unidad: 'ML' },   // refresco de 3 L, fila PZA
+        { insumoId: 'lata1',  cantidad: 1,   unidad: 'PZA' },  // una lata entera por batch
+    ] },
+]);
+setVar(B, '_cacheInsumosInv', [
+    { id: 'preTV', esSubReceta: true, recetaId: 'srTV', activo: '1' },
+    { id: 'tinto5', activo: '1' }, { id: 'sidral', activo: '1' }, { id: 'lata1', activo: '1' },
+]);
+vm.runInContext("invActual.prebatchProducidos = { preTV: 24 };", B);
+const filaSidral = { insumoId:'sidral', tipo:'pza', contNeto:3000, existenciaAnterior:10,
+    ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[] };
+const filaLata = { insumoId:'lata1', tipo:'pza', contNeto:355, existenciaAnterior:100,
+    ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[] };
+const filaTinto5 = { insumoId:'tinto5', tipo:'copa', contNeto:5000, copaML:150, existenciaAnterior:0,
+    ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[] };
+setVar(B, 'filasCaptura', [filaSidral, filaLata, filaTinto5]);
+test('prebatch pza: 300 ml × 24 de un refresco de 3 L = 2.4 piezas (no 7200)', () =>
+    eq(B._consumoBaseProd(filaSidral), 2.4));
+test('prebatch pza: el teórico baja 2.4, no se desploma a −7,189', () =>
+    eq(B.calcExistenciaTeorica(filaSidral), 10 - 2.4));
+test('prebatch pza: 1 PZA por batch × 24 = 24 piezas (unidad PZA va directa)', () =>
+    eq(B._consumoBaseProd(filaLata), 24));
+test('prebatch pza: el teórico de la lata baja 24', () =>
+    eq(B.calcExistenciaTeorica(filaLata), 100 - 24));
+test('prebatch copa: el vino sigue igual — 600×24 ml en copas de 150 = 96', () =>
+    eq(B._consumoBaseProd(filaTinto5), 96));
+vm.runInContext("invActual.prebatchProducidos = {};", B);
+setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
+
 // ── REPARTO del prebatch a sus insumos (modelo de Edwin, ejemplo completo) ──
 // Batch 750 ml = 100 Campari + 250 Aperol + 400 Vermouth. Se produce 1 batch,
 // se venden cocteles por 375 ml (media botella) y se PESA media botella (375 ml).

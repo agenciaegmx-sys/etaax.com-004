@@ -712,11 +712,47 @@ function _prodPrebatchUnidades(fila) {
     return n; // pza: 1 batch = 1 pza
 }
 // Consumo de ESTE insumo base por la producción de batches, en la unidad de su fila.
+/* Lo mismo que consumoBasesPorProduccion, pero SEPARANDO piezas de mililitros.
+   Hace falta para las filas de PIEZA: una sub-receta puede pedir "1 PZA de lata"
+   o "300 ML de refresco", y esos dos no se pueden sumar en el mismo montón. */
+function consumoBasesPorProduccionDetalle(insumoId) {
+    var prod = (invActual && invActual.prebatchProducidos) || {};
+    var out = { pza: 0, ml: 0 };
+    var canon = _canonInsumoId(insumoId) || insumoId;
+    Object.keys(prod).forEach(function (pid) {
+        var n = parseFloat(prod[pid]) || 0;
+        if (!n) return;
+        var pre = getInsumos().find(function (x) { return x.id === pid; });
+        if (!pre || !pre.recetaId) return;
+        var sr = (window._recetaResolver ? window._recetaResolver(pre.recetaId) : getRecetas().find(function (r) { return r.id === pre.recetaId; }));
+        if (!sr) return;
+        (sr.ingredientes || []).forEach(function (ing) {
+            if (!ing || !ing.insumoId) return;
+            // Por id canónico: la sub-receta puede apuntar a la COPIA por sucursal
+            // mientras la fila del inventario usa el MAESTRO.
+            if ((_canonInsumoId(ing.insumoId) || ing.insumoId) !== canon) return;
+            var cant = parseFloat(ing.cantidad) || 0;
+            var u = (ing.unidad || '').toUpperCase();
+            if (u === 'PZA' || u === 'PZ' || u === '') out.pza += cant * n;
+            else                                        out.ml  += ingredienteBase(cant, ing.unidad) * n;
+        });
+    });
+    return out;
+}
 function _consumoBaseProd(fila) {
+    /* PIEZA: la unidad base de la receta (ml/g) NO son piezas. Un refresco de 3 L
+       usado a 300 ml por batch × 24 batches son 7200 ml = 2.4 piezas, no 7200.
+       Se restaban 7200 PIEZAS del teórico y el insumo se iba a −7,189. Se convierte
+       igual que el consumo por recetas: piezas directas + (ml ÷ contenido de la pieza). */
+    if (fila.tipo === 'pza') {
+        var d = consumoBasesPorProduccionDetalle(fila.insumoId);
+        var cn = parseFloat(fila.contNeto) || 0;             // ml/g que trae una pieza
+        return d.pza + (cn > 0 ? d.ml / cn : 0);
+    }
     var u = consumoBasesPorProduccion(fila.insumoId); // ml / g / pza base
     if (!u) return 0;
     if (fila.tipo === 'copa') return fila.copaML > 0 ? u / fila.copaML : 0; // base ml → copas
-    return u; // peso (g/ml) y pza: directo
+    return u; // peso: la unidad base ES g/ml, va directo
 }
 
 // ══ REPARTO DEL PREBATCH A SUS INSUMOS (Resultado — modelo de Edwin) ══════════
@@ -6521,7 +6557,12 @@ function _step5TablasHTML() {
         const copasBot  = fila.contNeto>0 && fila.copaML>0 ? fila.contNeto/fila.copaML : 0;
         const entBot    = getEntradasBottles(fila.insumoId) + (copasBot > 0 ? adj.ent / copasBot : 0);
         const ventaBot  = parseFloat(fila.ventasBotella) || 0;
-        const ventaCoct    = consumoRecetasFila(fila) + adj.vco;
+        /* Lo que se fue en PRODUCIR batches de una sub-receta que lleva este insumo.
+           El teórico siempre lo restó, pero la columna no lo enseñaba: un tinto
+           usado en 24 batches de "Tinto de Verano" salía con coctelería en "—" y
+           una diferencia enorme sin explicación a la vista. */
+        const prodPBc      = (function () { try { return _consumoBaseProd(fila) || 0; } catch (e) { return 0; } })();
+        const ventaCoct    = consumoRecetasFila(fila) + adj.vco + prodPBc;
         const ventaCopaDir = parseFloat(fila.ventasCopasDirectas) || 0;
         const ventaCopa    = ventaCoct + ventaCopaDir;
         const cortesia  = parseFloat(fila.cortesiaCopas) || 0;
@@ -6552,7 +6593,7 @@ function _step5TablasHTML() {
                 <td style="text-align:center;color:var(--green);white-space:nowrap">${entBotStr}</td>
                 <td style="text-align:center;color:var(--accent)">${ventaBot > 0 ? ventaBot + ' bot' : '—'}</td>
                 <td style="text-align:center;color:var(--accent)">${ventaCopaDir > 0 ? _fmtCop(ventaCopaDir, fila) : '—'}</td>
-                <td style="text-align:center;color:var(--viol)${ventaCoct > 0 ? '' : ';cursor:help'}" title="${etx(_origenConsumo(fila))}">${ventaCoct > 0 ? _fmtCop(ventaCoct, fila) : '—'}</td>
+                <td style="text-align:center;color:var(--viol)${ventaCoct > 0 ? '' : ';cursor:help'}" title="${etx(prodPBc > 0 ? 'Incluye ' + _fmtCop(prodPBc, fila) + ' consumidas al producir batches de sub-receta' : _origenConsumo(fila))}">${ventaCoct > 0 ? _fmtCop(ventaCoct, fila) + (prodPBc > 0 ? '<span style="font-size:9px;opacity:.75"> ·prod</span>' : '') : '—'}</td>
                 <td style="text-align:center">
                     ${cmTotal > 0
                         ? `<div style="color:var(--red);font-size:12px;font-weight:600">${_fmtCop(cmTotal, fila)}</div>
@@ -6573,7 +6614,8 @@ function _step5TablasHTML() {
         const ea        = parseFloat(fila.existenciaAnterior) || 0;
         const entTotal  = getEntradasCopas(fila);
         const adjP      = _repartoDe(fila.insumoId);
-        const ventaCoct = calcVentasPzaRecetas(fila.insumoId) + adjP.vco;
+        const prodPBp   = (function () { try { return _consumoBaseProd(fila) || 0; } catch (e) { return 0; } })();
+        const ventaCoct = calcVentasPzaRecetas(fila.insumoId) + adjP.vco + prodPBp;
         const ventasDir = (fila.ventasBotella || 0) + (parseFloat(fila.ventasCopasDirectas)||0);
         const ventas    = ventasDir + ventaCoct;
         const cancelPza = getCancelacionesCopas(fila.insumoId) + adjP.can;
@@ -6595,7 +6637,7 @@ function _step5TablasHTML() {
                 </td>
                 <td style="text-align:center">${ea.toFixed(0)} pza</td>
                 <td style="text-align:center;color:var(--green)">${entTotal>0?'+'+entTotal.toFixed(0)+' pza':'—'}</td>
-                <td style="text-align:center;color:var(--viol)${ventaCoct>0?'':';cursor:help'}" title="${etx(_origenConsumo(fila))}">${ventaCoct>0?(ventaCoct%1?ventaCoct.toFixed(1):ventaCoct)+' pza':'—'}</td>
+                <td style="text-align:center;color:var(--viol)${ventaCoct>0?'':';cursor:help'}" title="${etx(prodPBp > 0 ? 'Incluye ' + _n1(prodPBp) + ' pza consumidas al producir batches de sub-receta' : _origenConsumo(fila))}">${ventaCoct>0?(ventaCoct%1?ventaCoct.toFixed(1):ventaCoct)+' pza'+(prodPBp>0?'<span style="font-size:9px;opacity:.75"> ·prod</span>':''):'—'}</td>
                 <td style="text-align:center;color:var(--accent)">${ventasDir>0?(ventasDir%1?ventasDir.toFixed(1):ventasDir)+' pza':'—'}</td>
                 <td style="text-align:center;color:var(--text-muted)">${cancelPza>0?cancelPza.toFixed(0)+' pza':'—'}</td>
                 <td style="text-align:center;color:var(--accent)">${cortMerma>0?(cortMerma%1?cortMerma.toFixed(1):cortMerma)+' pza':'—'}</td>
@@ -6899,7 +6941,8 @@ function _step5DesgloseCard(fila, refMap) {
     var difCarta = esPB ? 0 : dif * (fila.precioCarta||0);
     var pctVal   = esPB ? null : _pctVarianza(dif, _consumoPeriodo(fila) + adjG.venta); // dif vs venta neta
     var pct      = pctVal !== null ? ((pctVal>=0?'+':'')+pctVal.toFixed(1)+'%') : '—';
-    var ventaCoct = esComp ? (fila._ventaCoct||0) : consumoRecetasFila(fila);
+    var ventaCoct = esComp ? (fila._ventaCoct||0)
+        : consumoRecetasFila(fila) + (function(){ try { return _consumoBaseProd(fila) || 0; } catch(e) { return 0; } })();
     var ventaDir  = parseFloat(fila.ventasCopasDirectas)||0;
     var ventaBot  = parseFloat(fila.ventasBotella)||0;
     var cort = parseFloat(fila.cortesiaCopas)||0, merma = parseFloat(fila.mermaCopas)||0;
