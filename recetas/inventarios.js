@@ -123,7 +123,13 @@ async function _sbInitInv() {
         _supabase.from('inventarios').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true}),
         _supabase.from('entradas_log').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true}),
         _supabase.from('recetas').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true}),
-        _supabase.from('negocio_insumos').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true}),
+        /* Ordenado por insumo_id, NO por created_at: `negocio_insumos` no tiene esa
+           columna y PostgREST devolvía 400. La carga del catálogo del inventario
+           llevaba fallando en silencio (el error solo se veía en Network) y solo
+           funcionaba de rebote, por la copia que dejaba en localStorage la página
+           de Insumos — de ahí el "inventario sin insumos si no pasas antes por el
+           catálogo". app.js ya ordenaba bien por insumo_id. */
+        _supabase.from('negocio_insumos').select('datos').eq('negocio_id', negId).order('insumo_id', {ascending: true}),
     ]);
     // .filter(Boolean): si una fila viene con datos:null NO debe entrar al cache —
     // un null en _cacheEL reventaba el render del historial de entradas (TypeError).
