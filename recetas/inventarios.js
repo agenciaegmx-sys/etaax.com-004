@@ -644,7 +644,7 @@ function _consumoIdx() {
     var key = (invActual && invActual.id || '') + '|' + recetas.length;
     if (_consumoIdxCache && !_consumoDirty && _consumoIdxKey === key) return _consumoIdxCache;
     var idx = {};
-    function slot(id){ return idx[id] || (idx[id] = { mlBeb:0, baseAli:0, pzaDir:0, mlPza:0 }); }
+    function slot(id){ return idx[id] || (idx[id] = { mlBeb:0, baseBeb:0, baseAli:0, pzaDir:0, mlPza:0 }); }
     /* La receta guarda el id del insumo TAL COMO estaba al agregarlo: si el
        negocio independizó sus insumos por sucursal, ahí quedó el id de la COPIA.
        Las filas del inventario usan el id MAESTRO, así que el consumo por
@@ -662,6 +662,7 @@ function _consumoIdx() {
             var cant = parseFloat(ing.cantidad) || 0, u = (ing.unidad || '').toUpperCase();
             var s = slot(id);
             if (esBeb)            s.mlBeb   += ingredienteML(cant, ing.unidad) * uds;      // copas (bebidas, cualquier estatus)
+            if (esBeb)            s.baseBeb += ingredienteBase(cant, ing.unidad) * uds;   // lo mismo en unidad base (KG/LT sí convierten)
             if (esAli && activa)  s.baseAli += ingredienteBase(cant, ing.unidad) * uds;    // alimentos activos (unidad base)
             if (activa) {                                                                   // pza (bebidas+alimentos activos)
                 if (u === 'PZA' || u === 'PZ' || u === '') s.pzaDir += cant * uds;
@@ -679,7 +680,7 @@ function _consumoIdx() {
 function consumoRecetasFila(f) {
     if (!f) return 0;
     if (f.tipo === 'pza')  return calcVentasPzaRecetas(f.insumoId);
-    if (f.tipo === 'peso') return calcVentasBaseRecetas(f.insumoId);
+    if (f.tipo === 'peso') return _consumoRecetasBase(f.insumoId);
     return calcVentasCopasRecetas(f.insumoId, f.copaML);
 }
 function calcVentasCopasRecetas(insumoId, copaML) {
@@ -704,10 +705,17 @@ function unidadBaseInsumo(ins) {
     if (u === 'LT' || u === 'ML') return 'ML';
     return 'PZA';
 }
-// Consumo teórico de un insumo por las recetas de ALIMENTOS vendidas (en unidad base).
-function calcVentasBaseRecetas(insumoId) {
+/* Consumo teórico de un insumo por las recetas vendidas, en UNIDAD BASE (ml/g/pza),
+   venga de donde venga: bebidas o alimentos. Los dos montones son disjuntos (una
+   receta es de un tipo o del otro), así que sumarlos no cuenta doble.
+   Antes esto solo miraba los ALIMENTOS, y el tipo de la FILA no siempre coincide con
+   el de la RECETA: un jarabe que se cuenta en gramos (fila 'peso', familia Alimentos)
+   y se usa en un coctel caía en el montón de bebidas, que nadie leía aquí — el insumo
+   nunca se descontaba. Al revés pasa igual con un prebatch de cocina que se va en un
+   platillo. */
+function _consumoRecetasBase(insumoId) {
     var s = _consumoIdx()[insumoId] || _consumoIdx()[_canonInsumoId(insumoId)];
-    return s ? s.baseAli : 0; // g / ml / pza
+    return s ? (s.baseBeb + s.baseAli) : 0; // ml / g
 }
 
 // Consumo de un insumo PZA (refresco/cerveza/lata) por las recetas/menú vendidos, EN PIEZAS.
@@ -751,9 +759,25 @@ function consumoBasesPorProduccion(insumoId) {
     });
     return total; // unidad base del ingrediente (ml / g / pza)
 }
+/* Batches producidos de ESTE prebatch, empatando copia↔maestro.
+   El Paso 3 guarda la producción bajo el id del insumo TAL COMO lo ve esa sucursal
+   (si el negocio independizó sus insumos, ahí quedó el id de la COPIA), mientras la
+   fila del inventario usa el MAESTRO. Buscar la llave cruda devolvía CERO batches:
+   la producción no entraba al teórico del prebatch y su reparto salía en blanco.
+   Es el cuarto sitio de este mismo desajuste (los otros tres: _consumoIdx,
+   consumoBasesPorProduccion y consumoBasesPorProduccionDetalle). */
+function _batchesProducidos(insumoId) {
+    var prod = (invActual && invActual.prebatchProducidos) || {};
+    var canon = _canonInsumoId(insumoId) || insumoId;
+    var total = 0;
+    Object.keys(prod).forEach(function (pid) {
+        if ((_canonInsumoId(pid) || pid) === canon) total += parseFloat(prod[pid]) || 0;
+    });
+    return total;
+}
 // Producción de ESTE insumo si es un prebatch, en la unidad de su fila (copas / base / pza).
 function _prodPrebatchUnidades(fila) {
-    var n = (invActual && invActual.prebatchProducidos && parseFloat(invActual.prebatchProducidos[fila.insumoId])) || 0;
+    var n = _batchesProducidos(fila.insumoId);
     if (!n) return 0;
     var rB = _rendBatch(fila);
     if (fila.tipo === 'copa') return n * (rB > 0 && fila.copaML > 0 ? rB / fila.copaML : 0); // batches→copas
@@ -903,7 +927,13 @@ function _repartoPrebatch() {
         if (pf.tipo === 'copa' && !toB) return;
         var eaB    = (parseFloat(pf.existenciaAnterior) || 0) * toB;
         var entB   = getEntradasCopas(pf) * toB;
-        var ventaB = (calcVentasCopasRecetas(pf.insumoId, pf.copaML) + (parseFloat(pf.ventasCopasDirectas) || 0)) * toB
+        /* Lo VENDIDO del batch, en unidad base. El consumo por recetas se toma con
+           _consumoRecetasBase, no vía calcVentasCopasRecetas: esa devuelve 0 sin
+           copaML —el caso de un prebatch de cocina, que se cuenta en gramos— y
+           tampoco ve los batches que se van en un platillo en vez de un coctel.
+           Ahí el batch salía con venta 0 y sus insumos no recibían nada. */
+        var ventaB = _consumoRecetasBase(pf.insumoId)
+                   + (parseFloat(pf.ventasCopasDirectas) || 0) * toB
                    + (parseFloat(pf.ventasBotella) || 0) * (parseFloat(pf.contNeto) || 0);
         var cmB    = ((parseFloat(pf.cortesiaCopas) || 0) + (parseFloat(pf.mermaCopas) || 0)) * toB + (parseFloat(pf.mermaBase) || 0);
         var canB   = getCancelacionesCopas(pf.insumoId) * toB;
@@ -1047,7 +1077,7 @@ function calcExistenciaTeorica(fila) {
     if (fila.tipo === 'peso') {
         const eaP    = parseFloat(fila.existenciaAnterior) || 0;
         const entP   = getEntradasBottles(fila.insumoId);     // entradas en unidad base
-        const ventP  = calcVentasBaseRecetas(fila.insumoId);  // consumo por platillos vendidos
+        const ventP  = _consumoRecetasBase(fila.insumoId); // consumo por lo vendido (platillos y cocteles)
         const mermaP = parseFloat(fila.mermaBase) || 0;
         return eaP + entP + prodAdd - ventP - mermaP - prodSub;
     }
@@ -4018,7 +4048,7 @@ function _cardExistPeso(fila, idx) {
     const u    = (fila.baseUnit || 'G').toLowerCase();
     const ea   = parseFloat(fila.existenciaAnterior) || 0;
     const ent  = getEntradasBottles(fila.insumoId);
-    const cons = calcVentasBaseRecetas(fila.insumoId);
+    const cons = _consumoRecetasBase(fila.insumoId);
     const merm = parseFloat(fila.mermaBase) || 0;
     const teo  = calcExistenciaTeorica(fila);
     const fis  = parseFloat(fila.existenciaPeso) || 0;
@@ -4712,6 +4742,70 @@ function updProduccionPrebatch(id, delta) {
         const item = el.closest('.step3-menu-item');
         if (item) item.classList.toggle('has-cnt', nuevo > 0);
     }
+    _refrescarAvisoPrebatches(); // el aviso solo mira los batches ya capturados
+}
+
+/* ── ¿Este prebatch va a salir bien en el Resultado? ───────────────────────
+   Revisión SIN efectos: mira un prebatch con batches capturados y devuelve lo que
+   le falta para que su reparto funcione. Antes esto solo existía como console.warn
+   (el del rendimiento) o como nada: el batch salía repartiendo cero y no había
+   forma de saber por qué sin abrir la consola.
+   Solo revisa los que YA tienen producción capturada — de los demás no hay nada
+   que avisar todavía. */
+function _revisarPrebatch(pre) {
+    if (!pre) return null;
+    var n = _batchesProducidos(pre.id);
+    if (!n) return null;
+    var fila  = _filaDeMiembro(pre.id);
+    var sr    = (window._recetaResolver ? window._recetaResolver(pre.recetaId) : null)
+             || (getRecetas() || []).find(function (r) { return r && r.id === pre.recetaId; });
+    var probs = [];
+    if (!sr) {
+        probs.push('su sub-receta ya no existe: no se descuentan sus insumos base ni se reparte el sobrante');
+    } else {
+        var ligados = (sr.ingredientes || []).filter(function (ing) {
+            return ing && ing.insumoId && (parseFloat(ing.cantidad) || 0) > 0;
+        }).length;
+        if (!ligados) probs.push('ningún ingrediente de la sub-receta está ligado a un insumo: produce, pero no descuenta nada');
+    }
+    if (!fila) {
+        probs.push('no tiene renglón en este inventario, así que su sobrante no se reparte a sus insumos');
+    } else {
+        if (fila.tipo === 'pza') probs.push('está capturado por PIEZA: el reparto del sobrante solo funciona por copa o por peso');
+        var cx = (sr && sr.camposExtra) || {};
+        var rendSR = parseFloat(cx.rendimientoFinal) || 0;
+        var rendPr = parseFloat(fila.rendimientoBatch) || 0;
+        var cn     = parseFloat(fila.contNeto) || 0;
+        if (!rendSR && !rendPr && cn > 0)
+            probs.push('no tiene rendimiento capturado: se está usando el contenido del envase (' +
+                       _fmtBase(cn) + ') como si fuera lo que rinde un batch. Si ese envase es solo ' +
+                       'para guardarlo, la producción sale inflada');
+    }
+    return probs.length ? { nombre: pre.nombre || pre.id, batches: n, probs: probs } : null;
+}
+
+// Franja de avisos de los prebatches con producción capturada (mismo lugar donde se anota).
+function _avisoPrebatchesHTML(pres) {
+    var malos = (pres || []).map(_revisarPrebatch).filter(Boolean);
+    if (!malos.length) return '';
+    var items = malos.map(function (m) {
+        return '<div style="margin-top:6px"><b style="color:var(--text)">' + etx(m.nombre) + '</b> ' +
+            '<span style="opacity:.7">(' + m.batches + ' batch' + (m.batches === 1 ? '' : 'es') + ')</span>: ' +
+            m.probs.map(etx).join('; ') + '.</div>';
+    }).join('');
+    return '<div style="margin:0 0 12px;padding:10px 13px;border:1px solid rgba(245,200,66,.35);' +
+        'background:rgba(245,200,66,.07);border-radius:9px;font-size:11.5px;color:var(--text-muted);line-height:1.6">' +
+        '<b style="color:var(--accent)">Revisa estos batches.</b> Se capturó su producción, pero algo les falta ' +
+        'para que el Resultado cuadre:' + items + '</div>';
+}
+/* Contenedor SIEMPRE presente (aunque no haya avisos): así el aviso puede aparecer o
+   irse al capturar el primer batch sin re-renderizar el paso entero y perder el scroll. */
+function _avisoPrebatches(pres) {
+    return '<div id="avisoPrebatches">' + _avisoPrebatchesHTML(pres) + '</div>';
+}
+function _refrescarAvisoPrebatches() {
+    var el = document.getElementById('avisoPrebatches');
+    if (el) el.innerHTML = _avisoPrebatchesHTML(prebatchesProducibles());
 }
 
 function _renderProduccionPrebatch() {
@@ -4757,6 +4851,7 @@ function _renderProduccionPrebatch() {
         <div style="font-size:11px;color:var(--text-dim);padding:0 0 10px">
             Anota cuántos batches hiciste: descuenta los insumos base por receta y le suma la producción al prebatch.
         </div>
+        ${_avisoPrebatches(pres)}
         <div class="step3-menu-grid">${items}</div>
     </div>`;
 }
@@ -5924,7 +6019,7 @@ function _consumoPeriodo(f) {
             return m ? s + _consumoPeriodo(m) : s;
         }, 0);
     }
-    if (f.tipo === 'peso') return calcVentasBaseRecetas(f.insumoId);
+    if (f.tipo === 'peso') return _consumoRecetasBase(f.insumoId);
     // pza: directas + coctelería (antes faltaban las recetas → cerveza usada solo en cocteles salía "sin usar")
     if (f.tipo === 'pza')  return calcVentasPzaRecetas(f.insumoId) + (parseFloat(f.ventasBotella)||0) + (parseFloat(f.ventasCopasDirectas)||0);
     var copasBot = f.contNeto>0 && f.copaML>0 ? f.contNeto/f.copaML : 0;

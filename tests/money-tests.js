@@ -519,11 +519,36 @@ test('prebatch sin envase (legacy): fallback a contNeto → 15 copas', () =>
     eq(B._prodPrebatchUnidades({ ...filaPreEnv, rendimientoBatch: 0 }), 15));
 vm.runInContext("invActual.prebatchProducidos = {};", B);
 
-/* PENDIENTE: el caso copia↔maestro de la producción no se puede ejercitar aquí —
-   el resolver de insumos cachea su índice por firma y no se refresca entre bloques
-   del harness, así que _canonInsumoId no traduce. El arreglo SÍ está en
-   consumoBasesPorProduccion (comparación por id canónico, igual que _consumoIdx y
-   consumoBasesPorProduccionDetalle); falta poder probarlo aquí. */
+/* ── COPIA↔MAESTRO en la PRODUCCIÓN de batches ──
+   El Paso 3 guarda los batches bajo el id del insumo TAL COMO lo ve la sucursal (si
+   el negocio independizó sus insumos, ahí quedó el id de la COPIA), mientras la fila
+   del inventario usa el MAESTRO. Buscando la llave cruda, la fila veía CERO batches:
+   el prebatch entraba al Resultado sin producción y su reparto salía en blanco
+   ("Tinto de Verano SB" repartiendo 0 mientras Limoncello sí repartía). */
+setVar(B, '_cacheRecetasInv', [
+    { id: 'srCopia', tipo: 'sub-bebidas', status: 'activa',
+      camposExtra: { rendimientoFinal: '900', unidadRendimientoFinal: 'ML' },
+      ingredientes: [{ insumoId: 'vinoC', cantidad: 600, unidad: 'ML' }] },
+]);
+setVar(B, '_cacheInsumosInv', [
+    { id: 'preMaestro', esSubReceta: true, recetaId: 'srCopia', activo: '1' },
+    { id: 'preCopiaSuc', origenId: 'preMaestro', sucursalId: 'suc_principal',
+      esSubReceta: true, recetaId: 'srCopia', activo: '1' },
+    { id: 'vinoC', activo: '1' },
+]);
+vm.runInContext("invActual.prebatchProducidos = { preCopiaSuc: 24 };", B); // llave de la COPIA
+const filaPreCopia = { insumoId: 'preMaestro', tipo: 'copa', contNeto: 4000, copaML: 900,
+    rendimientoBatch: 0, existenciaAnterior: 0, ventasCopasDirectas: 0, cortesiaCopas: 0,
+    mermaCopas: 0, ventasBotella: 0, entradas: [] };
+setVar(B, 'filasCaptura', [filaPreCopia]);
+test('producción copia↔maestro: 24 batches guardados en la copia se ven desde el maestro', () =>
+    eq(B._batchesProducidos('preMaestro'), 24));
+test('producción copia↔maestro: entran al teórico (24 batches × 900 ml en copas de 900)', () =>
+    eq(B._prodPrebatchUnidades(filaPreCopia), 24));
+test('producción copia↔maestro: la llave de la copia sigue empatando consigo misma', () =>
+    eq(B._batchesProducidos('preCopiaSuc'), 24));
+vm.runInContext("invActual.prebatchProducidos = {};", B);
+setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
 
 /* ── RENDIMIENTO DEL BATCH ≠ CAPACIDAD DEL ENVASE ──
    El caso de Edwin: "Tinto de Verano" rinde 900 ml y se guarda en garrafas de 4 L.
@@ -668,6 +693,80 @@ setVar(B, 'filasCaptura', [filaPreC, filaAper]);
 vm.runInContext("_repCache = _repartoPrebatch();", B);
 test('reparto usa TODOS los ingredientes: Aperol 60/960 del físico (= 1.2 copas, no 9.6)', () =>
     eq(Math.round(B._repartoDe('aperol3').fis * 100) / 100, 1.2));
+
+/* ── PREBATCH DE COCINA (fila 'peso', se vende en un PLATILLO) ──
+   El reparto leía lo vendido del batch con la fórmula de COPAS, que devuelve 0 sin
+   tamaño de copa — y una salsa se cuenta en gramos, no en copas. Además solo miraba
+   las recetas de bebidas, así que un batch que se va en un platillo tampoco contaba.
+   Resultado: el batch salía con venta 0 y sus insumos no recibían nada, aunque la
+   producción y las ventas estuvieran bien capturadas.
+   Salsa: rinde 1000 g = 600 jitomate + 400 chile. 2 batches producidos, un platillo
+   que lleva 250 g vendido 4 veces (1000 g), y se pesan 900 g al cierre. */
+setVar(B, '_cacheRecetasInv', [
+    { id: 'srSalsa', tipo: 'sub-alimentos', status: 'activa',
+      camposExtra: { rendimientoFinal: '1000', unidadRendimientoFinal: 'G' },
+      ingredientes: [ { insumoId: 'jitomate', cantidad: 600, unidad: 'G' },
+                      { insumoId: 'chile',    cantidad: 400, unidad: 'G' } ] },
+    { id: 'platEnchi', tipo: 'alimentos', status: 'activa', ingredientes: [
+        { insumoId: 'preSalsa', cantidad: 250, unidad: 'G' } ] },
+]);
+setVar(B, '_cacheInsumosInv', [
+    { id: 'preSalsa', esSubReceta: true, recetaId: 'srSalsa', activo: '1', familia: 'Alimentos' },
+    { id: 'jitomate', activo: '1' }, { id: 'chile', activo: '1' },
+]);
+vm.runInContext("invActual.prebatchProducidos = { preSalsa: 2 };", B);
+vm.runInContext("invActual.cocktailsVendidos = { platEnchi: 4 }; _consumoDirty = true;", B);
+const filaPreSalsa = { insumoId: 'preSalsa', tipo: 'peso', baseUnit: 'G', contNeto: 1000,
+    rendimientoBatch: 1000, existenciaAnterior: 0, existenciaPeso: 900, mermaBase: 0, entradas: [] };
+const filaJito = { insumoId: 'jitomate', tipo: 'peso', baseUnit: 'G', contNeto: 1000,
+    existenciaAnterior: 5000, existenciaPeso: 3800, mermaBase: 0, entradas: [] };
+setVar(B, 'filasCaptura', [filaPreSalsa, filaJito]);
+vm.runInContext("_repCache = _repartoPrebatch();", B);
+test('prebatch de cocina: el platillo consume 250 g × 4 = 1000 g de salsa', () =>
+    eq(B._consumoRecetasBase('preSalsa'), 1000));
+test('prebatch de cocina: la venta del batch llega al jitomate (1000 g × 60% = 600 g)', () =>
+    eq(Math.round(B._repartoDe('jitomate').venta), 600));
+test('prebatch de cocina: el físico pesado se reparte igual (900 g × 60% = 540 g)', () =>
+    eq(Math.round(B._repartoDe('jitomate').fis), 540));
+test('prebatch de cocina: teórico del batch = 2000 producidos − 1000 vendidos = 1000 g', () =>
+    eq(B.calcExistenciaTeorica(filaPreSalsa), 1000));
+test('prebatch de cocina: el faltante de 100 g cae proporcional (jitomate −60 g)', () =>
+    eq(Math.round(B._repartoDe('jitomate').dif), -60));
+vm.runInContext("invActual.prebatchProducidos = {}; invActual.cocktailsVendidos = {}; _consumoDirty = true;", B);
+setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
+
+/* ── AVISO EN PANTALLA de los batches que no van a cuadrar ──
+   El caso de la garrafa (rendimiento = capacidad del envase) solo se avisaba por
+   console.warn: nadie lo veía y la producción salía inflada en silencio. */
+setVar(B, '_cacheRecetasInv', [
+    { id: 'srAviso', tipo: 'sub-bebidas', status: 'activa',
+      ingredientes: [{ insumoId: 'vinoA', cantidad: 600, unidad: 'ML' }] }, // sin rendimientoFinal
+    { id: 'srOk', tipo: 'sub-bebidas', status: 'activa',
+      camposExtra: { rendimientoFinal: '900', unidadRendimientoFinal: 'ML' },
+      ingredientes: [{ insumoId: 'vinoA', cantidad: 600, unidad: 'ML' }] },
+]);
+const preAviso = { id: 'preAviso', nombre: 'Tinto de Verano SB', esSubReceta: true, recetaId: 'srAviso', activo: '1' };
+const preOk    = { id: 'preOk',    nombre: 'Limoncello SB',      esSubReceta: true, recetaId: 'srOk',    activo: '1' };
+const preHuerf = { id: 'preHuerf', nombre: 'Batch huérfano',     esSubReceta: true, recetaId: 'noExiste', activo: '1' };
+setVar(B, '_cacheInsumosInv', [preAviso, preOk, preHuerf, { id: 'vinoA', activo: '1' }]);
+const filaAviso = { insumoId:'preAviso', tipo:'copa', contNeto:4000, copaML:900, rendimientoBatch:0,
+    existenciaAnterior:0, ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[] };
+const filaOk    = { ...filaAviso, insumoId:'preOk' };
+const filaHuerf = { ...filaAviso, insumoId:'preHuerf' };
+setVar(B, 'filasCaptura', [filaAviso, filaOk, filaHuerf]);
+vm.runInContext("invActual.prebatchProducidos = { preAviso: 24, preOk: 24, preHuerf: 3 };", B);
+test('aviso: sin rendimiento capturado se avisa que se está usando el envase', () =>
+    eq(/rendimiento capturado/.test(B._revisarPrebatch(preAviso).probs.join(' ')), true));
+test('aviso: con rendimiento en la sub-receta NO se avisa nada', () =>
+    eq(B._revisarPrebatch(preOk), null));
+test('aviso: una sub-receta que ya no existe se reporta como batch huérfano', () =>
+    eq(/ya no existe/.test(B._revisarPrebatch(preHuerf).probs.join(' ')), true));
+test('aviso: sin producción capturada no se molesta al usuario', () => {
+    vm.runInContext("invActual.prebatchProducidos = {};", B);
+    return eq(B._revisarPrebatch(preAviso), null);
+});
+vm.runInContext("invActual.prebatchProducidos = {};", B);
+setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
 
 /* ── CADENA DE DOS NIVELES: coctel → sub-receta (prebatch) → insumos base ──
    Es la pregunta de Edwin: si vendo cocteles hechos con un prebatch, ¿se descuenta
