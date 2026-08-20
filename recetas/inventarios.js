@@ -276,11 +276,26 @@ function _mergeDraftsLocal() {
     var ids = {}; _cacheInv.forEach(function(x){ if (x && x.id) ids[x.id] = 1; });
     var synced = _getSynced();
     locales.forEach(function(d){
+        if (!d || !d.id) return;
         // Solo recuperar/re-subir borradores que NUNCA se sincronizaron. Si ya estuvo
         // en la nube y ahora no está, fue BORRADO en otro equipo → no resucitar.
-        if (d && d.id && !ids[d.id] && !synced[d.id]) {
+        if (!ids[d.id] && !synced[d.id]) {
             _cacheInv.push(d);
             try { _sbUpInv(d); } catch(e) {} // re-subir: una vez que la nube funcione (v17), se sincroniza solo
+            return;
+        }
+        /* Está en los dos lados: gana el MÁS NUEVO. Si el guardado a la nube no
+           alcanzó a salir (se cerró la pestaña, se cayó la red), el respaldo local
+           tiene lo último que se tecleó y la nube una versión vieja — sin esto, al
+           reabrir el inventario se veía el número viejo y el nuevo se perdía. */
+        if (!ids[d.id]) return;
+        var i = _cacheInv.findIndex(function(x){ return x && x.id === d.id; });
+        if (i < 0) return;
+        var tNube  = Date.parse((_cacheInv[i] && _cacheInv[i].guardadoTs) || '') || 0;
+        var tLocal = Date.parse(d.guardadoTs || '') || 0;
+        if (tLocal > tNube) {
+            _cacheInv[i] = d;
+            try { _sbUpInv(d); } catch(e) {}   // y se re-sube para que la nube se ponga al día
         }
     });
 }
@@ -7824,6 +7839,7 @@ function guardarInventario() {
     invActual.filas = _nuevas.map(f => ({...f, existenciaFisica: calcExistencia(f)}));
     // Si se está EDITANDO un inventario cerrado, se persiste como CERRADO (el flag
     // _eraCerrado vive solo en memoria y nunca llega al disco/nube).
+    invActual.guardadoTs = new Date().toISOString();   // cuál copia es la más nueva
     const _persist = Object.assign({}, invActual);
     if (_persist._eraCerrado) _persist.cerrado = true;
     delete _persist._eraCerrado;
@@ -7858,9 +7874,24 @@ function _persistirBorradorLocal() {
     } catch(e) { console.warn('[borrador local]', e); }
 }
 // Flush al cerrar/ocultar la pestaña (móvil incluido).
-window.addEventListener('pagehide',     function(){ _persistirBorradorLocal(); });
-window.addEventListener('beforeunload', function(){ _persistirBorradorLocal(); });
-window.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'hidden') _persistirBorradorLocal(); });
+/* Al salir hay que soltar TODO lo pendiente, no solo el borrador local. El
+   guardado del inventario va con 600 ms de retraso (debounce): si tecleabas "30"
+   y navegabas enseguida, ese timer nunca llegaba a correr —solo se escribía el
+   respaldo local— y al reabrir el inventario la nube seguía teniendo el número
+   viejo. Eso es "puse 30, guardé, volví a entrar y decía 16". */
+function _flushPendientes() {
+    _persistirBorradorLocal();
+    try {
+        if (_autoGuardarTimer) {
+            clearTimeout(_autoGuardarTimer); _autoGuardarTimer = null;
+            guardarInventario();
+        }
+    } catch (e) { console.warn('[inv] flush al salir:', e); }
+}
+window._flushPendientes = _flushPendientes;
+window.addEventListener('pagehide',     _flushPendientes);
+window.addEventListener('beforeunload', _flushPendientes);
+window.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'hidden') _flushPendientes(); });
 
 // Indicador de guardado persistente (estilo Google Sheets).
 function _setGuardadoInd(estado) {
