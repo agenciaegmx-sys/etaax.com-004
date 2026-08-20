@@ -754,6 +754,22 @@ function consumoBasesPorProduccionDetalle(insumoId) {
     });
     return out;
 }
+/* ¿Se enseña la producción aparte en la columna de Coctelería?
+   SOLO cuando el batch de esa sub-receta NO se está repartiendo. Si el prebatch
+   tiene fila en el inventario, el reparto ya le devuelve al insumo su parte del
+   batch y la producción se cancela sola contra ella (por eso el modelo no cuenta
+   doble): enseñarla además sumaría el mismo vino dos veces —lo que entró al batch
+   y lo que salió vendido del batch— e inflaría el consumo al doble.
+   Cuando el prebatch NO se cuenta como existencia, no hay nada que cancele: ahí
+   la producción es lo único que se llevó el insumo y sí debe verse. */
+function _prodPBVisible(fila, adj) {
+    var p = 0;
+    try { p = _consumoBaseProd(fila) || 0; } catch (e) { return 0; }
+    if (!p) return 0;
+    if (adj && (adj.teo || adj.fis || adj.vco || adj.venta)) return 0;   // el reparto ya lo cubre
+    return p;
+}
+
 function _consumoBaseProd(fila) {
     /* PIEZA: la unidad base de la receta (ml/g) NO son piezas. Un refresco de 3 L
        usado a 300 ml por batch × 24 batches son 7200 ml = 2.4 piezas, no 7200.
@@ -6576,7 +6592,7 @@ function _step5TablasHTML() {
            El teórico siempre lo restó, pero la columna no lo enseñaba: un tinto
            usado en 24 batches de "Tinto de Verano" salía con coctelería en "—" y
            una diferencia enorme sin explicación a la vista. */
-        const prodPBc      = (function () { try { return _consumoBaseProd(fila) || 0; } catch (e) { return 0; } })();
+        const prodPBc      = _prodPBVisible(fila, adj);
         const ventaCoct    = consumoRecetasFila(fila) + adj.vco + prodPBc;
         const ventaCopaDir = parseFloat(fila.ventasCopasDirectas) || 0;
         const ventaCopa    = ventaCoct + ventaCopaDir;
@@ -6629,7 +6645,7 @@ function _step5TablasHTML() {
         const ea        = parseFloat(fila.existenciaAnterior) || 0;
         const entTotal  = getEntradasCopas(fila);
         const adjP      = _repartoDe(fila.insumoId);
-        const prodPBp   = (function () { try { return _consumoBaseProd(fila) || 0; } catch (e) { return 0; } })();
+        const prodPBp   = _prodPBVisible(fila, adjP);
         const ventaCoct = calcVentasPzaRecetas(fila.insumoId) + adjP.vco + prodPBp;
         const ventasDir = (fila.ventasBotella || 0) + (parseFloat(fila.ventasCopasDirectas)||0);
         const ventas    = ventasDir + ventaCoct;
@@ -6957,7 +6973,7 @@ function _step5DesgloseCard(fila, refMap) {
     var pctVal   = esPB ? null : _pctVarianza(dif, _consumoPeriodo(fila) + adjG.venta); // dif vs venta neta
     var pct      = pctVal !== null ? ((pctVal>=0?'+':'')+pctVal.toFixed(1)+'%') : '—';
     var ventaCoct = esComp ? (fila._ventaCoct||0)
-        : consumoRecetasFila(fila) + (function(){ try { return _consumoBaseProd(fila) || 0; } catch(e) { return 0; } })();
+        : consumoRecetasFila(fila) + _prodPBVisible(fila, (typeof _repartoDe === 'function') ? _repartoDe(fila.insumoId) : null);
     var ventaDir  = parseFloat(fila.ventasCopasDirectas)||0;
     var ventaBot  = parseFloat(fila.ventasBotella)||0;
     var cort = parseFloat(fila.cortesiaCopas)||0, merma = parseFloat(fila.mermaCopas)||0;
@@ -7121,7 +7137,7 @@ function verReporteDirectivo(gerencial, modo) {
            que al insumo le faltaba producto sin razón. Va aparte de ventaCoct para
            sumarse a ventaCoct, que es venta. Sí entra al CONSUMO (es uso de insumo
            a precio proveedor); no entra a la venta neta, que mide lo que se cobró. */
-        const prodPB       = (function () { try { return _consumoBaseProd(f) || 0; } catch (e) { return 0; } })();
+        const prodPB       = _prodPBVisible(f, adjO);
         const ventaCopaDir = parseFloat(f.ventasCopasDirectas) || 0; // venta directa por copa/pza
         const ventaCopa = ventaCoct + ventaCopaDir;
         const ventaBot  = parseFloat(f.ventasBotella) || 0;
