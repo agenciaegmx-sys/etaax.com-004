@@ -43,7 +43,8 @@
        Lo demás (contexto de sesión, permisos, preferencias) es de bytes y se queda
        en localStorage, que está disponible de inmediato al cargar la página. */
     var GRANDES = ['insumos', 'recetas', 'inv_local', 'el_local', 'staff',
-                   'checklists', 'checklist_runs', 'horarios'];
+                   'checklists', 'checklist_runs', 'horarios',
+                   'outbox_v1'];   // la cola de salida: con inventarios grandes NO cabe en localStorage
 
     var mem = {};            // clave → string
     var desdeIDB = {};       // claves que YA venían en IndexedDB al hidratar

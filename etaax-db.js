@@ -102,8 +102,35 @@
        Indicador discreto "Sincronizando… N pendientes" en vez del toast rojo.
        ════════════════════════════════════════════════════════════ */
     var OUTBOX = 'etaax_outbox_v1';
-    function _obLoad() { try { return JSON.parse(localStorage.getItem(OUTBOX)) || []; } catch (e) { return []; } }
-    function _obSave(q) { try { localStorage.setItem(OUTBOX, JSON.stringify(q)); } catch (e) {} }
+    /* La cola vive en el almacenamiento GRANDE (IndexedDB vía etaax-store).
+       Antes era localStorage y ahí estaba el bug del "313 cambios pendientes" que
+       nunca bajaba: con inventarios encolados la cola pesa megas, el setItem
+       reventaba por cuota y —como fallaba en silencio— los items YA SUBIDOS no se
+       podían quitar. Resultado: el contador congelado y los mismos 313 registros
+       re-subiéndose enteros en cada carga de la página.
+       Si el guardado falla, ahora se avisa: una cola que no se puede escribir es
+       una cola que va a repetir trabajo para siempre. */
+    function _obLoad() {
+        try {
+            var raw = window.etaaxStore ? etaaxStore.get(OUTBOX) : localStorage.getItem(OUTBOX);
+            return JSON.parse(raw) || [];
+        } catch (e) { return []; }
+    }
+    var _obSaveAviso = false;
+    function _obSave(q) {
+        var txt;
+        try { txt = JSON.stringify(q); } catch (e) { return; }
+        if (window.etaaxStore) { etaaxStore.set(OUTBOX, txt); return; }
+        try { localStorage.setItem(OUTBOX, txt); }
+        catch (e) {
+            if (!_obSaveAviso) {
+                _obSaveAviso = true;
+                console.error('[outbox] NO se pudo guardar la cola (' + Math.round(txt.length / 1024) +
+                              ' KB): los cambios ya subidos no se pueden quitar y se van a repetir. ' +
+                              'Falta etaax-store.js en esta página.', e && e.message);
+            }
+        }
+    }
 
     function _obIndicador() {
         var n = _obLoad().length;

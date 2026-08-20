@@ -139,6 +139,7 @@ body.nav-open #viewport{left:200px}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="/etaax-store.js"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js"></script>
 <script>
 function getNegocioActivo(){return localStorage.getItem('etaax_negocio_activo')||'';}
