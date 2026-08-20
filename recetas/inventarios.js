@@ -8208,6 +8208,7 @@ function guardarEntradaLog() {
     // Close modal and refresh historial
     document.getElementById('modalEntradaLog').style.display = 'none';
     _entLogInsumoCache = null;
+    _invalidarStep5();          // entró producto → el resumen debe rehacerse
     // Re-render the full view if vistaEntradas is visible, otherwise just the list
     if (document.getElementById('vistaEntradas')?.style.display !== 'none') {
         renderVistaEntradas();
@@ -8598,6 +8599,7 @@ function eliminarEntradaPorId(id) {
         }
         cerrarEditorEntrada();
         renderListadoEntradas();
+        _invalidarStep5();      // se fue producto del disponible → rehacer el resumen
     });
 }
 /* ══ EDITOR DE ENTRADA (✏️) ══════════════════════════════════════════════
@@ -8786,6 +8788,23 @@ async function _entEdSubirUna(file) {
     if (up.error) { alert('No se pudo subir la foto: ' + up.error.message); return ''; }
     return _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
 }
+/* Toda mano sobre el LOG DE ENTRADAS tiene que invalidar el Paso 5. Editar o
+   borrar una entrada ya registrada cambia el disponible, el teórico y el capital,
+   pero esas funciones solo repintaban su propia lista: el resumen se quedaba con
+   el cálculo cacheado y enseñaba números de antes del cambio. Además se prende el
+   aviso de "Recalcular" para que se vea que hay algo que rehacer. */
+function _invalidarStep5() {
+    window._step5Dirty = true;
+    window._step5Force = true;
+    if (typeof _consumoIdxCache !== 'undefined') { _consumoIdxCache = null; _consumoDirty = true; }
+    if (typeof _repCache !== 'undefined') _repCache = null;
+    if (typeof _marcarStep5Stale === 'function') _marcarStep5Stale(true);
+    if (typeof pasoActual !== 'undefined' && pasoActual === 5 && typeof renderStepContent === 'function') {
+        try { renderStepContent(); } catch (e) {}
+    }
+}
+window._invalidarStep5 = _invalidarStep5;
+
 function guardarEditorEntrada() {
     if (!_entEd) return;
     if (!(_entEd.cantidad > 0)) { alert('La cantidad debe ser mayor a 0.'); return; }
@@ -8803,6 +8822,7 @@ function guardarEditorEntrada() {
     }, ins);
     cerrarEditorEntrada();
     renderListadoEntradas();
+    _invalidarStep5();          // cambió el disponible → el resumen debe rehacerse
     // Dentro del inventario, la ficha del insumo muestra "ya registrado este período":
     // se repinta igual que al agregar una entrada, para que no quede el número viejo.
     if (invActual) {
