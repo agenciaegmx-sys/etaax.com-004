@@ -519,6 +519,38 @@ test('prebatch sin envase (legacy): fallback a contNeto → 15 copas', () =>
     eq(B._prodPrebatchUnidades({ ...filaPreEnv, rendimientoBatch: 0 }), 15));
 vm.runInContext("invActual.prebatchProducidos = {};", B);
 
+/* ── RENDIMIENTO DEL BATCH ≠ CAPACIDAD DEL ENVASE ──
+   El caso de Edwin: "Tinto de Verano" rinde 900 ml y se guarda en garrafas de 4 L.
+   Tomar la garrafa como rendimiento daba 24 batches × 4 L = 96 L producidos en vez
+   de 21.6 L, y ese fantasma de 74 L caía como faltante repartido a los insumos
+   (−89 L en el batch, −55 L en el vino). Manda lo capturado en la sub-receta. */
+setVar(B, '_cacheRecetasInv', [
+    { id: 'srTinto', tipo: 'sub-bebidas', status: 'activa',
+      camposExtra: { rendimientoFinal: '0.900', unidadRendimientoFinal: 'KG' },
+      ingredientes: [ { insumoId: 'vinoT', cantidad: 600, unidad: 'ML' },
+                      { insumoId: 'sidralT', cantidad: 300, unidad: 'ML' } ] },
+]);
+setVar(B, '_cacheInsumosInv', [
+    { id: 'preTinto', esSubReceta: true, recetaId: 'srTinto', activo: '1' },
+    { id: 'vinoT', activo: '1' }, { id: 'sidralT', activo: '1' },
+]);
+vm.runInContext("invActual.prebatchProducidos = { preTinto: 24 };", B);
+// La fila trae contNeto = 4000 (la GARRAFA) y ningún rendimiento propio.
+const filaGarrafa = { insumoId:'preTinto', nombre:'Tinto de Verano SB', tipo:'copa',
+    contNeto:4000, copaML:1000, rendimientoBatch:0, existenciaAnterior:0,
+    ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[] };
+setVar(B, 'filasCaptura', [filaGarrafa]);
+test('rendimiento: manda el de la sub-receta (0.900 KG → 900 ml), no la garrafa de 4 L', () =>
+    eq(B._rendBatch(filaGarrafa), 900));
+test('rendimiento: 24 batches × 900 ml = 21.6 L, no 96 L de garrafa', () =>
+    eq(B._prodPrebatchUnidades(filaGarrafa), 24 * 900 / 1000));
+test('rendimiento: sin sub-receta que consultar, un rendimiento capturado a mano manda', () =>
+    eq(B._rendBatch({ ...filaGarrafa, insumoId:'otro', rendimientoBatch: 4000 }), 4000));
+test('rendimiento: y sin nada capturado, el último recurso sigue siendo contNeto', () =>
+    eq(B._rendBatch({ ...filaGarrafa, insumoId:'otro', rendimientoBatch: 0 }), 4000));
+vm.runInContext("invActual.prebatchProducidos = {};", B);
+setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
+
 /* ── PREBATCH con insumo de PIEZA (refresco/lata) ──
    Bug real: una sub-receta que pide 300 ML de un refresco de 3 L restaba 7200
    PIEZAS del teórico (la unidad base son mililitros, no piezas) y el insumo se

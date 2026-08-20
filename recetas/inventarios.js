@@ -743,14 +743,59 @@ function consumoBasesPorProduccion(insumoId) {
 function _prodPrebatchUnidades(fila) {
     var n = (invActual && invActual.prebatchProducidos && parseFloat(invActual.prebatchProducidos[fila.insumoId])) || 0;
     if (!n) return 0;
-    // ml/g POR BATCH = rendimiento de la sub-receta (fila.rendimientoBatch). Fallback a
-    // contNeto: antes de definir envase físico, contNeto ERA el rendimiento del batch.
-    // (Con envase: contNeto = capacidad de la botella/garrafa, ≠ rendimiento del batch.)
-    var rB = parseFloat(fila.rendimientoBatch) || fila.contNeto || 0;
+    var rB = _rendBatch(fila);
     if (fila.tipo === 'copa') return n * (rB > 0 && fila.copaML > 0 ? rB / fila.copaML : 0); // batches→copas
     if (fila.tipo === 'peso') return n * rB; // batches→unidad base
     return n; // pza: 1 batch = 1 pza
 }
+/* CUÁNTO RINDE UN BATCH. Es distinto de la CAPACIDAD DEL ENVASE donde se guarda:
+   "Tinto de Verano" rinde 900 ml y se almacena en garrafas de 4 L. Confundirlos es
+   caro — con 24 batches, tomar la garrafa daba 96 L producidos en vez de 21.6 L, y
+   ese fantasma de 74 L caía como faltante repartido a los insumos de la sub-receta
+   (−89 L en el batch, −55 L en el vino).
+
+   Orden de preferencia, del dato más confiable al último recurso:
+     1. el rendimiento capturado en la SUB-RECETA (lo que el usuario escribió ahí);
+     2. el rendimiento de la presentación del insumo (también capturado a mano);
+     3. contNeto, que en registros viejos SÍ era el rendimiento… y en los nuevos es
+        la capacidad del envase. Se avisa, porque de aquí salen números inventados.
+   Lo capturado manda siempre: no se "corrige" con la suma de los ingredientes,
+   porque una sub-receta puede rendir menos de lo que entra (reducciones, mermas)
+   y ese dato lo sabe el cocinero, no la aritmética. */
+var _rendBatchAviso = {};
+function _rendBatch(fila) {
+    var r = _recetaDePrebatch(fila);
+    if (r) {
+        var cx = (r.camposExtra || {});
+        var rf = parseFloat(cx.rendimientoFinal) || 0;
+        if (rf > 0) {
+            var u = (cx.unidadRendimientoFinal || '').toString().toUpperCase();
+            return (u === 'KG' || u === 'LT' || u === 'L') ? rf * 1000 : rf;   // a g/ml
+        }
+    }
+    var rp = parseFloat(fila.rendimientoBatch) || 0;
+    if (rp > 0) return rp;
+    var cn = parseFloat(fila.contNeto) || 0;
+    if (cn > 0 && !_rendBatchAviso[fila.insumoId]) {
+        _rendBatchAviso[fila.insumoId] = 1;
+        console.warn('[inv] "' + (fila.nombre || fila.insumoId) + '": sin rendimiento de sub-receta; ' +
+                     'se usa el contenido del envase (' + cn + ') como rendimiento por batch. ' +
+                     'Si ese envase es solo de almacenamiento, la producción va a salir inflada.');
+    }
+    return cn;
+}
+function _recetaDePrebatch(fila) {
+    if (!fila) return null;
+    var cid = _canonInsumoId(fila.insumoId) || fila.insumoId;
+    var ins = (getInsumos() || []).find(function (x) {
+        return x && (_canonInsumoId(x.id) || x.id) === cid;
+    });
+    if (!ins || !ins.esSubReceta || !ins.recetaId) return null;
+    return (window._recetaResolver ? window._recetaResolver(ins.recetaId) : null)
+        || (getRecetas() || []).find(function (r) { return r && r.id === ins.recetaId; })
+        || null;
+}
+
 // Consumo de ESTE insumo base por la producción de batches, en la unidad de su fila.
 /* Lo mismo que consumoBasesPorProduccion, pero SEPARANDO piezas de mililitros.
    Hace falta para las filas de PIEZA: una sub-receta puede pedir "1 PZA de lata"
