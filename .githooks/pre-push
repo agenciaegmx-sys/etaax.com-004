@@ -1,8 +1,10 @@
 #!/bin/sh
-# ETAAX — el candado de fórmulas corre SOLO antes de cada push.
-# Si una fórmula de dinero cambió, el push se bloquea.
-echo "🔒 Candado de fórmulas (tests/money-tests.js)…"
+# ETAAX — los candados corren SOLO antes de cada push.
+# Si una fórmula de dinero cambió, o el almacenamiento local cambió de
+# comportamiento, el push se bloquea.
 RAIZ="$(git rev-parse --show-toplevel)"
+
+echo "🔒 Candado de fórmulas (tests/money-tests.js)…"
 if node "$RAIZ/tests/money-tests.js" > /tmp/etaax-tests.log 2>&1; then
     tail -1 /tmp/etaax-tests.log
 else
@@ -11,5 +13,17 @@ else
     echo "🚨 PUSH BLOQUEADO: una fórmula de dinero cambió o tronó."
     echo "   Revisa arriba. Si el cambio es intencional, ajusta su test"
     echo "   en tests/money-tests.js en el mismo commit."
+    exit 1
+fi
+
+echo "🔒 Candado del almacén (tests/store-tests.js)…"
+if node "$RAIZ/tests/store-tests.js" > /tmp/etaax-store-tests.log 2>&1; then
+    tail -1 /tmp/etaax-store-tests.log
+else
+    cat /tmp/etaax-store-tests.log
+    echo ""
+    echo "🚨 PUSH BLOQUEADO: el almacenamiento local cambió de comportamiento."
+    echo "   Aquí vive la carrera del outbox (hidratar tarde resucitaba la cola)."
+    echo "   Si el cambio es intencional, ajusta su test en tests/store-tests.js."
     exit 1
 fi

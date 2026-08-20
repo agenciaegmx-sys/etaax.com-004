@@ -132,8 +132,14 @@
         }
     }
 
+    /* Una cola que baja y una cola ATORADA se ven igual desde afuera: un número que
+       no cambia. Y no es lo mismo "va en camino" que "este registro ya falló seis
+       veces y a la octava se descarta". Los atorados (los que ya fallaron por algo
+       que NO es falta de red) se separan y se dicen por su nombre. */
     function _obIndicador() {
-        var n = _obLoad().length;
+        var q = _obLoad();
+        var n = q.length;
+        var atorados = q.filter(function (it) { return it && (it.tries || 0) > 0; });
         var el = document.getElementById('etaax-sync-pending');
         if (!n) { if (el) el.style.display = 'none'; return; }
         if (!el) {
@@ -145,10 +151,26 @@
                 'box-shadow:0 8px 32px rgba(0,0,0,.45)';
             if (document.body) document.body.appendChild(el);
         }
+        el.style.borderColor = atorados.length ? '#e05c5c' : '#f5c842';
         var s = n !== 1 ? 's' : '';
-        el.innerHTML = '<span style="color:#f5c842;font-weight:700">⏳ Sincronizando…</span> ' +
+        var txt = '<span style="color:#f5c842;font-weight:700">⏳ Sincronizando…</span> ' +
             n + ' cambio' + s + ' pendiente' + s + ' (se sube' + (n !== 1 ? 'n' : '') + ' solo' + s + ').';
+        if (atorados.length) {
+            // El que más ha fallado marca qué tan cerca está el descarte (a los 8 intentos).
+            var peor = atorados.reduce(function (a, b) { return (b.tries || 0) > (a.tries || 0) ? b : a; });
+            txt += '<div style="margin-top:5px;color:#e05c5c;font-size:11px">⚠️ ' + atorados.length +
+                ' atorado' + (atorados.length !== 1 ? 's' : '') + ' — el más terco lleva ' +
+                (peor.tries || 0) + ' de 8 intentos (' + _esc(peor.tabla || '?') + ').' +
+                '<br><span style="opacity:.75">Escribe <b>_sbOutbox()</b> en la consola para ver cuáles.</span></div>';
+        }
+        el.innerHTML = txt;
         el.style.display = 'block';
+    }
+    // El nombre de la tabla va dentro de innerHTML: nunca confiar en que venga limpio.
+    function _esc(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
     }
 
     function _obAdd(item) {
@@ -206,8 +228,16 @@
         // OJO: ya NO cortamos por navigator.onLine — muchas tablets/webviews lo reportan MAL
         // como offline aunque haya red, y el outbox se quedaba atorado TODO el día. Ahora
         // SIEMPRE intenta; si de verdad no hay red, _esErrRed evita descartar (solo reintenta).
+        // El candado se cierra ANTES del primer await: si no, dos llamadas seguidas
+        // (el temporizador y un `focus`, por ejemplo) pasarían las dos y correrían en paralelo.
         _obFlushing = true;
         try {
+            /* Esperar a que el almacén hidrate ANTES de leer la cola. Sin esto, un flush
+               temprano leía el espejo viejo de localStorage (la cola completa), la subía
+               entera otra vez y guardaba el resultado en memoria… que la hidratación
+               pisaba medio segundo después con la versión de disco. El contador se
+               quedaba clavado y los mismos registros se re-subían en cada carga. */
+            if (window.etaaxStore && etaaxStore.ready) { try { await etaaxStore.ready; } catch (e) {} }
             var q = _obLoad(), hechos = {}, triesUpd = {}, muertos = {};
             // Items de una versión vieja sin uid: asignarles uno y PERSISTIRLO antes
             // de ejecutar, para que el merge de abajo los identifique igual que al resto.

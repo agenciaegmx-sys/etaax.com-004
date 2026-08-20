@@ -14,15 +14,18 @@ No hay build ni lint. Para probar localmente sirve los archivos estáticos:
 python3 -m http.server 8000   # luego abrir http://localhost:8000/hub.html
 ```
 
-**Tests de fórmulas de dinero — correr SIEMPRE antes de push:**
+**Tests — correr SIEMPRE antes de push:**
 
 ```bash
 node tests/money-tests.js   # sale con código 1 si alguna fórmula cambió
+node tests/store-tests.js   # candado del almacenamiento local (etaax-store.js)
 ```
 
-Ejecuta el código REAL de producción (etaax-core.js + los `<script>` de diario.html e inventarios.js) en Node con DOM simulado y verifica ~51 fórmulas (resguardo, comisiones bancarias, netos de tarjeta, existencias teórico/físico, metas por días operativos, efectos de depósitos/retiros…). Si un test falla, el test tiene razón hasta demostrar lo contrario. Al tocar una fórmula de dinero o crear una nueva, agregar/ajustar su test en el mismo commit.
+`money-tests.js` ejecuta el código REAL de producción (etaax-core.js + los `<script>` de diario.html e inventarios.js) en Node con DOM simulado y verifica las fórmulas de dinero (resguardo, comisiones bancarias, netos de tarjeta, existencias teórico/físico, prebatch y su reparto, metas por días operativos, efectos de depósitos/retiros…). Si un test falla, el test tiene razón hasta demostrar lo contrario. Al tocar una fórmula de dinero o crear una nueva, agregar/ajustar su test en el mismo commit.
 
-Hay un hook pre-push que corre el candado y bloquea el push si falla (`.githooks/pre-push`; en una máquina nueva activarlo con `git config core.hooksPath .githooks`).
+`store-tests.js` levanta `etaax-store.js` sobre un IndexedDB de mentira con el reloj en la mano (se decide a propósito qué termina primero). Cubre la carrera entre hidratar y escribir: si la hidratación pisa lo ya escrito, resucita el estado viejo — ahí vivía el bug de la cola de salida clavada en 314 pendientes. Al tocar el almacenamiento, ajustar su test en el mismo commit.
+
+Hay un hook pre-push que corre los dos candados y bloquea el push si alguno falla (`.githooks/pre-push`; en una máquina nueva activarlo con `git config core.hooksPath .githooks`).
 
 **Núcleo de fórmulas `/etaax-core.js` (`window.EtaaxCore`):** una sola verdad para dinero de corte (flujoNeto, comisiones, netos, resguardo, depEfecto), periodos (getRange/semana ISO) y metas (calcMetaDiaria/diasOperativos). Las páginas lo cargan con `<script src="/etaax-core.js">` ANTES de su script y mantienen alias delgados (`function flujoNeto(c){return EtaaxCore.flujoNeto(c);}`). Al necesitar una de estas fórmulas en una página nueva, DELEGAR al núcleo — nunca copiar el cuerpo. Recibe datos por parámetro (cuentas, caja chica, factores), sin DOM.
 

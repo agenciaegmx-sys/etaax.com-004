@@ -49,7 +49,15 @@
     var mem = {};            // clave → string
     var desdeIDB = {};       // claves que YA venían en IndexedDB al hidratar
     var pendientes = {};     // claves con escritura sin bajar a IndexedDB
+    /* Claves que la APP ya escribió en esta carga. Hidratar es asíncrono, así que
+       puede terminar DESPUÉS de una escritura y, al volcar lo leído sobre `mem`,
+       pisar lo recién guardado con la versión vieja del disco. Ahí estaba la mitad
+       del outbox que "no bajaba": el flush vaciaba la cola y la hidratación la
+       resucitaba completa unos milisegundos después. Lo escrito en esta carga es
+       siempre más nuevo que lo leído: gana. */
+    var escritasEnSesion = {};
     var db = null, hayIDB = false;
+    var hidratado = false;   // ya se sabe si hay IndexedDB y ya se leyó lo que tenía
 
     function _esGrandeKey(k) {
         // k llega completa: "etaax_{negocio}_{clave}" o "etaax_{clave}"
@@ -127,12 +135,33 @@
         _bajaTimer = setTimeout(_bajar, 250);
     }
     function _bajar() {
-        if (!db) { pendientes = {}; return Promise.resolve(); }
         var claves = Object.keys(pendientes);
         if (!claves.length) return Promise.resolve();
+        if (!db) {
+            /* Sin base todavía: puede ser que IndexedDB NO EXISTA en este navegador,
+               o que simplemente aún no termine de abrir. Antes se trataban igual y se
+               tiraban las claves pendientes — lo escrito en el primer cuarto de
+               segundo de la página no llegaba nunca al disco y volvía a aparecer el
+               estado viejo en la siguiente carga. Si solo es que aún no abre, se
+               vuelve a intentar; si de plano no hay IndexedDB, ahí sí no hay a dónde
+               bajarlas (la app sigue leyendo de memoria y de localStorage). */
+            if (!hidratado) { _programarBajada(); return Promise.resolve(); }
+            pendientes = {};
+            return Promise.resolve();
+        }
         pendientes = {};
         return Promise.all(claves.map(function (k) {
-            return (mem[k] == null) ? _borrar(k) : _escribir(k, mem[k]);
+            if (mem[k] == null) return _borrar(k);
+            return _escribir(k, mem[k]).then(function (ok) {
+                /* Con el valor nuevo YA en disco, el espejo viejo de localStorage
+                   solo puede hacer daño: `get` vuelve a él mientras la memoria no
+                   hidrata y resucita el estado anterior. Así se quedaba pegada la
+                   cola de salida en sus 314 pendientes, carga tras carga.
+                   Se borra solo después de confirmar la escritura — antes sería
+                   quedarse sin ninguna copia legible. */
+                if (ok) { desdeIDB[k] = 1; try { localStorage.removeItem(k); } catch (e) {} }
+                return ok;
+            });
         }));
     }
     // Al salir de la página no puede quedarse nada arriba esperando el timer.
@@ -186,14 +215,21 @@
     var ready = _abrir().then(function (d) {
         db = d; hayIDB = !!d;
         if (!d) {
+            hidratado = true;
             console.warn('[etaax-store] sin IndexedDB: se sigue usando localStorage (tope ~5 MB)');
             return;
         }
         return _leerTodo(d).then(function (todo) {
-            Object.keys(todo).forEach(function (k) { mem[k] = todo[k]; desdeIDB[k] = 1; });
+            Object.keys(todo).forEach(function (k) {
+                desdeIDB[k] = 1;                     // sí estaba en disco (para la migración)
+                if (escritasEnSesion[k]) return;     // pero la app ya la reescribió: no la pises
+                mem[k] = todo[k];
+            });
+            hidratado = true;
             return _migrarDesdeLocal();
         });
     }).catch(function (e) {
+        hidratado = true;
         console.warn('[etaax-store] no se pudo abrir IndexedDB:', e && e.message);
     });
 
@@ -216,6 +252,7 @@
             if (_esGrandeKey(k)) {
                 mem[k] = String(v);
                 pendientes[k] = 1;
+                escritasEnSesion[k] = 1;
                 _programarBajada();
                 return true;                       // ya está disponible para leer
             }
