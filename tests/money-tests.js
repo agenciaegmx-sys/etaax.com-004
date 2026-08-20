@@ -519,6 +519,12 @@ test('prebatch sin envase (legacy): fallback a contNeto → 15 copas', () =>
     eq(B._prodPrebatchUnidades({ ...filaPreEnv, rendimientoBatch: 0 }), 15));
 vm.runInContext("invActual.prebatchProducidos = {};", B);
 
+/* PENDIENTE: el caso copia↔maestro de la producción no se puede ejercitar aquí —
+   el resolver de insumos cachea su índice por firma y no se refresca entre bloques
+   del harness, así que _canonInsumoId no traduce. El arreglo SÍ está en
+   consumoBasesPorProduccion (comparación por id canónico, igual que _consumoIdx y
+   consumoBasesPorProduccionDetalle); falta poder probarlo aquí. */
+
 /* ── RENDIMIENTO DEL BATCH ≠ CAPACIDAD DEL ENVASE ──
    El caso de Edwin: "Tinto de Verano" rinde 900 ml y se guarda en garrafas de 4 L.
    Tomar la garrafa como rendimiento daba 24 batches × 4 L = 96 L producidos en vez

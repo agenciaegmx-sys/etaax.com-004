@@ -725,6 +725,12 @@ function prebatchesProducibles() {
 function consumoBasesPorProduccion(insumoId) {
     var prod = (invActual && invActual.prebatchProducidos) || {};
     var total = 0;
+    /* Por id CANÓNICO. La sub-receta guarda el id tal como estaba al agregar el
+       ingrediente: si el negocio independizó sus insumos por sucursal, ahí quedó el
+       id de la COPIA, mientras la fila del inventario usa el MAESTRO. Comparando
+       ids crudos no empataban y la producción salía en CERO — el mismo desajuste
+       que ya había dejado la coctelería en blanco. */
+    var canon = _canonInsumoId(insumoId) || insumoId;
     Object.keys(prod).forEach(function(pid) {
         var n = parseFloat(prod[pid]) || 0;
         if (!n) return;
@@ -733,7 +739,7 @@ function consumoBasesPorProduccion(insumoId) {
         var sr = (window._recetaResolver ? window._recetaResolver(pre.recetaId) : getRecetas().find(function(r){ return r.id === pre.recetaId; }));
         if (!sr) return;
         (sr.ingredientes || []).forEach(function(ing){
-            if (ing.insumoId === insumoId)
+            if (ing && ing.insumoId && (_canonInsumoId(ing.insumoId) || ing.insumoId) === canon)
                 total += ingredienteBase(parseFloat(ing.cantidad) || 0, ing.unidad) * n; // x batch x #batches
         });
     });
