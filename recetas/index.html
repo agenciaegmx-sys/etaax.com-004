@@ -938,6 +938,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
 <script src="/etaax-db.js"></script>
+<script src="/etaax-store.js"></script><!-- IndexedDB: catálogo/inventarios fuera del tope de localStorage -->
 <script src="/etaax-core.js"></script><!-- fórmulas de dinero: antes de app.js -->
 <script src="/insumo-label.js"></script>
 <script src="/multi-select.js"></script><!-- filtros de grupo/categoría con palomitas -->
@@ -1024,10 +1025,13 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!_embedIF && typeof _esCatGlobalRecetas === 'function' && _esCatGlobalRecetas()) {
         _aplicarModoCatalogoGlobalRecetas();
     }
-    // Cargar recetas desde Supabase
-    if (typeof _sbInitRecetas === 'function') _sbInitRecetas();
-    // Cargar el catálogo de insumos (para el editor) aunque no se haya visitado Insumos.
-    if (typeof _sbInitInsumosCatalogo === 'function') _sbInitInsumosCatalogo();
+    // Primero la copia local (IndexedDB), luego la nube: así el editor tiene su
+    // catálogo aunque se abra sin red, y no arranca en blanco si otra pestaña ya
+    // migró los datos fuera de localStorage.
+    _conStore(function () {
+        if (typeof _sbInitRecetas === 'function') _sbInitRecetas();
+        if (typeof _sbInitInsumosCatalogo === 'function') _sbInitInsumosCatalogo();
+    });
 });
 
 // ── Sync precio formulario → costeo ──────────────────────────

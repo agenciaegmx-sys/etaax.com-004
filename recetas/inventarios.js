@@ -4,6 +4,31 @@
 
 // ── Helpers de sesión (mirror de app.js para páginas sin app.js) ──
 function getNegocioActivo() { return localStorage.getItem('etaax_negocio_activo') || ''; }
+/* Puente al almacenamiento grande (etaax-store.js). Las páginas siguen leyendo y
+   escribiendo igual; por debajo, las claves que crecen (catálogo, recetas,
+   inventarios) viven en IndexedDB y ya no compiten por los 5 MB de localStorage.
+   Si el store no está cargado, todo cae a localStorage como siempre. */
+/* Espera a que el almacenamiento grande (IndexedDB) tenga su copia en memoria.
+   Sin esto, una pestaña que abre después de que otra migró el catálogo leería
+   localStorage vacío y arrancaría sin datos. Son milisegundos; si el store no
+   está cargado, sigue de largo como siempre. */
+function _conStore(fn) {
+    if (window.etaaxStore && etaaxStore.ready && etaaxStore.ready.then)
+        etaaxStore.ready.then(fn, fn);
+    else fn();
+}
+function _skPut(k, v) {
+    if (window.etaaxStore) return etaaxStore.set(k, v);
+    try { localStorage.setItem(k, v); return true; } catch (e) { return false; }
+}
+function _skRaw(k) {
+    if (window.etaaxStore) return etaaxStore.get(k);
+    try { return localStorage.getItem(k); } catch (e) { return null; }
+}
+function _skDel(k) {
+    if (window.etaaxStore) return etaaxStore.del(k);
+    try { localStorage.removeItem(k); } catch (e) {}
+}
 function _sk(key) {
     var id = getNegocioActivo();
     return id ? ('etaax_' + id + '_' + key) : ('etaax_' + key);
@@ -111,7 +136,7 @@ async function _sbInitInv() {
     if (!r[3].error) {
         _cacheInsumosInv = (r[3].data || []).map(function(x){ return x.datos; }).filter(Boolean);
         // actualizar localStorage para compatibilidad con insumos.js
-        try { localStorage.setItem(_sk('insumos'), JSON.stringify(_cacheInsumosInv.map(function(ins){ var c=Object.assign({},ins); c.foto=''; c.fotoUrl=''; return c; }))); } catch(e) {}
+        try { _skPut(_sk('insumos'), JSON.stringify(_cacheInsumosInv.map(function(ins){ var c=Object.assign({},ins); c.foto=''; c.fotoUrl=''; return c; }))); } catch(e) {}
         /* Entrar al negocio e ir DIRECTO a editar un inventario ganaba la carrera
            contra esta carga: las filas se armaban con el catálogo vacío y el
            inventario salía sin insumos (había que ir a Insumos y volver). Si el
@@ -156,7 +181,7 @@ async function _reloadEntradasRT() {
     (_cacheEL || []).forEach(function(e){ if (e && e.id && !vistos[e.id]) frescas.push(e); });
     _cacheEL = frescas;
     window._step5Dirty = true; // llegaron datos nuevos del QR → invalidar el resumen
-    try { localStorage.setItem(_sk('el_local'), JSON.stringify(_cacheEL)); } catch(e) {}
+    try { _skPut(_sk('el_local'), JSON.stringify(_cacheEL)); } catch(e) {}
     // Refrescar lo que esté en pantalla: el registro de entradas, o el inventario
     // abierto (importa las nuevas del QR al momento).
     try {
@@ -247,27 +272,27 @@ function _limpiarStorageEmergencia() {
 // aún no tiene). Si la nube falla, el inventario sigue ahí en este equipo.
 function _guardarDraftsLocal() {
     try {
-        localStorage.setItem(_sk('inv_local'), JSON.stringify(_cacheInv || []));
+        _skPut(_sk('inv_local'), JSON.stringify(_cacheInv || []));
     } catch(e) {
         // Si no cabe (quota), al menos respaldar los borradores abiertos (lo más crítico).
-        try { localStorage.setItem(_sk('inv_local'), JSON.stringify((_cacheInv||[]).filter(function(x){return x && !x.cerrado;}))); } catch(e2) {}
+        try { _skPut(_sk('inv_local'), JSON.stringify((_cacheInv||[]).filter(function(x){return x && !x.cerrado;}))); } catch(e2) {}
     }
 }
 function _cargarDraftsLocal() {
-    try { return JSON.parse(localStorage.getItem(_sk('inv_local')) || '[]') || []; } catch(e) { return []; }
+    try { return JSON.parse(_skRaw(_sk('inv_local')) || '[]') || []; } catch(e) { return []; }
 }
 // IDs que YA se vieron en la nube alguna vez. Sirve para distinguir un borrador
 // nunca sincronizado (conservar) de un inventario que estaba sincronizado y se
 // BORRÓ en otro dispositivo (no resucitar). Sin esto, el borrado no se propagaba.
 var _syncedIds = null;
 function _getSynced() {
-    if (!_syncedIds) { try { _syncedIds = JSON.parse(localStorage.getItem(_sk('inv_synced')) || '{}') || {}; } catch(e) { _syncedIds = {}; } }
+    if (!_syncedIds) { try { _syncedIds = JSON.parse(_skRaw(_sk('inv_synced')) || '{}') || {}; } catch(e) { _syncedIds = {}; } }
     return _syncedIds;
 }
 function _marcarSynced(ids) {
     var s = _getSynced(), ch = false;
     (ids || []).forEach(function(id){ if (id && !s[id]) { s[id] = 1; ch = true; } });
-    if (ch) { try { localStorage.setItem(_sk('inv_synced'), JSON.stringify(s)); } catch(e) {} }
+    if (ch) { try { _skPut(_sk('inv_synced'), JSON.stringify(s)); } catch(e) {} }
 }
 function _mergeDraftsLocal() {
     var locales = _cargarDraftsLocal();
@@ -320,10 +345,10 @@ function setInventarios(d) {
 // Mismo problema que los inventarios: si el upsert a la nube falla/tarda, al
 // refrescar se perdían. Respaldo en localStorage + merge (y re-subida) al cargar.
 function _guardarELLocal() {
-    try { localStorage.setItem(_sk('el_local'), JSON.stringify(_cacheEL || [])); } catch(e) {}
+    try { _skPut(_sk('el_local'), JSON.stringify(_cacheEL || [])); } catch(e) {}
 }
 function _cargarELLocal() {
-    try { return JSON.parse(localStorage.getItem(_sk('el_local')) || '[]') || []; } catch(e) { return []; }
+    try { return JSON.parse(_skRaw(_sk('el_local')) || '[]') || []; } catch(e) { return []; }
 }
 function _mergeELLocal() {
     var locales = _cargarELLocal();
@@ -3158,7 +3183,7 @@ async function _asegurarCatalogoInv(forzar) {
         _cacheInsumosInv = lista;
         // Espejo en localStorage, igual que _sbInitInv (sin fotos, por la cuota).
         try {
-            localStorage.setItem(_sk('insumos'), JSON.stringify(lista.map(function (ins) {
+            _skPut(_sk('insumos'), JSON.stringify(lista.map(function (ins) {
                 var c = Object.assign({}, ins); c.foto = ''; c.fotoUrl = ''; return c;
             })));
         } catch (e) {}
@@ -9035,7 +9060,7 @@ function guardarFichaTecnica() {
     // stock desde la ficha no cambiaría nada. Se escriben los dos.
     p.stockMin          = ins.stockMin;
     p.stockMax          = ins.stockMax;
-    try { localStorage.setItem(_sk('insumos'), JSON.stringify(lista)); } catch(e) {}
+    try { _skPut(_sk('insumos'), JSON.stringify(lista)); } catch(e) {}
     // Sync fila en inventario activo
     const fila = filasCaptura.find(f => f.insumoId === _ftInsumoId);
     if (fila) {

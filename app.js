@@ -7,6 +7,31 @@
 function getNegocioActivo() {
     return localStorage.getItem('etaax_negocio_activo') || '';
 }
+/* Puente al almacenamiento grande (etaax-store.js). Las páginas siguen leyendo y
+   escribiendo igual; por debajo, las claves que crecen (catálogo, recetas,
+   inventarios) viven en IndexedDB y ya no compiten por los 5 MB de localStorage.
+   Si el store no está cargado, todo cae a localStorage como siempre. */
+/* Espera a que el almacenamiento grande (IndexedDB) tenga su copia en memoria.
+   Sin esto, una pestaña que abre después de que otra migró el catálogo leería
+   localStorage vacío y arrancaría sin datos. Son milisegundos; si el store no
+   está cargado, sigue de largo como siempre. */
+function _conStore(fn) {
+    if (window.etaaxStore && etaaxStore.ready && etaaxStore.ready.then)
+        etaaxStore.ready.then(fn, fn);
+    else fn();
+}
+function _skPut(k, v) {
+    if (window.etaaxStore) return etaaxStore.set(k, v);
+    try { localStorage.setItem(k, v); return true; } catch (e) { return false; }
+}
+function _skRaw(k) {
+    if (window.etaaxStore) return etaaxStore.get(k);
+    try { return localStorage.getItem(k); } catch (e) { return null; }
+}
+function _skDel(k) {
+    if (window.etaaxStore) return etaaxStore.del(k);
+    try { localStorage.removeItem(k); } catch (e) {}
+}
 function _sk(key) {
     var id = getNegocioActivo();
     return id ? ('etaax_' + id + '_' + key) : ('etaax_' + key);
@@ -15,13 +40,13 @@ function _sk(key) {
 // migra silenciosamente desde la clave legacy (etaax_{key}) una sola vez.
 function _skGet(key) {
     var k   = _sk(key);
-    var raw = localStorage.getItem(k);
+    var raw = _skRaw(k);
     if (raw !== null) return raw;                       // ya tiene datos propios
     var id = getNegocioActivo();
     if (!id) return null;                               // sin negocio → usa key plana
     var legacy = localStorage.getItem('etaax_' + key);
     if (legacy && legacy !== 'null') {
-        localStorage.setItem(k, legacy);               // migrar una sola vez
+        _skPut(k, legacy);                             // migrar una sola vez
         return legacy;
     }
     return null;
@@ -101,7 +126,7 @@ function setRecetas(data) {
             c.fotos = []; c.foto = '';
             return c;
         });
-        localStorage.setItem(_sk('recetas'), JSON.stringify(sinFotos));
+        _skPut(_sk('recetas'), JSON.stringify(sinFotos));
     } catch(e) {}
 }
 
@@ -226,7 +251,7 @@ async function _sbInitInsumosCatalogo() {
         // tiene su catálogo y el buscador de ingredientes funciona.
         setCatalogoInsumosMem(lista);
         var _espejoOk = true;
-        try { localStorage.setItem(_sk('insumos'), JSON.stringify(paraLocal)); }
+        try { _skPut(_sk('insumos'), JSON.stringify(paraLocal)); }
         catch (e) { _espejoOk = false; console.warn('[recetas] el catálogo no cupo en localStorage (cuota); queda solo en memoria esta sesión:', e && e.message); }
         console.log('[recetas] catálogo de insumos cargado · negocio_insumos:', dedup.length,
                     '· solo-local:', soloLocal.length, '· espejo local:', _espejoOk ? 'ok' : 'NO (cuota)');

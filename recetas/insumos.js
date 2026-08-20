@@ -254,6 +254,31 @@
            sucs.map(function(s){ return '<option value="' + (s.id||'') + '">' + (s.nombre || s.id) + '</option>'; }).join('');
        if (cur) el.value = cur;
    }
+   /* Puente al almacenamiento grande (etaax-store.js). Las páginas siguen leyendo y
+      escribiendo igual; por debajo, las claves que crecen (catálogo, recetas,
+      inventarios) viven en IndexedDB y ya no compiten por los 5 MB de localStorage.
+      Si el store no está cargado, todo cae a localStorage como siempre. */
+   /* Espera a que el almacenamiento grande (IndexedDB) tenga su copia en memoria.
+      Sin esto, una pestaña que abre después de que otra migró el catálogo leería
+      localStorage vacío y arrancaría sin datos. Son milisegundos; si el store no
+      está cargado, sigue de largo como siempre. */
+   function _conStore(fn) {
+       if (window.etaaxStore && etaaxStore.ready && etaaxStore.ready.then)
+           etaaxStore.ready.then(fn, fn);
+       else fn();
+   }
+   function _skPut(k, v) {
+       if (window.etaaxStore) return etaaxStore.set(k, v);
+       try { localStorage.setItem(k, v); return true; } catch (e) { return false; }
+   }
+   function _skRaw(k) {
+       if (window.etaaxStore) return etaaxStore.get(k);
+       try { return localStorage.getItem(k); } catch (e) { return null; }
+   }
+   function _skDel(k) {
+       if (window.etaaxStore) return etaaxStore.del(k);
+       try { localStorage.removeItem(k); } catch (e) {}
+   }
    function _sk(key) {
        var id = getNegocioActivo();
        return id ? ('etaax_' + id + '_' + key) : ('etaax_' + key);
@@ -286,7 +311,7 @@
        if (_insumosCache.length && _insBorrados && Object.keys(_insBorrados).length) {
            var _antes = _insumosCache.length;
            _insumosCache = _insumosCache.filter(function(x){ return !(x && _insBorrados[x.id]); });
-           if (_insumosCache.length !== _antes) { try { localStorage.setItem(_sk('insumos'), JSON.stringify(_insumosCache)); } catch(e) {} }
+           if (_insumosCache.length !== _antes) { try { _skPut(_sk('insumos'), JSON.stringify(_insumosCache)); } catch(e) {} }
        }
        return _insumosCache;
    }
@@ -311,7 +336,7 @@
            if (!ins.foto || !ins.foto.startsWith('data:')) return ins;
            var d = Object.assign({}, ins); d.foto = ''; return d;
        });
-       try { localStorage.setItem(_sk('insumos'), JSON.stringify(paraLocal)); } catch(e) {}
+       try { _skPut(_sk('insumos'), JSON.stringify(paraLocal)); } catch(e) {}
        // Supabase: datos completos con fotos (JSONB no tiene límite práctico)
        _insumosSyncPend = { negId: negId, data: data };
        clearTimeout(_insumosSyncTimer);
@@ -433,7 +458,7 @@
                if (!ins.foto || !ins.foto.startsWith('data:')) return ins;
                var d = Object.assign({}, ins); d.foto = ''; return d;
            });
-           try { localStorage.setItem(_sk('insumos'), JSON.stringify(sinFotos)); } catch(e) {}
+           try { _skPut(_sk('insumos'), JSON.stringify(sinFotos)); } catch(e) {}
            renderStats(); cargarFiltros(); setVistaInsumos(vistaInsumos);
 
            // Empujar a Supabase lo que solo existía localmente (no sincronizado).
@@ -484,7 +509,7 @@
            }
            // Reflejar en localStorage que ya son URLs (no base64)
            try {
-               localStorage.setItem(_sk('insumos'), JSON.stringify((_insumosCache || data).map(function(x) {
+               _skPut(_sk('insumos'), JSON.stringify((_insumosCache || data).map(function(x) {
                    if (!x.foto || !x.foto.startsWith('data:')) return x;
                    var c = Object.assign({}, x); c.foto = ''; return c;
                })));
@@ -1809,7 +1834,7 @@
        return _subcatsCustom;
    }
    function _saveSubcatsCustom() {
-       try { localStorage.setItem(_sk('subcats_custom'), JSON.stringify(_subcatsCustom || {})); } catch (e) {}
+       try { _skPut(_sk('subcats_custom'), JSON.stringify(_subcatsCustom || {})); } catch (e) {}
        _pushSubcatsCloud(); // respaldo en la nube (inv_ajustes.subcats)
    }
    // Sincronización en la nube de las subcategorías propias (antes solo localStorage).
@@ -1832,7 +1857,7 @@
            var sc = (r.data.datos || {}).subcats;
            if (sc && typeof sc === 'object') {
                _subcatsCustom = sc;
-               try { localStorage.setItem(_sk('subcats_custom'), JSON.stringify(sc)); } catch (e) {}
+               try { _skPut(_sk('subcats_custom'), JSON.stringify(sc)); } catch (e) {}
            }
        } catch (e) {}
    }
@@ -5358,5 +5383,5 @@
    // aborta init() antes de pintar la vista. Esperar a DOMContentLoaded garantiza
    // que todos los <script> síncronos (security/ctx-bar/etaax-db/supabase) ya
    // cargaron. En el admin (carga dinámica) readyState ya es 'complete' → corre ya.
-   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-   else init();
+   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ _conStore(init); });
+   else _conStore(init);
