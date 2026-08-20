@@ -3000,6 +3000,14 @@ function _entMostrar(fila, v) {
     if (!e) return v;
     return String(Math.round(((parseFloat(v) || 0) / e.factor) * 1000) / 1000);
 }
+/* Entradas con operaciones, igual que las existencias: llegan "3 rejillas + 2
+   sueltas" y se escribe 3*24+2. Antes el oninput borraba los operadores letra por
+   letra, así que en entradas era imposible teclear una cuenta. */
+function updEntradaCalc(idx, ei, el) {
+    var vacio = !String(el.value || '').trim();
+    _celdaCalc(el, function (v) { updEntradaEmp(idx, ei, vacio ? '' : v); });
+}
+window.updEntradaCalc = updEntradaCalc;
 function updEntradaEmp(idx, ei, val) {
     var fila = filasCaptura[idx];
     var e = _porEmpaqueEnt(fila) ? _empaqueDeFila(fila) : null;
@@ -4261,7 +4269,8 @@ function renderStep2Lista(filas) {
                     <div class="inv-peso-cell">
                         <div class="inv-peso-lbl">E${ei+1}</div>
                         <input type="text" inputmode="decimal" class="inv-peso-input" value="${_entMostrar(fila, e)}" placeholder="0"
-                            oninput="this.value=this.value.replace(/[^0-9.]/g,'');updEntradaEmp(${idx},${ei},this.value)">
+                            title="Puedes escribir operaciones: 3*24+5"
+                            onblur="updEntradaCalc(${idx},${ei},this)" onkeydown="_celdaKey(event,this)">
                     </div>`).join('')}
                 </div>
             </td>
@@ -4316,7 +4325,8 @@ function renderStep2Galeria(filas) {
                     <div>
                         <div style="font-size:9px;color:var(--text-dim);text-align:center;margin-bottom:3px">E${ei+1}</div>
                         <input type="text" inputmode="decimal" class="inv-pesos-grid-input" value="${_entMostrar(fila, e)}" placeholder="0"
-                            oninput="this.value=this.value.replace(/[^0-9.]/g,'');updEntradaEmp(${idx},${ei},this.value)"
+                            title="Puedes escribir operaciones: 3*24+5"
+                            onblur="updEntradaCalc(${idx},${ei},this)" onkeydown="_celdaKey(event,this)"
                             style="height:42px;font-size:16px;text-align:center;border:1px solid var(--border);
                                    border-radius:8px;background:var(--bg);color:var(--text);width:100%;
                                    font-family:'DM Sans',sans-serif;transition:border-color 0.15s;box-sizing:border-box">
@@ -6050,8 +6060,10 @@ async function cargarConteosQR() {
         if (r.error) { _conteosQR = []; return; }          // sin migración v42 → simplemente no hay
         var suc = (invActual.sucursalId || '');
         var area = (invActual.area || '').toLowerCase();
+        var _hechos = _conteosResueltos();
         _conteosQR = (r.data || []).map(function (x) { return x.datos; }).filter(function (c) {
             if (!c || c.aplicado) return false;
+            if (_hechos[c.id]) return false;           // ya resuelto aquí (aunque el sello no haya subido)
             if ((c.sucursalId || '') !== suc) return false;
             if (area && area !== 'general' && (c.area || '').toLowerCase() !== area) return false;
             // Solo conteos frescos: uno de hace dos semanas no es de este inventario.
@@ -6098,6 +6110,7 @@ function chipConteoQR(fila, idx) {
         + '<span style="font-size:11px;color:#7ab8f5">📋 ' + etx(_conteoResumen(c)) + '</span>'
         + '<span style="font-size:10.5px;color:var(--text-dim)">' + etx(c.contadoPor || '') + ' · ' + etx(c.hora || '') + '</span>'
         + '<button class="btn-vista" style="font-size:10.5px;padding:3px 9px;margin-left:auto" onclick="aplicarConteoQR(' + idx + ')">Usar</button>'
+        + '<button class="btn-vista" title="No tomar este conteo" style="font-size:10.5px;padding:3px 9px;color:var(--text-dim)" onclick="descartarConteoQR(' + idx + ')">Descartar</button>'
     + '</div>';
 }
 function _aplicarConteoAFila(fila, c) {
@@ -6108,24 +6121,67 @@ function _aplicarConteoAFila(fila, c) {
     // Queda escrito de dónde salió el número.
     fila.conteoQR = { por: c.contadoPor || '', fecha: c.fecha || '', hora: c.hora || '', nota: c.nota || '' };
 }
-async function _marcarConteoAplicado(c) {
+/* Conteos ya resueltos (aplicados o descartados) en ESTE navegador. Es el seguro
+   contra la mala red: si el sello no alcanza a subir, el conteo no reaparece
+   ofreciéndose otra vez, y sobre todo el número YA quedó escrito en el inventario. */
+function _conteosResueltosKey() { return _sk('conteos_qr_hechos'); }
+function _conteosResueltos() {
+    try { return JSON.parse(localStorage.getItem(_conteosResueltosKey()) || '{}'); } catch (e) { return {}; }
+}
+function _marcarResueltoLocal(id) {
+    if (!id) return;
+    var m = _conteosResueltos();
+    m[id] = Date.now();
+    // Poda a 30 días: es una lista de control, no un archivo.
+    var corte = Date.now() - 30 * 864e5;
+    Object.keys(m).forEach(function (k) { if (m[k] < corte) delete m[k]; });
+    try { localStorage.setItem(_conteosResueltosKey(), JSON.stringify(m)); } catch (e) {}
+}
+/* El sello viaja a la nube SIN await: con internet malo, esa llamada tardaba
+   minutos y dejaba el guardado local y el re-pintado esperando detrás — el número
+   aplicado no se guardaba y la existencia se quedaba en ceros. Ahora primero se
+   escribe en el inventario y luego se avisa a la nube; si el aviso falla, el
+   registro local ya evita que el conteo se vuelva a ofrecer. */
+function _marcarConteoAplicado(c, descartado) {
     c.aplicado = true;
+    if (descartado) c.descartado = true;
     c.aplicadoPor = (function () { try { return (JSON.parse(localStorage.getItem('etaax_ctx') || '{}').userName) || ''; } catch (e) { return ''; } })();
     c.aplicadoTs = new Date().toISOString();
-    try { await _supabase.from('inventario_conteos').update({ datos: c }).eq('id', c.id); } catch (e) {}
+    _marcarResueltoLocal(c.id);
+    try {
+        Promise.resolve(_supabase.from('inventario_conteos').update({ datos: c }).eq('id', c.id))
+            .catch(function () {});
+    } catch (e) {}
 }
-async function aplicarConteoQR(idx) {
+// Saca el conteo de la bandeja y deja el inventario guardado y re-pintado.
+function _cerrarConteo(c) {
+    _conteosQR = _conteosQR.filter(function (x) { return x.id !== c.id; });
+    _autoGuardar();
+    renderStepContent();
+}
+function aplicarConteoQR(idx) {
     var fila = filasCaptura[idx]; if (!fila) return;
     var c = _conteoDeFila(fila); if (!c) return;
-    _aplicarConteoAFila(fila, c);
-    await _marcarConteoAplicado(c);
-    _conteosQR = _conteosQR.filter(function (x) { return x.id !== c.id; });
-    _autoGuardar(); renderStepContent();
+    _aplicarConteoAFila(fila, c);   // 1) al inventario
+    _cerrarConteo(c);               // 2) guardar y pintar — no espera a la red
+    _marcarConteoAplicado(c);       // 3) el sello, por su cuenta
 }
+/* Rechazar el conteo: el encargado contó y no está de acuerdo. No toca la
+   existencia y el conteo no vuelve a ofrecerse. */
+function descartarConteoQR(idx) {
+    var fila = filasCaptura[idx]; if (!fila) return;
+    var c = _conteoDeFila(fila); if (!c) return;
+    var _hacer = function () { _marcarConteoAplicado(c, true); _cerrarConteo(c); };
+    var msg = 'El conteo de ' + (c.contadoPor || 'el colaborador') + ' (' + _conteoResumen(c) + ') se descarta '
+            + 'y no se vuelve a ofrecer. La existencia que ya capturaste no se toca.';
+    if (window.etaaxConfirm) etaaxConfirm('¿Descartar este conteo?', msg, _hacer, null, { yesLabel: 'Descartar', danger: true });
+    else if (confirm(msg)) _hacer();
+}
+window.descartarConteoQR = descartarConteoQR;
 async function aplicarConteosQR() {
     if (!_conteosQR.length) return;
     var n = _conteosQR.length;
-    var _hacer = async function () {
+    var _hacer = function () {
         var pend = _conteosQR.slice();
         for (var i = 0; i < pend.length; i++) {
             var c = pend[i];
@@ -6134,7 +6190,7 @@ async function aplicarConteosQR() {
             });
             if (!fila) continue;                       // contaron algo que no está en este inventario
             _aplicarConteoAFila(fila, c);
-            await _marcarConteoAplicado(c);
+            _marcarConteoAplicado(c);                  // sello sin await: la red no bloquea la captura
             _conteosQR = _conteosQR.filter(function (x) { return x.id !== c.id; });
         }
         _autoGuardar(); renderStepContent();
@@ -6156,7 +6212,14 @@ window.aplicarConteosQR = aplicarConteosQR;
 function _evalCelda(txt) {
     var t = String(txt == null ? '' : txt).trim();
     if (!t) return null;                                  // vacío = vacío, no cero
-    if (/^-?\d*\.?\d*$/.test(t)) return parseFloat(t);   // número simple
+    /* La coma como decimal. El teclado numérico de una tablet en español pone COMA,
+       no punto: "3,5" se caía del filtro, la celda se vaciaba y encima escribía 0.
+       Solo se traduce si NO hay puntos, para no romper "1.234,5" ni "3,4" como lista. */
+    if (t.indexOf(',') >= 0 && t.indexOf('.') < 0 && /^[0-9+\-*/(), ]+$/.test(t)) t = t.replace(/,/g, '.');
+    if (/^-?\d*\.?\d*$/.test(t)) {
+        var n = parseFloat(t);
+        return isFinite(n) ? n : null;                    // "-" o "." sueltos no son números
+    }
     if (!/^[0-9+\-*/(). ]+$/.test(t)) return null;        // fuera cualquier otro carácter
     if (/[+\-*/]{2,}/.test(t)) return null;               // "5++3" y similares
     try {
@@ -6167,10 +6230,20 @@ function _evalCelda(txt) {
 /* Handler de celda: evalúa al salir (blur) o con Enter, escribe el resultado en la
    ventanilla y lo manda al modelo con el mismo `upd*` de siempre. */
 function _celdaCalc(el, aplicar) {
+    var crudo = String(el.value == null ? '' : el.value).trim();
     var v = _evalCelda(el.value);
-    el.value = (v === null) ? '' : String(v);
     el.classList.remove('calc-err');
-    if (v === null && String(el.value || '').trim()) el.classList.add('calc-err');
+    /* Si lo escrito NO se pudo resolver ("5+", "3,5" en un teclado raro, un dedazo),
+       NO se borra ni se escribe 0. Antes se vaciaba la celda y se guardaba cero: se
+       perdía lo capturado y encima el 0 se veía como una existencia real. Ahora se
+       queda el texto, se marca en rojo y el modelo no se toca hasta que cuadre. */
+    if (v === null && crudo) {
+        el.classList.add('calc-err');
+        el.title = 'No se entiende "' + crudo + '". Escribe un número o una operación: 3*24+5';
+        return;
+    }
+    el.title = '';
+    el.value = (v === null) ? '' : String(v);
     aplicar(v === null ? 0 : v);
 }
 /* Al vaciar la celda se guarda '' (no 0): si se guardara 0, al volver a dibujar la
@@ -6192,7 +6265,12 @@ function updVentasDirCalc(idx, campo, el){
     var vacio = !String(el.value || '').trim();
     _celdaCalc(el, function (v) { updVentasDirectas(idx, campo, vacio ? '' : v); });
 }
-function _celdaKey(ev, el) { if (ev.key === 'Enter') { el.blur(); } }
+function _celdaKey(ev, el) {
+    // Enter = terminar la celda. blur() dispara el mismo onblur que ya evalúa, así
+    // que Enter y salir de la celda se comportan idénticos (antes Enter en algunos
+    // teclados de tablet no llegaba a blur y la operación se quedaba sin resolver).
+    if (ev.key === 'Enter' || ev.keyCode === 13) { ev.preventDefault(); el.blur(); }
+}
 window.updCapturaCalc = updCapturaCalc;
 window.updVentasCalc = updVentasCalc;
 window.updVentasDirCalc = updVentasDirCalc;
@@ -6980,6 +7058,12 @@ function verReporteDirectivo(gerencial, modo) {
         const copasBot  = f.contNeto > 0 && f.copaML > 0 ? f.contNeto / f.copaML : 1;
         // Coctelería = consumo por recetas del menú; copa → en copas, pza → en piezas.
         const ventaCoct    = (f.tipo === 'pza' ? calcVentasPzaRecetas(f.insumoId) : calcVentasCopasRecetas(f.insumoId, f.copaML)) + adjO.vco;
+        /* Lo que se fue en PRODUCIR batches. El teórico ya lo restaba, pero no se
+           enseñaba en ninguna columna: el renglón no cuadraba a la vista y parecía
+           que al insumo le faltaba producto sin razón. Va aparte de ventaCoct para
+           no ensuciar el dinero (producir no es vender: no entra a "vendido a precio
+           proveedor" ni a la venta neta). */
+        const prodPB       = (function () { try { return _consumoBaseProd(f) || 0; } catch (e) { return 0; } })();
         const ventaCopaDir = parseFloat(f.ventasCopasDirectas) || 0; // venta directa por copa/pza
         const ventaCopa = ventaCoct + ventaCopaDir;
         const ventaBot  = parseFloat(f.ventasBotella) || 0;
@@ -7006,7 +7090,7 @@ function verReporteDirectivo(gerencial, modo) {
         // Prebatch repartido: dif y consumo van en CERO aquí — ya viajan repartidos en
         // sus insumos (si no, faltCosto/vendidoCosto los contarían DOBLE).
         return { f, fisico, teorico, dif: esPBo ? 0 : dif, cc, difCosto, ea, entBot, copasBot,
-                 ventaCopa, ventaCoct, ventaCopaDir, ventaBot, ventaPzaTot, cortesia, merma, cancel,
+                 ventaCopa, ventaCoct, prodPB, ventaCopaDir, ventaBot, ventaPzaTot, cortesia, merma, cancel,
                  consumo: esPBo ? 0 : consumo,
                  disponible, pctConsumo, varPct, esBateo:_bat, esPB: esPBo };
     });
@@ -7192,7 +7276,7 @@ function verReporteDirectivo(gerencial, modo) {
               <td class="tc" style="color:${cOk}">${a.entBot>0?'+'+_ncRd(a.entBot)+' b':'—'}</td>
               <td class="tc">${a.ventaCopaDir>0?_ncRd(a.ventaCopaDir)+' c':'—'}</td>
               <td class="tc">${a.ventaBot>0?_ncRd(a.ventaBot)+' b':'—'}</td>
-              <td class="tc" style="color:#9b8de8">${a.ventaCoct>0?_ncRd(a.ventaCoct)+' c':'—'}</td>
+              <td class="tc" style="color:#9b8de8" title="${a.prodPB>0?'Incluye '+_ncRd(a.prodPB)+' que se fueron en producir batches de sub-receta':''}">${(a.ventaCoct+a.prodPB)>0?_ncRd(a.ventaCoct+a.prodPB)+' c'+(a.prodPB>0?'<span style="font-size:9px;opacity:.7"> ·prod</span>':''):'—'}</td>
               <td class="tc" style="font-weight:600">${_ncRd(a.fisBot)} bot</td>
               <td class="tc" style="color:${cDifC};font-weight:700">${a.dif>=0?'+':''}${a.dif.toFixed(1)} cop</td>
               <td class="tc" style="color:${cDifC}">${a.varPct.toFixed(0)}%</td>
@@ -7224,7 +7308,10 @@ function verReporteDirectivo(gerencial, modo) {
             const entStr = a.f.tipo === 'pza' ? (a.entBot>0?'+'+a.entBot+' p':'—') : (a.entBot>0?'+'+a.entBot.toFixed(1)+' b':'—');
             const vtaCopaStr = a.f.tipo === 'pza' ? '—' : (a.ventaCopaDir>0?a.ventaCopaDir.toFixed(1)+' c':'—');
             const vtaBotStr  = a.f.tipo === 'pza' ? ((a.ventaBot+a.ventaCopaDir)>0?(a.ventaBot+a.ventaCopaDir).toFixed(0)+' p':'—') : (a.ventaBot>0?a.ventaBot+' b':'—');
-            const coctStr    = a.ventaCoct>0 ? (a.f.tipo==='pza'?a.ventaCoct.toFixed(0)+' p':a.ventaCoct.toFixed(1)+' c') : '—';
+            // Coctelería + lo consumido al producir batches: así el renglón cuadra
+            // con el teórico, que ya restaba la producción.
+            const coctTot    = a.ventaCoct + (a.prodPB || 0);
+            const coctStr    = coctTot>0 ? (a.f.tipo==='pza'?coctTot.toFixed(0)+' p':coctTot.toFixed(1)+' c') + (a.prodPB>0?' *':'') : '—';
             const cDif  = scol(a.dif), cCost = scol(a.difCosto);
             return `<tr>
               <td style="font-weight:600;max-width:200px;white-space:normal;word-break:break-word">${etx(a.f.nombre)}${_fmtContenido(a.f)?`<div style="font-size:8.5px;color:#2471a3;margin-top:1px">📦 ${_fmtContenido(a.f)}</div>`:''}${_notaInsumo(a.f.insumoId)?`<div style="font-size:8.5px;color:#9a6f00;font-style:italic;margin-top:2px">📝 ${etx(_notaInsumo(a.f.insumoId))}</div>`:''}</td>

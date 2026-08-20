@@ -698,6 +698,30 @@ test('getEntradasBottles suma filas manuales + log del inventario', () => {
 // Qué entrada SUMA a "Compras del período". Todas entran al stock, pero solo la
 // compra es dinero que salió: si esto se rompe, el reporte infla las compras y
 // "Vendido vs Compras" miente.
+/* ── CELDAS CON OPERACIONES (lo que se teclea al contar) ──
+   De este evaluador salen las CANTIDADES del inventario: si se equivoca, se
+   captura otra existencia. El bug que costó datos: cuando no entendía lo escrito
+   BORRABA la celda y guardaba 0 — se perdía lo contado y el cero se leía como
+   existencia real. Y con teclado de tablet en español ("3,5") no entendía nunca. */
+const _celda = (txt) => {
+    const el = { value: txt, title: '', classList: { c: new Set(), add(x){this.c.add(x);}, remove(x){this.c.delete(x);}, has(x){return this.c.has(x);} } };
+    let guardado = '__intacto__';
+    B._celdaCalc(el, (v) => { guardado = v; });
+    return { value: el.value, err: el.classList.has('calc-err'), guardado };
+};
+test('celda: "3*24+5" = 77 (tres cajas de 24 más 5 sueltas)', () => eq(_celda('3*24+5').guardado, 77));
+test('celda: "144/12" = 12', () => eq(_celda('144/12').guardado, 12));
+test('celda: "(2+3)*4" = 20', () => eq(_celda('(2+3)*4').guardado, 20));
+test('celda: coma decimal de tablet "3,5" = 3.5', () => eq(_celda('3,5').guardado, 3.5));
+test('celda: "2,5*4" = 10 (coma dentro de una operación)', () => eq(_celda('2,5*4').guardado, 10));
+test('celda: "3.5" con punto sigue igual', () => eq(_celda('3.5').guardado, 3.5));
+test('celda incompleta "5+" NO borra lo escrito', () => eq(_celda('5+').value, '5+'));
+test('celda incompleta "5+" NO guarda 0 (antes borraba el dato)', () => eq(_celda('5+').guardado, '__intacto__'));
+test('celda incompleta se marca en rojo', () => eq(_celda('5+').err, true));
+test('celda con texto "abc" no toca el modelo', () => eq(_celda('abc').guardado, '__intacto__'));
+test('celda "-" suelto no escribe NaN', () => eq(_celda('-').value, '-'));
+test('celda vacía guarda vacío, no cero', () => eq(_celda('').value, ''));
+
 test('compra SÍ suma a compras', () => eq(B.entEsCompra('compra'), true));
 test('sin tipo (legacy) cuenta como compra', () => eq(B.entEsCompra(''), true));
 test('bonificación NO suma a compras', () => eq(B.entEsCompra('bonificacion'), false));

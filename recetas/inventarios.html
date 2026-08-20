@@ -705,6 +705,14 @@ body:not(.has-ctx) .inv-wizard-header { top: 48px; } /* sin ctx-bar (staff): sol
 .step3-cnt-val { min-width:36px; text-align:center; font-size:15px; font-weight:700;
     color:var(--text-dim); padding:0 4px; }
 .step3-cnt-val.active { color:var(--green); }
+
+/* Celda con una operación que no se entiende: se queda lo escrito (no se borra
+   ni se guarda 0) y se marca para que se corrija. */
+.calc-err {
+    border-color: var(--red) !important;
+    background: rgba(224,90,58,.10) !important;
+    color: var(--red) !important;
+}
 </style>
 
 <!-- Ficha técnica modal -->
