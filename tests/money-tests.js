@@ -735,6 +735,63 @@ test('prebatch de cocina: el faltante de 100 g cae proporcional (jitomate −60 
 vm.runInContext("invActual.prebatchProducidos = {}; invActual.cocktailsVendidos = {}; _consumoDirty = true;", B);
 setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
 
+/* ── UN INSUMO EN LAS DOS VÍAS: coctel directo Y dentro de un prebatch ──
+   La pregunta de Edwin: ¿la columna de Coctelería cuenta las dos cosas?
+   Vodka: 20 Vodka Tonic × 50 ml = 1 L directo. Además 4 batches de Limoncello con
+   500 ml de vodka cada uno = 2 L que se fueron al batch. El batch rinde 1 L (mitad
+   vodka, mitad limón), se venden 25 Spritz × 100 ml = 2.5 L de batch → al vodka le
+   tocan 1.25 L. Se pesan 1.5 L de batch al cierre → 0.75 L de vodka siguen ahí.
+
+   El renglón tiene que CUADRAR consigo mismo: EA (con su parte del batch) menos lo
+   consumido = el teórico que se enseña a la derecha. Sumar además los 2 L que
+   entraron al batch contaba el mismo vodka dos veces y dejaba la resta corta. */
+setVar(B, '_cacheRecetasInv', [
+    { id: 'srLimon', tipo: 'sub-bebidas', status: 'activa',
+      camposExtra: { rendimientoFinal: '1000', unidadRendimientoFinal: 'ML' },
+      ingredientes: [ { insumoId: 'vodkaD', cantidad: 500, unidad: 'ML' },
+                      { insumoId: 'limonD', cantidad: 500, unidad: 'ML' } ] },
+    { id: 'coctTonic',  tipo: 'bebidas', status: 'activa',
+      ingredientes: [ { insumoId: 'vodkaD',   cantidad: 50,  unidad: 'ML' } ] },
+    { id: 'coctSpritz', tipo: 'bebidas', status: 'activa',
+      ingredientes: [ { insumoId: 'preLimon', cantidad: 100, unidad: 'ML' } ] },
+]);
+setVar(B, '_cacheInsumosInv', [
+    { id: 'preLimon', nombre: 'Limoncello SB', esSubReceta: true, recetaId: 'srLimon', activo: '1' },
+    { id: 'vodkaD', activo: '1' }, { id: 'limonD', activo: '1' },
+]);
+vm.runInContext("invActual.prebatchProducidos = { preLimon: 4 };", B);
+vm.runInContext("invActual.cocktailsVendidos = { coctTonic: 20, coctSpritz: 25 }; _consumoDirty = true;", B);
+const filaPreLim = { insumoId:'preLimon', tipo:'copa', contNeto:4000, copaML:50, rendimientoBatch:1000,
+    existenciaAnterior:0, ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0,
+    entradas:[], cerradasBodega:0, cerradasBarra:0, pesos:['1.500'], pesoCristal:0 };
+const filaVodkaD = { insumoId:'vodkaD', tipo:'copa', contNeto:1000, copaML:50, existenciaAnterior:200,
+    ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[],
+    cerradasBodega:0, cerradasBarra:0, pesos:[], pesoCristal:0 };
+setVar(B, 'filasCaptura', [filaPreLim, filaVodkaD]);
+vm.runInContext("_repCache = _repartoPrebatch();", B);
+const copasAL = c => Math.round(c * 50) / 1000; // copas de 50 ml → litros
+test('dos vías: el uso DIRECTO en cocteles se cuenta (20 × 50 ml = 1 L)', () =>
+    eq(copasAL(B.consumoRecetasFila(filaVodkaD)), 1));
+test('dos vías: el uso VÍA PREBATCH también se cuenta (le tocan 1.25 L de lo vendido)', () =>
+    eq(copasAL(B._repartoDe('vodkaD').vco), 1.25));
+test('dos vías: la coctelería del renglón suma las dos = 2.25 L', () => {
+    const adj = B._repartoDe('vodkaD');
+    return eq(copasAL(B.consumoRecetasFila(filaVodkaD) + adj.vco + B._prodPBVisible(filaVodkaD, adj)), 2.25);
+});
+test('dos vías: lo que entró al batch NO se vuelve a sumar (los 2 L ya están dentro)', () =>
+    eq(B._prodPBVisible(filaVodkaD, B._repartoDe('vodkaD')), 0));
+test('dos vías: el renglón CUADRA — EA 10 L − coctelería 2.25 L = teórico 7.75 L', () => {
+    const adj = B._repartoDe('vodkaD');
+    const ea       = ((parseFloat(filaVodkaD.existenciaAnterior) || 0) + adj.ea);
+    const coct     = B.consumoRecetasFila(filaVodkaD) + adj.vco + B._prodPBVisible(filaVodkaD, adj);
+    const teorico  = B.calcExistenciaTeorica(filaVodkaD) + adj.teo;
+    return eq(copasAL(ea - coct), copasAL(teorico));
+});
+test('dos vías: y el vodka que sigue DENTRO del batch vuelve al teórico (0.75 L)', () =>
+    eq(copasAL(B._repartoDe('vodkaD').fis), 0.75));
+vm.runInContext("invActual.prebatchProducidos = {}; invActual.cocktailsVendidos = {}; _consumoDirty = true;", B);
+setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
+
 /* ── AVISO EN PANTALLA de los batches que no van a cuadrar ──
    El caso de la garrafa (rendimiento = capacidad del envase) solo se avisaba por
    console.warn: nadie lo veía y la producción salía inflada en silencio. */

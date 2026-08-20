@@ -6770,16 +6770,18 @@ function _step5TablasHTML() {
            usado en 24 batches de "Tinto de Verano" salía con coctelería en "—" y
            una diferencia enorme sin explicación a la vista. */
         /* Dos números distintos a propósito:
-           · prodPBmat entra al CÁLCULO, y vale 0 cuando el reparto del batch ya
-             le devuelve al insumo su parte (si no, se contaría el mismo vino dos
-             veces: el que entró al batch y el que salió vendido del batch).
-           · prodPBver es lo que se ENSEÑA. Siempre. Que el número no se sume dos
-             veces no significa que el encargado no deba ver a dónde se fue su
-             producto: con la celda en "—" el renglón no se explica solo. */
+           · prodPBmat es lo que SUMA a la coctelería, y vale 0 cuando el reparto
+             del batch ya le devuelve al insumo su parte (si no, se contaría el
+             mismo vino dos veces: el que entró al batch y el que salió vendido
+             del batch).
+           · prodPBver es cuánto se fue en producir batches. Se ENSEÑA siempre —
+             como marca "·prod" y en el tooltip, no sumado dentro de la cifra.
+             Sumarlo dejaba el renglón sin cuadrar: todas las demás columnas (EA,
+             entradas, teórico, físico) ya vienen con la parte del batch incluida,
+             así que EA − coctelería daba 2 L menos que el teórico de al lado. */
         const prodPBmat    = _prodPBVisible(fila, adj);
         const prodPBver    = (function () { try { return _consumoBaseProd(fila) || 0; } catch (e) { return 0; } })();
         const ventaCoct    = consumoRecetasFila(fila) + adj.vco + prodPBmat;
-        const coctVer      = consumoRecetasFila(fila) + adj.vco + prodPBver;
         const ventaCopaDir = parseFloat(fila.ventasCopasDirectas) || 0;
         const ventaCopa    = ventaCoct + ventaCopaDir;
         const cortesia  = parseFloat(fila.cortesiaCopas) || 0;
@@ -6810,7 +6812,7 @@ function _step5TablasHTML() {
                 <td style="text-align:center;color:var(--green);white-space:nowrap">${entBotStr}</td>
                 <td style="text-align:center;color:var(--accent)">${ventaBot > 0 ? ventaBot + ' bot' : '—'}</td>
                 <td style="text-align:center;color:var(--accent)">${ventaCopaDir > 0 ? _fmtCop(ventaCopaDir, fila) : '—'}</td>
-                <td style="text-align:center;color:var(--viol)${coctVer > 0 ? '' : ';cursor:help'}" title="${etx(prodPBver > 0 ? _fmtCop(prodPBver, fila) + ' se fueron en producir batches de sub-receta' + (prodPBmat === 0 ? ' (ya vienen contadas en el reparto del batch, no se suman aparte)' : '') : _origenConsumo(fila))}">${coctVer > 0 ? _fmtCop(coctVer, fila) + (prodPBver > 0 ? '<span style="font-size:9px;opacity:.75"> ·prod</span>' : '') : '—'}</td>
+                <td style="text-align:center;color:var(--viol);cursor:help" title="${etx(prodPBver > 0 ? 'Además, ' + _fmtCop(prodPBver, fila) + ' se fueron en producir batches de sub-receta' + (prodPBmat === 0 ? ' — no se suman aquí porque ese producto sigue contado dentro del batch (su parte ya viene en el teórico y el físico de este renglón)' : '') : _origenConsumo(fila))}">${ventaCoct > 0 ? _fmtCop(ventaCoct, fila) + (prodPBver > 0 ? '<span style="font-size:9px;opacity:.75"> ·prod</span>' : '') : '—'}</td>
                 <td style="text-align:center">
                     ${cmTotal > 0
                         ? `<div style="color:var(--red);font-size:12px;font-weight:600">${_fmtCop(cmTotal, fila)}</div>
@@ -6828,13 +6830,16 @@ function _step5TablasHTML() {
 
     // ── Constructor de fila PZA (secos: refrescos en lata, cervezas, etc.) ──
     function _rowPza(fila) {
-        const ea        = parseFloat(fila.existenciaAnterior) || 0;
-        const entTotal  = getEntradasCopas(fila);
         const adjP      = _repartoDe(fila.insumoId);
+        /* EA y entradas con su parte del batch, igual que el teórico y el físico de
+           abajo. Sin sumarlas, un refresco que además vive dentro de una sub-receta
+           enseñaba una existencia anterior más chica que la que su propio teórico
+           daba por buena — el renglón de pieza era el único que no cuadraba. */
+        const ea        = (parseFloat(fila.existenciaAnterior) || 0) + adjP.ea;
+        const entTotal  = getEntradasCopas(fila) + adjP.ent;
         const prodPBpMat = _prodPBVisible(fila, adjP);
         const prodPBpVer = (function () { try { return _consumoBaseProd(fila) || 0; } catch (e) { return 0; } })();
         const ventaCoct = calcVentasPzaRecetas(fila.insumoId) + adjP.vco + prodPBpMat;
-        const coctVerP  = calcVentasPzaRecetas(fila.insumoId) + adjP.vco + prodPBpVer;
         const ventasDir = (fila.ventasBotella || 0) + (parseFloat(fila.ventasCopasDirectas)||0);
         const ventas    = ventasDir + ventaCoct;
         const cancelPza = getCancelacionesCopas(fila.insumoId) + adjP.can;
@@ -6856,7 +6861,7 @@ function _step5TablasHTML() {
                 </td>
                 <td style="text-align:center">${ea.toFixed(0)} pza</td>
                 <td style="text-align:center;color:var(--green)">${entTotal>0?'+'+entTotal.toFixed(0)+' pza':'—'}</td>
-                <td style="text-align:center;color:var(--viol)${coctVerP>0?'':';cursor:help'}" title="${etx(prodPBpVer > 0 ? _n1(prodPBpVer) + ' pza se fueron en producir batches de sub-receta' + (prodPBpMat === 0 ? ' (ya vienen contadas en el reparto del batch, no se suman aparte)' : '') : _origenConsumo(fila))}">${coctVerP>0?(coctVerP%1?coctVerP.toFixed(1):coctVerP)+' pza'+(prodPBpVer>0?'<span style="font-size:9px;opacity:.75"> ·prod</span>':''):'—'}</td>
+                <td style="text-align:center;color:var(--viol);cursor:help" title="${etx(prodPBpVer > 0 ? 'Además, ' + _n1(prodPBpVer) + ' pza se fueron en producir batches de sub-receta' + (prodPBpMat === 0 ? ' — no se suman aquí porque ese producto sigue contado dentro del batch (su parte ya viene en el teórico y el físico de este renglón)' : '') : _origenConsumo(fila))}">${ventaCoct>0?(ventaCoct%1?ventaCoct.toFixed(1):ventaCoct)+' pza'+(prodPBpVer>0?'<span style="font-size:9px;opacity:.75"> ·prod</span>':''):'—'}</td>
                 <td style="text-align:center;color:var(--accent)">${ventasDir>0?(ventasDir%1?ventasDir.toFixed(1):ventasDir)+' pza':'—'}</td>
                 <td style="text-align:center;color:var(--text-muted)">${cancelPza>0?cancelPza.toFixed(0)+' pza':'—'}</td>
                 <td style="text-align:center;color:var(--accent)">${cortMerma>0?(cortMerma%1?cortMerma.toFixed(1):cortMerma)+' pza':'—'}</td>
