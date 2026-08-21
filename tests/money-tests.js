@@ -545,8 +545,18 @@ test('producción copia↔maestro: 24 batches guardados en la copia se ven desde
     eq(B._batchesProducidos('preMaestro'), 24));
 test('producción copia↔maestro: entran al teórico (24 batches × 900 ml en copas de 900)', () =>
     eq(B._prodPrebatchUnidades(filaPreCopia), 24));
-test('producción copia↔maestro: la llave de la copia sigue empatando consigo misma', () =>
-    eq(B._batchesProducidos('preCopiaSuc'), 24));
+/* La producción es del BATCH, y en el inventario la representa UN renglón. Si hay
+   dos registros de insumo de la misma sub-receta, solo el que tiene renglón se la
+   lleva: sumársela a los dos descontaría el doble de los insumos base. */
+test('producción copia↔maestro: el registro sin renglón NO se lleva la producción otra vez', () =>
+    eq(B._batchesProducidos('preCopiaSuc'), 0));
+test('producción copia↔maestro: con DOS renglones del mismo batch, solo el primero cuenta', () => {
+    const filaDup = { ...filaPreCopia, insumoId: 'preCopiaSuc' };
+    setVar(B, 'filasCaptura', [filaPreCopia, filaDup]);
+    const r = eq(B._prodPrebatchUnidades(filaPreCopia), 24) && eq(B._prodPrebatchUnidades(filaDup), 0);
+    setVar(B, 'filasCaptura', [filaPreCopia]);
+    return r;
+});
 vm.runInContext("invActual.prebatchProducidos = {};", B);
 setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
 
@@ -792,6 +802,54 @@ test('dos vías: y el vodka que sigue DENTRO del batch vuelve al teórico (0.75 
 vm.runInContext("invActual.prebatchProducidos = {}; invActual.cocktailsVendidos = {}; _consumoDirty = true;", B);
 setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
 
+/* ── EL COCTEL APUNTA A OTRO REGISTRO DE LA MISMA SUB-RECETA ──
+   El caso real del Tinto de Verano. "Cargar como insumo" NO le pone origenId al
+   insumo que crea, así que dos conversiones de la misma sub-receta (una por
+   sucursal, o una repetida) quedan como insumos distintos sin nada que los una:
+   _canonInsumoId no puede colapsarlos. Si el coctel quedó apuntando a uno y el
+   renglón del inventario usa el otro, el consumo EXISTE pero nadie lo encuentra —
+   el batch se reparte con ventas en cero y sus insumos no reciben lo vendido.
+   La producción sí funcionaba (no busca por id: recorre lo capturado y resuelve la
+   sub-receta), y por eso se veía el absurdo de "14.4 L en batches" con la
+   coctelería en "—". La identidad buena es la SUB-RECETA.
+
+   24 batches × 900 ml = 21.6 L producidos; 30 cocteles × 1 LT del batch. El vino
+   es 600 de 900 ml de la receta = 2/3 de todo lo que salga. */
+setVar(B, '_cacheRecetasInv', [
+    { id: 'srTV2', tipo: 'sub-bebidas', status: 'activa',
+      camposExtra: { rendimientoFinal: '900', unidadRendimientoFinal: 'ML' },
+      ingredientes: [ { insumoId: 'vinoCal', cantidad: 600, unidad: 'ML' },
+                      { insumoId: 'sidralM', cantidad: 300, unidad: 'ML' } ] },
+    // OJO: el coctel apunta a 'preTV_otro', NO al registro que tiene renglón.
+    { id: 'coctTV', tipo: 'bebidas', status: 'activa',
+      ingredientes: [ { insumoId: 'preTV_otro', cantidad: 1, unidad: 'LT' } ] },
+]);
+setVar(B, '_cacheInsumosInv', [
+    { id: 'preTV_fila', nombre: 'Tinto de Verano SB', esSubReceta: true, recetaId: 'srTV2', activo: '1' },
+    { id: 'preTV_otro', nombre: 'Tinto de Verano SB', esSubReceta: true, recetaId: 'srTV2', activo: '1' },
+    { id: 'vinoCal', activo: '1' }, { id: 'sidralM', activo: '1' },
+]);
+vm.runInContext("invActual.prebatchProducidos = { preTV_fila: 24 };", B);
+vm.runInContext("invActual.cocktailsVendidos = { coctTV: 30 }; _consumoDirty = true;", B);
+const filaTV2 = { insumoId:'preTV_fila', tipo:'copa', contNeto:4000, copaML:1000, rendimientoBatch:0,
+    existenciaAnterior:0, ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0,
+    entradas:[], cerradasBodega:0, cerradasBarra:0, pesos:[], pesoCristal:0 };
+const filaVinoCal = { insumoId:'vinoCal', tipo:'copa', contNeto:5000, copaML:1000, existenciaAnterior:0.1,
+    ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:['2'],
+    cerradasBodega:0, cerradasBarra:0, pesos:[], pesoCristal:0 };
+setVar(B, 'filasCaptura', [filaTV2, filaVinoCal]);
+vm.runInContext("_repCache = _repartoPrebatch();", B);
+test('otro registro: el consumo del coctel se encuentra por SUB-RECETA (30 × 1 LT = 30 L)', () =>
+    eq(B._consumoBaseSubReceta('srTV2'), 30000));
+test('otro registro: al vino le llegan sus 2/3 de lo vendido (20 L), ya no cero', () =>
+    eq(Math.round(B._repartoDe('vinoCal').venta * 1000) / 1000, 20));
+test('otro registro: la producción sigue descontándole 14.4 L al vino (600×24)', () =>
+    eq(Math.round(B._consumoBaseProd(filaVinoCal) * 1000) / 1000, 14.4));
+test('otro registro: y el batch queda marcado como repartido', () =>
+    eq(B._esPrebatchRepartido('preTV_fila'), true));
+vm.runInContext("invActual.prebatchProducidos = {}; invActual.cocktailsVendidos = {}; _consumoDirty = true;", B);
+setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
+
 /* ── AVISO EN PANTALLA de los batches que no van a cuadrar ──
    El caso de la garrafa (rendimiento = capacidad del envase) solo se avisaba por
    console.warn: nadie lo veía y la producción salía inflada en silencio. */
@@ -801,6 +859,10 @@ setVar(B, '_cacheRecetasInv', [
     { id: 'srOk', tipo: 'sub-bebidas', status: 'activa',
       camposExtra: { rendimientoFinal: '900', unidadRendimientoFinal: 'ML' },
       ingredientes: [{ insumoId: 'vinoA', cantidad: 600, unidad: 'ML' }] },
+    // El coctel que sí vende el batch bueno: sin esto, "producido y sin una sola
+    // venta" es un problema legítimo y el aviso tiene razón en salir.
+    { id: 'coctOk', tipo: 'bebidas', status: 'activa',
+      ingredientes: [{ insumoId: 'preOk', cantidad: 200, unidad: 'ML' }] },
 ]);
 const preAviso = { id: 'preAviso', nombre: 'Tinto de Verano SB', esSubReceta: true, recetaId: 'srAviso', activo: '1' };
 const preOk    = { id: 'preOk',    nombre: 'Limoncello SB',      esSubReceta: true, recetaId: 'srOk',    activo: '1' };
@@ -812,10 +874,15 @@ const filaOk    = { ...filaAviso, insumoId:'preOk' };
 const filaHuerf = { ...filaAviso, insumoId:'preHuerf' };
 setVar(B, 'filasCaptura', [filaAviso, filaOk, filaHuerf]);
 vm.runInContext("invActual.prebatchProducidos = { preAviso: 24, preOk: 24, preHuerf: 3 };", B);
+vm.runInContext("invActual.cocktailsVendidos = { coctOk: 30 }; _consumoDirty = true;", B);
 test('aviso: sin rendimiento capturado se avisa que se está usando el envase', () =>
     eq(/rendimiento capturado/.test(B._revisarPrebatch(preAviso).probs.join(' ')), true));
-test('aviso: con rendimiento en la sub-receta NO se avisa nada', () =>
+test('aviso: con rendimiento y ventas capturadas NO se avisa nada', () =>
     eq(B._revisarPrebatch(preOk), null));
+/* El caso del Tinto de Verano: 24 batches producidos y ni una venta descontada.
+   Antes esto pasaba mudo y el faltante caía repartido en el vino sin explicación. */
+test('aviso: producido y sin UNA SOLA venta descontada, se avisa', () =>
+    eq(/NINGUNA venta/.test(B._revisarPrebatch(preAviso).probs.join(' ')), true));
 test('aviso: una sub-receta que ya no existe se reporta como batch huérfano', () =>
     eq(/ya no existe/.test(B._revisarPrebatch(preHuerf).probs.join(' ')), true));
 test('aviso: sin producción capturada no se molesta al usuario', () => {

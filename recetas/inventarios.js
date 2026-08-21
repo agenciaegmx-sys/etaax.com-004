@@ -660,14 +660,28 @@ function _consumoIdx() {
             var id = ing.insumoId; if (!id) return;
             id = _canonInsumoId(id) || id;
             var cant = parseFloat(ing.cantidad) || 0, u = (ing.unidad || '').toUpperCase();
-            var s = slot(id);
-            if (esBeb)            s.mlBeb   += ingredienteML(cant, ing.unidad) * uds;      // copas (bebidas, cualquier estatus)
-            if (esBeb)            s.baseBeb += ingredienteBase(cant, ing.unidad) * uds;   // lo mismo en unidad base (KG/LT sí convierten)
-            if (esAli && activa)  s.baseAli += ingredienteBase(cant, ing.unidad) * uds;    // alimentos activos (unidad base)
-            if (activa) {                                                                   // pza (bebidas+alimentos activos)
-                if (u === 'PZA' || u === 'PZ' || u === '') s.pzaDir += cant * uds;
-                else                                       s.mlPza  += ingredienteML(cant, ing.unidad) * uds;
-            }
+            /* Un PREBATCH se acumula ADEMÁS bajo su sub-receta. El id del insumo no
+               sirve de identidad: al convertir una sub-receta a insumo el registro
+               no lleva origenId, así que dos conversiones (una por sucursal, o una
+               repetida) quedan como insumos distintos sin nada que los una, y
+               _canonInsumoId no puede colapsarlos. Si el coctel apunta a uno y el
+               renglón del inventario usa el otro, el consumo existe pero nadie lo
+               encuentra: el batch se reparte con VENTAS EN CERO y sus insumos no
+               reciben lo vendido (el caso del vino del Tinto de Verano).
+               La sub-receta sí es identidad estable: dos insumos con el mismo
+               recetaId son el mismo producto. */
+            var _ids = [id], _rid = _recetaIdDePrebatch(id);
+            if (_rid) _ids.push('sr:' + _rid);
+            _ids.forEach(function (k) {
+                var s = slot(k);
+                if (esBeb)            s.mlBeb   += ingredienteML(cant, ing.unidad) * uds;      // copas (bebidas, cualquier estatus)
+                if (esBeb)            s.baseBeb += ingredienteBase(cant, ing.unidad) * uds;   // lo mismo en unidad base (KG/LT sí convierten)
+                if (esAli && activa)  s.baseAli += ingredienteBase(cant, ing.unidad) * uds;    // alimentos activos (unidad base)
+                if (activa) {                                                                   // pza (bebidas+alimentos activos)
+                    if (u === 'PZA' || u === 'PZ' || u === '') s.pzaDir += cant * uds;
+                    else                                       s.mlPza  += ingredienteML(cant, ing.unidad) * uds;
+                }
+            });
         });
     });
     _consumoIdxCache = idx; _consumoIdxKey = key; _consumoDirty = false;
@@ -729,6 +743,54 @@ function calcVentasPzaRecetas(insumoId) {
 }
 
 // ── PREBATCH: producción de batches (sub-receta→insumo) ──────────
+/* ══ IDENTIDAD DE UN PREBATCH: SU SUB-RECETA, NO EL ID DEL INSUMO ══════════
+   Un insumo de producción propia puede existir varias veces (una conversión por
+   sucursal, una repetida, un registro viejo) y esos registros NO se enlazan entre
+   sí: "Cargar como insumo" no les pone origenId, así que _canonInsumoId los deja
+   como productos distintos. El recetaId sí los une: es el mismo batch.
+   Todo lo que pregunta "¿cuánto de este prebatch?" —producción, consumo, reparto—
+   pasa por aquí, para que no vuelva a depender de a cuál de los registros le tocó
+   apuntar a la receta. */
+function _recetaIdDePrebatch(insumoId) {
+    if (!insumoId) return '';
+    var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(insumoId) : null;
+    return (ins && ins.esSubReceta && ins.recetaId) ? ins.recetaId : '';
+}
+/* Si por lo que sea el inventario trae DOS renglones de la misma sub-receta, solo
+   el primero la representa. Sin esto, cada uno se llevaría la producción y las
+   ventas COMPLETAS del batch y el descuento saldría al doble. */
+var _srFilaCache = null, _srFilaRef = null, _srFilaLen = -1;
+function _filaPrincipalSubReceta(recetaId) {
+    if (_srFilaRef !== filasCaptura || _srFilaLen !== (filasCaptura || []).length || !_srFilaCache) {
+        _srFilaCache = {}; _srFilaRef = filasCaptura; _srFilaLen = (filasCaptura || []).length;
+        (filasCaptura || []).forEach(function (f) {
+            var rid = _recetaIdDePrebatch(f && f.insumoId);
+            if (rid && !_srFilaCache[rid]) _srFilaCache[rid] = f.insumoId;
+        });
+    }
+    return _srFilaCache[recetaId] || '';
+}
+function _esFilaPrincipalPrebatch(insumoId) {
+    var rid = _recetaIdDePrebatch(insumoId);
+    if (!rid) return true;                                     // no es prebatch: nada que deduplicar
+    return _filaPrincipalSubReceta(rid) === insumoId;
+}
+// Batches producidos de una sub-receta, sumando TODOS los registros de insumo que
+// la representan (el Paso 3 pudo capturar sobre cualquiera de ellos).
+function _batchesDeSubReceta(recetaId) {
+    var prod = (invActual && invActual.prebatchProducidos) || {};
+    var total = 0;
+    Object.keys(prod).forEach(function (pid) {
+        if (_recetaIdDePrebatch(pid) === recetaId) total += parseFloat(prod[pid]) || 0;
+    });
+    return total;
+}
+// Lo VENDIDO de una sub-receta por las recetas del menú, en unidad base (ml/g).
+function _consumoBaseSubReceta(recetaId) {
+    var s = _consumoIdx()['sr:' + recetaId];
+    return s ? (s.baseBeb + s.baseAli) : 0;
+}
+
 // Insumos prebatch disponibles = sub-recetas convertidas a insumo.
 // Respeta "incluir en inventario" (ocultoInventario) Y el ÁREA del inventario:
 // sin área asignada, o de otra área, NO aparece en la Producción de prebatch (Paso 3).
@@ -767,6 +829,11 @@ function consumoBasesPorProduccion(insumoId) {
    Es el cuarto sitio de este mismo desajuste (los otros tres: _consumoIdx,
    consumoBasesPorProduccion y consumoBasesPorProduccionDetalle). */
 function _batchesProducidos(insumoId) {
+    // Prebatch: identidad por SUB-RECETA (ver _recetaIdDePrebatch). Suma lo capturado
+    // sobre CUALQUIER registro de insumo de esa sub-receta; si el inventario trae dos
+    // renglones de la misma, solo el principal se la lleva (o se contaría doble).
+    var rid = _recetaIdDePrebatch(insumoId);
+    if (rid) return _esFilaPrincipalPrebatch(insumoId) ? _batchesDeSubReceta(rid) : 0;
     var prod = (invActual && invActual.prebatchProducidos) || {};
     var canon = _canonInsumoId(insumoId) || insumoId;
     var total = 0;
@@ -908,6 +975,9 @@ function _repartoPrebatch() {
         if (!pf || pf.tipo === 'pza' || pf.esCompuesto) return;
         var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(pf.insumoId) : null;
         if (!ins || !ins.esSubReceta || !ins.recetaId) return;
+        // Dos renglones de la misma sub-receta: solo el primero la representa, o cada
+        // uno se llevaría el batch COMPLETO y el descuento saldría al doble.
+        if (!_esFilaPrincipalPrebatch(pf.insumoId)) return;
         var sr = (window._recetaResolver ? window._recetaResolver(ins.recetaId) : getRecetas().find(function(r){ return r.id === ins.recetaId; }));
         if (!sr || !(sr.ingredientes || []).length) return;
         // TOTAL = suma de TODOS los ingredientes de la sub-receta (rendimiento base),
@@ -927,12 +997,15 @@ function _repartoPrebatch() {
         if (pf.tipo === 'copa' && !toB) return;
         var eaB    = (parseFloat(pf.existenciaAnterior) || 0) * toB;
         var entB   = getEntradasCopas(pf) * toB;
-        /* Lo VENDIDO del batch, en unidad base. El consumo por recetas se toma con
-           _consumoRecetasBase, no vía calcVentasCopasRecetas: esa devuelve 0 sin
-           copaML —el caso de un prebatch de cocina, que se cuenta en gramos— y
-           tampoco ve los batches que se van en un platillo en vez de un coctel.
-           Ahí el batch salía con venta 0 y sus insumos no recibían nada. */
-        var ventaB = _consumoRecetasBase(pf.insumoId)
+        /* Lo VENDIDO del batch, en unidad base, buscado POR SU SUB-RECETA. Dos
+           razones para no usar el id del insumo ni calcVentasCopasRecetas:
+             · calcVentasCopasRecetas devuelve 0 sin copaML (un prebatch de cocina se
+               cuenta en gramos) y solo mira recetas de bebidas, así que un batch que
+               se va en un platillo tampoco contaba;
+             · el id del insumo no es identidad estable — si el coctel apunta a otro
+               registro de la misma sub-receta, el consumo existe pero no se encuentra.
+           En los dos casos el batch salía con venta 0 y sus insumos no recibían nada. */
+        var ventaB = _consumoBaseSubReceta(ins.recetaId)
                    + (parseFloat(pf.ventasCopasDirectas) || 0) * toB
                    + (parseFloat(pf.ventasBotella) || 0) * (parseFloat(pf.contNeto) || 0);
         var cmB    = ((parseFloat(pf.cortesiaCopas) || 0) + (parseFloat(pf.mermaCopas) || 0)) * toB + (parseFloat(pf.mermaBase) || 0);
@@ -4754,7 +4827,9 @@ function updProduccionPrebatch(id, delta) {
    que avisar todavía. */
 function _revisarPrebatch(pre) {
     if (!pre) return null;
-    var n = _batchesProducidos(pre.id);
+    // Por sub-receta, no por el id de ESTE registro: la producción pudo capturarse
+    // sobre otro registro del mismo batch (ver _recetaIdDePrebatch).
+    var n = pre.recetaId ? _batchesDeSubReceta(pre.recetaId) : _batchesProducidos(pre.id);
     if (!n) return null;
     var fila  = _filaDeMiembro(pre.id);
     var sr    = (window._recetaResolver ? window._recetaResolver(pre.recetaId) : null)
@@ -4780,6 +4855,14 @@ function _revisarPrebatch(pre) {
             probs.push('no tiene rendimiento capturado: se está usando el contenido del envase (' +
                        _fmtBase(cn) + ') como si fuera lo que rinde un batch. Si ese envase es solo ' +
                        'para guardarlo, la producción sale inflada');
+        /* Producido pero sin una sola venta: o no se capturaron los cocteles que lo
+           usan, o ningún coctel lo lleva como ingrediente. En los dos casos el batch
+           entra al Resultado como si nada hubiera salido de él, y el faltante que eso
+           genera cae repartido en sus insumos sin explicación a la vista. */
+        if (pre.recetaId && !_consumoBaseSubReceta(pre.recetaId)
+            && !(parseFloat(fila.ventasCopasDirectas) || 0) && !(parseFloat(fila.ventasBotella) || 0))
+            probs.push('se produjo pero no se le descontó NINGUNA venta: revisa que los cocteles ' +
+                       'que lo usan estén capturados en este paso y que lo lleven como ingrediente');
     }
     return probs.length ? { nombre: pre.nombre || pre.id, batches: n, probs: probs } : null;
 }
