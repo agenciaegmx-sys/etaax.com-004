@@ -6758,6 +6758,26 @@ function _step5TablasHTML() {
         _ens(m0 ? _grupoCategoria(m0) : '🧩 Compuestos').comp.push(vf);
     });
 
+    /* Lo que se fue en PRODUCIR batches va COMO SEGUNDA LÍNEA, no sumado dentro de
+       la cifra. Las dos cosas importan y se estorban si se juntan en un solo número:
+       la suma tiene que cuadrar con el teórico de al lado (todas las columnas del
+       renglón ya traen la parte del batch), pero el encargado necesita ver que 4 L
+       de vodka se fueron a los batches — si no, la celda no explica el renglón.
+       Cuando el prebatch NO se está repartiendo, esa producción SÍ va dentro de la
+       cifra (es lo único que se llevó el insumo) y entonces no se repite abajo. */
+    function _lineaProd(fila, prodVer, prodMat, txt) {
+        if (!(prodVer > 0) || prodMat > 0) return '';
+        return '<div style="font-size:9.5px;opacity:.7;font-weight:500;white-space:nowrap">↳ ' +
+               txt + ' en batches</div>';
+    }
+    function _tituloCoct(fila, prodVer, prodMat) {
+        if (!(prodVer > 0)) return _origenConsumo(fila);
+        var t = _fmtCop(prodVer, fila) + ' se fueron en producir batches de sub-receta.';
+        if (prodMat > 0) return t + ' Van sumadas aquí: este batch no se está repartiendo.';
+        return t + ' NO se suman a la cifra de arriba porque ese producto sigue contado ' +
+               'dentro del batch — su parte ya viene en el teórico y en el físico de este renglón.';
+    }
+
     // ── Constructor de fila COPA (bebida con botella y copa) ──
     function _rowCopa(fila) {
         const adj       = _repartoDe(fila.insumoId);
@@ -6774,11 +6794,11 @@ function _step5TablasHTML() {
              del batch ya le devuelve al insumo su parte (si no, se contaría el
              mismo vino dos veces: el que entró al batch y el que salió vendido
              del batch).
-           · prodPBver es cuánto se fue en producir batches. Se ENSEÑA siempre —
-             como marca "·prod" y en el tooltip, no sumado dentro de la cifra.
-             Sumarlo dejaba el renglón sin cuadrar: todas las demás columnas (EA,
-             entradas, teórico, físico) ya vienen con la parte del batch incluida,
-             así que EA − coctelería daba 2 L menos que el teórico de al lado. */
+           · prodPBver es cuánto se fue en producir batches. Se ENSEÑA siempre, en
+             su propia línea (_lineaProd), no sumado dentro de la cifra: sumarlo
+             dejaba el renglón sin cuadrar, porque todas las demás columnas (EA,
+             entradas, teórico, físico) ya vienen con la parte del batch incluida
+             y EA − coctelería daba 2 L menos que el teórico de al lado. */
         const prodPBmat    = _prodPBVisible(fila, adj);
         const prodPBver    = (function () { try { return _consumoBaseProd(fila) || 0; } catch (e) { return 0; } })();
         const ventaCoct    = consumoRecetasFila(fila) + adj.vco + prodPBmat;
@@ -6812,7 +6832,7 @@ function _step5TablasHTML() {
                 <td style="text-align:center;color:var(--green);white-space:nowrap">${entBotStr}</td>
                 <td style="text-align:center;color:var(--accent)">${ventaBot > 0 ? ventaBot + ' bot' : '—'}</td>
                 <td style="text-align:center;color:var(--accent)">${ventaCopaDir > 0 ? _fmtCop(ventaCopaDir, fila) : '—'}</td>
-                <td style="text-align:center;color:var(--viol);cursor:help" title="${etx(prodPBver > 0 ? 'Además, ' + _fmtCop(prodPBver, fila) + ' se fueron en producir batches de sub-receta' + (prodPBmat === 0 ? ' — no se suman aquí porque ese producto sigue contado dentro del batch (su parte ya viene en el teórico y el físico de este renglón)' : '') : _origenConsumo(fila))}">${ventaCoct > 0 ? _fmtCop(ventaCoct, fila) + (prodPBver > 0 ? '<span style="font-size:9px;opacity:.75"> ·prod</span>' : '') : '—'}</td>
+                <td style="text-align:center;color:var(--viol);cursor:help" title="${etx(_tituloCoct(fila, prodPBver, prodPBmat))}">${ventaCoct > 0 ? _fmtCop(ventaCoct, fila) : '—'}${_lineaProd(fila, prodPBver, prodPBmat, _fmtCop(prodPBver, fila))}</td>
                 <td style="text-align:center">
                     ${cmTotal > 0
                         ? `<div style="color:var(--red);font-size:12px;font-weight:600">${_fmtCop(cmTotal, fila)}</div>
@@ -6861,7 +6881,7 @@ function _step5TablasHTML() {
                 </td>
                 <td style="text-align:center">${ea.toFixed(0)} pza</td>
                 <td style="text-align:center;color:var(--green)">${entTotal>0?'+'+entTotal.toFixed(0)+' pza':'—'}</td>
-                <td style="text-align:center;color:var(--viol);cursor:help" title="${etx(prodPBpVer > 0 ? 'Además, ' + _n1(prodPBpVer) + ' pza se fueron en producir batches de sub-receta' + (prodPBpMat === 0 ? ' — no se suman aquí porque ese producto sigue contado dentro del batch (su parte ya viene en el teórico y el físico de este renglón)' : '') : _origenConsumo(fila))}">${ventaCoct>0?(ventaCoct%1?ventaCoct.toFixed(1):ventaCoct)+' pza'+(prodPBpVer>0?'<span style="font-size:9px;opacity:.75"> ·prod</span>':''):'—'}</td>
+                <td style="text-align:center;color:var(--viol);cursor:help" title="${etx(_tituloCoct(fila, prodPBpVer, prodPBpMat))}">${ventaCoct>0?(ventaCoct%1?ventaCoct.toFixed(1):ventaCoct)+' pza':'—'}${_lineaProd(fila, prodPBpVer, prodPBpMat, _n1(prodPBpVer) + ' pza')}</td>
                 <td style="text-align:center;color:var(--accent)">${ventasDir>0?(ventasDir%1?ventasDir.toFixed(1):ventasDir)+' pza':'—'}</td>
                 <td style="text-align:center;color:var(--text-muted)">${cancelPza>0?cancelPza.toFixed(0)+' pza':'—'}</td>
                 <td style="text-align:center;color:var(--accent)">${cortMerma>0?(cortMerma%1?cortMerma.toFixed(1):cortMerma)+' pza':'—'}</td>
