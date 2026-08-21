@@ -847,8 +847,50 @@ test('otro registro: la producción sigue descontándole 14.4 L al vino (600×24
     eq(Math.round(B._consumoBaseProd(filaVinoCal) * 1000) / 1000, 14.4));
 test('otro registro: y el batch queda marcado como repartido', () =>
     eq(B._esPrebatchRepartido('preTV_fila'), true));
+/* Y el TEÓRICO del batch tiene que moverse con las ventas del coctel. Arreglar solo
+   el reparto dejaba el bug a medias: la columna de uso cambiaba, pero el teórico
+   seguía creyendo que del batch no había salido nada — así que la existencia
+   teórica, la diferencia y el % del renglón NO se movían al capturar ventas. */
+test('otro registro: el teórico del batch baja con lo vendido (21.6 L − 30 L = −8.4 L)', () =>
+    eq(Math.round(B.calcExistenciaTeorica(filaTV2) * 1000) / 1000, -8.4));
+test('otro registro: mover la venta del coctel MUEVE el teórico del batch', () => {
+    const antes = B.calcExistenciaTeorica(filaTV2);
+    vm.runInContext("invActual.cocktailsVendidos = { coctTV: 20 }; _consumoDirty = true;", B);
+    const despues = B.calcExistenciaTeorica(filaTV2);
+    vm.runInContext("invActual.cocktailsVendidos = { coctTV: 30 }; _consumoDirty = true;", B);
+    return eq(Math.round((despues - antes) * 1000) / 1000, 10); // 10 cocteles menos × 1 LT
+});
+test('otro registro: y eso mueve el teórico del VINO por su parte del batch (2/3)', () => {
+    const conVentas = B.calcExistenciaTeorica(filaVinoCal) + B._repartoDe('vinoCal').teo;
+    vm.runInContext("invActual.cocktailsVendidos = { coctTV: 20 }; _consumoDirty = true;", B);
+    vm.runInContext("_repCache = _repartoPrebatch();", B);
+    const menosVentas = B.calcExistenciaTeorica(filaVinoCal) + B._repartoDe('vinoCal').teo;
+    vm.runInContext("invActual.cocktailsVendidos = { coctTV: 30 }; _consumoDirty = true;", B);
+    vm.runInContext("_repCache = _repartoPrebatch();", B);
+    // 10 cocteles menos = 10 L menos salidos del batch; al vino le tocan 2/3 = 6.667 L
+    return eq(Math.round((menosVentas - conVentas) * 1000) / 1000, 6.667);
+});
 vm.runInContext("invActual.prebatchProducidos = {}; invActual.cocktailsVendidos = {}; _consumoDirty = true;", B);
 setVar(B, '_cacheInsumosInv', null); setVar(B, '_cacheRecetasInv', []);
+
+/* ── % DE VARIANZA CONTRA TODO EL USO, NO SOLO CONTRA LO VENDIDO ──
+   El Vodka American: 22.2 copas vendidas, 88.9 que se fueron a producir batches y
+   una varianza de +10.6 copas. Midiéndola contra las 22.2 salía +47.8% —semáforo
+   rojo— por un producto que en realidad movió 111 copas. La varianza sale de
+   manipular producto, así que se mide contra el producto manipulado: botella,
+   copa, pieza, coctelería Y producción de batches. */
+test('% de varianza: la base incluye la producción de batches (22.2 + 88.9 = 111.1)', () =>
+    eq(Math.round(B._usoTotal(22.2, 88.9, 0) * 10) / 10, 111.1));
+test('% de varianza: 10.6 sobre el uso completo = 9.5%, no 47.8%', () =>
+    eq(Math.round(B._pctVarianza(10.6, B._usoTotal(22.2, 88.9, 0)) * 10) / 10, 9.5));
+test('% de varianza: contra lo vendido solo, era el 47.8% que disparaba la alerta', () =>
+    eq(Math.round(B._pctVarianza(10.6, 22.2) * 10) / 10, 47.7));
+/* Si el batch NO se está repartiendo, esa producción YA viene sumada dentro de las
+   ventas del renglón: sumarla otra vez contaría el mismo producto dos veces. */
+test('% de varianza: con el batch sin repartir, la producción no se suma dos veces', () =>
+    eq(B._usoTotal(111.1, 88.9, 88.9), 111.1));
+test('% de varianza: sin uso alguno no hay base y no se inventa un porcentaje', () =>
+    eq(B._pctVarianza(5, B._usoTotal(0, 0, 0)), null));
 
 /* ── AVISO EN PANTALLA de los batches que no van a cuadrar ──
    El caso de la garrafa (rendimiento = capacidad del envase) solo se avisaba por

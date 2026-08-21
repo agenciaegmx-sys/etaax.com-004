@@ -697,9 +697,25 @@ function consumoRecetasFila(f) {
     if (f.tipo === 'peso') return _consumoRecetasBase(f.insumoId);
     return calcVentasCopasRecetas(f.insumoId, f.copaML);
 }
+/* El montón de consumo de UNA fila. Si la fila es un prebatch, manda el montón de
+   su SUB-RECETA (ver _recetaIdDePrebatch): el coctel pudo quedar apuntando a otro
+   registro del mismo batch y por su id no se encontraría nada.
+   Sin esto, arreglar solo el reparto dejaba el bug a medias: la columna de uso sí
+   se movía al capturar ventas del coctel, pero el TEÓRICO del batch seguía creyendo
+   que no había salido nada — y por eso el Resultado y la diferencia no cambiaban. */
+function _slotConsumo(insumoId) {
+    var idx = _consumoIdx();
+    var rid = _recetaIdDePrebatch(insumoId);
+    if (rid) {
+        // Renglón duplicado del mismo batch: el principal se lleva todo (si no, doble).
+        if (!_esFilaPrincipalPrebatch(insumoId)) return null;
+        return idx['sr:' + rid] || null;
+    }
+    return idx[insumoId] || idx[_canonInsumoId(insumoId)] || null;
+}
 function calcVentasCopasRecetas(insumoId, copaML) {
     if (!copaML || copaML <= 0) return 0;
-    var s = _consumoIdx()[insumoId] || _consumoIdx()[_canonInsumoId(insumoId)];
+    var s = _slotConsumo(insumoId);
     return s ? s.mlBeb / copaML : 0;
 }
 
@@ -728,14 +744,14 @@ function unidadBaseInsumo(ins) {
    nunca se descontaba. Al revés pasa igual con un prebatch de cocina que se va en un
    platillo. */
 function _consumoRecetasBase(insumoId) {
-    var s = _consumoIdx()[insumoId] || _consumoIdx()[_canonInsumoId(insumoId)];
+    var s = _slotConsumo(insumoId);
     return s ? (s.baseBeb + s.baseAli) : 0; // ml / g
 }
 
 // Consumo de un insumo PZA (refresco/cerveza/lata) por las recetas/menú vendidos, EN PIEZAS.
 // Antes no se contaba (calcVentasCopasRecetas devuelve 0 si no hay copaML) → no descontaba.
 function calcVentasPzaRecetas(insumoId) {
-    var s = _consumoIdx()[insumoId] || _consumoIdx()[_canonInsumoId(insumoId)];
+    var s = _slotConsumo(insumoId);
     if (!s) return 0;
     const fila     = filasCaptura.find(f => f.insumoId === insumoId);
     const contNeto = fila ? (fila.contNeto || 0) : 0; // ml por pieza
@@ -6115,6 +6131,18 @@ function _pctVarianza(dif, ventaNeta) {
     var v = parseFloat(ventaNeta) || 0;
     return v > 0 ? (dif / v) * 100 : null;
 }
+/* BASE DEL % DE VARIANZA = TODO el uso del insumo, no solo lo que se cobró.
+   El Vodka American lo dejaba claro: 22.2 copas vendidas y 88.9 que se fueron a
+   producir batches. Midiendo la varianza de 10.6 copas contra las 22.2 salía 47.8%
+   —un semáforo en rojo por un producto que en realidad movió 111 copas— cuando
+   contra el uso completo es ~9.5%. La varianza sale de manipular producto, así que
+   se mide contra todo el producto manipulado: botella, copa, pieza, coctelería y
+   producción de batches.
+   `prodMat > 0` significa que esa producción YA viene sumada dentro de `ventas`
+   (el batch no se está repartiendo); ahí no se vuelve a sumar. */
+function _usoTotal(ventas, prodVer, prodMat) {
+    return (parseFloat(ventas) || 0) + (prodMat > 0 ? 0 : (parseFloat(prodVer) || 0));
+}
 // ── FASE 1 — Resumen ejecutivo del inventario (faltantes/sobrantes, merma,
 //    vendidos por categoría, usados/sin usar, vendido vs compras) ──
 function _resumenEjecutivo() {
@@ -6897,7 +6925,7 @@ function _step5TablasHTML() {
         const dif       = fisico - teorico;
         const difCosto  = dif * (fila.precioCarta || 0);
         const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
-        const pctVal    = _pctVarianza(dif, ventaCopa + ventaBot * copasBot);
+        const pctVal    = _pctVarianza(dif, _usoTotal(ventaCopa + ventaBot * copasBot, prodPBver, prodPBmat));
         const pctStr    = pctVal !== null ? (pctVal>=0?'+':'')+pctVal.toFixed(1)+'%' : '—';
         const eaBot     = copasBot > 0 ? (ea/copasBot).toFixed(1) : ea.toFixed(1);
         const entBotStr = entBot > 0 ? `+${entBot % 1 ? entBot.toFixed(1) : entBot} ${_unidadCompra(fila)}` : '—';
@@ -6952,7 +6980,7 @@ function _step5TablasHTML() {
         const dif       = fisico - teorico;
         const difCosto  = dif * (fila.precioCarta || 0);
         const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
-        const pctVal    = _pctVarianza(dif, ventas);
+        const pctVal    = _pctVarianza(dif, _usoTotal(ventas, prodPBpVer, prodPBpMat));
         const pctStr    = pctVal !== null ? (pctVal>=0?'+':'')+pctVal.toFixed(1)+'%' : '—';
         const _contP = _fmtContenido(fila);
         const html = `<tr>
@@ -7008,6 +7036,7 @@ function _step5TablasHTML() {
         // que es justo lo que hacía ilegible el renglón.
         let entU=0, ventaBotU=0;
         const uC = _uComp(members);
+        let usoComp = 0;
         members.forEach(m => {
             ea       += parseFloat(m.existenciaAnterior)||0;
             ent      += getEntradasCopas(m);
@@ -7018,6 +7047,12 @@ function _step5TablasHTML() {
             ventaBot += (parseFloat(m.ventasBotella)||0) * (copasBot || 1);
             ventaCopa+= parseFloat(m.ventasCopasDirectas)||0;
             ventaCoct+= consumoRecetasFila(m);
+            // Producción de batches del miembro: entra a la base del % igual que en
+            // cualquier otro renglón (ver _usoTotal), no solo lo que se cobró.
+            usoComp  += _usoTotal(
+                (parseFloat(m.ventasCopasDirectas)||0) + (parseFloat(m.ventasBotella)||0)*(copasBot||1) + consumoRecetasFila(m),
+                (function(){ try { return _consumoBaseProd(m) || 0; } catch (e) { return 0; } })(),
+                _prodPBVisible(m, _repartoDe(m.insumoId)));
             cm       += (parseFloat(m.cortesiaCopas)||0) + (parseFloat(m.mermaCopas)||0);
             // Existencia en BOTELLAS: cada presentación aporta sus propias botellas
             // (su copaML/contNeto). El compuesto suma botellas; la diferencia queda en copas.
@@ -7028,7 +7063,7 @@ function _step5TablasHTML() {
         const teorico   = calcExistenciaTeorica(vf);
         const dif       = fisico - teorico;
         const difCosto  = dif * (vf.precioCarta || 0);
-        const pctValC   = _pctVarianza(dif, ventaBot + ventaCopa + ventaCoct);
+        const pctValC   = _pctVarianza(dif, usoComp);
         const color     = Math.abs(dif) < 0.05 ? 'var(--text-dim)' : (dif > 0 ? 'var(--green)' : 'var(--red)');
         const pctStr    = pctValC !== null ? ((pctValC>=0?'+':'')+pctValC.toFixed(1)+'%') : '—';
         const esPzaComp0 = members.length > 0 && members.every(m => m.tipo === 'pza');
@@ -7434,6 +7469,9 @@ function verReporteDirectivo(gerencial, modo) {
            sumarse a ventaCoct, que es venta. Sí entra al CONSUMO (es uso de insumo
            a precio proveedor); no entra a la venta neta, que mide lo que se cobró. */
         const prodPB       = _prodPBVisible(f, adjO);
+        // Cuánto se fue en batches SIEMPRE (aunque el reparto ya lo cubra): es lo que
+        // se enseña y lo que entra a la base del % de varianza. Ver _usoTotal.
+        const prodPBver    = (function () { try { return _consumoBaseProd(f) || 0; } catch (e) { return 0; } })();
         const ventaCopaDir = parseFloat(f.ventasCopasDirectas) || 0; // venta directa por copa/pza
         const ventaCopa = ventaCoct + ventaCopaDir;
         const ventaBot  = parseFloat(f.ventasBotella) || 0;
@@ -7451,10 +7489,14 @@ function verReporteDirectivo(gerencial, modo) {
             : ventaCopa + ventaBot * copasBot + cortesia + merma + cancel) + prodPB;
         const disponible = ea + (f.tipo === 'pza' ? entBot : entBot * copasBot);
         const pctConsumo = disponible > 0 ? (consumo / disponible) * 100 : 0;
-        // % de varianza vs VENTA NETA del periodo (misma definición que la columna % del Resultado).
-        // Sin ventas → 0 (sin base de comparación, no dispara alerta).
+        /* % de varianza contra TODO el uso del insumo (misma definición que la columna
+           % del Resultado, ver _usoTotal): botella, copa, pieza, coctelería Y producción
+           de batches. Midiéndolo solo contra lo vendido, un insumo que se va casi entero
+           a producir batches salía con un porcentaje enorme y disparaba alertas rojas
+           por una varianza que, contra el producto que de verdad manipuló, es chica.
+           Sin uso alguno → 0 (sin base de comparación, no dispara alerta). */
         const ventaNetaF = f.tipo === 'pza' ? ventaPzaTot : (ventaCopa + ventaBot * copasBot);
-        const varPct     = esPBo ? 0 : (_pctVarianza(dif, ventaNetaF) ?? 0);
+        const varPct     = esPBo ? 0 : (_pctVarianza(dif, _usoTotal(ventaNetaF, prodPBver, prodPB)) ?? 0);
         const _bat       = esBateo(f.insumoId) || esPBo; // de bateo / prebatch repartido: sin alerta propia
         if (!esPBo) { capitalCosto += fisico * cc; capitalCarta += fisico * (f.precioCarta || 0); }
         difTotal     += difCosto;
@@ -7464,7 +7506,7 @@ function verReporteDirectivo(gerencial, modo) {
         // Prebatch repartido: dif y consumo van en CERO aquí — ya viajan repartidos en
         // sus insumos (si no, faltCosto/vendidoCosto los contarían DOBLE).
         return { f, fisico, teorico, dif: esPBo ? 0 : dif, cc, difCosto, ea, entBot, copasBot,
-                 ventaCopa, ventaCoct, prodPB, ventaCopaDir, ventaBot, ventaPzaTot, cortesia, merma, cancel,
+                 ventaCopa, ventaCoct, prodPB, prodPBver, ventaCopaDir, ventaBot, ventaPzaTot, cortesia, merma, cancel,
                  consumo: esPBo ? 0 : consumo,
                  disponible, pctConsumo, varPct, esBateo:_bat, esPB: esPBo };
     });
@@ -7535,6 +7577,9 @@ function verReporteDirectivo(gerencial, modo) {
         const mem = (comp.miembros||[]).map(id => _aById[id]).filter(Boolean);
         if (!mem.length) return;
         let ea=0,entBot=0,vCopaDir=0,vBot=0,vCoct=0,cm=0,cancel=0,fisico=0,teorico=0,dif=0,difCosto=0,eaBot=0,fisBot=0,vendCopas=0,consumo=0;
+        // usoTotal: como en cualquier renglón, el % se mide contra TODO el uso de los
+        // miembros —incluida la producción de batches—, no solo contra lo vendido.
+        let usoTotal=0;
         mem.forEach(m => {
             ea+=m.ea; entBot+=m.entBot; vCopaDir+=m.ventaCopaDir; vBot+=m.ventaBot; vCoct+=m.ventaCoct;
             cm+=(m.cortesia+m.merma); cancel+=m.cancel; fisico+=m.fisico; teorico+=m.teorico;
@@ -7542,8 +7587,9 @@ function verReporteDirectivo(gerencial, modo) {
             eaBot  += m.copasBot>0 ? m.ea/m.copasBot : m.ea;
             fisBot += m.copasBot>0 ? m.fisico/m.copasBot : m.fisico;
             vendCopas += (m.ventaCopa||0) + (m.ventaBot||0)*(m.copasBot||0);
+            usoTotal  += _usoTotal((m.ventaCopa||0) + (m.ventaBot||0)*(m.copasBot||0), m.prodPBver, m.prodPB);
         });
-        const varPct = _pctVarianza(dif, vendCopas) ?? 0;
+        const varPct = _pctVarianza(dif, usoTotal) ?? 0;
         const nombre = comp.nombre || (mem[0] && mem[0].f.nombre) || 'Compuesto';
         _pushG(_grupoCategoria(mem[0].f), {
             esComp:true, comp, nombre, members:mem,
@@ -7650,7 +7696,7 @@ function verReporteDirectivo(gerencial, modo) {
               <td class="tc" style="color:${cOk}">${a.entBot>0?'+'+_ncRd(a.entBot)+' b':'—'}</td>
               <td class="tc">${a.ventaCopaDir>0?_ncRd(a.ventaCopaDir)+' c':'—'}</td>
               <td class="tc">${a.ventaBot>0?_ncRd(a.ventaBot)+' b':'—'}</td>
-              <td class="tc" style="color:#9b8de8" title="${a.prodPB>0?'Incluye '+_ncRd(a.prodPB)+' que se fueron en producir batches de sub-receta':''}">${(a.ventaCoct+a.prodPB)>0?_ncRd(a.ventaCoct+a.prodPB)+' c'+(a.prodPB>0?'<span style="font-size:9px;opacity:.7"> ·prod</span>':''):'—'}</td>
+              <td class="tc" style="color:#9b8de8" title="${a.prodPBver>0?_ncRd(a.prodPBver)+' se fueron en producir batches de sub-receta'+(a.prodPB>0?' (van sumadas aquí: este batch no se está repartiendo)':' (no se suman a la cifra: ese producto sigue contado dentro del batch)'):''}">${(a.ventaCoct+a.prodPB)>0?_ncRd(a.ventaCoct+a.prodPB)+' c':'—'}${a.prodPBver>0&&!(a.prodPB>0)?`<div style="font-size:9px;opacity:.7;white-space:nowrap">↳ ${_ncRd(a.prodPBver)} c en batches</div>`:''}</td>
               <td class="tc" style="font-weight:600">${_ncRd(a.fisBot)} bot</td>
               <td class="tc" style="color:${cDifC};font-weight:700">${a.dif>=0?'+':''}${a.dif.toFixed(1)} cop</td>
               <td class="tc" style="color:${cDifC}">${a.varPct.toFixed(0)}%</td>
