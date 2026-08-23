@@ -927,9 +927,10 @@ var ETAAX_CONTACTO = {
    Vacío = todavía no configurado → la app sigue enseñando solo WhatsApp, sin
    botones rotos. Cambiar el de prueba por el real al pasar a producción. */
 var ETAAX_PAGO = {
-    // OJO: este es el link de PRUEBA. Los objetos de test no existen en producción —
-    // al pasar a real hay que crear el link allá y cambiarlo aquí (ver docs/stripe-cobro.md).
-    link: 'https://buy.stripe.com/test_bJe00kea82B75ayavs7Re00',
+    // Link de PRODUCCIÓN (23-ago-2026). Al no traer "/test_", el botón se le muestra
+    // a TODOS los negocios, no solo al admin — ver _pagoVisible(). El de prueba era
+    // https://buy.stripe.com/test_bJe00kea82B75ayavs7Re00, por si hay que volver.
+    link: 'https://buy.stripe.com/bJe4gA6HG3Fb32q6fc7Re02',
     etiqueta: 'Pagar con tarjeta'
 };
 /* ¿Se puede enseñar el botón de pago? Un link de PRUEBA en producción es peor que
