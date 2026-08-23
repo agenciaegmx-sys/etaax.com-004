@@ -9,6 +9,7 @@
 <script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <script src="/page-guard.js"></script><!-- solo helpers de permisos; el guard no aplica en hub -->
 <script src="/precios.js"></script><!-- tabla de precios por sucursal (una sola verdad) -->
+<script src="/etaax-core.js"></script><!-- EtaaxCore.estadoCobro: fecha de corte y tolerancia -->
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -930,6 +931,28 @@ async function _leerSuscripcion(negId) {
         // real saltándose la RLS de `suscripciones`, así un negocio ACTIVA no se
         // falso-bloquea cuando la cuenta (dueño/staff/admin no-ADMIN_EMAIL) no alcanza
         // a leer su propia fila por RLS. Si dice activo → pasar sin más.
+        /* Detalle del cobro (v43): además de "puede o no puede", trae la fecha de
+           corte y los días que le quedan de tolerancia. Con eso la pantalla avisa
+           ANTES de cortar, en vez de dejar al restaurante sin sistema de golpe. */
+        try {
+            var det = await _supabase.rpc('negocio_cobro_estado', { p_neg: negId });
+            if (!det.error && det.data) {
+                var d = det.data;
+                var e = (window.EtaaxCore ? EtaaxCore.estadoCobro({
+                    estado: d.estado, proximoCobro: d.proximoCobro, diasTolerancia: d.diasTolerancia
+                }) : null);
+                /* El estado GUARDADO sigue diciendo 'activa' cuando lo que venció es
+                   la fecha — si se pasa tal cual, la pantalla de bloqueo cae al texto
+                   genérico en vez del de "tu suscripción venció". Se deriva. */
+                var _est = d.estado;
+                if (d.activo !== true && _est === 'activa') _est = 'vencida';
+                // Manda el servidor para el permiso; el núcleo solo para lo que se dice.
+                return { ok: d.activo === true, estado: _est, corte: d.proximoCobro,
+                         diasRestantes: d.diasRestantes,
+                         enTolerancia: !!(d.activo === true && e && e.enTolerancia),
+                         diasVencido: e ? e.diasVencido : 0 };
+            }
+        } catch (e) { /* RPC de detalle no desplegada (pre-v43) → sigue abajo */ }
         try {
             var act = await _supabase.rpc('negocio_esta_activo', { p_neg: negId });
             if (!act.error && act.data === true) return { ok: true, estado: 'activa' };
@@ -950,16 +973,46 @@ async function _gateSuscripcion(neg) {
     if (!neg || !neg.id) return;                              // hub general / sin negocio
     if (_sesion && _sesion.isAdmin) return;                  // admin maestro en modo negocio → libre
     var sub = await _leerSuscripcion(neg.id);
-    if (sub.ok) return;                                       // activa o indeterminado → dejar pasar
-    _mostrarBloqueo(neg, sub.estado);
+    if (sub.ok) { _avisoTolerancia(neg, sub); return; }        // activa o indeterminado → dejar pasar
+    _mostrarBloqueo(neg, sub.estado, sub);
 }
 
-function _mostrarBloqueo(neg, estado) {
+/* Franja de tolerancia: el pago venció pero el negocio SIGUE operando. Es la
+   ventana para avisar, y es lo que evita que un restaurante se quede sin sistema
+   en plena operación por un pago que entra un día tarde. No bloquea nada. */
+function _avisoTolerancia(neg, sub) {
+    var prev = document.getElementById('avisoTolerancia');
+    if (prev) prev.remove();
+    if (!sub || !sub.enTolerancia) return;
+    var d = sub.diasRestantes;
+    var cuando = d > 1 ? 'Te quedan ' + d + ' días' : (d === 1 ? 'Te queda 1 día' : 'Es el último día');
+    var wa = 'https://wa.me/' + ETAAX_CONTACTO.whatsapp + '?text=' +
+        encodeURIComponent('Hola, soy ' + (neg.nombre || 'un negocio') + ' y quiero ponerme al corriente con mi pago de ETAAX.');
+    var el = document.createElement('div');
+    el.id = 'avisoTolerancia';
+    el.style.cssText = 'margin:0 0 16px;padding:12px 16px;border:1px solid #f5c842;' +
+        'background:rgba(245,200,66,.08);border-radius:10px;font-size:13px;color:var(--text);line-height:1.6';
+    el.innerHTML = '<b style="color:#f5c842">Tu pago venció' +
+        (sub.diasVencido > 0 ? ' hace ' + sub.diasVencido + (sub.diasVencido === 1 ? ' día' : ' días') : '') + '.</b> ' +
+        cuando + ' para ponerte al corriente antes de que se pause el acceso. ' +
+        '<a href="' + wa + '" target="_blank" rel="noopener" style="color:#25d366;font-weight:600;text-decoration:none">Escríbeme por WhatsApp →</a>';
+    var cont = document.getElementById('viewModulos');
+    if (cont && cont.firstChild) cont.insertBefore(el, cont.firstChild);
+    else if (cont) cont.appendChild(el);
+}
+
+function _mostrarBloqueo(neg, estado, sub) {
+    // Con fecha de corte conocida, se dice DESDE CUÁNDO está pausado en vez de un
+    // "venció" sin referencia: el dueño necesita saber qué mes le falta.
+    var _desde = (sub && sub.diasVencido > 0)
+        ? ' Lleva ' + sub.diasVencido + (sub.diasVencido === 1 ? ' día' : ' días') +
+          ' vencido, incluyendo los días de tolerancia.'
+        : '';
     var copia = {
         pendiente: { icon:'⏳', titulo:'Tu cuenta está en revisión',
             msg:'Tu negocio se registró correctamente. Para activar el servicio, contáctame y coordinamos la activación de tu mes.' },
         vencida:   { icon:'🔔', titulo:'Tu suscripción venció',
-            msg:'El acceso a tu negocio está pausado. Contáctame para renovar tu mes y reactivarlo al instante.' },
+            msg:'El acceso a tu negocio está pausado.' + _desde + ' Contáctame para renovar tu mes y reactivarlo al instante.' },
         cancelada: { icon:'🚫', titulo:'Tu suscripción está cancelada',
             msg:'El acceso a tu negocio está desactivado. Si quieres reactivarlo, ponte en contacto conmigo.' }
     }[estado] || { icon:'🔒', titulo:'Acceso no disponible',

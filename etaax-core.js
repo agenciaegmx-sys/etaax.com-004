@@ -352,6 +352,75 @@
        no cambian ni un centavo.
          m = 2.5  →  costo bruto 40% · gasto op 40% · utilidad neta 20%              */
     var COSTEO_GASTO_OP_PCT = 40;    // fijo (por ahora no editable)
+    /* ══ COBRO DE LA SUSCRIPCIÓN: fecha de corte y días de tolerancia ══════════
+       Una sola verdad para "¿este negocio está al corriente?". La misma regla vive
+       además en SQL (negocio_esta_activo), porque el gate no puede depender de que
+       el navegador la calcule bien; aquí se usa para lo que la pantalla necesita
+       decir —cuántos días le quedan, si ya está en tolerancia— y para el panel.
+       Si un día cambia la regla, se cambia en los dos lados y su test lo cacha. */
+    var TOLERANCIA_DEFAULT = 3;   // días de gracia tras la fecha de corte
+
+    // Fecha (YYYY-MM-DD) → Date en hora local a medianoche. Sin esto, `new Date('2026-09-23')`
+    // se interpreta como UTC y en México cae un día antes: el corte se adelantaba 24 h.
+    function fechaLocal(s) {
+        if (s instanceof Date) return new Date(s.getFullYear(), s.getMonth(), s.getDate());
+        var p = String(s || '').slice(0, 10).split('-');
+        if (p.length !== 3) return null;
+        var d = new Date(+p[0], +p[1] - 1, +p[2]);
+        return isNaN(d.getTime()) ? null : d;
+    }
+    function fechaStr(d) {
+        return d ? d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') : '';
+    }
+    function diasEntre(a, b) {   // días completos de a → b (b − a)
+        var x = fechaLocal(a), y = fechaLocal(b);
+        if (!x || !y) return null;
+        return Math.round((y - x) / 86400000);
+    }
+    /* Siguiente fecha de cobro a partir de un DÍA ANCLA del mes. El día se recorta al
+       último día del mes cuando no existe: un negocio anclado al 31 cobra el 28 en
+       febrero (o el 29 en bisiesto) y vuelve al 31 en marzo — el ancla NO se pierde,
+       que es el error clásico de ir sumando "un mes" sobre la última fecha cobrada. */
+    function proximoCobro(diaCobro, desde) {
+        var dia = Math.min(31, Math.max(1, Math.round(n(diaCobro)) || 1));
+        var base = fechaLocal(desde || todayStr());
+        if (!base) return '';
+        function enMes(anio, mes) {                       // mes 0-11
+            var ultimo = new Date(anio, mes + 1, 0).getDate();
+            return new Date(anio, mes, Math.min(dia, ultimo));
+        }
+        var cand = enMes(base.getFullYear(), base.getMonth());
+        if (cand <= base) cand = enMes(base.getFullYear(), base.getMonth() + 1);
+        return fechaStr(cand);
+    }
+    /* Estado de cobro de un negocio. `sub` = { estado, proximoCobro, diasTolerancia }.
+       · activo        → puede usar la app (incluye los días de tolerancia)
+       · enTolerancia  → ya venció pero todavía no se corta: es la ventana para avisar
+       · diasRestantes → hasta el corte REAL (fecha + tolerancia). Negativo = ya cortado. */
+    function estadoCobro(sub, hoy) {
+        var s = sub || {};
+        var estado = s.estado || 'pendiente';
+        var tol    = Math.max(0, Math.round(n(s.diasTolerancia != null ? s.diasTolerancia : TOLERANCIA_DEFAULT)));
+        var corte  = s.proximoCobro ? String(s.proximoCobro).slice(0, 10) : '';
+        var hoyS   = hoy ? String(hoy).slice(0, 10) : todayStr();
+        if (estado === 'cancelada' || !corte) {
+            return { activo:false, enTolerancia:false, vencido:estado !== 'pendiente',
+                     diasRestantes:null, diasVencido:null, corte:corte, tolerancia:tol, estado:estado };
+        }
+        var aCorte  = diasEntre(hoyS, corte);             // >0 faltan, 0 hoy, <0 ya pasó
+        var limite  = fechaStr(new Date(fechaLocal(corte).getTime() + tol * 86400000));
+        var aLimite = diasEntre(hoyS, limite);
+        var activo  = estado === 'activa' && aLimite >= 0;
+        return {
+            activo: activo,
+            enTolerancia: activo && aCorte < 0,           // ya venció, sigue dentro de la gracia
+            vencido: aCorte < 0,
+            diasRestantes: aLimite,                        // hasta el corte real
+            diasVencido: aCorte < 0 ? -aCorte : 0,
+            corte: corte, limite: limite, tolerancia: tol, estado: estado
+        };
+    }
+
     var COSTEO_IVA_PCT      = 16;
     var COSTEO_DELIVERY_PCT = 40;    // recargo de delivery sobre el precio de platillo
     var COSTEO_MULT_DEFAULT = 1 / 0.30;
@@ -433,5 +502,7 @@
         multiploReceta: multiploReceta, costeoReceta: costeoReceta,
         COSTEO_MULT_DEFAULT: COSTEO_MULT_DEFAULT, COSTEO_GASTO_OP_PCT: COSTEO_GASTO_OP_PCT,
         DIA_FACTORES_DEFAULT: DIA_FACTORES_DEFAULT, diasOperativos: diasOperativos, operaDow: operaDow, calcMetaDiaria: calcMetaDiaria,
+        TOLERANCIA_DEFAULT: TOLERANCIA_DEFAULT, fechaLocal: fechaLocal, fechaStr: fechaStr, diasEntre: diasEntre,
+        proximoCobro: proximoCobro, estadoCobro: estadoCobro,
     };
 })();

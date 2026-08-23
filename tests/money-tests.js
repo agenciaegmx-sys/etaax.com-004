@@ -1616,6 +1616,74 @@ console.log('\n══ SUITE D · Cobro por sucursal (precios.js) ══');
         () => eq(P.descuentoMensual(10), 11.0617, 'desc promedio'));
 })();
 
+/* ═══════════ SUITE G · COBRO DE LA SUSCRIPCIÓN (etaax-core.js) ═══════════
+   Fecha de corte y días de tolerancia. Es aritmética de calendario, que es donde
+   se rompen las cosas en silencio: el día 31 en febrero, el corrimiento de zona
+   horaria que adelanta el corte 24 h, el ancla que se pierde tras un mes corto.
+   La MISMA regla vive en SQL (negocio_esta_activo): si cambia aquí, cambia allá. */
+console.log('\n══ SUITE G · Cobro de la suscripción (etaax-core.js) ══');
+(function () {
+    const C = A.EtaaxCore;
+
+    /* ── El ancla del mes no se pierde en los meses cortos ── */
+    test('ancla 15: desde el 3 de marzo, el corte es el 15 de marzo', () =>
+        eq(C.proximoCobro(15, '2026-03-03'), '2026-03-15', 'corte'));
+    test('ancla 15: desde el 15 mismo, salta al mes siguiente (no cobra dos veces hoy)', () =>
+        eq(C.proximoCobro(15, '2026-03-15'), '2026-04-15', 'corte'));
+    test('ancla 31: en febrero se recorta al 28', () =>
+        eq(C.proximoCobro(31, '2026-02-05'), '2026-02-28', 'corte'));
+    test('ancla 31: en un febrero BISIESTO se recorta al 29', () =>
+        eq(C.proximoCobro(31, '2028-02-05'), '2028-02-29', 'corte'));
+    test('ancla 31: tras el febrero corto vuelve al 31, no se queda en 28', () =>
+        eq(C.proximoCobro(31, '2026-02-28'), '2026-03-31', 'corte'));
+    test('ancla 30: enero sí tiene 30, marzo también', () =>
+        eq(C.proximoCobro(30, '2026-01-31'), '2026-02-28', 'corte'));
+    test('diciembre cruza el año', () =>
+        eq(C.proximoCobro(5, '2026-12-20'), '2027-01-05', 'corte'));
+
+    /* ── Zona horaria: el corte NO se puede adelantar un día ──
+       new Date('2026-09-23') es UTC; en México eso cae el 22 a las 18:00 y el
+       negocio se bloqueaba una noche antes de tiempo. */
+    test('la fecha se lee en hora LOCAL, no en UTC', () =>
+        eq(C.fechaStr(C.fechaLocal('2026-09-23')), '2026-09-23', 'fecha'));
+    test('días entre fechas cuenta días completos', () =>
+        eq(C.diasEntre('2026-09-20', '2026-09-23'), 3, 'días'));
+
+    /* ── Tolerancia: la ventana entre "venció" y "se corta" ── */
+    const sub = { estado: 'activa', proximoCobro: '2026-09-23', diasTolerancia: 3 };
+    test('antes del corte: activo y sin avisos', () => {
+        const e = C.estadoCobro(sub, '2026-09-20');
+        return eq(e.activo, true, 'activo') && eq(e.enTolerancia, false, 'tolerancia')
+            && eq(e.diasRestantes, 6, 'restantes');   // 3 al corte + 3 de gracia
+    });
+    test('el día del corte todavía está activo (se cobra ese día, no la víspera)', () => {
+        const e = C.estadoCobro(sub, '2026-09-23');
+        return eq(e.activo, true, 'activo') && eq(e.enTolerancia, false, 'tolerancia');
+    });
+    test('un día después: venció pero sigue operando, en tolerancia', () => {
+        const e = C.estadoCobro(sub, '2026-09-24');
+        return eq(e.activo, true, 'activo') && eq(e.enTolerancia, true, 'tolerancia')
+            && eq(e.diasVencido, 1, 'vencido') && eq(e.diasRestantes, 2, 'restantes');
+    });
+    test('el último día de tolerancia AÚN opera', () => {
+        const e = C.estadoCobro(sub, '2026-09-26');
+        return eq(e.activo, true, 'activo') && eq(e.diasRestantes, 0, 'restantes');
+    });
+    test('un día después de la tolerancia, se corta', () => {
+        const e = C.estadoCobro(sub, '2026-09-27');
+        return eq(e.activo, false, 'activo') && eq(e.diasVencido, 4, 'vencido');
+    });
+    test('sin tolerancia configurada, se corta al día siguiente del corte', () => {
+        const e = C.estadoCobro({ ...sub, diasTolerancia: 0 }, '2026-09-24');
+        return eq(e.activo, false, 'activo');
+    });
+    test('cancelada NO opera aunque la fecha de corte esté en el futuro', () =>
+        eq(C.estadoCobro({ ...sub, estado: 'cancelada' }, '2026-09-20').activo, false, 'activo'));
+    test('pendiente (nunca activado, sin fecha) no opera', () =>
+        eq(C.estadoCobro({ estado: 'pendiente' }, '2026-09-20').activo, false, 'activo'));
+    test('la tolerancia por default son 3 días', () => eq(C.TOLERANCIA_DEFAULT, 3, 'días'));
+})();
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0

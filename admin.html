@@ -901,9 +901,14 @@ function renderNegocios() {
         var dueno = usuariosMap[n.usuario_id];
         var staff = staffCount[n.id] || 0;
         var st    = _estadoSuscripcion(n.id);
-        var vence = st.activaHasta
-            ? new Date(st.activaHasta).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) +
-              (st.diasRestantes != null ? ' <span class="text-dim">(' + st.diasRestantes + 'd)</span>' : '')
+        /* La fecha se pinta en hora LOCAL: new Date('2026-09-23') es UTC y en México
+           se mostraba el 22. Los días que se enseñan son hasta el CORTE REAL, o sea
+           ya con la tolerancia incluida — es lo que de verdad tiene el negocio. */
+        var _fv = st.activaHasta ? EtaaxCore.fechaLocal(st.activaHasta) : null;
+        var vence = _fv
+            ? _fv.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) +
+              (st.diasRestantes != null ? ' <span class="text-dim">(' + st.diasRestantes + 'd)</span>' : '') +
+              (st.tolerancia ? '<div class="text-dim" style="font-size:10.5px">+' + st.tolerancia + 'd de tolerancia</div>' : '')
             : '—';
         var badge = '<span class="badge" style="background:' + st.color + '22;color:' + st.color + ';border:1px solid ' + st.color + '55">' + st.label + '</span>';
         // Botones de gestión (stopPropagation para no abrir el detalle).
@@ -912,6 +917,7 @@ function renderNegocios() {
         var btnCancelar = st.estado !== 'cancelada' && st.estado !== 'pendiente'
             ? '<button onclick="event.stopPropagation();cancelarSuscripcion(\'' + n.id + '\')" style="' + btnBase + 'background:rgba(232,90,90,.14);color:#e85a5a">Cancelar</button>'
             : '';
+        var btnCobro = '<button title="Día de cobro y días de tolerancia" onclick="event.stopPropagation();configurarCobro(\'' + n.id + '\')" style="' + btnBase + 'background:rgba(122,184,245,.14);color:#7ab8f5">📅</button>';
         var btnRecibo = '<button title="Generar recibo de pago o presupuesto de este negocio" onclick="event.stopPropagation();abrirDocumentoModal(\'recibo\',\'' + n.id + '\')" style="' + btnBase + 'background:rgba(245,200,66,.14);color:#f5c842">🧾</button>';
         var btnRespaldo = '<button title="Descargar respaldo del negocio" onclick="event.stopPropagation();descargarRespaldoNegocio(\'' + n.id + '\')" style="' + btnBase + 'background:var(--s2);color:var(--muted)">⬇️</button>';
         var btnEliminar = '<button title="Eliminar negocio" onclick="event.stopPropagation();eliminarNegocio(\'' + n.id + '\')" style="' + btnBase + 'background:rgba(232,90,90,.10);color:#e85a5a">🗑️</button>';
@@ -921,40 +927,102 @@ function renderNegocios() {
             '<td class="text-dim">' + esc(dueno ? (dueno.nombre||'—') : '—') + '</td>' +
             '<td>' + badge + '</td>' +
             '<td class="text-dim">' + vence + '</td>' +
-            '<td style="white-space:nowrap">' + btnActivar + btnCancelar + btnRecibo + btnRespaldo + btnEliminar + '</td>' +
+            '<td style="white-space:nowrap">' + btnActivar + btnCancelar + btnCobro + btnRecibo + btnRespaldo + btnEliminar + '</td>' +
         '</tr>';
     }).join('');
 }
 
-/* ── Suscripciones (activación manual) ── */
+/* ── Suscripciones (activación manual) ──────────────────────────────────
+   La REGLA de "está al corriente" NO se escribe aquí: se delega a
+   EtaaxCore.estadoCobro, que es la misma que corre en el hub y tiene su espejo
+   en SQL (negocio_esta_activo, v43). Aquí solo se pinta y se edita. */
+function _corteDe(s) {   // fecha de corte de una fila, con el camino viejo de respaldo
+    if (!s) return '';
+    return s.proximo_cobro ? String(s.proximo_cobro).slice(0, 10)
+         : (s.activa_hasta ? String(s.activa_hasta).slice(0, 10) : '');
+}
 function _estadoSuscripcion(negId) {
     var s = (_data.suscripciones || {})[negId];
-    var ahora = new Date();
-    if (!s) return { estado:'pendiente', label:'Pendiente', color:'#e0a93d', activa:false, activaHasta:null, diasRestantes:null };
-    var hasta = s.activa_hasta ? new Date(s.activa_hasta) : null;
-    var activa = s.estado === 'activa' && hasta && hasta > ahora;
-    if (s.estado === 'cancelada') return { estado:'cancelada', label:'Cancelada', color:'#e85a5a', activa:false, activaHasta:s.activa_hasta, diasRestantes:null };
-    if (activa) {
-        var dias = Math.ceil((hasta - ahora) / 86400000);
-        return { estado:'activa', label:'Activa', color:'#3dbe7a', activa:true, activaHasta:s.activa_hasta, diasRestantes:dias };
-    }
-    if (hasta && hasta <= ahora) return { estado:'vencida', label:'Vencida', color:'#e85a5a', activa:false, activaHasta:s.activa_hasta, diasRestantes:0 };
-    return { estado:'pendiente', label:'Pendiente', color:'#e0a93d', activa:false, activaHasta:s.activa_hasta, diasRestantes:null };
+    if (!s) return { estado:'pendiente', label:'Pendiente', color:'#e0a93d', activa:false, activaHasta:null, diasRestantes:null, tolerancia:EtaaxCore.TOLERANCIA_DEFAULT };
+    var corte = _corteDe(s);
+    var e = EtaaxCore.estadoCobro({ estado: s.estado, proximoCobro: corte, diasTolerancia: s.dias_tolerancia });
+    var base = { activaHasta: corte, diasRestantes: e.diasRestantes, tolerancia: e.tolerancia,
+                 diaCobro: s.dia_cobro || null, activa: e.activo, estado: e.estado };
+    if (s.estado === 'cancelada') return Object.assign(base, { estado:'cancelada', label:'Cancelada', color:'#e85a5a', activa:false, diasRestantes:null });
+    // En tolerancia: sigue operando, pero ya venció. Es su propio color a propósito —
+    // desde el panel hay que poder ver de un vistazo a quién hay que cobrarle HOY.
+    if (e.enTolerancia) return Object.assign(base, { estado:'tolerancia', label:'En tolerancia', color:'#e0a93d' });
+    if (e.activo)       return Object.assign(base, { estado:'activa',     label:'Activa',       color:'#3dbe7a' });
+    if (corte)          return Object.assign(base, { estado:'vencida',    label:'Vencida',      color:'#e85a5a', diasRestantes:0 });
+    return Object.assign(base, { estado:'pendiente', label:'Pendiente', color:'#e0a93d', diasRestantes:null });
 }
 
-// Activar / extender un mes. Si ya está activa, suma el mes a la fecha vigente.
+/* Activar / extender un mes RESPETANDO EL ANCLA del día de cobro.
+   Antes se sumaba un mes a la última fecha: quien pagaba tarde iba corriendo su
+   fecha de corte mes con mes hasta acabar cobrando en otro día del que se acordó.
+   Con ancla, el cobro siempre cae el mismo día (recortado en los meses cortos). */
 async function activarSuscripcion(negId) {
     var s = (_data.suscripciones || {})[negId];
-    var base = (s && s.activa_hasta && new Date(s.activa_hasta) > new Date()) ? new Date(s.activa_hasta) : new Date();
-    base.setMonth(base.getMonth() + 1);
+    var corte = _corteDe(s);
+    var vigente = corte && EtaaxCore.estadoCobro({ estado: s && s.estado, proximoCobro: corte, diasTolerancia: s && s.dias_tolerancia }).activo;
+    // Desde la fecha vigente si aún no vence (no se le regala tiempo ni se le quita);
+    // desde hoy si ya venció o nunca se activó.
+    var desde = vigente ? corte : EtaaxCore.todayStr();
+    var ancla = (s && s.dia_cobro) || Number(EtaaxCore.todayStr().slice(8, 10));
+    var nuevo = EtaaxCore.proximoCobro(ancla, desde);
     var reg = {
-        negocio_id: negId, estado: 'activa', activa_hasta: base.toISOString(),
+        negocio_id: negId, estado: 'activa',
+        proximo_cobro: nuevo, dia_cobro: ancla,
+        dias_tolerancia: (s && s.dias_tolerancia != null) ? s.dias_tolerancia : EtaaxCore.TOLERANCIA_DEFAULT,
+        activa_hasta: new Date(nuevo + 'T12:00:00').toISOString(),  // se mantiene por compatibilidad
         activada_at: new Date().toISOString(), updated_at: new Date().toISOString()
     };
     var r = await _supabase.from('suscripciones').upsert(reg, { onConflict: 'negocio_id' });
     if (r.error) { admAlert('No se pudo activar: ' + r.error.message); return; }
     _data.suscripciones[negId] = Object.assign({}, s, reg);
     renderNegocios();
+}
+
+/* Definir el día de cobro y los días de tolerancia de un negocio. */
+function configurarCobro(negId) {
+    var s = (_data.suscripciones || {})[negId] || {};
+    var neg = (_data.negocios || []).find(function(x){ return x.id === negId; }) || {};
+    var nombre = (neg.datos && neg.datos.nombre) || negId;
+    var corte  = _corteDe(s);
+    var ancla  = s.dia_cobro || (corte ? Number(corte.slice(8, 10)) : Number(EtaaxCore.todayStr().slice(8, 10)));
+    var tol    = (s.dias_tolerancia != null) ? s.dias_tolerancia : EtaaxCore.TOLERANCIA_DEFAULT;
+    var inp = 'width:100%;background:var(--s2);border:1px solid var(--b1);color:var(--text);' +
+              'padding:9px 11px;border-radius:8px;font-family:inherit;font-size:14px;margin-top:5px';
+    var lbl = 'font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px';
+    admDialog({
+        icon: '📅', title: 'Cobro de ' + esc(nombre), danger: false, yesLabel: 'Guardar',
+        msg: '<div style="text-align:left">' +
+                '<div style="' + lbl + '">Día de cobro del mes</div>' +
+                '<input id="cfgDiaCobro" type="number" min="1" max="31" value="' + ancla + '" style="' + inp + '">' +
+                '<div style="font-size:11.5px;color:var(--dim);margin-top:5px;line-height:1.5">En los meses que no tengan ese día se cobra el último (el 31 cae al 28 en febrero) y al siguiente vuelve al 31.</div>' +
+                '<div style="' + lbl + ';margin-top:16px">Días de tolerancia</div>' +
+                '<input id="cfgTolerancia" type="number" min="0" max="60" value="' + tol + '" style="' + inp + '">' +
+                '<div style="font-size:11.5px;color:var(--dim);margin-top:5px;line-height:1.5">Días que sigue operando después de la fecha de corte. Durante esos días ve un aviso, no un bloqueo.</div>' +
+                '<div style="' + lbl + ';margin-top:16px">Próximo cobro</div>' +
+                '<input id="cfgProximo" type="date" value="' + corte + '" style="' + inp + '">' +
+                '<div style="font-size:11.5px;color:var(--dim);margin-top:5px;line-height:1.5">Se puede ajustar a mano; normalmente lo mueve el botón de activar.</div>' +
+             '</div>',
+        onYes: async function () {
+            var dia = Math.min(31, Math.max(1, parseInt(document.getElementById('cfgDiaCobro').value, 10) || 1));
+            var tl  = Math.min(60, Math.max(0, parseInt(document.getElementById('cfgTolerancia').value, 10) || 0));
+            var px  = document.getElementById('cfgProximo').value || null;
+            var reg = { negocio_id: negId, dia_cobro: dia, dias_tolerancia: tl,
+                        proximo_cobro: px, updated_at: new Date().toISOString() };
+            // Sin fila previa hay que darle un estado, o la RLS guardaría un registro
+            // a medias que el gate leería como 'pendiente' sin querer.
+            if (!s.estado) reg.estado = px ? 'activa' : 'pendiente';
+            if (px) reg.activa_hasta = new Date(px + 'T12:00:00').toISOString();
+            var r = await _supabase.from('suscripciones').upsert(reg, { onConflict: 'negocio_id' });
+            if (r.error) { admAlert('No se pudo guardar: ' + r.error.message); return; }
+            _data.suscripciones[negId] = Object.assign({}, s, reg);
+            renderNegocios();
+        }
+    });
 }
 
 function cancelarSuscripcion(negId) {
