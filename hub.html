@@ -1017,7 +1017,7 @@ async function _gateSuscripcion(neg) {
     if (!neg || !neg.id) return;                              // hub general / sin negocio
     if (_sesion && _sesion.isAdmin) return;                  // admin maestro en modo negocio → libre
     var sub = await _leerSuscripcion(neg.id);
-    if (sub.ok) { _avisoTolerancia(neg, sub); _limpiarPagoURL(); return; } // activa o indeterminado
+    if (sub.ok) { _avisoTolerancia(neg, sub); _pintarProximoCobro(neg, sub); _limpiarPagoURL(); return; }
     /* VIENE DE PAGAR. Stripe regresa al dueño de inmediato, pero el aviso a nuestro
        webhook viaja aparte y tarda uno o dos segundos. Sin esperar, el que ACABA de
        pagar vería "tu suscripción venció" — la peor pantalla posible en ese momento.
@@ -1068,6 +1068,44 @@ async function _esperarPago(neg) {
     }
     _limpiarPagoURL();
     return false;
+}
+
+/* Cuándo es el próximo cobro y de cuánto, DENTRO de la app.
+   Hasta ahora ese dato solo vivía en el correo de Stripe, que se pierde entre
+   cincuenta más. El dueño no debería tener que buscar en su bandeja para saber
+   cuándo le van a cobrar y cuánto.
+   El importe se pide a /precios.js —la misma tabla que usa el panel—, así que si
+   el negocio tiene tres sucursales dice lo que de verdad se le va a cobrar.
+   No se pinta cuando ya venció: ahí manda la franja de tolerancia, que es más
+   urgente y se estorbarían. */
+function _pintarProximoCobro(neg, sub) {
+    var prev = document.getElementById('proximoCobro');
+    if (prev) prev.remove();
+    if (!sub || !sub.corte || sub.enTolerancia) return;
+    var e = window.EtaaxCore ? EtaaxCore.estadoCobro({
+        estado: 'activa', proximoCobro: sub.corte, diasTolerancia: 0
+    }) : null;
+    var dias = e ? e.diasRestantes : null;
+    if (dias === null || dias < 0) return;
+    var f = EtaaxCore.fechaLocal(sub.corte);
+    var cuando = f ? f.toLocaleDateString('es-MX', { day: 'numeric', month: 'long' }) : sub.corte;
+    // Por el helper de siempre, no leyendo localStorage a mano: si mañana cambia
+    // dónde viven las sucursales, este renglón no se queda mintiendo.
+    var nSucs = (typeof _getSucursales === 'function') ? _getSucursales(neg.id).length : 0;
+    var importe = (window.EtaaxPrecios && nSucs > 0) ? EtaaxPrecios.fmt(EtaaxPrecios.precioMensual(nSucs)) : '';
+    // "Faltan 0 días" se lee raro; el caso de hoy y el de mañana se dicen con palabras.
+    var falta = dias === 0 ? 'es hoy' : (dias === 1 ? 'es mañana' : 'en ' + dias + ' días');
+    var el = document.createElement('div');
+    el.id = 'proximoCobro';
+    el.style.cssText = 'margin:0 0 14px;padding:9px 14px;border:1px solid var(--b1);border-radius:9px;' +
+        'font-size:12.5px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+    el.innerHTML = '<span style="opacity:.75">💳 Tu próximo cobro ' + falta + ':</span> ' +
+        '<b style="color:var(--text)">' + _esc(cuando) + '</b>' +
+        (importe ? ' <span style="opacity:.75">·</span> <b style="color:var(--text)">' + _esc(importe) + '</b>' : '') +
+        (nSucs > 1 ? ' <span style="opacity:.6">(' + nSucs + ' sucursales)</span>' : '');
+    var cont = document.getElementById('viewModulos');
+    if (cont && cont.firstChild) cont.insertBefore(el, cont.firstChild);
+    else if (cont) cont.appendChild(el);
 }
 
 /* Franja de tolerancia: el pago venció pero el negocio SIGUE operando. Es la
@@ -1159,7 +1197,12 @@ function _mostrarBloqueo(neg, estado, sub) {
    precio de su posición. Tope de 10 sucursales en esta etapa.
    La CATEGORÍA (leyenda del badge) ya no se elige: se deriva del número de
    sucursales del negocio — 1-3 Pequeña Pyme · 4-7 Gran Pyme · 8+ Corporativo. */
-var PRECIO_PRIMERA_SUC = EtaaxPrecios.BASE, MAX_SUCURSALES = EtaaxPrecios.TOPE;
+/* TOPE ya NO es un máximo de sucursales: es dónde TERMINA la escalera del
+   descuento. De la 11ª en adelante cada sucursal cuesta lo mismo que la 10ª
+   ($1,449) y el negocio puede seguir abriendo las que quiera. Antes se bloqueaba
+   el alta ahí, y además el mensual se cortaba en $16,000 — o sea que el negocio
+   que más crecía era al que menos se le cobraba. */
+var PRECIO_PRIMERA_SUC = EtaaxPrecios.BASE, ESCALERA_HASTA = EtaaxPrecios.TOPE;
 function precioMensual(nSucs) { return EtaaxPrecios.precioMensual(nSucs); }
 function precioSucursalN(n) { return EtaaxPrecios.precioSucursal(n); }
 function _fmtPrecio(v) { return EtaaxPrecios.fmt(v); }
