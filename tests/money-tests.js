@@ -1610,8 +1610,21 @@ console.log('\n══ SUITE D · Cobro por sucursal (precios.js) ══');
         () => eq(P.precioMensual(4) - P.precioMensual(3), P.precioSucursal(4)));
 
     // Tope: pedir arriba de 10 no inventa precios ni sigue sumando.
-    test('la 11ª no se cobra sola (se cotiza a mano)', () => eq(P.precioSiguiente(10), 0));
-    test('mensual con 12 sucursales se corta en el de 10', () => eq(P.precioMensual(12), 16000));
+    /* De la 11ª en adelante el descuento SE CONGELA (cambio de modelo, ago 2026).
+       Antes precioMensual se cortaba en 10: un negocio con doce sucursales pagaba
+       lo mismo que uno con diez — se crecía en servicio sin crecer en ingreso. */
+    test('la 11ª cuesta lo mismo que la 10ª: el descuento se congela', () =>
+        eq(P.precioSucursal(11), 1449));
+    test('tras la 10ª, la siguiente ya no es "se cotiza a mano": suma $1,449', () =>
+        eq(P.precioSiguiente(10), 1449));
+    test('mensual con 11 sucursales = 16,000 + 1,449', () => eq(P.precioMensual(11), 17449));
+    test('mensual con 12 sucursales = 16,000 + dos veces 1,449', () => eq(P.precioMensual(12), 18898));
+    test('y sigue creciendo parejo: 15 sucursales = 16,000 + cinco veces 1,449', () =>
+        eq(P.precioMensual(15), 23245));
+    test('nadie paga menos por tener más: el mensual nunca baja al crecer', () => {
+        for (var n = 1; n <= 20; n++) if (P.precioMensual(n + 1) <= P.precioMensual(n)) return false;
+        return true;
+    });
     test('descuento promedio del paquete de 10 = 11.06%',
         () => eq(P.descuentoMensual(10), 11.0617, 'desc promedio'));
 })();

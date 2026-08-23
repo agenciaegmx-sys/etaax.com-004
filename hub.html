@@ -1176,8 +1176,8 @@ function _categoriaSesion() {
 // Legacy: el campo `plan` guardado en usuarios ya no gobierna precio ni límites,
 // pero se conserva para no romper cuentas/lecturas viejas (admin lo muestra).
 var PLANES = {
-    pyme: { nombre:'Pequeña Pyme', icon:'🏬', maxSucursales: MAX_SUCURSALES, precio:'$1,799', activo:true, color:'#f5c842', planClass:'plan-pyme' },
-    gran: { nombre:'Gran Pyme',    icon:'🏢', maxSucursales: MAX_SUCURSALES, precio:'$1,799', activo:true, color:'#c87a6a', planClass:'plan-gran' }
+    pyme: { nombre:'Pequeña Pyme', icon:'🏬', maxSucursales: 0, precio:'$1,799', activo:true, color:'#f5c842', planClass:'plan-pyme' },
+    gran: { nombre:'Gran Pyme',    icon:'🏢', maxSucursales: 0, precio:'$1,799', activo:true, color:'#c87a6a', planClass:'plan-gran' }
 };
 
 var TIPOS = {
@@ -1965,7 +1965,7 @@ function _migrarSucursalesLegacy(neg) {
 
 function _renderSucursales(neg) {
     var sucs  = _migrarSucursalesLegacy(neg);
-    var lleno = sucs.length >= MAX_SUCURSALES;
+    var lleno = false;   // ya no hay tope: siempre se puede abrir otra sucursal
     var color = neg.color || '#3dbe7a';
 
     var cat = categoriaNegocio(sucs.length || 1);
@@ -2039,7 +2039,7 @@ function _renderSucursales(neg) {
     document.getElementById('formNuevaSuc').style.display     = 'none';
     if (lleno) {
         document.getElementById('planLimitTextSuc').textContent =
-            'Máximo ' + MAX_SUCURSALES + ' sucursales por negocio en esta etapa de ETAAX';
+            'Máximo ' + ESCALERA_HASTA + ' sucursales por negocio en esta etapa de ETAAX';
     } else {
         // Publicidad del modelo por sucursal dentro del negocio
         // Cada sucursal nueva tiene SU precio (descuento creciente): se anuncia el
@@ -2530,7 +2530,6 @@ function crearSucursal() {
     var marca = _misNegocios()[0];
     if (!marca || !_sesion) return;
     var sucs = _getSucursales(marca.id);
-    if (sucs.length >= MAX_SUCURSALES) return;
     var inp    = document.getElementById('inSucNombre');
     var nombre = (inp.value || '').trim();
     if (!nombre) {

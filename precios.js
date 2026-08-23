@@ -26,19 +26,23 @@
    para abrir la segunda sucursal) y $40 de la 9ª a la 10ª, que es el que cuadra
    el paquete completo en $16,000 exactos.
 
-   Tope de 10 sucursales (primer año de producción). Un negocio con más se
-   cotiza a mano — por eso precioMensual() no inventa precios arriba de 10.
+   De la 11ª en adelante el descuento SE CONGELA: cada sucursal extra cuesta lo
+   mismo que la 10ª ($1,449). No hay tope de sucursales — un negocio puede seguir
+   abriendo y cada una se cobra a ese precio. (Antes precioMensual se cortaba en 10
+   y un negocio con doce pagaba lo mismo que uno con diez: se crecía en servicio
+   sin crecer en ingreso.) TOPE ya no es un máximo, es dónde TERMINA LA ESCALERA
+   del descuento.
    ============================================================================ */
 (function () {
     var BASE = 1799;                 // costo unitario de una sucursal, sin descuento
-    var TOPE = 10;                   // máximo de sucursales que el sistema cobra solo
+    var TOPE = 10;                   // hasta dónde baja el descuento; de ahí se congela
     // Costo de la N-ésima sucursal (índice 0 = la 1ª).
     var TABLA = [1799, 1699, 1669, 1639, 1609, 1579, 1549, 1519, 1489, 1449];
 
     function _n(x) { var v = parseInt(x, 10); return isNaN(v) ? 0 : v; }
 
-    // Costo mensual de la sucursal número n (1 = matriz). Fuera de rango se
-    // recorta al tope: pedir la 11ª devuelve el precio de la 10ª, no inventa.
+    // Costo mensual de la sucursal número n (1 = matriz). De la 11ª en adelante,
+    // el precio de la 10ª: la escalera termina ahí y el descuento se congela.
     function precioSucursal(n) {
         n = _n(n); if (n < 1) return 0;
         return TABLA[Math.min(n, TOPE) - 1];
@@ -54,23 +58,29 @@
         return p ? BASE - p : 0;
     }
     // Mensual del negocio = SUMA de los precios de cada sucursal (escalonado).
+    /* Mensual del negocio = SUMA de los precios de cada sucursal (escalonado).
+       NO se corta en 10: las de más allá suman al precio congelado de la 10ª.
+       Se calcula sin ciclo largo para que 200 sucursales no cuesten 200 vueltas. */
     function precioMensual(nSucs) {
-        nSucs = Math.min(_n(nSucs), TOPE);
-        var t = 0;
-        for (var i = 1; i <= nSucs; i++) t += precioSucursal(i);
+        nSucs = _n(nSucs);
+        if (nSucs < 1) return 0;
+        var enEscalera = Math.min(nSucs, TOPE), t = 0;
+        for (var i = 1; i <= enEscalera; i++) t += precioSucursal(i);
+        if (nSucs > TOPE) t += (nSucs - TOPE) * precioSucursal(TOPE);
         return t;
     }
     // Descuento promedio del paquete completo (lo que trae el negocio hoy).
     function descuentoMensual(nSucs) {
-        nSucs = Math.min(_n(nSucs), TOPE);
+        nSucs = _n(nSucs);
         if (nSucs < 1) return 0;
         var sinDesc = BASE * nSucs;
         return (sinDesc - precioMensual(nSucs)) / sinDesc * 100;
     }
     // Cuánto SUBE el mensual al agregar la siguiente sucursal (= precio de ésa).
+    // Cuánto SUBE el mensual al agregar la siguiente (= precio de ésa). Pasando la
+    // 10ª ya no devuelve 0 —eso era "se cotiza a mano"—, sino el precio congelado.
     function precioSiguiente(nSucsActuales) {
-        var n = _n(nSucsActuales) + 1;
-        return n > TOPE ? 0 : precioSucursal(n);
+        return precioSucursal(_n(nSucsActuales) + 1);
     }
     function fmt(v) { return '$' + Number(v || 0).toLocaleString('en-US'); }
     // "5.6%" — un decimal, sin ceros de relleno (5.56 → 5.6, 12.23 → 12.2).
