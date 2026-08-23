@@ -919,6 +919,49 @@ var ETAAX_CONTACTO = {
     whatsappMostrar: '+52 443 526 6424'  // cómo se ve en pantalla
 };
 
+/* ── PAGO CON TARJETA (Stripe) ────────────────────────────────────────────
+   Link de pago creado en el dashboard de Stripe. UNO solo para todos: a la URL
+   se le pega `client_reference_id` con el id del negocio, y así el webhook sabe
+   a quién aplicarle el mes. Sin ese parámetro, un link genérico deja el pago
+   huérfano y hay que casarlo a mano.
+   Vacío = todavía no configurado → la app sigue enseñando solo WhatsApp, sin
+   botones rotos. Cambiar el de prueba por el real al pasar a producción. */
+var ETAAX_PAGO = {
+    // OJO: este es el link de PRUEBA. Los objetos de test no existen en producción —
+    // al pasar a real hay que crear el link allá y cambiarlo aquí (ver docs/stripe-cobro.md).
+    link: 'https://buy.stripe.com/test_bJe00kea82B75ayavs7Re00',
+    etiqueta: 'Pagar con tarjeta'
+};
+/* ¿Se puede enseñar el botón de pago? Un link de PRUEBA en producción es peor que
+   no tener botón: el dueño mete su tarjeta real, Stripe la rechaza —en modo prueba
+   solo pasan las falsas— y se queda creyendo que su tarjeta falla. Así que mientras
+   el link sea de test, solo lo ve el admin maestro, que es quien está probando.
+   Con el link real (buy.stripe.com sin /test_), lo ve todo el mundo. */
+function _pagoVisible() {
+    if (!ETAAX_PAGO.link) return false;
+    var esPrueba = ETAAX_PAGO.link.indexOf('/test_') >= 0;
+    if (!esPrueba) return true;
+    try { return !!(_sesion && _sesion.isAdmin); } catch (e) { return false; }
+}
+// URL de pago de un negocio, o '' si aún no hay link configurado.
+function _linkPago(neg) {
+    if (!_pagoVisible() || !neg || !neg.id) return '';
+    var u = ETAAX_PAGO.link + (ETAAX_PAGO.link.indexOf('?') >= 0 ? '&' : '?') +
+            'client_reference_id=' + encodeURIComponent(neg.id);
+    // Pre-llenar el correo le ahorra un campo al dueño y amarra el pago a su cuenta.
+    try {
+        var em = _sesion && _sesion.email;
+        if (em) u += '&prefilled_email=' + encodeURIComponent(em);
+    } catch (e) {}
+    return u;
+}
+function _btnPagoHTML(neg, estilo) {
+    var u = _linkPago(neg);
+    if (!u) return '';
+    return '<a href="' + u + '" target="_blank" rel="noopener" style="' + (estilo || '') + '">💳 ' +
+           _esc(ETAAX_PAGO.etiqueta) + '</a>';
+}
+
 // Lee la suscripción del negocio. Devuelve { ok, estado, activaHasta, indeterminado }.
 // indeterminado=true cuando no se pudo verificar (sin sesión / error de red) →
 // en ese caso NO bloqueamos (fail-open) para no dejar fuera a un cliente que sí pagó.
@@ -973,8 +1016,57 @@ async function _gateSuscripcion(neg) {
     if (!neg || !neg.id) return;                              // hub general / sin negocio
     if (_sesion && _sesion.isAdmin) return;                  // admin maestro en modo negocio → libre
     var sub = await _leerSuscripcion(neg.id);
-    if (sub.ok) { _avisoTolerancia(neg, sub); return; }        // activa o indeterminado → dejar pasar
+    if (sub.ok) { _avisoTolerancia(neg, sub); _limpiarPagoURL(); return; } // activa o indeterminado
+    /* VIENE DE PAGAR. Stripe regresa al dueño de inmediato, pero el aviso a nuestro
+       webhook viaja aparte y tarda uno o dos segundos. Sin esperar, el que ACABA de
+       pagar vería "tu suscripción venció" — la peor pantalla posible en ese momento.
+       Se le espera un rato corto preguntando cada segundo; si de plano no llega,
+       cae al bloqueo normal, que ya trae los botones de pago y WhatsApp. */
+    if (_vieneDePagar()) {
+        var ok = await _esperarPago(neg);
+        if (ok) return;
+    }
     _mostrarBloqueo(neg, sub.estado, sub);
+}
+
+// ¿La URL trae la marca que le pusimos al redirect de Stripe?
+function _vieneDePagar() {
+    try {
+        var q = new URLSearchParams(location.search);
+        return q.get('pago') === 'ok' || !!q.get('session_id');
+    } catch (e) { return false; }
+}
+// Se quita para que un refresco (o un marcador guardado) no vuelva a entrar en la espera.
+function _limpiarPagoURL() {
+    if (!_vieneDePagar()) return;
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+}
+/* Pantalla de "confirmando" mientras el webhook aterriza. 15 intentos de 1 s: más
+   que suficiente para el camino normal, y con tope para no dejar a nadie girando
+   para siempre si el webhook de plano falló. */
+async function _esperarPago(neg) {
+    var v = document.getElementById('viewBloqueado');
+    if (v) {
+        v.innerHTML =
+            '<div style="max-width:420px;margin:0 auto;text-align:center;padding:64px 24px">' +
+                '<div style="font-size:46px;margin-bottom:12px">💳</div>' +
+                '<h2 style="font-family:\'Bebas Neue\',sans-serif;font-size:26px;letter-spacing:1px;color:var(--text);margin:0 0 8px">Confirmando tu pago</h2>' +
+                '<p style="color:var(--muted);font-size:14px;line-height:1.6;margin:0">Ya casi. Esto tarda unos segundos — no cierres la ventana.</p>' +
+            '</div>';
+        showView('viewBloqueado');
+    }
+    for (var i = 0; i < 15; i++) {
+        await new Promise(function (r) { setTimeout(r, 1000); });
+        var s = await _leerSuscripcion(neg.id);
+        if (s.ok) {
+            _limpiarPagoURL();
+            // Recargar es lo más limpio: el hub se re-arma completo, ya activo.
+            location.replace(location.pathname);
+            return true;
+        }
+    }
+    _limpiarPagoURL();
+    return false;
 }
 
 /* Franja de tolerancia: el pago venció pero el negocio SIGUE operando. Es la
@@ -992,9 +1084,11 @@ function _avisoTolerancia(neg, sub) {
     el.id = 'avisoTolerancia';
     el.style.cssText = 'margin:0 0 16px;padding:12px 16px;border:1px solid #f5c842;' +
         'background:rgba(245,200,66,.08);border-radius:10px;font-size:13px;color:var(--text);line-height:1.6';
+    var _pago = _btnPagoHTML(neg, 'color:#a89dff;font-weight:600;text-decoration:none');
     el.innerHTML = '<b style="color:#f5c842">Tu pago venció' +
         (sub.diasVencido > 0 ? ' hace ' + sub.diasVencido + (sub.diasVencido === 1 ? ' día' : ' días') : '') + '.</b> ' +
         cuando + ' para ponerte al corriente antes de que se pause el acceso. ' +
+        (_pago ? _pago + ' <span style="color:var(--dim)">·</span> ' : '') +
         '<a href="' + wa + '" target="_blank" rel="noopener" style="color:#25d366;font-weight:600;text-decoration:none">Escríbeme por WhatsApp →</a>';
     var cont = document.getElementById('viewModulos');
     if (cont && cont.firstChild) cont.insertBefore(el, cont.firstChild);
@@ -1008,11 +1102,20 @@ function _mostrarBloqueo(neg, estado, sub) {
         ? ' Lleva ' + sub.diasVencido + (sub.diasVencido === 1 ? ' día' : ' días') +
           ' vencido, incluyendo los días de tolerancia.'
         : '';
+    /* El texto cambia según haya o no forma de pagar solo. Mientras el cobro no
+       estaba conectado, la única salida era escribirle a Edwin y así lo decía. Con
+       el botón de pago disponible, mandar a "contáctame" pone un humano en medio de
+       algo que el dueño puede resolver en dos minutos a las 11 de la noche. */
+    var _hayPago = !!_linkPago(neg);
     var copia = {
-        pendiente: { icon:'⏳', titulo:'Tu cuenta está en revisión',
-            msg:'Tu negocio se registró correctamente. Para activar el servicio, contáctame y coordinamos la activación de tu mes.' },
+        pendiente: { icon:'⏳', titulo: _hayPago ? 'Activa tu cuenta' : 'Tu cuenta está en revisión',
+            msg: _hayPago
+                ? 'Tu negocio quedó registrado. Paga tu primer mes y el sistema se abre al instante.'
+                : 'Tu negocio se registró correctamente. Para activar el servicio, contáctame y coordinamos la activación de tu mes.' },
         vencida:   { icon:'🔔', titulo:'Tu suscripción venció',
-            msg:'El acceso a tu negocio está pausado.' + _desde + ' Contáctame para renovar tu mes y reactivarlo al instante.' },
+            msg:'El acceso a tu negocio está pausado.' + _desde +
+                (_hayPago ? ' Paga tu mes y se reactiva al instante.'
+                          : ' Contáctame para renovar tu mes y reactivarlo al instante.') },
         cancelada: { icon:'🚫', titulo:'Tu suscripción está cancelada',
             msg:'El acceso a tu negocio está desactivado. Si quieres reactivarlo, ponte en contacto conmigo.' }
     }[estado] || { icon:'🔒', titulo:'Acceso no disponible',
@@ -1031,6 +1134,9 @@ function _mostrarBloqueo(neg, estado, sub) {
             '<h2 style="font-family:\'Bebas Neue\',sans-serif;font-size:30px;letter-spacing:1px;color:var(--text);margin:0 0 10px">' + copia.titulo + '</h2>' +
             '<p style="color:var(--muted);font-size:14px;line-height:1.6;margin:0 0 26px">' + copia.msg + '</p>' +
             '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:22px">' +
+                // El pago va PRIMERO: es lo que desbloquea al negocio al instante.
+                // WhatsApp queda para dudas, no como único camino.
+                _btnPagoHTML(neg, 'background:#635bff;color:#fff;text-decoration:none;font-weight:600;padding:14px;border-radius:10px;font-size:15px;display:block') +
                 '<a href="' + waLink + '" target="_blank" rel="noopener" style="background:#25d366;color:#0a0908;text-decoration:none;font-weight:600;padding:14px;border-radius:10px;font-size:15px">💬 Escríbeme por WhatsApp</a>' +
                 '<a href="mailto:' + ETAAX_CONTACTO.email + '?subject=' + encodeURIComponent('Activar suscripción ETAAX') + '" style="background:var(--s2);border:1px solid var(--b1);color:var(--text);text-decoration:none;font-weight:500;padding:13px;border-radius:10px;font-size:14px">✉️ ' + ETAAX_CONTACTO.email + '</a>' +
             '</div>' +

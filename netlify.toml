@@ -57,6 +57,17 @@
   status = 404
   force = true
 
+# El CÓDIGO de las Edge Functions vive en el repo y Netlify publica la raíz tal
+# cual: sin esto, /supabase/functions/stripe-webhook/index.ts se descarga desde el
+# sitio. No trae secretos (esos viven en Supabase), pero sí enseña la mecánica del
+# cobro y qué eventos se aceptan — información de más para quien quiera empujarle
+# un webhook falso.
+[[redirects]]
+  from = "/supabase/*"
+  to = "/index.html"
+  status = 404
+  force = true
+
 [[redirects]]
   from = "/docs/*"
   to = "/index.html"
