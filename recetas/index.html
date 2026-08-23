@@ -736,6 +736,21 @@
                     </select>
                 </div>
             </div>
+            <!-- Selección múltiple: la selección se ACUMULA entre filtros a propósito.
+                 El caso real es imprimir el escandallo de varios grupos: filtras uno,
+                 seleccionas lo visible, cambias de grupo, seleccionas lo visible otra
+                 vez, e imprimes todo junto. Por eso "Seleccionar visibles" nunca borra
+                 lo de antes y existe "Quitar selección" para empezar de cero. -->
+            <div id="barraSelRecetas" style="display:none;gap:8px;align-items:center;flex-wrap:wrap;padding:0 20px 12px">
+                <span id="selRecCount" style="font-size:12px;color:var(--text-muted)"></span>
+                <button onclick="selRecetasVisibles()" title="Selecciona solo lo que está a la vista con los filtros puestos"
+                    style="padding:5px 13px;border-radius:20px;border:1.5px solid var(--green);background:rgba(61,190,122,.10);color:var(--green);font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit">
+                    <span id="selRecVisiblesTxt">Seleccionar visibles</span></button>
+                <button onclick="quitarSelRecetasVisibles()" title="Quita de la selección solo lo que está a la vista"
+                    style="padding:5px 13px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit">Quitar visibles</button>
+                <button onclick="limpiarSelRecetas()" title="Vacía la selección completa"
+                    style="padding:5px 13px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-dim);font-size:11.5px;font-weight:500;cursor:pointer;font-family:inherit">✕ Borrar selección</button>
+            </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;padding:4px 20px 14px">
                 <button id="rp-todas" onclick="filtroRecetaTipo='';filtroRecetaGrupo='';filtroRecetaCat='';_limpiarMultiRec();renderGridRecetas();_activarPillReceta('todas')"
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--green);background:rgba(61,190,122,0.12);color:var(--green);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s">Todas</button>
@@ -3431,6 +3446,7 @@ function renderGridRecetas() {
 
     lista = _ordenarRecetas(lista);
     _pintarOrdenRec();
+    _recetasVisibles = lista;   // lo que se ve con los filtros puestos (ver selRecetasVisibles)
 
     const iconos = { alimentos:'🍽️', 'sub-alimentos':'🥣', bebidas:'🥃', 'sub-bebidas':'🧃' };
     const grid   = document.getElementById('gridRecetas');
@@ -3447,6 +3463,7 @@ function renderGridRecetas() {
     if (vistaRecetas === 'lista') {
         renderListaRecetas(lista, iconos, _catGlobal, _sucAct);
         if (btnImp) btnImp.style.display = recetasSeleccionadas.size > 0 ? 'inline-flex' : 'none';
+        _pintarBarraSelRecetas();
         return;
     }
     grid.style.display = 'grid';
@@ -3492,6 +3509,7 @@ function renderGridRecetas() {
     // Mostrar botón imprimir selección
     if (btnImp) btnImp.style.display = recetasSeleccionadas.size > 0
         ? 'inline-flex' : 'none';
+    _pintarBarraSelRecetas();
     _engancharOrdenRec();
 }
 
@@ -3553,7 +3571,12 @@ function renderListaRecetas(lista, iconos, catGlobal, sucAct) {
     grid.innerHTML =
         '<table style="width:100%;border-collapse:collapse">' +
             '<thead><tr>' +
-                '<th style="'+th+'"></th>' +
+                // Marca/desmarca TODO LO VISIBLE (no el catálogo entero). Sale en
+                // indeterminado cuando solo una parte de lo filtrado está marcada.
+                '<th style="'+th+';width:34px"><input type="checkbox" id="chkSelTodasRecetas" ' +
+                    'onclick="event.stopPropagation();toggleSelTodasRecetas(this.checked)" ' +
+                    'title="Seleccionar todo lo visible" ' +
+                    'style="width:15px;height:15px;accent-color:var(--green);cursor:pointer"></th>' +
                 '<th style="'+th+'">Receta</th>' +
                 '<th style="'+th+'">Grupo</th>' +
                 '<th style="'+th+'">Categoría</th>' +
@@ -3568,6 +3591,57 @@ function toggleSeleccion(id, card) {
     if (recetasSeleccionadas.has(id)) recetasSeleccionadas.delete(id);
     else recetasSeleccionadas.add(id);
     renderGridRecetas();
+}
+
+/* ── Selección múltiple del catálogo ──────────────────────────────────────
+   `_recetasVisibles` es LO QUE SE VE con los filtros puestos (grupo, categoría,
+   tipo, búsqueda, estado). Todas las acciones de aquí trabajan sobre esa lista,
+   nunca sobre el catálogo completo: "seleccionar todo" con un grupo filtrado
+   tiene que seleccionar ese grupo y nada más — es el mismo criterio que ya usa
+   el catálogo de insumos con su _listaFiltrada. */
+var _recetasVisibles = [];
+function selRecetasVisibles() {
+    _recetasVisibles.forEach(function (r) { recetasSeleccionadas.add(r.id); });
+    renderGridRecetas();
+}
+function quitarSelRecetasVisibles() {
+    _recetasVisibles.forEach(function (r) { recetasSeleccionadas.delete(r.id); });
+    renderGridRecetas();
+}
+function limpiarSelRecetas() {
+    recetasSeleccionadas.clear();
+    renderGridRecetas();
+}
+// Checkbox del encabezado en vista lista: marca/desmarca lo visible.
+function toggleSelTodasRecetas(on) {
+    if (on) selRecetasVisibles(); else quitarSelRecetasVisibles();
+}
+/* Pinta la barra. Se separa lo VISIBLE seleccionado del total porque con filtros
+   puestos son dos números distintos, y no decirlo es cómo se imprime de más:
+   "12 de 40" con 3 seleccionadas fuera de la vista. */
+function _pintarBarraSelRecetas() {
+    var barra = document.getElementById('barraSelRecetas');
+    if (!barra) return;
+    var vis   = _recetasVisibles.length;
+    var visSel = _recetasVisibles.filter(function (r) { return recetasSeleccionadas.has(r.id); }).length;
+    var total = recetasSeleccionadas.size;
+    barra.style.display = vis ? 'flex' : 'none';
+    var cnt = document.getElementById('selRecCount');
+    if (cnt) {
+        cnt.innerHTML = total
+            ? '<b style="color:var(--green)">' + total + '</b> seleccionada' + (total !== 1 ? 's' : '') +
+              (total > visSel ? ' <span style="color:var(--text-dim)">(' + visSel + ' a la vista, ' +
+                                (total - visSel) + ' fuera del filtro)</span>' : '')
+            : '<span style="color:var(--text-dim)">Selecciona recetas para imprimir su escandallo en lote</span>';
+    }
+    var t = document.getElementById('selRecVisiblesTxt');
+    if (t) t.textContent = 'Seleccionar visibles (' + vis + ')';
+    // Checkbox del encabezado de la lista
+    var chk = document.getElementById('chkSelTodasRecetas');
+    if (chk) {
+        chk.checked = vis > 0 && visSel === vis;
+        chk.indeterminate = visSel > 0 && visSel < vis;
+    }
 }
 
 // ── Ficha técnica ─────────────────────────────────────────────
@@ -4134,7 +4208,19 @@ function ejecutarImpresion(modo) {
 
 function imprimirSeleccionadas() {
     if (!recetasSeleccionadas.size) return;
-    _imprimirIds = [...recetasSeleccionadas];
+    /* En el ORDEN DEL CATÁLOGO, no en el orden en que se fue dando clic. Un Set
+       conserva el orden de inserción, así que un lote de 30 escandallos salía
+       revuelto — que es justo lo contrario de para lo que sirve imprimir por
+       grupos. Se respeta el criterio de orden elegido en la vista (alfabético,
+       por grupo, a mano) y lo que quedó fuera del filtro va al final. */
+    var vis = (_recetasVisibles || []).filter(function (r) { return recetasSeleccionadas.has(r.id); });
+    var enVis = {};
+    vis.forEach(function (r) { enVis[r.id] = 1; });
+    var fuera = _ordenarRecetas(getRecetas().filter(function (r) {
+        return recetasSeleccionadas.has(r.id) && !enVis[r.id];
+    }));
+    _imprimirIds = vis.map(function (r) { return r.id; })
+                      .concat(fuera.map(function (r) { return r.id; }));
     document.getElementById('modalImpresion').style.display = 'flex';
 }
 

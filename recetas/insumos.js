@@ -2412,11 +2412,24 @@
        }
    });
 
+   /* Nombre del insumo en el header fijo. Se pinta al abrir y en cada tecla del
+      campo de nombre: bajando por presentaciones y costos, el encabezado dejaba de
+      decir QUÉ se está editando — y con varios insumos parecidos (mismo producto,
+      otra marca) es fácil guardar sobre el equivocado. */
+   window._pintarNombreHd = function (v) {
+       var el = document.getElementById('insNombreHd');
+       if (!el) return;
+       var t = String(v || '').trim();
+       el.textContent = t;
+       el.style.display = t ? 'block' : 'none';
+   };
+
    function abrirModal(ins = null, familiaDefault = '', categoriaDefault = '') {
        editandoId = ins ? ins.id : null;
        const cfg = TIPO_CONFIG[tipoInsumoActual] || TIPO_CONFIG['destilado'];
        const tituloTipo = ins ? 'Editar insumo' : `Nuevo insumo · ${cfg.icon} ${cfg.label}`;
        document.getElementById('modalTitulo').textContent = tituloTipo;
+       _pintarNombreHd(ins ? (ins.nombre || '') : '');
        var _sl = document.getElementById('insSello');
        if (_sl) _sl.innerHTML = ins ? _selloHTML(ins) : '';
    

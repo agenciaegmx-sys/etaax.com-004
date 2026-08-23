@@ -1242,6 +1242,37 @@ function _unoPorProducto(cat, preferirMaestro) {
 // Busca la presentación más relevante: primero la que tiene umContenido != PZA
 // (porque contNeto está en ML/G), luego cualquiera con contNeto > 0.
 // Devuelve 0 si no hay datos suficientes.
+/* Sub-unidades de un insumo (tercer nivel del empaque), o null si no las declara.
+   Devuelve el nombre con el que el negocio las llamó ("Tostadas") y cuánto pesa una,
+   que es lo que el escandallo necesita para ofrecerlas como unidad de medida.
+   `contSub` es el dato bueno; en registros viejos solo existía `contNeto` (el total
+   de la pieza) y se deriva dividiendo, igual que hace el propio catálogo. */
+function getSubUnidadInsumo(insumoId) {
+    if (!insumoId) return null;
+    var ins = (typeof window._insumoResolver === 'function')
+        ? window._insumoResolver(insumoId)
+        : getCatalogoInsumos().find(function (x) { return x.id === insumoId; });
+    var p = ins && (ins.presentaciones || [])[0];
+    if (!p) return null;
+    var n = parseFloat(p.unidadesPorPieza) || 0;
+    if (!(n > 1)) return null;
+    var costo = parseFloat(p.costoSubUnidad) || 0;
+    if (!(costo > 0)) return null;
+    var cada = (p.contSub !== undefined && p.contSub !== '')
+        ? parseFloat(p.contSub) || 0
+        : (parseFloat(p.contNeto) || 0) / n;
+    var nombre = (p.nombreSubUnidad || '').trim() || 'Sub-unidad';
+    return { nombre: nombre, singular: nombre.replace(/s$/i, ''), porPieza: n,
+             costo: costo, cada: cada, um: (p.umContenido || 'G').toUpperCase() };
+}
+// Peso bruto (ml/g) que aporta UNA sub-unidad.
+function _contSubBrutoML(insumoId) {
+    var s = getSubUnidadInsumo(insumoId);
+    if (!s || !(s.cada > 0)) return 0;
+    var f = { ML:1, LT:1000, G:1, KG:1000, OZ:29.5735 }[s.um];
+    return s.cada * (f || 1);
+}
+
 function getContenidoPorPieza(insumoId) {
     if (!insumoId) return 0;
     const ins = getCatalogoInsumos().find(x => x.id === insumoId);
@@ -1282,6 +1313,13 @@ function getCostoParaUnidad(insumo, unidadEscandallo) {
     }
     const p   = pres[0];
     if (!p) return 0;
+    /* SUBUNIDAD = el tercer nivel del empaque. Un paquete de 11 bolsas y cada bolsa
+       con 40 tostadas: PZA es la BOLSA ($49) y la tostada es con lo que de verdad
+       se cocina ($1.225). Ese costo ya lo calcula el catálogo (costoSubUnidad); lo
+       que faltaba era que el escandallo pudiera pedirlo — sin él, cobrar una tostada
+       obligaba a poner los 40 G a mano y a rehacer la cuenta cada vez que cambia el
+       precio de compra. getFactor no divide esta unidad: va pieza a pieza, como PZA. */
+    if (umEs === 'SUBUNIDAD') return parseFloat(p.costoSubUnidad) || 0;
     const cu   = parseFloat(p.costoUnitario) || parseFloat(p.precio) || 0;
     if (!cu) return 0;
     const umCu = (p.umCosto || 'LT').toUpperCase();
@@ -1371,6 +1409,11 @@ function getPesoBrutoPorUnidad(ing) {
         if (umC === 'LT' || umC === 'ML') return OZ_ML; // 1 porción = 1 OZ
         return getContenidoPorPieza(ing.insumoId); // otros
     }
+    /* SUBUNIDAD: lo que aporta UNA sub-unidad. OJO con la diferencia — el catálogo
+       guarda `contNeto` como el total de la PIEZA (1600 g la bolsa) y `contSub` como
+       el de cada sub-unidad (40 g la tostada). Usar contNeto aquí metería la bolsa
+       entera al peso bruto por cada tostada de la receta. */
+    if (u === 'SUBUNIDAD') return _contSubBrutoML(ing.insumoId);
     // PZA o CARGA → contenido real de la pieza
     return getContenidoPorPieza(ing.insumoId);
 }
@@ -1570,9 +1613,20 @@ function renderTabla() {
             '<td><input type="text" value="'+ing.desc+'" placeholder="Detalle" oninput="updateIng('+i+',\'desc\',this.value)"></td>' +
             '<td><input type="number" value="'+ing.cantidad+'" min="0" step="1" oninput="updateIng('+i+',\'cantidad\',parseFloat(this.value)||0)"></td>' +
             '<td><select onchange="updateUnidad('+i+',this.value)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-family:\'DM Sans\',sans-serif;font-size:13px;outline:none;">' +
+                /* La sub-unidad aparece SOLO si el insumo vinculado la declara, y se
+                   muestra con el nombre que le puso el negocio ("TOSTADA"), no con una
+                   etiqueta genérica: es la unidad con la que se cocina. Sin ella, para
+                   costear una tostada había que escribir sus gramos a mano y rehacer la
+                   cuenta cada vez que subía el precio de compra. */
                 ['ML','LT','G','KG','PZA','CARGA','OZ','PORCION'].map(u =>
                     '<option value="'+u+'"'+(ing.unidad===u?' selected':'')+'>'+u+'</option>'
                 ).join('') +
+                (function(){
+                    var s = getSubUnidadInsumo(ing.insumoId);
+                    if (!s && ing.unidad !== 'SUBUNIDAD') return '';
+                    var et = s ? s.singular.toUpperCase() : 'SUB-UNIDAD';
+                    return '<option value="SUBUNIDAD"'+(ing.unidad==='SUBUNIDAD'?' selected':'')+'>'+etx(et)+'</option>';
+                })() +
             '</select></td>' +
             '<td><div style="display:flex;align-items:center;gap:4px">' +
                 '<span style="color:var(--amber);font-size:14px">$</span>' +

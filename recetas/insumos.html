@@ -242,6 +242,11 @@
         <div class="modal-header">
             <div style="min-width:0">
                 <h2 id="modalTitulo">Nuevo insumo</h2>
+                <!-- Nombre del insumo en el header FIJO: al bajar por presentaciones,
+                     costos y stock, "Editar insumo" solo no dice cuál se está editando.
+                     Se actualiza mientras se escribe (ver #ins-nombre). -->
+                <div id="insNombreHd" style="font-size:12.5px;color:var(--accent);font-weight:600;
+                     margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:52vw"></div>
                 <!-- Sello de auditoría: cuándo se tocó por última vez y quién -->
                 <div id="insSello" style="margin-top:2px"></div>
             </div>
@@ -294,7 +299,7 @@
                     <div class="meta-grid" style="grid-template-columns:1fr 1fr">
                         <div class="meta-item" id="row-nombre" style="grid-column:span 2">
                             <label>Nombre base *</label>
-                            <input type="text" id="ins-nombre" placeholder="Solo el nombre. Ej. Tanqueray, Havana, Carpano">
+                            <input type="text" id="ins-nombre" placeholder="Solo el nombre. Ej. Tanqueray, Havana, Carpano" oninput="_pintarNombreHd(this.value)">
                         </div>
                         <div class="meta-item" id="row-variedad">
                             <label id="lbl-variedad">Variedad</label>

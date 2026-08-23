@@ -486,6 +486,30 @@ function ingredienteML(cantidad, unidad) {
     return cantidad;
 }
 
+/* SUB-UNIDADES DEL EMPAQUE (tercer nivel) ────────────────────────────────
+   El escandallo puede costear por sub-unidad: un paquete de 11 bolsas, cada bolsa
+   con 40 tostadas, y la receta lleva "1 TOSTADA". Para el INVENTARIO eso hay que
+   traducirlo a la unidad base del insumo — sin esto, `ingredienteML` cae a su rama
+   por default y una tostada descontaría 1 ml en vez de sus 40 g.
+   Se normaliza aquí, antes de acumular, para que todo lo de abajo siga viendo
+   gramos y mililitros como siempre. */
+function _normIngrediente(ing) {
+    var cant = parseFloat(ing && ing.cantidad) || 0;
+    var uni  = (ing && ing.unidad || '').toUpperCase();
+    if (uni !== 'SUBUNIDAD') return { cant: cant, unidad: ing && ing.unidad };
+    var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(ing.insumoId) : null;
+    var p   = ins && (ins.presentaciones || [])[0];
+    if (!p) return { cant: cant, unidad: 'G' };
+    var n    = parseFloat(p.unidadesPorPieza) || 0;
+    // `contSub` es el contenido de UNA sub-unidad; en registros viejos solo había
+    // `contNeto` (el total de la pieza) y se deriva dividiendo, igual que el catálogo.
+    var cada = (p.contSub !== undefined && p.contSub !== '')
+        ? parseFloat(p.contSub) || 0
+        : (n > 1 ? (parseFloat(p.contNeto) || 0) / n : 0);
+    if (!(cada > 0)) return { cant: cant, unidad: 'G' };
+    return { cant: cant * cada, unidad: (p.umContenido || 'G').toUpperCase() };
+}
+
 // ¿El inventario x puede servir de REFERENCIA (existencia anterior)?
 // Sirve cualquier inventario ANTERIOR con datos capturados: cerrado, primer
 // levantamiento (línea base), O un intermedio ABIERTO que ya se contó. Antes solo
@@ -659,7 +683,10 @@ function _consumoIdx() {
         (r.ingredientes || []).forEach(function(ing){
             var id = ing.insumoId; if (!id) return;
             id = _canonInsumoId(id) || id;
-            var cant = parseFloat(ing.cantidad) || 0, u = (ing.unidad || '').toUpperCase();
+            // Sub-unidad → unidad base antes de acumular (ver _normIngrediente).
+            var _nz = _normIngrediente(ing);
+            var cant = _nz.cant, u = (_nz.unidad || '').toUpperCase();
+            ing = { insumoId: ing.insumoId, cantidad: cant, unidad: _nz.unidad };
             /* Un PREBATCH se acumula ADEMÁS bajo su sub-receta. El id del insumo no
                sirve de identidad: al convertir una sub-receta a insumo el registro
                no lleva origenId, así que dos conversiones (una por sucursal, o una
@@ -831,8 +858,10 @@ function consumoBasesPorProduccion(insumoId) {
         var sr = (window._recetaResolver ? window._recetaResolver(pre.recetaId) : getRecetas().find(function(r){ return r.id === pre.recetaId; }));
         if (!sr) return;
         (sr.ingredientes || []).forEach(function(ing){
-            if (ing && ing.insumoId && (_canonInsumoId(ing.insumoId) || ing.insumoId) === canon)
-                total += ingredienteBase(parseFloat(ing.cantidad) || 0, ing.unidad) * n; // x batch x #batches
+            if (ing && ing.insumoId && (_canonInsumoId(ing.insumoId) || ing.insumoId) === canon) {
+                var _z = _normIngrediente(ing);           // sub-unidad → unidad base
+                total += ingredienteBase(_z.cant, _z.unidad) * n; // x batch x #batches
+            }
         });
     });
     return total; // unidad base del ingrediente (ml / g / pza)
@@ -935,10 +964,11 @@ function consumoBasesPorProduccionDetalle(insumoId) {
             // Por id canónico: la sub-receta puede apuntar a la COPIA por sucursal
             // mientras la fila del inventario usa el MAESTRO.
             if ((_canonInsumoId(ing.insumoId) || ing.insumoId) !== canon) return;
-            var cant = parseFloat(ing.cantidad) || 0;
-            var u = (ing.unidad || '').toUpperCase();
+            var _z2 = _normIngrediente(ing);              // sub-unidad → unidad base
+            var cant = _z2.cant;
+            var u = (_z2.unidad || '').toUpperCase();
             if (u === 'PZA' || u === 'PZ' || u === '') out.pza += cant * n;
-            else                                        out.ml  += ingredienteBase(cant, ing.unidad) * n;
+            else                                        out.ml  += ingredienteBase(cant, _z2.unidad) * n;
         });
     });
     return out;
@@ -1002,7 +1032,8 @@ function _repartoPrebatch() {
         // de alcoholes (bug: repartía 2500 entre 120 → 1250 c/u en vez de ~127 c/u).
         var partes = [], total = 0;
         (sr.ingredientes || []).forEach(function(ing){
-            var b = ingredienteBase(parseFloat(ing.cantidad) || 0, ing.unidad); // → ml/g base
+            var _z3 = _normIngrediente(ing);                       // sub-unidad → unidad base
+            var b = ingredienteBase(_z3.cant, _z3.unidad); // → ml/g base
             if (b <= 0) return;
             total += b;                                        // todos cuentan para el rendimiento
             if (ing.insumoId) partes.push({ id: ing.insumoId, b: b }); // solo los ligados se reparten
