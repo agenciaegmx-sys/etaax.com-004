@@ -1629,6 +1629,55 @@ console.log('\n══ SUITE D · Cobro por sucursal (precios.js) ══');
         () => eq(P.descuentoMensual(10), 11.0617, 'desc promedio'));
 })();
 
+/* ═══════════ SUITE H · SUELDO DIARIO Y SALARIO MÍNIMO (diario.html) ═══════════
+   El "salario mínimo" del negocio era solo un pre-llenado del formulario: se ponía
+   en el campo al dar de alta a alguien y ya. Quien se dio de alta ANTES de
+   definirlo, o se guardó sin sueldo, llegaba al pago de nómina con CERO — y un
+   cero en esa columna se lee como un dato real, no como un dato faltante.
+   Ahora el mínimo es el piso que aplica mientras nadie ponga otra cosa. */
+console.log('\n══ SUITE H · Sueldo diario y salario mínimo (diario.html) ══');
+(function () {
+    // El mínimo vive en /nomina-params.js, que diario.html carga aparte. Sin él,
+    // _nomParams() cae a su propio default de 0 y los tests medirían otra cosa.
+    cargarJS(A, 'nomina-params.js');
+    A._storage['etaax_negT_nomina_params'] = JSON.stringify({ salarioDiarioDefault: 280 });
+
+    test('sueldo diario propio: manda sobre el mínimo', () =>
+        eq(A._sueldoDiarioEfectivo({ esquemaSueldo: 'diario', sueldoDiario: 450 }), 450));
+    test('salario por periodo: mensual se divide entre 30', () =>
+        eq(A._sueldoDiarioEfectivo({ salarioBase: 9000, periodicidad: 'mensual' }), 300));
+    test('salario por periodo: quincenal entre 15', () =>
+        eq(A._sueldoDiarioEfectivo({ salarioBase: 4500, periodicidad: 'quincenal' }), 300));
+    test('salario por periodo: semanal entre 7', () =>
+        eq(A._sueldoDiarioEfectivo({ salarioBase: 2100, periodicidad: 'semanal' }), 300));
+
+    /* El caso que estaba roto y que se veía como un dato bueno. */
+    test('sin sueldo capturado: aplica el MÍNIMO del negocio, no cero', () =>
+        eq(A._sueldoDiarioEfectivo({ nombre: 'recién dado de alta' }), 280));
+    test('esquema diario pero sin monto: también cae al mínimo', () =>
+        eq(A._sueldoDiarioEfectivo({ esquemaSueldo: 'diario', sueldoDiario: 0 }), 280));
+    test('salario base en 0 con periodicidad puesta: cae al mínimo, no a 0/30', () =>
+        eq(A._sueldoDiarioEfectivo({ salarioBase: 0, periodicidad: 'mensual' }), 280));
+
+    /* Que se pueda DECIR de dónde salió el número: pagar el mínimo a propósito y
+       pagarlo porque nadie configuró el sueldo se ven idénticos en la lista. */
+    test('se distingue el sueldo propio del mínimo heredado', () => {
+        return eq(A._sueldoEsDelMinimo({ esquemaSueldo: 'diario', sueldoDiario: 450 }), false)
+            && eq(A._sueldoEsDelMinimo({ salarioBase: 9000, periodicidad: 'mensual' }), false)
+            && eq(A._sueldoEsDelMinimo({ nombre: 'sin nada' }), true);
+    });
+
+    /* Sin mínimo definido no se inventa nada: el cero sigue siendo cero, y el
+       renglón no se marca como "mínimo del negocio" porque no hay tal. */
+    test('sin mínimo definido, quien no tiene sueldo sigue en 0', () => {
+        A._storage['etaax_negT_nomina_params'] = JSON.stringify({ salarioDiarioDefault: 0 });
+        const r = eq(A._sueldoDiarioEfectivo({ nombre: 'sin nada' }), 0)
+               && eq(A._sueldoEsDelMinimo({ nombre: 'sin nada' }), false);
+        A._storage['etaax_negT_nomina_params'] = JSON.stringify({ salarioDiarioDefault: 280 });
+        return r;
+    });
+})();
+
 /* ═══════════ SUITE G · COBRO DE LA SUSCRIPCIÓN (etaax-core.js) ═══════════
    Fecha de corte y días de tolerancia. Es aritmética de calendario, que es donde
    se rompen las cosas en silencio: el día 31 en febrero, el corrimiento de zona

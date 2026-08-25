@@ -5241,7 +5241,12 @@ function _abrirSelectorPagoReal(tipo){
             body.innerHTML=staff.map(function(s){
                 var sub=(s.puesto?_esc(s.puesto)+' · ':'')+(catLbl[_ggStaffCat(s)]||'');
                 if(!_sucAct) sub+=' · <span style="color:#7ab8f5">'+_esc(_sucNombreDx(s.sucursalId))+'</span>';
-                return _selRow('abrirPagoNomina(\''+s.id+'\')', _esc(s.nombre), sub, fmtM(_sueldoDiarioEfectivo(s)), '≈ sueldo diario');
+                /* Se dice cuándo el sueldo sale del mínimo del negocio y no de su
+                   ficha: pagarle el mínimo a propósito y pagárselo porque nadie le
+                   configuró el sueldo se ven idénticos en la lista, y el segundo es
+                   un error que conviene notar ANTES de pagar. */
+                var _lbl = _sueldoEsDelMinimo(s) ? '≈ mínimo del negocio' : '≈ sueldo diario';
+                return _selRow('abrirPagoNomina(\''+s.id+'\')', _esc(s.nombre), sub, fmtM(_sueldoDiarioEfectivo(s)), _lbl);
             }).join('');
         }
     } else {
@@ -5280,13 +5285,32 @@ var _PN_METODOS = {
     transfer:    {lbl:'🏛️ Transferencia',      metodoPago:'banco', metodoBanco:'transfer'}
 };
 
-/* Sueldo diario efectivo: del esquema diario, o derivado del salario por periodo */
+/* Sueldo diario efectivo: el propio del colaborador, o —si nunca se le puso
+   ninguno— el SALARIO MÍNIMO definido para el negocio.
+
+   El mínimo era solo un pre-llenado del formulario: se ponía en el campo al crear
+   a alguien, y ya. Un colaborador dado de alta ANTES de definirlo, o guardado sin
+   sueldo, llegaba al pago de nómina con CERO — y ese cero se veía como un dato
+   real, no como un dato faltante. Ahora el mínimo es lo que dice su nombre: el
+   piso que aplica mientras nadie ponga otra cosa.
+
+   "Sin editar" = sin sueldo diario Y sin salario base. Un sueldo de $0 puesto a
+   propósito no existe; si los dos están vacíos, es que nadie lo configuró. */
 function _sueldoDiarioEfectivo(s){
     if(s.esquemaSueldo==='diario' && n(s.sueldoDiario)>0) return n(s.sueldoDiario);
     var b=n(s.salarioBase);
-    if(s.periodicidad==='semanal')   return b/7;
-    if(s.periodicidad==='quincenal') return b/15;
-    return b/30; // mensual o sin especificar
+    if(b>0){
+        if(s.periodicidad==='semanal')   return b/7;
+        if(s.periodicidad==='quincenal') return b/15;
+        return b/30; // mensual o sin especificar
+    }
+    return n(_nomParams().salarioDiarioDefault);
+}
+/* ¿Este sueldo viene del mínimo del negocio y no de su ficha? Sirve para decirlo
+   en pantalla: pagar el mínimo por descuido y pagarlo a propósito se ven igual. */
+function _sueldoEsDelMinimo(s){
+    return !(s.esquemaSueldo==='diario' && n(s.sueldoDiario)>0) && !(n(s.salarioBase)>0)
+        && n(_nomParams().salarioDiarioDefault) > 0;
 }
 function _diasDelMesActual(){ var d=new Date(); return new Date(d.getFullYear(),d.getMonth()+1,0).getDate(); }
 function _diasDefaultPeriodo(tipo){ return tipo==='semana'?7:tipo==='quincena'?15:tipo==='mes'?_diasDelMesActual():7; }
