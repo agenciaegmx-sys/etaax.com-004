@@ -74,6 +74,19 @@
               '<div class="sm-grid">' +
                 '<div class="sm-grp full"><label>Nombre completo *</label><input type="text" id="sm_nombre" placeholder="Ej. María Guadalupe Torres"></div>' +
                 '<div class="sm-grp"><label>Puesto desempeñado</label><input type="text" id="sm_puesto" placeholder="Mesero, Cocinero, Cajero…"></div>' +
+                /* ÁREA con opciones fijas, no texto libre. El portal del colaborador
+                   (QR + NIP) decide con esto qué checklists y qué recetario le
+                   muestra. Derivarlo del "puesto" escrito a mano sería adivinar:
+                   "Ayudante de barra", "Chef", "coc." — y fallaría CALLADO, con el
+                   colaborador viendo una pantalla vacía sin saber por qué. */
+                '<div class="sm-grp"><label>Área <span style="color:var(--text-dim);text-transform:none;letter-spacing:0">· define qué ve en el QR</span></label>' +
+                  '<select id="sm_area">' +
+                    '<option value="">— Sin asignar —</option>' +
+                    '<option value="barra">🍸 Barra</option>' +
+                    '<option value="cocina">🍳 Cocina</option>' +
+                    '<option value="piso">🍽️ Piso / Servicio</option>' +
+                    '<option value="administracion">🗃️ Administración</option>' +
+                  '</select></div>' +
                 '<div class="sm-grp"><label>Fecha de ingreso</label><input type="date" id="sm_fechaIngreso" onchange="StaffModal._calcPrima()"></div>' +
                 '<div class="sm-grp"><label>Celular / WhatsApp</label><input type="tel" id="sm_celular" placeholder="55 1234 5678"></div>' +
                 '<div class="sm-grp"><label>Correo (opcional)</label><input type="email" id="sm_correo" placeholder="nombre@correo.com"></div>' +
@@ -181,7 +194,7 @@
 
     function _fill(staffId) {
         _tmpDocs = [];
-        ['sm_nombre','sm_puesto','sm_fechaIngreso','sm_fechaNacimiento','sm_curp','sm_nss','sm_celular','sm_correo','sm_direccion','sm_usuario','sm_pwd','sm_nip','sm_salarioBase','sm_diaPago','sm_formaPago','sm_datosBancarios','sm_primaVacacional','sm_bonoIncentivo','sm_referencias','sm_notas'].forEach(function(id){ document.getElementById(id).value=''; });
+        ['sm_nombre','sm_puesto','sm_area','sm_fechaIngreso','sm_fechaNacimiento','sm_curp','sm_nss','sm_celular','sm_correo','sm_direccion','sm_usuario','sm_pwd','sm_nip','sm_salarioBase','sm_diaPago','sm_formaPago','sm_datosBancarios','sm_primaVacacional','sm_bonoIncentivo','sm_referencias','sm_notas'].forEach(function(id){ document.getElementById(id).value=''; });
         document.getElementById('sm_estado').value = 'Activo';
         document.getElementById('sm_rol').value = '';
         _poblarSucModal(staffId ? '' : (localStorage.getItem('etaax_sucursal_activa') || ''));
@@ -205,6 +218,7 @@
                 document.getElementById('sm_id').value = s.id;
                 document.getElementById('sm_nombre').value = s.nombre || '';
                 document.getElementById('sm_puesto').value = s.puesto || '';
+                var _ar = document.getElementById('sm_area'); if (_ar) _ar.value = s.area || '';
                 document.getElementById('sm_fechaIngreso').value = s.fechaIngreso || '';
                 document.getElementById('sm_celular').value = s.celular || '';
                 document.getElementById('sm_correo').value = s.correo || '';
@@ -281,6 +295,7 @@
             id: editId || _genId(),
             nombre: nombre,
             puesto: document.getElementById('sm_puesto').value.trim(),
+            area:   (document.getElementById('sm_area') || {}).value || '',
             sucursalId: (document.getElementById('sm_sucursal').value || '').trim(),
             rol: rol,
             usuario: usuario,

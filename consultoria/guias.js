@@ -116,7 +116,9 @@
         return '<a class="gu-card" href="' + e(g.url) + '" target="_blank" rel="noopener"' +
             (oculta ? ' style="opacity:.45"' : '') + '>' +
             '<div class="gu-card-top"><span class="gu-ico">' + (ICONO[g.tipo] || '📄') + '</span>' +
-                '<span class="gu-tag">' + e(ETIQUETA[g.tipo] || g.tipo) + (oculta ? ' · oculta' : '') + '</span></div>' +
+                '<span class="gu-tag">' + e(ETIQUETA[g.tipo] || g.tipo) +
+                    (g.audiencia === 'operativa' ? ' · operativa' : g.audiencia === 'administrativa' ? ' · admin' : '') +
+                    (oculta ? ' · oculta' : '') + '</span></div>' +
             '<div class="gu-card-t">' + e(g.titulo) + '</div>' +
             '<div class="gu-card-d">' + (g.descripcion ? e(g.descripcion) : '') + '</div>' +
             '<div class="gu-card-f">' +
@@ -129,7 +131,7 @@
     window._abrirGuia = function (seccion) {
         llenarSecciones(seccion);
         $('gTitulo').value = ''; $('gDesc').value = ''; $('gOrden').value = 0;
-        $('gTipo').value = 'pdf'; $('gMsg').textContent = '';
+        $('gTipo').value = 'pdf'; $('gAudiencia').value = 'ambas'; $('gMsg').textContent = '';
         window._cambiarTipoGuia();
         $('ovGuia').classList.add('on');
         setTimeout(function () { $('gTitulo').focus(); }, 40);
@@ -188,6 +190,7 @@
                 id: genId(), titulo: titulo,
                 descripcion: ($('gDesc').value || '').trim() || null,
                 categoria: cat, tipo: tipo, url: url,
+                audiencia: $('gAudiencia').value || 'ambas',
                 orden: parseInt($('gOrden').value, 10) || 0,
                 activa: true, updated_at: new Date().toISOString()
             });

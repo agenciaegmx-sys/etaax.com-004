@@ -60,7 +60,7 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
     <div class="cap-logo">
         <img src="/marca/etaax-logo-oscuro.svg" alt="ETAAX" style="height:29px;width:auto;display:block">
     </div>
-    <div class="cap-title" id="capTitle">Check list operativo</div>
+    <div class="cap-title" id="capTitle">Portal del colaborador</div>
     <div class="cap-sub" id="capSub">Identifícate con tu PIN</div>
 
     <!-- ── PIN ── -->
@@ -71,8 +71,36 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
         <div class="cap-msg" id="pinMsg"></div>
     </div>
 
+    <!-- ── PORTAL: qué quiere hacer ──
+         El QR dejó de ser solo el checklist. La URL NO cambia (hay códigos ya
+         impresos apuntando a checklist.html?n=…&t=…), así que el portal vive
+         aquí adentro y el checklist pasa a ser una de sus opciones. -->
+    <div id="menuScreen" style="display:none">
+        <div class="quien">👤 <b id="quienNomMenu">—</b> <span id="quienAreaMenu" style="color:var(--text-dim)"></span></div>
+        <label class="lbl">¿Qué necesitas?</label>
+        <div id="portalOpts"></div>
+    </div>
+
+    <!-- ── Recetario operativo (sin costos) ── -->
+    <div id="recScreen" style="display:none">
+        <button class="volver" onclick="_verMenu()">← Regresar</button>
+        <input id="recBuscar" class="fld" placeholder="🔍 Buscar receta…" oninput="_pintarRecetas()">
+        <div id="recList"></div>
+    </div>
+    <div id="recDetalle" style="display:none">
+        <button class="volver" onclick="_verRecetas()">← Otras recetas</button>
+        <div id="recFicha"></div>
+    </div>
+
+    <!-- ── Guías de uso ── -->
+    <div id="guiaScreen" style="display:none">
+        <button class="volver" onclick="_verMenu()">← Regresar</button>
+        <div id="guiaList"></div>
+    </div>
+
     <!-- ── Lista de checklists ── -->
     <div id="listScreen" style="display:none">
+        <button class="volver" onclick="_verMenu()">← Regresar</button>
         <div class="quien">👤 Registra: <b id="quienNom">—</b></div>
         <div id="countBox">⏱️ Tiempo en el check list: <b id="countVal" style="color:var(--text)">0:00</b></div>
         <label class="lbl">Elige el check list a realizar</label>
@@ -153,8 +181,26 @@ var MARCA = { '':'', ok:'✓', no:'✗', pend:'▲' };
 var CICLO = { '':'ok', ok:'no', no:'pend', pend:'' };
 
 var RUN = null;   // { plant, marcas:{tareaId:estado}, fotos:[] }
+var PERFIL = null, RECETAS = null, GUIAS = null;
 
-function _show(id){ ['pinScreen','listScreen','runScreen','doneScreen','errScreen'].forEach(function(x){ document.getElementById(x).style.display = x===id?'block':'none'; }); }
+// Área del colaborador, normalizada. Vacío = sin v46 o sin asignar → sin filtro.
+function _area(){ return PERFIL ? _normArea(PERFIL.area) : ''; }
+/* Los datos viejos traen el área escrita a mano ("Barra", "COCINA", "Cocina fría").
+   Se normaliza a las cuatro que entiende el portal para que un acento o una
+   mayúscula no dejen a alguien sin sus checklists. */
+function _normArea(a){
+    a = String(a||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+    if (!a) return '';
+    if (a.indexOf('barra') >= 0 || a.indexOf('bar') === 0) return 'barra';
+    if (a.indexOf('cocina') >= 0 || a.indexOf('coc') === 0) return 'cocina';
+    if (a.indexOf('piso') >= 0 || a.indexOf('servicio') >= 0 || a.indexOf('mesero') >= 0) return 'piso';
+    if (a.indexOf('admin') >= 0) return 'administracion';
+    return '';
+}
+var AREA_NOM = { barra:'🍸 Barra', cocina:'🍳 Cocina', piso:'🍽️ Piso', administracion:'🗃️ Administración' };
+
+var _PANTALLAS = ['pinScreen','menuScreen','recScreen','recDetalle','guiaScreen','listScreen','runScreen','doneScreen','errScreen'];
+function _show(id){ _PANTALLAS.forEach(function(x){ var el=document.getElementById(x); if(el) el.style.display = x===id?'block':'none'; }); }
 function _err(txt){ document.getElementById('errTxt').innerHTML = txt; document.getElementById('capSub').textContent = ''; _show('errScreen'); if(_countTimer){clearInterval(_countTimer);_countTimer=null;} }
 
 async function entrar(){
@@ -176,6 +222,16 @@ async function entrar(){
             return;
         }
         COLAB = rv.data; _NIPHASH = h;
+
+        /* El perfil (nombre + ÁREA) sale de portal_perfil, de v46. Si esa migración
+           todavía no corre, la RPC no existe y el portal sigue funcionando SIN filtro
+           por área — el colaborador ve todo, como antes. Degradar así es preferible a
+           dejarlo fuera por una migración pendiente. */
+        try {
+            var rperf = await _supabase.rpc('portal_perfil', { p_neg: NEG, p_token: TOKEN, p_niphash: h });
+            if (!rperf.error && rperf.data) PERFIL = rperf.data;
+        } catch (e) { /* v46 sin correr */ }
+
         var rp = await _supabase.rpc('checklist_plantillas', { p_neg: NEG, p_token: TOKEN });
         if (rp.error) {
             btn.disabled = false; msg.className='cap-msg err';
@@ -184,12 +240,16 @@ async function entrar(){
         }
         PLANTILLAS = (rp.data || []).filter(function(p){
             if (!p || !p.id || p.activo === false) return false;
-            if (!SUC || !p.sucursalId) return true;   // sin sucursal en el QR o plantilla global → visible
-            return p.sucursalId === SUC;
+            if (SUC && p.sucursalId && p.sucursalId !== SUC) return false;
+            /* Filtro por ÁREA: al de barra solo sus checklists. Una plantilla SIN área
+               se le muestra a todos — es la general del negocio, y esconderla dejaría
+               al colaborador sin nada que hacer por un dato que nadie llenó. */
+            if (_area() && p.area && _normArea(p.area) !== _area()) return false;
+            return true;
         });
         PLANTILLAS.sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
         document.getElementById('quienNom').textContent = COLAB;
-        volverLista();
+        _verMenu();
         _t0 = Date.now(); _tick(); _countTimer = setInterval(_tick, 1000);
     } catch (e) {
         btn.disabled=false; msg.className='cap-msg err'; msg.textContent='Error: '+((e&&e.message)||e);
@@ -202,6 +262,131 @@ function _tick(){
     if (el) el.textContent = Math.floor(seg/60) + ':' + String(seg%60).padStart(2,'0');
 }
 
+
+/* ══ PORTAL DEL COLABORADOR ═════════════════════════════════════════════
+   El QR era solo el checklist; ahora es la puerta. Todo lo que se agregue aquí
+   tiene que salir por una RPC con token + NIP: el dispositivo NO tiene sesión de
+   Supabase, así que no puede leer ninguna tabla por su cuenta. */
+function _verMenu(){
+    document.getElementById('capTitle').textContent = 'Portal del colaborador';
+    document.getElementById('capSub').textContent   = '';
+    document.getElementById('quienNomMenu').textContent = COLAB || '—';
+    var a = _area();
+    document.getElementById('quienAreaMenu').textContent = a ? ' · ' + AREA_NOM[a] : '';
+
+    /* El recetario solo tiene sentido para quien cocina o prepara. A piso y
+       administración no se les enseña: no es un permiso, es no llenarles la
+       pantalla con algo que no van a abrir nunca. */
+    var verRecetas = !a || a === 'barra' || a === 'cocina';
+    var ops = [];
+    ops.push(_opt('📋', 'Mis check lists',
+        PLANTILLAS.length ? PLANTILLAS.length + (PLANTILLAS.length===1?' disponible':' disponibles') : 'Ninguno para tu área',
+        PLANTILLAS.length ? 'volverLista()' : ''));
+    if (verRecetas) ops.push(_opt('📖', 'Recetario', 'Cómo se prepara, paso a paso', '_verRecetas()'));
+    ops.push(_opt('📚', 'Guías de uso', 'Manuales de ETAAX', '_verGuias()'));
+    document.getElementById('portalOpts').innerHTML = ops.join('');
+    _show('menuScreen');
+}
+function _opt(ico, tit, sub, accion){
+    var off = !accion;
+    return '<div class="plant-card"' + (off ? ' style="opacity:.45"' : ' onclick="' + accion + '"') + '>' +
+        '<div style="font-size:26px;line-height:1">' + ico + '</div>' +
+        '<div style="flex:1;min-width:0"><div class="plant-nom">' + etx(tit) + '</div>' +
+        '<div class="plant-meta">' + etx(sub) + '</div></div>' +
+        (off ? '' : '<div style="color:var(--green);font-size:18px">›</div>') + '</div>';
+}
+
+/* ── Recetario OPERATIVO ──
+   La RPC devuelve las recetas YA sin costos (v46). No se filtra aquí: si el
+   filtrado viviera en el navegador, bastaría abrir la consola para ver el precio
+   de cada ingrediente. Lo que no debe salir, no sale del servidor. */
+async function _verRecetas(){
+    _show('recScreen');
+    var cont = document.getElementById('recList');
+    if (RECETAS === null) {
+        cont.innerHTML = '<div class="plant-meta" style="padding:16px 2px">Cargando recetas…</div>';
+        try {
+            var r = await _supabase.rpc('portal_recetas', { p_neg: NEG, p_token: TOKEN, p_niphash: _NIPHASH });
+            if (r.error) throw new Error(r.error.message);
+            RECETAS = (r.data || []).sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
+        } catch (e) {
+            RECETAS = [];
+            cont.innerHTML = '<div class="cap-msg err">No se pudo cargar el recetario.<br>' +
+                '<span style="font-size:11px">' + etx((e&&e.message)||e) + ' — ¿se corrió la migración v46?</span></div>';
+            return;
+        }
+    }
+    _pintarRecetas();
+}
+function _pintarRecetas(){
+    var q = (document.getElementById('recBuscar').value || '').toLowerCase().trim();
+    var lista = (RECETAS||[]).filter(function(r){
+        return !q || (r.nombre||'').toLowerCase().indexOf(q) >= 0 || (r.grupo||'').toLowerCase().indexOf(q) >= 0;
+    });
+    document.getElementById('recList').innerHTML = lista.length
+        ? lista.map(function(r,i){
+            return '<div class="plant-card" onclick="_verReceta(' + i + ')">' +
+                '<div style="font-size:22px;line-height:1">' + (String(r.tipo||'').indexOf('bebida')>=0 ? '🥃' : '🍽️') + '</div>' +
+                '<div style="flex:1;min-width:0"><div class="plant-nom">' + etx(r.nombre) + '</div>' +
+                '<div class="plant-meta">' + etx(r.grupo||'') + ((r.ingredientes||[]).length ? ' · ' + r.ingredientes.length + ' ingredientes' : '') + '</div></div>' +
+                '<div style="color:var(--green);font-size:18px">›</div></div>';
+          }).join('')
+        : '<div class="plant-meta" style="padding:16px 2px">' + (q ? 'Ninguna receta con ese nombre.' : 'Todavía no hay recetas de tu área.') + '</div>';
+    // El índice va contra la lista FILTRADA; se guarda para que el detalle no se equivoque.
+    _RECVIS = lista;
+}
+var _RECVIS = [];
+function _verReceta(i){
+    var r = _RECVIS[i]; if (!r) return;
+    var ing = (r.ingredientes||[]).map(function(x){
+        return '<tr><td style="padding:7px 0;border-bottom:1px solid var(--border)">' + etx(x.nombre||'—') +
+            (x.desc ? '<div style="font-size:11px;color:var(--text-dim)">' + etx(x.desc) + '</div>' : '') + '</td>' +
+            '<td style="padding:7px 0;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;font-weight:600">' +
+            etx(x.cantidad||'') + ' <span style="color:var(--text-dim);font-weight:400">' + etx(x.unidad||'') + '</span></td></tr>';
+    }).join('');
+    document.getElementById('recFicha').innerHTML =
+        '<div class="cap-title" style="font-size:22px;margin:4px 0 2px">' + etx(r.nombre) + '</div>' +
+        '<div class="plant-meta" style="margin-bottom:14px">' + etx(r.grupo||'') +
+            (r.cristaleria ? ' · ' + etx(r.cristaleria) : '') + (r.tiempo ? ' · ⏱️ ' + etx(r.tiempo) : '') + '</div>' +
+        (r.foto ? '<img src="' + etx(r.foto) + '" style="width:100%;border-radius:12px;margin-bottom:14px">' : '') +
+        '<label class="lbl">Ingredientes</label>' +
+        '<table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px">' + ing + '</table>' +
+        (r.procedimiento
+            ? '<label class="lbl">Procedimiento</label><div style="font-size:14px;line-height:1.7;white-space:pre-wrap;color:var(--text-muted)">' + etx(r.procedimiento) + '</div>'
+            : '');
+    _show('recDetalle');
+}
+
+/* ── Guías de uso ── */
+async function _verGuias(){
+    _show('guiaScreen');
+    var cont = document.getElementById('guiaList');
+    if (GUIAS === null) {
+        cont.innerHTML = '<div class="plant-meta" style="padding:16px 2px">Cargando guías…</div>';
+        try {
+            var r = await _supabase.rpc('portal_guias', { p_neg: NEG, p_token: TOKEN, p_niphash: _NIPHASH });
+            if (r.error) throw new Error(r.error.message);
+            GUIAS = r.data || [];
+        } catch (e) {
+            GUIAS = [];
+            cont.innerHTML = '<div class="cap-msg err">No se pudieron cargar las guías.<br>' +
+                '<span style="font-size:11px">' + etx((e&&e.message)||e) + ' — ¿se corrió la migración v46?</span></div>';
+            return;
+        }
+    }
+    if (!GUIAS.length) { cont.innerHTML = '<div class="plant-meta" style="padding:16px 2px">Todavía no hay guías para tu área.</div>'; return; }
+    var porCat = {}, orden = [];
+    GUIAS.forEach(function(g){ var c = g.categoria || 'General'; if(!porCat[c]){porCat[c]=[];orden.push(c);} porCat[c].push(g); });
+    cont.innerHTML = orden.map(function(c){
+        return '<label class="lbl">' + etx(c) + '</label>' + porCat[c].map(function(g){
+            return '<a class="plant-card" href="' + etx(g.url) + '" target="_blank" rel="noopener" style="text-decoration:none;color:inherit">' +
+                '<div style="font-size:22px;line-height:1">' + (g.tipo==='video'?'▶️':'📕') + '</div>' +
+                '<div style="flex:1;min-width:0"><div class="plant-nom">' + etx(g.titulo) + '</div>' +
+                (g.descripcion ? '<div class="plant-meta">' + etx(g.descripcion) + '</div>' : '') + '</div>' +
+                '<div style="color:var(--green);font-size:18px">›</div></a>';
+        }).join('');
+    }).join('');
+}
 
 function volverLista(){
     document.getElementById('capSub').textContent = '¿Qué check list vas a realizar?';
