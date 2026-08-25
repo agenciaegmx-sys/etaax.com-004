@@ -97,6 +97,46 @@ Debe decir `aplicado` y la fecha de corte tiene que haber saltado un mes.
 4. Cobrarse a uno mismo una vez, de verdad, y reembolsarlo. Es la única forma de
    saber que la cadena completa funciona con dinero real.
 
+## Cobro POR SUCURSAL (precio escalonado)
+
+El precio depende de cuántas sucursales tiene el negocio, con la tabla de
+`/precios.js`. En Stripe eso es un **precio graduado** de diez tramos, el último
+abierto — cada sucursal conserva el precio de su posición y de la 11ª en adelante
+se congela en $1,449. Con cantidad 10 debe dar **$16,000**; con 12, **$18,898**.
+
+Precio de producción: `price_1U89zOK0TesmiDDoJ8SsFAtC`
+
+### Las dos funciones
+
+```bash
+supabase functions deploy crear-checkout
+supabase functions deploy sync-suscripcion
+```
+
+**SIN** `--no-verify-jwt`: al revés que el webhook, a estas las llama el navegador
+con la sesión del usuario, y de ahí sale quién es y a qué negocio entra.
+
+- **crear-checkout** — cuenta las sucursales EN EL SERVIDOR y arma el checkout.
+  Nunca acepta la cantidad que mande el navegador: es el número que decide cuánto
+  se paga. Reemplaza al Payment Link fijo.
+- **sync-suscripcion** — empuja la cantidad nueva a Stripe cuando dan de alta o
+  baja una sucursal, **sin prorrateo**: la sucursal sirve de inmediato y el precio
+  sube en el siguiente cobro. Es idempotente; si la cantidad ya coincide, ni toca
+  Stripe. La app la llama desde `_setSucursales`, que es el punto único por donde
+  pasan todos los cambios de sucursal.
+
+### Secreto opcional
+
+`STRIPE_PRICE_SUCURSAL` — el id del precio graduado. Si no está, se usa el de
+producción escrito en la función. Hace falta ponerlo para probar en modo test,
+porque los precios NO cruzan entre modos.
+
+### Pendiente al conectar esto
+
+Las suscripciones que ya corren en el producto viejo de **$1,799 fijo** NO se
+migran solas: hay que moverlas a mano desde el dashboard de Stripe. Con pocos
+clientes son cinco minutos; solo hay que acordarse.
+
 ## Lo que falta (fase 3)
 
 - **Suscripción recurrente**: que la tarjeta se cobre sola cada mes. La función ya
