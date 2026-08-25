@@ -940,13 +940,33 @@ async function _irAPagar(negId, btn) {
     try {
         var r = await _supabase.functions.invoke('crear-checkout', { body: { negocioId: negId } });
         var url = r && r.data && r.data.url;
-        if (!url) throw new Error((r && r.data && r.data.error) || (r && r.error && r.error.message) || 'sin respuesta');
+        if (!url) throw new Error(await _detalleFuncion(r));
         window.location.href = url;
     } catch (e) {
         if (btn) { btn.disabled = false; btn.textContent = txt; }
         alert('No se pudo abrir el pago: ' + ((e && e.message) || e) +
               '\n\nSi vuelve a pasar, escríbeme por WhatsApp y lo resolvemos.');
     }
+}
+
+/* El motivo REAL de una Edge Function que falla. supabase-js envuelve el error en
+   "Edge Function returned a non-2xx status code" y se traga el cuerpo — que es
+   justo donde viene el porqué ("No such price", "Ese negocio no es tuyo"…). El
+   cuerpo sigue disponible en error.context, que es la Response cruda. Sin esto,
+   diagnosticar obliga a ir a los logs del panel por cada intento. */
+async function _detalleFuncion(r) {
+    try {
+        var ctx = r && r.error && r.error.context;
+        if (ctx && typeof ctx.json === 'function') {
+            var b = await ctx.clone().json();
+            if (b && b.error) return b.error;
+        }
+        if (ctx && typeof ctx.text === 'function') {
+            var t = await ctx.clone().text();
+            if (t) return t.slice(0, 300);
+        }
+    } catch (e) { /* el cuerpo ya se consumió o no era JSON */ }
+    return (r && r.data && r.data.error) || (r && r.error && r.error.message) || 'sin respuesta';
 }
 
 /* Avisarle a Stripe que cambió el número de sucursales. Es idempotente y barata:

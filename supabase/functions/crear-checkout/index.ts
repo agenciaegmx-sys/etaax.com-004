@@ -63,6 +63,26 @@ async function contarSucursales(negId: string): Promise<number> {
   return Math.max(1, Array.isArray(arr) ? arr.length : 1);
 }
 
+/* ¿Este usuario puede tocar la suscripción de ESTE negocio? Dueño, su colaborador,
+   o el admin de plataforma. Sin esta revisión cualquiera abriría cobros a nombre de
+   un negocio ajeno — no le robaría dinero a nadie, pero sí le ensuciaría las
+   suscripciones a otro.
+   Se comprueba con el rol de servicio y comparando ids A MANO, no dejando que la
+   RLS decida con el token del usuario: si SUPABASE_ANON_KEY no estuviera puesta,
+   esa consulta fallaría en silencio y todo el mundo saldría como "no es tuyo" —
+   un permiso denegado que en realidad es un problema de configuración. */
+async function puedeOperar(negId: string, userId: string, email: string | null) {
+  const { data, error } = await admin.from('negocios')
+    .select('usuario_id, staff_uid').eq('id', negId).maybeSingle();
+  if (error) return { ok: false, motivo: 'No se pudo leer el negocio: ' + error.message, codigo: 500 };
+  if (!data)  return { ok: false, motivo: 'Ese negocio no existe', codigo: 404 };
+  const ADMIN = Deno.env.get('ETAAX_ADMIN_EMAIL') ?? 'admin@etaax.com';
+  if (data.usuario_id === userId) return { ok: true, motivo: '', codigo: 200 };
+  if (data.staff_uid === userId)  return { ok: true, motivo: '', codigo: 200 };
+  if (email && email === ADMIN)   return { ok: true, motivo: '', codigo: 200 };
+  return { ok: false, motivo: 'Tu cuenta no tiene permiso sobre este negocio', codigo: 403 };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -78,17 +98,8 @@ Deno.serve(async (req) => {
   try { negocioId = ((await req.json())?.negocioId ?? '').toString(); } catch (_) { /* body vacío */ }
   if (!negocioId) return json({ error: 'Falta el negocio' }, 400);
 
-  /* ¿Este usuario puede pagar por ESTE negocio? Se comprueba con la RLS, usando
-     su propio token: si no alcanza a leer la fila, no es suyo. Sin esta revisión
-     cualquiera podría abrir un checkout a nombre de un negocio ajeno — no le
-     robaría dinero a nadie, pero sí ensuciaría las suscripciones de otro. */
-  const comoUsuario = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-    { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false } },
-  );
-  const { data: neg } = await comoUsuario.from('negocios').select('id').eq('id', negocioId).maybeSingle();
-  if (!neg) return json({ error: 'Ese negocio no es tuyo' }, 403);
+  const permiso = await puedeOperar(negocioId, u.user.id, u.user.email ?? null);
+  if (!permiso.ok) return json({ error: permiso.motivo }, permiso.codigo);
 
   const cantidad = await contarSucursales(negocioId);
 
