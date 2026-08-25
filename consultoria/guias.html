@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
+<script src="/page-guard.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <title>ETAAX — Guías de uso</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../styles.css">
+    <style>
+        .gu-wrap { padding:26px 26px 90px;max-width:1180px;margin:0 auto; }
+        .gu-sub { font-size:12.5px;color:var(--text-dim);line-height:1.6;margin:0 0 22px;max-width:640px; }
+
+        /* Los botones del modal sí son propios: el modal no vive dentro de .header,
+           así que no hereda los estilos de acción de styles.css. */
+        .gu-btn { border:none;border-radius:9px;padding:9px 18px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:7px; }
+        .gu-btn-1 { background:var(--green);color:#0a0908; }
+        .gu-btn-2 { background:transparent;border:1px solid var(--border);color:var(--text-muted); }
+        .gu-btn-2:hover { border-color:var(--green);color:var(--green); }
+        .gu-btn[disabled]{opacity:.5;cursor:default}
+
+        .gu-sec { margin-bottom:30px; }
+        .gu-sec-hdr { display:flex;align-items:center;gap:11px;margin-bottom:13px;padding-bottom:9px;border-bottom:1px solid var(--border); }
+        .gu-sec-t { font-family:'Bebas Neue',sans-serif;font-size:21px;letter-spacing:1.6px;color:var(--text);line-height:1; }
+        .gu-sec-n { font-size:10.5px;color:var(--text-dim); }
+        .gu-sec-acc { margin-left:auto;display:flex;gap:5px; }
+        .gu-mini { background:transparent;border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:3px 9px;font-family:inherit;font-size:10.5px;cursor:pointer; }
+        .gu-mini:hover { border-color:var(--green);color:var(--green); }
+
+        .gu-grid { display:grid;gap:13px;grid-template-columns:repeat(auto-fill,minmax(258px,1fr)); }
+        .gu-card { background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:17px 17px 13px;
+                   text-decoration:none;color:var(--text);display:flex;flex-direction:column;gap:6px;transition:all .18s;position:relative; }
+        .gu-card:hover { border-color:rgba(61,190,122,.5);background:rgba(61,190,122,.05);transform:translateY(-2px); }
+        .gu-card-top { display:flex;align-items:center;justify-content:space-between;gap:8px; }
+        .gu-ico { font-size:24px;line-height:1; }
+        .gu-tag { font-size:9px;letter-spacing:1.2px;text-transform:uppercase;padding:3px 8px;border-radius:20px;
+                  background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);white-space:nowrap; }
+        .gu-card-t { font-size:14.5px;font-weight:600;line-height:1.3; }
+        .gu-card-d { font-size:11.5px;color:var(--text-dim);line-height:1.55;flex:1; }
+        .gu-card-f { display:flex;align-items:center;justify-content:space-between;margin-top:5px; }
+        .gu-card-cta { font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:var(--green); }
+        .gu-del { background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;padding:0 4px;line-height:1; }
+        .gu-del:hover{color:var(--red)}
+
+        .gu-vacio { text-align:center;padding:56px 20px;color:var(--text-dim);font-size:13px;line-height:1.75; }
+        .gu-nota { max-width:560px;margin:0 auto 24px;padding:11px 15px;border:1px solid var(--border);border-radius:10px;
+                   background:var(--surface);font-size:11.5px;color:var(--text-dim);line-height:1.6;text-align:center; }
+
+        /* Modal */
+        .gu-ov { position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.65);display:none;align-items:flex-start;justify-content:center;padding:40px 18px;overflow:auto; }
+        .gu-ov.on { display:flex; }
+        .gu-modal { background:var(--surface);border:1px solid var(--border);border-radius:16px;max-width:520px;width:100%;padding:24px; }
+        .gu-modal h3 { font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1.4px;color:var(--text);margin:0 0 3px; }
+        .gu-modal .hint { font-size:11.5px;color:var(--text-dim);line-height:1.6;margin-bottom:16px; }
+        .gu-f { display:grid;gap:10px;grid-template-columns:1fr 1fr; }
+        .gu-f .full { grid-column:1/-1; }
+        .gu-f label { font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-dim);display:block;margin-bottom:4px; }
+        .gu-f input,.gu-f select,.gu-f textarea { width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);
+                  padding:9px 11px;border-radius:8px;font-family:inherit;font-size:13px;box-sizing:border-box;outline:none; }
+        .gu-f input:focus,.gu-f select:focus,.gu-f textarea:focus { border-color:var(--green); }
+        .gu-modal-f { display:flex;gap:9px;justify-content:flex-end;align-items:center;margin-top:18px; }
+        @media (max-width:640px){ .gu-f{grid-template-columns:1fr} .gu-wrap{padding:20px 14px 80px} }
+        .theme-toggle { position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s; }
+        .theme-toggle:hover{border-color:var(--green);color:var(--green);}
+    </style>
+</head>
+<body>
+<div class="mod-grid-bg"></div>
+<div class="mod-glow"></div>
+
+<header class="top-bar">
+    <img src="/marca/etaax-logo-oscuro.svg" alt="ETAAX" style="height:26px;width:auto;display:block">
+    <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🗃️</a>
+    <div class="top-breadcrumb">
+        <a href="index.html" style="text-decoration:none;color:inherit"><span class="top-module-badge">Aprende y Analiza</span></a>
+        <span class="top-sep">|</span>
+        <span class="top-section-name">Guías de uso</span>
+    </div>
+</header>
+<div id="ctxBar" class="ctx-bar" style="display:none"></div>
+
+<div class="app-shell">
+    <nav class="nav cerrado" id="nav">
+        <div class="nav-top">
+            <div class="nav-brand"><span class="nav-brand-sub">Aprende y Analiza</span></div>
+            <div class="nav-top-actions">
+                <a href="index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Panel del módulo" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1">🗃️</a>
+                <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
+            </div>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Aprende</div>
+            <a href="guias.html" class="nav-link active" data-tooltip="Guías de uso"><span class="nav-icon">📚</span><span class="nav-text">Guías de uso</span></a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-label">Analiza</div>
+            <a href="ventas-productos.html" class="nav-link" data-tooltip="Ventas por Producto"><span class="nav-icon">📊</span><span class="nav-text">Ventas por Producto</span></a>
+            <a href="simulador-kpis.html" class="nav-link" data-tooltip="Simulador de Metas"><span class="nav-icon">🧮</span><span class="nav-text">Simulador de Metas</span></a>
+        </div>
+    </nav>
+
+    <main class="main-content expandido" id="mainContent">
+        <!-- Mismo header que el resto de sub-módulos (.header/.brand/.hdr-acts de
+             styles.css): título a la izquierda, acciones a la derecha, una sola fila. -->
+        <div class="header">
+            <div class="brand">
+                <span class="brand-label">Aprende</span>
+                <span class="brand-title">Guías de uso</span>
+            </div>
+            <!-- Acciones de administración. Se muestran SOLO al admin de plataforma,
+                 desde JS y tras confirmar la sesión: esconderlas por CSS no protege nada. -->
+            <div class="hdr-acts" id="guAcciones" style="display:none">
+                <button class="btn-accent" onclick="_abrirGuia()" title="Publicar una guía nueva para todos los negocios">📤 Subir nueva guía</button>
+                <button class="btn-accent" onclick="_abrirSeccion()" title="Agrupar las guías por temas">🗂️ Crear sección</button>
+            </div>
+        </div>
+
+        <div class="gu-wrap">
+            <div class="gu-sub">Manuales y tutoriales para sacarle todo a ETAAX. Ábrelos cuando los necesites — están para consultarse, no para aprendérselos.</div>
+            <div id="listaGuias"><div class="gu-vacio">Cargando…</div></div>
+        </div>
+    </main>
+</div>
+
+<!-- ══ MODAL: subir guía ══ -->
+<div class="gu-ov" id="ovGuia" onclick="if(event.target===this)_cerrarGuia()">
+  <div class="gu-modal">
+    <h3 id="guiaModalT">Subir nueva guía</h3>
+    <div class="hint">Lo que publiques aquí lo ven <b>todos</b> los negocios y sus sucursales, al instante.</div>
+    <div class="gu-f">
+        <div class="full"><label>Título</label>
+            <input id="gTitulo" placeholder="ej. Cómo levantar tu primer inventario"></div>
+        <div class="full"><label>De qué trata</label>
+            <textarea id="gDesc" rows="2" placeholder="Opcional, pero ayuda mucho a elegir la guía correcta"></textarea></div>
+        <div><label>Sección</label>
+            <select id="gCategoria"></select></div>
+        <div><label>Orden</label>
+            <input id="gOrden" type="number" value="0" title="0 aparece primero"></div>
+        <div class="full"><label>Tipo</label>
+            <select id="gTipo" onchange="_cambiarTipoGuia()">
+                <option value="pdf">📕 PDF · subir archivo</option>
+                <option value="video">▶️ Video de YouTube</option>
+                <option value="link">🔗 Enlace externo</option>
+            </select></div>
+        <div class="full" id="gFuente"></div>
+    </div>
+    <div class="gu-modal-f">
+        <span id="gMsg" style="font-size:12px;color:var(--text-dim);margin-right:auto"></span>
+        <button class="gu-btn gu-btn-2" onclick="_cerrarGuia()">Cancelar</button>
+        <button class="gu-btn gu-btn-1" id="gGuardar" onclick="_guardarGuia()">Publicar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: crear sección ══ -->
+<div class="gu-ov" id="ovSeccion" onclick="if(event.target===this)_cerrarSeccion()">
+  <div class="gu-modal">
+    <h3>Crear sección</h3>
+    <div class="hint">Las secciones agrupan las guías en el catálogo. Una sección vacía no se le muestra al cliente — aparece en cuanto le pongas la primera guía.</div>
+    <div class="gu-f">
+        <div class="full"><label>Nombre de la sección</label>
+            <input id="sNombre" placeholder="ej. Primeros pasos, Inventarios, Recetas"></div>
+    </div>
+    <div class="gu-modal-f">
+        <span id="sMsg" style="font-size:12px;color:var(--text-dim);margin-right:auto"></span>
+        <button class="gu-btn gu-btn-2" onclick="_cerrarSeccion()">Cancelar</button>
+        <button class="gu-btn gu-btn-1" onclick="_guardarSeccion()">Crear</button>
+    </div>
+  </div>
+</div>
+
+<button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
+
+<script>
+(function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);document.addEventListener('DOMContentLoaded',function(){if(s==='light'){document.getElementById('themeIcon').textContent='🌙';document.getElementById('themeLabel').textContent='Modo oscuro';}});})();
+function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('etaax_theme',n);document.getElementById('themeIcon').textContent=n==='light'?'🌙':'☀️';document.getElementById('themeLabel').textContent=n==='light'?'Modo oscuro':'Modo claro';}
+function toggleNav(){
+    var nav=document.getElementById('nav'),main=document.getElementById('mainContent');
+    nav.classList.toggle('cerrado');
+    if(main)main.classList.toggle('expandido');
+    var c=nav.classList.contains('cerrado');
+    var btn=document.getElementById('navToggleBtn'),txt=document.getElementById('navToggleTxt');
+    if(btn)btn.childNodes[0].textContent=c?'▶':'◀';
+    if(txt)txt.textContent=c?'Expandir':'Ocultar';
+    if(btn)btn.setAttribute('data-tooltip',c?'Expandir':'Ocultar');
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
+<script src="/etaax-store.js"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
+<script src="/etaax-db.js"></script>
+<script src="../security.js"></script>
+<script src="../ctx-bar.js"></script>
+<script src="/nav-pref.js"></script>
+<script src="guias.js"></script>
+</body>
+</html>
