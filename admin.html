@@ -282,7 +282,14 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 <div id="viewDenied" class="view-center access-denied" style="display:none">
   <div style="font-size:48px">🔐</div>
   <h2>Acceso restringido</h2>
-  <p>Esta sección es exclusiva del administrador de la plataforma.</p>
+  <p>Esta sección es exclusiva del administrador de la plataforma.<br>
+     Estás dentro con <b id="admCuentaActual">otra cuenta</b>.</p>
+  <!-- Callejón sin salida que había aquí: si ya venías con la sesión de un
+       NEGOCIO, esta pantalla no ofrecía forma de cambiar de cuenta — solo
+       "volver al inicio", que te regresaba con la misma sesión. Cerrar sesión
+       era el único camino y no estaba a la vista. -->
+  <button class="btn-back" style="border:none;cursor:pointer;font-family:inherit"
+          onclick="_salirYEntrarAdmin()">Entrar con la cuenta de administrador</button>
   <a href="hub.html" class="btn-back">← Volver al inicio</a>
 </div>
 
@@ -657,6 +664,8 @@ async function init() {
     }
 
     if (session.user.email !== ADMIN_EMAIL) {
+        var _c = document.getElementById('admCuentaActual');
+        if (_c) _c.textContent = session.user.email || 'otra cuenta';
         document.getElementById('viewDenied').style.display = 'flex';
         return;
     }
@@ -664,6 +673,17 @@ async function init() {
     document.getElementById('adminNombre').textContent = session.user.email;
     document.getElementById('viewAdmin').style.display = 'block';
     await cargarDatos();
+}
+
+/* Cierra la sesión del negocio y deja el formulario de login del admin.
+   La sesión vive en sessionStorage y es POR PESTAÑA: por eso entrar aquí con la
+   cuenta de un negocio abierta en la misma pestaña te dejaba fuera sin salida. */
+async function _salirYEntrarAdmin() {
+    try { await _supabase.auth.signOut(); } catch (e) {}
+    document.getElementById('viewDenied').style.display = 'none';
+    document.getElementById('viewLogin').style.display  = 'flex';
+    var em = document.getElementById('admEmail');
+    if (em) { em.value = ADMIN_EMAIL; document.getElementById('admPwd').focus(); }
 }
 
 /* ── LOGIN ── */
