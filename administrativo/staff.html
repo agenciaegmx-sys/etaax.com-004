@@ -446,6 +446,22 @@
                         <option value="otro">👤 Otro</option>
                     </select>
                 </div>
+                <!-- ÁREA: solo CORRECCIÓN. Normalmente se deriva del rol (Cocinero →
+                     cocina, Barman → barra…), así que pedirla siempre sería trabajo de
+                     a gratis y además podrían contradecirse. Se llena únicamente
+                     cuando el rol no dice el área: un gerente que lleva la barra, o un
+                     "Otro" que lava loza en la cocina. -->
+                <div class="form-group full">
+                    <label>Área en el QR <span style="color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400">· solo si el rol no la dice</span></label>
+                    <select id="fArea">
+                        <option value="">Según su rol <span></span></option>
+                        <option value="barra">🍸 Barra</option>
+                        <option value="cocina">🍳 Cocina</option>
+                        <option value="piso">🍽️ Piso / Servicio</option>
+                        <option value="administracion">🗃️ Administración</option>
+                    </select>
+                    <div id="areaHint" style="font-size:11px;color:var(--text-dim);margin-top:5px;line-height:1.5"></div>
+                </div>
             </div>
 
             <div class="modal-section" id="accesoSec">Acceso al sistema</div>
@@ -969,6 +985,8 @@ function _openModalReal(id) {
             var fSucEdit = document.getElementById('fSucursal');
             if (fSucEdit) fSucEdit.value = s.sucursalId || '';
             document.getElementById('fRol').value         = s.rol || '';
+            (function(){ var e=document.getElementById('fArea'); if(e){ e.value = s.area || ''; e.onchange = _pintarAreaHint; } })();
+            _pintarAreaHint();
             document.getElementById('fUsuario').value     = s.usuario || '';
             // La contraseña guardada nunca se muestra; el placeholder
             // indica que existe y que dejarla vacía la conserva
@@ -1051,6 +1069,8 @@ function clearForm() {
     document.getElementById('fFormaPago').value = '';
     document.getElementById('fEstado').value = 'Activo';
     document.getElementById('fRol').value = '';
+    (function(){ var e=document.getElementById('fArea'); if(e){ e.value=''; e.onchange = _pintarAreaHint; } })();
+    _pintarAreaHint();
     document.getElementById('fCategoriaNomina').value = 'operativa';
     document.getElementById('fBonoPeriodicidad').value = 'mensual';
     // Estandarizar el staff NUEVO al salario mínimo diario definido (si hay):
@@ -1069,7 +1089,24 @@ function clearForm() {
 // Roles con acceso completo (usuario + contraseña). El resto: solo NIP.
 var STAFF_ADMIN_ROLES = ['admin','gerente','administrativo','chef','jefe_barra'];
 function _esRolAdminStaff(rol){ return STAFF_ADMIN_ROLES.indexOf(rol) !== -1; }
-function _rolChangeStaff(){ _sugerirCategoria(); _togAccesoStaff(); }
+function _rolChangeStaff(){ _sugerirCategoria(); _togAccesoStaff(); _pintarAreaHint(); }
+/* Misma tabla que etaax_area_de_rol en SQL (v47). Está duplicada a propósito: aquí
+   solo sirve para DECIRLE al usuario en qué área va a quedar; quien decide de
+   verdad es la función del servidor, que es la que el portal consulta. */
+var _AREA_DE_ROL = { chef:'cocina', jefe_cocina:'cocina', cocinero:'cocina',
+    jefe_barra:'barra', barman:'barra', barista:'barra', mesero:'piso',
+    admin:'administracion', gerente:'administracion', administrativo:'administracion' };
+var _AREA_NOM = { barra:'🍸 Barra', cocina:'🍳 Cocina', piso:'🍽️ Piso', administracion:'🗃️ Administración' };
+function _pintarAreaHint(){
+    var h = document.getElementById('areaHint'); if (!h) return;
+    var sel = (document.getElementById('fArea')||{}).value || '';
+    if (sel) { h.textContent = 'Corregida a mano: va a ver lo de ' + _AREA_NOM[sel] + '.'; return; }
+    var rol = (document.getElementById('fRol')||{}).value || '';
+    var der = _AREA_DE_ROL[rol];
+    h.textContent = der
+        ? 'Por su rol queda en ' + _AREA_NOM[der] + '. En el QR va a ver los check lists y el recetario de esa área.'
+        : 'Ese rol no dice el área. Elígela aquí o solo verá lo administrativo.';
+}
 function _togAccesoStaff(){
     var rol = document.getElementById('fRol').value;
     var admin = _esRolAdminStaff(rol), conRol = !!rol;
@@ -1225,6 +1262,8 @@ async function saveStaff() {
         puesto:          puesto,
         sucursalId:      sucursalId,
         rol:             rol,
+        // Vacío = "según su rol". Ver etaax_area_de_rol (v47).
+        area:            (document.getElementById('fArea') || {}).value || '',
         usuario:         usuario,
         passwordHash:    passwordHash,
         nipHash:         nipHash,
@@ -1287,13 +1326,94 @@ function renderChips() {
     if (!tmpDocs.length) { list.innerHTML = ''; return; }
     list.innerHTML = tmpDocs.map(function(doc, i){
         var icon = doc.tipo && doc.tipo.includes('image') ? '🖼️' : (doc.tipo && doc.tipo.includes('pdf') ? '📄' : '📎');
+        /* El NOMBRE abre la vista previa, además del ojito. Un chip que dice
+           "DOC-20260428-WA…" no dice nada; antes había que descargarlo para saber
+           si era la INE o el contrato, y quedaba tirado en la carpeta de descargas. */
         return '<div class="file-chip">' +
             '<span>' + icon + '</span>' +
-            '<span class="file-chip-name" title="' + esc(doc.nombre) + '">' + esc(doc.nombre) + '</span>' +
+            '<span class="file-chip-name" title="Ver ' + esc(doc.nombre) + '" style="cursor:pointer" onclick="verDoc(' + i + ')">' + esc(doc.nombre) + '</span>' +
+            '<button class="file-chip-btn" title="Vista previa" onclick="verDoc(' + i + ')" style="color:var(--text-muted)">👁</button>' +
             '<button class="file-chip-btn dl" title="Descargar" onclick="downloadDoc(' + i + ')">⬇</button>' +
             '<button class="file-chip-btn rm" title="Eliminar" onclick="removeDoc(' + i + ')">✕</button>' +
         '</div>';
     }).join('');
+}
+
+/* ── Vista previa del expediente ─────────────────────────────────────────
+   Los archivos viven como data: URL dentro del registro (no en Storage), así que
+   el visor no necesita pedirle nada al servidor: ya los tiene en memoria.
+   · imagen → <img> (img-src ya permite data:)
+   · PDF    → <iframe> con blob:, NO con data:. La CSP no deja data: en frames, y
+              un blob es además una referencia local que se puede revocar al
+              cerrar, en vez de un string gigante viviendo en el DOM.
+   · lo demás (DOCX) → el navegador no lo puede mostrar; se ofrece descargar. */
+var _docBlobURL = null;
+function verDoc(i) {
+    var doc = tmpDocs[i];
+    if (!doc || !doc.data) return;
+    _cerrarVisorURL();
+
+    var tipo = String(doc.tipo || '');
+    var cuerpo;
+    if (tipo.indexOf('image') >= 0) {
+        cuerpo = '<img src="' + doc.data + '" style="max-width:100%;max-height:74vh;display:block;margin:0 auto;border-radius:8px">';
+    } else if (tipo.indexOf('pdf') >= 0) {
+        try {
+            _docBlobURL = URL.createObjectURL(_dataURLaBlob(doc.data));
+            cuerpo = '<iframe src="' + _docBlobURL + '" style="width:100%;height:74vh;border:0;border-radius:8px;background:#fff"></iframe>';
+        } catch (e) {
+            cuerpo = _sinVista('No se pudo abrir el PDF aquí.', i);
+        }
+    } else {
+        cuerpo = _sinVista('Este tipo de archivo no se puede ver en el navegador.', i);
+    }
+
+    var ov = document.createElement('div');
+    ov.id = 'docVisor';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.78);display:flex;' +
+        'align-items:center;justify-content:center;padding:26px';
+    ov.onclick = function (e) { if (e.target === ov) cerrarDoc(); };
+    ov.innerHTML =
+        '<div style="background:var(--s1,#14130f);border:1px solid var(--b1,#2a2824);border-radius:14px;' +
+             'max-width:960px;width:100%;padding:16px;box-shadow:0 24px 70px rgba(0,0,0,.6)">' +
+            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">' +
+                '<div style="flex:1;min-width:0;font-size:13.5px;font-weight:600;overflow:hidden;' +
+                     'text-overflow:ellipsis;white-space:nowrap">' + esc(doc.nombre) + '</div>' +
+                '<button onclick="downloadDoc(' + i + ')" style="background:transparent;border:1px solid var(--b1,#2a2824);' +
+                    'color:var(--text-muted,#a8a29a);border-radius:7px;padding:6px 12px;font-family:inherit;' +
+                    'font-size:12px;cursor:pointer">⬇ Descargar</button>' +
+                '<button onclick="cerrarDoc()" style="background:transparent;border:1px solid var(--b1,#2a2824);' +
+                    'color:var(--text-muted,#a8a29a);border-radius:7px;padding:6px 12px;font-family:inherit;' +
+                    'font-size:12px;cursor:pointer">✕ Cerrar</button>' +
+            '</div>' + cuerpo +
+        '</div>';
+    document.body.appendChild(ov);
+    document.addEventListener('keydown', _escVisor);
+}
+function _sinVista(msg, i) {
+    return '<div style="text-align:center;padding:52px 20px;color:var(--text-dim,#6b6862);font-size:13px;line-height:1.7">' +
+        '<div style="font-size:40px;margin-bottom:10px">📎</div>' + esc(msg) +
+        '<br>Descárgalo para abrirlo en tu computadora.</div>';
+}
+function _dataURLaBlob(u) {
+    var p = String(u).split(',');
+    var mime = (p[0].match(/:(.*?);/) || [])[1] || 'application/octet-stream';
+    var bin = atob(p[1]);
+    var arr = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+}
+function _escVisor(e) { if (e.key === 'Escape') cerrarDoc(); }
+// El blob se REVOCA al cerrar: si no, cada vista previa deja memoria reservada
+// hasta que se recargue la página, y el expediente se abre muchas veces al día.
+function _cerrarVisorURL() {
+    if (_docBlobURL) { try { URL.revokeObjectURL(_docBlobURL); } catch (e) {} _docBlobURL = null; }
+}
+function cerrarDoc() {
+    var ov = document.getElementById('docVisor');
+    if (ov) ov.remove();
+    _cerrarVisorURL();
+    document.removeEventListener('keydown', _escVisor);
 }
 
 function downloadDoc(i) {

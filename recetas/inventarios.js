@@ -2472,11 +2472,15 @@ function imprimirReporteExistencias(opts){
     var pagina = '<div class="pagina">' + _hdrRep + resumen + tabla +
         '<div class="pie-hoja">' + _ftrRep + '</div></div>';
 
-    var w = window.open('', '_blank');
-    w.document.write('<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Existencias por área — '+(negNom?etx(negNom):'ETAAX')+'</title>'+
+    var _doc = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Existencias por área — '+(negNom?etx(negNom):'ETAAX')+'</title>'+
         '<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">'+
-        '<style>'+CSS+'</style></head><body>'+pagina+'</body></html>');
-    w.document.close(); w.focus(); setTimeout(function(){ w.print(); }, 350);
+        '<style>'+CSS+'</style></head><body>'+pagina+
+        '<scr'+'ipt>window.onload=function(){setTimeout(function(){window.print();},250);}<\/scr'+'ipt></body></html>';
+    // Imprime en iframe oculto: sin pestaña huérfana que cerrar después.
+    if (typeof window.etaaxAbrirReporte === 'function' && window.etaaxAbrirReporte(_doc)) return;
+    var w = window.open('', '_blank');
+    if (!w) { alert('El navegador bloqueó la ventana. Permite las ventanas emergentes para imprimir.'); return; }
+    w.document.write(_doc); w.document.close(); w.focus();
 }
 
 function renderHistorial() {

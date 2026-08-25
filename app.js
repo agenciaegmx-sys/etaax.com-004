@@ -1135,8 +1135,15 @@ function buildPlantillaHTML(recetas) {
 }
 
 // Helpers de impresión
+/* Imprime SIN abrir pestaña. Antes se abría una ventana con el reporte y encima
+   el diálogo; al cerrar el diálogo quedaba una pestaña huérfana que había que
+   cerrar a mano, cada vez, para algo que se imprime y se tira.
+   etaaxAbrirReporte (reporte-marca.js) maqueta en un iframe oculto y manda
+   directo al diálogo. La ventana queda de respaldo por si esa pieza no cargó. */
 function abrirVentanaImpresion(html) {
+    if (typeof window.etaaxAbrirReporte === 'function' && window.etaaxAbrirReporte(html)) return;
     var win = window.open('', '_blank');
+    if (!win) { alert('El navegador bloqueó la ventana. Permite las ventanas emergentes para imprimir.'); return; }
     win.document.write(html);
     win.document.close();
 }

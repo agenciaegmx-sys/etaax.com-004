@@ -29,7 +29,11 @@
       connect-src 'self' https://byjuocnkyuxxudondciz.supabase.co wss://byjuocnkyuxxudondciz.supabase.co;
       img-src 'self' data: blob: https://byjuocnkyuxxudondciz.supabase.co;
       object-src 'none';
-      frame-src 'self';
+      # blob: es para la VISTA PREVIA del expediente digital (INE, contratos): el
+      # PDF se maqueta en un iframe desde un blob local, nunca desde un servidor
+      # externo. data: queda fuera a propósito — un blob se revoca al cerrar y no
+      # deja el archivo entero viviendo en el DOM.
+      frame-src 'self' blob:;
       frame-ancestors 'self';
       base-uri 'self';
       form-action 'self';

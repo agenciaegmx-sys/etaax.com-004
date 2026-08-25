@@ -243,20 +243,19 @@
             '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.print();},300);}<\/scr' + 'ipt></body></html>';
     };
 
-    /* Abre un reporte ya armado para imprimir. Primero intenta la ventana nueva
-       (lo de siempre); si el navegador la BLOQUEA —y lo hace sin avisar, así que
-       desde la app parece que el botón no sirve— cae a un iframe oculto de la
-       misma página: se imprime igual, sin depender de las ventanas emergentes. */
-    window.etaaxAbrirReporte = function (html) {
-        var w = null;
-        try { w = window.open('', '_blank'); } catch (e) {}
-        if (w && w.document) {
-            w.document.write(html); w.document.close();
-            // Al frente: si el navegador la abre en segundo plano, el diálogo de
-            // impresión se queda esperando y desde la app parece que no pasó nada.
-            try { w.focus(); } catch (e) {}
-            return true;
-        }
+    /* Abre un reporte ya armado para imprimir.
+
+       IMPRIME SIN ABRIR PESTAÑA. Antes se abría una ventana nueva con el reporte y
+       encima el diálogo de impresión; al cerrar el diálogo quedaba una pestaña
+       huérfana que había que cerrar a mano, cada vez. Para algo que se imprime y
+       se tira, esa pestaña no aporta nada.
+       Ahora el documento se maqueta en un iframe oculto de ESTA página y se manda
+       directo al diálogo. La ventana nueva queda solo de respaldo, por si el
+       iframe no se puede crear.
+
+       Para VER el reporte en pantalla en vez de imprimirlo, usar
+       etaaxVerReporte(html), que sí abre pestaña a propósito. */
+    function _imprimirEnIframe(html) {
         var ifr = document.createElement('iframe');
         ifr.setAttribute('aria-hidden', 'true');
         // FUERA de la pantalla pero CON TAMAÑO REAL: un iframe de 0×0 (o con
@@ -277,6 +276,28 @@
             setTimeout(function () { try { ifr.remove(); } catch (e) {} }, 60000);
         }, 450);
         return true;
+    }
+
+    /* Abre el reporte en una pestaña, SIN imprimir. Para cuando se quiere revisar
+       antes, o compartir la pantalla con alguien. */
+    window.etaaxVerReporte = function (html) {
+        var w = null;
+        try { w = window.open('', '_blank'); } catch (e) {}
+        if (!w || !w.document) return false;
+        // Se le quita el auto-print: aquí el punto es VER, no imprimir.
+        w.document.write(String(html).replace('window.print();', ''));
+        w.document.close();
+        try { w.focus(); } catch (e) {}
+        return true;
+    };
+
+    window.etaaxAbrirReporte = function (html) {
+        if (_imprimirEnIframe(html)) return true;
+        // Respaldo: si el iframe no se pudo crear, al menos que se pueda imprimir.
+        var w = null;
+        try { w = window.open('', '_blank'); } catch (e) {}
+        if (w && w.document) { w.document.write(html); w.document.close(); try { w.focus(); } catch (e) {} return true; }
+        return false;
     };
 
     // Pie estándar de reporte.

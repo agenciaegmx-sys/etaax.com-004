@@ -2181,6 +2181,8 @@ function imprimirRecibo(n, dueno, plan, nSuc, r) {
     '<scr'+'ipt>window.onload=function(){setTimeout(function(){window.print();},250);}<\/scr'+'ipt>' +
     '</body></html>';
 
+    // Imprime sin abrir pestaña (ver etaaxAbrirReporte). La ventana queda de respaldo.
+    if (typeof etaaxAbrirReporte === 'function' && etaaxAbrirReporte(html)) return;
     var w = window.open('', '_blank');
     if (!w) { admAlert('El navegador bloqueó la ventana. Permite las ventanas emergentes para imprimir el recibo.'); return; }
     w.document.write(html);
