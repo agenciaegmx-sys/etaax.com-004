@@ -126,6 +126,19 @@ window.etaaxPerm = function (negId, rol, path) {
     // significa "pasa con cualquiera de estas" (landings).
     var MAPA = [
         [/\/financiero\//,                      'financiero'],
+        /* Las GUÍAS de uso quedan abiertas a cualquiera con sesión: son el manual
+           del producto, y un barman las necesita tanto como el dueño. Va ANTES de
+           la regla del módulo, que exige 'financiero' y se las cerraría. */
+        [/\/consultoria\/guias/,                null],
+        /* Ventas por Producto se mudó de administrativo a consultoria (ago 2026),
+           pero conserva SU permiso: quien no lo tenía no debe ganarlo por la mudanza.
+           Va antes que la regla del módulo por el mismo motivo. */
+        [/\/consultoria\/ventas-productos/,     'ventas_productos'],
+        /* La PORTADA del módulo también queda abierta: es la puerta a las guías.
+           Si pidiera 'financiero', un colaborador no podría ni llegar al manual.
+           Las herramientas de análisis de adentro sí conservan su permiso, y la
+           portada atenúa las que no le tocan (ver consultoria/index.html). */
+        [/\/consultoria\/(index\.html)?$/,       null],
         [/\/consultoria\//,                     'financiero'],
         [/\/administrativo\/ventas-productos/,  'ventas_productos'],
         [/\/administrativo\/ventas/,            'ventas'],

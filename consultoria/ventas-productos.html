@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
     <style>
-        .vp-wrap { min-height:100vh; padding:80px 24px 100px; max-width:1100px; margin:0 auto; }
+        .vp-wrap { min-height:100vh; padding:22px 24px 100px; max-width:1100px; margin:0 auto; }
         .vp-hdr  { display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:28px; flex-wrap:wrap; gap:12px; }
         .vp-title { font-family:'Bebas Neue',sans-serif; font-size:38px; letter-spacing:2px; line-height:1; }
         .vp-title span { color:var(--green); }
@@ -112,7 +112,7 @@
     <img src="/marca/etaax-logo-oscuro.svg" alt="ETAAX" style="height:26px;width:auto;display:block">
     <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🗃️</a>
     <div class="top-breadcrumb">
-        <a href="index.html" style="text-decoration:none;color:inherit"><span class="top-module-badge">Administrativo</span></a>
+        <a href="index.html" style="text-decoration:none;color:inherit"><span class="top-module-badge">Aprende y Analiza</span></a>
         <span class="top-sep">|</span>
         <span class="top-section-name">Ventas por Producto</span>
     </div>
@@ -122,41 +122,38 @@
 <div class="app-shell">
     <nav class="nav cerrado" id="nav">
         <div class="nav-top">
-            <div class="nav-brand"><span class="nav-brand-sub">Control Administrativo</span></div>
+            <div class="nav-brand"><span class="nav-brand-sub">Aprende y Analiza</span></div>
             <div class="nav-top-actions">
-                <a href="index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Panel Admin" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1">🗃️</a>
+                <a href="index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Módulo" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1">🗃️</a>
                 <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
             </div>
         </div>
         <div class="nav-section">
-            <div class="nav-section-label">Admin</div>
-            <a href="diario.html" class="nav-link" data-tooltip="Ventas y Gastos"><span class="nav-icon">🧾</span><span class="nav-text">Ventas y Gastos</span></a>
+            <div class="nav-section-label">Aprende</div>
+            <a href="guias.html" class="nav-link" data-tooltip="Guías de uso"><span class="nav-icon">📚</span><span class="nav-text">Guías de uso</span></a>
         </div>
         <div class="nav-section">
-            <div class="nav-section-label">Catálogos</div>
-            <a href="staff.html" class="nav-link" data-tooltip="Staff"><span class="nav-icon">👥</span><span class="nav-text">Staff</span></a>
-            <a href="proveedores.html" class="nav-link" data-tooltip="Proveedores"><span class="nav-icon">🚚</span><span class="nav-text">Proveedores</span></a>
-            <a href="clientes.html" class="nav-link" data-tooltip="Clientes"><span class="nav-icon">⭐</span><span class="nav-text">Clientes</span></a>
-        </div>
-        <div class="nav-section">
-            <div class="nav-section-label">Menús</div>
-            <a href="menu.html" class="nav-link" data-tooltip="Menú"><span class="nav-icon">📋</span><span class="nav-text">Menú</span></a>
+            <div class="nav-section-label">Analiza</div>
             <a href="ventas-productos.html" class="nav-link active" data-tooltip="Ventas por Producto"><span class="nav-icon">🧾</span><span class="nav-text">Ventas por Producto</span></a>
+            <a href="simulador-kpis.html" class="nav-link" data-tooltip="Simulador de Metas"><span class="nav-icon">🧮</span><span class="nav-text">Simulador de Metas</span></a>
         </div>
     </nav>
 
     <main class="main-content expandido" id="mainContent">
 
-<div class="vp-wrap">
-
-    <!-- Header -->
-    <div class="vp-hdr">
-        <div>
-            <div class="vp-eyebrow">Control Administrativo</div>
-            <div class="vp-title">Ventas por <span>Producto</span></div>
-        </div>
-        <button class="btn-primary" onclick="abrirModal()">+ Cargar periodo</button>
+<!-- Mismo header que el resto de sub-módulos (.header/.brand/.hdr-acts de
+     styles.css): título a la izquierda, acciones a la derecha, en una sola fila. -->
+<div class="header">
+    <div class="brand">
+        <span class="brand-label">Analiza</span>
+        <span class="brand-title">Ventas por Producto</span>
     </div>
+    <div class="hdr-acts">
+        <button class="btn-accent" onclick="abrirModal()" title="Cargar un periodo a mano o desde el CSV de Soft Restaurant">+ Cargar periodo</button>
+    </div>
+</div>
+
+<div class="vp-wrap">
 
     <!-- ── Comparativa ── -->
     <div class="vp-card">

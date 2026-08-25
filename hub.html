@@ -769,21 +769,21 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 
       <a href="consultoria/index.html" class="hub-card">
         <div class="card-header">
-          <div class="card-icon">📋</div>
+          <div class="card-icon">📚</div>
           <span class="card-status status-active">Activo</span>
         </div>
-        <div class="card-title">Consultoría</div>
-        <div class="card-desc">Simulador de KPIs: parte de tus números reales y proyecta escenarios. Reportes y estrategia, próximamente.</div>
+        <div class="card-title">Aprende y Analiza</div>
+        <div class="card-desc">Las guías de uso de ETAAX, y herramientas para analizar tu operación con tus números reales.</div>
         <div class="card-modules">
-          <span class="card-module-tag">🧮 Simulador KPIs</span>
-          <span class="card-module-tag">📄 Reporte mensual</span>
-          <span class="card-module-tag">📌 Estrategia</span>
+          <span class="card-module-tag">📚 Guías de uso</span>
+          <span class="card-module-tag">📊 Ventas por Producto</span>
+          <span class="card-module-tag">🧮 Simulador de Metas</span>
         </div>
         <div class="card-footer">
           <span class="card-cta">Abrir módulo →</span>
           <div class="card-progress">
-            <div class="progress-dot"></div><div class="progress-dot off"></div><div class="progress-dot off"></div>
-            <span>1 de 3 herramientas</span>
+            <div class="progress-dot"></div><div class="progress-dot"></div><div class="progress-dot"></div>
+            <span>3 herramientas</span>
           </div>
         </div>
       </a>
@@ -2744,7 +2744,8 @@ function _showModulos(neg) {
     var CARD_KEYS = {
         'recetas/index.html':        ['recetas','insumos','inventarios','requisiciones'],
         'financiero/index.html':     ['financiero'],
-        'consultoria/index.html':    ['financiero'],
+        // Aprende y Analiza NO se restringe: contiene las guías de uso, que son
+        // para todo el mundo. Las herramientas de análisis se cuidan adentro.
         'administrativo/index.html': ['ventas','ventas_productos','gastos','menu','proveedores','clientes','staff','permisos']
     };
     document.querySelectorAll('a.hub-card').forEach(function(a) {

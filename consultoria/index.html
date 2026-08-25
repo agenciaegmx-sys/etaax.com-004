@@ -6,7 +6,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-    <title>ETAAX - Consultoría</title>
+    <title>ETAAX — Aprende y Analiza</title>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
     <style>
@@ -46,7 +46,7 @@
     <img src="/marca/etaax-logo-oscuro.svg" alt="ETAAX" style="height:26px;width:auto;display:block">
     <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🗃️</a>
     <div class="top-breadcrumb">
-        <span class="top-module-badge">Consultoría</span>
+        <span class="top-module-badge">Aprende y Analiza</span>
         <span class="top-sep">|</span>
         <span class="top-section-name">Herramientas</span>
     </div>
@@ -56,18 +56,55 @@
 <div class="cf-wrap">
     <div class="cf-hero">
         <div class="cf-hero-eyebrow">Módulo</div>
-        <div class="cf-hero-title"><span class="g">Consultoría</span></div>
-        <div class="cf-hero-sub">Análisis ejecutivos y herramientas estratégicas para la toma de decisiones, conectadas con los datos reales de tu negocio.</div>
+        <div class="cf-hero-title">Aprende y <span class="g">Analiza</span></div>
+        <div class="cf-hero-sub">Aprende a usar ETAAX con las guías, y analiza tu operación con herramientas conectadas a tus números reales.</div>
     </div>
 
     <div class="cf-modules">
         <div class="cf-section">
             <div class="cf-section-hdr">
-                <span class="cf-section-tag">Herramientas</span>
+                <span class="cf-section-tag">Aprende</span>
+                <div class="cf-section-title">Guías y tutoriales</div>
+                <div class="cf-section-desc">Material de ETAAX, igual para todas tus sucursales.</div>
+            </div>
+            <div class="cf-grid">
+                <a href="guias.html" class="cf-card">
+                    <div class="cf-card-hdr">
+                        <div class="cf-card-icon">📚</div>
+                        <span class="cf-badge-active">Activo</span>
+                    </div>
+                    <div class="cf-card-title">Guías de uso</div>
+                    <div class="cf-card-desc">Manuales en PDF para sacarle todo a la plataforma, paso a paso. Los tutoriales en video llegan pronto.</div>
+                    <div class="cf-card-cta">Abrir →</div>
+                </a>
+                <a class="cf-card coming-soon">
+                    <div class="cf-card-hdr">
+                        <div class="cf-card-icon">🎥</div>
+                        <span class="cf-badge-soon">Próximamente</span>
+                    </div>
+                    <div class="cf-card-title">Tutoriales en video</div>
+                    <div class="cf-card-desc">Los mismos temas de las guías, explicados en video y a tu ritmo.</div>
+                    <div class="cf-card-cta">En desarrollo</div>
+                </a>
+            </div>
+        </div>
+
+        <div class="cf-section">
+            <div class="cf-section-hdr">
+                <span class="cf-section-tag">Analiza</span>
                 <div class="cf-section-title">Estrategia y análisis</div>
                 <div class="cf-section-desc">Simula, proyecta y planea con base en tus números reales.</div>
             </div>
             <div class="cf-grid">
+                <a href="ventas-productos.html" class="cf-card">
+                    <div class="cf-card-hdr">
+                        <div class="cf-card-icon">📊</div>
+                        <span class="cf-badge-active">Activo</span>
+                    </div>
+                    <div class="cf-card-title">Ventas por Producto</div>
+                    <div class="cf-card-desc">Carga periodos (año, mes, semana) a mano o desde CSV de Soft Restaurant. Compara dos periodos con Δ y Δ%, y saca rankings Top 10–50 por producto y grupo.</div>
+                    <div class="cf-card-cta">Abrir →</div>
+                </a>
                 <a href="simulador-kpis.html" class="cf-card">
                     <div class="cf-card-hdr">
                         <div class="cf-card-icon">🧮</div>
@@ -96,6 +133,30 @@
 <script>
 (function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);document.addEventListener('DOMContentLoaded',function(){if(s==='light'){document.getElementById('themeIcon').textContent='🌙';document.getElementById('themeLabel').textContent='Modo oscuro';}});})();
 function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('etaax_theme',n);document.getElementById('themeIcon').textContent=n==='light'?'🌙':'☀️';document.getElementById('themeLabel').textContent=n==='light'?'Modo oscuro':'Modo claro';}
+</script>
+<script>
+/* La portada está abierta para que cualquiera llegue a las guías, pero las
+   herramientas de ANÁLISIS sí piden permiso. Sin esto, un colaborador sin
+   'financiero' hace clic, page-guard lo rebota al hub y no entiende por qué.
+   Mejor decírselo antes: la tarjeta se atenúa y explica a quién pedírselo. */
+document.addEventListener('DOMContentLoaded', function () {
+    var ctx = null;
+    try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch (e) { return; }
+    if (!ctx || ctx.ctxType !== 'staff') return;          // dueño y admin: acceso total
+    var rol = ctx.rol || 'otro';
+    if (rol === 'admin' || !window.etaaxPermisosRol) return;
+    var perms = etaaxPermisosRol(ctx.negId, rol) || {};
+    var REQUIERE = { 'ventas-productos.html': 'ventas_productos', 'simulador-kpis.html': 'financiero' };
+    document.querySelectorAll('a.cf-card[href]').forEach(function (a) {
+        var k = REQUIERE[a.getAttribute('href')];
+        if (!k || perms[k]) return;
+        a.classList.add('coming-soon');                   // atenúa y desactiva el clic
+        a.removeAttribute('href');
+        a.title = 'Tu rol no tiene acceso a esta herramienta. Pídesela al dueño del negocio.';
+        var cta = a.querySelector('.cf-card-cta');
+        if (cta) cta.textContent = 'Sin acceso';
+    });
+});
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
