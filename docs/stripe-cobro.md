@@ -120,10 +120,17 @@ con la sesión del usuario, y de ahí sale quién es y a qué negocio entra.
   Nunca acepta la cantidad que mande el navegador: es el número que decide cuánto
   se paga. Reemplaza al Payment Link fijo.
 - **sync-suscripcion** — empuja la cantidad nueva a Stripe cuando dan de alta o
-  baja una sucursal, **sin prorrateo**: la sucursal sirve de inmediato y el precio
-  sube en el siguiente cobro. Es idempotente; si la cantidad ya coincide, ni toca
-  Stripe. La app la llama desde `_setSucursales`, que es el punto único por donde
-  pasan todos los cambios de sucursal.
+  baja una sucursal. Es idempotente; si la cantidad ya coincide, ni toca Stripe.
+  La app la llama desde `_setSucursales`, el punto único por donde pasan todos los
+  cambios de sucursal.
+
+  **Prorrateo: `create_prorations`** (24-ago). No se le cobra a la tarjeta el día
+  que abre la sucursal; los días que falten del mes se suman a su SIGUIENTE
+  factura. Las otras dos opciones y por qué no:
+  · `none` regalaba hasta un mes por cada sucursal abierta (~$1,700 cada vez), y
+    no compraba nada — nadie abre una sucursal por ahorrarse tres semanas.
+  · `always_invoice` cobra al instante, y le cae un cargo inesperado justo el día
+    que el cliente crece.
 
 ### Secreto opcional
 

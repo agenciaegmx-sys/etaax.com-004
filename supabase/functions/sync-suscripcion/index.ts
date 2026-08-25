@@ -100,10 +100,17 @@ Deno.serve(async (req) => {
 
     await stripe.subscriptions.update(subId, {
       items: [{ id: item.id, quantity: cantidad }],
-      /* 'none' = sin prorrateo. Con el default ('create_prorations') Stripe le
-         cobraría ahí mismo la parte del mes que falta, que es justo el cargo
-         sorpresa que decidimos no hacer. */
-      proration_behavior: 'none',
+      /* PRORRATEO A LA SIGUIENTE FACTURA (decisión de Edwin, 24-ago).
+         Stripe calcula los días que falten del mes y los deja como renglón
+         pendiente: NO le toca la tarjeta el día que abre la sucursal, y ese
+         importe se cobra junto con su próximo mes.
+         · 'none' regalaba hasta un mes completo por cada sucursal que abrieran
+           (~$1,700 cada vez), sin comprar nada a cambio: nadie abre una sucursal
+           por ahorrarse tres semanas de suscripción.
+         · 'always_invoice' cobraría al instante, y le cae un cargo inesperado
+           justo el día que el cliente crece — el mejor día de la relación es mal
+           momento para ponerle un peaje. */
+      proration_behavior: 'create_prorations',
       metadata: { negocio_id: negocioId, sucursales: String(cantidad) },
     });
 
