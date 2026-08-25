@@ -111,9 +111,12 @@
         }).join('');
     }
 
+    /* La tarjeta ENTERA abre la vista previa. Las acciones de administración se van
+       al menú de tres puntos: tener el bote de basura pegado a "Abrir" es pedir un
+       dedazo, y aquí un dedazo borra la guía de TODOS los clientes. */
     function tarjeta(g) {
         var oculta = g.activa === false;
-        return '<a class="gu-card" href="' + e(g.url) + '" target="_blank" rel="noopener"' +
+        return '<div class="gu-card" onclick="_verGuia(\'' + e(g.id) + '\')"' +
             (oculta ? ' style="opacity:.45"' : '') + '>' +
             '<div class="gu-card-top"><span class="gu-ico">' + (ICONO[g.tipo] || '📄') + '</span>' +
                 '<span class="gu-tag">' + e(ETIQUETA[g.tipo] || g.tipo) +
@@ -123,20 +126,145 @@
             '<div class="gu-card-d">' + (g.descripcion ? e(g.descripcion) : '') + '</div>' +
             '<div class="gu-card-f">' +
                 '<span class="gu-card-cta">' + (g.tipo === 'video' ? 'Ver video →' : 'Abrir →') + '</span>' +
-                (_esAdmin ? '<button class="gu-del" title="Eliminar guía" onclick="event.preventDefault();event.stopPropagation();_borrarGuia(\'' + e(g.id) + '\')">🗑️</button>' : '') +
-            '</div></a>';
+                (_esAdmin ? '<button class="gu-del" title="Opciones" onclick="event.stopPropagation();_menuGuia(event,\'' + e(g.id) + '\')">⋯</button>' : '') +
+            '</div></div>';
     }
 
+    /* ── Menú de opciones (solo admin) ── */
+    window._menuGuia = function (ev, id) {
+        _cerrarMenus();
+        var g = _guias.find(function (x) { return x.id === id; }); if (!g) return;
+        var m = document.createElement('div');
+        m.className = 'gu-menu';
+        var r = ev.currentTarget.getBoundingClientRect();
+        m.style.cssText = 'position:fixed;z-index:10001;min-width:196px;background:var(--surface);' +
+            'border:1px solid var(--border);border-radius:10px;padding:5px;box-shadow:0 14px 40px rgba(0,0,0,.5);' +
+            'top:' + Math.min(r.bottom + 6, window.innerHeight - 190) + 'px;left:' + Math.max(10, r.right - 196) + 'px';
+        m.innerHTML =
+            _mi('👁', 'Ver', "_verGuia('" + e(id) + "')") +
+            _mi('✏️', 'Editar información', "_editarGuia('" + e(id) + "')") +
+            _mi(g.activa === false ? '👀' : '🙈', g.activa === false ? 'Volver a mostrar' : 'Ocultar a los clientes',
+                "_toggleGuia('" + e(id) + "')") +
+            '<div style="height:1px;background:var(--border);margin:5px 2px"></div>' +
+            _mi('🗑️', 'Eliminar', "_borrarGuia('" + e(id) + "')", true);
+        document.body.appendChild(m);
+        setTimeout(function () { document.addEventListener('click', _cerrarMenus, { once: true }); }, 0);
+    };
+    function _mi(ico, txt, accion, peligro) {
+        return '<div onclick="event.stopPropagation();_cerrarMenus();' + accion + '" ' +
+            'style="display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:7px;cursor:pointer;' +
+            'font-size:13px;color:' + (peligro ? 'var(--red)' : 'var(--text)') + '" ' +
+            'onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">' +
+            '<span style="font-size:14px">' + ico + '</span>' + e(txt) + '</div>';
+    }
+    window._cerrarMenus = function () {
+        Array.prototype.forEach.call(document.querySelectorAll('.gu-menu'), function (x) { x.remove(); });
+    };
+
+    /* ── Visor ──
+       El cliente solo VE y CIERRA: no tiene por qué encontrarse botones de
+       administración en una pantalla que es para consultar un manual. */
+    window._verGuia = function (id) {
+        var g = _guias.find(function (x) { return x.id === id; }); if (!g) return;
+        _cerrarVisor();
+        var cuerpo;
+        if (g.tipo === 'video') {
+            var vid = ytId(g.url);
+            cuerpo = vid
+                ? '<iframe src="https://www.youtube-nocookie.com/embed/' + e(vid) + '" allowfullscreen ' +
+                  'style="width:100%;aspect-ratio:16/9;border:0;border-radius:10px;background:#000"></iframe>'
+                : _fuera(g.url);
+        } else if (g.tipo === 'pdf') {
+            // #view=FitH abre ajustado al ancho: en un PDF vertical, el default deja
+            // media hoja en blanco y obliga a hacer zoom cada vez.
+            cuerpo = '<iframe src="' + e(g.url) + '#view=FitH" ' +
+                     'style="width:100%;height:76vh;border:0;border-radius:10px;background:#fff"></iframe>';
+        } else {
+            cuerpo = _fuera(g.url);
+        }
+        var ov = document.createElement('div');
+        ov.id = 'guVisor';
+        ov.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.8);display:flex;' +
+            'align-items:center;justify-content:center;padding:24px';
+        ov.onclick = function (ev) { if (ev.target === ov) _cerrarVisor(); };
+        ov.innerHTML =
+            '<div style="background:var(--surface);border:1px solid var(--border);border-radius:15px;' +
+                 'max-width:1000px;width:100%;padding:16px" onclick="event.stopPropagation()">' +
+                '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">' +
+                    '<div style="flex:1;min-width:0">' +
+                        '<div style="font-size:14.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + e(g.titulo) + '</div>' +
+                        (g.descripcion ? '<div style="font-size:11.5px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + e(g.descripcion) + '</div>' : '') +
+                    '</div>' +
+                    '<a href="' + e(g.url) + '" target="_blank" rel="noopener" class="gu-btn gu-btn-2" style="text-decoration:none">↗ Abrir aparte</a>' +
+                    '<button class="gu-btn gu-btn-2" onclick="_cerrarVisor()">✕ Cerrar</button>' +
+                '</div>' + cuerpo +
+            '</div>';
+        document.body.appendChild(ov);
+        document.addEventListener('keydown', _escVisor);
+    };
+    function _fuera(url) {
+        return '<div style="text-align:center;padding:56px 20px;color:var(--text-dim);font-size:13px;line-height:1.7">' +
+            '<div style="font-size:40px;margin-bottom:10px">🔗</div>Este contenido se abre fuera de ETAAX.' +
+            '<br><a href="' + e(url) + '" target="_blank" rel="noopener" style="color:var(--green)">Abrirlo ahora →</a></div>';
+    }
+    function _escVisor(ev) { if (ev.key === 'Escape') _cerrarVisor(); }
+    window._cerrarVisor = function () {
+        var ov = document.getElementById('guVisor'); if (ov) ov.remove();
+        document.removeEventListener('keydown', _escVisor);
+    };
+
+    /* Ocultar en vez de borrar: una guía que se retira temporalmente (porque el
+       módulo cambió y hay que rehacerla) no debería perderse. */
+    window._toggleGuia = async function (id) {
+        var g = _guias.find(function (x) { return x.id === id; }); if (!g) return;
+        var r = await _supabase.from('guias')
+            .update({ activa: g.activa === false, updated_at: new Date().toISOString() }).eq('id', id);
+        if (r.error) { alert('No se pudo cambiar: ' + r.error.message); return; }
+        await cargar();
+    };
+
     /* ── Modal: subir guía ──────────────────────────────────────── */
+    var _editando = null;   // id de la guía en edición, o null si es una nueva
+
     window._abrirGuia = function (seccion) {
+        _editando = null;
         llenarSecciones(seccion);
         $('gTitulo').value = ''; $('gDesc').value = ''; $('gOrden').value = 0;
         $('gTipo').value = 'pdf'; $('gAudiencia').value = 'ambas'; $('gMsg').textContent = '';
+        $('guiaModalT').textContent = 'Subir nueva guía';
+        $('gGuardar').textContent = 'Publicar';
+        $('gTipo').disabled = false;
         window._cambiarTipoGuia();
         $('ovGuia').classList.add('on');
         setTimeout(function () { $('gTitulo').focus(); }, 40);
     };
-    window._cerrarGuia = function () { $('ovGuia').classList.remove('on'); };
+
+    /* Editar SOLO la información: título, descripción, sección, orden y audiencia.
+       El ARCHIVO no se cambia aquí — reemplazarlo dejaría el PDF viejo huérfano en
+       Storage y, peor, cambiaría en silencio lo que ya leyeron los clientes bajo el
+       mismo título. Para cambiar el contenido: se publica una guía nueva y se
+       oculta la anterior. */
+    window._editarGuia = function (id) {
+        var g = _guias.find(function (x) { return x.id === id; }); if (!g) return;
+        _editando = id;
+        llenarSecciones(g.categoria);
+        $('gTitulo').value = g.titulo || '';
+        $('gDesc').value = g.descripcion || '';
+        $('gOrden').value = g.orden || 0;
+        $('gAudiencia').value = g.audiencia || 'ambas';
+        $('gTipo').value = g.tipo || 'pdf';
+        $('gTipo').disabled = true;               // el tipo va amarrado al archivo
+        $('gMsg').textContent = '';
+        $('guiaModalT').textContent = 'Editar información';
+        $('gGuardar').textContent = 'Guardar cambios';
+        $('gFuente').innerHTML = '<div style="font-size:11.5px;color:var(--text-dim);line-height:1.6;' +
+            'padding:9px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">' +
+            (ICONO[g.tipo] || '📄') + ' El archivo no se cambia desde aquí.<br>' +
+            'Para reemplazarlo, publica una guía nueva y oculta esta.</div>';
+        $('ovGuia').classList.add('on');
+        setTimeout(function () { $('gTitulo').focus(); }, 40);
+    };
+    window._cerrarGuia = function () { $('ovGuia').classList.remove('on'); _editando = null; $('gTipo').disabled = false; };
 
     function llenarSecciones(sel) {
         var vistas = {}, ops = [];
@@ -167,6 +295,25 @@
 
         btn.disabled = true;
         try {
+            // ── EDICIÓN: solo la información, sin tocar archivo ni tipo ──
+            if (_editando) {
+                var cate = ($('gCategoria').value || '').trim() || 'General';
+                msg.textContent = 'Guardando…';
+                var ru = await _supabase.from('guias').update({
+                    titulo: titulo,
+                    descripcion: ($('gDesc').value || '').trim() || null,
+                    categoria: cate,
+                    orden: parseInt($('gOrden').value, 10) || 0,
+                    audiencia: $('gAudiencia').value || 'ambas',
+                    updated_at: new Date().toISOString()
+                }).eq('id', _editando);
+                if (ru.error) { msg.textContent = 'No se pudo guardar: ' + ru.error.message; return; }
+                await _supabase.from('guia_secciones').upsert({ nombre: cate }, { onConflict: 'nombre' });
+                window._cerrarGuia();
+                await cargar();
+                return;
+            }
+
             if (tipo === 'pdf') {
                 var f = $('gArchivo').files[0];
                 if (!f) { msg.textContent = 'Elige el PDF.'; return; }

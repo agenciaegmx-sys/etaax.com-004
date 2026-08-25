@@ -41,8 +41,11 @@
         .gu-card-d { font-size:11.5px;color:var(--text-dim);line-height:1.55;flex:1; }
         .gu-card-f { display:flex;align-items:center;justify-content:space-between;margin-top:5px; }
         .gu-card-cta { font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:var(--green); }
-        .gu-del { background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;padding:0 4px;line-height:1; }
-        .gu-del:hover{color:var(--red)}
+        /* El ⋯ de opciones. Antes aquí vivía el bote de basura, pegado a "Abrir":
+           un dedazo borraba la guía de TODOS los clientes. Ahora abre el menú. */
+        .gu-del { background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:17px;
+                  line-height:1;padding:0 6px;border-radius:6px;letter-spacing:1px; }
+        .gu-del:hover{ color:var(--text);background:var(--surface2) }
 
         .gu-vacio { text-align:center;padding:56px 20px;color:var(--text-dim);font-size:13px;line-height:1.75; }
         .gu-nota { max-width:560px;margin:0 auto 24px;padding:11px 15px;border:1px solid var(--border);border-radius:10px;

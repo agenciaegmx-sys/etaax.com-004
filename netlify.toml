@@ -33,7 +33,11 @@
       # PDF se maqueta en un iframe desde un blob local, nunca desde un servidor
       # externo. data: queda fuera a propósito — un blob se revoca al cerrar y no
       # deja el archivo entero viviendo en el DOM.
-      frame-src 'self' blob:;
+      # frame-src: blob: para la vista previa del expediente (INE, contratos);
+      # el dominio de Supabase para ver los PDF de las guías sin salir de la app;
+      # youtube-nocookie para los tutoriales en video (esa variante NO deja cookies
+      # de seguimiento en el navegador del cliente).
+      frame-src 'self' blob: https://byjuocnkyuxxudondciz.supabase.co https://www.youtube-nocookie.com;
       frame-ancestors 'self';
       base-uri 'self';
       form-action 'self';
