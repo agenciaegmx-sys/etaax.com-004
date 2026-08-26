@@ -155,11 +155,14 @@ const cola = n => JSON.stringify(Array.from({ length: n }, (_, i) => ({ uid: 'i'
         await respirar();
         store.set(OUTBOX, '[]');
         await parpadeo();
+        /* Se mira el mapa CRUDO (`_m`), no `getItem`: desde que el almacén atiende
+           sus propias llaves aunque se pidan por localStorage, getItem devuelve el
+           espejo en memoria y ya no sirve para ver qué quedó guardado abajo. */
         test('el espejo viejo de localStorage sigue ahí hasta confirmar el disco', () =>
-            eq(localStorage.getItem(OUTBOX) !== null, true));
+            eq(localStorage._m[OUTBOX] !== undefined, true));
         await respirar();
         test('con el valor nuevo ya en disco, el espejo obsoleto se suelta', () =>
-            eq(localStorage.getItem(OUTBOX), null));
+            eq(localStorage._m[OUTBOX], undefined));
         test('y lo que se lee sigue siendo la cola vacía', () =>
             eq(store.get(OUTBOX), '[]'));
     }

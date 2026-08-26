@@ -59,6 +59,14 @@
     var db = null, hayIDB = false;
     var hidratado = false;   // ya se sabe si hay IndexedDB y ya se leyó lo que tenía
 
+    /* Acceso CRUDO a localStorage. El almacén se parcha a sí mismo más abajo, y su
+       maquinaria interna (migración, bajada a disco) tiene que seguir viendo el
+       localStorage de verdad — si pasara por el parche, borrar una clave del espejo
+       borraría también la copia en memoria, que es justo lo contrario. */
+    var _lsGet = localStorage.getItem.bind(localStorage);
+    var _lsSet = localStorage.setItem.bind(localStorage);
+    var _lsDel = localStorage.removeItem.bind(localStorage);
+
     function _esGrandeKey(k) {
         // k llega completa: "etaax_{negocio}_{clave}" o "etaax_{clave}"
         for (var i = 0; i < GRANDES.length; i++) {
@@ -159,7 +167,7 @@
                    cola de salida en sus 314 pendientes, carga tras carga.
                    Se borra solo después de confirmar la escritura — antes sería
                    quedarse sin ninguna copia legible. */
-                if (ok) { desdeIDB[k] = 1; try { localStorage.removeItem(k); } catch (e) {} }
+                if (ok) { desdeIDB[k] = 1; try { _lsDel(k); } catch (e) {} }
                 return ok;
             });
         }));
@@ -182,7 +190,7 @@
         var claves = [];
         for (var i = 0; i < localStorage.length; i++) claves.push(localStorage.key(i));
         var candidatas = claves.filter(function (k) {
-            return k && k.indexOf('etaax_') === 0 && _esGrandeKey(k) && localStorage.getItem(k) != null;
+            return k && k.indexOf('etaax_') === 0 && _esGrandeKey(k) && _lsGet(k) != null;
         });
         if (!candidatas.length) return Promise.resolve();
 
@@ -196,11 +204,11 @@
            legible, y el espacio se libera igual en la siguiente carga. */
         var bytes = 0, liberadas = 0, copiadas = 0;
         return Promise.all(candidatas.map(function (k) {
-            var v = localStorage.getItem(k);
+            var v = _lsGet(k);
             if (desdeIDB[k]) {
                 // Ya estaba a salvo en IndexedDB desde antes de esta carga.
                 bytes += v.length;
-                try { localStorage.removeItem(k); liberadas++; } catch (e) {}
+                try { _lsDel(k); liberadas++; } catch (e) {}
                 return Promise.resolve();
             }
             if (mem[k] == null) mem[k] = v;
@@ -233,6 +241,54 @@
         console.warn('[etaax-store] no se pudo abrir IndexedDB:', e && e.message);
     });
 
+    /* ══ EL ALMACÉN ATIENDE SUS LLAVES AUNQUE SE PIDAN POR localStorage ══════
+       El bug que esto arregla: horarios, staff, checklists y el catálogo de
+       recetas leían y escribían sus claves con `localStorage` directo. Pero esas
+       claves son GRANDES: el almacén las copia a IndexedDB y después LAS BORRA de
+       localStorage para liberar la cuota. Como esas páginas nunca miraban en
+       IndexedDB, al par de cargas veían vacío — y el dueño veía sus horarios
+       borrados "a los días", sin que nadie hubiera borrado nada.
+
+       Se podía arreglar cambiando los catorce lugares que las usan. Pero eso deja
+       la trampa armada para el que agregue el número quince, y el error no avisa:
+       los datos se ven bien un rato y desaparecen después.
+       Mejor que el almacén responda por sus llaves venga la pregunta por donde
+       venga. Es el mismo patrón que ya usa negocio-tab.js con las suyas.
+
+       OJO con el orden: negocio-tab.js parcha PRIMERO (va antes en el head) y
+       este parche encadena con el suyo — las llaves que no son grandes siguen
+       pasando por él. */
+    (function _parcharLocalStorage() {
+        var ls = window.localStorage; if (!ls) return;
+        var _get = ls.getItem.bind(ls), _set = ls.setItem.bind(ls), _del = ls.removeItem.bind(ls);
+        try {
+            Object.defineProperty(ls, 'getItem', { configurable: true, value: function (k) {
+                if (_esGrandeKey(String(k))) {
+                    // Espejo en memoria; si aún no hidrata, el localStorage viejo
+                    // sirve de puente para no arrancar en blanco.
+                    if (mem[k] != null) return mem[k];
+                    return _get(k);
+                }
+                return _get(k);
+            }});
+            Object.defineProperty(ls, 'setItem', { configurable: true, value: function (k, v) {
+                if (_esGrandeKey(String(k))) {
+                    mem[k] = String(v); pendientes[k] = 1; escritasEnSesion[k] = 1;
+                    _programarBajada();
+                    return;   // NO se escribe en localStorage: para eso está IndexedDB
+                }
+                return _set(k, v);
+            }});
+            Object.defineProperty(ls, 'removeItem', { configurable: true, value: function (k) {
+                if (_esGrandeKey(String(k))) {
+                    mem[k] = null; pendientes[k] = 1; escritasEnSesion[k] = 1;
+                    _programarBajada();
+                }
+                return _del(k);
+            }});
+        } catch (e) { /* navegador que no deja redefinir: se queda como antes */ }
+    })();
+
     window.etaaxStore = {
         ready: ready,
         esGrande: _esGrandeKey,
@@ -243,9 +299,9 @@
                 if (mem[k] != null) return mem[k];
                 // Todavía no hidrata (o nunca se guardó): el espejo viejo de
                 // localStorage sirve de puente para no arrancar en blanco.
-                try { return localStorage.getItem(k); } catch (e) { return null; }
+                try { return _lsGet(k); } catch (e) { return null; }
             }
-            try { return localStorage.getItem(k); } catch (e) { return null; }
+            try { return _lsGet(k); } catch (e) { return null; }
         },
 
         set: function (k, v) {
@@ -256,7 +312,7 @@
                 _programarBajada();
                 return true;                       // ya está disponible para leer
             }
-            try { localStorage.setItem(k, v); return true; }
+            try { _lsSet(k, v); return true; }
             catch (e) {
                 console.warn('[etaax-store] no cupo en localStorage:', k, e && e.message);
                 return false;
@@ -265,7 +321,7 @@
 
         del: function (k) {
             if (_esGrandeKey(k)) { mem[k] = null; pendientes[k] = 1; _programarBajada(); }
-            try { localStorage.removeItem(k); } catch (e) {}
+            try { _lsDel(k); } catch (e) {}
         },
 
         pendientes: function () { return Object.keys(pendientes).length; },
