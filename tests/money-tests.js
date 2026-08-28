@@ -1985,6 +1985,85 @@ console.log('\n══ SUITE L · Bloque bancario del editor de staff (administra
     });
 })();
 
+/* ═══════════ SUITE M · EXPEDIENTE DEL COLABORADOR (administrativo/staff.html) ═══════════
+   La vista de solo lectura. Dos cosas que sí importan: la antigüedad/edad que se
+   presentan como hechos, y que sueldo y datos bancarios NO salgan destapados —
+   en esta página editar a un colaborador pide la contraseña del administrador
+   justamente por eso, y una vista que los soltara desharía esa protección. */
+console.log('\n══ SUITE M · Expediente del colaborador (administrativo/staff.html) ══');
+(function () {
+    const M = crearContexto();
+    cargarJS(M, 'bancos-mx.js');
+    cargarInline(M, 'administrativo/staff.html');
+
+    const hoy = new Date();
+    const haceMeses = n => {
+        const d = new Date(hoy.getFullYear(), hoy.getMonth() - n, hoy.getDate());
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    };
+
+    test('antigüedad de 18 meses se dice en años y meses', () =>
+        eq(M._antiguedadDe(haceMeses(18)), '1 año y 6 meses', 'antigüedad'));
+    test('exactamente un año no arrastra "y 0 meses"', () =>
+        eq(M._antiguedadDe(haceMeses(12)), '1 año', 'antigüedad'));
+    test('un mes va en singular', () => eq(M._antiguedadDe(haceMeses(1)), '1 mes', 'antigüedad'));
+    test('recién entrado no dice "0 meses"', () =>
+        eq(M._antiguedadDe(haceMeses(0)), 'menos de un mes', 'antigüedad'));
+    test('sin fecha de ingreso no se inventa antigüedad', () => eq(M._antiguedadDe(''), '', 'antigüedad'));
+    /* Una fecha futura mal capturada no debe imprimir una antigüedad negativa. */
+    test('una fecha de ingreso futura no produce antigüedad', () => {
+        const d = new Date(hoy.getFullYear() + 1, 0, 15);
+        return eq(M._antiguedadDe(d.toISOString().slice(0, 10)), '', 'antigüedad');
+    });
+
+    test('la edad sale de la fecha de nacimiento', () => {
+        const d = new Date(hoy.getFullYear() - 30, hoy.getMonth(), hoy.getDate());
+        return eq(M._edadDe(d.toISOString().slice(0, 10)), 30, 'edad');
+    });
+    test('el cumpleaños que aún no llega este año resta un año', () => {
+        const d = new Date(hoy.getFullYear() - 30, hoy.getMonth(), hoy.getDate());
+        d.setDate(d.getDate() + 1);
+        return eq(M._edadDe(d.toISOString().slice(0, 10)), 29, 'edad');
+    });
+
+    /* ── Lo tapado sigue tapado ── */
+    const s = {
+        id: 'x1', nombre: 'Ana López', esquemaSueldo: 'diario', sueldoDiario: 450,
+        salarioBase: 0, bonoIncentivo: 700, primaVacacional: 120,
+        clabeNomina: '002010077777777771', bancoNomina: 'Banamex',
+        datosBancarios: 'cuenta 12345', categoriaNomina: 'operativa',
+    };
+    const tapado = M._expNominaCuerpo(s, false);
+    const abierto = M._expNominaCuerpo(s, true);
+
+    test('el sueldo NO aparece sin destapar', () => eq(tapado.indexOf('450') === -1, true, 'sueldo'));
+    test('el bono tampoco', () => eq(tapado.indexOf('700') === -1, true, 'bono'));
+    test('la prima tampoco', () => eq(tapado.indexOf('120') === -1, true, 'prima'));
+    test('la cuenta tampoco', () => eq(tapado.indexOf('12345') === -1, true, 'cuenta'));
+    /* De la CLABE solo los últimos 4: bastan para reconocerla, no para usarla. */
+    test('de la CLABE solo se ven los últimos 4 dígitos', () =>
+        eq(tapado.indexOf('7771') > -1 && tapado.indexOf('002010077777777771') === -1, true, 'clabe'));
+    /* El banco SÍ se ve: no sirve para mover dinero y ayuda a identificar la cuenta. */
+    test('el banco sí se ve tapado (no sirve para mover dinero)', () =>
+        eq(tapado.indexOf('Banamex') > -1, true, 'banco'));
+
+    test('al destapar sí aparece el sueldo', () => eq(abierto.indexOf('450') > -1, true, 'sueldo'));
+    test('al destapar sí aparece la CLABE completa', () =>
+        eq(abierto.replace(/\s/g, '').indexOf('002010077777777771') > -1, true, 'clabe'));
+
+    /* Sin sueldo capturado no debe salir un "••••••" que finge que hay un dato. */
+    test('un sueldo vacío se muestra vacío, no tapado', () =>
+        eq(M._expNominaCuerpo({ esquemaSueldo: 'periodo' }, false).indexOf('••••••') === -1, true, 'vacío'));
+
+    /* El expediente completo se arma sin reventar, incluso con un registro pelón. */
+    test('el expediente se arma con un registro casi vacío', () => {
+        M._storage['etaax_negocio_activo'] = 'n1';
+        M._storage['etaax_n1_staff'] = JSON.stringify([{ id: 'p1', nombre: 'Pedro' }]);
+        M.verExpediente('p1');
+        return eq(true, true, 'render');
+    });
+})();
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0

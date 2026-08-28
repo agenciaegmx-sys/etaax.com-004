@@ -384,7 +384,12 @@
             documentos: _tmpDocs.slice()
         };
         var idx = data.findIndex(function(s){ return s.id === obj.id; });
-        if (idx > -1) { data[idx] = obj; } else { data.push(obj); }
+        /* FUSIONAR, no reemplazar. Hay DOS editores de colaborador (este y el otro) y
+        cada uno arma su objeto con los campos que conoce. Reemplazar el registro
+        hace que el editor que no conoce un campo lo BORRE al guardar — la foto
+        desaparecería al editar desde Nóminas. Fusionando, cada quien actualiza lo
+        suyo y respeta lo que no maneja. */
+        if (idx > -1) { data[idx] = Object.assign({}, data[idx], obj); } else { data.push(obj); }
         await _save(_negId, data);
         _close();
         if (typeof _onSaved === 'function') _onSaved(obj);

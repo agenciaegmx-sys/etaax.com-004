@@ -378,6 +378,24 @@
         <div class="modal-body">
             <div class="modal-section">Datos personales</div>
             <div class="form-grid">
+                <!-- La foto va a Supabase Storage, NUNCA en base64 dentro del registro:
+                     así se llenó el catálogo de insumos hasta hacerlo lento de cargar. -->
+                <div class="form-group full" style="display:flex;align-items:center;gap:16px">
+                    <div id="fotoPrev" style="width:74px;height:74px;border-radius:50%;flex-shrink:0;
+                         background:var(--surface2);border:1px solid var(--border);display:flex;
+                         align-items:center;justify-content:center;font-size:26px;color:var(--text-dim);
+                         background-size:cover;background-position:center">👤</div>
+                    <div style="flex:1;min-width:0">
+                        <label style="display:block">Foto (opcional)</label>
+                        <input type="file" id="fFotoInput" accept="image/*" style="display:none" onchange="_subirFotoStaff(this)">
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+                            <button type="button" class="btn-row" onclick="document.getElementById('fFotoInput').click()" id="btnFoto">Agregar foto</button>
+                            <button type="button" class="btn-row del" onclick="_quitarFotoStaff()" id="btnQuitarFoto" style="display:none">Quitar</button>
+                        </div>
+                        <span class="form-hint" id="fotoHint">Se reduce y se guarda en la nube. JPG o PNG.</span>
+                    </div>
+                    <input type="hidden" id="fFoto">
+                </div>
                 <div class="form-group full">
                     <label>Nombre completo *</label>
                     <input type="text" id="fNombre" placeholder="Ej. María Guadalupe Torres">
@@ -945,7 +963,7 @@ function renderTable() {
         } else {
             sucCell = '<span style="color:var(--text-dim);font-size:12px">—</span>';
         }
-        return '<tr style="cursor:pointer" ondblclick="openModal(\'' + s.id + '\')">' +
+        return '<tr style="cursor:pointer" title="Ver expediente" onclick="verExpediente(\'' + s.id + '\')">' +
             '<td><strong>' + esc(s.nombre) + '</strong>' + cumpleChip + usuarioChip + docsChip + '</td>' +
             '<td>' + esc(s.puesto||'—') + '</td>' +
             '<td>' + sucCell + '</td>' +
@@ -954,9 +972,9 @@ function renderTable() {
             '<td>' + esc(s.celular||'—') + '</td>' +
             '<td>' + (s.salarioBase?'$'+Number(s.salarioBase).toLocaleString('es-MX',{minimumFractionDigits:2}):'—') + (s.periodicidad?' <span style="font-size:10px;color:var(--text-dim)">'+s.periodicidad+'</span>':'') + '</td>' +
             '<td><span class="estado-chip ' + estadoClass + '">' + esc(s.estado||'Activo') + '</span></td>' +
-            '<td style="white-space:nowrap">' +
-                '<button class="btn-row" onclick="event.stopPropagation();openModal(\'' + s.id + '\')">Editar</button> ' +
-                '<button class="btn-row del" onclick="event.stopPropagation();deleteStaff(\'' + s.id + '\')">Eliminar</button>' +
+            '<td style="white-space:nowrap;text-align:right">' +
+                '<button class="btn-row" title="Opciones" onclick="_menuStaff(event,\'' + s.id + '\')" ' +
+                    'style="padding:4px 10px;font-size:15px;line-height:1">⋯</button>' +
             '</td>' +
         '</tr>';
     }).join('');
@@ -990,6 +1008,8 @@ function _openModalReal(id) {
         var s = data.find(function(x){ return x.id === id; });
         if (s) {
             document.getElementById('fId').value          = s.id;
+            document.getElementById('fFoto').value        = s.foto || '';
+            _pintarFotoStaff();
             document.getElementById('fNombre').value      = s.nombre || '';
             document.getElementById('fPuesto').value      = s.puesto || '';
             document.getElementById('fFechaIngreso').value= s.fechaIngreso || '';
@@ -1098,6 +1118,10 @@ function clearForm() {
     document.getElementById('fPeriodicidad').value = '';
     document.getElementById('fDiaPago').value = '';
     document.getElementById('fFormaPago').value = '';
+    document.getElementById('fFoto').value = '';
+    document.getElementById('fotoHint').textContent = 'Se reduce y se guarda en la nube. JPG o PNG.';
+    document.getElementById('fotoHint').style.color = '';
+    _pintarFotoStaff();
     document.getElementById('fClabe').value = '';
     _ponerBanco('');
     clabeChange();
@@ -1398,6 +1422,7 @@ async function saveStaff() {
         categoriaNomina: document.getElementById('fCategoriaNomina').value || 'operativa',
         periodicidad:    document.getElementById('fPeriodicidad').value,
         diaPago:         document.getElementById('fDiaPago').value,
+        foto:            document.getElementById('fFoto').value,
         formaPagoNomina: document.getElementById('fFormaPago').value,
         bancoNomina:     _bancoValor(),
         clabeNomina:     document.getElementById('fClabe').value.replace(/[^0-9]/g, ''),
@@ -1412,7 +1437,12 @@ async function saveStaff() {
     };
 
     var idx = data.findIndex(function(s){ return s.id === obj.id; });
-    if (idx > -1) { data[idx] = obj; } else { data.push(obj); }
+    /* FUSIONAR, no reemplazar. Hay DOS editores de colaborador (este y el otro) y
+       cada uno arma su objeto con los campos que conoce. Reemplazar el registro
+       hace que el editor que no conoce un campo lo BORRE al guardar — la foto
+       desaparecería al editar desde Nóminas. Fusionando, cada quien actualiza lo
+       suyo y respeta lo que no maneja. */
+    if (idx > -1) { data[idx] = Object.assign({}, data[idx], obj); } else { data.push(obj); }
     await save(data);
     closeModal();
     renderAll();
@@ -1550,6 +1580,262 @@ function removeDoc(i) {
 }
 
 /* ── UTILS ── */
+/* ══════════════ FOTO DEL COLABORADOR ══════════════
+   A Storage, no al registro. Una foto en base64 dentro del JSONB se lleva por
+   delante la carga de toda la lista — ya pasó con el catálogo de insumos. */
+function _pintarFotoStaff() {
+    var url = document.getElementById('fFoto').value;
+    var prev = document.getElementById('fotoPrev');
+    prev.style.backgroundImage = url ? 'url("' + url.replace(/"/g, '%22') + '")' : '';
+    prev.textContent = url ? '' : '👤';
+    document.getElementById('btnQuitarFoto').style.display = url ? '' : 'none';
+    document.getElementById('btnFoto').textContent = url ? 'Cambiar foto' : 'Agregar foto';
+}
+async function _subirFotoStaff(input) {
+    var file = input.files && input.files[0];
+    input.value = '';                       // permite volver a elegir el MISMO archivo
+    if (!file) return;
+    var hint = document.getElementById('fotoHint');
+    hint.textContent = 'Subiendo…'; hint.style.color = 'var(--text-dim)';
+    var r = null;
+    try { r = await sbSubirEvidencia('staff', file, getNegocioActivo()); } catch (e) { r = null; }
+    if (!r || !r.url) {
+        /* Sin red no se guarda un base64 "mientras tanto": eso es justo lo que
+           infla el registro y nadie vuelve a limpiarlo. Mejor decirlo. */
+        hint.textContent = 'No se pudo subir la foto. Revisa tu conexión e inténtalo de nuevo.';
+        hint.style.color = 'var(--red)';
+        return;
+    }
+    document.getElementById('fFoto').value = r.url;
+    hint.textContent = 'Foto lista. Se guarda al dar Guardar.'; hint.style.color = 'var(--green)';
+    _pintarFotoStaff();
+}
+function _quitarFotoStaff() {
+    /* Solo se suelta la referencia; el archivo se queda en Storage. Borrarlo aquí
+       sería destruirlo antes de que el usuario confirme con Guardar, y si se
+       arrepiente ya no hay de dónde recuperarlo. */
+    document.getElementById('fFoto').value = '';
+    document.getElementById('fotoHint').textContent = 'Se quita al dar Guardar.';
+    document.getElementById('fotoHint').style.color = '';
+    _pintarFotoStaff();
+}
+
+/* ══════════════ MENÚ DE LA FILA (⋯) ══════════════ */
+function _cerrarMenusStaff() {
+    Array.prototype.forEach.call(document.querySelectorAll('.st-menu'), function (x) { x.remove(); });
+}
+function _menuStaff(ev, id) {
+    ev.stopPropagation();
+    _cerrarMenusStaff();
+    var m = document.createElement('div');
+    m.className = 'st-menu';
+    var r = ev.currentTarget.getBoundingClientRect();
+    m.style.cssText = 'position:fixed;z-index:10001;min-width:190px;background:var(--surface);' +
+        'border:1px solid var(--border);border-radius:10px;padding:5px;box-shadow:0 14px 40px rgba(0,0,0,.5);' +
+        'top:' + Math.min(r.bottom + 6, window.innerHeight - 160) + 'px;left:' + Math.max(10, r.right - 190) + 'px';
+    var q = id.replace(/'/g, "\\'");
+    m.innerHTML =
+        _miStaff('👁', 'Ver expediente', "verExpediente('" + q + "')") +
+        _miStaff('✏️', 'Editar', "openModal('" + q + "')") +
+        '<div style="height:1px;background:var(--border);margin:5px 2px"></div>' +
+        _miStaff('🗑️', 'Eliminar', "deleteStaff('" + q + "')", true);
+    document.body.appendChild(m);
+    setTimeout(function () { document.addEventListener('click', _cerrarMenusStaff, { once: true }); }, 0);
+}
+function _miStaff(ico, txt, accion, peligro) {
+    return '<div onclick="event.stopPropagation();_cerrarMenusStaff();' + accion + '" ' +
+        'style="display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:7px;cursor:pointer;' +
+        'font-size:13px;color:' + (peligro ? 'var(--red)' : 'var(--text)') + '" ' +
+        'onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">' +
+        '<span style="font-size:14px">' + ico + '</span>' + esc(txt) + '</div>';
+}
+
+/* ══════════════ EXPEDIENTE (solo lectura) ══════════════
+   Para consultar de un vistazo sin entrar al formulario. Los campos vacíos SÍ se
+   muestran, en gris: el expediente sirve igual para ver qué falta por capturar.
+
+   Sueldo y datos bancarios salen tapados. No es capricho: en esta página agregar
+   o editar un colaborador ya pide la contraseña del administrador justamente
+   porque ahí viven salarios, bancos y credenciales. Una vista que los soltara a
+   la primera desharía esa protección — quedan a un clic, pidiendo la clave. */
+var _expId = null, _expAbierto = {};
+
+function _edadDe(fechaISO) {
+    if (!fechaISO) return null;
+    var d = new Date(fechaISO + 'T12:00:00'), h = new Date();
+    if (isNaN(d)) return null;
+    var a = h.getFullYear() - d.getFullYear();
+    var m = h.getMonth() - d.getMonth();
+    if (m < 0 || (m === 0 && h.getDate() < d.getDate())) a--;
+    return a >= 0 && a < 130 ? a : null;
+}
+function _antiguedadDe(fechaISO) {
+    if (!fechaISO) return '';
+    var d = new Date(fechaISO + 'T12:00:00'), h = new Date();
+    if (isNaN(d) || d > h) return '';
+    var meses = (h.getFullYear() - d.getFullYear()) * 12 + (h.getMonth() - d.getMonth());
+    if (h.getDate() < d.getDate()) meses--;
+    if (meses < 1) return 'menos de un mes';
+    if (meses < 12) return meses + (meses === 1 ? ' mes' : ' meses');
+    var a = Math.floor(meses / 12), m = meses % 12;
+    return a + (a === 1 ? ' año' : ' años') + (m ? ' y ' + m + (m === 1 ? ' mes' : ' meses') : '');
+}
+function _fechaLarga(iso) {
+    if (!iso) return '';
+    var d = new Date(iso + 'T12:00:00');
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+function _dinero(n) {
+    return '$' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+// Una fila del expediente. Vacío = guion en gris, para que se note lo que falta.
+function _expF(label, valor, extra) {
+    var hay = valor !== null && valor !== undefined && String(valor).trim() !== '';
+    return '<div style="display:flex;gap:12px;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px">' +
+        '<div style="flex:0 0 42%;color:var(--text-dim);font-size:11.5px;letter-spacing:.4px;text-transform:uppercase;padding-top:2px">' + esc(label) + '</div>' +
+        '<div style="flex:1;min-width:0;color:' + (hay ? 'var(--text)' : 'var(--text-dim)') + ';word-break:break-word">' +
+            (hay ? esc(valor) : '—') +
+            (hay && extra ? '<div style="font-size:11.5px;color:var(--text-dim);margin-top:2px">' + esc(extra) + '</div>' : '') +
+        '</div></div>';
+}
+function _expSec(titulo, cuerpo, accion) {
+    return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+            '<div style="flex:1;font-size:10.5px;letter-spacing:2.2px;text-transform:uppercase;color:var(--text-dim)">' + esc(titulo) + '</div>' +
+            (accion || '') +
+        '</div>' + cuerpo + '</div>';
+}
+
+function verExpediente(id) {
+    var s = load().find(function (x) { return x.id === id; });
+    if (!s) return;
+    _expId = id;
+    tmpDocs = (s.documentos || []).slice();   // verDoc/downloadDoc leen de aquí
+    _expCerrar();
+
+    var iniciales = String(s.nombre || '?').trim().split(/\s+/).slice(0, 2)
+        .map(function (p) { return p.charAt(0); }).join('').toUpperCase();
+    var avatar = s.foto
+        ? '<div style="width:88px;height:88px;border-radius:50%;background-size:cover;background-position:center;' +
+          'border:2px solid var(--border);flex-shrink:0;background-image:url(\'' + esc(s.foto) + '\')"></div>'
+        : '<div style="width:88px;height:88px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);' +
+          'display:flex;align-items:center;justify-content:center;font-size:29px;font-weight:600;color:var(--text-dim);flex-shrink:0">' +
+          esc(iniciales) + '</div>';
+
+    var estadoClass = s.estado === 'Activo' ? 'estado-activo' : s.estado === 'Baja temporal' ? 'estado-baja-temp' : 'estado-baja-def';
+    var area = s.area || _AREA_DE_ROL[s.rol] || '';
+    var chips = rolBadge(s.rol) +
+        ' <span class="estado-chip ' + estadoClass + '">' + esc(s.estado || 'Activo') + '</span>' +
+        (area ? ' <span style="font-size:11px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:3px 8px;color:var(--text-muted)">' + esc(_AREA_NOM[area] || area) + '</span>' : '') +
+        (s.sucursalId ? ' <span style="font-size:11px;background:rgba(122,184,245,.12);color:#7ab8f5;border:1px solid rgba(122,184,245,.25);border-radius:5px;padding:3px 8px">' + esc(_sucNombre(s.sucursalId)) + '</span>' : '');
+
+    var edad = _edadDe(s.fechaNacimiento), ant = _antiguedadDe(s.fechaIngreso);
+
+    var secContacto = _expSec('Contacto', 
+        _expF('Celular / WhatsApp', s.celular) +
+        _expF('Correo', s.correo) +
+        _expF('Dirección', s.direccion));
+
+    var secPersonales = _expSec('Datos personales',
+        _expF('Fecha de nacimiento', _fechaLarga(s.fechaNacimiento), edad != null ? edad + ' años' : '') +
+        _expF('CURP', s.curp) +
+        _expF('NSS', s.nss) +
+        _expF('Fecha de ingreso', _fechaLarga(s.fechaIngreso), ant ? 'Antigüedad: ' + ant : ''));
+
+    var secAcceso = _expSec('Acceso al sistema',
+        _expF('Usuario', s.usuario) +
+        _expF('Credencial', s.passwordHash ? 'Contraseña configurada' : (s.nipHash ? 'NIP de 5 dígitos configurado' : '')) +
+        _expF('Área que ve en el QR', area ? (_AREA_NOM[area] || area) : ''));
+
+    var secNomina = _expSec('Nómina', '<div id="expNomina">' + _expNominaCuerpo(s, false) + '</div>',
+        '<button class="btn-row" id="expBtnVer" onclick="_expRevelar()">🔓 Mostrar</button>');
+
+    var docs = (s.documentos || []);
+    var secDocs = _expSec('Expediente digital (' + docs.length + ')',
+        docs.length
+            ? '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">' + docs.map(function (d, i) {
+                  return '<button class="btn-row" onclick="verDoc(' + i + ')" title="Ver ' + esc(d.nombre) + '" ' +
+                      'style="max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📎 ' + esc(d.nombre) + '</button>';
+              }).join('') + '</div>'
+            : '<div style="color:var(--text-dim);font-size:13px;padding:7px 0">Sin documentos cargados.</div>');
+
+    var secNotas = _expSec('Referencias y notas',
+        _expF('Referencias', s.referencias) +
+        _expF('Notas', s.notas));
+
+    var ov = document.createElement('div');
+    ov.id = 'expOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.72);overflow-y:auto;padding:24px 16px';
+    ov.onclick = function (e) { if (e.target === ov) _expCerrar(); };
+    ov.innerHTML =
+        '<div style="max-width:940px;margin:0 auto;background:var(--bg);border:1px solid var(--border);' +
+             'border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.6);overflow:hidden">' +
+          '<div style="display:flex;align-items:center;gap:18px;padding:22px 24px;border-bottom:1px solid var(--border);' +
+               'background:var(--surface);flex-wrap:wrap">' +
+            avatar +
+            '<div style="flex:1;min-width:220px">' +
+              '<div style="font-size:22px;font-weight:600;line-height:1.25">' + esc(s.nombre || '') +
+                (_esCumpleHoy(s.fechaNacimiento) ? ' <span title="Hoy cumple años">🎂</span>' : '') + '</div>' +
+              '<div style="font-size:13.5px;color:var(--text-muted);margin-top:3px">' + esc(s.puesto || 'Sin puesto') + '</div>' +
+              '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px">' + chips + '</div>' +
+            '</div>' +
+            '<div style="display:flex;gap:8px">' +
+              '<button class="btn-ghost" onclick="_expCerrar();openModal(\'' + esc(id).replace(/'/g, "\\'") + '\')">✏️ Editar</button>' +
+              '<button class="btn-ghost" onclick="_expCerrar()">✕ Cerrar</button>' +
+            '</div>' +
+          '</div>' +
+          '<div style="padding:18px 24px 26px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px">' +
+            secContacto + secPersonales + secNomina + secAcceso + secDocs + secNotas +
+          '</div>' +
+        '</div>';
+    document.body.appendChild(ov);
+    document.addEventListener('keydown', _expEsc);
+}
+
+function _expNominaCuerpo(s, revelado) {
+    var oculto = '••••••';
+    var esquema = s.esquemaSueldo === 'diario' ? 'Por día trabajado' : 'Fijo por periodo';
+    var sueldo = s.esquemaSueldo === 'diario' ? s.sueldoDiario : s.salarioBase;
+    var etiquetaSueldo = s.esquemaSueldo === 'diario' ? 'Sueldo diario' : 'Salario base (por periodo)';
+    var clabe = s.clabeNomina || '';
+    var clabeTxt = clabe
+        ? (revelado ? (window.BancosMX ? BancosMX.formatearClabe(clabe) : clabe)
+                    : '•••• •••• ' + clabe.slice(-4))
+        : '';
+    return _expF('Categoría', s.categoriaNomina === 'administrativa' ? 'Administrativa'
+                 : s.categoriaNomina === 'socios' ? 'Socios operativos' : 'Operativa') +
+        _expF('Esquema', esquema) +
+        _expF(etiquetaSueldo, sueldo ? (revelado ? _dinero(sueldo) : oculto) : '') +
+        _expF('Periodicidad', s.periodicidad ? s.periodicidad.charAt(0).toUpperCase() + s.periodicidad.slice(1) : '') +
+        _expF('Día de pago', s.diaPago) +
+        _expF('Bono / incentivo', s.bonoIncentivo ? (revelado ? _dinero(s.bonoIncentivo) + ' · ' + (s.bonoPeriodicidad || 'mensual') : oculto) : '') +
+        _expF('Prima dominical', s.primaVacacional ? (revelado ? _dinero(s.primaVacacional) + (s.primaVacacionalEnPago ? ' · se suma al pago' : ' · no se suma') : oculto) : '') +
+        _expF('Forma de pago', s.formaPagoNomina) +
+        _expF('Banco', s.bancoNomina) +
+        _expF('CLABE', clabeTxt) +
+        _expF('Cuenta / referencia', s.datosBancarios ? (revelado ? s.datosBancarios : oculto) : '');
+}
+
+function _expRevelar() {
+    var id = _expId;
+    _pedirClaveAdmin('Ver sueldo y datos bancarios', function () {
+        var s = load().find(function (x) { return x.id === id; });
+        if (!s) return;
+        var cont = document.getElementById('expNomina');
+        if (cont) cont.innerHTML = _expNominaCuerpo(s, true);
+        var b = document.getElementById('expBtnVer');
+        if (b) b.remove();
+    }, '🔓 Mostrar');
+}
+
+function _expEsc(e) { if (e.key === 'Escape') _expCerrar(); }
+function _expCerrar() {
+    var ov = document.getElementById('expOverlay');
+    if (ov) ov.remove();
+    document.removeEventListener('keydown', _expEsc);
+}
+
 function esc(s) {
     return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
