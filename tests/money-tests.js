@@ -19,20 +19,35 @@ const RAIZ = path.join(__dirname, '..');
 function crearContexto() {
     const values = {};
     function el(id) {
-        return {
+        const e = {
             id,
             get value() { return values[id] !== undefined ? String(values[id]) : ''; },
             set value(v) { values[id] = v; },
-            textContent: '', innerHTML: '', className: '', placeholder: '',
+            textContent: '', className: '', placeholder: '',
             style: {}, dataset: {},
             classList: { add(){}, remove(){}, toggle(){}, contains(){ return false; } },
             setAttribute(){}, getAttribute(){ return null; }, remove(){},
             appendChild(){}, querySelector(){ return null; },
             querySelectorAll(){ const a = []; a.forEach = Array.prototype.forEach; return a; },
-            addEventListener(){}, options: [], selectedIndex: 0,
+            addEventListener(){}, focus(){}, selectedIndex: 0,
             childNodes: [{ textContent: '' }], parentElement: { querySelectorAll(){ return []; } },
             closest(){ return null; },
         };
+        /* innerHTML sí se "parsea", pero solo para <option>: sin eso un <select>
+           poblado por JS queda sin `options` y toda la lógica que pregunta "¿este
+           valor está en la lista?" responde que no — el test pasaría por la rama
+           equivocada sin avisar. Es lo mínimo para que un select sea comprobable. */
+        let _html = '';
+        Object.defineProperty(e, 'innerHTML', {
+            get() { return _html; },
+            set(v) {
+                _html = String(v == null ? '' : v);
+                e.options = [..._html.matchAll(/<option(?:\s+value="([^"]*)")?[^>]*>([\s\S]*?)<\/option>/g)]
+                    .map(m => ({ value: m[1] !== undefined ? m[1] : m[2], text: m[2] }));
+            },
+        });
+        e.options = [];
+        return e;
     }
     const els = {};
     const storage = {};
@@ -1835,6 +1850,139 @@ console.log('\n══ SUITE G · Cobro de la suscripción (etaax-core.js) ══
     test('pendiente (nunca activado, sin fecha) no opera', () =>
         eq(C.estadoCobro({ estado: 'pendiente' }, '2026-09-20').activo, false, 'activo'));
     test('la tolerancia por default son 3 días', () => eq(C.TOLERANCIA_DEFAULT, 3, 'días'));
+})();
+
+/* ═══════════ SUITE K · BANCO Y CLABE DE LA NÓMINA (bancos-mx.js) ═══════════
+   El dígito de control de la CLABE no es cosmético: una clave con un número
+   cambiado tiene sus 18 dígitos y pasa como buena — el banco la rebota, o el
+   sueldo de alguien cae en otra cuenta. La aritmética se fija aquí para que
+   nadie la "simplifique" a un `length === 18`. */
+console.log('\n══ SUITE K · Banco y CLABE de la nómina (bancos-mx.js) ══');
+(function () {
+    const K = cargarJS(crearContexto(), 'bancos-mx.js');
+    const B = K.BancosMX;
+
+    /* CLABEs reales y publicadas — la referencia es externa, no algo que yo
+       haya generado con la misma fórmula que estoy probando (eso solo
+       comprobaría que el código coincide consigo mismo). */
+    test('CLABE documentada de Banamex valida', () => eq(B.validarClabe('002010077777777771').ok, true, 'ok'));
+    test('CLABE documentada de Santander valida', () => eq(B.validarClabe('014027000005555558').ok, true, 'ok'));
+    test('CLABE documentada de STP valida', () => eq(B.validarClabe('646180157042875763').ok, true, 'ok'));
+
+    /* Un dígito cambiado en medio: 18 dígitos, y aun así tiene que caer. */
+    test('un dígito cambiado NO pasa aunque tenga los 18', () =>
+        eq(B.validarClabe('002010077777777781').ok, false, 'ok'));
+    test('…y se dice que falló el control, no la longitud', () =>
+        eq(B.validarClabe('002010077777777781').motivo, 'control', 'motivo'));
+    /* Dos dígitos INTERCAMBIADOS es el error de dedo más común al teclear. */
+    test('dos dígitos volteados tampoco pasan', () =>
+        eq(B.validarClabe('014027000005555585').ok, false, 'ok'));
+
+    test('17 dígitos: falla por longitud, no por control', () =>
+        eq(B.validarClabe('00201007777777777').motivo, 'longitud', 'motivo'));
+    test('vacía se reporta como vacía (no como CLABE mala)', () =>
+        eq(B.validarClabe('').motivo, 'vacia', 'motivo'));
+    test('los guiones y espacios no estorban', () =>
+        eq(B.validarClabe('0020 1007 7777 7777 71').ok, true, 'ok'));
+
+    /* El banco sale de los 3 primeros dígitos… */
+    test('los 3 primeros dígitos dan el banco', () =>
+        eq(B.bancoDeClabe('012180001234567899').nombre, 'BBVA México', 'banco'));
+    /* …pero si el código no está en la lista NO se adivina: un banco equivocado
+       en un recibo de nómina es un problema con una persona. */
+    test('un código que no está en la lista devuelve null, no un banco al azar', () =>
+        eq(B.bancoDeClabe('999180001234567890'), null, 'banco'));
+    test('sin dígitos suficientes tampoco se adivina', () => eq(B.bancoDeClabe('01'), null, 'banco'));
+
+    test('la lista no trae códigos repetidos', () => {
+        const vistos = {};
+        let dup = 0;
+        B.lista.forEach(b => { if (vistos[b.codigo]) dup++; vistos[b.codigo] = 1; });
+        return eq(dup, 0, 'duplicados');
+    });
+    test('todos los códigos son de 3 dígitos', () =>
+        eq(B.lista.filter(b => !/^[0-9]{3}$/.test(b.codigo)).length, 0, 'malformados'));
+})();
+
+/* ═══════════ SUITE L · FORMULARIO DE BANCO EN STAFF (administrativo/staff.html) ═══════════
+   La lógica del bloque bancario del editor de colaborador. No es dinero, pero
+   decide a qué cuenta se manda un sueldo, y falla del modo más caro: callado.
+   Se prueba el archivo REAL de la página, no una copia. */
+console.log('\n══ SUITE L · Bloque bancario del editor de staff (administrativo/staff.html) ══');
+(function () {
+    const L = crearContexto();
+    cargarJS(L, 'bancos-mx.js');
+    cargarInline(L, 'administrativo/staff.html');
+    const $ = id => L.document.getElementById(id);
+
+    test('la lista de bancos se pobló en el select', () => {
+        L._ponerBanco('');
+        eq($('fBanco').options.length > 30, true, 'opciones');
+    });
+
+    /* Un banco de la lista se selecciona; el campo de texto libre se queda guardado. */
+    test('un banco de la lista queda seleccionado, sin abrir el campo libre', () => {
+        L._ponerBanco('Banorte');
+        eq($('fBanco').value + '|' + $('fBancoOtro').style.display, 'Banorte|none', 'estado');
+    });
+    test('…y ese es el valor que se guarda', () => eq(L._bancoValor(), 'Banorte', 'banco'));
+
+    /* Un banco que NO está en la lista no se pierde: cae en "Otro…" con su texto. */
+    test('un banco fuera de la lista abre el campo libre con su nombre', () => {
+        L._ponerBanco('Caja Solidaria del Pueblo');
+        eq($('fBancoOtro').value, 'Caja Solidaria del Pueblo', 'otro');
+    });
+    test('…y se guarda el texto escrito, no el marcador "otro"', () =>
+        eq(L._bancoValor(), 'Caja Solidaria del Pueblo', 'banco'));
+
+    /* El bloque aparece con transferencia y se esconde con efectivo… */
+    test('con transferencia, el bloque bancario se muestra', () => {
+        L._ponerBanco(''); $('fClabe').value = ''; $('fDatosBancarios').value = '';
+        $('fFormaPago').value = 'Transferencia Bancaria';
+        L.togBancarios();
+        eq($('grpBancarios').style.display, '', 'display');
+    });
+    test('con efectivo y sin datos, se esconde', () => {
+        $('fFormaPago').value = 'Efectivo';
+        L.togBancarios();
+        eq($('grpBancarios').style.display, 'none', 'display');
+    });
+    /* …pero NUNCA esconde datos ya capturados: invisible se siente igual que borrado. */
+    test('con efectivo pero CON CLABE guardada, sigue visible', () => {
+        $('fClabe').value = '002010077777777771';
+        L.togBancarios();
+        eq($('grpBancarios').style.display, '', 'display');
+    });
+
+    /* El banco se deduce de la CLABE solo cuando aún no se eligió uno. */
+    test('la CLABE llena el banco si estaba vacío', () => {
+        L._ponerBanco('');
+        $('fClabe').value = '014027000005555558';
+        L.clabeChange();
+        eq(L._bancoValor(), 'Santander', 'banco');
+    });
+    test('pero NO pisa un banco ya elegido a mano', () => {
+        L._ponerBanco('Banorte');
+        $('fClabe').value = '014027000005555558';
+        L.clabeChange();
+        eq(L._bancoValor(), 'Banorte', 'banco');
+    });
+
+    test('una CLABE que no cuadra se avisa en el momento', () => {
+        $('fClabe').value = '002010077777777781';
+        L.clabeChange();
+        eq($('clabeHint').textContent.indexOf('no cuadra') > -1, true, 'aviso');
+    });
+    test('una CLABE buena se confirma', () => {
+        $('fClabe').value = '002010077777777771';
+        L.clabeChange();
+        eq($('clabeHint').textContent.indexOf('válida') > -1, true, 'aviso');
+    });
+    test('a medio escribir solo se cuenta, sin regañar', () => {
+        $('fClabe').value = '00201007';
+        L.clabeChange();
+        eq($('clabeHint').textContent, '8 de 18 dígitos.', 'aviso');
+    });
 })();
 
 /* ═══════════════ RESUMEN ═══════════════ */

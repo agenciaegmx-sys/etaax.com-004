@@ -570,7 +570,7 @@
                 </div>
                 <div class="form-group">
                     <label>Forma de pago de nómina</label>
-                    <select id="fFormaPago">
+                    <select id="fFormaPago" onchange="togBancarios()">
                         <option value="">— Seleccionar —</option>
                         <option>Transferencia Bancaria</option>
                         <option>Efectivo</option>
@@ -578,11 +578,28 @@
                     </select>
                 </div>
             </div>
-            <div class="form-grid">
-                <div class="form-group full">
-                    <label>Datos bancarios (CLABE / cuenta, opcional)</label>
-                    <input type="text" id="fDatosBancarios" placeholder="18 dígitos o cuenta">
+            <!-- Banco y CLABE solo tienen sentido si se paga por transferencia; con
+                 efectivo o cheque estorban. Pero el bloque TAMBIÉN se muestra si ya
+                 hay datos guardados, para que un cambio de forma de pago nunca deje
+                 datos bancarios invisibles (invisible se siente igual que borrado). -->
+            <div class="form-grid" id="grpBancarios" style="display:none">
+                <div class="form-group">
+                    <label>Banco</label>
+                    <select id="fBanco" onchange="bancoChange()"></select>
+                    <input type="text" id="fBancoOtro" placeholder="Nombre del banco" style="display:none;margin-top:8px">
                 </div>
+                <div class="form-group">
+                    <label>Clave interbancaria (CLABE)</label>
+                    <input type="text" id="fClabe" maxlength="18" inputmode="numeric" placeholder="18 dígitos"
+                           oninput="this.value=this.value.replace(/[^0-9]/g,'');clabeChange()">
+                    <span class="form-hint" id="clabeHint">18 dígitos. Los 3 primeros identifican al banco.</span>
+                </div>
+                <div class="form-group full">
+                    <label>Número de cuenta o referencia (opcional)</label>
+                    <input type="text" id="fDatosBancarios" placeholder="Cuenta, tarjeta o referencia interna">
+                </div>
+            </div>
+            <div class="form-grid">
                 <div class="form-group full">
                     <label>Prima dominical ($) — calculada automáticamente</label>
                     <input type="number" id="fPrimaVacacional" min="0" step="0.01" placeholder="0.00" readonly style="opacity:.85">
@@ -644,6 +661,7 @@
 <script src="../supabase-config.js"></script>
 <script src="/etaax-store.js"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js"></script>
+<script src="/bancos-mx.js"></script><!-- bancos de México + CLABE: fuente única, no copiar -->
 <script>
 (function(){
     var saved = localStorage.getItem('etaax_theme') || 'dark';
@@ -1005,6 +1023,19 @@ function _openModalReal(id) {
             document.getElementById('fDiaPago').value      = s.diaPago || '';
             document.getElementById('fFormaPago').value    = s.formaPagoNomina || '';
             document.getElementById('fDatosBancarios').value = s.datosBancarios || '';
+            _ponerBanco(s.bancoNomina || '');
+            document.getElementById('fClabe').value = s.clabeNomina || '';
+            /* Antes había un solo campo libre "CLABE / cuenta". Si ahí quedó una
+               CLABE de verdad (18 dígitos que CUADRAN), se sube al campo nuevo y se
+               deja de duplicar. Solo si el dígito de control valida: mover algo que
+               no era una CLABE sería inventar. */
+            if (!(s.clabeNomina || '') && window.BancosMX &&
+                BancosMX.validarClabe(s.datosBancarios || '').ok) {
+                document.getElementById('fClabe').value = String(s.datosBancarios).replace(/[^0-9]/g, '');
+                document.getElementById('fDatosBancarios').value = '';
+            }
+            clabeChange();
+            togBancarios();
             document.getElementById('fPrimaVacacionalEnPago').checked = !!s.primaVacacionalEnPago;
             document.getElementById('fBonoIncentivo').value  = s.bonoIncentivo || '';
             document.getElementById('fBonoPeriodicidad').value = s.bonoPeriodicidad || 'mensual';
@@ -1067,6 +1098,10 @@ function clearForm() {
     document.getElementById('fPeriodicidad').value = '';
     document.getElementById('fDiaPago').value = '';
     document.getElementById('fFormaPago').value = '';
+    document.getElementById('fClabe').value = '';
+    _ponerBanco('');
+    clabeChange();
+    togBancarios();
     document.getElementById('fEstado').value = 'Activo';
     document.getElementById('fRol').value = '';
     (function(){ var e=document.getElementById('fArea'); if(e){ e.value=''; e.onchange = _pintarAreaHint; } })();
@@ -1097,6 +1132,88 @@ var _AREA_DE_ROL = { chef:'cocina', jefe_cocina:'cocina', cocinero:'cocina',
     jefe_barra:'barra', barman:'barra', barista:'barra', mesero:'piso',
     admin:'administracion', gerente:'administracion', administrativo:'administracion' };
 var _AREA_NOM = { barra:'🍸 Barra', cocina:'🍳 Cocina', piso:'🍽️ Piso', administracion:'🗃️ Administración' };
+/* ══ BANCO Y CLABE DE LA NÓMINA ═════════════════════════════════════════
+   La lista de bancos y la validación de la CLABE viven en /bancos-mx.js —
+   una sola fuente para este editor y para el modal flotante. */
+var _BANCO_OTRO = '__otro__';
+
+function _poblarBancos(sel) {
+    if (!sel || !window.BancosMX) return;
+    sel.innerHTML = '<option value="">— Seleccionar —</option>' +
+        BancosMX.lista.map(function (b) {
+            return '<option value="' + etx(b.nombre) + '">' + etx(b.nombre) + '</option>';
+        }).join('') +
+        '<option value="' + _BANCO_OTRO + '">➕ Otro… (escribirlo)</option>';
+}
+
+/* El banco se guarda por NOMBRE, no por código: si mañana cambia el catálogo de
+   Banxico o el banco se fusiona, lo escrito en el recibo sigue diciendo lo que
+   el negocio quiso decir. Por eso "Otro…" es texto libre y vale igual. */
+function bancoChange() {
+    var sel = document.getElementById('fBanco'), otro = document.getElementById('fBancoOtro');
+    if (!sel || !otro) return;
+    var esOtro = sel.value === _BANCO_OTRO;
+    otro.style.display = esOtro ? '' : 'none';
+    if (esOtro) otro.focus(); else otro.value = '';
+}
+
+function _bancoValor() {
+    var sel = document.getElementById('fBanco'), otro = document.getElementById('fBancoOtro');
+    if (!sel) return '';
+    if (sel.value === _BANCO_OTRO) return (otro && otro.value.trim()) || '';
+    return sel.value;
+}
+
+function _ponerBanco(nombre) {
+    var sel = document.getElementById('fBanco'), otro = document.getElementById('fBancoOtro');
+    if (!sel) return;
+    _poblarBancos(sel);
+    if (!nombre) { sel.value = ''; otro.value = ''; otro.style.display = 'none'; return; }
+    var enLista = Array.prototype.some.call(sel.options, function (o) { return o.value === nombre; });
+    if (enLista) { sel.value = nombre; otro.value = ''; otro.style.display = 'none'; }
+    else { sel.value = _BANCO_OTRO; otro.value = nombre; otro.style.display = ''; }
+}
+
+/* Se avisa en el momento, no al guardar: una CLABE con un dígito cambiado tiene
+   los 18 y pasa desapercibida — el banco la rebota, o cae en otra cuenta. */
+function clabeChange() {
+    var inp = document.getElementById('fClabe'), hint = document.getElementById('clabeHint');
+    if (!inp || !hint || !window.BancosMX) return;
+    var v = inp.value, r = BancosMX.validarClabe(v);
+    if (!v) {
+        hint.textContent = '18 dígitos. Los 3 primeros identifican al banco.';
+        hint.style.color = ''; return;
+    }
+    if (r.motivo === 'longitud') {
+        hint.textContent = r.digitos + ' de 18 dígitos.';
+        hint.style.color = 'var(--text-dim)';
+    } else if (r.motivo === 'control') {
+        hint.textContent = '⚠️ Los 18 dígitos están, pero la CLABE no cuadra — revisa que no falte o sobre un número.';
+        hint.style.color = 'var(--red)';
+    } else {
+        hint.textContent = '✓ CLABE válida · ' + BancosMX.formatearClabe(v);
+        hint.style.color = 'var(--green)';
+    }
+    // Sugerir el banco por los 3 primeros dígitos, solo si aún no se eligió uno.
+    var det = BancosMX.bancoDeClabe(v);
+    if (det && !_bancoValor()) {
+        _ponerBanco(det.nombre);
+        hint.textContent += ' · banco tomado de la CLABE';
+    }
+}
+
+/* Se muestra con transferencia, y también cuando ya hay algo guardado: cambiar la
+   forma de pago no debe esconder datos que alguien capturó. */
+function togBancarios() {
+    var g = document.getElementById('grpBancarios');
+    if (!g) return;
+    var forma = (document.getElementById('fFormaPago') || {}).value || '';
+    var hayDatos = !!(_bancoValor() ||
+        (document.getElementById('fClabe') || {}).value ||
+        (document.getElementById('fDatosBancarios') || {}).value);
+    g.style.display = (forma === 'Transferencia Bancaria' || hayDatos) ? '' : 'none';
+}
+
 function _pintarAreaHint(){
     var h = document.getElementById('areaHint'); if (!h) return;
     var sel = (document.getElementById('fArea')||{}).value || '';
@@ -1282,6 +1399,8 @@ async function saveStaff() {
         periodicidad:    document.getElementById('fPeriodicidad').value,
         diaPago:         document.getElementById('fDiaPago').value,
         formaPagoNomina: document.getElementById('fFormaPago').value,
+        bancoNomina:     _bancoValor(),
+        clabeNomina:     document.getElementById('fClabe').value.replace(/[^0-9]/g, ''),
         datosBancarios:  document.getElementById('fDatosBancarios').value.trim(),
         primaVacacional: parseFloat(document.getElementById('fPrimaVacacional').value)||0,
         primaVacacionalEnPago: document.getElementById('fPrimaVacacionalEnPago').checked,

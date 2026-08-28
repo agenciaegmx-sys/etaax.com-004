@@ -129,8 +129,21 @@
                 '<div class="sm-grp full" id="grpSmPreview" style="display:none"><div id="sm_sueldoPreview" style="background:var(--surface2);border:1px solid var(--green);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text-muted)"></div></div>' +
                 '<div class="sm-grp"><label>Periodicidad de pago</label><select id="sm_periodicidad" onchange="StaffModal._calcPrima()"><option value="">— Seleccionar —</option><option value="semanal">Semanal</option><option value="quincenal">Quincenal</option><option value="mensual">Mensual</option></select></div>' +
                 '<div class="sm-grp"><label>Día de pago</label><select id="sm_diaPago"><option value="">— Seleccionar —</option><option value="lunes">Lunes</option><option value="martes">Martes</option><option value="miercoles">Miércoles</option><option value="jueves">Jueves</option><option value="viernes">Viernes</option><option value="sabado">Sábado</option><option value="dia1_15">Días 1 y 15</option><option value="dia15_ultimo">Días 15 y último</option><option value="dia1">Día 1 del mes</option><option value="dia15">Día 15 del mes</option><option value="ultimo">Último día del mes</option></select></div>' +
-                '<div class="sm-grp"><label>Forma de pago de nómina</label><select id="sm_formaPago"><option value="">— Seleccionar —</option><option>Transferencia Bancaria</option><option>Efectivo</option><option>Cheque</option></select></div>' +
-                '<div class="sm-grp full"><label>Datos bancarios (CLABE / cuenta, opcional)</label><input type="text" id="sm_datosBancarios" placeholder="18 dígitos o cuenta"></div>' +
+                '<div class="sm-grp"><label>Forma de pago de nómina</label><select id="sm_formaPago" onchange="StaffModal._togBanc()"><option value="">— Seleccionar —</option><option>Transferencia Bancaria</option><option>Efectivo</option><option>Cheque</option></select></div>' +
+              '</div>' +
+              /* Banco y CLABE solo con transferencia; con efectivo o cheque estorban.
+                 Se muestran igual si YA hay datos guardados: cambiar la forma de pago
+                 no debe esconder lo que alguien capturó. */
+              '<div class="sm-grid" id="sm_bancarios" style="display:none">' +
+                '<div class="sm-grp"><label>Banco</label><select id="sm_banco" onchange="StaffModal._bancoChange()"></select>' +
+                  '<input type="text" id="sm_bancoOtro" placeholder="Nombre del banco" style="display:none;margin-top:8px"></div>' +
+                '<div class="sm-grp"><label>Clave interbancaria (CLABE)</label>' +
+                  '<input type="text" id="sm_clabe" maxlength="18" inputmode="numeric" placeholder="18 dígitos" ' +
+                    'oninput="this.value=this.value.replace(/[^0-9]/g,\'\');StaffModal._clabeChange()">' +
+                  '<span class="sm-hint" id="sm_clabeHint">18 dígitos. Los 3 primeros identifican al banco.</span></div>' +
+                '<div class="sm-grp full"><label>Número de cuenta o referencia (opcional)</label><input type="text" id="sm_datosBancarios" placeholder="Cuenta, tarjeta o referencia interna"></div>' +
+              '</div>' +
+              '<div class="sm-grid">' +
                 '<div class="sm-grp full"><label>Prima dominical ($) — calculada automáticamente</label><input type="number" id="sm_primaVacacional" min="0" step="0.01" placeholder="0.00" readonly style="opacity:.85"><span class="sm-hint" id="sm_primaVacHint"></span><label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-top:8px;cursor:pointer;text-transform:none;letter-spacing:0;color:var(--text-muted)"><input type="checkbox" id="sm_primaVacacionalEnPago" style="width:auto"> Trabaja domingos — sumar prima dominical al pago</label></div>' +
                 '<div class="sm-grp"><label>Bono / incentivo extra ($)</label><input type="number" id="sm_bonoIncentivo" min="0" step="0.01" placeholder="0.00"></div>' +
               '</div>' +
@@ -153,6 +166,33 @@
             '</div>' +
           '</div>';
         document.body.appendChild(el);
+    }
+
+    /* ── Banco y CLABE ── delegan en /bancos-mx.js, que es la fuente única.
+       Si esta página no lo cargó, el bloque sigue funcionando como texto libre:
+       se queda sin lista ni validación, pero no se rompe ni se pierde nada. */
+    var _BANCO_OTRO = '__otro__';
+    function _poblarBancos() {
+        var sel = document.getElementById('sm_banco');
+        if (!sel || !window.BancosMX) return;
+        sel.innerHTML = '<option value="">— Seleccionar —</option>' +
+            BancosMX.lista.map(function (b) { return '<option value="' + _esc(b.nombre) + '">' + _esc(b.nombre) + '</option>'; }).join('') +
+            '<option value="' + _BANCO_OTRO + '">➕ Otro… (escribirlo)</option>';
+    }
+    function _bancoValor() {
+        var sel = document.getElementById('sm_banco'), otro = document.getElementById('sm_bancoOtro');
+        if (!sel) return '';
+        if (sel.value === _BANCO_OTRO) return (otro && otro.value.trim()) || '';
+        return sel.value;
+    }
+    function _ponerBanco(nombre) {
+        var sel = document.getElementById('sm_banco'), otro = document.getElementById('sm_bancoOtro');
+        if (!sel) return;
+        _poblarBancos();
+        if (!nombre) { sel.value = ''; otro.value = ''; otro.style.display = 'none'; return; }
+        var enLista = Array.prototype.some.call(sel.options, function (o) { return o.value === nombre; });
+        if (enLista) { sel.value = nombre; otro.value = ''; otro.style.display = 'none'; }
+        else { sel.value = _BANCO_OTRO; otro.value = nombre; otro.style.display = ''; }
     }
 
     /* ── Persistencia (idéntico patrón a staff.html: reemplaza la tabla) ── */
@@ -206,6 +246,10 @@
         document.getElementById('sm_curp').value = '';
         document.getElementById('sm_nss').value = '';
         document.getElementById('sm_primaVacacionalEnPago').checked = false;
+        document.getElementById('sm_clabe').value = '';
+        _ponerBanco('');
+        window.StaffModal._clabeChange();
+        window.StaffModal._togBanc();
         window.StaffModal._togEsq();
         document.getElementById('sm_pwd').placeholder = 'Mínimo 6 caracteres';
         document.getElementById('sm_nip').placeholder = '5 dígitos';
@@ -241,6 +285,19 @@
                 document.getElementById('sm_diaPago').value = s.diaPago || '';
                 document.getElementById('sm_formaPago').value = s.formaPagoNomina || '';
                 document.getElementById('sm_datosBancarios').value = s.datosBancarios || '';
+                _ponerBanco(s.bancoNomina || '');
+                document.getElementById('sm_clabe').value = s.clabeNomina || '';
+                /* Antes había un solo campo libre "CLABE / cuenta". Si ahí quedó una
+                   CLABE de verdad (18 dígitos que CUADRAN), se sube al campo nuevo.
+                   Solo si el dígito de control valida: mover algo que no era una
+                   CLABE sería inventar. */
+                if (!(s.clabeNomina || '') && window.BancosMX &&
+                    BancosMX.validarClabe(s.datosBancarios || '').ok) {
+                    document.getElementById('sm_clabe').value = String(s.datosBancarios).replace(/[^0-9]/g, '');
+                    document.getElementById('sm_datosBancarios').value = '';
+                }
+                window.StaffModal._clabeChange();
+                window.StaffModal._togBanc();
                 document.getElementById('sm_primaVacacional').value = s.primaVacacional || '';
                 document.getElementById('sm_bonoIncentivo').value = s.bonoIncentivo || '';
                 document.getElementById('sm_referencias').value = s.referencias || '';
@@ -316,6 +373,8 @@
             periodicidad: document.getElementById('sm_periodicidad').value,
             diaPago: document.getElementById('sm_diaPago').value,
             formaPagoNomina: document.getElementById('sm_formaPago').value,
+            bancoNomina: _bancoValor(),
+            clabeNomina: document.getElementById('sm_clabe').value.replace(/[^0-9]/g, ''),
             datosBancarios: document.getElementById('sm_datosBancarios').value.trim(),
             primaVacacional: parseFloat(document.getElementById('sm_primaVacacional').value) || 0,
             primaVacacionalEnPago: document.getElementById('sm_primaVacacionalEnPago').checked,
@@ -348,6 +407,40 @@
         _save: _saveColaborador,
         _sugCat: function () { document.getElementById('sm_categoriaNomina').value = _categoriaPorRol(document.getElementById('sm_rol').value); },
         _rolChange: function () { window.StaffModal._sugCat(); window.StaffModal._togAcceso(); },
+        _bancoChange: function () {
+            var sel = document.getElementById('sm_banco'), otro = document.getElementById('sm_bancoOtro');
+            if (!sel || !otro) return;
+            var esOtro = sel.value === _BANCO_OTRO;
+            otro.style.display = esOtro ? '' : 'none';
+            if (esOtro) otro.focus(); else otro.value = '';
+        },
+        /* Se avisa AL ESCRIBIR, no al guardar: una CLABE con un dígito cambiado tiene
+           los 18 y pasa desapercibida — el banco la rebota, o cae en otra cuenta. */
+        _clabeChange: function () {
+            var inp = document.getElementById('sm_clabe'), hint = document.getElementById('sm_clabeHint');
+            if (!inp || !hint || !window.BancosMX) return;
+            var v = inp.value, r = BancosMX.validarClabe(v);
+            if (!v) { hint.textContent = '18 dígitos. Los 3 primeros identifican al banco.'; hint.style.color = ''; return; }
+            if (r.motivo === 'longitud') {
+                hint.textContent = r.digitos + ' de 18 dígitos.'; hint.style.color = 'var(--text-dim)';
+            } else if (r.motivo === 'control') {
+                hint.textContent = '⚠️ Los 18 dígitos están, pero la CLABE no cuadra — revisa que no falte o sobre un número.';
+                hint.style.color = 'var(--red)';
+            } else {
+                hint.textContent = '✓ CLABE válida · ' + BancosMX.formatearClabe(v);
+                hint.style.color = 'var(--green)';
+            }
+            var det = BancosMX.bancoDeClabe(v);
+            if (det && !_bancoValor()) { _ponerBanco(det.nombre); hint.textContent += ' · banco tomado de la CLABE'; }
+        },
+        _togBanc: function () {
+            var g = document.getElementById('sm_bancarios');
+            if (!g) return;
+            var forma = (document.getElementById('sm_formaPago') || {}).value || '';
+            var hay = !!(_bancoValor() || (document.getElementById('sm_clabe') || {}).value ||
+                         (document.getElementById('sm_datosBancarios') || {}).value);
+            g.style.display = (forma === 'Transferencia Bancaria' || hay) ? '' : 'none';
+        },
         _togAcceso: function () {
             var rol = document.getElementById('sm_rol').value;
             var admin = _esRolAdmin(rol), conRol = !!rol;
