@@ -2109,6 +2109,14 @@ console.log('\n══ SUITE N · Hoja impresa del check list (administrativo/che
         eq(N._freqCorto('A'), 'A · Apertura', 'etiqueta'));
     test('una frecuencia desconocida no rompe la etiqueta', () =>
         eq(N._freqCorto('ZZ'), 'ZZ', 'etiqueta'));
+
+    /* La leyenda corta la usan el otro reporte impreso y la ayuda del editor.
+       Había DOS copias escritas a mano que decían "D/T = diaria/turno" — que no
+       es lo que significa. Ahora las tres salen de FREQ_DEF. */
+    test('la leyenda corta dice lo mismo que la guía', () =>
+        eq(N._freqLeyenda(), 'A = Apertura · D/T = Durante el turno · SEM = Semanal · MEN = Mensual', 'leyenda'));
+    test('la leyenda cubre TODAS las frecuencias del selector', () =>
+        eq(N.FREQS.every(f => N._freqLeyenda().indexOf(f + ' = ') > -1), true, 'cobertura'));
 })();
 
 /* ═══════════════ RESUMEN ═══════════════ */

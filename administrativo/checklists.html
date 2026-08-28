@@ -166,7 +166,7 @@
         </div>
         <div class="ck-field" id="ckmSucWrap"><label>Sucursal</label><select class="ck-in" id="ckmSuc"></select></div>
         <div class="ck-field">
-            <label>Tareas <span style="text-transform:none;letter-spacing:0;color:var(--text-dim)">· la etiqueta es la frecuencia (A = apertura, D/T = diaria/turno, SEM = semanal)</span></label>
+            <label>Tareas <span style="text-transform:none;letter-spacing:0;color:var(--text-dim)">· la etiqueta es la frecuencia <span id="ckFreqAyuda"></span></span></label>
             <div id="ckmTareas"></div>
             <button class="ck-btn" style="margin-top:6px;font-size:12px" onclick="addTareaRow()">+ Agregar tarea</button>
         </div>
@@ -374,9 +374,9 @@ function _setTareaFreq(i,v){ _edit.tareas[i].freq=v; }
 function _delTarea(i){ _edit.tareas.splice(i,1); if(!_edit.tareas.length)_edit.tareas=[{id:genId(),texto:'',freq:'A'}]; _renderTareasEditor(); }
 /* ══ HOJA IMPRESA DEL CHECK LIST ═════════════════════════════════════════
    Reemplaza la hoja de Excel que se llenaba a mano en barra y cocina. Se conserva
-   lo que esa hoja tenía y sirve: la columna de FRECUENCIA a la izquierda (A =
-   apertura, D/T = diaria/turno, SEM = semanal), la banda de supervisión, la
-   semana, la leyenda de símbolos y la firma.
+   lo que esa hoja tenía y sirve: la columna de FRECUENCIA a la izquierda (ver
+   FREQ_DEF), la banda de supervisión, la semana, la leyenda de símbolos y la
+   firma.
 
    LOS DÍAS SE ELIGEN ANTES DE IMPRIMIR. La semana completa es lo normal, pero no
    siempre: una limpieza profunda que solo se hace viernes y sábado no necesita
@@ -461,6 +461,14 @@ var FREQ_DEF = {
 function _freqCorto(f){
     var d = FREQ_DEF[f]; if (!d) return f;
     return f + ' · ' + d.split(' — ')[0];
+}
+/* La leyenda corta ("A = Apertura · D/T = Durante el turno · …") para donde no
+   cabe la guía completa. Sale de FREQ_DEF como todo lo demás: había DOS copias
+   escritas a mano que decían "D/T = diaria/turno", que no es lo que significa. */
+function _freqLeyenda(sep){
+    return FREQS.map(function(f){
+        return f + ' = ' + (FREQ_DEF[f]||'').split(' — ')[0];
+    }).join(sep || ' · ');
 }
 
 function _rayita(mm){ return '<span class="ckray" style="width:'+mm+'mm"></span>'; }
@@ -702,7 +710,7 @@ function imprimirChecklist(){
     d.body.innerHTML = head +
         '<div style="padding:14px 20px"><table>'+thead+rows+
         '<tr><td colspan="2" style="border:1px solid #ccc;text-align:right;padding:5px 8px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#888">Firma</td>'+firmas+'</tr>'+
-        '</table><div style="margin-top:8px;font-size:10px;color:#888">✓ realizada · ✗ no realizada · ▲ pendiente &nbsp;·&nbsp; A = apertura · D/T = diaria/turno · SEM = semanal</div></div>'+
+        '</table><div style="margin-top:8px;font-size:10px;color:#888">✓ realizada · ✗ no realizada · ▲ pendiente &nbsp;·&nbsp; '+esc(_freqLeyenda())+'</div></div>'+
         foot;
     win.focus(); setTimeout(function(){ try{ win.print(); }catch(e){} }, 500);
 }
@@ -937,6 +945,7 @@ function descargarQrCk(){
 /* ── Init ── */
 document.getElementById('ckModal').addEventListener('click', function(e){ if(e.target===this) cerrarEditor(); });
 document.addEventListener('keydown', function(e){ if(e.key==='Escape') cerrarEditor(); });
+(function(){ var e=document.getElementById('ckFreqAyuda'); if(e) e.textContent='('+_freqLeyenda(', ')+')'; })();
 (async function init(){
     _cargarLocal(); _resolverScope(); render();
     await _cargarDB(); render();
