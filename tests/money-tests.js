@@ -1629,6 +1629,50 @@ console.log('\n══ SUITE D · Cobro por sucursal (precios.js) ══');
         () => eq(P.descuentoMensual(10), 11.0617, 'desc promedio'));
 })();
 
+/* ═══════════ SUITE J · INSUMOS DUPLICADOS EN EL INVENTARIO ═══════════
+   El síntoma de Edwin: en un inventario viejo aparecían DOS renglones del mismo
+   insumo —uno en ceros y otro con los datos— mientras en el catálogo solo existe
+   un producto.
+   La causa, otra vez, el id: el inventario viejo guardó la fila bajo el id de la
+   COPIA por sucursal, y el catálogo la arma con el MAESTRO. Al no empatar por id
+   crudo, salía un renglón nuevo vacío y el viejo se colaba aparte. */
+console.log('\n══ SUITE J · Insumos duplicados en el inventario ══');
+(function () {
+    setVar(B, '_cacheInsumosInv', [
+        { id: 'ron_maestro', activo: '1' },
+        { id: 'ron_copia', origenId: 'ron_maestro', sucursalId: 'suc_principal', activo: '1' },
+    ]);
+    // El inventario viejo guardó la fila bajo el id de la COPIA, con datos capturados.
+    vm.runInContext("invActual.filas = [{ insumoId:'ron_copia', cerradasBodega:3, cerradasBarra:1, pesos:['1.2'], entradas:[] }];", B);
+
+    test('la fila guardada bajo la COPIA se encuentra desde el MAESTRO', () => {
+        const f = B._filaGuardadaDe('ron_maestro');
+        return eq(!!f, true) && eq(f.insumoId, 'ron_copia');
+    });
+    test('y no se pierde lo capturado en ella', () =>
+        eq(B._filaGuardadaDe('ron_maestro').cerradasBodega, 3));
+
+    /* Un inventario YA dañado trae las dos filas. Gana la que tiene captura: quedarse
+       con la vacía sería borrarle el conteo al dueño al abrirlo para repararlo. */
+    test('con el duplicado ya guardado, gana la fila que SÍ trae datos', () => {
+        vm.runInContext("invActual.filas = [" +
+            "{ insumoId:'ron_maestro', cerradasBodega:0, cerradasBarra:0, pesos:[], entradas:[] }," +
+            "{ insumoId:'ron_copia',   cerradasBodega:3, cerradasBarra:1, pesos:['1.2'], entradas:[] }];", B);
+        const f = B._filaGuardadaDe('ron_maestro');
+        return eq(f.insumoId, 'ron_copia') && eq(f.cerradasBodega, 3);
+    });
+    test('una fila vacía no se confunde con una capturada', () => {
+        return eq(B._filaConDatos({ cerradasBodega: 0, pesos: [], entradas: [] }), false)
+            && eq(B._filaConDatos({ cerradasBodega: 0, pesos: ['0.8'], entradas: [] }), true)
+            && eq(B._filaConDatos({ cerradasBodega: 0, pesos: [], entradas: ['2'] }), true);
+    });
+    test('un insumo sin nada guardado no inventa fila', () =>
+        eq(B._filaGuardadaDe('no_existe'), undefined));
+
+    vm.runInContext("invActual.filas = [];", B);
+    setVar(B, '_cacheInsumosInv', null);
+})();
+
 /* ═══════════ SUITE I · COMPUESTOS EN EL DINERO DEL RESULTADO ═══════════
    El Resultado del Paso 5 y el reporte directivo daban totales distintos con las
    MISMAS existencias ($12,205 contra $12,919). No era un redondeo: el directivo

@@ -3403,6 +3403,33 @@ async function _asegurarCatalogoInv(forzar) {
     finally { _catInvPidiendo = false; }
 }
 
+/* La fila ya capturada de un insumo, buscada por id CANÓNICO.
+   Buscarla por id crudo era la mitad del bug de los insumos duplicados: si el
+   inventario viejo la guardó bajo el id de la COPIA por sucursal y el catálogo la
+   arma con el MAESTRO, no empataban — salía un renglón nuevo en ceros y el que
+   traía los datos quedaba suelto al lado.
+   Y si hay VARIAS (un inventario que YA se dañó con el duplicado), gana la que trae
+   captura de verdad: quedarse con la vacía sería borrarle el conteo al dueño justo
+   al abrir el inventario para repararlo. */
+function _filaConDatos(f) {
+    if (!f) return false;
+    if ((parseFloat(f.cerradasBodega) || 0) > 0 || (parseFloat(f.cerradasBarra) || 0) > 0) return true;
+    if ((f.pesos || []).some(function (p) { return (parseFloat(p) || 0) > 0; })) return true;
+    if ((parseFloat(f.existenciaPeso) || 0) > 0) return true;
+    if ((f.entradas || []).some(function (e) { return (parseFloat(e) || 0) > 0; })) return true;
+    if ((parseFloat(f.ventasCopasDirectas) || 0) > 0 || (parseFloat(f.ventasBotella) || 0) > 0) return true;
+    if ((parseFloat(f.cortesiaCopas) || 0) > 0 || (parseFloat(f.mermaCopas) || 0) > 0 || (parseFloat(f.mermaBase) || 0) > 0) return true;
+    if (f.nivelPct != null && f.nivelPct !== '') return true;
+    return false;
+}
+function _filaGuardadaDe(cid) {
+    var cands = (invActual && invActual.filas || []).filter(function (f) {
+        return f && f.insumoId && (_canonInsumoId(f.insumoId) || f.insumoId) === cid;
+    });
+    if (cands.length <= 1) return cands[0];
+    return cands.find(_filaConDatos) || cands[0];
+}
+
 function cargarProductosCaptura() {
     // Solo insumos de la sucursal activa Y del ÁREA de este inventario. Sin área → no
     // entra (qué hace la canela en un inventario de barra 😅). PERO sí entran: lo YA
@@ -3438,7 +3465,7 @@ function cargarProductosCaptura() {
         // Id CANÓNICO: la fila SIEMPRE se llavea por el maestro (origenId||id), así empata
         // con lo ya capturado y con las recetas, aunque `ins` sea una copia por sucursal.
         const _cid = ins.origenId || ins.id;
-        const existe = (invActual.filas || []).find(f => f.insumoId === _cid);
+        const existe = _filaGuardadaDe(_cid);
         if (existe) {
             // Sub-receta convertida a insumo: visible por DEFAULT (se captura la
             // existencia del prebatch); solo se oculta si el dueño lo marcó con el
@@ -3525,13 +3552,18 @@ function cargarProductosCaptura() {
             ventasCopasDirectas: 0, ventasBotella: 0, mermaBase: 0,
         };
     });
-    // Salvaguarda: conservar filas YA capturadas cuyo insumo no esté en el scope
-    // actual (ej. se capturó en otra sucursal/contexto) → nunca perder lo registrado.
+    /* Salvaguarda: conservar filas YA capturadas cuyo insumo no esté en el scope
+       actual (ej. se capturó en otra sucursal/contexto) → nunca perder lo registrado.
+       La comparación va por id CANÓNICO. Con ids crudos, una fila guardada bajo el id
+       de la COPIA no empataba con la del catálogo (que usa el MAESTRO) y se colaba
+       como un SEGUNDO renglón del mismo insumo: el nuevo en ceros y el viejo con los
+       datos, mientras en el catálogo solo existe un producto. */
     (invActual && invActual.filas || []).forEach(function(sf){
-        if (sf && sf.insumoId && !filasCaptura.some(function(f){ return f.insumoId === sf.insumoId; })) {
-            if (!sf.entradas) sf.entradas = ['','','','',''];
-            filasCaptura.push(sf);
-        }
+        if (!sf || !sf.insumoId) return;
+        var cid = _canonInsumoId(sf.insumoId) || sf.insumoId;
+        if (filasCaptura.some(function(f){ return (_canonInsumoId(f.insumoId) || f.insumoId) === cid; })) return;
+        if (!sf.entradas) sf.entradas = ['','','','',''];
+        filasCaptura.push(sf);
     });
 }
 
