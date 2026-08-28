@@ -173,7 +173,27 @@
         });
     }
 
+    /* ESPERAR A QUE HIDRATE ANTES DE TOCAR LA COLA.
+       Aquí estaba el rebote de los 348: inventarios auto-guarda a los milisegundos
+       de cargar, mucho antes de que IndexedDB termine de hidratar. En ese hueco
+       _obLoad() caía al espejo viejo de localStorage y leía la cola COMPLETA de
+       antes; se le agregaba el item nuevo y se guardaba — y como escribir marca la
+       clave como "tocada en esta sesión", la hidratación la respetaba y ya no
+       cargaba la cola real, que estaba vacía. Los pendientes revivían y quedaban
+       cementados por la misma protección que evita que la hidratación pise lo
+       recién escrito. */
     function _obAdd(item) {
+        try {
+            if (window.etaaxStore && etaaxStore.ready &&
+                typeof etaaxStore.hidratado === 'function' && !etaaxStore.hidratado()) {
+                etaaxStore.ready.then(function () { _obAddYa(item); },
+                                      function () { _obAddYa(item); });
+                return;
+            }
+        } catch (e) { /* sin almacén: se encola de inmediato */ }
+        _obAddYa(item);
+    }
+    function _obAddYa(item) {
         var q = _obLoad(), prev = null;
         // dedup: misma tabla + clave + op → gana el último estado (conserva los intentos
         // para que un item genuinamente roto no se re-encole en bucle eterno)

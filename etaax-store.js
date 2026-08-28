@@ -294,11 +294,20 @@
         esGrande: _esGrandeKey,
         hayIDB: function () { return hayIDB; },
 
+        hidratado: function () { return hidratado; },
+
         get: function (k) {
             if (_esGrandeKey(k)) {
                 if (mem[k] != null) return mem[k];
-                // Todavía no hidrata (o nunca se guardó): el espejo viejo de
-                // localStorage sirve de puente para no arrancar en blanco.
+                /* YA HIDRATADO = la memoria es la verdad. Un null aquí significa "no
+                   existe", NO "pregúntale a localStorage". Caer al espejo después de
+                   hidratar RESUCITA lo viejo: así volvían los 348 pendientes de la
+                   cola, minutos después de haberla vaciado.
+                   El puente al espejo solo tiene sentido ANTES de hidratar, para no
+                   arrancar en blanco — o cuando NO HAY IndexedDB, porque entonces
+                   localStorage no es un espejo: es el almacén de verdad y hay que
+                   seguir leyéndolo (tablets viejas, modo privado). */
+                if (hidratado && hayIDB) return null;
                 try { return _lsGet(k); } catch (e) { return null; }
             }
             try { return _lsGet(k); } catch (e) { return null; }
