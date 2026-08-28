@@ -244,6 +244,22 @@
             var _sinUid = false;
             q.forEach(function (it) { if (it && !it.uid) { it.uid = Date.now().toString(36) + Math.random().toString(36).slice(2, 8); _sinUid = true; } });
             if (_sinUid) _obSave(q);
+
+            /* ⚠️ NO pisar la cola con el snapshot: mientras el flush corre (awaits de
+               red) pueden ENCOLARSE items nuevos (ej. borrar varios gastos seguidos) y
+               guardarse encima los perdería sin ejecutar → "los borrados revivían".
+               Se re-lee la cola actual y solo se quita/actualiza lo que ESTE flush tocó. */
+            function _asentar() {
+                var fresca = _obLoad().filter(function (x) {
+                    if (!x || !x.uid) return false;
+                    if (hechos[x.uid] || muertos[x.uid]) return false;           // ejecutado o descartado
+                    if (triesUpd[x.uid] !== undefined) x.tries = triesUpd[x.uid]; // falló → conservar con sus intentos
+                    return true;
+                });
+                _obSave(fresca);
+                _obIndicador();
+            }
+
             for (var i = 0; i < q.length; i++) {
                 var it = q[i], err = null;
                 try { err = await _obEjecutar(it); } catch (e) { err = e || new Error('network'); }
@@ -256,19 +272,19 @@
                     if (it.tries >= 8) { if (it.uid) muertos[it.uid] = 1; console.error('[outbox] descartado tras 8 intentos:', it.tabla, it.k); }
                     else if (it.uid) triesUpd[it.uid] = it.tries;
                 }
+                /* SE ASIENTA EL AVANCE CADA POCOS ITEMS, no al final.
+                   Aquí estaba el bug de la cola que "crece y no baja": con 347
+                   pendientes, una vuelta completa tarda uno o dos MINUTOS de idas y
+                   vueltas a la red. Si en ese rato el usuario cambia de página,
+                   cierra la pestaña, o el navegador congela la pestaña en segundo
+                   plano —cosa que hace sola—, el ciclo muere antes del guardado
+                   final y NADA de lo ya subido se quita de la cola. Al volver, los
+                   mismos registros se re-suben y encima se agregan los nuevos: la
+                   cola solo puede crecer, aunque cada subida esté funcionando.
+                   Asentando por lotes, lo hecho ya no se repite jamás. */
+                if ((i + 1) % 5 === 0) _asentar();
             }
-            // ⚠️ NO pisar la cola con el snapshot: mientras el flush corría (awaits de
-            // red) pudieron ENCOLARSE items nuevos (ej. borrar varios gastos seguidos)
-            // y guardarse encima los perdía sin ejecutar → "los borrados revivían".
-            // Se re-lee la cola actual y solo se quita/actualiza lo que ESTE flush tocó.
-            var fresca = _obLoad().filter(function (x) {
-                if (!x || !x.uid) return false;
-                if (hechos[x.uid] || muertos[x.uid]) return false;           // ejecutado o descartado
-                if (triesUpd[x.uid] !== undefined) x.tries = triesUpd[x.uid]; // falló → conservar con sus intentos
-                return true;
-            });
-            _obSave(fresca);
-            _obIndicador();
+            _asentar();
         } finally {
             _obFlushing = false;
             if (_obRepetir) { _obRepetir = false; setTimeout(_obFlush, 50); } // vuelta extra por lo encolado en pleno flush

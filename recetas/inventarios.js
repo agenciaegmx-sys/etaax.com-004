@@ -6185,12 +6185,31 @@ function _resumenEjecutivo() {
     var mermados=[], mermaCosto=0, usados=0, sinUsar=0, sinUsarLista=[], vendidoCosto=0;
     var _mapaRE = _compDeInsumo();
     _repCache = _repartoPrebatch(); // reparto prebatch→insumos (resumen ejecutivo)
-    // Miembros de un compuesto NO se evalúan sueltos (su venta va al compuesto) → evita falsos faltantes.
+    /* Miembros de un compuesto: NO se evalúan sueltos para el CONSUMO (su venta va al
+       compuesto) → evita falsos faltantes. Pero para el DINERO sí cuentan uno por uno.
+
+       Regla de Edwin: el compuesto es la SUMA SIMPLE de los insumos que incluye, y
+       cada uno entra con SU precio. La fila virtual del compuesto usa el precio de
+       carta de su PRIMERA presentación para toda la diferencia, así que valuar ahí
+       daba otro número — de ahí que el Resultado y el reporte directivo no cuadraran
+       ($12,205 contra $12,919 con las mismas existencias). Ahora los dos suman los
+       miembros con su propio precio y dan lo mismo. */
     filasCaptura.filter(function(f){ return !_mapaRE[f.insumoId]; }).concat(_compuestosActivos().map(_virtualFilaCompuesto)).forEach(function(f){
         var _esPBr = !f.esCompuesto && _esPrebatchRepartido(f.insumoId);
         var _aR = (_esPBr || f.esCompuesto) ? _repZero : _repartoDe(f.insumoId);
         var cc = costoCopa(f), dif = _esPBr ? 0 : (calcDiferencia(f) + _aR.dif); // prebatch: dif repartida en sus insumos
-        if (dif < -0.001) { faltU++; faltCosto += Math.abs(dif)*cc; faltCarta += Math.abs(dif)*(f.precioCarta||0); }
+        if (f.esCompuesto) {
+            // El dinero del compuesto sale de sus miembros, no de la fila agregada.
+            var _comp = getCompuestos().find(function(x){ return x.id === f.compId; });
+            ((_comp && _comp.miembros) || []).forEach(function(mid){
+                var m = _filaDeMiembro(mid); if (!m) return;
+                var mAj = _repartoDe(m.insumoId);
+                var mDif = calcDiferencia(m) + mAj.dif, mCc = costoCopa(m);
+                if (mDif < -0.001) { faltU++; faltCosto += Math.abs(mDif)*mCc; faltCarta += Math.abs(mDif)*(m.precioCarta||0); }
+                else if (mDif > 0.001) { sobrU++; sobrCosto += mDif*mCc; sobrCarta += mDif*(m.precioCarta||0); }
+            });
+        }
+        else if (dif < -0.001) { faltU++; faltCosto += Math.abs(dif)*cc; faltCarta += Math.abs(dif)*(f.precioCarta||0); }
         else if (dif > 0.001) { sobrU++; sobrCosto += dif*cc; sobrCarta += dif*(f.precioCarta||0); }
         var merma = (parseFloat(f.mermaCopas)||0) + (parseFloat(f.mermaBase)||0);
         if (merma > 0) { mermados.push({nombre:f.nombre, costo:merma*cc, f:f, m:merma}); mermaCosto += merma*cc; }

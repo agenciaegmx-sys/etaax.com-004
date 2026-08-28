@@ -1629,6 +1629,53 @@ console.log('\n══ SUITE D · Cobro por sucursal (precios.js) ══');
         () => eq(P.descuentoMensual(10), 11.0617, 'desc promedio'));
 })();
 
+/* ═══════════ SUITE I · COMPUESTOS EN EL DINERO DEL RESULTADO ═══════════
+   El Resultado del Paso 5 y el reporte directivo daban totales distintos con las
+   MISMAS existencias ($12,205 contra $12,919). No era un redondeo: el directivo
+   sumaba los miembros del compuesto uno por uno, cada uno con SU precio de carta,
+   y el Paso 5 valuaba la diferencia agregada con el precio de la PRIMERA
+   presentación del compuesto. Regla de Edwin: el compuesto es la suma simple de
+   sus insumos, y cada uno entra con su propio precio. */
+console.log('\n══ SUITE I · Compuestos en el dinero del Resultado ══');
+(function () {
+    // Dos presentaciones del mismo producto con precios de carta MUY distintos:
+    // ahí es donde valuar por el primero se separa de valuar uno por uno.
+    const media = { insumoId:'cerv_media', tipo:'copa', contNeto:355, copaML:355, precioCarta:60,
+        costoUnitario:20, existenciaAnterior:10, cerradasBodega:6, cerradasBarra:0, pesos:[], pesoCristal:0,
+        ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[] };
+    const litro = { insumoId:'cerv_litro', tipo:'copa', contNeto:1000, copaML:1000, precioCarta:150,
+        costoUnitario:50, existenciaAnterior:10, cerradasBodega:14, cerradasBarra:0, pesos:[], pesoCristal:0,
+        ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[] };
+    setVar(B, 'filasCaptura', [media, litro]);
+
+    // media: físico 6 − teórico 10 = −4  → FALTA 4 × $60 = $240
+    // litro: físico 14 − teórico 10 = +4 → SOBRA 4 × $150 = $600
+    test('miembro con faltante: 6 contadas contra 10 teóricas = −4', () =>
+        eq(B.calcDiferencia(media), -4));
+    test('miembro con sobrante: 14 contadas contra 10 teóricas = +4', () =>
+        eq(B.calcDiferencia(litro), 4));
+
+    /* La suma buena: cada miembro con SU precio. Neto = 600 − 240 = +$360. */
+    test('valuando miembro por miembro, el neto a carta es +$360', () => {
+        const falt = Math.abs(B.calcDiferencia(media)) * media.precioCarta;
+        const sobr = B.calcDiferencia(litro) * litro.precioCarta;
+        return eq(sobr - falt, 360);
+    });
+
+    /* Lo que hacía el Paso 5: la diferencia AGREGADA (−4 + 4 = 0) por el precio del
+       PRIMER miembro. Da $0 — y esa brecha era el descuadre entre los dos reportes. */
+    test('valuando la diferencia agregada con el precio del primero, daba $0', () => {
+        const difAgregada = B.calcDiferencia(media) + B.calcDiferencia(litro);
+        return eq(difAgregada * media.precioCarta, 0);
+    });
+    test('la brecha entre los dos criterios es real, no un redondeo', () => {
+        const porMiembro = B.calcDiferencia(litro) * litro.precioCarta
+                         - Math.abs(B.calcDiferencia(media)) * media.precioCarta;
+        const agregado = (B.calcDiferencia(media) + B.calcDiferencia(litro)) * media.precioCarta;
+        return porMiembro !== agregado;
+    });
+})();
+
 /* ═══════════ SUITE H · SUELDO DIARIO Y SALARIO MÍNIMO (diario.html) ═══════════
    El "salario mínimo" del negocio era solo un pre-llenado del formulario: se ponía
    en el campo al dar de alta a alguien y ya. Quien se dio de alta ANTES de
