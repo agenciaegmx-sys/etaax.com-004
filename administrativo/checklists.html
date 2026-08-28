@@ -177,6 +177,43 @@
     </div>
 </div>
 
+<!-- ══ MODAL: imprimir plantilla ══
+     Los días se eligen ANTES de imprimir. La hoja de la semana completa es la
+     normal, pero no siempre: una limpieza profunda que solo se hace viernes y
+     sábado no necesita siete columnas vacías, y una hoja con columnas de más se
+     llena "por llenar". -->
+<div class="ck-modal-bg" id="ckPrintModal">
+    <div class="ck-modal" style="max-width:520px">
+        <div class="ck-modal-hd"><h3 id="ckpTitulo">Imprimir check list</h3>
+            <button class="ck-modal-x" onclick="cerrarImprimir()">✕</button></div>
+        <div class="ck-modal-body">
+            <label>Días de la hoja</label>
+            <div id="ckpDias" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+                <button class="ck-btn" style="font-size:11px" onclick="ckpPreset('todos')">Toda la semana</button>
+                <button class="ck-btn" style="font-size:11px" onclick="ckpPreset('lv')">Lunes a viernes</button>
+                <button class="ck-btn" style="font-size:11px" onclick="ckpPreset('fds')">Fin de semana</button>
+                <button class="ck-btn" style="font-size:11px" onclick="ckpPreset('ninguno')">Ninguno</button>
+            </div>
+            <label>Semana <span style="text-transform:none;letter-spacing:0;color:var(--text-dim)">· opcional, si se deja vacío se llena a mano</span></label>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
+                <input type="date" id="ckpDesde" class="ck-in" style="flex:1">
+                <span style="color:var(--text-dim);font-size:12px">al</span>
+                <input type="date" id="ckpHasta" class="ck-in" style="flex:1">
+            </div>
+            <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;cursor:pointer">
+                <input type="checkbox" id="ckpFirma" checked style="width:16px;height:16px;accent-color:var(--green)">
+                Incluir columna de firma
+            </label>
+            <div id="ckpMsg" style="font-size:11.5px;color:var(--text-dim);margin-top:10px;line-height:1.5"></div>
+        </div>
+        <div class="ck-modal-acts">
+            <button class="ck-mb-cancel" onclick="cerrarImprimir()">Cancelar</button>
+            <button class="ck-mb-save" onclick="imprimirPlantilla()">🖨️ Imprimir</button>
+        </div>
+    </div>
+</div>
+
 <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
 
 <script>
@@ -293,6 +330,7 @@ function renderPlantillas(){
             '<div class="ck-card-meta">'+(p.tareas?p.tareas.length:0)+' tareas · '+esc(_sucNombre(p.sucursalId))+'</div>'+
             '<div class="ck-card-acts">'+
                 '<button class="ck-btn" onclick="abrirEjecDe(\''+p.id+'\')">✅ Ejecutar</button>'+
+                '<button class="ck-btn" onclick="abrirImprimir(\''+p.id+'\')">🖨️ Imprimir</button>'+
                 '<button class="ck-btn" onclick="editarPlantilla(\''+p.id+'\')">✏️ Editar</button>'+
                 '<button class="ck-btn" onclick="eliminarPlantilla(\''+p.id+'\')">🗑️</button>'+
             '</div>'+
@@ -329,6 +367,141 @@ function _renderTareasEditor(){
 function _setTareaTxt(i,v){ _edit.tareas[i].texto=v; }
 function _setTareaFreq(i,v){ _edit.tareas[i].freq=v; }
 function _delTarea(i){ _edit.tareas.splice(i,1); if(!_edit.tareas.length)_edit.tareas=[{id:genId(),texto:'',freq:'A'}]; _renderTareasEditor(); }
+/* ══ HOJA IMPRESA DEL CHECK LIST ═════════════════════════════════════════
+   Reemplaza la hoja de Excel que se llenaba a mano en barra y cocina. Se conserva
+   lo que esa hoja tenía y sirve: la columna de FRECUENCIA a la izquierda (A =
+   apertura, D/T = diaria/turno, SEM = semanal), la banda de supervisión, la
+   semana, la leyenda de símbolos y la firma.
+
+   LOS DÍAS SE ELIGEN ANTES DE IMPRIMIR. La semana completa es lo normal, pero no
+   siempre: una limpieza profunda que solo se hace viernes y sábado no necesita
+   siete columnas, y una hoja con columnas de más se termina llenando "por
+   llenar" — que es peor que no tenerla. */
+var DIAS_SEM = [
+    { k:'L',  nom:'Lunes'     }, { k:'M',  nom:'Martes'  }, { k:'MI', nom:'Miércoles' },
+    { k:'J',  nom:'Jueves'    }, { k:'V',  nom:'Viernes' }, { k:'S',  nom:'Sábado'    },
+    { k:'D',  nom:'Domingo'   }
+];
+var _ckpSel = {}, _ckpPlant = null;
+
+function abrirImprimir(id){
+    _ckpPlant = _plantillas.find(function(x){ return x.id===id; });
+    if (!_ckpPlant) return;
+    if (!(_ckpPlant.tareas||[]).length) { alert('Esta plantilla no tiene tareas todavía.'); return; }
+    _ckpSel = {}; DIAS_SEM.forEach(function(d){ _ckpSel[d.k]=true; });
+    document.getElementById('ckpTitulo').textContent = 'Imprimir · ' + (_ckpPlant.nombre||'check list');
+    // Se sugiere la semana en curso (lunes a domingo): es lo que casi siempre se
+    // imprime, y corregirla es más rápido que escribirla desde cero.
+    var hoy=new Date(), dow=(hoy.getDay()+6)%7;              // 0 = lunes
+    var lun=new Date(hoy); lun.setDate(hoy.getDate()-dow);
+    var dom=new Date(lun); dom.setDate(lun.getDate()+6);
+    document.getElementById('ckpDesde').value = _isoFecha(lun);
+    document.getElementById('ckpHasta').value = _isoFecha(dom);
+    _ckpPintarDias();
+    document.getElementById('ckPrintModal').classList.add('on');
+}
+function _isoFecha(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function cerrarImprimir(){ document.getElementById('ckPrintModal').classList.remove('on'); _ckpPlant=null; }
+
+function _ckpPintarDias(){
+    document.getElementById('ckpDias').innerHTML = DIAS_SEM.map(function(d){
+        var on=_ckpSel[d.k];
+        return '<button onclick="ckpToggle(\''+d.k+'\')" style="padding:7px 13px;border-radius:8px;cursor:pointer;'+
+            'font-family:inherit;font-size:12px;font-weight:600;'+
+            'border:1.5px solid '+(on?'var(--green)':'var(--border)')+';'+
+            'background:'+(on?'rgba(61,190,122,.12)':'transparent')+';'+
+            'color:'+(on?'var(--green)':'var(--text-muted)')+'">'+d.nom+'</button>';
+    }).join('');
+    var n=DIAS_SEM.filter(function(d){return _ckpSel[d.k];}).length;
+    document.getElementById('ckpMsg').textContent = n
+        ? n+(n===1?' día · una columna para marcar':' días · una columna por día')
+        : 'Elige al menos un día.';
+}
+function ckpToggle(k){ _ckpSel[k]=!_ckpSel[k]; _ckpPintarDias(); }
+function ckpPreset(p){
+    var mapa = { todos:['L','M','MI','J','V','S','D'], lv:['L','M','MI','J','V'], fds:['S','D'], ninguno:[] };
+    _ckpSel = {}; (mapa[p]||[]).forEach(function(k){ _ckpSel[k]=true; });
+    _ckpPintarDias();
+}
+
+function _fechaLarga(iso){
+    if(!iso) return '';
+    var M=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    var p=iso.split('-'); return parseInt(p[2],10)+' de '+M[parseInt(p[1],10)-1];
+}
+
+function imprimirPlantilla(){
+    var p=_ckpPlant; if(!p) return;
+    var dias=DIAS_SEM.filter(function(d){ return _ckpSel[d.k]; });
+    if(!dias.length){ document.getElementById('ckpMsg').textContent='Elige al menos un día.'; return; }
+    var conFirma=document.getElementById('ckpFirma').checked;
+    var desde=document.getElementById('ckpDesde').value, hasta=document.getElementById('ckpHasta').value;
+
+    /* HORIZONTAL a partir de 4 días. En vertical, con la semana completa la
+       columna de tarea baja a 29% y ahí no cabe "Montar la barra de servicio
+       (acomodar tapetes, colocar vasos con agua y granadina…)" sin partirse en
+       cinco renglones. La hoja de Excel que esto reemplaza también era horizontal,
+       y por la misma razón. */
+    var horizontal = dias.length >= 4;
+
+    /* Los anchos se reparten a mano: la tarea se lleva lo que sobre y cada día
+       toma lo mismo. Con anchos automáticos, una tarea larga aplasta las columnas
+       de marcar hasta dejarlas inservibles para una palomita. */
+    var anchoDia = dias.length >= 5 ? 7 : 8;
+    var anchoTarea = 100 - 5 - (anchoDia*dias.length) - (conFirma?9:0);
+
+    var filas = (p.tareas||[]).filter(function(t){ return (t.texto||'').trim(); }).map(function(t){
+        return '<tr>'+
+            '<td class="ckf">'+esc(t.freq||'')+'</td>'+
+            '<td class="ckt">'+esc(t.texto)+'</td>'+
+            dias.map(function(){ return '<td class="ckd"></td>'; }).join('')+
+            (conFirma?'<td class="ckd"></td>':'')+
+        '</tr>';
+    }).join('');
+
+    var semana = (desde||hasta)
+        ? 'SEMANA DEL <u>&nbsp;'+esc(_fechaLarga(desde))+'&nbsp;</u> AL <u>&nbsp;'+esc(_fechaLarga(hasta))+'&nbsp;</u>'
+        : 'SEMANA DEL <u>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</u> AL <u>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</u>';
+
+    var cuerpo =
+        '<style>'+
+        '@media print{@page{size:letter '+(horizontal?'landscape':'portrait')+';margin:0.5cm}}'+
+        '.ckh{background:#8c5560;color:#fff;padding:9px 14px;font-family:"Bebas Neue",sans-serif;font-size:19px;letter-spacing:1.6px;display:flex;justify-content:space-between;align-items:center;gap:14px}'+
+        '.ckh .sup{font-family:"DM Sans",sans-serif;font-size:10px;letter-spacing:.5px;font-weight:600;white-space:nowrap}'+
+        '.ckb{background:#f3e2e4;padding:7px 14px;display:flex;justify-content:space-between;align-items:center;gap:14px;font-size:10px;font-weight:600;color:#5a4046;flex-wrap:wrap}'+
+        '.ckl span{margin-left:12px}'+
+        'table.ckt2{width:100%;border-collapse:collapse;margin-top:0}'+
+        'table.ckt2 th{background:#f7edee;border:1px solid #c9a9b0;padding:6px 4px;font-size:9px;font-weight:700;color:#5a4046;text-transform:uppercase;letter-spacing:.6px}'+
+        'table.ckt2 td{border:1px solid #c9a9b0;padding:7px 6px;font-size:10.5px}'+
+        'table.ckt2 tr{break-inside:avoid;page-break-inside:avoid}'+
+        '.ckf{width:5%;text-align:center;font-weight:800;font-size:9px;color:#5a4046}'+
+        '.ckt{font-weight:600;line-height:1.35}'+
+        /* Alto fijo: la celda tiene que dar espacio para una palomita a mano. Sin
+           esto, una tarea de un renglón deja una casilla donde no cabe la marca. */
+        '.ckd{height:26px}'+
+        '</style>'+
+        '<div class="ckh"><span>CHECK LIST '+esc((TIPO_LBL[p.tipo||'otro']||'').toUpperCase())+' · '+esc((p.nombre||'').toUpperCase())+'</span>'+
+            '<span class="sup">SUPERVISIÓN _______________________</span></div>'+
+        '<div class="ckb"><span>'+semana+'</span>'+
+            '<span class="ckl">Tarea realizada <b>✅</b><span>Tarea no realizada <b>❌</b></span><span>Pendiente <b>🔺</b></span></span></div>'+
+        '<table class="ckt2"><thead><tr>'+
+            '<th style="width:5%"></th>'+
+            '<th style="width:'+anchoTarea+'%;text-align:left;padding-left:10px">Tarea a realizar</th>'+
+            dias.map(function(d){ return '<th style="width:'+anchoDia+'%">'+esc(d.nom)+'</th>'; }).join('')+
+            (conFirma?'<th style="width:9%">Firma</th>':'')+
+        '</tr></thead><tbody>'+filas+'</tbody></table>';
+
+    var doc = etaaxReporteDoc({
+        titulo: 'Check list — '+(p.nombre||''),
+        subtitulo: (TIPO_LBL[p.tipo||'otro']||'Check list') + (p.area ? ' · '+p.area : ''),
+        derecha: _sucNombre(p.sucursalId),
+        cuerpo: cuerpo,
+        pie: 'Check list operativo · '+(p.nombre||'')
+    });
+    cerrarImprimir();
+    if (typeof etaaxAbrirReporte === 'function') etaaxAbrirReporte(doc);
+}
+
 function addTareaRow(){ _edit.tareas.push({id:genId(),texto:'',freq:'A'}); _renderTareasEditor(); }
 function cerrarEditor(){ document.getElementById('ckModal').classList.remove('on'); _edit=null; }
 function guardarPlantilla(){
