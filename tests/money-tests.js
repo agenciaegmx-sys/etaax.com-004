@@ -2064,6 +2064,53 @@ console.log('\n══ SUITE M · Expediente del colaborador (administrativo/staf
     });
 })();
 
+/* ═══════════ SUITE N · HOJA IMPRESA DEL CHECK LIST (administrativo/checklists.html) ═══════════
+   Estas hojas se enmican y se usan meses. Lo que se rompe aquí no se nota en
+   pantalla: se nota cuando ya se imprimieron cincuenta. */
+console.log('\n══ SUITE N · Hoja impresa del check list (administrativo/checklists.html) ══');
+(function () {
+    const N = crearContexto();
+    cargarJS(N, 'etaax-core.js');
+    cargarInline(N, 'administrativo/checklists.html');
+    const sinTags = h => String(h).replace(/<[^>]*>/g, '|');
+
+    /* Sin fechas: TRES renglones para escribir a mano (inicio, fin y mes). */
+    test('sin fechas se imprimen renglones, no huecos mudos', () =>
+        eq((N._ckSemanaHTML('', '').match(/ckray/g) || []).length, 3, 'renglones'));
+    test('con la semana completa no queda ningún renglón vacío', () =>
+        eq((N._ckSemanaHTML('2026-08-24', '2026-08-30').match(/ckray/g) || []).length, 0, 'renglones'));
+
+    /* Media fecha capturada: lo que falta se sigue pudiendo escribir a mano.
+       Antes, con solo el "desde", el "al" se imprimía en blanco y sin línea. */
+    test('con solo la fecha de inicio, el final queda como renglón', () =>
+        eq((N._ckSemanaHTML('2026-08-24', '').match(/ckray/g) || []).length, 1, 'renglones'));
+    test('…y el día capturado sí sale', () =>
+        eq(sinTags(N._ckSemanaHTML('2026-08-24', '')).indexOf('24') > -1, true, 'día'));
+
+    test('el mes se deduce de la semana', () =>
+        eq(sinTags(N._ckSemanaHTML('2026-08-24', '2026-08-30')).indexOf('agosto 2026') > -1, true, 'mes'));
+    /* Una semana a caballo entre dos meses es el caso que se olvida. */
+    test('una semana que cruza de mes nombra los dos', () => {
+        const t = sinTags(N._ckSemanaHTML('2026-08-31', '2026-09-06'));
+        return eq(t.indexOf('agosto') > -1 && t.indexOf('septiembre') > -1, true, 'meses');
+    });
+    /* Y a caballo entre dos AÑOS, que es el que se olvida después de ese. */
+    test('una semana que cruza de año nombra los dos años', () => {
+        const t = sinTags(N._ckSemanaHTML('2026-12-28', '2027-01-03'));
+        return eq(t.indexOf('2026') > -1 && t.indexOf('2027') > -1, true, 'años');
+    });
+
+    /* La guía impresa explica las iniciales. Si alguien agrega una frecuencia al
+       selector y olvida definirla, la hoja saldría con una letra sin explicación
+       — y quien llena la hoja a las 7 de la mañana no tiene a quién preguntarle. */
+    test('toda frecuencia del selector tiene definición para la guía', () =>
+        eq(N.FREQS.filter(f => !N.FREQ_DEF[f]).length, 0, 'sin definir'));
+    test('la etiqueta corta del selector sale de la misma definición', () =>
+        eq(N._freqCorto('A'), 'A · Apertura', 'etiqueta'));
+    test('una frecuencia desconocida no rompe la etiqueta', () =>
+        eq(N._freqCorto('ZZ'), 'ZZ', 'etiqueta'));
+})();
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0
