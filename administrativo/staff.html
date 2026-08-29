@@ -315,18 +315,23 @@
                             <select class="filtro-select" id="filterPuesto" onchange="renderAll()">
                                 <option value="">Todos los puestos</option>
                             </select>
+                            <!-- Sin "Baja definitiva": esos ya no viven en esta lista sino
+                                 en el histórico de bajas, con su propio botón. -->
                             <select class="filtro-select" id="filterEstado" onchange="renderAll()">
                                 <option value="">Todos los estados</option>
                                 <option>Activo</option>
                                 <option>Baja temporal</option>
-                                <option>Baja definitiva</option>
                             </select>
                         </div>
                         <button class="btn-ghost" onclick="window.location.href='permisos.html'"
                             title="Acceso restringido — requiere contraseña de administrador"
                             style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">🔐 Permisos y Roles</button>
                         <button class="btn-ghost" onclick="_abrirNomParams()"
+                            title="Acceso restringido — requiere contraseña de administrador"
                             style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">💵 Definir salario mínimo</button>
+                        <button class="btn-ghost" id="btnBajas" onclick="abrirBajas()"
+                            title="Colaboradores dados de baja — el histórico se conserva"
+                            style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">🗂️ Bajas</button>
                         <button class="btn-primary" onclick="openModal()">+ Agregar colaborador</button>
                     </div>
                 </div>
@@ -673,6 +678,50 @@
 .theme-toggle{position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;}
 .theme-toggle:hover{border-color:var(--green);color:var(--green);}
 </style>
+<!-- ══ CANDADO DE ENTRADA ══
+     Sueldos, CLABEs, CURPs y credenciales: el catálogo entero es dato sensible,
+     no solo las acciones sueltas. Se tapa hasta que se verifique la clave. -->
+<div id="staffLock" style="display:none;position:fixed;inset:0;z-index:99990;background:var(--bg);
+     align-items:center;justify-content:center;padding:24px">
+    <div style="text-align:center;max-width:380px">
+        <div style="font-size:44px;margin-bottom:14px">🔐</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:2px;color:var(--text)">CATÁLOGO DE STAFF</div>
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;margin-top:8px">
+            Aquí viven sueldos, datos bancarios y credenciales de acceso.<br>Se necesita la contraseña del administrador.
+        </div>
+        <div style="display:flex;gap:10px;justify-content:center;margin-top:22px">
+            <button class="btn-ghost" onclick="salirDelCatalogo()">← Salir</button>
+            <button class="btn-primary" onclick="desbloquearCatalogo()">🔓 Desbloquear</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══ MODAL: histórico de bajas ══
+     La lista de trabajo se queda con quien trabaja; quien ya salió no se borra
+     —eso sería perder el historial— sino que se guarda aquí. -->
+<div class="modal-overlay" id="modalBajas">
+    <div class="modal" style="max-width:720px">
+        <div class="modal-header">
+            <h2>Colaboradores dados de baja</h2>
+            <button class="modal-close" onclick="cerrarBajas()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div style="font-size:12.5px;color:var(--text-muted);line-height:1.6;margin-bottom:14px">
+                Salieron del negocio y ya no aparecen en el catálogo, pero su expediente se conserva.
+                Se pueden reactivar si regresan.
+            </div>
+            <div class="search-wrap" style="margin-bottom:14px">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="bajasQ" placeholder="Buscar por nombre o puesto…" oninput="_pintarBajas()">
+            </div>
+            <div id="bajasList"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-ghost" onclick="cerrarBajas()">Cerrar</button>
+        </div>
+    </div>
+</div>
+
 <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -820,6 +869,7 @@ function renderAll() {
     renderPuestoFilter();
     renderCumpleBanner();
     renderTable();
+    _pintarBotonBajas();
 }
 
 function renderSucursalFilter() {
@@ -867,7 +917,9 @@ function renderCumpleBanner() {
 }
 
 function renderPuestoChips() {
-    var data = load();
+    /* Sin los dados de baja: "Todos 30" tiene que ser la gente que hoy trabaja
+       aquí. Contar el histórico infla la plantilla y descuadra con la tabla. */
+    var data = load().filter(function(x){ return !_esBaja(x); });
     var counts = {};
     data.forEach(function(s){ if (s.puesto) counts[s.puesto] = (counts[s.puesto]||0) + 1; });
     var puestos = Object.keys(counts).sort();
@@ -922,7 +974,8 @@ function renderTable() {
         var matchP = !puesto || s.puesto === puesto;
         var matchE = !estado || s.estado === estado;
         var matchS = catGlobal ? true : (sucActiva ? _effSuc(s.sucursalId) === sucActiva : true);
-        return matchQ && matchP && matchE && matchS;
+        // Los dados de baja viven en su propio histórico, no en la lista de trabajo.
+        return !_esBaja(s) && matchQ && matchP && matchE && matchS;
     });
 
     filtered.sort(function(a,b){
@@ -986,9 +1039,11 @@ function renderTable() {
 // agregar o editar un colaborador requiere la contraseña del administrador
 // (gerente o dueño) en CADA acción.
 function openModal(id) {
-    _pedirClaveAdmin(id ? 'Editar colaborador' : 'Agregar colaborador', function () {
-        _openModalReal(id);
-    }, id ? '✏️ Editar' : '➕ Agregar');
+    /* Crear NO pide clave: dar de alta gente es la tarea del día y escribir la
+       contraseña en cada alta es exactamente la lata de la que se quejó Edwin.
+       Editar sí — ahí es donde se ven y se cambian sueldos y datos bancarios. */
+    if (id) _gateStaff('Editar colaborador', function () { _openModalReal(id); }, '✏️ Editar');
+    else _openModalReal('');
 }
 function _openModalReal(id) {
     tmpDocs = [];
@@ -1437,6 +1492,14 @@ async function saveStaff() {
         documentos:      tmpDocs.slice()
     };
 
+    /* La fecha de baja se estampa SOLA: es el dato por el que se consulta el
+       histórico y nadie se va a acordar de escribirlo. Se respeta la que ya
+       existiera —volver a guardar no debe recorrerla al día de hoy— y se limpia
+       si la persona regresa. */
+    var _prev = data.find(function(s){ return s.id === obj.id; }) || {};
+    if (obj.estado === 'Baja definitiva') obj.fechaBaja = _prev.fechaBaja || _hoyISO();
+    else obj.fechaBaja = '';
+
     var idx = data.findIndex(function(s){ return s.id === obj.id; });
     /* FUSIONAR, no reemplazar. Hay DOS editores de colaborador (este y el otro) y
        cada uno arma su objeto con los campos que conoce. Reemplazar el registro
@@ -1581,6 +1644,84 @@ function removeDoc(i) {
 }
 
 /* ── UTILS ── */
+/* ══════════════ HISTÓRICO DE BAJAS ══════════════
+   Un colaborador que sale NO se borra: eso tira su expediente, sus documentos y
+   el rastro de lo que se le pagó. Se archiva. La lista de trabajo se queda con
+   quien trabaja, y el histórico vive aquí.
+
+   "Baja temporal" NO cuenta como baja: es incapacidad o vacaciones y esa persona
+   sigue siendo del equipo — se queda en la lista, con su etiqueta. */
+function _esBaja(s){ return (s && s.estado) === 'Baja definitiva'; }
+function _bajas(){
+    return load().filter(_esBaja).sort(function(a,b){
+        // Los más recientes arriba: es a los que se les busca algo.
+        return String(b.fechaBaja||'').localeCompare(String(a.fechaBaja||'')) ||
+               (a.nombre||'').localeCompare(b.nombre||'');
+    });
+}
+function _pintarBotonBajas(){
+    var b = document.getElementById('btnBajas'); if (!b) return;
+    var n = _bajas().length;
+    b.innerHTML = '🗂️ Bajas' + (n ? ' <span class="pill" style="background:rgba(255,255,255,.07);color:var(--text-muted)">'+n+'</span>' : '');
+    b.style.display = '';
+}
+function abrirBajas(){
+    document.getElementById('bajasQ').value = '';
+    _pintarBajas();
+    document.getElementById('modalBajas').classList.add('open');
+}
+function cerrarBajas(){ document.getElementById('modalBajas').classList.remove('open'); }
+function _pintarBajas(){
+    var q = (document.getElementById('bajasQ').value||'').toLowerCase().trim();
+    var lista = _bajas().filter(function(s){
+        return !q || (s.nombre||'').toLowerCase().indexOf(q)>=0 || (s.puesto||'').toLowerCase().indexOf(q)>=0;
+    });
+    if (!lista.length){
+        document.getElementById('bajasList').innerHTML =
+            '<div style="text-align:center;padding:34px 12px;color:var(--text-dim);font-size:13px">'+
+            (q ? 'Nadie coincide con “'+esc(q)+'”.' : 'Todavía no hay colaboradores dados de baja.')+'</div>';
+        return;
+    }
+    document.getElementById('bajasList').innerHTML = lista.map(function(s){
+        var qid = esc(s.id).replace(/'/g,"\\'");
+        return '<div style="display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid var(--border)">'+
+            '<div style="flex:1;min-width:0">'+
+              '<div style="font-size:14px;color:var(--text)">'+esc(s.nombre||'—')+'</div>'+
+              '<div style="font-size:11.5px;color:var(--text-dim);margin-top:2px">'+esc(s.puesto||'Sin puesto')+
+                 (s.fechaBaja ? ' · baja el '+esc(_fechaLarga(s.fechaBaja)) : '')+
+                 (s.fechaIngreso ? ' · '+esc(_antiguedadDe(s.fechaIngreso)||'—')+' en el negocio' : '')+'</div>'+
+            '</div>'+
+            '<button class="btn-row" onclick="cerrarBajas();verExpediente(\''+qid+'\')">Expediente</button> '+
+            '<button class="btn-row" onclick="reactivarStaff(\''+qid+'\')">↩ Reactivar</button>'+
+        '</div>';
+    }).join('');
+}
+/* Reactivar NO pide clave: devolver a alguien a la lista no destruye nada y es
+   justo lo que se viene a hacer aquí. Borrar de verdad sigue estando en el ⋯. */
+function reactivarStaff(id){
+    var data = load();
+    var i = data.findIndex(function(x){ return x.id===id; });
+    if (i < 0) return;
+    if (!confirm('¿Regresar a '+(data[i].nombre||'este colaborador')+' al catálogo como Activo?')) return;
+    data[i] = Object.assign({}, data[i], { estado:'Activo', fechaBaja:'' });
+    save(data).then(function(){ _pintarBajas(); renderAll(); });
+}
+/* Dar de baja desde el menú ⋯: el camino corto para lo que antes obligaba a
+   entrar al formulario, cambiar el estado y guardar. */
+function darDeBajaStaff(id){
+    var data = load();
+    var i = data.findIndex(function(x){ return x.id===id; });
+    if (i < 0) return;
+    if (!confirm('¿Dar de baja a '+(data[i].nombre||'este colaborador')+'?\n\n'+
+                 'Sale del catálogo pero su expediente se conserva en Bajas, y se puede reactivar.')) return;
+    data[i] = Object.assign({}, data[i], { estado:'Baja definitiva', fechaBaja:_hoyISO() });
+    save(data).then(renderAll);
+}
+function _hoyISO(){
+    var d = new Date();
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
 /* ══════════════ FOTO DEL COLABORADOR ══════════════
    A Storage, no al registro. Una foto en base64 dentro del JSONB se lleva por
    delante la carga de toda la lista — ya pasó con el catálogo de insumos. */
@@ -1635,11 +1776,17 @@ function _menuStaff(ev, id) {
         'border:1px solid var(--border);border-radius:10px;padding:5px;box-shadow:0 14px 40px rgba(0,0,0,.5);' +
         'top:' + Math.min(r.bottom + 6, window.innerHeight - 160) + 'px;left:' + Math.max(10, r.right - 190) + 'px';
     var q = id.replace(/'/g, "\\'");
+    var s = load().find(function (x) { return x.id === id; }) || {};
     m.innerHTML =
         _miStaff('👁', 'Ver expediente', "verExpediente('" + q + "')") +
         _miStaff('✏️', 'Editar', "openModal('" + q + "')") +
         '<div style="height:1px;background:var(--border);margin:5px 2px"></div>' +
-        _miStaff('🗑️', 'Eliminar', "deleteStaff('" + q + "')", true);
+        (_esBaja(s)
+            ? _miStaff('↩', 'Reactivar', "reactivarStaff('" + q + "')")
+            : _miStaff('🗂️', 'Dar de baja', "darDeBajaStaff('" + q + "')")) +
+        /* Eliminar es lo ÚNICO irreversible aquí, y por eso está separado de
+           "dar de baja": la baja conserva el expediente, esto lo borra. */
+        _miStaff('🗑️', 'Eliminar del todo', "deleteStaff('" + q + "')", true);
     document.body.appendChild(m);
     setTimeout(function () { document.addEventListener('click', _cerrarMenusStaff, { once: true }); }, 0);
 }
@@ -1842,6 +1989,52 @@ function esc(s) {
 }
 
 /* ── INIT ── */
+/* ══ CANDADO DEL CATÁLOGO ═════════════════════════════════════════════════
+   Aquí viven sueldos, CLABEs, CURPs y credenciales de acceso: el catálogo
+   completo es dato sensible, no solo las acciones sueltas.
+
+   LA GRACIA, Y POR QUÉ EXISTE: pedir la clave al entrar y OTRA VEZ tres
+   segundos después al editar es la misma lata de la que se quejó Edwin, solo
+   que movida de lugar. Una vez verificada, vale unos minutos para las acciones
+   que NO destruyen nada (entrar, editar, salario mínimo).
+   ELIMINAR queda fuera de la gracia: siempre pide clave, siempre. Es lo único
+   irreversible de esta pantalla.
+   Y crear NO pide nada — dar de alta gente es la tarea del día. */
+var _GRACIA_MS = 5 * 60 * 1000;
+var _okHasta = 0;
+function _gateStaff(accion, cb, btnLabel) {
+    if (Date.now() < _okHasta) { cb(); return; }
+    if (!window._pedirClaveAdmin) { cb(); return; }   // sin guard cargado no se bloquea la operación
+    _pedirClaveAdmin(accion, function () { _okHasta = Date.now() + _GRACIA_MS; cb(); }, btnLabel);
+}
+function _pintarCandado(mostrar) {
+    var ov = document.getElementById('staffLock');
+    if (ov) ov.style.display = mostrar ? 'flex' : 'none';
+}
+function desbloquearCatalogo() {
+    _gateStaff('Catálogo de Staff — acceso restringido', function () {
+        _pintarCandado(false);
+        _arrancarCatalogo();
+    }, '🔓 Entrar');
+}
+function salirDelCatalogo() {
+    /* Al hub de Administrativo, no a la pantalla anterior: embebido en el modal
+       del hub, un history.back() dejaría la ventana en blanco. Si está embebido,
+       el ✕ del modal padre sigue estando arriba. */
+    window.location.href = 'index.html' + (/[?&]embed=1/.test(window.location.search) ? '?embed=1' : '');
+}
+
+var _arrancado = false;
+async function _arrancarCatalogo() {
+    if (_arrancado) return;
+    _arrancado = true;
+    var negId = getNegocioActivo();
+    if (window.NominaParams) { try { await NominaParams.sync(negId); } catch(e){} }
+    await syncFromDB();
+    renderAll();
+    _subStaffRealtime();
+}
+
 async function initPage() {
     var negId = getNegocioActivo();
     // Embebido en un modal del hub: no rebotar al hub aunque falte el negocio
@@ -1849,10 +2042,8 @@ async function initPage() {
     if (!negId) { if (!/[?&]embed=1/.test(window.location.search)) window.location.href = '../hub.html'; return; }
     // El alcance por sucursal lo aplica renderTable según la sucursal activa / modo
     // global (se eliminó el filtro por sucursal de la UI).
-    if (window.NominaParams) { try { await NominaParams.sync(negId); } catch(e){} }
-    await syncFromDB();
-    renderAll();
-    _subStaffRealtime();
+    _pintarCandado(true);
+    desbloquearCatalogo();
 }
 /* ── Realtime: sync en vivo entre dispositivos (tabla publicada en v32) ──
    Que un colaborador dado de alta/movido en una máquina aparezca en la otra
@@ -1885,13 +2076,21 @@ async function _reloadStaffRT() {
     } catch(e){}
 }
 function _abrirNomParams() {
-    if (window.NominaParams) NominaParams.open(getNegocioActivo(), function(){ renderAll(); });
+    /* Fija el sueldo con el que nacen TODOS los colaboradores nuevos: tocarlo
+       sin querer se paga en la nómina de la quincena siguiente. */
+    _gateStaff('Definir salario mínimo', function () {
+        if (window.NominaParams) NominaParams.open(getNegocioActivo(), function(){ renderAll(); });
+    }, '💵 Continuar');
 }
 document.addEventListener('DOMContentLoaded', initPage);
 
 document.getElementById('modalStaff').addEventListener('click', function(e){
     if (e.target === this) closeModal();
 });
+document.getElementById('modalBajas').addEventListener('click', function(e){
+    if (e.target === this) cerrarBajas();
+});
+document.addEventListener('keydown', function(e){ if (e.key === 'Escape') cerrarBajas(); });
 </script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>

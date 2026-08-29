@@ -2256,6 +2256,79 @@ console.log('\n══ SUITE Q · Aviso de actualizaciones (novedades.js) ══'
         eq(/^\d{4}-\d{2}-\d{2}$/.test(Q.FECHA), true, 'formato'));
 })();
 
+/* ═══════════ SUITE R · BAJAS Y CANDADO DEL CATÁLOGO (administrativo/staff.html) ═══════════
+   Dar de baja no es borrar: el expediente, los documentos y el rastro de lo
+   pagado se conservan. Y el candado tiene que dejar pasar lo de todos los días
+   (crear) sin soltar lo irreversible (eliminar). */
+console.log('\n══ SUITE R · Bajas y candado del catálogo (administrativo/staff.html) ══');
+(function () {
+    const R = crearContexto();
+    cargarJS(R, 'bancos-mx.js');
+    cargarJS(R, 'staff-area.js');
+    cargarInline(R, 'administrativo/staff.html');
+    R._storage['etaax_negocio_activo'] = 'n1';
+
+    const equipo = [
+        { id: 'a', nombre: 'Ana',  puesto: 'Cocinera', estado: 'Activo' },
+        { id: 'b', nombre: 'Beto', puesto: 'Barman',   estado: 'Baja temporal' },
+        { id: 'c', nombre: 'Cira', puesto: 'Mesera',   estado: 'Baja definitiva', fechaBaja: '2026-07-10' },
+        { id: 'd', nombre: 'Dani', puesto: 'Mesero',   estado: 'Baja definitiva', fechaBaja: '2026-08-02' },
+    ];
+    R._storage['etaax_n1_staff'] = JSON.stringify(equipo);
+
+    test('solo la baja DEFINITIVA cuenta como baja', () =>
+        eq(equipo.filter(R._esBaja).map(x => x.id).join(','), 'c,d', 'bajas'));
+    /* Una incapacidad o unas vacaciones NO son una salida: esa persona sigue
+       siendo del equipo y tiene que seguir en la lista de trabajo. */
+    test('la baja TEMPORAL se queda en el equipo', () => eq(R._esBaja(equipo[1]), false, 'temporal'));
+
+    test('el histórico lista a los que salieron, el más reciente primero', () =>
+        eq(R._bajas().map(x => x.id).join(','), 'd,c', 'orden'));
+
+    /* La fecha de baja es el dato por el que se consulta el histórico y nadie se
+       va a acordar de escribirlo: se estampa solo. */
+    const hoy = new Date();
+    const hoyISO = hoy.getFullYear() + '-' + String(hoy.getMonth()+1).padStart(2,'0') + '-' + String(hoy.getDate()).padStart(2,'0');
+    test('la fecha de hoy se arma bien para estampar la baja', () => eq(R._hoyISO(), hoyISO, 'fecha'));
+
+    /* La lista de trabajo se queda con quien trabaja. Un dado de baja que sigue
+       apareciendo ahí es un error caro: se le programa turno y se le paga. */
+    R.renderTable();
+    const tbody = R.document.getElementById('staffTbody').innerHTML;
+    test('la tabla NO muestra a los dados de baja', () =>
+        eq(tbody.indexOf('Cira') === -1 && tbody.indexOf('Dani') === -1, true, 'ocultos'));
+    test('…pero sí a los activos y a los de baja temporal', () =>
+        eq(tbody.indexOf('Ana') > -1 && tbody.indexOf('Beto') > -1, true, 'visibles'));
+    /* Y el contador de la ficha "Todos" tiene que cuadrar con la tabla: contar
+       el histórico infla la plantilla. */
+    R.renderPuestoChips();
+    test('el conteo de "Todos" cuenta al equipo actual, no al histórico', () =>
+        eq(R.document.getElementById('puestoChips').innerHTML.indexOf('>2<') > -1, true, 'conteo'));
+
+    /* El candado: una vez verificado, vale unos minutos para lo que no destruye
+       nada. Sin eso, entrar y editar pide la clave dos veces seguidas. */
+    let corrio = 0;
+    R._pedirClaveAdmin = function (_a, cb) { corrio++; cb(); };
+    setVar(R, '_okHasta', 0);
+    R._gateStaff('probar', function () {});
+    test('la primera vez sí pide la clave', () => eq(corrio, 1, 'veces'));
+    R._gateStaff('probar otra vez', function () {});
+    test('dentro de la gracia ya no la vuelve a pedir', () => eq(corrio, 1, 'veces'));
+    setVar(R, '_okHasta', Date.now() - 1);
+    R._gateStaff('ya venció', function () {});
+    test('vencida la gracia, la pide de nuevo', () => eq(corrio, 2, 'veces'));
+
+    /* Crear NO pasa por el candado — es la tarea del día. Editar sí. */
+    let pedidas = 0;
+    R._pedirClaveAdmin = function (_a, cb) { pedidas++; cb(); };
+    setVar(R, '_okHasta', 0);
+    R.openModal('');
+    test('crear un colaborador NO pide contraseña', () => eq(pedidas, 0, 'veces'));
+    setVar(R, '_okHasta', 0);
+    R.openModal('a');
+    test('editar uno existente SÍ la pide', () => eq(pedidas, 1, 'veces'));
+})();
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0
