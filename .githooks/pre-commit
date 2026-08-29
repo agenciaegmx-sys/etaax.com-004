@@ -1,0 +1,23 @@
+#!/bin/sh
+# ETAAX — estampa la fecha de publicación en /novedades.js
+#
+# El aviso de "hubo actualizaciones" necesita saber CUÁNDO se publicó. Escribir
+# esa fecha a mano se olvida al segundo commit y el aviso empieza a mentir, que
+# es peor que no tenerlo. Aquí se estampa sola en cada commit.
+#
+# Netlify publica en cuanto llega el push, así que la fecha del commit y la de
+# la publicación son la misma en la práctica.
+set -e
+F="novedades.js"
+[ -f "$F" ] || exit 0
+
+HOY=$(date +%Y-%m-%d)
+ACTUAL=$(sed -n "s/.*var FECHA = '\([0-9-]*\)'.*/\1/p" "$F" | head -1)
+
+if [ "$ACTUAL" != "$HOY" ]; then
+    # -i '' es la forma de BSD/macOS; en Linux sería -i a secas.
+    sed -i '' "s/var FECHA = '[0-9-]*'/var FECHA = '$HOY'/" "$F" 2>/dev/null \
+        || sed -i "s/var FECHA = '[0-9-]*'/var FECHA = '$HOY'/" "$F"
+    git add "$F"
+    echo "📅 novedades.js: fecha de publicación → $HOY"
+fi

@@ -162,9 +162,12 @@
         <button class="hr-btn" onclick="irHoy()" title="Ir a la semana actual">Hoy</button>
         <div class="hr-sep"></div>
         <select class="hr-select" id="sucSel" onchange="cambiarSuc(this.value)" style="display:none"></select>
+        <input type="text" id="hrBuscar" class="hr-select" placeholder="🔍 Buscar por nombre o puesto"
+               oninput="buscarStaff(this.value)" style="min-width:210px;flex:1;max-width:280px">
         <div class="hr-toolbar-right">
+            <button class="hr-btn" onclick="abrirAgregar()" title="Suma a alguien al rol de ESTA semana (gerencia, administración, o prestado de otra sucursal)">+ Agregar a la semana</button>
             <button class="hr-btn" onclick="copiarSemanaAnterior()" title="Trae los turnos de la semana pasada a esta">⧉ Copiar semana anterior</button>
-            <button class="hr-btn" onclick="imprimirHorario()" title="Rol de la semana en PDF, carta horizontal">🖨️ PDF</button>
+            <button class="hr-btn" onclick="abrirPDF()" title="Rol de la semana en PDF, carta horizontal">🖨️ PDF</button>
             <div class="hr-toggle">
                 <button id="tgGrid" class="on" onclick="setVista('grid')">▦ Cuadrícula</button>
                 <button id="tgCards" onclick="setVista('cards')">▤ Tarjetas</button>
@@ -193,6 +196,60 @@
     </div>
 </div>
 
+<!-- ══ MODAL: agregar a la semana ══
+     Gerencia y administración viven en Matriz y no salen en el rol operativo de
+     una sucursal; un colaborador de otra sucursal tampoco. Aquí se suman SOLO
+     para esta semana, sin tocar el catálogo de staff. -->
+<div class="hr-modal-bg" id="hrAddModal">
+    <div class="hr-modal" style="max-width:560px">
+        <h3>Agregar a la semana</h3>
+        <div class="msub" id="hrAddSub">—</div>
+        <input type="text" id="hrAddQ" class="hr-select" placeholder="🔍 Buscar por nombre o puesto"
+               oninput="_pintarAgregar()" style="width:100%;margin:12px 0 10px;box-sizing:border-box">
+        <div id="hrAddList" style="max-height:46vh;overflow-y:auto;margin:0 -4px"></div>
+        <div class="hr-modal-acts">
+            <button class="hr-mb-clear" onclick="cerrarAgregar()">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══ MODAL: opciones de un colaborador en esta semana ══ -->
+<div class="hr-modal-bg" id="hrPersonaModal">
+    <div class="hr-modal" style="max-width:460px">
+        <h3 id="hrPerNom">Colaborador</h3>
+        <div class="msub" id="hrPerSub">—</div>
+        <div id="hrPerBody" style="margin-top:14px"></div>
+        <div class="hr-modal-acts">
+            <button class="hr-mb-clear" onclick="cerrarPersona()">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══ MODAL: opciones del PDF ══ -->
+<div class="hr-modal-bg" id="hrPdfModal">
+    <div class="hr-modal" style="max-width:480px">
+        <h3>Exportar el rol de la semana</h3>
+        <div class="msub" id="hrPdfSub">—</div>
+        <div style="margin-top:14px">
+            <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px">Áreas a incluir</div>
+            <div id="hrPdfAreas" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+                <button class="hr-btn" style="font-size:11px" onclick="pdfAreasTodas()">Todas</button>
+                <button class="hr-btn" style="font-size:11px" onclick="pdfAreasNinguna()">Ninguna</button>
+            </div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:16px">
+                <input type="checkbox" id="hrPdfSepar" checked style="width:16px;height:16px;accent-color:var(--green)">
+                Separar la hoja por áreas
+            </label>
+            <div id="hrPdfMsg" style="font-size:11.5px;color:var(--text-dim);margin-top:10px;line-height:1.5"></div>
+        </div>
+        <div class="hr-modal-acts">
+            <button class="hr-mb-clear" onclick="cerrarPDF()">Cancelar</button>
+            <button class="hr-mb-save" onclick="imprimirHorario()">🖨️ Imprimir</button>
+        </div>
+    </div>
+</div>
+
 <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
 
 <script>
@@ -204,6 +261,7 @@ function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')
 <script src="/etaax-core.js"></script>
 <script src="/etaax-store.js"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js"></script>
+<script src="/staff-area.js"></script><!-- el área de un colaborador: fuente única -->
 <script src="/reporte-marca.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
@@ -355,10 +413,109 @@ function _coberturaDia(dayIdx){
     return n;
 }
 
+/* ══ INVITADOS DE LA SEMANA ═══════════════════════════════════════════════
+   Un solo mecanismo resuelve dos cosas que parecían distintas:
+
+     · meter a gerencia o administración —que viven en Matriz— al rol operativo
+       de una sucursal, y
+     · prestar un colaborador a otra sucursal SOLO esa semana.
+
+   Las dos son lo mismo: "esta semana, esta persona trabaja aquí". Se guarda en
+   el registro de la semana de la sucursal ANFITRIONA (rec.invitados), así que no
+   toca el catálogo de staff — la sucursal de a de veras sigue siendo la del
+   catálogo, y eso se cambia en Staff, que es donde debe cambiarse.
+
+   Consecuencia buscada: quien está invitado en otra sucursal DESAPARECE de la
+   suya esa semana. Tiene un solo cuerpo; si aparece en las dos, las horas y la
+   cobertura se cuentan doble y el rol miente. */
+function _invitacionesSemana(){
+    var mapa = {}, suf = '_' + _weekStr;
+    Object.keys(_horCache).forEach(function(k){
+        if (k.indexOf('hor_') !== 0 || k.slice(-suf.length) !== suf) return;
+        var sucId = k.slice(4, k.length - suf.length);
+        ((_horCache[k]||{}).invitados || []).forEach(function(sid){ mapa[sid] = sucId; });
+    });
+    return mapa;
+}
+function _sucDeEstaSemana(s){
+    var inv = _invitacionesSemana();
+    return inv[s.id] || _effSuc(s.sucursalId);
+}
+function _esInvitado(sid){ return !!_invitacionesSemana()[sid]; }
+
+/* Invitar = moverlo aquí esta semana. Si ya estaba invitado en otra sucursal se
+   le quita de allá primero: dos anfitriones a la vez no existen. */
+function invitarASemana(sid, sucDestino){
+    var inv = _invitacionesSemana(), origen = inv[sid];
+    if (origen && origen !== _effSuc(sucDestino)) _quitarInvitacion(sid, origen);
+    var recId = recordId(sucDestino, _weekStr);
+    var rec = _horCache[recId] || { id:recId, sucursalId:_effSuc(sucDestino), semana:_weekStr, turnos:{} };
+    rec.invitados = (rec.invitados||[]).filter(function(x){ return x !== sid; });
+    // Si su sucursal de catálogo YA es esta, no hace falta invitarlo: estaría de más.
+    var s = _staff.find(function(x){ return x.id===sid; });
+    if (!s || _effSuc(s.sucursalId) !== _effSuc(sucDestino)) rec.invitados.push(sid);
+    persist(rec);
+}
+function _quitarInvitacion(sid, sucId){
+    var rec = _horCache[recordId(sucId, _weekStr)];
+    if (!rec || !rec.invitados) return;
+    rec.invitados = rec.invitados.filter(function(x){ return x !== sid; });
+    persist(rec);
+}
+/* Regresarlo a su sucursal del catálogo. Los TURNOS que se le hayan puesto en la
+   sucursal prestada se quedan ahí; no se borran a la brava, porque pueden ser
+   trabajo real ya hecho. Se avisa cuando existen. */
+function regresarASuSucursal(sid){
+    var host = _invitacionesSemana()[sid];
+    if (!host) return;
+    var rec = _horCache[recordId(host, _weekStr)];
+    var conTurnos = rec && rec.turnos && rec.turnos[sid] && Object.keys(rec.turnos[sid]).length;
+    if (conTurnos && !confirm('Tiene turnos capturados en '+_sucNombre(host)+' esta semana.\n\n'+
+        'Se queda ese registro pero ya no aparecerá ahí. ¿Regresarlo a su sucursal?')) return;
+    _quitarInvitacion(sid, host);
+    cerrarPersona(); render();
+}
+
+/* ── Búsqueda por nombre ── */
+var _busq = '';
+function buscarStaff(v){ _busq = String(v||'').toLowerCase().trim(); render(); }
+function _pasaBusqueda(s){
+    if (!_busq) return true;
+    return (s.nombre||'').toLowerCase().indexOf(_busq) >= 0 ||
+           (s.puesto||'').toLowerCase().indexOf(_busq) >= 0;
+}
+
+/* ── Área (delegada a /staff-area.js, no reimplementada aquí) ── */
+function _areaDe(s){ return (window.StaffArea ? StaffArea.de(s) : ''); }
+function _areaNom(k){ return (window.StaffArea ? StaffArea.nom(k) : k) || 'Sin área'; }
+/* Agrupa respetando el orden operativo del catálogo de áreas, y deja al final a
+   quien no tiene área: mandarlos a "Administración" por descarte sería mentir. */
+function _porArea(lista){
+    var grupos = [], idx = {};
+    (window.StaffArea ? StaffArea.LISTA : []).forEach(function(a){
+        idx[a.k] = grupos.length; grupos.push({ k:a.k, nom:a.nom, gente:[] });
+    });
+    idx[''] = grupos.length; grupos.push({ k:'', nom:'Sin área asignada', gente:[] });
+    lista.forEach(function(s){ grupos[idx[_areaDe(s)] != null ? idx[_areaDe(s)] : idx['']].gente.push(s); });
+    return grupos.filter(function(g){ return g.gente.length; });
+}
+
 /* ── Render ── */
 function _staffScope(){
-    return _staff.filter(function(s){ return _effSuc(s.sucursalId) === _effSuc(_sucSel); })
-                 .sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
+    var inv = _invitacionesSemana(), yo = _effSuc(_sucSel);
+    return _staff.filter(function(s){
+        var host = inv[s.id];
+        return (host ? host === yo : _effSuc(s.sucursalId) === yo) && _pasaBusqueda(s);
+    }).sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
+}
+/* Sin el filtro del buscador: para contar y para el PDF, que no debe salir
+   recortado por lo que alguien haya dejado escrito en la caja de búsqueda. */
+function _staffScopeDe(sucId){
+    var inv = _invitacionesSemana(), yo = _effSuc(sucId);
+    return _staff.filter(function(s){
+        var host = inv[s.id];
+        return host ? host === yo : _effSuc(s.sucursalId) === yo;
+    }).sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
 }
 function _turnoCellHTML(sid, dayIdx){
     var t = (curRecord().turnos[sid]||{})['d'+dayIdx];
@@ -394,7 +551,11 @@ function render(){
     }
     var scope = _staffScope();
     if (!scope.length){
-        cont.innerHTML = '<div class="hr-empty"><div class="ic">🗓️</div><div style="font-size:15px;color:var(--text)">Sin colaboradores en '+esc(_sucNombre(_sucSel))+'</div><div style="margin-top:6px">Da de alta personal en el <a href="staff.html" style="color:var(--viol)">Catálogo de Staff</a> y asígnalo a esta sucursal.</div></div>';
+        /* Vacío por el buscador ≠ vacío de verdad. Mandar a dar de alta personal
+           cuando lo único que pasa es que nadie se llama "xyz" es desorientar. */
+        cont.innerHTML = _busq
+            ? '<div class="hr-empty"><div class="ic">🔍</div><div style="font-size:15px;color:var(--text)">Nadie coincide con “'+esc(_busq)+'”</div><div style="margin-top:6px">en '+esc(_sucNombre(_sucSel))+' esta semana.</div></div>'
+            : '<div class="hr-empty"><div class="ic">🗓️</div><div style="font-size:15px;color:var(--text)">Sin colaboradores en '+esc(_sucNombre(_sucSel))+'</div><div style="margin-top:6px">Da de alta personal en el <a href="staff.html" style="color:var(--viol)">Catálogo de Staff</a> y asígnalo a esta sucursal, o usa <b>+ Agregar a la semana</b>.</div></div>';
         return;
     }
     cont.innerHTML = _view==='grid' ? _renderGrid(scope) : _renderCards(scope);
@@ -433,7 +594,11 @@ function _renderGrid(scope){
     h += '</tr></thead><tbody>';
     scope.forEach(function(s){
         var _ar = _asisResumen(s.id);
-        h += '<tr><td><div class="hr-person"><span class="pn">'+esc(s.nombre||'—')+'</span><span class="pp">'+esc(s.puesto||'')+'</span>'
+        var _inv = _esInvitado(s.id);
+        h += '<tr><td><div class="hr-person" style="cursor:pointer" title="Opciones de esta semana" onclick="abrirPersona(\''+esc(s.id)+'\')">'
+           + '<span class="pn">'+esc(s.nombre||'—')
+           + (_inv ? ' <span style="font-size:10px;color:var(--viol);font-weight:600" title="Prestado a esta sucursal solo esta semana">· prestado</span>' : '')
+           + '</span><span class="pp">'+esc(s.puesto||'')+'</span>'
            + '<span class="ph">'+_fmtH(_horasStaff(s.id))+' / sem</span>'
            + (_ar.turnos ? '<span class="hr-asis-res">✓ '+_ar.si+'  ✕ '+_ar.no+(_retardosSemana(s.id)?'  ⏱ '+_retardosSemana(s.id):'')+(_ar.sinMarcar?'  · '+_ar.sinMarcar+' sin marcar':'')
                           + (_ar.si?'<br><b>'+_fmtH(_horasAsistidas(s.id))+'</b> asistidas':'') + '</span>' : '')
@@ -451,7 +616,9 @@ function _renderCards(scope){
     var hoy=_hoyIdx();
     var h = '<div class="hr-cards">';
     scope.forEach(function(s){
-        h += '<div class="hr-card"><div class="hr-card-hd"><div><div class="cn">'+esc(s.nombre||'—')+'</div><div class="cp">'+esc(s.puesto||'')+'</div></div><div class="chh">'+_fmtH(_horasStaff(s.id))+' / sem</div></div>';
+        h += '<div class="hr-card"><div class="hr-card-hd" style="cursor:pointer" onclick="abrirPersona(\''+esc(s.id)+'\')"><div><div class="cn">'+esc(s.nombre||'—')
+           + (_esInvitado(s.id) ? ' <span style="font-size:10px;color:var(--viol);font-weight:600">· prestado</span>' : '')
+           + '</div><div class="cp">'+esc(s.puesto||'')+'</div></div><div class="chh">'+_fmtH(_horasStaff(s.id))+' / sem</div></div>';
         for (var i=0;i<7;i++){
             var t = (curRecord().turnos[s.id]||{})['d'+i];
             var dv = !t ? '<span class="dv empty">+ asignar</span>'
@@ -590,29 +757,96 @@ function _tablaPDF(rec, staffList){
         + '<tbody>' + filas + '</tbody>'
         + '<tfoot><tr><td>Cobertura · personas por día</td>' + cob + '<td></td></tr></tfoot></table>';
 }
+/* ══ OPCIONES DEL PDF ═════════════════════════════════════════════════════
+   Un rol de 40 personas en una hoja no lo lee nadie: en la pared de la cocina
+   solo importa cocina. De ahí el filtro por área y la separación en bloques. */
+var _pdfAreas = null;    // null = todavía no se ha abierto el modal
+function _areasDelScope(){
+    var lista = _catGlobalOn() && !_sucSel
+        ? _sucsConStaff().reduce(function(acc,sid){ return acc.concat(_staffScopeDe(sid)); }, [])
+        : _staffScopeDe(_sucSel);
+    var vistas = {};
+    lista.forEach(function(s){ vistas[_areaDe(s)] = 1; });
+    var out = (window.StaffArea ? StaffArea.LISTA : []).filter(function(a){ return vistas[a.k]; })
+        .map(function(a){ return { k:a.k, nom:a.nom }; });
+    if (vistas['']) out.push({ k:'', nom:'Sin área asignada' });
+    return out;
+}
+function abrirPDF(){
+    var areas = _areasDelScope();
+    if (!areas.length){ alert('No hay colaboradores en el rol de esta semana.'); return; }
+    if (!_pdfAreas) { _pdfAreas = {}; areas.forEach(function(a){ _pdfAreas[a.k] = true; }); }
+    // Un área que apareció después (staff nuevo) entra encendida, no invisible.
+    areas.forEach(function(a){ if (_pdfAreas[a.k] === undefined) _pdfAreas[a.k] = true; });
+    document.getElementById('hrPdfSub').textContent = 'Semana ' + _weekStr.split('-W')[1] + ' · '
+        + ((_catGlobalOn() && !_sucSel) ? 'todas las sucursales' : _sucNombre(_sucSel));
+    _pintarPdfAreas();
+    document.getElementById('hrPdfModal').classList.add('on');
+}
+function cerrarPDF(){ document.getElementById('hrPdfModal').classList.remove('on'); }
+function _pintarPdfAreas(){
+    var areas = _areasDelScope();
+    document.getElementById('hrPdfAreas').innerHTML = areas.map(function(a){
+        var on = !!_pdfAreas[a.k];
+        return '<button onclick="pdfToggleArea(\''+esc(a.k)+'\')" style="padding:7px 13px;border-radius:8px;cursor:pointer;'+
+            'font-family:inherit;font-size:12px;font-weight:600;'+
+            'border:1.5px solid '+(on?'var(--green)':'var(--border)')+';'+
+            'background:'+(on?'rgba(61,190,122,.12)':'transparent')+';'+
+            'color:'+(on?'var(--green)':'var(--text-muted)')+'">'+esc(a.nom)+'</button>';
+    }).join('');
+    var n = _gentePDF().length;
+    document.getElementById('hrPdfMsg').textContent = n
+        ? n + (n===1 ? ' colaborador en la hoja' : ' colaboradores en la hoja')
+        : 'Sin áreas elegidas, la hoja saldría vacía.';
+}
+function pdfToggleArea(k){ _pdfAreas[k] = !_pdfAreas[k]; _pintarPdfAreas(); }
+function pdfAreasTodas(){ _areasDelScope().forEach(function(a){ _pdfAreas[a.k]=true; }); _pintarPdfAreas(); }
+function pdfAreasNinguna(){ _areasDelScope().forEach(function(a){ _pdfAreas[a.k]=false; }); _pintarPdfAreas(); }
+function _pasaArea(s){ return !_pdfAreas || _pdfAreas[_areaDe(s)]; }
+function _gentePDF(){
+    if (_catGlobalOn() && !_sucSel)
+        return _sucsConStaff().reduce(function(acc,sid){ return acc.concat(_staffScopeDe(sid).filter(_pasaArea)); }, []);
+    return _staffScopeDe(_sucSel).filter(_pasaArea);
+}
+/* Un bloque de tabla: separado por áreas o de corrido, según la casilla. */
+function _bloquePDF(rec, lista, separar){
+    if (!separar) return _tablaPDF(rec, lista);
+    return _porArea(lista).map(function(g){
+        return '<div class="rsec" style="font-size:13px;letter-spacing:1.6px">' + esc(g.nom) + '</div>'
+             + _tablaPDF(rec, g.gente);
+    }).join('');
+}
+
 function imprimirHorario(){
     var mon = _diaDate(0), sun = _diaDate(6);
     var rango = _fmtDia(mon) + ' – ' + _fmtDia(sun) + ' ' + sun.getFullYear();
+    var separar = (document.getElementById('hrPdfSepar')||{}).checked !== false;
+    if (!_gentePDF().length){ alert('Con esas áreas la hoja saldría vacía. Elige al menos un área.'); return; }
     var cuerpo = '';
-    if (_catGlobalOn()){
+    if (_catGlobalOn() && !_sucSel){
         // Vista global: una tabla por sucursal, con el rol de cada una.
-        var sucs = _sucsConStaff();
-        if (!sucs.length){ alert('No hay colaboradores con turnos esta semana.'); return; }
-        sucs.forEach(function (sid) {
-            var lista = _staff.filter(function (x) { return _effSuc(x.sucursalId) === _effSuc(sid); })
-                              .sort(function (a, b) { return (a.nombre || '').localeCompare(b.nombre || ''); });
+        _sucsConStaff().forEach(function (sid) {
+            var lista = _staffScopeDe(sid).filter(_pasaArea);
             if (!lista.length) return;
             var rec = _horCache[recordId(sid, _weekStr)] || { turnos: {} };
-            cuerpo += '<div class="rsec">' + esc(_sucNombre(sid)) + '</div>' + _tablaPDF(rec, lista);
+            cuerpo += '<div class="rsec">' + esc(_sucNombre(sid)) + '</div>' + _bloquePDF(rec, lista, separar);
         });
     } else {
-        var scope = _staffScope();
+        var scope = _staffScopeDe(_sucSel).filter(_pasaArea);
         if (!scope.length){ alert('No hay colaboradores en '+_sucNombre(_sucSel)+'.'); return; }
-        cuerpo = _tablaPDF(curRecord(), scope);
+        cuerpo = _bloquePDF(curRecord(), scope, separar);
     }
+    cerrarPDF();
     var html = etaaxReporteDoc({
         titulo: 'Horarios · Semana ' + _weekStr.split('-W')[1],
-        subtitulo: 'Horarios Operativos · Semana ' + _weekStr.split('-W')[1] + (_catGlobalOn() ? ' · Todas las sucursales' : ''),
+        subtitulo: 'Horarios Operativos · Semana ' + _weekStr.split('-W')[1]
+            + ((_catGlobalOn() && !_sucSel) ? ' · Todas las sucursales' : '')
+            /* Si se imprimió filtrado, la hoja tiene que DECIRLO: si no, parece el
+               rol completo y alguien va a creer que faltó gente por programar. */
+            + (_areasDelScope().some(function(a){ return !_pdfAreas[a.k]; })
+               ? ' · Solo ' + _areasDelScope().filter(function(a){ return _pdfAreas[a.k]; })
+                     .map(function(a){ return a.nom.replace(/^[^ ]+ /,''); }).join(', ')
+               : ''),
         derecha: '<div style="font-size:9px;color:#aaa;letter-spacing:1px">' + esc(rango) + '</div>',
         pie: 'Rol semanal · ✓ asistió · ✕ falta',
         cuerpo: cuerpo,
@@ -625,11 +859,135 @@ function imprimirHorario(){
 // Sucursales que tienen colaboradores (para la vista global).
 function _sucsConStaff(){
     var vistas = {}, out = [];
+    /* Por dónde trabajan ESTA SEMANA, no por su sucursal de catálogo: una sucursal
+       que esta semana solo tiene prestados sí tiene rol que mostrar, y la que
+       prestó a toda su gente puede quedarse sin ninguno. */
     _staff.forEach(function (s) {
-        var k = _effSuc(s.sucursalId);
+        var k = _sucDeEstaSemana(s);
         if (!vistas[k]) { vistas[k] = 1; out.push(k); }
     });
     return out.sort(function (a, b) { return _sucNombre(a).localeCompare(_sucNombre(b)); });
+}
+
+/* ══ AGREGAR A LA SEMANA ══════════════════════════════════════════════════ */
+function _sucDestino(){
+    /* En la vista global sin sucursal elegida no hay "aquí" al que sumar: se pide
+       elegir sucursal primero, porque invitar a alguien "a todas" no significa nada. */
+    return (_catGlobalOn() && !_sucSel) ? null : _effSuc(_sucSel);
+}
+function abrirAgregar(){
+    var dest = _sucDestino();
+    if (!dest){ alert('Elige primero una sucursal en el selector: hay que decir a CUÁL se suma.'); return; }
+    document.getElementById('hrAddSub').textContent =
+        'Solo para la semana ' + _weekStr.split('-W')[1] + ' en ' + _sucNombre(dest) + ' · no cambia su sucursal en el catálogo';
+    document.getElementById('hrAddQ').value = '';
+    _pintarAgregar();
+    document.getElementById('hrAddModal').classList.add('on');
+}
+function cerrarAgregar(){ document.getElementById('hrAddModal').classList.remove('on'); }
+function _pintarAgregar(){
+    var dest = _sucDestino(); if (!dest) return;
+    var q = (document.getElementById('hrAddQ').value||'').toLowerCase().trim();
+    var yaAqui = {}; _staffScopeDe(dest).forEach(function(s){ yaAqui[s.id]=1; });
+    var cands = _staff.filter(function(s){
+        if (yaAqui[s.id]) return false;
+        if (!q) return true;
+        return (s.nombre||'').toLowerCase().indexOf(q)>=0 || (s.puesto||'').toLowerCase().indexOf(q)>=0;
+    });
+    if (!cands.length){
+        document.getElementById('hrAddList').innerHTML =
+            '<div style="padding:22px 8px;text-align:center;color:var(--text-dim);font-size:13px">'+
+            (q ? 'Nadie coincide con “'+esc(q)+'”.' : 'Ya están todos en esta semana.')+'</div>';
+        return;
+    }
+    /* Primero gerencia y administración —es a quienes se viene a buscar— y luego
+       el resto agrupado por la sucursal DE LA QUE se estarían prestando. */
+    var admin = [], otros = {};
+    cands.forEach(function(s){
+        if (_areaDe(s) === 'administracion') admin.push(s);
+        else { var k=_sucDeEstaSemana(s); (otros[k]=otros[k]||[]).push(s); }
+    });
+    function fila(s){
+        var host = _invitacionesSemana()[s.id];
+        var de = host ? _sucNombre(host) : _sucNombre(_effSuc(s.sucursalId));
+        return '<div onclick="agregarASemana(\''+esc(s.id)+'\')" '+
+            'style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;cursor:pointer" '+
+            'onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">'+
+            '<div style="flex:1;min-width:0">'+
+              '<div style="font-size:13.5px;color:var(--text)">'+esc(s.nombre||'—')+'</div>'+
+              '<div style="font-size:11px;color:var(--text-dim)">'+esc(s.puesto||'')+
+                 (de ? ' · '+esc(de) : '')+'</div>'+
+            '</div><span style="color:var(--viol);font-size:12px;font-weight:600">Agregar +</span></div>';
+    }
+    function bloque(titulo, gente){
+        if (!gente.length) return '';
+        return '<div style="font-size:9.5px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);'+
+            'padding:10px 12px 4px">'+esc(titulo)+'</div>'+
+            gente.sort(function(a,b){return (a.nombre||'').localeCompare(b.nombre||'');}).map(fila).join('');
+    }
+    var html = bloque('Gerencia y administración', admin);
+    Object.keys(otros).sort(function(a,b){ return _sucNombre(a).localeCompare(_sucNombre(b)); })
+        .forEach(function(k){ html += bloque('De ' + _sucNombre(k), otros[k]); });
+    document.getElementById('hrAddList').innerHTML = html;
+}
+function agregarASemana(sid){
+    var dest = _sucDestino(); if (!dest) return;
+    invitarASemana(sid, dest);
+    _pintarAgregar();
+    render();
+}
+
+/* ══ OPCIONES DE UN COLABORADOR EN ESTA SEMANA ════════════════════════════ */
+var _perId = null;
+function abrirPersona(sid){
+    var s = _staff.find(function(x){ return x.id===sid; }); if (!s) return;
+    _perId = sid;
+    var host = _invitacionesSemana()[sid];
+    var suyaCat = _effSuc(s.sucursalId);
+    document.getElementById('hrPerNom').textContent = s.nombre || 'Colaborador';
+    document.getElementById('hrPerSub').textContent =
+        (s.puesto||'') + ' · ' + (_areaNom(_areaDe(s))) + ' · semana ' + _weekStr.split('-W')[1];
+
+    var sucs = [{id:MATRIZ_ID}].concat(_getSucs().filter(function(x){ return x.id!==MATRIZ_ID; }));
+    var actual = host || suyaCat;
+    var opciones = sucs.map(function(x){
+        var es = _effSuc(x.id) === actual;
+        return '<div '+(es?'':'onclick="moverASucursal(\''+esc(x.id)+'\')"')+' '+
+            'style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:8px;'+
+            (es?'background:var(--surface2);cursor:default':'cursor:pointer')+'" '+
+            (es?'':'onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'"')+'>'+
+            '<span style="flex:1;font-size:13.5px;color:var(--text)">'+esc(_sucNombre(x.id))+'</span>'+
+            (es?'<span style="font-size:11px;color:var(--green)">aquí esta semana</span>':
+                '<span style="font-size:11px;color:var(--viol)">mover →</span>')+'</div>';
+    }).join('');
+
+    document.getElementById('hrPerBody').innerHTML =
+        '<div style="font-size:9.5px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px">'+
+            'Sucursal SOLO en esta semana</div>'+
+        opciones +
+        /* Se dice de dónde salió y a dónde regresa: sin esto, un préstamo se
+           parece demasiado a un cambio permanente y alguien va a "arreglarlo"
+           en el catálogo cuando no hacía falta. */
+        (host
+            ? '<div style="margin-top:12px;padding:10px 12px;border-radius:8px;background:var(--surface2);font-size:12px;color:var(--text-muted);line-height:1.55">'+
+              'Prestado a <b>'+esc(_sucNombre(host))+'</b> solo esta semana. En el catálogo sigue en <b>'+esc(_sucNombre(suyaCat))+'</b>.'+
+              '<div style="margin-top:9px"><button class="hr-btn" onclick="regresarASuSucursal(\''+esc(sid)+'\')">↩ Regresar a '+esc(_sucNombre(suyaCat))+'</button></div></div>'
+            : '<div style="margin-top:12px;font-size:11.5px;color:var(--text-dim);line-height:1.55">'+
+              'Esto NO cambia su sucursal en el catálogo de staff — solo dónde trabaja esta semana. '+
+              'Para un cambio de planta, hazlo en <a href="staff.html" style="color:var(--viol)">Staff</a>.</div>');
+    document.getElementById('hrPersonaModal').classList.add('on');
+}
+function cerrarPersona(){ document.getElementById('hrPersonaModal').classList.remove('on'); _perId=null; }
+function moverASucursal(sucId){
+    if (!_perId) return;
+    var s = _staff.find(function(x){ return x.id===_perId; });
+    if (s && _effSuc(s.sucursalId) === _effSuc(sucId)) {
+        var host = _invitacionesSemana()[_perId];
+        if (host) _quitarInvitacion(_perId, host);     // vuelve a la suya: basta con soltar la invitación
+    } else {
+        invitarASemana(_perId, sucId);
+    }
+    cerrarPersona(); render();
 }
 
 /* ── Editor de turno ── */
@@ -675,7 +1033,9 @@ function copiarSemanaAnterior(){
     if (tieneAlgo && !confirm('Esto reemplazará los turnos de esta semana con los de la semana '+prevWk.split('-W')[1]+'. ¿Continuar?')) return;
     // Copia profunda solo del staff en scope
     var nuevo = {};
-    _staffScope().forEach(function(s){ if (prev.turnos[s.id]) nuevo[s.id] = JSON.parse(JSON.stringify(prev.turnos[s.id])); });
+    /* _staffScopeDe y no _staffScope: si alguien dejó algo escrito en el buscador,
+       copiar la semana solo traería a los que se ven y borraría el resto sin avisar. */
+    _staffScopeDe(_sucSel).forEach(function(s){ if (prev.turnos[s.id]) nuevo[s.id] = JSON.parse(JSON.stringify(prev.turnos[s.id])); });
     rec.turnos = nuevo;
     persist(rec);
     render();
@@ -683,7 +1043,14 @@ function copiarSemanaAnterior(){
 
 /* ── Init ── */
 document.getElementById('hrModal').addEventListener('click', function(e){ if (e.target===this) cerrarEditor(); });
-document.addEventListener('keydown', function(e){ if (e.key==='Escape') cerrarEditor(); });
+[['hrAddModal',cerrarAgregar],['hrPersonaModal',cerrarPersona],['hrPdfModal',cerrarPDF]].forEach(function(par){
+    var el = document.getElementById(par[0]);
+    if (el) el.addEventListener('click', function(e){ if (e.target===this) par[1](); });
+});
+document.addEventListener('keydown', function(e){
+    if (e.key !== 'Escape') return;
+    cerrarEditor(); cerrarAgregar(); cerrarPersona(); cerrarPDF();
+});
 
 (async function init(){
     _cargarLocal();
@@ -696,5 +1063,6 @@ document.addEventListener('keydown', function(e){ if (e.key==='Escape') cerrarEd
     }
 })();
 </script>
+<script src="/novedades.js"></script><!-- aviso de actualizaciones del sistema -->
 </body>
 </html>

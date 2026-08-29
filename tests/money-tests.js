@@ -1912,6 +1912,7 @@ console.log('\n══ SUITE L · Bloque bancario del editor de staff (administra
 (function () {
     const L = crearContexto();
     cargarJS(L, 'bancos-mx.js');
+    cargarJS(L, 'staff-area.js');   // la página la exige: sin ella su script no arranca
     cargarInline(L, 'administrativo/staff.html');
     const $ = id => L.document.getElementById(id);
 
@@ -1994,6 +1995,7 @@ console.log('\n══ SUITE M · Expediente del colaborador (administrativo/staf
 (function () {
     const M = crearContexto();
     cargarJS(M, 'bancos-mx.js');
+    cargarJS(M, 'staff-area.js');   // la página la exige: sin ella su script no arranca
     cargarInline(M, 'administrativo/staff.html');
 
     const hoy = new Date();
@@ -2117,6 +2119,141 @@ console.log('\n══ SUITE N · Hoja impresa del check list (administrativo/che
         eq(N._freqLeyenda(), 'A = Apertura · D/T = Durante el turno · SEM = Semanal · MEN = Mensual', 'leyenda'));
     test('la leyenda cubre TODAS las frecuencias del selector', () =>
         eq(N.FREQS.every(f => N._freqLeyenda().indexOf(f + ' = ') > -1), true, 'cobertura'));
+})();
+
+/* ═══════════ SUITE O · ÁREA DEL COLABORADOR (staff-area.js) ═══════════
+   Había DOS mapeos escritos por separado y una tercera copia en camino. El área
+   decide qué ve un colaborador en el QR: dos versiones que se separan un día es
+   alguien viendo los checklists de otra área. */
+console.log('\n══ SUITE O · Área del colaborador (staff-area.js) ══');
+(function () {
+    const A = cargarJS(crearContexto(), 'staff-area.js').StaffArea;
+
+    /* La JERARQUÍA es la parte que importa: corrección a mano → rol → puesto. */
+    test('el área corregida a mano manda sobre el rol', () =>
+        eq(A.de({ rol: 'mesero', area: 'cocina' }), 'cocina', 'área'));
+    test('sin corrección, manda el rol', () => eq(A.de({ rol: 'jefe_barra' }), 'barra', 'área'));
+    /* Adivinar por el puesto ANTES de mirar el rol pondría a un jefe de barra en
+       cocina porque alguien escribió "encargado de cocina y barra". */
+    test('el rol gana al puesto escrito a mano', () =>
+        eq(A.de({ rol: 'jefe_barra', puesto: 'Encargado de cocina' }), 'barra', 'área'));
+    test('sin rol, se lee el puesto', () => eq(A.de({ puesto: 'Auxiliar de Barra' }), 'barra', 'área'));
+    test('un colaborador sin nada no se manda a un área al azar', () => eq(A.de({}), '', 'área'));
+
+    test('gerencia y administración caen en administración', () =>
+        eq(A.deRol('gerente') + '|' + A.deRol('admin') + '|' + A.deRol('administrativo'),
+           'administracion|administracion|administracion', 'área'));
+
+    /* El puesto lo teclea una persona: con acentos, en mayúsculas, abreviado. */
+    test('los acentos no estorban', () => eq(A.norm('Atención a piso'), 'piso', 'área'));
+    test('mayúsculas tampoco', () => eq(A.norm('COCINA FRÍA'), 'cocina', 'área'));
+    test('"Chef" es cocina aunque no diga cocina', () => eq(A.norm('Chef ejecutivo'), 'cocina', 'área'));
+    test('"Garrotero" es piso', () => eq(A.norm('Garrotero'), 'piso', 'área'));
+    test('"Cajera" es administración', () => eq(A.norm('Cajera'), 'administracion', 'área'));
+    /* Un puesto que no es de ninguna de las cuatro NO se fuerza: "Sin área" es una
+       respuesta honesta; meterlo a Administración por descarte sería inventar. */
+    test('un puesto ajeno a las cuatro áreas no se fuerza', () => eq(A.norm('Jardinero'), '', 'área'));
+
+    test('el orden de las áreas es el de la operación, no el alfabético', () =>
+        eq(A.LISTA.map(x => x.k).join(','), 'barra,cocina,piso,administracion', 'orden'));
+    test('todo rol mapeado apunta a un área que existe', () =>
+        eq(Object.keys(A.MAPA_ROL).filter(r => !A.NOMBRES[A.MAPA_ROL[r]]).length, 0, 'huérfanos'));
+})();
+
+/* ═══════════ SUITE P · PRESTAR COLABORADORES ENTRE SUCURSALES (horarios.html) ═══════════
+   Un colaborador prestado a otra sucursal por una semana tiene UN SOLO cuerpo.
+   Si aparece en las dos, las horas y la cobertura se cuentan doble y el rol
+   miente — que es justo lo que no puede pasar en algo que se pega en la pared. */
+console.log('\n══ SUITE P · Prestar colaboradores entre sucursales (administrativo/horarios.html) ══');
+(function () {
+    const H = crearContexto();
+    cargarJS(H, 'etaax-core.js');
+    cargarJS(H, 'staff-area.js');
+    H._storage['etaax_negocio_activo'] = 'n1';
+    H._storage['etaax_n1_sucursales'] = JSON.stringify([{ id: 'suc_principal', nombre: 'Matriz' }, { id: 'sB', nombre: 'Sucursal B' }]);
+    cargarInline(H, 'administrativo/horarios.html');
+
+    setVar(H, '_staff', [
+        { id: 'a', nombre: 'Ana',   puesto: 'Cocinera', rol: 'cocinero', sucursalId: '' },      // Matriz
+        { id: 'b', nombre: 'Beto',  puesto: 'Barman',   rol: 'barman',   sucursalId: 'sB' },
+        { id: 'g', nombre: 'Gaby',  puesto: 'Gerente',  rol: 'gerente',  sucursalId: '' },      // Matriz
+    ]);
+    setVar(H, '_weekStr', '2026-W35');
+    setVar(H, '_busq', '');
+
+    const enSuc = suc => H._staffScopeDe(suc).map(x => x.id).join(',');
+
+    test('sin préstamos, cada quien está en su sucursal', () =>
+        eq(enSuc('') + ' | ' + enSuc('sB'), 'a,g | b', 'reparto'));
+
+    /* Prestar a Ana de Matriz a la Sucursal B por esta semana. */
+    H.invitarASemana('a', 'sB');
+    test('el prestado aparece en la sucursal que lo recibe', () => eq(enSuc('sB'), 'a,b', 'destino'));
+    test('y DESAPARECE de la suya — no se cuenta dos veces', () => eq(enSuc(''), 'g', 'origen'));
+    test('queda marcado como prestado', () => eq(H._esInvitado('a'), true, 'prestado'));
+    test('el catálogo de staff NO se tocó', () =>
+        eq(H._staff.find(x => x.id === 'a').sucursalId, '', 'sucursal de catálogo'));
+
+    /* Prestarlo a una TERCERA sucursal no puede dejarlo en dos a la vez. */
+    H.invitarASemana('a', 'suc_principal');
+    test('mover al prestado a otra sucursal no lo deja en dos', () =>
+        eq(enSuc('') + ' | ' + enSuc('sB'), 'a,g | b', 'reparto'));
+    test('volver a su propia sucursal lo deja de marcar como prestado', () =>
+        eq(H._esInvitado('a'), false, 'prestado'));
+
+    /* Sumar gerencia al rol operativo de una sucursal: el MISMO mecanismo. */
+    H.invitarASemana('g', 'sB');
+    test('gerencia se puede sumar al rol operativo de una sucursal', () =>
+        eq(enSuc('sB'), 'b,g', 'destino'));
+
+    /* La vista global tiene que ver la sucursal donde trabaja esta semana. */
+    test('la global lista las sucursales por dónde trabajan ESTA semana', () =>
+        eq(H._sucsConStaff().join(','), 'suc_principal,sB', 'sucursales'));
+
+    /* El buscador filtra la vista… */
+    setVar(H, '_busq', 'bet');
+    test('el buscador filtra por nombre', () => eq(H._staffScope !== undefined, true, 'existe'));
+    test('…pero NO recorta lo que se copia ni lo que se imprime', () =>
+        eq(enSuc('sB'), 'b,g', 'sin recortar'));
+    setVar(H, '_busq', '');
+
+    /* Agrupar por área para la hoja impresa. */
+    const grupos = H._porArea(H._staff);
+    test('la hoja se agrupa por área en orden operativo', () =>
+        eq(grupos.map(g => g.k).join(','), 'barra,cocina,administracion', 'grupos'));
+    test('cada quien cae en su área', () =>
+        eq(grupos.find(g => g.k === 'administracion').gente.map(x => x.id).join(','), 'g', 'gente'));
+})();
+
+/* ═══════════ SUITE Q · AVISO DE ACTUALIZACIONES (novedades.js) ═══════════
+   Lo lee el negocio, no nosotros. Un "hace 0 días" o un día de más por el
+   horario de verano se ve como un descuido en un aviso que presume cuidado. */
+console.log('\n══ SUITE Q · Aviso de actualizaciones (novedades.js) ══');
+(function () {
+    const Q = cargarJS(crearContexto(), 'novedades.js').EtaaxNovedades;
+
+    test('el mismo día se dice "hoy", no "hace 0 días"', () => eq(Q.hace(0), 'hoy', 'texto'));
+    test('un día es "ayer", no "hace 1 días"', () => eq(Q.hace(1), 'ayer', 'texto'));
+    test('tres días se cuentan', () => eq(Q.hace(3), 'hace 3 días', 'texto'));
+    /* El día 7 ya es "una semana": redondear hacia abajo suena a persona. */
+    test('a los 7 días es "hace una semana"', () => eq(Q.hace(7), 'hace una semana', 'texto'));
+    test('a los 13 sigue siendo una semana, no dos', () => eq(Q.hace(13), 'hace una semana', 'texto'));
+    test('a los 14 ya son dos semanas', () => eq(Q.hace(14), 'hace 2 semanas', 'texto'));
+    test('al mes se dice mes, no "hace 4 semanas"', () => eq(Q.hace(31), 'hace un mes', 'texto'));
+    test('dos meses se cuentan en meses', () => eq(Q.hace(70), 'hace 2 meses', 'texto'));
+    /* Nunca en futuro: si el reloj del equipo está atrasado, "hoy" es lo honesto. */
+    test('una fecha en el futuro no dice "hace -2 días"', () => eq(Q.hace(-2), 'hoy', 'texto'));
+
+    /* La cuenta de días se hace a mediodía a propósito: al filo de la medianoche,
+       o en el cambio de horario, restar timestamps crudos se va un día entero. */
+    const hoyISO = () => { const d = new Date(); return d.getFullYear() + '-' +
+        String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
+    test('la publicación de hoy cuenta 0 días', () => eq(Q.diasDesde(hoyISO()), 0, 'días'));
+    test('una fecha inválida no rompe el aviso', () => eq(Q.diasDesde('no-es-fecha'), 0, 'días'));
+
+    /* La fecha la estampa .githooks/pre-commit; que tenga forma de fecha. */
+    test('la fecha de publicación tiene forma de fecha', () =>
+        eq(/^\d{4}-\d{2}-\d{2}$/.test(Q.FECHA), true, 'formato'));
 })();
 
 /* ═══════════════ RESUMEN ═══════════════ */

@@ -156,6 +156,7 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
+<script src="/staff-area.js"></script><!-- el área de un colaborador: fuente única -->
 <script>
 (function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);})();
 function _q(k){var m=new RegExp('[?&]'+k+'=([^&]*)').exec(location.search);return m?decodeURIComponent(m[1]):'';}
@@ -188,16 +189,11 @@ function _area(){ return PERFIL ? _normArea(PERFIL.area) : ''; }
 /* Los datos viejos traen el área escrita a mano ("Barra", "COCINA", "Cocina fría").
    Se normaliza a las cuatro que entiende el portal para que un acento o una
    mayúscula no dejen a alguien sin sus checklists. */
-function _normArea(a){
-    a = String(a||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
-    if (!a) return '';
-    if (a.indexOf('barra') >= 0 || a.indexOf('bar') === 0) return 'barra';
-    if (a.indexOf('cocina') >= 0 || a.indexOf('coc') === 0) return 'cocina';
-    if (a.indexOf('piso') >= 0 || a.indexOf('servicio') >= 0 || a.indexOf('mesero') >= 0) return 'piso';
-    if (a.indexOf('admin') >= 0) return 'administracion';
-    return '';
-}
-var AREA_NOM = { barra:'🍸 Barra', cocina:'🍳 Cocina', piso:'🍽️ Piso', administracion:'🗃️ Administración' };
+/* Alias delgados: la verdad del área vive en /staff-area.js. Había DOS copias de
+   este mapeo (aquí y en el editor de staff) y una tercera en camino; si se
+   separan, el colaborador ve en el QR los checklists de otra área. */
+function _normArea(a){ return StaffArea.norm(a); }
+var AREA_NOM = StaffArea.NOMBRES;
 
 var _PANTALLAS = ['pinScreen','menuScreen','recScreen','recDetalle','guiaScreen','listScreen','runScreen','doneScreen','errScreen'];
 function _show(id){ _PANTALLAS.forEach(function(x){ var el=document.getElementById(x); if(el) el.style.display = x===id?'block':'none'; }); }

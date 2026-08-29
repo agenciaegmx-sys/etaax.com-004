@@ -680,6 +680,7 @@
 <script src="/etaax-store.js"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js"></script>
 <script src="/bancos-mx.js"></script><!-- bancos de México + CLABE: fuente única, no copiar -->
+<script src="/staff-area.js"></script><!-- el área de un colaborador: fuente única -->
 <script>
 (function(){
     var saved = localStorage.getItem('etaax_theme') || 'dark';
@@ -1152,10 +1153,10 @@ function _rolChangeStaff(){ _sugerirCategoria(); _togAccesoStaff(); _pintarAreaH
 /* Misma tabla que etaax_area_de_rol en SQL (v47). Está duplicada a propósito: aquí
    solo sirve para DECIRLE al usuario en qué área va a quedar; quien decide de
    verdad es la función del servidor, que es la que el portal consulta. */
-var _AREA_DE_ROL = { chef:'cocina', jefe_cocina:'cocina', cocinero:'cocina',
-    jefe_barra:'barra', barman:'barra', barista:'barra', mesero:'piso',
-    admin:'administracion', gerente:'administracion', administrativo:'administracion' };
-var _AREA_NOM = { barra:'🍸 Barra', cocina:'🍳 Cocina', piso:'🍽️ Piso', administracion:'🗃️ Administración' };
+/* El área vive en /staff-area.js — una sola fuente para este editor, el portal
+   del QR y el rol de horarios. Aquí solo quedan los alias delgados. */
+var _AREA_DE_ROL = StaffArea.MAPA_ROL;
+var _AREA_NOM    = StaffArea.NOMBRES;
 /* ══ BANCO Y CLABE DE LA NÓMINA ═════════════════════════════════════════
    La lista de bancos y la validación de la CLABE viven en /bancos-mx.js —
    una sola fuente para este editor y para el modal flotante. */
@@ -1900,5 +1901,6 @@ document.getElementById('modalStaff').addEventListener('click', function(e){
 <script src="/nav-pref.js"></script>
 <script src="/modal-drag.js"></script>
 <script src="/modal-dock.js"></script>
+<script src="/novedades.js"></script><!-- aviso de actualizaciones del sistema -->
 </body>
 </html>
