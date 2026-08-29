@@ -2114,56 +2114,55 @@ console.log('\n══ SUITE N · Hoja impresa del check list (administrativo/che
         eq(N.FREQS.join(','), 'A,D/T,C,SEM,MEN', 'orden'));
 
     /* ── QUÉ CELDAS SE TACHAN ──
-       Sin esto, la hoja de siete columnas se palomea completa "porque estaba
-       ahí", que es exactamente lo que estas hojas vienen a evitar. */
+       Semanal y mensual usan la MISMA regla: libre solo el día de la semana
+       elegido. Una mensual es "una vez al mes, en jueves" — así la hoja se tacha
+       sin depender de que la semana esté capturada, que es lo que pasa en las
+       hojas enmicadas. */
     const semMie = { freq: 'SEM', dia: '2' };            // 2 = miércoles
-    const men27  = { freq: 'MEN', dia: '27' };
-    // Semana 24–30 ago 2026: lunes 24 … domingo 30.
-    const fechas = [24, 25, 26, 27, 28, 29, 30];
+    const menJue = { freq: 'MEN', dia: '3' };            // 3 = jueves
+    const cuadro = t => [0,1,2,3,4,5,6].map(i => N._celdaBloqueada(t, i) ? 'x' : '·').join('');
 
-    test('la semanal deja libre SOLO su día', () =>
-        eq([0,1,2,3,4,5,6].map(i => N._celdaBloqueada(semMie, i, fechas) ? 'x' : '·').join(''),
-           'xx·xxxx', 'celdas'));
-    /* Sin día elegido no se tacha nada: bloquear a ciegas sería peor que no
-       bloquear — dejaría una tarea sin ningún día donde marcarla. */
-    test('una semanal SIN día elegido no tacha nada', () =>
-        eq([0,1,2,3,4,5,6].some(i => N._celdaBloqueada({freq:'SEM', dia:''}, i, fechas)), false, 'celdas'));
+    test('la semanal deja libre SOLO su día', () => eq(cuadro(semMie), 'xx·xxxx', 'celdas'));
+    test('la mensual se tacha igual que la semanal', () => eq(cuadro(menJue), 'xxx·xxx', 'celdas'));
+    /* Sin día elegido no se tacha nada: bloquear a ciegas dejaría la tarea sin
+       ningún día donde marcarse, que es peor que no bloquear. */
+    test('sin día elegido no se tacha nada', () =>
+        eq(cuadro({freq:'SEM', dia:''}), '·······', 'celdas'));
 
-    test('la mensual deja libre la columna cuya FECHA es su día', () =>
-        eq([0,1,2,3,4,5,6].map(i => N._celdaBloqueada(men27, i, fechas) ? 'x' : '·').join(''),
-           'xxx·xxx', 'celdas'));
-    /* Hoja en blanco (la que se enmica): sin fechas no hay forma de saber qué
-       columna es el día 27. Tachar a ciegas dejaría la tarea sin dónde marcarse. */
-    test('en una hoja SIN fechas, la mensual no tacha nada', () =>
-        eq([0,1,2,3,4,5,6].some(i => N._celdaBloqueada(men27, i, null)), false, 'celdas'));
-    test('una mensual sin día capturado tampoco tacha', () =>
-        eq([0,1,2,3,4,5,6].some(i => N._celdaBloqueada({freq:'MEN', dia:''}, i, fechas)), false, 'celdas'));
+    /* MIGRACIÓN: las mensuales viejas guardaban día del MES (1–31). Leído como
+       día de la semana, un "27" no es ningún día — y tacharía los siete. */
+    test('una mensual vieja con día del mes NO tacha los siete', () =>
+        eq(cuadro({freq:'MEN', dia:'27'}), '·······', 'celdas'));
+    test('un día del mes fuera de rango se lee como "sin elegir"', () =>
+        eq(N._diaValido('27'), null, 'día'));
+    /* AMBIGÜEDAD QUE NO SE PUEDE RESOLVER SOLA: un valor de 0 a 6 es un día de
+       la semana válido, así que una mensual vieja que guardaba "día 6 del mes"
+       ahora se lee como domingo. No hay forma de distinguirla de una que se
+       eligió hoy a propósito. Por eso el modal avisa y hay que revisar las
+       mensuales que ya existían. */
+    test('un valor de 0 a 6 se toma como día de la semana (aunque viniera del mes)', () =>
+        eq(N._diaValido('6'), 6, 'día'));
+    test('vacío es "sin elegir"', () => eq(N._diaValido(''), null, 'día'));
 
     /* Apertura, cierre y durante-el-turno pasan TODOS los días. */
     ['A', 'D/T', 'C'].forEach(f => {
-        test('"' + f + '" nunca tacha un día', () =>
-            eq([0,1,2,3,4,5,6].some(i => N._celdaBloqueada({freq:f, dia:'2'}, i, fechas)), false, 'celdas'));
+        test('"' + f + '" nunca tacha un día', () => eq(cuadro({freq:f, dia:'2'}), '·······', 'celdas'));
     });
 
-    /* La fila lleva SOLO la inicial: semanal y mensual se ven igual y el día se
-       lee de la casilla que quedó en blanco. Lo que no puede pasar en silencio es
-       imprimir una mensual que no se pueda tachar —hoja sin fechas—, porque ahí
-       la fila sale con los siete días abiertos y sin ninguna pista. */
+    /* Aviso antes de imprimir: una tarea con día pendiente sale con los siete
+       abiertos y nadie se va a dar cuenta hasta tener la hoja en la mano. */
     const plant = { tareas: [
-        { freq: 'MEN', dia: '27', texto: 'Inventario de destilados' },
-        { freq: 'MEN', dia: '5',  texto: 'Fumigación' },
-        { freq: 'MEN', dia: '',   texto: 'Sin día puesto' },   // sin día no hay nada que tachar
-        { freq: 'SEM', dia: '2',  texto: 'Lavar hielera' },    // la semanal sí puede, siempre
+        { freq: 'MEN', dia: '27', texto: 'Inventario (día del mes viejo)' },
+        { freq: 'SEM', dia: '',   texto: 'Sin día puesto' },
+        { freq: 'MEN', dia: '3',  texto: 'Fumigación en jueves' },
         { freq: 'A',   texto: 'Barrer' },
     ]};
-    test('con la semana en blanco se avisa cuántas mensuales quedan sin tachar', () =>
-        eq(N._mensualesSinFecha(plant, ''), 2, 'aviso'));
-    test('con la semana puesta no hay nada que avisar', () =>
-        eq(N._mensualesSinFecha(plant, '2026-08-24'), 0, 'aviso'));
-    test('una mensual sin día no cuenta para el aviso', () =>
-        eq(N._mensualesSinFecha({ tareas: [{ freq:'MEN', dia:'', texto:'x' }] }, ''), 0, 'aviso'));
-    test('una plantilla sin mensuales no avisa nada', () =>
-        eq(N._mensualesSinFecha({ tareas: [{ freq:'A', texto:'x' }] }, ''), 0, 'aviso'));
+    test('se avisa cuántas tareas quedaron sin día', () => eq(N._sinDiaElegido(plant), 2, 'aviso'));
+    test('una plantilla con todos los días puestos no avisa', () =>
+        eq(N._sinDiaElegido({ tareas: [{freq:'SEM', dia:'0', texto:'x'}, {freq:'A', texto:'y'}] }), 0, 'aviso'));
+    /* Una tarea sin texto no se imprime, así que tampoco debe generar aviso. */
+    test('una tarea vacía no cuenta para el aviso', () =>
+        eq(N._sinDiaElegido({ tareas: [{freq:'SEM', dia:'', texto:'  '}] }), 0, 'aviso'));
 
     /* ── REORDENAR TAREAS ──
        El orden de la lista es el orden en que se hacen: barrer antes de trapear,

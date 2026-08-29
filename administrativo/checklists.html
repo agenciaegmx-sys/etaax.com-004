@@ -390,17 +390,25 @@ function _renderTareasEditor(){
    día: apertura, cierre y "durante el turno" pasan todos los días. */
 function _pideDia(freq){ return freq==='SEM' || freq==='MEN'; }
 function _selDiaTarea(t,i){
-    if (t.freq==='SEM'){
-        return '<select class="ck-in ck-dia-sel" title="Qué día de la semana" onchange="_setTareaDia('+i+',this.value)">'+
-            '<option value="">— día —</option>'+
-            DIAS_SEM.map(function(d,k){ return '<option value="'+k+'"'+(String(t.dia)===String(k)?' selected':'')+'>'+esc(d.nom)+'</option>'; }).join('')+
-        '</select>';
-    }
-    if (t.freq==='MEN'){
-        return '<input class="ck-in ck-dia-sel" type="number" min="1" max="31" placeholder="día del mes" '+
-            'title="Qué día del mes" value="'+esc(t.dia||'')+'" oninput="_setTareaDia('+i+',this.value)">';
-    }
-    return '';
+    if (!_pideDia(t.freq)) return '';
+    /* La mensual elige DÍA DE LA SEMANA igual que la semanal ("una vez al mes,
+       en jueves"), no día del mes. Así la hoja se tacha sin depender de que la
+       semana esté capturada —que es lo que pasa en las hojas enmicadas— y las
+       dos frecuencias se ven y se llenan igual. */
+    var sel = _diaValido(t.dia);
+    return '<select class="ck-in ck-dia-sel" title="Qué día de la semana" onchange="_setTareaDia('+i+',this.value)">'+
+        '<option value="">— día —</option>'+
+        DIAS_SEM.map(function(d,k){ return '<option value="'+k+'"'+(sel===k?' selected':'')+'>'+esc(d.nom)+'</option>'; }).join('')+
+    '</select>';
+}
+/* Antes la mensual guardaba el día del MES (1–31). Ese número leído como día de
+   la semana no significa nada: un "27" no es ningún día. Se trata como "sin día
+   elegido" —el selector sale vacío y se vuelve a poner— en vez de tacharle los
+   siete días a la tarea, que la dejaría sin dónde marcarse. */
+function _diaValido(v){
+    if (v === '' || v == null) return null;
+    var n = parseInt(v, 10);
+    return (isNaN(n) || n < 0 || n > 6) ? null : n;
 }
 function _moverTarea(i,d){
     var j = i + d;
@@ -423,8 +431,9 @@ function _setTareaTxt(i,v){ _edit.tareas[i].texto=v; }
 function _setTareaDia(i,v){ _edit.tareas[i].dia = v===''?'':v; }
 function _setTareaFreq(i,v){
     _edit.tareas[i].freq=v;
-    // Cambiar de frecuencia tira el día: un "viernes" heredado de cuando era
-    // semanal no significa nada en una tarea de apertura.
+    /* De semanal a mensual (y al revés) el día se CONSERVA: en las dos significa
+       lo mismo, un día de la semana. Se tira solo al pasar a una frecuencia que
+       no lleva día — un "viernes" no significa nada en una tarea de apertura. */
     if (!_pideDia(v)) delete _edit.tareas[i].dia;
     _renderTareasEditor();
 }
@@ -475,12 +484,11 @@ function _ckpPintarDias(){
     var n=DIAS_SEM.filter(function(d){return _ckpSel[d.k];}).length;
     var el = document.getElementById('ckpMsg');
     if (!n){ el.textContent='Elige al menos un día.'; return; }
-    var m = _ckpPlant ? _mensualesSinFecha(_ckpPlant, document.getElementById('ckpDesde').value) : 0;
+    var m = _ckpPlant ? _sinDiaElegido(_ckpPlant) : 0;
     el.innerHTML = n+(n===1?' día · una columna para marcar':' días · una columna por día')+
         (m ? '<div style="color:var(--accent,#f5c842);margin-top:7px;line-height:1.5">⚠️ '+m+
-             (m===1?' tarea mensual saldrá':' tareas mensuales saldrán')+
-             ' con los siete días abiertos: sin la semana no se sabe en qué columna cae su día. '+
-             'Pon la semana si quieres que se tachen.</div>' : '');
+             (m===1?' tarea semanal o mensual no tiene día':' tareas semanales o mensuales no tienen día')+
+             ': saldrá'+(m===1?'':'n')+' con los siete abiertos. Edita la plantilla para elegirlo.</div>' : '');
 }
 function ckpToggle(k){ _ckpSel[k]=!_ckpSel[k]; _ckpPintarDias(); }
 function ckpSemanaActual(){
@@ -562,32 +570,22 @@ function _ckSemanaHTML(desde, hasta){
    no le tocan es la mitad del valor de la hoja: sin eso, la de los siete días
    se palomea completa "porque estaba ahí".
 
-   Devuelve `true` si la celda de ese día está BLOQUEADA.
-   · SEM → libre solo el día elegido.
-   · MEN → libre solo la columna cuya FECHA cae en ese día del mes. Eso exige que
-     la semana esté capturada; en una hoja en blanco (las que se enmican) no hay
-     forma de saberlo, así que no se tacha nada y el día va escrito junto a la
-     frecuencia. Tachar a ciegas sería peor que no tachar. */
-function _celdaBloqueada(t, diaIdx, fechasCol){
-    if (t.freq === 'SEM'){
-        if (t.dia === '' || t.dia == null) return false;   // sin día elegido, no se bloquea nada
-        return String(diaIdx) !== String(t.dia);
-    }
-    if (t.freq === 'MEN'){
-        var dm = parseInt(t.dia, 10);
-        if (!dm || !fechasCol) return false;               // hoja sin fechas: no se puede saber
-        return parseInt(fechasCol[diaIdx], 10) !== dm;
-    }
-    return false;
+   Devuelve `true` si la celda de ese día está BLOQUEADA. Semanal y mensual usan
+   la MISMA regla —libre solo el día de la semana elegido— y por eso las dos filas
+   se ven igual: la única diferencia es la inicial SEM o MEN. */
+function _celdaBloqueada(t, diaIdx){
+    if (!_pideDia(t.freq)) return false;      // apertura, cierre y D/T son de todos los días
+    var d = _diaValido(t.dia);
+    if (d === null) return false;             // sin día elegido no se tacha nada
+    return diaIdx !== d;
 }
-/* ¿Hay mensuales que van a salir SIN poder tacharse? Solo pasa en la hoja en
-   blanco: sin fechas no se sabe qué columna es el día 27, y esa fila sale con
-   los siete días abiertos. Se avisa ANTES de imprimir, en vez de dejar salir
-   una hoja a la que le falta lo que la hacía útil. */
-function _mensualesSinFecha(p, desde){
-    if (desde) return 0;
+/* Tareas de frecuencia semanal o mensual a las que les falta el día. Sin él la
+   fila sale con los siete días abiertos, que es justo lo que estas hojas vienen
+   a evitar. Cuenta también las mensuales viejas que traían día del MES, porque
+   ese número ya no significa nada y hay que volver a elegirlo. */
+function _sinDiaElegido(p){
     return (p.tareas||[]).filter(function(t){
-        return t.freq === 'MEN' && parseInt(t.dia, 10) && (t.texto||'').trim();
+        return _pideDia(t.freq) && (t.texto||'').trim() && _diaValido(t.dia) === null;
     }).length;
 }
 
@@ -632,18 +630,6 @@ function imprimirPlantilla(){
     var anchoDia = dias.length >= 5 ? 7 : 8;
     var anchoTarea = 100 - 5 - (anchoDia*dias.length) - (conFirma?9:0);
 
-    /* Los días del MES que cae en cada columna, solo si la semana está capturada.
-       Con eso una tarea mensual sabe cuál de las columnas es "su" día. */
-    var fechasCol = null;
-    if (desde){
-        var d0 = new Date(desde + 'T12:00:00');
-        if (!isNaN(d0)){
-            fechasCol = DIAS_SEM.map(function(_, k){
-                var d = new Date(d0); d.setDate(d0.getDate() + k); return d.getDate();
-            });
-        }
-    }
-
     var tareas = (p.tareas||[]).filter(function(t){ return (t.texto||'').trim(); });
     var hayBloqueos = false;
     var filas = tareas.map(function(t){
@@ -656,7 +642,7 @@ function imprimirPlantilla(){
                 // OJO: el índice es el del DÍA DE LA SEMANA real, no la posición
                 // en la hoja — con "fin de semana" la 1ª columna es sábado.
                 var idx = DIAS_SEM.findIndex(function(x){ return x.k === d.k; });
-                var bloq = _celdaBloqueada(t, idx, fechasCol);
+                var bloq = _celdaBloqueada(t, idx);
                 if (bloq) hayBloqueos = true;
                 return bloq ? '<td class="ckd ckx">✕</td>' : '<td class="ckd"></td>';
             }).join('')+
