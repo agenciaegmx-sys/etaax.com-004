@@ -87,6 +87,7 @@
         .ck-tarea-row { display:flex;gap:8px;align-items:center;margin-bottom:7px; }
         .ck-tarea-row .ck-in { flex:1; }
         .ck-freq-sel { width:150px;flex-shrink:0; }
+        .ck-dia-sel { width:118px;flex-shrink:0; }
         .ck-tarea-del { background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:16px;flex-shrink:0; }
         .ck-tarea-del:hover { color:#e05a3a; }
         .ck-modal-acts { display:flex;gap:8px;margin-top:18px; }
@@ -209,6 +210,10 @@
             <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;cursor:pointer">
                 <input type="checkbox" id="ckpFirma" checked style="width:16px;height:16px;accent-color:var(--green)">
                 Incluir columna de firma
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;cursor:pointer;margin-top:9px">
+                <input type="checkbox" id="ckpGuia" checked style="width:16px;height:16px;accent-color:var(--green)">
+                Incluir guía de llenado
             </label>
             <div id="ckpMsg" style="font-size:11.5px;color:var(--text-dim);margin-top:10px;line-height:1.5"></div>
         </div>
@@ -364,13 +369,39 @@ function _renderTareasEditor(){
     document.getElementById('ckmTareas').innerHTML=_edit.tareas.map(function(t,i){
         return '<div class="ck-tarea-row">'+
             '<select class="ck-in ck-freq-sel" title="Frecuencia de la tarea" onchange="_setTareaFreq('+i+',this.value)">'+FREQS.map(function(f){return '<option value="'+f+'"'+(t.freq===f?' selected':'')+'>'+esc(_freqCorto(f))+'</option>';}).join('')+'</select>'+
+            _selDiaTarea(t,i)+
             '<input class="ck-in" placeholder="Descripción de la tarea" value="'+esc(t.texto)+'" oninput="_setTareaTxt('+i+',this.value)">'+
             '<button class="ck-tarea-del" onclick="_delTarea('+i+')" title="Quitar">✕</button>'+
         '</div>';
     }).join('');
 }
+/* Semanal y mensual necesitan SABER CUÁNDO. Sin el día, "SEM" en una hoja de
+   siete columnas es una invitación a palomearla cualquier día —o los siete—, que
+   es justo lo que estas hojas vienen a evitar. Las demás frecuencias no llevan
+   día: apertura, cierre y "durante el turno" pasan todos los días. */
+function _pideDia(freq){ return freq==='SEM' || freq==='MEN'; }
+function _selDiaTarea(t,i){
+    if (t.freq==='SEM'){
+        return '<select class="ck-in ck-dia-sel" title="Qué día de la semana" onchange="_setTareaDia('+i+',this.value)">'+
+            '<option value="">— día —</option>'+
+            DIAS_SEM.map(function(d,k){ return '<option value="'+k+'"'+(String(t.dia)===String(k)?' selected':'')+'>'+esc(d.nom)+'</option>'; }).join('')+
+        '</select>';
+    }
+    if (t.freq==='MEN'){
+        return '<input class="ck-in ck-dia-sel" type="number" min="1" max="31" placeholder="día del mes" '+
+            'title="Qué día del mes" value="'+esc(t.dia||'')+'" oninput="_setTareaDia('+i+',this.value)">';
+    }
+    return '';
+}
 function _setTareaTxt(i,v){ _edit.tareas[i].texto=v; }
-function _setTareaFreq(i,v){ _edit.tareas[i].freq=v; }
+function _setTareaDia(i,v){ _edit.tareas[i].dia = v===''?'':v; }
+function _setTareaFreq(i,v){
+    _edit.tareas[i].freq=v;
+    // Cambiar de frecuencia tira el día: un "viernes" heredado de cuando era
+    // semanal no significa nada en una tarea de apertura.
+    if (!_pideDia(v)) delete _edit.tareas[i].dia;
+    _renderTareasEditor();
+}
 function _delTarea(i){ _edit.tareas.splice(i,1); if(!_edit.tareas.length)_edit.tareas=[{id:genId(),texto:'',freq:'A'}]; _renderTareasEditor(); }
 /* ══ HOJA IMPRESA DEL CHECK LIST ═════════════════════════════════════════
    Reemplaza la hoja de Excel que se llenaba a mano en barra y cocina. Se conserva
@@ -493,11 +524,66 @@ function _ckSemanaHTML(desde, hasta){
            '<span class="cksep">·</span>MES '+hueco(mes,38)+'</span>';
 }
 
+/* ══ QUÉ CELDAS QUEDAN LIBRES ═══════════════════════════════════════════
+   Una tarea semanal o mensual no se hace todos los días. Tachar las celdas que
+   no le tocan es la mitad del valor de la hoja: sin eso, la de los siete días
+   se palomea completa "porque estaba ahí".
+
+   Devuelve `true` si la celda de ese día está BLOQUEADA.
+   · SEM → libre solo el día elegido.
+   · MEN → libre solo la columna cuya FECHA cae en ese día del mes. Eso exige que
+     la semana esté capturada; en una hoja en blanco (las que se enmican) no hay
+     forma de saberlo, así que no se tacha nada y el día va escrito junto a la
+     frecuencia. Tachar a ciegas sería peor que no tachar. */
+function _celdaBloqueada(t, diaIdx, fechasCol){
+    if (t.freq === 'SEM'){
+        if (t.dia === '' || t.dia == null) return false;   // sin día elegido, no se bloquea nada
+        return String(diaIdx) !== String(t.dia);
+    }
+    if (t.freq === 'MEN'){
+        var dm = parseInt(t.dia, 10);
+        if (!dm || !fechasCol) return false;               // hoja sin fechas: no se puede saber
+        return parseInt(fechasCol[diaIdx], 10) !== dm;
+    }
+    return false;
+}
+/* El día que le toca, dicho debajo de la inicial. Va SIEMPRE, con fechas o sin
+   ellas: es el dato que le falta a quien llena la hoja. */
+function _notaDia(t){
+    if (t.freq === 'SEM' && t.dia !== '' && t.dia != null){
+        var d = DIAS_SEM[parseInt(t.dia,10)];
+        return d ? d.nom.slice(0,3) : '';
+    }
+    if (t.freq === 'MEN' && parseInt(t.dia,10)) return 'día ' + parseInt(t.dia,10);
+    return '';
+}
+
+/* La guía va aparte y es OPCIONAL: en una hoja que se enmica y se usa un año,
+   la primera vez sirve y de la décima en adelante solo ocupa el espacio de
+   abajo, que es donde se anota. */
+function _guiaHTML(guiaFreq, conFirma, hayBloqueos){
+    return '<div class="ckguia">'+
+        '<div class="gt">GUÍA DE LLENADO</div>'+
+        '<div class="ckgi"><b>Fechas</b> · Escribe el día en que empieza y termina la semana, y el mes al que corresponde. '+
+            'La hoja no las trae impresas a propósito: así sirve para cualquier semana.</div>'+
+        '<div class="ckgi"><b>Marcas</b> · <span class="ckmk">✓</span> tarea realizada &nbsp;·&nbsp; '+
+            '<span class="ckmk">✗</span> no realizada &nbsp;·&nbsp; '+
+            '<span class="ckmk">▲</span> pendiente (se empezó y quedó a medias, o se pasó al siguiente turno)</div>'+
+        (hayBloqueos
+            ? '<div class="ckgi"><b>Casillas grises</b> · Ese día no toca esa tarea; solo se llena la que está en blanco.</div>'
+            : '')+
+        guiaFreq+
+        '<div class="ckgi"><b>Supervisión</b> · Quien revisa la hoja al cierre firma arriba a la derecha'+
+            (conFirma?'; la columna <b>Firma</b> es para quien ejecutó las tareas de ese día.':'.')+'</div>'+
+    '</div>';
+}
+
 function imprimirPlantilla(){
     var p=_ckpPlant; if(!p) return;
     var dias=DIAS_SEM.filter(function(d){ return _ckpSel[d.k]; });
     if(!dias.length){ document.getElementById('ckpMsg').textContent='Elige al menos un día.'; return; }
     var conFirma=document.getElementById('ckpFirma').checked;
+    var conGuia=document.getElementById('ckpGuia').checked;
     var desde=document.getElementById('ckpDesde').value, hasta=document.getElementById('ckpHasta').value;
 
     /* HORIZONTAL a partir de 4 días. En vertical, con la semana completa la
@@ -513,12 +599,34 @@ function imprimirPlantilla(){
     var anchoDia = dias.length >= 5 ? 7 : 8;
     var anchoTarea = 100 - 5 - (anchoDia*dias.length) - (conFirma?9:0);
 
+    /* Los días del MES que cae en cada columna, solo si la semana está capturada.
+       Con eso una tarea mensual sabe cuál de las columnas es "su" día. */
+    var fechasCol = null;
+    if (desde){
+        var d0 = new Date(desde + 'T12:00:00');
+        if (!isNaN(d0)){
+            fechasCol = DIAS_SEM.map(function(_, k){
+                var d = new Date(d0); d.setDate(d0.getDate() + k); return d.getDate();
+            });
+        }
+    }
+
     var tareas = (p.tareas||[]).filter(function(t){ return (t.texto||'').trim(); });
+    var hayBloqueos = false;
     var filas = tareas.map(function(t){
+        var nota = _notaDia(t);
         return '<tr>'+
-            '<td class="ckf">'+esc(t.freq||'')+'</td>'+
+            '<td class="ckf">'+esc(t.freq||'')+
+                (nota ? '<div class="ckfd">'+esc(nota)+'</div>' : '')+'</td>'+
             '<td class="ckt">'+esc(t.texto)+'</td>'+
-            dias.map(function(){ return '<td class="ckd"></td>'; }).join('')+
+            dias.map(function(d){
+                // OJO: el índice es el del DÍA DE LA SEMANA real, no la posición
+                // en la hoja — con "fin de semana" la 1ª columna es sábado.
+                var idx = DIAS_SEM.findIndex(function(x){ return x.k === d.k; });
+                var bloq = _celdaBloqueada(t, idx, fechasCol);
+                if (bloq) hayBloqueos = true;
+                return bloq ? '<td class="ckd ckx">✕</td>' : '<td class="ckd"></td>';
+            }).join('')+
             (conFirma?'<td class="ckd"></td>':'')+
         '</tr>';
     }).join('');
@@ -591,17 +699,7 @@ function imprimirPlantilla(){
             dias.map(function(d){ return '<th style="width:'+anchoDia+'%">'+esc(d.nom)+'</th>'; }).join('')+
             (conFirma?'<th style="width:9%">Firma</th>':'')+
         '</tr></thead><tbody>'+filas+'</tbody></table>'+
-        '<div class="ckguia">'+
-            '<div class="gt">GUÍA DE LLENADO</div>'+
-            '<div class="ckgi"><b>Fechas</b> · Escribe el día en que empieza y termina la semana, y el mes al que corresponde. '+
-                'La hoja no las trae impresas a propósito: así sirve para cualquier semana.</div>'+
-            '<div class="ckgi"><b>Marcas</b> · <span class="ckmk">✓</span> tarea realizada &nbsp;·&nbsp; '+
-                '<span class="ckmk">✗</span> no realizada &nbsp;·&nbsp; '+
-                '<span class="ckmk">▲</span> pendiente (se empezó y quedó a medias, o se pasó al siguiente turno)</div>'+
-            guiaFreq+
-            '<div class="ckgi"><b>Supervisión</b> · Quien revisa la hoja al cierre firma arriba a la derecha'+
-                (conFirma?'; la columna <b>Firma</b> es para quien ejecutó las tareas de ese día.':'.')+'</div>'+
-        '</div>';
+        (conGuia ? _guiaHTML(guiaFreq, conFirma, hayBloqueos) : '');
 
     var doc = etaaxReporteDoc({
         titulo: 'Check list — '+(p.nombre||''),

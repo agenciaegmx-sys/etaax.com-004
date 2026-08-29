@@ -2113,6 +2113,44 @@ console.log('\n══ SUITE N · Hoja impresa del check list (administrativo/che
     test('las frecuencias siguen el orden del turno', () =>
         eq(N.FREQS.join(','), 'A,D/T,C,SEM,MEN', 'orden'));
 
+    /* ── QUÉ CELDAS SE TACHAN ──
+       Sin esto, la hoja de siete columnas se palomea completa "porque estaba
+       ahí", que es exactamente lo que estas hojas vienen a evitar. */
+    const semMie = { freq: 'SEM', dia: '2' };            // 2 = miércoles
+    const men27  = { freq: 'MEN', dia: '27' };
+    // Semana 24–30 ago 2026: lunes 24 … domingo 30.
+    const fechas = [24, 25, 26, 27, 28, 29, 30];
+
+    test('la semanal deja libre SOLO su día', () =>
+        eq([0,1,2,3,4,5,6].map(i => N._celdaBloqueada(semMie, i, fechas) ? 'x' : '·').join(''),
+           'xx·xxxx', 'celdas'));
+    /* Sin día elegido no se tacha nada: bloquear a ciegas sería peor que no
+       bloquear — dejaría una tarea sin ningún día donde marcarla. */
+    test('una semanal SIN día elegido no tacha nada', () =>
+        eq([0,1,2,3,4,5,6].some(i => N._celdaBloqueada({freq:'SEM', dia:''}, i, fechas)), false, 'celdas'));
+
+    test('la mensual deja libre la columna cuya FECHA es su día', () =>
+        eq([0,1,2,3,4,5,6].map(i => N._celdaBloqueada(men27, i, fechas) ? 'x' : '·').join(''),
+           'xxx·xxx', 'celdas'));
+    /* Hoja en blanco (la que se enmica): sin fechas no hay forma de saber qué
+       columna es el día 27. Tachar a ciegas dejaría la tarea sin dónde marcarse. */
+    test('en una hoja SIN fechas, la mensual no tacha nada', () =>
+        eq([0,1,2,3,4,5,6].some(i => N._celdaBloqueada(men27, i, null)), false, 'celdas'));
+    test('una mensual sin día capturado tampoco tacha', () =>
+        eq([0,1,2,3,4,5,6].some(i => N._celdaBloqueada({freq:'MEN', dia:''}, i, fechas)), false, 'celdas'));
+
+    /* Apertura, cierre y durante-el-turno pasan TODOS los días. */
+    ['A', 'D/T', 'C'].forEach(f => {
+        test('"' + f + '" nunca tacha un día', () =>
+            eq([0,1,2,3,4,5,6].some(i => N._celdaBloqueada({freq:f, dia:'2'}, i, fechas)), false, 'celdas'));
+    });
+
+    /* El día que toca, dicho debajo de la inicial: es el dato que le falta a
+       quien llena la hoja, y va con fechas o sin ellas. */
+    test('la semanal dice su día bajo la inicial', () => eq(N._notaDia(semMie), 'Mié', 'nota'));
+    test('la mensual dice el día del mes', () => eq(N._notaDia(men27), 'día 27', 'nota'));
+    test('las demás frecuencias no llevan nota', () => eq(N._notaDia({freq:'A'}), '', 'nota'));
+
     /* La leyenda corta la usan el otro reporte impreso y la ayuda del editor.
        Había DOS copias escritas a mano que decían "D/T = diaria/turno" — que no
        es lo que significa. Ahora las tres salen de FREQ_DEF. */
