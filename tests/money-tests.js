@@ -2254,6 +2254,67 @@ console.log('\n══ SUITE Q · Aviso de actualizaciones (novedades.js) ══'
     /* La fecha la estampa .githooks/pre-commit; que tenga forma de fecha. */
     test('la fecha de publicación tiene forma de fecha', () =>
         eq(/^\d{4}-\d{2}-\d{2}$/.test(Q.FECHA), true, 'formato'));
+
+    /* ── UNA VEZ POR SESIÓN ──
+       Se levanta el módulo con almacenamientos de mentira y se cuenta cuántas
+       veces se pintaría al navegar entre pantallas. */
+    function montarAviso(opts) {
+        opts = opts || {};
+        const ls = Object.assign({}, opts.ls || {});
+        const ss = Object.assign({}, opts.ss || {});
+        let pintadas = 0, cerrar = null;
+        const ctx = {
+            console: { log() {}, warn() {} }, Date, Math, isNaN,
+            setTimeout: fn => { fn(); return 0; },
+            localStorage: {
+                getItem: k => (k in ls ? ls[k] : null),
+                /* localStorage LLENO: es lo que pasa de verdad en esta app y el
+                   motivo de que el aviso se repitiera pantalla tras pantalla. */
+                setItem(k, v) { if (opts.lsLleno) throw new Error('QuotaExceededError'); ls[k] = v; },
+                removeItem(k) { delete ls[k]; },
+            },
+            sessionStorage: {
+                getItem: k => (k in ss ? ss[k] : null),
+                setItem(k, v) { ss[k] = v; }, removeItem(k) { delete ss[k]; },
+            },
+            document: {
+                readyState: 'complete', addEventListener() {},
+                getElementById: id => (id === 'etaaxNovedades' ? null : { style: {}, set onclick(f) { cerrar = f; } }),
+                createElement: () => ({ style: { cssText: '' }, setAttribute() {}, remove() {}, innerHTML: '' }),
+                body: { appendChild() { pintadas++; } },
+            },
+        };
+        ctx.window = ctx; vm.createContext(ctx);
+        vm.runInContext(fs.readFileSync(path.join(RAIZ, 'novedades.js'), 'utf8'), ctx, { filename: 'novedades.js' });
+        return { ctx, ls, ss, veces: () => pintadas, cerrar: () => cerrar && cerrar(),
+                 otraPantalla: () => ctx.EtaaxNovedades.arrancar() };
+    }
+
+    {
+        const a = montarAviso();
+        test('al iniciar sesión, el aviso sale', () => eq(a.veces(), 1, 'veces'));
+        a.cerrar();
+        a.otraPantalla(); a.otraPantalla();
+        test('tras "Entendido" ya no vuelve a salir en esa sesión', () => eq(a.veces(), 1, 'veces'));
+    }
+    {
+        /* El caso que lo rompía: localStorage lleno, el `catch` se traga el fallo
+           y el aviso reaparecía en cada pantalla. sessionStorage lo sostiene. */
+        const a = montarAviso({ lsLleno: true });
+        a.cerrar();
+        a.otraPantalla(); a.otraPantalla();
+        test('con localStorage LLENO, tampoco se repite en la sesión', () => eq(a.veces(), 1, 'veces'));
+    }
+    {
+        const a = montarAviso({ ls: { etaax_novedades_visto: Q.FECHA } });
+        test('una publicación ya dada por vista no vuelve a salir en otra sesión', () =>
+            eq(a.veces(), 0, 'veces'));
+    }
+    {
+        const a = montarAviso({ ls: { etaax_novedades_visto: '2020-01-01' } });
+        test('pero una publicación NUEVA sí sale aunque la anterior ya se hubiera visto', () =>
+            eq(a.veces(), 1, 'veces'));
+    }
 })();
 
 /* ═══════════ SUITE R · BAJAS Y CANDADO DEL CATÁLOGO (administrativo/staff.html) ═══════════
