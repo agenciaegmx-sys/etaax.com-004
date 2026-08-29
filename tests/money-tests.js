@@ -2145,11 +2145,40 @@ console.log('\n══ SUITE N · Hoja impresa del check list (administrativo/che
             eq([0,1,2,3,4,5,6].some(i => N._celdaBloqueada({freq:f, dia:'2'}, i, fechas)), false, 'celdas'));
     });
 
-    /* El día que toca, dicho debajo de la inicial: es el dato que le falta a
-       quien llena la hoja, y va con fechas o sin ellas. */
-    test('la semanal dice su día bajo la inicial', () => eq(N._notaDia(semMie), 'Mié', 'nota'));
-    test('la mensual dice el día del mes', () => eq(N._notaDia(men27), 'día 27', 'nota'));
-    test('las demás frecuencias no llevan nota', () => eq(N._notaDia({freq:'A'}), '', 'nota'));
+    /* La fila lleva SOLO la inicial: semanal y mensual se ven igual y el día se
+       lee de la casilla que quedó en blanco. Lo que no puede pasar en silencio es
+       imprimir una mensual que no se pueda tachar —hoja sin fechas—, porque ahí
+       la fila sale con los siete días abiertos y sin ninguna pista. */
+    const plant = { tareas: [
+        { freq: 'MEN', dia: '27', texto: 'Inventario de destilados' },
+        { freq: 'MEN', dia: '5',  texto: 'Fumigación' },
+        { freq: 'MEN', dia: '',   texto: 'Sin día puesto' },   // sin día no hay nada que tachar
+        { freq: 'SEM', dia: '2',  texto: 'Lavar hielera' },    // la semanal sí puede, siempre
+        { freq: 'A',   texto: 'Barrer' },
+    ]};
+    test('con la semana en blanco se avisa cuántas mensuales quedan sin tachar', () =>
+        eq(N._mensualesSinFecha(plant, ''), 2, 'aviso'));
+    test('con la semana puesta no hay nada que avisar', () =>
+        eq(N._mensualesSinFecha(plant, '2026-08-24'), 0, 'aviso'));
+    test('una mensual sin día no cuenta para el aviso', () =>
+        eq(N._mensualesSinFecha({ tareas: [{ freq:'MEN', dia:'', texto:'x' }] }, ''), 0, 'aviso'));
+    test('una plantilla sin mensuales no avisa nada', () =>
+        eq(N._mensualesSinFecha({ tareas: [{ freq:'A', texto:'x' }] }, ''), 0, 'aviso'));
+
+    /* ── REORDENAR TAREAS ──
+       El orden de la lista es el orden en que se hacen: barrer antes de trapear,
+       prender la plancha antes de montar. */
+    setVar(N, '_edit', { tareas: [{id:'a'},{id:'b'},{id:'c'}] });
+    N._moverTarea(2, -1);
+    test('una tarea sube un lugar', () => eq(N._edit.tareas.map(t=>t.id).join(''), 'acb', 'orden'));
+    N._moverTarea(0, 1);
+    test('y baja un lugar', () => eq(N._edit.tareas.map(t=>t.id).join(''), 'cab', 'orden'));
+    /* Los extremos no pueden salirse de la lista ni perder una tarea. */
+    N._moverTarea(0, -1);
+    test('la primera no se sale por arriba', () => eq(N._edit.tareas.map(t=>t.id).join(''), 'cab', 'orden'));
+    N._moverTarea(2, 1);
+    test('ni la última por abajo', () => eq(N._edit.tareas.map(t=>t.id).join(''), 'cab', 'orden'));
+    test('y no se pierde ninguna en el camino', () => eq(N._edit.tareas.length, 3, 'tareas'));
 
     /* La leyenda corta la usan el otro reporte impreso y la ayuda del editor.
        Había DOS copias escritas a mano que decían "D/T = diaria/turno" — que no

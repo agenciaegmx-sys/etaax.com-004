@@ -88,6 +88,10 @@
         .ck-tarea-row .ck-in { flex:1; }
         .ck-freq-sel { width:150px;flex-shrink:0; }
         .ck-dia-sel { width:118px;flex-shrink:0; }
+        .ck-tarea-mov { background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;
+            width:26px;height:30px;cursor:pointer;font-size:10px;flex-shrink:0;font-family:inherit; }
+        .ck-tarea-mov:hover:not(:disabled) { border-color:var(--viol);color:var(--viol); }
+        .ck-tarea-mov:disabled { opacity:.25;cursor:default; }
         .ck-tarea-del { background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:16px;flex-shrink:0; }
         .ck-tarea-del:hover { color:#e05a3a; }
         .ck-modal-acts { display:flex;gap:8px;margin-top:18px; }
@@ -198,7 +202,7 @@
             </div>
             <label>Semana <span style="text-transform:none;letter-spacing:0;color:var(--text-dim)">· opcional</span></label>
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-                <input type="date" id="ckpDesde" class="ck-in" style="flex:1">
+                <input type="date" id="ckpDesde" class="ck-in" style="flex:1" onchange="_ckpPintarDias()">
                 <span style="color:var(--text-dim);font-size:12px">al</span>
                 <input type="date" id="ckpHasta" class="ck-in" style="flex:1">
             </div>
@@ -371,6 +375,11 @@ function _renderTareasEditor(){
             '<select class="ck-in ck-freq-sel" title="Frecuencia de la tarea" onchange="_setTareaFreq('+i+',this.value)">'+FREQS.map(function(f){return '<option value="'+f+'"'+(t.freq===f?' selected':'')+'>'+esc(_freqCorto(f))+'</option>';}).join('')+'</select>'+
             _selDiaTarea(t,i)+
             '<input class="ck-in" placeholder="Descripción de la tarea" value="'+esc(t.texto)+'" oninput="_setTareaTxt('+i+',this.value)">'+
+            /* El ORDEN de las tareas es el orden en que se hacen: barrer antes de
+               trapear, prender la plancha antes de montar. Hasta ahora la única
+               forma de corregirlo era borrar y volver a escribir. */
+            '<button class="ck-tarea-mov" onclick="_moverTarea('+i+',-1)" title="Subir"'+(i===0?' disabled':'')+'>▲</button>'+
+            '<button class="ck-tarea-mov" onclick="_moverTarea('+i+',1)" title="Bajar"'+(i===_edit.tareas.length-1?' disabled':'')+'>▼</button>'+
             '<button class="ck-tarea-del" onclick="_delTarea('+i+')" title="Quitar">✕</button>'+
         '</div>';
     }).join('');
@@ -392,6 +401,23 @@ function _selDiaTarea(t,i){
             'title="Qué día del mes" value="'+esc(t.dia||'')+'" oninput="_setTareaDia('+i+',this.value)">';
     }
     return '';
+}
+function _moverTarea(i,d){
+    var j = i + d;
+    if (j < 0 || j >= _edit.tareas.length) return;
+    var t = _edit.tareas[i];
+    _edit.tareas[i] = _edit.tareas[j];
+    _edit.tareas[j] = t;
+    _renderTareasEditor();
+    /* El foco se queda en el botón que se acaba de usar, en su nueva posición:
+       reacomodar cinco tareas seguidas no debería obligar a volver a buscar el
+       botón con el ratón cada vez. Va en try: es una comodidad, y una comodidad
+       no puede tumbar el reordenamiento si el DOM no coopera. */
+    try {
+        var fila = document.getElementById('ckmTareas').children[j];
+        var b = fila && fila.querySelectorAll('.ck-tarea-mov')[d < 0 ? 0 : 1];
+        if (b && b.focus) b.focus();
+    } catch (e) {}
 }
 function _setTareaTxt(i,v){ _edit.tareas[i].texto=v; }
 function _setTareaDia(i,v){ _edit.tareas[i].dia = v===''?'':v; }
@@ -447,9 +473,14 @@ function _ckpPintarDias(){
             'color:'+(on?'var(--green)':'var(--text-muted)')+'">'+d.nom+'</button>';
     }).join('');
     var n=DIAS_SEM.filter(function(d){return _ckpSel[d.k];}).length;
-    document.getElementById('ckpMsg').textContent = n
-        ? n+(n===1?' día · una columna para marcar':' días · una columna por día')
-        : 'Elige al menos un día.';
+    var el = document.getElementById('ckpMsg');
+    if (!n){ el.textContent='Elige al menos un día.'; return; }
+    var m = _ckpPlant ? _mensualesSinFecha(_ckpPlant, document.getElementById('ckpDesde').value) : 0;
+    el.innerHTML = n+(n===1?' día · una columna para marcar':' días · una columna por día')+
+        (m ? '<div style="color:var(--accent,#f5c842);margin-top:7px;line-height:1.5">⚠️ '+m+
+             (m===1?' tarea mensual saldrá':' tareas mensuales saldrán')+
+             ' con los siete días abiertos: sin la semana no se sabe en qué columna cae su día. '+
+             'Pon la semana si quieres que se tachen.</div>' : '');
 }
 function ckpToggle(k){ _ckpSel[k]=!_ckpSel[k]; _ckpPintarDias(); }
 function ckpSemanaActual(){
@@ -458,10 +489,12 @@ function ckpSemanaActual(){
     var dom=new Date(lun); dom.setDate(lun.getDate()+6);
     document.getElementById('ckpDesde').value=_isoFecha(lun);
     document.getElementById('ckpHasta').value=_isoFecha(dom);
+    _ckpPintarDias();
 }
 function ckpSinFecha(){
     document.getElementById('ckpDesde').value='';
     document.getElementById('ckpHasta').value='';
+    _ckpPintarDias();
 }
 function ckpPreset(p){
     var mapa = { todos:['L','M','MI','J','V','S','D'], lv:['L','M','MI','J','V'], fds:['S','D'], ninguno:[] };
@@ -547,15 +580,15 @@ function _celdaBloqueada(t, diaIdx, fechasCol){
     }
     return false;
 }
-/* El día que le toca, dicho debajo de la inicial. Va SIEMPRE, con fechas o sin
-   ellas: es el dato que le falta a quien llena la hoja. */
-function _notaDia(t){
-    if (t.freq === 'SEM' && t.dia !== '' && t.dia != null){
-        var d = DIAS_SEM[parseInt(t.dia,10)];
-        return d ? d.nom.slice(0,3) : '';
-    }
-    if (t.freq === 'MEN' && parseInt(t.dia,10)) return 'día ' + parseInt(t.dia,10);
-    return '';
+/* ¿Hay mensuales que van a salir SIN poder tacharse? Solo pasa en la hoja en
+   blanco: sin fechas no se sabe qué columna es el día 27, y esa fila sale con
+   los siete días abiertos. Se avisa ANTES de imprimir, en vez de dejar salir
+   una hoja a la que le falta lo que la hacía útil. */
+function _mensualesSinFecha(p, desde){
+    if (desde) return 0;
+    return (p.tareas||[]).filter(function(t){
+        return t.freq === 'MEN' && parseInt(t.dia, 10) && (t.texto||'').trim();
+    }).length;
 }
 
 /* La guía va aparte y es OPCIONAL: en una hoja que se enmica y se usa un año,
@@ -614,10 +647,10 @@ function imprimirPlantilla(){
     var tareas = (p.tareas||[]).filter(function(t){ return (t.texto||'').trim(); });
     var hayBloqueos = false;
     var filas = tareas.map(function(t){
-        var nota = _notaDia(t);
+        /* Solo la inicial. Semanal y mensual se ven IGUAL: qué día toca se lee de
+           la única casilla que quedó en blanco, no de un texto extra al lado. */
         return '<tr>'+
-            '<td class="ckf">'+esc(t.freq||'')+
-                (nota ? '<div class="ckfd">'+esc(nota)+'</div>' : '')+'</td>'+
+            '<td class="ckf">'+esc(t.freq||'')+'</td>'+
             '<td class="ckt">'+esc(t.texto)+'</td>'+
             dias.map(function(d){
                 // OJO: el índice es el del DÍA DE LA SEMANA real, no la posición
@@ -671,6 +704,9 @@ function imprimirPlantilla(){
         'table.ckt2 td{border:1px solid #d8d8d8;padding:7px 6px;font-size:10.5px}'+
         'table.ckt2 tr{break-inside:avoid;page-break-inside:avoid}'+
         '.ckf{width:5%;text-align:center;font-weight:700;font-size:8.5px;color:#3a3a3a}'+
+        /* Celda tachada = ese día NO toca. Gris claro y con fondo: tiene que
+           leerse como "aquí no", nunca como una marca ya puesta. */
+        '.ckx{background:#f0f0f0;color:#bbb;text-align:center;font-size:11px;vertical-align:middle}'+
         '.ckt{font-weight:600;line-height:1.35}'+
         /* Alto fijo: la celda tiene que dar espacio para una palomita a mano. Sin
            esto, una tarea de un renglón deja una casilla donde no cabe la marca. */
