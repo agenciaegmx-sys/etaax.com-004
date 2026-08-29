@@ -1998,35 +1998,30 @@ console.log('\n══ SUITE M · Expediente del colaborador (administrativo/staf
     cargarJS(M, 'staff-area.js');   // la página la exige: sin ella su script no arranca
     cargarInline(M, 'administrativo/staff.html');
 
-    const hoy = new Date();
-    const haceMeses = n => {
-        const d = new Date(hoy.getFullYear(), hoy.getMonth() - n, hoy.getDate());
-        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-    };
+    /* Fecha de referencia FIJA. Antes se calculaba desde "hoy" y el candado
+       fallaba solo en fin de mes: restarle 18 meses a un 29 de agosto cae en un
+       29 de febrero que no existe y JS lo recorre al 1 de marzo. */
+    const HOY = '2026-08-29';
 
     test('antigüedad de 18 meses se dice en años y meses', () =>
-        eq(M._antiguedadDe(haceMeses(18)), '1 año y 6 meses', 'antigüedad'));
+        eq(M._antiguedadDe('2025-02-28', HOY), '1 año y 6 meses', 'antigüedad'));
     test('exactamente un año no arrastra "y 0 meses"', () =>
-        eq(M._antiguedadDe(haceMeses(12)), '1 año', 'antigüedad'));
-    test('un mes va en singular', () => eq(M._antiguedadDe(haceMeses(1)), '1 mes', 'antigüedad'));
+        eq(M._antiguedadDe('2025-08-29', HOY), '1 año', 'antigüedad'));
+    test('un mes va en singular', () => eq(M._antiguedadDe('2026-07-29', HOY), '1 mes', 'antigüedad'));
     test('recién entrado no dice "0 meses"', () =>
-        eq(M._antiguedadDe(haceMeses(0)), 'menos de un mes', 'antigüedad'));
-    test('sin fecha de ingreso no se inventa antigüedad', () => eq(M._antiguedadDe(''), '', 'antigüedad'));
+        eq(M._antiguedadDe('2026-08-20', HOY), 'menos de un mes', 'antigüedad'));
+    test('sin fecha de ingreso no se inventa antigüedad', () => eq(M._antiguedadDe('', HOY), '', 'antigüedad'));
     /* Una fecha futura mal capturada no debe imprimir una antigüedad negativa. */
-    test('una fecha de ingreso futura no produce antigüedad', () => {
-        const d = new Date(hoy.getFullYear() + 1, 0, 15);
-        return eq(M._antiguedadDe(d.toISOString().slice(0, 10)), '', 'antigüedad');
-    });
+    test('una fecha de ingreso futura no produce antigüedad', () =>
+        eq(M._antiguedadDe('2027-01-15', HOY), '', 'antigüedad'));
+    /* El día 30 del mes anterior visto desde un día 29: aún no cumple el mes. */
+    test('un mes que aún no se cumple no se redondea hacia arriba', () =>
+        eq(M._antiguedadDe('2026-07-30', HOY), 'menos de un mes', 'antigüedad'));
 
-    test('la edad sale de la fecha de nacimiento', () => {
-        const d = new Date(hoy.getFullYear() - 30, hoy.getMonth(), hoy.getDate());
-        return eq(M._edadDe(d.toISOString().slice(0, 10)), 30, 'edad');
-    });
-    test('el cumpleaños que aún no llega este año resta un año', () => {
-        const d = new Date(hoy.getFullYear() - 30, hoy.getMonth(), hoy.getDate());
-        d.setDate(d.getDate() + 1);
-        return eq(M._edadDe(d.toISOString().slice(0, 10)), 29, 'edad');
-    });
+    test('la edad sale de la fecha de nacimiento', () =>
+        eq(M._edadDe('1996-08-29', HOY), 30, 'edad'));
+    test('el cumpleaños que aún no llega este año resta un año', () =>
+        eq(M._edadDe('1996-08-30', HOY), 29, 'edad'));
 
     /* ── Lo tapado sigue tapado ── */
     const s = {
@@ -2111,12 +2106,18 @@ console.log('\n══ SUITE N · Hoja impresa del check list (administrativo/che
         eq(N._freqCorto('A'), 'A · Apertura', 'etiqueta'));
     test('una frecuencia desconocida no rompe la etiqueta', () =>
         eq(N._freqCorto('ZZ'), 'ZZ', 'etiqueta'));
+    /* Cierre es de las cuatro que se usan a diario en barra y cocina. */
+    test('el cierre tiene su propia inicial', () => eq(N._freqCorto('C'), 'C · Cierre', 'etiqueta'));
+    /* Las frecuencias van en el orden del turno, no como se hayan ido agregando:
+       quien lee la lista la lee como la jornada. */
+    test('las frecuencias siguen el orden del turno', () =>
+        eq(N.FREQS.join(','), 'A,D/T,C,SEM,MEN', 'orden'));
 
     /* La leyenda corta la usan el otro reporte impreso y la ayuda del editor.
        Había DOS copias escritas a mano que decían "D/T = diaria/turno" — que no
        es lo que significa. Ahora las tres salen de FREQ_DEF. */
     test('la leyenda corta dice lo mismo que la guía', () =>
-        eq(N._freqLeyenda(), 'A = Apertura · D/T = Durante el turno · SEM = Semanal · MEN = Mensual', 'leyenda'));
+        eq(N._freqLeyenda(), 'A = Apertura · D/T = Durante el turno · C = Cierre · SEM = Semanal · MEN = Mensual', 'leyenda'));
     test('la leyenda cubre TODAS las frecuencias del selector', () =>
         eq(N.FREQS.every(f => N._freqLeyenda().indexOf(f + ' = ') > -1), true, 'cobertura'));
 })();

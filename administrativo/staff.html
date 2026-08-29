@@ -1807,19 +1807,23 @@ function _miStaff(ico, txt, accion, peligro) {
    la primera desharía esa protección — quedan a un clic, pidiendo la clave. */
 var _expId = null, _expAbierto = {};
 
-function _edadDe(fechaISO) {
+/* `hoyISO` es opcional y existe para poder probarlas: sin una fecha de
+   referencia, estas dos dependen del día en que se corra el candado y fallan
+   solas en fin de mes (restar 18 meses a un 29 de agosto cae en un 29 de
+   febrero que no existe). En la app siempre se llaman sin ese argumento. */
+function _edadDe(fechaISO, hoyISO) {
     if (!fechaISO) return null;
-    var d = new Date(fechaISO + 'T12:00:00'), h = new Date();
-    if (isNaN(d)) return null;
+    var d = new Date(fechaISO + 'T12:00:00'), h = hoyISO ? new Date(hoyISO + 'T12:00:00') : new Date();
+    if (isNaN(d) || isNaN(h)) return null;
     var a = h.getFullYear() - d.getFullYear();
     var m = h.getMonth() - d.getMonth();
     if (m < 0 || (m === 0 && h.getDate() < d.getDate())) a--;
     return a >= 0 && a < 130 ? a : null;
 }
-function _antiguedadDe(fechaISO) {
+function _antiguedadDe(fechaISO, hoyISO) {
     if (!fechaISO) return '';
-    var d = new Date(fechaISO + 'T12:00:00'), h = new Date();
-    if (isNaN(d) || d > h) return '';
+    var d = new Date(fechaISO + 'T12:00:00'), h = hoyISO ? new Date(hoyISO + 'T12:00:00') : new Date();
+    if (isNaN(d) || isNaN(h) || d > h) return '';
     var meses = (h.getFullYear() - d.getFullYear()) * 12 + (h.getMonth() - d.getMonth());
     if (h.getDate() < d.getDate()) meses--;
     if (meses < 1) return 'menos de un mes';

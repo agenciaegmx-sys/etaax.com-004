@@ -243,7 +243,7 @@ function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')
    ══════════════════════════════════════════════════════════════ */
 var DIAS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 var MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-var FREQS = ['A','D/T','SEM','MEN'];
+var FREQS = ['A','D/T','C','SEM','MEN'];   // en el orden en que pasan en el turno
 var TIPO_LBL = { apertura:'Apertura', cierre:'Cierre', intermedio:'Intermedio', limpieza:'Limpieza', otro:'Otro' };
 var MATRIZ_ID = 'suc_principal';
 
@@ -450,6 +450,7 @@ var MESES_L=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','
 var FREQ_DEF = {
     'A':   'Apertura — al abrir, antes del servicio',
     'D/T': 'Durante el turno — mientras hay servicio',
+    'C':   'Cierre — al cerrar, terminado el servicio',
     'SEM': 'Semanal — una vez por semana',
     'MEN': 'Mensual — una vez al mes'
 };
