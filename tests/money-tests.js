@@ -2354,6 +2354,7 @@ console.log('\n══ SUITE R · Bajas y candado del catálogo (administrativo/s
 
     /* La lista de trabajo se queda con quien trabaja. Un dado de baja que sigue
        apareciendo ahí es un error caro: se le programa turno y se le paga. */
+    setVar(R, '_bloqueado', false);   // el catálogo nace bloqueado; aquí ya se entró
     R.renderTable();
     const tbody = R.document.getElementById('staffTbody').innerHTML;
     test('la tabla NO muestra a los dados de baja', () =>
@@ -2365,6 +2366,28 @@ console.log('\n══ SUITE R · Bajas y candado del catálogo (administrativo/s
     R.renderPuestoChips();
     test('el conteo de "Todos" cuenta al equipo actual, no al histórico', () =>
         eq(R.document.getElementById('puestoChips').innerHTML.indexOf('>2<') > -1, true, 'conteo'));
+
+    /* Bloqueado, el estado vacío NO puede decir "sin colaboradores": no es que no
+       haya, es que no se ha escrito la clave. Y no hay pantalla encima: solo el
+       modal de la contraseña, que el catálogo se ve detrás. */
+    setVar(R, '_bloqueado', true);
+    R.renderTable();
+    /* Y CON datos en el caché tampoco se pinta una sola fila: el modal de la
+       clave deja ver lo de atrás, y ahí se lee la columna de sueldo. */
+    test('bloqueado, no se pinta ninguna fila aunque haya datos en caché', () =>
+        eq(R.document.getElementById('staffTbody').innerHTML, '', 'filas'));
+    R._storage['etaax_n1_staff'] = JSON.stringify([]);
+    R.renderTable();
+    const vacio = () => R.document.getElementById('emptyState').innerHTML;
+    test('bloqueado, el estado vacío pide la contraseña', () =>
+        eq(vacio().indexOf('Desbloquear') > -1, true, 'mensaje'));
+    test('…y NO miente diciendo que no hay colaboradores', () =>
+        eq(vacio().indexOf('Sin colaboradores') === -1, true, 'mensaje'));
+    setVar(R, '_bloqueado', false);
+    R.renderTable();
+    test('desbloqueado y sin nadie, sí dice que no hay colaboradores', () =>
+        eq(vacio().indexOf('Sin colaboradores') > -1, true, 'mensaje'));
+    R._storage['etaax_n1_staff'] = JSON.stringify(equipo);
 
     /* El candado: una vez verificado, vale unos minutos para lo que no destruye
        nada. Sin eso, entrar y editar pide la clave dos veces seguidas. */

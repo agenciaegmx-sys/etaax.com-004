@@ -678,24 +678,6 @@
 .theme-toggle{position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;}
 .theme-toggle:hover{border-color:var(--green);color:var(--green);}
 </style>
-<!-- ══ CANDADO DE ENTRADA ══
-     Sueldos, CLABEs, CURPs y credenciales: el catálogo entero es dato sensible,
-     no solo las acciones sueltas. Se tapa hasta que se verifique la clave. -->
-<div id="staffLock" style="display:none;position:fixed;inset:0;z-index:99990;background:var(--bg);
-     align-items:center;justify-content:center;padding:24px">
-    <div style="text-align:center;max-width:380px">
-        <div style="font-size:44px;margin-bottom:14px">🔐</div>
-        <div style="font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:2px;color:var(--text)">CATÁLOGO DE STAFF</div>
-        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;margin-top:8px">
-            Aquí viven sueldos, datos bancarios y credenciales de acceso.<br>Se necesita la contraseña del administrador.
-        </div>
-        <div style="display:flex;gap:10px;justify-content:center;margin-top:22px">
-            <button class="btn-ghost" onclick="salirDelCatalogo()">← Salir</button>
-            <button class="btn-primary" onclick="desbloquearCatalogo()">🔓 Desbloquear</button>
-        </div>
-    </div>
-</div>
-
 <!-- ══ MODAL: histórico de bajas ══
      La lista de trabajo se queda con quien trabaja; quien ya salió no se borra
      —eso sería perder el historial— sino que se guarda aquí. -->
@@ -918,14 +900,15 @@ function renderCumpleBanner() {
 
 function renderPuestoChips() {
     /* Sin los dados de baja: "Todos 30" tiene que ser la gente que hoy trabaja
-       aquí. Contar el histórico infla la plantilla y descuadra con la tabla. */
-    var data = load().filter(function(x){ return !_esBaja(x); });
+       aquí. Contar el histórico infla la plantilla y descuadra con la tabla.
+       Y bloqueado, sin nada: las fichas dicen los puestos del negocio. */
+    var data = _bloqueado ? [] : load().filter(function(x){ return !_esBaja(x); });
     var counts = {};
     data.forEach(function(s){ if (s.puesto) counts[s.puesto] = (counts[s.puesto]||0) + 1; });
     var puestos = Object.keys(counts).sort();
 
     var container = document.getElementById('puestoChips');
-    if (!puestos.length) { container.innerHTML = '<span style="font-size:12px;color:var(--text-dim)">Sin colaboradores aún.</span>'; return; }
+    if (!puestos.length) { container.innerHTML = _bloqueado ? '' : '<span style="font-size:12px;color:var(--text-dim)">Sin colaboradores aún.</span>'; return; }
 
     var all = '<div class="puesto-chip ' + (!selectedPuesto ? 'selected' : '') + '" onclick="filterByPuesto(\'\')"><span>Todos</span><span class="puesto-chip-count">' + data.length + '</span></div>';
     var chips = puestos.map(function(p){
@@ -993,9 +976,25 @@ function renderTable() {
     var tbody = document.getElementById('staffTbody');
     var empty = document.getElementById('emptyState');
 
+    /* BLOQUEADO = sin filas, aunque haya datos en el caché local. El modal de la
+       contraseña deja ver lo que está detrás, y en esta tabla se lee la columna
+       de sueldo: dejarla pintada haría del candado un adorno. La pantalla se
+       queda como está —barra, encabezados, todo en su lugar—, solo sin datos. */
+    if (_bloqueado) filtered = [];
+
     if (!filtered.length) {
         tbody.innerHTML = '';
         empty.style.display = '';
+        /* Si cerró el modal de la clave sin escribirla, no hay que dejarlo con un
+           "sin colaboradores" que es mentira: no es que no haya, es que no se ha
+           desbloqueado. */
+        empty.innerHTML = _bloqueado
+            ? '<div class="empty-state-icon">🔐</div>' +
+              '<div class="empty-state-text">Aquí viven sueldos, datos bancarios y credenciales.<br>' +
+              'Se necesita la contraseña del administrador.</div>' +
+              '<div style="margin-top:14px"><button class="btn-primary" onclick="desbloquearCatalogo()">🔓 Desbloquear</button></div>'
+            : '<div class="empty-state-icon">👥</div>' +
+              '<div class="empty-state-text">Sin colaboradores registrados.<br>Agrega el primero con el botón de arriba.</div>';
         return;
     }
     empty.style.display = 'none';
@@ -2007,22 +2006,17 @@ function _gateStaff(accion, cb, btnLabel) {
     if (!window._pedirClaveAdmin) { cb(); return; }   // sin guard cargado no se bloquea la operación
     _pedirClaveAdmin(accion, function () { _okHasta = Date.now() + _GRACIA_MS; cb(); }, btnLabel);
 }
-function _pintarCandado(mostrar) {
-    var ov = document.getElementById('staffLock');
-    if (ov) ov.style.display = mostrar ? 'flex' : 'none';
-}
+/* Solo la ventanita de la contraseña, nada de pantalla de bloqueo encima: una
+   página nueva tapando el catálogo desarma la pantalla y no aporta nada que el
+   propio modal de la clave no diga ya. Si se cierra sin escribirla, el catálogo
+   se queda vacío y su estado vacío ofrece volver a intentarlo. */
 function desbloquearCatalogo() {
     _gateStaff('Catálogo de Staff — acceso restringido', function () {
-        _pintarCandado(false);
+        _bloqueado = false;
         _arrancarCatalogo();
     }, '🔓 Entrar');
 }
-function salirDelCatalogo() {
-    /* Al hub de Administrativo, no a la pantalla anterior: embebido en el modal
-       del hub, un history.back() dejaría la ventana en blanco. Si está embebido,
-       el ✕ del modal padre sigue estando arriba. */
-    window.location.href = 'index.html' + (/[?&]embed=1/.test(window.location.search) ? '?embed=1' : '');
-}
+var _bloqueado = true;
 
 var _arrancado = false;
 async function _arrancarCatalogo() {
@@ -2042,7 +2036,7 @@ async function initPage() {
     if (!negId) { if (!/[?&]embed=1/.test(window.location.search)) window.location.href = '../hub.html'; return; }
     // El alcance por sucursal lo aplica renderTable según la sucursal activa / modo
     // global (se eliminó el filtro por sucursal de la UI).
-    _pintarCandado(true);
+    renderAll();          // pinta el estado vacío bloqueado detrás del modal
     desbloquearCatalogo();
 }
 /* ── Realtime: sync en vivo entre dispositivos (tabla publicada en v32) ──
