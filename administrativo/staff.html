@@ -535,6 +535,18 @@
                     </select>
                     <span class="form-hint">Es solo para nómina, independiente del acceso al sistema. <b>Opera el negocio</b> (incluida gerencia, aunque tenga login admin) → <b>Operativa</b>. <b>No opera</b> (contador, redes, oficina) → <b>Administrativa</b>.</span>
                 </div>
+                <!-- Hay gente que trabaja en el negocio y NO le cuesta al negocio:
+                     becarios de Jóvenes Construyendo el Futuro (les paga el
+                     gobierno), practicantes, familiares. Sin esta casilla el
+                     sistema no tenía cómo decirlo: un sueldo en cero era
+                     indistinguible de un sueldo sin capturar, y caía al mínimo. -->
+                <div class="form-group full">
+                    <label style="display:flex;align-items:center;gap:9px;text-transform:none;letter-spacing:0;font-size:13.5px;cursor:pointer;color:var(--text)">
+                        <input type="checkbox" id="fSinCosto" onchange="_toggleSinCosto()" style="width:16px;height:16px;accent-color:var(--green)">
+                        Este colaborador <b>no le cuesta al negocio</b>
+                    </label>
+                    <span class="form-hint">Beca (Jóvenes Construyendo el Futuro), practicante, familiar… Trabaja aquí, pero su pago no sale de la caja. Se queda en el catálogo y en los horarios; no suma a la nómina.</span>
+                </div>
                 <div class="form-group">
                     <label>Esquema de pago</label>
                     <select id="fEsquemaSueldo" onchange="_toggleEsquemaSueldo()">
@@ -1089,10 +1101,12 @@ function _openModalReal(id) {
                 : 'Mínimo 6 caracteres';
             document.getElementById('fNip').value         = '';
             document.getElementById('fNip').placeholder   = s.nipHash ? '••••• guardado — vacío para conservarlo' : '5 dígitos';
+            document.getElementById('fSinCosto').checked  = !!s.sinCostoNegocio;
             document.getElementById('fSalarioBase').value  = s.salarioBase || '';
             document.getElementById('fEsquemaSueldo').value = s.esquemaSueldo || 'periodo';
             document.getElementById('fSueldoDiario').value  = s.sueldoDiario || '';
             _toggleEsquemaSueldo();
+            _toggleSinCosto();
             document.getElementById('fCategoriaNomina').value = s.categoriaNomina || _categoriaPorRol(s.rol);
             document.getElementById('fPeriodicidad').value = s.periodicidad || '';
             document.getElementById('fDiaPago').value      = s.diaPago || '';
@@ -1192,6 +1206,8 @@ function clearForm() {
     var _defMin = (window.NominaParams ? (NominaParams.get(getNegocioActivo()).salarioDiarioDefault || 0) : 0);
     document.getElementById('fEsquemaSueldo').value = _defMin > 0 ? 'diario' : 'periodo';
     document.getElementById('fSueldoDiario').value = _defMin > 0 ? _defMin : '';
+    document.getElementById('fSinCosto').checked = false;
+    _toggleSinCosto();
     document.getElementById('fPrimaVacacionalEnPago').checked = false;
     _toggleEsquemaSueldo();
     document.getElementById('fileInput').value = '';
@@ -1310,6 +1326,27 @@ function _togAccesoStaff(){
     document.getElementById('accesoAdmin').style.display = admin ? '' : 'none';
     document.getElementById('accesoNip').style.display   = (conRol && !admin) ? '' : 'none';
     document.getElementById('accesoNone').style.display  = conRol ? 'none' : '';
+}
+
+/* Sin costo = no hay sueldo que capturar. Se apagan los campos en vez de
+   esconderlos: apagados se ve que existen y por qué están así. */
+function _toggleSinCosto(){
+    var sin = document.getElementById('fSinCosto').checked;
+    ['fEsquemaSueldo','fSueldoDiario','fSalarioBase','fPeriodicidad','fDiaPago'].forEach(function(id){
+        var e = document.getElementById(id); if (!e) return;
+        e.disabled = sin;
+        e.style.opacity = sin ? '.45' : '';
+    });
+    /* El preview lo pinta _updateSueldoPreview, que ya sabe esconderse cuando no
+       hay sueldo que mostrar. Se le delega en vez de escribirle encima. */
+    var pvTxt = document.getElementById('sueldoPreviewTxt');
+    var pv = document.getElementById('sueldoPreview');
+    if (sin) {
+        if (pv) pv.style.display = '';
+        if (pvTxt) pvTxt.innerHTML = '🎓 <b>Sin costo para el negocio</b> — no suma a la nómina ni se le paga desde la caja.';
+    } else if (typeof _updateSueldoPreview === 'function') {
+        _updateSueldoPreview();
+    }
 }
 
 /* Muestra el campo correcto según el esquema de pago elegido */
@@ -1478,6 +1515,7 @@ async function saveStaff() {
         periodicidad:    document.getElementById('fPeriodicidad').value,
         diaPago:         document.getElementById('fDiaPago').value,
         foto:            document.getElementById('fFoto').value,
+        sinCostoNegocio: document.getElementById('fSinCosto').checked,
         formaPagoNomina: document.getElementById('fFormaPago').value,
         bancoNomina:     _bancoValor(),
         clabeNomina:     document.getElementById('fClabe').value.replace(/[^0-9]/g, ''),

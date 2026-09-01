@@ -2660,6 +2660,23 @@ console.log('\n══ SUITE U · Nómina por sucursal (financiero/gastos-globale
     test('sin mínimo definido, no se marca nada', () =>
         eq(G._sueldoEsDelMinimoGG({ nombre: 'X' }), false, 'origen'));
 
+    /* ── EL QUE NO LE CUESTA AL NEGOCIO ──
+       Becarios de Jóvenes Construyendo el Futuro (les paga el gobierno),
+       practicantes, familiares. Antes no había forma de decirlo: un sueldo en
+       cero era indistinguible de uno sin capturar, y caía al mínimo — o sea que
+       el sistema proyectaba un gasto que no existe, y en el módulo de pago le
+       habría pagado de la caja. */
+    G.NominaParams = { get: function(){ return { salarioDiarioDefault: 320 }; } };
+    const becario = { id: 'j', nombre: 'Jovan', sinCostoNegocio: true, esquemaSueldo: 'diario', sueldoDiario: 0 };
+    test('un colaborador sin costo proyecta CERO, no el mínimo', () =>
+        eq(G._baseMensualStaff(becario, '2026-09'), 0, 'base'));
+    test('y no se marca como "mínimo", porque no viene del mínimo', () =>
+        eq(G._sueldoEsDelMinimoGG(becario), false, 'origen'));
+    /* Sin la casilla, el mismo registro sí cae al mínimo: 320 × 30 = 9,600.
+       Ése es exactamente el número que aparecía y que no se podía bajar. */
+    test('sin la casilla, ese mismo registro cae al mínimo (9,600)', () =>
+        eq(G._baseMensualStaff({ id:'j', esquemaSueldo:'diario', sueldoDiario:0 }, '2026-09'), 9600, 'base'));
+
     /* _loadStaff NO se filtra, y es a propósito: alimenta la clasificación de
        gastos, que reconoce cuáles son de nómina por el nombre del colaborador.
        Un gasto capturado en una sucursal puede nombrar a alguien de otra;
@@ -2667,6 +2684,30 @@ console.log('\n══ SUITE U · Nómina por sucursal (financiero/gastos-globale
     setVar(G, '_sucursalId', 'sOx');
     test('el catálogo COMPLETO sigue disponible para clasificar gastos', () =>
         eq(G._loadStaff().length, 5, 'catálogo'));
+})();
+
+/* ═══════════ SUITE V · SIN COSTO PARA EL NEGOCIO (diario.html) ═══════════
+   Esta es la que importa: aquí no se proyecta, se PAGA. Un becario al que el
+   negocio no le paga tiene que salir en cero, o se le entrega dinero de la caja
+   a alguien a quien le paga el gobierno. */
+console.log('\n══ SUITE V · Sin costo para el negocio (administrativo/diario.html) ══');
+(function () {
+    const D = A;   // el contexto de diario.html ya cargado en la SUITE A
+    D.NominaParams = { get: function () { return { salarioDiarioDefault: 320, jornadaHoras: 8 }; } };
+
+    test('al que no le cuesta al negocio se le paga CERO', () =>
+        eq(D._sueldoDiarioEfectivo({ sinCostoNegocio: true }), 0, 'sueldo'));
+    /* La bandera manda sobre todo, incluso si quedó un sueldo viejo capturado:
+       si no, un becario al que antes se le puso sueldo seguiría cobrando. */
+    test('la bandera manda aunque haya un sueldo viejo capturado', () =>
+        eq(D._sueldoDiarioEfectivo({ sinCostoNegocio: true, esquemaSueldo: 'diario', sueldoDiario: 400 }), 0, 'sueldo'));
+    test('sin la bandera, sigue cayendo al mínimo como siempre', () =>
+        eq(D._sueldoDiarioEfectivo({ nombre: 'X' }), 320, 'sueldo'));
+    test('y un sueldo capturado se respeta igual que antes', () =>
+        eq(D._sueldoDiarioEfectivo({ esquemaSueldo: 'diario', sueldoDiario: 450 }), 450, 'sueldo'));
+    /* No se le marca "paga el mínimo": no cobra nada, no viene del mínimo. */
+    test('no se le avisa que cobra el mínimo', () =>
+        eq(D._sueldoEsDelMinimo({ sinCostoNegocio: true }), false, 'aviso'));
 })();
 
 /* ═══════════════ RESUMEN ═══════════════ */

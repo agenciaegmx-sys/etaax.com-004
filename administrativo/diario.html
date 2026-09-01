@@ -5297,6 +5297,11 @@ var _PN_METODOS = {
    "Sin editar" = sin sueldo diario Y sin salario base. Un sueldo de $0 puesto a
    propósito no existe; si los dos están vacíos, es que nadie lo configuró. */
 function _sueldoDiarioEfectivo(s){
+    /* Hay quien trabaja aquí y no le cuesta al negocio: becarios de Jóvenes
+       Construyendo el Futuro (les paga el gobierno), practicantes, familiares.
+       Va PRIMERO que todo, incluido el mínimo: si no, se le pagaría de la caja a
+       alguien a quien no hay que pagarle. */
+    if(s.sinCostoNegocio) return 0;
     if(s.esquemaSueldo==='diario' && n(s.sueldoDiario)>0) return n(s.sueldoDiario);
     var b=n(s.salarioBase);
     if(b>0){
@@ -5309,6 +5314,7 @@ function _sueldoDiarioEfectivo(s){
 /* ¿Este sueldo viene del mínimo del negocio y no de su ficha? Sirve para decirlo
    en pantalla: pagar el mínimo por descuido y pagarlo a propósito se ven igual. */
 function _sueldoEsDelMinimo(s){
+    if(s.sinCostoNegocio) return false;   // no cobra nada: no viene del mínimo ni de nada
     return !(s.esquemaSueldo==='diario' && n(s.sueldoDiario)>0) && !(n(s.salarioBase)>0)
         && n(_nomParams().salarioDiarioDefault) > 0;
 }
