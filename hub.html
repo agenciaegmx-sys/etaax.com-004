@@ -8,7 +8,8 @@
 <title>etaax – Acceso</title>
 <script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <script src="/page-guard.js"></script><!-- solo helpers de permisos; el guard no aplica en hub -->
-<script src="/precios.js"></script><!-- tabla de precios por sucursal (una sola verdad) -->
+<script src="/precios.js"></script>
+<script src="/datos-pago.js"></script><!-- datos de transferencia: fuente única -->
 <script src="/etaax-core.js"></script><!-- EtaaxCore.estadoCobro: fecha de corte y tolerancia -->
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -1196,6 +1197,19 @@ function _mostrarBloqueo(neg, estado, sub) {
                 '<a href="' + waLink + '" target="_blank" rel="noopener" style="background:#25d366;color:#0a0908;text-decoration:none;font-weight:600;padding:14px;border-radius:10px;font-size:15px">💬 Escríbeme por WhatsApp</a>' +
                 '<a href="mailto:' + ETAAX_CONTACTO.email + '?subject=' + encodeURIComponent('Activar suscripción ETAAX') + '" style="background:var(--s2);border:1px solid var(--b1);color:var(--text);text-decoration:none;font-weight:500;padding:13px;border-radius:10px;font-size:14px">✉️ ' + ETAAX_CONTACTO.email + '</a>' +
             '</div>' +
+            /* Los datos de transferencia, PLEGADOS. Quien va a pagar con tarjeta
+               tiene su botón arriba y no necesita verlos; quien acordó
+               transferencia los necesita a la mano y no debería tener que
+               pedirlos por WhatsApp a las 11 de la noche. Plegado porque el
+               camino que cobra solo es el de arriba. */
+            (window.ETAAX_PAGO_DATOS
+                ? '<details style="text-align:left;background:var(--s2);border:1px solid var(--b1);border-radius:10px;' +
+                       'padding:12px 14px;margin-bottom:22px;color:var(--text)">' +
+                      '<summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);list-style:none">' +
+                          '🏦 ¿Prefieres pagar por transferencia?</summary>' +
+                      '<div style="margin-top:10px">' + ETAAX_PAGO_DATOS.html(true) + '</div>' +
+                  '</details>'
+                : '') +
             '<div style="font-size:12px;color:var(--dim);margin-bottom:26px">WhatsApp: ' + _esc(ETAAX_CONTACTO.whatsappMostrar) + '</div>' +
             '<button onclick="logout()" style="background:transparent;border:1px solid var(--b1);color:var(--muted);padding:10px 22px;border-radius:8px;cursor:pointer;font-family:\'DM Sans\',sans-serif;font-size:13px">Cerrar sesión</button>' +
         '</div>';

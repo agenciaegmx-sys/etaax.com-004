@@ -51,6 +51,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="/supabase-config.js"></script>
+<script src="/datos-pago.js"></script><!-- datos de transferencia: fuente única -->
 <script>
 /* ════════════════════════════════════════════════════════════════
    ETAAX · Activación de cuenta por invitación
@@ -197,7 +198,13 @@ function _pintarListo(pwd){
             '</div>' +
             (esTarjeta
                 ? '<div class="al-msg" style="color:var(--text-dim)">Entrando…</div>'
-                : '<div class="al-neg" style="margin-top:22px;text-align:left">' +
+                : /* Los datos de la cuenta van AQUÍ, en la pantalla que ve justo
+                     al terminar. Mandarlo a buscarlos por WhatsApp es perder al
+                     cliente en el único momento en que está listo para pagar. */
+                  '<div class="al-neg" style="margin-top:22px;text-align:left">' +
+                      (window.ETAAX_PAGO_DATOS ? ETAAX_PAGO_DATOS.html() : '') +
+                  '</div>' +
+                  '<div class="al-neg" style="text-align:left">' +
                       '<div class="l">Tu acceso</div>' +
                       '<div class="v" style="font-size:14px">' + esc(_inv.email) + '</div>' +
                       '<div class="al-hint" style="margin-top:6px">Con ese correo y la contraseña que acabas de crear.</div>' +

@@ -2582,6 +2582,38 @@ console.log('\n══ SUITE S · Invitaciones de alta (admin.html) ══');
         eq(A.document.getElementById('tbodyInvitaciones').innerHTML.indexOf('Todavía no has invitado') > -1, true, 'vacío'));
 })();
 
+/* ═══════════ SUITE T · DATOS DE TRANSFERENCIA (datos-pago.js) ═══════════
+   Los ve el cliente al terminar su alta y desde el hub si su negocio espera
+   pago. Viven en UN archivo porque si estuvieran en dos, el día que cambie la
+   cuenta uno de los dos seguiría mandando dinero a la cuenta vieja. */
+console.log('\n══ SUITE T · Datos de transferencia (datos-pago.js) ══');
+(function () {
+    const D = cargarJS(crearContexto(), 'datos-pago.js').ETAAX_PAGO_DATOS;
+    const texto = D.html().replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+
+    test('la CLABE tiene los 18 dígitos', () =>
+        eq(D.clabe.replace(/\D/g, '').length, 18, 'clabe'));
+    /* Misma validación que la nómina: una CLABE con un dígito cambiado tiene sus
+       18 y el dinero rebota o cae en otra cuenta. Aquí es la cuenta de ETAAX. */
+    test('la CLABE cuadra con su dígito de control', () => {
+        const B = cargarJS(crearContexto(), 'bancos-mx.js').BancosMX;
+        return eq(B.validarClabe(D.clabe).ok, true, 'clabe');
+    });
+    test('la CLABE corresponde al banco que se anuncia', () => {
+        const B = cargarJS(crearContexto(), 'bancos-mx.js').BancosMX;
+        const det = B.bancoDeClabe(D.clabe);
+        return eq(!!det && det.nombre.toLowerCase().indexOf(D.banco.toLowerCase()) > -1, true,
+                  'banco (' + D.banco + ' vs ' + (det && det.nombre) + ')');
+    });
+
+    test('se pintan todos los datos que hacen falta para transferir', () =>
+        eq(['BBVA', 'Edwin', '155 287 7511', '4152', '0121'].every(x => texto.indexOf(x) > -1), true, 'datos'));
+    test('se pide el comprobante', () => eq(texto.toLowerCase().indexOf('comprobante') > -1, true, 'nota'));
+    /* La versión compacta va dentro de una tarjeta que ya lleva su título. */
+    test('la versión compacta no repite el encabezado', () =>
+        eq(D.html(true).indexOf('Datos para transferencia'), -1, 'compacto'));
+})();
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0
