@@ -2480,6 +2480,61 @@ console.log('\n══ SUITE R · Bajas y candado del catálogo (administrativo/s
     test('editar uno existente SÍ la pide', () => eq(pedidas, 1, 'veces'));
 })();
 
+/* ═══════════ SUITE S · INVITACIONES DE ALTA (admin.html) ═══════════
+   El link de invitación es un PORTADOR: quien lo tenga da de alta un negocio.
+   Es el único camino de alta desde que el registro público está cerrado, así
+   que lo que se fije aquí es lo que sostiene esa puerta. */
+console.log('\n══ SUITE S · Invitaciones de alta (admin.html) ══');
+(function () {
+    const A = crearContexto();
+    /* El generador usa crypto.getRandomValues, que el contexto de prueba no
+       trae: se le pone el del propio Node, que es el mismo del navegador. */
+    A.crypto = require('crypto').webcrypto;
+    A.location = { origin: 'https://etaax.com', pathname: '/admin.html' };
+    cargarInline(A, 'admin.html');
+
+    /* Si el token se pudiera adivinar, se daría de alta un negocio ajeno. */
+    const t1 = A._invToken(), t2 = A._invToken();
+    test('el token tiene 48 caracteres hexadecimales', () =>
+        eq(/^[0-9a-f]{48}$/.test(t1), true, 'token'));
+    test('dos invitaciones no comparten token', () => eq(t1 === t2, false, 'token'));
+    /* La RPC del servidor rechaza cualquier token de menos de 20 caracteres:
+       el que se genera aquí tiene que pasar ese piso con holgura. */
+    test('el token supera el mínimo que exige el servidor', () => eq(t1.length > 20, true, 'largo'));
+
+    test('el link apunta a la página de alta con su token', () =>
+        eq(A._invLink('abc123'), 'https://etaax.com/alta.html?t=abc123', 'link'));
+
+    /* Estado de la lista: usada / caducada / vigente. Se separan porque cada una
+       se resuelve distinto —iniciar sesión, pedir otra, o esperar— y decirle
+       "inválida" a las tres deja al cliente sin saber qué hacer. */
+    const ayer = new Date(Date.now() - 86400000).toISOString();
+    const manana = new Date(Date.now() + 86400000).toISOString();
+    setVar(A, '_data', { invitaciones: [
+        { token: 'a'.repeat(48), email: 'uno@x.com',  nombre_negocio: 'Uno',  forma_pago: 'stripe',  expira_at: manana, usada_at: null },
+        { token: 'b'.repeat(48), email: 'dos@x.com',  nombre_negocio: 'Dos',  forma_pago: 'offline', expira_at: manana, usada_at: new Date().toISOString() },
+        { token: 'c'.repeat(48), email: 'tres@x.com', nombre_negocio: 'Tres', forma_pago: 'stripe',  expira_at: ayer,   usada_at: null },
+    ]});
+    A.renderInvitaciones();
+    const tabla = A.document.getElementById('tbodyInvitaciones').innerHTML;
+
+    test('la vigente se marca como vigente', () => eq(tabla.indexOf('Vigente') > -1, true, 'estado'));
+    test('la ya usada se distingue de la caducada', () =>
+        eq(tabla.indexOf('Usada') > -1 && tabla.indexOf('Caducada') > -1, true, 'estado'));
+    /* Solo la vigente ofrece copiar el link: ofrecerlo en una usada o vencida es
+       mandarle al cliente un link que no va a funcionar. */
+    test('solo la vigente ofrece copiar el link', () =>
+        eq((tabla.match(/_copiarInv/g) || []).length, 1, 'botones'));
+    test('el contador dice cuántas siguen vivas', () =>
+        eq(A.document.getElementById('countInvitaciones').textContent, '3 · 1 vigente', 'contador'));
+
+    /* Una lista vacía no puede verse como un error. */
+    setVar(A, '_data', { invitaciones: [] });
+    A.renderInvitaciones();
+    test('sin invitaciones se explica, no se deja en blanco', () =>
+        eq(A.document.getElementById('tbodyInvitaciones').innerHTML.indexOf('Todavía no has invitado') > -1, true, 'vacío'));
+})();
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0

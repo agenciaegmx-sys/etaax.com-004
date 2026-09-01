@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<script src="/theme.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>etaax – Activa tu cuenta</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+<style>
+    body { background:var(--bg); color:var(--text); font-family:'DM Sans',sans-serif;
+           min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+    .al-card { background:var(--surface); border:1px solid var(--border); border-radius:18px;
+               padding:34px 30px; max-width:460px; width:100%; box-shadow:0 24px 70px rgba(0,0,0,.45); }
+    .al-marca { font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:5px;
+                color:var(--text-dim); text-align:center; margin-bottom:20px; }
+    .al-tit { font-family:'Bebas Neue',sans-serif; font-size:30px; letter-spacing:1.5px; line-height:1.05; }
+    .al-sub { font-size:13.5px; color:var(--text-muted); line-height:1.6; margin-top:8px; }
+    .al-neg { background:var(--surface2); border:1px solid var(--border); border-radius:11px;
+              padding:13px 15px; margin:20px 0 4px; }
+    .al-neg .l { font-size:9.5px; letter-spacing:2px; text-transform:uppercase; color:var(--text-dim); }
+    .al-neg .v { font-size:16px; font-weight:600; margin-top:3px; word-break:break-word; }
+    .al-campo { margin-top:16px; }
+    .al-campo label { display:block; font-size:9.5px; letter-spacing:2px; text-transform:uppercase;
+                      color:var(--text-dim); margin-bottom:6px; }
+    .al-campo input { width:100%; box-sizing:border-box; background:var(--surface2);
+                      border:1px solid var(--border); color:var(--text); padding:12px 14px;
+                      border-radius:10px; font-family:inherit; font-size:15px; outline:none; }
+    .al-campo input:focus { border-color:var(--green); }
+    .al-campo input:disabled { opacity:.6; }
+    .al-hint { font-size:11.5px; color:var(--text-dim); margin-top:5px; line-height:1.5; }
+    .al-btn { width:100%; margin-top:22px; background:var(--green); border:none; color:#0a0908;
+              font-family:inherit; font-size:15px; font-weight:700; padding:14px; border-radius:10px;
+              cursor:pointer; }
+    .al-btn:disabled { opacity:.55; cursor:default; }
+    .al-msg { margin-top:14px; font-size:13px; line-height:1.55; }
+    .al-err { color:var(--red); }
+    .al-ok  { color:var(--green); }
+    .al-centro { text-align:center; }
+</style>
+</head>
+<body>
+
+<div class="al-card">
+    <div class="al-marca">E T A A X</div>
+    <div id="alCuerpo" class="al-centro" style="color:var(--text-dim);font-size:13px;padding:20px 0">
+        Revisando tu invitación…
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="/supabase-config.js"></script>
+<script>
+/* ════════════════════════════════════════════════════════════════
+   ETAAX · Activación de cuenta por invitación
+
+   Esta página NO crea nada por su cuenta: manda el token y la contraseña a la
+   Edge Function `activar-invitacion`, que es quien tiene la llave de servicio.
+   Aquí solo se pinta lo que la invitación permite ver, que es el correo y el
+   nombre del negocio — nada de notas internas ni de otras invitaciones.
+
+   El correo NO se puede editar: viene fijo en la invitación. Si se pudiera
+   cambiar, el link dejaría de ser una invitación para alguien y pasaría a ser
+   un registro abierto con pasos extra.
+   ════════════════════════════════════════════════════════════════ */
+var _token = new URLSearchParams(location.search).get('t') || '';
+var _inv = null;
+
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function _pintarError(titulo, texto, conLogin){
+    document.getElementById('alCuerpo').innerHTML =
+        '<div class="al-centro">' +
+            '<div style="font-size:44px;margin-bottom:10px">🔒</div>' +
+            '<div class="al-tit">' + esc(titulo) + '</div>' +
+            '<div class="al-sub">' + esc(texto) + '</div>' +
+            (conLogin ? '<div class="al-msg"><a href="/hub.html" style="color:var(--viol)">Ir a iniciar sesión</a></div>' : '') +
+        '</div>';
+}
+
+/* Los motivos se distinguen a propósito: "ya se usó" y "caducó" se arreglan de
+   maneras distintas, y decirle "link inválido" a las tres deja al cliente sin
+   saber si tiene que pedir otro o simplemente iniciar sesión. */
+var MOTIVOS = {
+    usada:    ['Esta invitación ya se usó', 'Si la cuenta ya es tuya, inicia sesión. Si no, pide una invitación nueva.', true],
+    expirada: ['Esta invitación caducó',    'Los links vencen por seguridad. Escríbenos y te mandamos uno nuevo.', false],
+    invalida: ['Este link no es válido',    'Revisa que lo hayas copiado completo, o pídenos uno nuevo.', false]
+};
+
+async function _cargar(){
+    if (!_token){ _pintarError.apply(null, MOTIVOS.invalida); return; }
+    var r;
+    try { r = await _supabase.rpc('invitacion_ver', { p_token: _token }); }
+    catch (e) { _pintarError('No se pudo revisar tu invitación', 'Revisa tu conexión e inténtalo de nuevo.', false); return; }
+    if (r.error || !r.data || !r.data.ok){
+        var m = MOTIVOS[(r.data && r.data.motivo) || 'invalida'] || MOTIVOS.invalida;
+        _pintarError(m[0], m[1], m[2]);
+        return;
+    }
+    _inv = r.data;
+    _pintarFormulario();
+}
+
+function _pintarFormulario(){
+    var pago = _inv.forma_pago === 'stripe'
+        ? 'Al terminar te llevamos a registrar tu tarjeta. El cobro es mensual y automático.'
+        : 'Quedamos de acuerdo en pago por transferencia o efectivo. Activamos tu negocio en cuanto entre el pago.';
+    document.getElementById('alCuerpo').innerHTML =
+        '<div class="al-tit">Activa tu cuenta</div>' +
+        '<div class="al-sub">Solo falta tu nombre y una contraseña.</div>' +
+        '<div class="al-neg"><div class="l">Negocio</div><div class="v">' + esc(_inv.nombre_negocio) + '</div></div>' +
+        '<div class="al-neg"><div class="l">Correo de acceso</div><div class="v" style="font-size:14px">' + esc(_inv.email) + '</div></div>' +
+        '<div class="al-campo"><label>Tu nombre completo</label>' +
+            '<input type="text" id="alNombre" placeholder="Juan García" autocomplete="name"></div>' +
+        '<div class="al-campo"><label>Crea tu contraseña</label>' +
+            '<input type="password" id="alPwd" placeholder="Mínimo 6 caracteres" autocomplete="new-password">' +
+            '<div class="al-hint">Con este correo y esta contraseña vas a entrar a ETAAX.</div></div>' +
+        '<button class="al-btn" id="alBtn" onclick="activar()">Activar mi cuenta</button>' +
+        '<div class="al-msg" id="alMsg" style="color:var(--text-dim)">' + esc(pago) + '</div>';
+    document.getElementById('alPwd').addEventListener('keydown', function(e){
+        if (e.key === 'Enter') activar();
+    });
+    document.getElementById('alNombre').focus();
+}
+
+async function activar(){
+    var nombre = (document.getElementById('alNombre').value || '').trim();
+    var pwd    = document.getElementById('alPwd').value || '';
+    var msg    = document.getElementById('alMsg');
+    var btn    = document.getElementById('alBtn');
+    msg.className = 'al-msg al-err';
+    if (!nombre){ msg.textContent = 'Escribe tu nombre.'; return; }
+    if (pwd.length < 6){ msg.textContent = 'La contraseña necesita al menos 6 caracteres.'; return; }
+
+    btn.disabled = true; btn.textContent = 'Creando tu cuenta…';
+    msg.className = 'al-msg'; msg.style.color = 'var(--text-dim)';
+    msg.textContent = 'Un momento…';
+
+    var r;
+    try {
+        r = await _supabase.functions.invoke('activar-invitacion', {
+            body: { token: _token, nombre: nombre, password: pwd }
+        });
+    } catch (e) { r = { error: e }; }
+
+    /* supabase-js se traga el cuerpo del error y solo dice "non-2xx status".
+       El motivo real viene en error.context, y sin él el cliente vería
+       "algo salió mal" cuando el servidor le está diciendo exactamente qué. */
+    if (r.error){
+        var detalle = '';
+        try { detalle = (await r.error.context.json()).error || ''; } catch (e) {}
+        btn.disabled = false; btn.textContent = 'Activar mi cuenta';
+        msg.className = 'al-msg al-err';
+        msg.textContent = detalle || 'No se pudo crear tu cuenta. Inténtalo de nuevo o escríbenos.';
+        return;
+    }
+
+    /* Con la cuenta ya creada se inicia sesión sola: pedirle que teclee otra vez
+       lo que acaba de escribir es un paso de más justo cuando ya funcionó. */
+    msg.className = 'al-msg al-ok';
+    msg.textContent = '¡Listo! Entrando…';
+    try { await _supabase.auth.signInWithPassword({ email: _inv.email, password: pwd }); } catch (e) {}
+    setTimeout(function(){ location.href = '/hub.html'; }, 900);
+}
+
+_cargar();
+</script>
+</body>
+</html>

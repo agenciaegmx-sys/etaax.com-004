@@ -340,6 +340,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   <div class="tabs">
     <button class="tab active" onclick="switchTab('usuarios')">👥 Usuarios</button>
     <button class="tab" onclick="switchTab('negocios')">🏪 Negocios</button>
+    <button class="tab" onclick="switchTab('invitaciones')">✉️ Invitaciones</button>
     <button class="tab" onclick="switchTab('solicitudes')">📨 Solicitudes<span id="tabSolBadge" style="display:none;margin-left:6px;background:#e0a93d;color:#1a1916;border-radius:20px;padding:1px 7px;font-size:10px;font-weight:700"></span></button>
     <button class="tab" onclick="switchTab('staff')">🎯 Staff global</button>
     <button class="tab" onclick="switchTab('proveedores')">🚚 Proveedores</button>
@@ -400,6 +401,64 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   </div>
 
   <!-- TAB: SOLICITUDES DE PLAN (nueva sucursal vía asesor) -->
+  <!-- TAB: INVITACIONES
+       El registro público está cerrado a propósito. Aquí se genera el único
+       camino de alta: un link a nombre de UN correo, que caduca y se usa una
+       sola vez. -->
+  <div id="tab-invitaciones" class="tab-panel">
+    <div class="admin-section">
+      <div class="section-head">
+        <div class="section-title">Invitar a un cliente nuevo</div>
+      </div>
+      <div style="padding:16px 18px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px">
+          <div>
+            <label style="display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#8a8a8a;margin-bottom:5px">Correo del cliente</label>
+            <input type="email" id="invEmail" placeholder="dueno@negocio.com" style="width:100%;box-sizing:border-box;background:#1a1916;border:1px solid #2a2824;color:#f0ece6;padding:10px 12px;border-radius:8px;font-family:inherit;font-size:14px">
+          </div>
+          <div>
+            <label style="display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#8a8a8a;margin-bottom:5px">Nombre del negocio</label>
+            <input type="text" id="invNegocio" placeholder="Tata Mezcalería" style="width:100%;box-sizing:border-box;background:#1a1916;border:1px solid #2a2824;color:#f0ece6;padding:10px 12px;border-radius:8px;font-family:inherit;font-size:14px">
+          </div>
+          <div>
+            <label style="display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#8a8a8a;margin-bottom:5px">Cómo va a pagar</label>
+            <select id="invPago" style="width:100%;box-sizing:border-box;background:#1a1916;border:1px solid #2a2824;color:#f0ece6;padding:10px 12px;border-radius:8px;font-family:inherit;font-size:14px">
+              <option value="stripe">💳 Tarjeta · cobro automático</option>
+              <option value="offline">🏦 Transferencia o efectivo</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#8a8a8a;margin-bottom:5px">El link caduca en</label>
+            <select id="invDias" style="width:100%;box-sizing:border-box;background:#1a1916;border:1px solid #2a2824;color:#f0ece6;padding:10px 12px;border-radius:8px;font-family:inherit;font-size:14px">
+              <option value="3">3 días</option>
+              <option value="7" selected>7 días</option>
+              <option value="15">15 días</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:12px">
+          <label style="display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#8a8a8a;margin-bottom:5px">Notas internas (opcional)</label>
+          <input type="text" id="invNotas" placeholder="Lo atendió Edwin · acordamos 2 sucursales" style="width:100%;box-sizing:border-box;background:#1a1916;border:1px solid #2a2824;color:#f0ece6;padding:10px 12px;border-radius:8px;font-family:inherit;font-size:14px">
+        </div>
+        <button onclick="generarInvitacion()" id="invBtn" style="margin-top:14px;background:#3dbe7a;border:none;color:#0a0908;font-family:inherit;font-size:14px;font-weight:700;padding:11px 22px;border-radius:9px;cursor:pointer">Generar invitación</button>
+        <div id="invResultado" style="margin-top:14px"></div>
+      </div>
+    </div>
+
+    <div class="admin-section" style="margin-top:18px">
+      <div class="section-head">
+        <div class="section-title">Invitaciones enviadas</div>
+        <div class="section-count" id="countInvitaciones">—</div>
+      </div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>Correo</th><th>Negocio</th><th>Pago</th><th>Estado</th><th>Caduca</th><th></th></tr></thead>
+          <tbody id="tbodyInvitaciones"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div id="tab-solicitudes" class="tab-panel">
     <div class="admin-section">
       <div class="section-head">
@@ -725,14 +784,15 @@ async function adminLogin() {
 
 /* ── CARGA DE DATOS ── */
 async function cargarDatos() {
-    var [resU, resN, resS, resP, resSub, resSol, resSucs] = await Promise.all([
+    var [resU, resN, resS, resP, resSub, resSol, resSucs, resInv] = await Promise.all([
         _supabase.from('usuarios').select('*'),
         _supabase.from('negocios').select('*'),
         _supabase.from('staff').select('*'),
         _supabase.from('catalogo_proveedores').select('*').order('created_at', { ascending: true }),
         _supabase.from('suscripciones').select('*'),
         _supabase.from('solicitudes_plan').select('*').order('created_at', { ascending: false }),
-        _supabase.from('negocio_sucursales').select('negocio_id,datos')
+        _supabase.from('negocio_sucursales').select('negocio_id,datos'),
+        _supabase.from('invitaciones').select('*').order('creada_at', { ascending: false })
     ]);
 
     _data.usuarios    = (resU.data || []).filter(function(u){ return u.id !== ADMIN_EMAIL; });
@@ -742,6 +802,8 @@ async function cargarDatos() {
     _data.suscripciones = {};
     (resSub.data || []).forEach(function(s){ _data.suscripciones[s.negocio_id] = s; });
     _data.solicitudes = resSol.error ? [] : (resSol.data || []); // tabla v36 (si no existe aún, bandeja vacía)
+    // Si falta correr la v49, la pestaña se ve vacía en vez de tumbar el panel.
+    _data.invitaciones = resInv.error ? [] : (resInv.data || []);
     _data.sucsNeg = {};
     // Antes solo se guardaba el CONTEO. La lista completa (con nombre y logo) hace
     // falta para poder emitir un recibo a nombre de una sucursal concreta.
@@ -761,6 +823,7 @@ async function cargarDatos() {
     renderNegocios();
     renderStaff();
     renderProveedores();
+    renderInvitaciones();
     renderSolicitudes();
 }
 
@@ -2361,7 +2424,10 @@ function switchTab(tab) {
     if (tab === 'papelera') { window.location.href = 'admin-papelera.html'; return; }
     if (tab === 'rrhh')     { window.location.href = 'admin-catalogo-rrhh.html'; return; }
     _tabActivo = tab;
-    var tabs = ['usuarios','negocios','solicitudes','staff','proveedores','insumos'];
+    /* OJO: este arreglo se compara POR POSICIÓN contra los botones .tab. Al
+       agregar una pestaña hay que meterla aquí en el mismo lugar, o se marca
+       como activa la que no es. */
+    var tabs = ['usuarios','negocios','invitaciones','solicitudes','staff','proveedores','insumos'];
     document.querySelectorAll('.tab').forEach(function(b,i){
         b.classList.toggle('active', tabs[i] === tab);
     });
@@ -2520,6 +2586,129 @@ function cerrarForm() {
 }
 
 /* ── UTILS ── */
+/* ══════════════ INVITACIONES ══════════════
+   El registro público está cerrado (fase 0 de seguridad). Este es el ÚNICO
+   camino de alta: un link a nombre de un correo, que caduca y se usa una vez.
+   Quien lo abre no puede cambiar el correo — si pudiera, dejaría de ser una
+   invitación y volvería a ser registro abierto con pasos extra. */
+function _invToken() {
+    /* 32 caracteres de aleatoriedad criptográfica. El link es un portador: si
+       el token se pudiera adivinar, se podría dar de alta un negocio ajeno. */
+    var b = new Uint8Array(24);
+    (window.crypto || window.msCrypto).getRandomValues(b);
+    return Array.from(b, function (n) { return ('0' + n.toString(16)).slice(-2); }).join('');
+}
+function _invLink(token) { return location.origin + '/alta.html?t=' + token; }
+
+async function generarInvitacion() {
+    var email   = (document.getElementById('invEmail').value || '').trim().toLowerCase();
+    var negocio = (document.getElementById('invNegocio').value || '').trim();
+    var pago    = document.getElementById('invPago').value;
+    var dias    = parseInt(document.getElementById('invDias').value, 10) || 7;
+    var notas   = (document.getElementById('invNotas').value || '').trim();
+    var out     = document.getElementById('invResultado');
+    var btn     = document.getElementById('invBtn');
+
+    if (!email || email.indexOf('@') < 0) { out.innerHTML = '<div style="color:#e05a3a;font-size:13px">Escribe un correo válido.</div>'; return; }
+    if (!negocio) { out.innerHTML = '<div style="color:#e05a3a;font-size:13px">Escribe el nombre del negocio.</div>'; return; }
+
+    /* Aviso, no bloqueo: puede haber una razón legítima (la anterior caducó, se
+       equivocaron de correo). Pero mandar dos links vivos al mismo correo
+       termina en dos negocios duplicados. */
+    var viva = (_data.invitaciones || []).find(function (i) {
+        return String(i.email).toLowerCase() === email && !i.usada_at && new Date(i.expira_at) > new Date();
+    });
+    if (viva && !confirm('Ya hay una invitación vigente para ' + email + '.\n\nSi generas otra, las dos van a servir y podrían crearse dos negocios. ¿Continuar?')) return;
+
+    var token = _invToken();
+    var expira = new Date(Date.now() + dias * 86400000).toISOString();
+    btn.disabled = true; btn.textContent = 'Generando…';
+    var r = await _supabase.from('invitaciones').insert({
+        token: token, email: email, nombre_negocio: negocio,
+        forma_pago: pago, notas: notas || null, expira_at: expira
+    });
+    btn.disabled = false; btn.textContent = 'Generar invitación';
+
+    if (r.error) {
+        out.innerHTML = '<div style="color:#e05a3a;font-size:13px">No se pudo guardar: ' + esc(r.error.message) +
+            (/relation .* does not exist/i.test(r.error.message) ? '<br>Falta correr la migración v49 en el SQL Editor.' : '') + '</div>';
+        return;
+    }
+
+    var link = _invLink(token);
+    var cuerpo = 'Hola,\n\nYa está lista tu invitación para entrar a ETAAX con el negocio "' + negocio + '".\n\n' +
+        'Abre este link y crea tu contraseña:\n' + link + '\n\n' +
+        'El link vence en ' + dias + ' días y solo se puede usar una vez.\n\n' +
+        (pago === 'stripe'
+            ? 'Al terminar te pediremos registrar tu tarjeta; el cobro es mensual y automático.\n\n'
+            : 'Activamos tu negocio en cuanto recibamos el pago por transferencia o efectivo.\n\n') +
+        'Cualquier duda, aquí estamos.\nETAAX';
+
+    var mailto = 'mailto:' + encodeURIComponent(email) +
+        '?subject=' + encodeURIComponent('Tu acceso a ETAAX — ' + negocio) +
+        '&body=' + encodeURIComponent(cuerpo);
+    var wa = 'https://wa.me/?text=' + encodeURIComponent(
+        'Te acabo de mandar por correo tu acceso a ETAAX para "' + negocio + '". Revisa tu bandeja (y el spam, por si acaso).');
+
+    /* El correo va PRIMERO y el WhatsApp es solo el aviso: el link se manda al
+       buzón porque así el clic prueba que el correo es suyo. Por WhatsApp no
+       probaría nada. */
+    out.innerHTML =
+        '<div style="background:rgba(61,190,122,.08);border:1px solid rgba(61,190,122,.4);border-radius:10px;padding:14px">' +
+            '<div style="font-size:13px;color:#3dbe7a;font-weight:600;margin-bottom:8px">✅ Invitación lista para ' + esc(email) + '</div>' +
+            '<input readonly value="' + esc(link) + '" onclick="this.select()" ' +
+                'style="width:100%;box-sizing:border-box;background:#1a1916;border:1px solid #2a2824;color:#f0ece6;padding:9px 11px;border-radius:7px;font-family:monospace;font-size:12px;margin-bottom:10px">' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+                '<a href="' + esc(mailto) + '" style="background:#3dbe7a;color:#0a0908;text-decoration:none;font-weight:700;padding:9px 16px;border-radius:8px;font-size:13px">✉️ Mandar el correo</a>' +
+                '<a href="' + esc(wa) + '" target="_blank" rel="noopener" style="background:#25d366;color:#0a0908;text-decoration:none;font-weight:700;padding:9px 16px;border-radius:8px;font-size:13px">💬 Avisar por WhatsApp</a>' +
+                '<button onclick="_copiarInv(\'' + token + '\')" style="background:transparent;border:1px solid #2a2824;color:#a8a29a;padding:9px 16px;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit">Copiar link</button>' +
+            '</div>' +
+        '</div>';
+
+    document.getElementById('invEmail').value = '';
+    document.getElementById('invNegocio').value = '';
+    document.getElementById('invNotas').value = '';
+    await cargarDatos();
+    renderInvitaciones();
+}
+
+function _copiarInv(token) {
+    var l = _invLink(token);
+    if (navigator.clipboard) navigator.clipboard.writeText(l);
+    else { var t = document.createElement('textarea'); t.value = l; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+    alert('Link copiado:\n' + l);
+}
+
+function renderInvitaciones() {
+    var lista = _data.invitaciones || [];
+    var tb = document.getElementById('tbodyInvitaciones');
+    var cnt = document.getElementById('countInvitaciones');
+    if (!tb) return;
+    var vivas = lista.filter(function (i) { return !i.usada_at && new Date(i.expira_at) > new Date(); }).length;
+    if (cnt) cnt.textContent = lista.length + (vivas ? ' · ' + vivas + ' vigente' + (vivas !== 1 ? 's' : '') : '');
+    if (!lista.length) {
+        tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#6b6862;padding:22px;font-size:13px">Todavía no has invitado a nadie.</td></tr>';
+        return;
+    }
+    tb.innerHTML = lista.map(function (i) {
+        var usada = !!i.usada_at, vencida = new Date(i.expira_at) < new Date();
+        var estado = usada ? '<span style="color:#3dbe7a">✅ Usada</span>'
+                   : vencida ? '<span style="color:#6b6862">⏳ Caducada</span>'
+                   : '<span style="color:#f5c842">📨 Vigente</span>';
+        var f = new Date(i.expira_at);
+        return '<tr>' +
+            '<td>' + esc(i.email) + (i.notas ? '<div style="font-size:11px;color:#6b6862">' + esc(i.notas) + '</div>' : '') + '</td>' +
+            '<td>' + esc(i.nombre_negocio) + '</td>' +
+            '<td>' + (i.forma_pago === 'stripe' ? '💳 Tarjeta' : '🏦 Transfer.') + '</td>' +
+            '<td>' + estado + '</td>' +
+            '<td style="font-size:12px;color:#a8a29a">' + f.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) + '</td>' +
+            '<td>' + (usada || vencida ? '' :
+                '<button onclick="_copiarInv(\'' + esc(i.token) + '\')" style="background:transparent;border:1px solid #2a2824;color:#a8a29a;padding:5px 11px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit">Copiar link</button>') +
+            '</td>' +
+        '</tr>';
+    }).join('');
+}
+
 function esc(s) {
     return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
