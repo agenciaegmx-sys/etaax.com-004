@@ -49,9 +49,12 @@
     <main class="main-content expandido" id="mainContent">
         <div class="header">
             <div class="brand">
-                <span class="brand-label">Control Financiero</span>
-                <span class="brand-title">Menú</span>
+                <span class="brand-label">Carta y precios</span>
+                <span class="brand-title">Gestión de Menú</span>
             </div>
+            <button onclick="verCarta()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);
+                    padding:9px 18px;border-radius:9px;font-family:inherit;font-size:13px;cursor:pointer;white-space:nowrap">
+                &#128214; Ver la carta</button>
         </div>
 
         <div class="wrap">
@@ -321,6 +324,93 @@ function statColor(label, val, sub, color) {
 }
 
 // ── Tabla ────────────────────────────────────────────────────
+/* El menú excluye las SUB-recetas a propósito: una salsa o una base es
+   ingrediente de otro platillo, no algo que se venda en la carta. Pero decir
+   solo "no hay recetas" cuando SÍ hay seis hace pensar que el módulo está roto
+   — que fue exactamente lo que pasó. Se dice cuántas hay y por qué no cuentan. */
+function _vacioSinRecetas() {
+    var todas = getRecetas() || [];
+    var subs = todas.filter(function (r) { return String(r.tipo || '').indexOf('sub') === 0; }).length;
+    if (subs) {
+        return 'Todavía no tienes platillos ni bebidas de carta.' +
+            '<br><span style="font-size:12px;color:var(--text-dim);line-height:1.7">' +
+            'Tienes <b>' + subs + '</b> sub-receta' + (subs !== 1 ? 's' : '') + ' (salsas, bases, prebatch): ' +
+            'ésas son ingredientes de otras recetas y no van a la carta.<br>' +
+            'Crea recetas de tipo <b>Alimentos</b> o <b>Bebidas</b> en <a href="../recetas/index.html" style="color:var(--viol)">Recetas e Insumos</a> y aparecerán aquí solas.</span>';
+    }
+    return 'Aún no hay recetas de alimentos o bebidas.' +
+        '<br><span style="font-size:12px;color:var(--text-dim)">Crea tus recetas desde el módulo ' +
+        '<a href="../recetas/index.html" style="color:var(--viol)">Recetas e Insumos</a> y aparecerán aquí automáticamente.</span>';
+}
+
+/* == LA CARTA, COMO LA VE EL CLIENTE ====================================
+   La tabla de arriba es para administrar -food cost, utilidad, estado-; esto es
+   para VER el menu: agrupado, con su precio, sin numeros internos. Es la misma
+   informacion leida de otra manera, y sirve para detectar de un vistazo lo que
+   en la tabla se pierde: un grupo con un solo platillo, un precio fuera de
+   lugar, algo sin nombre presentable.
+
+   Los platillos SIN PRECIO salen marcados en vez de esconderse: un platillo sin
+   precio en la carta es justo lo que hay que ver, no lo que hay que ocultar. */
+function verCarta() {
+    var lista = getRecetas().filter(function (r) {
+        return (r.tipo === 'alimentos' || r.tipo === 'bebidas') && r.status !== 'inactiva';
+    });
+    if (!lista.length) { alert('Todavia no hay platillos ni bebidas activos en la carta.'); return; }
+
+    /* Agrupado por GRUPO (entradas, fuertes, postres...). Lo que no tiene grupo
+       se junta al final bajo "Otros" en vez de repartirse: un encabezado vacio
+       por platillo haria la carta ilegible. */
+    var grupos = {}, orden = [];
+    lista.forEach(function (r) {
+        var g = (r.grupo || '').trim() || '~~otros';
+        if (!grupos[g]) { grupos[g] = []; orden.push(g); }
+        grupos[g].push(r);
+    });
+    orden.sort(function (a, b) { return a.localeCompare(b, 'es'); });
+
+    var cuerpo = orden.map(function (g) {
+        var titulo = g === '~~otros' ? 'Otros' : g;
+        var items = grupos[g].slice().sort(function (a, b) {
+            return (a.nombre || '').localeCompare(b.nombre || '', 'es');
+        }).map(function (r) {
+            var p = parseFloat(r.precioEnCarta) || 0;
+            var precio = p > 0
+                ? '$' + p.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                : '<span style="color:#c0392b;font-size:9.5px;letter-spacing:1px;text-transform:uppercase">sin precio</span>';
+            return '<div class="ct-item">' +
+                '<span class="ct-nom">' + esc(r.nombre || '-') +
+                    (r.tipo === 'bebidas' ? '<span class="ct-tipo">bebida</span>' : '') + '</span>' +
+                '<span class="ct-pts"></span>' +
+                '<span class="ct-precio">' + precio + '</span>' +
+            '</div>';
+        }).join('');
+        return '<div class="ct-grupo"><div class="ct-gtit">' + esc(titulo) + '</div>' + items + '</div>';
+    }).join('');
+
+    var html = etaaxReporteDoc({
+        titulo: 'Carta',
+        subtitulo: 'Carta vigente - ' + lista.length + ' platillo' + (lista.length !== 1 ? 's' : ''),
+        pie: 'Carta vigente',
+        encabezadoUnaVez: true,   // una carta se lee como documento, no como catalogo
+        cuerpo:
+            '<style>' +
+            '.ct-grupo{break-inside:avoid;page-break-inside:avoid;margin-bottom:22px}' +
+            '.ct-gtit{font-family:"Bebas Neue",Arial,sans-serif;font-size:17px;letter-spacing:2.5px;' +
+                 'color:#1a1916;border-bottom:2px solid #3dbe7a;padding-bottom:4px;margin-bottom:10px;text-transform:uppercase}' +
+            /* Los puntos guia entre el nombre y el precio: es lo que hace que una
+               lista de precios se lea como carta y no como tabla. */
+            '.ct-item{display:flex;align-items:baseline;gap:6px;padding:5px 0;font-size:12.5px}' +
+            '.ct-nom{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70%}' +
+            '.ct-tipo{font-size:8px;letter-spacing:1px;text-transform:uppercase;color:#999;margin-left:7px}' +
+            '.ct-pts{flex:1;border-bottom:1px dotted #bbb;transform:translateY(-3px)}' +
+            '.ct-precio{white-space:nowrap;font-weight:600;font-variant-numeric:tabular-nums}' +
+            '@media print{@page{size:letter portrait;margin:0.5cm}}' +
+            '</style>' + cuerpo
+    });
+    if (typeof etaaxVerReporte === 'function') etaaxVerReporte(html);
+}
+
 function renderMenu() {
     var q = (document.getElementById('buscarMenu').value || '').toLowerCase().trim();
     var recetasAll = getRecetas().filter(function(r) {
@@ -343,7 +433,7 @@ function renderMenu() {
             '<div style="font-size:36px;margin-bottom:12px">📋</div>' +
             '<div style="font-size:14px">' +
             (recetasAll.length === 0
-                ? 'Aún no hay recetas de alimentos o bebidas.<br><span style="font-size:12px;color:var(--text-dim)">Crea tus recetas desde el módulo <strong>Recetas e Insumos</strong> y aparecerán aquí automáticamente.</span>'
+                ? _vacioSinRecetas()
                 : 'Sin resultados — ajusta los filtros') +
             '</div></td></tr>';
         return;
@@ -404,6 +494,7 @@ document.addEventListener('DOMContentLoaded', function() { renderMenu(); _sbInit
 <script src="/etaax-db.js"></script>
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
+<script src="/reporte-marca.js"></script><!-- marca de la carta impresa -->
 <script src="/nav-pref.js"></script>
 <script src="/modal-drag.js"></script>
 <script src="/modal-dock.js"></script>
