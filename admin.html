@@ -2674,6 +2674,24 @@ async function generarInvitacion() {
     renderInvitaciones();
 }
 
+/* Cancelar = BORRAR el renglón. El link deja de servir en el acto: la RPC no
+   encuentra el token y responde "invalida".
+
+   Se borra en vez de marcarse porque una invitación que nunca se usó no es
+   historia de nada — y marcarla como "usada" sería mentir en la lista. Las que
+   SÍ se usaron no se pueden cancelar: ésas ya son el registro de un alta. */
+async function cancelarInvitacion(token) {
+    var inv = (_data.invitaciones || []).find(function (i) { return i.token === token; });
+    if (!inv) return;
+    if (inv.usada_at) { alert('Esa invitación ya se usó: el negocio existe. Cancélala desde Negocios, no desde aquí.'); return; }
+    if (!confirm('¿Cancelar la invitación de ' + inv.email + '?\n\nEl link deja de funcionar de inmediato. Si ya se lo mandaste, avísale.')) return;
+
+    var r = await _supabase.from('invitaciones').delete().eq('token', token);
+    if (r.error) { alert('No se pudo cancelar: ' + r.error.message); return; }
+    await cargarDatos();
+    renderInvitaciones();
+}
+
 function _copiarInv(token) {
     var l = _invLink(token);
     if (navigator.clipboard) navigator.clipboard.writeText(l);
@@ -2741,8 +2759,13 @@ function renderInvitaciones() {
             '<td>' + (i.forma_pago === 'stripe' ? '💳 Tarjeta' : '🏦 Transfer.') + '</td>' +
             '<td>' + estado + '</td>' +
             '<td style="font-size:12px;color:#a8a29a">' + f.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) + '</td>' +
-            '<td>' + (usada || vencida ? '' :
-                '<button onclick="_copiarInv(\'' + esc(i.token) + '\')" style="background:transparent;border:1px solid #2a2824;color:#a8a29a;padding:5px 11px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit">Copiar link</button>') +
+            '<td style="white-space:nowrap">' +
+                (usada ? '' :
+                    (vencida ? '' :
+                        '<button onclick="_copiarInv(\'' + esc(i.token) + '\')" style="background:transparent;border:1px solid #2a2824;color:#a8a29a;padding:5px 11px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit">Copiar link</button> ') +
+                    /* Cancelar también en las caducadas: ya no sirven y solo
+                       ensucian la lista mientras se hacen pruebas. */
+                    '<button onclick="cancelarInvitacion(\'' + esc(i.token) + '\')" title="El link deja de servir" style="background:transparent;border:1px solid rgba(224,90,58,.5);color:#e05a3a;padding:5px 11px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit">Cancelar</button>') +
             '</td>' +
         '</tr>';
     }).join('');

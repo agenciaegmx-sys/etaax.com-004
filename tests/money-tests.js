@@ -2525,6 +2525,11 @@ console.log('\n══ SUITE S · Invitaciones de alta (admin.html) ══');
        mandarle al cliente un link que no va a funcionar. */
     test('solo la vigente ofrece copiar el link', () =>
         eq((tabla.match(/_copiarInv/g) || []).length, 1, 'botones'));
+    /* Cancelar sí aparece en la vigente Y en la caducada —las dos se pueden
+       limpiar de la lista—, pero NUNCA en la usada: ésa ya es el registro de un
+       alta que existe, y "cancelarla" no desharía el negocio. */
+    test('cancelar aparece en la vigente y en la caducada, no en la usada', () =>
+        eq((tabla.match(/cancelarInvitacion/g) || []).length, 2, 'botones'));
     test('el contador dice cuántas siguen vivas', () =>
         eq(A.document.getElementById('countInvitaciones').textContent, '3 · 1 vigente', 'contador'));
 
