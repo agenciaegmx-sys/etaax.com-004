@@ -2528,6 +2528,48 @@ console.log('\n══ SUITE S · Invitaciones de alta (admin.html) ══');
     test('el contador dice cuántas siguen vivas', () =>
         eq(A.document.getElementById('countInvitaciones').textContent, '3 · 1 vigente', 'contador'));
 
+    /* ── AVISO DE NEGOCIOS ESPERANDO ACTIVACIÓN ──
+       Un negocio dado de alta por invitación nace bloqueado. Si nadie avisa, el
+       cliente espera y ETAAX no se entera. */
+    setVar(A, '_data', {
+        invitaciones: [],
+        negocios: [
+            { id: 'n1', datos: { nombre: 'Tata Mezcalería' } },
+            { id: 'n2', datos: { nombre: 'Mammut Pizza' } },
+            { id: 'n3', datos: { nombre: 'Ya Activo' } },
+        ],
+        suscripciones: {
+            n1: { estado: 'pendiente' },
+            n3: { estado: 'activa' },
+            // n2 NO tiene fila: recién creado, todavía sin suscripción
+        },
+    });
+    A.renderAvisoPendientes();
+    test('cuenta los negocios en pendiente', () =>
+        eq(A._negociosPendientes().length, 2, 'pendientes'));
+    /* Un negocio SIN fila de suscripción también está esperando: es el caso del
+       recién creado, y es justo el que no hay que perder de vista. */
+    test('un negocio sin suscripción cuenta como pendiente', () =>
+        eq(A._negociosPendientes().some(n => n.id === 'n2'), true, 'pendientes'));
+    test('el que ya está activo no molesta', () =>
+        eq(A._negociosPendientes().some(n => n.id === 'n3'), false, 'pendientes'));
+    test('el aviso nombra a los que esperan', () => {
+        const h = A.document.getElementById('avisoPendientes').innerHTML;
+        return eq(h.indexOf('Tata Mezcalería') > -1 && h.indexOf('Mammut Pizza') > -1, true, 'aviso');
+    });
+    /* String(): en el navegador textContent siempre es texto, pero el DOM de
+       prueba guarda lo que se le dé tal cual. Comparar contra '2' probaría el
+       arnés, no la app. */
+    test('y la pestaña lleva el contador', () =>
+        eq(String(A.document.getElementById('tabNegBadge').textContent), '2', 'badge'));
+
+    /* Sin pendientes, el aviso se calla: un banner permanente deja de leerse. */
+    setVar(A, '_data', { invitaciones: [], negocios: [{ id: 'n3', datos: { nombre: 'Ya Activo' } }],
+                         suscripciones: { n3: { estado: 'activa' } } });
+    A.renderAvisoPendientes();
+    test('sin pendientes, el aviso se esconde', () =>
+        eq(A.document.getElementById('avisoPendientes').style.display, 'none', 'aviso'));
+
     /* Una lista vacía no puede verse como un error. */
     setVar(A, '_data', { invitaciones: [] });
     A.renderInvitaciones();

@@ -339,7 +339,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   <!-- TABS -->
   <div class="tabs">
     <button class="tab active" onclick="switchTab('usuarios')">👥 Usuarios</button>
-    <button class="tab" onclick="switchTab('negocios')">🏪 Negocios</button>
+    <button class="tab" onclick="switchTab('negocios')">🏪 Negocios<span id="tabNegBadge" style="display:none;margin-left:6px;background:#e0a93d;color:#1a1916;border-radius:20px;padding:1px 7px;font-size:10px;font-weight:700"></span></button>
     <button class="tab" onclick="switchTab('invitaciones')">✉️ Invitaciones</button>
     <button class="tab" onclick="switchTab('solicitudes')">📨 Solicitudes<span id="tabSolBadge" style="display:none;margin-left:6px;background:#e0a93d;color:#1a1916;border-radius:20px;padding:1px 7px;font-size:10px;font-weight:700"></span></button>
     <button class="tab" onclick="switchTab('staff')">🎯 Staff global</button>
@@ -406,6 +406,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
        camino de alta: un link a nombre de UN correo, que caduca y se usa una
        sola vez. -->
   <div id="tab-invitaciones" class="tab-panel">
+    <div id="avisoPendientes" style="display:none;margin-bottom:16px"></div>
     <div class="admin-section">
       <div class="section-head">
         <div class="section-title">Invitar a un cliente nuevo</div>
@@ -824,6 +825,7 @@ async function cargarDatos() {
     renderStaff();
     renderProveedores();
     renderInvitaciones();
+    renderAvisoPendientes();
     renderSolicitudes();
 }
 
@@ -2677,6 +2679,43 @@ function _copiarInv(token) {
     if (navigator.clipboard) navigator.clipboard.writeText(l);
     else { var t = document.createElement('textarea'); t.value = l; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
     alert('Link copiado:\n' + l);
+}
+
+/* ══ NEGOCIOS ESPERANDO ACTIVACIÓN ══
+   Un negocio que se dio de alta por invitación nace en `pendiente` y no opera
+   hasta que alguien lo activa. Con tarjeta lo desbloquea Stripe solo; con
+   transferencia lo tiene que hacer ETAAX — y si nadie avisa, el cliente se
+   queda esperando sin que nos enteremos. Este contador es ese aviso. */
+function _negociosPendientes() {
+    return (_data.negocios || []).filter(function (n) {
+        var sus = (_data.suscripciones || {})[n.id];
+        return !sus || sus.estado === 'pendiente';
+    });
+}
+function renderAvisoPendientes() {
+    var pend = _negociosPendientes();
+    var b = document.getElementById('tabNegBadge');
+    if (b) {
+        b.textContent = pend.length;
+        b.style.display = pend.length ? '' : 'none';
+        b.title = pend.length + ' negocio(s) esperando que los actives';
+    }
+    var caja = document.getElementById('avisoPendientes');
+    if (!caja) return;
+    if (!pend.length) { caja.style.display = 'none'; return; }
+    caja.style.display = '';
+    caja.innerHTML =
+        '<div style="background:rgba(224,169,61,.1);border:1px solid rgba(224,169,61,.45);border-radius:10px;padding:13px 16px">' +
+            '<div style="font-size:13.5px;color:#e0a93d;font-weight:700;margin-bottom:5px">' +
+                '⏳ ' + pend.length + (pend.length === 1 ? ' negocio espera activación' : ' negocios esperan activación') + '</div>' +
+            '<div style="font-size:12.5px;color:#a8a29a;line-height:1.6">' +
+                pend.map(function (n) {
+                    return esc((n.datos && n.datos.nombre) || n.id);
+                }).join(' · ') +
+            '</div>' +
+            '<div style="font-size:11.5px;color:#6b6862;margin-top:7px">' +
+                'Los de tarjeta se activan solos al pagar. Los de transferencia los activas tú en la pestaña Negocios.</div>' +
+        '</div>';
 }
 
 function renderInvitaciones() {

@@ -147,22 +147,69 @@ async function activar(){
 
     /* supabase-js se traga el cuerpo del error y solo dice "non-2xx status".
        El motivo real viene en error.context, y sin él el cliente vería
-       "algo salió mal" cuando el servidor le está diciendo exactamente qué. */
+       "algo salió mal" cuando el servidor le está diciendo exactamente qué.
+       Y si NI SIQUIERA hay cuerpo —la función no está desplegada, no hay red—
+       se dice el código: quedarse mudo es lo peor que puede hacer un botón. */
     if (r.error){
-        var detalle = '';
+        var detalle = '', estado = 0;
+        try { estado = r.error.context.status || 0; } catch (e) {}
         try { detalle = (await r.error.context.json()).error || ''; } catch (e) {}
         btn.disabled = false; btn.textContent = 'Activar mi cuenta';
         msg.className = 'al-msg al-err';
-        msg.textContent = detalle || 'No se pudo crear tu cuenta. Inténtalo de nuevo o escríbenos.';
+        if (!detalle){
+            detalle = estado === 404
+                ? 'El servicio de alta no está disponible en este momento. Avísanos, por favor.'
+                : estado
+                    ? 'No se pudo crear tu cuenta (error ' + estado + '). Inténtalo de nuevo o escríbenos.'
+                    : 'No se pudo conectar. Revisa tu internet e inténtalo de nuevo.';
+        }
+        msg.textContent = detalle;
+        // Para ti, en la consola: el detalle técnico completo.
+        try { console.error('[alta] fallo la activación · estado', estado, r.error); } catch (e) {}
         return;
     }
 
-    /* Con la cuenta ya creada se inicia sesión sola: pedirle que teclee otra vez
-       lo que acaba de escribir es un paso de más justo cuando ya funcionó. */
-    msg.className = 'al-msg al-ok';
-    msg.textContent = '¡Listo! Entrando…';
-    try { await _supabase.auth.signInWithPassword({ email: _inv.email, password: pwd }); } catch (e) {}
-    setTimeout(function(){ location.href = '/hub.html'; }, 900);
+    _pintarListo(pwd);
+}
+
+/* Qué ve al final depende de cómo va a pagar, porque son dos esperas distintas:
+
+   · TARJETA — la puede resolver él mismo ahora mismo. Se le inicia sesión sola
+     (acaba de teclear la contraseña, pedírsela otra vez es un paso de más) y se
+     le lleva al hub, donde está el botón de pago. Es el camino que cobra sin
+     que ETAAX tenga que hacer nada.
+   · TRANSFERENCIA / EFECTIVO — no hay nada que él pueda hacer todavía: falta
+     que llegue el dinero y que ETAAX active. Dejarlo entrar para que se
+     estrelle con una pantalla de "suscripción pendiente" se siente como un
+     error suyo. Mejor decirle la verdad: ya quedó, estamos activando. */
+function _pintarListo(pwd){
+    var esTarjeta = _inv.forma_pago === 'stripe';
+    document.getElementById('alCuerpo').innerHTML =
+        '<div class="al-centro">' +
+            '<div style="font-size:46px;margin-bottom:10px">' + (esTarjeta ? '🎉' : '📋') + '</div>' +
+            '<div class="al-tit">' + (esTarjeta ? 'Tu cuenta está lista' : 'Ya quedaste registrado') + '</div>' +
+            '<div class="al-sub">' +
+                (esTarjeta
+                    ? 'Te llevamos a ETAAX para que actives tu suscripción y empieces a usar <b>' + esc(_inv.nombre_negocio) + '</b>.'
+                    : 'Estamos preparando <b>' + esc(_inv.nombre_negocio) + '</b>. En cuanto confirmemos tu pago activamos el negocio y te avisamos — normalmente el mismo día.') +
+            '</div>' +
+            (esTarjeta
+                ? '<div class="al-msg" style="color:var(--text-dim)">Entrando…</div>'
+                : '<div class="al-neg" style="margin-top:22px;text-align:left">' +
+                      '<div class="l">Tu acceso</div>' +
+                      '<div class="v" style="font-size:14px">' + esc(_inv.email) + '</div>' +
+                      '<div class="al-hint" style="margin-top:6px">Con ese correo y la contraseña que acabas de crear.</div>' +
+                  '</div>' +
+                  '<a href="/hub.html" class="al-btn" style="display:block;text-decoration:none;text-align:center;box-sizing:border-box">Ir a iniciar sesión</a>') +
+        '</div>';
+
+    if (esTarjeta){
+        /* Solo aquí se inicia sesión sola: es el único caso donde entrar ahora
+           mismo le sirve de algo. */
+        _supabase.auth.signInWithPassword({ email: _inv.email, password: pwd })
+            .catch(function(){ /* si falla, el hub le pide la contraseña */ })
+            .then(function(){ setTimeout(function(){ location.href = '/hub.html'; }, 1200); });
+    }
 }
 
 _cargar();
