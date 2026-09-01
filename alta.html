@@ -157,11 +157,13 @@ async function activar(){
         btn.disabled = false; btn.textContent = 'Activar mi cuenta';
         msg.className = 'al-msg al-err';
         if (!detalle){
-            detalle = estado === 404
-                ? 'El servicio de alta no está disponible en este momento. Avísanos, por favor.'
-                : estado
-                    ? 'No se pudo crear tu cuenta (error ' + estado + '). Inténtalo de nuevo o escríbenos.'
-                    : 'No se pudo conectar. Revisa tu internet e inténtalo de nuevo.';
+            /* Sin código de estado NO se puede saber si fue la red o el
+               servidor: cuando la función no existe, el navegador bloquea la
+               respuesta por CORS y el error llega sin status. Decir "revisa tu
+               internet" ahí manda al cliente a buscar un problema que no tiene. */
+            detalle = estado
+                ? 'No se pudo crear tu cuenta (error ' + estado + '). Inténtalo de nuevo o escríbenos.'
+                : 'No se pudo completar el alta. Revisa tu conexión; si sigue igual, avísanos y lo resolvemos.';
         }
         msg.textContent = detalle;
         // Para ti, en la consola: el detalle técnico completo.
