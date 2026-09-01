@@ -2644,6 +2644,22 @@ console.log('\n══ SUITE U · Nómina por sucursal (financiero/gastos-globale
     test('los dados de baja no entran en ninguna', () =>
         eq(enSuc('sOx').indexOf('Exempl'), -1, 'nómina'));
 
+    /* ── ¿DE DÓNDE SALE EL SUELDO? ──
+       Un renglón en el mínimo del negocio se ve idéntico a uno capturado a
+       propósito, y eso fue lo que hizo pensar que la tabla estaba congelada. */
+    setVar(G, '_storage_np', null);
+    G.NominaParams = { get: function(){ return { salarioDiarioDefault: 315.04 }; } };
+    test('sin sueldo en su ficha, el sueldo viene del mínimo', () =>
+        eq(G._sueldoEsDelMinimoGG({ nombre: 'X' }), true, 'origen'));
+    test('con salario base capturado, NO es el mínimo', () =>
+        eq(G._sueldoEsDelMinimoGG({ salarioBase: 12000, periodicidad: 'mensual' }), false, 'origen'));
+    test('con sueldo diario capturado, tampoco', () =>
+        eq(G._sueldoEsDelMinimoGG({ esquemaSueldo: 'diario', sueldoDiario: 400 }), false, 'origen'));
+    /* Si el negocio no definió mínimo, no hay mínimo del cual venir. */
+    G.NominaParams = { get: function(){ return { salarioDiarioDefault: 0 }; } };
+    test('sin mínimo definido, no se marca nada', () =>
+        eq(G._sueldoEsDelMinimoGG({ nombre: 'X' }), false, 'origen'));
+
     /* _loadStaff NO se filtra, y es a propósito: alimenta la clasificación de
        gastos, que reconoce cuáles son de nómina por el nombre del colaborador.
        Un gasto capturado en una sucursal puede nombrar a alguien de otra;

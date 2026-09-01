@@ -663,7 +663,40 @@ async function _sbInit() {
     if (window.NominaParams) { try { await NominaParams.sync(negId); } catch(e){} }
     try { await _migrarNominasManuales(); } catch(e){ if(window.console) console.warn('Migración de nóminas omitida:', e); }
     renderAll();
+    _escucharStaff(negId);
 }
+
+/* ══ EL SUELDO SE EDITA EN OTRA PANTALLA ═════════════════════════════════
+   El sueldo de un colaborador se captura en el Catálogo de Staff, no aquí. Esta
+   página cargaba el catálogo UNA vez al abrir y ya: se editaba el sueldo allá,
+   se volvía acá, y seguía el número viejo. Parecía que la nómina estaba
+   "congelada" cuando en realidad se estaba leyendo una foto vieja.
+
+   Dos redes, porque una sola no basta:
+   · realtime — el cambio llega solo, aunque la pestaña esté abierta al lado.
+   · al volver a la pestaña — si realtime no está disponible (tabla sin publicar,
+     sesión de colaborador, red intermitente), volver a esta ventana relee. Es
+     justo el gesto que hace quien acaba de editar en la otra pantalla. */
+var _staffRtGG = null;
+function _escucharStaff(negId){
+    if (_staffRtGG || typeof sbRealtime !== 'function') return;
+    _staffRtGG = sbRealtime('staff', negId, function(){ _recargarStaff(negId); });
+}
+async function _recargarStaff(negId){
+    negId = negId || getNegocioActivo(); if (!negId) return;
+    try {
+        var r = await _supabase.from('staff').select('datos').eq('negocio_id', negId);
+        if (r.error) return;
+        var lista = (r.data||[]).map(function(x){ return x.datos; });
+        if (!lista.length) return;             // vacío por RLS: no borrar lo que hay
+        _cacheGG_Staff = lista;
+        try { localStorage.setItem('etaax_'+negId+'_staff', JSON.stringify(lista)); } catch(e){}
+        renderAll();
+    } catch(e){}
+}
+document.addEventListener('visibilitychange', function(){
+    if (document.visibilityState === 'visible') _recargarStaff();
+});
 
 /* ── Migración automática: colaboradores capturados manualmente en nóminas
    (sin staffId) se crean en el catálogo de staff y se ligan. Idempotente:
@@ -1252,6 +1285,15 @@ function _diasDelMes(mes){
 }
 /* Costo mensual de un colaborador para el resumen financiero:
    esquema 'diario' → sueldo diario × días reales del mes; 'periodo' → mensualizado. */
+/* ¿Este sueldo sale del MÍNIMO del negocio y no de su ficha? Mismo criterio que
+   diario.html (_sueldoEsDelMinimo). Sin decirlo, un renglón en el mínimo se ve
+   idéntico a uno capturado a propósito — y eso fue exactamente lo que hizo
+   pensar que la tabla estaba congelada. */
+function _sueldoEsDelMinimoGG(s){
+    if(s.esquemaSueldo==='diario' && n(s.sueldoDiario)>0) return false;
+    if(n(s.salarioBase)>0) return false;
+    return (window.NominaParams ? n(NominaParams.get(getNegocioActivo()).salarioDiarioDefault) : 0) > 0;
+}
 function _baseMensualStaff(s,mes){
     if(s.esquemaSueldo==='diario' && n(s.sueldoDiario)>0) return n(s.sueldoDiario)*_diasDelMes(mes);
     if(n(s.salarioBase)>0) return _mensualizar(s.salarioBase,s.periodicidad);
@@ -1387,11 +1429,17 @@ function renderNominas(){
         var tot=n(p.base)+n(p.bonos)+n(p.imss)+n(p.prima);
         totBase+=n(p.base); totBonos+=n(p.bonos); totImss+=n(p.imss); totPrima+=n(p.prima);
         var autoBadge=p.staffId?' <span style="font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--green);background:rgba(61,190,122,.1);border:1px solid rgba(61,190,122,.25);border-radius:10px;padding:1px 7px;vertical-align:middle">Catálogo</span>':'';
+        /* El aviso va junto al nombre, no en el total: lo que hay que corregir
+           es la ficha del colaborador, no este renglón. */
+        var _sMin = p.staffId && _cacheGG_Staff ? (_cacheGG_Staff.find(function(x){return x.id===p.staffId;})||null) : null;
+        var minBadge = (_sMin && _sueldoEsDelMinimoGG(_sMin))
+            ? ' <span title="No tiene sueldo en su ficha: se está usando el mínimo del negocio" style="font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--accent);background:rgba(245,200,66,.12);border:1px solid rgba(245,200,66,.35);border-radius:4px;padding:1px 5px">mínimo</span>'
+            : '';
         var acc=p._auto
             ? '<button class="btn-row" data-edit-staff="'+_esc(p.staffId)+'" title="Capturar bonos / IMSS / prima del mes">✏️</button>'
             : '<button class="btn-row" data-edit-nom="'+p.id+'">✏️</button> <button class="btn-row del" data-del-nom="'+p.id+'">🗑️</button>';
         return'<tr>'
-            +'<td style="font-weight:500">'+_esc(p.nombre)+autoBadge+'</td>'
+            +'<td style="font-weight:500">'+_esc(p.nombre)+autoBadge+minBadge+'</td>'
             +'<td class="ar">'+fmtM(p.base)+'</td>'
             +'<td class="ar" style="color:var(--accent)">'+fmtM(p.bonos)+'</td>'
             +'<td class="ar" style="color:var(--text-muted)">'+fmtM(p.imss)+'</td>'
