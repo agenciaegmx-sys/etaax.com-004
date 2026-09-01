@@ -27,7 +27,9 @@
       style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
       font-src 'self' https://fonts.gstatic.com;
       connect-src 'self' https://byjuocnkyuxxudondciz.supabase.co wss://byjuocnkyuxxudondciz.supabase.co;
-      img-src 'self' data: blob: https://byjuocnkyuxxudondciz.supabase.co;
+      # i.ytimg.com: la miniatura de un video de YouTube se saca de su id, sin
+      # pedirle al usuario que suba una imagen para algo que YouTube ya tiene.
+      img-src 'self' data: blob: https://byjuocnkyuxxudondciz.supabase.co https://i.ytimg.com;
       object-src 'none';
       # blob: es para la VISTA PREVIA del expediente digital (INE, contratos): el
       # PDF se maqueta en un iframe desde un blob local, nunca desde un servidor

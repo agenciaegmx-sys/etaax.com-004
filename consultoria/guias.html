@@ -26,6 +26,11 @@
         .gu-sec-t { font-family:'Bebas Neue',sans-serif;font-size:21px;letter-spacing:1.6px;color:var(--text);line-height:1; }
         .gu-sec-n { font-size:10.5px;color:var(--text-dim); }
         .gu-sec-acc { margin-left:auto;display:flex;gap:5px; }
+        /* Portada de la guía: 16:9 pegada al borde superior de la tarjeta, como
+           una miniatura de video. Sin portada la tarjeta se ve igual que antes. */
+        .gu-portada { width:calc(100% + 34px);margin:-17px -17px 12px;aspect-ratio:16/9;
+            border-radius:13px 13px 0 0;background-size:cover;background-position:center;
+            background-color:var(--surface2); }
         .gu-mini { background:transparent;border:1px solid var(--border);color:var(--text-dim);border-radius:6px;padding:3px 9px;font-family:inherit;font-size:10.5px;cursor:pointer; }
         .gu-mini:hover { border-color:var(--green);color:var(--green); }
 

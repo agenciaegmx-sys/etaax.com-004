@@ -118,6 +118,13 @@
         var oculta = g.activa === false;
         return '<div class="gu-card" onclick="_verGuia(\'' + e(g.id) + '\')"' +
             (oculta ? ' style="opacity:.45"' : '') + '>' +
+            /* La miniatura va ARRIBA de todo y en 16:9, como una tarjeta de
+               video: es lo que hace que treinta guías se distingan de un
+               vistazo. Sin miniatura la tarjeta se ve igual que siempre, así
+               que ninguna guía vieja cambia hasta que se le ponga una. */
+            (g.miniatura
+                ? '<div class="gu-portada" style="background-image:url(\'' + e(g.miniatura) + '\')"></div>'
+                : '') +
             '<div class="gu-card-top"><span class="gu-ico">' + (ICONO[g.tipo] || '📄') + '</span>' +
                 '<span class="gu-tag">' + e(ETIQUETA[g.tipo] || g.tipo) +
                     (g.audiencia === 'operativa' ? ' · operativa' : g.audiencia === 'administrativa' ? ' · admin' : '') +
@@ -257,10 +264,8 @@
         $('gMsg').textContent = '';
         $('guiaModalT').textContent = 'Editar información';
         $('gGuardar').textContent = 'Guardar cambios';
-        $('gFuente').innerHTML = '<div style="font-size:11.5px;color:var(--text-dim);line-height:1.6;' +
-            'padding:9px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">' +
-            (ICONO[g.tipo] || '📄') + ' El archivo no se cambia desde aquí.<br>' +
-            'Para reemplazarlo, publica una guía nueva y oculta esta.</div>';
+        $('gFuente').innerHTML = _bloqueFuente(g.tipo || 'pdf', g);
+        _pintarMini();
         $('ovGuia').classList.add('on');
         setTimeout(function () { $('gTitulo').focus(); }, 40);
     };
@@ -279,69 +284,159 @@
         }).join('');
     }
 
+    /* El bloque de la FUENTE (archivo o enlace) + la MINIATURA.
+       Al editar, el archivo es OPCIONAL: dejarlo vacío conserva el que ya está.
+       Antes esto no se podía y la instrucción era "publica una guía nueva y
+       oculta esta", que deja basura acumulada y rompe el link que ya circuló. */
+    function _bloqueFuente(t, g) {
+        var edit = !!g;
+        var html;
+        if (t === 'pdf') {
+            html = '<label>Archivo PDF' + (edit ? ' <span style="color:var(--text-dim);text-transform:none;letter-spacing:0">· opcional</span>' : '') + '</label>' +
+                '<input id="gArchivo" type="file" accept="application/pdf">' +
+                (edit ? '<div style="font-size:11.5px;color:var(--text-dim);margin-top:5px;line-height:1.5">' +
+                        'Deja esto vacío para conservar el PDF actual. Si eliges uno nuevo, <b>reemplaza al anterior</b> y el link que ya circuló sigue funcionando.</div>' : '');
+        } else {
+            html = '<label>' + (t === 'video' ? 'Link de YouTube' : 'Enlace') + '</label>' +
+                '<input id="gUrl" value="' + (edit ? e(g.url || '') : '') + '" placeholder="' +
+                (t === 'video' ? 'https://youtu.be/…' : 'https://…') + '"' +
+                (t === 'video' ? ' oninput="_previoYT()"' : '') + '>';
+        }
+        /* La miniatura hace que treinta guías se distingan de un vistazo. En un
+           video de YouTube se saca sola del id: pedir que suban una imagen de
+           algo que YouTube ya tiene sería trabajo de a gratis. */
+        html += '<div style="margin-top:14px"><label>Miniatura ' +
+            '<span style="color:var(--text-dim);text-transform:none;letter-spacing:0">· opcional</span></label>' +
+            '<div style="display:flex;gap:12px;align-items:flex-start">' +
+              '<div id="gMiniPrev" style="width:96px;height:64px;flex-shrink:0;border-radius:8px;border:1px solid var(--border);' +
+                   'background:var(--surface2) center/cover no-repeat;display:flex;align-items:center;justify-content:center;' +
+                   'font-size:22px;color:var(--text-dim)">' + (ICONO[t] || '📄') + '</div>' +
+              '<div style="flex:1;min-width:0">' +
+                '<input id="gMini" type="file" accept="image/*" onchange="_previoMini(this)">' +
+                '<div style="font-size:11.5px;color:var(--text-dim);margin-top:5px;line-height:1.5">' +
+                  (t === 'video'
+                    ? 'Si es de YouTube se toma sola del video. Sube una solo si quieres otra.'
+                    : 'Una imagen de portada para reconocer la guía de un vistazo.') +
+                '</div>' +
+                '<button type="button" id="gMiniQuitar" onclick="_quitarMini()" style="display:none;margin-top:7px;background:transparent;' +
+                  'border:1px solid var(--border);color:var(--text-muted);border-radius:7px;padding:5px 12px;font-family:inherit;font-size:12px;cursor:pointer">Quitar miniatura</button>' +
+              '</div>' +
+            '</div><input type="hidden" id="gMiniUrl" value="' + (edit ? e(g.miniatura || '') : '') + '"></div>';
+        return html;
+    }
+
     window._cambiarTipoGuia = function () {
-        var t = $('gTipo').value;
-        $('gFuente').innerHTML = t === 'pdf'
-            ? '<label>Archivo PDF</label><input id="gArchivo" type="file" accept="application/pdf">'
-            : '<label>' + (t === 'video' ? 'Link de YouTube' : 'Enlace') + '</label>' +
-              '<input id="gUrl" placeholder="' + (t === 'video' ? 'https://youtu.be/…' : 'https://…') + '">';
+        $('gFuente').innerHTML = _bloqueFuente($('gTipo').value, _editando ? _guias.find(function (x) { return x.id === _editando; }) : null);
+        _pintarMini();
     };
 
+    function _pintarMini() {
+        var u = ($('gMiniUrl') || {}).value || '';
+        var pv = $('gMiniPrev'), btn = $('gMiniQuitar');
+        if (!pv) return;
+        pv.style.backgroundImage = u ? 'url("' + u.replace(/"/g, '%22') + '")' : '';
+        pv.textContent = u ? '' : (ICONO[$('gTipo').value] || '📄');
+        if (btn) btn.style.display = u ? '' : 'none';
+    }
+    /* Un video de YouTube ya tiene portada: se arma con su id. */
+    window._previoYT = function () {
+        var id = ytId(($('gUrl').value || '').trim());
+        if (!id) return;
+        if (!$('gMiniUrl').value || /i\.ytimg\.com/.test($('gMiniUrl').value)) {
+            $('gMiniUrl').value = 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg';
+            _pintarMini();
+        }
+    };
+    window._previoMini = function (input) {
+        var f = input.files && input.files[0];
+        if (!f) return;
+        /* Se muestra al instante desde el archivo local; a Storage sube al
+           guardar. Así no queda una imagen huérfana si se cancela el modal. */
+        var fr = new FileReader();
+        fr.onload = function () {
+            $('gMiniPrev').style.backgroundImage = 'url("' + fr.result + '")';
+            $('gMiniPrev').textContent = '';
+            $('gMiniQuitar').style.display = '';
+        };
+        fr.readAsDataURL(f);
+    };
+    window._quitarMini = function () {
+        $('gMiniUrl').value = '';
+        if ($('gMini')) $('gMini').value = '';
+        _pintarMini();
+    };
+
+    /* Guardar una guía, nueva o existente.
+
+       EL ORDEN IMPORTA y antes estaba al revés: la rama de edición devolvía
+       ANTES de llegar a las subidas, así que reemplazar el PDF nunca se
+       ejecutaba. Aquí se sube primero TODO lo que puede fallar —miniatura y
+       archivo— y solo con eso resuelto se toca la base. Si algo se cae a medias,
+       la guía se queda como estaba en vez de apuntar a un archivo inexistente. */
     window._guardarGuia = async function () {
         var btn = $('gGuardar'), msg = $('gMsg');
         var titulo = ($('gTitulo').value || '').trim();
         if (!titulo) { msg.textContent = 'Ponle un título.'; return; }
-        var tipo = $('gTipo').value, url = '';
+        var tipo = $('gTipo').value;
+        var prev = _editando ? _guias.find(function (x) { return x.id === _editando; }) : null;
+        var url = prev ? (prev.url || '') : '';
 
         btn.disabled = true;
         try {
-            // ── EDICIÓN: solo la información, sin tocar archivo ni tipo ──
-            if (_editando) {
-                var cate = ($('gCategoria').value || '').trim() || 'General';
-                msg.textContent = 'Guardando…';
-                var ru = await _supabase.from('guias').update({
-                    titulo: titulo,
-                    descripcion: ($('gDesc').value || '').trim() || null,
-                    categoria: cate,
-                    orden: parseInt($('gOrden').value, 10) || 0,
-                    audiencia: $('gAudiencia').value || 'ambas',
-                    updated_at: new Date().toISOString()
-                }).eq('id', _editando);
-                if (ru.error) { msg.textContent = 'No se pudo guardar: ' + ru.error.message; return; }
-                await _supabase.from('guia_secciones').upsert({ nombre: cate }, { onConflict: 'nombre' });
-                window._cerrarGuia();
-                await cargar();
-                return;
+            /* ── 1. Miniatura (opcional) ── */
+            var mini = $('gMiniUrl') ? ($('gMiniUrl').value || '') : '';
+            var fMini = $('gMini') && $('gMini').files[0];
+            if (fMini) {
+                if (fMini.size > 5 * 1024 * 1024) { msg.textContent = 'Esa imagen pesa más de 5 MB. Súbela más chica.'; return; }
+                msg.textContent = 'Subiendo la miniatura…';
+                var mUrl = await window.sbSubirArchivo('miniaturas', fMini, '_guias');
+                if (!mUrl) { msg.textContent = 'No se pudo subir la miniatura.'; return; }
+                mini = mUrl;
             }
 
+            /* ── 2. El archivo o el enlace ── */
             if (tipo === 'pdf') {
-                var f = $('gArchivo').files[0];
-                if (!f) { msg.textContent = 'Elige el PDF.'; return; }
-                /* Tope de 40 MB. Una guía con capturas rara vez pasa de 10; arriba de
-                   eso casi siempre son imágenes sin comprimir, y el castigo se lo lleva
-                   quien la abra desde el celular del restaurante. */
-                if (f.size > 40 * 1024 * 1024) { msg.textContent = 'Ese PDF pesa más de 40 MB. Súbelo comprimido.'; return; }
-                msg.textContent = 'Subiendo…';
-                // scope '_guias' → cae en _guias/pdf/… , la ruta que v45 abre a lectura.
-                url = await window.sbSubirArchivo('pdf', f, '_guias');
-                if (!url) { msg.textContent = 'No se pudo subir el archivo.'; return; }
+                var f = $('gArchivo') && $('gArchivo').files[0];
+                /* Editando, el archivo es OPCIONAL: sin uno nuevo se conserva el
+                   que ya está. Antes había que publicar una guía nueva y ocultar
+                   la vieja, lo que acumula basura y rompe el link que ya circuló. */
+                if (!f && !url) { msg.textContent = 'Elige el PDF.'; return; }
+                if (f) {
+                    /* Tope de 40 MB. Una guía con capturas rara vez pasa de 10;
+                       arriba de eso casi siempre son imágenes sin comprimir, y el
+                       castigo se lo lleva quien la abra desde el celular. */
+                    if (f.size > 40 * 1024 * 1024) { msg.textContent = 'Ese PDF pesa más de 40 MB. Súbelo comprimido.'; return; }
+                    msg.textContent = 'Subiendo el PDF…';
+                    // scope '_guias' → cae en _guias/pdf/…, la ruta que v45 abre a lectura.
+                    var nueva = await window.sbSubirArchivo('pdf', f, '_guias');
+                    if (!nueva) { msg.textContent = 'No se pudo subir el archivo.'; return; }
+                    url = nueva;
+                }
             } else {
                 url = ($('gUrl').value || '').trim();
                 if (!url) { msg.textContent = 'Falta el enlace.'; return; }
                 if (tipo === 'video' && !ytId(url)) { msg.textContent = 'Ese link no parece de YouTube. Revísalo.'; return; }
             }
 
+            /* ── 3. Recién ahora se toca la base ── */
             var cat = ($('gCategoria').value || '').trim() || 'General';
-            msg.textContent = 'Guardando…';
-            var r = await _supabase.from('guias').insert({
-                id: genId(), titulo: titulo,
+            var campos = {
+                titulo: titulo,
                 descripcion: ($('gDesc').value || '').trim() || null,
-                categoria: cat, tipo: tipo, url: url,
+                categoria: cat,
+                tipo: tipo,
+                url: url,
+                miniatura: mini || null,
                 audiencia: $('gAudiencia').value || 'ambas',
                 orden: parseInt($('gOrden').value, 10) || 0,
-                activa: true, updated_at: new Date().toISOString()
-            });
+                updated_at: new Date().toISOString()
+            };
+            msg.textContent = 'Guardando…';
+            var r = _editando
+                ? await _supabase.from('guias').update(campos).eq('id', _editando)
+                : await _supabase.from('guias').insert(Object.assign({ id: genId(), activa: true }, campos));
             if (r.error) { msg.textContent = 'No se pudo guardar: ' + r.error.message; return; }
+
             // La sección se da de alta sola si venía solo de una guía suelta.
             await _supabase.from('guia_secciones').upsert({ nombre: cat }, { onConflict: 'nombre' });
             window._cerrarGuia();
