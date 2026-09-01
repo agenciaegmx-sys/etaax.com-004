@@ -2614,6 +2614,45 @@ console.log('\n══ SUITE T · Datos de transferencia (datos-pago.js) ══')
         eq(D.html(true).indexOf('Datos para transferencia'), -1, 'compacto'));
 })();
 
+/* ═══════════ SUITE U · NÓMINA POR SUCURSAL (financiero/gastos-globales.html) ═══════════
+   Dentro de una sucursal se listaba a TODO el personal del negocio, así que la
+   nómina de Oxford mostraba también a los de Madero y Altozano — y sumaba sus
+   sueldos. El catálogo de staff ya filtraba bien; esta pantalla, que es la que
+   dice cuánto se paga, no. */
+console.log('\n══ SUITE U · Nómina por sucursal (financiero/gastos-globales.html) ══');
+(function () {
+    const G = crearContexto();
+    cargarJS(G, 'etaax-core.js');
+    G._storage['etaax_negocio_activo'] = 'n1';
+    cargarInline(G, 'financiero/gastos-globales.html');
+
+    setVar(G, '_cacheGG_Staff', [
+        { id: 'a', nombre: 'Diego',  sucursalId: 'sOx',           estado: 'Activo', categoriaNomina: 'operativa', salarioBase: 9451.2, periodicidad: 'mensual' },
+        { id: 'b', nombre: 'Dayron', sucursalId: 'sMad',          estado: 'Activo', categoriaNomina: 'operativa', salarioBase: 9451.2, periodicidad: 'mensual' },
+        { id: 'c', nombre: 'Nadia',  sucursalId: 'sOx',           estado: 'Activo', categoriaNomina: 'operativa', salarioBase: 9451.2, periodicidad: 'mensual' },
+        { id: 'd', nombre: 'Matriz', sucursalId: '',              estado: 'Activo', categoriaNomina: 'operativa', salarioBase: 9451.2, periodicidad: 'mensual' },
+        { id: 'e', nombre: 'Exempl', sucursalId: 'sOx',           estado: 'Baja definitiva', categoriaNomina: 'operativa', salarioBase: 9451.2, periodicidad: 'mensual' },
+    ]);
+    const enSuc = suc => { setVar(G, '_sucursalId', suc); return G._staffNominaActivo().map(x => x.nombre).join(','); };
+
+    test('en una sucursal solo salen SUS colaboradores', () => eq(enSuc('sOx'), 'Diego,Nadia', 'nómina'));
+    test('otra sucursal, otra lista', () => eq(enSuc('sMad'), 'Dayron', 'nómina'));
+    /* Regla del sistema: registro sin sucursal = Matriz. */
+    test('el que no tiene sucursal cae en Matriz', () => eq(enSuc('suc_principal'), 'Matriz', 'nómina'));
+    test('en vista global salen todos', () =>
+        eq(enSuc(null), 'Diego,Dayron,Nadia,Matriz', 'nómina'));
+    test('los dados de baja no entran en ninguna', () =>
+        eq(enSuc('sOx').indexOf('Exempl'), -1, 'nómina'));
+
+    /* _loadStaff NO se filtra, y es a propósito: alimenta la clasificación de
+       gastos, que reconoce cuáles son de nómina por el nombre del colaborador.
+       Un gasto capturado en una sucursal puede nombrar a alguien de otra;
+       filtrarla lo mandaría a "variables" y descuadraría los KPIs. */
+    setVar(G, '_sucursalId', 'sOx');
+    test('el catálogo COMPLETO sigue disponible para clasificar gastos', () =>
+        eq(G._loadStaff().length, 5, 'catálogo'));
+})();
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0

@@ -1267,7 +1267,23 @@ function _staffCategoria(s){
     if(s.categoriaNomina) return s.categoriaNomina;
     return (s.rol==='gerente'||s.rol==='administrativo'||s.rol==='admin')?'administrativa':'operativa';
 }
-function _staffNominaActivo(){ return _loadStaff().filter(function(s){return s.estado!=='Baja definitiva';}); }
+/* Los colaboradores que entran en la TABLA de nóminas.
+
+   Filtra por SUCURSAL, y esto es el arreglo de un bug real: dentro de una
+   sucursal se listaba a todo el personal del negocio, así que la nómina de
+   Oxford mostraba también a los de Madero y Altozano. El catálogo de staff ya
+   filtraba bien; esta pantalla no, y es la que dice cuánto se paga.
+
+   OJO: NO se toca _loadStaff(), que es otra cosa. Esa lista alimenta la
+   clasificación de gastos (reconoce cuáles son de nómina por el nombre del
+   colaborador), y ahí sí hace falta el catálogo COMPLETO: un gasto capturado en
+   una sucursal puede nombrar a alguien de otra. Filtrarla dejaría de reconocer
+   esos gastos como nómina y los mandaría a variables. */
+function _staffNominaActivo(){
+    return _loadStaff()
+        .filter(function(s){ return s.estado!=='Baja definitiva'; })
+        .filter(_deSuc);
+}
 
 /* Lista combinada de una categoría/mes: entradas guardadas (manuales o con
    bonos/IMSS capturados) + colaboradores de staff que aún no tienen entrada,
@@ -1279,19 +1295,35 @@ function _nominaItems(cat,mes){
     var conEntrada={};
     // Entradas guardadas: si están ligadas a staff, la base/nombre se refrescan
     // siempre desde el catálogo (solo bonos/IMSS quedan capturados por mes).
+    /* Una entrada guardada pertenece a la sucursal de SU colaborador. Si es
+       manual (sin staffId) no hay a quién preguntarle, así que vale la regla del
+       sistema: sin sucursal = Matriz. Sin esto, las entradas capturadas a mano
+       se sumarían en TODAS las sucursales y el total mentiría por multiplicación.
+
+       Se busca en el catálogo COMPLETO, no en el filtrado: hay que distinguir
+       "es de otra sucursal" (se oculta) de "ya no está en el catálogo, o está
+       dado de baja" (se conserva tal cual). Confundirlos haría desaparecer de
+       la nómina a alguien a quien SÍ se le pagó ese mes, y eso es dinero que se
+       borra del registro. */
+    var todosPorId={}; _loadStaff().forEach(function(s){ todosPorId[s.id]=s; });
     var guardadas=(data[cat]||[]).map(function(p){
         if(p.staffId){
-            conEntrada[p.staffId]=true;
-            var s=staffPorId[p.staffId];
+            var s=staffPorId[p.staffId];              // ¿está en ESTA sucursal y activo?
             if(s){
+                conEntrada[p.staffId]=true;
                 var copia={}; for(var k in p) copia[k]=p[k];
                 copia.nombre=s.nombre;
                 copia.base=_baseMensualStaff(s,mes);
                 return copia;
             }
+            var full=todosPorId[p.staffId];
+            // Existe pero es de OTRA sucursal → no es nómina de aquí.
+            if(full && !_deSuc(full)) return null;
+            // Ya no está en el catálogo, o está de baja: el pago existió. Se queda.
+            return p;
         }
-        return p;
-    });
+        return _deSuc(p) ? p : null;
+    }).filter(Boolean);
     // Colaboradores de staff de esta categoría sin entrada → auto
     var autos=staff.filter(function(s){
         return _staffCategoria(s)===cat && !conEntrada[s.id];
