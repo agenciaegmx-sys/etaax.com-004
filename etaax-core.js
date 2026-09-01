@@ -483,7 +483,78 @@
         return neg + txt + ' ' + (moneda || 'PESOS') + ' ' + String(cent).padStart(2, '0') + '/100 M.N.';
     }
 
+    /* ══ EL SUELDO DE UN COLABORADOR ═══════════════════════════════════════
+       Estaba escrito TRES veces —el módulo que paga, el que proyecta y el
+       simulador— y las tres no decían lo mismo: el simulador no caía al mínimo
+       del negocio ni sabía de los colaboradores sin costo, así que su nómina
+       salía distinta de la que se pagaba. Aquí vive la única versión.
+
+       El ORDEN importa y es deliberado:
+       1) sin costo para el negocio — becarios de Jóvenes Construyendo el Futuro
+          (les paga el gobierno), practicantes, familiares. Va PRIMERO, incluso
+          antes de un sueldo viejo que hubiera quedado capturado: si no, se le
+          pagaría de la caja a quien no hay que pagarle.
+       2) el sueldo de su ficha, incluido un CERO capturado a propósito.
+       3) el mínimo del negocio, solo si nunca se le capturó nada. Devolver cero
+          ahí haría que la proyección saliera más baja que la realidad, y un
+          renglón en cero nadie lo revisa: parece que ese colaborador no cuesta.
+
+       `sueldoCapturado` es lo que separa "puse cero" de "nunca lo llené":
+       parseFloat('') || 0 los vuelve idénticos, y sin esa marca un cero escrito
+       a mano se ignoraba y se sustituía por el mínimo. Los registros viejos no
+       la traen, así que se siguen comportando igual que siempre. */
+    function sueldoDiarioEfectivo(s, salarioDiarioDefault) {
+        if (!s) return 0;
+        if (s.sinCostoNegocio) return 0;
+        var cap = !!s.sueldoCapturado;
+        if (s.esquemaSueldo === 'diario') {
+            var d = n(s.sueldoDiario);
+            if (d > 0 || cap) return d;
+        } else {
+            var b = n(s.salarioBase);
+            if (b > 0 || cap) {
+                if (s.periodicidad === 'semanal')   return b / 7;
+                if (s.periodicidad === 'quincenal') return b / 15;
+                return b / 30;                      // mensual o sin especificar
+            }
+        }
+        return n(salarioDiarioDefault);
+    }
+
+    /* Lo que cuesta ese colaborador en un mes. No es sueldoDiarioEfectivo × días:
+       un sueldo fijo por periodo se mensualiza por su periodicidad, no por los
+       días que traiga el mes. */
+    function baseMensualStaff(s, diasDelMes, salarioDiarioDefault) {
+        if (!s) return 0;
+        if (s.sinCostoNegocio) return 0;
+        var cap = !!s.sueldoCapturado, dias = n(diasDelMes) || 30;
+        if (s.esquemaSueldo === 'diario') {
+            var d = n(s.sueldoDiario);
+            if (d > 0 || cap) return d * dias;
+        } else {
+            var b = n(s.salarioBase);
+            if (b > 0 || cap) {
+                if (s.periodicidad === 'semanal')   return b * (52 / 12);
+                if (s.periodicidad === 'quincenal') return b * 2;
+                return b;
+            }
+        }
+        return n(salarioDiarioDefault) * dias;
+    }
+
+    /* ¿El sueldo sale del mínimo del negocio y no de su ficha? Para decirlo en
+       pantalla: pagar el mínimo por descuido y pagarlo a propósito se ven igual. */
+    function sueldoEsDelMinimo(s, salarioDiarioDefault) {
+        if (!s || s.sinCostoNegocio || s.sueldoCapturado) return false;
+        if (s.esquemaSueldo === 'diario' && n(s.sueldoDiario) > 0) return false;
+        if (s.esquemaSueldo !== 'diario' && n(s.salarioBase) > 0) return false;
+        return n(salarioDiarioDefault) > 0;
+    }
+
     window.EtaaxCore = {
+        sueldoDiarioEfectivo: sueldoDiarioEfectivo,
+        baseMensualStaff: baseMensualStaff,
+        sueldoEsDelMinimo: sueldoEsDelMinimo,
         n: n, fmtM: fmtM, fmtN: fmtN, genId: genId, todayStr: todayStr,
         gastoEsIMSS: gastoEsIMSS, gastoEsNomina: gastoEsNomina, gastoEsPropina: gastoEsPropina,
         gastoEsFijoPat: gastoEsFijoPat, gastoEsPagoFijo: gastoEsPagoFijo, nomTipoGasto: nomTipoGasto,

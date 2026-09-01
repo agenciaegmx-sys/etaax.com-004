@@ -10,6 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../styles.css">
 <script src="/etaax-core.js"></script>
+<script src="/nomina-params.js"></script><!-- salario mínimo del negocio: lo usa la regla de sueldo -->
 <style>
 .sim-wrap{max-width:1180px;margin:0 auto;padding:24px 22px 90px}
 .sim-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:20px}
@@ -253,12 +254,12 @@ async function _sbInit(){
 }
 
 /* ── Cálculo de datos reales (base) del mes ── */
+/* Alias delgado: la regla vive en EtaaxCore. Esta copia NO caía al mínimo del
+   negocio ni conocía a los colaboradores sin costo, así que el simulador
+   proyectaba una nómina distinta de la que se pagaba de verdad. */
 function _mensualizar(s,mes){
-    if(s.esquemaSueldo==='diario') return n(s.sueldoDiario)*diasMes(mes);
-    var b=n(s.salarioBase);
-    if(s.periodicidad==='semanal') return b*(52/12);
-    if(s.periodicidad==='quincenal') return b*2;
-    return b;
+    var def = (window.NominaParams ? n(NominaParams.get(getNegocioActivo()).salarioDiarioDefault) : 0);
+    return EtaaxCore.baseMensualStaff(s, diasMes(mes), def);
 }
 function _nominaMes(mes){
     var total=0, nom=_nominas[mes]||{}, conEntrada={};

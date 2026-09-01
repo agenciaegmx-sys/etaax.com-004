@@ -2686,6 +2686,67 @@ console.log('\n══ SUITE U · Nómina por sucursal (financiero/gastos-globale
         eq(G._loadStaff().length, 5, 'catálogo'));
 })();
 
+/* ═══════════ SUITE W · LA REGLA DEL SUELDO, UNA SOLA (etaax-core.js) ═══════════
+   Estaba escrita TRES veces —el módulo que paga, el que proyecta y el
+   simulador— y no decían lo mismo: el simulador no caía al mínimo del negocio
+   ni conocía a los colaboradores sin costo. Ahora las tres delegan aquí. */
+console.log('\n══ SUITE W · La regla del sueldo (etaax-core.js) ══');
+(function () {
+    const C = cargarJS(crearContexto(), 'etaax-core.js').EtaaxCore;
+    const MIN = 320;
+
+    /* ── UN CERO ESCRITO A MANO VALE CERO ──
+       parseFloat('') || 0 vuelve idéntico "puse cero" y "nunca lo llené", y por
+       eso un cero se ignoraba y se sustituía por el mínimo: el renglón nunca
+       bajaba por más que se guardara. `sueldoCapturado` los separa. */
+    const cero = { esquemaSueldo: 'diario', sueldoDiario: 0, sueldoCapturado: true };
+    test('un cero capturado a propósito se respeta', () => eq(C.sueldoDiarioEfectivo(cero, MIN), 0, 'sueldo'));
+    test('…y proyecta cero en el mes', () => eq(C.baseMensualStaff(cero, 30, MIN), 0, 'base'));
+    test('…y no se marca como "mínimo"', () => eq(C.sueldoEsDelMinimo(cero, MIN), false, 'origen'));
+
+    /* Los registros VIEJOS no traen la marca, así que se comportan igual que
+       siempre. Nadie se va a cero de un día para otro por este cambio. */
+    const legado = { esquemaSueldo: 'diario', sueldoDiario: 0 };
+    test('un cero heredado (sin marca) sigue cayendo al mínimo', () =>
+        eq(C.sueldoDiarioEfectivo(legado, MIN), 320, 'sueldo'));
+    test('…y sigue avisando que viene del mínimo', () => eq(C.sueldoEsDelMinimo(legado, MIN), true, 'origen'));
+
+    /* Sin costo gana a todo, incluso a un sueldo viejo que quedara capturado. */
+    test('sin costo paga cero aunque tenga sueldo capturado', () =>
+        eq(C.sueldoDiarioEfectivo({ sinCostoNegocio: true, esquemaSueldo: 'diario', sueldoDiario: 400 }, MIN), 0, 'sueldo'));
+
+    /* Las periodicidades: mensualizar NO es el sueldo diario × días. */
+    test('quincenal se mensualiza por dos, no por días', () =>
+        eq(C.baseMensualStaff({ salarioBase: 4950, periodicidad: 'quincenal' }, 31, MIN), 9900, 'base'));
+    test('semanal se mensualiza por 52/12', () =>
+        eq(C.baseMensualStaff({ salarioBase: 2000, periodicidad: 'semanal' }, 30, MIN), 2000 * 52 / 12, 'base'));
+    test('el diario sí depende de los días del mes', () =>
+        eq(C.baseMensualStaff({ esquemaSueldo: 'diario', sueldoDiario: 320 }, 31, MIN), 9920, 'base'));
+    /* Un sueldo por periodo se divide para sacar el diario, con la misma tabla. */
+    test('un quincenal de 4,950 da 330 al día', () =>
+        eq(C.sueldoDiarioEfectivo({ salarioBase: 4950, periodicidad: 'quincenal' }, MIN), 330, 'sueldo'));
+
+    /* Sin mínimo definido no hay de dónde caer, y no se avisa de un mínimo que
+       no existe. */
+    test('sin mínimo definido, el que no tiene sueldo cobra cero', () =>
+        eq(C.sueldoDiarioEfectivo({}, 0), 0, 'sueldo'));
+    test('…y no se marca "mínimo"', () => eq(C.sueldoEsDelMinimo({}, 0), false, 'origen'));
+    test('un colaborador inexistente no revienta la regla', () =>
+        eq(C.sueldoDiarioEfectivo(null, MIN), 0, 'sueldo'));
+
+    /* ── LAS TRES PANTALLAS DICEN LO MISMO ──
+       Que es el punto de haberlo movido al núcleo. */
+    const gente = [
+        { esquemaSueldo: 'diario', sueldoDiario: 0, sueldoCapturado: true },
+        { sinCostoNegocio: true },
+        { salarioBase: 6000, periodicidad: 'quincenal' },
+        {},
+    ];
+    const porNucleo = gente.map(s => C.baseMensualStaff(s, 30, MIN));
+    test('paga, proyecta y simula coinciden en cada caso', () =>
+        eq(porNucleo.join('|'), '0|0|12000|9600', 'nómina'));
+})();
+
 /* ═══════════ SUITE V · SIN COSTO PARA EL NEGOCIO (diario.html) ═══════════
    Esta es la que importa: aquí no se proyecta, se PAGA. Un becario al que el
    negocio no le paga tiene que salir en cero, o se le entrega dinero de la caja
