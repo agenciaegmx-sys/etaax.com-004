@@ -319,6 +319,44 @@
     }
     window._sbFlush = _obFlush;
     window._sbPendientes = function () { return _obLoad().length; };
+
+    /* ══ FORENSE DE LA COLA ═══════════════════════════════════════════════
+       Se corre en la consola: _sbColaDiag()
+
+       "Baja a cero y al recargar vuelven los mismos" tiene dos causas que desde
+       fuera se ven idénticas, y distinguirlas a ojo es imposible:
+         · la cola SE VACÍA pero el vaciado no llega al disco → en la siguiente
+           carga se lee la copia vieja y parece que resucitaron;
+         · algo REENCOLA los mismos registros en cada carga (un merge, un
+           re-upsert de arranque), y la cola es nueva aunque el contenido rime.
+       La diferencia está en los `uid`: si vuelven los MISMOS, es lo primero; si
+       vuelven otros, es lo segundo. */
+    window._sbColaDiag = function () {
+        var enMem = _obLoad();
+        var crudo = [];
+        try { crudo = JSON.parse(localStorage.getItem(OUTBOX) || '[]') || []; } catch (e) {}
+        var idb = null;
+        try { idb = (window.etaaxStore && etaaxStore.get) ? JSON.parse(etaaxStore.get(OUTBOX) || '[]') : null; } catch (e) {}
+
+        var porTabla = {}; enMem.forEach(function (x) { porTabla[x.tabla] = (porTabla[x.tabla] || 0) + 1; });
+        var r = {
+            pendientes: enMem.length,
+            por_tabla: porTabla,
+            con_reintentos: enMem.filter(function (x) { return (x.tries || 0) > 0; }).length,
+            // Los primeros uid: si tras recargar son LOS MISMOS, la cola no se está
+            // vaciando de verdad; si son otros, algo la está rellenando.
+            primeros_uid: enMem.slice(0, 5).map(function (x) { return x.uid; }),
+            en_espejo_localStorage: crudo.length,
+            en_almacen: idb === null ? '(sin etaaxStore)' : idb.length,
+            almacen_hidratado: (window.etaaxStore && etaaxStore.hidratado) ? etaaxStore.hidratado() : '(n/a)'
+        };
+        console.log('──── FORENSE DE LA COLA ────');
+        Object.keys(r).forEach(function (k) { console.log('  ' + k + ':', r[k]); });
+        console.log('  · Anota los "primeros_uid", recarga la página y vuelve a correrlo.');
+        console.log('    MISMOS uid → la cola no se vacía de verdad.');
+        console.log('    OTROS uid  → algo la está rellenando en cada carga.');
+        return r;
+    };
     // Diagnóstico: en consola, _sbOutbox() lista los items atorados (tabla, clave, intentos, tamaño).
     window._sbOutbox = function () {
         return _obLoad().map(function (it) {

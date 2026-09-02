@@ -101,6 +101,59 @@ function getEntradasLog() {
 }
 
 // ── Helpers Supabase inventarios ──────────────────────────────
+/* ══ DIAGNÓSTICO DE LA COLA ════════════════════════════════════════════════
+   Se corre en la consola: _invDiag()
+
+   Existe porque "371 cambios pendientes cada vez que abro" tiene al menos tres
+   causas distintas y desde fuera se ven idénticas:
+     · se encolan y suben bien, pero algo las vuelve a encolar en cada carga;
+     · se encolan y el servidor las rechaza (RLS), así que nunca bajan;
+     · el respaldo local tiene registros que la nube no devuelve, y el merge los
+       re-sube una y otra vez.
+   Adivinar cuál es cuesta más que medirlo. */
+window._invDiag = async function () {
+    var negId = getNegocioActivo();
+    var out = { negocio: negId };
+
+    var locEL = []; try { locEL = JSON.parse(_skGet(_sk('el_local')) || '[]') || []; } catch (e) {}
+    var locInv = []; try { locInv = JSON.parse(_skGet(_sk('inv_local')) || '[]') || []; } catch (e) {}
+    out.entradas_local = locEL.length;
+    out.inventarios_local = locInv.length;
+
+    try {
+        var rE = await _supabase.from('entradas_log').select('datos').eq('negocio_id', negId);
+        var rI = await _supabase.from('inventarios').select('datos').eq('negocio_id', negId);
+        out.entradas_nube = rE.error ? ('ERROR: ' + rE.error.message) : (rE.data || []).length;
+        out.inventarios_nube = rI.error ? ('ERROR: ' + rI.error.message) : (rI.data || []).length;
+        if (!rE.error) {
+            var enNube = {};
+            (rE.data || []).forEach(function (x) { if (x.datos && x.datos.id) enNube[x.datos.id] = 1; });
+            var faltan = locEL.filter(function (e) { return e && e.id && !enNube[e.id]; });
+            out.entradas_que_el_merge_resube = faltan.length;
+            out.ejemplo_id_faltante = faltan.length ? faltan[0].id : null;
+        }
+    } catch (e) { out.nube = 'no se pudo leer: ' + (e && e.message); }
+
+    /* Una escritura de prueba dice si el servidor ACEPTA lo que se le manda —
+       que es la diferencia entre "no bajan" y "no se están mandando". */
+    try {
+        var pruebaId = 'diag_' + Date.now().toString(36);
+        var w = await _supabase.from('entradas_log').insert({ id: pruebaId, negocio_id: negId, datos: { id: pruebaId, _diag: true } });
+        out.puede_escribir = w.error ? ('NO · ' + w.error.message) : 'sí';
+        if (!w.error) await _supabase.from('entradas_log').delete().eq('id', pruebaId);
+    } catch (e) { out.puede_escribir = 'NO · ' + (e && e.message); }
+
+    out.cola_pendientes = (typeof _sbPendientes === 'function') ? _sbPendientes() : '?';
+    var cola = (typeof _sbOutbox === 'function') ? _sbOutbox() : [];
+    var porTabla = {}; cola.forEach(function (x) { porTabla[x.tabla] = (porTabla[x.tabla] || 0) + 1; });
+    out.cola_por_tabla = porTabla;
+    out.cola_con_reintentos = cola.filter(function (x) { return (x.intentos || 0) > 0; }).length;
+
+    console.log('──── DIAGNÓSTICO DE INVENTARIOS ────');
+    Object.keys(out).forEach(function (k) { console.log('  ' + k + ':', out[k]); });
+    return out;
+};
+
 function _sbUpInv(inv) {
     var negId = getNegocioActivo(); if (!negId || typeof _supabase === 'undefined') return;
     sbUpsert('inventarios', inv, negId);
