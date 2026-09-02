@@ -2890,16 +2890,19 @@ console.log('\n══ SUITE Y · Periodo del inventario por momento (recetas/inv
        darle finalizar hasta el 1 de septiembre. Si la frontera fuera el CLIC,
        ese inventario se tragaría trece días de entradas que no son suyas y el
        siguiente arrancaría vacío: descuadra los dos a la vez. */
-    Y.prompt = function () { return '17:00'; };     // "lo cerré a las 5 de la tarde"
-    const tardio = { id: 'i9', fecha: '2026-08-19', cerrado: false };
+    /* La hora la pregunta el MODAL (_conCierreOperativo) antes de la contraseña,
+       y deja puesto `cierreOperativo`. Aquí se prueba lo que hace _sellarCierre
+       con y sin ese dato — que es lo que decide el reparto. */
+    const tardio = { id: 'i9', fecha: '2026-08-19', cerrado: false,
+                     cierreOperativo: new Date('2026-08-19T17:00:00').toISOString() };
     Y._sellarCierre(tardio);
 
     test('el clic queda registrado aparte, para auditar', () =>
         eq(/^\d{4}-\d{2}-\d{2}T/.test(tardio.cerradoAt), true, 'cerradoAt'));
-    test('pero la frontera del periodo es el 19, no el día del clic', () =>
-        eq(_diaLocal(tardio.cierreOperativo), '2026-08-19', 'cierreOperativo'));
-    test('y respeta la hora que se dijo', () =>
+    test('la frontera es la hora que se dijo, no el día del clic', () =>
         eq(_hhmmLocal(tardio.cierreOperativo), '17:00', 'hora'));
+    test('y es del 19, no de hoy', () =>
+        eq(_diaLocal(tardio.cierreOperativo), '2026-08-19', 'cierreOperativo'));
     test('la que manda para el periodo es la operativa, no el clic', () =>
         eq(Y._momentoCierre(tardio), tardio.cierreOperativo, 'frontera'));
 
@@ -2911,31 +2914,21 @@ console.log('\n══ SUITE Y · Periodo del inventario por momento (recetas/inv
     test('y lo del 19 antes de las 5 sigue siendo del viejo', () =>
         eq(cae('2026-08-19', '2026-08-19T14:00:00.000Z'), false, 'periodo'));
 
-    /* Cancelar el prompt NO puede caer en "ahora": eso es exactamente el error
-       que se quiere evitar. Cae al final de SU día. */
-    Y.prompt = function () { return null; };
-    const cancelado = { id: 'i11', fecha: '2026-08-19', cerrado: false };
-    Y._sellarCierre(cancelado);
-    test('si se cancela la pregunta, la frontera NO se va a hoy', () =>
-        eq(_diaLocal(cancelado.cierreOperativo), '2026-08-19', 'cierreOperativo'));
-    test('…y se va al final de ese día', () =>
-        eq(_hhmmLocal(cancelado.cierreOperativo), '23:59', 'hora'));
+    /* RED DE SEGURIDAD: si un camino de cierre se salta el modal, la frontera NO
+       puede irse a "ahora" —ése es justo el error que arruina el reparto—. Cae al
+       final de SU día: cuenta todo ese día y nada del siguiente. */
+    const sinPreguntar = { id: 'i11', fecha: '2026-08-19', cerrado: false };
+    Y._sellarCierre(sinPreguntar);
+    test('sin haber preguntado, la frontera NO se va a hoy', () =>
+        eq(_diaLocal(sinPreguntar.cierreOperativo), '2026-08-19', 'cierreOperativo'));
+    test('…se va al final de ese día', () =>
+        eq(_hhmmLocal(sinPreguntar.cierreOperativo), '23:59', 'hora'));
 
-    /* Una hora inventada tampoco se acepta a ciegas. */
-    Y.prompt = function () { return 'al rato'; };
-    const basura = { id: 'i12', fecha: '2026-08-19', cerrado: false };
-    Y._sellarCierre(basura);
-    test('una hora inválida cae al final del día, no a hoy', () =>
-        eq(_hhmmLocal(basura.cierreOperativo), '23:59', 'hora'));
-
-    /* Si el inventario ES de hoy, no se pregunta nada: el clic es el cierre. */
-    Y.prompt = function () { throw new Error('no debió preguntar'); };
-    /* El "hoy" del inventario es el LOCAL, el que se ve en pantalla — no el de
-       toISOString(), que de tarde en México ya es el día siguiente. */
+    /* Si el inventario ES de hoy, el clic ES el cierre. */
     const hoyISO = _diaLocal(new Date().toISOString());
     const deHoy = { id: 'i13', fecha: hoyISO, cerrado: false };
     Y._sellarCierre(deHoy);
-    test('un inventario de HOY se cierra sin preguntar nada', () =>
+    test('un inventario de HOY se cierra con el momento del clic', () =>
         eq(_diaLocal(deHoy.cierreOperativo), hoyISO, 'cierreOperativo'));
 
     /* El sello de cierre no se recorre al re-finalizar: eso movería entradas ya

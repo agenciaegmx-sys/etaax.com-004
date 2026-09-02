@@ -1350,6 +1350,71 @@ function _sellarCierre(inv) {
     return inv;
 }
 
+/* ══ ¿A QUÉ HORA SE CERRÓ? ═════════════════════════════════════════════════
+   Se pregunta ANTES de la contraseña, no después: la hora es un DATO y la
+   contraseña una autorización. Preguntarla dentro del callback hacía que el
+   diálogo saliera encima del modal de la clave, uno sobre otro.
+
+   Llama a `next()` solo si hay respuesta. Cancelar aborta el cierre completo:
+   más vale no cerrar que cerrar con una frontera inventada, porque esa frontera
+   decide a qué inventario van las entradas de los días siguientes. */
+function _conCierreOperativo(inv, next) {
+    if (!inv || inv.cierreOperativo) { next(); return; }
+    var ahora = new Date();
+    var hoy = ahora.getFullYear() + '-' + ('0' + (ahora.getMonth() + 1)).slice(-2) + '-' + ('0' + ahora.getDate()).slice(-2);
+    var f = String(inv.fecha || '');
+    // Mismo día: el clic ES el cierre, no hay nada que preguntar.
+    if (!f || f === hoy) { next(); return; }
+
+    var lbl = new Date(f + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' });
+    var ov = document.createElement('div');
+    ov.id = 'ovHoraCierre';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.74);display:flex;' +
+        'align-items:center;justify-content:center;padding:22px';
+    ov.innerHTML =
+        '<div style="background:var(--surface,#14130f);border:1px solid var(--border,#2a2824);border-radius:16px;' +
+             'max-width:430px;width:100%;padding:26px 26px 20px;box-shadow:0 22px 64px rgba(0,0,0,.6);' +
+             'font-family:\'DM Sans\',sans-serif;color:var(--text,#f0ece6)">' +
+          '<div style="font-size:10px;letter-spacing:2.4px;text-transform:uppercase;color:var(--text-dim,#6b6862)">Cierre del inventario</div>' +
+          '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:25px;letter-spacing:1.4px;margin:6px 0 12px;line-height:1.1">' +
+            '¿A qué hora terminaste el conteo?</div>' +
+          '<div style="font-size:13px;color:var(--text-muted,#a8a29a);line-height:1.6">' +
+            'Este inventario es del <b style="color:var(--text,#f0ece6)">' + lbl + '</b>, pero lo estás cerrando hoy.<br>' +
+            'Lo que se haya registrado <b>después</b> de esa hora se va al siguiente inventario.</div>' +
+          '<div style="margin:18px 0 6px">' +
+            '<label style="display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim,#6b6862);margin-bottom:6px">Hora del ' + lbl + '</label>' +
+            '<input type="time" id="hcHora" value="23:59" style="width:100%;box-sizing:border-box;background:var(--surface2,#1a1916);' +
+              'border:1px solid var(--border,#2a2824);color:var(--text,#f0ece6);padding:12px 14px;border-radius:10px;' +
+              'font-family:inherit;font-size:17px;outline:none">' +
+            '<div style="font-size:11.5px;color:var(--text-dim,#6b6862);margin-top:6px;line-height:1.5">' +
+              'Si no la recuerdas, deja las 23:59: cuenta todo ese día y nada del siguiente.</div>' +
+          '</div>' +
+          '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">' +
+            '<button id="hcCancel" style="background:transparent;border:1px solid var(--border,#2a2824);color:var(--text-muted,#a8a29a);' +
+              'border-radius:9px;padding:10px 18px;font-family:inherit;font-size:13.5px;cursor:pointer">Cancelar</button>' +
+            '<button id="hcOk" style="background:var(--green,#3dbe7a);border:none;color:#0a0908;border-radius:9px;' +
+              'padding:10px 22px;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer">Continuar</button>' +
+          '</div>' +
+        '</div>';
+    document.body.appendChild(ov);
+    var inp = ov.querySelector('#hcHora');
+    setTimeout(function () { try { inp.focus(); } catch (e) {} }, 60);
+
+    function cerrar() { try { ov.remove(); } catch (e) {} }
+    ov.querySelector('#hcCancel').onclick = cerrar;
+    ov.onclick = function (e) { if (e.target === ov) cerrar(); };
+    ov.querySelector('#hcOk').onclick = function () {
+        /* Un <input type="time"> vacío es posible en algunos navegadores; ahí
+           vale el final del día, igual que si no la recordara. */
+        var hhmm = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(inp.value || '').trim());
+        var hora = hhmm ? (('0' + hhmm[1]).slice(-2) + ':' + hhmm[2]) : '23:59';
+        inv.cierreOperativo = new Date(f + 'T' + hora + ':00').toISOString();
+        cerrar();
+        next();
+    };
+    inp.onkeydown = function (e) { if (e.key === 'Enter') ov.querySelector('#hcOk').click(); };
+}
+
 function _preguntarCierreOperativo(inv, ahora) {
     /* El día en LOCAL, no en UTC. La `fecha` del inventario es la que se ve en
        pantalla (local), y a las 7 de la tarde en México toISOString() ya devuelve
@@ -1364,21 +1429,12 @@ function _preguntarCierreOperativo(inv, ahora) {
 
     var _lbl = new Date(f + 'T12:00:00').toLocaleDateString('es-MX',
         { day: 'numeric', month: 'long', year: 'numeric' });
-    var r = (typeof prompt === 'function')
-        ? prompt(
-            'Este inventario es del ' + _lbl + ', pero lo estás finalizando hoy.\n\n' +
-            'Las entradas, mermas y conteos posteriores a ese momento se van al SIGUIENTE ' +
-            'inventario, así que importa a qué hora terminó el conteo.\n\n' +
-            '¿A qué hora del ' + _lbl + ' lo cerraste? (formato 24 h)',
-            '23:59')
-        : null;
-
-    /* Cancelar o escribir cualquier cosa NO cae a "ahora": eso es justo el error
-       que se quiere evitar. Cae al final de SU día, que es lo más cercano a la
-       verdad sin inventar una hora. */
-    var hhmm = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(r || '').trim());
-    var hora = hhmm ? (('0' + hhmm[1]).slice(-2) + ':' + hhmm[2]) : '23:59';
-    return new Date(f + 'T' + hora + ':00').toISOString();
+    /* RED DE SEGURIDAD. Lo normal es que _conCierreOperativo ya haya preguntado y
+       dejado `cierreOperativo` puesto; esto solo corre si algún camino de cierre
+       se saltó ese paso. Cae al final de SU día —nunca a "ahora"—, que es lo más
+       cercano a la verdad sin inventar una hora: cuenta todo ese día y nada del
+       siguiente. Poner "ahora" sería justo el error que arruina el reparto. */
+    return new Date(f + 'T23:59:00').toISOString();
 }
 
 // PERIODO del inventario activo: de la fecha de la REFERENCIA (exclusivo) a la fecha
@@ -2683,6 +2739,8 @@ function finalizarInventarioHistorial(id) {
     var inv = getInventarios().find(function(x){ return x.id === id; });
     if (!inv) return;
     if (inv.cerrado) { alert('Este inventario ya está cerrado.'); return; }
+    // La hora primero (es un dato); la clave después (es la autorización).
+    _conCierreOperativo(inv, function(){
     _solicitarClave('Finalizar y cerrar inventario', function(){
         inv.cerrado = true; _sellarCierre(inv);
         _calcCapitalesInv(inv); // refrescar capital al cerrar
@@ -2700,6 +2758,7 @@ function finalizarInventarioHistorial(id) {
         invActual = null; filasCaptura = []; window._soloVistaInv = false;
         renderStats(); renderHistorial();
     });
+    });   // cierra _conCierreOperativo
 }
 
 function renderHistTabla(lista) {
@@ -8526,21 +8585,26 @@ function _autoGuardar(opts) {
 
 function guardarYSalir() {
     if (!invActual) return;
-    invActual.cerrado = true; _sellarCierre(invActual); delete invActual._eraCerrado;
-    let guardado = false;
-    try { guardarInventario(); guardado = true; } catch(e) { console.warn('[guardarYSalir]', e); }
-    if (!guardado) {
-        invActual.cerrado = false;
-        alert('No se pudo guardar el inventario (almacenamiento lleno). Intenta cerrar otras pestañas o liberar espacio y vuelve a intentarlo.');
-        return;
-    }
-    invActual = null;
-    mostrarVista('vistaLista');
+    // Aquí no hay clave de por medio, pero la hora sí importa igual: si
+    // el inventario no es de hoy, la frontera hay que preguntarla.
+    _conCierreOperativo(invActual, function(){
+        invActual.cerrado = true; _sellarCierre(invActual); delete invActual._eraCerrado;
+        let guardado = false;
+        try { guardarInventario(); guardado = true; } catch(e) { console.warn('[guardarYSalir]', e); }
+        if (!guardado) {
+            invActual.cerrado = false;
+            alert('No se pudo guardar el inventario (almacenamiento lleno). Intenta cerrar otras pestañas o liberar espacio y vuelve a intentarlo.');
+            return;
+        }
+        invActual = null;
+        mostrarVista('vistaLista');
+    });
 }
 
 function finalizarPrimerLev() {
     if (!invActual) return;
     if (invActual.cerrado) return;
+    _conCierreOperativo(invActual, function(){
     _solicitarClave('Guardar y cerrar levantamiento', function() {
         invActual.cerrado = true; _sellarCierre(invActual); delete invActual._eraCerrado;
         let ok = false;
@@ -8552,11 +8616,13 @@ function finalizarPrimerLev() {
         invActual = null; filasCaptura = [];
         mostrarVista('vistaLista');
     });
+    });   // cierra _conCierreOperativo
 }
 
 function cerrarInventario() {
     if (!invActual) return;
     if (invActual.cerrado) { alert('Este inventario ya está cerrado.'); return; }
+    _conCierreOperativo(invActual, function(){
     _solicitarClave('Cerrar y finalizar inventario', function() {
         invActual.cerrado = true; _sellarCierre(invActual); delete invActual._eraCerrado;
         let ok = false;
@@ -8566,6 +8632,7 @@ function cerrarInventario() {
         invActual = null; filasCaptura = []; // salida limpia (no reusar en el siguiente)
         mostrarVista('vistaLista');
     });
+    });   // cierra _conCierreOperativo
 }
 
 function editarInventario(id) {
