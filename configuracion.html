@@ -285,9 +285,16 @@ async function saveExtra(d) {
 
 /* ── LOGO ── */
 function _getNegLogo(negId) { return localStorage.getItem('etaax_' + negId + '_logo') || ''; }
-function _setNegLogo(negId, b64) {
-    if (b64) localStorage.setItem('etaax_' + negId + '_logo', b64);
-    else localStorage.removeItem('etaax_' + negId + '_logo');
+/* Guarda la URL del logo. Se envuelve en try porque si localStorage está
+   lleno, `setItem` LANZA — y antes eso tumbaba la subida entera sin decir nada.
+   Ahora la URL ya vive en Storage: perder la copia local solo significa que se
+   relee de la nube en la siguiente carga, no que se pierda el logo. */
+function _guardarLogoLocal(clave, url) {
+    try { if (url) localStorage.setItem(clave, url); else localStorage.removeItem(clave); }
+    catch (e) { if (window.console) console.warn('[logo] no cupo en localStorage:', e && e.message); }
+}
+function _setNegLogo(negId, url) {
+    _guardarLogoLocal('etaax_' + negId + '_logo', url);
 }
 function _comprimirImg(file, callback) {
     var reader = new FileReader();
@@ -316,14 +323,17 @@ function renderLogoPrev() {
         prev.innerHTML = '<div style="width:88px;height:88px;border-radius:14px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:28px;background:var(--surface2)">🏢</div>';
     }
 }
-function logoChange(input) {
+async function logoChange(input) {
     if (!input.files || !input.files[0]) return;
     var negId = getNegocioActivo();
-    _comprimirImg(input.files[0], function(b64) {
-        _setNegLogo(negId, b64);
-        renderLogoPrev();
-        markDirty();
-    });
+    /* A Storage, no a localStorage. Antes se guardaba el base64 con setItem a
+       pelo: con el almacén lleno lanzaba, la subida moría en silencio y el logo
+       nunca aparecía — ni aquí ni en los reportes impresos. */
+    var url = await sbSubirLogo(input.files[0], negId);
+    if (!url) { alert('No se pudo subir el logo. Revisa tu conexión e inténtalo de nuevo.'); input.value = ''; return; }
+    _setNegLogo(negId, url);
+    renderLogoPrev();
+    markDirty();
 }
 function logoEliminar() {
     var negId = getNegocioActivo();

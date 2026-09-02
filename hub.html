@@ -2177,9 +2177,16 @@ function _setSucCfg(sucId, negId, data) {
     if (window.sbSucPush) sbSucPush(negId);
 }
 function _getSucLogo(sucId, negId) { return localStorage.getItem('etaax_' + negId + '_suc_' + sucId + '_logo') || ''; }
-function _setSucLogo(sucId, negId, b64) {
-    if (b64) localStorage.setItem('etaax_' + negId + '_suc_' + sucId + '_logo', b64);
-    else localStorage.removeItem('etaax_' + negId + '_suc_' + sucId + '_logo');
+/* Guarda la URL del logo. Se envuelve en try porque si localStorage está
+   lleno, `setItem` LANZA — y antes eso tumbaba la subida entera sin decir nada.
+   Ahora la URL ya vive en Storage: perder la copia local solo significa que se
+   relee de la nube en la siguiente carga, no que se pierda el logo. */
+function _guardarLogoLocal(clave, url) {
+    try { if (url) localStorage.setItem(clave, url); else localStorage.removeItem(clave); }
+    catch (e) { if (window.console) console.warn('[logo] no cupo en localStorage:', e && e.message); }
+}
+function _setSucLogo(sucId, negId, url) {
+    _guardarLogoLocal('etaax_' + negId + '_suc_' + sucId + '_logo', url);
     if (window.sbSucPush) sbSucPush(negId);
 }
 function _comprimirImg(file, callback) {
@@ -2242,12 +2249,13 @@ function _renderAjLogo() {
         prev.innerHTML = '<div style="width:72px;height:72px;border-radius:10px;border:2px dashed var(--b2);display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:22px">🏪</div>';
     }
 }
-function ajSucLogoChange(input) {
+async function ajSucLogoChange(input) {
     if (!input.files || !input.files[0]) return;
-    _comprimirImg(input.files[0], function(b64) {
-        _setSucLogo(_ajSucId, _ajNegId, b64);
-        _renderAjLogo();
-    });
+    var negId = _ajNegId, sucId = _ajSucId;
+    var url = await sbSubirLogo(input.files[0], negId);
+    if (!url) { alert('No se pudo subir el logo. Revisa tu conexión e inténtalo de nuevo.'); input.value = ''; return; }
+    _setSucLogo(sucId, negId, url);
+    _renderAjLogo();
 }
 function ajSucLogoEliminar() {
     _setSucLogo(_ajSucId, _ajNegId, '');
@@ -2360,9 +2368,8 @@ function guardarAjustesSucursal() {
 var _cfgNegId = null;
 
 function _getNegLogo(negId) { return localStorage.getItem('etaax_' + negId + '_logo') || ''; }
-function _setNegLogo(negId, b64) {
-    if (b64) localStorage.setItem('etaax_' + negId + '_logo', b64);
-    else localStorage.removeItem('etaax_' + negId + '_logo');
+function _setNegLogo(negId, url) {
+    _guardarLogoLocal('etaax_' + negId + '_logo', url);
 }
 function _getNegExtra(negId) { try { return JSON.parse(localStorage.getItem('etaax_' + negId + '_config_extra') || '{}'); } catch { return {}; } }
 function _setNegExtra(negId, data) { localStorage.setItem('etaax_' + negId + '_config_extra', JSON.stringify(data)); }
@@ -2375,14 +2382,14 @@ function _renderCfgNegLogo() {
         ? '<img src="' + b64 + '" style="width:80px;height:80px;object-fit:cover;border-radius:12px;border:1px solid var(--b2)">'
         : '<div style="width:80px;height:80px;border-radius:12px;border:2px dashed var(--b2);display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:26px;background:var(--s2)">🏢</div>';
 }
-function cfgNegLogoChange(input) {
+async function cfgNegLogoChange(input) {
     if (!input.files || !input.files[0]) return;
     var negId = _cfgNegId;
-    _comprimirImg(input.files[0], function(b64) {
-        _setNegLogo(negId, b64);
-        _renderCfgNegLogo();
-        _pushNegLogoNube(negId, b64);   // a Storage + a la fila del negocio
-    });
+    var url = await sbSubirLogo(input.files[0], negId);
+    if (!url) { alert('No se pudo subir el logo. Revisa tu conexión e inténtalo de nuevo.'); input.value = ''; return; }
+    _setNegLogo(negId, url);
+    _renderCfgNegLogo();
+    _pushNegLogoNube(negId, url);   // guarda la URL en la fila del negocio
 }
 function cfgNegLogoEliminar() {
     _pushNegLogoNube(_cfgNegId, '');

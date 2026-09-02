@@ -475,6 +475,25 @@
         return _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
     };
 
+    /* ══ LOGOS: A STORAGE, NUNCA A localStorage ═══════════════════════════
+       El logo del negocio y el de cada sucursal se guardaban como base64 en
+       localStorage, con `setItem` a pelo y SIN manejo de error. En esta app
+       localStorage se llena —es la causa raíz de media docena de bugs viejos— y
+       ahí setItem LANZA: la subida moría en silencio y el logo simplemente no
+       aparecía nunca, ni en pantalla ni en los reportes impresos.
+
+       Ahora sube a Storage y en localStorage solo queda la URL, que son 100
+       bytes en vez de 80 KB. Y si la subida falla, SE DICE: quedarse callado es
+       lo que hizo que este bug durara meses.
+
+       Devuelve la URL, o null si no se pudo (el llamador avisa al usuario). */
+    window.sbSubirLogo = async function (file, negId) {
+        var id = negId || _negId();
+        if (!file || !id || typeof _supabase === 'undefined') return null;
+        var r = await window.sbSubirEvidencia('logos', file, id);
+        return (r && r.url) || null;
+    };
+
     /* ── Sucursales en Supabase (antes solo localStorage → no sincronizaban) ──
        Doc por negocio en negocio_sucursales: { sucursales:[...], cfg:{[id]:{...}} }.
        sbUpsertDoc aligera los logos base64 a Storage automáticamente. */
