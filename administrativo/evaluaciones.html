@@ -320,9 +320,15 @@ async function _sbInit(){
     }
     var r=await Promise.all([
         _supabase.from('evaluaciones').select('datos').eq('negocio_id',negId),
-        _supabase.from('evaluacion_respuestas').select('datos').eq('negocio_id',negId).order('created_at',{ascending:false})
+        _supabase.from('evaluacion_respuestas').select('datos').eq('negocio_id',negId).order('created_at',{ascending:false}),
+        /* El catálogo de ETAAX se lee TAMBIÉN aquí, no solo cuando se abre el
+           importador: es lo que permite avisar que una copia se quedó atrás sin
+           que el negocio tenga que ir a buscarlo. Si falla (permisos, red), la
+           pantalla funciona igual y solo se queda sin el aviso. */
+        _supabase.from('catalogo_evaluaciones').select('datos')
     ]);
     if(!r[0].error) _evals=(r[0].data||[]).map(function(x){return x.datos;}).filter(Boolean);
+    if(r[2] && !r[2].error) _catEvals=(r[2].data||[]).map(function(x){return x.datos;}).filter(Boolean);
     if(!r[1].error) _respuestas=(r[1].data||[]).map(function(x){return x.datos;}).filter(Boolean);
     renderLista();
     _subRealtime(negId);
@@ -377,14 +383,80 @@ function renderLista(){
         '</div>';
     }).join('');
 }
+/* ══ ¿HAY UNA VERSIÓN NUEVA DE ETAAX? ═══════════════════════════════════════
+   Una evaluación que el negocio jaló del catálogo es una COPIA: si ETAAX le
+   agrega preguntas después, el negocio se queda con la vieja y no se entera.
+   Eso ya pasó — el catálogo tenía 27 preguntas y el negocio seguía con 17.
+
+   No se actualiza sola, a propósito. El negocio pudo haberla adaptado, y
+   pisarle su trabajo sin avisar es peor que dejarlo desactualizado. Se avisa y
+   él decide. */
+var _catEvals = [];       // plantillas del catálogo ETAAX, para comparar versiones
+
+function _maestraDe(e){
+    if (!e || !e.origenCatalogoId) return null;
+    return _catEvals.find(function (c) { return c.id === e.origenCatalogoId; }) || null;
+}
+function _hayVersionNueva(e){
+    var m = _maestraDe(e);
+    if (!m) return false;
+    return (parseInt(m.version, 10) || 1) > (parseInt(e.origenVersion, 10) || 1);
+}
+
+/* Trae de la maestra SOLO el contenido. Lo que es del negocio —su link, si está
+   activa, y sobre todo sus RESPUESTAS— no se toca: son de gente real que ya
+   contestó y no se pueden rehacer. */
+async function actualizarDesdeCatalogo(id){
+    var e = _evals.find(function (x) { return x.id === id; }); if (!e) return;
+    var m = _maestraDe(e); if (!m) return;
+    var nAntes = (e.preguntas || []).length, nDespues = (m.preguntas || []).length;
+    var resp = _respDe(id).length;
+
+    var aviso = 'ETAAX actualizó "' + (m.titulo || e.titulo) + '".\n\n' +
+        'Tu versión: ' + nAntes + ' pregunta' + (nAntes !== 1 ? 's' : '') + '\n' +
+        'Nueva:      ' + nDespues + ' pregunta' + (nDespues !== 1 ? 's' : '') + '\n\n';
+    if (resp) {
+        /* Esto hay que decirlo antes, no después: las respuestas viejas se
+           conservan pero fueron a OTRO cuestionario, y al leerlas junto a las
+           nuevas se comparan cosas distintas. */
+        aviso += '⚠️ Esta evaluación ya tiene ' + resp + ' respuesta' + (resp !== 1 ? 's' : '') + '. ' +
+                 'No se borran, pero corresponden al cuestionario anterior: al compararlas con las nuevas ' +
+                 'estarías midiendo cosas distintas.\n\n';
+    }
+    aviso += '¿Actualizar el contenido? Se reemplazan título, descripción y preguntas. ' +
+             'Tu link, tus respuestas y si está activa NO cambian.';
+    if (!confirm(aviso)) return;
+
+    e.titulo        = m.titulo;
+    e.descripcion   = m.descripcion;
+    e.categoria     = m.categoria;
+    e.instrucciones = m.instrucciones;
+    e.preguntas     = JSON.parse(JSON.stringify(m.preguntas || []));
+    e.puntajeMax    = (e.preguntas).reduce(function (s, q) { return s + _puntosMaxPregunta(q); }, 0);
+    e.origenVersion = parseInt(m.version, 10) || 1;
+    e.updatedAt     = new Date().toISOString();
+    if (typeof sbUpsert === 'function') sbUpsert('evaluaciones', e);
+    renderLista();
+}
+
 function cardHTML(e){
     var nq=(e.preguntas||[]).length;
-    return '<div class="ev-card">'+
+    var nueva = !_CAT && _hayVersionNueva(e);
+    var m = nueva ? _maestraDe(e) : null;
+    return '<div class="ev-card"'+(nueva?' style="border-color:rgba(245,200,66,.5)"':'')+'>'+
         '<div class="ev-card-top">'+
             '<div class="ev-card-tit">'+esc(e.titulo||'Sin título')+'</div>'+
             '<span class="ev-chip '+(e.activa?'on':'off')+'">'+(e.activa?'Activa':'Borrador')+'</span>'+
         '</div>'+
         '<div class="ev-card-meta">'+nq+' pregunta'+(nq!==1?'s':'')+(e.descripcion?' · '+esc(e.descripcion.slice(0,60)):'')+'</div>'+
+        (nueva
+            ? '<div style="background:rgba(245,200,66,.1);border:1px solid rgba(245,200,66,.4);border-radius:8px;'+
+                   'padding:9px 11px;margin:10px 0 2px;font-size:12.5px;color:var(--text-muted);line-height:1.55">'+
+                  '<b style="color:var(--accent)">✨ ETAAX mejoró esta evaluación</b><br>'+
+                  'Ahora trae '+((m.preguntas||[]).length)+' preguntas (tú tienes '+nq+'). '+
+                  '<button class="ev-btn sm" style="margin-top:7px" onclick="actualizarDesdeCatalogo(\''+e.id+'\')">Actualizar</button>'+
+              '</div>'
+            : '')+
         '<div class="ev-card-acts">'+
             '<button class="ev-btn ghost sm" onclick="editarEval(\''+e.id+'\')">✎ Editar</button>'+
             '<button class="ev-btn sm" onclick="compartir(\''+e.id+'\')">🔗 Compartir</button>'+
@@ -457,6 +529,7 @@ function abrirEvalsEtaax(){
             var nueva=Object.assign({}, d, {
                 id:'ev_'+genId(),
                 origenCatalogoId:d.id,
+                origenVersion:(parseInt(d.version,10)||1),   // de qué versión salió esta copia
                 token:_token(),          // link propio, no el de la plantilla
                 activa:false,            // entra como borrador: la revisas y tú la abres
                 createdAt:new Date().toISOString(),
@@ -765,6 +838,11 @@ async function guardarEval(){
     _evals.push(_edit);
     if(_CAT){
         _edit.activa=false; delete _edit.token; delete _edit.respuestas;   // plantilla pura
+        /* Cada guardada del catálogo sube la versión. Es lo que permite que un
+           negocio sepa que su copia se quedó atrás: comparar los textos de las
+           preguntas sería frágil y comparar fechas obliga a confiar en el reloj
+           de quien guardó. Un contador no se presta a interpretación. */
+        _edit.version = (parseInt(_edit.version, 10) || 1) + 1;
         var r=await _supabase.from(TABLA_EV).upsert([{id:_edit.id, datos:_edit, updated_at:ahora}]);
         if(r.error){ alert('No se pudo guardar en el catálogo: '+r.error.message); return; }
     } else if(typeof sbUpsert==='function') sbUpsert('evaluaciones', _edit); // id + negocio activo + datos

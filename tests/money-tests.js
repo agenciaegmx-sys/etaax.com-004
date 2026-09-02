@@ -2771,6 +2771,44 @@ console.log('\n══ SUITE V · Sin costo para el negocio (administrativo/diari
         eq(D._sueldoEsDelMinimo({ sinCostoNegocio: true }), false, 'aviso'));
 })();
 
+/* ═══════════ SUITE X · VERSIONES DE EVALUACIÓN (administrativo/evaluaciones.html) ═══════════
+   Una evaluación que el negocio jaló del catálogo es una COPIA. Si ETAAX le
+   agrega preguntas después, el negocio se queda con la vieja y no se entera —
+   ya pasó: el catálogo tenía 27 preguntas y el negocio seguía con 17. */
+console.log('\n══ SUITE X · Versiones de evaluación (administrativo/evaluaciones.html) ══');
+(function () {
+    const E = crearContexto();
+    E._storage['etaax_negocio_activo'] = 'n1';
+    cargarInline(E, 'administrativo/evaluaciones.html');
+
+    setVar(E, '_catEvals', [
+        { id: 'cat1', titulo: 'Psicométrico', version: 3, preguntas: new Array(27) },
+        { id: 'cat2', titulo: 'Sin versión',            preguntas: new Array(5) },
+    ]);
+
+    test('una copia atrasada se detecta', () =>
+        eq(E._hayVersionNueva({ origenCatalogoId: 'cat1', origenVersion: 1 }), true, 'aviso'));
+    test('una copia al día no molesta', () =>
+        eq(E._hayVersionNueva({ origenCatalogoId: 'cat1', origenVersion: 3 }), false, 'aviso'));
+    /* Una evaluación propia del negocio no tiene maestra: nunca debe avisar. */
+    test('una evaluación propia nunca pide actualizarse', () =>
+        eq(E._hayVersionNueva({ id: 'mia', titulo: 'Mía' }), false, 'aviso'));
+    /* Si la maestra se borró del catálogo, tampoco hay con qué comparar. */
+    test('si la maestra ya no existe, no se inventa un aviso', () =>
+        eq(E._hayVersionNueva({ origenCatalogoId: 'borrada', origenVersion: 1 }), false, 'aviso'));
+
+    /* Las copias VIEJAS no traen origenVersion y las maestras viejas no traen
+       version: las dos cuentan como 1, así que no se avisa hasta que ETAAX
+       guarde la maestra una vez. Es lo correcto — avisar de un cambio que no
+       ocurrió entrenaría a ignorar el aviso. */
+    test('sin versiones registradas (datos viejos) no se avisa de la nada', () =>
+        eq(E._hayVersionNueva({ origenCatalogoId: 'cat2' }), false, 'aviso'));
+    test('…y en cuanto la maestra sube de versión, sí', () => {
+        setVar(E, '_catEvals', [{ id: 'cat2', titulo: 'Sin versión', version: 2, preguntas: new Array(5) }]);
+        return eq(E._hayVersionNueva({ origenCatalogoId: 'cat2' }), true, 'aviso');
+    });
+})();
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0
