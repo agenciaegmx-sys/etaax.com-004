@@ -27,7 +27,14 @@
         if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
         return /failed to fetch|networkerror|network request failed|load failed|err_internet|err_network|err_connection|timeout|fetch/i.test(String(detalle || ''));
     }
+    /* El motivo EXACTO del último fallo de subida. _sbToastError manda a consola
+       todo lo que no sea de red y solo enseña los de red — razonable para no
+       alarmar por un error de esquema, pero deja al usuario (y a quien
+       diagnostica) sin saber qué pasó. Las subidas guardan aquí su motivo para
+       poder decirlo donde importa. */
+    window._sbUltimoError = '';
     window._sbToastError = function (detalle) {
+        window._sbUltimoError = String(detalle || '');
         console.error('[etaax-db]', detalle);
         if (!_esErrorDeRed(detalle)) return; // no es de red → solo consola, sin alarmar
         var el = document.getElementById('etaax-sync-toast');
@@ -471,7 +478,7 @@
         var base = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
         var path = id + '/' + carpeta + '/' + base + '.' + ext;
         var r = await _supabase.storage.from('evidencias').upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
-        if (r.error) { window._sbToastError && window._sbToastError('subir archivo: ' + r.error.message); return null; }
+        if (r.error) { window._sbUltimoError = r.error.message; window._sbToastError && window._sbToastError('subir archivo: ' + r.error.message); return null; }
         return _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
     };
 
@@ -490,8 +497,28 @@
     window.sbSubirLogo = async function (file, negId) {
         var id = negId || _negId();
         if (!file || !id || typeof _supabase === 'undefined') return null;
+        window._sbUltimoError = '';
         var r = await window.sbSubirEvidencia('logos', file, id);
         return (r && r.url) || null;
+    };
+
+    /* Traduce el error crudo del servidor a algo accionable. Un rechazo de
+       permisos y una caída de red se ven idénticos desde el navegador —los dos
+       son "no se pudo"— y decirle "revisa tu internet" a quien tiene internet
+       lo manda a buscar un problema que no tiene. */
+    window.sbMotivoSubida = function () {
+        var e = String(window._sbUltimoError || '');
+        if (!e) return 'No se pudo subir el archivo.';
+        if (/row-level security|violates|policy|not authorized|403/i.test(e))
+            return 'El servidor no te dejó subir el archivo a este negocio (permisos). ' +
+                   'No es tu conexión — avísale a ETAAX con este texto: ' + e;
+        if (/payload too large|413|exceeded maximum/i.test(e))
+            return 'La imagen pesa demasiado. Súbela más chica.';
+        if (/failed to fetch|networkerror|load failed|timeout/i.test(e))
+            return 'No se pudo conectar. Revisa tu internet e inténtalo de nuevo.';
+        if (/duplicate|already exists/i.test(e))
+            return 'Ya existe un archivo con ese nombre. Inténtalo de nuevo.';
+        return 'No se pudo subir el archivo: ' + e;
     };
 
     /* ── Sucursales en Supabase (antes solo localStorage → no sincronizaban) ──

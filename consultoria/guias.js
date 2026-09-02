@@ -390,7 +390,7 @@
                 if (fMini.size > 5 * 1024 * 1024) { msg.textContent = 'Esa imagen pesa más de 5 MB. Súbela más chica.'; return; }
                 msg.textContent = 'Subiendo la miniatura…';
                 var mUrl = await window.sbSubirArchivo('miniaturas', fMini, '_guias');
-                if (!mUrl) { msg.textContent = 'No se pudo subir la miniatura.'; return; }
+                if (!mUrl) { msg.textContent = window.sbMotivoSubida ? sbMotivoSubida() : 'No se pudo subir la miniatura.'; return; }
                 mini = mUrl;
             }
 
@@ -409,7 +409,7 @@
                     msg.textContent = 'Subiendo el PDF…';
                     // scope '_guias' → cae en _guias/pdf/…, la ruta que v45 abre a lectura.
                     var nueva = await window.sbSubirArchivo('pdf', f, '_guias');
-                    if (!nueva) { msg.textContent = 'No se pudo subir el archivo.'; return; }
+                    if (!nueva) { msg.textContent = window.sbMotivoSubida ? sbMotivoSubida() : 'No se pudo subir el archivo.'; return; }
                     url = nueva;
                 }
             } else {

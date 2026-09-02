@@ -2253,7 +2253,7 @@ async function ajSucLogoChange(input) {
     if (!input.files || !input.files[0]) return;
     var negId = _ajNegId, sucId = _ajSucId;
     var url = await sbSubirLogo(input.files[0], negId);
-    if (!url) { alert('No se pudo subir el logo. Revisa tu conexión e inténtalo de nuevo.'); input.value = ''; return; }
+    if (!url) { alert('No se pudo subir el logo.\n\n' + (window.sbMotivoSubida ? sbMotivoSubida() : '')); input.value = ''; return; }
     _setSucLogo(sucId, negId, url);
     _renderAjLogo();
 }
@@ -2386,7 +2386,7 @@ async function cfgNegLogoChange(input) {
     if (!input.files || !input.files[0]) return;
     var negId = _cfgNegId;
     var url = await sbSubirLogo(input.files[0], negId);
-    if (!url) { alert('No se pudo subir el logo. Revisa tu conexión e inténtalo de nuevo.'); input.value = ''; return; }
+    if (!url) { alert('No se pudo subir el logo.\n\n' + (window.sbMotivoSubida ? sbMotivoSubida() : '')); input.value = ''; return; }
     _setNegLogo(negId, url);
     _renderCfgNegLogo();
     _pushNegLogoNube(negId, url);   // guarda la URL en la fila del negocio

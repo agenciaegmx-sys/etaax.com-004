@@ -330,7 +330,7 @@ async function logoChange(input) {
        pelo: con el almacén lleno lanzaba, la subida moría en silencio y el logo
        nunca aparecía — ni aquí ni en los reportes impresos. */
     var url = await sbSubirLogo(input.files[0], negId);
-    if (!url) { alert('No se pudo subir el logo. Revisa tu conexión e inténtalo de nuevo.'); input.value = ''; return; }
+    if (!url) { alert('No se pudo subir el logo.\n\n' + (window.sbMotivoSubida ? sbMotivoSubida() : '')); input.value = ''; return; }
     _setNegLogo(negId, url);
     renderLogoPrev();
     markDirty();
