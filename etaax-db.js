@@ -370,13 +370,89 @@
         }
         var tablas = {};
         l.forEach(function (x) { tablas[x.tabla] = (tablas[x.tabla] || 0) + 1; });
+        /* Tocable, no "abre la consola": esto pasa sobre todo en la TABLET de la
+           barra, donde no hay consola que abrir. El motivo tiene que poder verse
+           y copiarse desde el mismo aparato. */
+        el.style.cursor = 'pointer';
         el.innerHTML = '<b style="color:#e05a3a">⚠️ ' + l.length + ' cambio' + (l.length !== 1 ? 's' : '') +
             ' no se pudo guardar</b><br>' +
             '<span style="color:#a8a29a">' + Object.keys(tablas).map(function (t) {
                 return _esc(t) + ' (' + tablas[t] + ')';
             }).join(' · ') + '</span><br>' +
-            '<span style="font-size:11px;color:#a8a29a">Escribe <b>_sbDescartes()</b> en la consola para ver el motivo, ' +
-            'o <b>_sbReintentar()</b> para volver a intentarlo.</span>';
+            '<span style="font-size:11px;color:#e0a93d">Toca aquí para ver el motivo y reintentar</span>';
+        el.onclick = _panelDescartes;
+    }
+
+    /* El detalle, en pantalla. En la tablet no hay consola, y el motivo es
+       justamente lo que hace falta para arreglarlo. */
+    function _panelDescartes() {
+        var l = [];
+        try { l = JSON.parse(localStorage.getItem(DESCARTADOS) || '[]') || []; } catch (e) {}
+        if (!l.length) return;
+        var viejo = document.getElementById('etaax-descartes-panel');
+        if (viejo) viejo.remove();
+
+        var ov = document.createElement('div');
+        ov.id = 'etaax-descartes-panel';
+        ov.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.78);overflow-y:auto;' +
+            'padding:22px 16px;font-family:"DM Sans",sans-serif';
+        /* El motivo del PRIMERO va arriba y completo: casi siempre todos fallan
+           por lo mismo, y es el texto que hay que reenviar para que lo arreglen. */
+        var motivo = l[0].motivo || 'desconocido';
+        var filas = l.slice(0, 40).map(function (x) {
+            var f = new Date(x.cuando);
+            return '<div style="padding:9px 0;border-bottom:1px solid #2a2824">' +
+                '<div style="font-size:13px;color:#f0ece6">' + _esc(x.tabla) + ' · <span style="color:#a8a29a">' + _esc(x.k || '') + '</span></div>' +
+                '<div style="font-size:11px;color:#6b6862;margin-top:2px">' +
+                    (isNaN(f) ? '' : f.toLocaleString('es-MX')) + '</div></div>';
+        }).join('');
+
+        ov.innerHTML =
+            '<div style="max-width:520px;margin:0 auto;background:#14130f;border:1px solid #2a2824;border-radius:16px;padding:22px">' +
+              '<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">' +
+                '<span style="font-size:22px">⚠️</span>' +
+                '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:1.5px;color:#f0ece6">' +
+                  l.length + ' CAMBIO' + (l.length !== 1 ? 'S' : '') + ' SIN GUARDAR</div>' +
+              '</div>' +
+              '<div style="font-size:12.5px;color:#a8a29a;line-height:1.6;margin-bottom:14px">' +
+                'El servidor los rechazó y se sacaron de la cola para que no la atoraran. ' +
+                'La información NO se borró: sigue aquí y se puede volver a mandar.</div>' +
+              '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#6b6862;margin-bottom:5px">Motivo</div>' +
+              '<div id="edMotivo" style="background:#1a1916;border:1px solid #2a2824;border-radius:9px;padding:11px 13px;' +
+                   'font-family:monospace;font-size:11.5px;color:#e0a93d;line-height:1.5;word-break:break-word">' +
+                _esc(motivo) + '</div>' +
+              '<div style="display:flex;gap:9px;flex-wrap:wrap;margin:14px 0 18px">' +
+                '<button id="edCopiar" style="background:#1a1916;border:1px solid #2a2824;color:#a8a29a;border-radius:8px;' +
+                  'padding:9px 15px;font-family:inherit;font-size:12.5px;cursor:pointer">📋 Copiar el motivo</button>' +
+                '<button id="edReintentar" style="background:#3dbe7a;border:none;color:#0a0908;border-radius:8px;' +
+                  'padding:9px 17px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer">Volver a intentar</button>' +
+              '</div>' +
+              '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#6b6862;margin-bottom:2px">Qué quedó pendiente</div>' +
+              filas +
+              (l.length > 40 ? '<div style="font-size:11px;color:#6b6862;padding-top:8px">…y ' + (l.length - 40) + ' más</div>' : '') +
+              '<button id="edCerrar" style="width:100%;margin-top:16px;background:transparent;border:1px solid #2a2824;' +
+                'color:#a8a29a;border-radius:9px;padding:11px;font-family:inherit;font-size:13px;cursor:pointer">Cerrar</button>' +
+            '</div>';
+        document.body.appendChild(ov);
+        ov.onclick = function (e) { if (e.target === ov) ov.remove(); };
+        document.getElementById('edCerrar').onclick = function () { ov.remove(); };
+        document.getElementById('edCopiar').onclick = function () {
+            var txt = 'ETAAX · ' + l.length + ' cambios sin guardar\n' +
+                      'Tablas: ' + Object.keys(tablasDe(l)).join(', ') + '\nMotivo: ' + motivo;
+            try {
+                if (navigator.clipboard) navigator.clipboard.writeText(txt);
+                else { var t = document.createElement('textarea'); t.value = txt; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+                document.getElementById('edCopiar').textContent = '✓ Copiado';
+            } catch (e) { alert(txt); }
+        };
+        document.getElementById('edReintentar').onclick = function () {
+            var n = window._sbReintentar();
+            ov.remove();
+            alert(n + ' cambio(s) se volvieron a mandar. Mira el indicador de sincronización abajo.');
+        };
+    }
+    function tablasDe(l) {
+        var t = {}; l.forEach(function (x) { t[x.tabla] = (t[x.tabla] || 0) + 1; }); return t;
     }
 
     // Qué se perdió y por qué.
