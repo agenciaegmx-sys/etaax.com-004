@@ -20,25 +20,32 @@
     Strict-Transport-Security = "max-age=31536000; includeSubDomains"
     # Permisos: deshabilita APIs que no usa la app
     Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=()"
-    # CSP: restringe desde dónde se pueden cargar recursos
+    # CSP: restringe desde dónde se pueden cargar recursos.
+    #
+    # ⚠️ NO PONER COMENTARIOS DENTRO DE LA CADENA. En TOML, ''"""'' es texto
+    # LITERAL: un "#" ahí no es un comentario, se manda tal cual en el header. El
+    # navegador lee esa línea como una directiva desconocida, la ignora… Y SE
+    # LLEVA LA DIRECTIVA QUE VENGA PEGADA. Así se rompió img-src (imágenes
+    # bloqueadas en toda la app, y "No se pudo procesar la imagen" al subir,
+    # porque el canvas tampoco podía cargar el data: URL) y así llevaba tiempo
+    # roto frame-src. Las notas van AQUÍ ARRIBA, como comentarios de verdad.
+    #
+    # img-src   · data: y blob: son imprescindibles: la compresión de imágenes
+    #             carga el archivo como data: URL antes de subirlo, y las vistas
+    #             previas usan blob:. i.ytimg.com es la miniatura de los videos
+    #             de YouTube, que se saca de su id.
+    # frame-src · blob: para la vista previa del expediente (INE, contratos);
+    #             Supabase para ver los PDF de las guías sin salir de la app;
+    #             youtube-nocookie para los tutoriales (no deja cookies de
+    #             seguimiento en el navegador del cliente).
     Content-Security-Policy = """
       default-src 'self';
       script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
       style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
       font-src 'self' https://fonts.gstatic.com;
       connect-src 'self' https://byjuocnkyuxxudondciz.supabase.co wss://byjuocnkyuxxudondciz.supabase.co;
-      # i.ytimg.com: la miniatura de un video de YouTube se saca de su id, sin
-      # pedirle al usuario que suba una imagen para algo que YouTube ya tiene.
       img-src 'self' data: blob: https://byjuocnkyuxxudondciz.supabase.co https://i.ytimg.com;
       object-src 'none';
-      # blob: es para la VISTA PREVIA del expediente digital (INE, contratos): el
-      # PDF se maqueta en un iframe desde un blob local, nunca desde un servidor
-      # externo. data: queda fuera a propósito — un blob se revoca al cerrar y no
-      # deja el archivo entero viviendo en el DOM.
-      # frame-src: blob: para la vista previa del expediente (INE, contratos);
-      # el dominio de Supabase para ver los PDF de las guías sin salir de la app;
-      # youtube-nocookie para los tutoriales en video (esa variante NO deja cookies
-      # de seguimiento en el navegador del cliente).
       frame-src 'self' blob: https://byjuocnkyuxxudondciz.supabase.co https://www.youtube-nocookie.com;
       frame-ancestors 'self';
       base-uri 'self';
