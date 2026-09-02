@@ -189,7 +189,7 @@ async function _sbInitInv() {
     if (!r[0].error) { _cacheInv = (r[0].data || []).map(function(x){ return x.datos; }).filter(Boolean); _marcarSynced(_cacheInv.map(function(c){ return c && c.id; })); }
     _mergeDraftsLocal(); // recuperar borradores que aún no sincronizaron a la nube
     if (!r[1].error) _cacheEL   = (r[1].data || []).map(function(x){ return x.datos; }).filter(Boolean);
-    _mergeELLocal(); // recuperar entradas que aún no sincronizaron a la nube
+    _mergeELLocal(true); // ya se sabe qué hay en la nube: aquí SÍ se re-sube lo que falte
     if (!r[2].error) _cacheRecetasInv = (r[2].data || []).map(function(x){ return x.datos; }).filter(Boolean);
     await _pullInvAjustes(negId); // compuestos + bateo desde la nube → localStorage
     if (!r[3].error) {
@@ -409,12 +409,29 @@ function _guardarELLocal() {
 function _cargarELLocal() {
     try { return JSON.parse(_skRaw(_sk('el_local')) || '[]') || []; } catch(e) { return []; }
 }
-function _mergeELLocal() {
+/* Sube a la vista lo que está en el respaldo local y no en el caché.
+
+   `reSubir` decide si además se manda a la nube, y NO es un detalle: init() corre
+   ANTES de que lleguen los datos de la nube, así que ahí el caché está vacío y
+   este merge cree que la nube no tiene NADA. Con reSubir activado, re-encolaba el
+   respaldo COMPLETO en cada carga — 364 entradas de golpe, todas con el mismo
+   instante en el uid. Subían bien y la cola bajaba a cero… y al recargar,
+   otras 364. Un ciclo perpetuo que no perdía datos pero tenía el aviso de
+   "sincronizando" prendido para siempre.
+
+   Solo se re-sube cuando de verdad se sabe qué hay en la nube (después de
+   _sbInit). Antes de eso se mezcla para VER, que es lo único que init() necesita
+   para pintar el historial. */
+function _mergeELLocal(reSubir) {
     var locales = _cargarELLocal();
     if (!locales.length) return;
     if (!_cacheEL) _cacheEL = [];
     var ids = {}; _cacheEL.forEach(function(x){ if (x && x.id) ids[x.id] = 1; });
-    locales.forEach(function(e){ if (e && e.id && !ids[e.id]) { _cacheEL.push(e); try { _sbUpEL(e); } catch(err){} } });
+    locales.forEach(function(e){
+        if (!e || !e.id || ids[e.id]) return;
+        _cacheEL.push(e);
+        if (reSubir) { try { _sbUpEL(e); } catch(err){} }
+    });
 }
 
 function setEntradasLog(d) {
@@ -9647,7 +9664,10 @@ function guardarFichaTecnica() {
 }
 
 // ── Init ──────────────────────────────────────────────────────
-function init() { _limpiarStorageEmergencia(); _mergeDraftsLocal(); _mergeELLocal(); renderStats(); renderHistorial(); }
+/* init() corre ANTES de que responda la nube: aquí se mezcla solo para PINTAR.
+   Re-subir en este punto sería mandar el respaldo entero, porque todavía no se
+   sabe qué hay allá. Lo que falte de verdad lo manda _sbInit al terminar. */
+function init() { _limpiarStorageEmergencia(); _mergeDraftsLocal(); _mergeELLocal(false); renderStats(); renderHistorial(); }
 // OJO: init() se llama AL FINAL del archivo, DESPUÉS de registrar los guardias de
 // navegación. Así, si init() llegara a fallar, los guardias ya quedaron activos.
 

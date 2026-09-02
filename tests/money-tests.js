@@ -2950,6 +2950,56 @@ console.log('\n══ SUITE Y · Periodo del inventario por momento (recetas/inv
         eq(/^\d{4}-\d{2}-\d{2}T/.test(sinSellar.cerradoAt), true, 'sello'));
 })();
 
+/* ═══════════ SUITE Z · LA COLA QUE NUNCA SE VACIABA (recetas/inventarios.js) ═══════════
+   364 cambios pendientes en cada carga, subiendo bien y volviendo a aparecer.
+   La causa: init() corre ANTES de que responda la nube, y el merge de entradas
+   re-subía TODO el respaldo local porque el caché estaba vacío y creía que allá
+   no había nada. No perdía datos —los upserts son idempotentes— pero dejaba el
+   aviso de "sincronizando" prendido para siempre y gastaba red en cada carga. */
+console.log('\n══ SUITE Z · La cola que nunca se vaciaba (recetas/inventarios.js) ══');
+(function () {
+    const Z = crearContexto();
+    cargarJS(Z, 'etaax-core.js');
+    cargarJS(Z, 'insumo-label.js');
+    cargarJS(Z, 'recetas/inventarios.js');
+    Z._storage['etaax_negocio_activo'] = 'negT';
+
+    // Respaldo local con tres entradas; la nube ya las tiene todas.
+    const locales = [{ id: 'e1' }, { id: 'e2' }, { id: 'e3' }];
+    Z._storage['etaax_negT_el_local'] = JSON.stringify(locales);
+
+    let subidas = [];
+    Z.sbUpsert = function (tabla, rec) { if (tabla === 'entradas_log') subidas.push(rec.id); };
+
+    /* ── ANTES de que responda la nube (lo que hace init) ── */
+    setVar(Z, '_cacheEL', null);
+    subidas = [];
+    Z._mergeELLocal(false);
+    test('con la nube sin responder, NO se re-sube nada', () => eq(subidas.length, 0, 'subidas'));
+    test('…pero sí se mezclan para poder pintar el historial', () =>
+        eq((Z._cacheEL || []).length, 3, 'vista'));
+
+    /* ── DESPUÉS de la nube, que ya las tiene: tampoco hay nada que mandar ── */
+    setVar(Z, '_cacheEL', [{ id: 'e1' }, { id: 'e2' }, { id: 'e3' }]);
+    subidas = [];
+    Z._mergeELLocal(true);
+    test('si la nube ya las tiene, no se re-sube ninguna', () => eq(subidas.length, 0, 'subidas'));
+
+    /* ── DESPUÉS de la nube, a la que le falta una: esa SÍ sube ── */
+    setVar(Z, '_cacheEL', [{ id: 'e1' }, { id: 'e3' }]);
+    subidas = [];
+    Z._mergeELLocal(true);
+    test('lo que de verdad falta en la nube sí se manda', () => eq(subidas.join(','), 'e2', 'subidas'));
+    test('…y solo eso, no el respaldo entero', () => eq(subidas.length, 1, 'subidas'));
+
+    /* EL BUG, tal cual era: caché vacío + re-subir = el respaldo completo. */
+    setVar(Z, '_cacheEL', null);
+    subidas = [];
+    Z._mergeELLocal(true);
+    test('con el caché vacío y reSubir, se mandaría TODO (por eso init pasa false)', () =>
+        eq(subidas.length, 3, 'subidas'));
+})();
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0
