@@ -106,20 +106,17 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
             <span class="mi">🍷</span>
             <span><span class="mt">Merma</span><br><span class="md">Se rompió, derramó o desperdició un insumo o un producto del menú</span></span>
         </button>
-        <button class="menu-btn" onclick="irConteo()">
-            <span class="mi">📋</span>
-            <span><span class="mt">Contar existencias</span><br><span class="md">Cuenta tus botellas o pésalas antes del inventario: el conteo llega al sistema y solo se aplica</span></span>
+        <button class="menu-btn" onclick="irSalida()">
+            <span class="mi">🎁</span>
+            <span><span class="mt">Cortesía o préstamo</span><br><span class="md">Salió un insumo sin ser venta: cortesía a un cliente o préstamo a otra área/sucursal</span></span>
         </button>
-        <!-- Ver lo del periodo es lo que evita el trabajo repetido: si dos
-             personas cuentan la misma barra, la segunda necesita saber qué ya
-             se capturó. Va al final del menú porque se consulta, no se captura. -->
         <button class="menu-btn" onclick="irHistorial()">
             <span class="mi">🧾</span>
             <span><span class="mt">Ver lo registrado</span><br><span class="md">Todo lo que se ha capturado desde el último inventario: entradas, mermas, cortesías y conteos</span></span>
         </button>
-        <button class="menu-btn" onclick="irSalida()">
-            <span class="mi">🎁</span>
-            <span><span class="mt">Cortesía o préstamo</span><br><span class="md">Salió un insumo sin ser venta: cortesía a un cliente o préstamo a otra área/sucursal</span></span>
+        <button class="menu-btn" onclick="irConteo()">
+            <span class="mi">📋</span>
+            <span><span class="mt">Contar existencias</span><br><span class="md">Cuenta tus botellas o pésalas antes del inventario: el conteo llega al sistema y solo se aplica</span></span>
         </button>
     </div>
 

@@ -296,7 +296,16 @@
                     // intento → el dato NO se descarta, se reintenta en la próxima vuelta.
                 } else {
                     it.tries = (it.tries || 0) + 1;
-                    if (it.tries >= 8) { if (it.uid) muertos[it.uid] = 1; console.error('[outbox] descartado tras 8 intentos:', it.tabla, it.k); }
+                    if (it.tries >= 8) {
+                        if (it.uid) muertos[it.uid] = 1;
+                        /* NO se descarta en silencio. Un console.error no lo lee
+                           nadie, y esto es un dato del negocio que se pierde: así
+                           desaparecían semanas de horarios ya capturadas. Se guarda
+                           en un apartado y se AVISA en pantalla hasta que alguien
+                           lo mire. */
+                        _guardarDescartado(it, err);
+                        console.error('[outbox] descartado tras 8 intentos:', it.tabla, it.k, err && err.message);
+                    }
                     else if (it.uid) triesUpd[it.uid] = it.tries;
                 }
                 /* SE ASIENTA EL AVANCE CADA POCOS ITEMS, no al final.
@@ -318,6 +327,84 @@
         }
     }
     window._sbFlush = _obFlush;
+    /* ══ LO QUE NO SE PUDO GUARDAR ═════════════════════════════════════════
+       Un cambio que el servidor rechaza ocho veces se saca de la cola para que
+       no la atore para siempre. Pero sacarlo y callarse es perder un dato del
+       negocio sin que nadie se entere — así se esfumaban semanas de horarios ya
+       capturadas: vivían en el navegador un rato y luego, nada.
+
+       Se guardan aparte, con el motivo, y se avisa en pantalla hasta que alguien
+       los mire. Que estorbe es el punto: un dato perdido debe doler. */
+    var DESCARTADOS = 'etaax_sync_descartados';
+
+    function _guardarDescartado(item, err) {
+        try {
+            var l = JSON.parse(localStorage.getItem(DESCARTADOS) || '[]') || [];
+            l.push({
+                tabla: item.tabla, k: item.k, op: item.op,
+                motivo: (err && err.message) || 'desconocido',
+                cuando: new Date().toISOString(),
+                payload: item.payload || null    // para poder reintentarlo a mano
+            });
+            /* Tope: si algo falla masivamente, no se llena el almacén con el
+               registro del fallo — eso rompería lo que todavía funciona. */
+            if (l.length > 200) l = l.slice(-200);
+            localStorage.setItem(DESCARTADOS, JSON.stringify(l));
+        } catch (e) { /* si ni esto cabe, queda el console.error */ }
+        _avisoDescartados();
+    }
+
+    function _avisoDescartados() {
+        var l = [];
+        try { l = JSON.parse(localStorage.getItem(DESCARTADOS) || '[]') || []; } catch (e) {}
+        var el = document.getElementById('etaax-descartes');
+        if (!l.length) { if (el) el.remove(); return; }
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'etaax-descartes';
+            el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:99999;' +
+                'background:#2a1512;border:1px solid #e05a3a;border-radius:10px;padding:12px 18px;' +
+                'font-family:"DM Sans",sans-serif;font-size:12.5px;color:#f0ece6;max-width:400px;line-height:1.6;' +
+                'box-shadow:0 8px 32px rgba(0,0,0,.5)';
+            if (document.body) document.body.appendChild(el);
+        }
+        var tablas = {};
+        l.forEach(function (x) { tablas[x.tabla] = (tablas[x.tabla] || 0) + 1; });
+        el.innerHTML = '<b style="color:#e05a3a">⚠️ ' + l.length + ' cambio' + (l.length !== 1 ? 's' : '') +
+            ' no se pudo guardar</b><br>' +
+            '<span style="color:#a8a29a">' + Object.keys(tablas).map(function (t) {
+                return _esc(t) + ' (' + tablas[t] + ')';
+            }).join(' · ') + '</span><br>' +
+            '<span style="font-size:11px;color:#a8a29a">Escribe <b>_sbDescartes()</b> en la consola para ver el motivo, ' +
+            'o <b>_sbReintentar()</b> para volver a intentarlo.</span>';
+    }
+
+    // Qué se perdió y por qué.
+    window._sbDescartes = function () {
+        var l = [];
+        try { l = JSON.parse(localStorage.getItem(DESCARTADOS) || '[]') || []; } catch (e) {}
+        console.table(l.map(function (x) {
+            return { tabla: x.tabla, clave: x.k, op: x.op, motivo: x.motivo, cuando: x.cuando };
+        }));
+        return l;
+    };
+
+    /* Volver a encolarlos. Sirve cuando el motivo ya se corrigió (una política de
+       permisos, una columna que faltaba): el dato sigue aquí y puede subir. */
+    window._sbReintentar = function () {
+        var l = [];
+        try { l = JSON.parse(localStorage.getItem(DESCARTADOS) || '[]') || []; } catch (e) {}
+        if (!l.length) { console.log('No hay nada descartado.'); return 0; }
+        l.forEach(function (x) {
+            if (x.payload) _obAdd({ op: x.op, tabla: x.tabla, k: x.k, payload: x.payload, opts: { onConflict: 'id' } });
+        });
+        try { localStorage.removeItem(DESCARTADOS); } catch (e) {}
+        _avisoDescartados();
+        _obFlush();
+        console.log('Reencolados ' + l.length + '. Mira el indicador de sincronización.');
+        return l.length;
+    };
+
     window._sbPendientes = function () { return _obLoad().length; };
 
     /* ══ FORENSE DE LA COLA ═══════════════════════════════════════════════
@@ -408,7 +495,7 @@
             document.addEventListener('visibilitychange', function () { if (!document.hidden) _obFlush(); });
         }
         setInterval(_obFlush, 20000);
-        setTimeout(function () { _obIndicador(); _obFlush(); }, 1500);
+        setTimeout(function () { _obIndicador(); _avisoDescartados(); _obFlush(); }, 1500);
     }
 
     /* ── Realtime: el servidor EMPUJA los cambios → el otro dispositivo se
