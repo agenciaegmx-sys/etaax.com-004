@@ -17,9 +17,6 @@ body{min-height:100vh;display:flex;flex-direction:column;align-items:center;just
 /* iOS Safari: los input date usan ancho intrínseco y se salen del recuadro
    si no se les quita la apariencia nativa */
 input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width:100%;text-align:left}
-.cap-fecha{margin-bottom:16px;text-align:left}
-.cap-fecha label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);display:block;margin-bottom:6px}
-.cap-fecha input{width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 14px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:15px;outline:none}
 .cap-btn{display:block;width:100%;box-sizing:border-box;background:var(--green);color:#0a0908;border:none;border-radius:10px;padding:16px;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;cursor:pointer;margin-top:8px}
 .cap-btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text-muted);font-weight:500}
 .cap-par{display:flex;gap:10px;margin-top:8px}
@@ -42,10 +39,14 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
     <div id="capCount" style="display:none;font-size:12px;color:var(--text-dim);margin:-10px 0 16px">⏱️ Expira en <b id="capCountVal" style="color:var(--text)">1:00</b></div>
 
     <div id="capForm">
-        <div class="cap-fecha">
-            <label>Fecha</label>
-            <input type="date" id="capFecha">
-        </div>
+        <!-- Sin campo de fecha, a propósito. El QR trae un token ÚNICO del corte o
+             del gasto que está abierto en la computadora, y la foto se asocia a
+             ese registro por el token — la fecha nunca se lee para emparejar
+             (claim_capturas ni siquiera la devuelve). Pedírsela a alguien que
+             está parado en la cocina con el celular era un paso de más que no
+             decidía nada.
+             Se sigue guardando la del día en la fila, para poder auditar y
+             limpiar capturas viejas. -->
         <div class="cap-thumbs" id="capThumbs"></div>
         <!-- Dos entradas separadas: capture abre la CÁMARA directo (Androids viejos
              no muestran el menú del sistema); sin capture abre galería/archivos. -->
@@ -126,7 +127,7 @@ async function onPick(input){
     if(!_vivo()){ mostrarMuerto(true); return; }
     var msg=document.getElementById('capMsg');
     var thumbs=document.getElementById('capThumbs');
-    var fecha=document.getElementById('capFecha').value||todayStr();
+    var fecha=todayStr();   // solo para el registro; no interviene en el emparejado
     for(var i=0;i<files.length;i++){
         msg.className='cap-msg'; msg.textContent='Subiendo foto…';
         var blob=await _comprimir(files[i],1280);
@@ -154,7 +155,6 @@ document.addEventListener('DOMContentLoaded',function(){
     if(!_vivo()){ mostrarMuerto(true); return; }
     document.getElementById('capTitle').textContent='Subir foto al '+lbl;
     document.getElementById('capSub').textContent='Se enviará a la computadora donde está abierto el '+lbl+'.';
-    document.getElementById('capFecha').value=todayStr();
     if(TS){
         document.getElementById('capCount').style.display='block';
         _tick();
