@@ -1250,12 +1250,45 @@ function getEntradasBottles(insumoId) {
 // carga los de ventas/gastos y las funciones de QR por sucursal lo necesitan.
 function _sucActiva() { return localStorage.getItem('etaax_sucursal_activa') || ''; }
 
+/* Sella el momento de cierre. Se respeta el que ya tuviera: volver a "finalizar"
+   un inventario ya cerrado (pasa al editarlo) no debe recorrer su cierre — eso
+   movería a otro periodo entradas que ya estaban repartidas. */
+function _sellarCierre(inv) {
+    if (inv && !inv.cerradoAt) inv.cerradoAt = new Date().toISOString();
+    return inv;
+}
+
 // PERIODO del inventario activo: de la fecha de la REFERENCIA (exclusivo) a la fecha
 // del inventario (inclusivo). Una entrada pertenece al inventario cuyo periodo cubre
 // su fecha → así el primer inventario que abras no se traga TODAS las entradas.
-function _enPeriodoInvActual(fecha) {
+function _enPeriodoInvActual(fecha, momento) {
     if (!invActual) return true;
     var refI = _getRefInv();
+
+    /* ── REGLA NUEVA: por MOMENTO, no por día ──────────────────────────────
+       Un inventario del 19 de agosto que se cerró a las 5 pm no debe quedarse
+       con lo que entró ese mismo 19 a las 8 pm: eso ya es del siguiente. Con
+       fechas sueltas eso no se puede distinguir, y era el hueco real.
+
+       Solo aplica si la referencia trae `cerradoAt` y el movimiento trae su
+       momento. Los inventarios que ya existen no tienen hora de cierre, así que
+       siguen repartiéndose por día — cambiarles la regla movería entradas ya
+       repartidas de un periodo a otro.
+
+       Los ISO se comparan como texto a propósito: mismo formato y misma zona
+       (Z), así que el orden alfabético ES el orden cronológico, sin construir
+       objetos Date en un bucle que corre por cada movimiento. */
+    var desde = refI && refI.cerradoAt ? String(refI.cerradoAt) : '';
+    var mom   = momento ? String(momento) : '';
+    if (desde && mom) {
+        if (mom <= desde) return false;                  // se registró antes de cerrar el anterior
+        var hasta = invActual.cerradoAt ? String(invActual.cerradoAt) : '';
+        // Inventario ABIERTO: no tiene tope. Todo lo que llegue desde el cierre
+        // del anterior es suyo hasta que se cierre.
+        return hasta ? (mom <= hasta) : true;
+    }
+
+    /* ── REGLA VIEJA: por día. Para los inventarios de antes de este cambio ── */
     var from = refI ? String(refI.fecha || '') : '';
     var to   = String(invActual.fecha || '9999-99-99');
     var f = String(fecha || ''); if (!f) return true;   // sin fecha: no la excluimos (compat)
@@ -1277,7 +1310,7 @@ function _recomputarMovsQR() {
         if (e.concepto !== 'merma' && e.concepto !== 'salida') return;
         if (e.mermaTipo === 'producto' || e.recetaId) return; // productos → mermasProductoQR
         if (e.sucursalId && suc && e.sucursalId !== suc) return; // sello de sucursal
-        if (!_enPeriodoInvActual(e.fecha)) return;               // periodo de este inventario
+        if (!_enPeriodoInvActual(e.fecha, e.registrado)) return;  // periodo de este inventario
         var _cid = _canonInsumoId(e.insumoId);                   // por id canónico (empata con la fila)
         (byIns[_cid] = byIns[_cid] || []).push(e);
     });
@@ -1331,7 +1364,7 @@ function _importarEntradasQR() {
     // (fuera de su periodo) → quedan libres para que el inventario correcto las reclame.
     var _globalIds = {}; (getEntradasLog() || []).forEach(function(g){ if (g && g.id && g.concepto !== 'merma' && g.concepto !== 'salida') _globalIds[g.id] = 1; });
     invActual.entradasLog = invActual.entradasLog.filter(function(le){
-        return !(le && le.id && _globalIds[le.id] && !_enPeriodoInvActual(le.fecha));
+        return !(le && le.id && _globalIds[le.id] && !_enPeriodoInvActual(le.fecha, le.registrado));
     });
     yaEnInv = {}; invActual.entradasLog.forEach(function(e){ if (e && e.id) yaEnInv[e.id] = 1; });
     var n = 0;
@@ -1340,7 +1373,7 @@ function _importarEntradasQR() {
         // Sello de sucursal: si el registro trae sucursal y NO es la activa, no se importa aquí
         var _sucImp = _sucActiva();
         if (e.sucursalId && _sucImp && e.sucursalId !== _sucImp) return;
-        if (!_enPeriodoInvActual(e.fecha)) return;   // periodo: pertenece a OTRO inventario
+        if (!_enPeriodoInvActual(e.fecha, e.registrado)) return;   // periodo: pertenece a OTRO inventario
         if (e.id && yaEnInv[e.id]) return;      // ya está en este inventario
         if (e.borrada) return; // borrada a propósito por el usuario (flag explícito).
         // OJO: NO usamos importadoEnInv como candado — confundía "borrada" con "no
@@ -2528,7 +2561,7 @@ function finalizarInventarioHistorial(id) {
     if (!inv) return;
     if (inv.cerrado) { alert('Este inventario ya está cerrado.'); return; }
     _solicitarClave('Finalizar y cerrar inventario', function(){
-        inv.cerrado = true;
+        inv.cerrado = true; _sellarCierre(inv);
         _calcCapitalesInv(inv); // refrescar capital al cerrar
         var lista = getInventarios();
         var idx = lista.findIndex(function(x){ return x.id === id; });
@@ -3160,6 +3193,10 @@ function iniciarInventario() {
     if (esNuevo) {
         invActual = {
             id: genId(), cerrado: false,
+            /* Momento REAL de apertura. `fecha` es un dato que se teclea (y se puede
+               corregir); esto es cuándo se abrió de verdad, y es la mitad de lo que
+               define el periodo. */
+            abiertoAt: new Date().toISOString(),
             sucursalId: localStorage.getItem('etaax_sucursal_activa') || '', // independiente por sucursal
             cocktailsVendidos: {}, prebatchProducidos: {}, ventasCompuesto: {}, cancelaciones: [], descuentos: [], entradasLog: [],
             filas: [], capitalCosto: 0, capitalCarta: 0, diferenciaCosto: 0
@@ -3211,7 +3248,7 @@ function _insumosConMovimientoQR() {
     (getEntradasLog() || []).forEach(function(e){
         if (!e || e.borrada || !e.insumoId) return;
         if (e.sucursalId && suc && e.sucursalId !== suc) return; // sello de sucursal
-        if (!_enPeriodoInvActual(e.fecha)) return;               // periodo de este inventario
+        if (!_enPeriodoInvActual(e.fecha, e.registrado)) return;  // periodo de este inventario
         set[_canonInsumoId(e.insumoId)] = 1;                     // por id canónico (empata con la fila)
     });
     return set;
@@ -8366,7 +8403,7 @@ function _autoGuardar(opts) {
 
 function guardarYSalir() {
     if (!invActual) return;
-    invActual.cerrado = true; delete invActual._eraCerrado;
+    invActual.cerrado = true; _sellarCierre(invActual); delete invActual._eraCerrado;
     let guardado = false;
     try { guardarInventario(); guardado = true; } catch(e) { console.warn('[guardarYSalir]', e); }
     if (!guardado) {
@@ -8382,7 +8419,7 @@ function finalizarPrimerLev() {
     if (!invActual) return;
     if (invActual.cerrado) return;
     _solicitarClave('Guardar y cerrar levantamiento', function() {
-        invActual.cerrado = true; delete invActual._eraCerrado;
+        invActual.cerrado = true; _sellarCierre(invActual); delete invActual._eraCerrado;
         let ok = false;
         try { guardarInventario(); ok = true; } catch(e) {}
         if (!ok) { invActual.cerrado = false; alert('No se pudo guardar (almacenamiento lleno).'); return; }
@@ -8398,7 +8435,7 @@ function cerrarInventario() {
     if (!invActual) return;
     if (invActual.cerrado) { alert('Este inventario ya está cerrado.'); return; }
     _solicitarClave('Cerrar y finalizar inventario', function() {
-        invActual.cerrado = true; delete invActual._eraCerrado;
+        invActual.cerrado = true; _sellarCierre(invActual); delete invActual._eraCerrado;
         let ok = false;
         try { guardarInventario(); ok = true; } catch(e) {}
         if (!ok) { invActual.cerrado = false; alert('No se pudo guardar (almacenamiento lleno).'); return; }
@@ -8541,7 +8578,7 @@ function guardarEntradaLog() {
     // Also save to active inventory so it appears in vistaEntradas historial
     // Copia inmediata al inventario activo (mismo id → el import por periodo no la
     // duplica). Si su fecha cae fuera del periodo, el import la reubica al inventario correcto.
-    if (invActual && _enPeriodoInvActual(fecha)) {
+    if (invActual && _enPeriodoInvActual(fecha, _nuevaEnt.registrado)) {
         if (!invActual.entradasLog) invActual.entradasLog = [];
         invActual.entradasLog.push({
             id: _nuevaEnt.id, insumoId,

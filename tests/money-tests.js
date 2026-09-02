@@ -2809,6 +2809,80 @@ console.log('\n══ SUITE X · Versiones de evaluación (administrativo/evalua
     });
 })();
 
+/* ═══════════ SUITE Y · PERIODO DEL INVENTARIO POR MOMENTO (recetas/inventarios.js) ═══════════
+   El caso de Edwin: un inventario del 19 de agosto cerrado a las 5 pm no debe
+   quedarse con lo que entró ese mismo 19 a las 8 pm. Con fechas sueltas eso no
+   se puede distinguir, y una entrada que cae en el periodo equivocado descuadra
+   las existencias de DOS inventarios: sobra en uno y falta en el otro. */
+console.log('\n══ SUITE Y · Periodo del inventario por momento (recetas/inventarios.js) ══');
+(function () {
+    const Y = crearContexto();
+    cargarJS(Y, 'etaax-core.js');
+    cargarJS(Y, 'insumo-label.js');
+    cargarJS(Y, 'recetas/inventarios.js');
+    Y._storage['etaax_negocio_activo'] = 'negT';
+
+    /* El anterior cerró el 19-ago a las 17:00; el actual sigue abierto. */
+    const anterior = { id: 'i1', fecha: '2026-08-19', cerrado: true, cerradoAt: '2026-08-19T17:00:00.000Z' };
+    const actual   = { id: 'i2', fecha: '2026-08-31', cerrado: false, abiertoAt: '2026-08-19T17:05:00.000Z' };
+    setVar(Y, 'invActual', actual);
+    Y._getRefInv = function () { return anterior; };
+
+    const cae = (fecha, mom) => Y._enPeriodoInvActual(fecha, mom);
+
+    test('lo del 19 ANTES del cierre es del inventario anterior', () =>
+        eq(cae('2026-08-19', '2026-08-19T14:30:00.000Z'), false, 'periodo'));
+    /* EL CASO QUE FALLABA: mismo día, después de cerrar. */
+    test('lo del 19 DESPUÉS del cierre ya es del nuevo', () =>
+        eq(cae('2026-08-19', '2026-08-19T20:00:00.000Z'), true, 'periodo'));
+    test('justo en el minuto del cierre queda en el anterior', () =>
+        eq(cae('2026-08-19', '2026-08-19T17:00:00.000Z'), false, 'periodo'));
+    test('un día después, claro que es del nuevo', () =>
+        eq(cae('2026-08-20', '2026-08-20T09:00:00.000Z'), true, 'periodo'));
+
+    /* Un inventario ABIERTO no tiene tope: todo lo que llegue es suyo hasta que
+       se cierre. Antes se cortaba en su `fecha`, así que lo registrado después
+       se perdía de vista. */
+    test('un inventario abierto se queda con lo posterior a su fecha', () =>
+        eq(cae('2026-09-05', '2026-09-05T10:00:00.000Z'), true, 'periodo'));
+
+    /* Cerrado: sí hay tope, y lo posterior es del siguiente. */
+    setVar(Y, 'invActual', Object.assign({}, actual, { cerrado: true, cerradoAt: '2026-08-31T18:00:00.000Z' }));
+    test('cerrado, lo posterior a SU cierre ya no le toca', () =>
+        eq(cae('2026-08-31', '2026-08-31T21:00:00.000Z'), false, 'periodo'));
+    test('…y lo de antes de su cierre sí', () =>
+        eq(cae('2026-08-31', '2026-08-31T12:00:00.000Z'), true, 'periodo'));
+
+    /* ── LOS INVENTARIOS VIEJOS NO CAMBIAN ──
+       No traen cerradoAt, así que se siguen repartiendo por día. Aplicarles la
+       regla nueva movería entradas ya repartidas de un periodo a otro. */
+    setVar(Y, 'invActual', { id: 'v2', fecha: '2026-08-31', cerrado: false });
+    Y._getRefInv = function () { return { id: 'v1', fecha: '2026-08-19' }; };   // sin cerradoAt
+    test('sin hora de cierre se sigue repartiendo por día', () =>
+        eq(cae('2026-08-19', '2026-08-19T20:00:00.000Z'), false, 'periodo'));
+    test('…y el día siguiente entra, como siempre', () =>
+        eq(cae('2026-08-20', '2026-08-20T20:00:00.000Z'), true, 'periodo'));
+    test('…con el tope viejo en la fecha del inventario', () =>
+        eq(cae('2026-09-05', '2026-09-05T10:00:00.000Z'), false, 'periodo'));
+
+    /* Un movimiento SIN momento (los ya guardados) cae a la regla por día. */
+    Y._getRefInv = function () { return anterior; };
+    setVar(Y, 'invActual', actual);
+    test('un movimiento sin hora usa la regla por día', () =>
+        eq(cae('2026-08-25', null), true, 'periodo'));
+
+    /* El sello de cierre no se recorre al re-finalizar: eso movería entradas ya
+       repartidas. */
+    const yaCerrado = { cerradoAt: '2026-08-19T17:00:00.000Z' };
+    Y._sellarCierre(yaCerrado);
+    test('re-finalizar un cerrado NO recorre su hora de cierre', () =>
+        eq(yaCerrado.cerradoAt, '2026-08-19T17:00:00.000Z', 'sello'));
+    const sinSellar = {};
+    Y._sellarCierre(sinSellar);
+    test('y uno sin sellar sí recibe su momento', () =>
+        eq(/^\d{4}-\d{2}-\d{2}T/.test(sinSellar.cerradoAt), true, 'sello'));
+})();
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0
