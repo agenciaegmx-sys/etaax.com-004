@@ -1250,12 +1250,65 @@ function getEntradasBottles(insumoId) {
 // carga los de ventas/gastos y las funciones de QR por sucursal lo necesitan.
 function _sucActiva() { return localStorage.getItem('etaax_sucursal_activa') || ''; }
 
-/* Sella el momento de cierre. Se respeta el que ya tuviera: volver a "finalizar"
-   un inventario ya cerrado (pasa al editarlo) no debe recorrer su cierre — eso
-   movería a otro periodo entradas que ya estaban repartidas. */
+/* ══ EL CIERRE SON DOS COSAS DISTINTAS ═════════════════════════════════════
+   · cerradoAt        — cuándo se le dio CLIC. Es rastro, para auditar.
+   · cierreOperativo  — hasta qué momento cuentan sus movimientos. ES LO QUE
+                        define el periodo.
+
+   Normalmente coinciden, pero no siempre: si el conteo fue el 19 y se olvidó
+   finalizarlo hasta el 1 de septiembre, tomar el clic como frontera haría que
+   ese inventario se tragara trece días de entradas que no son suyas — y el
+   siguiente arrancaría vacío. Descuadra los dos a la vez.
+
+   Por eso: si la fecha del inventario NO es hoy, se pregunta hasta qué hora de
+   ESE día cuentan sus movimientos. Suponerlo en silencio es justo lo que no se
+   puede hacer con algo que reparte existencias. */
+function _momentoCierre(inv) {
+    if (!inv) return '';
+    return String(inv.cierreOperativo || inv.cerradoAt || '');
+}
+
 function _sellarCierre(inv) {
-    if (inv && !inv.cerradoAt) inv.cerradoAt = new Date().toISOString();
+    if (!inv) return inv;
+    /* Se respeta lo que ya tuviera: volver a "finalizar" un inventario ya
+       cerrado (pasa al editarlo) no debe recorrer nada — eso movería a otro
+       periodo entradas que ya estaban repartidas. */
+    if (inv.cerradoAt && inv.cierreOperativo) return inv;
+    var ahora = new Date();
+    if (!inv.cerradoAt) inv.cerradoAt = ahora.toISOString();
+    if (!inv.cierreOperativo) inv.cierreOperativo = _preguntarCierreOperativo(inv, ahora);
     return inv;
+}
+
+function _preguntarCierreOperativo(inv, ahora) {
+    /* El día en LOCAL, no en UTC. La `fecha` del inventario es la que se ve en
+       pantalla (local), y a las 7 de la tarde en México toISOString() ya devuelve
+       el día siguiente: comparar contra eso le preguntaría la hora de cierre a
+       un inventario abierto hoy mismo. */
+    var hoy = ahora.getFullYear() + '-' +
+              ('0' + (ahora.getMonth() + 1)).slice(-2) + '-' +
+              ('0' + ahora.getDate()).slice(-2);
+    var f = String(inv.fecha || '');
+    // Mismo día (o sin fecha): el clic ES el momento del cierre.
+    if (!f || f === hoy) return ahora.toISOString();
+
+    var _lbl = new Date(f + 'T12:00:00').toLocaleDateString('es-MX',
+        { day: 'numeric', month: 'long', year: 'numeric' });
+    var r = (typeof prompt === 'function')
+        ? prompt(
+            'Este inventario es del ' + _lbl + ', pero lo estás finalizando hoy.\n\n' +
+            'Las entradas, mermas y conteos posteriores a ese momento se van al SIGUIENTE ' +
+            'inventario, así que importa a qué hora terminó el conteo.\n\n' +
+            '¿A qué hora del ' + _lbl + ' lo cerraste? (formato 24 h)',
+            '23:59')
+        : null;
+
+    /* Cancelar o escribir cualquier cosa NO cae a "ahora": eso es justo el error
+       que se quiere evitar. Cae al final de SU día, que es lo más cercano a la
+       verdad sin inventar una hora. */
+    var hhmm = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(r || '').trim());
+    var hora = hhmm ? (('0' + hhmm[1]).slice(-2) + ':' + hhmm[2]) : '23:59';
+    return new Date(f + 'T' + hora + ':00').toISOString();
 }
 
 // PERIODO del inventario activo: de la fecha de la REFERENCIA (exclusivo) a la fecha
@@ -1278,11 +1331,11 @@ function _enPeriodoInvActual(fecha, momento) {
        Los ISO se comparan como texto a propósito: mismo formato y misma zona
        (Z), así que el orden alfabético ES el orden cronológico, sin construir
        objetos Date en un bucle que corre por cada movimiento. */
-    var desde = refI && refI.cerradoAt ? String(refI.cerradoAt) : '';
+    var desde = refI ? _momentoCierre(refI) : '';
     var mom   = momento ? String(momento) : '';
     if (desde && mom) {
         if (mom <= desde) return false;                  // se registró antes de cerrar el anterior
-        var hasta = invActual.cerradoAt ? String(invActual.cerradoAt) : '';
+        var hasta = _momentoCierre(invActual);
         // Inventario ABIERTO: no tiene tope. Todo lo que llegue desde el cierre
         // del anterior es suyo hasta que se cierre.
         return hasta ? (mom <= hasta) : true;
