@@ -313,8 +313,42 @@ function curRecord(){
 }
 
 /* ── Persistencia ── */
+/* ══ EL BULTO DE SEMANAS ═══════════════════════════════════════════════════
+   Todas las semanas viven en UNA sola clave. Eso hace que cada guardado
+   reescriba el bulto completo — y ahí estaba el borrado: si el bulto en memoria
+   quedó corto, guardar aplasta lo que había.
+
+   Pasaba porque `horarios` es una clave GRANDE (vive en IndexedDB) y el arranque
+   la leía ANTES de que el almacén hidratara: devolvía vacío, se capturaba un
+   turno, y ese único turno sobrescribía todas las semanas anteriores. Es la
+   regla que quedó escrita en agosto —nadie lee-y-escribe una clave grande antes
+   de `ready`— y esta pantalla se quedó fuera del barrido.
+
+   Dos candados:
+   1) no se guarda hasta haber CARGADO de verdad;
+   2) nunca se escribe un bulto con MENOS semanas del que ya está guardado, salvo
+      que se hayan borrado a propósito. Perder una semana de rol es perder el
+      trabajo de alguien; que no se guarde algo se nota, que se borre no. */
+var _cargaLista = false;
+
 function _guardarLocal(){
-    try { localStorage.setItem(_sk('horarios'), JSON.stringify(_horCache)); } catch(e){}
+    if (!_cargaLista) {
+        console.warn('[horarios] guardado omitido: el almacén todavía no cargaba');
+        return;
+    }
+    try {
+        var previo = {};
+        try { previo = JSON.parse(localStorage.getItem(_sk('horarios')) || '{}') || {}; } catch(e){}
+        var antes = Object.keys(previo).length, ahora = Object.keys(_horCache || {}).length;
+        if (antes > ahora) {
+            /* Se está por perder alguna semana. En vez de aplastar, se FUSIONA:
+               lo que esté en memoria manda para lo que toca, y lo anterior se
+               conserva. Un rol perdido no se recupera de ningún lado. */
+            console.warn('[horarios] el guardado iba a dejar ' + antes + ' semanas en ' + ahora + ' · se fusiona');
+            for (var k in previo) if (!_horCache[k]) _horCache[k] = previo[k];
+        }
+        localStorage.setItem(_sk('horarios'), JSON.stringify(_horCache));
+    } catch(e){ console.warn('[horarios] no se pudo guardar local:', e && e.message); }
 }
 function persist(rec){
     rec.updated = Date.now();
@@ -347,10 +381,30 @@ async function _syncHorariosDB(){
         if (!sess.data || !sess.data.session) return;
         var res = await _supabase.from('horarios').select('datos').eq('negocio_id', negId);
         if (res.error || !res.data) return;
-        res.data.forEach(function(row){ var d=row.datos; if (d && d.id) _horCache[d.id] = d; });
+
+        var enNube = {};
+        res.data.forEach(function(row){
+            var d = row.datos;
+            if (d && d.id) { _horCache[d.id] = d; enNube[d.id] = 1; }
+        });
+
+        /* LO QUE ESTÁ SOLO AQUÍ, SE MANDA. Una semana que existe en este
+           navegador y no en la nube es una semana a un formateo de distancia de
+           desaparecer — así se perdieron las de agosto. Mientras la política de
+           permisos las rechazaba (hasta la v54), esto es también lo que las
+           recupera: en cuanto el servidor las acepte, suben solas. */
+        var soloLocal = Object.keys(_horCache).filter(function(id){
+            var r = _horCache[id];
+            return r && !enNube[id] && r.turnos && Object.keys(r.turnos).length;
+        });
+        if (soloLocal.length && window.sbUpsert) {
+            console.log('[horarios] ' + soloLocal.length + ' semana(s) solo en este equipo → subiendo');
+            soloLocal.forEach(function(id){ sbUpsert('horarios', _horCache[id], negId); });
+        }
+
         _guardarLocal();
         render();
-    } catch(e){}
+    } catch(e){ console.warn('[horarios] sync:', e && e.message); }
 }
 
 /* ── Scope de sucursal (dos caras, como staff.html) ── */
@@ -1053,11 +1107,17 @@ document.addEventListener('keydown', function(e){
 });
 
 (async function init(){
+    /* ESPERAR AL ALMACÉN antes de leer. Sin esto la lectura devuelve vacío y el
+       primer guardado se lleva por delante todas las semanas anteriores. */
+    if (window.etaaxStore && etaaxStore.ready && etaaxStore.ready.then) {
+        try { await etaaxStore.ready; } catch(e) {}
+    }
     _cargarLocal();
+    _cargaLista = true;      // desde aquí sí se puede guardar sin riesgo
     _resolverScope();
     await _cargarStaff();
     render();
-    _syncHorariosDB();
+    await _syncHorariosDB();
     if (window.sbRealtime) {
         sbRealtime('horarios', getNegocioActivo(), function(){ _syncHorariosDB(); });
     }
