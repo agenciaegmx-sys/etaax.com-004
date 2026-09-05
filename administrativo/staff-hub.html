@@ -264,6 +264,10 @@ document.addEventListener('keydown', function(e){ if(e.key==='Escape' && documen
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="/etaax-store.js"></script><!-- almacenamiento grande -->
+<script src="/etaax-db.js"></script><!-- la cola y sus avisos: sin esto, un cambio
+     descartado no se ve NI se puede consultar desde esta pantalla, que es el hub
+     desde el que se abren horarios y staff en un iframe. -->
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 <script src="/nav-pref.js"></script>
