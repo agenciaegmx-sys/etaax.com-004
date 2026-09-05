@@ -120,6 +120,7 @@
             if (!cred || !cred.email) {
                 _lastErr = _lastErr || 'sin credenciales (¿falta correr v19/v20 o aprovisionar como dueño?)';
                 console.warn('[staff-auth] ' + _lastErr);
+                _avisarSinSesion(_lastErr);
                 return false;
             }
             try {
@@ -129,11 +130,44 @@
                     _lastErr = 'login: ' + r.error.message;
                     console.warn('[staff-auth] login staff:', r.error.message,
                         '· Si dice "Email not confirmed", desactiva "Confirm email" en Supabase → Auth.');
+                    _avisarSinSesion(r.error.message);
                     return false;
                 }
                 _lastErr = null;
                 return true;
-            } catch (e) { _lastErr = 'login: ' + ((e && e.message) || e); console.warn('[staff-auth] login staff:', e); return false; }
+            } catch (e) {
+                _lastErr = 'login: ' + ((e && e.message) || e);
+                console.warn('[staff-auth] login staff:', e);
+                _avisarSinSesion((e && e.message) || 'sin conexión');
+                return false;
+            }
         }
     };
+
+    /* ══ SIN SESIÓN EN LA NUBE, Y QUE SE VEA ══════════════════════════════════
+       Si la cuenta compartida del negocio no logra entrar, el colaborador SIGUE
+       trabajando: captura sus horarios, sus cortes, sus conteos… y todo eso se
+       queda en el navegador. La cola lo intenta ocho veces, el servidor lo
+       rechaza porque no hay sesión, y se descarta. Días después "se borró todo".
+
+       Antes esto era un console.warn. En una tablet nadie ve un console.warn.
+       Ahora es un aviso que no se quita, porque lo que está en juego es el
+       trabajo de una jornada entera. */
+    function _avisarSinSesion(motivo) {
+        try {
+            if (document.getElementById('etaax-sin-sesion')) return;
+            var el = document.createElement('div');
+            el.id = 'etaax-sin-sesion';
+            el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:100003;background:#2a1512;' +
+                'border-bottom:2px solid #e05a3a;padding:11px 16px;font-family:"DM Sans",sans-serif;' +
+                'font-size:12.5px;color:#f0ece6;line-height:1.55;text-align:center';
+            el.innerHTML =
+                '<b style="color:#e05a3a">⚠️ No hay conexión con el servidor de ETAAX</b><br>' +
+                '<span style="color:#a8a29a">Puedes seguir trabajando, pero lo que captures ' +
+                '<b>podría no guardarse</b>. Avísale a ETAAX antes de capturar un turno completo.</span><br>' +
+                '<span style="font-size:11px;color:#6b6862">Motivo: ' +
+                String(motivo || '').replace(/[<>]/g, '') + '</span>';
+            if (document.body) document.body.appendChild(el);
+        } catch (e) { /* si ni el aviso se puede pintar, queda el console.warn */ }
+    }
 })();
