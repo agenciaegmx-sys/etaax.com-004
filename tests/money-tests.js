@@ -3724,6 +3724,46 @@ console.log('\n══ SUITE AE · Apartar y etiquetar en Diario (administrativo/
     test('…y dice dónde se aparta, sin sacarte del gasto', () =>
         eq($('gPrevHint').innerHTML.indexOf('Hacer previsión') > -1, true, 'camino'));
 
+    /* ══ EL CAMINO COMPLETO: apartar → aparece al gastar ══
+       Es lo que Edwin pidió verificar: en cuanto una previsión tiene saldo, debe
+       poder elegirse como respaldo del gasto. */
+    setVar(A, '_cachePrevs', [{ id:'p1', concepto:'Aguinaldo', estado:'en_curso' },
+                              { id:'p2', concepto:'Impuestos', estado:'en_curso' }]);
+    setVar(A, '_cacheDeps', []);
+    setVar(A, '_cacheGastos', []);
+    A._gPrevPoblar('');
+    test('sin apartar nada, no hay previsión que ofrecer', () =>
+        eq($('gPrevision').disabled, true, 'apagado'));
+
+    setVar(A, '_cacheDeps', [{ id:'ap1', tipo:'apartado', previsionId:'p1', monto:12000,
+                               fondo:'caja_fuerte', fecha:'2026-03-01' }]);
+    A._gPrevPoblar('');
+    test('apartado el dinero, la previsión ya se puede elegir', () =>
+        eq($('gPrevision').disabled, false, 'activo'));
+    test('…y aparece con su saldo respaldado', () => {
+        const o = $('gPrevision').options.find(x => x.value === 'p1');
+        return eq(o && o.text.indexOf('$12,000.00') > -1, true, 'saldo');
+    });
+    /* La meta que NO tiene dinero apartado no se ofrece: sería ofrecer algo que
+       no existe. */
+    test('la previsión sin saldo no se ofrece', () =>
+        eq($('gPrevision').options.some(x => x.value === 'p2'), false, 'vacía'));
+
+    /* Y el saldo baja conforme se usa: lo que queda respaldado, no lo apartado.
+       Los gastos se leen de _cacheGastosExt, que es el puente que llena
+       _syncGastosCortes cada vez que se guarda uno. */
+    setVar(A, '_cacheGastosExt', [{ id:'g1', previsionId:'p1', monto:5000, fecha:'2026-12-01' }]);
+    A._gPrevPoblar('');
+    test('lo ya usado se descuenta de lo que se ofrece', () => {
+        const o = $('gPrevision').options.find(x => x.value === 'p1');
+        return eq(o && o.text.indexOf('$7,000.00') > -1, true, 'restante');
+    });
+    /* Y si se gastó todo, deja de ofrecerse. */
+    setVar(A, '_cacheGastosExt', [{ id:'g1', previsionId:'p1', monto:12000, fecha:'2026-12-01' }]);
+    A._gPrevPoblar('');
+    test('agotada la previsión, ya no se ofrece', () => eq($('gPrevision').disabled, true, 'agotada'));
+    setVar(A, '_cacheGastosExt', []);
+
     /* Gastar más de lo apartado se avisa, pero no se prohíbe. */
     setVar(A, '_cacheDeps', [{ id:'a1', tipo:'apartado', previsionId:'p1', monto:20000,
                                fondo:'caja_fuerte', fecha:'2026-03-01' }]);
@@ -4085,6 +4125,39 @@ console.log('\n══ SUITE AH · Conciliación de tarjeta en Diario (administra
         const src = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
         return eq(src.indexOf('_menuCorte(event,') > -1, true, 'menú');
     });
+
+    /* ══ LA FICHA TÉCNICA (👁️ Ver corte) ══
+       El bloque estaba escrito ahí pero el `+` quedó DESPUÉS del `;`: la
+       expresión era válida —nadie se quejó— y el HTML nunca lo recibía. En el
+       editor sí salía, porque ahí se llama aparte. Este test mira la ficha. */
+    setVar(A, '_cacheCortes', [viejo]);
+    setVar(A, '_cacheGastos', []);
+    setVar(A, '_cacheDeps', []);
+    A._storage['etaax_ctx'] = JSON.stringify({ ctxType:'owner', negId:'negT' });
+    A.verCorte('v1');
+    test('la ficha del corte trae su bloque de conciliación', () =>
+        eq($('verCorteBody').innerHTML.indexOf('Conciliar un abono') > -1, true, 'ficha'));
+
+    /* Y el aviso arriba, que es lo primero que se pregunta al abrirla. */
+    setVar(A, '_cacheDeps', [{ id:'z1', tipo:'abono_tpv', cuentaId:'cta1', corteId:'otro',
+                               monto:1, fecha:'2026-08-30', folio:'seed' }]);
+    A.verCorte('v1');
+    test('la ficha avisa arriba que falta conciliar', () =>
+        eq($('verCorteBody').innerHTML.indexOf('Falta conciliar') > -1, true, 'aviso'));
+    test('…y el aviso va antes que los datos del corte', () => {
+        const h = $('verCorteBody').innerHTML;
+        return eq(h.indexOf('Falta conciliar') < h.indexOf('Fondo inicial'), true, 'arriba');
+    });
+
+    setVar(A, '_cacheDeps', [{ id:'z2', tipo:'abono_tpv', cuentaId:'cta1', corteId:'v1',
+                               monto:21180.25, fecha:'2026-09-01', folio:'R1' }]);
+    A.verCorte('v1');
+    test('conciliado, la ficha lo dice en verde', () =>
+        eq($('verCorteBody').innerHTML.indexOf('Corte conciliado') > -1, true, 'ok'));
+
+    /* Sin nada que conciliar, no hay aviso: uno que sale siempre deja de leerse. */
+    test('un corte sin tarjeta no lleva aviso', () =>
+        eq(A._tpvAvisoCorte({ id:'k9', fecha:'2026-09-05', tarjetaCuentas:[] }), '', 'sin aviso'));
 
     /* ── El bloque también dentro del EDITOR ──
        Edwin lo buscaba ahí, que es donde se corrige el corte. Al CAPTURAR uno

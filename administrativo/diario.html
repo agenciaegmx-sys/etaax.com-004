@@ -4119,6 +4119,9 @@ function verCorte(id) {
         : '';
 
     document.getElementById('verCorteBody').innerHTML =
+        // El estado de la conciliación, ARRIBA: es lo primero que se pregunta al
+        // abrir la ficha, y el bloque para actuar queda hasta el final.
+        _tpvAvisoCorte(c)+
         // Datos generales
         '<div style="display:grid;grid-template-columns:1fr 1fr 1fr'+(c.cajero?' 1fr':'')+';gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px">'+
             '<div><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px">Fecha</div><div style="font-size:15px;font-weight:600">'+c.fecha+'</div></div>'+
@@ -4168,9 +4171,9 @@ function verCorte(id) {
         // Evidencia visual
         evidHTML+
         // Notas
-        (c.notas?'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px"><div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Notas</div><div style="font-size:13px;color:var(--text)">'+c.notas+'</div></div>':'');+
+        (c.notas?'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px"><div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Notas</div><div style="font-size:13px;color:var(--text)">'+c.notas+'</div></div>':'')+
         // Conciliación de la venta con tarjeta contra el banco
-        _tpvBloqueCorte(c)
+        _tpvBloqueCorte(c);
 
     document.getElementById('modalVerCorte').classList.add('open');
 }
@@ -4287,6 +4290,32 @@ function _tpvCuentasDeCorte(c){
     if(!vistas[baseId] && EtaaxCore.tpvDeCorte(c, baseId, ctasDeb).neto>0.005){ vistas[baseId]=1; out.push(baseId); }
     return out;
 }
+/* Aviso de una línea al abrir la ficha: ¿este corte ya cayó al banco o no?
+   Vacío cuando no hay nada que conciliar —sin venta con tarjeta, o la cuenta no
+   concilia—: un aviso que sale siempre deja de leerse. */
+function _tpvAvisoCorte(c){
+    var ctasDeb=_cuentasDebito(), abonos=_abonosTpv(), falta=0, hayActiva=false;
+    _tpvCuentasDeCorte(c).forEach(function(cid){
+        if(_tpvModo(cid)===false) return;
+        var est=EtaaxCore.tpvConciliacion(load(), abonos, cid, todayStr(), _tpvModo(cid), ctasDeb);
+        if(!est.activa) return;
+        hayActiva=true;
+        falta+=Math.max(0, EtaaxCore.tpvDelCorte(c, abonos, cid, ctasDeb).falta);
+    });
+    if(!hayActiva) return '';
+    var pend=falta>0.005;
+    return '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;'
+        +'padding:11px 14px;border-radius:10px;border:1px solid '+(pend?'rgba(245,200,66,.35)':'rgba(61,190,122,.3)')+';'
+        +'background:'+(pend?'rgba(245,200,66,.07)':'rgba(61,190,122,.06)')+'">'
+        +'<span style="font-size:16px">'+(pend?'⏳':'✅')+'</span>'
+        +'<span style="font-size:13px;font-weight:600;color:'+(pend?'var(--accent)':'var(--green)')+'">'
+        +(pend?'Falta conciliar '+fmtM(falta):'Corte conciliado')+'</span>'
+        +'<span style="font-size:11px;color:var(--text-dim)">'
+        +(pend?'Esta venta con tarjeta todavía no cae al banco. Regístrala abajo cuando la veas en tu estado de cuenta.'
+              :'La venta con tarjeta de este día ya se vio caer al banco.')+'</span>'
+        +'</div>';
+}
+
 function _tpvBloqueCorte(c){
     var ctas=_tpvCuentasDeCorte(c).map(function(id){ return { cuentaId:id }; });
     if(!ctas.length) return '';   // sin venta con tarjeta no hay nada que conciliar
