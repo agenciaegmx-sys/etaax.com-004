@@ -3796,6 +3796,222 @@ console.log('\n══ SUITE AF · La cerveza se cuenta por pieza (recetas/invent
 
 }
 
+/* ═══════════ SUITE AG · CONCILIAR LA VENTA CON TARJETA (etaax-core.js) ═══════
+   La venta con tarjeta entraba al saldo del banco en cuanto se capturaba el
+   corte, pero el dinero cae a T+1 o T+2: el saldo nunca cuadraba con la app del
+   banco, siempre traía de más lo que venía en camino.                          */
+console.log('\n══ SUITE AG · Conciliar la venta con tarjeta (etaax-core.js) ══');
+{
+    const C = cargarJS(crearContexto(), 'etaax-core.js').EtaaxCore;
+    const corte = (id, fecha, bruto, neto, cta) =>
+        ({ id, fecha, tarjetaCuentas:[{ cuentaId: cta === undefined ? 'a' : cta,
+                                        ventaTC: bruto, ventaTD: 0, neto }] });
+    const abono = (corteId, monto, fecha, folio, cta) =>
+        ({ id:'ab'+corteId+monto, tipo:'abono_tpv', cuentaId: cta === undefined ? 'a' : cta,
+           corteId, monto, fecha, folio });
+
+    const cortes = [ corte('c1','2026-09-01',8000,7800),
+                     corte('c2','2026-09-02',6000,5850),
+                     corte('c3','2026-09-03',7000,6825) ];
+
+    /* ── Antes de conciliar nada, NADA cambia ──
+       Es lo que evita que el día del deploy todos los saldos se desplomen. */
+    const virgen = C.tpvConciliacion(cortes, [], 'a', '2026-09-06');
+    test('sin conciliaciones, la función está apagada', () => eq(virgen.activa, false, 'apagada'));
+    test('…y todo lo vendido sigue contando en el banco', () =>
+        eq(virgen.aportaBanco, 7800 + 5850 + 6825, 'banco'));
+    test('…sin inventar un tránsito que nadie pidió', () => eq(virgen.transito, 0, 'tránsito'));
+
+    /* ── Al conciliar, el arranque es el corte más viejo conciliado ── */
+    const r = C.tpvConciliacion(cortes, [abono('c2', 5850, '2026-09-03', 'REF88')], 'a', '2026-09-06');
+    test('la conciliación arranca en el corte más viejo conciliado', () => eq(r.desde, '2026-09-02', 'desde'));
+    test('lo anterior se da por caído: no se estaba rastreando', () => eq(r.historico, 7800, 'histórico'));
+    test('lo vendido a conciliar es de esa fecha en adelante', () => eq(r.vendido, 5850 + 6825, 'vendido'));
+    test('lo conciliado es lo que se vio caer', () => eq(r.conciliado, 5850, 'conciliado'));
+    test('lo que falta por caer queda en tránsito', () => eq(r.transito, 6825, 'tránsito'));
+
+    /* La razón de ser: el saldo del banco solo trae lo que de verdad está ahí. */
+    test('al banco suma lo histórico más lo conciliado, NO lo que viene en camino', () =>
+        eq(r.aportaBanco, 7800 + 5850, 'banco'));
+    test('vendido = conciliado + tránsito, sin centavos perdidos', () =>
+        eq(r.conciliado + r.transito, r.vendido, 'suma'));
+
+    /* ── La comisión: el banco deposita NETO ──
+       Conciliar contra el bruto haría que todos los abonos se vean cortos por la
+       comisión, todos los días, y la función sería puro ruido. */
+    test('la comisión del periodo es la diferencia entre bruto y neto', () =>
+        eq(r.comision, (6000 + 7000) - (5850 + 6825), 'comisión'));
+    test('un abono por el NETO deja el corte cuadrado', () =>
+        eq(C.tpvDelCorte(cortes[1], [abono('c2', 5850, '2026-09-03', 'X')], 'a').falta, 0, 'cuadra'));
+    test('conciliar contra el BRUTO dejaría el corte sobrado', () =>
+        eq(C.tpvDelCorte(cortes[1], [abono('c2', 6000, '2026-09-03', 'X')], 'a').falta, -150, 'sobra'));
+
+    /* ── La antigüedad, que es la alarma real ──
+       Un lote de terminal que nunca liquidó pasa desapercibido hasta el cierre de
+       mes. Un monto solo no alarma; "3 días" sí. */
+    test('dice desde cuándo espera el dinero', () => eq(r.pendienteDesde, '2026-09-03', 'fecha'));
+    test('…y cuántos días lleva', () => eq(r.diasPendiente, 3, 'días'));
+    /* Los abonos se CONSUMEN contra los cortes viejos. Si no se restaran, un solo
+       abono grande taparía todos los cortes siguientes y el pendiente más viejo
+       desaparecería de la vista. */
+    const cuatro = cortes.concat([corte('c4','2026-09-04',4200,4000)]);
+    const parcial = C.tpvConciliacion(cuatro,
+        [abono('c2', 5850, '2026-09-03', 'A'), abono('c3', 3000, '2026-09-04', 'B')], 'a', '2026-09-08');
+    test('el abono cubre el corte viejo y deja al descubierto el siguiente', () =>
+        eq(parcial.pendienteDesde, '2026-09-03', 'fifo'));
+    test('…y ese pendiente lleva sus días contados', () => eq(parcial.diasPendiente, 5, 'días'));
+
+    const alDia = C.tpvConciliacion(cortes, [abono('c2',5850,'2026-09-03','A'), abono('c3',6825,'2026-09-04','B')], 'a', '2026-09-06');
+    test('sin pendiente no hay antigüedad que reportar', () => eq(alDia.diasPendiente, 0, 'días'));
+    test('…y el tránsito queda en cero', () => eq(alDia.transito, 0, 'tránsito'));
+
+    /* Varios abonos del mismo día se suman: un depósito puede caer partido. */
+    const partido = C.tpvConciliacion(cortes,
+        [abono('c2', 3000, '2026-09-03', 'P1'), abono('c2', 2850, '2026-09-04', 'P2')], 'a', '2026-09-06');
+    test('un depósito partido en dos se suma', () => eq(partido.conciliado, 5850, 'suma'));
+
+    /* Cada cuenta lleva su propia cuenta: el dinero de una no tapa el hueco de otra. */
+    const dosCtas = [ corte('c1','2026-09-01',8000,7800,'a'), corte('c2','2026-09-01',4000,3900,'b') ];
+    const rb = C.tpvConciliacion(dosCtas, [abono('c1', 7800, '2026-09-02', 'X', 'a')], 'b', '2026-09-06');
+    test('el abono de una cuenta no concilia a la otra', () => eq(rb.conciliado, 0, 'aislado'));
+    const ra = C.tpvConciliacion(dosCtas, [abono('c1', 7800, '2026-09-02', 'X', 'a')], 'a', '2026-09-06');
+    test('la venta de una cuenta no se cuenta en la otra', () => eq(ra.vendido, 7800, 'solo suya'));
+    test('…y la otra cuenta solo ve lo suyo', () =>
+        eq(C.tpvConciliacion(dosCtas, [abono('c2', 3900, '2026-09-02', 'Y', 'b')], 'b', '2026-09-06').vendido,
+           3900, 'solo suya'));
+
+    /* Los cortes viejos traen tarjeta SIN cuenta asignada. Ese cubo es una cuenta
+       más, no un comodín: si se leyera como "todas", sumaría todo otra vez. */
+    const mixto = [ corte('c1','2026-09-01',8000,7800,'a'),
+                    corte('c2','2026-09-01',2000,1950,'') ];
+    test('la cuenta sin asignar solo ve lo suyo', () =>
+        eq(C.tpvConciliacion(mixto, [abono('c2',1950,'2026-09-02','X','')], '', '2026-09-06').vendido,
+           1950, 'sin cuenta'));
+    test('…y no se lleva también lo de la cuenta con nombre', () =>
+        eq(C.tpvDeCorte(mixto[0], '').neto, 0, 'aislado'));
+    test('sin decir cuenta, sí se leen todas', () =>
+        eq(C.tpvDeCorte(mixto[0]).neto + C.tpvDeCorte(mixto[1]).neto, 9750, 'todas'));
+
+    /* ── El desglose del día, que es lo que se ve al pie del corte ── */
+    const d = C.tpvDelCorte(cortes[1], [abono('c2', 3000, '2026-09-03', 'P1')], 'a');
+    test('el día muestra lo capturado', () => eq(d.bruto, 6000, 'bruto'));
+    test('…lo que debería caer, ya sin comisión', () => eq(d.neto, 5850, 'neto'));
+    test('…lo que ya cayó', () => eq(d.conciliado, 3000, 'conciliado'));
+    test('…la comisión del día', () => eq(d.comision, 150, 'comisión'));
+    test('…y lo que falta', () => eq(d.falta, 2850, 'falta'));
+
+    /* ── El folio repetido ──
+       Capturar dos veces el mismo depósito es el error más probable, y dejaría el
+       pendiente más chico de lo que es. */
+    const deps = [abono('c2', 5850, '2026-09-03', 'REF-8837')];
+    test('el mismo folio en la misma cuenta se detecta', () =>
+        eq(!!C.tpvFolioRepetido(deps, 'a', 'REF-8837'), true, 'repetido'));
+    test('…sin importar mayúsculas ni espacios', () =>
+        eq(!!C.tpvFolioRepetido(deps, 'a', '  ref-8837 '), true, 'normalizado'));
+    test('el mismo folio en OTRA cuenta no es repetido', () =>
+        eq(C.tpvFolioRepetido(deps, 'b', 'REF-8837'), null, 'otra cuenta'));
+    test('un folio nuevo pasa', () => eq(C.tpvFolioRepetido(deps, 'a', 'REF-9000'), null, 'nuevo'));
+    /* El folio es opcional: si un abono viejo se guardó sin folio, capturar otro
+       sin folio NO puede acusarse de duplicado. */
+    const sinFolio = [{ id:'z1', tipo:'abono_tpv', cuentaId:'a', monto:100, fecha:'2026-09-02', folio:'' }];
+    test('sin folio no se reclama nada: es opcional', () =>
+        eq(C.tpvFolioRepetido(sinFolio, 'a', '   '), null, 'vacío'));
+    test('…ni siquiera contra otro abono que tampoco trae folio', () =>
+        eq(C.tpvFolioRepetido(sinFolio, 'a', ''), null, 'ambos vacíos'));
+    test('al editar, un abono no se acusa a sí mismo', () =>
+        eq(C.tpvFolioRepetido(deps, 'a', 'REF-8837', deps[0].id), null, 'propio'));
+
+    /* ── Un abono NO es un movimiento suelto ──
+       Su efecto ya viaja por la vía de la conciliación; sumarlo como movimiento lo
+       contaría dos veces. */
+    test('un abono conciliado no mueve NINGÚN fondo por su cuenta', () => {
+        const e = C.depEfecto({ tipo:'abono_tpv', cuentaId:'a', monto:5850 });
+        /* Sin la regla cae en el camino de un movimiento normal y se va a la caja
+           fuerte: dinero que entra dos veces, por dos puertas distintas. */
+        return eq(e.banco === 0 && e.caja === 0 && e.tcPago === 0, true,
+                  'caja=' + e.caja + ' banco=' + e.banco);
+    });
+    test('un movimiento normal sí lo mueve', () =>
+        eq(C.depEfecto({ origen:'caja_fuerte', destino:'banco', monto:5850 }).banco, 5850, 'normal'));
+}
+
+/* ═══════════ SUITE AH · CONCILIACIÓN EN EL MÓDULO (administrativo/diario.html) ══
+   El bloque al pie del corte y el saldo por cuenta. Corre el código real.      */
+console.log('\n══ SUITE AH · Conciliación de tarjeta en Diario (administrativo/diario.html) ══');
+{
+    const $ = (id) => A.document.getElementById(id);
+    const ctas = [{ id:'cta1', tipo:'debito', banco:'BBVA', alias:'principal', predeterminada:true, activa:true }];
+    const cortes = [
+        { id:'k1', fecha:'2026-09-01', tarjetaCuentas:[{ cuentaId:'cta1', ventaTC:8000, ventaTD:0, neto:7800 }] },
+        { id:'k2', fecha:'2026-09-02', tarjetaCuentas:[{ cuentaId:'cta1', ventaTC:6000, ventaTD:0, neto:5850 }] }
+    ];
+
+    /* ── El bloque al pie del corte ── */
+    setVar(A, '_cacheDeps', []);
+    setVar(A, '_cuentasBancarias', ctas);
+    let html = A._tpvBloqueCorte(cortes[1]);
+    test('el corte con tarjeta ofrece conciliar', () =>
+        eq(html.indexOf('Conciliar un abono') > -1, true, 'botón'));
+    /* El desglose del día: sin la comisión a la vista, cada abono se ve corto y
+       parece un faltante que no existe. */
+    test('muestra la venta capturada', () => eq(html.indexOf('$6,000.00') > -1, true, 'bruto'));
+    test('muestra la comisión del día', () => eq(html.indexOf('−$150.00') > -1, true, 'comisión'));
+    /* El neto va en su propio renglón rotulado: es la cifra contra la que se
+       concilia, y confundirla con el bruto es el error que vuelve inútil todo. */
+    test('muestra lo que debe caer, ya neto, con su rótulo', () => {
+        const i = html.indexOf('Debe caer');
+        return eq(i > -1 && html.slice(i, i + 220).indexOf('$5,850.00') > -1, true, 'neto');
+    });
+    test('y dice cuánto falta por caer', () => eq(html.indexOf('Falta $5,850.00') > -1, true, 'falta'));
+
+    /* Un corte sin venta de tarjeta no tiene nada que conciliar. */
+    test('un corte sin tarjeta no ofrece conciliación', () =>
+        eq(A._tpvBloqueCorte({ id:'k9', fecha:'2026-09-02', tarjetaCuentas:[] }), '', 'vacío'));
+
+    setVar(A, '_cacheDeps', [{ id:'ab1', tipo:'abono_tpv', cuentaId:'cta1', corteId:'k2',
+                               monto:5850, fecha:'2026-09-04', folio:'REF-8837' }]);
+    html = A._tpvBloqueCorte(cortes[1]);
+    test('conciliado, el corte lo dice', () => eq(html.indexOf('✅ Conciliado') > -1, true, 'ok'));
+    test('…y el folio queda a la vista para rastrearlo', () =>
+        eq(html.indexOf('REF-8837') > -1, true, 'folio'));
+
+    /* ── El saldo por cuenta ──
+       Es lo que hace que el número cuadre con la app del banco. */
+    const saldo = (deps) => A._debitoPorCuenta(cortes, deps, ctas, 0, [])['cta1'].total;
+
+    /* Mientras nadie concilie, TODO se comporta como siempre: es lo que evita que
+       el día del deploy los saldos históricos se desplomen. */
+    test('sin conciliaciones, el saldo no cambia', () => eq(saldo([]), 7800 + 5850, 'histórico'));
+
+    const conc = [{ id:'ab1', tipo:'abono_tpv', cuentaId:'cta1', corteId:'k2',
+                    monto:5850, fecha:'2026-09-04', folio:'R1' }];
+    /* Al conciliar el corte del día 2, el del día 1 queda como histórico (ya cayó)
+       y el saldo trae los dos. Nada desaparece. */
+    test('al conciliar, el saldo sigue completo si todo cayó', () => eq(saldo(conc), 7800 + 5850, 'completo'));
+
+    /* Y un corte NUEVO sin conciliar ya no infla el saldo: es la corrección. */
+    const conNuevo = cortes.concat([{ id:'k3', fecha:'2026-09-05',
+        tarjetaCuentas:[{ cuentaId:'cta1', ventaTC:9000, ventaTD:0, neto:8775 }] }]);
+    const saldoNuevo = A._debitoPorCuenta(conNuevo, conc, ctas, 0, [])['cta1'].total;
+    test('la venta que aún no cae NO infla el saldo del banco', () =>
+        eq(saldoNuevo, 7800 + 5850, 'sin inflar'));
+    test('…y son exactamente los $8,775 que faltan por caer', () =>
+        eq(A.EtaaxCore.tpvConciliacion(conNuevo, conc, 'cta1', '2026-09-08').transito, 8775, 'tránsito'));
+
+    /* El desglose por cuenta y el total salen de la MISMA llamada: si divergieran,
+       el usuario vería un número arriba y otro abajo sin saber cuál creer. */
+    test('el saldo por cuenta cuadra con lo que aporta la conciliación', () => {
+        const t = A.EtaaxCore.tpvConciliacion(conNuevo, conc, 'cta1', '2026-09-08');
+        return eq(saldoNuevo, t.aportaBanco, 'cuadre');
+    });
+
+    /* Al conciliar el corte nuevo, su dinero entra al saldo. */
+    const todo = conc.concat([{ id:'ab2', tipo:'abono_tpv', cuentaId:'cta1', corteId:'k3',
+                                monto:8775, fecha:'2026-09-07', folio:'R2' }]);
+    test('conciliado el corte nuevo, su dinero entra al saldo', () =>
+        eq(A._debitoPorCuenta(conNuevo, todo, ctas, 0, [])['cta1'].total, 7800 + 5850 + 8775, 'entra'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0

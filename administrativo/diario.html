@@ -1452,6 +1452,44 @@
     </div>
 </div>
 
+<!-- Conciliar un abono de terminal contra el banco -->
+<div class="modal-overlay" id="modalTpv" onclick="if(event.target===this)_tpvCerrar()">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h2>🏦 Conciliar abono de terminal</h2>
+      <button class="modal-close" onclick="_tpvCerrar()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 13px;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:600" id="tpvCuenta">🏛️</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:2px">Venta del <span id="tpvDia">—</span></div>
+      </div>
+      <div class="fg">
+        <label>¿De cuánto fue el abono que cayó?</label>
+        <input type="number" id="tpvMonto" min="0" step="0.01" placeholder="0.00">
+        <div id="tpvMontoHint" style="font-size:10.5px;color:var(--text-dim);margin-top:4px;line-height:1.5"></div>
+      </div>
+      <div class="fg">
+        <label>¿Qué día cayó al banco?</label>
+        <input type="date" id="tpvFecha">
+      </div>
+      <div class="fg">
+        <label>Folio o referencia del banco (opcional)</label>
+        <textarea id="tpvFolio" rows="2" oninput="_tpvChk()" placeholder="Pega aquí la referencia tal como viene en tu estado de cuenta…" style="resize:vertical"></textarea>
+        <div id="tpvAviso" style="margin-top:5px"></div>
+      </div>
+      <div style="font-size:10.5px;color:var(--text-dim);line-height:1.5;background:var(--surface2);border-radius:8px;padding:9px 12px">
+        El banco deposita el <b>neto</b>, ya sin comisión: por eso se concilia contra lo que debe caer y no contra
+        la venta capturada. Al guardarlo, este dinero pasa a contar en el saldo de la cuenta.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="_tpvCerrar()">Cancelar</button>
+      <button class="btn-primary" onclick="_tpvGuardar()">Registrar abono</button>
+    </div>
+  </div>
+</div>
+
 <div class="cj-overlay" id="depOverlay" onclick="if(event.target===this)cerrarVerDepositos()">
     <div class="cj-panel">
         <div class="cj-header">
@@ -3435,6 +3473,19 @@ function _debitoPorCuenta(cortes, depositos, ctasDeb, gastosDebito, gastosDebito
         (c.transferCuentas||[]).forEach(function(t){ var m=parseFloat(t.monto)||0; sumTr+=m; add(t.cuentaId,'resto',m); });
         add(_base,'resto', n(c.transferencia)-sumTr);   // transferencia sin desglose
     });
+    /* Lo que todavía no cae se DESCUENTA: arriba la terminal se sumó completa,
+       pero el banco solo tiene lo conciliado. Se calcula por cuenta de una sola
+       pasada —la misma llamada que usa el saldo total— para que el desglose y el
+       total no puedan discrepar. Mientras nadie concilie una cuenta, su tránsito
+       es cero y todo se comporta como siempre. */
+    var _abTpv=(depositos||[]).filter(EtaaxCore.esAbonoTpv);
+    if(_abTpv.length){
+        var _hoyTpv=todayStr();
+        Object.keys(porCta).concat(['']).forEach(function(id){
+            var t=EtaaxCore.tpvConciliacion(cortes, _abTpv, id, _hoyTpv);
+            if(t.transito>0.005) add(id,'term', -t.transito);   // '' cae en la cuenta base
+        });
+    }
     (depositos||[]).forEach(function(d){
         var m=n(d.monto);
         var org=d.origen||(d.destino==='banco'?'caja_fuerte':'externo');
@@ -3556,8 +3607,27 @@ function _abrirCajaFuerteContenido(_yaFresco){
     // Cuenta débito (total): tarjeta terminal NETA (menos comisión bancaria) +
     // transferencias + efecto neto en banco − gastos débito → cuadra con el banco.
     var totTarjetaBruto = lista.reduce(function(s,c){return s+taBanco(c);},0);
-    var totTarjeta  = lista.reduce(function(s,c){return s+taBancoNeto(c);},0);
-    var totComision = Math.max(0, totTarjetaBruto - totTarjeta);
+    var totTarjetaVendido = lista.reduce(function(s,c){return s+taBancoNeto(c);},0);
+    var totComision = Math.max(0, totTarjetaBruto - totTarjetaVendido);
+
+    /* ── La venta con tarjeta cuenta cuando CAE, no cuando se captura ──
+       El dinero llega a T+1 o T+2. Contarlo desde el corte hacía que el saldo
+       trajera siempre de más lo que venía en camino, y nunca cuadraba con la app
+       del banco.
+
+       Mientras nadie concilie una cuenta, esa cuenta se comporta como siempre
+       (`aportaBanco` = todo lo vendido): así el día que esto se enciende ningún
+       saldo histórico se desploma. */
+    var _abonosCF = deps.filter(EtaaxCore.esAbonoTpv);
+    var totTarjeta = 0, totTransito = 0, _tpvPend = null;
+    _cuentasDebito().concat([{id:''}]).forEach(function(cta){
+        var t = EtaaxCore.tpvConciliacion(lista, _abonosCF, cta.id, todayStr());
+        totTarjeta  += t.aportaBanco;
+        totTransito += Math.max(0, t.transito);
+        if (t.transito > 0.005 && t.pendienteDesde &&
+            (!_tpvPend || t.pendienteDesde < _tpvPend.desde))
+            _tpvPend = { desde:t.pendienteDesde, dias:t.diasPendiente };
+    });
     // Comisiones por CUENTA con su PERIODO, para la tira que va bajo cada saldo
     // (el card del total desapareció: se leía duplicado y sin desglosar).
     var comComCta = {};
@@ -3656,6 +3726,26 @@ function _abrirCajaFuerteContenido(_yaFresco){
             '</div>'+
             '<div class="cj-acum-val" style="font-size:26px">'+fmtM(saldoDisponible)+'</div>'+
         '</div>'+
+        /* Lo que ya se vendió con tarjeta pero todavía no cae al banco. Antes iba
+           dentro del saldo y por eso nunca cuadraba con la app del banco; ahora se
+           ve aparte, con su antigüedad, que es la alarma real: un lote de terminal
+           que nunca liquidó pasaba desapercibido hasta el cierre de mes. */
+        (totTransito>0.005
+          ? '<div class="cj-acum" style="margin:0 0 10px;border-color:rgba(245,200,66,.35);background:rgba(245,200,66,.05)">'+
+                '<div>'+
+                    '<div class="cj-acum-lbl" style="color:var(--accent)">💳 En camino del banco</div>'+
+                    '<div style="margin-top:4px;font-size:10px;color:var(--text-dim);line-height:1.6">'+
+                        'Venta con tarjeta ya cobrada que todavía no cae. Entra al saldo cuando la concilies.'+
+                        (_tpvPend
+                          ? '<br><span style="color:'+(_tpvPend.dias>=4?'#ff9a9a':'var(--text-dim)')+'">'+
+                            (_tpvPend.dias>=4?'⚠️ ':'⏳ ')+'lo más viejo lleva '+_tpvPend.dias+
+                            (_tpvPend.dias===1?' día':' días')+' esperando ('+_fCorta(_tpvPend.desde)+')</span>'
+                          : '')+
+                    '</div>'+
+                '</div>'+
+                '<div class="cj-acum-val" style="color:var(--accent)">'+fmtM(totTransito)+'</div>'+
+            '</div>'
+          : '')+
         (aptTot>0.005
           ? '<div class="cj-acum" style="margin:0 0 10px;border-color:rgba(139,92,246,.4);background:rgba(139,92,246,.05)">'+
                 '<div>'+
@@ -4043,9 +4133,137 @@ function verCorte(id) {
         // Evidencia visual
         evidHTML+
         // Notas
-        (c.notas?'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px"><div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Notas</div><div style="font-size:13px;color:var(--text)">'+c.notas+'</div></div>':'');
+        (c.notas?'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px"><div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Notas</div><div style="font-size:13px;color:var(--text)">'+c.notas+'</div></div>':'');+
+        // Conciliación de la venta con tarjeta contra el banco
+        _tpvBloqueCorte(c)
 
     document.getElementById('modalVerCorte').classList.add('open');
+}
+
+/* ══ CONCILIAR LA VENTA CON TARJETA ════════════════════════════════════════
+   La venta con tarjeta entraba al saldo del banco en cuanto se capturaba el
+   corte, pero el dinero cae a T+1 o T+2: el saldo nunca cuadraba con la app del
+   banco, siempre traía de más lo que venía en camino.
+
+   Ahora llega al saldo cuando alguien lo VIO caer y anotó su folio. Toda la
+   cuenta vive en el núcleo (EtaaxCore.tpvConciliacion); aquí solo se captura. */
+function _abonosTpv(){ return _scopeSuc(_cacheDeps||[]).filter(EtaaxCore.esAbonoTpv); }
+
+function _tpvBloqueCorte(c){
+    var ctas=(c.tarjetaCuentas||[]).filter(function(t){
+        return t && ((n(t.ventaTC)+n(t.ventaTD))>0 || n(t.neto)>0);
+    });
+    if(!ctas.length) return '';   // sin venta con tarjeta no hay nada que conciliar
+    var abonos=_abonosTpv();
+    var filas=ctas.map(function(t){
+        var d=EtaaxCore.tpvDelCorte(c, abonos, t.cuentaId||'');
+        var cuadra=Math.abs(d.falta)<0.005;
+        var col=cuadra?'var(--green)':(d.conciliado>0?'var(--accent)':'var(--text-dim)');
+        var mis=(_abonosTpv()||[]).filter(function(x){
+            return x.corteId===c.id && (x.cuentaId||'')===(t.cuentaId||'');
+        }).sort(function(a,b){ return (a.fecha||'').localeCompare(b.fecha||''); });
+        return '<div style="border:1px solid var(--border);border-radius:9px;padding:11px 13px;margin-bottom:8px;background:var(--surface2)">'+
+            '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">'+
+                '<span style="font-size:12.5px;font-weight:600">🏛️ '+_escV(_cuentaBancoLabel(t.cuentaId||''))+'</span>'+
+                '<span style="font-size:11px;color:'+col+';font-weight:600">'+
+                    (cuadra?'✅ Conciliado':(d.falta>0?'⏳ Falta '+fmtM(d.falta)+' por caer':'⚠️ Conciliado de más '+fmtM(-d.falta)))+
+                '</span>'+
+            '</div>'+
+            /* El desglose del día: lo que se capturó, lo que debe caer ya sin
+               comisión, y lo que de verdad cayó. Sin la comisión a la vista, cada
+               abono se ve corto y parece un faltante. */
+            '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:8px">'+
+                _vcCard('Venta capturada', fmtM(d.bruto))+
+                _vcCard('Comisión del día', '−'+fmtM(d.comision), '#ff9a9a')+
+                _vcCard('Debe caer (neto)', fmtM(d.neto), 'var(--accent)')+
+                _vcCard('Ya conciliado', fmtM(d.conciliado), d.conciliado>0?'var(--green)':'var(--text-dim)')+
+            '</div>'+
+            (mis.length
+              ? '<div style="margin-top:9px;display:flex;flex-direction:column;gap:5px">'+
+                mis.map(function(x){
+                    return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:11.5px;'+
+                        'background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 10px">'+
+                        '<span style="color:var(--text-muted);min-width:0">'+_escV(_fCorta(x.fecha))+
+                            (x.folio?' · <span style="color:var(--text-dim);word-break:break-all">'+_escV(x.folio)+'</span>':'')+'</span>'+
+                        '<span style="display:flex;align-items:center;gap:8px;white-space:nowrap">'+
+                            '<strong style="color:var(--green)">'+fmtM(x.monto)+'</strong>'+
+                            '<button class="btn-row del" onclick="_tpvEliminar(\''+x.id+'\')" title="Quitar esta conciliación">🗑️</button>'+
+                        '</span></div>';
+                }).join('')+'</div>'
+              : '')+
+            '<button onclick="_tpvAbrir(\''+c.id+'\',\''+(t.cuentaId||'')+'\')" '+
+                'style="margin-top:9px;width:100%;background:transparent;border:1px dashed var(--border2,var(--border));color:var(--accent);'+
+                'border-radius:8px;padding:8px;font-size:12px;cursor:pointer">➕ Conciliar un abono de esta cuenta</button>'+
+        '</div>';
+    }).join('');
+    return '<div>'+
+        '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin:14px 0 7px">'+
+            '🏦 Conciliación con el banco</div>'+
+        '<div style="font-size:10.5px;color:var(--text-dim);margin:-3px 0 9px;line-height:1.5">'+
+            'La venta con tarjeta entra al saldo del banco <b>cuando la concilias</b>, no al capturar el corte: '+
+            'el dinero cae uno o dos días después.</div>'+
+        filas+'</div>';
+}
+
+var _tpvCorteId='', _tpvCuentaId='';
+function _tpvAbrir(corteId, cuentaId){
+    _tpvCorteId=corteId; _tpvCuentaId=cuentaId;
+    var c=load().find(function(x){return x.id===corteId;}); if(!c) return;
+    var d=EtaaxCore.tpvDelCorte(c, _abonosTpv(), cuentaId);
+    document.getElementById('tpvCuenta').textContent='🏛️ '+_cuentaBancoLabel(cuentaId);
+    document.getElementById('tpvDia').textContent=_fCorta(c.fecha||'');
+    /* Se propone lo que FALTA, no el total: en el segundo abono del mismo día,
+       proponer el total otra vez es invitar a duplicar. */
+    document.getElementById('tpvMonto').value=(d.falta>0.005)?(Math.round(d.falta*100)/100):'';
+    document.getElementById('tpvMontoHint').textContent=d.falta>0.005
+        ? ('Deben caer '+fmtM(d.neto)+' de este día · faltan '+fmtM(d.falta))
+        : ('Este día ya está conciliado ('+fmtM(d.conciliado)+').');
+    document.getElementById('tpvFecha').value=todayStr();
+    document.getElementById('tpvFolio').value='';
+    document.getElementById('tpvAviso').innerHTML='';
+    document.getElementById('modalTpv').classList.add('open');
+    setTimeout(function(){ var e=document.getElementById('tpvMonto'); if(e) e.focus(); },60);
+}
+function _tpvCerrar(){ document.getElementById('modalTpv').classList.remove('open'); }
+
+function _tpvChk(){
+    var av=document.getElementById('tpvAviso'); if(!av) return;
+    var rep=EtaaxCore.tpvFolioRepetido(_abonosTpv(), _tpvCuentaId, document.getElementById('tpvFolio').value);
+    av.innerHTML = rep
+        ? '<div style="color:var(--accent);font-size:11.5px;line-height:1.5">⚠️ Ese folio ya está capturado en esta cuenta '+
+          '('+_escV(_fCorta(rep.fecha))+' · '+fmtM(rep.monto)+'). Capturar dos veces el mismo depósito '+
+          'deja lo pendiente más chico de lo que es.</div>'
+        : '';
+}
+function _tpvGuardar(){
+    var monto=n(document.getElementById('tpvMonto').value);
+    var fecha=document.getElementById('tpvFecha').value;
+    var folio=(document.getElementById('tpvFolio').value||'').trim();
+    if(!(monto>0)){ alert('¿De cuánto fue el abono que cayó al banco?'); return; }
+    if(!fecha){ alert('¿Qué día cayó el abono?'); return; }
+    var rep=EtaaxCore.tpvFolioRepetido(_abonosTpv(), _tpvCuentaId, folio);
+    if(rep && !confirm('Ese folio ya está capturado en esta cuenta ('+_fCorta(rep.fecha)+' · '+fmtM(rep.monto)+').\n\n'
+        +'¿De todos modos lo registras?')) return;
+    var ab={
+        id:genId(), negocioId:getNegocioActivo(), sucursalId:_sucActiva(),
+        tipo:'abono_tpv', cuentaId:_tpvCuentaId, corteId:_tpvCorteId,
+        monto:monto, fecha:fecha, folio:folio
+    };
+    _cacheDeps=(_cacheDeps||[]).filter(function(x){return x.id!==ab.id;});
+    _cacheDeps.push(ab);
+    _sbUp('depositos', ab);
+    _tpvCerrar();
+    if(_verCorteId) verCorte(_verCorteId);          // re-pinta el bloque del corte
+    var cj=document.getElementById('cajOverlay');
+    if(cj&&cj.classList.contains('open'))_abrirCajaFuerteContenido();
+}
+function _tpvEliminar(id){
+    if(!confirm('¿Quitar esta conciliación? El dinero vuelve a contar como pendiente de caer.')) return;
+    _cacheDeps=(_cacheDeps||[]).filter(function(x){return x.id!==id;});
+    _sbDel('depositos', id);
+    if(_verCorteId) verCorte(_verCorteId);
+    var cj=document.getElementById('cajOverlay');
+    if(cj&&cj.classList.contains('open'))_abrirCajaFuerteContenido();
 }
 
 function _vcCard(lbl,val,color){

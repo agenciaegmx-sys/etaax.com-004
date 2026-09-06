@@ -184,6 +184,10 @@
         var m = n(d.monto);
         // Apartar es etiquetar, no mover: la caja fuerte no se entera (ver arriba).
         if (esApartado(d)) return { caja: 0, banco: 0, tcPago: 0 };
+        /* Un abono de terminal tampoco es un movimiento suelto: es la venta con
+           tarjeta que POR FIN cayó. Entra al saldo por la vía de la conciliación
+           (tpvConciliacion.aportaBanco); sumarlo aquí la contaría dos veces. */
+        if (esAbonoTpv(d)) return { caja: 0, banco: 0, tcPago: 0 };
         var origen = d.origen || (d.destino === 'banco' ? 'caja_fuerte' : 'externo');
         var dest = d.destino || 'caja_fuerte';
         var e = { caja: 0, banco: 0, tcPago: 0 };
@@ -257,6 +261,126 @@
             r.saldo += s.saldo; r.enCaja += s.enCaja; r.enBanco += s.enBanco;
         });
         return r;
+    }
+
+    /* ── CONCILIACIÓN DE VENTA CON TARJETA ─────────────────────────────────────
+       Hoy la venta con tarjeta entra al saldo del banco en cuanto se captura el
+       corte. Pero el dinero cae a T+1 o T+2, así que el saldo NUNCA cuadra con la
+       app del banco: siempre trae de más lo que todavía viene en camino.
+
+       Regla nueva: la venta con tarjeta llega al saldo cuando se CONCILIA — cuando
+       alguien vio el abono en el banco y anotó su folio. Mientras tanto vive como
+       EN TRÁNSITO, a la vista, con su antigüedad.
+
+       El banco deposita el NETO (ya sin comisión). Por eso se concilia contra el
+       neto: comparar contra el bruto haría que todos los abonos, todos los días,
+       se vean cortos por la comisión, y la función se volvería ruido.
+
+       ¿Desde cuándo cuenta? Desde el corte más viejo que se haya conciliado en esa
+       cuenta. Lo anterior se da por caído —no se estaba rastreando— y así el día
+       que se enciende la función ningún saldo histórico se desploma. Sin fecha que
+       configurar y se corrige solo. */
+    function esAbonoTpv(d) { return !!d && d.tipo === 'abono_tpv'; }
+
+    /* Bruto y neto de tarjeta de UN corte en UNA cuenta.
+       `cuentaId` null/ausente = TODAS las cuentas. La cadena vacía NO es "todas":
+       es el cubo de lo que se capturó sin cuenta asignada, que existe en los
+       cortes viejos. Confundirlos hacía que ese cubo sumara todo otra vez. */
+    function tpvDeCorte(corte, cuentaId) {
+        var r = { bruto: 0, neto: 0 };
+        ((corte && corte.tarjetaCuentas) || []).forEach(function (t) {
+            if (!t) return;
+            if (cuentaId != null && (t.cuentaId || '') !== cuentaId) return;
+            r.bruto += n(t.ventaTC) + n(t.ventaTD);
+            r.neto  += n(t.neto);
+        });
+        return r;
+    }
+
+    /* Estado de una cuenta: qué se vendió, qué ya cayó, qué falta y desde cuándo.
+       `cortes` y `deps` llegan ya filtrados por sucursal. */
+    function tpvConciliacion(cortes, deps, cuentaId, hoyStr) {
+        var abonos = (deps || []).filter(function (d) {
+            return esAbonoTpv(d) && (cuentaId == null || (d.cuentaId || '') === cuentaId);
+        });
+        var conciliado = abonos.reduce(function (t, a) { return t + n(a.monto); }, 0);
+
+        // Cortes de esta cuenta con venta de tarjeta, del más viejo al más nuevo.
+        var conVenta = (cortes || []).map(function (c) {
+            var v = tpvDeCorte(c, cuentaId);
+            return { fecha: c.fecha || '', id: c.id, bruto: v.bruto, neto: v.neto };
+        }).filter(function (x) { return x.bruto > 0 || x.neto > 0; })
+          .sort(function (a, b) { return (a.fecha || '').localeCompare(b.fecha || ''); });
+
+        /* El arranque: el corte más viejo que ya tiene conciliación. Los cortes de
+           antes se dan por caídos. */
+        var idsConc = {};
+        abonos.forEach(function (a) { if (a.corteId) idsConc[a.corteId] = 1; });
+        var desde = '';
+        conVenta.forEach(function (x) {
+            if (idsConc[x.id] && (!desde || x.fecha < desde)) desde = x.fecha;
+        });
+        if (!desde) {
+            // Conciliaciones sin corte de origen: el arranque es el abono más viejo.
+            abonos.forEach(function (a) { if (a.fecha && (!desde || a.fecha < desde)) desde = a.fecha; });
+        }
+
+        var r = { conciliado: conciliado, desde: desde, historico: 0, vendido: 0,
+                  bruto: 0, comision: 0, transito: 0, aportaBanco: 0,
+                  pendienteDesde: '', diasPendiente: 0, activa: !!desde };
+        conVenta.forEach(function (x) {
+            if (desde && x.fecha >= desde) { r.vendido += x.neto; r.bruto += x.bruto; }
+            else r.historico += x.neto;      // antes de conciliar: se da por caído
+        });
+        r.comision = Math.max(0, r.bruto - r.vendido);
+        r.transito = r.vendido - conciliado;
+        /* Lo que suma al banco: lo viejo (ya cayó) + lo que de verdad se vio caer.
+           Lo que falta por caer NO suma: es justo lo que descuadraba contra la app
+           del banco. */
+        r.aportaBanco = r.historico + conciliado;
+
+        /* Antigüedad: se consumen los abonos contra los cortes del más viejo al más
+           nuevo. El primero que no queda cubierto es el que lleva esperando. Un
+           monto solo no alarma; "7 días" sí. */
+        if (r.transito > 0.005) {
+            var resto = conciliado;
+            for (var i = 0; i < conVenta.length; i++) {
+                var x = conVenta[i];
+                if (desde && x.fecha < desde) continue;
+                if (resto >= x.neto - 0.005) { resto -= x.neto; continue; }
+                r.pendienteDesde = x.fecha; break;
+            }
+            if (r.pendienteDesde && hoyStr) r.diasPendiente = Math.max(0, diasEntre(r.pendienteDesde, hoyStr) || 0);
+        }
+        return r;
+    }
+
+    /* Lo conciliado de UN corte en UNA cuenta: es el desglose del día que se ve al
+       pie del corte (capturado · conciliado · comisión). */
+    function tpvDelCorte(corte, deps, cuentaId) {
+        var v = tpvDeCorte(corte, cuentaId);
+        var conc = (deps || []).reduce(function (t, d) {
+            if (!esAbonoTpv(d)) return t;
+            if ((d.corteId || '') !== ((corte && corte.id) || '')) return t;
+            if (cuentaId != null && (d.cuentaId || '') !== cuentaId) return t;
+            return t + n(d.monto);
+        }, 0);
+        return { bruto: v.bruto, neto: v.neto, conciliado: conc,
+                 comision: Math.max(0, v.bruto - v.neto), falta: v.neto - conc };
+    }
+
+    /* ¿Este folio ya se capturó en esta cuenta? Capturar dos veces el mismo abono
+       es el error más probable, y dejaría el pendiente más chico de lo que es. */
+    function tpvFolioRepetido(deps, cuentaId, folio, idPropio) {
+        var f = String(folio == null ? '' : folio).trim().toLowerCase();
+        if (!f) return null;
+        for (var i = 0; i < (deps || []).length; i++) {
+            var d = deps[i];
+            if (!esAbonoTpv(d) || d.id === idPropio) continue;
+            if ((d.cuentaId || '') !== (cuentaId || '')) continue;
+            if (String(d.folio || '').trim().toLowerCase() === f) return d;
+        }
+        return null;
     }
 
     /* ── METAS: una previsión es una meta de ahorro con fecha ──────────────────
@@ -742,6 +866,8 @@
         comisionBancoCorte: comisionBancoCorte,
         depEfecto: depEfecto, esRetiro: esRetiro,
         esApartado: esApartado, apartadoFondo: apartadoFondo, PREV_GENERAL: PREV_GENERAL,
+        esAbonoTpv: esAbonoTpv, tpvDeCorte: tpvDeCorte, tpvConciliacion: tpvConciliacion,
+        tpvDelCorte: tpvDelCorte, tpvFolioRepetido: tpvFolioRepetido,
         previsionSaldos: previsionSaldos,
         PREV_FREQS: PREV_FREQS, prevFreq: prevFreq,
         previsionPeriodos: previsionPeriodos, previsionPlan: previsionPlan,
