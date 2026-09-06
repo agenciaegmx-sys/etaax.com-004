@@ -1752,6 +1752,14 @@
                     <select id="gCuentaBanco" style="width:100%;box-sizing:border-box;background:var(--surface2,#1a1a1a);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:10px 12px;font-size:13px;outline:none;font-family:inherit"></select>
                 </div>
             </div>
+            <!-- La previsión NO reemplaza al método de pago: el dinero sale de la caja
+                 o del banco de todos modos. Es una etiqueta encima, para que el
+                 saldo siga cuadrando con el conteo físico. -->
+            <div id="gPrevWrap" style="display:none;margin-top:10px">
+                <label style="display:block;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin:0 0 5px">🔮 ¿Sale de una previsión?</label>
+                <select id="gPrevision" onchange="_gPrevUI()" style="width:100%;box-sizing:border-box;background:var(--surface2,#1a1a1a);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:9px 11px;font-size:13px"></select>
+                <div id="gPrevHint" style="font-size:10.5px;color:var(--text-dim);margin-top:5px;line-height:1.5"></div>
+            </div>
             <input type="hidden" id="gMetodo" value="caja_fuerte">
             <input type="hidden" id="gMetodoBanco" value="">
         </div>
@@ -2282,6 +2290,11 @@ function _cuentaBancoLabel(id){ var c=(_cuentasBancarias||[]).find(function(x){r
 function _depEfecto(d){ return EtaaxCore.depEfecto(d); }
 // Texto legible del movimiento de un depósito: "origen → destino".
 function _depMovTxt(d){
+    /* Un apartado no es un origen→destino: nada se movió. Se lee como lo que es. */
+    if(EtaaxCore.esApartado(d)){
+        return '🔮 Apartado en '+(EtaaxCore.apartadoFondo(d)==='banco'?'🏛️ banco':'🏦 caja fuerte')
+             + ' · '+_prevNombre(d.previsionId);
+    }
     var origen=d.origen||(d.destino==='banco'?'caja_fuerte':'externo');
     function lbl(t,id){ if(t==='externo')return 'Externo'; if(t==='retiro')return '📤 Retiro'; if(t==='caja_fuerte')return '🏦 Caja fuerte'; if(t==='banco')return '🏛️ '+_cuentaBancoLabel(id); if(t==='tarjeta_credito')return '💳 '+_cuentaBancoLabel(id); return t||'—'; }
     var dst=lbl(d.destino, d.destino==='tarjeta_credito'?d.tcId:d.destinoCuentaId);
@@ -2306,6 +2319,7 @@ async function _sbInit() {
         _supabase.from('gastos').select('datos').eq('negocio_id', negId),
         _supabase.from('tarjetas_credito').select('datos').eq('negocio_id', negId).order('created_at', {ascending:true}),
         _supabase.from('sf_metas').select('datos').eq('negocio_id', negId).maybeSingle(),
+        _supabase.from('previsiones').select('datos').eq('negocio_id', negId),
     ]);
     if (!r[0].error) _cacheCortes = _sinDelPend('cortes', (r[0].data||[]).map(function(x){return x.datos;}));
     if (!r[1].error) _cacheDeps   = _sinDelPend('depositos', (r[1].data||[]).map(function(x){return x.datos;}));
@@ -2313,6 +2327,7 @@ async function _sbInit() {
     if (!r[3].error) _cacheGastosExt = (r[3].data||[]).map(function(x){return x.datos;});
     if (!r[4].error) _cuentasBancarias = (r[4].data||[]).map(function(x){return x.datos;});
     if (!r[5].error && r[5].data) { _cacheMetasDx = r[5].data.datos || {}; _metaDiaCacheDx = {}; }
+    if (!r[6].error) _cachePrevs = (r[6].data||[]).map(function(x){return x.datos;});
     renderAll();
     renderDepositos();
     _subCortesRealtime(negId);
@@ -3359,6 +3374,32 @@ function eliminarCorte(id){
     });
 }
 
+/* ══ PREVISIONES ═══════════════════════════════════════════════════════════
+   Apartar es ETIQUETAR dinero que ya está en la caja o en el banco. No lo mueve
+   y no lo gasta: el total sigue igual, lo que baja es lo DISPONIBLE. Toda la
+   cuenta vive en el núcleo (EtaaxCore.previsionSaldos); aquí solo se captura.  */
+var _cachePrevs = null;
+function loadPrevs(){ return _cachePrevs || []; }
+function _prevSaldos(){
+    return EtaaxCore.previsionSaldos(loadPrevs(), _scopeSuc(_cacheDeps||[]), _scopeSuc(_loadGastos()));
+}
+function _prevNombre(id){
+    if(!id) return '';
+    if(id===EtaaxCore.PREV_GENERAL) return 'Previsión general';
+    var p=loadPrevs().find(function(x){return x&&x.id===id;});
+    return p?(p.concepto||p.nombre||'Previsión'):'Previsión';
+}
+/* Las previsiones que se pueden usar para pagar: las que tienen respaldo. El
+   cajón general aparece siempre que tenga saldo, aunque no esté en el catálogo. */
+function _prevConSaldo(){
+    var sal=_prevSaldos(), out=[];
+    Object.keys(sal.porId).forEach(function(k){
+        var s=sal.porId[k];
+        if(s.saldo>0.005) out.push({ id:k, nombre:_prevNombre(k), saldo:s.saldo });
+    });
+    return out.sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
+}
+
 /* ── Caja fuerte ── */
 function abrirCajaFuerte(){
     if(!_puede('ventas.cajaFuerte')) return;
@@ -3591,17 +3632,42 @@ function _abrirCajaFuerteContenido(_yaFresco){
     var saldoTarjetaCred = -gastosTarjetaCred + _efTcPago;
 
     // ── Header: saldo disponible + 2 cards fila 1 + tarjeta opcional fila 2 ────
-    var saldoDisponible = saldoCaja + saldoDebito; // efectivo resguardado + banco (sin deuda de TC)
+    var saldoTotal = saldoCaja + saldoDebito;   // lo que hay: efectivo resguardado + banco
+
+    /* ── Lo que hay vs. lo que es tuyo ──
+       De los $80,000 de la caja, ¿cuánto puedes gastar sin comerte el aguinaldo?
+       Ese es el número que se usa todos los días, y hasta ahora no existía.
+       Apartar no bajó el total (el billete sigue ahí); baja el DISPONIBLE. */
+    var _pvS = _prevSaldos();
+    var aptCaja = _pvS.enCaja, aptBanco = _pvS.enBanco, aptTot = aptCaja + aptBanco;
+    var saldoDisponible = saldoTotal - aptTot;
+
     var headerHTML =
         '<div class="cj-acum" style="margin:0 0 10px;border-color:rgba(245,200,66,.5);background:linear-gradient(135deg,rgba(245,200,66,.08),rgba(61,190,122,.05))">'+
             '<div>'+
-                '<div class="cj-acum-lbl">💰 Saldo disponible total</div>'+
+                '<div class="cj-acum-lbl">'+(aptTot>0.005?'💰 Disponible de verdad':'💰 Saldo disponible total')+'</div>'+
                 '<div style="margin-top:4px;font-size:10px;color:var(--text-dim);line-height:1.6">'+
                     '🏦 Caja fuerte '+fmtM(saldoCaja)+' &nbsp;+&nbsp; 🏛️ Banco '+fmtM(saldoDebito)+
+                    (aptTot>0.005
+                      ? '<br><span style="color:var(--accent)">− '+fmtM(aptTot)+' apartado en previsiones</span>'
+                        +' <span style="opacity:.7">(hay '+fmtM(saldoTotal)+', pero ese pedazo ya tiene dueño)</span>'
+                      : '')+
                 '</div>'+
             '</div>'+
             '<div class="cj-acum-val" style="font-size:26px">'+fmtM(saldoDisponible)+'</div>'+
         '</div>'+
+        (aptTot>0.005
+          ? '<div class="cj-acum" style="margin:0 0 10px;border-color:rgba(139,92,246,.4);background:rgba(139,92,246,.05)">'+
+                '<div>'+
+                    '<div class="cj-acum-lbl" style="color:var(--viol,#8b5cf6)">🔮 Apartado en previsiones</div>'+
+                    '<div style="margin-top:4px;font-size:10px;color:var(--text-dim);line-height:1.6">'+
+                        '🏦 '+fmtM(aptCaja)+' en caja &nbsp;·&nbsp; 🏛️ '+fmtM(aptBanco)+' en banco<br>'+
+                        'Sigue siendo tuyo y sigue ahí: no se gastó, solo dejó de contar como disponible.'+
+                    '</div>'+
+                '</div>'+
+                '<div class="cj-acum-val" style="color:var(--viol,#8b5cf6)">'+fmtM(aptTot)+'</div>'+
+            '</div>'
+          : '')+
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
             '<div class="cj-acum" style="margin:0">'+
                 '<div>'+
@@ -4056,11 +4122,19 @@ function _depPoblarSelects(d){
     deb.forEach(function(c){ dOpts+='<option value="banco:'+c.id+'">🏛️ '+_escV(_cuentaBancoLabel(c.id))+'</option>'; });
     cred.forEach(function(c){ dOpts+='<option value="tc:'+c.id+'">💳 Pago tarjeta crédito · '+_escV(_cuentaBancoLabel(c.id))+'</option>'; });
     dOpts+='<option value="retiro">📤 Retiro / salida (externo)</option>';
+    /* Apartar para una meta. No mueve el dinero de lugar: lo etiqueta. Va aquí
+       porque es donde el usuario ya está pensando "qué hago con este dinero". */
+    var _pv=loadPrevs().filter(function(x){ return x && x.estado!=='cancelada'; });
+    _pv.forEach(function(x){ dOpts+='<option value="prev:'+x.id+'">🔮 Apartar para · '+_escV(x.concepto||x.nombre||'Previsión')+'</option>'; });
+    dOpts+='<option value="prev:'+EtaaxCore.PREV_GENERAL+'">🔮 Apartar · previsión general</option>';
     dSel.innerHTML=dOpts;
     // Valores guardados (o compat con depósitos viejos que solo tenían `destino`)
-    var oVal = d.origen ? (d.origen==='banco' ? 'banco:'+(d.origenCuentaId||'') : d.origen)
-                        : (d.destino==='banco' ? 'caja_fuerte' : 'externo');
-    var dVal = d.destino==='tarjeta_credito' ? 'tc:'+(d.tcId||'')
+    var oVal = EtaaxCore.esApartado(d)
+                 ? (EtaaxCore.apartadoFondo(d)==='banco' ? 'banco:'+(d.fondoCuentaId||'') : 'caja_fuerte')
+                 : d.origen ? (d.origen==='banco' ? 'banco:'+(d.origenCuentaId||'') : d.origen)
+                            : (d.destino==='banco' ? 'caja_fuerte' : 'externo');
+    var dVal = EtaaxCore.esApartado(d) ? 'prev:'+(d.previsionId||EtaaxCore.PREV_GENERAL)
+             : d.destino==='tarjeta_credito' ? 'tc:'+(d.tcId||'')
              : d.destino==='banco' ? 'banco:'+(d.destinoCuentaId||(deb[0]?deb[0].id:''))
              : (d.destino||'caja_fuerte');
     oSel.value=oVal; if(oSel.selectedIndex<0) oSel.selectedIndex=0;
@@ -4070,11 +4144,17 @@ function _depPoblarSelects(d){
 function _depMov(){
     var oSel=document.getElementById('depOrigen'), dSel=document.getElementById('depDestino2'), h=document.getElementById('depMovHint');
     if(!oSel||!dSel||!h) return;
-    function lbl(val){ if(val==='externo')return 'una entrada externa'; if(val==='retiro')return 'fuera del negocio (retiro)'; if(val==='caja_fuerte')return 'Caja fuerte'; if(val.indexOf('banco:')===0)return _cuentaBancoLabel(val.slice(6)); if(val.indexOf('tc:')===0)return 'Tarjeta de crédito · '+_cuentaBancoLabel(val.slice(3)); return val; }
+    function lbl(val){ if(val==='externo')return 'una entrada externa'; if(val.indexOf('prev:')===0)return 'la previsión '+_prevNombre(val.slice(5)); if(val==='retiro')return 'fuera del negocio (retiro)'; if(val==='caja_fuerte')return 'Caja fuerte'; if(val.indexOf('banco:')===0)return _cuentaBancoLabel(val.slice(6)); if(val.indexOf('tc:')===0)return 'Tarjeta de crédito · '+_cuentaBancoLabel(val.slice(3)); return val; }
     var o=oSel.value, dd=dSel.value;
     var txt=(o==='externo')?('➕ Entra a '+lbl(dd)+' (no descuenta de ningún fondo).'):('Sale de '+lbl(o)+' → entra a '+lbl(dd)+'.');
     if(dd.indexOf('tc:')===0) txt+=' Reduce la deuda de la tarjeta de crédito.';
     if(dd==='retiro') txt='📤 RETIRO: sale de '+lbl(o)+' y el dinero deja el negocio.';
+    /* Lo más importante que puede decir esta pantalla: el dinero NO se mueve.
+       Si el usuario cree que salió, va a buscar un faltante que no existe. */
+    if(dd.indexOf('prev:')===0){
+        txt='🔮 APARTAR: el dinero se queda en '+lbl(o)+' —no se mueve ni se gasta— '
+           +'y deja de contar como disponible. Cuando pagues, etiquetas el gasto con esta previsión.';
+    }
     h.textContent=txt;
 }
 
@@ -4090,7 +4170,34 @@ function guardarDeposito(){
     if(oVal.indexOf('banco:')===0){ origen='banco'; origenCuentaId=oVal.slice(6); } else origen=oVal;
     if(dVal.indexOf('banco:')===0){ destino='banco'; destinoCuentaId=dVal.slice(6); }
     else if(dVal.indexOf('tc:')===0){ destino='tarjeta_credito'; tcId=dVal.slice(3); }
+    else if(dVal.indexOf('prev:')===0){ destino='prevision'; }
     else destino=dVal;
+
+    /* ── APARTAR ──
+       Se guarda con su propio tipo, y con FONDO en vez de origen: el origen dice
+       "de dónde salió" y aquí no salió de ningún lado —dice DÓNDE ESTÁ PARADO el
+       dinero apartado. Con tipo 'apartado', depEfecto devuelve cero y ningún
+       saldo se mueve. */
+    if(destino==='prevision'){
+        if(origen!=='caja_fuerte' && origen!=='banco'){
+            alert('Para apartar hay que decir dónde está ese dinero: caja fuerte o una cuenta bancaria.'); return;
+        }
+        var apId=document.getElementById('depId').value||genId();
+        var ap={
+            id:apId, negocioId:getNegocioActivo(), sucursalId:_sucActiva(),
+            tipo:'apartado', previsionId:dVal.slice(5),
+            fondo:origen, fondoCuentaId:(origen==='banco'?origenCuentaId:''),
+            fecha:fecha, monto:monto, concepto:concepto,
+            notas:document.getElementById('depNotas').value.trim()
+        };
+        _cacheDeps=(_cacheDeps||[]).filter(function(x){return x.id!==apId;});
+        _cacheDeps.push(ap);
+        _sbUp('depositos', ap);
+        cerrarModalDeposito(); renderDepositos();
+        var cjA=document.getElementById('cajOverlay');
+        if(cjA&&cjA.classList.contains('open'))_abrirCajaFuerteContenido();
+        return;
+    }
     // Sellar la cuenta cuando el selector no la pide (una sola cuenta registrada):
     // un movimiento de banco sin cuenta seguía a la predeterminada de turno y al
     // cambiarla se mudaba de cuenta solo.
@@ -5112,6 +5219,10 @@ function _abrirModalGasto(g,tipo){
     var metBtn=document.getElementById(metMap[met]);
     if(metBtn)metBtn.classList.add('active');
     document.getElementById('gMetodo').value=met;
+    /* Al editar, la previsión que ya traía; al crear, ninguna. El gasto que se
+       está editando no debe verse a sí mismo como saldo disponible, pero
+       tampoco debe perder su etiqueta: por eso se pasa la que ya tenía. */
+    _gPrevPoblar(d.previsionId||'');
     document.getElementById('bancoSubtipo').style.display=met==='banco'?'block':'none';
     if(met==='banco'&&d.metodoBanco){
         document.getElementById('gMetodoBanco').value=d.metodoBanco;
@@ -5996,6 +6107,34 @@ function setMetodoBanco(sub,btn){
     _gCuentaBancoUI();
 }
 
+/* El selector de previsión solo aparece si hay dinero apartado: ofrecer pagar
+   con una previsión vacía es ofrecer algo que no existe. */
+function _gPrevPoblar(sel){
+    var e=document.getElementById('gPrevision'); if(!e) return;
+    var lista=_prevConSaldo();
+    var wrap=document.getElementById('gPrevWrap');
+    if(!lista.length){ if(wrap) wrap.style.display='none'; e.innerHTML='<option value=""></option>'; return; }
+    if(wrap) wrap.style.display='';
+    e.innerHTML='<option value="">— No, es un gasto normal —</option>'
+        + lista.map(function(x){
+            return '<option value="'+x.id+'">🔮 '+_escV(x.nombre)+' · '+fmtM(x.saldo)+' respaldado</option>';
+          }).join('');
+    e.value=sel||'';
+    if(e.selectedIndex<0) e.selectedIndex=0;
+    _gPrevUI();
+}
+function _gPrevUI(){
+    var e=document.getElementById('gPrevision'), h=document.getElementById('gPrevHint');
+    if(!e||!h) return;
+    if(!e.value){ h.textContent=''; return; }
+    var x=_prevConSaldo().find(function(p){return p.id===e.value;});
+    var monto=n((document.getElementById('gMonto')||{}).value);
+    h.innerHTML='El gasto sale igual de tu caja o tu banco; lo que además baja es el respaldo de esta previsión, '
+        +'así que tu <b>disponible no se mueve</b>.'
+        + (x&&monto>x.saldo ? '<div style="color:var(--red);margin-top:4px">⚠️ Estás usando '
+            +fmtM(monto-x.saldo)+' más de lo que tenías apartado aquí. Se puede, pero quedará en números rojos.</div>' : '');
+}
+
 // Selector de cuenta de débito para el gasto: aparece SOLO en transferencia/débito
 // y SOLO si el negocio tiene 2+ cuentas de débito (con una sola no hay qué elegir).
 function _gCuentaBancoUI(){
@@ -6091,6 +6230,9 @@ function guardarGasto(){
         monto:monto,
         metodoPago:document.getElementById('gMetodo').value,
         metodoBanco:document.getElementById('gMetodoBanco').value,
+        // Etiqueta: de qué previsión salió el respaldo. No cambia el método ni el
+        // monto — solo dice que este gasto ya estaba fondeado.
+        previsionId:((document.getElementById('gPrevision')||{}).value)||'',
         // Cuenta de débito de la que sale el gasto (transferencia/débito con 2+ cuentas).
         // Vacío = predeterminada (compat con gastos viejos sin cuenta).
         // Cuenta de la que sale el gasto. Si el selector no está a la vista (una sola

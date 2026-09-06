@@ -3557,6 +3557,123 @@ console.log('\n══ SUITE AD · Pantalla de previsiones (financiero/previsione
     test('sin monto, el plan no se muestra', () => eq($('pvPreview').style.display, 'none', 'oculto'));
 }
 
+/* ═══════════ SUITE AE · APARTAR Y ETIQUETAR (administrativo/diario.html) ═══════
+   La captura: apartar dinero para una meta y etiquetar el gasto que la usa.
+   Corre el código real del módulo, no una copia de la fórmula.                  */
+console.log('\n══ SUITE AE · Apartar y etiquetar en Diario (administrativo/diario.html) ══');
+{
+    const $ = (id) => A.document.getElementById(id);
+    const guardado = () => (A._cacheDeps || [])[(A._cacheDeps || []).length - 1];
+
+    setVar(A, '_cachePrevs', [{ id:'p1', concepto:'Aguinaldo', estado:'en_curso' },
+                              { id:'p2', concepto:'Mantenimiento', estado:'cancelada' }]);
+    setVar(A, '_cacheDeps', []);
+
+    /* ── Apartar: el destino nuevo del modal de movimientos ── */
+    A._depPoblarSelects({});
+    const dest = $('depDestino2').options.map(o => o.value);
+    test('la meta viva aparece como destino para apartar', () =>
+        eq(dest.indexOf('prev:p1') > -1, true, 'destino'));
+    test('la meta cancelada no se ofrece', () => eq(dest.indexOf('prev:p2'), -1, 'cancelada'));
+    test('siempre existe el cajón general', () =>
+        eq(dest.indexOf('prev:' + A.EtaaxCore.PREV_GENERAL) > -1, true, 'general'));
+
+    /* El aviso es lo más importante de esa pantalla: si el usuario cree que el
+       dinero salió de la caja, va a buscar un faltante que no existe. */
+    $('depOrigen').value = 'caja_fuerte';
+    $('depDestino2').value = 'prev:p1';
+    A._depMov();
+    test('el modal avisa que el dinero NO se mueve', () =>
+        eq($('depMovHint').textContent.indexOf('no se mueve') > -1, true, 'aviso'));
+    test('…y que deja de contar como disponible', () =>
+        eq($('depMovHint').textContent.indexOf('disponible') > -1, true, 'aviso 2'));
+
+    /* ── Guardar el apartado ── */
+    $('depFecha').value = '2026-03-01';
+    $('depMonto').value = 20000;
+    $('depConcepto').value = 'Aparto para aguinaldo';
+    A.guardarDeposito();
+    const ap = guardado();
+    test('el apartado se guarda con su propio tipo', () => eq(ap.tipo, 'apartado', 'tipo'));
+    test('…apuntando a su meta', () => eq(ap.previsionId, 'p1', 'meta'));
+    test('…y diciendo dónde está parado el dinero', () => eq(ap.fondo, 'caja_fuerte', 'fondo'));
+    /* La prueba que sostiene todo: guardado así, no mueve ningún saldo. */
+    test('un apartado guardado no mueve la caja fuerte', () =>
+        eq(A.EtaaxCore.depEfecto(ap).caja, 0, 'caja'));
+
+    /* Apartar en el BANCO se guarda en el banco. Si todo cayera en "caja fuerte",
+       el disponible de la cuenta bancaria mentiría y el de la caja también. */
+    setVar(A, '_cuentasBancarias', [{ id:'cta1', tipo:'debito', nombre:'BBVA', predeterminada:true }]);
+    A._depPoblarSelects({});
+    $('depId').value = '';
+    $('depOrigen').value = 'banco:cta1';
+    $('depDestino2').value = 'prev:p1';
+    $('depFecha').value = '2026-03-02';
+    $('depMonto').value = 9000;
+    $('depConcepto').value = 'Aparto en banco';
+    A.guardarDeposito();
+    const apB = guardado();
+    test('lo apartado en el banco se guarda como del banco', () => eq(apB.fondo, 'banco', 'fondo'));
+    test('…y con la cuenta de la que se etiquetó', () => eq(apB.fondoCuentaId, 'cta1', 'cuenta'));
+    test('el núcleo lo lee en el fondo correcto', () =>
+        eq(A.EtaaxCore.previsionSaldos([{id:'p1'}], [apB], []).enBanco, 9000, 'banco'));
+    test('…y no lo cuenta en la caja fuerte', () =>
+        eq(A.EtaaxCore.previsionSaldos([{id:'p1'}], [apB], []).enCaja, 0, 'caja'));
+    setVar(A, '_cacheDeps', []);
+
+    /* Apartar desde una entrada externa no significa nada: el dinero tiene que
+       estar en algún lado para poder etiquetarlo. */
+    let avisos = 0; A.alert = () => { avisos++; };
+    const antes = (A._cacheDeps || []).length;
+    $('depId').value = ''; $('depOrigen').value = 'externo'; $('depDestino2').value = 'prev:p1';
+    $('depMonto').value = 5000; $('depConcepto').value = 'x';
+    A.guardarDeposito();
+    test('no se puede apartar dinero que no está en ningún fondo', () =>
+        eq((A._cacheDeps || []).length, antes, 'rechazado'));
+    test('…y se explica por qué', () => eq(avisos > 0, true, 'aviso'));
+
+    /* ── En la lista, un apartado se lee como lo que es ── */
+    test('el movimiento se lee como apartado, no como origen→destino', () =>
+        eq(A._depMovTxt(ap).indexOf('Apartado en') > -1
+           && A._depMovTxt(ap).indexOf('→') === -1, true, 'texto'));
+    test('…y dice para qué meta', () => eq(A._depMovTxt(ap).indexOf('Aguinaldo') > -1, true, 'meta'));
+
+    /* ── Etiquetar el gasto ── */
+    setVar(A, '_cacheDeps', [{ id:'a1', tipo:'apartado', previsionId:'p1', monto:20000,
+                               fondo:'caja_fuerte', fecha:'2026-03-01' }]);
+    setVar(A, '_cacheGastos', []);
+    A._gPrevPoblar('');
+    const ops = $('gPrevision').options.map(o => o.value);
+    test('la previsión con respaldo se ofrece al pagar', () => eq(ops.indexOf('p1') > -1, true, 'oferta'));
+    test('…y se puede decir que no, que es un gasto normal', () => eq(ops[0], '', 'opcional'));
+    test('el selector se muestra cuando hay algo apartado', () =>
+        eq($('gPrevWrap').style.display !== 'none', true, 'visible'));
+
+    /* Sin nada apartado no se ofrece pagar con previsión: sería ofrecer algo que
+       no existe. */
+    setVar(A, '_cacheDeps', []);
+    A._gPrevPoblar('');
+    test('sin dinero apartado, el selector se esconde', () =>
+        eq($('gPrevWrap').style.display, 'none', 'oculto'));
+
+    /* Gastar más de lo apartado se avisa, pero no se prohíbe. */
+    setVar(A, '_cacheDeps', [{ id:'a1', tipo:'apartado', previsionId:'p1', monto:20000,
+                               fondo:'caja_fuerte', fecha:'2026-03-01' }]);
+    A._gPrevPoblar('p1');
+    $('gMonto').value = 25000;
+    A._gPrevUI();
+    test('usar más de lo apartado se advierte', () =>
+        eq($('gPrevHint').innerHTML.indexOf('más de lo que tenías apartado') > -1, true, 'aviso'));
+    test('…con el monto exacto del excedente', () =>
+        eq($('gPrevHint').innerHTML.indexOf('$5,000.00') > -1, true, 'monto'));
+    $('gMonto').value = 8000;
+    A._gPrevUI();
+    test('dentro de lo apartado no se advierte nada', () =>
+        eq($('gPrevHint').innerHTML.indexOf('más de lo que tenías') , -1, 'sin aviso'));
+    test('y siempre se recuerda que el disponible no se mueve', () =>
+        eq($('gPrevHint').innerHTML.indexOf('disponible no se mueve') > -1, true, 'recordatorio'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0
