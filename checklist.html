@@ -31,6 +31,31 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
 .pl-btn .pi{font-size:26px;flex-shrink:0}
 .pl-btn .pt{font-size:15px;font-weight:600;color:var(--text)}
 .pl-btn .pd{font-size:12px;color:var(--text-dim);margin-top:2px}
+/* Botones del portal y del recetario.
+   El HTML ya usaba .plant-card / .plant-nom / .plant-meta, pero NUNCA se
+   escribieron sus estilos: se renderizaban como texto suelto, centrado por el
+   text-align de la tarjeta madre. De ahí que el portal se viera como una lista
+   de palabras en vez de botones. */
+.plant-card{display:flex;align-items:center;gap:14px;width:100%;box-sizing:border-box;
+    background:var(--surface2);border:1px solid var(--border);border-radius:14px;
+    padding:15px 16px;margin-bottom:11px;cursor:pointer;text-align:left;
+    transition:border-color .12s,transform .08s;-webkit-tap-highlight-color:transparent}
+.plant-card:active{border-color:var(--green);transform:scale(.985)}
+.plant-nom{font-size:15.5px;font-weight:600;color:var(--text);line-height:1.25}
+.plant-meta{font-size:12px;color:var(--text-dim);margin-top:3px;line-height:1.35;text-align:left}
+/* El ícono en su propio cuadro: da al botón un ancla visual y un área de toque
+   clara, en vez de un emoji flotando junto al texto. */
+.plant-ico{width:46px;height:46px;flex-shrink:0;border-radius:12px;display:flex;
+    align-items:center;justify-content:center;font-size:24px;line-height:1;
+    background:rgba(61,190,122,.10);border:1px solid rgba(61,190,122,.22);overflow:hidden}
+.plant-ico img{width:100%;height:100%;object-fit:cover;display:block}
+.plant-go{color:var(--green);font-size:20px;flex-shrink:0;opacity:.8}
+.plant-card[aria-disabled="true"]{opacity:.45;cursor:default}
+/* Encabezado de grupo dentro de una lista larga */
+.plant-sec{display:flex;align-items:center;gap:8px;margin:18px 0 8px;text-align:left}
+.plant-sec:first-child{margin-top:4px}
+.plant-sec span{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);white-space:nowrap}
+.plant-sec i{flex:1;height:1px;background:var(--border);display:block}
 /* Tareas del checklist */
 .tk-row{display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:13px 14px;margin-bottom:9px;text-align:left;cursor:pointer;user-select:none}
 .tk-row .tk-freq{font-size:9px;font-weight:700;color:var(--text-dim);border:1px solid var(--border);border-radius:5px;padding:2px 6px;flex-shrink:0}
@@ -285,11 +310,11 @@ function _verMenu(){
 }
 function _opt(ico, tit, sub, accion){
     var off = !accion;
-    return '<div class="plant-card"' + (off ? ' style="opacity:.45"' : ' onclick="' + accion + '"') + '>' +
-        '<div style="font-size:26px;line-height:1">' + ico + '</div>' +
+    return '<div class="plant-card"' + (off ? ' aria-disabled="true"' : ' onclick="' + accion + '"') + '>' +
+        '<div class="plant-ico">' + ico + '</div>' +
         '<div style="flex:1;min-width:0"><div class="plant-nom">' + etx(tit) + '</div>' +
         '<div class="plant-meta">' + etx(sub) + '</div></div>' +
-        (off ? '' : '<div style="color:var(--green);font-size:18px">›</div>') + '</div>';
+        (off ? '' : '<div class="plant-go">›</div>') + '</div>';
 }
 
 /* ── Recetario OPERATIVO ──
@@ -314,22 +339,58 @@ async function _verRecetas(){
     }
     _pintarRecetas();
 }
+/* Una SUB-receta es una preparación que entra en otras (un adobo, una salsa base),
+   no un platillo que sale a la mesa. La RPC ya lo dice en `tipo`
+   ('sub-alimentos' / 'sub-bebidas'), así que no hace falta migración. */
+function _esSubReceta(r){ return String((r && r.tipo) || '').indexOf('sub-') === 0; }
+
+function _recCard(r, i){
+    /* Si la receta tiene foto, la foto ES el ícono: en cocina se reconoce antes
+       un platillo por su imagen que por su nombre escrito. */
+    var ico = r.foto
+        ? '<img src="' + etx(r.foto) + '" alt="" loading="lazy">'
+        : (String(r.tipo||'').indexOf('bebida') >= 0 ? '🥃' : '🍽️');
+    var meta = [];
+    if (r.grupo) meta.push(etx(r.grupo));
+    if ((r.ingredientes||[]).length) meta.push(r.ingredientes.length + ' ingredientes');
+    if (r.tiempo) meta.push('⏱️ ' + etx(r.tiempo));
+    return '<div class="plant-card" onclick="_verReceta(' + i + ')">' +
+        '<div class="plant-ico">' + ico + '</div>' +
+        '<div style="flex:1;min-width:0"><div class="plant-nom">' + etx(r.nombre) + '</div>' +
+        '<div class="plant-meta">' + meta.join(' · ') + '</div></div>' +
+        '<div class="plant-go">›</div></div>';
+}
+function _recSec(txt){ return '<div class="plant-sec"><span>' + txt + '</span><i></i></div>'; }
+
 function _pintarRecetas(){
     var q = (document.getElementById('recBuscar').value || '').toLowerCase().trim();
     var lista = (RECETAS||[]).filter(function(r){
         return !q || (r.nombre||'').toLowerCase().indexOf(q) >= 0 || (r.grupo||'').toLowerCase().indexOf(q) >= 0;
     });
-    document.getElementById('recList').innerHTML = lista.length
-        ? lista.map(function(r,i){
-            return '<div class="plant-card" onclick="_verReceta(' + i + ')">' +
-                '<div style="font-size:22px;line-height:1">' + (String(r.tipo||'').indexOf('bebida')>=0 ? '🥃' : '🍽️') + '</div>' +
-                '<div style="flex:1;min-width:0"><div class="plant-nom">' + etx(r.nombre) + '</div>' +
-                '<div class="plant-meta">' + etx(r.grupo||'') + ((r.ingredientes||[]).length ? ' · ' + r.ingredientes.length + ' ingredientes' : '') + '</div></div>' +
-                '<div style="color:var(--green);font-size:18px">›</div></div>';
-          }).join('')
-        : '<div class="plant-meta" style="padding:16px 2px">' + (q ? 'Ninguna receta con ese nombre.' : 'Todavía no hay recetas de tu área.') + '</div>';
-    // El índice va contra la lista FILTRADA; se guarda para que el detalle no se equivoque.
-    _RECVIS = lista;
+    if (!lista.length) {
+        document.getElementById('recList').innerHTML =
+            '<div class="plant-meta" style="padding:16px 2px">' +
+            (q ? 'Ninguna receta con ese nombre.' : 'Todavía no hay recetas de tu área.') + '</div>';
+        _RECVIS = [];
+        return;
+    }
+    /* Los platillos primero y las preparaciones después: quien busca "cómo se
+       hace el aguachile" no quiere tropezar antes con quince adobos. El índice va
+       contra el ORDEN PINTADO, no contra el filtrado, o el detalle abriría otra. */
+    var platos = lista.filter(function(r){ return !_esSubReceta(r); });
+    var subs   = lista.filter(_esSubReceta);
+    _RECVIS = platos.concat(subs);
+
+    var html = '', i = 0;
+    if (platos.length) {
+        if (subs.length) html += _recSec('🍽️ Recetas');
+        platos.forEach(function(r){ html += _recCard(r, i++); });
+    }
+    if (subs.length) {
+        if (platos.length) html += _recSec('🧪 Preparaciones y bases');
+        subs.forEach(function(r){ html += _recCard(r, i++); });
+    }
+    document.getElementById('recList').innerHTML = html;
 }
 var _RECVIS = [];
 function _verReceta(i){
@@ -342,7 +403,8 @@ function _verReceta(i){
     }).join('');
     document.getElementById('recFicha').innerHTML =
         '<div class="cap-title" style="font-size:22px;margin:4px 0 2px">' + etx(r.nombre) + '</div>' +
-        '<div class="plant-meta" style="margin-bottom:14px">' + etx(r.grupo||'') +
+        '<div class="plant-meta" style="margin-bottom:14px">' +
+            (_esSubReceta(r) ? '🧪 Preparación · ' : '') + etx(r.grupo||'') +
             (r.cristaleria ? ' · ' + etx(r.cristaleria) : '') + (r.tiempo ? ' · ⏱️ ' + etx(r.tiempo) : '') + '</div>' +
         (r.foto ? '<img src="' + etx(r.foto) + '" style="width:100%;border-radius:12px;margin-bottom:14px">' : '') +
         '<label class="lbl">Ingredientes</label>' +
@@ -376,10 +438,10 @@ async function _verGuias(){
     cont.innerHTML = orden.map(function(c){
         return '<label class="lbl">' + etx(c) + '</label>' + porCat[c].map(function(g){
             return '<a class="plant-card" href="' + etx(g.url) + '" target="_blank" rel="noopener" style="text-decoration:none;color:inherit">' +
-                '<div style="font-size:22px;line-height:1">' + (g.tipo==='video'?'▶️':'📕') + '</div>' +
+                '<div class="plant-ico">' + (g.tipo==='video'?'▶️':'📕') + '</div>' +
                 '<div style="flex:1;min-width:0"><div class="plant-nom">' + etx(g.titulo) + '</div>' +
                 (g.descripcion ? '<div class="plant-meta">' + etx(g.descripcion) + '</div>' : '') + '</div>' +
-                '<div style="color:var(--green);font-size:18px">›</div></a>';
+                '<div class="plant-go">›</div></a>';
         }).join('');
     }).join('');
 }

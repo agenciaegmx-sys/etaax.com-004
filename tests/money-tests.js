@@ -4552,6 +4552,111 @@ console.log('\n══ SUITE AL · Catálogo de staff por sucursal (administrativ
         eq(heredado.indexOf('sin capturar') > -1 || heredado.indexOf('—') > -1, true, 'aviso'));
 }
 
+/* ═══════════ SUITE AM · PORTAL DEL COLABORADOR (checklist.html) ══════════════
+   El HTML usaba .plant-card / .plant-nom / .plant-meta y esas clases NUNCA se
+   escribieron: el portal se veía como una lista de palabras centradas en vez de
+   botones. Y el recetario mezclaba platillos con preparaciones.              */
+console.log('\n══ AM · Portal del colaborador (checklist.html) ══');
+{
+    const P = crearContexto();
+    cargarInline(P, 'checklist.html');
+    const $ = (id) => P.document.getElementById(id);
+    const CSS = fs.readFileSync(path.join(RAIZ, 'checklist.html'), 'utf8');
+    /* El arranque de la página se corta con el DOM de mentira (pide sesión), así
+       que las asignaciones de arriba no llegan a correr. Se reponen las que el
+       recetario necesita. */
+    setVar(P, '_PANTALLAS', ['pinScreen','menuScreen','recScreen','recDetalle','guiaScreen',
+                             'listScreen','runScreen','doneScreen','errScreen']);
+
+    /* ── Las clases existen de verdad ──
+       Sin esto el markup se pinta pero no se ve como botón, y nadie lo nota
+       hasta abrirlo en un teléfono. */
+    ['.plant-card{', '.plant-nom{', '.plant-meta{', '.plant-ico{', '.plant-go{', '.plant-sec{']
+        .forEach(function (c) {
+            test('el estilo ' + c.slice(0, -1) + ' está escrito', () =>
+                eq(CSS.indexOf(c) > -1, true, 'css'));
+        });
+    test('el botón del portal se arma con caja de ícono', () =>
+        eq(P._opt('📋', 'Mis check lists', '1 disponible', 'volverLista()').indexOf('plant-ico') > -1, true, 'ícono'));
+    /* Una opción sin acción no debe parecer tocable. */
+    test('la opción sin acción se marca deshabilitada', () =>
+        eq(P._opt('📋', 'x', 'y', '').indexOf('aria-disabled="true"') > -1, true, 'off'));
+    test('…y no lleva flecha de "entra aquí"', () =>
+        eq(P._opt('📋', 'x', 'y', '').indexOf('plant-go'), -1, 'sin flecha'));
+
+    /* ── El recetario: platillos y preparaciones, separados ── */
+    const rec = [
+        { nombre:'Aguachile verde', tipo:'alimentos',     grupo:'Crudos',  ingredientes:[1,2,3] },
+        { nombre:'Adobo de Chamorro', tipo:'sub-alimentos', grupo:'Bases',  ingredientes:[1,2] },
+        { nombre:'Ajillo',          tipo:'sub-alimentos', grupo:'Bases',   ingredientes:[1] },
+        { nombre:'Mezcal Sour',     tipo:'bebidas',       grupo:'Coctel',  ingredientes:[1,2], foto:'https://x/f.jpg' }
+    ];
+    setVar(P, 'RECETAS', rec);
+    $('recBuscar').value = '';
+    P._pintarRecetas();
+    const html = $('recList').innerHTML;
+
+    test('una sub-receta se reconoce por su tipo', () => eq(P._esSubReceta(rec[1]), true, 'sub'));
+    test('un platillo no se confunde con una preparación', () => eq(P._esSubReceta(rec[0]), false, 'plato'));
+    test('la lista separa recetas de preparaciones', () =>
+        eq(html.indexOf('Recetas') > -1 && html.indexOf('Preparaciones') > -1, true, 'secciones'));
+    /* Los platillos van primero: quien busca cómo se hace el aguachile no quiere
+       tropezar antes con quince adobos. */
+    test('los platillos se listan antes que las bases', () =>
+        eq(html.indexOf('Aguachile verde') < html.indexOf('Adobo de Chamorro'), true, 'orden'));
+
+    /* EL ÍNDICE: se pinta agrupado, así que tiene que apuntar al orden PINTADO.
+       Contra el orden filtrado, tocar una receta abriría otra. */
+    test('el índice sigue el orden pintado, no el filtrado', () =>
+        eq(P._RECVIS[0].nombre, 'Aguachile verde', 'primero'));
+    test('…y la primera preparación queda después de los platillos', () =>
+        eq(P._RECVIS[2].nombre, 'Adobo de Chamorro', 'tercero'));
+    test('tocar el primer renglón abre la primera receta pintada', () => {
+        const m = html.match(/_verReceta\((\d+)\)/);
+        return eq(P._RECVIS[parseInt(m[1])].nombre, 'Aguachile verde', 'coincide');
+    });
+
+    /* ── La foto ── */
+    test('la receta con foto la muestra en la lista', () =>
+        eq(html.indexOf('https://x/f.jpg') > -1, true, 'foto'));
+    test('la que no tiene, cae en su emoji', () =>
+        eq(html.indexOf('🍽️') > -1, true, 'emoji'));
+    /* Y la foto va DENTRO de la caja del ícono: suelta se estira a lo ancho del
+       renglón y rompe la fila. */
+    test('la foto vive dentro de la caja del ícono', () =>
+        eq(html.indexOf('<div class="plant-ico"><img') > -1, true, 'encajada'));
+    test('cada renglón del recetario es un botón con su caja', () =>
+        eq((html.match(/plant-ico/g) || []).length, 4, 'cuatro'));
+    /* Índice 1 = Mezcal Sour, que es la que trae foto. Ojo: NO es su posición en
+       la lista original —el agrupado reordena— y por eso el índice se toma de
+       _RECVIS y no del filtrado. */
+    P._verReceta(1);
+    test('la ficha también muestra la foto', () =>
+        eq($('recFicha').innerHTML.indexOf('https://x/f.jpg') > -1, true, 'ficha'));
+    /* Y la ficha dice cuando es una preparación, no un platillo que sale a la mesa. */
+    P._verReceta(2);
+    test('la ficha de una preparación lo dice', () =>
+        eq($('recFicha').innerHTML.indexOf('Preparación') > -1, true, 'aviso'));
+
+    /* Sin sub-recetas no se inventan encabezados para una sola lista. */
+    setVar(P, 'RECETAS', [rec[0]]);
+    P._pintarRecetas();
+    test('con puros platillos no se pinta ningún encabezado', () =>
+        eq($('recList').innerHTML.indexOf('plant-sec'), -1, 'sin secciones'));
+
+    /* Buscar sigue funcionando por encima del agrupado. */
+    setVar(P, 'RECETAS', rec);
+    $('recBuscar').value = 'adobo';
+    P._pintarRecetas();
+    test('la búsqueda filtra sobre los grupos', () => eq(P._RECVIS.length, 1, 'filtra'));
+    test('…y el índice sigue apuntando bien', () =>
+        eq(P._RECVIS[0].nombre, 'Adobo de Chamorro', 'índice'));
+    $('recBuscar').value = 'zzz';
+    P._pintarRecetas();
+    test('sin resultados se dice, no se deja en blanco', () =>
+        eq($('recList').innerHTML.indexOf('Ninguna receta') > -1, true, 'vacío'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0
