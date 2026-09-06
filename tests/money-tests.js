@@ -4043,6 +4043,64 @@ console.log('\n══ SUITE AH · Conciliación de tarjeta en Diario (administra
     test('…y el folio queda a la vista para rastrearlo', () =>
         eq(html.indexOf('REF-8837') > -1, true, 'folio'));
 
+    /* ══ EL CORTE VIEJO ══
+       Los cortes capturados antes del desglose por cuenta traen la tarjeta en un
+       campo plano (`tarjeta`), sin `tarjetaCuentas`. Leyendo solo el desglose, un
+       corte de agosto con $21,180 de tarjeta no tenía nada que conciliar y el
+       bloque simplemente no aparecía. */
+    const viejo = { id:'v1', fecha:'2026-08-30', tarjeta:21180.25, propTarjeta:0 };
+    setVar(A, '_cuentasBancarias', ctas);
+    setVar(A, '_cacheDeps', []);
+    test('el corte viejo sí tiene cuentas que conciliar', () =>
+        eq(A._tpvCuentasDeCorte(viejo).length, 1, 'cuenta base'));
+    test('…y se le ofrece conciliar', () =>
+        eq(A._tpvBloqueCorte(viejo).indexOf('Conciliar un abono') > -1, true, 'bloque'));
+    test('…con su venta capturada a la vista', () =>
+        eq(A._tpvBloqueCorte(viejo).indexOf('$21,180.25') > -1, true, 'bruto'));
+    /* Y lo que debe caer es el NETO, con la misma cuenta que usa el saldo. */
+    test('lo que debe caer sale de la misma regla que el saldo', () => {
+        const det = A.EtaaxCore.taBancoNetoDetalle(viejo, ctas);
+        const tpv = A.EtaaxCore.tpvDeCorte(viejo, 'cta1', ctas);
+        // Si estas dos divergieran, el saldo del banco y la conciliación dirían
+        // cosas distintas del mismo corte.
+        return eq(tpv.neto, (det.porCuenta['cta1'] || 0) + det.sinCuenta, 'neto');
+    });
+    /* Las propinas de tarjeta viajan en el mismo abono del banco: se concilian
+       juntas o el abono siempre se vería corto. */
+    const conProp = { id:'v2', fecha:'2026-08-30', tarjeta:10000, propTarjeta:500 };
+    test('la propina de tarjeta entra en lo que debe caer', () =>
+        eq(A.EtaaxCore.tpvDeCorte(conProp, 'cta1', ctas).bruto, 10500, 'con propina'));
+    /* Y la propina ya desglosada POR CUENTA cae en su cuenta, no en la base. */
+    const propPorCta = { id:'v3', fecha:'2026-08-30',
+        tarjetaCuentas:[{ cuentaId:'cta1', ventaTC:10000, ventaTD:0, neto:10000 }],
+        propTarjetaCuentas:{ cta1: 300 } };
+    test('la propina desglosada suma al abono de su cuenta', () =>
+        eq(A.EtaaxCore.tpvDeCorte(propPorCta, 'cta1', ctas).bruto, 10300, 'desglosada'));
+    test('…y no se la lleva otra cuenta', () =>
+        eq(A.EtaaxCore.tpvDeCorte(propPorCta, 'cta9', ctas).bruto, 0, 'aislada'));
+
+    /* Las acciones del renglón viven en el menú de tres puntos: tres botones en
+       una tabla de nueve columnas dejaban la fila apretada. */
+    test('la fila del corte usa el menú de tres puntos', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+        return eq(src.indexOf('_menuCorte(event,') > -1, true, 'menú');
+    });
+
+    /* ── El bloque también dentro del EDITOR ──
+       Edwin lo buscaba ahí, que es donde se corrige el corte. Al CAPTURAR uno
+       nuevo no aparece: el dinero de un corte que se está escribiendo todavía no
+       cayó al banco. */
+    setVar(A, '_cacheCortes', [viejo]);
+    A._storage['etaax_ctx'] = JSON.stringify({ ctxType:'owner', negId:'negT' });
+    A.abrirModal('v1');
+    test('al editar un corte aparece su conciliación', () =>
+        eq($('fTpvBloque').innerHTML.indexOf('Conciliar un abono') > -1, true, 'editor'));
+    test('…y el bloque se muestra', () => eq($('fTpvBloque').style.display, '', 'visible'));
+    A.abrirModal();
+    test('al capturar un corte nuevo no se pide conciliar nada', () =>
+        eq($('fTpvBloque').innerHTML, '', 'captura'));
+    test('…y el bloque queda escondido', () => eq($('fTpvBloque').style.display, 'none', 'oculto'));
+
     /* ── El saldo por cuenta ──
        Es lo que hace que el número cuadre con la app del banco. */
     const saldo = (deps) => A._debitoPorCuenta(cortes, deps, ctas, 0, [])['cta1'].total;

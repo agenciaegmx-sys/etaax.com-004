@@ -286,14 +286,55 @@
        `cuentaId` null/ausente = TODAS las cuentas. La cadena vacía NO es "todas":
        es el cubo de lo que se capturó sin cuenta asignada, que existe en los
        cortes viejos. Confundirlos hacía que ese cubo sumara todo otra vez. */
-    function tpvDeCorte(corte, cuentaId) {
-        var r = { bruto: 0, neto: 0 };
+    function tpvDeCorte(corte, cuentaId, ctas) {
+        var r = { bruto: 0, neto: 0 }, brutoDes = 0;
         ((corte && corte.tarjetaCuentas) || []).forEach(function (t) {
             if (!t) return;
+            brutoDes += n(t.ventaTC) + n(t.ventaTD);
             if (cuentaId != null && (t.cuentaId || '') !== cuentaId) return;
             r.bruto += n(t.ventaTC) + n(t.ventaTD);
             r.neto  += n(t.neto);
         });
+        /* Los cortes VIEJOS no traen desglose por cuenta: la tarjeta vive en un
+           campo plano. Sin esto, un corte de agosto con $21,180 de tarjeta no
+           tenía nada que conciliar y el bloque no aparecía. Se atribuye a la
+           cuenta base del corte, igual que hace el saldo (taBancoNetoDetalle):
+           si las dos no usaran la misma regla, el saldo y la conciliación
+           dirían cosas distintas.
+
+           Las PROPINAS de tarjeta entran también: el banco deposita el abono
+           completo, venta y propina juntas, y es contra ese abono que se
+           concilia. */
+        if (ctas && corte) {
+            var cta0 = ctaBaseCorte(corte, ctas);
+            var baseId = cta0 ? cta0.id : '';
+            if (cuentaId == null || cuentaId === baseId) {
+                var resto = n(corte.tarjeta) - brutoDes;
+                if (resto > 0.005) {
+                    r.bruto += resto;
+                    r.neto  += cta0 ? netoCuenta(cta0, 0, resto) : resto;
+                }
+            }
+            var pc = corte.propTarjetaCuentas, propDes = 0;
+            if (pc && typeof pc === 'object') {
+                Object.keys(pc).forEach(function (id) {
+                    var m = n(pc[id]); if (!m) return;
+                    propDes += m;
+                    if (cuentaId != null && id !== cuentaId) return;
+                    var cta = null;
+                    for (var i = 0; i < ctas.length; i++) if (ctas[i].id === id) cta = ctas[i];
+                    r.bruto += m;
+                    r.neto  += cta ? netoCuenta(cta, 0, m) : m;
+                });
+            }
+            if (cuentaId == null || cuentaId === baseId) {
+                var propResto = n(corte.propTarjeta) - propDes;
+                if (propResto > 0.005) {
+                    r.bruto += propResto;
+                    r.neto  += cta0 ? netoCuenta(cta0, 0, propResto) : propResto;
+                }
+            }
+        }
         return r;
     }
 
@@ -309,7 +350,7 @@
         return !!cta.conciliaTpv;
     }
 
-    function tpvConciliacion(cortes, deps, cuentaId, hoyStr, modo) {
+    function tpvConciliacion(cortes, deps, cuentaId, hoyStr, modo, ctas) {
         var abonos = (deps || []).filter(function (d) {
             return esAbonoTpv(d) && (cuentaId == null || (d.cuentaId || '') === cuentaId);
         });
@@ -317,7 +358,7 @@
 
         // Cortes de esta cuenta con venta de tarjeta, del más viejo al más nuevo.
         var conVenta = (cortes || []).map(function (c) {
-            var v = tpvDeCorte(c, cuentaId);
+            var v = tpvDeCorte(c, cuentaId, ctas);
             return { fecha: c.fecha || '', id: c.id, bruto: v.bruto, neto: v.neto };
         }).filter(function (x) { return x.bruto > 0 || x.neto > 0; })
           .sort(function (a, b) { return (a.fecha || '').localeCompare(b.fecha || ''); });
@@ -378,8 +419,8 @@
 
     /* Lo conciliado de UN corte en UNA cuenta: es el desglose del día que se ve al
        pie del corte (capturado · conciliado · comisión). */
-    function tpvDelCorte(corte, deps, cuentaId) {
-        var v = tpvDeCorte(corte, cuentaId);
+    function tpvDelCorte(corte, deps, cuentaId, ctas) {
+        var v = tpvDeCorte(corte, cuentaId, ctas);
         var conc = (deps || []).reduce(function (t, d) {
             if (!esAbonoTpv(d)) return t;
             if ((d.corteId || '') !== ((corte && corte.id) || '')) return t;

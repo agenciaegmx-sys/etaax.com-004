@@ -1384,6 +1384,10 @@
             <textarea id="fNotas" rows="2" placeholder="Observaciones, incidencias, contexto…" style="resize:vertical"></textarea>
         </div>
 
+        <!-- 9. Conciliación con el banco (solo al EDITAR: un corte que aún no
+             existe no tiene abono que buscar en el estado de cuenta) -->
+        <div id="fTpvBloque" style="display:none;margin-top:6px"></div>
+
         <input type="hidden" id="fId">
     </div>
     <div class="modal-footer">
@@ -2832,12 +2836,9 @@ function renderTabla(cur){
             '<td class="num-col">'+(ck>0?fmtM(ck):'—')+'</td>'+
             '<td class="num-col" style="color:var(--red)">'+(gas>0?fmtM(gas):'—')+'</td>'+
             '<td class="num-col" style="font-weight:700;color:var(--accent)">'+fmtM(rsg)+'</td>'+
-            '<td style="display:flex;gap:4px;justify-content:flex-end">'+
-                '<button class="btn-row" onclick="verCorte(\''+c.id+'\')" title="Ver corte">👁️</button>'+
-                (_puedeEditarCorte(c)
-                    ? '<button class="btn-row" onclick="abrirModal(\''+c.id+'\')">✏️</button>'+
-                      '<button class="btn-row del" onclick="eliminarCorte(\''+c.id+'\')">🗑️</button>'
-                    : '')+
+            '<td style="text-align:right;white-space:nowrap">'+
+                '<button class="btn-row" title="Opciones" onclick="_menuCorte(event,\''+c.id+'\')" '+
+                    'style="padding:4px 10px;font-size:15px;line-height:1">⋯</button>'+
             '</td>'+
         '</tr>';
     }).join('');
@@ -2947,6 +2948,13 @@ function abrirModal(id){
     else { var _c=load().find(function(c){return c.id===id;}); if(_c && !_puedeEditarCorte(_c)){ alert('Tu rol no puede editar cortes de días anteriores.'); return; } }
     var d=id?(load().find(function(c){return c.id===id;})||{}): {};
     document.getElementById('modalTitulo').textContent=id?'Editar corte':'Capturar corte del día';
+    /* La conciliación vive aquí dentro, al editar. Al capturar no tiene sentido:
+       el dinero de un corte que se está escribiendo todavía no cayó al banco. */
+    var _tb=document.getElementById('fTpvBloque');
+    if(_tb){
+        var _h = id ? _tpvBloqueCorte(d) : '';
+        _tb.innerHTML=_h; _tb.style.display=_h?'':'none';
+    }
     document.getElementById('fId').value=id||'';
     document.getElementById('fFecha').value=d.fecha||todayStr();
     document.getElementById('fTurno').value=d.turno||'dia';
@@ -3508,7 +3516,7 @@ function _debitoPorCuenta(cortes, depositos, ctasDeb, gastosDebito, gastosDebito
         var _ctaDe={}; (ctasDeb||[]).forEach(function(c){ if(c) _ctaDe[c.id]=c; });
         Object.keys(porCta).concat(['']).forEach(function(id){
             var t=EtaaxCore.tpvConciliacion(cortes, _abTpv, id, _hoyTpv,
-                                            EtaaxCore.tpvCuentaConcilia(_ctaDe[id]));
+                                            EtaaxCore.tpvCuentaConcilia(_ctaDe[id]), ctasDeb);
             if(t.transito>0.005) add(id,'term', -t.transito);   // '' cae en la cuenta base
         });
     }
@@ -3648,7 +3656,7 @@ function _abrirCajaFuerteContenido(_yaFresco){
     var totTarjeta = 0, totTransito = 0, _tpvPend = null;
     _cuentasDebito().concat([{id:''}]).forEach(function(cta){
         var t = EtaaxCore.tpvConciliacion(lista, _abonosCF, cta.id, todayStr(),
-                                          EtaaxCore.tpvCuentaConcilia(cta));
+                                          EtaaxCore.tpvCuentaConcilia(cta), _cuentasDebito());
         totTarjeta  += t.aportaBanco;
         totTransito += Math.max(0, t.transito);
         if (t.transito > 0.005 && t.pendienteDesde &&
@@ -4209,17 +4217,14 @@ function _tpvEncender(cuentaId){
    Vacío cuando no hay venta con tarjeta o la cuenta no concilia: una marca que
    sale siempre deja de significar algo. */
 function _tpvChipCorte(c){
-    var ctas=((c&&c.tarjetaCuentas)||[]).filter(function(t){
-        return t && ((n(t.ventaTC)+n(t.ventaTD))>0 || n(t.neto)>0);
-    });
+    var ctasDeb=_cuentasDebito();
     var abonos=_abonosTpv(), falta=0, hayActiva=false;   // sin cuentas, hayActiva se queda en false
-    ctas.forEach(function(t){
-        var cid=t.cuentaId||'';
+    _tpvCuentasDeCorte(c).forEach(function(cid){
         if(_tpvModo(cid)===false) return;                 // cuenta que no concilia
-        var est=EtaaxCore.tpvConciliacion(load(), abonos, cid, todayStr(), _tpvModo(cid));
+        var est=EtaaxCore.tpvConciliacion(load(), abonos, cid, todayStr(), _tpvModo(cid), ctasDeb);
         if(!est.activa) return;                           // todavía nadie concilia aquí
         hayActiva=true;
-        falta+=Math.max(0, EtaaxCore.tpvDelCorte(c, abonos, cid).falta);
+        falta+=Math.max(0, EtaaxCore.tpvDelCorte(c, abonos, cid, ctasDeb).falta);
     });
     if(!hayActiva) return '';
     return falta>0.005
@@ -4229,10 +4234,61 @@ function _tpvChipCorte(c){
         : '<div style="font-size:9.5px;color:var(--green);margin-top:2px;white-space:nowrap">✅ conciliado</div>';
 }
 
-function _tpvBloqueCorte(c){
-    var ctas=(c.tarjetaCuentas||[]).filter(function(t){
-        return t && ((n(t.ventaTC)+n(t.ventaTD))>0 || n(t.neto)>0);
+/* Cuentas que de verdad reciben dinero de ESTE corte. Los cortes viejos no traen
+   desglose por cuenta —la tarjeta vive en un campo plano—, así que leerlo tal cual
+   dejaba sin conciliación a todo lo capturado antes del desglose: por eso el
+   bloque no aparecía en un corte de agosto con $21,180 de tarjeta. */
+/* Ver, editar y eliminar en un solo menú, como en el catálogo de staff: tres
+   botones por renglón en una tabla de nueve columnas dejaban la fila apretada y
+   el ✏️ pegado al 🗑️. */
+function _menuCorte(ev, id){
+    ev.stopPropagation();
+    _cerrarMenusCorte();
+    var c=load().find(function(x){return x.id===id;})||{};
+    var m=document.createElement('div');
+    m.className='cx-menu';
+    var r=ev.currentTarget.getBoundingClientRect();
+    m.style.cssText='position:fixed;z-index:10001;min-width:200px;background:var(--surface);'+
+        'border:1px solid var(--border);border-radius:10px;padding:5px;box-shadow:0 14px 40px rgba(0,0,0,.5);'+
+        'top:'+Math.min(r.bottom+6, window.innerHeight-180)+'px;left:'+Math.max(10, r.right-200)+'px';
+    var q=String(id).replace(/'/g,"\\'");
+    m.innerHTML =
+        _miCorte('👁','Ver corte',"verCorte('"+q+"')") +
+        (_puedeEditarCorte(c)
+            ? _miCorte('✏️','Editar',"abrirModal('"+q+"')") +
+              '<div style="height:1px;background:var(--border);margin:5px 2px"></div>' +
+              _miCorte('🗑️','Eliminar',"eliminarCorte('"+q+"')", true)
+            : '');
+    document.body.appendChild(m);
+    setTimeout(function(){ document.addEventListener('click', _cerrarMenusCorte, { once:true }); }, 0);
+}
+function _miCorte(ico, txt, accion, peligro){
+    return '<div onclick="event.stopPropagation();_cerrarMenusCorte();'+accion+'" '+
+        'style="display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:7px;cursor:pointer;'+
+        'font-size:13px;color:'+(peligro?'#ff9a9a':'var(--text)')+'" '+
+        'onmouseover="this.style.background=\'var(--surface2)\'" '+
+        'onmouseout="this.style.background=\'transparent\'">'+
+        '<span style="width:18px;text-align:center">'+ico+'</span><span>'+txt+'</span></div>';
+}
+function _cerrarMenusCorte(){
+    var ms=document.querySelectorAll('.cx-menu');
+    for(var i=0;i<ms.length;i++) ms[i].remove();
+}
+
+function _tpvCuentasDeCorte(c){
+    var ctasDeb=_cuentasDebito(), out=[], vistas={};
+    ((c&&c.tarjetaCuentas)||[]).forEach(function(t){
+        if(!t) return;
+        var id=t.cuentaId||'';
+        if(!vistas[id] && ((n(t.ventaTC)+n(t.ventaTD))>0 || n(t.neto)>0)){ vistas[id]=1; out.push(id); }
     });
+    // Lo no desglosado y las propinas sin cuenta caen en la cuenta base del corte.
+    var base=EtaaxCore.ctaBaseCorte(c, ctasDeb), baseId=base?base.id:'';
+    if(!vistas[baseId] && EtaaxCore.tpvDeCorte(c, baseId, ctasDeb).neto>0.005){ vistas[baseId]=1; out.push(baseId); }
+    return out;
+}
+function _tpvBloqueCorte(c){
+    var ctas=_tpvCuentasDeCorte(c).map(function(id){ return { cuentaId:id }; });
     if(!ctas.length) return '';   // sin venta con tarjeta no hay nada que conciliar
     var abonos=_abonosTpv();
     var filas=ctas.map(function(t){
@@ -4251,7 +4307,7 @@ function _tpvBloqueCorte(c){
                     '🏦 Empezar a conciliar esta cuenta</button>'+
             '</div>';
         }
-        var d=EtaaxCore.tpvDelCorte(c, abonos, _cid);
+        var d=EtaaxCore.tpvDelCorte(c, abonos, _cid, _cuentasDebito());
         var cuadra=Math.abs(d.falta)<0.005;
         var col=cuadra?'var(--green)':(d.conciliado>0?'var(--accent)':'var(--text-dim)');
         var mis=(_abonosTpv()||[]).filter(function(x){
@@ -4308,7 +4364,7 @@ var _tpvCorteId='', _tpvCuentaId='';
 function _tpvAbrir(corteId, cuentaId){
     _tpvCorteId=corteId; _tpvCuentaId=cuentaId;
     var c=load().find(function(x){return x.id===corteId;}); if(!c) return;
-    var d=EtaaxCore.tpvDelCorte(c, _abonosTpv(), cuentaId);
+    var d=EtaaxCore.tpvDelCorte(c, _abonosTpv(), cuentaId, _cuentasDebito());
     document.getElementById('tpvCuenta').textContent='🏛️ '+_cuentaBancoLabel(cuentaId);
     document.getElementById('tpvDia').textContent=_fCorta(c.fecha||'');
     /* Se propone lo que FALTA, no el total: en el segundo abono del mismo día,
@@ -4352,7 +4408,7 @@ function _tpvGuardar(){
     _cacheDeps.push(ab);
     _sbUp('depositos', ab);
     _tpvCerrar();
-    if(_verCorteId) verCorte(_verCorteId);          // re-pinta el bloque del corte
+    _tpvRepintar();
     var cj=document.getElementById('cajOverlay');
     if(cj&&cj.classList.contains('open'))_abrirCajaFuerteContenido();
 }
@@ -4360,7 +4416,20 @@ function _tpvEliminar(id){
     if(!confirm('¿Quitar esta conciliación? El dinero vuelve a contar como pendiente de caer.')) return;
     _cacheDeps=(_cacheDeps||[]).filter(function(x){return x.id!==id;});
     _sbDel('depositos', id);
+    _tpvRepintar();
+}
+/* Un abono se puede registrar desde el visor o desde el editor: los dos tienen
+   que enterarse, y la lista y Caja Fuerte también. */
+function _tpvRepintar(){
     if(_verCorteId) verCorte(_verCorteId);
+    var fid=(document.getElementById('fId')||{}).value||'';
+    var mg=document.getElementById('modalCorte');
+    if(fid && mg && mg.classList.contains('open')){
+        var d=load().find(function(x){return x.id===fid;});
+        var tb=document.getElementById('fTpvBloque');
+        if(d && tb){ var h=_tpvBloqueCorte(d); tb.innerHTML=h; tb.style.display=h?'':'none'; }
+    }
+    if(typeof renderAll==='function') renderAll();
     var cj=document.getElementById('cajOverlay');
     if(cj&&cj.classList.contains('open'))_abrirCajaFuerteContenido();
 }
