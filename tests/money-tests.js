@@ -3012,6 +3012,7 @@ console.log('\n══ SUITE AA · Bonos automáticos y sanciones (diario.html) �
     test('los dos bonos entran, no se funden en uno', () => eq(semana.length, 2, 'renglones'));
     test('el concepto se ve en el recibo, no un total mudo', () =>
         eq(semana[0].concepto.indexOf('Puntualidad') === 0, true, 'concepto'));
+    test('cada bono trae su desglose', () => eq(!!semana[0].detalle, true, 'detalle'));
 
     /* ── "Por día" es por día TRABAJADO: eso lo distingue de un sueldo ── */
     test('el bono por día se multiplica por los días trabajados', () =>
@@ -3034,7 +3035,17 @@ console.log('\n══ SUITE AA · Bonos automáticos y sanciones (diario.html) �
     test('el mensual prorrateado a la semana da 7/30 del monto', () =>
         eq(mensualEnSemana[0].monto, 700, 'monto'));
     test('y se avisa que va prorrateado', () =>
-        eq(mensualEnSemana[0].concepto.indexOf('prorrateado') > -1, true, 'aviso'));
+        eq(mensualEnSemana[0].detalle.indexOf('prorrateado') > -1, true, 'aviso'));
+    /* El desglose se lee como el del sueldo: precio unitario × cantidad. Un total
+       suelto obliga a sacar la cuenta a mano para saber si está bien. */
+    test('el bono por día muestra su cuenta, no solo el total', () =>
+        eq(semana[0].detalle, '$30.00 × 6 días', 'desglose'));
+    test('el bono que cae justo con el periodo lo dice', () =>
+        eq(semana[1].detalle.indexOf('completo') > -1, true, 'completo'));
+    test('el prorrateado dice de cuánto salía y a cuántos días se llevó', () =>
+        eq(mensualEnSemana[0].detalle, '$3,000.00 mensual → prorrateado a 7 días', 'detalle'));
+    /* Y el concepto queda limpio: el nombre es el nombre, la cuenta va aparte. */
+    test('el concepto no carga la cuenta encima', () => eq(semana[0].concepto, 'Puntualidad', 'limpio'));
     test('quincenal en nómina mensual sube a dos quincenas', () =>
         eq(bonos({ bonos: [{ concepto:'B', monto:500, periodicidad:'quincenal' }] }, 'mes', 30)[0].monto, 1000, 'quincenal'));
 
@@ -3089,6 +3100,40 @@ console.log('\n══ SUITE AA · Bonos automáticos y sanciones (diario.html) �
         eq(cap('sancion', 200, 'faltante de caja').concepto.indexOf('faltante de caja') > -1, true, 'motivo'));
     test('un bono capturado a mano sigue sumando', () =>
         eq(cap('bono', 200, '').monto, 200, 'bono'));
+
+    /* Horas extras y días festivos también llevan su cuenta al recibo. */
+    const capCant = (tipo, monto, cant) => {
+        A._pagoNomStaff = { id:'s1', nombre:'Ana' }; A._pagoNomConceptos = []; A.alert = () => {};
+        A.document.getElementById('pnCptTipo').value   = tipo;
+        A.document.getElementById('pnCptMonto').value  = monto;
+        A.document.getElementById('pnCptCant').value   = cant;
+        A.document.getElementById('pnCptMetodo').value = 'mismo';
+        A.document.getElementById('pnCptMotivo').value = '';
+        A._pnCptAgregar();
+        return A._pagoNomConceptos[0];
+    };
+    test('las horas extras muestran el precio por hora', () =>
+        eq(capCant('horas', 315, 4).detalle, '$78.75 × 4 h', 'horas'));
+    test('los días festivos, el precio por día', () =>
+        eq(capCant('festivo', 630, 2).detalle, '$315.00 × 2 días', 'festivo'));
+    test('la prima dominical, por domingo', () =>
+        eq(capCant('prima', 160, 2).detalle, '$80.00 × 2 domingos', 'prima'));
+    test('un concepto sin cantidad no inventa un desglose', () =>
+        eq(capCant('otro', 500, '').detalle, '', 'sin cuenta'));
+
+    /* Y todo eso llega al recibo, que es donde el colaborador lo lee. */
+    A._pagoNomStaff = { id:'s1', nombre:'Ana' };
+    A._pagoNomConceptos = [{ concepto:'Incentivo diario', detalle:'$15.00 × 2 días', monto:30, pago:'mismo' }];
+    A.document.getElementById('pnDesde').value = '2026-09-01';
+    A.document.getElementById('pnHasta').value = '2026-09-07';
+    A.document.getElementById('pnDiario').value = 315;
+    A.document.getElementById('pnDias').value   = 2;
+    A.document.getElementById('pnTotal').value  = 660;
+    A._pnPrimaInclude = false;
+    const dRec = A._reciboNominaDatos();
+    test('el recibo desglosa el incentivo como desglosa el sueldo', () =>
+        eq(dRec.percepciones[1].detalle, '$15.00 × 2 días', 'recibo'));
+    test('…y no lo deja con una raya', () => eq(dRec.percepciones[1].detalle !== '—', true, 'sin raya'));
 
     /* Sin motivo no se aplica: un descuento anónimo en un recibo es una discusión
        con una persona dentro de un mes. */
@@ -3674,20 +3719,10 @@ console.log('\n══ SUITE AE · Apartar y etiquetar en Diario (administrativo/
         eq($('gPrevision').disabled, true, 'off'));
     test('…y explica qué es una previsión', () =>
         eq($('gPrevHint').innerHTML.indexOf('apartas antes') > -1, true, 'explica'));
-    test('…y ofrece el camino para apartar', () =>
-        eq($('gPrevHint').innerHTML.indexOf('_gIrApartar') > -1, true, 'camino'));
-    /* Y ese camino tiene que existir de verdad: un botón que llama a una función
-       que no está deja la pantalla muda sin decir por qué. */
-    test('el camino para apartar existe y lleva a apartar', () => {
-        setVar(A, '_cachePrevs', [{ id:'p1', concepto:'Aguinaldo', estado:'en_curso' }]);
-        // Sin contexto de sesión, _puede() niega todo: el dueño sí lo trae.
-        A._storage['etaax_ctx'] = JSON.stringify({ ctxType:'owner', negId:'negT' });
-        A._gIrApartar();
-        const dest = $('depDestino2').value;
-        return eq(dest.indexOf('prev:') === 0, true, 'destino=' + dest);
-    });
-    test('…y deja dicho de dónde sale el dinero apartado', () =>
-        eq($('depOrigen').value, 'caja_fuerte', 'origen'));
+    /* Apartar vive en Depósitos y Retiros: aquí solo se dice dónde está, sin
+       sacar al usuario a media captura del gasto. */
+    test('…y dice dónde se aparta, sin sacarte del gasto', () =>
+        eq($('gPrevHint').innerHTML.indexOf('Hacer previsión') > -1, true, 'camino'));
 
     /* Gastar más de lo apartado se avisa, pero no se prohíbe. */
     setVar(A, '_cacheDeps', [{ id:'a1', tipo:'apartado', previsionId:'p1', monto:20000,
@@ -4062,6 +4097,37 @@ console.log('\n══ SUITE AH · Conciliación de tarjeta en Diario (administra
         return eq(i > -1 && src.slice(i - 400, i).indexOf('tpvCuentaConcilia') > -1, true, 'wiring');
     });
 
+    /* ── La marca en la LISTA de cortes ──
+       El bloque para conciliar vive dentro de "Ver corte", y desde fuera no se ve:
+       sin esta marca, la venta que no ha caído no la nota nadie. */
+    setVar(A, '_cacheCortes', cortes);
+    setVar(A, '_cuentasBancarias', ctas);
+    setVar(A, '_cacheDeps', []);
+    test('sin conciliar nada, la lista no marca de más', () =>
+        eq(A._tpvChipCorte(cortes[1]), '', 'callado'));
+
+    setVar(A, '_cacheDeps', conc);
+    test('el corte conciliado se marca como tal', () =>
+        eq(A._tpvChipCorte(cortes[1]).indexOf('conciliado') > -1, true, 'ok'));
+    test('el corte que falta avisa cuánto', () => {
+        const chip = A._tpvChipCorte({ id:'k3', fecha:'2026-09-05',
+            tarjetaCuentas:[{ cuentaId:'cta1', ventaTC:9000, ventaTD:0, neto:8775 }] });
+        return eq(chip.indexOf('por conciliar') > -1 && chip.indexOf('$8,775.00') > -1, true, 'falta');
+    });
+    /* Un corte sin venta con tarjeta no se marca: una marca que sale siempre deja
+       de significar algo. */
+    test('un corte sin tarjeta no lleva marca', () =>
+        eq(A._tpvChipCorte({ id:'k9', fecha:'2026-09-05', tarjetaCuentas:[] }), '', 'sin marca'));
+    test('…ni uno con la tarjeta en ceros', () =>
+        eq(A._tpvChipCorte({ id:'k8', fecha:'2026-09-05',
+            tarjetaCuentas:[{ cuentaId:'cta1', ventaTC:0, ventaTD:0, neto:0 }] }), '', 'ceros'));
+    /* Y la marca tiene que llegar a la fila: calcularla y no pintarla es lo mismo
+       que no tenerla. */
+    test('la marca se pinta en la fila del corte', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+        return eq(src.indexOf("c.fecha+_tpvChip") > -1, true, 'pintada');
+    });
+
     /* Al conciliar el corte nuevo, su dinero entra al saldo. */
     const todo = conc.concat([{ id:'ab2', tipo:'abono_tpv', cuentaId:'cta1', corteId:'k3',
                                 monto:8775, fecha:'2026-09-07', folio:'R2' }]);
@@ -4180,6 +4246,27 @@ console.log('\n══ SUITE AK · Depósitos, retiros y apartados (administrativ
     test('el modal normal recupera su título', () =>
         eq($('depModalTitulo').textContent.indexOf('Depósito') > -1, true, 'genérico'));
 
+    /* ── El rótulo de la cuenta: el BANCO primero ──
+       Con solo el alias ("Principal", "Secundaria") no se sabe a qué banco cae el
+       dinero, que es justo lo que hay que saber para conciliarlo después. En
+       Transferencia sí se veía; en tarjeta y propinas, no. */
+    const ctasRot = [
+        { id:'c1', tipo:'debito', banco:'Afirme', alias:'Principal',  digitos:'2525', predeterminada:true, activa:true },
+        { id:'c2', tipo:'debito', banco:'Wuzi',   alias:'Secundaria', digitos:'9696', activa:true }
+    ];
+    setVar(A, '_cuentasBancarias', ctasRot);
+    test('el rótulo pone el banco al frente', () =>
+        eq(A._ctaLabel(ctasRot[0]), 'Afirme · Principal ····2525', 'rótulo'));
+    test('y buscar por id da exactamente el mismo rótulo', () =>
+        eq(A._cuentaBancoLabel('c2'), 'Wuzi · Secundaria ····9696', 'por id'));
+
+    A._renderTarjetaCuentas ? A._renderTarjetaCuentas() : null;
+    A._renderPropCuentas();
+    test('las propinas dicen a qué banco caen, no solo el alias', () =>
+        eq($('propLblA').textContent, 'Afirme · Principal ····2525', 'propina A'));
+    test('…y la segunda cuenta también', () =>
+        eq($('propLblB').textContent.indexOf('Wuzi') === 0, true, 'propina B'));
+
     /* ── Categorías propias ── */
     delete A._storage['etaax_negT_dep_categorias'];
     A._depPobCategorias('');
@@ -4258,6 +4345,80 @@ console.log('\n══ SUITE AK · Depósitos, retiros y apartados (administrativ
     });
     test('…y un apartado no se cuela entre los depósitos', () =>
         eq(pintado('', 'dep').indexOf('$5,000.00'), -1, 'fuera'));
+}
+
+/* ═══════════ SUITE AL · CATÁLOGO DE STAFF POR SUCURSAL (administrativo/staff.html) ══
+   El conteo de las fichas contaba TODO el negocio mientras la tabla ya filtraba
+   por sucursal: "Todos 37" con doce renglones a la vista. Y la columna de pago
+   leía solo `salarioBase`, que no existe en el esquema por día.               */
+console.log('\n══ SUITE AL · Catálogo de staff por sucursal (administrativo/staff.html) ══');
+{
+    const S = crearContexto();
+    cargarJS(S, 'etaax-core.js');
+    cargarJS(S, 'insumo-label.js');
+    cargarInline(S, 'administrativo/staff.html');
+    S._storage['etaax_negocio_activo'] = 'negT';
+
+    const gente = [
+        { id:'a', nombre:'Ana',   puesto:'Mesera',   sucursalId:'suc1', estado:'Activo' },
+        { id:'b', nombre:'Beto',  puesto:'Mesero',   sucursalId:'suc1', estado:'Activo' },
+        { id:'c', nombre:'Caro',  puesto:'Cocinera', sucursalId:'suc2', estado:'Activo' },
+        { id:'d', nombre:'Dani',  puesto:'Mesera',   sucursalId:'suc2', estado:'Activo' },
+        { id:'e', nombre:'Eva',   puesto:'Mesera',   sucursalId:'suc1', estado:'Baja definitiva' }
+    ];
+    S._storage['etaax_negT_staff'] = JSON.stringify(gente);
+
+    /* ── El conteo sigue a la sucursal activa ── */
+    S._getSucActiva = () => 'suc1';
+    S._catGlobalOn  = () => false;
+    test('solo cuenta la gente de la sucursal activa', () => eq(S._staffEnVista().length, 2, 'suc1'));
+    test('…y no arrastra la de la otra sucursal', () =>
+        eq(S._staffEnVista().some(x => x.sucursalId === 'suc2'), false, 'aislado'));
+    /* Los dados de baja viven en su histórico: contarlos infla la plantilla. */
+    test('los dados de baja no cuentan como plantilla', () =>
+        eq(S._staffEnVista().some(x => x.nombre === 'Eva'), false, 'baja'));
+
+    S._getSucActiva = () => 'suc2';
+    test('al cambiar de sucursal, el conteo cambia con ella', () => eq(S._staffEnVista().length, 2, 'suc2'));
+
+    /* El catálogo global es la excepción a propósito: ahí sí se ve todo. */
+    S._catGlobalOn = () => true;
+    test('en el catálogo global sí se ve todo el negocio', () => eq(S._staffEnVista().length, 4, 'global'));
+    S._catGlobalOn = () => false;
+
+    /* ── La columna de pago ── */
+    const celda = (s) => S._celdaPagoNomina(s);
+
+    /* Quien cobra POR DÍA salía con una raya aunque su sueldo estuviera capturado:
+       `salarioBase` solo existe en el esquema de sueldo fijo. */
+    const porDia = { nombre:'Angel', esquemaSueldo:'diario', sueldoDiario:315, periodicidad:'semanal' };
+    test('el sueldo por día ya no sale con raya', () => eq(celda(porDia).indexOf('—'), -1, 'sin raya'));
+    test('…y muestra el TOTAL del periodo, no el sueldo de un día', () =>
+        eq(celda(porDia).indexOf('$2,205.00') > -1, true, '315 × 7'));
+    test('…con su periodicidad a la vista', () =>
+        eq(celda(porDia).indexOf('semanal') > -1, true, 'periodo'));
+
+    test('quincenal multiplica por quince', () =>
+        eq(celda({ esquemaSueldo:'diario', sueldoDiario:315, periodicidad:'quincenal' }).indexOf('$4,725.00') > -1, true, 'quincena'));
+    test('mensual, por treinta', () =>
+        eq(celda({ esquemaSueldo:'diario', sueldoDiario:315, periodicidad:'mensual' }).indexOf('$9,450.00') > -1, true, 'mes'));
+
+    /* El sueldo fijo sigue leyéndose bien: no se rompió lo que ya servía. */
+    test('el sueldo fijo semanal se muestra completo', () =>
+        eq(celda({ salarioBase:3000, periodicidad:'semanal' }).indexOf('$3,000.00') > -1, true, 'fijo'));
+
+    /* Quien no le cuesta al negocio (beca, practicante) no debe verse como $0 a
+       secas: eso se lee como "no le he capturado el sueldo". */
+    test('el que no cuesta al negocio lo dice con palabras', () =>
+        eq(celda({ nombre:'Jovan', sinCostoNegocio:true, esquemaSueldo:'diario', sueldoDiario:0 })
+             .indexOf('sin costo') > -1, true, 'beca'));
+
+    /* Y un monto que sale del mínimo del negocio —que nadie capturó— no puede
+       verse igual que uno capturado. */
+    S._storage['etaax_gf_nomina_params'] = JSON.stringify({ salarioDiarioDefault: 280 });
+    const heredado = celda({ nombre:'Sin capturar', esquemaSueldo:'diario', periodicidad:'semanal' });
+    test('lo que viene del mínimo se avisa, no se hace pasar por capturado', () =>
+        eq(heredado.indexOf('sin capturar') > -1 || heredado.indexOf('—') > -1, true, 'aviso'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

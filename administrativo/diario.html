@@ -2318,7 +2318,11 @@ function _ctasCorte(){ var d=_cuentasDebito(); return d.length?d:[{id:'_sin',ban
 function _comEf(cta, cual){ return EtaaxCore.comEf(cta, cual); }
 // Tarjetas de CRÉDITO del negocio (las viejas sin tipo eran crédito).
 function _cuentasCredito(){ return (_cuentasBancarias||[]).filter(function(c){ return c && c.tipo!=='debito'; }); }
-function _cuentaBancoLabel(id){ var c=(_cuentasBancarias||[]).find(function(x){return x.id===id;}); return c?((c.banco||'Cuenta')+(c.alias?' · '+c.alias:'')+(c.digitos?' ····'+c.digitos:'')):'Cuenta'; }
+// Mismo rótulo que _ctaLabel, buscando por id: una sola forma de nombrar una cuenta.
+function _cuentaBancoLabel(id){
+    var c=(_cuentasBancarias||[]).find(function(x){return x.id===id;});
+    return c?_ctaLabel(c):'Cuenta';
+}
 // Efecto de un depósito/movimiento sobre los saldos. Compat: deps viejos solo tenían `destino`
 // (caja_fuerte|banco); "banco" implicaba que salía de caja fuerte.
 function _depEfecto(d){ return EtaaxCore.depEfecto(d); }
@@ -2812,8 +2816,12 @@ function renderTabla(cur){
         var gas=gastosPorFecha[c.fecha+'|'+(c.sucursalId||'suc_principal')]||0, rsg=resguardo(c);
         var metaD=metaDelDiaDx(c.fecha), pctM=metaD>0?vt/metaD*100:null;
         var colM=pctM===null?'var(--text-dim)':pctM>=100?'var(--green)':pctM>=80?'var(--accent)':'var(--red)';
+        /* Aviso de conciliación pendiente en la propia lista. El bloque para
+           conciliar vive dentro de "Ver corte", y ahí no se ve desde fuera: sin
+           esta marca, la venta que no ha caído no la nota nadie. */
+        var _tpvChip=_tpvChipCorte(c);
         return'<tr>'+
-            '<td class="al num-col">'+c.fecha+'</td>'+
+            '<td class="al num-col">'+c.fecha+_tpvChip+'</td>'+
             '<td class="al">'+turnoChip(c.turno||'dia')+'</td>'+
             '<td class="num-col" style="font-weight:700;color:var(--green)">'+fmtM(vt)+'</td>'+
             '<td class="num-col">'+(metaD>0
@@ -3079,7 +3087,14 @@ function v(id){return n(document.getElementById(id).value);}
 
 // ── Venta con TARJETA: crédito/débito en la fila de Ventas (cuenta A por default) +
 //    otras cuentas (B/C) abajo. El bruto total alimenta fTarjeta (oculto) → calcCorte. ──
-function _ctaLabel(c){ return (c.banco||'Cuenta') + (c.alias?' · '+c.alias:'') + (c.digitos?' ····'+c.digitos:''); }
+/* Rótulo único de una cuenta: BANCO · alias ····dígitos. El banco va primero
+   porque es lo que identifica el dinero en el estado de cuenta; el alias solo
+   sirve dentro del negocio. Lo usan tarjeta, transferencia y propinas: antes
+   cada uno lo armaba a su manera y la tarjeta enseñaba solo el alias. */
+function _ctaLabel(c){
+    if(!c) return 'Cuenta';
+    return (c.banco||'Cuenta') + (c.alias?' · '+c.alias:'') + (c.digitos?' ····'+c.digitos:'');
+}
 function _ctaComTxt(c){ var tc=parseFloat(c.comisionTC),td=parseFloat(c.comisionTD),iva=c.aplicaIva?'+IVA':''; return 'com. TC '+(isNaN(tc)?'—':tc+'%'+iva)+' · TD '+(isNaN(td)?'—':td+'%'+iva); }
 function _netoCuenta(c, tc, td){ return EtaaxCore.netoCuenta(c, tc, td); }
 function renderTarjetaCuentas(saved, fallbackTotal){
@@ -3107,10 +3122,13 @@ function renderTarjetaCuentas(saved, fallbackTotal){
         var lineB=document.getElementById('tarCtaB');
         if(lineB) lineB.innerHTML='→ '+_ctaLabel(ctaB)+' · neto <span id="netoCta_'+ctaB.id+'" style="color:var(--green)">$0.00</span>';
         var capB=document.getElementById('taCapB');
-        if(capB) capB.textContent=(ctaB.alias||ctaB.banco||'Cuenta B')+' · como débito';
+        /* Mismo rótulo que en Transferencia: BANCO · alias ····dígitos. Con solo el
+           alias ("Principal", "Secundaria") no se sabe a qué banco cae el dinero,
+           que es justo lo que hay que saber para conciliarlo después. */
+        if(capB) capB.textContent=_ctaLabel(ctaB)+' · como débito';
     }
     var capA=document.getElementById('taCapA');
-    if(capA) capA.textContent=(ctaA?(ctaA.alias||ctaA.banco||'Cuenta A'):'total tarjeta')+' · como débito';
+    if(capA) capA.textContent=(ctaA?_ctaLabel(ctaA):'total tarjeta')+' · como débito';
     // Cuentas C en adelante → caja "otras cuentas" (raro, pero soportado)
     var box=document.getElementById('tarjetaCuentasBox');
     if(box){
@@ -3206,8 +3224,9 @@ function _renderPropCuentas(){
     var lA=document.getElementById('propLblA'), lB=document.getElementById('propLblB');
     if(ctas.length>1){
         if(wB) wB.style.display='';
-        if(lA) lA.textContent=(ctas[0].alias||ctas[0].banco||'Cuenta A');
-        if(lB) lB.textContent=(ctas[1].alias||ctas[1].banco||'Cuenta B');
+        // Igual que tarjeta y transferencia: el banco manda, el alias acompaña.
+        if(lA) lA.textContent=_ctaLabel(ctas[0]);
+        if(lB) lB.textContent=_ctaLabel(ctas[1]);
     } else {
         if(wB) wB.style.display='none';
         if(inB) inB.value='';
@@ -4184,6 +4203,30 @@ function _tpvEncender(cuentaId){
     if(_verCorteId) verCorte(_verCorteId);
     var cj=document.getElementById('cajOverlay');
     if(cj&&cj.classList.contains('open'))_abrirCajaFuerteContenido();
+}
+
+/* Marca del corte en la lista: ✅ si todo lo de tarjeta ya cayó, ⏳ si falta.
+   Vacío cuando no hay venta con tarjeta o la cuenta no concilia: una marca que
+   sale siempre deja de significar algo. */
+function _tpvChipCorte(c){
+    var ctas=((c&&c.tarjetaCuentas)||[]).filter(function(t){
+        return t && ((n(t.ventaTC)+n(t.ventaTD))>0 || n(t.neto)>0);
+    });
+    var abonos=_abonosTpv(), falta=0, hayActiva=false;   // sin cuentas, hayActiva se queda en false
+    ctas.forEach(function(t){
+        var cid=t.cuentaId||'';
+        if(_tpvModo(cid)===false) return;                 // cuenta que no concilia
+        var est=EtaaxCore.tpvConciliacion(load(), abonos, cid, todayStr(), _tpvModo(cid));
+        if(!est.activa) return;                           // todavía nadie concilia aquí
+        hayActiva=true;
+        falta+=Math.max(0, EtaaxCore.tpvDelCorte(c, abonos, cid).falta);
+    });
+    if(!hayActiva) return '';
+    return falta>0.005
+        ? '<div style="font-size:9.5px;color:var(--accent);margin-top:2px;white-space:nowrap" '
+          +'title="Falta que caiga al banco '+fmtM(falta)+' de la venta con tarjeta. Ábrelo con 👁️ para conciliar.">'
+          +'⏳ por conciliar '+fmtM(falta)+'</div>'
+        : '<div style="font-size:9.5px;color:var(--green);margin-top:2px;white-space:nowrap">✅ conciliado</div>';
 }
 
 function _tpvBloqueCorte(c){
@@ -5991,19 +6034,24 @@ function _pnBonosDe(s, tipo, dias){
                no se le paga el incentivo de esos tres. Es lo que lo distingue de
                un sueldo. */
             var d = Math.max(0, n(dias));
-            monto = m * d; det = ' (' + d + (d === 1 ? ' día' : ' días') + ')';
+            monto = m * d;
+            /* El desglose se lee como el del sueldo ("$315.00 × 2 días"): ver un
+               total suelto obliga a sacar la cuenta a mano para saber si está bien. */
+            det = fmtM(m) + ' × ' + d + (d === 1 ? ' día' : ' días');
         } else if (f === freqDelPeriodo){
             monto = m;                       // su frecuencia coincide con lo que se paga
+            det = 'Bono ' + f + ' completo';
         } else {
             /* Frecuencias distintas: se lleva a un valor diario y se multiplica
                por los días del periodo. Pagar un bono mensual completo en una
                nómina semanal sería pagarlo cuatro veces al mes. */
             var alDia = f === 'semanal' ? m/7 : f === 'quincenal' ? m/15 : m/30;
             var dp = tipo === 'semana' ? 7 : tipo === 'quincena' ? 15 : tipo === 'mes' ? 30 : Math.max(1, n(dias));
-            monto = alDia * dp; det = ' (prorrateado)';
+            monto = alDia * dp;
+            det = fmtM(m) + ' ' + f + ' → prorrateado a ' + dp + (dp === 1 ? ' día' : ' días');
         }
         if (monto <= 0) return null;
-        return { concepto: (b.concepto || 'Bono') + det,
+        return { concepto: (b.concepto || 'Bono'), detalle: det,
                  monto: Math.round(monto * 100) / 100,
                  pago: 'mismo', fecha: '', _auto: true, _bonoKey: key };
     }).filter(Boolean);
@@ -6207,11 +6255,18 @@ function _pnCptAgregar(){
     }
 
     var cant=n(document.getElementById('pnCptCant').value);
-    if(cant>0) lbl+=' ('+cant+(tipo==='horas'?' h':' d')+')';
+    /* Mismo desglose que el sueldo: el precio unitario por la cantidad. Sale de
+       lo capturado, así que no inventa nada; si no hay cantidad, no hay detalle. */
+    var detalle='';
+    if(cant>0){
+        var uni=tipo==='horas'?' h':tipo==='prima'?' domingos':' días';
+        detalle=fmtM(Math.abs(monto)/cant)+' × '+cant+uni;
+    }
+    if(tipo==='sancion') detalle=detalle||'Descuento aplicado en este pago';
     var pago=(tipo==='sancion')?'mismo':((document.getElementById('pnCptMetodo')||{}).value||'mismo');
     // Fecha de pago propia solo si se paga aparte; default hoy.
     var fecha=(pago!=='mismo')?(((document.getElementById('pnCptFecha')||{}).value)||todayStr()):'';
-    _pagoNomConceptos.push({concepto:lbl, monto:monto, pago:pago, fecha:fecha});
+    _pagoNomConceptos.push({concepto:lbl, detalle:detalle, monto:monto, pago:pago, fecha:fecha});
     document.getElementById('pnCptCant').value=''; document.getElementById('pnCptMonto').value='';
     var _mi=document.getElementById('pnCptMotivo'); if(_mi){ _mi.value=''; _pnCptMotivoError(''); }
     var met=document.getElementById('pnCptMetodo'); if(met) met.value='mismo';
@@ -6237,7 +6292,10 @@ function _pnRenderCptList(){
           ? '<span style="font-size:10px;color:var(--accent);background:rgba(245,200,66,.12);border:1px solid rgba(245,200,66,.3);padding:1px 7px;border-radius:8px;white-space:nowrap">'+pg.lbl+(x.fecha?' · '+x.fecha:'')+'</span>'
           : '';
         return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;background:var(--surface2)">'
-          +'<span style="font-size:13px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+_esc(x.concepto)+badge+'</span>'
+          +'<span style="font-size:13px;display:flex;flex-direction:column;gap:2px;min-width:0">'
+            +'<span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+_esc(x.concepto)+badge+'</span>'
+            +(x.detalle?'<span style="font-size:10.5px;color:var(--text-dim)">'+_esc(x.detalle)+'</span>':'')
+          +'</span>'
           +'<span style="display:flex;align-items:center;gap:10px"><strong style="color:'+(x.monto<0?'var(--red,#e5484d)':'var(--accent)')+'">'+(x.monto<0?'−':'')+fmtM(Math.abs(x.monto))+'</strong>'
           +'<button class="btn-row del" onclick="_pnCptEliminar('+i+')">🗑️</button></span></div>';
     }).join('');
@@ -6283,8 +6341,10 @@ function _reciboNominaDatos(){
     var deducciones=[];
     (_pagoNomConceptos||[]).forEach(function(c){
         var m=_PN_METODOS[c.pago]||{}, v=n(c.monto);
-        if(v<0){ deducciones.push({ concepto:c.concepto, detalle:'—', monto:Math.abs(v) }); return; }
-        percepciones.push({ concepto:c.concepto, detalle:(c.pago && c.pago!=='mismo') ? 'Pagado aparte · '+m.lbl : '—', monto:v });
+        if(v<0){ deducciones.push({ concepto:c.concepto, detalle:c.detalle||'—', monto:Math.abs(v) }); return; }
+        var _det=c.detalle||'';
+        if(c.pago && c.pago!=='mismo') _det=(_det?_det+' · ':'')+'Pagado aparte · '+m.lbl;
+        percepciones.push({ concepto:c.concepto, detalle:_det||'—', monto:v });
     });
     return {
         folio:_pnFolio(s.id,desde,hasta), staff:s, periodicidad:perLbl,
@@ -6511,12 +6571,12 @@ function _gPrevPoblar(sel){
     if(!lista.length){
         e.innerHTML='<option value="">— Todavía no hay dinero apartado —</option>';
         e.value=''; e.disabled=true;
+        /* Apartar vive en Depósitos y Retiros, que es donde se piensa el dinero
+           que NO sale del negocio. Aquí solo se dice dónde está, sin sacar al
+           usuario del gasto que estaba capturando. */
         document.getElementById('gPrevHint').innerHTML=
             'Una previsión es dinero que <b>apartas antes</b> (aguinaldo, impuestos, mantenimiento) y que gastas después. '+
-            'Primero se aparta y luego se etiqueta el gasto que lo usa.'+
-            '<div style="margin-top:6px"><button type="button" onclick="_gIrApartar()" '+
-            'style="background:transparent;border:1px solid var(--accent);color:var(--accent);border-radius:7px;'+
-            'padding:6px 11px;font-size:11.5px;cursor:pointer">🔮 Apartar dinero para una previsión</button></div>';
+            'Para apartar, usa <b>🔮 Hacer previsión</b> en Depósitos y Retiros; aquí solo se etiqueta el gasto que la usa.';
         return;
     }
     e.disabled=false;
@@ -6531,10 +6591,6 @@ function _gPrevPoblar(sel){
 /* Apartar no es un gasto —el dinero no sale del negocio—, así que se captura en
    el modal de movimientos, no aquí. Este atajo lleva para allá sin que el usuario
    tenga que saber dónde vive. */
-function _gIrApartar(){
-    var m=document.getElementById('modalGasto'); if(m) m.classList.remove('open');
-    abrirModalApartar();
-}
 function _gPrevUI(){
     var e=document.getElementById('gPrevision'), h=document.getElementById('gPrevHint');
     if(!e||!h) return;
