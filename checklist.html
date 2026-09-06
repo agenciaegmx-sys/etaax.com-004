@@ -51,11 +51,14 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
 .plant-ico img{width:100%;height:100%;object-fit:cover;display:block}
 .plant-go{color:var(--green);font-size:20px;flex-shrink:0;opacity:.8}
 .plant-card[aria-disabled="true"]{opacity:.45;cursor:default}
-/* Encabezado de grupo dentro de una lista larga */
-.plant-sec{display:flex;align-items:center;gap:8px;margin:18px 0 8px;text-align:left}
-.plant-sec:first-child{margin-top:4px}
-.plant-sec span{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);white-space:nowrap}
-.plant-sec i{flex:1;height:1px;background:var(--border);display:block}
+/* Pestañas del recetario. Con lista larga, las secciones obligaban a scrollear
+   hasta el fondo para llegar a las bases; un toque llega directo. */
+.rec-tabs{display:flex;gap:8px;margin:12px 0 14px}
+.rec-tab{flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);
+    border-radius:11px;padding:11px 8px;font-family:inherit;font-size:13px;font-weight:600;
+    cursor:pointer;line-height:1.25;-webkit-tap-highlight-color:transparent}
+.rec-tab .rc{display:block;font-size:10.5px;font-weight:500;opacity:.75;margin-top:2px}
+.rec-tab.on{background:rgba(61,190,122,.12);border-color:var(--green);color:var(--green)}
 /* Tareas del checklist */
 .tk-row{display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:13px 14px;margin-bottom:9px;text-align:left;cursor:pointer;user-select:none}
 .tk-row .tk-freq{font-size:9px;font-weight:700;color:var(--text-dim);border:1px solid var(--border);border-radius:5px;padding:2px 6px;flex-shrink:0}
@@ -110,6 +113,7 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
     <div id="recScreen" style="display:none">
         <button class="volver" onclick="_verMenu()">← Regresar</button>
         <input id="recBuscar" class="fld" placeholder="🔍 Buscar receta…" oninput="_pintarRecetas()">
+        <div id="recTabs" class="rec-tabs"></div>
         <div id="recList"></div>
     </div>
     <div id="recDetalle" style="display:none">
@@ -360,8 +364,8 @@ function _recCard(r, i){
         '<div class="plant-meta">' + meta.join(' · ') + '</div></div>' +
         '<div class="plant-go">›</div></div>';
 }
-function _recSec(txt){ return '<div class="plant-sec"><span>' + txt + '</span><i></i></div>'; }
 
+var _RECTAB = 'platos';   // pestaña activa del recetario
 function _pintarRecetas(){
     var q = (document.getElementById('recBuscar').value || '').toLowerCase().trim();
     var lista = (RECETAS||[]).filter(function(r){
@@ -374,24 +378,36 @@ function _pintarRecetas(){
         _RECVIS = [];
         return;
     }
-    /* Los platillos primero y las preparaciones después: quien busca "cómo se
-       hace el aguachile" no quiere tropezar antes con quince adobos. El índice va
-       contra el ORDEN PINTADO, no contra el filtrado, o el detalle abriría otra. */
     var platos = lista.filter(function(r){ return !_esSubReceta(r); });
     var subs   = lista.filter(_esSubReceta);
-    _RECVIS = platos.concat(subs);
 
-    var html = '', i = 0;
-    if (platos.length) {
-        if (subs.length) html += _recSec('🍽️ Recetas');
-        platos.forEach(function(r){ html += _recCard(r, i++); });
+    /* Pestañas en vez de secciones: con el recetario largo, para llegar a las
+       bases había que scrollear hasta el fondo. Si solo hay de un tipo, no se
+       pintan —una pestaña sola no es una elección. */
+    var tabs = document.getElementById('recTabs');
+    var hayDos = platos.length > 0 && subs.length > 0;
+    if (tabs) {
+        tabs.style.display = hayDos ? '' : 'none';
+        tabs.innerHTML = hayDos
+            ? _recTab('platos', '🍽️ Recetas', platos.length) + _recTab('subs', '🧪 Sub-recetas', subs.length)
+            : '';
     }
-    if (subs.length) {
-        if (platos.length) html += _recSec('🧪 Preparaciones y bases');
-        subs.forEach(function(r){ html += _recCard(r, i++); });
-    }
-    document.getElementById('recList').innerHTML = html;
+    /* Si la pestaña activa se quedó vacía (por la búsqueda), se cae a la que sí
+       tiene: quedarse mirando una lista vacía teniendo resultados es peor que
+       cambiar de pestaña solo. */
+    if (!hayDos) _RECTAB = platos.length ? 'platos' : 'subs';
+
+    /* El índice va contra el ORDEN PINTADO, no contra el filtrado, o el detalle
+       abriría otra receta. */
+    _RECVIS = (_RECTAB === 'subs') ? subs : platos;
+    document.getElementById('recList').innerHTML =
+        _RECVIS.map(function(r, i){ return _recCard(r, i); }).join('');
 }
+function _recTab(k, txt, n){
+    return '<button class="rec-tab' + (_RECTAB === k ? ' on' : '') + '" onclick="_recVerTab(\'' + k + '\')">' +
+        txt + '<span class="rc">' + n + (n === 1 ? ' receta' : ' recetas') + '</span></button>';
+}
+function _recVerTab(k){ _RECTAB = k; _pintarRecetas(); }
 var _RECVIS = [];
 function _verReceta(i){
     var r = _RECVIS[i]; if (!r) return;

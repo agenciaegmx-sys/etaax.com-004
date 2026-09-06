@@ -4204,6 +4204,69 @@ console.log('\n══ SUITE AH · Conciliación de tarjeta en Diario (administra
         return eq(saldoNuevo, t.aportaBanco, 'cuadre');
     });
 
+    /* ── La confirmación, con la cara del sistema ──
+       El cuadro gris del navegador rompe la pantalla, no dice de qué cuenta habla
+       y no deja explicar la consecuencia. */
+    /* Copia desechable: apagar MUTA la cuenta del catálogo, y ensuciar `ctas`
+       arrastraría el estado a las pruebas de abajo. */
+    const ctasCf = ctas.map(function(c){ var o={}; for (var k in c) o[k]=c[k]; return o; });
+    setVar(A, '_cuentasBancarias', ctasCf);
+    /* Repintar la pantalla entera pide un periodo válido que aquí no existe; lo
+       que se prueba es la confirmación, no el repintado. */
+    setVar(A, 'renderAll', function(){});
+    let confirmsNavegador = 0;
+    A.confirm = () => { confirmsNavegador++; return true; };
+    A._tpvApagar('cta1');
+    test('apagar una cuenta NO usa el cuadro del navegador', () => eq(confirmsNavegador, 0, 'sin confirm'));
+    test('…abre la confirmación del sistema', () =>
+        eq($('cfTitulo').textContent.indexOf('Dejar de conciliar') > -1, true, 'modal'));
+    test('…y dice de qué cuenta habla', () =>
+        eq($('cfTexto').innerHTML.indexOf('BBVA') > -1, true, 'cuenta'));
+    test('…y qué va a pasar con el saldo', () =>
+        eq($('cfTexto').innerHTML.indexOf('desde que capturas el corte') > -1, true, 'consecuencia'));
+    /* La letra chica: que nada se borra. En un confirm() se pierde entre el texto. */
+    test('…y aclara que no se borra lo ya conciliado', () =>
+        eq($('cfNota').innerHTML.indexOf('Nada se borra') > -1, true, 'nota'));
+
+    /* La mecánica, sin depender de quién la use: cancelar NUNCA ejecuta. */
+    let corrio = 0;
+    A._confirmar({ titulo:'x', texto:'y' }, function(){ corrio++; });
+    A._confirmNo();
+    test('cancelar no ejecuta la acción', () => eq(corrio, 0, 'cancel'));
+    A._confirmar({ titulo:'x', texto:'y' }, function(){ corrio++; });
+    A._confirmSi();
+    test('aceptar sí la ejecuta, una sola vez', () => eq(corrio, 1, 'ok'));
+    A._confirmSi();
+    test('volver a aceptar no la repite', () => eq(corrio, 1, 'no repite'));
+
+    /* Cancelar no debe hacer nada. */
+    A._confirmNo();
+    /* Se lee por el mismo camino que usa la app (_tpvModo), no por la referencia
+       del objeto: es el estado que de verdad manda. */
+    test('cancelar deja la cuenta como estaba', () => eq(A._tpvModo('cta1'), null, 'intacta'));
+
+    A._tpvApagar('cta1');
+    A._confirmSi();
+    test('aceptar sí apaga la cuenta', () => eq(A._tpvModo('cta1'), false, 'apagada'));
+    /* Y el volante se suelta: si la función quedara pegada, el siguiente
+       "Aceptar" de cualquier otra cosa volvería a apagar esta cuenta. */
+    test('la acción no se queda pegada para el próximo aceptar', () =>
+        eq(A._cfCb, null, 'suelto'));
+    setVar(A, '_cuentasBancarias', ctas);   // de vuelta al catálogo limpio
+
+    /* Lo destructivo se ve destructivo. */
+    setVar(A, '_cacheDeps', [{ id:'ab9', tipo:'abono_tpv', cuentaId:'cta1', corteId:'k2',
+                               monto:5850, fecha:'2026-09-04', folio:'REF-1' }]);
+    A._tpvEliminar('ab9');
+    test('quitar una conciliación avisa de cuánto era', () =>
+        eq($('cfTexto').innerHTML.indexOf('$5,850.00') > -1, true, 'monto'));
+    test('…con su folio, para reconocerla', () =>
+        eq($('cfTexto').innerHTML.indexOf('REF-1') > -1, true, 'folio'));
+    test('…y el botón se pinta de peligro', () =>
+        eq($('cfOk').style.background.indexOf('red') > -1, true, 'rojo'));
+    A._confirmNo();
+    test('cancelar no borra la conciliación', () => eq((A._cacheDeps||[]).length, 1, 'sigue'));
+
     /* ── El negocio que NO quiere conciliar ── */
     const ctasOff = [Object.assign({}, ctas[0], { conciliaTpv:false })];
     setVar(A, '_cuentasBancarias', ctasOff);
@@ -4567,11 +4630,13 @@ console.log('\n══ AM · Portal del colaborador (checklist.html) ══');
        recetario necesita. */
     setVar(P, '_PANTALLAS', ['pinScreen','menuScreen','recScreen','recDetalle','guiaScreen',
                              'listScreen','runScreen','doneScreen','errScreen']);
+    setVar(P, '_RECTAB', 'platos');
 
     /* ── Las clases existen de verdad ──
        Sin esto el markup se pinta pero no se ve como botón, y nadie lo nota
        hasta abrirlo en un teléfono. */
-    ['.plant-card{', '.plant-nom{', '.plant-meta{', '.plant-ico{', '.plant-go{', '.plant-sec{']
+    ['.plant-card{', '.plant-nom{', '.plant-meta{', '.plant-ico{', '.plant-go{',
+     '.rec-tabs{', '.rec-tab{', '.rec-tab.on{']
         .forEach(function (c) {
             test('el estilo ' + c.slice(0, -1) + ' está escrito', () =>
                 eq(CSS.indexOf(c) > -1, true, 'css'));
@@ -4598,51 +4663,86 @@ console.log('\n══ AM · Portal del colaborador (checklist.html) ══');
 
     test('una sub-receta se reconoce por su tipo', () => eq(P._esSubReceta(rec[1]), true, 'sub'));
     test('un platillo no se confunde con una preparación', () => eq(P._esSubReceta(rec[0]), false, 'plato'));
-    test('la lista separa recetas de preparaciones', () =>
-        eq(html.indexOf('Recetas') > -1 && html.indexOf('Preparaciones') > -1, true, 'secciones'));
-    /* Los platillos van primero: quien busca cómo se hace el aguachile no quiere
-       tropezar antes con quince adobos. */
-    test('los platillos se listan antes que las bases', () =>
-        eq(html.indexOf('Aguachile verde') < html.indexOf('Adobo de Chamorro'), true, 'orden'));
 
-    /* EL ÍNDICE: se pinta agrupado, así que tiene que apuntar al orden PINTADO.
-       Contra el orden filtrado, tocar una receta abriría otra. */
-    test('el índice sigue el orden pintado, no el filtrado', () =>
-        eq(P._RECVIS[0].nombre, 'Aguachile verde', 'primero'));
-    test('…y la primera preparación queda después de los platillos', () =>
-        eq(P._RECVIS[2].nombre, 'Adobo de Chamorro', 'tercero'));
-    test('tocar el primer renglón abre la primera receta pintada', () => {
-        const m = html.match(/_verReceta\((\d+)\)/);
-        return eq(P._RECVIS[parseInt(m[1])].nombre, 'Aguachile verde', 'coincide');
+    /* ── Las pestañas ──
+       Con el recetario largo, para llegar a las bases había que scrollear hasta
+       el fondo. Un toque llega directo. */
+    test('se ofrecen las dos pestañas', () => {
+        const t = $('recTabs').innerHTML;
+        return eq(t.indexOf('Recetas') > -1 && t.indexOf('Sub-recetas') > -1, true, 'pestañas');
     });
+    test('cada pestaña dice cuántas trae', () =>
+        eq($('recTabs').innerHTML.indexOf('2 recetas') > -1, true, 'conteo'));
+    test('arranca en Recetas, que es lo que más se busca', () =>
+        eq($('recTabs').innerHTML.indexOf('rec-tab on') > -1
+           && $('recTabs').innerHTML.indexOf('Recetas') > -1, true, 'activa'));
 
-    /* ── La foto ── */
-    test('la receta con foto la muestra en la lista', () =>
-        eq(html.indexOf('https://x/f.jpg') > -1, true, 'foto'));
-    test('la que no tiene, cae en su emoji', () =>
-        eq(html.indexOf('🍽️') > -1, true, 'emoji'));
-    /* Y la foto va DENTRO de la caja del ícono: suelta se estira a lo ancho del
-       renglón y rompe la fila. */
-    test('la foto vive dentro de la caja del ícono', () =>
-        eq(html.indexOf('<div class="plant-ico"><img') > -1, true, 'encajada'));
-    test('cada renglón del recetario es un botón con su caja', () =>
-        eq((html.match(/plant-ico/g) || []).length, 4, 'cuatro'));
-    /* Índice 1 = Mezcal Sour, que es la que trae foto. Ojo: NO es su posición en
-       la lista original —el agrupado reordena— y por eso el índice se toma de
-       _RECVIS y no del filtrado. */
-    P._verReceta(1);
-    test('la ficha también muestra la foto', () =>
-        eq($('recFicha').innerHTML.indexOf('https://x/f.jpg') > -1, true, 'ficha'));
-    /* Y la ficha dice cuando es una preparación, no un platillo que sale a la mesa. */
-    P._verReceta(2);
+    /* Solo se ve la lista de la pestaña activa. */
+    test('la lista muestra los platillos', () =>
+        eq(html.indexOf('Aguachile verde') > -1, true, 'platos'));
+    test('…y NO mezcla las preparaciones', () =>
+        eq(html.indexOf('Adobo de Chamorro'), -1, 'sin mezclar'));
+
+    P._recVerTab('subs');
+    const hSub = $('recList').innerHTML;
+    test('al tocar Sub-recetas aparecen las bases', () =>
+        eq(hSub.indexOf('Adobo de Chamorro') > -1, true, 'subs'));
+    test('…y desaparecen los platillos', () => eq(hSub.indexOf('Aguachile verde'), -1, 'solo subs'));
+
+    /* EL ÍNDICE: se pinta una pestaña a la vez, así que tiene que apuntar a lo
+       PINTADO. Contra la lista completa, tocar una receta abriría otra. */
+    test('el índice sigue lo pintado en la pestaña activa', () =>
+        eq(P._RECVIS[0].nombre, 'Adobo de Chamorro', 'índice'));
+    test('tocar el primer renglón abre la primera receta pintada', () => {
+        const m = hSub.match(/_verReceta\((\d+)\)/);
+        return eq(P._RECVIS[parseInt(m[1])].nombre, 'Adobo de Chamorro', 'coincide');
+    });
+    P._verReceta(0);
     test('la ficha de una preparación lo dice', () =>
         eq($('recFicha').innerHTML.indexOf('Preparación') > -1, true, 'aviso'));
 
-    /* Sin sub-recetas no se inventan encabezados para una sola lista. */
+    /* ── La foto ── */
+    P._recVerTab('platos');
+    const hPla = $('recList').innerHTML;
+    test('la receta con foto la muestra en la lista', () =>
+        eq(hPla.indexOf('https://x/f.jpg') > -1, true, 'foto'));
+    test('la que no tiene, cae en su emoji', () => eq(hPla.indexOf('🍽️') > -1, true, 'emoji'));
+    /* La foto va DENTRO de la caja del ícono: suelta se estira a lo ancho del
+       renglón y rompe la fila. */
+    test('la foto vive dentro de la caja del ícono', () =>
+        eq(hPla.indexOf('<div class="plant-ico"><img') > -1, true, 'encajada'));
+    test('cada renglón del recetario es un botón con su caja', () =>
+        eq((hPla.match(/plant-ico/g) || []).length, 2, 'dos platillos'));
+    P._verReceta(1);
+    test('la ficha también muestra la foto', () =>
+        eq($('recFicha').innerHTML.indexOf('https://x/f.jpg') > -1, true, 'ficha'));
+
+    /* Con un solo tipo, las pestañas no se pintan: una pestaña sola no es una
+       elección, es un adorno que ocupa lugar. */
     setVar(P, 'RECETAS', [rec[0]]);
     P._pintarRecetas();
-    test('con puros platillos no se pinta ningún encabezado', () =>
-        eq($('recList').innerHTML.indexOf('plant-sec'), -1, 'sin secciones'));
+    test('con puros platillos no se pintan pestañas', () =>
+        eq($('recTabs').style.display, 'none', 'sin pestañas'));
+    test('…y la lista se ve igual', () =>
+        eq($('recList').innerHTML.indexOf('Aguachile verde') > -1, true, 'lista'));
+
+    /* Y con puras sub-recetas se cae solo a esa pestaña: quedarse en una vacía
+       teniendo resultados es peor que cambiar de pestaña solo. */
+    setVar(P, 'RECETAS', [rec[1], rec[2]]);
+    setVar(P, '_RECTAB', 'platos');
+    P._pintarRecetas();
+    test('con puras preparaciones se muestran, no una lista vacía', () =>
+        eq($('recList').innerHTML.indexOf('Adobo de Chamorro') > -1, true, 'cae sola'));
+
+    /* Buscar dentro de una pestaña que se queda sin resultados cae a la otra. */
+    setVar(P, 'RECETAS', rec);
+    setVar(P, '_RECTAB', 'subs');
+    $('recBuscar').value = 'aguachile';
+    P._pintarRecetas();
+    test('si la búsqueda vacía la pestaña activa, se cae a la que sí tiene', () =>
+        eq($('recList').innerHTML.indexOf('Aguachile verde') > -1, true, 'cae'));
+    $('recBuscar').value = '';
+    setVar(P, '_RECTAB', 'platos');
 
     /* Buscar sigue funcionando por encima del agrupado. */
     setVar(P, 'RECETAS', rec);

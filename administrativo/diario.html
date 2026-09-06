@@ -1462,6 +1462,26 @@
     </div>
 </div>
 
+<!-- Confirmación con la cara del sistema. El cuadro gris del navegador rompe la
+     pantalla, no dice de qué negocio habla y no deja explicar la consecuencia. -->
+<div class="modal-overlay" id="modalConfirm" onclick="if(event.target===this)_confirmNo()">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <h2 id="cfTitulo">Confirmar</h2>
+      <button class="modal-close" onclick="_confirmNo()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="cfTexto" style="font-size:13.5px;line-height:1.6;color:var(--text-muted)"></div>
+      <div id="cfNota" style="display:none;margin-top:11px;font-size:11.5px;line-height:1.55;
+           color:var(--text-dim);background:var(--surface2);border-radius:9px;padding:10px 13px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="_confirmNo()">Cancelar</button>
+      <button class="btn-primary" id="cfOk" onclick="_confirmSi()">Aceptar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Conciliar un abono de terminal contra el banco -->
 <div class="modal-overlay" id="modalTpv" onclick="if(event.target===this)_tpvCerrar()">
   <div class="modal" style="max-width:480px">
@@ -4186,6 +4206,32 @@ function verCorte(id) {
    Ahora llega al saldo cuando alguien lo VIO caer y anotó su folio. Toda la
    cuenta vive en el núcleo (EtaaxCore.tpvConciliacion); aquí solo se captura. */
 function _abonosTpv(){ return _scopeSuc(_cacheDeps||[]).filter(EtaaxCore.esAbonoTpv); }
+/* Confirmación propia. `nota` es la letra chica —lo que va a pasar de verdad— que
+   en un confirm() del navegador se pierde entre el texto. */
+var _cfCb = null;
+function _confirmar(opts, cb){
+    opts = opts || {};
+    _cfCb = cb || null;
+    document.getElementById('cfTitulo').textContent = opts.titulo || 'Confirmar';
+    document.getElementById('cfTexto').innerHTML    = opts.texto  || '';
+    var nt = document.getElementById('cfNota');
+    nt.innerHTML = opts.nota || ''; nt.style.display = opts.nota ? '' : 'none';
+    var ok = document.getElementById('cfOk');
+    ok.textContent = opts.ok || 'Aceptar';
+    /* Lo destructivo se ve destructivo: un botón verde para "borrar" invita a
+       aceptar sin leer. */
+    ok.style.background = opts.peligro ? 'var(--red,#e05a3a)' : '';
+    ok.style.color      = opts.peligro ? '#fff' : '';
+    document.getElementById('modalConfirm').classList.add('open');
+}
+function _confirmNo(){ document.getElementById('modalConfirm').classList.remove('open'); _cfCb = null; }
+function _confirmSi(){
+    var cb = _cfCb;
+    document.getElementById('modalConfirm').classList.remove('open');
+    _cfCb = null;
+    if (cb) cb();
+}
+
 /* ¿Esta cuenta concilia? null = automático (se enciende con el primer abono). */
 function _tpvModo(cuentaId){
     var c=_cuentasDebito().find(function(x){return x&&x.id===cuentaId;});
@@ -4194,26 +4240,35 @@ function _tpvModo(cuentaId){
 /* Apagar la conciliación de una cuenta: para el negocio que no quiere el proceso.
    La venta con tarjeta vuelve a contar en el saldo desde que se captura el corte.
    No se borra nada: los abonos capturados se quedan y vuelven si se reactiva. */
+/* La cuenta REAL del catálogo, no la que devuelve _cuentasDebito(): esa marca la
+   base con Object.assign, o sea una COPIA. Guardar sobre la copia no cambiaba
+   nada en memoria y mandaba a la nube un registro con `esBase` de más. */
+function _ctaReal(cuentaId){
+    return (_cuentasBancarias||[]).find(function(x){ return x && x.id===cuentaId; });
+}
 function _tpvApagar(cuentaId){
-    var c=_cuentasDebito().find(function(x){return x&&x.id===cuentaId;});
+    var c=_ctaReal(cuentaId);
     if(!c){ alert('No encontré esa cuenta.'); return; }
-    if(!confirm('¿Dejar de conciliar '+_cuentaBancoLabel(cuentaId)+'?\n\n'
-        +'La venta con tarjeta va a contar en el saldo desde que capturas el corte, '
-        +'sin esperar a que caiga al banco. Lo ya conciliado no se borra.')) return;
-    c.conciliaTpv=false;
-    sbUpsert('tarjetas_credito', c);
-    if(_verCorteId) verCorte(_verCorteId);
-    var cj=document.getElementById('cajOverlay');
-    if(cj&&cj.classList.contains('open'))_abrirCajaFuerteContenido();
+    _confirmar({
+        titulo:'🏦 Dejar de conciliar',
+        texto:'<b>'+_escV(_cuentaBancoLabel(cuentaId))+'</b> dejará de llevar conciliación. '
+             +'La venta con tarjeta volverá a contar en el saldo <b>desde que capturas el corte</b>, '
+             +'sin esperar a que caiga al banco.',
+        nota:'Nada se borra: los abonos que ya registraste se quedan, y si vuelves a '
+            +'encenderla todo reaparece tal como estaba.',
+        ok:'Dejar de conciliar'
+    }, function(){
+        c.conciliaTpv=false;
+        sbUpsert('tarjetas_credito', c);
+        _tpvRepintar();
+    });
 }
 function _tpvEncender(cuentaId){
-    var c=_cuentasDebito().find(function(x){return x&&x.id===cuentaId;});
+    var c=_ctaReal(cuentaId);
     if(!c) return;
     c.conciliaTpv=true;
     sbUpsert('tarjetas_credito', c);
-    if(_verCorteId) verCorte(_verCorteId);
-    var cj=document.getElementById('cajOverlay');
-    if(cj&&cj.classList.contains('open'))_abrirCajaFuerteContenido();
+    _tpvRepintar();
 }
 
 /* Marca del corte en la lista: ✅ si todo lo de tarjeta ya cayó, ⏳ si falta.
@@ -4442,10 +4497,18 @@ function _tpvGuardar(){
     if(cj&&cj.classList.contains('open'))_abrirCajaFuerteContenido();
 }
 function _tpvEliminar(id){
-    if(!confirm('¿Quitar esta conciliación? El dinero vuelve a contar como pendiente de caer.')) return;
-    _cacheDeps=(_cacheDeps||[]).filter(function(x){return x.id!==id;});
-    _sbDel('depositos', id);
-    _tpvRepintar();
+    var a=(_abonosTpv()||[]).find(function(x){return x.id===id;})||{};
+    _confirmar({
+        titulo:'Quitar esta conciliación',
+        texto:'Se quitará el abono de <b>'+fmtM(a.monto||0)+'</b>'
+             +(a.folio?' (folio <b>'+_escV(a.folio)+'</b>)':'')+'.',
+        nota:'Ese dinero vuelve a contar como pendiente de caer y sale del saldo del banco.',
+        ok:'Quitar', peligro:true
+    }, function(){
+        _cacheDeps=(_cacheDeps||[]).filter(function(x){return x.id!==id;});
+        _sbDel('depositos', id);
+        _tpvRepintar();
+    });
 }
 /* Un abono se puede registrar desde el visor o desde el editor: los dos tienen
    que enterarse, y la lista y Caja Fuerte también. */
