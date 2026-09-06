@@ -190,8 +190,13 @@ test('_netoCuenta sin cuenta = bruto', () => eq(A._netoCuenta(null, 1000, 2000),
 A._cuentasBancarias = [ctaConIva, ctaSinIva];
 const corteDesglose = { tarjeta: 3000, propTarjeta: 1000,
     tarjetaCuentas: [ { cuentaId: 'a', ventaTC: 1000, ventaTD: 2000, neto: A._netoCuenta(ctaConIva, 1000, 2000) } ] };
-test('taBancoNeto = neto de cuentas + propina con TD de la predeterminada', () =>
-    eq(A.taBancoNeto(corteDesglose), A._netoCuenta(ctaConIva, 1000, 2000) + 1000 * (1 - 0.0232)));
+/* La propina se netea con la MEZCLA crédito/débito de esa cuenta en ese corte:
+   viaja en la misma transacción que la venta, así que paga la misma tasa. Aquí la
+   venta fue 1000 TC + 2000 TD, así que un tercio de la propina va a tasa de
+   crédito. Antes se neteaba TODA como débito y la comisión salía corta. */
+test('taBancoNeto = neto de cuentas + propina prorrateada al mix del día', () =>
+    eq(A.taBancoNeto(corteDesglose),
+       A._netoCuenta(ctaConIva, 1000, 2000) + A.EtaaxCore.netoPropina(ctaConIva, 1000, 1000, 2000)));
 test('comisionBancoCorte = bruto − neto (nunca negativa)', () =>
     eq(A.comisionBancoCorte(corteDesglose), (3000 + 1000) - A.taBancoNeto(corteDesglose)));
 
@@ -208,18 +213,19 @@ test('comisionBancoCorte = bruto − neto (nunca negativa)', () =>
     test('propina con desglose usa la comisión de SU cuenta, no la de la predeterminada', () =>
         eq(A.taBancoNeto(corteProp, _ctas2),
            A._netoCuenta(ctaConIva, 1000, 2000) + A._netoCuenta(ctaSinIva, 0, 1000)));
-    test('propina SIN desglose (corte viejo) sigue neteando con la predeterminada', () =>
+    test('propina SIN desglose se carga a la predeterminada, con su mezcla', () =>
         eq(A.taBancoNeto(corteDesglose, _ctas2),
-           A._netoCuenta(ctaConIva, 1000, 2000) + 1000 * (1 - 0.0232)));
+           A._netoCuenta(ctaConIva, 1000, 2000) + A.EtaaxCore.netoPropina(ctaConIva, 1000, 1000, 2000)));
     test('detalle: la propina de B cae en B y nada queda sin cuenta', () => {
         const d = A.EtaaxCore.taBancoNetoDetalle(corteProp, _ctas2);
         eq(Math.round(d.porCuenta.b * 100) / 100, Math.round(A._netoCuenta(ctaSinIva, 0, 1000) * 100) / 100);
         eq(Math.round(d.sinCuenta * 100) / 100, 0);
     });
-    test('propina desglosada PARCIAL: el resto se netea con la predeterminada', () => {
+    test('propina desglosada PARCIAL: el resto va a la predeterminada, con su mezcla', () => {
         const parcial = { ...corteProp, propTarjeta: 1500, propTarjetaCuentas: { b: 1000 } };
         const d = A.EtaaxCore.taBancoNetoDetalle(parcial, _ctas2);
-        eq(Math.round(d.sinCuenta * 100) / 100, Math.round(500 * (1 - 0.0232) * 100) / 100);
+        eq(Math.round(d.sinCuenta * 100) / 100,
+           Math.round(A.EtaaxCore.netoPropina(ctaConIva, 500, 1000, 2000) * 100) / 100);
     });
     test('saldo por cuenta: la propina de B suma en B, no en la predeterminada', () => {
         const pc = A._debitoPorCuenta([corteProp], [], _ctas2, 0);
@@ -323,7 +329,9 @@ test('comisionBancoCorte = bruto − neto (nunca negativa)', () =>
         eq(Math.round(_pc.b.total * 100) / 100, 5900));
     test('débito por cuenta: A = terminal neta + propina + transfer − traspaso − gastos', () =>
         eq(Math.round(_pc.a.total * 100) / 100,
-           Math.round((A._netoCuenta(ctaConIva, 1000, 2000) + 1000 * (1 - 0.0232) + 400 - 1200 - 250) * 100) / 100));
+           Math.round((A._netoCuenta(ctaConIva, 1000, 2000)
+                       + A.EtaaxCore.netoPropina(ctaConIva, 1000, 1000, 2000)
+                       + 400 - 1200 - 250) * 100) / 100));
     test('INVARIANTE: la suma de cuentas = saldo total de débito', () => {
         const total = A.taBancoNeto(corteDesglose) + 400 /*transfer*/ + (5000 - 300) /*efecto banco deps*/ - 250 /*gastos*/;
         eq(Math.round((_pc.a.total + _pc.b.total) * 100) / 100, Math.round(total * 100) / 100);
@@ -4468,27 +4476,46 @@ console.log('\n══ SUITE AK · Depósitos, retiros y apartados (administrativ
     test('las categorías de fábrica están', () => eq(base.indexOf('Préstamo') > -1, true, 'base'));
     test('y se ofrece agregar otra', () => eq(base.indexOf('__nueva') > -1, true, 'nueva'));
 
-    A.prompt = () => 'Mantenimiento equipo';
+    /* La categoría nueva se pide en el modal del sistema, no con el prompt()
+       del navegador —que sale sin contexto y no puede explicar para qué es. */
+    let promptsNavegador = 0;
+    A.prompt = () => { promptsNavegador++; return 'x'; };
     $('depCategoria').value = '__nueva';
     A._depCatChange();
+    test('la categoría nueva NO usa el cuadro del navegador', () => eq(promptsNavegador, 0, 'sin prompt'));
+    test('…abre el modal con su campo', () => eq($('cfCampo').style.display, '', 'campo'));
+    test('…y explica para qué sirve la categoría', () =>
+        eq($('cfNota').innerHTML.indexOf('filtro') > -1, true, 'nota'));
+
+    /* Un nombre vacío se reclama DENTRO del modal, sin cerrarlo ni sacar otra
+       alerta encima. */
+    $('cfInput').value = '   ';
+    A._confirmSi();
+    test('sin nombre no se agrega nada', () => eq($('cfInputAviso').style.display, '', 'reclamo'));
+    /* Y la acción sigue armada: el modal no se cerró, se puede corregir y aceptar. */
+    test('…y la acción sigue viva para corregir y aceptar', () => eq(A._cfCb !== null, true, 'viva'));
+
+    $('cfInput').value = 'Mantenimiento equipo';
+    A._confirmSi();
     test('la categoría nueva se agrega y queda elegida', () =>
         eq($('depCategoria').value, 'Mantenimiento equipo', 'elegida'));
     test('…y se guarda para la próxima vez', () =>
         eq(A._depCats().indexOf('Mantenimiento equipo') > -1, true, 'guardada'));
 
     /* Una categoría que ya existe no se duplica: dos gemelas parten el filtro. */
-    A.prompt = () => '  préstamo ';
     $('depCategoria').value = '__nueva';
     A._depCatChange();
+    $('cfInput').value = '  préstamo ';
+    A._confirmSi();
     test('una categoría repetida no se duplica', () =>
         eq(A._depCats().filter(c => c.toLowerCase() === 'préstamo').length, 1, 'una sola'));
     test('…y se elige la que ya existía', () => eq($('depCategoria').value, 'Préstamo', 'existente'));
 
     /* Cancelar no deja el marcador puesto: guardarlo escribiría "__nueva" como
        categoría de verdad. */
-    A.prompt = () => null;
     $('depCategoria').value = '__nueva';
     A._depCatChange();
+    A._confirmNo();
     test('cancelar deja la categoría vacía, no el marcador', () => eq($('depCategoria').value, '', 'limpio'));
 
     /* ── El filtro por categoría ── */
@@ -4755,6 +4782,95 @@ console.log('\n══ AM · Portal del colaborador (checklist.html) ══');
     P._pintarRecetas();
     test('sin resultados se dice, no se deja en blanco', () =>
         eq($('recList').innerHTML.indexOf('Ninguna receta') > -1, true, 'vacío'));
+}
+
+/* ═══════════ SUITE AN · LA PROPINA PAGA LA TASA DE SU TARJETA (etaax-core.js) ══
+   Crédito y débito cobran comisiones distintas. La propina se neteaba TODA como
+   débito, así que en un negocio con mucha tarjeta de crédito la comisión salía
+   corta todos los días. No se captura si la propina fue de crédito o de débito
+   —sería un campo más, a diario, para un número chico—: se reparte con la mezcla
+   de ventas de esa cuenta EN ESE CORTE, que es el dato real del día.          */
+console.log('\n══ AN · La propina paga la tasa de su tarjeta (etaax-core.js) ══');
+{
+    const C = cargarJS(crearContexto(), 'etaax-core.js').EtaaxCore;
+    // Crédito 3%, débito 1%. Sin IVA para que la cuenta se lea a simple vista.
+    const cta = { id:'a', tipo:'debito', comisionTC:3, comisionTD:1, aplicaIva:false };
+
+    /* Mitad y mitad: la propina paga el promedio de las dos tasas (2%). */
+    test('con mitad crédito y mitad débito, la propina paga el promedio', () =>
+        eq(C.netoPropina(cta, 1000, 500, 500), 980, 'promedio'));
+    /* Puro débito: exactamente lo de antes. */
+    test('con pura venta de débito, paga tasa de débito', () =>
+        eq(C.netoPropina(cta, 1000, 0, 1000), 990, 'débito'));
+    /* Puro crédito: aquí estaba el error — antes daba 990. */
+    test('con pura venta de crédito, paga tasa de CRÉDITO', () =>
+        eq(C.netoPropina(cta, 1000, 1000, 0), 970, 'crédito'));
+    test('…y eso son $20 de comisión que antes no se contaban', () =>
+        eq(C.netoCuenta(cta, 0, 1000) - C.netoPropina(cta, 1000, 1000, 0), 20, 'diferencia'));
+
+    /* El caso real: 63% crédito. */
+    test('con la mezcla del día, la propina se reparte igual que la venta', () =>
+        eq(C.netoPropina(cta, 1000, 630, 370), 1000 - (630*.03 + 370*.01), 'mezcla'));
+
+    /* Sin mezcla conocida —cortes viejos sin desglose— se queda como estaba.
+       Recalcularlo ahí reescribiría comisiones de meses ya cerrados. */
+    test('sin ventas de tarjeta, se queda con la regla vieja: débito', () =>
+        eq(C.netoPropina(cta, 1000, 0, 0), C.netoCuenta(cta, 0, 1000), 'legado'));
+    test('sin cuenta, la propina llega íntegra', () => eq(C.netoPropina(null, 1000, 500, 500), 1000, 'sin cuenta'));
+    test('una propina en cero no inventa comisión', () => eq(C.netoPropina(cta, 0, 500, 500), 0, 'cero'));
+
+    /* La invariante: prorratear no puede crear ni desaparecer dinero. La suma de
+       las dos partes es siempre la propina completa. */
+    [[300,700],[1,999],[0,1],[12345,6789]].forEach(function(m){
+        test('la propina se reparte entera con ' + m[0] + '/' + m[1], () => {
+            var neto = C.netoPropina(cta, 1000, m[0], m[1]);
+            var base = m[0] + m[1], pTc = 1000 * (m[0]/base);
+            return eq(neto, C.netoCuenta(cta, pTc, 1000 - pTc), 'entera');
+        });
+    });
+
+    /* Y el neto nunca puede pasarse del bruto ni irse por debajo de la tasa peor. */
+    test('el neto de la propina cae entre la tasa de crédito y la de débito', () => {
+        var n = C.netoPropina(cta, 1000, 400, 600);
+        return eq(n <= 990.0001 && n >= 969.9999, true, 'entre tasas · ' + n);
+    });
+
+    /* Que llegue al corte completo: el saldo del banco y la conciliación leen lo
+       mismo, así que si divergieran el abono se vería corto o sobrado. */
+    const corte = { tarjeta:1000, propTarjeta:1000,
+        tarjetaCuentas:[{ cuentaId:'a', ventaTC:1000, ventaTD:0, neto:970 }] };
+    const det = C.taBancoNetoDetalle(corte, [cta]);
+    test('el saldo del banco ya cobra la propina a tasa de crédito', () =>
+        eq(Math.round((det.porCuenta.a + det.sinCuenta) * 100) / 100, 970 + 970, 'saldo'));
+    test('y la conciliación dice exactamente lo mismo', () =>
+        eq(Math.round(C.tpvDeCorte(corte, 'a', [cta]).neto * 100) / 100,
+           Math.round((det.porCuenta.a + det.sinCuenta) * 100) / 100, 'cuadre'));
+
+    /* Y con la propina YA desglosada por cuenta (que es como se captura hoy):
+       cada cuenta prorratea con SU propia mezcla, no con la del corte entero. */
+    const ctaB = { id:'b', tipo:'debito', comisionTC:5, comisionTD:2, aplicaIva:false };
+    const corteDes = { tarjeta:2000, propTarjeta:600,
+        tarjetaCuentas:[{ cuentaId:'a', ventaTC:1000, ventaTD:0,    neto:970 },
+                        { cuentaId:'b', ventaTC:0,    ventaTD:1000, neto:980 }],
+        propTarjetaCuentas:{ a:300, b:300 } };
+    const detD = C.taBancoNetoDetalle(corteDes, [cta, ctaB]);
+    /* En A todo fue crédito (3%) y en B todo débito (2%): la misma propina de $300
+       deja neto distinto en cada cuenta. Con la regla vieja las dos daban lo mismo. */
+    test('cada cuenta prorratea con SU mezcla, no con la del corte', () =>
+        eq(Math.round(detD.porCuenta.a * 100) / 100, Math.round((970 + 300*0.97) * 100) / 100, 'cuenta A'));
+    test('…y la otra con la suya', () =>
+        eq(Math.round(detD.porCuenta.b * 100) / 100, Math.round((980 + 300*0.98) * 100) / 100, 'cuenta B'));
+    test('la misma propina deja neto distinto según la tarjeta que la pagó', () =>
+        eq(detD.porCuenta.a - 970 !== detD.porCuenta.b - 980, true, 'distinto'));
+    test('nada queda sin cuenta cuando todo viene desglosado', () =>
+        eq(Math.round(detD.sinCuenta * 100) / 100, 0, 'sin huérfanos'));
+    /* Y la conciliación de cada cuenta cuadra con su parte del saldo. */
+    test('la conciliación de A cuadra con el saldo de A', () =>
+        eq(Math.round(C.tpvDeCorte(corteDes, 'a', [cta, ctaB]).neto * 100) / 100,
+           Math.round(detD.porCuenta.a * 100) / 100, 'A'));
+    test('la conciliación de B cuadra con el saldo de B', () =>
+        eq(Math.round(C.tpvDeCorte(corteDes, 'b', [cta, ctaB]).neto * 100) / 100,
+           Math.round(detD.porCuenta.b * 100) / 100, 'B'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

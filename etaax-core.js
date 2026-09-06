@@ -75,6 +75,27 @@
         return base * f / 100;
     }
     function netoCuenta(cta, tc, td) { return cta ? (tc * (1 - comEf(cta, 'tc')) + td * (1 - comEf(cta, 'td'))) : (tc + td); }
+
+    /* ── NETO DE UNA PROPINA DE TARJETA ────────────────────────────────────────
+       Crédito y débito cobran comisiones distintas, y la propina se netea con la
+       tasa de la tarjeta con la que se pagó. Pero la propina NO se captura
+       separada por tipo —sería un campo más, todos los días, para un número
+       chico— y hasta ahora se neteaba TODA como débito: la comisión salía corta.
+
+       No hace falta capturar nada: la propina viaja en la MISMA transacción que
+       la venta, así que se reparte con la mezcla crédito/débito de esa cuenta en
+       ese corte. Si el 63% de lo que cobró esa terminal fue crédito, el 63% de la
+       propina pagó tasa de crédito. Es el dato real del día, no un supuesto.
+
+       Sin mezcla conocida (cortes viejos, sin desglose) se queda como estaba:
+       débito. Cambiarlo ahí recalcularía comisiones de meses ya cerrados. */
+    function netoPropina(cta, prop, tc, td) {
+        if (!cta) return n(prop);
+        var base = n(tc) + n(td);
+        if (base <= 0) return netoCuenta(cta, 0, n(prop));
+        var pTc = n(prop) * (n(tc) / base);
+        return netoCuenta(cta, pTc, n(prop) - pTc);
+    }
     // Neto que llega al banco por un corte. cuentasDebito = cuentas de débito ordenadas
     // (la predeterminada primero); su [0] da la tasa de la propina y de cortes viejos.
     /* Lo NETO que llega al banco por este corte, DESGLOSADO por cuenta.
@@ -152,17 +173,27 @@
         if (restoBruto > 0.005) det.sinCuenta += cta0 ? netoCuenta(cta0, 0, restoBruto) : restoBruto;
 
         // ── Propinas de tarjeta ──
+        // Mezcla crédito/débito de cada cuenta EN ESTE CORTE: con eso se netea su
+        // propina (ver netoPropina), en vez de darla toda por débito.
+        var mix = {}, mixTot = { tc: 0, td: 0 };
+        (c.tarjetaCuentas || []).forEach(function (t) {
+            if (!t) return;
+            var id = t.cuentaId || '';
+            if (!mix[id]) mix[id] = { tc: 0, td: 0 };
+            mix[id].tc += n(t.ventaTC); mix[id].td += n(t.ventaTD);
+            mixTot.tc += n(t.ventaTC);  mixTot.td += n(t.ventaTD);
+        });
         var pc = c.propTarjetaCuentas, propDes = 0;
         if (pc && typeof pc === 'object') {
             Object.keys(pc).forEach(function (id) {
                 var m = n(pc[id]); if (!m) return;
                 propDes += m;
-                var cta = buscar(id);
-                addC(id, cta ? netoCuenta(cta, 0, m) : m);
+                var cta = buscar(id), mz = mix[id] || { tc: 0, td: 0 };
+                addC(id, cta ? netoPropina(cta, m, mz.tc, mz.td) : m);
             });
         }
         var propResto = n(c.propTarjeta) - propDes;
-        if (propResto > 0.005) det.sinCuenta += cta0 ? netoCuenta(cta0, 0, propResto) : propResto;
+        if (propResto > 0.005) det.sinCuenta += cta0 ? netoPropina(cta0, propResto, mixTot.tc, mixTot.td) : propResto;
 
         return det;
     }
@@ -315,6 +346,16 @@
                     r.neto  += cta0 ? netoCuenta(cta0, 0, resto) : resto;
                 }
             }
+            // Misma mezcla que usa el saldo: si aquí se neteara distinto, el banco
+            // y la conciliación dirían números distintos del mismo abono.
+            var mixC = {}, mixT = { tc: 0, td: 0 };
+            ((corte.tarjetaCuentas) || []).forEach(function (t) {
+                if (!t) return;
+                var id = t.cuentaId || '';
+                if (!mixC[id]) mixC[id] = { tc: 0, td: 0 };
+                mixC[id].tc += n(t.ventaTC); mixC[id].td += n(t.ventaTD);
+                mixT.tc += n(t.ventaTC);     mixT.td += n(t.ventaTD);
+            });
             var pc = corte.propTarjetaCuentas, propDes = 0;
             if (pc && typeof pc === 'object') {
                 Object.keys(pc).forEach(function (id) {
@@ -323,15 +364,16 @@
                     if (cuentaId != null && id !== cuentaId) return;
                     var cta = null;
                     for (var i = 0; i < ctas.length; i++) if (ctas[i].id === id) cta = ctas[i];
+                    var mz = mixC[id] || { tc: 0, td: 0 };
                     r.bruto += m;
-                    r.neto  += cta ? netoCuenta(cta, 0, m) : m;
+                    r.neto  += cta ? netoPropina(cta, m, mz.tc, mz.td) : m;
                 });
             }
             if (cuentaId == null || cuentaId === baseId) {
                 var propResto = n(corte.propTarjeta) - propDes;
                 if (propResto > 0.005) {
                     r.bruto += propResto;
-                    r.neto  += cta0 ? netoCuenta(cta0, 0, propResto) : propResto;
+                    r.neto  += cta0 ? netoPropina(cta0, propResto, mixT.tc, mixT.td) : propResto;
                 }
             }
         }
@@ -935,6 +977,7 @@
         cuentasDebito: cuentasDebito, cuentasDebitoActivas: cuentasDebitoActivas, ctaActiva: ctaActiva,
         comisionBancoCorte: comisionBancoCorte,
         nomEsAdm: _nomEsAdm,
+        netoPropina: netoPropina,
         depEfecto: depEfecto, esRetiro: esRetiro,
         esApartado: esApartado, apartadoFondo: apartadoFondo, PREV_GENERAL: PREV_GENERAL,
         esAbonoTpv: esAbonoTpv, tpvDeCorte: tpvDeCorte, tpvConciliacion: tpvConciliacion,

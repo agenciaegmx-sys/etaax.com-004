@@ -1472,6 +1472,12 @@
     </div>
     <div class="modal-body">
       <div id="cfTexto" style="font-size:13.5px;line-height:1.6;color:var(--text-muted)"></div>
+      <div id="cfCampo" style="display:none;margin-top:12px">
+        <input type="text" id="cfInput" maxlength="60" onkeydown="if(event.key==='Enter')_confirmSi()"
+          style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);
+          color:var(--text);border-radius:9px;padding:11px 13px;font-family:inherit;font-size:14px">
+        <div id="cfInputAviso" style="font-size:11px;color:#ff9a9a;margin-top:5px;display:none"></div>
+      </div>
       <div id="cfNota" style="display:none;margin-top:11px;font-size:11.5px;line-height:1.55;
            color:var(--text-dim);background:var(--surface2);border-radius:9px;padding:10px 13px"></div>
     </div>
@@ -4208,10 +4214,22 @@ function verCorte(id) {
 function _abonosTpv(){ return _scopeSuc(_cacheDeps||[]).filter(EtaaxCore.esAbonoTpv); }
 /* Confirmación propia. `nota` es la letra chica —lo que va a pasar de verdad— que
    en un confirm() del navegador se pierde entre el texto. */
-var _cfCb = null;
+var _cfCb = null, _cfPide = false;
 function _confirmar(opts, cb){
     opts = opts || {};
     _cfCb = cb || null;
+    /* Con `campo`, el modal pide un texto: sustituye al prompt() del navegador,
+       que sale sin contexto y no puede explicar para qué es lo que se escribe. */
+    _cfPide = !!opts.campo;
+    var wrap = document.getElementById('cfCampo'), inp = document.getElementById('cfInput');
+    wrap.style.display = _cfPide ? '' : 'none';
+    document.getElementById('cfInputAviso').style.display = 'none';
+    if (_cfPide) {
+        inp.value = opts.valor || '';
+        inp.placeholder = opts.campo === true ? '' : opts.campo;
+        inp.style.borderColor = '';
+        setTimeout(function(){ inp.focus(); inp.select(); }, 60);
+    }
     document.getElementById('cfTitulo').textContent = opts.titulo || 'Confirmar';
     document.getElementById('cfTexto').innerHTML    = opts.texto  || '';
     var nt = document.getElementById('cfNota');
@@ -4224,12 +4242,24 @@ function _confirmar(opts, cb){
     ok.style.color      = opts.peligro ? '#fff' : '';
     document.getElementById('modalConfirm').classList.add('open');
 }
-function _confirmNo(){ document.getElementById('modalConfirm').classList.remove('open'); _cfCb = null; }
+function _confirmNo(){ document.getElementById('modalConfirm').classList.remove('open'); _cfCb = null; _cfPide = false; }
 function _confirmSi(){
-    var cb = _cfCb;
+    var cb = _cfCb, val = null;
+    if (_cfPide) {
+        val = (document.getElementById('cfInput').value || '').trim();
+        if (!val) {
+            /* Se reclama DENTRO del modal, junto al campo: cerrar y sacar otra
+               alerta encima es lo que hacía el navegador. */
+            var av = document.getElementById('cfInputAviso');
+            av.textContent = 'Escribe un nombre.'; av.style.display = '';
+            document.getElementById('cfInput').style.borderColor = '#ff9a9a';
+            document.getElementById('cfInput').focus();
+            return;
+        }
+    }
     document.getElementById('modalConfirm').classList.remove('open');
-    _cfCb = null;
-    if (cb) cb();
+    _cfCb = null; _cfPide = false;
+    if (cb) cb(val);
 }
 
 /* ¿Esta cuenta concilia? null = automático (se enciende con el primer abono). */
@@ -4632,17 +4662,23 @@ function _depPobFiltroCat(){
 function _depCatChange(){
     var e=document.getElementById('depCategoria'); if(!e) return;
     if(e.value!=='__nueva') return;
-    var nom=prompt('¿Cómo se llama la nueva categoría?');
-    nom=(nom||'').trim();
-    if(!nom){ _depPobCategorias(''); return; }
-    if(_depCats().some(function(c){ return c.toLowerCase()===nom.toLowerCase(); })){
-        // Ya existe: se elige la que hay en vez de crear una gemela que parte el filtro.
+    /* Se deja el selector en blanco de entrada: si el usuario cancela, no puede
+       quedarse con el marcador "__nueva" puesto. */
+    _depPobCategorias('');
+    _confirmar({
+        titulo:'➕ Nueva categoría',
+        texto:'¿Cómo se llama? Va a quedar en la lista de este negocio para los próximos movimientos.',
+        campo:'Ej: Pago a Fudo, Mantenimiento, Publicidad…',
+        nota:'Sirve para agrupar y para el filtro de Depósitos y Retiros. Si ya existe una igual, se usa esa.',
+        ok:'Agregar'
+    }, function(nom){
         var ya=_depCats().find(function(c){ return c.toLowerCase()===nom.toLowerCase(); });
-        _depPobCategorias(ya); return;
-    }
-    var pr=_depCatsPropias(); pr.push(nom); _depCatsGuardar(pr);
-    _depPobCategorias(nom);
-    _depPobFiltroCat();
+        // Ya existe: se elige la que hay en vez de crear una gemela que parte el filtro.
+        if(ya){ _depPobCategorias(ya); return; }
+        var pr=_depCatsPropias(); pr.push(nom); _depCatsGuardar(pr);
+        _depPobCategorias(nom);
+        _depPobFiltroCat();
+    });
 }
 
 /* Tres puertas al MISMO modal, ya apuntando a lo que se va a hacer. Todo esto se
