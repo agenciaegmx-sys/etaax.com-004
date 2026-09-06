@@ -415,7 +415,8 @@ function toggleNav(){
 /* ── Supabase cache ── */
 var _kCache = {
     cortes: null, otros: null, gastos: null,
-    fijos: null, nominas: null, prevs: null, targets: null
+    fijos: null, nominas: null, prevs: null, targets: null,
+    deps: null          // movimientos; los APARTADOS de previsiones viven aquí
 };
 var _KPI_DEFAULTS = {fijos:15,variables:30,nomOp:22,nomAdm:8,prev:5,util:20};
 
@@ -434,6 +435,7 @@ async function _sbInit() {
         _supabase.from('kpi_targets').select('datos').eq('negocio_id', negId).maybeSingle(),
         _supabase.from('staff').select('datos').eq('negocio_id', negId),
         _supabase.from('tarjetas_credito').select('datos').eq('negocio_id', negId),
+        _supabase.from('depositos').select('datos').eq('negocio_id', negId),
     ]);
     if (!r[0].error) _kCache.cortes  = (r[0].data||[]).map(function(x){return x.datos;});
     if (!r[1].error) _kCache.otros   = (r[1].data||[]).map(function(x){return x.datos;});
@@ -444,6 +446,7 @@ async function _sbInit() {
     if (!r[6].error && r[6].data) _kCache.targets = r[6].data.datos || _KPI_DEFAULTS;
     if (!r[7].error) _kCache.staff = (r[7].data||[]).map(function(x){return x.datos;});
     if (!r[8].error) _kCache.ctas  = (r[8].data||[]).map(function(x){return x.datos;});
+    if (!r[9].error) _kCache.deps  = (r[9].data||[]).map(function(x){return x.datos;});
     renderAll();
 }
 
@@ -470,7 +473,8 @@ function loadNominasMes(mes){
     (d.socios||[]).forEach(function(p){adm+=n(p.base)+n(p.bonos)+n(p.imss);});
     return{op:op,adm:adm};
 }
-// Previsiones vigentes dentro del periodo (misma regla de siempre, ahora sobre un rango).
+/* Previsiones VIGENTES en el periodo: sigue sirviendo para saber qué metas
+   estaban corriendo. Ya NO es lo que se resta de la utilidad (ver abajo). */
 function prevsRango(from,to){
     return (_kCache.prevs||[]).filter(function(p){
         if(p.estado==='cancelada') return false;
@@ -478,7 +482,22 @@ function prevsRango(from,to){
         return p.fechaInicio&&p.fechaInicio>=from&&p.fechaInicio<=to;
     });
 }
-function loadPrevsRango(from,to){ return prevsRango(from,to).reduce(function(s,p){return s+n(p.montoEstimado);},0); }
+/* Lo que la utilidad del periodo dejó de tener disponible = lo que de verdad se
+   APARTÓ en esas fechas, no lo que alguien PLANEÓ apartar algún día.
+
+   Antes esto sumaba el monto estimado de toda previsión cuyo rango tocara el
+   periodo: una meta anual de $60,000 se restaba entera los 12 meses ($720,000
+   de utilidad borrada por una reserva de $60,000) y en la vista de un día se
+   restaba igual de completa. El campo "meses" que se capturaba no se usaba en
+   ninguna cuenta. */
+function loadPrevsRango(from,to){
+    return EtaaxCore.previsionApartadoRango(_kCache.deps||[], from, to);
+}
+/* Del gasto del periodo, cuánto venía respaldado por una previsión ya apartada.
+   No cambia el egreso —el dinero salió— pero explica diciembre. */
+function loadPrevUsadoRango(from,to,gastos){
+    return EtaaxCore.previsionUsadoRango(gastos, from, to);
+}
 
 /* ── Periodo: día · semana · mes · rango (mismo control que Ventas y Gastos) ── */
 var periodoTipo='mes';
@@ -612,13 +631,16 @@ function getPeriodoData(desde,hasta){
     // IMSS a Operativa (se paga global, no por colaborador) → Nóm. Adm. = nómina administrativa pura.
     var nomOp=cl.nomOp+cl.imss, nomAdm=cl.nomAdm;
 
-    // PREVISIONES = reserva, NO cuenta como egreso del mes (decisión Edwin) → va aparte;
-    // la utilidad NETA sí la descuenta (es dinero apartado de la utilidad).
+    // PREVISIONES = reserva, NO es egreso: el dinero no salió del negocio, solo
+    // quedó etiquetado. La utilidad NETA sí la descuenta, porque es utilidad que
+    // ya tiene dueño y no se puede repartir ni reinvertir.
     var prevs=loadPrevsRango(desde,hasta);
+    // De los egresos del periodo, lo que venía fondeado por una previsión.
+    var prevUsado=loadPrevUsadoRango(desde,hasta,gastos);
     var egresos=cl.egresos;                 // Fijos + Nóminas + Variables (SIN previsiones)
     var util=ingresos-egresos-prevs;        // utilidad neta tras apartar la reserva
 
-    return{ingresos:ingresos,fijos:cl.fijo,variables:cl.variable,nomOp:nomOp,nomAdm:nomAdm,prevs:prevs,egresos:egresos,util:util,
+    return{ingresos:ingresos,fijos:cl.fijo,variables:cl.variable,nomOp:nomOp,nomAdm:nomAdm,prevs:prevs,prevUsado:prevUsado,egresos:egresos,util:util,
            // crudo para el desglose por concepto (misma data, sin recalcular)
            desde:desde,hasta:hasta,ventas:ventas,otros:otrosT,gastos:gastos,cortes:cortes,otrosLista:otros,comisionBanco:comisionBanco};
 }
@@ -684,7 +706,7 @@ function imprimirKPIs(){
         {label:'Gastos Variables',      val:d.variables, tgt:t.variables, isUtil:false},
         {label:'Nómina Operativa',      val:d.nomOp,     tgt:t.nomOp,     isUtil:false},
         {label:'Nómina Administrativa', val:d.nomAdm,    tgt:t.nomAdm,    isUtil:false},
-        {label:'Previsiones (reserva)', val:d.prevs,     tgt:t.prev,      isUtil:false},
+        {label:'Previsiones (apartado)', val:d.prevs,    tgt:t.prev,      isUtil:false},
         {label:'Utilidad neta',         val:d.util,      tgt:t.util,      isUtil:true}
     ];
     var rows=CATS.map(function(c){
@@ -723,7 +745,7 @@ function imprimirKPIs(){
         '<div class="rsec">Distribución de egresos + utilidad (% sobre ingresos)</div>' +
         '<table class="rt"><thead><tr><th>Concepto</th><th>Monto</th><th>Porcentaje</th><th>Meta saludable</th><th>Estado</th></tr></thead><tbody>'+rows+'</tbody></table>' +
         histSec +
-        '<div style="font-size:9.5px;color:#8a8a8a;margin-top:9px;line-height:1.55">Las <b>previsiones</b> son una reserva apartada de la utilidad: no cuentan como egreso del mes. La <b>comisión bancaria</b> de los cortes ya está incluida en Gastos Variables. Las propinas se excluyen (pass-through al personal).</div>';
+        '<div style="font-size:9.5px;color:#8a8a8a;margin-top:9px;line-height:1.55">Las <b>previsiones</b> son dinero <b>apartado</b> en el periodo: sigue en la caja o en el banco, pero ya tiene dueño. No cuentan como egreso —no salieron del negocio— y sí se descuentan de la utilidad neta. El gasto llega después, cuando de verdad se paga. La <b>comisión bancaria</b> de los cortes ya está incluida en Gastos Variables. Las propinas se excluyen (pass-through al personal).</div>';
 
     var mesTxt=periodoTxt();
     var fecha=new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'});
@@ -778,6 +800,12 @@ function renderAll(){
     var grid=document.getElementById('distGrid');
     grid.innerHTML=CATS.map(function(cat){
         var sem=getSem(cat.pct,cat.tgt,cat.isUtil);
+        /* Diciembre carga el aguinaldo completo (esto es flujo: el gasto pega
+           cuando se paga). Sin este renglón el mes parece una catástrofe aunque
+           el dinero llevara todo el año apartado. */
+        var fondeado=(cat.id==='prev'&&n(d.prevUsado)>0)
+            ? '<div class="dist-sub" style="color:var(--green);font-size:10px;margin-top:2px">'
+              +'✓ '+fmtM(d.prevUsado)+' del gasto salió de previsiones</div>' : '';
         var blocks=d.ingresos>0?Math.max(0,Math.round(cat.pct/2)):0;
         var blocksHtml='';
         for(var i=0;i<Math.min(blocks,25);i++) blocksHtml+='<div class="blk '+cat.cls+'"></div>';
@@ -786,6 +814,7 @@ function renderAll(){
             +'<div class="dist-col-hdr '+cat.cls+'">'+cat.label+'</div>'
             +'<div class="dist-val '+cat.cls+(cat.isUtil&&cat.val<0?' neg':'')+'">'+fmtPct(cat.pct)+'</div>'
             +'<div class="dist-sub">'+fmtM(cat.val)+'</div>'
+            +fondeado
             +'<div class="dist-ver">🔍 Ver desglose</div>'
             +'<div class="dist-bars-row">'
             +'<div class="blocks-wrap">'+blocksHtml+'</div>'
@@ -830,7 +859,7 @@ var _DD_CFG={
     vars:  {t:'📊 Gastos Variables',       grupos:['variable'],       tab:'variables', nota:'Todo lo que no es fijo ni nómina (incluye impuestos y contabilidad) más la comisión bancaria de los cortes.'},
     nomop: {t:'👥 Nómina Operativa',       grupos:['nomOp','imss'],   tab:'nominas',   nota:'Nómina del personal operativo. El IMSS se paga global, no por colaborador, y por convención cuenta aquí.'},
     nomadm:{t:'👥 Nómina Administrativa',  grupos:['nomAdm'],         tab:'nominas',   nota:'Nómina administrativa y de socios.'},
-    prev:  {t:'🔮 Previsiones',            grupos:[],                 tab:'resumen',   nota:'Reserva apartada de la utilidad: NO cuenta como egreso del periodo, pero sí se descuenta de la utilidad neta.'},
+    prev:  {t:'🔮 Previsiones',            grupos:[],                 tab:'resumen',   nota:'Dinero que APARTASTE en el periodo: sigue en tu caja o en tu banco, pero ya tiene dueño. No es egreso (no salió del negocio) y sí se descuenta de la utilidad neta, porque no lo puedes repartir ni reinvertir.'},
     util:  {t:'💹 Utilidad neta',          grupos:[],                 tab:'resumen',   nota:'Ingresos − egresos − previsiones. Toca cualquier otra columna para ver de dónde sale cada resta.'}
 };
 function _ddFila(f,concepto,det,monto,chip){
@@ -842,9 +871,20 @@ function _ddFila(f,concepto,det,monto,chip){
 function _ddMovs(catId){
     var d=_dd.d||{}, cfg=_DD_CFG[catId]||{}, filas=[], total=0;
     if(catId==='prev'){
-        prevsRango(d.desde,d.hasta).forEach(function(p){
-            total+=n(p.montoEstimado);
-            filas.push(_ddFila(p.fechaInicio||'—', p.concepto||p.nombre||'Previsión', (p.fechaFin?('vigente hasta '+p.fechaFin):''), n(p.montoEstimado), p.tipo||''));
+        /* Cada apartado real, con su fecha y a qué meta se fue. Antes aquí se
+           listaban PLANES, y el mismo plan reaparecía mes tras mes. */
+        var _nomPrev={};
+        (_kCache.prevs||[]).forEach(function(p){ if(p&&p.id) _nomPrev[p.id]=p.concepto||p.nombre||'Previsión'; });
+        (_kCache.deps||[]).filter(function(x){
+            if(!EtaaxCore.esApartado(x)) return false;
+            var f=x.fecha||'';
+            return (!d.desde||f>=d.desde) && (!d.hasta||f<=d.hasta);
+        }).sort(function(a,b){return (a.fecha||'').localeCompare(b.fecha||'');})
+          .forEach(function(x){
+            total+=n(x.monto);
+            var meta=_nomPrev[x.previsionId]||'Previsión general';
+            filas.push(_ddFila(x.fecha||'—', meta, x.concepto||'',
+                       n(x.monto), EtaaxCore.apartadoFondo(x)==='banco'?'🏛️ Banco':'🏦 Caja fuerte'));
         });
     } else if(catId==='util'){
         var lineas=[
@@ -854,7 +894,7 @@ function _ddMovs(catId){
             {c:'− Gastos variables',   v:-d.variables, s:''},
             {c:'− Nómina operativa',   v:-d.nomOp,  s:''},
             {c:'− Nómina administrativa', v:-d.nomAdm, s:''},
-            {c:'− Previsiones',        v:-d.prevs,  s:'Reserva apartada'}
+            {c:'− Previsiones',        v:-d.prevs,  s:'Dinero apartado en el periodo'}
         ];
         lineas.forEach(function(l){ if(l.v!==0) filas.push(_ddFila('', l.c, l.s, l.v, '')); });
         total=d.util;

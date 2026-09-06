@@ -175,8 +175,15 @@
 
     /* ── Depósitos / retiros: efecto sobre los fondos ────────── */
     // Compat: depósitos viejos solo tenían `destino` ('banco' implicaba salir de caja fuerte).
+    /* Cajón para lo que se aparta sin elegir previsión del catálogo. Es UNO, con
+       nombre: un cajón anónimo por captura deja $40,000 apartados que en tres
+       meses nadie sabe para qué eran. */
+    var PREV_GENERAL = '_general';
+
     function depEfecto(d) {
         var m = n(d.monto);
+        // Apartar es etiquetar, no mover: la caja fuerte no se entera (ver arriba).
+        if (esApartado(d)) return { caja: 0, banco: 0, tcPago: 0 };
         var origen = d.origen || (d.destino === 'banco' ? 'caja_fuerte' : 'externo');
         var dest = d.destino || 'caja_fuerte';
         var e = { caja: 0, banco: 0, tcPago: 0 };
@@ -185,6 +192,99 @@
         return e; // destino 'retiro': el dinero deja el negocio (no suma a ningún fondo)
     }
     function esRetiro(d) { return (d && d.destino) === 'retiro'; }
+
+    /* ── PREVISIONES: dinero APARTADO, que no es dinero gastado ────────────────
+       Una previsión es una ETIQUETA sobre dinero que ya está en la caja o en el
+       banco — no es un lugar donde el dinero vive, ni una forma de pago.
+
+       De ahí sale toda la regla:
+
+       · APARTAR no mueve fondos. El billete sigue físicamente en la caja fuerte,
+         solo que ya tiene dueño. Por eso el saldo total NO baja (sigue cuadrando
+         con el conteo físico) y lo único que baja es lo DISPONIBLE. Por eso
+         `depEfecto` devuelve cero para un apartado: no es un movimiento.
+
+       · APARTAR tampoco es un gasto. El dinero no salió del negocio. Contarlo
+         como egreso sería cobrarlo dos veces: al apartar y al pagar.
+
+       · GASTAR sí es el gasto, en el mes en que se paga (ETAAX es flujo de
+         efectivo de punta a punta). Si el gasto trae `previsionId`, además baja
+         el apartado de esa previsión: la caja fuerte pierde el dinero y la
+         previsión pierde el respaldo, así que lo DISPONIBLE no se mueve —que es
+         justo lo correcto, porque ese dinero nunca fue tuyo para gastar en otra
+         cosa.                                                                    */
+    function esApartado(d) { return !!d && d.tipo === 'apartado'; }
+    // Fondo donde está parado el dinero apartado: 'caja_fuerte' (default) o 'banco'.
+    function apartadoFondo(d) { return (d && d.fondo === 'banco') ? 'banco' : 'caja_fuerte'; }
+
+    /* Saldos por previsión: cuánto se apartó, cuánto se usó y cuánto queda.
+       `prevs` = catálogo de previsiones, `deps` = movimientos (los apartados van
+       ahí con tipo 'apartado'), `gastos` = gastos ya filtrados por sucursal.
+       Todo llega por parámetro: sin DOM, sin localStorage. */
+    function previsionSaldos(prevs, deps, gastos) {
+        var porId = {};
+        function slot(id) {
+            if (!porId[id]) porId[id] = { id: id, prevision: null, apartado: 0, usado: 0,
+                                          saldo: 0, enCaja: 0, enBanco: 0,
+                                          aptCaja: 0, aptBanco: 0 };
+            return porId[id];
+        }
+        (prevs || []).forEach(function (p) { if (p && p.id) slot(p.id).prevision = p; });
+
+        (deps || []).forEach(function (d) {
+            if (!esApartado(d)) return;
+            var s = slot(d.previsionId || PREV_GENERAL), m = n(d.monto);
+            s.apartado += m;
+            if (apartadoFondo(d) === 'banco') s.aptBanco += m; else s.aptCaja += m;
+        });
+        (gastos || []).forEach(function (g) {
+            if (!g || !g.previsionId) return;
+            slot(g.previsionId).usado += n(g.monto);
+        });
+
+        var r = { porId: porId, apartado: 0, usado: 0, saldo: 0, enCaja: 0, enBanco: 0 };
+        Object.keys(porId).forEach(function (k) {
+            var s = porId[k];
+            s.saldo = s.apartado - s.usado;
+            /* El saldo se reparte entre caja y banco PROPORCIONAL a cómo se apartó.
+               Descontar el uso "del fondo por el que se pagó" suena más fino, pero
+               depende del orden en que se capturen los gastos: dos personas
+               capturando lo mismo en distinto orden verían saldos distintos. */
+            var mix = s.apartado > 0 ? (s.saldo / s.apartado) : 0;
+            s.enCaja  = s.aptCaja  * mix;
+            s.enBanco = s.aptBanco * mix;
+            r.apartado += s.apartado; r.usado += s.usado;
+            r.saldo += s.saldo; r.enCaja += s.enCaja; r.enBanco += s.enBanco;
+        });
+        return r;
+    }
+
+    /* Lo apartado DENTRO de un periodo: esto es lo que la utilidad del mes deja
+       de tener disponible. Antes se sumaba el monto PLANEADO de toda previsión
+       cuyo rango tocara el periodo, así que una meta anual de $60,000 se restaba
+       completa los 12 meses —$720,000 de utilidad borrada por una reserva de
+       $60,000—, y en una vista de un día se restaba igual de completa. */
+    function previsionApartadoRango(deps, desde, hasta) {
+        return (deps || []).reduce(function (t, d) {
+            if (!esApartado(d)) return t;
+            var f = d.fecha || '';
+            if (desde && f < desde) return t;
+            if (hasta && f > hasta) return t;
+            return t + n(d.monto);
+        }, 0);
+    }
+    /* Del gasto del periodo, cuánto venía respaldado por una previsión. El gasto
+       cuenta completo como egreso (es flujo); esto solo dice de dónde salió, para
+       que diciembre no parezca una catástrofe cuando el aguinaldo estaba fondeado. */
+    function previsionUsadoRango(gastos, desde, hasta) {
+        return (gastos || []).reduce(function (t, g) {
+            if (!g || !g.previsionId) return t;
+            var f = g.fecha || '';
+            if (desde && f < desde) return t;
+            if (hasta && f > hasta) return t;
+            return t + n(g.monto);
+        }, 0);
+    }
 
     /* ── Metas de venta (distribución mensual → diaria) ──────── */
     var DIA_FACTORES_DEFAULT = [0.7, 0.85, 0.9, 0.9, 0.95, 1.4, 1.3]; // Dom..Sáb (getDay)
@@ -569,6 +669,9 @@
         cuentasDebito: cuentasDebito, cuentasDebitoActivas: cuentasDebitoActivas, ctaActiva: ctaActiva,
         comisionBancoCorte: comisionBancoCorte,
         depEfecto: depEfecto, esRetiro: esRetiro,
+        esApartado: esApartado, apartadoFondo: apartadoFondo, PREV_GENERAL: PREV_GENERAL,
+        previsionSaldos: previsionSaldos,
+        previsionApartadoRango: previsionApartadoRango, previsionUsadoRango: previsionUsadoRango,
         importeLetra: importeLetra,
         multiploReceta: multiploReceta, costeoReceta: costeoReceta,
         COSTEO_MULT_DEFAULT: COSTEO_MULT_DEFAULT, COSTEO_GASTO_OP_PCT: COSTEO_GASTO_OP_PCT,

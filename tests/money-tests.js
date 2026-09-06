@@ -3186,6 +3186,136 @@ console.log('\n══ SUITE AA · Bonos automáticos y sanciones (diario.html) �
         eq(A._reciboNominaHTML(limpio).indexOf('Deducciones') === -1, true, 'html limpio'));
 }
 
+/* ═══════════ SUITE AB · PREVISIONES: APARTAR NO ES GASTAR (etaax-core.js) ═══════
+   El modelo entero cuelga de una frase: una previsión es una ETIQUETA sobre
+   dinero que ya está, no un lugar donde el dinero vive ni una forma de pago.
+   Estas pruebas son el candado de esa frase.                                    */
+console.log('\n══ SUITE AB · Previsiones: apartar no es gastar (etaax-core.js) ══');
+{
+    const C = cargarJS(crearContexto(), 'etaax-core.js').EtaaxCore;
+    const apartar = (monto, fondo, fecha, prevId) =>
+        ({ tipo:'apartado', previsionId: prevId || 'p1', monto, fondo: fondo || 'caja_fuerte', fecha: fecha || '2026-01-05' });
+    const gasto = (monto, fecha, prevId) =>
+        ({ monto, fecha: fecha || '2026-12-15', categoria:'Nómina', previsionId: prevId });
+
+    /* ── Apartar NO mueve fondos ──
+       Si restara de la caja fuerte, el saldo dejaría de cuadrar con el conteo
+       físico: el billete sigue en la caja, solo que ya tiene dueño. */
+    test('apartar no toca la caja fuerte: el billete sigue ahí', () =>
+        eq(C.depEfecto(apartar(20000)).caja, 0, 'caja'));
+    test('apartar tampoco toca el banco', () =>
+        eq(C.depEfecto(apartar(20000, 'banco')).banco, 0, 'banco'));
+    /* Un apartado trae origen por arrastre del modal; no debe engañar a depEfecto. */
+    test('ni con un origen pegado por el formulario', () =>
+        eq(C.depEfecto({ tipo:'apartado', origen:'caja_fuerte', destino:'caja_fuerte', monto:20000 }).caja, 0, 'origen'));
+    /* Y un movimiento normal SÍ sigue moviendo: no se rompió lo que ya servía. */
+    test('un movimiento normal sí mueve la caja', () =>
+        eq(C.depEfecto({ origen:'caja_fuerte', destino:'banco', monto:5000 }).caja, -5000, 'normal'));
+
+    /* ── Saldos por previsión ── */
+    const prevs = [{ id:'p1', concepto:'Aguinaldo' }, { id:'p2', concepto:'Mantenimiento' }];
+    const deps  = [apartar(20000,'caja_fuerte','2026-01-05'), apartar(10000,'banco','2026-02-05'),
+                   apartar(5000,'caja_fuerte','2026-03-05','p2')];
+    const r     = C.previsionSaldos(prevs, deps, [gasto(6000,'2026-12-15','p1')]);
+
+    test('lo apartado se acumula', () => eq(r.porId.p1.apartado, 30000, 'apartado'));
+    test('lo usado baja el saldo de esa previsión', () => eq(r.porId.p1.saldo, 24000, 'saldo'));
+    test('cada meta lleva su propia cuenta', () => eq(r.porId.p2.saldo, 5000, 'p2'));
+    test('el total apartado suma todas las metas', () => eq(r.apartado, 35000, 'total'));
+    test('el saldo total también', () => eq(r.saldo, 29000, 'saldo total'));
+
+    /* El saldo se reparte proporcional a cómo se apartó: 20k caja / 10k banco de
+       30k, tras usar 6k quedan 24k → 16k y 8k. Prorratear en vez de "descontar
+       del fondo por el que se pagó" hace la cuenta independiente del ORDEN de
+       captura: dos personas capturando lo mismo ven lo mismo. */
+    test('el saldo se reparte proporcional entre caja y banco', () =>
+        eq(r.porId.p1.enCaja, 16000, 'caja'));
+    test('…y el resto queda en el banco', () => eq(r.porId.p1.enBanco, 8000, 'banco'));
+    test('las dos partes suman el saldo, sin centavos perdidos', () =>
+        eq(r.porId.p1.enCaja + r.porId.p1.enBanco, r.porId.p1.saldo, 'suma'));
+    test('el apartado en caja del negocio entero', () => eq(r.enCaja, 21000, 'enCaja'));
+
+    /* ── El disponible: la razón de ser de todo esto ──
+       Caja fuerte $80,000, apartado $21,000 → disponible $59,000. */
+    const disponible = (caja, saldos) => caja - saldos.enCaja;
+    test('lo disponible es la caja menos lo que ya tiene dueño', () =>
+        eq(disponible(80000, r), 59000, 'disponible'));
+
+    /* Y aquí está la prueba de que el modelo es el correcto: pagar CON una
+       previsión no cambia el disponible. La caja baja y el respaldo baja con
+       ella —ese dinero nunca fue tuyo para gastarlo en otra cosa. */
+    const antes   = C.previsionSaldos(prevs, [apartar(20000)], []);
+    const despues = C.previsionSaldos(prevs, [apartar(20000)], [gasto(8000,'2026-12-15','p1')]);
+    test('pagar CON previsión no cambia el disponible', () =>
+        eq(disponible(80000 - 8000, despues), disponible(80000, antes), 'disponible'));
+    /* Un gasto normal del mismo monto SÍ te deja con menos dinero libre. */
+    const normal = C.previsionSaldos(prevs, [apartar(20000)], [gasto(8000,'2026-12-15')]);
+    test('un gasto sin previsión sí baja el disponible', () =>
+        eq(disponible(80000 - 8000, normal), disponible(80000, antes) - 8000, 'normal'));
+
+    /* Gastar de más contra una previsión deja el saldo en negativo. Se ve, no se
+       esconde: pagaste $30,000 de aguinaldo con $20,000 apartados. */
+    const pasado = C.previsionSaldos(prevs, [apartar(20000)], [gasto(30000,'2026-12-15','p1')]);
+    test('gastar más de lo apartado se ve en negativo, no se tapa', () =>
+        eq(pasado.porId.p1.saldo, -10000, 'negativo'));
+
+    /* Lo apartado sin elegir meta cae en UN cajón con nombre, no en uno por captura. */
+    const suelto = C.previsionSaldos([], [{ tipo:'apartado', monto:3000, fecha:'2026-01-01' },
+                                          { tipo:'apartado', monto:2000, fecha:'2026-02-01' }], []);
+    test('lo apartado sin meta cae en un solo cajón general', () =>
+        eq(Object.keys(suelto.porId).length, 1, 'cajón'));
+    test('…y ese cajón tiene nombre, no es anónimo', () =>
+        eq(suelto.porId[C.PREV_GENERAL].apartado, 5000, 'general'));
+
+    /* Un gasto normal no debe morder ninguna previsión: la mayoría de los gastos
+       NO son de previsión, y si cayeran en el cajón general se comerían el
+       respaldo del aguinaldo sin que nadie lo pidiera. */
+    const gastoSuelto = C.previsionSaldos(prevs, [apartar(20000)], [gasto(8000,'2026-12-15')]);
+    test('un gasto sin previsión no consume ningún apartado', () =>
+        eq(gastoSuelto.usado, 0, 'usado'));
+    test('…y deja intacto el saldo de las metas', () =>
+        eq(gastoSuelto.porId.p1.saldo, 20000, 'saldo'));
+
+    /* Un movimiento normal no se cuela en las previsiones. */
+    const sucio = C.previsionSaldos(prevs, [{ origen:'caja_fuerte', destino:'banco', monto:9000, fecha:'2026-01-01' }], []);
+    test('un depósito normal no se cuenta como apartado', () => eq(sucio.apartado, 0, 'limpio'));
+
+    /* ══ EL BUG DEL 12× ══
+       Antes se sumaba el monto PLANEADO de toda previsión cuyo rango tocara el
+       periodo. Una meta anual de $60,000 se restaba entera en los 12 meses:
+       $720,000 de utilidad borrada por una reserva de $60,000. Y en la vista de
+       un solo día se restaba igual de completa. */
+    const anual = [apartar(5000,'caja_fuerte','2026-01-31'), apartar(5000,'caja_fuerte','2026-02-28'),
+                   apartar(5000,'caja_fuerte','2026-03-31')];
+    test('enero resta solo lo que se apartó en enero', () =>
+        eq(C.previsionApartadoRango(anual, '2026-01-01', '2026-01-31'), 5000, 'enero'));
+    test('febrero resta lo suyo, no la meta entera otra vez', () =>
+        eq(C.previsionApartadoRango(anual, '2026-02-01', '2026-02-28'), 5000, 'febrero'));
+    test('el trimestre suma los tres, ni más ni menos', () =>
+        eq(C.previsionApartadoRango(anual, '2026-01-01', '2026-03-31'), 15000, 'trimestre'));
+    test('un día sin apartados no resta nada (antes restaba la meta completa)', () =>
+        eq(C.previsionApartadoRango(anual, '2026-02-14', '2026-02-14'), 0, 'un día'));
+    test('el día en que sí se apartó, resta ese apartado', () =>
+        eq(C.previsionApartadoRango(anual, '2026-01-31', '2026-01-31'), 5000, 'ese día'));
+    test('sumar los 12 meses no puede pasarse de lo apartado', () =>
+        eq(C.previsionApartadoRango(anual, '2026-01-01', '2026-12-31'), 15000, 'año'));
+
+    /* ── Lo usado en el periodo: explica diciembre sin maquillarlo ── */
+    const gs = [gasto(60000,'2026-12-20','p1'), gasto(12000,'2026-12-05'), gasto(3000,'2026-11-05','p1')];
+    test('de diciembre, lo que venía fondeado por una previsión', () =>
+        eq(C.previsionUsadoRango(gs, '2026-12-01', '2026-12-31'), 60000, 'fondeado'));
+    test('el gasto sin previsión no cuenta como fondeado', () =>
+        eq(C.previsionUsadoRango([gasto(12000,'2026-12-05')], '2026-12-01', '2026-12-31'), 0, 'sin prev'));
+    test('lo fondeado de otro mes se queda en su mes', () =>
+        eq(C.previsionUsadoRango(gs, '2026-11-01', '2026-11-30'), 3000, 'noviembre'));
+
+    /* Y el gasto sigue contando COMPLETO como egreso: es flujo de efectivo, el
+       dinero salió. Lo fondeado explica de dónde salió, no lo descuenta. */
+    const cl = C.clasificarGastos([{ monto:60000, categoria:'Nómina', previsionId:'p1' }], { fijos:[], staff:[] });
+    test('el gasto pagado con previsión sigue siendo egreso completo', () =>
+        eq(cl.egresos, 60000, 'egreso'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0
