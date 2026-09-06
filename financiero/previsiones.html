@@ -158,24 +158,24 @@
             <!-- KPIs -->
             <div class="kpi-grid">
                 <div class="kpi-card">
-                    <div class="kpi-lbl">Total previsto</div>
+                    <div class="kpi-lbl">Meta de todas</div>
                     <div class="kpi-val" id="kpiTotal">$0.00</div>
                     <div class="kpi-sub" id="kpiCount">0 previsiones</div>
                 </div>
-                <div class="kpi-card warn">
-                    <div class="kpi-lbl">Pendientes</div>
-                    <div class="kpi-val" id="kpiPendientes" style="color:var(--text-muted)">0</div>
-                    <div class="kpi-sub" id="kpiPendientesMonto">—</div>
-                </div>
                 <div class="kpi-card highlight">
-                    <div class="kpi-lbl">En curso</div>
-                    <div class="kpi-val" id="kpiEnCurso" style="color:var(--green)">0</div>
-                    <div class="kpi-sub" id="kpiEnCursoMonto">—</div>
+                    <div class="kpi-lbl">Ya apartado</div>
+                    <div class="kpi-val" id="kpiApartado" style="color:var(--green)">$0.00</div>
+                    <div class="kpi-sub" id="kpiApartadoSub">—</div>
                 </div>
-                <div class="kpi-card">
-                    <div class="kpi-lbl">Cumplidas</div>
-                    <div class="kpi-val" id="kpiCumplidas" style="color:var(--text-muted)">0</div>
-                    <div class="kpi-sub" id="kpiCumplidasMonto">—</div>
+                <div class="kpi-card warn">
+                    <div class="kpi-lbl">Me toca apartar</div>
+                    <div class="kpi-val" id="kpiCuota" style="color:var(--accent)">$0.00</div>
+                    <div class="kpi-sub" id="kpiCuotaSub">—</div>
+                </div>
+                <div class="kpi-card" id="kpiCardAtraso">
+                    <div class="kpi-lbl">Voy atrasado</div>
+                    <div class="kpi-val" id="kpiAtraso" style="color:var(--text-muted)">$0.00</div>
+                    <div class="kpi-sub" id="kpiAtrasoSub">—</div>
                 </div>
             </div>
 
@@ -198,11 +198,12 @@
                                 <th>Concepto</th>
                                 <th>Tipo</th>
                                 <th>Sucursal</th>
-                                <th style="text-align:right">Monto est.</th>
-                                <th>Período</th>
-                                <th style="text-align:right">T. Acumulado</th>
+                                <th style="text-align:right">Meta</th>
+                                <th style="text-align:right">Apartado</th>
+                                <th>Para cuándo</th>
+                                <th style="text-align:right">Me toca apartar</th>
                                 <th>Estado</th>
-                                <th>Progreso</th>
+                                <th>Avance</th>
                                 <th></th>
                             </tr>
                         </thead>
@@ -244,24 +245,24 @@
                     </select>
                 </div>
                 <div class="fg">
-                    <label>Monto estimado ($)</label>
-                    <input type="number" id="pvMonto" min="0" step="100" placeholder="0.00">
+                    <label>Meta a juntar ($)</label>
+                    <input type="number" id="pvMonto" min="0" step="100" placeholder="0.00" oninput="_pvPreview()">
                 </div>
             </div>
             <div class="fg-row-2">
                 <div class="fg">
-                    <label>Fecha inicio</label>
-                    <input type="date" id="pvFechaInicio">
+                    <label>Empiezo a apartar el</label>
+                    <input type="date" id="pvFechaInicio" onchange="_pvPreview()">
                 </div>
                 <div class="fg">
-                    <label>Fecha fin</label>
-                    <input type="date" id="pvFechaFin">
+                    <label>Lo necesito para el</label>
+                    <input type="date" id="pvFechaFin" onchange="_pvPreview()">
                 </div>
             </div>
             <div class="fg-row-2">
                 <div class="fg">
-                    <label>Tiempo acumulado (meses)</label>
-                    <input type="number" id="pvTiempo" min="1" max="120" step="1" placeholder="1">
+                    <label>¿Cada cuánto aparto?</label>
+                    <select id="pvPeriodicidad" onchange="_pvPreview()"></select>
                 </div>
                 <div class="fg">
                     <label>Estado</label>
@@ -279,6 +280,9 @@
                     <option value="">🌐 Todas las sucursales</option>
                 </select>
             </div>
+            <div id="pvPreview" style="display:none;margin:2px 0 14px;padding:11px 14px;border-radius:9px;
+                 border:1px solid rgba(61,190,122,.3);background:rgba(61,190,122,.06);
+                 font-size:12px;line-height:1.55;color:var(--text-muted)"></div>
             <div class="fg">
                 <label>Notas (opcional)</label>
                 <textarea id="pvNotas" rows="2" placeholder="Observaciones, detalles adicionales…" style="resize:vertical"></textarea>
@@ -303,14 +307,43 @@ function getNegocioActivo(){ return localStorage.getItem('etaax_negocio_activo')
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
 
 var _cachePrevs = null;
+var _cacheDeps  = null;   // movimientos: aquí viven los APARTADOS
+var _cacheGastos= null;   // gastos: los que traen previsionId consumen el apartado
 
 async function _sbInit() {
     var negId = getNegocioActivo();
     if (!negId) return;
-    var r = await _supabase.from('previsiones').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false});
-    if (!r.error) _cachePrevs = (r.data||[]).map(function(x){return x.datos;});
+    var r = await Promise.all([
+        _supabase.from('previsiones').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
+        _supabase.from('depositos').select('datos').eq('negocio_id', negId),
+        _supabase.from('gastos').select('datos').eq('negocio_id', negId)
+    ]);
+    if (!r[0].error) _cachePrevs  = (r[0].data||[]).map(function(x){return x.datos;});
+    if (!r[1].error) _cacheDeps   = (r[1].data||[]).map(function(x){return x.datos;});
+    if (!r[2].error) _cacheGastos = (r[2].data||[]).map(function(x){return x.datos;});
     renderAll();
 }
+/* Los apartados y los gastos se filtran por la sucursal elegida, igual que la
+   lista: si no, una meta de una sucursal se vería fondeada con dinero de otra. */
+function _scopeSuc(arr){
+    return (arr||[]).filter(function(x){
+        return !_sucursalId || !x || !x.sucursalId || x.sucursalId===_sucursalId;
+    });
+}
+function _saldos(){
+    return EtaaxCore.previsionSaldos(loadAll(), _scopeSuc(_cacheDeps), _scopeSuc(_cacheGastos));
+}
+function _plan(p, saldos, hoy){
+    var s=(saldos||_saldos()).porId[p.id];
+    return EtaaxCore.previsionPlan(p, s?s.apartado:0, hoy||todayStr());
+}
+var _EST_RITMO = {
+    cumplida:    { txt:'✅ Cumplida',    col:'var(--green)' },
+    al_corriente:{ txt:'🟢 Al corriente',col:'var(--green)' },
+    adelantado:  { txt:'🔵 Adelantado',  col:'var(--blue,#4a9eff)' },
+    atrasado:    { txt:'🔴 Atrasado',    col:'var(--red)' },
+    sin_fecha:   { txt:'⚪ Sin fechas',  col:'var(--text-dim)' }
+};
 function _sbUp(record) { sbUpsert('previsiones', record); }
 function _sbDel(id) { sbDelete('previsiones', id); }
 
@@ -355,60 +388,101 @@ function _renderSucMenu(){
 /* Filtro estado */
 var _filtroEstado='';
 
-/* Helpers */
-function progPct(p){
-    if(!p.fechaInicio||!p.fechaFin) return 0;
-    var hoy=new Date(),ini=new Date(p.fechaInicio),fin=new Date(p.fechaFin);
-    if(hoy<=ini) return 0;
-    if(hoy>=fin) return 100;
-    return Math.round((hoy-ini)/(fin-ini)*100);
-}
+/* El avance de una meta es el del DINERO, no el del calendario: que hayan pasado
+   seis meses no significa que lleves la mitad juntada. Lo calcula el núcleo. */
 
 /* Render */
-function renderAll(){
+function renderAll(hoyRef){
     var mes=document.getElementById('mesInput').value||mesStr();
+    var hoy=hoyRef||todayStr();   // el ritmo se mide contra hoy, no contra el mes elegido
     var lista=loadAll().filter(function(p){
         if(_sucursalId&&p.sucursalId&&p.sucursalId!==_sucursalId) return false;
         if(_filtroEstado&&p.estado!==_filtroEstado) return false;
-        // Show if date range overlaps with selected month
+        // Se ve si la meta está corriendo en el mes elegido. La fecha de término
+        // se llama `fechaObjetivo` desde que son metas; las capturadas antes
+        // traen `fechaFin` y siguen valiendo.
         var mesStart=mes+'-01';
         var y=parseInt(mes.slice(0,4)),m=parseInt(mes.slice(5,7));
         var mesEnd=new Date(y,m,0).toISOString().slice(0,10);
-        if(p.fechaInicio&&p.fechaFin) return p.fechaInicio<=mesEnd&&p.fechaFin>=mesStart;
-        if(p.fechaInicio) return p.fechaInicio.slice(0,7)===mes;
+        var fin=p.fechaObjetivo||p.fechaFin||'';
+        if(p.fechaInicio&&fin) return p.fechaInicio<=mesEnd&&fin>=mesStart;
+        if(p.fechaInicio) return p.fechaInicio<=mesEnd;   // sin término: corre desde que empezó
         return true;
     });
 
-    // KPIs
-    var total=lista.reduce(function(s,p){return s+n(p.montoEstimado);},0);
-    var byEst={pendiente:[],en_curso:[],cumplida:[],cancelada:[]};
-    lista.forEach(function(p){if(byEst[p.estado])byEst[p.estado].push(p);});
+    // ── KPIs: lo que de verdad quieres saber al abrir esta pantalla ──
+    var _sal=_saldos();
+    var planes=lista.map(function(p){ return {p:p, pl:_plan(p,_sal,hoy), sal:_sal.porId[p.id]}; });
+    var vivas=planes.filter(function(x){ return x.p.estado!=='cancelada'; });
+
+    var total    = vivas.reduce(function(s,x){return s+x.pl.objetivo;},0);
+    var apartado = vivas.reduce(function(s,x){return s+x.pl.apartado;},0);
+    // La cuota de aquí en adelante, no la original: si te atrasaste, la de antes
+    // ya no te lleva a la meta.
+    var cuota    = vivas.filter(function(x){return x.pl.estado!=='cumplida';})
+                        .reduce(function(s,x){return s+x.pl.porPeriodoAjustado;},0);
+    var atrasadas= vivas.filter(function(x){return x.pl.estado==='atrasado';});
+    var atraso   = atrasadas.reduce(function(s,x){return s-x.pl.diferencia;},0);
+
     document.getElementById('kpiTotal').textContent=fmtM(total);
     document.getElementById('kpiCount').textContent=lista.length+' previsión'+(lista.length!==1?'es':'');
-    document.getElementById('kpiPendientes').textContent=byEst.pendiente.length;
-    document.getElementById('kpiPendientesMonto').textContent=fmtM(byEst.pendiente.reduce(function(s,p){return s+n(p.montoEstimado);},0));
-    document.getElementById('kpiEnCurso').textContent=byEst.en_curso.length;
-    document.getElementById('kpiEnCursoMonto').textContent=fmtM(byEst.en_curso.reduce(function(s,p){return s+n(p.montoEstimado);},0));
-    document.getElementById('kpiCumplidas').textContent=byEst.cumplida.length;
-    document.getElementById('kpiCumplidasMonto').textContent=fmtM(byEst.cumplida.reduce(function(s,p){return s+n(p.montoEstimado);},0));
+    document.getElementById('kpiApartado').textContent=fmtM(apartado);
+    document.getElementById('kpiApartadoSub').textContent = total>0
+        ? (Math.round(apartado/total*100)+'% de la meta · faltan '+fmtM(Math.max(0,total-apartado)))
+        : 'Sin metas capturadas';
+    document.getElementById('kpiCuota').textContent=fmtM(cuota);
+    /* Se dice CADA CUÁNTO. Un monto sin su ritmo no se puede accionar: no sabes
+       si es cada semana o cada mes. Si las metas mezclan ritmos, se dice. */
+    var freqs={}; vivas.forEach(function(x){ if(x.pl.estado!=='cumplida') freqs[x.pl.freqNom]=1; });
+    var kf=Object.keys(freqs);
+    document.getElementById('kpiCuotaSub').textContent = !kf.length ? 'Todo al día'
+        : kf.length===1 ? ('Cada periodo · '+kf[0].toLowerCase()) : 'Ritmos mezclados ('+kf.join(', ').toLowerCase()+')';
+
+    var cardAtr=document.getElementById('kpiCardAtraso');
+    document.getElementById('kpiAtraso').textContent=fmtM(atraso);
+    document.getElementById('kpiAtraso').style.color = atraso>0?'var(--red)':'var(--green)';
+    document.getElementById('kpiAtrasoSub').textContent = atraso>0
+        ? (atrasadas.length+' meta'+(atrasadas.length!==1?'s':'')+' atrás de su ritmo')
+        : 'Ninguna meta atrasada';
+    cardAtr.className='kpi-card'+(atraso>0?' danger':' highlight');
 
     // Table
     var tbody=document.getElementById('prevTbody'),empty=document.getElementById('prevEmpty');
     if(!lista.length){tbody.innerHTML='';empty.style.display='block';return;}
     empty.style.display='none';
 
-    var EST_LABELS={pendiente:'pendiente',en_curso:'en_curso',cumplida:'cumplida',cancelada:'cancelada'};
-    tbody.innerHTML=lista.sort(function(a,b){return(a.fechaInicio||'').localeCompare(b.fechaFin||'');}).map(function(p){
-        var pct=progPct(p);
-        var pFill=pct>=100?'over':pct>=50?'warn':'';
+    /* Primero lo que urge: las atrasadas arriba, luego por fecha objetivo. Una
+       lista ordenada por fecha de captura no le dice a nadie qué hacer hoy. */
+    /* Los índices empiezan en 1 a propósito: con `atrasado:0`, la expresión
+       `ORD[estado]||9` mandaba lo más urgente hasta el final, porque 0 es falso. */
+    var ORD={atrasado:1, al_corriente:2, sin_fecha:3, adelantado:4, cumplida:5};
+    tbody.innerHTML=planes.sort(function(a,b){
+        var d=(ORD[a.pl.estado]||9)-(ORD[b.pl.estado]||9); if(d) return d;
+        return (a.p.fechaObjetivo||a.p.fechaFin||'9999').localeCompare(b.p.fechaObjetivo||b.p.fechaFin||'9999');
+    }).map(function(x){
+        var p=x.p, pl=x.pl, usado=x.sal?x.sal.usado:0;
+        var pct=Math.round(pl.pct);
+        var pFill=pl.estado==='atrasado'?'over':pct>=100?'':pct>=50?'warn':'';
+        var est=_EST_RITMO[pl.estado]||_EST_RITMO.sin_fecha;
+        var venceTxt=(p.fechaObjetivo||p.fechaFin||'—');
+        if(pl.vencida && pl.estado!=='cumplida') venceTxt='⚠️ '+venceTxt;
         return'<tr>'
             +'<td><div style="font-weight:500">'+_esc(p.concepto)+'</div>'+(p.notas?'<div style="font-size:10px;color:var(--text-dim);margin-top:2px">'+_esc(p.notas.slice(0,60))+'</div>':'')+'</td>'
             +'<td><span class="tipo-badge">'+_esc(p.tipo||'—')+'</span></td>'
             +'<td style="font-size:11px;color:var(--text-dim)">'+_negLabel(p.sucursalId||'')+'</td>'
-            +'<td style="text-align:right;font-weight:600;color:var(--accent)">'+fmtM(p.montoEstimado)+'</td>'
-            +'<td style="font-size:11px;white-space:nowrap;color:var(--text-dim)">'+(p.fechaInicio||'—')+' → '+(p.fechaFin||'—')+'</td>'
-            +'<td style="text-align:right;font-size:12px;color:var(--text-muted)">'+(n(p.tiempoAcumulado)||1)+' mes'+(n(p.tiempoAcumulado)!==1?'es':'')+'</td>'
-            +'<td><span class="est-badge est-'+_esc(p.estado||'pendiente')+'">'+(p.estado==='pendiente'?'⏳ Pendiente':p.estado==='en_curso'?'🔄 En curso':p.estado==='cumplida'?'✅ Cumplida':'❌ Cancelada')+'</span></td>'
+            +'<td style="text-align:right;font-weight:600;color:var(--accent)">'+fmtM(pl.objetivo)+'</td>'
+            +'<td style="text-align:right;font-weight:600;color:var(--green)">'+fmtM(pl.apartado)
+                +(usado>0?'<div style="font-size:10px;color:var(--text-muted);font-weight:400">sigue respaldado '+fmtM(pl.apartado-usado)+'</div>':'')
+                +(pl.falta>0?'<div style="font-size:10px;color:var(--text-dim);font-weight:400">faltan '+fmtM(pl.falta)+'</div>':'')+'</td>'
+            +'<td style="font-size:11px;white-space:nowrap;color:var(--text-dim)">'+_esc(venceTxt)
+                +(pl.conFecha?'<div style="font-size:10px">'+pl.restantes+' '+_esc(pl.freqNom.toLowerCase())+(pl.restantes===1?'':'es')+' por delante</div>':'')+'</td>'
+            +'<td style="text-align:right;white-space:nowrap">'
+                +(pl.estado==='cumplida'?'<span style="color:var(--green);font-size:11px">meta lograda</span>'
+                  :'<strong style="color:var(--accent)">'+fmtM(pl.porPeriodoAjustado)+'</strong>'
+                   +'<div style="font-size:10px;color:var(--text-dim)">cada '+_esc(pl.freqNom.toLowerCase().replace(/al$/,'a').replace(/mensua$/,'mes'))+'</div>')+'</td>'
+            +'<td><span class="est-badge" style="color:'+est.col+';border:1px solid '+est.col+';background:transparent">'+est.txt+'</span>'
+                +(pl.estado==='atrasado'?'<div style="font-size:10px;color:var(--red);margin-top:3px">'+fmtM(-pl.diferencia)+' atrás</div>':'')
+                +(p.estado==='cancelada'?'<div style="font-size:10px;color:var(--text-dim);margin-top:3px">❌ cancelada</div>':'')+'</td>'
             +'<td><div style="display:flex;align-items:center;gap:6px"><div class="prog-bar"><div class="prog-fill '+pFill+'" style="width:'+Math.min(100,pct)+'%"></div></div><span style="font-size:10px;color:var(--text-dim)">'+pct+'%</span></div></td>'
             +'<td style="white-space:nowrap"><button class="btn-row" data-edit="'+p.id+'">✏️</button> <button class="btn-row del" data-del="'+p.id+'">🗑️</button></td>'
             +'</tr>';
@@ -429,10 +503,13 @@ function abrirModal(id){
     document.getElementById('pvId').value=p.id||'';
     document.getElementById('pvConcepto').value=p.concepto||'';
     document.getElementById('pvTipo').value=p.tipo||'Inversión';
-    document.getElementById('pvMonto').value=p.montoEstimado||'';
+    document.getElementById('pvMonto').value=(p.montoObjetivo!=null?p.montoObjetivo:p.montoEstimado)||'';
     document.getElementById('pvFechaInicio').value=p.fechaInicio||todayStr();
-    document.getElementById('pvFechaFin').value=p.fechaFin||'';
-    document.getElementById('pvTiempo').value=p.tiempoAcumulado||1;
+    document.getElementById('pvFechaFin').value=p.fechaObjetivo||p.fechaFin||'';
+    var selF=document.getElementById('pvPeriodicidad');
+    selF.innerHTML=EtaaxCore.PREV_FREQS.map(function(f){
+        return '<option value="'+f.k+'">'+f.nom+'</option>'; }).join('');
+    selF.value=p.periodicidad||'mensual';
     document.getElementById('pvEstado').value=p.estado||'pendiente';
     document.getElementById('pvNotas').value=p.notas||'';
 
@@ -446,11 +523,32 @@ function abrirModal(id){
         sel.appendChild(opt);
     });
     document.getElementById('pvSucursal').value=p.sucursalId||'';
-    document.getElementById('modalTitle').textContent=id?'✏️ Editar Previsión':'🔮 Nueva Previsión';
+    document.getElementById('modalTitle').textContent=id?'✏️ Editar meta':'🔮 Nueva meta de previsión';
+    _pvPreview();
     document.getElementById('modalPrev').classList.add('open');
     setTimeout(function(){document.getElementById('pvConcepto').focus();},60);
 }
 function cerrarModal(){document.getElementById('modalPrev').classList.remove('open');}
+
+/* Enseñar el plan MIENTRAS se captura, no después de guardar: así se ve si la
+   cuota es realista antes de comprometerse con la fecha. */
+function _pvPreview(){
+    var box=document.getElementById('pvPreview'); if(!box) return;
+    var pl=EtaaxCore.previsionPlan({
+        montoObjetivo:n(document.getElementById('pvMonto').value),
+        fechaInicio:document.getElementById('pvFechaInicio').value,
+        fechaObjetivo:document.getElementById('pvFechaFin').value,
+        periodicidad:document.getElementById('pvPeriodicidad').value
+    }, 0, todayStr());
+    if(!(pl.objetivo>0)||!pl.conFecha){ box.style.display='none'; return; }
+    box.style.display='';
+    var unidad=pl.freqNom.toLowerCase();
+    box.innerHTML='📌 Apartando <b style="color:var(--green)">'+fmtM(pl.porPeriodo)+'</b> '
+        +'cada periodo <b>'+_esc(unidad)+'</b>, en <b>'+pl.periodos+'</b> aportaciones '
+        +'juntas <b>'+fmtM(pl.objetivo)+'</b> para el <b>'+_esc(document.getElementById('pvFechaFin').value)+'</b>.'
+        +'<div style="margin-top:5px;font-size:11px;color:var(--text-dim)">Apartar no gasta el dinero: '
+        +'sigue en tu caja o en tu banco, solo deja de contar como disponible.</div>';
+}
 function guardarPrev(){
     var concepto=document.getElementById('pvConcepto').value.trim();
     if(!concepto){alert('El concepto es obligatorio.');return;}
@@ -460,10 +558,14 @@ function guardarPrev(){
         id:id,
         concepto:concepto,
         tipo:document.getElementById('pvTipo').value,
-        montoEstimado:n(document.getElementById('pvMonto').value),
+        montoObjetivo:n(document.getElementById('pvMonto').value),
+        periodicidad:document.getElementById('pvPeriodicidad').value,
         fechaInicio:document.getElementById('pvFechaInicio').value,
+        fechaObjetivo:document.getElementById('pvFechaFin').value,
+        /* Los nombres viejos se siguen escribiendo: KPIs y Estadísticas leen
+           previsiones de este mismo negocio y no tienen por qué enterarse. */
+        montoEstimado:n(document.getElementById('pvMonto').value),
         fechaFin:document.getElementById('pvFechaFin').value,
-        tiempoAcumulado:n(document.getElementById('pvTiempo').value)||1,
         estado:document.getElementById('pvEstado').value,
         sucursalId:document.getElementById('pvSucursal').value||'',
         notas:document.getElementById('pvNotas').value.trim()
@@ -505,6 +607,7 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="/etaax-core.js"></script><!-- metas y saldos de previsión: una sola verdad -->
 <script src="/etaax-store.js"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js"></script>
 <script src="../security.js"></script>

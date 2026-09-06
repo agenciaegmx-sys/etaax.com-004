@@ -259,6 +259,78 @@
         return r;
     }
 
+    /* ── METAS: una previsión es una meta de ahorro con fecha ──────────────────
+       Antes se capturaba "monto estimado + rango de fechas + N meses" y ninguna
+       de las tres cosas movía una cuenta. Una meta sirve cuando responde: ¿cuánto
+       me toca apartar esta semana para llegar a tiempo, y voy bien o voy tarde?  */
+    var PREV_FREQS = [
+        { k: 'semanal',    nom: 'Semanal',    dias: 7 },
+        { k: 'quincenal',  nom: 'Quincenal',  dias: 15 },
+        { k: 'mensual',    nom: 'Mensual',    meses: 1 },
+        { k: 'bimestral',  nom: 'Bimestral',  meses: 2 },
+        { k: 'trimestral', nom: 'Trimestral', meses: 3 },
+        { k: 'semestral',  nom: 'Semestral',  meses: 6 },
+        { k: 'anual',      nom: 'Anual',      meses: 12 }
+    ];
+    function prevFreq(k) {
+        for (var i = 0; i < PREV_FREQS.length; i++) if (PREV_FREQS[i].k === k) return PREV_FREQS[i];
+        return PREV_FREQS[2];   // mensual: lo que casi siempre es
+    }
+    /* Periodos (con fracción) entre dos fechas. Los de días se miden en días; los
+       de meses en meses de calendario, porque una meta mensual la piensa la gente
+       por mes, no por bloques de 30 días que se van recorriendo. */
+    function previsionPeriodos(desde, hasta, freq) {
+        var a = fechaLocal(desde), b = fechaLocal(hasta);
+        if (!a || !b) return 0;
+        var f = prevFreq(freq);
+        if (f.dias) return Math.max(0, diasEntre(desde, hasta) / f.dias);
+        var meses = (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth())
+                  + (b.getDate() - a.getDate()) / 30;
+        return Math.max(0, meses / f.meses);
+    }
+
+    /* El plan de una meta: el número que de verdad se usa es `porPeriodoAjustado`
+       —cuánto apartar de aquí en adelante para llegar—. La cuota original no
+       sirve si ya te atrasaste: seguir apartándola te deja corto igual. */
+    function previsionPlan(p, apartado, hoyStr) {
+        p = p || {};
+        var objetivo = n(p.montoObjetivo != null ? p.montoObjetivo : p.montoEstimado);
+        var apt = n(apartado);
+        var hoy = hoyStr || fechaStr(new Date());
+        var ini = p.fechaInicio || '', fin = p.fechaObjetivo || p.fechaFin || '';
+        var freq = p.periodicidad || 'mensual';
+        var r = {
+            objetivo: objetivo, apartado: apt,
+            falta: Math.max(0, objetivo - apt),
+            pct: objetivo > 0 ? Math.min(100, apt / objetivo * 100) : 0,
+            periodicidad: freq, freqNom: prevFreq(freq).nom,
+            conFecha: !!(ini && fin),
+            periodos: 0, transcurridos: 0, restantes: 0,
+            porPeriodo: 0, porPeriodoAjustado: 0,
+            deberiaLlevar: 0, diferencia: 0, estado: 'sin_fecha', vencida: false
+        };
+        if (apt >= objetivo && objetivo > 0) r.estado = 'cumplida';
+        if (!r.conFecha) return r;   // sin fechas no hay ritmo que medir, solo avance
+
+        r.periodos    = Math.max(1, Math.ceil(previsionPeriodos(ini, fin, freq)));
+        r.transcurridos = Math.max(0, Math.min(r.periodos, Math.floor(previsionPeriodos(ini, hoy, freq))));
+        r.restantes   = r.periodos - r.transcurridos;   // transcurridos ya viene topado
+        r.porPeriodo  = objetivo / r.periodos;
+        r.vencida     = hoy > fin;
+        /* Pasada la fecha objetivo esto da el objetivo COMPLETO solito: los
+           periodos transcurridos vienen topados al total, y la cuota por el total
+           es la meta. Por eso no hay una rama aparte para las vencidas. */
+        r.deberiaLlevar = r.porPeriodo * r.transcurridos;
+        r.diferencia  = apt - r.deberiaLlevar;
+        r.porPeriodoAjustado = r.restantes > 0 ? (r.falta / r.restantes) : r.falta;
+
+        if (r.estado !== 'cumplida') {
+            r.estado = r.diferencia < -0.005 ? 'atrasado'
+                     : r.diferencia >  0.005 ? 'adelantado' : 'al_corriente';
+        }
+        return r;
+    }
+
     /* Lo apartado DENTRO de un periodo: esto es lo que la utilidad del mes deja
        de tener disponible. Antes se sumaba el monto PLANEADO de toda previsión
        cuyo rango tocara el periodo, así que una meta anual de $60,000 se restaba
@@ -671,6 +743,8 @@
         depEfecto: depEfecto, esRetiro: esRetiro,
         esApartado: esApartado, apartadoFondo: apartadoFondo, PREV_GENERAL: PREV_GENERAL,
         previsionSaldos: previsionSaldos,
+        PREV_FREQS: PREV_FREQS, prevFreq: prevFreq,
+        previsionPeriodos: previsionPeriodos, previsionPlan: previsionPlan,
         previsionApartadoRango: previsionApartadoRango, previsionUsadoRango: previsionUsadoRango,
         importeLetra: importeLetra,
         multiploReceta: multiploReceta, costeoReceta: costeoReceta,

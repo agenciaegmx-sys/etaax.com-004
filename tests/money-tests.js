@@ -3316,6 +3316,247 @@ console.log('\n══ SUITE AB · Previsiones: apartar no es gastar (etaax-core.
         eq(cl.egresos, 60000, 'egreso'));
 }
 
+/* ═══════════ SUITE AC · PREVISIONES COMO METAS (etaax-core.js) ═══════════
+   Una meta sirve cuando responde dos preguntas: ¿cuánto me toca apartar esta
+   semana para llegar a tiempo? y ¿voy bien o voy tarde? Antes se capturaban
+   monto, rango y "N meses", y ninguna de las tres movía una cuenta.          */
+console.log('\n══ SUITE AC · Previsiones como metas (etaax-core.js) ══');
+{
+    const C = cargarJS(crearContexto(), 'etaax-core.js').EtaaxCore;
+    const meta = (extra) => Object.assign({
+        montoObjetivo: 60000, fechaInicio: '2026-01-01',
+        fechaObjetivo: '2026-12-31', periodicidad: 'mensual'
+    }, extra || {});
+
+    /* ── El ritmo: en cuántos pedazos se parte la meta ── */
+    const m = C.previsionPlan(meta(), 0, '2026-01-01');
+    test('una meta anual por mes se parte en 12', () => eq(m.periodos, 12, 'periodos'));
+    test('la cuota es la meta entre los periodos', () => eq(m.porPeriodo, 5000, 'cuota'));
+    test('el mismo objetivo por semana se parte en 52', () =>
+        eq(C.previsionPlan(meta({periodicidad:'semanal'}), 0, '2026-01-01').periodos, 52, 'semanas'));
+    test('quincenal cae en 25 quincenas', () =>
+        eq(C.previsionPlan(meta({periodicidad:'quincenal'}), 0, '2026-01-01').periodos, 25, 'quincenas'));
+    test('semestral, en 2', () =>
+        eq(C.previsionPlan(meta({periodicidad:'semestral'}), 0, '2026-01-01').periodos, 2, 'semestres'));
+    test('anual, en 1', () =>
+        eq(C.previsionPlan(meta({periodicidad:'anual'}), 0, '2026-01-01').periodos, 1, 'año'));
+    /* Una meta a un plazo más corto que su propia periodicidad no puede valer
+       cero periodos: sería dividir entre cero. */
+    test('una meta anual a tres meses sigue siendo un periodo, no cero', () =>
+        eq(C.previsionPlan(meta({fechaObjetivo:'2026-03-31', periodicidad:'anual'}), 0, '2026-01-01').periodos, 1, 'mínimo'));
+    /* Y el caso que de verdad rompe: meta que empieza y termina el mismo día.
+       Sin piso, los periodos serían 0 y la cuota una división entre cero. */
+    const mismoDia = C.previsionPlan(meta({fechaInicio:'2026-05-01', fechaObjetivo:'2026-05-01'}), 0, '2026-05-01');
+    test('una meta de un solo día no divide entre cero', () => eq(mismoDia.periodos, 1, 'piso'));
+    test('…y pide la meta completa de una vez', () => eq(mismoDia.porPeriodo, 60000, 'cuota'));
+
+    /* ── ¿Voy bien o voy tarde? ── */
+    const alDia = C.previsionPlan(meta(), 25000, '2026-06-01');   // 5 meses × 5000
+    test('a mitad de año con la cuota al día: al corriente', () => eq(alDia.estado, 'al_corriente', 'estado'));
+    test('…y la diferencia es cero', () => eq(alDia.diferencia, 0, 'dif'));
+
+    const tarde = C.previsionPlan(meta(), 20000, '2026-06-01');
+    test('con $5,000 menos de lo que tocaba: atrasado', () => eq(tarde.estado, 'atrasado', 'estado'));
+    test('y dice exactamente cuánto falta de atraso', () => eq(tarde.diferencia, -5000, 'dif'));
+
+    const antes = C.previsionPlan(meta(), 40000, '2026-06-01');
+    test('apartando de más: adelantado', () => eq(antes.estado, 'adelantado', 'estado'));
+    test('con la meta completa: cumplida, aunque falten meses', () =>
+        eq(C.previsionPlan(meta(), 60000, '2026-06-01').estado, 'cumplida', 'cumplida'));
+
+    /* ── El número que de verdad se usa ──
+       Si te atrasaste, seguir apartando la cuota original te deja corto igual.  */
+    test('al día, la cuota de aquí en adelante es la de siempre', () =>
+        eq(alDia.porPeriodoAjustado, 5000, 'cuota'));
+    test('atrasado, la cuota sube para alcanzar la meta', () =>
+        eq(tarde.porPeriodoAjustado, 40000 / 7, 'ajustada'));
+    test('adelantado, la cuota baja', () => eq(antes.porPeriodoAjustado, 20000 / 7, 'ajustada'));
+    /* La prueba de que el ajuste sirve: apartar la cuota ajustada en cada periodo
+       que queda llega EXACTO a la meta. */
+    test('la cuota ajustada × los periodos que quedan llega justo a la meta', () =>
+        eq(tarde.porPeriodoAjustado * tarde.restantes + tarde.apartado, 60000, 'llega'));
+
+    /* ── Pasada la fecha ──
+       Medir contra la cuota de un periodo que ya no existe diría que vas bien. */
+    const vencida = C.previsionPlan(meta(), 50000, '2027-02-01');
+    test('pasada la fecha, se mide contra la meta completa', () => eq(vencida.deberiaLlevar, 60000, 'debería'));
+    test('…y $10,000 cortos siguen siendo un atraso', () => eq(vencida.estado, 'atrasado', 'estado'));
+    test('la meta vencida se marca como tal', () => eq(vencida.vencida, true, 'vencida'));
+    test('pero si ya se juntó, está cumplida aunque venciera', () =>
+        eq(C.previsionPlan(meta(), 60000, '2027-02-01').estado, 'cumplida', 'cumplida'));
+    /* Sin periodos restantes, lo que falta se debe de golpe, no dividido entre cero. */
+    test('sin periodos restantes, lo que falta se pide completo', () =>
+        eq(vencida.porPeriodoAjustado, 10000, 'de golpe'));
+
+    /* ── Antes de empezar y sin fechas ── */
+    test('antes de la fecha de inicio no se debe nada todavía', () =>
+        eq(C.previsionPlan(meta(), 0, '2025-11-01').deberiaLlevar, 0, 'aún no'));
+    const libre = C.previsionPlan({ montoObjetivo: 10000 }, 4000, '2026-06-01');
+    test('sin fechas no hay ritmo que medir', () => eq(libre.estado, 'sin_fecha', 'estado'));
+    test('…pero el avance sí se mide', () => eq(libre.pct, 40, 'pct'));
+    test('…y lo que falta también', () => eq(libre.falta, 6000, 'falta'));
+
+    /* ── Compatibilidad con lo ya capturado ──
+       Las previsiones viejas traen montoEstimado y fechaFin. Deben seguir vivas. */
+    const vieja = C.previsionPlan({ montoEstimado: 60000, fechaInicio: '2026-01-01',
+                                    fechaFin: '2026-12-31' }, 25000, '2026-06-01');
+    test('la previsión vieja se sigue leyendo (montoEstimado, fechaFin)', () =>
+        eq(vieja.objetivo, 60000, 'objetivo'));
+    test('…y sin periodicidad capturada, se asume mensual', () =>
+        eq(vieja.periodicidad, 'mensual', 'default'));
+    /* Una periodicidad que no existe (dato viejo, dedazo) tampoco puede tumbar la
+       cuenta: cae en mensual, que es lo que casi siempre es. */
+    test('una periodicidad desconocida cae en mensual, no en otra cosa', () =>
+        eq(C.previsionPlan(meta({periodicidad:'lunar'}), 0, '2026-01-01').periodos, 12, 'fallback'));
+    test('…con lo que cae al mismo plan que una meta nueva', () =>
+        eq(vieja.estado, 'al_corriente', 'estado'));
+
+    /* Una meta sin monto no divide entre cero ni miente diciendo 100%. */
+    const cero = C.previsionPlan(meta({ montoObjetivo: 0 }), 0, '2026-06-01');
+    test('una meta en cero no dice que va al 100%', () => eq(cero.pct, 0, 'pct'));
+    test('…ni se declara cumplida sola', () => eq(cero.estado !== 'cumplida', true, 'estado'));
+}
+
+/* ═══════════ SUITE AD · LA PANTALLA DE PREVISIONES (financiero/previsiones.html) ══
+   La fórmula puede estar perfecta y la pantalla no llamarla. Esto corre el código
+   REAL de la página con un DOM de mentira y mira lo que quedó escrito.          */
+console.log('\n══ SUITE AD · Pantalla de previsiones (financiero/previsiones.html) ══');
+{
+    const P = crearContexto();
+    cargarJS(P, 'etaax-core.js');
+    cargarInline(P, 'financiero/previsiones.html');
+    const $ = (id) => P.document.getElementById(id);
+
+    test('la pantalla carga el núcleo (antes no lo cargaba)', () =>
+        eq(typeof P.EtaaxCore, 'object', 'core'));
+    test('y expone el plan de metas', () => eq(typeof P.EtaaxCore.previsionPlan, 'function', 'plan'));
+
+    /* Meta de $60,000 al año, aportación mensual; llevamos $20,000 apartados a
+       mitad de año → deberían ser $25,000: vamos $5,000 atrás. */
+    setVar(P, '_cachePrevs', [{ id:'p1', concepto:'Aguinaldo', tipo:'Gasto', estado:'en_curso',
+        montoObjetivo:60000, periodicidad:'mensual',
+        fechaInicio:'2026-01-01', fechaObjetivo:'2026-12-31' }]);
+    setVar(P, '_cacheDeps', [
+        { tipo:'apartado', previsionId:'p1', monto:12000, fondo:'caja_fuerte', fecha:'2026-02-01' },
+        { tipo:'apartado', previsionId:'p1', monto:8000,  fondo:'caja_fuerte', fecha:'2026-04-01' },
+        { origen:'caja_fuerte', destino:'banco', monto:99999, fecha:'2026-03-01' }   // no es apartado
+    ]);
+    setVar(P, '_cacheGastos', []);
+    setVar(P, '_sucursalId', null);
+    const HOY_PV = '2026-06-01';   // fecha fija: el candado no depende del reloj
+    $('mesInput').value = '2026-06';
+    P.renderAll(HOY_PV);
+
+    test('la meta se pinta en el total', () => eq($('kpiTotal').textContent, '$60,000.00', 'meta'));
+    test('lo apartado sale de los movimientos, no de un plan escrito', () =>
+        eq($('kpiApartado').textContent, '$20,000.00', 'apartado'));
+    test('un movimiento normal no se cuela como apartado', () =>
+        eq($('kpiApartado').textContent.indexOf('99') === -1, true, 'limpio'));
+    test('la tabla dice cuánto llevas', () => eq($('prevTbody').innerHTML.indexOf('$20,000.00') > -1, true, 'tabla'));
+    test('…y cuánto falta', () => eq($('prevTbody').innerHTML.indexOf('faltan $40,000.00') > -1, true, 'falta'));
+
+    /* El renglón que hace útil la pantalla: cuánto apartar de aquí en adelante. */
+    test('la cuota que se muestra es la ajustada al atraso, no la original', () => {
+        const esperado = P.fmtM(40000 / 7);   // faltan 40k en los 7 meses que quedan
+        return eq($('kpiCuota').textContent, esperado, 'cuota');
+    });
+    test('y se dice cada cuánto, si no el monto no se puede accionar', () =>
+        eq($('kpiCuotaSub').textContent.indexOf('mensual') > -1, true, 'ritmo'));
+
+    test('el atraso se ve y se cuantifica', () => eq($('kpiAtraso').textContent, '$5,000.00', 'atraso'));
+    test('…y se dice cuántas metas van atrás', () =>
+        eq($('kpiAtrasoSub').textContent.indexOf('1 meta') > -1, true, 'cuántas'));
+    test('la fila se marca como atrasada', () =>
+        eq($('prevTbody').innerHTML.indexOf('Atrasado') > -1, true, 'badge'));
+
+    /* Al día, ya no debe gritar. */
+    setVar(P, '_cacheDeps', [{ tipo:'apartado', previsionId:'p1', monto:25000, fondo:'caja_fuerte', fecha:'2026-02-01' }]);
+    P.renderAll(HOY_PV);
+    test('con la cuota al día, no hay atraso que reportar', () => eq($('kpiAtraso').textContent, '$0.00', 'atraso'));
+    test('…y lo dice con palabras, no con un cero mudo', () =>
+        eq($('kpiAtrasoSub').textContent, 'Ninguna meta atrasada', 'texto'));
+    test('la fila se marca al corriente', () =>
+        eq($('prevTbody').innerHTML.indexOf('Al corriente') > -1, true, 'badge'));
+
+    /* Pagar CON la previsión consume lo apartado: es el enlace con el gasto real. */
+    setVar(P, '_cacheGastos', [{ id:'g1', previsionId:'p1', monto:9000, fecha:'2026-05-10' }]);
+    P.renderAll(HOY_PV);
+    test('un gasto etiquetado consume lo apartado', () => eq($('kpiApartado').textContent, '$25,000.00', 'apartado'));
+    test('…y la fila muestra el saldo que queda respaldado', () =>
+        eq($('prevTbody').innerHTML.indexOf('$16,000.00') > -1, true, 'saldo'));
+
+    /* Cada sucursal ve su propio dinero: si no, una meta se vería fondeada con
+       dinero de otra sucursal. */
+    setVar(P, '_cacheGastos', []);
+    setVar(P, '_cacheDeps', [
+        { tipo:'apartado', previsionId:'p1', monto:10000, fecha:'2026-02-01', sucursalId:'sucA' },
+        { tipo:'apartado', previsionId:'p1', monto:15000, fecha:'2026-02-01', sucursalId:'sucB' }
+    ]);
+    setVar(P, '_sucursalId', 'sucA');
+    P.renderAll(HOY_PV);
+    test('lo apartado en otra sucursal no fondea esta meta', () =>
+        eq($('kpiApartado').textContent, '$10,000.00', 'scope'));
+    setVar(P, '_sucursalId', null);
+
+    /* El orden importa: lo que urge va arriba. Una lista por fecha de captura no
+       le dice a nadie qué hacer hoy. */
+    setVar(P, '_cachePrevs', [
+        { id:'ok1', concepto:'Va bien',   estado:'en_curso', montoObjetivo:12000, periodicidad:'mensual',
+          fechaInicio:'2026-01-01', fechaObjetivo:'2026-12-31' },
+        { id:'mal', concepto:'Va tarde',  estado:'en_curso', montoObjetivo:12000, periodicidad:'mensual',
+          fechaInicio:'2026-01-01', fechaObjetivo:'2026-12-31' }
+    ]);
+    setVar(P, '_cacheDeps', [{ tipo:'apartado', previsionId:'ok1', monto:5000, fecha:'2026-02-01' }]);
+    setVar(P, '_cacheGastos', []);
+    P.renderAll(HOY_PV);
+    test('la meta atrasada se lista antes que la que va al día', () => {
+        const h = $('prevTbody').innerHTML;
+        return eq(h.indexOf('Va tarde') < h.indexOf('Va bien'), true, 'orden');
+    });
+
+    /* Una meta que ya terminó antes del mes elegido no debe aparecer: si la fecha
+       de término no se leyera, toda meta vieja seguiría colgada en la lista. */
+    setVar(P, '_cachePrevs', [{ id:'x1', concepto:'Terminada en marzo', estado:'en_curso',
+        montoObjetivo:5000, periodicidad:'mensual',
+        fechaInicio:'2026-01-01', fechaObjetivo:'2026-03-31' }]);
+    P.renderAll(HOY_PV);
+    test('una meta que terminó antes del mes elegido no se cuelga en la lista', () =>
+        eq($('prevTbody').innerHTML.indexOf('Terminada en marzo'), -1, 'filtrada'));
+
+    /* Y la pantalla tiene que CARGAR el núcleo de verdad: aquí lo inyecta el
+       arnés, así que sin mirar el HTML esto pasaría con la etiqueta borrada. */
+    test('el HTML carga /etaax-core.js (sin eso, la página muere en blanco)', () =>
+        eq(fs.readFileSync(path.join(RAIZ, 'financiero/previsiones.html'), 'utf8')
+             .indexOf('src="/etaax-core.js"') > -1, true, 'script'));
+
+    /* La previsión vieja, tal como está capturada hoy, no puede desaparecer. */
+    setVar(P, '_cachePrevs', [{ id:'v1', concepto:'Mantenimiento', estado:'en_curso',
+        montoEstimado:12000, fechaInicio:'2026-01-01', fechaFin:'2026-06-30' }]);
+    setVar(P, '_cacheDeps', []);
+    P.renderAll(HOY_PV);
+    test('la previsión capturada al modo viejo sigue apareciendo', () =>
+        eq($('prevTbody').innerHTML.indexOf('Mantenimiento') > -1, true, 'vieja'));
+    test('…con su monto leído como meta', () => eq($('kpiTotal').textContent, '$12,000.00', 'monto'));
+
+    /* El plan en vivo del modal: se ve la cuota ANTES de comprometerse. */
+    $('pvMonto').value = 60000;
+    $('pvFechaInicio').value = '2026-01-01';
+    $('pvFechaFin').value = '2026-12-31';
+    $('pvPeriodicidad').value = 'mensual';
+    P._pvPreview();
+    test('el modal calcula la cuota mientras se captura', () =>
+        eq($('pvPreview').innerHTML.indexOf('$5,000.00') > -1, true, 'preview'));
+    test('…y dice en cuántas aportaciones se llega', () =>
+        eq($('pvPreview').innerHTML.indexOf('<b>12</b>') > -1, true, 'aportaciones'));
+    test('…y aclara que apartar no gasta el dinero', () =>
+        eq($('pvPreview').innerHTML.indexOf('no gasta el dinero') > -1, true, 'aclaración'));
+
+    /* Sin meta o sin fecha no hay plan que enseñar: mejor callado que inventando. */
+    $('pvMonto').value = 0;
+    P._pvPreview();
+    test('sin monto, el plan no se muestra', () => eq($('pvPreview').style.display, 'none', 'oculto'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0
