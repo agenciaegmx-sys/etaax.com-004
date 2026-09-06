@@ -4143,8 +4143,17 @@ console.log('\n══ SUITE AH · Conciliación de tarjeta en Diario (administra
     setVar(A, '_cacheDeps', []);
     A._storage['etaax_ctx'] = JSON.stringify({ ctxType:'owner', negId:'negT' });
     A.verCorte('v1');
-    test('la ficha del corte trae su bloque de conciliación', () =>
-        eq($('verCorteBody').innerHTML.indexOf('Conciliar un abono') > -1, true, 'ficha'));
+    /* La ficha INFORMA: trae el desglose del día pero NO los botones que mueven
+       dinero. Una vista previa con botones invita a tocarlos creyendo que uno
+       solo está mirando. */
+    test('la ficha del corte trae su desglose de conciliación', () =>
+        eq($('verCorteBody').innerHTML.indexOf('Debe caer') > -1, true, 'desglose'));
+    test('…pero NO el botón de conciliar', () =>
+        eq($('verCorteBody').innerHTML.indexOf('Conciliar un abono'), -1, 'sin botón'));
+    test('…ni el de dejar de conciliar', () =>
+        eq($('verCorteBody').innerHTML.indexOf('No quiero conciliar'), -1, 'sin apagar'));
+    test('…y dice dónde sí se registra', () =>
+        eq($('verCorteBody').innerHTML.indexOf('Editar') > -1, true, 'camino'));
 
     /* Y el aviso arriba, que es lo primero que se pregunta al abrirla. */
     setVar(A, '_cacheDeps', [{ id:'z1', tipo:'abono_tpv', cuentaId:'cta1', corteId:'otro',
@@ -4176,6 +4185,22 @@ console.log('\n══ SUITE AH · Conciliación de tarjeta en Diario (administra
     A.abrirModal('v1');
     test('al editar un corte aparece su conciliación', () =>
         eq($('fTpvBloque').innerHTML.indexOf('Conciliar un abono') > -1, true, 'editor'));
+    /* En el editor SÍ están los botones: es donde se corrige el corte. */
+    test('…con el botón para dejar de conciliar esa cuenta', () =>
+        eq($('fTpvBloque').innerHTML.indexOf('No quiero conciliar') > -1, true, 'apagar'));
+
+    /* Y el papelero de un abono tampoco sale en la vista previa. */
+    setVar(A, '_cacheDeps', [{ id:'zz', tipo:'abono_tpv', cuentaId:'cta1', corteId:'v1',
+                               monto:100, fecha:'2026-09-01', folio:'F1' }]);
+    A.verCorte('v1');
+    test('la vista previa muestra el abono pero no deja borrarlo', () => {
+        const h = $('verCorteBody').innerHTML;
+        return eq(h.indexOf('F1') > -1 && h.indexOf('_tpvEliminar') === -1, true, 'sin papelera');
+    });
+    A.abrirModal('v1');
+    test('en el editor sí se puede quitar', () =>
+        eq($('fTpvBloque').innerHTML.indexOf('_tpvEliminar') > -1, true, 'con papelera'));
+    setVar(A, '_cacheDeps', []);
     test('…y el bloque se muestra', () => eq($('fTpvBloque').style.display, '', 'visible'));
     A.abrirModal();
     test('al capturar un corte nuevo no se pide conciliar nada', () =>
@@ -4235,6 +4260,20 @@ console.log('\n══ SUITE AH · Conciliación de tarjeta en Diario (administra
     /* La letra chica: que nada se borra. En un confirm() se pierde entre el texto. */
     test('…y aclara que no se borra lo ya conciliado', () =>
         eq($('cfNota').innerHTML.indexOf('Nada se borra') > -1, true, 'nota'));
+
+    /* La confirmación SIEMPRE se abre encima de otra pantalla, así que tiene que
+       ganarle a TODA la pila. Quedaba detrás del modal que la invocó y se veía
+       como si no pasara nada. Se compara contra todos los z-index del archivo:
+       así el día que alguien agregue un overlay más alto, esto lo caza. */
+    test('el modal de confirmación va arriba de toda la pila', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+        const m = src.match(/#modalConfirm\s*\{[^}]*z-index:\s*(\d+)/);
+        const zConfirm = m ? parseInt(m[1]) : 0;
+        const otros = [...src.matchAll(/z-index:\s*(\d{4})/g)]
+            .map(x => parseInt(x[1])).filter(z => z !== zConfirm);
+        const maxOtro = Math.max.apply(null, otros);
+        return eq(zConfirm > maxOtro, true, 'confirm=' + zConfirm + ' vs max=' + maxOtro);
+    });
 
     /* La mecánica, sin depender de quién la use: cancelar NUNCA ejecuta. */
     let corrio = 0;

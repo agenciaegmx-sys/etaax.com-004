@@ -122,6 +122,10 @@
         /* Pagar tarjeta desde caja fuerte: el modal de depósito debe quedar ENCIMA
            del overlay de caja fuerte (9100) — si no, abre detrás y "no pasa nada". */
         #modalDeposito { z-index: 9300; }
+        /* La confirmación SIEMPRE se abre encima de otra pantalla (un modal, un
+           overlay), así que va arriba de toda la pila. Con el z-index normal
+           quedaba DETRÁS del modal que la invocó: se veía como si no pasara nada. */
+        #modalConfirm { z-index: 9800; }
 
         /* ══ Impresión por card: solo se imprime #dxPrintArea ══ */
         #dxPrintArea { display:none; }
@@ -4198,8 +4202,8 @@ function verCorte(id) {
         evidHTML+
         // Notas
         (c.notas?'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px"><div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Notas</div><div style="font-size:13px;color:var(--text)">'+c.notas+'</div></div>':'')+
-        // Conciliación de la venta con tarjeta contra el banco
-        _tpvBloqueCorte(c);
+        // Conciliación de la venta con tarjeta: informativa, sin botones (ver arriba)
+        _tpvBloqueCorte(c, true);
 
     document.getElementById('modalVerCorte').classList.add('open');
 }
@@ -4401,7 +4405,11 @@ function _tpvAvisoCorte(c){
         +'</div>';
 }
 
-function _tpvBloqueCorte(c){
+/* `soloLectura` = la ficha técnica: ahí se INFORMA, no se actúa. Los botones de
+   conciliar, de apagar la cuenta y de borrar un abono viven en el editor, que es
+   donde se corrige el corte. Una vista previa con botones que cambian dinero
+   invita a tocarlos creyendo que solo se está mirando. */
+function _tpvBloqueCorte(c, soloLectura){
     var ctas=_tpvCuentasDeCorte(c).map(function(id){ return { cuentaId:id }; });
     if(!ctas.length) return '';   // sin venta con tarjeta no hay nada que conciliar
     var abonos=_abonosTpv();
@@ -4416,9 +4424,9 @@ function _tpvBloqueCorte(c){
                 '</div>'+
                 '<div style="font-size:10.5px;color:var(--text-dim);margin-top:5px;line-height:1.5">'+
                     'Esta cuenta no lleva conciliación: la venta con tarjeta cuenta en el saldo desde que capturas el corte.</div>'+
-                '<button onclick="_tpvEncender(\''+_cid+'\')" style="margin-top:8px;background:transparent;'+
+                (soloLectura?'':'<button onclick="_tpvEncender(\''+_cid+'\')" style="margin-top:8px;background:transparent;'+
                     'border:1px solid var(--border);color:var(--text-muted);border-radius:7px;padding:6px 11px;font-size:11.5px;cursor:pointer">'+
-                    '🏦 Empezar a conciliar esta cuenta</button>'+
+                    '🏦 Empezar a conciliar esta cuenta</button>')+
             '</div>';
         }
         var d=EtaaxCore.tpvDelCorte(c, abonos, _cid, _cuentasDebito());
@@ -4452,17 +4460,20 @@ function _tpvBloqueCorte(c){
                             (x.folio?' · <span style="color:var(--text-dim);word-break:break-all">'+_escV(x.folio)+'</span>':'')+'</span>'+
                         '<span style="display:flex;align-items:center;gap:8px;white-space:nowrap">'+
                             '<strong style="color:var(--green)">'+fmtM(x.monto)+'</strong>'+
-                            '<button class="btn-row del" onclick="_tpvEliminar(\''+x.id+'\')" title="Quitar esta conciliación">🗑️</button>'+
+                            (soloLectura?'':'<button class="btn-row del" onclick="_tpvEliminar(\''+x.id+'\')" title="Quitar esta conciliación">🗑️</button>')+
                         '</span></div>';
                 }).join('')+'</div>'
               : '')+
-            '<button onclick="_tpvAbrir(\''+c.id+'\',\''+_cid+'\')" '+
+            (soloLectura
+              ? (cuadra?'':'<div style="margin-top:9px;font-size:10.5px;color:var(--text-dim);text-align:center">'
+                    +'Para registrar el abono, abre el corte con ✏️ Editar.</div>')
+              : '<button onclick="_tpvAbrir(\''+c.id+'\',\''+_cid+'\')" '+
                 'style="margin-top:9px;width:100%;background:transparent;border:1px dashed var(--border2,var(--border));color:var(--accent);'+
                 'border-radius:8px;padding:8px;font-size:12px;cursor:pointer">➕ Conciliar un abono de esta cuenta</button>'+
-            '<button onclick="_tpvApagar(\''+_cid+'\')" style="margin-top:6px;width:100%;background:transparent;'+
+                '<button onclick="_tpvApagar(\''+_cid+'\')" style="margin-top:6px;width:100%;background:transparent;'+
                 'border:none;color:var(--text-dim);font-size:10.5px;cursor:pointer;padding:4px" '+
                 'title="La venta con tarjeta volverá a contar en el saldo desde que capturas el corte">'+
-                'No quiero conciliar esta cuenta</button>'+
+                'No quiero conciliar esta cuenta</button>')+
         '</div>';
     }).join('');
     return '<div>'+
