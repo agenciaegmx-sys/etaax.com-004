@@ -299,7 +299,17 @@
 
     /* Estado de una cuenta: qué se vendió, qué ya cayó, qué falta y desde cuándo.
        `cortes` y `deps` llegan ya filtrados por sucursal. */
-    function tpvConciliacion(cortes, deps, cuentaId, hoyStr) {
+    /* ¿Esta cuenta concilia? Tres estados, y el default no cambia nada:
+         false → NO concilia nunca: la venta con tarjeta entra al saldo al capturar
+                 el corte, como siempre. Para el negocio que no quiere el proceso.
+         true  → sí concilia, aunque todavía no haya ningún abono capturado.
+         sin definir → automático: concilia desde que se registra el primer abono. */
+    function tpvCuentaConcilia(cta) {
+        if (!cta || cta.conciliaTpv == null) return null;   // automático
+        return !!cta.conciliaTpv;
+    }
+
+    function tpvConciliacion(cortes, deps, cuentaId, hoyStr, modo) {
         var abonos = (deps || []).filter(function (d) {
             return esAbonoTpv(d) && (cuentaId == null || (d.cuentaId || '') === cuentaId);
         });
@@ -325,9 +335,17 @@
             abonos.forEach(function (a) { if (a.fecha && (!desde || a.fecha < desde)) desde = a.fecha; });
         }
 
+        /* Apagada a mano: nada queda en tránsito y todo lo vendido cuenta en el
+           banco desde el corte. Es exactamente el comportamiento de siempre. */
+        if (modo === false) desde = '';
+        /* Encendida a mano sin ningún abono todavía: se concilia TODO lo que haya,
+           así que el arranque es el corte más viejo. */
+        if (modo === true && !desde && conVenta.length) desde = conVenta[0].fecha;
+
         var r = { conciliado: conciliado, desde: desde, historico: 0, vendido: 0,
                   bruto: 0, comision: 0, transito: 0, aportaBanco: 0,
-                  pendienteDesde: '', diasPendiente: 0, activa: !!desde };
+                  pendienteDesde: '', diasPendiente: 0,
+                  activa: modo === false ? false : !!desde, apagada: modo === false };
         conVenta.forEach(function (x) {
             if (desde && x.fecha >= desde) { r.vendido += x.neto; r.bruto += x.bruto; }
             else r.historico += x.neto;      // antes de conciliar: se da por caído
@@ -338,6 +356,9 @@
            Lo que falta por caer NO suma: es justo lo que descuadraba contra la app
            del banco. */
         r.aportaBanco = r.historico + conciliado;
+        /* Apagada: todo lo vendido cuenta y nada queda en tránsito. Sumar además
+           lo ya conciliado lo contaría dos veces —el abono es ese mismo dinero. */
+        if (modo === false) { r.transito = 0; r.aportaBanco = r.historico; }
 
         /* Antigüedad: se consumen los abonos contra los cortes del más viejo al más
            nuevo. El primero que no queda cubierto es el que lleva esperando. Un
@@ -594,6 +615,9 @@
         }
         return false;
     }
+    // ¿Esta categoría de nómina va al cubo administrativo? Socios sí: no producen
+    // el servicio, y así lo cuenta también el documento de nóminas.
+    function _nomEsAdm(cat){ return cat === 'administrativa' || cat === 'socios'; }
     function nomTipoGasto(g, staff){
         if (g.categoriaNomina) return g.categoriaNomina;
         var c = String(g.concepto || ''), ix = c.lastIndexOf('—');
@@ -611,7 +635,12 @@
         if (gastoEsPropina(g)) return 'propina';                    // pass-through: fuera del gasto
         if (gastoEsPagoFijo(g, fijos)) return 'fijo';               // pago de un fijo del catálogo
         if (gastoEsIMSS(g)) return 'imss';
-        if (gastoEsNomina(g)) return nomTipoGasto(g, staff) === 'administrativa' ? 'nomAdm' : 'nomOp';
+        /* SOCIOS cuenta como administrativa, igual que en el documento de nóminas
+           (que ya sumaba socios en `adm`). Aquí se comparaba solo contra
+           'administrativa', así que el mismo pago caía en operativa si entraba por
+           Gastos y en administrativa si entraba por Nóminas: dos cubos distintos
+           para el mismo dinero, según la puerta. */
+        if (gastoEsNomina(g)) return _nomEsAdm(nomTipoGasto(g, staff)) ? 'nomAdm' : 'nomOp';
         if (!opts._catsFijos) {                                     // memo: se arma una sola vez por llamada
             var cf = {};
             for (var k = 0; k < fijos.length; k++) if (fijos[k] && fijos[k].categoria) cf[_catKey(fijos[k].categoria)] = 1;
@@ -864,9 +893,11 @@
         ctaBaseCorte: ctaBaseCorte, ctaBaseCatalogo: ctaBaseCatalogo,
         cuentasDebito: cuentasDebito, cuentasDebitoActivas: cuentasDebitoActivas, ctaActiva: ctaActiva,
         comisionBancoCorte: comisionBancoCorte,
+        nomEsAdm: _nomEsAdm,
         depEfecto: depEfecto, esRetiro: esRetiro,
         esApartado: esApartado, apartadoFondo: apartadoFondo, PREV_GENERAL: PREV_GENERAL,
         esAbonoTpv: esAbonoTpv, tpvDeCorte: tpvDeCorte, tpvConciliacion: tpvConciliacion,
+        tpvCuentaConcilia: tpvCuentaConcilia,
         tpvDelCorte: tpvDelCorte, tpvFolioRepetido: tpvFolioRepetido,
         previsionSaldos: previsionSaldos,
         PREV_FREQS: PREV_FREQS, prevFreq: prevFreq,

@@ -3649,12 +3649,29 @@ console.log('\n══ SUITE AE · Apartar y etiquetar en Diario (administrativo/
     test('el selector se muestra cuando hay algo apartado', () =>
         eq($('gPrevWrap').style.display !== 'none', true, 'visible'));
 
-    /* Sin nada apartado no se ofrece pagar con previsión: sería ofrecer algo que
-       no existe. */
+    /* Sin nada apartado, el selector SIGUE A LA VISTA pero desactivado y con la
+       explicación. Escondido es indistinguible de inexistente: así nadie
+       encontraba la función. */
     setVar(A, '_cacheDeps', []);
     A._gPrevPoblar('');
-    test('sin dinero apartado, el selector se esconde', () =>
-        eq($('gPrevWrap').style.display, 'none', 'oculto'));
+    test('sin dinero apartado, el selector sigue a la vista', () =>
+        eq($('gPrevWrap').style.display !== 'none', true, 'visible'));
+    test('…pero desactivado, para no ofrecer lo que no existe', () =>
+        eq($('gPrevision').disabled, true, 'off'));
+    test('…y explica qué es una previsión', () =>
+        eq($('gPrevHint').innerHTML.indexOf('apartas antes') > -1, true, 'explica'));
+    test('…y ofrece el camino para apartar', () =>
+        eq($('gPrevHint').innerHTML.indexOf('_gIrApartar') > -1, true, 'camino'));
+    /* Y ese camino tiene que existir de verdad: un botón que llama a una función
+       que no está deja la pantalla muda sin decir por qué. */
+    test('el camino para apartar existe y lleva a apartar', () => {
+        setVar(A, '_cachePrevs', [{ id:'p1', concepto:'Aguinaldo', estado:'en_curso' }]);
+        A._gIrApartar();
+        const dest = $('depDestino2').value;
+        return eq(dest.indexOf('prev:') === 0, true, 'destino=' + dest);
+    });
+    test('…y deja dicho de dónde sale el dinero apartado', () =>
+        eq($('depOrigen').value, 'caja_fuerte', 'origen'));
 
     /* Gastar más de lo apartado se avisa, pero no se prohíbe. */
     setVar(A, '_cacheDeps', [{ id:'a1', tipo:'apartado', previsionId:'p1', monto:20000,
@@ -4005,11 +4022,110 @@ console.log('\n══ SUITE AH · Conciliación de tarjeta en Diario (administra
         return eq(saldoNuevo, t.aportaBanco, 'cuadre');
     });
 
+    /* ── El negocio que NO quiere conciliar ── */
+    const ctasOff = [Object.assign({}, ctas[0], { conciliaTpv:false })];
+    setVar(A, '_cuentasBancarias', ctasOff);
+    setVar(A, '_cacheDeps', conc);
+    test('la cuenta apagada no pide conciliar', () =>
+        eq(A._tpvBloqueCorte(cortes[1]).indexOf('Conciliar un abono'), -1, 'sin botón'));
+    test('…lo dice con todas sus letras', () =>
+        eq(A._tpvBloqueCorte(cortes[1]).indexOf('Sin conciliar') > -1, true, 'aviso'));
+    test('…y ofrece volver a encenderla', () =>
+        eq(A._tpvBloqueCorte(cortes[1]).indexOf('Empezar a conciliar') > -1, true, 'volver'));
+    /* Y lo que importa: el saldo vuelve a contarlo todo desde el corte. */
+    test('apagada, la venta que aún no cae SÍ cuenta en el saldo', () =>
+        eq(A._debitoPorCuenta(conNuevo, conc, ctasOff, 0, [])['cta1'].total, 7800 + 5850 + 8775, 'completo'));
+    setVar(A, '_cuentasBancarias', ctas);
+
+    /* El saldo TOTAL de Caja Fuerte vive dentro del overlay y no se puede correr
+       aquí; al menos que no se le olvide preguntar por el interruptor, que es lo
+       que haría que el total y el desglose dijeran cosas distintas. */
+    test('el saldo total también consulta el interruptor de la cuenta', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+        const i = src.indexOf('totTarjeta  += t.aportaBanco');
+        return eq(i > -1 && src.slice(i - 400, i).indexOf('tpvCuentaConcilia') > -1, true, 'wiring');
+    });
+
     /* Al conciliar el corte nuevo, su dinero entra al saldo. */
     const todo = conc.concat([{ id:'ab2', tipo:'abono_tpv', cuentaId:'cta1', corteId:'k3',
                                 monto:8775, fecha:'2026-09-07', folio:'R2' }]);
     test('conciliado el corte nuevo, su dinero entra al saldo', () =>
         eq(A._debitoPorCuenta(conNuevo, todo, ctas, 0, [])['cta1'].total, 7800 + 5850 + 8775, 'entra'));
+}
+
+/* ═══════════ SUITE AI · NÓMINA DE SOCIOS ES ADMINISTRATIVA (etaax-core.js) ══
+   El mismo pago caía en un cubo distinto según la puerta por la que entrara: por
+   Gastos iba a operativa y por el documento de Nóminas a administrativa.      */
+console.log('\n══ SUITE AI · La nómina de socios es administrativa (etaax-core.js) ══');
+{
+    const C = cargarJS(crearContexto(), 'etaax-core.js').EtaaxCore;
+    const pago = (cat) => ({ categoria:'Nómina', concepto:'Pago quincena', monto:9000, categoriaNomina:cat });
+    const opts = { fijos:[], staff:[] };
+
+    test('la nómina de socios cuenta como administrativa', () =>
+        eq(C.grupoGasto(pago('socios'), opts), 'nomAdm', 'socios'));
+    test('igual que el documento de nóminas, que ya la sumaba en adm', () =>
+        eq(C.nomEsAdm('socios'), true, 'adm'));
+    test('la administrativa sigue siendo administrativa', () =>
+        eq(C.grupoGasto(pago('administrativa'), opts), 'nomAdm', 'adm'));
+    test('y la operativa sigue siendo operativa', () =>
+        eq(C.grupoGasto(pago('operativa'), opts), 'nomOp', 'op'));
+    test('sin categoría capturada, se asume operativa', () =>
+        eq(C.grupoGasto(pago(''), opts), 'nomOp', 'default'));
+
+    /* Y el dinero cae en el cubo correcto al clasificar, no solo al etiquetar. */
+    const cl = C.clasificarGastos([pago('socios'), pago('operativa')], opts);
+    test('el dinero de socios engorda la nómina administrativa', () => eq(cl.nomAdm, 9000, 'adm'));
+    test('…y no la operativa', () => eq(cl.nomOp, 9000, 'op'));
+    test('el total de nómina no cambia: solo se reparte bien', () => eq(cl.nom, 18000, 'total'));
+
+    /* La categoría del colaborador manda cuando el gasto no la trae. */
+    const staff = [{ nombre:'Ana Ruiz', categoriaNomina:'socios' }];
+    test('si el gasto no la trae, se lee del colaborador', () =>
+        eq(C.grupoGasto({ categoria:'Nómina', concepto:'Quincena — Ana Ruiz', monto:5000 },
+                        { fijos:[], staff }), 'nomAdm', 'del staff'));
+}
+
+/* ═══════════ SUITE AJ · EL NEGOCIO QUE NO QUIERE CONCILIAR ═══════════════════
+   No todos quieren el proceso. Apagar la cuenta devuelve el comportamiento de
+   siempre: la venta con tarjeta cuenta en el saldo desde que se captura el corte. */
+console.log('\n══ SUITE AJ · Apagar la conciliación de una cuenta ══');
+{
+    const C = cargarJS(crearContexto(), 'etaax-core.js').EtaaxCore;
+    const corte = (id, fecha, bruto, neto) =>
+        ({ id, fecha, tarjetaCuentas:[{ cuentaId:'a', ventaTC:bruto, ventaTD:0, neto }] });
+    const cortes = [ corte('c1','2026-09-01',8000,7800), corte('c2','2026-09-02',6000,5850) ];
+    const abonos = [{ id:'x', tipo:'abono_tpv', cuentaId:'a', corteId:'c1', monto:7800, fecha:'2026-09-03' }];
+
+    /* Los tres estados de una cuenta. */
+    test('sin definir: automático', () => eq(C.tpvCuentaConcilia({ id:'a' }), null, 'auto'));
+    test('apagada a mano', () => eq(C.tpvCuentaConcilia({ id:'a', conciliaTpv:false }), false, 'off'));
+    test('encendida a mano', () => eq(C.tpvCuentaConcilia({ id:'a', conciliaTpv:true }), true, 'on'));
+
+    /* ── Apagada: todo cuenta desde el corte, aunque haya abonos capturados ── */
+    const off = C.tpvConciliacion(cortes, abonos, 'a', '2026-09-06', false);
+    test('apagada, nada queda en tránsito', () => eq(off.transito, 0, 'tránsito'));
+    test('apagada, TODO lo vendido cuenta en el banco', () => eq(off.aportaBanco, 7800 + 5850, 'banco'));
+    test('apagada, no hay antigüedad que reportar', () => eq(off.diasPendiente, 0, 'días'));
+    test('y se sabe que está apagada a propósito, no vacía', () => eq(off.apagada, true, 'apagada'));
+
+    /* Lo capturado NO se pierde: si la vuelven a encender, vuelve a contar. */
+    test('apagar no borra lo ya conciliado', () => eq(off.conciliado, 7800, 'conservado'));
+    const reOn = C.tpvConciliacion(cortes, abonos, 'a', '2026-09-06', null);
+    test('al reencenderla, el tránsito vuelve tal como estaba', () => eq(reOn.transito, 5850, 'vuelve'));
+
+    /* ── Encendida a mano sin ningún abono: se concilia TODO desde el principio ──
+       Es lo que pide quien quiere empezar el proceso en serio, no al vuelo. */
+    const on = C.tpvConciliacion(cortes, [], 'a', '2026-09-06', true);
+    test('encendida sin abonos, todo lo vendido queda por conciliar', () =>
+        eq(on.transito, 7800 + 5850, 'todo'));
+    test('…y el banco no trae nada de tarjeta todavía', () => eq(on.aportaBanco, 0, 'banco'));
+
+    /* Y en automático sin abonos sigue sin cambiar nada: es lo que evita que el
+       día del deploy los saldos se desplomen. */
+    const auto = C.tpvConciliacion(cortes, [], 'a', '2026-09-06', null);
+    test('en automático sin abonos, nada cambia', () => eq(auto.aportaBanco, 7800 + 5850, 'sin cambio'));
+    test('…y no inventa tránsito', () => eq(auto.transito, 0, 'tránsito'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

@@ -3481,8 +3481,10 @@ function _debitoPorCuenta(cortes, depositos, ctasDeb, gastosDebito, gastosDebito
     var _abTpv=(depositos||[]).filter(EtaaxCore.esAbonoTpv);
     if(_abTpv.length){
         var _hoyTpv=todayStr();
+        var _ctaDe={}; (ctasDeb||[]).forEach(function(c){ if(c) _ctaDe[c.id]=c; });
         Object.keys(porCta).concat(['']).forEach(function(id){
-            var t=EtaaxCore.tpvConciliacion(cortes, _abTpv, id, _hoyTpv);
+            var t=EtaaxCore.tpvConciliacion(cortes, _abTpv, id, _hoyTpv,
+                                            EtaaxCore.tpvCuentaConcilia(_ctaDe[id]));
             if(t.transito>0.005) add(id,'term', -t.transito);   // '' cae en la cuenta base
         });
     }
@@ -3621,7 +3623,8 @@ function _abrirCajaFuerteContenido(_yaFresco){
     var _abonosCF = deps.filter(EtaaxCore.esAbonoTpv);
     var totTarjeta = 0, totTransito = 0, _tpvPend = null;
     _cuentasDebito().concat([{id:''}]).forEach(function(cta){
-        var t = EtaaxCore.tpvConciliacion(lista, _abonosCF, cta.id, todayStr());
+        var t = EtaaxCore.tpvConciliacion(lista, _abonosCF, cta.id, todayStr(),
+                                          EtaaxCore.tpvCuentaConcilia(cta));
         totTarjeta  += t.aportaBanco;
         totTransito += Math.max(0, t.transito);
         if (t.transito > 0.005 && t.pendienteDesde &&
@@ -4148,6 +4151,35 @@ function verCorte(id) {
    Ahora llega al saldo cuando alguien lo VIO caer y anotó su folio. Toda la
    cuenta vive en el núcleo (EtaaxCore.tpvConciliacion); aquí solo se captura. */
 function _abonosTpv(){ return _scopeSuc(_cacheDeps||[]).filter(EtaaxCore.esAbonoTpv); }
+/* ¿Esta cuenta concilia? null = automático (se enciende con el primer abono). */
+function _tpvModo(cuentaId){
+    var c=_cuentasDebito().find(function(x){return x&&x.id===cuentaId;});
+    return EtaaxCore.tpvCuentaConcilia(c);
+}
+/* Apagar la conciliación de una cuenta: para el negocio que no quiere el proceso.
+   La venta con tarjeta vuelve a contar en el saldo desde que se captura el corte.
+   No se borra nada: los abonos capturados se quedan y vuelven si se reactiva. */
+function _tpvApagar(cuentaId){
+    var c=_cuentasDebito().find(function(x){return x&&x.id===cuentaId;});
+    if(!c){ alert('No encontré esa cuenta.'); return; }
+    if(!confirm('¿Dejar de conciliar '+_cuentaBancoLabel(cuentaId)+'?\n\n'
+        +'La venta con tarjeta va a contar en el saldo desde que capturas el corte, '
+        +'sin esperar a que caiga al banco. Lo ya conciliado no se borra.')) return;
+    c.conciliaTpv=false;
+    sbUpsert('tarjetas_credito', c);
+    if(_verCorteId) verCorte(_verCorteId);
+    var cj=document.getElementById('cajOverlay');
+    if(cj&&cj.classList.contains('open'))_abrirCajaFuerteContenido();
+}
+function _tpvEncender(cuentaId){
+    var c=_cuentasDebito().find(function(x){return x&&x.id===cuentaId;});
+    if(!c) return;
+    c.conciliaTpv=true;
+    sbUpsert('tarjetas_credito', c);
+    if(_verCorteId) verCorte(_verCorteId);
+    var cj=document.getElementById('cajOverlay');
+    if(cj&&cj.classList.contains('open'))_abrirCajaFuerteContenido();
+}
 
 function _tpvBloqueCorte(c){
     var ctas=(c.tarjetaCuentas||[]).filter(function(t){
@@ -4156,7 +4188,22 @@ function _tpvBloqueCorte(c){
     if(!ctas.length) return '';   // sin venta con tarjeta no hay nada que conciliar
     var abonos=_abonosTpv();
     var filas=ctas.map(function(t){
-        var d=EtaaxCore.tpvDelCorte(c, abonos, t.cuentaId||'');
+        var _cid=t.cuentaId||'';
+        if(_tpvModo(_cid)===false){
+            // Cuenta apagada a propósito: se dice, y se ofrece volver a encenderla.
+            return '<div style="border:1px solid var(--border);border-radius:9px;padding:11px 13px;margin-bottom:8px;background:var(--surface2)">'+
+                '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
+                    '<span style="font-size:12.5px;font-weight:600">🏛️ '+_escV(_cuentaBancoLabel(_cid))+'</span>'+
+                    '<span style="font-size:11px;color:var(--text-dim)">Sin conciliar</span>'+
+                '</div>'+
+                '<div style="font-size:10.5px;color:var(--text-dim);margin-top:5px;line-height:1.5">'+
+                    'Esta cuenta no lleva conciliación: la venta con tarjeta cuenta en el saldo desde que capturas el corte.</div>'+
+                '<button onclick="_tpvEncender(\''+_cid+'\')" style="margin-top:8px;background:transparent;'+
+                    'border:1px solid var(--border);color:var(--text-muted);border-radius:7px;padding:6px 11px;font-size:11.5px;cursor:pointer">'+
+                    '🏦 Empezar a conciliar esta cuenta</button>'+
+            '</div>';
+        }
+        var d=EtaaxCore.tpvDelCorte(c, abonos, _cid);
         var cuadra=Math.abs(d.falta)<0.005;
         var col=cuadra?'var(--green)':(d.conciliado>0?'var(--accent)':'var(--text-dim)');
         var mis=(_abonosTpv()||[]).filter(function(x){
@@ -4191,9 +4238,13 @@ function _tpvBloqueCorte(c){
                         '</span></div>';
                 }).join('')+'</div>'
               : '')+
-            '<button onclick="_tpvAbrir(\''+c.id+'\',\''+(t.cuentaId||'')+'\')" '+
+            '<button onclick="_tpvAbrir(\''+c.id+'\',\''+_cid+'\')" '+
                 'style="margin-top:9px;width:100%;background:transparent;border:1px dashed var(--border2,var(--border));color:var(--accent);'+
                 'border-radius:8px;padding:8px;font-size:12px;cursor:pointer">➕ Conciliar un abono de esta cuenta</button>'+
+            '<button onclick="_tpvApagar(\''+_cid+'\')" style="margin-top:6px;width:100%;background:transparent;'+
+                'border:none;color:var(--text-dim);font-size:10.5px;cursor:pointer;padding:4px" '+
+                'title="La venta con tarjeta volverá a contar en el saldo desde que capturas el corte">'+
+                'No quiero conciliar esta cuenta</button>'+
         '</div>';
     }).join('');
     return '<div>'+
@@ -6325,14 +6376,27 @@ function setMetodoBanco(sub,btn){
     _gCuentaBancoUI();
 }
 
-/* El selector de previsión solo aparece si hay dinero apartado: ofrecer pagar
-   con una previsión vacía es ofrecer algo que no existe. */
+/* El selector SIEMPRE se ve. Antes se escondía cuando no había nada apartado
+   —para no ofrecer algo que no existe— pero escondido es indistinguible de
+   inexistente: nadie encontraba la función. Ahora, sin apartados, se ve
+   desactivado y dice cómo apartar. */
 function _gPrevPoblar(sel){
     var e=document.getElementById('gPrevision'); if(!e) return;
     var lista=_prevConSaldo();
     var wrap=document.getElementById('gPrevWrap');
-    if(!lista.length){ if(wrap) wrap.style.display='none'; e.innerHTML='<option value=""></option>'; return; }
     if(wrap) wrap.style.display='';
+    if(!lista.length){
+        e.innerHTML='<option value="">— Todavía no hay dinero apartado —</option>';
+        e.value=''; e.disabled=true;
+        document.getElementById('gPrevHint').innerHTML=
+            'Una previsión es dinero que <b>apartas antes</b> (aguinaldo, impuestos, mantenimiento) y que gastas después. '+
+            'Primero se aparta y luego se etiqueta el gasto que lo usa.'+
+            '<div style="margin-top:6px"><button type="button" onclick="_gIrApartar()" '+
+            'style="background:transparent;border:1px solid var(--accent);color:var(--accent);border-radius:7px;'+
+            'padding:6px 11px;font-size:11.5px;cursor:pointer">🔮 Apartar dinero para una previsión</button></div>';
+        return;
+    }
+    e.disabled=false;
     e.innerHTML='<option value="">— No, es un gasto normal —</option>'
         + lista.map(function(x){
             return '<option value="'+x.id+'">🔮 '+_escV(x.nombre)+' · '+fmtM(x.saldo)+' respaldado</option>';
@@ -6341,10 +6405,30 @@ function _gPrevPoblar(sel){
     if(e.selectedIndex<0) e.selectedIndex=0;
     _gPrevUI();
 }
+/* Apartar no es un gasto —el dinero no sale del negocio—, así que se captura en
+   el modal de movimientos, no aquí. Este atajo lleva para allá sin que el usuario
+   tenga que saber dónde vive. */
+function _gIrApartar(){
+    var m=document.getElementById('modalGasto'); if(m) m.classList.remove('open');
+    abrirModalDeposito();
+    var dSel=document.getElementById('depDestino2');
+    if(dSel){
+        for(var i=0;i<dSel.options.length;i++){
+            if(dSel.options[i].value.indexOf('prev:')===0){ dSel.selectedIndex=i; break; }
+        }
+    }
+    var oSel=document.getElementById('depOrigen'); if(oSel) oSel.value='caja_fuerte';
+    var cEl=document.getElementById('depConcepto'); if(cEl && !cEl.value) cEl.value='Apartado para previsión';
+    _depMov();
+}
 function _gPrevUI(){
     var e=document.getElementById('gPrevision'), h=document.getElementById('gPrevHint');
     if(!e||!h) return;
-    if(!e.value){ h.textContent=''; return; }
+    if(!e.value){
+        h.innerHTML='Déjalo así si es un gasto normal. Elige una previsión solo cuando este pago '+
+            'sale de dinero que ya habías apartado.';
+        return;
+    }
     var x=_prevConSaldo().find(function(p){return p.id===e.value;});
     var monto=n((document.getElementById('gMonto')||{}).value);
     h.innerHTML='El gasto sale igual de tu caja o tu banco; lo que además baja es el respaldo de esta previsión, '
