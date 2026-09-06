@@ -843,12 +843,18 @@
         <div class="dx-win-hdr"><div class="dx-win-title">💸 Depósitos y Retiros</div><button class="dx-win-close" onclick="dxCerrar('depositos')">✕ Cerrar</button></div>
         <div class="dx-win-body" id="dxPanel_depositos">
 <div class="dxp" id="dep_dxp"><div class="dxp-tabs"><button class="dxp-tab" onclick="dxpTipo('dep','dia',this)">Día</button><button class="dxp-tab" onclick="dxpTipo('dep','semana',this)">Semana</button><button class="dxp-tab active" onclick="dxpTipo('dep','mes',this)">Mes</button><button class="dxp-tab" onclick="dxpTipo('dep','rango',this)">Rango</button></div><input type="date" id="dep_val" onchange="dxpChange('dep')"><input type="date" id="dep_end" style="display:none" onchange="dxpChange('dep')"><span class="dxp-semana" id="dep_sem"></span></div>
-<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"><button class="btn-deposito" id="btnDepositar" onclick="abrirModalDeposito()">💸 Depositar</button><button class="btn-deposito" id="btnVerDepositos" style="background:rgba(120,160,240,.1);border-color:rgba(120,160,240,.3);color:var(--blue)" onclick="abrirVerDepositos()">📋 Vista completa</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxImprimir('Depósitos y retiros','tablaDepositos')">🖨️ Imprimir</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxCSV('Depósitos y retiros','tablaDepositos')">⬇️ CSV</button></div>
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px"><button class="btn-deposito" id="btnDepositar" onclick="abrirModalDeposito()">💸 Depositar</button><button class="btn-deposito" id="btnRetirar" style="background:rgba(224,90,58,.1);border-color:rgba(224,90,58,.3);color:#ff9a9a" onclick="abrirModalRetiro()">📤 Retirar</button><button class="btn-deposito" id="btnApartarPrev" style="background:rgba(139,92,246,.1);border-color:rgba(139,92,246,.35);color:var(--viol,#8b5cf6)" onclick="abrirModalApartar()">🔮 Hacer previsión</button><button class="btn-deposito" id="btnVerDepositos" style="background:rgba(120,160,240,.1);border-color:rgba(120,160,240,.3);color:var(--blue)" onclick="abrirVerDepositos()">📋 Vista completa</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxImprimir('Depósitos y retiros','tablaDepositos')">🖨️ Imprimir</button><button class="btn-ghost" style="font-size:11px;padding:6px 12px" onclick="dxCSV('Depósitos y retiros','tablaDepositos')">⬇️ CSV</button></div>
             <!-- Vistas: todos / solo depósitos / solo retiros -->
             <div class="dxp-tabs" style="display:inline-flex;margin-bottom:12px">
                 <button class="dxp-tab active" onclick="depVista('todos',this)">Todos</button>
                 <button class="dxp-tab" onclick="depVista('dep',this)">➕ Ver depósitos</button>
                 <button class="dxp-tab" onclick="depVista('ret',this)">📤 Ver retiros</button>
+                <button class="dxp-tab" onclick="depVista('prev',this)">🔮 Ver previsiones</button>
+            </div>
+            <div style="display:inline-flex;align-items:center;gap:8px;margin:0 0 12px 12px">
+                <label for="depFiltroCat" style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim)">Categoría</label>
+                <select id="depFiltroCat" onchange="renderDepositos()"
+                    style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 10px;font-size:12px"></select>
             </div>
             <div class="card" id="cardDepositos" style="margin-top:4px">
                 <div class="card-header" style="justify-content:space-between">
@@ -1521,7 +1527,7 @@
 <div class="modal-overlay" id="modalDeposito" onclick="if(event.target===this)cerrarModalDeposito()">
   <div class="modal-corte" style="max-width:600px">
     <div class="modal-header">
-        <h2>💸 Depósito / Retiro</h2>
+        <h2 id="depModalTitulo">💸 Depósito / Retiro</h2>
         <button class="modal-close" onclick="cerrarModalDeposito()">✕</button>
     </div>
     <div class="modal-body">
@@ -1543,17 +1549,7 @@
             </div>
             <div id="depMovHint" style="font-size:10.5px;color:var(--text-dim);margin:-4px 0 10px;line-height:1.5"></div>
             <div class="fg"><label>Categoría</label>
-                <select id="depCategoria">
-                    <option value="">— Sin categoría —</option>
-                    <option>Venta del día</option>
-                    <option>Aportación de socio</option>
-                    <option>Préstamo</option>
-                    <option>Pago a proveedor</option>
-                    <option>Retiro de utilidades</option>
-                    <option>Retiro de socio</option>
-                    <option>Emergencia</option>
-                    <option>Otro</option>
-                </select>
+                <select id="depCategoria" onchange="_depCatChange()"></select>
             </div>
             <div class="fg"><label>Concepto</label>
                 <input type="text" id="depConcepto" placeholder="Descripción del depósito…">
@@ -2689,14 +2685,23 @@ function depVista(v,btn){
     _depVista=v;
     if(btn&&btn.parentElement){ var t=btn.parentElement.querySelectorAll('.dxp-tab'); for(var i=0;i<t.length;i++)t[i].classList.remove('active'); btn.classList.add('active'); }
     var tit=document.getElementById('depCardTitulo');
-    if(tit) tit.textContent = v==='dep' ? '➕ Depósitos registrados' : v==='ret' ? '📤 Retiros registrados' : '💸 Movimientos registrados';
+    if(tit) tit.textContent = v==='dep' ? '➕ Depósitos registrados'
+                            : v==='ret' ? '📤 Retiros registrados'
+                            : v==='prev'? '🔮 Apartados en previsiones'
+                            : '💸 Movimientos registrados';
     renderDepositos();
 }
 function renderDepositos(){
+    _depPobFiltroCat();
     var _rd=dxpRango('dep');
     var deps=loadDep().filter(function(d){return inRange(d.fecha,_rd.from,_rd.to);});
     if(_depVista==='ret') deps=deps.filter(_esRetiro);
-    else if(_depVista==='dep') deps=deps.filter(function(d){return !_esRetiro(d);});
+    else if(_depVista==='prev') deps=deps.filter(EtaaxCore.esApartado);
+    else if(_depVista==='dep') deps=deps.filter(function(d){return !_esRetiro(d) && !EtaaxCore.esApartado(d);});
+    /* Filtro por categoría. "Sin categoría" es una opción de verdad: los
+       movimientos sin clasificar son justo los que hay que ir a revisar. */
+    var _fc=(document.getElementById('depFiltroCat')||{}).value||'';
+    if(_fc) deps=deps.filter(function(d){ return _fc==='__sin' ? !(d.categoria||'') : (d.categoria||'')===_fc; });
     deps=deps.sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
     var tbody=document.getElementById('depTbody');
     var empty=document.getElementById('depEmpty');
@@ -4347,12 +4352,14 @@ document.addEventListener('DOMContentLoaded',function(){
    ══════════════════════════════════════════════════════════ */
 function abrirModalDeposito(id){
     if(!_puede('ventas.hacerDeposito')) return;
+    var _t=document.getElementById('depModalTitulo');
+    if(_t) _t.textContent='💸 Depósito / Retiro';   // los atajos lo re-titulan después
     var d=id?(loadDep().find(function(x){return x.id===id;})||{}):{};
     document.getElementById('depId').value=id||'';
     document.getElementById('depFecha').value=d.fecha||todayStr();
     document.getElementById('depMonto').value=d.monto||'';
+    _depPobCategorias(d.categoria||'');
     _depPoblarSelects(d);
-    document.getElementById('depCategoria').value=d.categoria||'';
     document.getElementById('depConcepto').value=d.concepto||'';
     document.getElementById('depFinalidad').value=d.finalidad||'';
     document.getElementById('depAutoriza').value=d.autorizadoPor||'';
@@ -4375,6 +4382,92 @@ function pagarTarjetaCredito(tcId){
     }
     var oSel=document.getElementById('depOrigen'); if(oSel) oSel.value='caja_fuerte';
     var cEl=document.getElementById('depConcepto'); if(cEl && !cEl.value) cEl.value='Pago tarjeta de crédito';
+    _depMov();
+}
+
+/* ── Categorías de movimiento ──────────────────────────────────────────────
+   Las de fábrica más las que el negocio agregue. Se guardan por negocio: cada
+   uno mueve el dinero por sus propias razones, y obligarlos a llamarle "Otro" a
+   todo deja el filtro inservible. */
+var _DEP_CATS_BASE = ['Venta del día','Aportación de socio','Préstamo','Pago a proveedor',
+                      'Retiro de utilidades','Retiro de socio','Emergencia','Otro'];
+function _depCatsKey(){ return 'etaax_'+(getNegocioActivo()||'')+'_dep_categorias'; }
+function _depCatsPropias(){
+    try { return JSON.parse(localStorage.getItem(_depCatsKey())||'[]')||[]; } catch(e){ return []; }
+}
+function _depCats(){
+    var out=_DEP_CATS_BASE.slice(), pr=_depCatsPropias();
+    pr.forEach(function(c){ if(c && out.indexOf(c)<0) out.push(c); });
+    return out;
+}
+function _depCatsGuardar(lista){
+    try { localStorage.setItem(_depCatsKey(), JSON.stringify(lista)); } catch(e){}
+}
+function _depPobCategorias(sel){
+    var e=document.getElementById('depCategoria'); if(!e) return;
+    var v=(sel!=null?sel:e.value)||'';
+    e.innerHTML='<option value="">— Sin categoría —</option>'
+        + _depCats().map(function(c){ return '<option value="'+_escV(c)+'">'+_escV(c)+'</option>'; }).join('')
+        + '<option value="__nueva">➕ Agregar otra categoría…</option>';
+    e.value=v; if(e.selectedIndex<0) e.selectedIndex=0;
+}
+/* El filtro ofrece las categorías del catálogo MÁS las que ya aparecen en los
+   movimientos: si alguien capturó una categoría que después se quitó, sus
+   movimientos seguirían ahí y sin forma de encontrarlos. */
+function _depPobFiltroCat(){
+    var e=document.getElementById('depFiltroCat'); if(!e) return;
+    var v=e.value||'';
+    var usadas={}; (loadDep()||[]).forEach(function(d){ if(d&&d.categoria) usadas[d.categoria]=1; });
+    var lista=_depCats().slice();
+    Object.keys(usadas).forEach(function(c){ if(lista.indexOf(c)<0) lista.push(c); });
+    e.innerHTML='<option value="">Todas</option>'
+        + lista.map(function(c){ return '<option value="'+_escV(c)+'">'+_escV(c)+'</option>'; }).join('')
+        + '<option value="__sin">— Sin categoría —</option>';
+    e.value=v; if(e.selectedIndex<0) e.selectedIndex=0;
+}
+function _depCatChange(){
+    var e=document.getElementById('depCategoria'); if(!e) return;
+    if(e.value!=='__nueva') return;
+    var nom=prompt('¿Cómo se llama la nueva categoría?');
+    nom=(nom||'').trim();
+    if(!nom){ _depPobCategorias(''); return; }
+    if(_depCats().some(function(c){ return c.toLowerCase()===nom.toLowerCase(); })){
+        // Ya existe: se elige la que hay en vez de crear una gemela que parte el filtro.
+        var ya=_depCats().find(function(c){ return c.toLowerCase()===nom.toLowerCase(); });
+        _depPobCategorias(ya); return;
+    }
+    var pr=_depCatsPropias(); pr.push(nom); _depCatsGuardar(pr);
+    _depPobCategorias(nom);
+    _depPobFiltroCat();
+}
+
+/* Tres puertas al MISMO modal, ya apuntando a lo que se va a hacer. Todo esto se
+   podía hacer desde "Depositar" cambiando los selectores, pero nadie encontraba
+   cómo: un retiro y un apartado no se piensan como "un depósito con otro destino". */
+function abrirModalRetiro(){
+    if(!_puede('ventas.hacerDeposito')) return;
+    abrirModalDeposito();
+    var dSel=document.getElementById('depDestino2'); if(dSel) dSel.value='retiro';
+    var oSel=document.getElementById('depOrigen');   if(oSel) oSel.value='caja_fuerte';
+    var t=document.getElementById('depModalTitulo'); if(t) t.textContent='📤 Registrar retiro';
+    _depMov();
+}
+function abrirModalApartar(){
+    if(!_puede('ventas.hacerDeposito')) return;
+    abrirModalDeposito();
+    var dSel=document.getElementById('depDestino2');
+    if(dSel){
+        // Se fija el VALOR, no el índice: el índice se mueve cuando cambia el
+        // catálogo de previsiones, y el valor es lo que después se guarda.
+        var destino='prev:'+EtaaxCore.PREV_GENERAL;
+        for(var i=0;i<dSel.options.length;i++){
+            if(dSel.options[i].value.indexOf('prev:')===0){ destino=dSel.options[i].value; break; }
+        }
+        dSel.value=destino;
+    }
+    var oSel=document.getElementById('depOrigen'); if(oSel) oSel.value='caja_fuerte';
+    var cEl=document.getElementById('depConcepto'); if(cEl && !cEl.value) cEl.value='Apartado para previsión';
+    var t=document.getElementById('depModalTitulo'); if(t) t.textContent='🔮 Apartar para una previsión';
     _depMov();
 }
 
@@ -4481,7 +4574,8 @@ function guardarDeposito(){
         id:id, negocioId:getNegocioActivo(), fecha:fecha, monto:monto,
         origen:origen, origenCuentaId:origenCuentaId,
         destino:destino, destinoCuentaId:destinoCuentaId, tcId:tcId,
-        categoria:document.getElementById('depCategoria').value||'',
+        categoria:(function(){ var v=document.getElementById('depCategoria').value||'';
+                    return v==='__nueva'?'':v; })(),   // el marcador nunca se guarda
         concepto:concepto,
         finalidad:document.getElementById('depFinalidad').value.trim(),
         autorizadoPor:document.getElementById('depAutoriza').value.trim(),
@@ -5807,7 +5901,13 @@ function _ensurePagoNomModal(){
           +'<div class="fg-row-3" style="align-items:end">'
             +'<div class="fg"><label>Tipo</label><select id="pnCptTipo" onchange="_pnCptTipoChange()"><option value="bono">🎁 Bono</option><option value="sancion">⛔ Sanción / descuento</option><option value="horas">⏱️ Horas extras</option><option value="festivo">🎉 Día festivo</option><option value="doble">2️⃣ Día doble</option><option value="prima">☀️ Prima dominical</option><option value="otro">📋 Otro</option></select></div>'
             +'<div class="fg" id="pnCptCantWrap" style="display:none"><label id="pnCptCantLbl">Horas</label><input type="number" id="pnCptCant" min="0" step="1" placeholder="0"></div>'
-            +'<div class="fg"><label>Monto ($)</label><input type="number" id="pnCptMonto" min="0" step="0.01" placeholder="0.00"></div>'
+            +'<div class="fg"><label id="pnCptMontoLbl">Monto ($)</label><input type="number" id="pnCptMonto" min="0" step="0.01" placeholder="0.00"></div>'
+          +'</div>'
+          +'<div class="fg" id="pnCptMotivoWrap" style="display:none;margin-top:8px">'
+            +'<label>Motivo de la sanción</label>'
+            +'<input type="text" id="pnCptMotivo" maxlength="120" placeholder="Retardo · faltante de caja · ausencia sin avisar…">'
+            +'<div style="font-size:10.5px;color:var(--text-dim);margin-top:4px;line-height:1.45">'
+              +'Queda escrito en el recibo. Un descuento sin motivo es una discusión con una persona dentro de un mes.</div>'
           +'</div>'
           +'<div class="fg" id="pnCptMetodoWrap" style="margin-top:8px"><label>¿Cómo se paga este concepto?</label>'
             +'<select id="pnCptMetodo" onchange="_pnCptMetodoChange()"><option value="mismo">Mismo método que la nómina</option>'
@@ -6037,10 +6137,27 @@ function _pnCptTipoChange(){
        método pagarla solo confunde. */
     var esSancion = (tipo==='sancion');
     var mw=document.getElementById('pnCptMetodoWrap'); if(mw) mw.style.display=esSancion?'none':'';
+    var mo=document.getElementById('pnCptMotivoWrap'); if(mo) mo.style.display=esSancion?'':'none';
+    var lblM=document.getElementById('pnCptMontoLbl');
+    if(lblM) lblM.textContent=esSancion?'Cuánto se descuenta ($)':'Monto ($)';
     if(esSancion){
         var met=document.getElementById('pnCptMetodo'); if(met) met.value='mismo';
         var fw=document.getElementById('pnCptFechaWrap'); if(fw) fw.style.display='none';
+        var mi=document.getElementById('pnCptMotivo'); if(mi) setTimeout(function(){mi.focus();},40);
     }
+}
+/* Aviso pegado al campo, en vez de un cuadro del navegador encima de todo. */
+function _pnCptMotivoError(txt){
+    var mi=document.getElementById('pnCptMotivo'), w=document.getElementById('pnCptMotivoWrap');
+    if(!mi||!w) return;
+    var av=document.getElementById('pnCptMotivoAviso');
+    if(!av){
+        av=document.createElement('div'); av.id='pnCptMotivoAviso';
+        av.style.cssText='font-size:11px;color:#ff9a9a;margin-top:5px;display:none';
+        w.appendChild(av);
+    }
+    av.textContent=txt||''; av.style.display=txt?'':'none';
+    mi.style.borderColor=txt?'#ff9a9a':'';
 }
 function _pnCptCalcular(){
     var tipo=document.getElementById('pnCptTipo').value;
@@ -6076,10 +6193,15 @@ function _pnCptAgregar(){
        un recibo de nómina es una discusión con una persona dentro de un mes, y
        para entonces ya nadie se acuerda. */
     if(tipo==='sancion'){
-        var motivo=prompt('¿Por qué es la sanción?\n\nQueda escrito en el recibo, así que ponlo claro:\nretardo, faltante de caja, ausencia sin avisar…');
-        if(motivo===null) return;                       // cancelar no aplica nada
-        motivo=(motivo||'').trim();
-        if(!motivo){ alert('La sanción necesita un motivo: va en el recibo del colaborador.'); return; }
+        var mi=document.getElementById('pnCptMotivo');
+        var motivo=((mi&&mi.value)||'').trim();
+        if(!motivo){
+            /* Se señala el campo en vez de sacar un cuadro del navegador: el aviso
+               vive donde está el error, que es donde el usuario está mirando. */
+            _pnCptMotivoError('La sanción necesita un motivo: va escrito en el recibo.');
+            if(mi) mi.focus();
+            return;
+        }
         lbl='Sanción · '+motivo;
         monto=-Math.abs(monto);                          // resta del total
     }
@@ -6091,6 +6213,7 @@ function _pnCptAgregar(){
     var fecha=(pago!=='mismo')?(((document.getElementById('pnCptFecha')||{}).value)||todayStr()):'';
     _pagoNomConceptos.push({concepto:lbl, monto:monto, pago:pago, fecha:fecha});
     document.getElementById('pnCptCant').value=''; document.getElementById('pnCptMonto').value='';
+    var _mi=document.getElementById('pnCptMotivo'); if(_mi){ _mi.value=''; _pnCptMotivoError(''); }
     var met=document.getElementById('pnCptMetodo'); if(met) met.value='mismo';
     var fw=document.getElementById('pnCptFechaWrap'); if(fw) fw.style.display='none';
     document.getElementById('pnCptTipo').value='bono'; _pnCptTipoChange();
@@ -6410,16 +6533,7 @@ function _gPrevPoblar(sel){
    tenga que saber dónde vive. */
 function _gIrApartar(){
     var m=document.getElementById('modalGasto'); if(m) m.classList.remove('open');
-    abrirModalDeposito();
-    var dSel=document.getElementById('depDestino2');
-    if(dSel){
-        for(var i=0;i<dSel.options.length;i++){
-            if(dSel.options[i].value.indexOf('prev:')===0){ dSel.selectedIndex=i; break; }
-        }
-    }
-    var oSel=document.getElementById('depOrigen'); if(oSel) oSel.value='caja_fuerte';
-    var cEl=document.getElementById('depConcepto'); if(cEl && !cEl.value) cEl.value='Apartado para previsión';
-    _depMov();
+    abrirModalApartar();
 }
 function _gPrevUI(){
     var e=document.getElementById('gPrevision'), h=document.getElementById('gPrevHint');

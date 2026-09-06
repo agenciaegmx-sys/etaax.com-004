@@ -3069,15 +3069,16 @@ console.log('\n══ SUITE AA · Bonos automáticos y sanciones (diario.html) �
         eq(semana[1].concepto.indexOf('prorrateado'), -1, 'etiqueta'));
 
     /* ══ La sanción capturada a mano, por el camino real del modal ══ */
+    /* El motivo se captura en el formulario, no en un cuadro del navegador. */
     const cap = (tipo, monto, motivo) => {
         A._pagoNomStaff = { id:'s1', nombre:'Ana' };
         A._pagoNomConceptos = [];
-        A.prompt = () => motivo;
         A.alert  = () => {};
-        A.document.getElementById('pnCptTipo').value  = tipo;
-        A.document.getElementById('pnCptMonto').value = monto;
-        A.document.getElementById('pnCptCant').value  = '';
+        A.document.getElementById('pnCptTipo').value   = tipo;
+        A.document.getElementById('pnCptMonto').value  = monto;
+        A.document.getElementById('pnCptCant').value   = '';
         A.document.getElementById('pnCptMetodo').value = 'mismo';
+        A.document.getElementById('pnCptMotivo').value = motivo || '';
         A._pnCptAgregar();
         return A._pagoNomConceptos[0];
     };
@@ -3091,22 +3092,35 @@ console.log('\n══ SUITE AA · Bonos automáticos y sanciones (diario.html) �
 
     /* Sin motivo no se aplica: un descuento anónimo en un recibo es una discusión
        con una persona dentro de un mes. */
+    let regaños = 0;
     A._pagoNomStaff = { id:'s1' }; A._pagoNomConceptos = [];
-    A.prompt = () => '   '; A.alert = () => {};
-    A.document.getElementById('pnCptTipo').value = 'sancion';
-    A.document.getElementById('pnCptMonto').value = 200;
+    A.alert = () => { regaños++; };
+    A.document.getElementById('pnCptTipo').value   = 'sancion';
+    A.document.getElementById('pnCptMonto').value  = 200;
+    A.document.getElementById('pnCptMotivo').value = '   ';
     A._pnCptAgregar();
     test('una sanción sin motivo no se aplica', () => eq(A._pagoNomConceptos.length, 0, 'sin motivo'));
+    /* Y el reclamo vive PEGADO al campo, no en un cuadro del navegador encima de
+       todo: el aviso va donde el usuario está mirando. */
+    test('el reclamo aparece junto al campo, no en un cuadro del navegador', () =>
+        eq(A.document.getElementById('pnCptMotivoAviso').textContent.indexOf('motivo') > -1, true, 'inline'));
+    test('…y no se saca ninguna alerta del navegador', () => eq(regaños, 0, 'sin alert'));
 
-    /* Cancelar el aviso del motivo cancela la sanción entera, y en silencio:
-       quien se arrepiente no necesita que lo regañen. */
-    let regaños = 0;
-    A._pagoNomConceptos = []; A.prompt = () => null; A.alert = () => { regaños++; };
-    A.document.getElementById('pnCptTipo').value = 'sancion';
-    A.document.getElementById('pnCptMonto').value = 200;
-    A._pnCptAgregar();
-    test('cancelar el motivo no aplica ninguna sanción', () => eq(A._pagoNomConceptos.length, 0, 'cancelar'));
-    test('…y cancelar no regaña al usuario', () => eq(regaños, 0, 'alert'));
+    /* El campo de motivo solo se ve cuando es una sanción: en un bono no pinta nada. */
+    A.document.getElementById('pnCptTipo').value = 'sancion'; A._pnCptTipoChange();
+    /* El campo tiene que existir en la página: el arnés crea elementos al vuelo,
+       así que sin mirar el HTML esto pasaría con el campo borrado. */
+    test('el campo de motivo existe de verdad en la página', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+        return eq(src.indexOf("id=\"pnCptMotivo\"") > -1, true, 'markup');
+    });
+    test('el campo de motivo aparece al elegir sanción', () =>
+        eq(A.document.getElementById('pnCptMotivoWrap').style.display, '', 'visible'));
+    test('…y el monto se rotula como descuento', () =>
+        eq(A.document.getElementById('pnCptMontoLbl').textContent.indexOf('descuenta') > -1, true, 'rótulo'));
+    A.document.getElementById('pnCptTipo').value = 'bono'; A._pnCptTipoChange();
+    test('en un bono, el motivo no estorba', () =>
+        eq(A.document.getElementById('pnCptMotivoWrap').style.display, 'none', 'oculto'));
 
     /* ══ Reponer los bonos al mover el periodo ══
        El bono "por día" depende de los días, así que se recalcula al cambiarlos.
@@ -3666,6 +3680,8 @@ console.log('\n══ SUITE AE · Apartar y etiquetar en Diario (administrativo/
        que no está deja la pantalla muda sin decir por qué. */
     test('el camino para apartar existe y lleva a apartar', () => {
         setVar(A, '_cachePrevs', [{ id:'p1', concepto:'Aguinaldo', estado:'en_curso' }]);
+        // Sin contexto de sesión, _puede() niega todo: el dueño sí lo trae.
+        A._storage['etaax_ctx'] = JSON.stringify({ ctxType:'owner', negId:'negT' });
         A._gIrApartar();
         const dest = $('depDestino2').value;
         return eq(dest.indexOf('prev:') === 0, true, 'destino=' + dest);
@@ -4126,6 +4142,122 @@ console.log('\n══ SUITE AJ · Apagar la conciliación de una cuenta ══')
     const auto = C.tpvConciliacion(cortes, [], 'a', '2026-09-06', null);
     test('en automático sin abonos, nada cambia', () => eq(auto.aportaBanco, 7800 + 5850, 'sin cambio'));
     test('…y no inventa tránsito', () => eq(auto.transito, 0, 'tránsito'));
+}
+
+/* ═══════════ SUITE AK · DEPÓSITOS, RETIROS Y APARTADOS (diario.html) ═════════
+   Retirar y apartar se podían hacer desde "Depositar" cambiando los selectores,
+   pero nadie los encontraba: un retiro no se piensa como "un depósito con otro
+   destino". Ahora cada uno tiene su puerta, al mismo modal.                    */
+console.log('\n══ SUITE AK · Depósitos, retiros y apartados (administrativo/diario.html) ══');
+{
+    const $ = (id) => A.document.getElementById(id);
+    A._storage['etaax_ctx'] = JSON.stringify({ ctxType:'owner', negId:'negT' });
+    setVar(A, '_cachePrevs', [{ id:'p1', concepto:'Aguinaldo', estado:'en_curso' }]);
+    setVar(A, '_cuentasBancarias', []);
+
+    /* ── Cada botón deja el modal listo para lo suyo ── */
+    A.abrirModalRetiro();
+    test('Retirar deja el destino en retiro', () => eq($('depDestino2').value, 'retiro', 'destino'));
+    test('…y dice de dónde sale el dinero', () => eq($('depOrigen').value, 'caja_fuerte', 'origen'));
+    test('…y el modal se titula como lo que es', () =>
+        eq($('depModalTitulo').textContent.indexOf('retiro') > -1, true, 'título'));
+    /* El aviso importa: en un retiro el dinero DEJA el negocio. */
+    test('el modal avisa que el dinero deja el negocio', () =>
+        eq($('depMovHint').textContent.indexOf('deja el negocio') > -1, true, 'aviso'));
+
+    A.abrirModalApartar();
+    test('Hacer previsión apunta a una previsión', () =>
+        eq($('depDestino2').value.indexOf('prev:'), 0, 'destino'));
+    test('…y el modal se titula como lo que es', () =>
+        eq($('depModalTitulo').textContent.indexOf('Apartar') > -1, true, 'título'));
+    /* Y sigue diciendo lo más importante: apartar NO mueve el dinero. */
+    test('apartar sigue avisando que el dinero no se mueve', () =>
+        eq($('depMovHint').textContent.indexOf('no se mueve') > -1, true, 'aviso'));
+
+    /* Abrir el modal normal vuelve al título genérico: si se quedara el del
+       atajo, el usuario creería que está haciendo otra cosa. */
+    A.abrirModalDeposito();
+    test('el modal normal recupera su título', () =>
+        eq($('depModalTitulo').textContent.indexOf('Depósito') > -1, true, 'genérico'));
+
+    /* ── Categorías propias ── */
+    delete A._storage['etaax_negT_dep_categorias'];
+    A._depPobCategorias('');
+    const base = $('depCategoria').options.map(o => o.value);
+    test('las categorías de fábrica están', () => eq(base.indexOf('Préstamo') > -1, true, 'base'));
+    test('y se ofrece agregar otra', () => eq(base.indexOf('__nueva') > -1, true, 'nueva'));
+
+    A.prompt = () => 'Mantenimiento equipo';
+    $('depCategoria').value = '__nueva';
+    A._depCatChange();
+    test('la categoría nueva se agrega y queda elegida', () =>
+        eq($('depCategoria').value, 'Mantenimiento equipo', 'elegida'));
+    test('…y se guarda para la próxima vez', () =>
+        eq(A._depCats().indexOf('Mantenimiento equipo') > -1, true, 'guardada'));
+
+    /* Una categoría que ya existe no se duplica: dos gemelas parten el filtro. */
+    A.prompt = () => '  préstamo ';
+    $('depCategoria').value = '__nueva';
+    A._depCatChange();
+    test('una categoría repetida no se duplica', () =>
+        eq(A._depCats().filter(c => c.toLowerCase() === 'préstamo').length, 1, 'una sola'));
+    test('…y se elige la que ya existía', () => eq($('depCategoria').value, 'Préstamo', 'existente'));
+
+    /* Cancelar no deja el marcador puesto: guardarlo escribiría "__nueva" como
+       categoría de verdad. */
+    A.prompt = () => null;
+    $('depCategoria').value = '__nueva';
+    A._depCatChange();
+    test('cancelar deja la categoría vacía, no el marcador', () => eq($('depCategoria').value, '', 'limpio'));
+
+    /* ── El filtro por categoría ── */
+    setVar(A, '_cacheDeps', [
+        { id:'m1', fecha:'2026-09-01', monto:1000, categoria:'Préstamo',   origen:'externo', destino:'caja_fuerte' },
+        { id:'m2', fecha:'2026-09-02', monto:2000, categoria:'Emergencia', origen:'caja_fuerte', destino:'retiro' },
+        { id:'m3', fecha:'2026-09-03', monto:3000, categoria:'',           origen:'externo', destino:'caja_fuerte' },
+        { id:'m4', fecha:'2026-09-04', monto:4000, categoria:'Ya no existe', origen:'externo', destino:'caja_fuerte' }
+    ]);
+    A._depPobFiltroCat();
+    const filtro = $('depFiltroCat').options.map(o => o.value);
+    test('el filtro ofrece "todas"', () => eq(filtro[0], '', 'todas'));
+    test('…y una opción para lo que no tiene categoría', () =>
+        eq(filtro.indexOf('__sin') > -1, true, 'sin'));
+    /* Una categoría que ya no está en el catálogo pero SÍ en los movimientos debe
+       poder filtrarse: si no, esos movimientos quedan imposibles de encontrar. */
+    test('…y también las categorías que solo viven en los movimientos', () =>
+        eq(filtro.indexOf('Ya no existe') > -1, true, 'huérfana'));
+
+    /* Y el filtro tiene que FILTRAR, no solo ofrecer opciones. */
+    // El card trae su propio buscador de periodo; se abre a todo septiembre.
+    setVar(A, '_dxPer', { dep: { tipo:'mes', val:'2026-09', end:null } });
+    const pintado = (cat, vista) => {
+        setVar(A, '_depVista', vista || 'todos');
+        $('depFiltroCat').value = cat;
+        A.renderDepositos();
+        return $('depTbody').innerHTML;
+    };
+    let t = pintado('Préstamo');
+    test('el filtro deja solo lo de esa categoría', () =>
+        eq(t.indexOf('Préstamo') > -1 && t.indexOf('Emergencia') === -1, true, 'filtra'));
+    t = pintado('__sin');
+    test('«sin categoría» muestra justo lo que falta clasificar', () =>
+        eq(t.indexOf('$3,000.00') > -1 && t.indexOf('$1,000.00') === -1, true, 'sin'));
+    t = pintado('');
+    test('sin filtro se ven todos', () =>
+        eq(t.indexOf('$1,000.00') > -1 && t.indexOf('$4,000.00') > -1, true, 'todos'));
+
+    /* La vista "🔮 Ver previsiones": lo apartado tiene su propia lista. Un apartado
+       no es un depósito ni un retiro, así que en las otras vistas no debe salir. */
+    setVar(A, '_cacheDeps', A._cacheDeps.concat([
+        { id:'ap9', tipo:'apartado', previsionId:'p1', fondo:'caja_fuerte',
+          fecha:'2026-09-05', monto:5000, concepto:'Aparto aguinaldo' }
+    ]));
+    test('la vista de previsiones muestra solo los apartados', () => {
+        const h = pintado('', 'prev');
+        return eq(h.indexOf('$5,000.00') > -1 && h.indexOf('$1,000.00') === -1, true, 'solo apartados');
+    });
+    test('…y un apartado no se cuela entre los depósitos', () =>
+        eq(pintado('', 'dep').indexOf('$5,000.00'), -1, 'fuera'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */
