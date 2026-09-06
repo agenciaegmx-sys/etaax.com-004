@@ -3674,6 +3674,128 @@ console.log('\n══ SUITE AE · Apartar y etiquetar en Diario (administrativo/
         eq($('gPrevHint').innerHTML.indexOf('disponible no se mueve') > -1, true, 'recordatorio'));
 }
 
+/* ═══════════ SUITE AF · LA CERVEZA SE CUENTA POR PIEZA (recetas/inventarios.js) ══
+   El Resultado en pantalla decía 117 pza y el desglose impreso 14.6 bot: el mismo
+   dato en una unidad que no era la de nadie. El impreso dividía entre las "copas
+   por botella" que el catálogo le hereda a una cerveza de 355 ml.               */
+console.log('\n══ SUITE AF · La cerveza se cuenta por pieza (recetas/inventarios.js) ══');
+{
+    /* La cerveza del caso real: 355 ml de contenido y una copa heredada que da
+       8 copas por botella. Es la que convertía 117 en 14.6. */
+    const cerveza = { tipo:'pza', contNeto:355, copaML:44.375 };
+    const licor   = { tipo:'copa', contNeto:750, copaML:50 };
+    const carne   = { tipo:'peso', baseUnit:'kg', contNeto:1000, copaML:50 };
+
+    test('una cerveza NO tiene copas por botella: se cuenta por pieza', () =>
+        eq(B._copasBotDe(cerveza, 1), 0, 'pza'));
+    test('117 piezas siguen siendo 117, no 14.6', () => {
+        const cb = B._copasBotDe(cerveza, 1);
+        return eq(cb > 0 ? 117 / cb : 117, 117, 'piezas');
+    });
+    test('un licor sí tiene copas por botella', () => eq(B._copasBotDe(licor, 1), 15, 'copa'));
+    test('lo que se pesa tampoco se divide en copas', () => eq(B._copasBotDe(carne, 1), 0, 'peso'));
+
+    /* Un licor sin contenido capturado: quien MULTIPLICA necesita 1 (una botella
+       cuenta como una unidad); si diera 0 se borraría la venta por botella. */
+    const licorSinDato = { tipo:'copa', contNeto:0, copaML:0 };
+    test('licor sin contenido: la botella cuenta como una unidad al multiplicar', () =>
+        eq(B._copasBotDe(licorSinDato, 1), 1, 'default'));
+    test('…y al dividir da igual, porque dividir entre uno no mueve nada', () =>
+        eq(B._copasBotDe(licorSinDato), 0, 'sin default'));
+
+    /* Sumar "botellas" de una fila de piezas debe devolver las piezas: por aquí
+       pasan la existencia y el teórico del compuesto en pantalla. */
+    test('sumar botellas de una fila de piezas devuelve las piezas', () =>
+        eq(B._botellasDeFila(cerveza, 117), 117, 'piezas'));
+    test('…y de un licor sí las convierte a botellas', () =>
+        eq(B._botellasDeFila(licor, 30), 2, 'botellas'));
+
+    /* Un compuesto cuyas presentaciones son todas de pieza ES de pieza. Iba fijo
+       en 'copa', y por eso la captura y el detalle lo rotulaban en copas. */
+    setVar(B, 'filasCaptura', [
+        { insumoId:'cz1', tipo:'pza', nombre:'XX Ámbar', contNeto:355, copaML:44.375, existenciaAnterior:60, cerradasBarra:60 },
+        { insumoId:'cz2', tipo:'pza', nombre:'XX Lager', contNeto:355, copaML:44.375, existenciaAnterior:57, cerradasBarra:57 }
+    ]);
+    const vfPza = B._virtualFilaCompuesto({ id:'c1', nombre:'XX 355 ml', miembros:['cz1','cz2'] });
+    test('un compuesto de cervezas se declara de piezas', () => eq(vfPza.tipo, 'pza', 'tipo'));
+    test('y su existencia anterior son las piezas, no piezas entre ocho', () =>
+        eq(vfPza._eaBot, 117, 'anterior'));
+
+    /* La tarjeta de desglose del Resultado: es lo que se ve al abrir un producto.
+       Rotulaba TODO compuesto en botellas, así que una caja de cervezas salía en
+       una unidad que no era la suya. */
+    const cardPza = B._step5GaleriaHTML('', {}, [vfPza]);
+    test('la tarjeta del compuesto de cervezas dice pza, no bot', () =>
+        eq(cardPza.indexOf('117 pza') > -1, true, 'pza'));
+    test('…y no lo convierte a botellas', () => eq(cardPza.indexOf('14.6 bot'), -1, 'sin bot'));
+
+    setVar(B, 'filasCaptura', [
+        { insumoId:'ron9', tipo:'copa', nombre:'Ron', contNeto:750, copaML:50, existenciaAnterior:30, cerradasBarra:2 }
+    ]);
+    const vfCopa = B._virtualFilaCompuesto({ id:'c2', nombre:'Rones', miembros:['ron9'] });
+    test('un compuesto de licores sigue siendo de copa', () => eq(vfCopa.tipo, 'copa', 'tipo'));
+    test('y su tarjeta sí se lee en botellas', () =>
+        eq(B._step5GaleriaHTML('', {}, [vfCopa]).indexOf('2 bot') > -1, true, 'bot'));
+    /* 30 copas de 50 ml en botellas de 750 = 15 copas por botella = 2 botellas. */
+    test('…y su anterior sí se lee en botellas', () => eq(vfCopa._eaBot, 2, 'botellas'));
+    /* ══ EL REPORTE IMPRESO, DE VERDAD ══
+       Lo anterior comprueba la regla; esto corre el reporte directivo entero y
+       lee el HTML que sale. Es donde Edwin vio "14.6 bot" bajo un renglón que en
+       pantalla decía 117 pza. */
+    const _htmlReporte = (compuesto, filas) => {
+        setVar(B, 'filasCaptura', filas);
+        B._storage[B._compuestosKey()] = JSON.stringify([compuesto]);
+        setVar(B, 'invActual', { id:'i1', nombre:'Barra', fecha:'2026-09-03',
+            entradasLog:[], prebatchProducidos:{}, cocktailsVendidos:{}, ventasCompuesto:{},
+            cancelaciones:[], descuentos:[], compuestos:[compuesto] });
+        let cap = '';
+        const _ap = B.document.body.appendChild;
+        B.document.body.appendChild = function (nodo) { cap = (nodo && nodo.innerHTML) || ''; };
+        /* La poda final toca el DOM real y truena con el DOM de mentira; el HTML
+           ya está armado para entonces, que es lo que se quiere mirar. */
+        const _cw = B.console.warn, _ce2 = B.console.error, _cl = B.console.log;
+        B.console.warn = B.console.error = B.console.log = function(){};   // ruido esperado
+        try { B.verReporteDirectivo(false, 'desglose'); } catch (e) {}
+        B.console.warn = _cw; B.console.error = _ce2; B.console.log = _cl;
+        B.document.body.appendChild = _ap;
+        return cap;
+    };
+
+    const htmlPza = _htmlReporte(
+        { id:'c1', nombre:'XX 355 ml', miembros:['cz1','cz2'] },
+        /* Se venden por pieza suelta Y por "botella" (que en cerveza es la pieza
+           entera): 12+5 y 14+3 = 34 piezas. */
+        [{ insumoId:'cz1', tipo:'pza', nombre:'XX Ámbar', contNeto:355, copaML:44.375,
+           existenciaAnterior:60, cerradasBarra:43, ventasCopasDirectas:12, ventasBotella:5, precioCarta:45 },
+         { insumoId:'cz2', tipo:'pza', nombre:'XX Lager', contNeto:355, copaML:44.375,
+           existenciaAnterior:57, cerradasBarra:40, ventasCopasDirectas:14, ventasBotella:3, precioCarta:45 }]);
+
+    test('el reporte impreso dice 117 pza, igual que la pantalla', () =>
+        eq(htmlPza.indexOf('117 pza') > -1, true, 'pza'));
+    /* El total del grupo también: 26 cervezas vendidas son 26 piezas. Si el
+       compuesto se declarara "de copa", ese total se calcularía por otra rama y
+       las botellas vendidas se perderían. */
+    test('el total del grupo cuenta las 34 piezas vendidas', () =>
+        eq(htmlPza.indexOf('34 pza vendidas') > -1, true, 'grupo'));
+    test('…y ya no las convierte a 14.6 bot', () => eq(htmlPza.indexOf('14.6 bot'), -1, 'sin bot'));
+    test('el compuesto de cervezas no imprime NINGUNA botella', () =>
+        eq(htmlPza.indexOf(' bot<'), -1, 'sin bot'));
+    test('ni copas: en cervezas no existen', () => eq(htmlPza.indexOf(' cop<'), -1, 'sin cop'));
+
+    /* Y el licor sigue imprimiéndose en botellas y copas: el arreglo no se llevó
+       por delante lo que sí se sirve por copa. */
+    const htmlCopa = _htmlReporte(
+        { id:'c2', nombre:'Rones', miembros:['rn1','rn2'] },
+        [{ insumoId:'rn1', tipo:'copa', nombre:'Ron Blanco', contNeto:750, copaML:50,
+           existenciaAnterior:30, cerradasBarra:2, precioCarta:120 },
+         { insumoId:'rn2', tipo:'copa', nombre:'Ron Añejo', contNeto:750, copaML:50,
+           existenciaAnterior:15, cerradasBarra:1, precioCarta:150 }]);
+    test('un compuesto de licores sí se imprime en botellas', () =>
+        eq(htmlCopa.indexOf(' bot<') > -1, true, 'bot'));
+    test('…y su diferencia en copas', () => eq(htmlCopa.indexOf(' cop<') > -1, true, 'cop'));
+
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0

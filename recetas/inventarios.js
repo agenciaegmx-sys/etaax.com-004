@@ -2324,8 +2324,20 @@ function _teoricoCompuestoCopas(comp) {
    mismo que las del otro, así que se convierte miembro por miembro con su
    propio contNeto/copaML — antes se dividía todo entre 750 ml parejo y de ahí
    salían las "cantidades raras". */
+/* Copas por botella. Solo existe en lo que se SIRVE por copa: una cerveza o un
+   refresco se cuentan por pieza, aunque el catálogo les herede un contenido y una
+   copa. Dividir entre eso convertía 117 pza en "14.6 bot" en el desglose impreso,
+   mientras el Resultado en pantalla —que sí pregunta el tipo— mostraba las 117.
+
+   `sinDato` es qué devolver cuando es de copa pero no tiene contenido capturado:
+   0 para quien solo divide (dividir o no da igual) y 1 para quien multiplica
+   (una botella cuenta como una unidad). */
+function _copasBotDe(f, sinDato) {
+    if (!f || f.tipo === 'pza' || f.tipo === 'peso') return 0;
+    return (f.contNeto > 0 && f.copaML > 0) ? f.contNeto / f.copaML : (sinDato || 0);
+}
 function _botellasDeFila(f, copas) {
-    var cb = (f && f.contNeto > 0 && f.copaML > 0) ? f.contNeto / f.copaML : 0;
+    var cb = _copasBotDe(f);            // en piezas no hay copas que dividir
     return cb > 0 ? (copas || 0) / cb : (copas || 0);
 }
 function _miembrosFila(comp) {
@@ -2348,7 +2360,11 @@ function _virtualFilaCompuesto(comp) {
     return {
         esCompuesto: true, compId: comp.id, insumoId: '_comp_' + comp.id,
         nombre: comp.nombre, categoria: '🧩 Compuesto', subcategoria: '', familia: '🧩 Compuestos',
-        tipo: 'copa', copaML: _copaMLCompuesto(comp), contNeto: 0,
+        /* Un compuesto de cervezas es de PIEZAS. Iba fijo en 'copa', así que la
+           captura y el detalle lo rotulaban en copas aunque todas sus
+           presentaciones se cuenten por pieza. */
+        tipo: (mems.length > 0 && mems.every(function(m){ return m.tipo === 'pza'; })) ? 'pza' : 'copa',
+        copaML: _copaMLCompuesto(comp), contNeto: 0,
         costoUnitario: m0 ? (m0.costoUnitario || 0) : 0, precioCarta: m0 ? (m0.precioCarta || 0) : 0,
         ventasCopasDirectas: vD, cortesiaCopas: cD, mermaCopas: mD,
         // Antes iba en 0: si un miembro vendía botellas completas, el compuesto
@@ -7320,7 +7336,7 @@ function _step5TablasHTML() {
         if (!m) return { exist:'u', mov:'u', copasBot:0 };
         if (m.tipo === 'pza')  return { exist:'pza', mov:'pza', copasBot:0 };
         if (m.tipo === 'peso') { var u = m.baseUnit || 'u'; return { exist:u, mov:u, copasBot:0 }; }
-        return { exist:'bot', mov:'cop', copasBot:(m.contNeto>0 && m.copaML>0 ? m.contNeto/m.copaML : 0) };
+        return { exist:'bot', mov:'cop', copasBot:_copasBotDe(m) };
     }
     // Unidad del compuesto = la de sus miembros cuando todos coinciden.
     function _uComp(members) {
@@ -7617,10 +7633,10 @@ function _step5DesgloseCard(fila, refMap) {
     var _n1 = function(v){ return v%1 ? (Math.round(v*10)/10).toFixed(1) : v; };
     var eaDisp, fiDisp, uEx;
     if (esComp) {
-        // El compuesto se lee en BOTELLAS: es la suma de las botellas de sus
-        // miembros, cada uno con su propio envase. Antes convertía a litros o
-        // dividía entre 750 ml fijos y el número no se parecía a nada.
-        uEx = 'bot';
+        // El compuesto se lee en la unidad de sus miembros: botellas si se sirven
+        // por copa, PIEZAS si se cuentan por pieza. Antes iba fijo en botellas y
+        // una caja de cervezas salía en una unidad que no era la suya.
+        uEx = fila.tipo === 'pza' ? 'pza' : 'bot';
         eaDisp = _n1(fila._eaBot||0); fiDisp = _n1(fila._existBot||0);
     } else {
         uEx = fila.tipo==='pza'?'pza':(fila.tipo==='peso'?(fila.baseUnit||'u'):'bot');
@@ -7765,7 +7781,7 @@ function verReporteDirectivo(gerencial, modo) {
         const difCosto  = esPBo ? 0 : dif * (f.precioCarta || 0); // diferencia a precio de carta ($0 si no hay carta)
         const ea        = (parseFloat(f.existenciaAnterior) || 0) + adjO.ea;
         const entBot    = getEntradasBottles(f.insumoId);
-        const copasBot  = f.contNeto > 0 && f.copaML > 0 ? f.contNeto / f.copaML : 1;
+        const copasBot  = _copasBotDe(f, 1);   // 1 = sin contenido, la botella cuenta como una
         // Coctelería = consumo por recetas del menú; copa → en copas, pza → en piezas.
         const ventaCoct    = (f.tipo === 'pza' ? calcVentasPzaRecetas(f.insumoId) : calcVentasCopasRecetas(f.insumoId, f.copaML)) + adjO.vco;
         /* Lo que se fue en PRODUCIR batches. El teórico ya lo restaba, pero no se
@@ -7885,22 +7901,29 @@ function verReporteDirectivo(gerencial, modo) {
         // usoTotal: como en cualquier renglón, el % se mide contra TODO el uso de los
         // miembros —incluida la producción de batches—, no solo contra lo vendido.
         let usoTotal=0;
+        // Compuesto de piezas (cervezas, refrescos): todo se lee y se suma en piezas.
+        const esPzaComp = mem.length > 0 && mem.every(m => m.f.tipo === 'pza');
         mem.forEach(m => {
             ea+=m.ea; entBot+=m.entBot; vCopaDir+=m.ventaCopaDir; vBot+=m.ventaBot; vCoct+=m.ventaCoct;
             cm+=(m.cortesia+m.merma); cancel+=m.cancel; fisico+=m.fisico; teorico+=m.teorico;
             dif+=m.dif; difCosto+=m.difCosto; consumo+=m.consumo;
             eaBot  += m.copasBot>0 ? m.ea/m.copasBot : m.ea;
             fisBot += m.copasBot>0 ? m.fisico/m.copasBot : m.fisico;
-            vendCopas += (m.ventaCopa||0) + (m.ventaBot||0)*(m.copasBot||0);
-            usoTotal  += _usoTotal((m.ventaCopa||0) + (m.ventaBot||0)*(m.copasBot||0), m.prodPBver, m.prodPB);
+            /* En piezas la venta ya viene sumada en ventaPzaTot. Multiplicar por
+               copasBot (que ahí vale 0) borraba la venta por botella del %. */
+            const mVend = m.f.tipo === 'pza' ? (m.ventaPzaTot||0)
+                        : ((m.ventaCopa||0) + (m.ventaBot||0)*(m.copasBot||0));
+            vendCopas += mVend;
+            usoTotal  += _usoTotal(mVend, m.prodPBver, m.prodPB);
         });
         const varPct = _pctVarianza(dif, usoTotal) ?? 0;
         const nombre = comp.nombre || (mem[0] && mem[0].f.nombre) || 'Compuesto';
         _pushG(_grupoCategoria(mem[0].f), {
             esComp:true, comp, nombre, members:mem,
             ea, entBot, ventaCopaDir:vCopaDir, ventaBot:vBot, ventaCoct:vCoct, cmTotal:cm, cancel,
-            fisico, teorico, dif, difCosto, eaBot, fisBot, varPct, vendCopas, consumo,
-            f:{ tipo:'copa', nombre, insumoId:'_comp_'+comp.id }
+            fisico, teorico, dif, difCosto, eaBot, fisBot, varPct, vendCopas, consumo, esPzaComp,
+            ventaPzaTot: esPzaComp ? vendCopas : 0,
+            f:{ tipo: esPzaComp ? 'pza' : 'copa', nombre, insumoId:'_comp_'+comp.id }
         });
     });
 
@@ -7995,31 +8018,41 @@ function verReporteDirectivo(gerencial, modo) {
             if (a.esComp) {
                 gDif += a.difCosto; gNet += a.dif; gVend += a.vendCopas;
                 const cDifC = scol(a.dif), cCostC = scol(a.difCosto);
+                /* Un compuesto de piezas se lee en piezas, igual que el Resultado
+                   de la pantalla. Antes todo compuesto salía en bot/cop, así que
+                   una caja de cervezas se imprimía en una unidad que no era la de
+                   ninguna de sus columnas ni la del reporte final. */
+                const cP = !!a.esPzaComp;
+                const uEx = cP ? 'pza' : 'bot', uMov = cP ? 'pza' : 'cop',
+                      uEnt = cP ? 'p' : 'b',    uVta = cP ? 'p' : 'c';
                 const mainRow = `<tr style="background:#faf7ff">
               <td style="font-weight:700">🧩 ${etx(a.nombre)} <span style="font-weight:400;color:#999;font-size:8.5px">(${a.members.length} present.)</span>${_notaInsumo(a.f.insumoId)?`<div style="font-size:8.5px;color:#9a6f00;font-style:italic;margin-top:2px">📝 ${etx(_notaInsumo(a.f.insumoId))}</div>`:''}</td>
-              <td class="tc" style="color:#888">${_ncRd(a.eaBot)} bot</td>
-              <td class="tc" style="color:${cOk}">${a.entBot>0?'+'+_ncRd(a.entBot)+' b':'—'}</td>
-              <td class="tc">${a.ventaCopaDir>0?_ncRd(a.ventaCopaDir)+' c':'—'}</td>
-              <td class="tc">${a.ventaBot>0?_ncRd(a.ventaBot)+' b':'—'}</td>
+              <td class="tc" style="color:#888">${_ncRd(a.eaBot)} ${uEx}</td>
+              <td class="tc" style="color:${cOk}">${a.entBot>0?'+'+_ncRd(a.entBot)+' '+uEnt:'—'}</td>
+              <td class="tc">${a.ventaCopaDir>0?_ncRd(a.ventaCopaDir)+' '+uVta:'—'}</td>
+              <td class="tc">${a.ventaBot>0?_ncRd(a.ventaBot)+' '+uEnt:'—'}</td>
               <td class="tc" style="color:#9b8de8" title="${a.prodPBver>0?_ncRd(a.prodPBver)+' se fueron en producir batches de sub-receta'+(a.prodPB>0?' (van sumadas aquí: este batch no se está repartiendo)':' (no se suman a la cifra: ese producto sigue contado dentro del batch)'):''}">${(a.ventaCoct+a.prodPB)>0?_ncRd(a.ventaCoct+a.prodPB)+' c':'—'}${a.prodPBver>0&&!(a.prodPB>0)?`<div style="font-size:9px;opacity:.7;white-space:nowrap">↳ ${_ncRd(a.prodPBver)} c en batches</div>`:''}</td>
-              <td class="tc" style="font-weight:600">${_ncRd(a.fisBot)} bot</td>
-              <td class="tc" style="color:${cDifC};font-weight:700">${a.dif>=0?'+':''}${a.dif.toFixed(1)} cop</td>
+              <td class="tc" style="font-weight:600">${_ncRd(a.fisBot)} ${uEx}</td>
+              <td class="tc" style="color:${cDifC};font-weight:700">${a.dif>=0?'+':''}${_ncRd(a.dif)} ${uMov}</td>
               <td class="tc" style="color:${cDifC}">${a.varPct.toFixed(0)}%</td>
               <td class="tr" style="color:${cCostC};font-weight:700">${a.difCosto>=0?'+':''}$${_m2(a.difCosto)}</td>
             </tr>`;
                 const subRows = a.members.map(m => {
+                    const mP  = m.f.tipo === 'pza';
+                    const mEx = mP ? 'pza' : 'bot', mMov = mP ? 'pza' : 'cop',
+                          mEnt = mP ? 'p' : 'b',    mVta = mP ? 'p' : 'c';
                     const mEaBot  = m.copasBot>0 ? m.ea/m.copasBot : m.ea;
                     const mFisBot = m.copasBot>0 ? m.fisico/m.copasBot : m.fisico;
                     const mcD = scol(m.dif), mcC = scol(m.difCosto), mCont = _fmtContenido(m.f);
                     return `<tr style="background:#fbfaff">
               <td style="padding-left:22px;color:#666;font-size:9px">↳ ${etx(m.f.nombre)}${mCont?` · <span style="color:#2471a3">📦 ${mCont}</span>`:''}</td>
-              <td class="tc" style="color:#999">${_ncRd(mEaBot)} bot</td>
-              <td class="tc" style="color:${cOk}">${m.entBot>0?'+'+_ncRd(m.entBot)+' b':'—'}</td>
-              <td class="tc">${m.ventaCopaDir>0?_ncRd(m.ventaCopaDir)+' c':'—'}</td>
-              <td class="tc">${m.ventaBot>0?_ncRd(m.ventaBot)+' b':'—'}</td>
-              <td class="tc" style="color:#9b8de8">${m.ventaCoct>0?_ncRd(m.ventaCoct)+' c':'—'}</td>
-              <td class="tc">${_ncRd(mFisBot)} bot</td>
-              <td class="tc" style="color:${mcD};font-weight:600">${m.dif>=0?'+':''}${m.dif.toFixed(1)} cop</td>
+              <td class="tc" style="color:#999">${_ncRd(mEaBot)} ${mEx}</td>
+              <td class="tc" style="color:${cOk}">${m.entBot>0?'+'+_ncRd(m.entBot)+' '+mEnt:'—'}</td>
+              <td class="tc">${m.ventaCopaDir>0?_ncRd(m.ventaCopaDir)+' '+mVta:'—'}</td>
+              <td class="tc">${m.ventaBot>0?_ncRd(m.ventaBot)+' '+mEnt:'—'}</td>
+              <td class="tc" style="color:#9b8de8">${m.ventaCoct>0?_ncRd(m.ventaCoct)+' '+mVta:'—'}</td>
+              <td class="tc">${_ncRd(mFisBot)} ${mEx}</td>
+              <td class="tc" style="color:${mcD};font-weight:600">${m.dif>=0?'+':''}${_ncRd(m.dif)} ${mMov}</td>
               <td class="tc" style="color:${mcD}">${m.varPct.toFixed(0)}%</td>
               <td class="tr" style="color:${mcC}">${m.difCosto>=0?'+':''}$${_m2(m.difCosto)}</td>
             </tr>`;
