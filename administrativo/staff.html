@@ -643,17 +643,15 @@
                         <input type="checkbox" id="fPrimaVacacionalEnPago" style="width:auto"> Trabaja domingos — sumar prima dominical al pago
                     </label>
                 </div>
-                <div class="form-group">
-                    <label>Bono / incentivo extra ($)</label>
-                    <div style="display:flex;gap:8px">
-                        <input type="number" id="fBonoIncentivo" min="0" step="0.01" placeholder="0.00" style="flex:1" oninput="_updateBonoPreview()">
-                        <select id="fBonoPeriodicidad" onchange="_updateBonoPreview()" style="max-width:150px">
-                            <option value="mensual">Mensual</option>
-                            <option value="quincenal">Quincenal</option>
-                            <option value="semanal">Semanal</option>
-                        </select>
-                    </div>
-                    <span class="form-hint" id="bonoPreview" style="display:none"></span>
+                <!-- VARIOS bonos, cada uno con su concepto y su frecuencia. Antes era
+                     uno solo y sin nombre, así que "puntualidad", "transporte" y
+                     "productividad" tenían que sumarse a mano en un número mudo — y
+                     al pagar la nómina nadie sabía de qué estaba compuesto. -->
+                <div class="form-group full">
+                    <label>Bonos e incentivos</label>
+                    <div id="bonosLista"></div>
+                    <button type="button" class="btn-row" onclick="_bonoAgregar()" style="margin-top:8px">+ Agregar bono</button>
+                    <span class="form-hint" id="bonoPreview"></span>
                 </div>
             </div>
 
@@ -1126,8 +1124,8 @@ function _openModalReal(id) {
             clabeChange();
             togBancarios();
             document.getElementById('fPrimaVacacionalEnPago').checked = !!s.primaVacacionalEnPago;
-            document.getElementById('fBonoIncentivo').value  = s.bonoIncentivo || '';
-            document.getElementById('fBonoPeriodicidad').value = s.bonoPeriodicidad || 'mensual';
+            _bonos = _bonosDeStaff(s);   // convierte el formato viejo si hace falta
+            _renderBonos();
             document.getElementById('fReferencias').value = s.referencias || '';
             document.getElementById('fNotas').value       = s.notas || '';
             tmpDocs = (s.documentos || []).slice();
@@ -1138,7 +1136,6 @@ function _openModalReal(id) {
     renderChips();
     _lockSueldos(); // salario = regla estándar (mínimo); modificar pide clave
     _lockAcceso(!!id); // credenciales bloqueadas al editar; libres al dar de alta
-    _updateBonoPreview();
     document.getElementById('modalStaff').classList.add('open');
 }
 
@@ -1181,7 +1178,7 @@ function _lockAcceso(isEdit){
 }
 
 function clearForm() {
-    ['fNombre','fPuesto','fFechaIngreso','fFechaNacimiento','fCurp','fNss','fCelular','fCorreo','fDireccion','fDatosBancarios','fPrimaVacacional','fBonoIncentivo','fReferencias','fNotas','fUsuario','fPwd','fNip','fSalarioBase'].forEach(function(id){
+    ['fNombre','fPuesto','fFechaIngreso','fFechaNacimiento','fCurp','fNss','fCelular','fCorreo','fDireccion','fDatosBancarios','fPrimaVacacional','fReferencias','fNotas','fUsuario','fPwd','fNip','fSalarioBase'].forEach(function(id){
         document.getElementById(id).value = '';
     });
     document.getElementById('fPeriodicidad').value = '';
@@ -1200,12 +1197,12 @@ function clearForm() {
     (function(){ var e=document.getElementById('fArea'); if(e){ e.value=''; e.onchange = _pintarAreaHint; } })();
     _pintarAreaHint();
     document.getElementById('fCategoriaNomina').value = 'operativa';
-    document.getElementById('fBonoPeriodicidad').value = 'mensual';
     // Estandarizar el staff NUEVO al salario mínimo diario definido (si hay):
     // arranca con esquema "por día" y el sueldo precargado al mínimo.
     var _defMin = (window.NominaParams ? (NominaParams.get(getNegocioActivo()).salarioDiarioDefault || 0) : 0);
     document.getElementById('fEsquemaSueldo').value = _defMin > 0 ? 'diario' : 'periodo';
     document.getElementById('fSueldoDiario').value = _defMin > 0 ? _defMin : '';
+    _bonos = []; _renderBonos();
     document.getElementById('fSinCosto').checked = false;
     _toggleSinCosto();
     document.getElementById('fPrimaVacacionalEnPago').checked = false;
@@ -1420,21 +1417,6 @@ function _updateSueldoPreview() {
 
 /* Bono con periodicidad: normaliza a diario y muestra su equivalente por semana/
    quincena/mes (como el sueldo), usando los días reales del mes. */
-function _updateBonoPreview() {
-    var el = document.getElementById('bonoPreview');
-    if (!el) return;
-    var bono = parseFloat(document.getElementById('fBonoIncentivo').value) || 0;
-    if (bono <= 0) { el.style.display = 'none'; return; }
-    var per = document.getElementById('fBonoPeriodicidad').value || 'mensual';
-    var dias = _diasMesActual();
-    var perDias = per === 'semanal' ? 7 : per === 'quincenal' ? 15 : dias;
-    var diario = bono / perDias;
-    var fmt = function(v){ return '$' + v.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2}); };
-    el.innerHTML = '🎁 Bono ' + per + ' — equivale a: Semana <strong style="color:var(--text)">' + fmt(diario*7) +
-        '</strong> · Quincena <strong style="color:var(--text)">' + fmt(diario*15) +
-        '</strong> · Mes (' + dias + 'd) <strong style="color:var(--text)">' + fmt(diario*dias) + '</strong>';
-    el.style.display = '';
-}
 
 /* Sugiere la categoría de nómina a partir del rol del sistema.
    Gerencia OPERA el negocio (cocina/bar/servicio con acceso admin) → operativa para nómina.
@@ -1530,8 +1512,17 @@ async function saveStaff() {
         datosBancarios:  document.getElementById('fDatosBancarios').value.trim(),
         primaVacacional: parseFloat(document.getElementById('fPrimaVacacional').value)||0,
         primaVacacionalEnPago: document.getElementById('fPrimaVacacionalEnPago').checked,
-        bonoIncentivo:   parseFloat(document.getElementById('fBonoIncentivo').value)||0,
-        bonoPeriodicidad: document.getElementById('fBonoPeriodicidad').value||'mensual',
+        /* Se guardan los bonos con nombre. Los campos viejos se conservan por si
+           alguna pantalla todavía los lee: el primer bono va ahí, y así nada que
+           mire el formato anterior se queda en cero de golpe. */
+        bonos: _bonos.filter(function(b){ return (parseFloat(b.monto)||0) > 0; })
+                     .map(function(b){
+                         return { concepto: (b.concepto||'').trim() || 'Bono',
+                                  monto: parseFloat(b.monto)||0,
+                                  periodicidad: b.periodicidad || 'mensual' };
+                     }),
+        bonoIncentivo:   (function(){ var b=_bonos.find(function(x){return (parseFloat(x.monto)||0)>0;}); return b?parseFloat(b.monto):0; })(),
+        bonoPeriodicidad: (function(){ var b=_bonos.find(function(x){return (parseFloat(x.monto)||0)>0;}); return b?(b.periodicidad||'mensual'):'mensual'; })(),
         referencias:     document.getElementById('fReferencias').value.trim(),
         notas:           document.getElementById('fNotas').value.trim(),
         documentos:      tmpDocs.slice()
@@ -1689,6 +1680,74 @@ function removeDoc(i) {
 }
 
 /* ── UTILS ── */
+/* ══════════════ BONOS E INCENTIVOS ══════════════
+   Varios, cada uno con su concepto y su frecuencia. El "por día" es la razón de
+   este cambio: un incentivo de puntualidad o de transporte se gana por jornada
+   trabajada, no por mes, y con la frecuencia mensual no había forma de decirlo.
+
+   Se guardan en `bonos`. El campo viejo (`bonoIncentivo` + `bonoPeriodicidad`)
+   se convierte al abrir el expediente: nadie tiene que recapturar nada. */
+var BONO_FREQS = [
+    { k:'diario',    nom:'Por día trabajado' },
+    { k:'semanal',   nom:'Semanal' },
+    { k:'quincenal', nom:'Quincenal' },
+    { k:'mensual',   nom:'Mensual' }
+];
+var _bonos = [];
+
+function _bonosDeStaff(s){
+    if (s && Array.isArray(s.bonos)) return s.bonos.slice();
+    // Formato viejo: un solo bono sin nombre.
+    if (s && parseFloat(s.bonoIncentivo) > 0) {
+        return [{ concepto:'Bono', monto:parseFloat(s.bonoIncentivo),
+                  periodicidad: s.bonoPeriodicidad || 'mensual' }];
+    }
+    return [];
+}
+function _bonoAgregar(){ _bonos.push({ concepto:'', monto:'', periodicidad:'mensual' }); _renderBonos(); }
+function _bonoQuitar(i){ _bonos.splice(i,1); _renderBonos(); }
+function _bonoSet(i, campo, v){ if (_bonos[i]) _bonos[i][campo] = v; _pintarBonoResumen(); }
+
+function _renderBonos(){
+    var c = document.getElementById('bonosLista'); if (!c) return;
+    if (!_bonos.length){
+        c.innerHTML = '<div style="font-size:12.5px;color:var(--text-dim);padding:6px 0">Sin bonos. Agrega uno si este colaborador recibe incentivos.</div>';
+        _pintarBonoResumen(); return;
+    }
+    c.innerHTML = _bonos.map(function(b,i){
+        return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:7px">' +
+            '<input type="text" class="ck-in" placeholder="Puntualidad, transporte, productividad…" value="'+esc(b.concepto||'')+'" ' +
+                'oninput="_bonoSet('+i+',\'concepto\',this.value)" style="flex:1;min-width:0">' +
+            '<input type="number" min="0" step="0.01" placeholder="0.00" value="'+esc(b.monto===0?'0':(b.monto||''))+'" ' +
+                'oninput="_bonoSet('+i+',\'monto\',this.value)" style="width:104px">' +
+            '<select onchange="_bonoSet('+i+',\'periodicidad\',this.value)" style="width:158px">' +
+                BONO_FREQS.map(function(f){
+                    return '<option value="'+f.k+'"'+((b.periodicidad||'mensual')===f.k?' selected':'')+'>'+esc(f.nom)+'</option>';
+                }).join('') +
+            '</select>' +
+            '<button type="button" class="btn-row del" onclick="_bonoQuitar('+i+')" title="Quitar">✕</button>' +
+        '</div>';
+    }).join('');
+    _pintarBonoResumen();
+}
+
+/* Cuánto suman al mes, para poder compararlo con el sueldo de un vistazo. El
+   diario se estima con 30 días: es una referencia, no el cálculo del pago —ése
+   usa los días REALES trabajados, en el módulo que paga. */
+function _pintarBonoResumen(){
+    var h = document.getElementById('bonoPreview'); if (!h) return;
+    var mes = _bonos.reduce(function(t,b){
+        var m = parseFloat(b.monto) || 0;
+        if (!m) return t;
+        return t + (b.periodicidad === 'diario'    ? m * 30
+                  : b.periodicidad === 'semanal'   ? m * (52/12)
+                  : b.periodicidad === 'quincenal' ? m * 2 : m);
+    }, 0);
+    if (!mes) { h.textContent = 'Se suman solos al pagar la nómina, cada uno con su concepto.'; return; }
+    h.innerHTML = 'Equivalen a <b>' + _dinero(mes) + '</b> al mes. Se suman solos al pagar la nómina, ' +
+        'con su concepto a la vista. <span style="opacity:.7">El "por día" se calcula con los días realmente trabajados.</span>';
+}
+
 /* ══════════════ HISTÓRICO DE BAJAS ══════════════
    Un colaborador que sale NO se borra: eso tira su expediente, sus documentos y
    el rastro de lo que se le pagó. Se archiva. La lista de trabajo se queda con
@@ -2006,7 +2065,15 @@ function _expNominaCuerpo(s, revelado) {
         _expF(etiquetaSueldo, sueldo ? (revelado ? _dinero(sueldo) : oculto) : '') +
         _expF('Periodicidad', s.periodicidad ? s.periodicidad.charAt(0).toUpperCase() + s.periodicidad.slice(1) : '') +
         _expF('Día de pago', s.diaPago) +
-        _expF('Bono / incentivo', s.bonoIncentivo ? (revelado ? _dinero(s.bonoIncentivo) + ' · ' + (s.bonoPeriodicidad || 'mensual') : oculto) : '') +
+        (function(){
+            var bs = _bonosDeStaff(s);
+            if (!bs.length) return _expF('Bonos e incentivos', '');
+            if (!revelado) return _expF('Bonos e incentivos', bs.length + (bs.length===1?' bono':' bonos') + ' · ' + oculto);
+            var _f = { diario:'por día', semanal:'semanal', quincenal:'quincenal', mensual:'mensual' };
+            return bs.map(function(b){
+                return _expF(b.concepto || 'Bono', _dinero(b.monto) + ' · ' + (_f[b.periodicidad] || b.periodicidad));
+            }).join('');
+        })() +
         _expF('Prima dominical', s.primaVacacional ? (revelado ? _dinero(s.primaVacacional) + (s.primaVacacionalEnPago ? ' · se suma al pago' : ' · no se suma') : oculto) : '') +
         _expF('Forma de pago', s.formaPagoNomina) +
         _expF('Banco', s.bancoNomina) +

@@ -5276,6 +5276,7 @@ function _asegurarCategoria(cat){
 var _pagoNomStaff = null;
 var _pagoNomConceptos = [];   // [{concepto, monto, pago}]
 var _pnTotalManual = null;    // total ajustado a mano (null = automático)
+var _pnBonosQuitados = [];    // bonos automáticos que el usuario quitó a mano en este pago
 var _pnPrimaInclude = false;  // incluir la prima dominical en el subtotal
 // Métodos de pago por concepto (ej. bono en efectivo aunque la nómina sea transfer)
 var _PN_METODOS = {
@@ -5416,7 +5417,7 @@ function _ensurePagoNomModal(){
         +'<div class="gs-sec"><div class="gs-sec-title">Sueldo del periodo</div>'
           +'<div class="fg-row-3">'
             +'<div class="fg"><label>Sueldo diario ($)</label><input type="number" id="pnDiario" min="0" step="0.01" oninput="_pnCalc()"></div>'
-            +'<div class="fg"><label>Días trabajados</label><input type="number" id="pnDias" min="0" step="1" oninput="_pnCalc()"></div>'
+            +'<div class="fg"><label>Días trabajados</label><input type="number" id="pnDias" min="0" step="1" oninput="_pnReponerBonos();_pnCalc()"></div>'
             +'<div class="fg"><label>Subtotal sueldo</label><input type="text" id="pnSubtotal" readonly style="opacity:.85"></div>'
           +'</div>'
           +'<div id="pnPrimaDom" style="display:none;margin-top:8px;font-size:12px;color:var(--accent);background:rgba(245,200,66,.08);border:1px solid rgba(245,200,66,.25);border-radius:6px;padding:8px 12px"></div>'
@@ -5424,11 +5425,11 @@ function _ensurePagoNomModal(){
         +'</div>'
         +'<div class="gs-sec"><div class="gs-sec-title">Conceptos adicionales</div>'
           +'<div class="fg-row-3" style="align-items:end">'
-            +'<div class="fg"><label>Tipo</label><select id="pnCptTipo" onchange="_pnCptTipoChange()"><option value="bono">🎁 Bono</option><option value="horas">⏱️ Horas extras</option><option value="festivo">🎉 Día festivo</option><option value="doble">2️⃣ Día doble</option><option value="prima">☀️ Prima dominical</option><option value="otro">📋 Otro</option></select></div>'
+            +'<div class="fg"><label>Tipo</label><select id="pnCptTipo" onchange="_pnCptTipoChange()"><option value="bono">🎁 Bono</option><option value="sancion">⛔ Sanción / descuento</option><option value="horas">⏱️ Horas extras</option><option value="festivo">🎉 Día festivo</option><option value="doble">2️⃣ Día doble</option><option value="prima">☀️ Prima dominical</option><option value="otro">📋 Otro</option></select></div>'
             +'<div class="fg" id="pnCptCantWrap" style="display:none"><label id="pnCptCantLbl">Horas</label><input type="number" id="pnCptCant" min="0" step="1" placeholder="0"></div>'
             +'<div class="fg"><label>Monto ($)</label><input type="number" id="pnCptMonto" min="0" step="0.01" placeholder="0.00"></div>'
           +'</div>'
-          +'<div class="fg" style="margin-top:8px"><label>¿Cómo se paga este concepto?</label>'
+          +'<div class="fg" id="pnCptMetodoWrap" style="margin-top:8px"><label>¿Cómo se paga este concepto?</label>'
             +'<select id="pnCptMetodo" onchange="_pnCptMetodoChange()"><option value="mismo">Mismo método que la nómina</option>'
             +'<option value="caja_chica">💵 Efectivo (caja chica)</option>'
             +'<option value="caja_fuerte">🏦 Caja fuerte</option>'
@@ -5463,7 +5464,7 @@ function abrirPagoNomina(staffId){
     if(!s)return;
     _cerrarSelPago();
     _ensurePagoNomModal();
-    _pagoNomStaff=s; _pagoNomConceptos=[]; _pnTotalManual=null;
+    _pagoNomStaff=s; _pagoNomConceptos=[]; _pnTotalManual=null; _pnBonosQuitados=[];
     // La prima dominical se calcula sola por los domingos del periodo (ver _pnPrimaDom).
     // Se pre-marca si el colaborador trabaja domingos, pero siempre es visible/ajustable.
     _pnPrimaInclude=!!s.primaVacacionalEnPago;
@@ -5476,9 +5477,68 @@ function abrirPagoNomina(staffId){
     document.getElementById('pnCptTipo').value='bono';
     _pnTipoChange();      // ajusta fechas según tipo
     _pnCptTipoChange();   // ajusta el captador de conceptos
-    _pnRenderCptList();
+    _pnReponerBonos();    // los bonos de su ficha entran solos, con su concepto
     _pnCalc();
     document.getElementById('modalPagoNom').classList.add('open');
+}
+
+/* ══ LOS BONOS DEL EXPEDIENTE SE CARGAN SOLOS ══════════════════════════════
+   Estaban capturados en la ficha del colaborador y este módulo NUNCA los leía:
+   había que acordarse de teclearlos en cada pago, uno por uno. Un incentivo que
+   depende de que alguien lo recuerde no es un incentivo, es una lotería.
+
+   Cada bono entra como su propio concepto, con su nombre a la vista —así el
+   colaborador ve en el recibo POR QUÉ le pagaron eso, en vez de un total mudo.
+
+   Se recalculan al cambiar el periodo, no solo al abrir: el "por día" depende de
+   los días trabajados, y el periodo se puede mover después de abrir el modal. */
+function _pnBonosDe(s, tipo, dias){
+    if (!s) return [];
+    var lista = Array.isArray(s.bonos) ? s.bonos
+        : (n(s.bonoIncentivo) > 0 ? [{ concepto:'Bono', monto:n(s.bonoIncentivo),
+                                       periodicidad: s.bonoPeriodicidad || 'mensual' }] : []);
+    return lista.map(function(b, i){
+        var m = n(b.monto);
+        var key = (b.concepto||'Bono') + '·' + (b.periodicidad||'') + '·' + i;
+        if (_pnBonosQuitados.indexOf(key) >= 0) return null;
+        var f = b.periodicidad || 'mensual', monto = 0, det = '';
+        /* El periodo del pago y la frecuencia del bono se nombran distinto
+           ('semana' vs 'semanal'): sin traducirlos, ni el bono que cae justo con
+           el periodo se reconocía como tal. */
+        var freqDelPeriodo = { semana:'semanal', quincena:'quincenal', mes:'mensual' }[tipo] || '';
+        if (f === 'diario'){
+            /* Por día TRABAJADO, no por día del calendario: si faltó tres días,
+               no se le paga el incentivo de esos tres. Es lo que lo distingue de
+               un sueldo. */
+            var d = Math.max(0, n(dias));
+            monto = m * d; det = ' (' + d + (d === 1 ? ' día' : ' días') + ')';
+        } else if (f === freqDelPeriodo){
+            monto = m;                       // su frecuencia coincide con lo que se paga
+        } else {
+            /* Frecuencias distintas: se lleva a un valor diario y se multiplica
+               por los días del periodo. Pagar un bono mensual completo en una
+               nómina semanal sería pagarlo cuatro veces al mes. */
+            var alDia = f === 'semanal' ? m/7 : f === 'quincenal' ? m/15 : m/30;
+            var dp = tipo === 'semana' ? 7 : tipo === 'quincena' ? 15 : tipo === 'mes' ? 30 : Math.max(1, n(dias));
+            monto = alDia * dp; det = ' (prorrateado)';
+        }
+        if (monto <= 0) return null;
+        return { concepto: (b.concepto || 'Bono') + det,
+                 monto: Math.round(monto * 100) / 100,
+                 pago: 'mismo', fecha: '', _auto: true, _bonoKey: key };
+    }).filter(Boolean);
+}
+
+/* Se reponen los automáticos sin tocar lo que se capturó a mano: quien agregó
+   una sanción o unas horas extras no debe perderlas por mover una fecha. */
+function _pnReponerBonos(){
+    if (!_pagoNomStaff) return;
+    var tipo = (document.getElementById('pnTipo')||{}).value || 'semana';
+    var dias = n((document.getElementById('pnDias')||{}).value);
+    _pagoNomConceptos = _pagoNomConceptos.filter(function(c){ return !c._auto; });
+    _pagoNomConceptos = _pnBonosDe(_pagoNomStaff, tipo, dias).concat(_pagoNomConceptos);
+    _pnTotalManual = null;
+    _pnRenderCptList();
 }
 
 function _pnISO(dt){ return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); }
@@ -5509,6 +5569,7 @@ function _pnRangoChange(){
             (a && (a.conRol || a.descansos)) ? (a.asistidos + a.descansos) : _diffDias(d,h);
         _pnPintarAsistencia(a);
     }
+    _pnReponerBonos();   // el bono "por día" depende de los días del periodo
     _pnCalc();
 }
 /* Panel de asistencia: de dónde salió el número. Sin esto el usuario ve un dato que
@@ -5592,6 +5653,14 @@ function _pnCptTipoChange(){
     document.getElementById('pnCptCantWrap').style.display=necesitaCant?'':'none';
     document.getElementById('pnCptCantLbl').textContent=tipo==='horas'?'Horas':tipo==='prima'?'Domingos':'Días';
     document.getElementById('pnCptCalcBtn').style.display=necesitaCant?'':'none';
+    /* Una sanción no se "paga" por ningún método: se descuenta. Preguntar con qué
+       método pagarla solo confunde. */
+    var esSancion = (tipo==='sancion');
+    var mw=document.getElementById('pnCptMetodoWrap'); if(mw) mw.style.display=esSancion?'none':'';
+    if(esSancion){
+        var met=document.getElementById('pnCptMetodo'); if(met) met.value='mismo';
+        var fw=document.getElementById('pnCptFechaWrap'); if(fw) fw.style.display='none';
+    }
 }
 function _pnCptCalcular(){
     var tipo=document.getElementById('pnCptTipo').value;
@@ -5617,21 +5686,45 @@ function _pnCptAgregar(){
     var tipo=document.getElementById('pnCptTipo').value;
     var monto=n(document.getElementById('pnCptMonto').value);
     if(!monto||monto<=0){ alert('Indica el monto del concepto.'); return; }
-    var lbl={bono:'Bono',horas:'Horas extras',festivo:'Día festivo',doble:'Día doble',prima:'Prima dominical',otro:'Pago extra'}[tipo]||'Pago extra';
+    var lbl={bono:'Bono',sancion:'Sanción',horas:'Horas extras',festivo:'Día festivo',doble:'Día doble',prima:'Prima dominical',otro:'Pago extra'}[tipo]||'Pago extra';
+
+    /* Una sanción es un concepto NEGATIVO. No hace falta una estructura aparte:
+       así se suma sola al total, sale en la lista y sale en el recibo, con el
+       mismo código que ya existía.
+
+       El MOTIVO es obligatorio y va en la etiqueta. Un descuento sin motivo en
+       un recibo de nómina es una discusión con una persona dentro de un mes, y
+       para entonces ya nadie se acuerda. */
+    if(tipo==='sancion'){
+        var motivo=prompt('¿Por qué es la sanción?\n\nQueda escrito en el recibo, así que ponlo claro:\nretardo, faltante de caja, ausencia sin avisar…');
+        if(motivo===null) return;                       // cancelar no aplica nada
+        motivo=(motivo||'').trim();
+        if(!motivo){ alert('La sanción necesita un motivo: va en el recibo del colaborador.'); return; }
+        lbl='Sanción · '+motivo;
+        monto=-Math.abs(monto);                          // resta del total
+    }
+
     var cant=n(document.getElementById('pnCptCant').value);
     if(cant>0) lbl+=' ('+cant+(tipo==='horas'?' h':' d')+')';
-    var pago=(document.getElementById('pnCptMetodo')||{}).value||'mismo';
+    var pago=(tipo==='sancion')?'mismo':((document.getElementById('pnCptMetodo')||{}).value||'mismo');
     // Fecha de pago propia solo si se paga aparte; default hoy.
     var fecha=(pago!=='mismo')?(((document.getElementById('pnCptFecha')||{}).value)||todayStr()):'';
     _pagoNomConceptos.push({concepto:lbl, monto:monto, pago:pago, fecha:fecha});
     document.getElementById('pnCptCant').value=''; document.getElementById('pnCptMonto').value='';
     var met=document.getElementById('pnCptMetodo'); if(met) met.value='mismo';
     var fw=document.getElementById('pnCptFechaWrap'); if(fw) fw.style.display='none';
+    document.getElementById('pnCptTipo').value='bono'; _pnCptTipoChange();
     var fi=document.getElementById('pnCptFecha'); if(fi) fi.value='';
     _pnTotalManual=null; // al cambiar conceptos, el total vuelve a seguir el cálculo
     _pnRenderCptList(); _pnCalc();
 }
-function _pnCptEliminar(i){ _pagoNomConceptos.splice(i,1); _pnTotalManual=null; _pnRenderCptList(); _pnCalc(); }
+function _pnCptEliminar(i){
+    /* Si quitan un bono automático, se recuerda: si reviviera al mover una fecha
+       el usuario pensaría que el sistema le lleva la contraria. */
+    var c=_pagoNomConceptos[i];
+    if(c && c._auto && c._bonoKey) _pnBonosQuitados.push(c._bonoKey);
+    _pagoNomConceptos.splice(i,1); _pnTotalManual=null; _pnRenderCptList(); _pnCalc();
+}
 function _pnRenderCptList(){
     var c=document.getElementById('pnCptList');
     if(!_pagoNomConceptos.length){ c.innerHTML='<div style="font-size:12px;color:var(--text-dim);padding:4px 0">Sin conceptos adicionales.</div>'; return; }
@@ -5642,7 +5735,7 @@ function _pnRenderCptList(){
           : '';
         return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;background:var(--surface2)">'
           +'<span style="font-size:13px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+_esc(x.concepto)+badge+'</span>'
-          +'<span style="display:flex;align-items:center;gap:10px"><strong style="color:var(--accent)">'+fmtM(x.monto)+'</strong>'
+          +'<span style="display:flex;align-items:center;gap:10px"><strong style="color:'+(x.monto<0?'var(--red,#e5484d)':'var(--accent)')+'">'+(x.monto<0?'−':'')+fmtM(Math.abs(x.monto))+'</strong>'
           +'<button class="btn-row del" onclick="_pnCptEliminar('+i+')">🗑️</button></span></div>';
     }).join('');
 }
@@ -5681,23 +5774,35 @@ function _reciboNominaDatos(){
     var percepciones=[{ concepto:'Sueldo del periodo', detalle:fmtM(diario)+' × '+dias+' día'+(dias!==1?'s':''), monto:_pnSueldo() }];
     if(_pnPrimaInclude && prima.monto>0)
         percepciones.push({ concepto:'Prima dominical', detalle:prima.domingos+' domingo'+(prima.domingos!==1?'s':'')+' · '+prima.pct+'%', monto:prima.monto });
+    /* Una sanción NO es una percepción negativa escondida entre los bonos: en un
+       recibo se lee aparte, con su motivo, para que quien firma vea exactamente
+       cuánto ganó y cuánto se le descontó. */
+    var deducciones=[];
     (_pagoNomConceptos||[]).forEach(function(c){
-        var m=_PN_METODOS[c.pago]||{};
-        percepciones.push({ concepto:c.concepto, detalle:(c.pago && c.pago!=='mismo') ? 'Pagado aparte · '+m.lbl : '—', monto:n(c.monto) });
+        var m=_PN_METODOS[c.pago]||{}, v=n(c.monto);
+        if(v<0){ deducciones.push({ concepto:c.concepto, detalle:'—', monto:Math.abs(v) }); return; }
+        percepciones.push({ concepto:c.concepto, detalle:(c.pago && c.pago!=='mismo') ? 'Pagado aparte · '+m.lbl : '—', monto:v });
     });
     return {
         folio:_pnFolio(s.id,desde,hasta), staff:s, periodicidad:perLbl,
         desde:desde, hasta:hasta, dias:dias, diario:diario,
-        percepciones:percepciones, total:n(document.getElementById('pnTotal').value)
+        percepciones:percepciones, deducciones:deducciones,
+        totalPerc:percepciones.reduce(function(t,x){return t+n(x.monto);},0),
+        totalDed:deducciones.reduce(function(t,x){return t+n(x.monto);},0),
+        total:n(document.getElementById('pnTotal').value)
     };
 }
 function _reciboNominaHTML(d){
     var _e=(typeof etx==='function')?etx:function(x){ return String(x==null?'':x); };
-    var filas=d.percepciones.map(function(p){
-        return '<tr><td>'+_e(p.concepto)+'</td>'+
-               '<td style="text-align:left;color:#8a8a8a;font-weight:400">'+_e(p.detalle)+'</td>'+
-               '<td>'+fmtM(p.monto)+'</td></tr>';
-    }).join('');
+    var _filas=function(arr,signo){
+        return arr.map(function(p){
+            return '<tr><td>'+_e(p.concepto)+'</td>'+
+                   '<td style="text-align:left;color:#8a8a8a;font-weight:400">'+_e(p.detalle)+'</td>'+
+                   '<td>'+signo+fmtM(p.monto)+'</td></tr>';
+        }).join('');
+    };
+    var filas=_filas(d.percepciones,'');
+    var ded=(d.deducciones||[]);
     var dato=function(l,v){
         return '<div class="rcard" style="padding:10px 13px"><div class="l">'+_e(l)+'</div>'+
                '<div style="font-size:13px;font-weight:600;color:#1a1916;line-height:1.35">'+_e(v)+'</div></div>';
@@ -5722,7 +5827,22 @@ function _reciboNominaHTML(d){
             '<th style="text-align:left;width:33%">Detalle</th>'+
             '<th>Importe</th></tr></thead>'+
         '<tbody>'+filas+'</tbody>'+
-        '<tfoot><tr><td colspan="2">Total pagado</td><td>'+fmtM(d.total)+'</td></tr></tfoot></table>'+
+        '<tfoot><tr><td colspan="2">'+(ded.length?'Total de percepciones':'Total pagado')+'</td>'+
+            '<td>'+fmtM(ded.length?d.totalPerc:d.total)+'</td></tr></tfoot></table>'+
+
+        (ded.length
+          ? '<div class="rsec">Deducciones</div>'+
+            '<table class="rt"><thead><tr>'+
+                '<th style="width:42%">Concepto</th>'+
+                '<th style="text-align:left;width:33%">Detalle</th>'+
+                '<th>Importe</th></tr></thead>'+
+            '<tbody>'+_filas(ded,'−')+'</tbody>'+
+            '<tfoot><tr><td colspan="2">Total de deducciones</td><td>−'+fmtM(d.totalDed)+'</td></tr></tfoot></table>'+
+            '<div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;'+
+                'padding:11px 14px;background:#1a1916;color:#fff;border-radius:7px">'+
+                '<span style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700">Neto a pagar</span>'+
+                '<span style="font-size:16px;font-weight:700">'+fmtM(d.total)+'</span></div>'
+          : '')+
         '<div style="margin-top:9px;padding:10px 13px;background:#f8f8f8;border-left:3px solid #3dbe7a;border-radius:0 6px 6px 0">'+
             '<div style="font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#999;font-weight:700;margin-bottom:3px">Importe con letra</div>'+
             '<div style="font-size:11.5px;font-weight:600;color:#1a1916;line-height:1.4">'+_e(EtaaxCore.importeLetra(d.total))+'</div>'+

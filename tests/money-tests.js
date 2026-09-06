@@ -2993,6 +2993,199 @@ console.log('\n══ SUITE Z · La cola que nunca se vaciaba (recetas/inventari
         eq(subidas.length, 3, 'subidas'));
 })();
 
+/* ═══════════ SUITE AA · BONOS Y SANCIONES EN LA NÓMINA (diario.html) ═══════════
+   Los bonos vivían capturados en la ficha del colaborador y el módulo de pago
+   NUNCA los leía: había que acordarse de teclearlos. Aquí se fija que se cargan
+   solos, con la cuenta correcta según su periodicidad, y que una sanción resta.  */
+console.log('\n══ SUITE AA · Bonos automáticos y sanciones (diario.html) ══');
+{
+    const bonos = (s, tipo, dias) => A._pnBonosDe(s, tipo, dias);
+    const suma  = (arr) => arr.reduce((t, x) => t + x.monto, 0);
+
+    /* ── Cada bono entra como su propio renglón, con su nombre ── */
+    const ana = { bonos: [
+        { concepto: 'Puntualidad', monto: 30,  periodicidad: 'diario'  },
+        { concepto: 'Transporte',  monto: 350, periodicidad: 'semanal' },
+    ]};
+    const semana = bonos(ana, 'semana', 6);
+
+    test('los dos bonos entran, no se funden en uno', () => eq(semana.length, 2, 'renglones'));
+    test('el concepto se ve en el recibo, no un total mudo', () =>
+        eq(semana[0].concepto.indexOf('Puntualidad') === 0, true, 'concepto'));
+
+    /* ── "Por día" es por día TRABAJADO: eso lo distingue de un sueldo ── */
+    test('el bono por día se multiplica por los días trabajados', () =>
+        eq(semana[0].monto, 180, 'diario'));
+    test('si faltó, se le paga menos incentivo', () =>
+        eq(bonos(ana, 'semana', 4)[0].monto, 120, 'faltas'));
+    test('cero días trabajados = sin incentivo diario', () =>
+        eq(bonos(ana, 'semana', 0).length, 1, 'solo el semanal'));
+
+    /* ── Frecuencia que coincide: monto tal cual, sin prorrateo ── */
+    test('bono semanal en nómina semanal: íntegro', () => eq(semana[1].monto, 350, 'semanal'));
+    test('bono mensual en nómina mensual: íntegro', () =>
+        eq(bonos({ bonos: [{ concepto:'B', monto:1500, periodicidad:'mensual' }] }, 'mes', 30)[0].monto, 1500, 'mensual'));
+
+    /* ── Frecuencia distinta: se prorratea. Pagar un bono mensual completo en
+         una nómina semanal sería pagarlo cuatro veces al mes. ── */
+    const mensualEnSemana = bonos({ bonos: [{ concepto:'B', monto:3000, periodicidad:'mensual' }] }, 'semana', 7);
+    test('un bono mensual NO se paga entero cada semana', () =>
+        eq(mensualEnSemana[0].monto < 3000, true, 'prorrateo'));
+    test('el mensual prorrateado a la semana da 7/30 del monto', () =>
+        eq(mensualEnSemana[0].monto, 700, 'monto'));
+    test('y se avisa que va prorrateado', () =>
+        eq(mensualEnSemana[0].concepto.indexOf('prorrateado') > -1, true, 'aviso'));
+    test('quincenal en nómina mensual sube a dos quincenas', () =>
+        eq(bonos({ bonos: [{ concepto:'B', monto:500, periodicidad:'quincenal' }] }, 'mes', 30)[0].monto, 1000, 'quincenal'));
+
+    /* ── Un bono en cero no ensucia el recibo ── */
+    test('el bono en cero no aparece', () =>
+        eq(bonos({ bonos: [{ concepto:'B', monto:0, periodicidad:'mensual' }] }, 'mes', 30).length, 0, 'cero'));
+    test('sin bonos, no hay renglones', () => eq(bonos({}, 'semana', 7).length, 0, 'vacío'));
+
+    /* ── Compatibilidad: las fichas viejas traen un solo bono en campos sueltos ── */
+    const viejo = { bonoIncentivo: 800, bonoPeriodicidad: 'mensual' };
+    test('la ficha vieja de un solo bono se sigue leyendo', () =>
+        eq(bonos(viejo, 'mes', 30)[0].monto, 800, 'legado'));
+
+    /* ── El bono que el usuario quitó a mano NO revive al mover una fecha ── */
+    A._pnBonosQuitados = [];
+    const antes = bonos(ana, 'semana', 6);
+    A._pnBonosQuitados = [antes[0]._bonoKey];
+    test('el bono quitado a mano no vuelve al recalcular', () =>
+        eq(bonos(ana, 'semana', 6).length, 1, 'quitado'));
+    test('…y el otro sí sigue', () =>
+        eq(bonos(ana, 'semana', 6)[0].concepto.indexOf('Transporte'), 0, 'sobrevive'));
+    A._pnBonosQuitados = [];
+
+    /* ── Los automáticos se marcan, para poder reponerlos sin pisar lo capturado ── */
+    test('los bonos automáticos vienen marcados como tales', () =>
+        eq(semana.every(x => x._auto === true), true, 'marca'));
+
+    /* La coincidencia exacta y el prorrateo dan el mismo número cuando el periodo
+       mide lo mismo; lo que cambia es que al colaborador NO se le dice
+       "prorrateado" cuando le pagaron su bono completo. */
+    test('el bono semanal íntegro no se anuncia como prorrateado', () =>
+        eq(semana[1].concepto.indexOf('prorrateado'), -1, 'etiqueta'));
+
+    /* ══ La sanción capturada a mano, por el camino real del modal ══ */
+    const cap = (tipo, monto, motivo) => {
+        A._pagoNomStaff = { id:'s1', nombre:'Ana' };
+        A._pagoNomConceptos = [];
+        A.prompt = () => motivo;
+        A.alert  = () => {};
+        A.document.getElementById('pnCptTipo').value  = tipo;
+        A.document.getElementById('pnCptMonto').value = monto;
+        A.document.getElementById('pnCptCant').value  = '';
+        A.document.getElementById('pnCptMetodo').value = 'mismo';
+        A._pnCptAgregar();
+        return A._pagoNomConceptos[0];
+    };
+
+    test('la sanción capturada se guarda en negativo: si sumara, premiaría el retardo', () =>
+        eq(cap('sancion', 200, 'retardo').monto, -200, 'signo'));
+    test('el motivo capturado queda escrito en el concepto', () =>
+        eq(cap('sancion', 200, 'faltante de caja').concepto.indexOf('faltante de caja') > -1, true, 'motivo'));
+    test('un bono capturado a mano sigue sumando', () =>
+        eq(cap('bono', 200, '').monto, 200, 'bono'));
+
+    /* Sin motivo no se aplica: un descuento anónimo en un recibo es una discusión
+       con una persona dentro de un mes. */
+    A._pagoNomStaff = { id:'s1' }; A._pagoNomConceptos = [];
+    A.prompt = () => '   '; A.alert = () => {};
+    A.document.getElementById('pnCptTipo').value = 'sancion';
+    A.document.getElementById('pnCptMonto').value = 200;
+    A._pnCptAgregar();
+    test('una sanción sin motivo no se aplica', () => eq(A._pagoNomConceptos.length, 0, 'sin motivo'));
+
+    /* Cancelar el aviso del motivo cancela la sanción entera, y en silencio:
+       quien se arrepiente no necesita que lo regañen. */
+    let regaños = 0;
+    A._pagoNomConceptos = []; A.prompt = () => null; A.alert = () => { regaños++; };
+    A.document.getElementById('pnCptTipo').value = 'sancion';
+    A.document.getElementById('pnCptMonto').value = 200;
+    A._pnCptAgregar();
+    test('cancelar el motivo no aplica ninguna sanción', () => eq(A._pagoNomConceptos.length, 0, 'cancelar'));
+    test('…y cancelar no regaña al usuario', () => eq(regaños, 0, 'alert'));
+
+    /* ══ Reponer los bonos al mover el periodo ══
+       El bono "por día" depende de los días, así que se recalcula al cambiarlos.
+       Lo capturado a mano NO se puede perder en el camino. */
+    A._pagoNomStaff = ana; A._pnBonosQuitados = []; A._pnTotalManual = 999;
+    A.document.getElementById('pnTipo').value = 'semana';
+    A.document.getElementById('pnDias').value = 6;
+    A._pagoNomConceptos = [{ concepto:'Horas extras', monto: 500, pago:'mismo' }];
+    A._pnReponerBonos();
+    test('al reponer, los bonos de la ficha entran', () => eq(A._pagoNomConceptos.length, 3, 'entran'));
+    test('…sin borrar lo que se capturó a mano', () =>
+        eq(A._pagoNomConceptos.some(c => c.concepto === 'Horas extras'), true, 'manual'));
+    test('…y el total vuelve a ser automático', () => eq(A._pnTotalManual, null, 'manual'));
+
+    A.document.getElementById('pnDias').value = 3;
+    A._pnReponerBonos();
+    test('reponer dos veces NO duplica los bonos', () => eq(A._pagoNomConceptos.length, 3, 'duplicado'));
+    test('el bono por día se rehace con los días nuevos', () =>
+        eq(A._pagoNomConceptos.filter(c => c._auto)[0].monto, 90, 'rehecho'));
+
+    /* Y sobre todo: que esté CONECTADO. La cuenta puede estar perfecta y no
+       servir de nada si nadie la llama al mover las fechas del periodo. */
+    A._pagoNomStaff = ana; A._pnBonosQuitados = []; A._pagoNomConceptos = [];
+    A.document.getElementById('pnTipo').value  = 'semana';
+    A.document.getElementById('pnDesde').value = '2026-09-01';
+    A.document.getElementById('pnHasta').value = '2026-09-07';
+    A._pnRangoChange();
+    test('al mover el periodo, los bonos se cargan solos (sin teclear nada)', () =>
+        eq(A._pagoNomConceptos.length, 2, 'conectado'));
+
+    A._pagoNomConceptos = []; A._pnTotalManual = null;
+
+    /* ══ La sanción resta ══
+       Se guarda como concepto NEGATIVO: así usa el mismo total, la misma lista y
+       el mismo recibo que ya existían, sin una estructura aparte. */
+    const recibo = (percep, deduc) => {
+        A._pagoNomStaff = { id:'s1', nombre:'Ana' };
+        A._pagoNomConceptos = percep.concat(deduc);
+        A.document.getElementById('pnDesde').value = '2026-09-01';
+        A.document.getElementById('pnHasta').value = '2026-09-07';
+        A.document.getElementById('pnDiario').value = 400;
+        A.document.getElementById('pnDias').value   = 7;
+        A.document.getElementById('pnTotal').value  = 2800 + suma(percep) + suma(deduc);
+        A._pnPrimaInclude = false;
+        return A._reciboNominaDatos();
+    };
+    const d = recibo(
+        [{ concepto:'Puntualidad', monto: 180, pago:'mismo' }],
+        [{ concepto:'Sanción · retardo', monto: -200, pago:'mismo' }]
+    );
+
+    test('la sanción NO se cuela entre las percepciones', () =>
+        eq(d.percepciones.some(p => p.concepto.indexOf('Sanción') === 0), false, 'percep'));
+    test('la sanción sale en su propio bloque de deducciones', () =>
+        eq(d.deducciones.length, 1, 'deducciones'));
+    test('en el recibo la deducción se lee en positivo (el signo lo pone el bloque)', () =>
+        eq(d.deducciones[0].monto, 200, 'abs'));
+    test('el motivo viaja con la sanción: sin motivo es una discusión en un mes', () =>
+        eq(d.deducciones[0].concepto.indexOf('retardo') > -1, true, 'motivo'));
+    test('el total de percepciones no incluye la sanción', () => eq(d.totalPerc, 2980, 'totalPerc'));
+    test('el total de deducciones es la suma de lo descontado', () => eq(d.totalDed, 200, 'totalDed'));
+    test('el neto a pagar ya trae restada la sanción', () => eq(d.total, 2780, 'neto'));
+
+    /* Sin deducciones el recibo no debe inventar un bloque vacío. */
+    const limpio = recibo([{ concepto:'Puntualidad', monto:180, pago:'mismo' }], []);
+    test('sin sanciones no hay bloque de deducciones', () => eq(limpio.deducciones.length, 0, 'vacío'));
+
+    /* El armador del documento vive en /reporte-marca.js (no se carga aquí):
+       basta con devolver el cuerpo para poder mirarlo. */
+    A.etaaxReporteDoc = (o) => o.cuerpo;
+    const html = A._reciboNominaHTML(d);
+    test('el recibo impreso trae el bloque de Deducciones', () =>
+        eq(html.indexOf('Deducciones') > -1, true, 'html'));
+    test('el recibo impreso separa el Neto a pagar', () =>
+        eq(html.indexOf('Neto a pagar') > -1, true, 'neto'));
+    test('el recibo limpio NO trae bloque de deducciones', () =>
+        eq(A._reciboNominaHTML(limpio).indexOf('Deducciones') === -1, true, 'html limpio'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0
