@@ -22,6 +22,10 @@
     .al-neg .l { font-size:9.5px; letter-spacing:2px; text-transform:uppercase; color:var(--text-dim); }
     .al-neg .v { font-size:16px; font-weight:600; margin-top:3px; word-break:break-word; }
     .al-campo { margin-top:16px; }
+    .al-chk { display:flex; gap:10px; align-items:flex-start; margin:16px 0 0; font-size:12.5px;
+        line-height:1.5; color:var(--text-muted); cursor:pointer; text-align:left; }
+    .al-chk input { margin-top:2px; flex-shrink:0; width:17px; height:17px; cursor:pointer; accent-color:var(--green); }
+    .al-chk a { color:var(--green); text-decoration:underline; }
     .al-campo label { display:block; font-size:9.5px; letter-spacing:2px; text-transform:uppercase;
                       color:var(--text-dim); margin-bottom:6px; }
     .al-campo input { width:100%; box-sizing:border-box; background:var(--surface2);
@@ -118,6 +122,21 @@ function _pintarFormulario(){
         '<div class="al-campo"><label>Crea tu contraseña</label>' +
             '<input type="password" id="alPwd" placeholder="Mínimo 6 caracteres" autocomplete="new-password">' +
             '<div class="al-hint">Con este correo y esta contraseña vas a entrar a ETAAX.</div></div>' +
+        /* La aceptación se pide DONDE de verdad nace la cuenta. El formulario de
+           registro del hub quedó muerto hace tiempo (se cambió por "habla con un
+           asesor"), así que su checkbox no protegía nada: todas las altas pasan
+           por aquí. */
+        '<label class="al-chk"><input type="checkbox" id="alPriv">' +
+            '<span>He leído y acepto el <a href="/aviso-privacidad.html" target="_blank" rel="noopener">Aviso de Privacidad</a> ' +
+            'de ETAAX.</span></label>' +
+        /* La cláusula que reparte la responsabilidad. Sin ella el aviso no protege
+           a nadie: el dueño va a subir CURP, NSS, CLABE e INE de gente que nunca
+           firmó nada, y de esos datos el responsable es él. */
+        '<label class="al-chk"><input type="checkbox" id="alResp">' +
+            '<span>Entiendo que de los datos de mis colaboradores y clientes ' +
+            '<b>el responsable soy yo</b>, y que debo informarles y tener su consentimiento. ' +
+            'ETAAX solo los guarda por mi cuenta. ' +
+            '<a href="/aviso-colaboradores.html" target="_blank" rel="noopener">Ver el aviso que puedo entregarles</a>.</span></label>' +
         '<button class="al-btn" id="alBtn" onclick="activar()">Activar mi cuenta</button>' +
         '<div class="al-msg" id="alMsg" style="color:var(--text-dim)">' + esc(pago) + '</div>';
     document.getElementById('alPwd').addEventListener('keydown', function(e){
@@ -125,6 +144,10 @@ function _pintarFormulario(){
     });
     document.getElementById('alNombre').focus();
 }
+
+/* Versión del aviso que se está mostrando. Al cambiar el texto del aviso hay que
+   subirla aquí: es lo que queda guardado con la cuenta. */
+var AVISO_VERSION = '2026-09';
 
 async function activar(){
     var nombre = (document.getElementById('alNombre').value || '').trim();
@@ -134,6 +157,10 @@ async function activar(){
     msg.className = 'al-msg al-err';
     if (!nombre){ msg.textContent = 'Escribe tu nombre.'; return; }
     if (pwd.length < 6){ msg.textContent = 'La contraseña necesita al menos 6 caracteres.'; return; }
+    if (!document.getElementById('alPriv').checked){
+        msg.textContent = 'Necesitas aceptar el aviso de privacidad para continuar.'; return; }
+    if (!document.getElementById('alResp').checked){
+        msg.textContent = 'Necesitas reconocer tu responsabilidad sobre los datos de tu gente.'; return; }
 
     btn.disabled = true; btn.textContent = 'Creando tu cuenta…';
     msg.className = 'al-msg'; msg.style.color = 'var(--text-dim)';
@@ -142,7 +169,12 @@ async function activar(){
     var r;
     try {
         r = await _supabase.functions.invoke('activar-invitacion', {
-            body: { token: _token, nombre: nombre, password: pwd }
+            /* Se manda QUÉ versión se aceptó y CUÁNDO. Un aviso aceptado sin
+               registro de versión y fecha no sirve como prueba de nada: al
+               cambiar el texto, nadie podría decir qué fue lo que se aceptó. */
+            body: { token: _token, nombre: nombre, password: pwd,
+                    aviso_version: AVISO_VERSION,
+                    aviso_aceptado: new Date().toISOString() }
         });
     } catch (e) { r = { error: e }; }
 

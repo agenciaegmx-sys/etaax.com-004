@@ -9,7 +9,7 @@
    commit — no se escribe a mano, justamente porque es lo primero que se olvida.
    ============================================================ */
 (function () {
-    var FECHA = '2026-09-07';          /* ETAAX_DEPLOY — la estampa el hook */
+    var FECHA = '2026-09-08';          /* ETAAX_DEPLOY — la estampa el hook */
 
     /* DOS marcas, a propósito:
 

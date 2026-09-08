@@ -5336,6 +5336,77 @@ console.log('\n══ AQ · Que la cuenta de arriba cierre (financiero/kpis.html
         eq(est.indexOf("card('Utilidad',"), -1, 'sin ambigüedad'));
 }
 
+/* ═══════════ SUITE AR · AVISO DE PRIVACIDAD Y ACEPTACIÓN ════════════════════
+   Un aviso que no declara un dato, no lo ampara. Y una aceptación sin registro
+   de versión y fecha no prueba nada: al cambiar el texto, nadie puede decir qué
+   fue lo que se aceptó.                                                        */
+console.log('\n══ AR · Aviso de privacidad y aceptación ══');
+{
+    /* El HTML colapsa los saltos de línea, así que una frase partida en dos
+       renglones se lee igual: se normaliza antes de buscarla. */
+    const plano = (f) => fs.readFileSync(path.join(RAIZ, f), 'utf8').replace(/\s+/g, ' ');
+    const priv  = plano('aviso-privacidad.html');
+    const colab = plano('aviso-colaboradores.html');
+    const alta  = plano('alta.html');
+    const ef    = plano('supabase/functions/activar-invitacion/index.ts');
+    const inv   = fs.readFileSync(path.join(RAIZ, 'docs/inventario-datos.md'), 'utf8');
+
+    /* ── El aviso declara lo que la app DE VERDAD guarda ──
+       Decía "nombre, correo, contraseña y datos del negocio" mientras la app
+       guardaba CURP, NSS, CLABE e INE de los colaboradores. */
+    ['CURP', 'Seguro Social', 'CLABE', 'INE', 'sueldo', 'fotograf']
+        .forEach(d => test('el aviso declara: ' + d, () => eq(priv.indexOf(d) > -1, true, 'declarado')));
+
+    /* Los subencargados son obligatorios: los datos salen de México. */
+    ['Supabase', 'Netlify', 'Stripe', 'Resend']
+        .forEach(p => test('el aviso declara al proveedor ' + p, () => eq(priv.indexOf(p) > -1, true, 'declarado')));
+    test('y dice que hay transferencia internacional', () =>
+        eq(priv.indexOf('Estados Unidos') > -1, true, 'transferencia'));
+
+    /* El reparto de responsabilidad: ETAAX es encargado, el negocio responsable. */
+    test('el aviso distingue responsable de encargado', () =>
+        eq(priv.indexOf('ENCARGADO') > -1 && priv.indexOf('RESPONSABLE') > -1, true, 'papeles'));
+    test('…y dice que del staff el responsable es el negocio', () =>
+        eq(priv.indexOf('el responsable eres tú') > -1, true, 'dicho'));
+    test('el aviso conserva los derechos ARCO', () => eq(priv.indexOf('ARCO') > -1, true, 'arco'));
+    test('…con su plazo de respuesta', () => eq(priv.indexOf('20 días') > -1, true, 'plazo'));
+    test('…y la vía ante el INAI', () => eq(priv.indexOf('INAI') > -1, true, 'inai'));
+
+    /* Lo que el negocio le entrega a su gente. */
+    test('existe el aviso para colaboradores', () => eq(colab.indexOf('colaboradores') > -1, true, 'existe'));
+    test('…con espacio para firmar de recibido', () => eq(colab.indexOf('Firma') > -1, true, 'firma'));
+    test('…y nombra a ETAAX como quien guarda por cuenta del negocio', () =>
+        eq(colab.indexOf('por nuestra cuenta') > -1, true, 'encargado'));
+
+    /* ── La aceptación se pide DONDE nace la cuenta ──
+       El formulario del hub quedó muerto (se cambió por "habla con un asesor"),
+       así que su checkbox no protegía nada: todas las altas pasan por alta.html. */
+    test('la activación pide aceptar el aviso', () => eq(alta.indexOf('id="alPriv"') > -1, true, 'checkbox'));
+    test('…y reconocer la responsabilidad sobre los datos de su gente', () =>
+        eq(alta.indexOf('id="alResp"') > -1, true, 'cláusula'));
+    test('sin aceptar, la activación no sigue', () =>
+        eq(alta.indexOf("alPriv').checked") > -1, true, 'bloquea'));
+    test('manda QUÉ versión se aceptó', () => eq(alta.indexOf('aviso_version') > -1, true, 'versión'));
+
+    /* Y el servidor no se fía del navegador. */
+    test('el servidor exige el aviso aceptado', () =>
+        eq(ef.indexOf("if (!avisoVersion) return json") > -1, true, 'servidor'));
+    test('…y sella la fecha él mismo, no la del cliente', () =>
+        eq(ef.indexOf('const avisoAceptado = new Date().toISOString()') > -1, true, 'sellada'));
+    test('…y la guarda con la cuenta', () =>
+        eq(ef.indexOf('aviso_version: avisoVersion') > -1, true, 'guardada'));
+
+    /* ── El inventario es la base: si un dato no está ahí, no está declarado ── */
+    ['CURP', 'NSS', 'CLABE', 'INE', 'Supabase', 'Stripe']
+        .forEach(d => test('el inventario registra: ' + d, () => eq(inv.indexOf(d) > -1, true, 'inventariado')));
+    test('el inventario reconoce los huecos abiertos', () =>
+        eq(inv.indexOf('Huecos conocidos') > -1, true, 'honesto'));
+    /* El bucket público con INE dentro es el hueco más grande y tiene que estar
+       escrito, no olvidado. */
+    test('…incluido el bucket de evidencias público', () =>
+        eq(inv.indexOf('bucket `evidencias` es público') > -1, true, 'bucket'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0

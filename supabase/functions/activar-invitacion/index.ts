@@ -54,15 +54,25 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return json({ error: 'Método no permitido' }, 405);
 
-  let body: { token?: string; nombre?: string; password?: string };
+  let body: { token?: string; nombre?: string; password?: string;
+              aviso_version?: string; aviso_aceptado?: string };
   try { body = await req.json(); } catch { return json({ error: 'Cuerpo inválido' }, 400); }
 
   const token = (body.token ?? '').trim();
   const nombre = (body.nombre ?? '').trim();
+  /* Qué versión del aviso aceptó y cuándo. Se guarda con la cuenta: un aviso
+     aceptado sin registro de versión y fecha no prueba nada —al cambiar el texto
+     nadie podría decir qué fue lo que se aceptó. La fecha se sella aquí, en el
+     servidor, no se cree la del navegador (el reloj del cliente se puede mover). */
+  const avisoVersion  = (body.aviso_version ?? '').trim();
+  const avisoAceptado = new Date().toISOString();
   const password = body.password ?? '';
 
   if (!token) return json({ error: 'Falta el token de la invitación' }, 400);
   if (!nombre) return json({ error: 'Escribe tu nombre' }, 400);
+  /* Sin aviso aceptado no se crea la cuenta. Se valida también aquí, no solo en
+     el navegador: quien llame a esta función por su cuenta no puede saltárselo. */
+  if (!avisoVersion) return json({ error: 'Falta aceptar el aviso de privacidad' }, 400);
   if (password.length < 6) return json({ error: 'La contraseña debe tener al menos 6 caracteres' }, 400);
 
   /* ── 1. La invitación manda ──────────────────────────────────────────────
@@ -85,7 +95,7 @@ Deno.serve(async (req) => {
     email: inv.email,
     password,
     email_confirm: true,
-    user_metadata: { nombre },
+    user_metadata: { nombre, aviso_version: avisoVersion, aviso_aceptado: avisoAceptado },
   });
   if (eUser || !uNueva?.user) {
     const msg = String(eUser?.message ?? '');
