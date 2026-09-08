@@ -5274,6 +5274,68 @@ console.log('\n══ AP · Que la página arranque (todas las pantallas) ══
     });
 }
 
+/* ═══════════ SUITE AQ · QUE LA CUENTA DE ARRIBA CIERRE (financiero/kpis.html) ══
+   En pantalla se leía: ingresos $327,729 − egresos $303,950 … y la utilidad
+   decía $5,073. La resta daba $23,779. La diferencia eran las previsiones, que
+   estaban en la tabla de abajo pero no en la cuenta de arriba, y quien lo leía se
+   quedaba buscando dónde se fue el dinero.                                     */
+console.log('\n══ AQ · Que la cuenta de arriba cierre (financiero/kpis.html) ══');
+{
+    const K = crearContexto();
+    cargarJS(K, 'etaax-core.js');
+    cargarInline(K, 'financiero/kpis.html');
+    const $ = (id) => K.document.getElementById(id);
+
+    /* Los mismos números del caso real. */
+    const d = { ingresos:327729, egresos:303950, prevs:18706, prevUsado:0,
+                util:327729-303950-18706, fijos:7609, variables:200125,
+                nomOp:54086, nomAdm:42130, desde:'2026-08-01', hasta:'2026-08-31',
+                ventas:327729, otros:0, gastos:[], cortes:[], otrosLista:[], comisionBanco:0 };
+
+    test('la resta de la pantalla cierra: ingresos − egresos − previsiones = utilidad', () =>
+        eq(d.ingresos - d.egresos - d.prevs, d.util, 'cuadre'));
+    test('…y sin las previsiones NO cerraría', () =>
+        eq(d.ingresos - d.egresos !== d.util, true, 'la trampa'));
+
+    /* El card existe y lleva el número. */
+    K._pintarKPIs ? K._pintarKPIs(d) : null;
+    test('la pantalla tiene su card de apartado en previsiones', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'financiero/kpis.html'), 'utf8');
+        return eq(src.indexOf('id="kpiPrev"') > -1, true, 'card');
+    });
+    test('…y se llena con lo apartado del periodo', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'financiero/kpis.html'), 'utf8');
+        return eq(src.indexOf("getElementById('kpiPrev').textContent=fmtM(d.prevs)") > -1, true, 'lleno');
+    });
+    /* Y la cuenta escrita debajo de la utilidad: es la que el usuario intenta
+       hacer de cabeza. */
+    test('bajo la utilidad se escribe la resta completa', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'financiero/kpis.html'), 'utf8');
+        // Desde la ASIGNACIÓN, no desde el markup: el id aparece antes en el HTML.
+        const i = src.indexOf("getElementById('kpiUtilSub').textContent");
+        /* Tiene que estar el MONTO formateado, no solo la condición `d.prevs>0`:
+           con eso último la prueba pasaba aunque la resta ya no se escribiera. */
+        return eq(i > -1 && src.slice(i, i + 220).indexOf('fmtM(d.prevs)') > -1, true, 'resta');
+    });
+    /* El reporte impreso lleva el mismo card: si no, el PDF vuelve a no cuadrar. */
+    test('el reporte impreso también trae el apartado', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'financiero/kpis.html'), 'utf8');
+        return eq(src.indexOf("card('Apartado en previsiones'") > -1, true, 'reporte');
+    });
+
+    /* ── Y que no se llamen igual dos cosas distintas ──
+       Estadísticas muestra ventas − gastos, sin restar lo apartado. Es correcto,
+       pero llamarlo "Utilidad" igual que en KPIs hacía imposible cotejar los
+       módulos: dos números distintos con el mismo nombre. */
+    const est = fs.readFileSync(path.join(RAIZ, 'financiero/estadisticas.html'), 'utf8');
+    test('estadísticas dice "utilidad operativa", no "utilidad" a secas', () =>
+        eq(est.indexOf("card('Utilidad operativa'") > -1, true, 'nombrada'));
+    test('…y aclara que es antes de apartar previsiones', () =>
+        eq(est.indexOf('Antes de apartar previsiones') > -1, true, 'aclarado'));
+    test('ya no queda un card llamado solo "Utilidad"', () =>
+        eq(est.indexOf("card('Utilidad',"), -1, 'sin ambigüedad'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0

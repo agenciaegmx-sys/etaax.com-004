@@ -227,7 +227,7 @@
         </div>
 
         <div class="chart-card wide" data-k="util">
-            <div class="ch-title">💹 Utilidad</div>
+            <div class="ch-title">💹 Utilidad operativa</div>
             <div class="ch-sub">Ventas + ingresos − gastos, por corte de tiempo. Verde ganas, rojo pierdes.</div>
             <div id="chUtil"></div>
         </div>
@@ -1033,6 +1033,10 @@ function imprimirEstadisticas(){
     if(typeof etaaxReporteDoc!=='function'){ alert('No se pudo cargar el módulo de reportes. Recarga la página.'); return; }
     var rF=rangoF(), rC=rangoC(), comp=!!rC, rBase=comp?rC:rangoPrevio(rF);
     var vsTxt=comp?'vs B':'vs anterior';
+    /* Esto es utilidad OPERATIVA: ventas menos gastos, antes de apartar nada.
+       KPIs muestra la utilidad NETA, que además resta lo apartado en previsiones.
+       Son dos números distintos y correctos; llamar "Utilidad" a los dos era la
+       trampa —al comparar módulos no cuadraban y no se veía por qué. */
     var v=aVentas(rF), g=aGastos(rF), u=v-g, ck=aCheque(rF), pr=aProps(rF), co=aComis(rF), nom=aNomina(rF);
     var vB=aVentas(rBase), gB=aGastos(rBase);
     var dv=delta(v,vB,vsTxt), dg=delta(g,gB,vsTxt), du=delta(u,vB-gB,vsTxt),
@@ -1045,7 +1049,8 @@ function imprimirEstadisticas(){
     var cards =
         card('Ventas + ingresos', fmtM(v), '#1a7a46', dv.txt) +
         card('Gastos del periodo', fmtM(g), '#b52a1a', dg.txt) +
-        card('Utilidad', fmtM(u), u>=0?'#1a7a46':'#b52a1a', du.txt) +
+        card('Utilidad operativa', fmtM(u), u>=0?'#1a7a46':'#b52a1a',
+             'Antes de apartar previsiones · '+du.txt) +
         card('Cheque promedio', ck>0?fmtM(ck):'—', '', dck.txt) +
         card('Propinas (no es gasto)', fmtM(pr), '#9a6f00', dp.txt) +
         (cumpl!==null
@@ -1108,7 +1113,7 @@ function imprimirEstadisticas(){
         '<div class="rgrid" style="grid-template-columns:repeat(3,1fr)">'+cards+'</div>' +
         chBlock('Ventas por '+lblMode, totTag(fmtM(v),'#1a7a46'), _repLineChart(bk.labels, ventasSeries, fmtK, {labelEach:true}), _repLeg([{c:'#1a7a46',n:'Ventas'},{c:'#bbb',n:'Meta diaria'}])) +
         chBlock('Ventas vs Gastos', '<span style="color:#1a7a46">'+fmtM(v)+'</span> <span style="font-size:11px;font-family:\'DM Sans\',sans-serif;color:#aaa">ventas</span>&nbsp;&nbsp;·&nbsp;&nbsp;<span style="color:#b52a1a">'+fmtM(g)+'</span> <span style="font-size:11px;font-family:\'DM Sans\',sans-serif;color:#aaa">gastos</span>', _repColChart(bk.labels,[{name:'Ventas',color:'#1a7a46',values:serieV},{name:'Gastos',color:'#b52a1a',values:serieG}],fmtK,{wide:true,labelEach:true}), _repLeg([{c:'#1a7a46',n:'Ventas'},{c:'#b52a1a',n:'Gastos'}])) +
-        chBlock('Utilidad por '+lblMode, totTag(fmtM(u), u>=0?'#1a7a46':'#b52a1a'), _repColChart(bk.labels,[{name:'Utilidad',values:utilVals}],fmtK,{diverging:true,colPos:'#1a7a46',colNeg:'#b52a1a',labelEach:true})) +
+        chBlock('Utilidad operativa por '+lblMode, totTag(fmtM(u), u>=0?'#1a7a46':'#b52a1a'), _repColChart(bk.labels,[{name:'Utilidad',values:utilVals}],fmtK,{diverging:true,colPos:'#1a7a46',colNeg:'#b52a1a',labelEach:true})) +
         chBlock('Cheque promedio por '+lblMode, totTag(ck>0?fmtM(ck):'—','#2563c4'), _repLineChart(bk.labels,[{name:'Cheque',color:'#2563c4',values:serieCheque}],fmt$,{labelEach:true})) +
         chBlock('Propina sobre ventas (por '+lblMode+')', totTag(fmtM(pr)+' · '+(v>0?(pr/v*100).toFixed(1):'0')+'% prom.','#7a5cff'), _repColChart(bk.labels,[{name:'Ventas',color:'#1a7a46',values:serieV}],fmtK,{wide:true,barLabels:serieV.map(function(vv,i){ return vv>0?fmtK(vv)+' · '+Math.round((serieProp[i]||0)/vv*100)+'%':''; }),barLabelColor:'#5b3fc4'}), _repLeg([{c:'#1a7a46',n:'Venta (barra)'},{c:'#5b3fc4',n:'% propina (etiqueta)'}])) +
         chBlock('Comisiones bancarias', totTag(fmtM(co),'#b52a1a'), _repColChart(bk.labels,[{name:'Comisiones',color:'#b52a1a',values:serieComis}],fmt$,{labelEach:true})) +
@@ -1142,7 +1147,7 @@ function renderAll(){
     document.getElementById('tilesRow').innerHTML=
         tile('Ventas + ingresos',fmtM(v),p.green,dv.txt,dv.cls)+
         tile('Gastos',fmtM(g),p.red,dg.txt,dg.cls==='up'?'down':dg.cls==='down'?'up':'')+
-        tile('Utilidad',fmtM(u),u>=0?p.green:p.red,du.txt,du.cls)+
+        tile('Utilidad operativa',fmtM(u),u>=0?p.green:p.red,'antes de apartar · '+du.txt,du.cls)+
         tile('Cheque promedio',ck>0?fmtM(ck):'—','',dc.txt,dc.cls)+
         tile('Propinas',fmtM(pr),'',dp.txt,dp.cls)+
         (cumpl!==null

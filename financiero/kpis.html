@@ -40,10 +40,12 @@
         .suc-sep{height:1px;background:var(--border);margin:4px 0;}
 
         /* ── KPI Summary cards ── */
-        .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}
+        .kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px;}
         @media(max-width:900px){.kpi-grid{grid-template-columns:repeat(2,1fr);}}
         .kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;}
         .kpi-card.g{border-color:rgba(61,190,122,.3);background:rgba(61,190,122,.03);}
+        /* Morado: lo apartado no es ingreso ni egreso, es su propia cosa. */
+        .kpi-card.v{border-color:rgba(139,92,246,.35);background:rgba(139,92,246,.05);}
         .kpi-card.r{border-color:rgba(224,90,58,.3);background:rgba(224,90,58,.03);}
         .kpi-card.y{border-color:rgba(245,200,66,.3);background:rgba(245,200,66,.03);}
         .kpi-lbl{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px;}
@@ -260,6 +262,11 @@
                     <div class="kpi-lbl">Egresos totales</div>
                     <div class="kpi-val" id="kpiEgresos" style="color:var(--red)">$0</div>
                     <div class="kpi-sub">Fijos + Nóminas + Variables</div>
+                </div>
+                <div class="kpi-card" id="kpiPrevCard">
+                    <div class="kpi-lbl">Apartado en previsiones</div>
+                    <div class="kpi-val" id="kpiPrev" style="color:var(--viol,#8b5cf6)">$0</div>
+                    <div class="kpi-sub" id="kpiPrevSub">Sale de la utilidad, no del gasto</div>
                 </div>
                 <div class="kpi-card" id="kpiUtilCard">
                     <div class="kpi-lbl">Utilidad neta</div>
@@ -698,6 +705,10 @@ function imprimirKPIs(){
     var cards =
         card('Ingresos del periodo', fmtM(d.ingresos), '#1a7a46', 'Ventas + otros ingresos') +
         card('Egresos totales', fmtM(d.egresos), '#b52a1a', 'Fijos + Nóminas + Variables') +
+        /* Sin este renglón la resta de arriba no cierra: ingresos − egresos daba
+           un número distinto al de la utilidad, y quien lo lee se queda buscando
+           dónde se fue la diferencia. */
+        card('Apartado en previsiones', fmtM(d.prevs), '#7c5cd6', 'Sale de la utilidad, no del gasto') +
         card('Utilidad neta', fmtM(d.util), d.util>=0?'#1a7a46':'#b52a1a', fmtPct(margen)+' sobre ingresos') +
         card('Margen operativo', d.ingresos>0?fmtPct(margen):'—', margenColor, 'Meta: '+t.util+'%');
 
@@ -776,9 +787,25 @@ function renderAll(){
     // Summary KPIs
     document.getElementById('kpiIngresos').textContent=fmtM(d.ingresos);
     document.getElementById('kpiEgresos').textContent=fmtM(d.egresos);
+    /* Sin este renglón la resta de arriba no cierra: ingresos − egresos daba un
+       número distinto al de la utilidad y quien lo leía se quedaba buscando dónde
+       se fue la diferencia. Apartar no es un gasto —el dinero no salió del
+       negocio— pero sí sale de la utilidad: es utilidad que ya tiene dueño. */
+    document.getElementById('kpiPrev').textContent=fmtM(d.prevs);
+    document.getElementById('kpiPrevSub').textContent = d.prevs>0
+        ? (d.prevUsado>0
+            ? ('Y ' + fmtM(d.prevUsado) + ' del gasto salió de previsiones')
+            : 'Sale de la utilidad, no del gasto')
+        : (d.prevUsado>0
+            ? (fmtM(d.prevUsado) + ' del gasto salió de previsiones')
+            : 'Nada apartado en el periodo');
+    document.getElementById('kpiPrevCard').className='kpi-card'+(d.prevs>0?' v':'');
     document.getElementById('kpiUtil').textContent=fmtM(d.util);
     document.getElementById('kpiUtil').style.color=d.util>=0?'var(--green)':'var(--red)';
-    document.getElementById('kpiUtilSub').textContent=fmtPct(pUtil)+' sobre ingresos';
+    /* La cuenta completa, escrita: es la que el usuario intenta hacer de cabeza. */
+    document.getElementById('kpiUtilSub').textContent = d.prevs>0
+        ? (fmtM(d.ingresos)+' − '+fmtM(d.egresos)+' − '+fmtM(d.prevs))
+        : (fmtPct(pUtil)+' sobre ingresos');
     document.getElementById('kpiMargen').textContent=d.ingresos>0?fmtPct(pUtil):'—%';
     document.getElementById('kpiMargenMeta').textContent=t.util+'%';
     var semMrg=getSem(pUtil,t.util,true);
