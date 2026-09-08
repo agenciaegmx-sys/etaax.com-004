@@ -148,6 +148,11 @@
                 <div class="period-picker">
                     <label>Mes</label>
                     <input type="month" id="mesInput">
+                    <label style="display:inline-flex;align-items:center;gap:6px;margin-left:10px;
+                        font-size:11.5px;color:var(--text-dim);cursor:pointer;white-space:nowrap">
+                        <input type="checkbox" id="mesSolo" onchange="renderAll()" style="cursor:pointer">
+                        solo las de este mes
+                    </label>
                 </div>
                 <button class="btn-primary" id="btnAddPrev">+ Nueva previsión</button>
             </div>
@@ -389,6 +394,10 @@ function _sucDePrev(p){
 /* ¿La meta está corriendo en el mes elegido? La fecha de término se llama
    `fechaObjetivo` desde que son metas; las capturadas antes traen `fechaFin` y
    siguen valiendo. */
+function _soloMes(){
+    var c=document.getElementById('mesSolo');
+    return !!(c && c.checked);
+}
 function _enMes(p, mes){
     var mesStart=mes+'-01';
     var y=parseInt(mes.slice(0,4)), m=parseInt(mes.slice(5,7));
@@ -489,7 +498,12 @@ function renderAll(hoyRef){
         var _sp=_sucDePrev(p);
         if(_sucursalId && _sp && _sp!==_sucursalId) return false;
         if(_filtroEstado&&p.estado!==_filtroEstado) return false;
-        return _enMes(p, mes);
+        /* El mes NO filtra por default. Una meta no es un evento del mes: el
+           aguinaldo corre de agosto a diciembre y preguntar "¿cuáles son las de
+           septiembre?" es la pregunta equivocada —dejaba fuera metas que sí
+           existen y parecía que se habían borrado. Se filtra por mes solo si se
+           pide a propósito. */
+        return !_soloMes() || _enMes(p, mes);
     });
 
     // ── KPIs: lo que de verdad quieres saber al abrir esta pantalla ──
@@ -543,13 +557,13 @@ function renderAll(hoyRef){
                     var sp=_sucDePrev(p);
                     if(!o.suc && _sucursalId && sp && sp!==_sucursalId) return false;
                     if(!o.est && _filtroEstado && p.estado!==_filtroEstado) return false;
-                    if(!o.mes && !_enMes(p, mes)) return false;
+                    if(!o.mes && _soloMes() && !_enMes(p, mes)) return false;
                     return true;
                 });
             };
             if(_filtroEstado && _pasa({est:1})) _motivos.push('el filtro <b>'+_esc(_filtroEstado.replace('_',' '))+'</b>');
             if(_sucursalId   && _pasa({suc:1})) _motivos.push('la sucursal <b>'+_esc(_negLabel(_sucursalId))+'</b>');
-            if(_pasa({mes:1}))                  _motivos.push('el mes <b>'+_esc(mes)+'</b>');
+            if(_soloMes() && _pasa({mes:1}))    _motivos.push('el mes <b>'+_esc(mes)+'</b>');
             if(!_motivos.length) _motivos.push('los filtros de esta vista');
         }
         empty.innerHTML = _todas
@@ -723,7 +737,9 @@ function guardarPrev(){
 
 document.addEventListener('DOMContentLoaded',function(){
     document.getElementById('mesInput').value=mesStr();
-    document.getElementById('mesInput').addEventListener('change',renderAll);
+    /* Sin la envoltura, el Event del change entraba como `hoyRef` y el ritmo se
+       medía contra un objeto de evento en vez de contra una fecha. */
+    document.getElementById('mesInput').addEventListener('change',function(){ renderAll(); });
 
     // Sucursal
     _pintarSucChip();

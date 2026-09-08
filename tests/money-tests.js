@@ -3582,14 +3582,26 @@ console.log('\n══ SUITE AD · Pantalla de previsiones (financiero/previsione
         return eq(h.indexOf('Va tarde') < h.indexOf('Va bien'), true, 'orden');
     });
 
-    /* Una meta que ya terminó antes del mes elegido no debe aparecer: si la fecha
-       de término no se leyera, toda meta vieja seguiría colgada en la lista. */
+    /* ── EL MES NO FILTRA POR DEFAULT ──
+       Una meta no es un evento del mes: el aguinaldo corre de agosto a diciembre.
+       Preguntar "¿cuáles son las de septiembre?" dejaba fuera metas que sí
+       existen, y parecía que se habían borrado. El módulo es también el historial
+       de previsiones, así que se ven todas salvo que se pida lo contrario. */
     setVar(P, '_cachePrevs', [{ id:'x1', concepto:'Terminada en marzo', estado:'en_curso',
         montoObjetivo:5000, periodicidad:'mensual',
         fechaInicio:'2026-01-01', fechaObjetivo:'2026-03-31' }]);
+    $('mesSolo').checked = false;
+    $('mesInput').value = '2026-08';
     P.renderAll(HOY_PV);
-    test('una meta que terminó antes del mes elegido no se cuelga en la lista', () =>
+    test('una meta terminada en marzo se sigue viendo en agosto (es historial)', () =>
+        eq($('prevTbody').innerHTML.indexOf('Terminada en marzo') > -1, true, 'historial'));
+
+    /* Y si se pide a propósito, el mes sí filtra. */
+    $('mesSolo').checked = true;
+    P.renderAll(HOY_PV);
+    test('marcando «solo las de este mes», la de marzo desaparece de agosto', () =>
         eq($('prevTbody').innerHTML.indexOf('Terminada en marzo'), -1, 'filtrada'));
+    $('mesSolo').checked = false;
 
     /* Y la pantalla tiene que CARGAR el núcleo de verdad: aquí lo inyecta el
        arnés, así que sin mirar el HTML esto pasaría con la etiqueta borrada. */
@@ -4509,6 +4521,39 @@ console.log('\n══ SUITE AK · Depósitos, retiros y apartados (administrativ
     test('…y la segunda cuenta también', () =>
         eq($('propLblB').textContent.indexOf('Wuzi') === 0, true, 'propina B'));
 
+    /* ── Borrar un movimiento: qué se está borrando ──
+       Decía "¿Eliminar este depósito?" y ya: ni de cuánto, ni de qué día, ni si
+       era un retiro o un apartado. Borrar el equivocado no se deshace. */
+    setVar(A, '_cacheDeps', [
+        { id:'d1', fecha:'2026-08-10', monto:1425, concepto:'Apartado para previsión',
+          tipo:'apartado', previsionId:'p1', fondo:'caja_fuerte' },
+        { id:'d2', fecha:'2026-08-11', monto:900, concepto:'Pago a proveedor',
+          origen:'caja_fuerte', destino:'retiro' }
+    ]);
+    setVar(A, '_cachePrevs', [{ id:'p1', concepto:'Renta', estado:'en_curso' }]);
+    let confirmsNav = 0;
+    A.confirm = () => { confirmsNav++; return true; };
+
+    A.eliminarDeposito('d1');
+    test('borrar un movimiento NO usa el cuadro del navegador', () => eq(confirmsNav, 0, 'sin confirm'));
+    test('…dice de cuánto era', () => eq($('cfTexto').innerHTML.indexOf('$1,425.00') > -1, true, 'monto'));
+    test('…y de qué día', () => eq($('cfTexto').innerHTML.indexOf('ago') > -1, true, 'fecha'));
+    /* Y sabe QUÉ es: un apartado no se borra con el mismo texto que un depósito. */
+    test('reconoce que es un apartado, no un depósito', () =>
+        eq($('cfTitulo').textContent.indexOf('apartado') > -1, true, 'apartado'));
+    test('…y avisa que ese dinero vuelve a contar como disponible', () =>
+        eq($('cfNota').innerHTML.indexOf('disponible') > -1, true, 'consecuencia'));
+    A._confirmNo();
+    test('cancelar no borra nada', () => eq((A._cacheDeps||[]).length, 2, 'intacto'));
+
+    A.eliminarDeposito('d2');
+    test('un retiro se anuncia como retiro', () =>
+        eq($('cfTitulo').textContent.indexOf('retiro') > -1, true, 'retiro'));
+    A._confirmSi();
+    test('aceptar sí lo borra', () => eq((A._cacheDeps||[]).some(x => x.id === 'd2'), false, 'borrado'));
+    test('…y no se lleva al otro por delante', () =>
+        eq((A._cacheDeps||[]).some(x => x.id === 'd1'), true, 'el otro vive'));
+
     /* ── Categorías propias ── */
     delete A._storage['etaax_negT_dep_categorias'];
     A._depPobCategorias('');
@@ -5068,15 +5113,21 @@ console.log('\n══ AO · Previsiones por sucursal (financiero/previsiones.htm
         eq($('prevEmpty').innerHTML.indexOf('la sucursal') > -1, true, 'sucursal'));
     setVar(V, '_filtroEstado', '');
 
-    /* Y cuando sí es el mes, lo dice. */
+    /* Cuando el mes SÍ filtra (marcado a propósito) y es el que esconde, lo dice. */
     setVar(V, '_sucursalId', 'suc1');
-    V.renderAll('2026-09-15');
+    $('mesSolo').checked = true;
     $('mesInput').value = '2027-05';
     V.renderAll('2027-05-15');
-    test('cuando el que esconde es el mes, culpa al mes', () =>
+    test('con el mes marcado, culpa al mes', () =>
         eq($('prevEmpty').innerHTML.indexOf('el mes') > -1, true, 'mes'));
     test('…y no a la sucursal, que sí coincide', () =>
         eq($('prevEmpty').innerHTML.indexOf('la sucursal'), -1, 'sin sucursal'));
+    /* Sin marcarlo, el mes NO puede salir culpado: no está filtrando nada, y la
+       meta se ve aunque el mes elegido sea otro. */
+    $('mesSolo').checked = false;
+    V.renderAll('2027-05-15');
+    test('sin marcarlo, la meta se ve aunque el mes elegido sea otro', () =>
+        eq($('prevTbody').innerHTML.indexOf('Horno') > -1, true, 'visible'));
     $('mesInput').value = '2026-09';
 
 

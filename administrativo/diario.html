@@ -4003,15 +4003,7 @@ function abrirVerDepositos(){
     document.getElementById('depOverlay').classList.add('open');
 }
 function cerrarVerDepositos(){document.getElementById('depOverlay').classList.remove('open');}
-function _elimDepOv(id){
-    if(!confirm('¿Eliminar este depósito?'))return;
-    _cacheDeps = (_cacheDeps||[]).filter(function(x){return x.id!==id;});
-    _sbDel('depositos', id);
-    renderDepositos();
-    abrirVerDepositos();
-    var cajEl=document.getElementById('cajOverlay');
-    if(cajEl&&cajEl.classList.contains('open'))_abrirCajaFuerteContenido();
-}
+function _elimDepOv(id){ _confirmarBorrarMov(id, abrirVerDepositos); }
 
 
 /* ══════════════════════════════════════════════════════════
@@ -4942,14 +4934,31 @@ function abrirHistConciliaciones(){
 }
 function cerrarHistConciliaciones(){ document.getElementById('concHistOverlay').classList.remove('open'); }
 
-function eliminarDeposito(id){
-    if(!confirm('¿Eliminar este depósito?'))return;
-    _cacheDeps = (_cacheDeps||[]).filter(function(x){return x.id!==id;});
-    _sbDel('depositos', id);
-    renderDepositos();
-    var cajEl=document.getElementById('cajOverlay');
-    if(cajEl&&cajEl.classList.contains('open'))_abrirCajaFuerteContenido();
+/* Confirmación de borrado de un movimiento. Antes decía "¿Eliminar este
+   depósito?" y ya: ni de cuánto, ni de qué día, ni si era un retiro o un apartado
+   —y borrar el equivocado no se deshace. */
+function _confirmarBorrarMov(id, luego){
+    var d=(loadDep()||[]).find(function(x){return x.id===id;})||{};
+    var esAp=EtaaxCore.esApartado(d), esRet=_esRetiro(d);
+    _confirmar({
+        titulo: esAp?'🔮 Quitar este apartado':(esRet?'📤 Eliminar este retiro':'💸 Eliminar este depósito'),
+        texto:'<b>'+fmtM(d.monto||0)+'</b> · '+_escV(_fCorta(d.fecha||''))
+             +(d.concepto?'<div style="margin-top:4px;color:var(--text-dim)">'+_escV(d.concepto)+'</div>':'')
+             +'<div style="margin-top:4px;font-size:11.5px;color:var(--text-dim)">'+_depMovTxt(d)+'</div>',
+        nota: esAp
+            ? 'Ese dinero vuelve a contar como disponible: deja de estar apartado para su meta.'
+            : 'Los saldos de caja fuerte y banco se recalculan sin este movimiento.',
+        ok:'Eliminar', peligro:true
+    }, function(){
+        _cacheDeps = (_cacheDeps||[]).filter(function(x){return x.id!==id;});
+        _sbDel('depositos', id);
+        renderDepositos();
+        if(luego) luego();
+        var cajEl=document.getElementById('cajOverlay');
+        if(cajEl&&cajEl.classList.contains('open'))_abrirCajaFuerteContenido();
+    });
 }
+function eliminarDeposito(id){ _confirmarBorrarMov(id); }
 
 /* ══════════════════════════════════════════════════════════
    VENTAS EXTRA
