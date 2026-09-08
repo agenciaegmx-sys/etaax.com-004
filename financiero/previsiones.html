@@ -743,7 +743,6 @@ document.addEventListener('DOMContentLoaded',function(){
 
     // Sucursal
     _pintarSucChip();
-    chip.addEventListener('click',function(e){e.stopPropagation();_renderSucMenu();var menu=document.getElementById('sucMenu');menu.classList.toggle('open');chip.classList.toggle('open');});
     document.addEventListener('click',function(e){if(!e.target.closest('#sucMenu')&&!e.target.closest('#sucChip')){var m=document.getElementById('sucMenu');if(m)m.classList.remove('open');chip.classList.remove('open');}});
 
     // Filtros

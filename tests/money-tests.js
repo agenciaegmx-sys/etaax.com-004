@@ -4978,6 +4978,7 @@ console.log('\n══ AO · Previsiones por sucursal (financiero/previsiones.htm
     cargarInline(V, 'financiero/previsiones.html');
     const $ = (id) => V.document.getElementById(id);
 
+
     /* ── El selector lista SUCURSALES ── */
     const sucs = V._loadNegocios();
     test('el selector lista sucursales, no negocios', () =>
@@ -5196,6 +5197,81 @@ console.log('\n══ AO · Previsiones por sucursal (financiero/previsiones.htm
     V.renderAll('2026-08-15');
     test('sin previsiones, no se inventa un filtro culpable', () =>
         eq($('prevEmpty').innerHTML.indexOf('Sin previsiones') > -1, true, 'vacío real'));
+}
+
+/* ═══════════ SUITE AP · QUE LA PÁGINA ARRANQUE ═══════════════════════════════
+   Dos veces en el mismo día pasó lo mismo: al extraer una función quedó suelta
+   una línea que usaba una variable ya borrada. Un ReferenceError en el arranque
+   MATA todo lo que venía después —los botones no se conectan, la carga de datos
+   nunca corre— y la pantalla se ve como "no hay nada" cuando en realidad la
+   página se murió al cargar. Nada de eso rompe la sintaxis, así que ningún
+   chequeo estático lo veía.
+
+   Esto corre el DOMContentLoaded de verdad de cada pantalla y exige que llegue
+   entero al final.                                                             */
+console.log('\n══ AP · Que la página arranque (todas las pantallas) ══');
+{
+    const arrancar = (archivo, extras) => {
+        const W = crearContexto();
+        cargarJS(W, 'etaax-core.js');
+        cargarJS(W, 'insumo-label.js');
+        W._storage['etaax_negocio_activo'] = 'negT';
+        W._storage['etaax_ctx'] = JSON.stringify({ ctxType: 'owner', negId: 'negT' });
+        W._storage['etaax_negT_sucursales'] = JSON.stringify([{ id:'suc1', nombre:'Suc', activa:true }]);
+        Object.keys(extras || {}).forEach(k => { W._storage[k] = extras[k]; });
+        /* TODOS los arranques, no solo el último: varias pantallas registran más
+           de un DOMContentLoaded (el tema, el nav, el módulo). Quedarse con uno
+           dejaba los otros sin mirar. */
+        const arranques = [];
+        W.document.addEventListener = function (ev, fn) { if (ev === 'DOMContentLoaded') arranques.push(fn); };
+        cargarInline(W, archivo);
+        if (!arranques.length) return { W, corrio: false };
+        arranques.forEach(function (fn) { fn(); });   // si alguno lanza, el test falla con el motivo
+        return { W, corrio: true, cuantos: arranques.length };
+    };
+
+    /* Cuántos arranques registra cada pantalla. Fijarlo sirve de dos maneras: si
+       uno deja de registrarse —porque su bloque empezó a tronar antes— el número
+       baja y esto falla. Ojo con el alcance: solo se miran los handlers que
+       alcanzan a registrarse en el arnés; un bloque que revienta antes de llegar
+       a su addEventListener queda fuera de esta red. */
+    [
+        ['administrativo/diario.html',        3],
+        ['financiero/previsiones.html',       2],
+        ['financiero/gastos-globales.html',   2],
+        ['financiero/kpis.html',              2],
+        ['administrativo/staff.html',         1],
+    ].forEach(function (f) {
+        const r = arrancar(f[0]);
+        test('arranca sin lanzar: ' + f[0], () => eq(r.corrio, true, 'arrancó'));
+        test('…y registra sus ' + f[1] + ' arranques', () => eq(r.cuantos, f[1], 'cuantos'));
+    });
+
+    /* Y en Previsiones, además, que llegue HASTA EL FINAL: el ReferenceError
+       estaba a la mitad, así que el arranque "corría" pero el botón de crear
+       nunca quedaba conectado y los datos nunca se pedían. */
+    test('previsiones conecta el botón de crear (llega al final del arranque)', () => {
+        const W = crearContexto();
+        cargarJS(W, 'etaax-core.js');
+        W._storage['etaax_negocio_activo'] = 'negT';
+        W._storage['etaax_negT_sucursales'] = JSON.stringify([{ id:'suc1', nombre:'Suc', activa:true }]);
+        const wired = {};
+        const _ce = W.document.getElementById;
+        W.document.getElementById = function (id) {
+            const el = _ce.call(this, id);
+            if (!el._spy) {
+                el._spy = true;
+                const _al = el.addEventListener;
+                el.addEventListener = function () { wired[id] = true; return _al.apply(el, arguments); };
+            }
+            return el;
+        };
+        const arranques = [];
+        W.document.addEventListener = function (ev, fn) { if (ev === 'DOMContentLoaded') arranques.push(fn); };
+        cargarInline(W, 'financiero/previsiones.html');
+        arranques.forEach(function (fn) { fn(); });
+        return eq(!!wired['btnAddPrev'], true, 'botón conectado');
+    });
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */
