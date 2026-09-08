@@ -4912,6 +4912,103 @@ console.log('\n══ AN · La propina paga la tasa de su tarjeta (etaax-core.js
            Math.round(detD.porCuenta.b * 100) / 100, 'B'));
 }
 
+/* ═══════════ SUITE AO · PREVISIONES POR SUCURSAL (financiero/previsiones.html) ══
+   El selector listaba NEGOCIOS del dueño —legado multi-negocio—, así que ofrecía
+   "GRUPO JP" (el negocio) en vez de "Porcino's" (la sucursal), y guardaba como
+   `sucursalId` un id de NEGOCIO que nunca iba a coincidir con el de los apartados
+   y los gastos. Gastos Globales ya lo había corregido; esta pantalla no.      */
+console.log('\n══ AO · Previsiones por sucursal (financiero/previsiones.html) ══');
+{
+    const V = crearContexto();
+    cargarJS(V, 'etaax-core.js');
+    V._storage['etaax_negocio_activo'] = 'negT';
+    V._storage['etaax_negocios'] = JSON.stringify([{ id:'negT', nombre:'GRUPO JP', emoji:'🍖' }]);
+    V._storage['etaax_negT_sucursales'] = JSON.stringify([
+        { id:'suc1', nombre:"Porcino's Asador de Campo", emoji:'📍', activa:true },
+        { id:'suc2', nombre:'Sucursal Centro',           emoji:'📍', activa:true },
+        { id:'suc3', nombre:'Cerrada',                   emoji:'📍', activa:false }
+    ]);
+    V._storage['etaax_sucursal_activa'] = 'suc1';
+    cargarInline(V, 'financiero/previsiones.html');
+    const $ = (id) => V.document.getElementById(id);
+
+    /* ── El selector lista SUCURSALES ── */
+    const sucs = V._loadNegocios();
+    test('el selector lista sucursales, no negocios', () =>
+        eq(sucs.some(x => x.nombre.indexOf('Porcino') === 0), true, 'sucursal'));
+    test('…y ya no ofrece el nombre del negocio', () =>
+        eq(sucs.some(x => x.nombre === 'GRUPO JP'), false, 'sin negocio'));
+    test('la sucursal desactivada no se ofrece', () =>
+        eq(sucs.some(x => x.id === 'suc3'), false, 'inactiva'));
+    test('el rótulo dice el nombre de la sucursal', () =>
+        eq(V._negLabel('suc1').indexOf('Porcino') > -1, true, 'rótulo'));
+    test('sin sucursal, el rótulo es la vista global', () =>
+        eq(V._negLabel('').indexOf('Todas') > -1, true, 'global'));
+
+    /* ── Arranca donde vienes navegando ──
+       Abrir en "vista global" estando dentro de una sucursal hace creer que se
+       está viendo todo, y las metas de esa sucursal se pierden entre las demás. */
+    test('arranca en la sucursal activa, no en la vista global', () =>
+        eq(V._sucBloqueada(), 'suc1', 'activa'));
+
+    /* El staff queda clavado a la suya; el dueño puede moverse. */
+    V._storage['etaax_ctx'] = JSON.stringify({ ctxType:'staff', rol:'mesero' });
+    test('el staff queda clavado a su sucursal', () => eq(V._sucBloqueada(), 'suc1', 'clavado'));
+    V._storage['etaax_ctx'] = JSON.stringify({ ctxType:'owner' });
+    test('el dueño sí puede moverse', () => eq(V._sucBloqueada(), 'suc1', 'dueño en suc1'));
+
+    /* ── El filtro ── */
+    setVar(V, '_cachePrevs', [
+        { id:'p1', concepto:'Aguinaldos',   estado:'en_curso', sucursalId:'',     montoObjetivo:60000,
+          fechaInicio:'2026-08-01', fechaObjetivo:'2026-12-31', periodicidad:'semanal' },
+        { id:'p2', concepto:'Horno nuevo',  estado:'en_curso', sucursalId:'suc1', montoObjetivo:30000,
+          fechaInicio:'2026-08-01', fechaObjetivo:'2026-12-31', periodicidad:'mensual' },
+        { id:'p3', concepto:'Barra centro', estado:'en_curso', sucursalId:'suc2', montoObjetivo:10000,
+          fechaInicio:'2026-08-01', fechaObjetivo:'2026-12-31', periodicidad:'mensual' }
+    ]);
+    setVar(V, '_cacheDeps', []); setVar(V, '_cacheGastos', []);
+    setVar(V, '_sucursalId', 'suc1');
+    setVar(V, '_filtroEstado', '');
+    $('mesInput').value = '2026-08';
+    V.renderAll('2026-08-15');
+    let h = $('prevTbody').innerHTML;
+    test('en una sucursal se ve su meta', () => eq(h.indexOf('Horno nuevo') > -1, true, 'suya'));
+    test('…y NO la de la otra sucursal', () => eq(h.indexOf('Barra centro'), -1, 'ajena'));
+    /* Una meta "de todas" es del negocio entero: se ve desde cualquier sucursal. */
+    test('la meta de todas las sucursales se ve en cualquiera', () =>
+        eq(h.indexOf('Aguinaldos') > -1, true, 'global'));
+
+    setVar(V, '_sucursalId', null);
+    V.renderAll('2026-08-15');
+    test('en vista global se ven todas', () =>
+        eq($('prevTbody').innerHTML.indexOf('Barra centro') > -1, true, 'todas'));
+
+    /* ── El vacío tiene que decir POR QUÉ está vacío ──
+       Un "no hay nada" mudo con un filtro puesto se lee como un dato perdido: eso
+       es lo que hizo pensar que las previsiones se habían borrado. */
+    setVar(V, '_filtroEstado', 'cancelada');
+    V.renderAll('2026-08-15');
+    test('sin resultados, dice cuántas hay en realidad', () =>
+        eq($('prevEmpty').innerHTML.indexOf('3') > -1, true, 'cuántas'));
+    test('…y qué las está escondiendo', () =>
+        eq($('prevEmpty').innerHTML.indexOf('cancelada') > -1, true, 'motivo'));
+    test('…y ofrece quitar los filtros', () =>
+        eq($('prevEmpty').innerHTML.indexOf('_verTodasPrev') > -1, true, 'salida'));
+
+    V._verTodasPrev();
+    test('«ver todas» destapa la lista', () =>
+        eq($('prevTbody').innerHTML.indexOf('Aguinaldos') > -1, true, 'destapa'));
+    test('…quitando el filtro de estado', () => eq(V._filtroEstado, '', 'estado'));
+    test('…y el de sucursal', () => eq(V._sucursalId, null, 'sucursal'));
+
+    /* Sin ninguna previsión capturada, el mensaje es el de siempre: ahí no hay
+       nada escondido, no hay nada. */
+    setVar(V, '_cachePrevs', []);
+    V.renderAll('2026-08-15');
+    test('sin previsiones, no se inventa un filtro culpable', () =>
+        eq($('prevEmpty').innerHTML.indexOf('Sin previsiones') > -1, true, 'vacío real'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0

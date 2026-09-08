@@ -355,24 +355,41 @@ function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:2,
 function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 /* Sucursal */
-var _sucursalId=null;
+var _sucursalId=_sucBloqueada()||null;   // arranca en la sucursal donde vienes navegando
+/* Sucursales REALES del negocio activo (etaax_<neg>_sucursales).
+   Este selector listaba NEGOCIOS del dueño —legado multi-negocio—, así que en la
+   lista aparecía "GRUPO JP" (el negocio) en vez de "Porcino's Asador de Campo"
+   (la sucursal). Y peor: lo que se guardaba como `sucursalId` era un id de
+   NEGOCIO, que nunca iba a coincidir con el de los apartados y los gastos, que sí
+   guardan sucursal. Misma regla que Gastos Globales, que ya lo había corregido. */
 function _loadNegocios(){
     try{
-        var all=JSON.parse(localStorage.getItem('etaax_negocios')||'[]');
-        var activoId=localStorage.getItem('etaax_negocio_activo')||'';
-        if(!activoId)return all;
-        var activo=all.find(function(n){return n.id===activoId;});
-        if(!activo||!activo.usuarioId)return all;
-        return all.filter(function(n){return n.usuarioId===activo.usuarioId;});
-    }catch(e){return[];}
+        var negId=getNegocioActivo(); if(!negId) return [];
+        return (JSON.parse(localStorage.getItem('etaax_'+negId+'_sucursales')||'[]')||[])
+            .filter(function(s){ return s && s.id && s.activa!==false; });
+    }catch(e){ return []; }
 }
-function _negLabel(id){if(!id)return'🌐 Todas';var neg=_loadNegocios().find(function(n){return n.id===id;});return neg?(neg.emoji||'🏢')+' '+neg.nombre:'Sucursal';}
+/* Se abre en la sucursal donde se viene navegando, no en la vista global: si
+   estás dentro de una sucursal, sus previsiones son las que te importan. El staff
+   se queda clavado a la suya. */
+function _sucBloqueada(){
+    var ctx; try{ ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null'); }catch(e){}
+    var esStaff = ctx && ctx.ctxType==='staff' && (ctx.rol||'')!=='admin';
+    var sucAct = localStorage.getItem('etaax_sucursal_activa') || '';
+    if (esStaff) return sucAct || 'suc_principal';
+    return sucAct;
+}
+function _negLabel(id){
+    if(!id) return '🌐 Todas';
+    var suc=_loadNegocios().find(function(x){ return x.id===id; });
+    return suc ? ((suc.emoji||'📍')+' '+(suc.nombre||'Sucursal')) : '📍 Sucursal';
+}
 function _renderSucMenu(){
     var menu=document.getElementById('sucMenu');
     var negs=_loadNegocios();
     var html='<div class="suc-opt'+(!_sucursalId?' active':'')+'" data-suc="">🌐 Todas las sucursales</div>';
     if(negs.length)html+='<div class="suc-sep"></div>';
-    negs.forEach(function(neg){html+='<div class="suc-opt'+(_sucursalId===neg.id?' active':'')+'" data-suc="'+_esc(neg.id)+'">'+(neg.emoji||'🏢')+' '+_esc(neg.nombre)+'</div>';});
+    negs.forEach(function(sc){ html+='<div class="suc-opt'+(_sucursalId===sc.id?' active':'')+'" data-suc="'+_esc(sc.id)+'">'+(sc.emoji||'📍')+' '+_esc(sc.nombre||'Sucursal')+'</div>'; });
     menu.innerHTML=html;
     menu.querySelectorAll('.suc-opt').forEach(function(el){
         el.addEventListener('click',function(){
@@ -448,7 +465,23 @@ function renderAll(hoyRef){
 
     // Table
     var tbody=document.getElementById('prevTbody'),empty=document.getElementById('prevEmpty');
-    if(!lista.length){tbody.innerHTML='';empty.style.display='block';return;}
+    if(!lista.length){
+        /* Un "no hay nada" mudo, con un filtro puesto, se lee como un dato
+           perdido. Se dice qué lo está escondiendo y cómo quitarlo. */
+        var _todas=loadAll().length, _motivos=[];
+        if(_todas){
+            if(_filtroEstado) _motivos.push('el filtro <b>'+_esc(_filtroEstado.replace('_',' '))+'</b>');
+            if(_sucursalId)   _motivos.push('la sucursal <b>'+_esc(_negLabel(_sucursalId))+'</b>');
+            _motivos.push('el mes <b>'+_esc(mes)+'</b>');
+        }
+        empty.innerHTML = _todas
+            ? '<div style="font-size:32px;margin-bottom:8px">🔍</div>'
+              +'<div>Tienes <b>'+_todas+'</b> previsión'+(_todas!==1?'es':'')+', pero ninguna pasa '+_motivos.join(' + ')+'.</div>'
+              +'<div style="margin-top:10px"><button class="btn-ghost" onclick="_verTodasPrev()">Ver todas</button></div>'
+            : '<div style="font-size:32px;margin-bottom:8px">🔮</div>'
+              +'<div>Sin previsiones registradas.<br>Agrega una nueva para comenzar a planificar.</div>';
+        tbody.innerHTML='';empty.style.display='block';return;
+    }
     empty.style.display='none';
 
     /* Primero lo que urge: las atrasadas arriba, luego por fecha objetivo. Una
@@ -498,6 +531,16 @@ function renderAll(hoyRef){
 }
 
 /* Modal */
+/* Quita de un tirón lo que esté escondiendo la lista. */
+function _verTodasPrev(){
+    _filtroEstado=''; _sucursalId=null;
+    document.querySelectorAll('.filter-chip').forEach(function(b){
+        b.classList.toggle('active', !b.dataset.estado);
+    });
+    var chip=document.getElementById('sucChip');
+    if(chip) chip.textContent='🌐 Todas las sucursales ▾';
+    renderAll();
+}
 function abrirModal(id){
     var p=id?(loadAll().find(function(x){return x.id===id;})||{}):{};
     document.getElementById('pvId').value=p.id||'';
@@ -515,14 +558,19 @@ function abrirModal(id){
 
     // Populate sucursal select
     var sel=document.getElementById('pvSucursal');
+    /* "Todas" es una opción de verdad: una meta como el aguinaldo es del negocio
+       entero, no de una sucursal. Las demás son las sucursales REALES. */
     sel.innerHTML='<option value="">🌐 Todas las sucursales</option>';
-    _loadNegocios().forEach(function(neg){
+    _loadNegocios().forEach(function(sc){
         var opt=document.createElement('option');
-        opt.value=neg.id; opt.textContent=(neg.emoji||'🏢')+' '+neg.nombre;
-        if(p.sucursalId===neg.id)opt.selected=true;
+        opt.value=sc.id; opt.textContent=(sc.emoji||'📍')+' '+(sc.nombre||'Sucursal');
+        if(p.sucursalId===sc.id)opt.selected=true;
         sel.appendChild(opt);
     });
-    document.getElementById('pvSucursal').value=p.sucursalId||'';
+    /* Al crear, se propone la sucursal donde vienes navegando; al editar, la que
+       ya traía. Dejarlo siempre en "todas" hacía que las metas de una sucursal
+       nacieran sin dueño. */
+    document.getElementById('pvSucursal').value = id ? (p.sucursalId||'') : (_sucursalId||'');
     document.getElementById('modalTitle').textContent=id?'✏️ Editar meta':'🔮 Nueva meta de previsión';
     _pvPreview();
     document.getElementById('modalPrev').classList.add('open');
@@ -576,6 +624,10 @@ function guardarPrev(){
 }
 
 document.addEventListener('DOMContentLoaded',function(){
+    // El chip tiene que decir la verdad desde el primer pintado: si arranca en una
+    // sucursal y el rótulo dice "Vista global", el usuario cree que ve todo.
+    var _c0=document.getElementById('sucChip');
+    if(_c0) _c0.textContent=(_sucursalId?_negLabel(_sucursalId):'🌐 Todas las sucursales')+' ▾';
     document.getElementById('mesInput').value=mesStr();
     document.getElementById('mesInput').addEventListener('change',renderAll);
 
