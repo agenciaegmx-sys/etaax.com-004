@@ -330,6 +330,29 @@ function _scopeSuc(arr){
         return !_sucursalId || !x || !x.sucursalId || x.sucursalId===_sucursalId;
     });
 }
+/* Sucursal EFECTIVA de una previsión.
+   Las capturadas antes de este arreglo traen un id de NEGOCIO en `sucursalId`
+   —el selector viejo listaba negocios—, y ese id no es ninguna sucursal. En vez
+   de pedir una migración a mano, se leen como lo que en la práctica son: metas
+   del negocio entero, o sea "todas las sucursales". Nada se pierde y nada hay que
+   correr; al editarlas se les puede poner su sucursal de verdad. */
+function _sucDePrev(p){
+    var id=(p&&p.sucursalId)||'';
+    if(!id) return '';
+    return _loadNegocios().some(function(x){ return x.id===id; }) ? id : '';
+}
+/* ¿La meta está corriendo en el mes elegido? La fecha de término se llama
+   `fechaObjetivo` desde que son metas; las capturadas antes traen `fechaFin` y
+   siguen valiendo. */
+function _enMes(p, mes){
+    var mesStart=mes+'-01';
+    var y=parseInt(mes.slice(0,4)), m=parseInt(mes.slice(5,7));
+    var mesEnd=new Date(y,m,0).toISOString().slice(0,10);
+    var fin=p.fechaObjetivo||p.fechaFin||'';
+    if(p.fechaInicio&&fin) return p.fechaInicio<=mesEnd&&fin>=mesStart;
+    if(p.fechaInicio) return p.fechaInicio<=mesEnd;   // sin término: corre desde que empezó
+    return true;
+}
 function _saldos(){
     return EtaaxCore.previsionSaldos(loadAll(), _scopeSuc(_cacheDeps), _scopeSuc(_cacheGastos));
 }
@@ -355,7 +378,12 @@ function fmtM(v){return'$'+n(v).toLocaleString('es-MX',{minimumFractionDigits:2,
 function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 /* Sucursal */
-var _sucursalId=_sucBloqueada()||null;   // arranca en la sucursal donde vienes navegando
+/* Dentro de una sucursal el módulo es de ESA sucursal y el chip solo lo dice: el
+   consolidado vive en Financiero Global (hub, sin sucursal activa). Igual que
+   Ventas Totales y Gastos Totales; este era el único que dejaba brincar de una a
+   otra desde adentro. */
+var _SUC_LOCK = _sucBloqueada();
+var _sucursalId = _SUC_LOCK || null;
 /* Sucursales REALES del negocio activo (etaax_<neg>_sucursales).
    Este selector listaba NEGOCIOS del dueño —legado multi-negocio—, así que en la
    lista aparecía "GRUPO JP" (el negocio) en vez de "Porcino's Asador de Campo"
@@ -413,18 +441,10 @@ function renderAll(hoyRef){
     var mes=document.getElementById('mesInput').value||mesStr();
     var hoy=hoyRef||todayStr();   // el ritmo se mide contra hoy, no contra el mes elegido
     var lista=loadAll().filter(function(p){
-        if(_sucursalId&&p.sucursalId&&p.sucursalId!==_sucursalId) return false;
+        var _sp=_sucDePrev(p);
+        if(_sucursalId && _sp && _sp!==_sucursalId) return false;
         if(_filtroEstado&&p.estado!==_filtroEstado) return false;
-        // Se ve si la meta está corriendo en el mes elegido. La fecha de término
-        // se llama `fechaObjetivo` desde que son metas; las capturadas antes
-        // traen `fechaFin` y siguen valiendo.
-        var mesStart=mes+'-01';
-        var y=parseInt(mes.slice(0,4)),m=parseInt(mes.slice(5,7));
-        var mesEnd=new Date(y,m,0).toISOString().slice(0,10);
-        var fin=p.fechaObjetivo||p.fechaFin||'';
-        if(p.fechaInicio&&fin) return p.fechaInicio<=mesEnd&&fin>=mesStart;
-        if(p.fechaInicio) return p.fechaInicio<=mesEnd;   // sin término: corre desde que empezó
-        return true;
+        return _enMes(p, mes);
     });
 
     // ── KPIs: lo que de verdad quieres saber al abrir esta pantalla ──
@@ -469,10 +489,23 @@ function renderAll(hoyRef){
         /* Un "no hay nada" mudo, con un filtro puesto, se lee como un dato
            perdido. Se dice qué lo está escondiendo y cómo quitarlo. */
         var _todas=loadAll().length, _motivos=[];
+        /* Solo se nombra el filtro que DE VERDAD esconde: se prueba quitándolo uno
+           por uno y se ve si aparece algo. Listarlos todos culpaba al mes cuando el
+           mes no tenía nada que ver, y mandaba a buscar por el lado equivocado. */
         if(_todas){
-            if(_filtroEstado) _motivos.push('el filtro <b>'+_esc(_filtroEstado.replace('_',' '))+'</b>');
-            if(_sucursalId)   _motivos.push('la sucursal <b>'+_esc(_negLabel(_sucursalId))+'</b>');
-            _motivos.push('el mes <b>'+_esc(mes)+'</b>');
+            var _pasa=function(o){
+                return loadAll().some(function(p){
+                    var sp=_sucDePrev(p);
+                    if(!o.suc && _sucursalId && sp && sp!==_sucursalId) return false;
+                    if(!o.est && _filtroEstado && p.estado!==_filtroEstado) return false;
+                    if(!o.mes && !_enMes(p, mes)) return false;
+                    return true;
+                });
+            };
+            if(_filtroEstado && _pasa({est:1})) _motivos.push('el filtro <b>'+_esc(_filtroEstado.replace('_',' '))+'</b>');
+            if(_sucursalId   && _pasa({suc:1})) _motivos.push('la sucursal <b>'+_esc(_negLabel(_sucursalId))+'</b>');
+            if(_pasa({mes:1}))                  _motivos.push('el mes <b>'+_esc(mes)+'</b>');
+            if(!_motivos.length) _motivos.push('los filtros de esta vista');
         }
         empty.innerHTML = _todas
             ? '<div style="font-size:32px;margin-bottom:8px">🔍</div>'
@@ -532,13 +565,33 @@ function renderAll(hoyRef){
 
 /* Modal */
 /* Quita de un tirón lo que esté escondiendo la lista. */
+/* El chip de sucursal. Con candado informa dónde estás y no abre menú; sin
+   candado (Financiero Global, sin sucursal activa) sí deja elegir. */
+function _pintarSucChip(){
+    var chip=document.getElementById('sucChip'); if(!chip) return;
+    if(_SUC_LOCK){
+        chip.textContent=_negLabel(_SUC_LOCK);
+        chip.style.cursor='default';
+        chip.title='Estás dentro de esta sucursal. El consolidado de todas vive en Financiero Global.';
+        return;
+    }
+    chip.textContent='🌐 Todas las sucursales ▾';
+    chip.addEventListener('click',function(e){
+        e.stopPropagation(); _renderSucMenu();
+        var menu=document.getElementById('sucMenu');
+        menu.classList.toggle('open'); chip.classList.toggle('open');
+    });
+}
 function _verTodasPrev(){
-    _filtroEstado=''; _sucursalId=null;
+    _filtroEstado='';
+    // El candado de sucursal NO se suelta desde aquí: estando dentro de una
+    // sucursal, ver las de otra sería salirse del módulo sin decirlo.
+    if(!_SUC_LOCK) _sucursalId=null;
     document.querySelectorAll('.filter-chip').forEach(function(b){
         b.classList.toggle('active', !b.dataset.estado);
     });
     var chip=document.getElementById('sucChip');
-    if(chip) chip.textContent='🌐 Todas las sucursales ▾';
+    if(chip && !_SUC_LOCK) chip.textContent='🌐 Todas las sucursales ▾';
     renderAll();
 }
 function abrirModal(id){
@@ -624,15 +677,11 @@ function guardarPrev(){
 }
 
 document.addEventListener('DOMContentLoaded',function(){
-    // El chip tiene que decir la verdad desde el primer pintado: si arranca en una
-    // sucursal y el rótulo dice "Vista global", el usuario cree que ve todo.
-    var _c0=document.getElementById('sucChip');
-    if(_c0) _c0.textContent=(_sucursalId?_negLabel(_sucursalId):'🌐 Todas las sucursales')+' ▾';
     document.getElementById('mesInput').value=mesStr();
     document.getElementById('mesInput').addEventListener('change',renderAll);
 
     // Sucursal
-    var chip=document.getElementById('sucChip');
+    _pintarSucChip();
     chip.addEventListener('click',function(e){e.stopPropagation();_renderSucMenu();var menu=document.getElementById('sucMenu');menu.classList.toggle('open');chip.classList.toggle('open');});
     document.addEventListener('click',function(e){if(!e.target.closest('#sucMenu')&&!e.target.closest('#sucChip')){var m=document.getElementById('sucMenu');if(m)m.classList.remove('open');chip.classList.remove('open');}});
 

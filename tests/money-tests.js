@@ -5001,6 +5001,83 @@ console.log('\n══ AO · Previsiones por sucursal (financiero/previsiones.htm
     test('…quitando el filtro de estado', () => eq(V._filtroEstado, '', 'estado'));
     test('…y el de sucursal', () => eq(V._sucursalId, null, 'sucursal'));
 
+
+    /* ══ EL CANDADO DE SUCURSAL ══
+       Dentro de una sucursal el módulo es de ESA sucursal: el chip lo dice y no
+       ofrece brincar a otra. El consolidado vive en Financiero Global. */
+    V._pintarSucChip();
+    test('dentro de una sucursal, el chip no ofrece menú', () =>
+        eq(V._SUC_LOCK, 'suc1', 'candado'));
+    test('…y el chip dice en qué sucursal estás', () =>
+        eq($('sucChip').textContent.indexOf('Porcino') > -1, true, 'rótulo'));
+    test('…con la explicación de dónde ver el consolidado', () =>
+        eq(($('sucChip').title||'').indexOf('Financiero Global') > -1, true, 'ayuda'));
+
+    /* "Ver todas" quita filtros, pero NO se salta el candado: ver las de otra
+       sucursal sería salirse del módulo sin decirlo. */
+    setVar(V, '_filtroEstado', 'cancelada');
+    setVar(V, '_sucursalId', 'suc1');
+    V._verTodasPrev();
+    test('«ver todas» quita el filtro de estado', () => eq(V._filtroEstado, '', 'estado'));
+    test('…pero respeta el candado de sucursal', () => eq(V._sucursalId, 'suc1', 'candado'));
+
+    /* ══ LO CAPTURADO ANTES DEL ARREGLO ══
+       El selector viejo guardaba un id de NEGOCIO en `sucursalId`. Ese id no es
+       ninguna sucursal, así que se lee como lo que en la práctica es: una meta del
+       negocio entero. Nada se pierde y no hay migración que correr. */
+    setVar(V, '_cachePrevs', [
+        { id:'viejo', concepto:'Aguinaldos', estado:'en_curso', sucursalId:'negT',
+          montoObjetivo:60000, fechaInicio:'2026-08-01', fechaObjetivo:'2026-12-31', periodicidad:'semanal' }
+    ]);
+    test('la previsión vieja no se pierde: se lee como de todas', () =>
+        eq(V._sucDePrev({ sucursalId:'negT' }), '', 'normalizada'));
+    test('una sucursal de verdad se respeta', () => eq(V._sucDePrev({ sucursalId:'suc1' }), 'suc1', 'real'));
+    setVar(V, '_sucursalId', 'suc1');
+    V.renderAll('2026-09-15');
+    test('…y por eso SÍ aparece dentro de la sucursal', () =>
+        eq($('prevTbody').innerHTML.indexOf('Aguinaldos') > -1, true, 'aparece'));
+    setVar(V, '_sucursalId', 'suc2');
+    V.renderAll('2026-09-15');
+    test('…y también en la otra, porque es del negocio entero', () =>
+        eq($('prevTbody').innerHTML.indexOf('Aguinaldos') > -1, true, 'ambas'));
+
+    /* ══ EL MENSAJE NO PUEDE CULPAR AL FILTRO EQUIVOCADO ══
+       Listar todos los filtros activos mandaba a buscar por el lado equivocado:
+       decía "+ el mes 2026-09" cuando el mes no tenía nada que ver. */
+    setVar(V, '_cachePrevs', [
+        { id:'p1', concepto:'Horno', estado:'en_curso', sucursalId:'suc1', montoObjetivo:1000,
+          fechaInicio:'2026-08-01', fechaObjetivo:'2026-12-31', periodicidad:'mensual' }
+    ]);
+    setVar(V, '_sucursalId', 'suc2');
+    setVar(V, '_filtroEstado', '');
+    V.renderAll('2026-09-15');
+    test('culpa a la sucursal, que es la que esconde', () =>
+        eq($('prevEmpty').innerHTML.indexOf('sucursal') > -1, true, 'sucursal'));
+    test('…y NO al mes, que no tiene nada que ver', () =>
+        eq($('prevEmpty').innerHTML.indexOf('el mes'), -1, 'sin mes'));
+
+    /* Y un filtro de ESTADO que tampoco esconde nada no debe salir culpado: si la
+       previsión no aparece por la sucursal, cambiar el estado no la traería. */
+    setVar(V, '_sucursalId', 'suc2');
+    setVar(V, '_filtroEstado', 'en_curso');   // la única que hay ES 'en_curso'
+    V.renderAll('2026-09-15');
+    test('no culpa a un filtro que no esconde nada', () =>
+        eq($('prevEmpty').innerHTML.indexOf('el filtro'), -1, 'sin filtro'));
+    test('…y sí a la sucursal, que es la que la esconde', () =>
+        eq($('prevEmpty').innerHTML.indexOf('la sucursal') > -1, true, 'sucursal'));
+    setVar(V, '_filtroEstado', '');
+
+    /* Y cuando sí es el mes, lo dice. */
+    setVar(V, '_sucursalId', 'suc1');
+    V.renderAll('2026-09-15');
+    $('mesInput').value = '2027-05';
+    V.renderAll('2027-05-15');
+    test('cuando el que esconde es el mes, culpa al mes', () =>
+        eq($('prevEmpty').innerHTML.indexOf('el mes') > -1, true, 'mes'));
+    test('…y no a la sucursal, que sí coincide', () =>
+        eq($('prevEmpty').innerHTML.indexOf('la sucursal'), -1, 'sin sucursal'));
+    $('mesInput').value = '2026-09';
+
     /* Sin ninguna previsión capturada, el mensaje es el de siempre: ahí no hay
        nada escondido, no hay nada. */
     setVar(V, '_cachePrevs', []);
