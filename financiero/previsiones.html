@@ -155,6 +155,10 @@
 
         <div class="wrap">
 
+            <div id="prevFallas" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:9px;
+                 border:1px solid rgba(245,200,66,.35);background:rgba(245,200,66,.07);
+                 font-size:12px;color:var(--accent);line-height:1.5"></div>
+
             <!-- KPIs -->
             <div class="kpi-grid">
                 <div class="kpi-card">
@@ -310,18 +314,59 @@ var _cachePrevs = null;
 var _cacheDeps  = null;   // movimientos: aquí viven los APARTADOS
 var _cacheGastos= null;   // gastos: los que traen previsionId consumen el apartado
 
+/* Una consulta por su cuenta, que NUNCA tumba a las otras.
+   Con Promise.all bastaba que una de las tres reventara para que el await lanzara
+   y `renderAll()` no llegara a correr: la pantalla se quedaba con el HTML inicial
+   —KPIs en $0.00 y la tabla sin una sola fila— aunque las previsiones estuvieran
+   ahí. Un dato que no llega es un renglón menos; nunca una pantalla en blanco. */
+async function _traer(tabla, q) {
+    try {
+        var r = await q;
+        if (r && r.error) { _FALLAS.push(tabla + ': ' + r.error.message); return null; }
+        return (r && r.data || []).map(function (x) { return x.datos; });
+    } catch (e) {
+        _FALLAS.push(tabla + ': ' + ((e && e.message) || e));
+        return null;
+    }
+}
+var _FALLAS = [];
 async function _sbInit() {
     var negId = getNegocioActivo();
     if (!negId) return;
+    _FALLAS = [];
+    var negEq = function (t) { return _supabase.from(t).select('datos').eq('negocio_id', negId); };
     var r = await Promise.all([
-        _supabase.from('previsiones').select('datos').eq('negocio_id', negId).order('created_at', {ascending:false}),
-        _supabase.from('depositos').select('datos').eq('negocio_id', negId),
-        _supabase.from('gastos').select('datos').eq('negocio_id', negId)
+        _traer('previsiones', negEq('previsiones').order('created_at', { ascending: false })),
+        _traer('depositos',   negEq('depositos')),
+        _traer('gastos',      negEq('gastos'))
     ]);
-    if (!r[0].error) _cachePrevs  = (r[0].data||[]).map(function(x){return x.datos;});
-    if (!r[1].error) _cacheDeps   = (r[1].data||[]).map(function(x){return x.datos;});
-    if (!r[2].error) _cacheGastos = (r[2].data||[]).map(function(x){return x.datos;});
+    _aplicarCarga(r);
+}
+/* Lo que se hace con lo que llegó. Va aparte de la consulta a propósito: es la
+   parte que decide si la pantalla se pinta o se queda muda, y así se puede
+   comprobar sin red de por medio. */
+function _aplicarCarga(r){
+    r = r || [];
+    if (r[0]) _cachePrevs  = r[0];
+    if (r[1]) _cacheDeps   = r[1];
+    if (r[2]) _cacheGastos = r[2];
+    /* Las previsiones son la pantalla; los apartados y los gastos solo la
+       enriquecen. Si faltan esos dos, se avisa pero se pinta igual. */
+    if (_cachePrevs == null) _cachePrevs = [];
+    if (_cacheDeps  == null) _cacheDeps  = [];
+    if (_cacheGastos== null) _cacheGastos= [];
     renderAll();
+    _avisarFallas();
+}
+/* Lo que no cargó, dicho. Callarlo hace que un saldo incompleto se lea como un
+   saldo real. */
+function _avisarFallas(){
+    var box=document.getElementById('prevFallas');
+    if(!box) return;
+    if(!_FALLAS.length){ box.style.display='none'; box.innerHTML=''; return; }
+    box.style.display='';
+    box.innerHTML='⚠️ No se pudo cargar <b>'+_esc(_FALLAS.join(' · '))+'</b>. '
+        +'Lo que ves puede estar incompleto — recarga la página.';
 }
 /* Los apartados y los gastos se filtran por la sucursal elegida, igual que la
    lista: si no, una meta de una sucursal se vería fondeada con dinero de otra. */

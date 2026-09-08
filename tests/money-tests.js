@@ -1304,6 +1304,7 @@ test('sin pagar y el día aún no llega → programado (recordatorio de aviso)',
     A._cacheGastos = _prevG;
 })();
 
+
 /* clasificarGastos — UNA sola verdad de gastos para los 4 módulos (Gastos Totales,
    KPIs, Estadísticas, Diario). Misma data que SUITE D → debe dar los mismos cubos. */
 const _gsCanon = [
@@ -5077,6 +5078,66 @@ console.log('\n══ AO · Previsiones por sucursal (financiero/previsiones.htm
     test('…y no a la sucursal, que sí coincide', () =>
         eq($('prevEmpty').innerHTML.indexOf('la sucursal'), -1, 'sin sucursal'));
     $('mesInput').value = '2026-09';
+
+
+    /* ══ UNA CONSULTA CAÍDA NO PUEDE DEJAR LA PANTALLA EN BLANCO ══
+       Con Promise.all bastaba que una de las tres consultas reventara para que el
+       await lanzara y renderAll() no llegara a correr: la pantalla se quedaba con
+       el HTML inicial —KPIs en $0.00, tabla sin una sola fila— aunque las
+       previsiones estuvieran ahí. Fue justo lo que pasó al agregar depósitos y
+       gastos a la carga. */
+    const RENTA = [{ id:'r1', concepto:'Renta', estado:'en_curso', sucursalId:'suc1',
+                     montoObjetivo:5000, fechaInicio:'2026-09-01',
+                     fechaObjetivo:'2026-12-31', periodicidad:'mensual' }];
+    setVar(V, '_sucursalId', 'suc1');
+    setVar(V, '_filtroEstado', '');
+    $('mesInput').value = '2026-09';
+
+    /* Se cayeron depósitos y gastos (null), pero las previsiones llegaron. */
+    setVar(V, '_FALLAS', ['depositos: boom']);
+    setVar(V, '_cacheDeps', null); setVar(V, '_cacheGastos', null);
+    V._aplicarCarga([RENTA, null, null]);
+    test('si se caen depósitos y gastos, la previsión SÍ se pinta', () =>
+        eq($('prevTbody').innerHTML.indexOf('Renta') > -1, true, 'pintada'));
+    test('…y se avisa qué no cargó', () =>
+        eq($('prevFallas').innerHTML.indexOf('depositos') > -1, true, 'aviso'));
+    test('…sin callarlo, que haría leer un saldo incompleto como si fuera real', () =>
+        eq($('prevFallas').style.display, '', 'visible'));
+    /* Y los cachés caídos quedan en lista vacía, no en null: null revienta al
+       primer .filter() y devuelve la pantalla en blanco por otra puerta. */
+    test('el caché caído queda vacío, no en null', () => eq(Array.isArray(V._cacheDeps), true, 'vacío'));
+
+    /* Con todo cargado, no se inventa una advertencia. */
+    setVar(V, '_FALLAS', []);
+    V._aplicarCarga([RENTA, [], []]);
+    test('con todo cargado no hay aviso de falla', () => eq($('prevFallas').style.display, 'none', 'limpio'));
+    test('…y la previsión sigue en la lista', () =>
+        eq($('prevTbody').innerHTML.indexOf('Renta') > -1, true, 'ok'));
+
+    /* Cada consulta va por su cuenta: si volviera a Promise.all crudo, una caída
+       tumbaría a las otras. */
+    test('cada consulta pasa por su propio envoltorio', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'financiero/previsiones.html'), 'utf8');
+        return eq((src.match(/_traer\('/g) || []).length, 3, 'envueltas');
+    });
+    /* El envoltorio corre en una promesa y aquí no se puede esperar, así que se
+       revisa en el código: tiene que reportar TANTO el error que devuelve la
+       consulta como el que lanza. Callar cualquiera de los dos deja un saldo
+       incompleto pasando por bueno. */
+    test('el envoltorio reporta el error que devuelve la consulta', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'financiero/previsiones.html'), 'utf8');
+        const fn = src.slice(src.indexOf('async function _traer'), src.indexOf('var _FALLAS'));
+        // La rama del error tiene que reportar EN SÍ MISMA: que la función tenga
+        // un push en otro lado (el catch) no sirve de nada aquí.
+        const rama = (fn.split('\n').find(l => l.indexOf('r.error') > -1) || '');
+        return eq(rama.indexOf('_FALLAS.push') > -1, true, 'devuelto');
+    });
+    test('…y también el que lanza', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'financiero/previsiones.html'), 'utf8');
+        const fn = src.slice(src.indexOf('async function _traer'), src.indexOf('var _FALLAS'));
+        const cat = fn.slice(fn.indexOf('catch'));
+        return eq(cat.indexOf('_FALLAS.push') > -1, true, 'lanzado');
+    });
 
     /* Sin ninguna previsión capturada, el mensaje es el de siempre: ahí no hay
        nada escondido, no hay nada. */
