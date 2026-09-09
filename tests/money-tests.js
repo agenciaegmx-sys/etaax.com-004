@@ -5548,6 +5548,117 @@ console.log('\n══ AT · El orden de carga de los scripts ══');
     });
 }
 
+/* ═══════════ SUITE AU · LA ENTRADA QUE NO SE DEJA BORRAR (inventarios.js) ═════
+   Segundo round del mismo reporte: arreglado el arranque, las entradas SEGUÍAN
+   reviviendo y la cola seguía en 4. Faltaba esto:
+
+   El respaldo local guarda las entradas. Al cargar, lo que está en el respaldo y
+   NO está en la nube se daba por "local sin subir", así que se empujaba de vuelta
+   Y se re-subía. Pero una entrada puede faltar en la nube por dos razones
+   distintas: nunca llegó (hay que subirla) o la borraron (hay que soltarla).
+   Sin distinguirlas, cada carga resucitaba lo borrado y generaba un envío nuevo:
+   una cola que nunca baja.                                                     */
+console.log('\n══ AU · La entrada que no se deja borrar (recetas/inventarios.js) ══');
+{
+    const I = crearContexto();
+    cargarJS(I, 'etaax-core.js');
+    cargarJS(I, 'insumo-label.js');
+    cargarJS(I, 'recetas/inventarios.js');
+    I._storage['etaax_negocio_activo'] = 'negT';
+
+    const subidas = [];
+    setVar(I, '_sbUpEL', function (e) { subidas.push(e.id); });
+    I.sbPendientes = () => ({});
+
+    const montar = (nube, respaldo, synced) => {
+        subidas.length = 0;
+        setVar(I, '_cacheEL', nube.slice());
+        setVar(I, '_elSyncedIds', null);
+        I._storage['etaax_negT_el_synced'] = JSON.stringify(synced || {});
+        I._storage['etaax_negT_el_local']  = JSON.stringify(respaldo);
+        I._mergeELLocal(true);
+        return I._cacheEL;
+    };
+
+    /* Lo que NUNCA llegó a la nube sí se recupera y se sube: es la razón de ser
+       del respaldo local —no perder capturas cuando falla la red. */
+    let r = montar([], [{ id:'e1', nombre:'Mezcal' }], {});
+    test('la entrada que nunca subió se recupera del respaldo', () => eq(r.length, 1, 'recuperada'));
+    test('…y se vuelve a subir', () => eq(subidas.indexOf('e1') > -1, true, 'subida'));
+
+    /* Lo que YA ESTUVO en la nube y ahora no está, lo borraron: se suelta. */
+    r = montar([], [{ id:'e1', nombre:'Mezcal' }], { e1: 1 });
+    test('la entrada borrada en la nube NO revive', () => eq(r.length, 0, 'no revive'));
+    test('…y no se re-sube en cada carga', () => eq(subidas.length, 0, 'sin re-subir'));
+    /* Y el respaldo se limpia: si no, cada carga vuelve a evaluar el fantasma. */
+    test('…y el respaldo local se limpia del fantasma', () =>
+        eq(JSON.parse(I._storage['etaax_negT_el_local']).length, 0, 'limpio'));
+
+    /* Lo que yo acabo de borrar y va en camino tampoco vuelve. */
+    I.sbPendientes = () => ({ e1: 'delete' });
+    r = montar([], [{ id:'e1' }], {});
+    test('lo que borré y sigue en la cola no revive', () => eq(r.length, 0, 'en camino'));
+    I.sbPendientes = () => ({});
+
+    /* Lo que sí está en la nube se respeta tal cual, sin duplicar. */
+    r = montar([{ id:'e1', v:'nube' }], [{ id:'e1', v:'local' }], { e1: 1 });
+    test('lo que está en la nube no se duplica', () => eq(r.length, 1, 'una sola'));
+    test('…y se conserva en el respaldo', () =>
+        eq(JSON.parse(I._storage['etaax_negT_el_local']).length, 1, 'conservada'));
+
+    /* La marca se pone leyendo la nube, y tiene que quedar guardada: si solo
+       viviera en memoria, al recargar volvería a no saber qué ya estuvo. */
+    setVar(I, '_elSyncedIds', null);
+    I._storage['etaax_negT_el_synced'] = '{}';
+    I._marcarSyncedEL(['a1', 'a2']);
+    test('lo visto en la nube queda marcado', () => eq(I._getSyncedEL()['a1'], 1, 'marcado'));
+    test('…y guardado, no solo en memoria', () =>
+        eq(JSON.parse(I._storage['etaax_negT_el_synced'])['a2'], 1, 'persistido'));
+    /* Y quien lee la nube tiene que llamarla, o la marca nunca se pone. */
+    {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        test('la carga inicial marca lo que trae la nube', () =>
+            eq(src.indexOf('_marcarSyncedEL(_cacheEL.map(') > -1, true, 'carga'));
+        test('…y la relectura de realtime también', () =>
+            eq(src.indexOf('_marcarSyncedEL(frescas.map(') > -1, true, 'realtime'));
+    }
+
+    /* Varias a la vez: una nueva, una borrada. Solo sobrevive la nueva. */
+    r = montar([], [{ id:'nueva' }, { id:'vieja' }], { vieja: 1 });
+    test('convive lo nuevo con lo borrado sin equivocarse', () => eq(r.length, 1, 'una'));
+    test('…y la que sobrevive es la que nunca subió', () => eq(r[0].id, 'nueva', 'nueva'));
+}
+
+/* ═══════════ SUITE AV · CUÁNDO UN ERROR ES FALTA DE RED (etaax-db.js) ════════
+   La cola clavada en 4: el flush dejó de creerle a navigator.onLine hace tiempo
+   —muchas tablets se reportan offline teniendo red— pero el clasificador de
+   errores SÍ le seguía creyendo. En un dispositivo así, cualquier error se leía
+   como falta de red: no contaba intentos, no se descartaba nunca, y el envío se
+   quedaba atorado para siempre sin decir por qué.                              */
+console.log('\n══ AV · Cuándo un error es falta de red (etaax-db.js) ══');
+{
+    const src = fs.readFileSync(path.join(RAIZ, 'etaax-db.js'), 'utf8');
+    const fn = src.slice(src.indexOf('function _esErrRed'), src.indexOf('var _obFlushing'));
+    /* Se miran solo las líneas de CÓDIGO: el comentario que explica por qué ya no
+       se usa navigator.onLine lo nombra, y eso no cuenta. */
+    const codigo = fn.split('\n')
+        .filter(l => { const t = l.trim(); return t && !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*'); })
+        .join('\n');
+    test('el clasificador ya NO consulta navigator.onLine', () =>
+        eq(codigo.indexOf('navigator.onLine') === -1, true, 'sin onLine'));
+    /* Sigue reconociendo la falta de red de verdad, por el mensaje del fetch. */
+    ['failed to fetch', 'networkerror', 'timeout', 'load failed']
+        .forEach(m => test('…pero sigue reconociendo "' + m + '"', () =>
+            eq(fn.indexOf(m.split(' ')[0]) > -1, true, 'patrón')));
+    /* Y un error del servidor NO puede pasar por falta de red: si pasara, no
+       contaría intentos y se quedaría dando vueltas para siempre. */
+    ['permission denied', 'violates row-level security', 'payload too large', 'duplicate key']
+        .forEach(m => test('un error de servidor no se disfraza de red: ' + m, () => {
+            const re = /fetch|network|failed to fetch|networkerror|load failed|timeout|timed out|econn|dns|offline|abort/;
+            return eq(re.test(m), false, 'no es red');
+        }));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0

@@ -188,7 +188,12 @@ async function _sbInitInv() {
     // un null en _cacheEL reventaba el render del historial de entradas (TypeError).
     if (!r[0].error) { _cacheInv = (r[0].data || []).map(function(x){ return x.datos; }).filter(Boolean); _marcarSynced(_cacheInv.map(function(c){ return c && c.id; })); }
     _mergeDraftsLocal(); // recuperar borradores que aún no sincronizaron a la nube
-    if (!r[1].error) _cacheEL   = (r[1].data || []).map(function(x){ return x.datos; }).filter(Boolean);
+    if (!r[1].error) {
+        _cacheEL = (r[1].data || []).map(function(x){ return x.datos; }).filter(Boolean);
+        // Lo que la nube SÍ trae, queda marcado: es lo que después permite saber
+        // que algo desapareció porque lo borraron, y no porque nunca subió.
+        _marcarSyncedEL(_cacheEL.map(function(e){ return e && e.id; }));
+    }
     _mergeELLocal(true); // ya se sabe qué hay en la nube: aquí SÍ se re-sube lo que falte
     if (!r[2].error) _cacheRecetasInv = (r[2].data || []).map(function(x){ return x.datos; }).filter(Boolean);
     await _pullInvAjustes(negId); // compuestos + bateo desde la nube → localStorage
@@ -260,6 +265,7 @@ async function _reloadEntradasRT() {
     if (r.error) return;
     var frescas = (r.data || []).map(function(x){ return x.datos; }).filter(Boolean);
     frescas = _miCambioGana('entradas_log', frescas, _cacheEL);
+    _marcarSyncedEL(frescas.map(function(e){ return e && e.id; }));
     // Conservar las locales aún sin sincronizar (outbox) para que no desaparezcan.
     var vistos = {}; frescas.forEach(function(e){ if (e && e.id) vistos[e.id] = 1; });
     (_cacheEL || []).forEach(function(e){ if (e && e.id && !vistos[e.id]) frescas.push(e); });
@@ -448,16 +454,48 @@ function _cargarELLocal() {
    Solo se re-sube cuando de verdad se sabe qué hay en la nube (después de
    _sbInit). Antes de eso se mezcla para VER, que es lo único que init() necesita
    para pintar el historial. */
+/* Entradas que ya se vieron EN LA NUBE alguna vez. Es la misma idea que
+   `inv_synced` para los inventarios, y sin ella pasaba esto:
+
+     borras una entrada, el borrado SÍ llega al servidor, pero el respaldo local
+     todavía la tiene. A la siguiente carga, el servidor ya no la trae, así que
+     _mergeELLocal la daba por "local sin subir"… y la volvía a empujar Y a
+     subir. La entrada revivía, y cada carga generaba un envío nuevo — de ahí
+     una cola que nunca baja.
+
+   Con la marca se distingue lo que NUNCA llegó (hay que subirlo) de lo que ya
+   estuvo y desapareció (lo borraron: hay que soltarlo). */
+var _elSyncedIds = null;
+function _getSyncedEL() {
+    if (!_elSyncedIds) { try { _elSyncedIds = JSON.parse(_skRaw(_sk('el_synced')) || '{}') || {}; } catch(e) { _elSyncedIds = {}; } }
+    return _elSyncedIds;
+}
+function _marcarSyncedEL(ids) {
+    var s = _getSyncedEL(), ch = false;
+    (ids || []).forEach(function(id){ if (id && !s[id]) { s[id] = 1; ch = true; } });
+    if (ch) { try { _skPut(_sk('el_synced'), JSON.stringify(s)); } catch(e) {} }
+}
+
 function _mergeELLocal(reSubir) {
     var locales = _cargarELLocal();
     if (!locales.length) return;
     if (!_cacheEL) _cacheEL = [];
     var ids = {}; _cacheEL.forEach(function(x){ if (x && x.id) ids[x.id] = 1; });
+    var synced = _getSyncedEL();
+    var pend = (typeof sbPendientes === 'function') ? sbPendientes('entradas_log') : {};
+    var quedan = [];
     locales.forEach(function(e){
-        if (!e || !e.id || ids[e.id]) return;
+        if (!e || !e.id) return;
+        if (ids[e.id]) { quedan.push(e); return; }        // está en la nube: nada que hacer
+        if (pend[e.id] === 'delete') return;              // yo la borré y va en camino
+        if (synced[e.id]) return;                         // ya estuvo y ya no está: la borraron
         _cacheEL.push(e);
+        quedan.push(e);
         if (reSubir) { try { _sbUpEL(e); } catch(err){} }
     });
+    /* El respaldo local se limpia de lo que ya se soltó. Si no, en cada carga se
+       vuelve a evaluar lo mismo y el respaldo crece con fantasmas para siempre. */
+    if (quedan.length !== locales.length) { try { _skPut(_sk('el_local'), JSON.stringify(quedan)); } catch(e) {} }
 }
 
 function setEntradasLog(d) {

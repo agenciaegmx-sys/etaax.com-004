@@ -243,7 +243,14 @@
     }
     // ¿El error parece FALTA DE RED (no un error de datos/RLS)? → no descartar, reintentar.
     function _esErrRed(err) {
-        if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+        /* NO se consulta navigator.onLine, y es a propósito: el flush dejó de
+           creerle hace tiempo —muchas tablets y webviews se reportan offline
+           teniendo red— pero este clasificador sí le seguía creyendo. En un
+           dispositivo así, CUALQUIER error se leía como falta de red: no contaba
+           intentos, no se descartaba nunca y el envío se quedaba atorado para
+           siempre. Es la cola clavada en "4 pendientes" que no bajan ni se
+           descartan. Si de verdad no hay red, fetch falla con un mensaje que el
+           patrón de abajo sí reconoce. */
         var m = ((err && (err.message || err.msg || err)) + '').toLowerCase();
         return /fetch|network|failed to fetch|networkerror|load failed|timeout|timed out|econn|dns|offline|abort/.test(m);
     }
