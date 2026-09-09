@@ -302,6 +302,30 @@ const cola = n => JSON.stringify(Array.from({ length: n }, (_, i) => ({ uid: 'i'
             eq(m.ctx.window._sbPendientes(), 1));
     }
 
+    /* ── Qué está esperando en la cola ──
+       De aquí sale la regla que evita que un registro borrado reviva: si algo mío
+       sigue encolado, la copia del servidor es vieja y no puede pisarme. Si esta
+       lista miente, la protección no sirve. */
+    {
+        const m = montarDb({ enIDB: { [OUTBOX]: '[]' } });
+        await respirar();
+        m.ctx.window.sbUpsert('entradas_log', { id: 'e1', borrada: true });
+        m.ctx.window.sbUpsert('inventarios',  { id: 'i9' });
+        m.ctx.window.sbDelete('entradas_log', 'e2');
+        const pend = m.ctx.window.sbPendientes('entradas_log');
+
+        test('la cola reporta lo que está esperando por guardar', () => eq(pend['e1'], 'upsert'));
+        test('…y también lo que espera por borrar', () => eq(pend['e2'], 'delete'));
+        /* Aislado por tabla: la cola de una no puede congelar la lista de otra. */
+        test('…sin mezclar tablas', () => eq(pend['i9'], undefined));
+        test('la otra tabla sí ve lo suyo', () =>
+            eq(m.ctx.window.sbPendientes('inventarios')['i9'], 'upsert'));
+        /* Una tabla sin nada encolado devuelve vacío, no undefined: quien lo lee
+           hace Object.keys() sin preguntar. */
+        test('una tabla sin cola devuelve vacío, no undefined', () =>
+            eq(Object.keys(m.ctx.window.sbPendientes('gastos')).length, 0));
+    }
+
     /* ── Sin IndexedDB no se pierde nada ──
        Tablets viejas y modo privado: todo cae de vuelta a localStorage, que ahí
        NO es un espejo obsoleto sino el almacén de verdad. */

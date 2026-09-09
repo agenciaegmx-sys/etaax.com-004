@@ -229,12 +229,37 @@ function _subEntradasRealtime(negId) {
         _elRtT = setTimeout(_reloadEntradasRT, 400); // coalescer ráfagas en una recarga
     });
 }
+/* LA REGLA QUE FALTABA en cada relectura del servidor:
+
+     si un registro todavía tiene un cambio MÍO esperando en la cola, la copia
+     del servidor es vieja por definición y no puede pisar la mía.
+
+   Sin esto: borras una entrada —que se marca con una bandera y se sube—, el
+   envío se atora, llega un evento de realtime, se relee del servidor la versión
+   SIN la bandera… y la entrada revive. Y como cada reintento del envío atorado
+   vuelve a disparar realtime, la pantalla se recarga sola una y otra vez y no
+   deja ni escribir. Fue lo que le pasó a Edwin con cuatro movimientos atorados.
+
+   Lo pendiente de BORRAR se quita de la lista; lo pendiente de GUARDAR se
+   reemplaza por mi versión local. */
+function _miCambioGana(tabla, remotos, locales) {
+    var pend = (typeof sbPendientes === 'function') ? sbPendientes(tabla) : {};
+    if (!Object.keys(pend).length) return remotos;
+    var mios = {};
+    (locales || []).forEach(function(x){ if (x && x.id) mios[x.id] = x; });
+    return (remotos || []).map(function(x){
+        if (!x || !x.id || !pend[x.id]) return x;
+        return pend[x.id] === 'delete' ? null : (mios[x.id] || x);
+    }).filter(Boolean);
+}
+
 async function _reloadEntradasRT() {
     var negId = getNegocioActivo();
     if (!negId || _elRtNeg !== negId || typeof _supabase === 'undefined') return;
     var r = await _supabase.from('entradas_log').select('datos').eq('negocio_id', negId).order('created_at', {ascending: true});
     if (r.error) return;
     var frescas = (r.data || []).map(function(x){ return x.datos; }).filter(Boolean);
+    frescas = _miCambioGana('entradas_log', frescas, _cacheEL);
     // Conservar las locales aún sin sincronizar (outbox) para que no desaparezcan.
     var vistos = {}; frescas.forEach(function(e){ if (e && e.id) vistos[e.id] = 1; });
     (_cacheEL || []).forEach(function(e){ if (e && e.id && !vistos[e.id]) frescas.push(e); });
@@ -289,6 +314,7 @@ async function _reloadInvRT() {
     var r = await _supabase.from('inventarios').select('datos').eq('negocio_id', negId).order('created_at', { ascending: true });
     if (r.error) return;
     var remote = (r.data || []).map(function(x){ return x.datos; }).filter(Boolean);
+    remote = _miCambioGana('inventarios', remote, _cacheInv);
     var vistos = {}; remote.forEach(function(c){ if (c && c.id) vistos[c.id] = 1; });
     _marcarSynced(remote.map(function(c){ return c.id; }));
     var synced = _getSynced();

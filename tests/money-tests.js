@@ -5407,6 +5407,87 @@ console.log('\n══ AR · Aviso de privacidad y aceptación ══');
         eq(inv.indexOf('bucket `evidencias` es público') > -1, true, 'bucket'));
 }
 
+/* ═══════════ SUITE AS · LA ENTRADA QUE REVIVÍA (recetas/inventarios.js) ══════
+   Lo que pasó en producción: haciendo un inventario se atoraron cuatro
+   movimientos en la cola. Al borrar una entrada, revivía. Y la pantalla se
+   recargaba sola una y otra vez, tanto que no dejaba ni escribir.
+
+   La causa no era el borrado sino la RELECTURA: el borrado de una entrada se
+   marca con una bandera que viaja por la cola. Con el envío atorado, la copia
+   del servidor sigue SIN la bandera; llegaba un evento de realtime, se releía
+   del servidor y esa copia vieja pisaba el cambio local. Y como cada reintento
+   del envío atorado dispara otro realtime, la cosa se repetía sola.
+
+   La regla: si un registro tiene un cambio MÍO esperando en la cola, la copia
+   del servidor es vieja por definición y no puede pisar la mía.               */
+console.log('\n══ AS · La entrada que revivía (recetas/inventarios.js) ══');
+{
+    const I = crearContexto();
+    cargarJS(I, 'etaax-core.js');
+    cargarJS(I, 'insumo-label.js');
+    cargarJS(I, 'recetas/inventarios.js');
+
+    const gana = (t, rem, loc) => I._miCambioGana(t, rem, loc);
+
+    /* Sin nada en la cola, el servidor manda: es el caso normal. */
+    I.sbPendientes = () => ({});
+    test('sin cola pendiente, la copia del servidor manda', () =>
+        eq(gana('entradas_log', [{ id:'e1', borrada:false }], [{ id:'e1', borrada:true }])[0].borrada,
+           false, 'servidor'));
+
+    /* EL CASO DE EDWIN: la bandera de borrado está encolada y no ha subido. */
+    I.sbPendientes = () => ({ e1: 'upsert' });
+    const r = gana('entradas_log',
+        [{ id:'e1', borrada:false, nombre:'Mezcal' }],   // el servidor todavía no la tiene marcada
+        [{ id:'e1', borrada:true,  nombre:'Mezcal' }]);  // yo ya la borré
+    test('con mi cambio en la cola, la entrada NO revive', () => eq(r[0].borrada, true, 'no revive'));
+    test('…y sigue siendo la misma entrada, no se duplica', () => eq(r.length, 1, 'una sola'));
+
+    /* Un DELETE pendiente saca el registro de la lista, no lo deja volver. */
+    I.sbPendientes = () => ({ e1: 'delete' });
+    test('lo que ya borré y va en camino no vuelve a aparecer', () =>
+        eq(gana('entradas_log', [{ id:'e1' }, { id:'e2' }], []).length, 1, 'solo e2'));
+    test('…y el que sí sigue vivo se queda', () =>
+        eq(gana('entradas_log', [{ id:'e1' }, { id:'e2' }], [])[0].id, 'e2', 'e2'));
+
+    /* Los registros SIN cambio mío pendiente se siguen tomando del servidor: si
+       no, el trabajo de otra tablet nunca llegaría. */
+    I.sbPendientes = () => ({ e1: 'upsert' });
+    const mixto = gana('entradas_log',
+        [{ id:'e1', v:'servidor' }, { id:'e2', v:'servidor' }],
+        [{ id:'e1', v:'mío' },      { id:'e2', v:'viejo' }]);
+    test('mi cambio pendiente gana solo en SU registro', () => eq(mixto[0].v, 'mío', 'mío'));
+    test('…y lo demás sí se actualiza desde el servidor', () => eq(mixto[1].v, 'servidor', 'servidor'));
+
+    /* La cola de OTRA tabla no debe intervenir aquí. */
+    I.sbPendientes = (t) => t === 'inventarios' ? { e1:'upsert' } : {};
+    test('la cola de otra tabla no congela esta lista', () =>
+        eq(gana('entradas_log', [{ id:'e1', v:'servidor' }], [{ id:'e1', v:'mío' }])[0].v,
+           'servidor', 'aislado'));
+
+    /* Y si el registro pendiente ya no está en local (caso raro), no se inventa
+       nada: se deja el del servidor en vez de tirarlo. */
+    I.sbPendientes = () => ({ e9: 'upsert' });
+    test('un pendiente sin copia local no borra el registro', () =>
+        eq(gana('entradas_log', [{ id:'e9', v:'servidor' }], []).length, 1, 'conservado'));
+
+    /* Y que esté CONECTADO en las dos relecturas: la regla puede ser perfecta y no
+       servir de nada si nadie la llama al releer del servidor. */
+    {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        test('la relectura de entradas aplica la regla', () =>
+            eq(src.indexOf("_miCambioGana('entradas_log'") > -1, true, 'entradas'));
+        test('la relectura de inventarios también', () =>
+            eq(src.indexOf("_miCambioGana('inventarios'") > -1, true, 'inventarios'));
+    }
+
+    /* Sin la función de cola (una versión vieja de etaax-db.js en caché), la
+       relectura no puede tronar: se comporta como antes. */
+    I.sbPendientes = undefined;
+    test('sin la cola disponible, la relectura sigue funcionando', () =>
+        eq(gana('entradas_log', [{ id:'e1' }], []).length, 1, 'sin cola'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0

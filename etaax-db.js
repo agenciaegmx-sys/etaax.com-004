@@ -534,6 +534,27 @@
     // o carga inicial) deben IGNORAR esos registros: si la nube aún los tiene
     // porque el delete va en camino, sin esto "revivían" en pantalla unos
     // segundos (o para siempre, si el flush se perdía el delete).
+    /* Claves de una tabla con CUALQUIER escritura pendiente en la cola (upsert o
+       delete). Sirve para una regla que faltaba en todos los reloads de realtime:
+
+         si un registro todavía tiene un cambio mío en la cola, la copia del
+         servidor es VIEJA por definición y no puede pisar la mía.
+
+       Sin esto pasaba lo que reportó Edwin: borras una entrada —que se marca con
+       una bandera y se sube—, el envío se atora, llega un evento de realtime, se
+       relee del servidor la versión sin la bandera… y la entrada revive. Y como
+       cada reintento vuelve a disparar realtime, la pantalla se recarga sola una
+       y otra vez. */
+    window.sbPendientes = function (tabla) {
+        var s = {};
+        _obLoad().forEach(function (it) {
+            if (!it || it.tabla !== tabla) return;
+            var k = it.k || it.id;
+            if (k) s[k] = it.op || 'upsert';
+        });
+        return s;
+    };
+
     window.sbDeletesPendientes = function (tabla) {
         var s = {};
         _obLoad().forEach(function (it) { if (it && it.op === 'delete' && it.tabla === tabla && it.id) s[it.id] = 1; });
