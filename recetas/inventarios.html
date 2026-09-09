@@ -16,6 +16,15 @@
 <script src="/insumo-label.js"></script>
 <script src="/reporte-marca.js"></script>
 <script src="/foto-zoom.js"></script>
+    <!-- security.js y admin-guard.js van ANTES de inventarios.js, no después.
+         inventarios.js llama a init() en cuanto se parsea, y ahí ya usa etx()
+         para escapar HTML: cargándolo después, init reventaba con
+         "etx is not defined" en TODAS las cargas de la página y todo lo que
+         venía después de renderHistorial —realtime, importación de entradas,
+         estado del wizard— se quedaba sin correr. El try/catch lo escondía en un
+         console.warn que nadie leía. -->
+    <script src="../security.js"></script>
+    <script src="../admin-guard.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
     <script>
@@ -764,9 +773,7 @@ function toggleTheme() {
 // Cargar inventarios + insumos + recetas desde Supabase al iniciar
 document.addEventListener('DOMContentLoaded', function() { _sbInitInv(); });
 </script>
-<script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
-<script src="../admin-guard.js"></script>
 
 <!-- ── MODAL BLOQUEO NAVEGACIÓN (inventario en progreso) ──────── -->
 <div id="modalSalirInv" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:600;align-items:center;justify-content:center">

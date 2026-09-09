@@ -5488,6 +5488,66 @@ console.log('\n══ AS · La entrada que revivía (recetas/inventarios.js) ═
         eq(gana('entradas_log', [{ id:'e1' }], []).length, 1, 'sin cola'));
 }
 
+/* ═══════════ SUITE AT · EL ORDEN DE CARGA DE LOS SCRIPTS ════════════════════
+   inventarios.js llama a init() en cuanto se parsea, y ahí ya usa etx() para
+   escapar HTML. Pero security.js —que define etx— se cargaba DESPUÉS. Resultado:
+   "etx is not defined" en TODAS las cargas de la página, init muriendo a la mitad
+   y todo lo que venía después —realtime, importación de entradas, estado del
+   wizard— sin correr nunca. El try/catch lo escondía en un console.warn que nadie
+   lee, así que la página parecía sana.
+
+   Aquí se comprueba que cada archivo .js que usa un global lo tenga DISPONIBLE:
+   su proveedor debe cargarse antes.                                            */
+console.log('\n══ AT · El orden de carga de los scripts ══');
+{
+    /* Global → archivo que lo define. */
+    const PROVEE = {
+        'etx':               'security.js',
+        '_pedirClaveAdmin':  'admin-guard.js',
+        'insumoEtiqueta':    'insumo-label.js',
+        'etaaxReporteDoc':   'reporte-marca.js',
+        'EtaaxCore':         'etaax-core.js',
+        'sbUpsert':          'etaax-db.js',
+        'etaaxStore':        'etaax-store.js',
+    };
+
+    const scriptsDe = (html) =>
+        [...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m => m[1]);
+
+    /* Para cada página: qué .js propios carga, qué globales usa cada uno, y si
+       su proveedor va antes. */
+    const paginas = ['recetas/inventarios.html', 'recetas/index.html',
+                     'administrativo/diario.html', 'administrativo/staff.html',
+                     'financiero/previsiones.html', 'financiero/kpis.html'];
+
+    paginas.forEach(function (pag) {
+        const html = fs.readFileSync(path.join(RAIZ, pag), 'utf8');
+        const srcs = scriptsDe(html);
+        /* Se recorre la lista COMPLETA para que los índices de quien usa y quien
+           provee salgan de la misma numeración: comparando contra una lista
+           filtrada, las posiciones no coinciden y el resultado es basura. */
+        srcs.forEach(function (src, iSrc) {
+            if (!src.endsWith('.js') || src.startsWith('http')) return;
+            const archivo = src.replace(/^[./]+/, '');
+            const ruta = path.join(RAIZ, path.resolve('/' + path.dirname(pag) + '/' + src).slice(1));
+            let cuerpo = null;
+            try { cuerpo = fs.readFileSync(ruta, 'utf8'); } catch (e) { return; }   // no es del repo
+            /* Solo importan los que ARRANCAN solos: si todo su trabajo pasa dentro
+               de un DOMContentLoaded, para entonces ya cargó todo. */
+            if (cuerpo.indexOf('try { init(); }') === -1 && !/^\s*init\(\);/m.test(cuerpo)) return;
+
+            Object.keys(PROVEE).forEach(function (g) {
+                if (!new RegExp('\\b' + g + '\\s*[(.]').test(cuerpo)) return;
+                const prov = PROVEE[g];
+                const iProv = srcs.findIndex(s => s.endsWith('/' + prov) || s.endsWith(prov));
+                if (iProv === -1) return;   // no lo carga: otra historia
+                test(pag + ' carga ' + prov + ' antes que ' + archivo + ' (usa ' + g + ')',
+                     () => eq(iProv < iSrc, true, 'orden'));
+            });
+        });
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0

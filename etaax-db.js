@@ -265,7 +265,7 @@
                pisaba medio segundo después con la versión de disco. El contador se
                quedaba clavado y los mismos registros se re-subían en cada carga. */
             if (window.etaaxStore && etaaxStore.ready) { try { await etaaxStore.ready; } catch (e) {} }
-            var q = _obLoad(), hechos = {}, triesUpd = {}, muertos = {};
+            var q = _obLoad(), hechos = {}, triesUpd = {}, muertos = {}, errUpd = {};
             // Items de una versión vieja sin uid: asignarles uno y PERSISTIRLO antes
             // de ejecutar, para que el merge de abajo los identifique igual que al resto.
             var _sinUid = false;
@@ -281,6 +281,7 @@
                     if (!x || !x.uid) return false;
                     if (hechos[x.uid] || muertos[x.uid]) return false;           // ejecutado o descartado
                     if (triesUpd[x.uid] !== undefined) x.tries = triesUpd[x.uid]; // falló → conservar con sus intentos
+                    if (errUpd[x.uid] !== undefined) x.err = errUpd[x.uid];       // …y por qué falló
                     return true;
                 });
                 _obSave(fresca);
@@ -296,6 +297,9 @@
                     // intento → el dato NO se descarta, se reintenta en la próxima vuelta.
                 } else {
                     it.tries = (it.tries || 0) + 1;
+                    /* El motivo se guarda EN el item. Sin esto, _sbOutbox decía
+                       "5 de 8 intentos" y no por qué: la mitad de la respuesta. */
+                    it.err = String((err && err.message) || err).slice(0, 200);
                     if (it.tries >= 8) {
                         if (it.uid) muertos[it.uid] = 1;
                         /* NO se descarta en silencio. Un console.error no lo lee
@@ -306,7 +310,7 @@
                         _guardarDescartado(it, err);
                         console.error('[outbox] descartado tras 8 intentos:', it.tabla, it.k, err && err.message);
                     }
-                    else if (it.uid) triesUpd[it.uid] = it.tries;
+                    else if (it.uid) { triesUpd[it.uid] = it.tries; errUpd[it.uid] = it.err; }
                 }
                 /* SE ASIENTA EL AVANCE CADA POCOS ITEMS, no al final.
                    Aquí estaba el bug de la cola que "crece y no baja": con 347
@@ -522,10 +526,30 @@
     };
     // Diagnóstico: en consola, _sbOutbox() lista los items atorados (tabla, clave, intentos, tamaño).
     window._sbOutbox = function () {
-        return _obLoad().map(function (it) {
+        var filas = _obLoad().map(function (it) {
             var kb = '?'; try { kb = Math.round(JSON.stringify(it.payload || {}).length / 1024) + 'KB'; } catch (e) {}
-            return { tabla: it.tabla, op: it.op, clave: it.k, intentos: it.tries || 0, tamaño: kb };
+            return { tabla: it.tabla, op: it.op, clave: it.k, intentos: it.tries || 0, tamaño: kb,
+                     ultimo_error: it.err || '—' };
         });
+        /* Se IMPRIME, no solo se devuelve. Devolver un arreglo deja "(4) [{…},{…}]"
+           colapsado en la consola: quien lo corre para reportar un problema tiene
+           que ir abriendo objeto por objeto, y normalmente manda la captura así.
+           Con la tabla, la respuesta se lee de un vistazo. */
+        try {
+            if (!filas.length) console.log('%c✅ La cola está vacía: no hay nada pendiente por subir.', 'color:#3dbe7a');
+            else {
+                console.log('%c⏳ ' + filas.length + ' cambio(s) esperando en la cola:', 'color:#f5c842;font-weight:700');
+                console.table(filas);
+                var peor = filas.reduce(function (a, b) { return (b.intentos > a.intentos) ? b : a; }, filas[0]);
+                if (peor.intentos > 0)
+                    console.log('El que más ha fallado lleva ' + peor.intentos + ' de 8 intentos (' +
+                                peor.tabla + ' · ' + peor.clave + '). Motivo: ' + peor.ultimo_error);
+                else
+                    console.log('Ninguno ha fallado todavía: están en fila, no atorados. ' +
+                                'Si no bajan, revisa la conexión.');
+            }
+        } catch (e) {}
+        return filas;
     };
     // _sbVaciarOutbox() — descarta la cola (último recurso si algo quedó roto).
     window._sbVaciarOutbox = function () { _obSave([]); _obIndicador(); return 'outbox vaciado'; };
