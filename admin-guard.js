@@ -124,6 +124,11 @@
         } catch (e) { return false; }
     }
 
+    /* Se expone para que nadie más tenga que reinventarlo: verificar una
+       contraseña con el cliente GLOBAL cierra la sesión activa, y esa trampa ya
+       nos costó dos veces. Quien necesite comprobar credenciales, que llame aquí. */
+    window._verificarCredEtaax = _verificarCred;
+
     function _guardCtx() {
         try { return JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch (e) { return null; }
     }

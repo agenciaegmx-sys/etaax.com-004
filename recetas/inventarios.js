@@ -3368,8 +3368,16 @@ async function _confirmarClave() {
     if (btnConf) { btnConf.textContent = 'Verificando…'; btnConf.disabled = true; }
     errEl.textContent = '';
     try {
-        const { error } = await _supabase.auth.signInWithPassword({ email: _sesionEmail, password: pass });
-        if (error) throw new Error('Contraseña incorrecta');
+        /* Con un cliente EFÍMERO, nunca con el global.
+           Verificar la contraseña con `_supabase` es firmar de nuevo con la
+           sesión activa: supabase-js limpia la sesión antes de intentar, así que
+           un intento fallido —o uno hecho con el correo equivocado— TE SACA. Y
+           sin sesión, ninguna escritura pasa el RLS: los cambios se quedan
+           atorados en la cola y los borrados no persisten, así que las entradas
+           "revivían". Todo eso salía de teclear una contraseña para borrar una
+           entrada. admin-guard.js ya usaba cliente aparte; esto se quedó atrás. */
+        const ok = await _verificarClaveAparte(_sesionEmail, pass);
+        if (!ok) throw new Error('Contraseña incorrecta');
     } catch(e) {
         errEl.textContent = e.message || 'Error al verificar';
         document.getElementById('claveInput').value = '';
@@ -3382,6 +3390,30 @@ async function _confirmarClave() {
     const cb = _claveCallback;
     _cerrarModalClave();
     if (cb) cb();
+}
+
+/* Cliente aparte, sin sesión persistente: valida contra el servidor y no toca la
+   sesión de nadie. Se reusa el de admin-guard si ya está cargado, para no abrir
+   dos conexiones que hacen lo mismo. */
+var _invVerifier = null;
+async function _verificarClaveAparte(email, pass) {
+    if (!email || !pass) return false;
+    if (typeof window._verificarCredEtaax === 'function') return window._verificarCredEtaax(email, pass);
+    try {
+        if (!_invVerifier) {
+            if (typeof supabase === 'undefined' || !supabase.createClient) return false;
+            var url = (typeof SUPABASE_URL !== 'undefined') ? SUPABASE_URL : (window.SUPABASE_URL || '');
+            var key = (typeof SUPABASE_ANON !== 'undefined') ? SUPABASE_ANON : (window.SUPABASE_ANON || '');
+            if (!url || !key) return false;
+            _invVerifier = supabase.createClient(url, key, {
+                auth: { persistSession: false, autoRefreshToken: false,
+                        detectSessionInUrl: false, storageKey: 'etaax-verify-inv' }
+            });
+        }
+        var r = await _invVerifier.auth.signInWithPassword({ email: email, password: pass });
+        if (!r.error) { try { await _invVerifier.auth.signOut({ scope: 'local' }); } catch (e) {} }
+        return !r.error;
+    } catch (e) { return false; }
 }
 
 function _setFechaUltimo() {

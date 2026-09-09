@@ -5659,6 +5659,53 @@ console.log('\n══ AV · Cuándo un error es falta de red (etaax-db.js) ═�
         }));
 }
 
+/* ═══════════ SUITE AW · VERIFICAR UNA CLAVE NO PUEDE CERRAR LA SESIÓN ════════
+   El reporte completo de Edwin salía de aquí: al borrar una entrada, el modal
+   pedía la contraseña y la verificaba con `_supabase.auth.signInWithPassword`,
+   el cliente GLOBAL. supabase-js limpia la sesión antes de intentar, así que un
+   intento fallido —el 400 que salió en su consola— TE SACA.
+
+   Y sin sesión, ninguna escritura pasa el RLS: los cambios se quedan atorados en
+   la cola (los "4 pendientes" que no bajaban) y los borrados no persisten, así
+   que las entradas "revivían". Un solo error explicaba las tres cosas.        */
+console.log('\n══ AW · Verificar una clave no puede cerrar la sesión ══');
+{
+    const fuentes = {
+        'recetas/inventarios.js': fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8'),
+        'admin-guard.js':         fs.readFileSync(path.join(RAIZ, 'admin-guard.js'), 'utf8'),
+        'configuracion.html':     fs.readFileSync(path.join(RAIZ, 'configuracion.html'), 'utf8'),
+    };
+
+    /* La regla: NADIE verifica una contraseña con el cliente global.
+       Ojo con la distinción: INICIAR sesión sí va en el cliente global —es su
+       trabajo— y por eso hub.html, alta.html, admin.html y staff-auth.js quedan
+       fuera. Lo que no puede pasar es VERIFICAR una clave ahí: el hub también lo
+       hace, pero con un cliente aparte (línea del `v.auth`). */
+    Object.keys(fuentes).forEach(function (f) {
+        const usos = (fuentes[f].match(/_supabase\.auth\.signInWithPassword/g) || []).length;
+        test(f + ' no verifica claves con el cliente global', () => eq(usos, 0, 'usos=' + usos));
+    });
+
+    /* Y el cliente aparte existe, sin sesión persistente: si persistiera, volvería
+       a pisar la sesión buena por otra puerta. */
+    const inv = fuentes['recetas/inventarios.js'];
+    test('inventarios verifica con un cliente aparte', () =>
+        eq(inv.indexOf('_verificarClaveAparte') > -1, true, 'aparte'));
+    test('…que no guarda sesión', () =>
+        eq(inv.indexOf('persistSession: false') > -1, true, 'sin persistir'));
+    test('…y con su propio almacén, para no pisar el de la sesión buena', () =>
+        eq(inv.indexOf("storageKey: 'etaax-verify-inv'") > -1, true, 'storageKey'));
+    test('…y cierra el cliente aparte al terminar', () =>
+        eq(inv.indexOf("_invVerifier.auth.signOut({ scope: 'local' })") > -1, true, 'cierra'));
+
+    /* Y hay UNA sola verdad para esto, expuesta desde admin-guard: quien necesite
+       comprobar credenciales no tiene que reinventar la trampa. */
+    test('admin-guard expone el verificador para todos', () =>
+        eq(fuentes['admin-guard.js'].indexOf('window._verificarCredEtaax = _verificarCred') > -1, true, 'expuesto'));
+    test('…e inventarios lo prefiere si está cargado', () =>
+        eq(inv.indexOf('window._verificarCredEtaax') > -1, true, 'reusa'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0
