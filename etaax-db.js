@@ -143,6 +143,8 @@
        no cambia. Y no es lo mismo "va en camino" que "este registro ya falló seis
        veces y a la octava se descarta". Los atorados (los que ya fallaron por algo
        que NO es falta de red) se separan y se dicen por su nombre. */
+    /* Lo pone el flush cuando el servidor contesta que no hay quién firme. */
+    var _sinSesionGlobal = false;
     function _obIndicador() {
         var q = _obLoad();
         var n = q.length;
@@ -158,8 +160,22 @@
                 'box-shadow:0 8px 32px rgba(0,0,0,.45)';
             if (document.body) document.body.appendChild(el);
         }
-        el.style.borderColor = atorados.length ? '#e05c5c' : '#f5c842';
+        el.style.borderColor = (_sinSesionGlobal || atorados.length) ? '#e05c5c' : '#f5c842';
         var s = n !== 1 ? 's' : '';
+        /* Sin sesión el aviso NO puede decir "se suben solos": no van a subir
+           hasta que alguien vuelva a entrar, y decir lo contrario hace que el
+           usuario se vaya tranquilo con su inventario sin guardar. */
+        if (_sinSesionGlobal) {
+            el.innerHTML = '<span style="color:#e05c5c;font-weight:700">🔒 Tu sesión se cerró.</span> ' +
+                n + ' cambio' + s + ' sin subir.' +
+                '<div style="margin-top:5px;font-size:11px;opacity:.85">Están guardados aquí y ' +
+                '<b>no se van a perder</b>. Vuelve a iniciar sesión y suben solos.</div>' +
+                '<div style="margin-top:7px"><a href="/hub.html" style="display:inline-block;background:#3dbe7a;' +
+                'color:#0a0908;text-decoration:none;font-weight:600;padding:7px 14px;border-radius:7px;' +
+                'font-size:12px">Iniciar sesión</a></div>';
+            el.style.display = 'block';
+            return;
+        }
         var txt = '<span style="color:#f5c842;font-weight:700">⏳ Sincronizando…</span> ' +
             n + ' cambio' + s + ' pendiente' + s + ' (se sube' + (n !== 1 ? 'n' : '') + ' solo' + s + ').';
         if (atorados.length) {
@@ -255,6 +271,33 @@
         return /fetch|network|failed to fetch|networkerror|load failed|timeout|timed out|econn|dns|offline|abort/.test(m);
     }
 
+    /* ── SIN SESIÓN NO SE GASTAN INTENTOS ──────────────────────────────────────
+       Un 401 o un "violates row-level security" no dice nada del dato: dice que
+       en este momento no hay quién lo firme. Contarlo como intento fallido es
+       castigar al dato por un problema del entorno, y a los ocho intentos se
+       descarta trabajo bueno —un inventario entero de 136 KB, por ejemplo—
+       cuando lo único que hacía falta era volver a iniciar sesión.
+
+       Se trata igual que la falta de red: se reintenta, no se cuenta, no se
+       descarta. */
+    function _esErrSesion(err) {
+        var e = err || {};
+        var cod = String(e.code || e.status || '');
+        if (cod === '401' || cod === '403' || e.status === 401 || e.status === 403) return true;
+        var m = ((e.message || e.msg || e) + '').toLowerCase();
+        return /row-level security|violates row-level|jwt|not authenticated|unauthorized|no autorizado|permission denied/.test(m);
+    }
+    /* ¿Hay sesión ahora mismo? Se consulta sin red: supabase-js guarda la sesión
+       en memoria y en storage, así que esto no cuesta un viaje al servidor. */
+    var _haySesionCache = null;
+    async function _haySesion() {
+        try {
+            var r = await _supabase.auth.getSession();
+            _haySesionCache = !!(r && r.data && r.data.session);
+        } catch (e) { _haySesionCache = null; }   // null = no se pudo saber → intentar igual
+        return _haySesionCache;
+    }
+
     var _obFlushing = false, _obRepetir = false;
     async function _obFlush() {
         if (_obFlushing) { _obRepetir = true; return; } // algo entró en pleno flush → correr otra vuelta al terminar
@@ -273,6 +316,7 @@
                quedaba clavado y los mismos registros se re-subían en cada carga. */
             if (window.etaaxStore && etaaxStore.ready) { try { await etaaxStore.ready; } catch (e) {} }
             var q = _obLoad(), hechos = {}, triesUpd = {}, muertos = {}, errUpd = {};
+            var _sinSesion = false;
             // Items de una versión vieja sin uid: asignarles uno y PERSISTIRLO antes
             // de ejecutar, para que el merge de abajo los identifique igual que al resto.
             var _sinUid = false;
@@ -298,10 +342,12 @@
             for (var i = 0; i < q.length; i++) {
                 var it = q[i], err = null;
                 try { err = await _obEjecutar(it); } catch (e) { err = e || new Error('network'); }
-                if (!err) { if (it.uid) hechos[it.uid] = 1; }
-                else if (_esErrRed(err)) {
-                    // Falta de red (o tablet que se reporta offline por error): NO cuenta como
-                    // intento → el dato NO se descarta, se reintenta en la próxima vuelta.
+                if (!err) { if (it.uid) hechos[it.uid] = 1; _sinSesionGlobal = false; }
+                else if (_esErrRed(err) || _esErrSesion(err)) {
+                    /* Falta de red, o falta de SESIÓN: ninguna de las dos es culpa
+                       del dato. NO cuenta como intento → no se descarta, se
+                       reintenta cuando el entorno se componga. */
+                    if (_esErrSesion(err)) { _sinSesion = true; _sinSesionGlobal = true; }
                 } else {
                     it.tries = (it.tries || 0) + 1;
                     /* El motivo se guarda EN el item. Sin esto, _sbOutbox decía

@@ -326,6 +326,54 @@ const cola = n => JSON.stringify(Array.from({ length: n }, (_, i) => ({ uid: 'i'
             eq(Object.keys(m.ctx.window.sbPendientes('gastos')).length, 0));
     }
 
+
+    /* ══ SIN SESIÓN NO SE GASTAN INTENTOS ══
+       El caso real: la sesión se cerró, y la cola siguió intentando. Cada intento
+       volvía con 401 y "new row violates row-level security policy". Eso no dice
+       nada del dato —dice que en ese momento no hay quién lo firme—, pero se
+       contaba como intento fallido. A los ocho, se descarta: un inventario entero
+       de 136 KB perdido por no haber vuelto a entrar. */
+    {
+        const m = montarDb({ enIDB: { [OUTBOX]: '[]' } });
+        await respirar();
+        const esSesion = m.ctx.window._esErrSesionTest || null;
+        const src = fs.readFileSync(path.join(RAIZ, 'etaax-db.js'), 'utf8');
+
+        test('el 401 se reconoce como falta de sesión', () =>
+            eq(/401/.test(src.slice(src.indexOf('function _esErrSesion'), src.indexOf('function _haySesion'))), true));
+        test('…y el "row-level security" también', () =>
+            eq(src.slice(src.indexOf('function _esErrSesion'), src.indexOf('function _haySesion'))
+                  .indexOf('row-level security') > -1, true));
+        /* Y lo importante: se trata como la falta de red —se reintenta y NO se
+           cuenta— para que a los ocho intentos no se tire trabajo bueno. */
+        test('la falta de sesión NO cuenta como intento fallido', () =>
+            eq(src.indexOf('_esErrRed(err) || _esErrSesion(err)') > -1, true));
+        test('…y por eso nunca llega a los 8 ni se descarta', () => {
+            const i = src.indexOf('_esErrRed(err) || _esErrSesion(err)');
+            const j = src.indexOf('it.tries = (it.tries || 0) + 1', i);
+            const enMedio = src.slice(i, j);
+            // el incremento de intentos vive en la rama ELSE, después de esta
+            return eq(enMedio.indexOf('else {') > -1, true);
+        });
+
+        /* Y el aviso deja de mentir: "se suben solos" es falso sin sesión, y hace
+           que el usuario se vaya tranquilo con su inventario sin guardar. */
+        test('el aviso dice que la sesión se cerró', () =>
+            eq(src.indexOf('Tu sesión se cerró') > -1, true));
+        test('…y que los datos NO se van a perder', () =>
+            eq(src.indexOf('no se van a perder') > -1, true));
+        test('…y ofrece volver a entrar', () =>
+            eq(src.indexOf('Iniciar sesión</a>') > -1, true));
+        /* En cuanto algo sube, el aviso vuelve a la normalidad. */
+        /* Y en cuanto algo sube, la marca se limpia EN LA MISMA rama del éxito:
+           si viviera en otro lado, el aviso se quedaría pegado diciendo que no
+           hay sesión aunque ya la haya. */
+        test('al subir algo, el aviso deja de decir que no hay sesión', () => {
+            const i = src.indexOf('if (!err) { if (it.uid) hechos[it.uid] = 1;');
+            return eq(i > -1 && src.slice(i, i + 120).indexOf('_sinSesionGlobal = false') > -1, true);
+        });
+    }
+
     /* ── Sin IndexedDB no se pierde nada ──
        Tablets viejas y modo privado: todo cae de vuelta a localStorage, que ahí
        NO es un espejo obsoleto sino el almacén de verdad. */
