@@ -5020,7 +5020,24 @@ function abrirModalEntrada(insumoId, nombre) {
     document.getElementById('modalEntNombre').textContent = nombre;
     document.getElementById('entCantidad').value = '';
     document.getElementById('entCosto').value    = '';
-    document.getElementById('entFecha').value    = new Date().toISOString().slice(0,10);
+    /* El calendario se acota al periodo del inventario: es más barato no poder
+       elegir un día imposible que explicar después por qué no se guardó. El
+       candado de guardado sigue ahí —el `max` de un input se puede saltar
+       escribiendo—, esto solo evita el viaje. */
+    const _fEnt = document.getElementById('entFecha');
+    const _pEnt = _periodoInvActual();
+    _fEnt.max = _pEnt.hasta || '';
+    _fEnt.min = _pEnt.desde || '';
+    /* Se propone HOY si cae dentro del periodo; si no, el día del inventario.
+       Proponer una fecha que el propio candado va a rechazar es una trampa. */
+    const _hoyEnt = new Date().toISOString().slice(0,10);
+    _fEnt.value = (_pEnt.hasta && _hoyEnt > _pEnt.hasta) ? _pEnt.hasta : _hoyEnt;
+    const _ayudaEnt = document.getElementById('entFechaAyuda');
+    if (_ayudaEnt) {
+        _ayudaEnt.textContent = _pEnt.desde
+            ? ('Este inventario cubre del ' + _pEnt.desde + ' al ' + (_pEnt.hasta || 'cierre') + '.')
+            : ('Hasta el ' + (_pEnt.hasta || 'cierre') + ', que es la fecha de este inventario.');
+    }
     document.getElementById('entNotas').value    = '';
     // Show existing log for this insumo
     const log   = (invActual?.entradasLog||[]).filter(e=>e.insumoId===insumoId);
@@ -5055,6 +5072,59 @@ function cerrarModalEntrada() {
    Lo primero se ataja al guardar: es un dato roto. Lo segundo NO se bloquea —el
    insumo incompleto es problema del catálogo, no de la entrada— pero se avisa
    antes de guardar, que es cuando todavía se puede corregir. */
+/* ── EL PERIODO DEL INVENTARIO, EN PALABRAS ────────────────────────────────
+   Devuelve {desde, hasta} en fechas, para poder decirle al usuario dónde puede
+   registrar y para acotar el selector. `hasta` vacío = inventario abierto sin
+   tope… salvo su propia fecha: un inventario del 8 de septiembre no puede
+   recibir una entrada del 10, porque ese movimiento todavía no ocurrió cuando se
+   contó. */
+function _periodoInvActual() {
+    if (!invActual) return { desde: '', hasta: '' };
+    var refI = _getRefInv();
+    return {
+        desde: refI ? String(refI.fecha || '') : '',
+        hasta: String(invActual.fecha || '')
+    };
+}
+
+/* POR QUÉ ESTO ES UN CANDADO Y NO UN DETALLE:
+
+   Guardar una entrada con fecha POSTERIOR al inventario la deja fuera de su
+   periodo. En el siguiente render, `_importarEntradasQR` la saca de
+   `invActual.entradasLog` —está en el log global y no pertenece a este
+   periodo—, eso muta el inventario, el inventario se guarda, el guardado
+   dispara realtime, realtime repinta, y el render vuelve a sacarla. La rueda no
+   para: es el bucle de "recarga y recarga" que no dejaba ni escribir, con el
+   inventario subiéndose en cada vuelta.
+
+   Se ataja en el origen: una entrada no puede quedar fuera del periodo de su
+   inventario. */
+/* Se propone HOY si cae dentro del periodo; si no, el día del inventario.
+   Proponer una fecha que el propio candado va a rechazar es una trampa. */
+function _fechaSugeridaEntrada() {
+    var hoy = new Date().toISOString().slice(0, 10);
+    var p = _periodoInvActual();
+    if (p.hasta && hoy > p.hasta) return p.hasta;
+    return hoy;
+}
+
+function _fechaFueraDePeriodo(fecha) {
+    if (!fecha || !invActual) return null;
+    var p = _periodoInvActual(), f = String(fecha);
+    if (p.hasta && f > p.hasta) {
+        return 'La entrada quedaría DESPUÉS del cierre de este inventario (' + p.hasta + '), ' +
+               'así que no pertenece a este periodo: al guardarla se saldría sola y el ' +
+               'inventario no dejaría de recargarse.\n\nRegístrala en el inventario que ' +
+               'cubra esa fecha, o corrige el día.';
+    }
+    if (p.desde && f <= p.desde) {
+        return 'Esa fecha cae en el inventario anterior, que cerró el ' + p.desde + '. ' +
+               'Lo que entró hasta ese día ya quedó contado ahí.\n\nCorrige el día si te ' +
+               'equivocaste, o regístrala en el inventario que le toca.';
+    }
+    return null;
+}
+
 function _insumoDeEntrada(id) {
     if (!id) return null;
     try { return (typeof window._insumoResolver === 'function') ? window._insumoResolver(id) : null; }
@@ -5079,6 +5149,12 @@ function guardarEntrada() {
               'Vuelve a elegirlo de la lista, o agrégalo al catálogo primero.');
         return;
     }
+    /* Fuera del periodo NO se guarda: es lo que disparaba el bucle (ver
+       _fechaFueraDePeriodo). Se lee el campo aquí porque la fecha se declara más
+       abajo, y usarla antes revienta por zona muerta. */
+    const _fueraP = _fechaFueraDePeriodo(document.getElementById('entFecha').value || '');
+    if (_fueraP) { alert(_fueraP); return; }
+
     /* Existe pero no se distingue de otro con el mismo nombre: se avisa, no se
        bloquea. Es el catálogo el que está incompleto. */
     if (!_insumoIdentificable(_ins) &&
@@ -9069,7 +9145,8 @@ function renderFormEntrada() {
                 </div>
                 <div>
                     <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Fecha</div>
-                    <input type="date" id="entRapidaFecha" value="${new Date().toISOString().slice(0,10)}"
+                    <input type="date" id="entRapidaFecha" value="${_fechaSugeridaEntrada()}"
+                        min="${_periodoInvActual().desde || ''}" max="${_periodoInvActual().hasta || ''}"
                         style="height:52px;padding:0 10px;border:1px solid var(--border);border-radius:10px;
                                background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none">
                 </div>
@@ -9104,6 +9181,12 @@ function agregarEntradaRapida() {
     const cant = parseFloat(document.getElementById('entRapidaCant')?.value) || 0;
     if (cant <= 0) { document.getElementById('entRapidaCant')?.focus(); return; }
     const fecha = document.getElementById('entRapidaFecha')?.value || new Date().toISOString().slice(0,10);
+    /* Fuera del periodo NO se guarda: es el disparador del bucle. Ver
+       _fechaFueraDePeriodo — la entrada se sale sola en el siguiente render, eso
+       muta y guarda el inventario, el guardado dispara realtime, realtime
+       repinta, y vuelve a empezar. */
+    const _fueraR = _fechaFueraDePeriodo(fecha);
+    if (_fueraR) { alert(_fueraR); document.getElementById('entRapidaFecha')?.focus(); return; }
     const fila  = filasCaptura.find(f => f.insumoId === _entRapidaInsumoId);
     const ins   = (typeof window._insumoResolver === 'function') ? window._insumoResolver(_entRapidaInsumoId) : null;
     const _id   = genId() + genId();
@@ -9568,6 +9651,10 @@ function guardarEditorEntrada() {
     if (!_entEd) return;
     if (!(_entEd.cantidad > 0)) { alert('La cantidad debe ser mayor a 0.'); return; }
     if (!_entEd.insumoId)       { alert('Elige un insumo.'); return; }
+    /* Editar la fecha puede sacar la entrada del periodo igual que capturarla
+       mal, y con el mismo resultado. */
+    var _fueraEd = _fechaFueraDePeriodo(_entEd.fecha);
+    if (_fueraEd) { alert(_fueraEd); return; }
     var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(_entEd.insumoId) : null;
     _entAplicarCambios(_entEd.id, {
         tipo:      _entEd.tipo,

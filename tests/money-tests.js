@@ -5822,6 +5822,107 @@ console.log('\n══ AX · Una entrada sin insumo no se guarda (recetas/inventa
         eq(E._entAvisoInsumo({ id:'e3' }), '', 'sin id'));
 }
 
+/* ═══════════ SUITE AY · UNA ENTRADA FUERA DEL PERIODO (recetas/inventarios.js) ══
+   La causa real, que encontró Edwin: registrar una entrada con fecha POSTERIOR
+   al inventario. El 8 de septiembre, una entrada del 10.
+
+   Por qué eso hace bucle: la entrada queda fuera del periodo, así que en el
+   siguiente render `_importarEntradasQR` la saca de `invActual.entradasLog`
+   —está en el log global y no es de este periodo—; eso muta el inventario, el
+   inventario se guarda, el guardado dispara realtime, realtime repinta, y el
+   render vuelve a sacarla. La rueda no para: es el "recarga y recarga" que no
+   dejaba ni escribir, con el inventario subiéndose en cada vuelta.
+
+   Se ataja en el origen: la entrada no puede quedar fuera del periodo.       */
+console.log('\n══ AY · Una entrada fuera del periodo (recetas/inventarios.js) ══');
+{
+    const P = crearContexto();
+    cargarJS(P, 'etaax-core.js');
+    cargarJS(P, 'insumo-label.js');
+    cargarJS(P, 'recetas/inventarios.js');
+
+    /* Inventario del 8 de septiembre; el anterior cerró el 1. */
+    setVar(P, 'invActual', { id:'inv2', fecha:'2026-09-08', entradasLog: [] });
+    setVar(P, '_getRefInv', function(){ return { id:'inv1', fecha:'2026-09-01' }; });
+
+    const p = P._periodoInvActual();
+    test('el periodo va del cierre anterior a la fecha del inventario', () =>
+        eq(p.desde === '2026-09-01' && p.hasta === '2026-09-08', true, 'periodo'));
+
+    /* ── EL CASO DE EDWIN ── */
+    const futura = P._fechaFueraDePeriodo('2026-09-10');
+    test('una entrada posterior al inventario se rechaza', () => eq(!!futura, true, 'rechazada'));
+    test('…y se dice que quedaría después del cierre', () =>
+        eq(futura.indexOf('DESPUÉS del cierre') > -1, true, 'motivo'));
+    /* El mensaje tiene que decir qué hacer, no solo que no se puede. */
+    test('…y qué hacer: registrarla en el inventario que le toca', () =>
+        eq(futura.indexOf('inventario que') > -1, true, 'salida'));
+
+    /* Lo del periodo anterior tampoco: ya quedó contado allá. */
+    const vieja = P._fechaFueraDePeriodo('2026-08-30');
+    test('una entrada anterior al cierre pasado se rechaza', () => eq(!!vieja, true, 'rechazada'));
+    test('…diciendo que ya quedó contada en el inventario anterior', () =>
+        eq(vieja.indexOf('inventario anterior') > -1, true, 'motivo'));
+    /* Y el día exacto del cierre anterior pertenece al anterior, no a este. */
+    test('el día del cierre anterior es del inventario anterior', () =>
+        eq(!!P._fechaFueraDePeriodo('2026-09-01'), true, 'frontera'));
+
+    /* Lo que SÍ cae dentro pasa sin estorbo. */
+    ['2026-09-02', '2026-09-05', '2026-09-08'].forEach(f =>
+        test('la fecha ' + f + ' sí se acepta', () => eq(P._fechaFueraDePeriodo(f), null, 'dentro')));
+    /* El último día del periodo es la fecha del inventario: incluida. */
+    test('el propio día del inventario cuenta como suyo', () =>
+        eq(P._fechaFueraDePeriodo('2026-09-08'), null, 'incluido'));
+
+    /* Sin fecha no se inventa un rechazo (registros viejos, compat). */
+    test('sin fecha no se bloquea nada', () => eq(P._fechaFueraDePeriodo(''), null, 'compat'));
+
+    /* ── La fecha que se PROPONE tiene que ser una que sí se pueda guardar ──
+       Proponer "hoy" en un inventario viejo es tenderle una trampa al usuario:
+       le rechazamos lo mismo que le sugerimos. */
+    test('en un inventario pasado se propone su propia fecha, no hoy', () =>
+        eq(P._fechaSugeridaEntrada(), '2026-09-08', 'sugerida'));
+    test('…y esa sugerencia sí pasa el candado', () =>
+        eq(P._fechaFueraDePeriodo(P._fechaSugeridaEntrada()), null, 'coherente'));
+
+    /* Un inventario abierto HOY sí propone hoy. */
+    const hoy = new Date().toISOString().slice(0, 10);
+    setVar(P, 'invActual', { id:'inv3', fecha: hoy, entradasLog: [] });
+    test('en el inventario del día se propone hoy', () => eq(P._fechaSugeridaEntrada(), hoy, 'hoy'));
+
+    /* ── Y que esté CONECTADO donde de verdad se captura ──
+       La regla puede ser perfecta y no servir de nada si nadie la llama. Ojo: la
+       captura vive en `agregarEntradaRapida`; el modal viejo (`guardarEntrada`)
+       es código muerto —sus campos no existen en el HTML—, así que ahí el
+       candado no protege a nadie. */
+    {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        const rapida = src.slice(src.indexOf('function agregarEntradaRapida'),
+                                 src.indexOf('function eliminarEntradaRapida'));
+        test('la captura rápida valida el periodo', () =>
+            eq(rapida.indexOf('_fechaFueraDePeriodo') > -1, true, 'captura'));
+        test('…y no guarda si está fuera', () =>
+            eq(rapida.indexOf('if (_fueraR)') > -1 && rapida.indexOf('return;') > -1, true, 'bloquea'));
+
+        const editor = src.slice(src.indexOf('function guardarEditorEntrada'),
+                                 src.indexOf('function guardarEditorEntrada') + 900);
+        test('editar la fecha también valida el periodo', () =>
+            eq(editor.indexOf('_fechaFueraDePeriodo') > -1, true, 'editor'));
+
+        /* Y el calendario se acota: es más barato no poder elegir un día
+           imposible que explicar después por qué no se guardó. */
+        test('el calendario de la entrada se acota al periodo', () =>
+            eq(src.indexOf('max="${_periodoInvActual().hasta') > -1, true, 'max'));
+        test('…por los dos lados', () =>
+            eq(src.indexOf('min="${_periodoInvActual().desde') > -1, true, 'min'));
+    }
+
+    /* Sin inventario abierto no se estorba a nadie. */
+    setVar(P, 'invActual', null);
+    test('sin inventario abierto no hay periodo que violar', () =>
+        eq(P._fechaFueraDePeriodo('2030-01-01'), null, 'libre'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 console.log('\n════════════════════════════════════');
 console.log(FALLA === 0
