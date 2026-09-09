@@ -93,6 +93,12 @@ function crearContexto() {
         etaaxPerm(){ return true; }, etaaxPermisosRol(){ return {}; },
         _storage: storage, // acceso directo desde los tests
     };
+    /* window.addEventListener: varias páginas se enganchan a `resize` o
+       `beforeunload` mientras se cargan. Sin el stub, el módulo dejaba de
+       cargarse justo ahí y todo lo declarado más abajo quedaba sin inicializar
+       —lo que se ve como "Cannot access X before initialization". */
+    ctx.addEventListener = function () {};
+    ctx.removeEventListener = function () {};
     ctx.window = ctx; ctx.globalThis = ctx;
     vm.createContext(ctx);
     return ctx;
@@ -106,6 +112,12 @@ function cargarInline(ctx, htmlPath) {
         catch (e) { /* fallas de arranque por stubs (p.ej. onclick de mayorWall) no afectan las fórmulas */ }
     });
     return ctx;
+}
+/* Leer una variable top-level (let) DESDE FUERA: un `let` de módulo no vive en el
+   objeto global del contexto, así que ctx.miVar es undefined aunque la variable
+   exista y valga algo. Hay que preguntarle al propio script. */
+function getVar(ctx, nombre) {
+    try { return vm.runInContext(nombre, ctx); } catch (e) { return undefined; }
 }
 // Asignar una variable top-level (let) DENTRO del contexto del script
 function setVar(ctx, nombre, valor) {
@@ -5704,6 +5716,110 @@ console.log('\n══ AW · Verificar una clave no puede cerrar la sesión ═�
         eq(fuentes['admin-guard.js'].indexOf('window._verificarCredEtaax = _verificarCred') > -1, true, 'expuesto'));
     test('…e inventarios lo prefiere si está cargado', () =>
         eq(inv.indexOf('window._verificarCredEtaax') > -1, true, 'reusa'));
+}
+
+/* ═══════════ SUITE AX · UNA ENTRADA SIN INSUMO NO SE GUARDA (inventarios.js) ══
+   Una entrada guarda solo el `insumoId`; el nombre se arma al pintarla con la
+   etiqueta canónica. De ahí salían dos formas del mismo problema:
+
+   · HUÉRFANA: el id ya no está en el catálogo. La fila salía con un nombre a
+     medias y parecía sana.
+   · A MEDIAS: el insumo existe pero sin variedad, contenido ni marca. Entonces
+     se ven dos renglones "Torres 10" idénticos, uno completo y otro pelón — que
+     es exactamente lo que hizo cargar entradas al insumo equivocado.          */
+console.log('\n══ AX · Una entrada sin insumo no se guarda (recetas/inventarios.js) ══');
+{
+    const E = crearContexto();
+    cargarJS(E, 'etaax-core.js');
+    cargarJS(E, 'insumo-label.js');
+    cargarJS(E, 'recetas/inventarios.js');
+    const $ = (id) => E.document.getElementById(id);
+
+    const CATALOGO = {
+        full:  { id:'full',  nombre:'Torres 10', variedad:'Torres Brandy', contenido:'Botella 700 ml', marca:'Torres' },
+        pelon: { id:'pelon', nombre:'Torres 10' },
+    };
+    E.window._insumoResolver = (id) => CATALOGO[id] || null;
+
+    /* ── Qué tan identificable es ── */
+    test('un insumo con marca y contenido se distingue', () =>
+        eq(E._insumoIdentificable(CATALOGO.full), true, 'completo'));
+    test('uno con puro nombre NO se distingue de otro igual', () =>
+        eq(E._insumoIdentificable(CATALOGO.pelon), false, 'pelón'));
+    test('y un insumo que no existe, tampoco', () => eq(E._insumoIdentificable(null), false, 'nulo'));
+
+    /* ── Al guardar ── */
+    const guardar = (insumoId, cant, respuesta) => {
+        setVar(E, '_entradaInsumoId', insumoId);
+        setVar(E, 'invActual', { id:'i1', sucursalId:'suc1', entradasLog: [] });
+        $('entCantidad').value = cant; $('entCosto').value = 100;
+        $('entFecha').value = '2026-09-08'; $('entNotas').value = '';
+        E.alert = () => {}; E.confirm = () => respuesta !== false;
+        setVar(E, 'cerrarModalEntrada', function(){});
+        setVar(E, 'renderStepContent', function(){});
+        E.guardarEntrada();
+        return getVar(E, 'invActual').entradasLog;
+    };
+
+    test('la entrada con un insumo real se guarda', () => eq(guardar('full', 5).length, 1, 'guardada'));
+    /* Lo importante: una entrada huérfana no se puede costear ni descontar, y en
+       la lista parece buena. No se guarda. */
+    test('la entrada de un insumo que ya no existe NO se guarda', () =>
+        eq(guardar('fantasma', 5).length, 0, 'bloqueada'));
+    test('…y se explica por qué', () => {
+        let dicho = '';
+        setVar(E, '_entradaInsumoId', 'fantasma');
+        setVar(E, 'invActual', { id:'i1', entradasLog: [] });
+        $('entCantidad').value = 5;
+        E.alert = (m) => { dicho = m; };
+        E.guardarEntrada();
+        return eq(dicho.indexOf('catálogo') > -1, true, 'motivo');
+    });
+
+    /* El insumo capturado a medias sí se puede guardar —el problema es del
+       catálogo, no de la entrada— pero se avisa antes, que es cuando todavía se
+       puede corregir. */
+    test('el insumo a medias se avisa, no se bloquea', () => eq(guardar('pelon', 5).length, 1, 'guardada'));
+    test('…y si el usuario dice que no, no se guarda', () => eq(guardar('pelon', 5, false).length, 0, 'cancelada'));
+    /* Y el aviso tiene que decir POR QUÉ importa, no solo "¿seguro?". */
+    test('el aviso explica que no podrá distinguirlos', () => {
+        let dicho = '';
+        setVar(E, '_entradaInsumoId', 'pelon');
+        setVar(E, 'invActual', { id:'i1', entradasLog: [] });
+        $('entCantidad').value = 5;
+        E.confirm = (m) => { dicho = m; return false; };
+        E.guardarEntrada();
+        return eq(dicho.indexOf('distinguir') > -1, true, 'explica');
+    });
+    /* Un insumo completo no molesta con avisos. */
+    test('el insumo completo no pregunta nada', () => {
+        let preguntas = 0;
+        setVar(E, '_entradaInsumoId', 'full');
+        setVar(E, 'invActual', { id:'i1', entradasLog: [] });
+        $('entCantidad').value = 5;
+        E.confirm = () => { preguntas++; return true; };
+        E.guardarEntrada();
+        return eq(preguntas, 0, 'sin ruido');
+    });
+
+    /* ── Las que YA están guardadas ── */
+    test('la entrada huérfana se marca en la lista', () =>
+        eq(E._entAvisoInsumo({ id:'e1', insumoId:'fantasma' }).indexOf('ya no está en el catálogo') > -1, true, 'marcada'));
+    test('…y ofrece corregirla ahí mismo', () =>
+        eq(E._entAvisoInsumo({ id:'e1', insumoId:'fantasma' }).indexOf('abrirEditorEntrada') > -1, true, 'arreglo'));
+    test('la entrada sana no lleva aviso', () =>
+        eq(E._entAvisoInsumo({ id:'e2', insumoId:'full' }), '', 'limpia'));
+    /* Y el aviso tiene que LLEGAR a la fila: calcularlo y no pintarlo es igual
+       que no tenerlo. */
+    test('el aviso se pinta dentro de la fila de la entrada', () =>
+        eq(E._entNombreCell({ id:'e1', insumoId:'fantasma' }, 'Torres 10', '')
+             .indexOf('ya no está en el catálogo') > -1, true, 'pintado'));
+    test('…y la fila sana sigue limpia', () =>
+        eq(E._entNombreCell({ id:'e2', insumoId:'full' }, 'Torres 10', '')
+             .indexOf('ya no está') , -1, 'limpia'));
+    /* Y la que ni id trae (registros viejos) tampoco se marca de rojo sin razón. */
+    test('una entrada sin insumoId no se acusa de huérfana', () =>
+        eq(E._entAvisoInsumo({ id:'e3' }), '', 'sin id'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

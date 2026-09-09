@@ -5040,10 +5040,51 @@ function cerrarModalEntrada() {
     _entradaInsumoId = null;
 }
 
+/* ── QUÉ TAN IDENTIFICABLE ES UN INSUMO ────────────────────────────────────
+   Una entrada guarda solo el `insumoId`; el nombre se arma al pintarla, con la
+   etiqueta canónica. De ahí salen los dos problemas que Edwin vio en la lista:
+
+   · HUÉRFANA: el id ya no existe en el catálogo (se borró el insumo, o la
+     entrada vino de otra sucursal). No hay de dónde sacar el nombre y la fila
+     sale a medias, pareciendo una entrada buena.
+   · A MEDIAS: el insumo existe pero está capturado sin variedad, contenido ni
+     marca. Entonces se ven dos renglones "Torres 10", uno completo y otro pelón,
+     imposibles de distinguir — que es justo lo que hizo cargar entradas al
+     insumo equivocado.
+
+   Lo primero se ataja al guardar: es un dato roto. Lo segundo NO se bloquea —el
+   insumo incompleto es problema del catálogo, no de la entrada— pero se avisa
+   antes de guardar, que es cuando todavía se puede corregir. */
+function _insumoDeEntrada(id) {
+    if (!id) return null;
+    try { return (typeof window._insumoResolver === 'function') ? window._insumoResolver(id) : null; }
+    catch (e) { return null; }
+}
+function _insumoIdentificable(ins) {
+    if (!ins) return false;
+    return !!((ins.variedad || '').trim() || (ins.contenido || '').trim() ||
+              (ins.marca || '').trim() || (ins.presentacion || '').trim());
+}
+
 function guardarEntrada() {
     if (!_entradaInsumoId) return;
     const cantidad = parseFloat(document.getElementById('entCantidad').value) || 0;
     if (cantidad <= 0) { alert('Ingresa una cantidad mayor a 0.'); return; }
+
+    /* Sin insumo real no se guarda: una entrada huérfana no se puede costear, no
+       se puede descontar del inventario y en la lista parece buena. */
+    const _ins = _insumoDeEntrada(_canonInsumoId(_entradaInsumoId));
+    if (!_ins) {
+        alert('Ese producto ya no está en el catálogo de insumos, así que la entrada no se puede guardar.\n\n' +
+              'Vuelve a elegirlo de la lista, o agrégalo al catálogo primero.');
+        return;
+    }
+    /* Existe pero no se distingue de otro con el mismo nombre: se avisa, no se
+       bloquea. Es el catálogo el que está incompleto. */
+    if (!_insumoIdentificable(_ins) &&
+        !confirm('"' + (_ins.nombre || 'Este producto') + '" está capturado sin marca, contenido ni variedad.\n\n' +
+                 'En la lista de entradas se va a ver solo con ese nombre, y si tienes otro parecido no vas a ' +
+                 'poder distinguirlos.\n\n¿Guardar de todos modos?')) return;
     const costo  = parseFloat(document.getElementById('entCosto').value)  || 0;
     const fecha  = document.getElementById('entFecha').value || '';
     const notas  = document.getElementById('entNotas').value.trim();
@@ -9158,9 +9199,24 @@ function _qrOrigenHTML(e) {
 }
 // Celda de nombre: nombre + extra inline (merma/producto/motivo) + badge QR, y debajo el
 // COMENTARIO que se capturó al subir el registro (si trae notas).
+/* Una entrada guarda solo el `insumoId`: el nombre se arma al pintarla. Si ese id
+   ya no resuelve, la fila salía con un nombre a medias —o con el que se guardó
+   alguna vez— y parecía una entrada sana. Así se cargaron entradas al insumo
+   equivocado. Ahora se dice, y se ofrece arreglarlo ahí mismo. */
+function _entAvisoInsumo(e) {
+    if (!e || !e.insumoId) return '';
+    if (_insumoDeEntrada(_canonInsumoId(e.insumoId))) return '';
+    return '<span style="font-size:10.5px;color:#ff9a9a;display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+        '⚠️ Este producto ya no está en el catálogo' +
+        (e.id ? '<button onclick="abrirEditorEntrada(\'' + e.id + '\')" ' +
+            'style="background:transparent;border:1px solid #ff9a9a;color:#ff9a9a;border-radius:6px;' +
+            'padding:1px 8px;font-size:10px;cursor:pointer;font-family:inherit">Elegir el correcto</button>' : '') +
+    '</span>';
+}
 function _entNombreCell(e, nombre, extraInline) {
     return '<span class="ent-log-nombre" style="display:flex;flex-direction:column;gap:2px">' +
         '<span>' + nombre + (extraInline || '') + _qrOrigenHTML(e) + '</span>' +
+        _entAvisoInsumo(e) +
         (e && e.notas ? '<span style="font-size:10.5px;color:var(--text-dim);font-style:italic">📝 ' + etx(e.notas) + '</span>' : '') +
     '</span>';
 }
