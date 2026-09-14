@@ -9,7 +9,7 @@
    commit — no se escribe a mano, justamente porque es lo primero que se olvida.
    ============================================================ */
 (function () {
-    var FECHA = '2026-09-09';          /* ETAAX_DEPLOY — la estampa el hook */
+    var FECHA = '2026-09-14';          /* ETAAX_DEPLOY — la estampa el hook */
 
     /* DOS marcas, a propósito:
 
@@ -98,7 +98,14 @@
         document.getElementById('etaaxNovX').onclick = cerrar;
     }
 
+    /* Una novedad deja de ser novedad. Pasados estos días el aviso no sale más,
+       lo hayas cerrado o no: antes solo callaba si le dabas "Entendido", así que
+       a quien lo ignoraba lo perseguía en cada sesión hasta el siguiente deploy.
+       Eso ya no es avisar, es estorbar. */
+    var VIGENCIA_DIAS = 2;
+
     function _arrancar() {
+        if (_diasDesde(FECHA) > VIGENCIA_DIAS) return;   // ya es historia
         if (_yaSes(SESION) === FECHA) return;  // ya se dio por enterado en esta sesión
         if (_ya(VISTO)   === FECHA) return;    // y en una sesión anterior, también
         /* Un respiro antes de aparecer: entrar a una pantalla y que algo salte de
@@ -119,5 +126,7 @@
     /* Asomadero para el candado: el texto que ve el negocio y la cuenta de días
        son lo único que puede salir mal en silencio (un "hace 0 días", un día de
        más por el horario de verano). */
-    window.EtaaxNovedades = { FECHA: FECHA, hace: _hace, diasDesde: _diasDesde, arrancar: _arrancar };
+    window.EtaaxNovedades = { FECHA: FECHA, hace: _hace, diasDesde: _diasDesde,
+                              arrancar: _arrancar, VIGENCIA_DIAS: VIGENCIA_DIAS,
+                              vigente: function (dias) { return dias <= VIGENCIA_DIAS; } };
 })();

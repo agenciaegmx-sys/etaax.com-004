@@ -630,7 +630,18 @@ function admDialog(cfg) {
     ov.addEventListener('click', function(e){
         var act = e.target.getAttribute && e.target.getAttribute('data-act');
         if (e.target === ov || act === 'no') { cerrar(); if (cfg.onNo) cfg.onNo(); }
-        else if (act === 'yes') { cerrar(); if (cfg.onYes) cfg.onYes(); }
+        else if (act === 'yes') {
+            /* La acción corre ANTES de cerrar, y esto NO es un detalle de orden.
+               Varios diálogos llevan campos dentro (día de cobro, tolerancia,
+               próximo cobro) y los leen con getElementById en su primera línea.
+               Cerrando antes, el overlay ya no está en el DOM: getElementById
+               devuelve null, `.value` revienta, y el guardado muere sin decir
+               nada. Eso era "no me deja cambiar la fecha de cobro".
+
+               El finally garantiza que el diálogo se cierre aunque la acción
+               truene, o se quedaría clavado en pantalla. */
+            try { if (cfg.onYes) cfg.onYes(); } finally { cerrar(); }
+        }
     });
     document.body.appendChild(ov);
 }

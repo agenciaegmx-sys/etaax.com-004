@@ -737,12 +737,30 @@
         var t = grupoGasto(g, opts);
         return (t === 'nomOp' || t === 'nomAdm' || t === 'imss') ? 'nom' : t;
     }
+    /* ── ¿ESTE GASTO YA SALIÓ DEL NEGOCIO? ────────────────────────────────────
+       Un gasto PENDIENTE o PROGRAMADO está capturado pero NO pagado: el dinero
+       sigue en la caja. Contarlo como egreso infla el gasto del mes, encoge la
+       utilidad y hace que el saldo no cuadre con lo que de verdad hay.
+
+       Sin estatus = pagado: así se capturó siempre antes de que existiera el
+       campo, y cambiarles el significado reescribiría meses ya cerrados. */
+    function gastoEstatus(g) {
+        var e = String((g && g.estatus) || 'pagado').toLowerCase();
+        return (e === 'pendiente' || e === 'programado') ? e : 'pagado';
+    }
+    function gastoPagado(g) { return gastoEstatus(g) === 'pagado'; }
+
     function clasificarGastos(gastos, opts){
         opts = opts || {};
-        var r = { fijo: 0, nomOp: 0, nomAdm: 0, imss: 0, variable: 0, propina: 0 };
+        var r = { fijo: 0, nomOp: 0, nomAdm: 0, imss: 0, variable: 0, propina: 0,
+                  /* Lo comprometido y todavía no pagado: NO entra al egreso, pero
+                     se devuelve para poder enseñarlo —es plata que ya se debe. */
+                  pendiente: 0, programado: 0, porPagar: 0 };
         (gastos || []).forEach(function (g) {
             if (!g) return;
             var m = n(g.monto);
+            var est = gastoEstatus(g);
+            if (est !== 'pagado') { r[est] += m; r.porPagar += m; return; }
             r[grupoGasto(g, opts)] += m;   // una sola regla, compartida con los reportes
         });
         r.variable += n(opts.comisionBanco);                                   // comisión bancaria = variable
@@ -976,7 +994,7 @@
         ctaBaseCorte: ctaBaseCorte, ctaBaseCatalogo: ctaBaseCatalogo,
         cuentasDebito: cuentasDebito, cuentasDebitoActivas: cuentasDebitoActivas, ctaActiva: ctaActiva,
         comisionBancoCorte: comisionBancoCorte,
-        nomEsAdm: _nomEsAdm,
+        nomEsAdm: _nomEsAdm, gastoEstatus: gastoEstatus, gastoPagado: gastoPagado,
         netoPropina: netoPropina,
         depEfecto: depEfecto, esRetiro: esRetiro,
         esApartado: esApartado, apartadoFondo: apartadoFondo, PREV_GENERAL: PREV_GENERAL,

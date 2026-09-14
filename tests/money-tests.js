@@ -2373,13 +2373,21 @@ console.log('\n══ SUITE Q · Aviso de actualizaciones (novedades.js) ══'
             },
         };
         ctx.window = ctx; vm.createContext(ctx);
-        vm.runInContext(fs.readFileSync(path.join(RAIZ, 'novedades.js'), 'utf8'), ctx, { filename: 'novedades.js' });
+        /* La fecha de publicación la estampa el hook de pre-commit, así que en el
+           archivo es la del último deploy. Para probar el comportamiento hay que
+           fijarla: `hace` días, contados desde hoy. */
+        let src = fs.readFileSync(path.join(RAIZ, 'novedades.js'), 'utf8');
+        if (opts.hace !== undefined) {
+            const d = new Date(); d.setDate(d.getDate() - opts.hace);
+            src = src.replace(/var FECHA\s*=\s*'[^']*'/, "var FECHA = '" + d.toISOString().slice(0, 10) + "'");
+        }
+        vm.runInContext(src, ctx, { filename: 'novedades.js' });
         return { ctx, ls, ss, veces: () => pintadas, cerrar: () => cerrar && cerrar(),
                  otraPantalla: () => ctx.EtaaxNovedades.arrancar() };
     }
 
     {
-        const a = montarAviso();
+        const a = montarAviso({ hace: 0 });
         test('al iniciar sesión, el aviso sale', () => eq(a.veces(), 1, 'veces'));
         a.cerrar();
         a.otraPantalla(); a.otraPantalla();
@@ -2388,7 +2396,7 @@ console.log('\n══ SUITE Q · Aviso de actualizaciones (novedades.js) ══'
     {
         /* El caso que lo rompía: localStorage lleno, el `catch` se traga el fallo
            y el aviso reaparecía en cada pantalla. sessionStorage lo sostiene. */
-        const a = montarAviso({ lsLleno: true });
+        const a = montarAviso({ lsLleno: true, hace: 0 });
         a.cerrar();
         a.otraPantalla(); a.otraPantalla();
         test('con localStorage LLENO, tampoco se repite en la sesión', () => eq(a.veces(), 1, 'veces'));
@@ -2399,9 +2407,31 @@ console.log('\n══ SUITE Q · Aviso de actualizaciones (novedades.js) ══'
             eq(a.veces(), 0, 'veces'));
     }
     {
-        const a = montarAviso({ ls: { etaax_novedades_visto: '2020-01-01' } });
+        const a = montarAviso({ hace: 0, ls: { etaax_novedades_visto: '2020-01-01' } });
         test('pero una publicación NUEVA sí sale aunque la anterior ya se hubiera visto', () =>
             eq(a.veces(), 1, 'veces'));
+
+    /* ── UNA NOVEDAD DEJA DE SER NOVEDAD ──
+       Antes el aviso solo callaba si le dabas "Entendido": a quien lo ignoraba lo
+       perseguía en CADA sesión hasta el siguiente deploy. Edwin lo vio tres días
+       seguidos. Eso ya no es avisar, es estorbar. */
+    {
+        test('el aviso del día sale', () => eq(montarAviso({ hace: 0 }).veces(), 1, 'hoy'));
+        test('el de ayer también', () => eq(montarAviso({ hace: 1 }).veces(), 1, 'ayer'));
+        test('el de hace dos días todavía', () => eq(montarAviso({ hace: 2 }).veces(), 1, 'dos'));
+        /* Al tercer día ya es historia, se haya cerrado o no. */
+        test('el de hace TRES días ya no sale', () => eq(montarAviso({ hace: 3 }).veces(), 0, 'tres'));
+        test('ni el de la semana pasada', () => eq(montarAviso({ hace: 8 }).veces(), 0, 'semana'));
+        /* Y caduca aunque nunca se haya marcado como visto: ese era justo el caso
+           —ignorarlo no lo hacía desaparecer. */
+        test('caduca aunque nunca se haya dado por enterado', () =>
+            eq(montarAviso({ hace: 5, ls: {}, ss: {} }).veces(), 0, 'sin cerrar'));
+        /* La regla queda a la vista para quien la quiera ajustar. */
+        const Q2 = montarAviso({ hace: 0 }).ctx.EtaaxNovedades;
+        test('la vigencia es de 2 días y se puede consultar', () => eq(Q2.VIGENCIA_DIAS, 2, 'dias'));
+        test('…y el helper responde igual que el comportamiento', () =>
+            eq(Q2.vigente(2) === true && Q2.vigente(3) === false, true, 'coherente'));
+    }
     }
 })();
 
@@ -5921,6 +5951,133 @@ console.log('\n══ AY · Una entrada fuera del periodo (recetas/inventarios.j
     setVar(P, 'invActual', null);
     test('sin inventario abierto no hay periodo que violar', () =>
         eq(P._fechaFueraDePeriodo('2030-01-01'), null, 'libre'));
+}
+
+/* ═══════════ SUITE AZ · UN GASTO SIN PAGAR NO ES UN GASTO (etaax-core.js) ════
+   Un gasto PENDIENTE o PROGRAMADO está capturado pero NO pagado: el dinero sigue
+   en la caja. Se estaba contando como egreso, así que inflaba el gasto del mes,
+   encogía la utilidad y descuadraba el saldo contra lo que de verdad hay.      */
+console.log('\n══ AZ · Un gasto sin pagar no es un gasto (etaax-core.js) ══');
+{
+    const C = cargarJS(crearContexto(), 'etaax-core.js').EtaaxCore;
+    const g = (monto, estatus, extra) => Object.assign(
+        { categoria: 'Varios', concepto: 'compra', monto }, estatus ? { estatus } : {}, extra || {});
+    const opts = { fijos: [], staff: [] };
+
+    /* ── El estatus, normalizado ── */
+    test('sin estatus se asume pagado (así se capturó siempre antes)', () =>
+        eq(C.gastoEstatus({}), 'pagado', 'legado'));
+    test('pendiente se reconoce', () => eq(C.gastoEstatus({ estatus:'pendiente' }), 'pendiente', 'pend'));
+    test('programado también', () => eq(C.gastoEstatus({ estatus:'programado' }), 'programado', 'prog'));
+    test('un estatus raro no se inventa nada: cuenta como pagado', () =>
+        eq(C.gastoEstatus({ estatus:'loquesea' }), 'pagado', 'default'));
+    test('gastoPagado responde lo mismo', () =>
+        eq(C.gastoPagado({ estatus:'pendiente' }) === false && C.gastoPagado({}) === true, true, 'coherente'));
+
+    /* ── Lo que importa: no infla el egreso ── */
+    const cl = C.clasificarGastos([g(1000), g(500, 'pendiente'), g(300, 'programado')], opts);
+    test('el egreso cuenta SOLO lo pagado', () => eq(cl.egresos, 1000, 'egreso'));
+    test('…y el pendiente no se cuela en variables', () => eq(cl.variable, 1000, 'variable'));
+    /* Pero no desaparece: es plata que ya se debe y hay que poder verla. */
+    test('lo pendiente se devuelve aparte', () => eq(cl.pendiente, 500, 'pendiente'));
+    test('lo programado también', () => eq(cl.programado, 300, 'programado'));
+    test('y su suma, para el card', () => eq(cl.porPagar, 800, 'por pagar'));
+
+    /* Un gasto de nómina sin pagar tampoco engorda la nómina. */
+    const nom = C.clasificarGastos([
+        { categoria:'Nómina', concepto:'quincena', monto: 9000, estatus:'pendiente' },
+        { categoria:'Nómina', concepto:'quincena', monto: 7000 }
+    ], opts);
+    test('la nómina sin pagar no engorda la nómina', () => eq(nom.nom, 7000, 'nómina'));
+    test('…y sí aparece como por pagar', () => eq(nom.porPagar, 9000, 'por pagar'));
+
+    /* Un fijo programado no se cuenta como fijo del mes. */
+    const fij = C.clasificarGastos([
+        { categoria:'Renta', concepto:'renta', monto: 25000, estatus:'programado' }
+    ], opts);
+    test('el fijo programado no cuenta como fijo del mes', () => eq(fij.fijo, 0, 'fijo'));
+    test('…pero se sabe que se debe', () => eq(fij.programado, 25000, 'programado'));
+
+    /* La propina sigue fuera del gasto, pagada o no: es pass-through. */
+    const pr = C.clasificarGastos([
+        { categoria:'Propinas y gratificaciones', concepto:'propina', monto: 400 }
+    ], opts);
+    test('la propina sigue sin ser gasto', () => eq(pr.egresos, 0, 'propina'));
+
+    /* Y sin gastos, los cubos nuevos son cero y no undefined: quien los suma no
+       tiene que preguntar. */
+    const v = C.clasificarGastos([], opts);
+    test('sin gastos, lo por pagar es 0 y no undefined', () => eq(v.porPagar, 0, 'cero'));
+
+    /* La invariante: pagado + por pagar = todo lo capturado. Ni se pierde ni se
+       duplica un peso al separarlos. */
+    const todos = [g(1000), g(500,'pendiente'), g(300,'programado'), g(250)];
+    const t = C.clasificarGastos(todos, opts);
+    test('pagado + por pagar = todo lo capturado', () =>
+        eq(t.egresos + t.porPagar, 2050, 'sin fugas'));
+}
+
+/* ═══════════ SUITE BA · EL FILTRO Y EL CARD DE POR PAGAR ════════════════════
+   Los totales cuentan solo lo pagado (eso lo decide el núcleo). Estas pantallas
+   tienen que (a) no meter lo pendiente en el total, (b) enseñarlo aparte, y
+   (c) dejar filtrarlo para poder mirarlo.                                      */
+console.log('\n══ BA · El filtro y el card de "por pagar" ══');
+{
+    const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+    const gg  = fs.readFileSync(path.join(RAIZ, 'financiero/gastos-globales.html'), 'utf8');
+
+    /* ── Gastos diarios ── */
+    test('el total del día suma solo lo pagado', () =>
+        eq(dia.indexOf('_pag(all).reduce') > -1, true, 'pagado'));
+    test('…y el periodo anterior igual, o la comparación mentiría', () =>
+        eq(dia.indexOf('_pag(prev).reduce') > -1, true, 'prev'));
+    test('la categoría top no se elige con gastos sin pagar', () =>
+        eq(dia.indexOf('_pag(all).forEach(function(g){if(g.categoria)') > -1, true, 'top'));
+    test('hay card de "por pagar"', () => eq(dia.indexOf('id="gSumPorPagar"') > -1, true, 'card'));
+    test('…que desglosa pendiente y programado', () =>
+        eq(dia.indexOf("' pendiente'") > -1 && dia.indexOf("' programado'") > -1, true, 'desglose'));
+    test('hay filtro por estatus', () => eq(dia.indexOf('id="filtroEstatus"') > -1, true, 'filtro'));
+    test('…con la opción "por pagar" que junta los dos', () =>
+        eq(dia.indexOf('value="porpagar"') > -1, true, 'porpagar'));
+    test('…y el filtro usa la regla del núcleo, no una copia', () =>
+        eq(dia.indexOf('EtaaxCore.gastoEstatus(g)') > -1, true, 'núcleo'));
+
+    /* ── Gastos totales ── */
+    test('el card de por pagar existe en gastos totales', () =>
+        eq(gg.indexOf('id="kpiPorPagar"') > -1, true, 'card'));
+    test('…y se llena con lo que devuelve el núcleo', () =>
+        eq(gg.indexOf('fmtM(cl.porPagar') > -1, true, 'núcleo'));
+    test('…desglosando pendiente y programado', () =>
+        eq(gg.indexOf('cl.pendiente') > -1 && gg.indexOf('cl.programado') > -1, true, 'desglose'));
+    test('hay barra de filtro por estatus', () =>
+        eq(gg.indexOf('gg-est-chip') > -1, true, 'barra'));
+    test('…con los cuatro estados más "todos"', () =>
+        eq((gg.match(/gg-est-chip/g) || []).length >= 6, true, 'chips'));
+    test('…y filtra con la regla del núcleo', () =>
+        eq(gg.indexOf('EtaaxCore.gastoEstatus(g)') > -1, true, 'núcleo'));
+    /* Y el filtro tiene que estar CONECTADO a la carga, o sería un adorno. */
+    test('el filtro se aplica al cargar los gastos del periodo', () =>
+        eq(gg.indexOf('return _porEstatusGG(') > -1, true, 'conectado'));
+
+    /* ── Y el aviso de novedades ── */
+    const nov = fs.readFileSync(path.join(RAIZ, 'novedades.js'), 'utf8');
+    test('el aviso de novedades caduca', () =>
+        eq(nov.indexOf('_diasDesde(FECHA) > VIGENCIA_DIAS') > -1, true, 'caduca'));
+
+    /* ── El recordatorio de cobro, apagado ── */
+    const hub = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+    test('el recordatorio de próximo cobro ya no se pinta', () =>
+        eq(hub.indexOf('_avisoTolerancia(neg, sub); _pintarProximoCobro(neg, sub);'), -1, 'apagado'));
+    /* Pero la franja de tolerancia se queda: esa sí es urgente. */
+    test('…pero la franja de pago vencido sigue', () =>
+        eq(hub.indexOf('_avisoTolerancia(neg, sub);') > -1, true, 'tolerancia'));
+
+    /* ── El diálogo del admin lee sus campos antes de cerrarse ── */
+    const adm = fs.readFileSync(path.join(RAIZ, 'admin.html'), 'utf8');
+    test('el diálogo ejecuta la acción ANTES de cerrarse', () =>
+        eq(adm.indexOf('try { if (cfg.onYes) cfg.onYes(); } finally { cerrar(); }') > -1, true, 'orden'));
+    test('…y ya no cierra primero, que dejaba los campos sin leer', () =>
+        eq(adm.indexOf("act === 'yes') { cerrar(); if (cfg.onYes)"), -1, 'sin bug'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

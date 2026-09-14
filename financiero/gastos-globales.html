@@ -18,6 +18,12 @@
         .gg-tab.active{background:var(--surface);color:var(--text);font-weight:600;border:1px solid var(--border);box-shadow:0 1px 4px rgba(0,0,0,.2);}
         .gg-tab:hover:not(.active){color:var(--text);}
         .gg-tab-icon{font-size:15px;}
+        .gg-est-bar{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin:0 0 14px;}
+        .gg-est-lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-right:2px;}
+        .gg-est-chip{background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);
+            border-radius:20px;padding:5px 13px;font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer;}
+        .gg-est-chip:hover:not(.on){color:var(--text);}
+        .gg-est-chip.on{border-color:var(--accent);color:var(--accent);background:rgba(245,200,66,.08);}
         .gg-tabs-acts{margin-left:auto;display:flex;gap:8px;align-items:center;padding-left:12px;}
         .gg-tabs-acts .btn-accent{padding:7px 14px;font-size:12px;}
         @media(max-width:900px){ .gg-tabs{flex-wrap:wrap;} .gg-tabs-acts{margin-left:0;padding-left:0;width:100%;padding-top:6px;} }
@@ -212,6 +218,20 @@
                     <div class="kpi-val" id="kpiTotal">$0.00</div>
                     <div class="kpi-sub" id="kpiTotalSub">Fijos + Nóminas + Variables</div>
                 </div>
+                <div class="kpi-card" id="kpiPorPagarCard">
+                    <div class="kpi-lbl">Por pagar</div>
+                    <div class="kpi-val" id="kpiPorPagar" style="color:var(--accent)">$0.00</div>
+                    <div class="kpi-sub" id="kpiPorPagarSub">Capturado, aún sin salir de la caja</div>
+                </div>
+            </div>
+
+            <div class="gg-est-bar">
+                <span class="gg-est-lbl">Estatus de pago</span>
+                <button class="gg-est-chip on" data-est=""           onclick="ggFiltrarEstatus('')">Todos</button>
+                <button class="gg-est-chip"    data-est="pagado"     onclick="ggFiltrarEstatus('pagado')">✅ Pagados</button>
+                <button class="gg-est-chip"    data-est="pendiente"  onclick="ggFiltrarEstatus('pendiente')">⏳ Pendientes</button>
+                <button class="gg-est-chip"    data-est="programado" onclick="ggFiltrarEstatus('programado')">📅 Programados</button>
+                <button class="gg-est-chip"    data-est="porpagar"   onclick="ggFiltrarEstatus('porpagar')">Por pagar</button>
             </div>
 
             <!-- TABS -->
@@ -782,9 +802,29 @@ function _periodoTxtGG(){
     if(periodoTipoGG==='dia') return new Date(r.from+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'});
     return r.from+' → '+r.to;
 }
+/* Filtro por estatus de pago. Vacío = todo; el resto acota a lo pagado, a lo
+   pendiente, a lo programado o a la suma de los dos últimos. Los TOTALES siempre
+   cuentan solo lo pagado (eso lo decide el núcleo); esto es para poder MIRAR lo
+   que se debe sin que se mezcle con lo que ya salió. */
+var _ggEstatus = '';
+function ggFiltrarEstatus(v){
+    _ggEstatus = v || '';
+    document.querySelectorAll('.gg-est-chip').forEach(function(b){
+        b.classList.toggle('on', (b.dataset.est || '') === _ggEstatus);
+    });
+    if (typeof renderTodo === 'function') renderTodo();
+    else if (typeof renderAll === 'function') renderAll();
+}
+function _porEstatusGG(lista){
+    if (!_ggEstatus) return lista;
+    return (lista || []).filter(function(g){
+        var e = EtaaxCore.gastoEstatus(g);
+        return _ggEstatus === 'porpagar' ? e !== 'pagado' : e === _ggEstatus;
+    });
+}
 function loadGastosMes(mes){
     var r=_rgDe(mes);
-    return (_cacheGG_Gastos||[]).filter(function(g){return g.fecha&&g.fecha>=r.from&&g.fecha<=r.to;}).filter(_deSuc);
+    return _porEstatusGG((_cacheGG_Gastos||[]).filter(function(g){return g.fecha&&g.fecha>=r.from&&g.fecha<=r.to;}).filter(_deSuc));
 }
 // IMSS / cargas sociales: aunque se capture como gasto, cuenta en NÓMINAS, no en variables.
 function _esIMSS(g){ return /\bimss\b|seguro\s*social|cargas\s*sociales/i.test((g.categoria||'')+' '+(g.concepto||'')); }
@@ -1001,6 +1041,20 @@ function renderKPIs(mes){
     document.getElementById('kpiVariables').textContent=fmtM(totalVar);
     document.getElementById('kpiTotal').textContent=fmtM(total);
     document.getElementById('kpiTotalCard').className='kpi-card '+(total>0?'danger':'');
+
+    /* Lo comprometido y todavía sin pagar. NO entra al egreso —el dinero sigue en
+       la caja— pero tampoco puede quedarse invisible: es plata que ya se debe. */
+    var _pp=document.getElementById('kpiPorPagar');
+    if(_pp){
+        _pp.textContent=fmtM(cl.porPagar||0);
+        _pp.style.color=(cl.porPagar>0)?'var(--accent)':'var(--text-dim)';
+        var _d=[];
+        if(cl.pendiente>0)  _d.push('⏳ '+fmtM(cl.pendiente)+' pendiente');
+        if(cl.programado>0) _d.push('📅 '+fmtM(cl.programado)+' programado');
+        document.getElementById('kpiPorPagarSub').textContent =
+            _d.length ? _d.join(' · ') : 'Nada comprometido sin pagar';
+        document.getElementById('kpiPorPagarCard').className='kpi-card'+((cl.porPagar>0)?' warn':'');
+    }
 
     return{fijos:totalFijos,nominas:totalNom,variables:totalVar,total:total};
 }

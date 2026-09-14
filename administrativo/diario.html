@@ -732,6 +732,11 @@
                     <div class="sum-card-val" id="sumMM" style="font-size:20px">— / —</div>
                     <div class="sum-card-sub" id="sumFacturados">—</div>
                 </div>
+                <div class="sum-card" id="cardPorPagar">
+                    <div class="sum-card-label">Por pagar</div>
+                    <div class="sum-card-val" id="gSumPorPagar" style="color:var(--accent)">$0.00</div>
+                    <div class="sum-card-sub" id="gSumPorPagarDet">—</div>
+                </div>
                 <div class="sum-card">
                     <div class="sum-card-label">Categoría top</div>
                     <div class="sum-card-val" id="sumTopCat" style="font-size:16px;padding-top:4px">—</div>
@@ -775,6 +780,13 @@
                     <option value="banco:transfer">🏛️ Transferencia</option>
                     <option value="banco:debito">💳 Tarjeta débito</option>
                     <option value="banco:credito">💳 Tarjeta crédito</option>
+                </select>
+                <select id="filtroEstatus" onchange="gRenderAll()">
+                    <option value="">Todos los estatus</option>
+                    <option value="pagado">✅ Pagados</option>
+                    <option value="pendiente">⏳ Pendientes</option>
+                    <option value="programado">📅 Programados</option>
+                    <option value="porpagar">⏳📅 Por pagar (pendientes + programados)</option>
                 </select>
                 <!-- filtroTipo: obsoleto, cada panel es un tipo -->
                 <input type="text" id="filtroConcepto" placeholder="Buscar concepto…" oninput="gRenderAll()" style="min-width:180px">
@@ -5517,7 +5529,14 @@ function applyFilters(lista){
     var tipEl=document.getElementById('filtroTipo');
     var tip=tipEl?tipEl.value:'';
     var con=(document.getElementById('filtroConcepto').value||'').toLowerCase();
+    var estEl=document.getElementById('filtroEstatus');
+    var est=estEl?estEl.value:'';
     return lista.filter(function(g){
+        if(est){
+            var e=EtaaxCore.gastoEstatus(g);
+            if(est==='porpagar'){ if(e==='pagado') return false; }
+            else if(e!==est) return false;
+        }
         if(tip==='menor'&&g.tipo!=='menor')return false;
         if(cat&&g.categoria!==cat)return false;
         if(met){
@@ -5549,15 +5568,40 @@ function gRenderAll(){
 }
 
 function gRenderSummary(all,prev){
-    var totCur=all.reduce(function(s,g){return s+n(g.monto);},0);
-    var totPrev=prev.reduce(function(s,g){return s+n(g.monto);},0);
-    var menores=all.filter(function(g){return g.tipo==='menor';});
-    var mayores=all.filter(function(g){return g.tipo==='mayor';});
+    /* El total del período cuenta SOLO lo pagado: un gasto pendiente o programado
+       está capturado pero el dinero sigue en la caja. Lo comprometido va en su
+       propio card, que para eso está. */
+    var _pag=function(l){ return l.filter(EtaaxCore.gastoPagado); };
+    var totCur=_pag(all).reduce(function(s,g){return s+n(g.monto);},0);
+    var totPrev=_pag(prev).reduce(function(s,g){return s+n(g.monto);},0);
+
+    // Lo comprometido y aún sin pagar, separado por estatus.
+    var _pend=0,_prog=0;
+    all.forEach(function(g){
+        var e=EtaaxCore.gastoEstatus(g);
+        if(e==='pendiente') _pend+=n(g.monto);
+        else if(e==='programado') _prog+=n(g.monto);
+    });
+    var _porPagar=_pend+_prog;
+    var _ppEl=document.getElementById('gSumPorPagar');
+    if(_ppEl){
+        _ppEl.textContent=fmtM(_porPagar);
+        _ppEl.style.color=_porPagar>0?'var(--accent)':'var(--text-dim)';
+        var _det=[];
+        if(_pend) _det.push('⏳ '+fmtM(_pend)+' pendiente');
+        if(_prog) _det.push('📅 '+fmtM(_prog)+' programado');
+        document.getElementById('gSumPorPagarDet').textContent =
+            _det.length ? _det.join(' · ') : 'Nada comprometido sin pagar';
+        var _cpp=document.getElementById('cardPorPagar');
+        if(_cpp) _cpp.style.borderColor=_porPagar>0?'rgba(245,200,66,.35)':'';
+    }
+    var menores=_pag(all).filter(function(g){return g.tipo==='menor';});
+    var mayores=_pag(all).filter(function(g){return g.tipo==='mayor';});
     var facturados=all.filter(function(g){return g.facturado;}).length;
     var diff=totCur-totPrev,pct=totPrev?(diff/totPrev)*100:(totCur?100:0);
     // Top categoría
     var cats={};
-    all.forEach(function(g){if(g.categoria)cats[g.categoria]=(cats[g.categoria]||0)+n(g.monto);});
+    _pag(all).forEach(function(g){if(g.categoria)cats[g.categoria]=(cats[g.categoria]||0)+n(g.monto);});
     var topCat='—',topMonto=0;
     Object.keys(cats).forEach(function(k){if(cats[k]>topMonto){topMonto=cats[k];topCat=k;}});
 

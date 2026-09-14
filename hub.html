@@ -1137,7 +1137,13 @@ async function _gateSuscripcion(neg) {
     if (!neg || !neg.id) return;                              // hub general / sin negocio
     if (_sesion && _sesion.isAdmin) return;                  // admin maestro en modo negocio → libre
     var sub = await _leerSuscripcion(neg.id);
-    if (sub.ok) { _avisoTolerancia(neg, sub); _pintarProximoCobro(neg, sub); _limpiarPagoURL(); return; }
+    /* El recordatorio de "tu próximo cobro en N días" queda APAGADO a propósito:
+       salía en cada entrada al hub aunque faltaran tres semanas, y a esa distancia
+       no es un recordatorio, es un cobrador en la puerta. La franja de tolerancia
+       —esa sí urgente, el pago ya venció— se queda.
+       La función sigue aquí, entera, para volver a encenderla cuando se decida
+       dónde y cada cuándo tiene sentido mostrarla. */
+    if (sub.ok) { _avisoTolerancia(neg, sub); _limpiarPagoURL(); return; }
     /* VIENE DE PAGAR. Stripe regresa al dueño de inmediato, pero el aviso a nuestro
        webhook viaja aparte y tarda uno o dos segundos. Sin esperar, el que ACABA de
        pagar vería "tu suscripción venció" — la peor pantalla posible en ese momento.
