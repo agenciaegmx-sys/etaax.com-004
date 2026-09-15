@@ -633,7 +633,10 @@ function getPeriodoData(desde,hasta){
     //  VARIABLE = resto (incl. impuestos/contabilidad) + comisión bancaria · Propina fuera.
     var ctasDeb=(_kCache.ctas||[]).filter(function(c){return c&&c.tipo==='debito';})
         .sort(function(a,b){return (b.predeterminada?1:0)-(a.predeterminada?1:0);});
-    var comisionBanco=cortes.reduce(function(s,c){return s+EtaaxCore.comisionBancoCorte(c,ctasDeb);},0);
+    /* Con los abonos a la mano, la comisión de un corte ya conciliado es la REAL
+       (la que se corrigió al conciliar) y no la proyectada con la tasa. */
+    var _depsK=_kCache.deps||[];
+    var comisionBanco=cortes.reduce(function(s,c){return s+EtaaxCore.comisionBancoCorte(c,ctasDeb,_depsK);},0);
     var cl=EtaaxCore.clasificarGastos(gastos,{ fijos:loadFijos(), staff:loadStaff(), comisionBanco:comisionBanco });
     // IMSS a Operativa (se paga global, no por colaborador) → Nóm. Adm. = nómina administrativa pura.
     var nomOp=cl.nomOp+cl.imss, nomAdm=cl.nomAdm;

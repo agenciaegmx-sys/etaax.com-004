@@ -498,7 +498,7 @@ function bucketDe(fecha,modo){
 var MES_L=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 
 /* ── Datos ── */
-var _cortes=null,_gastos=null,_metas=null,_otros=null,_ctas=null,_staff=null,_recetas=null,_insumos=null;
+var _cortes=null,_gastos=null,_metas=null,_otros=null,_ctas=null,_staff=null,_recetas=null,_insumos=null,_deps=null;
 async function _sbInit(){
     var negId=getNegocioActivo(); if(!negId) return;
     var r=await Promise.all([
@@ -510,9 +510,13 @@ async function _sbInit(){
         _supabase.from('staff').select('datos').eq('negocio_id',negId),
         _supabase.from('recetas').select('datos').eq('negocio_id',negId),
         _supabase.from('negocio_insumos').select('datos').eq('negocio_id',negId),
+        /* Los abonos de terminal: sin ellos, la comisión de un corte ya conciliado
+           saldría aquí con la tasa proyectada y en KPIs con la real. Dos pantallas
+           diciendo números distintos de lo mismo es peor que no tenerlas. */
+        _supabase.from('depositos').select('datos').eq('negocio_id',negId),
     ]);
     function d(i){ return (r[i].error?[]:(r[i].data||[])).map(function(x){return x.datos;}).filter(Boolean); }
-    _cortes=d(0); _gastos=d(1); _otros=d(3); _ctas=d(4); _staff=d(5); _recetas=d(6); _insumos=d(7);
+    _cortes=d(0); _gastos=d(1); _otros=d(3); _ctas=d(4); _staff=d(5); _recetas=d(6); _insumos=d(7); _deps=d(8);
     _metas=(!r[2].error&&r[2].data)?(r[2].data.datos||{}):{};
     renderAll();
 }
@@ -532,7 +536,7 @@ function aVentasCortes(r){ return cortesR(r).reduce(function(s,c){return s+Etaax
 // (El total no depende del split fijo/variable, así que no necesita el catálogo de fijos.)
 function aGastos(r){ return EtaaxCore.clasificarGastos(gastosR(r), { staff:_staff||[], comisionBanco:aComis(r) }).egresos; }
 function aProps(r){ return cortesR(r).reduce(function(s,c){return s+EtaaxCore.propinas(c);},0); }
-function aComis(r){ var deb=ctasDeb(); return cortesR(r).reduce(function(s,c){return s+EtaaxCore.comisionBancoCorte(c,deb);},0); }
+function aComis(r){ var deb=ctasDeb(); return cortesR(r).reduce(function(s,c){return s+EtaaxCore.comisionBancoCorte(c,deb,_deps||[]);},0); }
 function aCheque(r){ var v=0,co=0; cortesR(r).forEach(function(c){ v+=EtaaxCore.ventasBruta(c); co+=n(c.comensales); }); return co>0?v/co:0; }
 function _esNom(g){ return g&&(g.staffId||/n[oó]mina|personal/i.test(g.categoria||'')); }
 function aNomina(r){ return gastosR(r).filter(_esNom).reduce(function(s,g){return s+n(g.monto);},0); }
@@ -1065,7 +1069,7 @@ function imprimirEstadisticas(){
     var serieO=serieBuckets(bk,otrosR(rF),function(o){return n(o.monto);});
     var utilVals=serieV.map(function(x,i){ return x+(serieO[i]||0)-(serieG[i]||0); });
     var serieProp=serieBuckets(bk,cortesR(rF),EtaaxCore.propinas);
-    var deb=ctasDeb(); var serieComis=serieBuckets(bk,cortesR(rF),function(c){return EtaaxCore.comisionBancoCorte(c,deb);});
+    var deb=ctasDeb(); var serieComis=serieBuckets(bk,cortesR(rF),function(c){return EtaaxCore.comisionBancoCorte(c,deb,_deps||[]);});
     // Cheque promedio por bucket = venta/comensales.
     var chv={},chc={}; cortesR(rF).forEach(function(x){ var k=bucketDe(x.fecha,bk.modo); chv[k]=(chv[k]||0)+EtaaxCore.ventasBruta(x); chc[k]=(chc[k]||0)+n(x.comensales); });
     var serieCheque=bk.keys.map(function(k){ return chc[k]>0?chv[k]/chc[k]:0; });
@@ -1326,7 +1330,7 @@ function renderAll(){
         }
         var deb=ctasDeb();
         colChart(document.getElementById('chComis'),bk.labels,
-            [{name:'Comisiones',color:p.red,values:serieBuckets(bk,cortesR(rF),function(c){return EtaaxCore.comisionBancoCorte(c,deb);})}],fmtK,{});
+            [{name:'Comisiones',color:p.red,values:serieBuckets(bk,cortesR(rF),function(c){return EtaaxCore.comisionBancoCorte(c,deb,_deps||[]);})}],fmtK,{});
     })();
 
     /* 12 · Pagos por colaborador */

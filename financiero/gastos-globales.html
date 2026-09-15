@@ -910,7 +910,7 @@ function _ctasDebGG(){
 }
 function _comEfGG(cta,cual){ return EtaaxCore.comEf(cta,cual); } // núcleo: fin del espejo
 function _netoCtaGG(c,tc,td){ return EtaaxCore.netoCuenta(c,tc,td); }
-function comisionCorteGG(c){ return EtaaxCore.comisionBancoCorte(c, _ctasDebGG()); }
+function comisionCorteGG(c){ return EtaaxCore.comisionBancoCorte(c, _ctasDebGG(), _cacheGG_Depositos||[]); }
 function comisionesBancoMes(mes){ return loadCortesMonth(mes).reduce(function(s,c){return s+comisionCorteGG(c);},0); }
 function loadOtrosMes(mes){
     var r=_rgDe(mes);

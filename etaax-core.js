@@ -202,7 +202,31 @@
         for (var k in d.porCuenta) if (d.porCuenta.hasOwnProperty(k)) t += d.porCuenta[k];
         return t;
     }
-    function comisionBancoCorte(c, cuentasDebito) { return Math.max(0, taBanco(c) - taBancoNeto(c, cuentasDebito)); }
+    /* Comisión bancaria de un corte. Sin `deps` devuelve la PROYECCIÓN (la tasa
+       configurada), que es como se calculó siempre. Con `deps`, las cuentas que ya
+       se conciliaron aportan su comisión REAL —la que cobró el banco— y las demás
+       siguen con la proyección. Mezclado es el caso normal: un corte puede tener
+       una terminal conciliada y otra todavía no.
+       Este es el número que Gastos Variables y KPIs cuentan como comisión. */
+    function comisionBancoCorte(c, cuentasDebito, deps) {
+        var proy = Math.max(0, taBanco(c) - taBancoNeto(c, cuentasDebito));
+        if (!c || !deps || !deps.length) return proy;
+        var cid = c.id || '', porCta = {}, hay = false;
+        deps.forEach(function (d) {
+            if (!esAbonoTpv(d) || (d.corteId || '') !== cid) return;
+            var k = d.cuentaId || '';
+            porCta[k] = (porCta[k] || 0) + n(d.comision);
+            hay = true;
+        });
+        if (!hay) return proy;
+        var real = 0, proyCubierta = 0;
+        Object.keys(porCta).forEach(function (k) {
+            var h = tpvHechos(c, deps, k, cuentasDebito);
+            // Solo manda lo real donde el corte YA cerró en esa cuenta.
+            if (h.cerrado) { real += h.comisionReal; proyCubierta += h.comisionProy; }
+        });
+        return Math.max(0, proy - proyCubierta + real);
+    }
 
     /* ── Depósitos / retiros: efecto sobre los fondos ────────── */
     // Compat: depósitos viejos solo tenían `destino` ('banco' implicaba salir de caja fuerte).
@@ -392,16 +416,72 @@
         return !!cta.conciliaTpv;
     }
 
+    /* ── LOS HECHOS DE UN CORTE EN UNA CUENTA, EN UN SOLO LUGAR ──────────────
+       Antes había dos maneras de medir lo mismo: el bloque al pie del corte
+       restaba contra el NETO proyectado y el saldo de caja fuerte hacía su propia
+       cuenta. Mientras la comisión fuera siempre la de la tasa configurada, las
+       dos daban igual. Ya no: la comisión REAL se captura al conciliar, y dos
+       reglas separadas se habrían desincronizado en cuanto una difiriera — es el
+       mismo error que costó tres migraciones en el bucket.
+
+       EL CAMBIO DE FONDO: se concilia contra el BRUTO, no contra el neto.
+       El neto es una proyección (venta × tasa configurada) y nunca cuadra al
+       centavo con el banco; por eso hacía falta un movimiento de ajuste. El
+       BRUTO es un dato duro: es la venta que se capturó. Entonces la regla de
+       cierre es una igualdad exacta:
+
+           lo que cayó  +  la comisión que cobró el banco  =  la venta capturada
+
+       Así un día que cae en tres depósitos, cada uno con su comisión, cierra
+       solo cuando los tres suman la venta. Y si faltan $2, se ven los $2.
+
+       `netoEfectivo` / `comisionEfectiva`: lo REAL si el corte ya cerró, la
+       proyección mientras no. Sin esa regla, los cortes todavía sin conciliar se
+       irían a cero en los reportes el día que esto se enciende. */
+    function tpvHechos(corte, deps, cuentaId, ctas) {
+        var v = tpvDeCorte(corte, cuentaId, ctas);
+        var cid = (corte && corte.id) || '';
+        var monto = 0, com = 0, nAb = 0;
+        (deps || []).forEach(function (d) {
+            if (!esAbonoTpv(d)) return;
+            if ((d.corteId || '') !== cid) return;
+            if (cuentaId != null && (d.cuentaId || '') !== cuentaId) return;
+            monto += n(d.monto); com += n(d.comision); nAb++;
+        });
+        var explicado = monto + com;
+        var falta = v.bruto - explicado;
+        var proy = Math.max(0, v.bruto - v.neto);
+        var cerrado = nAb > 0 && Math.abs(falta) < 0.005;
+        return {
+            bruto: v.bruto,                 // venta capturada: el dato duro
+            neto: v.neto,                   // proyección con la tasa configurada
+            comisionProy: proy,
+            conciliado: monto,              // lo que de verdad cayó
+            comisionReal: com,              // lo que de verdad cobró el banco
+            explicado: explicado,
+            falta: falta,                   // lo que falta para cuadrar con la venta
+            abonos: nAb,
+            cerrado: cerrado,
+            netoEfectivo:     cerrado ? monto : v.neto,
+            comisionEfectiva: cerrado ? com   : proy,
+            // Compat: el bloque del corte pinta `comision` como "comisión del día".
+            comision: cerrado ? com : proy
+        };
+    }
+
     function tpvConciliacion(cortes, deps, cuentaId, hoyStr, modo, ctas) {
         var abonos = (deps || []).filter(function (d) {
             return esAbonoTpv(d) && (cuentaId == null || (d.cuentaId || '') === cuentaId);
         });
         var conciliado = abonos.reduce(function (t, a) { return t + n(a.monto); }, 0);
 
-        // Cortes de esta cuenta con venta de tarjeta, del más viejo al más nuevo.
+        /* Cortes de esta cuenta con venta de tarjeta, del más viejo al más nuevo.
+           `neto` aquí es el EFECTIVO (real si el corte ya cerró, proyección si no):
+           con la proyección, un corte conciliado con comisión distinta a la tasa
+           dejaba un tránsito residual que no se iba nunca. */
         var conVenta = (cortes || []).map(function (c) {
-            var v = tpvDeCorte(c, cuentaId, ctas);
-            return { fecha: c.fecha || '', id: c.id, bruto: v.bruto, neto: v.neto };
+            var h = tpvHechos(c, deps, cuentaId, ctas);
+            return { fecha: c.fecha || '', id: c.id, bruto: h.bruto, neto: h.netoEfectivo };
         }).filter(function (x) { return x.bruto > 0 || x.neto > 0; })
           .sort(function (a, b) { return (a.fecha || '').localeCompare(b.fecha || ''); });
 
@@ -462,15 +542,7 @@
     /* Lo conciliado de UN corte en UNA cuenta: es el desglose del día que se ve al
        pie del corte (capturado · conciliado · comisión). */
     function tpvDelCorte(corte, deps, cuentaId, ctas) {
-        var v = tpvDeCorte(corte, cuentaId, ctas);
-        var conc = (deps || []).reduce(function (t, d) {
-            if (!esAbonoTpv(d)) return t;
-            if ((d.corteId || '') !== ((corte && corte.id) || '')) return t;
-            if (cuentaId != null && (d.cuentaId || '') !== cuentaId) return t;
-            return t + n(d.monto);
-        }, 0);
-        return { bruto: v.bruto, neto: v.neto, conciliado: conc,
-                 comision: Math.max(0, v.bruto - v.neto), falta: v.neto - conc };
+        return tpvHechos(corte, deps, cuentaId, ctas);
     }
 
     /* ¿Este folio ya se capturó en esta cuenta? Capturar dos veces el mismo abono
@@ -750,6 +822,27 @@
     }
     function gastoPagado(g) { return gastoEstatus(g) === 'pagado'; }
 
+    /* ── CUÁNTO ESPERÓ UN GASTO ──────────────────────────────────────────────
+       Un gasto pendiente es un dato fantasma: existe en el registro pero no ha
+       salido de ninguna cuenta. Lo que interesa medir es el HUECO entre el día en
+       que se generó (`fecha`) y el día en que de verdad se pagó (`pagadoEl`).
+       Si todavía no se paga, el hueco se mide contra hoy y sigue creciendo: es la
+       diferencia entre "tengo un pendiente" y "llevo 40 días debiéndolo".
+
+       OJO: `fechaPago` es OTRA cosa —la fecha en que se PROGRAMÓ pagarlo— y
+       confundirlas haría que un gasto programado a diciembre se reportara como
+       pagado desde hoy. */
+    function gastoEspera(g, hoyStr) {
+        var desde = String((g && g.fecha) || '').slice(0, 10);
+        if (!desde) return null;
+        var pagado = gastoPagado(g);
+        var hasta = pagado ? String((g && g.pagadoEl) || '').slice(0, 10)
+                           : String(hoyStr || '').slice(0, 10);
+        if (!hasta) return null;   // pagado sin sello: no se inventa una duración
+        return { pagado: pagado, desde: desde, hasta: hasta,
+                 dias: Math.max(0, diasEntre(desde, hasta) || 0) };
+    }
+
     function clasificarGastos(gastos, opts){
         opts = opts || {};
         var r = { fijo: 0, nomOp: 0, nomAdm: 0, imss: 0, variable: 0, propina: 0,
@@ -994,13 +1087,13 @@
         ctaBaseCorte: ctaBaseCorte, ctaBaseCatalogo: ctaBaseCatalogo,
         cuentasDebito: cuentasDebito, cuentasDebitoActivas: cuentasDebitoActivas, ctaActiva: ctaActiva,
         comisionBancoCorte: comisionBancoCorte,
-        nomEsAdm: _nomEsAdm, gastoEstatus: gastoEstatus, gastoPagado: gastoPagado,
+        nomEsAdm: _nomEsAdm, gastoEstatus: gastoEstatus, gastoPagado: gastoPagado, gastoEspera: gastoEspera,
         netoPropina: netoPropina,
         depEfecto: depEfecto, esRetiro: esRetiro,
         esApartado: esApartado, apartadoFondo: apartadoFondo, PREV_GENERAL: PREV_GENERAL,
         esAbonoTpv: esAbonoTpv, tpvDeCorte: tpvDeCorte, tpvConciliacion: tpvConciliacion,
         tpvCuentaConcilia: tpvCuentaConcilia,
-        tpvDelCorte: tpvDelCorte, tpvFolioRepetido: tpvFolioRepetido,
+        tpvHechos: tpvHechos, tpvDelCorte: tpvDelCorte, tpvFolioRepetido: tpvFolioRepetido,
         previsionSaldos: previsionSaldos,
         PREV_FREQS: PREV_FREQS, prevFreq: prevFreq,
         previsionPeriodos: previsionPeriodos, previsionPlan: previsionPlan,

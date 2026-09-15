@@ -1518,9 +1518,17 @@
       </div>
       <div class="fg">
         <label>¿De cuánto fue el abono que cayó?</label>
-        <input type="number" id="tpvMonto" min="0" step="0.01" placeholder="0.00">
+        <input type="number" id="tpvMonto" min="0" step="0.01" placeholder="0.00" oninput="_tpvCuadre()">
         <div id="tpvMontoHint" style="font-size:10.5px;color:var(--text-dim);margin-top:4px;line-height:1.5"></div>
       </div>
+      <div class="fg">
+        <label>¿Cuánta comisión cobró el banco por este abono?</label>
+        <input type="number" id="tpvCom" min="0" step="0.01" placeholder="0.00" oninput="_tpvCuadre()">
+        <div id="tpvComHint" style="font-size:10.5px;color:var(--text-dim);margin-top:4px;line-height:1.5"></div>
+      </div>
+      <!-- El renglón que cierra el corte: abono + comisión tiene que dar la venta
+           capturada. Se pinta en vivo para no descubrir el faltante al guardar. -->
+      <div id="tpvCuadreBox" style="border-radius:9px;padding:10px 13px;margin:-4px 0 12px;font-size:12px;line-height:1.55"></div>
       <div class="fg">
         <label>¿Qué día cayó al banco?</label>
         <input type="date" id="tpvFecha">
@@ -1531,13 +1539,16 @@
         <div id="tpvAviso" style="margin-top:5px"></div>
       </div>
       <div style="font-size:10.5px;color:var(--text-dim);line-height:1.5;background:var(--surface2);border-radius:8px;padding:9px 12px">
-        El banco deposita el <b>neto</b>, ya sin comisión: por eso se concilia contra lo que debe caer y no contra
-        la venta capturada. Al guardarlo, este dinero pasa a contar en el saldo de la cuenta.
+        La comisión viene <b>propuesta con tu tasa configurada</b>, pero manda la del banco:
+        corrígela con lo que diga tu estado de cuenta y ese será el dato real, tanto en el saldo
+        como en la comisión que cuentan tus gastos variables.
+        Un día puede caer en varios abonos: el corte cierra cuando <b>lo que cayó más las comisiones
+        suman la venta capturada</b>.
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn-ghost" onclick="_tpvCerrar()">Cancelar</button>
-      <button class="btn-primary" onclick="_tpvGuardar()">Registrar abono</button>
+      <button class="btn-primary" id="tpvBtnGuardar" onclick="_tpvGuardar()">Registrar abono</button>
     </div>
   </div>
 </div>
@@ -1893,6 +1904,16 @@
         <div class="fg" id="fechaPagoWrap" style="display:none">
             <label>Fecha de pago programada</label>
             <input type="date" id="gFechaPago">
+        </div>
+        <!-- Al SALDAR un pendiente: qué día salió de verdad el dinero. Solo
+             aparece ahí, porque en un gasto que nació pagado la respuesta ya la
+             da su propia fecha y preguntarla sería un campo de más todos los días. -->
+        <div class="fg" id="pagadoElWrap" style="display:none">
+            <label>¿Qué día se pagó?</label>
+            <input type="date" id="gPagadoEl">
+            <div class="form-hint" style="font-size:10.5px;color:var(--text-dim);margin-top:4px">
+                Sirve para saber cuánto tiempo estuvo pendiente.
+            </div>
         </div>
 
         <!-- Notas -->
@@ -2687,7 +2708,9 @@ function taBanco(c){return EtaaxCore.taBanco(c);}
 // predeterminada sobre el total (mejor aproximación al estado de cuenta real).
 function taBancoNeto(c){ return EtaaxCore.taBancoNeto(c, _cuentasDebito()); }
 // Comisión bancaria de un corte (bruto − neto).
-function comisionBancoCorte(c){ return EtaaxCore.comisionBancoCorte(c, _cuentasDebito()); }
+/* Los abonos van como tercer argumento: donde ya se concilió, la comisión que
+   cuenta es la que cobró el banco, no la de la tasa configurada. */
+function comisionBancoCorte(c){ return EtaaxCore.comisionBancoCorte(c, _cuentasDebito(), _abonosTpv()); }
 function taNeto(c){return taBanco(c);}                                 // alias legacy
 function ventasBruta(c){return EtaaxCore.ventasBruta(c);}
 function flujoNeto(c){return EtaaxCore.flujoNeto(c);}
@@ -2744,7 +2767,12 @@ function depVista(v,btn){
 function renderDepositos(){
     _depPobFiltroCat();
     var _rd=dxpRango('dep');
-    var deps=loadDep().filter(function(d){return inRange(d.fecha,_rd.from,_rd.to);});
+    /* Las conciliaciones bancarias NO se listan aquí. Sí mueven el saldo —son
+       cashback, cobros del banco, promociones— pero leerlas entre retiros,
+       depósitos y previsiones vuelve ilegible la lista. Tienen su propio
+       historial en Caja Fuerte, con el saldo de antes, el real y quién verificó. */
+    var deps=loadDep().filter(function(d){return inRange(d.fecha,_rd.from,_rd.to);})
+                      .filter(function(d){ return !_esConcBanco(d); });
     if(_depVista==='ret') deps=deps.filter(_esRetiro);
     else if(_depVista==='prev') deps=deps.filter(EtaaxCore.esApartado);
     else if(_depVista==='dep') deps=deps.filter(function(d){return !_esRetiro(d) && !EtaaxCore.esApartado(d);});
@@ -3656,9 +3684,13 @@ function _abrirCajaFuerteContenido(_yaFresco){
     var deps=loadDep().slice().sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
     var body=document.getElementById('cajBody');
 
-    // ── Gastos desde etaax_gastos ────────────────────────────
-    // Solo la sucursal activa (cuadra con `lista`=load(), que también está scopeada).
-    var todosGastos = _scopeSuc(_loadGastos());
+    /* ── Gastos desde etaax_gastos ────────────────────────────────────────────
+       Solo la sucursal activa (cuadra con `lista`=load(), que también está
+       scopeada) y SOLO LOS PAGADOS. Un gasto pendiente o programado es un dato
+       fantasma: está registrado, pero el dinero sigue en la cuenta. Restarlo del
+       saldo enseñaba menos dinero del que hay y hacía imposible cuadrar contra la
+       app del banco — justo lo que estas pantallas existen para lograr. */
+    var todosGastos = _scopeSuc(_loadGastos()).filter(EtaaxCore.gastoPagado);
     var gastosCajaFuerte = todosGastos.filter(function(g){return g.metodoPago==='caja_fuerte';})
                                       .reduce(function(s,g){return s+n(g.monto);},0);
     var gastosDebitoLista= todosGastos.filter(function(g){return g.metodoPago==='banco'&&g.metodoBanco!=='credito';});
@@ -4469,7 +4501,10 @@ function _tpvBloqueCorte(c, soloLectura){
             '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">'+
                 '<span style="font-size:12.5px;font-weight:600">🏛️ '+_escV(_cuentaBancoLabel(t.cuentaId||''))+'</span>'+
                 '<span style="font-size:11px;color:'+col+';font-weight:600">'+
-                    (cuadra?'✅ Conciliado':(d.falta>0?'⏳ Falta '+fmtM(d.falta)+' por caer':'⚠️ Conciliado de más '+fmtM(-d.falta)))+
+                    (cuadra ? '✅ Conciliado'
+                            : (!d.abonos ? '⏳ Sin conciliar · '+fmtM(d.bruto)+' de venta'
+                                         : (d.falta>0 ? '⏳ Faltan '+fmtM(d.falta)+' para que coincida'
+                                                      : '⚠️ Sobran '+fmtM(-d.falta)+' sobre la venta')))+
                 '</span>'+
             '</div>'+
             /* El desglose del día: lo que se capturó, lo que debe caer ya sin
@@ -4477,9 +4512,10 @@ function _tpvBloqueCorte(c, soloLectura){
                abono se ve corto y parece un faltante. */
             '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:8px">'+
                 _vcCard('Venta capturada', fmtM(d.bruto))+
-                _vcCard('Comisión del día', '−'+fmtM(d.comision), '#ff9a9a')+
-                _vcCard('Debe caer (neto)', fmtM(d.neto), 'var(--accent)')+
-                _vcCard('Ya conciliado', fmtM(d.conciliado), d.conciliado>0?'var(--green)':'var(--text-dim)')+
+                _vcCard(d.abonos?'Comisión real':'Comisión estimada', '−'+fmtM(d.comision), '#ff9a9a')+
+                _vcCard('Ya cayó', fmtM(d.conciliado), d.conciliado>0?'var(--green)':'var(--text-dim)')+
+                _vcCard(cuadra?'Cuadra':'Falta explicar', cuadra?'✅':fmtM(Math.abs(d.falta)),
+                        cuadra?'var(--green)':'var(--accent)')+
             '</div>'+
             (mis.length
               ? '<div style="margin-top:9px;display:flex;flex-direction:column;gap:5px">'+
@@ -4490,7 +4526,10 @@ function _tpvBloqueCorte(c, soloLectura){
                             (x.folio?' · <span style="color:var(--text-dim);word-break:break-all">'+_escV(x.folio)+'</span>':'')+'</span>'+
                         '<span style="display:flex;align-items:center;gap:8px;white-space:nowrap">'+
                             '<strong style="color:var(--green)">'+fmtM(x.monto)+'</strong>'+
-                            (soloLectura?'':'<button class="btn-row del" onclick="_tpvEliminar(\''+x.id+'\')" title="Quitar esta conciliación">🗑️</button>')+
+                            (n(x.comision)>0.005?'<span style="color:#ff9a9a;font-size:10.5px">−'+fmtM(x.comision)+' com.</span>':'')+
+                            (soloLectura?''
+                                :'<button class="btn-row" onclick="_tpvAbrir(\''+c.id+'\',\''+_cid+'\',\''+x.id+'\')" title="Editar este abono">✏️</button>'+
+                                 '<button class="btn-row del" onclick="_tpvEliminar(\''+x.id+'\')" title="Quitar esta conciliación">🗑️</button>')+
                         '</span></div>';
                 }).join('')+'</div>'
               : '')+
@@ -4511,28 +4550,76 @@ function _tpvBloqueCorte(c, soloLectura){
             '🏦 Conciliación con el banco</div>'+
         '<div style="font-size:10.5px;color:var(--text-dim);margin:-3px 0 9px;line-height:1.5">'+
             'La venta con tarjeta entra al saldo del banco <b>cuando la concilias</b>, no al capturar el corte: '+
-            'el dinero cae uno o dos días después.</div>'+
+            'el dinero cae uno o dos días después. Un día puede caer en varios abonos; el corte cierra '+
+            'cuando <b>lo que cayó más las comisiones suman la venta capturada</b>.</div>'+
         filas+'</div>';
 }
 
-var _tpvCorteId='', _tpvCuentaId='';
-function _tpvAbrir(corteId, cuentaId){
-    _tpvCorteId=corteId; _tpvCuentaId=cuentaId;
+var _tpvCorteId='', _tpvCuentaId='', _tpvEditId='';
+/* `abonoId` presente = se está EDITANDO uno ya registrado. Es lo normal: el
+   estado de cuenta llega días después y la comisión que se propuso con la tasa
+   casi nunca es la que cobró el banco. */
+function _tpvAbrir(corteId, cuentaId, abonoId){
+    _tpvCorteId=corteId; _tpvCuentaId=cuentaId; _tpvEditId=abonoId||'';
     var c=load().find(function(x){return x.id===corteId;}); if(!c) return;
-    var d=EtaaxCore.tpvDelCorte(c, _abonosTpv(), cuentaId, _cuentasDebito());
+    var prev=_tpvEditId ? (_abonosTpv()||[]).find(function(x){return x.id===_tpvEditId;}) : null;
+    /* Al editar, el hueco se mide SIN este abono: si no, su propio monto contaría
+       como ya explicado y el cuadre saldría al revés. */
+    var otros=(_abonosTpv()||[]).filter(function(x){ return x.id!==_tpvEditId; });
+    var d=EtaaxCore.tpvDelCorte(c, otros, cuentaId, _cuentasDebito());
     document.getElementById('tpvCuenta').textContent='🏛️ '+_cuentaBancoLabel(cuentaId);
     document.getElementById('tpvDia').textContent=_fCorta(c.fecha||'');
+
     /* Se propone lo que FALTA, no el total: en el segundo abono del mismo día,
-       proponer el total otra vez es invitar a duplicar. */
-    document.getElementById('tpvMonto').value=(d.falta>0.005)?(Math.round(d.falta*100)/100):'';
-    document.getElementById('tpvMontoHint').textContent=d.falta>0.005
-        ? ('Deben caer '+fmtM(d.neto)+' de este día · faltan '+fmtM(d.falta))
-        : ('Este día ya está conciliado ('+fmtM(d.conciliado)+').');
-    document.getElementById('tpvFecha').value=todayStr();
-    document.getElementById('tpvFolio').value='';
+       proponer el total otra vez es invitar a duplicar. El hueco se reparte entre
+       abono y comisión con la tasa configurada, así que quien no toque nada deja
+       el corte exactamente como lo dejaba antes de que la comisión fuera editable. */
+    var hueco=Math.max(0, d.falta);
+    var tasa=(d.bruto>0.005) ? (d.comisionProy/d.bruto) : 0;
+    var comSug=Math.round(hueco*tasa*100)/100;
+    document.getElementById('tpvMonto').value = prev ? prev.monto
+        : (hueco>0.005 ? Math.round((hueco-comSug)*100)/100 : '');
+    document.getElementById('tpvCom').value = prev ? n(prev.comision)
+        : (hueco>0.005 ? comSug : '');
+    document.getElementById('tpvMontoHint').textContent = prev
+        ? 'Corrige con lo que diga tu estado de cuenta.'
+        : (hueco>0.005 ? ('De la venta de este día faltan '+fmtM(hueco)+' por explicar.')
+                       : ('Este día ya cuadra ('+fmtM(d.conciliado)+' caídos).'));
+    document.getElementById('tpvComHint').textContent = 'Propuesta con tu tasa: '+fmtM(comSug)+
+        '. Manda la del banco — la que pongas aquí es la que cuenta como gasto.';
+    document.getElementById('tpvFecha').value = prev ? (prev.fecha||todayStr()) : todayStr();
+    document.getElementById('tpvFolio').value = prev ? (prev.folio||'') : '';
     document.getElementById('tpvAviso').innerHTML='';
+    var btn=document.getElementById('tpvBtnGuardar');
+    if(btn) btn.textContent = prev ? 'Guardar cambios' : 'Registrar abono';
+    _tpvCuadre();
     document.getElementById('modalTpv').classList.add('open');
     setTimeout(function(){ var e=document.getElementById('tpvMonto'); if(e) e.focus(); },60);
+}
+
+/* El renglón vivo: abono + comisión contra la venta capturada. Es la regla de
+   cierre, y verla mientras se escribe evita descubrir el faltante al guardar. */
+function _tpvCuadre(){
+    var box=document.getElementById('tpvCuadreBox'); if(!box) return;
+    var c=load().find(function(x){return x.id===_tpvCorteId;});
+    if(!c){ box.innerHTML=''; return; }
+    var otros=(_abonosTpv()||[]).filter(function(x){ return x.id!==_tpvEditId; });
+    var d=EtaaxCore.tpvDelCorte(c, otros, _tpvCuentaId, _cuentasDebito());
+    var monto=n(document.getElementById('tpvMonto').value);
+    var com  =n(document.getElementById('tpvCom').value);
+    var falta=Math.round((d.falta-monto-com)*100)/100;
+    var cuadra=Math.abs(falta)<0.005;
+    var col=cuadra?'var(--green)':(falta>0?'var(--accent)':'#ff9a9a');
+    box.style.background=cuadra?'rgba(61,190,122,.07)':(falta>0?'rgba(245,200,66,.07)':'rgba(224,90,58,.08)');
+    box.style.border='1px solid '+(cuadra?'rgba(61,190,122,.3)':(falta>0?'rgba(245,200,66,.35)':'rgba(224,90,58,.35)'));
+    box.innerHTML='<div style="color:var(--text-dim);font-size:11px">Venta capturada del día '+
+            '<b style="color:var(--text)">'+fmtM(d.bruto)+'</b></div>'+
+        '<div style="margin-top:3px">'+fmtM(monto)+' que cayó + '+fmtM(com)+' de comisión = '+
+            '<b>'+fmtM(monto+com)+'</b>'+(d.explicado>0.005?' <span style="color:var(--text-dim);font-size:11px">(ya explicados '+fmtM(d.explicado)+')</span>':'')+'</div>'+
+        '<div style="margin-top:4px;font-weight:600;color:'+col+'">'+
+            (cuadra ? '✅ Cuadra con la venta del día'
+                    : (falta>0 ? '⏳ Faltan '+fmtM(falta)+' para que coincida'
+                               : '⚠️ Sobran '+fmtM(-falta)+' sobre la venta capturada'))+'</div>';
 }
 function _tpvCerrar(){ document.getElementById('modalTpv').classList.remove('open'); }
 
@@ -4547,17 +4634,20 @@ function _tpvChk(){
 }
 function _tpvGuardar(){
     var monto=n(document.getElementById('tpvMonto').value);
+    var com  =n(document.getElementById('tpvCom').value);
     var fecha=document.getElementById('tpvFecha').value;
     var folio=(document.getElementById('tpvFolio').value||'').trim();
     if(!(monto>0)){ alert('¿De cuánto fue el abono que cayó al banco?'); return; }
     if(!fecha){ alert('¿Qué día cayó el abono?'); return; }
-    var rep=EtaaxCore.tpvFolioRepetido(_abonosTpv(), _tpvCuentaId, folio);
+    var rep=EtaaxCore.tpvFolioRepetido(_abonosTpv(), _tpvCuentaId, folio, _tpvEditId);
     if(rep && !confirm('Ese folio ya está capturado en esta cuenta ('+_fCorta(rep.fecha)+' · '+fmtM(rep.monto)+').\n\n'
         +'¿De todos modos lo registras?')) return;
+    var prev=_tpvEditId ? (_abonosTpv()||[]).find(function(x){return x.id===_tpvEditId;}) : null;
     var ab={
-        id:genId(), negocioId:getNegocioActivo(), sucursalId:_sucActiva(),
+        id: _tpvEditId || genId(),
+        negocioId:getNegocioActivo(), sucursalId:(prev&&prev.sucursalId)||_sucActiva(),
         tipo:'abono_tpv', cuentaId:_tpvCuentaId, corteId:_tpvCorteId,
-        monto:monto, fecha:fecha, folio:folio
+        monto:monto, comision:com, fecha:fecha, folio:folio
     };
     _cacheDeps=(_cacheDeps||[]).filter(function(x){return x.id!==ab.id;});
     _cacheDeps.push(ab);
@@ -4938,9 +5028,17 @@ function _concGuardar(){
     _abrirCajaFuerteContenido(true); // repintar con el ajuste ya aplicado
 }
 
-/* 📜 Vista histórica de conciliaciones (movimientos categoria 'ajuste') */
+/* ¿Este movimiento es una conciliación bancaria de cuenta? Se reconoce por el
+   dato ESTRUCTURADO que escribe _concGuardar, no por la categoría: "ajuste" es
+   una categoría que el usuario también puede poner a mano, y con ella un ajuste
+   suyo se colaba en el historial y desaparecía de sus movimientos.
+   Una sola regla, usada por el historial Y por el filtro de la lista: si cada uno
+   decidiera por su cuenta, un movimiento podría no salir en ninguno de los dos. */
+function _esConcBanco(d){ return !!(d && d.cuentaConcId); }
+
+/* 📜 Vista histórica de conciliaciones bancarias */
 function abrirHistConciliaciones(){
-    var lista=(_cacheDeps||[]).filter(function(d){return d&&d.categoria==='ajuste';})
+    var lista=(_cacheDeps||[]).filter(_esConcBanco)
         .slice().sort(function(a,b){return String(b.fecha||'').localeCompare(String(a.fecha||''));});
     var body=document.getElementById('concHistBody');
     if(!lista.length){
@@ -5669,6 +5767,11 @@ function estatusBadge(g){
     };
     var c=cfg[s]||cfg.pagado;
     var extra=s!=='pagado'&&g.fechaPago?' <span style="font-size:9px;opacity:.7">'+g.fechaPago+'</span>':'';
+    /* Un monto pendiente solo no alarma; "45 días" sí. Y en uno ya pagado, el
+       número cuenta cuánto tardó en salir — que es lo que se quería medir. */
+    var _esp=EtaaxCore.gastoEspera(g, todayStr());
+    if(_esp && _esp.dias>0) extra+=' <span style="font-size:9px;opacity:.75">· '+
+        (_esp.pagado?'pagado en ':'')+_esp.dias+'d'+(_esp.pagado?'':' esperando')+'</span>';
     return'<span style="background:'+c.bg+';color:'+c.color+';font-size:10px;letter-spacing:.5px;padding:2px 7px;border-radius:4px;white-space:nowrap">'+c.lbl+'</span>'+extra;
 }
 
@@ -5828,6 +5931,14 @@ function verGasto(id){
     var sCfg={pagado:{lbl:'✅ Pagado',c:'#3dbe7a'},pendiente:{lbl:'⏳ Pendiente',c:'#f5c842'},programado:{lbl:'📅 Programado',c:'var(--blue)'}};
     var sc=sCfg[g.estatus||'pagado']||sCfg.pagado;
     var estatusVal='<span style="color:'+sc.c+'">'+sc.lbl+'</span>'+(g.fechaPago&&g.estatus!=='pagado'?' · <span style="font-size:11px;color:var(--text-dim,#7a7570)">'+g.fechaPago+'</span>':'');
+    /* La vida del gasto: cuándo se generó y cuándo salió el dinero. En uno todavía
+       pendiente, el reloj corre contra hoy. */
+    var _espF=EtaaxCore.gastoEspera(g, todayStr());
+    if(_espF) estatusVal+=' · <span style="font-size:11px;color:var(--text-dim,#7a7570)">'+
+        (_espF.pagado
+            ? ('generado el '+_esc(_espF.desde)+', pagado el '+_esc(_espF.hasta)+
+               (_espF.dias>0?' ('+_espF.dias+' día'+(_espF.dias===1?'':'s')+' pendiente)':' (el mismo día)'))
+            : ('pendiente desde el '+_esc(_espF.desde)+' · '+_espF.dias+' día'+(_espF.dias===1?'':'s')))+'</span>';
 
     var body=
         fila('Categoría',_esc(g.categoria||'—'))+
@@ -5897,6 +6008,8 @@ function _abrirModalGasto(g,tipo){
     // Estatus
     setEstatus(d.estatus||'pagado');
     document.getElementById('gFechaPago').value=d.fechaPago||'';
+    document.getElementById('gPagadoEl').value=d.pagadoEl||'';
+    var _wp0=document.getElementById('pagadoElWrap'); if(_wp0) _wp0.style.display='none';
     // Tipo
     setTipo(tipo||d.tipo||'menor',true);
     // Método — usando IDs directos para evitar el bug de :first-of-type
@@ -6796,8 +6909,24 @@ function setEstatus(val){
         document.getElementById('sBtn_'+s).classList.toggle('active',s===val);
     });
     document.getElementById('fechaPagoWrap').style.display=(val==='pendiente'||val==='programado')?'':'none';
+    /* Solo al SALDAR uno que venía pendiente: ahí la fecha del gasto y el día del
+       pago son distintos, y esa distancia es justo lo que se quiere medir. */
+    var _prev=_gEnEdicion();
+    var _saldando = (val==='pagado') && !!_prev && !EtaaxCore.gastoPagado(_prev);
+    var _wp=document.getElementById('pagadoElWrap');
+    if(_wp){
+        _wp.style.display=_saldando?'':'none';
+        var _ip=document.getElementById('gPagadoEl');
+        if(_saldando && _ip && !_ip.value) _ip.value=todayStr();
+    }
 }
 
+/* El gasto TAL COMO ESTÁ GUARDADO, no como está el formulario: para saber si se
+   está saldando un pendiente hay que comparar contra su estatus anterior. */
+function _gEnEdicion(){
+    var id=(document.getElementById('gId')||{}).value||'';
+    return id ? (_cacheGastos||[]).find(function(x){return x.id===id;}) : null;
+}
 function setTipo(tipo,skipPin){
     document.getElementById('gTipo').value=tipo;
     document.getElementById('btnMenor').classList.toggle('active',tipo==='menor');
@@ -7005,6 +7134,20 @@ function guardarGasto(){
         notas:document.getElementById('gNotas').value.trim(),
         estatus:document.getElementById('gEstatus').value||'pagado',
         fechaPago:document.getElementById('gFechaPago').value||'',
+        /* El día en que de verdad salió el dinero. `fechaPago` es otra cosa —la
+           fecha PROGRAMADA— y mezclarlas haría que un gasto agendado a diciembre
+           se leyera como pagado desde hoy.
+           Se sella al pasar a pagado y se conserva si ya venía sellado, para no
+           reescribir la historia al editar cualquier otro campo. */
+        pagadoEl:(function(){
+            var est=document.getElementById('gEstatus').value||'pagado';
+            if(est!=='pagado') return '';               // vuelve a pendiente: se suelta el sello
+            if(_exG && _exG.pagadoEl) return _exG.pagadoEl;
+            var campo=document.getElementById('gPagadoEl');
+            if(campo && campo.value) return campo.value;
+            // Alta directa como pagado: se pagó el día del gasto.
+            return (_exG && EtaaxCore.gastoPagado(_exG)) ? (_exG.fecha||'') : (document.getElementById('gFecha').value||'');
+        })(),
         fijoId:_gastoFijoId||((_exG&&_exG.fijoId)||''), // link al gasto fijo si se pagó desde el catálogo
         categoriaNomina:_gastoNomCat||((_exG&&_exG.categoriaNomina)||''), // op/adm de nómina (split KPIs)
         staffId:_gastoStaffId||((_exG&&_exG.staffId)||'')

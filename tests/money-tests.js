@@ -160,6 +160,7 @@ async function testA(nombre, fn) {
     try { await fn(); PASA++; console.log('  ✅', nombre); }
     catch (e) { FALLA++; console.log('  💥', nombre, '→', e.message); }
 }
+const n$ = (v) => parseFloat(v) || 0;
 function eq(real, esperado, msg) {
     const ok = typeof esperado === 'number'
         ? Math.abs(real - esperado) < 0.005    // centavos: tolerancia de redondeo
@@ -4001,9 +4002,12 @@ console.log('\n══ SUITE AG · Conciliar la venta con tarjeta (etaax-core.js)
     const corte = (id, fecha, bruto, neto, cta) =>
         ({ id, fecha, tarjetaCuentas:[{ cuentaId: cta === undefined ? 'a' : cta,
                                         ventaTC: bruto, ventaTD: 0, neto }] });
-    const abono = (corteId, monto, fecha, folio, cta) =>
+    /* `com` = la comisión REAL de ESE abono. Es el dato nuevo: antes la comisión
+       salía siempre de la tasa configurada y por eso el saldo nunca cuadraba con
+       el banco al centavo. */
+    const abono = (corteId, monto, fecha, folio, cta, com) =>
         ({ id:'ab'+corteId+monto, tipo:'abono_tpv', cuentaId: cta === undefined ? 'a' : cta,
-           corteId, monto, fecha, folio });
+           corteId, monto, fecha, folio, comision: com === undefined ? 0 : com });
 
     const cortes = [ corte('c1','2026-09-01',8000,7800),
                      corte('c2','2026-09-02',6000,5850),
@@ -4031,15 +4035,69 @@ console.log('\n══ SUITE AG · Conciliar la venta con tarjeta (etaax-core.js)
     test('vendido = conciliado + tránsito, sin centavos perdidos', () =>
         eq(r.conciliado + r.transito, r.vendido, 'suma'));
 
-    /* ── La comisión: el banco deposita NETO ──
-       Conciliar contra el bruto haría que todos los abonos se vean cortos por la
-       comisión, todos los días, y la función sería puro ruido. */
+    /* ── LA REGLA DE CIERRE ──
+       Se concilia contra el BRUTO, no contra el neto. El neto es una proyección
+       (venta × tasa configurada) y nunca cuadra al centavo con el banco: de ahí
+       venían los movimientos de ajuste que ensuciaban depósitos y retiros.
+       El bruto es un dato duro —la venta capturada— así que el cierre es una
+       igualdad exacta:  lo que cayó + la comisión del banco = la venta.        */
     test('la comisión del periodo es la diferencia entre bruto y neto', () =>
         eq(r.comision, (6000 + 7000) - (5850 + 6825), 'comisión'));
-    test('un abono por el NETO deja el corte cuadrado', () =>
-        eq(C.tpvDelCorte(cortes[1], [abono('c2', 5850, '2026-09-03', 'X')], 'a').falta, 0, 'cuadra'));
-    test('conciliar contra el BRUTO dejaría el corte sobrado', () =>
-        eq(C.tpvDelCorte(cortes[1], [abono('c2', 6000, '2026-09-03', 'X')], 'a').falta, -150, 'sobra'));
+    test('un abono por el neto SIN declarar comisión deja pendiente la comisión', () =>
+        eq(C.tpvDelCorte(cortes[1], [abono('c2', 5850, '2026-09-03', 'X')], 'a').falta, 150, 'falta la comisión'));
+    test('…con su comisión declarada, el corte cierra exacto', () =>
+        eq(C.tpvDelCorte(cortes[1], [abono('c2', 5850, '2026-09-03', 'X', 'a', 150)], 'a').falta, 0, 'cuadra'));
+    /* Si el banco depositara BRUTO (comisión cobrada aparte), el mismo modelo
+       cierra con comisión cero. No hace falta otro camino. */
+    test('un abono por el bruto con comisión cero también cierra', () =>
+        eq(C.tpvDelCorte(cortes[1], [abono('c2', 6000, '2026-09-03', 'X', 'a', 0)], 'a').falta, 0, 'cuadra'));
+    test('pasarse sobre la venta se ve como sobrante, no como cuadre', () =>
+        eq(C.tpvDelCorte(cortes[1], [abono('c2', 6000, '2026-09-03', 'X', 'a', 150)], 'a').falta, -150, 'sobra'));
+
+    /* ── LA COMISIÓN REAL MANDA SOBRE LA PROYECTADA ──
+       Es el punto de todo el cambio: el banco cobró $212 donde la tasa proyectaba
+       $150, y ese $212 es el que tiene que llegar a gastos variables. */
+    const cerrado = [abono('c2', 5788, '2026-09-03', 'X', 'a', 212)];
+    const hCerr = C.tpvDelCorte(cortes[1], cerrado, 'a');
+    test('un corte cerrado con comisión distinta a la tasa SÍ cierra', () => eq(hCerr.falta, 0, 'cuadra'));
+    test('…y reporta la comisión REAL, no la proyectada', () => eq(hCerr.comision, 212, 'real'));
+    test('…la proyección queda a la vista, para poder comparar', () => eq(hCerr.comisionProy, 150, 'proyección'));
+    test('…y se marca como cerrado', () => eq(hCerr.cerrado, true, 'cerrado'));
+    test('sin conciliar, la comisión sigue siendo la proyectada', () =>
+        eq(C.tpvDelCorte(cortes[1], [], 'a').comision, 150, 'proyección'));
+
+    /* Y el número que leen Gastos Variables y KPIs cambia con él.
+       `taBanco` lee el campo plano del corte, así que este caso necesita un corte
+       completo: con solo el desglose por cuenta la proyección saldría en cero y el
+       test pasaría sin probar nada. */
+    const corteC = { id:'c2', fecha:'2026-09-02', tarjeta:6000, propTarjeta:0,
+                     tarjetaCuentas:[{ cuentaId:'a', ventaTC:6000, ventaTD:0, neto:5850 }] };
+    test('la comisión del corte que llega a los reportes es la real', () =>
+        eq(C.comisionBancoCorte(corteC, undefined, cerrado), 212, 'real'));
+    test('…y sin abonos sigue siendo la proyectada (nada se desploma)', () =>
+        eq(C.comisionBancoCorte(corteC, undefined, []), 150, 'proyección'));
+    /* A medio conciliar NO manda lo real: la comisión de los abonos que faltan
+       todavía no se conoce, y contar solo la de los que llegaron la dejaría corta. */
+    test('a medio conciliar manda la proyección, no una comisión incompleta', () =>
+        eq(C.comisionBancoCorte(corteC, undefined, [abono('c2', 3000, '2026-09-03', 'P', 'a', 70)]), 150, 'proyección'));
+
+    /* ── VARIOS ABONOS EN UN CORTE, CADA UNO CON SU COMISIÓN ──
+       Es el caso real: se venden 6,000 y el banco los deposita en tres partes,
+       cada una con su propia comisión. Cierra cuando las tres suman la venta. */
+    const tres = [ abono('c2', 2000, '2026-09-03', 'A', 'a', 52),
+                   abono('c2', 1800, '2026-09-03', 'B', 'a', 48),
+                   abono('c2', 2050, '2026-09-04', 'C', 'a', 50) ];
+    const h3 = C.tpvDelCorte(cortes[1], tres, 'a');
+    test('tres abonos del mismo día se cuentan los tres', () => eq(h3.abonos, 3, 'tres'));
+    test('…lo que cayó es la suma de los tres', () => eq(h3.conciliado, 5850, 'suma'));
+    test('…la comisión real es la suma de las tres', () => eq(h3.comisionReal, 150, 'suma'));
+    test('…y juntos cierran la venta del día', () => eq(h3.falta, 0, 'cuadra'));
+    /* Si a uno le faltan $2, se ven los $2. Es literalmente lo que se pidió. */
+    const faltan2 = [ abono('c2', 2000, '2026-09-03', 'A', 'a', 52),
+                      abono('c2', 1800, '2026-09-03', 'B', 'a', 48),
+                      abono('c2', 2048, '2026-09-04', 'C', 'a', 50) ];
+    test('si faltan $2 para la venta, el corte dice que faltan $2', () =>
+        eq(C.tpvDelCorte(cortes[1], faltan2, 'a').falta, 2, 'dos pesos'));
 
     /* ── La antigüedad, que es la alarma real ──
        Un lote de terminal que nunca liquidó pasa desapercibido hasta el cierre de
@@ -4088,12 +4146,15 @@ console.log('\n══ SUITE AG · Conciliar la venta con tarjeta (etaax-core.js)
         eq(C.tpvDeCorte(mixto[0]).neto + C.tpvDeCorte(mixto[1]).neto, 9750, 'todas'));
 
     /* ── El desglose del día, que es lo que se ve al pie del corte ── */
-    const d = C.tpvDelCorte(cortes[1], [abono('c2', 3000, '2026-09-03', 'P1')], 'a');
+    const d = C.tpvDelCorte(cortes[1], [abono('c2', 3000, '2026-09-03', 'P1', 'a', 78)], 'a');
     test('el día muestra lo capturado', () => eq(d.bruto, 6000, 'bruto'));
     test('…lo que debería caer, ya sin comisión', () => eq(d.neto, 5850, 'neto'));
     test('…lo que ya cayó', () => eq(d.conciliado, 3000, 'conciliado'));
-    test('…la comisión del día', () => eq(d.comision, 150, 'comisión'));
-    test('…y lo que falta', () => eq(d.falta, 2850, 'falta'));
+    test('…la comisión ya cobrada por lo que cayó', () => eq(d.comisionReal, 78, 'real'));
+    /* A medio conciliar la comisión que se muestra sigue siendo la proyectada:
+       la de los abonos que faltan todavía no se conoce. */
+    test('…la comisión del día sigue siendo la estimada mientras no cierre', () => eq(d.comision, 150, 'proyección'));
+    test('…y lo que falta se mide contra la VENTA, no contra el neto', () => eq(d.falta, 6000 - 3078, 'falta'));
 
     /* ── El folio repetido ──
        Capturar dos veces el mismo depósito es el error más probable, y dejaría el
@@ -4151,22 +4212,48 @@ console.log('\n══ SUITE AH · Conciliación de tarjeta en Diario (administra
        parece un faltante que no existe. */
     test('muestra la venta capturada', () => eq(html.indexOf('$6,000.00') > -1, true, 'bruto'));
     test('muestra la comisión del día', () => eq(html.indexOf('−$150.00') > -1, true, 'comisión'));
-    /* El neto va en su propio renglón rotulado: es la cifra contra la que se
-       concilia, y confundirla con el bruto es el error que vuelve inútil todo. */
-    test('muestra lo que debe caer, ya neto, con su rótulo', () => {
-        const i = html.indexOf('Debe caer');
-        return eq(i > -1 && html.slice(i, i + 220).indexOf('$5,850.00') > -1, true, 'neto');
-    });
-    test('y dice cuánto falta por caer', () => eq(html.indexOf('Falta $5,850.00') > -1, true, 'falta'));
+    /* Mientras nadie concilie, la comisión se rotula ESTIMADA: es la de la tasa
+       configurada, y darla por buena es lo que hacía que el saldo nunca cuadrara. */
+    test('la comisión sin conciliar se rotula como estimada', () =>
+        eq(html.indexOf('Comisión estimada') > -1, true, 'rótulo'));
+    /* Y no se anuncia un faltante en pesos antes de empezar: lo que hay es la
+       venta del día entera sin explicar, no un "falta" a medias. */
+    test('sin conciliar dice que está sin conciliar, con la venta del día', () =>
+        eq(html.indexOf('⏳ Sin conciliar · $6,000.00 de venta') > -1, true, 'estado'));
 
     /* Un corte sin venta de tarjeta no tiene nada que conciliar. */
     test('un corte sin tarjeta no ofrece conciliación', () =>
         eq(A._tpvBloqueCorte({ id:'k9', fecha:'2026-09-02', tarjetaCuentas:[] }), '', 'vacío'));
 
+    /* Un abono por el neto SIN comisión ya no cierra: faltan los $150 que el banco
+       se quedó y que nadie ha declarado. Es el aviso que se pidió. */
+    setVar(A, '_cacheDeps', [{ id:'ab0', tipo:'abono_tpv', cuentaId:'cta1', corteId:'k2',
+                               monto:5850, fecha:'2026-09-04', folio:'X' }]);
+    test('un abono sin comisión declarada avisa cuánto falta para que coincida', () =>
+        eq(A._tpvBloqueCorte(cortes[1]).indexOf('Faltan $150.00 para que coincida') > -1, true, 'aviso'));
+
     setVar(A, '_cacheDeps', [{ id:'ab1', tipo:'abono_tpv', cuentaId:'cta1', corteId:'k2',
-                               monto:5850, fecha:'2026-09-04', folio:'REF-8837' }]);
+                               monto:5850, comision:150, fecha:'2026-09-04', folio:'REF-8837' }]);
     html = A._tpvBloqueCorte(cortes[1]);
     test('conciliado, el corte lo dice', () => eq(html.indexOf('✅ Conciliado') > -1, true, 'ok'));
+    test('…y ya rotula la comisión como REAL, no estimada', () =>
+        eq(html.indexOf('Comisión real') > -1, true, 'rótulo'));
+    /* Cada abono trae su botón de editar: el estado de cuenta llega días después y
+       la comisión propuesta con la tasa casi nunca es la que cobró el banco. */
+    test('cada abono se puede editar, no solo borrar', () =>
+        eq(html.indexOf("_tpvAbrir('k2','cta1','ab1')") > -1, true, 'editar'));
+
+    /* Tres abonos con su comisión cada uno cierran el día: es el caso de Edwin,
+       10k vendidos que el banco deposita en varias partes. */
+    setVar(A, '_cacheDeps', [
+        { id:'t1', tipo:'abono_tpv', cuentaId:'cta1', corteId:'k2', monto:2000, comision:52, fecha:'2026-09-04' },
+        { id:'t2', tipo:'abono_tpv', cuentaId:'cta1', corteId:'k2', monto:1800, comision:48, fecha:'2026-09-04' },
+        { id:'t3', tipo:'abono_tpv', cuentaId:'cta1', corteId:'k2', monto:2050, comision:50, fecha:'2026-09-05' }]);
+    const h3 = A._tpvBloqueCorte(cortes[1]);
+    test('tres abonos con su comisión cierran el corte', () =>
+        eq(h3.indexOf('✅ Conciliado') > -1, true, 'cierra'));
+    test('…y los tres siguen a la vista', () =>
+        eq((h3.match(/_tpvEliminar\('t[123]'\)/g) || []).length, 3, 'los tres'));
     test('…y el folio queda a la vista para rastrearlo', () =>
         eq(html.indexOf('REF-8837') > -1, true, 'folio'));
 
@@ -4226,7 +4313,7 @@ console.log('\n══ SUITE AH · Conciliación de tarjeta en Diario (administra
        dinero. Una vista previa con botones invita a tocarlos creyendo que uno
        solo está mirando. */
     test('la ficha del corte trae su desglose de conciliación', () =>
-        eq($('verCorteBody').innerHTML.indexOf('Debe caer') > -1, true, 'desglose'));
+        eq($('verCorteBody').innerHTML.indexOf('Venta capturada') > -1, true, 'desglose'));
     test('…pero NO el botón de conciliar', () =>
         eq($('verCorteBody').innerHTML.indexOf('Conciliar un abono'), -1, 'sin botón'));
     test('…ni el de dejar de conciliar', () =>
@@ -4294,7 +4381,9 @@ console.log('\n══ SUITE AH · Conciliación de tarjeta en Diario (administra
        el día del deploy los saldos históricos se desplomen. */
     test('sin conciliaciones, el saldo no cambia', () => eq(saldo([]), 7800 + 5850, 'histórico'));
 
-    const conc = [{ id:'ab1', tipo:'abono_tpv', cuentaId:'cta1', corteId:'k2',
+    /* Con comisión declarada: sin ella el corte ya no cierra, porque el cierre se
+       mide contra la venta capturada y no contra el neto proyectado. */
+    const conc = [{ id:'ab1', tipo:'abono_tpv', cuentaId:'cta1', corteId:'k2', comision:150,
                     monto:5850, fecha:'2026-09-04', folio:'R1' }];
     /* Al conciliar el corte del día 2, el del día 1 queda como histórico (ya cayó)
        y el saldo trae los dos. Nada desaparece. */
@@ -4429,10 +4518,13 @@ console.log('\n══ SUITE AH · Conciliación de tarjeta en Diario (administra
     setVar(A, '_cacheDeps', conc);
     test('el corte conciliado se marca como tal', () =>
         eq(A._tpvChipCorte(cortes[1]).indexOf('conciliado') > -1, true, 'ok'));
-    test('el corte que falta avisa cuánto', () => {
+    /* Lo pendiente se mide contra la VENTA capturada, que es el dato duro: la
+       comisión real de ese día todavía no se conoce, así que descontar la
+       proyectada sería anunciar un número que nadie puede comprobar. */
+    test('el corte que falta avisa cuánto, medido contra la venta', () => {
         const chip = A._tpvChipCorte({ id:'k3', fecha:'2026-09-05',
             tarjetaCuentas:[{ cuentaId:'cta1', ventaTC:9000, ventaTD:0, neto:8775 }] });
-        return eq(chip.indexOf('por conciliar') > -1 && chip.indexOf('$8,775.00') > -1, true, 'falta');
+        return eq(chip.indexOf('por conciliar') > -1 && chip.indexOf('$9,000.00') > -1, true, 'falta');
     });
     /* Un corte sin venta con tarjeta no se marca: una marca que sale siempre deja
        de significar algo. */
@@ -6134,6 +6226,163 @@ console.log('\n══ BB0 · Las acciones de un gasto en un solo menú ══');
         const m = dia.slice(dia.indexOf('function _menuGasto'), dia.indexOf('function _menuCorte'));
         return eq(m.indexOf('_miCorte(') > -1 && m.indexOf('_cerrarMenusCorte()') > -1, true, 'compartido');
     });
+}
+
+/* ═══════════ SUITE BB3 · LA COMISIÓN QUE SE PROPONE AL CONCILIAR ════════════
+   El modal propone monto y comisión repartiendo el hueco con la tasa configurada.
+   Esa propuesta es lo que hace que el cambio sea seguro: quien no toque nada deja
+   el corte EXACTAMENTE como lo dejaba cuando la comisión no era editable. Si la
+   propuesta se rompe, el cambio deja de ser transparente para quien no concilia
+   al centavo — que hoy son todos.                                             */
+console.log('\n══ BB3 · La comisión que se propone al conciliar ══');
+{
+    const $ = (id) => A.document.getElementById(id);
+    setVar(A, '_cuentasBancarias', [{ id:'cta1', tipo:'debito', banco:'BBVA', predeterminada:true, activa:true }]);
+    setVar(A, '_cacheCortes', [{ id:'p1', fecha:'2026-09-02',
+        tarjetaCuentas:[{ cuentaId:'cta1', ventaTC:6000, ventaTD:0, neto:5850 }] }]);
+    setVar(A, '_cacheDeps', []);
+    A._tpvAbrir('p1', 'cta1');
+    test('propone el abono por el NETO, como siempre', () => eq(n$($('tpvMonto').value), 5850, 'monto'));
+    test('…y la comisión por la proyección de la tasa', () => eq(n$($('tpvCom').value), 150, 'comisión'));
+    test('juntos suman la venta capturada: quien no toca nada, cierra', () =>
+        eq(n$($('tpvMonto').value) + n$($('tpvCom').value), 6000, 'cierra'));
+
+    /* Segundo abono del mismo día: se propone lo que FALTA, no el total otra vez
+       —proponer el total es invitar a duplicar— y su comisión proporcional. */
+    setVar(A, '_cacheDeps', [{ id:'a1', tipo:'abono_tpv', cuentaId:'cta1', corteId:'p1',
+                               monto:2925, comision:75, fecha:'2026-09-03' }]);
+    A._tpvAbrir('p1', 'cta1');
+    test('el segundo abono propone solo lo que falta', () => eq(n$($('tpvMonto').value), 2925, 'monto'));
+    test('…con su parte de la comisión', () => eq(n$($('tpvCom').value), 75, 'comisión'));
+
+    /* Al EDITAR, el hueco se mide SIN ese abono: si contara el suyo propio, el
+       cuadre saldría al revés y editar un abono lo dejaría siempre "sobrado". */
+    A._tpvAbrir('p1', 'cta1', 'a1');
+    test('editar carga los valores del abono, no una propuesta nueva', () =>
+        eq(n$($('tpvMonto').value) === 2925 && n$($('tpvCom').value) === 75, true, 'carga'));
+    test('…y el botón dice que se está guardando un cambio', () =>
+        eq($('tpvBtnGuardar').textContent, 'Guardar cambios', 'botón'));
+    /* Y el renglón de cuadre mide el hueco SIN el abono que se edita. Si contara
+       el suyo propio, editarlo diría "✅ cuadra" siempre —aunque falten $3,000—
+       porque su monto estaría explicado dos veces. */
+    A._tpvCuadre();
+    test('al editar, el cuadre no cuenta dos veces el abono que se edita', () =>
+        eq($('tpvCuadreBox').innerHTML.indexOf('Faltan $3,000.00 para que coincida') > -1, true,
+           $('tpvCuadreBox').innerHTML.slice(-90)));
+
+    /* Y con los números que cierran, lo dice. */
+    A.document.getElementById('tpvMonto').value = 5850;
+    A.document.getElementById('tpvCom').value = 150;
+    A._tpvCuadre();
+    test('con los números que cierran, lo dice', () =>
+        eq($('tpvCuadreBox').innerHTML.indexOf('✅ Cuadra con la venta del día') > -1, true, 'cuadra'));
+    /* Pasarse no es cuadrar: se avisa como sobrante. */
+    A.document.getElementById('tpvCom').value = 300;
+    A._tpvCuadre();
+    test('pasarse de la venta avisa como sobrante', () =>
+        eq($('tpvCuadreBox').innerHTML.indexOf('⚠️ Sobran $150.00') > -1, true, 'sobra'));
+
+    /* La propuesta que se enseña al editar también mide el hueco sin este abono:
+       si contara el suyo, sugeriría la mitad de la comisión que toca. */
+    A._tpvAbrir('p1', 'cta1', 'a1');
+    test('al editar, la comisión propuesta es la del hueco SIN este abono', () =>
+        eq($('tpvComHint').textContent.indexOf('$150.00') > -1, true, $('tpvComHint').textContent));
+
+    /* ── Y que lo guardado sea lo que se escribió ──
+       Sin esto, el campo de comisión podía existir en pantalla y perderse al
+       guardar: la pantalla diría una cosa y el registro otra. */
+    setVar(A, '_cacheDeps', []);
+    A._tpvAbrir('p1', 'cta1');
+    A.document.getElementById('tpvMonto').value = 5788;
+    A.document.getElementById('tpvCom').value   = 212;
+    A.document.getElementById('tpvFecha').value = '2026-09-04';
+    A.document.getElementById('tpvFolio').value = 'REF-1';
+    A._tpvGuardar();
+    let guardados = getVar(A, '_cacheDeps') || [];
+    test('guardar deja UN abono', () => eq(guardados.length, 1, 'uno'));
+    test('…con la comisión que se escribió, no la de la tasa', () =>
+        eq(guardados[0].comision, 212, 'comisión'));
+    test('…y el corte queda cerrado', () =>
+        eq(A._tpvBloqueCorte({ id:'p1', fecha:'2026-09-02',
+            tarjetaCuentas:[{ cuentaId:'cta1', ventaTC:6000, ventaTD:0, neto:5850 }] })
+           .indexOf('✅ Conciliado') > -1, true, 'cerrado'));
+
+    /* Editar CORRIGE el abono, no crea otro. Si creara otro, el corte quedaría
+       conciliado al doble y el saldo del banco traería dinero que no existe. */
+    const idPrev = guardados[0].id;
+    A._tpvAbrir('p1', 'cta1', idPrev);
+    A.document.getElementById('tpvCom').value = 190;
+    A.document.getElementById('tpvMonto').value = 5810;
+    A._tpvGuardar();
+    guardados = getVar(A, '_cacheDeps') || [];
+    test('editar no duplica: sigue habiendo UN abono', () => eq(guardados.length, 1, 'uno'));
+    test('…es el mismo registro, corregido', () =>
+        eq(guardados[0].id === idPrev && guardados[0].comision === 190, true, 'mismo'));
+}
+
+/* ═══════════ SUITE BB1 · UN GASTO SIN PAGAR NO HA SALIDO DE LA CUENTA ════════
+   Los gastos pendientes y programados ya no contaban en los totales, pero SÍ
+   seguían restándose del saldo de caja fuerte, del banco y de la tarjeta. O sea
+   que la pantalla enseñaba menos dinero del que hay, y cuadrar contra la app del
+   banco era imposible — que es exactamente para lo que existe esa pantalla.
+   Un gasto sin pagar es un dato fantasma: está registrado, el dinero sigue ahí. */
+console.log('\n══ BB1 · Un gasto sin pagar no ha salido de la cuenta ══');
+{
+    const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+    test('el saldo solo resta gastos PAGADOS', () =>
+        eq(dia.indexOf('_scopeSuc(_loadGastos()).filter(EtaaxCore.gastoPagado)') > -1, true, 'filtrado'));
+    test('…y ya no toma la lista completa', () =>
+        eq(/var todosGastos = _scopeSuc\(_loadGastos\(\)\);/.test(dia), false, 'sin crudo'));
+
+    /* ── La vida del gasto: cuánto esperó ── */
+    const C = cargarJS(crearContexto(), 'etaax-core.js').EtaaxCore;
+    const hoy = '2026-09-15';
+    const pend = C.gastoEspera({ fecha:'2026-08-01', estatus:'pendiente' }, hoy);
+    test('un pendiente cuenta los días contra HOY, y siguen creciendo', () => eq(pend.dias, 45, 'días'));
+    test('…y se sabe que todavía no se paga', () => eq(pend.pagado, false, 'pendiente'));
+    const pag = C.gastoEspera({ fecha:'2026-08-01', estatus:'pagado', pagadoEl:'2026-08-06' }, hoy);
+    test('uno ya pagado cuenta lo que TARDÓ, no lo que va del año', () => eq(pag.dias, 5, 'días'));
+    test('…y deja ver los dos extremos', () =>
+        eq(pag.desde === '2026-08-01' && pag.hasta === '2026-08-06', true, 'fechas'));
+    test('pagado el mismo día son cero días, no un día', () =>
+        eq(C.gastoEspera({ fecha:'2026-08-01', estatus:'pagado', pagadoEl:'2026-08-01' }, hoy).dias, 0, 'cero'));
+    /* Sin sello no se inventa una duración: los gastos viejos no lo traen, y
+       medirlos contra hoy diría "45 días pendiente" de algo que se pagó en agosto. */
+    test('un pagado SIN sello no inventa una duración', () =>
+        eq(C.gastoEspera({ fecha:'2026-08-01', estatus:'pagado' }, hoy), null, 'sin dato'));
+
+    /* `fechaPago` es la fecha PROGRAMADA de pago y no debe confundirse con el
+       sello: un gasto agendado a diciembre se leería como pagado desde hoy. */
+    test('el sello es pagadoEl, no fechaPago', () =>
+        eq(C.gastoEspera({ fecha:'2026-08-01', estatus:'pagado', fechaPago:'2026-12-01' }, hoy), null, 'no confunde'));
+    test('volver a pendiente suelta el sello', () =>
+        eq(dia.indexOf("if(est!=='pagado') return '';") > -1, true, 'suelta'));
+    test('editar otro campo no reescribe el sello', () =>
+        eq(dia.indexOf('if(_exG && _exG.pagadoEl) return _exG.pagadoEl;') > -1, true, 'conserva'));
+}
+
+/* ═══════════ SUITE BB2 · LAS CONCILIACIONES NO SE MEZCLAN CON LOS MOVIMIENTOS ═
+   La conciliación bancaria de una cuenta genera un movimiento de ajuste que SÍ
+   mueve el saldo (cashback, cobros del banco, promociones). Pero leerlo entre
+   retiros, depósitos y previsiones volvía ilegible la lista. Tienen su propio
+   historial, con el saldo de antes, el real y quién verificó.                 */
+console.log('\n══ BB2 · Las conciliaciones no se mezclan con los movimientos ══');
+{
+    const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+    test('hay UNA sola regla para reconocer una conciliación bancaria', () =>
+        eq(dia.indexOf('function _esConcBanco(d){ return !!(d && d.cuentaConcId); }') > -1, true, 'regla'));
+    test('la lista de movimientos las deja fuera', () =>
+        eq(dia.indexOf('.filter(function(d){ return !_esConcBanco(d); })') > -1, true, 'fuera'));
+    test('el historial usa ESA MISMA regla', () =>
+        eq(dia.indexOf('(_cacheDeps||[]).filter(_esConcBanco)') > -1, true, 'misma'));
+    /* Si cada uno decidiera por su cuenta, un movimiento podría no salir en
+       ninguno de los dos y desaparecer sin dejar rastro. */
+    test('el historial ya no se guía por la categoría, que el usuario escribe a mano', () =>
+        eq(/filter\(function\(d\)\{return d&&d\.categoria==='ajuste';\}\)/.test(dia), false, 'sin categoría'));
+    /* Y siguen moviendo el saldo: sacarlas de la lista es un cambio de dónde se
+       leen, no de si cuentan. */
+    test('sacarlas de la lista no las saca del saldo', () =>
+        eq(dia.indexOf('_esConcBanco') > -1 && /depEfecto/.test(dia), true, 'cuentan'));
 }
 
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
