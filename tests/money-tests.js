@@ -7169,6 +7169,123 @@ console.log('\n══ BC1 · La navegación no manda a ningún lado roto ══'
     });
 }
 
+/* ═══════════ SUITE BC2 · EL PORTAL DEL QR NO VE DOBLE ═══════════════════════
+   Una receta salía DOS veces en el portal del colaborador: una con foto, grupo y
+   tiempo, y otra pelona. En el ERP, una sola.
+
+   La causa: desde que las recetas se independizaron por sucursal, cada producto
+   vive como MAESTRO + COPIA por sucursal, unidos por `origenId`. El ERP colapsa
+   ese par; `portal_recetas` (v46) nació antes de ese modelo y devolvía las dos
+   filas como si fueran dos platillos.
+
+   OJO CON EL ALCANCE DE ESTOS TESTS: aquí no hay Postgres, así que el SQL no se
+   ejecuta. Lo que sí se comprueba es (a) la regla de pertenencia contra la
+   función REAL del cliente, que es de donde tiene que salir la del servidor, y
+   (b) que el SQL tenga esas mismas tres ramas y el orden de preferencia. Si un
+   día hay base de pruebas, esto se sustituye por la consulta de verdad.        */
+console.log('\n══ BC2 · El portal del QR no ve doble ══');
+{
+    const v57 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v57.sql'), 'utf8');
+
+    /* ── (a) La regla de pertenencia, con la función REAL del cliente ── */
+    const ctx = { window:{}, document:{ addEventListener(){} }, console };
+    ctx.window = ctx;
+    vm.createContext(ctx);
+    vm.runInContext(fs.readFileSync(path.join(RAIZ, 'insumo-label.js'), 'utf8'), ctx, { filename:'insumo-label.js' });
+    const enSuc = ctx.window._recetaEnSuc;
+
+    test('con lista de sucursales, manda esa lista', () =>
+        eq(enSuc({ sucursales:['s2'] }, 's2') && !enSuc({ sucursales:['s2'] }, 's3'), true, 'lista'));
+    test('sin lista, vale sucursalId', () =>
+        eq(enSuc({ sucursalId:'s2' }, 's2') && !enSuc({ sucursalId:'s2' }, 's3'), true, 'sucursalId'));
+    test('una receta vieja sin sucursal es de Matriz', () =>
+        eq(enSuc({}, 'suc_principal') && !enSuc({}, 's2'), true, 'legacy'));
+    test('…pero un maestro _global no vive en ninguna sucursal', () =>
+        eq(enSuc({ _global:true }, 'suc_principal'), false, 'global'));
+    test('sucursal vacía se lee como Matriz', () =>
+        eq(enSuc({ sucursales:[''] }, ''), true, 'vacía = matriz'));
+
+    /* Las tres ramas tienen que estar en el SQL. Si el servidor decide distinto
+       que el cliente, el portal y el ERP enseñan recetarios distintos y nadie
+       sabe cuál creer. */
+    const fn = v57.slice(v57.indexOf('FUNCTION _receta_en_suc'), v57.indexOf('-- ── 2.'));
+    test('el SQL mira primero la lista de sucursales', () =>
+        eq(fn.indexOf("jsonb_array_elements_text(p_datos->'sucursales')") > -1, true, 'rama 1'));
+    test('…luego sucursalId', () =>
+        eq(fn.indexOf("p_datos->>'sucursalId'") > -1, true, 'rama 2'));
+    test('…y trata lo viejo como Matriz, salvo el maestro global', () =>
+        eq(fn.indexOf("'_global'") > -1 && fn.indexOf("'suc_principal'") > -1, true, 'rama 3'));
+
+    /* ── (b) La elección: una por producto, y cuál ──
+       Espejo en JS del ORDER BY del SQL (canon, prioridad, rid). Sirve para
+       comprobar que ese orden elige lo correcto en los casos que importan. */
+    function elegir(filas, suc) {
+        const prio = (r) => enSuc(r, suc) ? 0 : (!r.origenId ? 1 : 2);
+        const porCanon = {};
+        filas.forEach(function(r){
+            const canon = r.origenId || r.id;
+            const cand = porCanon[canon];
+            const p = prio(r);
+            if (!cand || p < cand.p || (p === cand.p && r.id < cand.r.id)) porCanon[canon] = { p:p, r:r };
+        });
+        return Object.keys(porCanon).map(k => porCanon[k].r);
+    }
+
+    const maestro = { id:'r1', nombre:'Corunditas', grupo:'Menu Alimentos', tiempo:'5 min' };
+    const copia   = { id:'r1c', origenId:'r1', nombre:'Corunditas', sucursales:['s2'] };
+
+    test('maestro + copia se enseñan como UNA sola receta', () =>
+        eq(elegir([maestro, copia], 's2').length, 1, 'una'));
+    test('…y gana la copia de SU sucursal', () =>
+        eq(elegir([maestro, copia], 's2')[0].id, 'r1c', 'la de su sucursal'));
+    test('en otra sucursal, gana el maestro', () =>
+        eq(elegir([maestro, copia], 's9')[0].id, 'r1', 'maestro'));
+    test('sin copias, el maestro solo sale una vez', () =>
+        eq(elegir([maestro], 's2').length, 1, 'una'));
+    test('dos copias de sucursales distintas siguen siendo UNA receta', () => {
+        const c3 = { id:'r1d', origenId:'r1', nombre:'Corunditas', sucursales:['s3'] };
+        return eq(elegir([maestro, copia, c3], 's3').length, 1, 'una');
+    });
+    /* Dos recetas capturadas por separado con el mismo nombre NO se juntan: son
+       dos maestros distintos y dos platillos pueden llamarse igual. Se deja
+       escrito para que nadie “arregle” esto uniendo por nombre. */
+    test('dos maestros con el mismo nombre NO se funden (son datos, no vista)', () => {
+        const otro = { id:'r2', nombre:'Corunditas' };
+        return eq(elegir([maestro, otro], 's2').length, 2, 'dos');
+    });
+
+    /* ── El SQL hace eso mismo ── */
+    test('el SQL agrupa por id canónico', () =>
+        eq(v57.indexOf("COALESCE(NULLIF(r.datos->>'origenId',''), r.datos->>'id') AS canon") > -1, true, 'canon'));
+    test('…y deja UNA por producto', () =>
+        eq(v57.indexOf('SELECT DISTINCT ON (canon) datos') > -1, true, 'distinct on'));
+    const orden = v57.replace(/\s+/g, ' ');
+    test('…prefiriendo la de la sucursal (0) sobre el maestro (1)', () =>
+        eq(orden.indexOf('_receta_en_suc(r.datos, v_suc) THEN 0') > -1
+        && orden.indexOf("COALESCE(r.datos->>'origenId','') = '' THEN 1") > -1, true, 'orden'));
+    test('…con desempate estable, para que no cambie sola entre llamadas', () =>
+        eq(v57.indexOf('ORDER BY canon, prioridad, rid') > -1, true, 'estable'));
+    test('el perfil ahora dice la sucursal del colaborador', () =>
+        eq(v57.indexOf("'sucursalId', COALESCE(NULLIF(s.datos->>'sucursalId',''), 'suc_principal')") > -1, true, 'sucursal'));
+
+    /* El portal es de colaboradores: la lista blanca de campos NO puede dejar
+       pasar dinero, ni siquiera al reescribir la función. */
+    /* Se miran solo las LÍNEAS DE CÓDIGO. El comentario de al lado explica por qué
+       la lista es blanca y ahí nombra el costo — un comentario no manda nada a
+       ningún lado, y filtrarlo por cómo empieza la línea no basta: un comentario
+       de varias líneas tiene renglones de en medio que no empiezan con nada. */
+    const bloque = v57.slice(v57.indexOf('SELECT jsonb_build_object('), v57.indexOf('FROM unica u'))
+        .replace(/\/\*[\s\S]*?\*\//g, ' ')
+        .split('\n').filter(l => l.trim().indexOf('--') !== 0).join('\n');
+    ['precio','costo','margen','utilidad','multiplo'].forEach(function(w){
+        test('el recetario no manda ' + w, () =>
+            eq(new RegExp(w, 'i').test(bloque), false, 'sin dinero'));
+    });
+    test('…y sigue mandando lo que el portal sí usa', () =>
+        eq(['nombre','tipo','grupo','tiempo','procedimiento','foto','camposExtra','ingredientes']
+            .every(k => bloque.indexOf("'" + k + "'") > -1), true, 'completo'));
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La
