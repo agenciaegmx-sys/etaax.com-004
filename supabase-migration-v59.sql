@@ -178,38 +178,41 @@ GRANT EXECUTE ON FUNCTION portal_recetas(TEXT,TEXT,TEXT)              TO anon, a
 GRANT EXECUTE ON FUNCTION checklist_plantillas(TEXT,TEXT,TEXT)        TO anon, authenticated;
 
 -- ============================================================================
--- CUÁNTO VE CADA SUCURSAL — todas de un tirón, solo cambia 'NEG'.
--- (Copia desde WITH hasta el punto y coma; va completa a propósito, sin puntos
---  suspensivos: abreviarla es lo que hace que no corra.)
+-- CUÁNTO VE CADA SUCURSAL — sin editar nada: recorre todos los negocios.
+-- (Va completa a propósito. Una versión con 'NEG' a mano ya causó dos falsos
+--  sustos: un error de sintaxis por abreviarla, y un "0 rows" por dejar el
+--  marcador sin reemplazar. Si no hay que editar, no hay dónde equivocarse.)
 --
 -- WITH sucs AS (
---     SELECT s.v->>'id' AS suc_id,
+--     SELECT n.negocio_id,
+--            s.v->>'id' AS suc_id,
 --            COALESCE(NULLIF(s.v->>'nombre',''), s.v->>'id') AS sucursal
 --       FROM negocio_sucursales n,
 --            LATERAL jsonb_array_elements(COALESCE(n.datos->'sucursales','[]'::jsonb)) AS s(v)
---      WHERE n.negocio_id = 'NEG'
 --     UNION
---     SELECT 'suc_principal', 'Matriz'
+--     SELECT id, 'suc_principal', 'Matriz' FROM negocios
 -- ),
 -- prod AS (
---     SELECT COALESCE(NULLIF(datos->>'origenId',''), datos->>'id') AS canon,
+--     SELECT negocio_id,
+--            COALESCE(NULLIF(datos->>'origenId',''), datos->>'id') AS canon,
 --            jsonb_agg(datos)              AS filas,
 --            bool_or(_declara_suc(datos))  AS alguien_declara
 --       FROM recetas
---      WHERE negocio_id = 'NEG'
---        AND COALESCE(datos->>'status','activa') <> 'inactiva'
---      GROUP BY 1
+--      WHERE COALESCE(datos->>'status','activa') <> 'inactiva'
+--      GROUP BY 1, 2
 -- )
--- SELECT u.sucursal,
+-- SELECT (SELECT g.datos->>'nombre' FROM negocios g WHERE g.id = u.negocio_id) AS negocio,
+--        u.sucursal,
 --        count(*) FILTER (
 --            WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(p.filas) AS f(v)
 --                           WHERE _receta_en_suc(f.v, u.suc_id))
 --               OR NOT p.alguien_declara
 --        ) AS vera,
 --        count(*) AS hay_en_el_negocio
---   FROM prod p CROSS JOIN sucs u
---  GROUP BY 1
---  ORDER BY 1;
+--   FROM prod p
+--   JOIN sucs u ON u.negocio_id = p.negocio_id
+--  GROUP BY 1, 2
+--  ORDER BY 1, 2;
 --
 -- Si el número de la izquierda te parece corto, lo que falta es asignar esas
 -- recetas a sus sucursales en el catálogo — no dejar de filtrar.
