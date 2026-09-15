@@ -4338,6 +4338,31 @@ function _tpvChipCorte(c){
 /* Ver, editar y eliminar en un solo menú, como en el catálogo de staff: tres
    botones por renglón en una tabla de nueve columnas dejaban la fila apretada y
    el ✏️ pegado al 🗑️. */
+/* Mismo menú de tres puntos que los cortes. Tres botones por fila en una tabla
+   que ya trae fecha, concepto, categoría, proveedor, método, factura, estatus,
+   evidencia y monto dejaban la columna de acciones peleando por el ancho; y en
+   pantalla chica el de eliminar quedaba pegado al de editar. */
+function _menuGasto(ev, id){
+    ev.stopPropagation();
+    _cerrarMenusCorte();
+    var g=(_loadGastos()||[]).find(function(x){return x.id===id;})||{};
+    var m=document.createElement('div');
+    m.className='cx-menu';
+    var r=ev.currentTarget.getBoundingClientRect();
+    m.style.cssText='position:fixed;z-index:10001;min-width:200px;background:var(--surface);'+
+        'border:1px solid var(--border);border-radius:10px;padding:5px;box-shadow:0 14px 40px rgba(0,0,0,.5);'+
+        'top:'+Math.min(r.bottom+6, window.innerHeight-180)+'px;left:'+Math.max(10, r.right-200)+'px';
+    var q=String(id).replace(/'/g,"\\'");
+    m.innerHTML =
+        _miCorte('👁','Ver gasto',"verGasto('"+q+"')") +
+        (_puedeEditarGasto(g)
+            ? _miCorte('✏️','Editar',"editarGasto('"+q+"')") +
+              '<div style="height:1px;background:var(--border);margin:5px 2px"></div>' +
+              _miCorte('🗑️','Eliminar',"eliminarGasto('"+q+"')", true)
+            : '');
+    document.body.appendChild(m);
+    setTimeout(function(){ document.addEventListener('click', _cerrarMenusCorte, { once:true }); }, 0);
+}
 function _menuCorte(ev, id){
     ev.stopPropagation();
     _cerrarMenusCorte();
@@ -5686,12 +5711,9 @@ function gRenderTabla(menores, mayores){
                 '<td>'+estatusBadge(g)+'</td>'+
                 '<td>'+evLink(g)+'</td>'+
                 '<td class="ar" style="font-weight:600;color:var(--red)">'+fmtM(g.monto)+'</td>'+
-                '<td style="display:flex;gap:4px;justify-content:flex-end">'+
-                    '<button class="btn-row" onclick="verGasto(\''+g.id+'\')" title="Ver">👁️</button>'+
-                    (_puedeEditarGasto(g)
-                        ? '<button class="btn-row" onclick="editarGasto(\''+g.id+'\')">✏️</button>'+
-                          '<button class="btn-row del" onclick="eliminarGasto(\''+g.id+'\')">🗑️</button>'
-                        : '')+
+                '<td style="text-align:right;white-space:nowrap">'+
+                    '<button class="btn-row" title="Opciones" onclick="_menuGasto(event,\''+g.id+'\')" '+
+                        'style="padding:4px 10px;font-size:15px;line-height:1">⋯</button>'+
                 '</td>'+
             '</tr>';
         }).join('');
@@ -5719,12 +5741,9 @@ function gRenderTabla(menores, mayores){
                 '<td>'+estatusBadge(g)+'</td>'+
                 '<td>'+evLink(g)+'</td>'+
                 '<td class="ar" style="font-weight:700;color:var(--red)">'+fmtM(g.monto)+'</td>'+
-                '<td style="display:flex;gap:4px;justify-content:flex-end">'+
-                    '<button class="btn-row" onclick="verGasto(\''+g.id+'\')" title="Ver">👁️</button>'+
-                    (_puedeEditarGasto(g)
-                        ? '<button class="btn-row" onclick="editarGasto(\''+g.id+'\')">✏️</button>'+
-                          '<button class="btn-row del" onclick="eliminarGasto(\''+g.id+'\')">🗑️</button>'
-                        : '')+
+                '<td style="text-align:right;white-space:nowrap">'+
+                    '<button class="btn-row" title="Opciones" onclick="_menuGasto(event,\''+g.id+'\')" '+
+                        'style="padding:4px 10px;font-size:15px;line-height:1">⋯</button>'+
                 '</td>'+
             '</tr>';
         }).join('');
@@ -7041,12 +7060,9 @@ function _filaPagoPanel(g){
         '<td>'+metodoLabel(g)+'</td>'+
         '<td>'+estatusBadge(g)+'</td>'+
         '<td class="ar" style="font-weight:600;color:var(--red)">'+fmtM(g.monto)+'</td>'+
-        '<td style="display:flex;gap:4px;justify-content:flex-end">'+
-            '<button class="btn-row" onclick="verGasto(\''+g.id+'\')" title="Ver">👁️</button>'+
-            (_puedeEditarGasto(g)
-                ? '<button class="btn-row" onclick="editarGasto(\''+g.id+'\')">✏️</button>'+
-                  '<button class="btn-row del" onclick="eliminarGasto(\''+g.id+'\')">🗑️</button>'
-                : '')+
+        '<td style="text-align:right;white-space:nowrap">'+
+            '<button class="btn-row" title="Opciones" onclick="_menuGasto(event,\''+g.id+'\')" '+
+                'style="padding:4px 10px;font-size:15px;line-height:1">⋯</button>'+
         '</td>'+
     '</tr>';
 }

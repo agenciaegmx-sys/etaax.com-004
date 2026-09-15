@@ -6111,6 +6111,31 @@ console.log('\n══ BA · El filtro y el card de "por pagar" ══');
         eq(adm.indexOf("act === 'yes') { cerrar(); if (cfg.onYes)"), -1, 'sin bug'));
 }
 
+/* ═══════════ SUITE BB0 · LAS ACCIONES DE UN GASTO VIVEN EN UN SOLO MENÚ ═════
+   La fila de un gasto ya trae fecha, concepto, categoría, proveedor, método,
+   factura, estatus, evidencia y monto. Tres botones más peleaban por el ancho y
+   en pantalla chica el de eliminar quedaba pegado al de editar. Se pliegan en el
+   mismo menú de tres puntos que usan los cortes.                              */
+console.log('\n══ BB0 · Las acciones de un gasto en un solo menú ══');
+{
+    const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+    test('existe el menú de gastos', () =>
+        eq(dia.indexOf('function _menuGasto(ev, id){') > -1, true, 'menú'));
+    /* Tres tablas pintan gastos: las dos listas y el panel de nóminas. */
+    test('las tres tablas de gastos lo usan', () =>
+        eq((dia.match(/_menuGasto\(event/g) || []).length, 3, 'las tres'));
+    /* Los botones sueltos no pueden volver: si vuelven, quedan LOS DOS y la
+       columna se rompe justo en la pantalla donde más estorba. */
+    test('ya no hay botones sueltos de ver/editar/eliminar en la fila', () =>
+        eq(/<button class="btn-row" onclick="verGasto/.test(dia), false, 'sin sueltos'));
+    test('el menú respeta el candado de edición', () =>
+        eq(dia.indexOf("_puedeEditarGasto(g)\n            ? _miCorte('✏️','Editar'") > -1, true, 'candado'));
+    test('reutiliza el renglón y el cierre de los cortes, no los reescribe', () => {
+        const m = dia.slice(dia.indexOf('function _menuGasto'), dia.indexOf('function _menuCorte'));
+        return eq(m.indexOf('_miCorte(') > -1 && m.indexOf('_cerrarMenusCorte()') > -1, true, 'compartido');
+    });
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La
