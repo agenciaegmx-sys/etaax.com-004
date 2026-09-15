@@ -6425,10 +6425,19 @@ console.log('\n══ BC · El freno de la pantalla de entrada (hub.html) ══
     /* ── La migración v56 ────────────────────────────────────────────────── */
     const v56 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v56.sql'), 'utf8');
     test('el contador vive en el servidor, no en el navegador', () =>
-        eq(v56.indexOf('CREATE TABLE IF NOT EXISTS login_intentos') > -1, true, 'tabla'));
+        eq(v56.indexOf('CREATE TABLE IF NOT EXISTS login_puerta') > -1, true, 'tabla'));
     test('la tabla NO se puede leer desde el cliente', () =>
-        eq(v56.indexOf('ALTER TABLE login_intentos ENABLE ROW LEVEL SECURITY') > -1
+        eq(v56.indexOf('ALTER TABLE login_puerta ENABLE ROW LEVEL SECURITY') > -1
         && v56.indexOf('CREATE POLICY') === -1, true, 'cerrada'));
+    /* La v30 YA tiene una tabla `login_intentos`, con otro esquema y otro trabajo
+       (limita las RPC de colaborador). Reusar el nombre era el peor caso posible:
+       `IF NOT EXISTS` no crea nada, el INSERT falla por columna inexistente y,
+       como este freno falla abierto a propósito, no habría contado un solo
+       intento sin que nadie se enterara. */
+    test('no se monta encima de la tabla de la v30', () => {
+        const escribe = /(INSERT INTO|DELETE FROM|UPDATE|CREATE TABLE[^\n]*)\s+login_intentos/.test(v56);
+        return eq(escribe, false, 'sin colisión');
+    });
     test('NO se guarda el correo, solo su md5', () =>
         eq(v56.indexOf('md5(lower(trim(coalesce(p_ident') > -1, true, 'md5'));
     /* La escalera: sin castigo creciente, 4 intentos por minuto siguen siendo
@@ -6443,7 +6452,7 @@ console.log('\n══ BC · El freno de la pantalla de entrada (hub.html) ══
     test('las tres funciones las puede llamar quien aún no tiene sesión', () =>
         eq((v56.match(/GRANT EXECUTE ON FUNCTION login_\w+\(TEXT\)\s+TO anon/g) || []).length, 3, 'grants'));
     test('el registro se limpia solo', () =>
-        eq(/DELETE FROM login_intentos WHERE creado < now\(\) - interval '24 hours'/.test(v56), true, 'retención'));
+        eq(/DELETE FROM login_puerta WHERE creado < now\(\) - interval '24 hours'/.test(v56), true, 'retención'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

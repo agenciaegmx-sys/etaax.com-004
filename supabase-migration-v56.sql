@@ -37,18 +37,27 @@
 -- Idempotente: se puede correr varias veces.
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS login_intentos (
+-- OJO CON EL NOMBRE. La v30 ya tiene una tabla `login_intentos`, con otro
+-- esquema (clave/intentos/ventana_inicio) y otro trabajo: limita las RPC de
+-- colaborador (staff_login, obtener_staff_cred, entrada_validar_nip) a 10
+-- intentos por 15 minutos. Reusar ese nombre aquí habría sido el peor caso:
+-- `IF NOT EXISTS` no crea nada, el INSERT falla por columna inexistente, y como
+-- este freno falla abierto a propósito, NUNCA habría contado un intento y nadie
+-- se habría enterado. Son dos frenos distintos y viven en tablas distintas:
+--   login_intentos (v30) → las RPC del colaborador
+--   login_puerta   (v56) → la pantalla de entrada
+CREATE TABLE IF NOT EXISTS login_puerta (
     id          BIGSERIAL PRIMARY KEY,
     ident       TEXT NOT NULL,             -- md5 del correo/usuario, NUNCA el correo
     ip          TEXT,
     creado      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS login_intentos_ident_idx ON login_intentos (ident, creado DESC);
-CREATE INDEX IF NOT EXISTS login_intentos_ip_idx    ON login_intentos (ip, creado DESC);
+CREATE INDEX IF NOT EXISTS login_puerta_ident_idx ON login_puerta (ident, creado DESC);
+CREATE INDEX IF NOT EXISTS login_puerta_ip_idx    ON login_puerta (ip, creado DESC);
 
 -- Nadie la lee desde el cliente: se entra solo por las funciones de abajo, que
 -- corren como dueñas. Con RLS activo y sin políticas, queda cerrada por defecto.
-ALTER TABLE login_intentos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE login_puerta ENABLE ROW LEVEL SECURITY;
 
 -- ── La IP de quien pide, tal como la pasa PostgREST ──────────────────────────
 CREATE OR REPLACE FUNCTION _login_ip()
@@ -95,7 +104,7 @@ DECLARE
 BEGIN
     -- Por cuenta
     SELECT count(*), max(creado) INTO v_n, v_ultimo
-      FROM login_intentos
+      FROM login_puerta
      WHERE ident = v_id AND creado > now() - interval '1 hour';
     v_espera := _login_espera(v_n);
     IF v_espera > 0 THEN
@@ -106,7 +115,7 @@ BEGIN
     -- Por IP: si no, basta con ir cambiando de correo para no toparse el freno.
     IF v_ip IS NOT NULL THEN
         SELECT count(*), max(creado) INTO v_n, v_ultimo
-          FROM login_intentos
+          FROM login_puerta
          WHERE ip = v_ip AND creado > now() - interval '1 hour';
         IF v_n >= 20 THEN
             v_falta := 900 - EXTRACT(EPOCH FROM (now() - v_ultimo))::INT;
@@ -124,9 +133,9 @@ RETURNS INT
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
 DECLARE v_id TEXT := md5(lower(trim(coalesce(p_ident, ''))));
 BEGIN
-    INSERT INTO login_intentos (ident, ip) VALUES (v_id, _login_ip());
+    INSERT INTO login_puerta (ident, ip) VALUES (v_id, _login_ip());
     -- Limpieza oportunista: esta tabla no necesita crecer más de un día.
-    DELETE FROM login_intentos WHERE creado < now() - interval '24 hours';
+    DELETE FROM login_puerta WHERE creado < now() - interval '24 hours';
     RETURN login_estado(p_ident);
 END;
 $$;
@@ -136,7 +145,7 @@ CREATE OR REPLACE FUNCTION login_exito(p_ident TEXT)
 RETURNS VOID
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
 BEGIN
-    DELETE FROM login_intentos WHERE ident = md5(lower(trim(coalesce(p_ident, ''))));
+    DELETE FROM login_puerta WHERE ident = md5(lower(trim(coalesce(p_ident, ''))));
 END;
 $$;
 
@@ -146,7 +155,7 @@ $$;
 GRANT EXECUTE ON FUNCTION login_estado(TEXT) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION login_fallo(TEXT)  TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION login_exito(TEXT)  TO anon, authenticated;
-REVOKE ALL ON TABLE login_intentos FROM anon, authenticated;
+REVOKE ALL ON TABLE login_puerta FROM anon, authenticated;
 
 -- ============================================================================
 -- COMPROBACIÓN
@@ -157,7 +166,7 @@ REVOKE ALL ON TABLE login_intentos FROM anon, authenticated;
 --   SELECT login_estado('prueba@ejemplo.com');          -- 0 otra vez
 --
 --   -- Y que la tabla NO se pueda leer desde el cliente (debe dar error):
---   --   supabase.from('login_intentos').select('*')
+--   --   supabase.from('login_puerta').select('*')
 -- ============================================================================
 -- Fin v56.
 -- ============================================================================
