@@ -25,6 +25,12 @@
     <meta name="twitter:title" content="Evaluación · ETAAX">
     <meta name="twitter:description" content="Contesta esta evaluación desde tu celular. Toma unos minutos y tus respuestas se envían de forma privada.">
     <meta name="twitter:image" content="https://etaax.com/marca/og-evaluacion.png">
+    <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
+         navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
+         (DNS + TLS) en medio, con el texto esperando. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://byjuocnkyuxxudondciz.supabase.co">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root{--bg:#161513;--surface:#1f1e1b;--surface2:#272521;--border:#3a3733;--text:#f0ece4;--dim:#9b958a;--green:#3dbe7a;--accent:#f5c842;--red:#e05a3a;}

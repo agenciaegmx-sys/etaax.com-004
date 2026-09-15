@@ -6432,26 +6432,94 @@ function _populateCancelTable(data) {
     for (let i = 0; i < 5; i++) _addPasteTableRow(tbody, 'cancelPasteBody', 6);
 }
 
+/* ── LIBRERÍAS PESADAS, SOLO CUANDO SE USAN ────────────────────────────────
+   XLSX pesa 861 KB y PDF.js 312 KB. Estaban en el <head> de inventarios.html,
+   así que la página bajaba 1.17 MB —bloqueando el pintado— en CADA visita, para
+   dos botones de importar que se usan de vez en cuando. Medido: era más de la
+   mitad del peso de la página.
+
+   Ahora se piden al elegir el archivo. La primera importación espera la descarga;
+   la segunda ya no, porque la promesa se guarda. Y quien nunca importa no paga. */
+var _libs = {};
+function _cargarLib(url, global) {
+    if (window[global]) return Promise.resolve(window[global]);
+    if (_libs[url]) return _libs[url];
+    _libs[url] = new Promise(function(resolve, reject){
+        var sc = document.createElement('script');
+        sc.src = url;
+        sc.onload  = function(){ resolve(window[global]); };
+        // Se borra la promesa fallida: si no, un corte de red dejaba la página sin
+        // poder importar nunca más, ni reintentando.
+        sc.onerror = function(){ delete _libs[url]; reject(new Error('no se pudo descargar')); };
+        document.head.appendChild(sc);
+    });
+    return _libs[url];
+}
+function _cargarXLSX() {
+    return _cargarLib('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'XLSX');
+}
+function _cargarPDFJS() {
+    return _cargarLib('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js', 'pdfjsLib')
+        .then(function(lib){
+            // El worker se configura al tener la librería (antes se hacía en el
+            // <head>, cuando ya estaba cargada por fuerza).
+            if (lib && lib.GlobalWorkerOptions && !lib.GlobalWorkerOptions.workerSrc) {
+                lib.GlobalWorkerOptions.workerSrc =
+                    'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+            }
+            return lib;
+        });
+}
+/* Aviso mientras baja: sin esto, elegir un archivo en una tablet lenta parece
+   que no hizo nada y el usuario vuelve a picarle. */
+function _libAviso(txt) {
+    var el = document.getElementById('_libAviso');
+    if (!txt) { if (el) el.remove(); return; }
+    if (!el) {
+        el = document.createElement('div');
+        el.id = '_libAviso';
+        el.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:24px;z-index:99999;'+
+            'background:var(--surface2,#222);color:var(--text,#eee);border:1px solid var(--border,#444);'+
+            'border-radius:10px;padding:10px 16px;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.4)';
+        document.body.appendChild(el);
+    }
+    el.textContent = txt;
+}
+/* Envoltura común: avisa, descarga, y si falla lo dice con su motivo. */
+async function _conLib(cargar, nombre, fn) {
+    try {
+        _libAviso('Preparando el lector de ' + nombre + '…');
+        await cargar();
+    } catch (e) {
+        _libAviso('');
+        alert('No se pudo cargar el lector de ' + nombre + '. Revisa tu conexión e inténtalo de nuevo.');
+        return false;
+    }
+    _libAviso('');
+    return fn ? fn() : true;
+}
+
 function importarXLSXCancelaciones(event) {
     const file = event.target.files[0]; if (!file) return;
     event.target.value = '';
-    if (typeof XLSX === 'undefined') { alert('Error: librería XLSX no cargada.'); return; }
-    const reader = new FileReader();
-    reader.onload = e => {
-        try {
-            const wb = XLSX.read(e.target.result, { type:'array' });
-            const ws = wb.Sheets[wb.SheetNames[0]];
-            const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
-            _populateCancelTable(_mapPOSCancelaciones(rows));
-        } catch(err) { alert('No se pudo leer el archivo: ' + err.message); }
-    };
-    reader.readAsArrayBuffer(file);
+    _conLib(_cargarXLSX, 'Excel', function(){
+        const reader = new FileReader();
+        reader.onload = e => {
+            try {
+                const wb = XLSX.read(e.target.result, { type:'array' });
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+                _populateCancelTable(_mapPOSCancelaciones(rows));
+            } catch(err) { alert('No se pudo leer el archivo: ' + err.message); }
+        };
+        reader.readAsArrayBuffer(file);
+    });
 }
 
 async function importarPDFCancelaciones(event) {
     const file = event.target.files[0]; if (!file) return;
     event.target.value = '';
-    if (typeof pdfjsLib === 'undefined') { alert('Error: PDF.js no cargado.'); return; }
+    if (!(await _conLib(_cargarPDFJS, 'PDF'))) return;
     try {
         const buf = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
@@ -6580,23 +6648,24 @@ function _populateDescTable(data) {
 function importarXLSXDescuentos(event) {
     const file = event.target.files[0]; if (!file) return;
     event.target.value = '';
-    if (typeof XLSX === 'undefined') { alert('Error: librería XLSX no cargada.'); return; }
-    const reader = new FileReader();
-    reader.onload = e => {
-        try {
-            const wb = XLSX.read(e.target.result, { type:'array' });
-            const ws = wb.Sheets[wb.SheetNames[0]];
-            const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
-            _populateDescTable(_mapPOSDescuentos(rows));
-        } catch(err) { alert('No se pudo leer el archivo: ' + err.message); }
-    };
-    reader.readAsArrayBuffer(file);
+    _conLib(_cargarXLSX, 'Excel', function(){
+        const reader = new FileReader();
+        reader.onload = e => {
+            try {
+                const wb = XLSX.read(e.target.result, { type:'array' });
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+                _populateDescTable(_mapPOSDescuentos(rows));
+            } catch(err) { alert('No se pudo leer el archivo: ' + err.message); }
+        };
+        reader.readAsArrayBuffer(file);
+    });
 }
 
 async function importarPDFDescuentos(event) {
     const file = event.target.files[0]; if (!file) return;
     event.target.value = '';
-    if (typeof pdfjsLib === 'undefined') { alert('Error: PDF.js no cargado.'); return; }
+    if (!(await _conLib(_cargarPDFJS, 'PDF'))) return;
     try {
         const buf = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;

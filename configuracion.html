@@ -7,6 +7,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <title>ETAAX – Configuración del negocio</title>
+<!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
+     navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
+     (DNS + TLS) en medio, con el texto esperando. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://byjuocnkyuxxudondciz.supabase.co">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 <style>

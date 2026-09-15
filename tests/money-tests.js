@@ -6794,6 +6794,177 @@ console.log('\n══ BB7 · La ficha base en el portal del QR ══');
         eq(hd.indexOf('1234') === -1 && hd.indexOf('99') === -1, true, hd.slice(0,120)));
 }
 
+/* ═══════════ SUITE BB8 · QUE NAVEGAR NO CUESTE DE MÁS ═══════════════════════
+   MEDIDO en producción (15-sep-2026), abriendo un módulo:
+     · 19 scripts, 2,202 KB en frío
+     · con la caché LLENA, ~4.4 s en serie solo revalidando (304 por archivo)
+     · de esos 2,202 KB, 1,173 eran XLSX + PDF.js en el <head> de inventarios,
+       para dos botones de importar que se usan de vez en cuando.
+   Esto cuida que esas tres cosas no se deshagan solas.                        */
+console.log('\n══ BB8 · Que navegar no cueste de más ══');
+{
+    /* ── 1. Las librerías pesadas ya no bloquean el pintado ── */
+    const inv  = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.html'), 'utf8');
+    const head = inv.slice(0, inv.indexOf('</head>'));
+    test('XLSX ya no se carga al abrir inventarios', () =>
+        eq(/<script[^>]+xlsx/i.test(head), false, '861 KB fuera'));
+    test('PDF.js tampoco', () =>
+        eq(/<script[^>]+pdfjs-dist/i.test(head), false, '312 KB fuera'));
+    /* Lo único externo que queda es supabase-js, que sí hace falta desde el inicio. */
+    test('del <head> solo queda el cliente de Supabase', () =>
+        eq((head.match(/cdn\.jsdelivr/g) || []).length, 1, 'uno'));
+
+    const invjs = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    test('existe el cargador bajo demanda', () =>
+        eq(invjs.indexOf('function _cargarLib(url, global)') > -1, true, 'cargador'));
+    test('los cuatro botones de importar lo usan', () =>
+        eq((invjs.match(/_conLib\(_cargar(XLSX|PDFJS)/g) || []).length, 4, 'los cuatro'));
+    test('ya nadie se rinde diciendo "librería no cargada"', () =>
+        eq(/librería XLSX no cargada|PDF\.js no cargado/.test(invjs), false, 'sin rendirse'));
+    /* Una descarga fallida NO puede dejar la página sin poder importar nunca más:
+       la promesa rota se borra para que el siguiente intento vuelva a pedirla. */
+    test('un fallo de red no deja la importación muerta para siempre', () =>
+        eq(invjs.indexOf('sc.onerror = function(){ delete _libs[url];') > -1, true, 'reintentable'));
+    /* Y el worker de PDF.js se configura al tener la librería: antes se hacía en
+       el <head>, cuando estaba cargada por fuerza. */
+    test('el worker de PDF.js se configura después de descargarlo', () => {
+        const i = invjs.indexOf('function _cargarPDFJS');
+        return eq(invjs.slice(i, i + 700).indexOf('workerSrc') > -1, true, 'worker');
+    });
+
+    /* El cargador se corre de verdad: pide el script UNA sola vez aunque se llame
+       dos, que es lo que evita bajar 861 KB por cada importación. */
+    {
+        const pedidos = [];
+        const ctx = { console:{warn(){}}, Promise, Object, String, Error,
+            document:{ head:{ appendChild(sc){ pedidos.push(sc.src); setTimeout(()=>sc.onload(),0); } },
+                       createElement:()=>({ set src(v){ this._s=v; }, get src(){ return this._s; } }),
+                       getElementById(){ return null; }, body:{ appendChild(){} } },
+            setTimeout };
+        ctx.window = ctx;
+        vm.createContext(ctx);
+        const ini = invjs.indexOf('var _libs = {};');
+        vm.runInContext(invjs.slice(ini, invjs.indexOf('function _cargarXLSX')), ctx, { filename:'cargarLib' });
+        ctx.window.XLSX = undefined;
+        const p1 = ctx._cargarLib('http://x/a.js', 'XLSX');
+        const p2 = ctx._cargarLib('http://x/a.js', 'XLSX');
+        test('dos llamadas seguidas piden el archivo UNA vez', () => eq(pedidos.length, 1, 'una'));
+        test('…y comparten la misma espera', () => eq(p1 === p2, true, 'misma promesa'));
+    }
+
+    /* ── 2. La caché ── */
+    const nt = fs.readFileSync(path.join(RAIZ, 'netlify.toml'), 'utf8');
+    /* Se mira DENTRO del bloque de los .js, no en los 200 caracteres siguientes:
+       el bloque de los .css viene pegado y su regla hacía pasar el test aunque la
+       de los .js se hubiera cambiado. */
+    const bloqueJs = (function(){
+        const i = nt.indexOf('for = "/*.js"');
+        if (i < 0) return '';
+        const j = nt.indexOf('[[headers]]', i);
+        return nt.slice(i, j < 0 ? nt.length : j);
+    })();
+    test('los .js se sirven con stale-while-revalidate', () =>
+        eq(bloqueJs.indexOf('stale-while-revalidate') > -1, true, bloqueJs.trim().slice(0, 80)));
+    test('…y ya no con must-revalidate, que obliga a preguntar por cada archivo', () =>
+        eq(bloqueJs.indexOf('must-revalidate') === -1, true, 'sin must-revalidate'));
+    /* El HTML NO: si también se guardara, un despliegue no se vería hasta la
+       segunda visita y habría que pedirle a la gente que recargue. */
+    test('el HTML se sigue revalidando siempre', () =>
+        eq(/for = "\/\*\.html"/.test(nt), false, 'html intacto'));
+
+    /* ── 3. Las fuentes ── */
+    const paginas = ['hub.html', 'recetas/index.html', 'administrativo/diario.html',
+                     'financiero/kpis.html', 'checklist.html'];
+    paginas.forEach(function(f){
+        const s = fs.readFileSync(path.join(RAIZ, f), 'utf8');
+        if (s.indexOf('fonts.googleapis') === -1) return;
+        test(f + ': saluda a gstatic antes de necesitarlo', () =>
+            eq(s.indexOf('rel="preconnect" href="https://fonts.gstatic.com" crossorigin') > -1, true, 'preconnect'));
+        /* El preconnect tiene que ir ANTES del CSS que descubre las fuentes; si va
+           después no adelanta nada y es un tag decorativo. */
+        test(f + ': …y el saludo va antes del CSS de fuentes', () =>
+            eq(s.indexOf('fonts.gstatic.com') < s.indexOf('fonts.googleapis.com/css2'), true, 'orden'));
+    });
+    /* Ninguna página con fuentes se puede quedar sin él. */
+    const conFuentes = [], sinPre = [];
+    ['hub.html','alta.html','index.html','checklist.html','entrada.html','captura.html',
+     'configuracion.html','admin.html','recetas/index.html','recetas/insumos.html',
+     'recetas/inventarios.html','administrativo/diario.html','administrativo/staff.html',
+     'financiero/kpis.html','financiero/estadisticas.html'].forEach(function(f){
+        const q = path.join(RAIZ, f);
+        if (!fs.existsSync(q)) return;
+        const s = fs.readFileSync(q, 'utf8');
+        if (s.indexOf('fonts.googleapis') === -1) return;
+        conFuentes.push(f);
+        if (s.indexOf('rel="preconnect"') === -1) sinPre.push(f);
+    });
+    test('ninguna página con fuentes se quedó sin preconnect', () =>
+        eq(sinPre.length, 0, sinPre.join(', ') || 'todas cubiertas'));
+    test('…y son varias, no una suelta', () => eq(conFuentes.length >= 10, true, conFuentes.length + ' páginas'));
+}
+
+/* ═══════════ SUITE BB9 · LA RED DE SEGURIDAD DE LA CACHÉ ════════════════════
+   Con stale-while-revalidate hay una rendija: la primera carga después de un
+   despliegue puede juntar HTML nuevo con un .js de la visita anterior. El
+   síntoma es siempre "X is not defined". Como esa misma carga ya disparó la
+   revalidación, recargar una vez lo arregla.
+
+   Lo que este candado cuida es que NO pueda entrar en bucle: esconder un bug de
+   verdad detrás de recargas infinitas sería mucho peor que la rendija.        */
+console.log('\n══ BB9 · La red de seguridad de la caché ══');
+{
+    function montar() {
+        const ss = { _d:{}, getItem(k){ return this._d[k]===undefined?null:this._d[k]; },
+                     setItem(k,v){ this._d[k]=String(v); }, removeItem(k){ delete this._d[k]; } };
+        let recargas = 0;
+        const oyentes = {};
+        const ctx = {
+            console:{ warn(){}, log(){} }, Date, String, RegExp, setTimeout, JSON, Object,
+            sessionStorage: ss, localStorage: ss,
+            location:{ reload(){ recargas++; } },
+            document:{ readyState:'complete', addEventListener(){} },
+        };
+        ctx.window = ctx;
+        ctx.window.addEventListener = (t, f) => { (oyentes[t] = oyentes[t] || []).push(f); };
+        vm.createContext(ctx);
+        const src = fs.readFileSync(path.join(RAIZ, 'negocio-tab.js'), 'utf8');
+        /* Se corre SOLO el vigilante: el resto del archivo intercepta localStorage
+           y aquí estorbaría. Se corta en su propia función, no en el comentario. */
+        const ini = src.lastIndexOf('(function () {', src.indexOf("var MARCA = 'etaax_recarga_cache'"));
+        vm.runInContext(src.slice(ini), ctx, { filename:'guard' });
+        return { ctx, ss, oyentes, err(msg){ (oyentes.error||[]).forEach(f => f({ message: msg })); },
+                 recargas(){ return recargas; } };
+    }
+
+    let m = montar();
+    test('el vigilante se registra', () => eq((m.oyentes.error||[]).length, 1, 'registrado'));
+    m.err('ReferenceError: sbAttr is not defined');
+    test('un arranque roto recarga una vez', () => eq(m.recargas(), 1, 'una'));
+    m.err('ReferenceError: sbAttr is not defined');
+    test('…y SOLO una: no entra en bucle', () => eq(m.recargas(), 1, 'sigue en una'));
+
+    m = montar();
+    m.err('TypeError: no se puede leer x de null');
+    test('un error que no es de versión no recarga nada', () => eq(m.recargas(), 0, 'quieto'));
+    m = montar();
+    m.err('Script error.');
+    test('un error sin mensaje tampoco', () => eq(m.recargas(), 0, 'quieto'));
+
+    /* Un error TARDÍO no es mezcla de versiones: es un bug de uso, y recargar le
+       borraría al usuario lo que estaba haciendo. */
+    m = montar();
+    const src = fs.readFileSync(path.join(RAIZ, 'negocio-tab.js'), 'utf8');
+    test('solo actúa durante el arranque, no a media captura', () =>
+        eq(src.indexOf('if (Date.now() - desde > ARRANQUE) return;') > -1, true, 'ventana'));
+    test('la marca vive por pestaña, no por navegador', () =>
+        eq(src.indexOf("sessionStorage.setItem(MARCA") > -1 && src.indexOf("localStorage.setItem(MARCA") === -1,
+           true, 'sessionStorage'));
+    /* Y una carga sana suelta la marca: si no, un susto dejaba la pestaña sin red
+       para el resto del día. */
+    test('una carga sana vuelve a armar la red', () =>
+        eq(src.indexOf("sessionStorage.removeItem(MARCA)") > -1, true, 'se rearma'));
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La

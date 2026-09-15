@@ -52,6 +52,42 @@
       form-action 'self';
     """
 
+# ── Caché: que navegar no cueste un viaje al servidor por archivo ──────────
+# MEDIDO (15-sep-2026, producción): abrir un módulo pide 19 scripts. Con la
+# cabecera por defecto de Netlify —max-age=0, must-revalidate— el navegador tiene
+# que PREGUNTARLE AL SERVIDOR por cada uno antes de usarlo, aunque los tenga
+# guardados y nada haya cambiado. Medido en serie: ~4.4 s de pura revalidación
+# con la caché llena. En una tablet con datos móviles eso se siente en CADA
+# navegación, y es tiempo que no compra nada.
+#
+# `stale-while-revalidate` cambia el trato: el navegador USA lo que tiene, de
+# inmediato, y revalida por detrás. La navegación deja de esperar.
+#
+# EL RIESGO, dicho claro: justo después de un despliegue, una carga puede juntar
+# el HTML nuevo (que sí se revalida siempre) con un .js de la visita anterior. Es
+# UNA carga: esa misma visita dispara la revalidación y la siguiente ya viene
+# pareja. Para que ni esa se sienta, /negocio-tab.js —el primer script de toda
+# página— detecta el síntoma de esa mezcla (una función que "no existe") y
+# recarga una sola vez.
+#
+# El HTML NO se toca: sigue revalidándose siempre, para que un despliegue se vea
+# sin pedirle a nadie que recargue.
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, stale-while-revalidate=604800"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=0, stale-while-revalidate=604800"
+
+# La marca no cambia nunca: se guarda de verdad.
+[[headers]]
+  for = "/marca/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
 # ── Archivos internos fuera del alcance público ───────────────
 # Netlify publica la raíz del repo TAL CUAL, así que las migraciones y la
 # documentación operativa quedaban descargables desde el sitio

@@ -7,6 +7,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <title>ETAAX - Inventarios</title>
+    <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
+         navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
+         (DNS + TLS) en medio, con el texto esperando. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://byjuocnkyuxxudondciz.supabase.co">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../styles.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -25,13 +31,11 @@
          console.warn que nadie leía. -->
     <script src="../security.js"></script>
     <script src="../admin-guard.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-    <script>
-        if (typeof pdfjsLib !== 'undefined') {
-            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
-        }
-    </script>
+    <!-- XLSX (861 KB) y PDF.js (312 KB) YA NO SE CARGAN AQUÍ.
+         Estaban en el <head>, bloqueando: esta página bajaba 1.17 MB antes de
+         pintar un solo píxel, en cada visita, para dos botones de importar que
+         casi nadie usa. Ahora se piden cuando se elige el archivo
+         (_cargarXLSX / _cargarPDFJS en inventarios.js). -->
 </head>
 <body>
 <header class="top-bar">

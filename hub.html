@@ -11,6 +11,12 @@
 <script src="/precios.js"></script>
 <script src="/datos-pago.js"></script><!-- datos de transferencia: fuente única -->
 <script src="/etaax-core.js"></script><!-- EtaaxCore.estadoCobro: fecha de corte y tolerancia -->
+<!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
+     navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
+     (DNS + TLS) en medio, con el texto esperando. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://byjuocnkyuxxudondciz.supabase.co">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
