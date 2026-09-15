@@ -536,14 +536,29 @@ function _comprimir(file){
         r.onerror=function(){resolve(null);}; r.readAsDataURL(file);
     });
 }
+/* ── Almacén PRIVADO (v55) ────────────────────────────────────────────────
+   Las fotos del QR van al bucket `evidencias-priv`, que NO tiene URL pública:
+   sin firma no se abren, y la firma solo la consigue el ERP con sesión. Subir
+   sigue funcionando sin sesión porque "privado" bloquea LEER, no escribir: la
+   política por token de la v55 es la misma de la v14/v28.
+   En el registro se guarda 'priv:<ruta>', no una URL — una URL pública es una
+   llave permanente y era justo lo que había que quitar.
+   Y la miniatura que ve quien toma la foto sale del archivo de su propio
+   celular (createObjectURL): no hay que pedirle nada al servidor. */
+var BUCKET_EV = 'evidencias-priv';
+var REF_PRIV  = 'priv:';
+var _PREV = {};                                  // ref → miniatura local
+function _prevDe(ref){ return _PREV[ref] || ref; }
 async function _subirFotoBlob(file, msgEl){
     if (!file) return '';
     var blob = await _comprimir(file);
     if (!blob){ if(msgEl){msgEl.className='cap-msg err';msgEl.textContent='No se pudo procesar la imagen.';} return ''; }
-    var path = NEG+'/entradas/'+TOKEN+'/'+genId()+'.jpg'; // mismo prefijo permitido para subida anónima (v28)
-    var up = await _supabase.storage.from('evidencias').upload(path, blob, {contentType:'image/jpeg'});
+    var path = NEG+'/entradas/'+TOKEN+'/'+genId()+'.jpg'; // mismo prefijo permitido para subida anónima (v28/v55)
+    var up = await _supabase.storage.from(BUCKET_EV).upload(path, blob, {contentType:'image/jpeg'});
     if (up.error){ if(msgEl){msgEl.className='cap-msg err';msgEl.textContent='Error al subir foto: '+up.error.message;} return ''; }
-    return _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
+    var ref = REF_PRIV + path;
+    try { _PREV[ref] = URL.createObjectURL(blob); } catch(e){}
+    return ref;
 }
 async function _addFoto(input){
     var files = Array.prototype.slice.call(input.files||[]); input.value='';
@@ -557,7 +572,11 @@ async function _addFoto(input){
     }
     if (RUN.fotos.length){ msg.className='cap-msg ok'; msg.textContent='✓ '+RUN.fotos.length+' foto(s) listas'; }
 }
-function _delFoto(i){ RUN.fotos.splice(i,1); _renderFotos(); }
+function _delFoto(i){
+    var ref = RUN.fotos[i];
+    if (_PREV[ref]) { try { URL.revokeObjectURL(_PREV[ref]); } catch(e){} delete _PREV[ref]; }
+    RUN.fotos.splice(i,1); _renderFotos();
+}
 /* 60 segundos, no 5 minutos. La razón es dura: Supabase rechaza archivos de más de
    50 MB por defecto y un video de teléfono pesa ~60 MB POR MINUTO en 1080p (y ~190 MB
    en 4K). Con 5 minutos el colaborador grababa, esperaba la subida y recibía un error
@@ -602,8 +621,8 @@ async function _addVideo(input){
     var url = '';
     try {
         var path = NEG+'/entradas/'+TOKEN+'/'+genId()+'.'+((f.name||'').split('.').pop()||'mp4').toLowerCase();
-        var up = await _supabase.storage.from('evidencias').upload(path, f, { contentType: f.type || 'video/mp4' });
-        if (!up.error) url = _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
+        var up = await _supabase.storage.from(BUCKET_EV).upload(path, f, { contentType: f.type || 'video/mp4' });
+        if (!up.error) url = REF_PRIV + path;
         else { msg.className='cap-msg err'; msg.textContent='Error al subir el video: '+up.error.message; return; }
     } catch(e){ msg.className='cap-msg err'; msg.textContent='Error al subir el video.'; return; }
     if (!url){ msg.className='cap-msg err'; msg.textContent='No se pudo subir el video. Intenta de nuevo.'; return; }
@@ -626,7 +645,7 @@ function _renderVideo(){
 function _renderFotos(){
     document.getElementById('runFotoCnt').textContent = RUN.fotos.length+' / '+MAX_FOTOS+' fotos';
     document.getElementById('runFotoStrip').innerHTML = RUN.fotos.map(function(u,i){
-        return '<div class="fs-it"><img src="'+etx(u)+'"><button class="fs-del" onclick="_delFoto('+i+')">✕</button></div>';
+        return '<div class="fs-it"><img src="'+etx(_prevDe(u))+'"><button class="fs-del" onclick="_delFoto('+i+')">✕</button></div>';
     }).join('');
 }
 

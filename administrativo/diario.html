@@ -3114,7 +3114,7 @@ function renderEvidenciasCorte(){
     if(!grid) return;
     grid.innerHTML = _evidenciasCorte.map(function(e,i){
         return '<div style="position:relative">'
-            +'<img src="'+_escV(e.url)+'" onclick="event.stopPropagation();etaaxVerFoto(this.src)" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:zoom-in" alt="evidencia">'
+            +'<img '+sbAttr(e.url)+' onclick="event.stopPropagation();etaaxVerFoto(this.src)" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:zoom-in" alt="evidencia">'
             +'<button onclick="eliminarEvidenciaCorte('+i+')" title="Quitar" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1">✕</button>'
             +'</div>';
     }).join('');
@@ -4142,11 +4142,12 @@ function verCorte(id) {
         ? '<div>'+sec('📸 Evidencia visual')+
             '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">'+
             evid.map(function(e){
-                var u=_escV(e.url);
-                return '<div onclick="event.stopPropagation();etaaxVerFoto(\''+u+'\')" '+
+                // La URL no se mete en el onclick: si es privada llega firmada DESPUÉS
+                // (sbAttr → data-priv), así que el click la lee del <img> ya resuelto.
+                return '<div onclick="event.stopPropagation();etaaxVerFoto(this.querySelector(\'img\').src)" '+
                     'style="display:block;width:72px;height:72px;border-radius:8px;overflow:hidden;cursor:zoom-in;'+
                     'border:1px solid var(--border);background:var(--surface2)" title="Ver foto completa">'+
-                    '<img src="'+u+'" alt="" loading="lazy" '+
+                    '<img '+sbAttr(e.url)+' alt="" loading="lazy" '+
                     'style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none"></div>';
             }).join('')+
             '</div></div>'
@@ -5658,8 +5659,8 @@ function evLink(g){
     if(!ev.length)return'<span style="opacity:.3;font-size:10px">—</span>';
     var e0=ev[0];
     var thumb=e0.pdf
-        ?'<a href="'+_esc(e0.url)+'" target="_blank" style="font-size:11px;color:var(--accent)">📄 PDF</a>'
-        :'<img src="'+_esc(e0.url)+'" onclick="event.stopPropagation();etaaxVerFoto(this.src)" style="width:28px;height:28px;object-fit:cover;border-radius:3px;border:1px solid var(--border);cursor:zoom-in" alt="evidencia">';
+        ?'<a '+sbAttr(e0.url,'href')+' target="_blank" style="font-size:11px;color:var(--accent)">📄 PDF</a>'
+        :'<img '+sbAttr(e0.url)+' onclick="event.stopPropagation();etaaxVerFoto(this.src)" style="width:28px;height:28px;object-fit:cover;border-radius:3px;border:1px solid var(--border);cursor:zoom-in" alt="evidencia">';
     if(ev.length>1)thumb+='<span style="font-size:10px;color:var(--text-dim);margin-left:3px">+'+(ev.length-1)+'</span>';
     return'<span style="display:inline-flex;align-items:center">'+thumb+'</span>';
 }
@@ -5800,8 +5801,8 @@ function verGasto(id){
     if(_evs.length){
         evHTML='<div style="display:flex;flex-wrap:wrap;gap:8px">'+_evs.map(function(e){
             return e.pdf
-                ?'<a href="'+_esc(e.url)+'" target="_blank" style="display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:6px;border:1px solid var(--border,#2a2825);background:var(--surface2);font-size:24px;text-decoration:none" title="'+_esc(e.nombre||'PDF')+'">📄</a>'
-                :'<img src="'+_esc(e.url)+'" loading="lazy" onclick="event.stopPropagation();etaaxVerFoto(this.src)" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border,#2a2825);cursor:zoom-in" alt="evidencia">';
+                ?'<a '+sbAttr(e.url,'href')+' target="_blank" style="display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:6px;border:1px solid var(--border,#2a2825);background:var(--surface2);font-size:24px;text-decoration:none" title="'+_esc(e.nombre||'PDF')+'">📄</a>'
+                :'<img '+sbAttr(e.url)+' loading="lazy" onclick="event.stopPropagation();etaaxVerFoto(this.src)" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border,#2a2825);cursor:zoom-in" alt="evidencia">';
         }).join('')+'</div>';
     }
 
@@ -6916,8 +6917,8 @@ function renderEvidenciasGasto(){
     if(!grid) return;
     grid.innerHTML=_evidenciasGasto.map(function(e,i){
         var inner=e.pdf
-            ?'<a href="'+_esc(e.url)+'" target="_blank" style="display:flex;align-items:center;justify-content:center;width:54px;height:54px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);font-size:22px;text-decoration:none">📄</a>'
-            :'<img src="'+_esc(e.url)+'" onclick="event.stopPropagation();etaaxVerFoto(this.src)" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:zoom-in" alt="evidencia">';
+            ?'<a '+sbAttr(e.url,'href')+' target="_blank" style="display:flex;align-items:center;justify-content:center;width:54px;height:54px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);font-size:22px;text-decoration:none">📄</a>'
+            :'<img '+sbAttr(e.url)+' onclick="event.stopPropagation();etaaxVerFoto(this.src)" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:zoom-in" alt="evidencia">';
         return '<div style="position:relative">'+inner
             +'<button onclick="eliminarEvidenciaGasto('+i+')" title="Quitar" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1">✕</button>'
             +'</div>';

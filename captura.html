@@ -134,16 +134,20 @@ async function onPick(input){
         if(!blob){ msg.className='cap-msg err'; msg.textContent='No se pudo procesar la imagen.'; continue; }
         var nombre=genId()+'.jpg';
         var path=NEG+'/inbox/'+TOKEN+'/'+nombre;
-        var up=await _supabase.storage.from('evidencias').upload(path,blob,{contentType:'image/jpeg'});
+        // Almacén PRIVADO (v55): sin URL pública. Subir sin sesión sigue
+        // funcionando —"privado" bloquea leer, no escribir— y en el registro
+        // queda 'priv:<ruta>', que solo el ERP con sesión puede firmar y abrir.
+        var up=await _supabase.storage.from('evidencias-priv').upload(path,blob,{contentType:'image/jpeg'});
         if(up.error){ msg.className='cap-msg err'; msg.textContent='Error al subir: '+up.error.message; continue; }
-        var pub=_supabase.storage.from('evidencias').getPublicUrl(path);
         var ins=await _supabase.from('capturas_pendientes').insert({
             id:genId()+genId(), negocio_id:NEG, tipo:TIPO, fecha:fecha, token:TOKEN,
-            foto_url:pub.data.publicUrl, foto_path:path
+            foto_url:'priv:'+path, foto_path:path
         });
         if(ins.error){ msg.className='cap-msg err'; msg.textContent='Enlace expirado o inválido.'; continue; }
-        // miniatura + éxito
-        var im=document.createElement('img'); im.src=pub.data.publicUrl; thumbs.appendChild(im);
+        // La miniatura sale del archivo del propio celular: nada que pedirle al servidor.
+        var im=document.createElement('img');
+        try { im.src=URL.createObjectURL(blob); } catch(e){}
+        thumbs.appendChild(im);
         _subidas++;
         msg.className='cap-msg ok'; msg.textContent='✓ Foto enviada ('+_subidas+'). Aparecerá en la computadora.';
     }

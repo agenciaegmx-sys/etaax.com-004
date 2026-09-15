@@ -1868,7 +1868,7 @@ function _hoyISO(){
 function _pintarFotoStaff() {
     var url = document.getElementById('fFoto').value;
     var prev = document.getElementById('fotoPrev');
-    prev.style.backgroundImage = url ? 'url("' + url.replace(/"/g, '%22') + '")' : '';
+    sbSetBg(prev, url);
     prev.textContent = url ? '' : '👤';
     document.getElementById('btnQuitarFoto').style.display = url ? '' : 'none';
     document.getElementById('btnFoto').textContent = url ? 'Cambiar foto' : 'Agregar foto';
@@ -2010,7 +2010,7 @@ function verExpediente(id) {
         .map(function (p) { return p.charAt(0); }).join('').toUpperCase();
     var avatar = s.foto
         ? '<div style="width:88px;height:88px;border-radius:50%;background-size:cover;background-position:center;' +
-          'border:2px solid var(--border);flex-shrink:0;background-image:url(\'' + esc(s.foto) + '\')"></div>'
+          'border:2px solid var(--border);flex-shrink:0;' + sbBgCss(s.foto) + '" ' + sbBgAttr(s.foto) + '></div>'
         : '<div style="width:88px;height:88px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);' +
           'display:flex;align-items:center;justify-content:center;font-size:29px;font-weight:600;color:var(--text-dim);flex-shrink:0">' +
           esc(iniciales) + '</div>';

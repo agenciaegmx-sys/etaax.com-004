@@ -873,7 +873,7 @@ function renderCumplimiento(){
                     +(e.duracionMin!=null ? ' <span style="color:var(--text-muted)">('+e.duracionMin+' min)</span>' : '')+'</div>'+
                 '<div style="font-size:11px;color:var(--text-dim);margin-top:1px">'+(e.cumplidas||0)+' hechas · '+(e.noRealizadas||0)+' no · '+(e.pendientes||0)+' pend'
                     +(e.notas?' · 📝 '+esc(e.notas):'')+(nf?' · 📷 '+nf:'')
-                    +(e.video_url?' · <a href="'+esc(e.video_url)+'" target="_blank" rel="noopener" style="color:var(--viol)">🎥 video'+(e.video_seg?' '+Math.floor(e.video_seg/60)+':'+String(e.video_seg%60).padStart(2,'0'):'')+'</a>':'')+'</div>'+
+                    +(e.video_url?' · <a '+sbAttr(e.video_url,'href')+' target="_blank" rel="noopener" style="color:var(--viol)">🎥 video'+(e.video_seg?' '+Math.floor(e.video_seg/60)+':'+String(e.video_seg%60).padStart(2,'0'):'')+'</a>':'')+'</div>'+
             '</div></div>';
     }).join('');
     cont.innerHTML='<div style="display:flex;justify-content:flex-end;margin-bottom:14px"><button class="ck-btn primary" onclick="abrirQrChecklist()">📱 QR de check list</button></div>'+
@@ -902,10 +902,9 @@ function _evidenciasVencidas(){
     });
 }
 // URL pública → ruta dentro del bucket (que es lo que pide remove()).
-function _rutaDeUrl(u){
-    var m = String(u||'').match(/\/object\/public\/evidencias\/(.+)$/);
-    return m ? decodeURIComponent(m[1]) : '';
-}
+/* Antes esto parseaba la URL pública a mano. Ya no hace falta: sbBorrarRefs
+   recibe la referencia tal como está guardada —URL vieja o 'priv:<ruta>'— y de
+   ahí saca ruta y almacén. Un solo lugar que sepa de buckets. */
 function _pesoAprox(lista){
     // Sin llamar a Storage por cada archivo: foto ~120 KB, video ~30 MB. Es un orden
     // de magnitud para decidir, no una factura.
@@ -943,16 +942,12 @@ async function purgarEvidencias(){
         v.forEach(function(e){
             var us = (e.foto_urls&&e.foto_urls.length ? e.foto_urls.slice() : (e.foto_url?[e.foto_url]:[]));
             if (e.video_url) us.push(e.video_url);
-            us.forEach(function(u){ var r=_rutaDeUrl(u); if(r) rutas.push(r); });
+            us.forEach(function(u){ if(u) rutas.push(u); });
             tocadas.push(e);
         });
         try {
-            // Storage acepta lotes; se parte para no mandar una lista enorme de un golpe.
-            for (var i=0;i<rutas.length;i+=100){
-                var lote = rutas.slice(i, i+100);
-                var r = await _supabase.storage.from('evidencias').remove(lote);
-                if (r.error) console.warn('[retención] no se borró un lote:', r.error.message);
-            }
+            // Parte en lotes y agrupa por almacén (público / privado) por dentro.
+            await sbBorrarRefs(rutas);
         } catch(e){ console.warn('[retención]', e); }
         // El registro se conserva, marcado, para que la ficha explique por qué no hay fotos.
         for (var j=0;j<tocadas.length;j++){
@@ -993,9 +988,9 @@ function verEjecucion(id){
     var fotos=(e.foto_urls&&e.foto_urls.length?e.foto_urls:(e.foto_url?[e.foto_url]:[]));
     var ev='';
     if(fotos.length) ev+='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:8px">'+fotos.map(function(u){
-        return '<a href="'+esc(u)+'" target="_blank" rel="noopener"><img src="'+esc(u)+'" style="width:78px;height:78px;object-fit:cover;border-radius:9px;border:1px solid var(--border)"></a>';
+        return '<a '+sbAttr(u,'href')+' target="_blank" rel="noopener"><img '+sbAttr(u)+' style="width:78px;height:78px;object-fit:cover;border-radius:9px;border:1px solid var(--border)"></a>';
     }).join('')+'</div>';
-    if(e.video_url) ev+='<div style="margin-top:8px"><video src="'+esc(e.video_url)+'" controls preload="metadata" '
+    if(e.video_url) ev+='<div style="margin-top:8px"><video '+sbAttr(e.video_url)+' controls preload="metadata" '
         +'style="width:100%;max-height:280px;border-radius:10px;border:1px solid var(--border);background:#000"></video></div>';
     if(!ev) ev = e.evidenciaPurgada
         ? '<div style="font-size:12px;color:var(--text-dim);margin-top:6px">🧹 Las imágenes se liberaron por la política de '+RETENCION_DIAS+' días ('

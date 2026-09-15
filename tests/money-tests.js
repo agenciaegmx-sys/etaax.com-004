@@ -86,6 +86,23 @@ function crearContexto() {
         },
         sbUpsert(){}, sbDelete(){}, sbUpsertDoc(){}, sbRealtime(){ return null; },
         sbDeletesPendientes(){ return {}; }, sbSubirEvidencia(){ return Promise.resolve(null); },
+        /* Almacén privado (etaax-db.js). Aquí van stubs simples: el comportamiento
+           real de estas piezas se prueba contra el archivo de verdad en la SUITE BB.
+           Lo que importa en las demás suites es que las páginas las encuentren —
+           que falten es justo lo que tumbaba la carga entera. */
+        sbAttr(v, a){ return (a || 'src') + '="' + String(v == null ? '' : v) + '"'; },
+        sbBgCss(v){ return v ? "background-image:url('" + v + "')" : ''; },
+        sbBgAttr(){ return ''; },
+        sbSetBg(el, v){ if (el) el.style.backgroundImage = v ? 'url("' + v + '")' : ''; },
+        sbHidratar(){ return Promise.resolve(0); },
+        sbFirmar(){ return Promise.resolve({}); },
+        sbBorrarRefs(){ return Promise.resolve(0); },
+        sbBorrarEvidencia(){ return Promise.resolve(); },
+        sbCarpetaPrivada(c){ return ['staff','gastos','cortes','inbox','entradas'].indexOf(String(c)) > -1; },
+        sbBucketDe(c){ return this.sbCarpetaPrivada(c) ? 'evidencias-priv' : 'evidencias'; },
+        sbRefDe(c, r){ return this.sbCarpetaPrivada(c) ? 'priv:' + r : 'https://sb.co/' + r; },
+        sbEsRefPriv(v){ return typeof v === 'string' && v.indexOf('priv:') === 0; },
+        sbRutaDeRef(v){ return this.sbEsRefPriv(v) ? v.slice(5) : ''; },
         _pedirClaveAdmin(_a, cb){ cb && cb(); },
         etx(x){ return String(x == null ? '' : x); },
         etaaxMarca(){ return {}; }, etaaxReporteHeader(){ return ''; }, etaaxReporteFooter(){ return ''; },
@@ -134,6 +151,13 @@ function cargarJS(ctx, jsPath) {
 let PASA = 0, FALLA = 0;
 function test(nombre, fn) {
     try { fn(); PASA++; console.log('  ✅', nombre); }
+    catch (e) { FALLA++; console.log('  💥', nombre, '→', e.message); }
+}
+/* Variante que ESPERA. Con el runner de arriba un test async pasa en falso: fn()
+   devuelve una promesa que nunca lanza, así que el candado se felicitaría solo.
+   Cualquier suite con await tiene que usar esta. */
+async function testA(nombre, fn) {
+    try { await fn(); PASA++; console.log('  ✅', nombre); }
     catch (e) { FALLA++; console.log('  💥', nombre, '→', e.message); }
 }
 function eq(real, esperado, msg) {
@@ -5550,6 +5574,13 @@ console.log('\n══ AT · El orden de carga de los scripts ══');
         'etaaxReporteDoc':   'reporte-marca.js',
         'EtaaxCore':         'etaax-core.js',
         'sbUpsert':          'etaax-db.js',
+        /* El resolvedor del almacén privado vive en el mismo archivo. Una página
+           que pinte evidencia sin él no se ve "un poco mal": revienta al armar el
+           HTML y se lleva por delante el resto del render. */
+        'sbAttr':            'etaax-db.js',
+        'sbBgCss':           'etaax-db.js',
+        'sbSetBg':           'etaax-db.js',
+        'sbBorrarRefs':      'etaax-db.js',
         'etaaxStore':        'etaax-store.js',
     };
 
@@ -6080,9 +6111,258 @@ console.log('\n══ BA · El filtro y el card de "por pagar" ══');
         eq(adm.indexOf("act === 'yes') { cerrar(); if (cfg.onYes)"), -1, 'sin bug'));
 }
 
+/* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
+   Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
+   escrita dentro del registro y dentro de cualquier archivo que se comparta. La
+   v55 agrega un segundo almacén privado y el código manda ahí lo sensible.
+
+   Lo que este candado cuida, y que ya costó tres migraciones en cadena (v48 →
+   v51 → v52) y una tanda de imágenes rotas:
+     1. que una carpeta sensible NUNCA se guarde como URL pública, y
+     2. que lo que YA estaba guardado como URL siga pintándose intacto.
+   Si alguien invierte una de las dos, la app o filtra datos o se queda ciega.
+
+   Corre el etaax-db.js REAL sobre un Storage de mentira que CUENTA llamadas: se
+   comprueba comportamiento, no la forma del texto.                            */
+async function suiteAlmacenPrivado() {
+console.log('\n══ BB · El almacén privado (etaax-db.js) ══');
+
+    const llamadas = { firmar: 0, subidas: [], borrados: [] };
+    const nodos = [];
+    const ctx = {
+        console: { log() {}, warn() {}, error() {} },
+        setTimeout: (fn, ms) => (ms >= 1000 ? 0 : setTimeout(fn, ms)),
+        clearTimeout, setInterval: () => 0, clearInterval,
+        Promise, JSON, Object, String, Date, Math, Array, Number, Boolean, RegExp,
+        decodeURIComponent, encodeURIComponent, Uint8Array,
+        /* El navegador los trae de fábrica; aquí hay que ponerlos o las subidas
+           devuelven null en silencio y los tests pasarían sin probar nada. */
+        atob: b64 => Buffer.from(b64, 'base64').toString('binary'),
+        Blob: class { constructor(partes, opts) { this.type = (opts || {}).type || ''; } },
+        localStorage: {
+            _d: { etaax_negocio_activo: 'n1' },
+            getItem(k) { return this._d[k] === undefined ? null : this._d[k]; },
+            setItem(k, v) { this._d[k] = String(v); }, removeItem(k) { delete this._d[k]; },
+        },
+        document: {
+            readyState: 'complete', body: null,
+            addEventListener() {}, getElementById() { return null; },
+            createElement: () => ({ style: {}, setAttribute() {} }),
+            querySelectorAll() { return nodos; },
+        },
+        navigator: { onLine: true },
+    };
+    ctx.window = ctx;
+    ctx.window.addEventListener = () => {};
+    ctx.window.MutationObserver = null;   // sin observador: aquí se hidrata a mano
+    ctx._supabase = {
+        from() { return { select() { return this; }, eq() { return this; } }; },
+        storage: {
+            from(bucket) {
+                return {
+                    upload(ruta) { llamadas.subidas.push({ bucket, ruta }); return Promise.resolve({ error: null }); },
+                    getPublicUrl(ruta) {
+                        return { data: { publicUrl: 'https://sb.co/storage/v1/object/public/' + bucket + '/' + ruta } };
+                    },
+                    createSignedUrls(rutas, seg) {
+                        llamadas.firmar++;
+                        return Promise.resolve({ error: null, data: rutas.map(r => ({
+                            path: r, error: null,
+                            signedUrl: 'https://sb.co/storage/v1/object/sign/' + bucket + '/' + r + '?token=T' + seg,
+                        })) });
+                    },
+                    remove(rutas) { llamadas.borrados.push({ bucket, rutas }); return Promise.resolve({ error: null }); },
+                };
+            },
+        },
+    };
+    vm.createContext(ctx);
+    vm.runInContext(fs.readFileSync(path.join(RAIZ, 'etaax-db.js'), 'utf8'), ctx, { filename: 'etaax-db.js' });
+    const w = ctx.window;
+
+    /* ── 1. Qué carpeta es sensible ─────────────────────────────────────── */
+    ['staff', 'gastos', 'cortes', 'inbox', 'entradas'].forEach(c =>
+        test('carpeta privada: ' + c, () => eq(w.sbCarpetaPrivada(c), true, 'privada')));
+    ['insumos', 'recetas', 'miniaturas', 'logos', '_guias', 'catalogo', 'pdf', 'archivos'].forEach(c =>
+        test('carpeta pública (el portal del QR la lee sin sesión): ' + c, () =>
+            eq(w.sbCarpetaPrivada(c), false, 'pública')));
+
+    test('el bucket de una carpeta sensible es el privado', () =>
+        eq(w.sbBucketDe('gastos'), 'evidencias-priv', 'bucket'));
+    test('el bucket de una carpeta pública sigue siendo el de siempre', () =>
+        eq(w.sbBucketDe('insumos'), 'evidencias', 'bucket'));
+
+    /* El bucket se deduce de la RUTA. Eso es lo que permite borrar un archivo sin
+       tener que recordar en qué almacén cayó: la carpeta es el 2º segmento. */
+    test('de la ruta sale el bucket: <neg>/gastos/x.jpg', () =>
+        eq(w.sbBucketDeRuta('n1/gastos/x.jpg'), 'evidencias-priv', 'priv'));
+    test('de la ruta sale el bucket: <neg>/insumos/x.jpg', () =>
+        eq(w.sbBucketDeRuta('n1/insumos/x.jpg'), 'evidencias', 'pub'));
+    test('ruta de tres niveles: <neg>/entradas/erp/x.jpg', () =>
+        eq(w.sbBucketDeRuta('n1/entradas/erp/x.jpg'), 'evidencias-priv', 'priv'));
+    test('una ruta sin carpeta no se cuela como privada', () =>
+        eq(w.sbBucketDeRuta('suelto.jpg'), 'evidencias', 'pub'));
+
+    /* ── 2. LO QUE SE GUARDA. Aquí vive el riesgo de filtración ─────────── */
+    test('un comprobante de gasto NUNCA se guarda como URL pública', () => {
+        const ref = w.sbRefDe('gastos', 'n1/gastos/a.jpg');
+        return eq(ref.indexOf('http') === -1 && ref === 'priv:n1/gastos/a.jpg', true, ref);
+    });
+    test('el INE de un colaborador tampoco', () =>
+        eq(w.sbRefDe('staff', 'n1/staff/i.jpg'), 'priv:n1/staff/i.jpg', 'ref'));
+    test('la foto de un insumo sí sigue siendo URL pública, a propósito', () =>
+        eq(w.sbRefDe('insumos', 'n1/insumos/f.jpg'),
+           'https://sb.co/storage/v1/object/public/evidencias/n1/insumos/f.jpg', 'url'));
+
+    /* ── 3. Leer la ruta de vuelta, de las tres formas que existen ──────── */
+    test('ruta desde una referencia privada', () =>
+        eq(w.sbRutaDeRef('priv:n1/gastos/a.jpg'), 'n1/gastos/a.jpg', 'ruta'));
+    test('ruta desde una URL pública ya guardada (lo viejo se puede borrar)', () =>
+        eq(w.sbRutaDeRef('https://sb.co/storage/v1/object/public/evidencias/n1/cortes/c.jpg'),
+           'n1/cortes/c.jpg', 'ruta'));
+    test('ruta desde una URL firmada, con su token colgando', () =>
+        eq(w.sbRutaDeRef('https://sb.co/storage/v1/object/sign/evidencias-priv/n1/staff/i.jpg?token=abc'),
+           'n1/staff/i.jpg', 'ruta'));
+
+    /* ── 4. PINTAR: lo viejo intacto, lo nuevo firmado ──────────────────── */
+    test('una URL ya guardada se pinta TAL CUAL (nada de lo cargado se rompe)', () =>
+        eq(w.sbAttr('https://sb.co/storage/v1/object/public/evidencias/n1/insumos/f.jpg'),
+           'src="https://sb.co/storage/v1/object/public/evidencias/n1/insumos/f.jpg"', 'intacta'));
+    test('un data: base64 también pasa sin tocarse', () =>
+        eq(w.sbAttr('data:image/png;base64,AAA'), 'src="data:image/png;base64,AAA"', 'intacta'));
+    test('sin valor no se inventa un src', () => eq(w.sbAttr(''), 'src=""', 'vacío'));
+
+    const at = w.sbAttr('priv:n1/gastos/a.jpg');
+    test('una referencia privada NO se pinta como si fuera URL', () =>
+        eq(at.indexOf('priv:') === -1, true, at));
+    test('…deja un hueco transparente, no el ícono de imagen rota', () =>
+        eq(at.indexOf('src="data:image/gif') > -1, true, at));
+    test('…y queda marcada para hidratarse', () =>
+        eq(at.indexOf('data-priv="n1/gastos/a.jpg"') > -1, true, at));
+    test('para un enlace marca href, no src', () =>
+        eq(w.sbAttr('priv:n1/gastos/a.pdf', 'href').indexOf('href=""') === 0, true, 'href'));
+
+    /* ── 5. Hidratar: una sola llamada para todo el repintado ───────────── */
+    const hacerNodo = (tipo, attr, ruta) => {
+        const n = {
+            tagName: tipo, style: {}, _a: { [attr]: ruta },
+            getAttribute(k) { return this._a[k] === undefined ? null : this._a[k]; },
+            setAttribute(k, v) { this._a[k] = v; },
+            removeAttribute(k) { delete this._a[k]; },
+            hasAttribute(k) { return this._a[k] !== undefined; },
+        };
+        nodos.push(n); return n;
+    };
+    const img = hacerNodo('IMG', 'data-priv', 'n1/gastos/a.jpg');
+    const enl = hacerNodo('A', 'data-priv', 'n1/gastos/b.pdf');
+    const fnd = hacerNodo('DIV', 'data-priv-bg', 'n1/staff/i.jpg');
+    const antes = llamadas.firmar;
+    const cuantos = await w.sbHidratar();
+
+    test('hidratar resuelve los tres a la vez', () => eq(cuantos, 3, 'tres'));
+    test('el <img> recibe una URL FIRMADA', () =>
+        eq(String(img._a.src || '').indexOf('/object/sign/evidencias-priv/n1/gastos/a.jpg?token=') > -1, true, img._a.src));
+    test('…y ya no lleva el marcador colgando', () => eq(img._a['data-priv'], undefined, 'limpio'));
+    test('el <a> recibe href firmado, no src', () =>
+        eq(String(enl._a.href || '').indexOf('?token=') > -1 && enl._a.src === undefined, true, 'href'));
+    test('el fondo CSS se pinta con background-image', () =>
+        eq(String(fnd.style.backgroundImage || '').indexOf('/object/sign/') > -1, true, fnd.style.backgroundImage));
+    test('UNA sola llamada a firmar para los tres, no una por imagen', () =>
+        eq(llamadas.firmar - antes, 1, 'lote'));
+
+    /* La firma vive una hora en memoria. Sin caché, una tabla de 60 gastos pediría
+       60 firmas en cada repintado y la página se arrastraría. */
+    const antes2 = llamadas.firmar;
+    const reuso = w.sbAttr('priv:n1/gastos/a.jpg');
+    await w.sbFirmar(['n1/gastos/a.jpg']);
+    test('la firma se reutiliza mientras está viva', () =>
+        eq(llamadas.firmar === antes2 && reuso.indexOf('?token=') > -1, true, 'caché'));
+
+    /* ── 6. Firmar en lote respeta el almacén de cada ruta ──────────────── */
+    const mezcla = await w.sbFirmar(['n2/gastos/g.jpg', 'n2/insumos/i.jpg']);
+    test('un lote mezclado se parte por almacén', () =>
+        eq(mezcla['n2/gastos/g.jpg'].indexOf('/evidencias-priv/') > -1
+        && mezcla['n2/insumos/i.jpg'].indexOf('/object/sign/evidencias/') > -1, true, JSON.stringify(mezcla)));
+
+    /* ── 7. Borrar sin saber dónde cayó el archivo ──────────────────────── */
+    llamadas.borrados.length = 0;
+    await w.sbBorrarRefs([
+        'priv:n1/cortes/c.jpg',
+        'https://sb.co/storage/v1/object/public/evidencias/n1/insumos/f.jpg',
+        'n1/gastos/viejo.jpg',
+    ]);
+    test('borrar en lote agrupa por almacén', () => {
+        const priv = llamadas.borrados.find(b => b.bucket === 'evidencias-priv');
+        const pub  = llamadas.borrados.find(b => b.bucket === 'evidencias');
+        return eq(!!priv && !!pub && priv.rutas.length === 2 && pub.rutas.length === 1, true,
+                  JSON.stringify(llamadas.borrados));
+    });
+
+    /* ── 8. Que las subidas de verdad cambien de almacén ───────────────── */
+    llamadas.subidas.length = 0;
+    const refG = await w.sbSubirFotoBase64('gastos', 'data:image/jpeg;base64,/9j/4AAQ', 'n1');
+    test('subir un comprobante va al bucket privado', () =>
+        eq(llamadas.subidas[0].bucket, 'evidencias-priv', JSON.stringify(llamadas.subidas[0])));
+    test('…y devuelve referencia, no URL', () =>
+        eq(String(refG).indexOf('priv:n1/gastos/') === 0, true, String(refG)));
+
+    llamadas.subidas.length = 0;
+    const refI = await w.sbSubirFotoBase64('insumos', 'data:image/jpeg;base64,/9j/4AAQ', 'n1');
+    test('subir la foto de un insumo sigue yendo al bucket público', () =>
+        eq(llamadas.subidas[0].bucket, 'evidencias', JSON.stringify(llamadas.subidas[0])));
+    test('…y sigue devolviendo URL pública, para que el QR la vea', () =>
+        eq(String(refI).indexOf('/object/public/evidencias/n1/insumos/') > -1, true, String(refI)));
+
+    /* ── 9. El cableado: que nadie deje una subida sensible en el público ── */
+    const qr = ['captura.html', 'entrada.html', 'checklist.html'];
+    qr.forEach(f => {
+        const src = fs.readFileSync(path.join(RAIZ, f), 'utf8');
+        test(f + ': ya no sube al bucket público', () =>
+            eq(src.indexOf("storage.from('evidencias')"), -1, 'sin bucket público'));
+        test(f + ': guarda referencia privada, no URL', () =>
+            eq(/priv:/.test(src) && src.indexOf('getPublicUrl') === -1, true, 'ref'));
+    });
+    /* La miniatura del QR sale del archivo del propio celular. Si volviera a leer
+       del servidor, el colaborador vería un cuadro roto: el bucket es privado y
+       esa página no tiene sesión con la que firmar. */
+    qr.forEach(f => {
+        const src = fs.readFileSync(path.join(RAIZ, f), 'utf8');
+        test(f + ': la miniatura sale del celular, no del servidor', () =>
+            eq(src.indexOf('createObjectURL') > -1, true, 'local'));
+    });
+
+    /* ── 10. La migración v55 ──────────────────────────────────────────── */
+    const v55 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v55.sql'), 'utf8');
+    test('v55 crea el bucket como PRIVADO', () =>
+        eq(/'evidencias-priv'[^)]*false/.test(v55.replace(/\s+/g, ' ')), true, 'public=false'));
+    test('v55 NO toca el bucket viejo (nada de lo cargado se rompe)', () =>
+        eq(/DROP POLICY[^\n]*"evidencias_(read|insert|update|delete)"/.test(v55), false, 'intacto'));
+    test('v55 deja subir al QR sin sesión: inbox por token', () =>
+        eq(v55.indexOf('token_pairing_valido') > -1 && v55.indexOf('evpriv_anon_inbox') > -1, true, 'inbox'));
+    test('v55 deja subir al QR sin sesión: entradas por token', () =>
+        eq(v55.indexOf('_entrada_token_ok') > -1 && v55.indexOf('evpriv_anon_entradas') > -1, true, 'entradas'));
+    /* Lo que NO debe existir: un SELECT para anon. Con eso el bucket volvería a
+       ser público con pasos extra. */
+    test('v55 NO le da LECTURA a anon (ahí estaría el hoyo de vuelta)', () => {
+        const sel = v55.match(/FOR SELECT TO ([a-z, ]+)/g) || [];
+        return eq(sel.every(l => l.indexOf('anon') === -1), true, sel.join(' | '));
+    });
+    /* La condición de acceso suma las TRES identidades. La v51 falló por quedarse
+       corta: is_platform_admin() solo reconoce admin@etaax.com, así que operando
+       un negocio ajeno desde otra cuenta las dos condiciones daban falso. */
+    test('la condición de acceso cubre dueño, cuenta de staff y admin', () =>
+        eq(v55.indexOf('n.usuario_id = auth.uid()') > -1
+        && v55.indexOf('n.staff_uid = auth.uid()') > -1
+        && v55.indexOf('OR is_platform_admin()') > -1, true, 'tres identidades'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
-console.log('\n════════════════════════════════════');
-console.log(FALLA === 0
-    ? '🔒 CANDADO OK — ' + PASA + ' fórmulas verificadas, 0 fallas'
-    : '🚨 ' + FALLA + ' FÓRMULA(S) ROTA(S) de ' + (PASA + FALLA) + ' — NO pushear hasta entender por qué');
-process.exit(FALLA === 0 ? 0 : 1);
+function resumen() {
+    console.log('\n════════════════════════════════════');
+    console.log(FALLA === 0
+        ? '🔒 CANDADO OK — ' + PASA + ' fórmulas verificadas, 0 fallas'
+        : '🚨 ' + FALLA + ' FÓRMULA(S) ROTA(S) de ' + (PASA + FALLA) + ' — NO pushear hasta entender por qué');
+    process.exit(FALLA === 0 ? 0 : 1);
+}
+
+suiteAlmacenPrivado().then(resumen);

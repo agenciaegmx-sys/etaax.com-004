@@ -58,6 +58,244 @@
         return function (r) { if (r && r.error) window._sbToastError(tag + ': ' + r.error.message); };
     }
 
+    /* ══ ALMACÉN PRIVADO ═══════════════════════════════════════════════════
+       Hay DOS almacenes y la carpeta decide cuál:
+
+         evidencias        público, el de siempre. Fotos de producto, logos,
+                           guías. Se ven desde el portal del QR, que no tiene
+                           sesión: privarlas rompería el QR sin ganar nada.
+         evidencias-priv   privado (v55). staff, gastos, cortes, inbox,
+                           entradas. Aquí NO hay URL pública: la única forma de
+                           abrir un archivo es una URL FIRMADA que caduca.
+
+       Por qué importa: una URL pública es una llave permanente. No caduca, no
+       se revoca, y queda escrita dentro del registro Y dentro de cada PDF que
+       se imprime. Quien reciba ese PDF recibe la llave.
+
+       Lo que se GUARDA en el registro cambia según el almacén:
+         público  → la URL de siempre  (nada cambia, nada se rompe)
+         privado  → 'priv:<ruta>'      (una referencia, no una llave)
+
+       Y al pintar, sbAttr() resuelve: si es URL la usa tal cual —por eso todo
+       lo ya cargado sigue funcionando— y si es 'priv:' la firma al momento.  */
+
+    var BUCKET_PUB  = 'evidencias';
+    var BUCKET_PRIV = 'evidencias-priv';
+    var PREF_PRIV   = 'priv:';
+    var FIRMA_SEG    = 3600;   // vida de la URL firmada
+    var FIRMA_MARGEN = 300;    // se re-firma 5 min antes de vencer
+
+    // Carpetas cuyo contenido, si se filtra, es un problema de datos personales.
+    // Que se filtre la foto de una botella no es un incidente; un INE, sí.
+    var CARPETAS_PRIV = { staff: 1, gastos: 1, cortes: 1, inbox: 1, entradas: 1 };
+
+    function sbCarpetaPrivada(carpeta) {
+        return !!CARPETAS_PRIV[String(carpeta || '').split('/')[0].toLowerCase()];
+    }
+    function sbBucketDe(carpeta) {
+        return sbCarpetaPrivada(carpeta) ? BUCKET_PRIV : BUCKET_PUB;
+    }
+    // El bucket es función PURA de la ruta (<neg>/<carpeta>/<archivo>), así que
+    // para borrar no hace falta recordar dónde se subió: se deduce.
+    function sbBucketDeRuta(ruta) {
+        var seg = String(ruta || '').split('/');
+        return sbBucketDe(seg.length > 1 ? seg[1] : '');
+    }
+    function sbEsRefPriv(v) {
+        return typeof v === 'string' && v.indexOf(PREF_PRIV) === 0;
+    }
+    function sbRutaDeRef(v) {
+        if (sbEsRefPriv(v)) return v.slice(PREF_PRIV.length);
+        // URL pública ya guardada → sacar la ruta para poder borrarla.
+        var m = String(v || '').match(/\/object\/(?:public|sign)\/[^/]+\/(.+?)(?:\?|$)/);
+        return m ? decodeURIComponent(m[1]) : '';
+    }
+    // La referencia que se guarda en el registro.
+    function sbRefDe(carpeta, ruta) {
+        if (sbCarpetaPrivada(carpeta)) return PREF_PRIV + ruta;
+        return _supabase.storage.from(BUCKET_PUB).getPublicUrl(ruta).data.publicUrl;
+    }
+
+    window.sbCarpetaPrivada = sbCarpetaPrivada;
+    window.sbBucketDe       = sbBucketDe;
+    window.sbBucketDeRuta   = sbBucketDeRuta;
+    window.sbEsRefPriv      = sbEsRefPriv;
+    window.sbRutaDeRef      = sbRutaDeRef;
+    window.sbRefDe          = sbRefDe;
+
+    /* ── Firmas: caché en memoria + una sola llamada por lote ────────────── */
+    var _firmas = {};          // ruta → { url, exp }
+    var _pendientes = {};      // ruta → true (esperando firma)
+    var _timerFirma = null;
+
+    function _firmaViva(ruta) {
+        var f = _firmas[ruta];
+        return (f && f.exp > Date.now() + FIRMA_MARGEN * 1000) ? f.url : '';
+    }
+
+    // Firma un lote de rutas. Devuelve { ruta: url } con lo que se pudo firmar.
+    window.sbFirmar = async function (rutas) {
+        var out = {};
+        if (typeof _supabase === 'undefined' || !rutas || !rutas.length) return out;
+        var falta = [];
+        for (var i = 0; i < rutas.length; i++) {
+            var viva = _firmaViva(rutas[i]);
+            if (viva) out[rutas[i]] = viva;
+            else if (falta.indexOf(rutas[i]) < 0) falta.push(rutas[i]);
+        }
+        // Storage firma en lote, pero no de a miles: se parte.
+        for (var b = 0; b < falta.length; b += 100) {
+            var lote = falta.slice(b, b + 100);
+            // Todas las rutas de un lote tienen que ir al mismo bucket.
+            var porBucket = {};
+            lote.forEach(function (r) {
+                var bk = sbBucketDeRuta(r);
+                (porBucket[bk] = porBucket[bk] || []).push(r);
+            });
+            var buckets = Object.keys(porBucket);
+            for (var k = 0; k < buckets.length; k++) {
+                var bk = buckets[k], rs = porBucket[bk];
+                var r;
+                try {
+                    r = await _supabase.storage.from(bk).createSignedUrls(rs, FIRMA_SEG);
+                } catch (e) { r = { error: e }; }
+                if (r && r.error) { window._sbUltimoError = r.error.message || String(r.error); continue; }
+                var arr = (r && r.data) || [];
+                for (var j = 0; j < arr.length; j++) {
+                    var it = arr[j];
+                    var ruta = it.path || rs[j];
+                    if (!it || it.error || !it.signedUrl) continue;
+                    _firmas[ruta] = { url: it.signedUrl, exp: Date.now() + FIRMA_SEG * 1000 };
+                    out[ruta] = it.signedUrl;
+                }
+            }
+        }
+        return out;
+    };
+
+    /* ── Pintar: un atributo que se resuelve solo ────────────────────────────
+       Los módulos arman HTML con concatenación, que es SINCRÓNICA, y firmar es
+       asíncrono. En vez de volver async cada render (serían decenas de sitios),
+       se emite un marcador `data-priv` y un observador lo hidrata al insertarse.
+       Así el sitio que pinta no tiene que saber nada de firmas ni de orden de
+       carga — que es justo donde esta app se ha roto antes.                  */
+
+    // 1×1 transparente: ocupa el hueco sin el ícono de imagen rota.
+    var IMG_HUECO = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+    function _escAtr(s) {
+        if (typeof window.etx === 'function') return window.etx(s);
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // sbAttr(valor [, 'src'|'href']) → el atributo listo para el HTML.
+    //   'https://…'   → src="https://…"        (lo de siempre, intacto)
+    //   'priv:neg/…'  → src="<hueco>" data-priv="neg/…"   y se hidrata solo
+    window.sbAttr = function (v, attr) {
+        attr = attr || 'src';
+        if (!v) return attr + '=""';
+        if (!sbEsRefPriv(v)) return attr + '="' + _escAtr(v) + '"';
+        var ruta = sbRutaDeRef(v);
+        var viva = _firmaViva(ruta);
+        if (viva) return attr + '="' + _escAtr(viva) + '"';
+        _pendientes[ruta] = true;
+        var hueco = (attr === 'href') ? '' : IMG_HUECO;
+        return attr + '="' + hueco + '" data-priv="' + _escAtr(ruta) + '"';
+    };
+
+    /* Fondos CSS (las fotos de colaboradores se pintan con background-image, no
+       con <img>). Mismo trato: si es privada, se marca y se hidrata. */
+    window.sbBgCss = function (v) {
+        if (!v) return '';
+        var u = sbEsRefPriv(v) ? _firmaViva(sbRutaDeRef(v)) : v;
+        return u ? "background-image:url('" + String(u).replace(/['\\]/g, '') + "')" : '';
+    };
+    window.sbBgAttr = function (v) {
+        if (!sbEsRefPriv(v)) return '';
+        var ruta = sbRutaDeRef(v);
+        if (_firmaViva(ruta)) return '';
+        _pendientes[ruta] = true;
+        return 'data-priv-bg="' + _escAtr(ruta) + '"';
+    };
+    // Versión imperativa, para código que ya tiene el nodo en la mano.
+    window.sbSetBg = function (el, v) {
+        if (!el) return;
+        if (!v) { el.style.backgroundImage = ''; return; }
+        if (!sbEsRefPriv(v)) { el.style.backgroundImage = 'url("' + String(v).replace(/"/g, '%22') + '")'; return; }
+        var ruta = sbRutaDeRef(v), viva = _firmaViva(ruta);
+        if (viva) { el.style.backgroundImage = 'url("' + viva + '")'; return; }
+        el.style.backgroundImage = '';
+        el.setAttribute('data-priv-bg', ruta);
+        _agendar();
+    };
+
+    // Firma lo que esté marcado en el DOM y lo suelta. Se llama solo (observer),
+    // y también a mano después de pintar si se quiere esperar el resultado.
+    window.sbHidratar = async function (root) {
+        var nodos = (root || document).querySelectorAll('[data-priv],[data-priv-bg]');
+        if (!nodos.length) return 0;
+        var rutas = [], i;
+        for (i = 0; i < nodos.length; i++) {
+            var r = nodos[i].getAttribute('data-priv') || nodos[i].getAttribute('data-priv-bg');
+            if (r && rutas.indexOf(r) < 0) rutas.push(r);
+        }
+        var urls = await window.sbFirmar(rutas);
+        var n = 0;
+        for (i = 0; i < nodos.length; i++) {
+            var el = nodos[i];
+            var esBg = el.hasAttribute('data-priv-bg');
+            var ru = esBg ? el.getAttribute('data-priv-bg') : el.getAttribute('data-priv');
+            var u = urls[ru];
+            if (!u) continue;   // sin permiso o sin red: se queda el hueco
+            if (esBg) { el.style.backgroundImage = 'url("' + u + '")'; el.removeAttribute('data-priv-bg'); }
+            else if (el.tagName === 'A') { el.setAttribute('href', u); el.removeAttribute('data-priv'); }
+            else { el.setAttribute('src', u); el.removeAttribute('data-priv'); }
+            delete _pendientes[ru];
+            n++;
+        }
+        return n;
+    };
+
+    // Un solo observador para toda la página. Junta los marcadores de un mismo
+    // repintado y los firma en UNA llamada.
+    function _observar() {
+        if (!window.MutationObserver || !document.body) return;
+        var obs = new MutationObserver(function (muts) {
+            for (var i = 0; i < muts.length; i++) {
+                var ad = muts[i].addedNodes;
+                for (var j = 0; j < ad.length; j++) {
+                    var n = ad[j];
+                    if (n.nodeType !== 1) continue;
+                    if (n.hasAttribute && (n.hasAttribute('data-priv') || n.hasAttribute('data-priv-bg'))) { _agendar(); return; }
+                    if (n.querySelector && n.querySelector('[data-priv],[data-priv-bg]')) { _agendar(); return; }
+                }
+            }
+        });
+        obs.observe(document.body, { childList: true, subtree: true });
+        window.sbHidratar();   // barrido inicial
+    }
+    function _agendar() {
+        if (_timerFirma) return;
+        _timerFirma = setTimeout(function () {
+            _timerFirma = null;
+            window.sbHidratar();
+        }, 40);
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _observar);
+    else _observar();
+
+    // Abrir un archivo privado sin pasar por el DOM (menús, descargas).
+    window.sbAbrirRef = async function (v) {
+        if (!v) return;
+        if (!sbEsRefPriv(v)) { window.open(v, '_blank', 'noopener'); return; }
+        var urls = await window.sbFirmar([sbRutaDeRef(v)]);
+        var u = urls[sbRutaDeRef(v)];
+        if (u) window.open(u, '_blank', 'noopener');
+        else window._sbToastError('No se pudo abrir el archivo (permiso o conexión)');
+    };
+
     // Sube un data:URL (imagen o PDF) a Storage y devuelve su URL pública.
     async function _subirDataUrl(carpeta, dataUrl, negId) {
         if (typeof _supabase === 'undefined') return null;
@@ -73,9 +311,9 @@
         } catch (e) { return null; }
         var id = negId || _negId() || 'catalogo';
         var path = id + '/' + carpeta + '/' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8) + '.' + ext;
-        var r = await _supabase.storage.from('evidencias').upload(path, blob, { contentType: ctype, upsert: false });
+        var r = await _supabase.storage.from(sbBucketDe(carpeta)).upload(path, blob, { contentType: ctype, upsert: false });
         if (r.error) return null;
-        return _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
+        return sbRefDe(carpeta, path);
     }
 
     // ALIGERAR: recorre el registro y sube a Storage cualquier base64 (data:),
@@ -729,17 +967,47 @@
         }
         var base = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
         var path = id + '/' + carpeta + '/' + base + ext;
-        var r = await _supabase.storage.from('evidencias').upload(path, blob, { contentType: ctype, upsert: false });
+        var r = await _supabase.storage.from(sbBucketDe(carpeta)).upload(path, blob, { contentType: ctype, upsert: false });
         if (r.error) { window._sbToastError('subir archivo: ' + r.error.message); return null; }
-        var pub = _supabase.storage.from('evidencias').getPublicUrl(path);
-        return { url: pub.data.publicUrl, path: path, pdf: esPdf, nombre: file.name || '' };
+        // `url` es lo que se guarda en el registro: URL si la carpeta es pública,
+        // 'priv:<ruta>' si es privada. `path` sigue siendo la ruta pelada.
+        return { url: sbRefDe(carpeta, path), path: path, pdf: esPdf, nombre: file.name || '' };
     };
 
     // sbBorrarEvidencia(path) → borra el archivo del bucket
+    // Acepta una ruta pelada, una 'priv:<ruta>' o la URL completa: de las tres
+    // sale la ruta, y de la ruta sale el bucket. Quien borra no tiene que saber
+    // en qué almacén cayó el archivo.
     window.sbBorrarEvidencia = async function (path) {
         if (!path || typeof _supabase === 'undefined') return;
-        var r = await _supabase.storage.from('evidencias').remove([path]);
+        var ruta = (String(path).indexOf('http') === 0 || sbEsRefPriv(path)) ? sbRutaDeRef(path) : String(path);
+        if (!ruta) return;
+        var r = await _supabase.storage.from(sbBucketDeRuta(ruta)).remove([ruta]);
         if (r.error) window._sbToastError('borrar foto: ' + r.error.message);
+    };
+
+    // Borrado en lote (retención de evidencias). Agrupa por almacén.
+    window.sbBorrarRefs = async function (refs) {
+        if (typeof _supabase === 'undefined' || !refs || !refs.length) return 0;
+        var porBucket = {}, i, ruta;
+        for (i = 0; i < refs.length; i++) {
+            var v = refs[i]; if (!v) continue;
+            ruta = (String(v).indexOf('http') === 0 || sbEsRefPriv(v)) ? sbRutaDeRef(v) : String(v);
+            if (!ruta) continue;
+            var bk = sbBucketDeRuta(ruta);
+            (porBucket[bk] = porBucket[bk] || []).push(ruta);
+        }
+        var n = 0, buckets = Object.keys(porBucket);
+        for (i = 0; i < buckets.length; i++) {
+            var lista = porBucket[buckets[i]];
+            for (var b = 0; b < lista.length; b += 100) {
+                var lote = lista.slice(b, b + 100);
+                var r = await _supabase.storage.from(buckets[i]).remove(lote);
+                if (r.error) console.warn('[retención] no se borró un lote:', r.error.message);
+                else n += lote.length;
+            }
+        }
+        return n;
     };
 
     // sbSubirFotoBase64(carpeta, dataUrl [, scope]) → Promise<url|null>
@@ -760,10 +1028,9 @@
         var id    = scope || _negId() || 'catalogo';
         var base  = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
         var path  = id + '/' + carpeta + '/' + base + '.jpg';
-        var r = await _supabase.storage.from('evidencias').upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: false });
+        var r = await _supabase.storage.from(sbBucketDe(carpeta)).upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: false });
         if (r.error) { window._sbToastError && window._sbToastError('subir foto: ' + r.error.message); return null; }
-        var pub = _supabase.storage.from('evidencias').getPublicUrl(path);
-        return pub.data.publicUrl;
+        return sbRefDe(carpeta, path);
     };
 
     // sbSubirArchivo(carpeta, file [, scope]) → Promise<url|null>
@@ -776,9 +1043,9 @@
         var ext  = (file.name && file.name.indexOf('.') >= 0) ? file.name.split('.').pop().toLowerCase() : 'bin';
         var base = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
         var path = id + '/' + carpeta + '/' + base + '.' + ext;
-        var r = await _supabase.storage.from('evidencias').upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
+        var r = await _supabase.storage.from(sbBucketDe(carpeta)).upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
         if (r.error) { window._sbUltimoError = r.error.message; window._sbToastError && window._sbToastError('subir archivo: ' + r.error.message); return null; }
-        return _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
+        return sbRefDe(carpeta, path);
     };
 
     /* ══ LOGOS: A STORAGE, NUNCA A localStorage ═══════════════════════════

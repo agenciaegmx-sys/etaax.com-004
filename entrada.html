@@ -825,13 +825,17 @@ async function _addFotoBatch(flujo, input){
     }
     if (st.fotos.length){ _cartMsg(flujo,'✓ '+st.fotos.length+' foto(s) listas','ok'); }
 }
-function _delFoto(flujo, i){ CART[flujo].fotos.splice(i,1); _renderFotos(flujo); }
+function _delFoto(flujo, i){
+    var ref = CART[flujo].fotos[i];
+    if (_PREV[ref]) { try { URL.revokeObjectURL(_PREV[ref]); } catch(e){} delete _PREV[ref]; }
+    CART[flujo].fotos.splice(i,1); _renderFotos(flujo);
+}
 function _renderFotos(flujo){
     var st = CART[flujo];
     var cnt = document.getElementById(flujo+'FotoCnt'); if (cnt) cnt.textContent = st.fotos.length+' / '+MAX_FOTOS+' fotos';
     var strip = document.getElementById(flujo+'FotoStrip'); if (!strip) return;
     strip.innerHTML = st.fotos.map(function(u,i){
-        return '<div class="fs-it"><img src="'+etx(u)+'"><button class="fs-del" onclick="_delFoto(\''+flujo+'\','+i+')">✕</button></div>';
+        return '<div class="fs-it"><img src="'+etx(_prevDe(u))+'"><button class="fs-del" onclick="_delFoto(\''+flujo+'\','+i+')">✕</button></div>';
     }).join('');
 }
 // Arma el registro (misma forma que antes) de un item del lote, con las fotos y nota compartidas.
@@ -975,15 +979,30 @@ function _comprimir(file){
         r.onerror=function(){resolve(null);}; r.readAsDataURL(file);
     });
 }
-// Sube UN archivo (comprimido) a Storage y devuelve su URL pública ('' si falla).
+/* ── Almacén PRIVADO (v55) ────────────────────────────────────────────────
+   Las fotos del QR van al bucket `evidencias-priv`, que NO tiene URL pública:
+   sin firma no se abren, y la firma solo la consigue el ERP con sesión. Subir
+   sigue funcionando sin sesión porque "privado" bloquea LEER, no escribir: la
+   política por token de la v55 es la misma de la v28.
+   En el registro se guarda 'priv:<ruta>', no una URL — una URL pública es una
+   llave permanente y era justo lo que había que quitar.
+   La miniatura sale del archivo del propio celular (createObjectURL). */
+var BUCKET_EV = 'evidencias-priv';
+var REF_PRIV  = 'priv:';
+var _PREV = {};                                  // ref → miniatura local
+function _prevDe(ref){ return _PREV[ref] || ref; }
+// Sube UN archivo (comprimido) al almacén privado y devuelve su referencia
+// 'priv:<ruta>' ('' si falla).
 async function _subirFotoBlob(file, msgEl){
     if (!file) return '';
     var blob = await _comprimir(file);
     if (!blob){ if(msgEl){msgEl.className='cap-msg err';msgEl.textContent='No se pudo procesar la imagen.';} return ''; }
     var path = NEG+'/entradas/'+TOKEN+'/'+genId()+'.jpg'; // path validado por la política de v28
-    var up = await _supabase.storage.from('evidencias').upload(path, blob, {contentType:'image/jpeg'});
+    var up = await _supabase.storage.from(BUCKET_EV).upload(path, blob, {contentType:'image/jpeg'});
     if (up.error){ if(msgEl){msgEl.className='cap-msg err';msgEl.textContent='Error al subir foto: '+up.error.message+' (¿corriste v28?)';} return ''; }
-    return _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
+    var ref = REF_PRIV + path;
+    try { _PREV[ref] = URL.createObjectURL(blob); } catch(e){}
+    return ref;
 }
 
 document.addEventListener('DOMContentLoaded', function(){

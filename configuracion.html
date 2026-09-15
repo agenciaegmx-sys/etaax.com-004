@@ -202,6 +202,26 @@
         </div>
     </div>
 
+    <!-- ALMACÉN PRIVADO DE ARCHIVOS -->
+    <div class="config-section">
+        <div class="config-section-title">Almacén privado de archivos</div>
+        <div class="form-hint" style="margin-bottom:16px;line-height:1.6">
+            Los comprobantes de gastos, la evidencia de cortes y los documentos de colaboradores
+            se guardan en un almacén <strong>privado</strong>: no tienen una dirección pública, y
+            para abrirlos ETAAX pide un permiso temporal que caduca en una hora.
+            Las fotos de insumos, recetas y logos siguen siendo públicas a propósito, porque el
+            portal del QR las muestra sin que nadie inicie sesión.
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <button class="btn-save" style="font-size:13px;padding:9px 20px" onclick="probarAlmacenPrivado()">Comprobar que funciona</button>
+            <div id="privMsg" class="form-hint" style="flex:1;min-width:220px"></div>
+        </div>
+        <div class="form-hint" style="margin-top:10px;font-size:11px">
+            Sube un archivo mínimo, lo vuelve a leer y lo borra. Sirve para saber
+            <em>antes</em> de necesitarlo si esta cuenta tiene permiso en este negocio.
+        </div>
+    </div>
+
     <!-- TARJETAS DE CRÉDITO -->
     <div class="config-section">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border)">
@@ -727,6 +747,46 @@ document.addEventListener('DOMContentLoaded',function(){
     renderTarjetas();
     document.getElementById('modalTarjeta').addEventListener('click',function(e){if(e.target===this)cerrarModalTarjeta();});
 });
+
+/* ── Comprobar el almacén privado ─────────────────────────────────────────
+   Esto existe por una historia concreta: al cerrar el bucket de evidencias
+   (v48 → v51 → v52) las subidas se rompieron y tardamos tres migraciones en
+   entender por qué, adivinando desde la consola. La causa de fondo era que la
+   política solo reconocía dos identidades —dueño y admin@etaax.com— y quien
+   opera un negocio ajeno desde otra cuenta no es ninguna de las dos.
+   Con esto la respuesta se tiene en cinco segundos y con la sesión REAL: sube,
+   lee y borra. Si algo falla, dice exactamente en qué paso.                  */
+async function probarAlmacenPrivado() {
+    var msg = document.getElementById('privMsg');
+    var neg = (typeof getNegocioActivo === 'function' ? getNegocioActivo() : '') ||
+              localStorage.getItem('etaax_negocio_activo') || '';
+    var pinta = function (txt, color) { msg.textContent = txt; msg.style.color = color; };
+    if (!neg) { pinta('No hay un negocio activo.', 'var(--red)'); return; }
+    pinta('Probando…', 'var(--text-dim)');
+
+    var ruta = neg + '/gastos/_prueba-' + Date.now().toString(36) + '.txt';
+    var bucket = (typeof sbBucketDe === 'function') ? sbBucketDe('gastos') : 'evidencias-priv';
+    try {
+        var sube = await _supabase.storage.from(bucket).upload(
+            ruta, new Blob(['ok'], { type: 'text/plain' }), { contentType: 'text/plain' });
+        if (sube.error) {
+            pinta('❌ No se pudo SUBIR: ' + sube.error.message +
+                  ' — corre la migración v55 y revisa que esta cuenta alcance este negocio.', 'var(--red)');
+            return;
+        }
+        var firma = await _supabase.storage.from(bucket).createSignedUrl(ruta, 60);
+        if (firma.error || !firma.data || !firma.data.signedUrl) {
+            pinta('⚠️ Subir sí, pero no se pudo LEER: ' + ((firma.error && firma.error.message) || 'sin permiso') +
+                  ' — las fotos se verían en blanco.', 'var(--red)');
+        } else {
+            pinta('✅ Todo bien. Los archivos sensibles de este negocio se guardan privados y se abren con permiso temporal.', 'var(--green)');
+        }
+        await _supabase.storage.from(bucket).remove([ruta]);   // no dejar basura
+    } catch (e) {
+        pinta('❌ Falló la prueba: ' + (e && e.message ? e.message : e), 'var(--red)');
+    }
+}
+
 </script>
 <script src="security.js"></script>
 <script src="/novedades.js"></script><!-- aviso de actualizaciones del sistema -->

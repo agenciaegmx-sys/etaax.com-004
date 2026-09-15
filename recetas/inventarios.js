@@ -9268,7 +9268,7 @@ function _fotosThumbHTML(e) {
     var arr = (e && e.foto_urls && e.foto_urls.length) ? e.foto_urls : ((e && e.foto_url) ? [e.foto_url] : []);
     if (!arr.length) return '';
     var thumbs = arr.slice(0, 3).map(function(u){
-        return '<img src="' + etx(u) + '" onclick="event.stopPropagation();etaaxVerFoto(this.src)" title="Ver evidencia" style="width:28px;height:28px;object-fit:cover;border-radius:5px;border:1px solid var(--border);cursor:zoom-in;flex-shrink:0">';
+        return '<img ' + sbAttr(u) + ' onclick="event.stopPropagation();etaaxVerFoto(this.src)" title="Ver evidencia" style="width:28px;height:28px;object-fit:cover;border-radius:5px;border:1px solid var(--border);cursor:zoom-in;flex-shrink:0">';
     }).join('');
     var more = arr.length > 3 ? '<span style="font-size:10px;color:var(--text-dim);align-self:center">+' + (arr.length - 3) + '</span>' : '';
     return '<span style="display:inline-flex;gap:3px;align-items:center">' + thumbs + more + '</span>';
@@ -9571,7 +9571,7 @@ function _entEdPintar() {
                 '<div class="ent-ed-fotos">' +
                     _entEd.fotos.map(function(u, i){
                         return '<span class="ent-ed-foto">' +
-                            '<img src="' + etx(u) + '" onclick="etaaxVerFoto(this.src)">' +
+                            '<img ' + sbAttr(u) + ' onclick="etaaxVerFoto(this.src)">' +
                             '<button title="Quitar foto" onclick="_entEd.fotos.splice(' + i + ',1);_entEdPintar()">✕</button>' +
                         '</span>';
                     }).join('') +
@@ -9626,9 +9626,9 @@ async function _entEdSubirUna(file) {
     if (!blob || typeof _supabase === 'undefined') return '';
     var neg = getNegocioActivo() || 'sin-negocio';
     var path = neg + '/entradas/erp/' + genId() + genId() + '.jpg';
-    var up = await _supabase.storage.from('evidencias').upload(path, blob, { contentType:'image/jpeg' });
+    var up = await _supabase.storage.from(sbBucketDe('entradas')).upload(path, blob, { contentType:'image/jpeg' });
     if (up.error) { alert('No se pudo subir la foto: ' + up.error.message); return ''; }
-    return _supabase.storage.from('evidencias').getPublicUrl(path).data.publicUrl;
+    return sbRefDe('entradas', path);
 }
 /* Toda mano sobre el LOG DE ENTRADAS tiene que invalidar el Paso 5. Editar o
    borrar una entrada ya registrada cambia el disponible, el teórico y el capital,
