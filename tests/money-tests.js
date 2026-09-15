@@ -7415,6 +7415,118 @@ console.log('\n══ BC3 · La ficha se arma con lo que sí tiene datos ══'
     });
 }
 
+/* ═══════════ SUITE BC4 · EL COLABORADOR SOLO VE LO DE SU SUCURSAL ═══════════
+   Con sucursal asignada, el portal del QR le muestra únicamente los datos de esa
+   sucursal. Sin asignar, ve todo — esa condición evita dejar sin nada a los
+   colaboradores que hoy no la tienen.
+
+   Y se cierra un hoyo de verdad: `checklist_plantillas` devolvía los checklists
+   de TODAS las sucursales y el filtro se hacía en el navegador. Los datos de las
+   otras sucursales SÍ viajaban al teléfono: bastaba abrir las herramientas del
+   navegador. Un filtro en el cliente es una cortina, no una puerta.
+
+   (Sin Postgres aquí, el SQL no se ejecuta: se prueba la REGLA con un espejo en
+   JS y se fija que el SQL diga lo mismo.)                                      */
+console.log('\n══ BC4 · El colaborador solo ve lo de su sucursal ══');
+{
+    const v59 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v59.sql'), 'utf8');
+
+    /* La regla de pertenencia sigue siendo la del cliente. */
+    const ctx = { window:{}, document:{ addEventListener(){} }, console };
+    ctx.window = ctx;
+    vm.createContext(ctx);
+    vm.runInContext(fs.readFileSync(path.join(RAIZ, 'insumo-label.js'), 'utf8'), ctx, { filename:'insumo-label.js' });
+    const enSuc = ctx.window._recetaEnSuc;
+    const declara = (r) => (Array.isArray(r.sucursales) && r.sucursales.length > 0)
+                        || !!(r.sucursalId && r.sucursalId !== '');
+
+    /* Espejo del WHERE de `visibles`. */
+    function visibles(filas, asignada) {
+        const porCanon = {};
+        filas.forEach(function(r){
+            const c = r.origenId || r.id;
+            (porCanon[c] = porCanon[c] || []).push(r);
+        });
+        return Object.keys(porCanon).filter(function(c){
+            if (!asignada) return true;                                  // sin asignar: todo
+            const g = porCanon[c];
+            if (g.some(r => enSuc(r, asignada))) return true;            // la suya
+            if (!g.some(declara)) return true;                           // de nadie: del negocio
+            return false;
+        });
+    }
+
+    const deA   = { id:'a1', nombre:'Sopa A',  sucursales:['s1'] };
+    const deB   = { id:'b1', nombre:'Sopa B',  sucursales:['s2'] };
+    const vieja = { id:'v1', nombre:'Sopa V' };                          // no declara nada
+    const todas = [deA, deB, vieja];
+
+    test('con sucursal asignada, no ve las de OTRA sucursal', () =>
+        eq(visibles(todas, 's1').indexOf('b1'), -1, 'la de s2 no aparece'));
+    test('…sí ve la suya', () =>
+        eq(visibles(todas, 's1').indexOf('a1') > -1, true, 'la de s1 sí'));
+    /* Lo que nadie asignó no es "de otra sucursal": es del negocio. Esconderlo no
+       protege nada y dejaría el recetario medio vacío de un día para otro. */
+    test('…y sigue viendo lo que no está asignado a ninguna', () =>
+        eq(visibles(todas, 's1').indexOf('v1') > -1, true, 'la vieja sí'));
+    test('SIN sucursal asignada, ve todo (por eso el cambio no deja a nadie sin nada)', () =>
+        eq(visibles(todas, null).length, 3, 'todo'));
+
+    /* Asignado a Matriz NO es lo mismo que sin asignar: el primero ve solo
+       Matriz, el segundo ve todo. Confundirlos es el error fácil aquí. */
+    const deMatriz = { id:'m1', nombre:'Sopa M', sucursales:['suc_principal'] };
+    test('asignado a Matriz ve Matriz, no todo', () => {
+        const v = visibles([deMatriz, deA], 'suc_principal');
+        return eq(v.indexOf('m1') > -1 && v.indexOf('a1') === -1, true, 'solo matriz');
+    });
+
+    /* Un producto con maestro + copia: basta con que UNA de sus filas viva ahí. */
+    test('basta con que una fila del producto viva en su sucursal', () => {
+        const maestro = { id:'p1', nombre:'Mole' };
+        const copia   = { id:'p1c', origenId:'p1', nombre:'Mole', sucursales:['s2'] };
+        return eq(visibles([maestro, copia], 's2').length, 1, 'visible');
+    });
+
+    /* ── El SQL dice lo mismo ──
+       Se quitan los comentarios ANTES de aplanar: el SQL lleva un `-- por qué` al
+       final de varias líneas, y al juntar todo en una esos comentarios quedaban
+       en medio de la condición y ninguna comparación casaba. */
+    const sq = v59.split('\n').map(l => l.replace(/--.*$/, '')).join(' ').replace(/\s+/g, ' ');
+    test('el SQL distingue "sin asignar" de "asignado a Matriz"', () =>
+        eq(v59.indexOf("v_asign  := NULLIF(v_perfil->>'sucursalId','');") > -1
+        && v59.indexOf("v_suc    := COALESCE(v_asign, 'suc_principal');") > -1, true, 'separados'));
+    test('sin sucursal asignada no filtra nada', () =>
+        eq(sq.indexOf('WHERE v_asign IS NULL') > -1, true, 'pasa todo'));
+    test('con sucursal, deja la suya y lo no asignado', () =>
+        eq(sq.indexOf('OR g.es_de_su_suc OR NOT g.alguien_declara') > -1, true, 'regla'));
+    test('«declara sucursal» mira la lista Y el campo suelto', () =>
+        eq(sq.indexOf("jsonb_array_length(p_datos->'sucursales') > 0) OR COALESCE(p_datos->>'sucursalId','') <> ''") > -1,
+           true, 'ambos'));
+
+    /* ── Los checklists: que filtre el servidor ── */
+    test('checklist_plantillas ahora pide el NIP, sin él no sabe quién eres', () =>
+        eq(v59.indexOf('checklist_plantillas(p_neg TEXT, p_token TEXT,') > -1
+        && v59.indexOf('p_niphash TEXT DEFAULT NULL)') > -1, true, 'con NIP'));
+    /* La firma cambia: si no se tira la vieja quedan las dos y la llamada de dos
+       argumentos sigue cayendo en la de la v38 — el arreglo no se vería. */
+    test('…y se tira la firma vieja antes de crear la nueva', () =>
+        eq(v59.indexOf('DROP FUNCTION IF EXISTS checklist_plantillas(TEXT, TEXT);') > -1, true, 'drop'));
+    test('el servidor filtra: la suya, la general, y nada más', () =>
+        eq(sq.indexOf("v_asign IS NULL OR COALESCE(c.datos->>'sucursalId','') = v_asign OR COALESCE(c.datos->>'sucursalId','') = ''") > -1,
+           true, 'filtro'));
+
+    /* ── El portal manda el NIP y usa la sucursal del COLABORADOR ── */
+    const ck = fs.readFileSync(path.join(RAIZ, 'checklist.html'), 'utf8');
+    test('el portal manda el NIP al pedir los checklists', () =>
+        eq(ck.indexOf("rpc('checklist_plantillas', { p_neg: NEG, p_token: TOKEN, p_niphash: h })") > -1, true, 'lo manda'));
+    /* La sucursal que manda es la del colaborador, no la del QR: el código puede
+       acabar pegado en otra pared o compartido por foto. */
+    test('el filtro local usa la sucursal del colaborador antes que la del QR', () =>
+        eq(ck.indexOf('var _sucColab = (PERFIL && PERFIL.sucursalId) || SUC || \'\';') > -1, true, 'del colaborador'));
+    test('…y ya no se guía solo por la del QR', () =>
+        eq(ck.indexOf('if (SUC && p.sucursalId && p.sucursalId !== SUC) return false;'), -1, 'sin SUC solo'));
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La

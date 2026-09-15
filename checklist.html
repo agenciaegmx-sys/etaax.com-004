@@ -263,15 +263,25 @@ async function entrar(){
             if (!rperf.error && rperf.data) PERFIL = rperf.data;
         } catch (e) { /* v46 sin correr */ }
 
-        var rp = await _supabase.rpc('checklist_plantillas', { p_neg: NEG, p_token: TOKEN });
+        /* El NIP va también aquí: sin saber QUIÉN pregunta, el servidor no puede
+           acotar por sucursal y tenía que mandar los checklists de todas — el
+           filtro quedaba en el navegador, que es una cortina, no una puerta
+           (bastaba abrir las herramientas del navegador para leerlos). */
+        var rp = await _supabase.rpc('checklist_plantillas', { p_neg: NEG, p_token: TOKEN, p_niphash: h });
         if (rp.error) {
             btn.disabled = false; msg.className='cap-msg err';
             msg.innerHTML = 'No se pudieron cargar los check lists.<br><span style="font-size:11px;color:var(--text-dim)">' + etx(rp.error.message) + ' — ¿se corrió la migración v38?</span>';
             return;
         }
+        /* La sucursal que manda es la del COLABORADOR, no la del QR: él sabe dónde
+           trabaja, y el código puede acabar pegado en otra pared o compartido.
+           Si no la tiene asignada se usa la del QR, y si tampoco, no se filtra.
+           Esto queda como segunda capa: desde la v59 el que filtra es el
+           servidor, pero mientras esa migración no corra, esto sigue tapando. */
+        var _sucColab = (PERFIL && PERFIL.sucursalId) || SUC || '';
         PLANTILLAS = (rp.data || []).filter(function(p){
             if (!p || !p.id || p.activo === false) return false;
-            if (SUC && p.sucursalId && p.sucursalId !== SUC) return false;
+            if (_sucColab && p.sucursalId && p.sucursalId !== _sucColab) return false;
             /* Filtro por ÁREA: al de barra solo sus checklists. Una plantilla SIN área
                se le muestra a todos — es la general del negocio, y esconderla dejaría
                al colaborador sin nada que hacer por un dato que nadie llenó. */
