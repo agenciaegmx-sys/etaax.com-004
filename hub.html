@@ -1758,6 +1758,36 @@ function showView(id) {
 /* ════════════════════════════════════════════════════════
    LOGIN
 ════════════════════════════════════════════════════════ */
+/* ── Freno a los intentos de adivinar la contraseña (v56) ──────────────────
+   El contador vive en el SERVIDOR. Guardarlo en el navegador sería un letrero,
+   no una puerta: se quita borrando los datos del sitio o abriendo una ventana
+   privada. Así el bloqueo viaja con la cuenta y con la IP.
+
+   Regla de oro aquí: si el servidor no contesta, SE DEJA PASAR. Un freno que
+   falla cerrado deja a todos los clientes fuera por un problema de red — el
+   remedio sería peor que la enfermedad, y esta app ya vivió esa película.     */
+async function _loginEspera(ident) {
+    try {
+        var r = await _supabase.rpc('login_estado', { p_ident: ident });
+        if (r.error) { console.warn('[login] sin freno:', r.error.message); return 0; }
+        return Number(r.data) || 0;
+    } catch (e) { console.warn('[login] sin freno:', e); return 0; }
+}
+async function _loginFallo(ident) {
+    try {
+        var r = await _supabase.rpc('login_fallo', { p_ident: ident });
+        return (r.error ? 0 : Number(r.data) || 0);
+    } catch (e) { return 0; }
+}
+function _loginExito(ident) {
+    try { _supabase.rpc('login_exito', { p_ident: ident }); } catch (e) {}
+}
+function _esperaTexto(seg) {
+    if (seg >= 90) return 'unos ' + Math.ceil(seg / 60) + ' minutos';
+    if (seg > 45)  return 'un minuto';
+    return seg + ' segundos';
+}
+
 async function loginSubmit() {
     var input = (document.getElementById('loginEmail').value || '').trim().toLowerCase();
     var pwd   = document.getElementById('loginPwd').value || '';
@@ -1773,6 +1803,15 @@ async function loginSubmit() {
         setTimeout(function(){ pwdField.classList.remove('error'); }, 1500);
     }
 
+    /* ¿Viene de una racha de fallos? Se pregunta ANTES de intentar: así el
+       formulario deja de servir como banco de pruebas de contraseñas. */
+    var _espera = await _loginEspera(input);
+    if (_espera > 0) {
+        shakeError('Demasiados intentos fallidos. Espera ' + _esperaTexto(_espera) + ' e inténtalo de nuevo.');
+        document.getElementById('loginForgot').style.display = 'block';
+        return;
+    }
+
     // ── Intento 1: login de dueño (contiene @) → Supabase Auth ──
     if (input.includes('@')) {
         var btn = document.querySelector('#viewLogin .btn-auth');
@@ -1780,11 +1819,17 @@ async function loginSubmit() {
         var result = await _supabase.auth.signInWithPassword({ email: input, password: pwd });
         btn.disabled = false; btn.textContent = 'Entrar';
         if (result.error) {
-            shakeError('Correo o contraseña incorrectos.');
+            /* El mensaje NO cambia según si el correo existe: eso convertiría la
+               pantalla en un buscador de clientes. Solo se dice cuánto esperar. */
+            var _tras = await _loginFallo(input);
+            shakeError(_tras > 0
+                ? 'Demasiados intentos fallidos. Espera ' + _esperaTexto(_tras) + ' e inténtalo de nuevo.'
+                : 'Correo o contraseña incorrectos.');
             // Solo al fallar: ofrecer recuperar contraseña
             document.getElementById('loginForgot').style.display = 'block';
             return;
         }
+        _loginExito(input);
         var u = result.data.user, meta = u.user_metadata || {};
         // Admin maestro → ir directo al panel
         if (u.email === ADMIN_EMAIL) { window.location.href = 'admin.html'; return; }
@@ -1833,6 +1878,7 @@ async function loginSubmit() {
             if (_hashPrevio && typeof _supabase !== 'undefined') {
                 try { _supabase.rpc('staff_actualizar_hash', { p_usuario: input, p_hash_viejo: _hashPrevio, p_hash_nuevo: _hV2 }).then(function(){}); } catch(e){}
             }
+            _loginExito(input);
             _iniciarSesionStaff(miembro, neg);
             return;
         }
@@ -1872,13 +1918,17 @@ async function loginSubmit() {
                     var negs = _getNegocios();
                     if (!negs.find(function (n) { return n.id === negObj.id; })) { negs.push(negObj); _setNegocios(negs); }
                 } catch (e) {}
+                _loginExito(input);
                 await _iniciarSesionStaff(miembroObj, negObj);
                 return;
             }
         } catch (e) { console.warn('[login] staff nube:', e); }
     }
 
-    shakeError('Usuario o contraseña incorrectos.');
+    var _trasStaff = await _loginFallo(input);
+    shakeError(_trasStaff > 0
+        ? 'Demasiados intentos fallidos. Espera ' + _esperaTexto(_trasStaff) + ' e inténtalo de nuevo.'
+        : 'Usuario o contraseña incorrectos.');
 }
 
 async function _iniciarSesionStaff(miembro, neg) {

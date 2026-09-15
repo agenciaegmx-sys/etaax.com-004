@@ -6356,6 +6356,96 @@ console.log('\n══ BB · El almacén privado (etaax-db.js) ══');
         && v55.indexOf('OR is_platform_admin()') > -1, true, 'tres identidades'));
 }
 
+/* ═══════════ SUITE BC · EL FRENO DE LA PANTALLA DE ENTRADA (hub.html + v56) ═══
+   Hasta ahora la entrada aceptaba intentos ilimitados: lo único enfrente era el
+   límite genérico de Supabase. Quien tuviera el correo de un cliente podía usar
+   el propio formulario como banco de pruebas, toda la noche y sin dejar rastro.
+
+   Dos cosas que este candado cuida, y que se contradicen si se hacen mal:
+     · que el freno EXISTA (contador en el servidor, castigo que crece), y
+     · que FALLE ABIERTO. Un freno que se cierra ante un error de red deja a
+       todos los clientes fuera por un problema que no es suyo. Esa es la
+       regresión cara, y por eso está aquí.                                    */
+async function suiteFrenoLogin() {
+console.log('\n══ BC · El freno de la pantalla de entrada (hub.html) ══');
+
+    const ctx = crearContexto();
+    cargarInline(ctx, 'hub.html');
+
+    /* ── Fallar abierto: si el servidor no contesta, se deja pasar ───────── */
+    ctx._supabase.rpc = () => Promise.resolve({ error: { message: 'función no existe' }, data: null });
+    await testA('si la función del servidor no existe, NO bloquea a nadie', async () =>
+        eq(await ctx.window._loginEspera('a@b.com'), 0, 'pasa'));
+
+    ctx._supabase.rpc = () => Promise.reject(new Error('sin red'));
+    await testA('si truena la red, tampoco bloquea', async () =>
+        eq(await ctx.window._loginEspera('a@b.com'), 0, 'pasa'));
+
+    /* ── …pero cuando el servidor sí dice "espera", se respeta ───────────── */
+    let pedido = null;
+    ctx._supabase.rpc = (fn, args) => { pedido = { fn, args }; return Promise.resolve({ error: null, data: 300 }); };
+    await testA('cuando el servidor manda esperar, el freno lo respeta', async () =>
+        eq(await ctx.window._loginEspera('a@b.com'), 300, 'bloquea'));
+    test('…preguntando por la cuenta que se está intentando', () =>
+        eq(pedido.fn === 'login_estado' && pedido.args.p_ident === 'a@b.com', true, JSON.stringify(pedido)));
+
+    ctx._supabase.rpc = () => Promise.resolve({ error: null, data: 60 });
+    await testA('un fallo devuelve la espera que toca', async () =>
+        eq(await ctx.window._loginFallo('a@b.com'), 60, 'cuenta'));
+
+    /* ── Cómo se le dice al usuario ──────────────────────────────────────── */
+    const txt = ctx.window._esperaTexto;
+    test('60 segundos se dicen "un minuto", no "60 segundos"', () =>
+        eq(txt(60), 'un minuto', txt(60)));
+    test('30 segundos sí se dicen en segundos', () => eq(txt(30), '30 segundos', txt(30)));
+    test('5 minutos se dicen en minutos', () => eq(txt(300), 'unos 5 minutos', txt(300)));
+    test('una hora se dice en minutos, no en segundos', () => eq(txt(3600), 'unos 60 minutos', txt(3600)));
+
+    /* ── El cableado en la pantalla ──────────────────────────────────────── */
+    const hub = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+    /* OJO con el indexOf: si la llamada desaparece devuelve -1, y -1 es menor que
+       cualquier posición, así que la comparación sola daba por buena su ausencia.
+       Hay que exigir que EXISTA y además que vaya antes. */
+    const iPreg = hub.indexOf('var _espera = await _loginEspera(input);');
+    const iAuth = hub.indexOf('auth.signInWithPassword({ email: input');
+    test('se pregunta ANTES de intentar (si no, el formulario sigue sirviendo de banco de pruebas)', () =>
+        eq(iPreg > -1 && iAuth > -1 && iPreg < iAuth, true, 'preg=' + iPreg + ' auth=' + iAuth));
+    test('un login fallido de dueño cuenta', () =>
+        eq(hub.indexOf('var _tras = await _loginFallo(input);') > -1, true, 'cuenta'));
+    test('un login fallido de colaborador TAMBIÉN cuenta (misma pantalla)', () =>
+        eq(hub.indexOf('var _trasStaff = await _loginFallo(input);') > -1, true, 'cuenta'));
+    test('entrar bien borra el contador', () =>
+        eq((hub.match(/_loginExito\(input\)/g) || []).length, 3, 'los tres caminos'));
+    /* El mensaje no puede cambiar según si el correo existe: eso convertiría la
+       pantalla en un buscador de clientes. */
+    test('el mensaje de error no distingue correo inexistente de contraseña mala', () =>
+        eq(hub.indexOf("'Correo o contraseña incorrectos.'") > -1
+        && hub.indexOf('no existe esa cuenta') === -1, true, 'sin filtrar'));
+
+    /* ── La migración v56 ────────────────────────────────────────────────── */
+    const v56 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v56.sql'), 'utf8');
+    test('el contador vive en el servidor, no en el navegador', () =>
+        eq(v56.indexOf('CREATE TABLE IF NOT EXISTS login_intentos') > -1, true, 'tabla'));
+    test('la tabla NO se puede leer desde el cliente', () =>
+        eq(v56.indexOf('ALTER TABLE login_intentos ENABLE ROW LEVEL SECURITY') > -1
+        && v56.indexOf('CREATE POLICY') === -1, true, 'cerrada'));
+    test('NO se guarda el correo, solo su md5', () =>
+        eq(v56.indexOf('md5(lower(trim(coalesce(p_ident') > -1, true, 'md5'));
+    /* La escalera: sin castigo creciente, 4 intentos por minuto siguen siendo
+       5 760 al día. */
+    const escalera = v56.replace(/\s+/g, ' ');
+    [['= 5', '60', '5'], ['= 6', '300', '6'], ['= 7', '900', '7'], ['>= 8', '3600', '8 o más']]
+        .forEach(([cond, seg, cuantos]) =>
+            test('la espera crece: ' + cuantos + ' fallos ⇒ ' + seg + ' s', () =>
+                eq(escalera.indexOf('p_fallos ' + cond + ' THEN ' + seg) > -1, true, 'escalera')));
+    test('también frena por IP (si no, basta con ir cambiando de correo)', () =>
+        eq(v56.indexOf('_login_ip()') > -1 && /v_n >= 20/.test(v56), true, 'por IP'));
+    test('las tres funciones las puede llamar quien aún no tiene sesión', () =>
+        eq((v56.match(/GRANT EXECUTE ON FUNCTION login_\w+\(TEXT\)\s+TO anon/g) || []).length, 3, 'grants'));
+    test('el registro se limpia solo', () =>
+        eq(/DELETE FROM login_intentos WHERE creado < now\(\) - interval '24 hours'/.test(v56), true, 'retención'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
@@ -6365,4 +6455,4 @@ function resumen() {
     process.exit(FALLA === 0 ? 0 : 1);
 }
 
-suiteAlmacenPrivado().then(resumen);
+suiteAlmacenPrivado().then(suiteFrenoLogin).then(resumen);
