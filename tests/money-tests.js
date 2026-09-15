@@ -6579,6 +6579,221 @@ console.log('\n══ BB5 · La sub-receta convertida a insumo ══');
     });
 }
 
+/* ═══════════ SUITE BB6 · EL INSUMO RECIÉN AGREGADO APARECE YA ════════════════
+   El módulo de insumos se abre DENTRO de un iframe desde el escandallo (los tres
+   botones: catálogo del negocio, catálogo ETAAX, nuevo insumo). Un iframe es otro
+   contexto de JavaScript: su memoria y su instancia de etaax-store son suyas.
+
+   Mientras el catálogo vivió en localStorage no importaba —el padre lo releía y
+   ya— pero al mudarlo a IndexedDB (clave GRANDE) el padre se quedó leyendo su
+   copia en memoria: el insumo recién agregado no existía para el buscador hasta
+   cerrar y volver a abrir el modal. Releer la base no sirve, es asíncrona; lo que
+   sirve es injertar los registros que el hijo manda en el propio mensaje.       */
+function suiteInsumoRecienAgregado() {
+console.log('\n══ BB6 · El insumo recién agregado aparece ya ══');
+
+    const cat = [];
+    for (let i = 0; i < 30; i++) {
+        cat.push({ id:'m'+i, nombre:'Insumo '+i, activo:'1', sucursalId:'suc_principal',
+                   sucursales:['suc_principal'],
+                   presentaciones:[{ costoUnitario:10+i, umCosto:'LT' }] });
+    }
+    const store = { 'etaax_negT_insumos': JSON.stringify(cat) };
+    const _nodos = {};
+    const nodo = () => ({ style:{}, innerHTML:'', value:'', textContent:'', children:[],
+        appendChild(){}, addEventListener(){}, removeChild(){}, remove(){},
+        getBoundingClientRect(){ return { bottom:10, left:0, width:200 }; },
+        scrollIntoView(){}, querySelectorAll(){ return []; }, querySelector(){ return null; },
+        focus(){}, select(){} });
+    const ctx = {
+        console:{ log(){}, warn(){}, error(){} }, JSON, Object, String, Date, Math, Array, Number,
+        Boolean, RegExp, parseFloat, parseInt, isNaN, setTimeout, clearTimeout, setInterval:()=>0, Promise,
+        localStorage:{ _d:{ etaax_negocio_activo:'negT', etaax_sucursal_activa:'suc_principal' },
+            getItem(k){ return this._d[k]===undefined?null:this._d[k]; },
+            setItem(k,v){ this._d[k]=String(v); }, removeItem(k){ delete this._d[k]; } },
+        sessionStorage:{ getItem(){ return null; }, setItem(){} },
+        document:{ readyState:'complete', addEventListener(){},
+                   getElementById(id){ return _nodos[id] || (_nodos[id] = nodo()); },
+                   querySelectorAll(sel){ return String(sel).indexOf('data-ing') > -1 ? [nodo()] : []; },
+                   querySelector(){ return null; }, createElement:nodo, body:{ appendChild(){} } },
+        navigator:{}, location:{ href:'' },
+    };
+    ctx.window = ctx;
+    /* Se guarda el listener de 'message' para poder DISPARAR el mensaje real del
+       iframe. Probar la función suelta no basta: si alguien la quita del manejador,
+       el buscador se queda ciego otra vez y el test seguiría en verde. */
+    const _msg = [];
+    ctx.window.addEventListener = (t, f) => { if (t === 'message') _msg.push(f); };
+    ctx.etaaxStore = { get(k){ return store[k]===undefined?null:store[k]; },
+                       set(k,v){ store[k]=v; }, del(k){ delete store[k]; } };
+    vm.createContext(ctx);
+    vm.runInContext(fs.readFileSync(path.join(RAIZ,'etaax-core.js'),'utf8'), ctx, { filename:'etaax-core.js' });
+    vm.runInContext(fs.readFileSync(path.join(RAIZ,'insumo-label.js'),'utf8'), ctx, { filename:'insumo-label.js' });
+    try { vm.runInContext(fs.readFileSync(path.join(RAIZ,'app.js'),'utf8'), ctx, { filename:'app.js' }); } catch(e) {}
+    const w = ctx.window;
+
+    test('antes de agregar, el insumo no existe', () =>
+        eq(w.buscarInsumos('tequila').length, 0, 'no está'));
+
+    /* Esto es lo que manda el iframe al agregar desde el catálogo. */
+    const nuevo = { id:'nvo1', nombre:'Tequila Blanco', activo:'1', sucursalId:'suc_principal',
+                    sucursales:['suc_principal'], presentaciones:[{ costoUnitario:420, umCosto:'LT' }] };
+    test('injertar devuelve cuántos entraron', () => eq(w._injertarInsumos([nuevo]), 1, 'uno'));
+    /* LA PRUEBA QUE IMPORTA: el buscador lo encuentra SIN recargar nada. */
+    test('el buscador lo encuentra en la siguiente tecla', () =>
+        eq(w.buscarInsumos('tequila').length, 1, 'ya aparece'));
+    test('…con su costo, no como un renglón vacío', () =>
+        eq(w.buscarInsumos('tequila')[0].presentaciones[0].costoUnitario, 420, 'costo'));
+    /* Y queda en el almacén, no solo en memoria: si no, se pierde al recargar. */
+    test('…y queda guardado en el almacén, no solo en memoria', () =>
+        eq(store['etaax_negT_insumos'].indexOf('Tequila Blanco') > -1, true, 'persistido'));
+
+    /* ── EL MENSAJE DE VERDAD ──
+       Lo que manda el iframe al agregar algo del catálogo. Sin disparar el mensaje
+       solo se estaría probando la función por su cuenta. */
+    const enviar = (data) => _msg.forEach(f => f({ data: data }));
+    test('el manejador de mensajes quedó registrado', () => eq(_msg.length > 0, true, 'registrado'));
+    enviar({ type:'insumosCambiaron', insumos:[{ id:'nvo2', nombre:'Mezcal Espadín', activo:'1',
+             sucursalId:'suc_principal', sucursales:['suc_principal'],
+             presentaciones:[{ costoUnitario:800, umCosto:'LT' }] }] });
+    test('al llegar el aviso del modal, el buscador ya lo encuentra', () =>
+        eq(w.buscarInsumos('mezcal').length, 1, 'aparece'));
+    test('…sin haber recargado ni reabierto nada', () =>
+        eq(w.buscarInsumos('mezcal')[0].presentaciones[0].costoUnitario, 800, 'con su costo'));
+    /* Un mensaje de otra cosa no debe tocar el catálogo. */
+    enviar({ type:'otraCosa', insumos:[{ id:'zzz', nombre:'Basura' }] });
+    test('un mensaje ajeno no mete nada al catálogo', () =>
+        eq(w.buscarInsumos('basura').length, 0, 'intacto'));
+
+    /* Agregar el MISMO id otra vez actualiza, no duplica: al agregar un insumo del
+       catálogo ETAAX que ya vivía en el negocio, se reusa su id. */
+    const editado = Object.assign({}, nuevo, { nombre:'Tequila Blanco 100% Agave' });
+    w._injertarInsumos([editado]);
+    test('el mismo id se actualiza, no se duplica', () =>
+        eq(w.buscarInsumos('tequila').length, 1, 'uno solo'));
+    test('…con el dato nuevo', () =>
+        eq(w.buscarInsumos('tequila')[0].nombre.indexOf('Agave') > -1, true, 'actualizado'));
+    test('un mensaje vacío no rompe ni borra nada', () =>
+        eq(w._injertarInsumos([]) === 0 && w._injertarInsumos(null) === 0, true, 'inocuo'));
+
+    /* ── Que las TRES vías avisen ── */
+    const ins = fs.readFileSync(path.join(RAIZ,'recetas/insumos.html'), 'utf8');
+    const insjs = fs.readFileSync(path.join(RAIZ,'recetas/insumos.js'), 'utf8');
+    test('hay UN helper que avisa al padre', () =>
+        eq(insjs.indexOf('window._avisarPadreIns = function') > -1, true, 'helper'));
+    test('el catálogo ETAAX avisa (las dos ramas: ya existía y nuevo)', () =>
+        eq((ins.match(/_avisarPadreIns\(\[_ex\]\)|_avisarPadreIns\(\[copia\]\)/g) || []).length, 2, 'ambas'));
+    test('el catálogo del negocio avisa', () =>
+        eq(ins.indexOf('_avisarPadreIns([ins])') > -1, true, 'avisa'));
+    test('guardar un insumo nuevo manda el REGISTRO, no solo el id', () =>
+        eq(insjs.indexOf('window._avisarPadreIns(_copiaNueva ? [insumo, _copiaNueva] : [insumo], true)') > -1, true, 'registro'));
+    /* ── LO QUE EL HIJO MANDA DE VERDAD ──
+       Se corre su función real con un `parent` de mentira que apunta lo enviado.
+       Comprobar el sitio donde se llama no basta: si el mensaje deja de llevar los
+       registros, el padre no tiene qué injertar y el bug vuelve entero, con todos
+       los demás tests en verde. */
+    const _src = insjs.slice(insjs.indexOf('window._avisarPadreIns = function'));
+    const _fn  = _src.slice(0, _src.indexOf('\n   };') + 6);
+    const cHijo = { console:{ warn(){} }, Object, String, Array, JSON, _soloMode: true };
+    cHijo.window = cHijo;
+    const enviados = [];
+    cHijo.window.parent = { postMessage(d){ enviados.push(d); }, __esOtro: true };
+    vm.createContext(cHijo);
+    vm.runInContext(_fn, cHijo, { filename: 'avisarPadreIns' });
+
+    cHijo.window._avisarPadreIns([{ id:'x1', nombre:'Ron', foto:'https://sb.co/f.jpg' }]);
+    test('el aviso lleva los REGISTROS, no solo el id', () =>
+        eq(enviados[0].insumos && enviados[0].insumos.length, 1, JSON.stringify(enviados[0])));
+    test('…con el dato completo del insumo', () =>
+        eq(enviados[0].insumos[0].nombre, 'Ron', 'nombre'));
+    test('…y también el id, para el que ya lo usaba', () => eq(enviados[0].insumoId, 'x1', 'id'));
+    test('agregar del catálogo NO pide cerrar el modal', () =>
+        eq(enviados[0].type, 'insumosCambiaron', enviados[0].type));
+
+    cHijo.window._avisarPadreIns([{ id:'x2', nombre:'Gin' }], true);
+    test('guardar un insumo SÍ pide cerrar el modal', () =>
+        eq(enviados[1].type, 'insumoGuardado', enviados[1].type));
+
+    /* La foto en base64 no viaja: pesa y el padre solo necesita la URL. */
+    cHijo.window._avisarPadreIns([{ id:'x3', nombre:'Vodka', foto:'data:image/jpeg;base64,AAAA' }]);
+    test('la foto base64 no se manda por el mensaje', () =>
+        eq(enviados[2].insumos[0].foto, '', 'sin base64'));
+    test('…pero una URL de foto sí pasa', () =>
+        eq(enviados[0].insumos[0].foto, 'https://sb.co/f.jpg', 'url'));
+    /* Fuera del iframe no se manda nada: la página abierta sola no tiene padre. */
+    const cSolo = { console:{ warn(){} }, Object, String, Array, JSON, _soloMode: false };
+    cSolo.window = cSolo; cSolo.window.parent = cSolo;
+    let mandados = 0;
+    cSolo.window.parent = { postMessage(){ mandados++; } };
+    vm.createContext(cSolo);
+    vm.runInContext(_fn, cSolo, { filename: 'avisarPadreIns' });
+    cSolo.window._avisarPadreIns([{ id:'z', nombre:'X' }]);
+    test('abierta como página normal, no le habla a nadie', () => eq(mandados, 0, 'callado'));
+    /* Agregar del catálogo NO cierra el modal: lo normal es agregar varios. */
+    const a = fs.readFileSync(path.join(RAIZ,'app.js'), 'utf8');
+    const iCambio = a.indexOf("e.data.type === 'insumosCambiaron'");
+    test('agregar del catálogo no cierra el modal', () =>
+        eq(a.slice(iCambio, a.indexOf("e.data.type === 'insumoGuardado'")).indexOf('cerrarIframeInsumo') === -1, true, 'sigue abierto'));
+}
+
+/* ═══════════ SUITE BB7 · LA FICHA BASE EN EL PORTAL DEL QR ═══════════════════
+   El servidor ya mandaba `camposExtra` (portal_recetas lo incluye) pero el portal
+   no lo pintaba: quien prepara un prebatch veía ingredientes y procedimiento pero
+   no CUÁNTO RINDE, en cuántas porciones, cuánto dura ni cómo se guarda.         */
+console.log('\n══ BB7 · La ficha base en el portal del QR ══');
+{
+    const ctx = { console:{log(){},warn(){}}, JSON, Object, String, Date, Math, Array, Number, Boolean,
+                  RegExp, parseFloat, parseInt, isNaN, setTimeout, clearTimeout, setInterval:()=>0, Promise,
+                  localStorage:{ getItem(){return null;}, setItem(){} },
+                  sessionStorage:{ getItem(){return null;}, setItem(){} },
+                  document:{ readyState:'complete', addEventListener(){}, getElementById(){ return null; },
+                             querySelector(){ return null; }, querySelectorAll(){ return []; },
+                             createElement:()=>({style:{},appendChild(){},addEventListener(){}}) },
+                  navigator:{}, location:{ search:'?t=x&n=y', href:'' }, URLSearchParams };
+    ctx.window = ctx; ctx.window.addEventListener = () => {};
+    vm.createContext(ctx);
+    const html = fs.readFileSync(path.join(RAIZ,'checklist.html'), 'utf8');
+    const bloques = [...html.matchAll(/<script(?![^>]*src)[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]);
+    bloques.forEach(b => { try { vm.runInContext(b, ctx); } catch(e) {} });
+    const F = ctx.window._fichaBase;
+
+    test('la ficha existe en el portal', () => eq(typeof F, 'function', 'existe'));
+
+    const sub = { tipo:'sub-bebidas', camposExtra:{
+        rendimientoFinal:'5', unidadRendimientoFinal:'LT',
+        porcionesQty:'25', porcionesUnidad:'copas',
+        pesoPorcion:'200', unidadPesoPorcion:'ML',
+        vidaUtilNum:'7', vidaUtilUnidad:'días', almacenamiento:'Refrigerado',
+        mermaManual:'', envaseCapacidad:'' } };
+    const h = F(sub);
+    test('una sub-receta dice cuánto rinde', () => eq(h.indexOf('5 LT') > -1, true, 'rinde'));
+    test('…en cuántas porciones', () => eq(h.indexOf('25 copas') > -1, true, 'porciones'));
+    test('…de cuánto cada una', () => eq(h.indexOf('200 ML') > -1, true, 'porción'));
+    test('…cuánto dura', () => eq(h.indexOf('7 días') > -1, true, 'vida útil'));
+    test('…y cómo se guarda', () => eq(h.indexOf('Refrigerado') > -1, true, 'almacenamiento'));
+    /* Lo vacío no se pinta: ocho renglones en blanco enseñan menos que tres con
+       dato, y el colaborador deja de leer la ficha. */
+    test('los campos vacíos no dejan renglones huecos', () =>
+        eq(h.indexOf('Merma') === -1 && h.indexOf('Envase') === -1, true, 'sin huecos'));
+    test('una receta sin ficha no pinta el encabezado', () =>
+        eq(F({ tipo:'sub-bebidas', camposExtra:{} }), '', 'vacío'));
+    test('sin camposExtra tampoco truena', () => eq(F({ tipo:'alimentos' }), '', 'vacío'));
+
+    const ali = { tipo:'alimentos', camposExtra:{ porciones:'4', unidadPorcion:'platos',
+        temperaturaServicio:'Caliente', alergenos:['Gluten','Lácteos'], 'acompañamientos':['Arroz'] } };
+    const ha = F(ali);
+    test('un platillo dice sus porciones', () => eq(ha.indexOf('4 platos') > -1, true, 'porciones'));
+    test('…y sus alérgenos juntos', () => eq(ha.indexOf('Gluten · Lácteos') > -1, true, 'alérgenos'));
+
+    /* El portal es de colaboradores: NUNCA puede colarse dinero. La RPC ya filtra
+       con lista blanca, pero la ficha se arma aquí y podría leer un campo nuevo. */
+    const conDinero = { tipo:'sub-bebidas', camposExtra:{ rendimientoFinal:'5',
+        unidadRendimientoFinal:'LT', costoTotal:'1234.56', precioEnCarta:'99' } };
+    const hd = F(conDinero);
+    test('la ficha NO pinta ningún costo aunque venga en el dato', () =>
+        eq(hd.indexOf('1234') === -1 && hd.indexOf('99') === -1, true, hd.slice(0,120)));
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La
@@ -6933,4 +7148,5 @@ function resumen() {
 }
 
 suiteBuscadorIngredientes();
+suiteInsumoRecienAgregado();
 suiteAlmacenPrivado().then(suiteFrenoLogin).then(resumen);

@@ -423,12 +423,60 @@ function _verReceta(i){
             (_esSubReceta(r) ? '🧪 Preparación · ' : '') + etx(r.grupo||'') +
             (r.cristaleria ? ' · ' + etx(r.cristaleria) : '') + (r.tiempo ? ' · ⏱️ ' + etx(r.tiempo) : '') + '</div>' +
         (r.foto ? '<img src="' + etx(r.foto) + '" style="width:100%;border-radius:12px;margin-bottom:14px">' : '') +
+        _fichaBase(r) +
         '<label class="lbl">Ingredientes</label>' +
         '<table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px">' + ing + '</table>' +
         (r.procedimiento
             ? '<label class="lbl">Procedimiento</label><div style="font-size:14px;line-height:1.7;white-space:pre-wrap;color:var(--text-muted)">' + etx(r.procedimiento) + '</div>'
             : '');
     _show('recDetalle');
+}
+
+/* ── La ficha base de una receta (camposExtra) ─────────────────────────────
+   El servidor ya mandaba estos datos (portal_recetas los incluye) pero el portal
+   no los pintaba nunca: quien prepara un prebatch veía los ingredientes y el
+   procedimiento, pero no CUÁNTO RINDE, en cuántas porciones, cuánto dura ni cómo
+   se guarda — que es justo lo que hay que saber antes de empezar.
+   Se arma por tipo de receta y se salta lo vacío: una ficha con ocho renglones
+   en blanco enseña menos que tres con dato. */
+function _fichaBase(r){
+    var cx = (r && r.camposExtra) || {};
+    var f = [];
+    var par = function(lbl, v, u){
+        var val = String(v == null ? '' : v).trim();
+        if (!val || val === '0') return;
+        f.push([lbl, val + (u ? ' ' + String(u).trim() : '')]);
+    };
+    var lista = function(lbl, arr){
+        if (!arr || !arr.length) return;
+        f.push([lbl, arr.filter(Boolean).join(' · ')]);
+    };
+    var tipo = String(r.tipo || '');
+    if (tipo === 'sub-alimentos' || tipo === 'sub-bebidas') {
+        par('Rinde',        cx.rendimientoFinal, cx.unidadRendimientoFinal);
+        par('Porciones',    cx.porcionesQty,     cx.porcionesUnidad);
+        par('Cada porción', cx.pesoPorcion,      cx.unidadPesoPorcion);
+        par('Merma',        cx.mermaManual, '%');
+        par('Envase',       cx.envaseCapacidad,  cx.envaseCapUnidad);
+        par('Vida útil',    cx.vidaUtilNum,      cx.vidaUtilUnidad);
+        par('Se guarda en', cx.almacenamiento);
+    } else if (tipo === 'alimentos') {
+        par('Porciones',   cx.porciones, cx.unidadPorcion);
+        par('Se sirve a',  cx.temperaturaServicio);
+        lista('Alérgenos', cx.alergenos);
+        lista('Va con',    cx['acompañamientos'] || cx.acompanamientos);
+    } else if (tipo === 'bebidas') {
+        par('Rinde',    cx.rendimientoBebida, cx.unidadRendimientoBebida);
+        par('Método',   cx.metodoPre);
+        par('Garnish',  cx.garnish);
+    }
+    if (!f.length) return '';
+    return '<label class="lbl">Ficha</label>' +
+        '<div style="display:grid;grid-template-columns:auto 1fr;gap:5px 14px;font-size:13px;margin-bottom:16px">' +
+        f.map(function(x){
+            return '<div style="color:var(--text-dim);white-space:nowrap">' + etx(x[0]) + '</div>' +
+                   '<div style="font-weight:600">' + etx(x[1]) + '</div>';
+        }).join('') + '</div>';
 }
 
 /* ── Guías de uso ── */

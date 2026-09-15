@@ -2358,6 +2358,37 @@
    
    const _soloMode = new URLSearchParams(location.search).get('solo') === '1';
 
+   /* ── AVISAR AL PADRE QUE EL CATÁLOGO CAMBIÓ ───────────────────────────────
+      Esta página se abre DENTRO de un iframe desde el escandallo (los tres
+      botones: catálogo del negocio, catálogo ETAAX, nuevo insumo). Un iframe es
+      otro contexto de JavaScript: tiene su PROPIA memoria y su propia instancia
+      de etaax-store. Escribir aquí no actualiza nada allá.
+
+      Antes eso no importaba porque el catálogo vivía en localStorage y el padre
+      lo releía y ya. Al mudarlo a IndexedDB (clave GRANDE), el padre se quedó
+      leyendo su copia en memoria: el insumo recién agregado no aparecía en el
+      buscador de ingredientes hasta cerrar y volver a abrir el modal.
+
+      Se mandan los REGISTROS, no un aviso a secas: el padre no puede releer la
+      base a tiempo —es asíncrona— pero sí puede injertar lo que le llega.     */
+   window._avisarPadreIns = function (registros, tambienCerrar) {
+       if (!_soloMode || !window.parent || window.parent === window) return;
+       var lista = (registros || []).filter(Boolean).map(function (r) {
+           // La foto en base64 no viaja: pesa y el padre solo necesita la URL.
+           if (r && r.foto && String(r.foto).indexOf('data:') === 0) {
+               var d = Object.assign({}, r); d.foto = ''; return d;
+           }
+           return r;
+       });
+       if (!lista.length) return;
+       try {
+           window.parent.postMessage({
+               type: tambienCerrar ? 'insumoGuardado' : 'insumosCambiaron',
+               insumoId: lista[0].id, insumos: lista
+           }, '*');
+       } catch (e) { console.warn('[insumos] no se pudo avisar al padre:', e); }
+   };
+
    // Delegado listener registrado una sola vez al inicio
    document.addEventListener('DOMContentLoaded', () => {
        const overlay = document.getElementById('modalOverlay');
@@ -4730,7 +4761,9 @@
        _insumosSyncPend = null;
        try { await _sincronizarInsumosSupabase(getNegocioActivo(), _copiaNueva ? [insumo, _copiaNueva] : [insumo]); } catch(e) {}
        if (_soloMode) {
-           window.parent.postMessage({ type: 'insumoGuardado', insumoId: insumo.id }, '*');
+           // Van los registros completos: con solo el id, el padre los buscaba en
+           // SU catálogo en memoria —que no tiene el insumo nuevo— y no encontraba nada.
+           window._avisarPadreIns(_copiaNueva ? [insumo, _copiaNueva] : [insumo], true);
            return;
        }
        var _eraEdicion = !!editandoId;

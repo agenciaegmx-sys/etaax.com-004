@@ -1956,11 +1956,50 @@ function cerrarIframeInsumo(forzar) {
     }, 4000);
 }
 
+/* ── INJERTAR LO QUE MANDA EL MODAL DE INSUMOS ──────────────────────────────
+   El módulo de insumos se abre en un IFRAME desde el escandallo. Un iframe es
+   otro contexto de JavaScript: su memoria y su instancia de etaax-store son
+   suyas. Antes daba igual porque el catálogo vivía en localStorage y bastaba
+   releerlo; desde que es una clave GRANDE en IndexedDB, releer aquí devuelve la
+   copia vieja de ESTA página y el insumo recién agregado no existía para el
+   buscador hasta cerrar y volver a abrir el modal.
+
+   Releer IndexedDB no sirve: es asíncrono y el usuario ya está escribiendo. Lo
+   que sí sirve es injertar los registros que el hijo manda en el propio mensaje.
+   Devuelve cuántos entraron. */
+function _injertarInsumos(lista) {
+    if (!lista || !lista.length) return 0;
+    var cat = getCatalogoInsumos().slice();
+    var porId = {};
+    cat.forEach(function(x, i){ if (x && x.id) porId[x.id] = i; });
+    var n = 0;
+    lista.forEach(function(r){
+        if (!r || !r.id) return;
+        if (porId[r.id] !== undefined) cat[porId[r.id]] = r;
+        else { porId[r.id] = cat.length; cat.push(r); }
+        n++;
+    });
+    if (!n) return 0;
+    // La memoria manda y el almacén queda al día: así el buscador lo encuentra en
+    // la siguiente tecla, sin esperar a ninguna recarga.
+    setCatalogoInsumosMem(cat);
+    try { _skPut(_sk('insumos'), JSON.stringify(cat)); } catch (e) {}
+    return n;
+}
+
 window.addEventListener('message', function(e) {
     if (!e.data || !e.data.type) return;
-    if (e.data.type === 'insumoGuardado') {
+    if (e.data.type === 'insumosCambiaron') {
+        // Se agregó algo desde el catálogo (del negocio o de ETAAX). El modal NO se
+        // cierra: lo normal es agregar varios de un tirón.
+        _injertarInsumos(e.data.insumos);
+        ingredientes.forEach(function(ing, i){ recalcularCostoDesdeInsumo(i); });
+        try { renderTabla(); } catch (err) {}
+    } else if (e.data.type === 'insumoGuardado') {
         var _insumoId = e.data.insumoId;
-        // Sincronizar nombre y costo del insumo editado en los ingredientes actuales
+        // Primero se injerta lo que viene en el mensaje: buscarlo en el catálogo de
+        // esta página no lo encontraba, porque el iframe escribió en el suyo.
+        _injertarInsumos(e.data.insumos);
         var _insActualizado = _insumoId ? getCatalogoInsumos().find(function(x) { return x.id === _insumoId; }) : null;
         ingredientes.forEach(function(ing, i) {
             if (_insActualizado && ing.insumoId === _insumoId) {
