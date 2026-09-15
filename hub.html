@@ -555,7 +555,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
         <div class="user-badge">
           <span class="user-badge-plan" id="negViewUserPlan">—</span>
         </div>
-        <button class="btn-logout" onclick="logout()">Salir</button>
+        <button class="btn-logout" onclick="logout()">Cerrar sesión</button>
       </div>
     </div>
 
@@ -689,7 +689,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
         <button class="btn-cambiar-neg" id="btnCatGlobal" onclick="abrirCatalogosGlobales()" title="Catálogos globales de todas las sucursales" style="display:none">🌐 Catálogos Globales</button>
         <button class="btn-cambiar-neg" id="btnCambiarNeg" onclick="cambiarNegocio()">↩ Cambiar negocio</button>
         <button class="btn-cambiar-neg" id="btnVolverAdmin" onclick="volverAlAdmin()" style="display:none;border-color:var(--gold);color:var(--gold)">← Panel Admin</button>
-        <button class="btn-logout" onclick="logout()">Salir</button>
+        <button class="btn-logout" onclick="logout()">Cerrar sesión</button>
       </div>
     </div>
 
@@ -847,7 +847,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
         <button class="catg-card" onclick="abrirCatGlobal('administrativo/staff.html')"><span class="catg-emoji">👥</span><span class="catg-label">Colaboradores</span></button>
         <button class="catg-card" onclick="abrirCatGlobal('administrativo/horarios.html')"><span class="catg-emoji">🗓️</span><span class="catg-label">Horarios</span></button>
         <button class="catg-card" onclick="abrirCatGlobal('recetas/index.html')"><span class="catg-emoji">🍽️</span><span class="catg-label">Recetas</span></button>
-        <button class="catg-card" onclick="abrirCatGlobal('recetas/index.html')"><span class="catg-emoji">🥘</span><span class="catg-label">Sub-recetas</span></button>
+        <button class="catg-card" onclick="abrirCatGlobal('recetas/index.html?tipo=sub')"><span class="catg-emoji">🥘</span><span class="catg-label">Sub-recetas</span></button>
         <button class="catg-card" onclick="abrirCatGlobal('recetas/insumos.html')"><span class="catg-emoji">📦</span><span class="catg-label">Insumos</span></button>
         <button class="catg-card" onclick="abrirCatGlobal('administrativo/clientes.html')"><span class="catg-emoji">🧾</span><span class="catg-label">Clientes</span></button>
         <button class="catg-card" onclick="abrirCatGlobal('administrativo/proveedores.html')"><span class="catg-emoji">🚚</span><span class="catg-label">Proveedores</span></button>
@@ -2087,30 +2087,12 @@ async function registroSubmit() {
    LOGOUT
 ════════════════════════════════════════════════════════ */
 // Confirm ESTILIZADO de cerrar sesión (adiós al confirm() nativo del navegador).
+/* La pregunta vive en security.js: la usan también las 26 páginas de módulo.
+   Dos redacciones del mismo diálogo terminan diciendo cosas distintas. */
 function _confirmSalir() {
-    return new Promise(function (resolve) {
-        var old = document.getElementById('salirOverlay');
-        if (old) old.remove();
-        var ov = document.createElement('div');
-        ov.id = 'salirOverlay';
-        ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9800;display:flex;align-items:center;justify-content:center;padding:20px';
-        ov.innerHTML =
-            '<div style="background:var(--surface,#141414);border:1px solid var(--border,#2a2a2a);border-radius:16px;padding:26px 26px 22px;max-width:360px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)">' +
-                '<div style="font-size:34px;margin-bottom:10px">👋</div>' +
-                '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:1.5px;color:var(--text,#eee);margin-bottom:6px">¿CERRAR SESIÓN?</div>' +
-                '<div style="font-size:13px;color:var(--text-dim,#888);margin-bottom:20px">Tu información queda guardada. Al volver, inicia sesión de nuevo.</div>' +
-                '<div style="display:flex;gap:10px;justify-content:center">' +
-                    '<button id="salirCancelBtn" style="flex:1;background:var(--surface2,#1d1d1d);border:1px solid var(--border,#2a2a2a);color:var(--text,#eee);border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Cancelar</button>' +
-                    '<button id="salirOkBtn" style="flex:1;background:rgba(224,90,58,.12);border:1px solid rgba(224,90,58,.55);color:#ff8a6a;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Cerrar sesión</button>' +
-                '</div>' +
-            '</div>';
-        document.body.appendChild(ov);
-        function done(v) { ov.remove(); resolve(v); }
-        document.getElementById('salirCancelBtn').onclick = function () { done(false); };
-        document.getElementById('salirOkBtn').onclick = function () { done(true); };
-        ov.addEventListener('click', function (e) { if (e.target === ov) done(false); });
-        document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { document.removeEventListener('keydown', esc); done(false); } });
-    });
+    return (typeof window.etaaxConfirmSalir === 'function')
+        ? window.etaaxConfirmSalir()
+        : Promise.resolve(confirm('¿Cerrar sesión?'));
 }
 async function logout() {
     var ok = await _confirmSalir();

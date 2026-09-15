@@ -48,7 +48,7 @@
                 '<div class="ctx-user-badge"><span>' + esc(ctx.userName.split(' ')[0]) + '</span>' +
                 '<span class="ctx-badge-plan" style="background:' + ctx.userColor + '22;color:' + ctx.userColor + '">' + esc(ctx.userBadge) + '</span></div>' +
                 '<a href="' + (catGlobal ? hubPath + '?negocios=1' : hubPath) + '" class="ctx-btn">← ' + (catGlobal ? 'Ir al negocio' : 'Ir a Módulos') + '</a>' +
-                '<button class="ctx-btn ctx-btn-danger" onclick="ctxSalir()">Salir</button>' +
+                '<button class="ctx-btn ctx-btn-danger" onclick="ctxSalir()">Cerrar sesión</button>' +
             '</div>' +
             '</div>';
         bar.style.display = 'flex';
@@ -108,7 +108,17 @@
     });
 })();
 
-function ctxSalir() {
+async function ctxSalir() {
+    /* Preguntar SIEMPRE. Este botón vive pegado a los de navegar y en una tablet
+       se toca solo: te sacaba de la sesión sin más y había que volver a entrar.
+       El hub ya preguntaba; las páginas de módulo no. Misma pregunta en todas
+       (etaaxConfirmSalir, en security.js).
+       Si por lo que sea el helper no está, se cae al confirm del navegador antes
+       que quedarse sin pregunta — que es el bug que esto arregla. */
+    var ok = (typeof window.etaaxConfirmSalir === 'function')
+        ? await window.etaaxConfirmSalir()
+        : confirm('¿Cerrar sesión?');
+    if (!ok) return;
     var ctx = null;
     try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch (e) {}
     // Admin maestro: volver al panel sin cerrar su sesión de Supabase

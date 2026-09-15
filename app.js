@@ -2478,7 +2478,7 @@ function initCtxBar() {
         '<div class="ctx-user-badge"><span>' + _esc(ctx.userName.split(' ')[0]) + '</span>' +
         '<span class="ctx-badge-plan" style="background:' + ctx.userColor + '22;color:' + ctx.userColor + '">' + _esc(ctx.userBadge) + '</span></div>' +
         '<a href="' + (catGlobal ? hubPath + '?negocios=1' : hubPath) + '" class="ctx-btn">← ' + (catGlobal ? 'Ir al negocio' : 'Ir a Módulos') + '</a>' +
-        '<button class="ctx-btn ctx-btn-danger" onclick="ctxSalir()">Salir</button>' +
+        '<button class="ctx-btn ctx-btn-danger" onclick="ctxSalir()">Cerrar sesión</button>' +
         '</div></div>';
     bar.style.display = 'flex';
     document.body.classList.add('has-ctx');

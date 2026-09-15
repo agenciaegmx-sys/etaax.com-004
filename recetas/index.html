@@ -760,6 +760,8 @@
             <div style="display:flex;gap:8px;flex-wrap:wrap;padding:4px 20px 14px">
                 <button id="rp-todas" onclick="filtroRecetaTipo='';filtroRecetaGrupo='';filtroRecetaCat='';_limpiarMultiRec();renderGridRecetas();_activarPillReceta('todas')"
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--green);background:rgba(61,190,122,0.12);color:var(--green);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s">Todas</button>
+                <button id="rp-sub" onclick="filtroRecetaTipo='sub';filtroRecetaGrupo='';filtroRecetaCat='';_limpiarMultiRec();renderGridRecetas();_activarPillReceta('sub')"
+                    style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer">🥘 Sub-recetas</button>
                 <button id="rp-alimentos" onclick="filtroRecetaTipo='alimentos';filtroRecetaGrupo='';filtroRecetaCat='';_limpiarMultiRec();renderGridRecetas();_activarPillReceta('alimentos')"
                     style="padding:6px 16px;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all 0.15s">🍽️ Alimentos</button>
                 <button id="rp-sub-alimentos" onclick="filtroRecetaTipo='sub-alimentos';filtroRecetaGrupo='';filtroRecetaCat='';_limpiarMultiRec();renderGridRecetas();_activarPillReceta('sub-alimentos')"
@@ -2943,7 +2945,7 @@ let _fichaSource         = 'verRecetas'; // 'verRecetas' | 'caratula'
 let _volverACaratula     = false;
 
 function _activarPillReceta(activa) {
-    ['todas','alimentos','sub-alimentos','bebidas','sub-bebidas'].forEach(function(id) {
+    ['todas','sub','alimentos','sub-alimentos','bebidas','sub-bebidas'].forEach(function(id) {
         var el = document.getElementById('rp-'+id); if (!el) return;
         var on = id === activa;
         el.style.background  = on ? 'rgba(61,190,122,0.12)' : 'transparent';
@@ -3446,7 +3448,11 @@ function renderGridRecetas() {
         });
     })();
 
-    if (filtroRecetaTipo) lista = lista.filter(r => r.tipo === filtroRecetaTipo);
+    /* 'sub' = las DOS familias de sub-receta. Existe porque el hub tiene una
+       tarjeta "Sub-recetas" y las sub-recetas viven en dos tipos (alimentos y
+       bebidas): sin esto, esa tarjeta tenía que elegir una y esconder la otra. */
+    if (filtroRecetaTipo === 'sub') lista = lista.filter(r => String(r.tipo||'').indexOf('sub-') === 0);
+    else if (filtroRecetaTipo) lista = lista.filter(r => r.tipo === filtroRecetaTipo);
 
     // ── Filtros Grupo → Categoría (cascada). Los selects se pueblan con lo que HAY. ──
     const _selG = document.getElementById('filtroRecetaGrupoSel');
@@ -4499,6 +4505,15 @@ window.addEventListener('load', function() {
     var urlSub = _params.get('subins');
     var urlNuevo = _params.get('nuevo');     // abrir editor de receta NUEVA en modal
     var urlCaratula = _params.get('caratula'); // abrir carátula de costos en modal
+    /* ?tipo= lo manda el hub desde "Catálogos Globales". Antes las tarjetas de
+       Recetas y de Sub-recetas abrían EXACTAMENTE la misma pantalla: la segunda
+       prometía un destino distinto y no lo daba. */
+    var urlTipo = _params.get('tipo');
+    if (urlTipo && ['sub','alimentos','sub-alimentos','bebidas','sub-bebidas'].indexOf(urlTipo) >= 0) {
+        filtroRecetaTipo = urlTipo;
+        if (typeof _activarPillReceta === 'function') _activarPillReceta(urlTipo);
+        if (typeof renderGridRecetas === 'function') renderGridRecetas();
+    }
     if (urlNuevo) {
         if (typeof entrarEscandallos === 'function') entrarEscandallos();
         if (urlNuevo === 'simple') { if (typeof crearRecetaSimple === 'function') crearRecetaSimple(); }

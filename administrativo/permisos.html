@@ -578,7 +578,7 @@ function _mostrarNavBar() {
             '<div class="ctx-user-badge"><span>'+_esc2((ctx.userName||'').split(' ')[0])+'</span>' +
             '<span class="ctx-badge-plan" style="background:'+ctx.userColor+'22;color:'+ctx.userColor+'">'+_esc2(ctx.userBadge)+'</span></div>' +
             '<a href="'+hubPath+'" class="ctx-btn">← Ir a Módulos</a>' +
-            '<button class="ctx-btn ctx-btn-danger" onclick="ctxSalir()">Salir</button>' +
+            '<button class="ctx-btn ctx-btn-danger" onclick="ctxSalir()">Cerrar sesión</button>' +
             '</div></div>';
     } else {
         // Fallback sin sesión: botones simples
@@ -590,7 +590,7 @@ function _mostrarNavBar() {
             '</div>' +
             '<div style="margin-left:auto;display:flex;gap:8px">' +
             '<a href="'+hubPath+'" class="ctx-btn">← Ir a Módulos</a>' +
-            '<button class="ctx-btn ctx-btn-danger" onclick="ctxSalir()">Salir</button>' +
+            '<button class="ctx-btn ctx-btn-danger" onclick="ctxSalir()">Cerrar sesión</button>' +
             '</div></div>';
     }
     bar.style.display = 'flex';

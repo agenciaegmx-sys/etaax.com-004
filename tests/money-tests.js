@@ -6965,6 +6965,189 @@ console.log('\n══ BB9 · La red de seguridad de la caché ══');
         eq(src.indexOf("sessionStorage.removeItem(MARCA)") > -1, true, 'se rearma'));
 }
 
+/* ═══════════ SUITE BC0 · CERRAR SESIÓN SE PREGUNTA SIEMPRE ══════════════════
+   El botón vive en la barra de contexto, pegado a los de navegar. En una tablet
+   se toca solo: te sacaba de la sesión sin preguntar y había que volver a
+   entrar. El hub SÍ preguntaba; las 26 páginas de módulo, no.                 */
+console.log('\n══ BC0 · Cerrar sesión se pregunta siempre ══');
+const testAsyncCola = [];
+{
+    const dock = fs.readFileSync(path.join(RAIZ, 'modal-dock.js'), 'utf8');
+    const ctxb = fs.readFileSync(path.join(RAIZ, 'ctx-bar.js'), 'utf8');
+    const hub  = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+    const adm  = fs.readFileSync(path.join(RAIZ, 'admin.html'), 'utf8');
+    const seg  = fs.readFileSync(path.join(RAIZ, 'security.js'), 'utf8');
+
+    test('hay UNA sola redacción del diálogo', () =>
+        eq(dock.indexOf('window.etaaxConfirmSalir = function') > -1
+        && seg.indexOf('etaaxConfirmSalir') === -1, true, 'una'));
+    test('la barra de contexto pregunta antes de salir', () =>
+        eq(ctxb.indexOf('await window.etaaxConfirmSalir()') > -1, true, 'pregunta'));
+    test('…y si el diálogo no estuviera, igual pregunta', () =>
+        eq(ctxb.indexOf("confirm('¿Cerrar sesión?')") > -1, true, 'sin quedarse sin pregunta'));
+    test('el hub delega en el mismo diálogo, no mantiene otro', () =>
+        eq(hub.indexOf('window.etaaxConfirmSalir()') > -1, true, 'delega'));
+    test('el panel admin también pregunta', () =>
+        eq(adm.indexOf('await window.etaaxConfirmSalir()') > -1, true, 'pregunta'));
+    /* Y respeta la respuesta: preguntar e ignorar el "no" deja el bug igual. */
+    test('…y si dices que no, el admin no cierra nada', () => {
+        const i = adm.indexOf('async function adminLogout()');
+        const cuerpo = adm.slice(i, adm.indexOf('}', adm.indexOf('signOut', i)));
+        return eq(cuerpo.indexOf('if (!ok) return;') > -1
+               && cuerpo.indexOf('if (!ok) return;') < cuerpo.indexOf('signOut'), true, 'respeta');
+    });
+
+    /* El cierre por INACTIVIDAD no puede preguntar: nadie está ahí para
+       contestar, y un diálogo esperando dejaría la sesión abierta justo cuando
+       se quería cerrar. */
+    const iLogout = seg.indexOf('function _logout()');
+    test('el cierre por inactividad NO pregunta', () =>
+        eq(seg.slice(iLogout, iLogout + 600).indexOf('ConfirmSalir') === -1, true, 'sin preguntar'));
+
+    /* El rótulo: "Salir" no decía qué se cerraba. */
+    ['hub.html','ctx-bar.js','app.js','administrativo/permisos.html'].forEach(function(f){
+        const s = fs.readFileSync(path.join(RAIZ, f), 'utf8');
+        test(f + ': el botón dice "Cerrar sesión"', () =>
+            eq(s.indexOf('>Salir<') === -1, true, 'sin "Salir" suelto'));
+    });
+
+    /* ── QUE EL "NO" SE RESPETE ──
+       Comprobar que se PREGUNTA no basta: el diálogo puede salir y la respuesta
+       ignorarse, y entonces el botón sigue sacándote igual. Se corre ctxSalir de
+       verdad, con el usuario diciendo que no, y se mira que no tocó nada. */
+    function correrCtxSalir(respuesta) {
+        const ls = { _d:{ etaax_negocio_activo:'n1', etaax_ctx:'{}' },
+            getItem(k){ return this._d[k]===undefined?null:this._d[k]; },
+            setItem(k,v){ this._d[k]=String(v); }, removeItem(k){ delete this._d[k]; } };
+        let destino = '';
+        const c = {
+            console:{ warn(){}, log(){} }, JSON, Object, String, Promise, Date, setTimeout,
+            localStorage: ls,
+            sessionStorage:{ _d:{}, getItem(){ return null; }, setItem(){}, removeItem(){}, clear(){ this.limpiado = true; } },
+            location:{ set href(v){ destino = v; }, get href(){ return destino; } },
+            document:{ getElementById(){ return null; }, querySelector(){ return null; },
+                       querySelectorAll(){ return []; }, addEventListener(){}, createElement(){ return { style:{} }; },
+                       body:{ appendChild(){} }, readyState:'complete' },
+            confirm(){ return respuesta; },
+        };
+        c.window = c; c.window.addEventListener = () => {};
+        c.window.etaaxConfirmSalir = function(){ return Promise.resolve(respuesta); };
+        vm.createContext(c);
+        vm.runInContext(ctxb, c, { filename:'ctx-bar.js' });
+        return { correr: c.ctxSalir, ls: ls, ses: c.sessionStorage, destino: () => destino };
+    }
+
+    const noSalgo = correrCtxSalir(false);
+    testAsyncCola.push(['si dices que NO, la sesión sigue abierta', async () => {
+        await noSalgo.correr();
+        eq(noSalgo.ls.getItem('etaax_negocio_activo'), 'n1', 'contexto intacto');
+    }]);
+    testAsyncCola.push(['…y no te manda a ningún lado', async () => {
+        eq(noSalgo.destino(), '', 'sin navegar');
+    }]);
+    const siSalgo = correrCtxSalir(true);
+    testAsyncCola.push(['si dices que SÍ, sí cierra', async () => {
+        await siSalgo.correr();
+        eq(siSalgo.ls.getItem('etaax_negocio_activo'), null, 'contexto borrado');
+    }]);
+    testAsyncCola.push(['…y te lleva al hub', async () => {
+        eq(siSalgo.destino().indexOf('/hub.html') === 0, true, siSalgo.destino());
+    }]);
+
+    /* El diálogo de verdad: lo destructivo nunca puede ser el default. */
+    const ctx = { document:{ getElementById(id){ return nodos[id] || null; },
+                             createElement(){ return crear(); },
+                             body:{ appendChild(n){ montado = n; } },
+                             addEventListener(){}, removeEventListener(){} },
+                  Promise, String, Object };
+    ctx.window = ctx;
+    let montado = null, nodos = {};
+    function crear(){
+        return { id:'', style:{ cssText:'' }, _h:{},
+            set innerHTML(v){ this._html = v;
+                ['salirCancelBtn','salirOkBtn'].forEach(function(b){
+                    if (v.indexOf(b) > -1) nodos[b] = { onclick:null, focus(){} };
+                });
+            },
+            get innerHTML(){ return this._html; },
+            addEventListener(t,f){ this._h[t] = f; }, remove(){ montado = null; }, focus(){} };
+    }
+    vm.createContext(ctx);
+    const ini = dock.lastIndexOf('(function () {', dock.indexOf('window.etaaxConfirmSalir'));
+    vm.runInContext(dock.slice(ini), ctx, { filename:'confirmSalir' });
+
+    let resultado = null;
+    ctx.window.etaaxConfirmSalir().then(function(v){ resultado = v; });
+    test('el diálogo se monta', () => eq(!!montado, true, 'montado'));
+    test('lo destructivo dice qué hace, no "Aceptar"', () =>
+        eq(montado.innerHTML.indexOf('>Cerrar sesión</button>') > -1, true, 'rótulo claro'));
+    test('la salida se puede cancelar sin miedo', () =>
+        eq(montado.innerHTML.indexOf('Seguir aquí') > -1, true, 'cancelar'));
+}
+
+/* ═══════════ SUITE BC1 · LA NAVEGACIÓN NO MANDA A NINGÚN LADO ROTO ══════════
+   Los catálogos globales y el panel financiero abren por URL escrita a mano en
+   el HTML. Un archivo que se renombra o se mueve NO avisa: el botón sigue ahí y
+   lleva a una página en blanco. Esto recorre esas rutas y comprueba que existen.
+   Y de paso: que dos tarjetas distintas no lleven al MISMO sitio, que era el
+   caso de Recetas y Sub-recetas.                                              */
+console.log('\n══ BC1 · La navegación no manda a ningún lado roto ══');
+{
+    const hub = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+    const destinos = [...hub.matchAll(/abrirCatGlobal\('([^']+)'\)/g)].map(m => m[1]);
+    test('el modal de catálogos globales tiene sus 7 tarjetas', () =>
+        eq(destinos.length, 7, destinos.length + ' tarjetas'));
+    destinos.forEach(function(u){
+        const archivo = u.split('?')[0];
+        test('catálogo → ' + u + ' existe', () =>
+            eq(fs.existsSync(path.join(RAIZ, archivo)), true, 'archivo'));
+    });
+    /* Dos tarjetas con el mismo destino es una que miente. */
+    test('ninguna tarjeta lleva al mismo sitio que otra', () =>
+        eq(new Set(destinos).size, destinos.length, destinos.join(' · ')));
+
+    /* El filtro que hace honesta la tarjeta de Sub-recetas: 'sub' son las DOS
+       familias (alimentos y bebidas). Elegir una escondería la otra. */
+    const rec = fs.readFileSync(path.join(RAIZ, 'recetas/index.html'), 'utf8');
+    test('la tarjeta de Sub-recetas pide el filtro de sub-recetas', () =>
+        eq(destinos.indexOf('recetas/index.html?tipo=sub') > -1, true, 'con filtro'));
+    test('el catálogo entiende ese filtro por URL', () =>
+        eq(rec.indexOf("var urlTipo = _params.get('tipo');") > -1, true, 'lo lee'));
+    test("'sub' incluye las dos familias, no una", () =>
+        eq(rec.indexOf("filtroRecetaTipo === 'sub') lista = lista.filter(r => String(r.tipo||'').indexOf('sub-') === 0)") > -1,
+           true, 'ambas'));
+    test('…y hay pastilla para volver a esa vista a mano', () =>
+        eq(rec.indexOf('id="rp-sub"') > -1 && rec.indexOf("'todas','sub','alimentos'") > -1, true, 'pastilla'));
+
+    /* ── El panel financiero ── */
+    const fin = fs.readFileSync(path.join(RAIZ, 'financiero/index.html'), 'utf8');
+    const rutas = [...fin.matchAll(/href="([^"]+\.html[^"]*)"/g)].map(m => m[1])
+        .filter(u => u.indexOf('http') !== 0);
+    test('el panel financiero ofrece sus destinos', () => eq(rutas.length >= 6, true, rutas.length + ' rutas'));
+    rutas.forEach(function(u){
+        const rel = u.split('?')[0];
+        const f = rel.indexOf('../') === 0 ? rel.slice(3) : (rel[0] === '/' ? rel.slice(1) : 'financiero/' + rel);
+        test('financiero → ' + rel + ' existe', () => eq(fs.existsSync(path.join(RAIZ, f)), true, f));
+    });
+    /* Buscar por sucursal Y global: donde los números se acotan por sucursal,
+       tiene que haber selector; si no, no hay forma de salir de una sucursal. */
+    ['estadisticas','gastos-globales','kpis','previsiones','ventas'].forEach(function(n){
+        const s = fs.readFileSync(path.join(RAIZ, 'financiero/' + n + '.html'), 'utf8');
+        test(n + ': acota por sucursal y deja volver a la vista global', () =>
+            eq(s.indexOf('etaax_sucursal_activa') > -1 && s.indexOf('id="sucChip"') > -1, true, 'selector'));
+    });
+    /* Entrar "en global" desde el hub = sin sucursal fijada: si quedara la última
+       usada, el panel abriría filtrado y los totales del negocio saldrían cortos. */
+    test('entrar al financiero global no arrastra la sucursal anterior', () => {
+        const i = hub.indexOf('function abrirFinancieroGlobal()');
+        return eq(hub.slice(i, i + 500).indexOf("removeItem('etaax_sucursal_activa')") > -1, true, 'limpia');
+    });
+    test('…y lo mismo al entrar a los catálogos globales', () => {
+        const i = hub.indexOf('function abrirCatalogosGlobalesNeg()');
+        return eq(hub.slice(i, i + 600).indexOf("removeItem('etaax_sucursal_activa')") > -1, true, 'limpia');
+    });
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La
@@ -7318,6 +7501,9 @@ function resumen() {
     process.exit(FALLA === 0 ? 0 : 1);
 }
 
+/* Las pruebas de ctxSalir necesitan await: se corren aquí, ya con el runner
+   que espera de verdad. */
+async function suiteSalirAsync(){ for (const [n, f] of testAsyncCola) await testA(n, f); }
 suiteBuscadorIngredientes();
 suiteInsumoRecienAgregado();
-suiteAlmacenPrivado().then(suiteFrenoLogin).then(resumen);
+suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin).then(resumen);
