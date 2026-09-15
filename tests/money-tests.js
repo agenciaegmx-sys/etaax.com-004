@@ -7286,6 +7286,135 @@ console.log('\n══ BC2 · El portal del QR no ve doble ══');
             .every(k => bloque.indexOf("'" + k + "'") > -1), true, 'completo'));
 }
 
+/* ═══════════ SUITE BC3 · LA FICHA SE ARMA CON LO QUE SÍ TIENE DATOS ═════════
+   La v57 quitó el duplicado del portal pero dejaba ver el registro equivocado:
+   la receta salía sin foto, sin grupo, sin tiempo y sin procedimiento, aunque en
+   el ERP estaba todo capturado.
+
+   En los datos reales hay pares donde uno tiene la ficha completa y el otro es
+   un CASCARÓN: mismo nombre y mismos ingredientes, nada más. Elegir por
+   pertenencia y quedarse con el cascarón deja al colaborador sin la mitad de la
+   receta — justo lo que va a leer para prepararla.
+
+   La v58 deja de elegir UNA fila: arma la ficha campo por campo con el primero
+   que no esté vacío, en el orden de preferencia de la v57. Eso es lo que
+   significa una copia por sucursal — lo que define, manda; lo que no, se hereda.
+
+   (Sin Postgres aquí, el SQL no se ejecuta: se prueba la REGLA con un espejo en
+   JS y se fija que el SQL diga lo mismo.)                                      */
+console.log('\n══ BC3 · La ficha se arma con lo que sí tiene datos ══');
+{
+    const v58 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v58.sql'), 'utf8');
+
+    /* Espejo de _primer_texto / _primer_json: primero no vacío, en orden. */
+    const vacioJson = (v) => v === undefined || v === null
+        || (Array.isArray(v) && v.length === 0)
+        || (typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0);
+    const primerTexto = (filas, k) => { for (const f of filas) if (f[k]) return f[k]; return null; };
+    const primerJson  = (filas, k) => { for (const f of filas) if (!vacioJson(f[k])) return f[k]; return null; };
+    function ficha(filas) {
+        return {
+            id:            filas[0].id,           // la identidad NO se mezcla
+            nombre:        primerTexto(filas,'nombre') || '',
+            grupo:         primerTexto(filas,'grupo'),
+            tiempo:        primerTexto(filas,'tiempo'),
+            foto:          primerTexto(filas,'foto'),
+            procedimiento: primerTexto(filas,'procedimiento'),
+            ingredientes:  primerJson(filas,'ingredientes') || [],
+            camposExtra:   primerJson(filas,'camposExtra') || {},
+        };
+    }
+
+    /* El caso de Edwin: la fila preferida es el cascarón y la ficha está en la
+       otra. Antes se veía el cascarón; ahora se ve la receta. */
+    const cascaron = { id:'r1c', nombre:'Corunditas', ingredientes:[{nombre:'Salsa'}] };
+    const completa = { id:'r1',  nombre:'Corunditas', grupo:'Menu Alimentos', tiempo:'5 min',
+                       foto:'https://sb.co/f.jpg', procedimiento:'Cortar 6 pedazos…',
+                       ingredientes:[{nombre:'Salsa'},{nombre:'Masa'}],
+                       camposExtra:{ temperaturaServicio:'Caliente' } };
+    const f = ficha([cascaron, completa]);
+    test('el procedimiento aparece aunque lo tenga la OTRA fila', () =>
+        eq(f.procedimiento, 'Cortar 6 pedazos…', 'procedimiento'));
+    test('…y la foto', () => eq(f.foto, 'https://sb.co/f.jpg', 'foto'));
+    test('…y el grupo', () => eq(f.grupo, 'Menu Alimentos', 'grupo'));
+    test('…y el tiempo de elaboración', () => eq(f.tiempo, '5 min', 'tiempo'));
+    test('…y la ficha base (camposExtra)', () =>
+        eq(f.camposExtra.temperaturaServicio, 'Caliente', 'ficha'));
+    /* La identidad NO se mezcla: si el id viniera de otra fila, abrir la receta
+       llevaría a otra distinta. */
+    test('el id se queda el de la fila preferida, no el de donde salió la foto', () =>
+        eq(f.id, 'r1c', 'identidad'));
+
+    /* Una lista vacía no puede ganarle a una con datos: un cascarón con
+       `ingredientes: []` taparía la receta de verdad. */
+    test('una lista de ingredientes vacía no tapa la buena', () => {
+        const vacio = { id:'a', nombre:'X', ingredientes:[] };
+        const bueno = { id:'b', nombre:'X', ingredientes:[{nombre:'Sal'}] };
+        return eq(ficha([vacio, bueno]).ingredientes.length, 1, 'gana la que tiene');
+    });
+    test('…ni un camposExtra vacío', () => {
+        const vacio = { id:'a', nombre:'X', camposExtra:{} };
+        const bueno = { id:'b', nombre:'X', camposExtra:{ porciones:'4' } };
+        return eq(ficha([vacio, bueno]).camposExtra.porciones, '4', 'gana el que tiene');
+    });
+    /* Lo que la copia SÍ define, manda: es el punto de tener copias por sucursal. */
+    test('lo que la fila preferida sí define, manda sobre el maestro', () => {
+        const suyo    = { id:'c', nombre:'X', tiempo:'2 min' };
+        const maestro = { id:'m', nombre:'X', tiempo:'9 min', foto:'f.jpg' };
+        const r = ficha([suyo, maestro]);
+        return eq(r.tiempo === '2 min' && r.foto === 'f.jpg', true, 'override + herencia');
+    });
+    test('si ninguna tiene el dato, se queda vacío y no truena', () =>
+        eq(ficha([{ id:'a', nombre:'X' }]).procedimiento, null, 'vacío'));
+
+    /* ── Y que el SQL diga lo mismo ── */
+    test('el SQL toma el primero que no esté vacío', () =>
+        eq(v58.indexOf("WHERE COALESCE(f->>p_key, '') <> ''") > -1
+        && v58.indexOf('LIMIT 1') > -1, true, 'primer no vacío'));
+    test('…recorriendo las filas YA ordenadas por preferencia', () =>
+        eq(v58.indexOf('jsonb_agg(datos ORDER BY prioridad, rid) AS filas') > -1, true, 'orden'));
+    test('…y una lista o un objeto vacíos no cuentan como dato', () =>
+        eq(v58.indexOf('jsonb_array_length(f->p_key) > 0') > -1
+        && v58.indexOf("f->p_key <> '{}'::jsonb") > -1, true, 'vacíos fuera'));
+    test('la identidad se toma de la fila preferida, sin mezclar', () =>
+        eq(v58.indexOf("'id',            (g.filas->0)->>'id'") > -1, true, 'id'));
+    test('sigue habiendo UNA receta por producto', () =>
+        eq(v58.indexOf('GROUP BY canon') > -1, true, 'una'));
+    /* Campo por campo, no "el primero que se me ocurrió": si uno se queda leyendo
+       una sola fila, ese dato vuelve a salir vacío cuando lo tiene el otro
+       registro — y sería justo el que se dejó de ver. */
+    ['grupo','categoria','cristaleria','tiempo','procedimiento','foto'].forEach(function(k){
+        test('«' + k + '» se busca en todas las filas, no solo en la primera', () =>
+            eq(v58.indexOf("_primer_texto(g.filas, '" + k + "')") > -1, true, 'heredado'));
+    });
+    ['camposExtra','ingredientes'].forEach(function(k){
+        test('«' + k + '» también', () =>
+            eq(v58.indexOf("_primer_json(g.filas, '" + k + "')") > -1, true, 'heredado'));
+    });
+    /* La sucursal sale del COLABORADOR que entra: es quien sabe dónde trabaja. */
+    test('la sucursal la pone el colaborador que entró', () =>
+        eq(v58.indexOf("v_suc    := COALESCE(NULLIF(v_perfil->>'sucursalId',''), 'suc_principal');") > -1,
+           true, 'del colaborador'));
+    test('…y la firma no cambió, así que el portal no manda nada nuevo', () =>
+        eq(v58.indexOf('portal_recetas(p_neg TEXT, p_token TEXT, p_niphash TEXT)') > -1
+        && v58.indexOf('p_suc') === -1, true, 'misma firma'));
+    test('y la preferencia sigue siendo la de la v57', () => {
+        const o = v58.replace(/\s+/g, ' ');
+        return eq(o.indexOf('_receta_en_suc(r.datos, v_suc) THEN 0') > -1
+               && o.indexOf("COALESCE(r.datos->>'origenId','') = '' THEN 1") > -1, true, 'misma');
+    });
+
+    /* El portal es de colaboradores: ni armando la ficha por partes puede colarse
+       dinero. */
+    const cuerpo = v58.slice(v58.indexOf('SELECT jsonb_build_object('), v58.indexOf('FROM grupos g'))
+        .replace(/\/\*[\s\S]*?\*\//g, ' ')
+        .split('\n').filter(l => l.trim().indexOf('--') !== 0).join('\n');
+    ['precio','costo','margen','utilidad','multiplo'].forEach(function(w){
+        test('la ficha armada no manda ' + w, () =>
+            eq(new RegExp(w, 'i').test(cuerpo), false, 'sin dinero'));
+    });
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La
