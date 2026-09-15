@@ -111,14 +111,14 @@
 async function ctxSalir() {
     /* Preguntar SIEMPRE. Este botón vive pegado a los de navegar y en una tablet
        se toca solo: te sacaba de la sesión sin más y había que volver a entrar.
-       El hub ya preguntaba; las páginas de módulo no. Misma pregunta en todas
-       (etaaxConfirmSalir, en security.js).
-       Si por lo que sea el helper no está, se cae al confirm del navegador antes
-       que quedarse sin pregunta — que es el bug que esto arregla. */
-    var ok = (typeof window.etaaxConfirmSalir === 'function')
-        ? await window.etaaxConfirmSalir()
-        : confirm('¿Cerrar sesión?');
-    if (!ok) return;
+       El diálogo lo define negocio-tab.js, el primer script de la página.
+       Si no estuviera, NO se cierra sesión: quedarse dentro es lo seguro, y el
+       confirm del navegador es justo el cuadro feo que esto vino a quitar. */
+    if (typeof window.etaaxConfirmSalir !== 'function') {
+        console.warn('[etaax] falta el diálogo de cerrar sesión; no se cierra nada.');
+        return;
+    }
+    if (!(await window.etaaxConfirmSalir())) return;
     var ctx = null;
     try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch (e) {}
     // Admin maestro: volver al panel sin cerrar su sesión de Supabase

@@ -6978,13 +6978,31 @@ const testAsyncCola = [];
     const adm  = fs.readFileSync(path.join(RAIZ, 'admin.html'), 'utf8');
     const seg  = fs.readFileSync(path.join(RAIZ, 'security.js'), 'utf8');
 
+    /* El diálogo vive en el PRIMER script de toda página. Estuvo en modal-dock.js
+       —que carga al final— y bastó una copia guardada de ese archivo para que no
+       existiera al tocar el botón: salía el confirm del navegador, el cuadro feo
+       que este diálogo venía a quitar. */
+    const negtab = fs.readFileSync(path.join(RAIZ, 'negocio-tab.js'), 'utf8');
     test('hay UNA sola redacción del diálogo', () =>
-        eq(dock.indexOf('window.etaaxConfirmSalir = function') > -1
+        eq(negtab.indexOf('window.etaaxConfirmSalir = function') > -1
+        && dock.indexOf('etaaxConfirmSalir') === -1
         && seg.indexOf('etaaxConfirmSalir') === -1, true, 'una'));
+    test('…y va en el primer script de la página, no en el último', () => {
+        const hb = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+        return eq(hb.indexOf('negocio-tab.js') < hb.indexOf('modal-dock.js'), true, 'primero');
+    });
+    /* Ya no hay camino que enseñe el cuadro del navegador: si el diálogo faltara,
+       NO se cierra sesión. Quedarse dentro es lo seguro; salir sin preguntar es
+       el bug que todo esto arregla. */
+    ['ctx-bar.js', 'hub.html', 'admin.html'].forEach(function(f){
+        const s2 = fs.readFileSync(path.join(RAIZ, f), 'utf8');
+        test(f + ': ya no cae al confirm del navegador', () =>
+            eq(s2.indexOf("confirm('¿Cerrar sesión?')"), -1, 'sin alert feo'));
+    });
     test('la barra de contexto pregunta antes de salir', () =>
         eq(ctxb.indexOf('await window.etaaxConfirmSalir()') > -1, true, 'pregunta'));
-    test('…y si el diálogo no estuviera, igual pregunta', () =>
-        eq(ctxb.indexOf("confirm('¿Cerrar sesión?')") > -1, true, 'sin quedarse sin pregunta'));
+    test('…y sin diálogo NO cierra sesión, en vez de salir sin preguntar', () =>
+        eq(ctxb.indexOf("if (typeof window.etaaxConfirmSalir !== 'function') {") > -1, true, 'a prueba de fallos'));
     test('el hub delega en el mismo diálogo, no mantiene otro', () =>
         eq(hub.indexOf('window.etaaxConfirmSalir()') > -1, true, 'delega'));
     test('el panel admin también pregunta', () =>
@@ -6992,9 +7010,9 @@ const testAsyncCola = [];
     /* Y respeta la respuesta: preguntar e ignorar el "no" deja el bug igual. */
     test('…y si dices que no, el admin no cierra nada', () => {
         const i = adm.indexOf('async function adminLogout()');
-        const cuerpo = adm.slice(i, adm.indexOf('}', adm.indexOf('signOut', i)));
-        return eq(cuerpo.indexOf('if (!ok) return;') > -1
-               && cuerpo.indexOf('if (!ok) return;') < cuerpo.indexOf('signOut'), true, 'respeta');
+        const cuerpo = adm.slice(i, adm.indexOf('signOut', i));
+        return eq(cuerpo.indexOf('if (!(await window.etaaxConfirmSalir())) return;') > -1, true,
+                  'la respuesta se respeta ANTES de cerrar');
     });
 
     /* El cierre por INACTIVIDAD no puede preguntar: nadie está ahí para
@@ -7028,7 +7046,7 @@ const testAsyncCola = [];
             document:{ getElementById(){ return null; }, querySelector(){ return null; },
                        querySelectorAll(){ return []; }, addEventListener(){}, createElement(){ return { style:{} }; },
                        body:{ appendChild(){} }, readyState:'complete' },
-            confirm(){ return respuesta; },
+            /* Sin confirm del navegador: el único camino es el diálogo propio. */
         };
         c.window = c; c.window.addEventListener = () => {};
         c.window.etaaxConfirmSalir = function(){ return Promise.resolve(respuesta); };
@@ -7073,16 +7091,19 @@ const testAsyncCola = [];
             addEventListener(t,f){ this._h[t] = f; }, remove(){ montado = null; }, focus(){} };
     }
     vm.createContext(ctx);
-    const ini = dock.lastIndexOf('(function () {', dock.indexOf('window.etaaxConfirmSalir'));
-    vm.runInContext(dock.slice(ini), ctx, { filename:'confirmSalir' });
-
-    let resultado = null;
-    ctx.window.etaaxConfirmSalir().then(function(v){ resultado = v; });
+    /* Si el diálogo no estuviera, esto tronaría y se llevaría el candado entero.
+       Mejor que falle UN test y se lea qué pasó. */
+    const iDlg = negtab.indexOf('window.etaaxConfirmSalir');
+    if (iDlg > -1) {
+        const ini = negtab.lastIndexOf('(function () {', iDlg);
+        vm.runInContext(negtab.slice(ini), ctx, { filename:'confirmSalir' });
+    }
+    if (typeof ctx.window.etaaxConfirmSalir === 'function') ctx.window.etaaxConfirmSalir();
     test('el diálogo se monta', () => eq(!!montado, true, 'montado'));
     test('lo destructivo dice qué hace, no "Aceptar"', () =>
-        eq(montado.innerHTML.indexOf('>Cerrar sesión</button>') > -1, true, 'rótulo claro'));
+        eq(!!montado && montado.innerHTML.indexOf('>Cerrar sesión</button>') > -1, true, 'rótulo claro'));
     test('la salida se puede cancelar sin miedo', () =>
-        eq(montado.innerHTML.indexOf('Seguir aquí') > -1, true, 'cancelar'));
+        eq(!!montado && montado.innerHTML.indexOf('Seguir aquí') > -1, true, 'cancelar'));
 }
 
 /* ═══════════ SUITE BC1 · LA NAVEGACIÓN NO MANDA A NINGÚN LADO ROTO ══════════

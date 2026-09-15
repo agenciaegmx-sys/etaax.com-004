@@ -126,3 +126,66 @@
         location.reload();
     });
 })();
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CONFIRMAR ANTES DE CERRAR SESIÓN — una sola redacción para toda la app
+
+   VIVE AQUÍ POR UNA RAZÓN: este es el PRIMER script de toda página de la app.
+   Estuvo en modal-dock.js, que se carga al final, y bastó una copia guardada de
+   ese archivo para que el diálogo no existiera todavía y saliera el confirm del
+   navegador — el alert feo que este diálogo venía a quitar. Definido aquí, está
+   antes de que exista un botón que se pueda tocar.
+   (Tampoco cabe en security.js: admin.html no lo carga, y arrastrarlo entero le
+   metería de paso el auto-logout por inactividad y el reemplazo de window.alert.)
+
+   El botón vive en la barra de contexto, pegado a los de navegar, y cerraba la
+   sesión al primer toque. En una tablet, con el dedo, eso pasa solo: te saca de
+   todo y hay que volver a entrar. El hub sí preguntaba; las 26 páginas de
+   módulo, no. Ahora preguntan todas, con el mismo diálogo.
+
+   OJO: el cierre por INACTIVIDAD (arriba) NO pasa por aquí a propósito — nadie
+   está ahí para contestar, y un diálogo esperando para siempre dejaría la sesión
+   abierta justo cuando se quería cerrar.
+   ════════════════════════════════════════════════════════════════════════════ */
+(function () {
+    if (window.etaaxConfirmSalir) return;
+    window.etaaxConfirmSalir = function () {
+        return new Promise(function (resolve) {
+            var old = document.getElementById('salirOverlay');
+            if (old) old.remove();
+            var ov = document.createElement('div');
+            ov.id = 'salirOverlay';
+            ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:99800;' +
+                'display:flex;align-items:center;justify-content:center;padding:20px';
+            ov.innerHTML =
+                '<div style="background:var(--surface,#141414);border:1px solid var(--border,#2a2a2a);' +
+                     'border-radius:16px;padding:26px 26px 22px;max-width:360px;width:100%;text-align:center;' +
+                     'box-shadow:0 24px 64px rgba(0,0,0,.6)">' +
+                    '<div style="font-size:34px;margin-bottom:10px">👋</div>' +
+                    '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;letter-spacing:1.5px;' +
+                         'color:var(--text,#eee);margin-bottom:6px">¿Cerrar sesión?</div>' +
+                    '<div style="font-size:13px;color:var(--text-dim,#888);margin-bottom:20px">' +
+                        'Tu información queda guardada. Al volver, inicia sesión otra vez.</div>' +
+                    '<div style="display:flex;gap:10px;justify-content:center">' +
+                        '<button id="salirCancelBtn" style="flex:1;background:var(--surface2,#1d1d1d);' +
+                            'border:1px solid var(--border,#2a2a2a);color:var(--text,#eee);border-radius:10px;' +
+                            'padding:11px 0;font-size:13px;cursor:pointer">Seguir aquí</button>' +
+                        '<button id="salirOkBtn" style="flex:1;background:rgba(224,90,58,.12);' +
+                            'border:1px solid rgba(224,90,58,.55);color:#ff8a6a;border-radius:10px;' +
+                            'padding:11px 0;font-size:13px;cursor:pointer;font-weight:600">Cerrar sesión</button>' +
+                    '</div>' +
+                '</div>';
+            document.body.appendChild(ov);
+            function done(v) { ov.remove(); resolve(v); }
+            document.getElementById('salirCancelBtn').onclick = function () { done(false); };
+            document.getElementById('salirOkBtn').onclick = function () { done(true); };
+            /* Tocar fuera y Escape CANCELAN. El destructivo nunca es el default:
+               por un dedazo se sale, por un dedazo no se debe salir. */
+            ov.addEventListener('click', function (e) { if (e.target === ov) done(false); });
+            document.addEventListener('keydown', function esc(e) {
+                if (e.key === 'Escape') { document.removeEventListener('keydown', esc); done(false); }
+            });
+            var b = document.getElementById('salirCancelBtn'); if (b) b.focus();
+        });
+    };
+})();

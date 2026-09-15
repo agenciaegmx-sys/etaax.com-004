@@ -2461,10 +2461,11 @@ async function adminLogout() {
     // Misma pregunta que en el resto de la app (modal-dock.js). Este panel toca
     // TODOS los negocios: salirse por un dedazo aquí es peor que en cualquier otro
     // lado, porque volver a entrar pide la cuenta maestra.
-    var ok = (typeof window.etaaxConfirmSalir === 'function')
-        ? await window.etaaxConfirmSalir()
-        : confirm('¿Cerrar sesión?');
-    if (!ok) return;
+    if (typeof window.etaaxConfirmSalir !== 'function') {
+        console.warn('[etaax] falta el diálogo de cerrar sesión; no se cierra nada.');
+        return;
+    }
+    if (!(await window.etaaxConfirmSalir())) return;
     await _supabase.auth.signOut();
     window.location.href = 'hub.html';
 }

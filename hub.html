@@ -2090,9 +2090,11 @@ async function registroSubmit() {
 /* La pregunta vive en security.js: la usan también las 26 páginas de módulo.
    Dos redacciones del mismo diálogo terminan diciendo cosas distintas. */
 function _confirmSalir() {
-    return (typeof window.etaaxConfirmSalir === 'function')
-        ? window.etaaxConfirmSalir()
-        : Promise.resolve(confirm('¿Cerrar sesión?'));
+    if (typeof window.etaaxConfirmSalir !== 'function') {
+        console.warn('[etaax] falta el diálogo de cerrar sesión; no se cierra nada.');
+        return Promise.resolve(false);
+    }
+    return window.etaaxConfirmSalir();
 }
 async function logout() {
     var ok = await _confirmSalir();
