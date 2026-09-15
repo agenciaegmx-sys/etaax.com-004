@@ -6385,6 +6385,200 @@ console.log('\n══ BB2 · Las conciliaciones no se mezclan con los movimiento
         eq(dia.indexOf('_esConcBanco') > -1 && /depEfecto/.test(dia), true, 'cuentan'));
 }
 
+/* ═══════════ SUITE BB4 · EL BUSCADOR DE INGREDIENTES (app.js) ════════════════
+   Escribir en el buscador de insumos del escandallo se arrastraba: ~100 ms por
+   tecla con un catálogo mediano. La causa no era el filtro sino la FIRMA del
+   catálogo: devolvía `contador + '|' + <TODO EL CATÁLOGO EN TEXTO>`, y el
+   resolver la pide una vez por producto desde `_unoPorProducto`. Medido con 600
+   productos: 602 copias del catálogo completo y 153 MB de string POR TECLA.
+
+   Aquí se cuida (a) que la firma siga siendo barata, (b) que siga detectando los
+   cambios —una firma barata que no detecte es peor que una cara— y (c) que el
+   buscador se pueda manejar con el teclado.                                   */
+function suiteBuscadorIngredientes() {
+console.log('\n══ BB4 · El buscador de ingredientes (app.js) ══');
+
+    function montar(nProductos) {
+        const cat = [];
+        for (let i = 0; i < nProductos; i++) {
+            const id = 'm' + i;
+            const base = { nombre:'Insumo '+i+' Campari', marca:'Marca'+(i%40), variedad:'V'+(i%7),
+                           categoria:'Cat'+(i%12), activo:'1',
+                           presentaciones:[{ costoUnitario:100+i, umCosto:'LT', contNeto:750, umContenido:'ML' }] };
+            cat.push(Object.assign({ id }, base));
+            cat.push(Object.assign({ id:'c'+i, origenId:id, sucursalId:'suc_principal' }, base));
+        }
+        const store = { 'etaax_negT_insumos': JSON.stringify(cat) };
+        const cuerpo = [];
+        /* Un nodo por id, reutilizado: renderTabla y los totales escriben en
+           varios, y devolver uno nuevo cada vez perdería lo que acaban de poner. */
+        const _nodos = {};
+        const nodo = () => ({ style:{}, _h:[], children:[], innerHTML:'', value:'', textContent:'',
+            appendChild(c){ this.children.push(c); }, removeChild(){},
+            addEventListener(t,f){ this._h.push([t,f]); },
+            getBoundingClientRect(){ return { bottom:10, left:0, width:200 }; },
+            scrollIntoView(){}, remove(){},
+            querySelectorAll(){ return []; }, querySelector(){ return null; }, focus(){}, select(){} });
+        const ctx = {
+            console:{ log(){}, warn(){}, error(){} }, JSON, Object, String, Date, Math, Array, Number,
+            Boolean, RegExp, parseFloat, parseInt, isNaN, setTimeout, clearTimeout, setInterval:()=>0, Promise,
+            localStorage:{ _d:{ etaax_negocio_activo:'negT', etaax_sucursal_activa:'suc_principal' },
+                getItem(k){ return this._d[k]===undefined?null:this._d[k]; },
+                setItem(k,v){ this._d[k]=String(v); }, removeItem(k){ delete this._d[k]; } },
+            sessionStorage:{ getItem(){ return null; }, setItem(){} },
+            document:{ readyState:'complete', addEventListener(){},
+                       /* renderTabla vacía el tbody al repintar: sin este nodo,
+                          elegir un insumo truena y el test no llegaría a mirar si
+                          quedó vinculado. */
+                       getElementById(id){ return _nodos[id] || (_nodos[id] = nodo()); },
+                       /* El buscador se coloca bajo el input de la fila, así que sin
+                          estos nodos `mostrarDropdown` sale por la puerta de atrás y
+                          los tests del teclado pasarían sin abrir nada. */
+                       querySelectorAll(sel){ return String(sel).indexOf('data-ing') > -1 ? [nodo(), nodo(), nodo()] : []; },
+                       querySelector(){ return null; },
+                       createElement:nodo, body:{ appendChild(c){ cuerpo.push(c); } } },
+            navigator:{}, location:{ href:'' },
+        };
+        ctx.window = ctx; ctx.window.addEventListener = () => {};
+        let lecturas = 0, bytes = 0;
+        ctx.etaaxStore = {
+            get(k){ const v = store[k] === undefined ? null : store[k]; if (v){ lecturas++; bytes += v.length; } return v; },
+            set(k,v){ store[k] = v; }, del(k){ delete store[k]; },
+        };
+        vm.createContext(ctx);
+        /* app.js delega las fórmulas de dinero al núcleo: sin él, repintar la tabla
+           truena y el test no llegaría a comprobar lo que le importa. */
+        vm.runInContext(fs.readFileSync(path.join(RAIZ,'etaax-core.js'),'utf8'), ctx, { filename:'etaax-core.js' });
+        vm.runInContext(fs.readFileSync(path.join(RAIZ,'insumo-label.js'),'utf8'), ctx, { filename:'insumo-label.js' });
+        try { vm.runInContext(fs.readFileSync(path.join(RAIZ,'app.js'),'utf8'), ctx, { filename:'app.js' }); }
+        catch(e) { /* el arranque toca el DOM real; las funciones quedan igual (hoisting) */ }
+        return { ctx, store, cat, cuerpo, medir(){ return { lecturas, bytes }; },
+                 reset(){ lecturas = 0; bytes = 0; } };
+    }
+
+    const m = montar(400);
+    const w = m.ctx;
+
+    /* ── (a) La firma tiene que ser BARATA ── */
+    const firma = w._firmaCatalogo();
+    test('la firma del catálogo es corta, no el catálogo entero', () =>
+        eq(firma.length < 40, true, 'mide ' + firma.length + ' caracteres'));
+    /* La otra mitad del arreglo: el catálogo acotado se memoriza. Sin esto, cada
+       tecla rehacía dos filtros sobre todo el catálogo más el colapso de copias,
+       que a su vez pide el resolver una vez por producto.
+       Se comprueba por IDENTIDAD —la misma lista, no una igual— que es la única
+       forma de saber que de verdad no se recalculó. */
+    test('el catálogo acotado no se recalcula en cada tecla', () =>
+        eq(w.getCatalogoInsumosScope() === w.getCatalogoInsumosScope(), true, 'memorizado'));
+
+    /* ── (b) …pero tiene que seguir detectando los cambios ──
+       Una firma barata que no detecta es peor que una cara: el buscador
+       enseñaría insumos de un catálogo que ya cambió, sin forma de notarlo. */
+    const antes = w.getCatalogoInsumosScope().length;
+    test('el catálogo acotado colapsa maestro y copia en un renglón', () =>
+        eq(antes, 400, 'uno por producto'));
+    const f1 = w._firmaCatalogo();
+    test('sin cambios, la firma no se mueve', () => eq(w._firmaCatalogo(), f1, 'estable'));
+
+    const nuevo = m.cat.slice();
+    nuevo.push({ id:'zz', nombre:'Zacate Campari', activo:'1', sucursalId:'suc_principal',
+                 sucursales:['suc_principal'], presentaciones:[{ costoUnitario:9, umCosto:'LT' }] });
+    m.store['etaax_negT_insumos'] = JSON.stringify(nuevo);
+    test('al cambiar el catálogo, la firma cambia', () => eq(w._firmaCatalogo() !== f1, true, 'cambió'));
+    test('…y el catálogo acotado se recalcula, no sirve el viejo', () =>
+        eq(w.getCatalogoInsumosScope().length, 401, 'recalculado'));
+    test('…y el insumo nuevo ya se encuentra al buscar', () =>
+        eq(w.buscarInsumos('zacate').length, 1, 'encontrado'));
+
+    /* Un cambio de PRECIO no cambia el número de registros: el caché viejo se
+       guiaba por la longitud y por eso se quedaba con el precio anterior. */
+    nuevo[0].presentaciones[0].costoUnitario = 99999;
+    m.store['etaax_negT_insumos'] = JSON.stringify(nuevo);
+    test('un cambio de precio también invalida el caché', () => {
+        const r = w.getCatalogoInsumosScope().find(x => x.id === 'm0' || x.origenId === 'm0');
+        return eq(r && r.presentaciones[0].costoUnitario, 99999, 'precio fresco');
+    });
+
+    /* ── (c) El teclado ── */
+    w.mostrarDropdown(0, 'campari');
+    test('el buscador abre con resultados', () => eq(!!w._dd && w._dd.items.length > 0, true, 'abierto'));
+    test('…y sin nada marcado: un Enter distraído no mete lo que nadie eligió', () =>
+        eq(w._dd.sel, -1, 'sin marcar'));
+
+    const tecla = (k) => w._ddTecla({ key:k }, 0);
+    test('↓ marca el primero', () => { tecla('ArrowDown'); return eq(w._dd.sel, 0, 'primero'); });
+    test('↓ otra vez baja al segundo', () => { tecla('ArrowDown'); return eq(w._dd.sel, 1, 'segundo'); });
+    test('↑ regresa al primero', () => { tecla('ArrowUp'); return eq(w._dd.sel, 0, 'primero'); });
+    test('↑ desde el primero da la vuelta al último', () => {
+        tecla('ArrowUp'); return eq(w._dd.sel, w._dd.items.length - 1, 'última');
+    });
+    test('las flechas SE CONSUMEN (si no, el cursor se mueve dentro del texto)', () =>
+        eq(tecla('ArrowDown'), true, 'consumida'));
+
+    /* `ingredientes` es un `let` de módulo: no vive en el objeto global del
+       contexto, hay que pedírselo al propio script. */
+    const ings = () => getVar(m.ctx, 'ingredientes');
+    setVar(m.ctx, 'ingredientes', [{ nombre:'', desc:'', cantidad:0, unidad:'ML', costoPorKgLt:0, insumoId:'' }]);
+    w.mostrarDropdown(0, 'campari');
+    w._ddTecla({ key:'ArrowDown' }, 0);
+    const primero = w._dd.items[0];
+    test('Enter elige lo marcado y lo vincula al catálogo', () => {
+        w._ddTecla({ key:'Enter' }, 0);
+        return eq(ings()[0].insumoId, primero.id, 'vinculado');
+    });
+    test('…y cierra el buscador', () => eq(w._dd, null, 'cerrado'));
+    test('Escape cierra sin elegir nada', () => {
+        w.mostrarDropdown(0, 'campari');
+        w._ddTecla({ key:'Escape' }, 0);
+        return eq(w._dd, null, 'cerrado');
+    });
+    /* Enter sin nada marcado toma el primero: eso SÍ es una decisión, porque hay
+       que apretar Enter a propósito viendo la lista. */
+    test('Enter sin marcar toma el primero de la lista', () => {
+        ings()[0].insumoId = '';
+        w.mostrarDropdown(0, 'campari');
+        const p = w._dd.items[0];
+        w._ddTecla({ key:'Enter' }, 0);
+        return eq(ings()[0].insumoId, p.id, 'primero');
+    });
+    /* Y el foco no se queda en el aire: al elegir, el tbody se reconstruye entero
+       y el usuario quedaba fuera de la tabla, teniendo que apuntar con el ratón. */
+    test('al elegir, el foco pasa al siguiente dato (Detalle)', () => {
+        const src = fs.readFileSync(path.join(RAIZ,'app.js'),'utf8');
+        const i = src.indexOf('function seleccionarInsumo');
+        return eq(src.slice(i, i + 900).indexOf('_foco(idx, 1)') > -1, true, 'foco');
+    });
+}
+
+/* ═══════════ SUITE BB5 · LA SUB-RECETA CONVERTIDA A INSUMO ═══════════════════
+   Dos fallas de la misma familia: el catálogo se leía y se escribía con
+   `localStorage` a pelo, cuando `insumos` es una clave GRANDE que vive en
+   IndexedDB. El insumo se guardaba donde nadie lo lee — por eso el botón nunca
+   pasaba a "✓ Agregado a insumos" aunque la conversión sí hubiera funcionado.  */
+console.log('\n══ BB5 · La sub-receta convertida a insumo ══');
+{
+    const rec = fs.readFileSync(path.join(RAIZ, 'recetas/index.html'), 'utf8');
+    test('el catálogo ya no se lee con localStorage a pelo', () =>
+        eq(rec.indexOf("localStorage.getItem(_sk('insumos'))"), -1, 'por el puente'));
+    test('…ni se escribe con localStorage a pelo', () =>
+        eq(rec.indexOf("localStorage.setItem(_sk('insumos')"), -1, 'por el puente'));
+    test('las escrituras refrescan la memoria del catálogo', () =>
+        eq((rec.match(/setCatalogoInsumosMem\(/g) || []).length >= 4, true, 'refresca'));
+    /* UNA sola regla para "¿esta sub-receta ya es insumo?": por recetaId si la
+       receta está guardada, y por nombre si todavía no —que es justo como el
+       guardado adopta a los huérfanos. Preguntar distinto era el bug del botón:
+       una sub-receta sin guardar nace con recetaId null y `null === ''` da false. */
+    test('hay UNA función que busca el insumo de la sub-receta', () =>
+        eq(rec.indexOf('function _buscarInsumoSubReceta()') > -1, true, 'una'));
+    test('…y las dos preguntas la usan', () =>
+        eq(rec.indexOf('function _subRecetaYaEsInsumo() { return !!_buscarInsumoSubReceta(); }') > -1
+        && rec.indexOf('function _insumoDeSubReceta() { return _buscarInsumoSubReceta(); }') > -1, true, 'compartida'));
+    test('reconoce la sub-receta sin guardar, por nombre', () => {
+        const i = rec.indexOf('function _buscarInsumoSubReceta()');
+        return eq(rec.slice(i, i + 800).indexOf('_normNombreSR(x.nombre) === nom') > -1, true, 'por nombre');
+    });
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La
@@ -6738,4 +6932,5 @@ function resumen() {
     process.exit(FALLA === 0 ? 0 : 1);
 }
 
+suiteBuscadorIngredientes();
 suiteAlmacenPrivado().then(suiteFrenoLogin).then(resumen);

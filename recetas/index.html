@@ -1757,11 +1757,30 @@ function limpiarFilaPorciones() {
 }
 
 // ── Agregar sub-receta como insumo ──────────────────────────
-// ¿La sub-receta abierta ya está convertida a insumo? (identidad = recetaId)
-function _subRecetaYaEsInsumo() {
-    if (!recetaActualId || typeof getCatalogoInsumos !== 'function') return false;
-    return getCatalogoInsumos().some(function(x){ return x && x.esSubReceta && x.recetaId === recetaActualId; });
+/* EL insumo de la sub-receta abierta, con la MISMA regla que usa el guardado:
+   por `recetaId` si la receta ya se guardó, y si no —receta todavía sin id— por
+   nombre normalizado, que es como el guardado adopta a los "huérfanos".
+
+   Que la comprobación usara solo `recetaId` era el bug del botón: al convertir
+   una sub-receta que aún no se ha guardado, el insumo nace con `recetaId: null`,
+   así que `null === ''` daba false y el botón se quedaba en "+ Agregar como
+   insumo" para siempre, aunque hubiera funcionado. Dos reglas para la misma
+   pregunta siempre terminan contestando distinto. */
+function _buscarInsumoSubReceta() {
+    if (typeof getCatalogoInsumos !== 'function') return null;
+    var cat = getCatalogoInsumos();
+    if (recetaActualId) {
+        var porId = cat.find(function(x){ return x && x.esSubReceta && x.recetaId === recetaActualId; });
+        if (porId) return porId;
+    }
+    var el = document.getElementById('nombreReceta');
+    var nom = _normNombreSR(el ? el.value : '');
+    if (!nom) return null;
+    return cat.find(function(x){
+        return x && x.esSubReceta && !x.recetaId && _normNombreSR(x.nombre) === nom;
+    }) || null;
 }
+function _subRecetaYaEsInsumo() { return !!_buscarInsumoSubReceta(); }
 // Estado del botón "Agregar como insumo": si ya está agregada, se BLOQUEA y
 // muestra "✓ AGREGADO A INSUMOS" (el sync se hace solo al guardar la receta).
 function _actualizarBotonAgregarInsumo() {
@@ -1788,10 +1807,9 @@ function _actualizarBotonAgregarInsumo() {
     _setChkIncluirInv();
 }
 // El insumo convertido de la sub-receta (para leer/escribir ocultoInventario).
-function _insumoDeSubReceta() {
-    if (!recetaActualId || typeof getCatalogoInsumos !== 'function') return null;
-    return getCatalogoInsumos().find(function(x){ return x && x.esSubReceta && x.recetaId === recetaActualId; }) || null;
-}
+// Misma regla que arriba: si aquí buscara distinto, el checkbox de inventario y
+// el selector de área escribirían sobre un insumo que el botón no reconoce.
+function _insumoDeSubReceta() { return _buscarInsumoSubReceta(); }
 // Estado del checkbox "Incluir en el inventario": del insumo convertido si existe;
 // si no, default por tipo (bebidas SÍ = prebatch; alimentos NO = base de cocina).
 function _setChkIncluirInv() {
@@ -1818,7 +1836,8 @@ function _setAreaSubReceta() {
     ins.area = sel.value || '';
     try {
         var cat = getCatalogoInsumos();
-        localStorage.setItem(_sk('insumos'), JSON.stringify(cat));
+        _skPut(_sk('insumos'), JSON.stringify(cat));
+        setCatalogoInsumosMem(cat);
         if (typeof sbUpsert === 'function') {
             var negId = getNegocioActivo ? getNegocioActivo() : (localStorage.getItem('etaax_negocio_activo') || '');
             if (negId) sbUpsert('insumos', ins, negId);
@@ -1833,7 +1852,8 @@ function _toggleIncluirInv() {
     ins.ocultoInventario = !chk.checked;
     try {
         var cat = getCatalogoInsumos();
-        localStorage.setItem(_sk('insumos'), JSON.stringify(cat));
+        _skPut(_sk('insumos'), JSON.stringify(cat));
+        setCatalogoInsumosMem(cat);
         var negId = getNegocioActivo ? getNegocioActivo() : (localStorage.getItem('etaax_negocio_activo') || '');
         if (negId && typeof _supabase !== 'undefined') {
             _supabase.from('negocio_insumos').upsert({ insumo_id: ins.id, negocio_id: negId, datos: ins, updated_at: new Date().toISOString() })
@@ -1998,7 +2018,12 @@ function agregarSubRecetaComoInsumo(silent) {
     // Guardar en catálogo
     try {
         var negId = getNegocioActivo ? getNegocioActivo() : (localStorage.getItem('etaax_negocio_activo') || '');
-        var catalogo = JSON.parse(localStorage.getItem(_sk('insumos'))) || [];
+        /* El catálogo es una clave GRANDE: vive en IndexedDB a través de
+           etaax-store, y `localStorage` solo guarda un espejo que puede estar
+           viejo o directamente vacío. Leerlo de ahí devolvía un catálogo
+           incompleto —a veces []— y entonces la búsqueda de duplicados no
+           encontraba la sub-receta que ya existía. Hay que leer por el puente. */
+        var catalogo = (function(){ try { return JSON.parse(_skGet('insumos')) || []; } catch(e){ return []; } })();
         // Identidad por recetaId (puede haber una copia por sucursal). Además,
         // HUÉRFANOS: sub-recetas del MISMO nombre creadas sin recetaId (sesiones
         // previas que duplicaban al presionar varias veces con la receta sin
@@ -2046,7 +2071,12 @@ function agregarSubRecetaComoInsumo(silent) {
         }
         // Eliminar del catálogo local los huérfanos duplicados sobrantes.
         if (_idsBorrar.length) catalogo = catalogo.filter(function(x){ return _idsBorrar.indexOf(x.id) < 0; });
-        localStorage.setItem(_sk('insumos'), JSON.stringify(catalogo));
+        /* Escribir por el puente Y refrescar la memoria. Antes esto iba a
+           localStorage a pelo: el insumo se guardaba donde NADIE lo lee, así que
+           el botón nunca pasaba a "✓ Agregado a insumos" —la comprobación no lo
+           encontraba— y el buscador tampoco lo ofrecía hasta recargar. */
+        _skPut(_sk('insumos'), JSON.stringify(catalogo));
+        setCatalogoInsumosMem(catalogo);
         // Si alguna copia estaba tombstoneada (borrada antes en el módulo de insumos),
         // al re-crearla desde la sub-receta se limpia su tombstone → coherente con
         // "guardar la sub-receta = este insumo debe existir" y evita que la
@@ -4418,9 +4448,12 @@ function _sanarInsumosSubReceta() {
     });
     if (!sanados.length) return;
     // Persistir: localStorage (sin foto base64) + Supabase (negocio_insumos).
-    try { localStorage.setItem(_sk('insumos'), JSON.stringify(ins.map(function(i){
-        if (i && i.foto && String(i.foto).indexOf('data:') === 0){ var d=Object.assign({},i); d.foto=''; return d; } return i;
-    }))); } catch(e) {}
+    try {
+        _skPut(_sk('insumos'), JSON.stringify(ins.map(function(i){
+            if (i && i.foto && String(i.foto).indexOf('data:') === 0){ var d=Object.assign({},i); d.foto=''; return d; } return i;
+        })));
+        setCatalogoInsumosMem(ins);
+    } catch(e) {}
     var negId = getNegocioActivo();
     if (negId && typeof _supabase !== 'undefined') {
         sanados.forEach(function(rec){ _supabase.from('negocio_insumos').upsert({ negocio_id: negId, insumo_id: rec.id, datos: rec }).then(function(){}); });

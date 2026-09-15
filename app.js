@@ -1174,11 +1174,34 @@ function getCatalogoInsumos() {
 // (El bug viejo comparaba solo `_n!==a.length` → quedaba stale ante cambios de precio.)
 // Usa la fábrica compartida (insumo-label.js). Fuente: getCatalogoInsumos (localStorage
 // 'insumos'); firma: el string crudo del localStorage → se reindexa al cambiar precios.
+/* ── LA FIRMA TIENE QUE SER BARATA ──────────────────────────────────────────
+   Antes esta función devolvía `_catInsSig + '|' + <TODO EL CATÁLOGO EN TEXTO>`.
+   Leerlo es barato (el almacén lo tiene en memoria), pero CONCATENARLO crea una
+   copia del string completo en cada llamada. Y el resolver se llama una vez por
+   producto desde `_unoPorProducto`, que corre en cada tecla del buscador de
+   ingredientes: medido con 600 productos daba 602 copias y 153 MB de string
+   movidos POR TECLA — los ~100 ms de retraso al escribir.
+
+   Ahora se compara por REFERENCIA: si el almacén devuelve el mismo string, no
+   cambió nada y la firma es la misma. Detecta exactamente lo mismo que antes
+   —incluido un cambio de precio que no cambia el número de registros— pero en
+   tiempo constante y sin copiar nada. */
+var _sigRaw = null, _sigN = 0;
 window._insumoResolver = window._makeInsumoResolver(getCatalogoInsumos, function(){
-    // La firma incluye el contador de memoria: si localStorage no pudo guardar
-    // (cuota), su string no cambia y el índice se quedaba con el catálogo viejo.
-    try { return _catInsSig + '|' + (_skGet('insumos') || ''); } catch (e) { return _catInsSig + '|'; }
+    // El contador de memoria sigue en la firma: si localStorage no pudo guardar
+    // (cuota), su string no cambia y el índice se quedaría con el catálogo viejo.
+    return _firmaCatalogo();
 });
+/* Una sola redacción de la firma: si el resolver y el caché del catálogo acotado
+   usaran reglas distintas, uno se invalidaría y el otro no, y el buscador
+   enseñaría insumos de un catálogo que ya cambió. */
+function _firmaCatalogo() {
+    try {
+        var raw = _skGet('insumos');
+        if (raw !== _sigRaw) { _sigRaw = raw; _sigN++; }
+        return _catInsSig + '|' + _sigN;
+    } catch (e) { return _catInsSig + '|'; }
+}
 
 // Costo POR unidad (kg/lt/pza) VIVO de un ingrediente vinculado: se recalcula
 // desde el insumo ACTUAL del catálogo, evitando el "drift" de costos congelados
@@ -1199,7 +1222,26 @@ function costoIngredienteVivo(ing) {
 // Catálogo acotado a la SUCURSAL donde se trabaja (regla "sin sucursal = matriz").
 // El escandallo de una sucursal solo debe ofrecer SUS insumos, no los de todo el
 // negocio. En modo catálogo global (o sin sucursal activa) devuelve todo.
+/* El catálogo acotado se recalcula en CADA tecla del buscador de ingredientes:
+   dos filtros sobre todo el catálogo más el colapso de copias, que a su vez pide
+   el resolver una vez por producto. Con 3,000 productos eran ~30 ms por tecla.
+   Nada de eso cambia mientras no cambie el catálogo ni la sucursal, así que se
+   memoriza por esas tres cosas. La firma es la misma del resolver —barata, por
+   referencia— así que editar un insumo invalida el caché al instante. */
+var _scopeCache = null, _scopeKey = '';
 function getCatalogoInsumosScope() {
+    var _k;
+    try {
+        var _cg = '';
+        try { _cg = sessionStorage.getItem('etaax_cat_global') || ''; } catch (e) {}
+        _k = _firmaCatalogo() + '|' + (localStorage.getItem('etaax_sucursal_activa') || '') + '|' + _cg;
+    } catch (e) { _k = ''; }
+    if (_k && _scopeCache && _k === _scopeKey) return _scopeCache;
+    var r = _calcCatalogoInsumosScope();
+    if (_k) { _scopeCache = r; _scopeKey = _k; }
+    return r;
+}
+function _calcCatalogoInsumosScope() {
     var cat = getCatalogoInsumos();
     // Inactivos GLOBALES fuera SIEMPRE (una receta no debe usar un insumo dado de baja).
     cat = cat.filter(function(x){ return x && x.activo !== '0'; });
@@ -1476,6 +1518,7 @@ function buscarInsumos(query) {
 
 function cerrarTodosDropdowns() {
     document.querySelectorAll('.ins-dropdown').forEach(d => d.remove());
+    _dd = null;
 }
 
 function crearItemDropdown(ins, idx) {
@@ -1485,8 +1528,11 @@ function crearItemDropdown(ins, idx) {
     var div = document.createElement('div');
     div.style.cssText = 'padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);' +
         'display:flex;align-items:center;gap:10px;transition:background 0.15s;';
-    div.addEventListener('mouseenter', function(){ this.style.background = 'var(--surface2)'; });
-    div.addEventListener('mouseleave', function(){ this.style.background = 'transparent'; });
+    /* El resaltado lo lleva el dropdown, no cada renglón: si el ratón pintara por
+       su cuenta, moverlo dejaría dos renglones marcados y Enter elegiría el que no
+       se ve resaltado. Pasar el ratón MUEVE la selección, y así teclado y ratón
+       hablan de lo mismo. */
+    div.addEventListener('mouseenter', function(){ _ddSeleccionar(_ddPos(this)); });
     div.addEventListener('mousedown', function(e){
         e.preventDefault(); // evita blur del input antes del click
         seleccionarInsumo(idx, ins.id);
@@ -1534,6 +1580,45 @@ function crearItemDropdown(ins, idx) {
     return div;
 }
 
+/* ── NAVEGAR EL BUSCADOR CON EL TECLADO ────────────────────────────────────
+   Antes solo se podía elegir con clic: escribir, soltar el teclado, apuntar,
+   hacer clic, y volver al teclado — por cada ingrediente de cada receta.
+   Ahora ↑ ↓ mueven, Enter elige y el foco pasa solo a "Detalle", que es el
+   siguiente dato que se escribe. `_dd` guarda qué renglón está marcado. */
+var _dd = null;   // { fila, items, sel, nodos }
+
+function _ddPos(nodo) {
+    return (_dd && _dd.nodos) ? _dd.nodos.indexOf(nodo) : -1;
+}
+function _ddSeleccionar(i) {
+    if (!_dd || !_dd.nodos.length) return;
+    if (i < 0) i = _dd.nodos.length - 1;
+    if (i >= _dd.nodos.length) i = 0;
+    _dd.sel = i;
+    _dd.nodos.forEach(function(nd, k){
+        nd.style.background = (k === i) ? 'var(--surface2)' : 'transparent';
+    });
+    var act = _dd.nodos[i];
+    if (act && act.scrollIntoView) act.scrollIntoView({ block: 'nearest' });
+}
+/* Devuelve true si la tecla YA se atendió aquí: así el input no hace lo suyo
+   (Enter no envía el formulario, las flechas no mueven el cursor del texto). */
+function _ddTecla(ev, fila) {
+    if (ev.key === 'Escape') { cerrarTodosDropdowns(); return true; }
+    if (!_dd || _dd.fila !== fila || !_dd.nodos.length) return false;
+    if (ev.key === 'ArrowDown') { _ddSeleccionar(_dd.sel + 1); return true; }
+    if (ev.key === 'ArrowUp')   { _ddSeleccionar(_dd.sel - 1); return true; }
+    if (ev.key === 'Enter') {
+        // Sin nada marcado, Enter toma el primero: es el que se está leyendo.
+        var i = _dd.sel >= 0 ? _dd.sel : 0;
+        var ins = _dd.items[i];
+        if (!ins) return false;
+        seleccionarInsumo(fila, ins.id);
+        return true;
+    }
+    return false;
+}
+
 function mostrarDropdown(idx, query) {
     cerrarTodosDropdowns();
     var resultados = buscarInsumos(query);
@@ -1555,11 +1640,17 @@ function mostrarDropdown(idx, query) {
         'border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.6);' +
         'max-height:280px;overflow-y:auto;';
 
-    resultados.forEach(function(ins) {
-        dd.appendChild(crearItemDropdown(ins, idx));
+    var nodos = resultados.map(function(ins) {
+        var nd = crearItemDropdown(ins, idx);
+        dd.appendChild(nd);
+        return nd;
     });
 
     document.body.appendChild(dd);
+    /* Nada marcado al abrir: marcar el primero de entrada haría que un Enter
+       distraído metiera un insumo que nadie eligió. Enter sin marcar sí toma el
+       primero, pero entonces es una decisión, no un accidente. */
+    _dd = { fila: idx, items: resultados, sel: -1, nodos: nodos };
 }
 
 
@@ -1576,7 +1667,25 @@ function seleccionarInsumo(idx, insumoId) {
     ingredientes[idx].costoPorKgLt = costo;
     cerrarTodosDropdowns();
     renderTabla();
+    /* renderTabla rehace todo el tbody, así que el foco se pierde y el usuario
+       queda fuera de la tabla: había que volver a apuntar con el ratón por cada
+       ingrediente. Se devuelve el foco al SIGUIENTE dato que se escribe —el
+       detalle de esa misma fila— para poder seguir de corrido. */
+    _foco(idx, 1);
     if (typeof guardarEnHistorial === 'function') guardarEnHistorial();
+}
+
+/* Pone el cursor en la columna `col` de la fila `fila` (0 = nombre, 1 = detalle,
+   2 = cantidad). Espera un tick porque el tbody se acaba de reconstruir. */
+function _foco(fila, col) {
+    setTimeout(function(){
+        var filas = document.querySelectorAll('#tbodyIngredientes tr');
+        var tr = filas[fila]; if (!tr) return;
+        var inputs = tr.querySelectorAll('input');
+        var el = inputs[col]; if (!el) return;
+        el.focus();
+        if (el.select) el.select();
+    }, 0);
 }
 
 function recalcularCostoDesdeInsumo(idx) {
@@ -1614,7 +1723,7 @@ function renderTabla() {
                 '<input type="text" data-ing="nombre" value="'+ing.nombre+'" placeholder="Ingrediente" autocomplete="off"' +
                 ' oninput="updateIng('+i+',\'nombre\',this.value);mostrarDropdown('+i+',this.value)"' +
                 ' onblur="setTimeout(cerrarTodosDropdowns,200)"' +
-                ' onkeydown="if(event.key===\'Escape\')cerrarTodosDropdowns()"' +
+                ' onkeydown="if(_ddTecla(event,'+i+'))event.preventDefault()"' +
                 ' style="width:100%">' +
                 '</div></td>' +
             '<td><input type="text" value="'+ing.desc+'" placeholder="Detalle" oninput="updateIng('+i+',\'desc\',this.value)"></td>' +
