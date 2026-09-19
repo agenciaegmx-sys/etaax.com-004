@@ -6369,12 +6369,30 @@ console.log('\n══ BB1 · Un gasto sin pagar no ha salido de la cuenta ══
 console.log('\n══ BB2 · Las conciliaciones no se mezclan con los movimientos ══');
 {
     const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
-    test('hay UNA sola regla para reconocer una conciliación bancaria', () =>
+    test('hay UNA sola regla para reconocer una conciliación de saldo', () =>
         eq(dia.indexOf('function _esConcBanco(d){ return !!(d && d.cuentaConcId); }') > -1, true, 'regla'));
-    test('la lista de movimientos las deja fuera', () =>
-        eq(dia.indexOf('.filter(function(d){ return !_esConcBanco(d); })') > -1, true, 'fuera'));
+    /* Y las DOS clases bajo un mismo techo: la de saldo y el abono de terminal.
+       El abono se colaba en la lista como un renglón sin concepto ni categoría,
+       solo fecha y monto — justo lo que la volvía ilegible. */
+    test('«conciliación» incluye también el abono de terminal', () =>
+        eq(dia.indexOf('function _esConciliacion(d){ return _esConcBanco(d) || EtaaxCore.esAbonoTpv(d); }') > -1,
+           true, 'las dos'));
+    test('la lista de movimientos deja fuera LAS DOS', () =>
+        eq(dia.indexOf('.filter(function(d){ return !_esConciliacion(d); })') > -1, true, 'fuera'));
     test('el historial usa ESA MISMA regla', () =>
-        eq(dia.indexOf('(_cacheDeps||[]).filter(_esConcBanco)') > -1, true, 'misma'));
+        eq(dia.indexOf('_scopeSuc(_cacheDeps||[]).filter(_esConciliacion)') > -1, true, 'misma'));
+    /* Cada una con su nombre, que es lo que pidió Edwin: "conciliación de saldo"
+       y "conciliación de corte <fecha>". Un historial con dos cosas distintas sin
+       rótulo se lee peor que dos listas. */
+    test('cada clase se llama por su nombre en el historial', () =>
+        eq(dia.indexOf("return '⚖️ Conciliación de saldo';") > -1
+        && dia.indexOf("return '🏦 Conciliación de corte'") > -1, true, 'rotuladas'));
+    /* El abono lleva la fecha del CORTE que concilia, no la del día en que cayó:
+       lo que se está cuadrando es esa venta. */
+    test('el abono se rotula con la fecha del corte, no la del depósito', () => {
+        const i = dia.indexOf('function _concConcepto(d)');
+        return eq(dia.slice(i, i + 420).indexOf("x.id===(d.corteId||'')") > -1, true, 'del corte');
+    });
     /* Si cada uno decidiera por su cuenta, un movimiento podría no salir en
        ninguno de los dos y desaparecer sin dejar rastro. */
     test('el historial ya no se guía por la categoría, que el usuario escribe a mano', () =>
@@ -7525,6 +7543,77 @@ console.log('\n══ BC4 · El colaborador solo ve lo de su sucursal ══');
         eq(ck.indexOf('var _sucColab = (PERFIL && PERFIL.sucursalId) || SUC || \'\';') > -1, true, 'del colaborador'));
     test('…y ya no se guía solo por la del QR', () =>
         eq(ck.indexOf('if (SUC && p.sucursalId && p.sucursalId !== SUC) return false;'), -1, 'sin SUC solo'));
+}
+
+/* ═══════════ SUITE BC5 · LA META QUE SE VEÍA EN DOS SUCURSALES ══════════════
+   Una previsión vieja aparecía en las dos sucursales y borrarla en una la
+   borraba en la otra. No era un bug del borrado: es UN SOLO registro.
+
+   Las metas capturadas antes del arreglo por sucursal traen un id de NEGOCIO en
+   `sucursalId` —el selector de entonces listaba negocios— y ese id no es ninguna
+   sucursal. `_sucDePrev` las lee como lo que en la práctica son: metas del
+   negocio entero, o sea de todas las sucursales.
+
+   Lo que SÍ estaba mal era que la lista mentía: el filtro usaba esa regla pero la
+   columna pintaba el campo crudo, y salía "📍 Sucursal" en una meta que se
+   comportaba como "🌐 Todas". Diciendo la verdad, el comportamiento se explica
+   solo — y se corrige editándola para elegirle su sucursal.                    */
+console.log('\n══ BC5 · La meta que se veía en dos sucursales ══');
+{
+    const prev = fs.readFileSync(path.join(RAIZ, 'financiero/previsiones.html'), 'utf8');
+
+    /* Se corre la regla REAL de la página sobre un catálogo de sucursales de
+       mentira, para probar comportamiento y no la forma del texto. */
+    const ctx = {
+        console:{ log(){}, warn(){} }, JSON, String, Object, Array,
+        localStorage:{ _d:{
+            etaax_negocio_activo: 'neg1',
+            'etaax_neg1_sucursales': JSON.stringify([
+                { id:'s1', nombre:'Tata',     activa:true },
+                { id:'s2', nombre:'Porcino', activa:true }]),
+        }, getItem(k){ return this._d[k]===undefined?null:this._d[k]; }, setItem(){}, removeItem(){} },
+        getNegocioActivo(){ return 'neg1'; },
+    };
+    ctx.window = ctx;
+    vm.createContext(ctx);
+    // Solo las tres funciones que deciden esto, no la página entera.
+    ['function _loadNegocios(){', 'function _negLabel(id){', 'function _sucDePrev(p){'].forEach(function(firma){
+        const i = prev.indexOf(firma);
+        const j = prev.indexOf('\n}', i) + 2;
+        vm.runInContext(prev.slice(i, j), ctx, { filename: firma });
+    });
+    const sucDe = ctx.window._sucDePrev, etiqueta = ctx.window._negLabel;
+
+    test('una meta de una sucursal real dice su sucursal', () =>
+        eq(sucDe({ sucursalId:'s1' }), 's1', 'suya'));
+    /* El caso de Edwin: id de NEGOCIO donde debería ir una sucursal. */
+    test('una meta vieja (id de negocio) se lee como "de todas"', () =>
+        eq(sucDe({ sucursalId:'neg1' }), '', 'todas'));
+    test('…y una sin sucursal, también', () => eq(sucDe({}), '', 'todas'));
+
+    /* La columna tiene que decir lo MISMO que decide el filtro. Antes una meta
+       vieja se pintaba "📍 Sucursal" y se comportaba como "🌐 Todas". */
+    test('la meta vieja se rotula "Todas", no "Sucursal"', () =>
+        eq(etiqueta(sucDe({ sucursalId:'neg1' })), '🌐 Todas', etiqueta(sucDe({ sucursalId:'neg1' }))));
+    test('la de una sucursal real se rotula con su nombre', () =>
+        eq(etiqueta(sucDe({ sucursalId:'s2' })).indexOf('Porcino') > -1, true, 'Porcino'));
+    test('la lista usa la regla del filtro, no el campo crudo', () =>
+        eq(prev.indexOf('_negLabel(_sucDePrev(p))') > -1
+        && prev.indexOf("_negLabel(p.sucursalId||'')") === -1, true, 'una sola regla'));
+
+    /* Y las NUEVAS sí son independientes: el selector del formulario ofrece
+       sucursales REALES, así que cada una nace con su dueño. */
+    test('el formulario ofrece sucursales reales, no negocios', () => {
+        const i = prev.indexOf("sel.innerHTML='<option value=\"\">🌐 Todas las sucursales</option>'");
+        return eq(prev.slice(i, i + 300).indexOf('_loadNegocios().forEach') > -1, true, 'reales');
+    });
+    test('…y al crear se propone la sucursal donde vienes navegando', () =>
+        eq(prev.indexOf("document.getElementById('pvSucursal').value = id ? (p.sucursalId||'') : (_sucursalId||'');") > -1,
+           true, 'hereda el contexto'));
+    /* El filtro solo esconde lo que es de OTRA sucursal: lo marcado "todas" se ve
+       siempre, a propósito — un aguinaldo es del negocio entero. */
+    test('la meta "de todas" se ve estés en la sucursal que estés', () =>
+        eq(prev.indexOf('if(_sucursalId && _sp && _sp!==_sucursalId) return false;') > -1, true, 'visible'));
 }
 
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════

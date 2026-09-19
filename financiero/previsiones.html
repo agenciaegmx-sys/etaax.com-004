@@ -600,7 +600,16 @@ function renderAll(hoyRef){
         return'<tr>'
             +'<td><div style="font-weight:500">'+_esc(p.concepto)+'</div>'+(p.notas?'<div style="font-size:10px;color:var(--text-dim);margin-top:2px">'+_esc(p.notas.slice(0,60))+'</div>':'')+'</td>'
             +'<td><span class="tipo-badge">'+_esc(p.tipo||'—')+'</span></td>'
-            +'<td style="font-size:11px;color:var(--text-dim)">'+_negLabel(p.sucursalId||'')+'</td>'
+            /* La MISMA regla que usa el filtro (_sucDePrev), no el campo crudo.
+               Ahí estaba la confusión: una meta vieja trae un id de NEGOCIO en
+               `sucursalId` —el selector de entonces listaba negocios— así que el
+               filtro la trataba como "de todas las sucursales" pero la columna la
+               pintaba como "📍 Sucursal". Se veía en las dos sucursales y parecía
+               un error; en realidad es UN solo registro del negocio entero, y por
+               eso al borrarlo desaparece de las dos.
+               Diciendo la verdad en la columna, el comportamiento se explica solo
+               — y se arregla editándola para elegirle su sucursal. */
+            +'<td style="font-size:11px;color:var(--text-dim)">'+_negLabel(_sucDePrev(p))+'</td>'
             +'<td style="text-align:right;font-weight:600;color:var(--accent)">'+fmtM(pl.objetivo)+'</td>'
             +'<td style="text-align:right;font-weight:600;color:var(--green)">'+fmtM(pl.apartado)
                 +(usado>0?'<div style="font-size:10px;color:var(--text-muted);font-weight:400">sigue respaldado '+fmtM(pl.apartado-usado)+'</div>':'')

@@ -2773,12 +2773,15 @@ function depVista(v,btn){
 function renderDepositos(){
     _depPobFiltroCat();
     var _rd=dxpRango('dep');
-    /* Las conciliaciones bancarias NO se listan aquí. Sí mueven el saldo —son
-       cashback, cobros del banco, promociones— pero leerlas entre retiros,
-       depósitos y previsiones vuelve ilegible la lista. Tienen su propio
-       historial en Caja Fuerte, con el saldo de antes, el real y quién verificó. */
+    /* NINGUNA conciliación se lista aquí — ni la del saldo de una cuenta ni el
+       abono de terminal de un corte. Las dos son conciliaciones y las dos viven
+       en su propio historial, en Caja Fuerte.
+       El abono de terminal se colaba: salía como un renglón sin concepto y sin
+       categoría, con solo una fecha y un monto. Entre retiros, depósitos y
+       previsiones, esos renglones mudos eran justo lo que volvía ilegible la
+       lista. */
     var deps=loadDep().filter(function(d){return inRange(d.fecha,_rd.from,_rd.to);})
-                      .filter(function(d){ return !_esConcBanco(d); });
+                      .filter(function(d){ return !_esConciliacion(d); });
     if(_depVista==='ret') deps=deps.filter(_esRetiro);
     else if(_depVista==='prev') deps=deps.filter(EtaaxCore.esApartado);
     else if(_depVista==='dep') deps=deps.filter(function(d){return !_esRetiro(d) && !EtaaxCore.esApartado(d);});
@@ -5041,26 +5044,47 @@ function _concGuardar(){
    Una sola regla, usada por el historial Y por el filtro de la lista: si cada uno
    decidiera por su cuenta, un movimiento podría no salir en ninguno de los dos. */
 function _esConcBanco(d){ return !!(d && d.cuentaConcId); }
+/* Las DOS clases de conciliación, bajo un mismo techo:
+     · de SALDO  — cuadrar una cuenta contra la banca real (cashback, cobros).
+     · de CORTE  — el abono de terminal que por fin cayó de una venta con tarjeta.
+   Se preguntan juntas en un solo lugar para que la lista de movimientos y el
+   historial no puedan discrepar: lo que sale de una entra en el otro. */
+function _esConciliacion(d){ return _esConcBanco(d) || EtaaxCore.esAbonoTpv(d); }
+/* Cómo se llama cada una en el historial. El abono lleva la fecha del CORTE que
+   concilia, no la del día en que cayó: es la venta que se está cuadrando. */
+function _concConcepto(d){
+    if(_esConcBanco(d)) return '⚖️ Conciliación de saldo';
+    var c=(_cacheCortes||[]).find(function(x){ return x && x.id===(d.corteId||''); });
+    var f=(c&&c.fecha)||'';
+    return '🏦 Conciliación de corte' + (f ? ' ' + _fCorta(f) : '');
+}
 
-/* 📜 Vista histórica de conciliaciones bancarias */
+/* 📜 Vista histórica de conciliaciones — las de saldo Y las de corte */
 function abrirHistConciliaciones(){
-    var lista=(_cacheDeps||[]).filter(_esConcBanco)
+    var lista=_scopeSuc(_cacheDeps||[]).filter(_esConciliacion)
         .slice().sort(function(a,b){return String(b.fecha||'').localeCompare(String(a.fecha||''));});
     var body=document.getElementById('concHistBody');
     if(!lista.length){
         body.innerHTML='<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:34px 0">Sin conciliaciones registradas todavía.<br><span style="font-size:11px">Usa ⚖️ Conciliar en una cuenta para registrar la primera.</span></div>';
     } else {
         var rows=lista.map(function(d){
-            var cta=d.cuentaConcId||d.destinoCuentaId||d.origenCuentaId||'';
-            var esEntrada=d.destino==='banco';
+            var _esSaldo=_esConcBanco(d);
+            var cta=d.cuentaConcId||d.cuentaId||d.destinoCuentaId||d.origenCuentaId||'';
+            /* El abono de terminal SIEMPRE entra: es dinero que llegó. El ajuste de
+               saldo puede ir en cualquiera de los dos sentidos. */
+            var esEntrada=_esSaldo ? (d.destino==='banco') : true;
             var aj=(esEntrada?'+':'−')+fmtM(n(d.monto));
             var fch=d.fecha?new Date(d.fecha+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}):'—';
-            var detalle=(d.concCalc!==undefined&&d.concReal!==undefined)
-                ? 'ETAAX '+fmtM(n(d.concCalc))+' → real '+fmtM(n(d.concReal))
-                : (d.notas||'');
+            var detalle=_esSaldo
+                ? ((d.concCalc!==undefined&&d.concReal!==undefined)
+                    ? 'ETAAX '+fmtM(n(d.concCalc))+' → real '+fmtM(n(d.concReal))
+                    : (d.notas||''))
+                : ('cayó al banco'+(n(d.comision)>0.005?' · comisión '+fmtM(d.comision):'')
+                    +(d.folio?' · '+d.folio:''));
             return '<tr>'+
                 '<td style="padding:8px 10px;white-space:nowrap">'+fch+'</td>'+
-                '<td style="padding:8px 10px">🏛️ '+_escV(_cuentaBancoLabel(cta))+'</td>'+
+                '<td style="padding:8px 10px">🏛️ '+_escV(_cuentaBancoLabel(cta))+
+                    '<div style="font-size:10.5px;color:var(--text-dim);margin-top:2px">'+_escV(_concConcepto(d))+'</div></td>'+
                 '<td style="padding:8px 10px;font-size:11px;color:var(--text-dim)">'+_escV(detalle)+'</td>'+
                 '<td style="padding:8px 10px;text-align:right;font-weight:700;color:'+(esEntrada?'var(--green)':'#ff9a9a')+';white-space:nowrap">'+aj+'</td>'+
                 '<td style="padding:8px 10px;font-size:12px">'+_escV(d.verificadoPor||d.autorizadoPor||'—')+'</td>'+
@@ -5070,7 +5094,7 @@ function abrirHistConciliaciones(){
             '<thead><tr style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);text-align:left">'+
             '<th style="padding:6px 10px">Fecha</th><th style="padding:6px 10px">Cuenta</th><th style="padding:6px 10px">Detalle</th><th style="padding:6px 10px;text-align:right">Ajuste</th><th style="padding:6px 10px">Verificó</th></tr></thead>'+
             '<tbody>'+rows+'</tbody></table>'+
-            '<div style="font-size:10px;color:var(--text-dim);margin-top:10px">Cada conciliación es un movimiento (categoría "ajuste") — también se puede editar o eliminar desde el historial de depósitos.</div>';
+            '<div style="font-size:10px;color:var(--text-dim);margin-top:10px">Aquí se acumulan las DOS: la de <b>saldo</b> (cuadrar la cuenta contra tu banca) y la de <b>corte</b> (el abono de terminal que cayó). Ninguna se lista en Depósitos y Retiros — ahí solo van movimientos de dinero que tú decides. También se puede editar o eliminar desde el historial de depósitos.</div>';
     }
     document.getElementById('concHistOverlay').classList.add('open');
 }
