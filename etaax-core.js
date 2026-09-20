@@ -58,7 +58,19 @@
     /* ── Dinero del CORTE ────────────────────────────────────── */
     function efNeto(c) { return n(c.efectivo); }                                    // solo la venta en efectivo
     function taBanco(c) { return n(c.tarjeta) + n(c.propTarjeta); }                 // venta + propina → banco (BRUTO)
-    function ventasBruta(c) { return n(c.efectivo) + n(c.tarjeta) + n(c.transferencia); }
+    /* ── ANTICIPOS APLICADOS A UN CORTE ──────────────────────────────────────
+       Un anticipo es dinero que YA entró a la caja o al banco semanas antes, pero
+       que todavía no era venta: es un pasivo, producto que se debe. Se vuelve
+       venta el día del evento.
+
+       Por eso suma a la VENTA pero no al FLUJO del día: ese dinero no llegó hoy,
+       llegó cuando se cobró el anticipo. Contarlo en los dos lados lo duplicaría
+       —una vez al recibirlo y otra al usarlo— y el saldo de caja fuerte quedaría
+       inflado justo por lo que ya estaba ahí dentro. */
+    function anticipoAplicado(c) {
+        return ((c && c.anticipos) || []).reduce(function (t, a) { return t + n(a && a.monto); }, 0);
+    }
+    function ventasBruta(c) { return n(c.efectivo) + n(c.tarjeta) + n(c.transferencia) + anticipoAplicado(c); }
     function flujoNeto(c) { return efNeto(c) + taBanco(c) + n(c.transferencia); }   // = ef + tarjeta + propTarjeta + transfer
     function propinas(c) { return n(c.propEfectivo) + n(c.propTarjeta); }
     function cheque(c) { var com = n(c.comensales); var ven = n(c.ventaDeclarada) || ventasBruta(c) || (n(c.comedor) + n(c.paraLlevar)); return com > 0 ? ven / com : 0; }
@@ -467,6 +479,95 @@
             // Compat: el bloque del corte pinta `comision` como "comisión del día".
             comision: cerrado ? com : proy
         };
+    }
+
+    /* ── ANTICIPOS: dinero recibido que todavía se debe en producto ──────────
+       Espejo de las previsiones, al revés:
+         · previsión = dinero MÍO apartado para un gasto futuro   → baja el disponible
+         · anticipo  = dinero AJENO recibido por una venta futura → está en la caja,
+                       pero una parte de ese saldo ya tiene dueño
+
+       Un anticipo SÍ mueve el fondo (el billete entra de verdad), a diferencia del
+       apartado, que solo etiqueta. Por eso `depEfecto` lo trata como cualquier
+       depósito y aquí solo se lleva la cuenta de cuánto falta por aplicar.       */
+    function esAnticipo(d)    { return !!d && d.tipo === 'anticipo'; }
+    function esAnticipoDev(d) { return !!d && d.tipo === 'anticipo_dev'; }
+    function anticipoFondo(d) { return (d && d.fondo === 'banco') ? 'banco' : 'caja_fuerte'; }
+
+    /* Saldos por anticipo: cuánto se recibió, cuánto se devolvió, cuánto se aplicó
+       y cuánto queda por aplicar. `deps` trae los anticipos y sus devoluciones;
+       `cortes` y `vex` (ventas especiales) traen dónde se usaron.
+       Todo por parámetro: sin DOM, sin localStorage. */
+    function anticipoSaldos(deps, cortes, vex) {
+        var porId = {};
+        function slot(id) {
+            if (!porId[id]) porId[id] = { id: id, anticipo: null, recibido: 0, devuelto: 0,
+                                          aplicado: 0, saldo: 0, enCaja: 0, enBanco: 0 };
+            return porId[id];
+        }
+        (deps || []).forEach(function (d) {
+            if (esAnticipo(d)) {
+                var s = slot(d.id), m = n(d.monto);
+                s.anticipo = d; s.recibido += m;
+                if (anticipoFondo(d) === 'banco') s.enBanco += m; else s.enCaja += m;
+            } else if (esAnticipoDev(d) && d.anticipoId) {
+                var v = slot(d.anticipoId), md = n(d.monto);
+                v.devuelto += md;
+                if (anticipoFondo(d) === 'banco') v.enBanco -= md; else v.enCaja -= md;
+            }
+        });
+        function aplicar(lista) {
+            (lista || []).forEach(function (x) {
+                ((x && x.anticipos) || []).forEach(function (a) {
+                    if (a && a.anticipoId) slot(a.anticipoId).aplicado += n(a.monto);
+                });
+            });
+        }
+        aplicar(cortes); aplicar(vex);
+
+        var tot = { recibido: 0, devuelto: 0, aplicado: 0, saldo: 0, enCaja: 0, enBanco: 0 };
+        Object.keys(porId).forEach(function (k) {
+            var s = porId[k];
+            /* Lo aplicado y lo devuelto ya no están pendientes. Nunca baja de cero:
+               aplicar de más sería un error de captura, y dejar un saldo negativo
+               restando del total lo escondería en vez de enseñarlo. */
+            s.saldo = Math.max(0, s.recibido - s.devuelto - s.aplicado);
+            tot.recibido += s.recibido; tot.devuelto += s.devuelto;
+            tot.aplicado += s.aplicado; tot.saldo += s.saldo;
+            tot.enCaja += s.enCaja;     tot.enBanco += s.enBanco;
+        });
+        return { porId: porId, total: tot };
+    }
+
+    /* ¿Cuáles TOCAN hoy? Si al capturar el anticipo se puso la fecha del evento,
+       el corte de ese día lo propone solo. Sin eso, el cajero tendría que
+       acordarse de que hace tres semanas alguien dejó dinero a cuenta — y un
+       anticipo que nadie aplica se queda inflando el saldo para siempre.
+       Los que ya pasaron de fecha y siguen con saldo van primero entre "otros":
+       son los que alguien olvidó. */
+    function anticiposDelDia(saldos, fecha) {
+        var f = String(fecha || '').slice(0, 10);
+        var delDia = [], otros = [];
+        var porId = (saldos && saldos.porId) || {};
+        Object.keys(porId).forEach(function (k) {
+            var s = porId[k];
+            if (!s || s.saldo <= 0.005 || !s.anticipo) return;
+            var fe = String(s.anticipo.fechaEvento || '').slice(0, 10);
+            if (fe && f && fe === f) delDia.push(s); else otros.push(s);
+        });
+        var ord = function (a, b) {
+            var fa = String((a.anticipo && a.anticipo.fechaEvento) || a.anticipo.fecha || '');
+            var fb = String((b.anticipo && b.anticipo.fechaEvento) || b.anticipo.fecha || '');
+            return fa.localeCompare(fb);
+        };
+        delDia.sort(ord); otros.sort(ord);
+        /* Vencidos: con fecha de evento YA pasada y saldo vivo. Se marcan para
+           poder avisar, no para esconderlos. */
+        var vencidos = otros.filter(function (s) {
+            var fe = String(s.anticipo.fechaEvento || '').slice(0, 10);
+            return fe && f && fe < f;
+        });
+        return { delDia: delDia, otros: otros, vencidos: vencidos };
     }
 
     function tpvConciliacion(cortes, deps, cuentaId, hoyStr, modo, ctas) {
@@ -1088,6 +1189,9 @@
         cuentasDebito: cuentasDebito, cuentasDebitoActivas: cuentasDebitoActivas, ctaActiva: ctaActiva,
         comisionBancoCorte: comisionBancoCorte,
         nomEsAdm: _nomEsAdm, gastoEstatus: gastoEstatus, gastoPagado: gastoPagado, gastoEspera: gastoEspera,
+        esAnticipo: esAnticipo, esAnticipoDev: esAnticipoDev, anticipoFondo: anticipoFondo,
+        anticipoSaldos: anticipoSaldos, anticipoAplicado: anticipoAplicado,
+        anticiposDelDia: anticiposDelDia,
         netoPropina: netoPropina,
         depEfecto: depEfecto, esRetiro: esRetiro,
         esApartado: esApartado, apartadoFondo: apartadoFondo, PREV_GENERAL: PREV_GENERAL,

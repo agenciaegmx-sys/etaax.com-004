@@ -7623,6 +7623,109 @@ console.log('\n══ BC5 · La meta que se veía en dos sucursales ══');
         eq(prev.indexOf('if(_sucursalId && _sp && _sp!==_sucursalId) return false;') > -1, true, 'visible'));
 }
 
+/* ═══════════ SUITE BC6 · ANTICIPOS (etaax-core.js) ══════════════════════════
+   Un anticipo es dinero AJENO que ya entró a la caja: el cliente pagó por
+   adelantado y todavía se le debe el producto. Es el espejo de una previsión —
+   ahí el dinero es mío y lo aparto para un gasto; aquí es suyo y lo tengo yo.
+
+   LA REGLA QUE NO SE PUEDE ROMPER: el anticipo suma a la VENTA el día del
+   evento, pero NO al FLUJO de ese día — ese dinero llegó semanas antes.
+   Contarlo en los dos lados lo duplica: una vez al recibirlo y otra al usarlo, y
+   el saldo de caja fuerte queda inflado justo por lo que ya estaba adentro.     */
+console.log('\n══ BC6 · Anticipos (etaax-core.js) ══');
+{
+    const C = cargarJS(crearContexto(), 'etaax-core.js').EtaaxCore;
+    const ant = (id, monto, fondo, fechaEvento, cliente) =>
+        ({ id, tipo:'anticipo', monto, fecha:'2026-09-05', fondo: fondo||'caja_fuerte',
+           fechaEvento: fechaEvento||'', cliente: cliente||'Cliente' });
+    const dev = (anticipoId, monto, fondo) =>
+        ({ id:'d'+anticipoId, tipo:'anticipo_dev', anticipoId, monto, fecha:'2026-09-08', fondo: fondo||'caja_fuerte' });
+    const corte = (fecha, efectivo, aplica) =>
+        ({ id:'c'+fecha, fecha, efectivo, tarjeta:0, transferencia:0, anticipos: aplica||[] });
+
+    /* ── Lo que se recibe ── */
+    const a1 = ant('a1', 10000, 'caja_fuerte', '2026-09-28', 'Boda Martínez');
+    let S = C.anticipoSaldos([a1], [], []);
+    test('un anticipo recibido queda pendiente de aplicar', () => eq(S.total.saldo, 10000, 'saldo'));
+    test('…y se sabe en qué fondo está parado', () =>
+        eq(S.total.enCaja === 10000 && S.total.enBanco === 0, true, 'caja'));
+    test('un anticipo al banco se para en el banco', () =>
+        eq(C.anticipoSaldos([ant('a2', 4500, 'banco')], [], []).total.enBanco, 4500, 'banco'));
+
+    /* ── LA REGLA: venta hoy, dinero de antes ── */
+    const evento = corte('2026-09-28', 20000, [{ anticipoId:'a1', monto:10000 }]);
+    test('la VENTA del evento incluye el anticipo', () => eq(C.ventasBruta(evento), 30000, 'venta'));
+    test('…pero el FLUJO del día NO: ese dinero llegó semanas antes', () =>
+        eq(C.flujoNeto(evento), 20000, 'flujo'));
+    /* Si el anticipo entrara al flujo, el dinero se contaría dos veces: al
+       recibirlo (que sí movió la caja) y otra vez aquí. */
+    test('el efectivo del corte sigue siendo solo lo que se cobró ese día', () =>
+        eq(C.efNeto(evento), 20000, 'efectivo'));
+    /* Y el resguardo del cajón tampoco se toca: el anticipo no está en ese cajón
+       esa noche, entró semanas antes y ya se resguardó entonces. */
+    test('el resguardo del cajón no cuenta el anticipo', () =>
+        eq(C.resguardo(Object.assign({ fondoInicial:2000, retiros:0 }, evento), 0), 22000, 'resguardo'));
+
+    /* Un corte sin anticipos se comporta EXACTAMENTE igual que antes: es lo que
+       hace que este cambio no mueva un solo número histórico. */
+    const normal = corte('2026-09-27', 15000);
+    test('un corte sin anticipos no cambia en nada', () =>
+        eq(C.ventasBruta(normal) === 15000 && C.flujoNeto(normal) === 15000, true, 'intacto'));
+    test('…ni uno viejo, que ni siquiera tiene el campo', () =>
+        eq(C.ventasBruta({ efectivo:15000, tarjeta:0, transferencia:0 }), 15000, 'intacto'));
+
+    /* ── Aplicar baja el saldo ── */
+    S = C.anticipoSaldos([a1], [evento], []);
+    test('aplicarlo lo saca de lo pendiente', () => eq(S.total.saldo, 0, 'saldo'));
+    test('…y queda registrado como aplicado', () => eq(S.total.aplicado, 10000, 'aplicado'));
+    /* Parcial: se puede usar una parte y dejar el resto para otro día. */
+    const parcial = corte('2026-09-28', 5000, [{ anticipoId:'a1', monto:4000 }]);
+    test('se puede aplicar solo una parte', () =>
+        eq(C.anticipoSaldos([a1], [parcial], []).total.saldo, 6000, 'resto'));
+    test('…y la venta de ese día suma solo esa parte', () => eq(C.ventasBruta(parcial), 9000, 'venta'));
+    /* Aplicar de más es un error de captura: el saldo se queda en cero, no en
+       negativo. Un negativo restaría del total y escondería el error. */
+    test('aplicar de más deja el saldo en cero, no en negativo', () =>
+        eq(C.anticipoSaldos([a1], [corte('2026-09-28', 0, [{ anticipoId:'a1', monto:99999 }])], []).total.saldo,
+           0, 'sin negativo'));
+
+    /* Las ventas especiales también consumen anticipo — es su caso más natural. */
+    test('una venta especial también puede aplicar anticipo', () =>
+        eq(C.anticipoSaldos([a1], [], [{ id:'v1', anticipos:[{ anticipoId:'a1', monto:10000 }] }]).total.saldo,
+           0, 'aplicado'));
+
+    /* ── Devolver ── */
+    S = C.anticipoSaldos([a1, dev('a1', 10000)], [], []);
+    test('devolver un anticipo baja lo pendiente', () => eq(S.total.saldo, 0, 'saldo'));
+    test('…y saca el dinero del fondo donde estaba', () => eq(S.total.enCaja, 0, 'caja'));
+    test('…dejando rastro de que entró y salió', () =>
+        eq(S.total.recibido === 10000 && S.total.devuelto === 10000, true, 'rastro'));
+    test('una devolución parcial deja el resto pendiente', () =>
+        eq(C.anticipoSaldos([a1, dev('a1', 3000)], [], []).total.saldo, 7000, 'resto'));
+
+    /* ── Qué toca hoy ── */
+    const b = ant('b1', 4500, 'banco', '2026-09-10', 'Empresa Ruiz');
+    const c = ant('c1', 2000, 'caja_fuerte', '', 'Sin fecha');
+    const todos = C.anticipoSaldos([a1, b, c], [], []);
+    const hoy28 = C.anticiposDelDia(todos, '2026-09-28');
+    test('el corte del día propone el anticipo de ESE evento', () =>
+        eq(hoy28.delDia.length === 1 && hoy28.delDia[0].anticipo.cliente === 'Boda Martínez', true, 'propone'));
+    /* Los que ya pasaron de fecha y siguen con saldo se marcan: un anticipo que
+       nadie aplicó se queda inflando el saldo para siempre. */
+    test('los de fecha pasada con saldo se marcan como vencidos', () =>
+        eq(hoy28.vencidos.length === 1 && hoy28.vencidos[0].anticipo.cliente === 'Empresa Ruiz', true, 'vencido'));
+    test('los que no tienen fecha de evento no se marcan vencidos', () =>
+        eq(hoy28.vencidos.some(x => x.anticipo.cliente === 'Sin fecha'), false, 'sin fecha'));
+    test('…pero sí se pueden elegir a mano', () =>
+        eq(hoy28.otros.some(x => x.anticipo.cliente === 'Sin fecha'), true, 'disponible'));
+    /* Uno ya aplicado deja de proponerse: si siguiera saliendo, se aplicaría dos
+       veces y la venta de ese día saldría inflada. */
+    test('un anticipo ya aplicado deja de proponerse', () =>
+        eq(C.anticiposDelDia(C.anticipoSaldos([a1], [evento], []), '2026-09-28').delDia.length, 0, 'fuera'));
+    test('en otro día, ese anticipo no se propone', () =>
+        eq(C.anticiposDelDia(todos, '2026-09-27').delDia.length, 0, 'otro día'));
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La
