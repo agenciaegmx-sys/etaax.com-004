@@ -603,8 +603,8 @@
                 </button>
                 <button class="dx-card azul" data-fn="depositos" onclick="dxAbrir('depositos')">
                     <div class="dx-card-hdr"><div class="dx-card-icon">💸</div><span class="dx-badge">Activo</span></div>
-                    <div class="dx-card-title">Depósitos y Retiros</div>
-                    <div class="dx-card-desc">Movimientos entre caja, caja fuerte y bancos, con categoría y vistas separadas de depósitos y retiros.</div>
+                    <div class="dx-card-title">Depósitos, Retiros y Previsiones</div>
+                    <div class="dx-card-desc">Movimientos entre caja, caja fuerte y bancos, con categoría y vistas separadas. Aquí también se apartan las previsiones.</div>
                     <div class="dx-card-cta">Abrir →</div>
                 </button>
                 <button class="dx-card rojo" data-fn="mayores" onclick="dxAbrir('mayores')">
@@ -621,8 +621,8 @@
                 </button>
                 <button class="dx-card" data-fn="extras" onclick="dxAbrir('extras')">
                     <div class="dx-card-hdr"><div class="dx-card-icon">🎪</div><span class="dx-badge">Activo</span></div>
-                    <div class="dx-card-title">Ventas Especiales</div>
-                    <div class="dx-card-desc">Eventos, banquetes y ventas fuera de la operación diaria. No se mezclan con los cortes.</div>
+                    <div class="dx-card-title">Anticipos y Ventas Especiales</div>
+                    <div class="dx-card-desc">Eventos, banquetes y ventas fuera de la operación diaria, y los anticipos que dejan a cuenta. No se mezclan con los cortes.</div>
                     <div class="dx-card-cta">Abrir →</div>
                 </button>
             </div>
@@ -3990,10 +3990,20 @@ function _abrirCajaFuerteContenido(_yaFresco){
           }).join('')
         : '<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--text-dim)">Sin depósitos registrados</td></tr>';
 
+    /* El detalle de cortes se pliega. Ocupaba media pantalla de tabla que casi
+       nunca se lee de corrido: lo que se consulta a diario son los saldos de
+       arriba, y para llegar a ellos había que pasar por encima de ella. Plegado,
+       el espacio queda para lo que sí se mira todos los días. */
     body.innerHTML = headerHTML +
         // Cortes
-        '<div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px">Detalle de cortes</div>'+
-        '<div class="cj-scrollsec" style="max-height:56vh;margin-bottom:8px">'+
+        '<button onclick="_cjToggleCortes()" id="cjCortesBtn" style="width:100%;display:flex;align-items:center;'+
+            'justify-content:space-between;gap:10px;background:var(--surface2);border:1px solid var(--border);'+
+            'border-radius:10px;padding:10px 14px;margin-bottom:8px;cursor:pointer;color:var(--text)">'+
+            '<span style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim)">'+
+                '📋 Detalle de cortes <span style="color:var(--text-muted)">· '+lista.length+'</span></span>'+
+            '<span id="cjCortesChev" style="font-size:13px;color:var(--text-dim)">▾</span>'+
+        '</button>'+
+        '<div id="cjCortesWrap" class="cj-scrollsec" style="display:none;max-height:56vh;margin-bottom:8px">'+
         '<table class="cj-table">'+
             '<thead><tr>'+
                 '<th>Fecha</th><th>Turno</th>'+
@@ -5057,6 +5067,16 @@ function _concConcepto(d){
     var c=(_cacheCortes||[]).find(function(x){ return x && x.id===(d.corteId||''); });
     var f=(c&&c.fecha)||'';
     return '🏦 Conciliación de corte' + (f ? ' ' + _fCorta(f) : '');
+}
+
+/* Desplegar el detalle de cortes. Cerrado por default: lo que se consulta a
+   diario son los saldos de arriba, no la tabla. */
+function _cjToggleCortes(){
+    var w=document.getElementById('cjCortesWrap'), ch=document.getElementById('cjCortesChev');
+    if(!w) return;
+    var abierto = w.style.display !== 'none';
+    w.style.display = abierto ? 'none' : '';
+    if(ch) ch.textContent = abierto ? '▾' : '▴';
 }
 
 /* 📜 Vista histórica de conciliaciones — las de saldo Y las de corte */

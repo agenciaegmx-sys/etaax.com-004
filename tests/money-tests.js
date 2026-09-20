@@ -2404,7 +2404,14 @@ console.log('\n══ SUITE Q · Aviso de actualizaciones (novedades.js) ══'
         let src = fs.readFileSync(path.join(RAIZ, 'novedades.js'), 'utf8');
         if (opts.hace !== undefined) {
             const d = new Date(); d.setDate(d.getDate() - opts.hace);
-            src = src.replace(/var FECHA\s*=\s*'[^']*'/, "var FECHA = '" + d.toISOString().slice(0, 10) + "'");
+            /* Fecha LOCAL, no toISOString(). El código cuenta los días con fechas
+               locales (a mediodía, para no depender del horario de verano), así
+               que armarla en UTC desplazaba un día y el test fallaba SOLO por la
+               tarde: después de las 18:00 en México ya es el día siguiente en UTC.
+               Un test que falla según la hora del día es peor que no tenerlo. */
+            const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+                      + '-' + String(d.getDate()).padStart(2, '0');
+            src = src.replace(/var FECHA\s*=\s*'[^']*'/, "var FECHA = '" + iso + "'");
         }
         vm.runInContext(src, ctx, { filename: 'novedades.js' });
         return { ctx, ls, ss, veces: () => pintadas, cerrar: () => cerrar && cerrar(),
