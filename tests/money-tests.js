@@ -8047,6 +8047,122 @@ console.log('\n══ BD0 · La comisión corregida llega al saldo por cuenta �
     });
 }
 
+/* ═══════════ SUITE BD1 · AUDITORÍA DEL SALDO EN EFECTIVO ════════════════════
+   Pedida por Edwin: que las matemáticas del efectivo estén bien.
+
+   El saldo de caja fuerte se arma así:
+       Σ resguardos  +  efecto neto de movimientos  −  gastos de caja fuerte
+
+   EL ERROR QUE SE ENCONTRÓ: `resguardo` recibe la caja chica del DÍA, y el
+   sistema admite varios turnos. Con dos cortes el mismo día, el mismo gasto de
+   caja chica se restaba en LOS DOS: $300 de caja chica con doble turno hacían
+   que el saldo saliera $300 corto, todos los días. No hay forma de saber en qué
+   turno se gastó —el gasto no lleva turno— así que la bolsa se le atribuye
+   entera al primer corte del día: arbitrario en el renglón, exacto en el total. */
+console.log('\n══ BD1 · Auditoría del saldo en efectivo ══');
+{
+    const C = cargarJS(crearContexto(), 'etaax-core.js').EtaaxCore;
+    /* `suc` se respeta TAL CUAL cuando viene: la cadena vacía es un caso de
+       prueba (corte viejo sin sucursal), no un "no me lo diste". */
+    const corte = (id, fecha, turno, fondo, efectivo, retiros, suc) =>
+        ({ id, fecha, turno, sucursalId: (suc === undefined ? 's1' : suc),
+           fondoInicial: fondo, efectivo, propRetiroCaja: 0, retiros });
+    /* Cómo lo arma Caja Fuerte, con la regla de quién absorbe la caja chica. */
+    const saldo = (cortes, chicaPorDia, gastosCF, movs) => {
+        const res = cortes.reduce(function (s, c) {
+            const cc = C.absorbeCajaChica(c, cortes) ? (chicaPorDia[c.fecha] || 0) : 0;
+            return s + C.resguardo(c, cc);
+        }, 0);
+        const ef = (movs || []).reduce(function (s, d) { return s + C.depEfecto(d).caja; }, 0);
+        return res + ef - gastosCF;
+    };
+
+    /* ── UN corte al día: nada cambia ── */
+    const uno = [corte('c1', '2026-09-18', 'dia', 2000, 5000, 2000)];
+    test('un solo corte absorbe la caja chica de su día', () =>
+        eq(C.absorbeCajaChica(uno[0], uno), true, 'la absorbe'));
+    test('…y el saldo sale exacto', () => eq(saldo(uno, { '2026-09-18': 300 }, 500, []), 4200, 'saldo'));
+
+    /* ── DOS turnos el mismo día: el error que se arregló ── */
+    const dos = [corte('c1', '2026-09-18', 'dia',   2000, 5000, 2000),
+                 corte('c2', '2026-09-18', 'noche', 2000, 3000, 2000)];
+    test('con dos turnos, solo UNO absorbe la caja chica', () =>
+        eq(C.absorbeCajaChica(dos[0], dos) && !C.absorbeCajaChica(dos[1], dos), true, 'uno solo'));
+    /* La cuenta a mano: (2000+5000−2000) + (2000+3000−2000) = 8000 de resguardos
+       brutos, − 300 de caja chica (UNA vez) − 500 de gasto = 7200. */
+    test('el saldo ya no resta la caja chica dos veces', () =>
+        eq(saldo(dos, { '2026-09-18': 300 }, 500, []), 7200, 'saldo'));
+    /* Tres turnos: sigue siendo una sola vez. */
+    const tres = dos.concat([corte('c3', '2026-09-18', 'tarde', 2000, 1000, 2000)]);
+    test('con tres turnos, tampoco se multiplica', () =>
+        eq(tres.filter(c => C.absorbeCajaChica(c, tres)).length, 1, 'una vez'));
+
+    /* ── Quién la absorbe: estable y sin sorpresas ── */
+    /* Los ids van A PROPÓSITO en contra del orden de turnos: si el desempate
+       mandara, ganaría la noche. Con ids que coincidan con el turno, este test
+       pasa aunque el orden de turnos se haya perdido — y no probaría nada. */
+    test('la absorbe el turno más temprano, no el primer id ni el capturado antes', () => {
+        const desorden = [corte('aNoche',  '2026-09-18', 'noche',  2000, 1000, 2000),
+                          corte('zManana', '2026-09-18', 'manana', 2000, 1000, 2000)];
+        const quien = desorden.filter(c => C.absorbeCajaChica(c, desorden)).map(c => c.id);
+        return eq(quien.join(), 'zManana', quien.join());
+    });
+    /* Que NO cambie entre recargas: si dos cortes comparten turno, desempata el
+       id. Sin eso, el renglón que carga la caja chica bailaría solo. */
+    test('con dos cortes del mismo turno, el desempate es estable', () => {
+        const igual = [corte('cB', '2026-09-18', 'dia', 2000, 1000, 2000),
+                       corte('cA', '2026-09-18', 'dia', 2000, 1000, 2000)];
+        const uno1 = igual.filter(c => C.absorbeCajaChica(c, igual)).map(c => c.id);
+        const uno2 = igual.slice().reverse().filter(c => C.absorbeCajaChica(c, igual.slice().reverse())).map(c => c.id);
+        return eq(uno1.length === 1 && uno1[0] === uno2[0], true, uno1 + ' vs ' + uno2);
+    });
+
+    /* ── Cada sucursal tiene su propia bolsa ── */
+    const dosSucs = [corte('a1', '2026-09-18', 'dia', 2000, 5000, 2000, 's1'),
+                     corte('b1', '2026-09-18', 'dia', 2000, 4000, 2000, 's2')];
+    test('dos sucursales el mismo día absorben cada una la suya', () =>
+        eq(dosSucs.filter(c => C.absorbeCajaChica(c, dosSucs)).length, 2, 'una por sucursal'));
+    /* Un corte sin sucursal se lee como Matriz, igual que en todo el resto. */
+    test('un corte sin sucursal cuenta como Matriz', () => {
+        const mix = [corte('m1', '2026-09-18', 'dia', 2000, 1000, 2000, ''),
+                     corte('m2', '2026-09-18', 'noche', 2000, 1000, 2000, 'suc_principal')];
+        return eq(mix.filter(c => C.absorbeCajaChica(c, mix)).length, 1, 'misma bolsa');
+    });
+    /* Días distintos no se estorban. */
+    const dosDias = [corte('d1', '2026-09-18', 'dia', 2000, 1000, 2000),
+                     corte('d2', '2026-09-19', 'dia', 2000, 1000, 2000)];
+    test('cada día absorbe la suya', () =>
+        eq(dosDias.filter(c => C.absorbeCajaChica(c, dosDias)).length, 2, 'dos días'));
+
+    /* ── Las otras piezas del efectivo, comprobadas a mano ── */
+    /* El retiro del corte es el fondo del turno siguiente: sale del resguardo y NO
+       se registra aparte, así que no se puede contar dos veces. */
+    test('el retiro baja el resguardo una sola vez', () =>
+        eq(C.resguardo({ fondoInicial:2000, efectivo:5000, retiros:2000, propRetiroCaja:0 }, 0), 5000, 'resguardo'));
+    /* Las propinas pagadas del cajón también salen del efectivo. */
+    test('las propinas pagadas del cajón bajan el resguardo', () =>
+        eq(C.resguardo({ fondoInicial:2000, efectivo:5000, retiros:2000, propRetiroCaja:400 }, 0), 4600, 'propinas'));
+    /* Un movimiento de caja fuerte al banco baja el efectivo y sube el banco. */
+    test('mover de caja fuerte al banco baja el efectivo', () =>
+        eq(C.depEfecto({ origen:'caja_fuerte', destino:'banco', monto:1000 }).caja, -1000, 'sale'));
+    /* Apartar una previsión NO mueve el efectivo: solo etiqueta. */
+    test('apartar una previsión no mueve el efectivo', () =>
+        eq(C.depEfecto({ tipo:'apartado', origen:'externo', destino:'caja_fuerte', monto:1000 }).caja, 0, 'no mueve'));
+    /* Un abono de terminal tampoco: ese dinero entra por la conciliación. */
+    test('un abono de terminal no mueve el efectivo', () =>
+        eq(C.depEfecto({ tipo:'abono_tpv', monto:1000, destino:'banco' }).caja, 0, 'no mueve'));
+    /* Un anticipo SÍ: es un billete que llegó. */
+    test('un anticipo a caja fuerte SÍ sube el efectivo', () =>
+        eq(C.depEfecto({ tipo:'anticipo', origen:'externo', destino:'caja_fuerte', monto:1000 }).caja, 1000, 'entra'));
+
+    /* ── Y que Caja Fuerte use la regla ── */
+    const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+    test('el resguardo de la pantalla aplica quién absorbe la caja chica', () =>
+        eq(dia.indexOf('EtaaxCore.absorbeCajaChica(c, _cacheCortes||[])') > -1, true, 'aplicado'));
+    test('…y ya no se la resta a todos los cortes del día', () =>
+        eq(dia.indexOf('return EtaaxCore.resguardo(c, _cajaChicaLive(c.fecha, c.sucursalId));'), -1, 'sin el atajo'));
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La

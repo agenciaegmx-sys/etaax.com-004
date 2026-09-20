@@ -75,6 +75,37 @@
     function propinas(c) { return n(c.propEfectivo) + n(c.propTarjeta); }
     function cheque(c) { var com = n(c.comensales); var ven = n(c.ventaDeclarada) || ventasBruta(c) || (n(c.comedor) + n(c.paraLlevar)); return com > 0 ? ven / com : 0; }
     function resultado(c) { return flujoNeto(c) - n(c.gastos); }
+    /* ── LA CAJA CHICA ES UNA BOLSA POR DÍA, NO UNA POR TURNO ────────────────
+       `resguardo` recibe la caja chica del DÍA. Con un solo corte diario eso está
+       bien, pero el sistema admite varios turnos (mañana, tarde, noche) y ahí el
+       mismo gasto se restaba en CADA corte de ese día: dos turnos con $300 de
+       caja chica descontaban $600, y el saldo de caja fuerte salía corto por
+       $300 todos los días con doble turno.
+
+       No hay forma de saber en qué turno se gastó —el gasto no lleva turno— así
+       que la bolsa se le atribuye ENTERA a un solo corte: el primero del día.
+       Es arbitrario en el renglón, exacto en el total, y es la única lectura que
+       no inventa datos. El orden es por turno y, a igualdad, por id, para que no
+       cambie de corte entre recargas. */
+    var _TURNO_ORD = { dia: 0, manana: 1, tarde: 2, noche: 3 };
+    function _rangoTurno(c) {
+        var t = (c && c.turno) || '';
+        return _TURNO_ORD[t] === undefined ? 9 : _TURNO_ORD[t];
+    }
+    function absorbeCajaChica(corte, cortes) {
+        if (!corte) return false;
+        var f = corte.fecha || '', su = (corte.sucursalId || 'suc_principal');
+        var mismos = (cortes || []).filter(function (c) {
+            return c && (c.fecha || '') === f && ((c.sucursalId || 'suc_principal') === su);
+        });
+        if (mismos.length <= 1) return true;       // un solo corte: le toca toda
+        mismos.sort(function (a, b) {
+            var d = _rangoTurno(a) - _rangoTurno(b);
+            return d !== 0 ? d : String(a.id || '').localeCompare(String(b.id || ''));
+        });
+        return (mismos[0].id || '') === (corte.id || '');
+    }
+
     // Resguardo físico del cajón. cajaChicaDia = gastos de caja chica de la fecha del corte.
     function resguardo(c, cajaChicaDia) { return n(c.fondoInicial) + n(c.efectivo) - n(cajaChicaDia) - n(c.propRetiroCaja) - n(c.retiros); }
 
@@ -1203,6 +1234,7 @@
         cuentasDebito: cuentasDebito, cuentasDebitoActivas: cuentasDebitoActivas, ctaActiva: ctaActiva,
         comisionBancoCorte: comisionBancoCorte,
         nomEsAdm: _nomEsAdm, gastoEstatus: gastoEstatus, gastoPagado: gastoPagado, gastoEspera: gastoEspera,
+        absorbeCajaChica: absorbeCajaChica,
         esAnticipo: esAnticipo, esAnticipoDev: esAnticipoDev, anticipoFondo: anticipoFondo,
         anticipoSaldos: anticipoSaldos, anticipoAplicado: anticipoAplicado,
         anticiposDelDia: anticiposDelDia,

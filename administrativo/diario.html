@@ -2805,9 +2805,15 @@ function _cajaChicaLive(fecha, sucId){
     return _gastosSuc(sucId).filter(function(g){ return g.fecha===fecha && g.metodoPago==='caja_chica'; })
         .reduce(function(s,g){ return s+n(g.monto); },0);
 }
-// Resguardo = Fondo inicial + Venta efectivo − Gastos caja chica (EN VIVO) − Fondo siguiente turno.
-// La caja chica se toma SOLO de la sucursal del corte (no de otras sucursales).
-function resguardo(c){return EtaaxCore.resguardo(c, _cajaChicaLive(c.fecha, c.sucursalId));}
+/* Resguardo = Fondo inicial + Venta efectivo − Gastos caja chica (EN VIVO) − Fondo siguiente turno.
+   La caja chica se toma SOLO de la sucursal del corte (no de otras sucursales), y
+   SOLO la absorbe UN corte de ese día: con varios turnos, el mismo gasto se
+   restaba en cada uno y el saldo salía corto (ver absorbeCajaChica en el núcleo). */
+function resguardo(c){
+    var cc = EtaaxCore.absorbeCajaChica(c, _cacheCortes||[])
+        ? _cajaChicaLive(c.fecha, c.sucursalId) : 0;
+    return EtaaxCore.resguardo(c, cc);
+}
 function resultado(c){return EtaaxCore.resultado(c);}
 
 /* ── Period state ── */
