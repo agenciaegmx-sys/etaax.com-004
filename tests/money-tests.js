@@ -7776,10 +7776,19 @@ console.log('\n══ BC7 · Anticipos en pantalla (diario.html) ══');
        corte anterior, el mismo anticipo se aplicaría dos veces. */
     test('abrir un corte carga lo suyo y descarta lo del anterior', () =>
         eq(dia.indexOf('_antAplic = (d.anticipos||[]).map(') > -1, true, 'se recarga'));
-    /* El saldo disponible baja: ese dinero está en la caja pero es de un cliente
-       que todavía no recibe su evento. */
-    test('el disponible de Caja Fuerte descuenta los anticipos', () =>
-        eq(dia.indexOf('var saldoDisponible = saldoTotal - aptTot - antTot;') > -1, true, 'descuenta'));
+    /* El anticipo SÍ cuenta en el disponible: ese billete ya entró y el negocio lo
+       puede operar. Es la diferencia con una PREVISIÓN, que sí se resta porque su
+       dinero ya tiene un gasto con nombre esperándolo.
+       Decisión de Edwin, y se fija aquí para que no se "arregle" de vuelta: los
+       dos comportamientos se ven razonables leyendo el código, y sin un test que
+       diga cuál se eligió, el siguiente que pase lo cambia de buena fe. */
+    test('el disponible SÍ incluye los anticipos (ya son dinero del negocio)', () =>
+        eq(dia.indexOf('var saldoDisponible = saldoTotal - aptTot;') > -1
+        && dia.indexOf('saldoTotal - aptTot - antTot') === -1, true, 'incluidos'));
+    test('…pero la previsión sí se resta: su dinero ya tiene un gasto esperándolo', () =>
+        eq(dia.indexOf('saldoTotal - aptTot') > -1, true, 'apartado fuera'));
+    test('…y el card avisa cuánto de ese disponible trae compromiso', () =>
+        eq(dia.indexOf("Incluye '+fmtM(antTot)+' de anticipos") > -1, true, 'avisa'));
     test('…y tiene su card, aparte del de previsiones', () =>
         eq(dia.indexOf('🎟️ Anticipos por aplicar') > -1, true, 'card'));
     /* Al elegir cuál aplicar NO se cuenta lo que el propio corte ya lleva: si no,

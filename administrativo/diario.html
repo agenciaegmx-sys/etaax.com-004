@@ -3909,30 +3909,31 @@ function _abrirCajaFuerteContenido(_yaFresco){
        Apartar no bajó el total (el billete sigue ahí); baja el DISPONIBLE. */
     var _pvS = _prevSaldos();
     var aptCaja = _pvS.enCaja, aptBanco = _pvS.enBanco, aptTot = aptCaja + aptBanco;
-    /* Los ANTICIPOS bajan el disponible por la misma razón que las previsiones,
-       pero por el motivo contrario: la previsión es dinero mío que ya tiene
-       destino; el anticipo es dinero AJENO que todavía debo en producto. En los
-       dos casos el billete está en la caja y en los dos casos ya tiene dueño.
-       Si no se restara, el disponible diría que hay para gastar un dinero que en
-       realidad es de un cliente que todavía no recibe su evento. */
+    /* Los ANTICIPOS NO se restan del disponible — decisión de Edwin, y es
+       defendible: ese billete ya entró y el negocio lo puede operar, igual que
+       cualquier otro ingreso. Se distingue de una PREVISIÓN, que sí se resta
+       porque su dinero ya tiene un gasto con nombre esperándolo.
+       El card de abajo sigue diciendo cuánto de ese disponible trae compromiso:
+       la información está, pero no bloquea el número. */
     var _anS = _antSaldos().total;
     var antTot = _anS.saldo;
-    var saldoDisponible = saldoTotal - aptTot - antTot;
+    var saldoDisponible = saldoTotal - aptTot;
 
     var headerHTML =
         '<div class="cj-acum" style="margin:0 0 10px;border-color:rgba(245,200,66,.5);background:linear-gradient(135deg,rgba(245,200,66,.08),rgba(61,190,122,.05))">'+
             '<div>'+
-                '<div class="cj-acum-lbl">'+((aptTot+antTot)>0.005?'💰 Disponible de verdad':'💰 Saldo disponible total')+'</div>'+
+                '<div class="cj-acum-lbl">'+(aptTot>0.005?'💰 Disponible de verdad':'💰 Saldo disponible total')+'</div>'+
                 '<div style="margin-top:4px;font-size:10px;color:var(--text-dim);line-height:1.6">'+
                     '🏦 Caja fuerte '+fmtM(saldoCaja)+' &nbsp;+&nbsp; 🏛️ Banco '+fmtM(saldoDebito)+
                     (aptTot>0.005
                       ? '<br><span style="color:var(--viol,#8b5cf6)">− '+fmtM(aptTot)+' apartado en previsiones</span>'
                       : '')+
-                    (antTot>0.005
-                      ? '<br><span style="color:var(--accent)">− '+fmtM(antTot)+' de anticipos por aplicar</span>'
-                      : '')+
-                    ((aptTot+antTot)>0.005
+                    (aptTot>0.005
                       ? ' <span style="opacity:.7">(hay '+fmtM(saldoTotal)+', pero ese pedazo ya tiene dueño)</span>'
+                      : '')+
+                    (antTot>0.005
+                      ? '<br><span style="color:var(--accent)">Incluye '+fmtM(antTot)+' de anticipos: ya es dinero del negocio, '+
+                        'pero se debe en producto.</span>'
                       : '')+
                 '</div>'+
             '</div>'+
@@ -3976,8 +3977,9 @@ function _abrirCajaFuerteContenido(_yaFresco){
                     '<div class="cj-acum-lbl" style="color:var(--accent)">🎟️ Anticipos por aplicar</div>'+
                     '<div style="margin-top:4px;font-size:10px;color:var(--text-dim);line-height:1.6">'+
                         '🏦 '+fmtM(_anS.enCaja)+' en caja &nbsp;·&nbsp; 🏛️ '+fmtM(_anS.enBanco)+' en banco<br>'+
-                        'Dinero de clientes por eventos que todavía no pasan. Está en la caja, pero '+
-                        'no es venta ni es tuyo hasta que lo apliques en el corte del evento.'+
+                        'Dinero de clientes por eventos que todavía no pasan. <b>Ya cuenta en el disponible</b> '+
+                        '—entró de verdad— pero todavía no es venta: lo será el día del evento, al aplicarlo en el corte. '+
+                        'Y se debe en producto.'+
                         (_antVencidos()>0
                           ? '<br><span style="color:#ff9a9a">⚠️ '+_antVencidos()+' con la fecha del evento ya pasada</span>'
                           : '')+
