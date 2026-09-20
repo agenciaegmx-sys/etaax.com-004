@@ -3684,6 +3684,12 @@ function _debitoPorCuenta(cortes, depositos, ctasDeb, gastosDebito, gastosDebito
             var t=EtaaxCore.tpvConciliacion(cortes, _abTpv, id, _hoyTpv,
                                             EtaaxCore.tpvCuentaConcilia(_ctaDe[id]), ctasDeb);
             if(t.transito>0.005) add(id,'term', -t.transito);   // '' cae en la cuenta base
+            /* Y la corrección de comisión: arriba se sumó la venta neteada con la
+               TASA, pero el banco cobró lo que cobró. Sin esto, el desglose por
+               cuenta se queda con la proyección mientras el total ya usa lo real,
+               y las dos cifras dejan de cuadrar en cuanto alguien corrige una
+               comisión al conciliar. */
+            if(Math.abs(t.ajusteNeto)>0.005) add(id,'term', t.ajusteNeto);
         });
     }
     (depositos||[]).forEach(function(d){

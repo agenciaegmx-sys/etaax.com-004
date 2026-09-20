@@ -582,7 +582,8 @@
            dejaba un tránsito residual que no se iba nunca. */
         var conVenta = (cortes || []).map(function (c) {
             var h = tpvHechos(c, deps, cuentaId, ctas);
-            return { fecha: c.fecha || '', id: c.id, bruto: h.bruto, neto: h.netoEfectivo };
+            return { fecha: c.fecha || '', id: c.id, bruto: h.bruto,
+                     neto: h.netoEfectivo, netoProy: h.neto };
         }).filter(function (x) { return x.bruto > 0 || x.neto > 0; })
           .sort(function (a, b) { return (a.fecha || '').localeCompare(b.fecha || ''); });
 
@@ -607,9 +608,22 @@
         if (modo === true && !desde && conVenta.length) desde = conVenta[0].fecha;
 
         var r = { conciliado: conciliado, desde: desde, historico: 0, vendido: 0,
-                  bruto: 0, comision: 0, transito: 0, aportaBanco: 0,
+                  bruto: 0, comision: 0, transito: 0, aportaBanco: 0, ajusteNeto: 0,
                   pendienteDesde: '', diasPendiente: 0,
                   activa: modo === false ? false : !!desde, apagada: modo === false };
+        /* ── LA CORRECCIÓN DE COMISIÓN, PARA QUIEN PARTE DE LA PROYECCIÓN ──────
+           El saldo TOTAL se arma sumando lo que de verdad cayó, así que ya trae la
+           comisión real. Pero el saldo POR CUENTA se arma al revés: suma la venta
+           neteada con la TASA CONFIGURADA y después resta lo que falta por caer.
+           Cuando la comisión que cobró el banco no fue la de la tasa, ese camino
+           se queda con la proyección y el desglose no cuadra con el total —
+           medido con un caso real: $42.89 proyectados contra $53.18 cobrados,
+           $10.29 de diferencia.
+
+           `ajusteNeto` es justo ese hueco: lo que hay que sumarle a la proyección
+           para llegar a lo real. Es cero mientras nadie corrija una comisión, así
+           que no mueve un solo saldo histórico. */
+        conVenta.forEach(function (x) { r.ajusteNeto += (x.neto - x.netoProy); });
         conVenta.forEach(function (x) {
             if (desde && x.fecha >= desde) { r.vendido += x.neto; r.bruto += x.bruto; }
             else r.historico += x.neto;      // antes de conciliar: se da por caído

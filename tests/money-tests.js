@@ -7972,6 +7972,81 @@ console.log('\n══ BC9 · El permiso manda, no el CSS ══');
     });
 }
 
+/* ═══════════ SUITE BD0 · LA COMISIÓN CORREGIDA LLEGA AL SALDO POR CUENTA ════
+   LO QUE VIO EDWIN: conciliar un corte con comisión distinta a la tasa dejaba
+   ~$10 de más en el saldo de la cuenta contra su banca real.
+
+   POR QUÉ: hay dos caminos para el mismo dinero y partían de sitios distintos.
+     · El saldo TOTAL suma lo que DE VERDAD cayó (los abonos) → ya trae la
+       comisión real.
+     · El saldo POR CUENTA suma la venta neteada con la TASA CONFIGURADA y luego
+       resta lo que falta por caer. Con la comisión corregida, ese camino se
+       quedaba con la proyección.
+
+   Con su caso real: $42.89 proyectados contra $53.18 cobrados = $10.29.
+   Dos caminos para la misma cifra siempre acaban discrepando; `ajusteNeto` es
+   lo que los vuelve a juntar.                                                 */
+console.log('\n══ BD0 · La comisión corregida llega al saldo por cuenta ══');
+{
+    const C = cargarJS(crearContexto(), 'etaax-core.js').EtaaxCore;
+    const ctas = [{ id:'A', tipo:'debito', predeterminada:true, activa:true,
+                    comisionTC:1.53, comisionTD:1.53, aplicaIva:false, esBase:true }];
+    const corte = { id:'c1', fecha:'2026-09-19', tarjeta:2803.10, propTarjeta:0,
+        tarjetaCuentas:[{ cuentaId:'A', ventaTC:2803.10, ventaTD:0, neto:2803.10*(1-0.0153) }] };
+    const ab = (id, monto, com) => ({ id, tipo:'abono_tpv', cuentaId:'A', corteId:'c1',
+                                      monto, comision:com, fecha:'2026-09-20' });
+    /* Así se arma el saldo POR CUENTA en Caja Fuerte: proyección − tránsito + ajuste. */
+    const porCuenta = (abonos) => {
+        const det = C.taBancoNetoDetalle(corte, ctas);
+        const t   = C.tpvConciliacion([corte], abonos, 'A', '2026-09-20', true, ctas);
+        return { saldo: det.porCuenta['A'] + det.sinCuenta - Math.max(0, t.transito) + t.ajusteNeto,
+                 total: t.aportaBanco, t: t };
+    };
+
+    /* El caso de Edwin, con sus números. */
+    const real = porCuenta([ab('b1', 1303.23, 30.17), ab('b2', 1446.69, 23.01)]);
+    test('la cuenta y el total dan lo MISMO', () =>
+        eq(Math.round(real.saldo*100)/100, Math.round(real.total*100)/100, 'cuadran'));
+    test('…y ese mismo es lo que de verdad cayó', () =>
+        eq(Math.round(real.saldo*100)/100, 2749.92, 'real'));
+    /* El ajuste es exactamente el hueco entre lo proyectado y lo cobrado. */
+    test('el ajuste vale la diferencia de comisión, con su signo', () =>
+        eq(Math.round(real.t.ajusteNeto*100)/100, -10.29, 'hueco'));
+
+    /* Si el banco hubiera cobrado MENOS de lo proyectado, el ajuste va al revés:
+       no es un descuento fijo, es la distancia entre las dos cifras. */
+    const barato = porCuenta([ab('b1', 2783.10, 20.00)]);
+    test('si el banco cobró MENOS, el ajuste suma en vez de restar', () =>
+        eq(barato.t.ajusteNeto > 0, true, String(barato.t.ajusteNeto)));
+    test('…y la cuenta vuelve a cuadrar con el total', () =>
+        eq(Math.round(barato.saldo*100)/100, Math.round(barato.total*100)/100, 'cuadran'));
+
+    /* LO QUE NO PUEDE MOVERSE: sin nadie corrigiendo comisiones, el ajuste es
+       cero y ningún saldo histórico cambia. Es lo que hace seguro este arreglo. */
+    const sinConciliar = porCuenta([]);
+    test('sin conciliar nada, el ajuste es cero', () => eq(sinConciliar.t.ajusteNeto, 0, 'cero'));
+    /* Con la comisión EXACTAMENTE igual a la tasa, tampoco se mueve. */
+    const exacta = porCuenta([ab('b1', 2803.10 - 42.89, 42.89)]);
+    test('con la comisión igual a la tasa, el ajuste sigue en cero', () =>
+        eq(Math.abs(exacta.t.ajusteNeto) < 0.005, true, String(exacta.t.ajusteNeto)));
+
+    /* A MEDIO CONCILIAR no se ajusta nada: la comisión de lo que falta todavía no
+       se conoce, y adelantarla sería inventar. El hueco lo tapa el tránsito. */
+    const medias = porCuenta([ab('b1', 1303.23, 30.17)]);
+    test('a medio conciliar, el ajuste espera', () => eq(medias.t.ajusteNeto, 0, 'espera'));
+    test('…y el tránsito cubre lo que falta por caer', () =>
+        eq(medias.t.transito > 0, true, 'en tránsito'));
+
+    /* Y el cableado: que Caja Fuerte lo aplique de verdad. */
+    const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+    test('el saldo por cuenta aplica el ajuste', () =>
+        eq(dia.indexOf("add(id,'term', t.ajusteNeto)") > -1, true, 'aplicado'));
+    test('…en el mismo lugar donde resta el tránsito, para que no se separen', () => {
+        const i = dia.indexOf("add(id,'term', -t.transito)");
+        return eq(dia.slice(i, i + 700).indexOf('t.ajusteNeto') > -1, true, 'juntos');
+    });
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La
