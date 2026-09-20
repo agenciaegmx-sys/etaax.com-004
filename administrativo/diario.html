@@ -982,7 +982,9 @@
         <div class="dx-win-hdr"><div class="dx-win-title">🎪 Ventas Especiales</div><button class="dx-win-close" onclick="dxCerrar('extras')">✕ Cerrar</button></div>
         <div class="dx-win-body" id="dxPanel_extras">
 <div class="dxp" id="vex_dxp"><div class="dxp-tabs"><button class="dxp-tab" onclick="dxpTipo('vex','dia',this)">Día</button><button class="dxp-tab" onclick="dxpTipo('vex','semana',this)">Semana</button><button class="dxp-tab active" onclick="dxpTipo('vex','mes',this)">Mes</button><button class="dxp-tab" onclick="dxpTipo('vex','rango',this)">Rango</button></div><input type="date" id="vex_val" onchange="dxpChange('vex')"><input type="date" id="vex_end" style="display:none" onchange="dxpChange('vex')"><span class="dxp-semana" id="vex_sem"></span></div>
-<div style="margin-bottom:14px"><button class="btn-venta-extra" id="btnVentaExtra" onclick="abrirModalVentaExtra()">🎪 + Nueva venta especial</button></div>
+<div style="margin-bottom:14px"><button class="btn-venta-extra" id="btnVentaExtra" onclick="abrirModalVentaExtra()">🎪 + Nueva venta especial</button>
+<button class="btn-venta-extra" onclick="abrirModalAnticipo()" style="margin-left:8px">🎟️ + Anticipo</button>
+<div id="antResumen" style="margin-top:12px"></div></div>
             <div class="card" id="cardVentasExtra" style="margin-top:16px;display:none">
                 <div class="card-header" style="justify-content:space-between">
                     <h2>🎪 Ventas especiales / Extras</h2>
@@ -1155,6 +1157,21 @@
                             <input type="hidden" id="fTransfer">
                         </td>
                         <td class="pago-neto" id="netoTransfer">$0.00</td>
+                    </tr>
+                    <!-- Fila 3b: ANTICIPOS aplicados a este corte.
+                         Es venta del día, pero NO dinero que llegó hoy: entró
+                         cuando se cobró el anticipo. Por eso vive aquí abajo,
+                         separada de las formas de pago de verdad. -->
+                    <tr id="rowAnticipos" style="display:none">
+                        <td class="pago-label" style="font-size:14px;font-weight:600;white-space:nowrap;color:var(--accent)">🎟️ Anticipos
+                            <div style="font-size:10px;font-weight:400;color:var(--text-dim)">ya cobrados antes</div></td>
+                        <td colspan="2">
+                            <div id="antAplicWrap" style="display:flex;flex-direction:column;gap:6px"></div>
+                            <button type="button" onclick="_antElegir()" style="margin-top:6px;width:100%;background:transparent;
+                                border:1px dashed var(--border2,var(--border));color:var(--accent);border-radius:8px;
+                                padding:7px;font-size:12px;cursor:pointer">➕ Usar monto de anticipos</button>
+                        </td>
+                        <td class="pago-neto" id="netoAnticipos" style="color:var(--accent)">$0.00</td>
                     </tr>
                     <tr>
                         <td class="pago-label" style="font-size:14px;font-weight:600;white-space:nowrap">🧾 Otros</td>
@@ -1642,6 +1659,56 @@
 </div>
 
 <!-- ══ MODAL VENTA EXTRA ══ -->
+<!-- ══ MODAL: Anticipo ══════════════════════════════════════════════════════
+     Un anticipo es dinero AJENO que ya entró: el cliente pagó por adelantado y
+     todavía se le debe el producto. Por eso pide DÓNDE quedó parado (caja fuerte
+     o una cuenta) y PARA CUÁNDO es: con la fecha del evento, el corte de ese día
+     lo propone solo. -->
+<div class="modal-overlay" id="modalAnticipo" onclick="if(event.target===this)cerrarModalAnticipo()">
+  <div class="modal-corte" style="max-width:580px">
+    <div class="modal-header">
+        <h2>🎟️ Anticipo</h2>
+        <button class="modal-close" onclick="cerrarModalAnticipo()">✕</button>
+    </div>
+    <div class="modal-body">
+        <input type="hidden" id="antId">
+        <div class="form-grid">
+            <div class="fg"><label>Fecha en que lo recibiste</label><input type="date" id="antFecha"></div>
+            <div class="fg"><label>Monto</label><input type="number" id="antMonto" min="0" step="0.01" placeholder="0.00"></div>
+        </div>
+        <div class="fg"><label>¿De quién es?</label>
+            <input type="text" id="antCliente" placeholder="Boda Martínez, Empresa Ruiz…" autocomplete="off"></div>
+        <div class="form-grid">
+            <div class="fg"><label>¿Para qué evento?</label>
+                <input type="text" id="antConcepto" placeholder="Banquete, comida de empresa…"></div>
+            <div class="fg"><label>¿Qué día es el evento?</label>
+                <input type="date" id="antFechaEvento">
+                <div class="form-hint" style="font-size:10.5px;color:var(--text-dim);margin-top:4px">
+                    Con esta fecha, el corte de ese día te lo propone solo.</div></div>
+        </div>
+        <div class="form-grid">
+            <div class="fg"><label>¿Dónde quedó el dinero?</label>
+                <select id="antFondo" onchange="_antFondoCambio()">
+                    <option value="caja_fuerte">🏦 Caja fuerte</option>
+                    <option value="banco">🏛️ Cuenta bancaria</option>
+                </select></div>
+            <div class="fg" id="antCuentaWrap" style="display:none"><label>¿En cuál cuenta?</label>
+                <select id="antCuenta"></select></div>
+        </div>
+        <div class="fg"><label>Notas</label><textarea id="antNotas" rows="2" placeholder="Opcional"></textarea></div>
+        <div style="font-size:10.5px;color:var(--text-dim);line-height:1.5;background:var(--surface2);border-radius:8px;padding:9px 12px">
+            El dinero entra al fondo que elijas <b>desde hoy</b>, pero todavía no es venta:
+            se vuelve venta el día del evento, cuando lo apliques en el corte. Mientras tanto
+            se ve en Caja Fuerte como <b>anticipos por aplicar</b>.
+        </div>
+    </div>
+    <div class="modal-footer">
+        <button class="btn-ghost" onclick="cerrarModalAnticipo()">Cancelar</button>
+        <button class="btn-primary" id="antBtnGuardar" onclick="guardarAnticipo()">Registrar anticipo</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modalVentaExtra" onclick="if(event.target===this)cerrarModalVentaExtra()">
   <div class="modal-corte" style="max-width:580px">
     <div class="modal-header">
@@ -3035,6 +3102,10 @@ function abrirModal(id){
         _tb.innerHTML=_h; _tb.style.display=_h?'':'none';
     }
     document.getElementById('fId').value=id||'';
+    /* Lo aplicado viaja con el corte. Al abrir uno nuevo hay que VACIARLO: si se
+       quedara lo del corte anterior, se aplicaría el mismo anticipo dos veces. */
+    _antAplic = (d.anticipos||[]).map(function(a){ return { anticipoId:a.anticipoId, monto:n(a.monto) }; });
+    setTimeout(function(){ try { _antPintarFila(); calcCorte(); } catch(e){} }, 0);
     document.getElementById('fFecha').value=d.fecha||todayStr();
     document.getElementById('fTurno').value=d.turno||'dia';
     document.getElementById('fCajero').value=d.cajero||'';
@@ -3419,11 +3490,18 @@ function calcCorte(){
     var tr=v('fTransfer');
     var decl=v('fVentaDeclarada');
 
+    /* El anticipo aplicado es VENTA de hoy pero NO flujo de hoy: ese dinero
+       entró cuando se cobró el anticipo, semanas antes. Va en `totV` y NO en
+       `totFlujo` — sumarlo a los dos lo contaría dos veces y el corte pediría
+       un efectivo que nunca estuvo en el cajón. Misma regla que el núcleo
+       (EtaaxCore.ventasBruta / flujoNeto), aquí solo para el número en pantalla. */
+    var ant = (typeof _antTotal === 'function') ? _antTotal() : 0;
+
     // Ventas y propinas son independientes
-    var totV   = ef + ta + tr;           // Total ventas (sin propinas)
+    var totV   = ef + ta + tr + ant;     // Total ventas (sin propinas)
     var totP   = pef + pta;              // Total propinas (dato informativo)
     var taBanc = ta + pta;               // Tarjeta → banco (venta + propina tarjeta)
-    var totFlujo = ef + taBanc + tr;     // Flujo total = ef + (ta+pta) + tr
+    var totFlujo = ef + taBanc + tr;     // Flujo total = ef + (ta+pta) + tr — sin anticipos
 
     // Totales grandes al pie del bloque de pagos + total de la fila de propinas
     document.getElementById('totVenta').textContent   = fmtM(totV);     // TOTAL VENTA (ef+tarjeta+transfer)
@@ -3485,6 +3563,9 @@ function guardarCorte(){
         : ((_exC && _exC.sucursalId!==undefined)?_exC.sucursalId:_sucActiva());
     var corte={id:id,negocioId:getNegocioActivo(),sucursalId:_sucC,fecha:fecha,turno:document.getElementById('fTurno').value,
         fondoInicial:v('fFondo'),ventaDeclarada:v('fVentaDeclarada'),
+        /* Los anticipos aplicados viajan CON el corte: así la venta del día se
+           puede recalcular sola desde el registro, sin cruzar tablas. */
+        anticipos:(_antAplic||[]).filter(function(a){ return a && a.anticipoId && n(a.monto)>0; }),
         efectivo:v('fEfectivo'),propEfectivo:v('fPropEfectivo'),
         ventaOtros:v('fVentaOtros'), // cortesias / consumo socios / otros -- informativo, no suma
         tarjeta:v('fTarjeta'),
@@ -3828,17 +3909,30 @@ function _abrirCajaFuerteContenido(_yaFresco){
        Apartar no bajó el total (el billete sigue ahí); baja el DISPONIBLE. */
     var _pvS = _prevSaldos();
     var aptCaja = _pvS.enCaja, aptBanco = _pvS.enBanco, aptTot = aptCaja + aptBanco;
-    var saldoDisponible = saldoTotal - aptTot;
+    /* Los ANTICIPOS bajan el disponible por la misma razón que las previsiones,
+       pero por el motivo contrario: la previsión es dinero mío que ya tiene
+       destino; el anticipo es dinero AJENO que todavía debo en producto. En los
+       dos casos el billete está en la caja y en los dos casos ya tiene dueño.
+       Si no se restara, el disponible diría que hay para gastar un dinero que en
+       realidad es de un cliente que todavía no recibe su evento. */
+    var _anS = _antSaldos().total;
+    var antTot = _anS.saldo;
+    var saldoDisponible = saldoTotal - aptTot - antTot;
 
     var headerHTML =
         '<div class="cj-acum" style="margin:0 0 10px;border-color:rgba(245,200,66,.5);background:linear-gradient(135deg,rgba(245,200,66,.08),rgba(61,190,122,.05))">'+
             '<div>'+
-                '<div class="cj-acum-lbl">'+(aptTot>0.005?'💰 Disponible de verdad':'💰 Saldo disponible total')+'</div>'+
+                '<div class="cj-acum-lbl">'+((aptTot+antTot)>0.005?'💰 Disponible de verdad':'💰 Saldo disponible total')+'</div>'+
                 '<div style="margin-top:4px;font-size:10px;color:var(--text-dim);line-height:1.6">'+
                     '🏦 Caja fuerte '+fmtM(saldoCaja)+' &nbsp;+&nbsp; 🏛️ Banco '+fmtM(saldoDebito)+
                     (aptTot>0.005
-                      ? '<br><span style="color:var(--accent)">− '+fmtM(aptTot)+' apartado en previsiones</span>'
-                        +' <span style="opacity:.7">(hay '+fmtM(saldoTotal)+', pero ese pedazo ya tiene dueño)</span>'
+                      ? '<br><span style="color:var(--viol,#8b5cf6)">− '+fmtM(aptTot)+' apartado en previsiones</span>'
+                      : '')+
+                    (antTot>0.005
+                      ? '<br><span style="color:var(--accent)">− '+fmtM(antTot)+' de anticipos por aplicar</span>'
+                      : '')+
+                    ((aptTot+antTot)>0.005
+                      ? ' <span style="opacity:.7">(hay '+fmtM(saldoTotal)+', pero ese pedazo ya tiene dueño)</span>'
                       : '')+
                 '</div>'+
             '</div>'+
@@ -3874,6 +3968,22 @@ function _abrirCajaFuerteContenido(_yaFresco){
                     '</div>'+
                 '</div>'+
                 '<div class="cj-acum-val" style="color:var(--viol,#8b5cf6)">'+fmtM(aptTot)+'</div>'+
+            '</div>'
+          : '')+
+        (antTot>0.005
+          ? '<div class="cj-acum" style="margin:0 0 10px;border-color:rgba(245,200,66,.4);background:rgba(245,200,66,.05)">'+
+                '<div>'+
+                    '<div class="cj-acum-lbl" style="color:var(--accent)">🎟️ Anticipos por aplicar</div>'+
+                    '<div style="margin-top:4px;font-size:10px;color:var(--text-dim);line-height:1.6">'+
+                        '🏦 '+fmtM(_anS.enCaja)+' en caja &nbsp;·&nbsp; 🏛️ '+fmtM(_anS.enBanco)+' en banco<br>'+
+                        'Dinero de clientes por eventos que todavía no pasan. Está en la caja, pero '+
+                        'no es venta ni es tuyo hasta que lo apliques en el corte del evento.'+
+                        (_antVencidos()>0
+                          ? '<br><span style="color:#ff9a9a">⚠️ '+_antVencidos()+' con la fecha del evento ya pasada</span>'
+                          : '')+
+                    '</div>'+
+                '</div>'+
+                '<div class="cj-acum-val" style="color:var(--accent)">'+fmtM(antTot)+'</div>'+
             '</div>'
           : '')+
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
@@ -4725,7 +4835,7 @@ document.addEventListener('DOMContentLoaded',function(){
     // Buscadores por card: cortes arranca en DÍA (captura), depósitos y extras en MES
     dxpInit('cor','dia',   function(){ var cur=currentData(),prev=prevData(); renderSummary(cur,prev); renderTabla(cur); });
     dxpInit('dep','mes',   function(){ renderDepositos(); });
-    dxpInit('vex','mes',   function(){ renderVentasExtra(); });
+    dxpInit('vex','mes',   function(){ renderVentasExtra(); _antPintar(); });
     aplicarPermisosVentas();
     renderAll();
     _sbInit();
@@ -5149,6 +5259,232 @@ function eliminarDeposito(id){ _confirmarBorrarMov(id); }
 /* ══════════════════════════════════════════════════════════
    VENTAS EXTRA
    ══════════════════════════════════════════════════════════ */
+/* ══ ANTICIPOS ═══════════════════════════════════════════════════════════════
+   Dinero AJENO que ya entró. Se guarda como un depósito normal (el billete sí se
+   movió, a diferencia de un apartado de previsión, que solo etiqueta) pero con
+   `tipo:'anticipo'`, para poder llevar aparte cuánto falta por aplicar. */
+function _anticipos(){ return _scopeSuc(_cacheDeps||[]).filter(function(d){
+    return EtaaxCore.esAnticipo(d) || EtaaxCore.esAnticipoDev(d); }); }
+function _antSaldos(){
+    return EtaaxCore.anticipoSaldos(_anticipos(), _scopeSuc(_cacheCortes||[]), _scopeSuc(_cacheVex||[]));
+}
+function _antFondoCambio(){
+    var w=document.getElementById('antCuentaWrap');
+    if(w) w.style.display = document.getElementById('antFondo').value==='banco' ? '' : 'none';
+}
+function abrirModalAnticipo(id){
+    var d = id ? (_anticipos().find(function(x){return x.id===id;})||{}) : {};
+    document.getElementById('antId').value       = id||'';
+    document.getElementById('antFecha').value    = d.fecha || todayStr();
+    document.getElementById('antMonto').value    = d.monto || '';
+    document.getElementById('antCliente').value  = d.cliente || '';
+    document.getElementById('antConcepto').value = d.concepto || '';
+    document.getElementById('antFechaEvento').value = d.fechaEvento || '';
+    document.getElementById('antFondo').value    = EtaaxCore.anticipoFondo(d);
+    document.getElementById('antNotas').value    = d.notas || '';
+    var sel=document.getElementById('antCuenta');
+    sel.innerHTML=_cuentasDebito().map(function(c){
+        return '<option value="'+_escV(c.id)+'"'+((d.cuentaId===c.id)?' selected':'')+'>'+_escV(_cuentaBancoLabel(c.id))+'</option>';
+    }).join('');
+    _antFondoCambio();
+    var b=document.getElementById('antBtnGuardar'); if(b) b.textContent = id ? 'Guardar cambios' : 'Registrar anticipo';
+    document.getElementById('modalAnticipo').classList.add('open');
+}
+function cerrarModalAnticipo(){ document.getElementById('modalAnticipo').classList.remove('open'); }
+
+function guardarAnticipo(){
+    var fecha=document.getElementById('antFecha').value;
+    var monto=n(document.getElementById('antMonto').value);
+    var cliente=(document.getElementById('antCliente').value||'').trim();
+    if(!fecha){ alert('¿Qué día recibiste el anticipo?'); return; }
+    if(!(monto>0)){ alert('El monto debe ser mayor a cero.'); return; }
+    if(!cliente){ alert('¿De quién es el anticipo? Sin dueño no se sabe a quién se le debe.'); return; }
+    var id=document.getElementById('antId').value||genId();
+    var fondo=document.getElementById('antFondo').value==='banco'?'banco':'caja_fuerte';
+    var cuentaId=fondo==='banco'?(document.getElementById('antCuenta').value||''):'';
+    var prev=_anticipos().find(function(x){return x.id===id;});
+    var ant={
+        id:id, negocioId:getNegocioActivo(), sucursalId:(prev&&prev.sucursalId)||_sucActiva(),
+        tipo:'anticipo', fecha:fecha, monto:monto,
+        cliente:cliente,
+        concepto:(document.getElementById('antConcepto').value||'').trim(),
+        fechaEvento:document.getElementById('antFechaEvento').value||'',
+        fondo:fondo, cuentaId:cuentaId,
+        notas:(document.getElementById('antNotas').value||'').trim(),
+        /* El dinero ENTRA de verdad: se guarda con origen/destino para que
+           `depEfecto` lo sume al fondo como cualquier depósito. Un anticipo no es
+           una etiqueta —eso es la previsión— es un billete que llegó. */
+        origen:'externo', destino:fondo==='banco'?'banco':'caja_fuerte',
+        destinoCuentaId:cuentaId, origenCuentaId:'',
+        categoria:'Anticipo',
+        concepto2:'',
+    };
+    ant.concepto = ant.concepto || ('Anticipo · '+cliente);
+    _cacheDeps=(_cacheDeps||[]).filter(function(x){return x.id!==ant.id;});
+    _cacheDeps.push(ant);
+    _sbUp('depositos', ant);
+    cerrarModalAnticipo();
+    _antPintar();
+    renderDepositos();
+    var cj=document.getElementById('cajOverlay');
+    if(cj&&cj.classList.contains('open'))_abrirCajaFuerteContenido();
+}
+
+/* Devolver: NO se borra el anticipo. El dinero entró y salió, y las dos cosas
+   tienen que verse — borrarlo dejaría un hueco sin explicación en la caja. */
+function devolverAnticipo(id){
+    var S=_antSaldos().porId[id]; if(!S||!S.anticipo) return;
+    if(S.saldo<=0.005){ alert('Este anticipo ya no tiene saldo por devolver.'); return; }
+    _confirmar({
+        titulo:'Devolver anticipo',
+        texto:'Se devolverán <b>'+fmtM(S.saldo)+'</b> de <b>'+_escV(S.anticipo.cliente||'')+'</b>.<br>'+
+              'El dinero sale del fondo donde estaba y queda el rastro de que entró y salió.',
+        ok:'Devolver', peligro:true
+    }, function(){
+        (function(){
+            var f=EtaaxCore.anticipoFondo(S.anticipo);
+            var dv={ id:genId(), negocioId:getNegocioActivo(), sucursalId:S.anticipo.sucursalId||_sucActiva(),
+                tipo:'anticipo_dev', anticipoId:id, fecha:todayStr(), monto:S.saldo,
+                fondo:f, cuentaId:S.anticipo.cuentaId||'',
+                origen:f==='banco'?'banco':'caja_fuerte', origenCuentaId:S.anticipo.cuentaId||'',
+                destino:'retiro', destinoCuentaId:'',
+                categoria:'Anticipo',
+                concepto:'Devolución de anticipo · '+(S.anticipo.cliente||'') };
+            _cacheDeps=(_cacheDeps||[]).filter(function(x){return x.id!==dv.id;});
+            _cacheDeps.push(dv);
+            _sbUp('depositos', dv);
+            _antPintar(); renderDepositos();
+            var cj=document.getElementById('cajOverlay');
+            if(cj&&cj.classList.contains('open'))_abrirCajaFuerteContenido();
+        })();
+    });
+}
+
+/* La lista de anticipos con saldo. Los vencidos (fecha de evento ya pasada y
+   dinero sin aplicar) van marcados: son los que alguien olvidó y se quedan
+   inflando el saldo. */
+function _antVencidos(){
+    try { return EtaaxCore.anticiposDelDia(_antSaldos(), todayStr()).vencidos.length; }
+    catch(e){ return 0; }
+}
+function _antPintar(){
+    var cont=document.getElementById('antResumen'); if(!cont) return;
+    var S=_antSaldos(), hoy=todayStr();
+    var D=EtaaxCore.anticiposDelDia(S, hoy);
+    var vivos=D.delDia.concat(D.otros);
+    if(!vivos.length){
+        cont.innerHTML='<div style="font-size:11.5px;color:var(--text-dim)">Sin anticipos por aplicar. '+
+            (S.total.recibido>0.005?'Se han recibido '+fmtM(S.total.recibido)+' y ya están todos aplicados o devueltos.':'')+'</div>';
+        return;
+    }
+    var vencidos={}; D.vencidos.forEach(function(x){ vencidos[x.id]=1; });
+    cont.innerHTML=
+        '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:7px">'+
+            '<span style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)">🎟️ Anticipos por aplicar</span>'+
+            '<strong style="color:var(--accent);font-size:15px">'+fmtM(S.total.saldo)+'</strong></div>'+
+        vivos.map(function(x){
+            var a=x.anticipo, venc=!!vencidos[x.id];
+            var fe=a.fechaEvento?_fCorta(a.fechaEvento):'';
+            return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;'+
+                'background:var(--surface2);border:1px solid '+(venc?'rgba(245,200,66,.4)':'var(--border)')+';'+
+                'border-radius:9px;padding:8px 12px;margin-bottom:6px">'+
+                '<div style="min-width:0">'+
+                    '<div style="font-size:12.5px;font-weight:600">'+_escV(a.cliente||'—')+'</div>'+
+                    '<div style="font-size:10.5px;color:var(--text-dim);margin-top:2px">'+
+                        (a.concepto?_escV(a.concepto)+' · ':'')+
+                        (fe?(venc?'⚠️ era el ':'📅 ')+fe:'sin fecha de evento')+
+                        ' · '+(EtaaxCore.anticipoFondo(a)==='banco'?'🏛️ '+_escV(_cuentaBancoLabel(a.cuentaId||'')):'🏦 Caja fuerte')+
+                        (x.aplicado>0.005?' · aplicado '+fmtM(x.aplicado):'')+
+                    '</div>'+
+                '</div>'+
+                '<div style="display:flex;align-items:center;gap:8px;white-space:nowrap">'+
+                    '<strong style="color:var(--accent)">'+fmtM(x.saldo)+'</strong>'+
+                    '<button class="btn-row" onclick="abrirModalAnticipo(\''+x.id+'\')" title="Editar">✏️</button>'+
+                    '<button class="btn-row del" onclick="devolverAnticipo(\''+x.id+'\')" title="Devolver">↩️</button>'+
+                '</div></div>';
+        }).join('');
+}
+
+/* ══ APLICAR UN ANTICIPO A UN CORTE ══════════════════════════════════════════
+   `_antAplic` es lo que se está aplicando en el corte ABIERTO. Vive aparte del
+   registro hasta que se guarda, igual que las evidencias. */
+var _antAplic = [];
+
+/* Los disponibles para este corte, sin contar lo que YA lleva aplicado el propio
+   corte —si no, su propio consumo se vería como saldo gastado y no se podría
+   corregir. */
+function _antDisponibles(corteId, fecha){
+    var otros=_scopeSuc(_cacheCortes||[]).filter(function(c){ return c && c.id!==corteId; });
+    var S=EtaaxCore.anticipoSaldos(_anticipos(), otros, _scopeSuc(_cacheVex||[]));
+    return EtaaxCore.anticiposDelDia(S, fecha||todayStr());
+}
+
+function _antPintarFila(){
+    var wrap=document.getElementById('antAplicWrap'); if(!wrap) return;
+    var row=document.getElementById('rowAnticipos');
+    var D=_antDisponibles(document.getElementById('fId').value||'', document.getElementById('fFecha').value||todayStr());
+    var hay=(D.delDia.length+D.otros.length)>0 || _antAplic.length>0;
+    if(row) row.style.display = hay ? '' : 'none';   // sin anticipos vivos, la fila ni aparece
+    var S=EtaaxCore.anticipoSaldos(_anticipos(), [], []);
+    wrap.innerHTML=_antAplic.map(function(a,i){
+        var ant=(S.porId[a.anticipoId]||{}).anticipo||{};
+        return '<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);'+
+            'border:1px solid var(--border);border-radius:8px;padding:6px 10px">'+
+            '<span style="flex:1;min-width:0;font-size:12px">'+_escV(ant.cliente||'Anticipo')+
+                (ant.concepto?' <span style="color:var(--text-dim);font-size:10.5px">· '+_escV(ant.concepto)+'</span>':'')+'</span>'+
+            '<input type="number" value="'+n(a.monto)+'" min="0" step="0.01" '+
+                'oninput="_antAplic['+i+'].monto=parseFloat(this.value)||0;_antTotal();calcCorte()" '+
+                'style="width:96px;text-align:right;background:var(--surface);border:1px solid var(--border);'+
+                'color:var(--text);border-radius:6px;padding:4px 8px;font-size:12px">'+
+            '<button type="button" class="btn-row del" onclick="_antQuitar('+i+')" title="Quitar">✕</button>'+
+        '</div>';
+    }).join('');
+    _antTotal();
+}
+function _antTotal(){
+    var t=(_antAplic||[]).reduce(function(s,a){ return s+n(a.monto); },0);
+    var el=document.getElementById('netoAnticipos'); if(el) el.textContent=fmtM(t);
+    return t;
+}
+function _antQuitar(i){ _antAplic.splice(i,1); _antPintarFila(); calcCorte(); }
+
+/* Elegir cuál aplicar. Los del día salen primero y ya marcados: con la fecha del
+   evento capturada, el corte de ese día los propone solo — que es justo lo que
+   evita que un anticipo se quede olvidado inflando el saldo. */
+function _antElegir(){
+    var D=_antDisponibles(document.getElementById('fId').value||'', document.getElementById('fFecha').value||todayStr());
+    var ya={}; _antAplic.forEach(function(a){ ya[a.anticipoId]=1; });
+    var libres=D.delDia.concat(D.otros).filter(function(x){ return !ya[x.id]; });
+    if(!libres.length){ alert('No hay anticipos con saldo por aplicar.'); return; }
+    var vencidos={}; D.vencidos.forEach(function(x){ vencidos[x.id]=1; });
+    var delDia={};  D.delDia.forEach(function(x){ delDia[x.id]=1; });
+    _confirmar({
+        titulo:'Usar monto de anticipos',
+        texto:'<div style="display:flex;flex-direction:column;gap:6px;max-height:46vh;overflow-y:auto">'+
+            libres.map(function(x){
+                var a=x.anticipo, esHoy=!!delDia[x.id], venc=!!vencidos[x.id];
+                return '<label style="display:flex;align-items:center;gap:10px;background:var(--surface2);'+
+                    'border:1px solid '+(esHoy?'rgba(61,190,122,.5)':(venc?'rgba(245,200,66,.45)':'var(--border)'))+';'+
+                    'border-radius:9px;padding:9px 12px;cursor:pointer">'+
+                    '<input type="checkbox" class="_antChk" data-id="'+_escV(x.id)+'" data-monto="'+x.saldo+'"'+(esHoy?' checked':'')+'>'+
+                    '<span style="flex:1;min-width:0">'+
+                        '<span style="font-size:12.5px;font-weight:600">'+_escV(a.cliente||'—')+'</span>'+
+                        '<span style="display:block;font-size:10.5px;color:var(--text-dim);margin-top:2px">'+
+                            (a.concepto?_escV(a.concepto)+' · ':'')+
+                            (esHoy?'✅ es de hoy':(venc?'⚠️ era el '+_fCorta(a.fechaEvento):(a.fechaEvento?'📅 '+_fCorta(a.fechaEvento):'sin fecha')))+
+                        '</span></span>'+
+                    '<strong style="color:var(--accent);white-space:nowrap">'+fmtM(x.saldo)+'</strong></label>';
+            }).join('')+'</div>',
+        ok:'Aplicar'
+    }, function(){
+        document.querySelectorAll('._antChk').forEach(function(c){
+            if(!c.checked) return;
+            _antAplic.push({ anticipoId:c.getAttribute('data-id'), monto:n(c.getAttribute('data-monto')) });
+        });
+        _antPintarFila(); calcCorte();
+    });
+}
+
 function abrirModalVentaExtra(id){
     if(!_puede('ventas.ventaExtra')) return;
     var d=id?(loadVex().find(function(x){return x.id===id;})||{}):{};
@@ -5196,7 +5532,10 @@ function eliminarVentaExtra(id){
     renderAll();
 }
 
+/* Los anticipos se repintan junto con las ventas especiales: comparten panel y
+   una venta especial puede consumir un anticipo. */
 function renderVentasExtra(cur){
+    _antPintar();
     var r=dxpRango('vex');
     var lista=loadVex().filter(function(v){
         return inRange(v.fecha,r.from,r.to);

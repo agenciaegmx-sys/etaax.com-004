@@ -7726,6 +7726,81 @@ console.log('\n══ BC6 · Anticipos (etaax-core.js) ══');
         eq(C.anticiposDelDia(todos, '2026-09-27').delDia.length, 0, 'otro día'));
 }
 
+/* ═══════════ SUITE BC7 · ANTICIPOS EN PANTALLA (diario.html) ════════════════
+   El núcleo ya sabe la regla (suite BC6). Aquí se cuida que la PANTALLA diga lo
+   mismo: si el total del corte sumara el anticipo al flujo, el cajero acabaría
+   buscando un efectivo que nunca estuvo en el cajón.                          */
+console.log('\n══ BC7 · Anticipos en pantalla (diario.html) ══');
+{
+    const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+
+    /* ── El total del formulario ── */
+    const A2 = crearContexto();
+    cargarJS(A2, 'etaax-core.js');
+    cargarInline(A2, 'administrativo/diario.html');
+    A2._storage['etaax_negocio_activo'] = 'negT';
+
+    setVar(A2, '_antAplic', []);
+    A2.document.getElementById('fEfectivo').value       = 20000;
+    A2.document.getElementById('fTarjeta').value        = 0;
+    A2.document.getElementById('fTransfer').value       = 0;
+    A2.document.getElementById('fPropEfectivo').value   = 0;
+    A2.document.getElementById('fPropTarjeta').value    = 0;
+    A2.document.getElementById('fPropTarjetaB').value   = 0;
+    A2.document.getElementById('fVentaDeclarada').value = 0;
+    A2.calcCorte();
+    test('sin anticipos, la venta es lo capturado', () =>
+        eq(A2.document.getElementById('totVenta').textContent, '$20,000.00', 'venta'));
+
+    setVar(A2, '_antAplic', [{ anticipoId:'a1', monto:10000 }]);
+    A2.calcCorte();
+    test('con anticipo, la VENTA del día lo suma', () =>
+        eq(A2.document.getElementById('totVenta').textContent, '$30,000.00', 'venta'));
+    /* Lo que NO puede pasar: que el flujo lo sume también. Ese dinero entró
+       semanas antes; si apareciera aquí, el corte pediría un efectivo que nunca
+       estuvo en el cajón y el resguardo saldría descuadrado todas las noches. */
+    test('…pero el FLUJO del día NO lo suma', () =>
+        eq(A2.document.getElementById('totNeto').textContent, '$20,000.00', 'flujo'));
+    test('la fila del corte enseña cuánto se aplicó', () =>
+        eq(A2.document.getElementById('netoAnticipos').textContent, '$10,000.00', 'fila'));
+
+    /* Quitar uno lo devuelve todo a su sitio. */
+    A2._antQuitar(0);
+    test('quitar el anticipo regresa la venta a lo capturado', () =>
+        eq(A2.document.getElementById('totVenta').textContent, '$20,000.00', 'venta'));
+
+    /* ── El cableado que no se puede caer ── */
+    test('lo aplicado se guarda CON el corte', () =>
+        eq(dia.indexOf('anticipos:(_antAplic||[]).filter(') > -1, true, 'se guarda'));
+    /* Al abrir un corte nuevo hay que VACIAR lo aplicado: si se quedara lo del
+       corte anterior, el mismo anticipo se aplicaría dos veces. */
+    test('abrir un corte carga lo suyo y descarta lo del anterior', () =>
+        eq(dia.indexOf('_antAplic = (d.anticipos||[]).map(') > -1, true, 'se recarga'));
+    /* El saldo disponible baja: ese dinero está en la caja pero es de un cliente
+       que todavía no recibe su evento. */
+    test('el disponible de Caja Fuerte descuenta los anticipos', () =>
+        eq(dia.indexOf('var saldoDisponible = saldoTotal - aptTot - antTot;') > -1, true, 'descuenta'));
+    test('…y tiene su card, aparte del de previsiones', () =>
+        eq(dia.indexOf('🎟️ Anticipos por aplicar') > -1, true, 'card'));
+    /* Al elegir cuál aplicar NO se cuenta lo que el propio corte ya lleva: si no,
+       su consumo se vería como saldo gastado y no se podría corregir. */
+    test('al elegir, el corte no se descuenta a sí mismo', () => {
+        const i = dia.indexOf('function _antDisponibles(');
+        return eq(dia.slice(i, i + 380).indexOf('c.id!==corteId') > -1, true, 'se excluye');
+    });
+    /* Devolver no borra: el dinero entró y salió, y las dos cosas se ven. */
+    test('devolver registra un movimiento, no borra el anticipo', () =>
+        eq(dia.indexOf("tipo:'anticipo_dev'") > -1 && dia.indexOf("destino:'retiro'") > -1, true, 'rastro'));
+    /* El anticipo SÍ mueve el fondo al recibirse (a diferencia de un apartado,
+       que solo etiqueta): por eso lleva origen y destino. */
+    test('recibir un anticipo mueve el fondo de verdad', () => {
+        const i = dia.indexOf('function guardarAnticipo()');
+        return eq(dia.slice(i, i + 2200).indexOf("origen:'externo'") > -1, true, 'entra dinero');
+    });
+    test('sin dueño no se guarda: hay que saber a quién se le debe', () =>
+        eq(dia.indexOf('¿De quién es el anticipo?') > -1, true, 'obligatorio'));
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La
