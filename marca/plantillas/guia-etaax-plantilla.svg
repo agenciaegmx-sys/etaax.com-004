@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ETAAX — PLANTILLA DE GUÍA DE USO
+  ───────────────────────────────────────────────────────────────────────────
+  A4 vertical real (595.28 × 841.89 pt). Al abrirla en Illustrator o Affinity
+  el documento ya mide A4: se exporta a PDF sin reescalar nada.
+
+  CÓMO ESTÁ ARMADA
+  · Cada bloque es un <g> con id, así que en el panel de capas aparecen con
+    nombre y se prenden, apagan y duplican sin buscar a ciegas.
+  · Los textos son TEXTO VIVO, no contornos: se reescriben tal cual. Si no
+    tienes Bebas Neue o DM Sans instaladas, el archivo cae a Arial y se ve
+    distinto pero NO se rompe — instálalas y vuelve a abrir.
+  · Sin filtros, sin máscaras, sin clip-paths. Todo son formas y texto planos,
+    que es lo que sobrevive a un round-trip entre programas.
+
+  POR QUÉ FONDO CLARO
+  La app es oscura, pero una guía se imprime y se cuelga en cocina: en oscuro
+  se come el tóner y se lee peor bajo la luz del pase. El crema #f0ece4 es de
+  la misma paleta. Abajo está la tira de color por si la quieres en oscuro.
+
+  PARA HACER LAS DEMÁS GUÍAS: duplica el archivo, cambia el rótulo de módulo,
+  el título y los pasos. La retícula (margen 48, columna de 499) ya está.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="595.28" height="841.89"
+     viewBox="0 0 595.28 841.89" font-family="'DM Sans', Inter, Arial, sans-serif">
+
+  <defs>
+    <!-- Paleta ETAAX. Editando estos valores cambia toda la página. -->
+    <style>
+      .tinta   { fill: #0f0e0c; }
+      .suave   { fill: #4a4844; }
+      .tenue   { fill: #7a7570; }
+      .verde   { fill: #3dbe7a; }
+      .ambar   { fill: #f5c842; }
+      .crema   { fill: #f0ece4; }
+      .display { font-family: 'Bebas Neue', 'Oswald', Impact, sans-serif; letter-spacing: 1.2px; }
+      .rotulo  { font-size: 7.5px; letter-spacing: 3.2px; text-transform: uppercase; }
+      .cuerpo  { font-size: 9.5px; }
+      .linea   { stroke: #d8d2c6; stroke-width: .75; }
+    </style>
+  </defs>
+
+  <g id="00-Fondo">
+    <rect width="595.28" height="841.89" fill="#f0ece4"/>
+  </g>
+
+  <g id="01-Encabezado">
+    <!-- Isotipo: mismo trazo que marca/etaax-isotipo.svg, escalado a 22 pt -->
+    <g id="01a-Isotipo" transform="translate(48,36) scale(0.3055)">
+      <rect width="72" height="72" rx="16" fill="#0f0e0c"/>
+      <path d="M10,32C10,21.5 18,13 30,13C42,13 49.5,21.5 49.5,31.5C49.5,33 49.3,34.5 49,36L18,36C19.5,41.5 23.5,45 29,45C33.5,45 37,43 39,40.5L47,44.5C43.5,50.5 36.5,54 28.5,54C16.5,54 10,45 10,32Z" fill="#f0ece4"/>
+      <path d="M18.5,29L41,29C39.5,24 35.5,21 29.5,21C23.5,21 20,24 18.5,29Z" fill="#0f0e0c"/>
+      <circle cx="51.11" cy="13.14" r="7" fill="#3dbe7a"/>
+    </g>
+    <text id="01b-Marca" x="78" y="52" class="display tinta" font-size="17">ETAAX</text>
+    <text id="01c-Modulo" x="547.28" y="51" text-anchor="end" class="rotulo suave">GUÍA DE USO · MÓDULO</text>
+    <line id="01d-Filete" x1="48" y1="70" x2="547.28" y2="70" class="linea"/>
+  </g>
+
+  <g id="02-Titulo">
+    <text id="02a-Antetitulo" x="48" y="112" class="rotulo verde">CÓMO SE USA</text>
+    <text id="02b-Titulo" x="48" y="148" class="display tinta" font-size="34">TÍTULO DE LA GUÍA</text>
+    <text id="02c-Bajada" x="48" y="174" class="cuerpo suave" font-size="10.5">
+      <tspan x="48" dy="0">Una línea que diga para qué sirve esto y a quién le toca hacerlo.</tspan>
+      <tspan x="48" dy="15">Dos renglones bastan: si necesita tres, el título está mal.</tspan>
+    </text>
+  </g>
+
+  <g id="03-Pasos">
+    <!-- Duplica 03a completo para cada paso. Alto del bloque: 96 pt. -->
+    <g id="03a-Paso-1" transform="translate(0,0)">
+      <circle cx="61" cy="228" r="13" fill="#0f0e0c"/>
+      <text x="61" y="232" text-anchor="middle" class="display crema" font-size="14">1</text>
+      <text x="88" y="226" class="display tinta" font-size="15">QUÉ HACER PRIMERO</text>
+      <text x="88" y="245" class="cuerpo suave">
+        <tspan x="88" dy="0">Una instrucción por paso, en imperativo y sin rodeos. Di dónde está el</tspan>
+        <tspan x="88" dy="13">botón y qué pasa al tocarlo.</tspan>
+      </text>
+      <line x1="88" y1="268" x2="547.28" y2="268" class="linea"/>
+    </g>
+    <g id="03b-Paso-2" transform="translate(0,72)">
+      <circle cx="61" cy="228" r="13" fill="#0f0e0c"/>
+      <text x="61" y="232" text-anchor="middle" class="display crema" font-size="14">2</text>
+      <text x="88" y="226" class="display tinta" font-size="15">EL SIGUIENTE PASO</text>
+      <text x="88" y="245" class="cuerpo suave">
+        <tspan x="88" dy="0">Si un paso necesita una advertencia, no la metas aquí: usa el recuadro</tspan>
+        <tspan x="88" dy="13">de abajo. Mezclarlas hace que no se lea ninguna.</tspan>
+      </text>
+      <line x1="88" y1="268" x2="547.28" y2="268" class="linea"/>
+    </g>
+    <g id="03c-Paso-3" transform="translate(0,144)">
+      <circle cx="61" cy="228" r="13" fill="#0f0e0c"/>
+      <text x="61" y="232" text-anchor="middle" class="display crema" font-size="14">3</text>
+      <text x="88" y="226" class="display tinta" font-size="15">Y EL ÚLTIMO</text>
+      <text x="88" y="245" class="cuerpo suave">
+        <tspan x="88" dy="0">Cierra diciendo cómo se comprueba que quedó bien: qué tiene que ver</tspan>
+        <tspan x="88" dy="13">el colaborador en pantalla para saber que ya.</tspan>
+      </text>
+    </g>
+  </g>
+
+  <g id="04-Captura">
+    <!-- Marco para la captura de pantalla. Pega la imagen ENCIMA y borra el
+         relleno punteado; deja el marco, que es lo que da el aire. -->
+    <rect x="48" y="450" width="499.28" height="196" rx="10" fill="#e6e0d4"
+          stroke="#c9c2b4" stroke-width="1" stroke-dasharray="5 4"/>
+    <text x="297.64" y="545" text-anchor="middle" class="rotulo tenue">CAPTURA DE PANTALLA</text>
+    <text x="297.64" y="562" text-anchor="middle" class="cuerpo tenue">Arrastra aquí la imagen · 499 × 196 pt</text>
+  </g>
+
+  <g id="05-Recuadro">
+    <!-- Ámbar = ojo con esto. Para un tip, cambia el relleno a #eef7f1 y la
+         barra a verde: la paleta ya distingue aviso de consejo. -->
+    <rect x="48" y="668" width="499.28" height="62" rx="9" fill="#fdf6e0"/>
+    <rect x="48" y="668" width="3.5" height="62" rx="1.75" class="ambar"/>
+    <text x="66" y="690" class="display tinta" font-size="12">OJO CON ESTO</text>
+    <text x="66" y="708" class="cuerpo suave">
+      <tspan x="66" dy="0">Lo que se rompe si se hace mal, dicho en una frase. Una advertencia por</tspan>
+      <tspan x="66" dy="13">guía: si hay dos, la segunda ya no se lee.</tspan>
+    </text>
+  </g>
+
+  <g id="06-Pie">
+    <line x1="48" y1="772" x2="547.28" y2="772" class="linea"/>
+    <text x="48" y="790" class="rotulo tenue">ETAAX.COM</text>
+    <text x="297.64" y="790" text-anchor="middle" class="rotulo tenue">NOMBRE DEL MÓDULO</text>
+    <text x="547.28" y="790" text-anchor="end" class="rotulo tenue">01</text>
+  </g>
+
+  <g id="07-Paleta-guia-no-imprimir">
+    <!-- Referencia de color. BÓRRALA antes de exportar: está aquí para que
+         puedas picar los colores con el gotero sin abrir el brand book. -->
+    <text x="48" y="816" class="rotulo tenue">PALETA</text>
+    <g transform="translate(92,806)">
+      <rect width="13" height="13" rx="3" fill="#0f0e0c"/><rect x="17" width="13" height="13" rx="3" fill="#f0ece4" stroke="#d8d2c6" stroke-width=".5"/>
+      <rect x="34" width="13" height="13" rx="3" fill="#3dbe7a"/><rect x="51" width="13" height="13" rx="3" fill="#f5c842"/>
+      <rect x="68" width="13" height="13" rx="3" fill="#e05a3a"/><rect x="85" width="13" height="13" rx="3" fill="#7a7570"/>
+      <rect x="102" width="13" height="13" rx="3" fill="#1a1916"/>
+    </g>
+    <text x="215" y="816" class="cuerpo tenue" font-size="8">tinta · crema · verde · ámbar · rojo · tenue · superficie oscura</text>
+  </g>
+</svg>
