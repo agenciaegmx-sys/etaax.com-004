@@ -7810,6 +7810,168 @@ console.log('\n══ BC7 · Anticipos en pantalla (diario.html) ══');
         eq(dia.indexOf('¿De quién es el anticipo?') > -1, true, 'obligatorio'));
 }
 
+/* ═══════════ SUITE BC8 · LOS PERMISOS LLEGAN AL DISPOSITIVO ═════════════════
+   EL BUG: apagar un permiso "no servía de nada" en el equipo del colaborador.
+
+   `etaaxPermisosRol` lee `etaax_<neg>_permisos` de localStorage. Esa clave la
+   escribía SOLO administrativo/permisos.html, en el equipo del dueño, y nadie
+   más la bajaba de Supabase — y el cierre de sesión la borra, porque no está en
+   la lista de claves que `_etaaxWipeCache` conserva.
+
+   En el celular del colaborador la clave no existía, así que se caía al DEFAULT
+   del rol, que es permisivo. El dueño lo veía apagado en su pantalla y allá
+   seguía abierto. No afectaba a UN permiso: afectaba a los 23.                */
+console.log('\n══ BC8 · Los permisos llegan al dispositivo ══');
+{
+    const pg = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8');
+
+    /* Se corre el page-guard REAL con un Supabase de mentira, para ver si de
+       verdad pide los permisos y los deja en su sitio. */
+    function montar(opts) {
+        opts = opts || {};
+        const ls = Object.assign({
+            etaax_ctx: JSON.stringify({ ctxType:'staff', rol:'mesero', negId:'n1' }),
+        }, opts.ls || {});
+        let pedido = null, reemplazo = null;
+        const ctx = {
+            console:{ warn(){}, log(){} }, JSON, Object, Array, String, Boolean, setTimeout, Promise,
+            localStorage:{ getItem:k=>(k in ls?ls[k]:null), setItem(k,v){ ls[k]=String(v); }, removeItem(k){ delete ls[k]; } },
+            location:{ pathname: opts.ruta || '/administrativo/diario.html', search:'',
+                       replace(u){ reemplazo = u; } },
+            document:{ addEventListener(){} },
+        };
+        ctx.window = ctx;
+        if (!opts.sinSupabase) {
+            ctx._supabase = { from(){ return { select(){ return this; },
+                /* .eq('negocio_id', negId): el valor es el SEGUNDO argumento. */
+                eq(col, val){ pedido = val; return Promise.resolve({ error:null, data: opts.remoto || [] }); } }; } };
+        }
+        vm.createContext(ctx);
+        /* Si page-guard truena al cargar, que falle UN test y se lea el motivo —
+           no que se caiga el candado entero y no se sepa dónde. */
+        let arranque = null;
+        try { vm.runInContext(pg, ctx, { filename:'page-guard.js' }); }
+        catch (e) { arranque = e; }
+        return { ctx, ls, arranque:()=>arranque, pedido:()=>pedido, destino:()=>reemplazo };
+    }
+
+    /* ── Que los pida ── */
+    const m = montar({ remoto:[{ rol:'mesero', datos:{ ventas:true, gastos:false, cambiarSucursal:false } }] });
+    test('page-guard carga sin tronar', () => eq(m.arranque(), null, String(m.arranque())));
+    test('existe la función que los refresca', () =>
+        eq(typeof m.ctx.window.etaaxPermisosRefrescar, 'function', 'existe'));
+    testAsyncCola.push(['una página de módulo los pide a Supabase', async () => {
+        await new Promise(r => setTimeout(r, 30));
+        eq(m.pedido(), 'n1', 'los pidió');
+    }]);
+    testAsyncCola.push(['…y los deja guardados para el resto de la sesión', async () => {
+        const g = JSON.parse(m.ls['etaax_n1_permisos'] || 'null');
+        eq(g && g.mesero && g.mesero.cambiarSucursal, false, 'guardados');
+    }]);
+
+    /* EL ORDEN REAL: page-guard es el PRIMER script del <head> y el cliente de
+       Supabase carga después. Si no esperara, pediría los permisos contra un
+       `_supabase` que todavía no existe — tronaría en el arranque de toda página
+       o, peor, se los saltaría en silencio y volveríamos al bug del principio. */
+    testAsyncCola.push(['espera al cliente de Supabase, que carga después', async () => {
+        const tarde = montar({ sinSupabase:true });
+        eq(tarde.arranque(), null, 'no truena sin cliente');
+        let pedido = null;
+        tarde.ctx._supabase = { from(){ return { select(){ return this; },
+            eq(col, val){ pedido = val; return Promise.resolve({ error:null,
+                data:[{ rol:'mesero', datos:{ ventas:true } }] }); } }; } };
+        await new Promise(r => setTimeout(r, 250));
+        eq(pedido, 'n1', 'los pidió en cuanto apareció');
+    }]);
+
+    /* ── Que FALLEN ABIERTO ──
+       Sin red no se puede dejar a la gente fuera: la puerta de cada módulo la
+       sigue guardando el servidor con RLS, no esta lista. */
+    const sinRed = montar({ sinSupabase:true });
+    test('sin Supabase no truena ni deja a nadie fuera', () =>
+        eq(sinRed.destino(), null, 'pasa'));
+    test('…y sigue valiendo lo que haya en caché', () => {
+        const con = montar({ sinSupabase:true,
+            ls:{ etaax_n1_permisos: JSON.stringify({ mesero:{ ventas:true } }) } });
+        return eq(con.ctx.window.etaaxPermisosRol('n1','mesero').ventas, true, 'caché');
+    });
+
+    /* ── Que sigan bloqueando ── */
+    test('sin permiso del módulo, la página rebota al hub', () => {
+        const x = montar({ ruta:'/administrativo/staff.html',
+            ls:{ etaax_n1_permisos: JSON.stringify({ mesero:{ staff:false } }) } });
+        return eq(String(x.destino()||'').indexOf('denegado=staff') > -1, true, x.destino());
+    });
+    test('con permiso, entra', () => {
+        const x = montar({ ruta:'/administrativo/staff.html',
+            ls:{ etaax_n1_permisos: JSON.stringify({ mesero:{ staff:true } }) } });
+        return eq(x.destino(), null, 'entra');
+    });
+    /* Y si los permisos llegan TARDE y niegan la ruta, se corrige: si no, quien
+       tenga el equipo sin datos entra igual y se queda adentro toda la sesión. */
+    /* El caso tiene que AISLAR la llegada tardía: si lo local ya negara, el
+       rebote ocurriría de entrada y el test pasaría sin probar nada. Aquí la
+       caché DEJA PASAR y el servidor niega — que es exactamente el equipo del
+       colaborador con datos viejos. */
+    testAsyncCola.push(['si llegan tarde y niegan la ruta, saca de la página', async () => {
+        const x = montar({ ruta:'/administrativo/staff.html',
+            ls:{ etaax_n1_permisos: JSON.stringify({ mesero:{ staff:true } }) },
+            remoto:[{ rol:'mesero', datos:{ staff:false } }] });
+        eq(x.destino(), null, 'de entrada pasa, porque su caché lo permitía');
+        await new Promise(r => setTimeout(r, 40));
+        eq(String(x.destino()||'').indexOf('denegado=staff') > -1, true, String(x.destino()));
+    }]);
+    /* El dueño no pasa por nada de esto. */
+    test('al dueño no se le pide nada: tiene acceso total', () => {
+        const x = montar({ ls:{ etaax_ctx: JSON.stringify({ ctxType:'owner', negId:'n1' }) } });
+        return eq(x.pedido(), null, 'no pide');
+    });
+
+    /* ── El default es permisivo: por eso faltar el dato abría la puerta ── */
+    test('sin datos, el default del rol manda (y es permisivo)', () => {
+        const x = montar({ sinSupabase:true });
+        return eq(x.ctx.window.etaaxPermisosRol('n1','mesero').cambiarSucursal, true, 'fail-open');
+    });
+    test('…por eso hay que bajarlos: el dato es lo que apaga el permiso', () =>
+        eq(pg.indexOf("from('permisos').select('rol, datos').eq('negocio_id', negId)") > -1, true, 'los baja'));
+}
+
+/* ═══════════ SUITE BC9 · EL PERMISO MANDA, NO EL CSS ════════════════════════
+   El segundo hueco: "cambiar de sucursal" se aplicaba escondiendo el selector
+   con display:none, y el guardado decidía MIRANDO ESE display. Esconder no es
+   impedir: basta cambiarlo desde las herramientas del navegador, o que otro
+   repintado lo muestre, para que el guardado obedezca.                        */
+console.log('\n══ BC9 · El permiso manda, no el CSS ══');
+{
+    const sitios = [
+        ['administrativo/diario.html', '_puedeSucC=_puedeCambiarSuc()',  'el corte'],
+        ['administrativo/diario.html', '_puedeSucG=gPuedeCambiarSuc()',  'el gasto'],
+        ['administrativo/clientes.html','_puedeSucCl=_puedeCambiarSuc()', 'el cliente'],
+        ['app.js',                      '_puedeSucR = (typeof _puedeCambiarSucReceta', 'la receta'],
+    ];
+    sitios.forEach(function(p3){
+        const src = fs.readFileSync(path.join(RAIZ, p3[0]), 'utf8');
+        test('al guardar ' + p3[2] + ', se vuelve a preguntar el permiso', () =>
+            eq(src.indexOf(p3[1]) > -1, true, p3[0]));
+    });
+    /* Lo que ya no puede volver: decidir SOLO por el display. */
+    const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+    test('el guardado del corte ya no decide solo por el display', () =>
+        eq(/var _sucC=\(_rowSucC && _rowSucC\.style\.display/.test(dia), false, 'sin atajo'));
+    test('…ni el del gasto', () =>
+        eq(/var _sucG=\(_rowSucG && _rowSucG\.style\.display/.test(dia), false, 'sin atajo'));
+
+    /* El permiso es fail-open a propósito (prendido salvo que lo apaguen), y las
+       cuatro funciones tienen que leerlo IGUAL: si una usara `!!perms.x`, ese
+       módulo quedaría cerrado para todos en cuanto alguien no lo declarara. */
+    ['administrativo/diario.html','administrativo/clientes.html','recetas/index.html','recetas/insumos.js']
+    .forEach(function(f){
+        const src = fs.readFileSync(path.join(RAIZ, f), 'utf8');
+        test(f + ': lee el permiso como fail-open', () =>
+            eq(/perms\.cambiarSucursal\s*!==\s*false/.test(src), true, 'mismo criterio'));
+    });
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La

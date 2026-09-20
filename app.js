@@ -361,9 +361,13 @@ async function guardarReceta() {
     // Sucursal donde vive la receta: si el selector está visible, usa la elección;
     // si no, conserva la existente al editar o estampa la sucursal activa al crear.
     var _exRec = getRecetas().find(function(r){ return r.id === (recetaActualId||''); });
+    /* Manda el PERMISO, no el CSS: un display:none esconde el selector pero no
+       impide leerlo, ni desde las herramientas del navegador ni si otro repintado
+       lo muestra. Mismo arreglo que en corte y gasto. */
     var _selSucR = document.getElementById('receta-sucursal');
     var _rowSucR = document.getElementById('row-receta-sucursal');
-    var _sucRec = (_rowSucR && _rowSucR.style.display !== 'none' && _selSucR)
+    var _puedeSucR = (typeof _puedeCambiarSucReceta !== 'function') || _puedeCambiarSucReceta();
+    var _sucRec = (_puedeSucR && _rowSucR && _rowSucR.style.display !== 'none' && _selSucR)
         ? _selSucR.value
         : ((_exRec && _exRec.sucursalId !== undefined)
             ? _exRec.sucursalId

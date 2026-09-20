@@ -73,6 +73,49 @@ window.ETAAX_SUBPERMS = {
 /* Permisos efectivos de un rol en un negocio:
    los guardados por el dueño (localStorage, sync de Supabase)
    o los defaults del rol si no hay personalizados. */
+/* ── LOS PERMISOS TIENEN QUE LLEGAR AL DISPOSITIVO ───────────────────────────
+   Aquí estaba el bug que hacía que apagar un permiso "no sirviera de nada".
+
+   `etaaxPermisosRol` lee `etaax_<neg>_permisos` de localStorage. Esa clave la
+   escribía SOLO administrativo/permisos.html, en el equipo del dueño. Ningún
+   otro lugar la bajaba de Supabase — y el cierre de sesión la borra, porque no
+   está en la lista de claves que `_etaaxWipeCache` conserva.
+
+   Resultado: en el celular del colaborador (o en el del dueño después de salir
+   y volver a entrar) la clave no existía, `etaaxPermisosRol` caía al DEFAULT del
+   rol, y el default es permisivo. El dueño apagaba un permiso, lo veía apagado
+   en su pantalla, y en el dispositivo del colaborador seguía abierto.
+
+   No afectaba a un permiso: afectaba a los 23.
+
+   Ahora cada página los baja al cargar. Se llama una sola vez por carga y
+   FALLA ABIERTO: si no hay red, se queda con lo que haya en caché o con el
+   default. Dejar a la gente fuera por un problema de conexión sería peor que el
+   hueco que esto tapa — y la puerta de cada módulo la sigue guardando el
+   servidor con RLS, no esta lista.                                            */
+var _permsPedidos = false;
+window.etaaxPermisosRefrescar = function (negId, luego) {
+    if (_permsPedidos || !negId) return; _permsPedidos = true;
+    /* page-guard va PRIMERO en el <head>, antes del cliente de Supabase: hay que
+       esperarlo. Si en 8 s no apareció, no hay nada que pedir. */
+    var intentos = 0;
+    (function esperar() {
+        if (typeof window._supabase === 'undefined') {
+            if (++intentos > 80) return;
+            return setTimeout(esperar, 100);
+        }
+        window._supabase.from('permisos').select('rol, datos').eq('negocio_id', negId)
+            .then(function (res) {
+                if (res.error || !res.data || !res.data.length) return;
+                var comb = {};
+                res.data.forEach(function (row) { comb[row.rol] = row.datos; });
+                try { localStorage.setItem('etaax_' + negId + '_permisos', JSON.stringify(comb)); } catch (e) {}
+                if (typeof luego === 'function') luego();
+            })
+            .catch(function (e) { console.warn('[etaax] permisos sin refrescar:', e); });
+    })();
+};
+
 window.etaaxPermisosRol = function (negId, rol) {
     var p = null;
     try { p = JSON.parse(localStorage.getItem('etaax_' + negId + '_permisos') || 'null'); } catch (e) {}
@@ -120,6 +163,11 @@ window.etaaxPerm = function (negId, rol, path) {
     if (ctx.ctxType !== 'staff') return;
     var rol = ctx.rol || 'otro';
     if (rol === 'admin') return;
+
+    /* Se pide ANTES de mirar el mapa: así una página sin candado (una landing)
+       también deja la caché caliente para la siguiente navegación. */
+    window.etaaxPermisosRefrescar(ctx.negId, function () { if (_reEvaluar) _reEvaluar(); });
+    var _reEvaluar = null;
 
     // Mapa ruta → clave(s) de permiso. El orden importa
     // (ventas-productos antes que ventas, etc.). Un array
@@ -174,8 +222,16 @@ window.etaaxPerm = function (negId, rol, path) {
     }
     if (!key) return; // landings de módulo (administrativo/index) pasan
 
-    var perms = window.etaaxPermisosRol(ctx.negId, rol);
-    var keys  = Array.isArray(key) ? key : [key];
-    var ok    = keys.some(function (k) { return perms[k]; });
-    if (!ok && !_embed) window.location.replace('/hub.html?denegado=' + keys[0]);
+    function _evaluar(quieto) {
+        var perms = window.etaaxPermisosRol(ctx.negId, rol);
+        var keys  = Array.isArray(key) ? key : [key];
+        var ok    = keys.some(function (k) { return perms[k]; });
+        if (!ok && !_embed) {
+            if (quieto) console.warn('[etaax] permiso denegado al refrescar:', keys[0]);
+            window.location.replace('/hub.html?denegado=' + keys[0]);
+        }
+        return ok;
+    }
+    _reEvaluar = function () { _evaluar(true); };
+    _evaluar(false);
 })();

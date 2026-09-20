@@ -3557,8 +3557,14 @@ function guardarCorte(){
     if(!fecha){alert('La fecha es obligatoria.');return;}
     var id=document.getElementById('fId').value||genId();
     var _exC=(_cacheCortes||[]).find(function(c){return c.id===id;});
+    /* Se vuelve a PREGUNTAR el permiso, no se mira si el renglón está visible.
+       Un `display:none` esconde el selector pero no impide leerlo: bastaba
+       cambiarlo desde las herramientas del navegador, o que otro repintado lo
+       mostrara, para que el guardado obedeciera. El permiso es la fuente, el CSS
+       es una consecuencia. */
     var _selSucC=document.getElementById('fSucursal'), _rowSucC=document.getElementById('row-corte-sucursal');
-    var _sucC=(_rowSucC && _rowSucC.style.display!=='none' && _selSucC)
+    var _puedeSucC=_puedeCambiarSuc() && _rowSucC && _rowSucC.style.display!=='none' && _selSucC;
+    var _sucC=_puedeSucC
         ? _selSucC.value
         : ((_exC && _exC.sucursalId!==undefined)?_exC.sucursalId:_sucActiva());
     var corte={id:id,negocioId:getNegocioActivo(),sucursalId:_sucC,fecha:fecha,turno:document.getElementById('fTurno').value,
@@ -7491,8 +7497,10 @@ function guardarGasto(){
     if(tipo==='mayor'&&!mayorDesbloqueado){alert('Se requiere autorización admin para gastos mayores.');return;}
     var id=document.getElementById('gId').value||genId();
     var _exG=(_cacheGastos||[]).find(function(x){return x.id===id;});
+    /* Igual que en el corte: manda el permiso, no el CSS. */
     var _selSucG=document.getElementById('gSucursal'), _rowSucG=document.getElementById('row-gasto-sucursal');
-    var _sucG=(_rowSucG && _rowSucG.style.display!=='none' && _selSucG)
+    var _puedeSucG=gPuedeCambiarSuc() && _rowSucG && _rowSucG.style.display!=='none' && _selSucG;
+    var _sucG=_puedeSucG
         ? _selSucG.value
         : ((_exG && _exG.sucursalId!==undefined)?_exG.sucursalId:_sucActiva());
     var gasto={

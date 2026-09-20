@@ -332,8 +332,11 @@ function guardarCliente(){
     if(!nombre){alert('El nombre es obligatorio.');document.getElementById('clNombre').focus();return;}
     var id=document.getElementById('clId').value||genId();
     var existing = (_cacheClientes||[]).find(function(c){return c.id===id;});
+    /* Manda el PERMISO, no el CSS: un display:none esconde el selector pero no
+       impide leerlo. Mismo arreglo que en corte, gasto y receta. */
     var _selSucCl=document.getElementById('clSucursal'), _rowSucCl=document.getElementById('row-cl-sucursal');
-    var _sucCl=(_rowSucCl && _rowSucCl.style.display!=='none' && _selSucCl)
+    var _puedeSucCl=_puedeCambiarSuc() && _rowSucCl && _rowSucCl.style.display!=='none' && _selSucCl;
+    var _sucCl=(_puedeSucCl)
         ? _selSucCl.value
         : ((existing && existing.sucursalId!==undefined)?existing.sucursalId:_sucActiva());
     var cliente={
