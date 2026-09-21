@@ -1067,11 +1067,11 @@
                     <label>Diferencia capturado vs. declarado</label>
                     <div class="calc-val neu" id="difDeclarada">—</div>
                     <button id="btnPosIncluyeProp" onclick="togglePosIncluyeProp()"
-                        title="¿El total del POS ya incluye la propina de tarjeta?"
+                        title="¿La venta que declara tu POS ya trae adentro la propina de tarjeta? Si sí, se compara contra venta + propina; si no, solo contra la venta."
                         style="margin-top:4px;background:rgba(61,190,122,.12);border:1px solid rgba(61,190,122,.4);
                         color:var(--green);border-radius:4px;padding:2px 8px;font-family:inherit;font-size:9px;
                         letter-spacing:.5px;cursor:pointer;text-align:center;transition:all .15s;align-self:flex-start">
-                        ✓ EN TOTAL POS
+                        ✓ PROPINA INCLUIDA EN VENTA
                     </button>
                 </div>
             </div>
@@ -2759,7 +2759,10 @@ function togglePosIncluyeProp() {
     _posIncluyePropTa = !_posIncluyePropTa;
     var btn = document.getElementById('btnPosIncluyeProp');
     if (btn) {
-        btn.textContent = _posIncluyePropTa ? '✓ EN TOTAL POS' : '○ EXCLUIDA DE POS';
+        /* El rótulo dice QUÉ significa, no dónde está. "EN TOTAL POS" obligaba a
+           recordar que ese total es la venta declarada y que la duda era si traía
+           la propina adentro; ahora el botón contesta la pregunta directamente. */
+        btn.textContent = _posIncluyePropTa ? '✓ PROPINA INCLUIDA EN VENTA' : '○ PROPINA NO INCLUIDA EN VENTA';
         btn.style.background    = _posIncluyePropTa ? 'rgba(61,190,122,.12)' : 'var(--surface2)';
         btn.style.borderColor   = _posIncluyePropTa ? 'rgba(61,190,122,.4)'  : 'var(--border)';
         btn.style.color         = _posIncluyePropTa ? 'var(--green)'          : 'var(--text-dim)';

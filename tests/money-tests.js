@@ -8163,6 +8163,56 @@ console.log('\n══ BD1 · Auditoría del saldo en efectivo ══');
         eq(dia.indexOf('return EtaaxCore.resguardo(c, _cajaChicaLive(c.fecha, c.sucursalId));'), -1, 'sin el atajo'));
 }
 
+/* ═══════════ SUITE BD2 · EL BOTÓN DE LA PROPINA EN LA VENTA DECLARADA ═══════
+   El botón decía "EN TOTAL POS" / "EXCLUIDA DE POS": obligaba a recordar que ese
+   "total" es la venta declarada y que la duda era si traía la propina adentro.
+   Ahora contesta la pregunta directamente.
+
+   Lo que de verdad decide ese botón es contra QUÉ se compara lo capturado: si el
+   POS ya trae la propina, contra venta + propina; si no, solo contra la venta.
+   Equivocarse ahí hace que salga una diferencia que no existe, todos los días. */
+console.log('\n══ BD2 · El botón de la propina en la venta declarada ══');
+{
+    const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+    test('el botón dice si la propina va incluida en la venta', () =>
+        eq(dia.indexOf("'✓ PROPINA INCLUIDA EN VENTA' : '○ PROPINA NO INCLUIDA EN VENTA'") > -1, true, 'rótulos'));
+    test('…y arranca con ese mismo rótulo, no con el viejo', () =>
+        eq(dia.indexOf('✓ PROPINA INCLUIDA EN VENTA\n                    </button>') > -1, true, 'inicial'));
+    /* Se mira el CÓDIGO, no los comentarios: el de al lado cita el rótulo viejo
+       para explicar por qué se cambió, y eso no lo ve nadie en pantalla. */
+    const codigo = dia.replace(/\/\*[\s\S]*?\*\//g, ' ');
+    test('ya no queda rastro del rótulo anterior', () =>
+        eq(codigo.indexOf('EN TOTAL POS') === -1 && codigo.indexOf('EXCLUIDA DE POS') === -1, true, 'sin rastro'));
+
+    /* Lo que el botón DECIDE no cambió: se comprueba corriendo calcCorte() de
+       verdad en los dos estados. Renombrar no puede mover la cuenta. */
+    const A3 = crearContexto();
+    cargarJS(A3, 'etaax-core.js');
+    cargarInline(A3, 'administrativo/diario.html');
+    const $ = (id) => A3.document.getElementById(id);
+    setVar(A3, '_antAplic', []);
+    $('fEfectivo').value = 1000; $('fTarjeta').value = 500; $('fTransfer').value = 0;
+    $('fPropEfectivo').value = 0; $('fPropTarjeta').value = 100; $('fPropTarjetaB').value = 0;
+    /* El POS declara 1,600 = venta 1,500 + propina 100. */
+    $('fVentaDeclarada').value = 1600;
+
+    /* OJO con el "contiene": '−$100.00' también contiene '0.00', así que buscar
+       ese trozo daba por buena una diferencia de cien pesos. Se compara el texto
+       COMPLETO, que es lo único que distingue cuadrar de no cuadrar. */
+    setVar(A3, '_posIncluyePropTa', true);
+    A3.calcCorte();
+    const difIncluida = $('difDeclarada').textContent.trim();
+    test('con la propina INCLUIDA, no hay diferencia contra el POS', () =>
+        eq(difIncluida.replace(/[^\d.-]/g, ''), '0.00', difIncluida));
+
+    setVar(A3, '_posIncluyePropTa', false);
+    A3.calcCorte();
+    /* Sin incluirla, se compara 1,500 contra 1,600: faltan 100, que es la propina. */
+    const difNo = $('difDeclarada').textContent.trim();
+    test('con la propina NO incluida, la diferencia es justo la propina', () =>
+        eq(difNo.indexOf('100.00') > -1 && difNo !== difIncluida, true, difNo));
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La
