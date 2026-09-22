@@ -351,6 +351,12 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
   padding:14px 20px;transition:border-color .3s;
 }
 .brand-info-bar-btns{margin-left:auto;display:flex;gap:8px;align-items:center;}
+/* Acceso discreto al aviso legal: presente, sin competirle a las acciones
+   de todos los días. Se despinta hasta que el cursor lo toca. */
+.aviso-priv-btn{font-size:11px;padding:5px 12px;border:1px solid transparent;border-radius:6px;
+  letter-spacing:.3px;background:transparent;color:var(--dim);cursor:pointer;text-decoration:none;
+  font-family:'DM Sans',sans-serif;transition:all .2s;white-space:nowrap;}
+.aviso-priv-btn:hover{border-color:var(--b2);background:var(--s2);color:var(--muted);}
 
 /* SUCURSAL SECTION */
 .suc-section-head{
@@ -2196,6 +2202,14 @@ function _renderBrandBar(neg) {
         '<div><div class="neg-activo-nombre">' + _esc(neg.nombre) + '</div>' +
         '<div class="neg-activo-tipo">' + t.label + '</div></div>' +
         '<div class="brand-info-bar-btns">' +
+        /* El aviso de privacidad, a la mano. Estaba solo en el pie de la landing
+           y en la palomita del registro: justo donde nadie vuelve a mirarlo. Un
+           dueño que quiere leerlo —o enseñárselo a alguien— seis meses después no
+           tenía de dónde. Va discreto, que no es una acción del día, pero a un
+           clic y con su propia pestaña para no perder el hub. */
+        '<a class="aviso-priv-btn" href="/aviso-privacidad.html" target="_blank" rel="noopener" ' +
+            'title="Aviso de Privacidad de ETAAX — quién es responsable de tus datos, ' +
+            'cuáles se guardan y cómo ejercer tus derechos">🔒 Aviso de privacidad</a>' +
         '<button onclick="abrirConfig(\'' + neg.id + '\',event)" ' +
             'style="font-size:11px;padding:5px 14px;border:1px solid var(--b2);border-radius:6px;letter-spacing:.3px;background:var(--s2);color:var(--muted);cursor:pointer;font-family:\'DM Sans\',sans-serif;transition:all .2s" ' +
             'onmouseover="this.style.borderColor=\''+( neg.color||'#3dbe7a' )+'\';this.style.color=\''+( neg.color||'#3dbe7a' )+'\'" ' +

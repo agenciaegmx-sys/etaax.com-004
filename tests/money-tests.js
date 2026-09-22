@@ -5555,7 +5555,68 @@ console.log('\n══ AR · Aviso de privacidad y aceptación ══');
         eq(priv.indexOf('el responsable eres tú') > -1, true, 'dicho'));
     test('el aviso conserva los derechos ARCO', () => eq(priv.indexOf('ARCO') > -1, true, 'arco'));
     test('…con su plazo de respuesta', () => eq(priv.indexOf('20 días') > -1, true, 'plazo'));
-    test('…y la vía ante el INAI', () => eq(priv.indexOf('INAI') > -1, true, 'inai'));
+    /* La autoridad cambió con la ley de 2025: el INAI se extinguió y la
+       vigilancia pasó a la Secretaría Anticorrupción y Buen Gobierno. Mandar a
+       alguien al INAI es mandarlo a una ventanilla que ya no existe. */
+    test('…y la vía ante la autoridad que hoy vigila', () =>
+        eq(priv.indexOf('Secretaría Anticorrupción y Buen Gobierno') > -1, true, 'autoridad'));
+    test('…y ya no manda al INAI, que se extinguió', () =>
+        eq(priv.indexOf('INAI') === -1, true, 'sin ventanilla muerta'));
+    test('se apoya en la ley vigente, la de 2025', () =>
+        eq(priv.indexOf('20 de marzo de 2025') > -1, true, 'ley'));
+
+    /* ── Quién responde, con nombre y domicilio ──────────────────────────────
+       Un aviso sin domicilio del responsable está incompleto: es a dónde se le
+       notifica. Durante meses decía literalmente "[DOMICILIO FISCAL]". */
+    test('el responsable tiene nombre, no solo marca', () =>
+        eq(priv.indexOf('Edwin Eduardo González González') > -1, true, 'con nombre'));
+    test('…y domicilio para oír y recibir notificaciones', () =>
+        eq(priv.indexOf('Lacas de Uruapan 336') > -1 && priv.indexOf('58230') > -1, true, 'domicilio'));
+    test('…sin marcadores por llenar', () =>
+        eq(/\[DOMICILIO|\[FECHA|\[POR LLENAR/.test(priv), false, 'completo'));
+    test('…y un correo para ejercer derechos', () =>
+        eq(priv.indexOf('agencia.egmx@gmail.com') > -1, true, 'contacto'));
+
+    /* Lo que la app registra de ti y no estaba declarado: IP, dispositivo y la
+       bitácora de acciones — todo eso existe desde el bloqueo por intentos
+       fallidos y los registros de acceso. */
+    ['dirección IP', 'navegador y dispositivo', 'acciones realizadas']
+        .forEach(d => test('el aviso declara el dato técnico: ' + d, () =>
+            eq(priv.indexOf(d) > -1, true, 'declarado')));
+    /* Sensibles: la app no los pide, pero un documento que sube el dueño puede
+       traerlos. Callarlo dejaría el hueco sin dueño. */
+    test('el aviso dice qué pasa con los datos sensibles', () =>
+        eq(priv.indexOf('no solicita datos personales sensibles') > -1, true, 'sensibles'));
+    test('…y de quién es la obligación si el dueño los sube', () =>
+        eq(priv.indexOf('consentimiento expreso y por escrito') > -1, true, 'de quién'));
+    /* Promesas que hoy son verificables y conviene tener por escrito. */
+    test('el aviso promete que los datos NO entrenan modelos de IA', () =>
+        eq(priv.indexOf('inteligencia artificial') > -1, true, 'sin IA'));
+    test('…ni se cruzan los de un negocio con los de otro', () =>
+        eq(priv.indexOf('no cruza los datos de un negocio con los de otro') > -1, true, 'sin cruces'));
+    /* Si hay fuga, hay que avisar: la obligación existe aunque duela. */
+    test('el aviso compromete avisar una vulneración de seguridad', () =>
+        eq(priv.indexOf('vulneración de seguridad') > -1, true, 'avisa'));
+    /* El negocio puede cambiar de manos; los datos no se heredan en silencio. */
+    test('si la operación cambia de dueño, se avisa antes', () =>
+        eq(priv.indexOf('30 días naturales') > -1, true, 'con aviso'));
+
+    /* ── El aviso, a la mano desde adentro ───────────────────────────────────
+       Estaba solo en el pie de la landing y en la palomita del registro: justo
+       donde nadie vuelve a mirarlo. Un dueño que quiere leerlo —o enseñárselo a
+       alguien— seis meses después no tenía de dónde. */
+    const hub = plano('hub.html');
+    test('el hub tiene acceso al aviso de privacidad', () =>
+        eq(hub.indexOf('href="/aviso-privacidad.html"') > -1, true, 'a la mano'));
+    /* Se busca el BOTÓN, no la regla de estilo que lleva el mismo nombre y
+       aparece antes en el archivo. */
+    const botonPriv = hub.indexOf('<a class="aviso-priv-btn"');
+    test('…junto a Configurar negocio, donde se administra el negocio', () =>
+        eq(botonPriv > -1 && hub.slice(botonPriv, botonPriv + 900).indexOf('Configurar negocio') > -1,
+           true, 'al lado'));
+    test('…y abre en su propia pestaña, sin perder el hub', () =>
+        eq(botonPriv > -1 && hub.slice(botonPriv, botonPriv + 300).indexOf('target="_blank"') > -1,
+           true, 'sin perder'));
 
     /* Lo que el negocio le entrega a su gente. */
     test('existe el aviso para colaboradores', () => eq(colab.indexOf('colaboradores') > -1, true, 'existe'));
@@ -5572,6 +5633,13 @@ console.log('\n══ AR · Aviso de privacidad y aceptación ══');
     test('sin aceptar, la activación no sigue', () =>
         eq(alta.indexOf("alPriv').checked") > -1, true, 'bloquea'));
     test('manda QUÉ versión se aceptó', () => eq(alta.indexOf('aviso_version') > -1, true, 'versión'));
+    /* Y que sea la que de verdad está publicada. Si el aviso se actualiza y el
+       sello se queda atrás, el registro dice que alguien aceptó un texto que
+       nunca vio — que es justo lo que el sello venía a evitar. */
+    test('…y es la versión que hoy está publicada', () => {
+        const sello = (alta.match(/AVISO_VERSION = '([^']+)'/) || [])[1];
+        return eq(priv.indexOf('Versión <strong>' + sello + '</strong>') > -1, true, 'al día');
+    });
 
     /* Y el servidor no se fía del navegador. */
     test('el servidor exige el aviso aceptado', () =>
