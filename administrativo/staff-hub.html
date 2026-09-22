@@ -318,13 +318,11 @@ function abrirTool(page, titulo, icono){
    acabe de cambiar adentro (un rol renombrado, por ejemplo). */
 function volverTool(){
     if(!_toolBase) return cerrarTool();
-    /* Al catálogo de staff se entra con contraseña, y volver lo RECARGA: sin
-       esto, salir de Roles y Permisos la pedía otra vez. Quien está adentro ya
-       la dio para llegar ahí — se le renueva su gracia, no se le vuelve a
-       preguntar por el mismo camino que acaba de recorrer. */
-    if(_toolBase === 'staff.html'){
-        try { sessionStorage.setItem('etaax_staff_gracia', String(Date.now() + 5*60*1000)); } catch(e){}
-    }
+    /* OJO: aquí NO se renueva la contraseña del catálogo de staff. Se hizo así
+       al principio y salió peor: cada ida y vuelta a Roles y Permisos reiniciaba
+       el reloj, y como cerrar desde adentro ES volver, bastaba con entrar y
+       salir para que el candado no se armara NUNCA. Ya no hace falta: la gracia
+       vive en la pestaña, así que sobrevive sola a la recarga mientras no venza. */
     var frame=document.getElementById('tmFrame');
     document.getElementById('tmLoading').style.display='flex';
     /* Los botones cambian YA, no cuando termine de cargar: si no, el catálogo
@@ -343,6 +341,12 @@ function cerrarTool(){
     var bg=document.getElementById('toolModal');
     bg.classList.remove('on');
     document.body.style.overflow='';
+    /* Cerrar la ventana REARMA el candado del catálogo: cerrar es salirse a
+       propósito, y volver a entrar tiene que volver a pedir la contraseña. La
+       gracia solo sirve mientras se está adentro trabajando. */
+    if(_toolBase === 'staff.html'){
+        try { sessionStorage.removeItem('etaax_staff_gracia'); } catch(e){}
+    }
     _toolBase='';
     // Liberar el iframe (detiene la app embebida y resetea su estado para la próxima).
     setTimeout(function(){ if(!bg.classList.contains('on')) document.getElementById('tmFrame').src='about:blank'; }, 180);

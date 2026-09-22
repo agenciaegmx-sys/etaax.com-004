@@ -2731,12 +2731,7 @@ function _showEscMenu() {
    permitido") y caer al default del rol cuando la clave no está declarada: así
    nadie pierde acceso por un permiso que todavía no existía cuando se guardó. */
 function _puedeRec(sub){
-    var ctx=null;
-    try{ ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null'); }catch(e){}
-    if(!ctx || ctx.ctxType!=='staff') return true;      // dueño / admin maestro
-    if((ctx.rol||'')==='admin') return true;
-    if(typeof window.etaaxPerm!=='function') return true;  // sin el helper, no se cierra nada
-    return window.etaaxPerm(ctx.negId||localStorage.getItem('etaax_negocio_activo'), ctx.rol, 'recetas.'+sub);
+    return (typeof window.etaaxPuedeSub === 'function') ? window.etaaxPuedeSub('recetas', sub) : true;
 }
 
 /* El "no" que sí se oye. Esconder el botón NO es negar: la función se puede

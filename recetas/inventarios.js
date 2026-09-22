@@ -2054,6 +2054,7 @@ function _repMoney(n){ return '$' + (Math.round((n||0)*100)/100).toLocaleString(
 
 function abrirReporteFinal(){ abrirReporteExistencias(true); }
 function abrirReporteExistencias(fusion){
+    if (typeof _exigeInv === 'function' && !_exigeInv('reporte', 'No puedes ver los reportes del inventario.')) return;
     _repFusion = !!fusion;
     // Selector: siempre ofrece Barra/Bodega/Cocina + cualquier otra área presente (ej. General)
     var rows = _datosReporteExistencias('todas');
@@ -2462,6 +2463,7 @@ function abrirParametros() {
 
 // QR de entradas por negocio: abre entrada.html en el cel SIN login (token + NIP).
 async function abrirQrEntradas() {
+    if (typeof _exigeInv === 'function' && !_exigeInv('qr', 'No puedes generar el QR de entradas.')) return;
     var negId = getNegocioActivo();
     if (!negId) { alert('No hay negocio activo.'); return; }
     document.getElementById('modalQrEntradas').style.display = 'flex';
@@ -2978,6 +2980,7 @@ function cambiarAnio(delta)  { anioVista += delta; mesSeleccionado = null; rende
 // VISTA FORM
 // ═══════════════════════════════════════════════════════════════
 function nuevoInventario() {
+    if (typeof _exigeInv === 'function' && !_exigeInv('capturar', 'No puedes abrir inventarios.')) return;
     invActual = null; filasCaptura = [];
     mostrarVista('vistaForm');
     limpiarFormulario();
@@ -2987,6 +2990,7 @@ function nuevoInventario() {
 }
 
 function nuevoPrimerLev() {
+    if (typeof _exigeInv === 'function' && !_exigeInv('capturar', 'No puedes abrir inventarios.')) return;
     invActual = null; filasCaptura = [];
     mostrarVista('vistaForm');
     limpiarFormulario();
@@ -3483,6 +3487,7 @@ function limpiarFormulario() {
 }
 
 function iniciarInventario() {
+    if (typeof _exigeInv === 'function' && !_exigeInv('capturar', 'No puedes abrir inventarios.')) return;
     const esNuevo = !invActual;
     if (esNuevo) {
         invActual = {
@@ -3904,6 +3909,11 @@ function cargarProductosCaptura() {
 const PASO_LABELS = ['','Existencias','Entradas','Ventas','Cancelaciones','Resumen de Resultado'];
 
 function irAPaso(n) {
+    /* El paso 5 es el Resultado: variancias, mermas y el reporte ejecutivo. Se
+       pide el mismo permiso que a los reportes de fuera — sería raro cerrarle la
+       puerta de la calle y dejarle la de atrás abierta. */
+    if (n === 5 && typeof _exigeInv === 'function' &&
+        !_exigeInv('reporte', 'No puedes ver el Resultado del inventario.')) return;
     pasoActual = n;
     if (n === 2) { try { _importarEntradasQR(); } catch(e) {} } // al entrar a Entradas, jala lo del QR
     actualizarStepBar();
@@ -3954,6 +3964,7 @@ function actualizarNavBtns() {
 }
 // Finalizar el inventario actual desde el wizard (cierra: ABIERTO → CERRADO).
 function finalizarInventarioActual() {
+    if (typeof _exigeInv === 'function' && !_exigeInv('cerrar', 'No puedes cerrar inventarios.')) return;
     if (!invActual) return;
     if (invActual.cerrado) { alert('Este inventario ya está cerrado.'); return; }
     if (invActual.tipoInv === 'primer_lev') { finalizarPrimerLev(); return; }
@@ -8043,6 +8054,14 @@ function _rdConstruirPaginas(src, pagesC, headHtml, footHtml) {
 
 // ── Reporte directivo ─────────────────────────────────────────
 function verReporteDirectivo(gerencial, modo) {
+    if (typeof _exigeInv === 'function') {
+        if (!_exigeInv('reporte', 'No puedes ver los reportes del inventario.')) return;
+        /* El GERENCIAL va sin importes (solo % y cantidades): ese sí lo puede ver
+           quien no tiene permiso de ver el dinero. El directivo y el desglose
+           llevan importes, y ahí se pide además "ver el capital invertido". */
+        if (gerencial !== true &&
+            !_exigeInv('verCostos', 'Ese reporte lleva importes y no puedes ver el capital invertido. El reporte gerencial sí está disponible.')) return;
+    }
     if (!invActual) return;
     const ger = gerencial === true; // Reporte Gerencial: oculta los importes (solo % + neto + dif$ por insumo).
     const desglose = modo === 'desglose'; // Reporte en DOS exportes: resumen general vs desglose por insumo (más orgánico de imprimir).
@@ -8917,6 +8936,7 @@ function guardarYSalir() {
 }
 
 function finalizarPrimerLev() {
+    if (typeof _exigeInv === 'function' && !_exigeInv('cerrar', 'No puedes cerrar inventarios.')) return;
     if (!invActual) return;
     if (invActual.cerrado) return;
     _conCierreOperativo(invActual, function(){
@@ -8935,6 +8955,7 @@ function finalizarPrimerLev() {
 }
 
 function cerrarInventario() {
+    if (typeof _exigeInv === 'function' && !_exigeInv('cerrar', 'No puedes cerrar inventarios.')) return;
     if (!invActual) return;
     if (invActual.cerrado) { alert('Este inventario ya está cerrado.'); return; }
     _conCierreOperativo(invActual, function(){
@@ -8991,6 +9012,7 @@ function eliminarInventario(id) {
 let _entLogInsumoCache = null;
 
 function abrirRegistroEntradas() {
+    if (typeof _exigeInv === 'function' && !_exigeInv('entradas', 'No puedes registrar entradas de mercancía.')) return;
     _entLogInsumoCache = _scopeSucInsumos(getInsumos()); // solo insumos de la sucursal activa
     _entRapidaInsumoId = null;
     _entRapidaBusqueda = '';
@@ -9044,6 +9066,7 @@ function seleccionarEntLogInsumo(id) {
 }
 
 function guardarEntradaLog() {
+    if (typeof _exigeInv === 'function' && !_exigeInv('entradas', 'No puedes registrar entradas de mercancía.')) return;
     const insumoId = document.getElementById('entLogInsumoId').value;
     const fecha    = document.getElementById('entLogFecha').value;
     const cantidad = parseFloat(document.getElementById('entLogCantidad').value);

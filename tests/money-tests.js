@@ -8501,10 +8501,13 @@ console.log('\n══ BD4 · Roles y Permisos: módulo de Recetas e Insumos ═�
     test('los módulos ya conectados no llevan marca', () =>
         eq(['recetas','insumos'].every(k => (SUB[k]||[]).length && !(SUB[k]||[]).some(x => x.pendiente)),
            true, 'sin marca'));
-    test('…y los que faltan sí la llevan, uno por uno', () =>
-        eq(['inventarios','requisiciones']
-            .every(k => (SUB[k]||[]).length && (SUB[k]||[]).every(x => x.pendiente === true)),
-           true, 'marcados'));
+    /* Ya no falta ninguno: los seis módulos mandan. Si mañana se declara un
+       sub-permiso sin conectar, esto lo saca a la luz con su nombre. */
+    test('…y ya no queda ninguno marcado, en ningún módulo', () => {
+        const pend = [];
+        Object.keys(SUB).forEach(k => (SUB[k]||[]).forEach(x => { if (x.pendiente) pend.push(k+'.'+x.key); }));
+        return eq(pend.join(', '), '', 'todos conectados');
+    });
     test('…y los que SÍ funcionan no llevan esa marca', () =>
         eq((SUB.ventas||[]).some(x => x.pendiente) || (SUB.gastos||[]).some(x => x.pendiente), false, 'sin marca'));
     test('la pantalla pinta esa marca, no la esconde', () =>
@@ -8895,14 +8898,41 @@ console.log('\n══ BD6 · La ventana de Staff y sus sub-pantallas ══');
         v.ctx._tmSincronizar();
         return eq(v.nodo('tmTitle').textContent, 'Catálogo de Staff', 'de vuelta');
     });
-    /* Al catálogo se entra con contraseña, y volver lo RECARGA: sin renovar la
-       gracia, salir de Roles y Permisos la pedía otra vez — la misma lata,
-       movida de lugar. Quien está adentro ya la dio para llegar ahí. */
-    test('volver al catálogo no vuelve a pedir la contraseña', () => {
+    /* Al catálogo se entra con contraseña, y volver lo RECARGA. La gracia vive
+       en la PESTAÑA justamente para sobrevivir a esa recarga: volver no la toca.
+       EL ERROR QUE SE COMETIÓ AQUÍ: al principio volver la RENOVABA, así que
+       cada ida y vuelta a Roles y Permisos reiniciaba el reloj — y como cerrar
+       desde adentro ES volver, bastaba con entrar y salir para que el candado no
+       se armara nunca. */
+    test('volver al catálogo no pide la contraseña otra vez', () => {
         const v = enPermisos();
+        v.ctx.sessionStorage.setItem('etaax_staff_gracia', String(Date.now() + 60000));
         v.ctx.volverTool();
         const hasta = parseInt(v.ctx.sessionStorage.getItem('etaax_staff_gracia') || '0', 10);
-        return eq(hasta > Date.now(), true, 'sin volver a preguntar');
+        return eq(hasta > Date.now(), true, 'la gracia sigue viva');
+    });
+    test('…pero volver NO reinicia el reloj', () => {
+        const v = enPermisos();
+        const vence = Date.now() + 30000;
+        v.ctx.sessionStorage.setItem('etaax_staff_gracia', String(vence));
+        v.ctx.volverTool();
+        const hasta = parseInt(v.ctx.sessionStorage.getItem('etaax_staff_gracia') || '0', 10);
+        return eq(hasta, vence, 'sin estirarse');
+    });
+    /* Y cerrar la ventana REARMA el candado: cerrar es salirse a propósito. */
+    test('cerrar la ventana vuelve a armar el candado del catálogo', () => {
+        const v = ventana('staff.html');
+        v.ctx.abrirTool('staff.html', 'Catálogo de Staff', '👥');
+        v.ctx.sessionStorage.setItem('etaax_staff_gracia', String(Date.now() + 300000));
+        v.ctx.cerrarTool();
+        return eq(v.ctx.sessionStorage.getItem('etaax_staff_gracia'), null, 'rearmado');
+    });
+    test('…pero cerrar OTRA herramienta no toca ese candado', () => {
+        const v = ventana('horarios.html');
+        v.ctx.abrirTool('horarios.html', 'Horarios Operativos', '🗓️');
+        v.ctx.sessionStorage.setItem('etaax_staff_gracia', String(Date.now() + 300000));
+        v.ctx.cerrarTool();
+        return eq(v.ctx.sessionStorage.getItem('etaax_staff_gracia') !== null, true, 'ajeno');
     });
     test('…y el catálogo lee esa gracia de la pestaña, no de una variable', () => {
         const stf = fs.readFileSync(path.join(RAIZ, 'administrativo/staff.html'), 'utf8');
@@ -10033,6 +10063,164 @@ console.log('\n══ BE5 · El ámbar que no se leía ══');
     test('la marca de "aún no aplica" se lee en modo claro', () => {
         const i = per.indexOf('.subperm-pend');
         return eq(per.slice(i, i + 260).indexOf('color:var(--accent-text)') > -1, true, 'legible');
+    });
+}
+
+/* ═══════════ SUITE BE6 · LOS ÚLTIMOS DOS MÓDULOS, Y LA REGLA COMPARTIDA ════
+   Inventarios y Requisiciones eran los dos que seguían diciendo "aún no
+   aplica". Con estos, los 43 sub-permisos del sistema mandan de verdad.
+
+   Y la regla de "¿puede este colaborador hacer esto?" vivía copiada en cada
+   módulo. Cuatro copias de la misma regla es garantía de que una se queda
+   atrás, así que ahora vive en un solo lugar y cada módulo le pone su nombre. */
+console.log('\n══ BE6 · Inventarios, Requisiciones y la regla compartida ══');
+{
+    const pg  = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8');
+    const inv = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.html'), 'utf8');
+    const ijs = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    const req = fs.readFileSync(path.join(RAIZ, 'recetas/requisiciones.html'), 'utf8');
+    const rec = fs.readFileSync(path.join(RAIZ, 'recetas/index.html'), 'utf8');
+    const ins = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.html'), 'utf8');
+
+    /* ── La regla, una sola, corrida de verdad ── */
+    function preguntar(ctx, permisos) {
+        const ls = { etaax_negocio_activo:'n1' };
+        if (ctx) ls['etaax_ctx'] = JSON.stringify(ctx);
+        if (permisos) ls['etaax_n1_permisos'] = JSON.stringify(permisos);
+        const c = { console, JSON, Object, Array, String, Date, setTimeout,
+            localStorage:{ getItem:k=>(k in ls?ls[k]:null), setItem(){}, removeItem(){} },
+            location:{ pathname:'/x.html', search:'' }, document:{ addEventListener(){} },
+            alert(){ c._avisos = (c._avisos||0)+1; } };
+        c.window = c; c.window.addEventListener = () => {};
+        vm.createContext(c);
+        vm.runInContext(pg, c, { filename:'page-guard.js' });
+        return c;
+    }
+    test('la regla de permisos vive en un solo lugar', () =>
+        eq(typeof preguntar({ctxType:'owner'}).window.etaaxPuedeSub, 'function', 'compartida'));
+    test('el dueño pasa siempre', () =>
+        eq(preguntar({ ctxType:'owner', negId:'n1' }).etaaxPuedeSub('inventarios','cerrar'), true, 'dueño'));
+    test('el admin del negocio pasa aunque su permiso diga que no', () =>
+        eq(preguntar({ ctxType:'staff', rol:'admin', negId:'n1' },
+                     { admin:{ inventarios:{ cerrar:false } } })
+            .etaaxPuedeSub('inventarios','cerrar'), true, 'admin'));
+    test('un colaborador con el permiso apagado NO pasa', () =>
+        eq(preguntar({ ctxType:'staff', rol:'cocinero', negId:'n1' },
+                     { cocinero:{ inventarios:{ cerrar:false } } })
+            .etaaxPuedeSub('inventarios','cerrar'), false, 'apagado'));
+    /* Falla ABIERTO: un permiso que falla cerrado deja a la gente fuera por un
+       problema de red, y la puerta de verdad la guarda el servidor con RLS. */
+    test('si no hay tabla de permisos, no se cierra nada', () =>
+        eq(preguntar({ ctxType:'staff', rol:'cocinero', negId:'n1' })
+            .etaaxPuedeSub('inventarios','cerrar'), true, 'falla abierto'));
+    test('el "no" avisa, no se queda mudo', () => {
+        const c = preguntar({ ctxType:'staff', rol:'cocinero', negId:'n1' },
+                            { cocinero:{ inventarios:{ cerrar:false } } });
+        const r = c.etaaxExigeSub('inventarios','cerrar','No puedes cerrar inventarios.');
+        return eq(r === false && c._avisos === 1, true, 'avisado');
+    });
+    test('…y cuando sí puede, no molesta', () => {
+        const c = preguntar({ ctxType:'owner', negId:'n1' });
+        const r = c.etaaxExigeSub('inventarios','cerrar');
+        return eq(r === true && !c._avisos, true, 'callado');
+    });
+    /* Y que los módulos ya conectados hayan soltado SU copia. */
+    [['recetas/index.html', rec, '_puedeRec'], ['recetas/insumos.html', ins, '_puedeIns'],
+     ['recetas/inventarios.html', inv, '_puedeInv'], ['recetas/requisiciones.html', req, '_puedeReq']]
+    .forEach(function (m) {
+        test(m[0] + ' usa la regla compartida, no una copia', () => {
+            const i = m[1].indexOf('function ' + m[2] + '(sub)');
+            return eq(i > -1 && m[1].slice(i, i + 220).indexOf('window.etaaxPuedeSub(') > -1,
+                      true, 'sin copia');
+        });
+    });
+
+    /* ── Ya no queda ni un "aún no aplica" ── */
+    const SUB = preguntar({ctxType:'owner'}).window.ETAAX_SUBPERMS;
+    test('ningún sub-permiso del sistema se anuncia como pendiente', () => {
+        const pend = [];
+        Object.keys(SUB).forEach(m => (SUB[m]||[]).forEach(x => { if (x.pendiente) pend.push(m+'.'+x.key); }));
+        return eq(pend.join(', '), '', 'todos conectados');
+    });
+    test('…y siguen siendo los mismos módulos, con sus llaves', () =>
+        eq(Object.keys(SUB).sort().join(','),
+           'gastos,insumos,inventarios,recetas,requisiciones,ventas', 'seis módulos'));
+
+    /* ── Inventarios ── */
+    /* ¿La función pide su permiso, y ANTES de hacer nada? Se busca por texto y no
+       con expresión regular: una barra de más en el escape y la prueba pasa
+       sola, sin mirar nada — ya pasó dos veces en este archivo. */
+    const G = (src, fn, clave) => {
+        const i = src.indexOf('function ' + fn + '(');
+        if (i < 0) return false;
+        const abre = src.indexOf('{', i);
+        return src.slice(abre + 1, abre + 261).indexOf("'" + clave + "'") > -1;
+    };
+    [['nuevoInventario','capturar'], ['nuevoPrimerLev','capturar'], ['iniciarInventario','capturar'],
+     ['abrirRegistroEntradas','entradas'], ['guardarEntradaLog','entradas'],
+     ['abrirQrEntradas','qr'], ['abrirReporteExistencias','reporte'],
+     ['cerrarInventario','cerrar'], ['finalizarInventarioActual','cerrar'], ['finalizarPrimerLev','cerrar']]
+    .forEach(function (par) {
+        test('inventarios: ' + par[0] + ' pide «' + par[1] + '»', () =>
+            eq(G(ijs, par[0], par[1]), true, 'con candado'));
+    });
+    /* El paso 5 ES el reporte ejecutivo: cerrarle la puerta de la calle y
+       dejarle la de atrás abierta no serviría de nada. */
+    test('inventarios: el paso 5 (Resultado) pide el permiso de reporte', () => {
+        const i = ijs.indexOf('function irAPaso(n)');
+        const t = ijs.slice(i, i + 500);
+        return eq(t.indexOf('n === 5') > -1 && t.indexOf("_exigeInv('reporte'") > -1, true, 'mismo permiso');
+    });
+    /* El gerencial va SIN importes: ese sí lo puede ver quien no ve el dinero. */
+    test('inventarios: el reporte con importes pide además ver el capital', () => {
+        const i = ijs.indexOf('function verReporteDirectivo(');
+        const t = ijs.slice(i, i + 900);
+        return eq(t.indexOf("gerencial !== true") > -1 && t.indexOf("_exigeInv('verCostos'") > -1,
+                  true, 'doble llave');
+    });
+    test('…pero el gerencial, que no los lleva, sigue abierto', () => {
+        const i = ijs.indexOf('function verReporteDirectivo(');
+        const t = ijs.slice(i, i + 900);
+        return eq(t.indexOf("if (gerencial !== true &&") > -1, true, 'sin cerrarlo de más');
+    });
+    test('inventarios: sin ver el capital, el <body> queda marcado', () =>
+        eq(inv.indexOf("classList.toggle('inv-sin-costos', !_puedeInv('verCostos'))") > -1, true, 'marcado'));
+    test('…y el CSS quita los importes en cada repintado', () =>
+        eq(inv.indexOf('body.inv-sin-costos .inv-col-dinero') > -1, true, 'por CSS'));
+    ['btnNuevoInv','btnPrimerLev','btnQrEntradas','btnAgregarEntrada',
+     'btnReporteExistencias','btnFinalizarInv'].forEach(function (id) {
+        test('inventarios: el botón ' + id + ' se puede esconder', () =>
+            eq(inv.indexOf('id="' + id + '"') > -1, true, 'con id'));
+    });
+
+    /* ── Requisiciones ── */
+    [['guardarExistencias','crear'], ['registrarFila','crear'],
+     ['abrirHistorial','historial'], ['verSnapHistorial','historial'],
+     ['exportarPedido','exportar'], ['exportarCSV','exportar'], ['verPedidoAdmin','exportar']]
+    .forEach(function (par) {
+        test('requisiciones: ' + par[0] + ' pide «' + par[1] + '»', () =>
+            eq(G(req, par[0], par[1]), true, 'con candado'));
+    });
+    /* Los pasos SON el permiso: el 2 es la proyección y el 3 el pedido que sale
+       al proveedor. Se piden en irPaso porque a esa la llaman también los
+       botones de avanzar, no solo las pestañas. */
+    test('requisiciones: el paso 2 pide ver la proyección', () => {
+        const i = req.indexOf('function irPaso(n)');
+        return eq(req.slice(i, i + 700).indexOf("n === 2 && !_exigeReq('verProyeccion'") > -1, true, 'paso 2');
+    });
+    test('requisiciones: el paso 3 pide poder exportar', () => {
+        const i = req.indexOf('function irPaso(n)');
+        return eq(req.slice(i, i + 700).indexOf("n === 3 && !_exigeReq('exportar'") > -1, true, 'paso 3');
+    });
+    test('…y el paso 1, la captura, queda abierto a quien captura', () => {
+        const i = req.indexOf('function irPaso(n)');
+        return eq(req.slice(i, i + 700).indexOf('n === 1 && !_exigeReq') === -1, true, 'sin estorbar');
+    });
+
+    /* ── Y que los dos avisen cuando bajen los permisos frescos ── */
+    [['inventarios', inv], ['requisiciones', req]].forEach(function (m) {
+        test(m[0] + ': se vuelve a aplicar cuando llegan los permisos de la nube', () =>
+            eq(m[1].indexOf("window.addEventListener('etaax:permisos'") > -1, true, 'al vuelo'));
     });
 }
 

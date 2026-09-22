@@ -28,18 +28,10 @@
    siguiente repintado, así que cada acción pregunta por su cuenta. Las dos
    capas, siempre. */
 function _puedeIns(sub){
-    var ctx=null;
-    try{ ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null'); }catch(e){}
-    if(!ctx || ctx.ctxType!=='staff') return true;      // dueño / admin maestro
-    if((ctx.rol||'')==='admin') return true;
-    if(typeof window.etaaxPerm!=='function') return true;  // sin el helper, no se cierra nada
-    return window.etaaxPerm(ctx.negId||localStorage.getItem('etaax_negocio_activo'), ctx.rol, 'insumos.'+sub);
+    return (typeof window.etaaxPuedeSub === 'function') ? window.etaaxPuedeSub('insumos', sub) : true;
 }
 function _exigeIns(sub, msg){
-    if(_puedeIns(sub)) return true;
-    alert('🔒 ' + (msg || 'Tu rol no tiene permiso para esta acción.') +
-          '\n\nPídeselo al administrador del negocio, en Roles y Permisos.');
-    return false;
+    return (typeof window.etaaxExigeSub === 'function') ? window.etaaxExigeSub('insumos', sub, msg) : true;
 }
 function _insOcultar(id){ var el=document.getElementById(id); if(el) el.style.display='none'; }
 /* Aplica los permisos a la pantalla. Los precios NO se esconden botón por botón:

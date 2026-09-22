@@ -21,6 +21,34 @@
 <script src="../supabase-config.js"></script>
 <script src="/etaax-db.js"></script>
 <script src="/insumo-label.js"></script>
+<script>
+/* ── PERMISOS DE ESTE MÓDULO (ver ETAAX_SUBPERMS.inventarios) ────────────────
+   La regla vive en page-guard.js (etaaxPuedeSub/etaaxExigeSub): aquí solo se le
+   pone el nombre del módulo. Esconder el botón NO es negar, así que además cada
+   acción pregunta por su cuenta. */
+function _puedeInv(sub){
+    return (typeof window.etaaxPuedeSub === 'function') ? window.etaaxPuedeSub('inventarios', sub) : true;
+}
+function _exigeInv(sub, msg){
+    return (typeof window.etaaxExigeSub === 'function') ? window.etaaxExigeSub('inventarios', sub, msg) : true;
+}
+function _invOcultar(id){ var el=document.getElementById(id); if(el) el.style.display='none'; }
+function _aplicarPermisosInv(){
+    if(!_puedeInv('capturar')) ['btnNuevoInv','btnPrimerLev','btnIniciarInv'].forEach(_invOcultar);
+    if(!_puedeInv('entradas')) _invOcultar('btnAgregarEntrada');
+    if(!_puedeInv('qr'))       _invOcultar('btnQrEntradas');
+    if(!_puedeInv('reporte'))  ['btnReporteExistencias','btnRepGerencial','btnRepDirectivo','btnRepDesglose']
+                                  .forEach(_invOcultar);
+    if(!_puedeInv('cerrar'))   ['btnFinalizarInv','btnFinalizarLev'].forEach(_invOcultar);
+    /* El dinero del reporte se quita por CSS: las tablas se repintan con cada
+       recálculo y acordarse de taparlo en cada repintado es lo que se olvida. */
+    if(document.body) document.body.classList.toggle('inv-sin-costos', !_puedeInv('verCostos'));
+}
+document.addEventListener('DOMContentLoaded', function(){
+    _aplicarPermisosInv();
+    window.addEventListener('etaax:permisos', function(){ _aplicarPermisosInv(); });
+});
+</script>
 <script src="/reporte-marca.js"></script>
 <script src="/foto-zoom.js"></script>
     <!-- security.js y admin-guard.js van ANTES de inventarios.js, no después.
@@ -94,12 +122,12 @@
                 <div class="hdr-acts">
                     <!-- Un solo reporte: la vista fusionada (antes "Reporte final") es la buena;
                          la variante sin fusionar se retiró para no confundir. -->
-                    <button class="btn-vista" onclick="abrirReporteExistencias()">📊 Reporte de existencias</button>
+                    <button class="btn-vista" id="btnReporteExistencias" onclick="abrirReporteExistencias()">📊 Reporte de existencias</button>
                     <button class="btn-vista" onclick="abrirParametros()">🧩 Compuestos</button>
-                    <button class="btn-vista" onclick="abrirQrEntradas()">📱 QR de entradas</button>
+                    <button class="btn-vista" id="btnQrEntradas" onclick="abrirQrEntradas()">📱 QR de entradas</button>
                     <button class="btn-vista" onclick="mostrarVista('vistaEntradas')">📋 Revisar entradas</button>
-                    <button class="btn-vista" onclick="nuevoPrimerLev()">📋 Primer levantamiento</button>
-                    <button class="btn-primary" onclick="nuevoInventario()">+ Nuevo inventario</button>
+                    <button class="btn-vista" id="btnPrimerLev" onclick="nuevoPrimerLev()">📋 Primer levantamiento</button>
+                    <button class="btn-primary" id="btnNuevoInv" onclick="nuevoInventario()">+ Nuevo inventario</button>
                 </div>
             </div>
 
@@ -239,9 +267,9 @@
                     <span id="step5HeaderBtns" style="display:none;gap:8px;align-items:center">
                         <span id="step5StaleBadge" style="display:none;align-items:center;font-size:11px;color:var(--accent)">⚠️ Los datos cambiaron</span>
                         <button id="btnRecalc5" class="btn-vista" style="color:var(--text-muted)" onclick="recalcularResultado()" title="Recalcula el resultado con los últimos cambios">🔄 Recalcular</button>
-                        <button class="btn-vista" style="color:#3dbe7a;border-color:#3dbe7a" onclick="verReporteDirectivo(true)">🔐 Reporte gerencial</button>
-                        <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)" onclick="verReporteDirectivo()">📄 Reporte directivo</button>
-                        <button class="btn-vista" onclick="verReporteDirectivo(false,'desglose')" title="Solo las tablas por insumo — se exporta aparte del resumen">📑 Desglose por insumo</button>
+                        <button class="btn-vista" id="btnRepGerencial" style="color:#3dbe7a;border-color:#3dbe7a" onclick="verReporteDirectivo(true)">🔐 Reporte gerencial</button>
+                        <button class="btn-vista" id="btnRepDirectivo" style="color:var(--accent);border-color:var(--accent)" onclick="verReporteDirectivo()">📄 Reporte directivo</button>
+                        <button class="btn-vista" id="btnRepDesglose" onclick="verReporteDirectivo(false,'desglose')" title="Solo las tablas por insumo — se exporta aparte del resumen">📑 Desglose por insumo</button>
                     </span>
                     <button class="btn-vista" onclick="pasoAnterior()" id="btnPasoAnt" style="display:none">← Anterior</button>
                     <button class="btn-vista" onclick="pasoSiguiente()" id="btnPasoSig">Siguiente →</button>
@@ -294,7 +322,7 @@
                     </div>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center">
-                    <button class="btn-vista" onclick="abrirRegistroEntradas()">📥 Agregar entrada</button>
+                    <button class="btn-vista" id="btnAgregarEntrada" onclick="abrirRegistroEntradas()">📥 Agregar entrada</button>
                     <button class="btn-vista" style="color:var(--accent);border-color:var(--accent)"
                         id="btnGuardarEntradas" onclick="guardarEntradas()">💾 Guardar entradas</button>
                 </div>
@@ -721,6 +749,12 @@ body:not(.has-ctx) .inv-wizard-header { top: 48px; } /* sin ctx-bar (staff): sol
     background: rgba(224,90,58,.10) !important;
     color: var(--red) !important;
 }
+
+/* Sin permiso de "ver el capital invertido", el reporte se ve en cantidades y
+   sin importes. Por CSS y no celda por celda: estas tablas se repintan con cada
+   recálculo. */
+body.inv-sin-costos .inv-col-dinero,
+body.inv-sin-costos #statCapital { display: none !important; }
 </style>
 
 <!-- Ficha técnica modal -->

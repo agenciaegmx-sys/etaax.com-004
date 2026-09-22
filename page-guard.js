@@ -94,18 +94,18 @@ window.ETAAX_SUBPERMS = {
         { key:'importar',       label:'Importar por archivo',     sub:'Alta masiva desde Excel o CSV' },
     ],
     inventarios: [
-        { key:'capturar',   label:'Capturar inventario',      sub:'Conteo de existencias por área', pendiente:true },
-        { key:'entradas',   label:'Registrar entradas',       sub:'Compras y recepciones de mercancía', pendiente:true },
-        { key:'qr',         label:'Generar el QR de entradas',sub:'El código que usan desde el celular', pendiente:true },
-        { key:'reporte',    label:'Ver reporte ejecutivo',    sub:'Variancias, mermas y resultado', pendiente:true },
-        { key:'verCostos',  label:'Ver el capital invertido', sub:'Sin esto ve cantidades, no dinero', pendiente:true },
-        { key:'cerrar',     label:'Cerrar el inventario',     sub:'Aplicarlo y dejarlo como existencia oficial', pendiente:true },
+        { key:'capturar',   label:'Capturar inventario',      sub:'Abrir un inventario y contar existencias por área' },
+        { key:'entradas',   label:'Registrar entradas',       sub:'Compras y recepciones de mercancía' },
+        { key:'qr',         label:'Generar el QR de entradas',sub:'El código que usan desde el celular' },
+        { key:'reporte',    label:'Ver reporte ejecutivo',    sub:'El Resultado y los reportes: variancias, mermas y mermas por insumo' },
+        { key:'verCostos',  label:'Ver el capital invertido', sub:'Sin esto ve el reporte en cantidades, sin importes' },
+        { key:'cerrar',     label:'Cerrar el inventario',     sub:'Aplicarlo y dejarlo como existencia oficial' },
     ],
     requisiciones: [
-        { key:'crear',        label:'Crear requisiciones',    sub:'Pedidos internos entre áreas', pendiente:true },
-        { key:'verProyeccion',label:'Ver proyección de compra',sub:'Qué comprar por área y proveedor', pendiente:true },
-        { key:'exportar',     label:'Exportar el pedido',     sub:'Mandar el pedido al proveedor', pendiente:true },
-        { key:'historial',    label:'Ver historial',          sub:'Requisiciones de periodos anteriores', pendiente:true },
+        { key:'crear',        label:'Capturar la requisición',sub:'Registrar existencias y armar el pedido' },
+        { key:'verProyeccion',label:'Ver proyección de compra',sub:'Qué comprar por área y proveedor' },
+        { key:'exportar',     label:'Exportar el pedido',     sub:'Mandarlo al proveedor en CSV o impreso' },
+        { key:'historial',    label:'Ver historial',          sub:'Requisiciones de periodos anteriores' },
     ],
     gastos: [
         { key:'capturar',       label:'Capturar gastos',           sub:'Registrar gastos menores / normales' },
@@ -247,6 +247,38 @@ window.etaaxPermisosRefrescar = function (negId, luego) {
             })
             .catch(function (e) { console.warn('[etaax] permisos sin refrescar:', e); });
     })();
+};
+
+/* ── ¿Puede este colaborador hacer ESTO, aquí? ───────────────────────────────
+   La misma pregunta se hacía en cada módulo con su propia copia (_puedeRec,
+   _puedeIns…). Cuatro copias de la misma regla es garantía de que una se queda
+   atrás, así que la regla vive aquí y los módulos solo le ponen su nombre.
+
+   Quién pasa siempre: el dueño y el admin maestro (no son "staff"), y el rol
+   `admin` del negocio — ese atajo es a propósito, para que nadie se deje fuera
+   de sus propios números por un descuido al editar permisos.
+
+   Y si el ayudante no cargó, NO se cierra nada: un permiso que falla cerrado
+   deja a la gente fuera por un problema de red, y la puerta de verdad la guarda
+   el servidor con RLS, no esta lista. */
+window.etaaxPuedeSub = function (modulo, sub) {
+    var ctx = null;
+    try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch (e) {}
+    if (!ctx || ctx.ctxType !== 'staff') return true;
+    if ((ctx.rol || '') === 'admin') return true;
+    if (typeof window.etaaxPerm !== 'function') return true;
+    return window.etaaxPerm(ctx.negId || localStorage.getItem('etaax_negocio_activo'),
+                            ctx.rol, modulo + '.' + sub);
+};
+/* El "no" que sí se oye. Esconder el botón NO es negar: la función se puede
+   llamar desde la consola, desde un link o reaparecer en el siguiente repintado.
+   Cada acción pregunta por su cuenta; lo que se esconde es para no ofrecer lo
+   que no se puede. Las dos capas, siempre. */
+window.etaaxExigeSub = function (modulo, sub, msg) {
+    if (window.etaaxPuedeSub(modulo, sub)) return true;
+    alert('🔒 ' + (msg || 'Tu rol no tiene permiso para esta acción.') +
+          '\n\nPídeselo al administrador del negocio, en Roles y Permisos.');
+    return false;
 };
 
 window.etaaxPermisosRol = function (negId, rol) {

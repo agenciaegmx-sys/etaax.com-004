@@ -5,6 +5,27 @@
 <script src="/page-guard.js"></script>
     <meta charset="UTF-8">
     <script src="/theme.js"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
+<script>
+/* ── PERMISOS DE ESTE MÓDULO (ver ETAAX_SUBPERMS.requisiciones) ──────────────
+   La regla vive en page-guard.js; aquí solo se le pone el nombre del módulo. */
+function _puedeReq(sub){
+    return (typeof window.etaaxPuedeSub === 'function') ? window.etaaxPuedeSub('requisiciones', sub) : true;
+}
+function _exigeReq(sub, msg){
+    return (typeof window.etaaxExigeSub === 'function') ? window.etaaxExigeSub('requisiciones', sub, msg) : true;
+}
+function _reqOcultar(id){ var el=document.getElementById(id); if(el) el.style.display='none'; }
+function _aplicarPermisosReq(){
+    if(!_puedeReq('historial'))     _reqOcultar('btnHistorialReq');
+    if(!_puedeReq('verProyeccion')) _reqOcultar('stepBtn2');
+    if(!_puedeReq('exportar'))      ['stepBtn3','btnExpCompleto','btnExpProv','btnExpArea','btnExpCSV','btnVistaAdminReq']
+                                       .forEach(_reqOcultar);
+}
+document.addEventListener('DOMContentLoaded', function(){
+    _aplicarPermisosReq();
+    window.addEventListener('etaax:permisos', function(){ _aplicarPermisosReq(); });
+});
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <title>ETAAX - Requisiciones</title>
@@ -274,7 +295,7 @@
             </div>
             <div class="hdr-acts">
                 <span id="fechaReq" style="font-size:12px;color:var(--text-dim);padding:0 4px"></span>
-                <button class="btn-vista" onclick="abrirHistorial()">📋 Historial</button>
+                <button class="btn-vista" id="btnHistorialReq" onclick="abrirHistorial()">📋 Historial</button>
                 <button class="btn-vista" onclick="cargarTodasAnteriores()" title="Cargar existencias vacías desde la última requisición archivada">↩ Cargar anteriores</button>
                 <button class="btn-primary" onclick="guardarExistencias()">💾 Guardar</button>
                 <button class="btn-danger" onclick="cerrarRequisicion()">✅ Cerrar y archivar</button>
@@ -430,15 +451,15 @@
                     <div class="card-body" style="padding:16px 18px">
                         <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:1.2px;color:var(--text);margin-bottom:10px">📤 Exportar pedido</div>
                         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-                            <button class="btn-vista" onclick="exportarPedido('','')" style="color:var(--green);border-color:var(--green)">🖨️ Pedido completo</button>
+                            <button class="btn-vista" id="btnExpCompleto" onclick="exportarPedido('','')" style="color:var(--green);border-color:var(--green)">🖨️ Pedido completo</button>
                             <select id="expProv" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:7px;font-family:inherit;font-size:12px"></select>
-                            <button class="btn-vista" onclick="exportarPedido('prov',document.getElementById('expProv').value)">🖨️ Por proveedor</button>
+                            <button class="btn-vista" id="btnExpProv" onclick="exportarPedido('prov',document.getElementById('expProv').value)">🖨️ Por proveedor</button>
                             <select id="expArea" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:7px;font-family:inherit;font-size:12px">
                                 <option value="cocina">🍳 Cocina</option><option value="barra">🍸 Barra</option><option value="bodega">📦 Bodega</option>
                             </select>
-                            <button class="btn-vista" onclick="exportarPedido('area',document.getElementById('expArea').value)">🖨️ Por área</button>
-                            <button class="btn-vista" onclick="exportarCSV()">⬇️ CSV</button>
-                            <button class="btn-vista" onclick="verPedidoAdmin()" style="color:var(--accent);border-color:var(--accent)">🔒 Vista admin (con costos)</button>
+                            <button class="btn-vista" id="btnExpArea" onclick="exportarPedido('area',document.getElementById('expArea').value)">🖨️ Por área</button>
+                            <button class="btn-vista" id="btnExpCSV" onclick="exportarCSV()">⬇️ CSV</button>
+                            <button class="btn-vista" id="btnVistaAdminReq" onclick="verPedidoAdmin()" style="color:var(--accent);border-color:var(--accent)">🔒 Vista admin (con costos)</button>
                         </div>
                         <div style="font-size:11px;color:var(--text-dim);margin-top:8px">Los comentarios de "pedido modificado" y "no pedir" van incluidos en el export.</div>
                     </div>
@@ -657,6 +678,13 @@ function init() {
 }
 
 function irPaso(n) {
+    /* Los pasos SON el permiso: el 2 es la proyección de compra y el 3 el
+       pedido que sale al proveedor. Se piden aquí y no solo escondiendo las
+       pestañas, porque a irPaso la llaman también los botones de avanzar. */
+    if (typeof _exigeReq === 'function') {
+        if (n === 2 && !_exigeReq('verProyeccion', 'No puedes ver la proyección de compra.')) return;
+        if (n === 3 && !_exigeReq('exportar', 'No puedes armar ni exportar el pedido.')) return;
+    }
     _pasoReq = n;
     document.getElementById('vistaPaso1').style.display = n===1?'':'none';
     document.getElementById('vistaPaso2').style.display = n===2?'':'none';
@@ -1059,6 +1087,7 @@ function actualizarExistencia(id, val) {
 }
 // Botón Registrar de la fila: sin existencia = registrar EN CERO (como inventarios)
 function registrarFila(id) {
+    if (typeof _exigeReq === 'function' && !_exigeReq('crear', 'No puedes capturar requisiciones.')) return;
     if (!reqData[id]) reqData[id] = { presIdx: 0 };
     var ri = reqData[id];
     if (!esRegistrado(ri)) { ri.existencia = 0; ri.modoCapt = ri.modoCapt || 'simple'; }
@@ -1144,6 +1173,7 @@ function guardarNota() {
 
 // ── Guardar existencias (snapshot) ────────────────────────────
 function guardarExistencias() {
+    if (typeof _exigeReq === 'function' && !_exigeReq('crear', 'No puedes capturar requisiciones.')) return;
     setReqData(reqData);
     var msg = document.createElement('div');
     msg.textContent = '✓ Existencias guardadas';
@@ -1192,6 +1222,7 @@ function calcResumen() {
 
 // ── Historial ─────────────────────────────────────────────────
 function abrirHistorial() {
+    if (typeof _exigeReq === 'function' && !_exigeReq('historial', 'No puedes ver el historial de requisiciones.')) return;
     var hist = getHistorial();
     var body = document.getElementById('historialBody');
     if (!hist.length) {
@@ -1224,6 +1255,7 @@ function cerrarHistorial() {
 }
 
 function verSnapHistorial(i) {
+    if (typeof _exigeReq === 'function' && !_exigeReq('historial', 'No puedes ver el historial de requisiciones.')) return;
     var hist = getHistorial();
     var snap = hist[i];
     if (!snap) return;
@@ -1373,6 +1405,7 @@ function renderPaso3() {
 
 // ── Export con filtro (completo / proveedor / área) ──────────
 function exportarPedido(tipo, valor) {
+    if (typeof _exigeReq === 'function' && !_exigeReq('exportar', 'No puedes exportar el pedido.')) return;
     var items = _itemsPedido();
     var titulo = 'Pedido completo';
     if (tipo==='prov') { items = items.filter(function(it){return it.proveedor===valor;}); titulo = 'Pedido · ' + valor; }
@@ -1417,6 +1450,7 @@ function exportarPedido(tipo, valor) {
     document.body.appendChild(ov);
 }
 function exportarCSV() {
+    if (typeof _exigeReq === 'function' && !_exigeReq('exportar', 'No puedes exportar el pedido.')) return;
     var items = _itemsPedido();
     if (!items.length) { alert('No hay ítems a pedir.'); return; }
     var filas = [['Insumo','Cantidad','Presentación','Área','Proveedor','Costo estimado','Comentario']];
@@ -1565,6 +1599,7 @@ function verPedido() {
 }
 
 function verPedidoAdmin() {
+    if (typeof _exigeReq === 'function' && !_exigeReq('exportar', 'No puedes exportar el pedido.')) return;
     var items = _buildPedidoItems();
     if (!items.length) { alert('Sin ítems a pedir en el pedido actual.'); return; }
 
