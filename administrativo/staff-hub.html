@@ -210,6 +210,7 @@
         <div class="tool-modal-hd">
             <span class="tm-ic" id="tmIcon">🧠</span>
             <span class="tm-tt" id="tmTitle">Herramienta</span>
+            <button class="tm-x" id="tmBack" style="display:none" onclick="volverTool()">← Volver</button>
             <button class="tm-x" style="margin-left:auto" onclick="cerrarTool()">✕ Cerrar</button>
         </div>
         <div class="tool-modal-body">
@@ -235,16 +236,39 @@ function toggleNav(){
 /* ── Abrir una herramienta como modal flotante (iframe embebido) ──
    Reusa la página completa (organigrama, perfiles, etc.) en modo ?embed=1,
    que oculta su barra de navegación. Misma origin → comparte sesión/negocio. */
-function abrirTool(page, titulo, icono){
-    var bg=document.getElementById('toolModal');
-    var frame=document.getElementById('tmFrame');
-    var loading=document.getElementById('tmLoading');
-    document.getElementById('tmTitle').textContent=titulo||'Herramienta';
-    document.getElementById('tmIcon').textContent=icono||'🧩';
-    loading.style.display='flex';
-    frame.onload=function(){ loading.style.display='none'; };
-    // Pasamos el contexto de sesión por la URL para que el iframe funcione aunque
-    // el navegador aísle su storage (si no, page-guard rebotaría al hub adentro).
+/* Herramienta con la que se abrió la ventana, y sus pantallas de adentro.
+   Roles y Permisos NO es otra herramienta: es una sub-pantalla del catálogo de
+   staff, a la que se entra navegando el mismo iframe. Sin esto, cerrarla tiraba
+   la ventana entera y sacaba al dueño del catálogo desde el que entró. */
+var _toolBase='', _toolTitulo='', _toolIcono='';
+var TOOL_SUB = {
+    'permisos.html': ['Roles y Permisos', '🔐'],
+};
+function _tmArchivo(){
+    try {
+        var p = document.getElementById('tmFrame').contentWindow.location.pathname;
+        return (p.split('/').pop() || '');
+    } catch(e){ return ''; }   // aún cargando o sin acceso: se trata como la base
+}
+function _tmDentro(){ var a=_tmArchivo(); return !!(_toolBase && a && a!==_toolBase); }
+/* El encabezado dice dónde estás parado: si sigue diciendo "Catálogo de Staff"
+   mientras editas permisos, cerrar se siente como cerrar el catálogo. */
+function _tmSincronizar(){
+    var dentro=_tmDentro(), sp=TOOL_SUB[_tmArchivo()];
+    var back=document.getElementById('tmBack');
+    if(back) back.style.display = dentro ? '' : 'none';
+    var titulo=_toolTitulo, icono=_toolIcono;
+    if(dentro){
+        if(sp){ titulo=sp[0]; icono=sp[1]; }
+        else {  // sub-pantalla que no está en el mapa: que al menos diga su nombre
+            try { titulo=(document.getElementById('tmFrame').contentWindow.document.title||'')
+                          .split('·')[0].trim() || _toolTitulo; } catch(e){}
+        }
+    }
+    document.getElementById('tmTitle').textContent = titulo;
+    document.getElementById('tmIcon').textContent  = icono;
+}
+function _tmURL(page){
     var q='embed=1';
     try {
         var neg=localStorage.getItem('etaax_negocio_activo')||'';
@@ -254,14 +278,44 @@ function abrirTool(page, titulo, icono){
         if(suc) q+='&suc='+encodeURIComponent(suc);
         if(ctx) q+='&ctx='+encodeURIComponent(ctx);
     } catch(e){}
-    frame.src = page + (page.indexOf('?')>=0 ? '&' : '?') + q;
+    return page + (page.indexOf('?')>=0 ? '&' : '?') + q;
+}
+function abrirTool(page, titulo, icono){
+    var bg=document.getElementById('toolModal');
+    var frame=document.getElementById('tmFrame');
+    var loading=document.getElementById('tmLoading');
+    _toolBase   = String(page).split('/').pop().split('?')[0];
+    _toolTitulo = titulo||'Herramienta';
+    _toolIcono  = icono||'🧩';
+    document.getElementById('tmTitle').textContent=_toolTitulo;
+    document.getElementById('tmIcon').textContent=_toolIcono;
+    loading.style.display='flex';
+    frame.onload=function(){ loading.style.display='none'; _tmSincronizar(); };
+    // Pasamos el contexto de sesión por la URL para que el iframe funcione aunque
+    // el navegador aísle su storage (si no, page-guard rebotaría al hub adentro).
+    frame.src = _tmURL(page);
     bg.classList.add('on');
     document.body.style.overflow='hidden';
 }
+/* Volver a la herramienta base. Se recarga en vez de usar history.back(): el
+   historial de un iframe es el MISMO del navegador, y un "atrás" ahí puede
+   sacar de la página entera. Recargar además refresca la lista con lo que se
+   acabe de cambiar adentro (un rol renombrado, por ejemplo). */
+function volverTool(){
+    if(!_toolBase) return cerrarTool();
+    var frame=document.getElementById('tmFrame');
+    document.getElementById('tmLoading').style.display='flex';
+    frame.src=_tmURL(_toolBase);
+    _tmSincronizar();
+}
 function cerrarTool(){
+    /* Estando en una sub-pantalla, cerrar significa "salir de ESTO", no de la
+       ventana: devuelve al catálogo, que es de donde se entró. */
+    if(_tmDentro()) return volverTool();
     var bg=document.getElementById('toolModal');
     bg.classList.remove('on');
     document.body.style.overflow='';
+    _toolBase='';
     // Liberar el iframe (detiene la app embebida y resetea su estado para la próxima).
     setTimeout(function(){ if(!bg.classList.contains('on')) document.getElementById('tmFrame').src='about:blank'; }, 180);
 }

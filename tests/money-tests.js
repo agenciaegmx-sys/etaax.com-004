@@ -8706,6 +8706,108 @@ console.log('\n══ BD5 · Escandallos: los diez permisos, conectados ══')
 }
 
 
+/* ═══════════ SUITE BD6 · LA VENTANA DE STAFF Y SUS SUB-PANTALLAS ═══════════
+   Roles y Permisos NO es otra herramienta: es una sub-pantalla del Catálogo de
+   Staff, a la que se entra navegando el MISMO iframe. Cerrarla tiraba la
+   ventana entera y sacaba al dueño del catálogo desde el que había entrado —
+   como si cerrar un cajón cerrara el mueble.
+
+   Ahora la ventana sabe dónde está parada: si estás adentro, cerrar te devuelve
+   al catálogo, y el encabezado dice el nombre de la sub-pantalla (si sigue
+   diciendo "Catálogo de Staff" mientras editas permisos, cerrar se siente como
+   cerrar el catálogo).                                                        */
+console.log('\n══ BD6 · La ventana de Staff y sus sub-pantallas ══');
+{
+    const hub = fs.readFileSync(path.join(RAIZ, 'administrativo/staff-hub.html'), 'utf8');
+
+    /* Se corre el código REAL de la ventana con un DOM de mentira, y se le pone
+       enfrente un iframe que "navegó" a donde diga cada prueba. */
+    function ventana(archivoEnElIframe) {
+        const nodos = {};
+        const nodo = (id) => (nodos[id] = nodos[id] || { id, style:{}, textContent:'', classList:{
+            _c:[], add(x){ this._c.push(x); }, remove(x){ this._c = this._c.filter(y=>y!==x); },
+            contains(x){ return this._c.indexOf(x) > -1; } } });
+        const frame = nodo('tmFrame');
+        frame.contentWindow = { location:{ pathname:'/administrativo/' + archivoEnElIframe },
+                                document:{ title:'Permisos · ETAAX' } };
+        const c = {
+            console, JSON, Object, Array, String, Number, Date, setTimeout, encodeURIComponent,
+            localStorage:{ getItem:()=>'', setItem(){}, removeItem(){} },
+            document:{ getElementById:nodo, body:{ style:{} }, addEventListener(){} },
+        };
+        c.window = c;
+        vm.createContext(c);
+        const i = hub.indexOf('/* Herramienta con la que se abrió la ventana');
+        const fin = hub.indexOf("document.getElementById('toolModal').addEventListener");
+        vm.runInContext(hub.slice(i, fin), c, { filename:'staff-hub' });
+        return { ctx:c, nodo, frame };
+    }
+
+    /* Abrir el catálogo y luego "entrar" a permisos. */
+    function enPermisos() {
+        const v = ventana('staff.html');
+        v.ctx.abrirTool('staff.html', 'Catálogo de Staff', '👥');
+        v.frame.contentWindow.location.pathname = '/administrativo/permisos.html';
+        v.ctx._tmSincronizar();
+        return v;
+    }
+
+    test('estando en el catálogo, no hay nada atrás', () => {
+        const v = ventana('staff.html');
+        v.ctx.abrirTool('staff.html', 'Catálogo de Staff', '👥');
+        v.ctx._tmSincronizar();
+        return eq(v.nodo('tmBack').style.display, 'none', 'sin volver');
+    });
+    test('al entrar a permisos aparece el botón de volver', () =>
+        eq(enPermisos().nodo('tmBack').style.display, '', 'con volver'));
+    test('…y el encabezado dice dónde estás: Roles y Permisos', () =>
+        eq(enPermisos().nodo('tmTitle').textContent, 'Roles y Permisos', 'rotulado'));
+
+    /* EL BUG: cerrar desde adentro tiraba la ventana entera. */
+    test('cerrar desde permisos NO cierra la ventana de staff', () => {
+        const v = enPermisos();
+        v.ctx.cerrarTool();
+        return eq(v.nodo('toolModal').classList.contains('on'), true, 'sigue abierta');
+    });
+    test('…sino que devuelve al catálogo de staff', () => {
+        const v = enPermisos();
+        v.ctx.cerrarTool();
+        return eq(v.nodo('tmFrame').src.indexOf('staff.html') === 0, true, 'de vuelta');
+    });
+    test('…y el encabezado vuelve a decir Catálogo de Staff', () => {
+        const v = enPermisos();
+        v.ctx.cerrarTool();
+        v.frame.contentWindow.location.pathname = '/administrativo/staff.html';
+        v.ctx._tmSincronizar();
+        return eq(v.nodo('tmTitle').textContent, 'Catálogo de Staff', 'de vuelta');
+    });
+    test('volver conserva el contexto del negocio en la URL', () => {
+        const v = enPermisos();
+        v.ctx.volverTool();
+        return eq(v.nodo('tmFrame').src.indexOf('embed=1') > -1, true, 'embebido');
+    });
+    /* Y desde el catálogo, cerrar sí cierra: la puerta de salida sigue ahí. */
+    test('estando en el catálogo, cerrar sí cierra la ventana', () => {
+        const v = ventana('staff.html');
+        v.ctx.abrirTool('staff.html', 'Catálogo de Staff', '👥');
+        v.ctx.cerrarTool();
+        return eq(v.nodo('toolModal').classList.contains('on'), false, 'cerrada');
+    });
+    /* El historial de un iframe es el MISMO del navegador: un "atrás" ahí puede
+       sacar de la página entera. Se vuelve recargando la base, no con back(). */
+    test('volver no usa el historial del navegador', () => {
+        const i = hub.indexOf('function volverTool()');
+        return eq(hub.slice(i, i + 400).indexOf('history.back') === -1, true, 'sin back');
+    });
+    test('la sub-pantalla desconocida al menos dice su propio nombre', () => {
+        const v = ventana('staff.html');
+        v.ctx.abrirTool('staff.html', 'Catálogo de Staff', '👥');
+        v.frame.contentWindow.location.pathname = '/administrativo/otra-cosa.html';
+        v.ctx._tmSincronizar();
+        return eq(v.nodo('tmTitle').textContent, 'Permisos', 'por su título');
+    });
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La
