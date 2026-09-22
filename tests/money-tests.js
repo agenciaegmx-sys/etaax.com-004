@@ -60,7 +60,10 @@ function crearContexto() {
             addEventListener() {}, removeEventListener() {},
             createElement(t) { return el('_' + t); },
             body: { appendChild(){}, style: {} },
-            documentElement: { setAttribute(){}, getAttribute(){ return 'dark'; } },
+            documentElement: { setAttribute(){}, getAttribute(){ return 'dark'; }, appendChild(){} },
+            /* <head> de mentira: hay archivos que inyectan su hoja de estilos ahí
+               (theme.js, el medidor de contraseña). Sin esto revientan al cargar. */
+            head: { appendChild(){} },
             readyState: 'complete',
         },
         localStorage: {
@@ -9540,6 +9543,7 @@ console.log('\n══ BE3 · El tema, uno solo para todo el sistema ══');
                 querySelector(){ return opts.conBoton ? {} : null; },
                 createElement(){ return { style:{}, addEventListener(){}, set innerHTML(v){}, setAttribute(){} }; },
                 addEventListener(t, f){ (oyentes[t] = oyentes[t] || []).push(f); },
+                head: { appendChild(){} },
                 body: { appendChild(){}, getAttribute(){ return null; } },
             },
         };
@@ -9724,6 +9728,49 @@ console.log('\n══ BE3 · El tema, uno solo para todo el sistema ══');
                       s.indexOf('/theme.js') > -1, true, 'lo respeta');
         });
     });
+
+    /* ── EL BOTÓN ───────────────────────────────────────────────────────────
+       En el hub salía el botón crudo del navegador: sin forma, pegado abajo a la
+       izquierda y EN EL FLUJO de la página, así que se iba con el scroll. Un
+       interruptor que hay que ir a buscar hasta el fondo no sirve de nada. */
+    const css = (tema.match(/st\.textContent =([\s\S]*?);\n/) || [])[1] || '';
+    test('el botón se define UNA vez, en el archivo compartido', () =>
+        eq(css.indexOf('.theme-toggle{') > -1, true, 'definido'));
+    test('…flota: no se va con el scroll', () =>
+        eq(css.indexOf('position:fixed') > -1, true, 'fijo'));
+    test('…del lado derecho, separado del borde de abajo', () =>
+        eq(/right:\d+px/.test(css) && /bottom:2[0-9]px/.test(css), true, 'colocado'));
+    /* El aviso de sesión por vencer vive en bottom:80px: se apilan, no se
+       encima uno al otro. */
+    test('…sin encimarse con el aviso de sesión por vencer', () => {
+        const sec = fs.readFileSync(path.join(RAIZ, 'security.js'), 'utf8');
+        const aviso = parseInt((sec.match(/bottom:(\d+)px;right:20px/) || [])[1] || '0', 10);
+        const boton = parseInt((css.match(/bottom:(\d+)px/) || [])[1] || '0', 10);
+        return eq(boton > 0 && aviso > boton + 20, true, boton + ' vs ' + aviso);
+    });
+    /* No todas las pantallas nombran igual sus variables: styles.css usa
+       --surface/--border, el hub y el panel traen --s1/--b1. Con una sola de las
+       dos, el botón salía transparente justo donde más se notaba. */
+    test('…con colores que funcionan con los dos juegos de variables', () =>
+        eq(css.indexOf('var(--surface,var(--s1') > -1 &&
+           css.indexOf('var(--border,var(--b1') > -1, true, 'con respaldo'));
+    test('…y con respaldo en duro por si faltaran las dos', () =>
+        eq(/var\(--surface,var\(--s1,#[0-9a-f]{6}\)\)/.test(css), true, 'nunca transparente'));
+    /* Va antes que los estilos de la página: una pantalla que necesite moverlo
+       o esconderlo —Organigrama lo esconde— tiene que poder. */
+    test('el estilo se inyecta en el <head>, para que la página pueda ganarle', () =>
+        eq(tema.indexOf('(document.head || document.documentElement).appendChild(st)') > -1,
+           true, 'sin imponerse'));
+    test('…y Organigrama lo sigue escondiendo', () =>
+        eq(fs.readFileSync(path.join(RAIZ, 'administrativo/organigrama.html'), 'utf8')
+            .indexOf('.theme-toggle{display:none}') > -1, true, 'respetado'));
+
+    const conEstilo = paginas.filter(function (p) {
+        const s = fs.readFileSync(path.join(RAIZ, p), 'utf8');
+        return /\.theme-toggle\s*\{\s*position/.test(s);
+    });
+    test('ninguna página guarda su propia copia del estilo', () =>
+        eq(conEstilo.join(', '), '', 'una sola copia'));
 
     /* Y los archivos de prueba que se publicaban en el sitio, fuera. */
     test('los archivos temporales ya no se publican', () =>

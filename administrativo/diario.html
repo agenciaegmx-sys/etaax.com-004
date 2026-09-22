@@ -117,15 +117,6 @@
         /* Placeholder de panel en construcción (se reemplaza en fases siguientes) */
         .dx-todo { text-align:center; color:var(--text-dim); font-size:13px; padding:40px 16px; }
 
-        /* Theme toggle */
-        .theme-toggle {
-            position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);
-            border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;
-            font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);
-            display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;
-        }
-        .theme-toggle:hover{border-color:var(--green);color:var(--green);}
-
         /* Pagar tarjeta desde caja fuerte: el modal de depósito debe quedar ENCIMA
            del overlay de caja fuerte (9100) — si no, abre detrás y "no pasa nada". */
         #modalDeposito { z-index: 9300; }
@@ -343,8 +334,7 @@
 
         .empty-state{text-align:center;padding:48px 24px;color:var(--text-dim);}
         .empty-state-icon{font-size:36px;margin-bottom:12px;}
-        .theme-toggle{position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;}
-        .theme-toggle:hover{border-color:var(--green);color:var(--green);}
+
     
 </style>
 <style>
@@ -508,8 +498,7 @@
         .nuevo-prov-form{background:rgba(61,190,122,.04);border:1px solid rgba(61,190,122,.2);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;margin-top:4px;}
         .nuevo-prov-form h4{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--green);margin:0;}
         .empty-state-icon{font-size:36px;margin-bottom:12px;}
-        .theme-toggle{position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;}
-        .theme-toggle:hover{border-color:var(--green);color:var(--green);}
+
 
         /* Metodo badge */
         .met-caja{color:var(--accent);font-size:11px;}

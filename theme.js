@@ -44,6 +44,39 @@
           todavía no hay <body> — solo se toca el <html>, que sí existe. */
     document.documentElement.setAttribute('data-theme', _leer());
 
+    /* 1b) El botón también se define AQUÍ, una sola vez ────────────────────
+          Estaba escrito a mano en 31 páginas, y en las que no lo traían —el hub,
+          entre ellas— salía un botón del navegador, sin forma, pegado abajo a la
+          izquierda y EN EL FLUJO de la página: se iba con el scroll, que es lo
+          contrario de lo que sirve un interruptor de tema.
+
+          Va inyectado desde el <head>, antes que los estilos de cada página: así
+          una pantalla que necesite moverlo o esconderlo —Organigrama lo esconde—
+          sigue mandando sobre esto.
+
+          Los colores llevan respaldo porque no todas las pantallas nombran igual
+          sus variables: styles.css usa --surface/--border, y el hub y el panel de
+          plataforma traen las suyas (--s1/--b1). Con una sola de las dos, el
+          botón salía transparente justo donde más se notaba. */
+    (function () {
+        var st = document.createElement('style');
+        st.id = 'etx-theme-css';
+        st.textContent =
+            '.theme-toggle{position:fixed;bottom:26px;right:22px;z-index:999;' +
+            '  background:var(--surface,var(--s1,#141210));' +
+            '  border:1px solid var(--border,var(--b1,#2a2825));' +
+            '  border-radius:50px;padding:8px 16px;cursor:pointer;' +
+            "  font-family:'DM Sans',system-ui,sans-serif;font-size:12px;" +
+            '  color:var(--text-muted,var(--muted,#7a7570));' +
+            '  display:flex;align-items:center;gap:6px;' +
+            '  box-shadow:0 2px 12px rgba(0,0,0,.28);transition:border-color .2s,color .2s}' +
+            '.theme-toggle:hover{border-color:var(--green,#3dbe7a);color:var(--green,#3dbe7a)}' +
+            /* El aviso de sesión por vencer vive en bottom:80px: se apilan, no se
+               encima uno al otro. */
+            '@media print{.theme-toggle{display:none}}';
+        (document.head || document.documentElement).appendChild(st);
+    })();
+
     /* 2) El botón: icono y palabra dicen A DÓNDE se va, no dónde se está. */
     function _sincronizarBoton() {
         var luz = _actual() === 'light';
