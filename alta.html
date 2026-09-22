@@ -133,7 +133,9 @@ function _pintarFormulario(){
            asesor"), así que su checkbox no protegía nada: todas las altas pasan
            por aquí. */
         '<label class="al-chk"><input type="checkbox" id="alPriv">' +
-            '<span>He leído y acepto el <a href="/aviso-privacidad.html" target="_blank" rel="noopener">Aviso de Privacidad</a> ' +
+            '<span>He leído y acepto los ' +
+            '<a href="/terminos" target="_blank" rel="noopener">Términos y Condiciones</a> y el ' +
+            '<a href="/privacidad" target="_blank" rel="noopener">Aviso de Privacidad</a> ' +
             'de ETAAX.</span></label>' +
         /* La cláusula que reparte la responsabilidad. Sin ella el aviso no protege
            a nadie: el dueño va a subir CURP, NSS, CLABE e INE de gente que nunca
@@ -142,7 +144,7 @@ function _pintarFormulario(){
             '<span>Entiendo que de los datos de mis colaboradores y clientes ' +
             '<b>el responsable soy yo</b>, y que debo informarles y tener su consentimiento. ' +
             'ETAAX solo los guarda por mi cuenta. ' +
-            '<a href="/aviso-colaboradores.html" target="_blank" rel="noopener">Ver el aviso que puedo entregarles</a>.</span></label>' +
+            '<a href="/colaboradores" target="_blank" rel="noopener">Ver el aviso que puedo entregarles</a>.</span></label>' +
         '<button class="al-btn" id="alBtn" onclick="activar()">Activar mi cuenta</button>' +
         '<div class="al-msg" id="alMsg" style="color:var(--text-dim)">' + esc(pago) + '</div>';
     document.getElementById('alPwd').addEventListener('keydown', function(e){

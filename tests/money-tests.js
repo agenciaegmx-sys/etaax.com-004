@@ -9195,6 +9195,122 @@ console.log('\n══ BD8 · La ventanita de roles ══');
     test('un rol de fábrica no se puede borrar', () => eq(abierto(), false, 'protegido'));
 })();
 
+/* ═══════════ SUITE BD9 · TÉRMINOS Y CONDICIONES ═══════════════════════════
+   El aviso de privacidad remitía a un "Acuerdo de Tratamiento de Datos que
+   forma parte de los Términos y Condiciones" — y esos Términos no existían. Un
+   documento legal que remite a otro inexistente es un cabo suelto: la relación
+   de encargo quedaba sin reglas escritas, que es justo lo que la ley pide poner
+   por escrito.                                                                 */
+console.log('\n══ BD9 · Términos y Condiciones ══');
+{
+    const plano = (f) => fs.readFileSync(path.join(RAIZ, f), 'utf8').replace(/\s+/g, ' ');
+    const ter  = plano('terminos.html');
+    const priv = plano('aviso-privacidad.html');
+    const alta = plano('alta.html');
+    const net  = fs.readFileSync(path.join(RAIZ, 'netlify.toml'), 'utf8');
+    const land = plano('index.html');
+
+    test('los Términos existen', () => eq(ter.length > 3000, true, 'existen'));
+    test('…con el mismo responsable que el aviso: nombre y domicilio', () =>
+        eq(ter.indexOf('Edwin Eduardo González González') > -1 &&
+           ter.indexOf('Lacas de Uruapan 336') > -1, true, 'mismo responsable'));
+    test('…y la misma versión publicada, para que no se contradigan', () =>
+        eq(ter.indexOf('Versión <strong>2026-10</strong>') > -1, true, 'al par'));
+
+    /* EL CABO SUELTO: el aviso remite al Acuerdo; ahora el Acuerdo existe y la
+       liga cae en él, no en el documento entero. */
+    test('el Anexo A —el Acuerdo de Tratamiento de Datos— existe', () =>
+        eq(ter.indexOf('Anexo A · Acuerdo de Tratamiento de Datos') > -1, true, 'existe'));
+    test('…y tiene ancla propia para poder apuntarle', () =>
+        eq(ter.indexOf('id="anexo-a"') > -1, true, 'con ancla'));
+    test('el aviso ya no remite al vacío: liga los Términos', () =>
+        eq(priv.indexOf('href="/terminos"') > -1, true, 'ligado'));
+    test('…y apunta derecho al Anexo', () =>
+        eq(priv.indexOf('href="/terminos#anexo-a"') > -1, true, 'al anexo'));
+
+    /* El Anexo reparte los papeles y dice qué se obliga cada quien. */
+    test('el Anexo dice quién es Responsable y quién Encargado', () =>
+        eq(ter.indexOf('tú eres el Responsable') > -1 &&
+           ter.indexOf('ETAAX es el Encargado') > -1, true, 'papeles'));
+    ['objeto', 'duración', 'Subencargados', 'vulneración de seguridad', 'Auditoría']
+        .forEach(x => test('el Anexo cubre: ' + x, () =>
+            eq(ter.toLowerCase().indexOf(x.toLowerCase()) > -1, true, 'cubierto')));
+    test('…y se obliga a suprimir o devolver los datos al terminar', () =>
+        eq(ter.indexOf('Suprimir o devolverte los datos') > -1, true, 'al final'));
+
+    /* ── Lo que de verdad protege a Edwin ────────────────────────────────────
+       La app calcula nóminas, impuestos y costos con los datos y criterios que
+       captura el dueño. Sin decirlo por escrito, un cálculo mal configurado se
+       le achaca a la herramienta. */
+    test('los Términos dicen que ETAAX no es asesor fiscal, contable ni laboral', () =>
+        eq(ter.indexOf('no presta asesoría') > -1, true, 'no es despacho'));
+    test('…y que el Cliente verifica los resultados antes de usarlos', () =>
+        eq(ter.indexOf('verificar') > -1 && ter.indexOf('antes de usarlos para pagar') > -1,
+           true, 'verifica'));
+    test('hay límite de responsabilidad', () =>
+        eq(ter.indexOf('12 meses anteriores') > -1, true, 'tope'));
+    test('…que no tapa el dolo ni la mala fe, porque la ley no lo permite', () =>
+        eq(ter.indexOf('dolo o mala fe') > -1, true, 'honesto'));
+    test('hay cláusula de indemnización por lo que el Cliente sube sin base legal', () =>
+        eq(ter.indexOf('sacar en paz y a salvo') > -1, true, 'indemniza'));
+    test('ley aplicable y tribunales, con sede', () =>
+        eq(ter.indexOf('Estados Unidos Mexicanos') > -1 &&
+           ter.indexOf('Morelia, Michoacán') > -1, true, 'jurisdicción'));
+
+    /* ── El cobro escrito como de verdad funciona ── */
+    test('el cobro se declara POR SUCURSAL', () =>
+        eq(ter.indexOf('por sucursal activa') > -1, true, 'unidad'));
+    test('…con el descuento que no es retroactivo', () =>
+        eq(ter.indexOf('no es retroactivo') > -1, true, 'escalonado'));
+    test('…y el prorrateo de una sucursal abierta a media factura', () =>
+        eq(ter.indexOf('proporcionalmente') > -1, true, 'prorrateo'));
+    test('dice la verdad sobre el CFDI: se emite a solicitud', () =>
+        eq(ter.indexOf('no es un CFDI') > -1, true, 'sin prometer de más'));
+    test('la renovación automática se dice, no se esconde', () =>
+        eq(ter.indexOf('renueva automáticamente') > -1, true, 'dicho'));
+    test('…igual que la tolerancia antes de suspender', () =>
+        eq(ter.indexOf('período de tolerancia') > -1, true, 'tolerancia'));
+    /* La retención al cancelar tiene que decir LO MISMO en los dos documentos:
+       si el aviso promete 6 meses y el contrato otra cosa, gana el desorden. */
+    test('la retención al cancelar coincide con el aviso de privacidad', () =>
+        eq(ter.indexOf('solo lectura durante 6 meses') > -1 &&
+           priv.indexOf('lectura durante <strong>6 meses</strong>') > -1, true, 'coinciden'));
+    test('los datos del Cliente son del Cliente', () =>
+        eq(ter.indexOf('Contenido del Cliente es tuyo') > -1, true, 'suyos'));
+    test('…y no entrenan modelos de IA, igual que en el aviso', () =>
+        eq(ter.indexOf('inteligencia artificial') > -1, true, 'sin IA'));
+
+    /* ── Se aceptan donde nace la cuenta ── */
+    test('el alta pide aceptar los Términos, no solo el aviso', () =>
+        eq(alta.indexOf('href="/terminos"') > -1, true, 'aceptados'));
+    test('…en la misma casilla que ya bloquea la activación', () => {
+        const i = alta.indexOf('id="alPriv"');
+        return eq(alta.slice(i, i + 420).indexOf('/terminos') > -1, true, 'con candado');
+    });
+
+    /* ── URL corta: estas ligas se dictan por teléfono y se escriben en
+       contratos. "etaax.com/privacidad" se entiende; el .html no. ── */
+    [['privacidad','aviso-privacidad.html'], ['terminos','terminos.html'],
+     ['colaboradores','aviso-colaboradores.html']].forEach(function (par) {
+        test('/' + par[0] + ' lleva al documento sin enseñar el .html', () => {
+            const i = net.indexOf('from = "/' + par[0] + '"');
+            return eq(i > -1 && net.slice(i, i + 120).indexOf('to = "/' + par[1] + '"') > -1,
+                      true, 'corta');
+        });
+    });
+    /* Reescritura (200), no redirección: una redirección 301 a una ruta que el
+       servidor no sepa servir se muerde la cola. */
+    test('son reescrituras, no redirecciones que puedan hacer ciclo', () => {
+        const i = net.indexOf('from = "/terminos"');
+        return eq(net.slice(i, i + 140).indexOf('status = 200') > -1, true, 'sin ciclo');
+    });
+    /* Y el pie de la landing dejó de prometer un documento que no existía. */
+    test('la landing ya no tiene el enlace muerto de Términos', () =>
+        eq(land.indexOf('<a href="#">Términos') === -1, true, 'vivo'));
+    test('…ahora lleva a los Términos de verdad', () =>
+        eq(land.indexOf('<a href="/terminos">') > -1, true, 'ligado'));
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La

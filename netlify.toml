@@ -88,6 +88,27 @@
   [headers.values]
     Cache-Control = "public, max-age=2592000"
 
+# ── Documentos legales con URL corta ──────────────────────────
+# Estas ligas se escriben en contratos, correos y se dictan por teléfono:
+# "etaax.com/privacidad" se entiende y se teclea; "aviso-privacidad.html" no.
+# Son REESCRITURAS (200), no redirecciones: la URL corta es la que se queda a la
+# vista y el archivo sigue viviendo donde siempre. Las rutas .html siguen
+# funcionando para no romper lo ya enviado.
+[[redirects]]
+  from = "/privacidad"
+  to = "/aviso-privacidad.html"
+  status = 200
+
+[[redirects]]
+  from = "/terminos"
+  to = "/terminos.html"
+  status = 200
+
+[[redirects]]
+  from = "/colaboradores"
+  to = "/aviso-colaboradores.html"
+  status = 200
+
 # ── Archivos internos fuera del alcance público ───────────────
 # Netlify publica la raíz del repo TAL CUAL, así que las migraciones y la
 # documentación operativa quedaban descargables desde el sitio
