@@ -21,6 +21,47 @@
 <script src="/etaax-db.js"></script>
 <script src="/etaax-store.js"></script><!-- IndexedDB: catálogo/inventarios fuera del tope de localStorage -->
 <script src="/insumo-label.js"></script>
+<script>
+/* ── PERMISOS DE ESTE MÓDULO (ver ETAAX_SUBPERMS.insumos en page-guard.js) ────
+   Mismo patrón que Escandallos, y por la misma razón: esconder el botón NO es
+   negar. La función se puede llamar desde la consola o reaparecer en el
+   siguiente repintado, así que cada acción pregunta por su cuenta. Las dos
+   capas, siempre. */
+function _puedeIns(sub){
+    var ctx=null;
+    try{ ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null'); }catch(e){}
+    if(!ctx || ctx.ctxType!=='staff') return true;      // dueño / admin maestro
+    if((ctx.rol||'')==='admin') return true;
+    if(typeof window.etaaxPerm!=='function') return true;  // sin el helper, no se cierra nada
+    return window.etaaxPerm(ctx.negId||localStorage.getItem('etaax_negocio_activo'), ctx.rol, 'insumos.'+sub);
+}
+function _exigeIns(sub, msg){
+    if(_puedeIns(sub)) return true;
+    alert('🔒 ' + (msg || 'Tu rol no tiene permiso para esta acción.') +
+          '\n\nPídeselo al administrador del negocio, en Roles y Permisos.');
+    return false;
+}
+function _insOcultar(id){ var el=document.getElementById(id); if(el) el.style.display='none'; }
+/* Aplica los permisos a la pantalla. Los precios NO se esconden botón por botón:
+   se marca el <body> y el CSS quita esas columnas en cada repintado, sin tener
+   que acordarse de volver a aplicarlo. */
+function _aplicarPermisosIns(){
+    if(!_puedeIns('crear'))          _insOcultar('btnAgregarInsumo');
+    if(!_puedeIns('catalogoEtaax'))  _insOcultar('btnCatalogoEtaax');
+    if(!_puedeIns('catalogoNegocio'))_insOcultar('btnInsumosNegGlobal');
+    if(!_puedeIns('eliminar'))       _insOcultar('btnEliminarSelec');
+    if(!_puedeIns('verCosteo'))      _insOcultar('btnVistaCosteo');
+    /* La importación por archivo no tiene botón propio hoy —se llega a ella por
+       otro camino—, así que aquí no hay nada que esconder: manda la función. */
+    if(document.body) document.body.classList.toggle('ins-sin-costos', !_puedeIns('verCostos'));
+}
+document.addEventListener('DOMContentLoaded', function(){
+    _aplicarPermisosIns();
+    /* Y otra vez cuando bajen los permisos frescos de la nube: al cargar solo
+       estaba la copia en caché, que puede ser de antes del último cambio. */
+    window.addEventListener('etaax:permisos', function(){ _aplicarPermisosIns(); });
+});
+</script>
 <script src="/reporte-marca.js"></script><!-- encabezado de marca para catálogo y costeo impresos -->
 <script src="/multi-select.js"></script><!-- filtros de familia/categoría con palomitas -->
 <script src="/reordenar.js"></script><!-- orden manual del catálogo (arrastrar filas) -->
@@ -84,8 +125,8 @@
                      la función sigue existiendo (abrirIndependizarSucIns) por si
                      algún catálogo viejo lo necesita. -->
                 <button class="btn-vista" id="btnIndepSucIns" hidden style="display:none;color:var(--blue);border-color:var(--blue)" onclick="abrirIndependizarSucIns()" title="Detecta insumos compartidos entre sucursales y crea una copia independiente por sucursal (con respaldo previo). Tus datos capturados no se tocan.">🔗 Independizar sucursales</button>
-                <button class="btn-vista" onclick="abrirCatalogoGlobal()" title="Importar del catálogo maestro de ETAAX">🌐 Insumos ETAAX</button>
-                <button class="btn-primary" onclick="abrirSelectorCategoria()">+ Agregar insumo</button>
+                <button class="btn-vista" id="btnCatalogoEtaax" onclick="abrirCatalogoGlobal()" title="Importar del catálogo maestro de ETAAX">🌐 Insumos ETAAX</button>
+                <button class="btn-primary" id="btnAgregarInsumo" onclick="abrirSelectorCategoria()">+ Agregar insumo</button>
             </div>
         </div>
 
@@ -178,8 +219,8 @@
                                         <th style="min-width:230px">Nombre</th>
                                         <th style="min-width:150px">Categoría</th>
                                         <th style="min-width:190px">Presentaciones</th>
-                                        <th style="min-width:160px">Costo base</th>
-                                        <th style="min-width:130px">Proveedor</th>
+                                        <th class="ins-col-costo" style="min-width:160px">Costo base</th>
+                                        <th class="ins-col-prov" style="min-width:130px">Proveedor</th>
                                         <th style="min-width:210px"></th>
                                     </tr>
                                 </thead>
@@ -623,6 +664,13 @@ async function migrarFotosNegocio() {
     color: var(--text-dim);
     line-height: 1.4;
 }
+
+/* Sin permiso de "ver precios de compra", el catálogo se ve completo pero sin
+   dinero. Se hace por CSS y no escondiendo celdas a mano: la tabla se repinta
+   con cada filtro, y acordarse de volver a taparlas en cada repintado es
+   exactamente el tipo de cosa que se olvida. */
+body.ins-sin-costos .ins-col-costo,
+body.ins-sin-costos .ins-col-prov { display: none; }
 </style>
 
 <style>
@@ -838,6 +886,7 @@ function _sucNombreIgn(id) {
     return s ? (s.nombre || id) : id;
 }
 function abrirInsumosGlobalNeg() {
+    if (!_exigeIns('catalogoNegocio', 'No puedes copiar insumos de otras sucursales.')) return;
     var modal = document.getElementById('modalInsumosNeg');
     document.getElementById('ignTitulo').textContent = 'Insumos Globales · ' + _negNombreActual();
     modal.style.display = 'flex';
@@ -1057,6 +1106,7 @@ var _CG_CACHE   = 'etaax_cg_v3';   // v3: orden estable (created_at+id); invalid
 var _CG_TTL     = 30 * 60 * 1000;
 
 async function abrirCatalogoGlobal() {
+    if (!_exigeIns('catalogoEtaax', 'No puedes traer insumos del catálogo de ETAAX.')) return;
     var modal = document.getElementById('modalCatalogoGlobal');
     modal.style.display = 'flex';
     document.body.style.overflow = 'hidden';

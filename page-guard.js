@@ -80,14 +80,18 @@ window.ETAAX_SUBPERMS = {
         { key:'eliminar',         label:'Eliminar recetas / sub-recetas', sub:'Borrar del catálogo' },
         { key:'cambios',          label:'Ver cambios recientes',       sub:'Qué se modificó por sucursal y qué sube al catálogo global' },
     ],
+    /* Insumos: los ocho CONECTADOS. Igual que Escandallos, cada uno lo obedecen
+       la pantalla (esconde el botón) y la función (se niega aunque la llamen por
+       otro camino). */
     insumos: [
-        { key:'crear',          label:'Crear insumos',            sub:'Dar de alta materias primas', pendiente:true },
-        { key:'editar',         label:'Editar insumos',           sub:'Modificar presentaciones y datos', pendiente:true },
-        { key:'eliminar',       label:'Eliminar insumos',         sub:'Borrar del catálogo', pendiente:true },
-        { key:'verCostos',      label:'Ver precios de compra',    sub:'Costos y proveedor de cada insumo', pendiente:true },
-        { key:'catalogoEtaax',  label:'Traer del catálogo ETAAX', sub:'Copiar insumos del catálogo de la plataforma', pendiente:true },
-        { key:'catalogoNegocio',label:'Copiar de otra sucursal',  sub:'Traer insumos que ya existen en el negocio', pendiente:true },
-        { key:'importar',       label:'Importar por archivo',     sub:'Alta masiva desde Excel o CSV', pendiente:true },
+        { key:'crear',          label:'Crear insumos',            sub:'Dar de alta materias primas' },
+        { key:'editar',         label:'Editar insumos',           sub:'Modificar presentaciones y datos' },
+        { key:'eliminar',       label:'Eliminar insumos',         sub:'Borrar del catálogo' },
+        { key:'verCostos',      label:'Ver precios de compra',    sub:'Sin esto ve el catálogo, pero no el costo ni el proveedor' },
+        { key:'verCosteo',      label:'Ver costeos',              sub:'La vista de costeo del catálogo: copa, trago y margen' },
+        { key:'catalogoEtaax',  label:'Traer del catálogo ETAAX', sub:'Copiar insumos del catálogo de la plataforma' },
+        { key:'catalogoNegocio',label:'Copiar de otra sucursal',  sub:'Traer insumos que ya existen en el negocio' },
+        { key:'importar',       label:'Importar por archivo',     sub:'Alta masiva desde Excel o CSV' },
     ],
     inventarios: [
         { key:'capturar',   label:'Capturar inventario',      sub:'Conteo de existencias por área', pendiente:true },

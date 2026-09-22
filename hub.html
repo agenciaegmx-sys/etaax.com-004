@@ -29,6 +29,7 @@
   --green2: #2a9960;
   --greend: #1a5c3a;
   --gold:   #f5c842;
+  --accent-text: #f5c842;   /* ámbar legible como TEXTO (en claro baja) */
   --goldd:  rgba(245,200,66,0.12);
   --text:   #f0ece4;
   --muted:  #7a7570;
@@ -53,6 +54,7 @@
   --green2: #1f8a50;
   --greend: #d4f0e3;
   --gold:   #c99a10;
+  --accent-text: #8a6400;
   --goldd:  rgba(201,154,16,0.10);
   --text:   #1a1916;
   --muted:  #6b6560;
@@ -1288,7 +1290,7 @@ function _avisoTolerancia(neg, sub) {
     el.style.cssText = 'margin:0 0 16px;padding:12px 16px;border:1px solid #f5c842;' +
         'background:rgba(245,200,66,.08);border-radius:10px;font-size:13px;color:var(--text);line-height:1.6';
     var _pago = _btnPagoHTML(neg, 'color:#a89dff;font-weight:600;text-decoration:none');
-    el.innerHTML = '<b style="color:#f5c842">Tu pago venció' +
+    el.innerHTML = '<b style="color:var(--accent-text)">Tu pago venció' +
         (sub.diasVencido > 0 ? ' hace ' + sub.diasVencido + (sub.diasVencido === 1 ? ' día' : ' días') : '') + '.</b> ' +
         cuando + ' para ponerte al corriente antes de que se pause el acceso. ' +
         (_pago ? _pago + ' <span style="color:var(--dim)">·</span> ' : '') +

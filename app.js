@@ -869,7 +869,7 @@ function buildSubRecetaCostoBlock(r) {
                 })() : '') +
             '</div>' +
             '<div style="background:#fafafa;border:1px solid #f5c842;border-radius:8px;padding:14px">' +
-                '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#f5c842;margin-bottom:10px">⚖️ Costo por Porción</div>' +
+                '<div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#8a6400;margin-bottom:10px">⚖️ Costo por Porción</div>' +
                 (costoPorcion > 0 ? (function(){
                     var pesoRow = '';
                     if (cx.pesoPorcion && cx.unidadPesoPorcion) {
@@ -884,7 +884,7 @@ function buildSubRecetaCostoBlock(r) {
                     }
                     return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee;font-size:11px"><span style="color:#666">Porciones totales</span><span style="font-weight:600">' + porcionQty + '</span></div>' +
                         pesoRow +
-                        '<div style="display:flex;justify-content:space-between;padding:7px 8px;margin-top:4px;background:#fff8e1;border-radius:4px;font-size:12px"><span style="font-weight:700;color:#333">Costo / porción</span><span style="font-weight:700;color:#f5c842">$' + costoPorcion.toFixed(2) + '</span></div>';
+                        '<div style="display:flex;justify-content:space-between;padding:7px 8px;margin-top:4px;background:#fff8e1;border-radius:4px;font-size:12px"><span style="font-weight:700;color:#333">Costo / porción</span><span style="font-weight:700;color:#8a6400">$' + costoPorcion.toFixed(2) + '</span></div>';
                 })() : '<div style="font-size:10px;color:#aaa;padding:16px 0;text-align:center">Agrega porciones en el escandallo</div>') +
             '</div>' +
         '</div></div>';
@@ -1003,6 +1003,9 @@ function _recetaHeaderMarca() {
 
 // ── VERSIÓN ADMINISTRATIVA ────────────────────────────────────
 // Con costos completos — misma estructura + columna costo + bloque costeo
+/* OJO CON EL ÁMBAR EN LAS PLANTILLAS IMPRESAS: el #f5c842 de pantalla sobre
+   papel blanco da 2.6:1 y sale casi invisible en la hoja. Como TEXTO se usa
+   #8a6400 (5.4:1); como BORDE sí puede ir el claro, ahí es decoración. */
 function buildPlantillaAdministrativa(recetas) {
     var paginasHTML = recetas.map(function(r) {
         var esSub = esSubRecetaTipo(r.tipo);
@@ -1046,8 +1049,8 @@ function buildPlantillaAdministrativa(recetas) {
             '<td style="padding:6px 7px;text-align:right;font-weight:700;font-size:15px;color:#1a1916">$' + costo.toFixed(2) + '</td></tr>';
 
         var bloquesSugerido =
-            '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f0f0f0;font-size:11px"><span style="color:#666">Precio sugerido comedor</span><span style="font-weight:700;color:#f5c842">$' + sComedor.toFixed(2) + '</span></div>' +
-            '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:11px"><span style="color:#666">Precio sugerido delivery</span><span style="font-weight:700;color:#f5c842">$' + sDelivery.toFixed(2) + '</span></div>';
+            '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f0f0f0;font-size:11px"><span style="color:#666">Precio sugerido comedor</span><span style="font-weight:700;color:#8a6400">$' + sComedor.toFixed(2) + '</span></div>' +
+            '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:11px"><span style="color:#666">Precio sugerido delivery</span><span style="font-weight:700;color:#8a6400">$' + sDelivery.toFixed(2) + '</span></div>';
 
         var bloquesAplicado = precioEnCarta > 0
             ? '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f0f0f0;font-size:11px"><span style="color:#666">Precio en carta (IVA inc.)</span><span style="font-weight:700;color:#3dbe7a">$' + precioEnCarta.toFixed(2) + '</span></div>' +
@@ -1112,7 +1115,7 @@ function buildPlantillaAdministrativa(recetas) {
                     R += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
                     // SUGERIDO
                     R += '<div style="background:#fafafa;border:1px solid #f5c842;border-radius:6px;padding:8px 10px">';
-                    R += '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#f5c842;margin-bottom:5px">📐 Costeo Sugerido</div>';
+                    R += '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#8a6400;margin-bottom:5px">📐 Costeo Sugerido</div>';
                     var _p1 = function(v){ return (Math.round(v*10)/10).toFixed(1).replace(/\.0$/,''); };
                     R += cr('Costo Bruto '+_p1(_sug.brutoPct)+'%','$'+costo.toFixed(2),true,'#c8960a');
                     R += cr('Gasto Operativo '+_p1(_sug.gastoOpPct)+'%','$'+_sug.gastoOp.toFixed(2),false);

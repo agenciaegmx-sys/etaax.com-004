@@ -795,6 +795,11 @@
    var vistaInsumos = 'lista'; // lista por default: más ligera que galería (imágenes)
 
    function setVistaInsumos(modo) {
+       /* La vista de costeo es dinero de arriba a abajo: copa, trago y margen.
+          Se niega aquí y no solo escondiendo su botón, porque a esta función la
+          llaman también los atajos y el estado guardado de la pantalla. */
+       if (modo === 'costeo' && typeof _exigeIns === 'function' &&
+           !_exigeIns('verCosteo', 'No puedes ver los costeos del catálogo.')) return;
        vistaInsumos = modo;
        var contLista = document.getElementById('contenedorLista');
        var contGrid  = document.getElementById('contenedorGrid');
@@ -1421,8 +1426,8 @@
                        `<span class="pill pill-amber" style="margin:2px;font-size:9px;white-space:nowrap">${etx(p.contNeto)} ${etx(p.umContenido)} · ${etx(p.rendimiento||'—')} ${etx(p.umRendimiento||'')}</span>`
                    ).join('')}
                </td>
-               <td style="color:var(--green);font-weight:500;white-space:nowrap">${etx(costo)}</td>
-               <td style="color:var(--text-muted)">${etx(prov)}</td>
+               <td class="ins-col-costo" style="color:var(--green);font-weight:500;white-space:nowrap">${etx(costo)}</td>
+               <td class="ins-col-prov" style="color:var(--text-muted)">${etx(prov)}</td>
                ${accionesTd}
            </tr>`;
        }).join('');
@@ -1610,6 +1615,7 @@
    }
 
    function _eliminarSeleccionados() {
+       if (typeof _exigeIns === 'function' && !_exigeIns('eliminar', 'No puedes eliminar insumos.')) return;
        // Se elimina EXACTAMENTE lo seleccionado (identidad = id). La vieja cascada
        // "por identidad" en el global borraba productos distintos que se llamaban
        // igual — eliminada 2026-07-06 (el global ya no deduplica la vista).
@@ -2340,6 +2346,7 @@
    }
 
    function abrirSelectorCategoria() {
+       if (typeof _exigeIns === 'function' && !_exigeIns('crear', 'No puedes dar de alta insumos.')) return;
        document.getElementById('modalCategoria').style.display = 'flex';
    }
    
@@ -2349,6 +2356,7 @@
    }
    
    function abrirModalConTipo(tipo) {
+       if (typeof _exigeIns === 'function' && !_exigeIns('crear', 'No puedes dar de alta insumos.')) return;
        tipoInsumoActual = tipo;
        document.getElementById('modalCategoria').style.display = 'none';
        const cfg = TIPO_CONFIG[tipo];
@@ -2711,6 +2719,7 @@
    }
 
    function editarInsumo(id) {
+       if (typeof _exigeIns === 'function' && !_exigeIns('editar', 'No puedes editar insumos.')) return;
        const ins = getInsumos().find(x => x.id === id);
        if (!ins) return;
        // PRODUCCIÓN PROPIA (sub-receta convertida a insumo): NO se edita como
@@ -2756,6 +2765,7 @@
    window.copiarInsumo = copiarInsumo;
 
    function eliminarInsumo(id) {
+       if (typeof _exigeIns === 'function' && !_exigeIns('eliminar', 'No puedes eliminar insumos.')) return;
        const ins = getInsumos().find(x => x.id === id);
        if (!ins) return;
        // Aviso si es un MAESTRO con copias vinculadas: al borrarlo, las copias siguen vivas
@@ -4624,6 +4634,13 @@
    }
 
    async function guardarInsumo() {
+       /* Aquí se decide: si el insumo es nuevo pide CREAR; si ya existía, EDITAR.
+          Un rol que puede dar de alta pero no modificar lo ajeno sigue pudiendo
+          guardar el suyo la primera vez. */
+       if (typeof _exigeIns === 'function') {
+           var _nec = editandoId ? 'editar' : 'crear';
+           if (!_exigeIns(_nec, editandoId ? 'No puedes editar insumos.' : 'No puedes dar de alta insumos.')) return;
+       }
        const nombre = document.getElementById('ins-nombre').value.trim();
        if (!nombre) { alert('El nombre es obligatorio'); return; }
    
@@ -4914,6 +4931,7 @@
    // ══════════════════════════════════════════════════════════════
    
    function abrirImportar() {
+       if (typeof _exigeIns === 'function' && !_exigeIns('importar', 'No puedes importar insumos por archivo.')) return;
        document.getElementById('modalImportar').style.display = 'flex';
        ['status1','status2','status3'].forEach(id => {
            document.getElementById(id).textContent = '—';

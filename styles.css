@@ -36,6 +36,13 @@
     --blue:       #78a0f0;
     --blue-dim:   rgba(120, 160, 240, 0.12);
 
+    /* Ámbar LEGIBLE COMO TEXTO. El --accent sirve para fondos, bordes y acentos
+       grandes; puesto como color de letra sobre una superficie clara da 2.6:1
+       —ilegible— y eso se notaba en todo el modo claro y en cada hoja impresa,
+       que siempre es blanca. Este token es el ámbar que sí se lee: en oscuro
+       coincide con el accent, en claro baja hasta 5.4:1 sobre blanco. */
+    --accent-text: #f5c842;
+
     /* Texto */
     --text:       #f0ece4;
     /* Grises secundarios subidos hacia el blanco: el --text-dim viejo (#4a4844)
@@ -62,6 +69,7 @@
 
     --accent:     #c99a10;
     --accent-dim: rgba(201, 154, 16, 0.10);
+    --accent-text: #8a6400;   /* 5.4:1 sobre blanco; el --accent daría 2.6:1 */
 
     --green:      #28a060;
     --green-dim:  #d4f0e3;
@@ -385,7 +393,7 @@ body.has-ctx .header { top: 96px; }
 
 .pill-amber {
     background: var(--accent-dim);
-    color: var(--accent);
+    color: var(--accent-text);
 }
 
 .pill-green {
@@ -665,17 +673,17 @@ textarea:focus {
 .costeo-mult input {
     width: 68px; padding: 4px 7px;
     background: var(--surface); border: 1px solid rgba(245, 200, 66, 0.45);
-    border-radius: 5px; color: #f5c842;
+    border-radius: 5px; color: var(--accent-text);
     font-family: inherit; font-size: 14px; font-weight: 700;
     font-variant-numeric: tabular-nums; text-align: center;
 }
-.costeo-mult input:focus { outline: none; border-color: #f5c842; }
+.costeo-mult input:focus { outline: none; border-color: var(--accent); }
 .costeo-mult-hint { font-size: 10px; color: var(--text-dim); flex: 1; }
 .costeo-mult button {
     background: transparent; border: 1px solid var(--border); color: var(--text-dim);
     border-radius: 5px; padding: 3px 8px; font-size: 12px; cursor: pointer; font-family: inherit;
 }
-.costeo-mult button:hover { color: #f5c842; border-color: rgba(245, 200, 66, 0.45); }
+.costeo-mult button:hover { color: var(--accent-text); border-color: rgba(245, 200, 66, 0.45); }
 
 .costeo-val {
     font-weight: 600;
@@ -684,7 +692,7 @@ textarea:focus {
 }
 
 /* Verde = bueno/aplicado, Dorado = sugerido/marca, Rojo = alerta */
-.val-amber { color: var(--accent); }
+.val-amber { color: var(--accent-text); }
 .val-green { color: var(--green); }
 .val-red   { color: var(--red); }
 .val-white { color: var(--text); }

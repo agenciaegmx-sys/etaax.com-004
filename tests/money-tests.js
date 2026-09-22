@@ -8495,8 +8495,14 @@ console.log('\n══ BD4 · Roles y Permisos: módulo de Recetas e Insumos ═�
     /* ── La honestidad: lo que no está conectado, se dice ── */
     test('Escandallos ya no lleva la marca en ninguno: los diez mandan', () =>
         eq((SUB.recetas||[]).some(x => x.pendiente), false, 'conectados'));
-    test('…pero los módulos que faltan sí la llevan, uno por uno', () =>
-        eq(['insumos','inventarios','requisiciones']
+    /* Escandallos e Insumos ya mandan; Inventarios y Requisiciones siguen
+       marcados. La lista tiene que decir la verdad de CADA uno, no de todos a
+       la vez: un permiso que se apaga y no pasa nada es peor que no tenerlo. */
+    test('los módulos ya conectados no llevan marca', () =>
+        eq(['recetas','insumos'].every(k => (SUB[k]||[]).length && !(SUB[k]||[]).some(x => x.pendiente)),
+           true, 'sin marca'));
+    test('…y los que faltan sí la llevan, uno por uno', () =>
+        eq(['inventarios','requisiciones']
             .every(k => (SUB[k]||[]).length && (SUB[k]||[]).every(x => x.pendiente === true)),
            true, 'marcados'));
     test('…y los que SÍ funcionan no llevan esa marca', () =>
@@ -9775,6 +9781,259 @@ console.log('\n══ BE3 · El tema, uno solo para todo el sistema ══');
     /* Y los archivos de prueba que se publicaban en el sitio, fuera. */
     test('los archivos temporales ya no se publican', () =>
         eq(paginas.filter(p => p.indexOf('_tmp-') === 0).join(', '), '', 'limpios'));
+}
+
+/* ═══════════ SUITE BE4 · INSUMOS: LOS OCHO PERMISOS, CONECTADOS ═══════════
+   Mismo trato que Escandallos: cada interruptor lo obedecen la pantalla (que
+   esconde lo que no se puede) y la función (que se niega aunque la llamen por
+   otro camino). Esconder sin negar es teatro.
+
+   Se suma "Ver costeos", que es la vista 🍸 del catálogo: copa, trago y margen.
+   Y "Ver precios de compra" deja de ser un rótulo: sin él, el catálogo se ve
+   completo —nombres, presentaciones, fotos— pero sin costo ni proveedor.      */
+console.log('\n══ BE4 · Insumos: los ocho permisos, conectados ══');
+{
+    const html = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.html'), 'utf8');
+    const js   = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.js'), 'utf8');
+    const pg   = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8');
+
+    const BLOQUE = (() => {
+        const a = html.indexOf('function _puedeIns(sub){');
+        const fin = 'function _aplicarPermisosIns(){';
+        const i = html.indexOf(fin, a);
+        return html.slice(a, html.indexOf('\n}', i) + 2);
+    })();
+
+    function pantalla(permisos) {
+        const ls = { etaax_negocio_activo:'n1',
+                     etaax_ctx: JSON.stringify({ ctxType:'staff', rol:'cocinero', negId:'n1' }) };
+        if (permisos) ls['etaax_n1_permisos'] = JSON.stringify({ cocinero:{ insumos:permisos } });
+        const nodos = {}; const clasesBody = [];
+        const c = {
+            console, JSON, Object, Array, String, Boolean, Number, Date, setTimeout, Promise, alert(){},
+            localStorage:{ getItem:k=>(k in ls?ls[k]:null), setItem(k,v){ ls[k]=String(v); }, removeItem(k){ delete ls[k]; } },
+            location:{ pathname:'/recetas/insumos.html', search:'', replace(){} },
+            document:{
+                addEventListener(){},
+                getElementById(id){
+                    if (!nodos[id]) nodos[id] = { style:{} };
+                    return nodos[id];
+                },
+                body: { classList: { toggle(cl, on){ if (on) clasesBody.push(cl);
+                                                     else clasesBody.splice(clasesBody.indexOf(cl) >>> 0, 1); } } },
+            },
+        };
+        c.window = c; c.window.addEventListener = () => {};
+        vm.createContext(c);
+        vm.runInContext(pg, c, { filename:'page-guard.js' });
+        vm.runInContext(BLOQUE, c, { filename:'permisos-insumos' });
+        c._aplicarPermisosIns();
+        return { ctx:c,
+                 oculto: (id) => !!(nodos[id] && nodos[id].style.display === 'none'),
+                 sinCostos: () => clasesBody.indexOf('ins-sin-costos') > -1,
+                 puede: (k) => c._puedeIns(k) };
+    }
+    const TODO = { crear:true, editar:true, eliminar:true, verCostos:true, verCosteo:true,
+                   catalogoEtaax:true, catalogoNegocio:true, importar:true };
+    function sin(...k){ const r = Object.assign({}, TODO); k.forEach(x => { r[x] = false; }); return pantalla(r); }
+    const CON_TODO = sin();
+
+    /* ── El catálogo ── */
+    const SUB = CON_TODO.ctx.window.ETAAX_SUBPERMS.insumos;
+    test('están los ocho permisos de Insumos', () =>
+        eq(SUB.map(x => x.key).join(','),
+           'crear,editar,eliminar,verCostos,verCosteo,catalogoEtaax,catalogoNegocio,importar', 'catálogo'));
+    test('ninguno dice ya "aún no aplica"', () => eq(SUB.some(x => x.pendiente), false, 'conectados'));
+    test('"Ver costeos" existe y se explica', () => {
+        const v = SUB.find(x => x.key === 'verCosteo');
+        return eq(!!v && v.label === 'Ver costeos' && v.sub.indexOf('costeo') > -1, true, 'con rótulo');
+    });
+
+    /* ── Quién manda ── */
+    test('el dueño entra a todo', () => {
+        const ls = { etaax_ctx: JSON.stringify({ ctxType:'owner', negId:'n1' }) };
+        return eq(pantalla(null).ctx._puedeIns !== undefined, true, 'existe');
+    });
+    test('un colaborador con el permiso apagado NO pasa', () => eq(sin('crear').puede('crear'), false, 'apagado'));
+    test('…y con el permiso prendido, sí', () => eq(CON_TODO.puede('crear'), true, 'prendido'));
+    test('con el formato viejo (módulo en true) nadie pierde nada', () =>
+        eq(pantalla(true).puede('verCosteo'), true, 'legacy'));
+
+    /* ── 1. Crear ── */
+    test('sin crear, se va el botón de agregar insumo', () =>
+        eq(sin('crear').oculto('btnAgregarInsumo'), true, 'sin alta'));
+    test('…y las dos puertas de alta se niegan', () =>
+        eq(js.indexOf("!_exigeIns('crear', 'No puedes dar de alta insumos.')") > -1 &&
+           js.split("_exigeIns('crear'").length - 1 >= 2, true, 'selector y tipo'));
+
+    /* ── 2. Editar ── */
+    test('editarInsumo se niega', () => {
+        const i = js.indexOf('function editarInsumo(id)');
+        return eq(js.slice(i, i + 200).indexOf("_exigeIns('editar'") > -1, true, 'función');
+    });
+    /* Guardar es la única puerta por la que entra un cambio, venga del editor o
+       de donde venga: pide CREAR si es nuevo y EDITAR si ya existía. */
+    test('guardar pide crear o editar según sea nuevo o no', () => {
+        const i = js.indexOf('async function guardarInsumo()');
+        return eq(js.slice(i, i + 600).indexOf("editandoId ? 'editar' : 'crear'") > -1, true, 'según');
+    });
+    test('…y corta ANTES de leer el formulario', () => {
+        const i = js.indexOf('async function guardarInsumo()');
+        const g = js.indexOf('_exigeIns(_nec', i);
+        return eq(g > i && g < js.indexOf("ins-nombre", i), true, 'antes');
+    });
+
+    /* ── 3. Eliminar ── */
+    test('sin eliminar, se va el botón de borrar lo seleccionado', () =>
+        eq(sin('eliminar').oculto('btnEliminarSelec'), true, 'sin borrar'));
+    test('…y los dos caminos de borrado se niegan', () => {
+        const a = js.indexOf('function eliminarInsumo(id)');
+        const b = js.indexOf('function _eliminarSeleccionados()');
+        return eq(js.slice(a, a + 200).indexOf("_exigeIns('eliminar'") > -1 &&
+                  js.slice(b, b + 200).indexOf("_exigeIns('eliminar'") > -1, true, 'funciones');
+    });
+
+    /* ── 4. Ver precios de compra ──────────────────────────────────────────
+       Es el que de verdad cambia quién ve qué: el catálogo entero se ve, pero
+       sin costo ni proveedor. */
+    test('sin ver precios, el <body> queda marcado', () =>
+        eq(sin('verCostos').sinCostos(), true, 'marcado'));
+    test('…y con el permiso, no', () => eq(CON_TODO.sinCostos(), false, 'limpio'));
+    test('el CSS quita la columna de costo y la de proveedor', () =>
+        eq(/body\.ins-sin-costos[\s\S]{0,120}\.ins-col-costo[\s\S]{0,120}display:\s*none/.test(html) ||
+           (html.indexOf('body.ins-sin-costos .ins-col-costo') > -1 &&
+            html.indexOf('.ins-col-prov { display: none; }') > -1), true, 'por CSS'));
+    /* Se hace por CSS y no escondiendo celdas a mano: la tabla se repinta con
+       cada filtro, y acordarse en cada repintado es lo que se olvida. */
+    test('las celdas van marcadas, no escondidas a mano en cada repintado', () =>
+        eq(js.indexOf('<td class="ins-col-costo"') > -1 &&
+           js.indexOf('<td class="ins-col-prov"') > -1, true, 'marcadas'));
+    test('…y sus cabeceras también, o la tabla quedaría chueca', () =>
+        eq(html.indexOf('<th class="ins-col-costo"') > -1 &&
+           html.indexOf('<th class="ins-col-prov"') > -1, true, 'cabeceras'));
+
+    /* ── 5. Ver costeos ── */
+    test('sin ver costeos, se va su botón del catálogo', () =>
+        eq(sin('verCosteo').oculto('btnVistaCosteo'), true, 'sin costeo'));
+    test('…y la vista se niega aunque la pidan por otro camino', () => {
+        const i = js.indexOf('function setVistaInsumos(modo)');
+        return eq(js.slice(i, i + 500).indexOf("modo === 'costeo'") > -1 &&
+                  js.slice(i, i + 500).indexOf("_exigeIns('verCosteo'") > -1, true, 'función');
+    });
+    test('…pero las otras vistas siguen abiertas', () => {
+        const p = sin('verCosteo');
+        return eq(p.oculto('btnVistaLista') || p.oculto('btnVistaGrid'), false, 'sin tocar');
+    });
+
+    /* ── 6 y 7. Los dos catálogos de origen ── */
+    test('sin el catálogo ETAAX, se va su botón', () =>
+        eq(sin('catalogoEtaax').oculto('btnCatalogoEtaax'), true, 'sin etaax'));
+    test('…y la función se niega', () => {
+        const i = html.indexOf('async function abrirCatalogoGlobal()');
+        return eq(html.slice(i, i + 200).indexOf("_exigeIns('catalogoEtaax'") > -1, true, 'función');
+    });
+    test('sin copiar de otra sucursal, se va su botón', () =>
+        eq(sin('catalogoNegocio').oculto('btnInsumosNegGlobal'), true, 'sin negocio'));
+    test('…y la función se niega', () => {
+        const i = html.indexOf('function abrirInsumosGlobalNeg()');
+        return eq(html.slice(i, i + 200).indexOf("_exigeIns('catalogoNegocio'") > -1, true, 'función');
+    });
+    test('son dos permisos distintos: apagar uno no apaga el otro', () => {
+        const p = sin('catalogoEtaax');
+        return eq(p.oculto('btnCatalogoEtaax') && !p.oculto('btnInsumosNegGlobal'), true, 'separados');
+    });
+
+    /* ── 8. Importar ── */
+    test('importar por archivo se niega', () => {
+        const i = js.indexOf('function abrirImportar()');
+        return eq(js.slice(i, i + 200).indexOf("_exigeIns('importar'") > -1, true, 'función');
+    });
+
+    /* ── Que apagar uno no apague los demás ── */
+    test('apagar eliminar no toca el alta ni los costeos', () => {
+        const p = sin('eliminar');
+        return eq(!p.oculto('btnAgregarInsumo') && !p.oculto('btnVistaCosteo'), true, 'quirúrgico');
+    });
+    test('con todo prendido, no se esconde nada', () =>
+        eq(['btnAgregarInsumo','btnCatalogoEtaax','btnInsumosNegGlobal','btnEliminarSelec','btnVistaCosteo']
+            .some(id => CON_TODO.oculto(id)), false, 'nada escondido'));
+
+    /* ── Y que el permiso fresco llegue sin recargar ── */
+    test('cuando bajan los permisos de la nube, la pantalla se vuelve a aplicar', () =>
+        eq(html.indexOf("window.addEventListener('etaax:permisos'") > -1, true, 'al vuelo'));
+}
+
+/* ═══════════ SUITE BE5 · EL ÁMBAR QUE NO SE LEÍA ══════════════════════════
+   El #f5c842 es el ámbar de la marca y se ve bien sobre fondo oscuro. Puesto
+   como color de LETRA sobre una superficie clara da 2.6:1 — por debajo del
+   4.5:1 que hace falta para leerse. Y eso pasaba en dos lugares a la vez: en
+   todo el modo claro, y en CADA HOJA IMPRESA, que siempre es blanca.
+
+   El arreglo no es quitar el ámbar: es tener DOS. El --accent sigue para
+   fondos, bordes y acentos grandes; --accent-text es el que se lee.          */
+console.log('\n══ BE5 · El ámbar que no se leía ══');
+{
+    const css = fs.readFileSync(path.join(RAIZ, 'styles.css'), 'utf8');
+
+    /* Contraste WCAG, calculado de verdad: un número inventado no sirve de nada. */
+    function lum(hex) {
+        const c = [1, 3, 5].map(i => parseInt(hex.substr(i, 2), 16) / 255)
+            .map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    }
+    const contraste = (a, b) => {
+        const l1 = Math.max(lum(a), lum(b)), l2 = Math.min(lum(a), lum(b));
+        return (l1 + 0.05) / (l2 + 0.05);
+    };
+
+    const luz = css.slice(css.indexOf('[data-theme="light"] {'));
+    const tokenLuz = (luz.match(/--accent-text:\s*(#[0-9a-f]{6})/) || [])[1];
+    const accentLuz = (luz.match(/--accent:\s*(#[0-9a-f]{6})/) || [])[1];
+
+    test('existe un ámbar pensado para TEXTO', () => eq(!!tokenLuz, true, 'existe'));
+    test('…y sobre blanco se lee (4.5:1 o más)', () =>
+        eq(contraste(tokenLuz, '#ffffff') >= 4.5, true, contraste(tokenLuz, '#ffffff').toFixed(2) + ':1'));
+    test('…y sobre el fondo claro del sistema también', () =>
+        eq(contraste(tokenLuz, '#f4f3f0') >= 4.5, true, contraste(tokenLuz, '#f4f3f0').toFixed(2) + ':1'));
+    /* La prueba de que hacía falta: el accent de siempre NO llega. */
+    test('el ámbar de acentos, en cambio, no llegaba ni de cerca', () =>
+        eq(contraste(accentLuz, '#ffffff') < 4.5, true, contraste(accentLuz, '#ffffff').toFixed(2) + ':1'));
+    test('en oscuro el ámbar de texto sigue siendo el de la marca', () => {
+        const osc = css.slice(css.indexOf(':root'), css.indexOf('[data-theme="light"]'));
+        return eq((osc.match(/--accent-text:\s*(#[0-9a-f]{6})/) || [])[1], '#f5c842', 'sin cambiar la marca');
+    });
+    test('…y ahí también se lee', () => {
+        const osc = css.slice(css.indexOf(':root'), css.indexOf('[data-theme="light"]'));
+        const t = (osc.match(/--accent-text:\s*(#[0-9a-f]{6})/) || [])[1];
+        const bg = (osc.match(/--bg:\s*(#[0-9a-f]{6})/) || [])[1];
+        return eq(contraste(t, bg) >= 4.5, true, contraste(t, bg).toFixed(2) + ':1');
+    });
+
+    /* Las clases de texto ámbar del sistema usan el token, no el color crudo. */
+    ['.pill-amber', '.val-amber'].forEach(function (cl) {
+        test(cl + ' usa el ámbar legible', () => {
+            const i = css.indexOf(cl);
+            return eq(css.slice(i, i + 140).indexOf('color: var(--accent-text)') > -1, true, 'token');
+        });
+    });
+
+    /* EL PAPEL SIEMPRE ES BLANCO: en las plantillas impresas no hay modo claro
+       que valga, el ámbar de pantalla sale casi invisible. */
+    const app = fs.readFileSync(path.join(RAIZ, 'app.js'), 'utf8');
+    const impresos = (app.match(/color:#f5c842/g) || []).length;
+    test('ninguna plantilla impresa deja ámbar de pantalla como texto', () =>
+        eq(impresos, 0, impresos + ' quedan'));
+    test('…y el que usan sí se lee en papel', () => {
+        const usados = [...new Set(app.match(/color:#8a6400/g) || [])];
+        return eq(usados.length > 0 && contraste('#8a6400', '#ffffff') >= 4.5, true, 'legible');
+    });
+
+    /* La marca del sub-permiso pendiente, que es donde saltó. */
+    const per = fs.readFileSync(path.join(RAIZ, 'administrativo/permisos.html'), 'utf8');
+    test('la marca de "aún no aplica" se lee en modo claro', () => {
+        const i = per.indexOf('.subperm-pend');
+        return eq(per.slice(i, i + 260).indexOf('color:var(--accent-text)') > -1, true, 'legible');
+    });
 }
 
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════

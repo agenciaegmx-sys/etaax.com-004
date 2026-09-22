@@ -414,7 +414,7 @@
             el.style.display = 'block';
             return;
         }
-        var txt = '<span style="color:#f5c842;font-weight:700">⏳ Sincronizando…</span> ' +
+        var txt = '<span style="color:var(--accent-text,#f5c842);font-weight:700">⏳ Sincronizando…</span> ' +
             n + ' cambio' + s + ' pendiente' + s + ' (se sube' + (n !== 1 ? 'n' : '') + ' solo' + s + ').';
         if (atorados.length) {
             // El que más ha fallado marca qué tan cerca está el descarte (a los 8 intentos).
