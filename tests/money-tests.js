@@ -8866,6 +8866,117 @@ console.log('\n══ BD6 · La ventana de Staff y sus sub-pantallas ══');
     });
 }
 
+/* ═══════════ SUITE BD7 · EL "VOLVER" QUE SE DISFRAZÓ DE "CERRAR" ═══════════
+   Salió un "← Volver" rojo, en medio del encabezado, en ventanas que no tienen
+   a dónde volver —Catálogo de Staff recién abierto, Horarios Operativos—.
+
+   La causa: el dock busca el botón de cerrar por clase, y "Volver" compartía la
+   clase de estilo con "Cerrar". Salía elegido como el botón de cerrar: se
+   pintaba de rojo, se metía al grupo, y el `display:none` que debía esconderlo
+   perdía contra el `!important` con el que se estiliza cerrar. Un botón
+   escondido, visible.
+
+   Y de paso: cancelar la contraseña de entrada dejaba al dueño mirando un
+   catálogo vacío que no puede usar, con la salida en el encabezado de atrás.  */
+console.log('\n══ BD7 · El "Volver" que se disfrazó de "Cerrar" ══');
+{
+    const dock = fs.readFileSync(path.join(RAIZ, 'modal-dock.js'), 'utf8');
+    const hub  = fs.readFileSync(path.join(RAIZ, 'administrativo/staff-hub.html'), 'utf8');
+    const stf  = fs.readFileSync(path.join(RAIZ, 'administrativo/staff.html'), 'utf8');
+
+    /* Se corre el buscador REAL del dock contra un encabezado de mentira. */
+    const findClose = (() => {
+        const i = dock.indexOf('function findClose(header) {');
+        const src = dock.slice(i, dock.indexOf('\n    }\n', i) + 6);
+        const c = { console };
+        c.CLOSE = '.modal-close,.dx-win-close,.tm-x';
+        vm.createContext(c);
+        vm.runInContext('var CLOSE = ' + JSON.stringify(c.CLOSE) + ';\n' + src + '\nthis.findClose = findClose;', c);
+        return c.findClose;
+    })();
+    function boton(clases, texto, onclick) {
+        const cs = String(clases||'').split(/\s+/).filter(Boolean);
+        return { textContent:texto||'', _cs:cs,
+                 classList:{ contains:(x)=>cs.indexOf(x) > -1 },
+                 getAttribute:()=>onclick||null };
+    }
+    function encabezado(botones) {
+        const sel = (s) => {
+            if (s === 'button') return botones;
+            const clases = s.split(',').map(x => x.trim().replace('.',''));
+            return botones.filter(b => b._cs.some(c => clases.indexOf(c) > -1));
+        };
+        return { querySelectorAll: sel, querySelector: (s) => sel(s)[0] || null };
+    }
+
+    const volver = boton('tm-back etx-hd-extra', '← Volver', 'volverTool()');
+    const cerrar = boton('tm-x', '✕ Cerrar', 'cerrarTool()');
+    test('el botón de cerrar es Cerrar, no Volver', () =>
+        eq(findClose(encabezado([volver, cerrar])), cerrar, 'el correcto'));
+    /* El cinturón: aunque a alguien se le vuelva a pasar la clase de cerrar en
+       un botón propio de la ventana, marcarlo como extra lo deja fuera. */
+    const volverConClaseDeCerrar = boton('tm-x etx-hd-extra', '← Volver', 'volverTool()');
+    test('…aunque Volver lleve por error la clase de Cerrar', () =>
+        eq(findClose(encabezado([volverConClaseDeCerrar, cerrar])), cerrar, 'excluido'));
+    test('…y aunque su texto diga algo parecido a cerrar', () =>
+        eq(findClose(encabezado([boton('etx-hd-extra','✕ Salir de aquí','cerrarAlgo()'), cerrar])),
+           cerrar, 'excluido'));
+    test('una ventana normal sigue encontrando su ✕ de siempre', () =>
+        eq(findClose(encabezado([boton('','✕','cerrarModal()')])).textContent, '✕', 'sin romper'));
+    test('y si no hay ninguno, no inventa uno', () =>
+        eq(findClose(encabezado([boton('','Guardar','guardar()')])), null, 'nulo'));
+
+    /* En la página: Volver ya no comparte la clase con Cerrar. */
+    test('Volver tiene su propia clase, no la de Cerrar', () =>
+        eq(/id="tmBack"[^>]*class="tm-back|class="tm-back[^"]*"[^>]*id="tmBack"/.test(hub), true, 'propia'));
+    test('…y sigue marcado para viajar con el grupo de botones', () =>
+        eq(/id="tmBack"[^>]*etx-hd-extra|etx-hd-extra[^>]*id="tmBack"/.test(hub), true, 'en el grupo'));
+    /* DOS botones con margin-left:auto se reparten el espacio libre entre ellos
+       y terminan desperdigados por el encabezado — eso era lo que se veía. Solo
+       uno lo reclama (Cerrar, como respaldo si el dock no cargó); Volver no. */
+    test('solo un botón del encabezado reclama el espacio libre', () => {
+        const css = hub.slice(hub.indexOf('.tool-modal-hd {'), hub.indexOf('.tool-modal-hd .tm-open'))
+                       .replace(/\/\*[\s\S]*?\*\//g, '');   // los comentarios no son reglas
+        return eq((css.match(/margin-left:auto/g) || []).length, 1, 'uno solo');
+    });
+    test('…y no es Volver', () => {
+        const i = hub.indexOf('.tool-modal-hd .tm-back {');
+        return eq(hub.slice(i, i + 300).indexOf('margin-left:auto') === -1, true, 'no reclama');
+    });
+
+    /* ── Cancelar la contraseña de entrada cierra la ventana ── */
+    const G = crearContexto();
+    cargarJS(G, 'admin-guard.js');
+    let arrepentido = 0;
+    G._pedirClaveAdmin('probar', function(){}, '🔓 Entrar', { onCancel: function(){ arrepentido++; } });
+    G._cerrarAdminGuard();
+    test('cancelar la contraseña avisa a quien la pidió', () => eq(arrepentido, 1, 'avisado'));
+    G._cerrarAdminGuard();
+    test('…una sola vez, no en cada cierre posterior', () => eq(arrepentido, 1, 'una vez'));
+    /* Y la siguiente vez, sin aviso pedido, no arrastra el del anterior. */
+    G._pedirClaveAdmin('sin aviso', function(){}, 'Entrar');
+    G._cerrarAdminGuard();
+    test('quien no pide aviso no hereda el del anterior', () => eq(arrepentido, 1, 'silencio'));
+    /* Autorizar pasa por el mismo cierre: entrar NO es arrepentirse. */
+    test('autorizar no dispara el aviso de cancelación', () => {
+        const ag = fs.readFileSync(path.join(RAIZ, 'admin-guard.js'), 'utf8');
+        const i = ag.indexOf('function autorizar(quien)');
+        return eq(ag.slice(i, i + 300).indexOf('_guardCancel = null;') > -1, true, 'limpio');
+    });
+
+    /* Y que el catálogo lo use donde importa: al ENTRAR. */
+    test('la contraseña de entrada al catálogo se puede cancelar cerrando', () =>
+        eq(stf.indexOf('desbloquearCatalogo(_cerrarVentanaStaff)') > -1, true, 'conectado'));
+    test('…y cerrar significa cerrar la ventana flotante del hub', () => {
+        const i = stf.indexOf('function _cerrarVentanaStaff()');
+        return eq(stf.slice(i, i + 420).indexOf('window.parent.cerrarTool()') > -1, true, 'al padre');
+    });
+    /* Pero el botón "Desbloquear" del estado vacío NO cierra: ahí el usuario ya
+       decidió quedarse, y cerrarle la ventana sería castigarlo por dudar. */
+    test('el desbloqueo desde el estado vacío no cierra nada', () =>
+        eq(stf.indexOf('onclick="desbloquearCatalogo()"') > -1, true, 'sin cerrar'));
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La

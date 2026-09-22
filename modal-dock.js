@@ -17,11 +17,19 @@
     // Botón de cerrar: por clase conocida, o por heurística (texto ✕/× o
     // onclick que menciona cerrar/close) — muchos modales usan un ✕ sin clase.
     function findClose(header) {
-        var c = header.querySelector(CLOSE); if (c) return c;
+        /* Los botones propios de la ventana (.etx-hd-extra, p.ej. "Volver")
+           NUNCA son el de cerrar. Sin esta exclusión, "← Volver" —que comparte
+           la clase de estilo con Cerrar— salía elegido: se pintaba de rojo como
+           cerrar, se metía al grupo, y el display:none que lo escondía perdía
+           contra el !important del estilo de cerrar. Resultado: un "Volver"
+           visible en ventanas que no tienen a dónde volver. */
+        var ok = function (e) { return e && !e.classList.contains('etx-hd-extra'); };
+        var cands = header.querySelectorAll(CLOSE);
+        for (var j = 0; j < cands.length; j++) if (ok(cands[j])) return cands[j];
         var btns = header.querySelectorAll('button');
         for (var i = 0; i < btns.length; i++) {
             var b = btns[i], t = (b.textContent || '').trim(), oc = (b.getAttribute('onclick') || '');
-            if (/^[✕✖×⨯]/.test(t) || /cerrar|close/i.test(oc)) return b;
+            if (ok(b) && (/^[✕✖×⨯]/.test(t) || /cerrar|close/i.test(oc))) return b;
         }
         return null;
     }

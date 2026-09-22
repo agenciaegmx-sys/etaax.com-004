@@ -2197,20 +2197,33 @@ function _graciaHasta() {
 function _graciaRenovar() {
     try { sessionStorage.setItem(_GRACIA_K, String(Date.now() + _GRACIA_MS)); } catch (e) {}
 }
-function _gateStaff(accion, cb, btnLabel) {
+function _gateStaff(accion, cb, btnLabel, alCancelar) {
     if (Date.now() < _graciaHasta()) { cb(); return; }
     if (!window._pedirClaveAdmin) { cb(); return; }   // sin guard cargado no se bloquea la operación
-    _pedirClaveAdmin(accion, function () { _graciaRenovar(); cb(); }, btnLabel);
+    _pedirClaveAdmin(accion, function () { _graciaRenovar(); cb(); }, btnLabel,
+        alCancelar ? { onCancel: alCancelar } : null);
+}
+/* Cancelar la contraseña de ENTRADA cierra la ventana. Dejarla abierta en un
+   catálogo vacío que no se puede usar no es "cancelar": es quedarse mirando una
+   pantalla muerta, con la salida escondida en el encabezado de atrás. */
+function _cerrarVentanaStaff() {
+    try {
+        if (window.parent && window.parent !== window && typeof window.parent.cerrarTool === 'function') {
+            window.parent.cerrarTool(); return;
+        }
+    } catch (e) {}
+    if (/[?&]embed=1/.test(window.location.search)) return;  // embebido sin padre útil: no navegar
+    window.location.href = 'staff-hub.html';
 }
 /* Solo la ventanita de la contraseña, nada de pantalla de bloqueo encima: una
    página nueva tapando el catálogo desarma la pantalla y no aporta nada que el
    propio modal de la clave no diga ya. Si se cierra sin escribirla, el catálogo
    se queda vacío y su estado vacío ofrece volver a intentarlo. */
-function desbloquearCatalogo() {
+function desbloquearCatalogo(alCancelar) {
     _gateStaff('Catálogo de Staff — acceso restringido', function () {
         _bloqueado = false;
         _arrancarCatalogo();
-    }, '🔓 Entrar');
+    }, '🔓 Entrar', alCancelar);
 }
 var _bloqueado = true;
 
@@ -2233,7 +2246,10 @@ async function initPage() {
     // El alcance por sucursal lo aplica renderTable según la sucursal activa / modo
     // global (se eliminó el filtro por sucursal de la UI).
     renderAll();          // pinta el estado vacío bloqueado detrás del modal
-    desbloquearCatalogo();
+    /* La de ENTRADA: si se cancela, se cierra la ventana. Distinto del botón
+       "🔓 Desbloquear" del estado vacío, donde cancelar deja el catálogo como
+       estaba — ahí el usuario ya decidió quedarse. */
+    desbloquearCatalogo(_cerrarVentanaStaff);
 }
 /* ── Realtime: sync en vivo entre dispositivos (tabla publicada en v32) ──
    Que un colaborador dado de alta/movido en una máquina aparezca en la otra

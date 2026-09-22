@@ -55,6 +55,17 @@
         .tool-modal-hd { display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface2);flex-shrink:0; }
         .tool-modal-hd .tm-ic { font-size:20px;line-height:1; }
         .tool-modal-hd .tm-tt { font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--text);line-height:1; }
+        /* Sin margin-left:auto: quien manda a la derecha es el grupo de botones
+           (.etx-hd-btns). Con el auto aquí, cada botón se peleaba el espacio y
+           terminaban repartidos por el encabezado en vez de juntos. */
+        .tool-modal-hd .tm-back { background:var(--surface);border:1px solid var(--border);border-radius:9px;
+            color:var(--text-muted);padding:7px 14px;font-family:'DM Sans',sans-serif;font-size:12.5px;
+            cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px; }
+        .tool-modal-hd .tm-back:hover { border-color:var(--viol);color:var(--viol); }
+        /* Con el dock cargado, el grupo (.etx-hd-btns) lo manda a la derecha.
+           Este auto es el respaldo para cuando el dock no llegó: sin él, Cerrar
+           se quedaría pegado al título. Al entrar al grupo, deja de aplicar
+           (dentro no hay espacio libre que repartir). */
         .tool-modal-hd .tm-x { margin-left:auto;background:var(--surface);border:1px solid var(--border);border-radius:9px;color:var(--text-muted);padding:7px 14px;font-family:'DM Sans',sans-serif;font-size:12.5px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px; }
         .tool-modal-hd .tm-x:hover { border-color:var(--viol);color:var(--viol); }
         .tool-modal-hd .tm-open { background:var(--surface);border:1px solid var(--border);border-radius:9px;color:var(--text-dim);padding:7px 12px;font-size:12px;cursor:pointer;text-decoration:none;transition:all .15s; }
@@ -210,7 +221,7 @@
         <div class="tool-modal-hd">
             <span class="tm-ic" id="tmIcon">🧠</span>
             <span class="tm-tt" id="tmTitle">Herramienta</span>
-            <button class="tm-x etx-hd-extra" id="tmBack" style="display:none" onclick="volverTool()">← Volver</button>
+            <button class="tm-back etx-hd-extra" id="tmBack" style="display:none" onclick="volverTool()">← Volver</button>
             <button class="tm-x" id="tmClose" onclick="cerrarTool()">✕ Cerrar</button>
         </div>
         <div class="tool-modal-body">

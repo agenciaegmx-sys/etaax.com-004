@@ -53,10 +53,15 @@
     }
 
     var _guardSoloAdmin = false;
+    var _guardCancel = null;
 
     window._pedirClaveAdmin = function (accion, callback, btnLabel, opts) {
         _ensureModal();
         _guardCb = callback;
+        /* Qué hacer si se arrepiente. Sin esto, "Cancelar" solo quitaba la
+           ventanita y dejaba al usuario mirando una pantalla vacía que no puede
+           usar; quien la abre decide si eso significa cerrar. */
+        _guardCancel = (opts && typeof opts.onCancel === 'function') ? opts.onCancel : null;
         // soloAdmin: no acepta la contraseña del colaborador, solo la
         // del dueño del negocio o la del admin maestro (p.ej. Permisos)
         _guardSoloAdmin = !!(opts && opts.soloAdmin);
@@ -92,6 +97,10 @@
         var m = document.getElementById('modalAdminGuard');
         if (m) m.style.display = 'none';
         _guardCb = null;
+        /* Se limpia ANTES de llamarlo: autorizar también pasa por aquí y una
+           autorización no es un arrepentimiento. */
+        var cancelar = _guardCancel; _guardCancel = null;
+        if (cancelar) cancelar();
     };
 
     var GUARD_ADMIN_EMAIL = 'admin@etaax.com';
@@ -179,6 +188,7 @@
         function autorizar(quien) {
             btn.disabled = false;
             var cb = _guardCb;
+            _guardCancel = null;   // entró: no es un arrepentimiento
             _cerrarAdminGuard();
             alert('Autorizado por: ' + quien);
             if (cb) cb();
