@@ -9283,9 +9283,12 @@ console.log('\n══ BD9 · Términos y Condiciones ══');
     /* ── Se aceptan donde nace la cuenta ── */
     test('el alta pide aceptar los Términos, no solo el aviso', () =>
         eq(alta.indexOf('href="/terminos"') > -1, true, 'aceptados'));
-    test('…en la misma casilla que ya bloquea la activación', () => {
-        const i = alta.indexOf('id="alPriv"');
-        return eq(alta.slice(i, i + 420).indexOf('/terminos') > -1, true, 'con candado');
+    /* Y en SU PROPIA casilla, no colgados de la del aviso: son dos documentos
+       con efectos distintos y uno puede cambiar sin el otro. */
+    test('…en su propia casilla, que también bloquea la activación', () => {
+        const i = alta.indexOf('id="alTerm"');
+        return eq(i > -1 && alta.slice(i, i + 300).indexOf('/terminos') > -1 &&
+                  alta.indexOf("getElementById('alTerm').checked") > -1, true, 'con candado');
     });
 
     /* ── URL corta: estas ligas se dictan por teléfono y se escriben en
@@ -9309,6 +9312,192 @@ console.log('\n══ BD9 · Términos y Condiciones ══');
         eq(land.indexOf('<a href="#">Términos') === -1, true, 'vivo'));
     test('…ahora lleva a los Términos de verdad', () =>
         eq(land.indexOf('<a href="/terminos">') > -1, true, 'ligado'));
+}
+
+/* ═══════════ SUITE BE1 · LA LLAVE MÁS GORDA DEL SISTEMA ═══════════════════
+   La contraseña del dueño abre la cuenta que ve nóminas, CLABE, CURP e INE de
+   todo el personal. Hasta hoy le bastaban SEIS caracteres: "123456" pasaba.
+
+   Y las casillas del alta: dos contratos distintos vivían en una sola palomita.
+   Eso no prueba que se aceptaron los dos, y si mañana cambia uno solo, no hay
+   forma de re-aceptar ese sin el otro.                                        */
+console.log('\n══ BE1 · Contraseñas de cuenta y consentimiento ══');
+{
+    const pwdSrc = fs.readFileSync(path.join(RAIZ, 'password.js'), 'utf8');
+    const c = { console, window:{}, document:{ getElementById(){ return null; },
+                 createElement(){ return { style:{}, appendChild(){}, setAttribute(){} }; },
+                 head:{ appendChild(){} } },
+               navigator:{}, setTimeout };
+    c.window = c;
+    vm.createContext(c);
+    vm.runInContext(pwdSrc, c, { filename:'password.js' });
+    const P = c.window.EtaaxPwd;
+
+    /* ── Lo que ya NO pasa ── */
+    test('"123456" ya no es una contraseña', () => eq(P.evaluar('123456').ok, false, 'rechazada'));
+    test('"12345678" tampoco, aunque llegue a los ocho', () =>
+        eq(P.evaluar('12345678').ok, false, 'conocida'));
+    test('"password" tampoco', () => eq(P.evaluar('Password1').ok, false, 'conocida'));
+    test('ni el nombre del propio sistema', () => eq(P.evaluar('Etaax2026').ok, false, 'conocida'));
+    /* Usar la parte de antes de la @ como contraseña es regalar medio par. */
+    test('ni tu propio correo', () =>
+        eq(P.evaluar('Edwin1234', { correo:'edwin@etaax.com' }).ok, false, 'su correo'));
+    test('…aunque le cambie las mayúsculas', () =>
+        eq(P.evaluar('EDWIN1234x', { correo:'edwin@etaax.com' }).ok, false, 'sin disfraz'));
+
+    /* ── Lo que sí ── */
+    test('una contraseña normal y decente pasa', () => eq(P.evaluar('Cocina2026').ok, true, 'pasa'));
+    test('…y dice QUÉ le falta cuando no pasa', () => {
+        const r = P.evaluar('cocina2026');
+        return eq(r.faltan.length === 1 && r.faltan[0].indexOf('MAYÚSCULA') > -1, true, r.faltan.join('|'));
+    });
+    test('siete caracteres no bastan', () => eq(P.evaluar('Abc123d').ok, false, 'corta'));
+    test('ocho sí, con las tres familias', () => eq(P.evaluar('Abc123de').ok, true, 'ocho'));
+    /* El medidor empuja sin bloquear: puede pasar y aun así verse flojita. */
+    test('la fuerza distingue "apenas cumple" de "buena"', () =>
+        eq(P.evaluar('Abc123de').fuerza < P.evaluar('Trucha!Verde42').fuerza, true, 'gradúa'));
+    test('lo conocido se hunde hasta el fondo del medidor', () =>
+        eq(P.evaluar('Password123!').fuerza, 0, 'sin crédito'));
+
+    /* ── El generador ── */
+    const muestra = [];
+    for (let i = 0; i < 40; i++) muestra.push(P.generar());
+    test('la contraseña sugerida siempre cumple la regla', () =>
+        eq(muestra.every(p => P.evaluar(p).ok), true, 'cumple'));
+    test('…y sale distinta cada vez', () =>
+        eq(new Set(muestra).size, muestra.length, 'no se repite'));
+    test('…con al menos 12 caracteres', () =>
+        eq(muestra.every(p => p.length >= 12), true, 'larga'));
+    /* Se va a dictar por teléfono y a copiar a mano: fuera lo que se confunde. */
+    test('…sin caracteres que se confundan al dictarla (l, I, 1, O, 0)', () =>
+        eq(muestra.every(p => !/[lI1O0]/.test(p)), true, 'legible'));
+    test('…y con las cuatro familias, no solo las tres obligatorias', () =>
+        eq(muestra.every(p => /[a-z]/.test(p) && /[A-Z]/.test(p) &&
+                              /[0-9]/.test(p) && /[^A-Za-z0-9]/.test(p)), true, 'completa'));
+    /* Los cuatro obligatorios se revuelven: si no, el patrón sería siempre
+       minúscula-MAYÚSCULA-número-símbolo al frente. */
+    test('…sin dejar los obligatorios siempre al principio', () => {
+        const patron = muestra.map(p => /^[a-z][A-Z][0-9]/.test(p)).filter(Boolean).length;
+        return eq(patron < muestra.length, true, 'revuelta');
+    });
+    test('la aleatoriedad sale del sistema, no de Math.random', () =>
+        eq(pwdSrc.indexOf('crypto.getRandomValues') > -1, true, 'buena entropía'));
+
+    /* ── En el alta ── */
+    const alta = fs.readFileSync(path.join(RAIZ, 'alta.html'), 'utf8');
+    test('el alta usa la regla compartida, no una copia suya', () =>
+        eq(alta.indexOf("EtaaxPwd.evaluar(pwd, { correo: _inv.email })") > -1, true, 'una sola verdad'));
+    test('…y monta el medidor con su botón de sugerencia', () =>
+        eq(alta.indexOf("EtaaxPwd.montar('alPwd'") > -1, true, 'medidor'));
+    test('…y carga el archivo que lo define', () =>
+        eq(alta.indexOf('src="/password.js"') > -1, true, 'cargado'));
+    /* Si el archivo no llegó, se cae al piso nuevo — no al viejo de 6. */
+    test('sin el archivo cargado, el piso sigue siendo 8', () =>
+        eq(alta.indexOf('} else if (pwd.length < 8)') > -1, true, 'sin regresar'));
+
+    /* ── Una casilla por documento ── */
+    ['alTerm', 'alPriv', 'alResp', 'alColab'].forEach(id =>
+        test('el alta tiene la casilla ' + id, () =>
+            eq(alta.indexOf('id="' + id + '"') > -1, true, 'existe')));
+    test('los Términos tienen su propia casilla, separada del Aviso', () => {
+        const i = alta.indexOf('id="alTerm"'), j = alta.indexOf('id="alPriv"');
+        return eq(alta.slice(i, j).indexOf('/privacidad') === -1, true, 'separadas');
+    });
+    test('el aviso para colaboradores dejó de ser una liga suelta', () =>
+        eq(alta.indexOf('id="alColab"') > -1 &&
+           alta.slice(alta.indexOf('id="alResp"'), alta.indexOf('id="alColab"')).indexOf('/colaboradores') === -1,
+           true, 'con casilla propia'));
+    /* Cada una bloquea, y cada una dice cuál faltó: "acepta los términos" no le
+       dice a nadie cuál de las cuatro se le pasó. */
+    ['alTerm', 'alPriv', 'alResp', 'alColab'].forEach(id =>
+        test('…y sin ' + id + ' no se crea la cuenta', () =>
+            eq(alta.indexOf("getElementById('" + id + "').checked") > -1, true, 'bloquea')));
+    test('cada casilla tiene su propio mensaje', () => {
+        const msgs = (alta.match(/msg\.textContent = 'Necesitas [^']+'|msg\.textContent = 'Falta la última[^']+'/g) || []);
+        return eq(new Set(msgs).size >= 4, true, 'distintos');
+    });
+
+    /* ── Y el servidor no se fía del navegador ── */
+    const ef = fs.readFileSync(path.join(RAIZ, 'supabase/functions/activar-invitacion/index.ts'), 'utf8');
+    test('el servidor exige los Términos, no solo el Aviso', () =>
+        eq(ef.indexOf('if (!terminosVersion)') > -1, true, 'exigidos'));
+    test('…y guarda su versión aparte de la del Aviso', () =>
+        eq(ef.indexOf('terminos_version: terminosVersion') > -1, true, 'por separado'));
+    /* Quien llame a la función por su cuenta no puede crear "123456". */
+    test('el servidor también exige los 8 caracteres', () =>
+        eq(ef.indexOf('password.length < 8') > -1 && ef.indexOf('password.length < 6') === -1,
+           true, 'piso en el servidor'));
+    test('…y las tres familias de caracteres', () =>
+        eq(ef.indexOf('!/[a-z]/.test(password)') > -1 && ef.indexOf('!/[A-Z]/.test(password)') > -1 &&
+           ef.indexOf('!/[0-9]/.test(password)') > -1, true, 'completo'));
+
+    /* ── Cambiar la contraseña obedece la misma regla ──
+       Exigir una contraseña fuerte al nacer y dejar cambiarla por "123456" al
+       día siguiente, desde la misma app, no protege nada. */
+    const cfg = fs.readFileSync(path.join(RAIZ, 'configuracion.html'), 'utf8');
+    test('cambiar la contraseña usa la misma regla que crearla', () =>
+        eq(cfg.indexOf('EtaaxPwd.evaluar(nueva') > -1, true, 'misma regla'));
+    test('…con su medidor y su sugerencia', () =>
+        eq(cfg.indexOf("EtaaxPwd.montar('accPassNueva'") > -1, true, 'medidor'));
+    test('…y ya no dice "mínimo 6" en ningún lado de esa pantalla', () =>
+        eq(cfg.indexOf('al menos 6 caracteres') === -1 && cfg.indexOf('Mín. 6 caracteres') === -1,
+           true, 'sin rastro'));
+}
+
+/* ═══════════ SUITE BE2 · EL FRENO DE LA PANTALLA DE ENTRADA ═══════════════
+   Comprobado CONTRA PRODUCCIÓN el 22-sep-2026 con un identificador falso: los
+   cuatro primeros fallos pasan, el quinto devuelve 60 s, el sexto 300 y el
+   séptimo 900. Entrar bien borra el contador. Aquí se amarra para que nadie lo
+   desconecte sin enterarse.                                                   */
+console.log('\n══ BE2 · El freno de la pantalla de entrada ══');
+{
+    const hub = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+    const sql = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v56.sql'), 'utf8');
+
+    test('el login pregunta ANTES de intentar', () => {
+        const i = hub.indexOf('async function loginSubmit()');
+        const j = hub.indexOf('signInWithPassword', i);
+        return eq(hub.slice(i, j).indexOf('_loginEspera(input)') > -1, true, 'antes');
+    });
+    test('…y no deja pasar si le quedan segundos', () => {
+        const i = hub.indexOf('var _espera = await _loginEspera(input)');
+        return eq(hub.slice(i, i + 400).indexOf('if (_espera > 0)') > -1, true, 'frena');
+    });
+    test('cada fallo se cuenta en el servidor', () =>
+        eq(hub.indexOf('await _loginFallo(input)') > -1, true, 'contado'));
+    test('…y entrar bien borra el contador', () =>
+        eq(hub.indexOf('_loginExito(input)') > -1, true, 'limpia'));
+    /* El contador NO puede vivir en el navegador: se borraría con los datos del
+       sitio o con una ventana privada. Sería un letrero, no una puerta. */
+    test('el contador vive en el servidor, no en el navegador', () =>
+        eq(/localStorage[^\n]*login_(puerta|intentos|fallos)/.test(hub), false, 'del lado bueno'));
+    /* Y falla ABIERTO: un freno que falla cerrado deja fuera a todos los
+       clientes por un problema de red. */
+    test('si el servidor no contesta, se deja pasar', () => {
+        const i = hub.indexOf('async function _loginEspera(ident)');
+        return eq(hub.slice(i, i + 420).indexOf('return 0;') > -1, true, 'falla abierto');
+    });
+    /* El mensaje no puede volverse un buscador de clientes. */
+    test('el mensaje no delata si el correo existe', () =>
+        eq(hub.indexOf('Correo o contraseña incorrectos.') > -1, true, 'sin delatar'));
+
+    /* La escalera, tal como se comprobó contra producción. */
+    const escalera = sql.replace(/[ \t]+/g, ' ');   // el SQL alinea con espacios de más
+    [[5, '= 5', 60], [6, '= 6', 300], [7, '= 7', 900], [8, '>= 8', 3600]].forEach(function (par) {
+        test('con ' + par[0] + ' fallos, esperar ' + par[2] + ' s', () =>
+            eq(escalera.indexOf('p_fallos ' + par[1] + ' THEN ' + par[2]) > -1, true, 'escalera'));
+    });
+    test('el correo NUNCA se guarda en claro, solo su huella', () =>
+        eq(sql.indexOf('md5(lower(trim(coalesce(p_ident') > -1, true, 'sin correos'));
+    /* Sin el freno por IP bastaría con ir cambiando de correo. */
+    test('también frena por IP, no solo por cuenta', () =>
+        eq(sql.indexOf('WHERE ip = v_ip') > -1, true, 'por IP'));
+    test('la tabla no la puede leer nadie desde el cliente', () =>
+        eq(sql.indexOf('REVOKE ALL ON TABLE login_puerta FROM anon, authenticated') > -1, true, 'cerrada'));
+    test('…y las tres funciones sí las puede llamar quien aún no entra', () =>
+        eq(sql.indexOf('GRANT EXECUTE ON FUNCTION login_estado(TEXT) TO anon') > -1, true, 'anon'));
+    test('la tabla se limpia sola: no guarda intentos de hace días', () =>
+        eq(sql.indexOf("creado < now() - interval '24 hours'") > -1, true, 'se limpia'));
 }
 
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════

@@ -197,7 +197,7 @@
                 <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:14px">🔑 Cambiar contraseña</div>
                 <div class="form-grid">
                     <div class="form-group full"><label>Contraseña actual</label><input type="password" id="accPassActual" placeholder="Tu contraseña actual" autocomplete="off"></div>
-                    <div class="form-group"><label>Nueva contraseña</label><input type="password" id="accPassNueva" placeholder="Mín. 6 caracteres" autocomplete="off"></div>
+                    <div class="form-group"><label>Nueva contraseña</label><input type="password" id="accPassNueva" placeholder="Mín. 8 caracteres" autocomplete="off"></div>
                     <div class="form-group"><label>Confirmar nueva contraseña</label><input type="password" id="accPassConf" placeholder="Repite la nueva" autocomplete="off"></div>
                 </div>
                 <div style="display:flex;align-items:center;gap:14px;margin-top:14px;flex-wrap:wrap">
@@ -265,6 +265,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
+<script src="/password.js"></script><!-- fuerza y sugerencia de contraseña -->
 <script src="/etaax-store.js"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js"></script>
 <script>
@@ -574,6 +575,9 @@ async function cargarCuentaAcceso() {
     } else {
         warn.style.display = 'none';
         box.style.display  = 'block';
+        /* El medidor se monta cuando ya se sabe el correo: sirve para avisar si
+           la contraseña se parece demasiado a él. */
+        if (window.EtaaxPwd) EtaaxPwd.montar('accPassNueva', { correo: function(){ return _cuentaEmail; } });
     }
 }
 
@@ -622,7 +626,15 @@ async function cambiarPasswordAcceso() {
     var nueva  = document.getElementById('accPassNueva').value;
     var conf   = document.getElementById('accPassConf').value;
     if (!actual) { _accMsg('accPassMsg', 'Ingresa tu contraseña actual.', false); return; }
-    if ((nueva || '').length < 6) { _accMsg('accPassMsg', 'La nueva contraseña debe tener al menos 6 caracteres.', false); return; }
+    /* Misma regla que al crear la cuenta (/password.js): no tendría sentido
+       exigir una contraseña fuerte al nacer y dejar cambiarla por "123456" al
+       día siguiente desde esta misma pantalla. */
+    if (window.EtaaxPwd) {
+        var _pw = EtaaxPwd.evaluar(nueva, { correo: _cuentaEmail });
+        if (!_pw.ok) { _accMsg('accPassMsg', 'La nueva contraseña necesita ' + _pw.faltan.join(', ') + '.', false); return; }
+    } else if ((nueva || '').length < 8) {
+        _accMsg('accPassMsg', 'La nueva contraseña debe tener al menos 8 caracteres.', false); return;
+    }
     if (nueva !== conf) { _accMsg('accPassMsg', 'Las contraseñas nuevas no coinciden.', false); return; }
     if (nueva === actual) { _accMsg('accPassMsg', 'La nueva contraseña debe ser distinta a la actual.', false); return; }
 

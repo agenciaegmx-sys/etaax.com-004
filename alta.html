@@ -61,6 +61,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="/supabase-config.js"></script>
+<script src="/password.js"></script><!-- fuerza y sugerencia de contraseña -->
 <script src="/datos-pago.js"></script><!-- datos de transferencia: fuente única -->
 <script>
 /* ════════════════════════════════════════════════════════════════
@@ -126,15 +127,22 @@ function _pintarFormulario(){
         '<div class="al-campo"><label>Tu nombre completo</label>' +
             '<input type="text" id="alNombre" placeholder="Juan García" autocomplete="name"></div>' +
         '<div class="al-campo"><label>Crea tu contraseña</label>' +
-            '<input type="password" id="alPwd" placeholder="Mínimo 6 caracteres" autocomplete="new-password">' +
+            '<input type="password" id="alPwd" placeholder="Mínimo 8 caracteres" autocomplete="new-password">' +
             '<div class="al-hint">Con este correo y esta contraseña vas a entrar a ETAAX.</div></div>' +
         /* La aceptación se pide DONDE de verdad nace la cuenta. El formulario de
            registro del hub quedó muerto hace tiempo (se cambió por "habla con un
            asesor"), así que su checkbox no protegía nada: todas las altas pasan
-           por aquí. */
-        '<label class="al-chk"><input type="checkbox" id="alPriv">' +
+           por aquí.
+           UNA CASILLA POR DOCUMENTO: dos contratos distintos en una sola palomita
+           no prueban que se aceptaron los dos, y son documentos separados con
+           efectos distintos —uno es el contrato, el otro dice qué se hace con los
+           datos—. Si mañana cambia uno solo, tiene que poder re-aceptarse solo. */
+        '<label class="al-chk"><input type="checkbox" id="alTerm">' +
             '<span>He leído y acepto los ' +
-            '<a href="/terminos" target="_blank" rel="noopener">Términos y Condiciones</a> y el ' +
+            '<a href="/terminos" target="_blank" rel="noopener">Términos y Condiciones</a> ' +
+            'de ETAAX.</span></label>' +
+        '<label class="al-chk"><input type="checkbox" id="alPriv">' +
+            '<span>He leído y acepto el ' +
             '<a href="/privacidad" target="_blank" rel="noopener">Aviso de Privacidad</a> ' +
             'de ETAAX.</span></label>' +
         /* La cláusula que reparte la responsabilidad. Sin ella el aviso no protege
@@ -143,19 +151,33 @@ function _pintarFormulario(){
         '<label class="al-chk"><input type="checkbox" id="alResp">' +
             '<span>Entiendo que de los datos de mis colaboradores y clientes ' +
             '<b>el responsable soy yo</b>, y que debo informarles y tener su consentimiento. ' +
-            'ETAAX solo los guarda por mi cuenta. ' +
-            '<a href="/colaboradores" target="_blank" rel="noopener">Ver el aviso que puedo entregarles</a>.</span></label>' +
+            'ETAAX solo los guarda por mi cuenta.</span></label>' +
+        /* Y su propia casilla para el modelo de aviso: es lo que el dueño le
+           entrega a su gente. Dentro de la casilla anterior, la liga se leía como
+           adorno y nadie la abría; aparte, queda constancia de que lo recibió. */
+        '<label class="al-chk"><input type="checkbox" id="alColab">' +
+            '<span>Ya vi el ' +
+            '<a href="/colaboradores" target="_blank" rel="noopener">aviso que puedo entregarle a mi gente</a> ' +
+            'y me comprometo a informarles.</span></label>' +
         '<button class="al-btn" id="alBtn" onclick="activar()">Activar mi cuenta</button>' +
         '<div class="al-msg" id="alMsg" style="color:var(--text-dim)">' + esc(pago) + '</div>';
     document.getElementById('alPwd').addEventListener('keydown', function(e){
         if (e.key === 'Enter') activar();
     });
+    /* Medidor + requisitos + sugerencia. Esta contraseña abre la cuenta que ve
+       nóminas, CLABE, CURP e INE de todo el personal: es la llave más gorda del
+       sistema y hasta hoy le bastaban seis caracteres. */
+    if (window.EtaaxPwd) EtaaxPwd.montar('alPwd', { correo: _inv.email });
     document.getElementById('alNombre').focus();
 }
 
 /* Versión del aviso que se está mostrando. Al cambiar el texto del aviso hay que
    subirla aquí: es lo que queda guardado con la cuenta. */
 var AVISO_VERSION = '2026-10';
+/* Los Términos se versionan aparte del Aviso: son documentos distintos y uno
+   puede cambiar sin el otro. Mandarlos juntos en un solo número haría imposible
+   decir cuál de los dos aceptó alguien. */
+var TERMINOS_VERSION = '2026-10';
 
 async function activar(){
     var nombre = (document.getElementById('alNombre').value || '').trim();
@@ -164,11 +186,24 @@ async function activar(){
     var btn    = document.getElementById('alBtn');
     msg.className = 'al-msg al-err';
     if (!nombre){ msg.textContent = 'Escribe tu nombre.'; return; }
-    if (pwd.length < 6){ msg.textContent = 'La contraseña necesita al menos 6 caracteres.'; return; }
+    /* La regla vive en /password.js, una sola para toda la app. Si el archivo no
+       cargó, se cae al mínimo de siempre en vez de dejar pasar cualquier cosa. */
+    if (window.EtaaxPwd) {
+        var _pw = EtaaxPwd.evaluar(pwd, { correo: _inv.email });
+        if (!_pw.ok){ msg.textContent = 'Tu contraseña necesita ' + _pw.faltan.join(', ') + '.'; return; }
+    } else if (pwd.length < 8){
+        msg.textContent = 'La contraseña necesita al menos 8 caracteres.'; return;
+    }
+    /* Cada documento, su casilla y su mensaje: "acepta los términos" no le dice
+       a nadie cuál de las cuatro le faltó palomear. */
+    if (!document.getElementById('alTerm').checked){
+        msg.textContent = 'Necesitas aceptar los Términos y Condiciones para continuar.'; return; }
     if (!document.getElementById('alPriv').checked){
-        msg.textContent = 'Necesitas aceptar el aviso de privacidad para continuar.'; return; }
+        msg.textContent = 'Necesitas aceptar el Aviso de Privacidad para continuar.'; return; }
     if (!document.getElementById('alResp').checked){
         msg.textContent = 'Necesitas reconocer tu responsabilidad sobre los datos de tu gente.'; return; }
+    if (!document.getElementById('alColab').checked){
+        msg.textContent = 'Falta la última: confirma que ya viste el aviso para tus colaboradores.'; return; }
 
     btn.disabled = true; btn.textContent = 'Creando tu cuenta…';
     msg.className = 'al-msg'; msg.style.color = 'var(--text-dim)';
@@ -182,6 +217,7 @@ async function activar(){
                cambiar el texto, nadie podría decir qué fue lo que se aceptó. */
             body: { token: _token, nombre: nombre, password: pwd,
                     aviso_version: AVISO_VERSION,
+                    terminos_version: TERMINOS_VERSION,
                     aviso_aceptado: new Date().toISOString() }
         });
     } catch (e) { r = { error: e }; }

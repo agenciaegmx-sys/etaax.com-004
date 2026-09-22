@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'Método no permitido' }, 405);
 
   let body: { token?: string; nombre?: string; password?: string;
-              aviso_version?: string; aviso_aceptado?: string };
+              aviso_version?: string; terminos_version?: string; aviso_aceptado?: string };
   try { body = await req.json(); } catch { return json({ error: 'Cuerpo inválido' }, 400); }
 
   const token = (body.token ?? '').trim();
@@ -65,6 +65,10 @@ Deno.serve(async (req) => {
      nadie podría decir qué fue lo que se aceptó. La fecha se sella aquí, en el
      servidor, no se cree la del navegador (el reloj del cliente se puede mover). */
   const avisoVersion  = (body.aviso_version ?? '').trim();
+  /* Los Términos se registran aparte del Aviso: son dos documentos con efectos
+     distintos y uno puede cambiar sin el otro. Con un solo número no se podría
+     decir cuál de los dos aceptó alguien. */
+  const terminosVersion = (body.terminos_version ?? '').trim();
   const avisoAceptado = new Date().toISOString();
   const password = body.password ?? '';
 
@@ -73,7 +77,13 @@ Deno.serve(async (req) => {
   /* Sin aviso aceptado no se crea la cuenta. Se valida también aquí, no solo en
      el navegador: quien llame a esta función por su cuenta no puede saltárselo. */
   if (!avisoVersion) return json({ error: 'Falta aceptar el aviso de privacidad' }, 400);
-  if (password.length < 6) return json({ error: 'La contraseña debe tener al menos 6 caracteres' }, 400);
+  if (!terminosVersion) return json({ error: 'Falta aceptar los términos y condiciones' }, 400);
+  /* El mínimo REAL de la app vive en /password.js; aquí se repite el piso porque
+     el navegador se puede saltar: quien llame a esta función por su cuenta no
+     puede crear una cuenta con "123456". */
+  if (password.length < 8) return json({ error: 'La contraseña debe tener al menos 8 caracteres' }, 400);
+  if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password))
+    return json({ error: 'La contraseña necesita una minúscula, una MAYÚSCULA y un número' }, 400);
 
   /* ── 1. La invitación manda ──────────────────────────────────────────────
      Se relee de la base aunque el navegador ya la haya consultado: lo que
@@ -95,7 +105,8 @@ Deno.serve(async (req) => {
     email: inv.email,
     password,
     email_confirm: true,
-    user_metadata: { nombre, aviso_version: avisoVersion, aviso_aceptado: avisoAceptado },
+    user_metadata: { nombre, aviso_version: avisoVersion,
+                     terminos_version: terminosVersion, aviso_aceptado: avisoAceptado },
   });
   if (eUser || !uNueva?.user) {
     const msg = String(eUser?.message ?? '');
