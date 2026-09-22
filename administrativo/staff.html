@@ -329,9 +329,9 @@
                                 <option>Baja temporal</option>
                             </select>
                         </div>
-                        <button class="btn-ghost" onclick="window.location.href='permisos.html'"
+                        <button class="btn-ghost" onclick="_irAPermisos()"
                             title="Acceso restringido — requiere contraseña de administrador"
-                            style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">🔐 Permisos y Roles</button>
+                            style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">🔐 Roles y Permisos</button>
                         <button class="btn-ghost" onclick="_abrirNomParams()"
                             title="Acceso restringido — requiere contraseña de administrador"
                             style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">💵 Definir salario mínimo</button>
@@ -794,6 +794,28 @@ function _pobRolSelect(valor) {
             return '<option value="' + esc(r.key) + '">' + (r.icon||'👤') + ' ' + esc(r.label) + '</option>';
         }).join('');
     sel.value = valor || '';
+}
+/* Ir a Roles y Permisos SIN romper la navegación.
+   Esta página se abre dentro de un modal flotante (staff-hub → iframe con
+   ?embed=1). Un `location.href` plano navegaba DENTRO de ese iframe y cargaba
+   la página completa —con su barra superior, su barra de contexto y su menú
+   lateral— encima de la que ya estaba: dos cromos apilados y sin forma de
+   volver.
+   Estando embebido se conserva el modo y el contexto; estando suelto, navega
+   normal. */
+function _irAPermisos() {
+    var esEmbed = /[?&]embed=1/.test(window.location.search);
+    if (!esEmbed) { window.location.href = 'permisos.html'; return; }
+    var q = 'embed=1';
+    try {
+        var neg = localStorage.getItem('etaax_negocio_activo') || '';
+        var suc = localStorage.getItem('etaax_sucursal_activa') || '';
+        var ctx = localStorage.getItem('etaax_ctx') || '';
+        if (neg) q += '&neg=' + encodeURIComponent(neg);
+        if (suc) q += '&suc=' + encodeURIComponent(suc);
+        if (ctx) q += '&ctx=' + encodeURIComponent(ctx);
+    } catch (e) {}
+    window.location.href = 'permisos.html?' + q;
 }
 function _bgDeColor(hex) {
     var h = String(hex||'#7a7570').replace('#','');

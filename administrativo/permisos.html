@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">
 <head>
+<script src="/embed.js"></script><!-- abierta dentro del modal de Staff: oculta su cromo -->
 <script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <script src="/page-guard.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<title>ETAAX – Permisos y Roles</title>
+<title>ETAAX – Roles y Permisos</title>
 <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
      navegador descubre gstatic hasta leer el CSS y paga una conexión nueva
      (DNS + TLS) en medio, con el texto esperando. -->
@@ -123,6 +124,12 @@
 .theme-toggle{position:fixed;bottom:20px;right:20px;z-index:999;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 16px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,.15);transition:all .2s;}
 .theme-toggle:hover{border-color:var(--green);color:var(--green);}
 
+
+/* Sub-permiso todavía sin conectar: se marca para no prometer lo que no cumple. */
+.subperm-pend{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:20px;
+  font-size:9px;letter-spacing:.6px;text-transform:uppercase;vertical-align:middle;
+  background:rgba(245,200,66,.12);color:#f5c842;border:1px solid rgba(245,200,66,.3)}
+.subperm-row.pendiente .subperm-label{opacity:.85}
 </style>
 </head>
 <body>
@@ -133,7 +140,7 @@
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px">
     <div style="font-size:36px">🔐</div>
     <div style="color:#f0ece6;font-family:'DM Sans',sans-serif;font-size:15px;text-align:center;padding:0 20px">
-        Permisos y Roles — acceso restringido<br>
+        Roles y Permisos — acceso restringido<br>
         <span style="font-size:12px;color:#7a7570">Se requiere la contraseña del dueño o del administrador</span>
     </div>
     <div style="display:flex;gap:10px">
@@ -149,7 +156,7 @@
     <div class="top-breadcrumb">
         <span class="top-module-badge">Administrativo</span>
         <span class="top-sep">|</span>
-        <span class="top-section-name">Permisos y Roles</span>
+        <span class="top-section-name">Roles y Permisos</span>
     </div>
 </header>
 
@@ -186,7 +193,7 @@
         <div class="header">
             <div class="brand">
                 <span class="brand-label">Gestión de</span>
-                <span class="brand-title">Permisos y Roles</span>
+                <span class="brand-title">Roles y Permisos</span>
             </div>
         </div>
 
@@ -277,10 +284,13 @@ function _guardarCfgRoles(cfg){
 
 /* ── MÓDULOS ── */
 var MODULES = [
-    { key:'recetas',       label:'Recetas y Escandallos', icon:'📖', sub:'Catálogo de recetas, sub-recetas y costos' },
-    { key:'insumos',       label:'Catálogo de Insumos',   icon:'🧂', sub:'Ingredientes, precios y proveedores' },
-    { key:'inventarios',   label:'Inventarios',           icon:'📦', sub:'Control de existencias por área' },
-    { key:'requisiciones', label:'Requisiciones',         icon:'📋', sub:'Solicitudes de compra y pedidos' },
+    /* Los rótulos son los MISMOS que usa el módulo por dentro (Escandallos,
+       Insumos, Inventarios, Requisiciones). Antes decían otra cosa aquí y el
+       dueño tenía que traducir entre dos vocabularios para saber qué apagaba. */
+    { key:'recetas',       label:'Escandallos',           icon:'📋', sub:'Recetas de cocina y bar con costeo automático' },
+    { key:'insumos',       label:'Insumos',               icon:'🧂', sub:'Catálogo de materias primas, presentaciones y costos' },
+    { key:'inventarios',   label:'Inventarios',           icon:'📦', sub:'Control de existencias por área: entradas, salidas y reporte' },
+    { key:'requisiciones', label:'Requisiciones',         icon:'📝', sub:'Pedidos internos y gestión de compras entre áreas' },
     { key:'ventas',        label:'Ventas',                icon:'💰', sub:'Registro y reporte de ventas' },
     { key:'ventas_productos', label:'Ventas por Producto', icon:'🧾', sub:'Desglose y reporte de ventas por producto (vive en Aprende y Analiza)' },
     { key:'gastos',        label:'Gastos',                icon:'📤', sub:'Captura y control de gastos' },
@@ -288,7 +298,7 @@ var MODULES = [
     { key:'proveedores',   label:'Proveedores',           icon:'🚚', sub:'Directorio y condiciones de compra' },
     { key:'clientes',      label:'Clientes',              icon:'⭐', sub:'Directorio de clientes frecuentes' },
     { key:'staff',         label:'Gestión de Staff',      icon:'👥', sub:'Expedientes y datos del equipo' },
-    { key:'permisos',      label:'Permisos y Roles',      icon:'🔐', sub:'Control de acceso por perfil' },
+    { key:'permisos',      label:'Roles y Permisos',      icon:'🔐', sub:'Control de acceso por perfil' },
     { key:'financiero',    label:'Financiero',            icon:'📊', sub:'Costos, márgenes y análisis' },
     { key:'config',        label:'Configuración',         icon:'⚙️', sub:'Ajustes generales del negocio' },
     { key:'cambiarSucursal', label:'Cambiar registros de sucursal', icon:'📍', sub:'Reasignar gastos, cortes, recetas e insumos a otra sucursal' },
@@ -296,7 +306,7 @@ var MODULES = [
 
 /* ── CATEGORÍAS (agrupación visual, igual que el nav) ── */
 var CATEGORIAS = [
-    { label:'Recetas y Escandallos', modulos:['recetas','insumos','inventarios','requisiciones'] },
+    { label:'Recetas e Insumos', modulos:['recetas','insumos','inventarios','requisiciones'] },
     { label:'Control Administrativo', modulos:['ventas','ventas_productos','gastos','menu','proveedores','clientes','staff','permisos'] },
     { label:'Finanzas',              modulos:['financiero'] },
     { label:'Ajustes',               modulos:['config'] },
@@ -492,9 +502,17 @@ function _renderModCard(m, perms, isAdmin) {
     if (hasSubs) {
         var subRows = subs.map(function(sp){
             var sc = _subVal(perms, m.key, sp.key);
-            return '<div class="subperm-row">' +
+            /* PENDIENTE: el interruptor ya existe y se guarda, pero el módulo
+               todavía no lo consulta. Se dice a la cara en vez de esconderlo:
+               un permiso que se apaga y no pasa nada es peor que no tenerlo
+               —ya pasó con "cambiar de sucursal"— y así se ve de un vistazo
+               qué falta por conectar. */
+            var pend = sp.pendiente
+                ? '<span class="subperm-pend" title="El interruptor ya se guarda, pero este módulo todavía no lo respeta. Está en camino.">por conectar</span>'
+                : '';
+            return '<div class="subperm-row' + (sp.pendiente ? ' pendiente' : '') + '">' +
                 '<div class="subperm-info">' +
-                    '<div class="subperm-label">' + sp.label + '</div>' +
+                    '<div class="subperm-label">' + sp.label + pend + '</div>' +
                     '<div class="subperm-sub">' + sp.sub + '</div>' +
                 '</div>' +
                 _toggleHTML('sub_' + m.key + '_' + sp.key, sc, disabled || !checked,

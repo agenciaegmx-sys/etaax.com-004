@@ -58,6 +58,44 @@ window.ETAAX_SUBPERMS = {
         { key:'verDepositos',   label:'Ver lista de depósitos',    sub:'Consultar el historial de depósitos' },
         { key:'cajaFuerte',     label:'Ver caja fuerte',           sub:'Acumulado de efectivo y saldos' },
     ],
+    /* ── RECETAS E INSUMOS ───────────────────────────────────────────────────
+       `pendiente:true` = el interruptor EXISTE pero todavía no lo respeta el
+       módulo. Se marca a la vista en vez de esconderlo: un permiso que se apaga
+       y no pasa nada es peor que no tenerlo — ya pasó con "cambiar de sucursal"
+       y costó una auditoría entera entender por qué. Al conectar uno, se le
+       quita la marca en el mismo commit. */
+    recetas: [
+        { key:'crear',        label:'Crear recetas',            sub:'Dar de alta escandallos nuevos', pendiente:true },
+        { key:'editar',       label:'Editar recetas',           sub:'Modificar y guardar escandallos', pendiente:true },
+        { key:'eliminar',     label:'Eliminar recetas',         sub:'Borrar del catálogo', pendiente:true },
+        { key:'verCostos',    label:'Ver costos y márgenes',    sub:'Sin esto ve la receta en vista operativa, sin dinero', pendiente:true },
+        { key:'caratula',     label:'Carátula de costos',       sub:'Comparativo de costos y rentabilidad', pendiente:true },
+        { key:'precioCarta',  label:'Cambiar precio en carta',  sub:'El precio de venta al público', pendiente:true },
+        { key:'imprimir',     label:'Imprimir escandallos',     sub:'Ficha operativa y administrativa', pendiente:true },
+    ],
+    insumos: [
+        { key:'crear',          label:'Crear insumos',            sub:'Dar de alta materias primas', pendiente:true },
+        { key:'editar',         label:'Editar insumos',           sub:'Modificar presentaciones y datos', pendiente:true },
+        { key:'eliminar',       label:'Eliminar insumos',         sub:'Borrar del catálogo', pendiente:true },
+        { key:'verCostos',      label:'Ver precios de compra',    sub:'Costos y proveedor de cada insumo', pendiente:true },
+        { key:'catalogoEtaax',  label:'Traer del catálogo ETAAX', sub:'Copiar insumos del catálogo de la plataforma', pendiente:true },
+        { key:'catalogoNegocio',label:'Copiar de otra sucursal',  sub:'Traer insumos que ya existen en el negocio', pendiente:true },
+        { key:'importar',       label:'Importar por archivo',     sub:'Alta masiva desde Excel o CSV', pendiente:true },
+    ],
+    inventarios: [
+        { key:'capturar',   label:'Capturar inventario',      sub:'Conteo de existencias por área', pendiente:true },
+        { key:'entradas',   label:'Registrar entradas',       sub:'Compras y recepciones de mercancía', pendiente:true },
+        { key:'qr',         label:'Generar el QR de entradas',sub:'El código que usan desde el celular', pendiente:true },
+        { key:'reporte',    label:'Ver reporte ejecutivo',    sub:'Variancias, mermas y resultado', pendiente:true },
+        { key:'verCostos',  label:'Ver el capital invertido', sub:'Sin esto ve cantidades, no dinero', pendiente:true },
+        { key:'cerrar',     label:'Cerrar el inventario',     sub:'Aplicarlo y dejarlo como existencia oficial', pendiente:true },
+    ],
+    requisiciones: [
+        { key:'crear',        label:'Crear requisiciones',    sub:'Pedidos internos entre áreas', pendiente:true },
+        { key:'verProyeccion',label:'Ver proyección de compra',sub:'Qué comprar por área y proveedor', pendiente:true },
+        { key:'exportar',     label:'Exportar el pedido',     sub:'Mandar el pedido al proveedor', pendiente:true },
+        { key:'historial',    label:'Ver historial',          sub:'Requisiciones de periodos anteriores', pendiente:true },
+    ],
     gastos: [
         { key:'capturar',       label:'Capturar gastos',           sub:'Registrar gastos menores / normales' },
         { key:'verCajaChica',   label:'Ver gastos de caja chica',  sub:'Gastos pagados desde caja chica' },

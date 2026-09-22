@@ -8325,6 +8325,89 @@ console.log('\n══ BD3 · Roles a la medida del negocio ══');
     });
 }
 
+/* ═══════════ SUITE BD4 · ROLES Y PERMISOS: EL MÓDULO DE RECETAS E INSUMOS ═══
+   Dos cosas:
+   1. La pantalla se abría DENTRO del modal flotante de Staff con su cromo
+      completo —barra superior, barra de contexto y menú lateral— encima de la
+      que ya estaba: dos páginas apiladas y sin forma de volver.
+   2. Los rótulos decían una cosa aquí y otra en el módulo, así que el dueño
+      tenía que traducir entre dos vocabularios para saber qué estaba apagando.
+
+   Y una regla que vale para todo lo que venga: un sub-permiso que se declara y
+   nadie consulta es una mentira. Los que todavía no están conectados se marcan
+   a la cara ("por conectar") en vez de esconderse — ya pasó con "cambiar de
+   sucursal" y costó una auditoría entera entender por qué no servía de nada.  */
+console.log('\n══ BD4 · Roles y Permisos: módulo de Recetas e Insumos ══');
+{
+    const per = fs.readFileSync(path.join(RAIZ, 'administrativo/permisos.html'), 'utf8');
+    const stf = fs.readFileSync(path.join(RAIZ, 'administrativo/staff.html'), 'utf8');
+    const pg  = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8');
+
+    /* ── La navegación que se rompía ── */
+    test('la pantalla sabe abrirse embebida', () =>
+        eq(per.indexOf('<script src="/embed.js"></script>') > -1, true, 'embed.js'));
+    test('…y embed.js va ANTES que page-guard, que es quien rebota al hub', () =>
+        eq(per.indexOf('/embed.js') < per.indexOf('/page-guard.js'), true, 'orden'));
+    test('el botón ya no navega a pelo dentro del iframe', () =>
+        eq(stf.indexOf("onclick=\"window.location.href='permisos.html'\""), -1, 'sin salto plano'));
+    test('…conserva el modo embebido y el contexto', () => {
+        const i = stf.indexOf('function _irAPermisos()');
+        const c = stf.slice(i, i + 900);
+        return eq(c.indexOf("'permisos.html?' + q") > -1 && c.indexOf('embed=1') > -1, true, 'lo conserva');
+    });
+    /* Abierta sola tiene que seguir funcionando igual. */
+    test('abierta fuera del modal, navega normal', () => {
+        const i = stf.indexOf('function _irAPermisos()');
+        return eq(stf.slice(i, i + 300).indexOf("if (!esEmbed) { window.location.href = 'permisos.html'; return; }") > -1,
+                  true, 'normal');
+    });
+
+    /* ── Los nombres ── */
+    test('la pantalla se llama Roles y Permisos', () =>
+        eq(per.indexOf('<span class="brand-title">Roles y Permisos</span>') > -1, true, 'renombrada'));
+    test('el grupo se llama como el módulo: Recetas e Insumos', () =>
+        eq(per.indexOf("label:'Recetas e Insumos'") > -1, true, 'grupo'));
+    /* Los cards usan el vocabulario del módulo, no uno propio. */
+    [['recetas','Escandallos'], ['insumos','Insumos'],
+     ['inventarios','Inventarios'], ['requisiciones','Requisiciones']].forEach(function(p2){
+        test('el card de ' + p2[0] + ' se llama «' + p2[1] + '»', () =>
+            eq(new RegExp("key:'" + p2[0] + "'[^}]*label:'" + p2[1] + "'").test(per), true, 'rótulo'));
+    });
+    test('ya no quedan los rótulos viejos', () =>
+        eq(per.indexOf("label:'Recetas y Escandallos'") === -1
+        && per.indexOf("label:'Catálogo de Insumos'") === -1, true, 'sin rastro'));
+
+    /* ── Los sub-permisos del módulo ── */
+    const ctx = { window:{}, console, JSON, Object, Array, String, Date, setTimeout,
+                  localStorage:{ getItem(){ return null; }, setItem(){}, removeItem(){} },
+                  location:{ pathname:'/hub.html', search:'' }, document:{ addEventListener(){} } };
+    ctx.window = ctx; ctx.window.addEventListener = () => {};
+    vm.createContext(ctx);
+    vm.runInContext(pg, ctx, { filename:'page-guard.js' });
+    const SUB = ctx.window.ETAAX_SUBPERMS;
+
+    ['recetas','insumos','inventarios','requisiciones'].forEach(function(k){
+        test(k + ' ya tiene sus sub-permisos declarados', () =>
+            eq((SUB[k] || []).length > 0, true, String((SUB[k]||[]).length)));
+    });
+    /* Lo que de verdad importa del dinero: quien no pueda ver costos, no los ve.
+       Se declara en los tres módulos donde hay dinero a la vista. */
+    ['recetas','insumos','inventarios'].forEach(function(k){
+        test(k + ' puede esconder los costos', () =>
+            eq((SUB[k]||[]).some(x => x.key === 'verCostos'), true, 'verCostos'));
+    });
+
+    /* ── La honestidad: lo que no está conectado, se dice ── */
+    test('los sub-permisos nuevos se marcan como "por conectar"', () =>
+        eq((SUB.recetas||[]).every(x => x.pendiente === true), true, 'marcados'));
+    test('…y los que SÍ funcionan no llevan esa marca', () =>
+        eq((SUB.ventas||[]).some(x => x.pendiente) || (SUB.gastos||[]).some(x => x.pendiente), false, 'sin marca'));
+    test('la pantalla pinta esa marca, no la esconde', () =>
+        eq(per.indexOf('subperm-pend') > -1 && per.indexOf('por conectar') > -1, true, 'visible'));
+    test('…y explica qué significa al pasar el cursor', () =>
+        eq(per.indexOf('todavía no lo respeta') > -1, true, 'explicado'));
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La
