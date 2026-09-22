@@ -506,9 +506,13 @@ function _renderModCard(m, perms, isAdmin) {
                todavía no lo consulta. Se dice a la cara en vez de esconderlo:
                un permiso que se apaga y no pasa nada es peor que no tenerlo
                —ya pasó con "cambiar de sucursal"— y así se ve de un vistazo
-               qué falta por conectar. */
+               qué falta.
+               OJO CON EL RÓTULO: decía "por conectar" y se leía como una tarea
+               del dueño. No lo es: es trabajo de desarrollo pendiente. Ahora
+               dice lo único que le importa a quien lo está viendo — que todavía
+               no hace efecto. */
             var pend = sp.pendiente
-                ? '<span class="subperm-pend" title="El interruptor ya se guarda, pero este módulo todavía no lo respeta. Está en camino.">por conectar</span>'
+                ? '<span class="subperm-pend" title="Tu elección se guarda, pero este módulo todavía no la respeta. Lo estamos conectando: por ahora, apagarlo no cambia nada.">aún no aplica</span>'
                 : '';
             return '<div class="subperm-row' + (sp.pendiente ? ' pendiente' : '') + '">' +
                 '<div class="subperm-info">' +

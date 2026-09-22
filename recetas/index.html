@@ -510,7 +510,7 @@
                     <div class="cat-btn-title" style="color:var(--green);font-size:15px">Ver recetas</div>
                     <div class="cat-btn-desc">Consultar el recetario completo</div>
                 </button>
-                <button onclick="abrirCaratulaModal()" class="cat-btn" style="border-color:var(--accent);padding:22px 16px">
+                <button id="btnCaratula" onclick="abrirCaratulaModal()" class="cat-btn" style="border-color:var(--accent);padding:22px 16px">
                     <span style="font-size:34px">📊</span>
                     <div class="cat-btn-title" style="color:var(--accent);font-size:15px">Carátula de costos</div>
                     <div class="cat-btn-desc">Resumen ejecutivo de costeo</div>
@@ -1055,6 +1055,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (typeof _sbInitRecetas === 'function') _sbInitRecetas();
         if (typeof _sbInitInsumosCatalogo === 'function') _sbInitInsumosCatalogo();
     });
+    if (typeof _aplicarPermisoCostos === 'function') _aplicarPermisoCostos();
 });
 
 // ── Sync precio formulario → costeo ──────────────────────────
@@ -2714,6 +2715,39 @@ function _showEscMenu() {
 }
 // Selector "📍 Sucursal" del editor: solo aparece si el negocio tiene >1 sucursal.
 // Mismo criterio que insumos (sin asignar = Matriz / suc_principal).
+/* ── PERMISOS DE ESTE MÓDULO ─────────────────────────────────────────────────
+   `_puedeRec('verCostos')` responde si este rol puede ver el dinero de una
+   receta. El dueño y el admin maestro siempre pueden; un colaborador, según lo
+   que diga Roles y Permisos.
+   Va por `etaaxPerm`, que ya sabe leer un módulo en `true` (legacy, "todo
+   permitido") y caer al default del rol cuando la clave no está declarada: así
+   nadie pierde acceso por un permiso que todavía no existía cuando se guardó. */
+function _puedeRec(sub){
+    var ctx=null;
+    try{ ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null'); }catch(e){}
+    if(!ctx || ctx.ctxType!=='staff') return true;      // dueño / admin maestro
+    if((ctx.rol||'')==='admin') return true;
+    if(typeof window.etaaxPerm!=='function') return true;  // sin el helper, no se cierra nada
+    return window.etaaxPerm(ctx.negId||localStorage.getItem('etaax_negocio_activo'), ctx.rol, 'recetas.'+sub);
+}
+
+/* Aplica el permiso de costos a la pantalla abierta. Se llama cada vez que se
+   pinta una receta: esconder una sola vez al cargar no basta, porque el editor
+   se vuelve a armar en cada apertura y el dinero reaparecería. */
+function _aplicarPermisoCostos(){
+    if(_puedeRec('verCostos')) return;
+    var sec=document.getElementById('seccionCostos');
+    if(sec) sec.classList.add('oculto');
+    ['subCardCostoFinal','subCardCostoPorcion','barraCostoTotal'].forEach(function(id){
+        var el=document.getElementById(id); if(el) el.style.display='none';
+    });
+    /* El botón de vista se va: con él, el colaborador volvería a encender lo que
+       el permiso acaba de apagar. Esconder sin quitar la puerta no es esconder. */
+    var btn=document.getElementById('btnVista'); if(btn) btn.style.display='none';
+    /* Y la carátula de costos es una pantalla ENTERA de dinero. */
+    var bc=document.getElementById('btnCaratula'); if(bc) bc.style.display='none';
+}
+
 function _puedeCambiarSucReceta(){
     var ctx; try{ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null');}catch(e){}
     if(!ctx || ctx.ctxType!=='staff') return true;

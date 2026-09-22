@@ -1711,6 +1711,10 @@ document.addEventListener('click', function(e) {
 
 // ── Render tabla de ingredientes ────────────────────────────
 function renderTabla() {
+    /* El permiso de costos se re-aplica en CADA pintado: el editor se vuelve a
+       armar al abrir cada receta, así que esconder una sola vez al cargar la
+       página dejaba el dinero a la vista en la segunda que se abriera. */
+    if (typeof _aplicarPermisoCostos === 'function') _aplicarPermisoCostos();
     const tbody = document.getElementById('tbodyIngredientes');
     tbody.innerHTML = '';
 

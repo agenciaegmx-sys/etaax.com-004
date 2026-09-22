@@ -68,7 +68,7 @@ window.ETAAX_SUBPERMS = {
         { key:'crear',        label:'Crear recetas',            sub:'Dar de alta escandallos nuevos', pendiente:true },
         { key:'editar',       label:'Editar recetas',           sub:'Modificar y guardar escandallos', pendiente:true },
         { key:'eliminar',     label:'Eliminar recetas',         sub:'Borrar del catálogo', pendiente:true },
-        { key:'verCostos',    label:'Ver costos y márgenes',    sub:'Sin esto ve la receta en vista operativa, sin dinero', pendiente:true },
+        { key:'verCostos',    label:'Ver costos y márgenes',    sub:'Sin esto ve la receta en vista operativa, sin dinero' },
         { key:'caratula',     label:'Carátula de costos',       sub:'Comparativo de costos y rentabilidad', pendiente:true },
         { key:'precioCarta',  label:'Cambiar precio en carta',  sub:'El precio de venta al público', pendiente:true },
         { key:'imprimir',     label:'Imprimir escandallos',     sub:'Ficha operativa y administrativa', pendiente:true },

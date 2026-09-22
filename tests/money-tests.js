@@ -8335,7 +8335,7 @@ console.log('\n══ BD3 · Roles a la medida del negocio ══');
 
    Y una regla que vale para todo lo que venga: un sub-permiso que se declara y
    nadie consulta es una mentira. Los que todavía no están conectados se marcan
-   a la cara ("por conectar") en vez de esconderse — ya pasó con "cambiar de
+   a la cara ("aún no aplica") en vez de esconderse — ya pasó con "cambiar de
    sucursal" y costó una auditoría entera entender por qué no servía de nada.  */
 console.log('\n══ BD4 · Roles y Permisos: módulo de Recetas e Insumos ══');
 {
@@ -8398,14 +8398,124 @@ console.log('\n══ BD4 · Roles y Permisos: módulo de Recetas e Insumos ═�
     });
 
     /* ── La honestidad: lo que no está conectado, se dice ── */
-    test('los sub-permisos nuevos se marcan como "por conectar"', () =>
-        eq((SUB.recetas||[]).every(x => x.pendiente === true), true, 'marcados'));
+    test('el que ya está conectado NO lleva la marca', () =>
+        eq(!!(SUB.recetas||[]).find(x => x.key === 'verCostos').pendiente, false, 'conectado'));
+    test('…y todos los demás de Escandallos sí la llevan', () =>
+        eq((SUB.recetas||[]).filter(x => x.key !== 'verCostos').every(x => x.pendiente === true),
+           true, 'marcados'));
     test('…y los que SÍ funcionan no llevan esa marca', () =>
         eq((SUB.ventas||[]).some(x => x.pendiente) || (SUB.gastos||[]).some(x => x.pendiente), false, 'sin marca'));
     test('la pantalla pinta esa marca, no la esconde', () =>
-        eq(per.indexOf('subperm-pend') > -1 && per.indexOf('por conectar') > -1, true, 'visible'));
+        eq(per.indexOf('subperm-pend') > -1 && per.indexOf('aún no aplica') > -1, true, 'visible'));
     test('…y explica qué significa al pasar el cursor', () =>
-        eq(per.indexOf('todavía no lo respeta') > -1, true, 'explicado'));
+        eq(per.indexOf('todavía no la respeta') > -1, true, 'explicado'));
+}
+
+/* ═══════════ SUITE BD5 · EL PRIMER PERMISO CONECTADO: COSTOS EN ESCANDALLOS ═
+   "Ver costos y márgenes" ya no es un interruptor decorativo: Escandallos lo
+   respeta. Sin ese permiso, el colaborador ve la receta —ingredientes,
+   cantidades, procedimiento— pero no el dinero.
+
+   Y no basta con esconder: hay que quitar la PUERTA. El botón "Vista admin"
+   volvería a encender justo lo que el permiso acaba de apagar, y la carátula de
+   costos es una pantalla entera de dinero.                                    */
+console.log('\n══ BD5 · Costos en Escandallos, conectado ══');
+{
+    const rec = fs.readFileSync(path.join(RAIZ, 'recetas/index.html'), 'utf8');
+    const app = fs.readFileSync(path.join(RAIZ, 'app.js'), 'utf8');
+    const pg  = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8');
+
+    /* Se corre el helper REAL contra sesiones distintas. */
+    function montar(ctxSes, perms) {
+        const ls = {};
+        if (ctxSes) ls['etaax_ctx'] = JSON.stringify(ctxSes);
+        ls['etaax_negocio_activo'] = 'n1';
+        if (perms) ls['etaax_n1_permisos'] = JSON.stringify(perms);
+        const c = {
+            console, JSON, Object, Array, String, Boolean, Number, Date, setTimeout, Promise,
+            localStorage:{ getItem:k=>(k in ls?ls[k]:null), setItem(k,v){ ls[k]=String(v); }, removeItem(k){ delete ls[k]; } },
+            location:{ pathname:'/recetas/index.html', search:'', replace(){} },
+            document:{ addEventListener(){}, getElementById(){ return null; } },
+        };
+        c.window = c; c.window.addEventListener = () => {};
+        vm.createContext(c);
+        vm.runInContext(pg, c, { filename:'page-guard.js' });
+        const i = rec.indexOf('function _puedeRec(sub){');
+        vm.runInContext(rec.slice(i, rec.indexOf('\n}', i) + 2), c, { filename:'_puedeRec' });
+        return c.window;
+    }
+
+    test('el dueño siempre ve los costos', () =>
+        eq(montar({ ctxType:'owner', negId:'n1' })._puedeRec('verCostos'), true, 'dueño'));
+    /* El admin del negocio no se puede quedar fuera de sus propios números, ni
+       por un descuido al editar sus permisos: el atajo está antes de consultar
+       la tabla, así que aunque ahí diga que no, él ve. */
+    test('el admin del negocio ve aunque su permiso diga que no', () =>
+        eq(montar({ ctxType:'staff', rol:'admin', negId:'n1' },
+                  { admin:{ recetas:{ verCostos:false } } })._puedeRec('verCostos'), true, 'admin'));
+    test('un colaborador con el permiso apagado NO los ve', () =>
+        eq(montar({ ctxType:'staff', rol:'cocinero', negId:'n1' },
+                  { cocinero:{ recetas:{ verCostos:false } } })._puedeRec('verCostos'), false, 'apagado'));
+    test('…y con el permiso prendido, sí', () =>
+        eq(montar({ ctxType:'staff', rol:'cocinero', negId:'n1' },
+                  { cocinero:{ recetas:{ verCostos:true } } })._puedeRec('verCostos'), true, 'prendido'));
+    /* Un módulo guardado como `true` a secas es el formato viejo: significaba
+       "todo permitido". Quien lo tenga así no puede perder acceso por un
+       permiso que no existía cuando se guardó. */
+    test('con el formato viejo (módulo en true), sigue viendo', () =>
+        eq(montar({ ctxType:'staff', rol:'cocinero', negId:'n1' },
+                  { cocinero:{ recetas:true } })._puedeRec('verCostos'), true, 'legacy'));
+    /* Sin el módulo, no hay costos que enseñar. */
+    test('sin acceso al módulo, tampoco a sus costos', () =>
+        eq(montar({ ctxType:'staff', rol:'mesero', negId:'n1' },
+                  { mesero:{ recetas:false } })._puedeRec('verCostos'), false, 'cerrado'));
+
+    /* ── Que la pantalla lo aplique de verdad ── */
+    test('esconde la sección de costos', () => {
+        const i = rec.indexOf('function _aplicarPermisoCostos()');
+        return eq(rec.slice(i, i + 900).indexOf("sec.classList.add('oculto')") > -1, true, 'oculta');
+    });
+    test('…y los costos de una sub-receta, que van aparte', () => {
+        const i = rec.indexOf('function _aplicarPermisoCostos()');
+        return eq(rec.slice(i, i + 900).indexOf("'subCardCostoFinal','subCardCostoPorcion','barraCostoTotal'") > -1,
+                  true, 'sub-receta');
+    });
+    /* LA PUERTA: sin quitar el botón de vista, el colaborador vuelve a encender
+       lo que el permiso apagó, y todo esto no sirve de nada. */
+    test('quita el botón de vista admin, que sería la puerta de atrás', () => {
+        const i = rec.indexOf('function _aplicarPermisoCostos()');
+        return eq(rec.slice(i, i + 1100).indexOf("getElementById('btnVista')") > -1, true, 'sin puerta');
+    });
+    test('…y la carátula de costos, que es una pantalla entera de dinero', () => {
+        const i = rec.indexOf('function _aplicarPermisoCostos()');
+        return eq(rec.slice(i, i + 1400).indexOf("getElementById('btnCaratula')") > -1, true, 'sin carátula');
+    });
+    test('el botón de carátula tiene id para poder esconderlo', () =>
+        eq(rec.indexOf('id="btnCaratula"') > -1, true, 'con id'));
+    /* Se re-aplica en cada pintado: el editor se rearma al abrir cada receta y
+       esconder una sola vez al cargar dejaba el dinero a la vista en la segunda. */
+    test('se vuelve a aplicar cada vez que se pinta una receta', () =>
+        eq(app.indexOf("if (typeof _aplicarPermisoCostos === 'function') _aplicarPermisoCostos();") > -1,
+           true, 'en cada render'));
+
+    /* ── Y que deje de decir que no aplica ── */
+    const ctx2 = { window:{}, console, JSON, Object, Array, String, Date, setTimeout,
+                   localStorage:{ getItem(){ return null; }, setItem(){}, removeItem(){} },
+                   location:{ pathname:'/hub.html', search:'' }, document:{ addEventListener(){} } };
+    ctx2.window = ctx2; ctx2.window.addEventListener = () => {};
+    vm.createContext(ctx2);
+    vm.runInContext(pg, ctx2, { filename:'page-guard.js' });
+    const rc = ctx2.window.ETAAX_SUBPERMS.recetas.find(x => x.key === 'verCostos');
+    test('ya no se anuncia como "aún no aplica"', () => eq(!!rc.pendiente, false, 'conectado'));
+    /* Los que siguen sin conectar mantienen su marca: la lista tiene que decir
+       la verdad de cada uno, no de todos a la vez. */
+    test('…pero los que faltan siguen marcados', () =>
+        eq(ctx2.window.ETAAX_SUBPERMS.recetas.filter(x => x.pendiente).length > 0, true, 'honesta'));
+
+    /* El rótulo ya no suena a tarea del dueño: no es algo que él conecte. */
+    const per = fs.readFileSync(path.join(RAIZ, 'administrativo/permisos.html'), 'utf8');
+    test('el rótulo dice que no aplica, no que hay que conectarlo', () =>
+        eq(per.indexOf('>aún no aplica<') > -1 && per.indexOf('>por conectar<') === -1, true, 'claro'));
 }
 
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
