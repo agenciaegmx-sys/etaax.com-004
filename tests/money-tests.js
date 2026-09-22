@@ -5409,6 +5409,10 @@ console.log('\n══ AP · Que la página arranque (todas las pantallas) ══
            dejaba los otros sin mirar. */
         const arranques = [];
         W.document.addEventListener = function (ev, fn) { if (ev === 'DOMContentLoaded') arranques.push(fn); };
+        /* El tema ya no vive dentro de cada página: se carga como archivo, igual
+           que en la pantalla de verdad. Sin cargarlo aquí, el arnés contaría un
+           arranque menos que el navegador y la red dejaría de cuadrar. */
+        cargarJS(W, 'theme.js');
         cargarInline(W, archivo);
         if (!arranques.length) return { W, corrio: false };
         arranques.forEach(function (fn) { fn(); });   // si alguno lanza, el test falla con el motivo
@@ -9498,6 +9502,232 @@ console.log('\n══ BE2 · El freno de la pantalla de entrada ══');
         eq(sql.indexOf('GRANT EXECUTE ON FUNCTION login_estado(TEXT) TO anon') > -1, true, 'anon'));
     test('la tabla se limpia sola: no guarda intentos de hace días', () =>
         eq(sql.indexOf("creado < now() - interval '24 hours'") > -1, true, 'se limpia'));
+}
+
+/* ═══════════ SUITE BE3 · EL TEMA, UNO SOLO PARA TODO EL SISTEMA ═══════════
+   Auditadas las 53 páginas. Lo que salió:
+
+     · 31 traían su PROPIA copia del interruptor, en NUEVE variantes. Hacían lo
+       mismo cada una a su manera, y las que se quedaban atrás no se notaban
+       hasta que alguien navegaba y veía el tema brincar de pantalla en pantalla.
+     · hub.html y admin.html guardaban la preferencia pero declaran su propia
+       paleta y nunca definieron la clara: el interruptor se movía y no cambiaba
+       NADA. Eso era "el modo oscuro no funciona en la pantalla principal".
+     · Los documentos legales ignoraban la preferencia.
+     · Y al cambiar el tema DENTRO de una ventana flotante, la página de atrás
+       se quedaba con el anterior hasta recargarla: dos temas a la vez.         */
+console.log('\n══ BE3 · El tema, uno solo para todo el sistema ══');
+{
+    const tema = fs.readFileSync(path.join(RAIZ, 'theme.js'), 'utf8');
+
+    /* ── Se corre el archivo REAL contra un documento de mentira ── */
+    function pagina(guardado, opts) {
+        opts = opts || {};
+        const ls = {};
+        if (guardado) ls['etaax_theme'] = guardado;
+        const root = { _attr: {},
+            setAttribute(k, v){ this._attr[k] = v; },
+            getAttribute(k){ return k in this._attr ? this._attr[k] : null; } };
+        const nodos = {};
+        const oyentes = {};
+        const c = {
+            console, JSON, Object, Array, String, Date, setTimeout, CustomEvent: function (n, o) { this.type = n; this.detail = (o||{}).detail; },
+            localStorage:{ getItem:k=>(k in ls?ls[k]:null), setItem(k,v){ ls[k]=String(v); }, removeItem(k){ delete ls[k]; } },
+            location:{ search: opts.search || '', pathname:'/x.html' },
+            document:{
+                documentElement: root,
+                getElementById(id){ return nodos[id] || null; },
+                querySelector(){ return opts.conBoton ? {} : null; },
+                createElement(){ return { style:{}, addEventListener(){}, set innerHTML(v){}, setAttribute(){} }; },
+                addEventListener(t, f){ (oyentes[t] = oyentes[t] || []).push(f); },
+                body: { appendChild(){}, getAttribute(){ return null; } },
+            },
+        };
+        c.window = c;
+        c.window.addEventListener = (t, f) => { (oyentes[t] = oyentes[t] || []).push(f); };
+        c.window.dispatchEvent = (e) => { (oyentes[e.type] || []).forEach(f => f(e)); return true; };
+        nodos.themeIcon  = { textContent:'' };
+        nodos.themeLabel = { textContent:'' };
+        vm.createContext(c);
+        vm.runInContext(tema, c, { filename:'theme.js' });
+        return {
+            ctx: c, ls, root, nodos, oyentes,
+            tema: () => root.getAttribute('data-theme'),
+            cargar: () => (oyentes['DOMContentLoaded'] || []).forEach(f => f()),
+            deOtroLado: (v) => (oyentes['storage'] || []).forEach(f => f({ key:'etaax_theme', newValue:v })),
+        };
+    }
+
+    /* ── Lo básico ── */
+    test('sin nada guardado, arranca en oscuro', () => eq(pagina(null).tema(), 'dark', 'oscuro'));
+    test('con claro guardado, la página ABRE en claro', () => eq(pagina('light').tema(), 'light', 'claro'));
+    /* Antes del primer pintado: si se aplicara después, se vería el parpadeo de
+       la pantalla oscura antes de ponerse clara. */
+    test('…y se aplica antes de que exista el <body>', () =>
+        eq(tema.indexOf("document.documentElement.setAttribute('data-theme', _leer());") > -1,
+           true, 'sin parpadeo'));
+    test('el interruptor cambia y GUARDA la preferencia', () => {
+        const p = pagina('dark');
+        p.ctx.toggleTheme();
+        return eq(p.tema() === 'light' && p.ls['etaax_theme'] === 'light', true, 'guardada');
+    });
+    test('…y de regreso', () => {
+        const p = pagina('light');
+        p.ctx.toggleTheme();
+        return eq(p.tema() === 'dark' && p.ls['etaax_theme'] === 'dark', true, 'de ida y vuelta');
+    });
+    test('el botón dice A DÓNDE se va, no dónde se está', () => {
+        const p = pagina('dark'); p.cargar();
+        const antes = p.nodos.themeLabel.textContent;
+        p.ctx.toggleTheme();
+        return eq(antes === 'Modo claro' && p.nodos.themeLabel.textContent === 'Modo oscuro',
+                  true, 'rotulado');
+    });
+
+    /* ── LO QUE FALTABA: que el cambio viaje ────────────────────────────────
+       El navegador dispara `storage` en todos los documentos del mismo origen
+       menos en el que escribió. Eso alcanza a las otras pestañas, a los iframes
+       y a la página que los contiene. */
+    test('el tema cambiado en otra pantalla llega a esta', () => {
+        const p = pagina('dark');
+        p.deOtroLado('light');
+        return eq(p.tema(), 'light', 'viaja');
+    });
+    test('…y también de regreso a oscuro', () => {
+        const p = pagina('light');
+        p.deOtroLado('dark');
+        return eq(p.tema(), 'dark', 'viaja');
+    });
+    /* Aplicar lo que llega de fuera NO debe volver a guardarlo: dos pestañas
+       escribiéndose la una a la otra no terminarían nunca. */
+    test('lo que llega de fuera no se re-guarda: nada de ping-pong', () => {
+        const p = pagina('dark');
+        let escrituras = 0;
+        const orig = p.ctx.localStorage.setItem;
+        p.ctx.localStorage.setItem = function (k, v) { escrituras++; return orig.call(this, k, v); };
+        p.deOtroLado('light');
+        return eq(escrituras, 0, 'sin rebote');
+    });
+    /* Se prueba EN CLARO a propósito: en oscuro, una clave ajena llevaría a
+       "dark" y el resultado se vería bien por casualidad, tapando el error. */
+    test('un cambio de OTRA clave no toca el tema', () => {
+        const p = pagina('light');
+        (p.oyentes['storage'] || []).forEach(f => f({ key:'etaax_ctx', newValue:'x' }));
+        return eq(p.tema(), 'light', 'ajeno');
+    });
+    test('quien se repinta con el tema recibe aviso', () => {
+        const p = pagina('dark');
+        let avisos = 0;
+        p.ctx.window.addEventListener('etaax:theme', function(){ avisos++; });
+        p.deOtroLado('light');
+        return eq(avisos, 1, 'avisado');
+    });
+
+    /* ── El botón flotante ── */
+    test('si la página no trae botón, se le pone uno', () => {
+        const p = pagina('dark');
+        let puesto = 0;
+        p.ctx.document.body.appendChild = function(){ puesto++; };
+        p.cargar();
+        return eq(puesto, 1, 'puesto');
+    });
+    test('…pero no se duplica si ya lo tiene', () => {
+        const p = pagina('dark', { conBoton:true });
+        let puesto = 0;
+        p.ctx.document.body.appendChild = function(){ puesto++; };
+        p.cargar();
+        return eq(puesto, 0, 'sin duplicar');
+    });
+    /* Dentro de una ventana flotante estorba: el de la página de atrás ya manda
+       sobre las dos. */
+    test('…ni dentro de una ventana flotante (?embed=1)', () => {
+        const p = pagina('dark', { search:'?embed=1' });
+        let puesto = 0;
+        p.ctx.document.body.appendChild = function(){ puesto++; };
+        p.cargar();
+        return eq(puesto, 0, 'sin estorbar');
+    });
+
+    /* ── Y que NADIE conserve su copia ─────────────────────────────────────── */
+    const paginas = [];
+    (function recorrer(d) {
+        fs.readdirSync(d).forEach(function (f) {
+            if (f === '.git' || f === 'node_modules') return;
+            const p = path.join(d, f);
+            if (fs.statSync(p).isDirectory()) return recorrer(p);
+            if (f.endsWith('.html')) paginas.push(path.relative(RAIZ, p));
+        });
+    })(RAIZ);
+
+    const conCopia = paginas.filter(function (p) {
+        const s = fs.readFileSync(path.join(RAIZ, p), 'utf8');
+        return s.indexOf('etaax_theme') > -1;
+    });
+    test('ninguna página guarda su propia copia del interruptor', () =>
+        eq(conCopia.join(', '), '', 'una sola copia'));
+
+    /* Las páginas de la APP (las que tienen sesión) tienen que seguir el tema.
+       Las públicas —la landing y el formulario de evaluación que se abre por
+       link— viven con su propio diseño y quedan fuera a propósito. */
+    const PUBLICAS = ['index.html', 'evaluacion.html'];
+    const sinTema = paginas.filter(function (p) {
+        if (PUBLICAS.indexOf(p) > -1) return false;
+        const s = fs.readFileSync(path.join(RAIZ, p), 'utf8');
+        if (s.split('\n').length < 25 && /location\.(replace|href)|http-equiv="refresh"/.test(s)) return false;
+        return s.indexOf('/theme.js') === -1;
+    });
+    test('todas las pantallas de la app cargan el tema compartido', () =>
+        eq(sinTema.join(', '), '', 'sin rezagadas'));
+
+    /* Y que lo carguen ARRIBA: si va al final, la pantalla se pinta oscura y
+       luego brinca a clara. */
+    test('…y lo cargan antes que nada, para que no parpadee', () => {
+        const tarde = paginas.filter(function (p) {
+            const s = fs.readFileSync(path.join(RAIZ, p), 'utf8');
+            /* El ÍNDICE DE LA ETIQUETA, no el de la ruta: cortar a media etiqueta
+               deja un `<script src="` suelto que se cuenta a sí mismo. */
+            const i = s.indexOf('<script src="/theme.js"');
+            if (i < 0) return false;
+            const antes = s.slice(0, i);
+            /* Solo tres pueden ir antes, y por obligación: negocio-tab.js fija el
+               negocio de la pestaña, page-guard.js rebota al hub si no hay sesión
+               y embed.js siembra el contexto dentro de una ventana flotante.
+               Cualquier otro script —o una hoja de estilos— antes del tema
+               significa pintar primero y corregir después: el parpadeo. */
+            return /<script(?![^>]*(theme|negocio-tab|page-guard|embed)\.js)/.test(antes) ||
+                   antes.indexOf('<link rel="stylesheet"') > -1;
+        });
+        return eq(tarde.join(', '), '', 'arriba');
+    });
+
+    /* ── Las dos pantallas que declaran su propia paleta ── */
+    [['hub.html', 'la pantalla principal'], ['admin.html', 'el panel de plataforma']]
+    .forEach(function (par) {
+        const s = fs.readFileSync(path.join(RAIZ, par[0]), 'utf8');
+        test(par[1] + ' declara SU paleta clara, no solo la oscura', () =>
+            eq(s.indexOf('[data-theme="light"] {') > -1, true, 'con paleta'));
+        test('…y le da valor a cada color que usa en oscuro', () => {
+            const osc = s.slice(s.indexOf(':root {'), s.indexOf('[data-theme="light"]'));
+            const luz = s.slice(s.indexOf('[data-theme="light"] {'));
+            const vars = (osc.match(/--[a-z0-9]+:/g) || []).map(v => v.trim());
+            const faltan = vars.filter(v => luz.indexOf(v) === -1);
+            return eq(faltan.join(' '), '', 'completa');
+        });
+    });
+
+    /* Los documentos legales abrían siempre en oscuro, con el tema clavado en
+       el <html>: ignoraban la preferencia sin querer. */
+    ['aviso-privacidad.html', 'terminos.html', 'aviso-colaboradores.html'].forEach(function (p) {
+        test(p + ' respeta el tema elegido', () => {
+            const s = fs.readFileSync(path.join(RAIZ, p), 'utf8');
+            return eq(s.indexOf('<html lang="es" data-theme="dark">') === -1 &&
+                      s.indexOf('/theme.js') > -1, true, 'lo respeta');
+        });
+    });
+
+    /* Y los archivos de prueba que se publicaban en el sitio, fuera. */
+    test('los archivos temporales ya no se publican', () =>
+        eq(paginas.filter(p => p.indexOf('_tmp-') === 0).join(', '), '', 'limpios'));
 }
 
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════

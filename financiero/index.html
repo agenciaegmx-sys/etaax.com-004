@@ -4,7 +4,8 @@
 <script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <script src="/page-guard.js"></script>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="/theme.js"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <title>ETAAX - Salud Financiera</title>
     <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
@@ -292,23 +293,8 @@
 </button>
 
 <script>
-(function(){
-    var saved = localStorage.getItem('etaax_theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', saved);
-    document.addEventListener('DOMContentLoaded', function(){
-        if (saved === 'light') {
-            document.getElementById('themeIcon').textContent = '🌙';
-            document.getElementById('themeLabel').textContent = 'Modo oscuro';
-        }
-    });
-})();
-function toggleTheme() {
-    var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('etaax_theme', next);
-    document.getElementById('themeIcon').textContent  = next === 'light' ? '🌙' : '☀️';
-    document.getElementById('themeLabel').textContent = next === 'light' ? 'Modo oscuro' : 'Modo claro';
-}
+
+
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>

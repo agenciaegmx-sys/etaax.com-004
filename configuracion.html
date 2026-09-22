@@ -4,6 +4,7 @@
 <script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <script src="/page-guard.js"></script>
 <meta charset="UTF-8">
+<script src="/theme.js"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <title>ETAAX – Configuración del negocio</title>
@@ -269,20 +270,8 @@
 <script src="/etaax-store.js"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js"></script>
 <script>
-(function(){
-    var saved = localStorage.getItem('etaax_theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', saved);
-    document.addEventListener('DOMContentLoaded', function(){
-        if (saved === 'light') { document.getElementById('themeIcon').textContent='🌙'; document.getElementById('themeLabel').textContent='Modo oscuro'; }
-    });
-})();
-function toggleTheme() {
-    var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('etaax_theme', next);
-    document.getElementById('themeIcon').textContent  = next === 'light' ? '🌙' : '☀️';
-    document.getElementById('themeLabel').textContent = next === 'light' ? 'Modo oscuro' : 'Modo claro';
-}
+
+
 
 /* ── STORAGE ── */
 function getNegocioActivo() { return localStorage.getItem('etaax_negocio_activo') || ''; }

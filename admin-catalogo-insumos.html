@@ -3,7 +3,8 @@
 <head>
 <script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="/theme.js"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <title>ETAAX · Catálogo Global de Insumos</title>
     <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
@@ -513,27 +514,9 @@ var CATALOGO_KEY     = '__catalogo__';          // sentinel negocioId
 var LS_KEY           = 'etaax___catalogo___insumos'; // clave localStorage
 
 /* ── Theme ─────────────────────────────────────────────────── */
-(function(){
-    var saved = localStorage.getItem('etaax_theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', saved);
-    document.addEventListener('DOMContentLoaded', function(){
-        var icon  = document.getElementById('themeIcon');
-        var label = document.getElementById('themeLabel');
-        if (saved === 'light') { if(icon) icon.textContent='🌙'; if(label) label.textContent='Modo oscuro'; }
-    });
-})();
 
-function toggleTheme() {
-    var html  = document.documentElement;
-    var curr  = html.getAttribute('data-theme');
-    var next  = curr === 'dark' ? 'light' : 'dark';
-    html.setAttribute('data-theme', next);
-    localStorage.setItem('etaax_theme', next);
-    var icon  = document.getElementById('themeIcon');
-    var label = document.getElementById('themeLabel');
-    if (next === 'light') { if(icon) icon.textContent='🌙'; if(label) label.textContent='Modo oscuro'; }
-    else                  { if(icon) icon.textContent='☀️'; if(label) label.textContent='Modo claro'; }
-}
+
+
 
 function toggleClearBtn() {
     var val = document.getElementById('searchInput').value;

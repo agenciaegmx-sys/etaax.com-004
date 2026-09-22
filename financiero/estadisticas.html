@@ -4,7 +4,8 @@
 <script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <script src="/page-guard.js"></script>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="/theme.js"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <title>ETAAX – Salud Financiera · Estadísticas</title>
     <!-- Las fuentes viven en OTRO servidor que el CSS que las declara: sin esto, el
@@ -354,13 +355,8 @@
    propias; paleta de series validada (contraste + daltonismo).
    La serie comparativa siempre va en GRIS (énfasis en el periodo A).
    ═════════════════════════════════════════════════════════════ */
-(function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);
-document.addEventListener('DOMContentLoaded',function(){if(s==='light'){document.getElementById('themeIcon').textContent='🌙';document.getElementById('themeLabel').textContent='Modo oscuro';}});})();
-function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';
-document.documentElement.setAttribute('data-theme',n);localStorage.setItem('etaax_theme',n);
-document.getElementById('themeIcon').textContent=n==='light'?'🌙':'☀️';
-document.getElementById('themeLabel').textContent=n==='light'?'Modo oscuro':'Modo claro';
-renderAll();}
+
+
 
 var n=EtaaxCore.n, fmtM=EtaaxCore.fmtM, getNegocioActivo=EtaaxCore.getNegocioActivo;
 function fmtK(v){ v=n(v); var a=Math.abs(v); if(a>=1000) return (v<0?'−':'')+'$'+(a/1000).toFixed(a>=10000?0:1)+'k'; return (v<0?'−':'')+'$'+Math.round(a); }
@@ -1517,5 +1513,10 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="/modal-drag.js"></script>
 <script src="/modal-dock.js"></script>
 <script src="/novedades.js"></script><!-- aviso de actualizaciones del sistema -->
+<script>
+/* Las gráficas se dibujan con los colores del tema y no se enteran solas:
+   se repintan cuando el tema cambia, venga de esta pantalla o de otra. */
+window.addEventListener('etaax:theme', function(){ if (typeof renderAll === 'function') renderAll(); });
+</script>
 </body>
 </html>

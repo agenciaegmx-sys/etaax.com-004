@@ -22,6 +22,30 @@
   --gold:  #f5c842; --salmon: #c87a6a; --red: #e05a3a;
   --text:  #f0ece4; --muted: #7a7570; --dim: #4a4844;
 }
+
+/* ── Modo claro ─────────────────────────────────────────────────────────────
+   Esta pantalla declara su propia paleta, así que el tema claro TAMBIÉN se
+   declara aquí. Sin esto, el interruptor guardaba la preferencia y no cambiaba
+   nada: era justo "el modo claro no funciona en la pantalla principal".
+   Los valores son los mismos de styles.css, para que al navegar no se sienta
+   que se cambió de aplicación. */
+[data-theme="light"] {
+  --bg:     #f4f3f0;
+  --s1:     #ffffff;
+  --s2:     #f0eeea;
+  --b1:     #dddad5;
+  --b2:     #ccc9c3;
+  --green:  #28a060;
+  --green2: #1f8a50;
+  --greend: #d4f0e3;
+  --gold:   #c99a10;
+  --goldd:  rgba(201,154,16,0.10);
+  --text:   #1a1916;
+  --muted:  #6b6560;
+  --dim:    #9e9890;
+  --salmon: #b0604f;
+  --red:    #cc3f22;
+}
 *{margin:0;padding:0;box-sizing:border-box;}
 body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;}
 ::-webkit-scrollbar{width:4px;}

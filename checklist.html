@@ -3,6 +3,7 @@
 <head>
 <script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <meta charset="UTF-8">
+<script src="/theme.js"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <title>ETAAX – Check list operativo</title>
@@ -193,7 +194,7 @@ label.lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(-
 <script src="supabase-config.js"></script>
 <script src="/staff-area.js"></script><!-- el área de un colaborador: fuente única -->
 <script>
-(function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);})();
+
 function _q(k){var m=new RegExp('[?&]'+k+'=([^&]*)').exec(location.search);return m?decodeURIComponent(m[1]):'';}
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}

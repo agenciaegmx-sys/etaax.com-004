@@ -4,6 +4,7 @@
 <script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
 <script src="/page-guard.js"></script>
 <meta charset="UTF-8">
+<script src="/theme.js"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <title>ETAAX – Simulador de Metas de Venta</title>
@@ -224,8 +225,8 @@
 <script src="/etaax-store.js"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js"></script>
 <script>
-(function(){var s=localStorage.getItem('etaax_theme')||'dark';document.documentElement.setAttribute('data-theme',s);document.addEventListener('DOMContentLoaded',function(){if(s==='light'){document.getElementById('themeIcon').textContent='🌙';document.getElementById('themeLabel').textContent='Modo oscuro';}});})();
-function toggleTheme(){var n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('etaax_theme',n);document.getElementById('themeIcon').textContent=n==='light'?'🌙':'☀️';document.getElementById('themeLabel').textContent=n==='light'?'Modo oscuro':'Modo claro';}
+
+
 function toggleNav(){var nav=document.getElementById('nav'),main=document.getElementById('mainContent');nav.classList.toggle('cerrado');if(main)main.classList.toggle('expandido');var c=nav.classList.contains('cerrado');var b=document.getElementById('navToggleBtn'),t=document.getElementById('navToggleTxt');if(b)b.childNodes[0].textContent=c?'▶':'◀';if(t)t.textContent=c?'Expandir':'Ocultar';if(b)b.setAttribute('data-tooltip',c?'Expandir':'Ocultar');document.body.classList.toggle('nav-open',!c);}
 
 function getNegocioActivo(){return localStorage.getItem('etaax_negocio_activo')||'';}
