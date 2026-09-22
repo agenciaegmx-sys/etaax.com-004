@@ -2186,11 +2186,21 @@ function esc(s) {
    irreversible de esta pantalla.
    Y crear NO pide nada — dar de alta gente es la tarea del día. */
 var _GRACIA_MS = 5 * 60 * 1000;
-var _okHasta = 0;
+/* La gracia vive en la PESTAÑA, no en la variable: Roles y Permisos se abre
+   navegando esta misma ventana, y al volver la página se recarga. Con la gracia
+   en memoria, volver del catálogo de permisos pedía la contraseña otra vez —
+   la misma lata, movida de lugar. Muere al cerrar la pestaña, como la sesión. */
+var _GRACIA_K = 'etaax_staff_gracia';
+function _graciaHasta() {
+    try { return parseInt(sessionStorage.getItem(_GRACIA_K) || '0', 10) || 0; } catch (e) { return 0; }
+}
+function _graciaRenovar() {
+    try { sessionStorage.setItem(_GRACIA_K, String(Date.now() + _GRACIA_MS)); } catch (e) {}
+}
 function _gateStaff(accion, cb, btnLabel) {
-    if (Date.now() < _okHasta) { cb(); return; }
+    if (Date.now() < _graciaHasta()) { cb(); return; }
     if (!window._pedirClaveAdmin) { cb(); return; }   // sin guard cargado no se bloquea la operación
-    _pedirClaveAdmin(accion, function () { _okHasta = Date.now() + _GRACIA_MS; cb(); }, btnLabel);
+    _pedirClaveAdmin(accion, function () { _graciaRenovar(); cb(); }, btnLabel);
 }
 /* Solo la ventanita de la contraseña, nada de pantalla de bloqueo encima: una
    página nueva tapando el catálogo desarma la pantalla y no aporta nada que el

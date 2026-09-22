@@ -35,7 +35,10 @@
         '.etx-chip .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}' +
         '.etx-chip .x{background:none;border:none;color:var(--text-dim,#8b867e);cursor:pointer;font-size:13px;line-height:1;padding:2px 2px;flex-shrink:0}' +
         '.etx-chip .x:hover{color:var(--red,#e05a3a)}' +
-        '.etx-hd-btns{display:inline-flex;align-items:center;gap:8px;flex-shrink:0}' +
+        /* SIEMPRE a la derecha. Varias ventanas dejaban Minimizar y Cerrar
+           pegados al título, del lado izquierdo, mientras el resto del
+           sistema los tiene a la derecha: la mano va a donde siempre. */
+        '.etx-hd-btns{display:inline-flex;align-items:center;gap:8px;flex-shrink:0;margin-left:auto!important}' +
         // Minimizar (morado) y Cerrar (rojo): con su palabra, no solo el símbolo.
         // Van con !important porque cada página trae su propio estilo de ✕.
         '.etx-min-btn,.etx-close-btn{display:inline-flex!important;align-items:center;gap:6px;height:28px;padding:0 12px!important;' +
@@ -112,6 +115,10 @@
             // space-between del header los separe).
             var wrap = document.createElement('span'); wrap.className = 'etx-hd-btns';
             close.parentNode.insertBefore(wrap, close);
+            /* Botones propios de la ventana que van con el grupo (p.ej. "Volver"
+               en una sub-pantalla): si se quedan fuera, el grupo se va a la
+               derecha y ellos se quedan solos junto al título. */
+            header.querySelectorAll('.etx-hd-extra').forEach(function (x) { wrap.appendChild(x); });
             wrap.appendChild(b); wrap.appendChild(close);
         } else header.appendChild(b);
     }

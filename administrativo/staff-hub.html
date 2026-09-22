@@ -210,8 +210,8 @@
         <div class="tool-modal-hd">
             <span class="tm-ic" id="tmIcon">🧠</span>
             <span class="tm-tt" id="tmTitle">Herramienta</span>
-            <button class="tm-x" id="tmBack" style="display:none" onclick="volverTool()">← Volver</button>
-            <button class="tm-x" style="margin-left:auto" onclick="cerrarTool()">✕ Cerrar</button>
+            <button class="tm-x etx-hd-extra" id="tmBack" style="display:none" onclick="volverTool()">← Volver</button>
+            <button class="tm-x" id="tmClose" onclick="cerrarTool()">✕ Cerrar</button>
         </div>
         <div class="tool-modal-body">
             <div class="tool-loading" id="tmLoading">Cargando…</div>
@@ -255,8 +255,12 @@ function _tmDentro(){ var a=_tmArchivo(); return !!(_toolBase && a && a!==_toolB
    mientras editas permisos, cerrar se siente como cerrar el catálogo. */
 function _tmSincronizar(){
     var dentro=_tmDentro(), sp=TOOL_SUB[_tmArchivo()];
-    var back=document.getElementById('tmBack');
-    if(back) back.style.display = dentro ? '' : 'none';
+    /* Adentro, UNA sola salida. Dos botones que hacen lo mismo —y uno de ellos
+       llamado "Cerrar", que suena a cerrar la ventana— es justo la confusión que
+       esto venía a quitar. */
+    var back=document.getElementById('tmBack'), cerrar=document.getElementById('tmClose');
+    if(back)   back.style.display   = dentro ? '' : 'none';
+    if(cerrar) cerrar.style.display = dentro ? 'none' : '';
     var titulo=_toolTitulo, icono=_toolIcono;
     if(dentro){
         if(sp){ titulo=sp[0]; icono=sp[1]; }
@@ -303,10 +307,23 @@ function abrirTool(page, titulo, icono){
    acabe de cambiar adentro (un rol renombrado, por ejemplo). */
 function volverTool(){
     if(!_toolBase) return cerrarTool();
+    /* Al catálogo de staff se entra con contraseña, y volver lo RECARGA: sin
+       esto, salir de Roles y Permisos la pedía otra vez. Quien está adentro ya
+       la dio para llegar ahí — se le renueva su gracia, no se le vuelve a
+       preguntar por el mismo camino que acaba de recorrer. */
+    if(_toolBase === 'staff.html'){
+        try { sessionStorage.setItem('etaax_staff_gracia', String(Date.now() + 5*60*1000)); } catch(e){}
+    }
     var frame=document.getElementById('tmFrame');
     document.getElementById('tmLoading').style.display='flex';
+    /* Los botones cambian YA, no cuando termine de cargar: si no, el catálogo
+       aparece con un "Volver" que ya no lleva a ningún lado. */
+    var back=document.getElementById('tmBack'), cerrar=document.getElementById('tmClose');
+    if(back) back.style.display='none';
+    if(cerrar) cerrar.style.display='';
+    document.getElementById('tmTitle').textContent=_toolTitulo;
+    document.getElementById('tmIcon').textContent=_toolIcono;
     frame.src=_tmURL(_toolBase);
-    _tmSincronizar();
 }
 function cerrarTool(){
     /* Estando en una sub-pantalla, cerrar significa "salir de ESTO", no de la

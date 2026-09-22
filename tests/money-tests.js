@@ -70,7 +70,15 @@ function crearContexto() {
             key(i){ return Object.keys(storage)[i] || null; },
             get length(){ return Object.keys(storage).length; },
         },
-        sessionStorage: { getItem(){ return null; }, setItem(){}, removeItem(){} },
+        /* sessionStorage DE VERDAD (guarda y devuelve): hay candados que viven por
+           pestaña —la gracia del catálogo de staff— y con un stub que olvida al
+           instante, un test podría celebrar que "no vuelve a pedir la clave"
+           cuando en realidad la pide siempre. */
+        sessionStorage: (function () {
+            const m = {};
+            return { _m: m, getItem(k){ return k in m ? m[k] : null; },
+                     setItem(k, v){ m[k] = String(v); }, removeItem(k){ delete m[k]; } };
+        })(),
         alert(){}, confirm(){ return true; }, prompt(){ return ''; },
         setTimeout(){ return 0; }, setInterval(){ return 0; }, clearTimeout(){}, clearInterval(){},
         navigator: {}, location: { pathname: '/', href: '', origin: 'https://etaax.com' },
@@ -2543,22 +2551,28 @@ console.log('\n══ SUITE R · Bajas y candado del catálogo (administrativo/s
        nada. Sin eso, entrar y editar pide la clave dos veces seguidas. */
     let corrio = 0;
     R._pedirClaveAdmin = function (_a, cb) { corrio++; cb(); };
-    setVar(R, '_okHasta', 0);
+    R.sessionStorage.removeItem('etaax_staff_gracia');
     R._gateStaff('probar', function () {});
     test('la primera vez sí pide la clave', () => eq(corrio, 1, 'veces'));
     R._gateStaff('probar otra vez', function () {});
     test('dentro de la gracia ya no la vuelve a pedir', () => eq(corrio, 1, 'veces'));
-    setVar(R, '_okHasta', Date.now() - 1);
+    /* La gracia vive en la PESTAÑA, no en una variable: Roles y Permisos se abre
+       navegando esta misma ventana y al volver la página se recarga. Con la
+       gracia en memoria, volver pedía la contraseña otra vez. */
+    test('…y sobrevive a una recarga de la página', () =>
+        eq(parseInt(R.sessionStorage.getItem('etaax_staff_gracia') || '0', 10) > Date.now(),
+           true, 'en la pestaña'));
+    R.sessionStorage.setItem('etaax_staff_gracia', String(Date.now() - 1));
     R._gateStaff('ya venció', function () {});
     test('vencida la gracia, la pide de nuevo', () => eq(corrio, 2, 'veces'));
 
     /* Crear NO pasa por el candado — es la tarea del día. Editar sí. */
     let pedidas = 0;
     R._pedirClaveAdmin = function (_a, cb) { pedidas++; cb(); };
-    setVar(R, '_okHasta', 0);
+    R.sessionStorage.removeItem('etaax_staff_gracia');
     R.openModal('');
     test('crear un colaborador NO pide contraseña', () => eq(pedidas, 0, 'veces'));
-    setVar(R, '_okHasta', 0);
+    R.sessionStorage.removeItem('etaax_staff_gracia');
     R.openModal('a');
     test('editar uno existente SÍ la pide', () => eq(pedidas, 1, 'veces'));
 })();
@@ -8733,6 +8747,8 @@ console.log('\n══ BD6 · La ventana de Staff y sus sub-pantallas ══');
         const c = {
             console, JSON, Object, Array, String, Number, Date, setTimeout, encodeURIComponent,
             localStorage:{ getItem:()=>'', setItem(){}, removeItem(){} },
+            sessionStorage:(function(){ const m={}; return { _m:m,
+                getItem:k=>(k in m?m[k]:null), setItem(k,v){ m[k]=String(v); }, removeItem(k){ delete m[k]; } }; })(),
             document:{ getElementById:nodo, body:{ style:{} }, addEventListener(){} },
         };
         c.window = c;
@@ -8752,12 +8768,23 @@ console.log('\n══ BD6 · La ventana de Staff y sus sub-pantallas ══');
         return v;
     }
 
-    test('estando en el catálogo, no hay nada atrás', () => {
+    /* En el catálogo: una sola salida, y es Cerrar. Adentro: una sola salida, y
+       es Volver. Dos botones que hacen lo mismo —uno de ellos llamado "Cerrar"—
+       es justo la confusión que esto venía a quitar. */
+    test('en el catálogo no hay botón de volver', () => {
         const v = ventana('staff.html');
         v.ctx.abrirTool('staff.html', 'Catálogo de Staff', '👥');
         v.ctx._tmSincronizar();
         return eq(v.nodo('tmBack').style.display, 'none', 'sin volver');
     });
+    test('…y sí el de cerrar, que es la salida de la ventana', () => {
+        const v = ventana('staff.html');
+        v.ctx.abrirTool('staff.html', 'Catálogo de Staff', '👥');
+        v.ctx._tmSincronizar();
+        return eq(v.nodo('tmClose').style.display, '', 'con cerrar');
+    });
+    test('adentro de permisos se esconde Cerrar: la salida es Volver', () =>
+        eq(enPermisos().nodo('tmClose').style.display, 'none', 'una salida'));
     test('al entrar a permisos aparece el botón de volver', () =>
         eq(enPermisos().nodo('tmBack').style.display, '', 'con volver'));
     test('…y el encabezado dice dónde estás: Roles y Permisos', () =>
@@ -8781,6 +8808,27 @@ console.log('\n══ BD6 · La ventana de Staff y sus sub-pantallas ══');
         v.ctx._tmSincronizar();
         return eq(v.nodo('tmTitle').textContent, 'Catálogo de Staff', 'de vuelta');
     });
+    /* Al catálogo se entra con contraseña, y volver lo RECARGA: sin renovar la
+       gracia, salir de Roles y Permisos la pedía otra vez — la misma lata,
+       movida de lugar. Quien está adentro ya la dio para llegar ahí. */
+    test('volver al catálogo no vuelve a pedir la contraseña', () => {
+        const v = enPermisos();
+        v.ctx.volverTool();
+        const hasta = parseInt(v.ctx.sessionStorage.getItem('etaax_staff_gracia') || '0', 10);
+        return eq(hasta > Date.now(), true, 'sin volver a preguntar');
+    });
+    test('…y el catálogo lee esa gracia de la pestaña, no de una variable', () => {
+        const stf = fs.readFileSync(path.join(RAIZ, 'administrativo/staff.html'), 'utf8');
+        return eq(stf.indexOf("sessionStorage.getItem(_GRACIA_K") > -1 &&
+                  stf.indexOf('var _okHasta') === -1, true, 'sobrevive la recarga');
+    });
+    test('los botones cambian al instante, sin esperar la carga', () => {
+        const i = hub.indexOf('function volverTool()');
+        const t = hub.slice(i, i + 1600);
+        return eq(t.indexOf("back.style.display='none'") > -1 &&
+                  t.indexOf("cerrar.style.display=''") > -1, true, 'sin parpadeo');
+    });
+
     test('volver conserva el contexto del negocio en la URL', () => {
         const v = enPermisos();
         v.ctx.volverTool();
@@ -8799,6 +8847,16 @@ console.log('\n══ BD6 · La ventana de Staff y sus sub-pantallas ══');
         const i = hub.indexOf('function volverTool()');
         return eq(hub.slice(i, i + 400).indexOf('history.back') === -1, true, 'sin back');
     });
+    /* Minimizar y Cerrar iban pegados al título, del lado izquierdo, mientras el
+       resto del sistema los tiene a la derecha: la mano va a donde siempre. */
+    const dock = fs.readFileSync(path.join(RAIZ, 'modal-dock.js'), 'utf8');
+    test('el grupo de botones va SIEMPRE a la derecha', () =>
+        eq(/\.etx-hd-btns\{[^}]*margin-left:auto!important/.test(dock), true, 'a la derecha'));
+    test('…y los botones propios de la ventana se van con el grupo', () =>
+        eq(dock.indexOf("querySelectorAll('.etx-hd-extra')") > -1, true, 'juntos'));
+    test('Volver está marcado para irse con el grupo', () =>
+        eq(/id="tmBack"[^>]*etx-hd-extra|etx-hd-extra[^>]*id="tmBack"/.test(hub), true, 'marcado'));
+
     test('la sub-pantalla desconocida al menos dice su propio nombre', () => {
         const v = ventana('staff.html');
         v.ctx.abrirTool('staff.html', 'Catálogo de Staff', '👥');
