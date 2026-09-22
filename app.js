@@ -351,6 +351,22 @@ function leerCamposExtra(tipo) {
 }
 
 async function guardarReceta() {
+    /* Guardar es la única puerta por la que entra un cambio al recetario, así
+       que aquí se decide: si la receta es nueva pide el permiso de CREAR (el de
+       su tipo, receta o sub-receta); si ya existía, el de EDITAR. Un rol que
+       puede dar de alta pero no modificar lo ajeno sigue pudiendo guardar la
+       suya la primera vez. */
+    if (typeof _puedeRec === 'function') {
+        var _esNueva = !recetaActualId;
+        var _need = _esNueva
+            ? (typeof _permDeTipo === 'function' ? _permDeTipo(recetaTipoActual) : 'crear')
+            : 'editar';
+        if (!_puedeRec(_need)) {
+            alert('🔒 ' + (_esNueva ? 'No puedes crear recetas.' : 'No puedes editar escandallos.') +
+                  '\n\nPídeselo al administrador del negocio, en Roles y Permisos.');
+            return false;
+        }
+    }
     const nombre = document.getElementById('nombreReceta').value.trim();
     if (!nombre) { alert('Agrega un nombre a la receta antes de guardar'); return false; }
     var _guardandoDesdeCaratula = !!window._volverACaratula;
@@ -475,7 +491,8 @@ async function guardarReceta() {
     }
     alert('✅ Receta "' + nombre + '" guardada');
     var btnImp = document.getElementById('btnImprimirHeader');
-    if (btnImp) btnImp.style.display = '';
+    if (btnImp) btnImp.style.display =
+        (typeof _puedeRec !== 'function' || _puedeRec('imprimir')) ? '' : 'none';
     if (typeof _showEscMenu === 'function' && !_guardandoDesdeCaratula) _showEscMenu();
     return true;
 }
@@ -592,7 +609,8 @@ function cargarReceta(id) {
     if (typeof window._avisarDirty === 'function') window._avisarDirty();
     // Show print button for saved recipe
     var btnImp = document.getElementById('btnImprimirHeader');
-    if (btnImp) btnImp.style.display = '';
+    if (btnImp) btnImp.style.display =
+        (typeof _puedeRec !== 'function' || _puedeRec('imprimir')) ? '' : 'none';
 }
 
 // IDs de sesión
@@ -1714,7 +1732,7 @@ function renderTabla() {
     /* El permiso de costos se re-aplica en CADA pintado: el editor se vuelve a
        armar al abrir cada receta, así que esconder una sola vez al cargar la
        página dejaba el dinero a la vista en la segunda que se abriera. */
-    if (typeof _aplicarPermisoCostos === 'function') _aplicarPermisoCostos();
+    if (typeof _aplicarPermisosRec === 'function') _aplicarPermisosRec();
     const tbody = document.getElementById('tbodyIngredientes');
     tbody.innerHTML = '';
 
@@ -2229,6 +2247,9 @@ function setVal(id, val) {
 
 // ── Vista cocina / administrador ─────────────────────────────
 function cambiarVista() {
+    /* La puerta de atrás del permiso de costos: este botón enciende justo lo que
+       "ver costos" apaga. Sin el permiso, no hace nada aunque lo llamen. */
+    if (typeof _puedeRec === 'function' && !_puedeRec('verCostos')) return;
     var boton  = document.getElementById('btnVista');
     var esSub  = typeof recetaTipoActual !== 'undefined' &&
                  (recetaTipoActual === 'sub-alimentos' || recetaTipoActual === 'sub-bebidas');

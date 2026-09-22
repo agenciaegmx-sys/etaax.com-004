@@ -8398,10 +8398,11 @@ console.log('\n══ BD4 · Roles y Permisos: módulo de Recetas e Insumos ═�
     });
 
     /* ── La honestidad: lo que no está conectado, se dice ── */
-    test('el que ya está conectado NO lleva la marca', () =>
-        eq(!!(SUB.recetas||[]).find(x => x.key === 'verCostos').pendiente, false, 'conectado'));
-    test('…y todos los demás de Escandallos sí la llevan', () =>
-        eq((SUB.recetas||[]).filter(x => x.key !== 'verCostos').every(x => x.pendiente === true),
+    test('Escandallos ya no lleva la marca en ninguno: los diez mandan', () =>
+        eq((SUB.recetas||[]).some(x => x.pendiente), false, 'conectados'));
+    test('…pero los módulos que faltan sí la llevan, uno por uno', () =>
+        eq(['insumos','inventarios','requisiciones']
+            .every(k => (SUB[k]||[]).length && (SUB[k]||[]).every(x => x.pendiente === true)),
            true, 'marcados'));
     test('…y los que SÍ funcionan no llevan esa marca', () =>
         eq((SUB.ventas||[]).some(x => x.pendiente) || (SUB.gastos||[]).some(x => x.pendiente), false, 'sin marca'));
@@ -8411,112 +8412,299 @@ console.log('\n══ BD4 · Roles y Permisos: módulo de Recetas e Insumos ═�
         eq(per.indexOf('todavía no la respeta') > -1, true, 'explicado'));
 }
 
-/* ═══════════ SUITE BD5 · EL PRIMER PERMISO CONECTADO: COSTOS EN ESCANDALLOS ═
-   "Ver costos y márgenes" ya no es un interruptor decorativo: Escandallos lo
-   respeta. Sin ese permiso, el colaborador ve la receta —ingredientes,
-   cantidades, procedimiento— pero no el dinero.
+/* ═══════════ SUITE BD5 · ESCANDALLOS: LOS DIEZ PERMISOS, CONECTADOS ════════
+   Un interruptor que se apaga y no pasa nada es peor que no tenerlo: el dueño
+   cree que cerró la puerta. Los diez sub-permisos de Escandallos obedecen en
+   las DOS capas, y las dos hacen falta:
 
-   Y no basta con esconder: hay que quitar la PUERTA. El botón "Vista admin"
-   volvería a encender justo lo que el permiso acaba de apagar, y la carátula de
-   costos es una pantalla entera de dinero.                                    */
-console.log('\n══ BD5 · Costos en Escandallos, conectado ══');
+     · la pantalla esconde lo que no se puede — para no ofrecerlo;
+     · la función se niega aunque la llamen por otro camino (la consola, un
+       link con ?nuevo=, un repintado que vuelve a mostrar el botón).
+
+   Esconder sin negar es teatro. Negar sin esconder es ofrecer y luego fallar. */
+console.log('\n══ BD5 · Escandallos: los diez permisos, conectados ══');
 {
     const rec = fs.readFileSync(path.join(RAIZ, 'recetas/index.html'), 'utf8');
     const app = fs.readFileSync(path.join(RAIZ, 'app.js'), 'utf8');
     const pg  = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8');
+    const per = fs.readFileSync(path.join(RAIZ, 'administrativo/permisos.html'), 'utf8');
 
-    /* Se corre el helper REAL contra sesiones distintas. */
-    function montar(ctxSes, perms) {
-        const ls = {};
-        if (ctxSes) ls['etaax_ctx'] = JSON.stringify(ctxSes);
-        ls['etaax_negocio_activo'] = 'n1';
-        if (perms) ls['etaax_n1_permisos'] = JSON.stringify(perms);
+    /* El bloque de permisos del módulo, tal cual vive en la página. */
+    const BLOQUE = (() => {
+        const a = rec.indexOf('function _puedeRec(sub){');
+        const fin = 'function _aplicarPermisoCostos(){ _aplicarPermisosRec(); }';
+        return rec.slice(a, rec.indexOf(fin, a) + fin.length);
+    })();
+
+    /* ¿La función se niega ella misma, y ANTES de hacer nada? Un permiso que se
+       consulta a mitad del trabajo ya dejó a medias lo que iba a impedir. */
+    function _gate(src, fn, clave) {
+        const i = src.indexOf('function ' + fn + '(');
+        if (i < 0) return false;
+        const cuerpo = src.slice(src.indexOf('{', i) + 1, src.indexOf('{', i) + 1 + 330);
+        const aguja = clave.charAt(0) === '_' ? '_exigeRec(' + clave : "_exigeRec('" + clave + "'";
+        return cuerpo.indexOf(aguja) > -1;
+    }
+
+    /* Monta la pantalla con un DOM de mentira y devuelve qué quedó escondido. */
+    function pantalla(rolCtx, permisos) {
+        const ls = { etaax_negocio_activo:'n1' };
+        if (rolCtx) ls['etaax_ctx'] = JSON.stringify(rolCtx);
+        if (permisos) ls['etaax_n1_permisos'] = JSON.stringify(permisos);
+        const nodos = {};
         const c = {
             console, JSON, Object, Array, String, Boolean, Number, Date, setTimeout, Promise,
+            alert(){ c._alertas = (c._alertas||0) + 1; },
             localStorage:{ getItem:k=>(k in ls?ls[k]:null), setItem(k,v){ ls[k]=String(v); }, removeItem(k){ delete ls[k]; } },
             location:{ pathname:'/recetas/index.html', search:'', replace(){} },
-            document:{ addEventListener(){}, getElementById(){ return null; } },
+            document:{
+                addEventListener(){},
+                getElementById(id){
+                    if (!nodos[id]) nodos[id] = { style:{}, _clases:[],
+                        classList:{ add(x){ nodos[id]._clases.push(x); } } };
+                    return nodos[id];
+                },
+            },
         };
         c.window = c; c.window.addEventListener = () => {};
         vm.createContext(c);
         vm.runInContext(pg, c, { filename:'page-guard.js' });
-        const i = rec.indexOf('function _puedeRec(sub){');
-        vm.runInContext(rec.slice(i, rec.indexOf('\n}', i) + 2), c, { filename:'_puedeRec' });
-        return c.window;
+        vm.runInContext(BLOQUE, c, { filename:'permisos-recetas' });
+        c._aplicarPermisosRec();
+        return {
+            oculto: (id) => !!(nodos[id] && nodos[id].style.display === 'none'),
+            conClase: (id, cl) => !!(nodos[id] && nodos[id]._clases.indexOf(cl) > -1),
+            puede: (k) => c._puedeRec(k),
+            ctx: c,
+        };
     }
+    /* Un colaborador con TODO prendido menos lo que se le quite. */
+    const TODO = { verCatalogo:true, crear:true, crearSub:true, editar:true, imprimir:true,
+                   verCostos:true, caratula:true, caratulaImprimir:true, eliminar:true, cambios:true };
+    function sin(...claves) {
+        const r = Object.assign({}, TODO);
+        claves.forEach(k => { r[k] = false; });
+        return pantalla({ ctxType:'staff', rol:'cocinero', negId:'n1' }, { cocinero:{ recetas:r } });
+    }
+    const CON_TODO = sin();
 
-    test('el dueño siempre ve los costos', () =>
-        eq(montar({ ctxType:'owner', negId:'n1' })._puedeRec('verCostos'), true, 'dueño'));
-    /* El admin del negocio no se puede quedar fuera de sus propios números, ni
-       por un descuido al editar sus permisos: el atajo está antes de consultar
-       la tabla, así que aunque ahí diga que no, él ve. */
-    test('el admin del negocio ve aunque su permiso diga que no', () =>
-        eq(montar({ ctxType:'staff', rol:'admin', negId:'n1' },
-                  { admin:{ recetas:{ verCostos:false } } })._puedeRec('verCostos'), true, 'admin'));
-    test('un colaborador con el permiso apagado NO los ve', () =>
-        eq(montar({ ctxType:'staff', rol:'cocinero', negId:'n1' },
-                  { cocinero:{ recetas:{ verCostos:false } } })._puedeRec('verCostos'), false, 'apagado'));
-    test('…y con el permiso prendido, sí', () =>
-        eq(montar({ ctxType:'staff', rol:'cocinero', negId:'n1' },
-                  { cocinero:{ recetas:{ verCostos:true } } })._puedeRec('verCostos'), true, 'prendido'));
-    /* Un módulo guardado como `true` a secas es el formato viejo: significaba
-       "todo permitido". Quien lo tenga así no puede perder acceso por un
-       permiso que no existía cuando se guardó. */
-    test('con el formato viejo (módulo en true), sigue viendo', () =>
-        eq(montar({ ctxType:'staff', rol:'cocinero', negId:'n1' },
-                  { cocinero:{ recetas:true } })._puedeRec('verCostos'), true, 'legacy'));
-    /* Sin el módulo, no hay costos que enseñar. */
-    test('sin acceso al módulo, tampoco a sus costos', () =>
-        eq(montar({ ctxType:'staff', rol:'mesero', negId:'n1' },
-                  { mesero:{ recetas:false } })._puedeRec('verCostos'), false, 'cerrado'));
+    /* ── El catálogo: los diez existen y ninguno se anuncia como pendiente ── */
+    const SUB = CON_TODO.ctx.window.ETAAX_SUBPERMS.recetas;
+    const CLAVES = ['verCatalogo','crear','crearSub','editar','imprimir',
+                    'verCostos','caratula','caratulaImprimir','eliminar','cambios'];
+    test('están los diez permisos de Escandallos', () =>
+        eq(SUB.map(x => x.key).join(','), CLAVES.join(','), 'catálogo'));
+    test('ninguno dice ya "aún no aplica"', () =>
+        eq(SUB.some(x => x.pendiente), false, 'todos conectados'));
+    test('cada uno se explica en la pantalla del dueño', () =>
+        eq(SUB.every(x => x.label && x.sub), true, 'con rótulo'));
 
-    /* ── Que la pantalla lo aplique de verdad ── */
-    test('esconde la sección de costos', () => {
-        const i = rec.indexOf('function _aplicarPermisoCostos()');
-        return eq(rec.slice(i, i + 900).indexOf("sec.classList.add('oculto')") > -1, true, 'oculta');
+    /* ── Quién manda: dueño y admin del negocio, siempre adentro ── */
+    test('el dueño ve todo aunque no haya tabla de permisos', () =>
+        eq(pantalla({ ctxType:'owner', negId:'n1' }).puede('eliminar'), true, 'dueño'));
+    test('el admin del negocio entra aunque su permiso diga que no', () =>
+        eq(pantalla({ ctxType:'staff', rol:'admin', negId:'n1' },
+                    { admin:{ recetas:{ eliminar:false } } }).puede('eliminar'), true, 'admin'));
+    test('con el formato viejo (módulo en true) nadie pierde nada', () =>
+        eq(pantalla({ ctxType:'staff', rol:'cocinero', negId:'n1' },
+                    { cocinero:{ recetas:true } }).puede('caratula'), true, 'legacy'));
+    /* EL HOYO QUE CASI SE COLÓ: un negocio que ya había guardado permisos tiene
+       el módulo como objeto con las claves VIEJAS. Al agregar "ver catálogo",
+       esa clave no está en lo guardado — y sin esta regla el colaborador se
+       queda sin recetario de un día para otro, por un permiso que nadie le
+       quitó. Si el default de su rol era "todo permitido", nace permitido. */
+    test('un permiso NUEVO no le quita nada a quien ya tenía permisos guardados', () =>
+        eq(pantalla({ ctxType:'staff', rol:'cocinero', negId:'n1' },
+                    { cocinero:{ recetas:{ crear:true, editar:true, eliminar:true, verCostos:true,
+                                           caratula:true, precioCarta:true, imprimir:true } } })
+            .puede('verCatalogo'), true, 'no se pierde'));
+    test('…pero si su rol tenía el módulo cerrado, sigue cerrado', () =>
+        eq(pantalla({ ctxType:'staff', rol:'mesero', negId:'n1' },
+                    { mesero:{ recetas:{ crear:false } } }).puede('verCatalogo'), false, 'cerrado'));
+    test('…y lo que el dueño apagó a mano sigue apagado', () =>
+        eq(pantalla({ ctxType:'staff', rol:'cocinero', negId:'n1' },
+                    { cocinero:{ recetas:{ eliminar:false } } }).puede('eliminar'), false, 'respetado'));
+
+    test('sin acceso al módulo, ningún sub-permiso pasa', () =>
+        eq(pantalla({ ctxType:'staff', rol:'mesero', negId:'n1' },
+                    { mesero:{ recetas:false } }).puede('verCatalogo'), false, 'cerrado'));
+
+    /* ── 1. Ver el catálogo ── */
+    test('sin ver catálogo, se va el botón de entrar al recetario', () =>
+        eq(sin('verCatalogo').oculto('btnVerRecetas'), true, 'sin recetario'));
+    test('…y verRecetas se niega aunque la llamen a mano', () =>
+        eq(_gate(rec, 'verRecetas', 'verCatalogo'), true, 'función'));
+    test('…lo mismo la ficha técnica, que es el mismo contenido por otra puerta', () =>
+        eq(_gate(rec, 'abrirFichaReceta', 'verCatalogo'), true, 'ficha'));
+
+    /* ── 2 y 3. Crear receta ≠ crear sub-receta ─────────────────────────────
+       Hay cocinas donde el cocinero arma salsas, fondos y jarabes pero no da de
+       alta platillos de la carta. Son dos permisos, no uno. */
+    test('una sub-receta pide el permiso de sub-recetas', () =>
+        eq(CON_TODO.ctx._permDeTipo('sub-bebidas'), 'crearSub', 'sub'));
+    test('…y una receta normal, el de recetas', () =>
+        eq(CON_TODO.ctx._permDeTipo('bebidas'), 'crear', 'normal'));
+    test('sin crear recetas, se van sus tarjetas y las del modal', () => {
+        const p = sin('crear');
+        return eq(['btnEscSimple','btnEscAlimentos','btnEscBebidas','btnNRAlimentos','btnNRBebidas']
+            .every(id => p.oculto(id)), true, 'sin alta');
     });
-    test('…y los costos de una sub-receta, que van aparte', () => {
-        const i = rec.indexOf('function _aplicarPermisoCostos()');
-        return eq(rec.slice(i, i + 900).indexOf("'subCardCostoFinal','subCardCostoPorcion','barraCostoTotal'") > -1,
-                  true, 'sub-receta');
+    test('…pero las de sub-receta siguen ahí, que es otro permiso', () =>
+        eq(sin('crear').oculto('btnEscSubAlimentos'), false, 'sub intacta'));
+    test('sin crear sub-recetas, se van solo las de sub-receta', () => {
+        const p = sin('crearSub');
+        return eq(p.oculto('btnEscSubBebidas') && !p.oculto('btnEscBebidas'), true, 'solo sub');
     });
-    /* LA PUERTA: sin quitar el botón de vista, el colaborador vuelve a encender
-       lo que el permiso apagó, y todo esto no sirve de nada. */
-    test('quita el botón de vista admin, que sería la puerta de atrás', () => {
-        const i = rec.indexOf('function _aplicarPermisoCostos()');
-        return eq(rec.slice(i, i + 1100).indexOf("getElementById('btnVista')") > -1, true, 'sin puerta');
+    test('quien no puede dar de alta NADA pierde el botón "+ Nueva receta"', () =>
+        eq(sin('crear','crearSub').oculto('btnNuevaReceta'), true, 'sin +'));
+    test('…pero si puede una de las dos, el botón se queda', () =>
+        eq(sin('crear').oculto('btnNuevaReceta'), false, 'con +'));
+    test('crearReceta se niega según el tipo', () =>
+        eq(_gate(rec, 'crearReceta', '_permDeTipo(tipo)'), true, 'por tipo'));
+    test('…y abrirEscModal ni abre la ventana', () =>
+        eq(_gate(rec, 'abrirEscModal', '_permDeTipo(tipo)'), true, 'sin ventana'));
+    test('la receta simple pide crear', () =>
+        eq(_gate(rec, 'crearRecetaSimple', 'crear'), true, 'simple'));
+    test('convertir una simple da de alta: pide el permiso del tipo destino', () =>
+        eq(_gate(rec, 'convertirRecetaSimple', '_permDeTipo(tipo)'), true, 'convertir'));
+    test('copiar una receta también es darla de alta', () =>
+        eq(_gate(rec, 'duplicarRecetaDesdeLista', '_permDeTipo(src.tipo)'), true, 'copiar'));
+
+    /* ── 4. Editar ── */
+    test('sin editar, se van Guardar y el Editar de la ficha', () => {
+        const p = sin('editar');
+        return eq(['btnGuardarReceta','btnGuardarCaratulaEdit','btnFichaEditar']
+            .every(id => p.oculto(id)), true, 'sin guardar');
     });
-    test('…y la carátula de costos, que es una pantalla entera de dinero', () => {
-        const i = rec.indexOf('function _aplicarPermisoCostos()');
-        return eq(rec.slice(i, i + 1400).indexOf("getElementById('btnCaratula')") > -1, true, 'sin carátula');
+    test('…y editarDesdeficha se niega', () =>
+        eq(_gate(rec, 'editarDesdeficha', 'editar'), true, 'función'));
+    /* La puerta REAL: guardar. Es por donde entra cualquier cambio al recetario,
+       venga del editor, de la carátula o de un atajo. */
+    test('guardar pide EDITAR cuando la receta ya existía', () =>
+        eq(app.indexOf("var _need = _esNueva") > -1 && app.indexOf(": 'editar';") > -1, true, 'editar'));
+    test('…y CREAR (del tipo que sea) cuando es nueva: quien da de alta puede guardar la suya', () =>
+        eq(app.indexOf("_esNueva\n            ? (typeof _permDeTipo === 'function' ? _permDeTipo(recetaTipoActual) : 'crear')") > -1,
+           true, 'crear'));
+    test('guardar corta ANTES de escribir nada', () => {
+        const i = app.indexOf('async function guardarReceta()');
+        const g = app.indexOf('if (!_puedeRec(_need))', i);
+        return eq(g > i && g < app.indexOf('setRecetas', i), true, 'antes');
     });
-    test('el botón de carátula tiene id para poder esconderlo', () =>
-        eq(rec.indexOf('id="btnCaratula"') > -1, true, 'con id'));
-    /* Se re-aplica en cada pintado: el editor se rearma al abrir cada receta y
-       esconder una sola vez al cargar dejaba el dinero a la vista en la segunda. */
-    test('se vuelve a aplicar cada vez que se pinta una receta', () =>
-        eq(app.indexOf("if (typeof _aplicarPermisoCostos === 'function') _aplicarPermisoCostos();") > -1,
+
+    /* ── 5. Imprimir ── */
+    test('sin imprimir, se van los tres botones de impresión', () => {
+        const p = sin('imprimir');
+        return eq(['btnImprimirHeader','btnImprimirSeleccion','btnFichaImprimir']
+            .every(id => p.oculto(id)), true, 'sin imprimir');
+    });
+    test('…y las tres funciones se niegan', () =>
+        eq(['abrirMenuImpresion','ejecutarImpresion','imprimirSeleccionadas']
+            .every(f => _gate(rec, f, 'imprimir')), true, 'funciones'));
+    /* Estos botones se vuelven a mostrar solos al guardar o al seleccionar: si
+       el permiso no se consulta AHÍ, reaparecen. */
+    test('el botón de imprimir no revive al guardar una receta', () =>
+        eq(app.indexOf("(typeof _puedeRec !== 'function' || _puedeRec('imprimir')) ? '' : 'none'") > -1,
+           true, 'no revive'));
+    test('…ni al seleccionar recetas en el catálogo', () =>
+        eq(rec.split("recetasSeleccionadas.size > 0 && _puedeRec('imprimir')").length - 1, 2, 'las dos vistas'));
+
+    /* ── 6. Ver costos dentro del escandallo ── */
+    test('sin ver costos, la sección de dinero se tapa', () =>
+        eq(sin('verCostos').conClase('seccionCostos', 'oculto'), true, 'tapada'));
+    test('…también los costos de sub-receta, que van aparte', () => {
+        const p = sin('verCostos');
+        return eq(['subCardCostoFinal','subCardCostoPorcion','barraCostoTotal']
+            .every(id => p.oculto(id)), true, 'sub-receta');
+    });
+    test('…y se va el botón de vista admin, que era la puerta de atrás', () =>
+        eq(sin('verCostos').oculto('btnVista'), true, 'sin puerta'));
+    test('…que además no hace nada si la llaman', () =>
+        eq(app.indexOf("if (typeof _puedeRec === 'function' && !_puedeRec('verCostos')) return;") > -1,
+           true, 'cambiarVista muda'));
+    test('…y el "Ver costeo" de la ficha se va con ellos', () =>
+        eq(sin('verCostos').oculto('btnFichaCosteo'), true, 'sin costeo'));
+    test('abrirFichaCosteo se niega', () =>
+        eq(_gate(rec, 'abrirFichaCosteo', 'verCostos'), true, 'función'));
+    /* Cambiar de tipo destapa la sección: si no se vuelve a aplicar, el dinero
+       reaparece a media captura. */
+    test('cambiar de tipo de receta no destapa el dinero', () => {
+        const i = rec.indexOf('if (esSub) renderRendimientoSub();');
+        return eq(rec.slice(i, i + 260).indexOf('_aplicarPermisosRec()') > -1, true, 're-aplica');
+    });
+    test('y se re-aplica en cada pintado de la tabla', () =>
+        eq(app.indexOf("if (typeof _aplicarPermisosRec === 'function') _aplicarPermisosRec();") > -1,
            true, 'en cada render'));
 
-    /* ── Y que deje de decir que no aplica ── */
-    const ctx2 = { window:{}, console, JSON, Object, Array, String, Date, setTimeout,
-                   localStorage:{ getItem(){ return null; }, setItem(){}, removeItem(){} },
-                   location:{ pathname:'/hub.html', search:'' }, document:{ addEventListener(){} } };
-    ctx2.window = ctx2; ctx2.window.addEventListener = () => {};
-    vm.createContext(ctx2);
-    vm.runInContext(pg, ctx2, { filename:'page-guard.js' });
-    const rc = ctx2.window.ETAAX_SUBPERMS.recetas.find(x => x.key === 'verCostos');
-    test('ya no se anuncia como "aún no aplica"', () => eq(!!rc.pendiente, false, 'conectado'));
-    /* Los que siguen sin conectar mantienen su marca: la lista tiene que decir
-       la verdad de cada uno, no de todos a la vez. */
-    test('…pero los que faltan siguen marcados', () =>
-        eq(ctx2.window.ETAAX_SUBPERMS.recetas.filter(x => x.pendiente).length > 0, true, 'honesta'));
+    /* ── 7 y 8. Carátula: verla e imprimirla son dos cosas ───────────────────
+       Llevarse el comparativo de márgenes en papel es sacarlo del negocio. */
+    test('sin carátula, se va su tarjeta del menú', () =>
+        eq(sin('caratula').oculto('btnCaratula'), true, 'sin carátula'));
+    test('…y las dos puertas de entrada se niegan', () =>
+        eq(_gate(rec, 'abrirCaratulaModal', 'caratula') && _gate(rec, 'verCaratula', 'caratula'),
+           true, 'funciones'));
+    test('se puede VER la carátula sin poder imprimirla', () => {
+        const p = sin('caratulaImprimir');
+        return eq(!p.oculto('btnCaratula') && p.oculto('caratulaBtnPrint'), true, 'solo ver');
+    });
+    test('imprimirCaratula se niega aunque la llamen', () =>
+        eq(_gate(rec, 'imprimirCaratula', 'caratulaImprimir'), true, 'función'));
+    test('el botón de imprimir no revive al abrir un grupo de la carátula', () => {
+        const i = rec.indexOf("document.getElementById('caratulaBtnPrint').style.display='inline-flex';");
+        return eq(rec.slice(i, i + 160).indexOf('_aplicarPermisosRec()') > -1, true, 'no revive');
+    });
 
-    /* El rótulo ya no suena a tarea del dueño: no es algo que él conecte. */
-    const per = fs.readFileSync(path.join(RAIZ, 'administrativo/permisos.html'), 'utf8');
-    test('el rótulo dice que no aplica, no que hay que conectarlo', () =>
-        eq(per.indexOf('>aún no aplica<') > -1 && per.indexOf('>por conectar<') === -1, true, 'claro'));
+    /* ── 9. Eliminar ── */
+    test('sin eliminar, se va el botón del editor', () =>
+        eq(sin('eliminar').oculto('btnEliminarReceta'), true, 'sin borrar'));
+    test('…y los dos caminos de borrado se niegan', () =>
+        eq(_gate(rec, 'eliminarReceta', 'eliminar') && _gate(rec, 'eliminarRecetaActual', 'eliminar'),
+           true, 'funciones'));
+    /* El menú de tres puntos del catálogo se arma en JS: ofrecer "Eliminar" para
+       que luego salte un aviso de permiso es prometer y no cumplir. */
+    test('el menú de la tarjeta no ofrece Eliminar a quien no puede', () => {
+        const i = rec.indexOf("var items = [_recMenuItem('👁️'");
+        return eq(rec.slice(i, i + 900).indexOf("if (_puedeRec('eliminar')) {") > -1, true, 'menú');
+    });
+    test('…ni Editar, ni Copiar', () => {
+        const i = rec.indexOf("var items = [_recMenuItem('👁️'");
+        const t = rec.slice(i, i + 900);
+        return eq(t.indexOf("if (_puedeRec('editar'))") > -1 &&
+                  t.indexOf("if (_puedeRec(_permDeTipo(r.tipo)))") > -1, true, 'menú');
+    });
+
+    /* ── 10. Cambios recientes ── */
+    test('sin cambios recientes, se va su botón', () =>
+        eq(sin('cambios').oculto('btnNovedadesRec'), true, 'sin novedades'));
+    test('…y no revive al repintar el catálogo', () =>
+        eq(rec.indexOf("b.style.display=_puedeRec('cambios')?'':'none';") > -1, true, 'no revive'));
+    test('abrirNovedadesRec se niega', () =>
+        eq(_gate(rec, 'abrirNovedadesRec', 'cambios'), true, 'función'));
+
+    /* ── Que apagar UNO no apague los demás ── */
+    test('apagar eliminar no toca guardar ni imprimir', () => {
+        const p = sin('eliminar');
+        return eq(!p.oculto('btnGuardarReceta') && !p.oculto('btnFichaImprimir'), true, 'quirúrgico');
+    });
+    test('con todo prendido, no se esconde nada', () =>
+        eq(['btnVerRecetas','btnCaratula','btnEscSimple','btnEscSubBebidas','btnGuardarReceta',
+            'btnEliminarReceta','btnNovedadesRec','btnVista','caratulaBtnPrint']
+            .some(id => CON_TODO.oculto(id)), false, 'nada escondido'));
+
+    /* ── Y que el permiso fresco llegue sin recargar ── */
+    test('cuando bajan los permisos de la nube, la pantalla se vuelve a aplicar', () =>
+        eq(pg.indexOf("new CustomEvent('etaax:permisos'") > -1 &&
+           rec.indexOf("window.addEventListener('etaax:permisos'") > -1, true, 'al vuelo'));
+
+    /* Las dos pantallas tienen que contar lo mismo: si el interruptor se ve
+       apagado aquí pero el colaborador sí puede, la pantalla miente. */
+    test('la pantalla del dueño usa la misma regla para los permisos nuevos', () =>
+        eq(per.indexOf('if (def === true) return true;') > -1, true, 'sin mentir'));
+
+    /* ── El rótulo del dueño ── */
+    test('la pantalla de permisos ya no manda a conectar nada', () =>
+        eq(per.indexOf('>por conectar<') === -1, true, 'sin jerga'));
 }
+
 
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda

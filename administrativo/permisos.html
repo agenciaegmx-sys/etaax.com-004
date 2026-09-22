@@ -443,6 +443,10 @@ function _subVal(perms, mod, sub) {
         if (sub in v) return v[sub] !== false;
         var def = (_defaultsDe(_rolActivo) || {})[mod];
         if (def && typeof def === 'object' && sub in def) return def[sub] !== false;
+        /* Misma regla que etaaxPerm: una clave que no estaba cuando se guardó
+           nace PRENDIDA si el rol tenía el módulo entero. Si aquí dijera que no
+           y allá que sí, esta pantalla estaría mintiendo sobre lo que pasa. */
+        if (def === true) return true;
         return false;
     }
     return false;

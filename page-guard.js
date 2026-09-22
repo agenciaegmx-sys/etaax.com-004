@@ -64,14 +64,21 @@ window.ETAAX_SUBPERMS = {
        y no pasa nada es peor que no tenerlo — ya pasó con "cambiar de sucursal"
        y costó una auditoría entera entender por qué. Al conectar uno, se le
        quita la marca en el mismo commit. */
+    /* Escandallos: los diez están CONECTADOS — cada interruptor lo obedecen la
+       pantalla (esconde el botón) y la función (se niega aunque la llamen por
+       otro camino). El orden es el del trabajo real: ver, crear, editar,
+       imprimir, dinero, borrar. */
     recetas: [
-        { key:'crear',        label:'Crear recetas',            sub:'Dar de alta escandallos nuevos', pendiente:true },
-        { key:'editar',       label:'Editar recetas',           sub:'Modificar y guardar escandallos', pendiente:true },
-        { key:'eliminar',     label:'Eliminar recetas',         sub:'Borrar del catálogo', pendiente:true },
-        { key:'verCostos',    label:'Ver costos y márgenes',    sub:'Sin esto ve la receta en vista operativa, sin dinero' },
-        { key:'caratula',     label:'Carátula de costos',       sub:'Comparativo de costos y rentabilidad', pendiente:true },
-        { key:'precioCarta',  label:'Cambiar precio en carta',  sub:'El precio de venta al público', pendiente:true },
-        { key:'imprimir',     label:'Imprimir escandallos',     sub:'Ficha operativa y administrativa', pendiente:true },
+        { key:'verCatalogo',      label:'Ver catálogo de recetas y sub-recetas', sub:'Entrar al recetario y abrir una ficha técnica' },
+        { key:'crear',            label:'Crear recetas / receta simple', sub:'Dar de alta escandallos de alimentos y bebidas' },
+        { key:'crearSub',         label:'Crear sub-recetas',           sub:'Salsas, fondos, masas, jarabes, bases' },
+        { key:'editar',           label:'Editar escandallos',          sub:'Recetas y sub-recetas: modificar y guardar' },
+        { key:'imprimir',         label:'Imprimir recetas',            sub:'Ficha operativa y administrativa' },
+        { key:'verCostos',        label:'Ver costos y márgenes',       sub:'Sin esto ve la receta en vista operativa, sin dinero' },
+        { key:'caratula',         label:'Ver carátula de costos',      sub:'Comparativo de costos y rentabilidad' },
+        { key:'caratulaImprimir', label:'Imprimir carátula de costos', sub:'Sacar el comparativo en papel o PDF' },
+        { key:'eliminar',         label:'Eliminar recetas / sub-recetas', sub:'Borrar del catálogo' },
+        { key:'cambios',          label:'Ver cambios recientes',       sub:'Qué se modificó por sucursal y qué sube al catálogo global' },
     ],
     insumos: [
         { key:'crear',          label:'Crear insumos',            sub:'Dar de alta materias primas', pendiente:true },
@@ -227,6 +234,12 @@ window.etaaxPermisosRefrescar = function (negId, luego) {
                 res.data.forEach(function (row) { comb[row.rol] = row.datos; });
                 try { localStorage.setItem('etaax_' + negId + '_permisos', JSON.stringify(comb)); } catch (e) {}
                 if (typeof luego === 'function') luego();
+                /* La página ya se pintó con lo que había en caché. Ahora que
+                   llegó lo de verdad, avisar para que se vuelva a aplicar: sin
+                   esto, un permiso recién cambiado por el dueño no se respeta
+                   hasta la siguiente carga. */
+                try { window.dispatchEvent(new CustomEvent('etaax:permisos', { detail:{ negId:negId } })); }
+                catch (e) {}
             })
             .catch(function (e) { console.warn('[etaax] permisos sin refrescar:', e); });
     })();
@@ -264,6 +277,11 @@ window.etaaxPerm = function (negId, rol, path) {
         if (sub in v) return v[sub] !== false;
         var def = (window.ETAAX_PERM_DEFAULTS[rol] || {})[mod];
         if (def && typeof def === 'object' && sub in def) return def[sub] !== false;
+        /* La clave no estaba cuando el dueño guardó. Si el default de su rol es
+           "todo permitido", este permiso NUEVO nace permitido: negarlo sería
+           quitarle al colaborador algo que nunca le quitaron — pasa cada vez que
+           se agrega un sub-permiso a un módulo con permisos ya guardados. */
+        if (def === true) return true;
         return false;
     }
     return false;
