@@ -8213,6 +8213,118 @@ console.log('\n══ BD2 · El botón de la propina en la venta declarada ═�
         eq(difNo.indexOf('100.00') > -1 && difNo !== difIncluida, true, difNo));
 }
 
+/* ═══════════ SUITE BD3 · ROLES A LA MEDIDA DEL NEGOCIO ══════════════════════
+   Cada negocio llama distinto a lo mismo: donde uno dice "Mesero" otro dice
+   "Hostess" o "Cajera". Antes la lista estaba escrita a mano en TRES archivos
+   —Permisos, el modal de staff y el catálogo de staff— así que agregar un rol
+   pedía tocar los tres y acordarse de los tres.
+
+   LA REGLA QUE NO SE PUEDE ROMPER: renombrar cambia la ETIQUETA, nunca la
+   LLAVE. La llave es lo que amarra a cada colaborador con sus permisos —vive en
+   `staff.datos.rol`, en la tabla `permisos` y en la sesión abierta— y si
+   cambiara al renombrar, todos los de ese rol se quedarían sin permisos de un
+   día para otro, sin forma de saber por qué.                                  */
+console.log('\n══ BD3 · Roles a la medida del negocio ══');
+{
+    const pg = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8');
+    function montar(permisos) {
+        const ls = { etaax_ctx: JSON.stringify({ ctxType:'owner', negId:'n1' }) };
+        if (permisos) ls['etaax_n1_permisos'] = JSON.stringify(permisos);
+        const ctx = {
+            console:{ warn(){}, log(){} }, JSON, Object, Array, String, Number, Boolean, Date, setTimeout, Promise,
+            localStorage:{ getItem:k=>(k in ls?ls[k]:null), setItem(k,v){ ls[k]=String(v); }, removeItem(k){ delete ls[k]; } },
+            location:{ pathname:'/hub.html', search:'', replace(){} },
+            document:{ addEventListener(){} },
+        };
+        ctx.window = ctx; ctx.window.addEventListener = () => {};
+        vm.createContext(ctx);
+        vm.runInContext(pg, ctx, { filename:'page-guard.js' });
+        return ctx.window;
+    }
+
+    /* ── De fábrica ── */
+    const w = montar(null);
+    test('el catálogo trae los roles de fábrica', () =>
+        eq(w.etaaxRoles('n1').length, w.ETAAX_ROLES_BASE.length, 'todos'));
+    test('y cada uno con su nombre', () => eq(w.etaaxRolLabel('n1','mesero'), 'Mesero', 'Mesero'));
+
+    /* ── Renombrar: cambia lo que se ve, NO la llave ── */
+    const r = montar({ '__roles__': { nombres:{ mesero:'Cajera' } } });
+    test('renombrar cambia la etiqueta', () => eq(r.etaaxRolLabel('n1','mesero'), 'Cajera', 'Cajera'));
+    test('…y la LLAVE se queda igual', () =>
+        eq(r.etaaxRoles('n1').some(x => x.key === 'mesero'), true, 'mesero sigue'));
+    /* Si la llave cambiara, sus permisos dejarían de encontrarse. Esto es lo que
+       de verdad importa del renombre. */
+    test('…así que sus permisos se siguen encontrando', () =>
+        eq(r.etaaxPermisosRol('n1','mesero').ventas, true, 'permisos intactos'));
+    test('…y se sabe que fue renombrado, para poder decirlo', () =>
+        eq(r.etaaxRol('n1','mesero').renombrado, true, 'marcado'));
+
+    /* ── Roles propios ── */
+    const c = montar({ '__roles__': { extra:[{ key:'rx_hostess', label:'Hostess', base:'mesero' }] } });
+    test('un rol propio aparece en el catálogo', () =>
+        eq(c.etaaxRolLabel('n1','rx_hostess'), 'Hostess', 'Hostess'));
+    test('…marcado como propio, para poder borrarlo', () =>
+        eq(c.etaaxRol('n1','rx_hostess').propio, true, 'propio'));
+    /* Sin fila de permisos propia, hereda los del rol base. Si devolviera {},
+       el dueño crearía "Hostess" y no podría entrar a nada, sin una pista. */
+    test('sin permisos propios, hereda los de su rol base', () =>
+        eq(c.etaaxPermisosRol('n1','rx_hostess').ventas,
+           c.ETAAX_PERM_DEFAULTS.mesero.ventas, 'hereda de mesero'));
+    /* Y cuando sí los tiene, mandan los suyos. */
+    const c2 = montar({ '__roles__': { extra:[{ key:'rx_hostess', label:'Hostess', base:'mesero' }] },
+                        'rx_hostess': { ventas:false, gastos:true } });
+    test('con permisos propios, mandan los suyos', () =>
+        eq(c2.etaaxPermisosRol('n1','rx_hostess').ventas, false, 'los suyos'));
+
+    /* ── La llave nueva no puede chocar ── */
+    test('la llave de un rol nuevo lleva prefijo, para no chocar con las de fábrica', () =>
+        eq(w.etaaxRolNuevaKey('n1','Hostess').indexOf('rx_'), 0, 'rx_'));
+    test('…sin acentos ni espacios', () =>
+        eq(w.etaaxRolNuevaKey('n1','Capitán de Meseros'), 'rx_capitan_de_meseros', 'normalizada'));
+    test('…y si ya existe, no la pisa', () => {
+        const d = montar({ '__roles__': { extra:[{ key:'rx_hostess', label:'Hostess', base:'otro' }] } });
+        return eq(d.etaaxRolNuevaKey('n1','Hostess'), 'rx_hostess_2', 'no pisa');
+    });
+    /* Un nombre que no deja letras no puede generar una llave vacía. */
+    test('un nombre raro no deja una llave vacía', () =>
+        eq(w.etaaxRolNuevaKey('n1','***'), 'rx_rol', 'con nombre'));
+
+    /* ── Que las TRES pantallas lean la misma lista ── */
+    const per = fs.readFileSync(path.join(RAIZ, 'administrativo/permisos.html'), 'utf8');
+    const mod = fs.readFileSync(path.join(RAIZ, 'staff-modal.js'), 'utf8');
+    const stf = fs.readFileSync(path.join(RAIZ, 'administrativo/staff.html'), 'utf8');
+    test('Permisos lee el catálogo del negocio', () =>
+        eq(per.indexOf('window.etaaxRoles(getNegocioActivo())') > -1, true, 'lo lee'));
+    test('el modal de staff, también', () =>
+        eq(mod.indexOf('window.etaaxRoles(negId)') > -1, true, 'lo lee'));
+    test('y el catálogo de staff, también', () =>
+        eq(stf.indexOf('window.etaaxRoles(negId)') > -1, true, 'lo lee'));
+    /* Ninguna puede conservar su lista escrita a mano: es lo que hacía que se
+       quedaran atrás entre ellas. */
+    [['administrativo/permisos.html', per], ['staff-modal.js', mod], ['administrativo/staff.html', stf]]
+    .forEach(function(par){
+        const codigo = par[1].replace(/\/\*[\s\S]*?\*\//g, ' ');
+        test(par[0] + ': ya no tiene su propia lista de roles', () =>
+            eq(/label:\s*'Jefe de Cocina'|value="jefe_cocina"/.test(codigo), false, 'sin lista propia'));
+    });
+
+    /* ── Crear un rol le graba SUS permisos de una vez ──
+       Sin fila propia, cada dispositivo caería al default del base y el dueño no
+       podría apagarle nada: no habría nada que apagar. */
+    test('crear un rol le graba permisos propios de entrada', () => {
+        const i = per.indexOf('function nuevoRol()');
+        return eq(per.slice(i, i + 1400).indexOf('all[key]=JSON.parse(JSON.stringify(DEFAULTS[base]||{}))') > -1,
+                  true, 'con permisos');
+    });
+    /* Borrar solo los propios: quitar uno de fábrica dejaría sin rol a quien ya
+       lo tenga asignado. */
+    test('solo se pueden borrar los roles propios', () => {
+        const i = per.indexOf('function borrarRol()');
+        return eq(per.slice(i, i + 300).indexOf('!act.propio') > -1, true, 'protegidos');
+    });
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La

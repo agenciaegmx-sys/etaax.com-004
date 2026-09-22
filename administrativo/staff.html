@@ -462,17 +462,6 @@
                     <label>Rol del sistema</label>
                     <select id="fRol" onchange="_rolChangeStaff()">
                         <option value="">— Sin acceso al sistema —</option>
-                        <option value="admin">👑 Administrador</option>
-                        <option value="gerente">🎯 Gerente</option>
-                        <option value="administrativo">📋 Administrativo</option>
-                        <option value="chef">🍳 Chef</option>
-                        <option value="jefe_barra">🍷 Jefe de Barra</option>
-                        <option value="jefe_cocina">👨‍🍳 Jefe de Cocina</option>
-                        <option value="cocinero">🥘 Cocinero</option>
-                        <option value="barman">🍸 Barman</option>
-                        <option value="barista">☕ Barista</option>
-                        <option value="mesero">🛎️ Mesero</option>
-                        <option value="otro">👤 Otro</option>
                     </select>
                 </div>
                 <!-- ÁREA: solo CORRECCIÓN. Normalmente se deriva del rol (Cocinero →
@@ -782,21 +771,37 @@ function _sucNombre(id) {
     return s ? (s.nombre || s.id) : id;
 }
 
-/* ── ROLES ── */
-var ROLES = [
-    { key:'admin',          label:'Administrador',   color:'#c87a6a', bg:'rgba(200,122,106,.15)', icon:'👑' },
-    { key:'gerente',        label:'Gerente',          color:'#f5c842', bg:'rgba(245,200,66,.12)',  icon:'🎯' },
-    { key:'jefe_cocina',    label:'Jefe de Cocina',   color:'#3dbe7a', bg:'rgba(61,190,122,.12)',  icon:'👨‍🍳' },
-    { key:'chef',           label:'Chef',             color:'#3dbe7a', bg:'rgba(61,190,122,.12)',  icon:'🍳' },
-    { key:'jefe_barra',     label:'Jefe de Barra',    color:'#c89b6a', bg:'rgba(200,155,106,.12)', icon:'🍷' },
-    { key:'cocinero',       label:'Cocinero',         color:'#3dbe7a', bg:'rgba(61,190,122,.12)',  icon:'🥘' },
-    { key:'barman',         label:'Barman',           color:'#7ab8f5', bg:'rgba(122,184,245,.12)', icon:'🍸' },
-    { key:'barista',        label:'Barista',          color:'#c4a882', bg:'rgba(196,168,130,.12)', icon:'☕' },
-    { key:'mesero',         label:'Mesero',           color:'#9b8de8', bg:'rgba(155,141,232,.12)', icon:'🛎️' },
-    { key:'administrativo', label:'Administrativo',   color:'#f5c842', bg:'rgba(245,200,66,.12)',  icon:'📋' },
-    { key:'otro',           label:'Otro',             color:'#7a7570', bg:'rgba(122,117,112,.12)', icon:'👤' },
-];
-function getRol(key) { return ROLES.find(function(r){ return r.key === key; }) || null; }
+/* ── ROLES ──────────────────────────────────────────────────────────────────
+   Salen del CATÁLOGO del negocio (page-guard.js), el mismo que administra
+   Permisos y Roles y que lee el modal de staff. Aquí solo se les pone el fondo
+   de la pastilla, derivado de su color: escrito a mano, este catálogo se
+   quedaba atrás en cuanto alguien creaba o renombraba un rol allá. */
+function _rolesNeg() {
+    var negId = getNegocioActivo ? getNegocioActivo() : '';
+    var base = (typeof window.etaaxRoles === 'function')
+        ? window.etaaxRoles(negId) : (window.ETAAX_ROLES_BASE || []);
+    return base.map(function(r){
+        return { key:r.key, label:r.label, icon:r.icon, color:r.color, bg:_bgDeColor(r.color) };
+    });
+}
+/* Llena el <select> de rol con el catálogo del negocio. Se llama al abrir el
+   modal: si se poblara una sola vez al cargar, un rol creado en otra pestaña no
+   aparecería hasta recargar. */
+function _pobRolSelect(valor) {
+    var sel = document.getElementById('fRol'); if (!sel) return;
+    sel.innerHTML = '<option value="">— Sin acceso al sistema —</option>' +
+        _rolesNeg().map(function(r){
+            return '<option value="' + esc(r.key) + '">' + (r.icon||'👤') + ' ' + esc(r.label) + '</option>';
+        }).join('');
+    sel.value = valor || '';
+}
+function _bgDeColor(hex) {
+    var h = String(hex||'#7a7570').replace('#','');
+    if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+    var r = parseInt(h.slice(0,2),16)||122, g = parseInt(h.slice(2,4),16)||117, b = parseInt(h.slice(4,6),16)||112;
+    return 'rgba('+r+','+g+','+b+',.12)';
+}
+function getRol(key) { return _rolesNeg().find(function(r){ return r.key === key; }) || null; }
 function rolBadge(key) {
     var r = getRol(key);
     if (!r) return '<span style="color:var(--text-dim);font-size:12px">—</span>';
@@ -1129,7 +1134,7 @@ function _openModalReal(id) {
             document.getElementById('fEstado').value      = s.estado || 'Activo';
             var fSucEdit = document.getElementById('fSucursal');
             if (fSucEdit) fSucEdit.value = s.sucursalId || '';
-            document.getElementById('fRol').value         = s.rol || '';
+            _pobRolSelect(s.rol || '');
             (function(){ var e=document.getElementById('fArea'); if(e){ e.value = s.area || ''; e.onchange = _pintarAreaHint; } })();
             _pintarAreaHint();
             document.getElementById('fUsuario').value     = s.usuario || '';
@@ -1235,7 +1240,7 @@ function clearForm() {
     clabeChange();
     togBancarios();
     document.getElementById('fEstado').value = 'Activo';
-    document.getElementById('fRol').value = '';
+    _pobRolSelect('');
     (function(){ var e=document.getElementById('fArea'); if(e){ e.value=''; e.onchange = _pintarAreaHint; } })();
     _pintarAreaHint();
     document.getElementById('fCategoriaNomina').value = 'operativa';

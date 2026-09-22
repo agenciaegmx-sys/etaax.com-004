@@ -73,6 +73,84 @@ window.ETAAX_SUBPERMS = {
 /* Permisos efectivos de un rol en un negocio:
    los guardados por el dueño (localStorage, sync de Supabase)
    o los defaults del rol si no hay personalizados. */
+/* ── CATÁLOGO DE ROLES ───────────────────────────────────────────────────────
+   Cada negocio llama distinto a lo mismo: donde uno dice "Mesero" otro dice
+   "Hostess" o "Cajera". Antes la lista estaba escrita a mano en TRES archivos
+   (permisos, el modal de staff y el catálogo de staff), así que agregar un rol
+   pedía tocar los tres y acordarse de los tres.
+
+   REGLA QUE NO SE PUEDE ROMPER: renombrar cambia la ETIQUETA, nunca la LLAVE.
+   La llave (`gerente`, `mesero`…) es lo que amarra a cada colaborador con sus
+   permisos: vive en `staff.datos.rol`, en la tabla `permisos` y en la sesión
+   abierta. Si al renombrar cambiara, todos los colaboradores de ese rol se
+   quedarían sin permisos de un día para otro, y sin forma de saber por qué.
+
+   Los roles NUEVOS sí estrenan llave, con prefijo `rx_` para no chocar nunca con
+   una de las de fábrica, ni con las que se agreguen al producto después.        */
+window.ETAAX_ROLES_BASE = [
+    { key:'admin',          label:'Administrador',  icon:'👑', color:'#c87a6a' },
+    { key:'gerente',        label:'Gerente',        icon:'🎯', color:'#f5c842' },
+    { key:'jefe_cocina',    label:'Jefe de Cocina', icon:'👨‍🍳', color:'#3dbe7a' },
+    { key:'chef',           label:'Chef',           icon:'🍳', color:'#3dbe7a' },
+    { key:'jefe_barra',     label:'Jefe de Barra',  icon:'🍷', color:'#c89b6a' },
+    { key:'cocinero',       label:'Cocinero',       icon:'🥘', color:'#3dbe7a' },
+    { key:'barman',         label:'Barman',         icon:'🍸', color:'#7ab8f5' },
+    { key:'barista',        label:'Barista',        icon:'☕', color:'#c4a882' },
+    { key:'mesero',         label:'Mesero',         icon:'🛎️', color:'#9b8de8' },
+    { key:'administrativo', label:'Administrativo', icon:'📋', color:'#f5c842' },
+    { key:'otro',           label:'Otro',           icon:'👤', color:'#7a7570' },
+];
+/* Los ajustes del negocio viajan en la MISMA tabla de permisos, bajo una llave
+   reservada. Así se sincronizan solos con lo que ya baja cada página y no hace
+   falta una migración ni otra tabla que mantener al día. */
+window.ETAAX_ROLES_KEY = '__roles__';
+
+function _rolesCfg(negId) {
+    try {
+        var p = JSON.parse(localStorage.getItem('etaax_' + negId + '_permisos') || 'null');
+        var c = p && p[window.ETAAX_ROLES_KEY];
+        return (c && typeof c === 'object') ? c : {};
+    } catch (e) { return {}; }
+}
+
+/* El catálogo EFECTIVO de un negocio: los de fábrica con su nombre puesto, más
+   los suyos. `base` de un rol propio dice de cuál hereda los permisos de salida. */
+window.etaaxRoles = function (negId) {
+    var cfg = _rolesCfg(negId), nom = cfg.nombres || {};
+    var out = window.ETAAX_ROLES_BASE.map(function (r) {
+        return { key:r.key, label: nom[r.key] || r.label, icon:r.icon, color:r.color,
+                 base:r.key, propio:false, renombrado: !!nom[r.key] };
+    });
+    (cfg.extra || []).forEach(function (r) {
+        if (!r || !r.key) return;
+        out.push({ key:r.key, label: nom[r.key] || r.label || r.key,
+                   icon: r.icon || '👤', color: r.color || '#7a7570',
+                   base: r.base || 'otro', propio:true, renombrado:false });
+    });
+    return out;
+};
+window.etaaxRol = function (negId, key) {
+    var l = window.etaaxRoles(negId);
+    for (var i = 0; i < l.length; i++) if (l[i].key === key) return l[i];
+    return null;
+};
+window.etaaxRolLabel = function (negId, key) {
+    var r = window.etaaxRol(negId, key);
+    return r ? r.label : (key || '');
+};
+/* Llave para un rol nuevo: `rx_` + el nombre normalizado. El prefijo la aparta
+   para siempre del espacio de las de fábrica. */
+window.etaaxRolNuevaKey = function (negId, label) {
+    var base = 'rx_' + String(label || 'rol').toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 24);
+    if (base === 'rx_') base = 'rx_rol';
+    var usadas = {}; window.etaaxRoles(negId).forEach(function (r) { usadas[r.key] = 1; });
+    if (!usadas[base]) return base;
+    for (var i = 2; i < 999; i++) if (!usadas[base + '_' + i]) return base + '_' + i;
+    return base + '_' + Date.now().toString(36);
+};
+
 /* ── LOS PERMISOS TIENEN QUE LLEGAR AL DISPOSITIVO ───────────────────────────
    Aquí estaba el bug que hacía que apagar un permiso "no sirviera de nada".
 
@@ -119,7 +197,14 @@ window.etaaxPermisosRefrescar = function (negId, luego) {
 window.etaaxPermisosRol = function (negId, rol) {
     var p = null;
     try { p = JSON.parse(localStorage.getItem('etaax_' + negId + '_permisos') || 'null'); } catch (e) {}
-    return (p && p[rol]) || window.ETAAX_PERM_DEFAULTS[rol] || {};
+    if (p && p[rol]) return p[rol];
+    if (window.ETAAX_PERM_DEFAULTS[rol]) return window.ETAAX_PERM_DEFAULTS[rol];
+    /* Un rol PROPIO del negocio no tiene defaults de fábrica. Se cae a los de su
+       rol base: sin esto, `{}` deja todo apagado y el dueño crea "Hostess" y
+       descubre que no puede entrar a nada, sin una pista de por qué. */
+    var r = window.etaaxRol(negId, rol);
+    if (r && r.base && window.ETAAX_PERM_DEFAULTS[r.base]) return window.ETAAX_PERM_DEFAULTS[r.base];
+    return {};
 };
 
 /* Resuelve un permiso por ruta 'modulo' o 'modulo.subpermiso'.

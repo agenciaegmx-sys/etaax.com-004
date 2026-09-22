@@ -197,6 +197,7 @@
             <!-- Barra de guardado -->
             <div class="save-bar">
                 <div class="save-bar-info">Rol activo: <strong id="rolActivoLabel">—</strong></div>
+                <div class="hdr-acts" id="rolAccs" style="margin-right:auto"></div>
                 <div class="hdr-acts">
                     <button class="btn-reset" onclick="resetarRol()">Restablecer defaults</button>
                     <button class="btn-save" onclick="guardarPermisos()">Guardar cambios</button>
@@ -252,20 +253,27 @@ function toggleNav() {
 function getNegocioActivo() { return localStorage.getItem('etaax_negocio_activo') || ''; }
 function _sk(key) { var id = getNegocioActivo(); return id ? ('etaax_' + id + '_' + key) : ('etaax_' + key); }
 
-/* ── ROLES ── */
-var ROLES = [
-    { key:'admin',          label:'Administrador',   icon:'👑', color:'#c87a6a' },
-    { key:'gerente',        label:'Gerente',          icon:'🎯', color:'#f5c842' },
-    { key:'jefe_cocina',    label:'Jefe de Cocina',   icon:'👨‍🍳', color:'#3dbe7a' },
-    { key:'chef',           label:'Chef',             icon:'🍳', color:'#3dbe7a' },
-    { key:'jefe_barra',     label:'Jefe de Barra',    icon:'🍷', color:'#c89b6a' },
-    { key:'cocinero',       label:'Cocinero',         icon:'🥘', color:'#3dbe7a' },
-    { key:'barman',         label:'Barman',           icon:'🍸', color:'#7ab8f5' },
-    { key:'barista',        label:'Barista',          icon:'☕', color:'#c4a882' },
-    { key:'mesero',         label:'Mesero',           icon:'🛎️', color:'#9b8de8' },
-    { key:'administrativo', label:'Administrativo',   icon:'📋', color:'#f5c842' },
-    { key:'otro',           label:'Otro',             icon:'👤', color:'#7a7570' },
-];
+/* ── ROLES ──────────────────────────────────────────────────────────────────
+   La lista ya no vive aquí: sale del catálogo del negocio (page-guard.js), que
+   es el mismo que lee el modal de staff. Antes estaba escrita a mano en TRES
+   archivos y agregar un rol pedía tocar los tres. */
+function ROLES_() { return window.etaaxRoles(getNegocioActivo()); }
+function _rolDe(k){ return ROLES_().find(function(r){ return r.key===k; }) || null; }
+/* Los defaults de un rol PROPIO son los de su rol base: sin eso nace con todo
+   apagado y el dueño no entiende por qué su "Hostess" no puede entrar a nada. */
+function _defaultsDe(k){
+    if (DEFAULTS[k]) return DEFAULTS[k];
+    var r=_rolDe(k);
+    return (r && DEFAULTS[r.base]) || {};
+}
+/* El catálogo del negocio viaja en la MISMA tabla de permisos, bajo una llave
+   reservada, así que se guarda y se sincroniza con lo que ya existe. */
+function _cfgRoles(){ var a=loadPermisos(); return a[window.ETAAX_ROLES_KEY] || {}; }
+function _guardarCfgRoles(cfg){
+    var all=loadPermisos();
+    all[window.ETAAX_ROLES_KEY]=cfg;
+    savePermisos(all);
+}
 
 /* ── MÓDULOS ── */
 var MODULES = [
@@ -332,7 +340,7 @@ async function syncPermisos() {
 
 function getRolPermisos(rolKey) {
     var all = loadPermisos();
-    return all[rolKey] || JSON.parse(JSON.stringify(DEFAULTS[rolKey] || {}));
+    return all[rolKey] || JSON.parse(JSON.stringify(_defaultsDe(rolKey)));
 }
 function setRolPermisos(rolKey, perms) {
     var all = loadPermisos();
@@ -347,14 +355,73 @@ var _expandido = {};   // qué cards de módulo están desplegados
 /* ── RENDER ── */
 function renderTabs() {
     var tabs = document.getElementById('rolesTabs');
-    tabs.innerHTML = ROLES.map(function(r){
+    var lista = ROLES_();
+    tabs.innerHTML = lista.map(function(r){
         return '<button class="rol-tab' + (r.key === _rolActivo ? ' active' : '') + '" ' +
             'onclick="selectRol(\'' + r.key + '\')" ' +
             'style="' + (r.key === _rolActivo ? 'border-color:' + r.color + ';color:' + r.color + ';background:' + r.color + '15' : '') + '">' +
-            '<span class="rol-tab-icon">' + r.icon + '</span>' + r.label +
+            '<span class="rol-tab-icon">' + r.icon + '</span>' + _esc2(r.label) +
         '</button>';
-    }).join('');
-    document.getElementById('rolActivoLabel').textContent = (ROLES.find(function(r){ return r.key === _rolActivo; })||{}).label || _rolActivo;
+    }).join('') +
+    '<button class="rol-tab" onclick="nuevoRol()" title="Crear un rol con el nombre que usa tu negocio" ' +
+        'style="border-style:dashed;color:var(--green);border-color:rgba(61,190,122,.5)">' +
+        '<span class="rol-tab-icon">➕</span>Nuevo rol</button>';
+    var act=_rolDe(_rolActivo);
+    document.getElementById('rolActivoLabel').textContent = (act||{}).label || _rolActivo;
+    var acc=document.getElementById('rolAccs');
+    if(acc){
+        /* Renombrar SIEMPRE se puede —es solo la etiqueta— pero borrar solo los
+           propios: quitar uno de fábrica dejaría sin rol a quien ya lo tenga. */
+        acc.innerHTML = act
+            ? '<button class="btn-reset" onclick="renombrarRol()" title="Cambiar cómo se llama en este negocio">✏️ Renombrar</button>'
+              + (act.propio ? '<button class="btn-reset" style="color:#ff9a9a;border-color:rgba(255,120,120,.4)" onclick="borrarRol()">🗑️ Borrar rol</button>' : '')
+            : '';
+    }
+}
+
+/* ── Crear, renombrar y borrar roles ─────────────────────────────────────────
+   Cada negocio llama distinto a lo mismo: Hostess, Cajera, Capitán. */
+function nuevoRol(){
+    var nom=(prompt('¿Cómo se llama el rol? (Hostess, Cajera, Capitán…)')||'').trim();
+    if(!nom) return;
+    var base=(prompt('¿De cuál rol copia los permisos de salida?\n\n'+
+        ROLES_().map(function(r){return '· '+r.label+'  ('+r.key+')';}).join('\n')+
+        '\n\nEscribe la llave (ej. mesero). Vacío = Otro, que arranca cerrado.','mesero')||'otro').trim();
+    if(!DEFAULTS[base]) base='otro';
+    var negId=getNegocioActivo();
+    var key=window.etaaxRolNuevaKey(negId, nom);
+    var cfg=_cfgRoles();
+    cfg.extra=(cfg.extra||[]).concat([{ key:key, label:nom, icon:'👤', color:'#7a7570', base:base }]);
+    var all=loadPermisos();
+    all[window.ETAAX_ROLES_KEY]=cfg;
+    /* Se le graban SUS permisos de una vez, copiados del base. Si se dejara sin
+       fila, cada dispositivo caería al default y el dueño no podría apagarle
+       nada: no hay nada que apagar. */
+    all[key]=JSON.parse(JSON.stringify(DEFAULTS[base]||{}));
+    savePermisos(all);
+    _rolActivo=key; renderTabs(); renderGrid();
+}
+function renombrarRol(){
+    var act=_rolDe(_rolActivo); if(!act) return;
+    var nom=(prompt('¿Cómo quieres que se llame «'+act.label+'» en este negocio?', act.label)||'').trim();
+    if(!nom || nom===act.label) return;
+    var cfg=_cfgRoles();
+    cfg.nombres=cfg.nombres||{};
+    cfg.nombres[_rolActivo]=nom;
+    _guardarCfgRoles(cfg);
+    renderTabs();
+}
+function borrarRol(){
+    var act=_rolDe(_rolActivo); if(!act || !act.propio) return;
+    if(!confirm('¿Borrar el rol «'+act.label+'»?\n\nLos colaboradores que lo tengan asignado se quedan SIN rol: hay que volver a asignarles uno.')) return;
+    var cfg=_cfgRoles();
+    cfg.extra=(cfg.extra||[]).filter(function(r){ return r && r.key!==_rolActivo; });
+    if(cfg.nombres) delete cfg.nombres[_rolActivo];
+    var all=loadPermisos();
+    all[window.ETAAX_ROLES_KEY]=cfg;
+    delete all[_rolActivo];
+    savePermisos(all);
+    _rolActivo='gerente'; renderTabs(); renderGrid();
 }
 
 /* Valor efectivo de un sub-permiso en el editor (en memoria) */
@@ -364,7 +431,7 @@ function _subVal(perms, mod, sub) {
     if (!v)          return false;
     if (typeof v === 'object') {
         if (sub in v) return v[sub] !== false;
-        var def = (DEFAULTS[_rolActivo] || {})[mod];
+        var def = (_defaultsDe(_rolActivo) || {})[mod];
         if (def && typeof def === 'object' && sub in def) return def[sub] !== false;
         return false;
     }
@@ -479,7 +546,7 @@ function selectRol(key) {
 /* Objeto de sub-permisos por defecto al encender un módulo expandible:
    clona el default del rol si es objeto; si no, todo en true. */
 function _objSubsOn(modKey) {
-    var def = (DEFAULTS[_rolActivo] || {})[modKey];
+    var def = (_defaultsDe(_rolActivo) || {})[modKey];
     if (def && typeof def === 'object') return JSON.parse(JSON.stringify(def));
     var o = {};
     (SUBPERMS[modKey] || []).forEach(function(sp){ o[sp.key] = true; });
@@ -521,7 +588,7 @@ function toggleSubPermiso(modKey, subKey) {
 }
 
 function guardarPermisos() {
-    var label = (ROLES.find(function(r){ return r.key === _rolActivo; })||{}).label || _rolActivo;
+    var label = (_rolDe(_rolActivo)||{}).label || _rolActivo;
     showToast('Permisos de ' + label + ' guardados');
 }
 
@@ -529,7 +596,7 @@ function resetarRol() {
     if (_rolActivo === 'admin') return;
     if (!confirm('¿Restablecer los permisos por defecto para este rol?')) return;
     var all = loadPermisos();
-    all[_rolActivo] = JSON.parse(JSON.stringify(DEFAULTS[_rolActivo] || {}));
+    all[_rolActivo] = JSON.parse(JSON.stringify(_defaultsDe(_rolActivo)));
     savePermisos(all);
     renderGrid();
     showToast('Permisos restablecidos');

@@ -96,12 +96,13 @@
                 '<div class="sm-grp full"><label>Dirección actual</label><input type="text" id="sm_direccion" placeholder="Calle, colonia, municipio, CP"></div>' +
                 '<div class="sm-grp"><label>Estado</label><select id="sm_estado"><option>Activo</option><option>Baja temporal</option><option>Baja definitiva</option></select></div>' +
                 '<div class="sm-grp"><label>Sucursal asignada</label><select id="sm_sucursal"><option value="">— Sin sucursal —</option></select></div>' +
+                /* Los roles salen del CATÁLOGO del negocio (page-guard.js), el mismo
+                   que administra Permisos y Roles: si un negocio creó "Hostess" o
+                   renombró "Mesero" a "Cajera", aquí aparece igual. Escrita a mano,
+                   esta lista se quedaba atrás en cuanto alguien tocaba la otra. */
                 '<div class="sm-grp full"><label>Rol del sistema</label><select id="sm_rol" onchange="StaffModal._rolChange()">' +
-                  '<option value="">— Sin acceso al sistema —</option><option value="admin">👑 Administrador</option><option value="gerente">🎯 Gerente</option>' +
-                  '<option value="administrativo">📋 Administrativo</option><option value="chef">🍳 Chef</option><option value="jefe_barra">🍷 Jefe de Barra</option>' +
-                  '<option value="jefe_cocina">👨‍🍳 Jefe de Cocina</option><option value="cocinero">🥘 Cocinero</option>' +
-                  '<option value="barman">🍸 Barman</option><option value="barista">☕ Barista</option><option value="mesero">🛎️ Mesero</option>' +
-                  '<option value="otro">👤 Otro</option></select></div>' +
+                  '<option value="">— Sin acceso al sistema —</option>' +
+                  _rolesOpciones() + '</select></div>' +
               '</div>' +
 
               '<div class="sm-sec" id="sm_accesoSec">Acceso al sistema</div>' +
@@ -223,6 +224,19 @@
     function _getSucsModal() {
         try { return JSON.parse(localStorage.getItem('etaax_' + _negId + '_sucursales') || '[]'); } catch(e) { return []; }
     }
+    /* Las opciones de rol, del catálogo del negocio. Si page-guard no estuviera
+       (una página que no lo carga), se cae a la lista de fábrica antes que dejar
+       el selector vacío y sin poder asignar rol a nadie. */
+    function _rolesOpciones() {
+        var negId = (function(){ try { return localStorage.getItem('etaax_negocio_activo') || ''; } catch(e){ return ''; } })();
+        var lista = (typeof window.etaaxRoles === 'function')
+            ? window.etaaxRoles(negId)
+            : (window.ETAAX_ROLES_BASE || []);
+        return lista.map(function (r) {
+            return '<option value="' + _esc(r.key) + '">' + (r.icon || '👤') + ' ' + _esc(r.label) + '</option>';
+        }).join('');
+    }
+
     function _poblarSucModal(selVal) {
         var sel = document.getElementById('sm_sucursal');
         if (!sel) return;
