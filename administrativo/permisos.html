@@ -130,6 +130,54 @@
   font-size:9px;letter-spacing:.6px;text-transform:uppercase;vertical-align:middle;
   background:rgba(245,200,66,.12);color:#f5c842;border:1px solid rgba(245,200,66,.3)}
 .subperm-row.pendiente .subperm-label{opacity:.85}
+
+/* ── Ventanita de roles ──────────────────────────────────────────────────────
+   Reemplaza al prompt() del navegador. Aquel decía "etaax.com dice", no se deja
+   estilizar, no cabe un ícono ni un rol base, y para elegir de cuál copiar los
+   permisos había que ESCRIBIR una llave (mesero, jefe_cocina) leída de una
+   lista en el mismo cuadro de texto. */
+.rm-bg{position:fixed;inset:0;z-index:9000;background:rgba(10,9,8,.72);
+  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+  display:none;align-items:center;justify-content:center;padding:20px}
+.rm-bg.on{display:flex}
+.rm-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  width:100%;max-width:430px;box-shadow:0 24px 60px rgba(0,0,0,.5);
+  animation:rmIn .16s ease both;max-height:90vh;display:flex;flex-direction:column}
+@keyframes rmIn{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+.rm-hd{padding:18px 22px 14px;border-bottom:1px solid var(--border)}
+.rm-kicker{font-size:10px;letter-spacing:2.4px;text-transform:uppercase;color:var(--text-dim);
+  display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.rm-title{font-family:'Bebas Neue',sans-serif;font-size:23px;letter-spacing:1.2px;color:var(--text);line-height:1}
+.rm-body{padding:18px 22px;overflow-y:auto}
+.rm-lbl{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-dim);
+  display:block;margin-bottom:7px}
+.rm-hint{font-size:11.5px;color:var(--text-dim);margin-top:7px;line-height:1.45}
+.rm-in,.rm-sel{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:9px;
+  color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;padding:11px 13px;outline:none;
+  transition:border-color .15s}
+.rm-in:focus,.rm-sel:focus{border-color:var(--accent)}
+.rm-field{margin-bottom:17px}
+.rm-field:last-child{margin-bottom:0}
+.rm-emojis{display:flex;flex-wrap:wrap;gap:6px}
+.rm-emo{width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;
+  background:var(--surface2);border:1px solid var(--border);border-radius:9px;cursor:pointer;
+  transition:all .13s;padding:0;line-height:1}
+.rm-emo:hover{border-color:var(--text-dim)}
+.rm-emo.sel{border-color:var(--accent);background:var(--accent-dim);transform:scale(1.06)}
+.rm-prev{display:flex;align-items:center;gap:9px;padding:9px 14px;border-radius:8px;
+  border:1px dashed var(--border2,var(--border));background:var(--surface2);
+  font-size:13px;color:var(--text-muted)}
+.rm-err{color:var(--red);font-size:12px;margin-top:9px;min-height:15px}
+.rm-ft{display:flex;gap:9px;justify-content:flex-end;padding:13px 22px;border-top:1px solid var(--border)}
+.rm-btn{font-family:'DM Sans',sans-serif;font-size:13px;padding:9px 20px;border-radius:8px;cursor:pointer;
+  transition:all .15s;border:1px solid var(--border);background:transparent;color:var(--text-muted)}
+.rm-btn:hover{border-color:var(--text-dim);color:var(--text)}
+.rm-btn.ok{background:var(--green);border-color:var(--green);color:#0a0908;font-weight:600}
+.rm-btn.ok:hover{opacity:.87}
+.rm-btn.peligro{background:var(--red);border-color:var(--red);color:#fff;font-weight:600}
+.rm-btn.peligro:hover{opacity:.87}
+.rm-aviso{font-size:13px;color:var(--text-muted);line-height:1.55}
+.rm-aviso strong{color:var(--text)}
 </style>
 </head>
 <body>
@@ -390,18 +438,128 @@ function renderTabs() {
 }
 
 /* ── Crear, renombrar y borrar roles ─────────────────────────────────────────
-   Cada negocio llama distinto a lo mismo: Hostess, Cajera, Capitán. */
+   Cada negocio llama distinto a lo mismo: Hostess, Cajera, Capitán.
+
+   Todo pasa por UNA ventanita propia (#rolModal). El prompt() del navegador que
+   había antes decía "etaax.com dice", no se deja estilizar, no cabe un ícono ni
+   un rol base — y para elegir de cuál copiar los permisos había que ESCRIBIR
+   una llave (mesero, jefe_cocina) leída de una lista dentro del mismo cuadro de
+   texto. Un dato interno pedido a mano es un error esperando a pasar. */
+var ICONOS_ROL = ['👤','🛎️','💁','🧑‍🍳','👨‍🍳','🍸','🍷','☕','🧾','💵','🧹','📋','🧑‍💼','🚚','🎧','🔑'];
+var _rmModo = null;        // 'nuevo' | 'renombrar' | 'aviso'
+var _rmIcono = '👤';
+var _rmOnOk = null;
+
+function _rmSet(id, mostrar){ var e=document.getElementById(id); if(e) e.style.display = mostrar ? '' : 'none'; }
+function _rmPreview(){
+    var n=(document.getElementById('rmNombre').value||'').trim();
+    document.getElementById('rmPrevNom').textContent  = n || 'Sin nombre';
+    document.getElementById('rmPrevIcon').textContent = _rmIcono;
+    document.getElementById('rmError').textContent = '';
+}
+function _rmPintarEmojis(){
+    document.getElementById('rmEmojis').innerHTML = ICONOS_ROL.map(function(e){
+        return '<button type="button" class="rm-emo' + (e===_rmIcono?' sel':'') + '" ' +
+               'onclick="_rmElegirIcono(\'' + e + '\')">' + e + '</button>';
+    }).join('');
+}
+function _rmElegirIcono(e){ _rmIcono=e; _rmPintarEmojis(); _rmPreview(); }
+function cerrarRolModal(){
+    document.getElementById('rolModal').classList.remove('on');
+    _rmModo=null; _rmOnOk=null;
+}
+function _rmAbrir(cfg){
+    _rmModo = cfg.modo;
+    _rmOnOk = cfg.onOk || null;
+    document.getElementById('rmKicker').textContent   = cfg.kicker;
+    document.getElementById('rmKickIcon').textContent = cfg.kickIcon || '👥';
+    document.getElementById('rmTitulo').textContent   = cfg.titulo;
+    document.getElementById('rmError').textContent    = '';
+    var ok = document.getElementById('rmOk');
+    ok.textContent = cfg.okLabel;
+    ok.className   = 'rm-btn ' + (cfg.peligro ? 'peligro' : 'ok');
+    var esAviso = cfg.modo === 'aviso';
+    _rmSet('rmCampos', !esAviso);
+    _rmSet('rmAviso',  esAviso);
+    if (esAviso) document.getElementById('rmAviso').innerHTML = cfg.aviso || '';
+    else {
+        var inp = document.getElementById('rmNombre');
+        inp.value = cfg.valor || '';
+        inp.placeholder = cfg.placeholder || '';
+        document.getElementById('rmLblNombre').textContent = cfg.labelNombre;
+        _rmSet('rmCampoIcono', !!cfg.conIcono);
+        _rmSet('rmCampoBase',  !!cfg.conBase);
+        _rmSet('rmCampoPrev',  !!cfg.conIcono);
+        if (cfg.conIcono) _rmPintarEmojis();
+        if (cfg.conBase) {
+            /* La lista se ELIGE, no se escribe: la llave interna nunca sale a la
+               superficie. Se ofrecen los de fábrica, que son los que tienen
+               permisos de salida; copiar de un rol propio heredaría los suyos y
+               con eso se encadenan copias de copias. */
+            document.getElementById('rmBase').innerHTML = ROLES_()
+                .filter(function(r){ return !r.propio; })
+                .map(function(r){
+                    return '<option value="' + r.key + '"' + (r.key==='mesero'?' selected':'') + '>' +
+                           (r.icon||'') + '  ' + r.label + '</option>';
+                }).join('');
+        }
+        _rmPreview();
+    }
+    document.getElementById('rolModal').classList.add('on');
+    setTimeout(function(){
+        var e = esAviso ? document.getElementById('rmOk') : document.getElementById('rmNombre');
+        if (e) e.focus();
+    }, 60);
+}
+/* Confirmación con la misma cara que el resto, en vez del confirm() gris. */
+function _rmConfirmar(titulo, aviso, onSi, opts){
+    opts = opts || {};
+    _rmAbrir({ modo:'aviso', kicker:opts.kicker||'Confirmar', kickIcon:opts.kickIcon||'⚠️',
+        titulo:titulo, aviso:aviso, okLabel:opts.okLabel||'Sí, continuar',
+        peligro:opts.peligro !== false, onOk:onSi });
+}
+
 function nuevoRol(){
-    var nom=(prompt('¿Cómo se llama el rol? (Hostess, Cajera, Capitán…)')||'').trim();
-    if(!nom) return;
-    var base=(prompt('¿De cuál rol copia los permisos de salida?\n\n'+
-        ROLES_().map(function(r){return '· '+r.label+'  ('+r.key+')';}).join('\n')+
-        '\n\nEscribe la llave (ej. mesero). Vacío = Otro, que arranca cerrado.','mesero')||'otro').trim();
+    _rmIcono = '👤';   // ANTES de abrir: si no, la ventanita se pinta con el ícono de la vez pasada
+    _rmAbrir({ modo:'nuevo', kicker:'Roles del negocio', kickIcon:'👥',
+        titulo:'Nuevo rol', labelNombre:'¿Cómo se llama el rol?',
+        placeholder:'Hostess, Cajera, Capitán…', conIcono:true, conBase:true,
+        okLabel:'Crear rol' });
+}
+function renombrarRol(){
+    var act=_rolDe(_rolActivo); if(!act) return;
+    _rmAbrir({ modo:'renombrar', kicker:'Renombrar', kickIcon:'✏️',
+        titulo:act.label, labelNombre:'¿Cómo quieres que se llame en este negocio?',
+        valor:act.label, placeholder:act.label, okLabel:'Guardar nombre' });
+}
+/* El OK de la ventanita: hace lo que toca según con qué se abrió. */
+function guardarRolModal(){
+    if (_rmModo === 'aviso') { var f=_rmOnOk; cerrarRolModal(); if (f) f(); return; }
+    var nom = (document.getElementById('rmNombre').value||'').trim();
+    if (!nom) { document.getElementById('rmError').textContent = 'Ponle un nombre al rol.'; return; }
+    /* Dos roles con el mismo nombre son indistinguibles en el selector de cada
+       colaborador: quien asigna no sabría cuál está eligiendo.
+       Al RENOMBRAR se ignora el propio (dejarle su mismo nombre no es chocar);
+       al CREAR no se ignora a nadie — si no, estando parado en Gerente se podía
+       crear otro rol llamado "Gerente" y quedaban dos idénticos en la lista. */
+    var choca = ROLES_().some(function(r){
+        return !(_rmModo === 'renombrar' && r.key === _rolActivo)
+            && r.label.toLowerCase() === nom.toLowerCase();
+    });
+    if (choca) {
+        document.getElementById('rmError').textContent = 'Ya hay un rol que se llama así.';
+        return;
+    }
+    if (_rmModo === 'nuevo') _crearRol(nom, _rmIcono, document.getElementById('rmBase').value||'otro');
+    else                     _renombrarRolA(nom);
+    cerrarRolModal();
+}
+function _crearRol(nom, icono, base){
     if(!DEFAULTS[base]) base='otro';
     var negId=getNegocioActivo();
     var key=window.etaaxRolNuevaKey(negId, nom);
     var cfg=_cfgRoles();
-    cfg.extra=(cfg.extra||[]).concat([{ key:key, label:nom, icon:'👤', color:'#7a7570', base:base }]);
+    cfg.extra=(cfg.extra||[]).concat([{ key:key, label:nom, icon:icono||'👤', color:'#7a7570', base:base }]);
     var all=loadPermisos();
     all[window.ETAAX_ROLES_KEY]=cfg;
     /* Se le graban SUS permisos de una vez, copiados del base. Si se dejara sin
@@ -411,10 +569,8 @@ function nuevoRol(){
     savePermisos(all);
     _rolActivo=key; renderTabs(); renderGrid();
 }
-function renombrarRol(){
-    var act=_rolDe(_rolActivo); if(!act) return;
-    var nom=(prompt('¿Cómo quieres que se llame «'+act.label+'» en este negocio?', act.label)||'').trim();
-    if(!nom || nom===act.label) return;
+function _renombrarRolA(nom){
+    var act=_rolDe(_rolActivo); if(!act || nom===act.label) return;
     var cfg=_cfgRoles();
     cfg.nombres=cfg.nombres||{};
     cfg.nombres[_rolActivo]=nom;
@@ -423,15 +579,19 @@ function renombrarRol(){
 }
 function borrarRol(){
     var act=_rolDe(_rolActivo); if(!act || !act.propio) return;
-    if(!confirm('¿Borrar el rol «'+act.label+'»?\n\nLos colaboradores que lo tengan asignado se quedan SIN rol: hay que volver a asignarles uno.')) return;
-    var cfg=_cfgRoles();
-    cfg.extra=(cfg.extra||[]).filter(function(r){ return r && r.key!==_rolActivo; });
-    if(cfg.nombres) delete cfg.nombres[_rolActivo];
-    var all=loadPermisos();
-    all[window.ETAAX_ROLES_KEY]=cfg;
-    delete all[_rolActivo];
-    savePermisos(all);
-    _rolActivo='gerente'; renderTabs(); renderGrid();
+    _rmConfirmar('Borrar «' + act.label + '»',
+        'Los colaboradores que tengan este rol se quedan <strong>sin rol</strong>: ' +
+        'hay que volver a asignarles uno a mano.',
+        function(){
+            var cfg=_cfgRoles();
+            cfg.extra=(cfg.extra||[]).filter(function(r){ return r && r.key!==_rolActivo; });
+            if(cfg.nombres) delete cfg.nombres[_rolActivo];
+            var all=loadPermisos();
+            all[window.ETAAX_ROLES_KEY]=cfg;
+            delete all[_rolActivo];
+            savePermisos(all);
+            _rolActivo='gerente'; renderTabs(); renderGrid();
+        }, { kicker:'Borrar rol', kickIcon:'🗑️', okLabel:'Sí, borrar el rol' });
 }
 
 /* Valor efectivo de un sub-permiso en el editor (en memoria) */
@@ -620,12 +780,17 @@ function guardarPermisos() {
 
 function resetarRol() {
     if (_rolActivo === 'admin') return;
-    if (!confirm('¿Restablecer los permisos por defecto para este rol?')) return;
-    var all = loadPermisos();
-    all[_rolActivo] = JSON.parse(JSON.stringify(_defaultsDe(_rolActivo)));
-    savePermisos(all);
-    renderGrid();
-    showToast('Permisos restablecidos');
+    var act = _rolDe(_rolActivo) || { label:_rolActivo };
+    _rmConfirmar('Restablecer «' + act.label + '»',
+        'Vuelve a los permisos de fábrica de este rol. <strong>Se pierde todo lo que ' +
+        'hayas ajustado</strong> aquí para él.',
+        function(){
+            var all = loadPermisos();
+            all[_rolActivo] = JSON.parse(JSON.stringify(_defaultsDe(_rolActivo)));
+            savePermisos(all);
+            renderGrid();
+            showToast('Permisos restablecidos');
+        }, { kicker:'Restablecer', kickIcon:'↺', okLabel:'Sí, restablecer' });
 }
 
 function showToast(msg) {
@@ -699,6 +864,13 @@ function _gatePermisos() {
     }, '🔓 Desbloquear', { soloAdmin: true });
 }
 
+/* Escape cierra la ventanita: si un modal no se cierra con Escape, se siente
+   trabado — y este puede abrirse encima del catálogo de staff. */
+document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && document.getElementById('rolModal').classList.contains('on')) {
+        e.stopPropagation(); cerrarRolModal();
+    }
+});
 document.addEventListener('DOMContentLoaded', async function(){
     // Cargar datos en background mientras se muestra el candado
     syncPermisos().then(function(){ renderTabs(); renderGrid(); });
@@ -723,6 +895,45 @@ function ctxSalir() {
     window.location.href = '/hub.html?salir=1';
 }
 </script>
+<!-- ══ VENTANITA DE ROLES (crear / renombrar / confirmar) ═══════════════ -->
+<div class="rm-bg" id="rolModal" onclick="if(event.target===this)cerrarRolModal()">
+    <div class="rm-card">
+        <div class="rm-hd">
+            <div class="rm-kicker"><span id="rmKickIcon">👥</span><span id="rmKicker">Roles del negocio</span></div>
+            <div class="rm-title" id="rmTitulo">Nuevo rol</div>
+        </div>
+        <div class="rm-body">
+            <div id="rmCampos">
+                <div class="rm-field">
+                    <label class="rm-lbl" id="rmLblNombre" for="rmNombre">¿Cómo se llama el rol?</label>
+                    <input class="rm-in" id="rmNombre" type="text" maxlength="28" autocomplete="off"
+                        placeholder="Hostess, Cajera, Capitán…" oninput="_rmPreview()"
+                        onkeydown="if(event.key==='Enter'){event.preventDefault();guardarRolModal();}">
+                </div>
+                <div class="rm-field" id="rmCampoIcono">
+                    <label class="rm-lbl">Ícono</label>
+                    <div class="rm-emojis" id="rmEmojis"></div>
+                </div>
+                <div class="rm-field" id="rmCampoBase">
+                    <label class="rm-lbl" for="rmBase">¿De cuál rol copia los permisos de salida?</label>
+                    <select class="rm-sel" id="rmBase"></select>
+                    <div class="rm-hint">Arranca con los mismos permisos que ese rol, y desde ahí los ajustas.
+                        <strong>Otro</strong> arranca todo cerrado.</div>
+                </div>
+                <div class="rm-field" id="rmCampoPrev">
+                    <label class="rm-lbl">Así se va a ver</label>
+                    <div class="rm-prev"><span id="rmPrevIcon">👤</span><span id="rmPrevNom">Nuevo rol</span></div>
+                </div>
+            </div>
+            <div class="rm-aviso" id="rmAviso" style="display:none"></div>
+            <div class="rm-err" id="rmError"></div>
+        </div>
+        <div class="rm-ft">
+            <button class="rm-btn" onclick="cerrarRolModal()">Cancelar</button>
+            <button class="rm-btn ok" id="rmOk" onclick="guardarRolModal()">Crear rol</button>
+        </div>
+    </div>
+</div>
 <script src="../admin-guard.js"></script>
 <script src="/nav-pref.js"></script>
 <script src="/modal-drag.js"></script>

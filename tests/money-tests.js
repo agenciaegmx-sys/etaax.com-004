@@ -87,7 +87,13 @@ function crearContexto() {
         _supabase: {
             from(){ return { select(){ return this; }, eq(){ return this; },
                 order(){ return Promise.resolve({ data: [], error: null }); },
-                maybeSingle(){ return Promise.resolve({ data: null, error: null }); } }; },
+                maybeSingle(){ return Promise.resolve({ data: null, error: null }); },
+                /* También se ESCRIBE. Sin esto, una página que guarda revienta a
+                   media función y el test siguiente mide un estado a medias. */
+                upsert(){ return Promise.resolve({ data: null, error: null }); },
+                insert(){ return Promise.resolve({ data: null, error: null }); },
+                update(){ return this; },
+                delete(){ return this; } }; },
             rpc(){ return Promise.resolve({ data: null, error: null }); },
             removeChannel(){},
             storage: { from(){ return { upload(){ return Promise.resolve({ error: null }); }, getPublicUrl(){ return { data: { publicUrl: '' } }; } }; } },
@@ -8327,7 +8333,7 @@ console.log('\n══ BD3 · Roles a la medida del negocio ══');
        Sin fila propia, cada dispositivo caería al default del base y el dueño no
        podría apagarle nada: no habría nada que apagar. */
     test('crear un rol le graba permisos propios de entrada', () => {
-        const i = per.indexOf('function nuevoRol()');
+        const i = per.indexOf('function _crearRol(');
         return eq(per.slice(i, i + 1400).indexOf('all[key]=JSON.parse(JSON.stringify(DEFAULTS[base]||{}))') > -1,
                   true, 'con permisos');
     });
@@ -8976,6 +8982,150 @@ console.log('\n══ BD7 · El "Volver" que se disfrazó de "Cerrar" ══');
     test('el desbloqueo desde el estado vacío no cierra nada', () =>
         eq(stf.indexOf('onclick="desbloquearCatalogo()"') > -1, true, 'sin cerrar'));
 }
+
+/* ═══════════ SUITE BD8 · LA VENTANITA DE ROLES ════════════════════════════
+   Crear un rol se pedía con el prompt() del navegador: "etaax.com dice", un
+   cuadro gris que no se deja estilizar. Y lo peor no era la cara — era que para
+   elegir de cuál rol copiar los permisos había que ESCRIBIR una llave interna
+   (mesero, jefe_cocina) leída de una lista dentro del mismo cuadro de texto. Un
+   dato de programador pedido a mano es un error esperando a pasar: una letra de
+   más y el rol nuevo nacía cerrado, sin decir por qué.
+
+   Ahora es una ventanita propia: nombre, ícono que se toca, y el rol base que
+   se ELIGE de una lista.                                                      */
+console.log('\n══ BD8 · La ventanita de roles ══');
+(function () {
+    const P = crearContexto();
+    P._storage['etaax_negocio_activo'] = 'n1';
+    cargarJS(P, 'page-guard.js');
+    cargarInline(P, 'administrativo/permisos.html');
+
+    /* El harness no tiene classList de verdad; el modal sí lo necesita. */
+    const mb = P.document.getElementById('rolModal');
+    let cls = [];
+    mb.classList = { add(c){ if(cls.indexOf(c)<0) cls.push(c); },
+                     remove(c){ cls = cls.filter(x => x !== c); },
+                     contains(c){ return cls.indexOf(c) > -1; } };
+    const abierto = () => cls.indexOf('on') > -1;
+    const txt = (id) => P.document.getElementById(id).textContent;
+    const val = (id) => P.document.getElementById(id).value;
+    const oculto = (id) => P.document.getElementById(id).style.display === 'none';
+
+    /* ── Ya no hay cuadros del navegador ── */
+    const html = fs.readFileSync(path.join(RAIZ, 'administrativo/permisos.html'), 'utf8');
+    const codigo = html.replace(/\/\*[\s\S]*?\*\//g, '');   // los comentarios hablan del prompt viejo
+    test('no queda un solo prompt() ni confirm() del navegador', () =>
+        eq(/[^.\w]prompt\(|[^.\w]confirm\(/.test(codigo), false, 'sin cuadros grises'));
+
+    /* ── Crear ── */
+    P.nuevoRol();
+    test('crear un rol abre la ventanita', () => eq(abierto(), true, 'abierta'));
+    test('…con su título', () => eq(txt('rmTitulo'), 'Nuevo rol', 'título'));
+    test('…pregunta el nombre en cristiano', () =>
+        eq(txt('rmLblNombre'), '¿Cómo se llama el rol?', 'pregunta'));
+    test('…ofrece íconos para tocar, no para escribir', () =>
+        eq(P.document.getElementById('rmEmojis').innerHTML.indexOf('rm-emo') > -1, true, 'íconos'));
+    /* LO IMPORTANTE: el rol base se elige de una lista. La llave interna
+       (mesero, jefe_cocina) nunca se le pide a nadie. */
+    test('el rol base se ELIGE de una lista, no se escribe', () =>
+        eq((P.document.getElementById('rmBase').options || []).length > 5, true, 'lista'));
+    test('…y cada opción guarda la llave por dentro y enseña el nombre', () => {
+        const o = (P.document.getElementById('rmBase').options || [])
+            .find(x => x.value === 'mesero');
+        return eq(!!o && o.text.indexOf('Mesero') > -1, true, 'llave adentro');
+    });
+    test('el botón dice lo que va a hacer', () => eq(txt('rmOk'), 'Crear rol', 'rótulo'));
+
+    /* Sin nombre no se crea nada, y se dice por qué en la misma ventana. */
+    P.document.getElementById('rmNombre').value = '   ';
+    P.guardarRolModal();
+    test('sin nombre, avisa y no crea nada', () =>
+        eq(txt('rmError').length > 0 && abierto(), true, 'avisa'));
+    test('…y no dejó un rol fantasma', () =>
+        eq(P.ROLES_().length, 11, 'los de fábrica'));
+
+    /* Dos roles con el mismo nombre son indistinguibles en el selector de cada
+       colaborador: quien asigna no sabría cuál está eligiendo. */
+    P.document.getElementById('rmNombre').value = 'Gerente';
+    P.guardarRolModal();
+    test('un nombre repetido no pasa', () =>
+        eq(txt('rmError'), 'Ya hay un rol que se llama así.', 'repetido'));
+    test('…y tampoco a medias mayúsculas', () => {
+        P.document.getElementById('rmNombre').value = 'gerente';
+        P.guardarRolModal();
+        return eq(txt('rmError'), 'Ya hay un rol que se llama así.', 'sin distinguir');
+    });
+
+    /* Crear de verdad. */
+    P._rmElegirIcono('🛎️');
+    P.document.getElementById('rmNombre').value = 'Hostess';
+    P.document.getElementById('rmBase').value = 'mesero';
+    P.guardarRolModal();
+    test('con nombre bueno, el rol se crea', () =>
+        eq(P.ROLES_().some(r => r.label === 'Hostess'), true, 'creado'));
+    test('…se queda con el ícono que se tocó', () =>
+        eq((P.ROLES_().find(r => r.label === 'Hostess') || {}).icon, '🛎️', 'ícono'));
+    test('…y la ventanita se cierra sola', () => eq(abierto(), false, 'cerrada'));
+    /* Nace CON permisos escritos, copiados del base: si se dejara sin fila, el
+       dueño no podría apagarle nada —no hay nada que apagar—. */
+    const nuevo = P.ROLES_().find(r => r.label === 'Hostess');
+    test('nace con los permisos del rol que eligió copiar', () => {
+        const g = P.loadPermisos()[nuevo.key] || {};
+        return eq(JSON.stringify(g), JSON.stringify(P.DEFAULTS.mesero), 'copiados');
+    });
+    test('…y queda como el rol activo, listo para ajustarlo', () =>
+        eq(P._rolActivo, nuevo.key, 'activo'));
+
+    /* Y al abrir otra vez, se empieza de cero: un rol nuevo no hereda el ícono
+       del que se creó antes, que ya está en su pestaña. */
+    P.nuevoRol();
+    test('el siguiente rol arranca con el ícono limpio', () => eq(P._rmIcono, '👤', 'limpio'));
+    test('…y la lista marca ese, no el de la vez pasada', () =>
+        eq(/class="rm-emo sel"[^>]*>👤</.test(P.document.getElementById('rmEmojis').innerHTML),
+           true, 'marcado'));
+    P.cerrarRolModal();
+
+    /* ── Renombrar ── */
+    P._rolActivo = 'gerente';
+    P.renombrarRol();
+    test('renombrar abre con el nombre actual ya puesto', () => eq(val('rmNombre'), 'Gerente', 'precargado'));
+    test('…y no pide ícono ni rol base: solo se cambia la etiqueta', () =>
+        eq(oculto('rmCampoIcono') && oculto('rmCampoBase'), true, 'solo nombre'));
+    test('…con su propio botón', () => eq(txt('rmOk'), 'Guardar nombre', 'rótulo'));
+    P.document.getElementById('rmNombre').value = 'Encargado';
+    P.guardarRolModal();
+    test('el rol pasa a llamarse como el negocio le dice', () =>
+        eq((P.ROLES_().find(r => r.key === 'gerente') || {}).label, 'Encargado', 'renombrado'));
+    test('…sin cambiarle la llave por dentro, que es la que guarda los permisos', () =>
+        eq(P.ROLES_().some(r => r.key === 'gerente'), true, 'misma llave'));
+
+    /* ── Borrar: confirmación con la misma cara, no el cuadro gris ── */
+    P._rolActivo = nuevo.key;
+    P.borrarRol();
+    test('borrar pregunta antes, en la misma ventanita', () =>
+        eq(abierto() && txt('rmTitulo').indexOf('Hostess') > -1, true, 'pregunta'));
+    test('…y dice qué les pasa a los colaboradores que lo tienen', () =>
+        eq(P.document.getElementById('rmAviso').innerHTML.indexOf('sin rol') > -1, true, 'consecuencia'));
+    test('…escondiendo los campos, que aquí no pintan nada', () =>
+        eq(oculto('rmCampos'), true, 'solo el aviso'));
+    P.cerrarRolModal();
+    test('si se cancela, el rol sigue vivo', () =>
+        eq(P.ROLES_().some(r => r.key === nuevo.key), true, 'intacto'));
+    P._rolActivo = nuevo.key;
+    P.borrarRol();
+    P.guardarRolModal();
+    test('si se confirma, el rol se va', () =>
+        eq(P.ROLES_().some(r => r.key === nuevo.key), false, 'borrado'));
+    test('…y sus permisos también, que ya no cuelgan de nadie', () =>
+        eq(P.loadPermisos()[nuevo.key], undefined, 'sin huérfanos'));
+
+    /* Un rol de fábrica no se puede borrar: dejaría sin rol a quien ya lo tenga
+       y no hay forma de volver a crearlo con la misma llave. */
+    P._rolActivo = 'mesero';
+    P.cerrarRolModal();
+    P.borrarRol();
+    test('un rol de fábrica no se puede borrar', () => eq(abierto(), false, 'protegido'));
+})();
 
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
