@@ -327,9 +327,9 @@ var MODULES = [
     { key:'insumos',       label:'Insumos',               icon:'🧂', sub:'Catálogo de materias primas, presentaciones y costos' },
     { key:'inventarios',   label:'Inventarios',           icon:'📦', sub:'Control de existencias por área: entradas, salidas y reporte' },
     { key:'requisiciones', label:'Requisiciones',         icon:'📝', sub:'Pedidos internos y gestión de compras entre áreas' },
-    { key:'ventas',        label:'Ventas',                icon:'💰', sub:'Registro y reporte de ventas' },
-    { key:'ventas_productos', label:'Ventas por Producto', icon:'🧾', sub:'Desglose y reporte de ventas por producto (vive en Aprende y Analiza)' },
-    { key:'gastos',        label:'Gastos',                icon:'📤', sub:'Captura y control de gastos' },
+    { key:'ventas',        label:'Ventas y Cortes',       icon:'💰', sub:'Cortes, movimientos, caja fuerte y ventas especiales — en Ventas y Gastos Diarios' },
+    { key:'ventas_productos', label:'Ventas por Producto', icon:'🧾', sub:'Desglose y reporte de ventas por producto' },
+    { key:'gastos',        label:'Gastos Diarios',        icon:'📤', sub:'Gastos del día, mayores, nóminas y fijos — en Ventas y Gastos Diarios' },
     { key:'menu',          label:'Menú',                  icon:'📄', sub:'Carta digital y precios de venta' },
     { key:'proveedores',   label:'Proveedores',           icon:'🚚', sub:'Directorio y condiciones de compra' },
     { key:'clientes',      label:'Clientes',              icon:'⭐', sub:'Directorio de clientes frecuentes' },
@@ -337,13 +337,16 @@ var MODULES = [
     { key:'permisos',      label:'Roles y Permisos',      icon:'🔐', sub:'Control de acceso por perfil' },
     { key:'financiero',    label:'Financiero',            icon:'📊', sub:'Costos, márgenes y análisis' },
     { key:'config',        label:'Configuración',         icon:'⚙️', sub:'Ajustes generales del negocio' },
-    { key:'cambiarSucursal', label:'Cambiar registros de sucursal', icon:'📍', sub:'Reasignar gastos, cortes, recetas e insumos a otra sucursal' },
+    { key:'cambiarSucursal', label:'Cambiar registros de sucursal', icon:'📍', sub:'Recetas, insumos y clientes. Los cortes y los gastos tienen el suyo, dentro de su módulo' },
 ];
 
 /* ── CATEGORÍAS (agrupación visual, igual que el nav) ── */
 var CATEGORIAS = [
     { label:'Recetas e Insumos', modulos:['recetas','insumos','inventarios','requisiciones'] },
-    { label:'Control Administrativo', modulos:['ventas','ventas_productos','gastos','menu','proveedores','clientes','staff','permisos'] },
+    { label:'Control Administrativo', modulos:['ventas','gastos','menu','proveedores','clientes','staff','permisos'] },
+    /* Ventas por Producto estaba listado en Control Administrativo y la pantalla
+       vive en Aprende y Analiza: se buscaba donde no estaba. */
+    { label:'Aprende y Analiza',     modulos:['ventas_productos'] },
     { label:'Finanzas',              modulos:['financiero'] },
     { label:'Ajustes',               modulos:['config'] },
     { label:'Acciones especiales',   modulos:['cambiarSucursal'] },

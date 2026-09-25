@@ -10224,6 +10224,182 @@ console.log('\n══ BE6 · Inventarios, Requisiciones y la regla compartida �
     });
 }
 
+/* ═══════════ SUITE BE7 · CONTROL ADMINISTRATIVO: UNA TARJETA, UN PERMISO ═══
+   Ventas y Gastos Diarios es UNA pantalla con ocho tarjetas, y las ocho
+   colgaban de dos interruptores: `ventas` y `gastos`. Quien podía capturar un
+   gasto de ochenta pesos también podía pagar la nómina completa — nóminas y
+   gastos fijos no tenían interruptor propio.
+
+   Y "cambiar de sucursal" era UNO para toda la app: apagarlo para que la cajera
+   no moviera cortes le quitaba también las recetas y los insumos. Ahora cada
+   módulo tiene el suyo, y el general sigue decidiendo donde no hay uno propio.
+
+   Ventas por Producto, además, estaba listado en Control Administrativo y su
+   pantalla vive en Aprende y Analiza: se buscaba donde no estaba.            */
+console.log('\n══ BE7 · Control Administrativo: una tarjeta, un permiso ══');
+{
+    const pg  = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8');
+    const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+    const per = fs.readFileSync(path.join(RAIZ, 'administrativo/permisos.html'), 'utf8');
+
+    const ctxPG = (() => {
+        const c = { console, JSON, Object, Array, String, Date, setTimeout,
+            localStorage:{ getItem(){ return null; }, setItem(){}, removeItem(){} },
+            location:{ pathname:'/hub.html', search:'' }, document:{ addEventListener(){} } };
+        c.window = c; c.window.addEventListener = () => {};
+        vm.createContext(c); vm.runInContext(pg, c, { filename:'page-guard.js' });
+        return c;
+    })();
+    const SUB = ctxPG.window.ETAAX_SUBPERMS;
+
+    /* ── Las ocho tarjetas, cada una con su llave ── */
+    const CARDS = [
+        ['gastos',    'gastos.capturar',      'Registrar gastos diarios'],
+        ['cortes',    'ventas.capturarCorte', 'Registrar corte de caja'],
+        ['nominas',   'gastos.nominas',       'Pagar nóminas'],
+        ['fijos',     'gastos.fijos',         'Pagar gasto fijo'],
+        ['depositos', 'ventas.hacerDeposito', 'Depósitos y retiros'],
+        ['mayores',   'gastos.gastosMayores', 'Registrar gasto mayor'],
+        ['caja',      'ventas.cajaFuerte',    'Ver caja fuerte'],
+        ['extras',    'ventas.ventaExtra',    'Ventas especiales'],
+    ];
+    /* El mapa REAL de la pantalla, leído del archivo. */
+    const MAPA = (() => {
+        const i = dia.indexOf('var DX_PERMISO = {');
+        const t = dia.slice(i, dia.indexOf('};', i));
+        const m = {};
+        t.replace(/(\w+):\s*'([^']+)'/g, (_, k, v) => { m[k] = v; return ''; });
+        return m;
+    })();
+    CARDS.forEach(function (c) {
+        test('la tarjeta «' + c[2] + '» pide ' + c[1], () => eq(MAPA[c[0]], c[1], 'mapeada'));
+    });
+    test('no queda ninguna tarjeta sin permiso', () => {
+        const enPagina = [...dia.matchAll(/class="dx-card[^"]*" data-fn="(\w+)"/g)].map(m => m[1]);
+        const sin = enPagina.filter(fn => !MAPA[fn]);
+        return eq(sin.join(', '), '', 'todas con llave');
+    });
+    /* Nóminas y fijos son el caso que motivó esto. */
+    ['nominas', 'fijos'].forEach(function (k) {
+        test('«' + k + '» ya tiene interruptor propio en el catálogo', () =>
+            eq((SUB.gastos || []).some(x => x.key === k), true, 'declarado'));
+    });
+    /* Esconder la tarjeta no es negar el panel: a dxAbrir la alcanzan el teclado
+       y la consola. */
+    test('dxAbrir se niega, no solo se esconde la tarjeta', () => {
+        const i = dia.indexOf('function dxAbrir(cual)');
+        return eq(dia.slice(i, i + 400).indexOf('if (!_dxPuedeCard(cual))') > -1, true, 'con puerta');
+    });
+    test('…y corta ANTES de abrir la caja fuerte, que no tiene panel propio', () => {
+        const i = dia.indexOf('function dxAbrir(cual)');
+        const g = dia.indexOf('_dxPuedeCard(cual)', i);
+        return eq(g > i && g < dia.indexOf('abrirCajaFuerte', i), true, 'antes');
+    });
+    test('las tarjetas se esconden una por una, no solo por módulo', () =>
+        eq(dia.indexOf('ocultar(Object.keys(DX_PERMISO).filter(') > -1, true, 'por tarjeta'));
+    test('el reporte directivo se va si le falta cualquiera de los dos lados', () =>
+        eq(dia.indexOf('if (!perms.ventas || !perms.gastos)') > -1, true, 'sin medias verdades'));
+
+    /* ── Los dos botones que viven dentro de una tarjeta ── */
+    test('apartar previsiones tiene su propio permiso', () => {
+        const i = dia.indexOf('function abrirModalApartar()');
+        return eq(dia.slice(i, i + 400).indexOf("_exigeVG('ventas.previsiones'") > -1, true, 'propio');
+    });
+    test('…y no basta con poder hacer depósitos', () =>
+        eq((SUB.ventas || []).some(x => x.key === 'previsiones'), true, 'declarado'));
+    test('registrar anticipos tiene su propio permiso', () => {
+        const i = dia.indexOf('function abrirModalAnticipo(id)');
+        return eq(dia.slice(i, i + 400).indexOf("_exigeVG('ventas.anticipos'") > -1, true, 'propio');
+    });
+    /* Guardar es por donde entra el cambio: ahí también. */
+    test('…y guardarlo también lo pide', () => {
+        const i = dia.indexOf('function guardarAnticipo()');
+        return eq(dia.slice(i, i + 200).indexOf("_exigeVG('ventas.anticipos'") > -1, true, 'al guardar');
+    });
+    test('los dos botones se esconden a quien no puede', () =>
+        eq(dia.indexOf("['ventas.previsiones','btnApartarPrev']") > -1 &&
+           dia.indexOf("['ventas.anticipos','btnNuevoAnticipo']") > -1, true, 'escondidos'));
+
+    /* ── Cambiar de sucursal: uno por módulo ─────────────────────────────────
+       Se corre la regla REAL contra permisos de mentira. */
+    const reglaSrc = (() => {
+        const i = dia.indexOf('function _puedeReasignar(modulo){');
+        return dia.slice(i, dia.indexOf('\n}', i) + 2);
+    })();
+    function reasignar(permisos, modulo) {
+        const c = { console, JSON, Object, String,
+            localStorage:{ getItem:(k)=> k==='etaax_ctx'
+                ? JSON.stringify({ ctxType:'staff', rol:'cajera', negId:'n1' }) : 'n1' },
+            getNegocioActivo:()=>'n1',
+            etaaxPermisosRol:()=>permisos };
+        c.window = c; c.window.etaaxPermisosRol = c.etaaxPermisosRol;
+        vm.createContext(c); vm.runInContext(reglaSrc, c, { filename:'reasignar' });
+        return c._puedeReasignar(modulo);
+    }
+    test('el permiso del módulo manda sobre el general', () =>
+        eq(reasignar({ cambiarSucursal:true, ventas:{ cambiarSucursal:false } }, 'ventas'),
+           false, 'manda el módulo'));
+    test('…y también al revés: el módulo puede abrir lo que el general cierra', () =>
+        eq(reasignar({ cambiarSucursal:false, gastos:{ cambiarSucursal:true } }, 'gastos'),
+           true, 'manda el módulo'));
+    /* Lo que ya estaba configurado no cambia de comportamiento: sin el permiso
+       nuevo, sigue decidiendo el general. */
+    test('sin permiso propio, decide el general (lo ya configurado no se mueve)', () =>
+        eq(reasignar({ cambiarSucursal:false, ventas:{ capturarCorte:true } }, 'ventas'),
+           false, 'compatible'));
+    test('…y si el general tampoco está, se deja pasar', () =>
+        eq(reasignar({ ventas:{} }, 'ventas'), true, 'falla abierto'));
+    /* Son independientes: apagar el del gasto no toca el del corte. */
+    test('cortes y gastos son independientes entre sí', () => {
+        const p = { gastos:{ cambiarSucursal:false }, ventas:{ cambiarSucursal:true } };
+        return eq(reasignar(p,'gastos') === false && reasignar(p,'ventas') === true, true, 'separados');
+    });
+    test('el corte usa el de ventas y el gasto el de gastos', () =>
+        eq(dia.indexOf("function _puedeCambiarSuc(){ return _puedeReasignar('ventas'); }") > -1 &&
+           dia.indexOf("function gPuedeCambiarSuc(){ return _puedeReasignar('gastos'); }") > -1,
+           true, 'cada quien el suyo'));
+    ['ventas','gastos'].forEach(function (m) {
+        test(m + ' declara su propio cambio de sucursal', () =>
+            eq((SUB[m] || []).some(x => x.key === 'cambiarSucursal'), true, 'declarado'));
+    });
+    /* Y el guardado sigue mandando sobre el CSS: esconder el selector no basta. */
+    ['_puedeSucC=_puedeCambiarSuc()', '_puedeSucG=gPuedeCambiarSuc()'].forEach(function (t) {
+        test('al guardar manda el permiso, no el display (' + t.slice(0,10) + ')', () =>
+            eq(dia.indexOf(t) > -1, true, 'permiso'));
+    });
+
+    /* ── Ventas por Producto, donde de verdad vive ── */
+    test('Ventas por Producto sale de Control Administrativo', () => {
+        const i = per.indexOf("label:'Control Administrativo'");
+        return eq(per.slice(i, i + 200).indexOf('ventas_productos') === -1, true, 'fuera');
+    });
+    test('…y aparece en Aprende y Analiza, que es donde está la pantalla', () => {
+        const i = per.indexOf("label:'Aprende y Analiza'");
+        return eq(i > -1 && per.slice(i, i + 120).indexOf('ventas_productos') > -1, true, 'en su grupo');
+    });
+    test('el permiso sigue existiendo: la pantalla no queda sin llave', () =>
+        eq(pg.indexOf("[/\\/consultoria\\/ventas-productos/,     'ventas_productos']") > -1 ||
+           pg.indexOf('ventas-productos') > -1, true, 'con llave'));
+
+    /* ── Los rótulos dicen dónde vive cada cosa ── */
+    test('los dos lados dicen que viven en Ventas y Gastos Diarios', () => {
+        const v = per.indexOf("key:'ventas',"), g = per.indexOf("key:'gastos',");
+        return eq(per.slice(v, v + 200).indexOf('Ventas y Gastos Diarios') > -1 &&
+                  per.slice(g, g + 200).indexOf('Ventas y Gastos Diarios') > -1, true, 'ubicados');
+    });
+    test('el interruptor general ya no promete cortes ni gastos', () => {
+        const i = per.indexOf("key:'cambiarSucursal'");
+        const t = per.slice(i, i + 220);
+        return eq(t.indexOf('Recetas, insumos y clientes') > -1, true, 'honesto');
+    });
+    /* Ningún sub-permiso nuevo puede nacer marcado: si se declara, se conecta. */
+    test('ninguno de los nuevos se anuncia como pendiente', () => {
+        const pend = [];
+        ['ventas','gastos'].forEach(m => (SUB[m]||[]).forEach(x => { if (x.pendiente) pend.push(m+'.'+x.key); }));
+        return eq(pend.join(', '), '', 'conectados');
+    });
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La

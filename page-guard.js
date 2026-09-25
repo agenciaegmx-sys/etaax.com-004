@@ -49,14 +49,25 @@ Object.keys(window.ETAAX_PERM_DEFAULTS).forEach(function (rol) {
 /* Catálogo de sub-permisos por módulo — fuente única para la UI de
    permisos.html y para validar claves. El orden define cómo se listan. */
 window.ETAAX_SUBPERMS = {
+    /* ── VENTAS Y GASTOS DIARIOS · lado VENTAS ───────────────────────────────
+       El módulo es UNA pantalla con ocho tarjetas. Aquí van las cuatro del lado
+       de ventas —corte, movimientos, caja fuerte y ventas especiales— y cada
+       tarjeta tiene su propio interruptor: apagarlo la quita de la pantalla y
+       niega su panel, no solo esconde un botón de adentro. */
     ventas: [
-        { key:'capturarCorte',  label:'Capturar cortes',          sub:'Registrar el corte del día' },
-        { key:'verLista',       label:'Ver cortes anteriores / lista', sub:'Consultar cortes de días pasados (solo lectura)' },
+        { key:'capturarCorte',  label:'Registrar corte de caja',   sub:'La tarjeta del corte del día, por turno y sucursal' },
+        { key:'verLista',       label:'Ver cortes anteriores',     sub:'Sin esto solo ve el corte de hoy' },
         { key:'editarHistorico',label:'Editar cortes anteriores',  sub:'El corte de hoy siempre es editable' },
-        { key:'ventaExtra',     label:'Registrar venta extra',     sub:'Eventos, festivales, catering' },
-        { key:'hacerDeposito',  label:'Hacer depósitos',           sub:'Registrar depósitos a caja fuerte o banco' },
-        { key:'verDepositos',   label:'Ver lista de depósitos',    sub:'Consultar el historial de depósitos' },
-        { key:'cajaFuerte',     label:'Ver caja fuerte',           sub:'Acumulado de efectivo y saldos' },
+        /* Reasignar de sucursal, SOLO para cortes. Antes era un interruptor
+           general para toda la app: apagarlo le quitaba también las recetas y
+           los insumos, y prenderlo se los daba todos. */
+        { key:'cambiarSucursal',label:'Cambiar el corte de sucursal', sub:'Reasignar un corte a otra sucursal' },
+        { key:'hacerDeposito',  label:'Depósitos y retiros',       sub:'La tarjeta de movimientos entre caja, caja fuerte y banco' },
+        { key:'verDepositos',   label:'Ver la lista de movimientos', sub:'Consultar el historial de depósitos y retiros' },
+        { key:'previsiones',    label:'Apartar previsiones',       sub:'Guardar dinero para un gasto que viene' },
+        { key:'ventaExtra',     label:'Ventas especiales',         sub:'Eventos, banquetes y ventas fuera de la operación diaria' },
+        { key:'anticipos',      label:'Registrar anticipos',       sub:'Lo que dejan a cuenta por un evento' },
+        { key:'cajaFuerte',     label:'Ver caja fuerte',           sub:'La tarjeta del resguardo: saldo, comisiones y movimientos a banco' },
     ],
     /* ── RECETAS E INSUMOS ───────────────────────────────────────────────────
        `pendiente:true` = el interruptor EXISTE pero todavía no lo respeta el
@@ -107,14 +118,21 @@ window.ETAAX_SUBPERMS = {
         { key:'exportar',     label:'Exportar el pedido',     sub:'Mandarlo al proveedor en CSV o impreso' },
         { key:'historial',    label:'Ver historial',          sub:'Requisiciones de periodos anteriores' },
     ],
+    /* ── VENTAS Y GASTOS DIARIOS · lado GASTOS ───────────────────────────────
+       Las otras cuatro tarjetas de la misma pantalla: gastos del día, gastos
+       mayores, nóminas y gastos fijos. Nóminas y fijos NO tenían interruptor:
+       quien podía capturar un gasto de $80 podía pagar la nómina completa. */
     gastos: [
-        { key:'capturar',       label:'Capturar gastos',           sub:'Registrar gastos menores / normales' },
+        { key:'capturar',       label:'Registrar gastos diarios',  sub:'La tarjeta de egresos operativos del día' },
         { key:'verCajaChica',   label:'Ver gastos de caja chica',  sub:'Gastos pagados desde caja chica' },
-        { key:'verHistorico',   label:'Ver gastos anteriores',     sub:'Consultar gastos de días pasados (solo lectura)' },
-        { key:'gastosMayores',  label:'Gastos mayores',            sub:'Ver y gestionar gastos mayores' },
+        { key:'verHistorico',   label:'Ver gastos anteriores',     sub:'Sin esto solo ve los gastos de hoy' },
+        { key:'editarHistorico',label:'Editar gastos anteriores',  sub:'El gasto de hoy siempre es editable' },
+        { key:'cambiarSucursal',label:'Cambiar el gasto de sucursal', sub:'Reasignar un gasto a otra sucursal' },
+        { key:'gastosMayores',  label:'Registrar gasto mayor',     sub:'La tarjeta de egresos grandes, con clave de administrador' },
+        { key:'nominas',        label:'Pagar nóminas',             sub:'La tarjeta de nómina del staff por periodo' },
+        { key:'fijos',          label:'Pagar gastos fijos',        sub:'La tarjeta de renta, servicios y obligaciones del mes' },
         { key:'verCajaFuerte',  label:'Ver gastos de caja fuerte', sub:'Gastos pagados desde caja fuerte' },
         { key:'verBanco',       label:'Ver gastos de banco',       sub:'Transferencia, débito y crédito' },
-        { key:'editarHistorico',label:'Editar gastos anteriores',  sub:'El gasto de hoy siempre es editable' },
         { key:'verResumen',     label:'Ver resumen de gastos',     sub:'Totales y desgloses del período' },
     ],
 };

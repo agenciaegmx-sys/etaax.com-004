@@ -973,7 +973,7 @@
         <div class="dx-win-body" id="dxPanel_extras">
 <div class="dxp" id="vex_dxp"><div class="dxp-tabs"><button class="dxp-tab" onclick="dxpTipo('vex','dia',this)">Día</button><button class="dxp-tab" onclick="dxpTipo('vex','semana',this)">Semana</button><button class="dxp-tab active" onclick="dxpTipo('vex','mes',this)">Mes</button><button class="dxp-tab" onclick="dxpTipo('vex','rango',this)">Rango</button></div><input type="date" id="vex_val" onchange="dxpChange('vex')"><input type="date" id="vex_end" style="display:none" onchange="dxpChange('vex')"><span class="dxp-semana" id="vex_sem"></span></div>
 <div style="margin-bottom:14px"><button class="btn-venta-extra" id="btnVentaExtra" onclick="abrirModalVentaExtra()">🎪 + Nueva venta especial</button>
-<button class="btn-venta-extra" onclick="abrirModalAnticipo()" style="margin-left:8px">🎟️ + Anticipo</button>
+<button class="btn-venta-extra" id="btnNuevoAnticipo" onclick="abrirModalAnticipo()" style="margin-left:8px">🎟️ + Anticipo</button>
 <div id="antResumen" style="margin-top:12px"></div></div>
             <div class="card" id="cardVentasExtra" style="margin-top:16px;display:none">
                 <div class="card-header" style="justify-content:space-between">
@@ -2144,6 +2144,13 @@ function toggleNav() {
 // ── Modales flotantes de función ──
 var _dxAbierto = null;
 function dxAbrir(cual) {
+    /* Esconder la tarjeta no es negar el panel: a dxAbrir la alcanzan el teclado,
+       la consola y cualquier repintado que vuelva a mostrar el botón. */
+    if (!_dxPuedeCard(cual)) {
+        alert('🔒 Tu rol no tiene permiso para abrir esta función.\n\n' +
+              'Pídeselo al administrador del negocio, en Roles y Permisos.');
+        return;
+    }
     // Caja fuerte no tiene panel propio: reusa el overlay existente del módulo (fase 2)
     if (cual === 'caja' && typeof abrirCajaFuerte === 'function') { abrirCajaFuerte(); return; }
     var ov = document.getElementById('dxOv_' + cual);
@@ -2389,6 +2396,24 @@ function rdImprimir(){
     window.print();
 }
 
+/* ── UNA TARJETA, UN PERMISO ─────────────────────────────────────────────────
+   Antes el corte se abría o no según el módulo ENTERO: quien podía capturar un
+   gasto de $80 también podía pagar la nómina completa, porque las dos tarjetas
+   colgaban del mismo interruptor. Ahora cada una tiene el suyo. */
+var DX_PERMISO = {
+    gastos:    'gastos.capturar',
+    mayores:   'gastos.gastosMayores',
+    nominas:   'gastos.nominas',
+    fijos:     'gastos.fijos',
+    cortes:    'ventas.capturarCorte',
+    depositos: 'ventas.hacerDeposito',
+    caja:      'ventas.cajaFuerte',
+    extras:    'ventas.ventaExtra',
+};
+function _dxPuedeCard(fn){
+    var path = DX_PERMISO[fn];
+    return !path || _puede(path);
+}
 // ── Cards según permisos del rol (los permisos finos siguen dentro de cada panel) ──
 function _dxAplicarPermisosCards(){
     var ctx; try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch(e) {}
@@ -2398,8 +2423,22 @@ function _dxAplicarPermisosCards(){
     function ocultar(lista){ lista.forEach(function(fn){ var b = document.querySelector('.dx-card[data-fn="' + fn + '"]'); if (b) b.style.display = 'none'; }); }
     if (!perms.ventas) ocultar(['cortes', 'depositos', 'caja', 'extras']);
     if (!perms.gastos) ocultar(['gastos', 'mayores', 'nominas', 'fijos']);
+    /* Y tarjeta por tarjeta, dentro de los módulos que sí tiene. */
+    ocultar(Object.keys(DX_PERMISO).filter(function(fn){ return !_dxPuedeCard(fn); }));
+    /* Los dos botones que viven DENTRO de una tarjeta y tienen permiso propio. */
+    [['ventas.previsiones','btnApartarPrev'], ['ventas.anticipos','btnNuevoAnticipo']]
+        .forEach(function(par){
+            if (_puede(par[0])) return;
+            var b = document.getElementById(par[1]);
+            if (b) b.style.display = 'none';
+        });
+    /* El reporte directivo consolida TODAS las tarjetas: si le falta cualquiera
+       de los dos lados, el número que vería estaría incompleto y no lo sabría. */
     if (!perms.ventas || !perms.gastos) { var rd = document.getElementById('btnReporteDirectivo'); if (rd) rd.style.display = 'none'; }
 }
+/* Se vuelve a aplicar cuando bajan los permisos frescos de la nube: al cargar
+   solo estaba la copia en caché, que puede ser de antes del último cambio. */
+window.addEventListener('etaax:permisos', function(){ _dxAplicarPermisosCards(); });
 document.addEventListener('DOMContentLoaded', function(){
     dxpInit('rd', 'mes', function(){ renderReporteDirectivo(); });
     _dxAplicarPermisosCards();
@@ -2586,13 +2625,21 @@ function _sucNombreDx(id){
     return (f && f.nombre) || (id==='suc_principal' ? 'Matriz' : id);
 }
 function load()    { return _scopeSuc(_cacheCortes || []); }
-// Permiso "cambiar de sucursal": permitido salvo que el dueño lo apague (fail-open).
-function _puedeCambiarSuc(){
+/* Permiso "cambiar de sucursal" del CORTE.
+   Antes esto colgaba del interruptor general, uno solo para toda la app:
+   apagarlo para que la cajera no moviera cortes le quitaba también las recetas
+   y los insumos, y prenderlo se los daba todos. Ahora manda el del módulo, y el
+   general solo decide cuando el del módulo no está puesto — así lo que ya
+   estaba configurado sigue funcionando igual. Fail-open, como el resto. */
+function _puedeCambiarSuc(){ return _puedeReasignar('ventas'); }
+function _puedeReasignar(modulo){
     var ctx; try{ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null');}catch(e){}
-    if(!ctx || ctx.ctxType!=='staff') return true;
+    if(!ctx || ctx.ctxType!=='staff') return true;            // dueño / admin maestro
     if((ctx.rol||'')==='admin') return true;
     var perms=window.etaaxPermisosRol?etaaxPermisosRol(ctx.negId||getNegocioActivo(),ctx.rol):{};
-    return perms.cambiarSucursal!==false;
+    var m=perms[modulo];
+    if(m && typeof m==='object' && 'cambiarSucursal' in m) return m.cambiarSucursal!==false;
+    return perms.cambiarSucursal!==false;                     // el de siempre
 }
 // Selector "📍 Sucursal" del corte: solo si hay >1 sucursal y el rol puede reasignar.
 function _pobSucursalCorte(sucId){
@@ -2629,6 +2676,14 @@ function _puede(path){
 function _puedeEditarCorte(c){ return _puede('ventas.editarHistorico') || (c && c.fecha===todayStr()); }
 /* ¿Un permiso está EXPLÍCITAMENTE negado? (permisos de "ver" nuevos: permitidos
    por defecto, ocultos solo si el dueño los apagó — no rompe permisos viejos). */
+/* El "no" que sí se oye. Esconder el botón no basta: a estas funciones las
+   alcanzan el teclado, la consola y cualquier repintado. */
+function _exigeVG(path, msg){
+    if(_puede(path)) return true;
+    alert('🔒 ' + (msg || 'Tu rol no tiene permiso para esta acción.') +
+          '\n\nPídeselo al administrador del negocio, en Roles y Permisos.');
+    return false;
+}
 function _negadoExplicito(mod, sub){
     var ctx; try{ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null');}catch(e){}
     if(!ctx || ctx.ctxType!=='staff') return false;
@@ -4951,6 +5006,10 @@ function abrirModalRetiro(){
     _depMov();
 }
 function abrirModalApartar(){
+    /* Apartar tiene su propio permiso: etiquetar dinero para un gasto que viene
+       no es lo mismo que moverlo de caja a banco, y hay encargadas que hacen lo
+       segundo y no lo primero. */
+    if(!_exigeVG('ventas.previsiones', 'No puedes apartar previsiones.')) return;
     if(!_puede('ventas.hacerDeposito')) return;
     abrirModalDeposito();
     var dSel=document.getElementById('depDestino2');
@@ -5271,6 +5330,10 @@ function _antFondoCambio(){
     if(w) w.style.display = document.getElementById('antFondo').value==='banco' ? '' : 'none';
 }
 function abrirModalAnticipo(id){
+    /* Un anticipo es dinero que entra a cuenta de un evento: se registra en la
+       misma tarjeta que las ventas especiales pero es otra cosa, y hay negocios
+       donde solo el administrador los toca. */
+    if(!_exigeVG('ventas.anticipos', 'No puedes registrar anticipos.')) return;
     var d = id ? (_anticipos().find(function(x){return x.id===id;})||{}) : {};
     document.getElementById('antId').value       = id||'';
     document.getElementById('antFecha').value    = d.fecha || todayStr();
@@ -5291,6 +5354,7 @@ function abrirModalAnticipo(id){
 function cerrarModalAnticipo(){ document.getElementById('modalAnticipo').classList.remove('open'); }
 
 function guardarAnticipo(){
+    if(!_exigeVG('ventas.anticipos', 'No puedes registrar anticipos.')) return;
     var fecha=document.getElementById('antFecha').value;
     var monto=n(document.getElementById('antMonto').value);
     var cliente=(document.getElementById('antCliente').value||'').trim();
@@ -5736,14 +5800,9 @@ function _scopeSuc(lista){
     return (lista||[]).filter(function(x){ return (x && (x.sucursalId || 'suc_principal')) === s; });
 }
 function gLoad()           { return _scopeSuc(_cacheGastos || []); }
-// Permiso "cambiar de sucursal": permitido salvo que el dueño lo apague (fail-open).
-function gPuedeCambiarSuc(){
-    var ctx; try{ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null');}catch(e){}
-    if(!ctx || ctx.ctxType!=='staff') return true;          // dueño / admin maestro
-    if((ctx.rol||'')==='admin') return true;
-    var perms=window.etaaxPermisosRol?etaaxPermisosRol(ctx.negId||getNegocioActivo(),ctx.rol):{};
-    return perms.cambiarSucursal!==false;
-}
+/* El del GASTO, por separado del corte: hay negocios donde la encargada corrige
+   un gasto mal cargado pero no toca un corte ya cerrado. */
+function gPuedeCambiarSuc(){ return _puedeReasignar('gastos'); }
 // Selector "📍 Sucursal" del gasto: solo si hay >1 sucursal y el rol puede reasignar.
 function _pobSucursalGasto(sucId){
     var sel=document.getElementById('gSucursal'), row=document.getElementById('row-gasto-sucursal');
