@@ -724,11 +724,16 @@ function selectRol(key) {
 
 /* Objeto de sub-permisos por defecto al encender un módulo expandible:
    clona el default del rol si es objeto; si no, todo en true. */
+/* Al convertir un módulo de `true` a objeto de sub-permisos, el objeto tiene que
+   quedar COMPLETO. Antes se copiaba el default del rol tal cual, y si a ese
+   default le faltaba una clave declarada, el sub-permiso nacía inexistente: la
+   pantalla lo pintaba apagado y el código lo daba por permitido. Los defaults ya
+   se rellenan en page-guard, y aquí se vuelve a asegurar por si esta pantalla se
+   abre con un catálogo más nuevo que el que vio el default. */
 function _objSubsOn(modKey) {
     var def = (_defaultsDe(_rolActivo) || {})[modKey];
-    if (def && typeof def === 'object') return JSON.parse(JSON.stringify(def));
-    var o = {};
-    (SUBPERMS[modKey] || []).forEach(function(sp){ o[sp.key] = true; });
+    var o = (def && typeof def === 'object') ? JSON.parse(JSON.stringify(def)) : {};
+    (SUBPERMS[modKey] || []).forEach(function(sp){ if (!(sp.key in o)) o[sp.key] = true; });
     return o;
 }
 

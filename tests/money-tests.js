@@ -10335,19 +10335,19 @@ console.log('\n══ BE7 · Control Administrativo: una tarjeta, un permiso ═
 
     /* ── Cambiar de sucursal: uno por módulo ─────────────────────────────────
        Se corre la regla REAL contra permisos de mentira. */
-    /* La regla vive en page-guard y la comparten los cinco módulos que tienen
-       selector de sucursal. Se corre LA DE VERDAD, no una copia del test. */
-    const reglaSrc = (() => {
-        const i = pg.indexOf('window.etaaxPuedeReasignar = function (modulo) {');
-        return pg.slice(i, pg.indexOf('\n};', i) + 3);
-    })();
-    function reasignar(permisos, modulo) {
-        const c = { console, JSON, Object, String,
-            localStorage:{ getItem:(k)=> k==='etaax_ctx'
-                ? JSON.stringify({ ctxType:'staff', rol:'cajera', negId:'n1' }) : 'n1' } };
-        c.window = c;
-        c.window.etaaxPermisosRol = () => permisos;
-        vm.createContext(c); vm.runInContext(reglaSrc, c, { filename:'reasignar' });
+    /* Se corre page-guard ENTERO, no un recorte de la función: ahora la regla se
+       apoya en el catálogo y en etaaxPerm, y probarla suelta escondería
+       justamente los desacuerdos entre esas piezas — que es el bug que esto
+       vino a cerrar. */
+    function reasignar(permisos, modulo, rol) {
+        const ls = { etaax_ctx: JSON.stringify({ ctxType:'staff', rol: rol || 'cajera', negId:'n1' }),
+                     etaax_negocio_activo:'n1',
+                     etaax_n1_permisos: JSON.stringify({ [rol || 'cajera']: permisos }) };
+        const c = { console, JSON, Object, Array, String, Date, setTimeout,
+            localStorage:{ getItem:k=>(k in ls?ls[k]:null), setItem(){}, removeItem(){} },
+            location:{ pathname:'/x.html', search:'' }, document:{ addEventListener(){} } };
+        c.window = c; c.window.addEventListener = () => {};
+        vm.createContext(c); vm.runInContext(pg, c, { filename:'page-guard.js' });
         return c.window.etaaxPuedeReasignar(modulo);
     }
     test('el permiso del módulo manda sobre el general', () =>
@@ -10361,8 +10361,76 @@ console.log('\n══ BE7 · Control Administrativo: una tarjeta, un permiso ═
     test('sin permiso propio, decide el general (lo ya configurado no se mueve)', () =>
         eq(reasignar({ cambiarSucursal:false, ventas:{ capturarCorte:true } }, 'ventas'),
            false, 'compatible'));
-    test('…y si el general tampoco está, se deja pasar', () =>
-        eq(reasignar({ ventas:{} }, 'ventas'), true, 'falla abierto'));
+    /* EL BUG QUE SE REPORTÓ: el dueño veía "Cambiar el corte de sucursal" en gris
+       y el selector seguía saliendo en el corte. Pasaba porque los defaults del
+       rol traían el módulo como OBJETO con las claves de cuando se escribieron:
+       la clave nueva no estaba en ningún lado, la pantalla la pintaba apagada
+       (no está → false) y el código la daba por permitida (no está → caigo al
+       interruptor general). Dos mitades respondiendo distinto. */
+    test('un sub-permiso que falta en lo guardado se resuelve por el default del rol', () =>
+        eq(reasignar({ ventas:{ capturarCorte:true } }, 'ventas', 'gerente'), true, 'permitido'));
+    test('…y la pantalla y el código dicen LO MISMO', () => {
+        const c = { console, JSON, Object, Array, String, Date, setTimeout,
+            localStorage:{ getItem(){ return null; }, setItem(){}, removeItem(){} },
+            /* Sin contexto, page-guard rebota al hub: el arnés necesita poder
+               "navegar" sin tronar. */
+            location:{ pathname:'/hub.html', search:'', replace(){} }, document:{ addEventListener(){} } };
+        c.window = c; c.window.addEventListener = () => {};
+        vm.createContext(c); vm.runInContext(pg, c, { filename:'page-guard.js' });
+        /* La pantalla lee el default del rol; el código, etaaxPerm. Si al default
+           le falta una clave declarada, las dos se separan. */
+        const faltan = [];
+        Object.keys(c.window.ETAAX_PERM_DEFAULTS).forEach(function (rol) {
+            Object.keys(c.window.ETAAX_SUBPERMS).forEach(function (mod) {
+                const def = c.window.ETAAX_PERM_DEFAULTS[rol][mod];
+                if (!def || typeof def !== 'object') return;
+                c.window.ETAAX_SUBPERMS[mod].forEach(function (sp) {
+                    if (!(sp.key in def)) faltan.push(rol + '.' + mod + '.' + sp.key);
+                });
+            });
+        });
+        return eq(faltan.join(', '), '', 'sin desacuerdos');
+    });
+    /* Y lo que alguien apagó A MANO se respeta: rellenar no puede volver a
+       prender lo que el dueño cerró. */
+    test('rellenar no reabre lo que estaba apagado a propósito', () => {
+        const c = { console, JSON, Object, Array, String, Date, setTimeout,
+            localStorage:{ getItem(){ return null; }, setItem(){}, removeItem(){} },
+            location:{ pathname:'/hub.html', search:'', replace(){} }, document:{ addEventListener(){} } };
+        c.window = c; c.window.addEventListener = () => {};
+        vm.createContext(c); vm.runInContext(pg, c, { filename:'page-guard.js' });
+        return eq(c.window.ETAAX_PERM_DEFAULTS.gerente.ventas.editarHistorico, false, 'respetado');
+    });
+    /* Un rol PROPIO del negocio hereda los sub-permisos de su rol base. Antes se
+       buscaba el default por el nombre del rol propio —que no existe— y el rol
+       heredaba el acceso al módulo pero no a sus funciones. */
+    test('un rol propio del negocio hereda los sub-permisos de su base', () => {
+        const ls = { etaax_ctx: JSON.stringify({ ctxType:'staff', rol:'rx_hostess', negId:'n1' }),
+                     etaax_negocio_activo:'n1',
+                     etaax_n1_permisos: JSON.stringify({
+                        '__roles__': { extra:[{ key:'rx_hostess', label:'Hostess', base:'gerente' }] },
+                        'rx_hostess': { ventas:{ capturarCorte:true } } }) };
+        const c = { console, JSON, Object, Array, String, Date, setTimeout,
+            localStorage:{ getItem:k=>(k in ls?ls[k]:null), setItem(){}, removeItem(){} },
+            location:{ pathname:'/x.html', search:'' }, document:{ addEventListener(){} } };
+        c.window = c; c.window.addEventListener = () => {};
+        vm.createContext(c); vm.runInContext(pg, c, { filename:'page-guard.js' });
+        /* Se pregunta por una clave que en el rol base está PRENDIDA y que no
+           está en lo guardado: si no heredara, saldría negada y la prueba no
+           distinguiría nada. */
+        return eq(c.window.ETAAX_PERM_DEFAULTS.gerente.ventas.hacerDeposito === true &&
+                  c.window.etaaxPerm('n1', 'rx_hostess', 'ventas.hacerDeposito') === true,
+                  true, 'heredado');
+    });
+    /* Y la pantalla de permisos construye objetos COMPLETOS al convertir un
+       módulo de `true` a sub-permisos: si copiara el default tal cual y a ese le
+       faltara una clave, volvería el desacuerdo por otra puerta. */
+    test('la pantalla completa los sub-permisos al convertir un módulo', () => {
+        const per2 = fs.readFileSync(path.join(RAIZ, 'administrativo/permisos.html'), 'utf8');
+        const i = per2.indexOf('function _objSubsOn(modKey)');
+        const t = per2.slice(i, i + 500);
+        return eq(t.indexOf('if (!(sp.key in o)) o[sp.key] = true;') > -1, true, 'completo');
+    });
     /* Son independientes: apagar el del gasto no toca el del corte. */
     test('cortes y gastos son independientes entre sí', () => {
         const p = { gastos:{ cambiarSucursal:false }, ventas:{ cambiarSucursal:true } };

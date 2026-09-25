@@ -336,6 +336,33 @@ window.etaaxExigeSub = function (modulo, sub, msg) {
     return false;
 };
 
+/* ── LOS DEFAULTS, AL DÍA CON EL CATÁLOGO ────────────────────────────────────
+   EL BUG QUE ESTO MATA: los defaults de algunos roles traen el módulo como
+   OBJETO con las claves de cuando se escribieron —gerente.ventas tenía siete—.
+   Al agregar un sub-permiso nuevo, esa clave no existía en ningún lado, y las
+   dos mitades del sistema respondían distinto:
+     · la pantalla lo pintaba APAGADO (no está en el objeto → false),
+     · el código lo daba por PERMITIDO (no está → caigo al interruptor general).
+   Resultado: el dueño veía "Cambiar el corte de sucursal" en gris, creía que lo
+   había cerrado, y el selector seguía saliendo en el corte. Un permiso que
+   miente es peor que no tenerlo.
+
+   Se rellena aquí, una vez, contra el catálogo: cualquier sub-permiso declarado
+   que le falte a un módulo YA PERMITIDO nace permitido. Lo que alguien apagó a
+   mano tiene su clave escrita y no se toca. */
+(function () {
+    Object.keys(window.ETAAX_PERM_DEFAULTS).forEach(function (rol) {
+        var perms = window.ETAAX_PERM_DEFAULTS[rol];
+        Object.keys(window.ETAAX_SUBPERMS).forEach(function (mod) {
+            var def = perms[mod];
+            if (!def || typeof def !== 'object') return;   // true/false: el módulo entero manda
+            window.ETAAX_SUBPERMS[mod].forEach(function (sp) {
+                if (!(sp.key in def)) def[sp.key] = true;
+            });
+        });
+    });
+})();
+
 /* ¿Puede reasignar un registro a otra sucursal, EN ESTE MÓDULO?
    Manda el permiso del módulo; si no está puesto, decide el general de antes —
    así lo que ya estaba configurado no cambia de comportamiento. Fail-open. */
@@ -345,10 +372,26 @@ window.etaaxPuedeReasignar = function (modulo) {
     if (!ctx || ctx.ctxType !== 'staff') return true;
     if ((ctx.rol || '') === 'admin') return true;
     if (typeof window.etaaxPermisosRol !== 'function') return true;
-    var perms = window.etaaxPermisosRol(ctx.negId || localStorage.getItem('etaax_negocio_activo'), ctx.rol) || {};
-    var m = perms[modulo];
-    if (m && typeof m === 'object' && 'cambiarSucursal' in m) return m.cambiarSucursal !== false;
+    var negId = ctx.negId || localStorage.getItem('etaax_negocio_activo');
+    /* Si el módulo declara el suyo, se resuelve con etaaxPerm — el MISMO
+       resolutor que usa toda la app. Tener aquí una copia de la cadena de
+       respaldo fue justo lo que hizo que esta pregunta se respondiera distinto
+       que la pantalla de permisos. */
+    var declara = (window.ETAAX_SUBPERMS[modulo] || []).some(function (x) { return x.key === 'cambiarSucursal'; });
+    if (declara) return window.etaaxPerm(negId, ctx.rol, modulo + '.cambiarSucursal');
+    /* Módulos sin el suyo (por ahora ninguno): el interruptor general de antes. */
+    var perms = window.etaaxPermisosRol(negId, ctx.rol) || {};
     return perms.cambiarSucursal !== false;
+};
+
+/* Los defaults que le tocan a un rol: los suyos, o los de su rol base si es un
+   rol propio del negocio. Se saca aparte porque lo necesitan DOS resolutores y
+   tenerlo escrito en uno solo fue lo que dejó a los roles propios sin
+   sub-permisos. */
+window.etaaxDefaultsDeRol = function (negId, rol) {
+    if (window.ETAAX_PERM_DEFAULTS[rol]) return window.ETAAX_PERM_DEFAULTS[rol];
+    var r = window.etaaxRol(negId, rol);
+    return (r && r.base && window.ETAAX_PERM_DEFAULTS[r.base]) || null;
 };
 
 window.etaaxPermisosRol = function (negId, rol) {
@@ -381,7 +424,12 @@ window.etaaxPerm = function (negId, rol, path) {
     if (!v) return false;
     if (typeof v === 'object') {
         if (sub in v) return v[sub] !== false;
-        var def = (window.ETAAX_PERM_DEFAULTS[rol] || {})[mod];
+        /* Los defaults DEL ROL — y si es un rol propio del negocio (Hostess,
+           Cajera), los de su rol base. Antes se buscaba `ETAAX_PERM_DEFAULTS[rol]`
+           en crudo: para un rol propio eso es `undefined`, así que CUALQUIER
+           sub-permiso que faltara en lo guardado quedaba negado. El rol propio
+           heredaba el acceso al módulo pero no a sus funciones. */
+        var def = (window.etaaxDefaultsDeRol(negId, rol) || {})[mod];
         if (def && typeof def === 'object' && sub in def) return def[sub] !== false;
         /* La clave no estaba cuando el dueño guardó. Si el default de su rol es
            "todo permitido", este permiso NUEVO nace permitido: negarlo sería
