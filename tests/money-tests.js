@@ -10864,6 +10864,74 @@ console.log('\n══ BF2 · Conteos del QR que se suman ══');
     });
 }
 
+/* ═══════════ SUITE BF3 · NAVEGACIÓN FANTASMA: AL NEGOCIO, NO A MATRIZ ══════
+   El admin maestro entra a un negocio desde su panel para revisar algo o
+   ayudar con una contraseña. Entraba al negocio correcto, sí, pero parado en
+   una SUCURSAL que no eligió —casi siempre Matriz—, porque al impersonar no se
+   tocaba `etaax_sucursal_activa` y quedaba la de la visita anterior. La app lee
+   esa clave en decenas de lugares, así que la pantalla decía un negocio y los
+   datos venían de otro alcance. Y si la clave traía la sucursal de OTRO
+   negocio, el alcance no correspondía a nada.
+
+   Vacío ya significa "vista global del negocio" en toda la app: es lo mismo que
+   usan los Catálogos Globales.                                                */
+console.log('\n══ BF3 · Navegación fantasma: al negocio, no a Matriz ══');
+{
+    const adm = fs.readFileSync(path.join(RAIZ, 'admin.html'), 'utf8');
+    const hub = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+
+    test('entrar como admin limpia la sucursal', () => {
+        const i = adm.indexOf('function entrarComoAdmin()');
+        return eq(adm.slice(i, i + 900).indexOf("removeItem('etaax_sucursal_activa')") > -1,
+                  true, 'sin arrastrar');
+    });
+    /* Se limpia ANTES de irse al hub, no después: si se fuera primero, el hub
+       leería la clave vieja en su primer pintado. */
+    test('…antes de salir al hub, no después', () => {
+        const i = adm.indexOf('function entrarComoAdmin()');
+        const t = adm.slice(i, i + 900);
+        return eq(t.indexOf("removeItem('etaax_sucursal_activa')") < t.indexOf("location.href = 'hub.html'"),
+                  true, 'a tiempo');
+    });
+    /* Y también en el hub: al hub se llega recargando, y ahí la clave vieja
+       volvería a mandar a Matriz sin pasar por el panel. */
+    test('el hub también la limpia al armar la sesión fantasma', () => {
+        const i = hub.indexOf('var negAdm = _negocios.find');
+        return eq(hub.slice(i, i + 900).indexOf("removeItem('etaax_sucursal_activa')") > -1,
+                  true, 'las dos puertas');
+    });
+    test('…y lo hace antes de guardar el contexto', () => {
+        const i = hub.indexOf('var negAdm = _negocios.find');
+        const t = hub.slice(i, i + 900);
+        return eq(t.indexOf("removeItem('etaax_sucursal_activa')") < t.indexOf('_guardarCtx(negAdm)'),
+                  true, 'sin discutir');
+    });
+    /* El contexto que se guarda no lleva sucursal: el ctx y el localStorage
+       tienen que decir lo mismo o la pantalla y los datos discuten. */
+    test('el contexto fantasma no lleva sucursal', () => {
+        const i = hub.indexOf('var negAdm = _negocios.find');
+        return eq(/_guardarCtx\(negAdm\)\s*;/.test(hub.slice(i, i + 900)), true, 'sin sucursal');
+    });
+
+    /* Lo que NO debe cambiar: el admin entra con SU sesión, no con la del
+       cliente. Los datos los abre RLS por su correo, no por suplantar a nadie. */
+    test('el admin entra con su propia sesión, no con la del cliente', () => {
+        const i = hub.indexOf('var imp = JSON.parse(impRaw);');
+        return eq(hub.slice(i, i + 400).indexOf('email: ADMIN_EMAIL') > -1, true, 'sin suplantar');
+    });
+    test('…y queda marcado como admin en el contexto', () => {
+        const i = hub.indexOf('var imp = JSON.parse(impRaw);');
+        return eq(hub.slice(i, i + 400).indexOf('isAdmin: true') > -1, true, 'marcado');
+    });
+    test('el contexto lo declara, para que la pantalla lo pueda decir', () =>
+        eq(hub.indexOf('ctxAdmin: !!_sesion.isAdmin') > -1, true, 'declarado'));
+    /* Y salir lo deja limpio: si el sello se quedara, el admin seguiría dentro
+       del negocio sin saberlo. */
+    test('salir del modo fantasma borra el sello', () =>
+        eq(fs.readFileSync(path.join(RAIZ, 'ctx-bar.js'), 'utf8')
+            .indexOf("removeItem('etaax_admin_impersonate')") > -1, true, 'limpio'));
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La

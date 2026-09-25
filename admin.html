@@ -2456,6 +2456,14 @@ function entrarComoAdmin() {
     if (!_impersonateTarget) return;
     sessionStorage.setItem('etaax_admin_impersonate', JSON.stringify(_impersonateTarget));
     localStorage.setItem('etaax_negocio_activo', _impersonateTarget.negocioId);
+    /* SE ENTRA AL NEGOCIO, NO A UNA SUCURSAL.
+       Antes esta clave no se tocaba, así que quedaba la sucursal que hubiera de
+       antes —de otro negocio, de otra visita— y la app, que lee la sucursal de
+       aquí en 77 lugares, te dejaba parado en Matriz sin que la hubieras
+       elegido. Peor: podía quedar el id de una sucursal de OTRO negocio.
+       Vacío ya significa "vista global del negocio" en toda la app: es lo mismo
+       que usan los Catálogos Globales. */
+    localStorage.removeItem('etaax_sucursal_activa');
     window.location.href = 'hub.html';
 }
 

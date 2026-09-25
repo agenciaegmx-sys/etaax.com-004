@@ -1692,6 +1692,12 @@ async function init() {
                 var negAdm = _negocios.find(function(n){ return n.id === imp.negocioId; });
                 if (negAdm) {
                     localStorage.setItem('etaax_negocio_activo', negAdm.id);
+                    /* Sin sucursal: el admin entra al NEGOCIO completo. Se limpia
+                       también aquí y no solo al salir del panel — al hub se puede
+                       llegar recargando, y entonces la clave vieja seguiría ahí
+                       mandando a Matriz. El ctx y el localStorage tienen que
+                       decir lo mismo o la pantalla y los datos discuten. */
+                    localStorage.removeItem('etaax_sucursal_activa');
                     _guardarCtx(negAdm);
                     _showModulos(negAdm);
                 } else {
