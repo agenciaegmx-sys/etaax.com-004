@@ -5428,7 +5428,7 @@ console.log('\n══ AP · Que la página arranque (todas las pantallas) ══
        alcanzan a registrarse en el arnés; un bloque que revienta antes de llegar
        a su addEventListener queda fuera de esta red. */
     [
-        ['administrativo/diario.html',        3],
+        ['administrativo/diario.html',        4],   /* +1: los rótulos del tope de archivos */
         ['financiero/previsiones.html',       2],
         ['financiero/gastos-globales.html',   2],
         ['financiero/kpis.html',              2],
@@ -10643,6 +10643,78 @@ console.log('\n══ BE9 · Guardar un colaborador, sin espera ni clics de más
        sintaxis inválida o borraría de más. Por eso se separa. */
     test('…y con la lista vacía se borra por negocio, sin filtro imposible', () =>
         eq(/vivos\.length\s*\?/.test(sav), true, 'caso vacío'));
+}
+
+/* ═══════════ SUITE BF1 · HASTA 10 ARCHIVOS EN CORTES Y GASTOS ══════════════
+   El tope estaba escrito a mano en SEIS lugares del código —5 en el corte, 6 en
+   el gasto— y en otros dos en los rótulos de la pantalla. Subirlo obligaba a
+   acordarse de los ocho, y el rótulo que se quedara atrás prometería un límite
+   distinto del que aplica el código.                                          */
+console.log('\n══ BF1 · Hasta 10 archivos en cortes y gastos ══');
+{
+    const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+
+    test('el tope es 10', () => eq(/var DX_MAX_EVID = 10;/.test(dia), true, 'diez'));
+    test('…y vive en UN solo lugar', () =>
+        eq((dia.match(/DX_MAX_EVID\s*=/g) || []).length, 1, 'una vez'));
+    /* Ni un número suelto: si alguien vuelve a escribir "6" a mano, el rótulo y
+       el candado se separan otra vez. */
+    test('ningún tope quedó escrito a mano', () =>
+        eq(/>=\s*[56]\)\{\s*alert\('Ya tienes [56]/.test(dia) ||
+           /Máximo [56] (fotos|archivos)/.test(dia), false, 'sin números sueltos'));
+    /* Los CUATRO sitios, uno por uno: contar usos no sirve —quitar uno deja el
+       total alto y la prueba pasa sola mientras ese sitio vuelve a su número
+       escrito a mano. */
+    [['subirEvidenciasCorte', 'DX_MAX_EVID - _evidenciasCorte.length'],
+     ['subirEvidenciasGasto', 'DX_MAX_EVID-_evidenciasGasto.length'],
+     ['_abrirPuenteCorte',    '_evidenciasCorte.length>=DX_MAX_EVID'],
+     ['_abrirPuenteGasto',    '_evidenciasGasto.length>=DX_MAX_EVID']]
+    .forEach(function (par) {
+        test(par[0] + ' lee la constante, no un número suyo', () => {
+            const i = dia.indexOf('function ' + par[0] + '(');
+            return eq(i > -1 && dia.slice(i, i + 900).indexOf(par[1]) > -1, true, 'compartida');
+        });
+    });
+    /* El rótulo "0/10" se escribe solo del mismo número. */
+    test('el rótulo sale del mismo número, no de un texto', () =>
+        eq((dia.match(/class="dx-max-evid"/g) || []).length, 2, 'los dos rótulos'));
+    test('…y se pinta al cargar la pantalla', () =>
+        eq(dia.indexOf("querySelectorAll('.dx-max-evid')") > -1, true, 'pintado'));
+
+    /* ── El corte acepta archivos, no solo fotos ── */
+    test('el corte acepta también PDF', () =>
+        eq(/id="fEvidenciaInput" accept="image\/\*,application\/pdf"/.test(dia), true, 'archivos'));
+    test('…y lo dice en la pantalla', () =>
+        eq(dia.indexOf('Toca para subir fotos o PDF') > -1, true, 'rotulado'));
+    /* Un PDF no cabe en un <img>: hay que pintarlo como ficha, o sale roto. */
+    test('el corte sabe pintar un PDF mientras se captura', () => {
+        const i = dia.indexOf('function renderEvidenciasCorte()');
+        return eq(dia.slice(i, i + 900).indexOf('e.pdf') > -1, true, 'ficha');
+    });
+    test('…y también en la ficha del corte ya guardado', () => {
+        const i = dia.indexOf('Evidencia visual — miniaturas');
+        return eq(dia.slice(i, i + 1400).indexOf('if (e.pdf)') > -1, true, 'ficha');
+    });
+    /* Las imágenes se comprimen antes de subir; un PDF viaja tal cual, así que
+       ahí sí hace falta el tope de tamaño — el gasto ya lo tenía. */
+    test('el corte pone tope de tamaño, ahora que acepta PDF', () => {
+        const i = dia.indexOf('async function subirEvidenciasCorte(input)');
+        return eq(dia.slice(i, i + 700).indexOf('10*1024*1024') > -1, true, 'con tope');
+    });
+    test('…igual que el gasto, que ya lo tenía', () => {
+        const i = dia.indexOf('async function subirEvidenciasGasto(input)');
+        return eq(dia.slice(i, i + 700).indexOf('10*1024*1024') > -1, true, 'con tope');
+    });
+    /* Y el QR del celular respeta el mismo tope: es otra puerta al mismo cajón,
+       y por ahí también se pueden meter diez. */
+    [['corte', '_evidenciasCorte'], ['gasto', '_evidenciasGasto']].forEach(function (par) {
+        test('la foto que llega por QR al ' + par[0] + ' respeta el tope', () => {
+            const i = dia.indexOf("QrPuente.abrir(getNegocioActivo()");
+            const j = dia.indexOf("QrPuente.abrir(getNegocioActivo()", i + 10);
+            const trozo = par[0] === 'corte' ? dia.slice(i, i + 500) : dia.slice(j, j + 500);
+            return eq(trozo.indexOf(par[1] + '.length>=DX_MAX_EVID') > -1, true, 'mismo tope');
+        });
+    });
 }
 
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════

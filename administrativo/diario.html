@@ -1389,9 +1389,9 @@
             <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
                 <div style="flex:1;min-width:220px">
                     <div onclick="document.getElementById('fEvidenciaInput').click()" style="border:2px dashed var(--border);border-radius:8px;padding:16px;text-align:center;cursor:pointer;transition:border-color .2s" onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border)'">
-                        <input type="file" id="fEvidenciaInput" accept="image/*" multiple style="display:none" onchange="subirEvidenciasCorte(this)">
+                        <input type="file" id="fEvidenciaInput" accept="image/*,application/pdf" multiple style="display:none" onchange="subirEvidenciasCorte(this)">
                         <div style="font-size:22px">📷</div>
-                        <div style="font-size:12px;color:var(--text-dim)">Toca para subir fotos · <span id="evCorteCount">0</span>/5</div>
+                        <div style="font-size:12px;color:var(--text-dim)">Toca para subir fotos o PDF · <span id="evCorteCount">0</span>/<span class="dx-max-evid">10</span></div>
                         <div id="evCorteLoading" style="font-size:11px;color:var(--accent);margin-top:4px;display:none">Subiendo…</div>
                     </div>
                     <div id="evCorteGrid" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px"></div>
@@ -1937,7 +1937,7 @@
                 <div onclick="document.getElementById('gEvidencia').click()" style="border:2px dashed var(--border);border-radius:8px;padding:16px;text-align:center;cursor:pointer;transition:border-color .2s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
                     <input type="file" id="gEvidencia" accept="image/*,application/pdf" multiple style="display:none" onchange="subirEvidenciasGasto(this)">
                     <div style="font-size:24px;margin-bottom:6px">📁</div>
-                    <div style="font-size:12px;color:var(--text-dim)">Toca para subir foto o PDF · <span id="evGastoCount">0</span>/6</div>
+                    <div style="font-size:12px;color:var(--text-dim)">Toca para subir foto o PDF · <span id="evGastoCount">0</span>/<span class="dx-max-evid">10</span></div>
                     <div style="font-size:10px;color:var(--text-dim);margin-top:4px;opacity:.6">Recibos, vouchers, comprobantes</div>
                     <div id="evGastoLoading" style="font-size:11px;color:var(--accent);margin-top:4px;display:none">Subiendo…</div>
                 </div>
@@ -3201,7 +3201,7 @@ function _abrirPuenteCorte(){
     var btn=document.getElementById('btnQrCorte');
     if(btn) btn.textContent='✕ Cerrar escaneo';
     QrPuente.abrir(getNegocioActivo(), 'corte', box, function(foto){
-        if(_evidenciasCorte.length>=5){ alert('Ya tienes 5 fotos en este corte.'); return; }
+        if(_evidenciasCorte.length>=DX_MAX_EVID){ alert('Ya tienes '+DX_MAX_EVID+' archivos en este corte.'); return; }
         _evidenciasCorte.push({url:foto.url, path:foto.path});
         renderEvidenciasCorte();
     });
@@ -3232,30 +3232,47 @@ function cerrarModal(){
 }
 
 /* ── Evidencia visual del corte (fotos en Supabase Storage) ── */
+/* Cuántos archivos caben por registro. Estaba escrito a mano en seis lugares
+   —5 en el corte, 6 en el gasto— y los rótulos de la pantalla en otros dos: al
+   subirlo había que acordarse de los ocho. Ahora es uno. */
+var DX_MAX_EVID = 10;
 var _evidenciasCorte = []; // [{url, path}]
 async function subirEvidenciasCorte(input){
     var files = Array.prototype.slice.call(input.files);
     input.value='';
-    var disp = 5 - _evidenciasCorte.length;
-    if(disp<=0){ alert('Máximo 5 fotos por corte.'); return; }
+    var disp = DX_MAX_EVID - _evidenciasCorte.length;
+    if(disp<=0){ alert('Máximo '+DX_MAX_EVID+' archivos por corte.'); return; }
     files = files.slice(0, disp);
     var loading = document.getElementById('evCorteLoading');
     if(loading) loading.style.display='block';
     for(var i=0;i<files.length;i++){
+        /* Las imágenes se comprimen antes de subir; un PDF viaja tal cual, así
+           que ahí sí hay que poner el tope. */
+        if(files[i].size>10*1024*1024){ alert('"'+files[i].name+'" supera 10 MB, se omite.'); continue; }
         var r = await sbSubirEvidencia('cortes', files[i]);
         if(r) _evidenciasCorte.push(r);
     }
     if(loading) loading.style.display='none';
     renderEvidenciasCorte();
 }
+/* Los rótulos "0/10" salen del mismo número que el candado: escritos a mano se
+   quedaban atrás y la pantalla prometía un límite y el código aplicaba otro. */
+document.addEventListener('DOMContentLoaded', function(){
+    document.querySelectorAll('.dx-max-evid').forEach(function(e){ e.textContent = DX_MAX_EVID; });
+});
 function renderEvidenciasCorte(){
     var grid = document.getElementById('evCorteGrid');
     var cnt = document.getElementById('evCorteCount');
     if(cnt) cnt.textContent = _evidenciasCorte.length;
     if(!grid) return;
     grid.innerHTML = _evidenciasCorte.map(function(e,i){
+        /* Un PDF no se puede pintar en un <img>: se muestra como ficha y se abre
+           aparte, igual que en gastos. */
+        var inner = e.pdf
+            ? '<a '+sbAttr(e.url,'href')+' target="_blank" style="display:flex;align-items:center;justify-content:center;width:54px;height:54px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);font-size:22px;text-decoration:none">📄</a>'
+            : '<img '+sbAttr(e.url)+' onclick="event.stopPropagation();etaaxVerFoto(this.src)" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:zoom-in" alt="evidencia">';
         return '<div style="position:relative">'
-            +'<img '+sbAttr(e.url)+' onclick="event.stopPropagation();etaaxVerFoto(this.src)" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:zoom-in" alt="evidencia">'
+            +inner
             +'<button onclick="eliminarEvidenciaCorte('+i+')" title="Quitar" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1">✕</button>'
             +'</div>';
     }).join('');
@@ -4352,6 +4369,11 @@ function verCorte(id) {
             evid.map(function(e){
                 // La URL no se mete en el onclick: si es privada llega firmada DESPUÉS
                 // (sbAttr → data-priv), así que el click la lee del <img> ya resuelto.
+                /* Un PDF no cabe en un <img>: se abre aparte, como en gastos. */
+                if (e.pdf) return '<a '+sbAttr(e.url,'href')+' target="_blank" title="Abrir el PDF" '+
+                    'style="display:flex;align-items:center;justify-content:center;width:72px;height:72px;'+
+                    'border-radius:8px;border:1px solid var(--border);background:var(--surface2);'+
+                    'font-size:26px;text-decoration:none">📄</a>';
                 return '<div onclick="event.stopPropagation();etaaxVerFoto(this.querySelector(\'img\').src)" '+
                     'style="display:block;width:72px;height:72px;border-radius:8px;overflow:hidden;cursor:zoom-in;'+
                     'border:1px solid var(--border);background:var(--surface2)" title="Ver foto completa">'+
@@ -6497,7 +6519,7 @@ function _abrirPuenteGasto(){
     var btn=document.getElementById('btnQrGasto');
     if(btn) btn.textContent='✕ Cerrar escaneo';
     QrPuente.abrir(getNegocioActivo(),'gasto',box,function(foto){
-        if(_evidenciasGasto.length>=6){ alert('Ya tienes 6 archivos en este gasto.'); return; }
+        if(_evidenciasGasto.length>=DX_MAX_EVID){ alert('Ya tienes '+DX_MAX_EVID+' archivos en este gasto.'); return; }
         _evidenciasGasto.push({url:foto.url, path:foto.path, pdf:false, nombre:'foto-celular.jpg'});
         renderEvidenciasGasto();
     });
@@ -7485,8 +7507,8 @@ var _evidenciasGasto = []; // [{url, path, pdf, nombre}] — hasta 6
 async function subirEvidenciasGasto(input){
     var files=Array.prototype.slice.call(input.files);
     input.value='';
-    var disp=6-_evidenciasGasto.length;
-    if(disp<=0){ alert('Máximo 6 archivos por gasto.'); return; }
+    var disp=DX_MAX_EVID-_evidenciasGasto.length;
+    if(disp<=0){ alert('Máximo '+DX_MAX_EVID+' archivos por gasto.'); return; }
     files=files.slice(0,disp);
     var loading=document.getElementById('evGastoLoading');
     if(loading) loading.style.display='block';
