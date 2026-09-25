@@ -132,7 +132,7 @@
                 <div class="cf-section-desc">Alta de colaboradores, roles, nóminas y horarios operativos por sucursal.</div>
             </div>
             <div class="cf-grid">
-                <a class="cf-card" style="cursor:pointer" onclick="abrirTool('staff.html','Catálogo de Staff','👥')">
+                <a class="cf-card" style="cursor:pointer" data-perm="verCatalogo" onclick="abrirTool('staff.html','Catálogo de Staff','👥')">
                     <div class="cf-card-hdr">
                         <div class="cf-card-icon">👥</div>
                         <span class="cf-badge-active">Activo</span>
@@ -141,7 +141,7 @@
                     <div class="cf-card-desc">Personal, roles y permisos de acceso por colaborador y sucursal. Alimenta automáticamente las nóminas.</div>
                     <div class="cf-card-cta">Abrir →</div>
                 </a>
-                <a class="cf-card" style="cursor:pointer" onclick="abrirTool('horarios.html','Horarios Operativos','🗓️')">
+                <a class="cf-card" style="cursor:pointer" data-perm="horarios" onclick="abrirTool('horarios.html','Horarios Operativos','🗓️')">
                     <div class="cf-card-hdr">
                         <div class="cf-card-icon">🗓️</div>
                         <span class="cf-badge-active">Activo</span>
@@ -150,7 +150,7 @@
                     <div class="cf-card-desc">Rol semanal de turnos por puesto y sucursal, con cobertura del día, horas por colaborador y "copiar semana anterior". Vista de cuadrícula o tarjetas.</div>
                     <div class="cf-card-cta">Abrir →</div>
                 </a>
-                <a class="cf-card" style="cursor:pointer" onclick="abrirTool('checklists.html','Checklists Operativos','✅')">
+                <a class="cf-card" style="cursor:pointer" data-perm="checklists" onclick="abrirTool('checklists.html','Checklists Operativos','✅')">
                     <div class="cf-card-hdr">
                         <div class="cf-card-icon">✅</div>
                         <span class="cf-badge-active">Activo</span>
@@ -170,7 +170,7 @@
                 <div class="cf-section-desc">La foto de tu equipo: quién es quién, qué se espera de cada puesto y cómo se mide.</div>
             </div>
             <div class="cf-grid">
-                <a class="cf-card" style="cursor:pointer" onclick="abrirTool('organigrama.html','Organigrama','🧠')">
+                <a class="cf-card" style="cursor:pointer" data-perm="organigrama" onclick="abrirTool('organigrama.html','Organigrama','🧠')">
                     <div class="cf-card-hdr">
                         <div class="cf-card-icon">🧠</div>
                         <span class="cf-badge-active">Activo</span>
@@ -179,7 +179,7 @@
                     <div class="cf-card-desc">Mapa visual de tu organización tipo red neuronal: crea puestos, conéctalos y vincula cada nodo con su perfil.</div>
                     <div class="cf-card-cta">Abrir →</div>
                 </a>
-                <a class="cf-card" style="cursor:pointer" onclick="abrirTool('perfiles-puesto.html','Perfiles de Puesto','📋')">
+                <a class="cf-card" style="cursor:pointer" data-perm="perfiles" onclick="abrirTool('perfiles-puesto.html','Perfiles de Puesto','📋')">
                     <div class="cf-card-hdr">
                         <div class="cf-card-icon">📋</div>
                         <span class="cf-badge-active">Activo</span>
@@ -188,7 +188,7 @@
                     <div class="cf-card-desc">Información general, competencias, salud y funciones de cada puesto. Listos para imprimir o exportar a PDF.</div>
                     <div class="cf-card-cta">Abrir →</div>
                 </a>
-                <a class="cf-card" style="cursor:pointer" onclick="abrirTool('evaluaciones.html','Evaluaciones','📝')">
+                <a class="cf-card" style="cursor:pointer" data-perm="evaluaciones" onclick="abrirTool('evaluaciones.html','Evaluaciones','📝')">
                     <div class="cf-card-hdr">
                         <div class="cf-card-icon">📝</div>
                         <span class="cf-badge-active">Activo</span>
@@ -247,6 +247,33 @@ function toggleNav(){
 /* ── Abrir una herramienta como modal flotante (iframe embebido) ──
    Reusa la página completa (organigrama, perfiles, etc.) en modo ?embed=1,
    que oculta su barra de navegación. Misma origin → comparte sesión/negocio. */
+/* ── PERMISOS DE ESTE HUB (ver ETAAX_SUBPERMS.staff) ─────────────────────────
+   Cada tarjeta lleva su clave en data-perm. La que no se puede no se pinta, y
+   abrirTool se niega aunque la llamen por otro camino: esconder una tarjeta no
+   es negar la herramienta. */
+function _puedeStaff(sub){
+    return (typeof window.etaaxPuedeSub === 'function') ? window.etaaxPuedeSub('staff', sub) : true;
+}
+function _exigeStaff(sub, msg){
+    return (typeof window.etaaxExigeSub === 'function') ? window.etaaxExigeSub('staff', sub, msg) : true;
+}
+function _aplicarPermisosStaffHub(){
+    document.querySelectorAll('.cf-card[data-perm]').forEach(function(a){
+        if(!_puedeStaff(a.getAttribute('data-perm'))) a.style.display='none';
+    });
+}
+document.addEventListener('DOMContentLoaded', function(){
+    _aplicarPermisosStaffHub();
+    window.addEventListener('etaax:permisos', function(){ _aplicarPermisosStaffHub(); });
+});
+
+/* De la página a su permiso: abrirTool recibe el archivo, no la clave. Vive
+   aquí, junto a quien lo usa, y no allá arriba con el resto de los permisos. */
+var STAFF_PERM = {
+    'staff.html':'verCatalogo', 'horarios.html':'horarios', 'checklists.html':'checklists',
+    'organigrama.html':'organigrama', 'perfiles-puesto.html':'perfiles', 'evaluaciones.html':'evaluaciones',
+};
+
 /* Herramienta con la que se abrió la ventana, y sus pantallas de adentro.
    Roles y Permisos NO es otra herramienta: es una sub-pantalla del catálogo de
    staff, a la que se entra navegando el mismo iframe. Sin esto, cerrarla tiraba
@@ -296,6 +323,8 @@ function _tmURL(page){
     return page + (page.indexOf('?')>=0 ? '&' : '?') + q;
 }
 function abrirTool(page, titulo, icono){
+    var _clave = STAFF_PERM[String(page).split('/').pop().split('?')[0]];
+    if(_clave && !_exigeStaff(_clave, 'No puedes abrir esta herramienta.')) return;
     var bg=document.getElementById('toolModal');
     var frame=document.getElementById('tmFrame');
     var loading=document.getElementById('tmLoading');

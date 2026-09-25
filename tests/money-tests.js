@@ -8056,15 +8056,21 @@ console.log('\n══ BC9 · El permiso manda, no el CSS ══');
     test('…ni el del gasto', () =>
         eq(/var _sucG=\(_rowSucG && _rowSucG\.style\.display/.test(dia), false, 'sin atajo'));
 
-    /* El permiso es fail-open a propósito (prendido salvo que lo apaguen), y las
-       cuatro funciones tienen que leerlo IGUAL: si una usara `!!perms.x`, ese
-       módulo quedaría cerrado para todos en cuanto alguien no lo declarara. */
+    /* Las cuatro tenían su propia copia de la regla y cualquiera podía quedarse
+       atrás. Ahora todas preguntan a la misma —etaaxPuedeReasignar— y la regla
+       vive en page-guard, donde es fail-open a propósito: si una usara
+       `!!perms.x`, ese módulo quedaría cerrado para todos en cuanto alguien no
+       lo declarara. */
     ['administrativo/diario.html','administrativo/clientes.html','recetas/index.html','recetas/insumos.js']
     .forEach(function(f){
         const src = fs.readFileSync(path.join(RAIZ, f), 'utf8');
-        test(f + ': lee el permiso como fail-open', () =>
-            eq(/perms\.cambiarSucursal\s*!==\s*false/.test(src), true, 'mismo criterio'));
+        test(f + ': pregunta a la regla compartida', () =>
+            eq(src.indexOf('etaaxPuedeReasignar(') > -1 &&
+               /perms\.cambiarSucursal/.test(src) === false, true, 'sin copia propia'));
     });
+    const pgR = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8');
+    test('…y esa regla es fail-open', () =>
+        eq(/perms\.cambiarSucursal\s*!==\s*false/.test(pgR), true, 'prendido salvo que lo apaguen'));
 }
 
 /* ═══════════ SUITE BD0 · LA COMISIÓN CORREGIDA LLEGA AL SALDO POR CUENTA ════
@@ -8595,8 +8601,11 @@ console.log('\n══ BD5 · Escandallos: los diez permisos, conectados ══')
     /* ── El catálogo: los diez existen y ninguno se anuncia como pendiente ── */
     const SUB = CON_TODO.ctx.window.ETAAX_SUBPERMS.recetas;
     const CLAVES = ['verCatalogo','crear','crearSub','editar','imprimir',
-                    'verCostos','caratula','caratulaImprimir','eliminar','cambios'];
-    test('están los diez permisos de Escandallos', () =>
+                    'verCostos','caratula','caratulaImprimir','eliminar','cambios',
+                    /* El de reasignar a otra sucursal dejó de ser un interruptor
+                       general de la app y ahora vive en cada módulo. */
+                    'cambiarSucursal'];
+    test('están los once permisos de Escandallos', () =>
         eq(SUB.map(x => x.key).join(','), CLAVES.join(','), 'catálogo'));
     test('ninguno dice ya "aún no aplica"', () =>
         eq(SUB.some(x => x.pendiente), false, 'todos conectados'));
@@ -8836,6 +8845,9 @@ console.log('\n══ BD6 · La ventana de Staff y sus sub-pantallas ══');
                                 document:{ title:'Permisos · ETAAX' } };
         const c = {
             console, JSON, Object, Array, String, Number, Date, setTimeout, encodeURIComponent,
+            /* El hub pregunta por permisos antes de abrir una herramienta; aquí
+               se deja pasar todo, que lo que se prueba es la navegación. */
+            _puedeStaff: () => true, _exigeStaff: () => true,
             localStorage:{ getItem:()=>'', setItem(){}, removeItem(){} },
             sessionStorage:(function(){ const m={}; return { _m:m,
                 getItem:k=>(k in m?m[k]:null), setItem(k,v){ m[k]=String(v); }, removeItem(k){ delete m[k]; } }; })(),
@@ -8843,7 +8855,7 @@ console.log('\n══ BD6 · La ventana de Staff y sus sub-pantallas ══');
         };
         c.window = c;
         vm.createContext(c);
-        const i = hub.indexOf('/* Herramienta con la que se abrió la ventana');
+        const i = hub.indexOf('/* De la página a su permiso: abrirTool recibe el archivo');
         const fin = hub.indexOf("document.getElementById('toolModal').addEventListener");
         vm.runInContext(hub.slice(i, fin), c, { filename:'staff-hub' });
         return { ctx:c, nodo, frame };
@@ -9870,9 +9882,10 @@ console.log('\n══ BE4 · Insumos: los ocho permisos, conectados ══');
 
     /* ── El catálogo ── */
     const SUB = CON_TODO.ctx.window.ETAAX_SUBPERMS.insumos;
-    test('están los ocho permisos de Insumos', () =>
+    test('están los nueve permisos de Insumos', () =>
         eq(SUB.map(x => x.key).join(','),
-           'crear,editar,eliminar,verCostos,verCosteo,catalogoEtaax,catalogoNegocio,importar', 'catálogo'));
+           'crear,editar,eliminar,verCostos,verCosteo,catalogoEtaax,catalogoNegocio,importar,cambiarSucursal',
+           'catálogo'));
     test('ninguno dice ya "aún no aplica"', () => eq(SUB.some(x => x.pendiente), false, 'conectados'));
     test('"Ver costeos" existe y se explica', () => {
         const v = SUB.find(x => x.key === 'verCosteo');
@@ -10142,9 +10155,9 @@ console.log('\n══ BE6 · Inventarios, Requisiciones y la regla compartida �
         Object.keys(SUB).forEach(m => (SUB[m]||[]).forEach(x => { if (x.pendiente) pend.push(m+'.'+x.key); }));
         return eq(pend.join(', '), '', 'todos conectados');
     });
-    test('…y siguen siendo los mismos módulos, con sus llaves', () =>
+    test('…y los módulos con desglose son los que deben', () =>
         eq(Object.keys(SUB).sort().join(','),
-           'gastos,insumos,inventarios,recetas,requisiciones,ventas', 'seis módulos'));
+           'clientes,gastos,insumos,inventarios,recetas,requisiciones,staff,ventas', 'ocho módulos'));
 
     /* ── Inventarios ── */
     /* ¿La función pide su permiso, y ANTES de hacer nada? Se busca por texto y no
@@ -10322,19 +10335,20 @@ console.log('\n══ BE7 · Control Administrativo: una tarjeta, un permiso ═
 
     /* ── Cambiar de sucursal: uno por módulo ─────────────────────────────────
        Se corre la regla REAL contra permisos de mentira. */
+    /* La regla vive en page-guard y la comparten los cinco módulos que tienen
+       selector de sucursal. Se corre LA DE VERDAD, no una copia del test. */
     const reglaSrc = (() => {
-        const i = dia.indexOf('function _puedeReasignar(modulo){');
-        return dia.slice(i, dia.indexOf('\n}', i) + 2);
+        const i = pg.indexOf('window.etaaxPuedeReasignar = function (modulo) {');
+        return pg.slice(i, pg.indexOf('\n};', i) + 3);
     })();
     function reasignar(permisos, modulo) {
         const c = { console, JSON, Object, String,
             localStorage:{ getItem:(k)=> k==='etaax_ctx'
-                ? JSON.stringify({ ctxType:'staff', rol:'cajera', negId:'n1' }) : 'n1' },
-            getNegocioActivo:()=>'n1',
-            etaaxPermisosRol:()=>permisos };
-        c.window = c; c.window.etaaxPermisosRol = c.etaaxPermisosRol;
+                ? JSON.stringify({ ctxType:'staff', rol:'cajera', negId:'n1' }) : 'n1' } };
+        c.window = c;
+        c.window.etaaxPermisosRol = () => permisos;
         vm.createContext(c); vm.runInContext(reglaSrc, c, { filename:'reasignar' });
-        return c._puedeReasignar(modulo);
+        return c.window.etaaxPuedeReasignar(modulo);
     }
     test('el permiso del módulo manda sobre el general', () =>
         eq(reasignar({ cambiarSucursal:true, ventas:{ cambiarSucursal:false } }, 'ventas'),
@@ -10358,6 +10372,17 @@ console.log('\n══ BE7 · Control Administrativo: una tarjeta, un permiso ═
         eq(dia.indexOf("function _puedeCambiarSuc(){ return _puedeReasignar('ventas'); }") > -1 &&
            dia.indexOf("function gPuedeCambiarSuc(){ return _puedeReasignar('gastos'); }") > -1,
            true, 'cada quien el suyo'));
+    /* Y los otros tres módulos con selector, cada uno con el suyo. */
+    [['recetas/index.html','recetas'], ['recetas/insumos.js','insumos'],
+     ['administrativo/clientes.html','clientes']].forEach(function (par) {
+        test(par[0] + ' pide el de ' + par[1], () =>
+            eq(fs.readFileSync(path.join(RAIZ, par[0]), 'utf8')
+                .indexOf("etaaxPuedeReasignar('" + par[1] + "')") > -1, true, 'el suyo'));
+    });
+    ['recetas','insumos','clientes'].forEach(function (m) {
+        test(m + ' declara su propio cambio de sucursal', () =>
+            eq((SUB[m] || []).some(x => x.key === 'cambiarSucursal'), true, 'declarado'));
+    });
     ['ventas','gastos'].forEach(function (m) {
         test(m + ' declara su propio cambio de sucursal', () =>
             eq((SUB[m] || []).some(x => x.key === 'cambiarSucursal'), true, 'declarado'));
@@ -10387,17 +10412,144 @@ console.log('\n══ BE7 · Control Administrativo: una tarjeta, un permiso ═
         return eq(per.slice(v, v + 200).indexOf('Ventas y Gastos Diarios') > -1 &&
                   per.slice(g, g + 200).indexOf('Ventas y Gastos Diarios') > -1, true, 'ubicados');
     });
-    test('el interruptor general ya no promete cortes ni gastos', () => {
-        const i = per.indexOf("key:'cambiarSucursal'");
-        const t = per.slice(i, i + 220);
-        return eq(t.indexOf('Recetas, insumos y clientes') > -1, true, 'honesto');
-    });
+    /* EL QUE SE FUE: "Acciones especiales · Cambiar registros de sucursal" era UN
+       interruptor para toda la app, y por eso no acababa de servir. Ya no se
+       ofrece: cada herramienta trae el suyo. */
+    test('el interruptor general ya no se ofrece en la pantalla', () =>
+        eq(per.indexOf("key:'cambiarSucursal'") === -1 &&
+           per.indexOf("modulos:['cambiarSucursal']") === -1, true, 'retirado'));
+    test('…pero lo ya configurado sigue respetándose por detrás', () =>
+        eq(reasignar({ cambiarSucursal:false }, 'recetas'), false, 'compatible'));
     /* Ningún sub-permiso nuevo puede nacer marcado: si se declara, se conecta. */
     test('ninguno de los nuevos se anuncia como pendiente', () => {
         const pend = [];
         ['ventas','gastos'].forEach(m => (SUB[m]||[]).forEach(x => { if (x.pendiente) pend.push(m+'.'+x.key); }));
         return eq(pend.join(', '), '', 'conectados');
     });
+}
+
+/* ═══════════ SUITE BE8 · GESTIÓN DE STAFF, HERRAMIENTA POR HERRAMIENTA ═════
+   El hub de Staff tiene seis herramientas y todas colgaban de un interruptor:
+   quien podía ver el rol de turnos podía también abrir el catálogo, donde viven
+   los sueldos, la CLABE y el expediente completo.
+
+   El Catálogo se desglosa fino porque ahí está lo delicado: dar de alta no es
+   lo mismo que editar el sueldo de alguien, dar de baja no es lo mismo que
+   BORRAR su expediente. Las otras cinco llevan un interruptor cada una.       */
+console.log('\n══ BE8 · Gestión de Staff, herramienta por herramienta ══');
+{
+    const pg  = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8');
+    const hub = fs.readFileSync(path.join(RAIZ, 'administrativo/staff-hub.html'), 'utf8');
+    const stf = fs.readFileSync(path.join(RAIZ, 'administrativo/staff.html'), 'utf8');
+
+    const SUB = (() => {
+        const c = { console, JSON, Object, Array, String, Date, setTimeout,
+            localStorage:{ getItem(){ return null; }, setItem(){}, removeItem(){} },
+            location:{ pathname:'/hub.html', search:'' }, document:{ addEventListener(){} } };
+        c.window = c; c.window.addEventListener = () => {};
+        vm.createContext(c); vm.runInContext(pg, c, { filename:'page-guard.js' });
+        return c.window.ETAAX_SUBPERMS.staff || [];
+    })();
+
+    /* ── El desglose del catálogo, tal como se pidió ── */
+    const CAT = ['verCatalogo','crear','editar','salarioMinimo','bajas','darBaja','eliminar'];
+    CAT.forEach(function (k) {
+        test('el catálogo declara «' + k + '»', () => eq(SUB.some(x => x.key === k), true, 'declarado'));
+    });
+    /* Las otras cinco herramientas del hub. */
+    const HERR = ['horarios','checklists','organigrama','perfiles','evaluaciones'];
+    HERR.forEach(function (k) {
+        test('el hub declara la herramienta «' + k + '»', () => eq(SUB.some(x => x.key === k), true, 'declarada'));
+    });
+    /* Reglamento Interno NO: su pantalla todavía no existe, y un permiso que no
+       gobierna nada es una mentira silenciosa. */
+    test('Reglamento Interno no se declara: su pantalla aún no existe', () =>
+        eq(SUB.some(x => x.key === 'reglamento'), false, 'sin prometer'));
+    test('ninguno nace marcado como pendiente', () =>
+        eq(SUB.some(x => x.pendiente), false, 'conectados'));
+
+    /* ── El hub: la tarjeta que no se puede, no se pinta ── */
+    const MAPA = (() => {
+        const i = hub.indexOf('var STAFF_PERM = {');
+        const t = hub.slice(i, hub.indexOf('};', i));
+        const m = {}; t.replace(/'([\w.-]+)':'(\w+)'/g, (_, a, b) => { m[a] = b; return ''; });
+        return m;
+    })();
+    [['staff.html','verCatalogo'], ['horarios.html','horarios'], ['checklists.html','checklists'],
+     ['organigrama.html','organigrama'], ['perfiles-puesto.html','perfiles'],
+     ['evaluaciones.html','evaluaciones']].forEach(function (par) {
+        test('abrir ' + par[0] + ' pide «' + par[1] + '»', () => eq(MAPA[par[0]], par[1], 'mapeada'));
+    });
+    test('cada tarjeta del hub lleva su clave escrita', () => {
+        const cartas = [...hub.matchAll(/class="cf-card"[^>]*data-perm="(\w+)"/g)].map(m => m[1]);
+        return eq(cartas.length, 6, cartas.join(','));
+    });
+    test('…y la que no se puede, se esconde', () =>
+        eq(/data-perm[\s\S]{0,120}style\.display='none'/.test(hub), true, 'escondida'));
+    /* Esconder la tarjeta no es negar la herramienta. */
+    test('abrirTool se niega, no solo se esconde la tarjeta', () => {
+        const i = hub.indexOf('function abrirTool(page, titulo, icono){');
+        return eq(hub.slice(i, i + 260).indexOf('_exigeStaff(_clave') > -1, true, 'con puerta');
+    });
+
+    /* ── El catálogo: cada acción, su llave ── */
+    const G = (fn, clave) => {
+        const i = stf.indexOf('function ' + fn + '(');
+        if (i < 0) return false;
+        const abre = stf.indexOf('{', i);
+        return stf.slice(abre + 1, abre + 400).indexOf("'" + clave + "'") > -1;
+    };
+    [['deleteStaff','eliminar'], ['abrirBajas','bajas'], ['reactivarStaff','bajas'],
+     ['darDeBajaStaff','darBaja'], ['_abrirNomParams','salarioMinimo']]
+    .forEach(function (par) {
+        test('catálogo: ' + par[0] + ' pide «' + par[1] + '»', () => eq(G(par[0], par[1]), true, 'con candado'));
+    });
+    /* Dar de alta y editar son DOS permisos: hay negocios donde la encargada
+       captura al personal nuevo pero no toca el sueldo de nadie. */
+    test('abrir la ficha pide crear o editar, según sea nueva o no', () => {
+        const i = stf.indexOf('function openModal(id)');
+        return eq(stf.slice(i, i + 420).indexOf("_exigeStaff(id ? 'editar' : 'crear'") > -1, true, 'según');
+    });
+    /* Y que el candado DECIDA: dejarlo escrito pero puenteado —un `if (true ||`
+       delante— lo deja de adorno, y una prueba que solo busca el texto lo
+       celebraría igual. */
+    test('…y guardar también, que es por donde entra el cambio', () => {
+        const i = stf.indexOf('async function saveStaff()');
+        const t = stf.slice(i, i + 460);
+        return eq(/if \(!_exigeStaff\(_esNuevoSt \? 'crear' : 'editar'[\s\S]{0,140}?\)\) return;/.test(t),
+                  true, 'al guardar, y corta');
+    });
+    test('…y lo decide por el campo que de verdad existe', () => {
+        const i = stf.indexOf('async function saveStaff()');
+        return eq(stf.slice(i, i + 300).indexOf("getElementById('fId')") > -1 &&
+                  stf.indexOf("var editId = document.getElementById('fId').value") > -1,
+                  true, 'mismo campo que el guardado');
+    });
+    /* El menú de la fila se arma con lo que se puede: ofrecer "Eliminar" para
+       que luego salte un aviso es prometer y no cumplir. */
+    test('el menú de la fila no ofrece lo que el rol no puede', () => {
+        const i = stf.indexOf('function _menuStaff(ev, id)');
+        const t = stf.slice(i, i + 1800);
+        return eq(t.indexOf("_puedeStaff('editar')") > -1 && t.indexOf("_puedeStaff('eliminar')") > -1 &&
+                  t.indexOf("_puedeStaff('darBaja')") > -1 && t.indexOf("_puedeStaff('bajas')") > -1,
+                  true, 'armado');
+    });
+    test('…y no deja una raya separadora suelta si no quedó nada abajo', () => {
+        const i = stf.indexOf('function _menuStaff(ev, id)');
+        return eq(stf.slice(i, i + 1800).indexOf('if (baja || borrar) items.push(') > -1, true, 'sin rayas huérfanas');
+    });
+    [['crear','btnAgregarColaborador'], ['salarioMinimo','btnSalarioMinimo'], ['bajas','btnBajas']]
+    .forEach(function (par) {
+        test('el botón de ' + par[0] + ' se puede esconder', () =>
+            eq(stf.indexOf("id=\"" + par[1] + "\"") > -1 &&
+               stf.indexOf("['" + par[0] + "','" + par[1] + "']") > -1, true, 'con id'));
+    });
+    /* Ojo con no confundir los dos candados de esta pantalla. */
+    test('el permiso es distinto del candado de contraseña', () =>
+        eq(stf.indexOf('¿eres tú?') > -1 && stf.indexOf('¿te toca?') > -1, true, 'dos cosas distintas'));
+    test('se vuelve a aplicar cuando bajan los permisos de la nube', () =>
+        eq(stf.indexOf("window.addEventListener('etaax:permisos'") > -1 &&
+           hub.indexOf("window.addEventListener('etaax:permisos'") > -1, true, 'al vuelo'));
 }
 
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════

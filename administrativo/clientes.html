@@ -254,11 +254,7 @@ function _scopeSuc(lista){
     return (lista||[]).filter(function(x){ return (x && (x.sucursalId || 'suc_principal')) === s; });
 }
 function _puedeCambiarSuc(){
-    var ctx; try{ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null');}catch(e){}
-    if(!ctx || ctx.ctxType!=='staff') return true;
-    if((ctx.rol||'')==='admin') return true;
-    var perms=window.etaaxPermisosRol?etaaxPermisosRol(ctx.negId||getNegocioActivo(),ctx.rol):{};
-    return perms.cambiarSucursal!==false;
+    return (typeof window.etaaxPuedeReasignar==='function') ? window.etaaxPuedeReasignar('clientes') : true;
 }
 function _pobSucursalCliente(sucId){
     var sel=document.getElementById('clSucursal'), row=document.getElementById('row-cl-sucursal');

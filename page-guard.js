@@ -39,8 +39,15 @@ window.ETAAX_PERM_DEFAULTS = {
     otro:           { recetas:false, insumos:false, inventarios:false, requisiciones:false, ventas:false, ventas_productos:false, gastos:false, menu:false, proveedores:false, clientes:false, staff:false, permisos:false, financiero:false, config:false },
 };
 
-/* Acción transversal "cambiar de sucursal" (reasignar gastos/cortes/recetas/insumos):
-   permitida por defecto en todos los roles; el dueño la apaga por rol en Permisos. */
+/* "Cambiar de sucursal" YA NO ES UNA ACCIÓN GENERAL. Era un interruptor único
+   para toda la app y por eso no acababa de servir: apagarlo para que la cajera
+   no moviera cortes le quitaba también las recetas y los insumos, y prenderlo se
+   los daba todos. Ahora cada herramienta trae el suyo —ventas, gastos, recetas,
+   insumos, clientes— y se apaga donde estorba, no en todas partes.
+
+   La clave general se SIGUE escribiendo aquí, en falso, por una sola razón: es
+   el respaldo de los negocios que ya la tenían configurada. Donde un módulo no
+   declare la suya, manda esta. No se muestra en la pantalla de permisos. */
 Object.keys(window.ETAAX_PERM_DEFAULTS).forEach(function (rol) {
     if (window.ETAAX_PERM_DEFAULTS[rol].cambiarSucursal === undefined)
         window.ETAAX_PERM_DEFAULTS[rol].cambiarSucursal = true;
@@ -90,6 +97,7 @@ window.ETAAX_SUBPERMS = {
         { key:'caratulaImprimir', label:'Imprimir carátula de costos', sub:'Sacar el comparativo en papel o PDF' },
         { key:'eliminar',         label:'Eliminar recetas / sub-recetas', sub:'Borrar del catálogo' },
         { key:'cambios',          label:'Ver cambios recientes',       sub:'Qué se modificó por sucursal y qué sube al catálogo global' },
+        { key:'cambiarSucursal',label:'Cambiar la receta de sucursal', sub:'Reasignar un escandallo a otra sucursal' },
     ],
     /* Insumos: los ocho CONECTADOS. Igual que Escandallos, cada uno lo obedecen
        la pantalla (esconde el botón) y la función (se niega aunque la llamen por
@@ -103,6 +111,7 @@ window.ETAAX_SUBPERMS = {
         { key:'catalogoEtaax',  label:'Traer del catálogo ETAAX', sub:'Copiar insumos del catálogo de la plataforma' },
         { key:'catalogoNegocio',label:'Copiar de otra sucursal',  sub:'Traer insumos que ya existen en el negocio' },
         { key:'importar',       label:'Importar por archivo',     sub:'Alta masiva desde Excel o CSV' },
+        { key:'cambiarSucursal',label:'Cambiar el insumo de sucursal', sub:'Reasignar un insumo a otra sucursal' },
     ],
     inventarios: [
         { key:'capturar',   label:'Capturar inventario',      sub:'Abrir un inventario y contar existencias por área' },
@@ -122,6 +131,34 @@ window.ETAAX_SUBPERMS = {
        Las otras cuatro tarjetas de la misma pantalla: gastos del día, gastos
        mayores, nóminas y gastos fijos. Nóminas y fijos NO tenían interruptor:
        quien podía capturar un gasto de $80 podía pagar la nómina completa. */
+    /* Clientes solo necesita uno por ahora: el resto del módulo se gobierna con
+       el interruptor del módulo entero. */
+    clientes: [
+        { key:'cambiarSucursal',label:'Cambiar el cliente de sucursal', sub:'Reasignar un cliente a otra sucursal' },
+    ],
+    /* ── GESTIÓN DE STAFF ────────────────────────────────────────────────────
+       El hub tiene seis herramientas; la primera —el Catálogo— es la que se
+       desglosa, porque ahí viven los sueldos, los datos bancarios y el
+       expediente. Las otras cinco llevan por ahora un interruptor cada una: se
+       afinan cuando toque, y mientras tanto el que existe SÍ manda.
+
+       Reglamento Interno no aparece a propósito: su pantalla todavía no existe
+       y un permiso que no gobierna nada es una mentira silenciosa. Entra el día
+       que entre el módulo. */
+    staff: [
+        { key:'verCatalogo',  label:'Entrar al catálogo de staff', sub:'Ver la lista del personal. Sin esto, no abre la tarjeta' },
+        { key:'crear',        label:'Agregar colaborador',       sub:'Dar de alta a alguien nuevo' },
+        { key:'editar',       label:'Editar colaborador',        sub:'Cambiar sus datos, su sueldo y su expediente' },
+        { key:'salarioMinimo',label:'Definir el salario mínimo', sub:'El sueldo con el que nacen todos los nuevos' },
+        { key:'bajas',        label:'Ver y editar bajas',        sub:'El archivo de quien ya no está, y reactivarlo' },
+        { key:'darBaja',      label:'Dar de baja a un colaborador', sub:'Sale de la operación; su expediente se conserva' },
+        { key:'eliminar',     label:'Eliminar un colaborador',   sub:'Lo ÚNICO irreversible: borra el expediente completo' },
+        { key:'horarios',     label:'Horarios operativos',       sub:'El rol semanal de turnos por puesto y sucursal' },
+        { key:'checklists',   label:'Checklists operativos',     sub:'Rutinas de apertura, cierre y limpiezas' },
+        { key:'organigrama',  label:'Organigrama',               sub:'El mapa de la organización' },
+        { key:'perfiles',     label:'Perfiles de puesto',        sub:'Qué se espera de cada puesto y cómo se mide' },
+        { key:'evaluaciones', label:'Evaluaciones',              sub:'Formularios de desempeño y sus resultados' },
+    ],
     gastos: [
         { key:'capturar',       label:'Registrar gastos diarios',  sub:'La tarjeta de egresos operativos del día' },
         { key:'verCajaChica',   label:'Ver gastos de caja chica',  sub:'Gastos pagados desde caja chica' },
@@ -297,6 +334,21 @@ window.etaaxExigeSub = function (modulo, sub, msg) {
     alert('🔒 ' + (msg || 'Tu rol no tiene permiso para esta acción.') +
           '\n\nPídeselo al administrador del negocio, en Roles y Permisos.');
     return false;
+};
+
+/* ¿Puede reasignar un registro a otra sucursal, EN ESTE MÓDULO?
+   Manda el permiso del módulo; si no está puesto, decide el general de antes —
+   así lo que ya estaba configurado no cambia de comportamiento. Fail-open. */
+window.etaaxPuedeReasignar = function (modulo) {
+    var ctx = null;
+    try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch (e) {}
+    if (!ctx || ctx.ctxType !== 'staff') return true;
+    if ((ctx.rol || '') === 'admin') return true;
+    if (typeof window.etaaxPermisosRol !== 'function') return true;
+    var perms = window.etaaxPermisosRol(ctx.negId || localStorage.getItem('etaax_negocio_activo'), ctx.rol) || {};
+    var m = perms[modulo];
+    if (m && typeof m === 'object' && 'cambiarSucursal' in m) return m.cambiarSucursal !== false;
+    return perms.cambiarSucursal !== false;
 };
 
 window.etaaxPermisosRol = function (negId, rol) {

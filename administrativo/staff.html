@@ -333,13 +333,13 @@
                         <button class="btn-ghost" onclick="_irAPermisos()"
                             title="Acceso restringido — requiere contraseña de administrador"
                             style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">🔐 Roles y Permisos</button>
-                        <button class="btn-ghost" onclick="_abrirNomParams()"
+                        <button class="btn-ghost" id="btnSalarioMinimo" onclick="_abrirNomParams()"
                             title="Acceso restringido — requiere contraseña de administrador"
                             style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">💵 Definir salario mínimo</button>
                         <button class="btn-ghost" id="btnBajas" onclick="abrirBajas()"
                             title="Colaboradores dados de baja — el histórico se conserva"
                             style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">🗂️ Bajas</button>
-                        <button class="btn-primary" onclick="openModal()">+ Agregar colaborador</button>
+                        <button class="btn-primary" id="btnAgregarColaborador" onclick="openModal()">+ Agregar colaborador</button>
                     </div>
                 </div>
 
@@ -1105,6 +1105,11 @@ function renderTable() {
 // agregar o editar un colaborador requiere la contraseña del administrador
 // (gerente o dueño) en CADA acción.
 function openModal(id) {
+    /* Dos permisos distintos: dar de alta y modificar a alguien que ya está.
+       Hay negocios donde la encargada captura al personal nuevo pero no toca
+       el sueldo de nadie. */
+    if (!_exigeStaff(id ? 'editar' : 'crear',
+        id ? 'No puedes editar colaboradores.' : 'No puedes dar de alta colaboradores.')) return;
     /* Crear NO pide clave: dar de alta gente es la tarea del día y escribir la
        contraseña en cada alta es exactamente la lata de la que se quejó Edwin.
        Editar sí — ahí es donde se ven y se cambian sueldos y datos bancarios. */
@@ -1493,6 +1498,7 @@ function closeModal() {
 }
 
 async function deleteStaff(id) {
+    if (!_exigeStaff('eliminar', 'No puedes eliminar colaboradores.')) return;
     _pedirClaveAdmin('Eliminar colaborador', async function() {
         await save(load().filter(function(s){ return s.id !== id; }));
         renderAll();
@@ -1500,6 +1506,10 @@ async function deleteStaff(id) {
 }
 
 async function saveStaff() {
+    /* Aquí se decide: si es alguien nuevo pide CREAR; si ya existía, EDITAR. */
+    var _esNuevoSt = !((document.getElementById('fId') || {}).value);
+    if (!_exigeStaff(_esNuevoSt ? 'crear' : 'editar',
+        _esNuevoSt ? 'No puedes dar de alta colaboradores.' : 'No puedes editar colaboradores.')) return;
     var nombre  = document.getElementById('fNombre').value.trim();
     var puesto  = document.getElementById('fPuesto').value.trim();
     var rol     = document.getElementById('fRol').value;
@@ -1827,6 +1837,7 @@ function _pintarBotonBajas(){
     b.style.display = '';
 }
 function abrirBajas(){
+    if (!_exigeStaff('bajas', 'No puedes ver el archivo de bajas.')) return;
     document.getElementById('bajasQ').value = '';
     _pintarBajas();
     document.getElementById('modalBajas').classList.add('open');
@@ -1860,6 +1871,7 @@ function _pintarBajas(){
 /* Reactivar NO pide clave: devolver a alguien a la lista no destruye nada y es
    justo lo que se viene a hacer aquí. Borrar de verdad sigue estando en el ⋯. */
 function reactivarStaff(id){
+    if (!_exigeStaff('bajas', 'No puedes reactivar colaboradores.')) return;
     var data = load();
     var i = data.findIndex(function(x){ return x.id===id; });
     if (i < 0) return;
@@ -1870,6 +1882,7 @@ function reactivarStaff(id){
 /* Dar de baja desde el menú ⋯: el camino corto para lo que antes obligaba a
    entrar al formulario, cambiar el estado y guardar. */
 function darDeBajaStaff(id){
+    if (!_exigeStaff('darBaja', 'No puedes dar de baja colaboradores.')) return;
     var data = load();
     var i = data.findIndex(function(x){ return x.id===id; });
     if (i < 0) return;
@@ -1938,16 +1951,19 @@ function _menuStaff(ev, id) {
         'top:' + Math.min(r.bottom + 6, window.innerHeight - 160) + 'px;left:' + Math.max(10, r.right - 190) + 'px';
     var q = id.replace(/'/g, "\\'");
     var s = load().find(function (x) { return x.id === id; }) || {};
-    m.innerHTML =
-        _miStaff('👁', 'Ver expediente', "verExpediente('" + q + "')") +
-        _miStaff('✏️', 'Editar', "openModal('" + q + "')") +
-        '<div style="height:1px;background:var(--border);margin:5px 2px"></div>' +
-        (_esBaja(s)
-            ? _miStaff('↩', 'Reactivar', "reactivarStaff('" + q + "')")
-            : _miStaff('🗂️', 'Dar de baja', "darDeBajaStaff('" + q + "')")) +
-        /* Eliminar es lo ÚNICO irreversible aquí, y por eso está separado de
-           "dar de baja": la baja conserva el expediente, esto lo borra. */
-        _miStaff('🗑️', 'Eliminar del todo', "deleteStaff('" + q + "')", true);
+    /* El menú se arma con lo que este rol puede hacer: ofrecer "Eliminar" para
+       que luego salte un aviso de permiso es prometer y no cumplir. */
+    var items = [_miStaff('👁', 'Ver expediente', "verExpediente('" + q + "')")];
+    if (_puedeStaff('editar')) items.push(_miStaff('✏️', 'Editar', "openModal('" + q + "')"));
+    var baja = _esBaja(s)
+        ? (_puedeStaff('bajas')   ? _miStaff('↩', 'Reactivar', "reactivarStaff('" + q + "')") : '')
+        : (_puedeStaff('darBaja') ? _miStaff('🗂️', 'Dar de baja', "darDeBajaStaff('" + q + "')") : '');
+    /* Eliminar es lo ÚNICO irreversible aquí, y por eso está separado de
+       "dar de baja": la baja conserva el expediente, esto lo borra. */
+    var borrar = _puedeStaff('eliminar')
+        ? _miStaff('🗑️', 'Eliminar del todo', "deleteStaff('" + q + "')", true) : '';
+    if (baja || borrar) items.push('<div style="height:1px;background:var(--border);margin:5px 2px"></div>');
+    m.innerHTML = items.join('') + baja + borrar;
     document.body.appendChild(m);
     setTimeout(function () { document.addEventListener('click', _cerrarMenusStaff, { once: true }); }, 0);
 }
@@ -2173,6 +2189,25 @@ function esc(s) {
    ELIMINAR queda fuera de la gracia: siempre pide clave, siempre. Es lo único
    irreversible de esta pantalla.
    Y crear NO pide nada — dar de alta gente es la tarea del día. */
+/* ── PERMISOS DEL CATÁLOGO (ver ETAAX_SUBPERMS.staff) ────────────────────────
+   Aquí viven los sueldos, los datos bancarios y el expediente completo, así que
+   se desglosa fino. La regla es la compartida de page-guard; aquí solo se le
+   pone el nombre del módulo. Ojo: esto es DISTINTO del candado de contraseña de
+   abajo — ese pregunta "¿eres tú?", esto pregunta "¿te toca?". */
+function _puedeStaff(sub){
+    return (typeof window.etaaxPuedeSub === 'function') ? window.etaaxPuedeSub('staff', sub) : true;
+}
+function _exigeStaff(sub, msg){
+    return (typeof window.etaaxExigeSub === 'function') ? window.etaaxExigeSub('staff', sub, msg) : true;
+}
+function _aplicarPermisosStaff(){
+    [['crear','btnAgregarColaborador'], ['salarioMinimo','btnSalarioMinimo'], ['bajas','btnBajas']]
+        .forEach(function(par){
+            if(_puedeStaff(par[0])) return;
+            var b=document.getElementById(par[1]); if(b) b.style.display='none';
+        });
+}
+
 var _GRACIA_MS = 5 * 60 * 1000;
 /* La gracia vive en la PESTAÑA, no en la variable: Roles y Permisos se abre
    navegando esta misma ventana, y al volver la página se recarga. Con la gracia
@@ -2219,6 +2254,8 @@ var _arrancado = false;
 async function _arrancarCatalogo() {
     if (_arrancado) return;
     _arrancado = true;
+    _aplicarPermisosStaff();
+    window.addEventListener('etaax:permisos', function(){ _aplicarPermisosStaff(); renderAll(); });
     var negId = getNegocioActivo();
     if (window.NominaParams) { try { await NominaParams.sync(negId); } catch(e){} }
     await syncFromDB();
@@ -2270,6 +2307,7 @@ async function _reloadStaffRT() {
     } catch(e){}
 }
 function _abrirNomParams() {
+    if (!_exigeStaff('salarioMinimo', 'No puedes definir el salario mínimo.')) return;
     /* Fija el sueldo con el que nacen TODOS los colaboradores nuevos: tocarlo
        sin querer se paga en la nómina de la quincena siguiente. */
     _gateStaff('Definir salario mínimo', function () {

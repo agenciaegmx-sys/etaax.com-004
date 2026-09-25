@@ -337,7 +337,6 @@ var MODULES = [
     { key:'permisos',      label:'Roles y Permisos',      icon:'🔐', sub:'Control de acceso por perfil' },
     { key:'financiero',    label:'Financiero',            icon:'📊', sub:'Costos, márgenes y análisis' },
     { key:'config',        label:'Configuración',         icon:'⚙️', sub:'Ajustes generales del negocio' },
-    { key:'cambiarSucursal', label:'Cambiar registros de sucursal', icon:'📍', sub:'Recetas, insumos y clientes. Los cortes y los gastos tienen el suyo, dentro de su módulo' },
 ];
 
 /* ── CATEGORÍAS (agrupación visual, igual que el nav) ── */
@@ -349,7 +348,10 @@ var CATEGORIAS = [
     { label:'Aprende y Analiza',     modulos:['ventas_productos'] },
     { label:'Finanzas',              modulos:['financiero'] },
     { label:'Ajustes',               modulos:['config'] },
-    { label:'Acciones especiales',   modulos:['cambiarSucursal'] },
+    /* "Acciones especiales · Cambiar registros de sucursal" se retiró: era UN
+       interruptor para toda la app y por eso no servía — apagarlo para que la
+       cajera no moviera cortes le quitaba también las recetas y los insumos.
+       Ahora cada herramienta trae el suyo, dentro de su módulo. */
 ];
 var _MOD_BY_KEY = {};
 MODULES.forEach(function(m){ _MOD_BY_KEY[m.key] = m; });

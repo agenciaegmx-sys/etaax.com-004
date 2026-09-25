@@ -2633,13 +2633,7 @@ function load()    { return _scopeSuc(_cacheCortes || []); }
    estaba configurado sigue funcionando igual. Fail-open, como el resto. */
 function _puedeCambiarSuc(){ return _puedeReasignar('ventas'); }
 function _puedeReasignar(modulo){
-    var ctx; try{ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null');}catch(e){}
-    if(!ctx || ctx.ctxType!=='staff') return true;            // dueño / admin maestro
-    if((ctx.rol||'')==='admin') return true;
-    var perms=window.etaaxPermisosRol?etaaxPermisosRol(ctx.negId||getNegocioActivo(),ctx.rol):{};
-    var m=perms[modulo];
-    if(m && typeof m==='object' && 'cambiarSucursal' in m) return m.cambiarSucursal!==false;
-    return perms.cambiarSucursal!==false;                     // el de siempre
+    return (typeof window.etaaxPuedeReasignar==='function') ? window.etaaxPuedeReasignar(modulo) : true;
 }
 // Selector "📍 Sucursal" del corte: solo si hay >1 sucursal y el rol puede reasignar.
 function _pobSucursalCorte(sucId){

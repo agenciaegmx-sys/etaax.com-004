@@ -16,13 +16,10 @@
        try { return JSON.parse(localStorage.getItem('etaax_' + negId + '_sucursales') || '[]'); } catch(e) { return []; }
    }
    function _getSucActivaIns() { return localStorage.getItem('etaax_sucursal_activa') || ''; }
-   // Permiso "cambiar de sucursal": permitido salvo que el dueño lo apague (fail-open).
+   /* Permiso "cambiar de sucursal" DE ESTE MÓDULO. Antes era el general de toda
+      la app: apagarlo aquí apagaba también los cortes y los gastos. */
    function _puedeCambiarSucIns() {
-       var ctx; try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch(e) {}
-       if (!ctx || ctx.ctxType !== 'staff') return true;
-       if ((ctx.rol||'') === 'admin') return true;
-       var perms = window.etaaxPermisosRol ? etaaxPermisosRol(ctx.negId||getNegocioActivo(), ctx.rol) : {};
-       return perms.cambiarSucursal !== false;
+       return (typeof window.etaaxPuedeReasignar === 'function') ? window.etaaxPuedeReasignar('insumos') : true;
    }
    // Sin sucursal = matriz (sucursal por defecto), no "global en todas".
    var MATRIZ_ID_INS = 'suc_principal';

@@ -2785,11 +2785,7 @@ function _aplicarPermisosRec(){
 function _aplicarPermisoCostos(){ _aplicarPermisosRec(); }
 
 function _puedeCambiarSucReceta(){
-    var ctx; try{ctx=JSON.parse(localStorage.getItem('etaax_ctx')||'null');}catch(e){}
-    if(!ctx || ctx.ctxType!=='staff') return true;
-    if((ctx.rol||'')==='admin') return true;
-    var perms=window.etaaxPermisosRol?etaaxPermisosRol(ctx.negId||localStorage.getItem('etaax_negocio_activo'),ctx.rol):{};
-    return perms.cambiarSucursal!==false;
+    return (typeof window.etaaxPuedeReasignar==='function') ? window.etaaxPuedeReasignar('recetas') : true;
 }
 function _pobSucursalReceta(sucId){
     // El selector de sucursal del editor se RETIRÓ (igual que en insumos):
