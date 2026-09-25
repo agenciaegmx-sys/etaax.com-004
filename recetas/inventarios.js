@@ -7041,54 +7041,145 @@ async function cargarConteosQR() {
         });
     } catch (e) { _conteosQR = []; }
 }
-function _conteoDeFila(fila) {
-    if (!fila || !_conteosQR.length) return null;
+/* TODOS los conteos de ese producto, del más viejo al más nuevo.
+   Antes esto devolvía UNO —el primero que encontrara— porque cada producto solo
+   podía tener un conteo al día: recontar sobreescribía. Ahora la barra cuenta el
+   refrigerador, luego la bodega, luego la cava, y los tres tienen que sumar. El
+   orden importa: es el que numera "conteo 1, 2, 3" en la pantalla. */
+function _conteosDeFila(fila) {
+    if (!fila || !_conteosQR.length) return [];
     var canon = _canonInsumoId(fila.insumoId) || fila.insumoId;
-    return _conteosQR.find(function (c) {
-        var k = _canonInsumoId(c.insumoId) || c.insumoId;
-        return k === canon;
-    }) || null;
+    return _conteosQR.filter(function (c) {
+        return (_canonInsumoId(c.insumoId) || c.insumoId) === canon;
+    }).sort(function (a, b) {
+        return String(a.fecha || '' + a.hora || '').localeCompare(String(b.fecha || '' + b.hora || '')) ||
+               String(a.hora || '').localeCompare(String(b.hora || ''));
+    });
+}
+/* Se conserva para lo que solo necesita "¿hay algo?". */
+function _conteoDeFila(fila) { return _conteosDeFila(fila)[0] || null; }
+
+/* Piezas de un conteo. El QR cuenta piezas cerradas y nada más: los pesos de
+   botellas abiertas se retiraron de esa pantalla porque necesitan báscula y el
+   dato de la tara, que vive aquí. */
+function _conteoPiezas(c) {
+    if (!c) return 0;
+    return (parseFloat(c.cerradasBodega) || 0) + (parseFloat(c.cerradasBarra) || 0);
+}
+function _conteosTotal(lista) {
+    return (lista || []).reduce(function (a, c) { return a + _conteoPiezas(c); }, 0);
 }
 function _conteoResumen(c) {
     var p = [];
     if (c.cerradasBodega !== '' && c.cerradasBodega != null) p.push(c.cerradasBodega + ' bodega');
     if (c.cerradasBarra !== '' && c.cerradasBarra != null) p.push(c.cerradasBarra + ' barra');
+    /* Los conteos VIEJOS (anteriores a este cambio) sí pueden traer pesos: se
+       siguen leyendo para no perder lo que ya estaba en la tabla. */
     var np = (c.pesos || []).filter(function (x) { return x !== '' && x != null; }).length;
     if (np) p.push(np + ' abierta' + (np !== 1 ? 's' : '') + ' pesada' + (np !== 1 ? 's' : ''));
     return p.join(' · ') || 'sin datos';
 }
 function bannerConteosQR() {
     if (!_conteosQR.length) return '';
-    var quienes = {};
-    _conteosQR.forEach(function (c) { if (c.contadoPor) quienes[c.contadoPor] = 1; });
+    var quienes = {}, _prods = {};
+    _conteosQR.forEach(function (c) {
+        if (c.contadoPor) quienes[c.contadoPor] = 1;
+        _prods[_canonInsumoId(c.insumoId) || c.insumoId] = 1;
+    });
     var nombres = Object.keys(quienes);
+    var _nProd = Object.keys(_prods).length;
     return '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:rgba(122,184,245,.07);border:1px solid rgba(122,184,245,.35);border-radius:11px;padding:11px 14px;margin-bottom:14px">'
         + '<span style="font-size:18px">📋</span>'
         + '<div style="flex:1;min-width:220px;font-size:12.5px;color:var(--text-muted);line-height:1.5">'
-            + '<b style="color:var(--text)">' + _conteosQR.length + ' producto' + (_conteosQR.length !== 1 ? 's' : '') + ' contado' + (_conteosQR.length !== 1 ? 's' : '') + ' desde el QR</b>'
+            + '<b style="color:var(--text)">' + _nProd + ' producto' + (_nProd !== 1 ? 's' : '') + ' contado' + (_nProd !== 1 ? 's' : '') + ' desde el QR</b>'
+            + (_conteosQR.length > _nProd ? ' <span style="color:var(--text-dim)">· ' + _conteosQR.length + ' conteos en total</span>' : '')
             + (nombres.length ? ' · por ' + etx(nombres.join(', ')) : '') + '<br>'
-            + '<span style="color:var(--text-dim)">Revisa cada uno en su tarjeta, o aplícalos todos de una vez.</span>'
+            + '<span style="color:var(--text-dim)">Los conteos de un mismo producto se suman. Revísalos en su tarjeta, o aplícalos todos de una vez.</span>'
         + '</div>'
         + '<button class="btn-vista" style="color:#7ab8f5;border-color:#7ab8f5" onclick="aplicarConteosQR()">Aplicar todos</button>'
     + '</div>';
 }
 /* Chip dentro de la fila: qué contó el colaborador y el botón para tomarlo. */
-function chipConteoQR(fila, idx) {
-    var c = _conteoDeFila(fila); if (!c) return '';
-    return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(122,184,245,.08);border:1px solid rgba(122,184,245,.3);border-radius:8px;padding:6px 10px;margin-bottom:8px">'
-        + '<span style="font-size:11px;color:#7ab8f5">📋 ' + etx(_conteoResumen(c)) + '</span>'
-        + '<span style="font-size:10.5px;color:var(--text-dim)">' + etx(c.contadoPor || '') + ' · ' + etx(c.hora || '') + '</span>'
-        + '<button class="btn-vista" style="font-size:10.5px;padding:3px 9px;margin-left:auto" onclick="aplicarConteoQR(' + idx + ')">Usar</button>'
-        + '<button class="btn-vista" title="No tomar este conteo" style="font-size:10.5px;padding:3px 9px;color:var(--text-dim)" onclick="descartarConteoQR(' + idx + ')">Descartar</button>'
-    + '</div>';
+/* Qué renglones están desplegados. Vive fuera del render porque la tabla se
+   repinta con cada tecla y si no, la lista se cerraría sola. */
+var _conteosAbiertos = {};
+function toggleConteosQR(insumoId) {
+    _conteosAbiertos[insumoId] = !_conteosAbiertos[insumoId];
+    renderStepContent();
 }
-function _aplicarConteoAFila(fila, c) {
-    if (c.cerradasBodega !== '' && c.cerradasBodega != null) fila.cerradasBodega = c.cerradasBodega;
-    if (c.cerradasBarra  !== '' && c.cerradasBarra  != null) fila.cerradasBarra  = c.cerradasBarra;
+window.toggleConteosQR = toggleConteosQR;
+
+/* El chip de la fila. Dice el TOTAL de lo contado por QR, y de dónde salió.
+   El botón cambia de trabajo según lo que ya haya capturado el encargado:
+     · con la casilla en cero → "Usar", escribe el total;
+     · con algo ya escrito   → "Sumar", lo agrega.
+   Eso es lo que pidió Edwin y es lo correcto: el segundo conteo de la noche no
+   corrige al primero, se le suma. */
+function chipConteoQR(fila, idx) {
+    var lista = _conteosDeFila(fila); if (!lista.length) return '';
+    var total = _conteosTotal(lista);
+    var yaTiene = (parseFloat(fila.cerradasBodega) || 0) + (parseFloat(fila.cerradasBarra) || 0);
+    var sumar = yaTiene > 0;
+    var abierto = !!_conteosAbiertos[fila.insumoId];
+    var quienes = {};
+    lista.forEach(function (c) { if (c.contadoPor) quienes[c.contadoPor] = 1; });
+    var nombres = Object.keys(quienes);
+
+    var cab = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+        + '<span style="font-size:11.5px;color:#7ab8f5">📋 <b>' + _fmtNum(total) + '</b> pza'
+            + (total === 1 ? '' : 's') + ' contadas por QR</span>'
+        + (lista.length > 1
+            ? '<button class="btn-vista" style="font-size:10px;padding:2px 8px;color:#7ab8f5;border-color:rgba(122,184,245,.4)" '
+              + 'onclick="toggleConteosQR(\'' + fila.insumoId + '\')">'
+              + (abierto ? '▾' : '▸') + ' ' + lista.length + ' conteos</button>'
+            : '<span style="font-size:10.5px;color:var(--text-dim)">' + etx(nombres.join(', ')) + ' · ' + etx(lista[0].hora || '') + '</span>')
+        + '<button class="btn-vista" style="font-size:10.5px;padding:3px 9px;margin-left:auto" '
+            + 'title="' + (sumar ? 'Se agrega a lo que ya tienes capturado' : 'Escribe este total en la existencia') + '" '
+            + 'onclick="aplicarConteoQR(' + idx + ')">' + (sumar ? '+ Sumar' : 'Usar') + '</button>'
+        + '<button class="btn-vista" title="No tomar estos conteos" style="font-size:10.5px;padding:3px 9px;color:var(--text-dim)" onclick="descartarConteoQR(' + idx + ')">Descartar</button>'
+    + '</div>';
+
+    /* El desglose: quién contó qué y a qué hora, y poder tirar UNO sin perder
+       los demás — que es justo lo que hace falta cuando alguien manda dos veces
+       el mismo refrigerador. */
+    var detalle = '';
+    if (abierto && lista.length > 1) {
+        detalle = '<div style="margin-top:7px;border-top:1px dashed rgba(122,184,245,.28);padding-top:6px">'
+            + lista.map(function (c, i) {
+                return '<div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-muted);padding:3px 0">'
+                    + '<span style="color:#7ab8f5;min-width:64px">Conteo ' + (i + 1) + '</span>'
+                    + '<span style="min-width:110px">' + etx(_conteoResumen(c)) + '</span>'
+                    + '<span style="color:var(--text-dim);flex:1">' + etx(c.contadoPor || '—') + ' · ' + etx(c.hora || '') + '</span>'
+                    + (c.nota ? '<span style="color:var(--text-dim);font-style:italic">' + etx(c.nota) + '</span>' : '')
+                    + '<button class="btn-vista" title="Quitar solo este conteo" style="font-size:9.5px;padding:2px 7px;color:var(--text-dim)" '
+                        + 'onclick="descartarUnConteoQR(\'' + c.id + '\')">✕</button>'
+                + '</div>';
+            }).join('')
+        + '</div>';
+    }
+    return '<div style="background:rgba(122,184,245,.08);border:1px solid rgba(122,184,245,.3);border-radius:8px;padding:6px 10px;margin-bottom:8px">'
+        + cab + detalle + '</div>';
+}
+/* Número corto: 12 y no 12.000, pero 1.5 si de verdad hay media pieza. */
+function _fmtNum(v) { return (Math.round((parseFloat(v) || 0) * 100) / 100) + ''; }
+/* Escribe UN conteo en la fila.
+   `sumar` decide si se agrega a lo que ya hay o si lo reemplaza. Al aplicar
+   varios conteos seguidos, solo el primero puede reemplazar: los demás suman,
+   o el último borraría a los anteriores — que es exactamente el bug que esto
+   viene a quitar. */
+function _aplicarConteoAFila(fila, c, sumar) {
+    var bod = parseFloat(c.cerradasBodega), bar = parseFloat(c.cerradasBarra);
+    if (!isNaN(bod)) fila.cerradasBodega = (sumar ? (parseFloat(fila.cerradasBodega) || 0) : 0) + bod;
+    if (!isNaN(bar)) fila.cerradasBarra  = (sumar ? (parseFloat(fila.cerradasBarra)  || 0) : 0) + bar;
+    /* Los conteos VIEJOS pueden traer pesos de botellas abiertas. Se respetan
+       —no se tira lo que ya estaba en la tabla— pero no se suman: cada peso es
+       UNA botella distinta, no una cantidad que se acumule. */
     var ps = (c.pesos || []).filter(function (x) { return x !== '' && x != null; });
     if (ps.length) { fila.pesos = ['', '', '', '']; ps.slice(0, 4).forEach(function (v, i) { fila.pesos[i] = v; }); fila.metodoCaptura = 'peso'; }
-    // Queda escrito de dónde salió el número.
-    fila.conteoQR = { por: c.contadoPor || '', fecha: c.fecha || '', hora: c.hora || '', nota: c.nota || '' };
+    // Queda escrito de dónde salió el número, y cuántos conteos lo formaron.
+    var previo = (fila.conteoQR && sumar) ? (fila.conteoQR.conteos || 1) : 0;
+    fila.conteoQR = { por: c.contadoPor || '', fecha: c.fecha || '', hora: c.hora || '',
+                      nota: c.nota || '', conteos: previo + 1 };
 }
 /* Conteos ya resueltos (aplicados o descartados) en ESTE navegador. Es el seguro
    contra la mala red: si el sello no alcanza a subir, el conteo no reaparece
@@ -7130,19 +7221,46 @@ function _cerrarConteo(c) {
 }
 function aplicarConteoQR(idx) {
     var fila = filasCaptura[idx]; if (!fila) return;
-    var c = _conteoDeFila(fila); if (!c) return;
-    _aplicarConteoAFila(fila, c);   // 1) al inventario
-    _cerrarConteo(c);               // 2) guardar y pintar — no espera a la red
-    _marcarConteoAplicado(c);       // 3) el sello, por su cuenta
+    var lista = _conteosDeFila(fila); if (!lista.length) return;
+    /* Si la casilla ya trae algo capturado a mano, el QR se SUMA: el encargado
+       contó la barra y la barra contó la bodega, y las dos cuentan. Si está en
+       cero, el primero escribe y los demás se le suman. */
+    var sumar = ((parseFloat(fila.cerradasBodega) || 0) + (parseFloat(fila.cerradasBarra) || 0)) > 0;
+    lista.forEach(function (c) {
+        _aplicarConteoAFila(fila, c, sumar);
+        sumar = true;                  // del segundo en adelante, SIEMPRE se suma
+        _marcarConteoAplicado(c);      // el sello, por su cuenta: la red no bloquea
+        _conteosQR = _conteosQR.filter(function (x) { return x.id !== c.id; });
+    });
+    _autoGuardar();
+    renderStepContent();
 }
+/* Tirar UN conteo suelto sin perder los demás: es lo que hace falta cuando
+   alguien manda dos veces el mismo refrigerador. */
+function descartarUnConteoQR(id) {
+    var c = _conteosQR.find(function (x) { return x.id === id; }); if (!c) return;
+    var msg = 'Se quita el conteo de ' + (c.contadoPor || 'el colaborador') + ' (' + _conteoResumen(c) + ') '
+            + 'y no se vuelve a ofrecer. Los demás conteos de este producto NO se tocan.';
+    var _hacer = function () { _marcarConteoAplicado(c, true); _cerrarConteo(c); };
+    if (window.etaaxConfirm) etaaxConfirm('¿Quitar este conteo?', msg, _hacer, null, { yesLabel: 'Quitar', danger: true });
+    else if (confirm(msg)) _hacer();
+}
+window.descartarUnConteoQR = descartarUnConteoQR;
 /* Rechazar el conteo: el encargado contó y no está de acuerdo. No toca la
    existencia y el conteo no vuelve a ofrecerse. */
 function descartarConteoQR(idx) {
     var fila = filasCaptura[idx]; if (!fila) return;
-    var c = _conteoDeFila(fila); if (!c) return;
-    var _hacer = function () { _marcarConteoAplicado(c, true); _cerrarConteo(c); };
-    var msg = 'El conteo de ' + (c.contadoPor || 'el colaborador') + ' (' + _conteoResumen(c) + ') se descarta '
-            + 'y no se vuelve a ofrecer. La existencia que ya capturaste no se toca.';
+    var lista = _conteosDeFila(fila); if (!lista.length) return;
+    var _hacer = function () {
+        lista.forEach(function (c) { _marcarConteoAplicado(c, true); });
+        _conteosQR = _conteosQR.filter(function (x) { return lista.indexOf(x) === -1; });
+        _autoGuardar(); renderStepContent();
+    };
+    var msg = lista.length > 1
+        ? 'Se descartan los ' + lista.length + ' conteos de este producto (' + _fmtNum(_conteosTotal(lista)) + ' pzas en total) '
+          + 'y no se vuelven a ofrecer. La existencia que ya capturaste no se toca.'
+        : 'El conteo de ' + (lista[0].contadoPor || 'el colaborador') + ' (' + _conteoResumen(lista[0]) + ') se descarta '
+          + 'y no se vuelve a ofrecer. La existencia que ya capturaste no se toca.';
     if (window.etaaxConfirm) etaaxConfirm('¿Descartar este conteo?', msg, _hacer, null, { yesLabel: 'Descartar', danger: true });
     else if (confirm(msg)) _hacer();
 }
@@ -7152,20 +7270,33 @@ async function aplicarConteosQR() {
     var n = _conteosQR.length;
     var _hacer = function () {
         var pend = _conteosQR.slice();
+        /* Se lleva la cuenta de qué fila ya recibió algo EN ESTA PASADA: el
+           primer conteo de cada producto decide si escribe o suma, y del
+           segundo en adelante siempre suma. Sin esto, el último conteo
+           sobreescribía a los anteriores y el total salía corto. */
+        var tocadas = {};
         for (var i = 0; i < pend.length; i++) {
             var c = pend[i];
             var fila = filasCaptura.find(function (f) {
                 return (_canonInsumoId(f.insumoId) || f.insumoId) === (_canonInsumoId(c.insumoId) || c.insumoId);
             });
             if (!fila) continue;                       // contaron algo que no está en este inventario
-            _aplicarConteoAFila(fila, c);
+            var yaTiene = ((parseFloat(fila.cerradasBodega) || 0) + (parseFloat(fila.cerradasBarra) || 0)) > 0;
+            _aplicarConteoAFila(fila, c, tocadas[fila.insumoId] || yaTiene);
+            tocadas[fila.insumoId] = true;
             _marcarConteoAplicado(c);                  // sello sin await: la red no bloquea la captura
             _conteosQR = _conteosQR.filter(function (x) { return x.id !== c.id; });
         }
         _autoGuardar(); renderStepContent();
     };
-    var msg = 'Se tomarán los conteos de ' + n + ' producto' + (n !== 1 ? 's' : '') + ' y se escribirán en las existencias de este inventario.\n\n'
-            + 'Lo que ya tengas capturado en esos productos se reemplaza.';
+    /* Se cuentan PRODUCTOS, no registros: decir "12 conteos" cuando son 4
+       productos contados 3 veces cada uno no le dice nada a nadie. */
+    var prods = {};
+    _conteosQR.forEach(function (c) { prods[_canonInsumoId(c.insumoId) || c.insumoId] = 1; });
+    var np = Object.keys(prods).length;
+    var msg = 'Se tomarán ' + n + ' conteo' + (n !== 1 ? 's' : '') + ' de ' + np + ' producto' + (np !== 1 ? 's' : '')
+            + ' y se escribirán en las existencias de este inventario.\n\n'
+            + 'Los conteos de un mismo producto se SUMAN entre sí. Donde ya tengas algo capturado a mano, se suma encima.';
     if (window.etaaxConfirm) etaaxConfirm('Aplicar conteos del QR', msg, _hacer, null, { yesLabel: 'Aplicar', danger: false });
     else if (confirm(msg)) _hacer();
 }

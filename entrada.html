@@ -155,18 +155,18 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
             </div>
             <div style="font-size:11px;color:var(--dim);margin:6px 0 14px">Puedes escribir operaciones: <b>3*24+5</b></div>
 
-            <label class="lbl">Botellas abiertas · peso con envase (kg)</label>
-            <div style="display:flex;gap:8px;margin-bottom:14px">
-                <input type="text" inputmode="decimal" class="fld" id="cntP0" placeholder="B1" style="margin-bottom:0;text-align:center">
-                <input type="text" inputmode="decimal" class="fld" id="cntP1" placeholder="B2" style="margin-bottom:0;text-align:center">
-                <input type="text" inputmode="decimal" class="fld" id="cntP2" placeholder="B3" style="margin-bottom:0;text-align:center">
-                <input type="text" inputmode="decimal" class="fld" id="cntP3" placeholder="B4" style="margin-bottom:0;text-align:center">
-            </div>
+            <!-- Los pesos de botellas abiertas se RETIRARON de aquí: el conteo por
+                 QR es de piezas cerradas. Pesar una botella abierta requiere la
+                 báscula y el dato de la tara, que vive en el inventario; pedirlo
+                 en el celular daba números que nadie podía verificar después. -->
+
+            <div id="cntYa" style="display:none;background:rgba(122,184,245,.08);border:1px solid rgba(122,184,245,.32);
+                border-radius:9px;padding:9px 12px;margin-bottom:14px;font-size:12px;color:var(--text-muted);line-height:1.5"></div>
 
             <label class="lbl">Nota (opcional)</label>
             <input type="text" class="fld" id="cntNota" placeholder="Ej. quedaron 2 cajas en bodega chica">
 
-            <button class="cap-btn" id="cntBtn" onclick="enviarConteo()">Guardar conteo</button>
+            <button class="cap-btn" id="cntBtn" onclick="enviarConteo()">Guardar este conteo</button>
             <div class="cap-msg" id="cntMsg"></div>
         </div>
 
@@ -644,18 +644,36 @@ function filtrarCnt(q){
         }).join('')
         : '<div class="ins-it" style="color:var(--text-dim);cursor:default">Sin resultados</div>';
 }
+/* Cuánto lleva contado de este producto en la sesión, dicho donde lo va a ver.
+   Con conteos que se SUMAN, esto es lo único que separa "conté la cava aparte"
+   de "se me olvidó que ya lo había contado". */
+function _pintarYaContado(id){
+    var box = document.getElementById('cntYa'); if(!box) return;
+    var mios = CNT_HECHOS.filter(function(h){ return h.insumoId===id; });
+    if(!mios.length){ box.style.display='none'; box.innerHTML=''; return; }
+    var tot = mios.reduce(function(a,h){
+        return a + (parseFloat(h.cerradasBodega)||0) + (parseFloat(h.cerradasBarra)||0);
+    }, 0);
+    box.style.display='block';
+    box.innerHTML = '📋 Ya contaste este producto <b>'+mios.length+' vez'+(mios.length!==1?'ces':'')+'</b> '
+        + 'en esta sesión · total <b>'+tot+'</b>.<br>'
+        + '<span style="opacity:.8">Lo que mandes ahora se SUMA. Si te equivocaste, díselo al encargado: él lo corrige en el inventario.</span>';
+}
 function selCnt(id){
     CNT_SEL = INSUMOS.find(function(x){ return x.id===id; });
     if (!CNT_SEL) return;
     document.getElementById('cntNom').textContent = CNT_SEL.nombre || '—';
     var cont = CNT_SEL.contNeto ? (CNT_SEL.contNeto+' '+(CNT_SEL.umContenido||'ML')) : '';
     document.getElementById('cntMeta').textContent = [CNT_SEL.categoria, cont].filter(Boolean).join(' · ') || '—';
-    // Si ya lo contó antes en esta sesión, se precargan sus números para corregir.
-    var prev = CNT_HECHOS.find(function(h){ return h.insumoId===id; }) || {};
-    document.getElementById('cntBodega').value = prev.cerradasBodega != null ? prev.cerradasBodega : '';
-    document.getElementById('cntBarra').value  = prev.cerradasBarra  != null ? prev.cerradasBarra  : '';
-    [0,1,2,3].forEach(function(i){ document.getElementById('cntP'+i).value = (prev.pesos && prev.pesos[i]) || ''; });
-    document.getElementById('cntNota').value = prev.nota || '';
+    /* Los campos arrancan VACÍOS, aunque ya lo haya contado antes.
+       Antes se precargaba su conteo anterior porque volver a enviarlo lo
+       CORREGÍA. Ahora cada envío es un conteo nuevo que se SUMA, así que
+       precargar el número de la vez pasada haría que se contara doble sin que
+       nadie se diera cuenta. En su lugar se le dice cuánto lleva. */
+    document.getElementById('cntBodega').value = '';
+    document.getElementById('cntBarra').value  = '';
+    document.getElementById('cntNota').value   = '';
+    _pintarYaContado(id);
     _UM_CNT = 'pza';
     _pintarSelEmpaque('cntEmpaque', CNT_SEL, _UM_CNT, 'setUmCnt');
     document.getElementById('cntForm').style.display = 'block';
@@ -717,28 +735,32 @@ async function enviarConteo(){
     if (!CNT_SEL){ msg.className='cap-msg err'; msg.textContent='Elige un producto.'; return; }
     var bod = _aPiezas(_evalCnt(document.getElementById('cntBodega').value), CNT_SEL, _UM_CNT);
     var bar = _aPiezas(_evalCnt(document.getElementById('cntBarra').value),  CNT_SEL, _UM_CNT);
-    var pesos = [0,1,2,3].map(function(i){ return _evalCnt(document.getElementById('cntP'+i).value); });
-    if (bod==='' && bar==='' && !pesos.some(function(p){ return p!==''; })){
-        msg.className='cap-msg err'; msg.textContent='Pon al menos una cantidad o un peso.'; return;
+    if (bod==='' && bar===''){
+        msg.className='cap-msg err'; msg.textContent='Pon al menos una cantidad.'; return;
     }
     var btn = document.getElementById('cntBtn'); btn.disabled = true;
     msg.className='cap-msg'; msg.textContent='Guardando…';
     try {
         var hoy = todayStr();
         var entry = {
-            // id estable: si vuelve a contar el mismo producto hoy, CORRIGE su conteo
-            // en vez de dejar dos verdades en la tabla.
-            id: 'cnt_'+NEG+'_'+(SUC||'suc_principal')+'_'+AREA+'_'+hoy+'_'+CNT_SEL.id,
+            /* Un id por ENVÍO, no por producto y día. Antes era estable —
+               cnt_neg_suc_area_fecha_insumo— para que recontar CORRIGIERA. Pero
+               una barra no cuenta un producto de una sentada: cuenta el
+               refrigerador, después la bodega, después la cava. Con el id
+               estable, el segundo conteo borraba al primero y el total salía
+               corto sin que nadie se enterara. Ahora cada uno queda, y el
+               inventario los suma. */
+            id: 'cnt_'+hoy.replace(/-/g,'')+'_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),
             insumoId: CNT_SEL.id, nombre: CNT_SEL.nombre || '',
             sucursalId: SUC || '', area: AREA, fecha: hoy, hora: nowHora(),
             cerradasBodega: bod, cerradasBarra: bar,
-            pesos: pesos,
             nota: (document.getElementById('cntNota').value||'').trim(),
             aplicado: false
         };
         var r = await _supabase.rpc('inventario_conteo_registrar', { p_neg:NEG, p_token:TOKEN, p_niphash:_NIPHASH, p_datos:entry });
         if (r.error){ msg.className='cap-msg err'; msg.textContent='No se pudo guardar: '+r.error.message; return; }
-        CNT_HECHOS = CNT_HECHOS.filter(function(h){ return h.insumoId!==entry.insumoId; });
+        /* Se APILA, no se reemplaza: la lista de la sesión debe reflejar lo mismo
+           que la tabla — un renglón por conteo enviado. */
         CNT_HECHOS.unshift(entry);
         msg.className='cap-msg ok'; msg.textContent='✓ '+(CNT_SEL.nombre||'Producto')+' contado';
         document.getElementById('cntForm').style.display='none';
@@ -755,11 +777,17 @@ function _renderCntHechos(){
             var partes = [];
             if (h.cerradasBodega!=='') partes.push(h.cerradasBodega+' bodega');
             if (h.cerradasBarra!=='')  partes.push(h.cerradasBarra+' barra');
-            var np = (h.pesos||[]).filter(function(p){ return p!==''; }).length;
-            if (np) partes.push(np+' abierta'+(np!==1?'s':'')+' pesada'+(np!==1?'s':''));
+            /* Se numera POR PRODUCTO: "Conteo 2" le dice al colaborador que ya
+               había contado ese antes, que es justo lo que evita el doble envío
+               por olvido. La lista viene del más nuevo al más viejo, así que se
+               cuenta hacia atrás. */
+            var mismos = CNT_HECHOS.filter(function(x){ return x.insumoId===h.insumoId; });
+            var num = mismos.length - mismos.indexOf(h);
             return '<div style="display:flex;justify-content:space-between;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:9px 12px;margin-bottom:7px">'
-                + '<span style="font-size:13px;color:var(--text)">'+etx(h.nombre)+'</span>'
-                + '<span style="font-size:11.5px;color:var(--dim);text-align:right">'+etx(partes.join(' · '))+'</span></div>';
+                + '<span style="font-size:13px;color:var(--text)">'+etx(h.nombre)
+                + (mismos.length>1 ? ' <span style="font-size:11px;color:var(--dim)">· conteo '+num+'</span>' : '')
+                + '</span>'
+                + '<span style="font-size:11.5px;color:var(--dim);text-align:right">'+etx(partes.join(' · '))+' <span style="opacity:.7">'+etx(h.hora||'')+'</span></span></div>';
         }).join('');
 }
 

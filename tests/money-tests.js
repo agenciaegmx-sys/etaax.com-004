@@ -10717,6 +10717,153 @@ console.log('\n══ BF1 · Hasta 10 archivos en cortes y gastos ══');
     });
 }
 
+/* ═══════════ SUITE BF2 · CONTEOS DEL QR QUE SE SUMAN ═══════════════════════
+   LO QUE PASABA: una barra no cuenta un producto de una sentada — cuenta el
+   refrigerador, después la bodega, después la cava. Pero el conteo del QR usaba
+   un id FIJO por producto y día (cnt_neg_suc_area_fecha_insumo), así que el
+   segundo conteo BORRABA al primero y el total salía corto sin que nadie se
+   enterara. Y del lado del inventario, aplicar un conteo REEMPLAZABA la casilla.
+
+   AHORA: cada envío es su propio registro, se numeran (conteo 1, 2, 3…) y el
+   inventario los SUMA. El botón dice qué va a hacer: "Usar" si la casilla está
+   en cero, "+ Sumar" si ya hay algo capturado.                                */
+console.log('\n══ BF2 · Conteos del QR que se suman ══');
+{
+    const inv = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    const ent = fs.readFileSync(path.join(RAIZ, 'entrada.html'), 'utf8');
+
+    /* ── El celular: piezas cerradas y nada más ── */
+    test('el QR ya no pide pesos de botellas abiertas', () =>
+        eq(/id="cntP[0-3]"/.test(ent), false, 'sin pesos'));
+    test('…y tampoco los manda en el registro', () => {
+        const i = ent.indexOf('var entry = {');
+        return eq(ent.slice(i, i + 900).indexOf('pesos:') === -1, true, 'sin pesos');
+    });
+    test('…y la validación pide una cantidad, no un peso', () =>
+        eq(ent.indexOf('Pon al menos una cantidad.') > -1, true, 'rotulado'));
+
+    /* EL CAMBIO DE FONDO: un id por envío. Con el id fijo, recontar borraba. */
+    test('cada envío del QR es su propio registro', () => {
+        const i = ent.indexOf('var entry = {');
+        const t = ent.slice(i, i + 900);
+        return eq(t.indexOf("'cnt_'+hoy.replace(/-/g,'')+'_'+Date.now()") > -1 &&
+                  t.indexOf("'_'+CNT_SEL.id,") === -1, true, 'id único');
+    });
+    /* Y como ahora SUMAN, precargar el conteo anterior contaría doble. */
+    test('el formulario ya no precarga el conteo anterior', () => {
+        const i = ent.indexOf('function selCnt(id){');
+        const t = ent.slice(i, i + 900);
+        return eq(t.indexOf("document.getElementById('cntBodega').value = '';") > -1 &&
+                  t.indexOf('prev.cerradasBodega') === -1, true, 'en blanco');
+    });
+    test('…y en su lugar avisa cuánto lleva contado', () =>
+        eq(ent.indexOf('function _pintarYaContado(id)') > -1 &&
+           ent.indexOf('Lo que mandes ahora se SUMA') > -1, true, 'avisado'));
+    test('la lista de la sesión apila, no reemplaza', () => {
+        const i = ent.indexOf('CNT_HECHOS.unshift(entry);');
+        return eq(i > -1 && ent.indexOf("CNT_HECHOS.filter(function(h){ return h.insumoId!==entry.insumoId; })") === -1,
+                  true, 'apila');
+    });
+    test('…y numera los conteos del mismo producto', () =>
+        eq(ent.indexOf("conteo '+num+'") > -1, true, 'conteo 1, 2, 3'));
+
+    /* ── El inventario: sumar, no reemplazar ── */
+    test('el inventario lee TODOS los conteos de un producto', () =>
+        eq(inv.indexOf('function _conteosDeFila(fila)') > -1 &&
+           /_conteosDeFila[\s\S]{0,400}\.filter\(/.test(inv), true, 'todos'));
+    test('…y los ordena, que es lo que los numera', () => {
+        const i = inv.indexOf('function _conteosDeFila(fila)');
+        return eq(inv.slice(i, i + 700).indexOf('.sort(') > -1, true, 'en orden');
+    });
+    test('sabe sumar las piezas de varios conteos', () =>
+        eq(inv.indexOf('function _conteosTotal(lista)') > -1, true, 'suma'));
+
+    /* El corazón: aplicar SUMA en vez de reemplazar. */
+    test('aplicar un conteo puede sumar en vez de reemplazar', () => {
+        const i = inv.indexOf('function _aplicarConteoAFila(fila, c, sumar)');
+        const t = inv.slice(i, i + 800);
+        return eq(i > -1 && t.indexOf('(sumar ? (parseFloat(fila.cerradasBodega) || 0) : 0) + bod') > -1,
+                  true, 'suma');
+    });
+    /* Y al aplicar varios seguidos, solo el primero puede reemplazar: si no, el
+       último borraría a los anteriores — el mismo bug, de nuevo. */
+    test('aplicando varios, del segundo en adelante SIEMPRE se suma', () => {
+        const i = inv.indexOf('function aplicarConteoQR(idx)');
+        const t = inv.slice(i, i + 900);
+        return eq(t.indexOf('sumar = true;') > -1, true, 'sin borrarse entre sí');
+    });
+    /* Se mira el ARGUMENTO, no que la palabra aparezca por ahí: dejar la marca
+       puesta pero no usarla al aplicar es exactamente el bug, y una prueba que
+       solo busca el nombre lo celebraría igual. */
+    test('…y lo mismo al aplicarlos todos de una vez', () => {
+        const i = inv.indexOf('var pend = _conteosQR.slice();');
+        const t = inv.slice(i, i + 1400);
+        return eq(t.indexOf('_aplicarConteoAFila(fila, c, tocadas[fila.insumoId] || yaTiene)') > -1,
+                  true, 'por producto');
+    });
+    /* El botón tiene que decir qué va a hacer. */
+    test('el botón dice "Usar" o "+ Sumar" según lo que ya haya', () => {
+        const i = inv.indexOf('function chipConteoQR(fila, idx)');
+        const t = inv.slice(i, i + 2600);
+        return eq(t.indexOf("(sumar ? '+ Sumar' : 'Usar')") > -1, true, 'honesto');
+    });
+    test('el chip muestra el TOTAL contado, no un conteo suelto', () => {
+        const i = inv.indexOf('function chipConteoQR(fila, idx)');
+        return eq(inv.slice(i, i + 2600).indexOf('_conteosTotal(lista)') > -1, true, 'total');
+    });
+
+    /* ── La lista desplegable del Paso 1 ── */
+    test('se puede desplegar la lista completa de conteos', () =>
+        eq(inv.indexOf('function toggleConteosQR(insumoId)') > -1 &&
+           inv.indexOf('window.toggleConteosQR') > -1, true, 'desplegable'));
+    /* El estado vive FUERA del render: la tabla se repinta con cada tecla y si
+       no, la lista se cerraría sola. */
+    test('…y no se cierra sola al repintar la tabla', () =>
+        eq(inv.indexOf('var _conteosAbiertos = {};') > -1, true, 'recordado'));
+    /* El chip es largo: se toma hasta donde termina la función, no un recorte
+       a ojo que deje fuera justo lo que se está comprobando. */
+    const chip = (() => {
+        const i = inv.indexOf('function chipConteoQR(fila, idx)');
+        return inv.slice(i, inv.indexOf('\nfunction _fmtNum', i));
+    })();
+    test('la lista numera conteo 1, 2, 3…', () =>
+        eq(chip.indexOf("Conteo ' + (i + 1)") > -1, true, 'numerada'));
+    test('…y dice quién contó y a qué hora', () =>
+        eq(chip.indexOf('c.contadoPor') > -1 && chip.indexOf('c.hora') > -1, true, 'con firma'));
+    /* Tirar uno solo: es lo que hace falta cuando alguien manda dos veces el
+       mismo refrigerador. */
+    test('se puede quitar UN conteo sin perder los demás', () =>
+        eq(inv.indexOf('function descartarUnConteoQR(id)') > -1 &&
+           inv.indexOf('window.descartarUnConteoQR') > -1, true, 'quirúrgico'));
+    test('…y descartar el producto se lleva todos sus conteos', () => {
+        const i = inv.indexOf('function descartarConteoQR(idx)');
+        const t = inv.slice(i, i + 900);
+        return eq(t.indexOf('lista.forEach(function (c) { _marcarConteoAplicado(c, true); })') > -1,
+                  true, 'todos');
+    });
+
+    /* ── El banner cuenta productos, no renglones ── */
+    test('el banner distingue productos de conteos', () => {
+        const i = inv.indexOf('function bannerConteosQR()');
+        const t = inv.slice(i, i + 1400);
+        return eq(t.indexOf('_nProd') > -1 && t.indexOf('conteos en total') > -1, true, 'claro');
+    });
+    test('…y avisa que se suman', () => {
+        const i = inv.indexOf('function bannerConteosQR()');
+        return eq(inv.slice(i, i + 1400).indexOf('se suman') > -1, true, 'dicho');
+    });
+    /* Los conteos VIEJOS traen pesos: no se pueden tirar. */
+    test('los conteos viejos con pesos se siguen leyendo', () => {
+        const i = inv.indexOf('function _conteoResumen(c)');
+        return eq(inv.slice(i, i + 600).indexOf('c.pesos') > -1, true, 'compatible');
+    });
+    test('…pero los pesos NO se suman: cada uno es otra botella', () => {
+        const i = inv.indexOf('function _aplicarConteoAFila(fila, c, sumar)');
+        const t = inv.slice(i, i + 900);
+        return eq(t.indexOf('fila.pesos = [') > -1 && t.indexOf('+= ps') === -1, true, 'sin acumular');
+    });
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La
