@@ -10513,14 +10513,16 @@ console.log('\n══ BE8 · Gestión de Staff, herramienta por herramienta ═�
     /* Y que el candado DECIDA: dejarlo escrito pero puenteado —un `if (true ||`
        delante— lo deja de adorno, y una prueba que solo busca el texto lo
        celebraría igual. */
+    /* El cuerpo del guardado vive en _saveStaffReal: saveStaff es la envoltura
+       que pone y suelta el candado de re-entrada. */
     test('…y guardar también, que es por donde entra el cambio', () => {
-        const i = stf.indexOf('async function saveStaff()');
+        const i = stf.indexOf('async function _saveStaffReal()');
         const t = stf.slice(i, i + 460);
         return eq(/if \(!_exigeStaff\(_esNuevoSt \? 'crear' : 'editar'[\s\S]{0,140}?\)\) return;/.test(t),
                   true, 'al guardar, y corta');
     });
     test('…y lo decide por el campo que de verdad existe', () => {
-        const i = stf.indexOf('async function saveStaff()');
+        const i = stf.indexOf('async function _saveStaffReal()');
         return eq(stf.slice(i, i + 300).indexOf("getElementById('fId')") > -1 &&
                   stf.indexOf("var editId = document.getElementById('fId').value") > -1,
                   true, 'mismo campo que el guardado');
@@ -10550,6 +10552,97 @@ console.log('\n══ BE8 · Gestión de Staff, herramienta por herramienta ═�
     test('se vuelve a aplicar cuando bajan los permisos de la nube', () =>
         eq(stf.indexOf("window.addEventListener('etaax:permisos'") > -1 &&
            hub.indexOf("window.addEventListener('etaax:permisos'") > -1, true, 'al vuelo'));
+}
+
+/* ═══════════ SUITE BE9 · GUARDAR UN COLABORADOR, SIN ESPERA NI CLICS DE MÁS ═
+   LO QUE PASABA: se cambiaba un dato, se daba Guardar, y el modal se quedaba
+   abierto sin señal de vida. Se sentía como que no había guardado, así que se
+   le daba clic otra vez, y otra. Sí guardaba — pero cada clic disparaba OTRO
+   guardado completo.
+
+   LA CAUSA, dos capas:
+     1. El editor ESPERABA el viaje completo a la nube antes de cerrar.
+     2. Y ese viaje era caro de más: se borraban TODOS los renglones del negocio
+        y luego se volvían a insertar. El doble de viajes… y entre uno y otro la
+        tabla quedaba VACÍA: si el alta fallaba ahí, el negocio se quedaba sin
+        su personal en la nube.                                                */
+console.log('\n══ BE9 · Guardar un colaborador, sin espera ni clics de más ══');
+{
+    const stf = fs.readFileSync(path.join(RAIZ, 'administrativo/staff.html'), 'utf8');
+    const cuerpo = (fn) => {
+        const i = stf.indexOf('function ' + fn + '(');
+        const abre = stf.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < stf.length) {
+            if (stf[j] === '{') prof++;
+            else if (stf[j] === '}') { prof--; if (!prof) return stf.slice(abre, j + 1); }
+            j++;
+        }
+        return '';
+    };
+
+    /* ── 1. El modal cierra YA ── */
+    const sv = cuerpo('_saveStaffReal');
+    test('el editor ya no espera a la nube para cerrarse', () =>
+        eq(/await\s+save\(data\)/.test(sv), false, 'sin espera'));
+    test('…cierra y repinta con lo que ya tiene en memoria', () => {
+        const c = sv.indexOf('closeModal();'), g = sv.indexOf('save(data)');
+        return eq(c > -1 && g > c, true, 'primero cierra');
+    });
+    /* Que el cierre no sea a ciegas: si la nube falla, se dice. */
+    test('…y si la nube falla, lo avisa en vez de callarse', () =>
+        eq(/save\(data\)\.catch\(/.test(sv), true, 'con aviso'));
+
+    /* ── 2. El segundo clic no dispara un segundo guardado ── */
+    test('hay candado de re-entrada', () => {
+        const w = cuerpo('saveStaff');
+        return eq(w.indexOf('if (_guardandoStaff) return;') > -1, true, 'con candado');
+    });
+    /* Se arma DESPUÉS de las validaciones: esas rebotan y deben dejar el botón
+       vivo. Y ANTES del primer await, que es el hueco por donde se colaba. */
+    test('el candado se arma antes del primer await', () => {
+        const a = sv.indexOf('_guardandoStaff = true;');
+        const b = sv.indexOf('await _hashPwdStaff');
+        return eq(a > -1 && a < b, true, 'a tiempo');
+    });
+    test('…y después de las validaciones, que sí rebotan', () => {
+        const a = sv.indexOf('_guardandoStaff = true;');
+        const v = sv.indexOf("alert('El nombre del colaborador es requerido.')");
+        return eq(v > -1 && v < a, true, 'sin trabar el botón');
+    });
+    /* Si algo truena a media construcción del objeto, el botón no puede quedar
+       muerto hasta recargar la página. */
+    test('el candado se suelta pase lo que pase', () => {
+        const w = cuerpo('saveStaff');
+        return eq(/finally\s*\{\s*_guardandoStaff\s*=\s*false;\s*\}/.test(w), true, 'con finally');
+    });
+
+    /* ── 3. Y el guardado deja de vaciar la tabla ─────────────────────────────
+       Borrar todo y reinsertar deja una ventana en la que el negocio NO TIENE
+       personal en la nube. Si el alta falla justo ahí, otro dispositivo
+       sincroniza el vacío. */
+    const sav = cuerpo('save');
+    /* El invariante NO es "no hay delete" —con la lista vacía hay que borrar por
+       negocio— sino que el borrado va DESPUÉS de escribir. Al revés queda la
+       ventana en la que la tabla está vacía. */
+    test('se escribe primero y se borra después: nunca hay un hueco', () => {
+        const u = sav.indexOf('.upsert('), d = sav.indexOf('.delete(');
+        return eq(u > -1 && d > u, true, 'orden correcto');
+    });
+    test('se escribe encima (upsert), que es un solo viaje', () =>
+        eq(sav.indexOf('.upsert(') > -1 && sav.indexOf('.insert(') === -1, true, 'upsert'));
+    test('…y si el upsert falla, NO se borra nada después', () => {
+        const u = sav.indexOf('rUp.error');
+        const d = sav.indexOf('delete()');
+        return eq(u > -1 && u < d && sav.slice(u, d).indexOf('return;') > -1, true, 'se detiene');
+    });
+    /* La limpieza borra solo lo que de verdad se fue. */
+    test('solo se borra lo que ya no está en la lista', () =>
+        eq(sav.indexOf(".not('id', 'in'") > -1, true, 'quirúrgica'));
+    /* Y el caso que rompe ese filtro: con la lista vacía, un `not in ()` sería
+       sintaxis inválida o borraría de más. Por eso se separa. */
+    test('…y con la lista vacía se borra por negocio, sin filtro imposible', () =>
+        eq(/vivos\.length\s*\?/.test(sav), true, 'caso vacío'));
 }
 
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════

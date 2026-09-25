@@ -820,19 +820,35 @@ function rolBadge(key) {
 
 /* ── DATA ── */
 function load() { try { return JSON.parse(localStorage.getItem(_sk('staff'))) || []; } catch(e){ return []; } }
+/* Guardar el catálogo completo.
+   ANTES: borraba TODOS los renglones del negocio y luego los volvía a insertar.
+   Dos problemas, y el segundo es serio:
+     · Es el doble de viajes, y el editor se quedaba esperándolos con el modal
+       abierto —de ahí la sensación de que "no guarda" y los clics de más—.
+     · Entre el borrado y el alta la tabla queda VACÍA. Si el alta fallaba ahí
+       —se cae la red, rebota RLS—, el negocio se quedaba sin su personal en la
+       nube. El respaldo local lo salvaba, pero otro dispositivo sincronizaba el
+       vacío.
+   AHORA: se escribe encima (upsert) y solo se borra lo que de verdad se fue.
+   En ningún momento existe el hueco. */
 async function save(d) {
     localStorage.setItem(_sk('staff'), JSON.stringify(d));
     var negId = getNegocioActivo();
     if (!negId) return;
-    // Reemplazar todos los registros del negocio
-    var rDel = await _supabase.from('staff').delete().eq('negocio_id', negId);
-    if (rDel.error) { _sbToastError('staff delete: ' + rDel.error.message); return; }
-    if (d.length) {
-        var rIns = await _supabase.from('staff').insert(
-            d.map(function(m){ return { id: m.id, negocio_id: negId, datos: m }; })
+    var vivos = (d || []).map(function(m){ return m.id; });
+    if (d && d.length) {
+        var rUp = await _supabase.from('staff').upsert(
+            d.map(function(m){ return { id: m.id, negocio_id: negId, datos: m }; }),
+            { onConflict: 'id' }
         );
-        if (rIns.error) _sbToastError('staff insert: ' + rIns.error.message);
+        if (rUp.error) { _sbToastError('staff: ' + rUp.error.message); return; }
     }
+    /* Lo que ya no está en la lista se borra — uno por uno por id, no por
+       negocio: el `not in` con la lista vacía borraría todo. */
+    var rDel = vivos.length
+        ? await _supabase.from('staff').delete().eq('negocio_id', negId).not('id', 'in', '(' + vivos.map(function(i){ return '"' + i + '"'; }).join(',') + ')')
+        : await _supabase.from('staff').delete().eq('negocio_id', negId);
+    if (rDel.error) _sbToastError('staff (limpieza): ' + rDel.error.message);
 }
 async function syncFromDB() {
     var negId = getNegocioActivo();
@@ -1505,7 +1521,19 @@ async function deleteStaff(id) {
     });
 }
 
+/* Candado de re-entrada: mientras un guardado está en vuelo, el botón no vuelve
+   a disparar. Dos guardados encimados no son solo lentos — el segundo puede
+   escribir sobre el primero a medio camino. */
+var _guardandoStaff = false;
+/* El candado se suelta SIEMPRE, pase lo que pase. Si un renglón del formulario
+   tronara a media construcción del objeto, sin esto el botón quedaría muerto
+   hasta recargar la página — y el dueño pensaría que se rompió el módulo. */
 async function saveStaff() {
+    if (_guardandoStaff) return;
+    try { await _saveStaffReal(); }
+    finally { _guardandoStaff = false; }
+}
+async function _saveStaffReal() {
     /* Aquí se decide: si es alguien nuevo pide CREAR; si ya existía, EDITAR. */
     var _esNuevoSt = !((document.getElementById('fId') || {}).value);
     if (!_exigeStaff(_esNuevoSt ? 'crear' : 'editar',
@@ -1535,6 +1563,11 @@ async function saveStaff() {
 
     var existing = editId ? (data.find(function(s){ return s.id === editId; }) || {}) : {};
     // Credenciales según el tipo de rol
+    /* A partir de aquí ya no hay vuelta atrás y hay dos `await` (el cifrado de la
+       contraseña y el del NIP). Ese es justo el hueco por el que se colaba el
+       segundo clic: el candado se arma DESPUÉS de las validaciones —esas sí
+       rebotan y deben dejar el botón vivo— y antes del primer await. */
+    _guardandoStaff = true;
     var passwordHash = esAdmin ? (pwd ? await _hashPwdStaff(pwd) : (existing.passwordHash || '')) : '';
     var nipHash      = (!esAdmin && rol) ? (nipRaw ? await _hashPwdStaff('nip|' + nipRaw) : (existing.nipHash || '')) : '';
     var sucursalId = (document.getElementById('fSucursal').value || '').trim();
@@ -1610,9 +1643,14 @@ async function saveStaff() {
        desaparecería al editar desde Nóminas. Fusionando, cada quien actualiza lo
        suyo y respeta lo que no maneja. */
     if (idx > -1) { data[idx] = Object.assign({}, data[idx], obj); } else { data.push(obj); }
-    await save(data);
+    /* Se cierra YA. El cambio está en memoria y en el respaldo local; la nube se
+       pone al día por detrás. Antes esto esperaba el viaje completo con el modal
+       abierto y sin señal de vida: se sentía como que no había guardado, así que
+       se le daba clic otra vez… y cada clic disparaba OTRO guardado completo.
+       Si la nube falla, _sbToastError lo dice — no se guarda el silencio. */
     closeModal();
     renderAll();
+    save(data).catch(function(e){ _sbToastError('staff: ' + (e && e.message || e)); });
 }
 
 /* ── FILE UPLOAD ── */
