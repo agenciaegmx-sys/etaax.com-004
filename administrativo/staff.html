@@ -330,7 +330,7 @@
                                 <option>Baja temporal</option>
                             </select>
                         </div>
-                        <button class="btn-ghost" onclick="_irAPermisos()"
+                        <button class="btn-ghost" id="btnRolesPermisos" onclick="_irAPermisos()"
                             title="Acceso restringido — requiere contraseña de administrador"
                             style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">🔐 Roles y Permisos</button>
                         <button class="btn-ghost" id="btnSalarioMinimo" onclick="_abrirNomParams()"
@@ -341,6 +341,15 @@
                             style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">🗂️ Bajas</button>
                         <button class="btn-primary" id="btnAgregarColaborador" onclick="openModal()">+ Agregar colaborador</button>
                     </div>
+                </div>
+
+                <!-- Qué se puede y qué no en la vista global -->
+                <div id="globalNota" style="display:none;margin:12px 22px 0;background:rgba(122,184,245,.08);border:1px solid rgba(122,184,245,.28);border-left:3px solid var(--blue,#7ab8f5);border-radius:8px;padding:10px 14px;font-size:12.5px;line-height:1.55;color:var(--text-muted)">
+                    🌐 <strong style="color:var(--text)">Vista global.</strong>
+                    Aquí ves a todo el personal, a qué sucursal pertenece, lo mueves de sucursal y
+                    revisas o registras bajas. Dar de alta, el salario mínimo y los permisos se
+                    manejan <strong style="color:var(--text)">dentro de cada sucursal</strong>,
+                    porque cada una tiene los suyos.
                 </div>
 
                 <!-- Aviso de cumpleaños del día -->
@@ -792,6 +801,7 @@ function _pobRolSelect(valor) {
    Estando embebido se conserva el modo y el contexto; estando suelto, navega
    normal. */
 function _irAPermisos() {
+    if (!_exigeSucursalStaff('Editar los roles y permisos')) return;
     var esEmbed = /[?&]embed=1/.test(window.location.search);
     if (!esEmbed) { window.location.href = 'permisos.html'; return; }
     var q = 'embed=1';
@@ -1126,6 +1136,9 @@ function openModal(id) {
        el sueldo de nadie. */
     if (!_exigeStaff(id ? 'editar' : 'crear',
         id ? 'No puedes editar colaboradores.' : 'No puedes dar de alta colaboradores.')) return;
+    /* EDITAR sí vive en la vista global —es justo ahí donde se mueve a alguien
+       de sucursal—; dar de ALTA no: nacería sin sucursal a la que pertenecer. */
+    if (!id && !_exigeSucursalStaff('Dar de alta a un colaborador')) return;
     /* Crear NO pide clave: dar de alta gente es la tarea del día y escribir la
        contraseña en cada alta es exactamente la lata de la que se quejó Edwin.
        Editar sí — ahí es donde se ven y se cambian sueldos y datos bancarios. */
@@ -2238,6 +2251,44 @@ function _puedeStaff(sub){
 function _exigeStaff(sub, msg){
     return (typeof window.etaaxExigeSub === 'function') ? window.etaaxExigeSub('staff', sub, msg) : true;
 }
+/* ── LA VISTA GLOBAL NO ES PARA TODO ─────────────────────────────────────────
+   Desde que los permisos son POR SUCURSAL, tres botones de esta barra no tienen
+   dónde aterrizar cuando se está mirando el negocio entero:
+
+     · Roles y Permisos  — se editan por sucursal; desde aquí no se sabe cuál.
+       (Y de paso arreglaba solo un estorbo: abrirlo desde la vista global
+        rompía la navegación, porque montaba la ventana del negocio encima.)
+     · Definir salario mínimo — es un parámetro de la sucursal, no del negocio.
+     · Agregar colaborador — nace en una sucursal; sin una elegida, en ninguna.
+
+   Lo que SÍ es de la vista global, y por eso se queda: ver el catálogo
+   completo, saber a qué sucursal pertenece cada quien, moverlo de sucursal
+   editándolo, darlo de baja y revisar las bajas.
+
+   La regla de siempre: esconder el botón no es negar. Cada una de las tres
+   acciones se niega también desde dentro. */
+function _vistaGlobalStaff() { return _catGlobalOn() || !_getSucActiva(); }
+
+/* El "no" explicado: decir "no se puede" sin decir dónde sí manda a la gente a
+   buscar a ciegas. */
+function _exigeSucursalStaff(accion) {
+    if (!_vistaGlobalStaff()) return true;
+    alert('🌐 Estás en la vista global, viendo todas las sucursales.\n\n' +
+          accion + ' es de cada sucursal por separado.\n\n' +
+          'Entra a la sucursal que quieras desde el hub y hazlo ahí.');
+    return false;
+}
+
+function _aplicarAlcanceStaff(){
+    var global = _vistaGlobalStaff();
+    ['btnRolesPermisos','btnSalarioMinimo','btnAgregarColaborador'].forEach(function(id){
+        var b = document.getElementById(id);
+        if (b && global) b.style.display = 'none';
+    });
+    var nota = document.getElementById('globalNota');
+    if (nota) nota.style.display = global ? '' : 'none';
+}
+
 function _aplicarPermisosStaff(){
     [['crear','btnAgregarColaborador'], ['salarioMinimo','btnSalarioMinimo'], ['bajas','btnBajas']]
         .forEach(function(par){
@@ -2293,6 +2344,7 @@ async function _arrancarCatalogo() {
     if (_arrancado) return;
     _arrancado = true;
     _aplicarPermisosStaff();
+    _aplicarAlcanceStaff();
     window.addEventListener('etaax:permisos', function(){ _aplicarPermisosStaff(); renderAll(); });
     var negId = getNegocioActivo();
     if (window.NominaParams) { try { await NominaParams.sync(negId); } catch(e){} }
@@ -2346,6 +2398,7 @@ async function _reloadStaffRT() {
 }
 function _abrirNomParams() {
     if (!_exigeStaff('salarioMinimo', 'No puedes definir el salario mínimo.')) return;
+    if (!_exigeSucursalStaff('Definir el salario mínimo')) return;
     /* Fija el sueldo con el que nacen TODOS los colaboradores nuevos: tocarlo
        sin querer se paga en la nómina de la quincena siguiente. */
     _gateStaff('Definir salario mínimo', function () {

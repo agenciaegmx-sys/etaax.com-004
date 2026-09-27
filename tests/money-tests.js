@@ -12121,6 +12121,183 @@ console.log('\n══ BF9 · Los permisos son por sucursal ══');
         eq(pg.indexOf('frontera de seguridad entre sucursales') > -1, true, 'anotado'));
 }
 
+/* ═══════════ SUITE BG1 · LA VISTA GLOBAL NO ES PARA TODO ═══════════════════
+   Desde que los permisos son por sucursal, tres botones del Catálogo de Staff
+   no tienen dónde aterrizar cuando se mira el negocio entero:
+
+     · Roles y Permisos      — se editan por sucursal; desde aquí no se sabe cuál
+                               (y abrirlo desde global además rompía la
+                                navegación: montaba la ventana del negocio
+                                encima de la que ya estaba).
+     · Definir salario mínimo — parámetro de la sucursal, no del negocio.
+     · Agregar colaborador    — nace en una sucursal; sin una elegida, en ninguna.
+
+   Lo que SÍ es de la vista global se queda: ver el catálogo completo, saber a
+   qué sucursal pertenece cada quien, MOVERLO de sucursal editándolo, darlo de
+   baja y revisar bajas. Por eso editar no se toca y crear sí.               */
+console.log('\n══ BG1 · La vista global no es para todo ══');
+{
+    const stf = fs.readFileSync(path.join(RAIZ, 'administrativo/staff.html'), 'utf8');
+    const decl = (fn) => {
+        const i = stf.indexOf('function ' + fn + '(');
+        if (i < 0) return '';
+        const abre = stf.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < stf.length) {
+            if (stf[j] === '{') prof++;
+            else if (stf[j] === '}') { prof--; if (!prof) return stf.slice(i, j + 1); }
+            j++;
+        }
+        return '';
+    };
+    const FNS = ['_getSucActiva','_catGlobalOn','_vistaGlobalStaff','_exigeSucursalStaff',
+                 '_aplicarAlcanceStaff','_aplicarPermisosStaff','openModal','_abrirNomParams',
+                 '_irAPermisos'];
+    test('las piezas del alcance existen en el catálogo de staff', () =>
+        eq(FNS.filter(f => !decl(f)).join(',') || 'todas', 'todas', 'completas'));
+
+    /* Se levanta el código REAL con un DOM de mentira: la pregunta es qué
+       BOTONES quedan y qué acciones dejan pasar, no cómo se ve. */
+    function catalogo(opts) {
+        opts = opts || {};
+        const ls = { etaax_negocio_activo:'n1' };
+        if (opts.suc) ls.etaax_sucursal_activa = opts.suc;
+        const ss = {};
+        if (opts.catGlobal) ss.etaax_cat_global = '1';
+        const IDS = ['btnRolesPermisos','btnSalarioMinimo','btnAgregarColaborador',
+                     'btnBajas','globalNota'];
+        const nodos = {};
+        IDS.forEach(id => nodos[id] = { style:{ display:'' } });
+        const visto = { alertas:[], abrioModal:null, navego:null, nomParams:0 };
+        const ctx = {
+            console:{ warn(){}, log(){} }, JSON, Object, Array, String, Boolean, Promise, Date,
+            localStorage:{ getItem:k=>(k in ls?ls[k]:null), setItem(k,v){ ls[k]=String(v); }, removeItem(k){ delete ls[k]; } },
+            sessionStorage:{ getItem:k=>(k in ss?ss[k]:null), setItem(k,v){ ss[k]=String(v); }, removeItem(k){ delete ss[k]; } },
+            document:{ getElementById:(id)=>nodos[id]||null, addEventListener(){} },
+            alert:(m)=>visto.alertas.push(m),
+        };
+        ctx.window = ctx;
+        ctx.location = { search: opts.embed ? '?embed=1' : '',
+                         get href(){ return visto.navego; }, set href(u){ visto.navego = u; } };
+        vm.createContext(ctx);
+        vm.runInContext(`
+            function getNegocioActivo(){ return localStorage.getItem('etaax_negocio_activo') || ''; }
+            var _PUEDE = ${JSON.stringify(opts.puede || {})};
+            function _puedeStaff(sub){ return _PUEDE[sub] !== false; }
+            function _exigeStaff(sub){ return _puedeStaff(sub); }
+            function _gateStaff(acc, cb){ cb(); }
+            function _openModalReal(id){ window.__visto.abrioModal = (id === '' ? 'nuevo' : 'editar:' + id); }
+            function renderAll(){}
+            var NominaParams = { open(){ window.__visto.nomParams++; } };
+        `, ctx);
+        ctx.__visto = visto;
+        FNS.forEach(f => vm.runInContext(decl(f), ctx, { filename:'staff.html' }));
+        return { ctx, nodos, visto };
+    }
+
+    /* ── Qué cuenta como "global" ── */
+    test('sin sucursal parada, es vista global', () =>
+        eq(catalogo({}).ctx._vistaGlobalStaff(), true, 'global'));
+    test('con el catálogo global prendido, también', () =>
+        eq(catalogo({ suc:'suc_centro', catGlobal:true }).ctx._vistaGlobalStaff(), true, 'global'));
+    test('parado en una sucursal, NO es global', () =>
+        eq(catalogo({ suc:'suc_centro' }).ctx._vistaGlobalStaff(), false, 'de sucursal'));
+
+    /* ── Los botones ── */
+    {
+        const c = catalogo({});
+        c.ctx._aplicarAlcanceStaff();
+        ['btnRolesPermisos','btnSalarioMinimo','btnAgregarColaborador'].forEach(id =>
+            test('en global se esconde ' + id, () =>
+                eq(c.nodos[id].style.display, 'none', 'escondido')));
+        /* Lo que SÍ es de la vista global no se toca: revisar bajas es
+           justamente para lo que sirve mirar el negocio entero. */
+        test('…pero Bajas se queda: eso sí es de la vista global', () =>
+            eq(c.nodos.btnBajas.style.display, '', 'visible'));
+        test('…y se explica dónde sí se hacen esas tres cosas', () =>
+            eq(c.nodos.globalNota.style.display, '', 'con aviso'));
+    }
+    {
+        const c = catalogo({ suc:'suc_centro' });
+        c.ctx._aplicarAlcanceStaff();
+        test('dentro de una sucursal los tres botones siguen ahí', () =>
+            eq(c.nodos.btnRolesPermisos.style.display === '' &&
+               c.nodos.btnSalarioMinimo.style.display === '' &&
+               c.nodos.btnAgregarColaborador.style.display === '', true, 'visibles'));
+        test('…y el aviso de vista global no sale', () =>
+            eq(c.nodos.globalNota.style.display, 'none', 'sin aviso'));
+    }
+    /* EL ORDEN IMPORTA: el permiso esconde primero y el alcance después. Si el
+       alcance volviera a mostrar, un rol sin permiso de dar de alta vería el
+       botón al entrar a una sucursal. */
+    {
+        const c = catalogo({ suc:'suc_centro', puede:{ crear:false } });
+        c.ctx._aplicarPermisosStaff();
+        c.ctx._aplicarAlcanceStaff();
+        test('el alcance NO vuelve a mostrar lo que el permiso escondió', () =>
+            eq(c.nodos.btnAgregarColaborador.style.display, 'none', 'sigue escondido'));
+    }
+
+    /* ── Esconder el botón no es negar: las tres se niegan por dentro ── */
+    {
+        const c = catalogo({});
+        c.ctx.openModal('');
+        test('en global, dar de ALTA se niega aunque se llame a mano', () =>
+            eq(c.visto.abrioModal, null, String(c.visto.abrioModal)));
+        test('…y se dice por qué, no solo que no', () =>
+            eq((c.visto.alertas[0]||'').indexOf('cada sucursal por separado') > -1, true,
+               c.visto.alertas[0] || 'sin aviso'));
+    }
+    /* EDITAR es la razón de ser de la vista global: es donde se mueve a alguien
+       de una sucursal a otra. Negarlo aquí rompería justo lo que se quiere. */
+    {
+        const c = catalogo({});
+        c.ctx.openModal('st_1');
+        test('en global, EDITAR sigue abriendo (es como se mueve de sucursal)', () =>
+            eq(c.visto.abrioModal, 'editar:st_1', String(c.visto.abrioModal)));
+    }
+    {
+        const c = catalogo({ suc:'suc_centro' });
+        c.ctx.openModal('');
+        test('dentro de una sucursal, dar de alta sí abre', () =>
+            eq(c.visto.abrioModal, 'nuevo', String(c.visto.abrioModal)));
+    }
+    {
+        const c = catalogo({});
+        c.ctx._abrirNomParams();
+        test('en global, el salario mínimo se niega', () =>
+            eq(c.visto.nomParams, 0, 'no abrió'));
+    }
+    {
+        const c = catalogo({ suc:'suc_centro' });
+        c.ctx._abrirNomParams();
+        test('…y dentro de una sucursal sí se define', () =>
+            eq(c.visto.nomParams, 1, 'abrió'));
+    }
+    /* Roles y Permisos desde la vista global hacía DOS cosas mal: editaba lo que
+       no se sabe de quién, y rompía la navegación montando la ventana del
+       negocio encima. Negarlo arregla las dos. */
+    {
+        const c = catalogo({});
+        c.ctx._irAPermisos();
+        test('en global, Roles y Permisos ni siquiera navega', () =>
+            eq(c.visto.navego, null, String(c.visto.navego)));
+    }
+    {
+        const c = catalogo({ suc:'suc_centro' });
+        c.ctx._irAPermisos();
+        test('…y desde una sucursal navega, llevándose la sucursal puesta', () =>
+            eq(String(c.visto.navego||'').indexOf('permisos.html') > -1, true, String(c.visto.navego)));
+    }
+    {
+        const c = catalogo({ suc:'suc_centro', embed:true });
+        c.ctx._irAPermisos();
+        test('…y embebido conserva el modo, para no apilar dos cromos', () =>
+            eq(String(c.visto.navego||'').indexOf('embed=1') > -1 &&
+               String(c.visto.navego||'').indexOf('suc=suc_centro') > -1, true, String(c.visto.navego)));
+    }
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
