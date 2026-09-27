@@ -11369,6 +11369,74 @@ console.log('\n══ BF7 · Los interruptores, bloqueados de verdad ══');
         eq((per.match(/if \(!_editando\) return;/g) || []).length, 2, 'las dos capas'));
 }
 
+/* ═══════════ SUITE BF8 · LA COLUMNA QUE NUNCA LLEGÓ ═══════════════════════
+   "Could not find the 'updated_at' column of 'permisos' in the schema cache".
+
+   La tabla `permisos` la creó la v2 SIN updated_at. La v11 la volvió a declarar
+   CON esa columna… usando `CREATE TABLE IF NOT EXISTS`. Como la tabla ya
+   existía, ese bloque no hizo NADA: la columna nunca se agregó y la migración
+   corrió "sin errores".
+
+   Desde entonces, cada guardado mandaba updated_at y PostgREST rechazaba la
+   escritura ENTERA. Los permisos nunca salieron del navegador de quien los
+   tocó — que es exactamente lo que se veía como "se activan y desactivan de
+   manera local" y "el cambio de mi tablet no aparece en la compu".
+
+   COMPROBADO CONTRA LA BASE DE PRODUCCIÓN (27-sep-2026):
+     permisos.updated_at → NO EXISTE     ·  staff.updated_at → NO EXISTE
+     recetas / inventarios → completas.                                        */
+console.log('\n══ BF8 · La columna que nunca llegó ══');
+{
+    const v60 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v60.sql'), 'utf8');
+    const per = fs.readFileSync(path.join(RAIZ, 'administrativo/permisos.html'), 'utf8');
+
+    /* ── La migración ── */
+    test('la v60 agrega la columna a permisos', () =>
+        eq(/ALTER TABLE permisos ADD COLUMN IF NOT EXISTS updated_at/.test(v60), true, 'agregada'));
+    /* staff arrastra el mismo hueco (la v10 la re-declaró igual). Ahí no rompió
+       nada porque su guardado nunca mandó updated_at — pero el hueco está. */
+    test('…y también a staff, que arrastra el mismo hueco', () =>
+        eq(/ALTER TABLE staff\s+ADD COLUMN IF NOT EXISTS updated_at/.test(v60), true, 'agregada'));
+    /* Con ALTER, no con otro CREATE: es justo la confusión que causó el bug.
+       Se miran las SENTENCIAS, no el texto: el encabezado explica el error y lo
+       nombra, y buscarlo a secas daría un falso rojo. */
+    test('lo hace con ALTER, no con otro CREATE TABLE IF NOT EXISTS', () => {
+        const sql = v60.replace(/^--.*$/gm, '');
+        return eq(/CREATE TABLE IF NOT EXISTS/i.test(sql), false, 'sin repetir el error');
+    });
+    test('es segura de re-ejecutar', () =>
+        eq((v60.match(/IF NOT EXISTS/g) || []).length >= 2, true, 'idempotente'));
+    test('deja una comprobación a la vista', () =>
+        eq(v60.indexOf('information_schema.columns') > -1, true, 'verificable'));
+
+    /* ── Y mientras la migración no se corra, que igual guarde ── */
+    test('si falta la columna, se reintenta sin ella', () => {
+        const i = per.indexOf('async function savePermisos(d, rolTocado)');
+        const t = per.slice(i, i + 2600);
+        return eq(/if \(r\.error && \/updated_at\/\.test\(r\.error\.message \|\| ''\)\)/.test(t),
+                  true, 'con reintento');
+    });
+    test('…mandando los permisos, que es el dato que importa', () => {
+        const i = per.indexOf('async function savePermisos(d, rolTocado)');
+        const t = per.slice(i, i + 2600);
+        return eq(t.indexOf('negocio_id:x.negocio_id, rol:x.rol, datos:x.datos') > -1, true, 'lo esencial');
+    });
+    /* El reintento NO puede volver el hueco invisible: por eso se anota. */
+    test('…y el hueco no se vuelve invisible: queda anotado', () => {
+        const i = per.indexOf('async function savePermisos(d, rolTocado)');
+        return eq(per.slice(i, i + 2600).indexOf("console.warn('[permisos] falta la columna updated_at") > -1,
+                  true, 'se delata');
+    });
+    /* Y si falla por OTRA cosa, no se reintenta a ciegas: se reporta. */
+    test('un error distinto NO se reintenta: se reporta', () => {
+        const i = per.indexOf('async function savePermisos(d, rolTocado)');
+        const t = per.slice(i, i + 2600);
+        const reintento = t.indexOf('console.warn(\'[permisos] falta la columna');
+        const reporte   = t.indexOf("_sbToastError('permisos: '");
+        return eq(reintento > -1 && reporte > reintento, true, 'sin tapar otros');
+    });
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La

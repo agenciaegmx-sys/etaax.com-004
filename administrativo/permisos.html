@@ -402,6 +402,23 @@ async function savePermisos(d, rolTocado) {
     });
     if (!rows.length) return { ok:true };
     var r = await _supabase.from('permisos').upsert(rows, { onConflict: 'negocio_id,rol' });
+    /* LA COLUMNA QUE NUNCA LLEGÓ. La tabla `permisos` la creó la v2 sin
+       updated_at; la v11 la volvió a declarar CON ella, pero con
+       `CREATE TABLE IF NOT EXISTS` — y como la tabla ya existía, ese bloque no
+       hizo nada. Resultado: el cliente mandaba updated_at, PostgREST rechazaba
+       la escritura ENTERA, y los permisos nunca salieron del navegador. Eso es
+       lo que se veía como "los permisos se quedan en mi máquina".
+
+       La v60 agrega la columna. Mientras tanto —y en cualquier base donde
+       falte— se reintenta sin ella: el dato importante son los permisos, no el
+       sello de la hora. Se avisa por consola para que el hueco no se vuelva
+       invisible otra vez. */
+    if (r.error && /updated_at/.test(r.error.message || '')) {
+        console.warn('[permisos] falta la columna updated_at (correr v60); se guarda sin el sello');
+        r = await _supabase.from('permisos')
+            .upsert(rows.map(function(x){ return { negocio_id:x.negocio_id, rol:x.rol, datos:x.datos }; }),
+                    { onConflict: 'negocio_id,rol' });
+    }
     if (r.error) { _sbToastError('permisos: ' + r.error.message); return { ok:false, motivo:r.error.message }; }
     return { ok:true };
 }
