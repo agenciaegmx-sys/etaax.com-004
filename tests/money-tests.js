@@ -11907,7 +11907,8 @@ console.log('\n══ BF9 · Los permisos son por sucursal ══');
         return '';
     };
     const FNS = ['_sucursales','_sucNombre','_rolRaw','_tienePropios',
-                 'getRolPermisos','_conPermisosPuestos','setRolPermisos','usarGenerales'];
+                 'getRolPermisos','_conPermisosPuestos','setRolPermisos','usarGenerales',
+                 'renderSucBar'];
     test('las piezas del guardado por sucursal existen en la pantalla', () =>
         eq(FNS.filter(f => !decl(f)).join(',') || 'todas', 'todas', 'completas'));
 
@@ -11919,11 +11920,16 @@ console.log('\n══ BF9 · Los permisos son por sucursal ══');
                      etaax_n1_sucursales: JSON.stringify([
                          { id:'suc_centro', nombre:'Centro' }, { id:'suc_plaza', nombre:'Plaza' }]) };
         let subido = null;
+        /* DOM de mentira, lo mínimo para que renderSucBar pinte de verdad:
+           preguntarle al HTML resultante es la única forma de cazar que el
+           punto o el aviso desaparezcan. */
+        const nodos = { sucBar:{ innerHTML:'', style:{} }, sucNota:{ innerHTML:'', style:{} } };
         const ctx = {
             console:{ warn(){}, log(){} }, JSON, Object, Array, String, Boolean, Promise,
             localStorage:{ getItem:k=>(k in ls?ls[k]:null), setItem(k,v){ ls[k]=String(v); }, removeItem(k){ delete ls[k]; } },
-            document:{ getElementById:()=>null, querySelector:()=>null, addEventListener(){} },
+            document:{ getElementById:(id)=>nodos[id]||null, querySelector:()=>null, addEventListener(){} },
         };
+        ctx.__nodos = nodos;
         ctx.window = ctx;
         vm.createContext(ctx);
         vm.runInContext(`
@@ -11938,7 +11944,7 @@ console.log('\n══ BF9 · Los permisos son por sucursal ══');
             function _rolDe(k){ return { key:k, label:k }; }
             function _esc2(s){ return String(s||''); }
             function showToast(){}
-            function renderSucBar(){} function renderTabs(){} function renderGrid(){}
+            function renderTabs(){} function renderGrid(){}
             function _rmConfirmar(t, a, onSi){ onSi(); }
             function savePermisos(d, rol){ window.__subido = { datos: JSON.parse(JSON.stringify(d)), rol: rol };
                                            return Promise.resolve({ ok:true }); }
@@ -11993,11 +11999,68 @@ console.log('\n══ BF9 · Los permisos son por sucursal ══');
             eq(base.staff === false && !('__suc__' in base), true, 'la base limpia'));
         test('el editor parado en una sucursal muestra LOS DE ESA SUCURSAL', () =>
             eq(centro.staff, true, 'los suyos'));
-        test('…y trabaja sobre una copia, no sobre la caché', () => {
-            const e = editor(CONSUC, 'suc_centro', 'gerente');
-            const p = e.ctx.getRolPermisos('gerente');
-            p.staff = 'MANOSEADO';
-            return eq(e.ctx.loadPermisos().gerente.__suc__.suc_centro.staff, true, 'sin tocar');
+        /* AQUÍ HABÍA UN TEST QUE NO PODÍA FALLAR: mutaba lo que devuelve
+           getRolPermisos y comprobaba que lo guardado no cambiara. Nunca iba a
+           cambiar — `loadPermisos()` vuelve a parsear el JSON en cada llamada,
+           así que no existe una caché en memoria que se pueda ensuciar. Lo
+           cazó la batería de mutaciones: quitarle la copia defensiva a
+           getRolPermisos no rompía nada. La copia se queda (es barata y el día
+           que aparezca una caché será lo único que salve), pero el test que
+           fingía cuidarla se va: uno que no puede fallar es peor que ninguno.
+
+           En su lugar, lo que sí se puede romper: qué sucursales marca la
+           barra con punto. Decir que una sucursal tiene lo suyo cuando sigue
+           los generales manda al dueño a editar donde no es. */
+        test('la barra distingue las sucursales que ya se independizaron', () => {
+            const e = editor(CONSUC, '', 'gerente');
+            return eq(e.ctx._tienePropios('gerente','suc_centro') === true &&
+                      e.ctx._tienePropios('gerente','suc_plaza')  === false, true, 'distingue');
+        });
+        test('…y lo pinta: punto en la independizada, nada en la que hereda', () => {
+            const e = editor(CONSUC, '', 'gerente');
+            e.ctx.renderSucBar();
+            const html = e.ctx.__nodos.sucBar.innerHTML;
+            /* CONTAR, no solo encontrar: "hay un punto antes de Centro" lo
+               cumple igual una barra que los marca TODOS — y esa versión rota
+               pasaba el test. Lo cazó la batería de mutaciones. */
+            const dots = (html.match(/suc-dot/g) || []).length;
+            return eq(dots === 1 && html.indexOf('suc-dot') < html.indexOf('Centro'),
+                      true, dots + ' punto(s)');
+        });
+        test('la barra ofrece «Todas (general)» y una pestaña por sucursal', () => {
+            const e = editor(CONSUC, '', 'gerente');
+            e.ctx.renderSucBar();
+            const html = e.ctx.__nodos.sucBar.innerHTML;
+            return eq(html.indexOf('Todas (general)') > -1 &&
+                      html.indexOf('Centro') > -1 && html.indexOf('Plaza') > -1, true, 'completa');
+        });
+        /* El aviso es lo único que le dice al dueño a QUIÉN le va a pegar lo
+           que está a punto de tocar. Los tres estados, pintados de verdad. */
+        test('parado en generales, el aviso lo dice', () => {
+            const e = editor(CONSUC, '', 'gerente'); e.ctx.renderSucBar();
+            return eq(e.ctx.__nodos.sucNota.innerHTML.indexOf('generales') > -1, true, 'lo dice');
+        });
+        test('parado en una sucursal que hereda, avisa que se va a independizar', () => {
+            const e = editor(CONSUC, 'suc_plaza', 'gerente'); e.ctx.renderSucBar();
+            const t = e.ctx.__nodos.sucNota.innerHTML;
+            return eq(t.indexOf('Plaza') > -1 && t.indexOf('sigue los permisos') > -1, true, t.slice(0,80));
+        });
+        test('parado en una independizada, avisa que los generales ya no le llegan', () => {
+            const e = editor(CONSUC, 'suc_centro', 'gerente'); e.ctx.renderSucBar();
+            const t = e.ctx.__nodos.sucNota.innerHTML;
+            return eq(t.indexOf('Centro') > -1 && t.indexOf('ya no le llegan') > -1, true, t.slice(0,80));
+        });
+        test('…y desde ahí se puede volver a los generales', () => {
+            const e = editor(CONSUC, 'suc_centro', 'gerente'); e.ctx.renderSucBar();
+            return eq(e.ctx.__nodos.sucNota.innerHTML.indexOf('usarGenerales()') > -1, true, 'con salida');
+        });
+        /* Con una sola sucursal no hay nada que elegir: la pantalla se queda
+           idéntica a la de siempre. */
+        test('con una sola sucursal, la barra ni se pinta', () => {
+            const e = editor(CONSUC, '', 'gerente');
+            e.ls.etaax_n1_sucursales = JSON.stringify([{ id:'suc_principal', nombre:'Matriz' }]);
+            e.ctx.renderSucBar();
+            return eq(e.ctx.__nodos.sucBar.style.display, 'none', 'escondida');
         });
     }
 

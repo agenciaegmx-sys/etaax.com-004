@@ -556,7 +556,7 @@ function renderSucBar() {
         lista.map(function(su){
             var propios = _tienePropios(_rolActivo, su.id);
             return '<button class="suc-tab' + (_sucSel === su.id ? ' active' : '') + '" ' +
-                'onclick="selectSuc(\'' + su.id + '\')"' +
+                'onclick="selectSuc(\'' + _esc2(su.id) + '\')"' +
                 (propios ? ' title="Esta sucursal tiene permisos propios"' : '') + '>' +
                 (propios ? '<span class="suc-dot"></span>' : '') + _esc2(su.nombre || su.id) +
             '</button>';
