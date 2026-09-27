@@ -148,6 +148,27 @@
 </header>
 <div id="ctxBar" class="ctx-bar" style="display:none"></div>
 
+<div class="app-shell">
+<nav class="nav cerrado" id="nav">
+    <div class="nav-top">
+        <div class="nav-brand"><span class="nav-brand-sub">Gestión de Staff</span></div>
+        <div class="nav-top-actions">
+            <a href="staff-hub.html" class="nav-toggle nav-toggle-btn" data-tooltip="Gestión de Staff" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1">🗃️</a>
+            <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
+        </div>
+    </div>
+    <div class="nav-section">
+        <div class="nav-section-label">Gestión de Staff</div>
+        <a href="staff.html" class="nav-link" data-tooltip="Catálogo"><span class="nav-icon">👥</span><span class="nav-text">Catálogo</span></a>
+        <a href="horarios.html" class="nav-link active" data-tooltip="Horarios"><span class="nav-icon">🗓️</span><span class="nav-text">Horarios</span></a>
+        <a href="checklists.html" class="nav-link" data-tooltip="Checklists"><span class="nav-icon">✅</span><span class="nav-text">Checklists</span></a>
+        <a href="organigrama.html" class="nav-link" data-tooltip="Organigrama"><span class="nav-icon">🧠</span><span class="nav-text">Organigrama</span></a>
+        <a href="perfiles-puesto.html" class="nav-link" data-tooltip="Perfiles"><span class="nav-icon">📋</span><span class="nav-text">Perfiles</span></a>
+        <a href="evaluaciones.html" class="nav-link" data-tooltip="Evaluaciones"><span class="nav-icon">📝</span><span class="nav-text">Evaluaciones</span></a>
+    </div>
+</nav>
+
+<main class="main-content expandido" id="mainContent">
 <div class="hr-wrap">
     <div class="hr-head">
         <div>
@@ -182,6 +203,8 @@
     </div>
 
     <div id="hrContent"></div>
+</div>
+</main>
 </div>
 
 <!-- Editor de turno -->
@@ -299,7 +322,19 @@ function _getSucs(){ var negId=getNegocioActivo(); try{ return JSON.parse(localS
 function _getSucActiva(){ return localStorage.getItem('etaax_sucursal_activa') || ''; }
 function _catGlobalOn(){ return sessionStorage.getItem('etaax_cat_global') === '1'; }
 function _effSuc(sucursalId){ return sucursalId || MATRIZ_ID; }
-function _sucNombre(id){ if(!id||id===MATRIZ_ID) return 'Matriz'; var s=_getSucs().find(function(x){return x.id===id;}); return s?(s.nombre||s.id):id; }
+/* El nombre que el negocio le puso, no la etiqueta del sistema.
+   ANTES: la sucursal `suc_principal` siempre se decía "Matriz", aunque en el
+   catálogo se llamara "Tata Mezcaleria + Cocina". La misma sucursal tenía dos
+   nombres según la pantalla, y en el selector de la vista global —donde salen
+   todas juntas— no había manera de saber cuál era cuál.
+   "Matriz" queda solo como último recurso: la sucursal que no está en el
+   catálogo (borrada, o datos de otro equipo que aún no bajan). */
+function _sucNombre(id){
+    if(!id) return 'Matriz';
+    var s=_getSucs().find(function(x){return x.id===id;});
+    if (s) return s.nombre || s.id;
+    return id===MATRIZ_ID ? 'Matriz' : id;
+}
 function esc(s){ return (window.etx?etx(String(s==null?'':s)):String(s==null?'':s)); }
 
 /* Estado */
@@ -413,6 +448,16 @@ async function _syncHorariosDB(){
     } catch(e){ console.warn('[horarios] sync:', e && e.message); }
 }
 
+function toggleNav() {
+    var nav = document.getElementById('nav'); var main = document.getElementById('mainContent');
+    nav.classList.toggle('cerrado'); if (main) main.classList.toggle('expandido');
+    var cerrado = nav.classList.contains('cerrado');
+    var btn = document.getElementById('navToggleBtn'); var txt = document.getElementById('navToggleTxt');
+    if (btn) btn.childNodes[0].textContent = cerrado ? '▶' : '◀';
+    if (txt) txt.textContent = cerrado ? 'Expandir' : 'Ocultar';
+    if (btn) btn.setAttribute('data-tooltip', cerrado ? 'Expandir' : 'Ocultar');
+}
+
 /* ── Scope de sucursal (dos caras, como staff.html) ── */
 function _resolverScope(){
     var sucs = _getSucs();
@@ -420,7 +465,7 @@ function _resolverScope(){
     var sel = document.getElementById('sucSel');
     if (global && sucs.length) {
         // Vista global: se puede elegir la sucursal a editar.
-        var opts = [{ id:MATRIZ_ID, nombre:'Matriz' }].concat(sucs.filter(function(s){ return s.id!==MATRIZ_ID; }));
+        var opts = [{ id:MATRIZ_ID, nombre:_sucNombre(MATRIZ_ID) }].concat(sucs.filter(function(s){ return s.id!==MATRIZ_ID; }));
         // dedup por si la matriz ya viene en la lista
         var seen={}, clean=[]; opts.forEach(function(o){ if(!seen[o.id]){ seen[o.id]=1; clean.push(o); } });
         // "Todas las sucursales" es el DEFAULT del catálogo global: se entra viendo el

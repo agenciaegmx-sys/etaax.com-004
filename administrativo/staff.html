@@ -329,6 +329,11 @@
                                 <option>Activo</option>
                                 <option>Baja temporal</option>
                             </select>
+                            <!-- Solo en la vista global: dentro de una sucursal la lista ya
+                                 es de esa sucursal y el filtro tendría una sola opción. -->
+                            <select class="filtro-select" id="filterSucursal" onchange="renderAll()" style="display:none">
+                                <option value="">Todas las sucursales</option>
+                            </select>
                         </div>
                         <button class="btn-ghost" id="btnRolesPermisos" onclick="_irAPermisos()"
                             title="Acceso restringido — requiere contraseña de administrador"
@@ -905,6 +910,9 @@ var tmpDocs = [];
 
 /* ── RENDER ALL ── */
 function renderAll() {
+    /* Primero el filtro: los chips y la tabla leen su valor a través de
+       _staffEnVista, así que tiene que estar poblado antes de contar. */
+    _pobFiltroSucursal();
     renderPuestoChips();
     renderPuestoFilter();
     renderCumpleBanner();
@@ -961,8 +969,16 @@ function renderCumpleBanner() {
    Una sola función para que no vuelvan a divergir. */
 function _staffEnVista() {
     var catGlobal = _catGlobalOn(), suc = _getSucActiva();
+    /* En la vista global se puede acotar a UNA sucursal sin salirse de ella:
+       con 40 colaboradores de cuatro sucursales, "todos" no es una vista, es
+       una pila. El filtro pasa por aquí —y no por la tabla— para que los chips
+       de puesto cuenten lo mismo que se ve. */
+    var filtroSuc = '';
+    var fs = document.getElementById('filterSucursal');
+    if (fs && fs.style.display !== 'none') filtroSuc = fs.value || '';
     return load().filter(function(s){
         if (_esBaja(s)) return false;
+        if (filtroSuc && _effSuc(s.sucursalId) !== filtroSuc) return false;
         return catGlobal ? true : (suc ? _effSuc(s.sucursalId) === suc : true);
     });
 }
@@ -2279,6 +2295,25 @@ function _exigeSucursalStaff(accion) {
     return false;
 }
 
+/* El filtro de sucursal de la vista global. Se puebla con el catálogo del
+   negocio; la matriz sale con el nombre que el negocio le puso, no con la
+   etiqueta del sistema. Se repuebla en cada render porque una sucursal creada
+   en otra pestaña no aparecería hasta recargar. */
+function _pobFiltroSucursal(){
+    var sel = document.getElementById('filterSucursal'); if (!sel) return;
+    if (!_vistaGlobalStaff()) { sel.style.display = 'none'; return; }
+    var previo = sel.value;
+    var sucs = _getSucs();
+    sel.innerHTML = '<option value="">Todas las sucursales</option>' +
+        sucs.map(function(su){
+            return '<option value="' + esc(su.id) + '">' + esc(su.nombre || su.id) + '</option>';
+        }).join('');
+    /* Si la sucursal filtrada desapareció del catálogo, el filtro se cae a
+       "todas" en vez de dejar la lista vacía sin explicación. */
+    sel.value = sucs.some(function(su){ return su.id === previo; }) ? previo : '';
+    sel.style.display = sucs.length > 1 ? '' : 'none';
+}
+
 function _aplicarAlcanceStaff(){
     var global = _vistaGlobalStaff();
     ['btnRolesPermisos','btnSalarioMinimo','btnAgregarColaborador'].forEach(function(id){
@@ -2345,6 +2380,7 @@ async function _arrancarCatalogo() {
     _arrancado = true;
     _aplicarPermisosStaff();
     _aplicarAlcanceStaff();
+    _pobFiltroSucursal();
     window.addEventListener('etaax:permisos', function(){ _aplicarPermisosStaff(); renderAll(); });
     var negId = getNegocioActivo();
     if (window.NominaParams) { try { await NominaParams.sync(negId); } catch(e){} }

@@ -12298,6 +12298,175 @@ console.log('\n══ BG1 · La vista global no es para todo ══');
     }
 }
 
+/* ═══════════ SUITE BG2 · LAS VISTAS GLOBALES, COMPLETAS ════════════════════
+   Tres huecos que se veían al trabajar en global:
+
+     · Horarios no tenía barra lateral: se entraba y no había cómo salir a las
+       otras herramientas de Staff sin volver al hub. De paso, la página
+       tampoco dejaba sitio para las barras de arriba y el encabezado quedaba
+       tapado.
+     · El Catálogo de Staff no dejaba acotar por sucursal: con 40
+       colaboradores de cuatro sucursales, "todos" no es una vista, es una pila.
+     · Y la sucursal `suc_principal` se decía "Matriz" en Horarios aunque en el
+       catálogo se llamara "Tata Mezcaleria + Cocina": la misma sucursal con dos
+       nombres según la pantalla, y en el selector global —donde salen todas
+       juntas— sin manera de saber cuál era cuál.                             */
+console.log('\n══ BG2 · Las vistas globales, completas ══');
+{
+    const hor = fs.readFileSync(path.join(RAIZ, 'administrativo/horarios.html'), 'utf8');
+    const stf = fs.readFileSync(path.join(RAIZ, 'administrativo/staff.html'), 'utf8');
+    const cuerpoDe = (src) => (fn) => {
+        const i = src.indexOf('function ' + fn + '(');
+        if (i < 0) return '';
+        const abre = src.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < src.length) {
+            if (src[j] === '{') prof++;
+            else if (src[j] === '}') { prof--; if (!prof) return src.slice(i, j + 1); }
+            j++;
+        }
+        return '';
+    };
+    const dH = cuerpoDe(hor), dS = cuerpoDe(stf);
+
+    /* ── La barra lateral de Horarios ── */
+    test('Horarios ya trae barra lateral', () =>
+        eq(hor.indexOf('<nav class="nav cerrado" id="nav">') > -1, true, 'con nav'));
+    test('…y se puede abrir y cerrar', () =>
+        eq(dH('toggleNav').indexOf("classList.toggle('cerrado')") > -1, true, 'con interruptor'));
+    /* Sin app-shell, el CSS global deja padding en el body y el encabezado se
+       mete debajo de la barra de contexto: es lo que se veía cortado arriba. */
+    test('…y el contenido deja sitio a las barras de arriba (app-shell)', () =>
+        eq(hor.indexOf('<div class="app-shell">') > -1 &&
+           hor.indexOf('<main class="main-content expandido" id="mainContent">') > -1,
+           true, 'con marco'));
+    test('…y lleva a las demás herramientas de Staff', () =>
+        eq(['staff.html','checklists.html','organigrama.html','perfiles-puesto.html','evaluaciones.html']
+           .every(h => hor.indexOf('href="' + h + '" class="nav-link"') > -1), true, 'completa'));
+    test('…marcándose a sí misma como la activa', () =>
+        eq(hor.indexOf('href="horarios.html" class="nav-link active"') > -1, true, 'activa'));
+    /* El <main> tiene que CERRARSE antes de los modales: dejarlos dentro los
+       mete en el flujo desplazado por la barra y se pintan corridos. */
+    test('el marco se cierra antes de los modales', () =>
+        eq(hor.indexOf('</main>\n</div>\n\n<!-- Editor de turno -->') > -1, true, 'cerrado'));
+
+    /* ── El nombre real de cada sucursal ── */
+    function horCtx(sucs) {
+        const ls = { etaax_negocio_activo:'n1', etaax_n1_sucursales: JSON.stringify(sucs) };
+        const ctx = { console, JSON, Object, Array, String, Boolean,
+            localStorage:{ getItem:k=>(k in ls?ls[k]:null), setItem(){}, removeItem(){} } };
+        ctx.window = ctx;
+        vm.createContext(ctx);
+        vm.runInContext("var MATRIZ_ID='suc_principal';" +
+            "function getNegocioActivo(){return localStorage.getItem('etaax_negocio_activo')||'';}", ctx);
+        ['_getSucs','_sucNombre'].forEach(f => vm.runInContext(dH(f), ctx, { filename:'horarios.html' }));
+        return ctx;
+    }
+    const REALES = [{ id:'suc_principal', nombre:'Tata Mezcaleria + Cocina' },
+                    { id:'suc_b',         nombre:"Porcino's Asador de Campo" }];
+    test('la matriz se llama como el negocio la nombró, no "Matriz"', () =>
+        eq(horCtx(REALES)._sucNombre('suc_principal'), 'Tata Mezcaleria + Cocina', 'su nombre'));
+    test('…y las demás también', () =>
+        eq(horCtx(REALES)._sucNombre('suc_b'), "Porcino's Asador de Campo", 'su nombre'));
+    /* "Matriz" sigue existiendo como ÚLTIMO recurso: la sucursal que no está en
+       el catálogo (borrada, o datos que aún no bajan de otro equipo). Sin esto,
+       el selector mostraría un id crudo. */
+    test('sin catálogo todavía, la matriz sigue diciéndose "Matriz"', () =>
+        eq(horCtx([])._sucNombre('suc_principal'), 'Matriz', 'de respaldo'));
+    test('…y un registro sin sucursal también', () =>
+        eq(horCtx(REALES)._sucNombre(''), 'Matriz', 'de respaldo'));
+    test('el selector de la vista global ya no clava el nombre de la matriz', () =>
+        eq(hor.indexOf("{ id:MATRIZ_ID, nombre:_sucNombre(MATRIZ_ID) }") > -1, true, 'del catálogo'));
+
+    /* ── El filtro por sucursal del Catálogo de Staff ── */
+    test('el catálogo trae filtro de sucursal', () =>
+        eq(stf.indexOf('id="filterSucursal"') > -1, true, 'existe'));
+    test('…y nace escondido: solo la vista global lo enciende', () =>
+        eq(/id="filterSucursal"[^>]*style="display:none"/.test(stf), true, 'escondido'));
+
+    function stfCtx(opts) {
+        opts = opts || {};
+        const ls = { etaax_negocio_activo:'n1',
+                     etaax_n1_sucursales: JSON.stringify(opts.sucs || REALES) };
+        if (opts.suc) ls.etaax_sucursal_activa = opts.suc;
+        const ss = {};
+        if (opts.catGlobal) ss.etaax_cat_global = '1';
+        const filtro = { value: opts.filtro || '', innerHTML:'', style:{ display: opts.visible ? '' : 'none' } };
+        const ctx = { console, JSON, Object, Array, String, Boolean,
+            localStorage:{ getItem:k=>(k in ls?ls[k]:null), setItem(){}, removeItem(){} },
+            sessionStorage:{ getItem:k=>(k in ss?ss[k]:null), setItem(){}, removeItem(){} },
+            document:{ getElementById:(id)=> id === 'filterSucursal' ? filtro : null } };
+        ctx.window = ctx;
+        vm.createContext(ctx);
+        vm.runInContext("var MATRIZ_ID='suc_principal';" +
+            "function getNegocioActivo(){return localStorage.getItem('etaax_negocio_activo')||'';}" +
+            "function esc(s){return String(s||'');}" +
+            "function _esBaja(s){return !!s.baja;}" +
+            "var _DATA=" + JSON.stringify(opts.data || []) + ";" +
+            "function load(){return _DATA;}", ctx);
+        ['_getSucs','_getSucActiva','_catGlobalOn','_effSuc','_vistaGlobalStaff',
+         '_pobFiltroSucursal','_staffEnVista'].forEach(f => vm.runInContext(dS(f), ctx, { filename:'staff.html' }));
+        ctx.__filtro = filtro;
+        return ctx;
+    }
+    const GENTE = [{ id:'a', nombre:'Ana',  sucursalId:'suc_principal' },
+                   { id:'b', nombre:'Beto', sucursalId:'suc_b' },
+                   { id:'c', nombre:'Caro', sucursalId:'' },           // sin sucursal = matriz
+                   { id:'d', nombre:'Dan',  sucursalId:'suc_b', baja:true }];
+
+    test('en global sin filtro salen todos los activos', () =>
+        eq(stfCtx({ data:GENTE })._staffEnVista().length, 3, 'los tres activos'));
+    test('filtrando por una sucursal, solo la suya', () =>
+        eq(stfCtx({ data:GENTE, visible:true, filtro:'suc_b' })._staffEnVista()
+             .map(function(s){return s.nombre;}).join(','), 'Beto', 'solo Beto'));
+    /* Quien no tiene sucursal capturada pertenece a la matriz, no a "ninguna":
+       si se cayera fuera, desaparecería del catálogo al filtrar y nadie sabría
+       dónde fue a parar. */
+    test('quien no tiene sucursal capturada cuenta como de la matriz', () =>
+        eq(stfCtx({ data:GENTE, visible:true, filtro:'suc_principal' })._staffEnVista()
+             .map(function(s){return s.nombre;}).sort().join(','), 'Ana,Caro', 'Ana y Caro'));
+    test('el filtro nunca resucita a alguien dado de baja', () =>
+        eq(stfCtx({ data:GENTE, visible:true, filtro:'suc_b' })._staffEnVista()
+             .some(function(s){ return s.baja; }), false, 'sin bajas'));
+    /* Si el filtro está escondido —porque no es vista global— su valor viejo no
+       puede seguir recortando la lista a espaldas de nadie. */
+    test('escondido, el filtro no recorta nada', () =>
+        eq(stfCtx({ data:GENTE, suc:'suc_principal', visible:false, filtro:'suc_b' })
+             ._staffEnVista().length, 2, 'la sucursal entera'));
+
+    /* ── Poblarlo ── */
+    {
+        const c = stfCtx({ data:GENTE });
+        c._pobFiltroSucursal();
+        test('el filtro se puebla con el nombre real de cada sucursal', () =>
+            eq(c.__filtro.innerHTML.indexOf('Tata Mezcaleria + Cocina') > -1 &&
+               c.__filtro.innerHTML.indexOf("Porcino's Asador de Campo") > -1, true, 'con nombres'));
+        test('…y se enciende en la vista global', () =>
+            eq(c.__filtro.style.display, '', 'visible'));
+    }
+    {
+        const c = stfCtx({ data:GENTE, suc:'suc_principal' });
+        c._pobFiltroSucursal();
+        test('dentro de una sucursal el filtro no sale (tendría una sola opción)', () =>
+            eq(c.__filtro.style.display, 'none', 'escondido'));
+    }
+    {
+        /* Un negocio de una sola sucursal no necesita elegir. */
+        const c = stfCtx({ data:GENTE, sucs:[{ id:'suc_principal', nombre:'Matriz' }] });
+        c._pobFiltroSucursal();
+        test('con una sola sucursal tampoco', () =>
+            eq(c.__filtro.style.display, 'none', 'escondido'));
+    }
+    {
+        /* Si la sucursal filtrada desaparece del catálogo, caer a "todas" es
+           mejor que dejar la lista vacía sin explicación. */
+        const c = stfCtx({ data:GENTE, visible:true, filtro:'suc_borrada' });
+        c._pobFiltroSucursal();
+        test('si la sucursal filtrada ya no existe, el filtro se cae a "todas"', () =>
+            eq(c.__filtro.value, '', 'a todas'));
+    }
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
