@@ -427,10 +427,74 @@ window.etaaxDefaultsDeRol = function (negId, rol) {
     return (r && r.base && window.ETAAX_PERM_DEFAULTS[r.base]) || null;
 };
 
-window.etaaxPermisosRol = function (negId, rol) {
+/* ── LOS PERMISOS SON POR SUCURSAL ───────────────────────────────────────────
+   Un negocio multi-sucursal no es un negocio con varias direcciones: cada
+   sucursal opera como un ente aparte. Hay Hostess en la del centro y no en la
+   de la plaza; el auxiliar administrativo de una no es el de la otra; y el
+   encargado de administración necesita más accesos en la sucursal grande que
+   en las chicas — con el MISMO nombre de rol.
+
+   Antes había una sola fila de permisos por rol y por negocio: tocar «Gerente»
+   se lo cambiaba a TODOS los gerentes de TODAS las sucursales. No había forma
+   de decir "aquí sí, allá no".
+
+   CÓMO QUEDA, sin migración y sin tabla nueva:
+
+     datos = { recetas:{...}, ventas:{...},        ← LA BASE, para todo el negocio
+               __suc__: { "suc_centro": {...} } }  ← las que se independizaron
+
+   · Una sucursal SIN entrada en `__suc__` sigue la base. Es lo que ya existía,
+     así que ningún negocio cambia de comportamiento al actualizar.
+   · Una sucursal CON entrada tiene los suyos, completos, y la base deja de
+     afectarla. Eso es lo que pidió Edwin: que cada una sea independiente, no
+     que herede a medias — heredar por partes significa que un cambio general
+     se cuela en una sucursal que ya estaba configurada, y sin que nadie lo vea.
+
+   La sucursal sale de `etaax_sucursal_activa`, que en la sesión de un
+   colaborador la fija el hub con la que trae asignada en su ficha: no la
+   escoge él. Sin sucursal (vista global del dueño) manda la base.
+
+   OJO CON EL ALCANCE: esto decide lo que la INTERFAZ ofrece y lo que cada
+   función se niega a hacer. La puerta de verdad la sigue guardando RLS en el
+   servidor, que no distingue sucursales. Es control de operación, no una
+   frontera de seguridad entre sucursales — y conviene no confundirlos.       */
+window.ETAAX_SUC_KEY = '__suc__';
+
+window.etaaxSucursalActiva = function () {
+    try { return localStorage.getItem('etaax_sucursal_activa') || ''; } catch (e) { return ''; }
+};
+
+/* Quita la llave reservada antes de entregar: quien pide permisos espera
+   módulos. Se copia — mutar aquí ensuciaría la caché de todos. */
+function _sinSuc(p) {
+    if (!p || !p[window.ETAAX_SUC_KEY]) return p;
+    var o = {};
+    Object.keys(p).forEach(function (k) { if (k !== window.ETAAX_SUC_KEY) o[k] = p[k]; });
+    return o;
+}
+
+/* ¿Esta sucursal se independizó de la base para este rol? La pantalla de Roles
+   y Permisos lo necesita para decir en qué estado está parada. */
+window.etaaxSucTienePropios = function (negId, rol, sucId) {
+    if (!sucId) return false;
     var p = null;
     try { p = JSON.parse(localStorage.getItem('etaax_' + negId + '_permisos') || 'null'); } catch (e) {}
-    if (p && p[rol]) return p[rol];
+    var raw = p && p[rol];
+    return !!(raw && raw[window.ETAAX_SUC_KEY] && raw[window.ETAAX_SUC_KEY][sucId]);
+};
+
+/* `sucId` omitido = la sucursal donde se está parado ahora. Pasar '' a
+   propósito pide la BASE — lo usa el editor para mostrarla aunque el dueño
+   esté dentro de una sucursal. */
+window.etaaxPermisosRol = function (negId, rol, sucId) {
+    if (sucId === undefined) sucId = window.etaaxSucursalActiva();
+    var p = null;
+    try { p = JSON.parse(localStorage.getItem('etaax_' + negId + '_permisos') || 'null'); } catch (e) {}
+    if (p && p[rol]) {
+        var mapa = p[rol][window.ETAAX_SUC_KEY];
+        if (sucId && mapa && mapa[sucId]) return mapa[sucId];
+        return _sinSuc(p[rol]);
+    }
     if (window.ETAAX_PERM_DEFAULTS[rol]) return window.ETAAX_PERM_DEFAULTS[rol];
     /* Un rol PROPIO del negocio no tiene defaults de fábrica. Se cae a los de su
        rol base: sin esto, `{}` deja todo apagado y el dueño crea "Hostess" y
@@ -447,10 +511,10 @@ window.etaaxPermisosRol = function (negId, rol) {
    - módulo en true  → sub-permiso true (legacy "todo permitido").
    - módulo en false → sub-permiso false.
    - módulo objeto   → lee la clave; si falta, cae al default del rol. */
-window.etaaxPerm = function (negId, rol, path) {
+window.etaaxPerm = function (negId, rol, path, sucId) {
     var parts = String(path || '').split('.');
     var mod = parts[0], sub = parts[1];
-    var perms = window.etaaxPermisosRol(negId, rol);
+    var perms = window.etaaxPermisosRol(negId, rol, sucId);
     var v = perms[mod];
     if (!sub) return !!v;
     if (v === true) return true;

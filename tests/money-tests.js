@@ -11216,7 +11216,11 @@ console.log('\n══ BF5 · Permisos: editar, guardar, cerrar ══');
     /* ── Guardar publica ── */
     test('guardar publica el borrador', () => {
         const t = cuerpo('guardarPermisos');
-        return eq(t.indexOf('if (_borrador) all[_rolActivo] = _borrador;') > -1, true, 'publica');
+        /* Desde que los permisos son por sucursal, el borrador no cae siempre
+           en la base: cae en el alcance que se esté editando. Lo que no cambia
+           es que hasta Guardar no sale nada de la pantalla. */
+        return eq(t.indexOf('if (_borrador) _conPermisosPuestos(all, _rolActivo, _borrador);') > -1,
+                  true, 'publica');
     });
     test('…y al salir bien, cierra la edición', () => {
         const t = cuerpo('guardarPermisos');
@@ -11779,6 +11783,279 @@ console.log('\n══ BC · El freno de la pantalla de entrada (hub.html) ══
         eq((v56.match(/GRANT EXECUTE ON FUNCTION login_\w+\(TEXT\)\s+TO anon/g) || []).length, 3, 'grants'));
     test('el registro se limpia solo', () =>
         eq(/DELETE FROM login_puerta WHERE creado < now\(\) - interval '24 hours'/.test(v56), true, 'retención'));
+}
+
+/* ═══════════ SUITE BF9 · LOS PERMISOS SON POR SUCURSAL ════════════════════
+   LO QUE ESTABA MAL: había UNA fila de permisos por rol y por negocio. Tocar
+   «Gerente» se lo tocaba a todos los gerentes de todas las sucursales.
+
+   Y un negocio multi-sucursal no es una empresa con varias direcciones: hay
+   Hostess en una y no en la otra, el auxiliar administrativo de cada una es
+   distinto, y el encargado de administración necesita más accesos en la grande
+   que en las chicas — con el MISMO nombre de rol. No había forma de decir
+   "aquí sí, allá no".
+
+   CÓMO QUEDA: la base sigue siendo la base, y una sucursal puede
+   independizarse guardando los suyos bajo `__suc__`. Sin migración: una
+   sucursal sin entrada se comporta EXACTAMENTE como antes — por eso el primer
+   grupo de pruebas es que nada cambie para quien no toque nada.            */
+console.log('\n══ BF9 · Los permisos son por sucursal ══');
+{
+    const pg  = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8');
+    const per = fs.readFileSync(path.join(RAIZ, 'administrativo/permisos.html'), 'utf8');
+
+    /* ── A) EL RESOLUTOR, corrido de verdad ──────────────────────────────── */
+    function resolver(permisos, sucActiva) {
+        const ls = {
+            etaax_ctx: JSON.stringify({ ctxType:'staff', rol:'gerente', negId:'n1' }),
+            etaax_n1_permisos: JSON.stringify(permisos),
+        };
+        if (sucActiva) ls.etaax_sucursal_activa = sucActiva;
+        const ctx = {
+            console:{ warn(){}, log(){} }, JSON, Object, Array, String, Boolean, setTimeout, Promise,
+            localStorage:{ getItem:k=>(k in ls?ls[k]:null), setItem(k,v){ ls[k]=String(v); }, removeItem(k){ delete ls[k]; } },
+            location:{ pathname:'/administrativo/diario.html', search:'', replace(){} },
+            document:{ addEventListener(){} },
+        };
+        ctx.window = ctx;
+        vm.createContext(ctx);
+        vm.runInContext(pg, ctx, { filename:'page-guard.js' });
+        return ctx.window;
+    }
+
+    const BASE = { ventas:{ cortes:true, cajaFuerte:false }, staff:false, gastos:true };
+    const CONSUC = {
+        gerente: Object.assign({}, BASE, {
+            __suc__: { suc_centro: { ventas:{ cortes:true, cajaFuerte:true }, staff:true, gastos:true } }
+        })
+    };
+
+    /* Lo primero: que el negocio que NO usa esto no note nada. */
+    test('sin sucursales propias, manda la base (como siempre)', () => {
+        const w = resolver({ gerente: BASE }, 'suc_centro');
+        return eq(w.etaaxPermisosRol('n1','gerente').gastos, true, 'la base');
+    });
+    test('…y la sucursal sin entrada propia también sigue la base', () => {
+        const w = resolver(CONSUC, 'suc_plaza');
+        return eq(w.etaaxPerm('n1','gerente','ventas.cajaFuerte'), false, 'base');
+    });
+    test('la sucursal que se independizó usa LOS SUYOS', () => {
+        const w = resolver(CONSUC, 'suc_centro');
+        return eq(w.etaaxPerm('n1','gerente','ventas.cajaFuerte'), true, 'los suyos');
+    });
+    /* El caso de Edwin, tal cual: el mismo rol, más accesos en una sucursal. */
+    test('el MISMO rol abre un módulo en una sucursal y no en la otra', () => {
+        const centro = resolver(CONSUC, 'suc_centro').etaaxPerm('n1','gerente','staff');
+        const plaza  = resolver(CONSUC, 'suc_plaza').etaaxPerm('n1','gerente','staff');
+        return eq(centro === true && plaza === false, true, 'centro ' + centro + ' / plaza ' + plaza);
+    });
+    test('sin sucursal parada (vista global del dueño) manda la base', () => {
+        const w = resolver(CONSUC, '');
+        return eq(w.etaaxPerm('n1','gerente','staff'), false, 'base');
+    });
+    /* La llave reservada NO es un módulo: si se colara, cualquier pantalla que
+       recorra los permisos pintaría un módulo fantasma llamado __suc__. */
+    test('la llave __suc__ no se entrega como si fuera un módulo', () => {
+        const w = resolver(CONSUC, '');
+        return eq('__suc__' in w.etaaxPermisosRol('n1','gerente'), false, 'limpia');
+    });
+    test('…y entregarla limpia NO ensucia la caché de los demás', () => {
+        const w = resolver(CONSUC, '');
+        w.etaaxPermisosRol('n1','gerente');                    // lectura de la base
+        return eq(w.etaaxPerm('n1','gerente','staff', 'suc_centro'), true,
+                  'la sucursal sigue teniendo los suyos');
+    });
+    /* El editor necesita ver la base AUNQUE el dueño esté parado en una
+       sucursal: por eso '' explícito significa "la base", no "la de aquí". */
+    test('pedir la base a propósito la devuelve, estando donde se esté', () => {
+        const w = resolver(CONSUC, 'suc_centro');
+        return eq(w.etaaxPerm('n1','gerente','staff', ''), false, 'la base');
+    });
+    test('la pantalla puede preguntar si una sucursal ya se independizó', () => {
+        const w = resolver(CONSUC, '');
+        return eq(w.etaaxSucTienePropios('n1','gerente','suc_centro') === true &&
+                  w.etaaxSucTienePropios('n1','gerente','suc_plaza')  === false, true, 'distingue');
+    });
+    /* Un sub-permiso que no existía cuando se guardó la sucursal sigue naciendo
+       permitido si su módulo estaba entero: la regla no puede cambiar según el
+       alcance, o la pantalla diría una cosa y el sistema haría otra. */
+    /* `mesero` trae `ventas:true` entero — o sea, sin sub-permisos declarados.
+       Es el caso donde la regla se nota: la clave no estaba cuando se guardó la
+       sucursal, y negarla sería quitarle algo que nunca le quitaron. */
+    test('en la sucursal propia sigue valiendo la regla del permiso nuevo', () => {
+        const w = resolver({ mesero:{ __suc__:{ suc_centro:{ ventas:{ verLista:true } } } } }, 'suc_centro');
+        return eq(w.etaaxPerm('n1','mesero','ventas.cajaFuerte'), true, 'nace prendido');
+    });
+    /* Y el reverso, que es el que de verdad cuida: si el rol SÍ declara el
+       sub-permiso en false, la sucursal propia hereda ese no — no se abre sola. */
+    test('…pero un sub-permiso que el rol niega sigue negado en la sucursal', () => {
+        const w = resolver({ gerente:{ __suc__:{ suc_centro:{ ventas:{ verLista:true } } } } }, 'suc_centro');
+        return eq(w.etaaxPerm('n1','gerente','ventas.cajaFuerte'), false, 'sigue negado');
+    });
+
+    /* ── B) EL GUARDADO, corrido de verdad ───────────────────────────────── */
+    const decl = (fn) => {
+        const i = per.indexOf('function ' + fn + '(');
+        if (i < 0) return '';
+        const abre = per.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < per.length) {
+            if (per[j] === '{') prof++;
+            else if (per[j] === '}') { prof--; if (!prof) return per.slice(i, j + 1); }
+            j++;
+        }
+        return '';
+    };
+    const FNS = ['_sucursales','_sucNombre','_rolRaw','_tienePropios',
+                 'getRolPermisos','_conPermisosPuestos','setRolPermisos','usarGenerales'];
+    test('las piezas del guardado por sucursal existen en la pantalla', () =>
+        eq(FNS.filter(f => !decl(f)).join(',') || 'todas', 'todas', 'completas'));
+
+    /* Se levanta el código REAL de permisos.html con lo mínimo alrededor: la
+       pregunta es qué DEJA GUARDADO, no cómo se ve. */
+    function editor(permisos, sucSel, rol) {
+        const ls = { etaax_negocio_activo:'n1',
+                     etaax_n1_permisos: JSON.stringify(permisos),
+                     etaax_n1_sucursales: JSON.stringify([
+                         { id:'suc_centro', nombre:'Centro' }, { id:'suc_plaza', nombre:'Plaza' }]) };
+        let subido = null;
+        const ctx = {
+            console:{ warn(){}, log(){} }, JSON, Object, Array, String, Boolean, Promise,
+            localStorage:{ getItem:k=>(k in ls?ls[k]:null), setItem(k,v){ ls[k]=String(v); }, removeItem(k){ delete ls[k]; } },
+            document:{ getElementById:()=>null, querySelector:()=>null, addEventListener(){} },
+        };
+        ctx.window = ctx;
+        vm.createContext(ctx);
+        vm.runInContext(`
+            var SUCK = '__suc__';
+            var _sucSel = ${JSON.stringify(sucSel)};
+            var _rolActivo = ${JSON.stringify(rol || 'gerente')};
+            var _editando = false;
+            function getNegocioActivo(){ return localStorage.getItem('etaax_negocio_activo') || ''; }
+            function _sk(k){ return 'etaax_' + getNegocioActivo() + '_' + k; }
+            function loadPermisos(){ try { return JSON.parse(localStorage.getItem(_sk('permisos'))) || {}; } catch(e){ return {}; } }
+            function _defaultsDe(){ return { ventas:true, gastos:true }; }
+            function _rolDe(k){ return { key:k, label:k }; }
+            function _esc2(s){ return String(s||''); }
+            function showToast(){}
+            function renderSucBar(){} function renderTabs(){} function renderGrid(){}
+            function _rmConfirmar(t, a, onSi){ onSi(); }
+            function savePermisos(d, rol){ window.__subido = { datos: JSON.parse(JSON.stringify(d)), rol: rol };
+                                           return Promise.resolve({ ok:true }); }
+        `, ctx);
+        FNS.forEach(f => vm.runInContext(decl(f), ctx, { filename:'permisos.html' }));
+        return { ctx, ls, subido:()=>ctx.__subido };
+    }
+
+    /* EL RIESGO GORDO de este diseño: que editar los generales se lleve por
+       delante las sucursales que ya estaban configuradas. Pasaría sin ruido —
+       el dueño toca la base y una sucursal pierde lo suyo sin que nadie lo
+       vea— y sería peor que el bug que se está arreglando. */
+    {
+        const e = editor(CONSUC, '', 'gerente');
+        const all = e.ctx.loadPermisos();
+        e.ctx._conPermisosPuestos(all, 'gerente', { ventas:false, staff:false });
+        test('editar los GENERALES no borra las sucursales independizadas', () =>
+            eq(all.gerente.__suc__ && all.gerente.__suc__.suc_centro &&
+               all.gerente.__suc__.suc_centro.staff, true, 'intactas'));
+        test('…y sí cambia la base', () =>
+            eq(all.gerente.ventas, false, 'cambió'));
+    }
+    /* Y el simétrico: tocar una sucursal no puede mover la base, o "aquí sí,
+       allá no" se convierte en "aquí sí y allá también". */
+    {
+        const e = editor(CONSUC, 'suc_plaza', 'gerente');
+        const all = e.ctx.loadPermisos();
+        e.ctx._conPermisosPuestos(all, 'gerente', { ventas:false, staff:true, gastos:false });
+        test('editar una sucursal NO mueve la base', () =>
+            eq(all.gerente.gastos === true && all.gerente.staff === false, true, 'base intacta'));
+        test('…ni mueve a las otras sucursales', () =>
+            eq(all.gerente.__suc__.suc_centro.gastos, true, 'centro intacto'));
+        test('…y la sucursal editada queda con los suyos', () =>
+            eq(all.gerente.__suc__.suc_plaza.staff, true, 'independizada'));
+    }
+    /* Un rol que nunca se había tocado: la sucursal tiene que partir de los
+       defaults del rol, no de `{}` — con `{}` el colaborador se queda sin nada
+       y sin una pista de por qué. */
+    {
+        const e = editor({}, 'suc_centro', 'gerente');
+        const all = e.ctx.loadPermisos();
+        e.ctx._conPermisosPuestos(all, 'gerente', { ventas:false });
+        test('sucursal propia sobre un rol sin guardar arranca de sus defaults', () =>
+            eq(all.gerente.gastos, true, 'defaults de base'));
+    }
+
+    /* Lo que se LEE tiene que ser lo mismo que se va a guardar. */
+    {
+        const base   = editor(CONSUC, '',           'gerente').ctx.getRolPermisos('gerente');
+        const centro = editor(CONSUC, 'suc_centro', 'gerente').ctx.getRolPermisos('gerente');
+        test('el editor en generales muestra la base, sin el mapa de sucursales', () =>
+            eq(base.staff === false && !('__suc__' in base), true, 'la base limpia'));
+        test('el editor parado en una sucursal muestra LOS DE ESA SUCURSAL', () =>
+            eq(centro.staff, true, 'los suyos'));
+        test('…y trabaja sobre una copia, no sobre la caché', () => {
+            const e = editor(CONSUC, 'suc_centro', 'gerente');
+            const p = e.ctx.getRolPermisos('gerente');
+            p.staff = 'MANOSEADO';
+            return eq(e.ctx.loadPermisos().gerente.__suc__.suc_centro.staff, true, 'sin tocar');
+        });
+    }
+
+    /* Volver a los generales: borra SU entrada, no la base ni las otras. */
+    {
+        const e = editor(CONSUC, 'suc_centro', 'gerente');
+        e.ctx.usarGenerales();
+        const d = e.subido();
+        test('«volver a los generales» borra solo esa sucursal', () =>
+            eq(d && d.datos.gerente.__suc__ === undefined, true, 'borrada'));
+        test('…y deja la base en pie', () =>
+            eq(d && d.datos.gerente.gastos, true, 'base viva'));
+        test('…y sube SOLO el rol tocado', () =>
+            eq(d && d.rol, 'gerente', 'una fila'));
+    }
+    {
+        /* Con dos sucursales propias, borrar una no se lleva la otra. */
+        const dos = { gerente: Object.assign({}, BASE, { __suc__:{
+            suc_centro:{ staff:true }, suc_plaza:{ staff:true } } }) };
+        const e = editor(dos, 'suc_centro', 'gerente');
+        e.ctx.usarGenerales();
+        const d = e.subido();
+        test('…y si hay otra sucursal propia, esa se queda', () =>
+            eq(d && d.datos.gerente.__suc__ && !!d.datos.gerente.__suc__.suc_plaza, true, 'sobrevive'));
+    }
+
+    /* ── C) LA PANTALLA NO PUEDE MENTIR ──────────────────────────────────── */
+    test('se arranca en GENERALES: independizar una sucursal es a propósito', () =>
+        eq(/var _sucSel = '';/.test(per), true, 'default general'));
+    test('con una sola sucursal la barra no aparece (no hay qué elegir)', () =>
+        eq(decl('renderSucBar').indexOf('if (lista.length < 2)') > -1, true, 'oculta'));
+    /* Cambiar de sucursal con cambios colgando es salirse del editor: si no
+       preguntara, el borrador se perdería en silencio — el mismo bug que ya se
+       arregló al cambiar de rol. */
+    test('cambiar de sucursal con cambios sin guardar pregunta antes', () =>
+        eq(decl('selectSuc').indexOf('_conGuardiaEdicion(') > -1, true, 'con guardia'));
+    test('el aviso dice en cuál de los tres estados está parado', () => {
+        const t = decl('renderSucBar');
+        return eq(t.indexOf('sigue los permisos') > -1 &&
+                  t.indexOf('tiene permisos ') > -1 &&
+                  t.indexOf('<strong>generales</strong>') > -1, true, 'los tres');
+    });
+    test('el aviso de guardado dice en qué sucursal se guardó', () =>
+        eq(per.indexOf("(_sucSel ? ' en ' + _sucNombre(_sucSel) : '')") > -1, true, 'dice dónde'));
+    test('guardar deja el borrador en el alcance elegido, no siempre en la base', () =>
+        eq(decl('guardarPermisos').indexOf('_conPermisosPuestos(all, _rolActivo, _borrador)') > -1,
+           true, 'al alcance'));
+    /* Toda ruta que repinta el tablero repinta la barra: si no, la pantalla se
+       queda diciendo que estás en una sucursal que ya no es. */
+    test('repintar el tablero repinta también la barra de sucursal', () =>
+        eq(decl('renderGrid').indexOf('renderSucBar();') > -1, true, 'al día'));
+
+    /* ── D) EL ALCANCE, DICHO EN VOZ ALTA ────────────────────────────────── */
+    /* Esto decide lo que la interfaz ofrece y lo que cada función se niega a
+       hacer. RLS no distingue sucursales: es control de operación, no una
+       frontera de seguridad. Que esté escrito donde vive el código. */
+    test('queda anotado que esto NO es una frontera de seguridad', () =>
+        eq(pg.indexOf('frontera de seguridad entre sucursales') > -1, true, 'anotado'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

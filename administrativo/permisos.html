@@ -120,6 +120,38 @@
 }
 .btn-reset:hover { border-color:var(--red);color:var(--red); }
 
+/* Barra de sucursal: mismo lenguaje que las pestañas de rol, pero arriba —
+   primero se elige DÓNDE y después A QUIÉN, que es el orden en que se piensa. */
+.suc-bar { display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:18px; }
+.suc-bar-lbl {
+    font-size:11px;letter-spacing:2.5px;text-transform:uppercase;
+    color:var(--text-dim);font-weight:600;margin-right:4px;
+}
+.suc-tab {
+    display:flex;align-items:center;gap:7px;
+    padding:7px 14px;border-radius:20px;border:1px solid var(--border);
+    background:var(--surface2);cursor:pointer;font-family:'DM Sans',sans-serif;
+    font-size:12.5px;color:var(--text-muted);transition:all .2s;white-space:nowrap;
+}
+.suc-tab:hover { border-color:var(--blue,#7ab8f5);color:var(--text); }
+.suc-tab.active {
+    border-color:var(--blue,#7ab8f5);background:rgba(122,184,245,.12);
+    color:var(--blue,#7ab8f5);font-weight:600;
+}
+/* El punto dice, sin leer, cuáles sucursales ya se independizaron. */
+.suc-dot { width:6px;height:6px;border-radius:50%;background:var(--blue,#7ab8f5);flex-shrink:0; }
+.suc-nota {
+    font-size:12px;line-height:1.55;color:var(--text-muted);
+    background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+    border-left:3px solid var(--blue,#7ab8f5);
+    padding:10px 15px;margin-bottom:20px;
+}
+.suc-nota strong { color:var(--text); }
+.suc-nota .suc-nota-a {
+    background:none;border:none;padding:0;margin-left:6px;cursor:pointer;
+    font-family:inherit;font-size:12px;color:var(--blue,#7ab8f5);text-decoration:underline;
+}
+
 .admin-lock-note {
     font-size:11px;color:var(--text-dim);
     background:var(--surface2);border:1px solid var(--border);border-radius:7px;
@@ -250,6 +282,10 @@
         </div>
 
         <div class="wrap">
+            <!-- Sucursal sobre la que se está editando -->
+            <div class="suc-bar" id="sucBar" style="display:none"></div>
+            <div class="suc-nota" id="sucNota" style="display:none"></div>
+
             <!-- Tabs de roles -->
             <div class="roles-tabs" id="rolesTabs"></div>
 
@@ -439,14 +475,143 @@ async function syncPermisos() {
     localStorage.setItem(_sk('permisos'), JSON.stringify(combined));
 }
 
+/* ── SOBRE QUÉ SUCURSAL SE ESTÁ EDITANDO ─────────────────────────────────────
+   Un negocio multi-sucursal no es una empresa con varias direcciones: cada
+   sucursal opera como un ente aparte. Hay Hostess en una y no en la otra, el
+   auxiliar administrativo de cada una es distinto, y el encargado de
+   administración necesita más accesos en la grande que en las chicas — con el
+   MISMO nombre de rol.
+
+   Antes esta pantalla editaba una sola fila por rol y por negocio: mover
+   «Gerente» se lo movía a todos los gerentes de todas las sucursales, y no
+   había forma de decir "aquí sí, allá no".
+
+   Ahora primero se elige la sucursal y después el rol. `_sucSel` vacío es LA
+   BASE: lo que aplica en toda sucursal que no tenga lo suyo.                 */
+var SUCK = window.ETAAX_SUC_KEY || '__suc__';
+var _sucSel = '';
+
+function _sucursales() {
+    try { return JSON.parse(localStorage.getItem(_sk('sucursales')) || '[]') || []; }
+    catch (e) { return []; }
+}
+function _sucNombre(id) {
+    var s = _sucursales().find(function(x){ return x.id === id; });
+    return s ? (s.nombre || id) : id;
+}
+/* La fila cruda del rol, con su mapa de sucursales incluido. */
+function _rolRaw(rolKey) { return loadPermisos()[rolKey] || null; }
+function _tienePropios(rolKey, sucId) {
+    var raw = _rolRaw(rolKey);
+    return !!(sucId && raw && raw[SUCK] && raw[SUCK][sucId]);
+}
+
+/* Los permisos que le tocan a este rol EN LA SUCURSAL ELEGIDA. Siempre una
+   copia: el editor los muta, y mutar la caché sería editar sin guardar. */
 function getRolPermisos(rolKey) {
-    var all = loadPermisos();
-    return all[rolKey] || JSON.parse(JSON.stringify(_defaultsDe(rolKey)));
+    var raw = _rolRaw(rolKey);
+    if (!raw) return JSON.parse(JSON.stringify(_defaultsDe(rolKey)));
+    if (_sucSel && raw[SUCK] && raw[SUCK][_sucSel]) {
+        return JSON.parse(JSON.stringify(raw[SUCK][_sucSel]));
+    }
+    var base = JSON.parse(JSON.stringify(raw));
+    delete base[SUCK];   // la base no incluye el mapa de excepciones
+    return base;
+}
+
+/* Deja `perms` en el lugar que corresponde y devuelve el mapa completo listo
+   para subir. Editar la BASE NO puede borrar las sucursales que ya se
+   independizaron: por eso el mapa se conserva aparte y se vuelve a colgar. */
+function _conPermisosPuestos(all, rolKey, perms) {
+    if (_sucSel) {
+        var raw = all[rolKey];
+        if (!raw) { raw = JSON.parse(JSON.stringify(_defaultsDe(rolKey))); all[rolKey] = raw; }
+        if (!raw[SUCK] || typeof raw[SUCK] !== 'object') raw[SUCK] = {};
+        raw[SUCK][_sucSel] = perms;
+    } else {
+        var mapa = all[rolKey] && all[rolKey][SUCK];
+        all[rolKey] = perms;
+        if (mapa) all[rolKey][SUCK] = mapa;
+    }
+    return all;
 }
 function setRolPermisos(rolKey, perms) {
-    var all = loadPermisos();
-    all[rolKey] = perms;
-    savePermisos(all, rolKey);
+    savePermisos(_conPermisosPuestos(loadPermisos(), rolKey, perms), rolKey);
+}
+
+function renderSucBar() {
+    var bar  = document.getElementById('sucBar');
+    var nota = document.getElementById('sucNota');
+    if (!bar || !nota) return;
+    var lista = _sucursales();
+    /* Con una sola sucursal no hay nada que elegir: la pantalla se queda igual
+       que siempre y no se le carga una decisión que no existe. */
+    if (lista.length < 2) { bar.style.display = 'none'; nota.style.display = 'none'; return; }
+
+    bar.style.display = '';
+    bar.innerHTML = '<span class="suc-bar-lbl">Sucursal</span>' +
+        '<button class="suc-tab' + (_sucSel === '' ? ' active' : '') + '" ' +
+            'onclick="selectSuc(\'\')" title="Lo que aplica en toda sucursal que no tenga los suyos">' +
+            '<span>🌐</span>Todas (general)</button>' +
+        lista.map(function(su){
+            var propios = _tienePropios(_rolActivo, su.id);
+            return '<button class="suc-tab' + (_sucSel === su.id ? ' active' : '') + '" ' +
+                'onclick="selectSuc(\'' + su.id + '\')"' +
+                (propios ? ' title="Esta sucursal tiene permisos propios"' : '') + '>' +
+                (propios ? '<span class="suc-dot"></span>' : '') + _esc2(su.nombre || su.id) +
+            '</button>';
+        }).join('');
+
+    var label = (_rolDe(_rolActivo) || {}).label || _rolActivo;
+    nota.style.display = '';
+    if (_sucSel === '') {
+        nota.innerHTML = 'Estás editando los permisos <strong>generales</strong> de ' +
+            _esc2(label) + '. Aplican en toda sucursal que no tenga los suyos; ' +
+            'las que ya se independizaron (•) no se ven afectadas.';
+    } else if (_tienePropios(_rolActivo, _sucSel)) {
+        nota.innerHTML = '<strong>' + _esc2(_sucNombre(_sucSel)) + '</strong> tiene permisos ' +
+            'propios para ' + _esc2(label) + '. Los cambios generales ya no le llegan.' +
+            (_editando ? '' :
+             '<button class="suc-nota-a" onclick="usarGenerales()">Volver a los generales</button>');
+    } else {
+        nota.innerHTML = '<strong>' + _esc2(_sucNombre(_sucSel)) + '</strong> sigue los permisos ' +
+            'generales de ' + _esc2(label) + '. En cuanto guardes un cambio aquí, esta ' +
+            'sucursal pasa a tener los suyos y deja de seguir a los generales.';
+    }
+}
+
+function selectSuc(sucId) {
+    if (sucId === _sucSel) return;
+    /* Cambiar de sucursal con cambios colgando es salirse del editor: la misma
+       pregunta que cambiar de rol o cerrar la ventana. */
+    _conGuardiaEdicion(function(){
+        _editando = false; _borrador = null; _sucio = false;
+        _sucSel = sucId;
+        renderSucBar(); renderTabs(); renderGrid();
+    });
+}
+
+/* Devolver una sucursal a los generales: se borra SU entrada, no la base. */
+function usarGenerales() {
+    if (!_sucSel) return;
+    var label = (_rolDe(_rolActivo) || {}).label || _rolActivo;
+    _rmConfirmar('Volver a los generales',
+        '«' + _esc2(_sucNombre(_sucSel)) + '» dejará de tener permisos propios para ' +
+        _esc2(label) + ' y volverá a seguir los generales del negocio. ' +
+        '<strong>Se pierde lo que hayas ajustado</strong> aquí para esa sucursal.',
+        function(){
+            var all = loadPermisos();
+            var raw = all[_rolActivo];
+            if (raw && raw[SUCK]) {
+                delete raw[SUCK][_sucSel];
+                if (!Object.keys(raw[SUCK]).length) delete raw[SUCK];
+            }
+            savePermisos(all, _rolActivo).then(function(r){
+                renderSucBar(); renderTabs(); renderGrid();
+                showToast(r && r.ok ? '✓ ' + _sucNombre(_sucSel) + ' vuelve a los generales'
+                                    : '⚠️ Quedó en este equipo: ' + ((r && r.motivo) || 'sin conexión'));
+            });
+        }, { kicker:'Sucursal', kickIcon:'🌐', okLabel:'Sí, usar los generales' });
 }
 
 /* ── STATE ── */
@@ -795,7 +960,8 @@ function _pedirSalirEdicion(continuar){
             icon: '❓',
             title: '¿Salir sin guardar?',
             msg: 'Tienes cambios sin guardar en los permisos de «' +
-                 ((_rolDe(_rolActivo)||{}).label || _rolActivo) + '».',
+                 ((_rolDe(_rolActivo)||{}).label || _rolActivo) + '»' +
+                 (_sucSel ? ' para la sucursal ' + _sucNombre(_sucSel) : '') + '.',
             buttons: [
                 { label: 'Seguir editando',   kind: 'ghost',   onClick: null },
                 { label: 'Guardar y salir',   kind: 'primary', onClick: guardarYSalir },
@@ -838,6 +1004,10 @@ function renderGrid() {
             cards +
         '</div>';
     }).join('');
+    /* La barra y el aviso cuelgan del mismo estado que el tablero (rol activo,
+       sucursal, si se está editando). Repintarlos aquí evita la clase de bug en
+       que la pantalla dice una cosa y se guarda otra. */
+    renderSucBar();
 }
 
 function toggleExpandir(modKey) {
@@ -917,12 +1087,13 @@ function toggleSubPermiso(modKey, subKey) {
    volver a entrar. */
 /* Guardar PUBLICA el borrador: hasta aquí nada salió de esta pantalla. */
 async function guardarPermisos() {
-    var label = (_rolDe(_rolActivo)||{}).label || _rolActivo;
+    var label = ((_rolDe(_rolActivo)||{}).label || _rolActivo) +
+                (_sucSel ? ' en ' + _sucNombre(_sucSel) : '');
     var btn = document.querySelector('#accsEdicion .btn-save');
     var t0 = btn ? btn.textContent : '';
     if (btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
     var all = loadPermisos();
-    if (_borrador) all[_rolActivo] = _borrador;
+    if (_borrador) _conPermisosPuestos(all, _rolActivo, _borrador);
     var r = await savePermisos(all, _rolActivo);
     if (btn) { btn.disabled = false; btn.textContent = t0; }
     if (r && r.ok) {
