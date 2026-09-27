@@ -6582,10 +6582,25 @@ function _selRow(onclick,izq,sub,der,derSub){
       +'</div>';
 }
 function abrirSelectorPago(tipo){
-    // Filtro de seguridad: requiere autorización del admin/dueño antes de pagar
+    /* DOS CANDADOS DISTINTOS, y hay que no confundirlos:
+         · el PERMISO dice "¿te toca?" → Roles y Permisos;
+         · la CONTRASEÑA dice "¿eres tú?" → que no pague alguien que se sentó
+           en la tablet que quedó abierta.
+
+       Esto pedía `soloAdmin`, que RECHAZA la contraseña del colaborador venga
+       de donde venga. Se puso cuando pagar nómina y gasto fijo no tenían
+       permiso propio: la contraseña del dueño era la única barrera. Ahora sí lo
+       tienen, y dejarlo así hacía que el permiso no sirviera de nada — el rol
+       administrativo lo tenía prendido y su contraseña nunca se aceptaba.
+
+       Ahora: primero se comprueba que le toque; si le toca, SU contraseña
+       basta. Si no le toca, no hay contraseña que valga. */
+    var _clave = (tipo === 'nomina') ? 'gastos.nominas' : 'gastos.fijos';
+    if (!_exigeVG(_clave, tipo === 'nomina'
+        ? 'No puedes pagar nóminas.' : 'No puedes pagar gastos fijos.')) return;
     _pedirClaveAdmin('Pagar '+(tipo==='nomina'?'nómina':'gasto fijo')+' — Autorización requerida', function(){
         _abrirSelectorPagoReal(tipo);
-    }, '🔓 Autorizar', { soloAdmin:true });
+    }, '🔓 Autorizar');
 }
 function _abrirSelectorPagoReal(tipo){
     _ensureSelModal();

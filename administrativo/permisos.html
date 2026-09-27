@@ -315,7 +315,7 @@ function _cfgRoles(){ var a=loadPermisos(); return a[window.ETAAX_ROLES_KEY] || 
 function _guardarCfgRoles(cfg){
     var all=loadPermisos();
     all[window.ETAAX_ROLES_KEY]=cfg;
-    savePermisos(all);
+    savePermisos(all, window.ETAAX_ROLES_KEY);   // el catálogo de roles es su propia fila
 }
 
 /* ── MÓDULOS ── */
@@ -368,16 +368,41 @@ var SUBPERMS = window.ETAAX_SUBPERMS || {};
 function loadPermisos() {
     try { return JSON.parse(localStorage.getItem(_sk('permisos'))) || {}; } catch(e){ return {}; }
 }
-async function savePermisos(d) {
+/* Guardar permisos.
+   ANTES SUBÍA TODOS LOS ROLES, siempre, desde la copia LOCAL. Ahí estaba el
+   bug de "los permisos se quedan en mi máquina":
+
+     1. En la tablet cambias Gerente → sube el mapa completo.
+     2. En la compu tenías la pantalla abierta desde antes, con la copia vieja.
+        Cambias Cocinero → sube el mapa completo OTRA VEZ, con el Gerente de
+        antes. El cambio de la tablet acaba de desaparecer, y nadie se enteró.
+
+   Ahora se sube SOLO el rol que se tocó. Dos personas pisándose exige que
+   editen el MISMO rol al mismo tiempo, que es otra cosa y mucho más rara.
+
+   `rolTocado` es obligatorio en la práctica: si no viene, se sube todo como
+   antes — se deja esa puerta solo para no romper una llamada que se me escape,
+   y se avisa por consola para encontrarla. */
+async function savePermisos(d, rolTocado) {
     localStorage.setItem(_sk('permisos'), JSON.stringify(d));
     var negId = getNegocioActivo();
-    if (!negId) return;
-    var rows = Object.keys(d).map(function(rol){
+    if (!negId) return { ok:false, motivo:'sin negocio' };
+    var claves = rolTocado ? [rolTocado] : Object.keys(d);
+    if (!rolTocado) console.warn('[permisos] guardado sin rol: se suben todos (revisar quién llamó)');
+    var rows = claves.filter(function(k){ return d[k] !== undefined; }).map(function(rol){
         return { negocio_id: negId, rol: rol, datos: d[rol], updated_at: new Date().toISOString() };
     });
-    if (!rows.length) return;
+    if (!rows.length) return { ok:true };
     var r = await _supabase.from('permisos').upsert(rows, { onConflict: 'negocio_id,rol' });
-    if (r.error) _sbToastError('permisos upsert: ' + r.error.message);
+    if (r.error) { _sbToastError('permisos: ' + r.error.message); return { ok:false, motivo:r.error.message }; }
+    return { ok:true };
+}
+async function _borrarFilaPermisos(rol){
+    var negId = getNegocioActivo(); if (!negId || !rol) return;
+    try {
+        var r = await _supabase.from('permisos').delete().eq('negocio_id', negId).eq('rol', rol);
+        if (r.error) _sbToastError('permisos (borrar rol): ' + r.error.message);
+    } catch (e) {}
 }
 async function syncPermisos() {
     var negId = getNegocioActivo();
@@ -396,7 +421,7 @@ function getRolPermisos(rolKey) {
 function setRolPermisos(rolKey, perms) {
     var all = loadPermisos();
     all[rolKey] = perms;
-    savePermisos(all);
+    savePermisos(all, rolKey);
 }
 
 /* ── STATE ── */
@@ -559,7 +584,9 @@ function _crearRol(nom, icono, base){
        fila, cada dispositivo caería al default y el dueño no podría apagarle
        nada: no hay nada que apagar. */
     all[key]=JSON.parse(JSON.stringify(DEFAULTS[base]||{}));
-    savePermisos(all);
+    /* Dos filas: el catálogo de roles y los permisos del rol nuevo. */
+    savePermisos(all, window.ETAAX_ROLES_KEY);
+    savePermisos(all, key);
     _rolActivo=key; renderTabs(); renderGrid();
 }
 function _renombrarRolA(nom){
@@ -580,9 +607,14 @@ function borrarRol(){
             cfg.extra=(cfg.extra||[]).filter(function(r){ return r && r.key!==_rolActivo; });
             if(cfg.nombres) delete cfg.nombres[_rolActivo];
             var all=loadPermisos();
+            var _borrado=_rolActivo;
             all[window.ETAAX_ROLES_KEY]=cfg;
-            delete all[_rolActivo];
-            savePermisos(all);
+            delete all[_borrado];
+            savePermisos(all, window.ETAAX_ROLES_KEY);
+            /* Y su fila se BORRA de la nube. Antes se subía el mapa sin ella y
+               la fila vieja se quedaba viva allá: al recargar en otro equipo el
+               rol borrado volvía a aparecer. */
+            _borrarFilaPermisos(_borrado);
             _rolActivo='gerente'; renderTabs(); renderGrid();
         }, { kicker:'Borrar rol', kickIcon:'🗑️', okLabel:'Sí, borrar el rol' });
 }
@@ -752,7 +784,7 @@ function togglePermiso(modKey) {
     }
     var all = loadPermisos();
     all[_rolActivo] = perms;
-    savePermisos(all);
+    savePermisos(all, _rolActivo);
     renderGrid();
 }
 
@@ -767,13 +799,28 @@ function toggleSubPermiso(modKey, subKey) {
     perms[modKey][subKey] = !cur;
     var all = loadPermisos();
     all[_rolActivo] = perms;
-    savePermisos(all);
+    savePermisos(all, _rolActivo);
     renderGrid();
 }
 
-function guardarPermisos() {
+/* "Guardar cambios" NO GUARDABA NADA: solo sacaba un letrero diciendo que sí.
+   Los interruptores ya se guardan solos al tocarlos, así que el botón sobraba —
+   pero mientras estuviera ahí, decía una mentira cómoda: si la subida a la nube
+   fallaba, el letrero salía igual y el dueño se iba tranquilo.
+
+   Ahora hace lo que promete: vuelve a subir el rol activo y dice la VERDAD de
+   cómo salió. Si no hay red, lo dice; el cambio sigue en el equipo y se sube al
+   volver a entrar. */
+async function guardarPermisos() {
     var label = (_rolDe(_rolActivo)||{}).label || _rolActivo;
-    showToast('Permisos de ' + label + ' guardados');
+    var btn = document.querySelector('.btn-save');
+    var t0 = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
+    var r = await savePermisos(loadPermisos(), _rolActivo);
+    if (btn) { btn.disabled = false; btn.textContent = t0; }
+    showToast(r && r.ok
+        ? '✓ Permisos de ' + label + ' guardados en la nube'
+        : '⚠️ Quedaron en este equipo: ' + ((r && r.motivo) || 'sin conexión'));
 }
 
 function resetarRol() {
@@ -785,7 +832,7 @@ function resetarRol() {
         function(){
             var all = loadPermisos();
             all[_rolActivo] = JSON.parse(JSON.stringify(_defaultsDe(_rolActivo)));
-            savePermisos(all);
+            savePermisos(all, _rolActivo);
             renderGrid();
             showToast('Permisos restablecidos');
         }, { kicker:'Restablecer', kickIcon:'↺', okLabel:'Sí, restablecer' });

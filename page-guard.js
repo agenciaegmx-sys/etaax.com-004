@@ -388,6 +388,32 @@ window.etaaxPuedeReasignar = function (modulo) {
    rol propio del negocio. Se saca aparte porque lo necesitan DOS resolutores y
    tenerlo escrito en uno solo fue lo que dejó a los roles propios sin
    sub-permisos. */
+/* ── LOS PERMISOS, EN VIVO ────────────────────────────────────────────────────
+   La tabla `permisos` se publica para realtime desde la v32 y NADIE la
+   escuchaba: un cambio hecho en la tablet no llegaba a la sesión abierta en la
+   computadora hasta recargar —y a veces ni así, porque la de la computadora la
+   pisaba al guardar—. Ahora el cambio entra solo, se guarda en la caché y se
+   avisa con `etaax:permisos`, que es el evento que las pantallas ya escuchan
+   para volver a aplicar lo suyo. */
+var _permsCanal = null;
+window.etaaxPermisosEnVivo = function (negId) {
+    if (_permsCanal || !negId || typeof window._supabase === 'undefined') return;
+    try {
+        _permsCanal = window._supabase
+            .channel('permisos_' + negId)
+            .on('postgres_changes',
+                { event: '*', schema: 'public', table: 'permisos', filter: 'negocio_id=eq.' + negId },
+                function () {
+                    /* Se vuelve a leer TODO el negocio y no solo la fila que
+                       llegó: es una consulta chica y así no hay que reconstruir
+                       el mapa a mano desde un evento suelto. */
+                    _permsPedidos = false;
+                    window.etaaxPermisosRefrescar(negId);
+                })
+            .subscribe();
+    } catch (e) { _permsCanal = null; }
+};
+
 window.etaaxDefaultsDeRol = function (negId, rol) {
     if (window.ETAAX_PERM_DEFAULTS[rol]) return window.ETAAX_PERM_DEFAULTS[rol];
     var r = window.etaaxRol(negId, rol);
@@ -454,14 +480,18 @@ window.etaaxPerm = function (negId, rol, path) {
     try { ctx = JSON.parse(localStorage.getItem('etaax_ctx') || 'null'); } catch (e) {}
     if (!ctx) { if (_embed) return; window.location.replace('/hub.html'); return; }
 
+    /* La caché se refresca para TODOS, incluidos el dueño y el rol admin.
+       Antes salían antes de llegar aquí —"ellos no necesitan permisos"— y era
+       cierto para lo suyo, pero la pantalla de Roles y Permisos lee esa misma
+       caché: el dueño editaba sobre una copia vieja y al guardar pisaba lo que
+       otro dispositivo acababa de cambiar. */
+    window.etaaxPermisosRefrescar(ctx.negId, function () { if (_reEvaluar) _reEvaluar(); });
+    window.etaaxPermisosEnVivo(ctx.negId);
+
     // Dueño y admin maestro: acceso total
     if (ctx.ctxType !== 'staff') return;
     var rol = ctx.rol || 'otro';
     if (rol === 'admin') return;
-
-    /* Se pide ANTES de mirar el mapa: así una página sin candado (una landing)
-       también deja la caché caliente para la siguiente navegación. */
-    window.etaaxPermisosRefrescar(ctx.negId, function () { if (_reEvaluar) _reEvaluar(); });
     var _reEvaluar = null;
 
     // Mapa ruta → clave(s) de permiso. El orden importa

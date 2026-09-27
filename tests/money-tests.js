@@ -8016,10 +8016,19 @@ console.log('\n══ BC8 · Los permisos llegan al dispositivo ══');
         await new Promise(r => setTimeout(r, 40));
         eq(String(x.destino()||'').indexOf('denegado=staff') > -1, true, String(x.destino()));
     }]);
-    /* El dueño no pasa por nada de esto. */
-    test('al dueño no se le pide nada: tiene acceso total', () => {
+    /* El dueño no pasa por el CANDADO DE RUTA —tiene acceso total— pero sí baja
+       los permisos: la pantalla de Roles y Permisos lee esa misma caché, y
+       editando sobre una copia vieja pisaba lo que otro dispositivo acababa de
+       cambiar. Eso era "los permisos se quedan en mi máquina". */
+    test('al dueño no se le cierra ninguna ruta', () => {
+        const x = montar({ ruta:'/administrativo/staff.html',
+            ls:{ etaax_ctx: JSON.stringify({ ctxType:'owner', negId:'n1' }),
+                 etaax_n1_permisos: JSON.stringify({ owner:{ staff:false } }) } });
+        return eq(x.destino(), null, 'pasa');
+    });
+    test('…pero SÍ se le refresca la caché de permisos', () => {
         const x = montar({ ls:{ etaax_ctx: JSON.stringify({ ctxType:'owner', negId:'n1' }) } });
-        return eq(x.pedido(), null, 'no pide');
+        return eq(x.pedido(), 'n1', 'al día');
     });
 
     /* ── El default es permisivo: por eso faltar el dato abría la puerta ── */
@@ -10998,6 +11007,135 @@ console.log('\n══ BF3 · Navegación fantasma: al negocio, no a Matriz ═�
     test('salir del modo fantasma borra el sello', () =>
         eq(fs.readFileSync(path.join(RAIZ, 'ctx-bar.js'), 'utf8')
             .indexOf("removeItem('etaax_admin_impersonate')") > -1, true, 'limpio'));
+}
+
+/* ═══════════ SUITE BF4 · LOS PERMISOS DEJAN DE QUEDARSE EN UNA MÁQUINA ═════
+   LO QUE PASABA: cambiabas un rol en la tablet y en la computadora no se
+   reflejaba, ni recargando. Tres cosas a la vez:
+
+     1. Guardar subía TODOS los roles desde la copia LOCAL. La computadora,
+        con la pantalla abierta desde antes, tocaba un rol y volvía a subir el
+        mapa entero con su copia vieja: el cambio de la tablet desaparecía y
+        nadie se enteraba.
+     2. "Guardar cambios" NO GUARDABA NADA — solo sacaba un letrero diciendo
+        que sí. Si la subida fallaba, el letrero salía igual.
+     3. La tabla se publica para realtime desde la v32 y NADIE la escuchaba.
+
+   Y por separado: pagar nómina y gasto fijo pedían `soloAdmin`, que rechaza la
+   contraseña del colaborador venga de donde venga. El permiso estaba prendido
+   y su contraseña nunca se aceptaba: el permiso no servía de nada.          */
+console.log('\n══ BF4 · Los permisos dejan de quedarse en una máquina ══');
+{
+    const per = fs.readFileSync(path.join(RAIZ, 'administrativo/permisos.html'), 'utf8');
+    const pg  = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8');
+    const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+
+    /* ── 1. Se sube SOLO el rol que se tocó ── */
+    test('guardar recibe QUÉ rol se tocó', () =>
+        eq(per.indexOf('async function savePermisos(d, rolTocado)') > -1, true, 'con nombre'));
+    test('…y sube solo esa fila, no el mapa entero', () => {
+        const i = per.indexOf('async function savePermisos(d, rolTocado)');
+        const t = per.slice(i, i + 1200);
+        return eq(t.indexOf('var claves = rolTocado ? [rolTocado] : Object.keys(d);') > -1,
+                  true, 'una fila');
+    });
+    test('ningún guardado se quedó sin decir qué rol toca', () =>
+        eq(/savePermisos\(all\)\s*;/.test(per), false, 'todos nombrados'));
+    /* Y si alguna llamada se escapa, que se note en vez de volver al bug. */
+    test('…y si alguna se escapara, avisa por consola', () => {
+        const i = per.indexOf('async function savePermisos(d, rolTocado)');
+        return eq(per.slice(i, i + 1200).indexOf('console.warn(\'[permisos] guardado sin rol') > -1,
+                  true, 'se delata');
+    });
+    /* Borrar un rol tiene que BORRAR su fila: subir el mapa sin ella dejaba la
+       fila viva en la nube y el rol reaparecía al recargar en otro equipo. */
+    test('borrar un rol borra su fila de la nube', () =>
+        eq(per.indexOf('async function _borrarFilaPermisos(rol)') > -1 &&
+           per.indexOf('_borrarFilaPermisos(_borrado)') > -1, true, 'sin resucitar'));
+    test('crear un rol escribe sus dos filas', () => {
+        const i = per.indexOf('all[key]=JSON.parse(JSON.stringify(DEFAULTS[base]||{}));');
+        const t = per.slice(i, i + 400);
+        return eq(t.indexOf('savePermisos(all, window.ETAAX_ROLES_KEY)') > -1 &&
+                  t.indexOf('savePermisos(all, key)') > -1, true, 'catálogo y permisos');
+    });
+
+    /* ── 2. El botón que mentía ── */
+    test('"Guardar cambios" ahora guarda de verdad', () => {
+        const i = per.indexOf('async function guardarPermisos()');
+        return eq(i > -1 && per.slice(i, i + 700).indexOf('await savePermisos(') > -1, true, 'guarda');
+    });
+    test('…y dice la verdad de cómo salió', () => {
+        const i = per.indexOf('async function guardarPermisos()');
+        const t = per.slice(i, i + 700);
+        return eq(t.indexOf('r && r.ok') > -1 && t.indexOf('Quedaron en este equipo') > -1,
+                  true, 'sin mentir');
+    });
+    test('guardar informa si pudo o no', () => {
+        const i = per.indexOf('async function savePermisos(d, rolTocado)');
+        const t = per.slice(i, i + 1400);
+        return eq(t.indexOf('return { ok:true }') > -1 && t.indexOf('return { ok:false') > -1,
+                  true, 'con respuesta');
+    });
+
+    /* ── 3. En vivo, sin recargar ── */
+    test('alguien escucha la tabla de permisos', () => {
+        const i = pg.indexOf('window.etaaxPermisosEnVivo = function (negId)');
+        const t = pg.slice(i, i + 1400);
+        /* Declarar el canal no es escucharlo: hacen falta el .on y el .subscribe. */
+        return eq(i > -1 && t.indexOf(".on('postgres_changes'") > -1 && t.indexOf('.subscribe()') > -1,
+                  true, 'suscrito');
+    });
+    /* Y que ALGUIEN lo encienda: la función más perfecta no sirve si nadie la
+       llama. */
+    test('…y el canal se enciende al cargar la página', () =>
+        eq(pg.indexOf('window.etaaxPermisosEnVivo(ctx.negId);') > -1, true, 'encendido'));
+    test('…filtrando por el negocio, no la tabla entera', () => {
+        const i = pg.indexOf('window.etaaxPermisosEnVivo = function (negId)');
+        return eq(pg.slice(i, i + 1200).indexOf("filter: 'negocio_id=eq.'") > -1, true, 'acotado');
+    });
+    test('…y al llegar un cambio vuelve a bajar y avisa', () => {
+        const i = pg.indexOf('window.etaaxPermisosEnVivo = function (negId)');
+        const t = pg.slice(i, i + 1400);
+        return eq(t.indexOf('_permsPedidos = false;') > -1 &&
+                  t.indexOf('window.etaaxPermisosRefrescar(negId)') > -1, true, 'al vuelo');
+    });
+    test('un solo canal, no uno por página', () => {
+        const i = pg.indexOf('window.etaaxPermisosEnVivo = function (negId)');
+        return eq(pg.slice(i, i + 300).indexOf('if (_permsCanal') > -1, true, 'sin duplicar');
+    });
+    /* El dueño también: la pantalla de permisos lee esa caché. */
+    test('la caché se refresca también para el dueño', () => {
+        const i = pg.indexOf('window.etaaxPermisosRefrescar(ctx.negId, function');
+        const j = pg.indexOf("if (ctx.ctxType !== 'staff') return;");
+        return eq(i > -1 && j > i, true, 'antes de salirse');
+    });
+
+    /* ── Y la contraseña que no obedecía al permiso ── */
+    test('pagar nómina y gasto fijo piden PRIMERO el permiso', () => {
+        const i = dia.indexOf('function abrirSelectorPago(tipo)');
+        const t = dia.slice(i, i + 1600);
+        /* Que el candado DECIDA, no que esté escrito: un `if (false &&` delante
+           lo deja de adorno y una prueba que busca el texto lo celebraría. */
+        return eq(t.indexOf("(tipo === 'nomina') ? 'gastos.nominas' : 'gastos.fijos'") > -1 &&
+                  /if \(!_exigeVG\(_clave,[\s\S]{0,120}?\)\) return;/.test(t), true, '¿te toca?');
+    });
+    /* Y si le toca, SU contraseña basta: `soloAdmin` la rechazaba siempre y
+       dejaba el permiso de adorno. */
+    /* Se miran las LÍNEAS DE CÓDIGO: el comentario de arriba explica por qué se
+       quitó `soloAdmin` y lo nombra, y buscarlo a secas daría un falso rojo. */
+    test('…y ya no exigen la contraseña del dueño', () => {
+        const i = dia.indexOf('function abrirSelectorPago(tipo)');
+        const codigo = dia.slice(i, i + 1600).replace(/\/\*[\s\S]*?\*\//g, '');
+        return eq(codigo.indexOf('soloAdmin') === -1, true, 'su contraseña vale');
+    });
+    test('…pero la contraseña se sigue pidiendo: son dos preguntas distintas', () => {
+        const i = dia.indexOf('function abrirSelectorPago(tipo)');
+        return eq(dia.slice(i, i + 1600).indexOf('_pedirClaveAdmin(') > -1, true, '¿eres tú?');
+    });
+    /* Donde soloAdmin SÍ tiene sentido, se queda: editar permisos no puede
+       autorizarse con la contraseña de quien está siendo limitado. */
+    test('entrar a Roles y Permisos sigue pidiendo la del dueño', () =>
+        eq(per.indexOf('soloAdmin: true') > -1, true, 'sin autofirmarse'));
 }
 
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
