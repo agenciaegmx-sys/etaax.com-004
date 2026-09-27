@@ -12704,6 +12704,128 @@ console.log('\n══ BG3 · El corte cuadra con sus movimientos ══');
            true, 'con pista'));
 }
 
+/* ═══════════ SUITE BG4 · LA VISTA GLOBAL NO PIDE CONTRASEÑA ═══════════════
+   La clave de ENTRADA al Catálogo de Staff existe para lo que se puede TOCAR
+   ahí dentro. Desde que la vista global dejó de configurar —sin roles y
+   permisos, sin salario mínimo, sin dar de alta— lo que queda es mirar el
+   catálogo, ver a qué sucursal pertenece cada quien, moverlo y revisar bajas.
+   Pedir la clave para eso no cuida nada.
+
+   Y rompía la navegación: cancelar cierra la ventana, y desde los catálogos
+   globales eso deja al dueño en la navegación de UNA sucursal, que no es de
+   donde venía.
+
+   LA PUERTA NO SE QUITA, SE MUEVE: editar a un colaborador —donde se ven y se
+   cambian sueldos y datos bancarios— sigue pidiendo clave, en global igual que
+   dentro de una sucursal.                                                    */
+console.log('\n══ BG4 · La vista global no pide contraseña ══');
+{
+    const stf = fs.readFileSync(path.join(RAIZ, 'administrativo/staff.html'), 'utf8');
+    const decl = (fn) => {
+        const i = stf.indexOf('function ' + fn + '(');
+        if (i < 0) return '';
+        const abre = stf.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < stf.length) {
+            if (stf[j] === '{') prof++;
+            else if (stf[j] === '}') { prof--; if (!prof) return stf.slice(i, j + 1); }
+            j++;
+        }
+        return '';
+    };
+
+    /* Se corre el arranque REAL con lo mínimo alrededor: la pregunta es si pide
+       la clave y si el catálogo queda utilizable, no cómo se ve. */
+    function arrancar(opts) {
+        opts = opts || {};
+        const ls = { etaax_negocio_activo: opts.sinNegocio ? '' : 'n1' };
+        if (opts.suc) ls.etaax_sucursal_activa = opts.suc;
+        const ss = {};
+        if (opts.catGlobal) ss.etaax_cat_global = '1';
+        const visto = { pidioClave: null, arranco: 0, cerroVentana: 0, navego: null };
+        const ctx = {
+            console:{ warn(){}, log(){} }, JSON, Object, Array, String, Boolean, Promise, Date,
+            localStorage:{ getItem:k=>(k in ls?ls[k]:null), setItem(k,v){ ls[k]=String(v); }, removeItem(k){ delete ls[k]; } },
+            sessionStorage:{ getItem:k=>(k in ss?ss[k]:null), setItem(k,v){ ss[k]=String(v); }, removeItem(k){ delete ss[k]; } },
+            document:{ getElementById:()=>null, addEventListener(){}, querySelectorAll:()=>[] },
+        };
+        ctx.window = ctx;
+        ctx.location = { search: opts.embed ? '?embed=1' : '',
+                         get href(){ return visto.navego; }, set href(u){ visto.navego = u; } };
+        vm.createContext(ctx);
+        vm.runInContext(`
+            function getNegocioActivo(){ return localStorage.getItem('etaax_negocio_activo') || ''; }
+            var _bloqueado = true, _arrancado = false;
+            function renderAll(){}
+            function _arrancarCatalogo(){ _arrancado = true; window.__visto.arranco++; }
+            function _gateStaff(accion, cb, lbl, alCancelar){
+                window.__visto.pidioClave = accion;
+                window.__visto.alCancelar = alCancelar;   // se guarda, NO se llama
+            }
+            function _cerrarVentanaStaff(){ window.__visto.cerroVentana++; }
+            function desbloquearCatalogo(alCancelar){
+                _gateStaff('Catálogo de Staff — acceso restringido', function(){
+                    _bloqueado = false; _arrancarCatalogo();
+                }, '🔓 Entrar', alCancelar);
+            }
+        `, ctx);
+        ctx.__visto = visto;
+        ['_getSucActiva','_catGlobalOn','_vistaGlobalStaff','initPage']
+            .forEach(f => vm.runInContext(decl(f), ctx, { filename:'staff.html' }));
+        ctx.initPage();
+        return { ctx, visto };
+    }
+
+    /* ── En global: se entra directo ── */
+    {
+        const a = arrancar({});                       // sin sucursal parada = global
+        test('sin sucursal parada, el catálogo NO pide contraseña', () =>
+            eq(a.visto.pidioClave, null, String(a.visto.pidioClave)));
+        test('…y arranca de verdad, no se queda en el estado vacío', () =>
+            eq(a.visto.arranco, 1, 'arrancó'));
+        test('…y queda utilizable (sin el candado puesto)', () =>
+            eq(a.ctx._bloqueado, false, 'desbloqueado'));
+    }
+    {
+        const a = arrancar({ suc:'suc_centro', catGlobal:true });
+        test('con el catálogo global prendido tampoco la pide', () =>
+            eq(a.visto.pidioClave, null, String(a.visto.pidioClave)));
+    }
+
+    /* ── Dentro de una sucursal: la clave sigue ── */
+    {
+        const a = arrancar({ suc:'suc_centro' });
+        test('dentro de una sucursal SÍ sigue pidiendo la contraseña', () =>
+            eq(String(a.visto.pidioClave||'').indexOf('acceso restringido') > -1, true,
+               String(a.visto.pidioClave)));
+        test('…y no arranca hasta que se escriba', () =>
+            eq(a.visto.arranco, 0, 'esperando'));
+        /* Cancelar la de ENTRADA cierra la ventana: quedarse mirando un
+           catálogo vacío que no se puede usar no es "cancelar". */
+        test('…y cancelar ahí sigue cerrando la ventana', () => {
+            a.visto.alCancelar();
+            return eq(a.visto.cerroVentana, 1, 'cerró');
+        });
+    }
+
+    /* ── LA PUERTA NO SE QUITA, SE MUEVE ── */
+    /* Si al quitar la de entrada se quitara también la de editar, la vista
+       global se volvería un vistazo libre a sueldos, CLABE y CURP de todo el
+       personal. Editar es donde está el dato sensible. */
+    test('editar a un colaborador sigue pidiendo clave, en global también', () =>
+        eq(decl('openModal').indexOf("_gateStaff('Editar colaborador'") > -1, true, 'con clave'));
+    test('…y esa clave no depende de la vista global', () =>
+        eq(decl('openModal').indexOf('_vistaGlobalStaff') === -1, true, 'siempre'));
+    /* Lo que se quitó de la vista global no puede volver por la ventana: sin
+       clave de entrada, un botón de configurar ahí sería peor que antes. */
+    test('en global se siguen negando alta, salario mínimo y permisos', () =>
+        eq(decl('_corteNuevoGasto') !== undefined &&
+           decl('_exigeSucursalStaff').indexOf('_vistaGlobalStaff()') > -1, true, 'negados'));
+    test('el salto directo se decide por la vista, no por una bandera suelta', () =>
+        eq(decl('initPage').indexOf('if (_vistaGlobalStaff()) { _bloqueado = false; _arrancarCatalogo(); return; }') > -1,
+           true, 'por la vista'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');

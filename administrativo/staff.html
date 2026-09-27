@@ -2397,6 +2397,21 @@ async function initPage() {
     // El alcance por sucursal lo aplica renderTable según la sucursal activa / modo
     // global (se eliminó el filtro por sucursal de la UI).
     renderAll();          // pinta el estado vacío bloqueado detrás del modal
+    /* ── LA VISTA GLOBAL NO PIDE CONTRASEÑA DE ENTRADA ───────────────────────
+       La clave de entrada existe para lo que se puede TOCAR aquí dentro. Desde
+       que la vista global dejó de configurar —sin roles y permisos, sin salario
+       mínimo, sin dar de alta— lo que queda es mirar el catálogo, ver a qué
+       sucursal pertenece cada quien, moverlo y revisar bajas. Pedir la clave
+       para eso no cuida nada.
+
+       Y además rompía la navegación: cancelar cierra la ventana, y desde los
+       catálogos globales eso deja al dueño en la navegación de UNA sucursal,
+       que no es de donde venía.
+
+       Lo que SÍ sigue pidiendo clave es editar a un colaborador —ahí se ven y
+       se cambian sueldos y datos bancarios—, en global igual que dentro de una
+       sucursal. La puerta se movió a donde de verdad está el dato sensible. */
+    if (_vistaGlobalStaff()) { _bloqueado = false; _arrancarCatalogo(); return; }
     /* La de ENTRADA: si se cancela, se cierra la ventana. Distinto del botón
        "🔓 Desbloquear" del estado vacío, donde cancelar deja el catálogo como
        estaba — ahí el usuario ya decidió quedarse. */
