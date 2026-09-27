@@ -1322,6 +1322,14 @@
                         <span class="ri-lbl">Venta ef.</span>
                         <span class="ri-val" id="rEfNeto" style="color:var(--green)">$0</span>
                     </div>
+                    <!-- Movimientos de caja: solo aparece si los hay. El signo lo
+                         pone el propio movimiento (entra cambio: +, se deposita: −),
+                         así que el operador se pinta desde el cálculo. -->
+                    <span class="resguardo-op" id="riMovOp" style="display:none">+</span>
+                    <div class="resguardo-item" id="riMov" style="display:none">
+                        <span class="ri-lbl">Movimientos</span>
+                        <span class="ri-val" id="rMov" style="color:var(--blue,#7ab8f5)">$0</span>
+                    </div>
                     <span class="resguardo-op">−</span>
                     <div class="resguardo-item">
                         <span class="ri-lbl">Gs. caja chica</span>
@@ -1345,26 +1353,63 @@
                     <span class="rr-val" id="rParaResguardo">$0.00</span>
                 </div>
             </div>
+
+            <!-- LO QUE LLEGÓ AL BANCO.
+                 El corte decía cuánto efectivo quedaba en el cajón y no decía
+                 cuánto había llegado a las cuentas — que hoy es la otra mitad
+                 del dinero. Tarjeta lleva venta Y propina porque viajan en la
+                 misma transacción: el banco abona las dos juntas. -->
+            <div class="resguardo-box" style="margin-top:10px;border-color:rgba(122,184,245,.32)">
+                <div class="resguardo-eq">
+                    <div class="resguardo-item">
+                        <span class="ri-lbl">Tarjeta <span style="opacity:.6">(venta + propina)</span></span>
+                        <span class="ri-val" id="rbTarjeta" style="color:var(--blue,#7ab8f5)">$0</span>
+                    </div>
+                    <span class="resguardo-op">+</span>
+                    <div class="resguardo-item">
+                        <span class="ri-lbl">Transferencias</span>
+                        <span class="ri-val" id="rbTransfer" style="color:var(--blue,#7ab8f5)">$0</span>
+                    </div>
+                    <span class="resguardo-op" id="rbMovOp" style="display:none">+</span>
+                    <div class="resguardo-item" id="rbMovIt" style="display:none">
+                        <span class="ri-lbl">Movimientos</span>
+                        <span class="ri-val" id="rbMov" style="color:var(--blue,#7ab8f5)">$0</span>
+                    </div>
+                    <span class="resguardo-op">=</span>
+                </div>
+                <div class="resguardo-result">
+                    <span class="rr-lbl">Ingresó a cuentas</span>
+                    <span class="rr-val" id="rBancoTotal" style="color:var(--blue,#7ab8f5)">$0.00</span>
+                </div>
+            </div>
+            <!-- Bruto arriba, comisión abajo: lo que el cliente pagó no es lo que
+                 el banco abona, y esconder la diferencia hace que el estado de
+                 cuenta nunca cuadre con el corte. -->
+            <div id="rBancoNota" style="font-size:11px;color:var(--text-dim);margin-top:7px;line-height:1.5;display:none"></div>
         </div>
 
-        <!-- 6. Depósitos / Ingresos adicionales del día -->
+        <!-- 6. Movimientos de caja del día
+             Un corte de verdad tiene más movimientos que la venta: entra cambio
+             de la caja fuerte, se retira efectivo que no es gasto, se deposita
+             en el banco, cae un anticipo cobrado la semana pasada. Todos son lo
+             mismo con distinto signo, por eso comparten una sola lista. -->
         <div class="corte-sec">
-            <div class="corte-sec-title">💸 Depósitos / Ingresos adicionales</div>
+            <div class="corte-sec-title">🔁 Movimientos de caja</div>
             <div id="ingresosExtraList" class="ingreso-list"></div>
             <!-- Mini form para agregar -->
             <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
-                <input type="text" id="iexConcepto" placeholder="Concepto (evento, venta, depósito…)"
+                <input type="text" id="iexConcepto" placeholder="Concepto (evento, cambio, depósito…)"
                     style="background:var(--surface2);border:1px solid var(--border);color:var(--text);
                     padding:8px 10px;border-radius:6px;font-family:inherit;font-size:12px;
                     outline:none;flex:2;min-width:140px;box-sizing:border-box">
-                <select id="iexOrigen"
+                <select id="iexOrigen" onchange="_iexPista()"
                     style="background:var(--surface2);border:1px solid var(--border);color:var(--text);
                     padding:8px 10px;border-radius:6px;font-family:inherit;font-size:12px;outline:none">
-                    <option value="efectivo">💵 Efectivo</option>
-                    <option value="transfer">🏛️ Transfer.</option>
-                    <option value="propietario">👤 Propietario</option>
-                    <option value="evento">🎪 Evento</option>
-                    <option value="otro">📋 Otro</option>
+                    <option value="ingreso_ef">💵 Entra efectivo al cajón</option>
+                    <option value="desde_fuerte">🏦→💵 Cambio desde caja fuerte</option>
+                    <option value="ingreso_banco">🏛️ Ingreso a cuenta bancaria</option>
+                    <option value="deposito">💵→🏛️ Depósito al banco</option>
+                    <option value="retiro_ef">💵→🏦 Retiro de efectivo (no es gasto)</option>
                 </select>
                 <input type="number" id="iexMonto" placeholder="Monto" min="0" step="0.01"
                     style="background:var(--surface2);border:1px solid var(--border);color:var(--text);
@@ -1377,9 +1422,27 @@
                     + Agregar
                 </button>
             </div>
-            <div id="iexTotalRow" style="display:none;justify-content:flex-end;align-items:center;gap:10px;margin-top:6px">
-                <span style="font-size:10px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase">Total ingresos adicionales</span>
+            <div id="iexPista" style="font-size:11px;color:var(--text-dim);margin-top:6px;line-height:1.5"></div>
+            <!-- Atajos: capturar un gasto o un anticipo SIN salirse del corte -->
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+                <button type="button" onclick="_corteNuevoGasto()" id="btnCorteGasto"
+                    title="Captura un gasto de caja chica y vuelve al corte: se descuenta del efectivo automáticamente"
+                    style="flex:1;min-width:190px;background:transparent;border:1px dashed rgba(224,90,58,.45);
+                    color:var(--red);border-radius:8px;padding:9px 12px;font-family:inherit;font-size:12px;cursor:pointer">
+                    📤 Registrar gasto de caja chica
+                </button>
+                <button type="button" onclick="_corteNuevoAnticipo()" id="btnCorteAnticipo"
+                    title="Cobra un anticipo desde aquí: entra el dinero hoy y queda listo para aplicarse el día del evento"
+                    style="flex:1;min-width:190px;background:transparent;border:1px dashed rgba(245,200,66,.45);
+                    color:var(--accent-text,var(--accent));border-radius:8px;padding:9px 12px;font-family:inherit;font-size:12px;cursor:pointer">
+                    🎟️ Cobrar un anticipo
+                </button>
+            </div>
+            <div id="iexTotalRow" style="display:none;justify-content:flex-end;align-items:center;gap:16px;margin-top:8px;flex-wrap:wrap">
+                <span style="font-size:10px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase">Efecto en el cajón</span>
                 <span id="iexTotal" style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--green);letter-spacing:.5px">$0.00</span>
+                <span style="font-size:10px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase">Efecto en el banco</span>
+                <span id="iexTotalBanco" style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--blue,#7ab8f5);letter-spacing:.5px">$0.00</span>
             </div>
         </div>
 
@@ -3184,6 +3247,7 @@ function abrirModal(id){
     document.getElementById('fNotas').value=d.notas||'';
     // Cargar ingresos extra del corte (si ya existen)
     _ingresosExtra = (d.ingresosExtra||[]).slice();
+    if (typeof _iexPista === 'function') _iexPista();
     renderIngresosExtra();
     // Cargar evidencia visual del corte
     _evidenciasCorte = (d.evidencias||[]).slice();
@@ -3589,18 +3653,73 @@ function calcCorte(){
     rdEl.textContent = gastos > 0 ? fmtM(res) : '—';
     rdEl.style.color = gastos > 0 ? (res >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text-muted)';
 
-    // Resguardo: Fondo + Venta efectivo - Gs. caja chica - Props. pagadas (retiro) - Fondo sig. turno
+    /* Resguardo: Fondo + Venta ef. + Movimientos − Gs. caja chica − Props.
+       pagadas − Fondo sig. turno.
+       Los MOVIMIENTOS son lo que faltaba: se capturaban y no entraban en
+       ninguna fórmula. El cálculo se delega al núcleo para que esta pantalla y
+       el resto del sistema no puedan decir cosas distintas. */
     var fondo=v('fFondo'), fondoSig=v('fRetiros');
     var propRet=_propRetiro?pta:0; // propinas de TARJETA pagadas en efectivo del cajon
-    var resguardoVal = fondo + ef - _gastosCajaChica - propRet - fondoSig;
+    var mov = EtaaxCore.movsCorte(_ingresosExtra);
+    var resguardoVal = EtaaxCore.resguardo({
+        fondoInicial: fondo, efectivo: ef, ingresosExtra: _ingresosExtra,
+        propRetiroCaja: propRet, retiros: fondoSig
+    }, _gastosCajaChica);
     document.getElementById('rFondo').textContent       = fmtM(fondo);
     document.getElementById('rEfNeto').textContent      = fmtM(ef);
     document.getElementById('rGasCajaChica').textContent = fmtM(_gastosCajaChica);
+    /* El signo lo pone el propio movimiento: si el neto del día es una salida
+       (se depositó más de lo que entró), el renglón tiene que decir «−» y el
+       número ir en positivo. Un «+ −$800» no se lee. */
+    var rmI=document.getElementById('riMov'), rmO=document.getElementById('riMovOp');
+    if(rmI){
+        rmI.style.display = mov.efectivo ? '' : 'none';
+        document.getElementById('rMov').textContent = fmtM(Math.abs(mov.efectivo));
+    }
+    if(rmO){ rmO.style.display = mov.efectivo ? '' : 'none'; rmO.textContent = mov.efectivo < 0 ? '−' : '+'; }
     var riI=document.getElementById('riPropRet'), riO=document.getElementById('riPropRetOp');
     if(riI){ riI.style.display=propRet>0?'':'none'; document.getElementById('rPropRet').textContent=fmtM(propRet); }
     if(riO) riO.style.display=propRet>0?'':'none';
     document.getElementById('rParaResguardo').textContent = fmtM(resguardoVal);
+
+    /* Lo que llegó al banco. Misma fórmula del núcleo que usa el resto. */
+    var banco = EtaaxCore.bancoCorte({ tarjeta: ta, propTarjeta: pta, transferencia: tr,
+                                       ingresosExtra: _ingresosExtra });
+    _set('rbTarjeta',  fmtM(taBanc));
+    _set('rbTransfer', fmtM(tr));
+    var bmI=document.getElementById('rbMovIt'), bmO=document.getElementById('rbMovOp');
+    if(bmI){
+        bmI.style.display = mov.banco ? '' : 'none';
+        _set('rbMov', fmtM(Math.abs(mov.banco)));
+    }
+    if(bmO){ bmO.style.display = mov.banco ? '' : 'none'; bmO.textContent = mov.banco < 0 ? '−' : '+'; }
+    _set('rBancoTotal', fmtM(banco));
+    /* La comisión, dicha en voz alta: lo que el cliente pagó NO es lo que el
+       banco abona, y esconder la diferencia hace que el estado de cuenta nunca
+       cuadre con el corte. */
+    var nota=document.getElementById('rBancoNota');
+    if(nota){
+        /* El neto se saca del MISMO desglose por cuenta que se va a guardar, no
+           de una cuenta a ojo: cada terminal cobra su tasa, y la propina se
+           netea con la mezcla crédito/débito de ese corte (ver netoPropina). */
+        var neto = null;
+        try {
+            neto = taBancoNeto({ tarjeta: ta, propTarjeta: pta,
+                                 tarjetaCuentas: _getTarjetaCuentas(),
+                                 propTarjetaCuentas: _getPropCuentas() });
+        } catch (e) { neto = null; }
+        if(neto !== null && banco > 0 && Math.abs(neto - taBanc) >= 0.01){
+            nota.style.display='';
+            nota.innerHTML = 'De la tarjeta, el banco abona <strong>' + fmtM(neto) + '</strong> '
+                + 'después de comisiones (' + fmtM(taBanc - neto) + ' de comisión). '
+                + 'Aquí arriba va el bruto, que es lo que cobró la terminal.';
+        } else { nota.style.display='none'; }
+    }
 }
+/* Escribir en un elemento que puede no existir todavía (el modal se arma por
+   partes): sin esto, un id ausente tumba el cálculo entero y el corte se queda
+   en ceros sin decir por qué. */
+function _set(id, txt){ var e=document.getElementById(id); if(e) e.textContent=txt; }
 
 function guardarCorte(){
     var fecha=document.getElementById('fFecha').value;
@@ -4260,16 +4379,23 @@ function verCorte(id) {
     document.getElementById('verCorteTitulo').textContent = (c.nombre||('Corte · '+c.fecha));
     document.getElementById('verCorteHeader').style.background = '';
 
+    /* El detalle tiene que leer los movimientos EXACTAMENTE como los calcula el
+       núcleo: si aquí un depósito se pintara con «+» y allá restara, el corte
+       diría una cosa y el saldo otra. Por eso el signo sale de movEfecto. */
     var ingrExtra = (c.ingresosExtra||[]);
     var ingrHTML = ingrExtra.length
         ? '<div style="display:flex;flex-direction:column;gap:4px">'+
             ingrExtra.map(function(ie){
-                var icon={efectivo:'💵',transfer:'🏛️',propietario:'👤',evento:'🎪',otro:'📋'};
+                var t=EtaaxCore.movTipo(ie), e=EtaaxCore.movEfecto(ie);
+                var signo = e.efectivo < 0 ? '−' : (e.efectivo > 0 ? '+' : '');
+                var col = e.efectivo < 0 ? 'var(--red)'
+                        : (e.efectivo > 0 ? 'var(--green)' : 'var(--blue,#7ab8f5)');
                 return '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted)">'
-                    +'<span>'+(icon[ie.origen]||'📋')+' '+ie.concepto+'</span>'
-                    +'<span style="color:var(--green)">+'+fmtM(ie.monto)+'</span></div>';
+                    +'<span>'+(IEX_ICONO[t]||'📋')+' '+_escV(ie.concepto)
+                    +' <span style="color:var(--text-dim);font-size:10.5px">'+(IEX_ETIQ[t]||'')+'</span></span>'
+                    +'<span style="color:'+col+'">'+signo+fmtM(Math.abs(n(ie.monto)))+'</span></div>';
             }).join('')+'</div>'
-        : '<span style="color:var(--text-dim);font-size:12px">Sin ingresos adicionales</span>';
+        : '<span style="color:var(--text-dim);font-size:12px">Sin movimientos de caja</span>';
 
     function row(lbl,val,color){
         return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">'
@@ -4431,8 +4557,8 @@ function verCorte(id) {
                 '</div>'+
             '</div>'+
         '</div>'+
-        // Ingresos adicionales
-        (ingrExtra.length?'<div>'+sec('💸 Ingresos adicionales')+ingrHTML+'</div>':'')+
+        // Movimientos de caja
+        (ingrExtra.length?'<div>'+sec('🔁 Movimientos de caja')+ingrHTML+'</div>':'')+
         // Evidencia visual
         evidHTML+
         // Notas
@@ -5367,7 +5493,10 @@ function abrirModalAnticipo(id){
     var b=document.getElementById('antBtnGuardar'); if(b) b.textContent = id ? 'Guardar cambios' : 'Registrar anticipo';
     document.getElementById('modalAnticipo').classList.add('open');
 }
-function cerrarModalAnticipo(){ document.getElementById('modalAnticipo').classList.remove('open'); }
+function cerrarModalAnticipo(){
+    document.getElementById('modalAnticipo').classList.remove('open');
+    if(typeof _corteRefrescarTrasCaptura==='function') _corteRefrescarTrasCaptura();
+}
 
 function guardarAnticipo(){
     if(!_exigeVG('ventas.anticipos', 'No puedes registrar anticipos.')) return;
@@ -5649,14 +5778,32 @@ function renderVentasExtra(cur){
    ══════════════════════════════════════════════════════════ */
 var _ingresosExtra = []; // array temporal mientras el modal está abierto
 
+/* Qué hace cada tipo, en una línea, antes de capturar. Es la diferencia entre
+   elegir bien y descubrir el error tres días después conciliando. */
+var IEX_PISTA = {
+    ingreso_ef:    'Entra efectivo al cajón y sube el resguardo. Aportación del dueño, cobro de un evento, una venta suelta.',
+    desde_fuerte:  'La caja fuerte manda cambio al cajón. Sube el resguardo de hoy; la caja fuerte baja lo mismo.',
+    ingreso_banco: 'Cayó a la cuenta sin pasar por el cajón: un anticipo que se cobró antes, una transferencia recibida. No es venta de hoy.',
+    deposito:      'El efectivo del día se va al banco. Baja el resguardo y sube lo que ingresó a cuentas.',
+    retiro_ef:     'Sale efectivo del cajón y NO es un gasto: se sube a la caja fuerte o se lo lleva el dueño.',
+};
+function _iexPista(){
+    var sel=document.getElementById('iexOrigen'), p=document.getElementById('iexPista');
+    if(!sel||!p) return;
+    p.textContent = IEX_PISTA[sel.value] || '';
+}
+
 function agregarIngresoExtra(){
     var concepto=document.getElementById('iexConcepto').value.trim();
     var monto=parseFloat(document.getElementById('iexMonto').value);
     // Antes fallaba en silencio: ahora avisa qué falta y enfoca el campo
-    if(!concepto){ alert('Escribe el concepto del ingreso (ej. evento, venta, depósito).'); document.getElementById('iexConcepto').focus(); return; }
-    if(!(monto>0)){ alert('Captura el monto del ingreso (mayor a cero).'); document.getElementById('iexMonto').focus(); return; }
-    var origen=document.getElementById('iexOrigen').value;
-    _ingresosExtra.push({concepto:concepto,origen:origen,monto:monto});
+    if(!concepto){ alert('Escribe el concepto del movimiento (ej. cambio de caja fuerte, depósito, evento).'); document.getElementById('iexConcepto').focus(); return; }
+    if(!(monto>0)){ alert('Captura el monto del movimiento (mayor a cero).'); document.getElementById('iexMonto').focus(); return; }
+    /* El monto se captura SIEMPRE en positivo y el tipo pone el signo: pedirle
+       a alguien que escriba «-800» para un depósito es pedirle que se equivoque.
+       `origen` se conserva por compatibilidad con lo ya guardado. */
+    var tipo=document.getElementById('iexOrigen').value;
+    _ingresosExtra.push({concepto:concepto,tipo:tipo,origen:tipo,monto:monto});
     document.getElementById('iexConcepto').value='';
     document.getElementById('iexMonto').value='';
     renderIngresosExtra();
@@ -5669,27 +5816,108 @@ function eliminarIngresoExtra(idx){
     calcCorte();
 }
 
+var IEX_ICONO = { ingreso_ef:'💵', desde_fuerte:'🏦', ingreso_banco:'🏛️',
+                  deposito:'📥', retiro_ef:'📤',
+                  /* los viejos, que solo traían `origen` */
+                  efectivo:'💵', transfer:'🏛️', propietario:'👤', evento:'🎪', otro:'📋' };
+var IEX_ETIQ = { ingreso_ef:'entra al cajón', desde_fuerte:'cambio de caja fuerte',
+                 ingreso_banco:'a cuenta bancaria', deposito:'depósito al banco',
+                 retiro_ef:'retiro de efectivo' };
+
 function renderIngresosExtra(){
     var list=document.getElementById('ingresosExtraList');
     var totalRow=document.getElementById('iexTotalRow');
     var totalEl=document.getElementById('iexTotal');
-    if(!_ingresosExtra.length){list.innerHTML='';totalRow.style.display='none';return;}
-    var origenIcon={efectivo:'💵',transfer:'🏛️',propietario:'👤',evento:'🎪',otro:'📋'};
+    if(!list) return;
+    if(!_ingresosExtra.length){list.innerHTML='';if(totalRow)totalRow.style.display='none';return;}
     list.innerHTML=_ingresosExtra.map(function(ie,i){
+        /* El tipo lo resuelve el núcleo, no esta pantalla: un movimiento viejo
+           sin `tipo` tiene que leerse aquí igual que se calcula allá. */
+        var t=EtaaxCore.movTipo(ie), ef=EtaaxCore.movEfecto(ie);
+        var signo = ef.efectivo < 0 ? '−' : (ef.efectivo > 0 ? '+' : '');
+        var color = ef.efectivo < 0 ? 'var(--red)' : (ef.banco > 0 && !ef.efectivo ? 'var(--blue,#7ab8f5)' : 'var(--green)');
         return '<div class="ingreso-row">'
-            +'<span style="font-size:14px">'+(origenIcon[ie.origen]||'📋')+'</span>'
-            +'<span class="ir-concepto">'+ie.concepto+'</span>'
-            +'<span class="ir-monto">+'+fmtM(ie.monto)+'</span>'
+            +'<span style="font-size:14px">'+(IEX_ICONO[t]||IEX_ICONO[ie.origen]||'📋')+'</span>'
+            +'<span class="ir-concepto">'+etx(ie.concepto)
+            +'<span style="font-size:10px;color:var(--text-dim);display:block;letter-spacing:.3px">'+(IEX_ETIQ[t]||'')+'</span></span>'
+            +'<span class="ir-monto" style="color:'+color+'">'+signo+fmtM(Math.abs(ie.monto))+'</span>'
             +'<button onclick="eliminarIngresoExtra('+i+')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;padding:2px 4px;font-size:12px">✕</button>'
         +'</div>';
     }).join('');
-    var tot=_ingresosExtra.reduce(function(s,ie){return s+ie.monto;},0);
-    totalEl.textContent=fmtM(tot);
-    totalRow.style.display='flex';
+    var m=EtaaxCore.movsCorte(_ingresosExtra);
+    if(totalEl) totalEl.textContent=(m.efectivo<0?'−':'')+fmtM(Math.abs(m.efectivo));
+    var tb=document.getElementById('iexTotalBanco');
+    if(tb) tb.textContent=(m.banco<0?'−':'')+fmtM(Math.abs(m.banco));
+    if(totalRow) totalRow.style.display='flex';
 }
 
+/* Sigue existiendo por compatibilidad, pero ya no es "el total": con
+   movimientos que restan, sumar montos en crudo da un número que no significa
+   nada. Devuelve el efecto NETO sobre el cajón. */
 function totalIngresosExtra(){
-    return _ingresosExtra.reduce(function(s,ie){return s+ie.monto;},0);
+    return EtaaxCore.movsCorte(_ingresosExtra).efectivo;
+}
+
+/* ══════════════════════════════════════════════════════════
+   ATAJOS DEL CORTE: capturar SIN salirse
+
+   Dos cosas que había que hacer en otra pantalla y volver:
+
+     · el gasto de caja chica, que es el movimiento más común del turno;
+     · el anticipo que se cobra en el momento.
+
+   No se construye nada nuevo: se abre el MISMO modal que ya existe, con la
+   fecha y la sucursal del corte puestas, y al cerrarlo se vuelve a jalar lo
+   del día para que el resguardo se corrija solo. Salirse del corte a medio
+   capturar es como se pierden las capturas.
+   ══════════════════════════════════════════════════════════ */
+var _corteEsperaGasto = false, _corteEsperaAnticipo = false;
+
+/* La fecha del corte manda sobre "hoy": un corte de ayer que se captura en la
+   mañana tiene que registrar el gasto en el día que fue, no en el de la
+   captura. */
+function _corteFecha(){
+    var f=document.getElementById('fFecha');
+    return (f && f.value) || todayStr();
+}
+
+function _corteNuevoGasto(){
+    if(!_exigeVG('gastos.capturar','No puedes capturar gastos.')) return;
+    _corteEsperaGasto = true;
+    _abrirModalGasto(null,'menor');
+    /* Prellenado: fecha del corte y caja chica. Es el caso del 95% —lo que se
+       paga del cajón durante el turno— y sigue siendo editable. */
+    var gf=document.getElementById('gFecha'); if(gf) gf.value=_corteFecha();
+    /* setMetodo pinta el botón que se le pasa: hay que darle el del método,
+       no solo el nombre. */
+    var mc=document.getElementById('mCajaChica');
+    if(mc && typeof setMetodo==='function'){ try { setMetodo('caja_chica', mc); } catch(e){} }
+    var sc=document.getElementById('gSucursal');
+    if(sc && _sucActiva()) sc.value=_sucActiva();
+}
+
+function _corteNuevoAnticipo(){
+    if(!_exigeVG('ventas.anticipos','No puedes registrar anticipos.')) return;
+    _corteEsperaAnticipo = true;
+    abrirModalAnticipo();
+    var af=document.getElementById('antFecha'); if(af) af.value=_corteFecha();
+}
+
+/* Al cerrarse el modal de encima, el corte vuelve a leer el día. Sin esto el
+   gasto quedaba guardado y el resguardo seguía mostrando el número viejo: el
+   dueño lo veía "mal" y volvía a capturar. */
+function _corteRefrescarTrasCaptura(){
+    if(_corteEsperaGasto){
+        _corteEsperaGasto = false;
+        if(typeof jalarGastosFecha==='function') jalarGastosFecha();
+    }
+    if(_corteEsperaAnticipo){
+        _corteEsperaAnticipo = false;
+        /* El anticipo recién cobrado ya se puede aplicar a este corte: se
+           repinta el selector para que aparezca sin recargar. */
+        if(typeof _antPintarFila==='function') { try { _antPintarFila(); } catch(e){} }
+        calcCorte();
+    }
 }
 </script>
 <script>
@@ -6546,6 +6774,7 @@ function _toggleQrGasto(){
 function gCerrarModal(){
     document.getElementById('modalGasto').classList.remove('open');
     _cerrarPuenteGasto();
+    if(typeof _corteRefrescarTrasCaptura==='function') _corteRefrescarTrasCaptura();
 }
 
 /* ══════════════════════════════════════════════════════════

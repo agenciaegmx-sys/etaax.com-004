@@ -12467,6 +12467,203 @@ console.log('\n══ BG2 · Las vistas globales, completas ══');
     }
 }
 
+/* ═══════════ SUITE BG3 · EL CORTE CUADRA CON SUS MOVIMIENTOS ══════════════
+   EL BUG, y era gordo: el corte tenía desde siempre una sección de "Depósitos
+   / Ingresos adicionales". Se capturaban, se guardaban en el corte, se veían
+   en el detalle… y NO ENTRABAN EN NINGUNA FÓRMULA. Ni en el resguardo, ni en
+   el flujo, ni en la venta. Se registraba un depósito de $5,000 y el efectivo
+   final salía exactamente igual que si no se hubiera capturado nada.
+
+   Y un corte de verdad tiene más movimientos que la venta: de caja fuerte
+   entran $800 porque no hay cambio, se retira efectivo que NO es gasto, se
+   deposita lo del día en el banco, cae a la cuenta un anticipo cobrado la
+   semana pasada. Todos son lo mismo con distinto signo.
+
+   Además faltaba la otra mitad del dinero: el corte decía cuánto efectivo
+   quedaba en el cajón y no decía cuánto había llegado al BANCO.             */
+console.log('\n══ BG3 · El corte cuadra con sus movimientos ══');
+{
+    const C = A.EtaaxCore;
+    const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+
+    /* ── El efecto de cada tipo ── */
+    const casos = [
+        ['ingreso_ef',    { efectivo:  500, banco:   0 }, 'entra efectivo al cajón'],
+        ['desde_fuerte',  { efectivo:  800, banco:   0 }, 'cambio de la caja fuerte'],
+        ['ingreso_banco', { efectivo:    0, banco: 500 }, 'cae a la cuenta'],
+        ['deposito',      { efectivo: -500, banco: 500 }, 'del cajón al banco'],
+        ['retiro_ef',     { efectivo: -500, banco:   0 }, 'sale y no es gasto'],
+    ];
+    casos.forEach(([tipo, esp, que]) => {
+        const monto = tipo === 'desde_fuerte' ? 800 : 500;
+        const e = C.movEfecto({ tipo: tipo, monto: monto });
+        test('movimiento «' + tipo + '»: ' + que, () =>
+            eq(e.efectivo === esp.efectivo && e.banco === esp.banco, true,
+               'ef ' + e.efectivo + ' / banco ' + e.banco));
+    });
+    /* Un depósito no crea ni destruye dinero: lo cambia de lugar. Si las dos
+       mitades no fueran iguales y opuestas, el total del negocio se movería
+       solo por depositar. */
+    test('un depósito no crea ni destruye dinero, lo cambia de sitio', () => {
+        const e = C.movEfecto({ tipo:'deposito', monto: 1234.5 });
+        return eq(e.efectivo + e.banco, 0, 'suma cero');
+    });
+
+    /* ── Los que ya estaban guardados ── */
+    /* Los movimientos viejos no traen `tipo`: todos eran dinero que entraba, y
+       lo único que los distingue es por dónde. Leerlos mal cambiaría números
+       de cortes ya cerrados. */
+    test('un movimiento viejo sin tipo se lee como entrada de efectivo', () =>
+        eq(C.movTipo({ origen:'evento', monto:100 }), 'ingreso_ef', 'entrada'));
+    test('…salvo el de transferencia, que entró al banco', () =>
+        eq(C.movTipo({ origen:'transfer', monto:100 }), 'ingreso_banco', 'al banco'));
+    test('un tipo desconocido no truena: cae a entrada de efectivo', () =>
+        eq(C.movTipo({ tipo:'marciano', monto:100 }), 'ingreso_ef', 'de respaldo'));
+
+    /* ── El resguardo, que era donde no llegaban ── */
+    const base = { fondoInicial: 1000, efectivo: 5000, propRetiroCaja: 0, retiros: 1000 };
+    test('sin movimientos, el resguardo es el de siempre', () =>
+        eq(C.resguardo(base, 300), 1000 + 5000 - 300 - 1000, 'igual'));
+    test('el cambio que entró de caja fuerte SUBE el resguardo', () =>
+        eq(C.resguardo(Object.assign({}, base, {
+            ingresosExtra:[{ tipo:'desde_fuerte', monto:800 }] }), 300),
+           1000 + 5000 + 800 - 300 - 1000, 'con los $800'));
+    test('el depósito al banco BAJA el resguardo', () =>
+        eq(C.resguardo(Object.assign({}, base, {
+            ingresosExtra:[{ tipo:'deposito', monto:4000 }] }), 300),
+           1000 + 5000 - 4000 - 300 - 1000, 'sin los $4,000'));
+    test('un retiro que no es gasto también lo baja', () =>
+        eq(C.resguardo(Object.assign({}, base, {
+            ingresosExtra:[{ tipo:'retiro_ef', monto:500 }] }), 300),
+           1000 + 5000 - 500 - 300 - 1000, 'sin los $500'));
+    /* Lo que cae a la cuenta NO toca el cajón: contarlo ahí haría que el corte
+       pidiera un efectivo que nunca estuvo. */
+    test('lo que cae a la cuenta no toca el cajón', () =>
+        eq(C.resguardo(Object.assign({}, base, {
+            ingresosExtra:[{ tipo:'ingreso_banco', monto:9000 }] }), 300),
+           1000 + 5000 - 300 - 1000, 'sin tocar'));
+    test('varios movimientos se suman con su signo', () =>
+        eq(C.resguardo(Object.assign({}, base, { ingresosExtra:[
+            { tipo:'desde_fuerte', monto:800 },
+            { tipo:'deposito',     monto:3000 },
+            { tipo:'ingreso_ef',   monto:200 },
+            { tipo:'ingreso_banco',monto:5000 }] }), 300),
+           1000 + 5000 + 800 - 3000 + 200 - 300 - 1000, 'neto'));
+    test('un corte sin la llave de movimientos no truena', () =>
+        eq(C.resguardo({ fondoInicial:100, efectivo:0 }, 0), 100, 'vivo'));
+
+    /* ── Lo que llegó al banco: la mitad que faltaba ── */
+    /* La propina de tarjeta va con la venta porque viajan en la MISMA
+       transacción: el banco abona las dos juntas. Separarlas haría que el
+       corte nunca cuadrara contra el estado de cuenta. */
+    test('al banco llega tarjeta + propina de tarjeta + transferencias', () =>
+        eq(C.bancoCorte({ tarjeta:10000, propTarjeta:800, transferencia:2000 }),
+           12800, 'las tres'));
+    test('…más lo que los movimientos mandaron allá', () =>
+        eq(C.bancoCorte({ tarjeta:10000, propTarjeta:800, transferencia:2000,
+                          ingresosExtra:[{ tipo:'deposito', monto:4000 },
+                                         { tipo:'ingreso_banco', monto:1000 }] }),
+           12800 + 5000, 'con los movimientos'));
+    test('…y lo que solo entra al cajón no cuenta como banco', () =>
+        eq(C.bancoCorte({ tarjeta:0, propTarjeta:0, transferencia:0,
+                          ingresosExtra:[{ tipo:'desde_fuerte', monto:800 },
+                                         { tipo:'ingreso_ef', monto:500 }] }),
+           0, 'nada al banco'));
+    /* El anticipo aplicado es VENTA de hoy pero no dinero de hoy: su lugar es
+       la venta, no el banco. Sumarlo aquí lo contaría dos veces — una cuando
+       se cobró y otra hoy. */
+    test('un anticipo aplicado no vuelve a entrar al banco hoy', () =>
+        eq(C.bancoCorte({ tarjeta:0, propTarjeta:0, transferencia:0,
+                          anticipos:[{ anticipoId:'a1', monto:3000 }] }), 0, 'sin doble'));
+    test('…pero sí sigue siendo venta del día', () =>
+        eq(C.ventasBruta({ efectivo:0, tarjeta:0, transferencia:0,
+                           anticipos:[{ anticipoId:'a1', monto:3000 }] }), 3000, 'venta'));
+
+    /* ── La pantalla no puede decir otra cosa que el núcleo ── */
+    const cuerpo = (fn) => {
+        const i = dia.indexOf('function ' + fn + '(');
+        if (i < 0) return '';
+        const abre = dia.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < dia.length) {
+            if (dia[j] === '{') prof++;
+            else if (dia[j] === '}') { prof--; if (!prof) return dia.slice(i, j + 1); }
+            j++;
+        }
+        return '';
+    };
+    test('el corte calcula su resguardo con el núcleo, no con una copia', () =>
+        eq(cuerpo('calcCorte').indexOf('EtaaxCore.resguardo({') > -1, true, 'delega'));
+    test('…y lo del banco también', () =>
+        eq(cuerpo('calcCorte').indexOf('EtaaxCore.bancoCorte(') > -1, true, 'delega'));
+    test('la lista de movimientos lee el tipo del núcleo', () =>
+        eq(cuerpo('renderIngresosExtra').indexOf('EtaaxCore.movTipo(ie)') > -1 &&
+           cuerpo('renderIngresosExtra').indexOf('EtaaxCore.movEfecto(ie)') > -1, true, 'delega'));
+    /* Si el detalle pintara un depósito con «+» y el cálculo lo restara, el
+       corte diría una cosa y el saldo otra. */
+    test('el detalle del corte saca el signo del mismo sitio', () =>
+        eq(dia.indexOf("var t=EtaaxCore.movTipo(ie), e=EtaaxCore.movEfecto(ie);") > -1,
+           true, 'mismo signo'));
+    test('el monto se captura en positivo y el TIPO pone el signo', () =>
+        eq(cuerpo('agregarIngresoExtra').indexOf("tipo:tipo,origen:tipo") > -1, true, 'sin signos a mano'));
+    /* `origen` se sigue escribiendo: si se dejara de guardar, un corte nuevo
+       leído por una versión vieja del código perdería el movimiento. */
+    test('…y se sigue guardando `origen`, para no romper lo que ya lee eso', () =>
+        eq(cuerpo('agregarIngresoExtra').indexOf('origen:tipo') > -1, true, 'compatible'));
+
+    /* ── Los atajos: capturar sin salirse del corte ── */
+    test('el corte puede registrar un gasto de caja chica', () =>
+        eq(dia.indexOf('function _corteNuevoGasto()') > -1 &&
+           dia.indexOf('onclick="_corteNuevoGasto()"') > -1, true, 'con botón'));
+    test('…pidiendo el permiso de capturar gastos, no el de ver el corte', () =>
+        eq(cuerpo('_corteNuevoGasto').indexOf("_exigeVG('gastos.capturar'") > -1, true, 'su permiso'));
+    test('…con la fecha DEL CORTE, no la de hoy', () =>
+        eq(cuerpo('_corteNuevoGasto').indexOf("gf.value=_corteFecha()") > -1, true, 'la del corte'));
+    test('…y prellenado como caja chica, que es el caso del turno', () =>
+        eq(cuerpo('_corteNuevoGasto').indexOf("setMetodo('caja_chica', mc)") > -1, true, 'caja chica'));
+    test('el corte puede cobrar un anticipo', () =>
+        eq(dia.indexOf('function _corteNuevoAnticipo()') > -1 &&
+           dia.indexOf('onclick="_corteNuevoAnticipo()"') > -1, true, 'con botón'));
+    test('…pidiendo el permiso de anticipos', () =>
+        eq(cuerpo('_corteNuevoAnticipo').indexOf("_exigeVG('ventas.anticipos'") > -1, true, 'su permiso'));
+    /* SIN ESTO el atajo es peor que no tenerlo: el gasto queda guardado, el
+       resguardo sigue mostrando el número viejo, y el dueño lo vuelve a
+       capturar creyendo que no se guardó. */
+    test('al cerrar el gasto, el corte vuelve a leer el día', () =>
+        eq(cuerpo('gCerrarModal').indexOf('_corteRefrescarTrasCaptura()') > -1, true, 'se refresca'));
+    test('…y al cerrar el anticipo, también', () =>
+        eq(cuerpo('cerrarModalAnticipo').indexOf('_corteRefrescarTrasCaptura()') > -1, true, 'se refresca'));
+    test('el refresco jala los gastos de la fecha', () =>
+        eq(cuerpo('_corteRefrescarTrasCaptura').indexOf('jalarGastosFecha()') > -1, true, 'los jala'));
+    /* Solo refresca si el modal se abrió DESDE el corte: si no, capturar un
+       gasto suelto repintaría un corte que ni está abierto. */
+    test('…solo si el modal se abrió desde el corte', () =>
+        eq(cuerpo('_corteRefrescarTrasCaptura').indexOf('if(_corteEsperaGasto){') > -1, true, 'con bandera'));
+
+    /* ── Que la pantalla tenga dónde enseñarlo ── */
+    test('el resguardo muestra el renglón de movimientos', () =>
+        eq(dia.indexOf('id="riMov"') > -1 && dia.indexOf('id="rMov"') > -1, true, 'con renglón'));
+    /* Un «+ −$800» no se lee: el signo va en el operador y el número en
+       positivo. */
+    test('…y si el neto sale, el operador cambia a «−»', () =>
+        eq(cuerpo('calcCorte').indexOf("rmO.textContent = mov.efectivo < 0 ? '−' : '+'") > -1,
+           true, 'signo legible'));
+    test('el corte ya dice cuánto ingresó a cuentas bancarias', () =>
+        eq(dia.indexOf('id="rBancoTotal"') > -1 &&
+           dia.indexOf('Ingresó a cuentas') > -1, true, 'con total'));
+    test('…con su desglose: tarjeta, transferencias y movimientos', () =>
+        eq(['rbTarjeta','rbTransfer','rbMov'].every(id => dia.indexOf('id="' + id + '"') > -1),
+           true, 'desglosado'));
+    /* Lo que el cliente pagó NO es lo que el banco abona. Esconder la comisión
+       hace que el estado de cuenta nunca cuadre con el corte. */
+    test('…y dice cuánto abona el banco después de comisiones', () =>
+        eq(cuerpo('calcCorte').indexOf('después de comisiones') > -1, true, 'con comisión'));
+    test('cada tipo de movimiento explica qué hace antes de capturarlo', () =>
+        eq(['ingreso_ef','desde_fuerte','ingreso_banco','deposito','retiro_ef']
+           .every(t => new RegExp(t + ':\\s*\'').test(dia.slice(dia.indexOf('var IEX_PISTA')))),
+           true, 'con pista'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');

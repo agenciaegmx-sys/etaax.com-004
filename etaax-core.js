@@ -106,8 +106,70 @@
         return (mismos[0].id || '') === (corte.id || '');
     }
 
+    /* ── LOS MOVIMIENTOS DE CAJA DE UN CORTE ─────────────────────────────────
+       EL BUG: el corte tenía desde siempre una sección de "Depósitos / Ingresos
+       adicionales". Se capturaban, se guardaban en el corte y se veían en el
+       detalle… y NO ENTRABAN EN NINGUNA FÓRMULA. Ni en el resguardo, ni en el
+       flujo, ni en la venta. O sea: se registraba un depósito y el efectivo
+       final salía exactamente igual que si no se hubiera capturado nada.
+
+       Y un corte de caja de verdad tiene más movimientos que la venta:
+
+         · de caja fuerte entran $800 al cajón porque no hay cambio,
+         · se retira efectivo que NO es un gasto (se sube a la caja fuerte),
+         · se deposita el efectivo del día en el banco,
+         · cae a la cuenta un anticipo que se cobró la semana pasada — no es
+           venta de hoy, pero sí es dinero que llegó hoy.
+
+       Todos son la misma cosa con distinto signo: CUÁNTO y de dónde a dónde.
+       Por eso se resuelven con una sola tabla en vez de cinco funciones.
+
+       La llave `ingresosExtra` se conserva —es donde ya viven los capturados—
+       y el TIPO es lo nuevo. Los viejos no lo traen: todos eran dinero que
+       entraba, y lo único que los distingue es por dónde entró.              */
+    var MOV_TIPOS = {
+        ingreso_ef:    { efectivo:  1, banco: 0 },   // entra efectivo al cajón
+        ingreso_banco: { efectivo:  0, banco: 1 },   // cae a la cuenta (anticipo viejo, transfer)
+        desde_fuerte:  { efectivo:  1, banco: 0 },   // caja fuerte manda cambio al cajón
+        retiro_ef:     { efectivo: -1, banco: 0 },   // sale efectivo y NO es gasto
+        deposito:      { efectivo: -1, banco: 1 },   // el efectivo del día se va al banco
+    };
+    function movTipo(m) {
+        var t = m && m.tipo;
+        if (t && MOV_TIPOS[t]) return t;
+        return (m && m.origen === 'transfer') ? 'ingreso_banco' : 'ingreso_ef';
+    }
+    function movEfecto(m) {
+        var s = MOV_TIPOS[movTipo(m)], val = n(m && m.monto);
+        return { efectivo: s.efectivo * val, banco: s.banco * val };
+    }
+    function movsCorte(movs) {
+        return (movs || []).reduce(function (t, m) {
+            var e = movEfecto(m);
+            t.efectivo += e.efectivo; t.banco += e.banco; return t;
+        }, { efectivo: 0, banco: 0 });
+    }
+
     // Resguardo físico del cajón. cajaChicaDia = gastos de caja chica de la fecha del corte.
-    function resguardo(c, cajaChicaDia) { return n(c.fondoInicial) + n(c.efectivo) - n(cajaChicaDia) - n(c.propRetiroCaja) - n(c.retiros); }
+    /* Los movimientos de caja entran aquí: es el único número que se compara
+       contra lo que hay FÍSICAMENTE en el cajón al cerrar. Si de caja fuerte
+       entraron $800, el cajón tiene $800 más — negarlo hacía que el corte
+       "faltara" por esa cantidad todos los días que hubiera movimientos. */
+    function resguardo(c, cajaChicaDia) {
+        return n(c.fondoInicial) + n(c.efectivo) + movsCorte(c && c.ingresosExtra).efectivo
+             - n(cajaChicaDia) - n(c.propRetiroCaja) - n(c.retiros);
+    }
+
+    /* ── LO QUE LLEGA A LAS CUENTAS BANCARIAS POR ESTE CORTE ──────────────────
+       El corte decía cuánto efectivo quedaba en el cajón y NO decía cuánto
+       había llegado al banco — que hoy es la mitad del dinero de un
+       restaurante. Tarjeta (venta + propina, que viajan en la misma
+       transacción), transferencias, y lo que los movimientos mandaron allá.
+       BRUTO: lo que el cliente pagó. La comisión se descuenta después, y el
+       desglose por cuenta la muestra aparte. */
+    function bancoCorte(c) {
+        return taBanco(c) + n(c.transferencia) + movsCorte(c && c.ingresosExtra).banco;
+    }
 
     /* ── Comisiones bancarias ────────────────────────────────── */
     // Fracción efectiva (0..1) que descuenta el banco: comisión TC/TD + IVA si aplica.
@@ -1240,6 +1302,8 @@
         anticiposDelDia: anticiposDelDia,
         netoPropina: netoPropina,
         depEfecto: depEfecto, esRetiro: esRetiro,
+        MOV_TIPOS: MOV_TIPOS, movTipo: movTipo, movEfecto: movEfecto,
+        movsCorte: movsCorte, bancoCorte: bancoCorte,
         esApartado: esApartado, apartadoFondo: apartadoFondo, PREV_GENERAL: PREV_GENERAL,
         esAbonoTpv: esAbonoTpv, tpvDeCorte: tpvDeCorte, tpvConciliacion: tpvConciliacion,
         tpvCuentaConcilia: tpvCuentaConcilia,
