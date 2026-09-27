@@ -11334,6 +11334,41 @@ console.log('\n══ BF6 · Los gastos fijos son de una sucursal ══');
         eq(dia.indexOf('_fijosScope().forEach(function(f){') > -1, true, 'acotado'));
 }
 
+/* ═══════════ SUITE BF7 · LOS INTERRUPTORES, BLOQUEADOS DE VERDAD ══════════
+   El manejador ya devolvía temprano fuera del modo edición… y el interruptor
+   se movía igual. Claro: es un <input type=checkbox> de verdad, y para cuando
+   el manejador corre el navegador YA lo cambió en la pantalla. Como no se
+   repintaba, quedaba mostrando algo que no era. Un interruptor que se mueve y
+   no hace nada es peor que uno que no se mueve.                              */
+console.log('\n══ BF7 · Los interruptores, bloqueados de verdad ══');
+{
+    const per = fs.readFileSync(path.join(RAIZ, 'administrativo/permisos.html'), 'utf8');
+
+    test('hay una sola regla de "¿se puede mover ahora?"', () =>
+        eq(per.indexOf('function _bloqueado(isAdmin)') > -1, true, 'una regla'));
+    test('…y bloquea fuera del modo edición', () => {
+        const i = per.indexOf('function _bloqueado(isAdmin)');
+        return eq(per.slice(i, i + 120).indexOf('isAdmin || !_editando') > -1, true, 'bloqueado');
+    });
+    /* Los DOS interruptores: el del módulo y el del sub-permiso. */
+    test('el interruptor del módulo se bloquea con esa regla', () => {
+        const i = per.indexOf("' id=\"tog_' + m.key + '\" onchange=");
+        return eq(per.slice(Math.max(0, i - 220), i).indexOf('_bloqueado(disabled)') > -1,
+                  true, 'con disabled');
+    });
+    test('…y el del sub-permiso también', () =>
+        eq(per.indexOf('_bloqueado(disabled) || !checked') > -1, true, 'con disabled'));
+    /* Y que se NOTE que está bloqueado: si no, "no se mueve" parece roto. */
+    test('el candado se ve: cursor de prohibido', () =>
+        eq(/\.toggle input:disabled \+ \.toggle-slider \{ cursor:not-allowed/.test(per), true, 'se nota'));
+    test('…y la pantalla entera se marca como consulta', () =>
+        eq(per.indexOf("grid.classList.toggle('solo-lectura', !_editando)") > -1, true, 'marcada'));
+    /* El cinturón sigue puesto: aunque alguien quite el disabled desde las
+       herramientas del navegador, el manejador no hace nada. */
+    test('y aun sin el candado visual, el manejador se niega', () =>
+        eq((per.match(/if \(!_editando\) return;/g) || []).length, 2, 'las dos capas'));
+}
+
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
    Una URL pública es una LLAVE PERMANENTE: no caduca, no se revoca, y queda
    escrita dentro del registro y dentro de cualquier archivo que se comparta. La

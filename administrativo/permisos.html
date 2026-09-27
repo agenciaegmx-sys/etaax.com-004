@@ -94,7 +94,11 @@
 }
 .toggle input:checked + .toggle-slider { background:var(--green); }
 .toggle input:checked + .toggle-slider::before { transform:translateX(18px); }
-.toggle input:disabled + .toggle-slider { cursor:default;opacity:.6; }
+.toggle input:disabled + .toggle-slider { cursor:not-allowed;opacity:.45; }
+/* Fuera del modo edición la pantalla entera se lee como lo que es: una consulta.
+   Sin esta pista, "no se mueve" parece que está roto. */
+.permisos-grid.solo-lectura .mod-card { opacity:.92; }
+.permisos-grid.solo-lectura .subperm-row { cursor:default; }
 
 .save-bar {
     display:flex;align-items:center;justify-content:space-between;gap:12px;
@@ -652,6 +656,13 @@ function _toggleHTML(id, checked, disabled, onchange) {
 }
 
 /* Render de un card de módulo (acordeón) */
+/* ¿Este interruptor se puede mover AHORA MISMO?
+   Devolver temprano en el manejador NO alcanza: el <input type=checkbox> ya se
+   movió en la pantalla cuando el manejador corre, y como no se repinta, se
+   queda mostrando algo que no es. Un interruptor que se mueve y no hace nada es
+   peor que uno que no se mueve. Se bloquea de verdad, con `disabled`. */
+function _bloqueado(isAdmin) { return isAdmin || !_editando; }
+
 function _renderModCard(m, perms, isAdmin) {
     // cambiarSucursal es fail-open: prendido salvo que lo apaguen explícitamente.
     var checked  = (m.key === 'cambiarSucursal') ? (perms[m.key] !== false) : !!perms[m.key];
@@ -683,7 +694,7 @@ function _renderModCard(m, perms, isAdmin) {
             (hasSubs ? '<div class="mod-chev">▸</div>' : '') +
             '<div class="toggle-wrap" onclick="event.stopPropagation()">' +
                 '<label class="toggle">' +
-                    '<input type="checkbox"' + (checked ? ' checked' : '') + (disabled ? ' disabled' : '') +
+                    '<input type="checkbox"' + (checked ? ' checked' : '') + (_bloqueado(disabled) ? ' disabled' : '') +
                     ' id="tog_' + m.key + '" onchange="togglePermiso(\'' + m.key + '\')">' +
                     '<span class="toggle-slider"></span>' +
                 '</label>' +
@@ -712,7 +723,7 @@ function _renderModCard(m, perms, isAdmin) {
                     '<div class="subperm-label">' + sp.label + pend + '</div>' +
                     '<div class="subperm-sub">' + sp.sub + '</div>' +
                 '</div>' +
-                _toggleHTML('sub_' + m.key + '_' + sp.key, sc, disabled || !checked,
+                _toggleHTML('sub_' + m.key + '_' + sp.key, sc, _bloqueado(disabled) || !checked,
                     'toggleSubPermiso(\'' + m.key + '\',\'' + sp.key + '\')') +
             '</div>';
         }).join('');
@@ -797,6 +808,7 @@ function renderGrid() {
     if (accL) accL.style.display = (_editando || isAdmin) ? 'none' : '';
     if (accE) accE.style.display = _editando ? '' : 'none';
     var grid    = document.getElementById('permisosGrid');
+    if (grid) grid.classList.toggle('solo-lectura', !_editando);
     document.getElementById('adminLockNote').style.display = isAdmin ? '' : 'none';
 
     grid.innerHTML = CATEGORIAS.map(function(cat){
