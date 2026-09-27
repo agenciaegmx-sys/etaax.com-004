@@ -5701,6 +5701,11 @@ var _cacheGastos = null;
 var _cacheProvs  = null;
 var _cacheCats   = null; // array de strings
 var _cacheFijos  = null; // gastos fijos (gf_fijos)
+/* Los gastos fijos son de UNA sucursal: la renta del local de Catedral no es la
+   del otro local. Se guardaban sin sucursal, así que aquí salían TODOS en
+   cualquier sucursal — y el recordatorio de pagos avisaba de rentas ajenas.
+   Sin sucursal = Matriz, la regla de siempre. */
+function _fijosScope(){ return _scopeSuc(_cacheFijos || []); }
 var _cacheNominas= null; // {[mes]:{operativa:[],administrativa:[],socios:[]}}
 var _cacheStaff  = null; // catálogo de colaboradores
 
@@ -6639,7 +6644,7 @@ function _abrirSelectorPagoReal(tipo){
         }
     } else {
         title.textContent='🏢 Pagar gasto fijo — elige uno';
-        var fijos=_cacheFijos||[];
+        var fijos=_fijosScope();
         if(!fijos.length){ body.innerHTML='<div style="padding:28px;text-align:center;color:var(--text-dim)">Sin gastos fijos configurados en Gastos globales.</div>'; }
         else {
             body.innerHTML=fijos.map(function(f){
@@ -7739,7 +7744,7 @@ function _renderRecordatorioPagos(){
     var el=document.getElementById('dxRecordatorio'); if(!el) return;
     if(sessionStorage.getItem('dxRecordCerrado')==='1'){ el.style.display='none'; return; }
     var pend=[];
-    (_cacheFijos||[]).forEach(function(f){
+    _fijosScope().forEach(function(f){
         var p=_planFijoDx(f); if(!p||!p.programado) return;
         if(p.dias<=5) pend.push({f:f,p:p}); // 'dias' = días hasta el pago que TOCA (≤0 vencido/hoy · ≤5 próximo)
     });

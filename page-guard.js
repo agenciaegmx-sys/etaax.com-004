@@ -131,6 +131,13 @@ window.ETAAX_SUBPERMS = {
        Las otras cuatro tarjetas de la misma pantalla: gastos del día, gastos
        mayores, nóminas y gastos fijos. Nóminas y fijos NO tenían interruptor:
        quien podía capturar un gasto de $80 podía pagar la nómina completa. */
+    /* Financiero: los gastos fijos son de UNA sucursal —la renta del local de
+       Catedral no es la del otro local— y hasta ahora se guardaban sin sucursal,
+       o sea todos colgando de Matriz. Al darles selector, hace falta decir quién
+       puede moverlos de sucursal. */
+    financiero: [
+        { key:'cambiarSucursal',label:'Cambiar el gasto fijo de sucursal', sub:'Reasignar un gasto fijo a otra sucursal' },
+    ],
     /* Clientes solo necesita uno por ahora: el resto del módulo se gobierna con
        el interruptor del módulo entero. */
     clientes: [

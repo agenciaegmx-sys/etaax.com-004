@@ -253,8 +253,12 @@
             <div class="save-bar">
                 <div class="save-bar-info">Rol activo: <strong id="rolActivoLabel">—</strong></div>
                 <div class="hdr-acts" id="rolAccs" style="margin-right:auto"></div>
-                <div class="hdr-acts">
+                <div class="hdr-acts" id="accsLectura">
+                    <button class="btn-save" onclick="editarRol()">✏️ Editar permisos de este rol</button>
+                </div>
+                <div class="hdr-acts" id="accsEdicion" style="display:none">
                     <button class="btn-reset" onclick="resetarRol()">Restablecer defaults</button>
+                    <button class="btn-reset" onclick="cancelarEdicionRol()">Cancelar</button>
                     <button class="btn-save" onclick="guardarPermisos()">Guardar cambios</button>
                 </div>
             </div>
@@ -722,9 +726,76 @@ function _renderModCard(m, perms, isAdmin) {
     '</div>';
 }
 
+/* ── MODO EDICIÓN ────────────────────────────────────────────────────────────
+   Antes cada interruptor se guardaba SOLO, al instante y en la nube. Dos
+   problemas con eso:
+     · No había "cancelar": tocabas por error y ya estaba hecho.
+     · Y desde que los permisos viajan en vivo, un rol A MEDIO CONFIGURAR le
+       llegaba al colaborador: le quitabas tres cosas para reacomodarlas y
+       durante esos segundos se quedaba sin ellas, en plena operación.
+
+   Ahora se edita una COPIA y no se publica nada hasta darle Guardar. Salir con
+   cambios pendientes pregunta, con los mismos tres botones que el editor de
+   escandallos — seguir editando, guardar y salir, salir sin guardar. */
+var _editando = false;
+var _borrador = null;   // la copia que se está tocando
+var _sucio    = false;
+
+function editarRol(){
+    if (_rolActivo === 'admin') return;   // el admin no se edita
+    _borrador = JSON.parse(JSON.stringify(getRolPermisos(_rolActivo)));
+    _editando = true; _sucio = false;
+    renderTabs(); renderGrid();
+}
+function _salirDeEdicion(){
+    _editando = false; _borrador = null; _sucio = false;
+    renderTabs(); renderGrid();
+}
+function cancelarEdicionRol(){
+    if (!_sucio) { _salirDeEdicion(); return; }
+    _pedirSalirEdicion(_salirDeEdicion);
+}
+/* Los mismos tres botones del editor de escandallos: la pregunta es la misma y
+   la respuesta también, así que no se inventa un diálogo nuevo. */
+function _pedirSalirEdicion(continuar){
+    var irse = function(){ _sucio = false; _salirDeEdicion(); if (continuar !== _salirDeEdicion) continuar(); };
+    var guardarYSalir = function(){
+        guardarPermisos().then(function(){ if (continuar !== _salirDeEdicion) continuar(); });
+    };
+    if (typeof etaaxDialog === 'function') {
+        etaaxDialog({
+            icon: '❓',
+            title: '¿Salir sin guardar?',
+            msg: 'Tienes cambios sin guardar en los permisos de «' +
+                 ((_rolDe(_rolActivo)||{}).label || _rolActivo) + '».',
+            buttons: [
+                { label: 'Seguir editando',   kind: 'ghost',   onClick: null },
+                { label: 'Guardar y salir',   kind: 'primary', onClick: guardarYSalir },
+                { label: 'Salir sin guardar', kind: 'danger',  onClick: irse }
+            ]
+        });
+    } else if (confirm('¿Salir sin guardar? Los cambios se perderán.')) { irse(); }
+}
+/* Salir de la pestaña, cerrar la ventana o cambiar de rol pasan por aquí. */
+function _conGuardiaEdicion(continuar){
+    if (!_editando || !_sucio) { continuar(); return true; }
+    _pedirSalirEdicion(continuar);
+    return false;
+}
+window._permGuardNav = _conGuardiaEdicion;
+/* Y el aviso del navegador, por si se cierra la pestaña con cambios colgando. */
+window.addEventListener('beforeunload', function(e){
+    if (!_editando || !_sucio) return;
+    e.preventDefault(); e.returnValue = '';
+});
+
 function renderGrid() {
     var isAdmin = _rolActivo === 'admin';
-    var perms   = getRolPermisos(_rolActivo);
+    /* En edición se pinta el BORRADOR; fuera de edición, lo guardado. */
+    var perms   = _editando && _borrador ? _borrador : getRolPermisos(_rolActivo);
+    var accL = document.getElementById('accsLectura'), accE = document.getElementById('accsEdicion');
+    if (accL) accL.style.display = (_editando || isAdmin) ? 'none' : '';
+    if (accE) accE.style.display = _editando ? '' : 'none';
     var grid    = document.getElementById('permisosGrid');
     document.getElementById('adminLockNote').style.display = isAdmin ? '' : 'none';
 
@@ -749,9 +820,15 @@ function toggleExpandir(modKey) {
 }
 
 function selectRol(key) {
-    _rolActivo = key;
-    renderTabs();
-    renderGrid();
+    if (key === _rolActivo) return;
+    /* Cambiar de rol con cambios colgando es salirse del editor: se pregunta,
+       igual que cerrar. Sin esto el borrador se perdía en silencio. */
+    _conGuardiaEdicion(function(){
+        _editando = false; _borrador = null; _sucio = false;
+        _rolActivo = key;
+        renderTabs();
+        renderGrid();
+    });
 }
 
 /* Objeto de sub-permisos por defecto al encender un módulo expandible:
@@ -771,7 +848,8 @@ function _objSubsOn(modKey) {
 
 function togglePermiso(modKey) {
     if (_rolActivo === 'admin') return;
-    var perms = getRolPermisos(_rolActivo);
+    if (!_editando) return;              // fuera de edición no se toca nada
+    var perms = _borrador;
     // cambiarSucursal es fail-open (prendido si no es false): el toggle se basa en eso.
     var nowOn = (modKey === 'cambiarSucursal') ? (perms[modKey] === false) : !perms[modKey];
     // Módulos con sub-permisos: al encender se guarda el objeto; al apagar, false
@@ -782,24 +860,21 @@ function togglePermiso(modKey) {
     } else {
         perms[modKey] = nowOn;
     }
-    var all = loadPermisos();
-    all[_rolActivo] = perms;
-    savePermisos(all, _rolActivo);
+    _sucio = true;
     renderGrid();
 }
 
 function toggleSubPermiso(modKey, subKey) {
     if (_rolActivo === 'admin') return;
-    var perms = getRolPermisos(_rolActivo);
+    if (!_editando) return;              // fuera de edición no se toca nada
+    var perms = _borrador;
     // Si el módulo está apagado, no hay sub-permisos que tocar
     if (!perms[modKey]) return;
     // Asegurar que el módulo sea un objeto de sub-permisos
     if (typeof perms[modKey] !== 'object') perms[modKey] = _objSubsOn(modKey);
     var cur = _subVal(perms, modKey, subKey);
     perms[modKey][subKey] = !cur;
-    var all = loadPermisos();
-    all[_rolActivo] = perms;
-    savePermisos(all, _rolActivo);
+    _sucio = true;
     renderGrid();
 }
 
@@ -811,16 +886,26 @@ function toggleSubPermiso(modKey, subKey) {
    Ahora hace lo que promete: vuelve a subir el rol activo y dice la VERDAD de
    cómo salió. Si no hay red, lo dice; el cambio sigue en el equipo y se sube al
    volver a entrar. */
+/* Guardar PUBLICA el borrador: hasta aquí nada salió de esta pantalla. */
 async function guardarPermisos() {
     var label = (_rolDe(_rolActivo)||{}).label || _rolActivo;
-    var btn = document.querySelector('.btn-save');
+    var btn = document.querySelector('#accsEdicion .btn-save');
     var t0 = btn ? btn.textContent : '';
     if (btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
-    var r = await savePermisos(loadPermisos(), _rolActivo);
+    var all = loadPermisos();
+    if (_borrador) all[_rolActivo] = _borrador;
+    var r = await savePermisos(all, _rolActivo);
     if (btn) { btn.disabled = false; btn.textContent = t0; }
-    showToast(r && r.ok
-        ? '✓ Permisos de ' + label + ' guardados en la nube'
-        : '⚠️ Quedaron en este equipo: ' + ((r && r.motivo) || 'sin conexión'));
+    if (r && r.ok) {
+        _sucio = false;
+        _salirDeEdicion();
+        showToast('✓ Permisos de ' + label + ' guardados');
+    } else {
+        /* Quedó en el equipo: NO se cierra la edición, para que se vea que algo
+           falta y se pueda reintentar. */
+        showToast('⚠️ Quedaron en este equipo: ' + ((r && r.motivo) || 'sin conexión'));
+    }
+    return r;
 }
 
 function resetarRol() {
@@ -830,11 +915,12 @@ function resetarRol() {
         'Vuelve a los permisos de fábrica de este rol. <strong>Se pierde todo lo que ' +
         'hayas ajustado</strong> aquí para él.',
         function(){
-            var all = loadPermisos();
-            all[_rolActivo] = JSON.parse(JSON.stringify(_defaultsDe(_rolActivo)));
-            savePermisos(all, _rolActivo);
+            /* Restablecer es un cambio MÁS del borrador, no un guardado: así se
+               puede ver cómo queda y arrepentirse con Cancelar. */
+            _borrador = JSON.parse(JSON.stringify(_defaultsDe(_rolActivo)));
+            _sucio = true;
             renderGrid();
-            showToast('Permisos restablecidos');
+            showToast('Valores de fábrica cargados — dale Guardar para aplicarlos');
         }, { kicker:'Restablecer', kickIcon:'↺', okLabel:'Sí, restablecer' });
 }
 
@@ -911,6 +997,14 @@ function _gatePermisos() {
 
 /* Escape cierra la ventanita: si un modal no se cierra con Escape, se siente
    trabado — y este puede abrirse encima del catálogo de staff. */
+/* La ventana flotante de Staff cierra esta pantalla desde SU barra. Se le avisa
+   que hay cambios colgando para que pregunte antes de tirarlos. */
+window.addEventListener('message', function(e){
+    if (!e || !e.data || e.data.type !== 'permQuiereCerrar') return;
+    _conGuardiaEdicion(function(){
+        try { window.parent.postMessage({ type:'permPuedeCerrar' }, window.location.origin); } catch (x) {}
+    });
+});
 document.addEventListener('keydown', function(e){
     if (e.key === 'Escape' && document.getElementById('rolModal').classList.contains('on')) {
         e.stopPropagation(); cerrarRolModal();

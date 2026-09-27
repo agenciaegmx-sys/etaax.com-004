@@ -513,6 +513,13 @@
                 <label>Proveedor (opcional)</label>
                 <input type="text" id="fijoProveedor" placeholder="Nombre del proveedor o empresa">
             </div>
+            <!-- La renta del local de Catedral no es la del otro local. Hasta
+                 ahora un gasto fijo se guardaba SIN sucursal, o sea colgando de
+                 Matriz para todos. -->
+            <div class="fg" id="row-fijo-sucursal" style="display:none">
+                <label>📍 Sucursal a la que pertenece</label>
+                <select id="fijoSucursal"></select>
+            </div>
             <div class="fg-row-2">
                 <div class="fg">
                     <label>Periodicidad</label>
@@ -747,7 +754,16 @@ function _sbUpFijo(record) { sbUpsert('gf_fijos', record); }
 function _sbDelFijo(id) { sbDelete('gf_fijos', id); }
 function _sbSaveNominas(allNominas) { sbUpsertDoc('gf_nominas', allNominas); }
 
+/* TODOS los gastos fijos del negocio, sin filtrar. Es el caché crudo: lo usan
+   el guardado y el borrado, que necesitan la lista completa para no tirar los
+   de las otras sucursales al reescribirla. */
 function loadFijos(){ return _cacheGG_Fijos || []; }
+/* Los de la sucursal en la que estás parado. Es lo que va a las vistas y a los
+   cálculos: dentro de una sucursal, la renta del otro local no es tu gasto.
+   En 🌐 vista global entran todos.
+   OJO: un fijo sin sucursal es de Matriz — regla del sistema para todo lo que
+   se capturó antes de que existiera el campo. */
+function fijosScope(){ return (_cacheGG_Fijos || []).filter(_deSuc); }
 function loadNominas(mes){
     var all = _cacheGG_Nominas || {};
     return all[mes] || {operativa:[],administrativa:[],socios:[]};
@@ -832,12 +848,12 @@ function _catExcluidaVar(g){ return /propina|gratificaci/i.test(g.categoria||'')
 // Categoría de naturaleza FIJA (renta/servicios/agua/luz/internet…) → cuenta en Gastos Fijos, no en variables.
 function _esFijoPat(g){ return /renta|arrendamiento|servicio|\bagua\b|\bluz\b|electric|energ[ií]a|internet|telecom|tel[eé]fon|\bgas\b|predial|software|suscripci/i.test(g.categoria||''); }
 // Categorías definidas como GASTO FIJO (en gf_fijos) → no deben recontarse en variables.
-function _catsFijos(){ var s={}; loadFijos().forEach(function(f){ if(f.categoria) s[String(f.categoria).toLowerCase().trim()]=1; }); return s; }
+function _catsFijos(){ var s={}; fijosScope().forEach(function(f){ if(f.categoria) s[String(f.categoria).toLowerCase().trim()]=1; }); return s; }
 // ── Matcher: liga cada gasto fijo del catálogo con su(s) pago(s) reales del mes ──
 // Por `fijoId` (pagos nuevos) o, si falta, por concepto + proveedor (pagos viejos sin link).
 function _norm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
 function _pagosFijosMes(mes){
-    var fijos=loadFijos(), gastos=loadGastosMes(mes);
+    var fijos=fijosScope(), gastos=loadGastosMes(mes);
     return fijos.map(function(f){
         var pagos=gastos.filter(function(g){
             if(g.fijoId) return g.fijoId===f.id;
@@ -1023,7 +1039,7 @@ function renderKPIs(mes){
     // Clasificación ÚNICA desde el núcleo (misma verdad para KPIs, Estadísticas y Diario).
     // Fijo = pagos de fijos + naturaleza fija · Nómina = nómina/personal + IMSS ·
     // Variable = resto (incl. impuestos/contabilidad) + comisión bancaria · Propina fuera.
-    var cl=EtaaxCore.clasificarGastos(loadGastosMes(mes),{ fijos:loadFijos(), staff:_loadStaff(), comisionBanco:comisionesBancoMes(mes) });
+    var cl=EtaaxCore.clasificarGastos(loadGastosMes(mes),{ fijos:fijosScope(), staff:_loadStaff(), comisionBanco:comisionesBancoMes(mes) });
     var totalFijos=cl.fijo, totalNom=cl.nom, totalVar=cl.variable, total=cl.egresos;
     var totalFijosNC=totalFijosNoCatalogMes(mes); // solo para el sublabel "Incluye $X no catalogados"
 
@@ -1074,7 +1090,7 @@ function _gastosRangoGG(from,to){
     return (_cacheGG_Gastos||[]).filter(function(g){ return g.fecha && g.fecha>=from && g.fecha<=to; }).filter(_deSuc);
 }
 function _clasifRangoGG(from,to){
-    return EtaaxCore.clasificarGastos(_gastosRangoGG(from,to), { fijos:loadFijos(), staff:_loadStaff(), comisionBanco:0 });
+    return EtaaxCore.clasificarGastos(_gastosRangoGG(from,to), { fijos:fijosScope(), staff:_loadStaff(), comisionBanco:0 });
 }
 
 // ── Reporte del MES en pantalla: TODO el gasto, separado por grupo ──
@@ -1084,7 +1100,7 @@ function _imprimirGastos(){
     var ini=_r.from, fin=_r.to;
     var gastos=loadGastosMes(mes);
     var comBanco=comisionesBancoMes(mes);
-    var opts={ fijos:loadFijos(), staff:_loadStaff(), comisionBanco:comBanco };
+    var opts={ fijos:fijosScope(), staff:_loadStaff(), comisionBanco:comBanco };
     var cl=EtaaxCore.clasificarGastos(gastos, opts);
     // Cada gasto a su grupo con la MISMA regla del núcleo (grupoGastoUI), y dentro
     // de cada grupo, por categoría. Así el reporte cuadra con los KPIs de arriba.
@@ -1253,7 +1269,7 @@ function _estatusFijo(x){
 function renderFijos(){
     var mes=_mesPicker||mesStr();
     _renderFijosNoCatalog(mes);
-    var lista=loadFijos();
+    var lista=fijosScope();
     var tbody=document.getElementById('fijosTbody');
     var empty=document.getElementById('fijosEmpty');
     var foot=document.getElementById('fijosFoot');
@@ -1735,18 +1751,50 @@ function _abrirFijoModal(id){
     document.getElementById('fijoPeriodicidad').value=d.periodicidad||'mensual';
     // Retrocompat: si un fijo viejo solo tenía diaPago, sugerir una fecha ref con ese día este mes.
     document.getElementById('fijoFechaRef').value=d.fechaRef||(d.diaPago?_fechaDeDia(d.diaPago):'');
+    /* Al editar, la suya; al crear, la sucursal en la que estás parado. */
+    _pobSucursalFijo(id ? (d.sucursalId||'') : (_SUC_LOCK||''));
     document.getElementById('modalFijoTitle').textContent=id?'✏️ Editar Gasto Fijo':'🏢 Nuevo Gasto Fijo';
     document.getElementById('modalFijo').classList.add('open');
     setTimeout(function(){document.getElementById('fijoConcepto').focus();},60);
 }
 function cerrarFijo(){document.getElementById('modalFijo').classList.remove('open');}
+/* ¿Puede este rol mover un gasto fijo de sucursal? La regla es la compartida
+   (page-guard): el permiso del módulo manda y falla abierto. */
+function _puedeCambiarSucFijo(){
+    return (typeof window.etaaxPuedeReasignar==='function') ? window.etaaxPuedeReasignar('financiero') : true;
+}
+/* El selector aparece solo si hay más de una sucursal Y el rol puede reasignar.
+   Un negocio de un solo local no tiene nada que elegir. */
+function _pobSucursalFijo(sucId){
+    var sel=document.getElementById('fijoSucursal'), row=document.getElementById('row-fijo-sucursal');
+    if(!sel||!row) return;
+    var sucs=_sucsNegSF();
+    if(sucs.length<=1 || !_puedeCambiarSucFijo()){ row.style.display='none'; return; }
+    row.style.display='';
+    var tieneMatriz=sucs.some(function(x){return x.id==='suc_principal';});
+    sel.innerHTML=(tieneMatriz?'':'<option value="suc_principal">Matriz</option>')+
+        sucs.map(function(x){return '<option value="'+_esc(x.id)+'">'+_esc(x.nombre||x.id)+'</option>';}).join('');
+    /* Sin sucursal guardada = Matriz, que es la regla del sistema para todo lo
+       que se capturó antes de que existiera el campo. */
+    sel.value=sucId||_SUC_LOCK||'suc_principal';
+}
 function guardarFijo(){
     var concepto=document.getElementById('fijoConcepto').value.trim();
     var monto=n(document.getElementById('fijoMonto').value);
     if(!concepto){alert('El concepto es obligatorio.');return;}
     if(!monto||monto<=0){alert('El monto debe ser mayor a cero.');return;}
     var id=document.getElementById('fijoId').value||genId();
+    /* Manda el PERMISO, no el display: esconder el selector no impide leerlo
+       —basta cambiarlo desde las herramientas del navegador, o que otro
+       repintado lo muestre—. Mismo criterio que en corte y gasto. */
+    var _exFijo=loadFijos().find(function(f){return f.id===id;});
+    var _selSucF=document.getElementById('fijoSucursal'), _rowSucF=document.getElementById('row-fijo-sucursal');
+    var _puedeSucF=_puedeCambiarSucFijo() && _rowSucF && _rowSucF.style.display!=='none' && _selSucF;
+    var _sucF=_puedeSucF
+        ? (_selSucF.value||'suc_principal')
+        : ((_exFijo && _exFijo.sucursalId!==undefined) ? _exFijo.sucursalId : (_SUC_LOCK||'suc_principal'));
     var record={id:id,concepto:concepto,categoria:document.getElementById('fijoCategoria').value,proveedor:document.getElementById('fijoProveedor').value.trim(),monto:monto,
+        sucursalId:_sucF,
         periodicidad:document.getElementById('fijoPeriodicidad').value||'mensual',
         fechaRef:document.getElementById('fijoFechaRef').value||''};
     _cacheGG_Fijos = loadFijos().filter(function(f){return f.id!==id;});

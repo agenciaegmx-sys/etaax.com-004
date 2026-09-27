@@ -1424,7 +1424,11 @@ console.log('\n══ SUITE D · Reclasificación de gastos (financiero/gastos-g
                 document: { getElementById: () => null }, querySelectorAll: () => [],
                 _cacheGG_Gastos: [], _cacheGG_Fijos: [] };
     D._deSuc = (x) => !D._sucursalId || ((x && x.sucursalId) || 'suc_principal') === D._sucursalId;
-    D.loadFijos = () => D._cacheGG_Fijos || [];
+    /* loadFijos = el caché crudo (lo usan guardar y borrar, que necesitan la
+       lista completa). fijosScope = los de la sucursal en la que estás parado,
+       que es lo que entra a las cuentas. */
+    D.loadFijos  = () => D._cacheGG_Fijos || [];
+    D.fijosScope = () => (D._cacheGG_Fijos || []).filter(D._deSuc);
     vm.createContext(D);
     vm.runInContext(src, D);
     D._cacheGG_Gastos = [
@@ -9146,8 +9150,19 @@ console.log('\n══ BD8 · La ventanita de roles ══');
     /* ── Ya no hay cuadros del navegador ── */
     const html = fs.readFileSync(path.join(RAIZ, 'administrativo/permisos.html'), 'utf8');
     const codigo = html.replace(/\/\*[\s\S]*?\*\//g, '');   // los comentarios hablan del prompt viejo
-    test('no queda un solo prompt() ni confirm() del navegador', () =>
-        eq(/[^.\w]prompt\(|[^.\w]confirm\(/.test(codigo), false, 'sin cuadros grises'));
+    test('no queda un solo prompt() del navegador', () =>
+        eq(/[^.\w]prompt\(/.test(codigo), false, 'sin cuadros grises'));
+    /* El confirm() sobrevive en UN lugar y a propósito: como último recurso del
+       aviso de "cambios sin guardar", por si security.js no cargó. Perder lo
+       editado en silencio es peor que un cuadro feo. Lo que se exige es que el
+       diálogo bueno se intente PRIMERO. */
+    test('…y el único confirm() es el respaldo del aviso de cambios sin guardar', () => {
+        const usos = (codigo.match(/[^.\w]confirm\(/g) || []).length;
+        const i = codigo.indexOf('function _pedirSalirEdicion(continuar)');
+        const t = codigo.slice(i, i + 1400);
+        return eq(usos === 1 && t.indexOf("typeof etaaxDialog === 'function'") < t.indexOf('confirm('),
+                  true, usos + ' usos');
+    });
 
     /* ── Crear ── */
     P.nuevoRol();
@@ -10166,7 +10181,7 @@ console.log('\n══ BE6 · Inventarios, Requisiciones y la regla compartida �
     });
     test('…y los módulos con desglose son los que deben', () =>
         eq(Object.keys(SUB).sort().join(','),
-           'clientes,gastos,insumos,inventarios,recetas,requisiciones,staff,ventas', 'ocho módulos'));
+           'clientes,financiero,gastos,insumos,inventarios,recetas,requisiciones,staff,ventas', 'nueve módulos'));
 
     /* ── Inventarios ── */
     /* ¿La función pide su permiso, y ANTES de hacer nada? Se busca por texto y no
@@ -11066,9 +11081,16 @@ console.log('\n══ BF4 · Los permisos dejan de quedarse en una máquina ═�
     });
     test('…y dice la verdad de cómo salió', () => {
         const i = per.indexOf('async function guardarPermisos()');
-        const t = per.slice(i, i + 700);
-        return eq(t.indexOf('r && r.ok') > -1 && t.indexOf('Quedaron en este equipo') > -1,
+        const t = per.slice(i, i + 1400);
+        return eq(t.indexOf('if (r && r.ok)') > -1 && t.indexOf('Quedaron en este equipo') > -1,
                   true, 'sin mentir');
+    });
+    /* Y si no pudo subir, NO se cierra la edición: que se vea que algo falta y
+       se pueda reintentar, en vez de cerrar como si todo hubiera salido bien. */
+    test('…y si no pudo subir, deja la edición abierta', () => {
+        const i = per.indexOf('async function guardarPermisos()');
+        const t = per.slice(i, i + 1400);
+        return eq(t.indexOf('_salirDeEdicion();') < t.indexOf('} else {'), true, 'sin cerrar a ciegas');
     });
     test('guardar informa si pudo o no', () => {
         const i = per.indexOf('async function savePermisos(d, rolTocado)');
@@ -11136,6 +11158,180 @@ console.log('\n══ BF4 · Los permisos dejan de quedarse en una máquina ═�
        autorizarse con la contraseña de quien está siendo limitado. */
     test('entrar a Roles y Permisos sigue pidiendo la del dueño', () =>
         eq(per.indexOf('soloAdmin: true') > -1, true, 'sin autofirmarse'));
+}
+
+/* ═══════════ SUITE BF5 · PERMISOS: EDITAR, GUARDAR, CERRAR ═════════════════
+   Cada interruptor se guardaba SOLO, al instante y en la nube. Dos problemas:
+     · no había "cancelar" — tocabas por error y ya estaba hecho;
+     · y desde que los permisos viajan en vivo, un rol A MEDIO CONFIGURAR le
+       llegaba al colaborador: le quitabas tres cosas para reacomodarlas y
+       durante esos segundos se quedaba sin ellas, en plena operación.
+
+   Ahora se edita una COPIA y no sale nada de la pantalla hasta darle Guardar. */
+console.log('\n══ BF5 · Permisos: editar, guardar, cerrar ══');
+{
+    const per = fs.readFileSync(path.join(RAIZ, 'administrativo/permisos.html'), 'utf8');
+    const cuerpo = (fn) => {
+        const i = per.indexOf('function ' + fn + '(');
+        if (i < 0) return '';
+        const abre = per.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < per.length) {
+            if (per[j] === '{') prof++;
+            else if (per[j] === '}') { prof--; if (!prof) return per.slice(abre, j + 1); }
+            j++;
+        }
+        return '';
+    };
+
+    /* ── Se entra a editar a propósito ── */
+    test('hay un botón para entrar a editar el rol', () =>
+        eq(per.indexOf('onclick="editarRol()"') > -1, true, 'con botón'));
+    test('…y editar trabaja sobre una COPIA', () => {
+        const t = cuerpo('editarRol');
+        return eq(t.indexOf('JSON.parse(JSON.stringify(getRolPermisos(_rolActivo)))') > -1,
+                  true, 'borrador');
+    });
+    test('fuera de edición, los interruptores no hacen nada', () =>
+        eq(cuerpo('toggleSubPermiso').indexOf('if (!_editando) return;') > -1 &&
+           cuerpo('togglePermiso').indexOf('if (!_editando) return;') > -1, true, 'de solo lectura'));
+    test('…y los que sí tocan, tocan el borrador, no lo guardado', () =>
+        eq(cuerpo('toggleSubPermiso').indexOf('var perms = _borrador;') > -1 &&
+           cuerpo('togglePermiso').indexOf('var perms = _borrador;') > -1, true, 'sin publicar'));
+    /* LO IMPORTANTE: mientras editas, NADA sube a la nube. */
+    test('tocar un interruptor ya NO sube nada a la nube', () =>
+        eq(cuerpo('toggleSubPermiso').indexOf('savePermisos(') === -1 &&
+           cuerpo('togglePermiso').indexOf('savePermisos(') === -1, true, 'sin publicar a medias'));
+    test('la pantalla pinta el borrador mientras se edita', () =>
+        eq(cuerpo('renderGrid').indexOf('_editando && _borrador ? _borrador : getRolPermisos(_rolActivo)') > -1,
+           true, 'lo que se ve es lo que se está tocando'));
+    test('los dos juegos de botones se alternan', () => {
+        const t = cuerpo('renderGrid');
+        return eq(t.indexOf("accsLectura") > -1 && t.indexOf("accsEdicion") > -1, true, 'según el modo');
+    });
+    /* Al admin no se le edita: su acceso es total por definición. */
+    test('el rol Administrador no entra a edición', () =>
+        eq(cuerpo('editarRol').indexOf("if (_rolActivo === 'admin') return;") > -1, true, 'intocable'));
+
+    /* ── Guardar publica ── */
+    test('guardar publica el borrador', () => {
+        const t = cuerpo('guardarPermisos');
+        return eq(t.indexOf('if (_borrador) all[_rolActivo] = _borrador;') > -1, true, 'publica');
+    });
+    test('…y al salir bien, cierra la edición', () => {
+        const t = cuerpo('guardarPermisos');
+        return eq(t.indexOf('_salirDeEdicion();') > -1, true, 'cierra');
+    });
+
+    /* ── Salir con cambios pregunta, con los mismos tres botones ── */
+    const dlg = cuerpo('_pedirSalirEdicion');
+    test('salir con cambios pregunta antes', () =>
+        eq(dlg.indexOf('etaaxDialog') > -1, true, 'pregunta'));
+    ['Seguir editando', 'Guardar y salir', 'Salir sin guardar'].forEach(function (b) {
+        test('…ofrece «' + b + '»', () => eq(dlg.indexOf("'" + b + "'") > -1, true, 'tres caminos'));
+    });
+    test('sin cambios, cancelar no pregunta nada', () => {
+        const t = cuerpo('cancelarEdicionRol');
+        return eq(t.indexOf('if (!_sucio) { _salirDeEdicion(); return; }') > -1, true, 'sin estorbar');
+    });
+    /* Cambiar de rol con cambios colgando es salirse: sin esto el borrador se
+       perdía en silencio. */
+    test('cambiar de rol con cambios pendientes también pregunta', () => {
+        const t = cuerpo('selectRol');
+        return eq(t.indexOf('_conGuardiaEdicion(') > -1, true, 'sin perderlo');
+    });
+    test('…y cerrar la pestaña del navegador avisa', () =>
+        eq(per.indexOf("window.addEventListener('beforeunload'") > -1, true, 'avisado'));
+    test('…y la ventana flotante puede preguntar antes de cerrar', () =>
+        eq(per.indexOf("e.data.type !== 'permQuiereCerrar'") > -1, true, 'con aviso'));
+
+    /* Restablecer defaults es un cambio MÁS del borrador: se puede ver cómo
+       queda y arrepentirse. Antes guardaba de golpe. */
+    test('restablecer carga los valores de fábrica en el borrador', () => {
+        const i = per.indexOf('function resetarRol()');
+        const t = per.slice(i, i + 1200);
+        return eq(t.indexOf('_borrador = JSON.parse(JSON.stringify(_defaultsDe(_rolActivo)));') > -1 &&
+                  t.indexOf('savePermisos(') === -1, true, 'reversible');
+    });
+}
+
+/* ═══════════ SUITE BF6 · LOS GASTOS FIJOS SON DE UNA SUCURSAL ══════════════
+   La renta del local de Catedral no es la del otro local. Se guardaban SIN
+   sucursal, así que todos colgaban de Matriz: aparecían en cualquier sucursal,
+   entraban a las cuentas de todas, y el recordatorio de pagos avisaba de
+   rentas ajenas.                                                              */
+console.log('\n══ BF6 · Los gastos fijos son de una sucursal ══');
+{
+    const gg  = fs.readFileSync(path.join(RAIZ, 'financiero/gastos-globales.html'), 'utf8');
+    const dia = fs.readFileSync(path.join(RAIZ, 'administrativo/diario.html'), 'utf8');
+    const pg  = fs.readFileSync(path.join(RAIZ, 'page-guard.js'), 'utf8');
+
+    test('el editor pregunta a qué sucursal pertenece', () =>
+        eq(gg.indexOf('id="row-fijo-sucursal"') > -1 && gg.indexOf('id="fijoSucursal"') > -1,
+           true, 'con selector'));
+    test('…y el gasto fijo se guarda con su sucursal', () => {
+        const i = gg.indexOf('function guardarFijo()');
+        return eq(gg.slice(i, i + 1800).indexOf('sucursalId:_sucF') > -1, true, 'guardada');
+    });
+    /* Manda el PERMISO, no el display: esconder el selector no impide leerlo. */
+    test('al guardar manda el permiso, no el display', () => {
+        const i = gg.indexOf('function guardarFijo()');
+        const t = gg.slice(i, i + 1800);
+        return eq(t.indexOf('_puedeCambiarSucFijo() && _rowSucF') > -1, true, 'permiso');
+    });
+    test('el selector solo sale con más de una sucursal y con permiso', () => {
+        const i = gg.indexOf('function _pobSucursalFijo(sucId)');
+        return eq(gg.slice(i, i + 900).indexOf('sucs.length<=1 || !_puedeCambiarSucFijo()') > -1,
+                  true, 'sin estorbar');
+    });
+    test('el permiso existe y es del módulo financiero', () => {
+        const c = { console, JSON, Object, Array, String, Date, setTimeout,
+            localStorage:{ getItem(){ return null; }, setItem(){}, removeItem(){} },
+            location:{ pathname:'/hub.html', search:'', replace(){} }, document:{ addEventListener(){} } };
+        c.window = c; c.window.addEventListener = () => {};
+        vm.createContext(c); vm.runInContext(pg, c, { filename:'page-guard.js' });
+        return eq((c.window.ETAAX_SUBPERMS.financiero || []).some(x => x.key === 'cambiarSucursal'),
+                  true, 'declarado');
+    });
+    test('…y usa la regla compartida, no una copia', () => {
+        const i = gg.indexOf('function _puedeCambiarSucFijo()');
+        return eq(gg.slice(i, i + 300).indexOf("etaaxPuedeReasignar('financiero')") > -1, true, 'compartida');
+    });
+
+    /* ── Y lo que de verdad cambia las cuentas: el alcance ── */
+    /* TODAS las cuentas, no una: dejar un solo sitio con la lista completa
+       vuelve a meter la renta del otro local en el resultado, y contar los
+       usos no lo detecta. */
+    test('las cuentas usan los fijos DE LA SUCURSAL', () =>
+        eq(gg.indexOf('function fijosScope()') > -1, true, 'existe'));
+    test('…y ninguna cuenta se quedó con la lista completa', () =>
+        eq(/fijos:\s*loadFijos\(\)|var fijos\s*=\s*loadFijos\(\)/.test(gg), false, 'todas acotadas'));
+    test('…y el reparto de categorías también', () => {
+        const i = gg.indexOf('function _catsFijos()');
+        return eq(gg.slice(i, i + 200).indexOf('fijosScope()') > -1, true, 'acotado');
+    });
+    test('…y la lista que se ve en pantalla', () => {
+        const i = gg.indexOf('var lista=fijosScope();');
+        return eq(i > -1, true, 'acotada');
+    });
+    test('…y el caché crudo se conserva para guardar y borrar', () => {
+        /* Si el guardado usara la lista acotada, al reescribir el caché tiraría
+           los fijos de las OTRAS sucursales. */
+        const i = gg.indexOf('function guardarFijo()');
+        return eq(gg.slice(i, i + 1800).indexOf('_cacheGG_Fijos = loadFijos().filter(') > -1,
+                  true, 'sin tirar los ajenos');
+    });
+    test('un fijo sin sucursal es de Matriz, como todo lo demás', () => {
+        const i = gg.indexOf('function _deSuc(x)');
+        return eq(gg.slice(i, i + 220).indexOf("|| 'suc_principal'") > -1, true, 'misma regla');
+    });
+    /* En Ventas y Gastos Diarios, lo mismo: elegir cuál pagar y el recordatorio. */
+    test('elegir qué gasto fijo pagar solo ofrece los de la sucursal', () => {
+        const i = dia.indexOf("title.textContent='🏢 Pagar gasto fijo — elige uno';");
+        return eq(dia.slice(i, i + 300).indexOf('_fijosScope()') > -1, true, 'acotado');
+    });
+    test('…y el recordatorio de pagos no avisa de rentas ajenas', () =>
+        eq(dia.indexOf('_fijosScope().forEach(function(f){') > -1, true, 'acotado'));
 }
 
 /* ═══════════ SUITE BB · EL ALMACÉN PRIVADO (etaax-db.js + v55) ════════════════
