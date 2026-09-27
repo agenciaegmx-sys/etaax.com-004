@@ -127,12 +127,28 @@
        La llave `ingresosExtra` se conserva —es donde ya viven los capturados—
        y el TIPO es lo nuevo. Los viejos no lo traen: todos eran dinero que
        entraba, y lo único que los distingue es por dónde entró.              */
+    /* TRES columnas, no dos, y la tercera es la que casi se me va: el saldo de
+       CAJA FUERTE se calcula como la suma de los resguardos de todos los cortes
+       (`Σ resguardo + movimientos de depósitos − gastos`). O sea que subir el
+       resguardo de un corte sube la caja fuerte.
+
+       Por eso un movimiento que TOCA la caja fuerte tiene que compensarse ahí:
+
+         · «cambio desde caja fuerte»: el cajón gana $800 y la caja fuerte los
+           PIERDE. Sin la compensación, esos $800 volverían con el resguardo y
+           la caja fuerte acabaría con $800 que nunca tuvo — contados dos veces.
+         · «retiro de efectivo»: el cajón pierde $500 y la caja fuerte los
+           RECIBE. Sin la compensación, el dinero se esfumaría del sistema.
+
+       Los otros tres no la tocan: lo que entra nuevo sube por el resguardo, lo
+       que se deposita nunca llega a la caja fuerte, y lo que cae a la cuenta no
+       pasa por ninguna caja.                                                  */
     var MOV_TIPOS = {
-        ingreso_ef:    { efectivo:  1, banco: 0 },   // entra efectivo al cajón
-        ingreso_banco: { efectivo:  0, banco: 1 },   // cae a la cuenta (anticipo viejo, transfer)
-        desde_fuerte:  { efectivo:  1, banco: 0 },   // caja fuerte manda cambio al cajón
-        retiro_ef:     { efectivo: -1, banco: 0 },   // sale efectivo y NO es gasto
-        deposito:      { efectivo: -1, banco: 1 },   // el efectivo del día se va al banco
+        ingreso_ef:    { efectivo:  1, banco: 0, fuerte:  0 },  // entra efectivo al cajón
+        ingreso_banco: { efectivo:  0, banco: 1, fuerte:  0 },  // cae a la cuenta (anticipo viejo, transfer)
+        desde_fuerte:  { efectivo:  1, banco: 0, fuerte: -1 },  // caja fuerte manda cambio al cajón
+        retiro_ef:     { efectivo: -1, banco: 0, fuerte:  1 },  // sale del cajón y sube a la caja fuerte
+        deposito:      { efectivo: -1, banco: 1, fuerte:  0 },  // el efectivo del día se va al banco
     };
     function movTipo(m) {
         var t = m && m.tipo;
@@ -141,13 +157,21 @@
     }
     function movEfecto(m) {
         var s = MOV_TIPOS[movTipo(m)], val = n(m && m.monto);
-        return { efectivo: s.efectivo * val, banco: s.banco * val };
+        return { efectivo: s.efectivo * val, banco: s.banco * val, fuerte: s.fuerte * val };
     }
     function movsCorte(movs) {
         return (movs || []).reduce(function (t, m) {
             var e = movEfecto(m);
-            t.efectivo += e.efectivo; t.banco += e.banco; return t;
-        }, { efectivo: 0, banco: 0 });
+            t.efectivo += e.efectivo; t.banco += e.banco; t.fuerte += e.fuerte; return t;
+        }, { efectivo: 0, banco: 0, fuerte: 0 });
+    }
+    /* Lo que estos movimientos le hacen a la CAJA FUERTE, sumando varios
+       cortes. Va aparte porque quien calcula ese saldo recorre los cortes, no
+       los movimientos. */
+    function movsFuerte(cortes) {
+        return (cortes || []).reduce(function (t, c) {
+            return t + movsCorte(c && c.ingresosExtra).fuerte;
+        }, 0);
     }
 
     // Resguardo físico del cajón. cajaChicaDia = gastos de caja chica de la fecha del corte.
@@ -1303,7 +1327,7 @@
         netoPropina: netoPropina,
         depEfecto: depEfecto, esRetiro: esRetiro,
         MOV_TIPOS: MOV_TIPOS, movTipo: movTipo, movEfecto: movEfecto,
-        movsCorte: movsCorte, bancoCorte: bancoCorte,
+        movsCorte: movsCorte, movsFuerte: movsFuerte, bancoCorte: bancoCorte,
         esApartado: esApartado, apartadoFondo: apartadoFondo, PREV_GENERAL: PREV_GENERAL,
         esAbonoTpv: esAbonoTpv, tpvDeCorte: tpvDeCorte, tpvConciliacion: tpvConciliacion,
         tpvCuentaConcilia: tpvCuentaConcilia,

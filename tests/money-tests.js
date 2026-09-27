@@ -12552,6 +12552,46 @@ console.log('\n══ BG3 · El corte cuadra con sus movimientos ══');
     test('un corte sin la llave de movimientos no truena', () =>
         eq(C.resguardo({ fondoInicial:100, efectivo:0 }, 0), 100, 'vivo'));
 
+/* ── LA CAJA FUERTE NO PUEDE CONTAR DOS VECES ────────────────────────────
+       Casi se me va, y habría sido invisible: el saldo de caja fuerte se
+       calcula como Σ resguardo de todos los cortes (+ depósitos − gastos). O
+       sea que subir el resguardo de un corte SUBE la caja fuerte.
+
+       Entonces los $800 de cambio que SALIERON de la caja fuerte al cajón
+       volverían con el resguardo de la noche, y la caja fuerte acabaría con
+       $800 que nunca tuvo. Todos los días. Y al revés: el retiro que subió del
+       cajón a la caja fuerte se esfumaría del sistema. */
+    test('el cambio que salió de caja fuerte se le descuenta a la caja fuerte', () =>
+        eq(C.movEfecto({ tipo:'desde_fuerte', monto:800 }).fuerte, -800, 'compensado'));
+    test('el retiro que subió a la caja fuerte se le suma', () =>
+        eq(C.movEfecto({ tipo:'retiro_ef', monto:500 }).fuerte, 500, 'compensado'));
+    ['ingreso_ef','ingreso_banco','deposito'].forEach(t =>
+        test('«' + t + '» no toca la caja fuerte', () =>
+            eq(C.movEfecto({ tipo:t, monto:999 }).fuerte, 0, 'sin tocar')));
+    /* La prueba que de verdad importa: el dinero total del negocio no puede
+       cambiar por mover un billete de un cajón a otro. */
+    test('mover cambio de la caja fuerte al cajón no crea ni destruye dinero', () => {
+        const e = C.movEfecto({ tipo:'desde_fuerte', monto:800 });
+        return eq(e.efectivo + e.fuerte + e.banco, 0, 'suma cero');
+    });
+    test('…ni subir un retiro del cajón a la caja fuerte', () => {
+        const e = C.movEfecto({ tipo:'retiro_ef', monto:500 });
+        return eq(e.efectivo + e.fuerte + e.banco, 0, 'suma cero');
+    });
+    test('movsFuerte suma lo de varios cortes', () =>
+        eq(C.movsFuerte([
+            { ingresosExtra:[{ tipo:'desde_fuerte', monto:800 }] },
+            { ingresosExtra:[{ tipo:'retiro_ef',    monto:300 }] },
+            { ingresosExtra:[{ tipo:'deposito',     monto:5000 }] },
+            { }
+        ]), -500, 'neto'));
+    test('el saldo de caja fuerte aplica esa compensación', () =>
+        eq(dia.indexOf('+ EtaaxCore.movsFuerte(lista)') > -1, true, 'compensa'));
+    /* Un movimiento viejo, que nunca tocó la caja fuerte, tampoco puede
+       empezar a tocarla ahora: cambiaría saldos ya conciliados. */
+    test('un movimiento viejo sin tipo no toca la caja fuerte', () =>
+        eq(C.movEfecto({ origen:'evento', monto:400 }).fuerte, 0, 'sin tocar'));
+
     /* ── Lo que llegó al banco: la mitad que faltaba ── */
     /* La propina de tarjeta va con la venta porque viajan en la MISMA
        transacción: el banco abona las dos juntas. Separarlas haría que el

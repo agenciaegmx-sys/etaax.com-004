@@ -3981,8 +3981,13 @@ function _abrirCajaFuerteContenido(_yaFresco){
     // tarjeta desde el banco quedaba invisible y el desglose no sumaba el total.
     var _efC=0,_efB=0,_efTcPago=0;
     deps.forEach(function(d){ var e=_depEfecto(d); _efC+=e.caja; _efB+=e.banco; _efTcPago+=e.tcPago; });
-    // Caja fuerte: resguardos + efecto neto de movimientos − gastos efectivo caja
-    var saldoCaja = totalResguardos + _efC - gastosCajaFuerte;
+    /* Caja fuerte: resguardos + efecto neto de movimientos − gastos efectivo caja
+       + lo que los movimientos DEL CORTE le hicieron.
+       Ese último término no es un adorno: el resguardo de cada corte sube esta
+       caja, así que el cambio que SALIÓ de aquí para el cajón volvería con el
+       resguardo y quedaría contado dos veces. Y al revés, el retiro que subió
+       del cajón a la caja fuerte se esfumaría. */
+    var saldoCaja = totalResguardos + _efC - gastosCajaFuerte + EtaaxCore.movsFuerte(lista);
     // Cuenta débito (total): tarjeta terminal NETA (menos comisión bancaria) +
     // transferencias + efecto neto en banco − gastos débito → cuadra con el banco.
     var totTarjetaBruto = lista.reduce(function(s,c){return s+taBanco(c);},0);
