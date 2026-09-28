@@ -150,6 +150,14 @@
                 <button class="ev-btn" onclick="nuevaEval()">+ Nueva evaluación</button>
             </div>
         </div>
+        <!-- Sucursal: solo sale cuando hay a qué cambiar y estamos en la vista
+             global. Dentro de una sucursal la lista YA es la suya. -->
+        <div id="evSucBar" style="display:none;align-items:center;gap:9px;margin-bottom:16px;flex-wrap:wrap">
+            <span style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)">Sucursal</span>
+            <select id="evSucSel" onchange="evCambiarSuc(this.value)"
+                style="background:var(--surface2);border:1px solid var(--border);color:var(--text);
+                padding:7px 11px;border-radius:8px;font-family:inherit;font-size:12.5px;outline:none"></select>
+        </div>
         <div id="listaCats"></div>
     </div>
 
@@ -307,6 +315,46 @@ var _evals=[], _edit=null, _respuestas=[], _verResId=null;
    constructor y no hay dos editores que mantener. En el catálogo no hay
    link público ni respuestas — solo la plantilla. */
 var _CAT=/[?&]catalogo=1/.test(location.search);
+
+/* ── LAS EVALUACIONES SON DE UNA SUCURSAL ────────────────────────────────────
+   Estaban sueltas: TODAS las evaluaciones del negocio se veían en TODAS las
+   sucursales, revueltas. Con cinco sucursales eso es una lista de cincuenta
+   formularios donde hay que adivinar cuál es el tuyo — y peor, el link público
+   de la evaluación de otra sucursal se comparte igual de fácil que el propio.
+
+   Ahora cada evaluación vive en una sucursal, igual que los checklists. Las
+   que ya existían no traen sucursal: pertenecen a la Matriz, que es la
+   convención del resto del sistema (_effSuc). Nadie pierde nada al actualizar,
+   solo dejan de estar revueltas.
+
+   EXCEPCIÓN: el CATÁLOGO de ETAAX (?catalogo=1) no se separa. Son plantillas
+   de la plataforma, no de un negocio: no tienen sucursal a la que pertenecer. */
+var MATRIZ_ID='suc_principal';
+function _getSucs(){ var n=getNegocioActivo(); try{return JSON.parse(localStorage.getItem('etaax_'+n+'_sucursales')||'[]')||[];}catch(e){return[];} }
+function _getSucActiva(){ try{return localStorage.getItem('etaax_sucursal_activa')||'';}catch(e){return '';} }
+function _catGlobalOn(){ try{return sessionStorage.getItem('etaax_cat_global')==='1';}catch(e){return false;} }
+function _effSuc(id){ return id||MATRIZ_ID; }
+/* El nombre que el negocio le puso, no la etiqueta del sistema: la misma
+   sucursal no puede llamarse "Matriz" aquí y "Tata Mezcaleria" en el catálogo
+   de staff. "Matriz" queda de último recurso. */
+function _sucNombre(id){
+    if(!id) return 'Matriz';
+    var x=_getSucs().find(function(y){return y.id===id;});
+    if(x) return x.nombre||x.id;
+    return id===MATRIZ_ID?'Matriz':id;
+}
+/* Sobre qué sucursal se está trabajando. Dentro de una sucursal, la suya y no
+   se discute. En la vista global se puede elegir, y arranca en la última que
+   se tocó o en la Matriz. Mismo patrón que checklists y horarios. */
+var _sucSel='';
+function _resolverScope(){
+    _sucSel = _catGlobalOn() ? (_sucSel || (_getSucActiva()||MATRIZ_ID))
+                             : (_getSucActiva()||MATRIZ_ID);
+}
+function _evalsScope(){
+    if(_CAT) return _evals;   // el catálogo de ETAAX no vive en ninguna sucursal
+    return _evals.filter(function(e){ return e && _effSuc(e.sucursalId)===_effSuc(_sucSel); });
+}
 var TABLA_EV=_CAT?'catalogo_evaluaciones':'evaluaciones';
 
 /* ── Carga ── */
@@ -378,8 +426,11 @@ function _subRealtime(negId){
 /* ── Lista por categoría ── */
 function renderLista(){
     var cont=document.getElementById('listaCats');
+    _resolverScope();
+    _pobSucBar();
+    var enVista=_evalsScope();
     cont.innerHTML=CATS.map(function(c){
-        var items=_evals.filter(function(e){return e.categoria===c.id;})
+        var items=enVista.filter(function(e){return e.categoria===c.id;})
                         .sort(function(a,b){return (b.updatedAt||'').localeCompare(a.updatedAt||'');});
         var cards=items.length ? items.map(cardHTML).join('') : '<div class="ev-empty">Sin evaluaciones en esta categoría.</div>';
         return '<div class="ev-cat">'+
@@ -454,7 +505,9 @@ function cardHTML(e){
             '<div class="ev-card-tit">'+esc(e.titulo||'Sin título')+'</div>'+
             '<span class="ev-chip '+(e.activa?'on':'off')+'">'+(e.activa?'Activa':'Borrador')+'</span>'+
         '</div>'+
-        '<div class="ev-card-meta">'+nq+' pregunta'+(nq!==1?'s':'')+(e.descripcion?' · '+esc(e.descripcion.slice(0,60)):'')+'</div>'+
+        '<div class="ev-card-meta">'+nq+' pregunta'+(nq!==1?'s':'')+
+            (_CAT?'':' · '+esc(_sucNombre(e.sucursalId)))+
+            (e.descripcion?' · '+esc(e.descripcion.slice(0,60)):'')+'</div>'+
         (nueva
             ? '<div style="background:rgba(245,200,66,.1);border:1px solid rgba(245,200,66,.4);border-radius:8px;'+
                    'padding:9px 11px;margin:10px 0 2px;font-size:12.5px;color:var(--text-muted);line-height:1.55">'+
@@ -467,8 +520,61 @@ function cardHTML(e){
             '<button class="ev-btn ghost sm" onclick="editarEval(\''+e.id+'\')">✎ Editar</button>'+
             '<button class="ev-btn sm" onclick="compartir(\''+e.id+'\')">🔗 Compartir</button>'+
             '<button class="ev-btn ghost sm" onclick="verResultados(\''+e.id+'\')">📊 Respuestas ('+_respDe(e.id).length+')</button>'+
+            (_CAT?'':'<button class="ev-btn ghost sm" onclick="copiarEvalASucursal(\''+e.id+'\')" title="Crear una copia independiente en otra sucursal">⧉ Copiar a sucursal</button>')+
         '</div>'+
     '</div>';
+}
+
+function _pobSucBar(){
+    var bar=document.getElementById('evSucBar'), sel=document.getElementById('evSucSel');
+    if(!bar||!sel) return;
+    var sucs=_getSucs();
+    /* El catálogo de ETAAX no tiene sucursales, y un negocio de una sola no
+       tiene nada que elegir. Fuera del modo global, la sucursal la fija la
+       navegación: un selector ahí solo invita a equivocarse. */
+    if(_CAT || sucs.length<2 || !_catGlobalOn()){ bar.style.display='none'; return; }
+    bar.style.display='flex';
+    sel.innerHTML=sucs.map(function(su){
+        return '<option value="'+esc(su.id)+'">'+esc(su.nombre||su.id)+'</option>';
+    }).join('');
+    sel.value=_effSuc(_sucSel);
+}
+function evCambiarSuc(id){ _sucSel=id; renderLista(); }
+
+/* ── Copiar una evaluación a otras sucursales ────────────────────────────────
+   Armar una evaluación de 27 preguntas cuesta una tarde. Volver a escribirla
+   en cada sucursal es la clase de trabajo que hace que la herramienta se deje
+   de usar. */
+function copiarEvalASucursal(id){
+    var e=_evals.find(function(x){return x.id===id;}); if(!e) return;
+    etaaxCopiarASucursal({
+        titulo:'Copiar evaluación a otras sucursales',
+        queEs:'una evaluación',
+        nombre:e.titulo||'Sin título',
+        sucursales:_getSucs(),
+        actual:_effSuc(e.sucursalId),
+        onCopiar:function(ids){
+            var ahora=new Date().toISOString();
+            ids.forEach(function(sid){
+                var copia=JSON.parse(JSON.stringify(e));
+                copia.id='ev_'+genId();
+                copia.sucursalId=sid;
+                /* Link PROPIO y en borrador. Heredar el token haría que dos
+                   sucursales compartieran el mismo formulario público y las
+                   respuestas de una cayeran en la otra — el peor error posible
+                   aquí, y silencioso. */
+                copia.token=_token();
+                copia.activa=false;
+                delete copia.respuestas;
+                copia.createdAt=ahora; copia.updatedAt=ahora;
+                _evals.push(copia);
+                if(typeof sbUpsert==='function') sbUpsert('evaluaciones', copia);
+            });
+            renderLista();
+            alert('✅ Copiada a '+ids.length+' sucursal'+(ids.length!==1?'es':'')+'.\n\n'+
+                  'Cada copia entra como BORRADOR y con su propio link: revísala allá y actívala cuando esté lista.');
+        }
+    });
 }
 
 /* ── Link público + Compartir ── */
@@ -500,7 +606,13 @@ function shCorreo(){ window.location.href='mailto:?subject='+encodeURIComponent(
 
 /* ── Editor ── */
 function nuevaEval(){
-    _edit={ id:'ev_'+genId(), titulo:'', categoria:CATS[0].id, descripcion:'', token:_token(), activa:false, preguntas:[] };
+    _resolverScope();
+    _edit={ id:'ev_'+genId(), titulo:'', categoria:CATS[0].id, descripcion:'', token:_token(),
+            activa:false, preguntas:[],
+            /* Nace donde estás parado. En la vista global, en la que dice la
+               barra: crear algo que aparece en otra sucursal es la forma más
+               rápida de perderlo. */
+            sucursalId:(_CAT?'':_effSuc(_sucSel)) };
     abrirEditor(false);
 }
 // Modo catálogo: esta página ES el catálogo → nada que importar aquí.
@@ -532,8 +644,10 @@ function abrirEvalsEtaax(){
             });
         },
         agregar:function(d){
+            _resolverScope();
             var nueva=Object.assign({}, d, {
                 id:'ev_'+genId(),
+                sucursalId:_effSuc(_sucSel),   // la plantilla de ETAAX no tiene sucursal; la copia sí
                 origenCatalogoId:d.id,
                 origenVersion:(parseInt(d.version,10)||1),   // de qué versión salió esta copia
                 token:_token(),          // link propio, no el de la plantilla
@@ -1041,6 +1155,7 @@ document.addEventListener('DOMContentLoaded',function(){ if(typeof _ctxBarInit==
 <script src="../supabase-config.js"></script>
 <script src="/etaax-store.js"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js"></script>
+<script src="/copiar-sucursal.js"></script><!-- copiar algo a otras sucursales: una sola ventanita -->
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 <script src="/reporte-marca.js"></script>

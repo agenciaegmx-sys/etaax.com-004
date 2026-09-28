@@ -246,6 +246,7 @@
 <script src="/etaax-core.js"></script>
 <script src="/etaax-store.js"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js"></script>
+<script src="/copiar-sucursal.js"></script><!-- copiar algo a otras sucursales: una sola ventanita -->
 <script src="/reporte-marca.js"></script>
 <script src="/qr-pairing.js"></script><!-- trae etaaxQrLogo: el ícono al centro del QR -->
 <script src="../security.js"></script>
@@ -269,7 +270,16 @@ function _getSucs(){ var n=getNegocioActivo(); try{return JSON.parse(localStorag
 function _getSucActiva(){ return localStorage.getItem('etaax_sucursal_activa')||''; }
 function _catGlobalOn(){ return sessionStorage.getItem('etaax_cat_global')==='1'; }
 function _effSuc(s){ return s||MATRIZ_ID; }
-function _sucNombre(id){ if(!id||id===MATRIZ_ID)return 'Matriz'; var s=_getSucs().find(function(x){return x.id===id;}); return s?(s.nombre||s.id):id; }
+/* El nombre que el negocio le puso. La misma sucursal no puede llamarse
+   "Matriz" aquí y "Tata Mezcaleria + Cocina" en el catálogo de staff: en la
+   tarjeta de un checklist eso deja al dueño sin saber de cuál es. "Matriz"
+   queda de último recurso, para la sucursal que no está en el catálogo. */
+function _sucNombre(id){
+    if(!id) return 'Matriz';
+    var s=_getSucs().find(function(x){return x.id===id;});
+    if(s) return s.nombre||s.id;
+    return id===MATRIZ_ID?'Matriz':id;
+}
 function esc(s){ return window.etx?etx(String(s==null?'':s)):String(s==null?'':s); }
 function genId(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
 
@@ -288,6 +298,38 @@ function _resolverScope(){
     _sucSel = _catGlobalOn() ? (_sucSel || (_getSucActiva()||MATRIZ_ID)) : (_getSucActiva()||MATRIZ_ID);
 }
 function _plantScope(){ return _plantillas.filter(function(p){ return p && p.activo!==false && _effSuc(p.sucursalId)===_effSuc(_sucSel); }); }
+
+/* ── Copiar un checklist a otras sucursales ──────────────────────────────────
+   Afinar un checklist de cierre de barra cuesta una tarde. Volver a escribirlo
+   tarea por tarea en las otras cuatro sucursales es la clase de trabajo que
+   hace que la herramienta se deje de usar. */
+function copiarPlantASucursal(id){
+    var p=_plantillas.find(function(x){return x.id===id;}); if(!p) return;
+    etaaxCopiarASucursal({
+        titulo:'Copiar checklist a otras sucursales',
+        queEs:'un checklist',
+        nombre:p.nombre||'Sin nombre',
+        sucursales:_getSucs(),
+        actual:_effSuc(p.sucursalId),
+        onCopiar:function(ids){
+            ids.forEach(function(sid){
+                var copia=JSON.parse(JSON.stringify(p));
+                copia.id=genId();
+                copia.sucursalId=sid;
+                /* Las TAREAS se copian; lo CUMPLIDO no. Un run vive pegado al
+                   id de su plantilla y a una semana: arrastrarlo diría que en
+                   la otra sucursal ya firmaron cosas que nadie hizo. */
+                delete copia.updated;
+                _plantillas.push(copia);
+                _guardarLocal();
+                if(window.sbUpsert) sbUpsert('checklists', copia);
+            });
+            render();
+            alert('✅ Copiado a '+ids.length+' sucursal'+(ids.length!==1?'es':'')+'.\n\n'+
+                  'Se copiaron las tareas. Lo ya cumplido NO se copia: cada sucursal arranca su propia semana.');
+        }
+    });
+}
 
 /* ── Persistencia ── */
 function _guardarLocal(){ try{ localStorage.setItem(_sk('checklists'), JSON.stringify(_plantillas)); localStorage.setItem(_sk('checklist_runs'), JSON.stringify(_runs)); }catch(e){} }
@@ -341,7 +383,23 @@ function render(){
 function renderPlantillas(){
     var cont=document.getElementById('viewPlant');
     var lista=_plantScope().sort(function(a,b){return (a.tipo||'').localeCompare(b.tipo||'')||(a.nombre||'').localeCompare(b.nombre||'');});
-    var h='<div style="display:flex;justify-content:flex-end;margin-bottom:14px"><button class="ck-btn primary" onclick="nuevaPlantilla()">+ Nueva plantilla</button></div>';
+    /* El selector solo en la VISTA GLOBAL y con más de una sucursal: dentro de
+       una sucursal la lista ya es la suya y elegir otra sería salirse de donde
+       la navegación dice que estás.
+       Sin esto, `_sucSel` existía pero no había cómo moverlo: en la vista
+       global se entraba a la Matriz y ahí se quedaba uno, sin manera de ver
+       los checklists de las demás sucursales. */
+    var sucs=_getSucs();
+    var barra = (_catGlobalOn() && sucs.length>1)
+        ? '<select class="ck-btn" onchange="ckCambiarSuc(this.value)" '+
+          'style="background:var(--surface2);color:var(--text);cursor:pointer">'+
+          sucs.map(function(su){
+              return '<option value="'+esc(su.id)+'"'+(_effSuc(_sucSel)===_effSuc(su.id)?' selected':'')+'>'+
+                     esc(su.nombre||su.id)+'</option>';
+          }).join('')+'</select>'
+        : '';
+    var h='<div style="display:flex;justify-content:'+(barra?'space-between':'flex-end')+';align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">'+
+          barra+'<button class="ck-btn primary" onclick="nuevaPlantilla()">+ Nueva plantilla</button></div>';
     if(!lista.length){ cont.innerHTML=h+'<div class="ck-empty"><div class="ic">📋</div><div style="font-size:15px;color:var(--text)">Sin checklists en '+esc(_sucNombre(_sucSel))+'</div><div style="margin-top:6px">Crea tu primera plantilla de apertura, cierre o limpieza.</div></div>'; return; }
     h+='<div class="ck-grid">'+lista.map(function(p){
         var tipo=p.tipo||'otro';
@@ -353,12 +411,14 @@ function renderPlantillas(){
                 '<button class="ck-btn" onclick="abrirEjecDe(\''+p.id+'\')">✅ Ejecutar</button>'+
                 '<button class="ck-btn" onclick="abrirImprimir(\''+p.id+'\')">🖨️ Imprimir</button>'+
                 '<button class="ck-btn" onclick="editarPlantilla(\''+p.id+'\')">✏️ Editar</button>'+
+                '<button class="ck-btn" onclick="copiarPlantASucursal(\''+p.id+'\')" title="Crear una copia independiente en otra sucursal">⧉ Copiar a sucursal</button>'+
                 '<button class="ck-btn" onclick="eliminarPlantilla(\''+p.id+'\')">🗑️</button>'+
             '</div>'+
         '</div>';
     }).join('')+'</div>';
     cont.innerHTML=h;
 }
+function ckCambiarSuc(id){ _sucSel=id; render(); }
 function _pobSucSelect(sel, val){
     var sucs=_getSucs(), tieneMatriz=sucs.some(function(s){return s.id===MATRIZ_ID;});
     sel.innerHTML='<option value="">— Sin asignar (Matriz) —</option>'+(tieneMatriz?'':'<option value="suc_principal">Matriz</option>')+sucs.map(function(s){return '<option value="'+esc(s.id)+'">'+esc(s.nombre||s.id)+'</option>';}).join('');

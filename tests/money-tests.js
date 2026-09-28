@@ -12826,6 +12826,193 @@ console.log('\n══ BG4 · La vista global no pide contraseña ══');
            true, 'por la vista'));
 }
 
+/* ═══════════ SUITE BG5 · CADA SUCURSAL, SUS CHECKLISTS Y SUS EVALUACIONES ══
+   Se revisó cómo estaban los dos:
+
+     · CHECKLISTS ya venían separados por sucursal (sucursalId + _plantScope).
+       Lo que les faltaba: en la VISTA GLOBAL `_sucSel` existía pero no había
+       cómo moverlo — se entraba a la Matriz y ahí se quedaba uno, sin manera
+       de ver los de las demás sucursales.
+
+     · EVALUACIONES NO estaban separadas. Cero. Todas las del negocio se veían
+       en todas las sucursales, revueltas. Con cinco sucursales eso es una
+       lista de cincuenta formularios donde hay que adivinar cuál es el tuyo —
+       y peor, el link público de la evaluación de otra sucursal se comparte
+       igual de fácil que el propio.
+
+   Y las dos ganan "copiar a otra sucursal": afinar un checklist de cierre o
+   una evaluación de 27 preguntas cuesta una tarde, y volver a escribirla en
+   cada sucursal es lo que hace que una herramienta se deje de usar.         */
+console.log('\n══ BG5 · Cada sucursal, sus checklists y sus evaluaciones ══');
+{
+    const ck  = fs.readFileSync(path.join(RAIZ, 'administrativo/checklists.html'), 'utf8');
+    const ev  = fs.readFileSync(path.join(RAIZ, 'administrativo/evaluaciones.html'), 'utf8');
+    const cps = fs.readFileSync(path.join(RAIZ, 'copiar-sucursal.js'), 'utf8');
+    const cuerpoDe = (src) => (fn) => {
+        const i = src.indexOf('function ' + fn + '(');
+        if (i < 0) return '';
+        const abre = src.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < src.length) {
+            if (src[j] === '{') prof++;
+            else if (src[j] === '}') { prof--; if (!prof) return src.slice(i, j + 1); }
+            j++;
+        }
+        return '';
+    };
+    const dC = cuerpoDe(ck), dE = cuerpoDe(ev);
+
+    /* ── EVALUACIONES: el alcance que no existía ── */
+    function evCtx(opts) {
+        opts = opts || {};
+        const ls = { etaax_negocio_activo:'n1',
+                     etaax_n1_sucursales: JSON.stringify(opts.sucs ||
+                        [{ id:'suc_principal', nombre:'Tata Mezcaleria' },
+                         { id:'suc_b', nombre:"Porcino's" }]) };
+        if (opts.suc) ls.etaax_sucursal_activa = opts.suc;
+        const ss = {};
+        if (opts.catGlobal) ss.etaax_cat_global = '1';
+        const bar = { style:{ display:'none' } }, sel = { innerHTML:'', value:'' };
+        const ctx = { console, JSON, Object, Array, String, Boolean,
+            localStorage:{ getItem:k=>(k in ls?ls[k]:null), setItem(){}, removeItem(){} },
+            sessionStorage:{ getItem:k=>(k in ss?ss[k]:null), setItem(){}, removeItem(){} },
+            document:{ getElementById:(id)=> id==='evSucBar'?bar:(id==='evSucSel'?sel:null) } };
+        ctx.window = ctx;
+        vm.createContext(ctx);
+        vm.runInContext(
+            "var MATRIZ_ID='suc_principal'; var _sucSel='';" +
+            "var _CAT=" + (opts.cat ? 'true' : 'false') + ";" +
+            "var _evals=" + JSON.stringify(opts.evals || []) + ";" +
+            "function getNegocioActivo(){return localStorage.getItem('etaax_negocio_activo')||'';}" +
+            "function esc(s){return String(s||'');}", ctx);
+        ['_getSucs','_getSucActiva','_catGlobalOn','_effSuc','_sucNombre',
+         '_resolverScope','_evalsScope','_pobSucBar']
+            .forEach(f => vm.runInContext(dE(f), ctx, { filename:'evaluaciones.html' }));
+        ctx.__bar = bar; ctx.__sel = sel;
+        return ctx;
+    }
+    const EVS = [
+        { id:'e1', titulo:'Cierre barra',  categoria:'c', sucursalId:'suc_principal' },
+        { id:'e2', titulo:'Cocina',        categoria:'c', sucursalId:'suc_b' },
+        { id:'e3', titulo:'Vieja sin suc', categoria:'c' },          // legacy
+    ];
+
+    test('las evaluaciones ya llevan sucursal', () =>
+        eq(ev.indexOf('sucursalId') > -1, true, 'con sucursal'));
+    test('parado en una sucursal solo se ven las suyas', () => {
+        const c = evCtx({ evals:EVS, suc:'suc_b' }); c._resolverScope();
+        return eq(c._evalsScope().map(e=>e.id).join(','), 'e2', 'solo e2');
+    });
+    /* Una evaluación guardada antes no trae sucursal. Pertenece a la Matriz —
+       la convención del resto del sistema. Si cayera fuera de todas, el negocio
+       actualizaría y sus evaluaciones desaparecerían sin dejar rastro. */
+    test('una evaluación vieja sin sucursal pertenece a la Matriz', () => {
+        const c = evCtx({ evals:EVS, suc:'suc_principal' }); c._resolverScope();
+        return eq(c._evalsScope().map(e=>e.id).sort().join(','), 'e1,e3', 'e1 y e3');
+    });
+    /* El catálogo de ETAAX son plantillas de la PLATAFORMA: no tienen sucursal
+       a la que pertenecer. Acotarlas dejaría el catálogo vacío. */
+    test('el catálogo de ETAAX no se acota por sucursal', () => {
+        const c = evCtx({ evals:EVS, cat:true, suc:'suc_b' }); c._resolverScope();
+        return eq(c._evalsScope().length, 3, 'las tres');
+    });
+    test('el nombre de la matriz sale del catálogo, no clavado', () =>
+        eq(evCtx({})._sucNombre('suc_principal'), 'Tata Mezcaleria', 'su nombre'));
+    test('…y "Matriz" queda de último recurso', () =>
+        eq(evCtx({ sucs:[] })._sucNombre('suc_principal'), 'Matriz', 'de respaldo'));
+
+    /* La barra de sucursal: solo donde sirve. */
+    {
+        const c = evCtx({ evals:EVS, catGlobal:true }); c._resolverScope(); c._pobSucBar();
+        test('en vista global se puede elegir la sucursal', () =>
+            eq(c.__bar.style.display, 'flex', 'visible'));
+        test('…con el nombre real de cada una', () =>
+            eq(c.__sel.innerHTML.indexOf('Tata Mezcaleria') > -1 &&
+               c.__sel.innerHTML.indexOf("Porcino's") > -1, true, 'con nombres'));
+    }
+    {
+        const c = evCtx({ evals:EVS, suc:'suc_b' }); c._resolverScope(); c._pobSucBar();
+        test('dentro de una sucursal la barra no sale (ya estás en una)', () =>
+            eq(c.__bar.style.display, 'none', 'escondida'));
+    }
+    {
+        const c = evCtx({ evals:EVS, catGlobal:true, sucs:[{id:'suc_principal',nombre:'Matriz'}] });
+        c._resolverScope(); c._pobSucBar();
+        test('con una sola sucursal tampoco', () =>
+            eq(c.__bar.style.display, 'none', 'escondida'));
+    }
+    {
+        const c = evCtx({ evals:EVS, cat:true, catGlobal:true }); c._resolverScope(); c._pobSucBar();
+        test('y en el catálogo de ETAAX menos', () =>
+            eq(c.__bar.style.display, 'none', 'escondida'));
+    }
+    test('una evaluación nueva nace en la sucursal donde estás', () =>
+        eq(dE('nuevaEval').indexOf('sucursalId:(_CAT?\'\':_effSuc(_sucSel))') > -1, true, 'aterriza'));
+    test('…y la que se jala del catálogo de ETAAX, también', () =>
+        eq(ev.indexOf('sucursalId:_effSuc(_sucSel),   // la plantilla de ETAAX no tiene sucursal; la copia sí') > -1,
+           true, 'aterriza'));
+    test('la tarjeta dice de qué sucursal es', () =>
+        eq(dE('cardHTML').indexOf('_sucNombre(e.sucursalId)') > -1, true, 'lo dice'));
+
+    /* ── COPIAR A OTRA SUCURSAL ── */
+    test('existe la ventanita compartida, una sola para todos', () =>
+        eq(cps.indexOf('window.etaaxCopiarASucursal = function') > -1, true, 'existe'));
+    test('…y las dos páginas la cargan', () =>
+        eq(ck.indexOf('/copiar-sucursal.js') > -1 && ev.indexOf('/copiar-sucursal.js') > -1,
+           true, 'cargada'));
+    test('los checklists se pueden copiar a otra sucursal', () =>
+        eq(dC('copiarPlantASucursal').length > 0 &&
+           ck.indexOf('onclick="copiarPlantASucursal') > -1, true, 'con acción'));
+    test('las evaluaciones también', () =>
+        eq(dE('copiarEvalASucursal').length > 0 &&
+           ev.indexOf('onclick="copiarEvalASucursal') > -1, true, 'con acción'));
+    test('la copia estrena id: si no, pisaría al original', () =>
+        eq(dC('copiarPlantASucursal').indexOf('copia.id=genId()') > -1 &&
+           dE('copiarEvalASucursal').indexOf("copia.id='ev_'+genId()") > -1, true, 'id nuevo'));
+    test('…y aterriza en la sucursal destino', () =>
+        eq(dC('copiarPlantASucursal').indexOf('copia.sucursalId=sid') > -1 &&
+           dE('copiarEvalASucursal').indexOf('copia.sucursalId=sid') > -1, true, 'destino'));
+    /* EL ERROR MÁS CARO POSIBLE AQUÍ, y silencioso: heredar el token haría que
+       dos sucursales compartieran el MISMO formulario público, y las respuestas
+       de una cayeran en la otra. */
+    test('la evaluación copiada estrena link público', () =>
+        eq(dE('copiarEvalASucursal').indexOf('copia.token=_token()') > -1, true, 'link propio'));
+    test('…y entra como borrador, no abierta al público', () =>
+        eq(dE('copiarEvalASucursal').indexOf('copia.activa=false') > -1, true, 'borrador'));
+    test('…sin arrastrar las respuestas de la original', () =>
+        eq(dE('copiarEvalASucursal').indexOf('delete copia.respuestas') > -1, true, 'sin respuestas'));
+    /* Un run de checklist vive pegado al id de su plantilla y a una semana:
+       arrastrarlo diría que allá ya firmaron cosas que nadie hizo. */
+    test('el checklist copiado no arrastra lo ya cumplido', () =>
+        eq(dC('copiarPlantASucursal').indexOf('Lo ya cumplido NO se copia') > -1 ||
+           dC('copiarPlantASucursal').indexOf('lo CUMPLIDO no') > -1, true, 'limpio'));
+    test('las dos copias suben a la nube, no se quedan en el equipo', () =>
+        eq(dC('copiarPlantASucursal').indexOf("sbUpsert('checklists'") > -1 &&
+           dE('copiarEvalASucursal').indexOf("sbUpsert('evaluaciones'") > -1, true, 'en la nube'));
+    /* Copiar algo encima de sí mismo solo deja un duplicado que nadie pidió. */
+    test('la sucursal donde ya vive no aparece como destino', () =>
+        eq(cps.indexOf("return _eff(s.id) !== actual;") > -1, true, 'excluida'));
+    test('sin otra sucursal, lo dice en vez de abrir una lista vacía', () =>
+        eq(cps.indexOf('No hay a dónde copiar') > -1, true, 'lo dice'));
+    /* "Copiar" a ninguna parte es un clic que no hace nada y parece que falló. */
+    test('el botón no se enciende hasta elegir un destino', () =>
+        eq(cps.indexOf('ok.disabled = !n;') > -1, true, 'apagado'));
+    /* Una copia que se actualiza sola a espaldas de quien la usa es peor que
+       volver a escribirla: que quede dicho en la propia ventana. */
+    test('se avisa que la copia queda independiente', () =>
+        eq(cps.indexOf('independiente') > -1, true, 'avisado'));
+
+    /* ── CHECKLISTS: el selector que faltaba en la vista global ── */
+    test('en vista global los checklists ya dejan cambiar de sucursal', () =>
+        eq(dC('renderPlantillas').indexOf('ckCambiarSuc(this.value)') > -1, true, 'con selector'));
+    test('…solo en global y con más de una sucursal', () =>
+        eq(dC('renderPlantillas').indexOf('(_catGlobalOn() && sucs.length>1)') > -1, true, 'acotado'));
+    test('…y cambiarla repinta la lista', () =>
+        eq(dC('ckCambiarSuc').indexOf('render()') > -1, true, 'repinta'));
+    test('los checklists dicen el nombre real de su sucursal', () =>
+        eq(dC('_sucNombre').indexOf('return s.nombre||s.id;') > -1, true, 'del catálogo'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
