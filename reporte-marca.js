@@ -205,22 +205,52 @@
             '.rsec{font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:2px;color:#1a1916;margin:20px 0 11px;padding-bottom:5px;border-bottom:2px solid #3dbe7a;break-after:avoid;page-break-after:avoid}' +
             '.rsec:first-of-type{margin-top:2px}' +
             '.rgrid{display:grid;gap:10px;break-inside:avoid;page-break-inside:avoid}' +
-            '.rcard{border:1px solid #ececec;border-radius:9px;padding:12px 14px;background:#fafafa}' +
-            '.rcard .l{font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#999;margin-bottom:6px;font-weight:700}' +
+            '.rcard{border:1px solid #bdbdbd;border-radius:9px;padding:12px 14px;background:#f6f6f6}' +
+            '.rcard .l{font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:#4a4a4a;margin-bottom:6px;font-weight:800}' +
             '.rcard .v{font-family:\'Bebas Neue\',sans-serif;font-size:25px;letter-spacing:1px;line-height:1;color:#1a1916}' +
-            '.rcard .s{font-size:9.5px;color:#8a8a8a;margin-top:5px;line-height:1.4}' +
+            '.rcard .s{font-size:9.5px;color:#4a4a4a;margin-top:5px;line-height:1.4}' +
             'table.rt{width:100%;border-collapse:collapse}' +
             'table.rt thead{display:table-header-group}' +   /* títulos de columna se repiten por hoja */
             'table.rt tr{break-inside:avoid;page-break-inside:avoid}' +
-            'table.rt thead th{background:#f5f5f5;padding:8px 10px;font-size:8px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:1.2px;border-bottom:2px solid #e0e0e0;text-align:right}' +
+            'table.rt thead th{background:#ececec;padding:8px 10px;font-size:8.5px;font-weight:800;color:#2b2b2b;text-transform:uppercase;letter-spacing:1.2px;border-bottom:2px solid #8a8a8a;text-align:right}' +
             'table.rt thead th:first-child{text-align:left}' +
-            'table.rt tbody td{padding:7px 10px;font-size:11.5px;border-bottom:1px solid #f1f1f1;text-align:right;font-variant-numeric:tabular-nums}' +
+            'table.rt tbody td{padding:7px 10px;font-size:11.5px;color:#1a1916;border-bottom:1px solid #cfcfcf;text-align:right;font-variant-numeric:tabular-nums}' +
             'table.rt tbody td:first-child{text-align:left;font-weight:600}' +
-            'table.rt tbody tr:nth-child(even){background:#fafafa}' +
+            'table.rt tbody tr:nth-child(even){background:#f4f4f4}' +
             'table.rt tfoot{display:table-row-group}' +   /* el Total va UNA vez al final (no se repite por hoja) */
             'table.rt tfoot td{background:#f8f8f8;border-top:2px solid #3dbe7a;padding:9px 10px;font-size:12px;font-weight:700;text-align:right}' +
             'table.rt tfoot td:first-child{text-align:left}' +
             '.rbadge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.5px;padding:2px 9px;border-radius:20px}' +
+
+            /* ── QUE LO IMPRESO SE LEA ────────────────────────────────────────
+               Los reportes se arman en cada módulo con estilos EN LÍNEA, y esos
+               estilos nacieron mirando una pantalla oscura: grises clarísimos
+               que en el monitor se ven discretos y en papel no existen, y el
+               ámbar de la marca, que sobre blanco simplemente no se lee.
+
+               Arreglarlo módulo por módulo era condenarse a que el siguiente
+               reporte volviera a nacer tenue. Estas reglas atacan el ESTILO EN
+               LÍNEA por su valor —`[style*="#aaa"]`— así que valen para lo que
+               ya está escrito y para lo que se escriba después, sin tocar
+               veinte archivos.
+
+               Van con !important porque un estilo en línea gana a cualquier
+               regla: es el único martillo que sirve aquí. Y solo cambian el
+               COLOR DEL TEXTO — los fondos y los bordes se quedan como están.
+
+               EL ÁMBAR NO SE ATENÚA, SE CAMBIA: pasa a negro y en negrita. Lo
+               que estaba resaltado sigue resaltado, pero con un recurso que sí
+               funciona en papel. (En pantalla la marca sigue igual: esto vive
+               SOLO dentro del documento del reporte.) */
+            '[style*="#aaa"],[style*="#AAA"],[style*="#aaaaaa"],' +
+            '[style*="#bbb"],[style*="#BBB"],[style*="#ccc"],[style*="#CCC"],' +
+            '[style*="#999"],[style*="#8a8a8a"],[style*="#888"]{color:#4a4a4a !important}' +
+            '[style*="#f5c842"],[style*="#F5C842"],[style*="#e0a93d"],[style*="#E0A93D"],' +
+            '[style*="#d4a017"],[style*="#c9a227"],[style*="var(--accent)"],' +
+            '[style*="rgb(245,200,66)"]{color:#1a1916 !important;font-weight:700 !important}' +
+            /* Las líneas de la tabla del cuerpo, por si un módulo las pinta
+               más claras que la base. */
+            'table.rt tbody tr:last-child td{border-bottom:1px solid #8a8a8a}' +
             // El PIE va como elemento aparte y se FIJA (position:fixed) al fondo de CADA hoja
             // al imprimir → siempre hasta abajo, aunque el contenido no llene la página.
             // OJO: en impresión, bottom:0 de un fixed es el borde del ÁREA DE CONTENIDO, no
@@ -231,7 +261,17 @@
             // pie queda más abajo y el contenido gana ~0.6cm de alto útil por hoja.
             '.rfoot-sp{height:0;padding:0;border:0}' +
             '@media screen{body{background:#eee;padding:20px 20px 0}.rep{max-width:21.6cm;margin:0 auto;background:#fff;box-shadow:0 6px 30px rgba(0,0,0,.15)}.rfoot{max-width:21.6cm;margin:0 auto 24px;background:#fff;box-shadow:0 12px 30px rgba(0,0,0,.15)}}' +
-            '@media print{@page{size:letter portrait;margin:0.5cm 0}.rfoot{position:fixed;left:0;right:0;bottom:0;background:#fff}.rfoot-sp{height:30px}}' +
+            /* La impresora aclara todo un punto respecto al monitor, y muchos
+               navegadores quitan los fondos al imprimir. `print-color-adjust`
+               los conserva —los renglones alternados son lo que evita saltarse
+               un línea al cotejar— y el resto sube de contraste. */
+            '@media print{@page{size:letter portrait;margin:0.5cm 0}' +
+            '.rfoot{position:fixed;left:0;right:0;bottom:0;background:#fff}.rfoot-sp{height:30px}' +
+            'body{-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+            'table.rt thead th{color:#000;border-bottom-color:#555}' +
+            'table.rt tbody td{color:#000;border-bottom-color:#b5b5b5}' +
+            '.rcard .l,.rcard .s{color:#333}' +
+            '}' +
             '</style></head><body>' +
             '<table class="rep">' +
                 '<thead><tr><td>' + header + '</td></tr></thead>' +

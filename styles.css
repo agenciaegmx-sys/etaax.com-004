@@ -1752,3 +1752,61 @@ body.has-ctx #vistaCaratula { top: 96px !important; }
     .nav-brand, .nav-section-label, .nav-text { display: none; }
     .main-content { margin-left: 50px; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   IMPRIMIR LA PANTALLA: que salga legible en papel
+
+   La mayoría de los reportes se arman con /reporte-marca.js, que ya nace
+   blanco y pensado para papel. Pero algunas pantallas se imprimen TAL CUAL
+   (el simulador de KPIs, por ejemplo) — y una pantalla de ETAAX es oscura.
+   En papel eso es una hoja negra, o —si el navegador quita los fondos, que es
+   lo normal— texto gris clarísimo sobre blanco: ilegible.
+
+   Aquí se fuerza una paleta de papel para CUALQUIER página del sistema que se
+   mande a imprimir, sin tocar cómo se ve en pantalla. Se hace redefiniendo los
+   tokens: todo el sistema los usa, así que no hay que perseguir selector por
+   selector ni acordarse de esto al escribir la siguiente pantalla.
+
+   EL ÁMBAR SE VA. Es el color de la marca y en el monitor funciona, pero sobre
+   papel blanco no se lee: se cambia por negro. Lo que estaba resaltado sigue
+   resaltándose, con negrita en vez de color.
+   ══════════════════════════════════════════════════════════════════════════ */
+@media print {
+    :root, [data-theme="dark"], [data-theme="light"] {
+        --bg:          #ffffff;
+        --surface:     #ffffff;
+        --surface2:    #f2f2f2;
+        --border:      #b5b5b5;
+        --border2:     #9a9a9a;
+
+        --text:        #000000;
+        --text-muted:  #2b2b2b;
+        --text-dim:    #4a4a4a;
+
+        /* Ámbar fuera: en papel blanco no existe. */
+        --accent:      #000000;
+        --accent-text: #000000;
+        --accent-dim:  #ededed;
+        --amber:       #000000;
+        --amber-dim:   #ededed;
+
+        /* Los de semáforo se oscurecen lo suficiente para leerse impresos. */
+        --green:       #12683c;
+        --green-dim:   #e4f1ea;
+        --red:         #9c2a12;
+        --red-dim:     #f6e6e2;
+        --viol:        #3d2f8f;
+        --viol-dim:    #ebe8f7;
+        --blue:        #1f4489;
+        --blue-dim:    #e6ecf7;
+    }
+    body { background: #fff !important; color: #000 !important; }
+    /* Conservar los fondos que SÍ informan (renglones alternados, chips de
+       estado): sin ellos se salta uno de renglón al cotejar contra la bodega. */
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    /* Nada de esto sirve en papel y se lleva media hoja. */
+    .theme-toggle, .nav, .ctx-bar, .top-bar, .header-actions,
+    .btn, button, .modal-overlay, .toast { display: none !important; }
+    /* El contenido recupera el ancho que le quitaba la barra lateral. */
+    .main-content, .main-content.expandido { margin-left: 0 !important; margin-top: 0 !important; }
+}

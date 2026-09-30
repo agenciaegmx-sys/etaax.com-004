@@ -13303,8 +13303,7 @@ console.log('\n══ BG7 · La botella se vende con su servicio ══');
     test('la tabla de costeo trae la columna', () =>
         eq(decl('_costeoTablaCopa').indexOf('Bot. + servicio') > -1, true, 'con columna'));
     test('…y el reporte impreso también', () =>
-        eq(ins.indexOf("'<th>Costo bot.</th><th>Sug. bot.</th><th>Bot. + servicio</th>") > -1,
-           true, 'impreso'));
+        eq(ins.indexOf("<th>Sug. bot.</th><th>Bot. + servicio</th>") > -1, true, 'impreso'));
     /* La tabla del PDF lleva una fila de grupo que abarca N columnas: si no se
        actualiza el conteo, el encabezado de grupo queda corrido una celda. */
     test('el PDF ajusta el ancho de la fila de grupo a la columna nueva', () =>
@@ -13318,6 +13317,147 @@ console.log('\n══ BG7 · La botella se vende con su servicio ══');
         eq(/mezcladoresBot:\s*'5'/.test(ins), true, 'de arranque'));
     test('…y una presentación ya guardada sin el campo no cambia de precio', () =>
         eq(calc({ mezcladorId: 'ref1', mezcladores: '1' }, 12).costo, 0, 'sin cambio'));
+}
+
+/* ═══════════ SUITE BG8 · LA CARÁTULA DE COSTEO Y LO QUE SE IMPRIME ═════════
+   Dos cosas distintas que Edwin pidió juntas:
+
+   A) LA CARÁTULA DE DESTILADOS decía el costo por LITRO. Nadie compra litros:
+      se compran botellas de 700 ó 750, y comparar contra un precio por litro
+      obliga a hacer la regla de tres de cabeza. Además tenía una columna
+      «Mezcl.» con un 🥤 que decía que el trago lleva refresco pero no cuánto
+      cuesta — que es el dato con el que se pone el precio.
+
+   B) LO IMPRESO SALÍA TENUE. Los reportes se arman en cada módulo con estilos
+      EN LÍNEA nacidos mirando una pantalla oscura: grises clarísimos que en el
+      monitor se ven discretos y en papel no existen. Y el ámbar de la marca,
+      que sobre blanco simplemente no se lee.                                 */
+console.log('\n══ BG8 · La carátula de costeo y lo que se imprime ══');
+{
+    const ins = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.js'), 'utf8');
+    const rep = fs.readFileSync(path.join(RAIZ, 'reporte-marca.js'), 'utf8');
+    /* El CSS del reporte se arma concatenando cadenas de JS. Para poder
+       preguntarle a la REGLA —y no a cómo quedó partida en el archivo— se
+       pegan los trozos adyacentes: '...' + '...' vuelve a ser una sola. */
+    const repCss = rep.replace(/'\s*\+\s*'/g, '');
+    const css = fs.readFileSync(path.join(RAIZ, 'styles.css'), 'utf8');
+    const decl = (fn) => {
+        const i = ins.indexOf('function ' + fn + '(');
+        if (i < 0) return '';
+        const abre = ins.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < ins.length) {
+            if (ins[j] === '{') prof++;
+            else if (ins[j] === '}') { prof--; if (!prof) return ins.slice(i, j + 1); }
+            j++;
+        }
+        return '';
+    };
+
+    /* ── A) LA CARÁTULA ── */
+    const tabla = decl('_costeoTablaCopa');
+    test('la columna de costo es la de la BOTELLA, no la del litro', () =>
+        eq(tabla.indexOf('>Costo botella<') > -1 && tabla.indexOf('>Costo unit.<') === -1,
+           true, 'por botella'));
+    /* El costo por litro no se pierde: baja a subtítulo de la misma celda,
+       junto al contenido. Los tres datos, una columna. */
+    test('…y el costo por litro sigue ahí, de subtítulo', () =>
+        eq(decl('_costoBotTxt').indexOf("(p.umCosto||'LT')") > -1, true, 'no se pierde'));
+    test('…con el contenido de la botella, para saber de qué tamaño habla', () =>
+        eq(decl('_costoBotTxt').indexOf("cont+' ML'") > -1, true, 'con tamaño'));
+    /* La vieja «Costo bot.» era EXACTAMENTE este número: dos columnas idénticas
+       se leen como si fueran cosas distintas. */
+    test('ya no hay dos columnas con el mismo costo de botella', () =>
+        eq(tabla.indexOf('>Costo bot.<'), -1, 'una sola'));
+    test('el costo de botella sale por lo que cuesta, no por un texto suelto', () =>
+        eq(tabla.indexOf('_costoBotTxt(D)') > -1, true, 'calculado'));
+
+    test('la copa sugerida se lee como la botella: markup y refrescos', () =>
+        eq(tabla.indexOf("' ×'+fCopa + (D.mezCopaCost>0 ? ' +'+D.mezCopaPz+' refr.' : '')") > -1,
+           true, 'mismo formato'));
+    test('…y su monto ya incluye el refresco cuando lo lleva', () =>
+        eq(tabla.indexOf('D.sugTrago > 0 ? D.sugTrago : sugCopa') > -1, true, 'incluido'));
+    /* Sin refresco, el precio sugerido es el de siempre: quien no usa
+       mezcladores no puede ver cambiar sus números. */
+    test('sin refresco, la copa sugerida no cambia', () =>
+        eq(decl('_costeoCopaDatos').indexOf('sugTrago:    mezCost > 0 ? (costoCopa*fCopa) + mezCost : 0') > -1,
+           true, 'sin cambio'));
+
+    test('el 🥤 se cambia por lo que cuesta el refresco', () =>
+        eq(tabla.indexOf('🥤'), -1, 'sin emoji'));
+    test('…en una columna que dice «Precio ref.»', () =>
+        eq(tabla.indexOf('>Precio ref.<') > -1, true, 'con nombre'));
+    test('…y va junto a la copa, no perdida entre las de botella', () =>
+        eq(tabla.indexOf('>Precio ref.<') < tabla.indexOf('>Sug. bot.<') &&
+           tabla.indexOf('>Sug. copa<') < tabla.indexOf('>Precio ref.<'), true, 'en su sitio'));
+    test('…diciendo cuántos refrescos son', () =>
+        eq(tabla.indexOf("_cMoney(D.mezCopaCost)") > -1 && tabla.indexOf("D.mezCopaPz") > -1,
+           true, 'con piezas'));
+    /* Sin mezclador va una raya, no un $0.00: un cero se lee como "el refresco
+       sale gratis". */
+    test('sin mezclador va una raya, no un cero', () =>
+        eq(tabla.indexOf("D.mezCopaCost>0") > -1, true, 'raya'));
+
+    /* El papel tiene que decir lo mismo que la pantalla, o no hay forma de
+       saber cuál de las dos miente. */
+    test('el PDF impreso trae las mismas columnas', () =>
+        eq(ins.indexOf('<th>Costo botella</th>') > -1 &&
+           ins.indexOf('<th>Precio ref.</th>') > -1, true, 'iguales'));
+    test('…y el PDF tampoco repite el costo de botella', () =>
+        eq(ins.indexOf('<th>Costo bot.</th>'), -1, 'una sola'));
+
+    /* ── B) LO IMPRESO ── */
+    /* El ámbar de la marca sobre papel blanco no se lee. No se atenúa: se
+       cambia por negro y negrita — lo que estaba resaltado sigue resaltado,
+       con un recurso que sí funciona en papel. */
+    test('el ámbar de los reportes pasa a negro', () =>
+        eq(/\[style\*="#f5c842"\][^{]*\{color:#1a1916 !important/.test(repCss), true, 'sin ámbar'));
+    test('…y se compensa con negrita, para no perder el énfasis', () =>
+        eq(/\[style\*="#f5c842"\][^{]*\{[^}]*font-weight:700 !important/.test(repCss), true, 'con negrita'));
+    test('…incluyendo el que viene por variable de tema', () =>
+        eq(rep.indexOf('[style*="var(--accent)"]') > -1, true, 'también'));
+    /* Ataca el ESTILO EN LÍNEA por su valor: vale para los reportes que ya
+       están escritos Y para los que se escriban después, sin tocar veinte
+       archivos ni acordarse de esto cada vez. */
+    ['#aaa', '#999', '#888', '#ccc'].forEach(g =>
+        test('el gris ' + g + ', invisible en papel, se oscurece', () =>
+            eq(rep.indexOf('[style*="' + g + '"]') > -1, true, 'oscurecido')));
+    test('…y va con !important, que es lo único que gana a un estilo en línea', () =>
+        eq(/\[style\*="#aaa"\][^{]*\{color:#4a4a4a !important/.test(repCss), true, 'gana'));
+    test('las líneas de la tabla dejan de ser casi blancas', () =>
+        eq(rep.indexOf('border-bottom:1px solid #cfcfcf') > -1 &&
+           rep.indexOf('border-bottom:1px solid #f1f1f1') === -1, true, 'visibles'));
+    test('los títulos de columna se leen (no #666 sobre gris)', () =>
+        eq(rep.indexOf('font-weight:800;color:#2b2b2b') > -1, true, 'legibles'));
+    /* Al imprimir, la impresora aclara todo un punto más que el monitor. */
+    test('al imprimir se sube el contraste otro punto', () =>
+        eq(/@media print\{[\s\S]*table\.rt tbody td\{color:#000/.test(repCss), true, 'a negro'));
+    /* Los renglones alternados son lo que evita saltarse una línea al cotejar:
+       si el navegador quita los fondos, se pierde esa ayuda. */
+    test('…y se conservan los fondos que sí informan', () =>
+        eq(rep.indexOf('print-color-adjust:exact') > -1, true, 'conservados'));
+
+    /* Algunas pantallas se imprimen TAL CUAL (el simulador de KPIs). Una
+       pantalla de ETAAX es oscura: en papel eso es una hoja negra, o —si el
+       navegador quita los fondos— texto gris clarísimo sobre blanco. */
+    test('imprimir una pantalla del sistema fuerza paleta de papel', () =>
+        eq(/@media print \{[\s\S]*--bg:\s*#ffffff/.test(css), true, 'blanco'));
+    test('…con el texto en negro, no en el gris de la pantalla', () =>
+        eq(/@media print \{[\s\S]*--text:\s*#000000/.test(css), true, 'negro'));
+    test('…y el ámbar también fuera ahí', () =>
+        eq(/@media print \{[\s\S]*--accent:\s*#000000/.test(css), true, 'sin ámbar'));
+    /* Verde y rojo se quedan —son semáforo, no adorno— pero oscurecidos para
+       que se distingan impresos. */
+    test('el semáforo se conserva, oscurecido para papel', () =>
+        eq(/@media print \{[\s\S]*--green:\s*#12683c[\s\S]*--red:\s*#9c2a12/.test(css), true, 'legible'));
+    test('la barra lateral y los botones no se llevan media hoja', () =>
+        eq(/@media print \{[\s\S]*\.theme-toggle, \.nav, \.ctx-bar/.test(css), true, 'fuera'));
+    test('…y el contenido recupera el ancho que le quitaba la barra', () =>
+        eq(/@media print \{[\s\S]*\.main-content[^}]*margin-left: 0 !important/.test(css), true, 'ancho'));
+    /* Va al FINAL del archivo a propósito: lo último declarado gana, así que
+       ninguna regla anterior lo pisa. */
+    test('el bloque de impresión va al final, para que nada lo pise', () =>
+        eq(css.lastIndexOf('@media print') > css.length - 2600, true, 'al final'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

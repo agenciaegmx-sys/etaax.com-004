@@ -1009,6 +1009,18 @@
            '<span style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--accent)">'+txt+'</span>'+
            '<span class="pill pill-amber" style="font-size:10px">'+n+'</span></div>';
    }
+   /* Lo que cuesta UNA botella, con su contenido y el costo por litro abajo:
+      los tres datos que hacían falta, en una celda. */
+   function _costoBotTxt(D){
+       if (!(D.costoBot > 0)) return '<span style="color:var(--text-dim)">—</span>';
+       var p = D.p;
+       var cont = toML(p.contNeto, p.umContenido||'ML');
+       var cu = parseFloat(p.costoUnitario)||0;
+       return fmtMXN(D.costoBot) +
+           '<div style="color:var(--text-dim);font-size:9.5px;font-weight:400">' +
+           (cont>0 ? cont+' ML' : '') +
+           (cu>0 ? ' · '+fmtMXN(cu)+'/'+(p.umCosto||'LT') : '') + '</div>';
+   }
    function _unitTxt(p){
        return (parseFloat(p.costoUnitario)||0)>0
            ? fmtMXN(parseFloat(p.costoUnitario))+'<span style="color:var(--text-dim);font-size:10px">/'+(p.umCosto||'LT')+'</span>'
@@ -1075,6 +1087,14 @@
            // La utilidad de la copa se mide contra el trago COMPLETO: si lleva
            // refresco, ese refresco cuesta y sale de otro insumo.
            costoTrago: costoCopa+mezCost,
+           // El mezclador de la COPA, dicho en números y no con un emoji: un
+           // 🥤 dice que lleva refresco pero no cuánto cuesta, que es el dato
+           // con el que se pone el precio.
+           mezCopaPz:   mezPiezas,
+           mezCopaCost: mezCost,
+           /* Precio sugerido del trago = copa ×factor + el refresco a costo.
+              Misma regla que la botella con su servicio (ver _mezBotDatos). */
+           sugTrago:    mezCost > 0 ? (costoCopa*fCopa) + mezCost : 0,
            tieneMez:  !!p.mezcladorId,
            costoBot:  costoBot,
            fBot:      fBot,
@@ -1125,12 +1145,19 @@
    }
 
    function _costeoTablaCopa(lista, todos){
+       /* EL COSTO ES EL DE LA BOTELLA, no el de un litro. Nadie compra litros:
+          se compran botellas de 700 ó 750, y comparar contra un precio por
+          litro obliga a hacer la regla de tres de cabeza cada vez. El costo
+          por litro no se pierde: viaja como subtítulo de la misma celda.
+          La columna «Costo bot.» que iba más adelante desaparece: era
+          exactamente este mismo número, repetido. */
        var head = '<tr>'+
            '<th style="'+_CTHL+'">Bebida</th><th style="'+_CTHL+'">Grupo</th>'+
-           '<th style="'+_CTH+'">Costo unit.</th><th style="'+_CTH+'">Costo/oz</th><th style="'+_CTH+'">Costo/copa</th>'+
-           '<th style="'+_CTH+'">Sug. copa</th><th style="'+_CTH+'">Carta copa</th><th style="'+_CTH+'">Utilidad copa</th>'+
-           '<th style="'+_CTH+';text-align:center">Mezcl.</th>'+
-           '<th style="'+_CTH+'">Costo bot.</th><th style="'+_CTH+'">Sug. bot.</th>'+
+           '<th style="'+_CTH+'">Costo botella</th><th style="'+_CTH+'">Costo/oz</th><th style="'+_CTH+'">Costo/copa</th>'+
+           '<th style="'+_CTH+'">Sug. copa</th>'+
+           '<th style="'+_CTH+'">Precio ref.</th>'+
+           '<th style="'+_CTH+'">Carta copa</th><th style="'+_CTH+'">Utilidad copa</th>'+
+           '<th style="'+_CTH+'">Sug. bot.</th>'+
            '<th style="'+_CTH+'">Bot. + servicio</th>'+
            '<th style="'+_CTH+'">Carta bot.</th><th style="'+_CTH+'">Utilidad bot.</th></tr>';
        var rows = lista.map(function(ins){
@@ -1138,17 +1165,26 @@
            var costoOz = D.costoOz, costoCopa = D.costoCopa, fCopa = D.fCopa, sugCopa = D.sugCopa;
            var cartaCopa = D.cartaCopa, costoTrago = D.costoTrago;
            var costoBot = D.costoBot, fBot = D.fBot, sugBot = D.sugBot, cartaBot = D.cartaBot;
+           /* La copa sugerida se lee como la botella: el markup y, si lleva
+              refresco, lo que suma. Un «$167.94 ×3.3» a secas escondía que el
+              trago completo cuesta más. */
+           var sugCopaMostrar = D.sugTrago > 0 ? D.sugTrago : sugCopa;
+           var sufCopa = ' ×'+fCopa + (D.mezCopaCost>0 ? ' +'+D.mezCopaPz+' refr.' : '');
            return '<tr>'+
                '<td style="'+_CTDL+';font-weight:600">'+etx(ins.nombre)+'</td>'+
                '<td style="'+_CTDL+';color:var(--text-muted)">'+etx(_grupoIns(ins))+'</td>'+
-               '<td style="'+_CTD+'">'+_unitTxt(p)+'</td>'+
+               '<td style="'+_CTD+'">'+_costoBotTxt(D)+'</td>'+
                '<td style="'+_CTD+'">'+_cMoney(costoOz)+'</td>'+
                '<td style="'+_CTD+'">'+_cMoney(costoCopa)+'</td>'+
-               '<td style="'+_CTD+'">'+_cMoney(sugCopa)+'<span style="color:var(--text-dim);font-size:10px"> ×'+fCopa+'</span></td>'+
+               '<td style="'+_CTD+'">'+_cMoney(sugCopaMostrar)+'<span style="color:var(--text-dim);font-size:10px">'+sufCopa+'</span></td>'+
+               /* El refresco contemplado, en pesos. El emoji decía que llevaba
+                  mezclador pero no cuánto cuesta, que es el dato con el que se
+                  pone el precio. */
+               '<td style="'+_CTD+'">'+(D.mezCopaCost>0
+                   ? _cMoney(D.mezCopaCost)+'<span style="color:var(--text-dim);font-size:10px"> ×'+D.mezCopaPz+'</span>'
+                   : '<span style="color:var(--text-dim)">—</span>')+'</td>'+
                '<td style="'+_CTD+';color:var(--accent)">'+_cMoney(cartaCopa)+'</td>'+
                '<td style="'+_CTD+'">'+_cUtil(cartaCopa, costoTrago)+'</td>'+
-               '<td style="'+_CTD+';text-align:center">'+(p.mezcladorId?'🥤':'<span style="color:var(--text-dim)">—</span>')+'</td>'+
-               '<td style="'+_CTD+'">'+_cMoney(costoBot)+'</td>'+
                '<td style="'+_CTD+'">'+_cMoney(sugBot)+'<span style="color:var(--text-dim);font-size:10px"> ×'+fBot+'</span></td>'+
                /* La botella con su servicio de refrescos. Sin servicio capturado
                   va una raya, no un cero: un cero se lee como "sale gratis". */
@@ -1345,23 +1381,35 @@
            cuerpo += '<div class="rsec">Destilados · Licores · Vinos · ' + g1.length + '</div>' +
                '<table class="rt tnum" style="font-size:10.5px"><thead><tr>' +
                    '<th class="w" style="width:20%">Bebida</th>' +
-                   '<th>Costo unit.</th><th>Costo/oz</th><th>Costo/copa</th><th>Sug. copa</th><th>Carta copa</th><th>Utilidad copa</th>' +
-                   '<th>Costo bot.</th><th>Sug. bot.</th><th>Bot. + servicio</th><th>Carta bot.</th><th>Utilidad bot.</th>' +
+                   '<th>Costo botella</th><th>Costo/oz</th><th>Costo/copa</th><th>Sug. copa</th><th>Precio ref.</th><th>Carta copa</th><th>Utilidad copa</th>' +
+                   '<th>Sug. bot.</th><th>Bot. + servicio</th><th>Carta bot.</th><th>Utilidad bot.</th>' +
                '</tr></thead><tbody>' +
                _agruparPDF(g1, _grupoIns).map(function(G){
                return _filaGrupoPDF(G.nombre, G.items.length, '', 12) + G.items.map(function(ins){
                    var D = _costeoCopaDatos(ins, todos), p = D.p;
+                   /* Mismas columnas y mismos números que la pantalla: si el
+                      papel dijera otra cosa, no habría forma de saber cuál de
+                      las dos miente. */
+                   var contML = toML(p.contNeto, p.umContenido||'ML');
                    var cu = (parseFloat(p.costoUnitario) > 0)
-                       ? fmtMXN(parseFloat(p.costoUnitario)) + '/' + (p.umCosto || 'LT') : '—';
+                       ? fmtMXN(parseFloat(p.costoUnitario)) + '/' + (p.umCosto || 'LT') : '';
+                   var costoBotTxt = D.costoBot > 0
+                       ? _u(D.costoBot) + '<span style="color:#5a5a5a;font-size:9px"><br>' +
+                         (contML>0 ? contML + ' ML' : '') + (cu ? ' · ' + cu : '') + '</span>'
+                       : '—';
+                   var sugCopaVal = D.sugTrago > 0 ? D.sugTrago : D.sugCopa;
+                   var sufCopa = ' ×' + D.fCopa + (D.mezCopaCost > 0 ? ' +' + D.mezCopaPz + ' refr.' : '');
                    return '<tr>' +
-                       '<td class="w ind">' + etx(ins.nombre) + (D.tieneMez ? ' 🥤' : '') + '</td>' +
-                       '<td>' + cu + '</td><td>' + _u(D.costoOz) + '</td><td>' + _u(D.costoCopa) + '</td>' +
-                       '<td>' + _u(D.sugCopa) + '<span style="color:#aaa;font-size:9.5px"> ×' + D.fCopa + '</span></td>' +
+                       '<td class="w ind">' + etx(ins.nombre) + '</td>' +
+                       '<td>' + costoBotTxt + '</td><td>' + _u(D.costoOz) + '</td><td>' + _u(D.costoCopa) + '</td>' +
+                       '<td>' + _u(sugCopaVal) + '<span style="color:#5a5a5a;font-size:9.5px">' + sufCopa + '</span></td>' +
+                       '<td>' + (D.mezCopaCost > 0
+                           ? _u(D.mezCopaCost) + '<span style="color:#5a5a5a;font-size:9.5px"> ×' + D.mezCopaPz + '</span>'
+                           : '—') + '</td>' +
                        '<td style="font-weight:700">' + _u(D.cartaCopa) + '</td><td>' + _ut(D.cartaCopa, D.costoTrago) + '</td>' +
-                       '<td>' + _u(D.costoBot) + '</td>' +
-                       '<td>' + _u(D.sugBot) + '<span style="color:#aaa;font-size:9.5px"> ×' + D.fBot + '</span></td>' +
+                       '<td>' + _u(D.sugBot) + '<span style="color:#5a5a5a;font-size:9.5px"> ×' + D.fBot + '</span></td>' +
                        '<td>' + (D.sugBotServ > 0
-                           ? _u(D.sugBotServ) + '<span style="color:#aaa;font-size:9.5px"> +' + D.mezBotPz + ' refr.</span>'
+                           ? _u(D.sugBotServ) + '<span style="color:#5a5a5a;font-size:9.5px"> +' + D.mezBotPz + ' refr.</span>'
                            : '—') + '</td>' +
                        /* Contra el costo de DESPACHAR la botella, refrescos
                           incluidos: si el papel dijera otro margen que la
