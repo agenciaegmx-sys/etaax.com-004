@@ -311,7 +311,16 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
             <button id="salTipoPres" onclick="setSalidaTipo('prestamo')">🔁 Préstamo</button>
         </div>
 
-        <label class="lbl">Insumo</label>
+        <!-- Una cortesía casi nunca es "media botella de ginebra": es UN CÓCTEL.
+             Sin esto había que traducir el coctel a sus ingredientes a mano, y
+             nadie lo hace bien a las once de la noche. Mismo par que en merma. -->
+        <label class="lbl">¿Qué saliste?</label>
+        <div class="chips" id="salQueChips">
+            <button id="salTipoInsumo" class="on" onclick="setSalidaQue('insumo')">📦 Insumo</button>
+            <button id="salTipoProd" onclick="setSalidaQue('producto')">🍸 Producto del menú</button>
+        </div>
+
+        <label class="lbl" id="salLbl">Insumo</label>
         <input id="salBusca" class="fld" placeholder="Buscar insumo…" oninput="filtrarSal(this.value)" autocomplete="off">
         <div id="salSelBox"></div>
         <div id="salList" class="buscaList"></div>
@@ -423,6 +432,32 @@ function _unoPorProductoQR(lista){
     });
     return orden.map(function(k){ return por[k]; });
 }
+/* ── QUÉ LE TOCA A CADA ÁREA ─────────────────────────────────────────────────
+   Quien entra por el QR ya eligió su área (barra / cocina / almacén). Hasta
+   ahora esa elección solo etiquetaba el registro: la lista seguía mostrando
+   TODO. El de barra buscaba un coctel entre doscientos platillos.
+
+   La regla es la que ya vive en el catálogo, sin inventar campos:
+     · barra   → bebidas (y sub-bebidas)
+     · cocina  → alimentos (y sub-alimentos)
+     · almacén → todo, porque de ahí sale todo
+
+   FALLA ABIERTO a propósito: lo que no dice a qué área pertenece se muestra
+   siempre. Esconder un insumo sin área capturada dejaría a alguien sin poder
+   registrar su merma, y no hay forma de que lo resuelva desde el celular. */
+function _areaDeReceta(x){
+    var t = String((x && x.tipo) || '').toLowerCase();
+    if (t.indexOf('bebida')  >= 0) return 'barra';
+    if (t.indexOf('aliment') >= 0) return 'cocina';
+    return '';                       // sin tipo: no se puede saber
+}
+function _delAreaQR(x, esReceta){
+    if (AREA === 'almacen') return true;         // el almacén surte a las dos
+    var a = esReceta ? _areaDeReceta(x)
+                     : String((x && x.area) || '').toLowerCase();
+    if (!a) return true;                          // sin área declarada: se muestra
+    return a === AREA;
+}
 function _enSucQR(x){
     if (!SUC || !x) return true;
     if ((x.inactivoEn||[]).indexOf(SUC) >= 0 || (x.inactivaEn||[]).indexOf(SUC) >= 0) return false; // pausado ahí
@@ -440,6 +475,7 @@ var AREA = 'barra';              // área elegida (aplica a entrada Y merma)
 var MERMA_TIPO = 'insumo';       // 'insumo' | 'producto'
 var MSEL = null, MFOTO_URL = '';
 var SALIDA_TIPO = 'cortesia';    // 'cortesia' | 'prestamo'
+var SALIDA_QUE  = 'insumo';      // 'insumo' | 'producto' — qué se está sacando
 var SSEL = null, SFOTO_URL = '';
 // ── Registro MÚLTIPLE (lote): hasta 15 insumos y 10 fotos por lote, en cada flujo ──
 var MAX_ITEMS = 15, MAX_FOTOS = 10;
@@ -454,7 +490,18 @@ function _pintarAreas(){
         }).join('');
     });
 }
-function setArea(a){ AREA = a; _pintarAreas(); }
+function setArea(a){
+    AREA = a; _pintarAreas();
+    /* Repintar la lista de la pantalla en la que estás. Sin esto se elegía
+       barra y la lista se quedaba con lo de cocina hasta escribir algo en el
+       buscador — parecía que el chip no servía. */
+    try {
+        if (document.getElementById('formScreen').style.display !== 'none') filtrarIns(document.getElementById('insBusca').value||'');
+        if (document.getElementById('mermaScreen').style.display !== 'none') filtrarMer(document.getElementById('merBusca').value||'');
+        if (document.getElementById('salidaScreen').style.display !== 'none') filtrarSal(document.getElementById('salBusca').value||'');
+        if (document.getElementById('conteoScreen').style.display !== 'none') filtrarCnt(document.getElementById('cntBuscar').value||'');
+    } catch(e){}
+}
 
 function _show(id){ ['pinScreen','menuScreen','formScreen','mermaScreen','salidaScreen','conteoScreen','histScreen','errScreen'].forEach(function(x){ var el=document.getElementById(x); if(el) el.style.display = x===id?'block':'none'; }); }
 function _err(txt){ document.getElementById('errTxt').innerHTML = txt; document.getElementById('capSub').textContent = ''; _show('errScreen'); if(_countTimer){clearInterval(_countTimer);_countTimer=null;} }
@@ -517,6 +564,7 @@ function _tick(){
 function filtrarIns(q){
     q = (q||'').toLowerCase();
     var lista = INSUMOS.filter(function(x){
+        if (!_delAreaQR(x, false)) return false;
         return !q || (x.nombre||'').toLowerCase().indexOf(q)>=0 || (x.marca||'').toLowerCase().indexOf(q)>=0 || (x.variedad||'').toLowerCase().indexOf(q)>=0;
     }).slice(0, 60);
     document.getElementById('insList').innerHTML = lista.length
@@ -551,23 +599,37 @@ function setMermaTipo(t){
     if (t === 'producto' && RECETAS === null) _cargarRecetas();
     else filtrarMer('');
 }
-async function _cargarRecetas(){
-    document.getElementById('merList').innerHTML = '<div class="ins-it" style="color:var(--text-dim);cursor:default">Cargando menú…</div>';
+async function _cargarRecetas(opts){
+    opts = opts || {};
+    var pintar = opts.pintar !== false;   // la llama merma Y salida: no repintar la ajena
+    if (pintar) document.getElementById('merList').innerHTML = '<div class="ins-it" style="color:var(--text-dim);cursor:default">Cargando menú…</div>';
     try {
         var rr = await _supabase.rpc('entrada_recetas', { p_neg: NEG, p_token: TOKEN });
-        RECETAS = (rr.data || []).filter(function(x){ return x && x.id && _enSucQR(x); });
+        /* MISMO trato que los insumos, que era lo que faltaba: primero se dejan
+           solo las de ESTA sucursal y después se quita el duplicado
+           maestro/copia. Sin el segundo paso un coctel salía cuatro veces —la
+           maestra más una copia por sucursal— y el colaborador tenía que
+           adivinar cuál tocar. (Necesita los campos que agrega la v61: sin
+           ellos `_enSucQR` no puede decidir y deja pasar todo.) */
+        RECETAS = _unoPorProductoQR(
+            (rr.data || []).filter(function(x){ return x && x.id && _enSucQR(x); })
+        );
         RECETAS.sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
     } catch(e) { RECETAS = []; }
     if (!RECETAS.length) {
-        document.getElementById('merList').innerHTML = '<div class="ins-it" style="color:var(--text-dim);cursor:default">No se pudo cargar el menú (¿se corrió la migración v32?)</div>';
+        var vacio = '<div class="ins-it" style="color:var(--text-dim);cursor:default">No hay productos del menú para esta sucursal.</div>';
+        if (pintar) document.getElementById('merList').innerHTML = vacio;
+        else document.getElementById('salList').innerHTML = vacio;
         return;
     }
-    filtrarMer('');
+    if (pintar) filtrarMer('');
 }
 function _mermaFuente(){ return MERMA_TIPO === 'producto' ? (RECETAS || []) : INSUMOS; }
 function filtrarMer(q){
     q = (q||'').toLowerCase();
+    var esProd = MERMA_TIPO === 'producto';
     var lista = _mermaFuente().filter(function(x){
+        if (!_delAreaQR(x, esProd)) return false;
         return !q || (x.nombre||'').toLowerCase().indexOf(q)>=0 || (x.marca||'').toLowerCase().indexOf(q)>=0 || (x.variedad||'').toLowerCase().indexOf(q)>=0 || (x.grupo||'').toLowerCase().indexOf(q)>=0;
     }).slice(0, 60);
     document.getElementById('merList').innerHTML = lista.length
@@ -592,7 +654,7 @@ function limpiarMer(){ MSEL=null; document.getElementById('merSelBox').innerHTML
 /* ── SALIDA de insumo: cortesía o préstamo (misma lógica, es una salida más) ── */
 function irSalida(){
     document.getElementById('capSub').textContent='Agrega cortesías o préstamos y registra el lote';
-    _pintarAreas(); setSalidaTipo(SALIDA_TIPO); filtrarSal(''); _renderCart('salida'); _renderFotos('salida');
+    _pintarAreas(); setSalidaTipo(SALIDA_TIPO); setSalidaQue(SALIDA_QUE); _renderCart('salida'); _renderFotos('salida');
     _show('salidaScreen');
 }
 function setSalidaTipo(t){
@@ -600,20 +662,45 @@ function setSalidaTipo(t){
     document.getElementById('salTipoCort').className = t==='cortesia' ? 'on' : '';
     document.getElementById('salTipoPres').className = t==='prestamo' ? 'on' : '';
 }
+/* Insumo o producto del menú. El menú se carga la primera vez que hace falta,
+   igual que en merma: bajarlo al entrar retrasaría a quien solo va a registrar
+   una entrada. */
+async function setSalidaQue(t){
+    SALIDA_QUE = t; SSEL = null;
+    document.getElementById('salTipoInsumo').className = t==='insumo'   ? 'on' : '';
+    document.getElementById('salTipoProd').className   = t==='producto' ? 'on' : '';
+    document.getElementById('salLbl').textContent   = t==='producto' ? 'Producto del menú' : 'Insumo';
+    document.getElementById('salBusca').placeholder = t==='producto' ? 'Buscar producto del menú…' : 'Buscar insumo…';
+    document.getElementById('salBusca').value = '';
+    document.getElementById('salSelBox').innerHTML = '';
+    document.getElementById('salUnidad').value = t==='producto' ? 'pza' : 'copa';
+    if (t === 'producto' && RECETAS === null) {
+        document.getElementById('salList').innerHTML = '<div class="ins-it" style="color:var(--text-dim);cursor:default">Cargando menú…</div>';
+        await _cargarRecetas({ pintar:false });
+    }
+    filtrarSal('');
+}
+function _salidaFuente(){ return SALIDA_QUE === 'producto' ? (RECETAS || []) : INSUMOS; }
 function filtrarSal(q){
     q = (q||'').toLowerCase();
-    var lista = INSUMOS.filter(function(x){
-        return !q || (x.nombre||'').toLowerCase().indexOf(q)>=0 || (x.marca||'').toLowerCase().indexOf(q)>=0 || (x.variedad||'').toLowerCase().indexOf(q)>=0;
+    var esProd = SALIDA_QUE === 'producto';
+    var lista = _salidaFuente().filter(function(x){
+        if (!_delAreaQR(x, esProd)) return false;
+        return !q || (x.nombre||'').toLowerCase().indexOf(q)>=0 || (x.marca||'').toLowerCase().indexOf(q)>=0 || (x.variedad||'').toLowerCase().indexOf(q)>=0 || (x.grupo||'').toLowerCase().indexOf(q)>=0;
     }).slice(0, 60);
     document.getElementById('salList').innerHTML = lista.length
-        ? lista.map(function(x){ return '<div class="ins-it" onclick="selSal(\''+x.id+'\')">'+etx(x.nombre)+_insMetaHTML(x)+'</div>'; }).join('')
+        ? lista.map(function(x){
+            if (esProd) { var g=x.grupo||''; return '<div class="ins-it" onclick="selSal(\''+x.id+'\')">'+etx(x.nombre)+(g?' <span class="chip">'+etx(g)+'</span>':'')+'</div>'; }
+            return '<div class="ins-it" onclick="selSal(\''+x.id+'\')">'+etx(x.nombre)+_insMetaHTML(x)+'</div>';
+        }).join('')
         : '<div class="ins-it" style="color:var(--text-dim);cursor:default">Sin resultados</div>';
 }
 function selSal(id){
-    SSEL = INSUMOS.find(function(x){ return x.id===id; });
+    SSEL = _salidaFuente().find(function(x){ return x.id===id; });
     if (!SSEL) return;
+    var chip = SALIDA_QUE==='producto' ? ((SSEL.grupo||'') ? '<div class="chip">'+etx(SSEL.grupo)+'</div>' : '') : _insMetaChip(SSEL);
     document.getElementById('salSelBox').innerHTML =
-        '<div class="ins-sel"><div><b>'+etx(SSEL.nombre)+'</b>'+_insMetaChip(SSEL)+'</div>'+
+        '<div class="ins-sel"><div><b>'+etx(SSEL.nombre)+'</b>'+chip+'</div>'+
         '<button class="cap-btn ghost" style="width:auto;margin:0;padding:6px 12px" onclick="limpiarSal()">cambiar</button></div>';
     document.getElementById('salList').innerHTML=''; document.getElementById('salBusca').value='';
 }
@@ -635,6 +722,7 @@ function irConteo(){
 function filtrarCnt(q){
     q = (q||'').toLowerCase();
     var lista = INSUMOS.filter(function(x){
+        if (!_delAreaQR(x, false)) return false;   // barra cuenta SUS botellas
         return !q || (x.nombre||'').toLowerCase().indexOf(q)>=0 || (x.marca||'').toLowerCase().indexOf(q)>=0 || (x.variedad||'').toLowerCase().indexOf(q)>=0;
     }).slice(0, 60);
     document.getElementById('cntLista').innerHTML = lista.length
@@ -819,10 +907,13 @@ function _addItem(flujo){
         it = { id:genId()+genId(), mermaTipo:MERMA_TIPO, insumoId:(MSEL.origenId||MSEL.id), nombre:MSEL.nombre+(MSEL.variedad?' '+MSEL.variedad:''), familia:MSEL.familia||MSEL.categoria||MSEL.grupo||'', cantidad:cm, unidad:document.getElementById('merUnidad').value, motivo:document.getElementById('merMotivo').value };
         limpiarMer(); document.getElementById('merCant').value='';
     } else { // salida
-        if (!SSEL){ _cartMsg(flujo,'Elige un insumo.','err'); return; }
+        if (!SSEL){ _cartMsg(flujo, SALIDA_QUE==='producto'?'Elige el producto del menú.':'Elige el insumo.','err'); return; }
         var cs = parseFloat(document.getElementById('salCant').value)||0;
         if (cs<=0){ _cartMsg(flujo,'Pon una cantidad mayor a 0.','err'); return; }
-        it = { id:genId()+genId(), salidaTipo:SALIDA_TIPO, insumoId:(SSEL.origenId||SSEL.id), nombre:SSEL.nombre+(SSEL.variedad?' '+SSEL.variedad:''), familia:SSEL.familia||SSEL.categoria||'', cantidad:cs, unidad:document.getElementById('salUnidad').value };
+        /* `salidaQue` distingue un insumo de un producto del menú, igual que
+           `mermaTipo` en la merma: quien lo aplique tiene que saber si descontar
+           una botella o reventar la receta en sus ingredientes. */
+        it = { id:genId()+genId(), salidaTipo:SALIDA_TIPO, salidaQue:SALIDA_QUE, insumoId:(SSEL.origenId||SSEL.id), nombre:SSEL.nombre+(SSEL.variedad?' '+SSEL.variedad:''), familia:SSEL.familia||SSEL.categoria||SSEL.grupo||'', cantidad:cs, unidad:document.getElementById('salUnidad').value };
         limpiarSal(); document.getElementById('salCant').value='';
     }
     st.items.push(it); _renderCart(flujo); _cartMsg(flujo,'','');

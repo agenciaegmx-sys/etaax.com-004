@@ -13013,6 +13013,191 @@ console.log('\n══ BG5 · Cada sucursal, sus checklists y sus evaluaciones �
         eq(dC('_sucNombre').indexOf('return s.nombre||s.id;') > -1, true, 'del catálogo'));
 }
 
+/* ═══════════ SUITE BG6 · EL QR DE INVENTARIOS, UNA RECETA Y DE SU ÁREA ═════
+   Lo que reportó Edwin, y es el MISMO hueco que tuvo el portal QR de staff:
+
+   1. Un coctel salía CUATRO veces: la receta maestra más una copia por
+      sucursal. El colaborador tenía que adivinar cuál tocar.
+   2. Se veían las recetas de TODAS las sucursales, no las de la suya.
+   3. No separaba por área: el de barra buscaba un coctel entre los platillos.
+   4. En cortesías y préstamos solo se podía elegir INSUMO. Una cortesía casi
+      nunca es "media botella de ginebra": es un cóctel.
+
+   LA RAÍZ ESTABA EN LA BASE, no en la pantalla. El QR ya tenía la lógica
+   (`_enSucQR`, `_unoPorProductoQR`), pero la RPC `entrada_recetas` de la v32
+   devolvía una lista hecha a mano con cuatro campos —id, nombre, tipo, grupo—
+   y NO mandaba `sucursales`, `sucursalId`, `origenId` ni `inactivaEn`. Sin
+   esos campos `_enSucQR` no puede decidir y cae a "sí, muéstrala": TODA receta
+   de TODA sucursal pasaba. La v61 los agrega.                                */
+console.log('\n══ BG6 · El QR de inventarios: una receta, y de su área ══');
+{
+    const ent = fs.readFileSync(path.join(RAIZ, 'entrada.html'), 'utf8');
+    const v61 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v61.sql'), 'utf8');
+    const decl = (fn) => {
+        const i = ent.indexOf('function ' + fn + '(');
+        if (i < 0) return '';
+        const abre = ent.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < ent.length) {
+            if (ent[j] === '{') prof++;
+            else if (ent[j] === '}') { prof--; if (!prof) return ent.slice(i, j + 1); }
+            j++;
+        }
+        return '';
+    };
+
+    /* ── LA MIGRACIÓN: sin estos campos, la pantalla no puede filtrar ── */
+    ['origenId', 'sucursalId', 'sucursales', 'inactivaEn'].forEach(k =>
+        test('la v61 manda `' + k + '` en entrada_recetas', () =>
+            eq(new RegExp("'" + k + "'").test(v61), true, 'lo manda')));
+    /* Esta RPC la ejecuta `anon`: un celular sin sesión, autorizado solo por el
+       token del QR. Mandar `r.datos` entero le entregaría a cualquiera con el
+       link los insumos, las cantidades y los COSTOS de cada receta. */
+    test('…pero NO manda la receta entera: el QR lo corre anon', () =>
+        eq(/SELECT\s+r\.datos\s/.test(v61), false, 'lista acotada'));
+    test('…y sigue sin exponer costos ni ingredientes', () =>
+        eq(v61.indexOf('ingredientes') === -1 && v61.indexOf('costo') === -1, true, 'sin costos'));
+    test('la v61 sigue pidiendo el token del QR', () =>
+        eq(v61.indexOf('_entrada_token_ok(p_neg, p_token)') > -1, true, 'con token'));
+
+    /* ── El código REAL del QR ── */
+    function qr(opts) {
+        opts = opts || {};
+        const ctx = { console, JSON, Object, Array, String, Boolean };
+        ctx.window = ctx;
+        vm.createContext(ctx);
+        vm.runInContext("var SUC=" + JSON.stringify(opts.suc || '') + ";" +
+                        "var AREA=" + JSON.stringify(opts.area || 'barra') + ";", ctx);
+        ['_unoPorProductoQR', '_enSucQR', '_areaDeReceta', '_delAreaQR']
+            .forEach(f => vm.runInContext(decl(f), ctx, { filename: 'entrada.html' }));
+        return ctx;
+    }
+
+    /* ── 1) UNA SOLA VEZ POR PRODUCTO ── */
+    /* Tal cual lo describió: la maestra más una copia por sucursal. */
+    const NEGRONI = [
+        { id: 'r_master', nombre: 'Negroni', tipo: 'bebidas' },
+        { id: 'r_s1', nombre: 'Negroni', tipo: 'bebidas', origenId: 'r_master', sucursales: ['suc_1'] },
+        { id: 'r_s2', nombre: 'Negroni', tipo: 'bebidas', origenId: 'r_master', sucursales: ['suc_2'] },
+        { id: 'r_s3', nombre: 'Negroni', tipo: 'bebidas', origenId: 'r_master', sucursales: ['suc_3'] },
+    ];
+    test('el colaborador de la sucursal 2 ve UN Negroni, no cuatro', () => {
+        const c = qr({ suc: 'suc_2' });
+        const r = c._unoPorProductoQR(NEGRONI.filter(x => c._enSucQR(x)));
+        return eq(r.length, 1, r.length + ' renglones');
+    });
+    /* Y tiene que ser LA SUYA, no la maestra: la copia es la que puede tener
+       los gramajes de esa sucursal. */
+    test('…y es la copia de SU sucursal, no la maestra', () => {
+        const c = qr({ suc: 'suc_2' });
+        const r = c._unoPorProductoQR(NEGRONI.filter(x => c._enSucQR(x)));
+        return eq(r[0].id, 'r_s2', r[0].id);
+    });
+    test('la copia de otra sucursal no se le ofrece', () => {
+        const c = qr({ suc: 'suc_2' });
+        return eq(NEGRONI.filter(x => c._enSucQR(x)).map(x => x.id).indexOf('r_s3'), -1, 'fuera');
+    });
+    /* Una receta sin sucursal es del negocio entero (la maestra, o una vieja
+       que nunca se asignó): si se cayera, el catálogo quedaría vacío para quien
+       nunca separó por sucursal. */
+    test('una receta sin sucursal sigue viéndose en todas', () =>
+        eq(qr({ suc: 'suc_9' })._enSucQR({ id: 'r_x', nombre: 'Café' }), true, 'se ve'));
+    test('lo pausado en esa sucursal no aparece', () =>
+        eq(qr({ suc: 'suc_2' })._enSucQR({ id: 'r_y', inactivaEn: ['suc_2'] }), false, 'pausada'));
+    test('…pero sí en las demás', () =>
+        eq(qr({ suc: 'suc_3' })._enSucQR({ id: 'r_y', inactivaEn: ['suc_2'] }), true, 'activa'));
+    test('la carga de recetas ya pasa por el deduplicador', () =>
+        eq(decl('_cargarRecetas').indexOf('_unoPorProductoQR(') > -1, true, 'dedup'));
+
+    /* ── 2) CADA ÁREA VE LO SUYO ── */
+    const CARTA = [
+        { id: 'b1', nombre: 'Negroni', tipo: 'bebidas' },
+        { id: 'b2', nombre: 'Jarabe',  tipo: 'sub-bebidas' },
+        { id: 'a1', nombre: 'Tacos',   tipo: 'alimentos' },
+        { id: 'a2', nombre: 'Salsa',   tipo: 'sub-alimentos' },
+        { id: 'x1', nombre: 'Sin tipo' },
+    ];
+    test('barra ve bebidas', () =>
+        eq(qr({ area: 'barra' })._delAreaQR(CARTA[0], true), true, 'las ve'));
+    /* OJO CON ESTE: "se ve en barra" lo cumple igual una sub-bebida bien
+       clasificada Y una que el sistema no reconoce (lo desconocido se muestra
+       siempre, a propósito). Lo cazó la batería de mutaciones. Se prueba la
+       CLASIFICACIÓN, que no tiene esa salida, y además que NO se cuele en
+       cocina — que es lo que distingue de verdad. */
+    test('…y también sus sub-bebidas (un jarabe es de barra)', () =>
+        eq(qr({ area: 'barra' })._delAreaQR(CARTA[1], true), true, 'las ve'));
+    test('…reconocidas como de barra, no como "no sé qué es"', () =>
+        eq(qr({})._areaDeReceta(CARTA[1]), 'barra', qr({})._areaDeReceta(CARTA[1]) || '(vacío)'));
+    test('…y por eso NO se cuelan en cocina', () =>
+        eq(qr({ area: 'cocina' })._delAreaQR(CARTA[1], true), false, 'fuera'));
+    test('una sub-receta de alimentos se reconoce como de cocina', () =>
+        eq(qr({})._areaDeReceta(CARTA[3]), 'cocina', qr({})._areaDeReceta(CARTA[3]) || '(vacío)'));
+    test('…y no se cuela en barra', () =>
+        eq(qr({ area: 'barra' })._delAreaQR(CARTA[3], true), false, 'fuera'));
+    test('…y NO ve alimentos', () =>
+        eq(qr({ area: 'barra' })._delAreaQR(CARTA[2], true), false, 'fuera'));
+    test('cocina ve alimentos y no bebidas', () => {
+        const c = qr({ area: 'cocina' });
+        return eq(c._delAreaQR(CARTA[2], true) === true && c._delAreaQR(CARTA[0], true) === false,
+                  true, 'separadas');
+    });
+    /* El almacén surte a las dos: acotarlo lo dejaría sin poder registrar la
+       mitad de lo que pasa por sus manos. */
+    test('el almacén ve todo', () => {
+        const c = qr({ area: 'almacen' });
+        return eq(CARTA.every(x => c._delAreaQR(x, true)), true, 'todo');
+    });
+    /* FALLA ABIERTO: lo que no dice a qué área pertenece se muestra siempre.
+       Esconder un insumo sin área capturada deja a alguien sin poder registrar
+       su merma, y no hay cómo resolverlo desde el celular. */
+    test('lo que no declara área se muestra siempre', () =>
+        eq(qr({ area: 'barra' })._delAreaQR(CARTA[4], true), true, 'se muestra'));
+    test('…y un insumo sin área, igual', () =>
+        eq(qr({ area: 'cocina' })._delAreaQR({ id: 'i1', nombre: 'Servilletas' }, false), true, 'se muestra'));
+    test('un insumo SÍ se acota por su área capturada', () => {
+        const c = qr({ area: 'cocina' });
+        return eq(c._delAreaQR({ id: 'i2', area: 'barra' }, false), false, 'fuera');
+    });
+    /* El área del insumo viene escrita por gente: "Barra" y "barra" son la
+       misma. Comparar en crudo escondería media bodega. */
+    test('el área del insumo no distingue mayúsculas', () =>
+        eq(qr({ area: 'barra' })._delAreaQR({ id: 'i3', area: 'Barra' }, false), true, 'la ve'));
+
+    /* Los cuatro buscadores tienen que acotar, no solo uno. */
+    ['filtrarIns', 'filtrarMer', 'filtrarSal', 'filtrarCnt'].forEach(fn =>
+        test(fn + ' acota por área', () =>
+            eq(decl(fn).indexOf('_delAreaQR(') > -1, true, 'acota')));
+    /* Sin esto se elegía barra y la lista se quedaba con lo de cocina hasta
+       escribir algo en el buscador: parecía que el chip no servía. */
+    test('cambiar de área repinta la lista que estás viendo', () =>
+        eq(decl('setArea').indexOf('filtrarIns(') > -1 &&
+           decl('setArea').indexOf('filtrarMer(') > -1 &&
+           decl('setArea').indexOf('filtrarSal(') > -1 &&
+           decl('setArea').indexOf('filtrarCnt(') > -1, true, 'repinta'));
+
+    /* ── 3) CORTESÍAS Y PRÉSTAMOS DE PRODUCTO ── */
+    test('en cortesías se puede elegir producto del menú', () =>
+        eq(ent.indexOf('setSalidaQue(\'producto\')') > -1, true, 'con opción'));
+    test('…y la lista sale del menú, no del catálogo de insumos', () =>
+        eq(decl('_salidaFuente').indexOf('RECETAS') > -1, true, 'del menú'));
+    test('…acotada al área, igual que la merma', () =>
+        eq(decl('filtrarSal').indexOf('_delAreaQR(x, esProd)') > -1, true, 'acotada'));
+    /* Quien aplique la salida tiene que saber si descontar una botella o
+       reventar la receta en sus ingredientes. Sin esta marca, un cóctel de
+       cortesía se descontaría como si fuera un insumo llamado "Negroni". */
+    test('el registro dice si salió un insumo o un producto', () =>
+        eq(decl('_addItem').indexOf('salidaQue:SALIDA_QUE') > -1, true, 'marcado'));
+    test('el menú se carga solo cuando hace falta', () =>
+        eq(decl('setSalidaQue').indexOf('RECETAS === null') > -1, true, 'perezoso'));
+    /* _cargarRecetas la llaman DOS pantallas: si repintara siempre la de merma,
+       pedir el menú desde cortesías escribiría en una lista que no se ve. */
+    test('cargar el menú desde cortesías no repinta la pantalla de merma', () =>
+        eq(decl('_cargarRecetas').indexOf('opts.pintar !== false') > -1, true, 'sin cruzarse'));
+    test('elegir producto y no elegir nada avisa lo que falta', () =>
+        eq(decl('_addItem').indexOf("SALIDA_QUE==='producto'?'Elige el producto del menú.'") > -1,
+           true, 'avisa'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
