@@ -1018,6 +1018,40 @@
    /* La matemática del costeo vive AQUÍ y en ningún otro lado. La pantalla y el
       reporte impreso leen los mismos números: si el papel dijera otra cosa que la
       tabla, no habría forma de saber cuál de las dos miente. */
+   /* ── EL SERVICIO DE BOTELLA ──────────────────────────────────────────────
+      Una botella no se vende sola: se vende con su servicio de refrescos. El
+      costeo por copa ya contemplaba el mezclador del trago, pero la botella se
+      quedaba en seco — el precio sugerido salía como si el cliente se llevara
+      la botella y nada más, y los 5 refrescos se los regalaba el negocio.
+
+      El número es INDEPENDIENTE del de la copa a propósito: un trago lleva 1
+      refresco y una botella 5, y amarrar los dos obligaba a elegir cuál de los
+      dos precios salía mal.
+
+      REGLA (la misma que ya usa el trago, y por eso no se discute aquí): el
+      refresco se suma A COSTO, sin multiplicarlo por el factor. El margen se
+      cobra sobre el destilado, que es lo que el negocio vende; el refresco se
+      repone. Multiplicarlo también sacaría un precio que nadie paga.
+
+      Se saca aparte porque lo usan CUATRO pantallas: las tarjetas del editor,
+      la utilidad, la tabla de costeo y el reporte impreso. Escrita cuatro
+      veces, una se queda atrás y el papel dice un precio distinto al de la
+      pantalla. */
+   function _mezBotDatos(p, todos){
+       var refIns = (p && p.mezcladorId)
+           ? (todos || getInsumos()).find(function(x){ return x.id === p.mezcladorId; })
+           : null;
+       var piezas = parseFloat(p && p.mezcladoresBot) || 0;
+       var costoUno = refIns ? _refrescoCostoPorPieza(refIns) : 0;
+       return {
+           refIns: refIns,
+           piezas: piezas,
+           /* Sin refresco elegido no hay servicio que costear, por más piezas
+              que se capturen: no se sabe qué cuesta. */
+           costo:  (refIns && piezas > 0) ? piezas * costoUno : 0
+       };
+   }
+
    function _costeoCopaDatos(ins, todos){
        var p = (ins.presentaciones||[])[0] || {};
        var cml = _costoPorMLp(p);
@@ -1029,6 +1063,8 @@
        var fCopa = parseFloat(p.factorCopa)||3.3;
        var costoBot = cml*toML(p.contNeto, p.umContenido||'ML');
        var fBot = parseFloat(p.factorBotella)||2.5;
+       var mezBot = _mezBotDatos(p, todos);
+       var sugBotSolo = costoBot*fBot;
        return {
            p: p,
            costoOz:   cml*OZ_ML,
@@ -1042,7 +1078,15 @@
            tieneMez:  !!p.mezcladorId,
            costoBot:  costoBot,
            fBot:      fBot,
-           sugBot:    costoBot*fBot,
+           sugBot:    sugBotSolo,
+           // El servicio: cuántos refrescos van con la botella y qué cuestan.
+           mezBotPz:   mezBot.piezas,
+           mezBotCost: mezBot.costo,
+           // Precio sugerido CON el servicio (refresco a costo, ver _mezBotDatos).
+           sugBotServ: mezBot.costo > 0 ? sugBotSolo + mezBot.costo : 0,
+           // Lo que de verdad cuesta despachar la botella con sus refrescos:
+           // contra esto se mide la utilidad, no contra la botella sola.
+           costoBotServ: costoBot + mezBot.costo,
            cartaBot:  parseFloat(String(p.precioCartaBot||'').replace(/,/g,''))||0
        };
    }
@@ -1086,7 +1130,9 @@
            '<th style="'+_CTH+'">Costo unit.</th><th style="'+_CTH+'">Costo/oz</th><th style="'+_CTH+'">Costo/copa</th>'+
            '<th style="'+_CTH+'">Sug. copa</th><th style="'+_CTH+'">Carta copa</th><th style="'+_CTH+'">Utilidad copa</th>'+
            '<th style="'+_CTH+';text-align:center">Mezcl.</th>'+
-           '<th style="'+_CTH+'">Costo bot.</th><th style="'+_CTH+'">Sug. bot.</th><th style="'+_CTH+'">Carta bot.</th><th style="'+_CTH+'">Utilidad bot.</th></tr>';
+           '<th style="'+_CTH+'">Costo bot.</th><th style="'+_CTH+'">Sug. bot.</th>'+
+           '<th style="'+_CTH+'">Bot. + servicio</th>'+
+           '<th style="'+_CTH+'">Carta bot.</th><th style="'+_CTH+'">Utilidad bot.</th></tr>';
        var rows = lista.map(function(ins){
            var D = _costeoCopaDatos(ins, todos), p = D.p;
            var costoOz = D.costoOz, costoCopa = D.costoCopa, fCopa = D.fCopa, sugCopa = D.sugCopa;
@@ -1104,12 +1150,20 @@
                '<td style="'+_CTD+';text-align:center">'+(p.mezcladorId?'🥤':'<span style="color:var(--text-dim)">—</span>')+'</td>'+
                '<td style="'+_CTD+'">'+_cMoney(costoBot)+'</td>'+
                '<td style="'+_CTD+'">'+_cMoney(sugBot)+'<span style="color:var(--text-dim);font-size:10px"> ×'+fBot+'</span></td>'+
+               /* La botella con su servicio de refrescos. Sin servicio capturado
+                  va una raya, no un cero: un cero se lee como "sale gratis". */
+               '<td style="'+_CTD+'">'+(D.sugBotServ>0
+                   ? _cMoney(D.sugBotServ)+'<span style="color:var(--text-dim);font-size:10px"> +'+D.mezBotPz+' refr.</span>'
+                   : '<span style="color:var(--text-dim)">—</span>')+'</td>'+
                '<td style="'+_CTD+';color:var(--accent)">'+_cMoney(cartaBot)+'</td>'+
-               '<td style="'+_CTD+'">'+_cUtil(cartaBot, costoBot)+'</td>'+
+               /* La utilidad se mide contra lo que cuesta DESPACHAR la botella:
+                  con sus refrescos si los lleva. Medirla contra la botella sola
+                  inflaba el margen justo en el producto de ticket más alto. */
+               '<td style="'+_CTD+'">'+_cUtil(cartaBot, D.costoBotServ)+'</td>'+
                '</tr>';
        }).join('');
        return _costeoSecTitle('🥃 Destilados · Licores · Vinos', lista.length)+
-           '<div class="tabla-wrap"><table style="min-width:1140px"><thead>'+head+'</thead><tbody>'+rows+'</tbody></table></div>';
+           '<div class="tabla-wrap"><table style="min-width:1260px"><thead>'+head+'</thead><tbody>'+rows+'</tbody></table></div>';
    }
 
    function _costeoTablaPieza(lista){
@@ -1292,10 +1346,10 @@
                '<table class="rt tnum" style="font-size:10.5px"><thead><tr>' +
                    '<th class="w" style="width:20%">Bebida</th>' +
                    '<th>Costo unit.</th><th>Costo/oz</th><th>Costo/copa</th><th>Sug. copa</th><th>Carta copa</th><th>Utilidad copa</th>' +
-                   '<th>Costo bot.</th><th>Sug. bot.</th><th>Carta bot.</th><th>Utilidad bot.</th>' +
+                   '<th>Costo bot.</th><th>Sug. bot.</th><th>Bot. + servicio</th><th>Carta bot.</th><th>Utilidad bot.</th>' +
                '</tr></thead><tbody>' +
                _agruparPDF(g1, _grupoIns).map(function(G){
-               return _filaGrupoPDF(G.nombre, G.items.length, '', 11) + G.items.map(function(ins){
+               return _filaGrupoPDF(G.nombre, G.items.length, '', 12) + G.items.map(function(ins){
                    var D = _costeoCopaDatos(ins, todos), p = D.p;
                    var cu = (parseFloat(p.costoUnitario) > 0)
                        ? fmtMXN(parseFloat(p.costoUnitario)) + '/' + (p.umCosto || 'LT') : '—';
@@ -1306,7 +1360,13 @@
                        '<td style="font-weight:700">' + _u(D.cartaCopa) + '</td><td>' + _ut(D.cartaCopa, D.costoTrago) + '</td>' +
                        '<td>' + _u(D.costoBot) + '</td>' +
                        '<td>' + _u(D.sugBot) + '<span style="color:#aaa;font-size:9.5px"> ×' + D.fBot + '</span></td>' +
-                       '<td style="font-weight:700">' + _u(D.cartaBot) + '</td><td>' + _ut(D.cartaBot, D.costoBot) + '</td>' +
+                       '<td>' + (D.sugBotServ > 0
+                           ? _u(D.sugBotServ) + '<span style="color:#aaa;font-size:9.5px"> +' + D.mezBotPz + ' refr.</span>'
+                           : '—') + '</td>' +
+                       /* Contra el costo de DESPACHAR la botella, refrescos
+                          incluidos: si el papel dijera otro margen que la
+                          pantalla, no habría forma de saber cuál miente. */
+                       '<td style="font-weight:700">' + _u(D.cartaBot) + '</td><td>' + _ut(D.cartaBot, D.costoBotServ) + '</td>' +
                    '</tr>';
                }).join(''); }).join('') + '</tbody></table>';
        }
@@ -2926,6 +2986,10 @@
            masaDrenada: '', umMasaDrenada: 'G', rendimiento: '', umRendimiento: 'OZ',
            tamanoCopa: '', umTamanoCopa: 'ML', umLectura: '',
            factorCopa: '3.3', factorBotella: '2.5', factorPieza: '2.0', costoPieza: '',
+           /* 5 es el servicio de siempre. Va como valor de arranque solo en
+              presentaciones NUEVAS: las ya guardadas se quedan sin él, así que
+              a nadie le cambia un precio de la noche a la mañana. */
+           mezcladoresBot: '5',
            proveedor: '', zona: '', fecha: hoy,
            precio: '', costoUnitario: '', umCosto: 'LT',
            incluyeImpuesto: '0', ivaCheck: '0', iepsCheck: '0', iepsTasa: '26.5', notas: '',
@@ -3675,7 +3739,7 @@
    
        // ── 3. Actualizar campos calculados en DOM ────────────────────
        const CALCULA_CRISTAL = ['contNeto','pesoUnidad','umContenido','umPeso'];
-       const CALCULA_COPA    = ['costoUnitario','umCosto','tamanoCopa','umTamanoCopa','contNeto','umContenido','precio','factorCopa','factorBotella','factorPieza'];
+       const CALCULA_COPA    = ['costoUnitario','umCosto','tamanoCopa','umTamanoCopa','contNeto','umContenido','precio','factorCopa','factorBotella','factorPieza','mezcladoresBot'];
    
        if (CALCULA_CRISTAL.includes(campo)) {
            const el = document.getElementById(`cristal-${i}`);
@@ -4015,9 +4079,17 @@
                    </select>
                </div>
                <div class="meta-item">
-                   <label>Mezcladores (pzas)</label>
+                   <label>Mezcladores por copa (pzas)</label>
                    <input type="number" value="${p.mezcladores||''}" placeholder="0" min="0" step="1"
                        oninput="updPres(${i},'mezcladores',this.value);actualizarCopaCosto(${i})">
+               </div>
+               <!-- INDEPENDIENTE del de la copa: una botella se vende con su
+                    servicio (5 refrescos es lo normal), y ese número no tiene
+                    por qué ser el mismo que lleva un trago suelto. -->
+               <div class="meta-item">
+                   <label>Mezcladores por botella (pzas)</label>
+                   <input type="number" value="${p.mezcladoresBot||''}" placeholder="5" min="0" step="1"
+                       oninput="updPres(${i},'mezcladoresBot',this.value);actualizarCopaCosto(${i})">
                </div>
                <div class="meta-item">
                    <label>Mezclador (refresco)</label>
@@ -4129,8 +4201,14 @@
        var items = [];
        if (precioCopa > 0 && costoTrago > 0)
            items.push(_utilChip(mezCost > 0 ? 'Utilidad trago' : 'Utilidad copa', (precioCopa - costoTrago)/costoTrago*100, precioCopa, costoTrago));
-       if (precioBot > 0 && costoBot > 0)
-           items.push(_utilChip('Utilidad botella', (precioBot - costoBot)/costoBot*100, precioBot, costoBot));
+       /* Si la botella va con 5 refrescos, esos refrescos cuestan. Medir la
+          utilidad contra la botella sola inflaba el margen justo en el producto
+          de ticket más alto. Misma regla que la copa con su trago. */
+       var mezBotU = _mezBotDatos(p);
+       var costoBotReal = costoBot + mezBotU.costo;
+       if (precioBot > 0 && costoBotReal > 0)
+           items.push(_utilChip(mezBotU.costo > 0 ? 'Utilidad bot. + servicio' : 'Utilidad botella',
+               (precioBot - costoBotReal)/costoBotReal*100, precioBot, costoBotReal));
        if (!items.length) return '';
        return '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">' + items.join('') + '</div>';
    }
@@ -4619,6 +4697,7 @@
        var precioCopaAuto = costoCopaNum * fCopa;          // markup SOLO sobre la copa
        var precioTrago    = precioCopaAuto + mezCost;      // + mezclador a costo (sin multiplicar)
        var precioBotAuto  = costoBot > 0 ? (costoBot * fBot).toFixed(2) : null;
+       var mezBot         = _mezBotDatos(p);
 
        var cards = [];
        cards.push(_cardCosteo('var(--border)','var(--text-dim)','var(--text)','Costo copa', fmtMXN(copa.costoCopa), (p.tamanoCopa||0)+' '+(p.umTamanoCopa||'ML')));
@@ -4626,7 +4705,14 @@
        if (mezCost > 0)
            cards.push(_cardCosteo('var(--green)','var(--green)','var(--green)','Precio trago', fmtMXN(precioTrago), 'copa ×'+fCopa+' + '+fmtMXN(mezCost)+' mezcl.'));
        cards.push(_cardCosteo('var(--border)','var(--text-dim)','var(--text)','Costo botella', costoBot>0?fmtMXN(costoBot):'—', contML>0?contML+' ML':'sin contenido'));
-       cards.push(_cardCosteo('var(--green)','var(--green)','var(--green)','Precio bot. ×'+fBot, precioBotAuto?fmtMXN(precioBotAuto):'—', 'sugerido carta'));
+       cards.push(_cardCosteo('var(--green)','var(--green)','var(--green)','Precio bot. ×'+fBot, precioBotAuto?fmtMXN(precioBotAuto):'—', mezBot.costo>0?'sin refrescos':'sugerido carta'));
+       /* La botella CON su servicio. Solo sale si hay refresco elegido y piezas
+          capturadas: una tarjeta que dice "+0 refrescos" no informa nada. */
+       if (mezBot.costo > 0 && precioBotAuto)
+           cards.push(_cardCosteo('var(--blue,#7ab8f5)','var(--blue,#7ab8f5)','var(--blue,#7ab8f5)',
+               'Bot. + '+mezBot.piezas+' refr.',
+               fmtMXN(parseFloat(precioBotAuto) + mezBot.costo),
+               'bot. ×'+fBot+' + '+fmtMXN(mezBot.costo)+' refr.'));
        return '<div style="display:grid;grid-template-columns:repeat('+cards.length+',1fr);gap:8px;margin-bottom:10px">' + cards.join('') + '</div>';
    }
 

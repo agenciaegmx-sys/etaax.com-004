@@ -13198,6 +13198,128 @@ console.log('\n══ BG6 · El QR de inventarios: una receta, y de su área ═
            true, 'avisa'));
 }
 
+/* ═══════════ SUITE BG7 · LA BOTELLA SE VENDE CON SU SERVICIO ═══════════════
+   Una botella de destilado no se vende sola: se vende con sus refrescos. El
+   costeo por copa ya contemplaba el mezclador del trago —y ese funciona bien—,
+   pero la botella se quedaba en seco: el precio sugerido salía como si el
+   cliente se llevara la botella y nada más, y los 5 refrescos se los regalaba
+   el negocio. En el producto de ticket más alto.
+
+   El número de mezcladores de la BOTELLA es independiente del de la copa a
+   propósito: un trago lleva 1 refresco y una botella 5. Amarrar los dos
+   obligaba a elegir cuál de los dos precios salía mal.                       */
+console.log('\n══ BG7 · La botella se vende con su servicio ══');
+{
+    const ins = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.js'), 'utf8');
+    const decl = (fn) => {
+        const i = ins.indexOf('function ' + fn + '(');
+        if (i < 0) return '';
+        const abre = ins.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < ins.length) {
+            if (ins[j] === '{') prof++;
+            else if (ins[j] === '}') { prof--; if (!prof) return ins.slice(i, j + 1); }
+            j++;
+        }
+        return '';
+    };
+
+    /* La fórmula REAL, corrida con un refresco de costo conocido. */
+    function calc(p, costoRefresco) {
+        const ctx = { console, JSON, Object, Array, String, Boolean, parseFloat, Math };
+        ctx.window = ctx;
+        vm.createContext(ctx);
+        vm.runInContext(
+            "function getInsumos(){ return [{ id:'ref1', nombre:'Refresco' }]; }" +
+            "function _refrescoCostoPorPieza(){ return " + costoRefresco + "; }", ctx);
+        vm.runInContext(decl('_mezBotDatos'), ctx, { filename: 'insumos.js' });
+        return ctx._mezBotDatos(p);
+    }
+
+    test('5 refrescos a $12 cuestan $60 de servicio', () =>
+        eq(calc({ mezcladorId: 'ref1', mezcladoresBot: '5' }, 12).costo, 60, 'servicio'));
+    test('el número de refrescos de la botella sale de SU campo', () =>
+        eq(calc({ mezcladorId: 'ref1', mezcladoresBot: '3' }, 12).piezas, 3, 'tres'));
+    /* Lo que pidió Edwin: independiente del de la copa. Si leyera `mezcladores`
+       (el del trago), la botella heredaría 1 refresco y el precio saldría mal. */
+    test('…y NO del de la copa: son independientes', () =>
+        eq(calc({ mezcladorId: 'ref1', mezcladores: '1', mezcladoresBot: '5' }, 12).piezas, 5,
+           'el de la botella'));
+    test('sin el campo capturado no hay servicio que cobrar', () =>
+        eq(calc({ mezcladorId: 'ref1' }, 12).costo, 0, 'cero'));
+    /* Sin refresco ELEGIDO no se sabe qué cuesta: capturar "5" sin decir 5 de
+       qué no puede inventar un costo. */
+    test('sin refresco elegido tampoco, por más piezas que se capturen', () =>
+        eq(calc({ mezcladoresBot: '5' }, 12).costo, 0, 'cero'));
+    test('un campo vacío no truena', () =>
+        eq(calc({ mezcladorId: 'ref1', mezcladoresBot: '' }, 12).costo, 0, 'cero'));
+
+    /* ── Los dos precios que pidió ver ── */
+    /* REGLA, la misma que ya usa el trago: el refresco se suma A COSTO, sin
+       multiplicarlo por el factor. El margen se cobra sobre el destilado, que
+       es lo que el negocio vende; el refresco se repone. */
+    test('el refresco se suma a COSTO, no multiplicado por el factor', () =>
+        eq(decl('_costeoCopaDatos').indexOf('sugBotSolo + mezBot.costo') > -1, true, 'a costo'));
+    test('el precio SIN refrescos sigue siendo costo × factor', () =>
+        eq(decl('_costeoCopaDatos').indexOf('var sugBotSolo = costoBot*fBot;') > -1, true, 'sin cambio'));
+    /* Si no hay servicio, `sugBotServ` es 0 y la columna pinta una raya: un
+       cero se lee como "sale gratis". */
+    test('sin servicio capturado, el precio con servicio no se inventa', () =>
+        eq(decl('_costeoCopaDatos').indexOf('mezBot.costo > 0 ? sugBotSolo + mezBot.costo : 0') > -1,
+           true, 'no se inventa'));
+
+    /* ── La utilidad, contra lo que de verdad cuesta despachar ── */
+    /* Medir la utilidad de la botella contra la botella SOLA, cuando lleva 5
+       refrescos encima, infla el margen justo en el producto de ticket más
+       alto — y es el número con el que se decide el precio de la carta. */
+    test('el costo real de la botella incluye sus refrescos', () =>
+        eq(decl('_costeoCopaDatos').indexOf('costoBotServ: costoBot + mezBot.costo') > -1,
+           true, 'incluye'));
+    test('la utilidad en pantalla se mide contra ese costo real', () =>
+        eq(decl('_costeoTablaCopa').indexOf('_cUtil(cartaBot, D.costoBotServ)') > -1, true, 'real'));
+    test('…y la del editor también', () =>
+        eq(decl('_utilidadHTML').indexOf('var costoBotReal = costoBot + mezBotU.costo;') > -1,
+           true, 'real'));
+    /* Si el papel dijera otro margen que la pantalla, no habría forma de saber
+       cuál de las dos miente. */
+    test('…y la del PDF impreso, la misma', () =>
+        eq(ins.indexOf('_ut(D.cartaBot, D.costoBotServ)') > -1, true, 'misma'));
+    test('la utilidad cambia de nombre cuando hay servicio, para no confundir', () =>
+        eq(decl('_utilidadHTML').indexOf("'Utilidad bot. + servicio'") > -1, true, 'lo dice'));
+
+    /* ── Que esté donde se captura y donde se lee ── */
+    test('el editor tiene su propio campo, separado del de la copa', () =>
+        eq(ins.indexOf("updPres(${i},'mezcladoresBot',this.value)") > -1, true, 'con campo'));
+    test('…etiquetado para que no se confunda con el de la copa', () =>
+        eq(ins.indexOf('Mezcladores por botella (pzas)') > -1 &&
+           ins.indexOf('Mezcladores por copa (pzas)') > -1, true, 'claro'));
+    test('tocarlo recalcula en vivo', () =>
+        eq(/CALCULA_COPA\s*=\s*\[[^\]]*'mezcladoresBot'/.test(ins), true, 'recalcula'));
+    test('la tarjeta del editor muestra la botella con su servicio', () =>
+        eq(decl('_costeoCardsHTML').indexOf("' refr.'") > -1, true, 'con tarjeta'));
+    test('…y solo cuando hay servicio que mostrar', () =>
+        eq(decl('_costeoCardsHTML').indexOf('if (mezBot.costo > 0 && precioBotAuto)') > -1,
+           true, 'solo si aplica'));
+    test('la tabla de costeo trae la columna', () =>
+        eq(decl('_costeoTablaCopa').indexOf('Bot. + servicio') > -1, true, 'con columna'));
+    test('…y el reporte impreso también', () =>
+        eq(ins.indexOf("'<th>Costo bot.</th><th>Sug. bot.</th><th>Bot. + servicio</th>") > -1,
+           true, 'impreso'));
+    /* La tabla del PDF lleva una fila de grupo que abarca N columnas: si no se
+       actualiza el conteo, el encabezado de grupo queda corrido una celda. */
+    test('el PDF ajusta el ancho de la fila de grupo a la columna nueva', () =>
+        eq(ins.indexOf("_filaGrupoPDF(G.nombre, G.items.length, '', 12)") > -1, true, '12 columnas'));
+
+    /* ── Nada cambia para lo que ya está guardado ── */
+    /* El valor de arranque va solo en presentaciones NUEVAS: si se aplicara a
+       las guardadas, a todo el mundo le cambiaría el margen de sus botellas de
+       la noche a la mañana, sin tocar nada. */
+    test('el servicio típico (5) arranca solo en presentaciones nuevas', () =>
+        eq(/mezcladoresBot:\s*'5'/.test(ins), true, 'de arranque'));
+    test('…y una presentación ya guardada sin el campo no cambia de precio', () =>
+        eq(calc({ mezcladorId: 'ref1', mezcladores: '1' }, 12).costo, 0, 'sin cambio'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
