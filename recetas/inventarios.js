@@ -2843,6 +2843,195 @@ function finalizarInventarioHistorial(id) {
     });   // cierra _conCierreOperativo
 }
 
+/* ══ AJUSTES DE UN INVENTARIO ══════════════════════════════════════════════
+   Dos cosas que no se podían hacer y que en la operación hacen falta todo el
+   tiempo:
+
+   1. REABRIR. Un inventario se finaliza y aparece una entrada que no se había
+      capturado, o un conteo que faltaba. Hasta ahora no había vuelta atrás:
+      el número quedaba mal para siempre y la única salida era borrar el
+      inventario entero y rehacerlo.
+
+   2. CORREGIR LAS HORAS. El inventario parte el tiempo en dos: lo registrado
+      ANTES de su cierre operativo cuenta en él, lo de después se va al
+      siguiente. Si esa hora quedó mal —se cerró a las 11 pero el conteo fue a
+      las 2— los movimientos caen en el periodo equivocado. Cambiarla los
+      reacomoda solos, porque todo el sistema lee ese mismo sello.
+
+   LAS DOS PIDEN CONTRASEÑA. No es burocracia: mueven dinero de un periodo a
+   otro y el que las toca por error no se entera hasta el corte del mes. */
+
+function _invPorId(id) {
+    return (getInventarios() || []).find(function (x) { return x.id === id; }) || null;
+}
+
+/* Guarda UN inventario: local y nube.
+   El upsert a la nube se FUERZA a propósito. `setInventarios` compara el MISMO
+   objeto —se mutó in-place— así que su diff no ve el cambio, y sin esto el
+   ajuste viviría solo en este equipo y la nube lo revertiría al recargar. Es
+   exactamente lo que ya le pasó a «finalizar». */
+function _guardarUno(inv) {
+    if (!inv) return;
+    var lista = getInventarios();
+    var idx = lista.findIndex(function (x) { return x.id === inv.id; });
+    if (idx >= 0) lista[idx] = inv;
+    setInventarios(lista);
+    try { _sbUpInv(inv); } catch (e) { console.warn('[inv guardar]', e); }
+}
+
+/* ISO → lo que entiende un <input type="datetime-local"> (sin zona, minutos). */
+function _isoALocal(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    var p = function (n) { return ('0' + n).slice(-2); };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+           'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+function reabrirInventario(id) {
+    if (typeof _exigeInv === 'function' && !_exigeInv('cerrar', 'No puedes reabrir inventarios.')) return;
+    var inv = _invPorId(id);
+    if (!inv) return;
+    if (!inv.cerrado) { alert('Este inventario ya está abierto.'); return; }
+    _solicitarClave('Reabrir inventario: ' + (inv.nombre || 'sin nombre'), function () {
+        inv.cerrado = false;
+        /* El sello de cierre se CONSERVA. Es la hora hasta la que cuentan sus
+           movimientos, y borrarla al reabrir mandaría todo lo del periodo al
+           siguiente inventario sin que nadie lo pidiera. Si hay que moverla,
+           se mueve a propósito desde «Ajustar horarios». */
+        _guardarUno(inv);
+        renderStats(); renderHistorial();
+        alert('✅ Inventario reabierto.\n\nPuedes continuar capturando. La hora de cierre se conservó: si también hay que moverla, usa «Ajustar horarios».');
+    });
+}
+
+function ajustarHorariosInv(id) {
+    if (typeof _exigeInv === 'function' && !_exigeInv('cerrar', 'No puedes ajustar inventarios.')) return;
+    var inv = _invPorId(id);
+    if (!inv) return;
+
+    var ov = document.createElement('div');
+    ov.id = 'ovHorariosInv';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.74);display:flex;' +
+        'align-items:center;justify-content:center;padding:22px';
+    var cierre = _isoALocal(inv.cierreOperativo || inv.cerradoAt);
+    var hAp = /^([01]?\d|2[0-3]):([0-5]\d)/.test(String(inv.turno || '')) ? String(inv.turno).slice(0, 5) : '';
+    ov.innerHTML =
+        '<div style="background:var(--surface,#14130f);border:1px solid var(--border,#2a2824);border-radius:16px;' +
+             'max-width:460px;width:100%;padding:26px 26px 20px;box-shadow:0 22px 64px rgba(0,0,0,.6);' +
+             'font-family:\'DM Sans\',sans-serif;color:var(--text,#f0ece6)">' +
+          '<div style="font-size:10px;letter-spacing:2.4px;text-transform:uppercase;color:var(--text-dim,#6b6862)">Ajustes del inventario</div>' +
+          '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:25px;letter-spacing:1.4px;margin:6px 0 12px;line-height:1.1">' +
+            'Horarios de apertura y cierre</div>' +
+          '<div style="font-size:12.5px;color:var(--text-muted,#a8a29a);line-height:1.6;margin-bottom:16px">' +
+            'La hora de cierre es la que <b style="color:var(--text,#f0ece6)">parte el periodo</b>: lo registrado antes ' +
+            'cuenta en este inventario, lo de después se va al siguiente. Moverla reacomoda los movimientos sola.</div>' +
+          '<label style="display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim,#6b6862);margin-bottom:6px">Apertura</label>' +
+          '<div style="display:flex;gap:8px;margin-bottom:14px">' +
+            '<input type="date" id="ahFecha" value="' + etx(inv.fecha || '') + '" style="flex:2;box-sizing:border-box;background:var(--surface2,#1a1916);' +
+              'border:1px solid var(--border,#2a2824);color:var(--text,#f0ece6);border-radius:9px;padding:10px;font-family:inherit;font-size:14px">' +
+            '<input type="time" id="ahHora" value="' + etx(hAp) + '" style="flex:1;box-sizing:border-box;background:var(--surface2,#1a1916);' +
+              'border:1px solid var(--border,#2a2824);color:var(--text,#f0ece6);border-radius:9px;padding:10px;font-family:inherit;font-size:14px">' +
+          '</div>' +
+          '<label style="display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim,#6b6862);margin-bottom:6px">Cierre operativo</label>' +
+          '<input type="datetime-local" id="ahCierre" value="' + etx(cierre) + '" style="width:100%;box-sizing:border-box;background:var(--surface2,#1a1916);' +
+            'border:1px solid var(--border,#2a2824);color:var(--text,#f0ece6);border-radius:9px;padding:10px;font-family:inherit;font-size:14px">' +
+          '<div style="font-size:11.5px;color:var(--text-dim,#6b6862);line-height:1.5;margin-top:7px">' +
+            (inv.cerrado ? 'Vacío = sin sello: contaría todo lo registrado hasta hoy.' : 'Este inventario sigue abierto; el cierre se sella al finalizarlo.') + '</div>' +
+          '<div id="ahErr" style="font-size:12px;color:var(--red,#e05a3a);margin-top:10px;min-height:16px"></div>' +
+          '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">' +
+            '<button id="ahCancel" style="background:transparent;border:1px solid var(--border,#2a2824);color:var(--text-muted,#a8a29a);' +
+              'border-radius:9px;padding:10px 18px;font-family:inherit;font-size:13.5px;cursor:pointer">Cancelar</button>' +
+            '<button id="ahOk" style="background:var(--green,#3dbe7a);border:none;color:#0a0908;border-radius:9px;' +
+              'padding:10px 22px;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer">Guardar horarios</button>' +
+          '</div>' +
+        '</div>';
+    document.body.appendChild(ov);
+    function cerrar() { try { ov.remove(); } catch (e) {} }
+    ov.querySelector('#ahCancel').onclick = cerrar;
+    ov.onclick = function (e) { if (e.target === ov) cerrar(); };
+    ov.querySelector('#ahOk').onclick = function () {
+        var fecha  = String((ov.querySelector('#ahFecha') || {}).value || '').trim();
+        var hora   = String((ov.querySelector('#ahHora')  || {}).value || '').trim();
+        var cierreV= String((ov.querySelector('#ahCierre')|| {}).value || '').trim();
+        var err    = ov.querySelector('#ahErr');
+        if (!fecha) { err.textContent = 'La fecha de apertura es obligatoria.'; return; }
+        /* Un cierre ANTES de la apertura deja el periodo al revés: ningún
+           movimiento cae dentro y el inventario sale en ceros, sin decir por
+           qué. Se para aquí, que es donde se puede corregir. */
+        if (cierreV) {
+            var ap = new Date(fecha + 'T' + (hora || '00:00') + ':00');
+            if (new Date(cierreV) < ap) {
+                err.textContent = 'El cierre no puede ser anterior a la apertura.';
+                return;
+            }
+        }
+        cerrar();
+        _solicitarClave('Ajustar horarios: ' + (inv.nombre || 'sin nombre'), function () {
+            inv.fecha = fecha;
+            if (hora) inv.turno = hora; else delete inv.turno;
+            if (cierreV) inv.cierreOperativo = new Date(cierreV).toISOString();
+            else delete inv.cierreOperativo;
+            _guardarUno(inv);
+            renderStats(); renderHistorial();
+            alert('✅ Horarios actualizados.\n\nLos movimientos del periodo se reacomodan solos con la nueva hora de cierre.');
+        });
+    };
+}
+
+/* ══ MENÚ DE TRES PUNTOS ═══════════════════════════════════════════════════
+   Ver, Continuar/Editar, Ajustar horarios, Reabrir, Finalizar y Eliminar en
+   una lista, en vez de tres botones peleando por el ancho de la fila — y con
+   el ✅ de finalizar a un pixel del ▶ de continuar. Lo destructivo va abajo,
+   separado por una línea, que es donde el dedo no llega por inercia. */
+function _invCerrarMenus() {
+    var v = document.querySelectorAll('.inv-menu');
+    for (var i = 0; i < v.length; i++) { try { v[i].remove(); } catch (e) {} }
+}
+function _invMi(ic, txt, accion, peligro) {
+    return '<button onclick="_invCerrarMenus();' + accion + '" ' +
+        'style="display:flex;align-items:center;gap:9px;width:100%;background:none;border:none;' +
+        'padding:9px 11px;border-radius:7px;cursor:pointer;font-family:inherit;font-size:13px;text-align:left;' +
+        'color:' + (peligro ? 'var(--red)' : 'var(--text)') + '" ' +
+        'onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'none\'">' +
+        '<span style="width:16px;text-align:center">' + ic + '</span>' + txt + '</button>';
+}
+function _invMenu(ev, id) {
+    ev.stopPropagation();
+    _invCerrarMenus();
+    var inv = _invPorId(id);
+    if (!inv) return;
+    var esLev = inv.tipoInv === 'primer_lev';
+    var q = String(id).replace(/'/g, "\\'");
+    var m = document.createElement('div');
+    m.className = 'inv-menu';
+    var r = ev.currentTarget.getBoundingClientRect();
+    m.style.cssText = 'position:fixed;z-index:10001;min-width:218px;background:var(--surface);' +
+        'border:1px solid var(--border);border-radius:10px;padding:5px;box-shadow:0 14px 40px rgba(0,0,0,.5);' +
+        'top:' + Math.min(r.bottom + 6, window.innerHeight - 280) + 'px;left:' + Math.max(10, r.right - 218) + 'px';
+    var html = _invMi('👁️', 'Ver', "verInventarioTour('" + q + "')");
+    if (esLev)             html += _invMi('✏️', 'Ajustar línea base', "abrirInventario('" + q + "')");
+    else if (inv.cerrado)  html += _invMi('✏️', 'Editar', "editarInventario('" + q + "')");
+    else                   html += _invMi('▶', 'Continuar', "abrirInventario('" + q + "')");
+    html += _invMi('⏱️', 'Ajustar horarios', "ajustarHorariosInv('" + q + "')");
+    if (!esLev) {
+        html += '<div style="height:1px;background:var(--border);margin:5px 2px"></div>';
+        html += inv.cerrado
+            ? _invMi('🔓', 'Reabrir inventario', "reabrirInventario('" + q + "')")
+            : _invMi('✅', 'Finalizar inventario', "finalizarInventarioHistorial('" + q + "')");
+    }
+    html += '<div style="height:1px;background:var(--border);margin:5px 2px"></div>';
+    html += _invMi('🗑️', 'Eliminar', "eliminarInventario('" + q + "')", true);
+    m.innerHTML = html;
+    document.body.appendChild(m);
+    setTimeout(function () { document.addEventListener('click', _invCerrarMenus, { once: true }); }, 0);
+}
+function _invBtnMenu(id) {
+    return '<button class="btn-vista" onclick="_invMenu(event,\'' + String(id).replace(/'/g, "\\'") + '\')" ' +
+        'title="Acciones" style="padding:4px 11px;font-size:13px;line-height:1">⋯</button>';
+}
+
 function renderHistTabla(lista) {
     return `<div class="card" style="max-width:none;margin-top:12px">
         <div class="card-body" style="padding:0"><div class="tabla-wrap"><table>
@@ -2858,16 +3047,6 @@ function renderHistTabla(lista) {
                 // no lleva Continuar/Finalizar (eso confundía y "revivía" el botón). Se abre
                 // para ajustarlo y siempre sirve de referencia de existencia anterior.
                 const esLev = inv.tipoInv === 'primer_lev';
-                const accionBtn = esLev
-                    ? `<button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px;color:var(--viol);border-color:var(--viol)"
-                        onclick="abrirInventario('${inv.id}')">✏️ Ajustar línea base</button>`
-                    : inv.cerrado
-                    ? `<button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px;color:var(--accent);border-color:var(--accent)"
-                        onclick="editarInventario('${inv.id}')">✏️ Editar</button>`
-                    : `<button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px"
-                        onclick="abrirInventario('${inv.id}')">▶ Continuar</button>
-                       <button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px;color:var(--green);border-color:var(--green)"
-                        onclick="finalizarInventarioHistorial('${inv.id}')">✅ Finalizar</button>`;
                 const estadoPill = esLev
                     ? `<span class="pill" style="background:rgba(155,141,232,.15);color:var(--viol);border:1px solid rgba(155,141,232,.35)">Línea base</span>`
                     : `<span class="pill ${inv.cerrado?'pill-green':'pill-amber'}">${inv.cerrado?'Cerrado':'Abierto'}</span>`;
@@ -2880,13 +3059,10 @@ function renderHistTabla(lista) {
                     <td style="color:var(--green);font-weight:500">$${_money2(inv.capitalCarta)}</td>
                     <td style="color:${dif>=0?'var(--green)':'var(--red)'};font-weight:500">${dif>=0?'+':''}$${_money2(dif)}</td>
                     <td>${estadoPill}</td>
-                    <td style="text-align:right;white-space:nowrap">
-                        <button class="btn-vista" style="padding:4px 10px;font-size:11px;margin-right:4px"
-                            onclick="verInventarioTour('${inv.id}')">👁️ Ver</button>
-                        ${accionBtn}
-                        <button class="btn-vista" style="padding:4px 10px;font-size:11px;color:var(--red);border-color:var(--red)"
-                            onclick="eliminarInventario('${inv.id}')">🗑️</button>
-                    </td>
+                    <!-- Un menú en lugar de tres botones: en una tabla de nueve
+                         columnas el ✅ de finalizar quedaba a un pixel del ▶ de
+                         continuar, y ese descuido sella el conteo del mes. -->
+                    <td style="text-align:right;white-space:nowrap">${_invBtnMenu(inv.id)}</td>
                 </tr>`;
             }).join('')}</tbody>
         </table></div></div>
@@ -2896,6 +3072,8 @@ function renderHistTabla(lista) {
 function renderHistCard(inv) {
     const dif = (inv.difNetoCosto !== undefined ? inv.difNetoCosto : inv.diferenciaCosto) || 0;
     const esLev = inv.tipoInv === 'primer_lev'; // línea base: sin Continuar/Finalizar
+    /* La acción más común se queda a la vista; el resto —incluido finalizar—
+       vive en el menú, lejos del dedo. */
     const accionBtn = esLev
         ? `<button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1;color:var(--viol);border-color:var(--viol)"
             onclick="abrirInventario('${inv.id}')">✏️ Ajustar línea base</button>`
@@ -2903,9 +3081,7 @@ function renderHistCard(inv) {
         ? `<button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1;color:var(--accent);border-color:var(--accent)"
             onclick="editarInventario('${inv.id}')">✏️ Editar</button>`
         : `<button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1"
-            onclick="abrirInventario('${inv.id}')">▶ Continuar</button>
-           <button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1;color:var(--green);border-color:var(--green)"
-            onclick="finalizarInventarioHistorial('${inv.id}')">✅ Finalizar</button>`;
+            onclick="abrirInventario('${inv.id}')">▶ Continuar</button>`;
     const estadoPill = esLev
         ? `<span class="pill" style="flex-shrink:0;margin-left:8px;background:rgba(155,141,232,.15);color:var(--viol);border:1px solid rgba(155,141,232,.35)">Línea base</span>`
         : `<span class="pill ${inv.cerrado?'pill-green':'pill-amber'}" style="flex-shrink:0;margin-left:8px">${inv.cerrado?'Cerrado':'Abierto'}</span>`;
@@ -2931,8 +3107,7 @@ function renderHistCard(inv) {
             <button class="btn-vista" style="padding:5px 10px;font-size:11px;flex:1"
                 onclick="verInventarioTour('${inv.id}')">👁️ Ver</button>
             ${accionBtn}
-            <button class="btn-vista" style="padding:5px 10px;font-size:11px;color:var(--red);border-color:var(--red)"
-                onclick="eliminarInventario('${inv.id}')">🗑️</button>
+            ${_invBtnMenu(inv.id)}
         </div>
     </div>`;
 }
@@ -4235,17 +4410,21 @@ function renderStep1() {
                             <span style="font-size:11px;color:var(--text-dim);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Registrados</span>
                             <span style="font-size:13px;font-weight:700;color:${nReg>0?'var(--green)':'var(--text)'}">${nReg} / ${filasCaptura.length} productos</span>
                         </div>
+                        <!-- AQUÍ HABÍA UN «✅ Finalizar» PEGADO A «Guardar y salir».
+                             Dos botones del mismo tamaño, uno junto al otro, y el de la
+                             derecha cerraba el inventario: un dedo de más y el conteo
+                             del mes queda sellado. Ya le pasó a Edwin.
+
+                             Finalizar se queda SOLO arriba, en la barra del wizard, que
+                             es donde se va a propósito cuando se terminó de contar.
+                             Aquí abajo, en medio de la captura, lo único que se necesita
+                             es salir sin perder lo escrito. -->
                         ${nReg > 0 ? `
                         <div style="display:flex;gap:8px">
                             <button onclick="guardarYSalir()"
                                 style="background:rgba(245,200,66,.1);border:1px solid var(--accent);color:var(--accent);
                                 border-radius:7px;padding:6px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">
                                 💾 Guardar y salir
-                            </button>
-                            <button onclick="typeof finalizarPrimerLev==='function'?finalizarPrimerLev():guardarYSalir()"
-                                style="background:rgba(61,190,122,.1);border:1px solid var(--green);color:var(--green);
-                                border-radius:7px;padding:6px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">
-                                ✅ Finalizar
                             </button>
                         </div>` : ''}
                     </div>

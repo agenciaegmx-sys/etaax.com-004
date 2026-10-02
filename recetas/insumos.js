@@ -1515,7 +1515,7 @@
                    <div style="display:flex;align-items:center;gap:10px">
                        ${_modoOrden ? '<span class="ord-grip" title="Arrastra para cambiar el orden">⠿</span>' : ''}
                        ${ins.foto
-                           ? `<img src="${etx(ins.foto)}" loading="lazy" decoding="async" style="width:36px;height:36px;border-radius:6px;object-fit:cover;border:1px solid var(--border)">`
+                           ? `<img ${_fotoInsAttr(ins.foto)} loading="lazy" decoding="async" style="width:36px;height:36px;border-radius:6px;object-fit:cover;border:1px solid var(--border)">`
                            : `<div style="width:36px;height:36px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px">${ins.esSubReceta ? '🍳' : '📦'}</div>`
                        }
                        <div>
@@ -1577,7 +1577,7 @@
            var nPres    = pres.length;
 
            var fotoHTML = ins.foto
-               ? '<img src="' + etx(ins.foto) + '" alt="" loading="lazy" decoding="async">'
+               ? '<img ' + _fotoInsAttr(ins.foto) + ' alt="" loading="lazy" decoding="async">'
                : '<span class="card-emoji">' + emoji + '</span>';
 
            var tipoBadge = ins.categoria
@@ -2621,11 +2621,11 @@
        const fotoImg = document.getElementById('insFotoImg');
        const fotoPh  = document.getElementById('insFotoPlaceholder');
        if (ins?.foto) {
-           fotoImg.src           = ins.foto;
+           _fotoInsEnImg(fotoImg, ins.foto);
            fotoImg.style.display = 'block';
            fotoPh.style.display  = 'none';
        } else {
-           fotoImg.src           = '';
+           _fotoInsEnImg(fotoImg, '');
            fotoImg.style.display = 'none';
            fotoPh.style.display  = 'flex';
        }
@@ -2962,6 +2962,46 @@
        });
    }
 
+   /* ── POR QUÉ LA FOTO DEL QR NO SE VEÍA ───────────────────────────────────
+      La foto SÍ se subía y SÍ se guardaba. Lo que no se veía era la imagen.
+
+      Desde la v55 el almacén de evidencias es PRIVADO. captura.html (el celular)
+      ya no puede dejar una URL pública, así que guarda una REFERENCIA:
+      `priv:<negocio>/inbox/<token>/foto.jpg`. Eso no es una dirección: es un
+      vale que solo el ERP, con sesión, puede cambiar por una URL firmada.
+
+      El resto del sistema lo resuelve con sbAttr()/sbHidratar() de etaax-db.js.
+      Insumos no: pintaba `img.src = foto.url` en crudo, así que el navegador
+      intentaba cargar «priv:negocio/inbox/…» como si fuera una dirección web.
+      Imagen rota — en la vista previa, en el catálogo y en la galería. Y como
+      la foto del dispositivo llega en base64 (que sí es una dirección válida),
+      el problema parecía ser «el QR no funciona» cuando en realidad era que
+      NINGUNA foto privada se pintaba.
+
+      Estas dos funciones son el único lugar donde se decide cómo pintar la foto
+      de un insumo. El comentario «ya es URL de Storage» que vivía abajo quedó
+      desde antes de que el almacén fuera privado, y fue lo que despistó. */
+   function _fotoInsAttr(ref) {
+       if (!ref) return '';
+       return (typeof window.sbAttr === 'function') ? window.sbAttr(ref) : 'src="' + etx(ref) + '"';
+   }
+   /* Para los <img> que ya existen en el DOM (la vista previa del editor), donde
+      no se arma HTML sino que se asigna el src a mano. */
+   function _fotoInsEnImg(img, ref) {
+       if (!img) return;
+       if (!ref) { img.removeAttribute('data-priv'); img.src = ''; return; }
+       if (window.sbEsRefPriv && window.sbEsRefPriv(ref)) {
+           /* Se marca y se deja que el hidratador lo firme: es el mismo camino
+              que usa el resto del sistema, y la firma vence en una hora. */
+           img.src = '';
+           img.setAttribute('data-priv', window.sbRutaDeRef(ref));
+           if (typeof window.sbHidratar === 'function') { try { window.sbHidratar(document); } catch (e) {} }
+       } else {
+           img.removeAttribute('data-priv');
+           img.src = ref;
+       }
+   }
+
    // ── Subir foto del insumo desde el celular vía QR (mismo puente que cortes/gastos/recetas) ──
    function _abrirPuenteInsumo() {
        var box = document.getElementById('qrInsumoBox');
@@ -2971,10 +3011,13 @@
        if (btn) btn.textContent = '✕ Cerrar escaneo';
        QrPuente.abrir(getNegocioActivo(), 'insumo', box, function(foto) {
            if (!foto || !foto.url) return;
-           fotoInsumoBase64 = foto.url; // ya es URL de Storage (liviana)
+           /* Se guarda la REFERENCIA tal cual llega (`priv:<ruta>`): es lo que
+              el resto del sistema sabe resolver, y lo que permite que la foto
+              siga abriéndose mañana con una firma nueva. */
+           fotoInsumoBase64 = foto.url;
            var img = document.getElementById('insFotoImg');
            var ph  = document.getElementById('insFotoPlaceholder');
-           if (img) { img.src = foto.url; img.style.display = 'block'; }
+           if (img) { _fotoInsEnImg(img, foto.url); img.style.display = 'block'; }
            if (ph)  ph.style.display = 'none';
        });
    }

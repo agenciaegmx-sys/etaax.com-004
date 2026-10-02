@@ -13460,6 +13460,202 @@ console.log('\n══ BG8 · La carátula de costeo y lo que se imprime ══')
         eq(css.lastIndexOf('@media print') > css.length - 2600, true, 'al final'));
 }
 
+/* ═══════════ SUITE BG9 · LA FOTO DEL QR Y LOS AJUSTES DE INVENTARIO ════════
+   Dos reportes de Edwin:
+
+   1. «No funciona cargar foto de un insumo desde el QR, solo desde el
+      dispositivo». La foto SÍ se subía y SÍ se guardaba — lo que no se veía era
+      la imagen. Desde la v55 el almacén es PRIVADO: captura.html guarda una
+      REFERENCIA (`priv:<ruta>`), que es un vale, no una dirección. El resto del
+      sistema la cambia por una URL firmada con sbAttr/sbHidratar; insumos la
+      pintaba en crudo, así que el navegador trataba de cargar
+      «priv:negocio/inbox/…» como si fuera una página. Y como la foto del
+      dispositivo llega en base64 —que SÍ es una dirección válida— el problema
+      parecía ser del QR cuando en realidad ninguna foto privada se veía.
+
+   2. Un «✅ Finalizar» pegado a «Guardar y salir» en medio de la captura. Dos
+      botones iguales, uno junto al otro, y el de la derecha sella el conteo del
+      mes. Ya le pasó.                                                         */
+console.log('\n══ BG9 · La foto del QR y los ajustes de inventario ══');
+{
+    const ins = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.js'), 'utf8');
+    const inv = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    const cap = fs.readFileSync(path.join(RAIZ, 'captura.html'), 'utf8');
+    const cuerpoDe = (src) => (fn) => {
+        const i = src.indexOf('function ' + fn + '(');
+        if (i < 0) return '';
+        const abre = src.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < src.length) {
+            if (src[j] === '{') prof++;
+            else if (src[j] === '}') { prof--; if (!prof) return src.slice(i, j + 1); }
+            j++;
+        }
+        return '';
+    };
+    const dI = cuerpoDe(ins), dV = cuerpoDe(inv);
+
+    /* ── 1) LA FOTO DEL QR ── */
+    /* El celular no puede dejar una URL pública: el almacén es privado. Que eso
+       siga así es la razón de ser del arreglo. */
+    test('el celular guarda una referencia privada, no una URL', () =>
+        eq(cap.indexOf("foto_url:'priv:'+path") > -1, true, 'referencia'));
+
+    /* La fórmula real, con el resolvedor de etaax-db simulado. */
+    function pintar(ref, conSb) {
+        const ctx = { console, JSON, String, Object };
+        ctx.window = ctx;
+        ctx.document = { querySelectorAll: () => [] };
+        const img = {
+            src: '', attrs: {},
+            setAttribute(k, v) { this.attrs[k] = v; },
+            removeAttribute(k) { delete this.attrs[k]; }
+        };
+        vm.createContext(ctx);
+        vm.runInContext("function etx(s){ return String(s==null?'':s); }", ctx);
+        if (conSb !== false) vm.runInContext(
+            "window.sbEsRefPriv=function(v){ return typeof v==='string' && v.indexOf('priv:')===0; };" +
+            "window.sbRutaDeRef=function(v){ return v.slice(5); };" +
+            "window.sbAttr=function(v){ return window.sbEsRefPriv(v)" +
+            "  ? 'src=\"\" data-priv=\"'+window.sbRutaDeRef(v)+'\"' : 'src=\"'+v+'\"'; };" +
+            "window.sbHidratar=function(){ window.__hidrato=(window.__hidrato||0)+1; };", ctx);
+        ['_fotoInsAttr', '_fotoInsEnImg'].forEach(f => vm.runInContext(dI(f), ctx, { filename: 'insumos.js' }));
+        ctx.__img = img;
+        return ctx;
+    }
+
+    const REF = 'priv:n1/inbox/tok/foto.jpg';
+    test('una foto privada NO se pinta como dirección web', () => {
+        const c = pintar(REF);
+        c._fotoInsEnImg(c.__img, REF);
+        return eq(c.__img.src, '', 'src vacío, no "priv:…"');
+    });
+    test('…se marca para que el hidratador la firme', () => {
+        const c = pintar(REF);
+        c._fotoInsEnImg(c.__img, REF);
+        return eq(c.__img.attrs['data-priv'], 'n1/inbox/tok/foto.jpg', 'marcada');
+    });
+    test('…y se pide la firma en el momento', () => {
+        const c = pintar(REF);
+        c._fotoInsEnImg(c.__img, REF);
+        return eq(c.__hidrato, 1, 'firmada');
+    });
+    /* La foto del dispositivo llega en base64 y SIEMPRE funcionó: no puede
+       romperse por arreglar la otra. */
+    test('una foto del dispositivo (base64) se sigue pintando directo', () => {
+        const c = pintar('data:image/jpeg;base64,AAA');
+        c._fotoInsEnImg(c.__img, 'data:image/jpeg;base64,AAA');
+        return eq(c.__img.src, 'data:image/jpeg;base64,AAA', 'directo');
+    });
+    test('…y una URL de las de antes, también', () => {
+        const c = pintar('https://x/y.jpg');
+        c._fotoInsEnImg(c.__img, 'https://x/y.jpg');
+        return eq(c.__img.src, 'https://x/y.jpg', 'directo');
+    });
+    /* Al cambiar de insumo, la marca de la foto anterior tiene que irse: si no,
+       el hidratador le pone al <img> vacío la foto del insumo de antes. */
+    test('quitar la foto limpia también la marca', () => {
+        const c = pintar(REF);
+        c._fotoInsEnImg(c.__img, REF);
+        c._fotoInsEnImg(c.__img, '');
+        return eq(c.__img.attrs['data-priv'] === undefined && c.__img.src === '', true, 'limpia');
+    });
+    /* El catálogo y la galería arman HTML, no asignan src: ahí va sbAttr. */
+    test('el HTML del catálogo sale por el resolvedor', () => {
+        const c = pintar(REF);
+        return eq(c._fotoInsAttr(REF).indexOf('data-priv=') > -1, true, c._fotoInsAttr(REF));
+    });
+    /* Si etaax-db no cargó, mejor una imagen rota que una página en blanco. */
+    test('sin el resolvedor cargado, no truena', () => {
+        const c = pintar(REF, false);
+        return eq(c._fotoInsAttr('https://x/y.jpg'), 'src="https://x/y.jpg"', 'sigue');
+    });
+    /* Las tres pantallas que pintan la foto del insumo tienen que usarlo: con
+       que una se quede en crudo, ahí vuelve la imagen rota. */
+    test('la vista previa del editor lo usa', () =>
+        eq(ins.indexOf('_fotoInsEnImg(fotoImg, ins.foto)') > -1, true, 'usa'));
+    test('la vista previa del QR lo usa', () =>
+        eq(ins.indexOf('_fotoInsEnImg(img, foto.url)') > -1, true, 'usa'));
+    test('la lista y la galería lo usan', () =>
+        eq((ins.match(/_fotoInsAttr\(ins\.foto\)/g) || []).length, 2, 'las dos'));
+    test('ya no queda ningún src crudo de foto de insumo', () =>
+        eq(ins.indexOf('src="${etx(ins.foto)}"') === -1 &&
+           ins.indexOf("'<img src=\"' + etx(ins.foto) + '\"") === -1, true, 'ninguno'));
+
+    /* ── 2) EL BOTÓN QUE SELLABA EL MES ── */
+    test('«Finalizar» ya no vive junto a «Guardar y salir»', () =>
+        eq(inv.indexOf("typeof finalizarPrimerLev==='function'?finalizarPrimerLev():guardarYSalir()"), -1,
+           'quitado'));
+    /* Pero no desaparece: sigue arriba, en la barra del wizard, que es donde se
+       va a propósito cuando se terminó de contar. */
+    test('…pero sigue arriba, en la barra del wizard', () =>
+        eq(fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.html'), 'utf8')
+             .indexOf('id="btnFinalizarInv"') > -1, true, 'sigue'));
+    test('y finalizar sigue pidiendo contraseña', () =>
+        eq(dV('cerrarInventario').indexOf('_solicitarClave(') > -1 &&
+           dV('finalizarPrimerLev').indexOf('_solicitarClave(') > -1, true, 'con clave'));
+
+    /* ── 3) REABRIR Y AJUSTAR HORARIOS ── */
+    test('un inventario cerrado se puede reabrir', () =>
+        eq(dV('reabrirInventario').length > 0, true, 'existe'));
+    test('…pidiendo contraseña', () =>
+        eq(dV('reabrirInventario').indexOf('_solicitarClave(') > -1, true, 'con clave'));
+    /* El sello de cierre es la hora hasta la que cuentan sus movimientos.
+       Borrarlo al reabrir mandaría todo el periodo al siguiente inventario sin
+       que nadie lo pidiera. */
+    /* Se prueba lo que HACE, no lo que dice el comentario: reabrir cambia el
+       estado y NO toca el sello. La versión anterior de este test buscaba la
+       palabra «cierreOperativo» en el cuerpo y pasaba o fallaba según cómo
+       estuviera redactado el comentario de al lado — eso no prueba nada. */
+    test('…sin borrar el sello de cierre, que es lo que parte el periodo', () =>
+        eq(dV('reabrirInventario').indexOf('inv.cerrado = false') > -1 &&
+           dV('reabrirInventario').indexOf('delete inv.cierreOperativo') === -1 &&
+           dV('reabrirInventario').indexOf('cierreOperativo =') === -1, true, 'conservado'));
+    test('…y avisando que no se puede reabrir lo que ya está abierto', () =>
+        eq(dV('reabrirInventario').indexOf('ya está abierto') > -1, true, 'avisa'));
+
+    test('se pueden ajustar los horarios de apertura y cierre', () =>
+        eq(dV('ajustarHorariosInv').length > 0, true, 'existe'));
+    test('…pidiendo contraseña, porque mueve dinero de periodo', () =>
+        eq(dV('ajustarHorariosInv').indexOf('_solicitarClave(') > -1, true, 'con clave'));
+    /* Un cierre ANTERIOR a la apertura deja el periodo al revés: ningún
+       movimiento cae dentro y el inventario sale en ceros sin decir por qué. */
+    test('…y no deja poner el cierre antes de la apertura', () =>
+        eq(dV('ajustarHorariosInv').indexOf('no puede ser anterior a la apertura') > -1,
+           true, 'lo impide'));
+    test('…guardando la hora de cierre como sello operativo', () =>
+        eq(dV('ajustarHorariosInv').indexOf('inv.cierreOperativo = new Date(cierreV).toISOString()') > -1,
+           true, 'sellado'));
+
+    /* El guardado tiene que FORZAR el upsert: setInventarios compara el mismo
+       objeto mutado in-place y su diff no ve el cambio. Es exactamente lo que
+       ya le pasó a «finalizar», que solo vivía en localStorage. */
+    test('el ajuste llega a la nube, no se queda en el equipo', () =>
+        eq(dV('_guardarUno').indexOf('_sbUpInv(inv)') > -1, true, 'a la nube'));
+    test('…y también al respaldo local', () =>
+        eq(dV('_guardarUno').indexOf('setInventarios(lista)') > -1, true, 'local'));
+
+    /* ── 4) EL MENÚ DE TRES PUNTOS ── */
+    ['Ver', 'Ajustar horarios', 'Reabrir inventario', 'Finalizar inventario', 'Eliminar'].forEach(op =>
+        test('el menú ofrece «' + op + '»', () =>
+            eq(dV('_invMenu').indexOf("'" + op + "'") > -1, true, 'ofrece')));
+    /* Reabrir y finalizar son excluyentes: ofrecer los dos a la vez invita a
+       tocar el que no es. */
+    test('reabrir y finalizar no salen juntos: depende de si está cerrado', () =>
+        eq(dV('_invMenu').indexOf('inv.cerrado\n            ? _invMi') > -1 ||
+           /inv\.cerrado[\s\S]{0,120}Reabrir[\s\S]{0,120}Finalizar/.test(dV('_invMenu')), true, 'excluyentes'));
+    test('eliminar va marcado como peligroso y separado', () =>
+        eq(/'Eliminar',[\s\S]{0,80}?, true\);/.test(dV('_invMenu')), true, 'aparte'));
+    /* La línea base no se finaliza ni se reabre: es una referencia, no un
+       conteo a reconciliar. */
+    test('la línea base no ofrece finalizar ni reabrir', () =>
+        eq(dV('_invMenu').indexOf('if (!esLev) {') > -1, true, 'sin cierre'));
+    test('las dos vistas del historial usan el menú', () =>
+        eq((inv.match(/_invBtnMenu\(inv\.id\)/g) || []).length, 2, 'tabla y tarjeta'));
+    test('la tabla ya no trae el ✅ pegado al ▶', () =>
+        eq(dV('renderHistTabla').indexOf('finalizarInventarioHistorial'), -1, 'sin botón suelto'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
