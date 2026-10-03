@@ -14323,6 +14323,7 @@ console.log('\n══ BH4 · El rótulo que mentía ══');
 console.log('\n══ BH5 · Resumen de resultados y proyección ══');
 {
     const C = A.EtaaxCore;
+    const core = fs.readFileSync(path.join(RAIZ, 'etaax-core.js'), 'utf8');
     const BASE = { ingresos: 482300, food: 150478, nom: 137000, fijos: 68000,
                    variables: 168000, prevs: 12000 };
     const pl = C.resumenPL(BASE);
@@ -14370,17 +14371,74 @@ console.log('\n══ BH5 · Resumen de resultados y proyección ══');
         return eq(lin(r, 'otros').monto, 0, 'piso en cero');
     });
 
-    /* ── Las dos caras del food cost ── */
-    /* Comprado vs consumido: la diferencia ES el dato. Si compraste más de lo
-       que usaste, el comprado sale inflado y el consumido dice la verdad. */
-    test('se puede ver el food cost CONSUMIDO, no solo el comprado', () => {
-        const r = C.resumenPL(Object.assign({}, BASE, { consumoInv: 139400 }));
-        return eq(r.foodConsumoPct.toFixed(1), (139400 / 482300 * 100).toFixed(1), 'consumido');
+    /* ── EL FOOD COST SALE DE LOS GASTOS, NO DEL INVENTARIO ──
+       Hubo una versión que mostraba además el food cost «consumido», sacado del
+       inventario cerrado. Se quitó, y las dos razones pesan:
+
+         1. NO SE INVENTARÍA TODO. Se cuenta la barra y no la cocina, o por
+            áreas en semanas distintas. Ese consumo PARCIAL dividido entre la
+            venta COMPLETA da un food cost bajísimo que se lee como una mejora
+            espectacular — el peor tipo de número: convincente y falso.
+         2. El dato ni se guardaba: `vendidoCosto` se calcula al pintar el Paso 5
+            del inventario y se queda ahí. La pantalla invitaba a cerrar un
+            inventario para ver algo que nunca iba a aparecer.
+
+       Lo cazó Edwin al decir «los inventarios aún no se conectan con los
+       estados financieros». Que no vuelva a entrar por descuido. */
+    const rs = fs.readFileSync(path.join(RAIZ, 'financiero/resumen.html'), 'utf8');
+    /* Ni la entrada (consumoInv) ni la salida (foodConsumo): si cualquiera de
+       las dos reaparece, es que el inventario volvió a colarse. */
+    test('el resumen NO depende del inventario', () =>
+        eq(core.indexOf('consumoInv') === -1 && core.indexOf('foodConsumo') === -1,
+           true, 'desconectado'));
+    test('…y la pantalla tampoco lo lee', () =>
+        eq(rs.indexOf("from('inventarios')") === -1 &&
+           rs.indexOf('_consumoDelPeriodo') === -1, true, 'desconectado'));
+
+    /* ── LA PANTALLA TIENE QUE CLASIFICAR IGUAL QUE EL NÚCLEO ──
+       costoInsumos SIN `opts` no sabe qué gastos están catalogados como fijos
+       del negocio, así que vuelve a contar como food cost algo que ya está en
+       el renglón de fijos. Es EXACTAMENTE el error que se acaba de corregir, y
+       sin este candado podía volver con un solo descuido. */
+    test('la pantalla le pasa el mismo contexto de clasificación', () =>
+        eq(/costoInsumos\(gastos,\s*opts\)/.test(rs), true, 'mismas reglas'));
+    test('…y ese contexto trae el catálogo de fijos y el staff', () =>
+        eq(/var opts = \{fijos:_c\.fijos,\s*staff:_c\.staff/.test(rs), true, 'completo'));
+
+    /* ── QUE LOS RENGLONES SUMEN LOS EGRESOS, SIEMPRE ──
+       Esta es LA invariante de la pantalla: si los renglones no suman
+       exactamente lo que clasificarGastos llama egresos, hay dinero contado dos
+       veces o perdido, y la utilidad del resumen deja de ser la misma que la de
+       KPIs sobre el mismo mes. */
+    test('los renglones suman EXACTAMENTE los egresos del periodo', () => {
+        const suma = pl.lineas.filter(l => l.k !== 'prevs')
+                              .reduce((t, l) => t + l.monto, 0);
+        return eq(Math.round(suma), Math.round(150478 + 137000 + 68000 + (168000 - 150478)),
+                  'cuadra');
     });
-    /* Un 0% se lee como «no gastaste nada en insumos», que es lo contrario de
-       «no tengo el dato». Por eso null y no cero. */
-    test('sin inventario cerrado, el consumido es NULL (no cero)', () =>
-        eq(pl.foodConsumo === null && pl.foodConsumoPct === null, true, 'no se inventa'));
+    /* EL ERROR QUE TENÍA: grupoGasto puede mandar una compra de insumos a
+       'fijo' —si está ligada a un gasto fijo del catálogo, o si su categoría
+       coincide con uno—. Sumarla igual en food la contaba DOS VECES: una en
+       fijos y otra en food, y el «variable − food» le restaba a un cubo donde
+       nunca estuvo. */
+    test('una compra de insumos clasificada como FIJO no entra al food cost', () => {
+        const fijos = [{ categoria: 'Bebidas y licores' }];   // el negocio la catalogó como fija
+        const gs = [{ categoria: 'Bebidas y licores', monto: 9000, fecha: '2026-10-01' }];
+        return eq(C.costoInsumos(gs, { fijos: fijos }), 0, 'no se cuenta dos veces');
+    });
+    test('…y sin ese catálogo, la misma compra sí es food cost', () =>
+        eq(C.costoInsumos([{ categoria: 'Bebidas y licores', monto: 9000 }], {}), 9000, 'variable'));
+    /* La garantía de fondo: food nunca puede ser mayor que variable, porque es
+       un subconjunto suyo. Si pudiera, «otros variables» se iría a cero y el
+       food cost se tragaría gasto que no es suyo. */
+    test('el food cost es siempre un subconjunto del variable', () => {
+        const gs = [{ categoria: 'Alimentos e ingredientes', monto: 5000 },
+                    { categoria: 'Renta y arrendamiento',    monto: 8000 },
+                    { categoria: 'Bebidas y licores',        monto: 3000 }];
+        const cl = C.clasificarGastos(gs, {});
+        return eq(C.costoInsumos(gs, {}) <= cl.variable, true,
+                  C.costoInsumos(gs, {}) + ' vs ' + cl.variable);
+    });
 
     /* ── El Score: contra SUS metas ── */
     const METAS = { food: 30, nom: 30, fijos: 15, otros: 5, prevs: 5, util: 20 };

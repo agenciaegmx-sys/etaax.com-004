@@ -177,7 +177,7 @@ function mesStr(){ return todayStr().slice(0,7); }
    Se leen las MISMAS tablas que KPIs y con las MISMAS reglas del núcleo. Si
    esta pantalla calculara por su cuenta, un día diría una utilidad distinta a
    la de KPIs sobre el mismo mes y no habría forma de saber cuál creer. */
-var _c = { cortes:[], otros:[], gastos:[], deps:[], ctas:[], fijos:[], staff:[], targets:null, invs:[] };
+var _c = { cortes:[], otros:[], gastos:[], deps:[], ctas:[], fijos:[], staff:[], targets:null };
 
 async function cargar(){
     var negId = getNegocioActivo(); if(!negId) return;
@@ -189,13 +189,12 @@ async function cargar(){
         _supabase.from('tarjetas_credito').select('datos').eq('negocio_id',negId),
         _supabase.from('gf_fijos').select('datos').eq('negocio_id',negId),
         _supabase.from('staff').select('datos').eq('negocio_id',negId),
-        _supabase.from('kpi_targets').select('datos').eq('negocio_id',negId).maybeSingle(),
-        _supabase.from('inventarios').select('datos').eq('negocio_id',negId)
+        _supabase.from('kpi_targets').select('datos').eq('negocio_id',negId).maybeSingle()
     ]);
     var fila = function(x){ return (x.data||[]).map(function(y){return y.datos;}).filter(Boolean); };
     _c.cortes=fila(r[0]); _c.otros=fila(r[1]); _c.gastos=fila(r[2]); _c.deps=fila(r[3]);
     _c.ctas=fila(r[4]); _c.fijos=fila(r[5]); _c.staff=fila(r[6]);
-    _c.targets=(r[7].data&&r[7].data.datos)||null; _c.invs=fila(r[8]);
+    _c.targets=(r[7].data&&r[7].data.datos)||null;
 }
 
 /* Alcance por sucursal: vacío = el negocio entero. Misma regla del resto. */
@@ -236,33 +235,24 @@ function plDelPeriodo(){
     var ctasDeb=(_c.ctas||[]).filter(function(c){return c&&c.tipo==='debito';});
     var comision=cortes.reduce(function(s,c){return s+EtaaxCore.comisionBancoCorte(c,ctasDeb,_c.deps);},0);
     var cl=EtaaxCore.clasificarGastos(gastos,{fijos:_c.fijos,staff:_c.staff,comisionBanco:comision});
+    /* OJO: clasificarGastos recibe su propio objeto porque lo MUTA (memoiza las
+       categorías de fijos adentro). Compartir la misma referencia haría que el
+       segundo llamado arrastrara el memo del primero — funciona, pero depende
+       de un detalle interno que mañana puede cambiar. */
     var prevs=EtaaxCore.previsionApartadoRango(_c.deps||[],desde,hasta);
 
+    /* El MISMO `opts` para las dos llamadas. Si costoInsumos clasificara con
+       otras reglas que clasificarGastos, un mismo gasto podría contarse en dos
+       renglones —o en ninguno— y la suma dejaría de cuadrar con los egresos. */
+    var opts = {fijos:_c.fijos, staff:_c.staff, comisionBanco:comision};
     return EtaaxCore.resumenPL({
         ingresos: ingresos,
-        food:      EtaaxCore.costoInsumos(gastos),
+        food:      EtaaxCore.costoInsumos(gastos, opts),
         nom:       cl.nomOp+cl.nomAdm+cl.imss,
         fijos:     cl.fijo,
         variables: cl.variable,
-        prevs:     prevs,
-        consumoInv: _consumoDelPeriodo(desde,hasta)
+        prevs:     prevs
     });
-}
-
-/* ── FOOD COST CONSUMIDO ─────────────────────────────────────────────────────
-   Sale de los inventarios CERRADOS que caen en el periodo: es lo que de verdad
-   se usó, valorizado. Null si no hay ninguno — y entonces la pantalla lo dice
-   en vez de inventar un número. */
-function _consumoDelPeriodo(desde,hasta){
-    var hubo=false, total=0;
-    (_c.invs||[]).filter(_deSuc).forEach(function(inv){
-        if(!inv||!inv.cerrado) return;
-        var f=inv.fecha||'';
-        if(!(f>=desde&&f<=hasta)) return;
-        var v=n(inv.consumoCosto||inv.vendidoCosto);
-        if(v>0){ hubo=true; total+=v; }
-    });
-    return hubo?total:null;
 }
 
 /* ── La proyección ───────────────────────────────────────────────────────── */
@@ -373,20 +363,13 @@ function render(mantenFoco){
 
     document.getElementById('btnLimpiar').style.display = _tocado()?'':'none';
 
-    // ── La nota: de dónde salió el food cost ──
-    var nota = '';
-    if (base.foodConsumoPct !== null) {
-        var brecha = base.lineas[0].pct - base.foodConsumoPct;
-        nota = '🍳 <b>Food cost comprado ' + fmtP(base.lineas[0].pct) + ' · consumido ' + fmtP(base.foodConsumoPct) + '.</b> ' +
-            (brecha > 1
-                ? 'Compraste ' + fmtP(brecha) + ' más de lo que usaste: o estás llenando bodega, o hay merma que no se registró.'
-                : brecha < -1
-                ? 'Usaste más de lo que compraste: saliste de inventario viejo, lo cual está bien una vez, no todos los meses.'
-                : 'Compra y consumo van parejos — la bodega no está creciendo ni vaciándose.');
-    } else {
-        nota = '🍳 El food cost sale de lo <b>comprado</b> este periodo. Para ver lo <b>consumido</b> de verdad ' +
-               '—que es el food cost de los libros— cierra un inventario dentro del periodo.';
-    }
+    // ── La nota: de dónde salen los números ──
+    /* Decir la base de medición no es letra chica: el mismo mes da utilidades
+       distintas según si se mide por flujo o por consumo, y quien lee tiene
+       derecho a saber cuál está viendo. */
+    var nota = '🧾 Esto es <b>ingresos contra egresos por categoría</b> del periodo: lo que entró y lo que ' +
+               'salió de la caja. El food cost es lo <b>comprado</b> en alimentos, bebidas e insumos de barra ' +
+               '— no el consumo de inventario, que todavía no alimenta este resumen.';
     nota += '<br>La utilidad no se edita: es lo que sale de los demás renglones. ' +
             'Los <b>gastos fijos</b> no suben si subes las ventas — por eso el margen mejora solo al vender más.';
     if (!sc.metasPuestas) nota += '<br>⚠️ Sin metas configuradas no hay Score. Ponlas en <a href="kpis.html" style="color:var(--green)">KPIs</a>.';

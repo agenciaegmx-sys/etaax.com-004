@@ -1105,14 +1105,26 @@
        periodo. Mezclar flujo con devengado en la misma columna da una utilidad
        que no cuadra con el banco y que nadie puede explicar.
 
-       EL FOOD COST TIENE DOS CARAS, y las dos importan:
-         · COMPRADO  → lo que se gastó en insumos este periodo. Es el que entra
-                       en la utilidad, porque es el dinero que salió.
-         · CONSUMIDO → lo que de verdad se usó, valorizado (sale del inventario
-                       cerrado). Es el food cost operativo de los libros.
-       Si compraste más de lo que consumiste, el comprado sale inflado y el
-       consumido te dice la verdad de la cocina. Enseñar solo uno esconde
-       justamente la diferencia que hay que mirar: la sobrecompra.           */
+       EL FOOD COST SALE DE LOS GASTOS POR CATEGORÍA, no del inventario.
+
+       Hubo una versión de esto que mostraba además el food cost «consumido»,
+       sacado del inventario cerrado. Se quitó, por dos razones y las dos
+       pesan:
+
+         1. NO SE INVENTARÍA TODO. Un negocio cuenta la barra y no la cocina, o
+            cuenta por áreas en semanas distintas. Ese consumo parcial dividido
+            entre la venta COMPLETA da un food cost bajísimo, que se lee como
+            una mejora espectacular cuando lo único que pasó es que faltan
+            categorías. Es el peor tipo de número: convincente y falso.
+         2. El dato ni siquiera se guardaba. `vendidoCosto` se calcula al pintar
+            el Paso 5 del inventario y se queda ahí; el registro no lo conserva.
+            Así que la pantalla invitaba a cerrar un inventario para ver algo
+            que nunca iba a aparecer.
+
+       Cuando los inventarios se conecten de verdad —guardando el consumo
+       valorizado y sabiendo qué áreas cubre cada uno— esto se vuelve a poner.
+       Mientras tanto, el resumen es lo que dice ser: ingresos contra egresos
+       por categoría.                                                        */
 
     /* Qué categorías de gasto son INSUMO de producto. Limpieza, desechables y
        empaque NO van aquí: son suministros de operación, no costo del platillo.
@@ -1128,12 +1140,26 @@
         if (!g) return false;
         return !!CATS_INSUMO[String(g.categoria || '').trim().toLowerCase()];
     }
-    /* Lo gastado en insumos del periodo. Solo lo PAGADO: un pedido que todavía
-       se debe no es costo de este mes (misma regla que clasificarGastos). */
-    function costoInsumos(gastos) {
+    /* Lo gastado en insumos del periodo.
+       SOLO lo PAGADO: un pedido que todavía se debe no es costo de este mes
+       (misma regla que clasificarGastos).
+
+       Y SOLO lo que clasificarGastos ya puso en VARIABLE. Esto no es un detalle:
+       `grupoGasto` puede mandar una compra a 'fijo' —si está ligada a un gasto
+       fijo del catálogo, o si su categoría coincide con uno— y entonces ese
+       dinero ya está contado en el renglón de fijos. Sumarlo también aquí lo
+       contaría DOS VECES, y el «otros variables = variable − food» le restaría
+       a un cubo donde nunca estuvo.
+
+       Con este filtro queda garantizado que food ⊆ variable, que es lo que hace
+       que los renglones del resumen sumen exactamente los egresos y ni un peso
+       más. */
+    function costoInsumos(gastos, opts) {
+        opts = opts || {};
         return (gastos || []).reduce(function (t, g) {
             if (!esGastoInsumo(g)) return t;
             if (gastoEstatus(g) !== 'pagado') return t;
+            if (grupoGasto(g, opts) !== 'variable') return t;
             return t + n(g.monto);
         }, 0);
     }
@@ -1170,14 +1196,7 @@
             egresos: egresos,
             prevs: prevs,
             utilidad: utilidad,
-            utilidadPct: pc(utilidad),
-            /* El food cost CONSUMIDO, si hay inventario cerrado que lo diga.
-               Null —no cero— cuando no se sabe: un 0% se lee como «no gastaste
-               nada en insumos», que es lo contrario de «no tengo el dato». */
-            foodConsumo: (d.consumoInv === null || d.consumoInv === undefined)
-                ? null : n(d.consumoInv),
-            foodConsumoPct: (d.consumoInv === null || d.consumoInv === undefined)
-                ? null : pc(n(d.consumoInv))
+            utilidadPct: pc(utilidad)
         };
     }
 
