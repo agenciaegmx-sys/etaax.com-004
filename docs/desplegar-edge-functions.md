@@ -20,13 +20,22 @@ Hay dos caminos. El primero no requiere instalar nada.
    El nombre importa: es la dirección a la que el panel le habla. Si escribes
    otro, el botón de la app seguirá sin encontrarla.
 
-4. Borra el código de ejemplo que trae y pega **todo** el contenido de:
+4. En el panel **FILES**, el archivo debe llamarse **`index.ts`**. Supabase
+   arranca la función buscando ese nombre exacto; con otro, queda sin punto de
+   entrada. Si trae otro nombre, renómbralo (o créalo con *Add File* y borra el
+   que sobra).
 
-   ```
-   supabase/functions/admin-credenciales/index.ts
-   ```
+5. Abre en tu editor el archivo `supabase/functions/admin-credenciales/index.ts`,
+   selecciona **todo su contenido** (Cmd+A), cópialo, y pégalo en el editor de
+   Supabase reemplazando el ejemplo.
 
-5. **Deploy function**. Tarda unos segundos.
+   > **Ojo con esto**, que ya pasó una vez: lo que se pega es el **código de
+   > adentro** del archivo, no la ruta. Si en el editor te queda una sola línea
+   > que dice `supabase/functions/...`, pegaste la dirección en vez del
+   > contenido. Bien pegado son ~161 líneas y la primera de código real es
+   > `import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';`
+
+6. **Deploy function**. Tarda unos segundos.
 
 Eso es todo. **No hace falta configurar secretos**: `SUPABASE_URL` y
 `SUPABASE_SERVICE_ROLE_KEY` los inyecta Supabase solo, y el correo del admin
