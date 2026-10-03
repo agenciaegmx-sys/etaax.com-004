@@ -100,6 +100,19 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .hub-back:hover{color:var(--text);border-color:var(--b2);background:var(--s2);}
 .hub-user-top{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);}
 .hub-user-dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 2s ease infinite;}
+/* ── Avatares de quién está trabajando aquí (presencia.js) ──────────────────
+   El hub tiene su propia hoja de estilos y no toma la de los módulos, así que
+   estas reglas se repiten a propósito: sin ellas los avatares salen como texto
+   suelto en medio de la barra. */
+.ctx-presencia{display:none;align-items:center;gap:0;margin-left:4px;flex-shrink:0}
+.ctx-pres-lbl{font-size:12px;margin-right:5px;opacity:.65}
+.ctx-pres-av{width:25px;height:25px;border-radius:50%;display:inline-flex;align-items:center;
+  justify-content:center;font-family:'DM Sans',sans-serif;font-size:9.5px;font-weight:700;
+  color:#0a0908;border:2px solid var(--bg,#0a0908);margin-left:-7px;cursor:default;
+  letter-spacing:.3px;transition:transform .14s}
+.ctx-pres-av:first-of-type{margin-left:0}
+.ctx-pres-av:hover{transform:translateY(-2px) scale(1.08);z-index:2}
+.ctx-pres-mas{background:var(--s2,#1c1a17);color:var(--muted,#a8a29a);font-size:10px}
 .btn-logout{
   background:transparent;border:1px solid var(--b2);color:var(--dim);
   font-family:'DM Sans',sans-serif;font-size:11px;padding:5px 12px;
@@ -720,6 +733,10 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
         <div id="chipTipo" class="neg-activo-tipo">—</div>
       </div>
       <span id="chipSucursalHub" class="chip-sucursal-hub" style="display:none"></span>
+      <!-- Quién más está trabajando en este negocio. El hub NO tenía este hueco
+           ni cargaba presencia.js: entre tarea y tarea la gente se queda aquí,
+           así que era justo donde más falta hacía y donde nadie se anunciaba. -->
+      <div class="ctx-presencia" id="ctxPresencia"></div>
       <div class="neg-activo-btns">
         <div class="user-badge">
           <span id="userNombreChip" style="font-size:12px">—</span>
@@ -1041,6 +1058,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
+<script src="/presencia.js"></script><!-- quién está trabajando aquí: avatares en la barra -->
 <script src="/etaax-store.js"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js"></script>
 <script src="staff-auth.js"></script>
@@ -1642,6 +1660,11 @@ async function init() {
         if (neg) {
             localStorage.setItem('etaax_negocio_activo', neg.id);
             _guardarCtx(neg);
+            /* Faltaba aquí también. Hay DOS caminos para que un colaborador
+               acabe dentro —entrar con su usuario, o recargar con la sesión ya
+               abierta— y el chip solo se enteraba del primero. Quien recargaba
+               veía «Sin sesión» el resto de la visita. */
+            _updateTopbar();
             _showModulos(neg);
             return;
         }
@@ -1781,6 +1804,40 @@ async function _bgVerify() {
             _renderVistaNegocio();
         }
     } catch(e) { /* verificación silenciosa */ }
+}
+
+/* El hub no usa ctx-bar.js —tiene su propia barra— así que pinta los avatares
+   por su cuenta. La lógica de quién está la pone presencia.js; esto solo los
+   dibuja, con la misma regla: salen LOS OTROS, no uno mismo. */
+var _hubPresLista = false;
+function _pintarPresenciaHub() {
+    var box = document.getElementById('ctxPresencia');
+    if (!box) return;
+    if (!window.EtaaxPresencia) { setTimeout(_pintarPresenciaHub, 300); return; }
+    if (!_hubPresLista) {
+        _hubPresLista = true;
+        EtaaxPresencia.alCambiar(function () { _pintarPresenciaHub(); });
+    }
+    var otros = EtaaxPresencia.gente().filter(function (p) { return !p.yo; });
+    if (!otros.length) { box.innerHTML = ''; box.style.display = 'none'; return; }
+    box.style.display = 'flex';
+    var MAX = 4;
+    var ver = otros.slice(0, MAX), resto = otros.length - ver.length;
+    box.innerHTML =
+        '<span class="ctx-pres-lbl" title="Personas trabajando en este negocio ahora">👥</span>' +
+        ver.map(function (p) {
+            var donde = p.suc ? ('en ' + p.suc) : 'en la vista global del negocio';
+            var det = p.nombre + (p.rol ? ' · ' + p.rol : '') +
+                      (p.tipo === 'dueno' ? ' (dueño)' : '') + ' — ' + donde;
+            var fuera = p.aqui ? '' : ';border-style:dashed';
+            return '<span class="ctx-pres-av" style="background:' + p.color + fuera +
+                   '" title="' + _esc(det) + '">' + _esc(p.inicial) + '</span>';
+        }).join('') +
+        (resto > 0
+            ? '<span class="ctx-pres-av ctx-pres-mas" title="' +
+              _esc(otros.slice(MAX).map(function (p) { return p.nombre; }).join(', ')) +
+              '">+' + resto + '</span>'
+            : '');
 }
 
 function _updateTopbar() {
@@ -3068,6 +3125,10 @@ function _registrarAcceso(neg) {
 function _showModulos(neg) {
     showView('viewModulos');
     _registrarAcceso(neg);
+    /* El contexto acaba de quedar escrito: ahora presencia.js ya sabe en qué
+       negocio y sucursal estamos y puede anunciarse. */
+    if (window.EtaaxPresencia) { try { EtaaxPresencia.entrar(); } catch (e) {} }
+    _pintarPresenciaHub();
     _gateSuscripcion(neg); // si el negocio no está activo, reemplaza por la pantalla de bloqueo
     // Hub General (admin sin negocio): los módulos no operan sin negocio
     // activo — deshabilitar cards para no abrir páginas vacías.

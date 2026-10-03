@@ -13949,6 +13949,29 @@ console.log('\n══ BH2 · Quién está, quién entró y cómo se le devuelve 
     test('si la barra se pinta antes de que presencia cargue, reintenta', () =>
         eq(dC('_pintarPresencia').indexOf('setTimeout(_pintarPresencia, 300)') > -1,
            true, 'no se rinde'));
+
+    /* ── EL HUB TAMBIÉN ES UN LUGAR DONDE SE ESTÁ ──
+       ESTA era la causa de que no se viera a nadie: presencia.js solo se
+       cargaba en las páginas de módulo. Entre tarea y tarea la gente se queda
+       en el panel de módulos del hub, así que quien estaba ahí NO SE ANUNCIABA
+       — y el de enfrente no lo veía por más que su conexión funcionara. */
+    test('el hub carga presencia: ahí también se está trabajando', () =>
+        eq(hub.indexOf('/presencia.js') > -1, true, 'cargado'));
+    test('…y tiene dónde pintar los avatares', () =>
+        eq(hub.indexOf('id="ctxPresencia"') > -1, true, 'con hueco'));
+    /* El hub tiene su propia hoja de estilos: sin estas reglas los avatares
+       salen como texto suelto en medio de la barra. */
+    test('…con sus estilos propios, porque no toma los de los módulos', () =>
+        eq(hub.indexOf('.ctx-pres-av{') > -1, true, 'con estilo'));
+    test('…y los pinta él, porque no usa ctx-bar.js', () =>
+        eq(hub.indexOf('function _pintarPresenciaHub()') > -1, true, 'propio'));
+    test('…con la misma regla: salen los otros, no uno mismo', () =>
+        eq(dH('_pintarPresenciaHub').indexOf('filter(function (p) { return !p.yo; })') > -1,
+           true, 'solo otros'));
+    /* Hay que anunciarse DESPUÉS de que el contexto quedó escrito: antes,
+       presencia.js no sabe aún en qué negocio ni sucursal está. */
+    test('se anuncia al entrar al panel de módulos, con el contexto ya puesto', () =>
+        eq(dH('_showModulos').indexOf('EtaaxPresencia.entrar()') > -1, true, 'a tiempo'));
     /* La misma persona con dos pestañas es UNA persona en la fila: ver
        «Ana» dos veces no dice nada. */
     test('dos pestañas de la misma persona cuentan como una', () =>
@@ -14268,6 +14291,14 @@ console.log('\n══ BH4 · El rótulo que mentía ══');
        con mi propia prosa no cuida nada. */
     test('al entrar como colaborador, el chip de arriba se entera', () =>
         eq(dH2('_iniciarSesionStaff').indexOf('_updateTopbar();') > -1, true, 'se actualiza'));
+    /* HAY DOS CAMINOS para que un colaborador acabe dentro: entrar con su
+       usuario, o RECARGAR con la sesión ya abierta. El chip solo se enteraba
+       del primero, así que quien recargaba veía «Sin sesión» el resto de la
+       visita — que es exactamente como lo encontró Edwin. */
+    test('…y al RECARGAR con la sesión abierta, también', () => {
+        const i = hub.indexOf("ses.type === 'staff' && ses.expira > Date.now()");
+        return eq(hub.slice(i, i + 900).indexOf('_updateTopbar();') > -1, true, 'los dos caminos');
+    });
     /* Y ANTES de pintar los módulos: al revés, el chip se actualizaría cuando
        la pantalla ya cambió, y se vería el parpadeo de «Sin sesión». */
     test('…antes de pintar los módulos, no después', () => {
