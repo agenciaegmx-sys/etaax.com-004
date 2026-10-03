@@ -525,7 +525,7 @@
                 <div class="form-group full">
                     <label>NIP de acceso (5 dígitos)</label>
                     <input type="text" id="fNip" maxlength="5" inputmode="numeric" placeholder="5 dígitos" autocomplete="off" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
-                    <span class="form-hint">Acceso rápido por QR a las vistas permitidas. Sin usuario ni contraseña.</span>
+                    <span class="form-hint">Para entrar por QR (inventarios, checklists, portal de staff) sin teclear usuario ni contraseña. Convive con el acceso al sistema: son para cosas distintas.</span>
                 </div>
             </div>
             <div class="form-grid" id="accesoNone" style="display:none">
@@ -1428,7 +1428,17 @@ function _togAccesoStaff(){
     var admin = _esRolAdminStaff(rol), conRol = !!rol;
     document.getElementById('accesoSec').style.display   = conRol ? '' : 'none';
     document.getElementById('accesoAdmin').style.display = admin ? '' : 'none';
-    document.getElementById('accesoNip').style.display   = (conRol && !admin) ? '' : 'none';
+    /* EL NIP ES PARA TODOS. Antes solo lo veían los roles SIN usuario y
+       contraseña, y eso dejaba un hueco raro: un gerente o un chef entraba al
+       sistema pero no podía usar el QR de inventarios ni el portal de staff,
+       que es justo lo que se usa en piso con el celular en la mano. Peor: al
+       darle acceso al sistema a alguien que ANTES era solo-QR, el campo
+       desaparecía y su NIP se borraba al guardar, sin avisar.
+
+       Las dos credenciales conviven porque sirven para cosas distintas:
+       usuario y contraseña para entrar al sistema desde una computadora; NIP de
+       5 dígitos para identificarse en un QR, sin teclear nada largo. */
+    document.getElementById('accesoNip').style.display   = conRol ? '' : 'none';
     document.getElementById('accesoNone').style.display  = conRol ? 'none' : '';
 }
 
@@ -1598,7 +1608,12 @@ async function _saveStaffReal() {
        rebotan y deben dejar el botón vivo— y antes del primer await. */
     _guardandoStaff = true;
     var passwordHash = esAdmin ? (pwd ? await _hashPwdStaff(pwd) : (existing.passwordHash || '')) : '';
-    var nipHash      = (!esAdmin && rol) ? (nipRaw ? await _hashPwdStaff('nip|' + nipRaw) : (existing.nipHash || '')) : '';
+    /* El NIP se conserva para CUALQUIER rol. Antes, para un rol con acceso al
+       sistema esto devolvía '' — o sea que ascender a alguien a gerente le
+       BORRABA el NIP en silencio, y seguía apareciendo en el QR hasta que el
+       servidor dejaba de reconocerlo. Sin rol no hay credencial: alguien sin
+       rol no entra a ningún lado. */
+    var nipHash      = rol ? (nipRaw ? await _hashPwdStaff('nip|' + nipRaw) : (existing.nipHash || '')) : '';
     var sucursalId = (document.getElementById('fSucursal').value || '').trim();
     var obj = {
         id:              editId || genId(),
@@ -1890,6 +1905,11 @@ function _pintarBonoResumen(){
    "Baja temporal" NO cuenta como baja: es incapacidad o vacaciones y esa persona
    sigue siendo del equipo — se queda en la lista, con su etiqueta. */
 function _esBaja(s){ return (s && s.estado) === 'Baja definitiva'; }
+/* ¿Este colaborador puede entrar HOY? La regla de verdad vive en el servidor
+   (v63: staff_login, entrada_validar_nip y portal_perfil filtran por estado).
+   Aquí solo se usa para DECIRLO en pantalla — que es lo que faltaba: la baja se
+   daba y nadie se enteraba de que el acceso seguía o dejaba de estar. */
+function _accesoActivo(s){ return (s && (s.estado || 'Activo')) === 'Activo'; }
 function _bajas(){
     return load().filter(_esBaja).sort(function(a,b){
         // Los más recientes arriba: es a los que se les busca algo.
@@ -1953,8 +1973,20 @@ function darDeBajaStaff(id){
     var data = load();
     var i = data.findIndex(function(x){ return x.id===id; });
     if (i < 0) return;
+    /* DECIR QUE SE LE QUITA EL ACCESO. Hasta ahora el aviso hablaba solo del
+       catálogo y del expediente, así que quien daba la baja no tenía forma de
+       saber si la persona seguía pudiendo entrar — y seguía. Ahora se dice, y
+       se dice también que es reversible, para que nadie evite dar la baja por
+       miedo a perder la configuración. */
+    var _cred = [];
+    if (data[i].passwordHash) _cred.push('su usuario y contraseña');
+    if (data[i].nipHash)      _cred.push('su NIP del QR');
     if (!confirm('¿Dar de baja a '+(data[i].nombre||'este colaborador')+'?\n\n'+
-                 'Sale del catálogo pero su expediente se conserva en Bajas, y se puede reactivar.')) return;
+                 'Sale del catálogo pero su expediente se conserva en Bajas.\n\n'+
+                 (_cred.length
+                    ? '🔒 Desde ese momento DEJA DE ENTRAR: ' + _cred.join(' y ') + ' ya no le abren.\n'
+                      + 'Las credenciales no se borran — si lo reactivas, vuelven a funcionar.'
+                    : 'Este colaborador no tiene credenciales de acceso.'))) return;
     data[i] = Object.assign({}, data[i], { estado:'Baja definitiva', fechaBaja:_hoyISO() });
     save(data).then(renderAll);
 }

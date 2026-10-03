@@ -88,10 +88,16 @@
         box.innerHTML =
             '<span class="ctx-pres-lbl" title="Personas trabajando en este negocio ahora">👥</span>' +
             ver.map(function (p) {
+                /* Decir DÓNDE está: con un solo canal por negocio, lo que
+                   distingue a quien está en tu sucursal de quien está en otra
+                   es este dato — y esconderlo haría creer que todos están
+                   contigo. El que está en otra va con el borde punteado. */
+                var donde = p.suc ? ('en ' + p.suc) : 'en la vista global del negocio';
                 var det = p.nombre + (p.rol ? ' · ' + p.rol : '') +
-                          (p.tipo === 'dueno' ? ' (dueño)' : '');
-                return '<span class="ctx-pres-av" style="background:' + p.color + '" title="' +
-                       esc(det) + ' — trabajando aquí ahora">' + esc(p.inicial) + '</span>';
+                          (p.tipo === 'dueno' ? ' (dueño)' : '') + ' — ' + donde;
+                var fuera = p.aqui ? '' : ';border-style:dashed';
+                return '<span class="ctx-pres-av" style="background:' + p.color + fuera + '" title="' +
+                       esc(det) + '">' + esc(p.inicial) + '</span>';
             }).join('') +
             (resto > 0
                 ? '<span class="ctx-pres-av ctx-pres-mas" title="' +

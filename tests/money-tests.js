@@ -13898,12 +13898,31 @@ console.log('\n══ BH2 · Quién está, quién entró y cómo se le devuelve 
         eq(pres.indexOf('.from(') === -1 && pres.indexOf('.insert(') === -1, true, 'efímera'));
     test('usa el canal de Realtime, que se limpia solo al cortarse', () =>
         eq(pres.indexOf('.presenceState()') > -1 && pres.indexOf('.track(') > -1, true, 'presence'));
-    /* Dos personas en sucursales distintas no se estorban: verse ahí sería
-       ruido, no información. */
-    test('el canal es por negocio Y sucursal', () =>
-        eq(dP('entrar').indexOf("'pres:' + c.negId + ':' + (_sucActiva() || '_global')") > -1, true, 'acotado'));
-    test('cambiar de sucursal cambia de sala', () =>
-        eq(pres.indexOf("e.key === 'etaax_sucursal_activa'") > -1, true, 'reentra'));
+    /* ESTO CAMBIÓ, y el motivo importa: el primer diseño abría un canal por
+       negocio+sucursal. El dueño mirando el negocio completo quedaba en una
+       sala y su gerente —fijada a su sucursal— en otra, así que NO SE VEÍAN.
+       Es el caso con el que Edwin lo probó, y justamente el que esto resuelve.
+       Ahora un canal por negocio, y la sucursal viaja como dato de cada quien. */
+    test('el canal es por NEGOCIO: el dueño ve a su gente esté donde esté', () =>
+        eq(dP('entrar').indexOf("var clave = 'pres:' + c.negId;") > -1, true, 'un canal'));
+    test('…y cada quien publica en qué sucursal está', () =>
+        eq(dP('_quienSoy').indexOf('suc:     _sucNombre()') > -1 &&
+           dP('_quienSoy').indexOf('sucId:   _sucActiva()') > -1, true, 'con sucursal'));
+    /* Si no se distinguiera, la fila haría creer que todos están contigo. */
+    test('se marca quién está en TU sucursal y quién en otra', () =>
+        eq(dP('_releer').indexOf("aqui: (m.sucId || '') === (_yo ? (_yo.sucId || '') : '')") > -1,
+           true, 'distinguidos'));
+    test('…y el avatar lo enseña, no solo lo guarda', () =>
+        eq(dC('_pintarPresencia').indexOf("p.aqui ? '' : ';border-style:dashed'") > -1 &&
+           dC('_pintarPresencia').indexOf("'en ' + p.suc") > -1, true, 'visible'));
+    /* Moverse de sucursal ya no cambia de sala, pero los demás tienen que ver
+       que te moviste. */
+    test('cambiar de sucursal se vuelve a anunciar', () =>
+        eq(pres.indexOf("e.key === 'etaax_sucursal_activa') _reanunciar()") > -1, true, 'reanuncia'));
+    /* Reiniciar la hora de llegada pondría a quien lleva horas al final de la
+       fila, como si acabara de entrar. */
+    test('…sin perder desde cuándo lleva ahí', () =>
+        eq(dP('_reanunciar').indexOf('_yo.desde = antes.desde') > -1, true, 'conservada'));
     /* La misma persona con dos pestañas es UNA persona en la fila: ver
        «Ana» dos veces no dice nada. */
     test('dos pestañas de la misma persona cuentan como una', () =>
@@ -14063,6 +14082,109 @@ console.log('\n══ BH2 · Quién está, quién entró y cómo se le devuelve 
         eq(/accesos_log'\)\.insert\(\{[\s\S]{0,400}tipo: 'admin_reset'/.test(fn), true, 'con rastro'));
     test('…y si la bitácora no existe, se avisa en vez de callarlo', () =>
         eq(fn.indexOf('NO se pudo registrar en la bitácora') > -1, true, 'avisado'));
+}
+
+/* ═══════════ SUITE BH3 · LA BAJA QUE NO QUITABA EL ACCESO ══════════════════
+   EL HUECO, encontrado en producción: dar de baja a alguien lo sacaba del
+   catálogo… y nada más. Sus credenciales seguían vivas. Una gerente dada de
+   baja el 15 de septiembre seguía subiendo entradas por el QR en octubre.
+
+   Ninguna de las funciones que autentican miraba el estado:
+     · staff_login          → entraba al sistema con usuario y contraseña
+     · entrada_validar_nip  → entraba al QR de inventarios con su NIP
+     · portal_perfil        → entraba al portal de staff con su NIP
+
+   Y de paso, el NIP solo existía para los roles SIN acceso al sistema: un
+   gerente o un chef entraba al sistema pero no podía usar el QR, que es lo que
+   se usa en piso con el celular en la mano.                                  */
+console.log('\n══ BH3 · La baja que no quitaba el acceso ══');
+{
+    const v63 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v63.sql'), 'utf8');
+    const stf = fs.readFileSync(path.join(RAIZ, 'administrativo/staff.html'), 'utf8');
+    const cuerpo = (fn) => {
+        const i = stf.indexOf('function ' + fn + '(');
+        if (i < 0) return '';
+        const abre = stf.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < stf.length) {
+            if (stf[j] === '{') prof++;
+            else if (stf[j] === '}') { prof--; if (!prof) return stf.slice(i, j + 1); }
+            j++;
+        }
+        return '';
+    };
+    /* El texto de UNA función dentro de la migración, para poder preguntarle a
+       cada una por separado. */
+    const sqlDe = (fn) => {
+        const i = v63.indexOf('CREATE OR REPLACE FUNCTION ' + fn);
+        if (i < 0) return '';
+        const j = v63.indexOf('$$;', i);
+        return v63.slice(i, j + 3);
+    };
+
+    /* ── Las tres puertas ── */
+    const GUARDA = "COALESCE(NULLIF(s.datos->>'estado', ''), 'Activo') = 'Activo'";
+    ['staff_login', 'entrada_validar_nip', 'portal_perfil'].forEach(fn =>
+        test(fn + ' ya no deja entrar a quien está de baja', () =>
+            eq(sqlDe(fn).indexOf(GUARDA) > -1, true, 'con candado')));
+    /* El candado va PEGADO a la línea que empata la credencial: ahí es donde se
+       decide si esta persona es quien dice ser. */
+    test('…y el candado va junto a donde se valida la credencial', () =>
+        eq(/passwordHash'\s*=\s*p_hash\s*\n\s*AND COALESCE\(NULLIF\(s\.datos->>'estado'/.test(v63),
+           true, 'en su sitio'));
+    /* LO QUE SALVA A TODOS LOS COLABORADORES VIEJOS: los que no traen el campo
+       `estado` se quedarían fuera de golpe sin el COALESCE. Sin estado = activo,
+       que es como se comportaban hasta hoy. */
+    test('quien no tiene estado capturado sigue entrando (los viejos)', () =>
+        eq(v63.indexOf("NULLIF(s.datos->>'estado', ''), 'Activo')") > -1, true, 'sin romper'));
+    /* Una baja temporal es una incapacidad o un permiso: mientras dura, no hay
+       por qué poder entrar. Se bloquean las dos porque el filtro es por
+       IGUALDAD con 'Activo', no por desigualdad con 'Baja definitiva'. */
+    test('bloquea las DOS bajas, temporal y definitiva', () =>
+        eq(v63.indexOf("<> 'Baja definitiva'") === -1 && v63.indexOf("= 'Activo'") > -1,
+           true, 'las dos'));
+    /* Las otras cuatro funciones del portal no validan por su cuenta: llaman a
+       estas y si devuelven NULL se salen. Que eso quede dicho, porque si alguien
+       agrega una quinta sin ese embudo, el hueco vuelve. */
+    test('se documenta por qué bastan tres funciones', () =>
+        eq(v63.indexOf('portal_recetas') > -1 && v63.indexOf('se cierran solas') > -1,
+           true, 'explicado'));
+    test('las tres conservan sus permisos', () =>
+        eq((v63.match(/GRANT EXECUTE ON FUNCTION/g) || []).length >= 3, true, 'con grants'));
+    /* Borrar las credenciales obligaría a reconfigurar a todo el que regresa de
+       una incapacidad. Dejan de abrir, no se destruyen. */
+    test('las credenciales no se borran: dejan de abrir', () =>
+        eq(v63.indexOf('las credenciales NO se borran') > -1, true, 'reversible'));
+
+    /* ── El NIP, para todos ── */
+    /* Un gerente o un chef entra al sistema desde la computadora, pero el QR es
+       lo que usa en piso con el celular. Negarle el NIP lo dejaba fuera de
+       inventarios, checklists y portal de staff. */
+    test('el campo de NIP sale para cualquier rol, no solo los sin sistema', () =>
+        eq(cuerpo('_togAccesoStaff').indexOf("document.getElementById('accesoNip').style.display   = conRol ? '' : 'none';") > -1,
+           true, 'para todos'));
+    /* ESTE ERA EL PEOR: ascender a alguien a gerente le BORRABA el NIP en
+       silencio al guardar. */
+    test('ascender a alguien ya no le borra el NIP', () =>
+        eq(stf.indexOf("var nipHash      = rol ? (nipRaw ? await _hashPwdStaff('nip|' + nipRaw) : (existing.nipHash || '')) : '';") > -1,
+           true, 'conservado'));
+    test('…pero sin rol no hay credencial', () =>
+        eq(/var nipHash\s+= rol \?/.test(stf), true, 'sin rol, nada'));
+
+    /* ── Que se diga al dar de baja ── */
+    /* El candado de verdad es del servidor; esto es para que quien da la baja
+       sepa lo que acaba de pasar en vez de descubrirlo tres semanas después. */
+    test('dar de baja avisa que se le quita el acceso', () =>
+        eq(cuerpo('darDeBajaStaff').indexOf('DEJA DE ENTRAR') > -1, true, 'avisado'));
+    test('…diciendo QUÉ credenciales dejan de abrir', () =>
+        eq(cuerpo('darDeBajaStaff').indexOf('su usuario y contraseña') > -1 &&
+           cuerpo('darDeBajaStaff').indexOf('su NIP del QR') > -1, true, 'concreto'));
+    /* Si no se dijera que es reversible, alguien evitaría dar la baja por miedo
+       a perder la configuración — y entonces el hueco sigue abierto. */
+    test('…y que es reversible, para que nadie evite dar la baja', () =>
+        eq(cuerpo('darDeBajaStaff').indexOf('vuelven a funcionar') > -1, true, 'reversible'));
+    test('…y no promete nada si no tenía credenciales', () =>
+        eq(cuerpo('darDeBajaStaff').indexOf('no tiene credenciales de acceso') > -1, true, 'honesto'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

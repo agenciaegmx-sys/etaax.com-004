@@ -17,9 +17,17 @@
    desaparece sola. Lo que SÍ se guarda es el acceso (bitácora, v62), que es
    otra pregunta: «quién entró», no «quién está».
 
-   ALCANCE: se comparte canal por NEGOCIO + SUCURSAL. Dos personas en sucursales
-   distintas no se estorban, así que verse ahí sería ruido. En la vista global
-   del negocio el canal es el del negocio entero.
+   ALCANCE: un canal por NEGOCIO, y la sucursal viaja como dato de cada quien.
+
+   El primer intento abría un canal por negocio+sucursal, y era un error: el
+   dueño mirando el negocio completo quedaba en una sala, y su gerente —fijada a
+   su sucursal— en otra. No se veían. Justo el caso con el que Edwin lo probó, y
+   justo el caso que esto viene a resolver: el dueño quiere ver a su gente,
+   estén donde estén.
+
+   Separar por sucursal tampoco era necesario para evitar ruido: la sucursal se
+   dice en cada avatar, así que de un vistazo se sabe quién está en la tuya y
+   quién en otra, sin perderlos de vista.
 
    API (window.EtaaxPresencia):
      .entrar()            → se une al canal de donde estés parado
@@ -71,6 +79,15 @@
     /* Quién soy, para que los demás me vean. Nada sensible: nombre, rol y si
        soy dueño o del equipo. Esto viaja a los otros navegadores conectados, así
        que no lleva correo ni id. */
+    /* El NOMBRE de la sucursal, no su id: lo que se enseña es «Centro», no
+       «suc_a1b2». Sale del contexto, que ya lo trae puesto. */
+    function _sucNombre() {
+        var c = _ctx();
+        if (!c) return '';
+        if (!_sucActiva()) return '';          // vista global del negocio
+        return String(c.sucNombre || '').slice(0, 30);
+    }
+
     function _quienSoy() {
         var c = _ctx();
         if (!c) return null;
@@ -83,6 +100,10 @@
             color:   _color(nombre),
             rol:     String(c.rol || '').slice(0, 24),
             tipo:    esStaff ? 'staff' : 'dueno',
+            /* Dónde está parado. Con un solo canal por negocio, esto es lo que
+               distingue «está en tu sucursal» de «está en otra». */
+            suc:     _sucNombre(),
+            sucId:   _sucActiva(),
             desde:   Date.now()
         };
     }
@@ -105,6 +126,10 @@
                     porNombre[m.nombre] = {
                         nombre: m.nombre, inicial: m.inicial, color: m.color,
                         rol: m.rol, tipo: m.tipo, desde: m.desde,
+                        suc: m.suc || '', sucId: m.sucId || '',
+                        /* ¿Está donde estoy yo? Sirve para enseñarlo distinto
+                           sin tener que esconderlo. */
+                        aqui: (m.sucId || '') === (_yo ? (_yo.sucId || '') : ''),
                         yo: !!(_yo && m.sid === _yo.sid)
                     };
                 }
@@ -128,7 +153,7 @@
     function entrar() {
         var c = _ctx();
         if (!c || !c.negId || typeof window._supabase === 'undefined') return;
-        var clave = 'pres:' + c.negId + ':' + (_sucActiva() || '_global');
+        var clave = 'pres:' + c.negId;
         if (_canal && _clave === clave) return;   // ya estoy donde debo
         salir();
         _yo = _quienSoy();
@@ -153,12 +178,24 @@
         _canal = null; _clave = ''; _gente = []; _avisar();
     }
 
-    /* Cambiar de sucursal es cambiar de sala: si no, el de la sucursal 2
-       seguiría apareciendo entre los de la 1. */
+    /* Cambiar de sucursal ya no cambia de sala —la sala es el negocio— pero sí
+       cambia lo que publico de mí: los demás tienen que ver que me moví. */
+    function _reanunciar() {
+        if (!_canal) { entrar(); return; }
+        var antes = _yo;
+        _yo = _quienSoy();
+        if (!_yo) return;
+        _yo.sid = _sesionId;
+        /* La hora de llegada se conserva: moverse de sucursal no es llegar de
+           nuevo, y reiniciarla pondría a quien lleva horas al final de la fila. */
+        if (antes && antes.desde) _yo.desde = antes.desde;
+        try { _canal.track(_yo); } catch (e) {}
+    }
     try {
         window.addEventListener('storage', function (e) {
             if (!e) return;
-            if (e.key === 'etaax_sucursal_activa' || e.key === 'etaax_ctx') entrar();
+            if (e.key === 'etaax_sucursal_activa') _reanunciar();
+            else if (e.key === 'etaax_ctx') entrar();
         });
     } catch (e) {}
 
