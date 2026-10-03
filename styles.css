@@ -1528,6 +1528,25 @@ textarea:focus {
     display: flex; align-items: center; justify-content: center;
     font-family: 'DM Sans', sans-serif;
 }
+/* ── Quién está trabajando aquí (presencia.js) ──────────────────────────────
+   Avatares encimados, como en un documento compartido: ocupan poco y se leen
+   de un vistazo. Solo salen LOS OTROS — ver mi propia inicial no me dice nada. */
+.ctx-presencia { display:none; align-items:center; gap:0; margin-left:4px; flex-shrink:0; }
+.ctx-pres-lbl  { font-size:12px; margin-right:5px; opacity:.65; }
+.ctx-pres-av {
+    width:25px; height:25px; border-radius:50%;
+    display:inline-flex; align-items:center; justify-content:center;
+    font-family:'DM Sans',sans-serif; font-size:9.5px; font-weight:700;
+    color:#0a0908; border:2px solid var(--bg);
+    margin-left:-7px;              /* encimados: el primero manda */
+    cursor:default; letter-spacing:.3px;
+    transition:transform .14s;
+}
+.ctx-pres-av:first-of-type { margin-left:0; }
+/* Al pasar encima sale del montón para poder leer su tooltip. */
+.ctx-pres-av:hover { transform:translateY(-2px) scale(1.08); z-index:2; }
+.ctx-pres-mas { background:var(--surface2); color:var(--text-muted); font-size:10px; }
+
 .ctx-bar-inner {
     display: flex; align-items: center; gap: 10px;
     width: 94%; max-width: 1180px; background: var(--surface);

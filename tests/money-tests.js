@@ -13828,6 +13828,243 @@ console.log('\n══ BH1 · Cierre, historial del QR y área por NIP ══');
         eq(/catch \(e\) \{ \/\* sin perfil/.test(ent), true, 'falla abierto'));
 }
 
+/* ═══════════ SUITE BH2 · QUIÉN ESTÁ, QUIÉN ENTRÓ Y CÓMO SE LE DEVUELVE ═════
+   Tres piezas que resuelven tres preguntas distintas, y conviene no
+   confundirlas:
+
+     · «¿Quién está trabajando AHORA?»  → presencia.js, con Realtime Presence.
+       Efímero: no toca la base. Un latido por persona cada pocos segundos
+       llenaría la tabla de ruido y dejaría fantasmas cada vez que alguien
+       cierra la laptop sin salir.
+     · «¿Quién ENTRÓ el martes?»        → bitácora accesos_log (v62).
+     · «Perdió correo Y contraseña»     → Edge Function admin-credenciales.
+       No puede vivir en el navegador: cambiar credenciales ajenas exige la
+       llave de servicio, que es la llave maestra de toda la base.             */
+console.log('\n══ BH2 · Quién está, quién entró y cómo se le devuelve el acceso ══');
+{
+    const pres = fs.readFileSync(path.join(RAIZ, 'presencia.js'), 'utf8');
+    const ctxb = fs.readFileSync(path.join(RAIZ, 'ctx-bar.js'), 'utf8');
+    const hub  = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+    const adm  = fs.readFileSync(path.join(RAIZ, 'admin.html'), 'utf8');
+    const v62  = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v62.sql'), 'utf8');
+    const fn   = fs.readFileSync(path.join(RAIZ, 'supabase/functions/admin-credenciales/index.ts'), 'utf8');
+    const cuerpoDe = (src) => (nombre) => {
+        const i = src.indexOf('function ' + nombre + '(');
+        if (i < 0) return '';
+        const abre = src.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < src.length) {
+            if (src[j] === '{') prof++;
+            else if (src[j] === '}') { prof--; if (!prof) return src.slice(i, j + 1); }
+            j++;
+        }
+        return '';
+    };
+    const dP = cuerpoDe(pres), dC = cuerpoDe(ctxb), dH = cuerpoDe(hub), dA = cuerpoDe(adm);
+
+    /* ── 1) PRESENCIA ── */
+    /* Se corre el código real: color e inicial son lo que hace reconocible a
+       alguien de un vistazo, y tienen que ser ESTABLES. */
+    function presCtx() {
+        const ls = {}, ss = {};
+        const ctx = { console, JSON, String, Object, Array, Date, Math, setTimeout,
+            localStorage: { getItem: k => (k in ls ? ls[k] : null), setItem(k, v) { ls[k] = v; }, removeItem(k) { delete ls[k]; } },
+            sessionStorage: { getItem: k => (k in ss ? ss[k] : null), setItem(k, v) { ss[k] = v; }, removeItem(k) { delete ss[k]; } },
+            document: { readyState: 'complete', addEventListener() {} },
+            navigator: { userAgent: 'test' } };
+        ctx.window = ctx;
+        ctx.window.addEventListener = function () {};
+        vm.createContext(ctx);
+        vm.runInContext(pres, ctx, { filename: 'presencia.js' });
+        return ctx.window.EtaaxPresencia;
+    }
+    const P = presCtx();
+    test('el mismo nombre da siempre el mismo color', () =>
+        eq(P._color('Ana López'), P._color('Ana López'), 'estable'));
+    /* Un color al azar por sesión haría imposible reconocer a nadie: el punto
+       del avatar es que se asocie a una persona. */
+    test('…y dos personas distintas, colores distintos', () =>
+        eq(P._color('Ana López') !== P._color('Beto Ruiz'), true, 'distinguibles'));
+    test('la inicial toma nombre y apellido', () =>
+        eq(P._inicial('Ana López'), 'AL', 'AL'));
+    test('…con un solo nombre, una letra', () =>
+        eq(P._inicial('Edwin'), 'E', 'E'));
+    test('…y sin nombre no truena', () =>
+        eq(P._inicial(''), '?', '?'));
+
+    /* La presencia es EFÍMERA a propósito: si tocara la base, cada latido sería
+       una escritura y cada laptop cerrada un fantasma. */
+    test('la presencia no escribe en ninguna tabla', () =>
+        eq(pres.indexOf('.from(') === -1 && pres.indexOf('.insert(') === -1, true, 'efímera'));
+    test('usa el canal de Realtime, que se limpia solo al cortarse', () =>
+        eq(pres.indexOf('.presenceState()') > -1 && pres.indexOf('.track(') > -1, true, 'presence'));
+    /* Dos personas en sucursales distintas no se estorban: verse ahí sería
+       ruido, no información. */
+    test('el canal es por negocio Y sucursal', () =>
+        eq(dP('entrar').indexOf("'pres:' + c.negId + ':' + (_sucActiva() || '_global')") > -1, true, 'acotado'));
+    test('cambiar de sucursal cambia de sala', () =>
+        eq(pres.indexOf("e.key === 'etaax_sucursal_activa'") > -1, true, 'reentra'));
+    /* La misma persona con dos pestañas es UNA persona en la fila: ver
+       «Ana» dos veces no dice nada. */
+    test('dos pestañas de la misma persona cuentan como una', () =>
+        eq(dP('_releer').indexOf('porNombre[m.nombre]') > -1, true, 'deduplicado'));
+    /* Pero cada pestaña necesita su propia clave, o cerrar una borraría la
+       presencia de la otra. */
+    test('…aunque cada pestaña tenga su propia clave', () =>
+        eq(pres.indexOf("presence: { key: _sesionId }") > -1, true, 'por pestaña'));
+    /* Lo que viaja a los otros navegadores no puede llevar correo ni id: es
+       dato de identificación, y para saludar basta el nombre. */
+    test('lo que se comparte no lleva correo ni id de usuario', () => {
+        const t = dP('_quienSoy');
+        return eq(t.indexOf('email') === -1 && t.indexOf('usuarioId') === -1, true, 'sin datos de más');
+    });
+
+    /* ── La fila de avatares ── */
+    test('la barra de contexto tiene su hueco', () =>
+        eq(ctxb.indexOf('id="ctxPresencia"') > -1, true, 'con hueco'));
+    /* Ver mi propio avatar no me dice nada, y en un negocio de una persona la
+       fila diría siempre "1": ruido permanente. */
+    test('no me pinto a mí mismo: solo quién MÁS está', () =>
+        eq(dC('_pintarPresencia').indexOf('filter(function (p) { return !p.yo; })') > -1, true, 'solo otros'));
+    test('sin nadie más, la fila desaparece', () =>
+        eq(dC('_pintarPresencia').indexOf("box.style.display = 'none'") > -1, true, 'se esconde'));
+    /* Ocho avatares empujan la barra y dejan de distinguirse. */
+    test('de cinco en adelante se resume en «+N»', () =>
+        eq(dC('_pintarPresencia').indexOf('var MAX = 4;') > -1, true, 'resumido'));
+    /* Suscribirse en cada repintado dejaría un oyente nuevo cada vez y la barra
+       acabaría repintándose decenas de veces por cambio. */
+    test('se suscribe UNA vez, no en cada repintado', () =>
+        eq(dC('_pintarPresencia').indexOf('if (!_presLista)') > -1, true, 'una vez'));
+    test('el nombre de quien está se escapa antes de pintarlo', () =>
+        eq(dC('_pintarPresencia').indexOf('esc(p.inicial)') > -1 &&
+           dC('_pintarPresencia').indexOf('esc(det)') > -1, true, 'escapado'));
+
+    /* ── 2) LA BITÁCORA ── */
+    test('la v62 crea la tabla de accesos', () =>
+        eq(/CREATE TABLE IF NOT EXISTS accesos_log/.test(v62), true, 'tabla'));
+    test('…con RLS encendido', () =>
+        eq(/ALTER TABLE accesos_log ENABLE ROW LEVEL SECURITY/.test(v62), true, 'RLS'));
+    /* La bitácora dice a qué hora entra cada quien: en manos del equipo, eso es
+       otra cosa. La leen el admin de plataforma y el dueño, nadie más. */
+    test('la lee el admin de plataforma y el dueño del negocio', () =>
+        eq(/is_platform_admin\(\)[\s\S]{0,200}n\.usuario_id = auth\.uid\(\)/.test(v62), true, 'acotada'));
+    /* Sin política de INSERT, RLS niega por defecto: es la forma de que nadie
+       pueda escribir accesos que nunca ocurrieron. */
+    test('nadie puede escribirla directo: solo la RPC', () =>
+        eq(/CREATE POLICY[^;]*accesos_log[^;]*FOR INSERT/.test(v62), false, 'sin insert directo'));
+    test('la RPC que registra es SECURITY DEFINER', () =>
+        eq(/FUNCTION acceso_registrar[\s\S]{0,400}SECURITY DEFINER/.test(v62), true, 'definer'));
+    /* La hora la pone el servidor. La del navegador la mueve cualquiera, y una
+       bitácora con horas falsas no sirve para nada. */
+    test('la hora la sella el servidor, no el navegador', () =>
+        eq(v62.indexOf('NOW()\n    );') > -1 || /creado\)[\s\S]{0,200}NOW\(\)/.test(v62), true, 'del servidor'));
+    /* Con sesión, el usuario sale del JWT: no se puede falsificar. El nombre
+       que manda el cliente solo vale para el colaborador, que entra sin sesión
+       y cuya identidad ya validó staff_login. */
+    test('con sesión manda el correo del token, no lo que diga el cliente', () =>
+        eq(/v_user := COALESCE\(NULLIF\(v_email, ''\), NULLIF\(p_usuario, ''\)/.test(v62), true, 'del token'));
+    test('un tipo inventado por el cliente no ensucia los filtros', () =>
+        eq(/IF v_tipo NOT IN \([^)]*\) THEN[\s\S]{0,80}'desconocido'/.test(v62), true, 'validado'));
+    test('la bitácora se limpia sola a los 6 meses', () =>
+        eq(/DELETE FROM accesos_log WHERE creado < NOW\(\) - INTERVAL '180 days'/.test(v62), true, 'retención'));
+    /* SECURITY INVOKER a propósito: si fuera DEFINER se saltaría RLS y
+       cualquiera con sesión leería la bitácora de cualquier negocio. */
+    /* OJO CON ESTE: la versión anterior buscaba «SECURITY INVOKER» en los 300
+       caracteres siguientes al nombre de la función… y ahí vive un COMENTARIO
+       que dice justo esas palabras. El test hacía match con mi propia prosa, no
+       con la declaración: cambiar INVOKER por DEFINER pasaba igual. Lo cazó la
+       batería de mutaciones. Ahora se mira la línea de declaración, y además
+       que esa función NO esté declarada DEFINER en ningún lado. */
+    test('la RPC de lectura NO se salta el candado', () => {
+        const i = v62.indexOf('FUNCTION accesos_de_negocio');
+        const decl = v62.slice(i, i + 300).split('AS $$')[0];
+        return eq(decl.indexOf('SECURITY INVOKER') > -1 && decl.indexOf('SECURITY DEFINER') === -1,
+                  true, decl.replace(/\s+/g, ' ').slice(0, 90));
+    });
+    test('…y topa cuántos devuelve', () =>
+        eq(/LIMIT LEAST\(GREATEST\(COALESCE\(p_limite, 100\), 1\), 500\)/.test(v62), true, 'topado'));
+    /* La IP es dato personal y no hace falta para la pregunta que esto
+       responde. Guardarla obliga a cuidarla. */
+    test('no se guarda la IP', () =>
+        eq(v62.toLowerCase().indexOf('inet') === -1, true, 'sin IP'));
+
+    /* El registro ocurre al ENTRAR A UN NEGOCIO: en el login todavía no hay
+       negocio elegido, y la pregunta es «quién entró a MI negocio». */
+    test('el acceso se registra al entrar a un negocio', () =>
+        eq(dH('_showModulos').indexOf('_registrarAcceso(neg)') > -1, true, 'en el embudo'));
+    /* Entrar, salir a módulos y volver es navegación, no un acceso nuevo:
+       registrarlo cada vez taparía lo que se viene a buscar. */
+    test('una vez por sesión y negocio, no en cada navegación', () =>
+        eq(dH('_registrarAcceso').indexOf('sessionStorage.getItem(k)') > -1, true, 'sin ruido'));
+    /* Si falla, se borra la marca: si no, se daría por registrado un acceso que
+       nunca se escribió. */
+    test('si falla el registro, el siguiente intento vuelve a probar', () =>
+        eq(dH('_registrarAcceso').indexOf('sessionStorage.removeItem(k)') > -1, true, 'reintenta'));
+    /* Una bitácora que impide trabajar cuando se cae es peor que no tenerla. */
+    test('no bloquea la entrada si la bitácora falla', () =>
+        eq(dH('_registrarAcceso').indexOf('try {') > -1 &&
+           dH('_registrarAcceso').indexOf('catch (e) {}') > -1, true, 'falla abierto'));
+    test('distingue dueño, colaborador y admin fantasma', () => {
+        const t = dH('_registrarAcceso');
+        return eq(t.indexOf("'staff'") > -1 && t.indexOf("'admin_fantasma'") > -1 && t.indexOf("'dueno'") > -1,
+                  true, 'los tres');
+    });
+
+    test('el panel admin puede verla por negocio', () =>
+        eq(adm.indexOf("rpc('accesos_de_negocio'") > -1, true, 'la lee'));
+    /* «Error» no se puede arreglar. «Falta correr la v62» sí. */
+    test('…y si falta la migración, lo dice con nombre y apellido', () =>
+        eq(dA('verAccesosNegocio').indexOf('supabase-migration-v62.sql') > -1, true, 'accionable'));
+    test('…y avisa que no hay registro de lo anterior a encenderla', () =>
+        eq(dA('verAccesosNegocio').indexOf('no hay registro de lo que pasó antes') > -1, true, 'honesto'));
+
+    /* ── 3) CREDENCIALES ── */
+    /* La llave de servicio en el cliente es la llave maestra de toda la base.
+       Que el front NO la toque es la mitad del diseño. */
+    test('el navegador nunca ve la llave de servicio', () =>
+        eq(adm.indexOf('SERVICE_ROLE') === -1 && adm.indexOf('service_role') === -1, true, 'sin llave'));
+    test('el cambio pasa por la Edge Function', () =>
+        eq(adm.indexOf("/functions/v1/admin-credenciales") > -1, true, 'en el servidor'));
+    test('…mandando la sesión del admin', () =>
+        eq(dA('guardarCredenciales').indexOf("'Authorization': 'Bearer ' + token") > -1, true, 'con token'));
+
+    test('la función exige sesión', () =>
+        eq(fn.indexOf("if (!token) return json({ ok: false, error: 'Falta la sesión.' }, 401)") > -1, true, 'candado 1'));
+    /* Se verifica contra el correo del TOKEN, no contra algo que mande el
+       cliente: lo contrario sería pedirle al ladrón que diga si es ladrón. */
+    test('…y que sea la del admin, verificada contra el token', () =>
+        eq(/const quien = \(u\.user\.email \?\? ''\)\.toLowerCase\(\);[\s\S]{0,200}quien !== ADMIN_EMAIL/.test(fn),
+           true, 'candado 2'));
+    /* Decir «existe pero no eres admin» le confirma a quien prueba que la
+       puerta está ahí. No se gana nada contándolo. */
+    test('…sin delatar que la puerta existe', () =>
+        eq(/quien !== ADMIN_EMAIL\) \{[\s\S]{0,400}'Sesión no válida\.'/.test(fn), true, 'callado'));
+    /* Sin esto, un error de dedo le cambia la contraseña a quien no toca. */
+    test('…y que ese usuario sea el dueño de ESE negocio', () =>
+        eq(fn.indexOf('neg.usuario_id !== usuarioId') > -1, true, 'candado 3'));
+    /* Validar solo en el navegador es validar nada: esto se puede llamar con
+       curl. */
+    test('la fuerza de la contraseña se valida en el SERVIDOR', () =>
+        eq(fn.indexOf('function passwordDebil') > -1 &&
+           fn.indexOf('const malo = passwordDebil(password)') > -1, true, 'en el servidor'));
+    /* El dueño no puede confirmar un correo nuevo en una bandeja que —por
+       definición de este caso— no puede abrir. */
+    test('el correo nuevo entra ya confirmado', () =>
+        eq(fn.indexOf('email_confirm: true') > -1, true, 'confirmado'));
+    /* Si no se actualiza el espejo, el correo nuevo sirve para entrar pero en
+       pantalla sigue el viejo, y nadie sabe cuál es el bueno. */
+    test('se actualiza el espejo que lee todo el sistema', () =>
+        eq(fn.indexOf("admin.from('usuarios').update({ email })") > -1, true, 'espejo'));
+    test('un correo que ya usa otra cuenta se para antes, con mensaje claro', () =>
+        eq(fn.indexOf('Ese correo ya lo usa otra cuenta.') > -1, true, 'claro'));
+    /* Un cambio de credenciales sin rastro es exactamente lo que no debe
+       existir en un sistema con dinero adentro. */
+    test('el cambio queda en la bitácora, con quién y qué', () =>
+        eq(/accesos_log'\)\.insert\(\{[\s\S]{0,400}tipo: 'admin_reset'/.test(fn), true, 'con rastro'));
+    test('…y si la bitácora no existe, se avisa en vez de callarlo', () =>
+        eq(fn.indexOf('NO se pudo registrar en la bitácora') > -1, true, 'avisado'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');

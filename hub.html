@@ -2996,8 +2996,52 @@ function _guardarCtx(neg, suc) {
     localStorage.setItem('etaax_ctx', JSON.stringify(ctx));
 }
 
+/* ══ LA BITÁCORA DE ACCESOS ════════════════════════════════════════════════
+   «¿Quién entró a mi negocio el martes?» no se podía responder. Ni para el
+   dueño que lo pregunta, ni para ETAAX cuando se lo piden.
+
+   Se registra al ENTRAR A UN NEGOCIO, no al validar la contraseña: el dato que
+   interesa es a qué negocio se entró, y en el login todavía no hay ninguno
+   elegido. `_showModulos` es el embudo por donde pasan todos los caminos
+   —dueño, colaborador, admin fantasma— así que es el único sitio donde hay que
+   ponerlo.
+
+   UNA VEZ POR SESIÓN Y NEGOCIO. Entrar, salir a módulos y volver es navegación,
+   no un acceso nuevo: registrarlo cada vez llenaría la bitácora de ruido y
+   taparía justo lo que se viene a buscar. La marca vive en sessionStorage, así
+   que al cerrar la pestaña vuelve a contar.
+
+   NO BLOQUEA. Si la RPC falla —sin red, o la v62 sin correr— se entra igual.
+   Una bitácora que impide trabajar cuando se cae es peor que no tenerla. */
+function _registrarAcceso(neg) {
+    try {
+        if (!neg || !neg.id || typeof _supabase === 'undefined') return;
+        var k = 'etaax_acc_' + neg.id;
+        if (sessionStorage.getItem(k)) return;
+        sessionStorage.setItem(k, '1');
+        var esStaff = !!(_sesion && _sesion.type === 'staff');
+        var esAdmin = !!(_sesion && _sesion.isAdmin);
+        /* El usuario solo se manda para el COLABORADOR: entra sin sesión propia
+           y su identidad ya la validó staff_login contra el hash. Para quien
+           tiene sesión, el servidor usa el correo del token —que no se puede
+           falsificar— e ignora lo que mande el cliente. */
+        _supabase.rpc('acceso_registrar', {
+            p_neg: neg.id,
+            p_usuario: esStaff ? (_sesion.nombre || '') : '',
+            p_tipo: esStaff ? 'staff' : (esAdmin ? 'admin_fantasma' : 'dueno'),
+            p_agente: String(navigator.userAgent || '').slice(0, 160)
+        }).then(function (r) {
+            /* Si no se pudo registrar, se borra la marca: así el siguiente
+               intento vuelve a probar en vez de dar por hecho un registro que
+               nunca ocurrió. */
+            if (r && r.error) { try { sessionStorage.removeItem(k); } catch (e) {} }
+        }, function () { try { sessionStorage.removeItem(k); } catch (e) {} });
+    } catch (e) {}
+}
+
 function _showModulos(neg) {
     showView('viewModulos');
+    _registrarAcceso(neg);
     _gateSuscripcion(neg); // si el negocio no está activo, reemplaza por la pantalla de bloqueo
     // Hub General (admin sin negocio): los módulos no operan sin negocio
     // activo — deshabilitar cards para no abrir páginas vacías.

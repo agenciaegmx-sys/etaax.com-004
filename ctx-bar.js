@@ -40,6 +40,10 @@
                 '<div class="ctx-neg-tipo">' + esc(tipo) + '</div>' +
             '</div>' +
             pill +
+            /* Quién más está trabajando aquí. Va junto a la sucursal porque es
+               información del MISMO alcance: "aquí, ahora". El contenido lo
+               pinta presencia.js; este es solo su sitio. */
+            '<div class="ctx-presencia" id="ctxPresencia"></div>' +
             '<div class="ctx-nav-btns">' +
                 '<button class="ctx-btn ctx-btn-icon" onclick="history.back()" title="Atrás">↩</button>' +
                 '<button class="ctx-btn ctx-btn-icon" onclick="history.forward()" title="Adelante">↪</button>' +
@@ -53,8 +57,47 @@
             '</div>';
         bar.style.display = 'flex';
         document.body.classList.add('has-ctx');
+        _pintarPresencia();
         // Sync nombre desde Supabase en background (multi-dispositivo)
         _syncNegNombre(ctx, initCtxBar);
+    }
+
+    /* ── LOS AVATARES DE QUIÉN ESTÁ AQUÍ ──────────────────────────────────
+       Se suscribe UNA vez (presencia.js avisa en cada cambio) y repinta solo
+       ese hueco: volver a armar toda la barra haría parpadear el nombre del
+       negocio cada vez que alguien abre una pestaña.
+
+       YO NO SALGO en la fila. Ver mi propio avatar no me dice nada —ya sé que
+       estoy— y en un negocio de una persona la fila diría siempre "1", que es
+       ruido. Lo que importa es quién MÁS está. */
+    var _presLista = false;
+    function _pintarPresencia() {
+        var box = document.getElementById('ctxPresencia');
+        if (!box || !window.EtaaxPresencia) return;
+        if (!_presLista) {
+            _presLista = true;
+            EtaaxPresencia.alCambiar(function () { _pintarPresencia(); });
+        }
+        var otros = EtaaxPresencia.gente().filter(function (p) { return !p.yo; });
+        if (!otros.length) { box.innerHTML = ''; box.style.display = 'none'; return; }
+        box.style.display = 'flex';
+        /* Cuatro caben; de ahí en adelante un "+N". Ocho avatares empujan la
+           barra y dejan de distinguirse entre sí. */
+        var MAX = 4;
+        var ver = otros.slice(0, MAX), resto = otros.length - ver.length;
+        box.innerHTML =
+            '<span class="ctx-pres-lbl" title="Personas trabajando en este negocio ahora">👥</span>' +
+            ver.map(function (p) {
+                var det = p.nombre + (p.rol ? ' · ' + p.rol : '') +
+                          (p.tipo === 'dueno' ? ' (dueño)' : '');
+                return '<span class="ctx-pres-av" style="background:' + p.color + '" title="' +
+                       esc(det) + ' — trabajando aquí ahora">' + esc(p.inicial) + '</span>';
+            }).join('') +
+            (resto > 0
+                ? '<span class="ctx-pres-av ctx-pres-mas" title="' +
+                  esc(otros.slice(MAX).map(function (p) { return p.nombre; }).join(', ')) +
+                  '">+' + resto + '</span>'
+                : '');
     }
 
     // Compara el nombre en Supabase con el de etaax_ctx y actualiza si cambió
