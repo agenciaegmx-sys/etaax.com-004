@@ -14314,6 +14314,163 @@ console.log('\n══ BH4 · El rótulo que mentía ══');
            true, 'sin plan'));
 }
 
+/* ═══════════ SUITE BH5 · RESUMEN DE RESULTADOS Y PROYECCIÓN ════════════════
+   El P&L del periodo en una pantalla, y al lado una columna donde se mueve
+   cualquier renglón para ver cuánta utilidad cambia.
+
+   Base de FLUJO, igual que todo ETAAX: lo que SALIÓ de la caja. Mezclar flujo
+   con devengado da una utilidad que no cuadra con el banco.                 */
+console.log('\n══ BH5 · Resumen de resultados y proyección ══');
+{
+    const C = A.EtaaxCore;
+    const BASE = { ingresos: 482300, food: 150478, nom: 137000, fijos: 68000,
+                   variables: 168000, prevs: 12000 };
+    const pl = C.resumenPL(BASE);
+    const lin = (p, k) => p.lineas.filter(l => l.k === k)[0];
+
+    /* ── Qué es food cost y qué no ── */
+    /* Limpieza, desechables y empaque son suministros de operación, no costo
+       del platillo. Meterlos infla el food cost y manda a buscar un problema a
+       la cocina que no está ahí. */
+    test('alimentos y bebidas SÍ son food cost', () =>
+        eq(C.esGastoInsumo({ categoria: 'Alimentos e ingredientes' }) &&
+           C.esGastoInsumo({ categoria: 'Bebidas y licores' }), true, 'los dos'));
+    test('limpieza y desechables NO lo son', () =>
+        eq(C.esGastoInsumo({ categoria: 'Insumos de limpieza' }) ||
+           C.esGastoInsumo({ categoria: 'Desechables y empaque' }), false, 'fuera'));
+    test('la categoría no distingue mayúsculas ni espacios', () =>
+        eq(C.esGastoInsumo({ categoria: '  BEBIDAS Y LICORES ' }), true, 'tolerante'));
+    /* Un pedido que todavía se debe no es costo de este mes: la misma regla que
+       usa clasificarGastos para todo lo demás. */
+    test('lo que aún no se paga no cuenta como food cost del mes', () =>
+        eq(C.costoInsumos([{ categoria: 'Bebidas y licores', monto: 5000, estatus: 'pendiente' },
+                           { categoria: 'Bebidas y licores', monto: 3000 }]), 3000, 'solo lo pagado'));
+
+    /* ── El P&L ── */
+    /* Si el insumo no se restara del variable, se contaría DOS veces —una en
+       food cost y otra en variables— y la suma de porcentajes pasaría de 100
+       sin que se entienda por qué. */
+    test('el insumo no se cuenta dos veces: otros variables lo descuenta', () =>
+        eq(Math.round(lin(pl, 'otros').monto), 168000 - 150478, 'sin doble'));
+    test('la utilidad es ventas menos todo lo demás', () =>
+        eq(Math.round(pl.utilidad),
+           482300 - 150478 - 137000 - 68000 - (168000 - 150478) - 12000, 'cuadra'));
+    test('los porcentajes son sobre venta', () =>
+        eq(lin(pl, 'food').pct.toFixed(1), (150478 / 482300 * 100).toFixed(1), 'sobre venta'));
+    /* Un Infinity o un NaN pintado en pantalla es peor que un cero: el cero se
+       entiende, el NaN hace pensar que el sistema está roto. */
+    test('sin ventas, los porcentajes son 0 y no NaN', () => {
+        const z = C.resumenPL({ ingresos: 0, food: 100, nom: 0, fijos: 0, variables: 100, prevs: 0 });
+        return eq(lin(z, 'food').pct === 0 && !isNaN(z.utilidadPct), true, 'sano');
+    });
+    /* El variable puede venir MENOR que el food cost si las categorías no
+       cuadran: restar a ciegas daría un «otros variables» negativo. */
+    test('otros variables nunca sale negativo', () => {
+        const r = C.resumenPL({ ingresos: 1000, food: 500, nom: 0, fijos: 0, variables: 200, prevs: 0 });
+        return eq(lin(r, 'otros').monto, 0, 'piso en cero');
+    });
+
+    /* ── Las dos caras del food cost ── */
+    /* Comprado vs consumido: la diferencia ES el dato. Si compraste más de lo
+       que usaste, el comprado sale inflado y el consumido dice la verdad. */
+    test('se puede ver el food cost CONSUMIDO, no solo el comprado', () => {
+        const r = C.resumenPL(Object.assign({}, BASE, { consumoInv: 139400 }));
+        return eq(r.foodConsumoPct.toFixed(1), (139400 / 482300 * 100).toFixed(1), 'consumido');
+    });
+    /* Un 0% se lee como «no gastaste nada en insumos», que es lo contrario de
+       «no tengo el dato». Por eso null y no cero. */
+    test('sin inventario cerrado, el consumido es NULL (no cero)', () =>
+        eq(pl.foodConsumo === null && pl.foodConsumoPct === null, true, 'no se inventa'));
+
+    /* ── El Score: contra SUS metas ── */
+    const METAS = { food: 30, nom: 30, fijos: 15, otros: 5, prevs: 5, util: 20 };
+    test('cumplir la meta da 100 en ese renglón', () => {
+        const sc = C.scorePL(pl, METAS);
+        return eq(sc.detalle.filter(d => d.k === 'nom')[0].punto, 100, 'cumple');
+    });
+    /* En un gasto, MENOS es mejor; en la utilidad, MÁS. Invertirlo premiaría
+       justo lo contrario de lo que conviene. */
+    test('en un gasto, pasarse de la meta baja la nota', () => {
+        const sc = C.scorePL(pl, METAS);
+        return eq(sc.detalle.filter(d => d.k === 'food')[0].punto < 100, true, 'castiga');
+    });
+    test('…y en la utilidad, quedarse corto es lo que la baja', () => {
+        const flojo = C.resumenPL(Object.assign({}, BASE, { nom: 200000 }));
+        const sc = C.scorePL(flojo, METAS);
+        return eq(sc.detalle.filter(d => d.k === 'util')[0].punto < 100, true, 'castiga');
+    });
+    test('superar la meta no da más de 100', () => {
+        const bueno = C.resumenPL(Object.assign({}, BASE, { food: 50000 }));
+        return eq(C.scorePL(bueno, METAS).detalle.filter(d => d.k === 'food')[0].punto, 100, 'tope');
+    });
+    /* La utilidad es la razón de ser de todo lo demás: un negocio puede tener
+       food cost perfecto y seguir perdiendo dinero. */
+    test('la utilidad pesa doble en el score', () =>
+        eq(C.PL_PESOS.util, 2, 'doble'));
+    /* Calificar contra un número que nadie puso es dar una nota falsa. */
+    test('un renglón sin meta no se califica: queda fuera del promedio', () => {
+        const sc = C.scorePL(pl, { util: 20 });
+        return eq(sc.detalle.filter(d => d.k === 'food')[0].punto, null, 'sin inventar');
+    });
+    test('sin ninguna meta no hay score, y se dice', () => {
+        const sc = C.scorePL(pl, {});
+        return eq(sc.score === null && sc.metasPuestas === false, true, 'honesto');
+    });
+
+    /* ── La proyección ── */
+    test('sin tocar nada, la proyección es igual al real', () => {
+        const p = C.proyectarPL(pl, {});
+        return eq(Math.round(p.utilidad), Math.round(pl.utilidad), 'idéntica');
+    });
+    test('bajar el food cost sube la utilidad por esa diferencia', () => {
+        const p = C.proyectarPL(pl, { food: { pct: 28 } });
+        const esperado = pl.utilidad + (lin(pl, 'food').monto - pl.ventas * 0.28);
+        return eq(Math.round(p.utilidad), Math.round(esperado), 'exacto');
+    });
+    test('tocar el MONTO recalcula el porcentaje', () => {
+        const p = C.proyectarPL(pl, { nom: { monto: 125000 } });
+        return eq(lin(p, 'nom').pct.toFixed(1), (125000 / 482300 * 100).toFixed(1), 'recalcula');
+    });
+    test('…y tocar el PORCENTAJE recalcula el monto', () => {
+        const p = C.proyectarPL(pl, { nom: { pct: 25 } });
+        return eq(Math.round(lin(p, 'nom').monto), Math.round(482300 * 0.25), 'recalcula');
+    });
+    /* LA PALANCA OPERATIVA, que es media consultoría de restaurantes: vender
+       más al mismo local mejora el margen SOLO porque los fijos no suben. Si
+       subieran con las ventas, la proyección mentiría sobre el mayor beneficio
+       de crecer. */
+    test('subir ventas NO sube los gastos fijos', () => {
+        const p = C.proyectarPL(pl, { ventas: 520000 });
+        return eq(Math.round(lin(p, 'fijos').monto), 68000, 'fijos de verdad');
+    });
+    test('…y por eso su porcentaje baja solo', () => {
+        const p = C.proyectarPL(pl, { ventas: 520000 });
+        return eq(lin(p, 'fijos').pct < lin(pl, 'fijos').pct, true, 'palanca');
+    });
+    /* Los variables SÍ suben con las ventas: dejar su monto fijo proyectaría
+       una cocina que produce de más sin comprar de más, que no existe. */
+    test('subir ventas SÍ sube el food cost, que es variable', () => {
+        const p = C.proyectarPL(pl, { ventas: 520000 });
+        return eq(Math.round(lin(p, 'food').monto), Math.round(520000 * lin(pl, 'food').pct / 100),
+                  'proporcional');
+    });
+    test('…conservando su porcentaje', () => {
+        const p = C.proyectarPL(pl, { ventas: 520000 });
+        return eq(lin(p, 'food').pct.toFixed(2), lin(pl, 'food').pct.toFixed(2), 'mismo %');
+    });
+    /* La utilidad es el RESULTADO. Dejarla editar permitiría «proyectar» una
+       utilidad que no sale de ningún lado — justo la clase de número que luego
+       nadie puede explicar frente a un socio. */
+    test('la utilidad no se puede editar: siempre se deriva', () => {
+        const p = C.proyectarPL(pl, { util: { monto: 999999 }, utilidad: 999999 });
+        return eq(Math.round(p.utilidad), Math.round(p.ventas - p.egresos), 'derivada');
+    });
+    test('los cambios se componen entre sí', () => {
+        const p = C.proyectarPL(pl, { ventas: 520000, food: { pct: 28 } });
+        return eq(Math.round(lin(p, 'food').monto), Math.round(520000 * 0.28), 'compuesto');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');

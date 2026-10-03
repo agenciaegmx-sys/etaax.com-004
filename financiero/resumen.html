@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<script src="/negocio-tab.js"></script><!-- negocio activo POR PESTAÑA: debe ir primero -->
+<script src="/page-guard.js"></script>
+<script src="/theme.js"></script><!-- tema claro/oscuro: uno solo para todo el sistema -->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ETAAX – Resumen de Resultados</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+<script src="/etaax-core.js"></script>
+<script src="/reporte-marca.js"></script>
+<style>
+.rs-wrap { max-width:1180px; margin:0 auto; padding:26px 20px 120px; }
+.rs-head { display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px; }
+.rs-title { font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:2px;color:var(--text);line-height:1; }
+.rs-title .g { color:var(--green); }
+.rs-sub { font-size:12px;color:var(--text-dim);margin-top:4px; }
+
+/* Barra de periodo */
+.rs-bar { display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:18px; }
+.rs-tab { padding:7px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);
+  cursor:pointer;font-family:inherit;font-size:12.5px;color:var(--text-muted);transition:all .18s; }
+.rs-tab:hover { border-color:var(--green);color:var(--text); }
+.rs-tab.on { border-color:var(--green);background:rgba(61,190,122,.12);color:var(--green);font-weight:600; }
+.rs-in { background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  padding:7px 11px;border-radius:8px;font-family:inherit;font-size:12.5px;outline:none; }
+
+/* La tabla: real · proyección */
+.rs-card { background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden; }
+.rs-tbl { width:100%;border-collapse:collapse; }
+.rs-tbl th { padding:11px 14px;font-size:9.5px;letter-spacing:2px;text-transform:uppercase;
+  color:var(--text-dim);text-align:right;border-bottom:1px solid var(--border);white-space:nowrap; }
+.rs-tbl th:first-child { text-align:left; }
+.rs-tbl td { padding:10px 14px;font-size:13.5px;text-align:right;border-bottom:1px solid var(--border);
+  font-variant-numeric:tabular-nums;white-space:nowrap; }
+.rs-tbl td:first-child { text-align:left;color:var(--text); }
+.rs-tbl tr:last-child td { border-bottom:none; }
+/* La columna de proyección, separada con una línea para que se lea como otra cosa */
+.rs-proy { border-left:2px solid rgba(122,184,245,.35);background:rgba(122,184,245,.04); }
+.rs-tbl th.rs-proy { color:var(--blue,#7ab8f5); }
+.rs-util td { background:var(--surface2);font-weight:700;font-size:15px; }
+.rs-util td:first-child { font-family:'Bebas Neue',sans-serif;font-size:19px;letter-spacing:1.4px; }
+
+/* Entradas de la proyección */
+.rs-ed { width:88px;background:transparent;border:1px solid transparent;border-radius:6px;
+  color:var(--blue,#7ab8f5);font-family:inherit;font-size:13.5px;text-align:right;padding:4px 6px;
+  outline:none;font-variant-numeric:tabular-nums; }
+.rs-ed:hover { border-color:var(--border); }
+.rs-ed:focus { border-color:var(--blue,#7ab8f5);background:var(--surface2); }
+.rs-ed.tocado { font-weight:700;background:rgba(122,184,245,.10);border-color:rgba(122,184,245,.4); }
+
+/* Score */
+.rs-score { display:flex;align-items:center;gap:16px;background:var(--surface);border:1px solid var(--border);
+  border-radius:14px;padding:16px 20px;flex-wrap:wrap; }
+.rs-score-num { font-family:'Bebas Neue',sans-serif;font-size:52px;line-height:.9;letter-spacing:1px; }
+.rs-score-lbl { font-size:9.5px;letter-spacing:2.4px;text-transform:uppercase;color:var(--text-dim); }
+.rs-chips { display:flex;gap:7px;flex-wrap:wrap;flex:1;min-width:240px; }
+.rs-chip { font-size:11px;padding:4px 10px;border-radius:20px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text-muted);white-space:nowrap; }
+.rs-chip b { color:var(--text); }
+
+.rs-nota { font-size:11.5px;color:var(--text-dim);line-height:1.6;margin-top:10px; }
+.rs-delta { font-size:12px;font-weight:600; }
+.rs-vacio { text-align:center;padding:50px 20px;color:var(--text-dim);line-height:1.7; }
+@media (max-width:700px){ .rs-tbl td,.rs-tbl th{padding:8px 9px;font-size:12.5px} .rs-ed{width:72px} }
+</style>
+</head>
+<body>
+<div class="mod-grid-bg"></div>
+<div class="mod-glow"></div>
+
+<header class="top-bar">
+    <img src="/marca/etaax-logo-oscuro.svg" alt="ETAAX" style="height:26px;width:auto;display:block">
+    <a href="../hub.html?negocios=1" class="topbar-home" title="Seleccionar negocio">🗃️</a>
+    <div class="top-breadcrumb">
+        <span class="top-module-badge">Financiero</span>
+        <span class="top-sep">|</span>
+        <span class="top-section-name">Resumen de Resultados</span>
+    </div>
+    <a href="index.html" class="topbar-home" title="Salud Financiera" style="margin-left:auto">←</a>
+</header>
+<div id="ctxBar" class="ctx-bar" style="display:none"></div>
+
+<div class="app-shell">
+<nav class="nav cerrado" id="nav">
+    <div class="nav-top">
+        <div class="nav-brand"><span class="nav-brand-sub">Salud Financiera</span></div>
+        <div class="nav-top-actions">
+            <a href="index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Salud Financiera" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1">📊</a>
+            <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
+        </div>
+    </div>
+    <div class="nav-section">
+        <div class="nav-section-label">Salud Financiera</div>
+        <a href="resumen.html" class="nav-link active" data-tooltip="Resumen"><span class="nav-icon">🧮</span><span class="nav-text">Resumen</span></a>
+        <a href="ventas.html" class="nav-link" data-tooltip="Ventas"><span class="nav-icon">📈</span><span class="nav-text">Ventas</span></a>
+        <a href="gastos-globales.html" class="nav-link" data-tooltip="Gastos"><span class="nav-icon">💸</span><span class="nav-text">Gastos</span></a>
+        <a href="kpis.html" class="nav-link" data-tooltip="KPIs"><span class="nav-icon">🎯</span><span class="nav-text">KPIs</span></a>
+        <a href="previsiones.html" class="nav-link" data-tooltip="Previsiones"><span class="nav-icon">🗂️</span><span class="nav-text">Previsiones</span></a>
+        <a href="estadisticas.html" class="nav-link" data-tooltip="Estadísticas"><span class="nav-icon">📊</span><span class="nav-text">Estadísticas</span></a>
+    </div>
+</nav>
+
+<main class="main-content expandido" id="mainContent">
+<div class="rs-wrap">
+    <div class="rs-head">
+        <div>
+            <div class="rs-title">Resumen de <span class="g">Resultados</span></div>
+            <div class="rs-sub" id="rsSub">Cargando…</div>
+        </div>
+        <button class="rs-tab" onclick="imprimirResumen()" title="Imprimir el resumen con la proyección">🖨️ Imprimir</button>
+    </div>
+
+    <!-- Periodo -->
+    <div class="rs-bar">
+        <button class="rs-tab" id="tbDia"  onclick="setPeriodo('dia')">Día</button>
+        <button class="rs-tab" id="tbSem"  onclick="setPeriodo('semana')">Semana</button>
+        <button class="rs-tab on" id="tbMes" onclick="setPeriodo('mes')">Mes</button>
+        <button class="rs-tab" id="tbRan"  onclick="setPeriodo('rango')">Rango</button>
+        <input type="month" class="rs-in" id="pickerInput" onchange="render()">
+        <input type="date"  class="rs-in" id="pickerEnd" onchange="render()" style="display:none">
+        <span style="flex:1"></span>
+        <button class="rs-tab" onclick="limpiarProyeccion()" id="btnLimpiar" style="display:none">↺ Limpiar proyección</button>
+    </div>
+
+    <!-- Score -->
+    <div class="rs-score" id="rsScore" style="margin-bottom:14px"></div>
+
+    <!-- La tabla -->
+    <div class="rs-card">
+        <table class="rs-tbl">
+            <thead><tr>
+                <th style="width:30%">Concepto</th>
+                <th>Real</th>
+                <th style="width:72px">%</th>
+                <th class="rs-proy">Proyección</th>
+                <th class="rs-proy" style="width:86px">%</th>
+                <th>Diferencia</th>
+            </tr></thead>
+            <tbody id="rsBody"></tbody>
+        </table>
+    </div>
+
+    <div class="rs-nota" id="rsNota"></div>
+</div>
+</main>
+</div>
+
+<button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
+
+<script>
+function toggleNav() {
+    var nav = document.getElementById('nav'); var main = document.getElementById('mainContent');
+    nav.classList.toggle('cerrado'); if (main) main.classList.toggle('expandido');
+    var cerrado = nav.classList.contains('cerrado');
+    var btn = document.getElementById('navToggleBtn'); var txt = document.getElementById('navToggleTxt');
+    if (btn) btn.childNodes[0].textContent = cerrado ? '▶' : '◀';
+    if (txt) txt.textContent = cerrado ? 'Expandir' : 'Ocultar';
+    if (btn) btn.setAttribute('data-tooltip', cerrado ? 'Expandir' : 'Ocultar');
+}
+
+function n(v){ var x=parseFloat(v); return isNaN(x)?0:x; }
+function esc(s){ return window.etx?etx(String(s==null?'':s)):String(s==null?'':s); }
+function fmtM(v){ return '$'+Math.round(n(v)).toLocaleString('es-MX'); }
+function fmtP(v){ return (n(v)).toFixed(1)+'%'; }
+function getNegocioActivo(){ return localStorage.getItem('etaax_negocio_activo')||''; }
+function _sk(k){ var id=getNegocioActivo(); return id?('etaax_'+id+'_'+k):('etaax_'+k); }
+function todayStr(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function mesStr(){ return todayStr().slice(0,7); }
+
+/* ── Datos ───────────────────────────────────────────────────────────────────
+   Se leen las MISMAS tablas que KPIs y con las MISMAS reglas del núcleo. Si
+   esta pantalla calculara por su cuenta, un día diría una utilidad distinta a
+   la de KPIs sobre el mismo mes y no habría forma de saber cuál creer. */
+var _c = { cortes:[], otros:[], gastos:[], deps:[], ctas:[], fijos:[], staff:[], targets:null, invs:[] };
+
+async function cargar(){
+    var negId = getNegocioActivo(); if(!negId) return;
+    var r = await Promise.all([
+        _supabase.from('cortes').select('datos').eq('negocio_id',negId),
+        _supabase.from('sf_otros').select('datos').eq('negocio_id',negId),
+        _supabase.from('gastos').select('datos').eq('negocio_id',negId),
+        _supabase.from('depositos').select('datos').eq('negocio_id',negId),
+        _supabase.from('tarjetas_credito').select('datos').eq('negocio_id',negId),
+        _supabase.from('gf_fijos').select('datos').eq('negocio_id',negId),
+        _supabase.from('staff').select('datos').eq('negocio_id',negId),
+        _supabase.from('kpi_targets').select('datos').eq('negocio_id',negId).maybeSingle(),
+        _supabase.from('inventarios').select('datos').eq('negocio_id',negId)
+    ]);
+    var fila = function(x){ return (x.data||[]).map(function(y){return y.datos;}).filter(Boolean); };
+    _c.cortes=fila(r[0]); _c.otros=fila(r[1]); _c.gastos=fila(r[2]); _c.deps=fila(r[3]);
+    _c.ctas=fila(r[4]); _c.fijos=fila(r[5]); _c.staff=fila(r[6]);
+    _c.targets=(r[7].data&&r[7].data.datos)||null; _c.invs=fila(r[8]);
+}
+
+/* Alcance por sucursal: vacío = el negocio entero. Misma regla del resto. */
+function _suc(){ return localStorage.getItem('etaax_sucursal_activa')||''; }
+function _deSuc(x){ var s=_suc(); if(!s) return true; return (x&&(x.sucursalId||''))===s || !(x&&x.sucursalId); }
+
+var periodoTipo='mes';
+function _pVal(){ var e=document.getElementById('pickerInput'); return (e&&e.value)||mesStr(); }
+function _pEnd(){ var e=document.getElementById('pickerEnd'); return (e&&e.value)||todayStr(); }
+function rango(){ return EtaaxCore.getRange(periodoTipo,_pVal(),_pEnd()); }
+
+function setPeriodo(t){
+    periodoTipo=t;
+    [['dia','tbDia'],['semana','tbSem'],['mes','tbMes'],['rango','tbRan']].forEach(function(p){
+        var b=document.getElementById(p[1]); if(b) b.className='rs-tab'+(t===p[0]?' on':'');
+    });
+    var i=document.getElementById('pickerInput'), e=document.getElementById('pickerEnd');
+    i.type = t==='mes'?'month':(t==='semana'?'week':'date');
+    if(t==='mes') i.value=mesStr(); else if(t!=='semana') i.value=todayStr();
+    e.style.display = t==='rango'?'':'none';
+    render();
+}
+
+/* El P&L del periodo, armado con el núcleo. */
+function plDelPeriodo(){
+    var r=rango(), desde=r.from, hasta=r.to;
+    var dentro=function(f){ return f && f>=desde && f<=hasta; };
+    var cortes=_c.cortes.filter(_deSuc).filter(function(c){return dentro(c.fecha);});
+    var otros =_c.otros.filter(_deSuc).filter(function(o){return dentro(o.fecha);});
+    var gastos=_c.gastos.filter(_deSuc).filter(function(g){return dentro(g.fecha);});
+
+    /* VENTA = venta bruta, SIN propinas: la propina es del staff, no ingreso
+       del negocio. Misma base que KPIs, Ventas y Estadísticas. */
+    var ventas=cortes.reduce(function(s,c){return s+EtaaxCore.ventasBruta(c);},0);
+    var otrosT=otros.reduce(function(s,o){return s+n(o.monto);},0);
+    var ingresos=ventas+otrosT;
+
+    var ctasDeb=(_c.ctas||[]).filter(function(c){return c&&c.tipo==='debito';});
+    var comision=cortes.reduce(function(s,c){return s+EtaaxCore.comisionBancoCorte(c,ctasDeb,_c.deps);},0);
+    var cl=EtaaxCore.clasificarGastos(gastos,{fijos:_c.fijos,staff:_c.staff,comisionBanco:comision});
+    var prevs=EtaaxCore.previsionApartadoRango(_c.deps||[],desde,hasta);
+
+    return EtaaxCore.resumenPL({
+        ingresos: ingresos,
+        food:      EtaaxCore.costoInsumos(gastos),
+        nom:       cl.nomOp+cl.nomAdm+cl.imss,
+        fijos:     cl.fijo,
+        variables: cl.variable,
+        prevs:     prevs,
+        consumoInv: _consumoDelPeriodo(desde,hasta)
+    });
+}
+
+/* ── FOOD COST CONSUMIDO ─────────────────────────────────────────────────────
+   Sale de los inventarios CERRADOS que caen en el periodo: es lo que de verdad
+   se usó, valorizado. Null si no hay ninguno — y entonces la pantalla lo dice
+   en vez de inventar un número. */
+function _consumoDelPeriodo(desde,hasta){
+    var hubo=false, total=0;
+    (_c.invs||[]).filter(_deSuc).forEach(function(inv){
+        if(!inv||!inv.cerrado) return;
+        var f=inv.fecha||'';
+        if(!(f>=desde&&f<=hasta)) return;
+        var v=n(inv.consumoCosto||inv.vendidoCosto);
+        if(v>0){ hubo=true; total+=v; }
+    });
+    return hubo?total:null;
+}
+
+/* ── La proyección ───────────────────────────────────────────────────────── */
+var _proy = {};                 // lo que el usuario movió
+function _tocado(){ return Object.keys(_proy).length>0; }
+
+function edVentas(el){
+    var v=parseFloat(String(el.value).replace(/[^0-9.\-]/g,''));
+    if(isNaN(v)||v<0){ delete _proy.ventas; } else { _proy.ventas=v; }
+    render(true);
+}
+function edPct(k, el){
+    var v=parseFloat(String(el.value).replace(/[^0-9.\-]/g,''));
+    if(isNaN(v)){ delete _proy[k]; } else { _proy[k]={pct:v}; }
+    render(true);
+}
+function edMonto(k, el){
+    var v=parseFloat(String(el.value).replace(/[^0-9.\-]/g,''));
+    if(isNaN(v)){ delete _proy[k]; } else { _proy[k]={monto:v}; }
+    render(true);
+}
+function limpiarProyeccion(){ _proy={}; render(); }
+
+function render(mantenFoco){
+    var foco = mantenFoco ? (document.activeElement&&document.activeElement.id) : null;
+    var selStart = null;
+    try { if(foco) selStart = document.activeElement.selectionStart; } catch(e){}
+
+    var base = plDelPeriodo();
+    var proy = EtaaxCore.proyectarPL(base, _proy);
+    var metas = _c.targets || {};
+    /* La meta de food cost no existía en KPIs (ahí no se medía). Se usa 30 como
+       punto de partida —el rango sano de la industria— y es editable desde
+       KPIs como las demás en cuanto se guarde una. */
+    var m = { food: n(metas.food)||30, nom: (n(metas.nomOp)+n(metas.nomAdm))||30,
+              fijos: n(metas.fijos)||15, otros: n(metas.variables)||10,
+              prevs: n(metas.prev)||5,  util: n(metas.util)||20 };
+    var sc = EtaaxCore.scorePL(base, m);
+
+    document.getElementById('rsSub').textContent =
+        _periodoTxt() + (_suc()? ' · esta sucursal' : ' · todo el negocio');
+
+    // ── Score ──
+    var col = sc.score===null ? 'var(--text-dim)'
+            : sc.score>=85 ? 'var(--green)' : sc.score>=70 ? 'var(--accent-text,var(--accent))' : 'var(--red)';
+    document.getElementById('rsScore').innerHTML =
+        '<div style="text-align:center;min-width:92px">' +
+          '<div class="rs-score-num" style="color:'+col+'">'+(sc.score===null?'—':sc.score)+'</div>' +
+          '<div class="rs-score-lbl">Score</div>' +
+        '</div>' +
+        '<div class="rs-chips">' +
+          sc.detalle.map(function(d){
+              if(d.punto===null) return '';
+              var c = d.punto>=100?'var(--green)':d.punto>=80?'var(--accent-text,var(--accent))':'var(--red)';
+              return '<span class="rs-chip"><b>'+esc(d.nom)+'</b> '+fmtP(d.real)+
+                     ' <span style="color:'+c+'">· meta '+d.meta+'%</span></span>';
+          }).join('') +
+        '</div>';
+
+    // ── La tabla ──
+    var filas = base.lineas.map(function(l,i){
+        var p = proy.lineas[i];
+        var dif = p.monto - l.monto;
+        /* En un gasto, bajar es bueno: el verde va al que REDUCE. Pintarlo al
+           revés haría leer una mejora como un problema. */
+        var cDif = Math.abs(dif)<0.5 ? 'var(--text-dim)' : (dif<0 ? 'var(--green)' : 'var(--red)');
+        var tocado = !!_proy[l.k];
+        return '<tr>'+
+            '<td>'+esc(l.nom)+'</td>'+
+            '<td>'+fmtM(l.monto)+'</td>'+
+            '<td style="color:var(--text-muted)">'+fmtP(l.pct)+'</td>'+
+            '<td class="rs-proy"><input class="rs-ed'+(tocado&&_proy[l.k].monto!==undefined?' tocado':'')+'" id="ed_m_'+l.k+'" '+
+                'value="'+Math.round(p.monto)+'" onchange="edMonto(\''+l.k+'\',this)" '+
+                'title="Escribe el monto; el porcentaje se recalcula"></td>'+
+            '<td class="rs-proy"><input class="rs-ed'+(tocado&&_proy[l.k].pct!==undefined?' tocado':'')+'" id="ed_p_'+l.k+'" '+
+                'value="'+p.pct.toFixed(1)+'" onchange="edPct(\''+l.k+'\',this)" '+
+                'title="Escribe el porcentaje; el monto se recalcula"></td>'+
+            '<td class="rs-delta" style="color:'+cDif+'">'+(dif>=0?'+':'−')+fmtM(Math.abs(dif))+'</td>'+
+        '</tr>';
+    }).join('');
+
+    var difU = proy.utilidad - base.utilidad;
+    var cU = Math.abs(difU)<0.5?'var(--text-dim)':(difU>0?'var(--green)':'var(--red)');
+
+    document.getElementById('rsBody').innerHTML =
+        // Ventas arriba: todo lo demás es un porcentaje de esto
+        '<tr>'+
+            '<td style="font-weight:600">Ventas</td>'+
+            '<td style="font-weight:600">'+fmtM(base.ventas)+'</td>'+
+            '<td style="color:var(--text-muted)">100%</td>'+
+            '<td class="rs-proy"><input class="rs-ed'+(_proy.ventas!==undefined?' tocado':'')+'" id="ed_ventas" '+
+                'value="'+Math.round(proy.ventas)+'" onchange="edVentas(this)" '+
+                'title="Súbelas o bájalas: todo lo demás se recalcula"></td>'+
+            '<td class="rs-proy" style="color:var(--text-dim)">100%</td>'+
+            '<td class="rs-delta" style="color:'+((proy.ventas-base.ventas)>0?'var(--green)':((proy.ventas-base.ventas)<0?'var(--red)':'var(--text-dim)'))+'">'+
+                ((proy.ventas-base.ventas)>=0?'+':'−')+fmtM(Math.abs(proy.ventas-base.ventas))+'</td>'+
+        '</tr>'+
+        filas +
+        // La utilidad es RESULTADO: no se edita, se observa
+        '<tr class="rs-util">'+
+            '<td>Utilidad</td>'+
+            '<td>'+fmtM(base.utilidad)+'</td>'+
+            '<td>'+fmtP(base.utilidadPct)+'</td>'+
+            '<td class="rs-proy" style="color:var(--blue,#7ab8f5)">'+fmtM(proy.utilidad)+'</td>'+
+            '<td class="rs-proy" style="color:var(--blue,#7ab8f5)">'+fmtP(proy.utilidadPct)+'</td>'+
+            '<td class="rs-delta" style="color:'+cU+'">'+(difU>=0?'+':'−')+fmtM(Math.abs(difU))+'</td>'+
+        '</tr>';
+
+    document.getElementById('btnLimpiar').style.display = _tocado()?'':'none';
+
+    // ── La nota: de dónde salió el food cost ──
+    var nota = '';
+    if (base.foodConsumoPct !== null) {
+        var brecha = base.lineas[0].pct - base.foodConsumoPct;
+        nota = '🍳 <b>Food cost comprado ' + fmtP(base.lineas[0].pct) + ' · consumido ' + fmtP(base.foodConsumoPct) + '.</b> ' +
+            (brecha > 1
+                ? 'Compraste ' + fmtP(brecha) + ' más de lo que usaste: o estás llenando bodega, o hay merma que no se registró.'
+                : brecha < -1
+                ? 'Usaste más de lo que compraste: saliste de inventario viejo, lo cual está bien una vez, no todos los meses.'
+                : 'Compra y consumo van parejos — la bodega no está creciendo ni vaciándose.');
+    } else {
+        nota = '🍳 El food cost sale de lo <b>comprado</b> este periodo. Para ver lo <b>consumido</b> de verdad ' +
+               '—que es el food cost de los libros— cierra un inventario dentro del periodo.';
+    }
+    nota += '<br>La utilidad no se edita: es lo que sale de los demás renglones. ' +
+            'Los <b>gastos fijos</b> no suben si subes las ventas — por eso el margen mejora solo al vender más.';
+    if (!sc.metasPuestas) nota += '<br>⚠️ Sin metas configuradas no hay Score. Ponlas en <a href="kpis.html" style="color:var(--green)">KPIs</a>.';
+    document.getElementById('rsNota').innerHTML = nota;
+
+    /* Devolver el foco donde estaba: sin esto, escribir un número repinta la
+       tabla y el cursor salta fuera del campo a media captura. */
+    if (foco) {
+        var el = document.getElementById(foco);
+        if (el) { el.focus(); try { el.setSelectionRange(selStart, selStart); } catch(e){} }
+    }
+}
+
+function _periodoTxt(){
+    var r=rango();
+    if(periodoTipo==='mes') return new Date(r.from+'T12:00:00').toLocaleDateString('es-MX',{month:'long',year:'numeric'});
+    if(periodoTipo==='dia') return new Date(r.from+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'});
+    return r.from+' al '+r.to;
+}
+
+/* ── Imprimir: el mismo resumen, con la proyección al lado ── */
+function imprimirResumen(){
+    var base=plDelPeriodo(), proy=EtaaxCore.proyectarPL(base,_proy);
+    var fil=function(nom,a,ap,b,bp){
+        return '<tr><td class="w">'+esc(nom)+'</td><td>'+fmtM(a)+'</td><td>'+fmtP(ap)+'</td>'+
+               '<td>'+fmtM(b)+'</td><td>'+fmtP(bp)+'</td><td>'+((b-a)>=0?'+':'−')+fmtM(Math.abs(b-a))+'</td></tr>';
+    };
+    var cuerpo='<table class="rt tnum"><thead><tr><th class="w">Concepto</th>'+
+        '<th>Real</th><th>%</th><th>Proyección</th><th>%</th><th>Diferencia</th></tr></thead><tbody>'+
+        fil('Ventas', base.ventas,100, proy.ventas,100)+
+        base.lineas.map(function(l,i){ var p=proy.lineas[i]; return fil(l.nom,l.monto,l.pct,p.monto,p.pct); }).join('')+
+        '</tbody><tfoot>'+fil('Utilidad', base.utilidad,base.utilidadPct, proy.utilidad,proy.utilidadPct)+'</tfoot></table>';
+    etaaxImprimir(etaaxReporte({
+        titulo:'Resumen de Resultados', subtitulo:_periodoTxt(),
+        pie:'Resumen de Resultados · '+_periodoTxt(), cuerpo:cuerpo
+    }));
+}
+
+document.addEventListener('DOMContentLoaded', async function(){
+    document.getElementById('pickerInput').value = mesStr();
+    document.getElementById('pickerEnd').value   = todayStr();
+    if(typeof _ctxBarInit==='function') _ctxBarInit();
+    await cargar();
+    render();
+});
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
+<script src="/etaax-store.js"></script>
+<script src="/etaax-db.js"></script>
+<script src="../security.js"></script>
+<script src="../ctx-bar.js"></script>
+<script src="/presencia.js"></script><!-- quién está trabajando aquí: avatares en la barra -->
+</body>
+</html>

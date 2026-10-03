@@ -1094,6 +1094,193 @@
         return r;
     }
 
+    /* ══ RESUMEN DE RESULTADOS (P&L) ═══════════════════════════════════════════
+       El estado de resultados del periodo, en los renglones con los que de
+       verdad se habla de un restaurante: ventas, food cost, nómina, fijos,
+       otros variables, previsiones y utilidad. Cada uno con su porcentaje
+       sobre venta, que es la unidad en que se compara un negocio con otro y
+       consigo mismo el mes pasado.
+
+       BASE DE FLUJO, igual que todo ETAAX: cuenta lo que SALIÓ de la caja en el
+       periodo. Mezclar flujo con devengado en la misma columna da una utilidad
+       que no cuadra con el banco y que nadie puede explicar.
+
+       EL FOOD COST TIENE DOS CARAS, y las dos importan:
+         · COMPRADO  → lo que se gastó en insumos este periodo. Es el que entra
+                       en la utilidad, porque es el dinero que salió.
+         · CONSUMIDO → lo que de verdad se usó, valorizado (sale del inventario
+                       cerrado). Es el food cost operativo de los libros.
+       Si compraste más de lo que consumiste, el comprado sale inflado y el
+       consumido te dice la verdad de la cocina. Enseñar solo uno esconde
+       justamente la diferencia que hay que mirar: la sobrecompra.           */
+
+    /* Qué categorías de gasto son INSUMO de producto. Limpieza, desechables y
+       empaque NO van aquí: son suministros de operación, no costo del platillo.
+       Meterlos infla el food cost y hace que se persiga un problema que no
+       está en la cocina. */
+    var CATS_INSUMO = {
+        'alimentos e ingredientes': 1,
+        'bebidas y licores': 1,
+        'insumos de barra (garnish, hielo…)': 1,
+        'insumos de barra (garnish, hielo...)': 1
+    };
+    function esGastoInsumo(g) {
+        if (!g) return false;
+        return !!CATS_INSUMO[String(g.categoria || '').trim().toLowerCase()];
+    }
+    /* Lo gastado en insumos del periodo. Solo lo PAGADO: un pedido que todavía
+       se debe no es costo de este mes (misma regla que clasificarGastos). */
+    function costoInsumos(gastos) {
+        return (gastos || []).reduce(function (t, g) {
+            if (!esGastoInsumo(g)) return t;
+            if (gastoEstatus(g) !== 'pagado') return t;
+            return t + n(g.monto);
+        }, 0);
+    }
+
+    /* El P&L del periodo. Recibe lo ya calculado por quien lo llama —ingresos,
+       la clasificación de gastos, previsiones— para no volver a recorrer nada
+       ni depender del DOM.
+
+       `otrosVar` es el variable SIN los insumos: si no se restaran, el insumo
+       se contaría dos veces (una en food cost y otra en variables) y la suma de
+       porcentajes pasaría de 100 sin que se entienda por qué.                */
+    function resumenPL(d) {
+        d = d || {};
+        var ventas   = n(d.ingresos);
+        var food     = n(d.food);
+        var nom      = n(d.nom);
+        var fijos    = n(d.fijos);
+        var otrosVar = Math.max(0, n(d.variables) - food);
+        var prevs    = n(d.prevs);
+        var egresos  = food + nom + fijos + otrosVar;
+        var utilidad = ventas - egresos - prevs;
+        /* Sin ventas no hay porcentaje que calcular: devolver 0 es más honesto
+           que un Infinity o un NaN pintado en pantalla. */
+        var pc = function (v) { return ventas > 0 ? (v / ventas) * 100 : 0; };
+        return {
+            ventas: ventas,
+            lineas: [
+                { k: 'food',   nom: 'Food cost',      monto: food,     pct: pc(food) },
+                { k: 'nom',    nom: 'Nómina',         monto: nom,      pct: pc(nom) },
+                { k: 'fijos',  nom: 'Gastos fijos',   monto: fijos,    pct: pc(fijos) },
+                { k: 'otros',  nom: 'Otros variables',monto: otrosVar, pct: pc(otrosVar) },
+                { k: 'prevs',  nom: 'Previsiones',    monto: prevs,    pct: pc(prevs) }
+            ],
+            egresos: egresos,
+            prevs: prevs,
+            utilidad: utilidad,
+            utilidadPct: pc(utilidad),
+            /* El food cost CONSUMIDO, si hay inventario cerrado que lo diga.
+               Null —no cero— cuando no se sabe: un 0% se lee como «no gastaste
+               nada en insumos», que es lo contrario de «no tengo el dato». */
+            foodConsumo: (d.consumoInv === null || d.consumoInv === undefined)
+                ? null : n(d.consumoInv),
+            foodConsumoPct: (d.consumoInv === null || d.consumoInv === undefined)
+                ? null : pc(n(d.consumoInv))
+        };
+    }
+
+    /* ── EL SCORE: qué tan cerca está de SUS metas ────────────────────────────
+       Se mide contra las metas que el negocio configuró, no contra un estándar
+       de revista: un bar de autor y una fonda tienen food costs sanos muy
+       distintos, y calificar a los dos con la misma vara no ayuda a ninguno.
+
+       Cada renglón da 0-100: 100 si cumple la meta o la mejora, y baja
+       proporcionalmente conforme se aleja. La utilidad PESA DOBLE — es la
+       razón de ser de todo lo demás, y un negocio puede tener food cost
+       perfecto y seguir perdiendo dinero.
+
+       Un renglón sin meta configurada NO se inventa: se queda fuera del
+       promedio. Calificar contra un número que nadie puso es dar una nota
+       falsa. */
+    var PL_PESOS   = { food: 1, nom: 1, fijos: 1, otros: 1, prevs: 1, util: 2 };
+    /* Para el gasto, menor es mejor; para la utilidad, mayor es mejor. */
+    var PL_MAYOR   = { util: 1 };
+
+    function _puntoLinea(real, meta, mayorEsMejor) {
+        if (meta === null || meta === undefined || isNaN(meta)) return null;
+        if (meta === 0) return real <= 0 ? 100 : 0;
+        var razon = mayorEsMejor ? (real / meta) : (meta / real);
+        if (!isFinite(razon)) return real <= 0 ? 100 : 0;
+        if (razon >= 1) return 100;                 // cumple o mejora
+        /* Se alejó: la nota baja con la distancia, y toca cero cuando se
+           desvía el doble de la meta. Un castigo lineal es explicable; una
+           curva «elegante» nadie la puede defender frente a un dueño. */
+        return Math.max(0, Math.round(razon * 100));
+    }
+
+    function scorePL(pl, metas) {
+        metas = metas || {};
+        var det = [], suma = 0, peso = 0;
+        (pl.lineas || []).forEach(function (l) {
+            var p = _puntoLinea(l.pct, metas[l.k], !!PL_MAYOR[l.k]);
+            det.push({ k: l.k, nom: l.nom, real: l.pct, meta: metas[l.k], punto: p });
+            if (p === null) return;
+            var w = PL_PESOS[l.k] || 1;
+            suma += p * w; peso += w;
+        });
+        var pu = _puntoLinea(pl.utilidadPct, metas.util, true);
+        det.push({ k: 'util', nom: 'Utilidad', real: pl.utilidadPct, meta: metas.util, punto: pu });
+        if (pu !== null) { suma += pu * PL_PESOS.util; peso += PL_PESOS.util; }
+        return {
+            /* Sin una sola meta configurada no hay score: null, y la pantalla
+               invita a ponerlas. Un 0 ahí diría «vas pésimo», que es mentira. */
+            score: peso > 0 ? Math.round(suma / peso) : null,
+            detalle: det,
+            metasPuestas: peso > 0
+        };
+    }
+
+    /* ── LA PROYECCIÓN: mover un renglón y ver todo lo demás ──────────────────
+       `cambios` trae lo que el usuario movió: { ventas, food:{pct|monto}, … }.
+       La UTILIDAD NUNCA se edita: es el resultado, no una entrada. Dejarla
+       editar permitiría «proyectar» una utilidad que no sale de ningún lado —
+       justo la clase de número que luego nadie puede explicar. */
+    function proyectarPL(base, cambios) {
+        cambios = cambios || {};
+        var ventas = (cambios.ventas !== undefined && cambios.ventas !== null)
+            ? n(cambios.ventas) : n(base.ventas);
+        var lineas = (base.lineas || []).map(function (l) {
+            var c = cambios[l.k] || {};
+            var monto, pct;
+            if (c.pct !== undefined && c.pct !== null) {
+                /* Tocó el PORCENTAJE: manda, y el monto se recalcula sobre las
+                   ventas proyectadas. */
+                pct = n(c.pct); monto = ventas * pct / 100;
+            } else if (c.monto !== undefined && c.monto !== null) {
+                monto = n(c.monto); pct = ventas > 0 ? (monto / ventas) * 100 : 0;
+            } else {
+                /* Sin tocar: se conserva el PORCENTAJE, no el monto. Si suben
+                   las ventas, el food cost sube con ellas — es variable. Dejar
+                   el monto fijo proyectaría una cocina que produce de más sin
+                   comprar de más, que no existe. */
+                pct = l.pct; monto = ventas * pct / 100;
+            }
+            return { k: l.k, nom: l.nom, monto: monto, pct: pct };
+        });
+        /* Los FIJOS son la excepción: no suben porque vendas más. Esa es su
+           definición, y es de donde sale la mitad del apalancamiento de un
+           restaurante — venderle más al mismo local. */
+        lineas.forEach(function (l) {
+            var c = cambios[l.k] || {};
+            if (l.k !== 'fijos') return;
+            if (c.pct !== undefined && c.pct !== null) return;
+            var monto = (c.monto !== undefined && c.monto !== null)
+                ? n(c.monto)
+                : (base.lineas.filter(function (x) { return x.k === 'fijos'; })[0] || {}).monto || 0;
+            l.monto = monto;
+            l.pct = ventas > 0 ? (monto / ventas) * 100 : 0;
+        });
+        var egresos = lineas.reduce(function (t, l) { return t + l.monto; }, 0);
+        var utilidad = ventas - egresos;
+        return {
+            ventas: ventas, lineas: lineas, egresos: egresos,
+            utilidad: utilidad,
+            utilidadPct: ventas > 0 ? (utilidad / ventas) * 100 : 0
+        };
+    }
+
     /* ── COSTEO DE RECETA: múltiplo sobre el costo bruto ───────────────────────────
        Regla histórica: costo bruto 30% → precio de platillo = costo / 0.30 (múltiplo
        3.333…), gasto operativo 40%, utilidad neta el resto. El múltiplo ahora es
@@ -1310,6 +1497,9 @@
         gastoEsIMSS: gastoEsIMSS, gastoEsNomina: gastoEsNomina, gastoEsPropina: gastoEsPropina,
         gastoEsFijoPat: gastoEsFijoPat, gastoEsPagoFijo: gastoEsPagoFijo, nomTipoGasto: nomTipoGasto,
         clasificarGastos: clasificarGastos, grupoGasto: grupoGasto, grupoGastoUI: grupoGastoUI,
+        CATS_INSUMO: CATS_INSUMO, esGastoInsumo: esGastoInsumo, costoInsumos: costoInsumos,
+        resumenPL: resumenPL, scorePL: scorePL, proyectarPL: proyectarPL,
+        PL_PESOS: PL_PESOS,
         planFijoPago: planFijoPago,
         getNegocioActivo: getNegocioActivo, sucActiva: sucActiva, scopeSuc: scopeSuc,
         getWeekStr: getWeekStr, semanaISO: semanaISO, getRange: getRange, prevRange: prevRange, inRange: inRange,
