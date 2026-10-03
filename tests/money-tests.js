@@ -14187,6 +14187,39 @@ console.log('\n══ BH3 · La baja que no quitaba el acceso ══');
         eq(cuerpo('darDeBajaStaff').indexOf('no tiene credenciales de acceso') > -1, true, 'honesto'));
 }
 
+/* ═══════════ SUITE BH4 · EL RÓTULO QUE MENTÍA ══════════════════════════════
+   Arriba del hub decía «Modo local» con un punto VERDE pulsando. Edwin preguntó
+   qué significaba, y la respuesta es que ya no significaba nada: era el valor
+   inicial escrito a mano en el HTML, de cuando el hub funcionaba sin Supabase.
+
+   El problema no era que sobrara, era que ENGAÑABA. Un punto verde activo junto
+   a esas palabras se lee como «estás trabajando sin conexión, tus datos están
+   solo en este equipo» — y es falso. Peor: el mismo chip, al cerrar sesión, ya
+   decía «Sin sesión» en gris. Dos etiquetas distintas para el mismo estado. */
+console.log('\n══ BH4 · El rótulo que mentía ══');
+{
+    const hub = fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8');
+    /* Que no quede como texto vivo en ninguna parte: en el comentario que
+       explica por qué se fue, sí — ahí es historia, no interfaz. */
+    test('«Modo local» ya no se le enseña a nadie', () =>
+        eq(/<span>Modo local<\/span>/.test(hub), false, 'fuera'));
+    /* Un estado, una etiqueta: antes de entrar y después de salir es lo mismo
+       —no hay sesión— y decirlo de dos formas distintas hace dudar de si son
+       cosas distintas. */
+    test('antes de entrar dice lo mismo que al salir: «Sin sesión»', () =>
+        eq((hub.match(/<span>Sin sesión<\/span>/g) || []).length >= 1 &&
+           hub.indexOf("<span>Sin sesión</span>'") > -1, true, 'una sola etiqueta'));
+    /* El punto verde pulsando es el que contaba la mentira: sin sesión no hay
+       nada latiendo. */
+    test('…y sin sesión el punto no late ni va en verde', () =>
+        eq((hub.match(/background:var\(--dim\);animation:none/g) || []).length >= 2,
+           true, 'apagado en los dos caminos'));
+    /* Con sesión SÍ late y SÍ va en verde: ahí el indicador dice algo real. */
+    test('con sesión sí late, porque ahí sí indica algo', () =>
+        eq(hub.indexOf("'<div class=\"hub-user-dot\"></div><span>' + _esc(_sesion.nombre") > -1,
+           true, 'vivo'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
