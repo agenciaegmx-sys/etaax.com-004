@@ -1422,13 +1422,27 @@ function _sellarCierre(inv) {
    Llama a `next()` solo si hay respuesta. Cancelar aborta el cierre completo:
    más vale no cerrar que cerrar con una frontera inventada, porque esa frontera
    decide a qué inventario van las entradas de los días siguientes. */
+/* SIEMPRE se pregunta, y se pregunta FECHA Y HORA.
+   Antes había dos atajos: si el inventario ya traía sello no se preguntaba, y
+   si se cerraba el mismo día tampoco. Los dos se caen con «reabrir»: se reabre
+   un inventario para meter lo que faltaba y al volver a finalizarlo conservaba
+   el sello VIEJO — el movimiento recién capturado quedaba fuera del periodo,
+   en silencio. Y el atajo del mismo día impedía corregir una hora mal puesta.
+   Preguntar siempre cuesta un clic; equivocarse de periodo cuesta el mes. */
+/* Qué proponer en el diálogo: lo que ya tenía sellado —al re-finalizar un
+   inventario reabierto, lo normal es confirmar la misma hora— y si nunca se
+   cerró, el final de su día de apertura. */
+function _cierreSugerido(inv, fecha, ahora) {
+    var prev = inv && (inv.cierreOperativo || inv.cerradoAt);
+    if (prev) { var l = _isoALocal(prev); if (l) return l; }
+    return fecha + 'T23:59';
+}
+
 function _conCierreOperativo(inv, next) {
-    if (!inv || inv.cierreOperativo) { next(); return; }
+    if (!inv) { next(); return; }
     var ahora = new Date();
-    var hoy = ahora.getFullYear() + '-' + ('0' + (ahora.getMonth() + 1)).slice(-2) + '-' + ('0' + ahora.getDate()).slice(-2);
     var f = String(inv.fecha || '');
-    // Mismo día: el clic ES el cierre, no hay nada que preguntar.
-    if (!f || f === hoy) { next(); return; }
+    if (!f) { next(); return; }   // sin fecha no hay periodo que partir
 
     var lbl = new Date(f + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' });
     var ov = document.createElement('div');
@@ -1443,11 +1457,11 @@ function _conCierreOperativo(inv, next) {
           '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:25px;letter-spacing:1.4px;margin:6px 0 12px;line-height:1.1">' +
             '¿A qué hora terminaste el conteo?</div>' +
           '<div style="font-size:13px;color:var(--text-muted,#a8a29a);line-height:1.6">' +
-            'Este inventario es del <b style="color:var(--text,#f0ece6)">' + lbl + '</b>, pero lo estás cerrando hoy.<br>' +
-            'Lo que se haya registrado <b>después</b> de esa hora se va al siguiente inventario.</div>' +
+            'Este inventario abrió el <b style="color:var(--text,#f0ece6)">' + lbl + '</b>.<br>' +
+            'Lo que se haya registrado <b>después</b> del momento que pongas aquí se va al siguiente inventario.</div>' +
           '<div style="margin:18px 0 6px">' +
-            '<label style="display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim,#6b6862);margin-bottom:6px">Hora del ' + lbl + '</label>' +
-            '<input type="time" id="hcHora" value="23:59" style="width:100%;box-sizing:border-box;background:var(--surface2,#1a1916);' +
+            '<label style="display:block;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim,#6b6862);margin-bottom:6px">Fecha y hora del cierre</label>' +
+            '<input type="datetime-local" id="hcHora" value="' + _cierreSugerido(inv, f, ahora) + '" style="width:100%;box-sizing:border-box;background:var(--surface2,#1a1916);' +
               'border:1px solid var(--border,#2a2824);color:var(--text,#f0ece6);padding:12px 14px;border-radius:10px;' +
               'font-family:inherit;font-size:17px;outline:none">' +
             '<div style="font-size:11.5px;color:var(--text-dim,#6b6862);margin-top:6px;line-height:1.5">' +
@@ -1468,11 +1482,14 @@ function _conCierreOperativo(inv, next) {
     ov.querySelector('#hcCancel').onclick = cerrar;
     ov.onclick = function (e) { if (e.target === ov) cerrar(); };
     ov.querySelector('#hcOk').onclick = function () {
-        /* Un <input type="time"> vacío es posible en algunos navegadores; ahí
-           vale el final del día, igual que si no la recordara. */
-        var hhmm = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(inp.value || '').trim());
-        var hora = hhmm ? (('0' + hhmm[1]).slice(-2) + ':' + hhmm[2]) : '23:59';
-        inv.cierreOperativo = new Date(f + 'T' + hora + ':00').toISOString();
+        /* Vacío o ilegible → el final del día de apertura, que es lo que valía
+           antes de que esto se pudiera elegir. Nunca se deja sin sello: sin él,
+           el inventario contaría todo lo registrado hasta hoy. */
+        var v = String(inp.value || '').trim();
+        var d = v ? new Date(v) : null;
+        inv.cierreOperativo = (d && !isNaN(d.getTime()))
+            ? d.toISOString()
+            : new Date(f + 'T23:59:00').toISOString();
         cerrar();
         next();
     };
@@ -5052,8 +5069,80 @@ function setVistaEntradas2(v) {
     renderStepContent();
 }
 
+/* ══ LO QUE ENTRÓ POR EL QR, EN UNA LISTA ══════════════════════════════════
+   Las mermas y las cortesías del celular YA se suman en cada insumo —eso
+   funciona— pero solo se ven abriendo producto por producto. Con 328 renglones
+   eso no es revisar, es buscar. Como historial de movimientos sirve más tener
+   la lista corrida: qué salió, cuánto, quién y cuándo.
+
+   Es una VISTA, no un cálculo: los números siguen saliendo de _recomputarMovsQR.
+   Si esta lista contara por su cuenta, un día diría algo distinto al inventario
+   y no habría forma de saber cuál manda. */
+var _movsQRAbierto = false;
+function toggleMovsQR() { _movsQRAbierto = !_movsQRAbierto; renderStepContent(); }
+window.toggleMovsQR = toggleMovsQR;
+
+function _movsQRDelPeriodo() {
+    var suc = _sucActiva();
+    return (getEntradasLog() || []).filter(function (e) {
+        if (!e || e.borrada) return false;
+        if (e.concepto !== 'merma' && e.concepto !== 'salida') return false;
+        if (e.sucursalId && suc && e.sucursalId !== suc) return false;
+        return _enPeriodoInvActual(e.fecha, e.registrado);
+    }).sort(function (a, b) {
+        return String(b.registrado || b.fecha || '').localeCompare(String(a.registrado || a.fecha || ''));
+    });
+}
+function _movQRTipo(e) {
+    if (e.concepto === 'merma') return { ic: '💔', txt: 'Merma', col: 'var(--red)' };
+    return (e.salidaTipo === 'prestamo')
+        ? { ic: '🔁', txt: 'Préstamo', col: 'var(--viol)' }
+        : { ic: '🎁', txt: 'Cortesía', col: 'var(--accent-text,var(--accent))' };
+}
+function bannerMovsQR() {
+    var movs = _movsQRDelPeriodo();
+    if (!movs.length) return '';
+    var nM = movs.filter(function (e) { return e.concepto === 'merma'; }).length;
+    var nC = movs.length - nM;
+    var quienes = {};
+    movs.forEach(function (e) { if (e.registradoPor) quienes[e.registradoPor] = 1; });
+    var nombres = Object.keys(quienes);
+    var lista = !_movsQRAbierto ? '' :
+        '<div style="margin-top:10px;border-top:1px solid rgba(224,90,58,.22);padding-top:8px;max-height:320px;overflow-y:auto">'
+        + movs.map(function (e) {
+            var t = _movQRTipo(e);
+            var cuando = (e.fecha || '') + (e.registrado ? ' · ' + String(e.registrado).slice(11, 16) : '');
+            return '<div style="display:flex;align-items:baseline;gap:10px;padding:6px 2px;border-bottom:1px solid var(--border);font-size:12.5px">'
+                + '<span style="white-space:nowrap;color:' + t.col + '">' + t.ic + ' ' + t.txt + '</span>'
+                + '<span style="flex:1;min-width:0;color:var(--text)">' + etx(e.nombre || '—')
+                  + (e.motivo ? ' <span style="color:var(--text-dim);font-size:11px">· ' + etx(e.motivo) + '</span>' : '')
+                  + (e.notas ? ' <span style="color:var(--text-dim);font-size:11px">· ' + etx(e.notas) + '</span>' : '')
+                + '</span>'
+                + '<span style="font-weight:600;white-space:nowrap;color:' + t.col + '">'
+                  + etx(String(e.cantidad || 0)) + ' ' + etx(e.unidad || '') + '</span>'
+                + '<span style="color:var(--text-dim);font-size:11px;white-space:nowrap">'
+                  + (e.registradoPor ? etx(e.registradoPor) + ' · ' : '') + etx(cuando) + '</span>'
+            + '</div>';
+          }).join('')
+        + '</div>';
+    return '<div style="background:rgba(224,90,58,.06);border:1px solid rgba(224,90,58,.3);border-radius:11px;padding:11px 14px;margin-bottom:14px">'
+        + '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+        + '<span style="font-size:18px">📤</span>'
+        + '<div style="flex:1;min-width:220px;font-size:12.5px;color:var(--text-muted);line-height:1.5">'
+            + '<b style="color:var(--text)">' + movs.length + ' movimiento' + (movs.length !== 1 ? 's' : '') + ' desde el QR</b>'
+            + ' <span style="color:var(--text-dim)">· ' + nM + ' merma' + (nM !== 1 ? 's' : '')
+            + ' · ' + nC + ' cortesía' + (nC !== 1 ? 's' : '') + ' o préstamo' + (nC !== 1 ? 's' : '') + '</span>'
+            + (nombres.length ? ' · por ' + etx(nombres.join(', ')) : '') + '<br>'
+            + '<span style="color:var(--text-dim)">Ya están sumados en cada insumo. Esta lista es para revisarlos juntos.</span>'
+        + '</div>'
+        + '<button class="btn-vista" style="color:var(--red);border-color:var(--red)" onclick="toggleMovsQR()">'
+            + (_movsQRAbierto ? '▾ Ocultar lista' : '▸ Ver los ' + movs.length) + '</button>'
+        + '</div>' + lista
+    + '</div>';
+}
+
 function renderStep2() {
-    const switcher = buildVistaSwitcherEnt();
+    const switcher = buildVistaSwitcherEnt() + bannerMovsQR();
     if (vistaEntradas2 === 'lista') {
         const filas  = getFilasFiltradas();
         const noData = !filasCaptura.length
@@ -7258,6 +7347,48 @@ function _conteoResumen(c) {
     if (np) p.push(np + ' abierta' + (np !== 1 ? 's' : '') + ' pesada' + (np !== 1 ? 's' : ''));
     return p.join(' · ') || 'sin datos';
 }
+/* ¿Está desplegada la lista del banner? Vive fuera del render porque el Paso 1
+   se repinta con cada tecla del buscador: dentro, la lista se cerraría sola. */
+var _bannerQRAbierto = false;
+function toggleBannerConteosQR() {
+    _bannerQRAbierto = !_bannerQRAbierto;
+    renderStepContent();
+}
+window.toggleBannerConteosQR = toggleBannerConteosQR;
+
+/* El nombre del producto de un conteo, como se llame hoy en el catálogo. El
+   conteo solo guarda el id: si se renombró el insumo, el papel viejo mentiría. */
+function _nomDeConteo(c) {
+    var canon = _canonInsumoId(c.insumoId) || c.insumoId;
+    var fila = (filasCaptura || []).find(function (f) {
+        return (_canonInsumoId(f.insumoId) || f.insumoId) === canon;
+    });
+    if (fila && fila.nombre) return fila.nombre;
+    return c.nombre || '(producto fuera de este inventario)';
+}
+
+/* LA LISTA QUE FALTABA. El desglose por producto ya existía dentro de cada
+   tarjeta, pero para saber QUÉ se contó desde el celular había que ir abriendo
+   tarjeta por tarjeta — con 328 productos eso no es una revisión, es una
+   búsqueda. Aquí va el historial corrido, como en el QR: qué, cuánto, quién y
+   cuándo. */
+function _listaConteosQR() {
+    var orden = _conteosQR.slice().sort(function (a, b) {
+        return String((b.fecha || '') + (b.hora || '')).localeCompare(String((a.fecha || '') + (a.hora || '')));
+    });
+    return '<div style="margin-top:10px;border-top:1px solid rgba(122,184,245,.25);padding-top:8px;max-height:320px;overflow-y:auto">'
+        + orden.map(function (c) {
+            var cuando = (c.fecha || '') + (c.hora ? ' · ' + c.hora : '');
+            return '<div style="display:flex;align-items:baseline;gap:10px;padding:6px 2px;border-bottom:1px solid var(--border);font-size:12.5px">'
+                + '<span style="flex:1;min-width:0;color:var(--text)">' + etx(_nomDeConteo(c)) + '</span>'
+                + '<span style="color:#7ab8f5;font-weight:600;white-space:nowrap">' + etx(_conteoResumen(c)) + '</span>'
+                + '<span style="color:var(--text-dim);font-size:11px;white-space:nowrap">'
+                    + (c.contadoPor ? etx(c.contadoPor) + ' · ' : '') + etx(cuando) + '</span>'
+            + '</div>';
+          }).join('')
+    + '</div>';
+}
+
 function bannerConteosQR() {
     if (!_conteosQR.length) return '';
     var quienes = {}, _prods = {};
@@ -7267,7 +7398,8 @@ function bannerConteosQR() {
     });
     var nombres = Object.keys(quienes);
     var _nProd = Object.keys(_prods).length;
-    return '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:rgba(122,184,245,.07);border:1px solid rgba(122,184,245,.35);border-radius:11px;padding:11px 14px;margin-bottom:14px">'
+    return '<div style="background:rgba(122,184,245,.07);border:1px solid rgba(122,184,245,.35);border-radius:11px;padding:11px 14px;margin-bottom:14px">'
+        + '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
         + '<span style="font-size:18px">📋</span>'
         + '<div style="flex:1;min-width:220px;font-size:12.5px;color:var(--text-muted);line-height:1.5">'
             + '<b style="color:var(--text)">' + _nProd + ' producto' + (_nProd !== 1 ? 's' : '') + ' contado' + (_nProd !== 1 ? 's' : '') + ' desde el QR</b>'
@@ -7275,7 +7407,11 @@ function bannerConteosQR() {
             + (nombres.length ? ' · por ' + etx(nombres.join(', ')) : '') + '<br>'
             + '<span style="color:var(--text-dim)">Los conteos de un mismo producto se suman. Revísalos en su tarjeta, o aplícalos todos de una vez.</span>'
         + '</div>'
+        + '<button class="btn-vista" style="color:#7ab8f5;border-color:#7ab8f5" onclick="toggleBannerConteosQR()">'
+            + (_bannerQRAbierto ? '▾ Ocultar lista' : '▸ Ver los ' + _conteosQR.length + ' conteos') + '</button>'
         + '<button class="btn-vista" style="color:#7ab8f5;border-color:#7ab8f5" onclick="aplicarConteosQR()">Aplicar todos</button>'
+        + '</div>'
+        + (_bannerQRAbierto ? _listaConteosQR() : '')
     + '</div>';
 }
 /* Chip dentro de la fila: qué contó el colaborador y el botón para tomarlo. */

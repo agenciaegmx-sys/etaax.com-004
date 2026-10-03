@@ -13656,6 +13656,178 @@ console.log('\n══ BG9 · La foto del QR y los ajustes de inventario ══')
         eq(dV('renderHistTabla').indexOf('finalizarInventarioHistorial'), -1, 'sin botón suelto'));
 }
 
+/* ═══════════ SUITE BH1 · CIERRE, HISTORIAL DEL QR Y ÁREA POR NIP ═══════════
+   Cuatro cosas que Edwin pidió juntas:
+
+   1. FINALIZAR SIEMPRE PREGUNTA fecha y hora. Había dos atajos: si el
+      inventario ya traía sello no se preguntaba, y si se cerraba el mismo día
+      tampoco. Los dos se caen con «reabrir»: se reabre para meter lo que
+      faltaba y al re-finalizar conservaba el sello VIEJO — el movimiento
+      recién capturado quedaba fuera del periodo, en silencio.
+
+   2. EL BANNER DEL PASO 1 decía «35 productos contados desde el QR» y no había
+      cómo ver CUÁLES. El desglose existía dentro de cada tarjeta; con 328
+      renglones eso no es revisar, es buscar.
+
+   3. EL PASO 2 no mostraba las mermas y cortesías del QR como lista. Se suman
+      bien en cada insumo, pero como historial de movimientos hacía falta
+      verlas juntas.
+
+   4. EL QR DE INVENTARIOS no sabía de qué área es quien entra: el chip
+      arrancaba en «barra» para todos y se podía mover a las tres. El portal de
+      staff lleva tiempo leyendo el área del colaborador con portal_perfil; el
+      de inventarios no la pedía.                                              */
+console.log('\n══ BH1 · Cierre, historial del QR y área por NIP ══');
+{
+    const inv = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    const ent = fs.readFileSync(path.join(RAIZ, 'entrada.html'), 'utf8');
+    const cuerpoDe = (src) => (fn) => {
+        const i = src.indexOf('function ' + fn + '(');
+        if (i < 0) return '';
+        const abre = src.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < src.length) {
+            if (src[j] === '{') prof++;
+            else if (src[j] === '}') { prof--; if (!prof) return src.slice(i, j + 1); }
+            j++;
+        }
+        return '';
+    };
+    const dV = cuerpoDe(inv), dE = cuerpoDe(ent);
+
+    /* ── 1) FINALIZAR SIEMPRE PREGUNTA ── */
+    const cco = dV('_conCierreOperativo');
+    test('ya no se salta la pregunta si el inventario trae sello', () =>
+        eq(cco.indexOf('inv.cierreOperativo) { next(); return; }'), -1, 'siempre pregunta'));
+    /* El atajo del mismo día impedía corregir una hora mal puesta. */
+    test('…ni cuando se cierra el mismo día', () =>
+        eq(cco.indexOf("f === hoy"), -1, 'siempre pregunta'));
+    test('se pregunta FECHA y hora, no solo la hora', () =>
+        eq(cco.indexOf('type="datetime-local" id="hcHora"') > -1, true, 'fecha y hora'));
+    /* Al re-finalizar un inventario reabierto lo normal es confirmar la misma
+       hora: proponerla ahorra el error de teclearla de nuevo. */
+    test('propone el sello que ya tenía', () =>
+        eq(dV('_cierreSugerido').indexOf('inv.cierreOperativo || inv.cerradoAt') > -1, true, 'propone'));
+    test('…y si nunca se cerró, el final de su día de apertura', () =>
+        eq(dV('_cierreSugerido').indexOf("fecha + 'T23:59'") > -1, true, 'por defecto'));
+    /* Sin sello, el inventario contaría TODO lo registrado hasta hoy: nunca se
+       puede quedar vacío, ni con el campo en blanco. */
+    test('nunca se queda sin sello, aunque el campo venga vacío', () =>
+        eq(cco.indexOf("new Date(f + 'T23:59:00').toISOString()") > -1, true, 'con respaldo'));
+    test('un inventario sin fecha no truena', () =>
+        eq(cco.indexOf('if (!f) { next(); return; }') > -1, true, 'sigue'));
+    /* El sello que pone el diálogo tiene que sobrevivir a _sellarCierre, que
+       corre después: si lo pisara, preguntar no serviría de nada. */
+    test('el sello elegido sobrevive al sellado posterior', () =>
+        eq(dV('_sellarCierre').indexOf('if (!inv.cierreOperativo)') > -1, true, 'respetado'));
+
+    /* ── 2) LA LISTA DEL PASO 1 ── */
+    test('el banner del QR se puede desplegar', () =>
+        eq(dV('bannerConteosQR').indexOf('toggleBannerConteosQR()') > -1, true, 'desplegable'));
+    test('…y muestra la lista de conteos', () =>
+        eq(dV('bannerConteosQR').indexOf('_listaConteosQR()') > -1, true, 'con lista'));
+    test('cada renglón dice producto, cantidad, quién y cuándo', () => {
+        const t = dV('_listaConteosQR');
+        return eq(t.indexOf('_nomDeConteo(c)') > -1 && t.indexOf('_conteoResumen(c)') > -1 &&
+                  t.indexOf('c.contadoPor') > -1 && t.indexOf('cuando') > -1, true, 'completo');
+    });
+    /* El conteo guarda el id, no el nombre: si el insumo se renombró, leer el
+       nombre viejo del conteo mostraría algo que ya no existe.
+       SE CORRE LA FUNCIÓN. La versión anterior de estos dos tests buscaba
+       `_canonInsumoId` en el cuerpo y pasaba igual con la búsqueda en el
+       catálogo ARRANCADA — lo cazó la batería de mutaciones. */
+    function nomDe(conteo, filas) {
+        const ctx = { console, JSON, String, Object, Array };
+        ctx.window = ctx;
+        vm.createContext(ctx);
+        vm.runInContext('function _canonInsumoId(id){ return String(id||"").replace(/^copia_/, ""); }' +
+                        'var filasCaptura = ' + JSON.stringify(filas || []) + ';', ctx);
+        vm.runInContext(dV('_nomDeConteo'), ctx, { filename: 'inventarios.js' });
+        return ctx._nomDeConteo(conteo);
+    }
+    test('el nombre sale del catálogo de hoy, no del conteo viejo', () =>
+        eq(nomDe({ insumoId: 'i1', nombre: 'Absolut (nombre viejo)' },
+                 [{ insumoId: 'i1', nombre: 'Absolut Blue 750' }]),
+           'Absolut Blue 750', 'del catálogo'));
+    /* La copia de una sucursal y su maestra son el MISMO producto: el conteo
+       puede venir con cualquiera de los dos ids. */
+    test('…aunque el conteo traiga el id de la copia y la fila el del maestro', () =>
+        eq(nomDe({ insumoId: 'copia_i1' }, [{ insumoId: 'i1', nombre: 'Absolut Blue 750' }]),
+           'Absolut Blue 750', 'empatan'));
+    test('…y si el producto ya no está en el inventario, se dice', () =>
+        eq(nomDe({ insumoId: 'i9' }, [{ insumoId: 'i1', nombre: 'Absolut' }])
+             .indexOf('fuera de este inventario') > -1, true, 'avisado'));
+    /* El Paso 1 se repinta con cada tecla del buscador: con el estado dentro
+       del render, la lista se cerraría sola al escribir. */
+    /* Declarada DENTRO de la función, la bandera se reinicia en cada llamada y
+       la lista se cierra sola al escribir en el buscador. Buscar la línea a
+       secas pasaba igual con la variable movida adentro — lo cazó la batería. */
+    test('abrir la lista sobrevive al repintado del buscador', () =>
+        eq(/var _bannerQRAbierto = false;/.test(inv) &&
+           dV('toggleBannerConteosQR').indexOf('var _bannerQRAbierto') === -1 &&
+           dV('bannerConteosQR').indexOf('var _bannerQRAbierto') === -1,
+           true, 'fuera del render'));
+    /* Lo mismo para la del paso 2. */
+    test('…y la del paso 2, igual', () =>
+        eq(/var _movsQRAbierto = false;/.test(inv) &&
+           dV('toggleMovsQR').indexOf('var _movsQRAbierto') === -1 &&
+           dV('bannerMovsQR').indexOf('var _movsQRAbierto') === -1,
+           true, 'fuera del render'));
+    test('«Aplicar todos» sigue estando', () =>
+        eq(dV('bannerConteosQR').indexOf('aplicarConteosQR()') > -1, true, 'sigue'));
+
+    /* ── 3) MERMAS Y CORTESÍAS EN EL PASO 2 ── */
+    test('el paso de entradas muestra los movimientos del QR', () =>
+        eq(dV('renderStep2').indexOf('bannerMovsQR()') > -1, true, 'con panel'));
+    test('…mermas y cortesías/préstamos, no entradas', () => {
+        const t = dV('_movsQRDelPeriodo');
+        return eq(t.indexOf("e.concepto !== 'merma' && e.concepto !== 'salida'") > -1, true, 'los dos');
+    });
+    /* Un movimiento de otra sucursal o de otro periodo no es de este
+       inventario: contarlo ahí sería mentir sobre el conteo. */
+    test('solo los de ESTA sucursal', () =>
+        eq(dV('_movsQRDelPeriodo').indexOf('e.sucursalId !== suc') > -1, true, 'acotado'));
+    test('…y los de ESTE periodo', () =>
+        eq(dV('_movsQRDelPeriodo').indexOf('_enPeriodoInvActual(e.fecha, e.registrado)') > -1, true, 'acotado'));
+    test('lo borrado no aparece', () =>
+        eq(dV('_movsQRDelPeriodo').indexOf('e.borrada') > -1, true, 'sin borrados'));
+    test('se distingue merma de cortesía y de préstamo', () => {
+        const t = dV('_movQRTipo');
+        return eq(t.indexOf("'Merma'") > -1 && t.indexOf("'Préstamo'") > -1 && t.indexOf("'Cortesía'") > -1,
+                  true, 'los tres');
+    });
+    /* Es una VISTA, no un cálculo. Si contara por su cuenta, un día diría algo
+       distinto al inventario y no habría forma de saber cuál manda. */
+    test('la lista no recalcula nada: los números siguen saliendo del inventario', () =>
+        eq(dV('bannerMovsQR').indexOf('Ya están sumados en cada insumo') > -1, true, 'solo vista'));
+
+    /* ── 4) EL ÁREA LA DICE EL NIP ── */
+    test('el QR de inventarios ya pide el perfil del colaborador', () =>
+        eq(ent.indexOf("rpc('portal_perfil'") > -1, true, 'lo pide'));
+    test('…con la misma fuente de áreas que el resto del sistema', () =>
+        eq(ent.indexOf('/staff-area.js') > -1 && ent.indexOf('StaffArea.norm(perfil.area)') > -1,
+           true, 'fuente única'));
+    test('un colaborador de barra queda fijado en barra', () =>
+        eq(ent.indexOf("if (aOp === 'barra' || aOp === 'cocina') { AREA = aOp; AREA_FIJA = true; }") > -1,
+           true, 'fijado'));
+    /* Administración y piso SÍ ven las tres: son quienes levantan inventario
+       general. Fijarlos a un área los dejaría sin poder capturar lo demás. */
+    test('…pero administración y piso siguen viendo las tres', () =>
+        eq(ent.indexOf("aOp === 'barra' || aOp === 'cocina'") > -1, true, 'sin fijar'));
+    test('con el área fijada, los chips dejan de ser botones', () =>
+        eq(dE('_pintarAreas').indexOf('if (AREA_FIJA) {') > -1, true, 'rótulo'));
+    test('…y se dice cuál es su área, no se esconde el dato', () =>
+        eq(dE('_pintarAreas').indexOf('tu área') > -1, true, 'informado'));
+    /* Esconder los chips no basta: setArea se puede llamar desde la consola o
+       desde un botón que sobreviva a un repintado. */
+    test('esconder el chip no es impedir: setArea también se niega', () =>
+        eq(dE('setArea').indexOf('if (AREA_FIJA) return;') > -1, true, 'negado'));
+    /* Si la RPC no responde, dejar a alguien sin poder capturar es peor que
+       mostrarle de más: el filtro es de comodidad, no de seguridad. */
+    test('si el perfil no llega, se sigue pudiendo capturar', () =>
+        eq(/catch \(e\) \{ \/\* sin perfil/.test(ent), true, 'falla abierto'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');

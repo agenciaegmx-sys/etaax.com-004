@@ -375,6 +375,7 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
+<script src="/staff-area.js"></script><!-- el área de un colaborador: fuente única -->
 <script>
 
 function _q(k){var m=new RegExp('[?&]'+k+'=([^&]*)').exec(location.search);return m?decodeURIComponent(m[1]):'';}
@@ -471,7 +472,8 @@ function _enSucQR(x){
    cada registro. */
 var COLAB = '', _NIPHASH = '', INSUMOS = [], SEL = null, FOTO_URL = '', _countTimer = null, _t0 = 0;
 var RECETAS = null;              // menú del negocio (lazy: se carga al entrar a merma de producto)
-var AREA = 'barra';              // área elegida (aplica a entrada Y merma)
+var AREA = 'barra';              // área de trabajo (aplica a entrada, merma, salida y conteo)
+var AREA_FIJA = false;           // la dijo el NIP: no se elige, se informa
 var MERMA_TIPO = 'insumo';       // 'insumo' | 'producto'
 var MSEL = null, MFOTO_URL = '';
 var SALIDA_TIPO = 'cortesia';    // 'cortesia' | 'prestamo'
@@ -482,15 +484,32 @@ var MAX_ITEMS = 15, MAX_FOTOS = 10;
 var CART = { entrada:{items:[],fotos:[]}, merma:{items:[],fotos:[]}, salida:{items:[],fotos:[]} };
 
 var AREAS = [ ['barra','🍸 Barra'], ['cocina','🍳 Cocina'], ['almacen','📦 Almacén'] ];
+/* Cuando el NIP ya dijo el área, el bloque de chips deja de ser un selector y
+   pasa a ser un rótulo: decir en qué área estás parado sirve; poder cambiarla
+   a mano era justo el problema. */
 function _pintarAreas(){
+    var nom = (AREAS.find(function(a){ return a[0] === AREA; }) || [AREA, AREA])[1];
     ['areaChipsEnt','areaChipsMer','areaChipsSal','areaChipsCnt'].forEach(function(cid){
         var c = document.getElementById(cid); if (!c) return;
+        /* Con el área fijada por el NIP esto deja de ser un selector y pasa a
+           ser un rótulo: decir en qué área estás parado sirve; poder cambiarla
+           con el dedo era justo el problema. */
+        if (AREA_FIJA) {
+            c.innerHTML = '<span style="display:inline-flex;align-items:center;gap:7px;background:rgba(61,190,122,.1);' +
+                'border:1px solid rgba(61,190,122,.4);border-radius:20px;padding:6px 14px;font-size:13px;color:var(--green)">' +
+                nom + '<span style="font-size:10.5px;color:var(--text-dim)">tu área</span></span>';
+            return;
+        }
         c.innerHTML = AREAS.map(function(a){
             return '<button class="'+(AREA===a[0]?'on':'')+'" onclick="setArea(\''+a[0]+'\')">'+a[1]+'</button>';
         }).join('');
     });
 }
 function setArea(a){
+    /* Esconder los chips no basta: setArea se puede llamar desde la consola o
+       desde un botón que sobreviva a un repintado. Si el NIP ya dijo el área,
+       aquí se niega. */
+    if (AREA_FIJA) return;
     AREA = a; _pintarAreas();
     /* Repintar la lista de la pantalla en la que estás. Sin esto se elegía
        barra y la lista se quedaba con lo de cocina hasta escribir algo en el
@@ -536,6 +555,24 @@ async function entrar(){
             return;
         }
         COLAB = rv.data; _NIPHASH = h;
+        /* ── EL ÁREA LA DICE EL NIP, NO EL DEDO ──────────────────────────────
+           El chip de área arrancaba en «barra» para todos y se podía mover a
+           cocina o almacén: el de barra terminaba buscando su ginebra entre
+           toda la lista del negocio. Y el área no es una preferencia, es QUIÉN
+           ERES — ya está en la ficha del colaborador, y el portal de staff lleva
+           tiempo leyéndola con esta misma RPC.
+
+           Si el perfil dice barra o cocina, se fija y los chips desaparecen: no
+           hay nada que elegir. Administración, piso o sin área capturada SÍ ven
+           los tres —son quienes levantan inventario general— y ahí el chip
+           sigue sirviendo. FALLA ABIERTO: si la RPC no responde, se queda como
+           estaba, porque dejar a alguien sin poder capturar es peor. */
+        try {
+            var rp = await _supabase.rpc('portal_perfil', { p_neg: NEG, p_token: TOKEN, p_niphash: h });
+            var perfil = rp && rp.data;
+            var aOp = (perfil && window.StaffArea) ? StaffArea.norm(perfil.area) : '';
+            if (aOp === 'barra' || aOp === 'cocina') { AREA = aOp; AREA_FIJA = true; }
+        } catch (e) { /* sin perfil: los tres chips, como antes */ }
         // 2) Cargar insumos (token-gated, también por RPC).
         var ri = await _supabase.rpc('entrada_insumos', { p_neg: NEG, p_token: TOKEN });
         INSUMOS = _unoPorProductoQR(                                    // sin duplicados maestro/copia
