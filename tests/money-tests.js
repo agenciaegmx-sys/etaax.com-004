@@ -13923,6 +13923,32 @@ console.log('\n══ BH2 · Quién está, quién entró y cómo se le devuelve 
        fila, como si acabara de entrar. */
     test('…sin perder desde cuándo lleva ahí', () =>
         eq(dP('_reanunciar').indexOf('_yo.desde = antes.desde') > -1, true, 'conservada'));
+
+    /* ── POR QUÉ NO SE VEÍA NADIE ──
+       La primera versión intentaba entrar UNA vez, 400 ms después de cargar. Si
+       el cliente de Supabase todavía no existía —se baja de un CDN, y una
+       tablet tarda más— se rendía EN SILENCIO y no volvía a intentarlo. La
+       barra quedaba vacía para siempre, sin una pista de por qué. */
+    test('si el cliente de Supabase aún no está, se vuelve a intentar', () =>
+        eq(dP('entrar').indexOf('setTimeout(entrar, 100)') > -1, true, 'reintenta'));
+    test('…pero no para siempre: se rinde y lo DICE', () =>
+        eq(dP('entrar').indexOf('_intentos > 150') > -1 &&
+           dP('entrar').indexOf('nadie va a verse conectado') > -1, true, 'avisa'));
+    /* CHANNEL_ERROR en un canal de presencia suele ser Realtime apagado en el
+       proyecto. Decirlo por su nombre ahorra buscar en el lugar equivocado. */
+    test('si el canal no conecta, se nombra la causa probable', () =>
+        eq(dP('entrar').indexOf('Realtime esté encendido') > -1, true, 'accionable'));
+    /* Sin una forma de mirar el estado, diagnosticar esto es adivinar: no se
+       puede reproducir el navegador de otra persona. */
+    test('hay cómo diagnosticarlo desde la consola', () =>
+        eq(pres.indexOf('estado: function ()') > -1 &&
+           pres.indexOf('conexion: _estado') > -1 &&
+           pres.indexOf('viendo: _gente.map') > -1, true, 'observable'));
+    /* ctx-bar se carga ANTES que presencia.js en algunas páginas: rendirse ahí
+       dejaba la fila vacía aunque la conexión funcionara perfecto. */
+    test('si la barra se pinta antes de que presencia cargue, reintenta', () =>
+        eq(dC('_pintarPresencia').indexOf('setTimeout(_pintarPresencia, 300)') > -1,
+           true, 'no se rinde'));
     /* La misma persona con dos pestañas es UNA persona en la fila: ver
        «Ana» dos veces no dice nada. */
     test('dos pestañas de la misma persona cuentan como una', () =>
@@ -14216,8 +14242,45 @@ console.log('\n══ BH4 · El rótulo que mentía ══');
            true, 'apagado en los dos caminos'));
     /* Con sesión SÍ late y SÍ va en verde: ahí el indicador dice algo real. */
     test('con sesión sí late, porque ahí sí indica algo', () =>
-        eq(hub.indexOf("'<div class=\"hub-user-dot\"></div><span>' + _esc(_sesion.nombre") > -1,
-           true, 'vivo'));
+        eq((hub.match(/'<div class="hub-user-dot"><\/div><span>' \+ nombre/g) || []).length, 2,
+           'vivo en los dos caminos'));
+
+    /* ── EL COLABORADOR TAMBIÉN TIENE SESIÓN ──
+       Entraba, trabajaba, y arriba seguía diciendo «Sin sesión»: lo peor que
+       puede decir un indicador, porque quien lo lee se queda sin saber si lo
+       que captura se está guardando. */
+    const dH2 = (fn) => {
+        const i = hub.indexOf('function ' + fn + '(');
+        if (i < 0) return '';
+        const abre = hub.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < hub.length) {
+            if (hub[j] === '{') prof++;
+            else if (hub[j] === '}') { prof--; if (!prof) return hub.slice(i, j + 1); }
+            j++;
+        }
+        return '';
+    };
+    /* SE MIRA LA LLAMADA, NO EL COMENTARIO. La versión anterior aceptaba
+       encontrar el comentario que explica por qué está la línea — así que
+       borrar la línea y dejar el comentario pasaba el test. Lo cazó la batería
+       de mutaciones, y es el mismo tropiezo de antes: un candado que hace match
+       con mi propia prosa no cuida nada. */
+    test('al entrar como colaborador, el chip de arriba se entera', () =>
+        eq(dH2('_iniciarSesionStaff').indexOf('_updateTopbar();') > -1, true, 'se actualiza'));
+    /* Y ANTES de pintar los módulos: al revés, el chip se actualizaría cuando
+       la pantalla ya cambió, y se vería el parpadeo de «Sin sesión». */
+    test('…antes de pintar los módulos, no después', () => {
+        const t = dH2('_iniciarSesionStaff');
+        return eq(t.indexOf('_updateTopbar();') < t.indexOf('_showModulos(neg);'), true, 'en orden');
+    });
+    test('…y dice «Sesión activa», no una pastilla de plan', () =>
+        eq(dH2('_updateTopbar').indexOf('Sesión activa') > -1, true, 'su estado'));
+    /* El plan es del negocio, no suyo: a quien entra a capturar un corte no le
+       dice nada, y ocupa el lugar de lo que sí importa. */
+    test('…porque el plan es del negocio, no del colaborador', () =>
+        eq(/esStaff\) \{[\s\S]{0,400}Sesión activa[\s\S]{0,80}return;/.test(dH2('_updateTopbar')),
+           true, 'sin plan'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

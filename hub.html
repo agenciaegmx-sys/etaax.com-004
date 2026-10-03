@@ -1785,9 +1785,25 @@ async function _bgVerify() {
 
 function _updateTopbar() {
     if (!_sesion) return;
+    /* EL COLABORADOR TAMBIÉN TIENE SESIÓN. Antes este chip solo sabía de dueños:
+       un colaborador entraba, trabajaba, y arriba seguía diciendo que no había
+       sesión. Es lo peor que puede decir un indicador — quien lo lee se queda
+       sin saber si lo que captura se está guardando.
+
+       Y no lleva pastilla de plan: el plan es del negocio, no suyo, y a quien
+       entra a capturar un corte no le dice nada. En su lugar, lo que sí importa
+       desde su lado: que su sesión está activa. */
+    var esStaff = _sesion.type === 'staff';
+    var nombre = _esc(String(_sesion.nombre || '').split(' ')[0] || 'Sesión');
+    if (esStaff) {
+        document.getElementById('topbarUser').innerHTML =
+            '<div class="hub-user-dot"></div><span>' + nombre + '</span>' +
+            '<span class="user-badge-plan plan-pyme">Sesión activa</span>';
+        return;
+    }
     var p = _categoriaSesion();
     document.getElementById('topbarUser').innerHTML =
-        '<div class="hub-user-dot"></div><span>' + _esc(_sesion.nombre.split(' ')[0]) + '</span>' +
+        '<div class="hub-user-dot"></div><span>' + nombre + '</span>' +
         '<span class="user-badge-plan ' + p.planClass + '">' + p.nombre + '</span>';
 }
 
@@ -2006,6 +2022,9 @@ async function _iniciarSesionStaff(miembro, neg) {
     else localStorage.removeItem('etaax_sucursal_activa');
     _migrarDatosLegacy(neg.id);
     _guardarCtx(neg, sucAsignada);
+    /* Faltaba esta línea: el chip de arriba nunca se enteraba de que el
+       colaborador había entrado, y se quedaba en «Sin sesión» toda la visita. */
+    _updateTopbar();
     _showModulos(neg);
 }
 

@@ -150,14 +150,39 @@
         for (var i = 0; i < _oyentes.length; i++) { try { _oyentes[i](_gente); } catch (e) {} }
     }
 
+    /* ── POR QUÉ HAY REINTENTOS AQUÍ ─────────────────────────────────────────
+       La primera versión intentaba entrar UNA vez, 400 ms después de cargar la
+       página. Si en ese instante el cliente de Supabase todavía no existía —se
+       baja de un CDN, y una conexión lenta o una tablet tardan más de 400 ms—
+       la función se rendía en silencio y NUNCA volvía a intentarlo. La barra se
+       quedaba vacía para siempre y no había forma de saber por qué.
+
+       Ahora espera hasta 15 segundos. Si ni así, lo dice por consola: una pieza
+       que falla callada es una pieza que nadie arregla. */
+    var _estado = 'sin empezar';
+    var _intentos = 0;
+
     function entrar() {
         var c = _ctx();
-        if (!c || !c.negId || typeof window._supabase === 'undefined') return;
+        if (!c || !c.negId || typeof window._supabase === 'undefined') {
+            /* Todavía no hay con qué. Se vuelve a intentar: lo que falta
+               —el cliente, o el contexto del negocio— llega en milisegundos. */
+            if (++_intentos > 150) {
+                if (_estado !== 'sin cliente') {
+                    _estado = 'sin cliente';
+                    console.warn('[presencia] no hay cliente de Supabase o contexto de negocio; nadie va a verse conectado.');
+                }
+                return;
+            }
+            _estado = 'esperando';
+            setTimeout(entrar, 100);
+            return;
+        }
         var clave = 'pres:' + c.negId;
         if (_canal && _clave === clave) return;   // ya estoy donde debo
         salir();
         _yo = _quienSoy();
-        if (!_yo) return;
+        if (!_yo) { _estado = 'sin identidad'; return; }
         _clave = clave;
         try {
             _canal = window._supabase.channel(clave, { config: { presence: { key: _sesionId } } });
@@ -166,9 +191,18 @@
                 .on('presence', { event: 'join' },  _avisar)
                 .on('presence', { event: 'leave' }, _avisar)
                 .subscribe(function (estado) {
-                    if (estado === 'SUBSCRIBED') { try { _canal.track(_yo); } catch (e) {} }
+                    _estado = String(estado || '');
+                    if (estado === 'SUBSCRIBED') { try { _canal.track(_yo); } catch (e) { _estado = 'track falló'; } }
+                    /* CHANNEL_ERROR o TIMED_OUT con un canal de presencia suele
+                       ser Realtime apagado en el proyecto. Decirlo por su
+                       nombre ahorra media hora de buscar en el lugar
+                       equivocado. */
+                    else if (estado === 'CHANNEL_ERROR' || estado === 'TIMED_OUT') {
+                        console.warn('[presencia] el canal no conectó (' + estado + '). ' +
+                                     'Revisa que Realtime esté encendido en el proyecto de Supabase.');
+                    }
                 });
-        } catch (e) { _canal = null; _clave = ''; }
+        } catch (e) { _canal = null; _clave = ''; _estado = 'excepción: ' + ((e && e.message) || e); }
     }
 
     function salir() {
@@ -208,12 +242,27 @@
         salir: salir,
         gente: function () { return _gente.slice(); },
         alCambiar: function (fn) { if (typeof fn === 'function') { _oyentes.push(fn); fn(_gente); } },
+        /* Para diagnosticar sin adivinar. En la consola del navegador:
+               EtaaxPresencia.estado()
+           Dice en qué canal está, si conectó, quién cree ser y a quién ve. Con
+           eso se sabe en un vistazo si el problema es la conexión, el contexto
+           o que de verdad no hay nadie más. */
+        estado: function () {
+            return {
+                canal: _clave || '(ninguno)',
+                conexion: _estado,
+                yo: _yo ? (_yo.nombre + ' · ' + (_yo.suc || 'vista global')) : '(sin identidad)',
+                viendo: _gente.map(function (p) {
+                    return p.nombre + (p.yo ? ' (yo)' : '') + ' · ' + (p.suc || 'vista global');
+                })
+            };
+        },
         _color: _color, _inicial: _inicial
     };
 
     /* Se entra solo: una pieza que hay que acordarse de encender en cada página
        es una pieza que la mitad de las páginas no van a tener. */
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function () { setTimeout(entrar, 400); });
-    } else { setTimeout(entrar, 400); }
+        document.addEventListener('DOMContentLoaded', function () { entrar(); });
+    } else { entrar(); }
 })();

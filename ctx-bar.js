@@ -73,7 +73,11 @@
     var _presLista = false;
     function _pintarPresencia() {
         var box = document.getElementById('ctxPresencia');
-        if (!box || !window.EtaaxPresencia) return;
+        if (!box) return;
+        /* presencia.js se carga DESPUÉS de esta barra en algunas páginas. Si no
+           está todavía, se vuelve a intentar: rendirse aquí dejaba la fila vacía
+           para siempre, sin un solo aviso de por qué. */
+        if (!window.EtaaxPresencia) { setTimeout(_pintarPresencia, 300); return; }
         if (!_presLista) {
             _presLista = true;
             EtaaxPresencia.alCambiar(function () { _pintarPresencia(); });
