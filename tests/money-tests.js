@@ -14529,6 +14529,156 @@ console.log('\n══ BH5 · Resumen de resultados y proyección ══');
     });
 }
 
+/* ═══════════ SUITE BH6 · CHECKLIST IMPRESO E INSUMOS POR SUCURSAL ══════════
+   Dos facturas de Edwin:
+
+   1. La hoja de checklist: la firma era una COLUMNA al final —una sola para
+      toda la semana, o sea la firma de nadie—; faltaba el modo de UNA columna
+      para un check de producción; y la cuadrícula gris no sobrevivía a la
+      impresora.
+
+   2. «Cambio la unidad de medida de una copa en la sucursal 1 y se refleja en
+      la 2». No era un error de guardado: es que SON EL MISMO REGISTRO. El
+      modelo de membresía deja que un insumo pertenezca a varias sucursales a la
+      vez, y entonces no hay dos cosas que puedan diferir — hay una vista desde
+      dos lados.                                                              */
+console.log('\n══ BH6 · Checklist impreso e insumos por sucursal ══');
+{
+    const ck  = fs.readFileSync(path.join(RAIZ, 'administrativo/checklists.html'), 'utf8');
+    const ijs = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.js'), 'utf8');
+    const ih  = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.html'), 'utf8');
+    const cuerpoDe = (src) => (fn) => {
+        const i = src.indexOf('function ' + fn + '(');
+        if (i < 0) return '';
+        const abre = src.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < src.length) {
+            if (src[j] === '{') prof++;
+            else if (src[j] === '}') { prof--; if (!prof) return src.slice(i, j + 1); }
+            j++;
+        }
+        return '';
+    };
+    const dCk = cuerpoDe(ck), dIj = cuerpoDe(ijs), dIh = cuerpoDe(ih);
+
+    /* ── 1) LA HOJA IMPRESA ── */
+    /* Como columna al final, la firma era UNA para toda la semana: la firma de
+       nadie. Al pie, con una casilla bajo cada día, firma quien ejecutó las
+       tareas de ESE día, debajo de su propia columna. */
+    test('la firma es un RENGLÓN al pie, no una columna', () =>
+        eq(dCk('imprimirPlantilla').indexOf('<tfoot><tr class="ckfirma">') > -1 &&
+           dCk('imprimirPlantilla').indexOf("<th style=\"width:9%\">Firma</th>") === -1,
+           true, 'al pie'));
+    /* En <tfoot> queda al pie SIEMPRE, aunque las tareas se partan en dos hojas.
+       Dentro del tbody se iría a media página con la primera mitad. */
+    test('…y en tfoot, para que no se vaya a media hoja', () =>
+        eq(dCk('imprimirPlantilla').indexOf('<tfoot>') > -1, true, 'tfoot'));
+    test('…con una casilla por columna de día', () =>
+        eq(dCk('imprimirPlantilla').indexOf("dias.map(function(){ return '<td></td>'; })") > -1,
+           true, 'una por día'));
+
+    /* Un control de producción se llena el día que se produce. Con siete
+       columnas, las otras seis se palomean «porque estaban ahí». */
+    test('hay modo de UNA sola columna, sin días', () =>
+        eq(ck.indexOf('id="ckpUnaCol"') > -1, true, 'con opción'));
+    test('…y esa columna se llama Check', () =>
+        eq(dCk('imprimirPlantilla').indexOf("nom:'Check'") > -1, true, 'Check'));
+    /* Sin día al cual pertenecer, no hay nada que tachar: tachar ahí dejaría
+       casillas muertas sin explicación. */
+    test('…y en ese modo no se tacha ninguna casilla', () =>
+        eq(dCk('imprimirPlantilla').indexOf("if (d.k === null) return '<td class=\"ckd\"></td>'") > -1,
+           true, 'sin tachados'));
+    /* Un selector que sigue ahí sin efecto es peor que uno que no está. */
+    test('…y el selector de días se apaga, no se queda de adorno', () =>
+        eq(dCk('ckpModoCol').indexOf("pointerEvents = una ? 'none'") > -1, true, 'apagado'));
+    /* Dejar pegado el modo de la impresión anterior saca una hoja equivocada
+       sin que nadie lo note. */
+    test('el modo arranca en semana cada vez que se abre', () =>
+        eq(dCk('abrirImprimir').indexOf('uc.checked=false') > -1, true, 'sin memoria'));
+
+    /* El gris #d8d8d8 se veía bien en pantalla y desaparecía en una láser con
+       poco tóner — justo la cuadrícula, que es lo único que guía la mano. */
+    test('la cuadrícula es gruesa y casi negra', () =>
+        eq(ck.indexOf("border:1.4px solid #1a1916") > -1 &&
+           ck.indexOf("border:1px solid #d8d8d8") === -1, true, 'visible'));
+    test('…con marco exterior más grueso todavía', () =>
+        eq(ck.indexOf('border-collapse:collapse;border:2px solid #1a1916') > -1, true, 'con marco'));
+    test('los encabezados de columna ya no son gris claro', () =>
+        eq(ck.indexOf("color:#1a1916;text-transform:uppercase;letter-spacing:1.1px}") > -1, true, 'legibles'));
+    /* La ✕ de «aquí no toca» tiene que sobrevivir a la fotocopia sin parecer
+       un tachado hecho a mano. */
+    test('la casilla tachada se distingue sin parecer marcada a mano', () =>
+        eq(ck.indexOf(".ckx{background:#dcdcdc;color:#6a6a6a") > -1, true, 'media tinta'));
+
+    /* ── 2) INSUMOS INDEPENDIENTES POR SUCURSAL ── */
+    /* LA CAUSA: un registro con `sucursales:[suc1,suc2]` es UNO solo. */
+    test('se puede saber si un insumo lo comparten varias sucursales', () =>
+        eq(dIj('insumoCompartido').indexOf('mem.length > 1') > -1, true, 'detectable'));
+    test('se puede independizar UN insumo, no solo el catálogo entero', () =>
+        eq(dIj('independizarUnInsumo').length > 0, true, 'por producto'));
+    /* El barrido masivo ya existía y por eso nadie lo usaba: nadie independiza
+       500 insumos para resolver uno. */
+    test('…creando una copia por sucursal, ligada al maestro', () => {
+        const t = dIj('independizarUnInsumo');
+        return eq(t.indexOf('copia.origenId   = ins.id') > -1 &&
+                  t.indexOf('copia.sucursales = [suc]') > -1, true, 'copias');
+    });
+    /* Dejar el maestro en una de ellas haría que esa sucursal viera dos veces
+       el mismo producto. */
+    test('…y el maestro se queda SIN sucursal, como ficha de referencia', () =>
+        eq(dIj('independizarUnInsumo').indexOf("lista[i].sucursales = []") > -1, true, 'sin duplicar'));
+    /* Inventarios y mermas referencian el id canónico —el del maestro, que se
+       conserva—: por eso esto es seguro a media operación. */
+    test('…sin tocar lo ya capturado, y diciéndolo', () =>
+        eq(dIj('independizarUnInsumo').indexOf('NO se toca') > -1, true, 'avisado'));
+    test('…y no se puede independizar lo que ya es independiente', () =>
+        eq(dIj('independizarUnInsumo').indexOf('ya es independiente') > -1, true, 'sin ruido'));
+
+    /* EL CAMBIO DE FONDO: guardar un insumo tiene que cambiar UN insumo. */
+    test('guardar ya NO dispara la propagación a otras sucursales', () =>
+        eq(ijs.indexOf('_ofrecerPropagacion(insumo') === -1, true, 'a mano'));
+    test('…y no quedó código muerto invitando a reconectarla', () =>
+        eq(ijs.indexOf('_origKeyProp') === -1, true, 'limpio'));
+    test('copiar a otras sucursales es un botón, no un automatismo', () =>
+        eq(ih.indexOf('function abrirCopiarASucursales(') > -1 &&
+           ih.indexOf('onclick="abrirCopiarASucursales(editandoId)"') > -1, true, 'a mano'));
+    /* Dos tequilas que se llaman «Don Julio» en sucursales distintas pueden ser
+       presentaciones diferentes: lo que los hace el mismo producto es compartir
+       maestro, no el texto. Buscar por nombre fue el motivo de que esta ventana
+       estuviera apagada. */
+    test('los parientes se buscan por VÍNCULO, no por nombre', () =>
+        eq(dIh('_parientesInsumo').indexOf('ins.origenId || ins.id') > -1 &&
+           dIh('_parientesInsumo').indexOf('_keyIns') === -1, true, 'por vínculo'));
+    /* En las presentaciones viven los precios, los tamaños de copa y los
+       mezcladores — justo lo que cada sucursal tiene distinto. Copiarlas por
+       defecto borraría el trabajo de la otra sin preguntar. */
+    test('las presentaciones solo se copian si se piden', () =>
+        eq(dIh('aplicarPropagacion').indexOf('if (conPres && _propInsumo.presentaciones)') > -1,
+           true, 'opt-in'));
+    /* Lo único que hace que una copia siga siendo de SU sucursal. */
+    test('la membresía de sucursal NUNCA viaja en la copia', () => {
+        const t = dIh('aplicarPropagacion');
+        return eq(t.indexOf('target.sucursales =') === -1 &&
+                  t.indexOf('target.sucursalId =') === -1 &&
+                  t.indexOf('target.origenId =') === -1, true, 'intacta');
+    });
+    test('lo copiado se sube a la nube, no se queda en el equipo', () =>
+        eq(dIh('aplicarPropagacion').indexOf('_sincronizarInsumosSupabase') > -1, true, 'sincronizado'));
+
+    /* El aviso tiene que salir ANTES de cambiar algo, no después. */
+    test('el editor avisa cuando el insumo es compartido', () =>
+        eq(ih.indexOf('id="insCompartidoAviso"') > -1 &&
+           dIh('_pintarAvisoSucursal').indexOf('es el MISMO registro en') > -1, true, 'avisado'));
+    test('…al ABRIR el editor, no al guardar', () =>
+        eq(dIj('abrirModal').indexOf('_pintarAvisoSucursal(ins)') > -1, true, 'a tiempo'));
+    test('…y un insumo nuevo no lo muestra: todavía no vive en ningún lado', () =>
+        eq(dIh('_pintarAvisoSucursal').indexOf('if (!ins || !ins.id) return;') > -1, true, 'sin ruido'));
+    /* Si ya es independiente, lo útil es lo contrario: llevar el cambio a sus
+       copias cuando se quiera. */
+    test('si ya es independiente, se ofrece copiar a sus copias', () =>
+        eq(dIh('_pintarAvisoSucursal').indexOf("bc.style.display = ''") > -1, true, 'lo contrario'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');

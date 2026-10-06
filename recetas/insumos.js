@@ -196,6 +196,84 @@
        try { _sincronizarInsumosSupabase(getNegocioActivo(), nuevas.concat(toFork.map(function(p){ return p.ins; }))); } catch(e){}
        return { maestros: toFork.length, copias: nuevas.length };
    }
+   /* ══ UN INSUMO, INDEPENDIENTE EN CADA SUCURSAL ════════════════════════════
+      EL CASO QUE REPORTÓ EDWIN: cambia la unidad de medida de una copa de un
+      destilado en la sucursal 1 y el cambio aparece también en la 2.
+
+      No es un error de guardado: es que **son el mismo registro**. El modelo de
+      membresía deja que un insumo pertenezca a varias sucursales a la vez
+      (`sucursales: [suc1, suc2]`), y entonces no hay dos cosas que puedan
+      diferir — hay una sola, vista desde dos lados.
+
+      Eso está bien para un catálogo que se administra central (mismo producto,
+      mismo proveedor, misma ficha). Deja de servir en cuanto una sucursal sirve
+      la copa de 45 ml y la otra de 60: ahí hacen falta DOS registros.
+
+      Esta función parte UN insumo —no todo el catálogo— en copias por sucursal.
+      Es la versión por producto de `_independizarInsumosPorSuc`, que solo
+      existía como barrido masivo y por eso nadie la usaba: nadie independiza
+      500 insumos para resolver uno.
+
+      LO YA CAPTURADO NO SE TOCA. Inventarios y mermas referencian el id
+      CANÓNICO —el del maestro, que se conserva— y el resolver por sucursal hace
+      ver la copia. Por eso esto es seguro a media operación.                 */
+   function independizarUnInsumo(id) {
+       var lista = getInsumos();
+       var ins = lista.find(function(x){ return x.id === id; });
+       if (!ins) return;
+       if (ins.origenId) {
+           alert('«' + (ins.nombre || 'Este insumo') + '» ya es la copia independiente de su sucursal.');
+           return;
+       }
+       var mem = window._insumoSucursales ? window._insumoSucursales(ins) : (ins.sucursalId ? [ins.sucursalId] : []);
+       if (mem.length <= 1) {
+           alert('«' + (ins.nombre || 'Este insumo') + '» ya es independiente: vive en una sola sucursal.');
+           return;
+       }
+       var nombres = mem.map(function(su){ return _sucNombreIgn(su); }).join(', ');
+       var _hacer = function () {
+           var nuevas = [];
+           mem.forEach(function(suc){
+               var copia = JSON.parse(JSON.stringify(ins));
+               copia.id         = genId();
+               copia.origenId   = ins.id;       // liga al maestro (id canónico)
+               copia.sucursales = [suc];
+               copia.sucursalId = suc || '';
+               delete copia._memPreMigra;
+               nuevas.push(copia);
+           });
+           /* El maestro se queda SIN sucursal: pasa a ser la ficha de referencia
+              del negocio. Dejarlo en una de ellas haría que esa sucursal viera
+              dos veces el mismo producto. */
+           var i = lista.findIndex(function(x){ return x.id === ins.id; });
+           if (i >= 0) { lista[i]._memPreMigra = mem.slice(); lista[i].sucursales = []; lista[i].sucursalId = ''; }
+           var all = lista.concat(nuevas);
+           setInsumos(all);
+           try { _sincronizarInsumosSupabase(getNegocioActivo(), nuevas.concat(i>=0?[lista[i]]:[])); } catch(e){}
+           try { filtrar(); } catch(e){}
+           if (window.etaaxAlert) etaaxAlert('Listo: «' + (ins.nombre||'') + '» ahora es independiente en ' +
+               mem.length + ' sucursal' + (mem.length>1?'es':'') + '. Lo que cambies en una ya no toca a las otras.');
+       };
+       var msg = '«' + etx(ins.nombre || '') + '» hoy es <b>un solo registro</b> compartido por ' +
+           '<b>' + etx(nombres) + '</b>: lo que cambies en una sucursal cambia en todas.<br><br>' +
+           'Se va a crear <b>una copia por sucursal</b>, cada una editable por su cuenta.<br><br>' +
+           '✔ Lo ya capturado en inventarios y mermas NO se toca.<br>' +
+           '✔ Si después quieres igualarlas, está el botón de copiar a otras sucursales.';
+       if (window.etaaxConfirm)
+           etaaxConfirm('Independizar por sucursal', msg, _hacer, null, { yesLabel:'Sí, independizar' });
+       else if (confirm(msg.replace(/<[^>]+>/g,''))) _hacer();
+   }
+   window.independizarUnInsumo = independizarUnInsumo;
+
+   /* ¿Este insumo lo comparten varias sucursales? Lo usa el editor para avisar
+      ANTES de que alguien cambie algo creyendo que solo toca lo suyo. */
+   function insumoCompartido(ins) {
+       if (!ins || ins.origenId) return [];
+       var mem = window._insumoSucursales ? window._insumoSucursales(ins) : [];
+       return mem.length > 1 ? mem : [];
+   }
+   window.insumoCompartido = insumoCompartido;
+
    function abrirIndependizarSucIns() {
        var plan = _independizarInsumosPorSuc(true);
        if (!plan.maestros) { alert('✅ No hay insumos compartidos entre sucursales. Ya trabajan independientes.'); return; }
@@ -2688,6 +2766,9 @@
                sucs.map(function(s){ return '<option value="' + (s.id||'') + '">' + (s.nombre||s.id) + '</option>'; }).join('');
            selEl.value = ins ? (ins.sucursalId || '') : (_getSucActivaIns() || '');
        })();
+       /* El aviso de sucursal se pinta al ABRIR, no al guardar: sirve para
+          saber qué va a pasar ANTES de tocar nada. */
+       if (typeof _pintarAvisoSucursal === 'function') { try { _pintarAvisoSucursal(ins); } catch(e){} }
        document.getElementById('modalOverlay').style.display = 'flex';
        setTimeout(() => document.getElementById('ins-nombre').focus(), 100);
    }
@@ -4821,14 +4902,6 @@
        const fotoAnterior = editandoId
            ? getInsumos().find(x => x.id === editandoId)?.foto || ''
            : '';
-       // Identidad ORIGINAL (nombre+marca antes de editar) para encontrar los
-       // "hermanos" en otras sucursales aunque el nombre cambie en esta edición.
-       var _origKeyProp = '';
-       if (editandoId && typeof _keyIns === 'function') {
-           var _prevIns = getInsumos().find(x => x.id === editandoId);
-           if (_prevIns) _origKeyProp = _keyIns(_prevIns);
-       }
-
        // Asegurar familia auto-rellenada antes de guardar
        var famEl = document.getElementById('ins-familia');
        if (famEl && !famEl.value) famEl.value = FAMILIA_POR_TIPO[tipoInsumoActual] || '';
@@ -4962,9 +5035,12 @@
        init();
        // En el Catálogo Global del negocio: si editaste un insumo que también
        // existe en otras sucursales, ofrecer propagar su ficha técnica.
-       if (_eraEdicion && _catGlobalIns() && typeof _ofrecerPropagacion === 'function') {
-           _ofrecerPropagacion(insumo, _origKeyProp);
-       }
+       /* AQUÍ SE DISPARABA SOLA la propagación a otras sucursales. Ya no:
+          ahora es un botón que alguien aprieta a propósito
+          (abrirCopiarASucursales). Guardar un insumo tiene que cambiar UN
+          insumo — el que estás editando— y nada más. Que una ventana aparezca
+          sola después de guardar, con las sucursales ya palomeadas, es cómo se
+          pisa el trabajo de otra sucursal sin darse cuenta. */
    }
 
    // ── Ficha técnica ─────────────────────────────────────────────

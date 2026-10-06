@@ -199,7 +199,7 @@
         <div class="ck-modal-hd"><h3 id="ckpTitulo">Imprimir check list</h3>
             <button class="ck-modal-x" onclick="cerrarImprimir()">✕</button></div>
         <div class="ck-modal-body">
-            <label>Días de la hoja</label>
+            <label id="ckpDiasLbl">Días de la hoja</label>
             <div id="ckpDias" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"></div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
                 <button class="ck-btn" style="font-size:11px" onclick="ckpPreset('todos')">Toda la semana</button>
@@ -218,9 +218,17 @@
                 <button class="ck-btn" style="font-size:11px" onclick="ckpSinFecha()">Dejar en blanco</button>
                 <span style="font-size:11px;color:var(--text-dim);align-self:center">En blanco = renglones para escribir a mano</span>
             </div>
+            <!-- UNA SOLA COLUMNA: hay checklists que no son semanales. Un control
+                 de producción se llena el día que se produce y no necesita siete
+                 columnas — con siete, se palomean las otras seis "porque estaban
+                 ahí", que es justo lo que estas hojas vienen a evitar. -->
+            <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;cursor:pointer;margin-bottom:10px">
+                <input type="checkbox" id="ckpUnaCol" onchange="ckpModoCol()" style="width:16px;height:16px;accent-color:var(--green)">
+                Una sola columna <span style="color:var(--text-dim)">— para un check del día, no de la semana</span>
+            </label>
             <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;cursor:pointer">
                 <input type="checkbox" id="ckpFirma" checked style="width:16px;height:16px;accent-color:var(--green)">
-                Incluir columna de firma
+                Incluir renglón de firma
             </label>
             <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;cursor:pointer;margin-top:9px">
                 <input type="checkbox" id="ckpGuia" checked style="width:16px;height:16px;accent-color:var(--green)">
@@ -534,11 +542,28 @@ function abrirImprimir(id){
        Quien sí quiera la semana impresa la pone con un clic. */
     document.getElementById('ckpDesde').value = '';
     document.getElementById('ckpHasta').value = '';
-    _ckpPintarDias();
+    /* El modo arranca en SEMANA cada vez: dejar pegado el «una sola columna»
+       de la impresión anterior saca una hoja equivocada sin que nadie lo note. */
+    var uc=document.getElementById('ckpUnaCol'); if(uc) uc.checked=false;
+    ckpModoCol();
     document.getElementById('ckPrintModal').classList.add('on');
 }
 function _isoFecha(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function cerrarImprimir(){ document.getElementById('ckPrintModal').classList.remove('on'); _ckpPlant=null; }
+
+/* Con una sola columna, elegir días deja de tener sentido: se apaga el selector
+   en vez de dejarlo ahí sin efecto. Un control que no hace nada es peor que uno
+   que no está. */
+function ckpModoCol(){
+    var una = document.getElementById('ckpUnaCol').checked;
+    var box = document.getElementById('ckpDias');
+    if (box) box.style.opacity = una ? '.35' : '';
+    if (box) box.style.pointerEvents = una ? 'none' : '';
+    var lbl = document.getElementById('ckpDiasLbl');
+    if (lbl) lbl.style.opacity = una ? '.35' : '';
+    _ckpPintarDias();
+}
+function _ckpUnaCol(){ var e=document.getElementById('ckpUnaCol'); return !!(e&&e.checked); }
 
 function _ckpPintarDias(){
     document.getElementById('ckpDias').innerHTML = DIAS_SEM.map(function(d){
@@ -549,8 +574,12 @@ function _ckpPintarDias(){
             'background:'+(on?'rgba(61,190,122,.12)':'transparent')+';'+
             'color:'+(on?'var(--green)':'var(--text-muted)')+'">'+d.nom+'</button>';
     }).join('');
-    var n=DIAS_SEM.filter(function(d){return _ckpSel[d.k];}).length;
     var el = document.getElementById('ckpMsg');
+    if (_ckpUnaCol()){
+        el.innerHTML = 'Una columna <b>Check</b> para palomear o tachar · sin días de la semana.';
+        return;
+    }
+    var n=DIAS_SEM.filter(function(d){return _ckpSel[d.k];}).length;
     if (!n){ el.textContent='Elige al menos un día.'; return; }
     var m = _ckpPlant ? _sinDiaElegido(_ckpPlant) : 0;
     el.innerHTML = n+(n===1?' día · una columna para marcar':' días · una columna por día')+
@@ -673,13 +702,18 @@ function _guiaHTML(guiaFreq, conFirma, hayBloqueos){
             : '')+
         guiaFreq+
         '<div class="ckgi"><b>Supervisión</b> · Quien revisa la hoja al cierre firma arriba a la derecha'+
-            (conFirma?'; la columna <b>Firma</b> es para quien ejecutó las tareas de ese día.':'.')+'</div>'+
+            (conFirma?'; el renglón <b>Firma de quien ejecutó</b>, al pie, lleva una casilla bajo cada columna — firma ahí quien hizo las tareas de ese día.':'.')+'</div>'+
     '</div>';
 }
 
 function imprimirPlantilla(){
     var p=_ckpPlant; if(!p) return;
-    var dias=DIAS_SEM.filter(function(d){ return _ckpSel[d.k]; });
+    var unaCol = _ckpUnaCol();
+    /* Las columnas de la hoja. En modo «una sola», es una sin día: `k:null`
+       apaga el tachado por día, porque sin día no hay nada que tachar. */
+    var dias = unaCol
+        ? [{ k:null, nom:'Check' }]
+        : DIAS_SEM.filter(function(d){ return _ckpSel[d.k]; });
     if(!dias.length){ document.getElementById('ckpMsg').textContent='Elige al menos un día.'; return; }
     var conFirma=document.getElementById('ckpFirma').checked;
     var conGuia=document.getElementById('ckpGuia').checked;
@@ -690,13 +724,17 @@ function imprimirPlantilla(){
        (acomodar tapetes, colocar vasos con agua y granadina…)" sin partirse en
        cinco renglones. La hoja de Excel que esto reemplaza también era horizontal,
        y por la misma razón. */
-    var horizontal = dias.length >= 4;
+    var horizontal = dias.length >= 4;   // con una sola columna, vertical siempre
 
     /* Los anchos se reparten a mano: la tarea se lleva lo que sobre y cada día
        toma lo mismo. Con anchos automáticos, una tarea larga aplasta las columnas
        de marcar hasta dejarlas inservibles para una palomita. */
-    var anchoDia = dias.length >= 5 ? 7 : 8;
-    var anchoTarea = 100 - 5 - (anchoDia*dias.length) - (conFirma?9:0);
+    /* La firma dejó de ser COLUMNA: ahora es un renglón al pie, con una casilla
+       bajo cada día. Firma quien ejecutó las tareas DE ESE DÍA, y al pie de su
+       propia columna es donde se busca. Como columna al final obligaba a una
+       sola firma para toda la semana — que es la firma de nadie. */
+    var anchoDia = unaCol ? 14 : (dias.length >= 5 ? 7 : 8);
+    var anchoTarea = 100 - 5 - (anchoDia*dias.length);
 
     var tareas = (p.tareas||[]).filter(function(t){ return (t.texto||'').trim(); });
     var hayBloqueos = false;
@@ -707,6 +745,10 @@ function imprimirPlantilla(){
             '<td class="ckf">'+esc(t.freq||'')+'</td>'+
             '<td class="ckt">'+esc(t.texto)+'</td>'+
             dias.map(function(d){
+                /* Con una sola columna no hay día al cual pertenecer: nada se
+                   tacha. Tachar ahí dejaría una hoja con casillas muertas sin
+                   explicación. */
+                if (d.k === null) return '<td class="ckd"></td>';
                 // OJO: el índice es el del DÍA DE LA SEMANA real, no la posición
                 // en la hoja — con "fin de semana" la 1ª columna es sábado.
                 var idx = DIAS_SEM.findIndex(function(x){ return x.k === d.k; });
@@ -714,7 +756,6 @@ function imprimirPlantilla(){
                 if (bloq) hayBloqueos = true;
                 return bloq ? '<td class="ckd ckx">✕</td>' : '<td class="ckd"></td>';
             }).join('')+
-            (conFirma?'<td class="ckd"></td>':'')+
         '</tr>';
     }).join('');
 
@@ -740,39 +781,53 @@ function imprimirPlantilla(){
         '.ckh{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;'+
              'border-bottom:2px solid #3dbe7a;padding-bottom:6px;margin-bottom:9px}'+
         '.ckh .tit{font-family:"Bebas Neue",Arial,sans-serif;font-size:20px;letter-spacing:2px;color:#1a1916;line-height:1}'+
-        '.ckh .sup{font-family:"DM Sans",sans-serif;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;'+
-             'color:#666;white-space:nowrap;font-weight:700}'+
+        '.ckh .sup{font-family:"DM Sans",sans-serif;font-size:9.5px;letter-spacing:1.2px;text-transform:uppercase;'+
+             'color:#1a1916;white-space:nowrap;font-weight:800}'+
         '.ckb{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;'+
-             'font-size:9.5px;color:#666;margin-bottom:9px;font-weight:600;letter-spacing:.4px}'+
+             'font-size:10px;color:#2b2b2b;margin-bottom:9px;font-weight:700;letter-spacing:.4px}'+
         '.cksem{text-transform:uppercase;letter-spacing:1.1px;white-space:nowrap}'+
-        '.cksep{margin:0 9px;color:#ccc}'+
-        '.ckdato{color:#1a1916;border-bottom:1px solid #1a1916;padding:0 5px;text-transform:none;letter-spacing:0}'+
+        '.cksep{margin:0 9px;color:#8a8a8a}'+
+        '.ckdato{color:#1a1916;border-bottom:1.4px solid #1a1916;padding:0 5px;text-transform:none;letter-spacing:0}'+
         /* El renglón en blanco: una línea de verdad, no guiones bajos —los "___"
            se parten de renglón y quedan escalonados. */
-        '.ckray{display:inline-block;border-bottom:1px solid #1a1916;height:9px;margin:0 3px;vertical-align:baseline}'+
+        '.ckray{display:inline-block;border-bottom:1.4px solid #1a1916;height:9px;margin:0 3px;vertical-align:baseline}'+
         '.ckleg span{margin-left:13px}'+
         '.ckleg b{font-size:11px;color:#1a1916}'+
-        'table.ckt2{width:100%;border-collapse:collapse}'+
-        'table.ckt2 th{background:#f5f5f5;border:1px solid #d8d8d8;padding:6px 4px;font-size:8px;font-weight:700;'+
-             'color:#666;text-transform:uppercase;letter-spacing:1.1px}'+
-        'table.ckt2 td{border:1px solid #d8d8d8;padding:7px 6px;font-size:10.5px}'+
+        /* ── LAS LÍNEAS TIENEN QUE VERSE EN PAPEL ──────────────────────────
+           Esta hoja se imprime, se enmica y se llena con marcador. El gris
+           #d8d8d8 que se veía bien en pantalla desaparece en una impresora
+           láser con poco tóner, y la cuadrícula —que es lo único que guía la
+           mano— se vuelve invisible. Línea más gruesa y casi negra.
+           El marco exterior va todavía más grueso: le da borde a la hoja. */
+        'table.ckt2{width:100%;border-collapse:collapse;border:2px solid #1a1916}'+
+        'table.ckt2 th{background:#e8e8e8;border:1.4px solid #1a1916;padding:7px 4px;font-size:9px;font-weight:800;'+
+             'color:#1a1916;text-transform:uppercase;letter-spacing:1.1px}'+
+        'table.ckt2 td{border:1.4px solid #1a1916;padding:7px 6px;font-size:11px;color:#1a1916}'+
         'table.ckt2 tr{break-inside:avoid;page-break-inside:avoid}'+
-        '.ckf{width:5%;text-align:center;font-weight:700;font-size:8.5px;color:#3a3a3a}'+
-        /* Celda tachada = ese día NO toca. Gris claro y con fondo: tiene que
-           leerse como "aquí no", nunca como una marca ya puesta. */
-        '.ckx{background:#f0f0f0;color:#bbb;text-align:center;font-size:11px;vertical-align:middle}'+
-        '.ckt{font-weight:600;line-height:1.35}'+
+        '.ckf{width:5%;text-align:center;font-weight:800;font-size:9.5px;color:#1a1916}'+
+        /* Celda tachada = ese día NO toca. Tiene que leerse como «aquí no» sin
+           confundirse con una marca ya puesta: por eso trama gris y la ✕ en un
+           gris medio —no negra, que parecería tachado a mano— pero lo bastante
+           oscura para sobrevivir a la fotocopia. */
+        '.ckx{background:#dcdcdc;color:#6a6a6a;text-align:center;font-size:12px;vertical-align:middle}'+
+        '.ckt{font-weight:600;line-height:1.35;color:#1a1916}'+
         /* Alto fijo: la celda tiene que dar espacio para una palomita a mano. Sin
            esto, una tarea de un renglón deja una casilla donde no cabe la marca. */
-        '.ckd{height:26px}'+
+        '.ckd{height:28px}'+
+        /* ── EL RENGLÓN DE FIRMA, AL PIE ──
+           Una casilla alta bajo cada columna: firma quien ejecutó las tareas de
+           ESE día, debajo de su propia columna. */
+        '.ckfirma td{height:46px;border:1.4px solid #1a1916;vertical-align:bottom}'+
+        '.ckfirma .lbl{font-size:9px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;'+
+             'color:#1a1916;text-align:right;padding-right:10px;vertical-align:middle;background:#e8e8e8}'+
         /* Guía de llenado: se queda con la hoja. Quien la llena a las 7 de la
            mañana no tiene a quién preguntarle qué quería decir "D/T". */
-        '.ckguia{margin-top:12px;border:1px solid #e4e4e4;border-left:3px solid #3dbe7a;border-radius:6px;'+
+        '.ckguia{margin-top:12px;border:1.2px solid #9a9a9a;border-left:3px solid #3dbe7a;border-radius:6px;'+
              'padding:9px 12px;background:#fafafa;break-inside:avoid;page-break-inside:avoid}'+
         '.ckguia .gt{font-family:"Bebas Neue",Arial,sans-serif;font-size:12px;letter-spacing:2px;color:#1a1916;margin-bottom:5px}'+
-        '.ckgi{font-size:8.8px;color:#555;line-height:1.65}'+
+        '.ckgi{font-size:9.2px;color:#2b2b2b;line-height:1.65}'+
         '.ckgi b{color:#1a1916}'+
-        '.ckfq{display:inline-block;border:1px solid #c9c9c9;border-radius:3px;padding:0 4px;background:#fff;font-size:8.5px}'+
+        '.ckfq{display:inline-block;border:1.2px solid #1a1916;border-radius:3px;padding:0 4px;background:#fff;font-size:9px;font-weight:700}'+
         '.ckmk{display:inline-block;font-size:11px;color:#1a1916;width:13px;text-align:center}'+
         '</style>'+
         '<div class="ckh">'+
@@ -787,8 +842,17 @@ function imprimirPlantilla(){
             '<th style="width:5%"></th>'+
             '<th style="width:'+anchoTarea+'%;text-align:left;padding-left:10px">Tarea a realizar</th>'+
             dias.map(function(d){ return '<th style="width:'+anchoDia+'%">'+esc(d.nom)+'</th>'; }).join('')+
-            (conFirma?'<th style="width:9%">Firma</th>':'')+
-        '</tr></thead><tbody>'+filas+'</tbody></table>'+
+        '</tr></thead><tbody>'+filas+'</tbody>'+
+        /* El renglón de firma va en <tfoot>: así queda SIEMPRE al pie de la
+           tabla, aunque las tareas se partan en dos hojas. Dentro del tbody se
+           iría a media página con la primera mitad de las tareas. */
+        (conFirma
+            ? '<tfoot><tr class="ckfirma">'+
+                '<td class="lbl" colspan="2">Firma de quien ejecutó</td>'+
+                dias.map(function(){ return '<td></td>'; }).join('')+
+              '</tr></tfoot>'
+            : '')+
+        '</table>'+
         (conGuia ? _guiaHTML(guiaFreq, conFirma, hayBloqueos) : '');
 
     var doc = etaaxReporteDoc({
