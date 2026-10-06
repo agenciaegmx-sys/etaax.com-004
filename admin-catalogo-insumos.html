@@ -271,7 +271,11 @@
         <div class="modal-header">
             <h2 id="modalTitulo">Nuevo insumo</h2>
             <div style="display:flex;align-items:center;gap:10px">
-                <span class="pill pill-green" id="ins-activo-pill" onclick="toggleActivoInsumo()" style="cursor:pointer;user-select:none">Activo</span>
+                <!-- BOTÓN, no <span>: ver recetas/insumos.html -->
+                <button type="button" class="pill pill-green" id="ins-activo-pill"
+                    onclick="toggleActivoInsumo()"
+                    title="Dar de baja o reactivar este insumo"
+                    style="cursor:pointer;user-select:none;border:none;font-family:inherit">Activo</button>
                 <input type="hidden" id="ins-activo" value="1">
                 <!-- Convertir tipo -->
                 <div style="position:relative">

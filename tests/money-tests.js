@@ -15933,6 +15933,124 @@ console.log('\n══ BH12 · Dos botones que no hacían nada ══');
         eq(ver.indexOf('sin propinas') > -1 && ver.indexOf('comprado') > -1, true, 'auditable'));
 }
 
+/* ═══════════ SUITE BH13 · EL ARRASTRE SE COMÍA LOS CLICS ═══════════════════
+   LA CAUSA DE QUE LA PASTILLA NO SIRVIERA, y no era donde parecía.
+
+   modal-drag.js permite mover cualquier modal arrastrándolo por su encabezado.
+   Para que el arrastre siga al puntero aunque se salga del encabezado, llama a
+   setPointerCapture(). Y ahí está la trampa: cuando un puntero queda capturado,
+   el `click` se dispara en el ELEMENTO QUE CAPTURÓ —el encabezado— y no en lo
+   que se apretó. Cualquier control del encabezado que el arrastre no reconozca
+   deja de responder: su onclick nunca corre.
+
+   La lista de «esto no arranca un arrastre» enumeraba etiquetas: button, a,
+   input, select, textarea, label. La pastilla de activo/inactivo es un <span>,
+   así que no estaba — y llevaba quién sabe cuánto tiempo muerta, en el editor
+   de insumos y en el catálogo ETAAX.
+
+   Se arregló por los dos lados: la lista ya no enumera etiquetas sino que
+   reconoce CONTROLES (cualquier cosa con onclick o role="button"), y la
+   pastilla es un <button> de verdad.                                          */
+console.log('\n══ BH13 · El arrastre se comía los clics ══');
+{
+    const drag = fs.readFileSync(path.join(RAIZ, 'modal-drag.js'), 'utf8');
+
+    /* ── Se corre modal-drag.js de verdad contra un DOM de mentira ── */
+    /* Un `closest` mínimo: compara la lista de selectores contra etiqueta,
+       clase y atributos de cada nodo subiendo por el árbol. Es lo justo para
+       decidir si el arrastre debe arrancar o no. */
+    const nodo = (tag, opts) => Object.assign({ tag, clases:[], attrs:{}, padre:null, style:{} }, opts || {});
+    const casa = (n, sel) => sel.split(',').map(x => x.trim()).some(x => {
+        if (x.startsWith('.')) return n.clases.indexOf(x.slice(1)) >= 0;
+        if (x.startsWith('[')) {
+            const m = x.match(/^\[([a-zA-Z-]+)(?:="([^"]*)")?\]$/);
+            if (!m) return false;
+            return m[2] === undefined ? (n.attrs[m[1]] !== undefined) : (n.attrs[m[1]] === m[2]);
+        }
+        return n.tag === x;
+    });
+    const conClosest = (n) => {
+        n.closest = (sel) => { let c = n; while (c) { if (casa(c, sel)) return c; c = c.padre; } return null; };
+        n.parentElement = n.padre;
+        return n;
+    };
+
+    const correr = (target) => {
+        const manejadores = [];
+        const ctx = { console, Math, parseFloat };
+        ctx.window = ctx;
+        let capturado = false;
+        ctx.getComputedStyle = () => ({ position:'static', resize:'none' });
+        ctx.document = {
+            body: conClosest(nodo('body')),
+            head: { appendChild(){} },
+            documentElement: { appendChild(){} },
+            createElement: () => ({ set textContent(v){}, get textContent(){ return ''; } }),
+            addEventListener: (ev, fn) => manejadores.push([ev, fn])
+        };
+        vm.createContext(ctx);
+        vm.runInContext(drag, ctx, { filename:'modal-drag.js' });
+        /* El espía va en TODA la cadena: setPointerCapture lo llama el
+           ENCABEZADO, no el elemento que se apretó. Ponerlo solo en el target
+           daba «no arrastra» siempre, incluido el caso que sí debe arrastrar. */
+        for (let c = target; c; c = c.padre) c.setPointerCapture = () => { capturado = true; };
+        manejadores.filter(h => h[0] === 'pointerdown').forEach(h =>
+            h[1]({ pointerType:'mouse', button:0, clientX:10, clientY:10, pointerId:1, target }));
+        return capturado;
+    };
+
+    /* El armado: un encabezado de modal, dentro de un modal, con un control. */
+    const conHeader = (ctrl) => {
+        const modal  = conClosest(nodo('div', { clases:['modal'] }));
+        const header = conClosest(nodo('div', { clases:['modal-header'], padre:modal }));
+        header.parentElement = modal; header.padre = modal;
+        ctrl.padre = header; ctrl.parentElement = header;
+        return conClosest(ctrl);
+    };
+
+    /* EL CASO EXACTO DEL REPORTE: la pastilla, cuando era un <span>. */
+    test('un control con onclick en el encabezado ya NO arranca el arrastre', () =>
+        eq(correr(conHeader(nodo('span', { attrs:{ onclick:'toggleActivoInsumo()' } }))), false, 'respeta el clic'));
+    /* Y así quedó en el HTML: botón de verdad, que además se enfoca con el
+       tabulador y responde al Enter. */
+    test('…y un <button>, tampoco (como siempre)', () =>
+        eq(correr(conHeader(nodo('button', {}))), false, 'respeta el clic'));
+    test('…ni algo marcado como botón por accesibilidad', () =>
+        eq(correr(conHeader(nodo('div', { attrs:{ role:'button' } }))), false, 'respeta el clic'));
+    /* Lo que NO se puede romper al arreglar esto: el encabezado tiene que
+       seguir moviendo la ventana. Es para lo que existe el archivo. */
+    test('pero arrastrar por el encabezado vacío sigue funcionando', () =>
+        eq(correr(conHeader(nodo('h2', {}))), true, 'se mueve'));
+    test('…y por el encabezado mismo', () => {
+        const modal  = conClosest(nodo('div', { clases:['modal'] }));
+        const header = conClosest(nodo('div', { clases:['modal-header'], padre:modal }));
+        header.parentElement = modal;
+        return eq(correr(header), true, 'se mueve');
+    });
+
+    /* ── La causa, dicha en el código ── */
+    /* Si la lista vuelve a enumerar etiquetas, el siguiente control que no sea
+       <button> nace muerto y nadie entiende por qué. */
+    test('la lista reconoce CONTROLES, no etiquetas sueltas', () =>
+        eq(drag.indexOf('[onclick]') > -1 && drag.indexOf('[role="button"]') > -1, true, 'general'));
+    test('…y deja escrito por qué, que es lo que costó encontrar', () =>
+        eq(drag.indexOf('setPointerCapture') > -1 &&
+           drag.indexOf('el `click` se dispara en el ELEMENTO QUE CAPTURÓ') > -1, true, 'explicado'));
+
+    /* ── La pastilla, en las dos páginas que la tienen ── */
+    ['recetas/insumos.html', 'admin-catalogo-insumos.html'].forEach(p => {
+        const h = fs.readFileSync(path.join(RAIZ, p), 'utf8');
+        test(p + ': la pastilla es un botón de verdad', () =>
+            eq(/<button[^>]*id="ins-activo-pill"/.test(h) &&
+               h.indexOf('<span class="pill pill-green" id="ins-activo-pill"') === -1,
+               true, 'botón'));
+        /* Un botón dentro de un <form> envía el formulario si no se dice que no.
+           Aquí no hay form, pero el default de `submit` es una bomba de tiempo. */
+        test('…sin tipo por defecto, que es enviar formularios', () =>
+            eq(/<button type="button"[^>]*id="ins-activo-pill"/.test(h), true, 'type=button'));
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');

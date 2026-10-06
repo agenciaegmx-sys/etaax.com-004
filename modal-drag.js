@@ -13,7 +13,17 @@
 
     var MODAL  = '.modal,.dx-win,.cj-panel,.modal-gg,.tool-modal,.vp-mbox';
     var HANDLE = '.modal-header,.dx-win-hdr,.cj-header,.tool-modal-hd,.etx-modal-hd';
-    var SKIP   = 'button,a,input,select,textarea,label,.modal-close';
+    /* LO QUE NO ARRANCA UN ARRASTRE. Ojo con esta lista: el arrastre llama a
+       setPointerCapture sobre el encabezado y, cuando un puntero queda
+       capturado, el `click` se dispara en el ELEMENTO QUE CAPTURÓ — no en lo
+       que se apretó. O sea que cualquier control del encabezado que no esté
+       aquí deja de responder: su onclick nunca corre y parece que el botón está
+       muerto. Así se pasó semanas la pastilla de activo/inactivo del editor de
+       insumos, que es un <span>, no un <button>.
+
+       Por eso ya no se enumeran etiquetas nada más: cualquier cosa con onclick
+       o con role="button" ES un control, se vea como se vea. */
+    var SKIP   = 'button,a,input,select,textarea,label,.modal-close,[onclick],[role="button"]';
 
     // Caja del modal a mover: si el encabezado no está dentro de una clase de
     // modal conocida, se sube genéricamente hasta el hijo directo del overlay

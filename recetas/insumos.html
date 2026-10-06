@@ -291,9 +291,14 @@ document.addEventListener('DOMContentLoaded', function(){
                 <div id="insSello" style="margin-top:2px"></div>
             </div>
             <div style="display:flex;align-items:center;gap:10px">
-                <span class="pill pill-green" id="ins-activo-pill"
+                <!-- BOTÓN, no <span>. Además de ser lo correcto (se enfoca con
+                     el tabulador y responde al Enter), modal-drag.js deja en paz
+                     a los <button> del encabezado: con un <span> el arrastre
+                     capturaba el puntero y se quedaba con el clic. -->
+                <button type="button" class="pill pill-green" id="ins-activo-pill"
                     onclick="toggleActivoInsumo()"
-                    style="cursor:pointer;user-select:none">Activo</span>
+                    title="Dar de baja o reactivar este insumo"
+                    style="cursor:pointer;user-select:none;border:none;font-family:inherit">Activo</button>
                 <input type="hidden" id="ins-activo" value="1">
                 <!-- Convertir tipo -->
                 <div style="position:relative">
