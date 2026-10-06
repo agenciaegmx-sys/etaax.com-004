@@ -2850,12 +2850,96 @@
        setTimeout(() => document.getElementById('ins-nombre').focus(), 100);
    }
    
-   function toggleActivoInsumo() {
-       const inp = document.getElementById('ins-activo');
-       const nuevoVal = inp.value === '1' ? '0' : '1';
-       inp.value = nuevoVal;
-       actualizarPillActivo(nuevoVal);
-   }
+    /* ══ DAR DE BAJA / REACTIVAR UN INSUMO ═════════════════════════════════════
+       La pastilla PARECE un interruptor, y hasta ahora no lo era: cambiaba de
+       color y ahí se quedaba. Lo que de verdad daba de baja al insumo era
+       apretar Guardar después — y como el cambio lo hacía JavaScript sobre un
+       input oculto, ni siquiera disparaba el `change` que marca el modal como
+       sucio, así que cerrar sin guardar se lo llevaba EN SILENCIO: sin aviso de
+       «tienes cambios», sin nada. Clic, se pone rojo, cierro, y el insumo sigue
+       activo. Por eso «no servía».
+
+       Ahora hace lo que aparenta: se aplica al momento. Dar de baja se pregunta
+       —esconde el producto de los catálogos y de las requisiciones—; reactivar
+       no, porque devolver algo a la vista no rompe nada.
+
+       En un insumo que todavía no existe (alta) no hay dónde guardar: ahí sí
+       solo marca el valor, y queda registrado como cambio pendiente. */
+    function toggleActivoInsumo() {
+        const inp = document.getElementById('ins-activo');
+        if (!inp) return;
+        const nuevoVal = inp.value === '1' ? '0' : '1';
+
+        if (!editandoId) {                       // alta: no hay registro que tocar
+            inp.value = nuevoVal;
+            actualizarPillActivo(nuevoVal);
+            modalDirty = true;                   // lo cambió JS: el `change` no se dispara solo
+            return;
+        }
+
+        const _aplicar = function () {
+            inp.value = nuevoVal;
+            actualizarPillActivo(nuevoVal);
+            _guardarActivo(editandoId, nuevoVal);
+        };
+        if (nuevoVal === '1') { _aplicar(); return; }
+
+        const ins = getInsumos().find(function (x) { return x.id === editandoId; });
+        const msg = '<b>' + etx(insumoTitulo(ins || {})) + '</b> deja de aparecer en el catálogo, ' +
+            'en las requisiciones y en el conteo de inventario.<br><br>' +
+            '<span style="color:var(--text-dim);font-size:12px">Lo ya capturado —inventarios, mermas, ' +
+            'escandallos— NO se toca, y se puede reactivar cuando quieras.</span>';
+        if (window.etaaxConfirm)
+            etaaxConfirm('Dar de baja el insumo', msg, _aplicar, null, { yesLabel: 'Sí, dar de baja', danger: true });
+        else if (confirm(msg.replace(/<[^>]+>/g, ''))) _aplicar();
+    }
+
+    /* Escribe SOLO el campo `activo` en el registro. No pasa por guardarInsumo
+       a propósito: esa función toma todo lo que haya en el formulario, así que
+       dar de baja arrastraría de paso cualquier edición a medias que estuviera
+       en pantalla sin que nadie la haya confirmado. */
+    function _guardarActivo(id, val) {
+        var lista = getInsumos();
+        var i = lista.findIndex(function (x) { return x.id === id; });
+        if (i < 0) return;
+        var previo = JSON.parse(JSON.stringify(lista[i]));
+        lista[i].activo = val;
+        lista[i].updatedAt = new Date().toISOString();
+        lista[i].updatedBy = _usuarioActual();
+        _registrarCambios(lista[i], previo);     // queda en la bitácora, como cualquier cambio
+        var tocados = [lista[i]];
+
+        /* LAS COPIAS. Desde el catálogo global se edita el MAESTRO, y dar de
+           baja solo al maestro dejaba el producto vivo en las tres sucursales:
+           se sigue pidiendo, se sigue contando, se sigue vendiendo. «Ya no lo
+           manejamos» es una decisión del negocio, así que alcanza a sus copias.
+           (Al revés no: dar de baja en una sucursal es cosa de esa sucursal.) */
+        if (_catGlobalIns() && !lista[i].origenId) {
+            var canon = lista[i].id;
+            lista.forEach(function (x, j) {
+                if (x.origenId !== canon) return;
+                if (x.activo === val) return;
+                var p2 = JSON.parse(JSON.stringify(x));
+                lista[j].activo = val;
+                lista[j].updatedAt = lista[i].updatedAt;
+                lista[j].updatedBy = lista[i].updatedBy;
+                _registrarCambios(lista[j], p2);
+                tocados.push(lista[j]);
+            });
+        }
+
+        setInsumos(lista);
+        try { _sincronizarInsumosSupabase(getNegocioActivo(), tocados); } catch (e) {}
+        _novInvalidar();
+        try { filtrar(); } catch (e) {}
+        /* Solo se avisa cuando el cambio alcanzó a OTROS registros: eso no se ve
+           en pantalla y hay que decirlo. Para un solo registro la pastilla ya es
+           la respuesta — un diálogo por cada clic enseña a cerrarlos sin leer. */
+        if (tocados.length > 1 && window.etaaxAlert)
+            etaaxAlert((val === '1' ? 'Reactivado' : 'Dado de baja') + ' también en ' +
+                (tocados.length - 1) + ' copia' + (tocados.length === 2 ? '' : 's') + ' de sucursal.');
+    }
+    window.toggleActivoInsumo = toggleActivoInsumo;
    
    function actualizarPillActivo(val) {
        const pill = document.getElementById('ins-activo-pill');

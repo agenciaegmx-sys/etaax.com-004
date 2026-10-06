@@ -15669,6 +15669,270 @@ console.log('\n══ BH11 · Qué queda de cada copa ══');
     });
 }
 
+/* ═══════════ SUITE BH12 · DOS BOTONES QUE NO HACÍAN NADA ═══════════════════
+   1. LA PASTILLA DE ACTIVO/INACTIVO. Parecía un interruptor y no lo era:
+      cambiaba de color y ahí se quedaba. Lo que de verdad daba de baja al
+      insumo era apretar Guardar después — y como el cambio lo hacía JavaScript
+      sobre un input oculto, ni siquiera disparaba el `change` que marca el
+      modal como sucio. Clic, se pone rojo, cierro, y el insumo sigue activo,
+      sin aviso de «tienes cambios sin guardar».
+
+   2. EL BOTÓN DE IMPRIMIR del resumen llamaba a etaaxImprimir(etaaxReporte(…))
+      y NINGUNA de las dos existe en el proyecto: el helper se llama
+      etaaxReporteDoc y se abre con etaaxAbrirReporte. Tronaba en la consola,
+      en silencio, desde el día que se escribió.                               */
+console.log('\n══ BH12 · Dos botones que no hacían nada ══');
+{
+    const ijs = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.js'), 'utf8');
+    const rs  = fs.readFileSync(path.join(RAIZ, 'financiero/resumen.html'), 'utf8');
+    const cuerpoDe = (src) => (fn) => {
+        const i = src.indexOf('function ' + fn + '(');
+        if (i < 0) throw new Error('no existe ' + fn);
+        const abre = src.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < src.length) {
+            if (src[j] === '{') prof++;
+            else if (src[j] === '}') { prof--; if (!prof) return src.slice(i, j + 1); }
+            j++;
+        }
+        throw new Error('sin cerrar ' + fn);
+    };
+    const dI = cuerpoDe(ijs), dR = cuerpoDe(rs);
+
+    /* ── 1) LA PASTILLA, corriendo de verdad ── */
+    /* Catálogo: un maestro con copias en dos sucursales. */
+    /* Y un producto AJENO, de otra familia: sin él la prueba no notaría que el
+       barrido se lleve de corbata al catálogo entero —todos los registros de la
+       muestra serían parientes—. Lo destapó la batería. */
+    const CAT = () => [
+        { id:'m_mezcal', nombre:'Mezcal', activo:'1' },
+        { id:'c_s1', origenId:'m_mezcal', nombre:'Mezcal', sucursales:['s1'], activo:'1' },
+        { id:'c_s2', origenId:'m_mezcal', nombre:'Mezcal', sucursales:['s2'], activo:'1' },
+        { id:'m_tonica', nombre:'Tónica', activo:'1' },
+        { id:'c_ton_s1', origenId:'m_tonica', nombre:'Tónica', sucursales:['s1'], activo:'1' }
+    ];
+    const armar = (enGlobal, idEditando) => {
+        const ctx = { console, Date, Math, String, JSON, parseFloat, isNaN, Object, Array };
+        ctx.window = ctx;
+        vm.createContext(ctx);
+        let lista = CAT(), sincronizados = null, avisos = [];
+        ctx.getInsumos  = () => lista;
+        ctx.setInsumos  = (l) => { lista = l; };
+        ctx.editandoId  = idEditando;
+        ctx._catGlobalIns = () => enGlobal;
+        ctx._usuarioActual = () => 'edwin';
+        ctx._registrarCambios = () => {};
+        ctx._novInvalidar = () => {};
+        ctx.filtrar = () => {};
+        ctx.getNegocioActivo = () => 'neg';
+        ctx._sincronizarInsumosSupabase = (_, t) => { sincronizados = t; };
+        ctx.etaaxAlert = (m) => { avisos.push(m); };
+        ctx.insumoTitulo = (x) => x.nombre || '';
+        ctx.etx = (x) => String(x == null ? '' : x);
+        /* etaaxConfirm que dice que SÍ: lo que se prueba es qué pasa cuando el
+           usuario acepta, no el diálogo. */
+        ctx.etaaxConfirm = (t, m, onYes) => { onYes(); };
+        const els = { 'ins-activo':{ value:'1' }, 'ins-activo-pill':{ textContent:'Activo', className:'pill pill-green' } };
+        ctx.document = { getElementById: (id) => els[id] || null };
+        ctx.modalDirty = false;
+        vm.runInContext([dI('toggleActivoInsumo'), dI('_guardarActivo'), dI('actualizarPillActivo')].join('\n'),
+                        ctx, { filename:'insumos.js (extracto)' });
+        return { ctx, els, lista: () => lista, sync: () => sincronizados, avisos };
+    };
+
+    /* EL SÍNTOMA EXACTO: antes esto dejaba `activo` en '1' en el registro. */
+    test('dar de baja se aplica al momento, no al apretar Guardar', () => {
+        const h = armar(false, 'c_s2');
+        h.ctx.toggleActivoInsumo();
+        return eq(h.lista().find(x => x.id === 'c_s2').activo, '0', 'aplicado');
+    });
+    test('…y la pastilla queda en rojo, diciendo lo mismo que el dato', () => {
+        const h = armar(false, 'c_s2');
+        h.ctx.toggleActivoInsumo();
+        return eq(h.els['ins-activo-pill'].textContent === 'Inactivo' &&
+                  h.els['ins-activo'].value === '0', true, 'coherente');
+    });
+    test('…subiéndolo a la nube, no solo al equipo', () => {
+        const h = armar(false, 'c_s2');
+        h.ctx.toggleActivoInsumo();
+        return eq((h.sync() || []).length, 1, 'sincronizado');
+    });
+    test('…y se puede reactivar', () => {
+        const h = armar(false, 'c_s2');
+        h.ctx.toggleActivoInsumo();
+        h.els['ins-activo'].value = '0';
+        h.ctx.toggleActivoInsumo();
+        return eq(h.lista().find(x => x.id === 'c_s2').activo, '1', 'reversible');
+    });
+    /* Dar de baja en UNA sucursal es cosa de esa sucursal: la de al lado puede
+       seguir vendiéndolo. Es la independencia que se construyó a propósito. */
+    test('darlo de baja en una sucursal no toca a las demás', () => {
+        const h = armar(false, 'c_s2');
+        h.ctx.toggleActivoInsumo();
+        const l = h.lista();
+        return eq(l.find(x => x.id === 'c_s1').activo === '1' &&
+                  l.find(x => x.id === 'm_mezcal').activo === '1', true, 'independiente');
+    });
+    /* LA OTRA MITAD: dar de baja el maestro y dejar el producto vivo en las tres
+       sucursales —pidiéndose, contándose, vendiéndose— es dar de baja nada. */
+    test('desde el catálogo global sí alcanza a sus copias', () => {
+        const h = armar(true, 'm_mezcal');
+        h.ctx.toggleActivoInsumo();
+        const l = h.lista();
+        return eq(l.filter(x => x.activo === '0').map(x => x.id).sort().join(','),
+                  'c_s1,c_s2,m_mezcal', 'hasta abajo');
+    });
+    /* Y SOLO a las suyas. Sin el guardián del vínculo, dar de baja un producto
+       daría de baja el catálogo completo de un clic. */
+    test('…y SOLO a las suyas, no al resto del catálogo', () => {
+        const h = armar(true, 'm_mezcal');
+        h.ctx.toggleActivoInsumo();
+        const l = h.lista();
+        return eq(l.find(x => x.id === 'm_tonica').activo === '1' &&
+                  l.find(x => x.id === 'c_ton_s1').activo === '1', true, 'solo la familia');
+    });
+    test('…subiendo los tres registros, no solo el maestro', () => {
+        const h = armar(true, 'm_mezcal');
+        h.ctx.toggleActivoInsumo();
+        return eq((h.sync() || []).length, 3, 'completo');
+    });
+    /* Una copia que YA estaba dada de baja no se vuelve a tocar: se le movería
+       la fecha de «última modificación» sin que nada cambiara, y el aviso diría
+       que alcanzó a dos sucursales cuando solo alcanzó a una. */
+    test('…sin tocar las copias que ya estaban como se pide', () => {
+        const h = armar(true, 'm_mezcal');
+        h.lista().find(x => x.id === 'c_s1').activo = '0';   // esta ya estaba de baja
+        h.ctx.toggleActivoInsumo();
+        return eq((h.sync() || []).length === 2 &&
+                  h.avisos[0].indexOf('1 copia de sucursal') > -1, true, 'solo lo que cambió');
+    });
+    /* Eso no se ve en pantalla —las copias viven en otra vista— así que hay que
+       decirlo. Para un solo registro no: la pastilla ya es la respuesta, y un
+       diálogo por cada clic enseña a cerrarlos sin leer. */
+    test('…avisando que el cambio llegó a las sucursales', () => {
+        const h = armar(true, 'm_mezcal');
+        h.ctx.toggleActivoInsumo();
+        return eq(h.avisos.length === 1 && h.avisos[0].indexOf('2 copias') > -1, true, 'avisado');
+    });
+    test('…y sin diálogo cuando es un solo registro', () => {
+        const h = armar(false, 'c_s2');
+        h.ctx.toggleActivoInsumo();
+        return eq(h.avisos.length, 0, 'sin ruido');
+    });
+    /* En un alta no hay registro que tocar: ahí sí queda para el Guardar, y por
+       eso hay que marcar el modal como sucio a mano —el input es oculto y lo
+       cambia JavaScript, así que no dispara `change` solo. */
+    test('en un insumo nuevo solo marca el valor…', () => {
+        const h = armar(false, '');
+        h.ctx.toggleActivoInsumo();
+        return eq(h.els['ins-activo'].value === '0' && h.sync() === null, true, 'sin guardar');
+    });
+    test('…pero marcándolo como cambio pendiente', () => {
+        const h = armar(false, '');
+        h.ctx.toggleActivoInsumo();
+        return eq(h.ctx.modalDirty, true, 'avisa al cerrar');
+    });
+    /* Dar de baja esconde el producto de los catálogos: se pregunta. Reactivar
+       no rompe nada, así que no se pregunta —preguntar de más también enseña a
+       no leer. */
+    test('dar de baja pregunta antes; reactivar no', () => {
+        const t = dI('toggleActivoInsumo');
+        return eq(t.indexOf("if (nuevoVal === '1') { _aplicar(); return; }") > -1 &&
+                  t.indexOf("etaaxConfirm('Dar de baja el insumo'") > -1, true, 'lo justo');
+    });
+    /* Lo capturado no se toca: si dar de baja borrara el histórico, nadie se
+       atrevería a usar el botón. */
+    test('…diciendo que lo ya capturado no se toca', () =>
+        eq(dI('toggleActivoInsumo').indexOf('NO se toca') > -1, true, 'tranquilo'));
+    /* guardarInsumo toma TODO lo que haya en el formulario: pasar por ahí haría
+       que dar de baja arrastrara de paso cualquier edición a medias en pantalla
+       que nadie confirmó. */
+    test('escribe solo el campo activo, sin arrastrar el formulario', () => {
+        const t = dI('_guardarActivo');
+        return eq(t.indexOf('guardarInsumo') === -1 && t.indexOf('lista[i].activo = val;') > -1,
+                  true, 'quirúrgico');
+    });
+
+    /* ── 2) EL BOTÓN DE IMPRIMIR ── */
+    /* Las funciones que llamaba no existen en el proyecto. Se mira el CUERPO de
+       la función, no el archivo: el comentario que cuenta el arreglo también
+       nombra a las difuntas, y buscarlas sueltas daba verde con el bug puesto. */
+    test('imprimir ya no llama a funciones que no existen', () => {
+        const t = dR('_imprimirResumen') + dR('imprimirResumen');
+        return eq(t.indexOf('etaaxImprimir') === -1 && t.indexOf('etaaxReporte(') === -1, true, 'reales');
+    });
+    /* Y que esas dos sigan sin existir en ningún lado: si alguien las
+       «arreglara» definiéndolas aquí, el reporte dejaría de ser el de la casa. */
+    test('…y nadie las inventó por su cuenta', () =>
+        eq(fs.readdirSync(RAIZ).filter(x => x.endsWith('.js'))
+             .some(x => fs.readFileSync(path.join(RAIZ, x), 'utf8').indexOf('window.etaaxImprimir') > -1),
+           false, 'un solo generador'));
+    test('…sino al generador de reportes de la casa', () =>
+        eq(dR('_imprimirResumen').indexOf('etaaxReporteDoc({') > -1, true, 'el bueno'));
+    /* Si el helper no cargó (caché viejo), el botón tiene que decirlo en vez de
+       no hacer nada: un botón mudo es indistinguible de uno roto. */
+    /* Se exige la condición Y el aviso: dejar solo el `return` vuelve a dejar el
+       botón mudo, que es indistinguible de uno roto —lo destapó la batería. */
+    test('…avisando si el módulo de reportes no cargó', () => {
+        const t = dR('_imprimirResumen');
+        return eq(t.indexOf("typeof etaaxReporteDoc!=='function'") > -1 &&
+                  t.indexOf("alert('No se pudo cargar el módulo de reportes") > -1, true, 'sin silencio');
+    });
+    test('…y si truena, diciéndolo en vez de quedarse callado', () =>
+        eq(dR('imprimirResumen').indexOf('No se pudo generar el reporte') > -1, true, 'sin silencio'));
+    /* Con el bloqueador de ventanas emergentes puesto, window.open devuelve
+       null: sin la red del iframe el botón volvería a no hacer nada. */
+    test('…con iframe de respaldo si bloquean la ventana', () =>
+        eq(dR('_imprimirResumen').indexOf("createElement('iframe')") > -1, true, 'con red'));
+
+    /* Y que de verdad produzca el reporte: se corre el generador real. */
+    const ctx = { console, Date, Math, String, Number, JSON, parseFloat, isNaN, Object, Array,
+                  localStorage: { getItem: () => null, setItem(){} } };
+    ctx.window = ctx;
+    ctx.document = { createElement: () => ({ style:{}, contentWindow:null }), body:{ appendChild(){} },
+                     getElementById: () => null };
+    vm.createContext(ctx);
+    vm.runInContext(fs.readFileSync(path.join(RAIZ, 'etaax-core.js'), 'utf8'), ctx, { filename:'etaax-core.js' });
+    vm.runInContext(fs.readFileSync(path.join(RAIZ, 'reporte-marca.js'), 'utf8'), ctx, { filename:'reporte-marca.js' });
+    ctx._c = { cortes:[{ fecha:'2026-09-05', efectivo:40000, tarjeta:20000, comensales:150 }], otros:[],
+               gastos:[{ fecha:'2026-09-02', concepto:'Carne', categoria:'Alimentos e ingredientes', monto:12000 }],
+               deps:[], ctas:[], fijos:[], staff:[], targets:null, metas:{} };
+    ctx._deSuc = () => true; ctx._sucNom = () => 'Matriz'; ctx._suc = () => '';
+    ctx.rango = () => ({ from:'2026-09-01', to:'2026-09-30' });
+    ctx._periodoTxt = () => 'septiembre de 2026';
+    ctx._proy = {}; ctx._DET = null; ctx._mdCache = {};
+    ctx.esc = (x) => String(x == null ? '' : x);
+    let papel = null;
+    ctx.etaaxAbrirReporte = (h) => { papel = h; };
+    ['n','fmtM','fmtP','_tocado','plDelPeriodo','_metaDelDia','metaDelRango','_imprimirResumen','imprimirResumen']
+        .forEach(f => vm.runInContext(dR(f), ctx, { filename:'resumen.html (extracto)' }));
+    ctx.imprimirResumen();
+    const ver = papel ? papel.replace(/<style[\s\S]*?<\/style>/g,'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ') : '';
+
+    test('el botón produce un reporte de verdad', () =>
+        eq(papel !== null && papel.indexOf('<!DOCTYPE html>') === 0, true, 'generado'));
+    test('…con los renglones del P&L', () =>
+        eq(ver.indexOf('Food cost $12,000') > -1 && ver.indexOf('Utilidad $48,000') > -1, true, 'completo'));
+    /* Es lo que se lleva a la junta: el P&L dice cuánto y los indicadores dicen
+       de qué manera. En papel se necesitan los dos. */
+    test('…y con los indicadores, que es lo que se lleva a la junta', () =>
+        eq(ver.indexOf('Cheque promedio $400') > -1 && ver.indexOf('Comensales 150') > -1, true, 'con KPIs'));
+    /* Sin proyección capturada, esas columnas serían una copia de las reales:
+       tres columnas de papel para repetir lo mismo. */
+    test('…sin columnas de proyección si nadie la tocó', () =>
+        eq(ver.indexOf('Proyección') === -1, true, 'sin relleno'));
+    test('…y CON ellas en cuanto se toque', () => {
+        ctx._proy = { ventas: 90000 };
+        papel = null; ctx.imprimirResumen();
+        const v2 = papel.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
+        return eq(v2.indexOf('Proyección') > -1 && v2.indexOf('Diferencia') > -1, true, 'comparable');
+    });
+    /* Decir con qué base se midió es lo que permite comparar este papel con el
+       del mes pasado. */
+    test('…diciendo en el papel con qué base se midió', () =>
+        eq(ver.indexOf('sin propinas') > -1 && ver.indexOf('comprado') > -1, true, 'auditable'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');

@@ -642,22 +642,84 @@ function _periodoTxt(){
     return r.from+' al '+r.to;
 }
 
-/* ── Imprimir: el mismo resumen, con la proyección al lado ── */
+/* ── Imprimir: el mismo resumen, con la proyección al lado ──────────────────
+   Llamaba a etaaxImprimir(etaaxReporte(...)) y NINGUNA de las dos existe: el
+   helper se llama etaaxReporteDoc y se abre con etaaxAbrirReporte. O sea que el
+   botón nunca funcionó — tronaba en silencio en la consola. Ahora usa el mismo
+   camino que Ventas Totales, con su misma red de seguridad. */
 function imprimirResumen(){
+    try { _imprimirResumen(); }
+    catch(e){ console.error(e); alert('No se pudo generar el reporte:\n'+((e&&e.message)||e)); }
+}
+function _imprimirResumen(){
+    if(typeof etaaxReporteDoc!=='function'){
+        alert('No se pudo cargar el módulo de reportes. Recarga la página.'); return;
+    }
     var base=plDelPeriodo(), proy=EtaaxCore.proyectarPL(base,_proy);
-    var fil=function(nom,a,ap,b,bp){
-        return '<tr><td class="w">'+esc(nom)+'</td><td>'+fmtM(a)+'</td><td>'+fmtP(ap)+'</td>'+
-               '<td>'+fmtM(b)+'</td><td>'+fmtP(bp)+'</td><td>'+((b-a)>=0?'+':'−')+fmtM(Math.abs(b-a))+'</td></tr>';
+    var metas=_c.targets||{};
+    var m={ food:n(metas.food)||30, nom:(n(metas.nomOp)+n(metas.nomAdm))||30,
+            fijos:n(metas.fijos)||15, otros:n(metas.variables)||10,
+            prevs:n(metas.prev)||5, util:n(metas.util)||20 };
+    var sc=EtaaxCore.scorePL(base,m);
+    var hayProy=_tocado();
+
+    /* Si nadie tocó la proyección, las columnas de proyección serían una copia
+       de las reales: tres columnas gastando papel para repetir lo mismo. */
+    var fil=function(nom,a,ap,b,bp,fuerte){
+        var t=fuerte?'<b>':'', c=fuerte?'</b>':'';
+        return '<tr><td>'+t+esc(nom)+c+'</td><td>'+t+fmtM(a)+c+'</td><td>'+fmtP(ap)+'</td>'+
+               (hayProy ? '<td>'+fmtM(b)+'</td><td>'+fmtP(bp)+'</td><td>'+
+                          ((b-a)>=0?'+':'−')+fmtM(Math.abs(b-a))+'</td>' : '')+'</tr>';
     };
-    var cuerpo='<table class="rt tnum"><thead><tr><th class="w">Concepto</th>'+
-        '<th>Real</th><th>%</th><th>Proyección</th><th>%</th><th>Diferencia</th></tr></thead><tbody>'+
-        fil('Ventas', base.ventas,100, proy.ventas,100)+
+    var cuerpo='<div class="rsec">Resultados del periodo</div>'+
+        '<table class="rt"><thead><tr><th>Concepto</th><th>Real</th><th>%</th>'+
+        (hayProy?'<th>Proyección</th><th>%</th><th>Diferencia</th>':'')+'</tr></thead><tbody>'+
+        fil('Ventas', base.ventas,100, proy.ventas,100, true)+
         base.lineas.map(function(l,i){ var p=proy.lineas[i]; return fil(l.nom,l.monto,l.pct,p.monto,p.pct); }).join('')+
-        '</tbody><tfoot>'+fil('Utilidad', base.utilidad,base.utilidadPct, proy.utilidad,proy.utilidadPct)+'</tfoot></table>';
-    etaaxImprimir(etaaxReporte({
-        titulo:'Resumen de Resultados', subtitulo:_periodoTxt(),
-        pie:'Resumen de Resultados · '+_periodoTxt(), cuerpo:cuerpo
-    }));
+        '</tbody><tfoot>'+
+        fil('Utilidad', base.utilidad,base.utilidadPct, proy.utilidad,proy.utilidadPct, true)+
+        '</tfoot></table>';
+
+    /* Los indicadores van en el papel porque es lo que se lleva a la junta: el
+       P&L dice cuánto y éstos dicen de qué manera. */
+    var com=(_DET&&_DET._comensales)||0;
+    var meta=metaDelRango();
+    var r=rango();
+    var dias=Math.max(1, Math.round((new Date(r.to+'T12:00:00')-new Date(r.from+'T12:00:00'))/864e5)+1);
+    var tar=function(l,v,s){ return '<div class="rcard"><div class="l">'+esc(l)+'</div>'+
+        '<div class="v">'+v+'</div>'+(s?'<div class="s">'+s+'</div>':'')+'</div>'; };
+    cuerpo+='<div class="rsec">Indicadores</div>'+
+        '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">'+
+        tar('Score', (sc.score===null?'—':sc.score), sc.metasPuestas?'contra tus metas':'sin metas configuradas')+
+        tar('Meta del periodo', meta===null?'Sin definir':fmtM(meta),
+            (meta&&meta>0)?(base.ventas/meta*100).toFixed(0)+'% cumplido':'')+
+        tar('Comensales', com>0?com.toLocaleString('es-MX'):'—', com>0?(com/dias).toFixed(0)+' por día':'sin captura')+
+        tar('Cheque promedio', com>0?fmtM(base.ventas/com):'—', com>0?'sin propinas':'falta el dato de comensales')+
+        '</div>';
+
+    /* La misma nota de la pantalla: decir con qué base se midió no es letra
+       chica, es lo que permite comparar este papel con el del mes pasado. */
+    cuerpo+='<div style="margin-top:14px;font-size:9.5px;color:#4a4a4a;line-height:1.55">'+
+        'Ingresos contra egresos por categoría del periodo. La venta se mide bruta, sin propinas. '+
+        'El food cost es lo <b>comprado</b> en alimentos, bebidas e insumos de barra — no el consumo de inventario.'+
+        (hayProy?' La columna de proyección es un escenario capturado a mano, no un pronóstico del sistema.':'')+
+        '</div>';
+
+    var html=etaaxReporteDoc({
+        titulo:'Resumen de Resultados',
+        subtitulo:_periodoTxt()+(_suc()?' · esta sucursal':' · todo el negocio'),
+        cuerpo:cuerpo, pie:'Salud Financiera · Resumen de Resultados'
+    });
+    // Ventana emergente y, si la bloquean, iframe oculto: el botón NUNCA debe
+    // quedarse en silencio (que es justo lo que hacía).
+    if(typeof etaaxAbrirReporte==='function'){ etaaxAbrirReporte(html); return; }
+    var w=null; try{ w=window.open('','_blank'); }catch(e){}
+    if(w&&w.document){ w.document.write(html); w.document.close(); return; }
+    var ifr=document.createElement('iframe');
+    ifr.style.cssText='position:fixed;left:-10000px;top:0;width:900px;height:1200px;border:0;opacity:0';
+    document.body.appendChild(ifr);
+    var d=ifr.contentWindow.document; d.open(); d.write(String(html).replace('window.print();','')); d.close();
+    setTimeout(function(){ try{ ifr.contentWindow.focus(); ifr.contentWindow.print(); }catch(e){} }, 450);
 }
 
 document.addEventListener('DOMContentLoaded', async function(){
