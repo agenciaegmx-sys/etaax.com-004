@@ -9839,6 +9839,116 @@ function _entEnPeriodo(fechaStr) {
     return true;
 }
 function setEntPeriodo(p) { _entPeriodo = p; renderVistaEntradas(); }
+
+/* ══ BUSCAR DENTRO DEL HISTORIAL ═══════════════════════════════════════════
+   Con 188 entradas, 9 mermas y 9 cortesías revueltas en una sola lista, los
+   únicos filtros eran de tiempo: para contestar «¿cuándo entró el Cinzano?» o
+   «¿qué se dio de cortesía este mes?» había que bajar leyendo renglón por
+   renglón.
+
+   Dos cosas distintas, a propósito:
+     · El TIPO (entradas / mermas / cortesías) es un cambio de lista: cada una
+       responde una pregunta distinta y mezclarlas es lo que estorba.
+     · El TEXTO busca dentro de lo que quede, en todo lo que se ve del renglón
+       —producto, quién lo registró, motivo, nota— porque uno se acuerda de
+       cualquiera de esos, no del campo en que lo guardó el sistema. */
+var _entTipo = 'todos', _entBusca = '';
+/* OJO: estos dos repintan SOLO la lista, no la vista entera. Volver a armar la
+   pantalla en cada tecla se lleva el foco del buscador a media palabra. */
+function setEntTipo(t) { _entTipo = t; renderListadoEntradas(); }
+function setEntBusca(v) { _entBusca = String(v || ''); renderListadoEntradas(); }
+/* Las pestañas van en su propio contenedor, SEPARADO del input: así se
+   repintan con cada tecla sin tocar el campo donde se está escribiendo. */
+function _entPintaChips(cta) {
+    var el = document.getElementById('entTipoChips');
+    if (!el) return;
+    var total = cta.entrada + cta.merma + cta.salida;
+    /* El fondo encendido va explícito y no calculado: color-mix no existe en
+       navegadores viejos y la pestaña activa se quedaría sin señal de estar
+       activa, que es lo único que ese fondo hace. */
+    var chip = function (t, ic, lbl, n, col, bg) {
+        var on = _entTipo === t;
+        return '<button onclick="setEntTipo(\'' + t + '\')" ' +
+            'style="border:1px solid ' + (on ? col : 'var(--border)') + ';' +
+            'background:' + (on ? bg : 'transparent') + ';' +
+            'color:' + (on ? col : 'var(--text-muted)') + ';border-radius:20px;padding:5px 13px;' +
+            'font-family:inherit;font-size:12px;cursor:pointer;font-weight:' + (on ? '700' : '500') + '">' +
+            ic + ' ' + lbl + ' <span style="opacity:.75">' + n + '</span></button>';
+    };
+    el.innerHTML =
+        chip('todos',   '📋', 'Todo',      total,       'var(--accent)', 'rgba(245,200,66,.14)') +
+        chip('entrada', '📦', 'Entradas',  cta.entrada, 'var(--green)',  'rgba(61,190,122,.14)') +
+        chip('merma',   '🗑️', 'Mermas',    cta.merma,   'var(--red)',    'rgba(224,90,58,.14)') +
+        chip('salida',  '🎁', 'Cortesías', cta.salida,  '#9b7fe0',       'rgba(124,95,211,.16)');
+}
+
+function _entTipoDe(e) {
+    return (e && e.concepto === 'merma') ? 'merma'
+         : (e && e.concepto === 'salida') ? 'salida' : 'entrada';
+}
+/* Todo lo que se ve del renglón, en un solo texto. Buscar solo por nombre
+   dejaría fuera «se rompió» o «Diego», que es justo como se busca de memoria. */
+function _entTextoBusca(e) {
+    if (!e) return '';
+    var MOT = { se_rompio:'se rompió', se_derramo:'se derramó', mal_preparado:'mal preparado',
+                caducado:'caducado', otro:'otro' };
+    return [e.nombreProducto, e.nombre, e.notas, MOT[e.motivo] || e.motivo, e.registradoPor,
+            e.area, e.fecha, e.salidaTipo === 'prestamo' ? 'préstamo' : (e.concepto === 'salida' ? 'cortesía' : ''),
+            e.concepto === 'merma' ? 'merma' : '',
+            (typeof tipoEntradaLabel === 'function' && e.tipo) ? tipoEntradaLabel(e.tipo) : '']
+        .join(' ').toLowerCase();
+}
+/* Qué decir cuando no queda nada. «Sin registros de esta sucursal» con un
+   buscador escrito es engañoso: hace pensar que no hay datos cuando lo que pasa
+   es que el filtro no deja pasar ninguno, y lo que se necesita es el botón para
+   quitarlo. */
+function _entVacioHTML() {
+    var q = _entBusca.trim();
+    var filtrando = q || _entTipo !== 'todos';
+    if (!filtrando)
+        return '<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:24px 0">Sin registros de esta sucursal</div>';
+    var LBL = { entrada:'entradas', merma:'mermas', salida:'cortesías o préstamos' };
+    var qué = _entTipo === 'todos' ? 'registros' : LBL[_entTipo];
+    return '<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:30px 0;line-height:1.7">' +
+        'No hay ' + qué + (q ? ' que digan «<b style="color:var(--text)">' + etx(q) + '</b>»' : '') +
+        ' en este periodo.' +
+        '<div style="margin-top:12px"><button onclick="_entLimpiarFiltros()" ' +
+        'style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:20px;' +
+        'padding:6px 14px;font-family:inherit;font-size:12px;cursor:pointer">↺ Quitar el filtro</button></div></div>';
+}
+function _entLimpiarFiltros() { _entBusca = ''; _entTipo = 'todos'; renderVistaEntradas(); }
+
+/* LA CADENA DE FILTRADO, en un solo lugar. Primero el texto, después el tipo,
+   y los contadores de las pestañas SOBRE LO BUSCADO —no sobre el total y no
+   sobre lo ya filtrado por pestaña—:
+
+     · sobre el total: al teclear «cinzano» las pestañas seguirían diciendo
+       «188 entradas» y no servirían de nada;
+     · sobre lo filtrado por pestaña: al entrar a Mermas las demás se irían a
+       cero y no habría cómo saber que hay algo más — la pestaña se volvería
+       una trampa de un solo sentido.
+
+   Va aparte del render para poder probarla con datos en la mano: cuando vivía
+   dentro, el candado comprobaba los filtros por su cuenta y no notaba que la
+   pantalla dejara de usarlos. */
+function _entFiltrar(lista) {
+    var buscadas = (lista || []).filter(_entPasaBusca);
+    var cta = { entrada:0, merma:0, salida:0 };
+    buscadas.forEach(function (e) { cta[_entTipoDe(e)]++; });
+    var visibles = (_entTipo === 'todos') ? buscadas
+        : buscadas.filter(function (e) { return _entTipoDe(e) === _entTipo; });
+    return { visibles: visibles, cta: cta };
+}
+
+function _entPasaBusca(e) {
+    var q = _entBusca.trim().toLowerCase();
+    if (!q) return true;
+    /* Varias palabras = todas tienen que estar, en cualquier orden: «cinzano
+       diego» encuentra lo que registró Diego de Cinzano sin importar el orden
+       en que se escriba. */
+    var txt = _entTextoBusca(e);
+    return q.split(/\s+/).every(function (p) { return txt.indexOf(p) >= 0; });
+}
 function setEntRango() {
     _entDesde = (document.getElementById('entDesde')||{}).value || '';
     _entHasta = (document.getElementById('entHasta')||{}).value || '';
@@ -9902,6 +10012,9 @@ function renderListadoEntradas() {
     const countEl = document.getElementById('entLogCount');
     if (countEl) countEl.textContent = log.length + ' registro' + (log.length !== 1 ? 's' : '');
     if (!log.length) {
+        /* Las pestañas se pintan igual, en cero: dejar su renglón en blanco se
+           ve como si la pantalla se hubiera roto a medio cargar. */
+        _entPintaChips({ entrada:0, merma:0, salida:0 });
         cont.innerHTML = `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:24px 0">
             Sin entradas registradas</div>`;
         return;
@@ -9920,12 +10033,15 @@ function renderListadoEntradas() {
     // de esa sucursal (las sin sello quedan solo en la vista matriz). Dentro de un inventario
     // (Paso 2) no se filtra: sus entradas ya están acotadas a él (y no llevan sucursalId).
     const _sucHist = _sucActiva();
-    const visibles = rows.filter(function(e){
+    const deLaSuc = rows.filter(function(e){
         if (!e) return false;                        // excluir null/undefined (reventaba el render)
         if (!useGlobal) return true;                 // dentro del inventario → ya acotadas
         if (!_sucHist) return true;                  // matriz / sin sucursal → historial global real
         return (e.sucursalId || '') === _sucHist;    // sucursal específica → SOLO sus entradas
     });
+    const _f = _entFiltrar(deLaSuc);
+    _entPintaChips(_f.cta);
+    const visibles = _f.visibles;
     var _sucNomH = '';
     try {
         var _ssH = JSON.parse(localStorage.getItem('etaax_' + getNegocioActivo() + '_sucursales') || '[]');
@@ -9998,13 +10114,13 @@ const fotoTh = _fotosThumbHTML(e);
             (entradasArr.length ? secHdr('📦 Entradas' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + entradasArr.map(_safeRow).join('') : '') +
             (mermasArr.length   ? secHdr('🗑️ Mermas'   + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + mermasArr.map(_safeRow).join('') : '') +
             (salidasArr.length  ? secHdr('🎁 Cortesías / Préstamos' + (_sucNomH ? ' · ' + etx(_sucNomH) : '')) + salidasArr.map(_safeRow).join('') : '') +
-            (!visibles.length ? `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:24px 0">Sin registros de esta sucursal</div>` : '');
+            (!visibles.length ? _entVacioHTML() : '');
     } catch (err) {
         console.warn('[registro entradas] render por secciones falló, fallback plano:', err);
         if (countEl) countEl.textContent = visibles.length + ' registro' + (visibles.length !== 1 ? 's' : '');
         cont.innerHTML = visibles.length
             ? visibles.map(_safeRow).join('')
-            : `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:24px 0">Sin registros de esta sucursal</div>`;
+            : _entVacioHTML();
     }
 }
 
@@ -10306,11 +10422,26 @@ function renderVistaEntradas() {
                 <span style="color:var(--text-dim);font-size:12px">a</span>
                 <input type="date" id="entHasta" value="${_entHasta}" onchange="setEntRango()" style="${_inpDate}">` : ''}
         </div>`;
+    /* El buscador y las pestañas de tipo. Van SIEMPRE —también dentro de un
+       inventario, donde el Paso 2 junta las mismas tres listas—, porque es ahí
+       donde más estorba tener que bajar leyendo. */
+    const filtroTipo = `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+            <div style="position:relative;flex:1;min-width:200px;max-width:380px">
+                <input id="entBuscar" type="search" value="${etx(_entBusca)}"
+                    oninput="setEntBusca(this.value)" autocomplete="off"
+                    placeholder="🔍 Buscar por producto, quién lo registró, motivo o nota…"
+                    style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);
+                           border-radius:20px;padding:7px 13px;font-family:inherit;font-size:12.5px;outline:none">
+            </div>
+            <div id="entTipoChips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+        </div>`;
     cont.innerHTML = `
         <div class="ent-rapida-wrap${invActual ? '' : ' ent-ancho'}">
             ${searchSection}
             <div>
                 ${filtroFechas}
+                ${filtroTipo}
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
                     <span style="font-size:11px;color:var(--text-dim);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">
                         ${invActual ? 'Entradas del período' : 'Historial de entradas'}

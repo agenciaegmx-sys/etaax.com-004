@@ -16409,6 +16409,149 @@ console.log('\n══ BH15 · La hora de captura ══');
         eq((fin.match(/href="resumen\.html"/g) || []).length, 1, 'una vez'));
 }
 
+/* ═══════════ SUITE BH16 · BUSCAR EN EL HISTORIAL DE ENTRADAS ═══════════════
+   188 entradas, 9 mermas y 9 cortesías revueltas en una sola lista, y los
+   únicos filtros eran de tiempo. Para contestar «¿cuándo entró el Cinzano?» o
+   «¿qué se dio de cortesía este mes?» había que bajar leyendo renglón por
+   renglón.
+
+   Dos cosas distintas a propósito: el TIPO cambia de lista —cada una contesta
+   una pregunta diferente y mezclarlas es lo que estorba— y el TEXTO busca
+   dentro de lo que quede.                                                     */
+console.log('\n══ BH16 · Buscar en el historial de entradas ══');
+{
+    const inv = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    const dI = (fn) => {
+        const i = inv.indexOf('function ' + fn + '(');
+        if (i < 0) throw new Error('no existe ' + fn);
+        const abre = inv.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < inv.length) {
+            if (inv[j] === '{') prof++;
+            else if (inv[j] === '}') { prof--; if (!prof) return inv.slice(i, j + 1); }
+            j++;
+        }
+        throw new Error('sin cerrar ' + fn);
+    };
+    const cx = { console, String, Array };
+    cx.window = cx;
+    vm.createContext(cx);
+    vm.runInContext('var _entTipo="todos",_entBusca="";' +
+        'function etx(s){return String(s==null?"":s);}' +
+        'function tipoEntradaLabel(t){return t==="compra"?"Compra":t;}' +
+        dI('_entTipoDe') + dI('_entTextoBusca') + dI('_entPasaBusca') + dI('_entFiltrar') + dI('_entVacioHTML'),
+        cx, { filename:'inventarios.js (extracto)' });
+
+    const LOG = [
+        { concepto:'entrada', nombre:'Cinzano Brut Cotsco',   tipo:'compra', registradoPor:'Diego', fecha:'2026-09-29' },
+        { concepto:'entrada', nombre:'Aperol Campari',        tipo:'compra', registradoPor:'Diego', fecha:'2026-09-29' },
+        { concepto:'entrada', nombre:'Mineral ciel 355 ml',   tipo:'compra', registradoPor:'Ana',   fecha:'2026-09-29' },
+        { concepto:'merma',   nombre:'Carta Blanca Heineken', motivo:'se_rompio', notas:'Accidente del cliente', registradoPor:'Diego' },
+        { concepto:'salida',  nombre:'Disaronno',  salidaTipo:'cortesia', notas:'Cocina', registradoPor:'Diego' },
+        { concepto:'salida',  nombre:'Aconte 3 años', salidaTipo:'prestamo', notas:'Fue para cocina, piña caramelizada', registradoPor:'Diego' }
+    ];
+    /* Se corre LA FUNCIÓN DE LA PANTALLA, no una copia del encadenado: cuando
+       la prueba rehacía los filtros por su cuenta, daba verde aunque el render
+       dejara de usarlos —lo destapó la batería—. */
+    const correr = (q, t) => {
+        cx._entBusca = q; cx._entTipo = t || 'todos';
+        const r = cx._entFiltrar(LOG);
+        return { nombres: r.visibles.map(e => e.nombre), cta: r.cta };
+    };
+
+    test('sin filtro se ve todo', () =>
+        eq(correr('').nombres.length, 6, 'todo'));
+    test('buscar por producto encuentra el producto', () =>
+        eq(correr('cinzano').nombres.join(','), 'Cinzano Brut Cotsco', 'por nombre'));
+    /* Uno se acuerda de quién lo registró, no del campo donde el sistema lo
+       guardó: buscar solo por nombre dejaría fuera la mitad de las búsquedas
+       reales. */
+    test('…y también por quién lo registró', () =>
+        eq(correr('diego').nombres.length, 5, 'por persona'));
+    test('…por el motivo de la merma', () =>
+        eq(correr('se rompió').nombres.join(','), 'Carta Blanca Heineken', 'por motivo'));
+    test('…y por la nota', () =>
+        eq(correr('cocina').nombres.length, 2, 'por nota'));
+    /* Varias palabras = todas presentes, en cualquier orden. Si fuera una sola
+       cadena literal, «cinzano diego» no encontraría nada aunque los dos datos
+       estén en el renglón. */
+    test('varias palabras se piden TODAS, en cualquier orden', () =>
+        eq(correr('cinzano diego').nombres.join(',') === 'Cinzano Brut Cotsco' &&
+           correr('diego cinzano').nombres.join(',') === 'Cinzano Brut Cotsco', true, 'sin orden'));
+    test('la búsqueda no distingue mayúsculas', () =>
+        eq(correr('CINZANO').nombres.length, 1, 'sin acentos de más'));
+
+    /* ── Las pestañas ── */
+    test('el tipo cambia de lista: solo mermas', () =>
+        eq(correr('', 'merma').nombres.join(','), 'Carta Blanca Heineken', 'una lista'));
+    test('…solo cortesías y préstamos', () =>
+        eq(correr('', 'salida').nombres.length, 2, 'una lista'));
+    /* Un préstamo y una cortesía son la misma salida con distinto rótulo: los
+       dos tienen que caer en la misma pestaña o uno se vuelve invisible. */
+    test('…con el préstamo en la misma pestaña que la cortesía', () =>
+        eq(correr('préstamo', 'salida').nombres.join(','), 'Aconte 3 años', 'juntos'));
+    /* Las pestañas cuentan lo que hay DE LO BUSCADO: al teclear «cinzano»
+       sirve ver que son 1 entrada y 0 mermas, no los totales de siempre. */
+    test('las pestañas cuentan sobre lo buscado, no sobre el total', () => {
+        const c = correr('diego').cta;
+        return eq(c.entrada === 2 && c.merma === 1 && c.salida === 2, true, 'al día');
+    });
+    /* Y NO se achican con la pestaña elegida: si al entrar a «Mermas» los
+       contadores de las otras se fueran a cero, no habría cómo saber que hay
+       algo más y la pestaña sería una trampa de un solo sentido. */
+    test('…sin achicarse al elegir una pestaña', () => {
+        const c = correr('', 'merma').cta;
+        return eq(c.entrada === 3 && c.salida === 2, true, 'siguen a la vista');
+    });
+
+    /* ── Cuando no queda nada ── */
+    /* «Sin registros de esta sucursal» con un buscador escrito hace pensar que
+       no hay datos, cuando lo que pasa es que el filtro no deja pasar ninguno. */
+    test('sin resultados se dice que es el filtro, no que no haya datos', () => {
+        cx._entBusca = 'xyz'; cx._entTipo = 'merma';
+        const t = cx._entVacioHTML();
+        return eq(t.indexOf('No hay mermas') > -1 && t.indexOf('xyz') > -1, true, 'honesto');
+    });
+    test('…con el botón para quitarlo', () => {
+        cx._entBusca = 'xyz'; cx._entTipo = 'merma';
+        return eq(cx._entVacioHTML().indexOf('_entLimpiarFiltros()') > -1, true, 'con salida');
+    });
+    test('…pero sin filtro, el mensaje de siempre', () => {
+        cx._entBusca = ''; cx._entTipo = 'todos';
+        return eq(cx._entVacioHTML().indexOf('Sin registros de esta sucursal') > -1, true, 'sin cambiar');
+    });
+
+    /* ── Cómo se repinta ── */
+    /* Volver a armar la vista entera en cada tecla se lleva el foco del
+       buscador a media palabra, y el campo queda inservible. */
+    test('escribir repinta SOLO la lista, no la vista entera', () =>
+        eq(dI('setEntBusca').indexOf('renderListadoEntradas()') > -1 &&
+           dI('setEntBusca').indexOf('renderVistaEntradas()') === -1, true, 'sin perder el foco'));
+    test('…y cambiar de pestaña, igual', () =>
+        eq(dI('setEntTipo').indexOf('renderListadoEntradas()') > -1 &&
+           dI('setEntTipo').indexOf('renderVistaEntradas()') === -1, true, 'sin perder el foco'));
+    /* Por eso las pestañas viven en su PROPIO contenedor: si estuvieran dentro
+       del mismo bloque que el input, repintarlas lo borraría. */
+    test('las pestañas se repintan aparte del campo de texto', () =>
+        eq(inv.indexOf("getElementById('entTipoChips')") > -1 &&
+           dI('_entPintaChips').indexOf('entBuscar') === -1, true, 'separados'));
+    /* El filtro va también DENTRO de un inventario: el Paso 2 junta las mismas
+       tres listas y es donde más estorba bajar leyendo. */
+    test('el filtro está en la vista, junto a los de periodo', () =>
+        eq(inv.indexOf('${filtroFechas}\n                ${filtroTipo}') > -1, true, 'siempre'));
+    test('el texto escrito sobrevive al repintado', () =>
+        eq(inv.indexOf('id="entBuscar" type="search" value="${etx(_entBusca)}"') > -1, true, 'con valor'));
+    /* Y que la lista de verdad salga de esa cadena: si el render volviera a
+       armar sus propios filtros, la suite de arriba seguiría en verde mientras
+       la pantalla enseña todo. */
+    test('la lista que se pinta sale de esa misma cadena', () => {
+        const t = dI('renderListadoEntradas');
+        return eq(t.indexOf('const _f = _entFiltrar(deLaSuc);') > -1 &&
+                  t.indexOf('const visibles = _f.visibles;') > -1 &&
+                  t.indexOf('_entPintaChips(_f.cta)') > -1, true, 'una sola cadena');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
