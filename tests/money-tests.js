@@ -15491,9 +15491,31 @@ console.log('\n══ BH10 · Abrir el renglón, y los indicadores ══');
     PAGS.forEach(p => {
         const h = fs.readFileSync(path.join(RAIZ, 'financiero/' + p + '.html'), 'utf8');
         test(p + ' toma la barra de un solo lugar', () =>
-            eq(h.indexOf('src="nav.js"') > -1 && h.indexOf('class="nav-section"') === -1,
-               true, 'una sola'));
+            eq(h.indexOf('src="nav.js"') > -1 &&
+               h.indexOf('class="nav-section"') === -1 &&
+               h.indexOf('<nav class="nav" id="nav"></nav>') > -1, true, 'una sola'));
+        /* EL ENCABEZADO TAMBIÉN. Ya se había separado: Resumen traía 📊 «Salud
+           Financiera» donde las otras seis traen 🗃️ «Panel Financiero», y eso
+           son dos segundos de duda al cambiar de sub-módulo. */
+        test('…incluido su encabezado, no una copia propia', () =>
+            eq(h.indexOf('class="nav-top"') === -1 && h.indexOf('id="navToggleBtn"') === -1,
+               true, 'sin copia'));
+        /* LA OTRA MITAD DEL SÍNTOMA: Resumen arrancaba `cerrado` y sin
+           nav-pref.js, así que la barra se escondía sola al entrar mientras en
+           los demás sub-módulos se quedaba como el usuario la había dejado. */
+        test('…arrancando abierta y recordando la preferencia', () =>
+            eq(h.indexOf('<main class="main-content expandido"') === -1 &&
+               h.indexOf('nav-pref.js') > -1, true, 'igual que las demás'));
+        /* El botón de abrir/cerrar lo CREA nav.js; nav-pref le acomoda la
+           flecha. Al revés, nav-pref pinta una flecha que un instante después se
+           reemplaza por la de default y el botón acaba diciendo lo contrario de
+           lo que hace. */
+        test('…cargando nav.js ANTES que nav-pref.js', () =>
+            eq(h.indexOf('src="nav.js"') < h.indexOf('nav-pref.js'), true, 'en orden'));
     });
+    test('el encabezado de la barra es el mismo para todas', () =>
+        eq(nav.indexOf("data-tooltip=\"Panel Financiero\"") > -1 &&
+           nav.indexOf('id="navToggleBtn"') > -1, true, 'uno solo'));
     test('…y esa barra lleva a los siete sub-módulos', () =>
         eq(PAGS.every(p => nav.indexOf("'" + p + ".html'") > -1), true, 'completa'));
     /* Sin marcar dónde estás, la barra deja de ser un mapa y es solo una lista
@@ -15506,10 +15528,10 @@ console.log('\n══ BH10 · Abrir el renglón, y los indicadores ══');
        borrarle el cuerpo al forEach para que el candado siga en verde—, lo
        destapó la batería. */
     test('…quitando la que la página trajera, para no duplicarla', () => {
-        const viejas = [{ parentNode:{ removeChild(){ viejas.quitada = true; } } }];
-        let pintado = '';
+        let pintado = 'LO QUE TRAÍA LA PÁGINA';
         const navEl = {
-            querySelectorAll: () => viejas,
+            set innerHTML(v) { pintado = v; },
+            get innerHTML() { return pintado; },
             insertAdjacentHTML: (_, h) => { pintado += h; }
         };
         const c = { console,
@@ -15518,22 +15540,28 @@ console.log('\n══ BH10 · Abrir el renglón, y los indicadores ══');
                        addEventListener(){} } };
         c.window = c; vm.createContext(c);
         vm.runInContext(nav, c, { filename:'nav.js' });
-        return eq(viejas.quitada === true &&
+        return eq(pintado.indexOf('LO QUE TRAÍA LA PÁGINA') === -1 &&
                   (pintado.match(/class="nav-section"/g) || []).length === 5, true, 'sin duplicar');
     });
     /* Y que de verdad pinte la lista completa, con el activo donde toca. */
     test('…y pintando los siete enlaces, con KPIs marcado al estar en KPIs', () => {
         let pintado = '';
-        const navEl = { querySelectorAll: () => [], insertAdjacentHTML: (_, h) => { pintado += h; } };
+        const navEl = { set innerHTML(v) { pintado = v; }, get innerHTML() { return pintado; },
+                        insertAdjacentHTML: (_, h) => { pintado += h; } };
         const c = { console,
             location:{ pathname:'/financiero/kpis.html' },
             document:{ readyState:'complete', getElementById: (id) => id === 'nav' ? navEl : null,
                        addEventListener(){} } };
         c.window = c; vm.createContext(c);
         vm.runInContext(nav, c, { filename:'nav.js' });
+        /* El encabezado va en lo pintado, no solo en el archivo: sin él la barra
+           se queda sin el botón de abrir/cerrar ni el atajo al panel, y buscar
+           el texto en nav.js no lo nota —lo destapó la batería. */
         return eq((pintado.match(/class="nav-link/g) || []).length === 7 &&
                   pintado.indexOf('href="kpis.html" class="nav-link active"') > -1 &&
-                  pintado.indexOf('href="resumen.html" class="nav-link"') > -1, true, 'completa');
+                  pintado.indexOf('href="resumen.html" class="nav-link"') > -1 &&
+                  pintado.indexOf('id="navToggleBtn"') > -1 &&
+                  pintado.indexOf('class="nav-brand-sub"') > -1, true, 'completa');
     });
 }
 

@@ -145,17 +145,9 @@
 <div id="ctxBar" class="ctx-bar" style="display:none"></div>
 
 <div class="app-shell">
-    <nav class="nav cerrado" id="nav">
-        <div class="nav-top">
-            <div class="nav-brand"><span class="nav-brand-sub">Salud Financiera</span></div>
-            <div class="nav-top-actions">
-                <a href="index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Panel Financiero" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1">🗃️</a>
-                <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
-            </div>
-        </div>
-    </nav>
+    <nav class="nav" id="nav"></nav><!-- la pinta /financiero/nav.js -->
 
-    <main class="main-content expandido" id="mainContent">
+    <main class="main-content" id="mainContent">
         <div class="header">
             <div class="brand">
                 <span class="brand-label">Salud Financiera</span>
@@ -1980,10 +1972,10 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="/bancos-mx.js"></script><!-- bancos de México + CLABE (lo usa staff-modal) -->
 <script src="/staff-modal.js"></script>
 <script src="/nomina-params.js"></script>
-<script src="/nav-pref.js"></script>
+<script src="nav.js"></script><!-- la barra lateral, una sola para todo el módulo -->
+<script src="/nav-pref.js"></script><!-- abierta/cerrada: va DESPUÉS de nav.js -->
 <script src="/modal-drag.js"></script>
 <script src="/modal-dock.js"></script>
 <script src="/novedades.js"></script><!-- aviso de actualizaciones del sistema -->
-<script src="nav.js"></script><!-- la barra lateral, una sola para todo el módulo -->
 </body>
 </html>

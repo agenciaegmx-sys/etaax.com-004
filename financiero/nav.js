@@ -31,6 +31,23 @@
         ]}
     ];
 
+    /* EL ENCABEZADO DE LA BARRA, también una sola vez. Estaba copiado igual que
+       los enlaces, y ya había empezado a separarse: Resumen traía 📊 «Salud
+       Financiera» donde las otras seis traen 🗃️ «Panel Financiero». Son dos
+       segundos de duda cada vez que se cambia de sub-módulo —«¿me salí del
+       módulo?»— por un copiar y pegar. */
+    var TOP =
+        '<div class="nav-top">' +
+            '<div class="nav-brand"><span class="nav-brand-sub">Salud Financiera</span></div>' +
+            '<div class="nav-top-actions">' +
+                '<a href="index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Panel Financiero" ' +
+                   'style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;' +
+                   'font-size:16px;line-height:1">🗃️</a>' +
+                '<button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" ' +
+                   'onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>' +
+            '</div>' +
+        '</div>';
+
     function archivoActual() {
         var p = (location.pathname || '').split('/').pop();
         return p || 'index.html';
@@ -40,11 +57,10 @@
         var nav = document.getElementById('nav');
         if (!nav) return;
         var aqui = archivoActual();
-        /* Fuera las secciones que trajera la página; el `nav-top` se queda. Sin
-           esto quedarían las dos listas, la vieja y la nueva. */
-        Array.prototype.slice.call(nav.querySelectorAll('.nav-section')).forEach(function (s) {
-            s.parentNode.removeChild(s);
-        });
+        /* Fuera lo que la página trajera: si quedara, se pintarían las dos
+           barras, la vieja y la nueva, una debajo de la otra. */
+        nav.innerHTML = '';
+        nav.insertAdjacentHTML('beforeend', TOP);
         var html = SECCIONES.map(function (sec) {
             return '<div class="nav-section">' +
                 '<div class="nav-section-label">' + sec.label + '</div>' +
@@ -59,6 +75,11 @@
         nav.insertAdjacentHTML('beforeend', html);
     }
 
+    /* OJO CON EL ORDEN: nav-pref.js guarda si la barra va abierta o cerrada y
+       pinta la flecha del botón. Como ese botón lo crea ESTE archivo, nav.js
+       tiene que correr ANTES —si no, nav-pref acomoda una flecha que un
+       instante después se reemplaza por la de default y el botón acaba diciendo
+       lo contrario de lo que hace. En las páginas va justo antes de él. */
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pintar);
     else pintar();
 })();
