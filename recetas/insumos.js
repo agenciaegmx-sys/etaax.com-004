@@ -4722,28 +4722,89 @@
        var costoBot = cu > 0 && contML > 0 ? cu*(contML/1000) : 0;
        var precioCopa = parseFloat(String(p.precioCarta||'').replace(/,/g,'')) || 0;
        var precioBot  = parseFloat(String(p.precioCartaBot||'').replace(/,/g,'')) || 0;
-       var items = [];
-       if (precioCopa > 0 && costoTrago > 0)
-           items.push(_utilChip(mezCost > 0 ? 'Utilidad trago' : 'Utilidad copa', (precioCopa - costoTrago)/costoTrago*100, precioCopa, costoTrago));
        /* Si la botella va con 5 refrescos, esos refrescos cuestan. Medir la
           utilidad contra la botella sola inflaba el margen justo en el producto
           de ticket más alto. Misma regla que la copa con su trago. */
        var mezBotU = _mezBotDatos(p);
        var costoBotReal = costoBot + mezBotU.costo;
-       if (precioBot > 0 && costoBotReal > 0)
-           items.push(_utilChip(mezBotU.costo > 0 ? 'Utilidad bot. + servicio' : 'Utilidad botella',
-               (precioBot - costoBotReal)/costoBotReal*100, precioBot, costoBotReal));
+
+       /* UNA TARJETA POR PRESENTACIÓN. Antes había un solo «+157%» y ya. Ese
+          número es el margen sobre el COSTO: sirve para poner precio, pero no
+          contesta lo que se pregunta a diario —«¿cuánto me queda de esta copa y
+          qué tajada se lleva el producto?»—. Y se parece tanto al food cost
+          (que es sobre el PRECIO) que invita a confundirlos siendo números muy
+          distintos: +157% sobre el costo es 39% de food cost.
+
+          Se separa copa de botella porque son dos ventas con dos márgenes.
+          Promediarlas de cabeza es como se termina vendiendo la botella barata
+          porque «la copa deja bien». */
+       var items = [
+           _utilCard(mezCost > 0 ? 'Trago (copa + refresco)' : 'Copa', precioCopa, costoTrago,
+               (p.tamanoCopa ? p.tamanoCopa + ' ' + (p.umTamanoCopa || 'ML') : '')),
+           _utilCard(mezBotU.costo > 0 ? 'Botella + servicio' : 'Botella', precioBot, costoBotReal,
+               (p.contNeto ? p.contNeto + ' ' + (p.umContenido || 'ML') : ''))
+       ].filter(Boolean);
        if (!items.length) return '';
-       return '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">' + items.join('') + '</div>';
+       return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(246px,1fr));gap:10px;margin-top:10px">' +
+           items.join('') + '</div>';
    }
 
-   function _utilChip(label, pct, precio, costo) {
-       var col = pct >= 0 ? 'var(--green)' : 'var(--red)';
-       return '<div style="flex:1;min-width:140px;background:var(--surface);border:1px solid ' + col + ';border-radius:8px;padding:10px;text-align:center">' +
-           '<div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:4px">' + label + '</div>' +
-           '<div style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:' + col + ';letter-spacing:1px">' + (pct >= 0 ? '+' : '') + pct.toFixed(0) + '%</div>' +
-           '<div style="font-size:9px;color:var(--text-dim)">precio ' + fmtMXN(precio) + ' · costo ' + fmtMXN(costo) + '</div>' +
-           '</div>';
+   /* El desglose de UNA presentación: qué se cobra, qué se va en producto y qué
+      queda. Los tres en el mismo renglón, para no sacarlos de cabeza ni
+      confundir un porcentaje con el otro. */
+   function _utilCard(label, precio, costo, sub) {
+       if (!(costo > 0)) return '';                 // sin costo no hay nada que desglosar
+       var hayPrecio = precio > 0;
+       var gan   = precio - costo;
+       var col   = !hayPrecio ? 'var(--border)' : (gan >= 0 ? 'var(--green)' : 'var(--red)');
+       var colTx = !hayPrecio ? 'var(--text-dim)' : (gan >= 0 ? 'var(--green)' : 'var(--red)');
+       /* DOS PORCENTAJES DISTINTOS, los dos útiles:
+            · del PRECIO  → cuánto de cada peso cobrado se va en producto. Es el
+              food cost de ese renglón, el que se compara contra la meta.
+            · sobre el COSTO → por cuánto se multiplicó el costo. Es el que se usa
+              al poner precio («× 3.3»).
+          Son el MISMO hecho dicho de dos maneras, y confundirlos hace creer que
+          un food cost de 39% es un margen de 39%. */
+       var pctCosto = hayPrecio ? (costo / precio * 100) : 0;
+       var pctGan   = hayPrecio ? (gan / precio * 100) : 0;
+       var markup   = gan / costo * 100;
+
+       var fila = function (nom, val, color, peso) {
+           return '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:3px 0">' +
+               '<span style="font-size:10.5px;color:var(--text-dim)">' + nom + '</span>' +
+               '<span style="font-size:12px;color:' + (color || 'var(--text)') + ';font-weight:' + (peso || 500) +
+               ';font-variant-numeric:tabular-nums;text-align:right">' + val + '</span></div>';
+       };
+
+       var cuerpo;
+       if (hayPrecio) {
+           cuerpo =
+               fila('Precio de venta', fmtMXN(precio), 'var(--text)', 600) +
+               fila('Costo del producto', fmtMXN(costo) +
+                    ' <span style="color:var(--text-dim)">· ' + pctCosto.toFixed(0) + '% del precio</span>',
+                    'var(--text-muted)') +
+               '<div style="border-top:1px solid var(--border);margin:5px 0 3px"></div>' +
+               fila('<b style="color:' + colTx + '">Te queda</b>',
+                    '<b>' + fmtMXN(gan) + '</b> <span style="color:var(--text-dim)">· ' +
+                    pctGan.toFixed(0) + '% del precio</span>', colTx, 700) +
+               fila('Multiplicador sobre el costo',
+                    '×' + (precio / costo).toFixed(2) + ' <span style="color:var(--text-dim)">· ' +
+                    (markup >= 0 ? '+' : '') + markup.toFixed(0) + '%</span>', 'var(--text-dim)');
+       } else {
+           /* Sin precio capturado no se inventa un margen: se dice qué falta. Un
+              «0%» ahí se leería como «esta botella no deja nada», que es una
+              afirmación, no un hueco. */
+           cuerpo =
+               fila('Costo del producto', fmtMXN(costo), 'var(--text-muted)', 600) +
+               '<div style="font-size:10.5px;color:var(--text-dim);padding-top:6px;line-height:1.5">' +
+               'Captura su precio de carta arriba para ver cuánto te queda.</div>';
+       }
+
+       return '<div style="background:var(--surface);border:1px solid ' + col + ';border-radius:9px;padding:11px 13px">' +
+           '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:7px">' +
+               '<span style="font-size:8.5px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)">' + label + '</span>' +
+               (sub ? '<span style="font-size:9.5px;color:var(--text-dim)">' + sub + '</span>' : '') +
+           '</div>' + cuerpo + '</div>';
    }
 
    function _actualizarUtilidad(i) {

@@ -13284,8 +13284,13 @@ console.log('\n══ BG7 · La botella se vende con su servicio ══');
        cuál de las dos miente. */
     test('…y la del PDF impreso, la misma', () =>
         eq(ins.indexOf('_ut(D.cartaBot, D.costoBotServ)') > -1, true, 'misma'));
-    test('la utilidad cambia de nombre cuando hay servicio, para no confundir', () =>
-        eq(decl('_utilidadHTML').indexOf("'Utilidad bot. + servicio'") > -1, true, 'lo dice'));
+    /* El rótulo tiene que decirlo: «Botella» a secas, midiendo contra un costo
+       que ya trae cinco refrescos, haría pensar que el margen es el de la
+       botella sola. (La tarjeta se llamaba «Utilidad bot. + servicio» antes de
+       que el bloque se partiera en copa y botella; lo que se exige es que siga
+       diciendo que incluye el servicio, no el nombre viejo.) */
+    test('la tarjeta cambia de nombre cuando hay servicio, para no confundir', () =>
+        eq(decl('_utilidadHTML').indexOf("'Botella + servicio'") > -1, true, 'lo dice'));
 
     /* ── Que esté donde se captura y donde se lee ── */
     test('el editor tiene su propio campo, separado del de la copa', () =>
@@ -15562,6 +15567,105 @@ console.log('\n══ BH10 · Abrir el renglón, y los indicadores ══');
                   pintado.indexOf('href="resumen.html" class="nav-link"') > -1 &&
                   pintado.indexOf('id="navToggleBtn"') > -1 &&
                   pintado.indexOf('class="nav-brand-sub"') > -1, true, 'completa');
+    });
+}
+
+/* ═══════════ SUITE BH11 · QUÉ QUEDA DE CADA COPA ══════════════════════════
+   El costeo cerraba con un solo número: «UTILIDAD COPA +157%». Ese 157% es el
+   margen sobre el COSTO —sirve para poner precio— pero no contesta lo que se
+   pregunta a diario: cuánto queda de esta copa y qué tajada se lleva el
+   producto. Peor, se parece tanto al food cost (que se mide sobre el PRECIO)
+   que invita a confundirlos siendo números muy distintos: +157% sobre el costo
+   es 39% de food cost sobre el precio.
+
+   Y mezclaba copa con botella: dos ventas con dos márgenes distintos. */
+console.log('\n══ BH11 · Qué queda de cada copa ══');
+{
+    const ijs = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.js'), 'utf8');
+    const cuerpo = (fn) => {
+        const i = ijs.indexOf('function ' + fn + '(');
+        if (i < 0) throw new Error('no existe ' + fn);
+        const abre = ijs.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < ijs.length) {
+            if (ijs[j] === '{') prof++;
+            else if (ijs[j] === '}') { prof--; if (!prof) return ijs.slice(i, j + 1); }
+            j++;
+        }
+        throw new Error('sin cerrar ' + fn);
+    };
+    const ctx = { console, Math, String, Number, parseFloat, isNaN };
+    ctx.window = ctx;
+    vm.createContext(ctx);
+    vm.runInContext('function fmtMXN(v){return "$"+(Math.round(v*100)/100).toFixed(2);}' + cuerpo('_utilCard'),
+                    ctx, { filename:'insumos.js (extracto)' });
+    /* Se lee el texto que ve el usuario, sin etiquetas: lo que importa es qué
+       número acaba en pantalla, no cómo está armado el HTML. */
+    const ver = (h) => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+    /* El caso de la captura: tequila de $160 la copa con $62.14 de costo. */
+    const copa = ver(ctx._utilCard('Copa', 160, 62.14, '60 ML'));
+
+    test('se dice cuánto deja la copa en PESOS, no solo en porcentaje', () =>
+        eq(copa.indexOf('$97.86') > -1, true, 'en pesos'));
+    /* Es el food cost de ese renglón: el número que se compara contra la meta
+       del negocio. Sin él, el costeo no conversa con el resumen de resultados. */
+    test('…qué tajada del precio se lleva el producto', () =>
+        eq(copa.indexOf('$62.14 · 39% del precio') > -1, true, 'food cost'));
+    test('…y qué tajada queda', () =>
+        eq(copa.indexOf('$97.86 · 61% del precio') > -1, true, 'margen'));
+    /* Las dos tajadas son del mismo pastel: si no suman 100 es que una de las
+       dos está mal calculada. */
+    test('…sumando 100% entre las dos', () => {
+        const m = copa.match(/(\d+)% del precio/g).map(x => parseInt(x));
+        return eq(m[0] + m[1], 100, 'el mismo pastel');
+    });
+    /* El 157% no se tira: es el que se usa al poner precio («× 3.3»). Lo que
+       cambia es que ya no va solo ni se puede confundir con el food cost. */
+    test('el multiplicador sigue ahí, pero dicho como lo que es', () =>
+        eq(copa.indexOf('×2.57') > -1 && copa.indexOf('+157%') > -1 &&
+           copa.indexOf('Multiplicador sobre el costo') > -1, true, 'sin confundir'));
+
+    /* ── Copa y botella, separadas ── */
+    /* Son dos ventas con dos márgenes. Promediarlas de cabeza es como se
+       termina vendiendo la botella barata porque «la copa deja bien». */
+    test('la copa y la botella se desglosan por separado', () => {
+        const t = cuerpo('_utilidadHTML');
+        return eq(t.indexOf("_utilCard(mezCost > 0 ? 'Trago (copa + refresco)' : 'Copa'") > -1 &&
+                  t.indexOf("_utilCard(mezBotU.costo > 0 ? 'Botella + servicio' : 'Botella'") > -1,
+                  true, 'separadas');
+    });
+    /* Si la botella va con 5 refrescos, esos refrescos cuestan: medir contra la
+       botella sola infla el margen justo en el producto de ticket más alto. */
+    test('…y la botella se mide contra su costo CON el servicio', () =>
+        eq(cuerpo('_utilidadHTML').indexOf('var costoBotReal = costoBot + mezBotU.costo;') > -1,
+           true, 'con refrescos'));
+    test('…cada una diciendo de qué tamaño habla', () => {
+        const bot = ver(ctx._utilCard('Botella', 1800, 725, '700 ML'));
+        return eq(copa.indexOf('60 ML') > -1 && bot.indexOf('700 ML') > -1, true, 'con tamaño');
+    });
+    const bot = ver(ctx._utilCard('Botella', 1800, 725, '700 ML'));
+    test('…con su propio margen, no el de la copa', () =>
+        eq(bot.indexOf('$1075.00 · 60% del precio') > -1, true, 'el suyo'));
+
+    /* ── Lo que NO se inventa ── */
+    /* Un «0%» donde falta el precio se leería como «esta botella no deja nada»,
+       que es una afirmación; lo cierto es que falta un dato. */
+    test('sin precio capturado se dice qué falta, no «0%»', () => {
+        const v = ver(ctx._utilCard('Botella', 0, 725, '700 ML'));
+        return eq(v.indexOf('Captura su precio de carta') > -1 && v.indexOf('0%') === -1,
+                  true, 'honesto');
+    });
+    test('…pero sí se enseña su costo, que es lo que sí se sabe', () =>
+        eq(ver(ctx._utilCard('Botella', 0, 725, '700 ML')).indexOf('$725.00') > -1, true, 'lo que hay'));
+    /* Sin costo no hay nada que desglosar: una tarjeta vacía solo estorba. */
+    test('sin costo no se pinta tarjeta', () =>
+        eq(ctx._utilCard('Botella', 1800, 0, ''), '', 'callada'));
+    /* Vender por debajo del costo tiene que verse como lo que es. Un valor
+       absoluto o un signo perdido lo disfrazaría de ganancia chica. */
+    test('vender por debajo del costo sale en rojo y en negativo', () => {
+        const h = ctx._utilCard('Copa', 50, 62.14, '60 ML');
+        return eq(h.indexOf('var(--red)') > -1 && ver(h).indexOf('$-12.14') > -1, true, 'sin disfraz');
     });
 }
 
