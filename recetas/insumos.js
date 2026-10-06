@@ -1152,6 +1152,24 @@
            (cont>0 ? cont+' ML' : '') +
            (cu>0 ? ' · '+fmtMXN(cu)+'/'+(p.umCosto||'LT') : '') + '</div>';
    }
+   /* Cuántas copas salen de la botella. Es la cuenta que todo el mundo hace de
+      cabeza al ver «copa de 45» y «botella de 750»: ponerla ahorra el paso y
+      evita el error de dividir con el contenido equivocado. */
+   function _copasPorBot(p){
+       var copaML = toML(p.tamanoCopa, p.umTamanoCopa || 'ML');
+       var contML = toML(p.contNeto, p.umContenido || 'ML');
+       if (!(copaML > 0) || !(contML > 0)) return '';
+       var n = contML / copaML;
+       return ' <span style="color:var(--text-dim);font-weight:400">· ' +
+              (n >= 10 ? Math.round(n) : (Math.round(n * 10) / 10)) + ' por botella</span>';
+   }
+   /* Cómo se lee el consumo en el inventario. 'Automático' no es un dato que le
+      sirva a quien consulta la ficha: ahí se dice qué significa. */
+   function _umLecturaTxt(u){
+       var M = { COPA: 'copas', OZ: 'onzas', ML: 'mililitros', LT: 'litros' };
+       return M[String(u || '').toUpperCase()] || String(u || '');
+   }
+
    function _unitTxt(p){
        return (parseFloat(p.costoUnitario)||0)>0
            ? fmtMXN(parseFloat(p.costoUnitario))+'<span style="color:var(--text-dim);font-size:10px">/'+(p.umCosto||'LT')+'</span>'
@@ -3472,6 +3490,55 @@
            return x.id !== ins.id && !x.origenId && !ins.origenId && _keyInsLocal(x) === k;
        });
    }
+   /* ══ DOS COSAS DISTINTAS QUE ESTABAN REVUELTAS ═════════════════════════════
+      El panel mezclaba, con los mismos botones, dos cosas que no se parecen:
+
+        · LO QUE PASÓ AQUÍ — yo cambié el tamaño de copa en mi sucursal. Eso es
+          HISTORIAL: no hay nada que decidir, ya lo decidí al hacerlo. Sirve para
+          mirar atrás y, si me equivoqué, deshacerlo.
+
+        · LO QUE PASÓ EN OTRO LADO — la otra sucursal, o el catálogo global,
+          cambió algo del mismo producto. Eso es una ALERTA: hay que decidir si
+          lo tomo o no.
+
+      Mezclados, los botones no podían tener sentido para los dos: «Dejar así»
+      en un cambio propio no significa nada, y en uno ajeno no dice si se aplicó
+      o se descartó. Y peor: estando en una sucursal NO HABÍA botón para aplicar
+      un cambio que venía del global — solo «Revertir», que deshace en el origen,
+      que es lo contrario de lo que se quiere.
+
+      Ahora cada uno tiene su lugar y sus botones:
+        ALERTA    → ✓ Aplicar aquí   ✕ No usar
+        HISTORIAL → ↩️ Revertir      🗑️ Quitar
+
+      Y la marca 🔔 del catálogo cuenta SOLO las alertas. Un historial no pide
+      atención; si la pidiera, la marca nunca se apagaría y dejaría de servir. */
+   function _novEsAjeno(n) {
+       var suc = _catGlobalIns() ? '' : (_getSucActivaIns() || '');
+       var hs = (n && n.h && n.h.suc) || '';
+       /* En el CATÁLOGO GLOBAL lo ajeno es lo que se hizo en una sucursal: eso
+          es lo que el dueño puede querer subir al maestro. Lo que él mismo hizo
+          en el global es su propio historial. */
+       if (!suc) return !!hs;
+       /* Dentro de una SUCURSAL lo ajeno es todo lo que no se hizo aquí — que,
+          por cómo filtra _novLista, es lo que viene del catálogo global. */
+       return hs !== suc;
+   }
+
+   /* CUÁL registro es «el mío»: a ese se le aplica un cambio ajeno. En una
+      sucursal, su copia; en el global, el maestro. Sin esto, «aplicar» no
+      sabría a qué registro escribir y podría tocar el de otra sucursal. */
+   function _novMiCopia(ins) {
+       if (!ins) return null;
+       var canon = ins.origenId || ins.id;
+       var fam = (getInsumos() || []).filter(function (x) { return (x.origenId || x.id) === canon; });
+       var suc = _catGlobalIns() ? '' : (_getSucActivaIns() || '');
+       if (!suc) return fam.find(function (x) { return !x.origenId; }) || null;
+       return fam.find(function (x) {
+           return window._insumoEnSuc && window._insumoEnSuc(x, _effSucIns(suc));
+       }) || null;
+   }
+
    /* ══ EL AVISO, EN CADA INSUMO ══════════════════════════════════════════════
       El botón de Novedades junta todo en una lista y está bien para revisar de
       corrido. Pero el encargado no entra a Novedades: entra a su catálogo, y
@@ -3492,6 +3559,10 @@
        var m = {};
        try {
            _novLista().forEach(function (n) {
+               /* SOLO LAS ALERTAS. Contar también el historial propio haría que
+                  la marca no se apagara nunca —siempre hay algo que uno mismo
+                  cambió— y una marca permanente se vuelve parte del decorado. */
+               if (!_novEsAjeno(n)) return;
                var canon = n.ins.origenId || n.ins.id;
                m[canon] = (m[canon] || 0) + 1;
            });
@@ -3556,6 +3627,14 @@
            if (!q) return true;
            return ((insumoTitulo(n.ins) || '') + ' ' + (n.h.sucNom || '') + ' ' + (n.h.quien || '')).toLowerCase().indexOf(q) >= 0;
        });
+       /* LAS ALERTAS PRIMERO. El historial propio puede ser largo —uno cambia
+          cosas todo el día— y dejaba las alertas enterradas abajo, que es donde
+          no se ven. Lo que pide decisión va arriba; lo informativo, después. */
+       lista.sort(function (a, b) {
+           var aa = _novEsAjeno(a) ? 0 : 1, bb = _novEsAjeno(b) ? 0 : 1;
+           if (aa !== bb) return aa - bb;
+           return String(b.h.ts).localeCompare(String(a.h.ts));
+       });
        if (!lista.length) {
            cont.innerHTML = '<div style="text-align:center;padding:44px 20px;color:var(--text-dim)">'
                + '<div style="font-size:34px;margin-bottom:8px">✅</div>'
@@ -3571,21 +3650,57 @@
                    + '<span style="color:var(--text-dim)">→</span>'
                    + '<span style="color:var(--green);font-weight:600">' + etx(c.a) + '</span></div>';
            }).join('') || '<div style="font-size:12px;color:var(--text-dim);padding-top:5px">Alta del insumo.</div>';
-           return '<div class="ins-card" style="padding:13px 15px;margin-bottom:10px">'
+           /* LOS BOTONES DEPENDEN DE QUÉ ES ESTO. Con los mismos para los dos
+              casos, ninguno podía tener sentido: «Dejar así» no significa nada
+              en un cambio propio, y en uno ajeno no dice si se tomó o se tiró. */
+           var ajeno = _novEsAjeno(n);
+           var tieneCambios = !!(n.h.cambios && n.h.cambios.length);
+           var acciones;
+           if (ajeno) {
+               /* ALERTA: vino de otro lado y hay que decidir. Dos salidas, y las
+                  dos cierran el asunto — ninguna lo deja «pendiente» para
+                  siempre. */
+               var dondeNom = _catGlobalIns() ? 'el catálogo global' : 'esta sucursal';
+               acciones =
+                     '<button class="btn-vista" style="font-size:11px;padding:5px 10px" onclick="_novFicha(\'' + n.ins.id + '\')">📋 Ficha</button>'
+                   + (tieneCambios ? '<button class="btn-vista" style="font-size:11px;padding:5px 10px;color:var(--green);border-color:var(--green)" '
+                       + 'title="Tomar estos valores y escribirlos en ' + dondeNom + '" '
+                       + 'onclick="_novAplicarAqui(\'' + n.key + '\',\'' + n.ins.id + '\')">✓ Aplicar aquí</button>' : '')
+                   + (herm && _catGlobalIns() ? '<button class="btn-vista" style="font-size:11px;padding:5px 10px" '
+                       + 'title="Llevar la ficha de este insumo a las sucursales que elijas" '
+                       + 'onclick="_novAplicar(\'' + n.key + '\',\'' + n.ins.id + '\')">⬆️ Copiar a sucursales…</button>' : '')
+                   + '<button class="btn-vista" style="font-size:11px;padding:5px 10px" '
+                       + 'title="Descartar el aviso. El insumo no cambia aquí y la alerta deja de pedir atención." '
+                       + 'onclick="_novDejar(\'' + n.key + '\')">✕ No usar</button>';
+           } else {
+               /* HISTORIAL: lo hice yo. No hay nada que decidir — sirve para
+                  mirar atrás y, si me equivoqué, deshacerlo o borrar el renglón. */
+               acciones =
+                     '<button class="btn-vista" style="font-size:11px;padding:5px 10px" onclick="_novFicha(\'' + n.ins.id + '\')">📋 Ficha</button>'
+                   + (tieneCambios ? '<button class="btn-vista" style="font-size:11px;padding:5px 10px;color:var(--red);border-color:rgba(224,90,58,.5)" '
+                       + 'title="Devolver los valores anteriores" '
+                       + 'onclick="_novRevertir(\'' + n.key + '\',\'' + n.ins.id + '\')">↩️ Revertir</button>' : '')
+                   + '<button class="btn-vista" style="font-size:11px;padding:5px 10px;color:var(--text-dim)" '
+                       + 'title="Borrar este movimiento del historial. El insumo no cambia." '
+                       + 'onclick="_novQuitar(\'' + n.key + '\',\'' + n.ins.id + '\')">🗑️ Quitar</button>';
+           }
+           var marca = ajeno
+               ? '<span style="display:inline-block;background:rgba(245,200,66,.16);border:1px solid rgba(245,200,66,.45);'
+                   + 'color:var(--accent-text,var(--accent));border-radius:20px;padding:1px 9px;font-size:9.5px;'
+                   + 'font-weight:700;letter-spacing:.5px;margin-left:7px;vertical-align:middle">🔔 ALERTA</span>'
+               : '';
+           return '<div class="ins-card" style="padding:13px 15px;margin-bottom:10px'
+               + (ajeno ? ';border-left:3px solid rgba(245,200,66,.55)' : '') + '">'
                + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">'
                    + '<div style="min-width:0">'
-                       + '<div style="font-weight:700;font-size:14px;color:var(--text)">' + etx(insumoTitulo(n.ins)) + '</div>'
+                       + '<div style="font-weight:700;font-size:14px;color:var(--text)">' + etx(insumoTitulo(n.ins)) + marca + '</div>'
                        + '<div style="font-size:11px;color:var(--text-dim);margin-top:3px">'
-                           + (n.h.tipo === 'alta' ? '🆕 Alta' : n.h.tipo === 'reversion' ? '↩️ Reversión' : '✏️ Edición') + ' · ' + etx(_novFecha(n.h.ts))
+                           + (n.h.tipo === 'alta' ? '🆕 Alta' : n.h.tipo === 'reversion' ? '↩️ Reversión'
+                              : n.h.tipo === 'aplicado' ? '⬇️ Aplicado' : '✏️ Edición') + ' · ' + etx(_novFecha(n.h.ts))
                            + (n.h.sucNom ? ' · <b style="color:#7ab8f5">' + etx(n.h.sucNom) + '</b>' : '')
                            + (n.h.quien ? ' · ' + etx(n.h.quien) : '') + '</div>'
                    + '</div>'
-                   + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
-                       + '<button class="btn-vista" style="font-size:11px;padding:5px 10px" onclick="_novFicha(\'' + n.ins.id + '\')">📋 Ficha</button>'
-                       + ((herm && _catGlobalIns()) ? '<button class="btn-vista" style="font-size:11px;padding:5px 10px;color:var(--green);border-color:var(--green)" onclick="_novAplicar(\'' + n.key + '\',\'' + n.ins.id + '\')">⬆️ Actualizar en…</button>' : '')
-                       + ((n.h.cambios && n.h.cambios.length) ? '<button class="btn-vista" style="font-size:11px;padding:5px 10px;color:var(--red);border-color:rgba(224,90,58,.5)" onclick="_novRevertir(\'' + n.key + '\',\'' + n.ins.id + '\')" title="Devolver los valores anteriores">↩️ Revertir</button>' : '')
-                       + '<button class="btn-vista" style="font-size:11px;padding:5px 10px" onclick="_novDejar(\'' + n.key + '\')">Dejar así</button>'
-                   + '</div>'
+                   + '<div style="display:flex;gap:6px;flex-wrap:wrap">' + acciones + '</div>'
                + '</div>' + filas + '</div>';
        }).join('');
    }
@@ -3700,6 +3815,105 @@
    window._novAplicarSel = _novAplicarSel;
    window._novRevertir = _novRevertir;
    // Dejar así: se queda como cambio local de esa sucursal y sale de la lista.
+   /* ══ APLICAR AQUÍ un cambio que vino de otro lado ══════════════════════════
+      Esto NO existía, y era el hueco grande: estando en una sucursal, cuando
+      llegaba un cambio del catálogo global, los únicos botones eran «Revertir»
+      —que deshace en el ORIGEN, o sea en el global, para todos— y «Dejar así».
+      No había forma de decir «sí, tómalo aquí».
+
+      Toma los valores NUEVOS del cambio y los escribe en MI registro. Solo los
+      campos que cambiaron: copiar la ficha entera se llevaría por delante lo
+      que esta sucursal tiene distinto a propósito, que es justo lo que se
+      protegió al independizarlos. */
+   function _novAplicarAqui(key, insId) {
+       var nov = _novLista().find(function (n) { return n.key === key; });
+       if (!nov) return;
+       var mia = _novMiCopia(nov.ins);
+       if (!mia) {
+           if (window.etaaxAlert) etaaxAlert('Este producto no tiene copia en ' +
+               (_catGlobalIns() ? 'el catálogo global' : 'esta sucursal') + ', así que no hay dónde aplicarlo.');
+           return;
+       }
+       var cambios = (nov.h.cambios || []).filter(function (c) { return c.k; });
+       if (!cambios.length) {
+           if (window.etaaxAlert) etaaxAlert('Este movimiento es de antes de que se guardaran los valores: no se puede aplicar solo. Ábrelo en la ficha y cópialo a mano.');
+           return;
+       }
+       var _hacer = function () {
+           var lista = getInsumos();
+           var i = lista.findIndex(function (x) { return x.id === mia.id; });
+           if (i < 0) return;
+           var dest = lista[i];
+           var p0 = (dest.presentaciones || [])[0];
+           cambios.forEach(function (c) {
+               if (c.pres) { if (p0) p0[c.k] = (c.aRaw === undefined ? '' : c.aRaw); }
+               else dest[c.k] = (c.aRaw === undefined ? '' : c.aRaw);
+           });
+           dest.updatedAt = new Date().toISOString();
+           dest.updatedBy = _usuarioActual();
+           /* Queda escrito de DÓNDE vino: dentro de un mes, «¿quién cambió
+              esto?» tiene que poder contestarse sin adivinar. */
+           (dest.historial = dest.historial || []).unshift({
+               ts: dest.updatedAt, quien: dest.updatedBy,
+               suc: _catGlobalIns() ? '' : (_getSucActivaIns() || ''),
+               sucNom: _catGlobalIns() ? 'Catálogo global' : _sucNomIns(_getSucActivaIns() || ''),
+               global: _catGlobalIns() || undefined, tipo: 'aplicado',
+               desde: nov.h.sucNom || '',
+               cambios: cambios.map(function (c) {
+                   return { campo: c.campo, de: c.de, a: c.a, k: c.k, pres: c.pres, deRaw: c.deRaw, aRaw: c.aRaw };
+               })
+           });
+           setInsumos(lista);
+           try { _sincronizarInsumosSupabase(getNegocioActivo(), [dest]); } catch (e) {}
+           _NOV_VISTAS[key] = 1; _novGuardarVistas();
+           _novRender(document.getElementById('novBuscar') ? document.getElementById('novBuscar').value : '');
+           try { filtrar(); } catch (e) {}
+       };
+       var det = cambios.map(function (c) {
+           return '<div style="font-size:12px;color:var(--text-muted);padding:2px 0">' + etx(c.campo) +
+                  ': <s style="color:var(--text-dim)">' + etx(c.de) + '</s> → <b style="color:var(--green)">' + etx(c.a) + '</b></div>';
+       }).join('');
+       var dondeNom = _catGlobalIns() ? 'el catálogo global' : _sucNomIns(_getSucActivaIns() || '');
+       if (window.etaaxConfirm)
+           etaaxConfirm('Aplicar en ' + dondeNom,
+               'Se van a tomar estos valores de <b>' + etx(nov.h.sucNom || 'otro lado') + '</b> y escribirlos en ' +
+               '<b>' + etx(dondeNom) + '</b>:<br><br>' + det +
+               '<br><span style="color:var(--text-dim);font-size:12px">Solo cambian estos campos. Lo demás de este insumo se queda como está.</span>',
+               _hacer, null, { yesLabel: 'Sí, aplicar aquí' });
+       else _hacer();
+   }
+   window._novAplicarAqui = _novAplicarAqui;
+
+   /* ══ QUITAR DEL HISTORIAL ══════════════════════════════════════════════════
+      «Dejar así» solo marcaba la entrada como vista: desaparecía de la lista
+      pero seguía en el registro, y al cambiar de equipo o limpiar el navegador
+      reaparecía. Esto la BORRA de verdad.
+
+      Solo para el historial PROPIO: borrar el rastro de lo que hizo otra
+      sucursal sería borrarle su registro, no el mío. */
+   function _novQuitar(key, insId) {
+       var nov = _novLista().find(function (n) { return n.key === key; });
+       if (!nov) return;
+       var _hacer = function () {
+           var lista = getInsumos();
+           var i = lista.findIndex(function (x) { return x.id === insId; });
+           if (i < 0) return;
+           lista[i].historial = (lista[i].historial || []).filter(function (h) { return h.ts !== nov.h.ts; });
+           setInsumos(lista);
+           try { _sincronizarInsumosSupabase(getNegocioActivo(), [lista[i]]); } catch (e) {}
+           _novInvalidar();
+           _novRender(document.getElementById('novBuscar') ? document.getElementById('novBuscar').value : '');
+           try { filtrar(); } catch (e) {}
+       };
+       if (window.etaaxConfirm)
+           etaaxConfirm('Quitar del historial',
+               'Se borra este movimiento del historial de <b>' + etx(insumoTitulo(nov.ins)) + '</b>.<br><br>' +
+               '<span style="color:var(--text-dim);font-size:12px">El insumo NO cambia: solo deja de aparecer el registro de que se cambió. No se puede deshacer.</span>',
+               _hacer, null, { yesLabel: 'Sí, quitar', danger: true });
+       else _hacer();
+   }
+   window._novQuitar = _novQuitar;
+
    function _novDejar(key) {
        _NOV_VISTAS[key] = 1; _novGuardarVistas();
        _novRender(document.getElementById('novBuscar') ? document.getElementById('novBuscar').value : '');
@@ -5253,6 +5467,13 @@
                        </div>
                    </div>
                    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px">
+                       <!-- LA UNIDAD DE SERVICIO. La ficha decía cuánto cuesta la
+                            botella y cuántas onzas trae, pero no CON QUÉ se sirve —
+                            que es el dato con el que se cuenta el inventario y se
+                            cobra la copa. Quien la consultaba tenía que abrir el
+                            editor para saber si esa casa sirve de 45 o de 60. -->
+                       ${p.tamanoCopa ? `<span style="font-size:12px;font-weight:500;color:var(--accent)">🍷 Copa de ${p.tamanoCopa} ${p.umTamanoCopa||'ML'}${_copasPorBot(p)}</span>` : ''}
+                       ${p.umLectura ? `<span style="font-size:11px;color:var(--text-muted)">📏 Se cuenta en ${_umLecturaTxt(p.umLectura)}</span>` : ''}
                        ${p.rendimiento ? `<span style="font-size:12px;font-weight:500;color:var(--accent)">🥃 ${p.rendimiento} ${p.umRendimiento||'OZ'} por botella</span>` : ''}
                        ${p.proveedor   ? `<span style="font-size:11px;color:var(--text-muted)">🏪 ${p.proveedor}</span>` : ''}
                        ${p.zona        ? `<span style="font-size:11px;color:var(--text-muted)">📍 ${p.zona}</span>` : ''}

@@ -14688,31 +14688,36 @@ console.log('\n══ BH6 · Checklist impreso e insumos por sucursal ══');
         eq(ijs.indexOf('_ofrecerPropagacion(insumo') === -1, true, 'a mano'));
     test('…y no quedó código muerto invitando a reconectarla', () =>
         eq(ijs.indexOf('_origKeyProp') === -1, true, 'limpio'));
-    test('copiar a otras sucursales es un botón, no un automatismo', () =>
-        eq(ih.indexOf('function abrirCopiarASucursales(') > -1 &&
-           ih.indexOf('onclick="abrirCopiarASucursales(editandoId)"') > -1, true, 'a mano'));
-    /* Dos tequilas que se llaman «Don Julio» en sucursales distintas pueden ser
-       presentaciones diferentes: lo que los hace el mismo producto es compartir
-       maestro, no el texto. Buscar por nombre fue el motivo de que esta ventana
-       estuviera apagada. */
-    test('los parientes se buscan por VÍNCULO, no por nombre', () =>
-        eq(dIh('_parientesInsumo').indexOf('ins.origenId || ins.id') > -1 &&
-           dIh('_parientesInsumo').indexOf('_keyIns') === -1, true, 'por vínculo'));
-    /* En las presentaciones viven los precios, los tamaños de copa y los
-       mezcladores — justo lo que cada sucursal tiene distinto. Copiarlas por
-       defecto borraría el trabajo de la otra sin preguntar. */
-    test('las presentaciones solo se copian si se piden', () =>
-        eq(dIh('aplicarPropagacion').indexOf('if (conPres && _propInsumo.presentaciones)') > -1,
-           true, 'opt-in'));
-    /* Lo único que hace que una copia siga siendo de SU sucursal. */
-    test('la membresía de sucursal NUNCA viaja en la copia', () => {
-        const t = dIh('aplicarPropagacion');
-        return eq(t.indexOf('target.sucursales =') === -1 &&
-                  t.indexOf('target.sucursalId =') === -1 &&
-                  t.indexOf('target.origenId =') === -1, true, 'intacta');
-    });
-    test('lo copiado se sube a la nube, no se queda en el equipo', () =>
-        eq(dIh('aplicarPropagacion').indexOf('_sincronizarInsumosSupabase') > -1, true, 'sincronizado'));
+    /* ── EL EMPUJE SE RETIRA ──
+       Había un botón «⧉ Copiar a sucursales» junto a Guardar: desde el editor
+       se escribía la ficha en las copias de las otras sucursales. Con las
+       alertas eso sobra y además estorba — cada sucursal recibe el cambio en su
+       propio catálogo y decide (✓ Aplicar aquí / ✕ No usar). Empujar desde aquí
+       le quitaba esa decisión sin que se enterara, que es el mismo problema que
+       se acaba de separar.
+
+       Las dos capas: fuera el botón Y fuera la función. Esconder el botón no es
+       negar la acción — la ventana seguiría abriéndose desde la consola o desde
+       cualquier onclick que quedara. */
+    test('el editor ya no ofrece empujar la ficha a otras sucursales', () =>
+        eq(ih.indexOf('btnCopiarSuc') === -1 &&
+           ih.indexOf('⧉ Copiar a sucursales') === -1, true, 'sin botón'));
+    test('…y la función de empujar tampoco existe ya', () =>
+        eq(ih.indexOf('function abrirCopiarASucursales(') === -1 &&
+           ih.indexOf('function aplicarPropagacion(') === -1 &&
+           ih.indexOf('id="modalPropagar"') === -1, true, 'sin ventana'));
+    /* Si quedara el llamado sin la función, el pie del editor tronaría al abrir
+       un insumo que tenga copias. */
+    test('…sin dejar llamadas colgando al código que se fue', () =>
+        eq(ih.indexOf('_parientesInsumo') === -1 &&
+           ih.indexOf('cerrarPropagar') === -1 &&
+           ih.indexOf('_propInsumo') === -1, true, 'limpio'));
+    /* Lo que SÍ se queda: llevar un cambio a las sucursales desde el panel de
+       Novedades del catálogo global. Ahí es el dueño mirando qué pasó en cada
+       sucursal, no alguien editando un insumo que de paso pisa a las demás. */
+    test('…pero el catálogo global sí puede llevarlo desde Novedades', () =>
+        eq(ijs.indexOf('⬆️ Copiar a sucursales…') > -1 &&
+           ijs.indexOf('function _novAplicar(') > -1, true, 'donde toca'));
 
     /* El aviso tiene que salir ANTES de cambiar algo, no después. */
     test('el editor avisa cuando el insumo es compartido', () =>
@@ -14722,10 +14727,10 @@ console.log('\n══ BH6 · Checklist impreso e insumos por sucursal ══');
         eq(dIj('abrirModal').indexOf('_pintarAvisoSucursal(ins)') > -1, true, 'a tiempo'));
     test('…y un insumo nuevo no lo muestra: todavía no vive en ningún lado', () =>
         eq(dIh('_pintarAvisoSucursal').indexOf('if (!ins || !ins.id) return;') > -1, true, 'sin ruido'));
-    /* Si ya es independiente, lo útil es lo contrario: llevar el cambio a sus
-       copias cuando se quiera. */
-    test('si ya es independiente, se ofrece copiar a sus copias', () =>
-        eq(dIh('_pintarAvisoSucursal').indexOf("bc.style.display = ''") > -1, true, 'lo contrario'));
+    /* Si ya es independiente no hay nada que avisar: el editor cambia un insumo
+       y nada más. Antes aquí se encendía el botón de empujar. */
+    test('si ya es independiente, el editor no ofrece nada más', () =>
+        eq(dIh('_pintarAvisoSucursal').indexOf('btnCopiarSuc') === -1, true, 'callado'));
 }
 
 /* ═══════════ SUITE BH7 · EL FILTRO QUE SE CERRABA, Y EL AVISO EN SU SITIO ══
@@ -14830,6 +14835,132 @@ console.log('\n══ BH7 · El filtro que se cerraba, y el aviso en su sitio �
        que no todos los roles pueden ver. */
     test('el panel de recetas sigue pidiendo su permiso', () =>
         eq(dR('abrirNovedadesRec').indexOf("_exigeRec('cambios'") > -1, true, 'con permiso'));
+}
+
+
+/* ═══════════ SUITE BH8 · ALERTA vs HISTORIAL, Y LA COPA EN LA FICHA ════════
+   El panel mezclaba, con los mismos botones, dos cosas que no se parecen:
+
+     · LO QUE PASÓ AQUÍ — yo cambié el tamaño de copa en mi sucursal. Es
+       HISTORIAL: no hay nada que decidir, ya lo decidí al hacerlo.
+     · LO QUE PASÓ EN OTRO LADO — otra sucursal o el catálogo global cambió algo
+       del mismo producto. Es una ALERTA: hay que decidir si se toma.
+
+   Mezclados, los botones no podían tener sentido para los dos. «Dejar así» no
+   significa nada en un cambio propio. Y peor: estando en una sucursal NO HABÍA
+   botón para aplicar un cambio que venía del global — solo «Revertir», que
+   deshace en el ORIGEN, o sea para todos.                                    */
+console.log('\n══ BH8 · Alerta vs historial, y la copa en la ficha ══');
+{
+    const ijs = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.js'), 'utf8');
+    const cuerpo = (fn) => {
+        const i = ijs.indexOf('function ' + fn + '(');
+        if (i < 0) return '';
+        const abre = ijs.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < ijs.length) {
+            if (ijs[j] === '{') prof++;
+            else if (ijs[j] === '}') { prof--; if (!prof) return ijs.slice(i, j + 1); }
+            j++;
+        }
+        return '';
+    };
+
+    /* ── La separación ── */
+    /* En el GLOBAL lo ajeno es lo que se hizo en una sucursal —eso es lo que el
+       dueño puede querer subir al maestro—. En una SUCURSAL lo ajeno es todo lo
+       que no se hizo ahí. */
+    test('se distingue lo hecho aquí de lo hecho en otro lado', () => {
+        const t = cuerpo('_novEsAjeno');
+        return eq(t.indexOf('if (!suc) return !!hs;') > -1 &&
+                  t.indexOf('return hs !== suc;') > -1, true, 'separadas');
+    });
+    /* Contar también el historial propio haría que la marca no se apagara
+       nunca —siempre hay algo que uno mismo cambió— y una marca permanente se
+       vuelve parte del decorado. */
+    test('la marca 🔔 cuenta SOLO las alertas, no el historial propio', () =>
+        eq(cuerpo('_novMapa').indexOf('if (!_novEsAjeno(n)) return;') > -1, true, 'solo alertas'));
+
+    /* ── El hueco grande: no se podía aplicar lo ajeno ── */
+    test('ahora se puede aplicar aquí un cambio que vino de otro lado', () =>
+        eq(cuerpo('_novAplicarAqui').length > 0, true, 'existe'));
+    /* Sin saber cuál registro es «el mío», aplicar podría escribir en el de otra
+       sucursal — que es exactamente lo que se acaba de separar. */
+    test('…sabiendo a qué registro escribir: el de aquí', () => {
+        const t = cuerpo('_novMiCopia');
+        return eq(t.indexOf("if (!suc) return fam.find(function (x) { return !x.origenId; })") > -1 &&
+                  t.indexOf('window._insumoEnSuc(x, _effSucIns(suc))') > -1, true, 'el mío');
+    });
+    /* Copiar la ficha entera se llevaría por delante lo que esta sucursal tiene
+       distinto a propósito — justo lo que se protegió al independizarlas. */
+    test('…aplicando SOLO los campos que cambiaron', () =>
+        eq(cuerpo('_novAplicarAqui').indexOf('cambios.forEach(function (c) {') > -1 &&
+           cuerpo('_novAplicarAqui').indexOf('c.aRaw === undefined') > -1, true, 'quirúrgico'));
+    /* «¿Quién cambió esto?» tiene que poder contestarse dentro de un mes. */
+    test('…y dejando escrito de dónde vino', () =>
+        eq(cuerpo('_novAplicarAqui').indexOf("tipo: 'aplicado'") > -1 &&
+           cuerpo('_novAplicarAqui').indexOf('desde: nov.h.sucNom') > -1, true, 'con rastro'));
+    test('…sube a la nube, no se queda en el equipo', () =>
+        eq(cuerpo('_novAplicarAqui').indexOf('_sincronizarInsumosSupabase') > -1, true, 'sincronizado'));
+    /* Un movimiento viejo sin los valores guardados no se puede aplicar solo:
+       decirlo es mejor que no hacer nada al tocar el botón. */
+    test('…y si el movimiento no trae los valores, lo dice', () =>
+        eq(cuerpo('_novAplicarAqui').indexOf('no se puede aplicar solo') > -1, true, 'honesto'));
+    /* Escribir sobre un insumo sin avisar qué se va a escribir es cómo se
+       pierde un dato sin saber cuándo. */
+    test('…preguntando antes, con los valores a la vista', () =>
+        eq(cuerpo('_novAplicarAqui').indexOf('etaaxConfirm') > -1, true, 'con confirmación'));
+
+    /* ── Quitar del historial ── */
+    /* «Dejar así» solo marcaba como visto: desaparecía de la lista pero seguía
+       en el registro, y al cambiar de equipo reaparecía. */
+    test('el historial propio se puede borrar de verdad', () =>
+        eq(cuerpo('_novQuitar').indexOf("filter(function (h) { return h.ts !== nov.h.ts; })") > -1,
+           true, 'se borra'));
+    test('…diciendo que el insumo NO cambia, solo el registro', () =>
+        eq(cuerpo('_novQuitar').indexOf('El insumo NO cambia') > -1, true, 'claro'));
+
+    /* ── Los botones, uno por caso ── */
+    test('una alerta ofrece aplicar o descartar', () => {
+        const t = cuerpo('_novRender');
+        return eq(t.indexOf('✓ Aplicar aquí') > -1 && t.indexOf('✕ No usar') > -1, true, 'decidible');
+    });
+    test('…y el historial propio, revertir o quitar', () => {
+        const t = cuerpo('_novRender');
+        return eq(t.indexOf('↩️ Revertir') > -1 && t.indexOf('🗑️ Quitar') > -1, true, 'informativo');
+    });
+    /* «Dejar así» ya no existe como ETIQUETA de botón: no decía si se tomó o se
+       tiró. Se busca el rótulo tal como se pinta, no la palabra suelta —el
+       comentario que explica por qué se fue también la contiene. */
+    test('«Dejar así» desaparece de los botones: no decía qué pasó', () =>
+        eq(cuerpo('_novRender').indexOf('>Dejar así</button>'), -1, 'sin ambigüedad'));
+    test('la alerta se marca para que se distinga de un vistazo', () =>
+        eq(cuerpo('_novRender').indexOf('🔔 ALERTA') > -1, true, 'marcada'));
+    /* El historial propio puede ser largo —uno cambia cosas todo el día— y
+       dejaba las alertas enterradas abajo, que es donde no se ven. */
+    test('las alertas van primero, no enterradas bajo el historial', () =>
+        eq(cuerpo('_novRender').indexOf('var aa = _novEsAjeno(a) ? 0 : 1') > -1, true, 'arriba'));
+
+    /* ── La unidad de servicio en la ficha ── */
+    /* La ficha decía cuánto cuesta la botella y cuántas onzas trae, pero no CON
+       QUÉ se sirve — que es el dato con el que se cuenta el inventario y se
+       cobra la copa. Había que abrir el editor para saberlo. */
+    test('la ficha técnica dice el tamaño de copa', () =>
+        eq(ijs.indexOf('🍷 Copa de ${p.tamanoCopa}') > -1, true, 'con copa'));
+    test('…y cómo se cuenta ese insumo en el inventario', () =>
+        eq(ijs.indexOf('📏 Se cuenta en ${_umLecturaTxt(p.umLectura)}') > -1, true, 'con unidad'));
+    /* «Automático» no es un dato que le sirva a quien consulta la ficha. */
+    test('…traducida a palabras, no a la clave interna', () =>
+        eq(cuerpo('_umLecturaTxt').indexOf("COPA: 'copas'") > -1, true, 'legible'));
+    /* Es la cuenta que todo el mundo hace de cabeza al ver «copa de 45» y
+       «botella de 750». */
+    test('…y cuántas copas salen de la botella', () =>
+        eq(cuerpo('_copasPorBot').indexOf('contML / copaML') > -1, true, 'calculada'));
+    /* Sin tamaño de copa o sin contenido, dividir daría Infinity o NaN pintado
+       en la ficha. */
+    test('…sin inventar nada cuando falta el dato', () =>
+        eq(cuerpo('_copasPorBot').indexOf("if (!(copaML > 0) || !(contML > 0)) return '';") > -1,
+           true, 'callado'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */
