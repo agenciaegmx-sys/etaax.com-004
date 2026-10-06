@@ -166,6 +166,42 @@
            return true;
        } catch(e) { console.warn('[respaldo insumos]', e); return false; }
    }
+   /* Partir UN insumo compartido en copias por sucursal. Es el único lugar
+      donde ocurre el forkeo: lo usan el botón por producto y el masivo. Con dos
+      copias de esto, el día que una cambie —un campo nuevo, otra regla— el
+      catálogo quedaría con insumos partidos de dos maneras distintas y nadie
+      sabría cuál es la buena. Devuelve las copias nuevas; NO guarda. */
+   function _forkInsumo(ins, mem) {
+       var nuevas = [];
+       mem.forEach(function (suc) {
+           var copia = JSON.parse(JSON.stringify(ins));
+           copia.id         = genId();
+           copia.origenId   = ins.id;        // liga al maestro (id canónico)
+           copia.sucursales = [suc];
+           copia.sucursalId = suc || '';
+           delete copia._memPreMigra;
+           nuevas.push(copia);
+       });
+       /* El maestro se queda SIN sucursal: pasa a ser la ficha de referencia del
+          negocio. Dejarlo en una de ellas haría que esa sucursal viera dos veces
+          el mismo producto. `_memPreMigra` guarda dónde vivía, por si algún día
+          hay que revertir. */
+       ins._memPreMigra = mem.slice();
+       ins.sucursales = [];
+       ins.sucursalId = '';
+       return nuevas;
+   }
+
+   /* ¿Qué insumos están compartidos? Un registro con dos o más sucursales es UNO
+      solo visto desde varios lados: por eso editarlo en una lo cambia en todas. */
+   function _insumosCompartidos(lista) {
+       return (lista || getInsumos()).filter(function (ins) {
+           if (!ins || ins.origenId) return false;          // ya es una copia
+           var mem = window._insumoSucursales ? window._insumoSucursales(ins) : (ins.sucursalId ? [ins.sucursalId] : []);
+           return mem.length > 1;
+       });
+   }
+
    function _independizarInsumosPorSuc(dryRun) {
        var lista = getInsumos();
        var toFork = [];
@@ -177,20 +213,7 @@
        });
        if (dryRun) return { maestros: toFork.length, copias: toFork.reduce(function(s,p){ return s + p.mem.length; }, 0) };
        var nuevas = [];
-       toFork.forEach(function(p){
-           p.ins._memPreMigra = p.mem.slice(); // huella para revertir si hiciera falta
-           p.mem.forEach(function(suc){
-               var copia = JSON.parse(JSON.stringify(p.ins));
-               copia.id        = genId();
-               copia.origenId  = p.ins.id;        // liga al maestro (canónico)
-               copia.sucursales = [suc];
-               copia.sucursalId = suc || '';
-               delete copia._memPreMigra;
-               nuevas.push(copia);
-           });
-           p.ins.sucursales = []; // el maestro queda global-only (sin sucursal); las copias sirven a cada una
-           p.ins.sucursalId = '';
-       });
+       toFork.forEach(function(p){ nuevas = nuevas.concat(_forkInsumo(p.ins, p.mem)); });
        var all = getInsumos().concat(nuevas);
        setInsumos(all);
        try { _sincronizarInsumosSupabase(getNegocioActivo(), nuevas.concat(toFork.map(function(p){ return p.ins; }))); } catch(e){}
@@ -232,21 +255,8 @@
        }
        var nombres = mem.map(function(su){ return _sucNombreIgn(su); }).join(', ');
        var _hacer = function () {
-           var nuevas = [];
-           mem.forEach(function(suc){
-               var copia = JSON.parse(JSON.stringify(ins));
-               copia.id         = genId();
-               copia.origenId   = ins.id;       // liga al maestro (id canónico)
-               copia.sucursales = [suc];
-               copia.sucursalId = suc || '';
-               delete copia._memPreMigra;
-               nuevas.push(copia);
-           });
-           /* El maestro se queda SIN sucursal: pasa a ser la ficha de referencia
-              del negocio. Dejarlo en una de ellas haría que esa sucursal viera
-              dos veces el mismo producto. */
            var i = lista.findIndex(function(x){ return x.id === ins.id; });
-           if (i >= 0) { lista[i]._memPreMigra = mem.slice(); lista[i].sucursales = []; lista[i].sucursalId = ''; }
+           var nuevas = _forkInsumo(i >= 0 ? lista[i] : ins, mem);
            var all = lista.concat(nuevas);
            setInsumos(all);
            try { _sincronizarInsumosSupabase(getNegocioActivo(), nuevas.concat(i>=0?[lista[i]]:[])); } catch(e){}
@@ -276,18 +286,40 @@
 
    function abrirIndependizarSucIns() {
        var plan = _independizarInsumosPorSuc(true);
-       if (!plan.maestros) { alert('✅ No hay insumos compartidos entre sucursales. Ya trabajan independientes.'); return; }
-       if (!_respaldarCatalogoIns()) { if (!confirm('⚠️ No se pudo descargar el respaldo automático. ¿Continuar de todas formas?')) return; }
-       var ok = confirm('🔗 INDEPENDIZAR INSUMOS POR SUCURSAL\n\n' +
-           'Detectados: ' + plan.maestros + ' insumo(s) compartido(s) entre sucursales.\n' +
-           'Se crearán ' + plan.copias + ' copia(s) independiente(s) (una por sucursal), ligadas a su maestro.\n\n' +
-           '✔ Tus inventarios/mermas YA capturados NO se tocan (referencian el id del maestro).\n' +
-           '✔ Es reversible (ya se descargó un respaldo .json).\n\n' +
-           'Ya se descargó el respaldo. ¿Ejecutar ahora?');
-       if (!ok) return;
-       var res = _independizarInsumosPorSuc(false);
-       alert('✅ Listo: ' + res.copias + ' copia(s) creadas de ' + res.maestros + ' insumo(s).\nCada sucursal ahora edita la suya de forma independiente.');
-       try { init(); } catch(e){}
+       if (!plan.maestros) {
+           alert('✅ No hay insumos compartidos entre sucursales. Ya trabajan independientes.');
+           return;
+       }
+       /* Una muestra de los nombres: «32 insumos» no dice nada, pero ver «Don
+          Julio, Jarabe natural, Limón…» deja reconocer de inmediato si el
+          sistema está mirando lo que uno cree. */
+       var muestra = _insumosCompartidos().slice(0, 6)
+           .map(function (x) { return x.nombre || '(sin nombre)'; }).join(' · ');
+       var masN = Math.max(0, plan.maestros - 6);
+
+       if (!_respaldarCatalogoIns()) {
+           if (!confirm('⚠️ No se pudo descargar el respaldo automático. ¿Continuar de todas formas?')) return;
+       }
+       var _hacer = function () {
+           var res = _independizarInsumosPorSuc(false);
+           alert('✅ Listo: ' + res.copias + ' copia' + (res.copias !== 1 ? 's' : '') + ' creada' + (res.copias !== 1 ? 's' : '') +
+                 ' de ' + res.maestros + ' insumo' + (res.maestros !== 1 ? 's' : '') + '.\n\n' +
+                 'Cada sucursal edita la suya por su cuenta. Lo que cambies en una ya no toca a las otras.');
+           try { init(); } catch (e) {}
+       };
+       var msg =
+           'Hoy <b>' + plan.maestros + ' insumo' + (plan.maestros !== 1 ? 's' : '') + '</b> ' +
+           (plan.maestros !== 1 ? 'son UN SOLO registro compartido' : 'es UN SOLO registro compartido') +
+           ' por varias sucursales: lo que cambies en una cambia en todas.<br>' +
+           '<span style="color:var(--text-dim);font-size:12px">' + etx(muestra) +
+           (masN ? ' · y ' + masN + ' más' : '') + '</span><br><br>' +
+           'Se crearán <b>' + plan.copias + ' copias independientes</b> (una por sucursal), ligadas a su maestro.<br><br>' +
+           '✔ Los inventarios y mermas ya capturados <b>NO se tocan</b>: referencian el id del maestro, que se conserva.<br>' +
+           '✔ Ya se descargó un respaldo <b>.json</b> por si hiciera falta volver atrás.<br>' +
+           '✔ Se puede repetir sin miedo: lo ya independizado se salta.';
+       if (window.etaaxConfirm)
+           etaaxConfirm('Independizar insumos por sucursal', msg, _hacer, null, { yesLabel: 'Sí, independizar' });
+       else if (confirm(msg.replace(/<[^>]+>/g, ''))) _hacer();
    }
    window.abrirIndependizarSucIns = abrirIndependizarSucIns;
    function _catGlobalIns() { return sessionStorage.getItem('etaax_cat_global') === '1'; }
@@ -302,10 +334,27 @@
        if (ttl) ttl.innerHTML   = on ? 'Insumos <span style="color:#7ab8f5">· Global</span>' : 'Insumos';
        // En modo global no tiene sentido el botón de copiar entre sucursales.
        if (bn) bn.style.display = on ? 'none' : '';
-       // Independizar por sucursal: retirado de la vista. El modelo maestro + copia
-       // ya deja cada sucursal independiente al crear o al vincular.
+       /* ── INDEPENDIZAR POR SUCURSAL: VUELVE, Y SOLO EN EL GLOBAL ───────────
+          Se había retirado con el argumento de que «el modelo maestro + copia ya
+          deja cada sucursal independiente al crear». Cierto para los insumos
+          NUEVOS — nacen maestro + copia, igual que las recetas— pero no para el
+          catálogo que ya existía: esos siguen siendo UN registro compartido por
+          varias sucursales, y por eso cambiar la copa en una la cambiaba en
+          todas.
+
+          Dejarlo solo para quien quisiera arreglarlos de uno en uno no era una
+          opción: con 500 insumos, eso no se hace. Vuelve como lo que es, una
+          MIGRACIÓN de una sola vez, y vive en el Catálogo Global porque toca al
+          negocio entero, no a la sucursal donde estés parado.
+
+          El botón se esconde solo cuando ya no hay nada que independizar. */
        var bi = document.getElementById('btnIndepSucIns');
-       if (bi) bi.style.display = 'none';
+       if (bi) {
+           var _pend = on ? _insumosCompartidos().length : 0;
+           bi.hidden = !_pend;
+           bi.style.display = _pend ? '' : 'none';
+           if (_pend) bi.textContent = '🔗 Independizar ' + _pend + ' insumo' + (_pend !== 1 ? 's' : '') + ' compartido' + (_pend !== 1 ? 's' : '');
+       }
        // Novedades: en el GLOBAL muestra los cambios de TODAS las sucursales; dentro
        // de una sucursal, solo los suyos (que es lo que ahí importa).
        var bnv = document.getElementById('btnNovedadesIns');

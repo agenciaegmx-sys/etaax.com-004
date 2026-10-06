@@ -14616,17 +14616,66 @@ console.log('\n══ BH6 · Checklist impreso e insumos por sucursal ══');
         eq(dIj('insumoCompartido').indexOf('mem.length > 1') > -1, true, 'detectable'));
     test('se puede independizar UN insumo, no solo el catálogo entero', () =>
         eq(dIj('independizarUnInsumo').length > 0, true, 'por producto'));
-    /* El barrido masivo ya existía y por eso nadie lo usaba: nadie independiza
-       500 insumos para resolver uno. */
+    /* EL FORKEO VIVE EN UN SOLO LUGAR. Con dos copias de esta lógica —la del
+       botón por producto y la del barrido masivo— el día que una cambie el
+       catálogo quedaría con insumos partidos de dos maneras distintas, y nadie
+       sabría cuál es la buena. */
     test('…creando una copia por sucursal, ligada al maestro', () => {
-        const t = dIj('independizarUnInsumo');
+        const t = dIj('_forkInsumo');
         return eq(t.indexOf('copia.origenId   = ins.id') > -1 &&
                   t.indexOf('copia.sucursales = [suc]') > -1, true, 'copias');
     });
     /* Dejar el maestro en una de ellas haría que esa sucursal viera dos veces
        el mismo producto. */
     test('…y el maestro se queda SIN sucursal, como ficha de referencia', () =>
-        eq(dIj('independizarUnInsumo').indexOf("lista[i].sucursales = []") > -1, true, 'sin duplicar'));
+        eq(dIj('_forkInsumo').indexOf('ins.sucursales = [];') > -1, true, 'sin duplicar'));
+    test('…guardando dónde vivía, por si hay que revertir', () =>
+        eq(dIj('_forkInsumo').indexOf('ins._memPreMigra = mem.slice()') > -1, true, 'reversible'));
+    /* Las dos puertas —una por una y el barrido— tienen que partir IGUAL. */
+    test('el barrido masivo usa el mismo forkeo', () =>
+        eq(dIj('_independizarInsumosPorSuc').indexOf('_forkInsumo(p.ins, p.mem)') > -1, true, 'una verdad'));
+    test('…y el de un solo insumo también', () =>
+        eq(dIj('independizarUnInsumo').indexOf('_forkInsumo(') > -1, true, 'una verdad'));
+
+    /* ── EL BARRIDO, DE VUELTA A LA VISTA ──
+       Se había retirado con el argumento de que «el modelo maestro + copia ya
+       deja cada sucursal independiente al crear». Cierto para los insumos
+       NUEVOS; falso para el catálogo que ya existía. Y arreglar 500 insumos de
+       uno en uno no es una opción. */
+    test('el barrido masivo se puede alcanzar desde el catálogo global', () =>
+        eq(ih.indexOf('onclick="abrirIndependizarSucIns()"') > -1 &&
+           ih.indexOf('id="btnIndepSucIns" hidden') === -1, true, 'visible'));
+    /* Solo en el GLOBAL: toca al negocio entero, no a la sucursal donde estés
+       parado. Y solo si queda algo que independizar: un botón que no hace nada
+       es ruido permanente. */
+    test('…solo en el global, y solo si queda algo que hacer', () =>
+        eq(dIj('_actualizarBannerGlobal').indexOf('var _pend = on ? _insumosCompartidos().length : 0;') > -1,
+           true, 'acotado'));
+    /* Se mira la CONDICIÓN, no solo el texto: dejar la línea escrita pero
+       inalcanzable pasaba el test anterior — lo cazó la batería. */
+    test('…diciendo cuántos son, no «independizar» a secas', () =>
+        eq(dIj('_actualizarBannerGlobal').indexOf("if (_pend) bi.textContent = '🔗 Independizar ' + _pend") > -1,
+           true, 'concreto'));
+    /* «32 insumos» no dice nada; ver los nombres deja reconocer de inmediato si
+       el sistema está mirando lo que uno cree. */
+    test('el diálogo enseña una muestra de cuáles', () =>
+        eq(dIj('abrirIndependizarSucIns').indexOf('_insumosCompartidos().slice(0, 6)') > -1, true, 'con nombres'));
+    /* Una migración de catálogo sin respaldo previo es una apuesta. */
+    test('…y descarga un respaldo antes de tocar nada', () =>
+        eq(dIj('abrirIndependizarSucIns').indexOf('_respaldarCatalogoIns()') > -1, true, 'con respaldo'));
+    /* Que se pueda repetir sin miedo es lo que la vuelve usable: nadie corre
+       una migración si no sabe qué pasa al correrla dos veces. */
+    test('…y es idempotente: lo ya independizado se salta', () =>
+        eq(dIj('_independizarInsumosPorSuc').indexOf("if (!ins || ins.origenId) return;") > -1 &&
+           dIj('_independizarInsumosPorSuc').indexOf('if (mem.length <= 1) return;') > -1, true, 'repetible'));
+
+    /* ── LO AUTOMÁTICO YA ESTABA ──
+       Un insumo NUEVO ya nace maestro + copia en su sucursal, igual que las
+       recetas. Si eso se rompiera, el catálogo volvería a llenarse de registros
+       compartidos y el barrido habría que correrlo para siempre. */
+    test('un insumo nuevo sigue naciendo maestro + copia de su sucursal', () =>
+        eq(ijs.indexOf('_copiaNueva.origenId = insumo.id') > -1 &&
+           ijs.indexOf('_copiaNueva.sucursales = [_sucCopiaNueva]') > -1, true, 'automático'));
     /* Inventarios y mermas referencian el id canónico —el del maestro, que se
        conserva—: por eso esto es seguro a media operación. */
     test('…sin tocar lo ya capturado, y diciéndolo', () =>
