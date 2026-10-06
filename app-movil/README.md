@@ -44,17 +44,34 @@ Decirlo importa tanto como lo anterior:
 
 ## Cómo se instala
 
-1. Escanear el QR de la sucursal, como siempre (Inventarios → 📱 QR de
-   entradas). El QR lleva el negocio, el token y la sucursal.
-2. En el teléfono, el menú del navegador → **«Agregar a pantalla de inicio»** /
-   «Instalar». En iPhone es el botón de compartir ⬆️; en Android suele salir
-   solo un aviso abajo.
-3. Listo: queda un ícono. Al abrirlo ya no hay que escanear nada — el negocio,
-   el token y la sucursal viajan en el acceso instalado.
+En **Inventarios → 📱 QR de entradas** hay un enlace a `instalar.html`. Ese es el
+que se le manda al equipo por WhatsApp: la página detecta si el teléfono es
+iPhone o Android y enseña los pasos de ese, con las credenciales del negocio ya
+dentro para que al terminar la app abra lista.
+
+- **Android:** Chrome ofrece **«Instalar»** —un aviso abajo o en el menú ⋮—. Es
+  una instalación de verdad: la app queda en el cajón de aplicaciones.
+- **iPhone / iPad:** desde **Safari**, botón de compartir ⬆️ → **«Agregar a
+  inicio»**. Queda con su ícono y a pantalla completa, igual que cualquier otra.
 
 Sigue pidiendo el **NIP de 5 dígitos** en cada apertura. Eso es a propósito: el
 teléfono de la barra lo usan varias personas y el NIP es lo que dice quién
 registró qué.
+
+### Por qué en iPhone no se baja de una tienda
+
+**Apple no permite instalar ninguna app fuera del App Store.** No hay archivo que
+descargar ni instalador: «Agregar a inicio» es la única vía, y la ejecuta la
+persona — no existe forma de dispararla desde el código, como sí la hay en
+Android. Por eso en iPhone la app enseña los pasos en vez de un botón que diga
+«Instalar»: un botón que no hace lo que dice es peor que no tenerlo.
+
+Subirla al App Store es posible pero es otro proyecto: cuenta de desarrollador
+de pago anual, empaquetarla como app nativa y pasar la revisión de Apple, que
+rechaza de entrada las que son solo un sitio web envuelto (su guía 4.2, «Minimum
+Functionality»). Tendría sentido el día que haya una razón nativa de verdad
+—escáner de código de barras, notificaciones, captura sin señal—, no para
+conseguir el ícono: eso ya se tiene.
 
 ---
 
@@ -63,6 +80,7 @@ registró qué.
 ```
 app-movil/
   index.html           la cáscara: una sola página, pantallas que se muestran y esconden
+  instalar.html        la guía que se manda por WhatsApp, por plataforma
   app.css              estilos. Oscuro por default (la barra es oscura), claro a un toque
   app.js               toda la lógica
   sw.js                service worker: guarda la cáscara para que abra sin esperar

@@ -2583,16 +2583,24 @@ async function abrirQrEntradas() {
        ícono, abre sin la barra del navegador y no hay que escanear nada cada
        vez. Si no se ofrece aquí, nadie la va a encontrar: este modal es el único
        lugar donde alguien está pensando en «cómo registra la barra». */
-    var urlApp = location.origin + '/app-movil/?n=' + encodeURIComponent(negId) + '&t=' + encodeURIComponent(token)
+    var credQR = '?n=' + encodeURIComponent(negId) + '&t=' + encodeURIComponent(token)
         + (sucQR ? '&s=' + encodeURIComponent(sucQR) : '');
+    var urlApp = location.origin + '/app-movil/' + credQR;
+    /* Lo que se manda por WhatsApp es la PÁGINA DE INSTALACIÓN, no la app cruda:
+       el encargado no va a estar parado junto a cada persona del turno
+       explicándole los pasos, y los de iPhone no se parecen a los de Android. */
+    var urlInst = location.origin + '/app-movil/instalar.html' + credQR;
     urlEl.innerHTML = etx(url)
         + '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);text-align:left">'
             + '<div style="font-size:11.5px;color:var(--text-muted);line-height:1.55;margin-bottom:8px">'
                 + '📱 <b style="color:var(--text)">¿Lo usan a diario?</b> Ábrela una vez desde el teléfono y agrégala a '
                 + 'la pantalla de inicio: queda un ícono y ya no hay que escanear el QR cada vez.</div>'
-            + '<a href="' + etx(urlApp) + '" target="_blank" rel="noopener" '
+            + '<a href="' + etx(urlInst) + '" target="_blank" rel="noopener" '
                 + 'style="display:inline-block;font-size:11.5px;color:var(--green);word-break:break-all">'
-                + etx(urlApp) + '</a>'
+                + etx(urlInst) + '</a>'
+            + '<div style="font-size:10.5px;color:var(--text-dim);margin-top:6px;line-height:1.5">'
+                + 'Mándaselo por WhatsApp a tu equipo: la página detecta si el teléfono es '
+                + 'iPhone o Android y enseña los pasos de ese.</div>'
         + '</div>'
         + (sucQR ? '' : '<div style="color:var(--accent);margin-top:8px;font-size:11px;line-height:1.5;text-align:left">⚠️ Estás en <b>vista global (sin sucursal)</b>. Las entradas de este QR quedarían <b>sin sucursal</b> y NO se verían en el historial de una sucursal específica. Entra a una <b>sucursal</b> antes de generar el QR para que queden selladas.</div>');
     function gen() {

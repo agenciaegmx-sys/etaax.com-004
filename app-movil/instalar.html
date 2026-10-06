@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es" data-tema="oscuro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#13120f">
+<title>ETAAX · Instalar la app de registro</title>
+<link rel="icon" href="icons/icono-192.png">
+<link rel="apple-touch-icon" href="icons/icono-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<style>
+/* ══ LA PÁGINA QUE SE MANDA POR WHATSAPP ═══════════════════════════════════
+   El encargado no va a estar parado junto a cada persona del turno
+   explicándole cómo dejar la app en su teléfono. Manda este link y cada quien
+   ve los pasos de SU teléfono — los de iPhone y los de Android son distintos y
+   enseñar los dos juntos es la forma más rápida de que nadie siga ninguno.
+
+   Lleva las credenciales del QR en la dirección, así que al terminar los pasos
+   la app ya abre lista: solo pide el NIP. */
+.wrap { max-width:560px; margin:0 auto; padding:26px 18px calc(var(--safe-b) + 40px); }
+.cab { display:flex; align-items:center; gap:14px; margin-bottom:8px; }
+.cab img { border-radius:15px; }
+.cab h1 { font-family:'Bebas Neue',sans-serif; font-size:27px; letter-spacing:1.6px; line-height:1.05; font-weight:400; }
+.cab p { font-size:13px; color:var(--dim); margin-top:3px; }
+.intro { font-size:14px; color:var(--txt2); line-height:1.6; margin:18px 0 22px; }
+.tabs { display:flex; gap:8px; margin-bottom:18px; }
+.tab { flex:1; padding:13px; border-radius:var(--r); border:1px solid var(--borde);
+    background:var(--sup); color:var(--txt2); font-size:14px; font-weight:500; min-height:52px; }
+.tab.on { border-color:var(--verde); background:rgba(61,190,122,.12); color:var(--verde); font-weight:700; }
+.bloque { background:var(--sup); border:1px solid var(--borde); border-radius:var(--r); padding:18px 16px; }
+.bloque h2 { font-size:16px; margin-bottom:4px; }
+.bloque > p { font-size:13px; color:var(--dim); line-height:1.55; }
+.pasos-g { list-style:none; margin-top:16px; display:flex; flex-direction:column; gap:14px; }
+.pasos-g li { display:flex; align-items:flex-start; gap:13px; font-size:14.5px; line-height:1.55; }
+.pasos-g i { flex-shrink:0; width:27px; height:27px; border-radius:50%; background:var(--verde);
+    color:#0c1a12; font-style:normal; font-size:13.5px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; }
+.pasos-g b { font-weight:600; }
+.aclara { font-size:12.5px; color:var(--dim); line-height:1.6; margin-top:16px; padding-top:14px;
+    border-top:1px solid var(--borde); }
+.abrir { margin-top:22px; }
+.abrir .btn { text-decoration:none; }
+.falta { background:rgba(224,90,58,.1); border:1px solid rgba(224,90,58,.4); color:var(--rojo);
+    border-radius:var(--r); padding:15px 16px; font-size:13.5px; line-height:1.6; }
+.listo { background:rgba(61,190,122,.1); border:1px solid rgba(61,190,122,.4); color:var(--verde);
+    border-radius:var(--r); padding:15px 16px; font-size:14px; line-height:1.6; text-align:center; }
+.pie { font-size:11.5px; color:var(--dim); text-align:center; margin-top:28px; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+    <div class="cab">
+        <img src="icons/icono-192.png" alt="" width="58" height="58">
+        <div>
+            <h1>Registro de barra y cocina</h1>
+            <p>Entradas, mermas, cortesías y conteo</p>
+        </div>
+    </div>
+
+    <p class="intro">Déjala en la pantalla de inicio de tu teléfono: queda un ícono,
+    abre a pantalla completa y ya no hay que escanear el QR cada vez. Sigues
+    entrando con tu NIP.</p>
+
+    <div id="estado"></div>
+
+    <div class="tabs" id="tabs" hidden>
+        <button class="tab" data-so="ios">🍎 iPhone</button>
+        <button class="tab" data-so="android">🤖 Android</button>
+    </div>
+
+    <div id="guia"></div>
+
+    <div class="abrir" id="abrir" hidden>
+        <a class="btn btn-ok" id="linkApp" href="#">Abrir la app</a>
+    </div>
+
+    <div class="pie">ETAAX · EGMx Consultoría</div>
+</div>
+
+<script>
+/* Las credenciales del QR viajan en la dirección para que, al terminar los
+   pasos, la app ya abra lista. Si alguien llega aquí sin ellas, se dice: una
+   app instalada que no sabe de qué negocio es, es un ícono muerto. */
+var Q = new URLSearchParams(location.search);
+var NEG = Q.get('n') || '', TOKEN = Q.get('t') || '', SUC = Q.get('s') || '';
+var URL_APP = './' + (NEG && TOKEN
+    ? '?n=' + encodeURIComponent(NEG) + '&t=' + encodeURIComponent(TOKEN) + (SUC ? '&s=' + encodeURIComponent(SUC) : '')
+    : '');
+
+var UA = navigator.userAgent || '';
+/* El iPad moderno se anuncia como Mac: lo delata que la pantalla responda al
+   tacto. Sin esto, a un iPad se le enseñan los pasos de Android. */
+var ES_IOS = /iPad|iPhone|iPod/.test(UA) || (/Macintosh/.test(UA) && typeof document.ontouchend !== 'undefined');
+/* En iOS TODOS los navegadores usan el motor de Safari, así que buscar «Safari»
+   no distingue: Chrome en iPhone también lo trae. Se descartan por su marca. */
+var ES_SAFARI = !/CriOS|FxiOS|EdgiOS|OPiOS|GSA/.test(UA);
+var INSTALADA = false;
+try { INSTALADA = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; } catch (e) {}
+
+var GUIAS = {
+    ios: '<div class="bloque">' +
+        '<h2>En iPhone o iPad</h2>' +
+        '<p>Se hace desde <b>Safari</b>. Toma menos de un minuto.</p>' +
+        '<ol class="pasos-g">' +
+            '<li><i>1</i><span>Abre esta página en <b>Safari</b> (si llegaste por WhatsApp, ' +
+                'toca los tres puntos ··· y elige «Abrir en Safari»).</span></li>' +
+            '<li><i>2</i><span>Toca el botón de <b>compartir</b> ⬆️, el cuadrito con la flecha, ' +
+                'abajo de la pantalla.</span></li>' +
+            '<li><i>3</i><span>Baja en la lista y elige <b>«Agregar a inicio»</b>.</span></li>' +
+            '<li><i>4</i><span>Toca <b>Agregar</b>, arriba a la derecha.</span></li>' +
+            '<li><i>5</i><span>Busca el ícono de ETAAX en tu pantalla y ábrelo. Te va a pedir ' +
+                'tu <b>NIP de 5 dígitos</b>.</span></li>' +
+        '</ol>' +
+        '<div class="aclara"><b>¿Por qué no se baja del App Store?</b><br>' +
+            'Apple no permite instalar ninguna app fuera de su tienda, así que esta es la ' +
+            'única manera en iPhone. No es un atajo ni un apaño: queda igual que cualquier ' +
+            'otra app —con su ícono, a pantalla completa y sin la barra del navegador—.</div>' +
+        '</div>',
+    android: '<div class="bloque">' +
+        '<h2>En Android</h2>' +
+        '<p>Se hace desde <b>Chrome</b>. Toma menos de un minuto.</p>' +
+        '<ol class="pasos-g">' +
+            '<li><i>1</i><span>Abre esta página en <b>Chrome</b>.</span></li>' +
+            '<li><i>2</i><span>Si sale solo un aviso abajo que dice <b>«Instalar»</b>, tócalo ' +
+                'y listo.</span></li>' +
+            '<li><i>3</i><span>Si no sale, toca los <b>tres puntos ⋮</b> de arriba a la derecha ' +
+                'y elige <b>«Instalar app»</b> o <b>«Agregar a pantalla principal»</b>.</span></li>' +
+            '<li><i>4</i><span>Confirma. Busca el ícono de ETAAX y ábrelo: te va a pedir tu ' +
+                '<b>NIP de 5 dígitos</b>.</span></li>' +
+        '</ol>' +
+        '<div class="aclara">Si el teléfono es compartido entre el turno, está bien: el ' +
+            'NIP se pide cada vez que se abre, y es lo que deja escrito quién registró qué.</div>' +
+        '</div>'
+};
+
+function pintar(so) {
+    document.querySelectorAll('.tab').forEach(function (t) {
+        t.classList.toggle('on', t.getAttribute('data-so') === so);
+    });
+    document.getElementById('guia').innerHTML = GUIAS[so] || '';
+}
+
+document.getElementById('tabs').onclick = function (e) {
+    var b = e.target.closest('[data-so]'); if (!b) return;
+    pintar(b.getAttribute('data-so'));
+};
+
+(function arranque() {
+    var est = document.getElementById('estado');
+    if (INSTALADA) {
+        est.innerHTML = '<div class="listo">✓ Ya la tienes instalada. Ábrela desde su ícono.</div>';
+        return;
+    }
+    if (!NEG || !TOKEN) {
+        est.innerHTML = '<div class="falta"><b>A este enlace le faltan los datos del negocio.</b><br>' +
+            'Pídele a tu encargado el enlace completo: lo saca de <b>Inventarios → 📱 QR de entradas</b>. ' +
+            'Sin eso, la app quedaría instalada pero sin saber de qué sucursal es.</div>';
+        return;
+    }
+    document.getElementById('tabs').hidden = false;
+    /* Se abre en la pestaña de SU teléfono. Enseñar las dos a la vez es la forma
+       más rápida de que nadie siga ninguna. La otra queda a un toque, para
+       cuando alguien lo lee desde la computadora para explicárselo a otro. */
+    pintar(ES_IOS ? 'ios' : 'android');
+    if (ES_IOS && !ES_SAFARI) {
+        est.innerHTML = '<div class="falta">Estás en un navegador que no es Safari. ' +
+            'En iPhone, «Agregar a inicio» solo funciona bien desde <b>Safari</b>: ' +
+            'ábrelo ahí y vuelve a esta página.</div>';
+    }
+    var a = document.getElementById('linkApp');
+    a.href = URL_APP;
+    document.getElementById('abrir').hidden = false;
+})();
+</script>
+</body>
+</html>

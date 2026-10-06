@@ -30,6 +30,12 @@
 }
 
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+/* EL ATRIBUTO `hidden` TIENE QUE GANAR. El navegador lo aplica con un
+   display:none de su hoja por defecto, y CUALQUIER regla de display del autor
+   —un .tarjeta{display:flex} inocente— lo pisa sin avisar. Así se quedó visible
+   en iPhone la tarjeta de «Instalar», que ahí no tiene nada que hacer: el
+   elemento decía estar escondido y se veía igual. */
+[hidden] { display:none !important; }
 html, body { background:var(--bg); color:var(--txt); font-family:'DM Sans',system-ui,sans-serif; }
 body {
     min-height:100dvh; padding-top:calc(60px + var(--safe-t));
@@ -108,12 +114,25 @@ select.campo { appearance:none; background-image:linear-gradient(45deg,transpare
 .mcard-txt b { display:block; font-size:16px; margin-bottom:3px; }
 .mcard-txt small { font-size:12px; color:var(--dim); line-height:1.45; display:block; }
 .mcard-sec { background:transparent; }
-.instalar { display:flex; align-items:center; gap:12px; margin-top:16px; padding:14px 16px;
+.instalar { margin-top:16px; padding:15px 16px;
     background:rgba(61,190,122,.08); border:1px solid rgba(61,190,122,.3); border-radius:var(--r); }
-.instalar div { flex:1; }
-.instalar b { display:block; font-size:14px; }
-.instalar small { font-size:11.5px; color:var(--dim); line-height:1.45; }
-.instalar .btn { width:auto; padding:0 18px; min-height:46px; }
+.instalar-fila { display:flex; align-items:center; gap:12px; }
+.instalar-fila > div { flex:1; }
+.instalar b { display:block; font-size:14.5px; }
+.instalar small { font-size:11.5px; color:var(--dim); line-height:1.5; }
+.instalar .btn { width:auto; padding:0 18px; min-height:46px; flex-shrink:0; }
+/* Los pasos de iPhone. No es un botón que promete instalar y luego explica: es
+   la explicación, que es lo único que ahí se puede ofrecer. */
+.pasos { list-style:none; margin-top:12px; display:flex; flex-direction:column; gap:9px; }
+.pasos li { display:flex; align-items:flex-start; gap:10px; font-size:13.5px; line-height:1.5; }
+.pasos i { flex-shrink:0; width:23px; height:23px; border-radius:50%; background:var(--verde);
+    color:#0c1a12; font-style:normal; font-size:12px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; margin-top:1px; }
+.pasos b { font-weight:600; }
+.icono-share { display:inline-flex; align-items:center; justify-content:center; vertical-align:-4px;
+    width:20px; height:20px; border-radius:5px; background:var(--sup); border:1px solid var(--borde); }
+.instalar-nota { font-size:11.5px; color:var(--dim); line-height:1.5; margin-top:11px;
+    padding-top:10px; border-top:1px solid rgba(61,190,122,.2); }
 .salir { display:block; margin:26px auto 0; padding:12px 20px; font-size:13px; color:var(--dim); }
 
 /* ── Chips de área y de tipo ── */

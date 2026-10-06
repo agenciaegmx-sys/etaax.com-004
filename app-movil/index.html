@@ -82,10 +82,10 @@
                 <small>Todo lo capturado desde el último inventario</small></span>
         </button>
     </div>
-    <div class="instalar" id="instalar" hidden>
-        <div><b>Instálala en el teléfono</b><small>Queda un ícono y ya no hay que escanear el QR cada vez.</small></div>
-        <button class="btn btn-sec" onclick="instalar()">Instalar</button>
-    </div>
+    <!-- La tarjeta se arma por plataforma: en Android hay un botón que de verdad
+         instala; en iPhone no existe tal cosa —Apple solo permite «Agregar a
+         inicio»— así que ahí van los pasos, no un botón que promete y explica. -->
+    <div class="instalar" id="instalar" hidden></div>
     <button class="salir" onclick="salir()">Cerrar sesión</button>
 </section>
 

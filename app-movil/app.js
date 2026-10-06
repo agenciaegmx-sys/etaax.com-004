@@ -236,6 +236,7 @@ function irMenu() {
                 .filter(Boolean).join(' · ');
     $('quienCard').innerHTML = '<b>' + etx(COLAB) + '</b>' +
         (det ? '<small>' + etx(det) + '</small>' : '');
+    pintarInstalar();
     mostrar('pMenu', 'Registro', '¿Qué vas a registrar?', false, false);
 }
 
@@ -715,22 +716,95 @@ function fila(ico, titulo, sub, quien) {
 }
 
 /* ══ INSTALAR ══════════════════════════════════════════════════════════════
-   Android avisa por su cuenta; se guarda el aviso para ofrecerlo cuando tenga
-   sentido —en el menú, ya con sesión— y no en la cara apenas abre. iOS no
-   expone esto: ahí se instala desde Compartir → «Agregar a inicio», y por eso
-   el texto del README lo explica. */
+   NO HAY UNA SOLA MANERA DE INSTALAR, y fingir que sí es lo que estaba mal.
+
+     · ANDROID / Chrome: el navegador ofrece instalar de verdad. Se guarda su
+       aviso y se usa cuando tiene sentido —en el menú, ya con sesión— y no en
+       la cara apenas abre.
+     · IPHONE: Apple no permite instalar NADA fuera del App Store. La única vía
+       es Compartir → «Agregar a inicio», y la hace la persona, no la página: no
+       existe forma de dispararla desde el código. Ahí se enseñan los pasos.
+       Poner un botón que diga «Instalar» y luego sacar un texto es prometer algo
+       que no se puede cumplir.
+     · IPHONE pero en Chrome/Firefox: «Agregar a inicio» de esos navegadores
+       deja un acceso que abre el navegador otra vez, no la app. Hay que decir
+       que se abra en Safari.
+     · YA INSTALADA: no se ofrece nada. Ofrecer instalar lo ya instalado hace
+       dudar de si de verdad quedó instalado.                                   */
+function esStandalone() {
+    try {
+        return window.matchMedia('(display-mode: standalone)').matches ||
+               navigator.standalone === true;
+    } catch (e) { return false; }
+}
+function esIOS() {
+    var ua = navigator.userAgent || '';
+    /* El iPad moderno se anuncia como Mac: lo delata que la pantalla responda al
+       tacto. Sin esto, a un iPad se le enseñan los pasos de Android. */
+    return /iPad|iPhone|iPod/.test(ua) ||
+           (/Macintosh/.test(ua) && typeof document.ontouchend !== 'undefined');
+}
+function esSafari() {
+    var ua = navigator.userAgent || '';
+    /* En iOS TODOS los navegadores usan el motor de Safari, así que no basta con
+       buscar «Safari» —Chrome en iPhone también lo trae—. Se descartan por su
+       marca propia. */
+    return !/CriOS|FxiOS|EdgiOS|OPiOS|GSA/.test(ua);
+}
+
+function pintarInstalar() {
+    var el = $('instalar'); if (!el) return;
+    if (esStandalone()) { el.hidden = true; return; }   // ya está instalada
+
+    if (_instalador) {                                   // Android: se puede de verdad
+        el.innerHTML =
+            '<div class="instalar-fila"><div>' +
+                '<b>Instálala en el teléfono</b>' +
+                '<small>Queda un ícono y ya no hay que escanear el QR cada vez.</small>' +
+            '</div><button class="btn btn-sec" onclick="instalar()">Instalar</button></div>';
+        el.hidden = false; return;
+    }
+
+    if (esIOS()) {
+        el.innerHTML = esSafari()
+            ? '<b>Déjala en tu pantalla de inicio</b>' +
+              '<small>Queda un ícono y ya no hay que escanear el QR cada vez.</small>' +
+              '<ol class="pasos">' +
+                '<li><i>1</i><span>Toca <b>compartir</b> <span class="icono-share">⬆️</span> ' +
+                    'abajo de la pantalla.</span></li>' +
+                '<li><i>2</i><span>Baja y elige <b>«Agregar a inicio»</b>.</span></li>' +
+                '<li><i>3</i><span>Toca <b>Agregar</b>. Listo.</span></li>' +
+              '</ol>' +
+              '<div class="instalar-nota">En iPhone esta es la única manera: Apple no permite ' +
+                'instalar apps fuera del App Store. Queda igual que cualquier otra, con su ícono ' +
+                'y a pantalla completa.</div>'
+            : '<b>Ábrela en Safari para dejarla en tu pantalla</b>' +
+              '<small>Desde este navegador el acceso que se crea vuelve a abrir el navegador, ' +
+              'no la app. Copia la dirección, ábrela en <b>Safari</b> y ahí sí aparece ' +
+              '«Agregar a inicio».</small>';
+        el.hidden = false; return;
+    }
+
+    /* Escritorio, o un Android que todavía no ofrece el aviso (Chrome espera a
+       que la página se use un poco antes de ofrecerlo). No se inventa un botón:
+       se dice dónde está la opción. */
+    el.innerHTML =
+        '<b>Instálala en el teléfono</b>' +
+        '<small>Ábrela en el celular del área y busca <b>«Instalar app»</b> o ' +
+        '<b>«Agregar a pantalla de inicio»</b> en el menú del navegador. ' +
+        'Queda un ícono y ya no hay que escanear el QR cada vez.</small>';
+    el.hidden = false;
+}
+
 window.addEventListener('beforeinstallprompt', function (e) {
-    e.preventDefault(); _instalador = e;
-    var el = $('instalar'); if (el) el.hidden = false;
+    e.preventDefault(); _instalador = e; pintarInstalar();
 });
 async function instalar() {
-    if (!_instalador) {
-        toast('En iPhone: botón de compartir ⬆️ → «Agregar a inicio».');
-        return;
-    }
+    if (!_instalador) { pintarInstalar(); return; }
     _instalador.prompt();
     try { await _instalador.userChoice; } catch (e) {}
-    _instalador = null; $('instalar').hidden = true;
+    _instalador = null;
+    pintarInstalar();
 }
 
 /* ══ SERVICE WORKER ════════════════════════════════════════════════════════
@@ -772,7 +846,8 @@ window.instalar = instalar;
 window._appMovil = {
     areasPermitidas: areasPermitidas, setArea: setArea, visible: visible,
     unoPorProducto: unoPorProducto, enSuc: enSuc, armarRegistro: armarRegistro,
-    horaDe: horaDe,
+    horaDe: horaDe, esIOS: esIOS, esSafari: esSafari, esStandalone: esStandalone,
+    pintarInstalar: pintarInstalar,
     _set: function (k, v) {
         if (k === 'AREA_COLAB') AREA_COLAB = v; if (k === 'AREA') AREA = v;
         if (k === 'FLUJO') FLUJO = v; if (k === 'SUB') SUB = v;

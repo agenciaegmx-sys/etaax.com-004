@@ -9752,7 +9752,7 @@ console.log('\n══ BE3 · El tema, uno solo para todo el sistema ══');
        y una oficina de día—; compartir la preferencia haría que cambiar el tema
        en la oficina deslumbrara al barman. Lleva su propio interruptor, con su
        propia clave. */
-    const PUBLICAS = ['index.html', 'evaluacion.html', 'app-movil/index.html'];
+    const PUBLICAS = ['index.html', 'evaluacion.html', 'app-movil/index.html', 'app-movil/instalar.html'];
     const sinTema = paginas.filter(function (p) {
         if (PUBLICAS.indexOf(p) > -1) return false;
         const s = fs.readFileSync(path.join(RAIZ, p), 'utf8');
@@ -16943,6 +16943,18 @@ console.log('\n══ BH18 · La app móvil ══');
     vm.runInContext(fs.readFileSync(path.join(RAIZ, 'staff-area.js'), 'utf8'), cx, { filename:'staff-area.js' });
     vm.runInContext(ajs, cx, { filename:'app-movil/app.js' });
     const A = cx.window._appMovil;
+    const dEx = (fn) => {
+        const i = ajs.indexOf('function ' + fn + '(');
+        if (i < 0) throw new Error('no existe ' + fn + ' en app-movil/app.js');
+        const abre = ajs.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < ajs.length) {
+            if (ajs[j] === '{') prof++;
+            else if (ajs[j] === '}') { prof--; if (!prof) return ajs.slice(i, j + 1); }
+            j++;
+        }
+        throw new Error('sin cerrar ' + fn);
+    };
 
     /* Un producto vive como maestro + una copia por sucursal. Sin deduplicar, el
        buscador enseña el mismo tequila cuatro veces y no hay forma de saber cuál
@@ -17103,10 +17115,92 @@ console.log('\n══ BH18 · La app móvil ══');
        único lugar donde alguien está pensando en «cómo registra la barra». */
     const inv2 = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
     test('la app se ofrece junto al QR de siempre', () =>
-        eq(inv2.indexOf("'/app-movil/?n='") > -1, true, 'a la vista'));
+        eq(inv2.indexOf("'/app-movil/' + credQR") > -1, true, 'a la vista'));
     test('…con el mismo negocio, token y sucursal del QR', () =>
-        eq(/urlApp = location\.origin \+ '\/app-movil\/\?n=' \+ encodeURIComponent\(negId\) \+ '&t=' \+ encodeURIComponent\(token\)/.test(inv2),
+        eq(/credQR = '\?n=' \+ encodeURIComponent\(negId\) \+ '&t=' \+ encodeURIComponent\(token\)/.test(inv2),
            true, 'mismas credenciales'));
+
+    /* ── INSTALAR: no hay una sola manera, y fingir que sí es lo que estaba mal ──
+       La tarjeta decía «Instalar», se tocaba, y salía un texto. Un botón que no
+       hace lo que dice es peor que no tenerlo. Y en iPhone ni siquiera debía
+       aparecer: Apple no permite instalar nada fuera del App Store, así que ahí
+       lo único que existe es «Agregar a inicio», y la hace la persona —no hay
+       forma de dispararla desde el código. */
+    const inst = fs.readFileSync(path.join(dir, 'instalar.html'), 'utf8');
+    const probar = (ua, tactil) => {
+        const c = { console, navigator: { userAgent: ua }, document: tactil ? { ontouchend: null } : {},
+                    window: { matchMedia: () => ({ matches: false }) } };
+        c.window.navigator = c.navigator; c.window.document = c.document;
+        vm.createContext(c);
+        vm.runInContext(dEx('esIOS') + dEx('esSafari'), c, { filename:'app-movil/app.js' });
+        return { ios: c.esIOS(), safari: c.esSafari() };
+    };
+    const UA_IOS_SAF = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Version/17.5 Mobile/15E148 Safari/604.1';
+    const UA_IOS_CHR = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 CriOS/126.0 Mobile/15E148 Safari/604.1';
+    const UA_IPAD    = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.5 Safari/605.1.15';
+    const UA_ANDROID = 'Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 Chrome/126.0 Mobile Safari/537.36';
+
+    test('un iPhone se reconoce como iPhone', () =>
+        eq(probar(UA_IOS_SAF, false).ios, true, 'iOS'));
+    /* El iPad moderno se anuncia como Mac: lo delata que la pantalla responda al
+       tacto. Sin eso, a un iPad se le enseñan los pasos de Android y no
+       encuentra ninguno de los botones. */
+    test('…y un iPad también, aunque se anuncie como Mac', () =>
+        eq(probar(UA_IPAD, true).ios, true, 'iPad'));
+    test('…pero una Mac de escritorio no', () =>
+        eq(probar(UA_IPAD, false).ios, false, 'escritorio'));
+    /* En iOS TODOS los navegadores usan el motor de Safari, así que buscar
+       «Safari» en el user-agent no distingue: Chrome en iPhone también lo trae.
+       Y desde Chrome, «Agregar a inicio» deja un acceso que vuelve a abrir el
+       navegador, no la app. */
+    test('Chrome en iPhone NO se confunde con Safari', () =>
+        eq(probar(UA_IOS_CHR, false).safari, false, 'distinguidos'));
+    test('…y ahí se le dice que abra Safari, en vez de dar pasos que no sirven', () =>
+        eq(ajs.indexOf('Ábrela en Safari para dejarla en tu pantalla') > -1, true, 'la ruta buena'));
+    test('en Android sí hay botón que instala de verdad', () =>
+        eq(probar(UA_ANDROID, false).ios === false &&
+           ajs.indexOf('_instalador.prompt();') > -1, true, 'de verdad'));
+    /* En iPhone el botón no puede existir: lo que se enseña son los pasos. */
+    test('en iPhone se enseñan los pasos, no un botón que no instala', () =>
+        eq(ajs.indexOf('«Agregar a inicio»</b>.</span></li>') > -1 &&
+           ajs.indexOf("toast('En iPhone") === -1, true, 'sin prometer'));
+    /* Ofrecer instalar lo ya instalado hace dudar de si de verdad quedó. */
+    test('ya instalada, no se ofrece nada', () =>
+        eq(dEx('pintarInstalar').indexOf('if (esStandalone()) { el.hidden = true; return; }') > -1,
+           true, 'callada'));
+    /* EL BUG DE RAÍZ: el atributo `hidden` lo aplica el navegador con un
+       display:none de su hoja por defecto, y CUALQUIER display del autor lo
+       pisa sin avisar. Por eso la tarjeta se veía en iPhone: decía estar
+       escondida y se mostraba igual. */
+    const acss = fs.readFileSync(path.join(dir, 'app.css'), 'utf8');
+    test('el atributo «hidden» gana sobre el display del CSS', () =>
+        eq(/\[hidden\]\s*\{\s*display:\s*none\s*!important/.test(acss), true, 'escondido de verdad'));
+    test('…y la tarjeta ya no trae un display que lo pise', () =>
+        eq(/\.instalar \{[^}]*display:flex/.test(acss), false, 'sin pisar'));
+
+    /* ── La página que se manda por WhatsApp ── */
+    /* El encargado no va a estar parado junto a cada persona del turno
+       explicándole los pasos, y los de iPhone no se parecen a los de Android. */
+    test('hay una página de instalación para mandarle al equipo', () =>
+        eq(inst.indexOf('data-so="ios"') > -1 && inst.indexOf('data-so="android"') > -1, true, 'las dos'));
+    /* Enseñar las dos guías a la vez es la forma más rápida de que nadie siga
+       ninguna: abre en la de SU teléfono y la otra queda a un toque. */
+    test('…y abre en la del teléfono desde el que se lee', () =>
+        eq(inst.indexOf("pintar(ES_IOS ? 'ios' : 'android')") > -1, true, 'la suya'));
+    /* Una app instalada que no sabe de qué negocio es, es un ícono muerto. */
+    test('…llevando las credenciales para que la app abra lista', () =>
+        eq(inst.indexOf("'?n=' + encodeURIComponent(NEG)") > -1, true, 'con credenciales'));
+    test('…y si el enlace llega sin ellas, lo dice', () =>
+        eq(inst.indexOf('A este enlace le faltan los datos del negocio') > -1, true, 'honesto'));
+    /* «¿Por qué no se baja del App Store?» es LA pregunta que va a hacer todo el
+       mundo con un iPhone. Contestarla en la misma página evita que la
+       instalación se quede a medias por desconfianza. */
+    test('…explicando por qué en iPhone no se baja de una tienda', () =>
+        eq(inst.indexOf('Apple no permite instalar ninguna app fuera de su tienda') > -1,
+           true, 'explicado'));
+    const inv3 = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    test('el QR ofrece esa página, no la app cruda', () =>
+        eq(inv3.indexOf("'/app-movil/instalar.html'") > -1, true, 'la que explica'));
 
     /* ── Lo que NO hace, dicho en voz alta ── */
     /* Prometer captura sin señal y no cumplirla es peor que no prometerla: la
