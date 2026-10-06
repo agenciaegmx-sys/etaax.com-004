@@ -1074,11 +1074,25 @@ async function irHistorial(){
             '</div></div>';
     }
 
+    /* LA HORA DE CAPTURA. Los conteos la guardan en `hora`; los movimientos
+       (entradas, mermas, cortesías) no —guardan el momento completo en
+       `registrado`, que es además el campo con el que el ERP decide a qué
+       inventario pertenece cada uno—. Sin ella, la lista solo decía el día y no
+       había forma de saber si un registro cayó antes o después del cierre. */
+    function _horaDe(m){
+        if (m.hora) return m.hora;
+        if (!m.registrado) return '';
+        var d = new Date(m.registrado);
+        if (isNaN(d)) return '';
+        return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+    }
+
     var html = '';
     if (cnts.length){
         html += '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin:16px 0 4px">Ya contados ('+cnts.length+')</div>';
         html += cnts.map(function(c){
-            return fila('📋', c.nombre || '—', (c.fecha||'') + (c.hora ? ' · '+c.hora : ''), c.quien);
+            var hc = _horaDe(c);
+            return fila('📋', c.nombre || '—', (c.fecha||'') + (hc ? ' · '+hc : ''), c.quien);
         }).join('');
     }
     if (movs.length){
@@ -1087,7 +1101,7 @@ async function irHistorial(){
             var cant = m.cantidad ? (m.cantidad + (m.unidad ? ' '+m.unidad : '')) : '';
             return fila(ICONO_MOV[m.concepto] || '•',
                 (m.nombre || '—') + (cant ? '  ·  ' + cant : ''),
-                (NOMBRE_MOV[m.concepto] || m.concepto || '') + ' · ' + (m.fecha||'') + (m.hora ? ' '+m.hora : ''),
+                (NOMBRE_MOV[m.concepto] || m.concepto || '') + ' · ' + (m.fecha||'') + (_horaDe(m) ? ' · '+_horaDe(m) : ''),
                 m.quien);
         }).join('');
     }

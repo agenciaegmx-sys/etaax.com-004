@@ -1521,6 +1521,42 @@ function _preguntarCierreOperativo(inv, ahora) {
 // PERIODO del inventario activo: de la fecha de la REFERENCIA (exclusivo) a la fecha
 // del inventario (inclusivo). Una entrada pertenece al inventario cuyo periodo cubre
 // su fecha → así el primer inventario que abras no se traga TODAS las entradas.
+/* ══ LA HORA DE CAPTURA ════════════════════════════════════════════════════
+   La lista enseñaba solo el día. Y resulta que la hora es el dato que DECIDE:
+   _enPeriodoInvActual reparte cada movimiento entre un inventario y el
+   siguiente comparando el MOMENTO en que se registró contra la hora de cierre.
+   Un inventario cerrado a las 5 pm no se queda con lo que entró ese mismo día
+   a las 8 pm.
+
+   O sea que el sistema ya decidía por hora y la pantalla solo mostraba el día:
+   quien veía un movimiento «del 30 de septiembre» en el inventario de octubre
+   no tenía cómo saber si eso estaba bien o era un error. Ahora se ve.
+
+   EL DÍA DEL MOVIMIENTO NO SIEMPRE ES EL DÍA DE LA CAPTURA: una entrada admite
+   fecha a mano, así que se puede registrar hoy una compra de la semana pasada.
+   Cuando no coinciden se dice —«capturado el 28/07»— porque si no, la hora se
+   leería como la del movimiento y sería peor que no ponerla. */
+function _horaCaptura(fecha, momento) {
+    if (!momento) return '';                       // registro viejo: no se inventa
+    var d = new Date(momento);
+    if (isNaN(d)) return '';
+    var hh = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    var diaCap = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' +
+                 String(d.getDate()).padStart(2, '0');
+    var mismoDia = !fecha || String(fecha).slice(0, 10) === diaCap;
+    return { hora: hh, mismoDia: mismoDia, diaCap: diaCap,
+             txt: mismoDia ? hh : ('cap. ' + diaCap.slice(8) + '/' + diaCap.slice(5, 7) + ' ' + hh) };
+}
+/* El trozo de HTML que va junto a la fecha. Separado para que las tres listas
+   —entradas, mermas y cortesías— no se vayan separando con el tiempo. */
+function _horaCapHTML(e) {
+    var h = _horaCaptura(e && e.fecha, e && e.registrado);
+    if (!h) return '';
+    var t = h.mismoDia ? 'Hora en que se capturó el registro'
+                       : 'Se capturó el ' + h.diaCap + ' a las ' + h.hora + ', con fecha de movimiento ' + (e.fecha || '—');
+    return ' <span style="opacity:.72;font-size:10.5px" title="' + etx(t) + '">· ' + etx(h.txt) + '</span>';
+}
+
 function _enPeriodoInvActual(fecha, momento) {
     if (!invActual) return true;
     var refI = _getRefInv();
@@ -5111,7 +5147,13 @@ function bannerMovsQR() {
         '<div style="margin-top:10px;border-top:1px solid rgba(224,90,58,.22);padding-top:8px;max-height:320px;overflow-y:auto">'
         + movs.map(function (e) {
             var t = _movQRTipo(e);
-            var cuando = (e.fecha || '') + (e.registrado ? ' · ' + String(e.registrado).slice(11, 16) : '');
+            /* OJO: aquí se cortaba el ISO a pelo —slice(11,16)— y eso es la hora
+               en UTC, seis horas adelante de la de la barra. El mismo registro
+               decía 20:35 en este panel y 14:35 en la lista de abajo, y con esa
+               hora nadie podía decidir si cayó antes o después del cierre.
+               Ahora las dos salen del mismo helper, que sí convierte. */
+            var _hc = _horaCaptura(e.fecha, e.registrado);
+            var cuando = (e.fecha || '') + (_hc ? ' · ' + _hc.txt : '');
             return '<div style="display:flex;align-items:baseline;gap:10px;padding:6px 2px;border-bottom:1px solid var(--border);font-size:12.5px">'
                 + '<span style="white-space:nowrap;color:' + t.col + '">' + t.ic + ' ' + t.txt + '</span>'
                 + '<span style="flex:1;min-width:0;color:var(--text)">' + etx(e.nombre || '—')
@@ -8866,7 +8908,9 @@ function verReporteDirectivo(gerencial, modo) {
         const porIns = {};
         (invActual.entradasLog || []).forEach(function(e){
             if (!e || !e.insumoId || !(parseFloat(e.cantidad) > 0)) return;
-            (porIns[e.insumoId] = porIns[e.insumoId] || []).push({ cant: parseFloat(e.cantidad)||0, fecha: e.fecha || '', nota: e.notas || (e.origen === 'qr' ? 'QR' : '') });
+            var _h = _horaCaptura(e.fecha, e.registrado);
+            (porIns[e.insumoId] = porIns[e.insumoId] || []).push({ cant: parseFloat(e.cantidad)||0, fecha: e.fecha || '',
+                hora: _h ? _h.txt : '', nota: e.notas || (e.origen === 'qr' ? 'QR' : '') });
         });
         filasCaptura.forEach(function(f){
             if (!f || !f.insumoId) return;
@@ -8884,7 +8928,8 @@ function verReporteDirectivo(gerencial, modo) {
                 return '<tr>' +
                     '<td style="font-weight:'+(i===0?'600':'400')+'">' + (i===0 ? etx(_nom(id)) : '') + '</td>' +
                     '<td class="tc" style="color:#1a7a4a;font-weight:600">+' + (e.cant % 1 ? e.cant.toFixed(1) : e.cant) + ' ' + _u(id) + '</td>' +
-                    '<td class="tc" style="color:#888">' + (e.fecha || '—') + '</td>' +
+                    '<td class="tc" style="color:#888">' + (e.fecha || '—') +
+                        (e.hora ? ' <span style="font-size:9px">' + etx(e.hora) + '</span>' : '') + '</td>' +
                     '<td style="color:#888">' + etx(e.nota || '') + '</td>' +
                     '<td class="tr" style="color:#888">' + (i===0 ? '<strong style="color:#1a7a4a">+'+(tot % 1 ? tot.toFixed(1) : tot)+' '+_u(id)+'</strong>' : '') + '</td>' +
                 '</tr>';
@@ -9900,7 +9945,7 @@ const fotoTh = _fotosThumbHTML(e);
             return `<div class="ent-log-fila">
                 ${_entNombreCell(e, nombre, (e.mermaTipo === 'producto' ? ' <span style="font-size:9px;color:var(--text-dim)">🍹 producto</span>' : '') + (motivo ? ' <span style="font-size:10px;color:var(--text-dim)">· ' + motivo + '</span>' : ''))}
                 <span class="ent-log-badge" style="color:var(--red);background:rgba(224,90,58,.12);border-color:rgba(224,90,58,.4)">Merma${areaTx}</span>
-                <span class="ent-log-fecha">${e.fecha || '—'}</span>
+                <span class="ent-log-fecha">${e.fecha || '—'}${_horaCapHTML(e)}</span>
                 <span class="ent-log-cant" style="color:var(--red)">−${cant} ${etx(e.unidad || 'pza')}</span>
                 ${fotoTh}
                 <button class="ent-log-del" title="Eliminar" onclick="eliminarEntradaPorId('${e.id}')">🗑️</button>
@@ -9913,7 +9958,7 @@ const fotoTh = _fotosThumbHTML(e);
             return `<div class="ent-log-fila">
                 ${_entNombreCell(e, nombre, '')}
                 <span class="ent-log-badge" style="color:#9b7fe0;background:rgba(124,95,211,.12);border-color:rgba(124,95,211,.4)">${lbl}${areaTx}</span>
-                <span class="ent-log-fecha">${e.fecha || '—'}</span>
+                <span class="ent-log-fecha">${e.fecha || '—'}${_horaCapHTML(e)}</span>
                 <span class="ent-log-cant" style="color:#9b7fe0">−${cant} ${etx(e.unidad || 'pza')}</span>
                 ${fotoTh}
                 <button class="ent-log-del" title="Eliminar" onclick="eliminarEntradaPorId('${e.id}')">🗑️</button>
@@ -9922,7 +9967,7 @@ const fotoTh = _fotosThumbHTML(e);
         return `<div class="ent-log-fila">
             ${_entNombreCell(e, nombre, '')}
             <span class="ent-log-badge" style="color:${color};background:${color}1a;border-color:${color}50">${tipoEntradaLabel(e.tipo)}</span>
-            <span class="ent-log-fecha">${e.fecha || '—'}</span>
+            <span class="ent-log-fecha">${e.fecha || '—'}${_horaCapHTML(e)}</span>
             <span class="ent-log-cant">+${cant} ${_unidadCompra(e)}</span>
             ${fotoTh}
             <button class="ent-log-del" title="Editar registro completo" onclick="abrirEditorEntrada('${e.id}')">✏️</button>

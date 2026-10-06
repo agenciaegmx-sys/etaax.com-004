@@ -16288,6 +16288,127 @@ console.log('\n══ BH14 · La escalera del restaurante ══');
            true, 'explicado donde se lee'));
 }
 
+/* ═══════════ SUITE BH15 · LA HORA DE CAPTURA ═══════════════════════════════
+   Las listas de entradas, mermas y cortesías enseñaban solo el día. Y resulta
+   que la hora es el dato que DECIDE: _enPeriodoInvActual reparte cada
+   movimiento entre un inventario y el siguiente comparando el MOMENTO en que
+   se registró contra la hora de cierre — un inventario cerrado a las 5 pm no
+   se queda con lo que entró ese mismo día a las 8 pm.
+
+   O sea que el sistema ya decidía por hora y la pantalla solo mostraba el día:
+   quien veía un movimiento «del 30 de septiembre» dentro del inventario de
+   octubre no tenía cómo saber si eso estaba bien o era un error.
+
+   El dato ya se guardaba (`registrado`, ISO completo, tanto desde el QR como
+   desde el ERP). No hacía falta capturar nada: hacía falta enseñarlo.          */
+console.log('\n══ BH15 · La hora de captura ══');
+{
+    const inv = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    const ent = fs.readFileSync(path.join(RAIZ, 'entrada.html'), 'utf8');
+    const cuerpo = (src) => (fn) => {
+        const i = src.indexOf('function ' + fn + '(');
+        if (i < 0) throw new Error('no existe ' + fn);
+        const abre = src.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < src.length) {
+            if (src[j] === '{') prof++;
+            else if (src[j] === '}') { prof--; if (!prof) return src.slice(i, j + 1); }
+            j++;
+        }
+        throw new Error('sin cerrar ' + fn);
+    };
+    const dI = cuerpo(inv);
+
+    /* Se corre el formateador de verdad. */
+    const cx = { console, Date, String, Number, isNaN };
+    cx.window = cx;
+    vm.createContext(cx);
+    vm.runInContext('function etx(s){return String(s==null?"":s);}' + dI('_horaCaptura') + dI('_horaCapHTML'),
+                    cx, { filename:'inventarios.js (extracto)' });
+    const ver = (e) => cx._horaCapHTML(e).replace(/<[^>]+>/g, '').trim();
+    /* La hora local del equipo: el ISO va en UTC y lo que importa es la hora a
+       la que la barra registró, no la de Greenwich. Se calcula aquí para que la
+       prueba no dependa de en qué zona corra. */
+    const local = (iso) => { const d = new Date(iso);
+        return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); };
+    const ISO = '2026-10-03T20:35:00Z';
+    const diaLocal = (() => { const d = new Date(ISO);
+        return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); })();
+
+    test('la lista ya dice a qué hora se capturó', () =>
+        eq(ver({ fecha: diaLocal, registrado: ISO }), '· ' + local(ISO), 'con hora'));
+    /* EL ERROR QUE TENÍA EL PANEL DE MOVIMIENTOS QR: cortaba el ISO a pelo
+       —slice(11,16)— y eso es la hora en UTC, seis horas adelante de la de la
+       barra. El mismo registro decía 20:35 arriba y 14:35 abajo, y con esa hora
+       nadie puede decidir si cayó antes o después del cierre. */
+    test('…en la hora del negocio, no en UTC', () =>
+        eq(ver({ fecha: diaLocal, registrado: ISO }).indexOf('20:35') === -1 ||
+           local(ISO) === '20:35', true, 'convertida'));
+    test('…y el panel de movimientos del QR usa el mismo formateador', () =>
+        eq(inv.indexOf("String(e.registrado).slice(11, 16)") === -1 &&
+           /var _hc = _horaCaptura\(e\.fecha, e\.registrado\)/.test(inv), true, 'uno solo'));
+
+    /* El día del movimiento no siempre es el de la captura: una entrada admite
+       fecha a mano, así que hoy se puede registrar una compra de la semana
+       pasada. Si no se dijera, la hora se leería como la del movimiento. */
+    test('cuando se capturó otro día, se dice', () =>
+        eq(ver({ fecha:'2026-07-26', registrado: ISO }).indexOf('cap.') > -1, true, 'sin confundir'));
+    test('…con la fecha completa en el detalle', () =>
+        eq(cx._horaCapHTML({ fecha:'2026-07-26', registrado: ISO })
+             .indexOf('con fecha de movimiento 2026-07-26') > -1, true, 'explicado'));
+
+    /* Un registro viejo no trae `registrado`. Inventarle una hora sería peor
+       que no ponerla: se decidiría con un dato falso. */
+    test('un registro sin momento no inventa una hora', () =>
+        eq(ver({ fecha:'2026-07-26' }), '', 'callado'));
+    test('…ni uno con el momento corrupto', () =>
+        eq(ver({ fecha:'2026-07-26', registrado:'no-es-fecha' }), '', 'callado'));
+    /* El caso traicionero: new Date(null) NO es Invalid Date, es el 31 de
+       diciembre de 1969. Sin el guardián de arriba, un registro con el campo en
+       null pintaría «cap. 31/12 18:00» como si fuera un dato — lo destapó la
+       batería, porque el isNaN solo no lo atrapa. */
+    test('…ni uno con el momento en null, que daría 1969', () =>
+        eq(ver({ fecha:'2026-07-26', registrado:null }) === '' &&
+           ver({ fecha:'2026-07-26', registrado:0 }) === '', true, 'sin 1969'));
+
+    /* Las tres listas —entradas, mermas y cortesías— por el mismo camino, para
+       que no se vayan separando con el tiempo. */
+    test('las tres listas la muestran', () =>
+        eq((inv.match(/\$\{e\.fecha \|\| '—'\}\$\{_horaCapHTML\(e\)\}/g) || []).length, 3, 'las tres'));
+    /* Y el QR del celular, que es donde se captura: ahí el movimiento no guarda
+       `hora` como los conteos, guarda el momento completo. */
+    test('el registro del celular también la muestra', () =>
+        eq(ent.indexOf('function _horaDe(m)') > -1 &&
+           ent.indexOf("if (m.hora) return m.hora;") > -1 &&
+           ent.indexOf('_horaDe(m)') > -1, true, 'en el QR'));
+    test('…convirtiendo el momento a hora local, no cortando el texto', () =>
+        eq(ent.indexOf('d.getHours()).padStart(2,\'0\')') > -1 &&
+           ent.indexOf("m.registrado).slice(11") === -1, true, 'convertida'));
+    /* La RPC ya devolvía el campo: no hizo falta migración ni capturar nada
+       nuevo. Si alguien lo quitara del SELECT, la hora desaparecería del
+       celular sin que nada más se rompiera. */
+    test('la consulta del QR sigue devolviendo el momento', () =>
+        eq(fs.readFileSync(path.join(RAIZ, 'supabase-migration-v53.sql'), 'utf8')
+             .indexOf("'registrado', COALESCE(e.datos->>'registrado', e.created_at::text)") > -1,
+           true, 'viene del servidor'));
+    /* El impreso de entradas es lo que se firma al revisar el inventario. */
+    test('el reporte impreso de entradas también la lleva', () =>
+        eq(inv.indexOf("hora: _h ? _h.txt : ''") > -1 &&
+           inv.indexOf("(e.hora ? ' <span style=\"font-size:9px\">' + etx(e.hora)") > -1, true, 'auditable'));
+
+    /* ── El panel financiero, en el mismo orden que la barra ── */
+    /* El panel decía un orden y la barra decía otro: quien entra por el panel
+       no encontraba la pantalla con la que se abre la junta, que estaba hasta
+       abajo dentro de «KPIs ejecutivos». */
+    const fin = fs.readFileSync(path.join(RAIZ, 'financiero/index.html'), 'utf8');
+    const nav = fs.readFileSync(path.join(RAIZ, 'financiero/nav.js'), 'utf8');
+    test('el panel abre con Resumen de Resultados, como la barra', () =>
+        eq(fin.indexOf('resumen.html') < fin.indexOf('ventas.html') &&
+           nav.indexOf('resumen.html') < nav.indexOf('ventas.html'), true, 'mismo orden'));
+    test('…y no quedó duplicado donde estaba', () =>
+        eq((fin.match(/href="resumen\.html"/g) || []).length, 1, 'una vez'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');

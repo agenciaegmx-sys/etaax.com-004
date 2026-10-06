@@ -52,6 +52,7 @@
         .cf-section:nth-child(2) { animation-delay: .05s; }
         .cf-section:nth-child(3) { animation-delay: .10s; }
         .cf-section:nth-child(4) { animation-delay: .15s; }
+        .cf-section:nth-child(5) { animation-delay: .20s; }
         .cf-section-hdr {
             display: flex; align-items: flex-end; gap: 14px;
             margin-bottom: 14px;
@@ -186,6 +187,30 @@
 
     <div class="cf-modules">
 
+        <!-- ══ 0: RESULTADOS ══
+             Va primero, igual que en la barra lateral: es donde se empieza a
+             leer el mes. Estaba hasta abajo, dentro de «KPIs ejecutivos», y el
+             panel decía un orden mientras la barra decía otro — quien entra por
+             el panel no encontraba la pantalla con la que se abre la junta. -->
+        <div class="cf-section">
+            <div class="cf-section-hdr">
+                <span class="cf-section-tag">Resultados</span>
+                <div class="cf-section-title">Dónde empieza el mes</div>
+                <div class="cf-section-desc">El estado de resultados del período, con su proyección al lado.</div>
+            </div>
+            <div class="cf-grid">
+                <a href="resumen.html" class="cf-card">
+                    <div class="cf-card-hdr">
+                        <div class="cf-card-icon">🧮</div>
+                        <span class="cf-badge-active">Activo</span>
+                    </div>
+                    <div class="cf-card-title">Resumen de Resultados</div>
+                    <div class="cf-card-desc">El estado de resultados del período en una pantalla: ventas, costo de cocina y de barra, utilidad bruta, costo primo, nómina, fijos y utilidad neta, cada renglón con su porcentaje y un Score contra tus metas. Cada concepto se abre para ver los movimientos que lo suman. Al lado, una columna de proyección: mueves cualquier renglón y ves cuánta utilidad cambia.</div>
+                    <div class="cf-card-cta">Abrir →</div>
+                </a>
+            </div>
+        </div>
+
         <!-- ══ 1: CAPTURA OPERATIVA ══ -->
         <div class="cf-section">
             <div class="cf-section-hdr">
@@ -252,18 +277,6 @@
                 <div class="cf-section-desc">Tablero de control con los indicadores clave del negocio en tiempo real.</div>
             </div>
             <div class="cf-grid">
-                <!-- Va PRIMERO en su sección: es la pantalla donde se empieza a
-                     leer el mes. KPIs es el detalle de la distribución; esto es
-                     el resultado y qué pasaría si se moviera. -->
-                <a href="resumen.html" class="cf-card">
-                    <div class="cf-card-hdr">
-                        <div class="cf-card-icon">🧮</div>
-                        <span class="cf-badge-active">Activo</span>
-                    </div>
-                    <div class="cf-card-title">Resumen de Resultados</div>
-                    <div class="cf-card-desc">El estado de resultados del período en una pantalla: ventas, food cost, nómina, fijos y utilidad con sus porcentajes y un Score contra tus metas. Al lado, una columna de proyección: mueves cualquier renglón y ves cuánta utilidad cambia.</div>
-                    <div class="cf-card-cta">Abrir →</div>
-                </a>
                 <a href="kpis.html" class="cf-card">
                     <div class="cf-card-hdr">
                         <div class="cf-card-icon">🎯</div>
