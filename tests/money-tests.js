@@ -9744,13 +9744,28 @@ console.log('\n══ BE3 · El tema, uno solo para todo el sistema ══');
 
     /* Las páginas de la APP (las que tienen sesión) tienen que seguir el tema.
        Las públicas —la landing y el formulario de evaluación que se abre por
-       link— viven con su propio diseño y quedan fuera a propósito. */
-    const PUBLICAS = ['index.html', 'evaluacion.html'];
+       link— viven con su propio diseño y quedan fuera a propósito.
+
+       Y la APP MÓVIL también, por una razón distinta: es una PWA que se instala
+       en el teléfono de la barra y arranca OSCURA aunque la computadora del
+       encargado esté en claro. Son dos aparatos y dos luces —una barra de noche
+       y una oficina de día—; compartir la preferencia haría que cambiar el tema
+       en la oficina deslumbrara al barman. Lleva su propio interruptor, con su
+       propia clave. */
+    const PUBLICAS = ['index.html', 'evaluacion.html', 'app-movil/index.html'];
     const sinTema = paginas.filter(function (p) {
         if (PUBLICAS.indexOf(p) > -1) return false;
         const s = fs.readFileSync(path.join(RAIZ, p), 'utf8');
         if (s.split('\n').length < 25 && /location\.(replace|href)|http-equiv="refresh"/.test(s)) return false;
         return s.indexOf('/theme.js') === -1;
+    });
+    /* La excepción, con candado: si la app móvil guardara su tema bajo la clave
+       compartida, los dos aparatos se pisarían la preferencia sin que nadie
+       entendiera por qué. */
+    test('la app móvil guarda su tema aparte, no en la clave compartida', () => {
+        const am = fs.readFileSync(path.join(RAIZ, 'app-movil/app.js'), 'utf8');
+        return eq(am.indexOf("'etaax_appmovil_tema'") > -1 && am.indexOf('etaax_theme') === -1,
+                  true, 'su propia clave');
     });
     test('todas las pantallas de la app cargan el tema compartido', () =>
         eq(sinTema.join(', '), '', 'sin rezagadas'));
@@ -16851,6 +16866,260 @@ console.log('\n══ BH17 · Cada quien ve su área ══');
     const ijs = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.js'), 'utf8');
     test('…y un insumo con un área vieja no la pierde al abrirlo', () =>
         eq(ijs.indexOf("op.textContent = nom + ' (como estaba)';") > -1, true, 'sin borrar'));
+}
+
+/* ═══════════ SUITE BH18 · LA APP MÓVIL ═════════════════════════════════════
+   Lo que hoy se hace escaneando el QR en el navegador, instalable: ícono en la
+   pantalla de inicio, sin barra de navegador y abriendo al instante aunque la
+   señal esté mala.
+
+   LA REGLA QUE ESTA SUITE CUIDA: la app NO reimplementa el negocio. Llama a las
+   mismas funciones del servidor que entrada.html y usa el mismo vocabulario de
+   áreas. El día que tenga sus propias reglas, tendremos dos sistemas diciendo
+   cosas distintas sobre el mismo inventario — y el que esté equivocado será
+   siempre el que nadie está mirando.                                          */
+console.log('\n══ BH18 · La app móvil ══');
+{
+    const dir = path.join(RAIZ, 'app-movil');
+    const ajs = fs.readFileSync(path.join(dir, 'app.js'), 'utf8');
+    const ah  = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
+    const sw  = fs.readFileSync(path.join(dir, 'sw.js'), 'utf8');
+    const man = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.webmanifest'), 'utf8'));
+    const ent = fs.readFileSync(path.join(RAIZ, 'entrada.html'), 'utf8');
+
+    /* ── No reimplementa el negocio ── */
+    /* Las RPC son el contrato con el servidor: si la app llamara a otras, o a
+       las mismas con otros datos, los dos caminos empezarían a divergir. */
+    ['entrada_validar_nip', 'portal_perfil', 'entrada_insumos', 'entrada_recetas',
+     'entrada_registrar', 'inventario_conteo_registrar', 'entrada_historial'].forEach(rpc => {
+        test('usa la misma consulta del servidor: ' + rpc, () =>
+            eq(ajs.indexOf("'" + rpc + "'") > -1 && ent.indexOf("'" + rpc + "'") > -1, true, 'la misma'));
+    });
+    /* El área decide qué ve cada quien. Una copia de esa regla aquí es un
+       colaborador viendo la pantalla equivocada el día que cambie una de las
+       dos. */
+    test('el área sale del mismo vocabulario, no de una copia', () =>
+        eq(ah.indexOf('../staff-area.js') > -1 && ajs.indexOf('StaffArea.veInsumo') > -1, true, 'fuente única'));
+    test('…resolviendo el perfil con la jerarquía completa', () =>
+        eq(ajs.indexOf("StaffArea.de({ area: crudo, rol: p.rol, puesto: p.puesto })") > -1, true, 'área, rol y puesto'));
+    /* El relleno de 'administracion' de portal_perfil manda a todos a ver el
+       negocio entero: es el mismo error que ya se corrigió en el QR. */
+    test('…descartando el relleno de la consulta', () =>
+        eq(ajs.indexOf("(p.area === 'administracion' ? '' : p.area)") > -1, true, 'sin inventar'));
+    /* Cambiar el hash dejaría a TODOS fuera sin que nada más se rompiera. Se
+       exige la LLAMADA, no la cadena suelta: el comentario que explica la regla
+       también la nombra, y con eso el candado daba verde sobre el código
+       mutado. Sexta vez que un test mío caza su propia explicación; de ahí que
+       aquí se pida el encode( completo. */
+    const _salt = "TextEncoder().encode('etaax-staff|nip|' + pin)";
+    test('el NIP se verifica con el mismo hash que el resto del sistema', () =>
+        eq(ajs.indexOf(_salt) > -1 && ent.indexOf("encode('etaax-staff|nip|' + pin)") > -1,
+           true, 'el mismo'));
+    /* La ruta la valida la política del bucket (v28): cambiarla haría que el
+       servidor rechace la subida sin decir por qué. */
+    test('la foto sube a la ruta que valida el servidor', () =>
+        eq(ajs.indexOf("NEG + '/entradas/' + TOKEN + '/'") > -1, true, 'la ruta buena'));
+    test('…al bucket privado, no al público', () =>
+        eq(ajs.indexOf("'evidencias-priv'") > -1 && ajs.indexOf("from('evidencias')") === -1, true, 'privado'));
+
+    /* ── Se corre la lógica de la app ── */
+    const cx = { console, Date, Math, String, Number, JSON, parseFloat, isNaN, Object, Array,
+                 URLSearchParams, crypto: { subtle: {} }, TextEncoder,
+                 localStorage: { getItem: () => null, setItem(){}, removeItem(){} },
+                 location: { search: '?n=neg1&t=tok1&s=suc_2', origin: 'https://etaax.com' },
+                 navigator: { onLine: true },
+                 setTimeout, clearTimeout, URL };
+    cx.window = cx;
+    const _els = {};
+    const _el = (id) => _els[id] || (_els[id] = { innerHTML:'', textContent:'', value:'', hidden:false, style:{},
+                                                  classList:{ toggle(){}, add(){}, remove(){} },
+                                                  focus(){}, setAttribute(){}, getAttribute(){ return null; },
+                                                  querySelector(){ return null; } });
+    cx.document = { getElementById: _el, documentElement: { getAttribute: () => 'oscuro', setAttribute(){} },
+                    querySelector: () => null, createElement: () => ({ style:{}, getContext: () => ({}) }),
+                    addEventListener(){}, body: { classList:{ toggle(){}, add(){}, remove(){} } } };
+    cx.addEventListener = () => {};
+    vm.createContext(cx);
+    vm.runInContext(fs.readFileSync(path.join(RAIZ, 'staff-area.js'), 'utf8'), cx, { filename:'staff-area.js' });
+    vm.runInContext(ajs, cx, { filename:'app-movil/app.js' });
+    const A = cx.window._appMovil;
+
+    /* Un producto vive como maestro + una copia por sucursal. Sin deduplicar, el
+       buscador enseña el mismo tequila cuatro veces y no hay forma de saber cuál
+       tocar. */
+    test('el buscador enseña UN producto por producto, no uno por sucursal', () => {
+        A._set('SUC', 'suc_2');
+        const r = A.unoPorProducto([
+            { id:'m', nombre:'Don Julio' },
+            { id:'c1', origenId:'m', nombre:'Don Julio', sucursales:['suc_1'] },
+            { id:'c2', origenId:'m', nombre:'Don Julio', sucursales:['suc_2'] }
+        ]);
+        return eq(r.length, 1, 'uno solo');
+    });
+    /* Y el que queda tiene que ser el de SU sucursal: quedarse con el maestro
+       enseñaría precios y tamaños de otra. */
+    test('…y es la copia de SU sucursal', () => {
+        A._set('SUC', 'suc_2');
+        const r = A.unoPorProducto([
+            { id:'m', nombre:'Don Julio' },
+            { id:'c2', origenId:'m', nombre:'Don Julio', sucursales:['suc_2'] }
+        ]);
+        return eq(r[0].id, 'c2', 'la suya');
+    });
+    test('un insumo de otra sucursal no se lista', () => {
+        A._set('SUC', 'suc_2');
+        return eq(A.enSuc({ id:'x', sucursales:['suc_1'] }), false, 'fuera');
+    });
+
+    /* ── Cada quien ve lo suyo, igual que en el QR ── */
+    test('al de barra no se le cuela un insumo de cocina', () => {
+        A._set('AREA_COLAB', 'barra'); A._set('FLUJO', 'entrada'); A._set('SUB', {});
+        return eq(A.visible({ nombre:'Harina', area:'cocina' }), false, 'fuera');
+    });
+    /* La producción propia casi nunca tiene área capturada: su familia —que el
+       sistema escribe solo— dice si es de barra o de cocina. */
+    test('…ni una salsa de producción propia', () => {
+        A._set('AREA_COLAB', 'barra'); A._set('FLUJO', 'entrada'); A._set('SUB', {});
+        return eq(A.visible({ nombre:'Salsa de tomate', familia:'Alimentos', area:'' }), false, 'por su familia');
+    });
+    test('…y sí lo suyo', () => {
+        A._set('AREA_COLAB', 'barra');
+        return eq(A.visible({ nombre:'Ginebra', area:'barra' }) &&
+                  A.visible({ nombre:'Tónica reserva', area:'almacen_barra' }), true, 'lo suyo');
+    });
+    test('en mermas de producto, el barman solo ve bebidas', () => {
+        A._set('AREA_COLAB', 'barra'); A._set('FLUJO', 'merma'); A._set('SUB', { que:'producto' });
+        return eq(A.visible({ nombre:'Negroni', tipo:'bebidas' }) &&
+                  !A.visible({ nombre:'Tacos', tipo:'alimentos' }), true, 'su carta');
+    });
+    test('al de barra se le ofrecen SOLO su área y su almacén', () => {
+        A._set('AREA_COLAB', 'barra');
+        return eq(A.areasPermitidas().join(','), 'barra,almacen_barra', 'lo suyo');
+    });
+    /* Esconder el chip no es negarlo: se compara contra la lista, que es lo que
+       de verdad autoriza.
+
+       OJO CON ESTA PRUEBA: el repintado TAMBIÉN corrige un área fuera de lista,
+       así que correr setArea y mirar el resultado da verde con el guardián
+       puesto y sin él —lo destapó la batería—. Por eso se exige además la línea
+       que niega: es la que impide que una llamada desde la consola, o un chip
+       que sobreviva a un repintado, cuele un área ajena. */
+    test('…y elegir otra área se NIEGA, no solo se esconde', () => {
+        A._set('AREA_COLAB', 'barra'); A._set('AREA', 'barra');
+        A.setArea('almacen_cocina');
+        return eq(A._get('AREA') === 'barra' &&
+                  ajs.indexOf('if (areasPermitidas().indexOf(a) < 0) return;') > -1, true, 'negado');
+    });
+
+    /* ── Lo que se manda al servidor ── */
+    test('el registro lleva el sello de sucursal y de área', () => {
+        A._set('AREA_COLAB', 'barra'); A._set('AREA', 'barra'); A._set('SUC', 'suc_2');
+        A._set('FLUJO', 'entrada'); A._set('FOTOS', []);
+        const r = A.armarRegistro({ id:'i1', insumoId:'ins1', nombre:'Ginebra', cantidad:2, unidad:'BOT', tipo:'compra' });
+        return eq(r.sucursalId === 'suc_2' && r.area === 'barra' && r.concepto === 'entrada', true, 'sellado');
+    });
+    /* La hora de captura es la que decide a qué inventario pertenece el
+       movimiento. Sin ella, el ERP tiene que repartir por día. */
+    test('…y su momento de captura', () => {
+        A._set('FLUJO', 'merma'); A._set('FOTOS', []);
+        const r = A.armarRegistro({ id:'i2', insumoId:'ins2', nombre:'Mezcal', cantidad:1, unidad:'PZA',
+                                    motivo:'se_rompio', mermaTipo:'insumo' });
+        return eq(/^\d{4}-\d{2}-\d{2}T/.test(r.registrado) && /^\d{2}:\d{2}$/.test(r.hora), true, 'con hora');
+    });
+    /* Una merma de PRODUCTO del menú no descuenta un insumo: va con recetaId, y
+       confundirlos descontaría del almacén algo que no salió de ahí. */
+    test('una merma de producto va con recetaId, no con insumoId', () => {
+        A._set('FLUJO', 'merma'); A._set('FOTOS', []);
+        const r = A.armarRegistro({ id:'i3', insumoId:'rec9', nombre:'Negroni', cantidad:1, unidad:'PZA',
+                                    motivo:'otro', mermaTipo:'producto' });
+        return eq(r.recetaId === 'rec9' && r.insumoId === '', true, 'sin confundir');
+    });
+    test('un préstamo y una cortesía se distinguen en el registro', () => {
+        A._set('FLUJO', 'salida'); A._set('FOTOS', []);
+        const r = A.armarRegistro({ id:'i4', insumoId:'ins4', nombre:'Aperol', cantidad:2, unidad:'OZ',
+                                    salidaTipo:'prestamo' });
+        return eq(r.concepto === 'salida' && r.salidaTipo === 'prestamo', true, 'distinguidos');
+    });
+    /* La hora se convierte a la del negocio. Cortar el texto del ISO da la hora
+       de Greenwich: seis horas corrida, y con esa no se puede decir si un
+       movimiento cayó antes o después del cierre. */
+    test('el historial convierte la hora, no corta el texto del ISO', () =>
+        eq(ajs.indexOf("String(d.getHours()).padStart(2, '0')") > -1 &&
+           /registrado\)\.slice\(11/.test(ajs) === false, true, 'convertida'));
+
+    /* ── Instalable ── */
+    test('se puede instalar: trae manifest y se declara independiente', () =>
+        eq(man.display === 'standalone' && ah.indexOf('rel="manifest"') > -1, true, 'instalable'));
+    test('…con sus íconos, incluido el recortable de Android', () => {
+        const ps = man.icons.map(i => i.purpose).join(' ');
+        return eq(man.icons.length >= 3 && ps.indexOf('maskable') > -1, true, 'con íconos');
+    });
+    ['icono-192.png', 'icono-512.png', 'icono-maskable.png'].forEach(ic => {
+        test('…y el archivo ' + ic + ' existe de verdad', () =>
+            eq(fs.existsSync(path.join(dir, 'icons', ic)), true, 'existe'));
+    });
+    /* El acceso instalado abre la raíz, SIN los parámetros del QR. Sin guardar
+       las credenciales, el ícono sería una pantalla muerta y habría que volver a
+       escanear cada vez — justo lo que la instalación viene a evitar. */
+    test('el ícono instalado no pierde el negocio ni el token', () =>
+        eq(ajs.indexOf("localStorage.setItem(LS, JSON.stringify({ n: NEG, t: TOKEN, s: SUC }))") > -1,
+           true, 'recordado'));
+    /* Pero el NIP se pide siempre: el teléfono de la barra lo usan varias
+       personas y el NIP es lo que dice quién registró qué. */
+    test('…pero el NIP se sigue pidiendo en cada apertura', () =>
+        eq(ajs.indexOf('localStorage.setItem') > -1 && /NIPHASH[^\n]*localStorage/.test(ajs) === false,
+           true, 'sin guardar el NIP'));
+
+    /* ── El service worker ── */
+    /* Un catálogo o un historial servidos desde la caché serían un inventario
+       viejo presentado como actual: alguien contaría contra existencias de hace
+       tres días sin enterarse. */
+    test('el service worker guarda la cáscara, NO los datos', () =>
+        eq(sw.indexOf('if (url.origin !== self.location.origin) return;') > -1, true, 'solo la cáscara'));
+    test('…y nunca intercepta un registro', () =>
+        eq(sw.indexOf("if (req.method !== 'GET') return;") > -1, true, 'sin tocar escrituras'));
+    /* addAll falla entero si UN archivo falla, y entonces no se guarda nada. */
+    /* Se exige la LLAMADA, no la ausencia de la palabra: el comentario que
+       explica por qué no se usa addAll también la nombra. Quinta vez que un
+       test mío caza su propia explicación — por eso ahora se busca `c.addAll(`,
+       que es la llamada, y no el texto suelto. */
+    test('…guardando lo que sí se pueda si un archivo falla', () =>
+        eq(sw.indexOf('c.add(u).catch(') > -1 && /\bc\.addAll\(/.test(sw) === false, true, 'uno por uno'));
+    test('…y limpiando sus versiones viejas al activarse', () =>
+        eq(sw.indexOf("k.indexOf('etaax-movil-') === 0) ? caches.delete(k)") > -1, true, 'sin basura'));
+    /* El resto de los .js van con stale-while-revalidate de una semana. Para un
+       service worker eso deja la app instalada congelada en la cáscara anterior
+       hasta que a alguien se le ocurra borrar los datos del sitio. */
+    const nt = fs.readFileSync(path.join(RAIZ, 'netlify.toml'), 'utf8');
+    test('el service worker se sirve SIN caché', () =>
+        eq(/for = "\/app-movil\/sw\.js"[\s\S]{0,160}no-cache/.test(nt), true, 'siempre fresco'));
+    /* Netlify aplica todas las reglas que casan y gana la ÚLTIMA: si este bloque
+       fuera antes del de /*.js, no serviría de nada. */
+    test('…y esa regla va DESPUÉS de la de todos los .js', () =>
+        eq(nt.indexOf('for = "/app-movil/sw.js"') > nt.indexOf('for = "/*.js"'), true, 'en orden'));
+
+    /* ── Que se pueda encontrar ── */
+    /* Si no se ofrece junto al QR, nadie la va a encontrar: ese modal es el
+       único lugar donde alguien está pensando en «cómo registra la barra». */
+    const inv2 = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    test('la app se ofrece junto al QR de siempre', () =>
+        eq(inv2.indexOf("'/app-movil/?n='") > -1, true, 'a la vista'));
+    test('…con el mismo negocio, token y sucursal del QR', () =>
+        eq(/urlApp = location\.origin \+ '\/app-movil\/\?n=' \+ encodeURIComponent\(negId\) \+ '&t=' \+ encodeURIComponent\(token\)/.test(inv2),
+           true, 'mismas credenciales'));
+
+    /* ── Lo que NO hace, dicho en voz alta ── */
+    /* Prometer captura sin señal y no cumplirla es peor que no prometerla: la
+       barra captura una merma, se va tranquila y el dato nunca existió. */
+    test('sin señal lo dice, no finge que guardó', () =>
+        eq(ajs.indexOf('Sin internet. Tu lista NO se ha perdido') > -1, true, 'honesto'));
+    test('…y el README dice que todavía no captura offline', () =>
+        eq(fs.readFileSync(path.join(dir, 'README.md'), 'utf8').indexOf('No captura sin señal') > -1,
+           true, 'sin promesas'));
+    /* Perder en silencio una merma de una botella de mezcal es peor que pedir
+       que se vuelva a tocar el botón. */
+    test('lo que falla se queda en la lista para reintentar', () =>
+        eq(ajs.indexOf('LOTE = fallidos; pintarLote();') > -1, true, 'sin perder nada'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

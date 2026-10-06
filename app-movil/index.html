@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es" data-tema="oscuro">
+<head>
+<meta charset="UTF-8">
+<!-- viewport-fit=cover + los safe-area del CSS: sin esto, en un iPhone la barra
+     de acciones de abajo queda tapada por la rayita del gesto de inicio. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#13120f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ETAAX Registro">
+<title>ETAAX · Registro de barra y cocina</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icono-192.png">
+<link rel="apple-touch-icon" href="icons/icono-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<!-- ══ CABECERA ══════════════════════════════════════════════════════════════
+     Fija arriba porque en estas pantallas uno se pierde: el título dice SIEMPRE
+     en qué flujo está parado y quién lo está registrando. -->
+<header class="hdr" id="hdr">
+    <button class="hdr-volver" id="btnVolver" onclick="irMenu()" hidden>←</button>
+    <div class="hdr-txt">
+        <div class="hdr-tit" id="hdrTit">Registro</div>
+        <div class="hdr-sub" id="hdrSub">barra / cocina</div>
+    </div>
+    <button class="hdr-tema" onclick="toggleTema()" aria-label="Cambiar tema"><span id="temaIco">☀️</span></button>
+</header>
+
+<main id="main">
+
+<!-- ══ 1 · ENTRAR CON EL NIP ═════════════════════════════════════════════════
+     Teclado propio, no el del sistema: con dedos mojados y en media luz, cinco
+     botones grandes se aciertan y un campo de texto no. -->
+<section class="pant" id="pLogin">
+    <div class="marca"><img src="icons/icono-192.png" alt="" width="54" height="54"><div>
+        <div class="marca-n">ETAAX</div><div class="marca-s">Registro de barra y cocina</div></div></div>
+
+    <div class="nip-wrap">
+        <div class="nip-lbl">Tu NIP de 5 dígitos</div>
+        <div class="nip-puntos" id="nipPuntos" aria-live="polite"></div>
+        <div class="nip-msg" id="nipMsg"></div>
+    </div>
+
+    <div class="teclado" id="teclado"></div>
+    <div class="avisos" id="loginAviso"></div>
+</section>
+
+<!-- ══ 2 · MENÚ ══════════════════════════════════════════════════════════════ -->
+<section class="pant" id="pMenu" hidden>
+    <div class="quien" id="quienCard"></div>
+    <div class="menu">
+        <button class="mcard" onclick="abrirFlujo('entrada')">
+            <span class="mcard-ico">📦</span>
+            <span class="mcard-txt"><b>Entrada de insumos</b>
+                <small>Llegó mercancía: compra, bonificación, consignación o préstamo pagado</small></span>
+        </button>
+        <button class="mcard" onclick="abrirFlujo('merma')">
+            <span class="mcard-ico">🍷</span>
+            <span class="mcard-txt"><b>Merma</b>
+                <small>Se rompió, se derramó o se desperdició un insumo o un producto del menú</small></span>
+        </button>
+        <button class="mcard" onclick="abrirFlujo('salida')">
+            <span class="mcard-ico">🎁</span>
+            <span class="mcard-txt"><b>Cortesía o préstamo</b>
+                <small>Salió algo sin ser venta: cortesía a un cliente o préstamo a otra área</small></span>
+        </button>
+        <button class="mcard" onclick="abrirFlujo('conteo')">
+            <span class="mcard-ico">📋</span>
+            <span class="mcard-txt"><b>Contar existencias</b>
+                <small>Cuenta botellas o pésalas antes del inventario</small></span>
+        </button>
+        <button class="mcard mcard-sec" onclick="abrirHistorial()">
+            <span class="mcard-ico">🧾</span>
+            <span class="mcard-txt"><b>Lo registrado</b>
+                <small>Todo lo capturado desde el último inventario</small></span>
+        </button>
+    </div>
+    <div class="instalar" id="instalar" hidden>
+        <div><b>Instálala en el teléfono</b><small>Queda un ícono y ya no hay que escanear el QR cada vez.</small></div>
+        <button class="btn btn-sec" onclick="instalar()">Instalar</button>
+    </div>
+    <button class="salir" onclick="salir()">Cerrar sesión</button>
+</section>
+
+<!-- ══ 3 · CAPTURA (los cuatro flujos comparten esta pantalla) ════════════════
+     Son el mismo gesto —elegir producto, poner cuánto, agregar al lote— y
+     mantenerlos en una sola pantalla es lo que evita que se vayan separando. -->
+<section class="pant" id="pFlujo" hidden>
+    <div id="flujoArea" class="chips-area"></div>
+    <div id="flujoExtra"></div>
+
+    <label class="lbl" for="buscar">Producto</label>
+    <input class="campo" id="buscar" type="search" autocomplete="off"
+           placeholder="Escribe para buscar…" oninput="buscar(this.value)">
+    <div class="sugs" id="sugs"></div>
+
+    <div id="elegido" hidden>
+        <div class="elegido-card">
+            <div class="elegido-nom" id="elegidoNom"></div>
+            <button class="elegido-x" onclick="limpiarElegido()" aria-label="Quitar">✕</button>
+        </div>
+        <div class="fila">
+            <div style="flex:1.2">
+                <label class="lbl" for="cant">Cantidad</label>
+                <input class="campo campo-num" id="cant" type="text" inputmode="decimal" placeholder="0">
+            </div>
+            <div style="flex:1" id="boxUnidad">
+                <label class="lbl" for="unidad">Unidad</label>
+                <select class="campo" id="unidad"></select>
+            </div>
+        </div>
+        <div id="camposFlujo"></div>
+        <button class="btn btn-add" onclick="agregarAlLote()">+ Agregar a la lista</button>
+    </div>
+
+    <div class="lote" id="lote"></div>
+
+    <label class="lbl" for="nota">Comentario <span class="opt">opcional</span></label>
+    <textarea class="campo" id="nota" rows="2" placeholder="Lo que haga falta explicar…"></textarea>
+
+    <div class="fotos-wrap">
+        <label class="lbl">Fotos <span class="opt">opcional · hasta 10</span></label>
+        <div class="fotos" id="fotos"></div>
+        <label class="btn btn-sec btn-foto">
+            📷 Agregar foto
+            <input type="file" accept="image/*" capture="environment" multiple hidden onchange="tomarFoto(this)">
+        </label>
+    </div>
+</section>
+
+<!-- ══ 4 · LO REGISTRADO ═════════════════════════════════════════════════════ -->
+<section class="pant" id="pHist" hidden>
+    <div class="hist-sub" id="histSub">Cargando…</div>
+    <div class="hist-chips" id="histChips"></div>
+    <div id="histBody"></div>
+</section>
+
+</main>
+
+<!-- ══ BARRA DE ACCIÓN ═══════════════════════════════════════════════════════
+     Abajo y pegada al pulgar. Arriba del todo no se alcanza con una mano, y
+     este teléfono se usa con la otra ocupada. -->
+<div class="barra" id="barra" hidden>
+    <div class="barra-msg" id="barraMsg"></div>
+    <button class="btn btn-ok" id="btnEnviar" onclick="enviarLote()">Registrar</button>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../supabase-config.js"></script>
+<script src="../staff-area.js"></script><!-- quién ve qué: la MISMA regla del resto del sistema -->
+<script src="app.js"></script>
+</body>
+</html>

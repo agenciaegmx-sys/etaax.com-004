@@ -82,6 +82,29 @@
   [headers.values]
     Cache-Control = "public, max-age=0, stale-while-revalidate=604800"
 
+# ── EL SERVICE WORKER DE LA APP MÓVIL, SIN CACHÉ ──────────────
+# La regla de arriba sirve TODOS los .js con stale-while-revalidate de una
+# semana. Para un service worker eso es una trampa: el navegador lo compara byte
+# a byte para decidir si instala una versión nueva, y si se lo sirven viejo
+# durante siete días, la app instalada se queda congelada en la cáscara anterior
+# hasta que a alguien se le ocurra borrar los datos del sitio. Nadie relaciona
+# nunca ese síntoma con esta línea, así que va explicada.
+#
+# OJO CON EL ORDEN: Netlify aplica TODAS las reglas que casan y gana la ÚLTIMA.
+# Este bloque tiene que ir DESPUÉS del de /*.js o no sirve de nada.
+[[headers]]
+  for = "/app-movil/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+# El manifest también: cambiar el nombre o el ícono de la app instalada no debe
+# tardar una semana en verse.
+[[headers]]
+  for = "/app-movil/manifest.webmanifest"
+  [headers.values]
+    Cache-Control = "no-cache"
+    Content-Type = "application/manifest+json; charset=utf-8"
+
 # La marca no cambia nunca: se guarda de verdad.
 [[headers]]
   for = "/marca/*"

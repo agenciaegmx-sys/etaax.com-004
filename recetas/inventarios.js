@@ -2578,7 +2578,23 @@ async function abrirQrEntradas() {
         + (sucQR ? '&s=' + encodeURIComponent(sucQR) : '');
     // Blindaje multi-sucursal: sin sucursal activa, las entradas quedan SIN sello y no
     // aparecen en el historial de ninguna sucursal (se acabó el "historial global").
-    urlEl.innerHTML = etx(url) + (sucQR ? '' : '<div style="color:var(--accent);margin-top:8px;font-size:11px;line-height:1.5;text-align:left">⚠️ Estás en <b>vista global (sin sucursal)</b>. Las entradas de este QR quedarían <b>sin sucursal</b> y NO se verían en el historial de una sucursal específica. Entra a una <b>sucursal</b> antes de generar el QR para que queden selladas.</div>');
+    /* LA APP INSTALABLE, al lado del QR de siempre. Es el mismo registro —los
+       mismos datos, las mismas reglas— pero se instala en el teléfono: queda un
+       ícono, abre sin la barra del navegador y no hay que escanear nada cada
+       vez. Si no se ofrece aquí, nadie la va a encontrar: este modal es el único
+       lugar donde alguien está pensando en «cómo registra la barra». */
+    var urlApp = location.origin + '/app-movil/?n=' + encodeURIComponent(negId) + '&t=' + encodeURIComponent(token)
+        + (sucQR ? '&s=' + encodeURIComponent(sucQR) : '');
+    urlEl.innerHTML = etx(url)
+        + '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);text-align:left">'
+            + '<div style="font-size:11.5px;color:var(--text-muted);line-height:1.55;margin-bottom:8px">'
+                + '📱 <b style="color:var(--text)">¿Lo usan a diario?</b> Ábrela una vez desde el teléfono y agrégala a '
+                + 'la pantalla de inicio: queda un ícono y ya no hay que escanear el QR cada vez.</div>'
+            + '<a href="' + etx(urlApp) + '" target="_blank" rel="noopener" '
+                + 'style="display:inline-block;font-size:11.5px;color:var(--green);word-break:break-all">'
+                + etx(urlApp) + '</a>'
+        + '</div>'
+        + (sucQR ? '' : '<div style="color:var(--accent);margin-top:8px;font-size:11px;line-height:1.5;text-align:left">⚠️ Estás en <b>vista global (sin sucursal)</b>. Las entradas de este QR quedarían <b>sin sucursal</b> y NO se verían en el historial de una sucursal específica. Entra a una <b>sucursal</b> antes de generar el QR para que queden selladas.</div>');
     function gen() {
         box.innerHTML = '';
         var d = document.createElement('div');
