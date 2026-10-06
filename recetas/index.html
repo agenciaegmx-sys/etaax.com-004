@@ -3212,6 +3212,49 @@ function _novrLista(){
     out.sort(function(a,b){ return String(b.h.ts).localeCompare(String(a.h.ts)); });
     return out;
 }
+/* ══ DOS COSAS DISTINTAS QUE ESTABAN REVUELTAS ═════════════════════════════
+   Igual que en insumos. El panel mezclaba, con los mismos botones:
+
+     · LO QUE PASÓ AQUÍ — yo cambié el gramaje en mi sucursal. Es HISTORIAL: ya
+       lo decidí al hacerlo, no hay nada que resolver.
+     · LO QUE PASÓ EN OTRO LADO — otra sucursal, o el catálogo global, cambió la
+       misma receta. Es una ALERTA: hay que decidir si se toma.
+
+   Revueltos, «Dejar así» no quería decir lo mismo en los dos, y faltaba lo
+   principal: estando en una sucursal no había forma de TOMAR un cambio que
+   venía del global. El único botón, «Subir al global», va al revés.
+
+   Ahora:
+     ALERTA    → ✓ Aplicar aquí · ⬆️ Subir al global (solo en el global) · ✕ No usar
+     HISTORIAL → 📋 Ficha · 🗑️ Quitar
+
+   (El historial de recetas no ofrece «Revertir» como el de insumos: el cambio
+   de una receta se anota en prosa —«Procedimiento: versión anterior →
+   actualizado»—, sin los valores viejos, así que no hay con qué deshacerlo. Un
+   botón que prometiera eso mentiría.) */
+function _novrEsAjeno(n){
+    var suc = _esCatGlobalRecetas() ? '' : (localStorage.getItem('etaax_sucursal_activa')||'');
+    var hs = (n && n.h && n.h.suc) || '';
+    /* En el CATÁLOGO GLOBAL lo ajeno es lo que se hizo en una sucursal — eso es
+       lo que puede querer subirse al maestro. Lo hecho en el global es su
+       propio historial. */
+    if(!suc) return !!hs;
+    /* Dentro de una SUCURSAL lo ajeno es lo que no se hizo aquí, que por cómo
+       filtra _novrLista es lo que viene del catálogo global. */
+    return hs !== suc;
+}
+/* CUÁL receta es «la mía»: a esa se le aplica un cambio ajeno. En el global, el
+   maestro; en una sucursal, su copia. Sin esto, «aplicar» no sabría a cuál
+   escribir y podría pisar la de otra sucursal. */
+function _novrMiCopia(r){
+    if(!r) return null;
+    var canon = r.origenId || r.id;
+    var fam = getRecetas().filter(function(x){ return (x.origenId||x.id)===canon; });
+    var suc = _esCatGlobalRecetas() ? '' : (localStorage.getItem('etaax_sucursal_activa')||'');
+    if(!suc) return fam.find(function(x){ return !x.origenId; }) || null;
+    return fam.find(function(x){ return window._recetaEnSuc && window._recetaEnSuc(x, suc); }) || null;
+}
+
 /* ══ EL AVISO, EN CADA RECETA ══════════════════════════════════════════════
    El botón de Novedades junta todo y sirve para revisar de corrido. Pero el
    chef entra a su recetario, no a Novedades — y ahí no había forma de ver que a
@@ -3227,6 +3270,10 @@ function _novrMapa(){
     var m = {};
     try {
         _novrLista().forEach(function(n){
+            /* SOLO LAS ALERTAS. Contando también el historial propio la marca no
+               se apagaría nunca —siempre hay algo que uno mismo cambió— y una
+               marca permanente se vuelve parte del decorado. */
+            if(!_novrEsAjeno(n)) return;
             var canon = n.rec.origenId || n.rec.id;
             m[canon] = (m[canon]||0) + 1;
         });
@@ -3295,6 +3342,13 @@ function _novrRender(q){
             +'<div style="font-size:14px;color:var(--text-muted)">'+(q?'Sin resultados para «'+etx(q)+'»':'Todo al día: no hay cambios pendientes de revisar.')+'</div></div>';
         return;
     }
+    /* Las alertas primero: el historial propio puede ser largo —uno cambia
+       cosas todo el día— y dejaba lo que SÍ hay que decidir enterrado abajo. */
+    lista.sort(function(a,b){
+        var aa=_novrEsAjeno(a)?0:1, bb=_novrEsAjeno(b)?0:1;
+        if(aa!==bb) return aa-bb;
+        return String(b.h.ts).localeCompare(String(a.h.ts));
+    });
     cont.innerHTML=lista.map(function(n){
         var herm=_novrHermanas(n.rec).length;
         var filas=(n.h.cambios||[]).map(function(c){
@@ -3304,20 +3358,42 @@ function _novrRender(q){
                 +'<span style="color:var(--text-dim)">→</span>'
                 +'<span style="color:var(--green);font-weight:600">'+etx(c.a)+'</span></div>';
         }).join('') || '<div style="font-size:12px;color:var(--text-dim);padding-top:5px">Alta de la receta.</div>';
-        return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:13px 15px;margin-bottom:10px">'
+        /* LOS BOTONES DEPENDEN DE QUÉ ES ESTO. Con los mismos para los dos
+           casos ninguno podía tener sentido. */
+        var BTN='style="background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit"';
+        var ajeno=_novrEsAjeno(n), acciones;
+        var ficha='<button onclick="_novrFicha(\''+n.rec.id+'\')" '+BTN+'>📋 Ficha</button>';
+        if(ajeno){
+            /* ALERTA: vino de otro lado y hay que decidir. Las dos salidas
+               cierran el asunto; ninguna lo deja pendiente para siempre. */
+            var donde=_esCatGlobalRecetas()?'el catálogo global':'esta sucursal';
+            acciones = ficha
+                +'<button onclick="_novrAplicarAqui(\''+n.key+'\',\''+n.rec.id+'\')" title="Tomar esta versión de la receta y dejarla igual en '+donde+'" '
+                +'style="background:transparent;border:1px solid var(--green);color:var(--green);border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit">✓ Aplicar aquí</button>'
+                +((herm&&_esCatGlobalRecetas())?'<button onclick="_novrAplicar(\''+n.key+'\',\''+n.rec.id+'\')" title="Dejarla igual en el maestro y en todas sus copias" '+BTN+'>⬆️ Subir al global ('+herm+')</button>':'')
+                +'<button onclick="_novrDejar(\''+n.key+'\')" title="Descartar el aviso. La receta no cambia aquí." '+BTN+'>✕ No usar</button>';
+        } else {
+            /* HISTORIAL: lo hice yo. Solo mirar atrás — o borrar el renglón
+               para que deje de aparecer. */
+            acciones = ficha
+                +'<button onclick="_novrQuitar(\''+n.key+'\',\''+n.rec.id+'\')" title="Borrar este movimiento del historial. La receta no cambia." '
+                +'style="background:var(--surface);border:1px solid var(--border);color:var(--text-dim);border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit">🗑️ Quitar</button>';
+        }
+        var marca = ajeno
+            ? '<span style="display:inline-block;background:rgba(245,200,66,.16);border:1px solid rgba(245,200,66,.45);color:var(--accent);'
+                +'border-radius:20px;padding:1px 9px;font-size:9.5px;font-weight:700;letter-spacing:.5px;margin-left:7px;vertical-align:middle">🔔 ALERTA</span>'
+            : '';
+        return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:13px 15px;margin-bottom:10px'
+            +(ajeno?';border-left:3px solid rgba(245,200,66,.55)':'')+'">'
             +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">'
                 +'<div style="min-width:0">'
-                    +'<div style="font-weight:700;font-size:14px;color:var(--text)">'+etx(n.rec.nombre||'(sin nombre)')+'</div>'
+                    +'<div style="font-weight:700;font-size:14px;color:var(--text)">'+etx(n.rec.nombre||'(sin nombre)')+marca+'</div>'
                     +'<div style="font-size:11px;color:var(--text-dim);margin-top:3px">'
-                        +_novrTipoLbl(n.rec.tipo)+' · '+(n.h.tipo==='alta'?'🆕 Alta':'✏️ Edición')+' · '+etx(_novrFecha(n.h.ts))
+                        +_novrTipoLbl(n.rec.tipo)+' · '+(n.h.tipo==='alta'?'🆕 Alta':n.h.tipo==='aplicado'?'⬇️ Aplicado':'✏️ Edición')+' · '+etx(_novrFecha(n.h.ts))
                         +(n.h.sucNom?' · <b style="color:#7ab8f5">'+etx(n.h.sucNom)+'</b>':'')
                         +(n.h.quien?' · '+etx(n.h.quien):'')+'</div>'
                 +'</div>'
-                +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
-                    +'<button onclick="_novrFicha(\''+n.rec.id+'\')" style="background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit">📋 Ficha</button>'
-                    +((herm&&_esCatGlobalRecetas())?'<button onclick="_novrAplicar(\''+n.key+'\',\''+n.rec.id+'\')" style="background:transparent;border:1px solid var(--green);color:var(--green);border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit">⬆️ Subir al global ('+herm+')</button>':'')
-                    +'<button onclick="_novrDejar(\''+n.key+'\')" style="background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit">Dejar así</button>'
-                +'</div>'
+                +'<div style="display:flex;gap:6px;flex-wrap:wrap">'+acciones+'</div>'
             +'</div>'+filas+'</div>';
     }).join('');
 }
@@ -3356,6 +3432,88 @@ function _novrAplicar(key, recId){
     if(window.etaaxConfirm) etaaxConfirm('Subir «'+(src.nombre||'')+'» al catálogo global', msg, _hacer, null, {yesLabel:'Actualizar', danger:false});
     else if(confirm(msg)) _hacer();
 }
+/* ══ APLICAR AQUÍ una receta que cambió en otro lado ═══════════════════════
+   Esto NO existía, y era el hueco: estando en una sucursal, cuando el catálogo
+   global cambiaba una receta, el único botón era «Subir al global» —que va al
+   revés— o «Dejar así». No había forma de decir «sí, tómala aquí».
+
+   Es el mismo trasvase que «Subir al global» pero en una sola dirección: el
+   contenido de la versión que cambió entra en MI copia. Lo que NO viaja es la
+   identidad —id, vínculo al maestro, sucursal y bitácora—: eso es lo único que
+   hace que la copia siga siendo de esta sucursal. */
+function _novrAplicarAqui(key, recId){
+    var nov=_novrLista().find(function(n){ return n.key===key; }); if(!nov) return;
+    var lista=getRecetas();
+    var src=lista.find(function(x){ return x.id===recId; }); if(!src) return;
+    var mia=_novrMiCopia(src);
+    if(!mia){
+        if(window.etaaxAlert) etaaxAlert('Esta receta no tiene copia en '+
+            (_esCatGlobalRecetas()?'el catálogo global':'esta sucursal')+', así que no hay dónde aplicarla.');
+        return;
+    }
+    if(mia.id===src.id){
+        if(window.etaaxAlert) etaaxAlert('Este cambio ya es el de esta receta: no hay nada que aplicar.');
+        return;
+    }
+    var _hacer=function(){
+        var i=lista.findIndex(function(x){ return x.id===mia.id; });
+        if(i<0) return;
+        var destino=lista[i];
+        var upd=JSON.parse(JSON.stringify(src));
+        upd.id=destino.id; upd.origenId=destino.origenId; upd.sucursalId=destino.sucursalId;
+        upd.sucursales=destino.sucursales; upd._global=destino._global;
+        upd.historial=(destino.historial||[]).slice();
+        /* Queda escrito de DÓNDE vino: «¿quién cambió esto?» tiene que poder
+           contestarse dentro de un mes sin adivinar. */
+        var enGlobal=_esCatGlobalRecetas();
+        var sucAct=enGlobal?'':(localStorage.getItem('etaax_sucursal_activa')||'');
+        upd.historial.unshift({
+            ts:new Date().toISOString(),
+            quien:(typeof _usuarioActualRec==='function'?_usuarioActualRec():(src.updatedBy||'')),
+            suc:sucAct, sucNom:enGlobal?'Catálogo global':(typeof _sucNomRec==='function'?_sucNomRec(sucAct):sucAct),
+            global:enGlobal||undefined, tipo:'aplicado', desde:(nov.h.sucNom||''),
+            cambios:(nov.h.cambios||[]).slice()
+        });
+        lista[i]=upd;
+        setRecetas(lista);
+        if(typeof _sbUpReceta==='function'){ try{ _sbUpReceta(upd); }catch(e){} }
+        _NOVR_VISTAS[key]=1; _novrGuardar();
+        _novrRender(document.getElementById('novrBuscar')?document.getElementById('novrBuscar').value:'');
+        renderGridRecetas();
+    };
+    var donde=_esCatGlobalRecetas()?'el catálogo global':'esta sucursal';
+    var msg='Los ingredientes, precios y procedimiento de <b>'+etx(src.nombre||'')+'</b> van a quedar iguales en '+
+        'la versión de <b>'+etx(donde)+'</b>.<br><br>'+
+        '<span style="color:var(--text-dim);font-size:12px">Su nombre de sucursal, su vínculo y su bitácora se quedan como están. No se toca ninguna otra sucursal.</span>';
+    if(window.etaaxConfirm) etaaxConfirm('Aplicar en '+donde, msg, _hacer, null, {yesLabel:'Sí, aplicar aquí'});
+    else if(confirm(msg.replace(/<[^>]+>/g,''))) _hacer();
+}
+
+/* ══ QUITAR DEL HISTORIAL ══════════════════════════════════════════════════
+   «Dejar así» solo marcaba la entrada como vista: desaparecía de la lista pero
+   seguía en el registro y reaparecía al cambiar de equipo o limpiar el
+   navegador. Esto la BORRA. Solo del historial PROPIO: borrar el rastro de lo
+   que hizo otra sucursal sería borrarle su registro, no el mío. */
+function _novrQuitar(key, recId){
+    var nov=_novrLista().find(function(n){ return n.key===key; });
+    if(!nov) return;
+    var _hacer=function(){
+        var lista=getRecetas();
+        var i=lista.findIndex(function(x){ return x.id===recId; });
+        if(i<0) return;
+        lista[i].historial=(lista[i].historial||[]).filter(function(h){ return h.ts!==nov.h.ts; });
+        setRecetas(lista);
+        if(typeof _sbUpReceta==='function'){ try{ _sbUpReceta(lista[i]); }catch(e){} }
+        _novrInvalidar();
+        _novrRender(document.getElementById('novrBuscar')?document.getElementById('novrBuscar').value:'');
+        renderGridRecetas();
+    };
+    var msg='Se borra este movimiento del historial de <b>'+etx(nov.rec.nombre||'')+'</b>.<br><br>'+
+        '<span style="color:var(--text-dim);font-size:12px">La receta NO cambia: solo deja de aparecer el registro de que se cambió. No se puede deshacer.</span>';
+    if(window.etaaxConfirm) etaaxConfirm('Quitar del historial', msg, _hacer, null, {yesLabel:'Sí, quitar', danger:true});
+    else if(confirm(msg.replace(/<[^>]+>/g,''))) _hacer();
+}
+
 function _novrDejar(key){
     _novrCargar(); _NOVR_VISTAS[key]=1; _novrGuardar();
     _novrRender(document.getElementById('novrBuscar')?document.getElementById('novrBuscar').value:'');

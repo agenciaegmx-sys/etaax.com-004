@@ -15016,6 +15016,87 @@ console.log('\n══ BH8 · Alerta vs historial, y la copa en la ficha ══')
            true, 'callado'));
 }
 
+/* ── Y lo mismo en RECETAS ──
+   Edwin lo pidió para los dos catálogos. Un insumo que avisa y una receta que
+   no, o que avisa distinto, es peor que ninguno: enseña a desconfiar de la
+   marca. */
+{
+    const rec = fs.readFileSync(path.join(RAIZ, 'recetas/index.html'), 'utf8');
+    const dR = (fn) => {
+        const i = rec.indexOf('function ' + fn + '(');
+        if (i < 0) return '';
+        const abre = rec.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < rec.length) {
+            if (rec[j] === '{') prof++;
+            else if (rec[j] === '}') { prof--; if (!prof) return rec.slice(i, j + 1); }
+            j++;
+        }
+        return '';
+    };
+
+    test('recetas separa igual lo de aquí de lo de otro lado', () => {
+        const t = dR('_novrEsAjeno');
+        return eq(t.indexOf('if(!suc) return !!hs;') > -1 &&
+                  t.indexOf('return hs !== suc;') > -1, true, 'separadas');
+    });
+    test('…y su marca 🔔 también cuenta SOLO alertas', () =>
+        eq(dR('_novrMapa').indexOf('if(!_novrEsAjeno(n)) return;') > -1, true, 'solo alertas'));
+    test('…con su botón de aplicar aquí, que no existía', () =>
+        eq(dR('_novrAplicarAqui').length > 0, true, 'existe'));
+    /* Lo único que hace que la copia siga siendo de esta sucursal. Pisarlo la
+       mudaría de lugar o la volvería un duplicado del origen. */
+    test('…sin que viaje la identidad: id, vínculo, sucursal y bitácora', () => {
+        const t = dR('_novrAplicarAqui');
+        return eq(t.indexOf('upd.id=destino.id;') > -1 &&
+                  t.indexOf('upd.origenId=destino.origenId;') > -1 &&
+                  t.indexOf('upd.sucursales=destino.sucursales;') > -1 &&
+                  t.indexOf('upd.historial=(destino.historial||[]).slice();') > -1, true, 'intacta');
+    });
+    /* Aplicar aquí escribe en UNA receta. Si tocara a las hermanas sería «subir
+       al global» con otro nombre, que es justo lo que no se pidió. */
+    test('…tocando UNA sola receta, no a sus hermanas', () =>
+        eq(dR('_novrAplicarAqui').indexOf('hermanas') === -1 &&
+           dR('_novrAplicarAqui').indexOf('lista[i]=upd;') > -1, true, 'una sola'));
+    test('…dejando escrito de dónde vino', () =>
+        eq(dR('_novrAplicarAqui').indexOf("tipo:'aplicado'") > -1 &&
+           dR('_novrAplicarAqui').indexOf('desde:(nov.h.sucNom||\'\')') > -1, true, 'con rastro'));
+    test('…sincronizando, no solo en este equipo', () =>
+        eq(dR('_novrAplicarAqui').indexOf('_sbUpReceta(upd)') > -1, true, 'sincronizado'));
+    /* Si la receta del aviso ya ES la mía, «aplicar» se copiaría sobre sí misma
+       y además borraría su propia bitácora al escribir upd.historial. */
+    test('…y sin aplicarse sobre sí misma', () =>
+        eq(dR('_novrAplicarAqui').indexOf('if(mia.id===src.id)') > -1, true, 'sin vueltas'));
+    test('…preguntando antes', () =>
+        eq(dR('_novrAplicarAqui').indexOf('if(window.etaaxConfirm) etaaxConfirm(\'Aplicar en \'+donde') > -1,
+           true, 'con confirmación'));
+
+    test('el historial de recetas se puede borrar de verdad', () =>
+        eq(dR('_novrQuitar').indexOf('return h.ts!==nov.h.ts;') > -1, true, 'se borra'));
+    test('…diciendo que la receta NO cambia', () =>
+        eq(dR('_novrQuitar').indexOf('La receta NO cambia') > -1, true, 'claro'));
+    test('…y subiendo el borrado, no dejándolo en el equipo', () =>
+        eq(dR('_novrQuitar').indexOf('_sbUpReceta(lista[i])') > -1, true, 'sincronizado'));
+
+    test('una alerta de receta ofrece aplicar o descartar', () => {
+        const t = dR('_novrRender');
+        return eq(t.indexOf('✓ Aplicar aquí') > -1 && t.indexOf('✕ No usar') > -1, true, 'decidible');
+    });
+    test('…y el historial propio, solo quitar', () =>
+        eq(dR('_novrRender').indexOf('🗑️ Quitar') > -1, true, 'informativo'));
+    /* El historial de recetas se anota en prosa («Procedimiento: versión
+       anterior → actualizado»), sin los valores viejos: un botón de revertir
+       prometería algo que no se puede cumplir. */
+    test('…sin prometer un «revertir» que la receta no puede cumplir', () =>
+        eq(rec.indexOf('_novrRevertir'), -1, 'honesto'));
+    test('las alertas de recetas también van primero', () =>
+        eq(dR('_novrRender').indexOf('var aa=_novrEsAjeno(a)?0:1') > -1, true, 'arriba'));
+    test('…y se marcan como tales', () =>
+        eq(dR('_novrRender').indexOf('🔔 ALERTA') > -1, true, 'marcada'));
+    test('«Dejar así» también desaparece de los botones de recetas', () =>
+        eq(dR('_novrRender').indexOf('>Dejar así</button>'), -1, 'sin ambigüedad'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
