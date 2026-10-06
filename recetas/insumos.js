@@ -268,7 +268,7 @@
            '<b>' + etx(nombres) + '</b>: lo que cambies en una sucursal cambia en todas.<br><br>' +
            'Se va a crear <b>una copia por sucursal</b>, cada una editable por su cuenta.<br><br>' +
            '✔ Lo ya capturado en inventarios y mermas NO se toca.<br>' +
-           '✔ Si después quieres igualarlas, está el botón de copiar a otras sucursales.';
+           '✔ Si después una cambia algo, las demás lo ven como alerta en su catálogo y deciden si lo toman.';
        if (window.etaaxConfirm)
            etaaxConfirm('Independizar por sucursal', msg, _hacer, null, { yesLabel:'Sí, independizar' });
        else if (confirm(msg.replace(/<[^>]+>/g,''))) _hacer();

@@ -14893,9 +14893,20 @@ console.log('\n══ BH8 · Alerta vs historial, y la copa en la ficha ══')
     });
     /* Copiar la ficha entera se llevaría por delante lo que esta sucursal tiene
        distinto a propósito — justo lo que se protegió al independizarlas. */
-    test('…aplicando SOLO los campos que cambiaron', () =>
-        eq(cuerpo('_novAplicarAqui').indexOf('cambios.forEach(function (c) {') > -1 &&
-           cuerpo('_novAplicarAqui').indexOf('c.aRaw === undefined') > -1, true, 'quirúrgico'));
+    /* Las DOS escrituras, cada una por su lado: hay campos que viven en el
+       insumo y campos que viven en su primera presentación. Pedir solo que
+       aparezca «c.aRaw» deja pasar que se borre una de las dos ramas —la otra
+       todavía contiene el texto—; lo destapó la batería. */
+    test('…aplicando SOLO los campos que cambiaron', () => {
+        const t = cuerpo('_novAplicarAqui');
+        return eq(t.indexOf('cambios.forEach(function (c) {') > -1 &&
+                  t.indexOf("if (c.pres) { if (p0) p0[c.k] = (c.aRaw === undefined ? '' : c.aRaw); }") > -1 &&
+                  t.indexOf("else dest[c.k] = (c.aRaw === undefined ? '' : c.aRaw);") > -1, true, 'quirúrgico');
+    });
+    /* Y hacia ADELANTE: aRaw es el valor nuevo, deRaw el viejo. Confundirlos
+       haría que «aplicar» dejara el insumo como estaba y pareciera que no sirve. */
+    test('…tomando el valor NUEVO, no el que había antes', () =>
+        eq(cuerpo('_novAplicarAqui').indexOf('deRaw === undefined ? \'\' : c.deRaw'), -1, 'hacia adelante'));
     /* «¿Quién cambió esto?» tiene que poder contestarse dentro de un mes. */
     test('…y dejando escrito de dónde vino', () =>
         eq(cuerpo('_novAplicarAqui').indexOf("tipo: 'aplicado'") > -1 &&
@@ -14907,9 +14918,37 @@ console.log('\n══ BH8 · Alerta vs historial, y la copa en la ficha ══')
     test('…y si el movimiento no trae los valores, lo dice', () =>
         eq(cuerpo('_novAplicarAqui').indexOf('no se puede aplicar solo') > -1, true, 'honesto'));
     /* Escribir sobre un insumo sin avisar qué se va a escribir es cómo se
-       pierde un dato sin saber cuándo. */
-    test('…preguntando antes, con los valores a la vista', () =>
-        eq(cuerpo('_novAplicarAqui').indexOf('etaaxConfirm') > -1, true, 'con confirmación'));
+       pierde un dato sin saber cuándo. Se exige la condición COMPLETA: basta con
+       que alguien la deje en `if (false)` para que no pregunte nunca, y buscar
+       solo la palabra «etaaxConfirm» no lo nota —lo destapó la batería. */
+    test('…preguntando antes, con los valores a la vista', () => {
+        const t = cuerpo('_novAplicarAqui');
+        return eq(t.indexOf('if (window.etaaxConfirm)') > -1 &&
+                  t.indexOf("etaaxConfirm('Aplicar en ' + dondeNom") > -1 &&
+                  t.indexOf('_hacer, null,') > -1, true, 'con confirmación');
+    });
+    /* Y los valores concretos en el texto: «¿aplicar los cambios?» no deja
+       decidir, porque no dice qué cambia ni desde qué valor. */
+    test('…diciendo de qué valor a qué valor, no «hay cambios»', () =>
+        eq(cuerpo('_novAplicarAqui').indexOf("etx(c.de) + '</s> → <b style=\"color:var(--green)\">' + etx(c.a)") > -1,
+           true, 'concreto'));
+
+    /* ── Revertir: estaba sin candado ──
+       Lo destapó la batería de mutaciones: vaciar el bucle que devuelve los
+       valores anteriores no rompía ningún test. Revertir es uno de los dos
+       botones del historial, así que se cierra ahora. */
+    test('revertir devuelve los valores ANTERIORES, no los nuevos', () => {
+        const t = cuerpo('_novRevertir');
+        return eq(t.indexOf('cambios.forEach(function (c) {') > -1 &&
+                  t.indexOf('p0[c.k] = (c.deRaw === undefined') > -1 &&
+                  t.indexOf('ins[c.k] = (c.deRaw === undefined') > -1, true, 'hacia atrás');
+    });
+    /* Deshacer sin dejar constancia borraría el rastro de que hubo un cambio y
+       de que se deshizo: dos hechos, no cero. */
+    test('…y queda registrado como reversión', () =>
+        eq(cuerpo('_novRevertir').indexOf("tipo: 'reversion'") > -1, true, 'con rastro'));
+    test('…sincronizando, no solo en este equipo', () =>
+        eq(cuerpo('_novRevertir').indexOf('_sincronizarInsumosSupabase') > -1, true, 'sincronizado'));
 
     /* ── Quitar del historial ── */
     /* «Dejar así» solo marcaba como visto: desaparecía de la lista pero seguía
@@ -14919,6 +14958,20 @@ console.log('\n══ BH8 · Alerta vs historial, y la copa en la ficha ══')
            true, 'se borra'));
     test('…diciendo que el insumo NO cambia, solo el registro', () =>
         eq(cuerpo('_novQuitar').indexOf('El insumo NO cambia') > -1, true, 'claro'));
+    test('…y preguntando de verdad antes de borrar', () => {
+        const t = cuerpo('_novQuitar');
+        return eq(t.indexOf('if (window.etaaxConfirm)') > -1 &&
+                  t.indexOf("etaaxConfirm('Quitar del historial'") > -1, true, 'pregunta');
+    });
+
+    /* ── El aviso de independizar, al día ──
+       Decía «si después quieres igualarlas, está el botón de copiar a otras
+       sucursales» — ese botón ya no existe. Un mensaje que manda a un botón que
+       se fue es peor que no decir nada. */
+    test('independizar ya no manda al botón que se quitó', () =>
+        eq(cuerpo('independizarUnInsumo').indexOf('botón de copiar a otras sucursales'), -1, 'al día'));
+    test('…sino que explica cómo se enteran ahora las demás', () =>
+        eq(cuerpo('independizarUnInsumo').indexOf('lo ven como alerta en su catálogo') > -1, true, 'explicado'));
 
     /* ── Los botones, uno por caso ── */
     test('una alerta ofrece aplicar o descartar', () => {
