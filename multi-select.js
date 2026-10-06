@@ -139,10 +139,55 @@
     document.addEventListener('click', function (e) {
         if (!POP || !e.target.closest) return;
         if (e.target.closest('.ems-pop') || e.target.closest('.ems-btn')) return;
+        /* Soltar el arrastre de la barra de desplazamiento FUERA del
+           desplegable cuenta como un clic en el cuerpo: sin esto, bajar la
+           lista con la barrita y soltar el botón un pixel afuera cerraba el
+           filtro y perdía la selección. */
+        if (_arrastrando) return;
         cerrar();
     });
-    window.addEventListener('scroll', cerrar, true);
+    /* Mientras el botón del mouse esté apretado sobre el desplegable, se está
+       arrastrando su barra — no eligiendo otra cosa. */
+    var _arrastrando = false;
+    document.addEventListener('mousedown', function (e) {
+        _arrastrando = !!(POP && e.target && e.target.closest && e.target.closest('.ems-pop'));
+    }, true);
+    document.addEventListener('mouseup', function () {
+        if (_arrastrando) setTimeout(function () { _arrastrando = false; }, 0);
+    }, true);
+    /* ── EL SCROLL DE LA LISTA NO ES «SALIRSE» ────────────────────────────────
+       EL BUG: esto escuchaba el scroll con `capture`, así que se disparaba con
+       CUALQUIER scroll de la página — incluido el de la propia lista. Resultado:
+       el filtro con más opciones de las que caben era inservible. Al intentar
+       bajar para ver las de abajo, se cerraba. Exactamente lo que reportó Edwin,
+       y pasaba igual arrastrando la barra lateral del desplegable.
+
+       Cerrar con el scroll de la PÁGINA sí hace falta: el desplegable está
+       posicionado con `fixed` junto a su botón, y si la página se mueve queda
+       flotando donde ya no va. Pero el scroll de adentro es justo lo que el
+       usuario quiere hacer.
+
+       `e.target` del scroll de la página es `document` —sin nodeType de
+       elemento—, así que la comprobación de pertenencia lo deja pasar y solo
+       perdona el de adentro. */
+    window.addEventListener('scroll', function (e) {
+        if (!POP) return;
+        var t = e && e.target;
+        if (t && t.nodeType === 1 && POP.contains(t)) return;   // scroll DENTRO del desplegable
+        cerrar();
+    }, true);
     window.addEventListener('resize', cerrar);
+
+    /* La rueda del mouse sobre la lista tampoco cierra. Algunos navegadores
+       emiten `wheel` sin llegar a producir `scroll` cuando ya se llegó al tope,
+       y sin esto el filtro se cerraba justo al final de la lista — donde más
+       se nota. */
+    window.addEventListener('wheel', function (e) {
+        if (!POP) return;
+        var t = e && e.target;
+        if (t && t.closest && t.closest('.ems-pop')) return;
+        cerrar();
+    }, { capture: true, passive: true });
 
     var CSS =
         '.ems-btn{display:inline-flex;align-items:center;justify-content:space-between;gap:8px;' +

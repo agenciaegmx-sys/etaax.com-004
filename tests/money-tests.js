@@ -14728,6 +14728,110 @@ console.log('\n══ BH6 · Checklist impreso e insumos por sucursal ══');
         eq(dIh('_pintarAvisoSucursal').indexOf("bc.style.display = ''") > -1, true, 'lo contrario'));
 }
 
+/* ═══════════ SUITE BH7 · EL FILTRO QUE SE CERRABA, Y EL AVISO EN SU SITIO ══
+   1. Los filtros de insumos y recetas se cerraban al intentar hacer scroll:
+      con más opciones de las que caben, el desplegable era inservible.
+
+   2. El aviso de «hubo cambios en otra sucursal» solo existía como un botón
+      global de Novedades. El encargado no entra a Novedades: entra a su
+      catálogo, y ahí no había forma de saber que a ESE producto le pasó algo.
+      Se enteraba al abrir el editor — o sea, cuando ya iba a cambiar otra
+      cosa.                                                                   */
+console.log('\n══ BH7 · El filtro que se cerraba, y el aviso en su sitio ══');
+{
+    const ms  = fs.readFileSync(path.join(RAIZ, 'multi-select.js'), 'utf8');
+    const ijs = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.js'), 'utf8');
+    const rec = fs.readFileSync(path.join(RAIZ, 'recetas/index.html'), 'utf8');
+    const cuerpoDe = (src) => (fn) => {
+        const i = src.indexOf('function ' + fn + '(');
+        if (i < 0) return '';
+        const abre = src.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < src.length) {
+            if (src[j] === '{') prof++;
+            else if (src[j] === '}') { prof--; if (!prof) return src.slice(i, j + 1); }
+            j++;
+        }
+        return '';
+    };
+    const dIj = cuerpoDe(ijs), dR = cuerpoDe(rec);
+
+    /* ── 1) EL FILTRO ── */
+    /* LA CAUSA: escuchaba el scroll con `capture`, así que se disparaba con
+       CUALQUIER scroll de la página — incluido el de la propia lista. */
+    test('el scroll DENTRO del desplegable ya no lo cierra', () =>
+        eq(/POP\.contains\(t\)\) return;\s*\/\/ scroll DENTRO/.test(ms), true, 'perdonado'));
+    /* Pero el de la PÁGINA sí tiene que cerrarlo: el desplegable está
+       posicionado con `fixed` junto a su botón, y si la página se mueve queda
+       flotando donde ya no va. */
+    test('…pero el scroll de la PÁGINA sí lo cierra', () =>
+        eq(ms.indexOf("window.addEventListener('scroll'") > -1 &&
+           /if \(!POP\) return;[\s\S]{0,200}cerrar\(\);/.test(ms), true, 'sigue cerrando'));
+    /* Algunos navegadores emiten `wheel` sin llegar a producir `scroll` cuando
+       ya se llegó al tope: sin esto se cerraba justo al final de la lista,
+       donde más se nota. */
+    test('la rueda sobre la lista tampoco lo cierra', () =>
+        eq(/addEventListener\('wheel'[\s\S]{0,260}closest\('\.ems-pop'\)\) return;/.test(ms),
+           true, 'perdonada'));
+    /* Soltar el arrastre de la barrita un pixel afuera contaba como «clic en el
+       cuerpo» y cerraba el filtro perdiendo la selección. */
+    test('arrastrar la barra y soltar fuera no cierra el filtro', () =>
+        eq(ms.indexOf('if (_arrastrando) return;') > -1 &&
+           ms.indexOf("addEventListener('mousedown'") > -1, true, 'con arrastre'));
+    /* Un clic de verdad fuera SÍ cierra: si no, el desplegable se quedaría
+       abierto tapando la pantalla. */
+    test('…pero un clic de verdad afuera sí lo cierra', () =>
+        eq(ms.indexOf("if (e.target.closest('.ems-pop') || e.target.closest('.ems-btn')) return;") > -1,
+           true, 'sigue cerrando'));
+
+    /* ── 2) EL AVISO POR PRODUCTO ── */
+    /* Se cuenta por el id CANÓNICO: un cambio del maestro le importa a sus tres
+       copias, y el de la sucursal 1 le importa a la 2 — es el mismo producto
+       visto desde otro lado. Contar por registro dejaría a cada copia ciega de
+       lo que pasó en las demás, que es justo lo que se quiere avisar. */
+    test('las novedades se cuentan por PRODUCTO, no por registro', () =>
+        eq(dIj('_novMapa').indexOf('n.ins.origenId || n.ins.id') > -1, true, 'canónico'));
+    test('cada insumo sabe cuántas tiene pendientes', () =>
+        eq(dIj('novPendientes').indexOf("_novMapa()[ins.origenId || ins.id]") > -1, true, 'por insumo'));
+    test('…y la marca solo sale si hay algo que avisar', () =>
+        eq(dIj('novBadgeHTML').indexOf("if (!n) return '';") > -1, true, 'sin ruido'));
+    test('la marca aparece en la lista y en la galería', () =>
+        eq(ijs.indexOf('${novBadgeHTML(ins)}') > -1 && ijs.indexOf('novHTML') > -1, true, 'las dos'));
+    /* Abrir el panel con los 200 cambios del negocio cuando se preguntó por uno
+       obliga a buscarlo otra vez. */
+    test('tocarla abre el panel acotado a ESE producto', () =>
+        eq(dIj('abrirNovedadesIns').indexOf("_NOV_SOLO = _ins ? (_ins.origenId || _ins.id) : '';") > -1,
+           true, 'acotado'));
+    test('…y el botón global sigue abriéndolo completo', () =>
+        eq(dIj('abrirNovedadesIns').indexOf('soloId ?') > -1, true, 'sin id, todo'));
+    /* UNA MARCA QUE NO SE VA DESPUÉS DE ATENDERLA ENSEÑA A IGNORARLAS TODAS.
+       Por eso el conteo se invalida al decidir y en cada repintado. */
+    test('decidir una novedad apaga su marca sin recargar', () =>
+        eq(dIj('_novGuardarVistas').indexOf('_novInvalidar();') > -1, true, 'se apaga'));
+    test('…y el catálogo la recalcula en cada repintado', () =>
+        eq(dIj('filtrar').indexOf('_novInvalidar()') > -1, true, 'al día'));
+    /* El clic en la marca no puede abrir también el editor del insumo. */
+    test('tocar la marca no abre el editor por debajo', () =>
+        eq(dIj('novBadgeHTML').indexOf('event.stopPropagation()') > -1, true, 'aislado'));
+
+    /* ── Lo mismo en recetas ── */
+    test('las recetas también avisan por platillo', () =>
+        eq(dR('novrPendientes').length > 0 && rec.indexOf('novrBadgeHTML(r)') > -1, true, 'con marca'));
+    test('…contando por el maestro, no por la copia', () =>
+        eq(dR('_novrMapa').indexOf('n.rec.origenId || n.rec.id') > -1, true, 'canónico'));
+    test('…abriendo el panel solo de esa receta', () =>
+        eq(dR('abrirNovedadesRec').indexOf("_NOVR_SOLO = _r ? (_r.origenId || _r.id) : '';") > -1,
+           true, 'acotado'));
+    test('…y apagando la marca al decidir', () =>
+        eq(dR('_novrGuardar').indexOf('_novrInvalidar();') > -1, true, 'se apaga'));
+    test('…recalculada en cada repintado de la grilla', () =>
+        eq(dR('renderGridRecetas').indexOf('_novrInvalidar()') > -1, true, 'al día'));
+    /* El permiso de ver cambios se sigue exigiendo: la marca lleva a un panel
+       que no todos los roles pueden ver. */
+    test('el panel de recetas sigue pidiendo su permiso', () =>
+        eq(dR('abrirNovedadesRec').indexOf("_exigeRec('cambios'") > -1, true, 'con permiso'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');

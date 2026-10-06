@@ -3177,9 +3177,13 @@ function guardarRecetaSuc(){
    sale de la lista; el historial NO se borra.
    ══════════════════════════════════════════════════════════════════════════════ */
 var _NOVR_VISTAS = {};
+var _NOVR_SOLO = '';   // cuando el panel se abre desde la marca de UNA receta
 function _novrKey(){ var n=localStorage.getItem('etaax_negocio_activo')||''; return 'etaax_'+n+'_nov_vistas_rec'; }
 function _novrCargar(){ try{ _NOVR_VISTAS=JSON.parse(localStorage.getItem(_novrKey())||'{}'); }catch(e){ _NOVR_VISTAS={}; } }
-function _novrGuardar(){ try{ localStorage.setItem(_novrKey(), JSON.stringify(_NOVR_VISTAS)); }catch(e){} }
+function _novrGuardar(){
+    try{ localStorage.setItem(_novrKey(), JSON.stringify(_NOVR_VISTAS)); }catch(e){}
+    _novrInvalidar();   // decidir una novedad apaga su marca, sin recargar
+}
 /* Hermanas de una receta: el maestro y todas las copias del mismo maestro. Es a
    quienes llega el cambio si se sube al global. */
 function _novrHermanas(r){
@@ -3208,6 +3212,45 @@ function _novrLista(){
     out.sort(function(a,b){ return String(b.h.ts).localeCompare(String(a.h.ts)); });
     return out;
 }
+/* ══ EL AVISO, EN CADA RECETA ══════════════════════════════════════════════
+   El botón de Novedades junta todo y sirve para revisar de corrido. Pero el
+   chef entra a su recetario, no a Novedades — y ahí no había forma de ver que a
+   ESA receta le pasó algo en otra sucursal. Se enteraba al abrir el editor, o
+   sea cuando ya iba a cambiar otra cosa.
+
+   Mismo dato, puesto donde se mira. Se cuenta por el id CANÓNICO (el del
+   maestro): un cambio del maestro le importa a sus copias, y el de la sucursal
+   1 le importa a la 2 — es el mismo platillo visto desde otro lado. */
+var _NOVR_MAPA = null;
+function _novrMapa(){
+    if(_NOVR_MAPA) return _NOVR_MAPA;
+    var m = {};
+    try {
+        _novrLista().forEach(function(n){
+            var canon = n.rec.origenId || n.rec.id;
+            m[canon] = (m[canon]||0) + 1;
+        });
+    } catch(e){ m = {}; }
+    _NOVR_MAPA = m;
+    return m;
+}
+/* Se invalida en cada repintado y al decidir: una marca que no se va después
+   de atenderla enseña a ignorarlas todas. */
+function _novrInvalidar(){ _NOVR_MAPA = null; }
+function novrPendientes(r){ return r ? (_novrMapa()[r.origenId||r.id]||0) : 0; }
+function novrBadgeHTML(r){
+    var n = novrPendientes(r);
+    if(!n) return '';
+    var q = String(r.id).replace(/'/g,"\\'");
+    return '<button onclick="event.stopPropagation();abrirNovedadesRec(\''+q+'\')" '+
+        'title="'+n+' cambio'+(n!==1?'s':'')+' en otra sucursal o en el catálogo global, sin revisar. '+
+        'Toca para ver qué cambió y decidir." '+
+        'style="display:inline-flex;align-items:center;gap:4px;background:rgba(245,200,66,.14);'+
+        'border:1px solid rgba(245,200,66,.45);color:var(--accent-text,var(--accent));border-radius:20px;'+
+        'padding:1px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;'+
+        'white-space:nowrap;vertical-align:middle;margin-left:6px">🔔 '+n+'</button>';
+}
+
 function _novrFecha(iso){
     var d=new Date(iso); if(isNaN(d)) return '';
     var dias=Math.floor((Date.now()-d.getTime())/86400000);
@@ -3217,8 +3260,13 @@ function _novrTipoLbl(t){
     return t==='sub-alimentos'?'🥣 Sub Alimentos':t==='sub-bebidas'?'🧃 Sub Bebidas'
          : t==='bebidas'?'🥃 Bebidas':'🍽️ Alimentos';
 }
-function abrirNovedadesRec(){
+function abrirNovedadesRec(soloId){
     if(!_exigeRec('cambios','No puedes ver los cambios recientes del recetario.'))return;
+    /* Sin id = el panel de siempre. Con id = solo esa receta y sus copias:
+       abrirlo con los 200 cambios del negocio cuando se preguntó por una obliga
+       a buscarla otra vez. */
+    var _r = soloId ? getRecetas().find(function(x){ return x.id===soloId; }) : null;
+    _NOVR_SOLO = _r ? (_r.origenId || _r.id) : '';
     var ov=document.createElement('div');
     ov.id='novrOverlay';
     ov.style.cssText='position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:20px';
@@ -3237,6 +3285,7 @@ function _novrRender(q){
     var cont=document.getElementById('novrLista'); if(!cont) return;
     q=String(q||'').toLowerCase().trim();
     var lista=_novrLista().filter(function(n){
+        if(_NOVR_SOLO && (n.rec.origenId||n.rec.id)!==_NOVR_SOLO) return false;
         if(!q) return true;
         return ((n.rec.nombre||'')+' '+(n.h.sucNom||'')+' '+(n.h.quien||'')).toLowerCase().indexOf(q)>=0;
     });
@@ -3477,6 +3526,9 @@ function _engancharOrdenRec() {
 }
 
 function renderGridRecetas() {
+    /* El conteo se recalcula en cada repintado: cacheado entre renders, atender
+       una novedad dejaría su marca puesta hasta recargar la página. */
+    if (typeof _novrInvalidar === 'function') _novrInvalidar();
     const q   = (document.getElementById('buscarReceta')?.value || '').toLowerCase();
     const _catGlobal = _esCatGlobalRecetas();
     // Independizar por sucursal: operación a nivel negocio → solo en el catálogo global.
@@ -3608,6 +3660,9 @@ function renderGridRecetas() {
                 ${sel?'<span style="color:#0a0908;font-size:10px;font-weight:700">✓</span>':''}
             </div>
             ${_modoOrdenRec ? '<span class="ord-grip" style="position:absolute;top:8px;left:30px;z-index:2" title="Arrastra para cambiar el orden">⠿</span>' : ''}
+            <!-- La marca de novedades, arriba a la derecha: el nombre de la
+                 receta ya va apretado y una marca dentro del texto lo partiría. -->
+            ${novrPendientes(r) ? `<div style="position:absolute;top:7px;right:7px;z-index:2">${novrBadgeHTML(r)}</div>` : ''}
             <div style="font-size:20px;margin-bottom:6px;margin-top:4px;text-align:center">${icono}</div>
             <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:3px;
                 white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${etx(r.nombre)}</div>

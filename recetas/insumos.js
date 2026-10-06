@@ -842,6 +842,10 @@
    }
 
    function filtrar() {
+       /* El conteo de novedades se recalcula en cada repintado: si se quedara
+          cacheado, atender una novedad dejaría su marca puesta hasta recargar
+          — y una marca que no se va después de atenderla enseña a ignorarlas. */
+       if (typeof _novInvalidar === 'function') _novInvalidar();
        // Si los selects de filtro están vacíos (solo la opción default), recargarlos
        const fFam = document.getElementById('filtroFamilia');
        const fCat = document.getElementById('filtroCategoria');
@@ -1646,7 +1650,7 @@
                            : `<div style="width:36px;height:36px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px">${ins.esSubReceta ? '🍳' : '📦'}</div>`
                        }
                        <div>
-                           <div style="font-weight:500">${etx(insumoTitulo(ins))}${ins.esSubReceta ? ' <span style="font-size:9px;background:rgba(245,200,66,.15);color:var(--accent);border:1px solid rgba(245,200,66,.3);border-radius:4px;padding:1px 6px;vertical-align:middle;white-space:nowrap">🍳 Sub-receta</span>' : ''}</div>
+                           <div style="font-weight:500">${etx(insumoTitulo(ins))}${ins.esSubReceta ? ' <span style="font-size:9px;background:rgba(245,200,66,.15);color:var(--accent);border:1px solid rgba(245,200,66,.3);border-radius:4px;padding:1px 6px;vertical-align:middle;white-space:nowrap">🍳 Sub-receta</span>' : ''}${novBadgeHTML(ins)}</div>
                            ${(insumoContenido(ins)||ins.marca) ? `<div style="font-size:11px;color:var(--text-muted)">${insumoMetaHTML(ins)}</div>` : ''}
                            ${_catGlobalIns() ? `<div style="margin-top:3px">${_insumoBadgesIns(ins)}</div>` : ''}
                        </div>
@@ -1706,6 +1710,11 @@
            var fotoHTML = ins.foto
                ? '<img ' + _fotoInsAttr(ins.foto) + ' alt="" loading="lazy" decoding="async">'
                : '<span class="card-emoji">' + emoji + '</span>';
+           /* La marca de novedades, sobre la foto: en la galería el nombre ya va
+              apretado y una marca dentro del texto lo parte en dos renglones. */
+           var novHTML = novPendientes(ins)
+               ? '<div style="position:absolute;top:7px;right:7px;z-index:2">' + novBadgeHTML(ins) + '</div>'
+               : '';
 
            var tipoBadge = ins.categoria
                ? '<div class="insumo-card-tipo-badge">' + etx(ins.familia) + '</div>'
@@ -1738,9 +1747,10 @@
 
            return '<div class="insumo-card" data-sel-id="' + ins.id + '" data-ord-id="' + ins.id + '" ' + cardClick + '>' +
                selOverlay +
-               '<div class="insumo-card-foto">' +
+               '<div class="insumo-card-foto" style="position:relative">' +
                    fotoHTML +
                    tipoBadge +
+                   novHTML +
                '</div>' +
                '<div class="insumo-card-body">' +
                    '<div class="insumo-card-nombre" title="' + etx(insumoEtiqueta(ins)) + '">' + etx(insumoTitulo(ins)) + '</div>' +
@@ -3415,6 +3425,10 @@
    }
    function _novGuardarVistas() {
        try { localStorage.setItem(_novKeyStore(), JSON.stringify(_NOV_VISTAS)); } catch (e) {}
+       /* Decidir una novedad tiene que apagar su marca. Sin esto, el conteo
+          cacheado la seguiría mostrando hasta recargar la página — y una marca
+          que no se va después de atenderla enseña a ignorarlas todas. */
+       _novInvalidar();
    }
    function _novLista() {
        _novCargarVistas();
@@ -3458,7 +3472,64 @@
            return x.id !== ins.id && !x.origenId && !ins.origenId && _keyInsLocal(x) === k;
        });
    }
-   function abrirNovedadesIns() {
+   /* ══ EL AVISO, EN CADA INSUMO ══════════════════════════════════════════════
+      El botón de Novedades junta todo en una lista y está bien para revisar de
+      corrido. Pero el encargado no entra a Novedades: entra a su catálogo, y
+      ahí no había forma de saber que a ESE producto le pasó algo en otra
+      sucursal. Se enteraba abriendo el editor — o sea, cuando ya iba a cambiar
+      otra cosa.
+
+      Esto es el mismo dato, puesto donde se mira: una marca en el renglón, como
+      el indicador de conciliar en los cortes.
+
+      SE CUENTA POR PRODUCTO, no por registro. Una novedad del maestro le
+      importa a sus tres copias, y el cambio de la sucursal 1 le importa a la 2:
+      por eso la cuenta se agrupa por el id CANÓNICO (el del maestro), que es lo
+      que de verdad identifica al producto a través de sus copias. */
+   var _NOV_MAPA = null;      // { idCanónico: n } — se arma una vez por repintado
+   function _novMapa() {
+       if (_NOV_MAPA) return _NOV_MAPA;
+       var m = {};
+       try {
+           _novLista().forEach(function (n) {
+               var canon = n.ins.origenId || n.ins.id;
+               m[canon] = (m[canon] || 0) + 1;
+           });
+       } catch (e) { m = {}; }
+       _NOV_MAPA = m;
+       return m;
+   }
+   /* El mapa se invalida en cada repintado del catálogo: si se guardara entre
+      renders, decidir una novedad dejaría la marca puesta hasta recargar. */
+   function _novInvalidar() { _NOV_MAPA = null; }
+   window._novInvalidar = _novInvalidar;
+
+   function novPendientes(ins) {
+       if (!ins) return 0;
+       return _novMapa()[ins.origenId || ins.id] || 0;
+   }
+   window.novPendientes = novPendientes;
+
+   /* La marca. Se pinta igual en la lista y en la galería: dos marcas distintas
+      para lo mismo se leen como dos cosas distintas. */
+   function novBadgeHTML(ins) {
+       var n = novPendientes(ins);
+       if (!n) return '';
+       var q = String(ins.id).replace(/'/g, "\\'");
+       return '<button onclick="event.stopPropagation();abrirNovedadesIns(\'' + q + '\')" ' +
+           'title="' + n + ' cambio' + (n !== 1 ? 's' : '') + ' en otra sucursal o en el catálogo global, sin revisar. ' +
+           'Toca para ver qué cambió y decidir." ' +
+           'style="display:inline-flex;align-items:center;gap:4px;background:rgba(245,200,66,.14);' +
+           'border:1px solid rgba(245,200,66,.45);color:var(--accent-text,var(--accent));border-radius:20px;' +
+           'padding:1px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;' +
+           'white-space:nowrap;vertical-align:middle;margin-left:6px">🔔 ' + n + '</button>';
+   }
+   window.novBadgeHTML = novBadgeHTML;
+
+   function abrirNovedadesIns(soloId) {
+       /* Sin id = el panel de siempre, con todo. Con id = solo ese producto. */
+       var _ins = soloId ? (getInsumos() || []).find(function (x) { return x.id === soloId; }) : null;
+       _NOV_SOLO = _ins ? (_ins.origenId || _ins.id) : '';
        var ov = document.createElement('div');
        ov.id = 'novOverlay';
        ov.style.cssText = 'position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:20px';
@@ -3472,10 +3543,16 @@
        document.body.appendChild(ov);
        _novRender('');
    }
+   /* Cuando el panel se abre desde la marca de un insumo, se queda en ESE
+      producto —y en sus copias, que son el mismo producto visto desde otra
+      sucursal—. Abrirlo con los 200 cambios del negocio cuando se preguntó por
+      uno obliga a buscarlo otra vez. */
+   var _NOV_SOLO = '';
    function _novRender(q) {
        var cont = document.getElementById('novLista'); if (!cont) return;
        q = String(q || '').toLowerCase().trim();
        var lista = _novLista().filter(function (n) {
+           if (_NOV_SOLO && (n.ins.origenId || n.ins.id) !== _NOV_SOLO) return false;
            if (!q) return true;
            return ((insumoTitulo(n.ins) || '') + ' ' + (n.h.sucNom || '') + ' ' + (n.h.quien || '')).toLowerCase().indexOf(q) >= 0;
        });
