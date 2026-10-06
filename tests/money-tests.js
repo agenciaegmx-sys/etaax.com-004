@@ -15295,6 +15295,248 @@ console.log('\n══ BH9 · El catálogo es el de esta tienda ══');
     ctx.getInsumos = () => JSON.parse(JSON.stringify(CAT));
 }
 
+
+/* ═══════════ SUITE BH10 · ABRIR EL RENGLÓN, Y LOS INDICADORES ══════════════
+   Un total sin forma de abrirlo es un número que hay que creer. «Food cost
+   $67,006» no se puede discutir, corregir ni auditar: para saber si estaba bien
+   había que irse a Gastos, filtrar por fechas y sumar a mano, y para entonces ya
+   nadie lo revisa.
+
+   LA INVARIANTE DE ESTA SUITE: la lista tiene que sumar EXACTAMENTE el renglón.
+   Una lista que suma otra cosa es peor que no tener lista — da la sensación de
+   haber auditado el número mientras lo desmiente en silencio. Por eso aquí se
+   corre plDelPeriodo() de verdad, con cortes y gastos armados a mano, y se
+   comparan las dos cosas.                                                      */
+console.log('\n══ BH10 · Abrir el renglón, y los indicadores ══');
+{
+    const rs = fs.readFileSync(path.join(RAIZ, 'financiero/resumen.html'), 'utf8');
+    const cuerpoRS = (fn) => {
+        const i = rs.indexOf('function ' + fn + '(');
+        if (i < 0) throw new Error('no existe ' + fn + ' en resumen.html');
+        const abre = rs.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < rs.length) {
+            if (rs[j] === '{') prof++;
+            else if (rs[j] === '}') { prof--; if (!prof) return rs.slice(i, j + 1); }
+            j++;
+        }
+        throw new Error('sin cerrar ' + fn);
+    };
+
+    /* El periodo: septiembre. Dos cortes con comensales, gastos de cada tipo y
+       un apartado de previsión. */
+    const CORTES = [
+        { fecha:'2026-09-05', sucursalId:'', efectivo:40000, tarjeta:20000, transferencia:0,
+          comensales:150, propEfectivo:900, propTarjeta:1100 },
+        { fecha:'2026-09-12', sucursalId:'', efectivo:30000, tarjeta:10000, transferencia:0,
+          comensales:100, propEfectivo:500, propTarjeta:500 }
+    ];
+    const OTROS  = [ { fecha:'2026-09-08', concepto:'Renta de salón', monto:5000 } ];
+    const GASTOS = [
+        /* Las categorías son las REALES del catálogo (EtaaxCore.CATS_INSUMO).
+           Con nombres inventados —«Alimentos» a secas— el gasto cae en otros
+           variables y el food cost sale en cero sin que nada avise. */
+        { fecha:'2026-09-02', concepto:'Carnicería',  categoria:'Alimentos e ingredientes', monto:12000 },
+        { fecha:'2026-09-03', concepto:'Licores',     categoria:'Bebidas y licores',        monto:8000  },
+        { fecha:'2026-09-04', concepto:'Renta',       categoria:'Renta',         monto:25000 },
+        { fecha:'2026-09-06', concepto:'Sueldos',     categoria:'Nómina',        monto:18000 },
+        { fecha:'2026-09-07', concepto:'Limpieza',    categoria:'Mantenimiento', monto:3000  },
+        /* Capturado pero NO pagado: no salió de la caja, así que no suma al
+           renglón — y por lo tanto tampoco puede salir en su lista. */
+        { fecha:'2026-09-09', concepto:'Proveedor x', categoria:'Alimentos e ingredientes', monto:9999, estatus:'pendiente' },
+        /* La propina es del staff: ni es gasto ni es ingreso del negocio. */
+        { fecha:'2026-09-10', concepto:'Propinas',    categoria:'Propinas',      monto:2500, esPropina:true }
+    ];
+    const DEPS = [
+        { fecha:'2026-09-15', tipo:'apartado', concepto:'Aguinaldos', monto:7000, fondo:'banco' },
+        { fecha:'2026-08-15', tipo:'apartado', concepto:'Fuera del periodo', monto:4000 }
+    ];
+
+    /* etaax-core.js se expone en window: se carga igual que en el navegador, no
+       con require — así se prueba el archivo que de verdad sirve la página. */
+    const ctx = { console, Date, Math, String, Number, JSON, parseFloat, isNaN, Object, Array };
+    ctx.window = ctx;
+    vm.createContext(ctx);
+    vm.runInContext(fs.readFileSync(path.join(RAIZ, 'etaax-core.js'), 'utf8'), ctx, { filename:'etaax-core.js' });
+
+    ctx._c = { cortes:CORTES, otros:OTROS, gastos:GASTOS, deps:DEPS, ctas:[], fijos:[], staff:[], targets:null, metas:{} };
+    ctx._deSuc   = () => true;
+    ctx._sucNom  = () => 'Matriz';
+    ctx.rango    = () => ({ from:'2026-09-01', to:'2026-09-30' });
+    ctx._DET     = null;
+    vm.runInContext([cuerpoRS('n'), cuerpoRS('plDelPeriodo')].join('\n'), ctx, { filename:'resumen.html' });
+
+    const pl  = ctx.plDelPeriodo();
+    const DET = ctx._DET;
+    const suma = (a) => (a || []).reduce((t, x) => t + x.monto, 0);
+    const linea = (k) => pl.lineas.find(l => l.k === k).monto;
+
+    /* ── LA INVARIANTE, renglón por renglón ── */
+    test('la lista de ventas suma exactamente el renglón de ventas', () =>
+        eq(suma(DET.ventas), pl.ventas, 'cuadra'));
+    test('la de food cost suma exactamente el food cost', () =>
+        eq(suma(DET.food), linea('food'), 'cuadra'));
+    test('la de nómina suma exactamente la nómina', () =>
+        eq(suma(DET.nom), linea('nom'), 'cuadra'));
+    test('la de gastos fijos suma exactamente los fijos', () =>
+        eq(suma(DET.fijos), linea('fijos'), 'cuadra'));
+    test('la de otros variables suma exactamente ese renglón', () =>
+        eq(suma(DET.otros), linea('otros'), 'cuadra'));
+    test('la de previsiones suma exactamente lo apartado', () =>
+        eq(suma(DET.prevs), linea('prevs'), 'cuadra'));
+
+    /* ── Lo que NO debe aparecer ── */
+    /* Un gasto pendiente está capturado pero no ha salido de la caja. Si se
+       colara en la lista, el pie diría más que el renglón y parecería que el
+       renglón está mal. */
+    test('un gasto PENDIENTE no se cuela en ninguna lista', () => {
+        const todos = [].concat(DET.food, DET.nom, DET.fijos, DET.otros);
+        return eq(todos.some(x => x.concepto === 'Proveedor x'), false, 'fuera');
+    });
+    /* La propina pasa por la caja pero es del staff: no es gasto del negocio ni
+       ingreso suyo. Es la regla que ya cuida clasificarGastos. */
+    test('la propina tampoco: no es gasto del negocio', () => {
+        const todos = [].concat(DET.food, DET.nom, DET.fijos, DET.otros);
+        return eq(todos.some(x => x.concepto === 'Propinas'), false, 'fuera');
+    });
+    /* El apartado de agosto no es de este periodo. */
+    test('un apartado de otro mes no entra en previsiones', () =>
+        eq(DET.prevs.some(x => x.concepto === 'Fuera del periodo'), false, 'fuera'));
+    /* La venta se mide BRUTA: la propina de tarjeta entra a la cuenta del
+       negocio pero es del mesero. Sumarla inflaría la venta y, de paso, bajaría
+       el food cost sin que nadie comprara menos. */
+    test('la venta es bruta: la propina no la infla', () =>
+        eq(pl.ventas, 40000 + 20000 + 30000 + 10000 + 5000, 'sin propinas'));
+
+    /* ── Lo que SÍ, y dónde ── */
+    test('los ingresos extra entran en la lista de ventas', () =>
+        eq(DET.ventas.some(x => x.concepto === 'Renta de salón'), true, 'incluido'));
+    test('alimentos y bebidas caen en food cost, no en otros variables', () =>
+        eq(suma(DET.food), 20000, 'donde toca'));
+    test('la limpieza cae en otros variables, no en food cost', () =>
+        eq(DET.otros.some(x => x.concepto === 'Limpieza') &&
+           !DET.food.some(x => x.concepto === 'Limpieza'), true, 'donde toca'));
+    /* «$18,000 de nómina» no dice si sobra administración o falta cocina. */
+    test('la nómina llega partida en operativa / administrativa / IMSS', () =>
+        eq(DET.nom.every(x => ['Operativa','Administrativa','IMSS'].indexOf(x.sub) >= 0), true, 'partida'));
+    /* Lo más reciente arriba: la lista se lee para ver qué pasó, y lo que pasó
+       ayer importa más que lo de hace tres semanas. */
+    test('cada lista viene de lo más nuevo a lo más viejo', () =>
+        eq(DET.food[0].fecha >= DET.food[DET.food.length - 1].fecha, true, 'ordenada'));
+
+    /* ── Los comensales, de los mismos cortes que la venta ── */
+    /* Si salieran de otra consulta, un día el cheque promedio no cuadraría con
+       la venta de arriba y no habría forma de saber cuál creer. */
+    test('los comensales salen de los cortes del periodo', () =>
+        eq(DET._comensales, 250, 'mismos cortes'));
+    test('…y el cheque promedio se saca de la venta, no promediando promedios', () =>
+        eq(cuerpoRS('renderKpis').indexOf('com>0 ? base.ventas/com : 0') > -1, true, 'ponderado'));
+
+    /* ── La meta del periodo ── */
+    /* Para una semana o un rango suelto, prorratear el mes daría una meta falsa:
+       los días no valen lo mismo (un sábado no es un martes). Se suman los días
+       que caen dentro, con el reparto diario del núcleo. */
+    test('la meta de un rango suma los días que caen dentro', () => {
+        const t = cuerpoRS('metaDelRango');
+        return eq(t.indexOf('EtaaxCore.calcMetaDiaria') === -1 &&
+                  t.indexOf('_metaDelDia(f)') > -1 &&
+                  t.indexOf('d.setDate(d.getDate()+1)') > -1, true, 'por día');
+    });
+    test('…usando el mismo reparto diario que Ventas Totales', () =>
+        eq(cuerpoRS('_metaDelDia').indexOf("EtaaxCore.calcMetaDiaria(mes, md.meta, md.dist||'uniforme', md.manualDays||null)") > -1,
+           true, 'mismo reparto'));
+    /* Sin meta puesta, «$0 de meta» se leería como «cumpliste el 0%» o, peor,
+       como que la meta es cero y todo está bien. */
+    test('…y sin meta configurada dice «sin definir», no cero', () =>
+        eq(cuerpoRS('metaDelRango').indexOf('return hay ? t : null;') > -1, true, 'honesto'));
+    test('…invitando a ponerla donde se pone', () =>
+        eq(cuerpoRS('renderKpis').indexOf("Ponla en <a href=\"ventas.html\"") > -1, true, 'con salida'));
+
+    /* ── Cómo se leen los porcentajes ── */
+    /* En un GASTO, estar por debajo de la meta es cumplir. Pintarlo al revés
+       haría leer un ahorro como un problema — y es el error fácil, porque en la
+       utilidad es exactamente al revés. */
+    test('en un gasto, por debajo de la meta es cumplir', () =>
+        eq(cuerpoRS('renderKpis').indexOf('var ok = meta2>0 ? (l.pct<=meta2) : null;') > -1, true, 'al derecho'));
+    test('…y en la utilidad, por encima', () =>
+        eq(cuerpoRS('renderKpis').indexOf('var okU = m.util>0 ? (base.utilidadPct>=m.util) : null;') > -1,
+           true, 'al revés, a propósito'));
+    /* Una meta que nadie puso no se inventa: calificar contra un número
+       imaginario es dar una nota que no significa nada. */
+    test('un renglón sin meta no se califica', () =>
+        eq(cuerpoRS('renderKpis').indexOf("'sin meta configurada'") > -1, true, 'sin inventar'));
+
+    /* ── La ventana de desglose ── */
+    test('cada renglón se puede abrir', () =>
+        eq(cuerpoRS('verDetalle').length > 0 && rs.indexOf('_conLupa(l.k, l.nom)') > -1, true, 'abrible'));
+    test('…incluido el de ventas', () =>
+        eq(rs.indexOf("_conLupa('ventas','Ventas')") > -1, true, 'también'));
+    /* El pie con el total es lo que convierte la lista en algo verificable: sin
+       él hay que sumar a ojo para saber si cuadra. */
+    test('…y la ventana cierra con el total de lo que listó', () =>
+        eq(cuerpoRS('verDetalle').indexOf("fmtM(total)") > -1 &&
+           cuerpoRS('verDetalle').indexOf('var total=filas.reduce') > -1, true, 'verificable'));
+    /* Un renglón en cero no tiene nada que enseñar: un botón que abre una
+       ventana vacía enseña a no tocar los botones. */
+    test('…y un renglón sin movimientos no finge tenerlos', () =>
+        eq(cuerpoRS('_conLupa').indexOf('if(!cuantos) return esc(nom);') > -1, true, 'sin promesas'));
+
+    /* ── La barra lateral ── */
+    /* LA CAUSA: la lista de enlaces estaba copiada a mano en cada página. Siete
+       copias; basta que una se quede atrás para que un sub-módulo desaparezca
+       mientras estás en otro. Resumen se agregó a su propia página y a ninguna
+       más, así que entrar a Ventas lo borraba del mapa. */
+    const nav = fs.readFileSync(path.join(RAIZ, 'financiero/nav.js'), 'utf8');
+    const PAGS = ['ventas','gastos-globales','cuentas-bancarias','previsiones','estadisticas','kpis','resumen'];
+    PAGS.forEach(p => {
+        const h = fs.readFileSync(path.join(RAIZ, 'financiero/' + p + '.html'), 'utf8');
+        test(p + ' toma la barra de un solo lugar', () =>
+            eq(h.indexOf('src="nav.js"') > -1 && h.indexOf('class="nav-section"') === -1,
+               true, 'una sola'));
+    });
+    test('…y esa barra lleva a los siete sub-módulos', () =>
+        eq(PAGS.every(p => nav.indexOf("'" + p + ".html'") > -1), true, 'completa'));
+    /* Sin marcar dónde estás, la barra deja de ser un mapa y es solo una lista
+       de ligas. */
+    test('…marcando en cuál estás parado', () =>
+        eq(nav.indexOf("(l.href === aqui) ? ' active' : ''") > -1, true, 'ubicado'));
+    /* Si la página trajera su propia lista quedarían las dos pintadas, una
+       debajo de la otra. Se comprueba CORRIENDO nav.js contra un nav de mentira
+       que ya trae una sección: buscar el texto de la línea no sirve —basta con
+       borrarle el cuerpo al forEach para que el candado siga en verde—, lo
+       destapó la batería. */
+    test('…quitando la que la página trajera, para no duplicarla', () => {
+        const viejas = [{ parentNode:{ removeChild(){ viejas.quitada = true; } } }];
+        let pintado = '';
+        const navEl = {
+            querySelectorAll: () => viejas,
+            insertAdjacentHTML: (_, h) => { pintado += h; }
+        };
+        const c = { console,
+            location:{ pathname:'/financiero/kpis.html' },
+            document:{ readyState:'complete', getElementById: (id) => id === 'nav' ? navEl : null,
+                       addEventListener(){} } };
+        c.window = c; vm.createContext(c);
+        vm.runInContext(nav, c, { filename:'nav.js' });
+        return eq(viejas.quitada === true &&
+                  (pintado.match(/class="nav-section"/g) || []).length === 5, true, 'sin duplicar');
+    });
+    /* Y que de verdad pinte la lista completa, con el activo donde toca. */
+    test('…y pintando los siete enlaces, con KPIs marcado al estar en KPIs', () => {
+        let pintado = '';
+        const navEl = { querySelectorAll: () => [], insertAdjacentHTML: (_, h) => { pintado += h; } };
+        const c = { console,
+            location:{ pathname:'/financiero/kpis.html' },
+            document:{ readyState:'complete', getElementById: (id) => id === 'nav' ? navEl : null,
+                       addEventListener(){} } };
+        c.window = c; vm.createContext(c);
+        vm.runInContext(nav, c, { filename:'nav.js' });
+        return eq((pintado.match(/class="nav-link/g) || []).length === 7 &&
+                  pintado.indexOf('href="kpis.html" class="nav-link active"') > -1 &&
+                  pintado.indexOf('href="resumen.html" class="nav-link"') > -1, true, 'completa');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');

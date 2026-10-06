@@ -64,6 +64,17 @@
   background:var(--surface2);color:var(--text-muted);white-space:nowrap; }
 .rs-chip b { color:var(--text); }
 
+/* KPIs: tarjetas chicas, el dato grande y qué significa abajo */
+.rs-kpis { display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:10px;margin-top:14px; }
+.rs-kpi { background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 15px; }
+.rs-kpi-lbl { font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:var(--text-dim);margin-bottom:5px; }
+.rs-kpi-val { font-family:'Bebas Neue',sans-serif;font-size:27px;letter-spacing:.8px;color:var(--text);line-height:1; }
+.rs-kpi-sub { font-size:10.5px;color:var(--text-dim);margin-top:4px;line-height:1.45; }
+.rs-kpi-barra { height:5px;border-radius:4px;background:var(--surface2);margin-top:8px;overflow:hidden; }
+.rs-kpi-barra i { display:block;height:100%;border-radius:4px; }
+.rs-kpi-grupo { grid-column:1/-1;font-size:9.5px;letter-spacing:2.2px;text-transform:uppercase;
+  color:var(--text-dim);margin:8px 0 -2px; }
+
 .rs-nota { font-size:11.5px;color:var(--text-dim);line-height:1.6;margin-top:10px; }
 .rs-delta { font-size:12px;font-weight:600; }
 .rs-vacio { text-align:center;padding:50px 20px;color:var(--text-dim);line-height:1.7; }
@@ -94,15 +105,6 @@
             <a href="index.html" class="nav-toggle nav-toggle-btn" data-tooltip="Salud Financiera" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:16px;line-height:1">📊</a>
             <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
         </div>
-    </div>
-    <div class="nav-section">
-        <div class="nav-section-label">Salud Financiera</div>
-        <a href="resumen.html" class="nav-link active" data-tooltip="Resumen"><span class="nav-icon">🧮</span><span class="nav-text">Resumen</span></a>
-        <a href="ventas.html" class="nav-link" data-tooltip="Ventas"><span class="nav-icon">📈</span><span class="nav-text">Ventas</span></a>
-        <a href="gastos-globales.html" class="nav-link" data-tooltip="Gastos"><span class="nav-icon">💸</span><span class="nav-text">Gastos</span></a>
-        <a href="kpis.html" class="nav-link" data-tooltip="KPIs"><span class="nav-icon">🎯</span><span class="nav-text">KPIs</span></a>
-        <a href="previsiones.html" class="nav-link" data-tooltip="Previsiones"><span class="nav-icon">🗂️</span><span class="nav-text">Previsiones</span></a>
-        <a href="estadisticas.html" class="nav-link" data-tooltip="Estadísticas"><span class="nav-icon">📊</span><span class="nav-text">Estadísticas</span></a>
     </div>
 </nav>
 
@@ -146,6 +148,9 @@
         </table>
     </div>
 
+    <!-- Los KPIs, debajo del P&L: el mismo periodo visto por indicador -->
+    <div class="rs-kpis" id="rsKpis"></div>
+
     <div class="rs-nota" id="rsNota"></div>
 </div>
 </main>
@@ -177,7 +182,7 @@ function mesStr(){ return todayStr().slice(0,7); }
    Se leen las MISMAS tablas que KPIs y con las MISMAS reglas del núcleo. Si
    esta pantalla calculara por su cuenta, un día diría una utilidad distinta a
    la de KPIs sobre el mismo mes y no habría forma de saber cuál creer. */
-var _c = { cortes:[], otros:[], gastos:[], deps:[], ctas:[], fijos:[], staff:[], targets:null };
+var _c = { cortes:[], otros:[], gastos:[], deps:[], ctas:[], fijos:[], staff:[], targets:null, metas:{} };
 
 async function cargar(){
     var negId = getNegocioActivo(); if(!negId) return;
@@ -189,12 +194,18 @@ async function cargar(){
         _supabase.from('tarjetas_credito').select('datos').eq('negocio_id',negId),
         _supabase.from('gf_fijos').select('datos').eq('negocio_id',negId),
         _supabase.from('staff').select('datos').eq('negocio_id',negId),
-        _supabase.from('kpi_targets').select('datos').eq('negocio_id',negId).maybeSingle()
+        _supabase.from('kpi_targets').select('datos').eq('negocio_id',negId).maybeSingle(),
+        _supabase.from('sf_metas').select('datos').eq('negocio_id',negId).maybeSingle()
     ]);
     var fila = function(x){ return (x.data||[]).map(function(y){return y.datos;}).filter(Boolean); };
     _c.cortes=fila(r[0]); _c.otros=fila(r[1]); _c.gastos=fila(r[2]); _c.deps=fila(r[3]);
     _c.ctas=fila(r[4]); _c.fijos=fila(r[5]); _c.staff=fila(r[6]);
     _c.targets=(r[7].data&&r[7].data.datos)||null;
+    /* La meta de VENTA es otra cosa que las metas de porcentaje: vive en
+       sf_metas por mes y la pone el encargado desde Ventas Totales. Se lee aquí
+       para poder decir «vas al 86% de tu meta» sin que haya que cambiar de
+       pantalla a averiguarlo. */
+    _c.metas=(r[8].data&&r[8].data.datos)||{};
 }
 
 /* Alcance por sucursal: vacío = el negocio entero. Misma regla del resto. */
@@ -208,6 +219,7 @@ function rango(){ return EtaaxCore.getRange(periodoTipo,_pVal(),_pEnd()); }
 
 function setPeriodo(t){
     periodoTipo=t;
+    _mdCache={};   // el reparto diario depende del mes: al cambiar de periodo se rearma
     [['dia','tbDia'],['semana','tbSem'],['mes','tbMes'],['rango','tbRan']].forEach(function(p){
         var b=document.getElementById(p[1]); if(b) b.className='rs-tab'+(t===p[0]?' on':'');
     });
@@ -245,6 +257,56 @@ function plDelPeriodo(){
        otras reglas que clasificarGastos, un mismo gasto podría contarse en dos
        renglones —o en ninguno— y la suma dejaría de cuadrar con los egresos. */
     var opts = {fijos:_c.fijos, staff:_c.staff, comisionBanco:comision};
+
+    /* ── DE DÓNDE SALIÓ CADA RENGLÓN ───────────────────────────────────────────
+       Un total sin forma de abrirlo es un número que hay que creer. «Food cost
+       $67,006» no se puede discutir, corregir ni auditar: para saber si está
+       bien había que irse a Gastos, filtrar por fechas y sumar a mano — y para
+       entonces ya nadie lo revisa.
+
+       El desglose se arma AQUÍ, en la misma pasada que el total y con la misma
+       regla del núcleo (EtaaxCore.grupoGasto). Calcularlo aparte sería abrir la
+       puerta a que la lista sume una cosa y el renglón diga otra, que es peor
+       que no tener lista. */
+    var DET = { ventas:[], food:[], nom:[], fijos:[], otros:[], prevs:[] };
+    cortes.forEach(function(c){
+        DET.ventas.push({ fecha:c.fecha, concepto:'Corte'+(c.turno?' · '+c.turno:''),
+                          sub:_sucNom(c.sucursalId), monto:EtaaxCore.ventasBruta(c) });
+    });
+    otros.forEach(function(o){
+        DET.ventas.push({ fecha:o.fecha, concepto:o.concepto||o.nombre||'Otro ingreso',
+                          sub:'ingreso extra', monto:n(o.monto) });
+    });
+    gastos.forEach(function(g){
+        /* Un gasto PENDIENTE está capturado pero no ha salido de la caja: no
+           suma al renglón, así que tampoco puede aparecer en su lista. */
+        if(EtaaxCore.gastoEstatus(g)!=='pagado') return;
+        var grupo=EtaaxCore.grupoGasto(g,opts);
+        if(grupo==='propina') return;              // la propina es del staff, no gasto
+        var reng={ fecha:g.fecha, concepto:g.concepto||g.descripcion||g.proveedor||'(sin concepto)',
+                   sub:g.categoria||'', monto:n(g.monto) };
+        if(grupo==='variable'&&EtaaxCore.esGastoInsumo(g)) DET.food.push(reng);
+        else if(grupo==='variable') DET.otros.push(reng);
+        else if(grupo==='fijo')     DET.fijos.push(reng);
+        else { reng.sub = grupo==='imss'?'IMSS':(grupo==='nomAdm'?'Administrativa':'Operativa');
+               reng.grupo = grupo; DET.nom.push(reng); }
+    });
+    (_c.deps||[]).filter(_deSuc).forEach(function(d){
+        if(!EtaaxCore.esApartado(d)) return;
+        if(!dentro(d.fecha)) return;
+        DET.prevs.push({ fecha:d.fecha, concepto:d.concepto||d.prevNombre||'Apartado',
+                         sub:EtaaxCore.apartadoFondo(d)==='banco'?'banco':'caja fuerte', monto:n(d.monto) });
+    });
+    Object.keys(DET).forEach(function(k){
+        DET[k].sort(function(a,b){ return String(b.fecha||'').localeCompare(String(a.fecha||'')); });
+    });
+    /* Los comensales del periodo salen de los mismos cortes que la venta: el
+       cheque promedio tiene que medirse contra la venta que se está enseñando,
+       no contra otra. */
+    DET._comensales = cortes.reduce(function(t,c){ return t+n(c.comensales); },0);
+    DET._cortes = cortes.length;
+    _DET = DET;
+
     return EtaaxCore.resumenPL({
         ingresos: ingresos,
         food:      EtaaxCore.costoInsumos(gastos, opts),
@@ -253,6 +315,19 @@ function plDelPeriodo(){
         variables: cl.variable,
         prevs:     prevs
     });
+}
+
+var _DET = null;   // el desglose del último periodo calculado
+
+/* El nombre de la sucursal del corte, para que la lista diga de dónde vino cada
+   venta cuando se está mirando el negocio completo. */
+function _sucNom(id){
+    if(!id) return 'Matriz';
+    try {
+        var l=JSON.parse(localStorage.getItem(_sk('sucursales'))||'[]');
+        var x=l.find(function(y){ return y.id===id; });
+        return (x&&x.nombre)||id;
+    } catch(e){ return id; }
 }
 
 /* ── La proyección ───────────────────────────────────────────────────────── */
@@ -275,6 +350,19 @@ function edMonto(k, el){
     render(true);
 }
 function limpiarProyeccion(){ _proy={}; render(); }
+
+/* El concepto, con la cuenta de movimientos que hay detrás. El número de
+   renglones a la vista es lo que invita a abrirlo: «Food cost · 23» se lee como
+   algo que se puede revisar; «Food cost» a secas, como un dato dado. */
+function _conLupa(k, nom){
+    var cuantos = (_DET && _DET[k]) ? _DET[k].length : 0;
+    if(!cuantos) return esc(nom);
+    return '<button onclick="verDetalle(\''+k+'\')" title="Ver los movimientos que suman este renglón" '+
+        'style="background:none;border:none;padding:0;font:inherit;color:var(--text);cursor:pointer;'+
+        'text-align:left;display:inline-flex;align-items:center;gap:7px">'+esc(nom)+
+        '<span style="font-size:10px;color:var(--text-dim);border:1px solid var(--border);border-radius:20px;'+
+        'padding:1px 7px;font-variant-numeric:tabular-nums">'+cuantos+' ⌄</span></button>';
+}
 
 function render(mantenFoco){
     var foco = mantenFoco ? (document.activeElement&&document.activeElement.id) : null;
@@ -321,7 +409,7 @@ function render(mantenFoco){
         var cDif = Math.abs(dif)<0.5 ? 'var(--text-dim)' : (dif<0 ? 'var(--green)' : 'var(--red)');
         var tocado = !!_proy[l.k];
         return '<tr>'+
-            '<td>'+esc(l.nom)+'</td>'+
+            '<td>'+_conLupa(l.k, l.nom)+'</td>'+
             '<td>'+fmtM(l.monto)+'</td>'+
             '<td style="color:var(--text-muted)">'+fmtP(l.pct)+'</td>'+
             '<td class="rs-proy"><input class="rs-ed'+(tocado&&_proy[l.k].monto!==undefined?' tocado':'')+'" id="ed_m_'+l.k+'" '+
@@ -340,7 +428,7 @@ function render(mantenFoco){
     document.getElementById('rsBody').innerHTML =
         // Ventas arriba: todo lo demás es un porcentaje de esto
         '<tr>'+
-            '<td style="font-weight:600">Ventas</td>'+
+            '<td style="font-weight:600">'+_conLupa('ventas','Ventas')+'</td>'+
             '<td style="font-weight:600">'+fmtM(base.ventas)+'</td>'+
             '<td style="color:var(--text-muted)">100%</td>'+
             '<td class="rs-proy"><input class="rs-ed'+(_proy.ventas!==undefined?' tocado':'')+'" id="ed_ventas" '+
@@ -360,6 +448,8 @@ function render(mantenFoco){
             '<td class="rs-proy" style="color:var(--blue,#7ab8f5)">'+fmtP(proy.utilidadPct)+'</td>'+
             '<td class="rs-delta" style="color:'+cU+'">'+(difU>=0?'+':'−')+fmtM(Math.abs(difU))+'</td>'+
         '</tr>';
+
+    renderKpis(base, m);
 
     document.getElementById('btnLimpiar').style.display = _tocado()?'':'none';
 
@@ -381,6 +471,176 @@ function render(mantenFoco){
         var el = document.getElementById(foco);
         if (el) { el.focus(); try { el.setSelectionRange(selStart, selStart); } catch(e){} }
     }
+}
+
+/* ══ LOS INDICADORES ═══════════════════════════════════════════════════════
+   El P&L dice CUÁNTO; los KPIs dicen DE QUÉ MANERA. Dos meses con la misma
+   venta pueden venir de 900 cuentas de $380 o de 400 de $870, y lo que hay que
+   hacer con cada uno no se parece en nada.
+
+   Van debajo de la tabla y leen el MISMO periodo y los MISMOS cortes: si
+   salieran de otra consulta, un día el cheque promedio no cuadraría con la
+   venta de arriba y no habría forma de saber cuál creer. */
+
+/* La meta de venta del periodo. Vive por mes en sf_metas y se reparte por día
+   (EtaaxCore.calcMetaDiaria), así que para un rango suelto o una semana se suman
+   los días que caen dentro — no se prorratea el mes, que daría una meta falsa
+   para un periodo de cuatro días. */
+var _mdCache = {};
+function _metaDelDia(fecha){
+    var mes=fecha.slice(0,7);
+    if(!_mdCache[mes]){
+        var md=(_c.metas||{})[mes];
+        _mdCache[mes]= md ? EtaaxCore.calcMetaDiaria(mes, md.meta, md.dist||'uniforme', md.manualDays||null) : {};
+    }
+    return _mdCache[mes][fecha]||0;
+}
+function metaDelRango(){
+    var r=rango(), t=0, hay=false;
+    var d0=new Date(r.from+'T12:00:00'), d1=new Date(r.to+'T12:00:00');
+    for(var d=new Date(d0); d<=d1; d.setDate(d.getDate()+1)){
+        var f=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+        var m=_metaDelDia(f);
+        if(m>0) hay=true;
+        t+=m;
+    }
+    return hay ? t : null;    // sin meta puesta se dice «sin definir», no «$0»
+}
+
+function _kpiCard(lbl, val, sub, color, barraPct, barraColor){
+    var barra = (barraPct===null||barraPct===undefined) ? '' :
+        '<div class="rs-kpi-barra"><i style="width:'+Math.max(0,Math.min(100,barraPct))+'%;background:'+
+        (barraColor||'var(--green)')+'"></i></div>';
+    return '<div class="rs-kpi"><div class="rs-kpi-lbl">'+esc(lbl)+'</div>'+
+        '<div class="rs-kpi-val"'+(color?' style="color:'+color+'"':'')+'>'+val+'</div>'+
+        '<div class="rs-kpi-sub">'+sub+'</div>'+barra+'</div>';
+}
+
+function renderKpis(base, m){
+    var cont=document.getElementById('rsKpis'); if(!cont) return;
+    var com=(_DET&&_DET._comensales)||0;
+    var cortes=(_DET&&_DET._cortes)||0;
+    /* El cheque promedio se calcula sobre la VENTA del periodo, no sumando los
+       cheques de cada corte: promediar promedios le daría el mismo peso a un
+       martes de 12 cuentas que a un sábado de 300. */
+    var cheque = com>0 ? base.ventas/com : 0;
+    var meta = metaDelRango();
+    var cump = (meta&&meta>0) ? (base.ventas/meta*100) : null;
+    var cCump = cump===null ? 'var(--text-dim)' : cump>=100?'var(--green)':cump>=80?'var(--accent-text,var(--accent))':'var(--red)';
+    var dias = Math.max(1, Math.round((new Date(rango().to+'T12:00:00')-new Date(rango().from+'T12:00:00'))/864e5)+1);
+
+    var html='<div class="rs-kpi-grupo">Cómo se vendió</div>';
+    html+=_kpiCard('Meta del periodo',
+        meta===null?'Sin definir':fmtM(meta),
+        meta===null
+            ? 'Ponla en <a href="ventas.html" style="color:var(--green)">Ventas Totales</a> para medir el avance'
+            : (cump===null?'':'<b style="color:'+cCump+'">'+cump.toFixed(0)+'%</b> cumplido · faltan '+
+               (meta-base.ventas>0?fmtM(meta-base.ventas):'$0')),
+        null, cump, cCump);
+    html+=_kpiCard('Comensales',
+        com>0?com.toLocaleString('es-MX'):'—',
+        com>0 ? (com/dias).toFixed(0)+' por día en '+dias+' días'
+              : 'No se capturaron comensales en los cortes del periodo');
+    html+=_kpiCard('Cheque promedio',
+        com>0?fmtM(cheque):'—',
+        com>0 ? 'Venta entre comensales — sin propinas'
+              : 'Hace falta el número de comensales en el corte');
+    html+=_kpiCard('Venta por día',
+        fmtM(base.ventas/dias),
+        cortes+' corte'+(cortes===1?'':'s')+' en el periodo');
+
+    /* El mismo P&L leído como porcentajes, que es como se compara entre meses y
+       contra la meta: los pesos de septiembre y los de febrero no se comparan,
+       los porcentajes sí. */
+    html+='<div class="rs-kpi-grupo">Cómo se gastó · % sobre la venta</div>';
+    base.lineas.forEach(function(l){
+        var meta2 = m[l.k==='otros'?'otros':l.k];
+        /* En un gasto, estar POR DEBAJO de la meta es cumplir. Pintarlo al revés
+           haría leer un ahorro como un problema. */
+        var ok = meta2>0 ? (l.pct<=meta2) : null;
+        var c  = ok===null?'var(--text)':ok?'var(--green)':'var(--red)';
+        html+=_kpiCard(l.nom, fmtP(l.pct),
+            meta2>0 ? ('meta '+meta2+'% · '+(ok?'dentro':'<b style="color:var(--red)">'+(l.pct-meta2).toFixed(1)+' pts arriba</b>'))
+                    : 'sin meta configurada',
+            c, meta2>0?Math.min(100,(l.pct/meta2)*100):null, ok?'var(--green)':'var(--red)');
+    });
+    var okU = m.util>0 ? (base.utilidadPct>=m.util) : null;
+    html+=_kpiCard('Utilidad', fmtP(base.utilidadPct),
+        m.util>0 ? ('meta '+m.util+'% · '+(okU?'cumplida':'<b style="color:var(--red)">'+(m.util-base.utilidadPct).toFixed(1)+' pts abajo</b>'))
+                 : 'sin meta configurada',
+        okU===null?'var(--text)':okU?'var(--green)':'var(--red)',
+        m.util>0?Math.min(100,(base.utilidadPct/m.util)*100):null,
+        okU?'var(--green)':'var(--red)');
+    cont.innerHTML=html;
+}
+
+/* ══ ABRIR UN RENGLÓN ══════════════════════════════════════════════════════
+   Lo que hay detrás del número, con los mismos registros que se sumaron. El
+   total del pie tiene que coincidir con el renglón de la tabla: si no coincide,
+   es que la lista y el cálculo se separaron, y eso se ve de inmediato. */
+var _DET_TITULOS = {
+    ventas:['Ventas e ingresos','Los cortes de caja y los ingresos extra del periodo. La venta se mide BRUTA, sin propinas: la propina es del staff, no ingreso del negocio.'],
+    food:  ['Food cost','Lo comprado en alimentos, bebidas e insumos de barra. Es compra, no consumo de inventario.'],
+    nom:   ['Nómina','Sueldos, IMSS y lo pagado a socios, separado en operativa y administrativa.'],
+    fijos: ['Gastos fijos','Lo que se paga igual venda o no venda: renta, servicios, licencias.'],
+    otros: ['Otros variables','Gastos que suben y bajan con la operación y no son insumo: limpieza, mantenimiento, comisiones, impuestos.'],
+    prevs: ['Previsiones','Dinero apartado este periodo para un gasto futuro (aguinaldos, impuestos, reparaciones). Sale de la caja aunque todavía no se gaste.']
+};
+function verDetalle(k){
+    if(!_DET) return;
+    var t=_DET_TITULOS[k]||[k,''];
+    var filas=_DET[k]||[];
+    var total=filas.reduce(function(a,b){ return a+n(b.monto); },0);
+
+    var cuerpo;
+    if(!filas.length){
+        cuerpo='<div class="rs-vacio">No hay movimientos de este tipo en el periodo.</div>';
+    } else {
+        /* La nómina se enseña partida: «$4,640 de nómina» no dice si el
+           problema es que sobra administración o que falta cocina. */
+        var sub='';
+        if(k==='nom'){
+            var g={Operativa:0,Administrativa:0,IMSS:0};
+            filas.forEach(function(r){ g[r.sub]=(g[r.sub]||0)+n(r.monto); });
+            sub='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
+                Object.keys(g).map(function(x){
+                    return '<span class="rs-chip"><b>'+esc(x)+'</b> '+fmtM(g[x])+
+                           ' <span style="color:var(--text-dim)">· '+(total>0?(g[x]/total*100).toFixed(0):0)+'%</span></span>';
+                }).join('')+'</div>';
+        }
+        cuerpo=sub+'<table class="rs-tbl"><thead><tr>'+
+            '<th style="width:88px">Fecha</th><th style="text-align:left">Concepto</th>'+
+            '<th style="text-align:left;width:34%">'+(k==='ventas'?'Sucursal':'Detalle')+'</th><th>Monto</th>'+
+            '</tr></thead><tbody>'+
+            filas.map(function(r){
+                return '<tr><td style="text-align:left;color:var(--text-dim);font-size:12px">'+esc(r.fecha||'')+'</td>'+
+                    '<td style="text-align:left">'+esc(r.concepto)+'</td>'+
+                    '<td style="text-align:left;color:var(--text-muted);font-size:12px">'+esc(r.sub||'—')+'</td>'+
+                    '<td>'+fmtM(r.monto)+'</td></tr>';
+            }).join('')+
+            '</tbody><tfoot><tr class="rs-util"><td colspan="3" style="text-align:left">'+filas.length+
+            ' movimiento'+(filas.length===1?'':'s')+'</td><td>'+fmtM(total)+'</td></tr></tfoot></table>';
+    }
+
+    var ov=document.getElementById('rsDetOv');
+    if(ov) ov.remove();
+    ov=document.createElement('div');
+    ov.id='rsDetOv';
+    ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.72);display:flex;'+
+        'align-items:center;justify-content:center;padding:18px';
+    ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+    ov.innerHTML='<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;'+
+        'width:min(840px,96vw);max-height:88vh;display:flex;flex-direction:column;overflow:hidden">'+
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;'+
+            'padding:16px 18px;border-bottom:1px solid var(--border)">'+
+            '<div><div style="font-family:\'Bebas Neue\',sans-serif;font-size:21px;letter-spacing:1.4px;'+
+                'color:var(--text)">'+esc(t[0])+'</div>'+
+                '<div style="font-size:11.5px;color:var(--text-dim);margin-top:3px;line-height:1.55;max-width:560px">'+
+                t[1]+'</div></div>'+
+            '<button class="rs-tab" onclick="document.getElementById(\'rsDetOv\').remove()">✕ Cerrar</button>'+
+        '</div>'+
+        '<div style="flex:1;overflow:auto;padding:14px 18px 20px">'+cuerpo+'</div></div>';
+    document.body.appendChild(ov);
 }
 
 function _periodoTxt(){
@@ -424,5 +684,6 @@ document.addEventListener('DOMContentLoaded', async function(){
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 <script src="/presencia.js"></script><!-- quién está trabajando aquí: avatares en la barra -->
+<script src="nav.js"></script><!-- la barra lateral, una sola para todo el módulo -->
 </body>
 </html>

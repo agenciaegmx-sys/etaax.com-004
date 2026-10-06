@@ -152,24 +152,6 @@
             <button class="nav-toggle nav-toggle-btn" id="navToggleBtn" data-tooltip="Expandir" onclick="toggleNav()">▶<span class="nav-toggle-text" id="navToggleTxt">Expandir</span></button>
         </div>
     </div>
-    <div class="nav-section">
-        <div class="nav-section-label">Ingresos</div>
-        <a href="ventas.html" class="nav-link" data-tooltip="Ventas Totales"><span class="nav-icon">💰</span><span class="nav-text">Ventas Totales</span></a>
-    </div>
-    <div class="nav-section">
-        <div class="nav-section-label">Egresos</div>
-        <a href="gastos-globales.html" class="nav-link" data-tooltip="Gastos Totales"><span class="nav-icon">📤</span><span class="nav-text">Gastos Totales</span></a>
-    </div>
-    <div class="nav-section">
-        <div class="nav-section-label">Cuentas</div>
-        <a href="cuentas-bancarias.html" class="nav-link" data-tooltip="Cuentas Bancarias"><span class="nav-icon">🏦</span><span class="nav-text">Cuentas Bancarias</span></a>
-    </div>
-    <div class="nav-section">
-        <div class="nav-section-label">Análisis</div>
-        <a href="previsiones.html" class="nav-link" data-tooltip="Previsiones"><span class="nav-icon">🔮</span><span class="nav-text">Previsiones</span></a>
-        <a href="estadisticas.html" class="nav-link active" data-tooltip="Estadísticas"><span class="nav-icon">📊</span><span class="nav-text">Estadísticas</span></a>
-        <a href="kpis.html" class="nav-link" data-tooltip="KPIs Financieros"><span class="nav-icon">🎯</span><span class="nav-text">KPIs</span></a>
-    </div>
 </nav>
 
 <main class="main-content" id="mainContent">
@@ -1516,5 +1498,6 @@ document.addEventListener('DOMContentLoaded',function(){
    se repintan cuando el tema cambia, venga de esta pantalla o de otra. */
 window.addEventListener('etaax:theme', function(){ if (typeof renderAll === 'function') renderAll(); });
 </script>
+<script src="nav.js"></script><!-- la barra lateral, una sola para todo el módulo -->
 </body>
 </html>
