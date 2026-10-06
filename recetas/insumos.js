@@ -3454,7 +3454,19 @@
        var corte = Date.now() - _HIST_DIAS * 864e5;
        // Fuera del catálogo global se ven SOLO los cambios hechos en esta sucursal.
        var sucAct = _catGlobalIns() ? '' : (_getSucActivaIns() || '');
+       /* SOLO LOS PRODUCTOS QUE ESTA VISTA MANEJA.
+          Antes se recorría getInsumos() entero, así que en una sucursal
+          aparecían alertas de productos del catálogo global que ella no vende.
+          Tocar «Aplicar aquí» contestaba «no hay dónde aplicarlo» — y tenía
+          razón: el aviso nunca debió salir.
+
+          Se compara por id CANÓNICO: el cambio del maestro le importa a esta
+          sucursal si ella tiene una copia de ese maestro, aunque el registro
+          que cambió sea otro. */
+       var aqui = {};
+       _insumosDeEstaVista().forEach(function (x) { aqui[x.origenId || x.id] = 1; });
        (getInsumos() || []).forEach(function (ins) {
+           if (!aqui[ins.origenId || ins.id]) return;
            (ins.historial || []).forEach(function (h) {
                if (!h || !h.ts) return;
                // Dentro de una sucursal se ven SUS cambios y los del catálogo global
@@ -5080,6 +5092,31 @@
       catálogo; su costo POR PIEZA se jala en vivo y, × las piezas, se
       suma al costo de la copa → costo del trago.
       ════════════════════════════════════════════════════════════ */
+   /* ══ EL CATÁLOGO DE ESTA VISTA ═════════════════════════════════════════════
+      Los registros que esta pantalla tiene por suyos: en una sucursal, los que
+      VIVEN ahí; en el catálogo global, los maestros. Es la misma regla de
+      membresía que usa filtrar() para pintar la lista.
+
+      Estaba escrita a mano dentro de filtrar() y en ningún lado más, así que
+      todo lo demás leía getInsumos() entero —todos los registros del negocio,
+      los de las otras sucursales incluidos—. De ahí salían los dos síntomas: la
+      lista de mezcladores con el mismo refresco repetido tantas veces como
+      sucursales lo tuvieran, y alertas de productos que esta sucursal no
+      maneja, que al tocar «Aplicar aquí» contestaban «no hay dónde aplicarlo»
+      —porque era cierto: nunca debieron aparecer—.
+
+      El catálogo de un negocio se mira como una tienda: lo que hay en ESTA
+      tienda. */
+   function _insumosDeEstaVista() {
+       var lista = getInsumos() || [];
+       if (_catGlobalIns()) return lista.filter(function (x) { return !x.origenId; });
+       var suc = _getSucActivaIns() || '';
+       if (!suc) return lista;                       // sin sucursal elegida: no hay a qué acotar
+       return lista.filter(function (x) {
+           return window._insumoEnSuc && window._insumoEnSuc(x, suc);
+       });
+   }
+
    function _esRefresco(x) {
        if (!x) return false;
        if (x.tipoInsumo === 'refresco') return true;
@@ -5098,7 +5135,12 @@
    }
 
    function _refrescosDelCatalogo() {
-       return getInsumos().filter(_esRefresco).map(function(x) {
+       /* Los de ESTA sucursal. Con getInsumos() salía la lista entera del
+          negocio: el mismo refresco repetido una vez por cada sucursal que lo
+          tuviera, y refrescos que aquí no se manejan. */
+       return _insumosDeEstaVista().filter(function (x) {
+           return _esRefresco(x) && x.activo !== '0';
+       }).map(function(x) {
            return { id: x.id, nombre: insumoEtiqueta(x), pza: _refrescoCostoPorPieza(x) };
        }).sort(function(a, b){ return a.nombre.localeCompare(b.nombre); });
    }

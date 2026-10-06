@@ -15095,6 +15095,204 @@ console.log('\n══ BH8 · Alerta vs historial, y la copa en la ficha ══')
         eq(dR('_novrRender').indexOf('🔔 ALERTA') > -1, true, 'marcada'));
     test('«Dejar así» también desaparece de los botones de recetas', () =>
         eq(dR('_novrRender').indexOf('>Dejar así</button>'), -1, 'sin ambigüedad'));
+
+    /* ── Y el catálogo de recetas también es el de esta tienda ──
+       Mismo descuido que en insumos: recorrer getRecetas() entero hacía que a
+       una sucursal le llegaran avisos de platillos que no tiene en carta. */
+    test('las recetas de la vista son las de esta sucursal', () => {
+        const t = dR('_recetasDeEstaVista');
+        return eq(t.indexOf('return !x.origenId;') > -1 &&
+                  t.indexOf('window._recetaEnSuc(x, suc)') > -1, true, 'acotado');
+    });
+    test('…y el panel solo avisa de esas', () =>
+        eq(dR('_novrLista').indexOf('_recetasDeEstaVista().forEach') > -1 &&
+           dR('_novrLista').indexOf('if(!aqui[r.origenId||r.id]) return;') > -1, true, 'sin ruido'));
+    /* Por id CANÓNICO: el cambio del maestro le importa a la sucursal que tiene
+       una copia de ese maestro, aunque el registro que cambió sea otro. */
+    test('…emparejando por maestro, no por el registro que cambió', () =>
+        eq(dR('_novrLista').indexOf('aqui[x.origenId||x.id] = 1;') > -1, true, 'por vínculo'));
+}
+
+
+/* ═══════════ SUITE BH9 · EL CATÁLOGO ES EL DE ESTA TIENDA ══════════════════
+   Dos síntomas, una sola causa: leer getInsumos() entero —todos los registros
+   del negocio, los de las otras sucursales incluidos— en lugar del catálogo de
+   la sucursal abierta.
+
+     · El desplegable de mezcladores mostraba el mismo refresco una vez por cada
+       sucursal que lo tuviera («Agua Tónica · Schweppes» tres veces seguidas), y
+       refrescos que esta barra no maneja.
+
+     · El panel de cambios avisaba de productos del catálogo global que esta
+       sucursal no vende. Tocar «Aplicar aquí» contestaba «no hay dónde
+       aplicarlo» — y era cierto: el aviso nunca debió salir.
+
+   Aquí NO se hace coincidencia de texto: se corren las funciones reales con un
+   catálogo armado a mano.                                                      */
+console.log('\n══ BH9 · El catálogo es el de esta tienda ══');
+{
+    const ijs = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.js'), 'utf8');
+    const cuerpo = (fn) => {
+        const i = ijs.indexOf('function ' + fn + '(');
+        if (i < 0) throw new Error('no existe ' + fn);
+        const abre = ijs.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < ijs.length) {
+            if (ijs[j] === '{') prof++;
+            else if (ijs[j] === '}') { prof--; if (!prof) return ijs.slice(i, j + 1); }
+            j++;
+        }
+        throw new Error('sin cerrar ' + fn);
+    };
+
+    /* El catálogo de prueba: un maestro que vive SOLO en el global (Midori — el
+       del reporte), un refresco que las tres sucursales copiaron, y uno propio
+       de la sucursal 2. */
+    const CAT = [
+        { id:'m_midori', nombre:'Midori',  categoria:'Licores',   activo:'1' },
+        { id:'m_tonica', nombre:'Tónica',  categoria:'Refrescos', activo:'1' },
+        { id:'c_ton_s1', origenId:'m_tonica', nombre:'Tónica', categoria:'Refrescos', sucursales:['s1'], activo:'1' },
+        { id:'c_ton_s2', origenId:'m_tonica', nombre:'Tónica', categoria:'Refrescos', sucursales:['s2'], activo:'1' },
+        { id:'c_ton_s3', origenId:'m_tonica', nombre:'Tónica', categoria:'Refrescos', sucursales:['s3'], activo:'1' },
+        { id:'s2_coco',  nombre:'Agua de coco', categoria:'Refrescos', sucursales:['s2'], activo:'1' },
+        { id:'s2_baja',  nombre:'Soda de baja', categoria:'Refrescos', sucursales:['s2'], activo:'0' }
+    ];
+
+    /* Contexto con las funciones REALES de membresía (insumo-label.js) y lo
+       mínimo alrededor. */
+    const ctx = { console, Date, String, Number, Math, JSON, parseFloat, isNaN,
+                  document:{ addEventListener(){}, getElementById(){ return null; } } };
+    ctx.window = ctx;
+    vm.createContext(ctx);
+    vm.runInContext(fs.readFileSync(path.join(RAIZ, 'insumo-label.js'), 'utf8'), ctx, { filename:'insumo-label.js' });
+
+    let VISTA = { global:false, suc:'s2' };
+    ctx.getInsumos      = () => JSON.parse(JSON.stringify(CAT));
+    ctx._catGlobalIns   = () => VISTA.global;
+    ctx._getSucActivaIns= () => VISTA.suc;
+    ctx.MATRIZ_ID_INS   = 'suc_principal';
+    ctx._HIST_DIAS      = 90;
+    ctx._NOV_VISTAS     = {};
+    ctx._novCargarVistas= () => {};
+    ctx.insumoEtiqueta  = (x) => x.nombre;
+    ctx.fmtMXN          = (v) => '$' + v;
+    vm.runInContext([
+        cuerpo('_effSucIns'), cuerpo('_insumosDeEstaVista'),
+        cuerpo('_esRefresco'), cuerpo('_refrescoCostoPorPieza'),
+        cuerpo('_refrescosDelCatalogo'), cuerpo('_novLista')
+    ].join('\n'), ctx, { filename:'insumos.js (extracto)' });
+
+    const ids = (arr) => arr.map(x => x.id).sort().join(',');
+
+    /* ── El catálogo de la vista ── */
+    test('en una sucursal, el catálogo son SUS registros', () => {
+        VISTA = { global:false, suc:'s2' };
+        return eq(ids(ctx._insumosDeEstaVista()), 'c_ton_s2,s2_baja,s2_coco', 'solo s2');
+    });
+    /* El maestro vive en el catálogo, no en la barra: por eso Midori no tenía
+       por qué aparecerle a nadie en sucursal. */
+    test('…sin los maestros ni las copias de las otras', () => {
+        VISTA = { global:false, suc:'s1' };
+        return eq(ids(ctx._insumosDeEstaVista()), 'c_ton_s1', 'solo s1');
+    });
+    /* En el global entran los maestros y también los sueltos: un registro sin
+       `origenId` ES su propio maestro —así son los insumos de antes de que el
+       catálogo se independizara por sucursal—. Es exactamente la regla con la
+       que filtrar() pinta la lista; si estas dos se separaran, el panel hablaría
+       de un catálogo distinto del que se está viendo. */
+    test('en el catálogo global, los maestros (y los sueltos, que lo son)', () => {
+        VISTA = { global:true, suc:'' };
+        return eq(ids(ctx._insumosDeEstaVista()), 'm_midori,m_tonica,s2_baja,s2_coco', 'maestros');
+    });
+    test('…nunca las copias, que viven en su sucursal', () => {
+        VISTA = { global:true, suc:'' };
+        return eq(ctx._insumosDeEstaVista().some(x => x.origenId), false, 'sin copias');
+    });
+    /* El candado de que las dos reglas no se separen: filtrar() es quien pinta
+       la lista y _insumosDeEstaVista quien contesta «qué hay en esta tienda». */
+    test('…misma regla que usa la rejilla para pintar', () =>
+        eq(ijs.indexOf('lista = lista.filter(x => !x.origenId);') > -1 &&
+           cuerpo('_insumosDeEstaVista').indexOf('return !x.origenId;') > -1, true, 'una sola regla'));
+    /* Sin sucursal elegida no hay a qué acotar: esconder todo dejaría la
+       pantalla en blanco, que es peor que mostrar de más. */
+    test('sin sucursal elegida no se esconde nada', () => {
+        VISTA = { global:false, suc:'' };
+        return eq(ctx._insumosDeEstaVista().length, CAT.length, 'todo');
+    });
+
+    /* ── El desplegable de mezcladores ── */
+    test('el mezclador se elige entre los refrescos de ESTA sucursal', () => {
+        VISTA = { global:false, suc:'s2' };
+        return eq(ids(ctx._refrescosDelCatalogo()), 'c_ton_s2,s2_coco', 'los de aquí');
+    });
+    /* El síntoma exacto del reporte: la misma tónica tres veces, una por
+       sucursal. Elegir entre tres renglones idénticos es elegir a ciegas. */
+    test('…una sola vez, no una por sucursal que lo tenga', () => {
+        VISTA = { global:false, suc:'s2' };
+        const tonicas = ctx._refrescosDelCatalogo().filter(r => r.nombre === 'Tónica');
+        return eq(tonicas.length, 1, 'sin repetir');
+    });
+    /* Un refresco dado de baja sigue en el catálogo para no romper el histórico,
+       pero ofrecerlo para costear un trago nuevo es ofrecer algo que ya no se
+       compra. */
+    test('…y sin los que están dados de baja', () => {
+        VISTA = { global:false, suc:'s2' };
+        return eq(ctx._refrescosDelCatalogo().some(r => r.id === 's2_baja'), false, 'sin bajas');
+    });
+
+    /* ── Las alertas ── */
+    const hoy = new Date().toISOString();
+    const conHist = (extra) => {
+        const c = JSON.parse(JSON.stringify(CAT));
+        Object.keys(extra).forEach(id => {
+            c.find(x => x.id === id).historial = extra[id];
+        });
+        ctx.getInsumos = () => JSON.parse(JSON.stringify(c));
+    };
+
+    /* EL CASO DEL REPORTE: Midori cambió en el catálogo global y le salió como
+       alerta a una barra que no lo vende. */
+    test('un cambio del global NO avisa si la sucursal no maneja ese producto', () => {
+        VISTA = { global:false, suc:'s2' };
+        conHist({ m_midori:[{ ts:hoy, suc:'', global:true, sucNom:'Catálogo global', cambios:[] }] });
+        return eq(ctx._novLista().length, 0, 'sin avisar');
+    });
+    /* …pero si SÍ lo maneja, el aviso es justo el que sirve: el maestro cambió y
+       mi copia se quedó atrás. */
+    test('…y SÍ avisa cuando la sucursal tiene copia de ese producto', () => {
+        VISTA = { global:false, suc:'s2' };
+        conHist({ m_tonica:[{ ts:hoy, suc:'', global:true, sucNom:'Catálogo global', cambios:[] }] });
+        const l = ctx._novLista();
+        return eq(l.length === 1 && l[0].ins.id === 'm_tonica', true, 'avisa');
+    });
+    /* Lo de la sucursal de al lado es asunto de ella: en MI panel no es ni
+       alerta ni historial. */
+    test('lo que cambió otra sucursal no se asoma en esta', () => {
+        VISTA = { global:false, suc:'s2' };
+        conHist({ c_ton_s1:[{ ts:hoy, suc:'s1', sucNom:'Sucursal 1', cambios:[] }] });
+        return eq(ctx._novLista().length, 0, 'ajeno de verdad');
+    });
+    test('mis propios cambios sí viven en mi historial', () => {
+        VISTA = { global:false, suc:'s2' };
+        conHist({ c_ton_s2:[{ ts:hoy, suc:'s2', sucNom:'Sucursal 2', cambios:[] }] });
+        return eq(ctx._novLista().length, 1, 'historial');
+    });
+    /* En el catálogo global el dueño sí quiere ver qué pasó en cada sucursal:
+       es su panel de control, no el de una tienda. */
+    test('el catálogo global sí ve lo que pasó en las sucursales', () => {
+        VISTA = { global:true, suc:'' };
+        conHist({ c_ton_s1:[{ ts:hoy, suc:'s1', sucNom:'Sucursal 1', cambios:[] }] });
+        return eq(ctx._novLista().length, 1, 'panel del dueño');
+    });
+    /* Un cambio viejo no es novedad; la poda también al leer evita que un
+       histórico largo resucite avisos de hace meses. */
+    test('un cambio de hace más de 90 días ya no es novedad', () => {
+        VISTA = { global:false, suc:'s2' };
+        const viejo = new Date(Date.now() - 120 * 864e5).toISOString();
+        conHist({ c_ton_s2:[{ ts:viejo, suc:'s2', sucNom:'Sucursal 2', cambios:[] }] });
+        return eq(ctx._novLista().length, 0, 'podado');
+    });
+    ctx.getInsumos = () => JSON.parse(JSON.stringify(CAT));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

@@ -3192,12 +3192,28 @@ function _novrHermanas(r){
         return x.id !== r.id && (x.id === masterId || x.origenId === masterId);
     });
 }
+/* Las recetas que ESTA vista tiene por suyas: en una sucursal, las que viven
+   ahí; en el catálogo global, los maestros. Mismo criterio que la rejilla. */
+function _recetasDeEstaVista(){
+    var lista = getRecetas() || [];
+    if(_esCatGlobalRecetas()) return lista.filter(function(x){ return !x.origenId; });
+    var suc = localStorage.getItem('etaax_sucursal_activa')||'';
+    if(!suc) return lista;
+    return lista.filter(function(x){ return window._recetaEnSuc && window._recetaEnSuc(x, suc); });
+}
 function _novrLista(){
     _novrCargar();
     var corte = Date.now() - 90*864e5, out = [];
     // Fuera del catálogo global se ven SOLO los cambios de esta sucursal.
     var sucAct = _esCatGlobalRecetas() ? '' : (localStorage.getItem('etaax_sucursal_activa')||'');
+    /* SOLO LAS RECETAS QUE ESTA VISTA MANEJA. Recorrer getRecetas() entero hacía
+       que a una sucursal le llegaran avisos de platillos que no tiene en carta.
+       Se compara por id CANÓNICO: el cambio del maestro le importa si esta
+       sucursal tiene una copia de ese maestro. */
+    var aqui = {};
+    _recetasDeEstaVista().forEach(function(x){ aqui[x.origenId||x.id] = 1; });
     getRecetas().forEach(function(r){
+        if(!aqui[r.origenId||r.id]) return;
         (r.historial||[]).forEach(function(h){
             if(!h||!h.ts) return;
             // Dentro de una sucursal: sus cambios + los hechos en el catálogo global.
