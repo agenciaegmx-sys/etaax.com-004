@@ -82,6 +82,18 @@
                 <small>Todo lo capturado desde el último inventario</small></span>
         </button>
     </div>
+
+    <!-- ══ EL PORTAL DEL COLABORADOR ══════════════════════════════════════════
+         Lo de arriba es REGISTRAR: sale dinero o entra producto, y queda
+         escrito. Esto es CONSULTAR Y CUMPLIR: lo que hay que hacer en el turno
+         y cómo se hace. Son dos cabezas distintas y por eso van separados: con
+         todo revuelto en una lista de ocho, nadie encuentra nada a medio turno.
+
+         Las opciones se arman según el perfil (ver pintarPortal): a quien no
+         cocina no se le enseña el recetario — no es un permiso, es no llenarle
+         la pantalla con algo que no va a abrir nunca. -->
+    <div class="menu-grupo" id="grupoPortal" hidden>Tu turno</div>
+    <div class="menu" id="menuPortal" hidden></div>
     <!-- La tarjeta se arma por plataforma: en Android hay un botón que de verdad
          instala; en iPhone no existe tal cosa —Apple solo permite «Agregar a
          inicio»— así que ahí van los pasos, no un botón que promete y explica. -->
@@ -133,6 +145,51 @@
             <input type="file" accept="image/*" capture="environment" multiple hidden onchange="tomarFoto(this)">
         </label>
     </div>
+</section>
+
+<!-- ══ 5 · CHECKLISTS ════════════════════════════════════════════════════════ -->
+<section class="pant" id="pChecks" hidden>
+    <div id="checksList"></div>
+</section>
+
+<!-- Ejecutar un checklist. Las tareas se tocan para marcarlas: ✓ cumplida,
+     ✗ no se pudo, y otra vez para dejarla pendiente. Tres estados y no dos,
+     porque «no se pudo» y «no lo he hecho» no son lo mismo y revolverlos hace
+     inútil el reporte. -->
+<section class="pant" id="pRun" hidden>
+    <div class="run-barra">
+        <div class="run-prog"><i id="runProgBar"></i></div>
+        <div class="run-cuenta" id="runCuenta">—</div>
+    </div>
+    <div id="runTareas"></div>
+
+    <label class="lbl" for="runNota">Comentario <span class="opt">opcional</span></label>
+    <textarea class="campo" id="runNota" rows="2" placeholder="Lo que haga falta explicar…"></textarea>
+
+    <div class="fotos-wrap">
+        <label class="lbl">Fotos <span class="opt">opcional · hasta 10</span></label>
+        <div class="fotos" id="runFotos"></div>
+        <label class="btn btn-sec btn-foto">
+            📷 Agregar foto
+            <input type="file" accept="image/*" capture="environment" multiple hidden onchange="tomarFotoRun(this)">
+        </label>
+    </div>
+</section>
+
+<!-- ══ 6 · RECETARIO OPERATIVO (sin un solo costo) ════════════════════════════ -->
+<section class="pant" id="pRecetas" hidden>
+    <input class="campo" id="recBuscar" type="search" autocomplete="off"
+           placeholder="🔍 Buscar receta…" oninput="filtrarRecetario(this.value)">
+    <div class="chips-area" id="recTabs"></div>
+    <div id="recLista"></div>
+</section>
+<section class="pant" id="pReceta" hidden>
+    <div id="recFicha"></div>
+</section>
+
+<!-- ══ 7 · GUÍAS DE USO ══════════════════════════════════════════════════════ -->
+<section class="pant" id="pGuias" hidden>
+    <div id="guiasLista"></div>
 </section>
 
 <!-- ══ 4 · LO REGISTRADO ═════════════════════════════════════════════════════ -->

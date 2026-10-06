@@ -24,6 +24,28 @@ Los cuatro flujos del QR, rehechos para una mano y un pulgar:
 
 Y **Lo registrado**: lo capturado desde el último cierre de inventario.
 
+### El portal del colaborador
+
+Lo de arriba es **registrar**: sale dinero o entra producto y queda escrito. Esto
+es **consultar y cumplir** — qué hay que hacer en el turno y cómo se hace. Van en
+la misma app para que haya UN ícono en el teléfono, no dos, pero separados en el
+menú: con todo revuelto en una lista de ocho, nadie encuentra nada a medio turno.
+
+| | |
+|---|---|
+| 📋 **Mis check lists** | Los de su área y su sucursal. Cada tarea cicla ✅ cumplida → ❌ no se pudo → pendiente |
+| 📖 **Recetario** | La ficha operativa, **sin un solo costo**. Solo para barra y cocina |
+| 📚 **Guías de uso** | Los manuales de ETAAX |
+
+**Tres estados en las tareas, no dos.** «No se pudo» y «no lo he hecho» no son lo
+mismo —una es un problema que reportar, la otra es trabajo sin terminar— y
+revolverlas hace inútil el reporte. Por eso la barra de arriba mide **lo
+revisado** y el porcentaje mide **lo cumplido**: un turno donde nada se pudo
+hacer marca 4/4 revisadas y 0% cumplido, que es exactamente lo que pasó.
+
+Se puede mandar incompleto: un turno que se corta a la mitad es un dato, no un
+error, y lo pendiente queda en el reporte.
+
 Cada flujo arma un **lote** (hasta 15 renglones y 10 fotos) y lo manda de un
 golpe. Lo que falle se queda en la lista para reintentar — nunca se pierde en
 silencio.

@@ -17329,6 +17329,149 @@ console.log('\n══ BH18 · La app móvil ══');
     test('el QR ofrece esa página, no la app cruda', () =>
         eq(inv3.indexOf("'/app-movil/instalar.html'") > -1, true, 'la que explica'));
 
+    /* ══ EL PORTAL DEL COLABORADOR ═════════════════════════════════════════
+       Lo de registrar (entradas, mermas, cortesías, conteo) es una cabeza; lo
+       de consultar y cumplir —checklists, recetario, guías— es otra. Van en la
+       app para que haya UN ícono en el teléfono, no dos.
+
+       LA REGLA: ninguna decisión se reescribe aquí. Qué recetas ve cada quien,
+       qué checklists le tocan y qué campos viajan lo decide el servidor, por
+       las MISMAS consultas que usa checklist.html. */
+    ['checklist_plantillas', 'checklist_registrar', 'portal_recetas', 'portal_guias'].forEach(rpc => {
+        const chk = fs.readFileSync(path.join(RAIZ, 'checklist.html'), 'utf8');
+        test('el portal usa la misma consulta: ' + rpc, () =>
+            eq(ajs.indexOf("'" + rpc + "'") > -1 && chk.indexOf("'" + rpc + "'") > -1, true, 'la misma'));
+    });
+    /* El recetario del portal NO es el de las mermas: aquel trae id/nombre/tipo
+       para buscar un producto; este trae la ficha operativa. Pedir «la receta
+       completa» desde aquí sería justo lo que portal_recetas evita. */
+    test('el recetario del portal no se confunde con el de las mermas', () =>
+        eq(ajs.indexOf('var PLANTILLAS = [], RECETARIO = null') > -1 &&
+           ajs.indexOf("rpc('entrada_recetas'") > -1, true, 'dos cosas'));
+    /* portal_recetas arma la receta campo por campo con lista blanca: el dinero
+       no viaja. Si la app pidiera la tabla por su cuenta, se saltaría eso. */
+    test('la ficha se pide por la consulta que filtra el dinero', () =>
+        eq(dEx('abrirRecetario').indexOf("rpc('portal_recetas'") > -1 &&
+           ajs.indexOf("from('recetas')") === -1, true, 'sin costos'));
+
+    /* ── El checklist ── */
+    /* Se corre la cuenta de verdad. */
+    const correrRun = (marcas) => {
+        const els = {};
+        const el = (id) => els[id] || (els[id] = { innerHTML:'', textContent:'', style:{}, value:'', disabled:false });
+        const c = { console, Math, String, Object, Array, JSON };
+        c.document = { getElementById: el }; c.window = c; c.etx = (x) => String(x == null ? '' : x);
+        vm.createContext(c);
+        vm.runInContext('var RUN=null;function $(id){return document.getElementById(id);}' +
+            dEx('cuentaRun'), c, { filename:'app-movil/app.js' });
+        c.RUN = { plant: { tareas: [{id:'t1'},{id:'t2'},{id:'t3'},{id:'t4'}] }, marcas: marcas };
+        const r = c.cuentaRun();
+        return { pct: r.pct, ok: r.ok, no: r.no, cuenta: el('runCuenta').textContent,
+                 barra: el('runProgBar').style.width };
+    };
+    /* TRES estados, no dos: «no se pudo» y «no lo he hecho» no son lo mismo
+       —una es un problema que reportar y la otra es trabajo sin terminar— y
+       revolverlas hace inútil el reporte. */
+    test('una tarea cicla entre cumplida, no se pudo y pendiente', () =>
+        eq(ajs.indexOf("var MARCA_SIG = { '': 'si', si: 'no', no: '' };") > -1, true, 'tres estados'));
+    /* LA DISTINCIÓN QUE IMPORTA: la barra mide lo REVISADO y el porcentaje mide
+       lo CUMPLIDO. Si fueran el mismo número, un turno donde nada se pudo
+       hacer se vería idéntico a uno perfecto. */
+    test('marcar «no se pudo» avanza la revisión pero no el cumplimiento', () => {
+        const r = correrRun({ t1:'no', t2:'no', t3:'no', t4:'no' });
+        return eq(r.barra === '100%' && r.pct === 0, true, 'no es lo mismo');
+    });
+    test('…y todo cumplido sí da 100%', () =>
+        eq(correrRun({ t1:'si', t2:'si', t3:'si', t4:'si' }).pct, 100, 'cumplido'));
+    test('…y lo no marcado queda pendiente, sin contar como cumplido', () => {
+        const r = correrRun({ t1:'si' });
+        return eq(r.pct === 25 && r.cuenta === '1/4', true, 'pendiente');
+    });
+    /* Las que no se pudieron se enseñan aparte en el contador: son lo que hay
+       que ir a ver, y enterradas en «3/4» no las ve nadie. */
+    test('…y las que no se pudieron se cuentan a la vista', () =>
+        eq(correrRun({ t1:'si', t2:'si', t3:'no' }).cuenta, '3/4 · 1 ✕', 'visibles'));
+    /* Un turno que se corta a la mitad es un dato, no un error: se puede
+       mandar incompleto y lo pendiente queda en el reporte. */
+    test('se puede enviar incompleto: un turno cortado es un dato', () =>
+        eq(dEx('cuentaRun').indexOf("$('btnEnviar').disabled = false;") > -1, true, 'sin trabar'));
+    /* La hora de envío sola no dice si el check tomó tres minutos o dos horas,
+       que es justo lo que interesa revisar. */
+    test('el checklist sella cuándo empezó, no solo cuándo se mandó', () =>
+        eq(dEx('abrirRun').indexOf('inicioTs: new Date().toISOString()') > -1 &&
+           dEx('enviarRun').indexOf('duracionMin:') > -1, true, 'medible'));
+    /* `colaborador` lo sella el servidor desde el NIP: mandarlo desde el
+       cliente dejaría registrar a nombre de otro. */
+    test('…y NO manda quién lo hizo: eso lo sella el servidor', () =>
+        eq(/colaborador:/.test(dEx('enviarRun')), false, 'sin suplantar'));
+    /* Un botón abajo y dos pantallas que lo usan: tener dos botones distintos
+       sería dos sitios donde mirar. */
+    test('el botón de abajo manda lo que esté en pantalla', () =>
+        eq(dEx('enviarLote').indexOf('if (RUN) { await enviarRun(); return; }') > -1, true, 'uno solo'));
+
+    /* ── Qué se le ofrece a cada quien ── */
+    /* El recetario solo tiene sentido para quien cocina o prepara. No es un
+       permiso —el servidor igual no les devolvería recetas— es no llenarle la
+       pantalla a piso y administración con algo que no van a abrir nunca. */
+    const portal = (area, plantillas) => {
+        const els = {};
+        const el = (id) => els[id] || (els[id] = { innerHTML:'', hidden:true });
+        const c = { console, Object, Array, String };
+        c.document = { getElementById: el }; c.window = c;
+        /* El vocabulario de áreas se carga aquí: `sa` vive en otra suite y
+           apoyarse en ella haría que esta prueba dependiera del orden en que
+           corren, que es como se construye un candado frágil. */
+        const _sa = { console }; _sa.window = _sa;
+        vm.createContext(_sa);
+        vm.runInContext(fs.readFileSync(path.join(RAIZ, 'staff-area.js'), 'utf8'), _sa,
+                        { filename:'staff-area.js' });
+        c.StaffArea = _sa.window.StaffArea; c.etx = (x) => String(x == null ? '' : x);
+        c.AREA_COLAB = area; c.PLANTILLAS = plantillas || [];
+        vm.createContext(c);
+        vm.runInContext('function $(id){return document.getElementById(id);}' +
+            dEx('pintarPortal') + dEx('_opcion'), c, { filename:'app-movil/app.js' });
+        c.pintarPortal();
+        return el('menuPortal').innerHTML;
+    };
+    test('a quien cocina se le ofrece el recetario', () =>
+        eq(portal('cocina', [{}]).indexOf('Recetario') > -1, true, 'le sirve'));
+    test('…y a barra también', () =>
+        eq(portal('barra', [{}]).indexOf('Recetario') > -1, true, 'le sirve'));
+    test('…pero no a piso ni a administración', () =>
+        eq(portal('piso', [{}]).indexOf('Recetario') === -1 &&
+           portal('administracion', [{}]).indexOf('Recetario') === -1, true, 'sin ruido'));
+    /* Sin checklists para su área, la opción se enseña APAGADA en vez de
+       esconderse: así se sabe que existe y que no le tocan, en vez de que
+       parezca que la app está incompleta. */
+    test('sin checklists, la opción se ve apagada y dice por qué', () => {
+        const h = portal('barra', []);
+        return eq(h.indexOf('Ninguno para tu área') > -1 && h.indexOf('disabled') > -1, true, 'explicado');
+    });
+    test('las guías son para todos', () =>
+        eq(portal('administracion', []).indexOf('Guías de uso') > -1, true, 'para todos'));
+
+    /* ── Al salir, nada del turno anterior se queda ── */
+    /* El teléfono de la barra lo usan varias personas: dejar el recetario o los
+       checklists de quien acaba de salir le enseñaría al siguiente lo que no le
+       toca, y sin NIP de por medio. */
+    test('cerrar sesión borra lo cargado del turno anterior', () => {
+        const t = dEx('salir');
+        return eq(t.indexOf('PLANTILLAS = []') > -1 && t.indexOf('RECETARIO = null') > -1 &&
+                  t.indexOf('GUIAS = null') > -1 && t.indexOf('RUN = null') > -1, true, 'limpio');
+    });
+
+    /* ── Las fotos, una sola implementación ── */
+    /* Con dos copias, el día que cambie el tope o la compresión una se queda
+       atrás sin que nadie lo note. */
+    test('las fotos del lote y las del checklist salen del mismo código', () =>
+        eq(dEx('tomarFoto').indexOf('_fotosA(input, FOTOS') > -1 &&
+           dEx('tomarFotoRun').indexOf('_fotosA(input, RUN.fotos') > -1, true, 'una sola'));
+    /* Una foto que no subió se SACA de la lista: dejarla haría creer que la
+       evidencia quedó guardada cuando no existe en ningún lado. */
+    test('…y la que no sube se quita, no se finge guardada', () =>
+        eq(dEx('_fotosA').indexOf('var k = arr.indexOf(marca); if (k >= 0) arr.splice(k, 1);') > -1,
+           true, 'honesto'));
+
     /* ── Lo que NO hace, dicho en voz alta ── */
     /* Prometer captura sin señal y no cumplirla es peor que no prometerla: la
        barra captura una merma, se va tranquila y el dato nunca existió. */

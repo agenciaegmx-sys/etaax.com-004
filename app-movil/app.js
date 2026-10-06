@@ -52,6 +52,25 @@ var LOTE = [], FOTOS = [];     // lo que se va a mandar
 var SUB = {};                  // opciones del flujo (qué se mermó, tipo de salida…)
 var _instalador = null;
 
+/* ══ EL PORTAL DEL COLABORADOR ═════════════════════════════════════════════
+   Lo de arriba (entradas, mermas, cortesías, conteo) es REGISTRAR: sale dinero
+   o entra producto y queda escrito. Esto es CONSULTAR Y CUMPLIR: qué hay que
+   hacer en el turno y cómo se hace.
+
+   Son las mismas tres cosas que ya ofrece checklist.html y por las MISMAS
+   consultas del servidor —checklist_plantillas, portal_recetas, portal_guias—.
+   Ninguna regla se reescribe aquí: qué recetas ve cada quien, qué checklists le
+   tocan y qué campos se mandan lo decide el servidor, que es donde ya está
+   pensado. Lo único que cambia es la pantalla.
+
+   Y OJO CON LO QUE EL SERVIDOR NO MANDA: portal_recetas arma la receta campo
+   por campo con una lista blanca, sin un solo costo. Es a propósito —si mañana
+   alguien agrega un campo con dinero adentro, con lista blanca no se filtra
+   solo—. No pedir «la receta completa» desde aquí es parte de eso. */
+var PLANTILLAS = [], RECETARIO = null, GUIAS = null;
+var RUN = null;                  // el checklist que se está ejecutando
+var _recFiltro = '', _recTab = '';
+
 var MAX_ITEMS = 15, MAX_FOTOS = 10;
 var BUCKET = 'evidencias-priv', REF_PRIV = 'priv:';
 var _PREV = {};                // ref → miniatura local (el bucket es privado)
@@ -104,7 +123,7 @@ try {
 } catch (e) {}
 
 /* ── Navegación entre pantallas ── */
-var PANTS = ['pLogin', 'pMenu', 'pFlujo', 'pHist'];
+var PANTS = ['pLogin', 'pMenu', 'pFlujo', 'pHist', 'pChecks', 'pRun', 'pRecetas', 'pReceta', 'pGuias'];
 function mostrar(id, titulo, sub, conVolver, conBarra) {
     PANTS.forEach(function (p) { $(p).hidden = (p !== id); });
     $('hdrTit').textContent = titulo;
@@ -162,7 +181,10 @@ async function entrar() {
         }
         COLAB = rv.data; NIPHASH = h;
         await cargarPerfil(h);
-        await cargarInsumos();
+        /* El catálogo y los checklists se piden EN PARALELO: en serie son dos
+           viajes a Supabase con la señal de una cocina, y el colaborador los
+           espera mirando la pantalla de entrar. */
+        await Promise.all([cargarInsumos(), cargarPlantillas()]);
         irMenu();
     } catch (e) {
         $('nipMsg').textContent = 'Error: ' + ((e && e.message) || e);
@@ -231,11 +253,12 @@ function unoPorProducto(lista) {
 
 /* ══ 2 · MENÚ ══════════════════════════════════════════════════════════════ */
 function irMenu() {
-    FLUJO = ''; SEL = null; LOTE = []; FOTOS = []; SUB = {};
+    FLUJO = ''; SEL = null; LOTE = []; FOTOS = []; SUB = {}; RUN = null;
     var det = [PUESTO, (window.StaffArea && AREA_COLAB) ? StaffArea.nom(AREA_COLAB) : '']
                 .filter(Boolean).join(' · ');
     $('quienCard').innerHTML = '<b>' + etx(COLAB) + '</b>' +
         (det ? '<small>' + etx(det) + '</small>' : '');
+    pintarPortal();
     pintarInstalar();
     detectarInstalada();
     mostrar('pMenu', 'Registro', '¿Qué vas a registrar?', false, false);
@@ -243,9 +266,160 @@ function irMenu() {
 
 function salir() {
     NIP = ''; NIPHASH = ''; COLAB = ''; PUESTO = ''; AREA_COLAB = '';
-    INSUMOS = []; RECETAS = null; pintarPuntos();
+    /* TODO lo del turno anterior se borra. El teléfono de la barra lo usan
+       varias personas: dejar el recetario o los checklists de quien acaba de
+       salir le enseñaría al siguiente lo que no le toca. */
+    INSUMOS = []; RECETAS = null; PLANTILLAS = []; RECETARIO = null; GUIAS = null; RUN = null;
+    pintarPuntos();
     $('nipMsg').textContent = '';
     mostrar('pLogin', 'Registro', 'barra / cocina', false, false);
+}
+
+/* Las opciones del portal se arman según el perfil. El recetario solo tiene
+   sentido para quien cocina o prepara: a piso y administración no se les
+   enseña. No es un permiso —el servidor igual no les devolvería recetas— es no
+   llenarles la pantalla con algo que no van a abrir nunca. */
+function pintarPortal() {
+    var g = $('grupoPortal'), m = $('menuPortal');
+    if (!g || !m) return;
+    var a = window.StaffArea ? StaffArea.norm(AREA_COLAB) : '';
+    var cocina = !a || a === 'barra' || a === 'cocina';
+    var ops = [];
+    ops.push(_opcion('📋', 'Mis check lists',
+        PLANTILLAS.length ? (PLANTILLAS.length + (PLANTILLAS.length === 1 ? ' disponible' : ' disponibles'))
+                          : 'Ninguno para tu área',
+        PLANTILLAS.length ? 'abrirChecklists()' : ''));
+    if (cocina) ops.push(_opcion('📖', 'Recetario', 'Cómo se prepara, paso a paso', 'abrirRecetario()'));
+    ops.push(_opcion('📚', 'Guías de uso', 'Manuales de ETAAX', 'abrirGuias()'));
+    m.innerHTML = ops.join('');
+    g.hidden = false; m.hidden = false;
+}
+function _opcion(ico, tit, sub, accion) {
+    var off = !accion;
+    return '<button class="mcard mcard-sec"' + (off ? ' disabled style="opacity:.45"' : ' onclick="' + accion + '"') + '>' +
+        '<span class="mcard-ico">' + ico + '</span>' +
+        '<span class="mcard-txt"><b>' + etx(tit) + '</b><small>' + etx(sub) + '</small></span></button>';
+}
+
+/* Los checklists de SU área y SU sucursal: lo decide el servidor (v59), que
+   para eso lee el perfil del NIP. Aquí solo se piden. */
+async function cargarPlantillas() {
+    try {
+        var r = await _supabase.rpc('checklist_plantillas',
+            { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH });
+        PLANTILLAS = (r && r.data) || [];
+    } catch (e) { PLANTILLAS = []; }
+}
+
+/* ══ CHECK LISTS ═══════════════════════════════════════════════════════════ */
+var TIPO_CHK = { apertura:['🌅','Apertura'], cierre:['🌙','Cierre'], turno:['🔁','Turno'],
+                 limpieza:['🧽','Limpieza'], mantenimiento:['🔧','Mantenimiento'] };
+function abrirChecklists() {
+    mostrar('pChecks', 'Mis check lists', 'los de tu área', true, false);
+    $('checksList').innerHTML = PLANTILLAS.length
+        ? PLANTILLAS.map(function (p, i) {
+            var t = TIPO_CHK[p.tipo] || ['📋', p.tipo || ''];
+            var n2 = (p.tareas || []).length;
+            return '<button class="rec-it" data-chk="' + i + '">' +
+                '<span class="rec-it-ico">' + t[0] + '</span>' +
+                '<span style="flex:1;min-width:0"><b>' + etx(p.nombre || '—') + '</b>' +
+                '<small>' + etx(t[1]) + ' · ' + n2 + ' tarea' + (n2 === 1 ? '' : 's') + '</small></span>' +
+                '<span style="color:var(--dim)">›</span></button>';
+        }).join('')
+        : '<div class="hvacio">No hay check lists para tu área.<br>Tu encargado los arma desde el sistema.</div>';
+    $('checksList').onclick = function (e) {
+        var b = e.target.closest('[data-chk]'); if (!b) return;
+        abrirRun(PLANTILLAS[parseInt(b.getAttribute('data-chk'), 10)]);
+    };
+}
+
+/* TRES ESTADOS, no dos: cumplida, no se pudo, y pendiente. «No se pudo» y «no
+   lo he hecho» no son lo mismo —una es un problema que reportar y la otra es
+   trabajo sin terminar— y revolverlas hace inútil el reporte. */
+var MARCA_SIG = { '': 'si', si: 'no', no: '' };
+var MARCA_ICO = { si: '✅', no: '❌', '': '' };
+function abrirRun(p) {
+    if (!p) return;
+    /* Se sella CUÁNDO empezó: la hora de envío sola no dice si el check tomó
+       tres minutos o dos horas, que es justo lo que interesa revisar. */
+    RUN = { plant: p, marcas: {}, fotos: [], inicioTs: new Date().toISOString(), horaInicio: horaStr() };
+    var t = TIPO_CHK[p.tipo] || ['📋', p.tipo || ''];
+    mostrar('pRun', p.nombre || 'Check list', t[1], true, true);
+    $('btnEnviar').textContent = 'Enviar el check list';
+    $('runNota').value = '';
+    pintarTareas(); pintarFotosRun(); barraMsg('');
+}
+function pintarTareas() {
+    var tareas = (RUN.plant.tareas || []);
+    $('runTareas').innerHTML =
+        '<div class="run-ayuda">Toca cada tarea: una vez ✅ cumplida, otra ❌ no se pudo, ' +
+        'otra la deja pendiente.</div>' +
+        tareas.map(function (t) {
+            var est = RUN.marcas[t.id] || '';
+            return '<button class="tarea ' + est + '" data-t="' + etx(t.id) + '">' +
+                '<span class="tarea-txt">' + (t.freq ? '<span class="tarea-freq">' + etx(t.freq) + '</span>' : '') +
+                etx(t.texto || '') + '</span>' +
+                '<span class="tarea-marca">' + (MARCA_ICO[est] || '') + '</span></button>';
+        }).join('');
+    $('runTareas').onclick = function (e) {
+        var b = e.target.closest('[data-t]'); if (!b) return;
+        var id = b.getAttribute('data-t');
+        RUN.marcas[id] = MARCA_SIG[RUN.marcas[id] || ''];
+        pintarTareas();
+    };
+    cuentaRun();
+}
+function cuentaRun() {
+    var tot = (RUN.plant.tareas || []).length;
+    var ok = 0, no = 0;
+    Object.keys(RUN.marcas).forEach(function (k) {
+        if (RUN.marcas[k] === 'si') ok++; else if (RUN.marcas[k] === 'no') no++;
+    });
+    var hechas = ok + no;
+    var pct = tot ? Math.round(ok / tot * 100) : 0;
+    $('runProgBar').style.width = (tot ? Math.round(hechas / tot * 100) : 0) + '%';
+    $('runCuenta').textContent = hechas + '/' + tot + (no ? ' · ' + no + ' ✕' : '');
+    /* Se puede enviar incompleto: un turno que se corta a la mitad es un dato,
+       no un error. Lo que no se marcó queda como pendiente y se ve en el
+       reporte. */
+    $('btnEnviar').disabled = false;
+    return { tot: tot, ok: ok, no: no, pct: pct };
+}
+async function tomarFotoRun(input) { await _fotosA(input, RUN.fotos, pintarFotosRun); }
+function pintarFotosRun() { _pintarFotos($('runFotos'), RUN.fotos, pintarFotosRun); }
+
+async function enviarRun() {
+    if (!RUN) return;
+    if (RUN.fotos.some(function (f) { return f.subiendo; })) { barraMsg('Espera a que suban las fotos.', 'err'); return; }
+    if (!navigator.onLine) { barraMsg('Sin internet. Vuelve a tocar Enviar cuando haya señal.', 'err'); return; }
+    var c = cuentaRun();
+    var pend = c.tot - c.ok - c.no;
+    $('btnEnviar').disabled = true; barraMsg('Enviando…');
+    var refs = RUN.fotos.filter(function (f) { return f.ref; }).map(function (f) { return f.ref; });
+    var entry = {
+        plantillaId: RUN.plant.id, plantillaNombre: RUN.plant.nombre || '', tipo: RUN.plant.tipo || '',
+        sucursalId: SUC, area: AREA_COLAB || '',
+        fecha: hoyStr(), hora: horaStr(),
+        horaInicio: RUN.horaInicio, inicioTs: RUN.inicioTs, finTs: new Date().toISOString(),
+        duracionMin: Math.max(0, Math.round((Date.now() - Date.parse(RUN.inicioTs)) / 60000)),
+        marcas: RUN.marcas, totalTareas: c.tot, cumplidas: c.ok, noRealizadas: c.no,
+        pendientes: pend, pct: c.pct,
+        notas: ($('runNota').value || '').trim(),
+        foto_url: refs[0] || '', foto_urls: refs,
+        registrado: new Date().toISOString()
+        // `colaborador` lo sella el servidor desde el NIP validado
+    };
+    try {
+        var r = await _supabase.rpc('checklist_registrar',
+            { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH, p_datos: entry });
+        if (r.error) { $('btnEnviar').disabled = false; barraMsg('No se pudo guardar: ' + r.error.message, 'err'); return; }
+        RUN = null;
+        toast('✓ Check list enviado · ' + c.pct + '% cumplido', 'ok');
+        irMenu();
+    } catch (e) {
+        $('btnEnviar').disabled = false;
+        barraMsg('No se pudo guardar: ' + ((e && e.message) || e), 'err');
+    }
 }
 
 /* ══ 3 · LOS CUATRO FLUJOS ═════════════════════════════════════════════════
@@ -525,21 +699,46 @@ function comprimir(file) {
         r.readAsDataURL(file);
     });
 }
-async function tomarFoto(input) {
+/* Una sola implementación de fotos para los dos flujos que las usan —el lote de
+   registro y el checklist—. Con dos copias, el día que cambie el tope o la
+   compresión, una de ellas se queda atrás sin que nadie lo note. */
+async function _fotosA(input, arr, repintar) {
     var files = Array.prototype.slice.call(input.files || []);
     input.value = '';
     for (var i = 0; i < files.length; i++) {
-        if (FOTOS.length >= MAX_FOTOS) { toast('Van ' + MAX_FOTOS + ' fotos, que es el tope.', 'err'); break; }
+        if (arr.length >= MAX_FOTOS) { toast('Van ' + MAX_FOTOS + ' fotos, que es el tope.', 'err'); break; }
         var marca = { id: genId(), ref: '', subiendo: true, prev: '' };
         try { marca.prev = URL.createObjectURL(files[i]); } catch (e) {}
-        FOTOS.push(marca); pintarFotos();
+        arr.push(marca); repintar();
         var ref = await subirFoto(files[i]);
         marca.subiendo = false;
-        if (ref) { marca.ref = ref; }
-        else { FOTOS = FOTOS.filter(function (f) { return f.id !== marca.id; }); toast('No se pudo subir esa foto.', 'err'); }
-        pintarFotos();
+        if (ref) marca.ref = ref;
+        else {
+            /* La foto que no subió se SACA de la lista: dejarla haría creer que
+               la evidencia quedó guardada cuando no existe en ningún lado. */
+            var k = arr.indexOf(marca); if (k >= 0) arr.splice(k, 1);
+            toast('No se pudo subir esa foto.', 'err');
+        }
+        repintar();
     }
 }
+function _pintarFotos(cont, arr, repintar) {
+    if (!cont) return;
+    cont.innerHTML = arr.map(function (f) {
+        return '<div class="foto-th">' + (f.prev ? '<img src="' + f.prev + '" alt="">' : '') +
+            (f.subiendo ? '<div class="foto-sub">subiendo…</div>'
+                        : '<button data-foto="' + f.id + '" aria-label="Quitar">✕</button>') + '</div>';
+    }).join('');
+    cont.onclick = function (e) {
+        var b = e.target.closest('[data-foto]'); if (!b) return;
+        var id = b.getAttribute('data-foto');
+        var k = -1;
+        arr.forEach(function (f, i) { if (f.id === id) k = i; });
+        if (k >= 0) arr.splice(k, 1);
+        repintar();
+    };
+}
+async function tomarFoto(input) { await _fotosA(input, FOTOS, pintarFotos); }
 async function subirFoto(file) {
     var blob = await comprimir(file);
     if (!blob) return '';
@@ -554,18 +753,7 @@ async function subirFoto(file) {
     try { _PREV[ref] = URL.createObjectURL(blob); } catch (e) {}
     return ref;
 }
-function pintarFotos() {
-    $('fotos').innerHTML = FOTOS.map(function (f) {
-        return '<div class="foto-th">' + (f.prev ? '<img src="' + f.prev + '" alt="">' : '') +
-            (f.subiendo ? '<div class="foto-sub">subiendo…</div>'
-                        : '<button data-foto="' + f.id + '" aria-label="Quitar">✕</button>') + '</div>';
-    }).join('');
-    $('fotos').onclick = function (e) {
-        var b = e.target.closest('[data-foto]'); if (!b) return;
-        FOTOS = FOTOS.filter(function (f) { return f.id !== b.getAttribute('data-foto'); });
-        pintarFotos();
-    };
-}
+function pintarFotos() { _pintarFotos($('fotos'), FOTOS, pintarFotos); }
 
 /* ── Mandar ──
    Un registro por renglón, igual que el QR del navegador. Lo que falle se queda
@@ -602,6 +790,10 @@ function armarRegistro(it) {
 
 var _enviando = false;
 async function enviarLote() {
+    /* El botón de la barra es UNO solo y sirve a dos pantallas. Aquí se decide
+       a cuál: con el checklist abierto, manda el checklist. Tener dos botones
+       distintos abajo sería dos sitios donde mirar. */
+    if (RUN) { await enviarRun(); return; }
     if (_enviando) return;
     if (!LOTE.length) { barraMsg('Agrega algo a la lista.', 'err'); return; }
     if (FOTOS.some(function (f) { return f.subiendo; })) { barraMsg('Espera a que suban las fotos.', 'err'); return; }
@@ -632,6 +824,132 @@ async function enviarLote() {
     } else {
         barraMsg(ok + ' guardados · ' + fallidos.length + ' fallaron. Siguen en la lista: vuelve a tocar Registrar.', 'err');
     }
+}
+
+/* ══ RECETARIO OPERATIVO ═══════════════════════════════════════════════════
+   La ficha de cómo se prepara, SIN un solo costo. Eso no lo decide esta
+   pantalla: portal_recetas arma cada receta campo por campo con lista blanca y
+   el dinero simplemente no viaja. Pedirla así —y no «la receta completa»— es lo
+   que hace que mañana, cuando alguien agregue un campo con un precio adentro,
+   no se filtre solo. */
+async function abrirRecetario() {
+    mostrar('pRecetas', 'Recetario', 'cómo se prepara', true, false);
+    if (RECETARIO === null) {
+        $('recLista').innerHTML = '<div class="hvacio">Cargando…</div>';
+        if (!navigator.onLine) {
+            $('recLista').innerHTML = '<div class="sinred">Sin internet. El recetario se lee del servidor.</div>';
+            return;
+        }
+        try {
+            var r = await _supabase.rpc('portal_recetas',
+                { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH });
+            RECETARIO = (r && r.data) || [];
+        } catch (e) { RECETARIO = []; }
+        _recFiltro = ''; _recTab = '';
+        $('recBuscar').value = '';
+    }
+    pintarRecetario();
+}
+function filtrarRecetario(q) { _recFiltro = String(q || ''); pintarRecetario(); }
+var TIPO_REC = { bebidas:'🍸 Bebidas', 'sub-bebidas':'🧪 Preparados', alimentos:'🍳 Alimentos',
+                 'sub-alimentos':'🥣 Bases' };
+function pintarRecetario() {
+    var todas = RECETARIO || [];
+    /* Las pestañas salen de lo que de verdad hay: enseñar «Bebidas» a una
+       cocina que no tiene ninguna es una pestaña que solo da clics en vacío. */
+    var tipos = [];
+    todas.forEach(function (r) { if (r.tipo && tipos.indexOf(r.tipo) < 0) tipos.push(r.tipo); });
+    $('recTabs').innerHTML = (tipos.length > 1)
+        ? '<button class="chip-b' + (!_recTab ? ' on' : '') + '" data-tab="">Todas</button>' +
+          tipos.map(function (t) {
+              return '<button class="chip-b' + (_recTab === t ? ' on' : '') + '" data-tab="' + etx(t) + '">' +
+                     (TIPO_REC[t] || etx(t)) + '</button>';
+          }).join('')
+        : '';
+    $('recTabs').onclick = function (e) {
+        var b = e.target.closest('[data-tab]'); if (!b) return;
+        _recTab = b.getAttribute('data-tab'); pintarRecetario();
+    };
+
+    var q = _recFiltro.trim().toLowerCase();
+    var pal = q ? q.split(/\s+/) : [];
+    var lista = todas.filter(function (r) {
+        if (_recTab && r.tipo !== _recTab) return false;
+        if (!pal.length) return true;
+        var txt = [r.nombre, r.grupo, r.categoria].join(' ').toLowerCase();
+        return pal.every(function (p) { return txt.indexOf(p) >= 0; });
+    });
+    $('recLista').innerHTML = lista.length
+        ? lista.map(function (r, i) {
+            var ico = (String(r.tipo || '').indexOf('bebida') >= 0) ? '🍸' : '🍳';
+            var meta = [r.grupo, r.categoria].filter(Boolean).join(' · ');
+            return '<button class="rec-it" data-rec="' + i + '"><span class="rec-it-ico">' + ico + '</span>' +
+                '<span style="flex:1;min-width:0"><b>' + etx(r.nombre || '—') + '</b>' +
+                (meta ? '<small>' + etx(meta) + '</small>' : '') + '</span>' +
+                '<span style="color:var(--dim)">›</span></button>';
+        }).join('')
+        : '<div class="hvacio">' + (q ? 'Nada con «' + etx(q) + '».' : 'No hay recetas para tu área.') + '</div>';
+    $('recLista').onclick = function (e) {
+        var b = e.target.closest('[data-rec]'); if (!b) return;
+        verReceta(lista[parseInt(b.getAttribute('data-rec'), 10)]);
+    };
+}
+function verReceta(r) {
+    if (!r) return;
+    mostrar('pReceta', r.nombre || 'Receta', [r.grupo, r.categoria].filter(Boolean).join(' · '), true, false);
+    var ings = r.ingredientes || [];
+    var cx = r.camposExtra || {};
+    var chips = [];
+    if (r.cristaleria) chips.push('🥃 ' + r.cristaleria);
+    if (r.tiempo)      chips.push('⏱️ ' + r.tiempo);
+    Object.keys(cx).forEach(function (k) { if (cx[k]) chips.push(k + ': ' + cx[k]); });
+
+    $('recFicha').innerHTML =
+        (r.foto ? '<img class="ficha-foto" src="' + etx(r.foto) + '" alt="" loading="lazy">' : '') +
+        '<div class="ficha-tit">' + etx(r.nombre || '—') + '</div>' +
+        (chips.length ? '<div class="ficha-meta">' + chips.map(function (c) {
+            return '<span class="rs-chip chip-b" style="min-height:0;padding:5px 11px;font-size:12px">' +
+                   etx(c) + '</span>'; }).join('') + '</div>' : '<div style="height:12px"></div>') +
+        (ings.length
+            ? '<div class="ficha-sec">Lleva</div>' + ings.map(function (i) {
+                return '<div class="ficha-ing"><span>' + etx(i.nombre || '—') +
+                    (i.desc ? '<small>' + etx(i.desc) + '</small>' : '') + '</span>' +
+                    '<b>' + etx([i.cantidad, i.unidad].filter(Boolean).join(' ')) + '</b></div>';
+              }).join('')
+            : '') +
+        (r.procedimiento
+            ? '<div class="ficha-sec">Cómo se hace</div><div class="ficha-proc">' +
+              etx(r.procedimiento) + '</div>'
+            : '<div class="ficha-sec">Cómo se hace</div><div class="hvacio" style="padding:20px 0">' +
+              'Esta receta todavía no tiene el procedimiento escrito.</div>');
+}
+
+/* ══ GUÍAS DE USO ══════════════════════════════════════════════════════════ */
+async function abrirGuias() {
+    mostrar('pGuias', 'Guías de uso', 'manuales de ETAAX', true, false);
+    if (GUIAS === null) {
+        $('guiasLista').innerHTML = '<div class="hvacio">Cargando…</div>';
+        if (!navigator.onLine) {
+            $('guiasLista').innerHTML = '<div class="sinred">Sin internet. Las guías se leen del servidor.</div>';
+            return;
+        }
+        try {
+            var r = await _supabase.rpc('portal_guias', { p_neg: NEG, p_token: TOKEN, p_niphash: NIPHASH });
+            GUIAS = (r && r.data) || [];
+        } catch (e) { GUIAS = []; }
+    }
+    $('guiasLista').innerHTML = (GUIAS && GUIAS.length)
+        ? GUIAS.map(function (g) {
+            /* target=_blank + rel=noopener: sin eso, la página abierta puede
+               manipular la que la abrió. Y en una app instalada, salir a un PDF
+               sin pestaña nueva deja al colaborador sin forma de volver. */
+            return '<a class="guia-it" href="' + etx(g.url || '#') + '" target="_blank" rel="noopener">' +
+                '<span class="rec-it-ico">' + (String(g.tipo || '') === 'video' ? '🎬' : '📄') + '</span>' +
+                '<span style="flex:1;min-width:0"><b>' + etx(g.titulo || '—') + '</b>' +
+                (g.descripcion ? '<small>' + etx(g.descripcion) + '</small>' : '') + '</span>' +
+                '<span style="color:var(--dim)">↗</span></a>';
+        }).join('')
+        : '<div class="hvacio">Todavía no hay guías publicadas.</div>';
 }
 
 /* ══ 4 · LO REGISTRADO ═════════════════════════════════════════════════════ */
@@ -902,6 +1220,11 @@ window.enviarLote = enviarLote;
 window.tomarFoto = tomarFoto;
 window.instalar = instalar;
 window.yaLaTengo = yaLaTengo;
+window.abrirChecklists = abrirChecklists;
+window.abrirRecetario = abrirRecetario;
+window.filtrarRecetario = filtrarRecetario;
+window.abrirGuias = abrirGuias;
+window.tomarFotoRun = tomarFotoRun;
 
 /* Para poder probarlo desde la consola y desde el candado. */
 window._appMovil = {
@@ -909,7 +1232,8 @@ window._appMovil = {
     unoPorProducto: unoPorProducto, enSuc: enSuc, armarRegistro: armarRegistro,
     horaDe: horaDe, esIOS: esIOS, esSafari: esSafari, esStandalone: esStandalone,
     pintarInstalar: pintarInstalar, yaInstalada: yaInstalada, detectarInstalada: detectarInstalada,
-    yaLaTengo: yaLaTengo,
+    yaLaTengo: yaLaTengo, pintarPortal: pintarPortal, cuentaRun: cuentaRun,
+    _setRun: function (r) { RUN = r; },
     _set: function (k, v) {
         if (k === 'AREA_COLAB') AREA_COLAB = v; if (k === 'AREA') AREA = v;
         if (k === 'FLUJO') FLUJO = v; if (k === 'SUB') SUB = v;
