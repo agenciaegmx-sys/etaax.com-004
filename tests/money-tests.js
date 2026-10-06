@@ -16566,7 +16566,67 @@ console.log('\n══ BH16 · Buscar en el historial de entradas ══');
     test('el filtro está en la vista, junto a los de periodo', () =>
         eq(inv.indexOf('${filtroFechas}\n                ${filtroTipo}') > -1, true, 'siempre'));
     test('el texto escrito sobrevive al repintado', () =>
-        eq(inv.indexOf('id="entBuscar" type="search" value="${etx(_entBusca)}"') > -1, true, 'con valor'));
+        eq(dI('_filtroTipoHTML').indexOf("value=\"' + etx(_entBusca) + '\"") > -1, true, 'con valor'));
+    /* El historial de afuera y el Paso 2 del inventario enseñan la misma lista:
+       si cada uno armara su propio buscador, un día filtrarían distinto. */
+    test('las dos pantallas usan el MISMO bloque de filtro', () =>
+        eq((inv.match(/_filtroTipoHTML\(\)/g) || []).length >= 3, true, 'uno solo'));
+
+    /* ── EL PASO 2, con todo lo del periodo ── */
+    /* Las mermas y cortesías del QR vivían SOLO en el panel rojo de arriba:
+       los mismos movimientos del mismo periodo partidos en dos lugares, y para
+       revisarlos había que mirar en los dos. */
+    test('el Paso 2 lista también mermas y cortesías del periodo', () =>
+        eq(dI('renderListadoEntradas').indexOf('_movs = _movsQRDelPeriodo();') > -1 &&
+           dI('renderListadoEntradas').indexOf('(invActual.entradasLog || []).concat(_movs)') > -1,
+           true, 'todo junto'));
+    /* Se leen del log global, no del inventario: ahí es donde viven, y copiarlas
+       las dejaría viejas o duplicadas. */
+    test('…leyéndolas del log global, no copiándolas al inventario', () =>
+        eq(dI('_movsQRDelPeriodo').indexOf('getEntradasLog()') > -1, true, 'una sola copia'));
+    /* El comentario y la foto ya salían; lo que faltaba era la HORA, porque el
+       import no se la llevaba: el mismo registro tenía dos fichas distintas
+       según dónde se mirara, y aquí es donde más importa —la hora decide si el
+       movimiento cayó antes o después del cierre de este inventario. */
+    test('la entrada importada se lleva su momento de captura', () =>
+        eq(inv.indexOf("registrado: e.registrado || '',") > -1, true, 'con hora'));
+    test('…y el comentario y las fotos, como ya lo hacía', () =>
+        eq(inv.indexOf("tipo: e.tipo || '', notas: e.notas || ''") > -1 &&
+           inv.indexOf("foto_urls: e.foto_urls || []        // lote: varias fotos de evidencia") > -1,
+           true, 'completo'));
+
+    /* ── El historial que no cargaba ── */
+    /* EL BUG: al terminar la carga de la nube se repintaba la vista de LISTA y
+       nada más. Quien entraba al negocio y tocaba «Registro de entradas» antes
+       de que resolviera —que es lo normal, son cuatro consultas— se quedaba con
+       la pantalla armada del respaldo local, y nadie la refrescaba. De ahí el
+       «hay que refrescar o salir y entrar para que se vean». */
+    test('al llegar los datos se repinta la pantalla que esté abierta', () => {
+        const t = dI('_sbInitInv');
+        return eq(t.indexOf("var _ve = document.getElementById('vistaEntradas');") > -1 &&
+                  t.indexOf("if (_ve && _ve.style.display !== 'none') renderVistaEntradas();") > -1,
+                  true, 'sin refrescar a mano');
+    });
+    /* Una lista vacía es una AFIRMACIÓN —«no hay nada»— y mientras la nube no
+       conteste lo cierto es que todavía no se sabe. Es justo el momento en que
+       alguien concluye que se le perdieron los datos. */
+    test('mientras carga se dice «cargando», no «sin entradas»', () =>
+        eq(dI('renderListadoEntradas').indexOf('⏳ Cargando el historial…') > -1 &&
+           dI('renderListadoEntradas').indexOf('(!invActual && !_INV_CARGADO)') > -1, true, 'honesto'));
+    /* …y que la bandera se LEVANTE al terminar la carga. Sin eso el aviso de
+       «cargando» se queda puesto para siempre y la pantalla nunca dice que no
+       hay nada cuando de verdad no hay nada —lo destapó la batería, porque
+       buscar el nombre de la bandera no basta: hay que exigir la asignación. */
+    test('…y se deja de decir en cuanto llegan los datos', () =>
+        eq(dI('_sbInitInv').indexOf('_INV_CARGADO = true;') > -1, true, 'se apaga'));
+    /* El contador decía «637 registros» sobre una lista de 206: contaba el cache
+       crudo, con los borrados y con las entradas de las otras sucursales. */
+    /* Se mira la ASIGNACIÓN, no la palabra: el comentario que cuenta el arreglo
+       también nombra getEntradasLog().length. Cuarta vez que un test mío caza su
+       propia explicación. */
+    test('el contador ya no sale del cache crudo', () =>
+        eq(dI('renderVistaEntradas').indexOf('const logLen = invActual ? (invActual.entradasLog||[]).length : 0;') > -1 &&
+           /const logLen[^\n]*getEntradasLog/.test(inv) === false, true, 'lo que se ve'));
     /* Y que la lista de verdad salga de esa cadena: si el render volviera a
        armar sus propios filtros, la suite de arriba seguiría en verde mientras
        la pantalla enseña todo. */
@@ -16642,10 +16702,35 @@ console.log('\n══ BH17 · Cada quien ve su área ══');
        común: ven todo, a propósito. */
     test('piso y administración ven todo', () =>
         eq(ve('piso','almacen_cocina') && ve('administracion','barra'), true, 'sin límite'));
-    /* FALLA ABIERTO: esconder un insumo sin área capturada dejaría a alguien
+    /* ── LAS SUB-RECETAS, que se colaban en todas las listas ──
+       La producción propia —jarabes, salsas, bases— casi nunca tiene área
+       capturada, así que el filtro fallaba abierto y al barman le aparecía
+       «Salsa de tomate para pizzas» al buscar «salsa».
+
+       No hace falta capturar nada: al convertir una receta en insumo el sistema
+       escribe él mismo la familia, «Bebidas» o «Alimentos», según el tipo de la
+       receta. Ese dato no lo teclea una persona, así que se puede creer. */
+    const SALSA  = { nombre:'SALSA DE TOMATE PARA PIZZAS', familia:'Alimentos',
+                     categoria:'Producción propia', esSubReceta:true, area:'' };
+    const JARABE = { nombre:'Jarabe natural', familia:'Bebidas',
+                     categoria:'Producción propia', esSubReceta:true, area:'' };
+    test('una salsa de producción propia NO se le cuela al de barra', () =>
+        eq(S.veInsumo('barra', SALSA), false, 'por su familia'));
+    test('…y un jarabe sí, que es producción de barra', () =>
+        eq(S.veInsumo('barra', JARABE), true, 'por su familia'));
+    test('…al revés para cocina', () =>
+        eq(S.veInsumo('cocina', SALSA) && !S.veInsumo('cocina', JARABE), true, 'simétrico'));
+    /* Si alguien capturó el área a mano, manda la suya: la familia es un
+       respaldo, no una corrección. */
+    test('…pero el área capturada a mano gana sobre la familia', () =>
+        eq(S.areaDeInsumo({ familia:'Alimentos', area:'barra' }), 'barra', 'a mano'));
+
+    /* FALLA ABIERTO: esconder un insumo sin área NI familia dejaría a alguien
        sin poder registrar su merma, y no hay cómo resolverlo desde el celular. */
     test('un insumo sin área se le muestra a todos', () =>
         eq(ve('barra',''), true, 'falla abierto'));
+    test('…y uno sin área ni familia, igual', () =>
+        eq(S.veInsumo('barra', { nombre:'Servilletas' }), true, 'falla abierto'));
     test('…y un colaborador sin área ve todo', () =>
         eq(ve('','cocina'), true, 'falla abierto'));
 
@@ -16673,6 +16758,15 @@ console.log('\n══ BH17 · Cada quien ve su área ══');
                     dE('_areasPermitidas') + dE('_areaNomQR'),
                     cx, { filename:'entrada.html (extracto)' });
 
+    /* Pasarle solo `x.area` dejaría fuera la familia y las sub-recetas volverían
+       a colarse: el filtro necesita el registro completo. */
+    test('el QR le pasa el insumo entero al filtro, no solo su área', () =>
+        eq(dE('_delAreaQR').indexOf('StaffArea.veInsumo(AREA_COLAB, x)') > -1, true, 'completo'));
+    test('…y por eso la salsa de pizzas no sale en el QR del barman', () => {
+        cx.AREA_COLAB = 'barra';
+        return eq(cx._delAreaQR({ nombre:'SALSA DE TOMATE PARA PIZZAS', familia:'Alimentos',
+                                  esSubReceta:true, area:'' }, false), false, 'fuera');
+    });
     test('el QR del barman no lista insumos de cocina', () => {
         cx.AREA_COLAB = 'barra';
         const lista = [{ nombre:'Ginebra', area:'barra' }, { nombre:'Harina', area:'cocina' },

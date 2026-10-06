@@ -169,6 +169,11 @@ function _sbDelEL(id) {
     sbDelete('entradas_log', id);
 }
 
+/* ¿Ya llegaron los datos de la nube? Mientras no, la pantalla dice «cargando»
+   en vez de enseñar una lista vacía: una lista vacía es una AFIRMACIÓN —«no hay
+   nada»— y aquí lo cierto es que todavía no se sabe. */
+var _INV_CARGADO = false;
+
 async function _sbInitInv() {
     var negId = getNegocioActivo();
     if (!negId || typeof _supabase === 'undefined') return;
@@ -216,7 +221,25 @@ async function _sbInitInv() {
             }
         } catch(e) { console.warn('[inv] re-armado de filas tras cargar insumos:', e); }
     }
-    if (typeof init === 'function') init();
+    /* YA HAY DATOS DE LA NUBE: repintar LO QUE ESTÉ EN PANTALLA, no solo la
+       lista de inventarios.
+
+       EL BUG: init() repinta la vista de LISTA y nada más. Quien entraba al
+       negocio y tocaba «Registro de entradas» antes de que resolviera esta
+       carga —que es lo normal, son cuatro consultas— veía la pantalla armada
+       con el respaldo local: contador en 637 y la lista vacía, porque esas
+       entradas de respaldo no traían el sello de sucursal con el que se filtra.
+       Cuando los datos buenos llegaban, nadie repintaba. De ahí el «hay que
+       refrescar o salir y entrar para que se vean».
+
+       No se repinta a ciegas: si hay un inventario abierto con captura a medias,
+       rearmarlo le movería el piso a quien está contando. */
+    _INV_CARGADO = true;
+    try {
+        var _ve = document.getElementById('vistaEntradas');
+        if (_ve && _ve.style.display !== 'none') renderVistaEntradas();
+        else if (typeof init === 'function') init();
+    } catch (e) { if (typeof init === 'function') init(); }
     _subInvRealtime(negId);
     _subEntradasRealtime(negId); // el QR de entradas/mermas aparece SOLO (requiere v32)
     _subAjustesRealtime(negId);  // compuestos + bateo en vivo entre dispositivos (v37 + v39)
@@ -1708,6 +1731,12 @@ function _importarEntradasQR() {
             fecha: e.fecha || '', origen: e.origen || 'manual',
             registradoPor: e.registradoPor || '', // quién lo registró en el QR (sello del RPC)
             sucursalId: e.sucursalId || _sucActiva() || '', // sello: hereda la sucursal del registro
+            /* El MOMENTO de captura viaja con la entrada. Sin él, el Paso 2
+               enseñaba solo el día mientras el historial de afuera decía la hora
+               —el mismo registro, dos fichas distintas— y justo aquí es donde
+               importa: la hora es la que decide si el movimiento cayó antes o
+               después del cierre de este inventario. */
+            registrado: e.registrado || '',
             foto_url: e.foto_url || '',         // evidencia visual del QR (1ª foto)
             foto_urls: e.foto_urls || []        // lote: varias fotos de evidencia
         });
@@ -1732,7 +1761,7 @@ function _importarEntradasQR() {
                 nombre: le.nombreProducto || le.nombre || '—', familia: '',
                 cantidad: parseFloat(le.cantidad) || 0, costo: parseFloat(le.costo) || 0,
                 tipo: le.tipo || '', notas: le.notas || '', fecha: le.fecha || '',
-                origen: le.origen || 'manual',
+                origen: le.origen || 'manual', registrado: le.registrado || '',
                 foto_url: le.foto_url || '', foto_urls: le.foto_urls || [],
                 sucursalId: le.sucursalId || _sucActiva() || 'suc_principal',
                 importadoEnInv: invActual.id, registrado: new Date().toISOString()
@@ -5212,8 +5241,12 @@ function renderStep2() {
             </div>
             <div id="entFormCard"></div>
             <div>
+                <!-- El mismo buscador y las mismas pestañas que el historial de
+                     afuera: aquí la lista junta entradas, mermas y cortesías del
+                     periodo, y revolverlas es lo que estorba al revisar. -->
+                ${_filtroTipoHTML()}
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-                    <span style="font-size:11px;color:var(--text-dim);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Entradas del período</span>
+                    <span style="font-size:11px;color:var(--text-dim);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">Movimientos del período</span>
                     <span id="entLogCount" style="font-size:13px;font-weight:700;color:var(--text)">${logCount} registro${logCount !== 1 ? 's' : ''}</span>
                 </div>
                 <div id="entLogList"></div>
@@ -9924,7 +9957,35 @@ function _entVacioHTML() {
         'style="background:transparent;border:1px solid var(--border);color:var(--text-muted);border-radius:20px;' +
         'padding:6px 14px;font-family:inherit;font-size:12px;cursor:pointer">↺ Quitar el filtro</button></div></div>';
 }
-function _entLimpiarFiltros() { _entBusca = ''; _entTipo = 'todos'; renderVistaEntradas(); }
+function _entLimpiarFiltros() { _entBusca = ''; _entTipo = 'todos'; _entRepintar(); }
+/* Repinta la vista que esté en pantalla. El Paso 2 y el historial de afuera son
+   dos armados distintos de la misma lista; llamar al equivocado deja el filtro
+   aplicado y la pantalla sin cambiar. */
+function _entRepintar() {
+    try {
+        var ve = document.getElementById('vistaEntradas');
+        if (ve && ve.style.display !== 'none') { renderVistaEntradas(); return; }
+    } catch (e) {}
+    if (typeof renderStepContent === 'function') renderStepContent();
+    else renderVistaEntradas();
+}
+
+/* EL BUSCADOR Y LAS PESTAÑAS, en un solo lugar: el historial de afuera y el
+   Paso 2 del inventario enseñan la misma lista y tienen que filtrarla igual.
+   Copiarlo en los dos armados es cómo se separan. */
+function _filtroTipoHTML() {
+    return '' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">' +
+            '<div style="position:relative;flex:1;min-width:200px;max-width:380px">' +
+                '<input id="entBuscar" type="search" value="' + etx(_entBusca) + '" ' +
+                    'oninput="setEntBusca(this.value)" autocomplete="off" ' +
+                    'placeholder="🔍 Buscar por producto, quién lo registró, motivo o nota…" ' +
+                    'style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);' +
+                           'border-radius:20px;padding:7px 13px;font-family:inherit;font-size:12.5px;outline:none">' +
+            '</div>' +
+            '<div id="entTipoChips" style="display:flex;gap:6px;flex-wrap:wrap"></div>' +
+        '</div>';
+}
 
 /* LA CADENA DE FILTRADO, en un solo lugar. Primero el texto, después el tipo,
    y los contadores de las pestañas SOBRE LO BUSCADO —no sobre el total y no
@@ -10011,7 +10072,19 @@ function renderListadoEntradas() {
     // Use inventory-specific log when active, global log otherwise
     let log, useGlobal;
     if (invActual) {
-        log = invActual.entradasLog || [];
+        /* El Paso 2 enseñaba SOLO entradas; las mermas y cortesías del QR vivían
+           aparte, en el panel rojo de arriba. Eran los mismos movimientos del
+           mismo periodo partidos en dos lugares, y para revisarlos había que
+           mirar en los dos. Ahora van en la misma lista —con sus comentarios y
+           su foto, como afuera— y las pestañas sirven para separarlos cuando se
+           quiere.
+
+           Las de merma/cortesía se leen del log global, no del inventario: ahí
+           es donde viven (el inventario solo guarda las entradas) y así no se
+           duplican ni se quedan viejas. */
+        var _movs = [];
+        try { _movs = _movsQRDelPeriodo(); } catch (e) { _movs = []; }
+        log = (invActual.entradasLog || []).concat(_movs);
         useGlobal = false;
     } else {
         log = [...getEntradasLog()].filter(function(e){ return e && !e.borrada && _entEnPeriodo(e.fecha); }).reverse();
@@ -10023,8 +10096,14 @@ function renderListadoEntradas() {
         /* Las pestañas se pintan igual, en cero: dejar su renglón en blanco se
            ve como si la pantalla se hubiera roto a medio cargar. */
         _entPintaChips({ entrada:0, merma:0, salida:0 });
-        cont.innerHTML = `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:24px 0">
-            Sin entradas registradas</div>`;
+        /* «Sin entradas registradas» mientras la nube todavía no contesta es una
+           AFIRMACIÓN falsa: lo cierto es que aún no se sabe. Y es justo el
+           momento en que alguien concluye que se le perdieron los datos. */
+        cont.innerHTML = (!invActual && !_INV_CARGADO)
+            ? `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:28px 0">
+                 ⏳ Cargando el historial…</div>`
+            : `<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:24px 0">
+                 Sin entradas registradas</div>`;
         return;
     }
     // Asegurar id estable en cada entrada (las de inventario no lo traían) → borrar/editar por id.
@@ -10420,7 +10499,12 @@ function renderVistaEntradas() {
         </div>
         <div id="entFormCard"></div>` : '';
 
-    const logLen = invActual ? (invActual.entradasLog||[]).length : getEntradasLog().length;
+    /* El contador del encabezado lo RELLENA renderListadoEntradas con lo que de
+       verdad se pinta. Aquí solo va un valor de arranque, y antes era
+       getEntradasLog().length —el cache crudo, con los borrados y con las
+       entradas de las otras sucursales—: por eso decía «637 registros» sobre
+       una lista de 206. */
+    const logLen = invActual ? (invActual.entradasLog||[]).length : 0;
     const _perTab = (p, lbl) => `<button onclick="setEntPeriodo('${p}')" style="border:1px solid ${_entPeriodo===p?'var(--accent)':'var(--border)'};background:${_entPeriodo===p?'rgba(245,200,66,.12)':'transparent'};color:${_entPeriodo===p?'var(--accent)':'var(--text-muted)'};border-radius:20px;padding:5px 14px;font-family:inherit;font-size:12px;cursor:pointer;font-weight:${_entPeriodo===p?'700':'500'}">${lbl}</button>`;
     const _inpDate = 'background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 8px;font-size:12px';
     const filtroFechas = invActual ? '' : `
@@ -10430,20 +10514,7 @@ function renderVistaEntradas() {
                 <span style="color:var(--text-dim);font-size:12px">a</span>
                 <input type="date" id="entHasta" value="${_entHasta}" onchange="setEntRango()" style="${_inpDate}">` : ''}
         </div>`;
-    /* El buscador y las pestañas de tipo. Van SIEMPRE —también dentro de un
-       inventario, donde el Paso 2 junta las mismas tres listas—, porque es ahí
-       donde más estorba tener que bajar leyendo. */
-    const filtroTipo = `
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
-            <div style="position:relative;flex:1;min-width:200px;max-width:380px">
-                <input id="entBuscar" type="search" value="${etx(_entBusca)}"
-                    oninput="setEntBusca(this.value)" autocomplete="off"
-                    placeholder="🔍 Buscar por producto, quién lo registró, motivo o nota…"
-                    style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);
-                           border-radius:20px;padding:7px 13px;font-family:inherit;font-size:12.5px;outline:none">
-            </div>
-            <div id="entTipoChips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-        </div>`;
+    const filtroTipo = _filtroTipoHTML();
     cont.innerHTML = `
         <div class="ent-rapida-wrap${invActual ? '' : ' ent-ancho'}">
             ${searchSection}
@@ -10454,7 +10525,9 @@ function renderVistaEntradas() {
                     <span style="font-size:11px;color:var(--text-dim);font-weight:500;text-transform:uppercase;letter-spacing:0.5px">
                         ${invActual ? 'Entradas del período' : 'Historial de entradas'}
                     </span>
-                    <span id="entLogCount" style="font-size:13px;font-weight:700;color:var(--text)">${logLen} registro${logLen !== 1 ? 's' : ''}</span>
+                    <span id="entLogCount" style="font-size:13px;font-weight:700;color:var(--text)">${
+                        (!invActual && !_INV_CARGADO) ? '<span style="color:var(--text-dim);font-weight:500">cargando…</span>'
+                        : (logLen + ' registro' + (logLen !== 1 ? 's' : ''))}</span>
                 </div>
                 <div id="entLogList"></div>
             </div>

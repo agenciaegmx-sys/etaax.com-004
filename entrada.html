@@ -470,7 +470,10 @@ function _delAreaQR(x, esReceta){
         return ar === mia;
     }
     if (!window.StaffArea) return true;           // sin el vocabulario: falla abierto
-    return StaffArea.veInsumo(AREA_COLAB, (x && x.area) || '');
+    /* El insumo ENTERO, no solo su campo `area`: las sub-recetas casi nunca lo
+       tienen y su familia —que el sistema escribe solo al convertir la receta—
+       dice si es producción de barra o de cocina. */
+    return StaffArea.veInsumo(AREA_COLAB, x);
 }
 function _enSucQR(x){
     if (!SUC || !x) return true;

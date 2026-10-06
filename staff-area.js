@@ -137,13 +137,37 @@
     function veAreas(areaColab) {
         return VE_AREAS[norm(areaColab)] || null;     // null = todas
     }
-    /* ¿Este insumo le toca a esta persona? FALLA ABIERTO: un insumo sin área
-       capturada se le muestra a todos. Esconderlo dejaría a alguien sin poder
+    /* ══ EL ÁREA EFECTIVA DE UN INSUMO ═════════════════════════════════════════
+       Normalmente es su campo `area`. Pero las SUB-RECETAS —la producción
+       propia: jarabes, salsas, bases— se colaban en todas las listas: casi
+       ninguna tiene área capturada, así que el filtro fallaba abierto y al
+       barman le aparecía «Salsa de tomate para pizzas» al buscar «salsa».
+
+       No hace falta capturar nada: al convertir una receta en insumo el sistema
+       escribe él mismo la familia, «Bebidas» o «Alimentos», según el tipo de la
+       receta. Ese dato no lo teclea una persona, así que se puede creer:
+       producción de bebidas es barra, producción de alimentos es cocina.
+
+       Solo aplica cuando NO hay área capturada: si alguien puso una a mano,
+       manda la suya. */
+    function areaDeInsumo(ins) {
+        if (!ins) return '';
+        if (typeof ins === 'string') return normIns(ins);
+        var a = normIns(ins.area);
+        if (a) return a;
+        var fam = String(ins.familia || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        if (fam.indexOf('bebida') >= 0)  return 'barra';
+        if (fam.indexOf('aliment') >= 0) return 'cocina';
+        return '';
+    }
+
+    /* ¿Este insumo le toca a esta persona? FALLA ABIERTO: un insumo sin área ni
+       familia se le muestra a todos. Esconderlo dejaría a alguien sin poder
        registrar su merma, y no hay forma de que lo resuelva desde el celular. */
-    function veInsumo(areaColab, areaInsumo) {
+    function veInsumo(areaColab, insumo) {
         var permitidas = veAreas(areaColab);
         if (!permitidas) return true;
-        var a = normIns(areaInsumo);
+        var a = areaDeInsumo(insumo);
         if (!a) return true;
         return permitidas.indexOf(a) >= 0;
     }
@@ -157,6 +181,7 @@
         LISTA: LISTA, NOMBRES: NOMBRES, MAPA_ROL: DE_ROL,
         nom: nom, norm: norm, deRol: deRol, de: de,
         AREAS_INSUMO: AREAS_INSUMO, VE_AREAS: VE_AREAS,
-        normIns: normIns, nomIns: nomIns, veAreas: veAreas, veInsumo: veInsumo
+        normIns: normIns, nomIns: nomIns, veAreas: veAreas, veInsumo: veInsumo,
+        areaDeInsumo: areaDeInsumo
     };
 })();
