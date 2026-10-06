@@ -453,11 +453,24 @@ function _areaDeReceta(x){
     return '';                       // sin tipo: no se puede saber
 }
 function _delAreaQR(x, esReceta){
-    if (AREA === 'almacen') return true;         // el almacén surte a las dos
-    var a = esReceta ? _areaDeReceta(x)
-                     : String((x && x.area) || '').toLowerCase();
-    if (!a) return true;                          // sin área declarada: se muestra
-    return a === AREA;
+    /* LO QUE SE VE LO DECIDE QUIÉN ERES, no el chip. Antes el filtro usaba el
+       chip seleccionado, así que bastaba con tocar «Cocina» para ver —y mermar—
+       todo el inventario de cocina desde la barra. El chip ahora solo dice
+       DÓNDE cae el movimiento; lo que se puede ver es asunto del área del
+       colaborador, y eso lo manda su perfil.
+
+       La lista va con la UNIÓN de sus áreas (barra + almacén barra), no con la
+       del chip: una botella puede entrar a la barra o irse al almacén, y
+       obligar a cambiar de chip para encontrarla solo estorba. */
+    if (esReceta) {
+        var ar = _areaDeReceta(x);
+        if (!ar) return true;                     // sin tipo: no se puede saber
+        var mia = window.StaffArea ? StaffArea.norm(AREA_COLAB) : '';
+        if (mia !== 'barra' && mia !== 'cocina') return true;
+        return ar === mia;
+    }
+    if (!window.StaffArea) return true;           // sin el vocabulario: falla abierto
+    return StaffArea.veInsumo(AREA_COLAB, (x && x.area) || '');
 }
 function _enSucQR(x){
     if (!SUC || !x) return true;
@@ -472,8 +485,10 @@ function _enSucQR(x){
    cada registro. */
 var COLAB = '', _NIPHASH = '', INSUMOS = [], SEL = null, FOTO_URL = '', _countTimer = null, _t0 = 0;
 var RECETAS = null;              // menú del negocio (lazy: se carga al entrar a merma de producto)
-var AREA = 'barra';              // área de trabajo (aplica a entrada, merma, salida y conteo)
-var AREA_FIJA = false;           // la dijo el NIP: no se elige, se informa
+var AREA = 'barra';              // DÓNDE cae el movimiento (se sella en el registro)
+var AREA_COLAB = '';             // QUIÉN ES: su área de trabajo. Decide qué puede ver.
+var PUESTO = '';                 // su puesto, para decirlo junto al nombre
+var AREA_FIJA = false;           // su área ya no se elige: se informa
 var MERMA_TIPO = 'insumo';       // 'insumo' | 'producto'
 var MSEL = null, MFOTO_URL = '';
 var SALIDA_TIPO = 'cortesia';    // 'cortesia' | 'prestamo'
@@ -483,33 +498,47 @@ var SSEL = null, SFOTO_URL = '';
 var MAX_ITEMS = 15, MAX_FOTOS = 10;
 var CART = { entrada:{items:[],fotos:[]}, merma:{items:[],fotos:[]}, salida:{items:[],fotos:[]} };
 
-var AREAS = [ ['barra','🍸 Barra'], ['cocina','🍳 Cocina'], ['almacen','📦 Almacén'] ];
+/* Las áreas donde ESTE colaborador puede dejar un movimiento. El de barra no
+   tiene por qué poder mandar algo al almacén de cocina: enseñarle el botón es
+   invitar al error, y esconderlo sin negarlo en el código no es negarlo. */
+function _areasPermitidas(){
+    var l = (window.StaffArea && StaffArea.veAreas(AREA_COLAB)) || null;
+    if (l) return l;
+    return (window.StaffArea ? StaffArea.AREAS_INSUMO.map(function(a){ return a.k; })
+                             : ['barra','cocina','almacen_general']);
+}
+function _areaNomQR(k){
+    return (window.StaffArea && StaffArea.nomIns(k)) || k;
+}
 /* Cuando el NIP ya dijo el área, el bloque de chips deja de ser un selector y
    pasa a ser un rótulo: decir en qué área estás parado sirve; poder cambiarla
    a mano era justo el problema. */
 function _pintarAreas(){
-    var nom = (AREAS.find(function(a){ return a[0] === AREA; }) || [AREA, AREA])[1];
+    var permitidas = _areasPermitidas();
+    /* Con UNA sola área posible el bloque deja de ser selector y pasa a ser
+       rótulo: decir dónde estás parado sirve; poder cambiarlo con el dedo era
+       el problema. Con dos —su área y su almacén— sigue siendo un selector,
+       porque ahí sí hay algo que decidir: si la botella se queda en la barra o
+       se guarda. */
     ['areaChipsEnt','areaChipsMer','areaChipsSal','areaChipsCnt'].forEach(function(cid){
         var c = document.getElementById(cid); if (!c) return;
-        /* Con el área fijada por el NIP esto deja de ser un selector y pasa a
-           ser un rótulo: decir en qué área estás parado sirve; poder cambiarla
-           con el dedo era justo el problema. */
-        if (AREA_FIJA) {
+        if (permitidas.length === 1) {
             c.innerHTML = '<span style="display:inline-flex;align-items:center;gap:7px;background:rgba(61,190,122,.1);' +
                 'border:1px solid rgba(61,190,122,.4);border-radius:20px;padding:6px 14px;font-size:13px;color:var(--green)">' +
-                nom + '<span style="font-size:10.5px;color:var(--text-dim)">tu área</span></span>';
+                _areaNomQR(permitidas[0]) + '<span style="font-size:10.5px;color:var(--text-dim)">tu área</span></span>';
             return;
         }
-        c.innerHTML = AREAS.map(function(a){
-            return '<button class="'+(AREA===a[0]?'on':'')+'" onclick="setArea(\''+a[0]+'\')">'+a[1]+'</button>';
+        c.innerHTML = permitidas.map(function(k){
+            return '<button class="'+(AREA===k?'on':'')+'" onclick="setArea(\''+k+'\')">'+_areaNomQR(k)+'</button>';
         }).join('');
     });
 }
 function setArea(a){
-    /* Esconder los chips no basta: setArea se puede llamar desde la consola o
-       desde un botón que sobreviva a un repintado. Si el NIP ya dijo el área,
-       aquí se niega. */
-    if (AREA_FIJA) return;
+    /* Esconder el botón no es negarlo: setArea se puede llamar desde la consola
+       o desde un chip que sobreviva a un repintado. Aquí se niega lo que no le
+       toca, y por eso se compara contra la lista —no contra un booleano, que
+       dejaba pasar cualquier área mientras el perfil no fijara ninguna. */
+    if (_areasPermitidas().indexOf(a) < 0) return;
     AREA = a; _pintarAreas();
     /* Repintar la lista de la pantalla en la que estás. Sin esto se elegía
        barra y la lista se quedaba con lo de cocina hasta escribir algo en el
@@ -570,9 +599,31 @@ async function entrar(){
         try {
             var rp = await _supabase.rpc('portal_perfil', { p_neg: NEG, p_token: TOKEN, p_niphash: h });
             var perfil = rp && rp.data;
-            var aOp = (perfil && window.StaffArea) ? StaffArea.norm(perfil.area) : '';
-            if (aOp === 'barra' || aOp === 'cocina') { AREA = aOp; AREA_FIJA = true; }
-        } catch (e) { /* sin perfil: los tres chips, como antes */ }
+            if (perfil) {
+                PUESTO = perfil.puesto || '';
+                /* LA CAUSA DE QUE A TODOS LES SALIERAN LAS TRES ÁREAS: aquí se
+                   leía SOLO `perfil.area`, y la consulta rellena ese campo con
+                   'administracion' cuando el colaborador no lo tiene capturado
+                   —que es el caso normal: el área casi nunca se llena a mano—.
+                   O sea que un barman con rol «barman» y puesto «Barman» salía
+                   como administración y veía el negocio entero.
+
+                   Ahora se resuelve con la misma jerarquía de siempre (área a
+                   mano → rol del sistema → puesto escrito), y el valor relleno
+                   se descarta cuando no viene de un campo real. `areaReal` y
+                   `rol` los agrega la v64; sin ella se cae al puesto, que la
+                   consulta ya devolvía: «Barman» → barra, sin migrar nada. */
+                var crudo = (perfil.areaReal !== undefined) ? perfil.areaReal
+                          : (perfil.area === 'administracion' ? '' : perfil.area);
+                AREA_COLAB = window.StaffArea
+                    ? StaffArea.de({ area: crudo, rol: perfil.rol, puesto: perfil.puesto })
+                    : '';
+                if (!AREA_COLAB && perfil.area) AREA_COLAB = StaffArea.norm(perfil.area);
+                var _perm = _areasPermitidas();
+                if (_perm.indexOf(AREA) < 0) AREA = _perm[0];
+                AREA_FIJA = _perm.length === 1;
+            }
+        } catch (e) { /* sin perfil: se ven todas las áreas, como antes */ }
         // 2) Cargar insumos (token-gated, también por RPC).
         var ri = await _supabase.rpc('entrada_insumos', { p_neg: NEG, p_token: TOKEN });
         INSUMOS = _unoPorProductoQR(                                    // sin duplicados maestro/copia
@@ -580,7 +631,18 @@ async function entrar(){
         );
         INSUMOS.sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
         // 3) Menú de conceptos.
-        document.getElementById('quienNom').textContent = COLAB;
+        /* El nombre solo no dice nada cuando hay tres Diegos o cuando el
+           encargado revisa qué se registró: el puesto y el área son lo que
+           ubica a la persona, y además dejan ver de un golpe si el sistema le
+           asignó el área correcta —que es justo lo que estaba fallando—. */
+        var _q = document.getElementById('quienNom');
+        if (_q) {
+            var det = [PUESTO, (window.StaffArea && AREA_COLAB) ? StaffArea.nom(AREA_COLAB) : '']
+                        .filter(Boolean).join(' · ');
+            _q.innerHTML = etx(COLAB) + (det
+                ? '<span style="display:block;font-size:11.5px;font-weight:400;color:var(--dim);margin-top:2px">' +
+                  etx(det) + '</span>' : '');
+        }
         document.getElementById('entradaFecha').value = todayStr();
         filtrarIns('');
         volverMenu();

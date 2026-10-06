@@ -13061,13 +13061,20 @@ console.log('\n══ BG6 · El QR de inventarios: una receta, y de su área ═
         eq(v61.indexOf('_entrada_token_ok(p_neg, p_token)') > -1, true, 'con token'));
 
     /* ── El código REAL del QR ── */
+    /* `area` ya no es el chip: es QUIÉN ES el colaborador. El chip solo sella
+       dónde cae el movimiento, y por eso se pasa aparte —si los dos fueran el
+       mismo valor, esta prueba no notaría que tocar «Cocina» vuelva a abrir la
+       cocina entera, que es exactamente el agujero que se cerró. */
     function qr(opts) {
         opts = opts || {};
         const ctx = { console, JSON, Object, Array, String, Boolean };
         ctx.window = ctx;
         vm.createContext(ctx);
+        vm.runInContext(fs.readFileSync(path.join(RAIZ, 'staff-area.js'), 'utf8'), ctx,
+                        { filename: 'staff-area.js' });
         vm.runInContext("var SUC=" + JSON.stringify(opts.suc || '') + ";" +
-                        "var AREA=" + JSON.stringify(opts.area || 'barra') + ";", ctx);
+                        "var AREA_COLAB=" + JSON.stringify(opts.area || 'barra') + ";" +
+                        "var AREA=" + JSON.stringify(opts.chip || opts.area || 'barra') + ";", ctx);
         ['_unoPorProductoQR', '_enSucQR', '_areaDeReceta', '_delAreaQR']
             .forEach(f => vm.runInContext(decl(f), ctx, { filename: 'entrada.html' }));
         return ctx;
@@ -13141,11 +13148,20 @@ console.log('\n══ BG6 · El QR de inventarios: una receta, y de su área ═
         return eq(c._delAreaQR(CARTA[2], true) === true && c._delAreaQR(CARTA[0], true) === false,
                   true, 'separadas');
     });
-    /* El almacén surte a las dos: acotarlo lo dejaría sin poder registrar la
-       mitad de lo que pasa por sus manos. */
-    test('el almacén ve todo', () => {
-        const c = qr({ area: 'almacen' });
+    /* Piso y administración ven todo: son quienes levantan el inventario
+       general y quienes piden lo de uso común. («Almacén» dejó de ser un área
+       de colaborador: ahora el almacén está partido en tres y es una propiedad
+       del INSUMO, no de la persona.) */
+    test('piso ve todo el recetario', () => {
+        const c = qr({ area: 'piso' });
         return eq(CARTA.every(x => c._delAreaQR(x, true)), true, 'todo');
+    });
+    /* EL AGUJERO QUE SE CERRÓ: el filtro usaba el CHIP, así que bastaba tocar
+       «Cocina» para ver —y mermar— el inventario entero de cocina desde la
+       barra. Ahora el chip no abre nada. */
+    test('mover el chip no le abre a la barra el área de cocina', () => {
+        const c = qr({ area: 'barra', chip: 'cocina' });
+        return eq(c._delAreaQR({ id:'i3', area:'cocina' }, false), false, 'sin atajo');
     });
     /* FALLA ABIERTO: lo que no dice a qué área pertenece se muestra siempre.
        Esconder un insumo sin área capturada deja a alguien sin poder registrar
@@ -13810,23 +13826,33 @@ console.log('\n══ BH1 · Cierre, historial del QR y área por NIP ══');
     test('el QR de inventarios ya pide el perfil del colaborador', () =>
         eq(ent.indexOf("rpc('portal_perfil'") > -1, true, 'lo pide'));
     test('…con la misma fuente de áreas que el resto del sistema', () =>
-        eq(ent.indexOf('/staff-area.js') > -1 && ent.indexOf('StaffArea.norm(perfil.area)') > -1,
+        eq(ent.indexOf('/staff-area.js') > -1 && ent.indexOf('StaffArea.de({ area: crudo') > -1,
            true, 'fuente única'));
-    test('un colaborador de barra queda fijado en barra', () =>
-        eq(ent.indexOf("if (aOp === 'barra' || aOp === 'cocina') { AREA = aOp; AREA_FIJA = true; }") > -1,
-           true, 'fijado'));
-    /* Administración y piso SÍ ven las tres: son quienes levantan inventario
-       general. Fijarlos a un área los dejaría sin poder capturar lo demás. */
-    test('…pero administración y piso siguen viendo las tres', () =>
-        eq(ent.indexOf("aOp === 'barra' || aOp === 'cocina'") > -1, true, 'sin fijar'));
-    test('con el área fijada, los chips dejan de ser botones', () =>
-        eq(dE('_pintarAreas').indexOf('if (AREA_FIJA) {') > -1, true, 'rótulo'));
+    /* ESTO CAMBIÓ, y la suite BH17 lo cubre a fondo. Antes el área se leía de
+       un solo campo —`perfil.area`, que la consulta rellena con
+       'administracion' cuando nadie lo capturó— y un barman salía como
+       administración. Ahora se resuelve con la jerarquía completa: campo a mano
+       → rol → puesto. Y el almacén se partió en tres, así que «quedar fijado»
+       dejó de ser lo correcto: al de barra se le ofrecen SU área y SU almacén,
+       porque ahí sí hay algo que decidir. */
+    test('el área del colaborador sale de su rol o su puesto, no de un relleno', () =>
+        eq(ent.indexOf("StaffArea.de({ area: crudo, rol: perfil.rol, puesto: perfil.puesto })") > -1,
+           true, 'jerarquía'));
+    /* Administración y piso SÍ ven todas: son quienes levantan inventario
+       general. Acotarlos los dejaría sin poder capturar lo demás. */
+    test('…y administración y piso siguen viendo todas', () =>
+        eq(dE('_areasPermitidas').indexOf('if (l) return l;') > -1 &&
+           dE('_areasPermitidas').indexOf('StaffArea.AREAS_INSUMO.map') > -1, true, 'sin acotar'));
+    test('con una sola área posible, los chips dejan de ser botones', () =>
+        eq(dE('_pintarAreas').indexOf('if (permitidas.length === 1) {') > -1, true, 'rótulo'));
     test('…y se dice cuál es su área, no se esconde el dato', () =>
         eq(dE('_pintarAreas').indexOf('tu área') > -1, true, 'informado'));
     /* Esconder los chips no basta: setArea se puede llamar desde la consola o
-       desde un botón que sobreviva a un repintado. */
+       desde un botón que sobreviva a un repintado. Y se compara contra la LISTA,
+       no contra un booleano —el booleano dejaba pasar cualquier área mientras
+       el perfil no fijara ninguna, que con el relleno era siempre. */
     test('esconder el chip no es impedir: setArea también se niega', () =>
-        eq(dE('setArea').indexOf('if (AREA_FIJA) return;') > -1, true, 'negado'));
+        eq(dE('setArea').indexOf('_areasPermitidas().indexOf(a) < 0') > -1, true, 'negado'));
     /* Si la RPC no responde, dejar a alguien sin poder capturar es peor que
        mostrarle de más: el filtro es de comodidad, no de seguridad. */
     test('si el perfil no llega, se sigue pudiendo capturar', () =>
@@ -16550,6 +16576,187 @@ console.log('\n══ BH16 · Buscar en el historial de entradas ══');
                   t.indexOf('const visibles = _f.visibles;') > -1 &&
                   t.indexOf('_entPintaChips(_f.cta)') > -1, true, 'una sola cadena');
     });
+}
+
+/* ═══════════ SUITE BH17 · CADA QUIEN VE SU ÁREA ════════════════════════════
+   En el QR de entradas le salían las tres áreas a todo el mundo, y con tocar
+   «Cocina» un barman veía —y podía mermar— el inventario entero de la cocina.
+
+   LA CAUSA no estaba en los botones. portal_perfil rellena el área con
+   'administracion' cuando el colaborador no la tiene capturada a mano —que es
+   el caso normal, ese campo casi nunca se llena— y el QR leía ESE campo y nada
+   más. Un barman con rol «barman» y puesto «Barman» salía como administración.
+   El área ya se resolvía bien en un solo lugar (staff-area.js: campo a mano →
+   rol → puesto); lo que faltaba era usarlo.
+
+   Y «Bodega» era una sola para todo: el de barra buceaba entre la harina para
+   encontrar su ginebra de reserva. Ahora el almacén está partido en tres.      */
+console.log('\n══ BH17 · Cada quien ve su área ══');
+{
+    const sa = { console };
+    sa.window = sa;
+    vm.createContext(sa);
+    vm.runInContext(fs.readFileSync(path.join(RAIZ, 'staff-area.js'), 'utf8'), sa, { filename:'staff-area.js' });
+    const S = sa.window.StaffArea;
+
+    /* ── El área del colaborador: la jerarquía completa ── */
+    /* ES EL CASO DEL REPORTE: Diego, rol «barman», puesto «Barman», sin área
+       capturada. Antes salía administración y veía todo. */
+    test('un barman sin área capturada es de barra, por su rol', () =>
+        eq(S.de({ area:'', rol:'barman', puesto:'Barman' }), 'barra', 'por rol'));
+    test('…y si tampoco hay rol, por su puesto', () =>
+        eq(S.de({ area:'', rol:'', puesto:'Barman' }), 'barra', 'por puesto'));
+    /* El campo a mano manda: es la corrección explícita de una persona. */
+    test('…pero el área escrita a mano gana sobre las dos', () =>
+        eq(S.de({ area:'cocina', rol:'barman', puesto:'Barman' }), 'cocina', 'a mano'));
+
+    /* ── El almacén, partido ── */
+    test('el almacén se parte en barra, cocina y general', () =>
+        eq(S.AREAS_INSUMO.map(a => a.k).join(','),
+           'barra,cocina,almacen_barra,almacen_cocina,almacen_general', 'tres almacenes'));
+    /* Cientos de insumos dicen «bodega». Reescribirles el campo en masa movería
+       de lugar cosas que nadie pidió mover; se lee como lo que era. */
+    test('«bodega» sigue valiendo y se lee como almacén general', () =>
+        eq(S.normIns('bodega'), 'almacen_general', 'sin migrar datos'));
+    test('…igual que «almacén» a secas y «general»', () =>
+        eq(S.normIns('almacen') === 'almacen_general' &&
+           S.normIns('general') === 'almacen_general', true, 'compatible'));
+    test('…y el texto tecleado a mano también se entiende', () =>
+        eq(S.normIns('Almacén Barra') === 'almacen_barra' &&
+           S.normIns('ALMACEN COCINA') === 'almacen_cocina', true, 'tolerante'));
+
+    /* ── Quién ve qué ── */
+    const ve = (c, i) => S.veInsumo(c, i);
+    test('el de barra ve lo de barra y su almacén', () =>
+        eq(ve('barra','barra') && ve('barra','almacen_barra'), true, 'lo suyo'));
+    /* EL SÍNTOMA EXACTO: un barman no tiene nada que hacer en el inventario de
+       cocina, y enseñárselo le da más lista donde buscar y más formas de
+       registrar una merma en el insumo equivocado. */
+    test('…y NO ve lo de cocina ni su almacén', () =>
+        eq(ve('barra','cocina') || ve('barra','almacen_cocina'), false, 'ni de lejos'));
+    test('…ni el almacén general', () =>
+        eq(ve('barra','almacen_general'), false, 'tampoco'));
+    test('el de cocina, al revés', () =>
+        eq(ve('cocina','almacen_cocina') && !ve('cocina','almacen_barra'), true, 'simétrico'));
+    /* Piso y administración levantan el inventario general y piden lo de uso
+       común: ven todo, a propósito. */
+    test('piso y administración ven todo', () =>
+        eq(ve('piso','almacen_cocina') && ve('administracion','barra'), true, 'sin límite'));
+    /* FALLA ABIERTO: esconder un insumo sin área capturada dejaría a alguien
+       sin poder registrar su merma, y no hay cómo resolverlo desde el celular. */
+    test('un insumo sin área se le muestra a todos', () =>
+        eq(ve('barra',''), true, 'falla abierto'));
+    test('…y un colaborador sin área ve todo', () =>
+        eq(ve('','cocina'), true, 'falla abierto'));
+
+    /* ── El QR ── */
+    const ent = fs.readFileSync(path.join(RAIZ, 'entrada.html'), 'utf8');
+    const dE = (fn) => {
+        const i = ent.indexOf('function ' + fn + '(');
+        if (i < 0) throw new Error('no existe ' + fn);
+        const abre = ent.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < ent.length) {
+            if (ent[j] === '{') prof++;
+            else if (ent[j] === '}') { prof--; if (!prof) return ent.slice(i, j + 1); }
+            j++;
+        }
+        throw new Error('sin cerrar ' + fn);
+    };
+    /* Se corre el filtro del QR de verdad. */
+    const cx = { console, String, Array, window: null };
+    cx.window = cx;
+    cx.StaffArea = S;
+    cx.AREA_COLAB = 'barra';
+    vm.createContext(cx);
+    vm.runInContext('var AREA="barra";' + dE('_areaDeReceta') + dE('_delAreaQR') +
+                    dE('_areasPermitidas') + dE('_areaNomQR'),
+                    cx, { filename:'entrada.html (extracto)' });
+
+    test('el QR del barman no lista insumos de cocina', () => {
+        cx.AREA_COLAB = 'barra';
+        const lista = [{ nombre:'Ginebra', area:'barra' }, { nombre:'Harina', area:'cocina' },
+                       { nombre:'Tónica reserva', area:'almacen_barra' }, { nombre:'Aceite', area:'bodega' },
+                       { nombre:'Sin capturar', area:'' }];
+        return eq(lista.filter(x => cx._delAreaQR(x, false)).map(x => x.nombre).join(','),
+                  'Ginebra,Tónica reserva,Sin capturar', 'solo lo suyo');
+    });
+    /* LO QUE CAMBIÓ DE RAÍZ: antes el filtro usaba el CHIP, así que tocar
+       «Cocina» abría la cocina entera. Ahora el chip solo dice dónde cae el
+       movimiento; lo que se ve lo manda el perfil. */
+    test('…y cambiar de chip no le abre otra área', () => {
+        cx.AREA_COLAB = 'barra'; cx.AREA = 'almacen_barra';
+        const r1 = cx._delAreaQR({ area:'cocina' }, false);
+        cx.AREA = 'cocina';
+        return eq(r1 === false && cx._delAreaQR({ area:'cocina' }, false) === false, true, 'sin atajo');
+    });
+    test('el de cocina sí ve lo de cocina', () => {
+        cx.AREA_COLAB = 'cocina';
+        return eq(cx._delAreaQR({ area:'cocina' }, false) &&
+                  !cx._delAreaQR({ area:'barra' }, false), true, 'simétrico');
+    });
+    /* El recetario de mermas de producto va por el tipo de la receta, que es la
+       misma regla del inventario. */
+    test('en mermas de producto, el barman solo ve bebidas', () => {
+        cx.AREA_COLAB = 'barra';
+        return eq(cx._delAreaQR({ tipo:'bebida' }, true) &&
+                  !cx._delAreaQR({ tipo:'alimento' }, true), true, 'su carta');
+    });
+
+    /* ── Los botones de área ── */
+    test('al barman se le ofrecen SOLO barra y su almacén', () => {
+        cx.AREA_COLAB = 'barra';
+        return eq(cx._areasPermitidas().join(','), 'barra,almacen_barra', 'lo suyo');
+    });
+    test('…y a piso, todas', () => {
+        cx.AREA_COLAB = 'piso';
+        return eq(cx._areasPermitidas().length, 5, 'todas');
+    });
+    /* Esconder el botón no es negarlo: setArea se puede llamar desde la consola
+       o desde un chip que sobreviva a un repintado. */
+    test('…y setArea NIEGA lo que no le toca, no solo lo esconde', () =>
+        eq(dE('setArea').indexOf('_areasPermitidas().indexOf(a) < 0') > -1, true, 'dos capas'));
+    /* El booleano viejo dejaba pasar cualquier área mientras el perfil no
+       fijara ninguna: con el default de 'administracion' eso era siempre. */
+    test('…sin el booleano que dejaba pasar todo', () =>
+        eq(dE('setArea').indexOf('if (AREA_FIJA) return;') === -1, true, 'sin hueco'));
+
+    /* ── El perfil ── */
+    /* LA CAUSA, en una línea: leer solo `perfil.area` con su relleno. */
+    test('el QR resuelve el área con la jerarquía completa', () =>
+        eq(ent.indexOf("StaffArea.de({ area: crudo, rol: perfil.rol, puesto: perfil.puesto })") > -1,
+           true, 'área, rol y puesto'));
+    test('…descartando el relleno de la consulta', () =>
+        eq(ent.indexOf("perfil.area === 'administracion' ? '' : perfil.area") > -1, true, 'sin inventar'));
+    /* La v64 agrega areaReal y rol; sin correrla, el puesto —que la consulta ya
+       devolvía— alcanza para que un «Barman» caiga en barra. */
+    test('…funcionando con la consulta vieja, por el puesto', () =>
+        eq(ent.indexOf("(perfil.areaReal !== undefined) ? perfil.areaReal") > -1, true, 'sin esperar la v64'));
+    const v64 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v64.sql'), 'utf8');
+    test('la v64 entrega el rol y el área sin rellenar', () =>
+        eq(v64.indexOf("'rol',      s.datos->>'rol'") > -1 &&
+           v64.indexOf("'areaReal', COALESCE(s.datos->>'area', '')") > -1, true, 'las tres piezas'));
+    /* portal_recetas y portal_guias deciden con `area`: bajarle el default les
+       abriría contenido a quien hoy no lo ve. */
+    test('…sin tocar el `area` del que dependen recetas y guías', () =>
+        eq(v64.indexOf("'area',     COALESCE(NULLIF(s.datos->>'area',''), 'administracion')") > -1,
+           true, 'sin efectos de lado'));
+
+    /* ── Quién está registrando ── */
+    test('el QR dice el puesto y el área de quien entra', () =>
+        eq(ent.indexOf('var det = [PUESTO,') > -1 &&
+           ent.indexOf('StaffArea.nom(AREA_COLAB)') > -1, true, 'ubicado'));
+
+    /* ── El catálogo ── */
+    const ih = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.html'), 'utf8');
+    test('el editor de insumos ofrece los tres almacenes', () =>
+        eq(ih.indexOf('value="almacen_barra"') > -1 && ih.indexOf('value="almacen_cocina"') > -1 &&
+           ih.indexOf('value="almacen_general"') > -1, true, 'partido'));
+    /* Sin esto, abrir un insumo que dice «bodega» lo deja en «sin área» y
+       guardar se la BORRA: perder un dato por un cambio de catálogo. */
+    const ijs = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.js'), 'utf8');
+    test('…y un insumo con un área vieja no la pierde al abrirlo', () =>
+        eq(ijs.indexOf("op.textContent = nom + ' (como estaba)';") > -1, true, 'sin borrar'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

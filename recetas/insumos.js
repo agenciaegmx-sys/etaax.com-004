@@ -2736,7 +2736,24 @@
        document.getElementById('ins-familia').value      = ins?.familia      || familiaDefault;
        document.getElementById('ins-categoria').value    = ins?.categoria    || categoriaDefault;
        document.getElementById('ins-subcategoria').value = ins?.subcategoria || '';
-       (function(){ var elA = document.getElementById('ins-area'); if (elA) elA.value = ins?.area || ''; })();
+       (function(){
+           var elA = document.getElementById('ins-area'); if (!elA) return;
+           var v = (ins && ins.area) || '';
+           /* UN ÁREA QUE YA NO ESTÁ EN LA LISTA. «Bodega» se partió en almacén
+              de barra, de cocina y general; los cientos de insumos que dicen
+              «bodega» siguen diciéndolo, a propósito —reescribirles el campo en
+              masa movería de lugar cosas que nadie pidió mover—. Sin este
+              renglón el select se queda en «sin área» y guardar se la BORRA,
+              que es perder un dato por un cambio de catálogo. */
+           if (v && !Array.prototype.some.call(elA.options, function(o){ return o.value === v; })) {
+               var nom = (window.StaffArea ? StaffArea.nomIns(v) : '') || v;
+               var op = document.createElement('option');
+               op.value = v;
+               op.textContent = nom + ' (como estaba)';
+               elA.appendChild(op);
+           }
+           elA.value = v;
+       })();
        document.getElementById('ins-marca').value        = ins?.marca        || '';
        document.getElementById('ins-variedad').value     = ins?.variedad     || '';
        var _madEl = document.getElementById('ins-maduracion'); if (_madEl) _madEl.value = ins?.maduracion || '';

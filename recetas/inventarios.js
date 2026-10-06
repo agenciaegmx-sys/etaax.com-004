@@ -2034,7 +2034,15 @@ function toggleReporteVista(){
     _renderReporteExistencias();
 }
 const _AREA_LBL = { barra:'Barra', bodega:'Bodega', cocina:'Cocina', general:'General' };
-function _areaNom(a){ return _AREA_LBL[a] || (a ? (a.charAt(0).toUpperCase()+a.slice(1)) : 'General'); }
+function _areaNom(a){
+    /* Los nombres salen del vocabulario compartido (staff-area.js) para que el
+       reporte y el QR llamen igual a lo mismo. `_AREA_LBL` manda todavía: trae
+       los rótulos del eje FÍSICO del conteo (barra/bodega/cocina), que es otra
+       cosa —dónde se cuenta— y no se toca aquí. */
+    if (_AREA_LBL[a]) return _AREA_LBL[a];
+    if (window.StaffArea) { var n2 = StaffArea.nomIns(a); if (n2 && n2 !== a) return n2; }
+    return a ? (a.charAt(0).toUpperCase() + a.slice(1)) : 'General';
+}
 
 // Última existencia registrada de cada insumo (del inventario CERRADO más reciente
 // que lo contó), acotado por área. Devuelve filas con cantidad, costo y capital.
