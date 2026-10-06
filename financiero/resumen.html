@@ -43,6 +43,20 @@
 /* La columna de proyección, separada con una línea para que se lea como otra cosa */
 .rs-proy { border-left:2px solid rgba(122,184,245,.35);background:rgba(122,184,245,.04); }
 .rs-tbl th.rs-proy { color:var(--blue,#7ab8f5); }
+/* Los peldaños CALCULADOS: fondo propio para que no se confundan con los
+   renglones que sí se capturan. El costo primo va marcado porque es el que se
+   mira primero. */
+.rs-calc td { background:rgba(122,184,245,.05);font-weight:600;color:var(--text); }
+.rs-calc td:first-child { color:var(--text);font-size:12.5px; }
+.rs-calc-f td { background:rgba(245,200,66,.09);border-top:1px solid rgba(245,200,66,.3);
+  border-bottom:1px solid rgba(245,200,66,.3);font-weight:700; }
+.rs-calc-f td:first-child { font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:1.2px;
+  color:var(--accent-text,var(--accent)); }
+/* Sub-renglones: detalle del de arriba, no otro gasto. Sangrados y en chico
+   para que la columna no parezca sumar de más. */
+.rs-sub td { font-size:11.5px;color:var(--text-dim);padding-top:5px;padding-bottom:5px; }
+.rs-sub td:first-child { padding-left:28px;color:var(--text-muted); }
+
 .rs-util td { background:var(--surface2);font-weight:700;font-size:15px; }
 .rs-util td:first-child { font-family:'Bebas Neue',sans-serif;font-size:19px;letter-spacing:1.4px; }
 
@@ -277,7 +291,14 @@ function plDelPeriodo(){
         if(grupo==='propina') return;              // la propina es del staff, no gasto
         var reng={ fecha:g.fecha, concepto:g.concepto||g.descripcion||g.proveedor||'(sin concepto)',
                    sub:g.categoria||'', monto:n(g.monto) };
-        if(grupo==='variable'&&EtaaxCore.esGastoInsumo(g)) DET.food.push(reng);
+        if(grupo==='variable'&&EtaaxCore.esGastoInsumo(g)){
+            /* Cocina y barra se marcan desde aquí: un costo de insumos de 25%
+               no dice nada —puede ser una cocina cara con una barra sana, o al
+               revés, y se arreglan de maneras opuestas. */
+            reng.area = EtaaxCore.areaInsumo(g);
+            reng.sub = (reng.area==='barra'?'Barra · ':'Cocina · ')+(g.categoria||'');
+            DET.food.push(reng);
+        }
         else if(grupo==='variable') DET.otros.push(reng);
         else if(grupo==='fijo')     DET.fijos.push(reng);
         else { reng.sub = grupo==='imss'?'IMSS':(grupo==='nomAdm'?'Administrativa':'Operativa');
@@ -299,6 +320,12 @@ function plDelPeriodo(){
     DET._cortes = cortes.length;
     _DET = DET;
 
+    /* La escalera del restaurante: utilidad bruta, costo primo, utilidad
+       operativa. Se calcula del P&L ya armado, así que no puede decir una cosa
+       distinta de la tabla — son el mismo dato leído por peldaños. */
+    _AREA = EtaaxCore.costoInsumosPorArea(gastos, opts);
+    _FIN  = EtaaxCore.costoFinanciero(gastos, opts);
+
     return EtaaxCore.resumenPL({
         ingresos: ingresos,
         food:      EtaaxCore.costoInsumos(gastos, opts),
@@ -310,6 +337,8 @@ function plDelPeriodo(){
 }
 
 var _DET = null;   // el desglose del último periodo calculado
+var _AREA = { cocina:0, barra:0 };   // el costo de insumos, partido
+var _FIN  = 0;                       // lo pagado en intereses y costo del dinero
 
 /* El nombre de la sucursal del corte, para que la lista diga de dónde vino cada
    venta cuando se está mirando el negocio completo. */
@@ -369,8 +398,17 @@ function render(mantenFoco){
        KPIs como las demás en cuanto se guarde una. */
     var m = { food: n(metas.food)||30, nom: (n(metas.nomOp)+n(metas.nomAdm))||30,
               fijos: n(metas.fijos)||15, otros: n(metas.variables)||10,
-              prevs: n(metas.prev)||5,  util: n(metas.util)||20 };
+              prevs: n(metas.prev)||5,  util: n(metas.util)||20,
+              /* Metas de los peldaños. 65% de costo primo y 12% de utilidad
+                 operativa son el rango sano de la industria restaurantera; se
+                 usan de punto de partida hasta que el negocio ponga las suyas,
+                 igual que ya se hacía con el food cost. */
+              primo: n(metas.primo)||65, operativa: n(metas.operativa)||12 };
     var sc = EtaaxCore.scorePL(base, m);
+    /* La escalera se calcula aquí arriba porque el Score ya la usa en sus
+       pastillas. Declararla más abajo la dejaba en `undefined` al pintarlas. */
+    var escal  = EtaaxCore.escaleraPL(base, {financieros:_FIN});
+    var escalP = EtaaxCore.escaleraPL(proy, {financieros:_FIN});
 
     document.getElementById('rsSub').textContent =
         _periodoTxt() + (_suc()? ' · esta sucursal' : ' · todo el negocio');
@@ -390,10 +428,50 @@ function render(mantenFoco){
               return '<span class="rs-chip"><b>'+esc(d.nom)+'</b> '+fmtP(d.real)+
                      ' <span style="color:'+c+'">· meta '+d.meta+'%</span></span>';
           }).join('') +
+          /* Los dos peldaños, al lado de los cubos. No entran al Score porque
+             son los MISMOS pesos contados de otra manera —el costo primo ya es
+             food + nómina— y calificarlos aparte pesaría dos veces lo mismo. */
+          (function(){
+              var cP = escal.primoPct<=m.primo ? 'var(--green)' : 'var(--red)';
+              var cO = escal.operativaPct>=m.operativa ? 'var(--green)' : 'var(--red)';
+              return '<span class="rs-chip" title="Insumos + nómina juntos"><b>Costo primo</b> '+
+                     fmtP(escal.primoPct)+' <span style="color:'+cP+'">· meta &lt;'+m.primo+'%</span></span>'+
+                     '<span class="rs-chip" title="Lo que deja la operación antes de previsiones e intereses"><b>Utilidad operativa</b> '+
+                     fmtP(escal.operativaPct)+' <span style="color:'+cO+'">· meta &gt;'+m.operativa+'%</span></span>';
+          })() +
         '</div>';
 
     // ── La tabla ──
-    var filas = base.lineas.map(function(l,i){
+    /* LA ESCALERA DEL RESTAURANTE, intercalada. El P&L por cubos contesta
+       «cuánto entró y cuánto salió»; un restaurante además se lee por peldaños,
+       y en ese orden, porque cada uno tiene su palanca:
+
+         Venta − costo directo  → UTILIDAD BRUTA   (¿cobro bien lo que compro?)
+                − nómina        → COSTO PRIMO      (el número rey de la industria)
+                − operativos    → UTILIDAD OPERATIVA
+                − previsiones   → UTILIDAD NETA
+
+       Estos renglones NO se editan: salen de los de arriba. Por eso van con
+       fondo propio, para que no se confundan con los que sí se capturan. */
+    var _escFila = function(nom, a, ap, b, bp, fuerte, ayuda){
+        var dif = b - a;
+        var cD = Math.abs(dif)<0.5 ? 'var(--text-dim)' : (dif>0?'var(--green)':'var(--red)');
+        return '<tr class="rs-calc'+(fuerte?' rs-calc-f':'')+'">'+
+            '<td'+(ayuda?' title="'+ayuda+'"':'')+'>'+esc(nom)+(ayuda?' <span style="color:var(--text-dim);font-size:10px">ⓘ</span>':'')+'</td>'+
+            '<td>'+fmtM(a)+'</td><td>'+fmtP(ap)+'</td>'+
+            '<td class="rs-proy">'+fmtM(b)+'</td><td class="rs-proy">'+fmtP(bp)+'</td>'+
+            '<td class="rs-delta" style="color:'+cD+'">'+(dif>=0?'+':'−')+fmtM(Math.abs(dif))+'</td></tr>';
+    };
+    /* Cocina y barra: el mismo costo de arriba, partido. Va como sub-renglón
+       —sangrado y en chico— porque es un detalle del food cost, no otro gasto;
+       ponerlo al mismo nivel haría que la columna sumara de más a la vista. */
+    var _subFila = function(nom, monto){
+        var pct = base.ventas>0 ? (monto/base.ventas*100) : 0;
+        return '<tr class="rs-sub"><td>↳ '+esc(nom)+'</td><td>'+fmtM(monto)+'</td>'+
+            '<td>'+fmtP(pct)+'</td><td class="rs-proy"></td><td class="rs-proy"></td><td></td></tr>';
+    };
+
+    var _ed =  base.lineas.map(function(l,i){
         var p = proy.lineas[i];
         var dif = p.monto - l.monto;
         /* En un gasto, bajar es bueno: el verde va al que REDUCE. Pintarlo al
@@ -412,10 +490,30 @@ function render(mantenFoco){
                 'title="Escribe el porcentaje; el monto se recalcula"></td>'+
             '<td class="rs-delta" style="color:'+cDif+'">'+(dif>=0?'+':'−')+fmtM(Math.abs(dif))+'</td>'+
         '</tr>';
-    }).join('');
+    });
 
     var difU = proy.utilidad - base.utilidad;
     var cU = Math.abs(difU)<0.5?'var(--text-dim)':(difU>0?'var(--green)':'var(--red)');
+
+    /* El orden de los peldaños. `_ed` trae los renglones EDITABLES en el orden de
+       resumenPL (food, nom, fijos, otros, prevs) y aquí se intercalan los
+       calculados, que es donde significan algo. Se guarda como arreglo y no
+       como un bloque de HTML: partir el bloque buscando «</tr>» funcionaba
+       hasta que algún renglón trajera una tabla adentro. */
+    var cuerpoEscalera =
+        _ed[0] +                                                  // Food cost
+        (( _AREA.cocina>0||_AREA.barra>0 ) ? _subFila('Cocina · alimentos e ingredientes', _AREA.cocina) +
+                                             _subFila('Barra · bebidas, licores y garnish', _AREA.barra) : '') +
+        _escFila('Utilidad bruta', escal.bruta, escal.brutaPct, escalP.bruta, escalP.brutaPct, false,
+                 'Venta menos el costo de lo que se compró para venderla. Contesta si se está cobrando bien lo que se compra.') +
+        _ed[1] +                                                  // Nómina
+        _escFila('Costo primo', escal.primo, escal.primoPct, escalP.primo, escalP.primoPct, true,
+                 'Insumos + nómina. Es el número que se mira primero en esta industria: los dos se intercambian, y verlos por separado deja que uno tape al otro. Sano: 60-65% de la venta.') +
+        _ed[2] + _ed[3] +                                         // Fijos y otros variables
+        _escFila('Utilidad operativa', escal.operativa, escal.operativaPct, escalP.operativa, escalP.operativaPct, false,
+                 'Lo que deja la operación antes de previsiones e intereses. No se le llama EBITDA porque ETAAX no lleva depreciación ni amortización.') +
+        (_FIN>0 ? _subFila('de ahí, intereses y costo del dinero', _FIN) : '') +
+        _ed[4];                                                   // Previsiones
 
     document.getElementById('rsBody').innerHTML =
         // Ventas arriba: todo lo demás es un porcentaje de esto
@@ -430,10 +528,10 @@ function render(mantenFoco){
             '<td class="rs-delta" style="color:'+((proy.ventas-base.ventas)>0?'var(--green)':((proy.ventas-base.ventas)<0?'var(--red)':'var(--text-dim)'))+'">'+
                 ((proy.ventas-base.ventas)>=0?'+':'−')+fmtM(Math.abs(proy.ventas-base.ventas))+'</td>'+
         '</tr>'+
-        filas +
+        cuerpoEscalera +
         // La utilidad es RESULTADO: no se edita, se observa
         '<tr class="rs-util">'+
-            '<td>Utilidad</td>'+
+            '<td>Utilidad neta</td>'+
             '<td>'+fmtM(base.utilidad)+'</td>'+
             '<td>'+fmtP(base.utilidadPct)+'</td>'+
             '<td class="rs-proy" style="color:var(--blue,#7ab8f5)">'+fmtM(proy.utilidad)+'</td>'+
@@ -659,7 +757,8 @@ function _imprimirResumen(){
     var metas=_c.targets||{};
     var m={ food:n(metas.food)||30, nom:(n(metas.nomOp)+n(metas.nomAdm))||30,
             fijos:n(metas.fijos)||15, otros:n(metas.variables)||10,
-            prevs:n(metas.prev)||5, util:n(metas.util)||20 };
+            prevs:n(metas.prev)||5, util:n(metas.util)||20,
+            primo:n(metas.primo)||65, operativa:n(metas.operativa)||12 };
     var sc=EtaaxCore.scorePL(base,m);
     var hayProy=_tocado();
 
@@ -671,13 +770,33 @@ function _imprimirResumen(){
                (hayProy ? '<td>'+fmtM(b)+'</td><td>'+fmtP(bp)+'</td><td>'+
                           ((b-a)>=0?'+':'−')+fmtM(Math.abs(b-a))+'</td>' : '')+'</tr>';
     };
+    /* El papel lleva la MISMA escalera que la pantalla. Si el reporte impreso
+       mostrara otra estructura, la junta discutiría sobre números que no se
+       pueden volver a encontrar en el sistema. */
+    var escal=EtaaxCore.escaleraPL(base,{financieros:_FIN});
+    var escalP=EtaaxCore.escaleraPL(proy,{financieros:_FIN});
+    var ed=base.lineas.map(function(l,i){ var p=proy.lineas[i]; return fil(l.nom,l.monto,l.pct,p.monto,p.pct); });
+    var sub=function(nom,monto){
+        var pct=base.ventas>0?(monto/base.ventas*100):0;
+        return '<tr><td style="padding-left:24px;color:#4a4a4a">↳ '+esc(nom)+'</td><td>'+fmtM(monto)+'</td>'+
+               '<td>'+fmtP(pct)+'</td>'+(hayProy?'<td></td><td></td><td></td>':'')+'</tr>';
+    };
     var cuerpo='<div class="rsec">Resultados del periodo</div>'+
         '<table class="rt"><thead><tr><th>Concepto</th><th>Real</th><th>%</th>'+
         (hayProy?'<th>Proyección</th><th>%</th><th>Diferencia</th>':'')+'</tr></thead><tbody>'+
         fil('Ventas', base.ventas,100, proy.ventas,100, true)+
-        base.lineas.map(function(l,i){ var p=proy.lineas[i]; return fil(l.nom,l.monto,l.pct,p.monto,p.pct); }).join('')+
+        ed[0]+
+        ((_AREA.cocina>0||_AREA.barra>0) ? sub('Cocina · alimentos e ingredientes',_AREA.cocina)+
+                                           sub('Barra · bebidas, licores y garnish',_AREA.barra) : '')+
+        fil('Utilidad bruta', escal.bruta,escal.brutaPct, escalP.bruta,escalP.brutaPct, true)+
+        ed[1]+
+        fil('Costo primo (insumos + nómina)', escal.primo,escal.primoPct, escalP.primo,escalP.primoPct, true)+
+        ed[2]+ed[3]+
+        fil('Utilidad operativa', escal.operativa,escal.operativaPct, escalP.operativa,escalP.operativaPct, true)+
+        (_FIN>0 ? sub('de ahí, intereses y costo del dinero',_FIN) : '')+
+        ed[4]+
         '</tbody><tfoot>'+
-        fil('Utilidad', base.utilidad,base.utilidadPct, proy.utilidad,proy.utilidadPct, true)+
+        fil('Utilidad neta', base.utilidad,base.utilidadPct, proy.utilidad,proy.utilidadPct, true)+
         '</tfoot></table>';
 
     /* Los indicadores van en el papel porque es lo que se lleva a la junta: el
@@ -689,8 +808,10 @@ function _imprimirResumen(){
     var tar=function(l,v,s){ return '<div class="rcard"><div class="l">'+esc(l)+'</div>'+
         '<div class="v">'+v+'</div>'+(s?'<div class="s">'+s+'</div>':'')+'</div>'; };
     cuerpo+='<div class="rsec">Indicadores</div>'+
-        '<div class="rgrid" style="grid-template-columns:repeat(4,1fr)">'+
+        '<div class="rgrid" style="grid-template-columns:repeat(3,1fr)">'+
         tar('Score', (sc.score===null?'—':sc.score), sc.metasPuestas?'contra tus metas':'sin metas configuradas')+
+        tar('Costo primo', fmtP(escal.primoPct), 'insumos + nómina · meta &lt;'+m.primo+'%')+
+        tar('Utilidad operativa', fmtP(escal.operativaPct), 'antes de previsiones e intereses')+
         tar('Meta del periodo', meta===null?'Sin definir':fmtM(meta),
             (meta&&meta>0)?(base.ventas/meta*100).toFixed(0)+'% cumplido':'')+
         tar('Comensales', com>0?com.toLocaleString('es-MX'):'—', com>0?(com/dias).toFixed(0)+' por día':'sin captura')+
@@ -703,6 +824,8 @@ function _imprimirResumen(){
         'Ingresos contra egresos por categoría del periodo. La venta se mide bruta, sin propinas. '+
         'El food cost es lo <b>comprado</b> en alimentos, bebidas e insumos de barra — no el consumo de inventario.'+
         (hayProy?' La columna de proyección es un escenario capturado a mano, no un pronóstico del sistema.':'')+
+        '<br>El costo se parte en cocina y barra por la categoría del gasto; los dos porcentajes van sobre la '+
+        'venta <b>total</b>, porque el corte registra la venta por forma de pago y no por lo que se vendió.'+
         '</div>';
 
     var html=etaaxReporteDoc({

@@ -15911,8 +15911,12 @@ console.log('\n══ BH12 · Dos botones que no hacían nada ══');
 
     test('el botón produce un reporte de verdad', () =>
         eq(papel !== null && papel.indexOf('<!DOCTYPE html>') === 0, true, 'generado'));
+    /* «Utilidad neta», no «Utilidad» a secas: desde que el papel lleva la
+       escalera hay tres utilidades (bruta, operativa y neta) y la de abajo
+       necesita apellido para no confundirse con las otras dos. */
     test('…con los renglones del P&L', () =>
-        eq(ver.indexOf('Food cost $12,000') > -1 && ver.indexOf('Utilidad $48,000') > -1, true, 'completo'));
+        eq(ver.indexOf('Food cost $12,000') > -1 && ver.indexOf('Utilidad neta $48,000') > -1,
+           true, 'completo'));
     /* Es lo que se lleva a la junta: el P&L dice cuánto y los indicadores dicen
        de qué manera. En papel se necesitan los dos. */
     test('…y con los indicadores, que es lo que se lleva a la junta', () =>
@@ -16049,6 +16053,239 @@ console.log('\n══ BH13 · El arrastre se comía los clics ══');
         test('…sin tipo por defecto, que es enviar formularios', () =>
             eq(/<button type="button"[^>]*id="ins-activo-pill"/.test(h), true, 'type=button'));
     });
+}
+
+/* ═══════════ SUITE BH14 · LA ESCALERA DEL RESTAURANTE ══════════════════════
+   El resumen leía el periodo por CUBOS —cuánto entró, cuánto salió en cada
+   categoría—. Un restaurante además se lee por PELDAÑOS, y en ese orden,
+   porque cada uno tiene una palanca distinta:
+
+     Venta − costo directo → UTILIDAD BRUTA     ¿cobro bien lo que compro?
+            − nómina       → COSTO PRIMO        el número rey de la industria
+            − operativos   → UTILIDAD OPERATIVA
+            − previsiones  → UTILIDAD NETA
+
+   Y el costo de insumos se parte en cocina y barra: un 36% de costo no dice
+   nada —puede ser una cocina cara con una barra sana, o al revés, y se
+   arreglan de maneras opuestas—.
+
+   LO QUE DELIBERADAMENTE NO ESTÁ: venta por categoría (alimentos / bebidas /
+   alcohol), cheque promedio por área, RevPASH y rotación de inventario. Todos
+   necesitan datos que ETAAX no captura —el corte registra la venta por forma
+   de pago, no por lo que se vendió— y fabricarlos daría números convincentes
+   y falsos.                                                                  */
+console.log('\n══ BH14 · La escalera del restaurante ══');
+{
+    const core = fs.readFileSync(path.join(RAIZ, 'etaax-core.js'), 'utf8');
+    /* El núcleo se carga como en el navegador —se expone en window—, no con
+       require: así se prueba el archivo que de verdad sirve la página. */
+    const _cx = { console, Math, Date, String, Number, JSON, parseFloat, isNaN, Object, Array };
+    _cx.window = _cx;
+    vm.createContext(_cx);
+    vm.runInContext(core, _cx, { filename:'etaax-core.js' });
+    const core$ = _cx.window.EtaaxCore;
+
+    const G = [
+        { fecha:'2026-09-02', categoria:'Alimentos e ingredientes',            monto:67000 },
+        { fecha:'2026-09-03', categoria:'Bebidas y licores',                   monto:50000 },
+        { fecha:'2026-09-04', categoria:'Insumos de barra (garnish, hielo…)',  monto:10673 },
+        { fecha:'2026-09-05', categoria:'Nómina y personal',                   monto:64094 },
+        { fecha:'2026-09-06', categoria:'Renta y arrendamiento',               monto:40945 },
+        { fecha:'2026-09-08', categoria:'Gastos financieros',                  monto:5950  },
+        /* No pagado: no salió de la caja, no cuenta en ningún peldaño. */
+        { fecha:'2026-09-09', categoria:'Alimentos e ingredientes', monto:9999, estatus:'pendiente' }
+    ];
+    const opts = { fijos:[], staff:[] };
+    const cl = core$.clasificarGastos(G, { fijos:[], staff:[] });
+    const pl = core$.resumenPL({ ingresos:348939, food:core$.costoInsumos(G, opts),
+        nom: cl.nomOp + cl.nomAdm + cl.imss, fijos: cl.fijo, variables: cl.variable, prevs: 0 });
+    const fin = core$.costoFinanciero(G, opts);
+    const esc = core$.escaleraPL(pl, { financieros: fin });
+    const area = core$.costoInsumosPorArea(G, opts);
+
+    /* ── Cocina y barra ── */
+    test('el costo de insumos se parte en cocina y barra', () =>
+        eq(area.cocina === 67000 && area.barra === 60673, true, 'partido'));
+    /* Si las partes no suman el total, una de las dos está mal y el renglón de
+       arriba deja de poder explicarse con los de abajo. */
+    test('…sumando EXACTAMENTE el food cost, no una aproximación', () =>
+        eq(area.cocina + area.barra, core$.costoInsumos(G, opts), 'cuadra'));
+    /* El garnish y el hielo son barra aunque no sean bebida: se compran para
+       servir el trago. Dejarlos en cocina ensucia los dos números. */
+    test('el garnish y el hielo cuentan como barra', () =>
+        eq(core$.areaInsumo({ categoria:'Insumos de barra (garnish, hielo…)' }), 'barra', 'barra'));
+    test('…y lo que no es insumo no tiene área', () =>
+        eq(core$.areaInsumo({ categoria:'Renta y arrendamiento' }), '', 'sin área'));
+    test('un insumo no pagado no entra en ninguna de las dos', () =>
+        eq(area.cocina, 67000, 'solo lo pagado'));
+
+    /* ── Los peldaños ── */
+    test('utilidad bruta = venta menos el costo de lo que se vende', () =>
+        eq(esc.bruta, 348939 - 127673, 'bruta'));
+    /* El número rey: insumos y nómina se intercambian —se puede bajar el costo
+       de producto a punta de mano de obra, o al revés— y mirarlos por separado
+       deja que uno tape al otro. */
+    test('costo primo = insumos + nómina, juntos', () =>
+        eq(esc.primo, 127673 + 64094, 'primo'));
+    test('…y su porcentaje va sobre la venta', () =>
+        eq(esc.primoPct.toFixed(1), ((127673 + 64094) / 348939 * 100).toFixed(1), 'sobre venta'));
+    /* Pagar intereses no es operar. Si no se separan, un crédito caro se lee
+       como una operación ineficiente y se va a apretar la cocina por un
+       problema que está en el banco. */
+    test('los intereses salen de la utilidad OPERATIVA', () =>
+        eq(esc.operativa, 348939 - 127673 - 64094 - 40945, 'sin financieros'));
+    test('…pero sí restan en la utilidad neta', () =>
+        eq(esc.neta, esc.operativa - 5950, 'restados'));
+    /* LA INVARIANTE: la escalera es el MISMO dato leído de otra forma. Si el
+       último peldaño no da la misma utilidad que el P&L por cubos, una de las
+       dos lecturas miente y no hay forma de saber cuál. */
+    test('el último peldaño da la MISMA utilidad que el P&L por cubos', () =>
+        eq(Math.round(esc.neta), Math.round(pl.utilidad), 'la misma'));
+    /* Sin venta, dividir daría Infinity pintado en la pantalla. */
+    test('sin ventas los porcentajes son cero, no Infinity', () => {
+        const v = core$.escaleraPL(core$.resumenPL({ ingresos:0, food:5000 }), {});
+        return eq(v.primoPct === 0 && v.netaPct === 0, true, 'sin dividir entre cero');
+    });
+    /* Un gasto financiero que ya se contó como nómina o propina no se puede
+       volver a descontar: saldría dos veces de la utilidad. */
+    test('solo cuenta como financiero lo que está en esa categoría', () =>
+        eq(core$.costoFinanciero(G, opts), 5950, 'solo esa'));
+    test('…y nada más lo pagado', () =>
+        eq(core$.costoFinanciero([{ categoria:'Gastos financieros', monto:800, estatus:'pendiente' }], opts),
+           0, 'solo pagado'));
+
+    /* ── En la pantalla y en el papel ── */
+    const rs = fs.readFileSync(path.join(RAIZ, 'financiero/resumen.html'), 'utf8');
+    const dR = (fn) => {
+        const i = rs.indexOf('function ' + fn + '(');
+        if (i < 0) throw new Error('no existe ' + fn);
+        const abre = rs.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < rs.length) {
+            if (rs[j] === '{') prof++;
+            else if (rs[j] === '}') { prof--; if (!prof) return rs.slice(i, j + 1); }
+            j++;
+        }
+        throw new Error('sin cerrar ' + fn);
+    };
+    test('la tabla intercala los peldaños entre los renglones editables', () => {
+        const t = dR('render');
+        return eq(t.indexOf("_escFila('Utilidad bruta'") > -1 &&
+                  t.indexOf("_escFila('Costo primo'") > -1 &&
+                  t.indexOf("_escFila('Utilidad operativa'") > -1, true, 'en su orden');
+    });
+    /* Los peldaños salen de los de arriba: dejarlos editar permitiría
+       «proyectar» un costo primo que no sale de ningún lado. */
+    test('…y esos renglones no se editan, porque son resultado', () =>
+        eq(dR('render').indexOf('rs-calc') > -1 &&
+           dR('render').indexOf('_escFila') > -1 &&
+           /_escFila = function[^}]*rs-ed/.test(dR('render')) === false, true, 'solo lectura'));
+    /* La escalera también se proyecta: si solo se calculara sobre lo real, al
+       mover las ventas el costo primo se quedaría clavado y la comparación
+       diría cualquier cosa. */
+    test('…pero sí se recalculan con la proyección', () =>
+        eq(dR('render').indexOf('EtaaxCore.escaleraPL(proy, {financieros:_FIN})') > -1, true, 'comparable'));
+    /* El desglose que se abre al tocar «Food cost» también tiene que decir qué
+       renglón es de cocina y cuál de barra: si no, la lista es un montón de
+       compras sin separar y el sub-renglón de arriba no se puede verificar.
+       Se corre plDelPeriodo() de verdad. */
+    test('el desglose del food cost marca cada compra como cocina o barra', () => {
+        const cx = { console, Date, Math, String, Number, JSON, parseFloat, isNaN, Object, Array };
+        cx.window = cx;
+        vm.createContext(cx);
+        vm.runInContext(core, cx, { filename:'etaax-core.js' });
+        cx._c = { cortes:[{ fecha:'2026-09-05', efectivo:348939 }], otros:[], gastos:G,
+                  deps:[], ctas:[], fijos:[], staff:[], targets:null, metas:{} };
+        cx._deSuc = () => true; cx._sucNom = () => 'Matriz';
+        cx.rango = () => ({ from:'2026-09-01', to:'2026-09-30' });
+        cx._DET = null; cx._AREA = { cocina:0, barra:0 }; cx._FIN = 0;
+        vm.runInContext([dR('n'), dR('plDelPeriodo')].join('\n'), cx, { filename:'resumen.html' });
+        cx.plDelPeriodo();
+        const f = cx._DET.food;
+        return eq(f.length === 3 &&
+                  f.every(r => r.area === 'cocina' || r.area === 'barra') &&
+                  f.some(r => r.sub.indexOf('Cocina · ') === 0) &&
+                  f.some(r => r.sub.indexOf('Barra · ') === 0), true, 'marcado');
+    });
+    test('cocina y barra van como sub-renglón del food cost', () =>
+        eq(dR('render').indexOf("_subFila('Cocina") > -1 &&
+           dR('render').indexOf("_subFila('Barra") > -1, true, 'sangrados'));
+    /* Si fueran renglones normales, la columna parecería sumar de más: el food
+       cost ya los contiene. */
+    test('…sin columna de proyección, para que no parezcan otro gasto', () =>
+        eq(dR('render').indexOf('rs-sub') > -1, true, 'detalle'));
+    test('el costo primo y la utilidad operativa salen como pastillas', () =>
+        eq(dR('render').indexOf('<b>Costo primo</b>') > -1 &&
+           dR('render').indexOf('<b>Utilidad operativa</b>') > -1, true, 'a la vista'));
+    /* El costo primo YA ES food + nómina: calificarlo aparte pesaría dos veces
+       lo mismo y el Score dejaría de significar lo que dice. */
+    test('…pero NO entran al Score: ya están contados en sus cubos', () =>
+        eq(/primo|operativa/.test(core.slice(core.indexOf('function scorePL'),
+                                             core.indexOf('function proyectarPL'))), false, 'sin doble conteo'));
+    /* Sin la meta, el papel imprime «meta <undefined%» — un dato roto que se ve
+       como un dato. Se comprueba sobre el reporte GENERADO, no sobre el código. */
+    test('…y el papel no imprime ningún «undefined»', () => {
+        const cx = { console, Date, Math, String, Number, JSON, parseFloat, isNaN, Object, Array,
+                     localStorage:{ getItem: () => null, setItem(){} } };
+        cx.window = cx;
+        cx.document = { createElement: () => ({ style:{}, contentWindow:null }),
+                        body:{ appendChild(){} }, getElementById: () => null };
+        vm.createContext(cx);
+        vm.runInContext(core, cx, { filename:'etaax-core.js' });
+        vm.runInContext(fs.readFileSync(path.join(RAIZ, 'reporte-marca.js'), 'utf8'), cx, { filename:'reporte-marca.js' });
+        cx._c = { cortes:[{ fecha:'2026-09-05', efectivo:348939, comensales:780 }], otros:[], gastos:G,
+                  deps:[], ctas:[], fijos:[], staff:[], targets:null, metas:{} };
+        cx._deSuc = () => true; cx._sucNom = () => 'Matriz'; cx._suc = () => '';
+        cx.rango = () => ({ from:'2026-09-01', to:'2026-09-30' });
+        cx._periodoTxt = () => 'septiembre de 2026';
+        cx._proy = {}; cx._DET = null; cx._AREA = { cocina:0, barra:0 }; cx._FIN = 0; cx._mdCache = {};
+        cx.esc = (x) => String(x == null ? '' : x);
+        let papel = null;
+        cx.etaaxAbrirReporte = (h) => { papel = h; };
+        ['n','fmtM','fmtP','_tocado','plDelPeriodo','_metaDelDia','metaDelRango','_imprimirResumen','imprimirResumen']
+            .forEach(fn => vm.runInContext(dR(fn), cx, { filename:'resumen.html' }));
+        cx.imprimirResumen();
+        return eq(papel !== null && papel.indexOf('undefined') === -1 &&
+                  papel.indexOf('NaN') === -1, true, 'sin huecos');
+    });
+    test('el papel lleva la misma escalera que la pantalla', () => {
+        const t = dR('_imprimirResumen');
+        return eq(t.indexOf("fil('Costo primo (insumos + nómina)'") > -1 &&
+                  t.indexOf("fil('Utilidad bruta'") > -1 &&
+                  t.indexOf("fil('Utilidad operativa'") > -1, true, 'la misma');
+    });
+    /* LO QUE NO SE PUEDE FINGIR. El corte de caja registra la venta por forma
+       de pago, no por lo que se vendió: no hay de dónde sacar cuánto vendió la
+       cocina y cuánto la barra. Decir «bar cost 21%» —costo de barra entre
+       VENTA de barra— sería un número que parece el bueno y no lo es. */
+    test('se dice que los dos porcentajes van sobre la venta TOTAL', () =>
+        eq(dR('_imprimirResumen').indexOf('venta <b>total</b>') > -1, true, 'sin fingir'));
+    test('…y por qué: el corte no registra qué se vendió', () =>
+        eq(dR('_imprimirResumen').indexOf('la venta por forma de pago y no por lo que se vendió') > -1,
+           true, 'explicado'));
+    /* EBITDA descuenta además depreciación y amortización, y ETAAX no lleva
+       activos fijos. Ponerle ese nombre a un número que no los descuenta es dar
+       por bueno un dato que un contador rechazaría. */
+    /* Lo que se exige es que EBITDA no sea el RÓTULO de nada: la palabra sí
+       aparece —en el comentario del núcleo y en la ayuda que lee el usuario,
+       explicando justamente por qué no se usa—, así que buscarla suelta daba
+       rojo con el código correcto. Es la tercera vez que un test mío caza su
+       propia explicación en vez del código. */
+    test('no se le llama EBITDA a lo que no descuenta depreciación', () => {
+        const rotulo = /(?:_escFila|fil|tar|_kpiCard)\(\s*'EBITDA/.test(rs) ||
+                       /<b>EBITDA<\/b>/.test(rs) ||
+                       /nom:\s*'EBITDA/.test(core);
+        return eq(rotulo, false, 'sin nombres prestados');
+    });
+    /* Y que el peldaño se llame por lo que es. */
+    test('…se llama utilidad operativa, que es lo que mide', () =>
+        eq(dR('render').indexOf("_escFila('Utilidad operativa'") > -1 &&
+           dR('_imprimirResumen').indexOf("fil('Utilidad operativa'") > -1, true, 'su nombre'));
+    /* Decirle al usuario POR QUÉ no se llama EBITDA es parte del arreglo: si no,
+       el primer contador que lo vea va a preguntar dónde está el EBITDA. */
+    test('…diciéndole al usuario por qué no es EBITDA', () =>
+        eq(rs.indexOf('No se le llama EBITDA porque ETAAX no lleva depreciación') > -1,
+           true, 'explicado donde se lee'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

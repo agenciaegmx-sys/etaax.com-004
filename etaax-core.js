@@ -1140,6 +1140,42 @@
         if (!g) return false;
         return !!CATS_INSUMO[String(g.categoria || '').trim().toLowerCase()];
     }
+
+    /* ── COCINA Y BARRA, POR SEPARADO ─────────────────────────────────────────
+       Un costo de insumos de 25% no dice nada: puede ser una cocina cara con
+       una barra sana, o al revés, y se arreglan de maneras opuestas. La barra
+       es el área donde el descuadre se nota menos y pesa más.
+
+       OJO CON LO QUE ESTO ES Y LO QUE NO: aquí se parte el COSTO, no la venta.
+       El corte de caja registra la venta por forma de pago (efectivo, tarjeta,
+       transferencia), no por lo que se vendió, así que NO se puede saber cuánto
+       vendió la cocina y cuánto la barra. Los dos porcentajes van sobre la
+       venta TOTAL. El «bar cost» de los reportes de la industria —costo de
+       barra entre VENTA de barra— necesita un dato que ETAAX no captura hoy;
+       llamarle así a esto sería mentir con un número que parece el bueno. */
+    var CATS_BARRA = {
+        'bebidas y licores': 1,
+        'insumos de barra (garnish, hielo…)': 1,
+        'insumos de barra (garnish, hielo...)': 1
+    };
+    function areaInsumo(g) {
+        if (!esGastoInsumo(g)) return '';
+        return CATS_BARRA[String(g.categoria || '').trim().toLowerCase()] ? 'barra' : 'cocina';
+    }
+    /* El mismo costo de insumos de costoInsumos(), partido en dos. Se calcula
+       con las MISMAS tres condiciones —pagado, variable, de insumo— para que la
+       suma de las partes sea exactamente el total y no una aproximación. */
+    function costoInsumosPorArea(gastos, opts) {
+        opts = opts || {};
+        var r = { cocina: 0, barra: 0 };
+        (gastos || []).forEach(function (g) {
+            if (!esGastoInsumo(g)) return;
+            if (gastoEstatus(g) !== 'pagado') return;
+            if (grupoGasto(g, opts) !== 'variable') return;
+            r[areaInsumo(g)] += n(g.monto);
+        });
+        return r;
+    }
     /* Lo gastado en insumos del periodo.
        SOLO lo PAGADO: un pedido que todavía se debe no es costo de este mes
        (misma regla que clasificarGastos).
@@ -1198,6 +1234,78 @@
             utilidad: utilidad,
             utilidadPct: pc(utilidad)
         };
+    }
+
+    /* ── LA ESCALERA DEL RESTAURANTE ──────────────────────────────────────────
+       El P&L de arriba contesta «cuánto entró y cuánto salió por cubo». Un
+       restaurante se lee además por PELDAÑOS, y en ese orden, porque cada uno
+       tiene una palanca distinta:
+
+         Venta
+          − Costo directo (lo que se compra para vender)  → UTILIDAD BRUTA
+          − Nómina                                        → COSTO PRIMO
+          − Gastos operativos                             → UTILIDAD OPERATIVA
+          − Previsiones y financieros                     → UTILIDAD NETA
+
+       EL COSTO PRIMO (prime cost) es el número que se mira primero en esta
+       industria: insumos + nómina juntos. Sirve porque los dos se intercambian
+       —se puede bajar el costo de producto a punta de mano de obra (hacer en
+       casa lo que antes se compraba hecho) o al revés— y mirarlos por separado
+       deja que uno tape al otro. Sano: 60-65% de la venta.
+
+       LA UTILIDAD OPERATIVA es lo que queda de operar, antes de lo que no es
+       operación. NO se le llama EBITDA aquí: EBITDA descuenta además
+       depreciación y amortización, y ETAAX no lleva activos fijos. Ponerle ese
+       nombre a un número que no los descuenta es dar por bueno un dato que un
+       contador rechazaría. */
+    function escaleraPL(pl, extra) {
+        extra = extra || {};
+        var ventas  = n(pl && pl.ventas);
+        var linea   = function (k) {
+            var l = ((pl && pl.lineas) || []).find(function (x) { return x.k === k; });
+            return l ? n(l.monto) : 0;
+        };
+        var food    = linea('food');
+        var nom     = linea('nom');
+        var opex    = linea('fijos') + linea('otros');
+        var prevs   = linea('prevs');
+        var finan   = n(extra.financieros);        // sale del OPEX: no es operación
+        var pc      = function (v) { return ventas > 0 ? (v / ventas) * 100 : 0; };
+
+        var bruta   = ventas - food;
+        var primo   = food + nom;
+        /* Los financieros salen del operativo: pagar intereses no es operar. Si
+           no se separan, un crédito caro se lee como una operación ineficiente
+           y se va a apretar la cocina por un problema que está en el banco. */
+        var opexOp  = Math.max(0, opex - finan);
+        var operativa = bruta - nom - opexOp;
+        var neta    = operativa - finan - prevs;
+
+        return {
+            ventas: ventas,
+            bruta: bruta,        brutaPct: pc(bruta),
+            primo: primo,        primoPct: pc(primo),
+            opex: opexOp,        opexPct: pc(opexOp),
+            financieros: finan,  financierosPct: pc(finan),
+            operativa: operativa, operativaPct: pc(operativa),
+            prevs: prevs,        prevsPct: pc(prevs),
+            neta: neta,          netaPct: pc(neta)
+        };
+    }
+
+    /* Lo gastado en intereses, comisiones de crédito y demás costo del dinero.
+       Se mira la categoría del gasto, igual que todo lo demás. */
+    var CATS_FINANCIERO = { 'gastos financieros': 1 };
+    function costoFinanciero(gastos, opts) {
+        opts = opts || {};
+        return (gastos || []).reduce(function (t, g) {
+            if (!g) return t;
+            if (gastoEstatus(g) !== 'pagado') return t;
+            if (!CATS_FINANCIERO[String(g.categoria || '').trim().toLowerCase()]) return t;
+            var gr = grupoGasto(g, opts);
+            if (gr !== 'variable' && gr !== 'fijo') return t;   // ya contado en otro cubo
+            return t + n(g.monto);
+        }, 0);
     }
 
     /* ── EL SCORE: qué tan cerca está de SUS metas ────────────────────────────
@@ -1518,6 +1626,8 @@
         clasificarGastos: clasificarGastos, grupoGasto: grupoGasto, grupoGastoUI: grupoGastoUI,
         CATS_INSUMO: CATS_INSUMO, esGastoInsumo: esGastoInsumo, costoInsumos: costoInsumos,
         resumenPL: resumenPL, scorePL: scorePL, proyectarPL: proyectarPL,
+        CATS_BARRA: CATS_BARRA, areaInsumo: areaInsumo, costoInsumosPorArea: costoInsumosPorArea,
+        escaleraPL: escaleraPL, CATS_FINANCIERO: CATS_FINANCIERO, costoFinanciero: costoFinanciero,
         PL_PESOS: PL_PESOS,
         planFijoPago: planFijoPago,
         getNegocioActivo: getNegocioActivo, sucActiva: sucActiva, scopeSuc: scopeSuc,
