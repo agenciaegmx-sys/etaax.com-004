@@ -58,6 +58,24 @@ Sigue pidiendo el **NIP de 5 dígitos** en cada apertura. Eso es a propósito: e
 teléfono de la barra lo usan varias personas y el NIP es lo que dice quién
 registró qué.
 
+### Cuándo deja de ofrecerse
+
+En cuanto la app sabe que ya está instalada. Saberlo no es directo —
+`display-mode: standalone` contesta cómo se está viendo AHORA, no si existe una
+copia instalada— así que hay tres caminos:
+
+| | |
+|---|---|
+| Se abrió desde el ícono | Se deja una marca y el navegador del mismo teléfono ya no la ofrece |
+| Chrome en Android | Se le pregunta directo (`getInstalledRelatedApps`); por eso el manifest se declara a sí mismo como app relacionada |
+| «Ya la tengo instalada» | La persona lo dice. Es la única vía que funciona en todos lados |
+
+**En iPhone hace falta la tercera.** La app agregada a la pantalla de inicio
+tiene su **propio almacenamiento**, separado del de Safari: la marca que se
+escribe adentro no la ve el navegador, y Safari no tiene nada parecido a
+`getInstalledRelatedApps`. Cuando el sistema no puede saber algo, preguntarlo
+una vez es mejor que insistir para siempre.
+
 ### Por qué en iPhone no se baja de una tienda
 
 **Apple no permite instalar ninguna app fuera del App Store.** No hay archivo que

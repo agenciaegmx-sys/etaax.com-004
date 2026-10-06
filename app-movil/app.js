@@ -237,6 +237,7 @@ function irMenu() {
     $('quienCard').innerHTML = '<b>' + etx(COLAB) + '</b>' +
         (det ? '<small>' + etx(det) + '</small>' : '');
     pintarInstalar();
+    detectarInstalada();
     mostrar('pMenu', 'Registro', '¿Qué vas a registrar?', false, false);
 }
 
@@ -731,12 +732,54 @@ function fila(ico, titulo, sub, quien) {
        que se abra en Safari.
      · YA INSTALADA: no se ofrece nada. Ofrecer instalar lo ya instalado hace
        dudar de si de verdad quedó instalado.                                   */
+/* ¿ESTA ventana ES la app instalada? Ojo con el alcance: esto contesta cómo se
+   está viendo AHORA, no si existe una copia instalada en el teléfono. Abrir la
+   misma dirección en el navegador da `false` aunque el ícono ya esté en la
+   pantalla de inicio — y ahí es donde la tarjeta de instalar volvía a salir
+   después de instalarla. Por eso hay tres caminos más, abajo. */
 function esStandalone() {
     try {
         return window.matchMedia('(display-mode: standalone)').matches ||
                navigator.standalone === true;
     } catch (e) { return false; }
 }
+
+/* ══ ¿YA ESTÁ INSTALADA EN ESTE TELÉFONO? ══════════════════════════════════
+   Tres maneras, porque ninguna sola alcanza:
+
+   1. SE USÓ COMO APP alguna vez. Al abrir desde el ícono se deja una marca; de
+      ahí en adelante el navegador del mismo teléfono ya sabe que existe.
+      OJO CON IPHONE: la app agregada a la pantalla de inicio tiene su PROPIO
+      almacenamiento, separado del de Safari. La marca que se escribe adentro
+      NO la ve Safari. Sirve en Android; en iPhone hace falta la tercera.
+
+   2. SE LO PREGUNTAMOS AL NAVEGADOR (getInstalledRelatedApps). Chrome en
+      Android sabe contestarlo —por eso el manifest se declara a sí mismo como
+      app relacionada—. Safari no tiene nada parecido.
+
+   3. LO DICE LA PERSONA: «ya la tengo». Es la única que funciona en todos
+      lados, y por eso existe. No es un parche: cuando el sistema no puede
+      saber algo, preguntarlo una vez es mejor que insistir para siempre. */
+var MARCA_INST = 'etaax_appmovil_instalada';
+function _marcar(v) { try { localStorage.setItem(MARCA_INST, v); } catch (e) {} }
+function _marca()   { try { return localStorage.getItem(MARCA_INST) || ''; } catch (e) { return ''; } }
+
+function yaInstalada() {
+    if (esStandalone()) return true;
+    return _marca() === 'si' || _marca() === 'dicho';
+}
+/* Se corre al arrancar: si Chrome contesta que sí, se deja la marca y la
+   tarjeta no vuelve a salir en ese navegador. */
+async function detectarInstalada() {
+    if (esStandalone()) { _marcar('si'); return; }
+    try {
+        if (!navigator.getInstalledRelatedApps) return;
+        var apps = await navigator.getInstalledRelatedApps();
+        if (apps && apps.length) { _marcar('si'); pintarInstalar(); }
+    } catch (e) { /* el navegador no sabe contestar: queda el botón de «ya la tengo» */ }
+}
+/* «Ya la tengo»: la persona lo sabe aunque el navegador no. */
+function yaLaTengo() { _marcar('dicho'); pintarInstalar(); toast('Listo, no te la vuelvo a ofrecer.', 'ok'); }
 function esIOS() {
     var ua = navigator.userAgent || '';
     /* El iPad moderno se anuncia como Mac: lo delata que la pantalla responda al
@@ -754,7 +797,7 @@ function esSafari() {
 
 function pintarInstalar() {
     var el = $('instalar'); if (!el) return;
-    if (esStandalone()) { el.hidden = true; return; }   // ya está instalada
+    if (yaInstalada()) { el.hidden = true; return; }    // ya está: no se ofrece de nuevo
 
     if (_instalador) {                                   // Android: se puede de verdad
         el.innerHTML =
@@ -777,7 +820,7 @@ function pintarInstalar() {
               '</ol>' +
               '<div class="instalar-nota">En iPhone esta es la única manera: Apple no permite ' +
                 'instalar apps fuera del App Store. Queda igual que cualquier otra, con su ícono ' +
-                'y a pantalla completa.</div>'
+                'y a pantalla completa.</div>' + _btnYaLaTengo()
             : '<b>Ábrela en Safari para dejarla en tu pantalla</b>' +
               '<small>Desde este navegador el acceso que se crea vuelve a abrir el navegador, ' +
               'no la app. Copia la dirección, ábrela en <b>Safari</b> y ahí sí aparece ' +
@@ -792,17 +835,34 @@ function pintarInstalar() {
         '<b>Instálala en el teléfono</b>' +
         '<small>Ábrela en el celular del área y busca <b>«Instalar app»</b> o ' +
         '<b>«Agregar a pantalla de inicio»</b> en el menú del navegador. ' +
-        'Queda un ícono y ya no hay que escanear el QR cada vez.</small>';
+        'Queda un ícono y ya no hay que escanear el QR cada vez.</small>' + _btnYaLaTengo();
     el.hidden = false;
+}
+/* Safari no tiene forma de decirnos si ya está instalada, y en iPhone el
+   almacenamiento de la app agregada ni siquiera se comparte con el navegador.
+   Cuando el sistema no puede saberlo, se pregunta una vez. */
+function _btnYaLaTengo() {
+    return '<button class="ya-tengo" onclick="yaLaTengo()">Ya la tengo instalada — no me lo vuelvas a mostrar</button>';
 }
 
 window.addEventListener('beforeinstallprompt', function (e) {
     e.preventDefault(); _instalador = e; pintarInstalar();
 });
+/* Android avisa cuando la instalación terminó, incluso si se hizo desde el menú
+   del navegador y no desde nuestro botón. Es la señal más confiable que hay. */
+window.addEventListener('appinstalled', function () {
+    _marcar('si'); _instalador = null; pintarInstalar();
+});
 async function instalar() {
     if (!_instalador) { pintarInstalar(); return; }
     _instalador.prompt();
-    try { await _instalador.userChoice; } catch (e) {}
+    try {
+        var r = await _instalador.userChoice;
+        /* Si aceptó, se deja la marca aquí mismo: el evento `appinstalled` no
+           siempre llega —depende del navegador— y sin esto la tarjeta volvería
+           a salir en la siguiente apertura, que es justo lo que se corrigió. */
+        if (r && r.outcome === 'accepted') _marcar('si');
+    } catch (e) {}
     _instalador = null;
     pintarInstalar();
 }
@@ -841,13 +901,15 @@ window.agregarAlLote = agregarAlLote;
 window.enviarLote = enviarLote;
 window.tomarFoto = tomarFoto;
 window.instalar = instalar;
+window.yaLaTengo = yaLaTengo;
 
 /* Para poder probarlo desde la consola y desde el candado. */
 window._appMovil = {
     areasPermitidas: areasPermitidas, setArea: setArea, visible: visible,
     unoPorProducto: unoPorProducto, enSuc: enSuc, armarRegistro: armarRegistro,
     horaDe: horaDe, esIOS: esIOS, esSafari: esSafari, esStandalone: esStandalone,
-    pintarInstalar: pintarInstalar,
+    pintarInstalar: pintarInstalar, yaInstalada: yaInstalada, detectarInstalada: detectarInstalada,
+    yaLaTengo: yaLaTengo,
     _set: function (k, v) {
         if (k === 'AREA_COLAB') AREA_COLAB = v; if (k === 'AREA') AREA = v;
         if (k === 'FLUJO') FLUJO = v; if (k === 'SUB') SUB = v;

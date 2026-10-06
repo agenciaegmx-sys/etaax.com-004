@@ -10,8 +10,30 @@
   "theme_color": "#13120f",
   "lang": "es-MX",
   "icons": [
-    { "src": "icons/icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icono-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
-  ]
+    {
+      "src": "icons/icono-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icono-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icono-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "/app-movil/manifest.webmanifest"
+    }
+  ],
+  "prefer_related_applications": false
 }

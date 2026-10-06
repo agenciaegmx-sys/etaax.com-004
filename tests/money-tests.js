@@ -16944,8 +16944,11 @@ console.log('\n══ BH18 · La app móvil ══');
     vm.runInContext(ajs, cx, { filename:'app-movil/app.js' });
     const A = cx.window._appMovil;
     const dEx = (fn) => {
-        const i = ajs.indexOf('function ' + fn + '(');
+        let i = ajs.indexOf('function ' + fn + '(');
         if (i < 0) throw new Error('no existe ' + fn + ' en app-movil/app.js');
+        /* Si la función es async, el `async` va ANTES de `function`: recortarlo
+           deja un `await` suelto y el extracto ni compila. */
+        if (ajs.slice(Math.max(0, i - 6), i) === 'async ') i -= 6;
         const abre = ajs.indexOf('{', i);
         let prof = 0, j = abre;
         while (j < ajs.length) {
@@ -17164,10 +17167,134 @@ console.log('\n══ BH18 · La app móvil ══');
     test('en iPhone se enseñan los pasos, no un botón que no instala', () =>
         eq(ajs.indexOf('«Agregar a inicio»</b>.</span></li>') > -1 &&
            ajs.indexOf("toast('En iPhone") === -1, true, 'sin prometer'));
-    /* Ofrecer instalar lo ya instalado hace dudar de si de verdad quedó. */
-    test('ya instalada, no se ofrece nada', () =>
-        eq(dEx('pintarInstalar').indexOf('if (esStandalone()) { el.hidden = true; return; }') > -1,
-           true, 'callada'));
+    /* ── YA INSTALADA: NO SE VUELVE A OFRECER ──
+       Ofrecer instalar lo ya instalado hace dudar de si de verdad quedó. Pero
+       saberlo no es directo: `display-mode: standalone` contesta cómo se está
+       viendo AHORA, no si existe una copia instalada. Abrir la misma dirección
+       en el navegador da «no» aunque el ícono ya esté en la pantalla de inicio,
+       y ahí es donde la tarjeta volvía a salir después de instalarla. */
+    const estado = (standalone, guardado) => {
+        let store = guardado ? { etaax_appmovil_instalada: guardado } : {};
+        const c = { console,
+            localStorage: { getItem: k => store[k] || null, setItem: (k, v) => { store[k] = v; } },
+            navigator: { standalone: standalone },
+            window: { matchMedia: () => ({ matches: standalone }) } };
+        c.window.navigator = c.navigator;
+        vm.createContext(c);
+        vm.runInContext("var MARCA_INST='etaax_appmovil_instalada';" +
+            dEx('_marcar') + dEx('_marca') + dEx('esStandalone') + dEx('yaInstalada'),
+            c, { filename:'app-movil/app.js' });
+        return c.yaInstalada();
+    };
+    test('abierta desde el ícono, no se ofrece instalar', () =>
+        eq(estado(true, null), true, 'callada'));
+    test('…y en el navegador sin instalar, sí se ofrece', () =>
+        eq(estado(false, null), false, 'se ofrece'));
+    /* EL CASO QUE FALTABA: ya instalada pero abierta en el navegador del mismo
+       teléfono. El navegador no le dice a la página que existe una copia, así
+       que hay que acordarse. */
+    test('…pero si ya se usó como app, el navegador ya no la ofrece', () =>
+        eq(estado(false, 'si'), true, 'recordado'));
+    /* En iPhone la app agregada a inicio tiene su PROPIO almacenamiento,
+       separado del de Safari: la marca escrita adentro no la ve el navegador.
+       Por eso existe «ya la tengo» — es la única vía que funciona en todos
+       lados, y cuando el sistema no puede saber algo, preguntarlo una vez es
+       mejor que insistir para siempre. */
+    test('…y si la persona dice que ya la tiene, se le cree', () =>
+        eq(estado(false, 'dicho'), true, 'preguntado una vez'));
+    /* …y se le cree LA PRÓXIMA VEZ también. Sin dejar la marca, el botón esconde
+       la tarjeta hasta que se recargue y vuelve a salir: preguntar una vez y
+       olvidarlo es peor que no preguntar —lo destapó la batería. */
+    test('…y no se le vuelve a preguntar en la siguiente apertura', () => {
+        let store = {};
+        const c = { console,
+            localStorage: { getItem: k => store[k] || null, setItem: (k, v) => { store[k] = v; } },
+            pintarInstalar: function () {}, toast: function () {} };
+        c.window = c;
+        vm.createContext(c);
+        vm.runInContext("var MARCA_INST='etaax_appmovil_instalada';" +
+            dEx('_marcar') + dEx('_marca') + dEx('yaLaTengo'),
+            c, { filename:'app-movil/app.js' });
+        c.yaLaTengo();
+        return eq(store.etaax_appmovil_instalada, 'dicho', 'recordado');
+    });
+    /* Se CORRE pintarInstalar: comprobar que la función existe no nota que deje
+       de usarse —lo destapó la batería, cambiando yaInstalada() por
+       esStandalone() dentro de ella—. */
+    const pintar = (opts) => {
+        opts = opts || {};
+        let store = opts.guardado ? { etaax_appmovil_instalada: opts.guardado } : {};
+        const caja = { innerHTML:'', hidden:true };
+        const c = { console,
+            localStorage: { getItem: k => store[k] || null, setItem: (k, v) => { store[k] = v; } },
+            navigator: { standalone: !!opts.standalone, userAgent: opts.ua || '' },
+            window: { matchMedia: () => ({ matches: !!opts.standalone }) },
+            document: { ontouchend: opts.tactil ? null : undefined,
+                        getElementById: () => caja } };
+        c.window.navigator = c.navigator; c.window.document = c.document;
+        vm.createContext(c);
+        vm.runInContext("var MARCA_INST='etaax_appmovil_instalada'; var _instalador=" +
+            (opts.conPrompt ? '{}' : 'null') + ';' +
+            "function $(id){return document.getElementById(id);}" +
+            dEx('_marcar') + dEx('_marca') + dEx('esStandalone') + dEx('yaInstalada') +
+            dEx('esIOS') + dEx('esSafari') + dEx('_btnYaLaTengo') + dEx('pintarInstalar'),
+            c, { filename:'app-movil/app.js' });
+        c.pintarInstalar();
+        return caja;
+    };
+    /* EL CASO DEL REPORTE: instalada, pero abierta en el navegador del mismo
+       teléfono. La tarjeta no debe volver. */
+    test('la tarjeta NO vuelve en el navegador si ya se instaló', () =>
+        eq(pintar({ guardado:'si', ua:UA_ANDROID }).hidden, true, 'callada'));
+    test('…ni si la persona dijo que ya la tiene', () =>
+        eq(pintar({ guardado:'dicho', ua:UA_IOS_SAF }).hidden, true, 'callada'));
+    test('…y sí aparece cuando de verdad no está instalada', () =>
+        eq(pintar({ ua:UA_ANDROID }).hidden, false, 'se ofrece'));
+    /* La salida de «ya la tengo» tiene que estar en TODOS los casos donde el
+       navegador no puede saberlo solo: en iPhone y en el genérico. Comprobarla
+       en uno dejaba pasar que se cayera del otro. */
+    test('la salida de «ya la tengo» está en los pasos de iPhone', () =>
+        eq(pintar({ ua:UA_IOS_SAF }).innerHTML.indexOf('yaLaTengo()') > -1, true, 'con salida'));
+    test('…y también cuando no se reconoce el teléfono', () =>
+        eq(pintar({ ua:'Mozilla/5.0 (X11; Linux x86_64)' }).innerHTML.indexOf('yaLaTengo()') > -1,
+           true, 'con salida'));
+    /* En Android, con botón de verdad, no hace falta: el navegador ya sabe. */
+    test('…pero no estorba donde el botón sí instala', () =>
+        eq(pintar({ ua:UA_ANDROID, conPrompt:true }).innerHTML.indexOf('yaLaTengo()'), -1, 'sin ruido'));
+
+    /* Chrome en Android SÍ sabe contestarlo, y para eso el manifest tiene que
+       declararse a sí mismo como app relacionada. Sin esa línea, la consulta
+       devuelve vacío siempre y nadie entiende por qué. */
+    /* testA, no test: con el runner normal una prueba async pasa en falso —la
+       promesa nunca lanza y el candado se felicita solo—. */
+    testA('a Chrome se le pregunta directamente si ya está instalada', async () => {
+        let store = {}, preguntado = false;
+        const c = { console,
+            localStorage: { getItem: k => store[k] || null, setItem: (k, v) => { store[k] = v; } },
+            navigator: { standalone: false,
+                getInstalledRelatedApps: function () { preguntado = true; return Promise.resolve([{ id:'x' }]); } },
+            window: { matchMedia: () => ({ matches: false }) },
+            pintarInstalar: function () {} };
+        c.window.navigator = c.navigator;
+        vm.createContext(c);
+        vm.runInContext("var MARCA_INST='etaax_appmovil_instalada';" +
+            dEx('_marcar') + dEx('_marca') + dEx('esStandalone') + dEx('detectarInstalada'),
+            c, { filename:'app-movil/app.js' });
+        await c.detectarInstalada();
+        /* Se exige que PREGUNTE y que se quede con la respuesta: quedarse con
+           ella es lo que evita que la tarjeta vuelva en la siguiente apertura. */
+        return eq(preguntado === true && store.etaax_appmovil_instalada === 'si', true, 'se pregunta');
+    });
+    test('…y el manifest se declara para que pueda contestar', () =>
+        eq(man.related_applications && man.related_applications[0].platform === 'webapp', true, 'declarado'));
+    /* El evento de «ya quedó instalada» llega aunque se haya instalado desde el
+       menú del navegador y no desde nuestro botón: es la señal más confiable. */
+    test('instalar desde el menú del navegador también cuenta', () =>
+        eq(ajs.indexOf("window.addEventListener('appinstalled'") > -1, true, 'contado'));
+    /* Y si aceptó en nuestro botón, se marca ahí mismo: `appinstalled` no
+       siempre llega, y sin esto la tarjeta volvería en la siguiente apertura. */
+    test('…y aceptar en nuestro botón, también', () =>
+        eq(dEx('instalar').indexOf("r.outcome === 'accepted') _marcar('si')") > -1, true, 'marcado'));
     /* EL BUG DE RAÍZ: el atributo `hidden` lo aplica el navegador con un
        display:none de su hoja por defecto, y CUALQUIER display del autor lo
        pisa sin avisar. Por eso la tarjeta se veía en iPhone: decía estar
