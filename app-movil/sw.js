@@ -18,7 +18,7 @@
    le ocurra borrar los datos del sitio.
    ══════════════════════════════════════════════════════════════════════════ */
 
-var CACHE = 'etaax-movil-v1';
+var CACHE = 'etaax-movil-v2';
 
 /* Las rutas de ARRIBA (../) son del proyecto, no de esta carpeta: la app
    reutiliza el cliente de Supabase y el vocabulario de áreas en vez de tener
@@ -31,7 +31,10 @@ var CASCARA = [
     './manifest.webmanifest',
     './icons/icono-192.png',
     '../supabase-config.js',
-    '../staff-area.js'
+    /* CON SU VERSIÓN, igual que en el HTML: sin ella el service worker guarda
+       el archivo viejo y la app instalada se queda con el vocabulario de áreas
+       anterior aunque el sitio ya tenga el nuevo. */
+    '../staff-area.js?v=2'
 ];
 
 self.addEventListener('install', function (e) {

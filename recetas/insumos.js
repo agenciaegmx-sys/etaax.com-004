@@ -2746,7 +2746,7 @@
               renglón el select se queda en «sin área» y guardar se la BORRA,
               que es perder un dato por un cambio de catálogo. */
            if (v && !Array.prototype.some.call(elA.options, function(o){ return o.value === v; })) {
-               var nom = (window.StaffArea ? StaffArea.nomIns(v) : '') || v;
+               var nom = ((window.StaffArea && StaffArea.nomIns) ? StaffArea.nomIns(v) : '') || v;
                var op = document.createElement('option');
                op.value = v;
                op.textContent = nom + ' (como estaba)';

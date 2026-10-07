@@ -2069,7 +2069,7 @@ function _areaNom(a){
        los rótulos del eje FÍSICO del conteo (barra/bodega/cocina), que es otra
        cosa —dónde se cuenta— y no se toca aquí. */
     if (_AREA_LBL[a]) return _AREA_LBL[a];
-    if (window.StaffArea) { var n2 = StaffArea.nomIns(a); if (n2 && n2 !== a) return n2; }
+    if (window.StaffArea && StaffArea.nomIns) { var n2 = StaffArea.nomIns(a); if (n2 && n2 !== a) return n2; }
     return a ? (a.charAt(0).toUpperCase() + a.slice(1)) : 'General';
 }
 

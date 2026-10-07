@@ -75,6 +75,22 @@ var MAX_ITEMS = 15, MAX_FOTOS = 10;
 var BUCKET = 'evidencias-priv', REF_PRIV = 'priv:';
 var _PREV = {};                // ref → miniatura local (el bucket es privado)
 
+/* ══ EL VOCABULARIO DE ÁREAS, SI ES EL NUEVO ═══════════════════════════════
+   NO basta con preguntar si existe `window.StaffArea`. El proyecto sirve los
+   .js con `stale-while-revalidate` de una semana: después de un despliegue, un
+   teléfono puede traer el archivo VIEJO —el objeto existe, pero sin las
+   funciones nuevas— y entonces `StaffArea.veInsumo(...)` revienta con «is not a
+   function» y la pantalla de entrar se queda muerta. Pasó en producción.
+
+   Se pregunta por la FUNCIÓN que se va a usar. Si no está, se devuelve null y
+   quien llama cae a su camino de «sin vocabulario», que ya existe y falla
+   abierto: se ve de más durante una carga, en vez de no poder trabajar. */
+function _SA() {
+    var S = window.StaffArea;
+    return (S && typeof S.veInsumo === 'function' && typeof S.veAreas === 'function' &&
+            typeof S.nomIns === 'function' && S.AREAS_INSUMO) ? S : null;
+}
+
 /* ── Utilidades ── */
 function $(id) { return document.getElementById(id); }
 function etx(s) { return String(s == null ? '' : s)
@@ -212,12 +228,13 @@ async function cargarPerfil(h) {
 }
 
 function areasPermitidas() {
-    var l = (window.StaffArea && StaffArea.veAreas(AREA_COLAB)) || null;
+    var S = _SA();
+    var l = (S && S.veAreas(AREA_COLAB)) || null;
     if (l) return l;
-    return window.StaffArea ? StaffArea.AREAS_INSUMO.map(function (a) { return a.k; })
-                            : ['barra', 'cocina', 'almacen_general'];
+    return S ? S.AREAS_INSUMO.map(function (a) { return a.k; })
+             : ['barra', 'cocina', 'almacen_general'];
 }
-function nomArea(k) { return (window.StaffArea && StaffArea.nomIns(k)) || k; }
+function nomArea(k) { return (_SA() && _SA().nomIns(k)) || k; }
 
 /* ── El catálogo ──
    Se deduplica maestro/copia y se acota a la sucursal del QR: el colaborador
@@ -527,16 +544,16 @@ function fuente() {
 /* Lo que se VE lo decide quién eres, no el chip. El chip solo sella dónde cae el
    movimiento. Es la misma regla de /staff-area.js que usa el QR del navegador. */
 function visible(x) {
-    if (!window.StaffArea) return true;
+    if (!_SA()) return true;
     if ((FLUJO === 'merma' || FLUJO === 'salida') && SUB.que === 'producto') {
         var t = String((x && x.tipo) || '').toLowerCase();
         var ar = t.indexOf('bebida') >= 0 ? 'barra' : (t.indexOf('aliment') >= 0 ? 'cocina' : '');
         if (!ar) return true;                       // sin tipo: no se puede saber
-        var mia = StaffArea.norm(AREA_COLAB);
+        var mia = _SA().norm(AREA_COLAB);
         if (mia !== 'barra' && mia !== 'cocina') return true;
         return ar === mia;
     }
-    return StaffArea.veInsumo(AREA_COLAB, x);
+    return _SA().veInsumo(AREA_COLAB, x);
 }
 
 var _buscarT = null;

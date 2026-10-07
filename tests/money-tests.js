@@ -13090,7 +13090,10 @@ console.log('\n══ BG6 · El QR de inventarios: una receta, y de su área ═
         vm.runInContext("var SUC=" + JSON.stringify(opts.suc || '') + ";" +
                         "var AREA_COLAB=" + JSON.stringify(opts.area || 'barra') + ";" +
                         "var AREA=" + JSON.stringify(opts.chip || opts.area || 'barra') + ";", ctx);
-        ['_unoPorProductoQR', '_enSucQR', '_areaDeReceta', '_delAreaQR']
+        /* _SA va primero: es el guardián que revisa que el vocabulario cargado
+           sea el NUEVO. Sin él en el extracto, el filtro no compila —y ese
+           guardián existe justo porque el navegador puede traer el viejo. */
+        ['_SA', '_unoPorProductoQR', '_enSucQR', '_areaDeReceta', '_delAreaQR']
             .forEach(f => vm.runInContext(decl(f), ctx, { filename: 'entrada.html' }));
         return ctx;
     }
@@ -13857,7 +13860,7 @@ console.log('\n══ BH1 · Cierre, historial del QR y área por NIP ══');
        general. Acotarlos los dejaría sin poder capturar lo demás. */
     test('…y administración y piso siguen viendo todas', () =>
         eq(dE('_areasPermitidas').indexOf('if (l) return l;') > -1 &&
-           dE('_areasPermitidas').indexOf('StaffArea.AREAS_INSUMO.map') > -1, true, 'sin acotar'));
+           dE('_areasPermitidas').indexOf('.AREAS_INSUMO.map') > -1, true, 'sin acotar'));
     test('con una sola área posible, los chips dejan de ser botones', () =>
         eq(dE('_pintarAreas').indexOf('if (permitidas.length === 1) {') > -1, true, 'rótulo'));
     test('…y se dice cuál es su área, no se esconde el dato', () =>
@@ -16769,14 +16772,14 @@ console.log('\n══ BH17 · Cada quien ve su área ══');
     cx.StaffArea = S;
     cx.AREA_COLAB = 'barra';
     vm.createContext(cx);
-    vm.runInContext('var AREA="barra";' + dE('_areaDeReceta') + dE('_delAreaQR') +
+    vm.runInContext('var AREA="barra";' + dE('_SA') + dE('_areaDeReceta') + dE('_delAreaQR') +
                     dE('_areasPermitidas') + dE('_areaNomQR'),
                     cx, { filename:'entrada.html (extracto)' });
 
     /* Pasarle solo `x.area` dejaría fuera la familia y las sub-recetas volverían
        a colarse: el filtro necesita el registro completo. */
     test('el QR le pasa el insumo entero al filtro, no solo su área', () =>
-        eq(dE('_delAreaQR').indexOf('StaffArea.veInsumo(AREA_COLAB, x)') > -1, true, 'completo'));
+        eq(dE('_delAreaQR').indexOf('.veInsumo(AREA_COLAB, x)') > -1, true, 'completo'));
     test('…y por eso la salsa de pizzas no sale en el QR del barman', () => {
         cx.AREA_COLAB = 'barra';
         return eq(cx._delAreaQR({ nombre:'SALSA DE TOMATE PARA PIZZAS', familia:'Alimentos',
@@ -16942,6 +16945,9 @@ console.log('\n══ BH18 · La app móvil ══');
     vm.createContext(cx);
     vm.runInContext(fs.readFileSync(path.join(RAIZ, 'staff-area.js'), 'utf8'), cx, { filename:'staff-area.js' });
     vm.runInContext(ajs, cx, { filename:'app-movil/app.js' });
+    /* El guardián _SA mira `window.StaffArea`; en el contexto de prueba hay que
+       dejarlo donde él lo busca. */
+    cx.StaffArea = cx.window.StaffArea;
     const A = cx.window._appMovil;
     const dEx = (fn) => {
         let i = ajs.indexOf('function ' + fn + '(');
@@ -17484,6 +17490,119 @@ console.log('\n══ BH18 · La app móvil ══');
        que se vuelva a tocar el botón. */
     test('lo que falla se queda en la lista para reintentar', () =>
         eq(ajs.indexOf('LOTE = fallidos; pintarLote();') > -1, true, 'sin perder nada'));
+}
+
+/* ═══════════ SUITE BH19 · EL ARCHIVO VIEJO EN LA CACHÉ ═════════════════════
+   SE CAYÓ EN PRODUCCIÓN: «Error: StaffArea.veInsumo is not a function» en la
+   pantalla de entrar del QR. Nadie podía registrar nada.
+
+   LA CAUSA. netlify.toml sirve los .js con stale-while-revalidate de una
+   semana: el navegador USA lo que tiene y revalida por detrás. Después de un
+   despliegue, un teléfono trae el staff-area.js VIEJO —el objeto `StaffArea`
+   existe, pero sin las funciones nuevas— mientras el HTML, que sí se revalida
+   siempre, ya viene con el código que las llama.
+
+   Y LA GUARDIA NO SERVÍA: preguntaba `if (!window.StaffArea) return true;`.
+   El objeto estaba ahí. Lo que faltaba era la función.
+
+   Dos arreglos, y los dos hacen falta:
+     · Preguntar por la FUNCIÓN, no por el objeto → nunca más revienta.
+     · Poner versión en la dirección del script → la caché vieja se cambia en la
+       siguiente carga, no en una semana. Sin esto, el guardián evita el error
+       pero el filtro por área se queda apagado hasta que expire.             */
+console.log('\n══ BH19 · El archivo viejo en la caché ══');
+{
+    const ent = fs.readFileSync(path.join(RAIZ, 'entrada.html'), 'utf8');
+    const am  = fs.readFileSync(path.join(RAIZ, 'app-movil/app.js'), 'utf8');
+    const sa  = fs.readFileSync(path.join(RAIZ, 'staff-area.js'), 'utf8');
+    const dE2 = (src) => (fn) => {
+        let i = src.indexOf('function ' + fn + '(');
+        if (i < 0) throw new Error('no existe ' + fn);
+        if (src.slice(Math.max(0, i - 6), i) === 'async ') i -= 6;
+        const abre = src.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < src.length) {
+            if (src[j] === '{') prof++;
+            else if (src[j] === '}') { prof--; if (!prof) return src.slice(i, j + 1); }
+            j++;
+        }
+        throw new Error('sin cerrar ' + fn);
+    };
+
+    /* Se corre el guardián con un StaffArea VIEJO —el que había antes— y con el
+       nuevo. Es la prueba que de verdad reproduce la caída. */
+    const guardia = (src, objeto) => {
+        const c = { console, window: {} };
+        c.window.StaffArea = objeto;
+        vm.createContext(c);
+        vm.runInContext(dE2(src)('_SA'), c, { filename:'extracto' });
+        return c._SA();
+    };
+    const VIEJO = { norm: function () {}, de: function () {}, nom: function () {} };
+    const NUEVO = { norm: function () {}, de: function () {}, nom: function () {},
+                    veInsumo: function () {}, veAreas: function () {},
+                    nomIns: function () {}, AREAS_INSUMO: [] };
+
+    [['entrada.html', ent], ['app-movil/app.js', am]].forEach(([nom, src]) => {
+        test(nom + ': con el vocabulario VIEJO no se usa, no revienta', () =>
+            eq(guardia(src, VIEJO), null, 'sin reventar'));
+        test(nom + ': …ni con el objeto ausente', () =>
+            eq(guardia(src, undefined), null, 'sin reventar'));
+        test(nom + ': …y con el nuevo sí se usa', () =>
+            eq(guardia(src, NUEVO) !== null, true, 'se usa'));
+    });
+    /* FALLA ABIERTO: con el vocabulario viejo se ve de MÁS durante una carga, en
+       vez de no poder trabajar. Esconder todo sería la otra manera de dejar la
+       pantalla inservible. */
+    test('sin el vocabulario nuevo, el filtro deja ver todo', () =>
+        eq(dE2(ent)('_delAreaQR').indexOf('if (!_SA()) return true;') > -1, true, 'falla abierto'));
+    /* Preguntar solo por el objeto es exactamente el error que tiró el QR. */
+    test('ya nadie pregunta solo si el objeto existe', () =>
+        eq(/if \(!window\.StaffArea\) return true;/.test(ent) === false &&
+           /if \(!window\.StaffArea\) return true;/.test(am) === false, true, 'por la función'));
+    /* Los OTROS consumidores del vocabulario también revientan con el archivo
+       viejo: nomIns tampoco existía. */
+    ['recetas/insumos.js', 'recetas/inventarios.js'].forEach(p => {
+        const src = fs.readFileSync(path.join(RAIZ, p), 'utf8');
+        test(p + ': también comprueba la función antes de llamarla', () =>
+            eq(/window\.StaffArea && StaffArea\.nomIns/.test(src) ||
+               /window\.StaffArea \? StaffArea\.nomIns/.test(src) === false, true, 'protegido'));
+    });
+
+    /* ── La versión en la dirección ── */
+    /* El HTML sí se revalida siempre; el .js no. Con una versión en la URL, el
+       navegador pide una dirección que no tiene guardada y trae el archivo nuevo
+       de una. Sin esto, el guardián evita el error pero el filtro por área se
+       queda apagado hasta que expire la caché. */
+    const PAGS_SA = ['entrada.html', 'checklist.html', 'administrativo/horarios.html',
+                     'administrativo/staff.html', 'recetas/insumos.html',
+                     'recetas/inventarios.html', 'app-movil/index.html'];
+    PAGS_SA.forEach(p => {
+        const h = fs.readFileSync(path.join(RAIZ, p), 'utf8');
+        test(p + ': pide el vocabulario con versión', () =>
+            eq(/src="(?:\.\.\/|\/)staff-area\.js\?v=\d+"/.test(h), true, 'sin caché vieja'));
+    });
+    /* El service worker guarda la cáscara: si guardara la dirección SIN versión,
+       la app instalada se quedaría con el vocabulario viejo aunque el sitio ya
+       tenga el nuevo. */
+    const sw2 = fs.readFileSync(path.join(RAIZ, 'app-movil/sw.js'), 'utf8');
+    test('el service worker guarda la versión nueva, no la vieja', () =>
+        eq(sw2.indexOf("'../staff-area.js?v=2'") > -1 && /'\.\.\/staff-area\.js'/.test(sw2) === false,
+           true, 'al día'));
+    /* Y su propia versión sube: el navegador lo compara byte a byte y, sin
+       cambio, no instala la cáscara nueva. */
+    test('…y su caché cambia de nombre para que se reemplace', () =>
+        eq(sw2.indexOf("var CACHE = 'etaax-movil-v2'") > -1, true, 'renovada'));
+
+    /* ── Que el vocabulario siga teniendo lo que se le pide ── */
+    /* Si mañana se le quita una de estas, el guardián apagaría el filtro EN
+       SILENCIO en todas las pantallas y nadie entendería por qué dejó de
+       acotar. Mejor que truene aquí. */
+    const _expuesto = sa.slice(sa.lastIndexOf('window.StaffArea = {'));
+    ['veInsumo', 'veAreas', 'nomIns', 'normIns', 'areaDeInsumo', 'AREAS_INSUMO'].forEach(k => {
+        test('staff-area.js sigue exponiendo ' + k, () =>
+            eq(_expuesto.indexOf(k + ':') > -1, true, 'expuesto'));
+    });
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

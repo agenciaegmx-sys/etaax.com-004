@@ -375,7 +375,7 @@ input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
-<script src="/staff-area.js"></script><!-- el área de un colaborador: fuente única -->
+<script src="/staff-area.js?v=2"></script><!-- el área de un colaborador: fuente única -->
 <script>
 
 function _q(k){var m=new RegExp('[?&]'+k+'=([^&]*)').exec(location.search);return m?decodeURIComponent(m[1]):'';}
@@ -452,6 +452,21 @@ function _areaDeReceta(x){
     if (t.indexOf('aliment') >= 0) return 'cocina';
     return '';                       // sin tipo: no se puede saber
 }
+/* ══ EL VOCABULARIO DE ÁREAS, SI ES EL NUEVO ═══════════════════════════════
+   NO basta con preguntar si existe `window.StaffArea`. El proyecto sirve los
+   .js con `stale-while-revalidate` de una semana: después de un despliegue, un
+   teléfono puede traer el archivo VIEJO —el objeto existe, pero sin las
+   funciones nuevas— y entonces `StaffArea.veInsumo(...)` revienta con «is not a
+   function» y la pantalla de entrar se queda muerta. Pasó en producción.
+
+   Se pregunta por la FUNCIÓN que se va a usar. Si no está, se devuelve null y
+   quien llama cae a su camino de «sin vocabulario», que ya existe y falla
+   abierto: se ve de más durante una carga, en vez de no poder trabajar. */
+function _SA() {
+    var S = window.StaffArea;
+    return (S && typeof S.veInsumo === 'function' && typeof S.veAreas === 'function' &&
+            typeof S.nomIns === 'function' && S.AREAS_INSUMO) ? S : null;
+}
 function _delAreaQR(x, esReceta){
     /* LO QUE SE VE LO DECIDE QUIÉN ERES, no el chip. Antes el filtro usaba el
        chip seleccionado, así que bastaba con tocar «Cocina» para ver —y mermar—
@@ -465,15 +480,15 @@ function _delAreaQR(x, esReceta){
     if (esReceta) {
         var ar = _areaDeReceta(x);
         if (!ar) return true;                     // sin tipo: no se puede saber
-        var mia = window.StaffArea ? StaffArea.norm(AREA_COLAB) : '';
+        var mia = _SA() ? _SA().norm(AREA_COLAB) : '';
         if (mia !== 'barra' && mia !== 'cocina') return true;
         return ar === mia;
     }
-    if (!window.StaffArea) return true;           // sin el vocabulario: falla abierto
+    if (!_SA()) return true;                      // sin el vocabulario nuevo: falla abierto
     /* El insumo ENTERO, no solo su campo `area`: las sub-recetas casi nunca lo
        tienen y su familia —que el sistema escribe solo al convertir la receta—
        dice si es producción de barra o de cocina. */
-    return StaffArea.veInsumo(AREA_COLAB, x);
+    return _SA().veInsumo(AREA_COLAB, x);
 }
 function _enSucQR(x){
     if (!SUC || !x) return true;
@@ -505,13 +520,14 @@ var CART = { entrada:{items:[],fotos:[]}, merma:{items:[],fotos:[]}, salida:{ite
    tiene por qué poder mandar algo al almacén de cocina: enseñarle el botón es
    invitar al error, y esconderlo sin negarlo en el código no es negarlo. */
 function _areasPermitidas(){
-    var l = (window.StaffArea && StaffArea.veAreas(AREA_COLAB)) || null;
+    var S = _SA();
+    var l = (S && S.veAreas(AREA_COLAB)) || null;
     if (l) return l;
-    return (window.StaffArea ? StaffArea.AREAS_INSUMO.map(function(a){ return a.k; })
-                             : ['barra','cocina','almacen_general']);
+    return S ? S.AREAS_INSUMO.map(function(a){ return a.k; })
+             : ['barra','cocina','almacen_general'];
 }
 function _areaNomQR(k){
-    return (window.StaffArea && StaffArea.nomIns(k)) || k;
+    return (_SA() && _SA().nomIns(k)) || k;
 }
 /* Cuando el NIP ya dijo el área, el bloque de chips deja de ser un selector y
    pasa a ser un rótulo: decir en qué área estás parado sirve; poder cambiarla
