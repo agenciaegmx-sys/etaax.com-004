@@ -825,6 +825,13 @@ function _consumoIdx() { return _construirIdx(false); }
 function _cancelIdx()  { return _construirIdx(true); }
 
 function _construirIdx(esCancel) {
+    /* ANTES de mirar la caché, no después. Al abrir un inventario guardado, sus
+       cancelaciones llegan sin resolver; quien las resuelve es esta llamada, y
+       es ella la que marca el montón como sucio. Si se hiciera después de la
+       caché, el primer cálculo devolvería el montón vacío que se guardó en la
+       llamada anterior y el teórico saldría sin descontar nada — justo al abrir,
+       que es cuando se mira. La guarda por firma la hace barata. */
+    if (esCancel) _autoMatchCancelaciones();
     var recetas = getRecetas();
     // Llave BARATA + dirty-flag: antes la llave hacía JSON.stringify(vendidos) en
     // CADA llamada (200 filas × varios cálculos por render = miles de stringify)

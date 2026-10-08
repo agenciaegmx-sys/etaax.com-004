@@ -18718,6 +18718,252 @@ console.log('\n══ BH24 · El cóctel que se cancela ══');
         vm.runInContext("invActual.descuentos = [{ nombreProducto:'NEGRONI', cantidad:9 }];", C);
         return eq(C.calcExistenciaTeorica(fGin), 100, 'solo es precio');
     });
+
+    /* ══ LAS ONCE CIEGAS QUE DESTAPÓ LA BATERÍA ═══════════════════════════
+       De veinte daños a propósito, los primeros tests solo cazaron nueve. Lo
+       que faltaba no eran casos raros: eran la mitad de los caminos por donde
+       pasa esta función. Lo que sigue los cierra uno por uno.             */
+
+    /* ── 1 y 2. El teórico en las OTRAS dos unidades ──
+       El primer test solo miraba filas de copa. Un coctel que lleva una lata
+       (fila 'pza') o un jarabe que se pesa (fila 'peso') no estaba cubierto, y
+       quitarles el descuento no rompía nada. */
+    setVar(C, '_cacheRecetasInv', [
+        { id:'recNegroni', nombre:'Negroni', tipo:'bebidas', status:'activa', ingredientes:[
+            { insumoId:'gin', cantidad:45, unidad:'ML' }, { insumoId:'campari', cantidad:30, unidad:'ML' } ] },
+        { id:'recAbeja', nombre:'Abeja Reina', tipo:'bebidas', status:'activa',
+          ingredientes:[{ insumoId:'gin', cantidad:60, unidad:'ML' }] },
+        { id:'srJarabe', nombre:'Jarabe de hibisco', tipo:'sub-bebidas', status:'activa',
+          ingredientes:[{ insumoId:'gin', cantidad:10, unidad:'ML' }] },
+        /* Un coctel con lata y con jarabe pesado: toca las tres unidades. */
+        { id:'recPaloma', nombre:'Paloma Clasica', tipo:'bebidas', status:'activa', ingredientes:[
+            { insumoId:'tequila', cantidad:45, unidad:'ML' },
+            { insumoId:'toronja', cantidad:1,  unidad:'PZA' },
+            { insumoId:'jarabeG', cantidad:20, unidad:'G' } ] }
+    ]);
+    const fLata = { insumoId:'toronja', nombre:'Refresco de toronja', tipo:'pza', contNeto:355,
+        copaML:0, existenciaAnterior:30, ventasCopasDirectas:0, ventasBotella:0,
+        cortesiaCopas:0, mermaCopas:0, entradas:[] };
+    const fJar  = { insumoId:'jarabeG', nombre:'Jarabe de goma', tipo:'peso', baseUnit:'g',
+        contNeto:1000, existenciaAnterior:1000, mermaBase:0, entradas:[] };
+    const cancelarPaloma = (n) => {
+        setVar(C, 'invActual', { id:'invT', area:'barra', entradasLog:[], prebatchProducidos:{},
+            cocktailsVendidos:{}, ventasCompuesto:{}, cancelaciones:[], descuentos:[], filas:[] });
+        setVar(C, 'filasCaptura', [fGin, fCamp, fBeer, fLata, fJar]);
+        vm.runInContext('invActual.cancelaciones = [{ nombreProducto:"PALOMA CLASICA", cantidad:' + n + ' }];' +
+                        '_autoMatchFirma = ""; _cancelDirty = true; _consumoDirty = true;', C);
+    };
+    test('CIEGA · una fila de PIEZA también baja por lo cancelado', () => {
+        cancelarPaloma(3);
+        return eq(C.calcExistenciaTeorica(fLata), 27, '30 − 3 latas');
+    });
+    test('CIEGA · y una fila de PESO también', () => {
+        cancelarPaloma(3);
+        return eq(C.calcExistenciaTeorica(fJar), 940, '1000 − 60 g');
+    });
+
+    /* ── 3. El fallback por nombre, de verdad ──
+       El primer test daba 0 por la razón equivocada: «Negroni» no se parece a
+       «Ginebra Beefeater», así que el fallback jamás se disparaba y quitarle el
+       candado no cambiaba nada. Hace falta un insumo cuyo nombre SÍ empiece
+       como el producto cancelado — que es justo lo que pasa en la barra: el
+       prebatch se llama como el trago. */
+    test('CIEGA · el fallback por nombre NO repite lo que pegó con una receta', () => {
+        const fMix = { insumoId:'mixNeg', nombre:'Negroni Mix PR', tipo:'copa', contNeto:750,
+            copaML:45, existenciaAnterior:10, ventasCopasDirectas:0, cortesiaCopas:0,
+            mermaCopas:0, ventasBotella:0, entradas:[] };
+        setVar(C, 'invActual', { id:'invT', area:'barra', entradasLog:[], prebatchProducidos:{},
+            cocktailsVendidos:{}, ventasCompuesto:{}, cancelaciones:[], descuentos:[], filas:[] });
+        setVar(C, 'filasCaptura', [fGin, fCamp, fMix]);
+        vm.runInContext('invActual.cancelaciones = [{ nombreProducto:"NEGRONI", cantidad:2,' +
+                        ' recetaId:"recNegroni", recetaNombre:"Negroni" }];' +
+                        '_autoMatchFirma = ""; _cancelDirty = true;', C);
+        return eq(C.getCancelacionesCopas('mixNeg'), 0, 'una sola vez');
+    });
+    /* LA CONTRAPRUEBA, Y LO QUE ENSEÑÓ. La primera versión de este test ponía
+       un renglón «NEGRONI» sin resolver y esperaba que el fallback lo cazara.
+       Da 0 — y está bien: el matching corre antes y lo resuelve a la receta.
+
+       O sea que para un renglón normal el fallback por nombre ya no se alcanza
+       nunca. Le queda UN hueco: un nombre tan corto que el matching ni lo
+       intenta (pide palabras de 3 letras o más). Ahí sigue vivo, y ahí se
+       comprueba — si no, el candado de arriba pasaría aunque el fallback
+       estuviera muerto y nadie sabría que se borró algo que sí se usa. */
+    test('…y el fallback por nombre sigue vivo donde el matching ni entra', () => {
+        const fMix = { insumoId:'mixNeg', nombre:'XX Lager Heineken', tipo:'pza', contNeto:355,
+            copaML:0, existenciaAnterior:10, entradas:[] };
+        setVar(C, 'invActual', { id:'invT', area:'barra', entradasLog:[], prebatchProducidos:{},
+            cocktailsVendidos:{}, ventasCompuesto:{}, cancelaciones:[], descuentos:[], filas:[] });
+        setVar(C, 'filasCaptura', [fMix]);
+        vm.runInContext('invActual.cancelaciones = [{ nombreProducto:"XX", cantidad:2 }];' +
+                        '_autoMatchFirma = ""; _cancelDirty = true;', C);
+        return eq(C.getCancelacionesCopas('mixNeg'), 2, 'el legacy vive');
+    });
+
+    /* ── 4. La caché, sin ayudarle ──
+       El primer test marcaba `_cancelDirty` a mano antes de medir: estaba
+       comprobando su propio andamio. BUG REAL QUE DESTAPÓ: al abrir un
+       inventario guardado, las cancelaciones llegan sin resolver y quien las
+       resuelve es la propia construcción del montón. Si eso pasara DESPUÉS de
+       mirar la caché, el primer cálculo devolvería vacío — justo al abrir, que
+       es cuando se mira. */
+    test('CIEGA · un inventario recién abierto descuenta a la PRIMERA', () => {
+        base();
+        C.cancelRecetasFila(fGin);          // deja el montón vacío en la caché
+        vm.runInContext('invActual.cancelaciones = [{ nombreProducto:"NEGRONI", cantidad:2 }];', C);
+        /* Nadie toca banderas: es lo que pasa al cargar de la nube. */
+        return eq(C.cancelRecetasFila(fGin), 2, 'sin esperar un segundo render');
+    });
+
+    /* ── 5. La firma, con su cuenta de verdad ──
+       Comparar la firma consigo misma pasa aunque esté mal: lo que importa es
+       que diga CERO pendientes. Con la cuenta vieja un renglón resuelto a
+       receta seguía contándose, la firma nunca se estabilizaba y el matching
+       completo corría en cada render — el retraso que esa guarda evita. */
+    test('CIEGA · tras resolver a receta, la firma dice cero pendientes', () => {
+        cancelar([{ nombreProducto:'NEGRONI', cantidad:1 }]);
+        C._cancelUnidadesPorReceta();
+        return eq(/\|0$/.test(vm.runInContext('_autoMatchFirma', C)), true,
+                  'firma: ' + vm.runInContext('_autoMatchFirma', C));
+    });
+
+    /* ── 6. El prebatch ──
+       Si se cancelan diez Negronis hechos con el Mix Negroni, ese mix salió de
+       la botella. Sin esto el reparto de la variancia le echaba la culpa a los
+       insumos del batch, que es el peor lugar para equivocarse: ahí es donde se
+       decide si alguien está robando. */
+    test('CIEGA · el batch recibe lo cancelado de los tragos que lo usan', () => {
+        setVar(C, '_cacheRecetasInv', [
+            { id:'srMix', nombre:'Mix Negroni', tipo:'sub-bebidas', status:'activa',
+              camposExtra:{ rendimientoFinal:'1000', unidadRendimientoFinal:'ML' },
+              ingredientes:[{ insumoId:'campari', cantidad:500, unidad:'ML' }] },
+            { id:'recNegroni', nombre:'Negroni', tipo:'bebidas', status:'activa',
+              ingredientes:[{ insumoId:'preMix', cantidad:90, unidad:'ML' }] }
+        ]);
+        setVar(C, '_cacheInsumosInv', [{ id:'preMix', esSubReceta:true, recetaId:'srMix', activo:'1' },
+                                       { id:'campari', activo:'1' }]);
+        setVar(C, 'invActual', { id:'invT', area:'barra', entradasLog:[], prebatchProducidos:{},
+            cocktailsVendidos:{}, ventasCompuesto:{}, cancelaciones:[], descuentos:[], filas:[] });
+        setVar(C, 'filasCaptura', [{ insumoId:'preMix', nombre:'Mix Negroni PR', tipo:'copa',
+            contNeto:1000, copaML:90, existenciaAnterior:0, entradas:[] }]);
+        vm.runInContext('invActual.cancelaciones = [{ nombreProducto:"NEGRONI", cantidad:4 }];' +
+                        '_autoMatchFirma = ""; _cancelDirty = true;', C);
+        return eq(C._cancelBaseSubReceta('srMix'), 360, '4 × 90 ml del batch');
+    });
+    /* Y LO QUE LA BATERÍA VOLVIÓ A DESTAPAR: el test de arriba comprueba la
+       FUNCIÓN, no que esté conectada. Quitarla del reparto no rompía nada.
+       Lo que importa es que el Campari del batch reciba su parte de lo
+       cancelado: si no, el reparto de la variancia le echa la culpa a los
+       insumos, que es el peor lugar para equivocarse — ahí es donde se decide
+       si alguien está robando. */
+    test('…y el reparto se lo pasa a los insumos del batch', () => {
+        setVar(C, '_cacheRecetasInv', [
+            { id:'srMix', nombre:'Mix Negroni', tipo:'sub-bebidas', status:'activa',
+              camposExtra:{ rendimientoFinal:'1000', unidadRendimientoFinal:'ML' },
+              ingredientes:[{ insumoId:'campari', cantidad:1000, unidad:'ML' }] },
+            { id:'recNegroni', nombre:'Negroni', tipo:'bebidas', status:'activa',
+              ingredientes:[{ insumoId:'preMix', cantidad:90, unidad:'ML' }] }
+        ]);
+        setVar(C, '_cacheInsumosInv', [{ id:'preMix', esSubReceta:true, recetaId:'srMix', activo:'1' },
+                                       { id:'campari', activo:'1' }]);
+        setVar(C, 'invActual', { id:'invT', area:'barra', entradasLog:[], prebatchProducidos:{},
+            cocktailsVendidos:{}, ventasCompuesto:{}, cancelaciones:[], descuentos:[], filas:[] });
+        /* El batch es 100% Campari, así que todo lo cancelado del batch le toca
+           a él: 4 × 90 ml = 360 ml, y su copa es de 30 ml → 12 copas. */
+        setVar(C, 'filasCaptura', [
+            { insumoId:'preMix', nombre:'Mix Negroni PR', tipo:'copa', contNeto:1000, copaML:90,
+              existenciaAnterior:0, entradas:[] },
+            { insumoId:'campari', nombre:'Campari', tipo:'copa', contNeto:750, copaML:30,
+              existenciaAnterior:50, entradas:[] }
+        ]);
+        vm.runInContext('invActual.cancelaciones = [{ nombreProducto:"NEGRONI", cantidad:4 }];' +
+                        '_autoMatchFirma = ""; _cancelDirty = true;', C);
+        const rep = C._repartoPrebatch();
+        const a = rep.porInsumo['campari'];
+        return eq(a ? Math.round(a.can * 100) / 100 : 0, 12, 'su parte del batch tirado');
+    });
+
+    /* ── 7, 8. Las puertas de captura ──
+       Son tres: a mano, la tabla que se pega y el botón de re-detectar. Los
+       primeros tests llamaban al match directamente, así que dejar cualquiera
+       de las tres con el buscador viejo no rompía nada — y por cualquiera de
+       las tres entra la coctelería de una noche entera. */
+    vm.runInContext('function _autoGuardar(){} function renderStepContent(){}', C);
+    const puerta = () => {
+        setVar(C, '_cacheRecetasInv', [
+            { id:'recNegroni', nombre:'Negroni', tipo:'bebidas', status:'activa',
+              ingredientes:[{ insumoId:'gin', cantidad:45, unidad:'ML' }] } ]);
+        setVar(C, 'invActual', { id:'invT', area:'barra', entradasLog:[], prebatchProducidos:{},
+            cocktailsVendidos:{}, ventasCompuesto:{}, cancelaciones:[], descuentos:[], filas:[] });
+        setVar(C, 'filasCaptura', [fGin]);
+        vm.runInContext('_autoMatchFirma = ""; _cancelDirty = true;', C);
+    };
+    test('CIEGA · capturar a mano un cóctel lo pega con su receta', () => {
+        puerta();
+        C.document.getElementById('cancelProd').value = 'NEGRONI';
+        C.document.getElementById('cancelCantidad').value = '2';
+        C.agregarCancelacionManual();
+        const c = vm.runInContext('invActual.cancelaciones[0]', C);
+        return eq(c && c.recetaId, 'recNegroni', 'por la puerta de a mano');
+    });
+    test('CIEGA · re-detectar también busca en la carta', () => {
+        puerta();
+        vm.runInContext('invActual.cancelaciones = [{ nombreProducto:"NEGRONI", cantidad:2 }];', C);
+        C._reDetectarCancelaciones();
+        return eq(vm.runInContext('invActual.cancelaciones[0].recetaId', C), 'recNegroni', 'por el botón');
+    });
+    /* Re-detectar tiene que poder DESHACER una corrección a mano: para eso
+       existe. Si solo rellenara los vacíos, un error corregido mal se quedaría. */
+    test('…y rehace un renglón que estaba apuntando a otra cosa', () => {
+        puerta();
+        vm.runInContext('invActual.cancelaciones = [{ nombreProducto:"NEGRONI", cantidad:2,' +
+                        ' insumoId:"gin", insumoNombre:"Ginebra" }];', C);
+        C._reDetectarCancelaciones();
+        const c = vm.runInContext('invActual.cancelaciones[0]', C);
+        return eq(!!c.insumoId + '|' + c.recetaId, 'false|recNegroni', 'rehecho');
+    });
+    /* La tercera puerta: la tabla que se pega desde Excel. */
+    test('CIEGA · la tabla pegada también pega los cócteles con su receta', () => {
+        puerta();
+        const tb = C.document.getElementById('cancelPasteBody');
+        tb.rows = [{ cells: [{ textContent:'1' }, { textContent:'' }, { textContent:'NEGRONI' },
+                             { textContent:'2' }, { textContent:'' }, { textContent:'' },
+                             { textContent:'' }] }];
+        C.confirmarTablaCancelaciones();
+        return eq(vm.runInContext('invActual.cancelaciones[0].recetaId', C), 'recNegroni', 'por Excel');
+    });
+
+    /* ── 9, 10. Lo que se ve en pantalla ──
+       Revueltos en un solo desplegable, «Negroni» el coctel y «Negroni Mix PR»
+       el insumo son dos renglones seguidos sin nada que los distinga — y elegir
+       uno u otro es justo la decisión que importa. */
+    const invSrc = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    test('CIEGA · el desplegable separa la carta de los insumos', () =>
+        eq(invSrc.indexOf('<optgroup label="Carta (cócteles y platillos)">') > -1 &&
+           invSrc.indexOf('<optgroup label="Insumos del inventario">') > -1, true, 'rotulados'));
+    /* El contador de arriba decía «Todos detectados» con media lista en verde
+       por recetas… o al revés: con el conteo viejo, los resueltos a receta
+       seguían contándose como pendientes y el aviso ámbar no se apagaba nunca. */
+    test('CIEGA · «sin detectar» cuenta los que no pegaron con NADA', () =>
+        eq(invSrc.indexOf('cancelaciones.filter(c => !c.insumoId && !c.recetaId).length') > -1,
+           true, 'las dos vías'));
+
+    /* ── 11. La sucursal ──
+       Un coctel pausado en esta sucursal no se vende aquí, así que tampoco se
+       cancela aquí. Si el match lo encontrara igual, el descuento caería sobre
+       insumos que nunca salieron de esa barra. */
+    test('CIEGA · un cóctel pausado en esta sucursal no se puede cancelar aquí', () => {
+        C._storage['etaax_sucursal_activa'] = 'sucB';
+        vm.runInContext('window._recetaActivaEnSuc = function (r, s) {' +
+                        ' return !(r.inactivaEn && r.inactivaEn[s]); };', C);
+        setVar(C, '_cacheRecetasInv', [
+            { id:'recNegroni', nombre:'Negroni', tipo:'bebidas', status:'activa',
+              inactivaEn:{ sucB:1 }, ingredientes:[{ insumoId:'gin', cantidad:45, unidad:'ML' }] } ]);
+        const r = C._matchCancelacion('NEGRONI');
+        C._storage['etaax_sucursal_activa'] = '';
+        vm.runInContext('window._recetaActivaEnSuc = undefined;', C);
+        return eq(r, null, 'no se vende aquí');
+    });
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */
