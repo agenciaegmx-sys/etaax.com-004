@@ -247,24 +247,43 @@ REVOKE ALL ON FUNCTION menu_cfg_guardar(TEXT, TEXT, JSONB) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION menu_cfg_guardar(TEXT, TEXT, JSONB) TO authenticated;
 
 -- ── Comprobación ────────────────────────────────────────────────────────────
--- Que la carta NO pueda devolver nada de dinero interno. Las cuatro columnas
--- deben decir FALSE.
-SELECT pg_get_functiondef(p.oid) LIKE '%ingredientes%' AS filtra_ingredientes,
-       pg_get_functiondef(p.oid) LIKE '%costo%'        AS filtra_costo,
-       pg_get_functiondef(p.oid) LIKE '%proveedor%'    AS filtra_proveedor,
-       pg_get_functiondef(p.oid) LIKE '%procedimiento%' AS filtra_procedimiento
-  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
- WHERE n.nspname = 'public' AND p.proname = 'menu_publico_ver';
-
--- Que guardar los ajustes NO pueda escribir el token. Debe decir FALSE.
-SELECT pg_get_functiondef(p.oid) LIKE '%jsonb_build_object%token%' AS escribe_token
-  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
- WHERE n.nspname = 'public' AND p.proname = 'menu_cfg_guardar';
-
--- Y que el token de la carta NO sea el del QR de la barra. Debe salir vacío.
-SELECT m.negocio_id
-  FROM menu_publico m JOIN negocios g ON g.id = m.negocio_id
- WHERE m.datos->>'token' = g.entrada_token;
+-- UNA sola consulta, y cada renglón dice en palabras si pasó. Antes eran tres
+-- consultas sueltas que devolvían `false` cuando todo estaba BIEN, y eso se
+-- lee al revés: uno ve «false» y cree que algo falló.
+--
+-- Lo que tiene que salir: la columna `resultado` con PASA en los cinco.
+SELECT * FROM (
+    SELECT 1 AS n, 'La carta no puede devolver la receta' AS prueba,
+           CASE WHEN def LIKE '%ingredientes%' THEN 'FALLA' ELSE 'PASA' END AS resultado
+      FROM (SELECT pg_get_functiondef(p.oid) AS def FROM pg_proc p
+             JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE n.nspname='public' AND p.proname='menu_publico_ver') d
+    UNION ALL
+    SELECT 2, 'La carta no puede devolver costos',
+           CASE WHEN def LIKE '%costo%' THEN 'FALLA' ELSE 'PASA' END
+      FROM (SELECT pg_get_functiondef(p.oid) AS def FROM pg_proc p
+             JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE n.nspname='public' AND p.proname='menu_publico_ver') d
+    UNION ALL
+    SELECT 3, 'La carta no puede devolver proveedores',
+           CASE WHEN def LIKE '%proveedor%' THEN 'FALLA' ELSE 'PASA' END
+      FROM (SELECT pg_get_functiondef(p.oid) AS def FROM pg_proc p
+             JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE n.nspname='public' AND p.proname='menu_publico_ver') d
+    UNION ALL
+    SELECT 4, 'Guardar los ajustes no puede tocar el token',
+           CASE WHEN def LIKE '%jsonb_build_object%token%' THEN 'FALLA' ELSE 'PASA' END
+      FROM (SELECT pg_get_functiondef(p.oid) AS def FROM pg_proc p
+             JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE n.nspname='public' AND p.proname='menu_cfg_guardar') d
+    UNION ALL
+    -- El token de la carta NUNCA puede ser el del QR de la barra: ese abre el
+    -- catálogo de insumos con costos y proveedores.
+    SELECT 5, 'El QR de la carta no es el QR de la barra',
+           CASE WHEN EXISTS (SELECT 1 FROM menu_publico m JOIN negocios g ON g.id = m.negocio_id
+                              WHERE m.datos->>'token' = g.entrada_token)
+                THEN 'FALLA' ELSE 'PASA' END
+) t ORDER BY n;
 
 -- ============================================================================
 -- Fin v66. Después de correrla:
