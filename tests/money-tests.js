@@ -18394,6 +18394,36 @@ console.log('\n══ BH23 · La carta de la mesa ══');
         vm.runInContext(goSrc('_goGrupoDe') + ';' + goSrc('_goFusion'), c);
         return c;
     })();
+    /* CIEGA QUE DESTAPÓ LA BATERÍA. Quitarle el filtro de tipo a _goEnCarta no
+       rompía nada: no había un solo test que CORRIERA esa función. La maqueta
+       del teléfono habría contado los jarabes y las salsas, y el negocio le
+       habría hecho un lugar en el orden a un grupo que el comensal nunca ve —
+       sin ningún síntoma, porque la carta real sí los filtra.
+
+       Son los mismos tres candados del servidor, y se comprueban corriéndolos. */
+    const enCarta = (() => {
+        const c = { console, String, Object };
+        vm.createContext(c);
+        vm.runInContext('var _RECS = [];\nfunction getRecetas(){ return _RECS; }\n' +
+                        goSrc('_goEnCarta') + ';' + goSrc('_goGrupoDe') + ';' + goSrc('_goConteos') +
+                        ';\nfunction _run(recs){ _RECS = recs; return { lista: _goEnCarta(), cnt: _goConteos() }; }', c);
+        return c._run;
+    })();
+    const PLATO = { id:'r1', nombre:'Tiradito', tipo:'alimentos', grupo:'Entradas', menu:{ visible:true } };
+    const JARABE = { id:'r2', nombre:'Jarabe de hibisco', tipo:'sub-bebidas', grupo:'Jarabes',
+                     menu:{ visible:true } };
+    test('la maqueta NO cuenta las sub-recetas, ni prendidas', () =>
+        eq(enCarta([PLATO, JARABE]).lista.map(r => r.id).join(','), 'r1', 'sin jarabes'));
+    test('…ni un platillo que nadie prendió', () =>
+        eq(enCarta([PLATO, { id:'r3', tipo:'bebidas', grupo:'Coctelería' }]).lista.length, 1, 'apagado'));
+    test('…ni una receta dada de baja', () =>
+        eq(enCarta([PLATO, { id:'r4', tipo:'bebidas', status:'inactiva', menu:{ visible:true } }]).lista.length,
+           1, 'sin inactivas'));
+    test('…y el conteo por grupo sale de esa misma lista', () =>
+        eq(JSON.stringify(enCarta([PLATO, JARABE,
+            { id:'r5', nombre:'Mezcal', tipo:'bebidas', grupo:'Entradas', menu:{ visible:true } }]).cnt),
+           '{"Entradas":2}', 'un solo filtro'));
+
     test('el grupo del menú manda sobre el del escandallo', () =>
         eq(goCtx._goGrupoDe({ menu:{ grupo:'Para compartir' }, grupo:'Entradas', categoria:'Frías' }),
            'Para compartir', 'el ajustado'));
@@ -18472,8 +18502,15 @@ console.log('\n══ BH23 · La carta de la mesa ══');
            true, 'con la consecuencia'));
     /* La v66 no se corre sola. Un error de «función no existe» sin esa pista
        manda a buscar el bug en el navegador. */
-    test('si falta la migración, se dice cuál', () =>
-        eq(mh23.indexOf('¿Corriste la migración v66 en Supabase?') > -1, true, 'con la pista'));
+    /* OTRA CIEGA DE LA BATERÍA: el aviso está en DOS pantallas —generar el QR y
+       guardar el orden— y un indexOf del texto pasa aunque se le quite a una.
+       Se comprueba cada función por su cuenta. */
+    test('si falta la migración, el QR dice cuál', () =>
+        eq(goSrc('abrirQrCarta').indexOf('¿Corriste la migración v66 en Supabase?') > -1,
+           true, 'con la pista'));
+    test('…y guardar el orden también', () =>
+        eq(goSrc('guardarGruposCarta').indexOf('¿Corriste la migración v66 en Supabase?') > -1,
+           true, 'en las dos'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */
