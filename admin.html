@@ -632,16 +632,17 @@ async function betaAppLink() {
     try {
         var r = await _supabase.rpc('entrada_token_asegurar', { p_neg: neg });
         if (r.error) throw r.error;
-        /* SIN sucursal: el admin maestro no está parado en ninguna. Lo que se
-           registre desde ahí quedaría sin sello, así que se dice — probar con
-           datos que luego no aparecen en el historial de nadie es la peor
-           manera de probar. */
+        /* SIN sucursal EN EL ENLACE, y está bien: desde la v65 la sucursal sale
+           del NIP —el token dice el negocio, el NIP dice la persona y la ficha
+           de esa persona dice su sucursal—. Un enlace por negocio alcanza para
+           todas sus barras, que es justo lo que una app instalada necesita. */
         _betaUrl = location.origin + '/app-movil/instalar.html?n=' + encodeURIComponent(neg) +
                    '&t=' + encodeURIComponent(r.data);
         out.innerHTML = _etxAdmin(_betaUrl) +
-            '<div style="color:#f5c842;margin-top:7px">⚠️ Sin sucursal: lo que se registre con este ' +
-            'enlace queda <b>sin sello de sucursal</b>. Para probar en una barra real, saca el enlace ' +
-            'desde Inventarios → QR de entradas estando dentro de la sucursal.</div>';
+            '<div style="color:#8a8a8a;margin-top:7px;line-height:1.55">Un solo enlace para todo el ' +
+            'negocio: <b style="color:#eee">la sucursal la pone el NIP</b> de quien entra, no el ' +
+            'enlace. Si un colaborador no tiene sucursal asignada en su ficha, lo que registre cae ' +
+            'en Matriz — revísalo en Gestión de Staff antes de repartirlo.</div>';
         btn.disabled = false; abr.href = _betaUrl; abr.hidden = false;
     } catch (e) {
         out.textContent = 'No se pudo generar: ' + ((e && e.message) || e);

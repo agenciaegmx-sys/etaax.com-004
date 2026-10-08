@@ -283,7 +283,21 @@ async function cargarPerfil(h) {
         var rp = await _supabase.rpc('portal_perfil', { p_neg: NEG, p_token: TOKEN, p_niphash: h });
         var p = rp && rp.data;
         if (!p) return;
-        PUESTO = p.puesto || '';
+                PUESTO = p.puesto || '';
+                /* LA SUCURSAL SALE DEL NIP, no del enlace.
+
+                   El QR la lleva en la dirección (&s=…) porque cada sucursal
+                   imprime el suyo. La app instalada no puede: se instala UNA vez
+                   y la usa quien sea del negocio, así que pedirle al admin que
+                   elija una al generar el enlace deja la puerta abierta a
+                   registrar en la sucursal equivocada.
+
+                   Y no hace falta: el token dice de qué NEGOCIO es y el NIP dice
+                   QUIÉN ES — y la ficha de esa persona ya trae su sucursal.
+
+                   El enlace manda solo si la persona NO tiene sucursal asignada:
+                   ahí el QR pegado en esa barra sabe más que una ficha vacía. */
+                if (p.sucursalId) SUC = p.sucursalId;
         var crudo = (p.areaReal !== undefined) ? p.areaReal
                   : (p.area === 'administracion' ? '' : p.area);
         AREA_COLAB = window.StaffArea

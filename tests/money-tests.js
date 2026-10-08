@@ -17758,11 +17758,14 @@ console.log('\n══ BH20 · Las dos puertas de la app ══');
         const beta = adm.indexOf('id="beta-app"');
         return eq(ini > -1 && beta > ini && beta < fin, true, 'en su pestaña');
     });
-    /* Lo que se registre sin sucursal queda sin sello y no aparece en el
-       historial de nadie: probar con datos que luego se pierden es la peor
-       manera de probar. */
-    test('…advirtiendo que ese enlace va sin sucursal', () =>
-        eq(adm.indexOf('queda <b>sin sello de sucursal</b>') > -1, true, 'advertido'));
+    /* Un enlace por negocio alcanza para todas sus barras: la sucursal la pone
+       el NIP. Lo que sí hay que decir es qué pasa con una ficha sin sucursal
+       asignada, que es el caso que silenciosamente manda todo a Matriz. */
+    test('…diciendo que la sucursal la pone el NIP, no el enlace', () =>
+        eq(adm.indexOf('la sucursal la pone el NIP') > -1, true, 'explicado'));
+    test('…y advirtiendo del colaborador sin sucursal asignada', () =>
+        eq(adm.indexOf('cae en Matriz') > -1 || adm.indexOf('cae \nen Matriz') > -1 ||
+           adm.indexOf('en Matriz') > -1, true, 'advertido'));
 
     /* ── Que la cáscara esté completa ── */
     /* Un onclick que apunta a una función inexistente es un botón muerto que
@@ -17786,6 +17789,123 @@ console.log('\n══ BH20 · Las dos puertas de la app ══');
     });
     test('el service worker guarda también la puerta de la cuenta', () =>
         eq(fs.readFileSync(path.join(dir, 'sw.js'), 'utf8').indexOf("'./cuenta.js'") > -1, true, 'completa'));
+}
+
+/* ═══════════ SUITE BH21 · LO QUE UN CREATE OR REPLACE SE LLEVA ═════════════
+   PASÓ, Y NO LO VIO NADIE HASTA QUE EDWIN PREGUNTÓ OTRA COSA.
+
+   La v64 reescribió portal_perfil completa para agregarle `rol` y `areaReal`.
+   Al reescribirla se llevó dos cosas de la v63 que no debía tocar:
+
+     · el filtro `estado = 'Activo'` — el candado del caso de la gerente dada de
+       baja que seguía entrando por el QR. Sin él, un colaborador dado de baja
+       recupera su perfil y con eso alcanza el recetario y las guías;
+     · el campo `sucursalId` — lo leen portal_recetas, el recetario del portal y
+       checklist_plantillas. Sin él, TODOS caen a 'suc_principal'.
+
+   CREATE OR REPLACE no avisa de nada: la función nueva es la función, punto. Y
+   una migración se lee sola, sin la anterior al lado. Por eso este candado mira
+   la ÚLTIMA definición de cada función en todo el repo y exige que siga
+   teniendo lo que sus llamadores esperan.                                     */
+console.log('\n══ BH21 · Lo que un CREATE OR REPLACE se lleva ══');
+{
+    /* La última definición gana: es la que quedará en la base cuando se corran
+       las migraciones en orden. Se ordenan por número, no alfabéticamente —si
+       no, la v9 iría después de la v64. */
+    const migs = fs.readdirSync(RAIZ)
+        .filter(f => /^supabase-migration-v\d+\.sql$/.test(f))
+        .sort((a, b) => parseInt(a.match(/v(\d+)/)[1], 10) - parseInt(b.match(/v(\d+)/)[1], 10));
+
+    /* El candado se escribe así:
+         COALESCE(NULLIF(s.datos->>'estado', ''), 'Activo') = 'Activo'
+       Hay paréntesis EN MEDIO, así que un patrón que no los cruce no lo
+       encuentra y da por roto algo que está bien. */
+    const _CANDADO_BAJA = /'estado'[\s\S]{0,90}'Activo'\s*\)?\s*=\s*'Activo'/;
+
+    const ultimaDef = (fn) => {
+        let txt = '', donde = '';
+        migs.forEach(m => {
+            const src = fs.readFileSync(path.join(RAIZ, m), 'utf8');
+            const i = src.indexOf('CREATE OR REPLACE FUNCTION ' + fn + '(');
+            if (i < 0) return;
+            const fin = src.indexOf('$$;', i);
+            txt = src.slice(i, fin > 0 ? fin + 3 : src.length);
+            donde = m;
+        });
+        return { txt: txt, donde: donde };
+    };
+
+    /* ── El candado de la baja, en las tres puertas que autentican ──
+       Las demás funciones no validan por su cuenta: llaman a estas y si
+       devuelven NULL se salen. Cerrando estas tres, las otras se cierran solas
+       — esa arquitectura de embudo ya estaba bien hecha. */
+    ['staff_login', 'entrada_validar_nip', 'portal_perfil'].forEach(fn => {
+        const d = ultimaDef(fn);
+        test('la última versión de ' + fn + ' conserva el candado de baja', () =>
+            eq(_CANDADO_BAJA.test(d.txt), true, 'desde ' + (d.donde || '—')));
+    });
+
+    /* ── Los campos que portal_perfil tiene que seguir devolviendo ──
+       Cada uno se lo pide alguien. Si falta, ese alguien no truena: se queda
+       con un valor por defecto y enseña datos de otra sucursal en silencio, que
+       es peor que un error. */
+    const perfil = ultimaDef('portal_perfil');
+    const PIDEN = {
+        sucursalId: 'portal_recetas (v57), el recetario (v58) y checklist_plantillas (v59)',
+        area:       'portal_recetas y portal_guias',
+        rol:        'el QR y la app, para resolver el área por jerarquía',
+        areaReal:   'lo mismo, para distinguir «no capturado» de «administración»',
+        puesto:     'el QR y la app, último escalón de esa jerarquía',
+        nombre:     'todo lo que dice quién está registrando'
+    };
+    Object.keys(PIDEN).forEach(campo => {
+        test('portal_perfil sigue devolviendo `' + campo + '` — lo pide ' + PIDEN[campo], () =>
+            eq(perfil.txt.indexOf("'" + campo + "'") > -1, true, 'en ' + perfil.donde));
+    });
+
+    /* ── La sucursal sale del NIP ──
+       El QR la lleva en el enlace porque cada sucursal imprime el suyo. La app
+       instalada no puede: se instala UNA vez y la usa quien sea del negocio.
+       Pedirle al admin que elija una deja la puerta abierta a registrar en la
+       sucursal equivocada — y no hace falta, porque la ficha de la persona ya
+       la trae. */
+    const sucNip = ultimaDef('entrada_sucursal_de_nip');
+    test('se puede preguntar a qué sucursal pertenece un NIP', () =>
+        eq(sucNip.txt.length > 0, true, 'existe'));
+    test('…con el mismo candado de baja que las demás', () =>
+        eq(_CANDADO_BAJA.test(sucNip.txt), true, 'protegida'));
+    /* Sin sucursal asignada, Matriz: es donde viven los datos viejos, y dejar
+       el registro sin sello lo saca del historial de todas. */
+    test('…y sin sucursal asignada cae en Matriz, no en vacío', () =>
+        eq(sucNip.txt.indexOf("'suc_principal'") > -1, true, 'con piso'));
+
+    /* El cliente la usa: si la pidiera y no la aplicara, el enlace de la app
+       seguiría decidiendo la sucursal. */
+    const am3 = fs.readFileSync(path.join(RAIZ, 'app-movil/app.js'), 'utf8');
+    const en3 = fs.readFileSync(path.join(RAIZ, 'entrada.html'), 'utf8');
+    test('la app sella con la sucursal del colaborador, no con la del enlace', () =>
+        eq(am3.indexOf('if (p.sucursalId) SUC = p.sucursalId;') > -1, true, 'del NIP'));
+    test('…y el QR también, por si alguien escanea el de otra barra', () =>
+        eq(en3.indexOf('if (perfil.sucursalId) SUC = perfil.sucursalId;') > -1, true, 'del NIP'));
+    /* ORDEN: el perfil se pide ANTES del catálogo. Al revés, el catálogo se
+       filtraría con la sucursal del enlace y después se cambiaría el sello: la
+       lista diría una cosa y el registro caería en otra. */
+    test('…y el perfil se pide ANTES del catálogo, no después', () => {
+        const p = am3.indexOf('await cargarPerfil(h);');
+        const c = am3.indexOf('cargarInsumos()');
+        return eq(p > -1 && c > p, true, 'en orden');
+    });
+
+    /* ── La página de instalación ── */
+    /* Dos rectángulos grandes con el logo de una tienda encima es exactamente
+       lo que se aprieta esperando que empiece a bajar algo. Como aquí no hay
+       nada que bajar, se siente roto. */
+    const inst2 = fs.readFileSync(path.join(RAIZ, 'app-movil/instalar.html'), 'utf8');
+    test('se dice de entrada que no hay nada que descargar', () =>
+        eq(inst2.indexOf('<b>No hay nada que descargar.</b>') > -1, true, 'sin falsa espera'));
+    test('…y los dos botones se ven como lo que son: un selector', () =>
+        eq(inst2.indexOf('<div class="tabs-lbl">Ver los pasos de</div>') > -1 &&
+           inst2.indexOf('role="tablist"') > -1, true, 'sin parecer descarga'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

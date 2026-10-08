@@ -26,10 +26,18 @@
 .cab h1 { font-family:'Bebas Neue',sans-serif; font-size:27px; letter-spacing:1.6px; line-height:1.05; font-weight:400; }
 .cab p { font-size:13px; color:var(--dim); margin-top:3px; }
 .intro { font-size:14px; color:var(--txt2); line-height:1.6; margin:18px 0 22px; }
-.tabs { display:flex; gap:8px; margin-bottom:18px; }
-.tab { flex:1; padding:13px; border-radius:var(--r); border:1px solid var(--borde);
-    background:var(--sup); color:var(--txt2); font-size:14px; font-weight:500; min-height:52px; }
-.tab.on { border-color:var(--verde); background:rgba(61,190,122,.12); color:var(--verde); font-weight:700; }
+/* LOS DOS BOTONES PARECÍAN DE DESCARGA Y NO LO SON. Dos rectángulos grandes
+   con el logo de una tienda encima es exactamente lo que se aprieta esperando
+   que empiece a bajar algo — y como aquí no hay nada que bajar, se siente roto.
+   Son un SELECTOR de instrucciones, y ahora se ven como tal: un control
+   segmentado, con su rótulo encima diciendo qué eligen. */
+.tabs-lbl { font-size:11px; letter-spacing:1.6px; text-transform:uppercase; color:var(--dim);
+    margin-bottom:8px; }
+.tabs { display:flex; gap:4px; margin-bottom:18px; background:var(--sup);
+    border:1px solid var(--borde); border-radius:30px; padding:4px; }
+.tab { flex:1; padding:11px; border-radius:26px; border:none;
+    background:transparent; color:var(--txt2); font-size:14px; font-weight:500; min-height:46px; }
+.tab.on { background:var(--verde); color:#0c1a12; font-weight:700; }
 .bloque { background:var(--sup); border:1px solid var(--borde); border-radius:var(--r); padding:18px 16px; }
 .bloque h2 { font-size:16px; margin-bottom:4px; }
 .bloque > p { font-size:13px; color:var(--dim); line-height:1.55; }
@@ -61,15 +69,18 @@
         </div>
     </div>
 
-    <p class="intro">Déjala en la pantalla de inicio de tu teléfono: queda un ícono,
-    abre a pantalla completa y ya no hay que escanear el QR cada vez. Sigues
-    entrando con tu NIP.</p>
+    <p class="intro"><b>No hay nada que descargar.</b> Se agrega desde el navegador en
+    menos de un minuto: queda un ícono en tu pantalla de inicio, abre a pantalla completa
+    y ya no hay que escanear el QR cada vez. Sigues entrando con tu NIP.</p>
 
     <div id="estado"></div>
 
-    <div class="tabs" id="tabs" hidden>
-        <button class="tab" data-so="ios">🍎 iPhone</button>
-        <button class="tab" data-so="android">🤖 Android</button>
+    <div id="tabsBox" hidden>
+        <div class="tabs-lbl">Ver los pasos de</div>
+        <div class="tabs" id="tabs" role="tablist">
+            <button class="tab" data-so="ios" role="tab">iPhone</button>
+            <button class="tab" data-so="android" role="tab">Android</button>
+        </div>
     </div>
 
     <div id="guia"></div>
@@ -161,7 +172,7 @@ document.getElementById('tabs').onclick = function (e) {
             'Sin eso, la app quedaría instalada pero sin saber de qué sucursal es.</div>';
         return;
     }
-    document.getElementById('tabs').hidden = false;
+    document.getElementById('tabsBox').hidden = false;
     /* Se abre en la pestaña de SU teléfono. Enseñar las dos a la vez es la forma
        más rápida de que nadie siga ninguna. La otra queda a un toque, para
        cuando alguien lo lee desde la computadora para explicárselo a otro. */

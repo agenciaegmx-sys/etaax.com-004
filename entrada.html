@@ -620,6 +620,11 @@ async function entrar(){
             var perfil = rp && rp.data;
             if (perfil) {
                 PUESTO = perfil.puesto || '';
+                /* La sucursal del colaborador manda sobre la del enlace. En el
+                   QR las dos suelen coincidir —cada sucursal imprime el suyo—
+                   pero si alguien escanea el QR de otra barra, lo que registre
+                   debe caer donde trabaja, no donde escaneó. */
+                if (perfil.sucursalId) SUC = perfil.sucursalId;
                 /* LA CAUSA DE QUE A TODOS LES SALIERAN LAS TRES ÁREAS: aquí se
                    leía SOLO `perfil.area`, y la consulta rellena ese campo con
                    'administracion' cuando el colaborador no lo tiene capturado
