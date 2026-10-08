@@ -19608,10 +19608,27 @@ console.log('\n══ BH27 · Arrastrar para reordenar ══');
         m.arrastrar(0, 2, false);
         return eq(m.movs.join('|'), 'r0>despues>r2', 'la mitad manda');
     });
+    /* Soltar donde se tomó no es un movimiento. El guardián está DOS veces —al
+       marcar y al soltar— y la batería lo destapó: quitar el de marcar no
+       cambia nada porque el de soltar lo ataja. Eso no es un hueco, es el
+       cinturón además de los tirantes; el que decide es el de soltar y es el
+       que se comprueba. */
     test('soltar sobre sí misma no mueve nada', () => {
         const m = motor(4, true);
         m.arrastrar(1, 1, true);
         return eq(m.movs.length, 0, 'sin ruido');
+    });
+    test('…ni aunque la marca se hubiera pintado sobre ella', () => {
+        const m = motor(4, true);
+        const y = m.items[2]._rect.top + 4;
+        m.cont.disparar('pointerdown', { pointerId:1, button:0, clientX:5, clientY:y,
+            target: m.items[2].children[0], preventDefault(){} });
+        /* Se mueve a otra fila y se REGRESA a la propia antes de soltar: así el
+           destino queda siendo ella misma por el camino largo. */
+        m.doc.disparar('pointermove', { pointerId:1, clientX:5, clientY:m.items[0]._rect.top + 4, preventDefault(){} });
+        m.doc.disparar('pointermove', { pointerId:1, clientX:5, clientY:y, preventDefault(){} });
+        m.doc.disparar('pointerup',   { pointerId:1, clientX:5, clientY:y, preventDefault(){} });
+        return eq(m.movs.length, 0, 'el de soltar manda');
     });
     /* EL ARREGLO DE TABLET. Con el motor viejo esto no disparaba nada: el dedo
        no manda `dragstart`. Aquí no hay un solo listener de drag. */
@@ -19665,6 +19682,31 @@ console.log('\n══ BH27 · Arrastrar para reordenar ══');
         m.api.quitar(m.cont);
         m.arrastrar(3, 0, true);
         return eq(m.movs.length, 0, 'sin fantasmas');
+    });
+    /* CIEGA DE LA BATERÍA: quitar solo la mitad de los listeners del documento
+       pasaba desapercibido, porque con el `pointerdown` ya quitado nunca se
+       empieza un arrastre y los demás no se notan. Pero se ACUMULAN: el
+       catálogo se repinta en cada tecla del buscador, y a los veinte repintados
+       hay veinte juegos escuchando cada movimiento del dedo. Se cuentan. */
+    test('…y no deja ni uno suelto: se cuentan', () => {
+        const m = motor(4, true);
+        const antes = ['pointermove','pointerup','pointercancel']
+            .reduce((n, t) => n + (m.doc._ls[t] || []).length, 0);
+        m.api.quitar(m.cont);
+        const despues = ['pointermove','pointerup','pointercancel']
+            .reduce((n, t) => n + (m.doc._ls[t] || []).length, 0);
+        return eq(antes + '→' + despues, '3→0', 'limpio');
+    });
+    /* Y la prueba de que se acumulan si no: aplicar diez veces y quitar una
+       sola tiene que dejar el documento igual de limpio, porque cada aplicar
+       empieza por quitar lo suyo. */
+    test('…ni aunque se repinte diez veces seguidas', () => {
+        const m = motor(4, true);
+        for (let k = 0; k < 10; k++)
+            m.api.aplicar(m.cont, { item:'tr[data-ord-id]', onMover(){} });
+        const vivos = ['pointermove','pointerup','pointercancel']
+            .reduce((n, t) => n + (m.doc._ls[t] || []).length, 0);
+        return eq(vivos, 3, 'un solo juego: ' + vivos);
     });
     test('…y re-aplicar no duplica el movimiento', () => {
         const m = motor(4, true);
@@ -19754,6 +19796,18 @@ console.log('\n══ BH27 · Arrastrar para reordenar ══');
     });
     test('…y con un solo ingrediente no se engancha nada', () =>
         eq(aj.indexOf('if (ingredientes.length < 2) return;') > -1, true, 'sin tirador inútil'));
+    /* CIEGA: los tests llamaban a _engancharOrdenIng a mano, así que quitarla
+       de renderTabla no rompía nada — y renderTabla es el único lugar desde
+       donde se llama en producción. Un tirador que se pinta y no engancha es
+       exactamente el bug de la vista de lista, otra vez. */
+    test('…y renderTabla lo engancha al terminar de pintar', () => {
+        const i = aj.indexOf('function renderTabla()');
+        const j = aj.indexOf('\nfunction ', i + 10);
+        const cuerpo = aj.slice(i, j);
+        return eq(cuerpo.indexOf('_engancharOrdenIng();') > -1 &&
+                  cuerpo.indexOf('_engancharOrdenIng();') > cuerpo.indexOf('tbody.appendChild(tr)'),
+                  true, 'después de pintar, no antes');
+    });
     test('…y cada renglón del escandallo lleva su tirador', () =>
         eq(aj.indexOf("tr.setAttribute('data-ing-i', i);") > -1 &&
            aj.indexOf('<span class="ord-grip"') > -1, true, 'con asa'));
