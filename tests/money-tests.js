@@ -6537,9 +6537,17 @@ console.log('\n══ BB4 · El buscador de ingredientes (app.js) ══');
         /* Un nodo por id, reutilizado: renderTabla y los totales escriben en
            varios, y devolver uno nuevo cada vez perdería lo que acaban de poner. */
         const _nodos = {};
+        /* El nodo de mentira tiene que traer lo que renderTabla USA, no lo
+           mínimo para que el test de hoy pase: cada hueco se descubre un día
+           que alguien toca el renglón y truena un test que no venía al caso.
+           setAttribute lo pide el tirador de arrastrar de cada ingrediente. */
         const nodo = () => ({ style:{}, _h:[], children:[], innerHTML:'', value:'', textContent:'',
+            _attrs:{}, setAttribute(k,v){ this._attrs[k]=v; },
+            getAttribute(k){ return this._attrs[k]==null?null:String(this._attrs[k]); },
+            removeAttribute(k){ delete this._attrs[k]; },
+            classList:{ add(){}, remove(){}, contains(){ return false; }, toggle(){} },
             appendChild(c){ this.children.push(c); }, removeChild(){},
-            addEventListener(t,f){ this._h.push([t,f]); },
+            addEventListener(t,f){ this._h.push([t,f]); }, removeEventListener(){},
             getBoundingClientRect(){ return { bottom:10, left:0, width:200 }; },
             scrollIntoView(){}, remove(){},
             querySelectorAll(){ return []; }, querySelector(){ return null; }, focus(){}, select(){} });
