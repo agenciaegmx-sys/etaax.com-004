@@ -19150,6 +19150,292 @@ console.log('\n══ BH25 · Dar de alta sin salir del catálogo ══');
            true, 'el parámetro vive'));
 }
 
+/* ═══════════ SUITE BH26 · EL PREBATCH, DE PUNTA A PUNTA ═══════════════════
+   LA PREGUNTA DE EDWIN, con sus números: «tengo 350 ml de mix de negroni que
+   representan 175 de campari y 175 de cinzano; hago 2 prebatch más; me gasté
+   los 3 en la venta; debería estar en ceros la existencia del prebatch, y si
+   hay más prebatch significa que hicieron más recetas y eso falta en campari y
+   en cinzano. Todo debe cuadrar.»
+
+   Es la cadena completa: producir descuenta los insumos base, vender descuenta
+   el BATCH (no sus insumos otra vez — iría doble), y lo que quede del batch se
+   reparte proporcional entre sus insumos para que la cuenta cierre.
+
+   Esta suite corre esa cadena entera con sus cifras, y después la rompe por
+   los cuatro lugares por donde se puede romper con datos reales.            */
+console.log('\n══ BH26 · El prebatch, de punta a punta ══');
+{
+    const P = crearContexto();
+    cargarJS(P, 'etaax-core.js');
+    cargarJS(P, 'insumo-label.js');
+    cargarJS(P, 'recetas/inventarios.js');
+    P._storage['etaax_negocio_activo'] = 'negT';
+
+    /* 1 batch de Mix Negroni rinde 350 ml y lleva 175 de cada uno.
+       Las filas se cuentan en ml (copa de 1 ml) para leer los números tal como
+       Edwin los dice, sin convertir en la cabeza. */
+    const RECS = () => ([
+        { id:'srMix', nombre:'Mix Negroni', tipo:'sub-bebidas', status:'activa',
+          camposExtra:{ rendimientoFinal:'350', unidadRendimientoFinal:'ML' },
+          ingredientes:[{ insumoId:'campari', cantidad:175, unidad:'ML' },
+                        { insumoId:'cinzano', cantidad:175, unidad:'ML' }] },
+        { id:'recNeg', nombre:'Negroni', tipo:'bebidas', status:'activa',
+          ingredientes:[{ insumoId:'preMix', cantidad:60, unidad:'ML' }] }
+    ]);
+    const INS = () => ([
+        { id:'preMix',  nombre:'Mix Negroni PR', esSubReceta:true, recetaId:'srMix', activo:'1' },
+        { id:'campari', nombre:'Campari', activo:'1' },
+        { id:'cinzano', nombre:'Cinzano Rosso', activo:'1' }
+    ]);
+    const fMix = () => ({ insumoId:'preMix', nombre:'Mix Negroni PR', tipo:'copa', contNeto:350,
+        copaML:1, rendimientoBatch:350, existenciaAnterior:350, ventasCopasDirectas:0,
+        cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[], pesos:[],
+        cerradasBodega:0, cerradasBarra:0 });
+    const fIns = (id, nom, ea) => ({ insumoId:id, nombre:nom, tipo:'copa', contNeto:750, copaML:1,
+        existenciaAnterior:ea, ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0,
+        ventasBotella:0, entradas:[], pesos:[], cerradasBodega:0, cerradasBarra:0 });
+
+    /* negronis: cuántos se vendieron. fis*: lo que se CONTÓ físicamente, en ml. */
+    const montar = (negronis, fisMix, fisCam, fisCin, tweak) => {
+        setVar(P, '_cacheRecetasInv', RECS());
+        setVar(P, '_cacheInsumosInv', INS());
+        setVar(P, 'invActual', { id:'invT', area:'barra', entradasLog:[], ventasCompuesto:{},
+            cancelaciones:[], descuentos:[], filas:[],
+            prebatchProducidos:{ preMix: 2 },            // 2 batches hechos en el Paso 3
+            cocktailsVendidos:{ recNeg: negronis } });
+        const m = fMix(), c = fIns('campari','Campari',2250), z = fIns('cinzano','Cinzano Rosso',1500);
+        m.cerradasBodega = fisMix / 350;                 // contNeto 350 → ml físicos
+        c.cerradasBodega = fisCam / 750;
+        z.cerradasBodega = fisCin / 750;
+        setVar(P, 'filasCaptura', [m, c, z]);
+        vm.runInContext('_consumoDirty = true; _cancelDirty = true;', P);
+        if (tweak) tweak();
+        return { m, c, z };
+    };
+    const n2 = (v) => Math.round(v * 100) / 100;
+
+    /* ── LOS TRES MOVIMIENTOS, UNO POR UNO ── */
+    test('producir 2 batches da 700 ml de mix', () => {
+        const f = montar(17.5, 0, 1900, 1150);
+        return eq(n2(P._prodPrebatchUnidades(f.m)), 700, '2 × 350');
+    });
+    test('…y eso saca 350 ml de Campari de sus botellas', () => {
+        montar(17.5, 0, 1900, 1150);
+        return eq(n2(P.consumoBasesPorProduccion('campari')), 350, '2 × 175');
+    });
+    test('…y 350 de Cinzano, cada uno el suyo', () => {
+        montar(17.5, 0, 1900, 1150);
+        return eq(n2(P.consumoBasesPorProduccion('cinzano')), 350, 'por separado');
+    });
+    test('vender 17.5 Negronis se bebe 1050 ml de mix', () => {
+        montar(17.5, 0, 1900, 1150);
+        return eq(n2(P.calcVentasCopasRecetas('preMix', 1)), 1050, '17.5 × 60');
+    });
+    /* EL CANDADO CONTRA LA CUENTA DOBLE. El Campari ya se descontó al producir
+       el batch; si el coctel volviera a descontarlo, el mismo líquido saldría
+       dos veces del inventario y el faltante sería del doble. */
+    test('el coctel NO vuelve a descontar el Campari — ya salió al producir', () => {
+        montar(17.5, 0, 1900, 1150);
+        return eq(n2(P.calcVentasCopasRecetas('campari', 1)), 0, 'una sola vez');
+    });
+
+    /* ── «DEBERÍA ESTAR EN CEROS», dicho por Edwin ──
+       1 batch que había + 2 que hizo = 1050 ml, y se vendieron 1050. */
+    test('CUADRA · el mix queda en ceros y no sobra ni falta nada', () => {
+        const f = montar(17.5, 0, 1900, 1150);
+        return eq([n2(P.calcExistenciaTeorica(f.m)), n2(P.calcExistencia(f.m)),
+                   n2(P.calcExistenciaTeorica(f.c)), n2(P.calcExistencia(f.c)),
+                   n2(P.calcExistenciaTeorica(f.z)), n2(P.calcExistencia(f.z))].join('|'),
+                  '0|0|1900|1900|1150|1150', 'los tres cuadran');
+    });
+    /* El Campari que se fue EN LOS COCTELES sí se ve, por el reparto del batch:
+       525 ml de los 1050 de mix vendidos. Es el «separarlos por uso de cada
+       insumo» que pedía Edwin — no se descuenta dos veces, pero se enseña. */
+    test('…y el reparto dice cuánto Campari se fue en esos cocteles', () => {
+        montar(17.5, 0, 1900, 1150);
+        const a = P._repartoPrebatch().porInsumo['campari'];
+        return eq(n2(a && a.venta), 525, 'la mitad de 1050');
+    });
+    test('…y el Cinzano la otra mitad', () => {
+        montar(17.5, 0, 1900, 1150);
+        const a = P._repartoPrebatch().porInsumo['cinzano'];
+        return eq(n2(a && a.venta), 525, 'proporcional');
+    });
+
+    /* ── «SI HAY MÁS PREBATCH, ESO FALTA EN CAMPARI Y EN CINZANO» ──
+       Alguien hizo un tercer batch y no lo capturó: sacó 175 de cada botella
+       —así que las botellas tienen MENOS— y dejó 350 ml de mix de más.
+       La prueba de que el modelo cierra: el faltante de cada botella es
+       exactamente lo que el reparto encuentra dentro del bote del mix. */
+    test('UN BATCH DE MÁS · las botellas salen cortas…', () => {
+        const f = montar(17.5, 350, 1725, 975);
+        return eq([n2(P.calcExistencia(f.c) - P.calcExistenciaTeorica(f.c)),
+                   n2(P.calcExistencia(f.z) - P.calcExistenciaTeorica(f.z))].join('|'),
+                  '-175|-175', 'falta en las dos');
+    });
+    test('…y el mix sale largo por el batch que nadie capturó', () => {
+        const f = montar(17.5, 350, 1725, 975);
+        return eq(n2(P.calcExistencia(f.m) - P.calcExistenciaTeorica(f.m)), 350, 'sobra un batch');
+    });
+    /* Y AQUÍ CIERRA TODO: lo que le falta a la botella está dentro del bote.
+       Sumando la parte que el reparto le devuelve, el Campari cuadra en CERO —
+       no se perdió, está en otro envase. */
+    test('…y al sumarle su parte del bote, el Campari cuadra en CERO', () => {
+        const f = montar(17.5, 350, 1725, 975);
+        const a = P._repartoPrebatch().porInsumo['campari'];
+        const difPropia = P.calcExistencia(f.c) - P.calcExistenciaTeorica(f.c);
+        return eq(n2(difPropia + a.dif), 0, 'no se perdió, cambió de envase');
+    });
+    test('…y el Cinzano igual', () => {
+        const f = montar(17.5, 350, 1725, 975);
+        const a = P._repartoPrebatch().porInsumo['cinzano'];
+        return eq(n2((P.calcExistencia(f.z) - P.calcExistenciaTeorica(f.z)) + a.dif), 0, 'cierra');
+    });
+    /* Lo que SÍ es un faltante de verdad: el mix no aparece por ningún lado.
+       Se hicieron los batches, se bebieron, y las botellas tampoco lo tienen. */
+    test('un faltante REAL sí se queda como faltante', () => {
+        const f = montar(17.5, 0, 1725, 975);          // botellas cortas y sin mix que lo explique
+        const a = P._repartoPrebatch().porInsumo['campari'];
+        return eq(n2((P.calcExistencia(f.c) - P.calcExistenciaTeorica(f.c)) + a.dif), -175,
+                  'eso sí se investiga');
+    });
+
+    /* ── EL RENGLÓN DEL PASO 5 ──
+       El Resultado no enseña la cifra pelona: le dobla la parte del batch. Si
+       se mirara solo lo propio, el Campari saldría con −175 eternos y nadie
+       entendería por qué, teniendo el bote del mix ahí al lado. */
+    test('el Paso 5 suma la parte del batch al teórico y al físico', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        return eq(src.indexOf('const teorico   = calcExistenciaTeorica(fila) + adj.teo;') > -1 &&
+                  src.indexOf('const fisico    = calcExistencia(fila) + adj.fis;') > -1,
+                  true, 'con su parte');
+    });
+
+    /* ══ LO QUE PASA CUANDO LA CADENA SE ROMPE ══════════════════════════════
+       Cuatro eslabones: el insumo marcado como producción propia, su liga a la
+       sub-receta, la sub-receta con ingredientes, y un renglón en ESTE
+       inventario. Hoy, si uno se rompe, no truena nada: el Resultado enseña
+       ceros y el faltante del Campari aparece como una diferencia sin
+       explicación — que termina pareciendo robo.
+
+       Lo que sigue no arregla la cadena: la DELATA. Un cálculo que no se puede
+       hacer tiene que decirlo en vez de devolver cero.                       */
+    const diag = () => P._prebatchDiagnostico().map(x => x.mal).join(',');
+
+    test('con la cadena sana, el Resultado no dice nada', () => {
+        montar(17.5, 0, 1900, 1150);
+        return eq(diag(), '', 'sin ruido');
+    });
+    /* ROTURA 1, Y LA MÁS CARA: el insumo dejó de estar marcado como producción
+       propia. Se vio en la prueba: el Campari se queda con un teórico de 2250
+       —los 350 que entraron al batch NO se le restan— y el reparto no existe. */
+    test('ROTO · el insumo perdió su marca de producción propia', () => {
+        montar(17.5, 0, 1900, 1150, () => {
+            setVar(P, '_cacheInsumosInv', [{ id:'preMix', nombre:'Mix Negroni PR', activo:'1' },
+                { id:'campari', nombre:'Campari', activo:'1' },
+                { id:'cinzano', nombre:'Cinzano Rosso', activo:'1' }]);
+        });
+        return eq(diag(), 'nolink', 'delatado');
+    });
+    test('…y se delata porque NADIE le descuenta al Campari lo del batch', () => {
+        const f = montar(17.5, 0, 1900, 1150, () => {
+            setVar(P, '_cacheInsumosInv', [{ id:'preMix', nombre:'Mix Negroni PR', activo:'1' },
+                { id:'campari', nombre:'Campari', activo:'1' },
+                { id:'cinzano', nombre:'Cinzano Rosso', activo:'1' }]);
+        });
+        return eq(n2(P.calcExistenciaTeorica(f.c)), 2250, 'teórico intacto: eso es el síntoma');
+    });
+    /* ROTURA 2: está marcado pero no dice de qué sub-receta. */
+    test('ROTO · marcado como producción propia pero sin sub-receta', () => {
+        montar(17.5, 0, 1900, 1150, () => {
+            setVar(P, '_cacheInsumosInv', [
+                { id:'preMix', nombre:'Mix Negroni PR', esSubReceta:true, activo:'1' },
+                { id:'campari', nombre:'Campari', activo:'1' },
+                { id:'cinzano', nombre:'Cinzano Rosso', activo:'1' }]);
+        });
+        return eq(diag(), 'sinreceta', 'delatado');
+    });
+    /* ROTURA 3: apunta a una sub-receta borrada. Nada lo cura solo: el sanador
+       por nombre solo rellena ligas VACÍAS, no las que apuntan a un muerto. */
+    test('ROTO · apunta a una sub-receta que ya no existe', () => {
+        montar(17.5, 0, 1900, 1150, () => {
+            setVar(P, '_cacheInsumosInv', [
+                { id:'preMix', nombre:'Mix Negroni PR', esSubReceta:true, recetaId:'srBorrada', activo:'1' },
+                { id:'campari', nombre:'Campari', activo:'1' },
+                { id:'cinzano', nombre:'Cinzano Rosso', activo:'1' }]);
+        });
+        return eq(diag(), 'recetamuerta', 'delatado');
+    });
+    /* ROTURA 4: el batch se vende pero no tiene renglón aquí. Lo que se fue de
+       ese bote no se le descuenta a nadie — ni al batch ni a sus insumos. */
+    test('ROTO · se vende un batch que no tiene renglón en el inventario', () => {
+        montar(17.5, 0, 1900, 1150, () => {
+            const c = fIns('campari','Campari',2250), z = fIns('cinzano','Cinzano Rosso',1500);
+            setVar(P, 'filasCaptura', [c, z]);
+        });
+        return eq(diag(), 'sinfila', 'delatado');
+    });
+    /* FALSO POSITIVO QUE SÍ APARECIÓ AL PROBARLO: dos conversiones de la misma
+       sub-receta no se enlazan entre sí, así que el coctel puede apuntar a un
+       registro sin renglón. Eso YA funciona —el consumo se acumula por
+       recetaId— y avisar ahí enseñaría a ignorar el aviso. */
+    test('…pero NO avisa cuando el coctel apunta a otro registro del mismo batch', () => {
+        montar(17.5, 0, 1900, 1150, () => {
+            setVar(P, '_cacheRecetasInv', [RECS()[0],
+                { id:'recNeg', nombre:'Negroni', tipo:'bebidas', status:'activa',
+                  ingredientes:[{ insumoId:'preMixOtro', cantidad:60, unidad:'ML' }] }]);
+            setVar(P, '_cacheInsumosInv', INS().concat([
+                { id:'preMixOtro', nombre:'Mix Negroni PR', esSubReceta:true, recetaId:'srMix', activo:'1' }]));
+        });
+        return eq(diag(), '', 'sin gritar en lo que funciona');
+    });
+    /* …y en ese caso el reparto SÍ reparte: la prueba de que callar es correcto. */
+    test('…y en ese caso el Campari sí recibe sus 525 ml', () => {
+        montar(17.5, 0, 1900, 1150, () => {
+            setVar(P, '_cacheRecetasInv', [RECS()[0],
+                { id:'recNeg', nombre:'Negroni', tipo:'bebidas', status:'activa',
+                  ingredientes:[{ insumoId:'preMixOtro', cantidad:60, unidad:'ML' }] }]);
+            setVar(P, '_cacheInsumosInv', INS().concat([
+                { id:'preMixOtro', nombre:'Mix Negroni PR', esSubReceta:true, recetaId:'srMix', activo:'1' }]));
+        });
+        const a = P._repartoPrebatch().porInsumo['campari'];
+        return eq(n2(a && a.venta), 525, 'funciona de verdad');
+    });
+    /* La producción capturada bajo el id de la COPIA por sucursal también
+       funciona (se arregló antes): tampoco debe avisar. */
+    test('…ni cuando la producción quedó bajo el id de la copia por sucursal', () => {
+        montar(17.5, 0, 1900, 1150, () => {
+            setVar(P, '_cacheInsumosInv', INS().concat([
+                { id:'preMixCopia', origenId:'preMix', sucursalId:'sucB',
+                  esSubReceta:true, recetaId:'srMix', activo:'1' }]));
+            vm.runInContext('invActual.prebatchProducidos = { preMixCopia: 2 };', P);
+        });
+        return eq(diag(), '', 'eso ya se resolvió');
+    });
+
+    /* El aviso va ARRIBA del Resultado, donde se mira la diferencia: el momento
+       en que esto importa es justo cuando alguien ve un faltante y no se lo
+       explica. En una pestaña aparte no lo lee nadie. */
+    test('el aviso sale en el Resultado, antes de los números', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        return eq(/return kpis \+ _prebatchAvisoHTML\(\) \+ _resumenEjecutivo\(\)/.test(src),
+                  true, 'donde duele');
+    });
+    test('…y nombra el renglón culpable, no un «hay un problema»', () => {
+        montar(17.5, 0, 1900, 1150, () => {
+            setVar(P, '_cacheInsumosInv', [{ id:'preMix', nombre:'Mix Negroni PR', activo:'1' },
+                { id:'campari', nombre:'Campari', activo:'1' },
+                { id:'cinzano', nombre:'Cinzano Rosso', activo:'1' }]);
+        });
+        const h = P._prebatchAvisoHTML();
+        return eq(h.indexOf('Mix Negroni PR') > -1 && h.indexOf('Mix Negroni') > -1, true, 'con nombre');
+    });
+    test('…y con la cadena sana no se pinta nada', () => {
+        montar(17.5, 0, 1900, 1150);
+        return eq(P._prebatchAvisoHTML(), '', 'sin banda inútil');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');

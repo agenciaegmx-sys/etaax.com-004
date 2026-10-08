@@ -1303,6 +1303,119 @@ function _repartoPrebatch() {
 var _repCache = null;
 var _repZero  = { ea:0, ent:0, vco:0, cm:0, can:0, teo:0, fis:0, dif:0, venta:0 };
 function _repartoDe(id) { return (_repCache && _repCache.porInsumo[id]) || _repZero; }
+
+/* ══ CUANDO UN PREBATCH NO SE PUEDE RASTREAR ═══════════════════════════════
+   La cadena del prebatch tiene cuatro eslabones: el insumo marcado como
+   producción propia, su liga a la sub-receta, la sub-receta con ingredientes,
+   y un renglón en ESTE inventario. Si alguno se rompe, hoy no truena nada: el
+   Resultado enseña ceros y el faltante del Campari aparece como una diferencia
+   sin explicación — que termina pareciendo robo.
+
+   Esto no arregla la cadena: la DELATA. Un cálculo que no se puede hacer tiene
+   que decirlo, no devolver cero.                                             */
+function _prebatchDiagnostico() {
+    var out = [];
+    var recs = (typeof getRecetas === 'function') ? getRecetas() : [];
+    var porId = {}; recs.forEach(function (r) { if (r && r.id) porId[r.id] = r; });
+    var _res = function (id) {
+        return (typeof window._insumoResolver === 'function') ? window._insumoResolver(id) : null;
+    };
+    /* Nombre de sub-receta → la sub-receta. Sirve para delatar el caso más
+       feo: un renglón que SE LLAMA como una sub-receta pero que el sistema no
+       reconoce como producción propia. Ese es invisible por completo. */
+    var porNombre = {};
+    recs.forEach(function (r) {
+        if (r && String(r.tipo || '').indexOf('sub') === 0 && r.nombre)
+            porNombre[String(r.nombre).trim().toLowerCase()] = r;
+    });
+
+    (filasCaptura || []).forEach(function (f) {
+        if (!f || !f.insumoId) return;
+        var ins = _res(f.insumoId);
+        var nom = String(f.nombre || '').trim().toLowerCase();
+        if (!ins || !ins.esSubReceta) {
+            /* Se compara también quitando el sufijo que pone la conversión
+               («Mix Negroni PR» ← «Mix Negroni»): es como quedan nombrados. */
+            var base = nom.replace(/\s*(pr|prebatch|batch)\s*$/, '');
+            if (porNombre[nom] || porNombre[base])
+                out.push({ fila: f.nombre, mal: 'nolink',
+                    txt: 'se llama como la sub-receta «' + (porNombre[nom] || porNombre[base]).nombre +
+                         '» pero no está marcado como producción propia' });
+            return;
+        }
+        if (!ins.recetaId) {
+            out.push({ fila: f.nombre, mal: 'sinreceta',
+                txt: 'está marcado como producción propia pero no dice de qué sub-receta' });
+            return;
+        }
+        var sr = porId[ins.recetaId];
+        if (!sr) {
+            out.push({ fila: f.nombre, mal: 'recetamuerta',
+                txt: 'apunta a una sub-receta que ya no existe' });
+            return;
+        }
+        if (!(sr.ingredientes || []).length) {
+            out.push({ fila: f.nombre, mal: 'sinings',
+                txt: 'su sub-receta «' + sr.nombre + '» no tiene ingredientes capturados' });
+        }
+    });
+
+    /* Y al revés: un coctel que se bebe un prebatch que NO tiene renglón aquí.
+       Su consumo no lo descuenta nadie —ni el batch ni sus insumos—, así que
+       desaparece del inventario sin dejar rastro. */
+    var vendidos = (invActual && invActual.cocktailsVendidos) || {};
+    var conFila = {}; (filasCaptura || []).forEach(function (f) { if (f) conFila[f.insumoId] = 1; });
+    var yaDicho = {};
+    recs.forEach(function (r) {
+        if (!r || !(parseFloat(vendidos[r.id]) || 0)) return;
+        if (r.tipo !== 'bebidas' && r.tipo !== 'alimentos') return;
+        (r.ingredientes || []).forEach(function (ing) {
+            var id = ing && ing.insumoId; if (!id) return;
+            var cid = (typeof _canonInsumoId === 'function' && _canonInsumoId(id)) || id;
+            if (conFila[id] || conFila[cid]) return;
+            var ins2 = _res(id);
+            if (!ins2 || !ins2.esSubReceta) return;        // insumo normal fuera del área: otra cosa
+            /* FALSO POSITIVO QUE SÍ APARECIÓ AL PROBARLO: el coctel puede
+               apuntar a OTRO registro del mismo batch (dos conversiones de la
+               misma sub-receta no se enlazan entre sí). Eso ya está resuelto
+               —el consumo se acumula por recetaId, no por id de insumo— así que
+               si hay un renglón de esa MISMA sub-receta, no hay nada que avisar.
+               Un aviso que grita en lo que funciona enseña a ignorarlo. */
+            if (ins2.recetaId && typeof _filaPrincipalSubReceta === 'function' &&
+                _filaPrincipalSubReceta(ins2.recetaId)) return;
+            if (yaDicho[cid]) return; yaDicho[cid] = 1;
+            out.push({ fila: ins2.nombre || '—', mal: 'sinfila',
+                txt: 'se vendió en «' + r.nombre + '» pero no tiene renglón en este inventario: ' +
+                     'lo que se fue de ese batch no se le descuenta a nadie' });
+        });
+    });
+    return out;
+}
+
+/* El aviso, arriba del Resultado. Va donde se mira la diferencia, no en una
+   pestaña aparte: el momento en que esto importa es justo cuando alguien está
+   viendo un faltante y no se lo explica. */
+function _prebatchAvisoHTML() {
+    var p = [];
+    try { p = _prebatchDiagnostico(); } catch (e) { return ''; }
+    if (!p.length) return '';
+    return '<div style="margin:0 16px 14px;background:rgba(245,200,66,.08);' +
+        'border:1px solid rgba(245,200,66,.45);border-radius:12px;padding:13px 15px">' +
+        '<div style="font-size:12.5px;font-weight:700;color:var(--accent);margin-bottom:7px">' +
+        '⚠️ ' + p.length + ' producción' + (p.length === 1 ? '' : 'es') + ' propia' +
+        (p.length === 1 ? '' : 's') + ' sin rastrear</div>' +
+        '<div style="font-size:11.5px;color:var(--text-muted);line-height:1.6">' +
+        'Lo que estos batches se llevaron <b style="color:var(--text)">no se le está ' +
+        'descontando a sus insumos</b>, así que su faltante va a salir aquí como una ' +
+        'diferencia sin explicación.</div>' +
+        '<ul style="margin:9px 0 0 16px;padding:0;font-size:11.5px;color:var(--text-muted);line-height:1.75">' +
+        p.map(function (x) {
+            return '<li><b style="color:var(--text)">' + etx(x.fila) + '</b> — ' + etx(x.txt) + '</li>';
+        }).join('') +
+        '</ul><div style="font-size:11px;color:var(--text-dim);margin-top:9px;line-height:1.6">' +
+        'Se arregla en Recetas → Insumos, volviendo a «Cargar como insumo» la sub-receta, ' +
+        'o dándole su renglón en el Paso 1.</div></div>';
+}
 function _esPrebatchRepartido(id) { return !!(_repCache && _repCache.esPB[id]); }
 
 // ── Fuzzy match cancelación → insumo ─────────────────────────
@@ -7534,7 +7647,8 @@ function renderStep5() {
             <button id="s5ModoGal" class="${_step5Modo==='galeria'?'active':''}" onclick="setStep5Modo('galeria')">⊞ Galería</button>
         </div>
     </div></div>`;
-    return kpis + _resumenEjecutivo() + searchBar5 + `<div id="step5Tablas">${_step5TablasHTML()}</div>`;
+    return kpis + _prebatchAvisoHTML() + _resumenEjecutivo() + searchBar5 +
+           `<div id="step5Tablas">${_step5TablasHTML()}</div>`;
 }
 
 var _busqStep5 = '';
