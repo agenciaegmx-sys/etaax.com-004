@@ -2578,30 +2578,13 @@ async function abrirQrEntradas() {
         + (sucQR ? '&s=' + encodeURIComponent(sucQR) : '');
     // Blindaje multi-sucursal: sin sucursal activa, las entradas quedan SIN sello y no
     // aparecen en el historial de ninguna sucursal (se acabó el "historial global").
-    /* LA APP INSTALABLE, al lado del QR de siempre. Es el mismo registro —los
-       mismos datos, las mismas reglas— pero se instala en el teléfono: queda un
-       ícono, abre sin la barra del navegador y no hay que escanear nada cada
-       vez. Si no se ofrece aquí, nadie la va a encontrar: este modal es el único
-       lugar donde alguien está pensando en «cómo registra la barra». */
-    var credQR = '?n=' + encodeURIComponent(negId) + '&t=' + encodeURIComponent(token)
-        + (sucQR ? '&s=' + encodeURIComponent(sucQR) : '');
-    var urlApp = location.origin + '/app-movil/' + credQR;
-    /* Lo que se manda por WhatsApp es la PÁGINA DE INSTALACIÓN, no la app cruda:
-       el encargado no va a estar parado junto a cada persona del turno
-       explicándole los pasos, y los de iPhone no se parecen a los de Android. */
-    var urlInst = location.origin + '/app-movil/instalar.html' + credQR;
+    /* AQUÍ NO VA LA APP MÓVIL. Estuvo un rato y se quitó a propósito: la app
+       es una BETA que nadie debe conocer todavía, y este modal lo abre cualquier
+       encargado. Su único enlace vive en el panel maestro, que es donde está
+       quien puede decidir con quién probarla. Cuando esté lista, vuelve aquí —
+       este es el lugar natural, porque es donde alguien está pensando en «cómo
+       registra la barra». */
     urlEl.innerHTML = etx(url)
-        + '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);text-align:left">'
-            + '<div style="font-size:11.5px;color:var(--text-muted);line-height:1.55;margin-bottom:8px">'
-                + '📱 <b style="color:var(--text)">¿Lo usan a diario?</b> Ábrela una vez desde el teléfono y agrégala a '
-                + 'la pantalla de inicio: queda un ícono y ya no hay que escanear el QR cada vez.</div>'
-            + '<a href="' + etx(urlInst) + '" target="_blank" rel="noopener" '
-                + 'style="display:inline-block;font-size:11.5px;color:var(--green);word-break:break-all">'
-                + etx(urlInst) + '</a>'
-            + '<div style="font-size:10.5px;color:var(--text-dim);margin-top:6px;line-height:1.5">'
-                + 'Mándaselo por WhatsApp a tu equipo: la página detecta si el teléfono es '
-                + 'iPhone o Android y enseña los pasos de ese.</div>'
-        + '</div>'
         + (sucQR ? '' : '<div style="color:var(--accent);margin-top:8px;font-size:11px;line-height:1.5;text-align:left">⚠️ Estás en <b>vista global (sin sucursal)</b>. Las entradas de este QR quedarían <b>sin sucursal</b> y NO se verían en el historial de una sucursal específica. Entra a una <b>sucursal</b> antes de generar el QR para que queden selladas.</div>');
     function gen() {
         box.innerHTML = '';

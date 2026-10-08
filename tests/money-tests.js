@@ -17120,14 +17120,18 @@ console.log('\n══ BH18 · La app móvil ══');
         eq(nt.indexOf('for = "/app-movil/sw.js"') > nt.indexOf('for = "/*.js"'), true, 'en orden'));
 
     /* ── Que se pueda encontrar ── */
-    /* Si no se ofrece junto al QR, nadie la va a encontrar: ese modal es el
-       único lugar donde alguien está pensando en «cómo registra la barra». */
+    /* LA BETA NO SE ASOMA EN EL QR. Estuvo un rato ahí —es el lugar natural,
+       porque es donde alguien está pensando en «cómo registra la barra»— y se
+       quitó a propósito: ese modal lo abre cualquier encargado, y una beta que
+       nadie debe conocer todavía no puede estar a la vista de todos. Su único
+       enlace vive en el panel maestro, donde está quien decide con quién
+       probarla. Cuando esté lista, vuelve. */
     const inv2 = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
-    test('la app se ofrece junto al QR de siempre', () =>
-        eq(inv2.indexOf("'/app-movil/' + credQR") > -1, true, 'a la vista'));
-    test('…con el mismo negocio, token y sucursal del QR', () =>
-        eq(/credQR = '\?n=' \+ encodeURIComponent\(negId\) \+ '&t=' \+ encodeURIComponent\(token\)/.test(inv2),
-           true, 'mismas credenciales'));
+    test('la beta NO se asoma en el QR de entradas', () =>
+        eq(inv2.indexOf('app-movil'), -1, 'escondida'));
+    test('…y su único enlace sigue siendo el del panel maestro', () =>
+        eq(fs.readFileSync(path.join(RAIZ, 'admin.html'), 'utf8')
+             .indexOf("location.origin + '/app'") > -1, true, 'un solo lugar'));
 
     /* ── INSTALAR: no hay una sola manera, y fingir que sí es lo que estaba mal ──
        La tarjeta decía «Instalar», se tocaba, y salía un texto. Un botón que no
@@ -17339,8 +17343,11 @@ console.log('\n══ BH18 · La app móvil ══');
         eq(inst.indexOf('Apple no permite instalar ninguna app fuera de su tienda') > -1,
            true, 'explicado'));
     const inv3 = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
-    test('el QR ofrece esa página, no la app cruda', () =>
-        eq(inv3.indexOf("'/app-movil/instalar.html'") > -1, true, 'la que explica'));
+    /* Ese enlace vivía en el QR y se retiró: la beta no se asoma donde la ve
+       cualquier encargado. Lo cubre la suite BH20. */
+    test('la página de instalación es una sola para todos', () =>
+        eq(fs.readFileSync(path.join(RAIZ, 'netlify.toml'), 'utf8')
+             .indexOf('to = "/app-movil/instalar.html"') > -1, true, 'una sola'));
 
     /* ══ EL PORTAL DEL COLABORADOR ═════════════════════════════════════════
        Lo de registrar (entradas, mermas, cortesías, conteo) es una cabeza; lo
