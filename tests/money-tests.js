@@ -13492,11 +13492,14 @@ console.log('\n══ BG8 · La carátula de costeo y lo que se imprime ══')
     test('los títulos de columna se leen (no un gris sobre gris)', () => {
         const m = rep.match(/table\.rt thead th\{[^}]*background:(#[0-9a-f]{3,6})[^}]*color:(#[0-9a-f]{3,6})/i);
         if (!m) return eq(false, true, 'sin encabezado');
-        /* Legible = la letra y su fondo se separan de verdad. Sirve igual para
-           letra oscura sobre gris claro que para letra blanca sobre negro, que
-           es a donde acabó yendo. */
-        return eq(Math.abs(_lumRep(m[2]) - _lumRep(m[1])) >= 45, true,
-                  m[2] + ' sobre ' + m[1] + ' = ' + Math.abs(_lumRep(m[2]) - _lumRep(m[1])) + ' puntos');
+        /* «Gris sobre gris» no se mide por el tono del texto: #666 es oscuro y
+           aun así se pierde sobre #ececec. Se mide la PAREJA — tienen que
+           separarse mucho Y uno de los dos ser francamente oscuro. La primera
+           versión de este test pedía 45 puntos de separación y dejaba pasar
+           justo el caso que venía a cazar. */
+        const sep = Math.abs(_lumRep(m[2]) - _lumRep(m[1]));
+        return eq(sep >= 55 && Math.min(_lumRep(m[1]), _lumRep(m[2])) <= 35, true,
+                  m[2] + ' sobre ' + m[1] + ' = ' + sep + ' puntos');
     });
     /* Al imprimir, la impresora aclara todo un punto más que el monitor. */
     test('al imprimir se sube el contraste otro punto', () =>
@@ -20080,6 +20083,31 @@ console.log('\n══ BH29 · Que se vea en papel ══');
        siempre se imprime. Sin él, el semáforo de utilidad era tres rectángulos
        invisibles con un número adentro. */
     const car = hojas['carátula de costos']();
+    /* ── EL ENCABEZADO DE CADA TABLA, EN TODAS LAS HOJAS ──
+       CIEGA DE LA BATERÍA: la rejilla y el encabezado oscuro solo se
+       comprobaban en el escandallo administrativo. La carátula de costos tiene
+       su PROPIO CSS y se podía dejar pálida sin que nadie se quejara — y es la
+       hoja de siete columnas por cuarenta renglones, justo la que más rejilla
+       necesita.
+
+       Y el umbral de 45% no la cazaba: #666 está en 40% y pasa. El problema de
+       «gris sobre gris» no es el tono del texto, es que texto y fondo se
+       parecen. Se mide la pareja: tienen que separarse MUCHO y uno de los dos
+       tiene que ser francamente oscuro. Letra blanca sobre negro pasa; gris
+       medio sobre gris claro, no. */
+    const parejaOk = (txt, bg) =>
+        Math.abs(lum(txt) - lum(bg)) >= 55 && Math.min(lum(txt), lum(bg)) <= 35;
+
+    test('el encabezado de la carátula va en oscuro con letra blanca', () => {
+        const m = car.match(/table\.ct thead th \{[^}]*color:\s*(#[0-9a-f]{3,6})[^}]*background:\s*(#[0-9a-f]{3,6})/i);
+        return eq(m ? parejaOk(m[1], m[2]) : false, true,
+                  m ? m[1] + ' sobre ' + m[2] : 'sin encabezado');
+    });
+    test('…y la carátula también tiene rejilla, no solo renglones', () =>
+        eq(/table\.ct tbody td \{[^}]*border:\s*[\d.]+px solid/.test(car), true, 'celdas cerradas'));
+    test('…y su tabla lleva marco exterior', () =>
+        eq(/table\.ct \{[^}]*border:\s*[\d.]+px solid/.test(car), true, 'enmarcada'));
+
     test('las pastillas del semáforo llevan contorno, no solo relleno', () =>
         eq(/\.pill \{[^}]*border:[\d.]+px solid/.test(car), true, 'la forma se ve igual'));
     test('…y las tres del semáforo se distinguen entre sí', () => {
