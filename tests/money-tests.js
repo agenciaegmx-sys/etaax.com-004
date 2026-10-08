@@ -17591,8 +17591,14 @@ console.log('\n══ BH19 · El archivo viejo en la caché ══');
            true, 'al día'));
     /* Y su propia versión sube: el navegador lo compara byte a byte y, sin
        cambio, no instala la cáscara nueva. */
-    test('…y su caché cambia de nombre para que se reemplace', () =>
-        eq(sw2.indexOf("var CACHE = 'etaax-movil-v2'") > -1, true, 'renovada'));
+    /* Se exige que la versión SUBA, no un número concreto: fijar «v2» obliga a
+       tocar el candado en cada cambio del service worker, y un candado que hay
+       que apagar para trabajar deja de cuidar nada. Lo que importa es que no se
+       quede atrás. */
+    test('…y su caché cambia de nombre para que se reemplace', () => {
+        const m = sw2.match(/var CACHE = 'etaax-movil-v(\d+)'/);
+        return eq(!!m && parseInt(m[1], 10) >= 2, true, 'renovada');
+    });
 
     /* ── Que el vocabulario siga teniendo lo que se le pide ── */
     /* Si mañana se le quita una de estas, el guardián apagaría el filtro EN
@@ -17603,6 +17609,173 @@ console.log('\n══ BH19 · El archivo viejo en la caché ══');
         test('staff-area.js sigue exponiendo ' + k, () =>
             eq(_expuesto.indexOf(k + ':') > -1, true, 'expuesto'));
     });
+}
+
+/* ═══════════ SUITE BH20 · LAS DOS PUERTAS DE LA APP ════════════════════════
+   La app ahora abre como una app de banco: una portada con lo que se puede
+   hacer SIN entrar y, debajo, la cuenta.
+
+   LA RAZÓN DE FONDO: quien trabaja en barra o cocina NO tiene cuenta, tiene un
+   NIP de 5 dígitos. Pedirle correo y contraseña sería inventarle una credencial
+   que no existe, y de paso obligaría a crear usuarios de Supabase para gente que
+   solo registra una merma. Por eso los botones de arriba funcionan igual que
+   escanear el QR —mismo token, mismo NIP, misma seguridad— y la cuenta queda
+   para lo que mueve dinero.
+
+   Nada del modelo de seguridad del QR cambió, y esta suite lo vigila.          */
+console.log('\n══ BH20 · Las dos puertas de la app ══');
+{
+    const dir  = path.join(RAIZ, 'app-movil');
+    const ah2  = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
+    const am2  = fs.readFileSync(path.join(dir, 'app.js'), 'utf8');
+    const cta  = fs.readFileSync(path.join(dir, 'cuenta.js'), 'utf8');
+    const cuerpoDe = (src) => (fn) => {
+        let i = src.indexOf('function ' + fn + '(');
+        if (i < 0) throw new Error('no existe ' + fn);
+        if (src.slice(Math.max(0, i - 6), i) === 'async ') i -= 6;
+        const abre = src.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < src.length) {
+            if (src[j] === '{') prof++;
+            else if (src[j] === '}') { prof--; if (!prof) return src.slice(i, j + 1); }
+            j++;
+        }
+        throw new Error('sin cerrar ' + fn);
+    };
+    const dA = cuerpoDe(am2), dC = cuerpoDe(cta);
+
+    /* ── La puerta del QR no cambió ── */
+    /* Es LA garantía de este cambio: se agregó una puerta, no se tocó la que ya
+       funcionaba. El día que el NIP pase por otro lado, o el token deje de ser
+       el del QR, esto truena. */
+    test('el NIP sigue validándose igual que antes', () =>
+        eq(am2.indexOf("rpc('entrada_validar_nip'") > -1 &&
+           am2.indexOf("TextEncoder().encode('etaax-staff|nip|' + pin)") > -1, true, 'intacta'));
+    test('…y la cuenta NO se mete en esa puerta', () => {
+        /* cuenta.js no debe tocar el NIP ni el token del QR: si un día lo
+           hiciera, las dos puertas dejarían de ser independientes. */
+        return eq(cta.indexOf('entrada_validar_nip') === -1 &&
+                  cta.indexOf('etaax-staff|nip|') === -1, true, 'separadas');
+    });
+    /* Los botones rápidos solo tienen sentido si la app sabe de qué negocio es.
+       Sin credenciales del QR, ofrecerlos sería un botón que lleva a un error. */
+    test('sin credenciales del QR no se ofrecen los botones rápidos', () =>
+        eq(dA('verInicio').indexOf("$('inicioRapido').hidden = !(NEG && TOKEN);") > -1, true, 'honesto'));
+    test('…y se dice cómo conseguirlas', () =>
+        eq(dA('verInicio').indexOf('abre la app desde el QR de tu sucursal') > -1, true, 'con salida'));
+    /* Dos botones distintos que llevaran al mismo sitio harían sobrar uno. */
+    test('cada botón lleva a lo que ofrece', () =>
+        eq(dA('entrar').indexOf("if (_destinoNip === 'portal')") > -1, true, 'sin confundir'));
+
+    /* ── La sesión de la cuenta ── */
+    /* supabase-config.js guarda en sessionStorage —se borra al cerrar— y además
+       BORRA de localStorage cualquier sesión que encuentre. Para una app
+       instalada eso significaría escribir la contraseña en cada apertura. */
+    test('la app guarda su sesión con su propia llave', () =>
+        eq(dC('iniciar').indexOf('storage: window.localStorage') > -1 &&
+           dC('iniciar').indexOf('storageKey: LLAVE_SESION') > -1, true, 'propia'));
+    /* La llave NO puede empezar con `sb-`: supabase-config.js barre esas de
+       localStorage en CADA carga, y la sesión de la app desaparecería sin que
+       nadie entendiera por qué. */
+    test('…y esa llave sobrevive al barrido de supabase-config', () => {
+        const sc = fs.readFileSync(path.join(RAIZ, 'supabase-config.js'), 'utf8');
+        const m = cta.match(/var LLAVE_SESION = '([^']+)'/);
+        return eq(!!m && m[1].indexOf('sb-') !== 0 && sc.indexOf("indexOf('sb-') === 0") > -1,
+                  true, 'no la barre');
+    });
+    /* Un solo cliente para las dos puertas: con dos vivos, un día uno tiene
+       sesión y el otro no sobre la misma pantalla. */
+    test('una sola conexión sirve a las dos puertas', () =>
+        eq(dC('iniciar').indexOf('window._supabase = SB;') > -1, true, 'una sola'));
+    /* El mensaje NO cambia según si el correo existe: eso convertiría la
+       pantalla en un buscador de clientes. Misma regla que el hub. */
+    test('el error de login no dice si el correo existe', () =>
+        eq(dC('entrarCuenta').indexOf("'Correo o contraseña incorrectos.'") > -1, true, 'sin filtrar'));
+
+    /* ── El candado del teléfono ── */
+    /* Huella y Face ID en una app web se hacen con WebAuthn, no con una API de
+       huella. `platform` + `required` pide la huella DEL TELÉFONO y exige
+       verificar a la persona: sin eso bastaría tener el aparato en la mano. */
+    test('la biometría exige verificar a la persona, no solo tener el teléfono', () => {
+        const t = dC('registrarBiometria');
+        return eq(t.indexOf("authenticatorAttachment: 'platform'") > -1 &&
+                  t.indexOf("userVerification: 'required'") > -1, true, 'de verdad');
+    });
+    test('…y se comprueba que el teléfono la tenga antes de ofrecerla', () =>
+        eq(dC('hayBiometria').indexOf('isUserVerifyingPlatformAuthenticatorAvailable') > -1,
+           true, 'sin prometer'));
+    /* El PIN de la app NO es el NIP del colaborador: aquel identifica a una
+       persona ante el negocio y lo pone el encargado; este solo abre la app en
+       este teléfono. Mezclarlos haría que cambiar uno afectara al otro. */
+    test('el PIN de la app es otra cosa que el NIP del colaborador', () =>
+        eq(dC('hashPin').indexOf("'etaax-movil|pin|'") > -1 &&
+           cta.indexOf("'etaax-staff|nip|'") === -1, true, 'separados'));
+    test('…y se guarda hasheado, no en claro', () =>
+        eq(dC('hashPin').indexOf("crypto.subtle.digest('SHA-256'") > -1, true, 'hasheado'));
+    /* Si la biometría falla o la cancelan tiene que quedar una salida: dejar a
+       alguien fuera de sus propios números por un sensor que no leyó sería peor
+       que no tener candado. */
+    test('si el sensor falla, queda el PIN o la contraseña', () =>
+        eq(dC('alAbrir').indexOf('Entrar con mi contraseña') > -1, true, 'con salida'));
+    /* Preguntar el candado en cada entrada enseña a decir que no sin leer. */
+    test('decir «ahora no» se recuerda, no se vuelve a preguntar', () =>
+        eq(dC('sinCandado').indexOf("_lsSet(LLAVE_PIN, 'no')") > -1 &&
+           dC('ofrecerCandado').indexOf("if (_ls(LLAVE_PIN) || _ls(LLAVE_BIO))") > -1, true, 'una vez'));
+    /* El candado es de ESTE teléfono, no de la sesión: borrarlo al salir
+       obligaría a configurarlo otra vez en cada entrada. */
+    test('cerrar sesión no borra el candado del teléfono', () =>
+        eq(dC('salirCuenta').indexOf('LLAVE_PIN') === -1 &&
+           dC('salirCuenta').indexOf('LLAVE_BIO') === -1, true, 'se queda'));
+
+    /* ── Lo que todavía no está ── */
+    /* Esconder lo que falta haría pensar que la app está rota o incompleta, y
+       eso es lo que hace que nadie la vuelva a abrir. Se enseña apagado. */
+    test('los módulos que faltan se ven apagados, no escondidos', () => {
+        const t = dA('verHome');
+        return eq(t.indexOf("var listo = !!m.fn;") > -1 && t.indexOf("· pronto") > -1, true, 'visible');
+    });
+    test('…y se dice que es una beta', () =>
+        eq(dA('verHome').indexOf('<b>beta</b>') > -1, true, 'dicho'));
+
+    /* ── Dónde se reparte ── */
+    /* Vive solo en el panel maestro a propósito: si el enlace estuviera en el
+       módulo de cada negocio, un cliente la instalaría a su equipo antes de que
+       nadie la haya usado en una barra real. */
+    const adm = fs.readFileSync(path.join(RAIZ, 'admin.html'), 'utf8');
+    test('el enlace de la beta vive solo en el panel maestro', () =>
+        eq(adm.indexOf('/app-movil/instalar.html?n=') > -1 &&
+           fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8').indexOf('/app-movil/') === -1,
+           true, 'sin repartir'));
+    test('…marcado como beta, para que nadie lo tome por terminado', () =>
+        eq(adm.indexOf('id="beta-app"') > -1 && /Beta<\/span>/.test(adm), true, 'marcado'));
+    /* Lo que se registre sin sucursal queda sin sello y no aparece en el
+       historial de nadie: probar con datos que luego se pierden es la peor
+       manera de probar. */
+    test('…advirtiendo que ese enlace va sin sucursal', () =>
+        eq(adm.indexOf('queda <b>sin sello de sucursal</b>') > -1, true, 'advertido'));
+
+    /* ── Que la cáscara esté completa ── */
+    /* Un onclick que apunta a una función inexistente es un botón muerto que
+       solo se descubre tocándolo. */
+    test('todos los botones de la app apuntan a algo que existe', () => {
+        const faltan = [];
+        (ah2.match(/onclick="([a-zA-Z_]+)\(/g) || []).forEach(m => {
+            const fn = m.replace('onclick="', '').replace('(', '');
+            if (!new RegExp('window\\.' + fn + '\\s*=').test(am2 + cta)) faltan.push(fn);
+        });
+        return eq([...new Set(faltan)].join(', '), '', 'sin botones muertos');
+    });
+    /* Mostrar una pantalla que no existe deja la app en blanco sin error. */
+    test('…y todas las pantallas que se muestran existen en el HTML', () => {
+        const faltan = [];
+        ((am2 + cta).match(/mostrar(?:Cuenta)?\('(p[A-Za-z]+)'/g) || []).forEach(m => {
+            const id = m.replace(/.*\('/, '').replace("'", '');
+            if (ah2.indexOf('id="' + id + '"') < 0) faltan.push(id);
+        });
+        return eq([...new Set(faltan)].join(', '), '', 'sin pantallas fantasma');
+    });
+    test('el service worker guarda también la puerta de la cuenta', () =>
+        eq(fs.readFileSync(path.join(dir, 'sw.js'), 'utf8').indexOf("'./cuenta.js'") > -1, true, 'completa'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

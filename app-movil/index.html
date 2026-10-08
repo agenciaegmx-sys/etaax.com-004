@@ -35,6 +35,78 @@
 
 <main id="main">
 
+<!-- ══ 0 · LA PORTADA ════════════════════════════════════════════════════════
+     Dos puertas, sin mezclarlas. Arriba, lo que se hace SIN entrar —igual que
+     escanear el QR, con el NIP de 5 dígitos—: quien trabaja en barra o cocina no
+     tiene cuenta, tiene NIP, y pedirle correo y contraseña sería inventarle una
+     credencial que no existe. Abajo, la cuenta de siempre, para lo que mueve
+     dinero. Es el mismo trato que hace una app de banco con «consultar saldo». -->
+<section class="pant" id="pInicio" hidden>
+    <div class="marca"><img src="icons/icono-192.png" alt="" width="54" height="54"><div>
+        <div class="marca-n">ETAAX</div><div class="marca-s" id="inicioSub">Tu operación, en el bolsillo</div></div></div>
+
+    <div id="inicioRapido" hidden>
+        <div class="menu-grupo" style="margin-top:18px">Sin entrar · con tu NIP</div>
+        <div class="menu">
+            <button class="mcard" onclick="irNip('registrar')">
+                <span class="mcard-ico">📦</span>
+                <span class="mcard-txt"><b>Registrar movimientos</b>
+                    <small>Entradas, mermas, cortesías y conteo</small></span>
+            </button>
+            <button class="mcard" onclick="irNip('portal')">
+                <span class="mcard-ico">📋</span>
+                <span class="mcard-txt"><b>Portal del colaborador</b>
+                    <small>Tus check lists, el recetario y las guías</small></span>
+            </button>
+        </div>
+    </div>
+
+    <div class="menu-grupo" style="margin-top:26px">Con tu cuenta</div>
+    <button class="mcard" onclick="verCuenta()">
+        <span class="mcard-ico">🔐</span>
+        <span class="mcard-txt"><b>Entrar con mi cuenta</b>
+            <small>Gastos, insumos, recetas y resultados</small></span>
+    </button>
+
+    <div class="avisos" id="inicioAviso"></div>
+</section>
+
+<!-- ══ 0b · ENTRAR CON LA CUENTA ═════════════════════════════════════════════ -->
+<section class="pant" id="pCuenta" hidden>
+    <label class="lbl" for="ctaCorreo">Correo</label>
+    <input class="campo" id="ctaCorreo" type="email" inputmode="email" autocomplete="username"
+           autocapitalize="none" spellcheck="false" placeholder="tu@correo.com">
+    <label class="lbl" for="ctaPwd">Contraseña</label>
+    <input class="campo" id="ctaPwd" type="password" autocomplete="current-password" placeholder="••••••••">
+    <div class="nip-msg" id="ctaMsg" style="text-align:left"></div>
+    <button class="btn btn-ok" id="ctaBtn" onclick="entrarCuenta()" style="margin-top:8px">Entrar</button>
+    <div class="avisos">Es la misma cuenta con la que entras al sistema desde la computadora.</div>
+</section>
+
+<!-- ══ 0c · EL CANDADO DE ESTE TELÉFONO ══════════════════════════════════════ -->
+<section class="pant" id="pCandado" hidden>
+    <div class="candado" id="candadoOferta"></div>
+</section>
+
+<section class="pant" id="pPin" hidden>
+    <div class="nip-wrap">
+        <div class="nip-lbl" id="pinTit">PIN de la app</div>
+        <div class="nip-puntos" id="pinPts"></div>
+        <div class="nip-msg" id="pinErr"></div>
+    </div>
+    <div class="teclado" id="pinTeclado"></div>
+</section>
+
+<!-- ══ 0d · EL MENÚ DE LA CUENTA ═════════════════════════════════════════════
+     Los módulos llegan por fases. Lo que todavía no está se enseña APAGADO y
+     diciendo dónde sí se hace: esconderlo haría pensar que la app está rota o
+     incompleta, y eso es justo lo que hace que nadie la vuelva a abrir. -->
+<section class="pant" id="pHome" hidden>
+    <div class="quien" id="homeQuien"></div>
+    <div class="menu" id="homeMenu"></div>
+    <button class="salir" onclick="salirCuenta()">Cerrar sesión</button>
+</section>
+
 <!-- ══ 1 · ENTRAR CON EL NIP ═════════════════════════════════════════════════
      Teclado propio, no el del sistema: con dedos mojados y en media luz, cinco
      botones grandes se aciertan y un campo de texto no. -->
@@ -213,6 +285,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
+<script src="cuenta.js"></script><!-- la otra puerta: cuenta, candado y biometría -->
 <script src="../staff-area.js?v=2"></script><!-- quién ve qué: la MISMA regla del resto del sistema -->
 <script src="app.js"></script>
 </body>

@@ -11,6 +11,43 @@ mantener; se publica igual que cualquier otro cambio, con un push.
 
 ---
 
+## Las dos puertas
+
+La app abre como una app de banco: una portada con lo que se puede hacer **sin
+entrar** y, debajo, la cuenta.
+
+| Puerta | Quién | Qué alcanza |
+|---|---|---|
+| **NIP de 5 dígitos** | Barra y cocina | Registrar movimientos · Portal del colaborador |
+| **Correo y contraseña** | Dueño o gerente | Gastos, insumos, recetas, resultados |
+
+**La de arriba funciona igual que escanear el QR** — mismo token, mismo NIP,
+misma seguridad. Es a propósito: quien trabaja en barra no tiene cuenta, tiene
+NIP. Pedirle correo y contraseña sería inventarle una credencial que no existe y
+obligaría a crear usuarios para gente que solo registra una merma.
+
+### El candado del teléfono
+
+Con cuenta, la sesión **se queda guardada** —cerrar la app y escribir la
+contraseña cada vez la volvería inservible— y encima va un candado: **huella o
+Face ID** donde el teléfono lo ofrezca, **PIN de 4 dígitos** si no.
+
+La huella se hace con **WebAuthn**, el mismo mecanismo de los passkeys; no hay
+una API de huella en la web. Funciona en iPhone (Safari 16+) y en Android,
+también con la app instalada. El **patrón de puntos no se ofrece**: es un gesto
+de Android nativo que en web habría que dibujar a mano y no protege más que un
+PIN.
+
+Ese PIN **no es el NIP del colaborador**. El NIP identifica a una persona ante el
+negocio y lo pone el encargado; este solo abre la app en ese teléfono y lo elige
+quien la instala.
+
+**Qué protege el candado y qué no.** Protege contra lo que de verdad pasa:
+alguien levanta el teléfono desbloqueado de la barra y lo abre. **No** protege
+contra quien se lleva el aparato y lo desarma con herramientas — la sesión vive
+en el almacenamiento del navegador y ahí seguiría. Para eso está cerrar sesión y,
+si el teléfono se pierde, cambiar la contraseña desde el sistema.
+
 ## Qué hace (v1)
 
 Los cuatro flujos del QR, rehechos para una mano y un pulgar:
@@ -122,7 +159,8 @@ app-movil/
   index.html           la cáscara: una sola página, pantallas que se muestran y esconden
   instalar.html        la guía que se manda por WhatsApp, por plataforma
   app.css              estilos. Oscuro por default (la barra es oscura), claro a un toque
-  app.js               toda la lógica
+  app.js               la puerta del NIP: los cuatro flujos y el portal
+  cuenta.js            la otra puerta: login, candado y biometría
   sw.js                service worker: guarda la cáscara para que abra sin esperar
   manifest.webmanifest lo que hace que se pueda instalar
   icons/               el ícono de la pantalla de inicio

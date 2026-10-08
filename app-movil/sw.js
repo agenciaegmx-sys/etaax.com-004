@@ -18,7 +18,7 @@
    le ocurra borrar los datos del sitio.
    ══════════════════════════════════════════════════════════════════════════ */
 
-var CACHE = 'etaax-movil-v2';
+var CACHE = 'etaax-movil-v3';
 
 /* Las rutas de ARRIBA (../) son del proyecto, no de esta carpeta: la app
    reutiliza el cliente de Supabase y el vocabulario de áreas en vez de tener
@@ -28,6 +28,7 @@ var CASCARA = [
     './index.html',
     './app.css',
     './app.js',
+    './cuenta.js',
     './manifest.webmanifest',
     './icons/icono-192.png',
     '../supabase-config.js',

@@ -575,6 +575,36 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
     </div>
   </div>
 
+  <!-- ══ LA APP MÓVIL, EN BETA ════════════════════════════════════════════════
+       Vive AQUÍ y en ningún otro lado a propósito: hasta que esté probada de
+       verdad, el único que la reparte es quien administra la plataforma. Si el
+       enlace estuviera en el módulo de cada negocio, un cliente la instalaría a
+       su equipo antes de que nadie la haya usado en una barra real. -->
+  <div id="beta-app" style="margin:26px 0 0;background:var(--card,#17161a);border:1px solid rgba(245,200,66,.35);
+       border-radius:14px;padding:20px 22px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <span style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#f5c842;
+            border:1px solid rgba(245,200,66,.5);border-radius:20px;padding:2px 10px">Beta</span>
+      <span style="font-size:15px;font-weight:600">App móvil de registro</span>
+    </div>
+    <div style="font-size:12.5px;color:var(--muted);line-height:1.65;margin-bottom:14px;max-width:640px">
+      Los cuatro flujos del QR y el portal del colaborador, instalables en el teléfono.
+      <b style="color:var(--text,#eee)">Todavía no se promueve:</b> se prueba en una barra real antes de
+      ofrecerla a los clientes. El enlace lleva las credenciales del negocio que elijas abajo.
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <select id="betaAppNeg" onchange="betaAppLink()"
+              style="background:#111014;border:1px solid #2b2a30;color:#eee;border-radius:9px;
+                     padding:9px 11px;font-family:inherit;font-size:13px;min-width:220px">
+        <option value="">Elige un negocio…</option>
+      </select>
+      <button class="btn-add" id="betaAppCopiar" onclick="betaAppCopiar()" disabled>Copiar enlace</button>
+      <a id="betaAppAbrir" href="#" target="_blank" rel="noopener" hidden
+         style="font-size:12.5px;color:#3dbe7a;text-decoration:none">Abrir ↗</a>
+    </div>
+    <div id="betaAppUrl" style="font-size:11px;color:var(--muted);margin-top:11px;word-break:break-all"></div>
+  </div>
+
   <!-- TAB: INSUMOS — redirige a página dedicada -->
   <div id="tab-insumos" class="tab-panel">
     <div class="empty-state" style="padding:64px 24px">Redirigiendo al catálogo de insumos…</div>
@@ -582,6 +612,70 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 
 </div>
 </div>
+
+<script>
+/* ══ EL ENLACE DE LA APP MÓVIL (beta) ══════════════════════════════════════
+   Arma la misma dirección que el QR de entradas, con el token del negocio
+   elegido. Se apoya en `entrada_token_asegurar`, que crea el token si el
+   negocio todavía no tiene uno — así el enlace sirve aunque esa sucursal nunca
+   haya generado su QR. */
+var _betaUrl = '';
+async function betaAppLink() {
+    var sel = document.getElementById('betaAppNeg');
+    var out = document.getElementById('betaAppUrl');
+    var btn = document.getElementById('betaAppCopiar');
+    var abr = document.getElementById('betaAppAbrir');
+    _betaUrl = ''; btn.disabled = true; abr.hidden = true;
+    var neg = sel.value;
+    if (!neg) { out.textContent = ''; return; }
+    out.textContent = 'Generando el enlace…';
+    try {
+        var r = await _supabase.rpc('entrada_token_asegurar', { p_neg: neg });
+        if (r.error) throw r.error;
+        /* SIN sucursal: el admin maestro no está parado en ninguna. Lo que se
+           registre desde ahí quedaría sin sello, así que se dice — probar con
+           datos que luego no aparecen en el historial de nadie es la peor
+           manera de probar. */
+        _betaUrl = location.origin + '/app-movil/instalar.html?n=' + encodeURIComponent(neg) +
+                   '&t=' + encodeURIComponent(r.data);
+        out.innerHTML = _etxAdmin(_betaUrl) +
+            '<div style="color:#f5c842;margin-top:7px">⚠️ Sin sucursal: lo que se registre con este ' +
+            'enlace queda <b>sin sello de sucursal</b>. Para probar en una barra real, saca el enlace ' +
+            'desde Inventarios → QR de entradas estando dentro de la sucursal.</div>';
+        btn.disabled = false; abr.href = _betaUrl; abr.hidden = false;
+    } catch (e) {
+        out.textContent = 'No se pudo generar: ' + ((e && e.message) || e);
+    }
+}
+function _etxAdmin(s) { return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+async function betaAppCopiar() {
+    if (!_betaUrl) return;
+    try { await navigator.clipboard.writeText(_betaUrl); }
+    catch (e) { window.prompt('Copia el enlace:', _betaUrl); return; }
+    var b = document.getElementById('betaAppCopiar');
+    var t = b.textContent; b.textContent = '✓ Copiado';
+    setTimeout(function () { b.textContent = t; }, 1600);
+}
+/* El selector se llena con los negocios que el panel ya cargó. Se intenta varias
+   veces porque esa carga es asíncrona y no hay un evento al que engancharse. */
+(function _betaAppNegocios(intentos) {
+    var sel = document.getElementById('betaAppNeg');
+    /* El panel guarda todo en `_data`, que se llena de forma asíncrona. No hay
+       un evento al que engancharse, así que se reintenta: es feo, pero menos
+       que un selector vacío sin explicación. */
+    var negs = (window._data && window._data.negocios) || null;
+    if (sel && negs && negs.length) {
+        sel.innerHTML = '<option value="">Elige un negocio…</option>' +
+            negs.map(function (n) {
+                return '<option value="' + _etxAdmin(n.id) + '">' +
+                       _etxAdmin(n.nombre || n.id) + '</option>';
+            }).join('');
+        return;
+    }
+    if ((intentos || 0) < 20) setTimeout(function () { _betaAppNegocios((intentos || 0) + 1); }, 600);
+})(0);
+</script>
 
 <!-- ── DETAIL PANEL (usuario) ── -->
 <div id="detailPanel" class="detail-panel" onclick="if(event.target===this)cerrarDetail()">

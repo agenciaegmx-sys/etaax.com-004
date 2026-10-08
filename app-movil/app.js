@@ -139,7 +139,8 @@ try {
 } catch (e) {}
 
 /* ── Navegación entre pantallas ── */
-var PANTS = ['pLogin', 'pMenu', 'pFlujo', 'pHist', 'pChecks', 'pRun', 'pRecetas', 'pReceta', 'pGuias'];
+var PANTS = ['pInicio', 'pCuenta', 'pCandado', 'pPin', 'pHome',
+             'pLogin', 'pMenu', 'pFlujo', 'pHist', 'pChecks', 'pRun', 'pRecetas', 'pReceta', 'pGuias'];
 function mostrar(id, titulo, sub, conVolver, conBarra) {
     PANTS.forEach(function (p) { $(p).hidden = (p !== id); });
     $('hdrTit').textContent = titulo;
@@ -149,6 +150,65 @@ function mostrar(id, titulo, sub, conVolver, conBarra) {
     document.body.classList.toggle('con-barra', !!conBarra);
     window.scrollTo(0, 0);
 }
+
+/* ══ 0 · LA PORTADA ════════════════════════════════════════════════════════
+   Dos puertas que no se mezclan. La del NIP (QR) y la de la cuenta.
+   `_destinoNip` recuerda a cuál de las dos cosas iba quien tecleó su NIP: sin
+   eso, el botón del portal y el de registrar llevarían al mismo sitio y uno de
+   los dos sobraría. */
+var _destinoNip = 'registrar';
+function verInicio() {
+    /* Los botones rápidos solo tienen sentido si la app sabe de qué negocio es.
+       Sin las credenciales del QR, lo único que queda es la cuenta. */
+    $('inicioRapido').hidden = !(NEG && TOKEN);
+    $('inicioAviso').innerHTML = (NEG && TOKEN)
+        ? 'Los dos primeros funcionan igual que escanear el QR: solo piden tu NIP.'
+        : 'Para registrar con NIP, abre la app desde el QR de tu sucursal.';
+    mostrar('pInicio', 'ETAAX', 'elige cómo entrar', false, false);
+}
+function irNip(destino) {
+    _destinoNip = destino;
+    NIP = ''; pintarPuntos(); $('nipMsg').textContent = '';
+    mostrar('pLogin', destino === 'portal' ? 'Portal del colaborador' : 'Registrar',
+            'identifícate con tu NIP', true, false);
+}
+function verCuenta() {
+    $('ctaMsg').textContent = '';
+    var c = window._cuenta ? window._cuenta.correo() : '';
+    if (c && !$('ctaCorreo').value) $('ctaCorreo').value = c;
+    mostrarCuenta('pCuenta', 'Entrar', 'con tu cuenta de ETAAX');
+}
+/* cuenta.js no conoce las pantallas: se las pide a la cáscara por aquí. */
+function mostrarCuenta(id, tit, sub) { mostrar(id, tit, sub, true, false); }
+function toastC(m, c) { toast(m, c); }
+
+/* ══ EL MENÚ DE LA CUENTA ══════════════════════════════════════════════════
+   Los módulos llegan por fases. Lo que todavía no está se enseña APAGADO y
+   diciendo dónde sí se hace: esconderlo haría pensar que la app está rota o
+   incompleta, y eso es lo que hace que nadie la vuelva a abrir. */
+var MODULOS_CUENTA = [
+    { ico:'💸', tit:'Agregar un gasto',   sub:'Con su foto, desde donde estés',            fn:'' },
+    { ico:'🧾', tit:'Ver los cortes',     sub:'Lo capturado desde la computadora',          fn:'' },
+    { ico:'🥃', tit:'Insumos',            sub:'Consultar, corregir precios, agregar uno',   fn:'' },
+    { ico:'📖', tit:'Recetas',            sub:'Consultar y crear una sencilla',             fn:'' },
+    { ico:'📊', tit:'Resultados',         sub:'El resumen del mes y las estadísticas',      fn:'' }
+];
+function verHome() {
+    var correo = (window._cuenta && window._cuenta.correo()) || '';
+    $('homeQuien').innerHTML = '<b>Tu cuenta</b>' + (correo ? '<small>' + etx(correo) + '</small>' : '');
+    $('homeMenu').innerHTML = MODULOS_CUENTA.map(function (m) {
+        var listo = !!m.fn;
+        return '<button class="mcard"' + (listo ? ' onclick="' + m.fn + '"' : ' disabled style="opacity:.42"') + '>' +
+            '<span class="mcard-ico">' + m.ico + '</span>' +
+            '<span class="mcard-txt"><b>' + etx(m.tit) + '</b><small>' + etx(m.sub) +
+            (listo ? '' : ' <span style="color:var(--dim)">· pronto</span>') + '</small></span></button>';
+    }).join('') +
+    '<div class="avisos" style="margin-top:4px;text-align:left">Esta app es una <b>beta</b>: lo que ' +
+    'todavía no está aquí se sigue haciendo desde la computadora, igual que siempre.</div>';
+    mostrar('pHome', 'Tu cuenta', (window._cuenta && window._cuenta.correo()) || '', false, false);
+}
+window._appCuentaLista = verHome;
+window._appCuentaFuera = verInicio;
 
 /* ══ 1 · ENTRAR CON EL NIP ═════════════════════════════════════════════════
    Teclado propio y no el del sistema: con dedos mojados y en media luz, cinco
@@ -202,6 +262,12 @@ async function entrar() {
            espera mirando la pantalla de entrar. */
         await Promise.all([cargarInsumos(), cargarPlantillas()]);
         irMenu();
+        /* Quien tocó «Portal del colaborador» quería el portal, no el menú de
+           registrar: llevarlo al menú le haría buscar otra vez lo que ya pidió. */
+        if (_destinoNip === 'portal') {
+            if (PLANTILLAS.length) abrirChecklists();
+            else if (window.StaffArea) abrirRecetario();
+        }
     } catch (e) {
         $('nipMsg').textContent = 'Error: ' + ((e && e.message) || e);
     }
@@ -289,7 +355,7 @@ function salir() {
     INSUMOS = []; RECETAS = null; PLANTILLAS = []; RECETARIO = null; GUIAS = null; RUN = null;
     pintarPuntos();
     $('nipMsg').textContent = '';
-    mostrar('pLogin', 'Registro', 'barra / cocina', false, false);
+    verInicio();
 }
 
 /* Las opciones del portal se arman según el perfil. El recetario solo tiene
@@ -1213,19 +1279,24 @@ if ('serviceWorker' in navigator) {
 }
 
 /* ── Arranque ── */
-window.addEventListener('DOMContentLoaded', function () {
+window.addEventListener('DOMContentLoaded', async function () {
     pintarTeclado(); pintarPuntos();
-    if (!NEG || !TOKEN) {
-        $('nipMsg').innerHTML = 'Esta app todavía no está ligada a un negocio.<br>' +
-            'Ábrela escaneando el QR de tu sucursal (Inventarios → 📱 QR de entradas) y vuelve a instalarla.';
-        $('teclado').innerHTML = '';
-        return;
-    }
     $('loginAviso').innerHTML = 'Tu NIP dice quién registró qué.<br>Si no lo tienes, pídeselo a tu encargado.';
+    /* Si hay sesión guardada, cuenta.js se encarga —pidiendo huella o PIN si hay
+       candado— y la portada no se llega a ver. Si no, se muestra. */
+    var conSesion = false;
+    try { conSesion = window._cuenta ? await window._cuenta.alAbrir() : false; } catch (e) {}
+    if (!conSesion) verInicio();
 });
 
 /* Lo que el HTML llama por onclick. */
 window.toggleTema = toggleTema;
+window.verInicio = verInicio;
+window.verCuenta = verCuenta;
+window.verHome = verHome;
+window.irNip = irNip;
+window.mostrarCuenta = mostrarCuenta;
+window.toastC = toastC;
 window.irMenu = irMenu;
 window.salir = salir;
 window.abrirFlujo = abrirFlujo;
