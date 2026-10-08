@@ -38,7 +38,7 @@ try {
     if (NEG && TOKEN) localStorage.setItem(LS, JSON.stringify({ n: NEG, t: TOKEN, s: SUC }));
     else {
         var g = JSON.parse(localStorage.getItem(LS) || 'null');
-        if (g && g.n && g.t) { NEG = g.n; TOKEN = g.t; SUC = g.s || ''; }
+        if (g && g.n && g.t) { NEG = g.n; TOKEN = g.t; SUC = g.s || ''; NEG_NOM = g.nom || ''; }
     }
 } catch (e) {}
 
@@ -151,6 +151,18 @@ function mostrar(id, titulo, sub, conVolver, conBarra) {
     window.scrollTo(0, 0);
 }
 
+/* Lo que cuenta.js averiguó al entrar. Se guarda en el teléfono para que el
+   equipo de barra y cocina entre con su NIP sin que nadie reparta un enlace con
+   el token dentro. La SUCURSAL no se guarda a propósito: la pone el NIP de quien
+   entra — guardarla haría que el teléfono del encargado sellara todo con la
+   suya. */
+var NEG_NOM = '';
+function _fijarQR(neg, token, nombre) {
+    NEG = neg; TOKEN = token; NEG_NOM = nombre || '';
+    try { localStorage.setItem(LS, JSON.stringify({ n: NEG, t: TOKEN, s: '', nom: NEG_NOM })); } catch (e) {}
+}
+window._appFijarQR = _fijarQR;
+
 /* ══ 0 · LA PORTADA ════════════════════════════════════════════════════════
    Dos puertas que no se mezclan. La del NIP (QR) y la de la cuenta.
    `_destinoNip` recuerda a cuál de las dos cosas iba quien tecleó su NIP: sin
@@ -158,13 +170,25 @@ function mostrar(id, titulo, sub, conVolver, conBarra) {
    los dos sobraría. */
 var _destinoNip = 'registrar';
 function verInicio() {
-    /* Los botones rápidos solo tienen sentido si la app sabe de qué negocio es.
-       Sin las credenciales del QR, lo único que queda es la cuenta. */
-    $('inicioRapido').hidden = !(NEG && TOKEN);
-    $('inicioAviso').innerHTML = (NEG && TOKEN)
-        ? 'Los dos primeros funcionan igual que escanear el QR: solo piden tu NIP.'
-        : 'Para registrar con NIP, abre la app desde el QR de tu sucursal.';
-    mostrar('pInicio', 'ETAAX', 'elige cómo entrar', false, false);
+    /* Los botones de NIP solo tienen sentido si la app sabe de qué negocio es.
+       Sin eso NO se esconden a secas: se dice cómo conseguirlo, porque un
+       teléfono recién instalado SIEMPRE llega así y dejar media pantalla en
+       blanco se lee como que la app está incompleta.
+
+       Se consigue de dos maneras, y las dos están a la mano:
+         · que alguien entre UNA vez con su cuenta (el encargado configura el
+           teléfono y su equipo ya solo usa el NIP);
+         · o escanear el QR de la sucursal, que trae las credenciales. */
+    var listo = !!(NEG && TOKEN);
+    $('inicioRapido').hidden = !listo;
+    $('inicioSub').textContent = listo && NEG_NOM ? NEG_NOM : 'Tu operación, en el bolsillo';
+    $('inicioAviso').innerHTML = listo
+        ? 'Los dos de arriba funcionan igual que escanear el QR: solo piden tu NIP.'
+        : '<b style="color:var(--txt)">¿Eres de barra o cocina?</b><br>' +
+          'Este teléfono todavía no está ligado a un negocio. Pídele a tu encargado que ' +
+          'entre una vez con su cuenta aquí, o escanea el <b>QR de tu sucursal</b> con la ' +
+          'cámara. Después entras solo con tu NIP.';
+    mostrar('pInicio', 'ETAAX', listo ? 'elige cómo entrar' : 'empieza por aquí', false, false);
 }
 function irNip(destino) {
     _destinoNip = destino;
@@ -195,7 +219,9 @@ var MODULOS_CUENTA = [
 ];
 function verHome() {
     var correo = (window._cuenta && window._cuenta.correo()) || '';
-    $('homeQuien').innerHTML = '<b>Tu cuenta</b>' + (correo ? '<small>' + etx(correo) + '</small>' : '');
+    $('homeQuien').innerHTML = '<b>' + etx(NEG_NOM || 'Tu cuenta') + '</b>' +
+        (correo ? '<small>' + etx(correo) + '</small>' : '') +
+        (NEG && TOKEN ? '<small style="color:var(--verde);margin-top:4px">✓ Tu equipo ya puede entrar con su NIP en este teléfono</small>' : '');
     $('homeMenu').innerHTML = MODULOS_CUENTA.map(function (m) {
         var listo = !!m.fn;
         return '<button class="mcard"' + (listo ? ' onclick="' + m.fn + '"' : ' disabled style="opacity:.42"') + '>' +

@@ -17320,11 +17320,18 @@ console.log('\n══ BH18 · La app móvil ══');
        ninguna: abre en la de SU teléfono y la otra queda a un toque. */
     test('…y abre en la del teléfono desde el que se lee', () =>
         eq(inst.indexOf("pintar(ES_IOS ? 'ios' : 'android')") > -1, true, 'la suya'));
-    /* Una app instalada que no sabe de qué negocio es, es un ícono muerto. */
-    test('…llevando las credenciales para que la app abra lista', () =>
-        eq(inst.indexOf("'?n=' + encodeURIComponent(NEG)") > -1, true, 'con credenciales'));
-    test('…y si el enlace llega sin ellas, lo dice', () =>
-        eq(inst.indexOf('A este enlace le faltan los datos del negocio') > -1, true, 'honesto'));
+    /* UNA SOLA DIRECCIÓN PARA TODOS. Antes esta página exigía `?n=…&t=…`, lo que
+       obligaba a generar un enlace por negocio —con el token del QR dentro— y a
+       repartirlo por WhatsApp. El enlace con credenciales sigue sirviendo (es el
+       del QR), pero ya no es obligatorio. */
+    test('el enlace del QR sigue funcionando si viene con credenciales', () =>
+        eq(inst.indexOf("'?n=' + encodeURIComponent(NEG)") > -1, true, 'compatible'));
+    test('…pero sin ellas la página sirve igual, no se declara rota', () =>
+        eq(inst.indexOf('A este enlace le faltan los datos del negocio') === -1, true, 'una sola'));
+    /* Quien la agrega a su pantalla la abre, ve que le pide cuenta y la cierra
+       pensando que no es para él. Hay que decirle qué sigue. */
+    test('…y dice qué pasa después de instalarla', () =>
+        eq(inst.indexOf('¿Y luego?') > -1 && inst.indexOf('NIP de 5 dígitos') > -1, true, 'con rumbo'));
     /* «¿Por qué no se baja del App Store?» es LA pregunta que va a hacer todo el
        mundo con un iPhone. Contestarla en la misma página evita que la
        instalación se quede a medias por desconfianza. */
@@ -17660,9 +17667,23 @@ console.log('\n══ BH20 · Las dos puertas de la app ══');
     /* Los botones rápidos solo tienen sentido si la app sabe de qué negocio es.
        Sin credenciales del QR, ofrecerlos sería un botón que lleva a un error. */
     test('sin credenciales del QR no se ofrecen los botones rápidos', () =>
-        eq(dA('verInicio').indexOf("$('inicioRapido').hidden = !(NEG && TOKEN);") > -1, true, 'honesto'));
-    test('…y se dice cómo conseguirlas', () =>
-        eq(dA('verInicio').indexOf('abre la app desde el QR de tu sucursal') > -1, true, 'con salida'));
+        eq(dA('verInicio').indexOf("$('inicioRapido').hidden = !listo;") > -1, true, 'honesto'));
+    /* Un teléfono recién instalado SIEMPRE llega así: esconder media pantalla
+       sin explicar se lee como que la app está incompleta. */
+    test('…y se dice cómo conseguirlas, con las dos maneras', () => {
+        const t = dA('verInicio');
+        return eq(t.indexOf('entre una vez con su cuenta') > -1 &&
+                  t.indexOf('QR de tu sucursal') > -1, true, 'con salida');
+    });
+    /* El login resuelve el negocio y guarda el token en el teléfono: eso es lo
+       que habilita la puerta del NIP sin repartir secretos. */
+    test('entrar con la cuenta deja listo el teléfono para los NIP', () =>
+        eq(dC('resolverNegocio').indexOf("rpc('entrada_token_asegurar'") > -1 &&
+           dC('resolverNegocio').indexOf('window._appFijarQR(') > -1, true, 'configurado'));
+    /* La SUCURSAL no se guarda: la pone el NIP de quien entra. Guardarla haría
+       que el teléfono del encargado sellara todo con la suya. */
+    test('…sin guardar la sucursal del encargado', () =>
+        eq(dA('_fijarQR').indexOf("s: ''") > -1, true, 'la pone el NIP'));
     /* Dos botones distintos que llevaran al mismo sitio harían sobrar uno. */
     test('cada botón lleva a lo que ofrece', () =>
         eq(dA('entrar').indexOf("if (_destinoNip === 'portal')") > -1, true, 'sin confundir'));
@@ -17743,9 +17764,19 @@ console.log('\n══ BH20 · Las dos puertas de la app ══');
        nadie la haya usado en una barra real. */
     const adm = fs.readFileSync(path.join(RAIZ, 'admin.html'), 'utf8');
     test('el enlace de la beta vive solo en el panel maestro', () =>
-        eq(adm.indexOf('/app-movil/instalar.html?n=') > -1 &&
+        eq(adm.indexOf("location.origin + '/app'") > -1 &&
            fs.readFileSync(path.join(RAIZ, 'hub.html'), 'utf8').indexOf('/app-movil/') === -1,
            true, 'sin repartir'));
+    /* UNO SOLO, y sin el token adentro. El selector de negocio obligaba a
+       generar un enlace por cliente —con el secreto del QR dentro— que luego se
+       reparte por WhatsApp. */
+    test('…y es UNO solo, sin pedir elegir negocio', () =>
+        eq(adm.indexOf('betaAppNeg') === -1 && adm.indexOf('entrada_token_asegurar') === -1,
+           true, 'uno solo'));
+    /* /app se dicta por teléfono y se escribe sin equivocarse. */
+    test('…con dirección corta', () =>
+        eq(/from = "\/app"[\s\S]{0,120}instalar\.html/.test(
+            fs.readFileSync(path.join(RAIZ, 'netlify.toml'), 'utf8')), true, 'corta'));
     test('…marcado como beta, para que nadie lo tome por terminado', () =>
         eq(adm.indexOf('id="beta-app"') > -1 && /Beta<\/span>/.test(adm), true, 'marcado'));
     /* Y DENTRO de una pestaña. Las .tab-panel se esconden con display:none y se
@@ -17762,10 +17793,11 @@ console.log('\n══ BH20 · Las dos puertas de la app ══');
        el NIP. Lo que sí hay que decir es qué pasa con una ficha sin sucursal
        asignada, que es el caso que silenciosamente manda todo a Matriz. */
     test('…diciendo que la sucursal la pone el NIP, no el enlace', () =>
-        eq(adm.indexOf('la sucursal la pone el NIP') > -1, true, 'explicado'));
-    test('…y advirtiendo del colaborador sin sucursal asignada', () =>
-        eq(adm.indexOf('cae en Matriz') > -1 || adm.indexOf('cae \nen Matriz') > -1 ||
-           adm.indexOf('en Matriz') > -1, true, 'advertido'));
+        eq(adm.indexOf('la sucursal la pone su NIP, no el enlace') > -1, true, 'explicado'));
+    /* Quien lo reparta tiene que saber cómo se configura un teléfono de barra:
+       si no, lo manda y el equipo se topa con una pantalla que le pide cuenta. */
+    test('…y cómo se configura el teléfono del equipo', () =>
+        eq(adm.indexOf('configura el teléfono una vez con su') > -1, true, 'explicado'));
 
     /* ── Que la cáscara esté completa ── */
     /* Un onclick que apunta a una función inexistente es un botón muerto que

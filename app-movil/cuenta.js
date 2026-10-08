@@ -165,12 +165,72 @@ async function entrarCuenta() {
         }
         SESION = r.data.session;
         _lsSet(LLAVE_CORREO, correo);
-        msg.textContent = '';
+        msg.textContent = 'Preparando tu negocio…';
         $('ctaPwd').value = '';
+        /* LAS CREDENCIALES DEL NEGOCIO SALEN DE AQUÍ, no del enlace.
+           Antes el enlace de descarga las llevaba dentro, lo que significaba
+           repartir por WhatsApp el mismo secreto impreso en el QR de la barra —
+           y un enlace distinto por negocio que nadie sabía cuál era. */
+        await resolverNegocio(msg);
+        msg.textContent = '';
         ofrecerCandado();
     } catch (e) {
         btn.disabled = false; msg.textContent = 'Error: ' + ((e && e.message) || e);
     }
+}
+
+/* ══ DE QUÉ NEGOCIO ES ESTE TELÉFONO ═══════════════════════════════════════
+   Con la sesión puesta, la app lo averigua sola: pregunta qué negocios alcanza
+   esta cuenta y pide el token del QR —la misma función que usa el botón de
+   «QR de entradas» del sistema—. Con eso, los botones de NIP quedan listos para
+   el equipo de barra y cocina SIN que nadie reparta un enlace con secretos.
+
+   Un teléfono se configura UNA vez: el encargado entra con su cuenta, y de ahí
+   en adelante su equipo entra solo con su NIP. */
+async function resolverNegocio(msg) {
+    try {
+        var r = await SB.from('negocios').select('id,nombre').order('nombre');
+        var negs = (r && r.data) || [];
+        if (!negs.length) {
+            /* Una cuenta que no alcanza ningún negocio sí puede entrar —verá sus
+               módulos— pero no puede habilitar la puerta del NIP. Se dice, en vez
+               de dejar botones que no funcionan. */
+            if (msg) msg.textContent = '';
+            return;
+        }
+        var neg = negs[0];
+        if (negs.length > 1) {
+            var elegido = await elegirNegocio(negs);
+            if (!elegido) return;
+            neg = elegido;
+        }
+        if (msg) msg.textContent = 'Preparando ' + (neg.nombre || '') + '…';
+        var t = await SB.rpc('entrada_token_asegurar', { p_neg: neg.id });
+        if (t.error || !t.data) return;
+        /* La sucursal NO se guarda: la pone el NIP de quien entre. Guardarla
+           haría que el teléfono del encargado sellara todo con SU sucursal. */
+        window._appFijarQR(neg.id, t.data, neg.nombre || '');
+    } catch (e) { /* sin negocio resuelto: la puerta del NIP se queda apagada */ }
+}
+
+/* Con varios negocios hay que preguntar, pero UNA vez: queda guardado con el
+   token y no se vuelve a pedir en ese teléfono. */
+function elegirNegocio(negs) {
+    return new Promise(function (resolve) {
+        var ov = document.createElement('div');
+        ov.className = 'hoja';
+        ov.innerHTML = '<div class="hoja-caja"><div class="hoja-tit">¿De qué negocio es este teléfono?</div>' +
+            '<div class="hoja-sub">Se guarda en el aparato para que tu equipo entre con su NIP. ' +
+            'Puedes cambiarlo cerrando sesión.</div>' +
+            negs.map(function (n, i) {
+                return '<button class="hoja-op" data-i="' + i + '">' + etx(n.nombre || n.id) + '</button>';
+            }).join('') + '</div>';
+        ov.onclick = function (e) {
+            var b = e.target.closest('[data-i]'); if (!b) return;
+            ov.remove(); resolve(negs[parseInt(b.getAttribute('data-i'), 10)]);
+        };
+        document.body.appendChild(ov);
+    });
 }
 
 /* Tras entrar, se ofrece el candado UNA vez. No se impone: hay teléfonos de
@@ -308,6 +368,7 @@ window._cuenta = {
     iniciar: iniciar, alAbrir: alAbrir, entrarCuenta: entrarCuenta,
     salirCuenta: salirCuenta, hayBiometria: hayBiometria,
     sesion: function () { return SESION; },
+    resolverNegocio: resolverNegocio,
     correo: function () { return _ls(LLAVE_CORREO); },
     /* Para probarlo desde la consola y desde el candado del repo. */
     _hashPin: hashPin, _llaves: { sesion: LLAVE_SESION, pin: LLAVE_PIN, bio: LLAVE_BIO }

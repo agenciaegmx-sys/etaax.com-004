@@ -103,6 +103,23 @@ Decirlo importa tanto como lo anterior:
 
 ## Cómo se instala
 
+**Una sola dirección para todos: `etaax.com/app`.** No hay un enlace por
+negocio, y el token del QR ya **no viaja en la dirección** — salía por WhatsApp
+con el mismo secreto que está impreso en la barra.
+
+Las credenciales salen del **login**, como en cualquier app:
+
+| Quién | Qué hace |
+|---|---|
+| Dueño o gerente | Entra con su cuenta. La app averigua sola de qué negocio es y consigue el token |
+| Barra y cocina | El encargado entra una vez con su cuenta en ese teléfono —o escanean el QR de su sucursal— y de ahí en adelante entran solo con su NIP |
+
+**La sucursal la pone el NIP**, no el teléfono ni el enlace. Por eso el aparato
+guarda el negocio pero **no** la sucursal: si guardara la del encargado, todo lo
+que registrara el equipo quedaría sellado con la de él.
+
+## Cómo se agrega a la pantalla
+
 En **Inventarios → 📱 QR de entradas** hay un enlace a `instalar.html`. Ese es el
 que se le manda al equipo por WhatsApp: la página detecta si el teléfono es
 iPhone o Android y enseña los pasos de ese, con las credenciales del negocio ya

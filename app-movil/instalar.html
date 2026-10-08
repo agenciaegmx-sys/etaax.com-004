@@ -85,6 +85,8 @@
 
     <div id="guia"></div>
 
+    <div id="despues"></div>
+
     <div class="abrir" id="abrir" hidden>
         <a class="btn btn-ok" id="linkApp" href="#">Abrir la app</a>
     </div>
@@ -166,12 +168,12 @@ document.getElementById('tabs').onclick = function (e) {
         est.innerHTML = '<div class="listo">✓ Ya la tienes instalada. Ábrela desde su ícono.</div>';
         return;
     }
-    if (!NEG || !TOKEN) {
-        est.innerHTML = '<div class="falta"><b>A este enlace le faltan los datos del negocio.</b><br>' +
-            'Pídele a tu encargado el enlace completo: lo saca de <b>Inventarios → 📱 QR de entradas</b>. ' +
-            'Sin eso, la app quedaría instalada pero sin saber de qué sucursal es.</div>';
-        return;
-    }
+    /* YA NO HACEN FALTA CREDENCIALES EN EL ENLACE. Antes esta página exigía
+       `?n=…&t=…` y sin eso se declaraba rota; eso obligaba a generar un enlace
+       por negocio —con el token del QR dentro— y a repartirlo por WhatsApp.
+       Ahora es UNA sola dirección para todos: quien instale entra con su cuenta
+       y la app averigua sola de qué negocio es. El enlace con credenciales
+       sigue funcionando (es el del QR), solo que ya no es obligatorio. */
     document.getElementById('tabsBox').hidden = false;
     /* Se abre en la pestaña de SU teléfono. Enseñar las dos a la vez es la forma
        más rápida de que nadie siga ninguna. La otra queda a un toque, para
@@ -185,6 +187,16 @@ document.getElementById('tabs').onclick = function (e) {
     var a = document.getElementById('linkApp');
     a.href = URL_APP;
     document.getElementById('abrir').hidden = false;
+    /* Lo que sigue DESPUÉS de instalarla. Sin esto, quien la agrega a su
+       pantalla la abre, ve que le pide cuenta y la cierra pensando que no es
+       para él. */
+    document.getElementById('despues').innerHTML =
+        '<div class="aclara" style="border-top:none;padding-top:0">' +
+        '<b style="color:var(--txt)">¿Y luego?</b><br>' +
+        'Si tienes cuenta de ETAAX, entra con ella: la app averigua sola de qué negocio es.<br>' +
+        'Si eres de <b>barra o cocina</b>, tu encargado entra una vez con su cuenta en ese ' +
+        'teléfono — o escaneas el QR de tu sucursal — y de ahí en adelante entras solo con tu ' +
+        '<b>NIP de 5 dígitos</b>.</div>';
 })();
 </script>
 </body>

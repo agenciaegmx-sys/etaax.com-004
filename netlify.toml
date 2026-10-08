@@ -117,6 +117,16 @@
 # Son REESCRITURAS (200), no redirecciones: la URL corta es la que se queda a la
 # vista y el archivo sigue viviendo donde siempre. Las rutas .html siguen
 # funcionando para no romper lo ya enviado.
+# ── LA APP MÓVIL, CON DIRECCIÓN CORTA ─────────────────────────
+# etaax.com/app se dicta por teléfono y se escribe sin equivocarse. Y es UNA
+# sola para todos: las credenciales del negocio ya no viajan en la dirección —
+# salen del login, como en cualquier app—. Antes había que generar un enlace por
+# negocio, lo que significaba repartir el token del QR por WhatsApp.
+[[redirects]]
+  from = "/app"
+  to = "/app-movil/instalar.html"
+  status = 200
+
 [[redirects]]
   from = "/privacidad"
   to = "/aviso-privacidad.html"
