@@ -19300,6 +19300,35 @@ console.log('\n══ BH26 · El prebatch, de punta a punta ══');
                   'eso sí se investiga');
     });
 
+    /* CIEGA DE LA BATERÍA: todo el escenario de Edwin usa filas de COPA, así
+       que quitarle el descuento por producción a la rama de PESO no rompía
+       nada. Y es un caso de todos los días: un jarabe que se pesa en gramos
+       dentro del mismo batch. Sin esto, producir no le resta al jarabe y su
+       faltante sale como diferencia. */
+    test('un ingrediente que se PESA también se descuenta al producir', () => {
+        setVar(P, '_cacheRecetasInv', [
+            { id:'srMix', nombre:'Mix Negroni', tipo:'sub-bebidas', status:'activa',
+              camposExtra:{ rendimientoFinal:'350', unidadRendimientoFinal:'ML' },
+              ingredientes:[{ insumoId:'campari', cantidad:175, unidad:'ML' },
+                            { insumoId:'gomaG',   cantidad:40,  unidad:'G' }] },
+            { id:'recNeg', nombre:'Negroni', tipo:'bebidas', status:'activa',
+              ingredientes:[{ insumoId:'preMix', cantidad:60, unidad:'ML' }] }
+        ]);
+        setVar(P, '_cacheInsumosInv', [
+            { id:'preMix', nombre:'Mix Negroni PR', esSubReceta:true, recetaId:'srMix', activo:'1' },
+            { id:'campari', nombre:'Campari', activo:'1' },
+            { id:'gomaG', nombre:'Jarabe de goma', activo:'1' }]);
+        setVar(P, 'invActual', { id:'invT', area:'barra', entradasLog:[], ventasCompuesto:{},
+            cancelaciones:[], descuentos:[], filas:[],
+            prebatchProducidos:{ preMix: 2 }, cocktailsVendidos:{ recNeg: 0 } });
+        const m = fMix();
+        const g = { insumoId:'gomaG', nombre:'Jarabe de goma', tipo:'peso', baseUnit:'g',
+            contNeto:1000, existenciaAnterior:1000, mermaBase:0, entradas:[] };
+        setVar(P, 'filasCaptura', [m, fIns('campari','Campari',2250), g]);
+        vm.runInContext('_consumoDirty = true; _cancelDirty = true;', P);
+        return eq(n2(P.calcExistenciaTeorica(g)), 920, '1000 − 2 × 40 g');
+    });
+
     /* ── EL RENGLÓN DEL PASO 5 ──
        El Resultado no enseña la cifra pelona: le dobla la parte del batch. Si
        se mirara solo lo propio, el Campari saldría con −175 eternos y nadie
