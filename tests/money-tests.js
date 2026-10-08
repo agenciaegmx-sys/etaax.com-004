@@ -20260,6 +20260,28 @@ console.log('\n══ BH30 · Capturar los batches del Paso 3 ══');
         P3.setProduccionPrebatch('preMix', 'abc');
         return eq(vm.runInContext('invActual.prebatchProducidos.preMix', P3), 0, 'coacciona a 0');
     });
+    /* CIEGA DE LA BATERÍA: nada probaba qué le pasa al CAMPO mientras se
+       escribe. Si al guardar se le reescribe el valor al campo que tiene el
+       foco, teclear «15» se convierte en «1» en cuanto se procesa el primer
+       dígito — y el que captura ve cómo se le borra lo que está escribiendo.
+       Por eso el guardador respeta el campo activo. */
+    test('escribir en el campo no se pisa a sí mismo', () => {
+        montar();
+        /* A MEDIO TECLEAR: en pantalla va «15» y lo guardado todavía es 1.
+           (La primera versión de este test puso los dos en 1 y entonces pisar
+           o no pisar daba el mismo resultado: no comprobaba nada.) */
+        const campo = { value:'15', classList:{ add(){}, remove(){}, toggle(){} },
+                        closest: () => null };
+        const doc = vm.runInContext('document', P3);
+        doc.getElementById = (id) => (id === 'prod-preMix' ? campo : null);
+        doc.activeElement = campo;                 // el dedo está encima de él
+        P3.setProduccionPrebatch('preMix', 1);
+        const mientras = campo.value;              // debe seguir diciendo «15»
+        doc.activeElement = null;                  // ya soltó el campo
+        P3.setProduccionPrebatch('preMix', 7);     // ahora sí se refleja
+        return eq(mientras + '→' + campo.value, '15→7', 'respeta lo que se teclea');
+    });
+
     /* El campo tiene que ser un CAMPO, con teclado numérico en tablet y la
        misma calculadora que el de cócteles («2+1»). */
     const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
