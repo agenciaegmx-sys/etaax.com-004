@@ -9752,7 +9752,11 @@ console.log('\n══ BE3 · El tema, uno solo para todo el sistema ══');
        y una oficina de día—; compartir la preferencia haría que cambiar el tema
        en la oficina deslumbrara al barman. Lleva su propio interruptor, con su
        propia clave. */
-    const PUBLICAS = ['index.html', 'evaluacion.html', 'app-movil/index.html', 'app-movil/instalar.html'];
+    /* Y la CARTA del QR de la mesa, por lo mismo que la landing: la abre un
+       comensal en su teléfono, no tiene sesión y no hay preferencia de tema que
+       seguir — la carta se ve igual de noche en la mesa 4 para todos. */
+    const PUBLICAS = ['index.html', 'evaluacion.html', 'carta.html',
+                      'app-movil/index.html', 'app-movil/instalar.html'];
     const sinTema = paginas.filter(function (p) {
         if (PUBLICAS.indexOf(p) > -1) return false;
         const s = fs.readFileSync(path.join(RAIZ, p), 'utf8');
@@ -18090,6 +18094,386 @@ console.log('\n══ BH22 · Pasar de una foto a otra ══');
             eq(src.indexOf('etaaxVerFotoDe(this)') > -1 && src.indexOf('data-fotos') > -1,
                true, 'en carrusel'));
     });
+}
+
+/* ═══════════ SUITE BH23 · LA CARTA DE LA MESA ══════════════════════════════
+   El QR que se pega en las mesas abre una página SIN SESIÓN. Cualquiera con el
+   enlace la ve: el comensal, su primo, quien le saque foto al código desde la
+   banqueta y el de la competencia.
+
+   Y la fila de la que sale esa carta es la misma `recetas` donde vive el
+   escandallo: ingredientes, costo por insumo, proveedor, procedimiento,
+   rendimiento, merma. Todo el costeo del negocio está a una columna de
+   distancia de una función que atiende a `anon`.
+
+   Por eso la carta NO se arma filtrando lo que no debe salir, sino enumerando
+   a mano lo que sí. Una lista negra se queda vieja en cuanto alguien agrega un
+   campo al escandallo; una lista blanca no.
+
+   Los tres candados, en este orden:
+     1. nada sale hasta que se prenda a mano, platillo por platillo;
+     2. sub-recetas fuera —jarabes y salsas no son platillos—;
+     3. solo lo de ESA sucursal, porque el QR es de esa mesa.                 */
+console.log('\n══ BH23 · La carta de la mesa ══');
+{
+    const migs23 = fs.readdirSync(RAIZ)
+        .filter(f => /^supabase-migration-v\d+\.sql$/.test(f))
+        .sort((a, b) => parseInt(a.match(/v(\d+)/)[1], 10) - parseInt(b.match(/v(\d+)/)[1], 10));
+    /* La ÚLTIMA definición gana, como en BH21: es la que queda en la base. Un
+       CREATE OR REPLACE en una migración futura puede llevarse un candado sin
+       avisar, y fue exactamente lo que pasó con portal_perfil en la v64. */
+    const ult23 = (fn) => {
+        let txt = '', donde = '';
+        migs23.forEach(m => {
+            const src = fs.readFileSync(path.join(RAIZ, m), 'utf8');
+            const i = src.indexOf('CREATE OR REPLACE FUNCTION ' + fn + '(');
+            if (i < 0) return;
+            const fin = src.indexOf('$$;', i);
+            txt = src.slice(i, fin > 0 ? fin + 3 : src.length);
+            donde = m;
+        });
+        return { txt, donde };
+    };
+    const ver23 = ult23('menu_publico_ver');
+    const v66 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v66.sql'), 'utf8');
+
+    test('existe la función que sirve la carta', () =>
+        eq(ver23.txt.length > 0, true, 'en ' + (ver23.donde || '—')));
+
+    /* ── CANDADO 1: nada sale hasta prenderlo ──
+       Sin esto, correr la migración publicaría el menú completo —con los
+       precios internos y los nombres de cocina— en el mismo instante. */
+    test('CANDADO 1 · nada sale hasta prenderlo a mano', () =>
+        eq(/'menu'->>'visible'[\s\S]{0,40}false\)\s*=\s*true/.test(ver23.txt), true, 'apagado por default'));
+    /* El default importa tanto como el filtro: `(x)::boolean = true` sobre un
+       NULL da NULL, y NULL en un WHERE no es true… pero un `<> false` sí
+       dejaría pasar lo que nunca se configuró. */
+    test('…y lo que nunca se configuró cuenta como apagado', () =>
+        eq(ver23.txt.indexOf("COALESCE((r.datos->'menu'->>'visible')::boolean, false) = true") > -1,
+           true, 'COALESCE a false'));
+
+    /* ── CANDADO 2: las sub-recetas no son platillos ──
+       Un jarabe de hibisco con su rendimiento y su costo por litro en la mesa
+       del cliente no es una fuga de datos dramática, pero es la carta del
+       negocio enseñando su cocina. Y el día que alguien prenda una por error,
+       tiene que no pasar nada. */
+    test('CANDADO 2 · solo platillos y bebidas de carta', () =>
+        eq(ver23.txt.indexOf("r.datos->>'tipo' IN ('alimentos', 'bebidas')") > -1, true, 'sub-recetas fuera'));
+    test('…y una receta dada de baja tampoco sale', () =>
+        eq(/status[\s\S]{0,30}<>\s*'inactiva'/.test(ver23.txt), true, 'sin inactivas'));
+
+    /* ── CANDADO 3: el QR es de ESA mesa, de ESA sucursal ──
+       Dos sucursales del mismo negocio tienen cartas distintas y precios
+       distintos. Un QR que enseñe las dos manda al cliente a pedir algo que
+       ahí no existe. Reusa _receta_en_suc (v57), que ya resuelve maestro+copia. */
+    test('CANDADO 3 · solo las recetas de esa sucursal', () =>
+        eq(ver23.txt.indexOf('_receta_en_suc(r.datos, v_suc)') > -1, true, 'por sucursal'));
+    test('…y la sucursal sale de la fila del token, no de quien pregunta', () =>
+        eq(ver23.txt.indexOf("v_suc := COALESCE(NULLIF(v_cfg->>'sucursalId','')") > -1, true, 'del token'));
+
+    /* ── LA LISTA BLANCA ──
+       Ni una palabra del escandallo en la respuesta. Se mira el texto de la
+       función entera: si mañana alguien agrega 'costo' «solo para el reporte»,
+       este candado truena antes del push. */
+    const PROHIBIDO = {
+        ingredientes:  'la receta completa del platillo',
+        costoUnitario: 'lo que le cuesta cada insumo al negocio',
+        proveedor:     'a quién le compra y en cuánto',
+        procedimiento: 'cómo se prepara',
+        rendimiento:   'cuánto saca de cada batch',
+        merma:         'cuánto se le echa a perder',
+        precioSugerido:'el precio antes de redondear'
+    };
+    Object.keys(PROHIBIDO).forEach(k => {
+        test('la carta NO puede devolver `' + k + '` — ' + PROHIBIDO[k], () =>
+            eq(ver23.txt.indexOf(k) === -1, true, 'fuera de la lista blanca'));
+    });
+    /* Lo que SÍ sale, enumerado: si el día de mañana se devolviera `r.datos`
+       entero «para no andar agregando campos», esto truena. */
+    test('…y lo que sale es un objeto armado campo por campo', () =>
+        eq(ver23.txt.indexOf('jsonb_build_object(') > -1 &&
+           /SELECT\s+r\.datos\s/.test(ver23.txt) === false, true, 'enumerado'));
+
+    /* ── DESCRIPCIÓN Y PRECIO, UNO POR UNO ──
+       Hay negocios que no ponen precios en la carta del QR a propósito, y la
+       descripción se escribe para el cliente, no para la cocina. Prender la
+       visibilidad del platillo no debe prender también estos dos. */
+    test('el precio sale SOLO si se pidió', () =>
+        eq(/verPrecio'\)::boolean, false\)[\s\S]{0,80}precioEnCarta/.test(ver23.txt), true, 'opt-in'));
+    test('la descripción sale SOLO si se pidió', () =>
+        eq(/verDesc'\)::boolean, false\)[\s\S]{0,60}'desc'/.test(ver23.txt), true, 'opt-in'));
+
+    /* ── EL TOKEN DE LA CARTA NO ES EL DE LA BARRA ──
+       EL ERROR QUE ESTABA A UN PASO DE COMETERSE. El negocio ya tiene un token
+       para el QR de entradas, y reusarlo habría ahorrado una tabla. Pero ese
+       token abre el catálogo de insumos CON COSTOS Y PROVEEDORES, y este se va
+       a pegar en veinte mesas y a subir a un Linktree. Con un token compartido,
+       cualquier comensal curioso se lleva la lista de costos a su casa. */
+    test('la carta tiene su propio token, no el del QR de la barra', () =>
+        eq(ver23.txt.indexOf('entrada_token') === -1, true, 'tokens separados'));
+    test('…y se busca contra la tabla de la carta, no contra negocios', () =>
+        eq(/FROM\s+menu_publico[\s\S]{0,120}datos->>'token'\s*=\s*p_token/.test(ver23.txt), true, 'su tabla'));
+    /* Un token vacío contra una fila sin token daría match y abriría la carta
+       de cualquiera. Pasa si la fila se creó a mano o si una migración futura
+       mete una fila sin token. */
+    test('…y un token vacío no abre nada', () =>
+        eq(/p_token IS NOT NULL AND p_token <> ''/.test(ver23.txt), true, 'sin match vacío'));
+    /* Sin índice, cada escaneo recorre la tabla entera: con una carta que se
+       comparte por WhatsApp eso son cientos de barridos en una noche. */
+    test('…y el token se busca por índice', () =>
+        eq(v66.indexOf("menu_publico_token_idx") > -1 && v66.indexOf("(datos->>'token')") > -1,
+           true, 'indexado'));
+
+    /* ── QUIÉN PUEDE PEDIR QUÉ ──
+       Solo la lectura de la carta es pública. Generar, rotar y configurar piden
+       sesión: si `anon` pudiera llamar a menu_token_rotar, cualquiera tiraría
+       los QR de todas las mesas de todos los negocios con un rizo de curl. */
+    test('la carta se lee sin sesión — es para el comensal', () =>
+        eq(v66.indexOf('GRANT EXECUTE ON FUNCTION menu_publico_ver(TEXT, TEXT) TO anon, authenticated;') > -1,
+           true, 'pública a propósito'));
+    ['menu_token_asegurar(TEXT, TEXT)', 'menu_token_rotar(TEXT, TEXT)',
+     'menu_cfg_guardar(TEXT, TEXT, JSONB)'].forEach(fn => {
+        test('…pero ' + fn.split('(')[0] + ' NO se le da a anon', () => {
+            const g = v66.indexOf('GRANT EXECUTE ON FUNCTION ' + fn + ' TO ');
+            const linea = g > -1 ? v66.slice(g, v66.indexOf(';', g)) : '';
+            return eq(g > -1 && linea.indexOf('anon') === -1, true, 'solo con sesión: ' + linea.slice(-18));
+        });
+        test('…y se le quita el permiso de PUBLIC primero', () =>
+            eq(v66.indexOf('REVOKE ALL ON FUNCTION ' + fn + ' FROM PUBLIC;') > -1, true, 'revocado'));
+    });
+    /* SECURITY DEFINER sin search_path fijo es la puerta clásica: quien pueda
+       crear un esquema en el path se pone por delante de `public`. */
+    ['menu_publico_ver', 'menu_token_asegurar', 'menu_token_rotar', 'menu_cfg_guardar'].forEach(fn => {
+        test(fn + ' fija su search_path', () =>
+            eq(ult23(fn).txt.indexOf('SET search_path = public') > -1, true, 'sin secuestro de esquema'));
+    });
+    /* Las tres que escriben comprueban que quien pide sea del negocio. Son
+       SECURITY DEFINER: corren por encima de RLS, así que el dueño se verifica
+       a mano o no se verifica. */
+    ['menu_token_asegurar', 'menu_token_rotar', 'menu_cfg_guardar'].forEach(fn => {
+        test(fn + ' comprueba que quien pide sea de ese negocio', () => {
+            const t = ult23(fn).txt;
+            return eq(/v_owner = auth\.uid\(\) OR es_staff_de\(p_neg\) OR is_platform_admin\(\)/.test(t) &&
+                      /RAISE EXCEPTION 'no autorizado'/.test(t), true, 'con dueño');
+        });
+    });
+
+    /* ── EL QR IMPRESO NO SE INVALIDA SOLO ──
+       Asegurar el token se llama cada vez que se abre el modal. Si generara uno
+       nuevo cada vez, los veinte QR pegados en las mesas morirían en cuanto
+       alguien abriera la pantalla a mirar. */
+    const aseg23 = ult23('menu_token_asegurar');
+    test('pedir el QR dos veces devuelve el MISMO código', () =>
+        eq(/SELECT datos->>'token' INTO v_tok[\s\S]{0,180}RETURN v_tok;/.test(aseg23.txt), true, 'idempotente'));
+    /* Y rotar es su propia función, no un efecto de otra: invalidar lo impreso
+       tiene que ser algo que alguien decidió, no algo que pasó. */
+    test('…y romperlos a propósito es otra función, aparte', () =>
+        eq(ult23('menu_token_rotar').txt.length > 0, true, 'decisión explícita'));
+
+    /* ── GUARDAR EL ORDEN NO PUEDE MATAR EL QR ──
+       LA TRAMPA DE ESTA TABLA. La fila guarda el token Y los ajustes en el
+       mismo `datos`. Un upsert normal desde el cliente —el patrón de todo el
+       resto del sistema— manda el objeto completo y REEMPLAZA `datos`: si por
+       lo que sea no trae la llave `token`, los QR de las mesas quedan muertos y
+       nadie se entera hasta que un comensal escanea. Por eso los ajustes se
+       guardan con una función que MEZCLA y que no sabe escribir el token. */
+    const cfg23 = ult23('menu_cfg_guardar');
+    test('guardar los ajustes MEZCLA, no reemplaza', () =>
+        eq(cfg23.txt.indexOf('SET datos = menu_publico.datos || v_limpio') > -1, true, 'merge'));
+    /* Se mira el CÓDIGO, sin los comentarios: el comentario de arriba de esa
+       función explica justamente que el token no va, y un indexOf a secas se
+       caza a sí mismo. Van ocho veces en este archivo. */
+    const sinComs = (t) => t.split('\n').filter(l => l.trim().indexOf('--') !== 0).join('\n');
+    test('…y no puede escribir el token ni queriendo', () => {
+        const codigo = sinComs(cfg23.txt);
+        return eq(/v_limpio := jsonb_strip_nulls\(jsonb_build_object\([\s\S]{0,200}'grupos'/.test(codigo) &&
+                  codigo.indexOf("'token'") === -1, true, 'lista blanca de ajustes');
+    });
+    /* El cliente tiene que USARLA. Con el upsert suelto al lado, la función de
+       arriba no protege nada. */
+    const mh23 = fs.readFileSync(path.join(RAIZ, 'administrativo/menu.html'), 'utf8');
+    test('el navegador guarda los ajustes por esa función', () =>
+        eq(mh23.indexOf("_supabase.rpc('menu_cfg_guardar'") > -1, true, 'por la puerta'));
+    test('…y NUNCA escribe la fila de la carta a pelo', () =>
+        eq(/(sbUpsert|sbUpsertDoc)\(\s*'menu_publico'|from\('menu_publico'\)[\s\S]{0,40}(upsert|insert|update)/
+           .test(mh23), false, 'sin atajos'));
+
+    /* ── LA PANTALLA PÚBLICA ──
+       carta.html no lleva page-guard ni negocio-tab, a propósito: esas dos
+       redirigen al hub cuando no hay sesión, y aquí nunca va a haber. */
+    const ch23 = fs.readFileSync(path.join(RAIZ, 'carta.html'), 'utf8');
+    test('la carta no lleva la guarda de sesión — nadie va a tener una', () =>
+        eq(ch23.indexOf('page-guard.js') === -1 && ch23.indexOf('negocio-tab.js') === -1, true, 'pública'));
+    /* Que la carta de un negocio salga en Google es decisión del negocio, no
+       un accidente de haber usado un QR. */
+    test('…y pide no ser indexada por los buscadores', () =>
+        eq(/name="robots"[\s\S]{0,40}noindex/.test(ch23), true, 'fuera de Google'));
+    /* El nombre del platillo lo escribe el negocio y la carta lo pinta
+       concatenando HTML. Sin escapar, un apóstrofo en «Dedo's» rompe la página
+       y un `<script>` en el nombre corre en el teléfono del cliente. */
+    test('…y escapa los nombres que escribió el negocio', () =>
+        eq(ch23.indexOf('etx(it.nombre)') > -1 && ch23.indexOf('etx(it.foto)') > -1, true, 'con etx()'));
+    /* Trae su PROPIO etx y no carga security.js: ese archivo saca a la gente
+       por inactividad a los 30 minutos, y en una carta que se queda abierta en
+       la mesa toda la cena eso no tiene ningún sentido. Pero entonces el
+       escape tiene que estar completo aquí: la foto y el grupo entran en
+       atributos HTML, así que las comillas también se escapan o un nombre con
+       una comilla rompe la etiqueta. */
+    test('…con su propio escape, completo: incluidas las comillas', () => {
+        const i = ch23.indexOf('function etx(');
+        const cuerpo = ch23.slice(i, ch23.indexOf('function $(', i));
+        return eq(ch23.indexOf('security.js') === -1 &&
+                  ['&amp;', '&lt;', '&gt;', '&quot;'].every(e => cuerpo.indexOf(e) > -1),
+                  true, 'sin medias tintas');
+    });
+    /* Una carta apagada tiene que decir que está cerrada, no «código inválido»:
+       el negocio puede bajarla sin despegar los QR, y mandar al cliente a pedir
+       otro código cuando el código está bien es mandarlo a dar vueltas. */
+    test('una carta bajada dice que está cerrada, no que el código es malo', () =>
+        eq(ver23.txt.indexOf("'ok', false, 'motivo', 'cerrada'") > -1 &&
+           ch23.indexOf('if (d.ok === false)') > -1, true, 'el mensaje correcto'));
+
+    /* ── EL ORDEN DE LOS GRUPOS ──
+       Alfabético pone «Postres» antes de «Principales» y ningún restaurante
+       enseña así su carta. El negocio los acomoda a mano y ese orden manda. */
+    const ordenGrupos = (() => {
+        const i = ch23.indexOf('function ordenGrupos(');
+        const abre = ch23.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < ch23.length) {
+            if (ch23[j] === '{') prof++;
+            else if (ch23[j] === '}') { prof--; if (!prof) break; }
+            j++;
+        }
+        const c = { console };
+        vm.createContext(c);
+        vm.runInContext('var ITEMS=[];' + ch23.slice(i, j + 1) +
+                        ';function _run(items,cfg){ITEMS=items;return ordenGrupos(cfg);}', c);
+        return c._run;
+    })();
+    const I = (g) => ({ grupo: g });
+    test('el orden que acomodó el negocio es el que se usa', () =>
+        eq(ordenGrupos([I('Postres'), I('Entradas'), I('Principales')],
+                       ['Entradas', 'Principales', 'Postres']).join('>'),
+           'Entradas>Principales>Postres', 'a mano'));
+    /* Un grupo recién creado NO debe desaparecer de la carta por no haberse
+       acomodado todavía: el negocio prende un platillo nuevo el viernes y no va
+       a entrar a ordenar grupos antes de abrir. */
+    test('un grupo nuevo entra al final, no desaparece', () =>
+        eq(ordenGrupos([I('Entradas'), I('Mezcales')], ['Entradas']).join('>'),
+           'Entradas>Mezcales', 'nadie se queda fuera'));
+    test('…y varios nuevos entran alfabéticos entre ellos', () =>
+        eq(ordenGrupos([I('Vinos'), I('Entradas'), I('Mezcales')], ['Entradas']).join('>'),
+           'Entradas>Mezcales>Vinos', 'ordenados'));
+    /* Un grupo acomodado que se quedó sin platillos no puede dejar una pestaña
+       vacía en el teléfono del cliente. */
+    test('un grupo acomodado sin platillos no deja pestaña vacía', () =>
+        eq(ordenGrupos([I('Entradas')], ['Postres', 'Entradas']).join('>'), 'Entradas', 'sin huecos'));
+    test('sin nada acomodado, alfabético — pero funciona igual', () =>
+        eq(ordenGrupos([I('Postres'), I('Entradas')], null).join('>'), 'Entradas>Postres', 'con default'));
+
+    /* ── LA MISMA CADENA DE GRUPO EN LOS DOS LADOS ──
+       La pantalla de acomodar enseña una maqueta de teléfono. Si el navegador
+       resolviera el grupo distinto que el servidor, el negocio acomodaría
+       «Coctelería» y en la mesa saldría «Otros». */
+    const goSrc = (fn) => {
+        const i = mh23.indexOf('function ' + fn + '(');
+        if (i < 0) throw new Error('no existe ' + fn);
+        const abre = mh23.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < mh23.length) {
+            if (mh23[j] === '{') prof++;
+            else if (mh23[j] === '}') { prof--; if (!prof) return mh23.slice(i, j + 1); }
+            j++;
+        }
+        throw new Error('sin cerrar ' + fn);
+    };
+    const goCtx = (() => {
+        const c = { console, String, Object };
+        vm.createContext(c);
+        vm.runInContext(goSrc('_goGrupoDe') + ';' + goSrc('_goFusion'), c);
+        return c;
+    })();
+    test('el grupo del menú manda sobre el del escandallo', () =>
+        eq(goCtx._goGrupoDe({ menu:{ grupo:'Para compartir' }, grupo:'Entradas', categoria:'Frías' }),
+           'Para compartir', 'el ajustado'));
+    test('…si no se ajustó, el del escandallo', () =>
+        eq(goCtx._goGrupoDe({ menu:{}, grupo:'Entradas', categoria:'Frías' }), 'Entradas', 'heredado'));
+    test('…y si tampoco, la categoría: hay negocios que llenaron solo esa', () =>
+        eq(goCtx._goGrupoDe({ menu:{}, categoria:'Coctelería Clásica' }), 'Coctelería Clásica', 'el otro campo'));
+    test('…y un platillo sin nada cae en «Otros», igual que en el servidor', () =>
+        eq(goCtx._goGrupoDe({ menu:{} }), 'Otros', 'con piso'));
+    /* La cadena del servidor, carácter por carácter: los dos COALESCE tienen
+       que tener los mismos tres campos en el mismo orden. */
+    test('las dos cadenas de grupo coinciden campo por campo', () => {
+        const sql = ver23.txt.indexOf("NULLIF(r.datos->'menu'->>'grupo','')") > -1 &&
+                    ver23.txt.indexOf("NULLIF(r.datos->>'grupo','')") > -1 &&
+                    ver23.txt.indexOf("NULLIF(r.datos->>'categoria','')") > -1 &&
+                    ver23.txt.indexOf("'Otros')") > -1;
+        const js = goSrc('_goGrupoDe');
+        return eq(sql && /menu && r\.menu\.grupo\) \|\| r\.grupo \|\| r\.categoria/.test(js) &&
+                  js.indexOf("'Otros'") > -1, true, 'alineadas');
+    });
+
+    /* La fusión del lado de la configuración hace lo mismo que ordenGrupos pero
+       con los grupos que HOY existen, vengan o no con platillos prendidos. */
+    test('acomodar: lo guardado conserva su lugar, lo nuevo va al final', () =>
+        eq(goCtx._goFusion(['Principales', 'Entradas'], { Entradas:2, Principales:5, Postres:1 }).join('>'),
+           'Principales>Entradas>Postres', 'estable'));
+    /* Un grupo que se quedó sin platillos SIGUE en la lista de acomodar —no en
+       la carta—: el orden que se acomodó vale para cuando se vuelva a prender
+       algo ahí, y borrarlo obliga a reacomodar cada temporada. */
+    test('…y un grupo vacío guarda su lugar en la pantalla de acomodar', () =>
+        eq(goCtx._goFusion(['Postres', 'Entradas'], { Entradas:1 }).join('>'), 'Postres>Entradas', 'lo recuerda'));
+    test('…sin repetir uno que esté dos veces en lo guardado', () =>
+        eq(goCtx._goFusion(['Entradas', 'Entradas'], { Entradas:1 }).join('>'), 'Entradas', 'sin duplicar'));
+
+    /* ── LO QUE EL MODAL DE CADA PLATILLO ESCRIBE ──
+       Los ajustes de la carta viven en `r.menu`, aparte. Si el nombre del menú
+       sobreescribiera `r.nombre`, la cocina dejaría de reconocer su propia
+       receta y el escandallo cambiaría de nombre por un ajuste de diseño. */
+    test('los ajustes de la carta viven aparte del escandallo', () => {
+        const g = goSrc('guardarQrReceta');
+        return eq(g.indexOf('_qrRec.menu = ') > -1 &&
+                  /_qrRec\.nombre\s*=/.test(g) === false &&
+                  /_qrRec\.precioEnCarta\s*=/.test(g) === false, true, 'en r.menu');
+    });
+    /* El platillo nace apagado: el modal se abre, se mira y se cierra sin que
+       nada se haya publicado. */
+    /* El interruptor refleja lo que HAY guardado, y un platillo sin `menu`
+       abre con `m = {}`: `m.visible` es undefined y la casilla sale apagada.
+       Abrir, mirar y cerrar no publica nada — y abrir tampoco escribe: lo
+       único que guarda es el botón de Guardar. */
+    test('abrir el modal de un platillo no lo publica', () => {
+        const a = goSrc('abrirQrReceta');
+        return eq(a.indexOf('var m = r.menu || {};') > -1 &&
+                  a.indexOf("(m.visible ? ' checked' : '')") > -1 &&
+                  a.indexOf('sbUpsert') === -1 && a.indexOf('_supabase') === -1,
+                  true, 'solo mira');
+    });
+
+    /* ── EL AVISO DE QUE SON DOS CÓDIGOS DISTINTOS ──
+       Quien imprime el QR es quien tiene que saber que este no es el de la
+       barra. En la documentación no lo lee nadie. */
+    test('se dice en pantalla que este QR no abre el catálogo', () =>
+        eq(mh23.indexOf('no abre el catálogo, no enseña costos ni proveedores') > -1, true, 'dicho donde se usa'));
+    /* Un QR que lleva a una carta vacía se pega en veinte mesas y alguien lo
+       descubre el viernes. */
+    test('…y se avisa antes de imprimir si no hay nada prendido', () =>
+        eq(mh23.indexOf('Todavía no has prendido ninguno') > -1, true, 'antes de la impresora'));
+    /* En vista global el QR sería el de Matriz. Generarlo sin decirlo deja
+       pegado en las mesas de Playa el QR de Tulum. */
+    test('…y en vista global se avisa que el QR sería el de Matriz', () =>
+        eq(mh23.indexOf('Estás en <b>vista global</b>') > -1, true, 'sin confundir sucursal'));
+    /* Rotar invalida lo impreso: se pregunta con la consecuencia escrita, no
+       con un «¿seguro?». */
+    test('rotar avisa que hay que reimprimir los QR pegados', () =>
+        eq(goSrc('rotarQrCarta').indexOf('ya estén pegados en las mesas hay que reimprimirlos') > -1,
+           true, 'con la consecuencia'));
+    /* La v66 no se corre sola. Un error de «función no existe» sin esa pista
+       manda a buscar el bug en el navegador. */
+    test('si falta la migración, se dice cuál', () =>
+        eq(mh23.indexOf('¿Corriste la migración v66 en Supabase?') > -1, true, 'con la pista'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

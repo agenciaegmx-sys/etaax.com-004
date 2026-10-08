@@ -59,9 +59,15 @@
                 <span class="brand-label">Carta y precios</span>
                 <span class="brand-title">Gestión de Menú</span>
             </div>
-            <button onclick="verCarta()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);
-                    padding:9px 18px;border-radius:9px;font-family:inherit;font-size:13px;cursor:pointer;white-space:nowrap">
-                &#128214; Ver la carta</button>
+            <div style="display:flex;gap:9px;flex-wrap:wrap">
+              <button onclick="abrirQrCarta()" style="background:rgba(201,162,39,.12);border:1px solid var(--gold,#c9a227);
+                      color:var(--gold,#c9a227);padding:9px 18px;border-radius:9px;font-family:inherit;font-size:13px;
+                      cursor:pointer;white-space:nowrap;font-weight:600">
+                  &#128241; QR de la carta</button>
+              <button onclick="verCarta()" style="background:transparent;border:1px solid var(--border);color:var(--text-muted);
+                      padding:9px 18px;border-radius:9px;font-family:inherit;font-size:13px;cursor:pointer;white-space:nowrap">
+                  &#128214; Ver la carta</button>
+            </div>
         </div>
 
         <div class="wrap">
@@ -109,11 +115,12 @@
                                     <th style="text-align:right">COSTO BRUTO</th>
                                     <th style="text-align:center">FOOD COST</th>
                                     <th style="text-align:center">UTILIDAD</th>
+                                    <th style="text-align:center">EN LA CARTA</th>
                                     <th style="text-align:center">ESTADO</th>
                                 </tr>
                             </thead>
                             <tbody id="menuBody">
-                                <tr><td colspan="8" style="text-align:center;padding:48px;color:var(--text-dim)">Cargando...</td></tr>
+                                <tr><td colspan="9" style="text-align:center;padding:48px;color:var(--text-dim)">Cargando...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -413,7 +420,7 @@ function renderMenu() {
 
     var body = document.getElementById('menuBody');
     if (!lista.length) {
-        body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:56px;color:var(--text-dim)">' +
+        body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:56px;color:var(--text-dim)">' +
             '<div style="font-size:36px;margin-bottom:12px">📋</div>' +
             '<div style="font-size:14px">' +
             (recetasAll.length === 0
@@ -439,6 +446,7 @@ function renderMenu() {
         var uBg    = uPct >= 30 ? 'rgba(61,190,122,0.12)' : uPct >= 15 ? 'rgba(245,200,66,0.12)' : 'rgba(224,90,58,0.12)';
 
         var rend = getRendimientoNeto(r);
+        var enCarta = !!(r.menu && r.menu.visible);
 
         return '<tr style="opacity:' + (inactiva ? '0.45' : '1') + '">' +
             '<td style="font-size:12px;font-weight:600">' + esc(r.nombre) +
@@ -454,6 +462,18 @@ function renderMenu() {
                     ? '<span style="color:' + uColor + ';background:' + uBg + ';border-radius:20px;padding:2px 10px;font-weight:700;font-size:12px">' + uPct.toFixed(0) + '%</span>'
                     : '<span style="color:var(--text-dim)">—</span>') +
             '</td>' +
+            /* LA CARTA PÚBLICA, por platillo. Va al lado del estado porque son las
+               dos decisiones de visibilidad: una dice si se vende, la otra si se
+               enseña. El punto verde avisa de un vistazo cuáles ya están en la
+               carta — sin eso habría que abrir los sesenta para saberlo. */
+            '<td style="text-align:center">' +
+                '<button onclick="abrirQrReceta(\'' + r.id + '\')" title="Qué se enseña de este platillo en la carta del QR" ' +
+                    'style="border:1px solid ' + (enCarta ? 'var(--green)' : 'var(--border)') + ';cursor:pointer;' +
+                    'padding:4px 11px;border-radius:20px;font-size:11px;font-family:inherit;background:' +
+                    (enCarta ? 'rgba(61,190,122,.12)' : 'transparent') + ';color:' +
+                    (enCarta ? 'var(--green)' : 'var(--text-dim)') + '">' +
+                    (enCarta ? '● En la carta' : '○ Oculto') + '</button>' +
+            '</td>' +
             '<td style="text-align:center">' +
                 '<button onclick="toggleStatus(\'' + r.id + '\')" style="border:none;cursor:pointer;padding:4px 14px;border-radius:20px;font-size:11px;font-weight:600;font-family:\'DM Sans\',sans-serif;transition:all .15s;background:' +
                 (inactiva ? 'rgba(100,100,100,0.15)' : 'rgba(61,190,122,0.15)') + ';color:' +
@@ -464,6 +484,444 @@ function renderMenu() {
     }).join('');
 }
 
+/* ══ LA CARTA PÚBLICA, PLATILLO POR PLATILLO ═══════════════════════════════
+   Lo que el cliente ve en el QR de la mesa no es lo que ve la cocina. El nombre
+   puede ser otro, la foto puede ser otra, y el precio puede no ir. Por eso cada
+   platillo guarda su propio bloque `menu` en vez de reutilizar los campos del
+   escandallo: ahí viven los datos de COSTEAR, aquí los de VENDER, y mezclarlos
+   obligaría a elegir entre una foto buena para costear y una buena para la
+   carta.
+
+   NADA sale hasta que se prenda aquí, uno por uno. Un menú que se publica solo
+   es un menú con la salsa madre adentro. */
+var _qrRec = null, _qrFotoNueva = '';
+
+function abrirQrReceta(id) {
+    var r = getRecetas().find(function (x) { return x.id === id; });
+    if (!r) return;
+    _qrRec = r; _qrFotoNueva = '';
+    var m = r.menu || {};
+    var fotos = (r.fotos && r.fotos.length) ? r.fotos : (r.foto ? [r.foto] : []);
+    var elegida = m.foto || fotos[0] || '';
+
+    document.getElementById('qrRecTitulo').textContent = r.nombre || 'Platillo';
+    document.getElementById('qrRecCuerpo').innerHTML =
+        /* Lo primero es el interruptor: es la decisión, lo demás es el detalle. */
+        '<label class="qr-sw"><input type="checkbox" id="qrVisible"' + (m.visible ? ' checked' : '') + '>' +
+            '<span><b>Enseñar en la carta del QR</b>' +
+            '<small>Apagado, este platillo no aparece aunque esté activo en la carta impresa.</small></span></label>' +
+
+        '<div class="qr-sec">La foto</div>' +
+        (fotos.length
+            ? '<div class="qr-fotos" id="qrFotos">' + fotos.map(function (u, i) {
+                  return '<button class="qr-foto' + (u === elegida ? ' on' : '') + '" data-foto="' + esc(u) + '">' +
+                         '<img src="' + esc(u) + '" alt="" loading="lazy"></button>';
+              }).join('') + '</div>'
+            : '<div class="qr-aviso">Este platillo no tiene fotos en el escandallo. Sube una aquí.</div>') +
+        /* Las fotos del escandallo se tomaron para costear —un plato sobre acero,
+           con luz de cocina— y no siempre sirven para vender. Por eso se puede
+           subir una propia SOLO para la carta, sin tocar la del costeo. */
+        '<label class="qr-subir">📷 Subir una foto solo para la carta' +
+            '<input type="file" accept="image/*" hidden onchange="qrSubirFoto(this)"></label>' +
+        '<input type="hidden" id="qrFoto" value="' + esc(elegida) + '">' +
+
+        '<div class="qr-sec">Cómo se llama en la carta</div>' +
+        '<label class="qr-lbl">En español</label>' +
+        '<input class="qr-in" id="qrNomEs" value="' + esc(m.nombreEs || r.nombre || '') + '" ' +
+            'placeholder="' + esc(r.nombre || '') + '">' +
+        '<label class="qr-lbl">En inglés <span class="qr-opt">opcional</span></label>' +
+        '<input class="qr-in" id="qrNomEn" value="' + esc(m.nombreEn || '') + '" placeholder="—">' +
+
+        '<div class="qr-sec">Descripción</div>' +
+        '<textarea class="qr-in" id="qrDesc" rows="2" ' +
+            'placeholder="Cómo lo describirías en la mesa…">' + esc(m.desc || '') + '</textarea>' +
+        '<label class="qr-sw"><input type="checkbox" id="qrVerDesc"' + (m.verDesc ? ' checked' : '') + '>' +
+            '<span>Enseñar la descripción</span></label>' +
+
+        '<div class="qr-sec">Precio y grupo</div>' +
+        '<label class="qr-sw"><input type="checkbox" id="qrVerPrecio"' + (m.verPrecio ? ' checked' : '') + '>' +
+            '<span>Enseñar el precio' +
+            '<small>' + (parseFloat(r.precioEnCarta) ? 'Hoy: $' + parseFloat(r.precioEnCarta).toFixed(2) :
+                '⚠️ Este platillo no tiene precio capturado — no saldría ninguno.') + '</small></span></label>' +
+        '<label class="qr-lbl">Grupo en la carta</label>' +
+        '<input class="qr-in" id="qrGrupo" value="' + esc(m.grupo || r.grupo || '') + '" ' +
+            'list="qrGruposLista" placeholder="' + esc(r.grupo || 'Otros') + '">' +
+        '<datalist id="qrGruposLista">' + _gruposExistentes().map(function (g) {
+            return '<option value="' + esc(g) + '">'; }).join('') + '</datalist>' +
+        '<div class="qr-nota">El grupo de la carta puede ser otro que el del escandallo: ' +
+            'la carta se acomoda a gusto del negocio, no al de la cocina.</div>';
+
+    document.getElementById('qrFotos') && (document.getElementById('qrFotos').onclick = function (e) {
+        var b = e.target.closest('[data-foto]'); if (!b) return;
+        document.getElementById('qrFoto').value = b.getAttribute('data-foto');
+        Array.prototype.forEach.call(this.querySelectorAll('.qr-foto'), function (x) { x.classList.remove('on'); });
+        b.classList.add('on');
+    });
+    document.getElementById('qrRecModal').style.display = 'flex';
+}
+
+function _gruposExistentes() {
+    var g = {};
+    (getRecetas() || []).forEach(function (r) {
+        if (r.menu && r.menu.grupo) g[r.menu.grupo] = 1;
+        if (r.grupo) g[r.grupo] = 1;
+    });
+    return Object.keys(g).sort(function (a, b) { return a.localeCompare(b, 'es'); });
+}
+
+/* La foto de la carta va al bucket PÚBLICO (carpeta `recetas`), que es donde ya
+   viven las del escandallo: el cliente la abre sin sesión, así que no puede ser
+   una URL firmada que caduca. */
+async function qrSubirFoto(input) {
+    var file = (input.files || [])[0];
+    input.value = '';
+    if (!file || !window.sbSubirFotoBase64) return;
+    var lbl = input.parentElement;
+    var txt = lbl.firstChild.nodeValue;
+    lbl.firstChild.nodeValue = '⏳ Subiendo…';
+    try {
+        var b64 = await new Promise(function (res) {
+            var r = new FileReader(); r.onload = function (e) { res(e.target.result); };
+            r.onerror = function () { res(''); }; r.readAsDataURL(file);
+        });
+        if (!b64) throw new Error('no se pudo leer');
+        var url = await sbSubirFotoBase64('recetas', b64, getNegocioActivo());
+        if (!url) throw new Error('no se pudo subir');
+        _qrFotoNueva = url;
+        document.getElementById('qrFoto').value = url;
+        var cont = document.getElementById('qrFotos');
+        if (cont) {
+            Array.prototype.forEach.call(cont.querySelectorAll('.qr-foto'), function (x) { x.classList.remove('on'); });
+            cont.insertAdjacentHTML('afterbegin',
+                '<button class="qr-foto on" data-foto="' + esc(url) + '"><img src="' + esc(url) + '" alt=""></button>');
+        }
+    } catch (e) { alert('No se pudo subir la foto: ' + ((e && e.message) || e)); }
+    lbl.firstChild.nodeValue = txt;
+}
+
+function cerrarQrReceta() {
+    document.getElementById('qrRecModal').style.display = 'none';
+    _qrRec = null;
+}
+
+async function guardarQrReceta() {
+    if (!_qrRec) return;
+    var visible = document.getElementById('qrVisible').checked;
+    var foto = document.getElementById('qrFoto').value || '';
+    /* Prender sin foto deja un hueco gris en la carta, que se ve peor que no
+       tener el platillo. Se avisa y se deja decidir, no se impide. */
+    if (visible && !foto &&
+        !confirm('Este platillo no tiene foto para la carta. Va a salir sin imagen.' +
+                 String.fromCharCode(10, 10) + '¿Lo enseñamos así?')) return;
+
+    _qrRec.menu = {
+        visible:   visible,
+        foto:      foto,
+        nombreEs:  (document.getElementById('qrNomEs').value || '').trim(),
+        nombreEn:  (document.getElementById('qrNomEn').value || '').trim(),
+        desc:      (document.getElementById('qrDesc').value || '').trim(),
+        verDesc:   document.getElementById('qrVerDesc').checked,
+        verPrecio: document.getElementById('qrVerPrecio').checked,
+        grupo:     (document.getElementById('qrGrupo').value || '').trim()
+    };
+    /* Se guarda la receta ENTERA, que es la fila que vive en la tabla. Mandar
+       solo el bloque `menu` sobrescribiría todo lo demás con nada. */
+    try { sbUpsert('recetas', _qrRec, getNegocioActivo()); } catch (e) {
+        alert('No se pudo guardar: ' + ((e && e.message) || e)); return;
+    }
+    cerrarQrReceta();
+    renderMenu();
+}
+
+/* ══ EL QR DE LA CARTA ═════════════════════════════════════════════════════
+   UNO POR SUCURSAL, con su PROPIO token — nunca el del QR de la barra. Ese
+   abre el catálogo de insumos con costos de compra y proveedores, y esta carta
+   se va a pegar en las mesas y a subir a un Linktree: justamente lo que se
+   quiere que pase. Con el token compartido, cualquier cliente con curiosidad
+   podría jalar la lista de costos desde su casa. */
+var _cartaTok = '', _cartaCfg = null;
+
+function _sucMenu() { return localStorage.getItem('etaax_sucursal_activa') || ''; }
+function _sucNomMenu() {
+    var sid = _sucMenu(); if (!sid) return '';
+    try {
+        var l = JSON.parse(localStorage.getItem('etaax_' + getNegocioActivo() + '_sucursales') || '[]');
+        var x = l.find(function (y) { return y.id === sid; });
+        return (x && x.nombre) || '';
+    } catch (e) { return ''; }
+}
+
+async function abrirQrCarta() {
+    var negId = getNegocioActivo();
+    if (!negId) { alert('No hay negocio activo.'); return; }
+    document.getElementById('qrCartaModal').style.display = 'flex';
+    var box = document.getElementById('qrCartaBox');
+    var inf = document.getElementById('qrCartaInfo');
+    box.innerHTML = '<div style="color:var(--text-dim);font-size:12px">Generando…</div>';
+    inf.textContent = '';
+
+    /* Cuántos platillos saldrían. Es lo primero que hay que saber antes de
+       imprimir nada: un QR que lleva a una carta vacía se pega en veinte mesas
+       y alguien lo descubre el viernes. */
+    var visibles = _goEnCarta();
+    var sinFoto = visibles.filter(function (r) { return !((r.menu && r.menu.foto) || r.foto); }).length;
+
+    try {
+        var t = await _supabase.rpc('menu_token_asegurar', { p_neg: negId, p_suc: _sucMenu() });
+        if (t.error) throw t.error;
+        _cartaTok = t.data;
+    } catch (e) {
+        box.innerHTML = '<div style="color:var(--red);font-size:12px;line-height:1.6">No se pudo generar el QR.<br>' +
+            '¿Corriste la migración v66 en Supabase?<br><span style="color:var(--text-dim)">' +
+            esc((e && e.message) || e) + '</span></div>';
+        return;
+    }
+
+    var url = location.origin + '/carta.html?n=' + encodeURIComponent(negId) +
+              '&t=' + encodeURIComponent(_cartaTok);
+    document.getElementById('qrCartaUrl').textContent = url;
+    document.getElementById('qrCartaAbrir').href = url;
+    var nom = _sucNomMenu();
+    inf.innerHTML =
+        '<b style="color:var(--text)">' + visibles.length + '</b> platillo' + (visibles.length === 1 ? '' : 's') +
+        ' en la carta' + (nom ? ' de <b style="color:var(--text)">' + esc(nom) + '</b>' : '') +
+        (visibles.length === 0
+            ? '<div style="color:var(--accent);margin-top:8px;line-height:1.6">⚠️ Todavía no has prendido ninguno. ' +
+              'Abre «En la carta» en cada platillo que quieras enseñar — nada sale hasta que lo prendas.</div>'
+            : (sinFoto ? '<div style="color:var(--accent);margin-top:8px;line-height:1.6">⚠️ ' + sinFoto +
+                ' sin foto: van a salir con un marco vacío.</div>' : '')) +
+        (_sucMenu() ? '' : '<div style="color:var(--accent);margin-top:8px;line-height:1.6">⚠️ Estás en <b>vista global</b>. ' +
+            'Este QR sería el de <b>Matriz</b>. Entra a una sucursal para generar el suyo.</div>');
+
+    function gen() {
+        box.innerHTML = '';
+        var d = document.createElement('div');
+        d.style.cssText = 'background:#fff;padding:14px;border-radius:12px;display:inline-block';
+        box.appendChild(d);
+        try {
+            new QRCode(d, { text: url, width: 210, height: 210, colorDark: '#0a0908', colorLight: '#ffffff' });
+            if (window.etaaxQrLogo) window.etaaxQrLogo(d);
+        } catch (e) { box.innerHTML = '<div style="color:var(--red);font-size:12px">No se pudo generar el QR.</div>'; }
+    }
+    if (window.QRCode) gen();
+    else {
+        var sc = document.createElement('script');
+        sc.src = 'https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js';
+        sc.onload = gen;
+        sc.onerror = function () { box.innerHTML = '<div style="color:var(--red);font-size:12px">No se pudo cargar el generador.</div>'; };
+        document.head.appendChild(sc);
+    }
+}
+function cerrarQrCarta() { document.getElementById('qrCartaModal').style.display = 'none'; }
+function copiarQrCarta() {
+    var u = document.getElementById('qrCartaUrl').textContent;
+    navigator.clipboard.writeText(u).then(function () {
+        var b = document.getElementById('qrCartaCopiar');
+        var t = b.textContent; b.textContent = '✓ Copiado';
+        setTimeout(function () { b.textContent = t; }, 1600);
+    }, function () { window.prompt('Copia el enlace:', u); });
+}
+/* Rotar invalida los QR ya pegados en las mesas: por eso se pregunta con el
+   consecuencia escrita, no con un «¿seguro?». */
+async function rotarQrCarta() {
+    if (!confirm('Se genera un código NUEVO y el de ahora deja de funcionar.' +
+                 String.fromCharCode(10, 10) +
+                 'Los QR que ya estén pegados en las mesas hay que reimprimirlos.' +
+                 String.fromCharCode(10, 10) + '¿Lo hacemos?')) return;
+    try {
+        var r = await _supabase.rpc('menu_token_rotar', { p_neg: getNegocioActivo(), p_suc: _sucMenu() });
+        if (r.error) throw r.error;
+        cerrarQrCarta();
+        abrirQrCarta();
+    } catch (e) { alert('No se pudo rotar: ' + ((e && e.message) || e)); }
+}
+
+/* ══ LOS GRUPOS DE LA CARTA, EN SU ORDEN ════════════════════════════════════
+   Nacen solos del escandallo (la categoría que ya se captura: entradas,
+   principales, postres, coctelería) para que la carta funcione sin configurar
+   nada. Pero el orden alfabético pone «Postres» antes de «Principales», y
+   ningún restaurante enseña así su carta: por eso se acomodan a mano y ese
+   orden es el que manda. */
+var _goOrden = [], _goCargado = false;
+
+/* El inventario de grupos tal como está HOY: cuántos platillos prendidos hay en
+   cada uno. Un grupo con cero no se tira de la lista —se marca— porque el orden
+   que se acomodó ya vale para cuando se vuelva a prender algo ahí. */
+/* El grupo de un platillo, con la MISMA cadena que menu_publico_ver (v66):
+   el del menú manda, luego el del escandallo, luego la categoría. Si esta
+   cadena y la del servidor se separan, la maqueta del teléfono enseña un orden
+   y la carta real otro — y el negocio acomoda a ciegas. */
+function _goGrupoDe(r) {
+    return String(((r.menu && r.menu.grupo) || r.grupo || r.categoria || '')).trim() || 'Otros';
+}
+
+/* Los platillos que HOY saldrían en la carta: los mismos tres candados del
+   servidor. Si aquí entrara una sub-receta, el negocio le haría un lugar en el
+   orden a un grupo que el comensal nunca va a ver. */
+function _goEnCarta() {
+    return (getRecetas() || []).filter(function (r) {
+        return r && r.menu && r.menu.visible &&
+               (r.tipo === 'alimentos' || r.tipo === 'bebidas') &&
+               r.status !== 'inactiva';
+    });
+}
+
+function _goConteos() {
+    var c = {};
+    _goEnCarta().forEach(function (r) {
+        var g = _goGrupoDe(r);
+        c[g] = (c[g] || 0) + 1;
+    });
+    return c;
+}
+
+/* Fusiona lo guardado con lo que existe: lo acomodado conserva su lugar y lo
+   nuevo entra al final, alfabético. Si un grupo nuevo se colara al principio
+   solo por ser nuevo, cada platillo que se prende reacomodaría la carta. */
+function _goFusion(guardados, conteos) {
+    var out = [], vistos = {};
+    (guardados || []).forEach(function (g) {
+        g = String(g || '').trim();
+        if (!g || vistos[g]) return;
+        vistos[g] = 1; out.push(g);
+    });
+    Object.keys(conteos).sort(function (a, b) { return a.localeCompare(b, 'es'); })
+        .forEach(function (g) { if (!vistos[g]) { vistos[g] = 1; out.push(g); } });
+    return out;
+}
+
+async function abrirGruposCarta() {
+    var negId = getNegocioActivo();
+    if (!negId) { alert('No hay negocio activo.'); return; }
+    document.getElementById('grupOrdModal').style.display = 'flex';
+    var cu = document.getElementById('grupOrdCuerpo');
+    cu.innerHTML = '<div style="color:var(--text-dim);font-size:12.5px;padding:24px 0;text-align:center">Cargando…</div>';
+
+    if (!_goCargado) {
+        try {
+            var id = negId + '|' + (_sucMenu() || 'suc_principal');
+            var q = await _supabase.from('menu_publico').select('datos').eq('id', id).maybeSingle();
+            _cartaCfg = (q.data && q.data.datos) || {};
+        } catch (e) { _cartaCfg = _cartaCfg || {}; }
+        _goCargado = true;
+    }
+    _goOrden = _goFusion((_cartaCfg && _cartaCfg.grupos) || [], _goConteos());
+    _goPintar();
+}
+
+function _goPintar() {
+    var cu = document.getElementById('grupOrdCuerpo');
+    if (!cu) return;
+    var cnt = _goConteos(), cfg = _cartaCfg || {};
+    var nom = _sucNomMenu();
+    var tot = Object.keys(cnt).reduce(function (a, k) { return a + cnt[k]; }, 0);
+
+    /* La maqueta enseña las pestañas en el orden de arriba y los primeros
+       platillos del primer grupo: lo que de verdad ve quien escanea. */
+    var prim = _goOrden.filter(function (g) { return cnt[g]; })[0] || '';
+    var ejem = _goEnCarta().filter(function (r) { return _goGrupoDe(r) === prim; }).slice(0, 4);
+
+    var h = '<div class="cel"><div class="cel-notch"></div>' +
+        '<div class="cel-tit">' + esc((cfg.titulo || '').trim() || (nom || 'Nuestra carta')) + '</div>' +
+        (cfg.nota ? '<div class="cel-sub">' + esc(String(cfg.nota).slice(0, 34)) + '</div>' : '') +
+        '<div class="cel-tabs">' +
+            _goOrden.filter(function (g) { return cnt[g]; }).slice(0, 4).map(function (g, i) {
+                return '<div class="cel-tab' + (i === 0 ? ' on' : '') + '">' + esc(g) + '</div>';
+            }).join('') +
+        '</div>';
+    if (ejem.length) {
+        h += '<div class="cel-rej">' + ejem.map(function (r) {
+            var f = (r.menu && r.menu.foto) || r.foto || '';
+            return '<div class="cel-card"><div class="ph">' +
+                (f ? '<img src="' + esc(f) + '" style="width:100%;height:100%;object-fit:cover">' : '🍽️') +
+                '</div><div class="nm">' + esc(((r.menu && r.menu.nombreEs) || r.nombre || '').slice(0, 28)) +
+                '</div></div>';
+        }).join('') + '</div>';
+        if (cnt[prim] > 4) h += '<div class="cel-mas">+ ' + (cnt[prim] - 4) + ' más en ' + esc(prim) + '</div>';
+    } else {
+        h += '<div class="cel-mas" style="padding:26px 10px;line-height:1.7">Todavía no hay ningún platillo ' +
+             'prendido.<br>Préndelos uno por uno con «En la carta».</div>';
+    }
+    h += '</div>';
+
+    h += '<div class="qr-sec" style="margin-top:22px">Encabezado</div>' +
+        '<label class="qr-lbl">Título <span class="qr-opt">(si lo dejas vacío sale el nombre de la sucursal)</span></label>' +
+        '<input class="qr-in" id="goTitulo" maxlength="60" placeholder="' + esc(nom || 'Nuestra carta') + '" ' +
+            'value="' + esc(cfg.titulo || '') + '" oninput="_goCfgIn()">' +
+        '<label class="qr-lbl">Una línea debajo <span class="qr-opt">(opcional)</span></label>' +
+        '<input class="qr-in" id="goNota" maxlength="90" placeholder="Cocina de temporada · Tulum" ' +
+            'value="' + esc(cfg.nota || '') + '" oninput="_goCfgIn()">';
+
+    h += '<div class="qr-sec">El orden de los grupos</div>';
+    if (!_goOrden.length) {
+        h += '<div class="qr-aviso">No hay grupos todavía. El grupo sale de la <b style="color:var(--text)">' +
+             'categoría del escandallo</b>, y lo puedes cambiar a gusto en «En la carta» de cada platillo.</div>';
+    } else {
+        h += _goOrden.map(function (g, i) {
+            var n = cnt[g] || 0;
+            return '<div class="go-fila' + (n ? '' : ' vacio') + '">' +
+                '<div class="go-pos">' + (i + 1) + '</div>' +
+                '<div class="go-nom">' + esc(g) +
+                    '<small>' + (n ? n + ' platillo' + (n === 1 ? '' : 's') : 'ninguno prendido ahora') + '</small></div>' +
+                '<button class="go-mv" onclick="_goMover(' + i + ',-1)"' + (i === 0 ? ' disabled' : '') +
+                    ' title="Subir">▲</button>' +
+                '<button class="go-mv" onclick="_goMover(' + i + ',1)"' +
+                    (i === _goOrden.length - 1 ? ' disabled' : '') + ' title="Bajar">▼</button>' +
+            '</div>';
+        }).join('');
+        h += '<div class="qr-nota">Los grupos sin nada prendido no salen en la carta, pero guardan su lugar ' +
+             'para cuando vuelvas a prender algo ahí. ' + tot + ' platillo' + (tot === 1 ? '' : 's') +
+             ' en total.</div>';
+    }
+    cu.innerHTML = h;
+}
+
+/* Se lee del campo y se repinta la maqueta, pero NO se escribe en el servidor
+   hasta Guardar: cancelar tiene que poder deshacer de verdad. */
+function _goCfgIn() {
+    _cartaCfg = _cartaCfg || {};
+    var t = document.getElementById('goTitulo'), n = document.getElementById('goNota');
+    _cartaCfg.titulo = t ? t.value : '';
+    _cartaCfg.nota   = n ? n.value : '';
+    var cel = document.querySelector('#grupOrdCuerpo .cel-tit');
+    var sub = document.querySelector('#grupOrdCuerpo .cel-sub');
+    if (cel) cel.textContent = (_cartaCfg.titulo || '').trim() || (_sucNomMenu() || 'Nuestra carta');
+    if (sub) sub.textContent = String(_cartaCfg.nota || '').slice(0, 34);
+}
+
+function _goMover(i, paso) {
+    var j = i + paso;
+    if (j < 0 || j >= _goOrden.length) return;
+    var t = _goOrden[i]; _goOrden[i] = _goOrden[j]; _goOrden[j] = t;
+    _goPintar();
+    /* El foco se pierde al repintar: se devuelve a la MISMA flecha en su nueva
+       fila para poder subir un grupo cuatro lugares con cuatro toques. */
+    var f = document.querySelectorAll('#grupOrdCuerpo .go-fila')[j];
+    var b = f && f.querySelectorAll('.go-mv')[paso < 0 ? 0 : 1];
+    if (b && !b.disabled) b.focus();
+}
+
+function cerrarGruposCarta() {
+    document.getElementById('grupOrdModal').style.display = 'none';
+    _goCargado = false;   // al reabrir se relee: alguien más pudo acomodarlos
+}
+
+async function guardarGruposCarta() {
+    _goCfgIn();
+    try {
+        var r = await _supabase.rpc('menu_cfg_guardar', {
+            p_neg: getNegocioActivo(), p_suc: _sucMenu(),
+            p_cfg: { titulo: (_cartaCfg.titulo || '').trim(), nota: (_cartaCfg.nota || '').trim(),
+                     grupos: _goOrden }
+        });
+        if (r.error) throw r.error;
+        cerrarGruposCarta();
+    } catch (e) {
+        alert('No se pudo guardar: ' + ((e && e.message) || e) +
+              String.fromCharCode(10, 10) + '¿Corriste la migración v66 en Supabase?');
+    }
+}
+
 function esc(s) {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
@@ -471,6 +929,179 @@ function esc(s) {
 // ── Init ─────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() { renderMenu(); _sbInitMenu(); });
 </script>
+<!-- ══ AJUSTES DE LA CARTA, POR PLATILLO ══════════════════════════════════════
+     Lo que el cliente ve en el QR de la mesa no es lo que ve la cocina: el
+     nombre puede ser otro, la foto puede ser otra y el precio puede no ir. -->
+<div id="qrRecModal" onclick="if(event.target===this)cerrarQrReceta()"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9500;
+            align-items:center;justify-content:center;padding:18px">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;
+              width:min(520px,96vw);max-height:88vh;display:flex;flex-direction:column;overflow:hidden">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+                padding:17px 20px;border-bottom:1px solid var(--border)">
+      <div>
+        <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)">
+          En la carta del QR</div>
+        <div id="qrRecTitulo" style="font-family:'Bebas Neue',sans-serif;font-size:21px;
+             letter-spacing:1.2px;color:var(--text);margin-top:2px">—</div>
+      </div>
+      <button onclick="cerrarQrReceta()" style="background:none;border:none;color:var(--text-dim);
+              font-size:19px;cursor:pointer;padding:4px 8px">✕</button>
+    </div>
+    <div id="qrRecCuerpo" style="flex:1;overflow:auto;padding:16px 20px 20px"></div>
+    <div style="display:flex;gap:10px;padding:14px 20px;border-top:1px solid var(--border)">
+      <button onclick="cerrarQrReceta()" style="flex:1;background:transparent;border:1px solid var(--border);
+              color:var(--text-muted);border-radius:10px;padding:12px;font-family:inherit;font-size:14px;
+              cursor:pointer">Cancelar</button>
+      <button onclick="guardarQrReceta()" style="flex:1.4;background:var(--green);color:#0c1a12;border:none;
+              border-radius:10px;padding:12px;font-family:inherit;font-size:14px;font-weight:600;
+              cursor:pointer">Guardar</button>
+    </div>
+  </div>
+</div>
+<!-- ══ EL QR DE LA CARTA ══════════════════════════════════════════════════ -->
+<div id="qrCartaModal" onclick="if(event.target===this)cerrarQrCarta()"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9500;
+            align-items:center;justify-content:center;padding:18px">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;
+              width:min(460px,96vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+                padding:17px 20px;border-bottom:1px solid var(--border)">
+      <div>
+        <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)">
+          Para pegar en las mesas</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:21px;letter-spacing:1.2px;
+             color:var(--gold,#c9a227);margin-top:2px">QR de la carta</div>
+      </div>
+      <button onclick="cerrarQrCarta()" style="background:none;border:none;color:var(--text-dim);
+              font-size:19px;cursor:pointer;padding:4px 8px">✕</button>
+    </div>
+    <div style="flex:1;overflow:auto;padding:20px;text-align:center">
+      <div id="qrCartaBox" style="min-height:214px;display:flex;align-items:center;justify-content:center"></div>
+      <div id="qrCartaInfo" style="font-size:12.5px;color:var(--text-muted);line-height:1.6;margin-top:14px"></div>
+      <div id="qrCartaUrl" style="font-size:11px;color:var(--text-dim);word-break:break-all;
+           background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+           padding:9px 10px;margin-top:14px;text-align:left"></div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button id="qrCartaCopiar" onclick="copiarQrCarta()" style="flex:1;background:transparent;
+                border:1px solid var(--border);color:var(--text-muted);border-radius:9px;padding:11px;
+                font-family:inherit;font-size:13px;cursor:pointer">&#128203; Copiar enlace</button>
+        <a id="qrCartaAbrir" href="#" target="_blank" rel="noopener" style="flex:1;background:transparent;
+           border:1px solid var(--border);color:var(--text-muted);border-radius:9px;padding:11px;
+           font-size:13px;text-decoration:none;display:flex;align-items:center;justify-content:center">
+           &#128065; Ver cómo queda</a>
+      </div>
+      <button onclick="abrirGruposCarta()" style="width:100%;margin-top:8px;background:rgba(201,162,39,.1);
+              border:1px solid var(--gold,#c9a227);color:var(--gold,#c9a227);border-radius:9px;padding:11px;
+              font-family:inherit;font-size:13px;cursor:pointer;font-weight:600">
+          &#128451;&#65039; Ajustes y orden de los grupos</button>
+      <!-- Este QR es DISTINTO al de la barra. Decirlo aquí, no en la
+           documentación: el que lo imprime es quien tiene que saberlo. -->
+      <div class="qr-aviso" style="margin-top:16px;text-align:left">
+        Este código es <b style="color:var(--text)">solo de esta carta</b> y no sirve para nada más:
+        no abre el catálogo, no enseña costos ni proveedores, y no deja registrar nada.
+        Es otro código, aparte del QR de entradas de la barra.
+      </div>
+      <button onclick="rotarQrCarta()" style="background:none;border:none;color:var(--text-dim);
+              font-size:11.5px;cursor:pointer;margin-top:12px;text-decoration:underline">
+          Generar un código nuevo (los impresos dejan de servir)</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ AJUSTES DE LA CARTA: LOS GRUPOS, EN SU ORDEN ═══════════════════════════
+     En una vista de teléfono a propósito. Una lista de grupos en una tabla de
+     escritorio no dice nada; lo que importa es con qué se topa el comensal
+     primero, y eso solo se ve con la forma de la pantalla donde va a pasar. -->
+<div id="grupOrdModal" onclick="if(event.target===this)cerrarGruposCarta()"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9600;
+            align-items:center;justify-content:center;padding:18px">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;
+              width:min(600px,96vw);max-height:92vh;display:flex;flex-direction:column;overflow:hidden">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+                padding:17px 20px;border-bottom:1px solid var(--border)">
+      <div>
+        <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)">
+          Así se va a ver</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:21px;letter-spacing:1.2px;
+             color:var(--text);margin-top:2px">Ajustes de la carta</div>
+      </div>
+      <button onclick="cerrarGruposCarta()" style="background:none;border:none;color:var(--text-dim);
+              font-size:19px;cursor:pointer;padding:4px 8px">✕</button>
+    </div>
+    <div id="grupOrdCuerpo" style="flex:1;overflow:auto;padding:18px 20px 20px"></div>
+    <div style="display:flex;gap:10px;padding:14px 20px;border-top:1px solid var(--border)">
+      <button onclick="cerrarGruposCarta()" style="flex:1;background:transparent;border:1px solid var(--border);
+              color:var(--text-muted);border-radius:10px;padding:12px;font-family:inherit;font-size:14px;
+              cursor:pointer">Cancelar</button>
+      <button onclick="guardarGruposCarta()" style="flex:1.4;background:var(--green);color:#0c1a12;border:none;
+              border-radius:10px;padding:12px;font-family:inherit;font-size:14px;font-weight:600;
+              cursor:pointer">Guardar</button>
+    </div>
+  </div>
+</div>
+<style>
+/* La maqueta de teléfono. No es decoración: es la única forma de ver que
+   «Postres» quedó arriba de «Entradas» sin tener que imaginárselo. */
+.cel { width:252px; margin:0 auto; background:#13120f; border:7px solid #2a2721; border-radius:30px;
+  padding:14px 11px 16px; box-shadow:0 10px 34px rgba(0,0,0,.5); }
+.cel-notch { width:52px; height:4px; background:#2a2721; border-radius:3px; margin:0 auto 12px; }
+.cel-tit { font-family:'Bebas Neue',sans-serif; font-size:17px; letter-spacing:1.2px; color:#f2ede2;
+  text-align:center; line-height:1.15; }
+.cel-sub { font-size:9.5px; color:#8b8578; text-align:center; margin-top:3px; letter-spacing:.8px;
+  text-transform:uppercase; }
+.cel-tabs { display:flex; gap:5px; overflow:hidden; margin-top:12px; padding-bottom:3px; }
+.cel-tab { flex-shrink:0; font-size:9.5px; padding:5px 9px; border-radius:20px; background:#211e19;
+  color:#b5ae9f; white-space:nowrap; }
+.cel-tab.on { background:var(--gold,#c9a227); color:#13120f; font-weight:700; }
+.cel-rej { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:11px; }
+.cel-card { background:#1c1915; border-radius:9px; overflow:hidden; }
+.cel-card .ph { height:42px; background:#262219; display:flex; align-items:center; justify-content:center;
+  font-size:15px; }
+.cel-card .nm { font-size:8.5px; color:#e8e2d6; padding:5px 6px 6px; line-height:1.3; }
+.cel-mas { font-size:9px; color:#6f6a5e; text-align:center; margin-top:9px; }
+/* Las filas que se acomodan. Flechas y no arrastrar: esto se usa en tablet
+   detrás de la barra, y arrastrar con el dedo en una lista con scroll propio
+   falla justo cuando hay prisa. */
+.go-fila { display:flex; align-items:center; gap:9px; background:var(--surface2);
+  border:1px solid var(--border); border-radius:10px; padding:9px 10px; margin-bottom:7px; }
+.go-fila.vacio { opacity:.5; }
+.go-pos { width:21px; height:21px; border-radius:50%; background:var(--border); color:var(--text-muted);
+  font-size:10.5px; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-weight:700; }
+.go-nom { flex:1; font-size:13.5px; color:var(--text); min-width:0; }
+.go-nom small { display:block; font-size:10.5px; color:var(--text-dim); margin-top:1px; }
+.go-mv { background:transparent; border:1px solid var(--border); color:var(--text-muted); width:28px;
+  height:28px; border-radius:7px; cursor:pointer; font-size:12px; flex-shrink:0; }
+.go-mv:disabled { opacity:.28; cursor:default; }
+.go-mv:not(:disabled):hover { border-color:var(--green); color:var(--green); }
+.qr-sec { font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--text-dim);
+  margin:20px 0 9px; padding-top:14px; border-top:1px solid var(--border); }
+.qr-sec:first-child { margin-top:0; padding-top:0; border-top:none; }
+.qr-lbl { display:block; font-size:11.5px; color:var(--text-muted); margin:10px 0 5px; }
+.qr-opt { color:var(--text-dim); }
+.qr-in { width:100%; background:var(--surface2); border:1px solid var(--border); color:var(--text);
+  border-radius:9px; padding:11px 12px; font-family:inherit; font-size:14px; outline:none; }
+.qr-in:focus { border-color:var(--green); }
+/* El interruptor con su explicación debajo: una casilla suelta no dice qué
+   pasa al prenderla, y aquí lo que pasa es que algo se vuelve público. */
+.qr-sw { display:flex; align-items:flex-start; gap:11px; cursor:pointer; padding:11px 0; }
+.qr-sw input { width:19px; height:19px; margin-top:1px; accent-color:var(--green); flex-shrink:0; }
+.qr-sw span { font-size:14px; color:var(--text); }
+.qr-sw small { display:block; font-size:11.5px; color:var(--text-dim); margin-top:3px; line-height:1.5; }
+.qr-fotos { display:flex; gap:8px; flex-wrap:wrap; }
+.qr-foto { width:78px; height:78px; border-radius:10px; overflow:hidden; padding:0;
+  border:2px solid var(--border); background:var(--surface2); cursor:pointer; }
+.qr-foto.on { border-color:var(--green); }
+.qr-foto img { width:100%; height:100%; object-fit:cover; display:block; }
+.qr-subir { display:block; margin-top:10px; text-align:center; background:transparent;
+  border:1.5px dashed var(--border); color:var(--text-muted); border-radius:10px; padding:12px;
+  font-size:13px; cursor:pointer; }
+.qr-subir:hover { border-color:var(--green); color:var(--green); }
+.qr-aviso { font-size:12.5px; color:var(--text-dim); line-height:1.55; background:var(--surface2);
+  border:1px solid var(--border); border-radius:9px; padding:12px; }
+.qr-nota { font-size:11.5px; color:var(--text-dim); line-height:1.55; margin-top:8px; }
+</style>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../supabase-config.js"></script>
 <script src="/insumo-label.js"></script>
@@ -479,6 +1110,7 @@ document.addEventListener('DOMContentLoaded', function() { renderMenu(); _sbInit
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 <script src="/presencia.js"></script><!-- quién está trabajando aquí: avatares en la barra -->
+<script src="/qr-pairing.js"></script><!-- trae etaaxQrLogo: el ícono al centro del QR -->
 <script src="/reporte-marca.js"></script><!-- marca de la carta impresa -->
 <script src="/nav-pref.js"></script>
 <script src="/modal-drag.js"></script>

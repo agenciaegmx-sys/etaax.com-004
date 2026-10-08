@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f0e0c">
+<!-- La carta NO se indexa. Es para quien está en la mesa, no para que Google la
+     cachee con precios de hace seis meses y alguien llegue reclamando. -->
+<meta name="robots" content="noindex, nofollow">
+<title>Carta</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════════════════════════════════
+   LA CARTA QUE VE EL CLIENTE EN LA MESA
+
+   No se parece al resto del sistema a propósito. Todo lo demás es una
+   herramienta de trabajo —densa, con mucho dato por centímetro—; esto es un
+   escaparate: una foto grande, el nombre, y nada que distraiga.
+
+   OSCURA. Se abre en la mesa de un bar, de noche, con el teléfono a media luz.
+   Una pantalla blanca a esa hora deslumbra a quien la abre y a quien está
+   enfrente.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root {
+    --bg:#0f0e0c; --sup:#1a1815; --borde:#2d2a25;
+    --txt:#f0ece4; --txt2:#b5afa3; --dim:#7d7769; --oro:#c9a227;
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-t: env(safe-area-inset-top, 0px);
+}
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body { background:var(--bg); color:var(--txt); font-family:'DM Sans',system-ui,sans-serif;
+    padding-bottom:calc(var(--safe-b) + 40px); overflow-x:hidden; }
+
+.cab { text-align:center; padding:calc(var(--safe-t) + 34px) 20px 10px; }
+.cab-neg { font-family:'Bebas Neue',sans-serif; font-size:33px; letter-spacing:3px; line-height:1.05; }
+.cab-sub { font-size:12.5px; color:var(--dim); margin-top:7px; letter-spacing:1px; }
+.cab-nota { font-size:12.5px; color:var(--txt2); margin-top:14px; line-height:1.6;
+    max-width:520px; margin-left:auto; margin-right:auto; }
+.regla { width:54px; height:2px; background:var(--oro); margin:18px auto 0; border-radius:2px; }
+
+/* Las pestañas de grupo, pegajosas: con cuarenta platillos uno se pierde a la
+   mitad y no quiere volver a subir para cambiar de sección. */
+.tabs { position:sticky; top:0; z-index:10; display:flex; gap:7px; overflow-x:auto;
+    padding:14px 16px; background:color-mix(in srgb, var(--bg) 94%, transparent);
+    backdrop-filter:blur(12px); border-bottom:1px solid var(--borde);
+    scrollbar-width:none; -ms-overflow-style:none; }
+.tabs::-webkit-scrollbar { display:none; }
+.tab { white-space:nowrap; background:var(--sup); border:1px solid var(--borde); color:var(--txt2);
+    border-radius:30px; padding:9px 16px; font-family:inherit; font-size:13px; cursor:pointer; }
+.tab.on { border-color:var(--oro); color:var(--oro); background:rgba(201,162,39,.1); font-weight:600; }
+
+.wrap { max-width:620px; margin:0 auto; padding:4px 16px; }
+.grupo-tit { font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:2.4px;
+    color:var(--oro); margin:30px 0 14px; display:flex; align-items:center; gap:12px; }
+.grupo-tit::after { content:''; flex:1; height:1px; background:var(--borde); }
+
+.rejilla { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+@media (min-width:560px) { .rejilla { grid-template-columns:repeat(3,1fr); } }
+.plato { background:var(--sup); border:1px solid var(--borde); border-radius:14px;
+    overflow:hidden; cursor:pointer; text-align:left; padding:0; font-family:inherit;
+    display:flex; flex-direction:column; }
+.plato:active { transform:scale(.985); }
+.plato-foto { width:100%; aspect-ratio:1; object-fit:cover; display:block; background:#232019; }
+/* Un platillo sin foto NO se esconde: el negocio decidió enseñarlo. Se le pone
+   un marco digno en vez de un hueco gris que parece imagen rota. */
+.plato-sinfoto { width:100%; aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(145deg,#232019,#1a1815); font-size:34px; opacity:.4; }
+.plato-txt { padding:11px 12px 13px; flex:1; display:flex; flex-direction:column; gap:3px; }
+.plato-nom { font-size:14px; font-weight:500; line-height:1.3; }
+.plato-en { font-size:11.5px; color:var(--dim); font-style:italic; line-height:1.3; }
+.plato-desc { font-size:11.5px; color:var(--txt2); line-height:1.5; margin-top:3px; }
+.plato-precio { font-size:14.5px; color:var(--oro); font-weight:600; margin-top:6px;
+    font-variant-numeric:tabular-nums; }
+
+/* La vista grande. Al tocar un platillo se abre completo: es lo que la gente
+   quiere del QR —ver bien el plato antes de pedirlo—. */
+.vista { position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.95); display:none;
+    flex-direction:column; align-items:center; justify-content:center; padding:18px; }
+.vista img { max-width:96vw; max-height:62vh; border-radius:14px; display:block; }
+.vista-info { max-width:560px; text-align:center; margin-top:20px; padding:0 8px; }
+.vista-nom { font-family:'Bebas Neue',sans-serif; font-size:29px; letter-spacing:1.6px; line-height:1.1; }
+.vista-en { font-size:14px; color:var(--dim); font-style:italic; margin-top:4px; }
+.vista-desc { font-size:14.5px; color:var(--txt2); line-height:1.65; margin-top:14px; }
+.vista-precio { font-size:21px; color:var(--oro); font-weight:600; margin-top:14px; }
+.vista-x { position:absolute; top:calc(var(--safe-t) + 14px); right:14px; width:44px; height:44px;
+    border-radius:50%; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.22);
+    color:#fff; font-size:18px; cursor:pointer; }
+.vista-nav { position:absolute; top:50%; transform:translateY(-50%); width:50px; height:70px;
+    border-radius:12px; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.2);
+    color:#fff; font-size:24px; cursor:pointer; }
+
+.estado { text-align:center; padding:70px 24px; color:var(--dim); font-size:14.5px; line-height:1.8; }
+.pie { text-align:center; font-size:11px; color:var(--dim); margin-top:44px; letter-spacing:1px; opacity:.6; }
+</style>
+</head>
+<body>
+
+<div class="cab">
+    <div class="cab-neg" id="cNeg">—</div>
+    <div class="cab-sub" id="cSub"></div>
+    <div class="regla"></div>
+    <div class="cab-nota" id="cNota"></div>
+</div>
+
+<div class="tabs" id="cTabs" hidden></div>
+<div class="wrap"><div id="cCuerpo"><div class="estado">Cargando la carta…</div></div>
+    <div class="pie" id="cPie" hidden>ETAAX</div></div>
+
+<div class="vista" id="vista">
+    <button class="vista-x" onclick="cerrarVista()" aria-label="Cerrar">✕</button>
+    <button class="vista-nav" style="left:10px" onclick="navVista(-1)" aria-label="Anterior">‹</button>
+    <button class="vista-nav" style="right:10px" onclick="navVista(1)" aria-label="Siguiente">›</button>
+    <img id="vImg" alt="" hidden>
+    <div class="vista-info">
+        <div class="vista-nom" id="vNom"></div>
+        <div class="vista-en"  id="vEn"></div>
+        <div class="vista-desc" id="vDesc"></div>
+        <div class="vista-precio" id="vPrecio"></div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="/supabase-config.js"></script>
+<script>
+/* ══════════════════════════════════════════════════════════════════════════
+   Esta página NO tiene sesión y no la necesita. Pide la carta por una sola
+   consulta (`menu_publico_ver`) que arma cada platillo campo por campo: lo que
+   no está en esa lista blanca simplemente no viaja. Aquí no hay forma de
+   llegar a un costo aunque se quiera.
+   ══════════════════════════════════════════════════════════════════════════ */
+var Q = new URLSearchParams(location.search);
+var NEG = Q.get('n') || '', TOKEN = Q.get('t') || '';
+var ITEMS = [], VISTA = [], VIDX = 0, TAB = '';
+
+function etx(s) { return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function $(id) { return document.getElementById(id); }
+function fmt(v) { return '$' + Number(v).toLocaleString('es-MX', { minimumFractionDigits: 0 }); }
+
+function estado(html) { $('cCuerpo').innerHTML = '<div class="estado">' + html + '</div>'; }
+
+async function cargar() {
+    if (!NEG || !TOKEN) { estado('Este código no es válido.<br>Pídele a tu mesero el correcto.'); return; }
+    try {
+        var r = await _supabase.rpc('menu_publico_ver', { p_neg: NEG, p_token: TOKEN });
+        if (r.error || !r.data) {
+            estado('Este código ya no está activo.<br>Pídele a tu mesero el correcto.'); return;
+        }
+        var d = r.data;
+        /* Cerrada ≠ inválida: el negocio puede bajar la carta sin despegar los
+           QR de las mesas, y entonces hay que decir eso y no «código inválido». */
+        if (d.ok === false) {
+            $('cNeg').textContent = 'Carta no disponible';
+            estado('La carta está temporalmente fuera de línea.<br>Pregúntale a tu mesero.');
+            return;
+        }
+        document.title = (d.negocio || 'Carta');
+        $('cNeg').textContent = d.titulo || d.negocio || 'Carta';
+        $('cSub').textContent = d.titulo && d.negocio ? d.negocio : '';
+        $('cNota').textContent = d.nota || '';
+        ITEMS = d.items || [];
+        if (!ITEMS.length) { estado('La carta se está preparando.<br>Vuelve en un rato.'); return; }
+        pintar(ordenGrupos(d.grupos));
+        $('cPie').hidden = false;
+    } catch (e) {
+        estado('No se pudo cargar la carta.<br>Revisa tu conexión e inténtalo de nuevo.');
+    }
+}
+
+/* El orden lo pone el negocio. Lo que NO esté en su lista se acomoda al final,
+   alfabético: un grupo recién creado no debe desaparecer de la carta por no
+   haberse acomodado todavía. */
+function ordenGrupos(cfg) {
+    var puestos = (cfg || []).map(function (g) { return typeof g === 'string' ? g : g.nombre; }).filter(Boolean);
+    var hay = [];
+    ITEMS.forEach(function (it) { if (hay.indexOf(it.grupo) < 0) hay.push(it.grupo); });
+    var orden = puestos.filter(function (g) { return hay.indexOf(g) >= 0; });
+    hay.filter(function (g) { return orden.indexOf(g) < 0; })
+       .sort(function (a, b) { return String(a).localeCompare(String(b), 'es'); })
+       .forEach(function (g) { orden.push(g); });
+    return orden;
+}
+
+function pintar(grupos) {
+    /* Con un solo grupo las pestañas sobran: un filtro de una opción es un
+       botón que no hace nada. */
+    if (grupos.length > 1) {
+        $('cTabs').innerHTML = '<button class="tab' + (!TAB ? ' on' : '') + '" data-g="">Todo</button>' +
+            grupos.map(function (g) {
+                return '<button class="tab' + (TAB === g ? ' on' : '') + '" data-g="' + etx(g) + '">' +
+                       etx(g) + '</button>';
+            }).join('');
+        $('cTabs').hidden = false;
+        $('cTabs').onclick = function (e) {
+            var b = e.target.closest('[data-g]'); if (!b) return;
+            TAB = b.getAttribute('data-g');
+            pintar(grupos);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+    }
+    var ver = TAB ? [TAB] : grupos;
+    VISTA = [];
+    $('cCuerpo').innerHTML = ver.map(function (g) {
+        var items = ITEMS.filter(function (it) { return it.grupo === g; });
+        if (!items.length) return '';
+        var desde = VISTA.length;
+        VISTA = VISTA.concat(items);
+        return '<div class="grupo-tit">' + etx(g) + '</div><div class="rejilla">' +
+            items.map(function (it, i) {
+                return '<button class="plato" data-i="' + (desde + i) + '">' +
+                    (it.foto
+                        ? '<img class="plato-foto" src="' + etx(it.foto) + '" alt="" loading="lazy">'
+                        : '<div class="plato-sinfoto">🍽️</div>') +
+                    '<div class="plato-txt">' +
+                        '<div class="plato-nom">' + etx(it.nombre) + '</div>' +
+                        (it.nombreEn ? '<div class="plato-en">' + etx(it.nombreEn) + '</div>' : '') +
+                        (it.desc ? '<div class="plato-desc">' + etx(it.desc) + '</div>' : '') +
+                        (it.precio != null ? '<div class="plato-precio">' + fmt(it.precio) + '</div>' : '') +
+                    '</div></button>';
+            }).join('') + '</div>';
+    }).join('');
+    $('cCuerpo').onclick = function (e) {
+        var b = e.target.closest('[data-i]'); if (!b) return;
+        abrirVista(parseInt(b.getAttribute('data-i'), 10));
+    };
+}
+
+/* Ver el plato grande es lo que la gente quiere del QR: decidir qué pedir
+   mirándolo bien. Y pasar al siguiente sin cerrar, como en cualquier galería. */
+function abrirVista(i) {
+    VIDX = i;
+    pintarVista();
+    $('vista').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+function pintarVista() {
+    var it = VISTA[VIDX]; if (!it) return;
+    var img = $('vImg');
+    if (it.foto) { img.src = it.foto; img.hidden = false; } else { img.src = ''; img.hidden = true; }
+    $('vNom').textContent = it.nombre || '';
+    $('vEn').textContent = it.nombreEn || '';
+    $('vDesc').textContent = it.desc || '';
+    $('vPrecio').textContent = it.precio != null ? fmt(it.precio) : '';
+    var varios = VISTA.length > 1;
+    document.querySelectorAll('.vista-nav').forEach(function (b) { b.style.display = varios ? 'block' : 'none'; });
+}
+function navVista(p) {
+    if (VISTA.length < 2) return;
+    VIDX = (VIDX + p + VISTA.length) % VISTA.length;
+    pintarVista();
+}
+function cerrarVista() {
+    $('vista').style.display = 'none';
+    document.body.style.overflow = '';
+}
+$('vista').addEventListener('click', function (e) { if (e.target === this) cerrarVista(); });
+document.addEventListener('keydown', function (e) {
+    if ($('vista').style.display === 'none') return;
+    if (e.key === 'Escape') cerrarVista();
+    if (e.key === 'ArrowLeft') navVista(-1);
+    if (e.key === 'ArrowRight') navVista(1);
+});
+/* Deslizar para pasar de plato: en un teléfono es el gesto que la gente
+   intenta antes que buscar una flecha. */
+var _tx = 0;
+$('vista').addEventListener('touchstart', function (e) { _tx = e.touches[0].clientX; }, { passive: true });
+$('vista').addEventListener('touchend', function (e) {
+    var dx = (e.changedTouches[0] || {}).clientX - _tx;
+    if (Math.abs(dx) > 55) navVista(dx < 0 ? 1 : -1);
+}, { passive: true });
+
+document.addEventListener('DOMContentLoaded', cargar);
+</script>
+</body>
+</html>
