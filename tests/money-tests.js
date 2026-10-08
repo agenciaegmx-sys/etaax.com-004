@@ -18513,6 +18513,213 @@ console.log('\n══ BH23 · La carta de la mesa ══');
            true, 'en las dos'));
 }
 
+/* ═══════════ SUITE BH24 · EL CÓCTEL QUE SE CANCELA ════════════════════════
+   LO QUE PASABA. El POS cancela lo que está en la CARTA: «Negroni», «Abeja
+   Reina», «Guayaba Splash». El Paso 4 buscaba cada uno de esos nombres SOLO en
+   el catálogo de insumos — y ninguno es un insumo. Resultado: casi toda la
+   coctelería quedaba en «Sin match», y una cancelación sin match no descuenta
+   nada.
+
+   El trago sí se preparó. Se sirvió, el cliente lo rechazó y se tiró. La
+   ginebra, el Campari y el vermut salieron de sus botellas. Pero el inventario
+   no se enteraba, y ese faltante reaparecía dos pasos después como una
+   diferencia que nadie sabía explicar — y que terminaba pareciendo robo.
+
+   Ahora el renglón se busca primero entre las RECETAS del Paso 3, y lo
+   cancelado se lleva sus ingredientes por el mismo camino que una venta
+   (prebatch incluido), pero en su propio montón: la columna de coctelería
+   vendida tiene que seguir cuadrando con lo que se capturó.                  */
+console.log('\n══ BH24 · El cóctel que se cancela ══');
+{
+    const C = crearContexto();
+    cargarJS(C, 'etaax-core.js');
+    cargarJS(C, 'insumo-label.js');
+    cargarJS(C, 'recetas/inventarios.js');
+    C._storage['etaax_negocio_activo'] = 'negT';
+
+    /* La barra de Edwin: un Negroni de ginebra + Campari, y una cerveza que se
+       vende suelta (no es receta de nadie). */
+    setVar(C, '_cacheRecetasInv', [
+        { id:'recNegroni', nombre:'Negroni', tipo:'bebidas', status:'activa', ingredientes:[
+            { insumoId:'gin',     cantidad:45, unidad:'ML' },
+            { insumoId:'campari', cantidad:30, unidad:'ML' } ] },
+        { id:'recAbeja', nombre:'Abeja Reina', tipo:'bebidas', status:'activa', ingredientes:[
+            { insumoId:'gin', cantidad:60, unidad:'ML' } ] },
+        /* Una SUB-receta: jamás se cancela desde el POS porque no se vende. */
+        { id:'srJarabe', nombre:'Jarabe de hibisco', tipo:'sub-bebidas', status:'activa',
+          ingredientes:[{ insumoId:'gin', cantidad:10, unidad:'ML' }] }
+    ]);
+    setVar(C, '_cacheInsumosInv', [{ id:'gin', activo:'1' }, { id:'campari', activo:'1' },
+                                   { id:'xxlager', activo:'1' }]);
+    const fGin  = { insumoId:'gin', nombre:'Ginebra Beefeater', tipo:'copa', contNeto:750, copaML:45,
+        existenciaAnterior:100, ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0,
+        ventasBotella:0, entradas:[] };
+    const fCamp = { insumoId:'campari', nombre:'Campari', tipo:'copa', contNeto:750, copaML:30,
+        existenciaAnterior:50, ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0,
+        ventasBotella:0, entradas:[] };
+    const fBeer = { insumoId:'xxlager', nombre:'XX Lager Heineken', tipo:'pza', contNeto:355, copaML:0,
+        existenciaAnterior:40, ventasCopasDirectas:0, ventasBotella:0, cortesiaCopas:0,
+        mermaCopas:0, entradas:[] };
+    const base = () => {
+        setVar(C, 'invActual', { id:'invT', area:'barra', entradasLog:[], prebatchProducidos:{},
+            cocktailsVendidos:{}, ventasCompuesto:{}, cancelaciones:[], descuentos:[], filas:[] });
+        setVar(C, 'filasCaptura', [fGin, fCamp, fBeer]);
+        vm.runInContext('_autoMatchFirma = ""; _cancelDirty = true; _consumoDirty = true;', C);
+    };
+    const cancelar = (lista) => {
+        base();
+        vm.runInContext('invActual.cancelaciones = ' + JSON.stringify(lista) + ';', C);
+        vm.runInContext('_autoMatchFirma = ""; _cancelDirty = true;', C);
+    };
+
+    /* ── EL MATCH ── */
+    test('un cóctel del POS encuentra su receta, no un insumo suelto', () => {
+        base();
+        const m = C._matchCancelacion('NEGRONI');
+        return eq(m && m.tipo + ':' + m.nombre, 'receta:Negroni', 'la carta');
+    });
+    test('…y «ABEJA REINA», que antes se quedaba sin match', () => {
+        base();
+        const m = C._matchCancelacion('ABEJA REINA');
+        return eq(m && m.nombre, 'Abeja Reina', 'encontrada');
+    });
+    /* Lo que NO es receta sigue pegando con su insumo: una cerveza se vende
+       suelta y no tiene escandallo. */
+    test('una cerveza suelta sigue pegando con su insumo', () => {
+        base();
+        const m = C._matchCancelacion('XX LAGER');
+        return eq(m && m.tipo + ':' + m.nombre, 'insumo:XX Lager Heineken', 'directo');
+    });
+    /* LA DECISIÓN QUE IMPORTA. «Mix Negroni PR» es el prebatch del Negroni, y
+       con el match a insumos ganaba él: se descontaba el mix y la ginebra y el
+       Campari del resto de la receta no se tocaban. La receta descuenta TODO. */
+    test('con un prebatch que se llama igual, gana la receta', () => {
+        base();
+        setVar(C, 'filasCaptura', [fGin, fCamp,
+            { insumoId:'mixNeg', nombre:'Mix Negroni PR', tipo:'copa', contNeto:750, copaML:45,
+              existenciaAnterior:10, entradas:[] }]);
+        const m = C._matchCancelacion('NEGRONI');
+        return eq(m && m.tipo, 'receta', 'la receta manda');
+    });
+    /* Una sub-receta no se vende, así que tampoco se cancela: si se colara,
+       cancelar «jarabe» descontaría una producción que nunca se hizo. */
+    test('las sub-recetas no entran al match — no se venden', () => {
+        base();
+        return eq(C._recetasCancelables().some(r => r.id === 'srJarabe'), false, 'fuera');
+    });
+    test('un nombre que no se parece a nada se queda sin match', () => {
+        base();
+        return eq(C._matchCancelacion('ZZZQWX'), null, 'honesto');
+    });
+
+    /* ── EL DESCUENTO ── */
+    /* 2 Negronis cancelados = 90 ml de ginebra = 2 copas de 45 ml. */
+    test('cancelar 2 Negronis descuenta la ginebra de los dos', () => {
+        cancelar([{ nombreProducto:'NEGRONI', cantidad:2 }]);
+        return eq(C.cancelRecetasFila(fGin), 2, '90 ml = 2 copas');
+    });
+    test('…y el Campari de los dos, en SU tamaño de copa', () => {
+        cancelar([{ nombreProducto:'NEGRONI', cantidad:2 }]);
+        return eq(C.cancelRecetasFila(fCamp), 2, '60 ml / 30 ml');
+    });
+    test('…y eso baja del teórico de la ginebra', () => {
+        cancelar([{ nombreProducto:'NEGRONI', cantidad:2 }]);
+        return eq(C.calcExistenciaTeorica(fGin), 98, '100 − 2');
+    });
+    /* EL BUG ENTERO EN UN RENGLÓN: antes esto daba 100 — el trago se tiraba y
+       el inventario seguía creyendo que la botella estaba llena. */
+    test('…lo que ANTES no pasaba: el teórico se quedaba en 100', () => {
+        base();
+        return eq(C.calcExistenciaTeorica(fGin), 100, 'sin cancelaciones, intacto');
+    });
+    /* Dos recetas distintas que usan el mismo insumo se suman. */
+    test('dos cócteles distintos con el mismo insumo se suman', () => {
+        cancelar([{ nombreProducto:'NEGRONI', cantidad:1 }, { nombreProducto:'ABEJA REINA', cantidad:1 }]);
+        return eq(C.cancelRecetasFila(fGin), (45 + 60) / 45, 'los dos');
+    });
+
+    /* ── NO SE CUENTA DOS VECES ──
+       El renglón apunta a UNA cosa. Si quedara con insumoId Y recetaId, el
+       insumo se descontaría por los dos caminos. */
+    test('un renglón apunta a una sola cosa, nunca a las dos', () => {
+        base();
+        const c = { nombreProducto:'NEGRONI', cantidad:1, insumoId:'gin', insumoNombre:'Ginebra' };
+        C._aplicarMatchCancel(c, { tipo:'receta', id:'recNegroni', nombre:'Negroni' });
+        return eq(!!c.insumoId + '|' + !!c.recetaId, 'false|true', 'excluyentes');
+    });
+    /* El fallback por nombre de getCancelacionesCopas cazaba cualquier renglón
+       cuyo producto empezara parecido. Con el match a recetas tenía que dejar
+       de hacerlo o el Negroni bajaba la ginebra dos veces. */
+    test('lo que pegó con una receta NO vuelve a contar como insumo', () => {
+        cancelar([{ nombreProducto:'NEGRONI', cantidad:2 }]);
+        return eq(C.getCancelacionesCopas('gin'), 0, 'una sola vez');
+    });
+    /* Y al revés: una cancelación de insumo sigue funcionando igual que antes.
+       Esto es una regresión que se arreglaría tarde — el POS cancela cervezas
+       todos los días. */
+    test('una cancelación de insumo sigue bajando igual que antes', () => {
+        cancelar([{ nombreProducto:'XX LAGER', cantidad:3 }]);
+        return eq(C.getCancelacionesCopas('xxlager'), 3, 'sin regresión');
+    });
+    test('…y llega al teórico de esa cerveza', () => {
+        cancelar([{ nombreProducto:'XX LAGER', cantidad:3 }]);
+        return eq(C.calcExistenciaTeorica(fBeer), 37, '40 − 3');
+    });
+
+    /* ── LA VENTA SIGUE SIENDO LA VENTA ──
+       Lo cancelado NO puede sumarse a la columna de coctelería vendida: esa
+       columna cuadra con lo que se capturó en el Paso 3, y si se moviera sola
+       nadie entendería de dónde salió. Son dos montones. */
+    test('lo cancelado NO infla la coctelería vendida', () => {
+        cancelar([{ nombreProducto:'NEGRONI', cantidad:5 }]);
+        return eq(C.consumoRecetasFila(fGin), 0, 'la venta es la venta');
+    });
+    test('…y lo vendido NO se cuenta como cancelado', () => {
+        base();
+        vm.runInContext('invActual.cocktailsVendidos = { recNegroni: 4 }; _consumoDirty = true;', C);
+        return eq(C.cancelRecetasFila(fGin), 0, 'montones separados');
+    });
+    /* Los dos bajan del teórico, cada uno por su lado: 4 vendidos + 2
+       cancelados = 6 copas de ginebra fuera de la botella. */
+    test('el teórico resta las dos cosas: lo vendido Y lo cancelado', () => {
+        cancelar([{ nombreProducto:'NEGRONI', cantidad:2 }]);
+        vm.runInContext('invActual.cocktailsVendidos = { recNegroni: 4 }; _consumoDirty = true;', C);
+        return eq(C.calcExistenciaTeorica(fGin), 94, '100 − 4 − 2');
+    });
+
+    /* ── LA CACHÉ NO PUEDE QUEDARSE DORMIDA ──
+       Los dos montones comparten la misma llave (negocio|nº de recetas). Si
+       cancelar no marcara su propia bandera, el Paso 5 seguiría enseñando el
+       teórico de antes y parecería que el cambio no se guardó. */
+    test('cambiar una cancelación refresca su montón, no el viejo', () => {
+        cancelar([{ nombreProducto:'NEGRONI', cantidad:1 }]);
+        const antes = C.cancelRecetasFila(fGin);
+        vm.runInContext('invActual.cancelaciones[0].cantidad = 3; _cancelDirty = true;', C);
+        return eq(antes + '→' + C.cancelRecetasFila(fGin), '1→3', 'se entera');
+    });
+    /* La guarda de _autoMatchCancelaciones contaba los renglones SIN insumoId.
+       Un renglón resuelto a una RECETA no tiene insumoId, así que seguía
+       contando como pendiente: la firma nunca se estabilizaba y el matching
+       completo volvía a correr en cada render — el retraso que esa guarda
+       existe para evitar. */
+    test('un renglón resuelto a receta deja de contar como pendiente', () => {
+        cancelar([{ nombreProducto:'NEGRONI', cantidad:1 }]);
+        C._cancelUnidadesPorReceta();                       // corre el matching
+        const f1 = vm.runInContext('_autoMatchFirma', C);
+        C._cancelUnidadesPorReceta();                       // y otra vez
+        return eq(f1 === vm.runInContext('_autoMatchFirma', C) && f1 !== '', true, 'estable');
+    });
+
+    /* ── LO QUE NO CAMBIA ──
+       Un DESCUENTO no toca el inventario: el producto se sirvió y se cobró más
+       barato. Mezclarlos haría que una promoción de 2x1 se viera como merma. */
+    test('un descuento no mueve el inventario', () => {
+        base();
+        vm.runInContext("invActual.descuentos = [{ nombreProducto:'NEGRONI', cantidad:9 }];", C);
+        return eq(C.calcExistenciaTeorica(fGin), 100, 'solo es precio');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');

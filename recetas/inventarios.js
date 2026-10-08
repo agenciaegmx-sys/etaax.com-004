@@ -815,15 +815,30 @@ function _btnCopiarAnterior(idx, fila, estilo) {
 // en cada render (lento con 200+ insumos). Ahora se recorren las recetas UNA vez y se acumula por
 // insumo; la consulta por fila es O(1). Se re-calcula solo si cambian recetas o lo vendido.
 var _consumoIdxCache = null, _consumoIdxKey = '', _consumoDirty = true; window._step5Dirty = true;
-function _consumoIdx() {
-    var vendidos = (invActual && invActual.cocktailsVendidos) || {};
-    var recetas  = getRecetas();
+/* El MISMO índice, con otra fuente: lo CANCELADO. Un trago cancelado se preparó
+   y se tiró, así que se lleva sus insumos igual que uno vendido — pero no es una
+   venta y no puede sumarse a la columna de coctelería vendida, que tiene que
+   seguir cuadrando con lo capturado en el Paso 3. Por eso son dos montones. */
+var _cancelIdxCache = null, _cancelIdxKey = '', _cancelDirty = true;
+
+function _consumoIdx() { return _construirIdx(false); }
+function _cancelIdx()  { return _construirIdx(true); }
+
+function _construirIdx(esCancel) {
+    var recetas = getRecetas();
     // Llave BARATA + dirty-flag: antes la llave hacía JSON.stringify(vendidos) en
     // CADA llamada (200 filas × varios cálculos por render = miles de stringify)
     // — parte importante de la lentitud del Paso 5. Los 3 puntos que escriben
     // cocktailsVendidos marcan _consumoDirty.
     var key = (invActual && invActual.id || '') + '|' + recetas.length;
-    if (_consumoIdxCache && !_consumoDirty && _consumoIdxKey === key) return _consumoIdxCache;
+    if (esCancel) { if (_cancelIdxCache  && !_cancelDirty  && _cancelIdxKey  === key) return _cancelIdxCache; }
+    else          { if (_consumoIdxCache && !_consumoDirty && _consumoIdxKey === key) return _consumoIdxCache; }
+    /* DESPUÉS de la caché, no antes: armar el mapa de lo cancelado recorre la
+       lista entera, y esto se llama una vez POR FILA en el Paso 5. Con 200
+       renglones eso era recorrer las cancelaciones 200 veces por render, que es
+       exactamente el tipo de retraso que esta caché existe para evitar. */
+    var vendidos = esCancel ? _cancelUnidadesPorReceta()
+                            : ((invActual && invActual.cocktailsVendidos) || {});
     var idx = {};
     function slot(id){ return idx[id] || (idx[id] = { mlBeb:0, baseBeb:0, baseAli:0, pzaDir:0, mlPza:0 }); }
     /* La receta guarda el id del insumo TAL COMO estaba al agregarlo: si el
@@ -868,8 +883,21 @@ function _consumoIdx() {
             });
         });
     });
-    _consumoIdxCache = idx; _consumoIdxKey = key; _consumoDirty = false;
+    if (esCancel) { _cancelIdxCache  = idx; _cancelIdxKey  = key; _cancelDirty  = false; }
+    else          { _consumoIdxCache = idx; _consumoIdxKey = key; _consumoDirty = false; }
     return idx;
+}
+
+/* Las unidades canceladas, agrupadas por receta. Mismo formato que
+   cocktailsVendidos para poder pasarlas por el mismo molino. */
+function _cancelUnidadesPorReceta() {
+    _autoMatchCancelaciones();
+    var out = {};
+    ((invActual && invActual.cancelaciones) || []).forEach(function (c) {
+        if (!c || !c.recetaId) return;
+        out[c.recetaId] = (out[c.recetaId] || 0) + (parseFloat(c.cantidad) || 0);
+    });
+    return out;
 }
 /* Consumo por recetas EN LA UNIDAD DE LA FILA. Una lata de 355 ml usada en un
    coctel es 1 PIEZA, no 7.9 copas: dividir entre el tamaño de copa (45 ml por
@@ -881,14 +909,24 @@ function consumoRecetasFila(f) {
     if (f.tipo === 'peso') return _consumoRecetasBase(f.insumoId);
     return calcVentasCopasRecetas(f.insumoId, f.copaML);
 }
+/* Lo que se llevaron las CANCELACIONES de cócteles y platillos, en la unidad de
+   la fila. Mismo camino que el consumo por ventas —prebatch, id canónico,
+   renglón duplicado—, solo cambia el montón de donde sale. */
+function cancelRecetasFila(f) {
+    if (!f) return 0;
+    var idx = _cancelIdx();
+    if (f.tipo === 'pza')  return calcVentasPzaRecetas(f.insumoId, idx);
+    if (f.tipo === 'peso') return _consumoRecetasBase(f.insumoId, idx);
+    return calcVentasCopasRecetas(f.insumoId, f.copaML, idx);
+}
 /* El montón de consumo de UNA fila. Si la fila es un prebatch, manda el montón de
    su SUB-RECETA (ver _recetaIdDePrebatch): el coctel pudo quedar apuntando a otro
    registro del mismo batch y por su id no se encontraría nada.
    Sin esto, arreglar solo el reparto dejaba el bug a medias: la columna de uso sí
    se movía al capturar ventas del coctel, pero el TEÓRICO del batch seguía creyendo
    que no había salido nada — y por eso el Resultado y la diferencia no cambiaban. */
-function _slotConsumo(insumoId) {
-    var idx = _consumoIdx();
+function _slotConsumo(insumoId, idx) {
+    idx = idx || _consumoIdx();
     var rid = _recetaIdDePrebatch(insumoId);
     if (rid) {
         // Renglón duplicado del mismo batch: el principal se lleva todo (si no, doble).
@@ -897,9 +935,9 @@ function _slotConsumo(insumoId) {
     }
     return idx[insumoId] || idx[_canonInsumoId(insumoId)] || null;
 }
-function calcVentasCopasRecetas(insumoId, copaML) {
+function calcVentasCopasRecetas(insumoId, copaML, idx) {
     if (!copaML || copaML <= 0) return 0;
-    var s = _slotConsumo(insumoId);
+    var s = _slotConsumo(insumoId, idx);
     return s ? s.mlBeb / copaML : 0;
 }
 
@@ -927,15 +965,15 @@ function unidadBaseInsumo(ins) {
    y se usa en un coctel caía en el montón de bebidas, que nadie leía aquí — el insumo
    nunca se descontaba. Al revés pasa igual con un prebatch de cocina que se va en un
    platillo. */
-function _consumoRecetasBase(insumoId) {
-    var s = _slotConsumo(insumoId);
+function _consumoRecetasBase(insumoId, idx) {
+    var s = _slotConsumo(insumoId, idx);
     return s ? (s.baseBeb + s.baseAli) : 0; // ml / g
 }
 
 // Consumo de un insumo PZA (refresco/cerveza/lata) por las recetas/menú vendidos, EN PIEZAS.
 // Antes no se contaba (calcVentasCopasRecetas devuelve 0 si no hay copaML) → no descontaba.
-function calcVentasPzaRecetas(insumoId) {
-    var s = _slotConsumo(insumoId);
+function calcVentasPzaRecetas(insumoId, idx) {
+    var s = _slotConsumo(insumoId, idx);
     if (!s) return 0;
     const fila     = filasCaptura.find(f => f.insumoId === insumoId);
     const contNeto = fila ? (fila.contNeto || 0) : 0; // ml por pieza
@@ -988,6 +1026,13 @@ function _batchesDeSubReceta(recetaId) {
 // Lo VENDIDO de una sub-receta por las recetas del menú, en unidad base (ml/g).
 function _consumoBaseSubReceta(recetaId) {
     var s = _consumoIdx()['sr:' + recetaId];
+    return s ? (s.baseBeb + s.baseAli) : 0;
+}
+/* Lo mismo, pero de lo CANCELADO. Va aparte de la venta a propósito: la venta
+   del batch tiene que seguir siendo la venta, o el reparto de la variancia deja
+   de cuadrar con lo que se capturó en el Paso 3. */
+function _cancelBaseSubReceta(recetaId) {
+    var s = _cancelIdx()['sr:' + recetaId];
     return s ? (s.baseBeb + s.baseAli) : 0;
 }
 
@@ -1213,7 +1258,11 @@ function _repartoPrebatch() {
                    + (parseFloat(pf.ventasCopasDirectas) || 0) * toB
                    + (parseFloat(pf.ventasBotella) || 0) * (parseFloat(pf.contNeto) || 0);
         var cmB    = ((parseFloat(pf.cortesiaCopas) || 0) + (parseFloat(pf.mermaCopas) || 0)) * toB + (parseFloat(pf.mermaBase) || 0);
-        var canB   = getCancelacionesCopas(pf.insumoId) * toB;
+        /* El batch también se va en lo cancelado: si se cancelan diez Negronis
+           hechos con el Mix Negroni, ese mix salió de la botella. Sin esto, el
+           reparto de la variancia le echaba la culpa a los insumos. */
+        var canB   = getCancelacionesCopas(pf.insumoId) * toB
+                   + _cancelBaseSubReceta(ins.recetaId);
         var teoB   = calcExistenciaTeorica(pf) * toB;
         var fisB   = calcExistencia(pf) * toB;
         out.esPB[pf.insumoId] = 1;
@@ -1260,6 +1309,17 @@ function _normMatch(s) {
         .trim();
 }
 
+/* Qué tan bien pega un nombre del POS contra un candidato. Una sola regla para
+   insumos y para recetas: si cada lado puntuara distinto, el desempate entre
+   «Negroni» el coctel y «Mix Negroni PR» el insumo saldría a cara o cruz. */
+function _puntajeMatch(words, q, nombre) {
+    const n = _normMatch(nombre);
+    let score = 0;
+    words.forEach(w => { if (n.includes(w)) score++; });
+    if (n.includes(q) || q.includes(n)) score += 0.5;
+    return score;
+}
+
 function _matchInsumo(nombreProducto) {
     if (!nombreProducto || !filasCaptura.length) return null;
     const q      = _normMatch(nombreProducto);
@@ -1267,13 +1327,71 @@ function _matchInsumo(nombreProducto) {
     if (!words.length) return null;
     let best = null, bestScore = 0;
     filasCaptura.forEach(fila => {
-        const n = _normMatch(fila.nombre);
-        let score = 0;
-        words.forEach(w => { if (n.includes(w)) score++; });
-        if (n.includes(q) || q.includes(n)) score += 0.5;
+        const score = _puntajeMatch(words, q, fila.nombre);
         if (score > bestScore) { bestScore = score; best = fila; }
     });
     return bestScore > 0 ? best : null;
+}
+
+/* ══ LAS RECETAS TAMBIÉN SE CANCELAN ═══════════════════════════════════════
+   El POS cancela lo que está en la CARTA: «Negroni», «Abeja Reina», «Guayaba
+   Splash». Nada de eso es un insumo — son recetas, las mismas que se capturan
+   en el Paso 3. Buscarlas solo en el catálogo de insumos dejaba casi toda la
+   coctelería en «Sin match», y una cancelación sin match no descuenta nada: el
+   trago se preparó, se tiró, y el faltante aparecía después como una diferencia
+   que nadie sabía explicar.
+
+   Las mismas recetas del Paso 3, para que lo que se puede cancelar sea
+   exactamente lo que se puede vender. */
+function _recetasCancelables() {
+    /* La MISMA sucursal que lee el Paso 3 (y de la misma clave): si aquí se
+       resolviera distinto, se podría cancelar un coctel que esa sucursal no
+       vende, y el descuento caería sobre insumos que nunca salieron. */
+    const suc = localStorage.getItem('etaax_sucursal_activa') || '';
+    return getRecetas().filter(r =>
+        (r.tipo === 'alimentos' || r.tipo === 'bebidas') &&
+        ((suc && typeof window._recetaActivaEnSuc === 'function')
+            ? window._recetaActivaEnSuc(r, suc)
+            : r.status !== 'inactiva')
+    );
+}
+
+/* La receta GANA los empates. El renglón que cancela el POS es un producto de
+   la carta, y el insumo que se le parece suele ser su propio prebatch: con
+   «Negroni» → «Mix Negroni PR» se descontaba el mix pero no la ginebra ni el
+   Campari del resto de la receta. Con la receta se descuenta todo, el mix
+   incluido, por el mismo camino que una venta. */
+function _matchCancelacion(nombreProducto) {
+    if (!nombreProducto) return null;
+    const q     = _normMatch(nombreProducto);
+    const words = q.split(' ').filter(p => p.length >= 3);
+    if (!words.length) return null;
+
+    let rBest = null, rScore = 0;
+    _recetasCancelables().forEach(r => {
+        const sc = _puntajeMatch(words, q, r.nombre);
+        if (sc > rScore) { rScore = sc; rBest = r; }
+    });
+    let iBest = null, iScore = 0;
+    (filasCaptura || []).forEach(fila => {
+        const sc = _puntajeMatch(words, q, fila.nombre);
+        if (sc > iScore) { iScore = sc; iBest = fila; }
+    });
+
+    if (rBest && rScore >= iScore) return { tipo:'receta', id:rBest.id, nombre:rBest.nombre };
+    if (iBest && iScore > 0)       return { tipo:'insumo', id:iBest.insumoId, nombre:iBest.nombre };
+    return null;
+}
+
+/* Deja un renglón apuntando a UNA cosa y solo una. Sin esto, un renglón que
+   antes pegó con un insumo y ahora pega con una receta se descontaría dos
+   veces: una por el insumo y otra por los ingredientes de la receta. */
+function _aplicarMatchCancel(c, m) {
+    c.insumoId = null; c.insumoNombre = null;
+    c.recetaId = null; c.recetaNombre = null;
+    if (!m) return;
+    if (m.tipo === 'receta') { c.recetaId = m.id; c.recetaNombre = m.nombre; }
+    else                     { c.insumoId = m.id; c.insumoNombre = m.nombre; }
 }
 
 var _autoMatchFirma = '';
@@ -1282,15 +1400,19 @@ function _autoMatchCancelaciones() {
     // Guarda: si no hay cancelaciones sin insumoId nuevas, no hay nada que hacer.
     // (Antes corría el matching de texto completo EN CADA llamada — y se llama
     // por fila en el Paso 5/reporte → era el retraso de varios segundos.)
-    const firma = (invActual?.id || '') + '|' + lista.length + '|' + lista.reduce((s,c)=>s+(c.insumoId?0:1),0);
+    /* La firma cuenta los renglones SIN NADA. Antes contaba los que no tenían
+       insumoId, y con el match a recetas uno ya resuelto —pero resuelto a una
+       receta— seguía contando como pendiente: la firma nunca se estabilizaba y
+       el matching completo volvía a correr en cada render. Era justo el retraso
+       de varios segundos que esta guarda existe para evitar. */
+    const _pend = (l) => l.reduce((s,c)=> s + ((c.insumoId || c.recetaId) ? 0 : 1), 0);
+    const firma = (invActual?.id || '') + '|' + lista.length + '|' + _pend(lista);
     if (firma === _autoMatchFirma) return;
     lista.forEach(c => {
-        if (!c.insumoId) {
-            const m = _matchInsumo(c.nombreProducto);
-            if (m) { c.insumoId = m.insumoId; c.insumoNombre = m.nombre; }
-        }
+        if (!c.insumoId && !c.recetaId) _aplicarMatchCancel(c, _matchCancelacion(c.nombreProducto));
     });
-    _autoMatchFirma = (invActual?.id || '') + '|' + lista.length + '|' + lista.reduce((s,c)=>s+(c.insumoId?0:1),0);
+    _autoMatchFirma = (invActual?.id || '') + '|' + lista.length + '|' + _pend(lista);
+    _cancelDirty = true; window._step5Dirty = true;
 }
 
 function getCancelacionesCopas(insumoId) {
@@ -1299,6 +1421,11 @@ function getCancelacionesCopas(insumoId) {
     return (invActual?.cancelaciones || [])
         .filter(c => {
             if (c.insumoId) return c.insumoId === insumoId;
+            /* Si el renglón ya pegó con una RECETA, aquí no cuenta: sus insumos
+               se descuentan por los ingredientes (ver cancelRecetasFila). Sin
+               esta línea el fallback por nombre lo cazaría otra vez y el
+               descuento saldría doble. */
+            if (c.recetaId) return false;
             // legacy fallback
             return fila && c.nombreProducto &&
                 fila.nombre.toLowerCase().includes(c.nombreProducto.toLowerCase().split(' ')[0]);
@@ -1351,12 +1478,18 @@ function calcExistenciaTeorica(fila) {
     // Prebatch: + lo producido (si esta fila es un prebatch) / − lo consumido al producir batches (si es base).
     const prodAdd = _prodPrebatchUnidades(fila);
     const prodSub = _consumoBaseProd(fila);
+    /* Lo CANCELADO por recetas. Un Negroni cancelado se preparó y se tiró: se
+       llevó su ginebra, su Campari y su vermut igual que uno vendido. Antes la
+       cancelación solo bajaba el insumo cuando el POS cancelaba un producto
+       suelto —una cerveza—; si cancelaba un coctel no bajaba nada y el faltante
+       aparecía después como diferencia sin explicación. */
+    const cancelRec = cancelRecetasFila(fila);
     if (fila.tipo === 'peso') {
         const eaP    = parseFloat(fila.existenciaAnterior) || 0;
         const entP   = getEntradasBottles(fila.insumoId);     // entradas en unidad base
         const ventP  = _consumoRecetasBase(fila.insumoId); // consumo por lo vendido (platillos y cocteles)
         const mermaP = parseFloat(fila.mermaBase) || 0;
-        return eaP + entP + prodAdd - ventP - mermaP - prodSub;
+        return eaP + entP + prodAdd - ventP - cancelRec - mermaP - prodSub;
     }
     const ea          = parseFloat(fila.existenciaAnterior) || 0;
     const ventasRec   = calcVentasCopasRecetas(fila.insumoId, fila.copaML);
@@ -1364,14 +1497,14 @@ function calcExistenciaTeorica(fila) {
     const cancelCopas = getCancelacionesCopas(fila.insumoId);
     const cortesia    = parseFloat(fila.cortesiaCopas) || 0;
     const merma       = parseFloat(fila.mermaCopas) || 0;
-    const totalCopas  = ventasRec + ventasDir + cancelCopas + cortesia + merma;
+    const totalCopas  = ventasRec + ventasDir + cancelCopas + cancelRec + cortesia + merma;
     const entTotal    = getEntradasCopas(fila);
     if (fila.tipo === 'pza') {
         const ventaPzaRec = calcVentasPzaRecetas(fila.insumoId);     // venta por menú/recetas (piezas)
         const ventaPzaDir = parseFloat(fila.ventasCopasDirectas) || 0; // venta directa por pieza (campo "Pzas")
         return ea + entTotal + prodAdd
             - (fila.ventasBotella || 0) - ventaPzaDir - ventaPzaRec
-            - cancelCopas - cortesia - merma - prodSub;
+            - cancelCopas - cancelRec - cortesia - merma - prodSub;
     }
     return ea + entTotal + prodAdd - totalCopas - prodSub - (fila.ventasBotella || 0) * (fila.contNeto > 0 && fila.copaML > 0 ? fila.contNeto / fila.copaML : 0);
 }
@@ -6404,29 +6537,46 @@ function renderStep4() {
 function _renderCancelacionesTab(cancelaciones) {
     // Run auto-match on cancelaciones that haven't been matched yet
     _autoMatchCancelaciones();
-    const noMatch = cancelaciones.filter(c => !c.insumoId).length;
+    const noMatch = cancelaciones.filter(c => !c.insumoId && !c.recetaId).length;
+    /* Dos listas, separadas y rotuladas. Revueltas, «Negroni» el coctel y «Mix
+       Negroni PR» el insumo salen pegados en el desplegable y es imposible
+       saber cuál se está eligiendo — que es justo la decisión que importa. */
+    const recetaOpts = _recetasCancelables()
+        .slice().sort((a,b) => String(a.nombre||'').localeCompare(String(b.nombre||''), 'es'))
+        .map(r => `<option value="r:${etx(r.id)}">${etx(r.nombre)}</option>`).join('');
     const insumoOpts = filasCaptura.map(f =>
         `<option value="${f.insumoId}">${etx(insumoEtiqueta(f))}</option>`
     ).join('');
+    const opcionesMatch =
+        `<option value="">— cambiar —</option>` +
+        (recetaOpts ? `<optgroup label="Carta (cócteles y platillos)">${recetaOpts}</optgroup>` : '') +
+        `<optgroup label="Insumos del inventario">${insumoOpts}</optgroup>`;
 
     const tabla = cancelaciones.length ? `<div class="tabla-wrap" style="overflow-x:auto"><table style="min-width:820px">
         <thead><tr>
             <th style="width:110px">Fecha / Hora</th>
             <th>Producto POS</th>
             <th style="width:55px;text-align:center">Cant.</th>
-            <th style="width:165px">Insumo detectado</th>
+            <th style="width:175px">Detectado</th>
             <th>Motivo</th>
             <th style="width:80px">Mesero</th>
             <th style="width:28px"></th>
         </tr></thead>
         <tbody>${cancelaciones.map((c,i)=>{
-            const matched = !!c.insumoId;
-            const badge = matched
-                ? `<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(61,190,122,.12);
-                    border:1px solid rgba(61,190,122,.4);color:var(--green);border-radius:6px;
+            /* Se distingue a simple vista de qué pegó. Una receta descuenta TODOS
+               sus ingredientes y un insumo descuenta solo ese: no es lo mismo y
+               quien revisa la lista tiene que poder verlo sin abrir nada. */
+            const esRec  = !!c.recetaId;
+            const nombre = esRec ? (c.recetaNombre || '—') : (c.insumoNombre || '—');
+            const badge = (esRec || c.insumoId)
+                ? `<span style="display:inline-flex;align-items:center;gap:4px;
+                    background:${esRec ? 'rgba(122,184,245,.12)' : 'rgba(61,190,122,.12)'};
+                    border:1px solid ${esRec ? 'rgba(122,184,245,.45)' : 'rgba(61,190,122,.4)'};
+                    color:${esRec ? '#7ab8f5' : 'var(--green)'};border-radius:6px;
                     padding:2px 8px;font-size:11px;font-weight:600;max-width:100%;overflow:hidden;
-                    text-overflow:ellipsis;white-space:nowrap" title="${c.insumoNombre||''}">
-                    ✓ ${c.insumoNombre||'—'}</span>`
+                    text-overflow:ellipsis;white-space:nowrap"
+                    title="${etx(nombre)}${esRec ? ' — descuenta todos sus ingredientes' : ''}">
+                    ${esRec ? '🍸' : '✓'} ${etx(nombre)}</span>`
                 : `<span style="background:rgba(245,200,66,.12);border:1px solid rgba(245,200,66,.4);
                     color:var(--accent);border-radius:6px;padding:2px 8px;font-size:11px">
                     ⚠ Sin match</span>`;
@@ -6440,8 +6590,7 @@ function _renderCancelacionesTab(cancelaciones) {
                         <select onchange="_setCancelInsumo(${i},this.value)"
                             style="font-size:10px;background:var(--surface2);border:1px solid var(--border);
                             color:var(--text-muted);border-radius:5px;padding:2px 4px;width:100%;font-family:inherit">
-                            <option value="">— cambiar insumo —</option>
-                            ${insumoOpts}
+                            ${opcionesMatch}
                         </select>
                     </div>
                 </td>
@@ -6626,15 +6775,19 @@ function agregarCancelacionManual() {
     if (!nombreProducto || cantidad <= 0) { alert('Indica el producto y la cantidad.'); return; }
     if (!invActual.cancelaciones) invActual.cancelaciones = [];
     const entrada = { fechaHora, nombreProducto, cantidad, autorizo, motivo, mesero };
-    const m = _matchInsumo(nombreProducto);
-    if (m) { entrada.insumoId = m.insumoId; entrada.insumoNombre = m.nombre; }
+    _aplicarMatchCancel(entrada, _matchCancelacion(nombreProducto));
     invActual.cancelaciones.push(entrada);
+    _cancelDirty = true; window._step5Dirty = true;
     _autoGuardar(); renderStepContent();
 }
 
 function eliminarCancelacion(idx) {
     _pedirClaveAdmin('Eliminar cancelación', function() {
-        if (invActual?.cancelaciones) { invActual.cancelaciones.splice(idx,1); _autoGuardar(); renderStepContent(); }
+        if (invActual?.cancelaciones) {
+            invActual.cancelaciones.splice(idx,1);
+            _autoMatchFirma = ''; _cancelDirty = true; window._step5Dirty = true;
+            _autoGuardar(); renderStepContent();
+        }
     });
 }
 
@@ -6756,31 +6909,40 @@ function confirmarTablaCancelaciones() {
         const [fechaHora='', nombreProducto='', cantStr='', autorizo='', motivo='', mesero=''] = tds;
         if (!nombreProducto) return;
         const entrada = { fechaHora, nombreProducto, cantidad: parseFloat(cantStr)||1, autorizo, motivo, mesero };
-        const m = _matchInsumo(nombreProducto);
-        if (m) { entrada.insumoId = m.insumoId; entrada.insumoNombre = m.nombre; }
+        _aplicarMatchCancel(entrada, _matchCancelacion(nombreProducto));
         toAdd.push(entrada);
     });
     if (!toAdd.length) { alert('Sin datos válidos. Ingresa productos en la columna Producto.'); return; }
     if (!invActual.cancelaciones) invActual.cancelaciones = [];
     invActual.cancelaciones.push(...toAdd);
+    _cancelDirty = true; window._step5Dirty = true;
     _autoGuardar(); renderStepContent();
 }
 
 function _reDetectarCancelaciones() {
     (invActual?.cancelaciones || []).forEach(c => {
-        const m = _matchInsumo(c.nombreProducto);
-        c.insumoId     = m ? m.insumoId : null;
-        c.insumoNombre = m ? m.nombre   : null;
+        _aplicarMatchCancel(c, _matchCancelacion(c.nombreProducto));
     });
+    _autoMatchFirma = '';   // se rehízo todo: que la guarda no crea que ya estaba
+    _cancelDirty = true; window._step5Dirty = true;
     _autoGuardar(); renderStepContent();
 }
 
-function _setCancelInsumo(idx, insumoId) {
+/* El valor del selector trae de qué lista salió: `r:<id>` una receta, el id
+   pelón un insumo. Sin el prefijo no se podrían distinguir — un insumo y una
+   receta pueden tener el mismo id si uno se convirtió del otro. */
+function _setCancelInsumo(idx, valor) {
     const c = invActual?.cancelaciones?.[idx];
     if (!c) return;
-    const fila = filasCaptura.find(f => f.insumoId === insumoId);
-    c.insumoId     = insumoId || null;
-    c.insumoNombre = fila ? fila.nombre : null;
+    if (!valor) { _aplicarMatchCancel(c, null); }
+    else if (valor.indexOf('r:') === 0) {
+        const r = getRecetas().find(x => x.id === valor.slice(2));
+        _aplicarMatchCancel(c, r ? { tipo:'receta', id:r.id, nombre:r.nombre } : null);
+    } else {
+        const fila = filasCaptura.find(f => f.insumoId === valor);
+        _aplicarMatchCancel(c, { tipo:'insumo', id:valor, nombre: fila ? fila.nombre : null });
+    }
+    _cancelDirty = true; window._step5Dirty = true;
     _autoGuardar(); renderStepContent();
 }
 
