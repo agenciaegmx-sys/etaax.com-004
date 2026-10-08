@@ -3821,6 +3821,11 @@ function renderGridRecetas() {
         renderListaRecetas(lista, iconos, _catGlobal, _sucAct);
         if (btnImp) btnImp.style.display = (recetasSeleccionadas.size > 0 && _puedeRec('imprimir')) ? 'inline-flex' : 'none';
         _pintarBarraSelRecetas();
+        /* ESTA LÍNEA FALTABA. La vista de lista salía por aquí ANTES de
+           enganchar el arrastre: el tirador ⠿ se pintaba en cada renglón y no
+           movía nada. Y la lista es justo la vista donde se reacomoda —en la
+           galería no se ve el orden— así que la función parecía rota del todo. */
+        _engancharOrdenRec();
         return;
     }
     grid.style.display = 'grid';

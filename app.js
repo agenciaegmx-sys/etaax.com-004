@@ -1744,8 +1744,15 @@ function renderTabla() {
         const vinculado = !!ing.insumoId;
 
         const tr = document.createElement('tr');
+        tr.setAttribute('data-ing-i', i);      // identidad del renglón al arrastrar
         tr.innerHTML =
-            '<td style="color:var(--text-dim);width:32px">'+(i+1)+'</td>' +
+            /* El tirador va PEGADO al número, en su misma celda: una columna
+               aparte le robaría ancho a la tabla, que ya va apretada con ocho.
+               Y es el único punto por donde se arrastra — el resto del renglón
+               son campos que hay que poder tocar para escribir. */
+            '<td style="color:var(--text-dim);width:44px;white-space:nowrap">' +
+                '<span class="ord-grip" title="Arrastra para cambiar el orden">⠿</span>' +
+                (i+1) + '</td>' +
             '<td style="position:relative">' +
                 '<div style="display:flex;align-items:center;gap:5px">' +
                 (vinculado ? '<span style="width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0" title="Vinculado al catálogo"></span>' : '') +
@@ -1785,7 +1792,45 @@ function renderTabla() {
         tbody.appendChild(tr);
     });
 
+    _engancharOrdenIng();
     calcularCosteos();
+}
+
+/* ── El orden de los ingredientes del escandallo ───────────────────────────
+   Se captura en el orden en que uno se acuerda, no en el que se cocina. Poder
+   subir el destilado base hasta arriba —o bajar la guarnición al final— hace
+   que la ficha se lea como la receta de verdad, y esa ficha es la que acaba
+   impresa y pegada en la barra.
+
+   Aquí el orden NO es un campo guardado como en los catálogos: ES el orden del
+   arreglo. La ficha, el costeo y el impreso ya recorren `ingredientes` tal
+   cual, así que mover el renglón mueve las tres cosas de un golpe.
+
+   Se mueve por POSICIÓN, no por id: un ingrediente escrito a mano no tiene
+   insumoId, y dos renglones del mismo insumo (el mismo ron en dos partes de la
+   receta) tendrían el mismo. La posición siempre es única. */
+function _engancharOrdenIng() {
+    if (typeof etaaxReordenar === 'undefined') return;
+    const tbody = document.getElementById('tbodyIngredientes');
+    if (!tbody) return;
+    etaaxReordenar.quitar(tbody);
+    if (ingredientes.length < 2) return;        // con uno no hay nada que ordenar
+    etaaxReordenar.aplicar(tbody, {
+        item: 'tr[data-ing-i]',
+        id:   el => el.getAttribute('data-ing-i'),
+        onMover: function (a, b, antes) {
+            const ia = parseInt(a, 10), ib = parseInt(b, 10);
+            if (isNaN(ia) || isNaN(ib) || ia === ib) return;
+            const it = ingredientes.splice(ia, 1)[0];
+            /* Al sacar el renglón, todo lo que estaba debajo se recorre uno:
+               el destino de más abajo ya no está donde decía. */
+            let dest = ib > ia ? ib - 1 : ib;
+            ingredientes.splice(antes ? dest : dest + 1, 0, it);
+            window._escDirty = true;
+            if (typeof window._avisarDirty === 'function') window._avisarDirty();
+            renderTabla();
+        }
+    });
 }
 
 // ── Actualizar campo de un ingrediente ───────────────────────

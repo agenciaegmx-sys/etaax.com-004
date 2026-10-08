@@ -2626,6 +2626,32 @@
    
    const _soloMode = new URLSearchParams(location.search).get('solo') === '1';
 
+   /* Abre el insumo que pidió la dirección, esperando a que exista. El catálogo
+      puede venir de IndexedDB (rápido) o de Supabase (primera carga del día, o
+      un aparato recién estrenado), así que se reintenta con un tope: dos
+      segundos y medio es más de lo que tarda cualquiera de los dos, y pasado
+      eso lo honesto es decir que no está. */
+   function _abrirInsumoPedido(id, intento) {
+       var ins = (typeof getInsumos === 'function') ? getInsumos().find(function (x) { return x.id === id; }) : null;
+       if (ins) { editarInsumo(id); return; }
+       if (intento < 25) { setTimeout(function () { _abrirInsumoPedido(id, intento + 1); }, 100); return; }
+       /* Se acabó la espera. Un hueco negro manda a reportar «no carga»; esto
+          manda a mirar si el insumo sigue existiendo, que es lo que pasó. */
+       var b = document.body;
+       if (!b) return;
+       var d = document.createElement('div');
+       d.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;' +
+           'padding:28px;text-align:center;font-family:inherit;z-index:99999';
+       d.innerHTML = '<div style="max-width:380px">' +
+           '<div style="font-size:30px;margin-bottom:12px">🔌</div>' +
+           '<div style="font-size:14px;font-weight:600;color:var(--text,#eee);margin-bottom:8px">' +
+           'No se pudo abrir este insumo</div>' +
+           '<div style="font-size:12.5px;color:var(--text-muted,#999);line-height:1.65">' +
+           'El catálogo no terminó de cargar, o el insumo ya no existe en esta sucursal.<br>' +
+           'Cierra esta ventana y vuelve a intentarlo.</div></div>';
+       b.appendChild(d);
+   }
+
    /* ── AVISAR AL PADRE QUE EL CATÁLOGO CAMBIÓ ───────────────────────────────
       Esta página se abre DENTRO de un iframe desde el escandallo (los tres
       botones: catálogo del negocio, catálogo ETAAX, nuevo insumo). Un iframe es
@@ -2666,7 +2692,17 @@
        }
        const _q = new URLSearchParams(location.search);
        const urlId = _q.get('id');
-       if (urlId) setTimeout(() => editarInsumo(urlId), 150);
+       /* ══ LA VENTANA EN BLANCO ══════════════════════════════════════════
+          Antes esto era `setTimeout(… , 150)` a secas. El catálogo no está en
+          memoria al cargar: vive en IndexedDB y se hidrata solo, así que a los
+          150 ms puede no haber llegado. editarInsumo() no encuentra el insumo,
+          se sale sin decir nada (`if (!ins) return`) y la ventana flotante se
+          queda vacía — con el título puesto, que es lo que más despista.
+
+          Pasaba «seguido», no siempre: es una carrera, y la gana quien cargue
+          más rápido ese día. Ahora se ESPERA al almacén y, si aun así el
+          insumo no aparece, se dice en vez de dejar el hueco negro. */
+       if (urlId) _conStore(function () { _abrirInsumoPedido(urlId, 0); });
        // Embed: abrir directo la fuente pedida desde el escandallo
        else if (_q.get('nuevo') === '1')     setTimeout(() => { if (typeof abrirModal === 'function') abrirModal(); }, 150);
        else if (_q.get('globalneg') === '1') setTimeout(() => { if (typeof abrirInsumosGlobalNeg === 'function') abrirInsumosGlobalNeg(); }, 200);

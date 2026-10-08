@@ -19465,6 +19465,397 @@ console.log('\n══ BH26 · El prebatch, de punta a punta ══');
     });
 }
 
+/* ═══════════ SUITE BH27 · ARRASTRAR PARA REORDENAR ═══════════════════════
+   «La función de mover o reacomodar de lugar cada receta no funciona ni en
+   tablet ni en compu.» Eran DOS fallas distintas con el mismo síntoma:
+
+   1. En la VISTA DE LISTA el arrastre nunca se enganchaba. renderGridRecetas
+      salía por un `return` antes de llamar a _engancharOrdenRec: el tirador ⠿
+      se pintaba en cada renglón y no movía nada. Y la lista es justo donde uno
+      reacomoda —en la galería no se ve el orden—, así que parecía rota entera.
+
+   2. En TABLET no funcionaba por una razón de fondo: estaba hecho con el
+      arrastre del navegador (draggable + dragstart), y el dedo NO dispara
+      `dragstart`. Esa API no existe para el tacto. No era un ajuste: había que
+      cambiar de motor. Ahora es Pointer Events, un solo camino para ratón,
+      dedo y lápiz.                                                           */
+console.log('\n══ BH27 · Arrastrar para reordenar ══');
+{
+    /* ── Un DOM de juguete con punteros ──
+       Lo justo para correr el motor de verdad: elementos con su rectángulo,
+       elementFromPoint, closest y listeners. Comprobar el texto del archivo no
+       sirve aquí — lo que falla es el comportamiento. */
+    function miniDOM(filas, conGrip) {
+        const docLs = {};
+        function nuevoEl(tag, attrs, rect) {
+            const cl = new Set();
+            const el = {
+                tagName: tag, _attrs: attrs || {}, children: [], parent: null,
+                classList: { add: c => cl.add(c), remove: c => cl.delete(c),
+                             contains: c => cl.has(c), toggle: c => cl.has(c) ? cl.delete(c) : cl.add(c) },
+                _cl: cl, style: {}, _rect: rect || { top:0, height:20, bottom:20, left:0, width:100 },
+                getBoundingClientRect() { return this._rect; },
+                getAttribute(k) { return this._attrs[k] != null ? String(this._attrs[k]) : null; },
+                setAttribute(k, v) { this._attrs[k] = v; },
+                removeAttribute(k) { delete this._attrs[k]; },
+                setPointerCapture() {}, releasePointerCapture() {},
+                appendChild(c) { c.parent = this; this.children.push(c); return c; },
+                contains(n) { for (let p = n; p; p = p.parent) if (p === this) return true; return false; },
+                closest(sel) {
+                    for (let p = this; p; p = p.parent) if (coincide(p, sel)) return p;
+                    return null;
+                },
+                querySelector(sel) { return todos(this).find(x => coincide(x, sel)) || null; },
+                querySelectorAll(sel) { return todos(this).filter(x => coincide(x, sel)); },
+                _ls: {},
+                addEventListener(t, f) { (this._ls[t] = this._ls[t] || []).push(f); },
+                removeEventListener(t, f) { this._ls[t] = (this._ls[t] || []).filter(g => g !== f); },
+                disparar(t, ev) { (this._ls[t] || []).slice().forEach(f => f(ev)); }
+            };
+            return el;
+        }
+        function todos(n, acc) { acc = acc || []; n.children.forEach(c => { acc.push(c); todos(c, acc); }); return acc; }
+        /* Selectores que de verdad se usan: '.clase', 'tag[attr]', '[attr]'. */
+        function coincide(el, sel) {
+            return sel.split(',').map(s => s.trim()).some(s => {
+                if (s[0] === '.') return el._cl.has(s.slice(1));
+                const m = s.match(/^([a-z]*)\[([^\]=]+)(?:="([^"]*)")?\]$/i);
+                if (m) {
+                    if (m[1] && el.tagName !== m[1]) return false;
+                    if (el._attrs[m[2]] == null) return false;
+                    return m[3] == null || String(el._attrs[m[2]]) === m[3];
+                }
+                return el.tagName === s;
+            });
+        }
+
+        const cont = nuevoEl('tbody', {}, { top:0, height:filas * 20, bottom:filas * 20 });
+        const items = [];
+        for (let i = 0; i < filas; i++) {
+            const tr = nuevoEl('tr', { 'data-ord-id': 'r' + i }, { top:i*20, height:20, bottom:i*20+20 });
+            cont.appendChild(tr);
+            if (conGrip) {
+                const g = nuevoEl('span', {}, { top:i*20, height:20, bottom:i*20+20 });
+                g.classList.add('ord-grip');
+                tr.appendChild(g);
+            }
+            items.push(tr);
+        }
+        const doc = {
+            _ls: docLs,
+            addEventListener(t, f) { (docLs[t] = docLs[t] || []).push(f); },
+            removeEventListener(t, f) { docLs[t] = (docLs[t] || []).filter(g => g !== f); },
+            disparar(t, ev) { (docLs[t] || []).slice().forEach(f => f(ev)); },
+            createElement: (t) => nuevoEl(t, {}, null),
+            head: nuevoEl('head', {}, null),
+            documentElement: nuevoEl('html', {}, null),
+            body: nuevoEl('body', {}, null),
+            /* El punto cae en la fila cuyo rectángulo lo contiene. Si hay
+               tirador, se devuelve el tirador: es lo que de verdad hay debajo
+               del dedo y el motor tiene que saber subir hasta la fila. */
+            elementFromPoint(x, y) {
+                const tr = items.find(t => y >= t._rect.top && y < t._rect.bottom);
+                if (!tr) return null;
+                return (conGrip && x < 10) ? tr.children[0] : tr;
+            }
+        };
+        return { cont, items, doc };
+    }
+
+    function motor(filas, conGrip) {
+        const { cont, items, doc } = miniDOM(filas, conGrip);
+        const movs = [];
+        const c = { console, Set, Array, String, Number, parseInt, parseFloat, isNaN, Math, JSON,
+            document: doc, setInterval: () => 0, clearInterval: () => {},
+            getComputedStyle: () => ({ overflowY: 'visible' }) };
+        c.window = c;
+        vm.createContext(c);
+        vm.runInContext(fs.readFileSync(path.join(RAIZ, 'reordenar.js'), 'utf8'), c, { filename:'reordenar.js' });
+        c.etaaxReordenar.aplicar(cont, {
+            item: 'tr[data-ord-id]',
+            onMover: (a, b, antes) => movs.push(a + (antes ? '>antes>' : '>despues>') + b)
+        });
+        /* Arrastrar: se toma la fila `de` y se suelta sobre la `a`, arriba o
+           abajo de su mitad según `enLaParteDeArriba`. */
+        const arrastrar = (de, a, arriba) => {
+            const yDe = items[de]._rect.top + 10;
+            const yA  = items[a]._rect.top + (arriba ? 4 : 16);
+            const x = conGrip ? 5 : 50;
+            cont.disparar('pointerdown', { pointerId:1, button:0, clientX:x, clientY:yDe,
+                target: conGrip ? items[de].children[0] : items[de], preventDefault(){} });
+            doc.disparar('pointermove', { pointerId:1, clientX:x, clientY:yA, preventDefault(){} });
+            doc.disparar('pointerup',   { pointerId:1, clientX:x, clientY:yA, preventDefault(){} });
+        };
+        return { cont, items, movs, arrastrar, api: c.etaaxReordenar, doc };
+    }
+
+    /* ── EL MOTOR, CORRIENDO ── */
+    test('arrastrar la última fila hasta arriba la mueve', () => {
+        const m = motor(4, true);
+        m.arrastrar(3, 0, true);
+        return eq(m.movs.join('|'), 'r3>antes>r0', 'de abajo a arriba');
+    });
+    test('…y soltar en la mitad de abajo la deja DESPUÉS', () => {
+        const m = motor(4, true);
+        m.arrastrar(0, 2, false);
+        return eq(m.movs.join('|'), 'r0>despues>r2', 'la mitad manda');
+    });
+    test('soltar sobre sí misma no mueve nada', () => {
+        const m = motor(4, true);
+        m.arrastrar(1, 1, true);
+        return eq(m.movs.length, 0, 'sin ruido');
+    });
+    /* EL ARREGLO DE TABLET. Con el motor viejo esto no disparaba nada: el dedo
+       no manda `dragstart`. Aquí no hay un solo listener de drag. */
+    test('TABLET · el motor ya no depende del arrastre del navegador', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'reordenar.js'), 'utf8');
+        const codigo = src.split('\n').filter(l => l.indexOf('//') !== 0 &&
+            l.indexOf('   Esto estaba con') < 0 && l.indexOf('draggable + dragstart') < 0).join('\n');
+        return eq(/addEventListener\('drag/.test(codigo) === false &&
+                  codigo.indexOf("addEventListener('pointerdown'") > -1, true, 'punteros');
+    });
+    /* El dedo arrastrando y el dedo haciendo scroll son el mismo gesto. Si el
+       renglón entero tomara el dedo, no habría forma de bajar a ver el resto de
+       la lista en tablet. Por eso solo el tirador lo toma. */
+    /* Se mira el CSS que el módulo INYECTA, no el texto del archivo: ahí está
+       partido en pedazos con comentarios en medio y cualquier patrón sobre la
+       fuente se caza a sí mismo o se pierde. (Van nueve veces en este archivo.) */
+    const cssInyectado = (() => {
+        const m = motor(2, true);
+        const st = m.doc.head.children.find(x => x.tagName === 'style');
+        return (st && st.textContent) || '';
+    })();
+    test('TABLET · el tirador toma el dedo…', () =>
+        eq(/\.ord-grip\{[^}]*touch-action:none/.test(cssInyectado), true, 'lo agarra'));
+    test('…y donde hay tirador, la lista sigue haciendo scroll con el dedo', () =>
+        eq(cssInyectado.indexOf('.ord-con-grip .ord-mov{touch-action:auto}') > -1,
+           true, 'conviven'));
+    test('…y sin tirador, el renglón entero lo toma', () =>
+        eq(/(^|\})\.ord-mov\{touch-action:none\}/.test(cssInyectado), true, 'el asa es la fila'));
+    /* Y donde NO hay tirador, el renglón entero tiene que tomarlo: si no, en
+       tablet no se podría arrastrar nada ahí. */
+    test('…y donde no hay tirador, el renglón entero es el asa', () => {
+        const m = motor(3, false);
+        m.arrastrar(2, 0, true);
+        return eq(m.movs.join('|'), 'r2>antes>r0', 'sin tirador también');
+    });
+    /* Con tirador, tocar el renglón FUERA del tirador no arrastra: ahí están
+       los campos que hay que poder escribir y la ficha que hay que poder abrir. */
+    test('con tirador, tocar el resto del renglón no arrastra', () => {
+        const m = motor(4, true);
+        m.cont.disparar('pointerdown', { pointerId:1, button:0, clientX:50, clientY:70,
+            target: m.items[3], preventDefault(){} });
+        m.doc.disparar('pointermove', { pointerId:1, clientX:50, clientY:4, preventDefault(){} });
+        m.doc.disparar('pointerup',   { pointerId:1, clientX:50, clientY:4, preventDefault(){} });
+        return eq(m.movs.length, 0, 'el campo se puede tocar');
+    });
+    /* Quitar tiene que desenganchar DE VERDAD, incluidos los listeners que
+       viven en el documento. Si no, cada repintado deja otro juego y un solo
+       arrastre acaba moviendo la fila varias veces. */
+    test('quitar desengancha también lo que colgó del documento', () => {
+        const m = motor(4, true);
+        m.api.quitar(m.cont);
+        m.arrastrar(3, 0, true);
+        return eq(m.movs.length, 0, 'sin fantasmas');
+    });
+    test('…y re-aplicar no duplica el movimiento', () => {
+        const m = motor(4, true);
+        m.api.aplicar(m.cont, { item:'tr[data-ord-id]',
+            onMover: (a, b, antes) => m.movs.push(a + (antes ? '>antes>' : '>despues>') + b) });
+        m.arrastrar(3, 0, true);
+        return eq(m.movs.length, 1, 'una sola vez');
+    });
+
+    /* ── LA VISTA DE LISTA, QUE NUNCA SE ENGANCHÓ ── */
+    const ri = fs.readFileSync(path.join(RAIZ, 'recetas/index.html'), 'utf8');
+    test('LISTA · el catálogo engancha el arrastre antes de salirse', () => {
+        const i = ri.indexOf("if (vistaRecetas === 'lista') {");
+        const bloque = ri.slice(i, ri.indexOf('return;', i));
+        return eq(bloque.indexOf('_engancharOrdenRec();') > -1, true, 'ya no se va sin engancharlo');
+    });
+    test('…y la galería lo sigue enganchando', () => {
+        const i = ri.indexOf('function renderGridRecetas()');
+        const j = ri.indexOf('\nfunction ', i + 10);
+        return eq(ri.slice(i, j).split('_engancharOrdenRec();').length - 1, 2, 'las dos vistas');
+    });
+    /* En insumos ya estaba bien y tiene que seguir estándolo: es la misma
+       función para la tabla y la galería, llamada después de pintar. */
+    const ij = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.js'), 'utf8');
+    test('INSUMOS · tabla y galería siguen enganchadas', () => {
+        const i = ij.indexOf('function _renderPagina()');
+        const bloque = ij.slice(i, i + 900);
+        return eq(bloque.indexOf('_engancharOrden();') > -1 &&
+                  ij.indexOf("etaaxReordenar.aplicar(tb,") > -1 &&
+                  ij.indexOf("etaaxReordenar.aplicar(grid,") > -1, true, 'las dos');
+    });
+
+    /* ── LOS INGREDIENTES DEL ESCANDALLO ──
+       Pedido nuevo: subir hasta arriba el insumo que está al final. Aquí el
+       orden NO es un campo guardado: ES el orden del arreglo, y la ficha, el
+       costeo y el impreso ya lo recorren tal cual. */
+    const aj = fs.readFileSync(path.join(RAIZ, 'app.js'), 'utf8');
+    const mover = (() => {
+        const i = aj.indexOf('function _engancharOrdenIng()');
+        const abre = aj.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < aj.length) { if (aj[j]==='{') prof++; else if (aj[j]==='}') { prof--; if (!prof) break; } j++; }
+        const cuerpo = aj.slice(i, j + 1);
+        const c = { console, parseInt, isNaN, window: {} };
+        c.window = c;
+        vm.createContext(c);
+        vm.runInContext('var ingredientes = [];\n' +
+            'var etaaxReordenar = { quitar(){}, aplicar(cont, o){ c_onMover = o.onMover; } };\n' +
+            'var c_onMover = null;\n' +
+            'function renderTabla(){}\n' +
+            'document = { getElementById: () => ({}) };\n' + cuerpo +
+            '\nfunction _run(lista, a, b, antes){ ingredientes = lista; _engancharOrdenIng();' +
+            ' c_onMover(String(a), String(b), antes); return ingredientes.map(x => x.n).join(""); }', c);
+        return c._run;
+    })();
+    const L = () => [{n:'A'},{n:'B'},{n:'C'},{n:'D'}];
+
+    test('ESCANDALLO · el último ingrediente se puede subir hasta arriba', () =>
+        eq(mover(L(), 3, 0, true), 'DABC', 'lo que pidió Edwin'));
+    test('…y el primero se puede mandar al final', () =>
+        eq(mover(L(), 0, 3, false), 'BCDA', 'al revés también'));
+    /* LA TRAMPA DEL ÍNDICE: al sacar el renglón, todo lo que estaba debajo se
+       recorre uno. Sin ajustar el destino, mover hacia abajo cae un lugar de
+       más y el ingrediente acaba donde nadie lo puso. */
+    test('…y moviendo hacia ABAJO no se pasa de lugar', () =>
+        eq(mover(L(), 0, 2, false), 'BCAD', 'A queda justo después de C'));
+    test('…ni hacia abajo soltando en la mitad de arriba', () =>
+        eq(mover(L(), 0, 2, true), 'BACD', 'justo antes de C'));
+    test('…y hacia ARRIBA cae donde se soltó', () =>
+        eq(mover(L(), 2, 1, true), 'ACBD', 'antes de B'));
+    test('soltar donde estaba no revuelve nada', () =>
+        eq(mover(L(), 1, 1, true), 'ABCD', 'intacto'));
+    /* Se mueve por POSICIÓN y no por id a propósito: un ingrediente escrito a
+       mano no tiene insumoId, y el mismo ron en dos renglones tendría el mismo.
+       La posición siempre es única. */
+    test('…y funciona con dos renglones del MISMO insumo', () => {
+        const dup = [{n:'A',insumoId:'ron'},{n:'B'},{n:'C',insumoId:'ron'}];
+        return eq(mover(dup, 2, 0, true), 'CAB', 'sin confundirlos');
+    });
+    /* Mover es un cambio sin guardar: si no se marcara, cerrar la ventana no
+       preguntaría nada y el orden se perdería sin avisar. */
+    test('…y reacomodar cuenta como cambio sin guardar', () => {
+        const i = aj.indexOf('function _engancharOrdenIng()');
+        const cuerpo = aj.slice(i, i + 2000);
+        return eq(cuerpo.indexOf('window._escDirty = true;') > -1 &&
+                  cuerpo.indexOf('_avisarDirty') > -1, true, 'avisa');
+    });
+    test('…y con un solo ingrediente no se engancha nada', () =>
+        eq(aj.indexOf('if (ingredientes.length < 2) return;') > -1, true, 'sin tirador inútil'));
+    test('…y cada renglón del escandallo lleva su tirador', () =>
+        eq(aj.indexOf("tr.setAttribute('data-ing-i', i);") > -1 &&
+           aj.indexOf('<span class="ord-grip"') > -1, true, 'con asa'));
+}
+
+/* ═══════════ SUITE BH28 · LA VENTANA QUE ABRÍA EN BLANCO ═════════════════
+   «Estoy en una receta y quiero editar el insumo, abre la ventana pero no
+   carga info, se queda así, y me pasa en la compu y en la tablet.»
+
+   La ventana abre insumos.html?id=<insumo>, y ahí se hacía:
+       if (urlId) setTimeout(() => editarInsumo(urlId), 150);
+
+   El catálogo NO está en memoria al cargar: vive en IndexedDB y se hidrata
+   solo, o viene de Supabase la primera vez del día. A los 150 ms puede no
+   haber llegado. editarInsumo() no encuentra el insumo y se sale sin decir
+   nada (`if (!ins) return`), así que queda el marco con el título puesto y el
+   hueco negro debajo — lo que más despista, porque el título SÍ sale.
+
+   Por eso pasaba «seguido» y no siempre: es una carrera, y la gana quien
+   cargue más rápido ese día. Es la misma familia de bugs que la cola de salida
+   clavada: nadie debe leer una clave grande antes de que el almacén esté.    */
+console.log('\n══ BH28 · La ventana que abría en blanco ══');
+{
+    const ij = fs.readFileSync(path.join(RAIZ, 'recetas/insumos.js'), 'utf8');
+    const fnDe = (src, nombre) => {
+        const i = src.indexOf('function ' + nombre + '(');
+        if (i < 0) throw new Error('no existe ' + nombre);
+        const abre = src.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < src.length) { if (src[j]==='{') prof++; else if (src[j]==='}') { prof--; if (!prof) return src.slice(i, j+1); } j++; }
+        throw new Error('sin cerrar ' + nombre);
+    };
+
+    /* Se corre el abridor de verdad con un reloj en la mano: el catálogo
+       aparece en el intento que uno decida, y se mira si lo esperó. */
+    function abridor(apareceEnIntento) {
+        const pendientes = [];
+        const estado = { abrio: null, avisos: [], intentos: 0 };
+        const body = { appendChild(el) { estado.avisos.push(el.innerHTML || ''); } };
+        const c = { console, setTimeout(f, ms) { pendientes.push(f); return pendientes.length; },
+            document: { body, createElement: () => ({ style:{}, set innerHTML(v) { this._h = v; },
+                                                      get innerHTML() { return this._h || ''; } }) },
+            getInsumos() {
+                estado.intentos++;
+                return estado.intentos >= apareceEnIntento ? [{ id:'ins1', nombre:'Medallon de Atun' }] : [];
+            },
+            editarInsumo(id) { estado.abrio = id; } };
+        c.window = c;
+        vm.createContext(c);
+        vm.runInContext(fnDe(ij, '_abrirInsumoPedido'), c);
+        c._abrirInsumoPedido('ins1', 0);
+        /* Se deja correr el reloj hasta 40 vueltas: más que el tope del propio
+           abridor, para ver también qué hace cuando se rinde. */
+        for (let k = 0; k < 40 && pendientes.length; k++) (pendientes.shift())();
+        return estado;
+    }
+
+    test('si el catálogo ya está, abre de inmediato', () =>
+        eq(abridor(1).abrio, 'ins1', 'sin esperar'));
+    /* EL CASO DE EDWIN: el catálogo tarda. Antes, a los 150 ms se rendía en
+       silencio; ahora espera. */
+    test('si el catálogo tarda, lo ESPERA en vez de abrir en blanco', () =>
+        eq(abridor(12).abrio, 'ins1', 'ya no se rinde al primer intento'));
+    test('…y aguanta una carga lenta de verdad (20 vueltas)', () =>
+        eq(abridor(20).abrio, 'ins1', 'dos segundos'));
+    /* Pero la espera no puede ser infinita: si el insumo de plano no está
+       —lo borraron, o es de otra sucursal— hay que decirlo. Un hueco negro
+       manda a reportar «no carga»; esto manda a mirar si el insumo existe. */
+    test('si de plano no llega, lo DICE en vez de dejar el hueco negro', () => {
+        const e = abridor(9999);
+        return eq(e.abrio === null && e.avisos.length === 1, true, 'con mensaje');
+    });
+    test('…y el mensaje dice qué pasó y qué hacer', () => {
+        const h = abridor(9999).avisos[0] || '';
+        return eq(h.indexOf('No se pudo abrir este insumo') > -1 &&
+                  h.indexOf('ya no existe') > -1 &&
+                  h.indexOf('vuelve a intentarlo') > -1, true, 'útil');
+    });
+    /* Y no insiste para siempre: 25 intentos de 100 ms. Sin tope, una ventana
+       abierta por error seguiría preguntando mientras la pestaña viva. */
+    test('…y deja de insistir, no se queda preguntando para siempre', () => {
+        const e = abridor(9999);
+        return eq(e.intentos <= 27, true, 'con tope: ' + e.intentos);
+    });
+
+    /* LA CAUSA DE FONDO: leer el catálogo antes de que el almacén esté listo.
+       insumos.js ya tenía _conStore para esto —se usa en otras lecturas— y
+       esta era la que se le había escapado. */
+    test('se espera al almacén antes de buscar el insumo', () => {
+        const i = ij.indexOf("const urlId = _q.get('id');");
+        const bloque = ij.slice(i, i + 1400);
+        return eq(/if \(urlId\) _conStore\(/.test(bloque), true, 'por la puerta de siempre');
+    });
+    test('…y ya no queda el setTimeout de 150 ms que perdía la carrera', () => {
+        const i = ij.indexOf("const urlId = _q.get('id');");
+        const bloque = ij.slice(i, i + 1400);
+        return eq(/if \(urlId\) setTimeout/.test(bloque), false, 'fuera');
+    });
+    /* Las otras tres entradas por dirección (nuevo, catálogo del negocio,
+       catálogo ETAAX) abren un modal vacío que no depende del catálogo, así
+       que su setTimeout corto sigue siendo correcto. Se deja escrito para que
+       nadie los "arregle" de más. */
+    test('las otras entradas por dirección siguen abriendo directo', () => {
+        const i = ij.indexOf("const urlId = _q.get('id');");
+        const bloque = ij.slice(i, i + 1600);
+        return eq(bloque.indexOf("_q.get('nuevo') === '1'") > -1 &&
+                  bloque.indexOf("_q.get('etaax') === '1'") > -1, true, 'intactas');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
