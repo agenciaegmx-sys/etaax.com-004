@@ -18964,6 +18964,79 @@ console.log('\n══ BH24 · El cóctel que se cancela ══');
         vm.runInContext('window._recetaActivaEnSuc = undefined;', C);
         return eq(r, null, 'no se vende aquí');
     });
+
+    /* ══ EL ARCHIVO QUE SE SUBE ════════════════════════════════════════════
+       Pregunta de Edwin, textual: si subo un Excel ¿el sistema detecta las
+       columnas o se rompe el orden si no coincide con el de ETAAX?
+
+       La respuesta corta es que sí lo detecta, por NOMBRE de columna y no por
+       posición. Pero probándolo salieron dos agujeros reales, y aquí quedan
+       tapados los dos.                                                      */
+    const mapC = (rows) => C._mapPOSCancelaciones(rows);
+
+    /* El orden NO importa mientras el encabezado se reconozca. Es lo que hace
+       que sirva el archivo del POS tal como sale, sin acomodar nada. */
+    test('EXCEL · las columnas en otro orden se acomodan solas', () => {
+        const r = mapC([['Cantidad','Descripcion','Fecha','Mesero','Razon'],
+                        ['2','NEGRONI','25/09/2026 23:53','PERLA','CAMBIO DE OPINION']])[0];
+        return eq([r.nombreProducto, r.cantidad, r.mesero, r.motivo].join('|'),
+                  'NEGRONI|2|PERLA|CAMBIO DE OPINION', 'por nombre, no por lugar');
+    });
+    /* Columnas que ETAAX no usa —folio, precio— se ignoran sin recorrer nada. */
+    test('EXCEL · las columnas de más se ignoran, no corren a las otras', () => {
+        const r = mapC([['SerieFolio','Fecha','Descripcion','Precio','Cantidad','Mesero'],
+                        ['A-991','25/09','NEGRONI','160','2','PERLA']])[0];
+        return eq(r.nombreProducto + '|' + r.cantidad, 'NEGRONI|2', 'sin recorrerse');
+    });
+
+    /* AGUJERO 1, ENCONTRADO AL PROBARLO. Buscando quién autorizó se preguntaba
+       por «nombre», y un encabezado «Nombre del producto» lo contiene: el
+       nombre del cóctel acababa en Autorizó («NEGRONI / TOMAS»). */
+    test('EXCEL · «Nombre del producto» ya no se cuela en Autorizó', () => {
+        const r = mapC([['Fecha','Nombre del producto','Cantidad','Usuario','Razon'],
+                        ['25/09','NEGRONI','2','TOMAS','CAMBIO']])[0];
+        return eq(r.autorizo, 'TOMAS', 'cada columna en su campo');
+    });
+
+    /* AGUJERO 2. Un POS que rotule «Momento / Artículo / Piezas» no usa ninguna
+       palabra conocida: la fila de rótulos se colaba como una cancelación más,
+       un producto llamado «Artículo» con cantidad 1. La señal que lo delata es
+       que un encabezado no trae NINGÚN número y una fila de datos siempre trae
+       la cantidad. */
+    test('EXCEL · un encabezado con otras palabras ya no entra como dato', () => {
+        const out = mapC([['Momento','Articulo','Piezas','Quien','Porque','Capitan'],
+                          ['25/09/2026','NEGRONI','2','TOMAS','CAMBIO','PERLA']]);
+        return eq(out.length + '|' + out[0].nombreProducto, '1|NEGRONI', 'un solo renglón');
+    });
+    /* …y en ese caso el mapeo cae a POSICIÓN, que es lo que hacía siempre. No
+       adivina: acierta si el orden coincide con el de la tabla de ETAAX, y si
+       no, se ve en la vista previa antes de confirmar. */
+    test('…y cae a posición, que es el orden de la tabla de ETAAX', () => {
+        const r = mapC([['Momento','Articulo','Piezas','Quien','Porque','Capitan'],
+                        ['25/09/2026','NEGRONI','2','TOMAS','CAMBIO','PERLA']])[0];
+        return eq(r.autorizo + '|' + r.mesero, 'TOMAS|PERLA', 'por lugar');
+    });
+    /* Un archivo sin encabezado SÍ es datos desde la primera fila: tirarla
+       perdería una cancelación en silencio, que es peor que un renglón de más. */
+    test('EXCEL · sin encabezado, la primera fila es un dato y no se tira', () => {
+        const out = mapC([['25/09/2026','NEGRONI','2','TOMAS','CAMBIO','PERLA'],
+                          ['25/09/2026','ZARZA','1','TOMAS','CAMBIO','JORGE']]);
+        return eq(out.length, 2, 'no se pierde ninguna');
+    });
+
+    /* En DESCUENTOS el mismo criterio, y uno propio: «Descuento» a secas puede
+       ser el porcentaje o el monto según el POS. Sin separarlos, $160 de
+       descuento entraban como 160 POR CIENTO. */
+    test('EXCEL · descuentos: el monto no se lee como porcentaje', () => {
+        const r = C._mapPOSDescuentos([['Fecha','Monto de descuento','Motivo'],
+                                       ['25/09','160','CORTESIA']])[0];
+        return eq(r.monto + '|' + r.porcentaje, '160|0', 'dinero no es por ciento');
+    });
+    test('…y el porcentaje sigue leyéndose cuando sí lo es', () => {
+        const r = C._mapPOSDescuentos([['Fecha','Porcentaje','Monto','Motivo'],
+                                       ['25/09','20','160','CORTESIA']])[0];
+        return eq(r.porcentaje + '|' + r.monto, '20|160', 'los dos');
+    });
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

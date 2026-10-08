@@ -6802,21 +6802,46 @@ function eliminarCancelacion(idx) {
 function _normCol(s) { return (s||'').toString().toLowerCase().replace(/[\s_áéíóúüñ]/g, c =>
     ({' ':'','_':'','á':'a','é':'e','í':'i','ó':'o','ú':'u','ü':'u','ñ':'n'}[c]||c)); }
 
+/* ¿La primera fila es un encabezado aunque no reconozcamos sus palabras?
+   La señal: no trae NINGÚN número y alguna fila de abajo sí. Un renglón de
+   cancelación siempre trae una cantidad; un encabezado nunca.
+
+   Sin esto, un POS que rotule sus columnas «Momento / Artículo / Piezas» caía
+   en el saco de «sin encabezado» y la fila de rótulos se colaba como una
+   cancelación más: un producto llamado «Artículo», cantidad 1. */
+function _pareceEncabezado(rows) {
+    if (rows.length < 2) return false;
+    const _num = (c) => /\d/.test(String(c == null ? '' : c));
+    if (rows[0].some(_num)) return false;
+    return rows.slice(1).some(r => (r || []).some(_num));
+}
+
 function _mapPOSCancelaciones(rows) {
     if (!rows.length) return [];
     const firstNorm = rows[0].map(_normCol);
     const POS_KEYS = ['seriefolio','numcheque','idmesero','mesero','comanda','cantidad','descripcion','razon','fecha','nombre','usuario'];
-    const isHeader = firstNorm.some(h => POS_KEYS.some(k => h.includes(k)));
-    const dataRows = isHeader ? rows.slice(1) : rows;
+    /* Dos preguntas distintas que antes eran una sola: si la primera fila SE TIRA
+       y si sus nombres sirven para mapear. Un encabezado con palabras que no
+       conocemos se tira igual —no es un dato— pero el mapeo cae a posición, que
+       es lo mismo que hacía antes y por lo menos acierta cuando el orden
+       coincide. Juntas, un encabezado desconocido se colaba como dato. */
+    const conNombres = firstNorm.some(h => POS_KEYS.some(k => h.includes(k)));
+    const dataRows = (conNombres || _pareceEncabezado(rows)) ? rows.slice(1) : rows;
     let colMap = null;
-    if (isHeader) {
+    if (conNombres) {
         colMap = {};
         firstNorm.forEach((h, i) => { colMap[h] = i; });
     }
-    const g = (cols, ...keys) => {
+    /* `excluir` evita que una columna se cuele en el campo equivocado. El caso
+       real: buscando quién autorizó se pregunta por «nombre», y un encabezado
+       «Nombre del producto» lo contiene — así que el nombre del cóctel acababa
+       en «Autorizó» («NEGRONI / TOMAS»). El producto tiene su propia columna. */
+    const g = (cols, keys, excluir) => {
         if (!colMap) return undefined;
         for (const k of keys) {
-            const idx = Object.keys(colMap).find(h => h.includes(_normCol(k)));
+            const idx = Object.keys(colMap).find(h =>
+                h.includes(_normCol(k)) &&
+                !(excluir || []).some(x => h.includes(_normCol(x))));
             if (idx !== undefined && cols[colMap[idx]] != null) return (cols[colMap[idx]]||'').toString().trim();
         }
         return '';
@@ -6825,12 +6850,15 @@ function _mapPOSCancelaciones(rows) {
         if (!cols || cols.every(c => !c)) return null;
         let rec;
         if (colMap) {
-            const fechaHora      = g(cols, 'fecha');
-            const nombreProducto = g(cols, 'descripcion', 'producto');
-            const cantidad       = parseFloat(g(cols, 'cantidad', 'qty') || '1') || 1;
-            const autorizo       = [g(cols, 'nombre'), g(cols, 'usuario')].filter(Boolean).join(' / ') || '';
-            const motivo         = g(cols, 'razon', 'motivo');
-            const mesero         = g(cols, 'mesero');
+            const DEL_PRODUCTO = ['producto', 'descripcion', 'articulo', 'platillo'];
+            const fechaHora      = g(cols, ['fecha']);
+            const nombreProducto = g(cols, ['descripcion', 'producto', 'articulo']);
+            const cantidad       = parseFloat(g(cols, ['cantidad', 'qty']) || '1') || 1;
+            const autorizo       = [g(cols, ['autorizo']),
+                                    g(cols, ['nombre'], DEL_PRODUCTO),
+                                    g(cols, ['usuario'])].filter(Boolean).join(' / ') || '';
+            const motivo         = g(cols, ['razon', 'motivo']);
+            const mesero         = g(cols, ['mesero']);
             rec = { fechaHora, nombreProducto, cantidad, autorizo, motivo, mesero };
         } else {
             const [fh='',np='',qs='',au='',mo='',me=''] = cols.map(c=>(c||'').toString().trim().replace(/^"|"$/g,''));
@@ -7113,17 +7141,21 @@ function _mapPOSDescuentos(rows) {
     if (!rows.length) return [];
     const firstNorm = rows[0].map(_normCol);
     const POS_KEYS = ['fecha','porcentaje','descuento','monto','importe','folio','cuenta','cheque','motivo','razon','concepto','autorizo','nombre','usuario'];
-    const isHeader = firstNorm.some(h => POS_KEYS.some(k => h.includes(k)));
-    const dataRows = isHeader ? rows.slice(1) : rows;
+    // Mismo criterio que en cancelaciones: tirar la primera fila y mapear por
+    // nombre son dos decisiones distintas (ver _pareceEncabezado).
+    const conNombres = firstNorm.some(h => POS_KEYS.some(k => h.includes(k)));
+    const dataRows = (conNombres || _pareceEncabezado(rows)) ? rows.slice(1) : rows;
     let colMap = null;
-    if (isHeader) {
+    if (conNombres) {
         colMap = {};
         firstNorm.forEach((h, i) => { colMap[h] = i; });
     }
-    const g = (cols, ...keys) => {
+    const g = (cols, keys, excluir) => {
         if (!colMap) return undefined;
         for (const k of keys) {
-            const idx = Object.keys(colMap).find(h => h.includes(_normCol(k)));
+            const idx = Object.keys(colMap).find(h =>
+                h.includes(_normCol(k)) &&
+                !(excluir || []).some(x => h.includes(_normCol(x))));
             if (idx !== undefined && cols[colMap[idx]] != null) return (cols[colMap[idx]]||'').toString().trim().replace('$','');
         }
         return '';
@@ -7132,12 +7164,19 @@ function _mapPOSDescuentos(rows) {
         if (!cols || cols.every(c => !c)) return null;
         let rec;
         if (colMap) {
-            const fechaHora  = g(cols, 'fecha');
-            const porcentaje = parseFloat(g(cols, 'porcentaje', 'descuento', 'percent', 'disc') || '0') || 0;
-            const monto      = parseFloat(g(cols, 'monto', 'importe', 'amount') || '0') || 0;
-            const folio      = g(cols, 'folio', 'cuenta', 'cheque', 'ticket');
-            const motivo     = g(cols, 'motivo', 'razon', 'concepto');
-            const autorizo   = [g(cols, 'nombre'), g(cols, 'usuario'), g(cols, 'autorizo')].filter(Boolean).join(' / ') || '';
+            /* «Descuento» a secas puede ser el porcentaje O el monto según el
+               POS, así que el porcentaje no se lo queda si la columna habla de
+               dinero — y al revés. Sin esto, $160 de descuento entraban como
+               160 por ciento. */
+            const fechaHora  = g(cols, ['fecha']);
+            const porcentaje = parseFloat(g(cols, ['porcentaje', 'percent', 'descuento', 'disc'],
+                                              ['monto', 'importe', 'total']) || '0') || 0;
+            const monto      = parseFloat(g(cols, ['monto', 'importe', 'amount']) || '0') || 0;
+            const folio      = g(cols, ['folio', 'cuenta', 'cheque', 'ticket']);
+            const motivo     = g(cols, ['motivo', 'razon', 'concepto']);
+            const autorizo   = [g(cols, ['autorizo']),
+                                g(cols, ['nombre'], ['producto', 'descripcion', 'articulo', 'cliente']),
+                                g(cols, ['usuario'])].filter(Boolean).join(' / ') || '';
             rec = { fechaHora, porcentaje, monto, folio, motivo, autorizo };
         } else {
             const [fh='',ps='',ms='',fo='',mo='',au=''] = cols.map(c=>(c||'').toString().trim().replace(/^"|"$/g,'').replace('$',''));
