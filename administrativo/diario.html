@@ -4496,7 +4496,11 @@ function verCorte(id) {
     var evid = (c.evidencias||[]).filter(function(e){ return e && e.url; });
     var evidHTML = evid.length
         ? '<div>'+sec('📸 Evidencia visual')+
-            '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">'+
+            /* data-fotos: el visor junta las hermanas de este contenedor para
+               poder pasar de una a otra. Sin él, cada pantalla tendría que armar
+               la lista a mano — que es como una se queda atrás al cambiar el
+               marcado. */
+            '<div data-fotos style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">'+
             evid.map(function(e){
                 // La URL no se mete en el onclick: si es privada llega firmada DESPUÉS
                 // (sbAttr → data-priv), así que el click la lee del <img> ya resuelto.
@@ -4505,7 +4509,7 @@ function verCorte(id) {
                     'style="display:flex;align-items:center;justify-content:center;width:72px;height:72px;'+
                     'border-radius:8px;border:1px solid var(--border);background:var(--surface2);'+
                     'font-size:26px;text-decoration:none">📄</a>';
-                return '<div onclick="event.stopPropagation();etaaxVerFoto(this.querySelector(\'img\').src)" '+
+                return '<div onclick="event.stopPropagation();etaaxVerFotoDe(this)" '+
                     'style="display:block;width:72px;height:72px;border-radius:8px;overflow:hidden;cursor:zoom-in;'+
                     'border:1px solid var(--border);background:var(--surface2)" title="Ver foto completa">'+
                     '<img '+sbAttr(e.url)+' alt="" loading="lazy" '+

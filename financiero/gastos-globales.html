@@ -595,9 +595,6 @@
     </div>
 </div>
 <!-- Lightbox de evidencia -->
-<div id="ggLightbox" onclick="this.style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:9600;align-items:center;justify-content:center;padding:24px;cursor:zoom-out">
-    <img id="ggLightboxImg" src="" alt="" style="max-width:100%;max-height:100%;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.6)">
-</div>
 
 <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span><span id="themeLabel">Modo claro</span></button>
 
@@ -1651,7 +1648,7 @@ function _ggTarjetaGasto(g){
         var esPdf=(e&&e.pdf)||/\.pdf($|\?)/i.test(u);
         return esPdf
             ?'<a href="'+u+'" target="_blank" style="display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:6px;border:1px solid var(--border,#2a2825);background:var(--surface2);font-size:24px;text-decoration:none" title="Comprobante PDF">📄</a>'
-            :'<img src="'+u+'" loading="lazy" onclick="_ggLightbox(this.src)" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border,#2a2825);cursor:zoom-in" alt="evidencia">';
+            :'<img src="'+u+'" loading="lazy" onclick="etaaxVerFotoDe(this)" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border,#2a2825);cursor:zoom-in" alt="evidencia">';
     }).join('');
     return '<div style="padding:16px 20px;border-bottom:1px solid var(--border,#2a2825)'+(esMayor?';border-top:3px solid rgba(224,90,58,.5)':'')+'">'+
             '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">'+
@@ -1672,11 +1669,13 @@ function _ggTarjetaGasto(g){
             fila('Facturado',g.facturado?'<span style="color:var(--green,#3dbe7a)">✔ Con factura</span>':'<span style="color:var(--text-dim,#7a7570)">✗ Sin factura</span>')+
             fila('Estatus',estatusVal)+
             (g.notas?fila('Notas',_esc(g.notas)):'')+
-            (evHTML?'<div style="padding:12px 0 2px"><div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-dim,#7a7570);margin-bottom:6px">Evidencia</div><div style="display:flex;flex-wrap:wrap;gap:8px">'+evHTML+'</div></div>':'')+
+            (evHTML?'<div style="padding:12px 0 2px"><div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-dim,#7a7570);margin-bottom:6px">Evidencia</div><div data-fotos style="display:flex;flex-wrap:wrap;gap:8px">'+evHTML+'</div></div>':'')+
         '</div>';
 }
 function cerrarGastosCat(){ document.getElementById('modalCatGastos').classList.remove('open'); }
-function _ggLightbox(src){ var lb=document.getElementById('ggLightbox'); document.getElementById('ggLightboxImg').src=src; lb.style.display='flex'; }
+/* El visor propio se retiró: era una SEGUNDA implementación, sin zoom y sin
+   manera de pasar de una foto a otra. Ahora usa /foto-zoom.js, el mismo del
+   corte — una gasto con tres facturas se revisa igual en los dos lados. */
 
 /* ── RESUMEN P&L ── */
 function renderResumen(){
@@ -1965,6 +1964,7 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="../supabase-config.js"></script>
 <script src="/etaax-store.js"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="/etaax-db.js"></script>
+<script src="/foto-zoom.js"></script><!-- visor de fotos con zoom y carrusel -->
 <script src="../security.js"></script>
 <script src="../ctx-bar.js"></script>
 <script src="/presencia.js"></script><!-- quién está trabajando aquí: avatares en la barra -->

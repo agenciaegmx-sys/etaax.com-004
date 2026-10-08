@@ -2,14 +2,24 @@
    ETAAX — Visor de fotos con zoom EN LA MISMA PÁGINA (lightbox)
    Sustituye el abrir la evidencia en otra pestaña (cortes, gastos, fotos QR).
 
-   Uso:  onclick="etaaxVerFoto(this.src)"  (o etaaxVerFoto(url))
+   Uso:
+     etaaxVerFoto(url)            una sola foto
+     etaaxVerFotos([urls], i)     varias, con flechas y contador
+     etaaxVerFotoDe(elemento)     las hermanas del contenedor [data-fotos]
+
    - Clic/tap en la imagen → acerca (2.5x) hacia el punto tocado; otro clic aleja.
    - Rueda del mouse → zoom gradual. Dos dedos → pinch zoom (celular).
    - Con zoom, arrastrar → mover la imagen.
+   - Flechas ‹ › o las del teclado → pasar de foto. Dan la vuelta.
    - Cerrar: ✕, clic fuera de la imagen o tecla Escape.
    ============================================================================ */
 (function () {
-    var _ov = null, _img = null, _btn = null;
+    var _ov = null, _img = null, _btn = null, _ant = null, _sig = null, _cta = null;
+    /* EL CARRUSEL. Un corte trae siete fotos del ticket y un gasto puede traer
+       varias de la factura. Hasta ahora se abría UNA y para ver la siguiente
+       había que cerrar, buscar la miniatura y volver a abrir — siete veces.
+       `_lista` guarda el grupo al que pertenece la que se está viendo. */
+    var _lista = [], _idx = 0;
     var _scale = 1, _tx = 0, _ty = 0;
     var _drag = null, _movio = false, _pinch = null, _lastTap = 0;
     var MAXZ = 5;
@@ -24,6 +34,7 @@
         if (!_ov) return;
         _ov.style.display = 'none';
         _img.src = '';
+        _lista = []; _idx = 0;
         document.body.style.overflow = '';
     }
 
@@ -60,10 +71,42 @@
         _btn.onclick = _cerrar;
         _ov.appendChild(_btn);
 
+        /* Las flechas van PEGADAS A LOS BORDES y grandes: esto se usa en un
+           celular, con una mano, y en el centro estorbarían la foto. */
+        var flecha = function (lado, txt, aria) {
+            var b = document.createElement('button');
+            b.innerHTML = txt;
+            b.setAttribute('aria-label', aria);
+            b.style.cssText = 'position:absolute;top:50%;transform:translateY(-50%);' + lado +
+                ':10px;width:52px;height:72px;border-radius:12px;background:rgba(255,255,255,.1);' +
+                'border:1px solid rgba(255,255,255,.2);color:#fff;font-size:24px;cursor:pointer;' +
+                'display:none;align-items:center;justify-content:center;z-index:2';
+            _ov.appendChild(b);
+            return b;
+        };
+        _ant = flecha('left', '‹', 'Anterior');
+        _sig = flecha('right', '›', 'Siguiente');
+        _ant.onclick = function (e) { e.stopPropagation(); _ir(-1); };
+        _sig.onclick = function (e) { e.stopPropagation(); _ir(1); };
+
+        /* El contador: sin él no se sabe cuántas faltan ni si ya se dio la
+           vuelta, y uno se queda picando la flecha de más. */
+        _cta = document.createElement('div');
+        _cta.style.cssText = 'position:absolute;bottom:16px;left:50%;transform:translateX(-50%);' +
+            'background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.18);color:#fff;' +
+            'border-radius:20px;padding:6px 14px;font-size:13px;font-family:system-ui,sans-serif;' +
+            'display:none;z-index:2;font-variant-numeric:tabular-nums';
+        _ov.appendChild(_cta);
+
         // Cerrar tocando el fondo (no la imagen)
         _ov.addEventListener('click', function (e) { if (e.target === _ov) _cerrar(); });
         document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && _ov.style.display !== 'none') _cerrar();
+            if (!_ov || _ov.style.display === 'none') return;
+            if (e.key === 'Escape') { _cerrar(); return; }
+            /* Las flechas del teclado: quien revisa siete tickets en la
+               computadora no quiere ir al mouse en cada uno. */
+            if (e.key === 'ArrowLeft')  { _ir(-1); e.preventDefault(); }
+            if (e.key === 'ArrowRight') { _ir(1);  e.preventDefault(); }
         });
 
         // Clic en la imagen: alternar zoom (si no fue un arrastre)
@@ -147,12 +190,52 @@
         document.body.appendChild(_ov);
     }
 
-    window.etaaxVerFoto = function (src) {
-        if (!src) return;
+    /* Pasar de una foto a otra. DA LA VUELTA a propósito: con siete fotos uno
+       llega al final y lo natural es seguir picando; toparse con un botón muerto
+       se siente como que se rompió. */
+    function _ir(paso) {
+        if (_lista.length < 2) return;
+        _idx = (_idx + paso + _lista.length) % _lista.length;
+        _pintar();
+    }
+    function _pintar() {
+        _img.src = _lista[_idx] || '';
+        _reset(false);                       // cada foto empieza sin zoom
+        var varias = _lista.length > 1;
+        _ant.style.display = varias ? 'flex' : 'none';
+        _sig.style.display = varias ? 'flex' : 'none';
+        _cta.style.display = varias ? 'block' : 'none';
+        if (varias) _cta.textContent = (_idx + 1) + ' de ' + _lista.length;
+    }
+    function _abrir(lista, i) {
+        lista = (lista || []).filter(Boolean);
+        if (!lista.length) return;
         _ensure();
-        _img.src = src;
-        _reset(false);
+        _lista = lista;
+        _idx = Math.max(0, Math.min(lista.length - 1, i || 0));
+        _pintar();
         _ov.style.display = 'flex';
         document.body.style.overflow = 'hidden'; // no scrollear la página de fondo
+    }
+
+    /* UNA foto. Se queda tal cual: lo llaman nueve lugares del sistema y
+       cambiarle la forma obligaría a tocarlos todos para no ganar nada. */
+    window.etaaxVerFoto = function (src) { _abrir([src], 0); };
+
+    /* VARIAS, con flechas y contador. `i` es la que se tocó. */
+    window.etaaxVerFotos = function (lista, i) { _abrir(lista, i); };
+
+    /* Para el caso común: un contenedor de miniaturas donde se tocó una.
+       Junta las hermanas sin que cada pantalla tenga que armar la lista a mano
+       —que es como una se queda atrás cuando cambia el marcado—. */
+    window.etaaxVerFotoDe = function (el) {
+        if (!el) return;
+        var caja = el.closest('[data-fotos]') || el.parentElement;
+        var imgs = caja ? Array.prototype.slice.call(caja.querySelectorAll('img')) : [];
+        var mia = (el.tagName === 'IMG') ? el : el.querySelector('img');
+        var srcs = imgs.map(function (x) { return x.src; }).filter(Boolean);
+        var i = Math.max(0, imgs.indexOf(mia));
+        if (!srcs.length && mia) srcs = [mia.src];
+        _abrir(srcs, i);
     };
 })();

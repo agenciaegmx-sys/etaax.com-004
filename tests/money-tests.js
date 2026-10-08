@@ -17947,6 +17947,151 @@ console.log('\n══ BH21 · Lo que un CREATE OR REPLACE se lleva ══');
            inst2.indexOf('role="tablist"') > -1, true, 'sin parecer descarga'));
 }
 
+/* ═══════════ SUITE BH22 · PASAR DE UNA FOTO A OTRA ════════════════════════
+   Un corte trae SIETE fotos del ticket y un gasto puede traer varias de la
+   factura. Hasta ahora se abría una y, para ver la siguiente, había que
+   cerrar, buscar la miniatura y volver a abrir. Siete veces.
+
+   Y había DOS visores: el de /foto-zoom.js (con zoom y pellizco) y uno propio
+   en Gastos Globales, sin nada de eso. La misma factura se revisaba distinto
+   según por dónde se entrara.                                                */
+console.log('\n══ BH22 · Pasar de una foto a otra ══');
+{
+    const fz = fs.readFileSync(path.join(RAIZ, 'foto-zoom.js'), 'utf8');
+    const dF = (fn) => {
+        const i = fz.indexOf('function ' + fn + '(');
+        if (i < 0) throw new Error('no existe ' + fn);
+        const abre = fz.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < fz.length) {
+            if (fz[j] === '{') prof++;
+            else if (fz[j] === '}') { prof--; if (!prof) return fz.slice(i, j + 1); }
+            j++;
+        }
+        throw new Error('sin cerrar ' + fn);
+    };
+
+    /* Se corre el visor entero con un DOM de mentira: lo que importa es qué foto
+       acaba en pantalla y qué dice el contador. */
+    const visor = () => {
+        const hechos = [];
+        const el = () => ({ style:{}, setAttribute(){}, appendChild(){}, addEventListener(){},
+            querySelector: () => null,
+            getBoundingClientRect: () => ({ left:0, top:0, width:100, height:100 }),
+            set src(v) { hechos.push('src=' + v); }, get src() { return ''; },
+            set textContent(v) { hechos.push('cta=' + v); }, get textContent() { return ''; },
+            set innerHTML(v) {}, get innerHTML() { return ''; } });
+        const c = { console, Math, Array, String,
+            document: { createElement: el, addEventListener(){}, body:{ appendChild(){}, style:{} } } };
+        c.window = c;
+        vm.createContext(c);
+        vm.runInContext(fz, c, { filename:'foto-zoom.js' });
+        return { api: c.window, hechos: hechos };
+    };
+
+    const F = ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'];
+    test('abrir la tercera de cuatro enseña ESA, no la primera', () => {
+        const v = visor(); v.hechos.length = 0;
+        v.api.etaaxVerFotos(F, 2);
+        return eq(v.hechos.indexOf('src=c.jpg') > -1, true, 'la que se tocó');
+    });
+    /* Sin contador no se sabe cuántas faltan ni si ya se dio la vuelta, y uno se
+       queda picando la flecha de más. */
+    test('…diciendo cuántas hay y en cuál va', () => {
+        const v = visor(); v.hechos.length = 0;
+        v.api.etaaxVerFotos(F, 2);
+        return eq(v.hechos.indexOf('cta=3 de 4') > -1, true, 'ubicado');
+    });
+    /* Con UNA foto, flechas y contador estorban: no hay a dónde ir. */
+    test('con una sola foto no se enseña contador', () => {
+        const v = visor(); v.hechos.length = 0;
+        v.api.etaaxVerFoto('x.jpg');
+        return eq(v.hechos.some(h => h.indexOf('cta=') === 0 && h !== 'cta=✕'), false, 'sin ruido');
+    });
+    /* Una evidencia vacía o nula en la lista no debe correr la numeración ni
+       dejar un hueco negro al pasar. */
+    test('los huecos de la lista no cuentan', () => {
+        const v = visor(); v.hechos.length = 0;
+        v.api.etaaxVerFotos(['a.jpg', '', null, 'b.jpg'], 0);
+        return eq(v.hechos.indexOf('cta=1 de 2') > -1, true, 'sin huecos');
+    });
+
+    /* ── Dar la vuelta ──
+       Con siete fotos uno llega al final y lo natural es seguir picando;
+       toparse con un botón muerto se siente como que se rompió. */
+    const correrIr = () => {
+        const c = { console, Math };
+        vm.createContext(c);
+        vm.runInContext('var _lista=[],_idx=0;function _pintar(){};' + dF('_ir'), c,
+                        { filename:'foto-zoom.js' });
+        return c;
+    };
+    test('después de la última, la siguiente es la primera', () => {
+        const c = correrIr();
+        c._lista = ['a','b','c']; c._idx = 2;
+        c._ir(1);
+        return eq(c._idx, 0, 'da la vuelta');
+    });
+    test('…y antes de la primera, la última', () => {
+        const c = correrIr();
+        c._lista = ['a','b','c']; c._idx = 0;
+        c._ir(-1);
+        return eq(c._idx, 2, 'da la vuelta');
+    });
+    /* Con una sola foto no basta con que el índice no cambie: SIN el guardián,
+       `_ir` igual llama a repintar, y repintar reinicia el zoom. O sea que picar
+       la flecha te desharía el acercamiento que acabas de hacer sobre la única
+       foto que hay —lo destapó la batería, porque el índice se quedaba igual. */
+    test('…y con una sola foto no se mueve NI se repinta', () => {
+        const c = { console, Math };
+        let repintes = 0;
+        vm.createContext(c);
+        vm.runInContext('var _lista=[],_idx=0;function _pintar(){ repintes(); };' + dF('_ir'), c,
+                        { filename:'foto-zoom.js' });
+        c.repintes = function () { repintes++; };
+        c._lista = ['sola']; c._idx = 0;
+        c._ir(1);
+        return eq(c._idx === 0 && repintes === 0, true, 'quieta de verdad');
+    });
+    /* Cada foto empieza SIN zoom: quedarse con el acercamiento de la anterior
+       deja la siguiente mostrando una esquina, y parece que no cargó. */
+    test('cada foto empieza sin zoom', () =>
+        eq(dF('_pintar').indexOf('_reset(false);') > -1, true, 'desde cero'));
+    /* Las flechas del teclado: quien revisa siete tickets en la computadora no
+       quiere ir al mouse en cada uno. */
+    test('se puede pasar con las flechas del teclado', () =>
+        eq(fz.indexOf("e.key === 'ArrowLeft'") > -1 && fz.indexOf("e.key === 'ArrowRight'") > -1,
+           true, 'sin mouse'));
+
+    /* ── Un solo visor para todo el sistema ── */
+    /* Había dos: el de foto-zoom.js y uno propio en Gastos Globales, sin zoom y
+       sin flechas. La misma factura se revisaba distinto según por dónde se
+       entrara. */
+    const gg = fs.readFileSync(path.join(RAIZ, 'financiero/gastos-globales.html'), 'utf8');
+    /* Se busca la ETIQUETA que lo carga, no el nombre del archivo: el comentario
+       que explica por qué se retiró el visor viejo también lo nombra, y con eso
+       el candado daba verde sin el script. Séptima vez que un test mío caza su
+       propia explicación — por eso aquí se pide el <script src>. */
+    test('Gastos Globales usa el visor compartido, no uno propio', () =>
+        eq(/<script src="\/foto-zoom\.js"><\/script>/.test(gg) &&
+           gg.indexOf('function _ggLightbox') === -1, true, 'uno solo'));
+    test('…y el visor viejo se quitó del marcado, no solo del código', () =>
+        eq(gg.indexOf('id="ggLightbox"'), -1, 'sin restos'));
+    /* La forma vieja —una sola foto— se queda: la llaman varios lugares del
+       sistema y cambiarles la firma obligaría a tocarlos todos para no ganar
+       nada donde solo hay una evidencia. */
+    test('la llamada de una sola foto sigue existiendo', () =>
+        eq(fz.indexOf('window.etaaxVerFoto = function (src)') > -1, true, 'compatible'));
+    /* Cada pantalla que arme su propia lista es una pantalla que se queda atrás
+       cuando cambia el marcado: el visor junta las hermanas del contenedor. */
+    ['administrativo/diario.html', 'financiero/gastos-globales.html'].forEach(p => {
+        const src = fs.readFileSync(path.join(RAIZ, p), 'utf8');
+        test(p + ': las evidencias se abren como grupo', () =>
+            eq(src.indexOf('etaaxVerFotoDe(this)') > -1 && src.indexOf('data-fotos') > -1,
+               true, 'en carrusel'));
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
