@@ -20139,6 +20139,213 @@ console.log('\n══ BH29 · Que se vea en papel ══');
             '% DE UTILIDAD NETA'].every(t => car.indexOf(t) > -1), true, 'sin perder nada'));
 }
 
+/* ═══════════ SUITE BH30 · CAPTURAR LOS BATCHES DEL PASO 3 ════════════════
+   Tres quejas de Edwin sobre la producción de prebatch, y tres causas
+   distintas — la matemática no era ninguna de ellas:
+
+   1. «no me deja escribir 1.5 prebatch». Cierto: el contador era un <span>
+      con botones de − y +. Medio batch era imposible de capturar, y doce
+      batches eran doce clics. El contador de cócteles de esa MISMA pantalla
+      ya era un campo donde se escribe; este no.
+
+   2. «si actualizo el dato no se refresca en el reporte final». El Paso 5
+      guarda su resumen renderizado y lo volvía a enseñar TAL CUAL aunque los
+      datos hubieran cambiado: lo único que avisaba era una línea de 11px en
+      un encabezado con ocho botones, y había que acordarse de picar 🔄.
+
+   3. «no se marca bien en los insumos». La matemática sí baja los insumos
+      base —se comprueba aquí— así que lo que fallaba era verlo: el número
+      viejo del resumen cacheado.                                            */
+console.log('\n══ BH30 · Capturar los batches del Paso 3 ══');
+{
+    const P3 = crearContexto();
+    cargarJS(P3, 'etaax-core.js');
+    cargarJS(P3, 'insumo-label.js');
+    cargarJS(P3, 'recetas/inventarios.js');
+    P3._storage['etaax_negocio_activo'] = 'negT';
+    vm.runInContext('function _autoGuardar(){} function _refrescarAvisoPrebatches(){}', P3);
+
+    /* 1 batch de Mix Negroni = 175 ml de Campari + 175 de Cinzano. */
+    const montar = () => {
+        setVar(P3, '_cacheRecetasInv', [
+            { id:'srMix', nombre:'Mix Negroni', tipo:'sub-bebidas', status:'activa',
+              camposExtra:{ rendimientoFinal:'350', unidadRendimientoFinal:'ML' },
+              ingredientes:[{ insumoId:'campari', cantidad:175, unidad:'ML' },
+                            { insumoId:'cinzano', cantidad:175, unidad:'ML' }] }]);
+        setVar(P3, '_cacheInsumosInv', [
+            { id:'preMix', nombre:'Mix Negroni PR', esSubReceta:true, recetaId:'srMix', activo:'1' },
+            { id:'campari', nombre:'Campari', activo:'1' },
+            { id:'cinzano', nombre:'Cinzano Rosso', activo:'1' }]);
+        setVar(P3, 'invActual', { id:'invT', area:'barra', entradasLog:[], ventasCompuesto:{},
+            cancelaciones:[], descuentos:[], filas:[], prebatchProducidos:{}, cocktailsVendidos:{} });
+        const mk = (id, nom, ea, copa) => ({ insumoId:id, nombre:nom, tipo:'copa', contNeto:copa===1?350:750,
+            copaML:1, rendimientoBatch:350, existenciaAnterior:ea, ventasCopasDirectas:0,
+            cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[], pesos:[],
+            cerradasBodega:0, cerradasBarra:0 });
+        const f = { mix: mk('preMix','Mix Negroni PR',0,1), cam: mk('campari','Campari',2250),
+                    cin: mk('cinzano','Cinzano Rosso',1500) };
+        setVar(P3, 'filasCaptura', [f.mix, f.cam, f.cin]);
+        vm.runInContext('_consumoDirty = true; _cancelDirty = true;', P3);
+        return f;
+    };
+    const n2 = (v) => Math.round(v * 100) / 100;
+
+    /* ── 1. MEDIO BATCH ES UN BATCH NORMAL ──
+       Se acaba el día, o la botella no da para el batch completo. Que el
+       sistema no lo admita obliga a redondear, y redondear en el inventario
+       es inventarse producto. */
+    test('se puede capturar MEDIO batch', () => {
+        montar();
+        P3.setProduccionPrebatch('preMix', 1.5);
+        return eq(vm.runInContext('invActual.prebatchProducidos.preMix', P3), 1.5, '1.5 cabe');
+    });
+    test('…y medio batch descuenta la mitad de los insumos', () => {
+        const f = montar();
+        P3.setProduccionPrebatch('preMix', 0.5);
+        return eq(n2(P3.calcExistenciaTeorica(f.cam)), 2250 - 87.5, 'la mitad de 175');
+    });
+    test('…y le suma al prebatch la mitad de su rendimiento', () => {
+        const f = montar();
+        P3.setProduccionPrebatch('preMix', 0.5);
+        return eq(n2(P3._prodPrebatchUnidades(f.mix)), 175, 'medio de 350');
+    });
+    /* Doce batches eran doce clics. Ahora se escribe el número. */
+    test('…y se puede escribir doce de un tirón', () => {
+        montar();
+        P3.setProduccionPrebatch('preMix', 12);
+        return eq(vm.runInContext('invActual.prebatchProducidos.preMix', P3), 12, 'sin doce clics');
+    });
+    /* Los botones ± siguen sirviendo y respetan lo escrito: no redondean. */
+    test('los botones ± respetan los decimales ya capturados', () => {
+        montar();
+        P3.setProduccionPrebatch('preMix', 1.5);
+        P3.updProduccionPrebatch('preMix', 1);
+        return eq(vm.runInContext('invActual.prebatchProducidos.preMix', P3), 2.5, '1.5 + 1');
+    });
+    test('…y no bajan de cero', () => {
+        montar();
+        P3.updProduccionPrebatch('preMix', -5);
+        return eq(vm.runInContext('invActual.prebatchProducidos.preMix', P3), 0, 'sin negativos');
+    });
+    /* ESTE TEST CASI SE VA MINTIENDO. Lo escribí llamándolo «un dedazo no se
+       guarda como cero» y la aserción comprobaba justo lo contrario: que SÍ se
+       guarda 0. Un candado cuyo nombre promete algo que el código no hace es
+       peor que no tenerlo — al siguiente que lo lea le dice que está cubierto.
+
+       Lo real: quien protege es _celdaCalc, la pieza del campo. Si no entiende
+       lo escrito («5+», un dedazo) NO llama al guardador, deja el texto en rojo
+       y el dato intacto. Es la misma que ya protege el contador de cócteles.
+       El guardador, llamado a pelo, sí convierte a 0 — por eso importa que la
+       pantalla pase SIEMPRE por la puerta. */
+    test('lo que no se entiende NO toca el dato: el campo es el que filtra', () => {
+        montar();
+        P3.setProduccionPrebatch('preMix', 3);
+        const campo = { value: '5+', classList:{ add(){}, remove(){} }, title:'' };
+        let llamado = false;
+        P3._celdaCalc(campo, function (v) { llamado = true; P3.setProduccionPrebatch('preMix', v); });
+        return eq(llamado === false &&
+                  vm.runInContext('invActual.prebatchProducidos.preMix', P3) === 3,
+                  true, 'los 3 batches siguen ahí');
+    });
+    test('…y lo que SÍ se entiende pasa, operaciones incluidas', () => {
+        montar();
+        const campo = { value: '2+1.5', classList:{ add(){}, remove(){} }, title:'' };
+        P3._celdaCalc(campo, function (v) { P3.setProduccionPrebatch('preMix', v); });
+        return eq(vm.runInContext('invActual.prebatchProducidos.preMix', P3), 3.5, '2 + 1.5');
+    });
+    /* Y el guardador a pelo convierte a número: es la última red, no la
+       primera. Queda escrito para que nadie lo llame esperando que filtre. */
+    test('…pero el guardador por su cuenta NO filtra: por eso el campo importa', () => {
+        montar();
+        P3.setProduccionPrebatch('preMix', 'abc');
+        return eq(vm.runInContext('invActual.prebatchProducidos.preMix', P3), 0, 'coacciona a 0');
+    });
+    /* El campo tiene que ser un CAMPO, con teclado numérico en tablet y la
+       misma calculadora que el de cócteles («2+1»). */
+    const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    test('el contador del Paso 3 es un campo, no un rótulo', () =>
+        eq(src.indexOf('<input id="prod-${p.id}" type="text" inputmode="decimal"') > -1 &&
+           src.indexOf('<span id="prod-${p.id}"') === -1, true, 'se puede escribir'));
+    test('…con la misma calculadora que el contador de cócteles', () =>
+        eq(/onblur="_celdaCalc\(this,function\(v\)\{ setProduccionPrebatch/.test(src), true, 'acepta 2+1'));
+
+    /* ── 2. LAS TRES BANDERAS ──
+       Antes solo se marcaba _step5Dirty. Hoy la producción no pasa por los
+       otros dos montones y no mordía, pero es la familia de bugs que ya costó
+       dos sesiones: un dato que cambia y un caché que no se entera. */
+    test('capturar producción ensucia los TRES cachés', () => {
+        montar();
+        vm.runInContext('_consumoDirty = false; _cancelDirty = false; window._step5Dirty = false;', P3);
+        P3.setProduccionPrebatch('preMix', 2);
+        return eq([vm.runInContext('window._step5Dirty', P3),
+                   vm.runInContext('_consumoDirty', P3),
+                   vm.runInContext('_cancelDirty', P3)].join('|'), 'true|true|true', 'nadie se queda atrás');
+    });
+    test('…y los botones ± también', () => {
+        montar();
+        vm.runInContext('_consumoDirty = false; window._step5Dirty = false;', P3);
+        P3.updProduccionPrebatch('preMix', 1);
+        return eq(vm.runInContext('window._step5Dirty && _consumoDirty', P3), true, 'por los dos caminos');
+    });
+
+    /* ── 3. EL RESUMEN QUE NO SE REFRESCABA ──
+       La caché del Paso 5 se queda —el resumen es lento con 200+ insumos—
+       pero solo para lo que de verdad resuelve: volver SIN haber tocado nada.
+       Quien captura tres batches y va al Resultado no está navegando, está
+       comprobando lo que acaba de hacer. */
+    test('el Paso 5 NO reusa su resumen viejo si los datos cambiaron', () =>
+        eq(/_keep5\.innerHTML &&\s*\n\s*!window\._step5Force && !window\._step5Dirty/.test(src),
+           true, 'recalcula solo'));
+    test('…pero sí lo reusa cuando nada cambió — para eso existe', () => {
+        const i = src.indexOf('if (_keep5 && _keep5.dataset.inv === _invId');
+        const bloque = src.slice(i, i + 320);
+        return eq(bloque.indexOf('_keep5.style.display') > -1 && bloque.indexOf('return;') > -1,
+                  true, 'sigue siendo instantáneo');
+    });
+    /* Y cuando el aviso sí tenga que salir, que se lea: iba en texto de 11px
+       entre ocho botones. */
+    test('el aviso de «datos cambiaron» se ve, no es letra chica', () => {
+        const i = src.indexOf('function _marcarStep5Stale');
+        const cuerpo = src.slice(i, i + 1100);
+        return eq(cuerpo.indexOf('background:var(--accent)') > -1 &&
+                  cuerpo.indexOf('font-weight:700') > -1, true, 'pastilla');
+    });
+
+    /* ── LO QUE SÍ FUNCIONABA, Y TIENE QUE SEGUIR ──
+       «No se marca bien en los insumos» no era la matemática: los insumos base
+       sí bajan. Queda comprobado aquí para que la próxima vez se sepa dónde
+       NO buscar. */
+    test('capturar 2 batches baja 350 ml de Campari…', () => {
+        const f = montar();
+        P3.setProduccionPrebatch('preMix', 2);
+        return eq(n2(P3.calcExistenciaTeorica(f.cam)), 1900, '2250 − 350');
+    });
+    test('…y 350 de Cinzano, cada uno el suyo', () => {
+        const f = montar();
+        P3.setProduccionPrebatch('preMix', 2);
+        return eq(n2(P3.calcExistenciaTeorica(f.cin)), 1150, '1500 − 350');
+    });
+    test('…y le suma 700 ml al prebatch', () => {
+        const f = montar();
+        P3.setProduccionPrebatch('preMix', 2);
+        return eq(n2(P3.calcExistenciaTeorica(f.mix)), 700, '2 × 350');
+    });
+    /* Corregir el número a la baja tiene que DESHACER lo anterior, no sumarse:
+       si se queda lo viejo, bajar un batch mal capturado sería imposible. */
+    test('corregir de 3 a 1 deja el descuento de UNO, no de cuatro', () => {
+        const f = montar();
+        P3.setProduccionPrebatch('preMix', 3);
+        P3.setProduccionPrebatch('preMix', 1);
+        return eq(n2(P3.calcExistenciaTeorica(f.cam)), 2250 - 175, 'reemplaza, no suma');
+    });
+    test('…y borrarlo del todo devuelve los insumos a como estaban', () => {
+        const f = montar();
+        P3.setProduccionPrebatch('preMix', 3);
+        P3.setProduccionPrebatch('preMix', 0);
+        return eq(n2(P3.calcExistenciaTeorica(f.cam)), 2250, 'sin rastro');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');

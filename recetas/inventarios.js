@@ -3729,7 +3729,16 @@ window.recalcularResultado = recalcularResultado;
 // Avisa en el Paso 5 que los datos cambiaron y hay que recalcular (badge + botón resaltado).
 function _marcarStep5Stale(stale) {
     var b = document.getElementById('step5StaleBadge');
-    if (b) b.style.display = stale ? 'inline-flex' : 'none';
+    /* El aviso iba en texto de 11px entre ocho botones: se podía mirar el
+       Resultado entero sin verlo. Ahora es una pastilla con fondo. Casi nunca
+       sale —el resumen se recalcula solo al entrar con datos nuevos— y por eso
+       mismo, cuando sale, tiene que leerse. */
+    if (b) {
+        b.style.display = stale ? 'inline-flex' : 'none';
+        b.style.cssText = (stale ? 'display:inline-flex' : 'display:none') +
+            ';align-items:center;gap:4px;font-size:11px;font-weight:700;' +
+            'color:#0a0908;background:var(--accent);border-radius:20px;padding:3px 11px';
+    }
     var btn = document.getElementById('btnRecalc5');
     if (btn) { btn.style.color = stale ? 'var(--accent)' : 'var(--text-muted)'; btn.style.borderColor = stale ? 'var(--accent)' : ''; }
 }
@@ -4516,9 +4525,23 @@ function renderStepContent() {
         // recalcular en CADA navegación (era lento con 200+ insumos). Si hubo cambios,
         // se AVISA para recalcular a mano con 🔄 (el botón deja de ser "de adorno").
         // El reporte impreso (verReporteDirectivo) siempre recalcula fresco por su cuenta.
-        if (_keep5 && _keep5.dataset.inv === _invId && _keep5.innerHTML && !window._step5Force) {
+        /* ══ «SI ACTUALIZO EL DATO NO SE REFRESCA NINGÚN CAMBIO» ═══════════
+           Era esto. El resumen se guardaba renderizado y, al volver, se
+           enseñaba TAL CUAL aunque los datos hubieran cambiado: lo único que
+           avisaba era una línea de 11px —«⚠️ Los datos cambiaron»— perdida en
+           un encabezado con ocho botones, y había que acordarse de picar 🔄.
+
+           Quien captura tres batches y se va al Resultado a ver qué pasó no
+           está navegando: está comprobando lo que acaba de hacer. Que le
+           enseñen el número viejo sin que se note es peor que esperar.
+
+           La caché se queda —para eso se hizo, el resumen es lento con 200+
+           insumos— pero solo para lo que de verdad resuelve: volver al paso 5
+           SIN haber tocado nada. Si algo cambió, se recalcula. */
+        if (_keep5 && _keep5.dataset.inv === _invId && _keep5.innerHTML &&
+            !window._step5Force && !window._step5Dirty) {
             _keep5.style.display = '';
-            _marcarStep5Stale(!!window._step5Dirty);
+            _marcarStep5Stale(false);
             return;
         }
         if (!_keep5) {
@@ -5954,22 +5977,46 @@ function _updStep3MenuTotal() {
 }
 
 // ── Producción de prebatch (batches hechos) ──────────────────────
-function updProduccionPrebatch(id, delta) {
+/* ══ MEDIO BATCH ES UN BATCH NORMAL ════════════════════════════════════════
+   Esto solo tenía botones de − y +: el contador era un <span>, no un campo, y
+   el salto era de uno en uno. Capturar 1.5 batches era IMPOSIBLE — y hacer
+   medio batch es lo más normal del mundo cuando se acaba el día o cuando la
+   botella no da para el batch completo.
+
+   Peor: no se podía escribir «12» de un tirón. Doce batches eran doce clics.
+
+   El contador de cócteles de esta misma pantalla ya era un campo donde se
+   escribe (y hasta acepta «6+4»). Esto es lo mismo, con la misma pieza.      */
+function _prodPbAplicar(id, nuevo) {
     if (!invActual.prebatchProducidos) invActual.prebatchProducidos = {};
-    const actual = parseFloat(invActual.prebatchProducidos[id] || 0);
-    const nuevo  = Math.max(0, actual + delta);
+    nuevo = Math.max(0, parseFloat(nuevo) || 0);
     invActual.prebatchProducidos[id] = nuevo;
-    window._step5Dirty = true; // la producción cambia la matemática del resumen
+    /* LAS TRES BANDERAS, no una. Antes solo se marcaba _step5Dirty; las otras
+       dos quedaban en false. Hoy la producción no pasa por esos dos montones y
+       no mordía, pero es exactamente la familia de bugs que ya costó dos
+       sesiones: un dato que cambia y un caché que no se entera. */
+    _consumoDirty = true; _cancelDirty = true; window._step5Dirty = true;
     if (typeof _autoGuardar === 'function') _autoGuardar(); // persistir (antes solo quedaba en memoria)
     const el = document.getElementById('prod-' + id);
     if (el) {
-        el.textContent = nuevo;
+        /* Se escribe el valor SOLO si no es el campo que se está editando: si
+           no, teclear «15» se convierte en «1» en cuanto se procesa el «1». */
+        if (el !== document.activeElement) el.value = nuevo > 0 ? nuevo : '';
         el.classList.toggle('active', nuevo > 0);
         const item = el.closest('.step3-menu-item');
         if (item) item.classList.toggle('has-cnt', nuevo > 0);
     }
     _refrescarAvisoPrebatches(); // el aviso solo mira los batches ya capturados
 }
+
+/* Los botones ± siguen existiendo para el caso de siempre (uno más, uno menos)
+   y ahora respetan los decimales que se hayan escrito: 1.5 + 1 = 2.5. */
+function updProduccionPrebatch(id, delta) {
+    const actual = parseFloat((invActual.prebatchProducidos || {})[id] || 0);
+    _prodPbAplicar(id, actual + delta);
+}
+// Captura directa: se teclea cuántos batches se hicieron, decimales incluidos.
+function setProduccionPrebatch(id, val) { _prodPbAplicar(id, val); }
 
 /* ── ¿Este prebatch va a salir bien en el Resultado? ───────────────────────
    Revisión SIN efectos: mira un prebatch con batches capturados y devuelve lo que
@@ -6074,7 +6121,12 @@ function _renderProduccionPrebatch() {
             </div>
             <div class="step3-counter">
                 <button onclick="updProduccionPrebatch('${p.id}',-1)">−</button>
-                <span id="prod-${p.id}" class="step3-cnt-val ${n>0?'active':''}">${n}</span>
+                <input id="prod-${p.id}" type="text" inputmode="decimal"
+                    class="step3-cnt-val ${n>0?'active':''}" value="${n>0?n:''}" placeholder="—"
+                    title="Cuántos batches hiciste. Acepta medios (1.5) y operaciones: 2+1"
+                    onkeydown="_celdaKey(event,this)"
+                    onblur="_celdaCalc(this,function(v){ setProduccionPrebatch('${p.id}', v); }); if(!(+this.value>0)) this.value='';"
+                    style="width:46px;text-align:center;background:transparent;border:none;outline:none;font-family:inherit">
                 <button onclick="updProduccionPrebatch('${p.id}',1)">+</button>
             </div>
         </div>`;
