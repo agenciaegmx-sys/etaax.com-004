@@ -152,20 +152,20 @@
             ? '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + _esc(m.sucursalColor) + ';margin-right:5px;vertical-align:middle"></span>'
             : '';
         var linea2 =
-            (m.sucursal ? '<div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#555;font-weight:700;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _dot + _esc(m.sucursal) + '</div>' : '') +
-            (subtitulo ? '<div style="font-size:7.5px;letter-spacing:1px;text-transform:uppercase;color:#999;margin-top:2px;line-height:1.5">' + _esc(subtitulo) + '</div>' : '');
+            (m.sucursal ? '<div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#2b2820;font-weight:700;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _dot + _esc(m.sucursal) + '</div>' : '') +
+            (subtitulo ? '<div style="font-size:7.5px;letter-spacing:1px;text-transform:uppercase;color:#56514a;margin-top:2px;line-height:1.5">' + _esc(subtitulo) + '</div>' : '');
         // Identidad junto al nombre: el logo BASE de la marca; sin logo → emoji.
         var identidad = m.logo
-            ? '<img src="' + _esc(m.logo) + '" style="width:46px;height:46px;object-fit:contain;border:1px solid #eee;border-radius:8px;flex-shrink:0;background:#fff" alt="logo">'
+            ? '<img src="' + _esc(m.logo) + '" style="width:46px;height:46px;object-fit:contain;border:1.5px solid #b9b3a5;border-radius:8px;flex-shrink:0;background:#fff" alt="logo">'
             : (m.emoji ? '<span style="font-size:28px;line-height:1;flex-shrink:0">' + _esc(m.emoji) + '</span>' : '');
         // Logo como <img> con data-URI (NO svg inline): así se re-pinta en CADA hoja al
         // imprimir. Chrome no vuelve a pintar un <svg> inline dentro de un <thead> repetido.
         var _logoImg = '<img src="data:image/svg+xml;charset=utf-8,' + encodeURIComponent(window.etaaxLogoSVG({ variant:'claro', height:26 })) + '" alt="ETAAX" style="height:26px;width:auto;display:block;flex-shrink:0">';
         return '<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;' +
-                'padding:12px 20px;border-bottom:3px solid #3dbe7a">' +
+                'padding:12px 20px;border-bottom:4px solid #1f8a52">' +
             '<div style="display:flex;align-items:center;gap:12px;min-width:0">' +
                 _logoImg +
-                '<div style="border-left:1px solid #ddd;padding-left:12px;min-width:0;display:flex;align-items:center;gap:10px">' +
+                '<div style="border-left:2px solid #b9b3a5;padding-left:12px;min-width:0;display:flex;align-items:center;gap:10px">' +
                     identidad +
                     '<div style="min-width:0">' +
                         '<div style="font-family:\'Bebas Neue\',Arial,sans-serif;font-size:26px;letter-spacing:1px;color:#1a1916;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(nombre) + '</div>' +
@@ -173,7 +173,7 @@
                     '</div>' +
                 '</div>' +
             '</div>' +
-            (derechaHTML ? '<div style="text-align:right;font-size:9px;color:#aaa;line-height:1.7;flex-shrink:0">' + derechaHTML + '</div>' : '') +
+            (derechaHTML ? '<div style="text-align:right;font-size:9px;color:#56514a;line-height:1.7;flex-shrink:0">' + derechaHTML + '</div>' : '') +
         '</div>';
     };
 
@@ -202,23 +202,23 @@
             '.rep>tfoot{display:table-footer-group}' +   /* pie se repite ABAJO de cada hoja */
             '.rep>thead>tr>td,.rep>tfoot>tr>td{padding:0}' +
             '.rbody{padding:16px 30px 20px}' +
-            '.rsec{font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:2px;color:#1a1916;margin:20px 0 11px;padding-bottom:5px;border-bottom:2px solid #3dbe7a;break-after:avoid;page-break-after:avoid}' +
+            '.rsec{font-family:\'Bebas Neue\',sans-serif;font-size:16px;letter-spacing:2px;color:#1a1916;margin:20px 0 11px;padding-bottom:5px;border-bottom:3px solid #1f8a52;break-after:avoid;page-break-after:avoid}' +
             '.rsec:first-of-type{margin-top:2px}' +
             '.rgrid{display:grid;gap:10px;break-inside:avoid;page-break-inside:avoid}' +
-            '.rcard{border:1px solid #bdbdbd;border-radius:9px;padding:12px 14px;background:#f6f6f6}' +
+            '.rcard{border:1.5px solid #8d8778;border-radius:9px;padding:12px 14px;background:#f2f0ea}' +
             '.rcard .l{font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:#4a4a4a;margin-bottom:6px;font-weight:800}' +
             '.rcard .v{font-family:\'Bebas Neue\',sans-serif;font-size:25px;letter-spacing:1px;line-height:1;color:#1a1916}' +
             '.rcard .s{font-size:9.5px;color:#4a4a4a;margin-top:5px;line-height:1.4}' +
             'table.rt{width:100%;border-collapse:collapse}' +
             'table.rt thead{display:table-header-group}' +   /* títulos de columna se repiten por hoja */
             'table.rt tr{break-inside:avoid;page-break-inside:avoid}' +
-            'table.rt thead th{background:#ececec;padding:8px 10px;font-size:8.5px;font-weight:800;color:#2b2b2b;text-transform:uppercase;letter-spacing:1.2px;border-bottom:2px solid #8a8a8a;text-align:right}' +
+            'table.rt thead th{background:#2f2b24;padding:8px 10px;font-size:8.5px;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:1.2px;border-bottom:2px solid #2f2b24;text-align:right}' +
             'table.rt thead th:first-child{text-align:left}' +
-            'table.rt tbody td{padding:7px 10px;font-size:11.5px;color:#1a1916;border-bottom:1px solid #cfcfcf;text-align:right;font-variant-numeric:tabular-nums}' +
+            'table.rt tbody td{padding:7px 10px;font-size:11.5px;color:#1a1916;border-bottom:1px solid #cfcabd;text-align:right;font-variant-numeric:tabular-nums}' +
             'table.rt tbody td:first-child{text-align:left;font-weight:600}' +
             'table.rt tbody tr:nth-child(even){background:#f4f4f4}' +
             'table.rt tfoot{display:table-row-group}' +   /* el Total va UNA vez al final (no se repite por hoja) */
-            'table.rt tfoot td{background:#f8f8f8;border-top:2px solid #3dbe7a;padding:9px 10px;font-size:12px;font-weight:700;text-align:right}' +
+            'table.rt tfoot td{background:#e4f6ec;border-top:3px solid #1f8a52;padding:9px 10px;font-size:12px;font-weight:700;text-align:right}' +
             'table.rt tfoot td:first-child{text-align:left}' +
             '.rbadge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.5px;padding:2px 9px;border-radius:20px}' +
 

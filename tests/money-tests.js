@@ -13475,11 +13475,29 @@ console.log('\n══ BG8 · La carátula de costeo y lo que se imprime ══')
             eq(rep.indexOf('[style*="' + g + '"]') > -1, true, 'oscurecido')));
     test('…y va con !important, que es lo único que gana a un estilo en línea', () =>
         eq(/\[style\*="#aaa"\][^{]*\{color:#4a4a4a !important/.test(repCss), true, 'gana'));
-    test('las líneas de la tabla dejan de ser casi blancas', () =>
-        eq(rep.indexOf('border-bottom:1px solid #cfcfcf') > -1 &&
-           rep.indexOf('border-bottom:1px solid #f1f1f1') === -1, true, 'visibles'));
-    test('los títulos de columna se leen (no #666 sobre gris)', () =>
-        eq(rep.indexOf('font-weight:800;color:#2b2b2b') > -1, true, 'legibles'));
+    /* ESTOS DOS TESTS FIJABAN EL HEX EXACTO y tronaron al oscurecer la hoja un
+       punto más — con un color MEJOR que el que exigían. Un candado que pide
+       «#cfcfcf» no protege el contraste: protege ese gris. Ahora miden lo que
+       de verdad importa, que es cuánto se separa del papel. */
+    const _lumRep = (hex) => {
+        let h = hex.replace('#','').toLowerCase();
+        if (h.length === 3) h = h.split('').map(c => c + c).join('');
+        return Math.round((0.299*parseInt(h.slice(0,2),16) + 0.587*parseInt(h.slice(2,4),16) +
+                           0.114*parseInt(h.slice(4,6),16)) / 255 * 100);
+    };
+    test('las líneas de la tabla dejan de ser casi blancas', () => {
+        const m = rep.match(/table\.rt tbody td\{[^}]*border-bottom:1px solid (#[0-9a-f]{3,6})/i);
+        return eq(m ? _lumRep(m[1]) <= 82 : false, true, m ? m[1] + ' = ' + _lumRep(m[1]) + '%' : 'sin línea');
+    });
+    test('los títulos de columna se leen (no un gris sobre gris)', () => {
+        const m = rep.match(/table\.rt thead th\{[^}]*background:(#[0-9a-f]{3,6})[^}]*color:(#[0-9a-f]{3,6})/i);
+        if (!m) return eq(false, true, 'sin encabezado');
+        /* Legible = la letra y su fondo se separan de verdad. Sirve igual para
+           letra oscura sobre gris claro que para letra blanca sobre negro, que
+           es a donde acabó yendo. */
+        return eq(Math.abs(_lumRep(m[2]) - _lumRep(m[1])) >= 45, true,
+                  m[2] + ' sobre ' + m[1] + ' = ' + Math.abs(_lumRep(m[2]) - _lumRep(m[1])) + ' puntos');
+    });
     /* Al imprimir, la impresora aclara todo un punto más que el monitor. */
     test('al imprimir se sube el contraste otro punto', () =>
         eq(/@media print\{[\s\S]*table\.rt tbody td\{color:#000/.test(repCss), true, 'a negro'));
@@ -19916,6 +19934,181 @@ console.log('\n══ BH28 · La ventana que abría en blanco ══');
         return eq(bloque.indexOf("_q.get('nuevo') === '1'") > -1 &&
                   bloque.indexOf("_q.get('etaax') === '1'") > -1, true, 'intactas');
     });
+}
+
+/* ═══════════ SUITE BH29 · QUE SE VEA EN PAPEL ════════════════════════════
+   «Se ve muy pálido al imprimir.» Y era cierto: la plantilla estaba pintada
+   con los grises de una PANTALLA — #efefef para las líneas, #888 y #999 para
+   el texto secundario, el verde de marca #3dbe7a para los acentos. En un
+   monitor retroiluminado eso se lee; en papel no.
+
+   Tres razones: la tinta no brilla, casi ninguna impresora de oficina es fiel
+   con los tonos claros (los satura hacia el blanco), y un escandallo no se lee
+   en la mano — está pegado en la pared de la cocina, con vapor y mala luz, y
+   se mira de reojo a dos metros.
+
+   Este candado NO lee el archivo: GENERA la hoja y le mide los colores. Un
+   umbral sobre el texto fuente se esquiva con un color nuevo; sobre la hoja
+   terminada, no.                                                             */
+console.log('\n══ BH29 · Que se vea en papel ══');
+{
+    const I = crearContexto();
+    cargarJS(I, 'etaax-core.js');
+    cargarJS(I, 'insumo-label.js');
+    cargarJS(I, 'app.js');
+    I._storage['etaax_negocio_activo'] = 'negT';
+
+    const RECETA = [{ id:'r1', nombre:'Negroni de la Casa', tipo:'bebidas', status:'activa',
+        grupo:'Coctelería', categoria:'Clásica', precioEnCarta:180, cristaleria:'Old Fashioned',
+        tiempo:'3 min', procedimiento:'Enfriar el vaso y remover 20 segundos.',
+        ingredientes:[
+            { nombre:'Ginebra Beefeater', desc:'London Dry', cantidad:30, unidad:'ML', costoPorKgLt:420 },
+            { nombre:'Campari',           desc:'—',          cantidad:30, unidad:'ML', costoPorKgLt:510 },
+            { nombre:'Vermouth Rosso',    desc:'Cinzano',    cantidad:30, unidad:'ML', costoPorKgLt:290 }]}];
+    const SUB = [{ id:'r2', nombre:'Mix Negroni', tipo:'sub-bebidas', status:'activa',
+        camposExtra:{ rendimientoFinal:'1000', unidadRendimientoFinal:'ML', porcionesQty:'11' },
+        ingredientes:[{ nombre:'Campari', desc:'', cantidad:500, unidad:'ML', costoPorKgLt:510 }] }];
+    setVar(I, '_cacheRecetasInv', RECETA);
+
+    const hojas = {
+        'escandallo administrativo': () => I.buildPlantillaAdministrativa(RECETA),
+        'escandallo operativo':      () => I.buildPlantillaOperativa(RECETA),
+        'carátula de costos':        () => I.buildPlantillaCaratula(RECETA,
+            { key:'bebidas', label:'Bebidas', tipo:'normal', rendDefault:'BEBIDA', emoji:'🥃',
+              subtitulo:'Carátula de Costos' }),
+        'carátula de sub-recetas':   () => I.buildPlantillaCaratula(SUB,
+            { key:'sub-bebidas', label:'Sub Bebidas', tipo:'sub', rendDefault:'LT', emoji:'🧃',
+              subtitulo:'Carátula de Sub Recetas' })
+    };
+
+    /* Luminosidad percibida, 0 = negro, 100 = blanco. Es la fórmula clásica
+       (el ojo ve el verde mucho más que el azul), y es la que decide si algo
+       se distingue del papel. */
+    const lum = (hex) => {
+        let h = hex.replace('#', '').toLowerCase();
+        if (h.length === 3) h = h.split('').map(c => c + c).join('');
+        const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
+        return Math.round((0.299*r + 0.587*g + 0.114*b) / 255 * 100);
+    };
+    /* Se miran SOLO los colores que pintan algo: `color:` y `border…: … solid
+       #xxx`. Los `fill=` del logo quedan fuera —es una marca, no texto— y los
+       de los comentarios del CSS también, que ya me cazaron una vez. */
+    const colores = (html, prop) => {
+        const re = prop === 'texto'
+            ? /color:\s*(#[0-9a-f]{3,6})/gi
+            : /border(?:-top|-bottom|-left|-right)?:\s*[\d.]+px\s+solid\s+(#[0-9a-f]{3,6})/gi;
+        const out = [];
+        let m;
+        while ((m = re.exec(html))) {
+            /* `background-color:` también casa con /color:/ y no es texto. */
+            if (prop === 'texto' && /background-?\s*$/i.test(html.slice(Math.max(0, m.index-11), m.index))) continue;
+            /* LETRA BLANCA SOBRE FONDO OSCURO ES LO CONTRARIO DE PÁLIDO, y el
+               encabezado de la tabla es justo eso. Se mira el fondo que fija la
+               MISMA regla CSS (o el mismo style=""): si es oscuro, el blanco es
+               la decisión correcta y no una fuga. Exentar el blanco a secas
+               sería un agujero por donde se cuela cualquier cosa clara. */
+            if (prop === 'texto') {
+                const ini = Math.max(html.lastIndexOf('{', m.index), html.lastIndexOf('"', m.index));
+                const fin = html.indexOf('}', m.index);
+                const regla = html.slice(ini, fin > 0 ? fin : m.index + 120);
+                const bg = regla.match(/background(?:-color)?:\s*(#[0-9a-f]{3,6})/i);
+                if (bg && lum(bg[1]) <= 45) continue;
+            }
+            out.push(m[1].toLowerCase());
+        }
+        return out;
+    };
+
+    /* ── LOS DOS UMBRALES ──
+       45% para TEXTO: por debajo de eso una letra de 9px se lee a dos metros.
+       80% para LÍNEAS: una raya no necesita tanto contraste como una letra,
+       pero #efefef (94%) era literalmente invisible. */
+    Object.keys(hojas).forEach(nombre => {
+        const html = hojas[nombre]();
+        test(nombre + ': ningún texto más claro que el umbral', () => {
+            const malos = [...new Set(colores(html, 'texto'))].filter(c => lum(c) > 45);
+            return eq(malos.join(', '), '', 'palidos: ' + malos.map(c => c + '=' + lum(c) + '%').join(' '));
+        });
+        test('…y ninguna línea invisible', () => {
+            const malos = [...new Set(colores(html, 'borde'))].filter(c => lum(c) > 80);
+            return eq(malos.join(', '), '', 'palidas: ' + malos.map(c => c + '=' + lum(c) + '%').join(' '));
+        });
+    });
+
+    /* ── LA REJILLA DE LA TABLA ──
+       No tenía: solo una línea inferior por celda, de #efefef. En papel eso es
+       una lista de palabras flotando, y seguir un renglón de seis columnas con
+       el dedo lleno de harina es justo lo que hace falta poder hacer. */
+    const adm = hojas['escandallo administrativo']();
+    test('la tabla de ingredientes tiene rejilla completa, no solo subrayado', () =>
+        eq(/\.tabla-ing td\s*\{[^}]*border:\s*1px solid/.test(adm), true, 'celdas cerradas'));
+    test('…y su encabezado va en oscuro con letra blanca', () =>
+        eq(/\.tabla-ing th\s*\{[^}]*color:#fff[^}]*background:#2f2b24/.test(adm), true, 'contraste máximo'));
+    /* Renglón sí, renglón no. #fafafa (2% de gris) desaparecía al imprimir. */
+    test('…y la franja alterna sobrevive a la impresora', () => {
+        const m = adm.match(/tbody tr:nth-child\(even\) td \{ background:(#[0-9a-f]{3,6})/i);
+        return eq(m ? lum(m[1]) <= 96 : false, true, m ? m[1] + ' = ' + lum(m[1]) + '%' : 'sin franja');
+    });
+
+    /* ── SIN ESTO NO SE IMPRIME NI UN FONDO ──
+       El navegador quita los colores de fondo por default para ahorrar tinta.
+       Con el encabezado de la tabla en oscuro y letra blanca, eso lo dejaría
+       BLANCO SOBRE BLANCO: ilegible. Es la línea que vuelve obligatorio
+       revisar todo lo demás. */
+    Object.keys(hojas).forEach(nombre => {
+        test(nombre + ': fuerza los fondos al imprimir', () =>
+            eq(/print-color-adjust:\s*exact/.test(hojas[nombre]()), true, 'con tinta'));
+    });
+
+    /* ── EL VERDE DE MARCA ES DE PANTALLA ──
+       #3dbe7a sobre blanco está al 56% de luminosidad: como texto de 9px en
+       papel se desvanece. En la hoja va su versión oscura. El logo conserva el
+       de marca porque es una marca, no un dato. */
+    test('el verde de pantalla no se usa para texto ni líneas en la hoja', () => {
+        const usos = Object.keys(hojas).reduce((n, k) => {
+            const h = hojas[k]();
+            return n + colores(h, 'texto').filter(c => c === '#3dbe7a').length
+                     + colores(h, 'borde').filter(c => c === '#3dbe7a').length;
+        }, 0);
+        return eq(usos, 0, 'solo el oscuro');
+    });
+    test('…pero el logo conserva el verde de la marca', () =>
+        eq(adm.indexOf('fill="#3dbe7a"') > -1, true, 'la marca no se toca'));
+
+    /* ── LAS PASTILLAS LLEVAN BORDE ──
+       Un relleno claro puede salir casi blanco según la impresora; el contorno
+       siempre se imprime. Sin él, el semáforo de utilidad era tres rectángulos
+       invisibles con un número adentro. */
+    const car = hojas['carátula de costos']();
+    test('las pastillas del semáforo llevan contorno, no solo relleno', () =>
+        eq(/\.pill \{[^}]*border:[\d.]+px solid/.test(car), true, 'la forma se ve igual'));
+    test('…y las tres del semáforo se distinguen entre sí', () => {
+        const tonos = { pg:-1, pa:-1, pr:-1 };
+        const re = /\.(pg|pa|pr) \{[^}]*color:\s*(#[0-9a-f]{3,6})/gi;
+        let m;
+        while ((m = re.exec(car))) tonos[m[1].toLowerCase()] = lum(m[2]);
+        const t = [tonos.pg, tonos.pa, tonos.pr];
+        /* LO QUE DESTAPÓ ESTE TEST: verde y rojo estaban en colores distintos
+           pero con la MISMA luminosidad. Muchas cocinas imprimen en blanco y
+           negro, y entonces los dos salen como el mismo gris — el semáforo deja
+           de decir nada justo donde más se necesita. Se exige que los tres se
+           separen también por peso, no solo por tono. */
+        const separados = t.every((x, i) => t.every((y, j) => i === j || Math.abs(x - y) >= 6));
+        return eq(t.every(x => x >= 0 && x <= 45) && separados, true,
+                  'luminosidades: ' + t.join('/'));
+    });
+
+    /* ── LO QUE NO SE PUEDE ROMPER AL OSCURECER ──
+       Toda esta pasada fue de color. Si de paso se hubiera perdido un dato, el
+       escandallo impreso mentiría — que es peor que verse pálido. */
+    test('la hoja sigue trayendo sus ingredientes y su costo', () =>
+        eq(adm.indexOf('Ginebra Beefeater') > -1 && adm.indexOf('Vermouth Rosso') > -1 &&
+           adm.indexOf('Costo total') > -1, true, 'completa'));
+    test('…y el precio en carta y el procedimiento', () =>
+        eq(adm.indexOf('180.00') > -1 && adm.indexOf('Enfriar el vaso') > -1, true, 'intacta'));
+    test('…y la carátula sigue trayendo sus siete columnas', () =>
+        eq(['NOMBRE DE RECETA','RENDIMIENTO NETO','COSTO BRUTO','PRECIO EN CARTA',
+            '% DE UTILIDAD NETA'].every(t => car.indexOf(t) > -1), true, 'sin perder nada'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */
