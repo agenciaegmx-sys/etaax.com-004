@@ -714,6 +714,14 @@
                         style="display:none;color:var(--green);border-color:var(--green);padding:6px 14px;font-size:12px">
                         🖨️ Imprimir selección
                     </button>
+                    <!-- Dar de alta sin salir del catálogo: se está buscando algo, no
+                         aparece, y lo natural es crearlo ahí mismo. Abre la MISMA
+                         ventana flotante que Editar, así que al guardar se vuelve a la
+                         lista donde ibas en vez de aterrizar en la pantalla principal. -->
+                    <button class="btn-vista" id="btnNuevaRecCat" onclick="_nuevaRecCatMenu(event)"
+                        style="color:var(--green);border-color:var(--green);padding:6px 14px;font-size:12px">
+                        + Nueva receta ▾
+                    </button>
                     <button class="modal-close"
                         onclick="document.getElementById('modalVerRecetas').style.display='none';_showEscMenu()">✕</button>
                 </div>
@@ -4704,6 +4712,40 @@ function _recMenuAbrir(ev, id) {
     pop.style.top  = (rc.bottom + h + 8 > window.innerHeight ? Math.max(8, rc.top - h - 6) : rc.bottom + 6) + 'px';
     _recMenuEl = pop;
 }
+/* ── Dar de alta desde el catálogo ──
+   Cuatro tipos, el mismo menú que ya usa cada renglón y la misma ventana
+   flotante que Editar (abrirEscModal → ?embed=1&nuevo=…). No construye nada
+   nuevo: el catálogo se queda abierto detrás y al guardar se vuelve a él. */
+function _nuevaRecCatMenu(ev) {
+    ev.stopPropagation();
+    var yaAbierto = _recMenuEl && _recMenuEl.getAttribute('data-id') === '__nuevaRec';
+    _recMenuCerrar();
+    if (yaAbierto) return;                 // segundo clic en el botón = cerrar
+
+    /* Solo los tipos que este rol puede dar de alta. Ofrecer uno para que
+       después salte el aviso de permiso es prometer y no cumplir. */
+    var TIPOS = [
+        { t:'alimentos',     ico:'🍽️', lbl:'Receta · Alimentos' },
+        { t:'bebidas',       ico:'🥃', lbl:'Receta · Bebidas' },
+        { t:'sub-alimentos', ico:'🥣', lbl:'Sub Receta · Alimentos' },
+        { t:'sub-bebidas',   ico:'🧃', lbl:'Sub Receta · Bebidas' }
+    ].filter(function (x) { return _puedeRec(_permDeTipo(x.t)); });
+    if (!TIPOS.length) { _exigeRec('crear', 'No puedes dar de alta recetas nuevas.'); return; }
+
+    var pop = document.createElement('div');
+    pop.className = 'rec-menu-pop';
+    pop.setAttribute('data-id', '__nuevaRec');
+    pop.innerHTML = TIPOS.map(function (x) {
+        return _recMenuItem(x.ico, x.lbl, "abrirEscModal('" + x.t + "')");
+    }).join('');
+    document.body.appendChild(pop);
+    var rc = ev.currentTarget.getBoundingClientRect();
+    var w = pop.offsetWidth, h = pop.offsetHeight;
+    pop.style.left = Math.min(Math.max(8, rc.right - w), window.innerWidth - w - 8) + 'px';
+    pop.style.top  = (rc.bottom + h + 8 > window.innerHeight ? Math.max(8, rc.top - h - 6) : rc.bottom + 6) + 'px';
+    _recMenuEl = pop;
+}
+
 /* Editar sin pasar por la ficha: reusa el MISMO camino que el botón Editar de la
    ficha técnica (ventana flotante, o la página completa dentro de un embed). */
 function editarRecetaDesdeLista(id) {

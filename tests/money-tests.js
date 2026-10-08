@@ -19039,6 +19039,117 @@ console.log('\n══ BH24 · El cóctel que se cancela ══');
     });
 }
 
+/* ═══════════ SUITE BH25 · DAR DE ALTA SIN SALIR DEL CATÁLOGO ══════════════
+   Se busca algo en «Mis Recetas», no aparece, y lo natural es crearlo ahí
+   mismo. Antes había que cerrar el catálogo, volver a la pantalla principal,
+   darle a «+ Nueva receta» y, al guardar, aterrizar otra vez en la principal —
+   con los filtros y la búsqueda perdidos.
+
+   No se construyó nada: el botón abre la MISMA ventana flotante que Editar
+   (abrirEscModal → ?embed=1&nuevo=…), que ya deja el catálogo abierto detrás y
+   lo repinta al cerrarse.                                                    */
+console.log('\n══ BH25 · Dar de alta sin salir del catálogo ══');
+{
+    const ri = fs.readFileSync(path.join(RAIZ, 'recetas/index.html'), 'utf8');
+    const aj = fs.readFileSync(path.join(RAIZ, 'app.js'), 'utf8');
+    const fnDe = (src, nombre) => {
+        const i = src.indexOf('function ' + nombre + '(');
+        if (i < 0) throw new Error('no existe ' + nombre);
+        const abre = src.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < src.length) {
+            if (src[j] === '{') prof++;
+            else if (src[j] === '}') { prof--; if (!prof) return src.slice(i, j + 1); }
+            j++;
+        }
+        throw new Error('sin cerrar ' + nombre);
+    };
+
+    test('el catálogo tiene su propio botón de alta', () =>
+        eq(ri.indexOf('id="btnNuevaRecCat"') > -1 &&
+           ri.indexOf('onclick="_nuevaRecCatMenu(event)"') > -1, true, 'a la mano'));
+
+    /* Se corre el menú de verdad: lo que importa es qué opciones salen y a
+       dónde llevan, no que la función exista. */
+    const menu = (puede) => {
+        const hechos = [];
+        const pop = { className:'', setAttribute(){}, offsetWidth:200, offsetHeight:160,
+                      style:{}, set innerHTML(v) { hechos.push(v); }, get innerHTML() { return ''; } };
+        const c = { console, String, Math, Array,
+            _recMenuEl: null,
+            _recMenuCerrar(){}, _puedeRec: puede,
+            _exigeRec(){ hechos.push('EXIGE'); return false; },
+            document: { createElement: () => pop, body: { appendChild(){} } },
+            window: { innerWidth: 1200, innerHeight: 800 } };
+        c.window = Object.assign(c.window, c);
+        vm.createContext(c);
+        vm.runInContext(fnDe(ri, '_permDeTipo') + ';' + fnDe(ri, '_recMenuItem') + ';' +
+                        fnDe(ri, '_nuevaRecCatMenu'), c);
+        c._nuevaRecCatMenu({ stopPropagation(){},
+            currentTarget: { getBoundingClientRect: () => ({ right:900, bottom:60, top:30 }) } });
+        return hechos.join('');
+    };
+
+    const TODO = () => true;
+    test('ofrece los CUATRO tipos, no solo recetas', () => {
+        const h = menu(TODO);
+        return eq(['Receta · Alimentos', 'Receta · Bebidas',
+                   'Sub Receta · Alimentos', 'Sub Receta · Bebidas']
+                  .every(t => h.indexOf(t) > -1), true, 'los cuatro');
+    });
+    /* Cada opción abre la ventana flotante. Llamar a crearReceta() directo
+       mandaría al editor de página completa y el catálogo desaparecería — que
+       es justo lo que se quería evitar. */
+    test('…y cada uno abre la ventana flotante, no el editor de página', () => {
+        const h = menu(TODO);
+        return eq(h.indexOf("abrirEscModal('sub-bebidas')") > -1 &&
+                  h.indexOf('crearReceta(') === -1, true, 'flotante');
+    });
+    /* Quien no puede dar de alta sub-recetas no las ve. Ofrecerlas para que
+       después salte el aviso de permiso es prometer y no cumplir. */
+    test('un rol que solo crea recetas no ve las sub-recetas', () => {
+        const h = menu((p) => p === 'crear');
+        return eq(h.indexOf('Receta · Bebidas') > -1 && h.indexOf('Sub Receta') === -1,
+                  true, 'solo lo suyo');
+    });
+    test('…y quien no puede dar de alta nada recibe el aviso, no un menú vacío', () =>
+        eq(menu(() => false).indexOf('EXIGE') > -1, true, 'con explicación'));
+
+    /* ── QUE NO SE SALGA DEL CATÁLOGO ──
+       Es la parte que Edwin pidió cuidar. Son tres eslabones y los tres tienen
+       que estar: abrir sin tocar el catálogo, guardar sin dejarlo dirty, y
+       repintarlo al cerrar para que la receta nueva aparezca. */
+    const esc = fnDe(ri, 'abrirEscModal');
+    test('abrir el editor NO cierra el catálogo', () =>
+        eq(esc.indexOf('modalVerRecetas') === -1, true, 'se queda detrás'));
+    test('…y lo hace por la ventana flotante con ?nuevo=', () =>
+        eq(esc.indexOf("abrirEditorEnModal('index.html?embed=1&nuevo=") > -1, true, 'la misma de Editar'));
+
+    /* Guardar dentro de la ventana avisa al padre, que la cierra. Si el aviso
+       de «sin cambios» saliera DESPUÉS, el padre preguntaría «¿cerrar sin
+       guardar?» justo después de guardar. El orden importa. */
+    const gr = fnDe(aj, 'guardarReceta');
+    test('al guardar se limpia el aviso de cambios ANTES de pedir el cierre', () => {
+        const iD = gr.indexOf('window._escDirty = false');
+        const iM = gr.indexOf("postMessage({ type: 'recetaGuardada'");
+        return eq(iD > -1 && iM > iD, true, 'en orden');
+    });
+    /* Y al cerrarse, el catálogo se repinta: sin esto la receta recién creada
+       no aparecería en la lista y parecería que no se guardó. */
+    test('al cerrar la ventana, el catálogo se repinta con lo nuevo', () => {
+        const ci = fnDe(aj, 'cerrarIframeInsumo');
+        return eq(ci.indexOf("getElementById('modalVerRecetas')") > -1 &&
+                  ci.indexOf('renderGridRecetas()') > -1, true, 'aparece sola');
+    });
+    /* La ventana flotante ya sabe arrancar en «receta nueva»: es el parámetro
+       que usa el botón de la pantalla principal. Si se quitara, el botón del
+       catálogo abriría una ventana en blanco. */
+    test('la ventana flotante sabe arrancar en receta nueva', () =>
+        eq(ri.indexOf("var urlNuevo = _params.get('nuevo')") > -1 &&
+           ri.indexOf('else if (typeof crearReceta === \'function\') crearReceta(urlNuevo);') > -1,
+           true, 'el parámetro vive'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
