@@ -430,6 +430,36 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
         </table>
       </div>
     </div>
+
+  <!-- ══ LA APP MÓVIL, EN BETA ════════════════════════════════════════════════
+       Vive AQUÍ y en ningún otro lado a propósito: hasta que esté probada de
+       verdad, el único que la reparte es quien administra la plataforma. Si el
+       enlace estuviera en el módulo de cada negocio, un cliente la instalaría a
+       su equipo antes de que nadie la haya usado en una barra real. -->
+  <div id="beta-app" style="margin:26px 0 0;background:var(--card,#17161a);border:1px solid rgba(245,200,66,.35);
+       border-radius:14px;padding:20px 22px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <span style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#f5c842;
+            border:1px solid rgba(245,200,66,.5);border-radius:20px;padding:2px 10px">Beta</span>
+      <span style="font-size:15px;font-weight:600">App móvil de registro</span>
+    </div>
+    <div style="font-size:12.5px;color:var(--muted);line-height:1.65;margin-bottom:14px;max-width:640px">
+      Los cuatro flujos del QR y el portal del colaborador, instalables en el teléfono.
+      <b style="color:var(--text,#eee)">Todavía no se promueve:</b> se prueba en una barra real antes de
+      ofrecerla a los clientes. El enlace lleva las credenciales del negocio que elijas abajo.
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <select id="betaAppNeg" onchange="betaAppLink()"
+              style="background:#111014;border:1px solid #2b2a30;color:#eee;border-radius:9px;
+                     padding:9px 11px;font-family:inherit;font-size:13px;min-width:220px">
+        <option value="">Elige un negocio…</option>
+      </select>
+      <button class="btn-add" id="betaAppCopiar" onclick="betaAppCopiar()" disabled>Copiar enlace</button>
+      <a id="betaAppAbrir" href="#" target="_blank" rel="noopener" hidden
+         style="font-size:12.5px;color:#3dbe7a;text-decoration:none">Abrir ↗</a>
+    </div>
+    <div id="betaAppUrl" style="font-size:11px;color:var(--muted);margin-top:11px;word-break:break-all"></div>
+  </div>
   </div>
 
   <!-- TAB: SOLICITUDES DE PLAN (nueva sucursal vía asesor) -->
@@ -573,36 +603,6 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
         </table>
       </div>
     </div>
-  </div>
-
-  <!-- ══ LA APP MÓVIL, EN BETA ════════════════════════════════════════════════
-       Vive AQUÍ y en ningún otro lado a propósito: hasta que esté probada de
-       verdad, el único que la reparte es quien administra la plataforma. Si el
-       enlace estuviera en el módulo de cada negocio, un cliente la instalaría a
-       su equipo antes de que nadie la haya usado en una barra real. -->
-  <div id="beta-app" style="margin:26px 0 0;background:var(--card,#17161a);border:1px solid rgba(245,200,66,.35);
-       border-radius:14px;padding:20px 22px">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-      <span style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#f5c842;
-            border:1px solid rgba(245,200,66,.5);border-radius:20px;padding:2px 10px">Beta</span>
-      <span style="font-size:15px;font-weight:600">App móvil de registro</span>
-    </div>
-    <div style="font-size:12.5px;color:var(--muted);line-height:1.65;margin-bottom:14px;max-width:640px">
-      Los cuatro flujos del QR y el portal del colaborador, instalables en el teléfono.
-      <b style="color:var(--text,#eee)">Todavía no se promueve:</b> se prueba en una barra real antes de
-      ofrecerla a los clientes. El enlace lleva las credenciales del negocio que elijas abajo.
-    </div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-      <select id="betaAppNeg" onchange="betaAppLink()"
-              style="background:#111014;border:1px solid #2b2a30;color:#eee;border-radius:9px;
-                     padding:9px 11px;font-family:inherit;font-size:13px;min-width:220px">
-        <option value="">Elige un negocio…</option>
-      </select>
-      <button class="btn-add" id="betaAppCopiar" onclick="betaAppCopiar()" disabled>Copiar enlace</button>
-      <a id="betaAppAbrir" href="#" target="_blank" rel="noopener" hidden
-         style="font-size:12.5px;color:#3dbe7a;text-decoration:none">Abrir ↗</a>
-    </div>
-    <div id="betaAppUrl" style="font-size:11px;color:var(--muted);margin-top:11px;word-break:break-all"></div>
   </div>
 
   <!-- TAB: INSUMOS — redirige a página dedicada -->

@@ -17748,6 +17748,16 @@ console.log('\n══ BH20 · Las dos puertas de la app ══');
            true, 'sin repartir'));
     test('…marcado como beta, para que nadie lo tome por terminado', () =>
         eq(adm.indexOf('id="beta-app"') > -1 && /Beta<\/span>/.test(adm), true, 'marcado'));
+    /* Y DENTRO de una pestaña. Las .tab-panel se esconden con display:none y se
+       enseñan con .active; un bloque que queda FUERA de todas sale en todas, y
+       encima pegado a lo que no le corresponde. Está en Negocios porque ahí es
+       donde se elige el negocio que el enlace necesita. */
+    test('…y dentro de la pestaña de negocios, no suelto entre pestañas', () => {
+        const ini = adm.indexOf('<div id="tab-negocios"');
+        const fin = adm.indexOf('<div id="tab-invitaciones"');
+        const beta = adm.indexOf('id="beta-app"');
+        return eq(ini > -1 && beta > ini && beta < fin, true, 'en su pestaña');
+    });
     /* Lo que se registre sin sucursal queda sin sello y no aparece en el
        historial de nadie: probar con datos que luego se pierden es la peor
        manera de probar. */
