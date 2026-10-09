@@ -20747,9 +20747,22 @@ console.log('\n══ BH33 · La nota del miembro y el conteo que no decía cuá
     /* BH21: un CREATE OR REPLACE se lleva lo que no se vuelva a escribir. La
        v67 reescribe entrada_historial COMPLETA y todo lo de la v53 tiene que
        seguir ahí. */
+    /* Se mira SOLO EL CUERPO de la función, no el archivo entero: abajo hay
+       una consulta de comprobación que nombra esas mismas piezas, y un
+       indexOf sobre todo el texto se caza a sí mismo. Pasó: quité la llamada
+       real al candado del token y el test siguió en verde porque la palabra
+       aparecía en mi propia comprobación. Van diez veces en este archivo. */
+    const _cuerpoV67 = (() => {
+        const i = v67.indexOf('CREATE OR REPLACE FUNCTION entrada_historial(');
+        const j = v67.indexOf('$$;', i);
+        return v67.slice(i, j > 0 ? j : v67.length);
+    })();
     ['_entrada_token_ok', 'p_niphash', 'movimientos', 'v_desde', 'cierreOperativo'].forEach(x =>
         test('…y la v67 conserva `' + x + '` de la v53', () =>
-            eq(v67.indexOf(x) > -1, true, 'sin llevárselo')));
+            eq(_cuerpoV67.indexOf(x) > -1, true, 'sin llevárselo')));
+    /* Y que la llamada esté ENTERA, no solo el nombre suelto en un comentario. */
+    test('…con el token comprobado de verdad, no nombrado', () =>
+        eq(/IF NOT _entrada_token_ok\(p_neg, p_token\) THEN/.test(_cuerpoV67), true, 'la llamada'));
     test('…y la v67 vuelve a dar su permiso a anon', () =>
         eq(v67.indexOf('GRANT EXECUTE ON FUNCTION entrada_historial(TEXT,TEXT,TEXT,TEXT,TEXT) TO anon') > -1,
            true, 'el QR no tiene sesión'));
