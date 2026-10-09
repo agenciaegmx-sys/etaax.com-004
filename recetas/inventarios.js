@@ -1374,7 +1374,13 @@ function _prebatchDiagnostico() {
         if (!(sr.ingredientes || []).length) {
             out.push({ fila: f.nombre, mal: 'sinings',
                 txt: 'su sub-receta «' + sr.nombre + '» no tiene ingredientes capturados' });
+            return;
         }
+        /* AQUÍ ESTUVO UNA HEURÍSTICA MÍA QUE NO SERVÍA: avisar cuando el
+           nombre del insumo y el de su sub-receta no coincidían. La conversión
+           «Cargar como insumo» les pone sufijos («Mix Negroni» → «Mix Negroni
+           PR»), así que gritaba en lo normal. Un aviso que sale siempre enseña
+           a ignorar los avisos. */
     });
 
     /* Y al revés: un coctel que se bebe un prebatch que NO tiene renglón aquí.
@@ -1407,6 +1413,94 @@ function _prebatchDiagnostico() {
         });
     });
     return out;
+}
+
+/* ══ ENSEÑAR LA CUENTA, NO SOLO EL RESULTADO ══════════════════════════════
+   «Capturo la producción y el vodka no baja» puede romperse en cinco sitios
+   distintos, y desde fuera los cinco se ven igual: un cero. Esto desarma la
+   cuenta renglón por renglón —cuánto le toca a cada ingrediente y si ese
+   ingrediente tiene renglón en ESTE inventario— para que se vea DÓNDE se
+   corta en vez de tener que adivinarlo.
+
+   Se enseña siempre que haya producción capturada, no solo cuando algo falla:
+   el que acaba de anotar tres batches quiere comprobar que se descontó lo que
+   pensaba, y la única forma hoy es ir insumo por insumo. */
+function _prebatchDesglose() {
+    var prod = (invActual && invActual.prebatchProducidos) || {};
+    var filas = {};
+    (filasCaptura || []).forEach(function (f) {
+        if (f && f.insumoId) filas[_canonInsumoId(f.insumoId) || f.insumoId] = f;
+    });
+    var out = [];
+    Object.keys(prod).forEach(function (pid) {
+        var n = parseFloat(prod[pid]) || 0;
+        if (!n) return;
+        var pre = (typeof window._insumoResolver === 'function') ? window._insumoResolver(pid) : null;
+        var nom = (pre && pre.nombre) || pid;
+        if (!pre || !pre.esSubReceta || !pre.recetaId) {
+            out.push({ nombre: nom, batches: n, mal: 'El insumo donde se capturó no es producción propia', ings: [] });
+            return;
+        }
+        /* LA MISMA receta que usa el cálculo —por el resolver, no por id crudo—
+           o este desglose mentiría igual que la ficha mentía antes. */
+        var sr = (window._recetaResolver ? window._recetaResolver(pre.recetaId) : null);
+        if (!sr) {
+            out.push({ nombre: nom, batches: n, mal: 'Su sub-receta no se encuentra', ings: [] });
+            return;
+        }
+        var ings = (sr.ingredientes || []).map(function (ing) {
+            var iid = ing && ing.insumoId;
+            var can = iid ? (_canonInsumoId(iid) || iid) : '';
+            var ins = iid && typeof window._insumoResolver === 'function' ? window._insumoResolver(iid) : null;
+            var z = _normIngrediente(ing || {});
+            var u = (z.unidad || '').toUpperCase();
+            var base = (u === 'PZA' || u === 'PZ' || u === '') ? z.cant : ingredienteBase(z.cant, z.unidad);
+            return {
+                nombre: (ins && ins.nombre) || (ing && ing.nombre) || '(sin insumo)',
+                cant: base * n,
+                unidad: (u === 'PZA' || u === 'PZ' || u === '') ? 'pza' : (u === 'G' || u === 'KG' ? 'g' : 'ml'),
+                sinInsumo: !ins,
+                sinFila: !!can && !filas[can]
+            };
+        });
+        out.push({ nombre: nom, batches: n, receta: sr.nombre, mal: '', ings: ings });
+    });
+    return out;
+}
+
+function _prebatchDesgloseHTML() {
+    var d = [];
+    try { d = _prebatchDesglose(); } catch (e) { return ''; }
+    if (!d.length) return '';
+    var hayProblema = d.some(function (x) { return x.mal || x.ings.some(function (i) { return i.sinInsumo || i.sinFila; }); });
+    return '<div style="margin:0 16px 14px;background:var(--surface);border:1px solid ' +
+        (hayProblema ? 'rgba(245,200,66,.5)' : 'var(--border)') + ';border-radius:12px;padding:13px 15px">' +
+        '<div style="font-size:11.5px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;' +
+        'color:var(--text-muted);margin-bottom:9px">🏭 Qué se llevó la producción de batches</div>' +
+        d.map(function (x) {
+            if (x.mal) return '<div style="font-size:12px;color:var(--accent);margin-bottom:7px">' +
+                '<b style="color:var(--text)">' + etx(x.nombre) + '</b> · ' + x.batches +
+                ' batch' + (x.batches === 1 ? '' : 'es') + ' — ' + etx(x.mal) + '</div>';
+            return '<div style="margin-bottom:9px">' +
+                '<div style="font-size:12.5px;color:var(--text);font-weight:600">' + etx(x.nombre) +
+                ' · ' + x.batches + ' batch' + (x.batches === 1 ? '' : 'es') +
+                '<span style="font-weight:400;color:var(--text-dim)"> → hace ' + etx(x.receta) + '</span></div>' +
+                (x.ings.length
+                    ? '<div style="font-size:11.5px;color:var(--text-muted);line-height:1.8;margin-top:3px">' +
+                      x.ings.map(function (i) {
+                          var cant = Math.round(i.cant * 100) / 100;
+                          /* El renglón que falta es el dato: un ingrediente sin
+                             renglón en este inventario NO se descuenta en ningún
+                             lado, y es invisible salvo aquí. */
+                          var nota = i.sinInsumo ? ' <span style="color:var(--red)">— ese insumo ya no existe</span>'
+                                    : i.sinFila  ? ' <span style="color:var(--accent)">— sin renglón en este inventario: ' +
+                                                   'NO se le descuenta</span>' : '';
+                          return '· ' + etx(i.nombre) + ' <b style="color:var(--text)">−' + cant + ' ' + i.unidad +
+                                 '</b>' + nota;
+                      }).join('<br>') + '</div>'
+                    : '<div style="font-size:11.5px;color:var(--accent)">Esa sub-receta no tiene ingredientes.</div>') +
+            '</div>';
+        }).join('') + '</div>';
 }
 
 /* El aviso, arriba del Resultado. Va donde se mira la diferencia, no en una
@@ -6148,8 +6242,29 @@ function _renderProduccionPrebatch() {
                         title="Ver la sub-receta" style="background:none;border:none;cursor:pointer;
                         color:var(--text-dim);font-size:13px;padding:0;flex-shrink:0;line-height:1.2">📋</button>` : ''}
                 </div>
-                ${bases?`<div style="font-size:10px;color:var(--text-dim);margin-top:3px;
-                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis">↓ ${etx(bases)}</div>`:''}
+                ${(function(){
+                    /* ══ QUÉ RECETA VA A CONSUMIR ESTA TARJETA ═══════════════
+                       El nombre grande es el del INSUMO; lo que se descuenta al
+                       capturar un batch son los ingredientes de SU SUB-RECETA.
+                       Normalmente se llaman igual —la conversión «Cargar como
+                       insumo» les pone el mismo nombre— y no hay nada que
+                       decir. Pero si la liga quedó apuntando a otra, capturar
+                       aquí descuenta OTROS insumos, y hasta ahora la única
+                       pista era la lista de bases: un «↓ Limoncello» donde se
+                       esperaba «↓ Limón, Azúcar, Vodka».
+
+                       Por eso la tarjeta dice SIEMPRE qué sub-receta va a
+                       consumir: lo que se descuenta deja de ser una suposición
+                       basada en que los dos nombres se parecen. */
+                    return (sr
+                        ? `<div style="font-size:10px;color:var(--text-dim);margin-top:3px;
+                             white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+                             title="Capturar aquí descuenta los ingredientes de «${etx(sr.nombre)}»">
+                             hace: ${etx(sr.nombre)}</div>`
+                        : '') +
+                    (bases ? `<div style="font-size:10px;color:var(--text-dim);margin-top:3px;
+                        white-space:nowrap;overflow:hidden;text-overflow:ellipsis">↓ ${etx(bases)}</div>` : '');
+                })()}
             </div>
             <div class="step3-counter">
                 <button onclick="updProduccionPrebatch('${p.id}',-1)">−</button>
@@ -6412,7 +6527,18 @@ function _frKpi(lbl, val, col) {
 }
 var _frRecetaId = null;
 function verFichaReceta(recetaId, editar) {
-    var r = getRecetas().find(function(x){ return x.id === recetaId; });
+    /* ══ LA FICHA Y EL CÁLCULO MIRABAN RECETAS DISTINTAS ═══════════════════
+       Esto buscaba por id CRUDO, así que enseñaba el MAESTRO. Todo lo que
+       calcula —el consumo por producción, el reparto del batch, el teórico—
+       pasa por _recetaResolver, que devuelve la COPIA de la sucursal activa
+       cuando existe.
+
+       Con una copia editada, la ficha decía «lleva 1.75 LT de vodka» y el
+       inventario descontaba otra cosa. Dos pantallas del mismo sistema
+       contradiciéndose sobre el mismo platillo, y la que manda es la que NO se
+       ve. Lo que se enseña tiene que ser lo que se descuenta. */
+    var r = (window._recetaResolver ? window._recetaResolver(recetaId) : null) ||
+            getRecetas().find(function(x){ return x.id === recetaId; });
     if (!r) { alert('Receta no encontrada.'); return; }
     _frRecetaId = recetaId;
     var ed = !!editar;
@@ -6461,7 +6587,11 @@ function verFichaReceta(recetaId, editar) {
 }
 // Guarda la edición de la receta en la tabla `recetas` → se actualiza en todos lados.
 function guardarFichaReceta() {
-    var r = getRecetas().find(function(x){ return x.id === _frRecetaId; });
+    /* La MISMA que enseñó la ficha (ver verFichaReceta): si aquí se buscara por
+       id crudo, se editaría la copia en pantalla y se guardaría sobre el
+       maestro — o al revés. */
+    var r = (window._recetaResolver ? window._recetaResolver(_frRecetaId) : null) ||
+            getRecetas().find(function(x){ return x.id === _frRecetaId; });
     if (!r) return;
     var pEl = document.getElementById('frPrecio'); if (pEl) r.precioEnCarta = parseFloat(pEl.value) || 0;
     var prep = document.getElementById('frPrep');  if (prep) r.preparacion = prep.value;
@@ -7731,7 +7861,7 @@ function renderStep5() {
             <button id="s5ModoGal" class="${_step5Modo==='galeria'?'active':''}" onclick="setStep5Modo('galeria')">⊞ Galería</button>
         </div>
     </div></div>`;
-    return kpis + _prebatchAvisoHTML() + _resumenEjecutivo() + searchBar5 +
+    return kpis + _prebatchAvisoHTML() + _prebatchDesgloseHTML() + _resumenEjecutivo() + searchBar5 +
            `<div id="step5Tablas">${_step5TablasHTML()}</div>`;
 }
 

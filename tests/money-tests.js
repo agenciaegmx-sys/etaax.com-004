@@ -19476,7 +19476,9 @@ console.log('\n══ BH26 · El prebatch, de punta a punta ══');
        explica. En una pestaña aparte no lo lee nadie. */
     test('el aviso sale en el Resultado, antes de los números', () => {
         const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
-        return eq(/return kpis \+ _prebatchAvisoHTML\(\) \+ _resumenEjecutivo\(\)/.test(src),
+        /* Antes y después del desglose: lo que importa es que vaya ARRIBA de
+           los números, no el orden exacto entre los dos bloques de prebatch. */
+        return eq(/return kpis \+ _prebatchAvisoHTML\(\)[^;]*\+ _resumenEjecutivo\(\)/.test(src),
                   true, 'donde duele');
     });
     test('…y nombra el renglón culpable, no un «hay un problema»', () => {
@@ -20535,6 +20537,143 @@ console.log('\n══ BH31 · El id que cambiaba según dónde estabas ══');
                   bloque.indexOf('getInsumos().find(x => x.id === ing.insumoId)') === -1,
                   true, 'sin signos de interrogación');
     });
+}
+
+/* ═══════════ SUITE BH32 · ENSEÑAR LA CUENTA, NO SOLO EL RESULTADO ════════
+   «Capturo la producción y el vodka no baja» puede romperse en cinco sitios
+   distintos, y desde fuera los cinco se ven igual: un cero. Dos sesiones
+   adivinando cuál era.
+
+   Lo que faltaba no era otro arreglo: era poder VER la cuenta. Ahora el
+   Resultado desarma la producción renglón por renglón —cuánto le toca a cada
+   ingrediente y si ese ingrediente tiene renglón en este inventario— y se
+   enseña siempre que haya batches capturados, no solo cuando algo falla: el
+   que acaba de anotar tres quiere comprobar que descontó lo que pensaba.
+
+   Y se arregló la mentira que lo hacía imposible de depurar: la FICHA buscaba
+   la receta por id crudo (el maestro) mientras TODO el cálculo pasa por el
+   resolver (la copia de la sucursal). Con una copia editada, la ficha decía
+   «lleva 1.75 LT de vodka» y el inventario descontaba otra cosa.            */
+console.log('\n══ BH32 · Enseñar la cuenta, no solo el resultado ══');
+{
+    const G = crearContexto();
+    cargarJS(G, 'etaax-core.js');
+    cargarJS(G, 'insumo-label.js');
+    cargarJS(G, 'recetas/inventarios.js');
+    G._storage['etaax_negocio_activo'] = 'negT';
+    vm.runInContext('function _autoGuardar(){} function _refrescarAvisoPrebatches(){}', G);
+
+    const INGS = [{ insumoId:'limon',  cantidad:200,  unidad:'G' },
+                  { insumoId:'azucar', cantidad:320,  unidad:'G' },
+                  { insumoId:'agua',   cantidad:500,  unidad:'ML' },
+                  { insumoId:'vodka',  cantidad:1.75, unidad:'LT' }];
+    const SR = (ings) => [{ id:'srLim1', nombre:'Limoncello SB 1', tipo:'sub-bebidas', status:'activa',
+        camposExtra:{ rendimientoFinal:'2.6', unidadRendimientoFinal:'LT' }, ingredientes:ings }];
+    const INS = [{ id:'preLim1', nombre:'Limoncello SB 1', esSubReceta:true, recetaId:'srLim1', activo:'1' },
+        { id:'vodka', nombre:"Vodka American · Sam's", activo:'1' },
+        { id:'limon', nombre:'Limón eureca', activo:'1' },
+        { id:'azucar', nombre:'Azucar', activo:'1' }, { id:'agua', nombre:'Agua natural', activo:'1' }];
+    const fila = (id, nom, tipo) => ({ insumoId:id, nombre:nom, tipo:tipo || 'copa', contNeto:1800,
+        copaML:45, existenciaAnterior:5, entradas:[], pesos:[], cerradasBodega:0, cerradasBarra:0 });
+    const FIL = () => [fila('preLim1','Limoncello SB 1'), fila('vodka',"Vodka American · Sam's"),
+        fila('limon','Limón eureca','peso'), fila('azucar','Azucar','peso'), fila('agua','Agua natural')];
+
+    const montar = (recetas, insumos, filas, batches) => {
+        setVar(G, '_cacheRecetasInv', recetas);
+        setVar(G, '_cacheInsumosInv', insumos);
+        setVar(G, 'invActual', { id:'invT', area:'barra', entradasLog:[], ventasCompuesto:{},
+            cancelaciones:[], descuentos:[], filas:[], prebatchProducidos:{}, cocktailsVendidos:{} });
+        setVar(G, 'filasCaptura', filas);
+        vm.runInContext('_consumoDirty = true; _cancelDirty = true;', G);
+        if (batches) G.setProduccionPrebatch('preLim1', batches);
+        return G._prebatchDesglose();
+    };
+    const linea = (d, nom) => (d[0].ings || []).find(i => i.nombre.indexOf(nom) === 0);
+
+    /* ── LA CUENTA, DESARMADA ── */
+    test('el desglose dice cuánto se lleva CADA ingrediente', () => {
+        const d = montar(SR(INGS), INS, FIL(), 2);
+        return eq((d[0].ings || []).map(i => i.nombre.split(' ')[0] + ':' + i.cant + i.unidad).join(' '),
+                  'Limón:400g Azucar:640g Agua:1000ml Vodka:3500ml', '2 batches');
+    });
+    test('…y nombra la sub-receta que va a producir', () => {
+        const d = montar(SR(INGS), INS, FIL(), 2);
+        return eq(d[0].receta + ' × ' + d[0].batches, 'Limoncello SB 1 × 2', 'con nombre');
+    });
+    test('…y lo hace con medios batches sin redondear', () => {
+        const d = montar(SR(INGS), INS, FIL(), 0.5);
+        return eq(linea(d, 'Vodka').cant, 875, '1.75 LT ÷ 2');
+    });
+
+    /* ── LOS CUATRO LUGARES DONDE SE CORTA ──
+       Cada uno se veía igual desde fuera: un cero. Ahora cada uno se dice. */
+    test('ROTO · un ingrediente SIN renglón en este inventario se delata', () => {
+        const d = montar(SR(INGS), INS, FIL().filter(f => f.insumoId !== 'vodka'), 2);
+        const v = linea(d, 'Vodka');
+        return eq(v.sinFila, true, 'a ese no se le descuenta nada');
+    });
+    test('…y los que SÍ tienen renglón no se marcan', () => {
+        const d = montar(SR(INGS), INS, FIL().filter(f => f.insumoId !== 'vodka'), 2);
+        return eq((d[0].ings || []).filter(i => i.sinFila).length, 1, 'solo el que falta');
+    });
+    test('ROTO · un ingrediente cuyo insumo ya no existe se delata', () => {
+        const d = montar(SR(INGS.slice(0,3).concat([{ insumoId:'borrado', cantidad:1.75, unidad:'LT' }])),
+                         INS, FIL(), 2);
+        return eq((d[0].ings || []).some(i => i.sinInsumo), true, 'se fue del catálogo');
+    });
+    test('ROTO · capturar sobre algo que no es producción propia', () => {
+        const d = montar(SR(INGS), INS.map(x => x.id === 'preLim1' ? { id:'preLim1', nombre:'Limoncello SB 1', activo:'1' } : x),
+                         FIL(), 2);
+        return eq(d[0].mal.indexOf('no es producción propia') > -1, true, 'se dice');
+    });
+    /* EL CASO QUE DESTAPÓ TODO ESTO: hay una COPIA por sucursal de la
+       sub-receta, con OTROS ingredientes, y el cálculo usa la copia mientras
+       la ficha enseñaba el maestro. El desglose usa la copia —la que manda— y
+       por eso la diferencia salta a la vista. */
+    test('COPIA de la sub-receta: el desglose usa la que de verdad manda', () => {
+        const conCopia = SR(INGS).concat([{ id:'srLim1Copia', origenId:'srLim1',
+            sucursalId:'suc_principal', nombre:'Limoncello SB 1', tipo:'sub-bebidas', status:'activa',
+            ingredientes:[{ insumoId:'preLim1', cantidad:60, unidad:'ML' }] }]);
+        const d = montar(conCopia, INS, FIL(), 2);
+        return eq((d[0].ings || []).length + '|' + (d[0].ings[0] || {}).cant, '1|120',
+                  'la copia, no el maestro');
+    });
+    /* Sin producción capturada no se pinta nada: el Resultado ya está cargado
+       de bloques y uno más vacío solo estorba. */
+    test('sin batches capturados no se pinta el bloque', () => {
+        montar(SR(INGS), INS, FIL(), 0);
+        return eq(G._prebatchDesgloseHTML(), '', 'sin ruido');
+    });
+    test('…y con batches se pinta arriba de los números', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        return eq(/return kpis \+ _prebatchAvisoHTML\(\) \+ _prebatchDesgloseHTML\(\) \+ _resumenEjecutivo/.test(src),
+                  true, 'donde se mira el faltante');
+    });
+
+    /* ── LA FICHA DECÍA UNA COSA Y EL INVENTARIO DESCONTABA OTRA ──
+       Dos pantallas del mismo sistema contradiciéndose sobre el mismo
+       platillo, y la que mandaba era la que NO se veía. */
+    const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    test('la ficha enseña la MISMA receta que usa el cálculo', () => {
+        const i = src.indexOf('function verFichaReceta(');
+        return eq(src.slice(i, i + 1100).indexOf('window._recetaResolver(recetaId)') > -1,
+                  true, 'por el resolver');
+    });
+    test('…y guardarla edita esa misma, no el maestro por debajo', () => {
+        const i = src.indexOf('function guardarFichaReceta(');
+        return eq(src.slice(i, i + 500).indexOf('window._recetaResolver(_frRecetaId)') > -1,
+                  true, 'la misma');
+    });
+    /* La tarjeta del Paso 3 dice SIEMPRE qué sub-receta va a consumir. Antes
+       la única pista era la lista de bases, y había que deducirlo. */
+    test('la tarjeta del Paso 3 dice qué sub-receta produce', () =>
+        eq(src.indexOf('hace: ${etx(sr.nombre)}') > -1, true, 'sin deducir'));
+    /* Y lo que NO se hizo: avisar cuando el nombre del insumo y el de su
+       sub-receta no coinciden. La conversión les pone sufijos («Mix Negroni»
+       → «Mix Negroni PR»), así que gritaba en lo normal. Queda escrito para
+       no volver a intentarlo. */
+    test('…pero NO se avisa por un nombre con sufijo: eso es lo normal', () =>
+        eq(src.indexOf("mal: 'ligacruzada'") === -1, true, 'sin falsos positivos'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */
