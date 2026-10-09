@@ -18552,9 +18552,14 @@ console.log('\n══ BH23 · La carta de la mesa ══');
     test('si falta la migración, el QR dice cuál', () =>
         eq(goSrc('abrirQrCarta').indexOf('¿Corriste la migración v66 en Supabase?') > -1,
            true, 'con la pista'));
-    test('…y guardar el orden también', () =>
-        eq(goSrc('guardarGruposCarta').indexOf('¿Corriste la migración v66 en Supabase?') > -1,
-           true, 'en las dos'));
+    /* Guardar necesita la v66 (la tabla) Y la v68 (la lista blanca ampliada
+       con la apariencia). El mensaje nombra las dos: decir solo «v66» manda a
+       correr una migración que probablemente ya está, y el error sigue. */
+    test('…y guardar el orden también, nombrando las dos', () => {
+        const g = goSrc('guardarGruposCarta');
+        eq(g.indexOf('migración v66') > -1, true, 'la tabla');
+        return eq(g.indexOf('v68') > -1, true, 'y la de la apariencia');
+    });
 }
 
 /* ═══════════ SUITE BH24 · EL CÓCTEL QUE SE CANCELA ════════════════════════
@@ -22454,6 +22459,387 @@ console.log('\n══ BH46 · El reporte de existencias, agrupado ══');
         const i = src.indexOf('var _cuerpoP =');
         return eq(src.slice(i, i + 900).indexOf("t + (r.capital || 0)") > -1,
                   true, 'cada bloque se cierra solo');
+    });
+}
+
+/* ═══════════ SUITE BH47 · LA CARTA VESTIDA DEL NEGOCIO ══════════════════
+   El QR de la mesa abría una página oscura genérica: la carta de ETAAX con el
+   nombre del negocio en texto plano. Ahora el negocio elige colores,
+   tipografías y cómo se ve cada dato, y arriba va SU logo y SU sucursal.
+
+   Tres cosas pueden romperse aquí, y las tres se ven en la mesa:
+
+   1. QUE LA MAQUETA MIENTA. El editor enseña un teléfono de muestra. Si esa
+      maqueta calculara sus colores por su cuenta, el dueño elegiría un color,
+      vería otro en la mesa y ya habría pegado veinte códigos. Por eso las dos
+      piden el MISMO bloque de variables a /carta-tema.js — y eso es lo que
+      aquí se verifica, no que «se vea bien».
+
+   2. QUE UN APAGADO REVIVA. La descripción trae cursiva por default.
+      Quitársela guarda un cero, y un cero leído con `||` vuelve al default:
+      la cursiva resucitaba en cada recarga. Es el bug que encontró este
+      candado antes de que Edwin lo viera.
+
+   3. QUE EL COLOR SE SALGA DEL ATRIBUTO. Los valores terminan dentro de un
+      `style="…"`. Un valor sin filtrar ahí no es un color feo: es una puerta.
+
+   Y un cuarto, de diseño: la carta se abre en la mesa de un bar, de noche,
+   con el brillo bajo. Un texto a 2:1 contra su fondo se ve «elegante» en el
+   monitor del dueño y no se lee ahí. No se bloquea —es su carta— pero se
+   avisa, con el número, antes de imprimir.                                  */
+console.log('\n══ BH47 · La carta vestida del negocio ══');
+{
+    const E = crearContexto();
+    cargarJS(E, 'carta-tema.js');
+    const CT = E.CartaTema;
+
+    /* Las variables como objeto, que es como las lee el navegador. */
+    const V = (t) => {
+        const o = {};
+        CT.vars(t).split(';').forEach(p => {
+            const i = p.indexOf(':');
+            if (i > 0) o[p.slice(0, i).trim()] = p.slice(i + 1).trim();
+        });
+        return o;
+    };
+
+    test('el tema existe y es una sola verdad', () =>
+        eq(typeof CT === 'object' && typeof CT.vars === 'function', true, 'window.CartaTema'));
+
+    /* ── El default. Sin tocar nada, la carta se ve como se veía: oscura. Si
+       esto cambia, cada negocio que nunca abrió los ajustes ve otra carta
+       mañana sin haber pedido nada. */
+    test('sin ajustes, la carta sigue siendo la oscura de siempre', () => {
+        const d = V({});
+        eq(d['--ct-bg'], '#13120f', 'fondo');
+        return eq(d['--ct-ac'], '#c9a227', 'acento');
+    });
+
+    /* ── EL BUG DEL APAGADO ──
+       `desI` vale 1 por default. Guardar 0 es quitar la cursiva a propósito, y
+       con `t.desI || DEF.desI` ese cero volvía a 1 en cada lectura. */
+    test('quitar la cursiva de la descripción se respeta', () =>
+        eq(V({ desI: 0 })['--ct-des-i'], 'normal', 'el cero manda'));
+    test('…y lo que no se tocó conserva su default', () =>
+        eq(V({ desI: 0 })['--ct-nom-w'], '700', 'el nombre sigue en negrita'));
+    test('…y prender algo apagado por default también', () =>
+        eq(V({ nomI: 1 })['--ct-nom-i'], 'italic', 'cursiva en el nombre'));
+
+    /* ── LA PUERTA DEL ATRIBUTO ──
+       Esto sale dentro de `style="…"`. Un valor con `;` cierra la declaración
+       y permite escribir otras; uno con `"` se sale del atributo. */
+    test('un color inventado no entra: cae al default', () =>
+        eq(V({ fondo: 'red; } body{display:none' })['--ct-bg'], '#13120f', 'filtrado'));
+    test('…ni abreviado mal, ni con letras que no son hex', () => {
+        eq(V({ texto: '#12' })['--ct-txt'], '#f0ece4', 'corto');
+        return eq(V({ texto: '#gggggg' })['--ct-txt'], '#f0ece4', 'no es hex');
+    });
+    test('…y un hex de tres se expande, que sí es válido', () =>
+        eq(V({ fondo: '#fff' })['--ct-bg'], '#ffffff', '#fff → #ffffff'));
+    test('ningún valor puede salirse del atributo style', () => {
+        /* TODAS las combinaciones de tipografía, porque el riesgo real está
+           ahí: el día que alguien agregue una fuente con comillas dobles en
+           su nombre, el `style="…"` de la maqueta se parte en dos. */
+        let mal = '';
+        CT.FUENTES.forEach(a => CT.FUENTES.forEach(b => {
+            const t = CT.vars({ fuente: a.k, fuenteTit: b.k });
+            /* El bloque TERMINA en `;`: lo que se mira es que no haya ninguno
+               dentro de un valor, ni comillas dobles, ni llaves. */
+            if (/"/.test(t) || /[{}]/.test(t) || /;[^-]/.test(t.slice(0, -1) + ' ')) {
+                mal = a.k + '+' + b.k;
+            }
+        }));
+        return eq(mal, '', 'sin comillas dobles, llaves ni punto y coma suelto');
+    });
+
+    /* ── Una fuente que no existe ──
+       Puede venir de una versión futura del editor o de la fila editada a
+       mano. Deja la carta sin tipografía si no se filtra. */
+    test('una tipografía desconocida cae a la del sistema', () =>
+        eq(V({ fuente: 'comic' })['--ct-f'], CT.fuente('dm'), 'default'));
+    test('…y una del catálogo se respeta', () =>
+        eq(V({ fuente: 'mono' })['--ct-f'].indexOf('monospace') > -1, true, 'la elegida'));
+
+    /* ── LOS GRISES SE CALCULAN, NO SE ESCRIBEN ──
+       El tema guarda cuatro colores; el gris de la letra chica y el de las
+       líneas salen de mezclar el texto con el fondo. Es lo que permite que el
+       MISMO tema funcione en claro: con grises fijos, quien eligiera fondo
+       blanco se quedaba con bordes negros y letra chica invisible. */
+    test('en fondo claro, el gris de la letra chica se oscurece', () => {
+        const claro = V({ fondo: '#ffffff', texto: '#111111' });
+        const dim = CT.hex(claro['--ct-dim'], '');
+        /* Entre el texto y el fondo: más claro que la letra, más oscuro que
+           el papel. Un gris fijo de tema oscuro quedaría casi blanco aquí. */
+        const L = (h) => parseInt(h.slice(1, 3), 16);
+        eq(L(dim) > L('#111111'), true, 'más claro que el texto');
+        return eq(L(dim) < L('#ffffff'), true, 'más oscuro que el fondo');
+    });
+    test('…y en fondo oscuro se aclara', () => {
+        const osc = V({ fondo: '#000000', texto: '#ffffff' });
+        const L = (h) => parseInt(h.slice(1, 3), 16);
+        return eq(L(CT.hex(osc['--ct-dim'], '')) < 255, true, 'entre los dos');
+    });
+
+    /* ── El color por campo: vacío = hereda ──
+       Un `input[type=color]` no tiene estado vacío, así que «auto» tenía que
+       ser explícito. Si vacío no heredara, cada campo nacería negro. */
+    test('sin color propio, el nombre hereda el del texto', () =>
+        eq(V({ texto: '#abcdef' })['--ct-nom-c'], '#abcdef', 'hereda'));
+    test('…el precio hereda el acento', () =>
+        eq(V({ acento: '#9c2b2b' })['--ct-pre-c'], '#9c2b2b', 'hereda el acento'));
+    test('…la descripción hereda el gris calculado', () => {
+        const d = V({});
+        return eq(d['--ct-des-c'], d['--ct-dim'], 'el mismo gris');
+    });
+    test('…y un color elegido le gana a lo que heredaría', () =>
+        eq(V({ acento: '#9c2b2b', preC: '#000000' })['--ct-pre-c'], '#000000', 'manda el elegido'));
+
+    /* ── El aviso de contraste ──
+       WCAG: blanco contra negro es 21:1, y lo cómodo empieza en 4.5. */
+    test('el contraste se mide como lo define WCAG', () => {
+        eq(Math.round(CT.contraste('#ffffff', '#000000')), 21, 'blanco/negro');
+        return eq(Math.round(CT.contraste('#777777', '#777777')), 1, 'el mismo color');
+    });
+
+    /* `aplicar` escribe propiedad por propiedad y NO con cssText: el `<html>`
+       de la carta y la maqueta del editor pueden traer otros estilos en línea,
+       y un cssText se los lleva. */
+    test('el tema se aplica sin borrar otros estilos en línea', () => {
+        const puesto = {};
+        const falso = { style: { setProperty(k, v) { puesto[k] = v; } } };
+        CT.aplicar(falso, { fondo: '#101010' });
+        eq(puesto['--ct-bg'], '#101010', 'escribió el fondo');
+        return eq(Object.keys(puesto).length > 15, true, 'todas las variables');
+    });
+}
+
+/* ── Que los DOS consumidores usen de verdad ese archivo ────────────────
+   Las pruebas de arriba verifican el cálculo. Estas verifican que nadie se
+   haya hecho su propia copia: ahí es donde la maqueta empieza a mentir. */
+{
+    const carta = fs.readFileSync(path.join(RAIZ, 'carta.html'), 'utf8');
+    const menu  = fs.readFileSync(path.join(RAIZ, 'administrativo/menu.html'), 'utf8');
+
+    test('la carta pública carga el tema compartido', () =>
+        eq(carta.indexOf('src="/carta-tema.js"') > -1, true, 'un solo archivo'));
+    test('…y el editor del menú también', () =>
+        eq(menu.indexOf('src="/carta-tema.js"') > -1, true, 'el mismo'));
+
+    /* La maqueta del teléfono NO puede tener un color fijo: con uno solo se
+       vería bien en el tema oscuro y mentiría con cualquier otro. Se mira el
+       bloque de reglas `.cel*`, que es la maqueta entera. */
+    test('la maqueta del editor no tiene colores propios', () => {
+        const ini = menu.indexOf('.cel { width:252px');
+        const fin = menu.indexOf('.ap-cols {', ini);
+        const css = menu.slice(ini, fin);
+        /* El marco del teléfono (#2a2721) sí es fijo a propósito: es el
+           aparato, no la carta. Lo demás sale de las variables. */
+        const fijos = (css.match(/#[0-9a-f]{3,6}/gi) || []).filter(c => c.toLowerCase() !== '#2a2721');
+        return eq(fijos.join(' '), '', 'todo sale de --ct-*');
+    });
+    test('…y la carta real pinta los tres campos con esas variables', () => {
+        ['--ct-nom-c', '--ct-des-c', '--ct-pre-c', '--ct-nom-w', '--ct-des-i', '--ct-pre-w']
+            .forEach(v => eq(carta.indexOf('var(' + v + ')') > -1, true, v));
+        return eq(carta.indexOf("--oro") < 0, true, 'sin la paleta vieja');
+    });
+    /* La carta trae los defaults ESCRITOS en su :root. No es duplicar el
+       cálculo: es que la primera pintada —antes de que llegue la consulta— ya
+       sea correcta. Sin eso se ve medio segundo en blanco con letras blancas. */
+    test('la carta arranca pintada, antes de saber de qué negocio es', () =>
+        eq(/:root\s*\{[^}]*--ct-bg:#13120f/.test(carta), true, 'default en el :root'));
+
+    /* ── Lo que se guarda ── */
+    test('el editor guarda la apariencia, el logo y la sucursal', () => {
+        const i = menu.indexOf('async function guardarGruposCarta');
+        const cuerpo = menu.slice(i, menu.indexOf('\n}', i));
+        eq(cuerpo.indexOf('tema: CartaTema.norm(') > -1, true, 'tema normalizado');
+        eq(cuerpo.indexOf('logo:') > -1, true, 'logo');
+        return eq(cuerpo.indexOf('sucNom:') > -1, true, 'nombre de la sucursal');
+    });
+    /* Normalizado ANTES de salir: lo que se guarda tiene que ser lo que el
+       tema sabe leer. Guardar el objeto crudo deja colores a medio escribir en
+       la fila, y el filtro de la lectura los tapa pero no los quita. */
+    test('…y lo guarda normalizado, no crudo', () => {
+        const i = menu.indexOf('async function guardarGruposCarta');
+        const cuerpo = menu.slice(i, menu.indexOf('\n}', i));
+        return eq(/tema:\s*CartaTema\.norm/.test(cuerpo), true, 'pasa por el filtro');
+    });
+
+    /* ── EL LOGO DEL QR ──
+       El código se pega en veinte mesas del negocio: quien lo mira de cerca
+       lee la marca que hay en medio, y era la de ETAAX. */
+    test('el QR de la carta lleva el logo de la sucursal', () => {
+        const i = menu.indexOf('function gen() {', menu.indexOf('async function abrirQrCarta'));
+        const cuerpo = menu.slice(i, i + 1400);
+        eq(cuerpo.indexOf('_qrLogoPropio') > -1, true, 'el del negocio');
+        /* Y si no hay ninguno, el de ETAAX: mejor eso que un hueco blanco en
+           medio del código. */
+        return eq(cuerpo.indexOf('etaaxQrLogo') > -1, true, 'respaldo');
+    });
+    test('…y si la imagen no carga, el QR no se queda hueco', () => {
+        const i = menu.indexOf('function _qrLogoPropio');
+        const cuerpo = menu.slice(i, menu.indexOf('\n}', menu.indexOf('logo.src = url', i)));
+        return eq(cuerpo.indexOf('onerror') > -1 && cuerpo.indexOf('etaaxQrLogo') > -1,
+                  true, 'cae al de ETAAX');
+    });
+
+    /* ── El pie ── */
+    test('la carta firma abajo con etaax.com y la marca registrada', () =>
+        eq(/etaax\.com\s*<sup>&reg;<\/sup>/.test(carta), true, 'hasta abajo, chico'));
+    /* Arriba va el logo del negocio y abajo la firma de quien hace el sistema.
+       Al revés —la marca de ETAAX arriba— la carta se siente de ETAAX, que es
+       exactamente lo que Edwin pidió cambiar. */
+    test('…y arriba el logo del negocio, no el de ETAAX', () => {
+        const i = carta.indexOf('<div class="cab">');
+        const cab = carta.slice(i, carta.indexOf('</div>\n\n<div class="tabs"', i));
+        eq(cab.indexOf('id="cLogo"') > -1, true, 'el logo del negocio');
+        return eq(cab.toLowerCase().indexOf('etaax') < 0, true, 'sin marca de ETAAX arriba');
+    });
+    test('el nombre de la sucursal sale en el encabezado', () =>
+        eq(carta.indexOf("$('cSuc').textContent") > -1, true, 'su sucursal'));
+    /* Repetir «Mammut · Mammut» porque el título quedó igual al nombre del
+       negocio es ruido, y pasa en cuanto alguien escribe su nombre en el
+       título — que es lo primero que todos hacen. */
+    test('…sin repetir lo que el título ya dijo', () => {
+        const i = carta.indexOf('function encabezado');
+        const cuerpo = carta.slice(i, carta.indexOf('\n}', i));
+        return eq(cuerpo.indexOf('!igual(suc, tit)') > -1, true, 'compara antes de pintar');
+    });
+    /* El logo entra en un `src`. Viene de nuestra propia consulta, pero una
+       dirección `javascript:` ahí se ejecuta — y la fila la escribe un cliente
+       del navegador, no el servidor. */
+    test('el logo se revisa antes de entrar en un src', () => {
+        const i = carta.indexOf('function encabezado');
+        const cuerpo = carta.slice(i, carta.indexOf('\n}\n', i));
+        return eq(/\^\(https\?:\\\/\\\/\|data:image\\\//.test(cuerpo), true, 'solo http(s) y data:image');
+    });
+}
+
+/* ── El aviso de contraste, corriendo de verdad ─────────────────────────── */
+{
+    const E = crearContexto();
+    cargarJS(E, 'carta-tema.js');
+    cargarJS(E, 'reporte-marca.js');
+    cargarInline(E, 'administrativo/menu.html');
+
+    const avisoCon = (tema) => {
+        setVar(E, '_cartaCfg', { tema });
+        E._goAvisoContraste();
+        return E.document.getElementById('apMal').innerHTML;
+    };
+
+    test('el default no dispara ningún aviso', () =>
+        eq(avisoCon({}), '', 'oscuro clásico, 15.9:1'));
+    /* El caso real: texto gris oscuro sobre fondo gris oscuro. En el monitor
+       del dueño se ve «sobrio»; en la mesa, de noche, no se ve. */
+    test('un texto que no se lee sí avisa, con el número', () => {
+        const h = avisoCon({ fondo: '#13120f', texto: '#2b2820' });
+        eq(h.indexOf('contraste') > -1, true, 'avisa');
+        return eq(/\d\.\d:1/.test(h), true, 'dice cuánto');
+    });
+    test('…y el acento también se revisa, no solo el texto', () => {
+        const h = avisoCon({ fondo: '#13120f', texto: '#f0ece4', acento: '#1a1814' });
+        return eq(h.indexOf('acento') > -1, true, 'los precios se leen con el acento');
+    });
+    /* Avisa, NO bloquea: es su carta y su decisión. Un candado que impide
+       guardar aquí se sortea escribiendo el color en otra parte. */
+    test('avisar no es impedir guardar', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'administrativo/menu.html'), 'utf8');
+        const i = src.indexOf('async function guardarGruposCarta');
+        const cuerpo = src.slice(i, src.indexOf('\n}', i));
+        return eq(cuerpo.indexOf('_goAvisoContraste') < 0 && cuerpo.indexOf('contraste') < 0,
+                  true, 'guardar no consulta el aviso');
+    });
+
+    /* ── El logo pesado ──
+       Los logos de ahora son URLs de Storage (cien caracteres). Los viejos son
+       base64 y pueden pesar cientos de kilobytes: eso lo descargaría ENTERO
+       cada cliente que abre la carta en datos móviles, para pintarlo de 46
+       píxeles. */
+    test('una URL de Storage se guarda tal cual', () => {
+        E.etaaxMarca = () => ({ logo: 'https://sb.co/logo.png' });
+        let r = null;
+        E._logoParaCarta(v => { r = v; });
+        return eq(r, 'https://sb.co/logo.png', 'sin tocar');
+    });
+    test('…un base64 chico también, sin dar la vuelta por el canvas', () => {
+        const chico = 'data:image/png;base64,' + 'A'.repeat(500);
+        E.etaaxMarca = () => ({ logo: chico });
+        let r = null;
+        E._logoParaCarta(v => { r = v; });
+        return eq(r, chico, 'cabe de sobra');
+    });
+    test('…y sin logo no se guarda nada, no «undefined»', () => {
+        E.etaaxMarca = () => ({});
+        let r = 'x';
+        E._logoParaCarta(v => { r = v; });
+        return eq(r, '', 'cadena vacía');
+    });
+}
+
+/* ── La migración: lo que un CREATE OR REPLACE se lleva (BH21) ──────────── */
+{
+    const migs47 = fs.readdirSync(RAIZ)
+        .filter(f => /^supabase-migration-v\d+\.sql$/.test(f))
+        .sort((a, b) => parseInt(a.match(/v(\d+)/)[1], 10) - parseInt(b.match(/v(\d+)/)[1], 10));
+    const ult47 = (fn) => {
+        let txt = '', donde = '';
+        migs47.forEach(m => {
+            const src = fs.readFileSync(path.join(RAIZ, m), 'utf8');
+            const i = src.indexOf('CREATE OR REPLACE FUNCTION ' + fn + '(');
+            if (i < 0) return;
+            const fin = src.indexOf('$$;', i);
+            txt = src.slice(i, fin > 0 ? fin + 3 : src.length);
+            donde = m;
+        });
+        return { txt, donde };
+    };
+    const ver = ult47('menu_publico_ver'), guar = ult47('menu_cfg_guardar');
+
+    test('la carta devuelve su apariencia y su marca', () => {
+        eq(ver.txt.indexOf("'tema'") > -1, true, 'tema en ' + ver.donde);
+        eq(ver.txt.indexOf("'logo'") > -1, true, 'logo');
+        return eq(ver.txt.indexOf("'sucNom'") > -1, true, 'sucNom');
+    });
+    test('…y un tema vacío no deja la carta sin nada', () =>
+        eq(/'tema',\s*COALESCE\(v_cfg->'tema'/.test(ver.txt), true, 'COALESCE a {}'));
+    test('los ajustes se pueden guardar', () => {
+        eq(guar.txt.indexOf("'tema'") > -1, true, 'tema en ' + guar.donde);
+        return eq(guar.txt.indexOf("'sucNom'") > -1, true, 'sucNom');
+    });
+    /* LO QUE EL CREATE OR REPLACE NO SE LLEVÓ. Las dos funciones se
+       reescribieron completas en la v68: los candados de la v66 tienen que
+       seguir ahí, en la ÚLTIMA definición, que es la que queda en la base. */
+    test('CANDADO 1 sobrevivió a la v68 · nada sale hasta prenderlo', () =>
+        eq(ver.txt.indexOf("COALESCE((r.datos->'menu'->>'visible')::boolean, false) = true") > -1,
+           true, 'apagado por default'));
+    test('CANDADO 2 sobrevivió · las sub-recetas siguen fuera', () =>
+        eq(/r\.datos->>'tipo' IN \('alimentos', 'bebidas'\)/.test(ver.txt), true, 'solo carta'));
+    test('CANDADO 3 sobrevivió · solo lo de esta sucursal', () =>
+        eq(ver.txt.indexOf('_receta_en_suc') > -1, true, 'la mesa es de una sucursal'));
+    /* El token es el secreto del QR. La lista blanca del guardado no lo
+       incluye: si el editor pudiera escribirlo, un bug en el cliente podría
+       dejar el QR de la mesa apuntando a nada. */
+    test('…y el editor sigue sin poder escribir el token', () => {
+        const i = guar.txt.indexOf('v_limpio :=');
+        const lista = guar.txt.slice(i, guar.txt.indexOf('));', i));
+        return eq(lista.indexOf('token') < 0, true, 'fuera de la lista blanca');
+    });
+    test('…ni el interruptor de encendido de la carta', () => {
+        const i = guar.txt.indexOf('v_limpio :=');
+        const lista = guar.txt.slice(i, guar.txt.indexOf('));', i));
+        return eq(lista.indexOf("'activa'") < 0, true, 'ese va por su propia puerta');
+    });
+    /* Y la lista blanca de los platillos no se amplió de contrabando: la
+       apariencia es del negocio, los costos no salen ni con tema nuevo.
+
+       SIN LOS COMENTARIOS. Mi primera versión buscaba en el texto completo y
+       se cazaba a sí misma: el comentario que explica que ahí NO hay costos
+       dice la palabra «costos». Es la tercera vez que caigo en esto, así que
+       va escrito: lo que se mide es el CÓDIGO, no lo que el código cuenta. */
+    test('la carta sigue sin poder devolver un costo', () => {
+        const codigo = ver.txt.split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
+        return eq(/costo|proveedor|margen|ingrediente/i.test(codigo), false, 'ni un campo más');
     });
 }
 

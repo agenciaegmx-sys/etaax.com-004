@@ -24,56 +24,80 @@
    Una pantalla blanca a esa hora deslumbra a quien la abre y a quien está
    enfrente.
    ══════════════════════════════════════════════════════════════════════════ */
+/* ══ LA VISTE EL NEGOCIO, NO ETAAX ════════════════════════════════════════
+   Estos valores son el default —el oscuro de arriba— y están aquí para que la
+   PRIMERA pintada ya sea correcta: la carta tarda un viaje de red en saber de
+   qué negocio es, y sin esto se vería medio segundo en blanco con letras
+   blancas. Cuando llegan los datos, /carta-tema.js reescribe las mismas
+   variables con los colores de la sucursal.
+
+   Las `--ct-*` las calcula ese archivo, el MISMO que pinta la maqueta del
+   editor. Si aquí se derivaran por separado, el dueño elegiría un color en
+   el editor y vería otro en la mesa. */
 :root {
-    --bg:#0f0e0c; --sup:#1a1815; --borde:#2d2a25;
-    --txt:#f0ece4; --txt2:#b5afa3; --dim:#7d7769; --oro:#c9a227;
+    --ct-bg:#13120f; --ct-sup:#1b1915; --ct-borde:#3b3935; --ct-hueco:#302e2a;
+    --ct-txt:#f0ece4; --ct-dim:#8d8a84; --ct-ac:#c9a227; --ct-ac-10:#2c2612;
+    --ct-f:'DM Sans',system-ui,sans-serif; --ct-ft:'Bebas Neue','DM Sans',sans-serif;
+    --ct-nom-w:700; --ct-nom-i:normal; --ct-nom-c:#f0ece4;
+    --ct-des-w:400; --ct-des-i:italic;  --ct-des-c:#8d8a84;
+    --ct-pre-w:700; --ct-pre-i:normal;  --ct-pre-c:#c9a227;
     --safe-b: env(safe-area-inset-bottom, 0px);
     --safe-t: env(safe-area-inset-top, 0px);
 }
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-body { background:var(--bg); color:var(--txt); font-family:'DM Sans',system-ui,sans-serif;
+body { background:var(--ct-bg); color:var(--ct-txt); font-family:var(--ct-f);
     padding-bottom:calc(var(--safe-b) + 40px); overflow-x:hidden; }
 
-.cab { text-align:center; padding:calc(var(--safe-t) + 34px) 20px 10px; }
-.cab-neg { font-family:'Bebas Neue',sans-serif; font-size:33px; letter-spacing:3px; line-height:1.05; }
-.cab-sub { font-size:12.5px; color:var(--dim); margin-top:7px; letter-spacing:1px; }
-.cab-nota { font-size:12.5px; color:var(--txt2); margin-top:14px; line-height:1.6;
+.cab { text-align:center; padding:calc(var(--safe-t) + 30px) 20px 10px; }
+/* El logo del negocio arriba, y grande. Es lo primero que ve quien escanea:
+   la carta tiene que anunciar de quién es antes de decir qué hay. */
+.cab-logo { display:block; max-width:132px; max-height:92px; width:auto; height:auto;
+    object-fit:contain; margin:0 auto 14px; }
+.cab-neg { font-family:var(--ct-ft); font-size:33px; letter-spacing:3px; line-height:1.05;
+    color:var(--ct-txt); }
+.cab-suc { font-size:12px; color:var(--ct-ac); margin-top:6px; letter-spacing:2.4px;
+    text-transform:uppercase; font-weight:600; }
+.cab-sub { font-size:12.5px; color:var(--ct-dim); margin-top:5px; letter-spacing:1px; }
+.cab-nota { font-size:12.5px; color:var(--ct-dim); margin-top:14px; line-height:1.6;
     max-width:520px; margin-left:auto; margin-right:auto; }
-.regla { width:54px; height:2px; background:var(--oro); margin:18px auto 0; border-radius:2px; }
+.regla { width:54px; height:2px; background:var(--ct-ac); margin:18px auto 0; border-radius:2px; }
 
 /* Las pestañas de grupo, pegajosas: con cuarenta platillos uno se pierde a la
    mitad y no quiere volver a subir para cambiar de sección. */
 .tabs { position:sticky; top:0; z-index:10; display:flex; gap:7px; overflow-x:auto;
-    padding:14px 16px; background:color-mix(in srgb, var(--bg) 94%, transparent);
-    backdrop-filter:blur(12px); border-bottom:1px solid var(--borde);
+    padding:14px 16px; background:color-mix(in srgb, var(--ct-bg) 94%, transparent);
+    backdrop-filter:blur(12px); border-bottom:1px solid var(--ct-borde);
     scrollbar-width:none; -ms-overflow-style:none; }
 .tabs::-webkit-scrollbar { display:none; }
-.tab { white-space:nowrap; background:var(--sup); border:1px solid var(--borde); color:var(--txt2);
-    border-radius:30px; padding:9px 16px; font-family:inherit; font-size:13px; cursor:pointer; }
-.tab.on { border-color:var(--oro); color:var(--oro); background:rgba(201,162,39,.1); font-weight:600; }
+.tab { white-space:nowrap; background:var(--ct-sup); border:1px solid var(--ct-borde);
+    color:var(--ct-dim); border-radius:30px; padding:9px 16px; font-family:inherit; font-size:13px;
+    cursor:pointer; }
+.tab.on { border-color:var(--ct-ac); color:var(--ct-ac); background:var(--ct-ac-10); font-weight:600; }
 
 .wrap { max-width:620px; margin:0 auto; padding:4px 16px; }
-.grupo-tit { font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:2.4px;
-    color:var(--oro); margin:30px 0 14px; display:flex; align-items:center; gap:12px; }
-.grupo-tit::after { content:''; flex:1; height:1px; background:var(--borde); }
+.grupo-tit { font-family:var(--ct-ft); font-size:22px; letter-spacing:2.4px;
+    color:var(--ct-ac); margin:30px 0 14px; display:flex; align-items:center; gap:12px; }
+.grupo-tit::after { content:''; flex:1; height:1px; background:var(--ct-borde); }
 
 .rejilla { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
 @media (min-width:560px) { .rejilla { grid-template-columns:repeat(3,1fr); } }
-.plato { background:var(--sup); border:1px solid var(--borde); border-radius:14px;
+.plato { background:var(--ct-sup); border:1px solid var(--ct-borde); border-radius:14px;
     overflow:hidden; cursor:pointer; text-align:left; padding:0; font-family:inherit;
     display:flex; flex-direction:column; }
 .plato:active { transform:scale(.985); }
-.plato-foto { width:100%; aspect-ratio:1; object-fit:cover; display:block; background:#232019; }
+.plato-foto { width:100%; aspect-ratio:1; object-fit:cover; display:block; background:var(--ct-hueco); }
 /* Un platillo sin foto NO se esconde: el negocio decidió enseñarlo. Se le pone
    un marco digno en vez de un hueco gris que parece imagen rota. */
 .plato-sinfoto { width:100%; aspect-ratio:1; display:flex; align-items:center; justify-content:center;
-    background:linear-gradient(145deg,#232019,#1a1815); font-size:34px; opacity:.4; }
+    background:var(--ct-hueco); font-size:34px; opacity:.4; }
 .plato-txt { padding:11px 12px 13px; flex:1; display:flex; flex-direction:column; gap:3px; }
-.plato-nom { font-size:14px; font-weight:500; line-height:1.3; }
-.plato-en { font-size:11.5px; color:var(--dim); font-style:italic; line-height:1.3; }
-.plato-desc { font-size:11.5px; color:var(--txt2); line-height:1.5; margin-top:3px; }
-.plato-precio { font-size:14.5px; color:var(--oro); font-weight:600; margin-top:6px;
-    font-variant-numeric:tabular-nums; }
+.plato-nom { font-size:14px; line-height:1.3;
+    color:var(--ct-nom-c); font-weight:var(--ct-nom-w); font-style:var(--ct-nom-i); }
+.plato-en { font-size:11.5px; color:var(--ct-dim); font-style:italic; line-height:1.3; }
+.plato-desc { font-size:11.5px; line-height:1.5; margin-top:3px;
+    color:var(--ct-des-c); font-weight:var(--ct-des-w); font-style:var(--ct-des-i); }
+.plato-precio { font-size:14.5px; margin-top:6px; font-variant-numeric:tabular-nums;
+    color:var(--ct-pre-c); font-weight:var(--ct-pre-w); font-style:var(--ct-pre-i); }
 
 /* La vista grande. Al tocar un platillo se abre completo: es lo que la gente
    quiere del QR —ver bien el plato antes de pedirlo—. */
@@ -81,10 +105,13 @@ body { background:var(--bg); color:var(--txt); font-family:'DM Sans',system-ui,s
     flex-direction:column; align-items:center; justify-content:center; padding:18px; }
 .vista img { max-width:96vw; max-height:62vh; border-radius:14px; display:block; }
 .vista-info { max-width:560px; text-align:center; margin-top:20px; padding:0 8px; }
-.vista-nom { font-family:'Bebas Neue',sans-serif; font-size:29px; letter-spacing:1.6px; line-height:1.1; }
-.vista-en { font-size:14px; color:var(--dim); font-style:italic; margin-top:4px; }
-.vista-desc { font-size:14.5px; color:var(--txt2); line-height:1.65; margin-top:14px; }
-.vista-precio { font-size:21px; color:var(--oro); font-weight:600; margin-top:14px; }
+.vista-nom { font-family:var(--ct-ft); font-size:29px; letter-spacing:1.6px; line-height:1.1;
+    color:var(--ct-nom-c); font-style:var(--ct-nom-i); }
+.vista-en { font-size:14px; color:var(--ct-dim); font-style:italic; margin-top:4px; }
+.vista-desc { font-size:14.5px; line-height:1.65; margin-top:14px;
+    color:var(--ct-des-c); font-weight:var(--ct-des-w); font-style:var(--ct-des-i); }
+.vista-precio { font-size:21px; margin-top:14px;
+    color:var(--ct-pre-c); font-weight:var(--ct-pre-w); font-style:var(--ct-pre-i); }
 .vista-x { position:absolute; top:calc(var(--safe-t) + 14px); right:14px; width:44px; height:44px;
     border-radius:50%; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.22);
     color:#fff; font-size:18px; cursor:pointer; }
@@ -92,14 +119,22 @@ body { background:var(--bg); color:var(--txt); font-family:'DM Sans',system-ui,s
     border-radius:12px; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.2);
     color:#fff; font-size:24px; cursor:pointer; }
 
-.estado { text-align:center; padding:70px 24px; color:var(--dim); font-size:14.5px; line-height:1.8; }
-.pie { text-align:center; font-size:11px; color:var(--dim); margin-top:44px; letter-spacing:1px; opacity:.6; }
+.estado { text-align:center; padding:70px 24px; color:var(--ct-dim); font-size:14.5px; line-height:1.8; }
+/* El pie. La carta es del negocio —por eso su logo va arriba y grande— y la
+   firma de quien la hace va hasta abajo, chica: quien está pidiendo de comer
+   no necesita saber de ETAAX, pero quien se pregunta «¿con qué hicieron
+   esto?» encuentra la respuesta donde se buscan estas cosas. */
+.pie { text-align:center; margin-top:46px; padding-top:18px; border-top:1px solid var(--ct-borde);
+    font-size:10.5px; color:var(--ct-dim); letter-spacing:1.6px; opacity:.75; line-height:1.7; }
+.pie sup { font-size:7.5px; vertical-align:super; letter-spacing:0; }
 </style>
 </head>
 <body>
 
 <div class="cab">
+    <img class="cab-logo" id="cLogo" alt="" hidden>
     <div class="cab-neg" id="cNeg">—</div>
+    <div class="cab-suc" id="cSuc"></div>
     <div class="cab-sub" id="cSub"></div>
     <div class="regla"></div>
     <div class="cab-nota" id="cNota"></div>
@@ -107,7 +142,7 @@ body { background:var(--bg); color:var(--txt); font-family:'DM Sans',system-ui,s
 
 <div class="tabs" id="cTabs" hidden></div>
 <div class="wrap"><div id="cCuerpo"><div class="estado">Cargando la carta…</div></div>
-    <div class="pie" id="cPie" hidden>ETAAX</div></div>
+    <div class="pie" id="cPie" hidden>etaax.com <sup>&reg;</sup></div></div>
 
 <div class="vista" id="vista">
     <button class="vista-x" onclick="cerrarVista()" aria-label="Cerrar">✕</button>
@@ -124,6 +159,7 @@ body { background:var(--bg); color:var(--txt); font-family:'DM Sans',system-ui,s
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="/supabase-config.js"></script>
+<script src="/carta-tema.js"></script><!-- el mismo tema que la maqueta del editor -->
 <script>
 /* ══════════════════════════════════════════════════════════════════════════
    Esta página NO tiene sesión y no la necesita. Pide la carta por una sola
@@ -157,9 +193,8 @@ async function cargar() {
             estado('La carta está temporalmente fuera de línea.<br>Pregúntale a tu mesero.');
             return;
         }
-        document.title = (d.negocio || 'Carta');
-        $('cNeg').textContent = d.titulo || d.negocio || 'Carta';
-        $('cSub').textContent = d.titulo && d.negocio ? d.negocio : '';
+        vestir(d);
+        encabezado(d);
         $('cNota').textContent = d.nota || '';
         ITEMS = d.items || [];
         if (!ITEMS.length) { estado('La carta se está preparando.<br>Vuelve en un rato.'); return; }
@@ -167,6 +202,55 @@ async function cargar() {
         $('cPie').hidden = false;
     } catch (e) {
         estado('No se pudo cargar la carta.<br>Revisa tu conexión e inténtalo de nuevo.');
+    }
+}
+
+/* ══ LA CARTA SE VISTE CON LO QUE ELIGIÓ EL NEGOCIO ═══════════════════════
+   El tema viaja en la misma consulta que los platillos: esta página no tiene
+   sesión y no puede ir a buscar la configuración por su cuenta. Si no trae
+   nada —una carta guardada antes de que existieran estos ajustes, o con la
+   migración v68 sin correr— se queda con el default oscuro de la hoja de
+   estilo, que es exactamente como se veía antes. */
+function vestir(d) {
+    try { CartaTema.aplicar(document.documentElement, d.tema); } catch (e) {}
+    /* La barra de estado del teléfono, del color del fondo. Sin esto, una
+       carta de fondo claro abre con una franja negra arriba y se ve como una
+       página a medio cargar. */
+    try {
+        var m = document.querySelector('meta[name="theme-color"]');
+        var bg = getComputedStyle(document.documentElement).getPropertyValue('--ct-bg').trim();
+        if (m && bg) m.setAttribute('content', bg);
+    } catch (e) {}
+}
+
+/* El logo y el nombre de la SUCURSAL, no los de ETAAX. Quien escanea en la
+   mesa está en un restaurante concreto: la carta tiene que decir de quién es
+   antes de decir qué hay. El nombre del negocio queda debajo, y solo cuando
+   aporta algo que el título no dijo ya — repetir «Mammut · Mammut» es ruido. */
+function encabezado(d) {
+    var tit = String(d.titulo || '').trim() || String(d.negocio || '').trim() || 'Carta';
+    var suc = String(d.sucNom  || '').trim();
+    var neg = String(d.negocio || '').trim();
+    function igual(a, b) { return a.toLowerCase() === b.toLowerCase(); }
+
+    document.title = tit;
+    $('cNeg').textContent = tit;
+    $('cSuc').textContent = (suc && !igual(suc, tit)) ? suc : '';
+    $('cSub').textContent = (neg && !igual(neg, tit) && !igual(neg, suc)) ? neg : '';
+
+    /* El logo viene de nuestra propia consulta, pero igual se revisa antes de
+       meterlo en un `src`: una dirección con `javascript:` ahí se ejecuta. */
+    var logo = String(d.logo || '').trim();
+    var img = $('cLogo');
+    if (/^(https?:\/\/|data:image\/)/i.test(logo)) {
+        img.src = logo;
+        img.hidden = false;
+        img.alt = tit;
+        /* Si el archivo no carga —el logo se borró, el bucket cambió— se
+           esconde el hueco en vez de dejar el ícono de imagen rota. */
+        img.onerror = function () { img.hidden = true; };
+    } else {
+        img.hidden = true;
     }
 }
 

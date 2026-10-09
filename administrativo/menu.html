@@ -641,6 +641,27 @@ async function guardarQrReceta() {
    podría jalar la lista de costos desde su casa. */
 var _cartaTok = '', _cartaCfg = null;
 
+/* ══ LA CARTA SE VE DEL NEGOCIO, NO DE ETAAX ══════════════════════════════
+   Lo que abre el cliente en la mesa tiene que parecer del restaurante. Los
+   colores, las tipografías y los estilos por campo viven en /carta-tema.js —
+   el MISMO archivo que usa carta.html— para que la maqueta de aquí no mienta.
+   Una maqueta que calcula sus colores por su cuenta es peor que no tenerla. */
+function _tema() { return (_cartaCfg && _cartaCfg.tema) || {}; }
+function _temaVars() { return CartaTema.vars(_tema()); }
+
+/* El logo y el nombre que le tocan a ESTA sucursal — misma jerarquía que los
+   reportes impresos: el de la sucursal si lo tiene, si no el del negocio. */
+function _marcaCarta() {
+    if (typeof etaaxMarca !== 'function') return { logo:'', sucursal:'', negocio:'' };
+    try { return etaaxMarca() || {}; } catch (e) { return { logo:'', sucursal:'', negocio:'' }; }
+}
+
+/* El nombre de la sucursal para la carta. `_sucNomMenu()` devuelve vacío
+   cuando la sucursal no está en la lista local —pasa con `suc_principal`, que
+   muchos negocios nunca dieron de alta—; la marca de los reportes ya resuelve
+   ese caso («Matriz»), y la carta no puede salir sin nombre. */
+function _sucCarta() { return _sucNomMenu() || _marcaCarta().sucursal || ''; }
+
 function _sucMenu() { return localStorage.getItem('etaax_sucursal_activa') || ''; }
 function _sucNomMenu() {
     var sid = _sucMenu(); if (!sid) return '';
@@ -700,7 +721,14 @@ async function abrirQrCarta() {
         box.appendChild(d);
         try {
             new QRCode(d, { text: url, width: 210, height: 210, colorDark: '#0a0908', colorLight: '#ffffff' });
-            if (window.etaaxQrLogo) window.etaaxQrLogo(d);
+            /* El logo del centro es el de la SUCURSAL, no el de ETAAX: este
+               código se pega en veinte mesas del negocio y quien lo ve de
+               cerca lee la marca que hay en medio. Si la sucursal no tiene
+               logo propio se cae al del negocio, y si no hay ninguno, al de
+               ETAAX — mejor eso que un hueco en medio del código. */
+            var _lg = _marcaCarta().logo;
+            if (_lg && typeof _qrLogoPropio === 'function') _qrLogoPropio(d, _lg);
+            else if (window.etaaxQrLogo) window.etaaxQrLogo(d);
         } catch (e) { box.innerHTML = '<div style="color:var(--red);font-size:12px">No se pudo generar el QR.</div>'; }
     }
     if (window.QRCode) gen();
@@ -712,6 +740,36 @@ async function abrirQrCarta() {
         document.head.appendChild(sc);
     }
 }
+/* Misma mecánica que etaaxQrLogo (qr-pairing.js) pero con la imagen del
+   negocio: placa blanca al centro y el logo encima. El corrector de errores
+   del QR en nivel H tolera que se tape ~24% del área, así que el código se
+   sigue leyendo; más grande ya no. */
+function _qrLogoPropio(cont, url) {
+    try {
+        var canvas = cont && cont.querySelector('canvas');
+        if (!canvas) return;
+        var img = cont.querySelector('img');
+        var ctx = canvas.getContext('2d');
+        var s = canvas.width;
+        var logo = new Image();
+        logo.crossOrigin = 'anonymous';
+        logo.onload = function () {
+            var box = Math.round(s * 0.24), ico = Math.round(s * 0.20);
+            var x = (s - box) / 2, y = (s - box) / 2, r = Math.round(box * 0.2);
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            if (ctx.roundRect) ctx.roundRect(x, y, box, box, r); else ctx.rect(x, y, box, box);
+            ctx.fill();
+            ctx.drawImage(logo, (s - ico) / 2, (s - ico) / 2, ico, ico);
+            if (img) { try { img.src = canvas.toDataURL('image/png'); } catch (e) {} }
+        };
+        /* Si el logo no carga —está en otro dominio sin permiso, o no
+           existe— el QR se queda con el de ETAAX en vez de sin nada. */
+        logo.onerror = function () { if (window.etaaxQrLogo) window.etaaxQrLogo(cont); };
+        logo.src = url;
+    } catch (e) { if (window.etaaxQrLogo) window.etaaxQrLogo(cont); }
+}
+
 function cerrarQrCarta() { document.getElementById('qrCartaModal').style.display = 'none'; }
 function copiarQrCarta() {
     var u = document.getElementById('qrCartaUrl').textContent;
@@ -813,7 +871,8 @@ function _goPintar() {
     var cu = document.getElementById('grupOrdCuerpo');
     if (!cu) return;
     var cnt = _goConteos(), cfg = _cartaCfg || {};
-    var nom = _sucNomMenu();
+    var mar = _marcaCarta();
+    var nom = _sucCarta();
     var tot = Object.keys(cnt).reduce(function (a, k) { return a + cnt[k]; }, 0);
 
     /* La maqueta enseña las pestañas en el orden de arriba y los primeros
@@ -821,20 +880,31 @@ function _goPintar() {
     var prim = _goOrden.filter(function (g) { return cnt[g]; })[0] || '';
     var ejem = _goEnCarta().filter(function (r) { return _goGrupoDe(r) === prim; }).slice(0, 4);
 
-    var h = '<div class="cel"><div class="cel-notch"></div>' +
+    var h = '<div class="cel" id="apCel" style="' + esc(_temaVars()) + '">' +
+        '<div class="cel-notch"></div>' +
+        (mar.logo ? '<img class="cel-logo" src="' + esc(mar.logo) + '" alt="">' : '') +
         '<div class="cel-tit">' + esc((cfg.titulo || '').trim() || (nom || 'Nuestra carta')) + '</div>' +
-        (cfg.nota ? '<div class="cel-sub">' + esc(String(cfg.nota).slice(0, 34)) + '</div>' : '') +
+        '<div class="cel-sub">' + esc(String(cfg.nota || '').slice(0, 34)) + '</div>' +
+        '<div class="cel-regla"></div>' +
         '<div class="cel-tabs">' +
             _goOrden.filter(function (g) { return cnt[g]; }).slice(0, 4).map(function (g, i) {
                 return '<div class="cel-tab' + (i === 0 ? ' on' : '') + '">' + esc(g) + '</div>';
             }).join('') +
         '</div>';
     if (ejem.length) {
+        /* Con nombre, descripción y precio en la tarjeta: son los tres campos
+           que se pueden vestir, y sin verlos juntos nadie sabe si el precio en
+           cursiva se lee o no. */
         h += '<div class="cel-rej">' + ejem.map(function (r) {
-            var f = (r.menu && r.menu.foto) || r.foto || '';
+            var m = r.menu || {};
+            var f = m.foto || r.foto || '';
+            var pr = _goPrecioEj(r);
             return '<div class="cel-card"><div class="ph">' +
                 (f ? '<img src="' + esc(f) + '" style="width:100%;height:100%;object-fit:cover">' : '🍽️') +
-                '</div><div class="nm">' + esc(((r.menu && r.menu.nombreEs) || r.nombre || '').slice(0, 28)) +
+                '</div><div class="tx">' +
+                '<div class="nm">' + esc(((m.nombreEs) || r.nombre || '').slice(0, 26)) + '</div>' +
+                '<div class="ds">' + esc((m.desc || 'Su descripción va aquí').slice(0, 38)) + '</div>' +
+                (pr != null ? '<div class="pr">$' + Number(pr).toLocaleString('es-MX') + '</div>' : '') +
                 '</div></div>';
         }).join('') + '</div>';
         if (cnt[prim] > 4) h += '<div class="cel-mas">+ ' + (cnt[prim] - 4) + ' más en ' + esc(prim) + '</div>';
@@ -842,7 +912,7 @@ function _goPintar() {
         h += '<div class="cel-mas" style="padding:26px 10px;line-height:1.7">Todavía no hay ningún platillo ' +
              'prendido.<br>Préndelos uno por uno con «En la carta».</div>';
     }
-    h += '</div>';
+    h += '<div class="cel-pie">etaax.com ®</div></div>';
 
     h += '<div class="qr-sec" style="margin-top:22px">Encabezado</div>' +
         '<label class="qr-lbl">Título <span class="qr-opt">(si lo dejas vacío sale el nombre de la sucursal)</span></label>' +
@@ -850,7 +920,22 @@ function _goPintar() {
             'value="' + esc(cfg.titulo || '') + '" oninput="_goCfgIn()">' +
         '<label class="qr-lbl">Una línea debajo <span class="qr-opt">(opcional)</span></label>' +
         '<input class="qr-in" id="goNota" maxlength="90" placeholder="Cocina de temporada · Tulum" ' +
-            'value="' + esc(cfg.nota || '') + '" oninput="_goCfgIn()">';
+            'value="' + esc(cfg.nota || '') + '" oninput="_goCfgIn()">' +
+        /* El logo NO se sube aquí: es el mismo de los reportes y de la barra de
+           contexto, y tener dos lugares donde cambiarlo acaba con dos logos
+           distintos en la misma sucursal. Aquí solo se dice cuál tomó. */
+        '<div class="qr-nota" style="display:flex;align-items:center;gap:9px;margin-top:11px">' +
+            (mar.logo
+                ? '<img src="' + esc(mar.logo) + '" style="width:30px;height:30px;object-fit:contain;' +
+                  'border:1px solid var(--border);border-radius:7px;background:#fff;flex-shrink:0" alt="">' +
+                  '<span>Este logo va en el QR y arriba de la carta. Se cambia en ' +
+                  '<b style="color:var(--text)">Configuración</b> ' +
+                  (mar.logoSucursal ? '(es el de esta sucursal)' : '(es el del negocio)') + '.</span>'
+                : '<span>⚠️ Esta sucursal no tiene logo. El QR sale con el de ETAAX y la carta sin ' +
+                  'imagen arriba. Súbelo en <b style="color:var(--text)">Configuración</b>.</span>') +
+        '</div>';
+
+    h += _goApariencia();
 
     h += '<div class="qr-sec">El orden de los grupos</div>';
     if (!_goOrden.length) {
@@ -874,6 +959,138 @@ function _goPintar() {
              ' en total.</div>';
     }
     cu.innerHTML = h;
+    _goAvisoContraste();
+}
+
+/* Un precio de ejemplo para la maqueta: el que de verdad va a salir en la
+   carta de ese platillo. Inventar «$180» haría que el precio se vea bien en
+   la maqueta y se desborde en la carta real con un platillo de $1,450. */
+function _goPrecioEj(r) {
+    var m = r.menu || {};
+    if (m.precio != null && m.precio !== '') return Number(m.precio);
+    if (m.sinPrecio) return null;
+    var p = Number(r.precioVenta || r.precio || 0);
+    return p > 0 ? p : null;
+}
+
+/* ══ APARIENCIA ══════════════════════════════════════════════════════════
+   Cuatro colores y dos tipografías mandan toda la carta; los grises de la
+   letra chica y de las líneas los calcula /carta-tema.js mezclando el texto
+   con el fondo, así que quien elija fondo claro no se queda con bordes negros.
+   Por eso aquí NO hay un control para cada gris: serían ocho decisiones para
+   un resultado peor. */
+function _goApariencia() {
+    var t = CartaTema.norm(_tema());
+    var COL = [
+        ['fondo',   'Fondo de la carta'],
+        ['tarjeta', 'Fondo de las tarjetas'],
+        ['texto',   'Texto'],
+        ['acento',  'Acento <small style="display:block;color:var(--text-dim)">precios, líneas, pestaña activa</small>']
+    ];
+    var h = '<div class="qr-sec">Apariencia</div><div class="ap-cols">' +
+        COL.map(function (c) {
+            return '<label class="ap-col"><input type="color" value="' + esc(t[c[0]]) + '" ' +
+                'oninput="_goTemaIn(\'' + c[0] + '\',this.value)"><span>' + c[1] + '</span></label>';
+        }).join('') + '</div>' +
+        '<div id="apMal"></div>';
+
+    var FS = CartaTema.FUENTES.map(function (x) { return x; });
+    function sel(k, lbl) {
+        return '<label class="qr-lbl">' + lbl + '</label><select class="ap-sel" ' +
+            'onchange="_goTemaIn(\'' + k + '\',this.value)">' +
+            FS.map(function (x) {
+                return '<option value="' + x.k + '"' + (t[k] === x.k ? ' selected' : '') + '>' +
+                       esc(x.lbl) + '</option>';
+            }).join('') + '</select>';
+    }
+    h += sel('fuenteTit', 'Tipografía del título y los grupos') +
+         sel('fuente',    'Tipografía del resto');
+
+    /* Negrita, cursiva y color por campo. El color arranca en «auto»: el
+       nombre hereda el color del texto, la descripción su gris y el precio el
+       acento. Elegir un color es salirse de eso a propósito, y «auto» lo
+       devuelve — sin ese botón, un color puesto por error no se puede quitar
+       porque un `input[type=color]` no tiene estado vacío. */
+    var CAMP = [['nom', 'Nombre del platillo'], ['des', 'Descripción'], ['pre', 'Precio']];
+    h += '<label class="qr-lbl">Cómo se ve cada dato <span class="qr-opt">(negrita, cursiva, color)</span></label>';
+    h += CAMP.map(function (c) {
+        var k = c[0], auto = !t[k + 'C'];
+        return '<div class="ap-fila"><b>' + c[1] + '</b>' +
+            '<button class="ap-tg ng' + (t[k+'B'] ? ' on' : '') + '" title="Negrita" ' +
+                'onclick="_goTg(this,\'' + k + 'B\')">B</button>' +
+            '<button class="ap-tg it' + (t[k+'I'] ? ' on' : '') + '" title="Cursiva" ' +
+                'onclick="_goTg(this,\'' + k + 'I\')">I</button>' +
+            '<input type="color" value="' + esc(t[k+'C'] || _goAutoCol(k, t)) + '" ' +
+                'oninput="_goTemaIn(\'' + k + 'C\',this.value,1)">' +
+            '<button class="ap-auto" title="Volver al color que hereda" ' +
+                'onclick="_goTemaIn(\'' + k + 'C\',\'\',1)"' + (auto ? ' disabled style="opacity:.3"' : '') +
+                '>auto</button>' +
+        '</div>';
+    }).join('');
+
+    h += '<button class="ap-reset" onclick="_goTemaReset()">Volver al diseño original de ETAAX</button>';
+    return h;
+}
+
+/* El color que ese campo heredaría si no se eligiera ninguno. Es lo que se
+   pone en el selector para que arranque donde está, no en negro. */
+function _goAutoCol(k, t) {
+    if (k === 'pre') return t.acento;
+    if (k === 'des') return CartaTema.mix(t.texto, t.fondo, 0.55);
+    return t.texto;
+}
+
+/* Se cambia el tema y se repinta SOLO la maqueta. Repintar todo el panel
+   mataría el arrastre del selector de color —que dispara `input` en cada
+   movimiento— y dejaría de verse el cambio mientras se elige, que es
+   justamente para lo que sirve. */
+function _goTemaIn(k, v, repintar) {
+    _cartaCfg = _cartaCfg || {};
+    _cartaCfg.tema = _cartaCfg.tema || {};
+    _cartaCfg.tema[k] = v;
+    var cel = document.getElementById('apCel');
+    if (cel) cel.setAttribute('style', _temaVars());
+    _goAvisoContraste();
+    /* Los colores por campo sí necesitan repintar su renglón: el botón «auto»
+       se prende y se apaga con ellos. Se hace al soltar, no en cada
+       movimiento, para no matar el arrastre. */
+    if (repintar) _goPintar();
+}
+
+function _goTg(btn, k) {
+    var on = !CartaTema.norm(_tema())[k];
+    btn.classList.toggle('on', on);
+    _goTemaIn(k, on ? 1 : 0);
+}
+
+function _goTemaReset() {
+    if (!confirm('¿Volver al diseño original? Se pierden los colores y las tipografías que elegiste.')) return;
+    _cartaCfg = _cartaCfg || {};
+    _cartaCfg.tema = {};
+    _goPintar();
+}
+
+/* EL AVISO QUE SALVA LA CARTA. Elegir los colores en un monitor a pleno brillo
+   y pegar el QR en una mesa de bar a media luz son dos cosas distintas: un
+   texto a 2:1 contra su fondo se ve «elegante» en la computadora del dueño y
+   no se lee en la mesa. No se bloquea —es su carta y su decisión— pero se
+   dice, con el número, antes de que esté impresa en veinte mesas. */
+function _goAvisoContraste() {
+    var box = document.getElementById('apMal');
+    if (!box) return;
+    var t = CartaTema.norm(_tema()), avisos = [];
+    function rev(a, b, qué) {
+        var c = CartaTema.contraste(a, b);
+        if (c < 4.5) avisos.push(qué + ' (' + c.toFixed(1) + ':1)');
+    }
+    rev(t.texto, t.fondo, 'el texto sobre el fondo');
+    rev(t.texto, t.tarjeta, 'el texto sobre las tarjetas');
+    rev(t.acento, t.fondo, 'el acento sobre el fondo');
+    box.innerHTML = avisos.length
+        ? '<div class="ap-mal"><b>Cuidado con el contraste:</b> casi no se lee ' + avisos.join('; ') +
+          '. Lo cómodo empieza en 4.5:1. La carta se abre en la mesa, de noche y con el ' +
+          'brillo bajo — lo que aquí se ve discreto, ahí no se ve.</div>'
+        : '';
 }
 
 /* Se lee del campo y se repinta la maqueta, pero NO se escribe en el servidor
@@ -906,19 +1123,67 @@ function cerrarGruposCarta() {
     _goCargado = false;   // al reabrir se relee: alguien más pudo acomodarlos
 }
 
+/* ══ EL LOGO Y EL NOMBRE VIAJAN EN LA FILA ════════════════════════════════
+   La carta es una página PÚBLICA, sin sesión: no puede leer el catálogo del
+   negocio ni el localStorage de nadie para averiguar cómo se llama la sucursal
+   o dónde está su logo. Así que lo que se vea arriba de la carta se guarda
+   junto con el resto de la configuración, aquí, donde sí hay sesión.
+
+   Se vuelven a escribir en CADA guardado: si alguien cambia el logo en
+   Configuración, la carta se entera al siguiente guardado del menú y no se
+   queda con el de antes para siempre. */
+function _logoParaCarta(cb) {
+    var url = _marcaCarta().logo || '';
+    if (!url) { cb(''); return; }
+    /* Una URL de Storage pesa cien caracteres: se guarda tal cual. Un base64
+       —los logos viejos, de antes de que subieran a Storage— puede pesar cientos
+       de kilobytes, y eso lo descargaría ENTERO cada cliente que abre la carta
+       en datos móviles, para pintarlo de 46 píxeles. Ese se reencoge. */
+    if (!/^data:/i.test(url)) { cb(url); return; }
+    if (url.length < 40000) { cb(url); return; }
+    try {
+        var img = new Image();
+        img.onload = function () {
+            try {
+                var MAX = 192, w = img.width, h = img.height;
+                if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; } }
+                else       { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; } }
+                var c = document.createElement('canvas');
+                c.width = w; c.height = h;
+                c.getContext('2d').drawImage(img, 0, 0, w, h);
+                /* PNG y no JPEG: muchos logos son transparentes y en JPEG el
+                   fondo sale negro. Si aun así no baja de 200 KB se va sin
+                   logo — mejor una carta sin imagen arriba que una carta que
+                   tarda cuatro segundos en la mesa. */
+                var mini = c.toDataURL('image/png');
+                cb(mini.length > 200000 ? '' : mini);
+            } catch (e) { cb(''); }
+        };
+        img.onerror = function () { cb(''); };
+        img.src = url;
+    } catch (e) { cb(''); }
+}
+
 async function guardarGruposCarta() {
     _goCfgIn();
+    var logo = await new Promise(function (res) { _logoParaCarta(res); });
     try {
         var r = await _supabase.rpc('menu_cfg_guardar', {
             p_neg: getNegocioActivo(), p_suc: _sucMenu(),
             p_cfg: { titulo: (_cartaCfg.titulo || '').trim(), nota: (_cartaCfg.nota || '').trim(),
-                     grupos: _goOrden }
+                     grupos: _goOrden,
+                     /* Normalizado antes de salir: lo que se guarda es lo que
+                        /carta-tema.js sabe leer, sin colores a medio escribir. */
+                     tema: CartaTema.norm(_tema()),
+                     logo: logo,
+                     sucNom: _sucCarta() }
         });
         if (r.error) throw r.error;
         cerrarGruposCarta();
     } catch (e) {
         alert('No se pudo guardar: ' + ((e && e.message) || e) +
-              String.fromCharCode(10, 10) + '¿Corriste la migración v66 en Supabase?');
+              String.fromCharCode(10, 10) + '¿Corriste la migración v66 en Supabase? ' +
+              'Y la v68, que es la que guarda los ajustes de apariencia.');
     }
 }
 
@@ -1042,24 +1307,73 @@ document.addEventListener('DOMContentLoaded', function() { renderMenu(); _sbInit
 </div>
 <style>
 /* La maqueta de teléfono. No es decoración: es la única forma de ver que
-   «Postres» quedó arriba de «Entradas» sin tener que imaginárselo. */
-.cel { width:252px; margin:0 auto; background:#13120f; border:7px solid #2a2721; border-radius:30px;
-  padding:14px 11px 16px; box-shadow:0 10px 34px rgba(0,0,0,.5); }
+   «Postres» quedó arriba de «Entradas» sin tener que imaginárselo — y, desde
+   que la carta se puede vestir, la única forma de ver el color antes de
+   pegarlo en veinte mesas.
+
+   TODO sale de las variables `--ct-*` que calcula /carta-tema.js, las MISMAS
+   que usa carta.html. No hay un solo color fijo aquí: si lo hubiera, la
+   maqueta se vería bonita con el tema oscuro y mentiría con cualquier otro. */
+.cel { width:252px; margin:0 auto; background:var(--ct-bg); border:7px solid #2a2721;
+  border-radius:30px; padding:14px 11px 16px; box-shadow:0 10px 34px rgba(0,0,0,.5);
+  font-family:var(--ct-f); }
 .cel-notch { width:52px; height:4px; background:#2a2721; border-radius:3px; margin:0 auto 12px; }
-.cel-tit { font-family:'Bebas Neue',sans-serif; font-size:17px; letter-spacing:1.2px; color:#f2ede2;
+.cel-logo { display:block; width:34px; height:34px; object-fit:contain; margin:0 auto 7px;
+  border-radius:7px; }
+.cel-tit { font-family:var(--ct-ft); font-size:17px; letter-spacing:1.2px; color:var(--ct-txt);
   text-align:center; line-height:1.15; }
-.cel-sub { font-size:9.5px; color:#8b8578; text-align:center; margin-top:3px; letter-spacing:.8px;
+.cel-sub { font-size:9.5px; color:var(--ct-dim); text-align:center; margin-top:3px; letter-spacing:.8px;
   text-transform:uppercase; }
+.cel-regla { width:34px; height:2px; background:var(--ct-ac); border-radius:2px; margin:7px auto 0; }
 .cel-tabs { display:flex; gap:5px; overflow:hidden; margin-top:12px; padding-bottom:3px; }
-.cel-tab { flex-shrink:0; font-size:9.5px; padding:5px 9px; border-radius:20px; background:#211e19;
-  color:#b5ae9f; white-space:nowrap; }
-.cel-tab.on { background:var(--gold,#c9a227); color:#13120f; font-weight:700; }
+.cel-tab { flex-shrink:0; font-size:9.5px; padding:5px 9px; border-radius:20px;
+  border:1px solid var(--ct-borde); background:var(--ct-sup);
+  color:var(--ct-dim); white-space:nowrap; }
+.cel-tab.on { background:var(--ct-ac-10); border-color:var(--ct-ac); color:var(--ct-ac); font-weight:600; }
 .cel-rej { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:11px; }
-.cel-card { background:#1c1915; border-radius:9px; overflow:hidden; }
-.cel-card .ph { height:42px; background:#262219; display:flex; align-items:center; justify-content:center;
-  font-size:15px; }
-.cel-card .nm { font-size:8.5px; color:#e8e2d6; padding:5px 6px 6px; line-height:1.3; }
-.cel-mas { font-size:9px; color:#6f6a5e; text-align:center; margin-top:9px; }
+.cel-card { background:var(--ct-sup); border:1px solid var(--ct-borde); border-radius:9px; overflow:hidden; }
+.cel-card .ph { height:42px; background:var(--ct-hueco); display:flex; align-items:center;
+  justify-content:center; font-size:15px; }
+.cel-card .tx { padding:5px 6px 6px; }
+.cel-card .nm { font-size:8.5px; line-height:1.3; color:var(--ct-nom-c);
+  font-weight:var(--ct-nom-w); font-style:var(--ct-nom-i); }
+.cel-card .ds { font-size:7.5px; line-height:1.35; margin-top:2px; color:var(--ct-des-c);
+  font-weight:var(--ct-des-w); font-style:var(--ct-des-i); }
+.cel-card .pr { font-size:8.5px; margin-top:3px; color:var(--ct-pre-c);
+  font-weight:var(--ct-pre-w); font-style:var(--ct-pre-i); }
+.cel-mas { font-size:9px; color:var(--ct-dim); text-align:center; margin-top:9px; }
+.cel-pie { font-size:7px; color:var(--ct-dim); text-align:center; margin-top:10px; letter-spacing:.9px;
+  opacity:.75; }
+/* ── Los controles de apariencia ──────────────────────────────────────── */
+.ap-cols { display:grid; grid-template-columns:repeat(2,1fr); gap:9px; }
+.ap-col { display:flex; align-items:center; gap:9px; background:var(--surface2);
+  border:1px solid var(--border); border-radius:9px; padding:7px 9px; }
+.ap-col input[type=color] { width:30px; height:30px; padding:0; border:1px solid var(--border);
+  border-radius:7px; background:transparent; cursor:pointer; flex-shrink:0; }
+.ap-col span { font-size:11.5px; color:var(--text-muted); line-height:1.3; }
+/* Un renglón por campo del platillo: negrita, cursiva y color juntos, porque
+   la pregunta real es «cómo se ve el PRECIO», no «dónde está la cursiva». */
+.ap-fila { display:flex; align-items:center; gap:7px; background:var(--surface2);
+  border:1px solid var(--border); border-radius:9px; padding:7px 9px; margin-bottom:7px; }
+.ap-fila > b { flex:1; font-size:12.5px; font-weight:500; color:var(--text); min-width:0; }
+.ap-tg { width:30px; height:30px; border-radius:7px; border:1px solid var(--border);
+  background:transparent; color:var(--text-dim); cursor:pointer; font-size:13px; flex-shrink:0; }
+.ap-tg.on { border-color:var(--green); color:var(--green); background:rgba(61,190,122,.1); }
+.ap-tg.it { font-style:italic; font-family:Georgia,serif; }
+.ap-tg.ng { font-weight:800; }
+.ap-fila input[type=color] { width:30px; height:30px; padding:0; border:1px solid var(--border);
+  border-radius:7px; background:transparent; cursor:pointer; flex-shrink:0; }
+.ap-auto { background:transparent; border:none; color:var(--text-dim); font-size:10px;
+  cursor:pointer; text-decoration:underline; padding:0 2px; flex-shrink:0; width:30px; }
+.ap-sel { width:100%; background:var(--surface2); border:1px solid var(--border); color:var(--text);
+  border-radius:9px; padding:10px 11px; font-family:inherit; font-size:13.5px; cursor:pointer; }
+.ap-mal { font-size:11.5px; line-height:1.55; color:var(--amber,#e0a93d); margin-top:9px;
+  background:rgba(224,169,61,.09); border:1px solid rgba(224,169,61,.35); border-radius:9px;
+  padding:9px 11px; }
+.ap-reset { background:transparent; border:1px solid var(--border); color:var(--text-dim);
+  border-radius:9px; padding:9px 12px; font-family:inherit; font-size:12px; cursor:pointer;
+  margin-top:11px; width:100%; }
+.ap-reset:hover { border-color:var(--text-muted); color:var(--text); }
 /* Las filas que se acomodan. Flechas y no arrastrar: esto se usa en tablet
    detrás de la barra, y arrastrar con el dedo en una lista con scroll propio
    falla justo cuando hay prisa. */
@@ -1112,6 +1426,7 @@ document.addEventListener('DOMContentLoaded', function() { renderMenu(); _sbInit
 <script src="/presencia.js"></script><!-- quién está trabajando aquí: avatares en la barra -->
 <script src="/qr-pairing.js"></script><!-- trae etaaxQrLogo: el ícono al centro del QR -->
 <script src="/reporte-marca.js"></script><!-- marca de la carta impresa -->
+<script src="/carta-tema.js"></script><!-- el mismo tema que pinta carta.html -->
 <script src="/nav-pref.js"></script>
 <script src="/modal-drag.js"></script>
 <script src="/modal-dock.js"></script>
