@@ -21558,29 +21558,179 @@ console.log('\n══ BH38 · Decir en qué unidad, y de dónde sale ══');
         eq(linea(BOTELLA, 0, 0, '0'), '', 'sin ruido'));
 
     /* ── 2. DE DÓNDE SALE LA EXISTENCIA QUE NO ESTÁ EN SUS BOTELLAS ── */
-    test('la existencia anterior dice cuánto está dentro de un batch', () => {
-        const i = src.indexOf('const eaBot     =');
-        const bloque = src.slice(i, i + 1900);
-        return eq(bloque.indexOf('bot en batches') > -1, true, 'explicado');
-    });
+    /* Por la FUNCIÓN, no por un recorte de 1900 caracteres: ya tronó dos veces
+       al agregarle una línea. Un candado que depende de cuánto texto hay antes
+       protege el tamaño, no la conducta. */
+    const _dentroSrc = (() => {
+        const i = src.indexOf('const _dentroBat = (copas) => {');
+        const fin = src.indexOf('\n        };', i);
+        return src.slice(i, fin > 0 ? fin : i + 1200);
+    })();
+    test('la existencia anterior dice cuánto está dentro de un batch', () =>
+        eq(_dentroSrc.indexOf('en batches') > -1, true, 'explicado'));
+    /* Y en las DOS unidades: contra la receta del batch, que está en litros, y
+       contra la bodega, que cuenta botellas. */
+    test('…en botellas y en litros, para no convertir en la cabeza', () =>
+        eq(_dentroSrc.indexOf("' bot'") > -1 && _dentroSrc.indexOf("' L'") > -1,
+           true, 'las dos'));
     test('…y se pinta junto a la anterior Y junto al físico', () => {
         return eq((src.match(/\$\{_dentroBat\(adj\.(ea|fis)\)\}/g) || []).length, 2,
                   'las dos cifras que no cuadran con el Paso 1');
     });
     /* Sin reparto no se pinta: la inmensa mayoría de los renglones no tiene
        nada dentro de ningún batch y una línea de más en cada uno es ruido. */
-    test('…y no se pinta cuando no hay nada dentro de un batch', () => {
-        const i = src.indexOf('const _dentroBat =');
-        const bloque = src.slice(i, i + 600);
-        return eq(/if \(!\(Math\.abs\(copas\) > 0\.05\)/.test(bloque), true, 'solo cuando aplica');
-    });
+    test('…y no se pinta cuando no hay nada dentro de un batch', () =>
+        eq(/if \(!\(Math\.abs\(copas\) > 0\.05\)/.test(_dentroSrc), true, 'solo cuando aplica'));
     /* Y explica POR QUÉ, no solo cuánto: el que mira un faltante necesita
        saber que el producto no se perdió, cambió de envase. */
-    test('…y el porqué está en el título, no solo el número', () => {
-        const i = src.indexOf('const _dentroBat =');
-        const bloque = src.slice(i, i + 700);
-        return eq(bloque.indexOf('está dentro de un batch') > -1 &&
-                  bloque.indexOf('no solo el') > -1, true, 'con explicación');
+    test('…y el porqué está en el título, no solo el número', () =>
+        eq(_dentroSrc.indexOf('está dentro de un batch') > -1 &&
+           _dentroSrc.indexOf('no solo el') > -1, true, 'con explicación'));
+}
+
+/* ═══════════ SUITE BH39 · UN BATCH HECHO DE OTRO BATCH ═══════════════════
+   «Limoncello SB Bot.» son las botellas de 750 ml, y su receta lleva UN
+   ingrediente: «Limoncello SB 1», que a su vez es el batch de la garrafa,
+   hecho con vodka. Dos niveles.
+
+   El reparto bajaba UNO. El Limoncello de la garrafa le devolvía su vodka al
+   vodka, pero el EMBOTELLADO le devolvía su contenido al Limoncello de la
+   garrafa… y ahí se quedaba. Con 1.09 L embotellados faltaban 0.69 L de vodka
+   en el Resultado, y nada lo decía: el renglón del vodka enseñaba 0.7 bot
+   cuando debían ser 1.07.
+
+   Lo cazó Edwin leyendo su propia barra: «son 2 lts de limoncello en SB1 y lo
+   de las botellas es otro litro». Dos litros en la garrafa y uno en botellas,
+   y el reporte solo contaba los de la garrafa.
+
+   Ahora los batches se reparten EN ORDEN: primero los que alimentan a otros,
+   para que cuando le toque al de abajo ya traiga lo que recibió de arriba.  */
+console.log('\n══ BH39 · Un batch hecho de otro batch ══');
+{
+    const K = crearContexto();
+    cargarJS(K, 'etaax-core.js');
+    cargarJS(K, 'insumo-label.js');
+    cargarJS(K, 'recetas/inventarios.js');
+    K._storage['etaax_negocio_activo'] = 'negT';
+    vm.runInContext('function _autoGuardar(){} function _refrescarAvisoPrebatches(){}', K);
+
+    /* El batch: 200 G limón + 320 G azúcar + 500 ML agua + 1750 ML vodka.
+       Total 2770 → el vodka es el 63.18 % de lo que hay en cualquier
+       Limoncello, esté en la garrafa o embotellado. */
+    const RECS = [
+        { id:'srLim1', nombre:'Limoncello SB 1', tipo:'sub-bebidas', status:'activa',
+          camposExtra:{ rendimientoFinal:'2600', unidadRendimientoFinal:'ML' },
+          ingredientes:[{ insumoId:'limon', cantidad:200, unidad:'G' },
+                        { insumoId:'azucar', cantidad:320, unidad:'G' },
+                        { insumoId:'agua', cantidad:500, unidad:'ML' },
+                        { insumoId:'vodka', cantidad:1750, unidad:'ML' }] },
+        { id:'srBot', nombre:'Limoncello SB Bot.', tipo:'sub-bebidas', status:'activa',
+          camposExtra:{ rendimientoFinal:'750', unidadRendimientoFinal:'ML' },
+          ingredientes:[{ insumoId:'preLim1', cantidad:750, unidad:'ML' }] }];
+    const INS = [
+        { id:'preLim1', nombre:'Limoncello SB 1', esSubReceta:true, recetaId:'srLim1', activo:'1' },
+        { id:'preBot',  nombre:'Limoncello SB Bot.', esSubReceta:true, recetaId:'srBot', activo:'1' },
+        { id:'vodka', nombre:"Vodka American 2 · Sam's", activo:'1' },
+        { id:'limon', nombre:'Limón', activo:'1' }, { id:'azucar', nombre:'Azucar', activo:'1' },
+        { id:'agua', nombre:'Agua', activo:'1' }];
+
+    /* mlGarrafa / mlBotellas: lo que se CONTÓ en cada uno. copaML = 1 para
+       leer los resultados directo en mililitros. */
+    const montar = (mlGarrafa, mlBotellas, conBot) => {
+        setVar(K, '_cacheRecetasInv', RECS);
+        setVar(K, '_cacheInsumosInv', INS);
+        setVar(K, 'invActual', { id:'invT', area:'barra', entradasLog:[], ventasCompuesto:{},
+            cancelaciones:[], descuentos:[], filas:[], prebatchProducidos:{}, cocktailsVendidos:{} });
+        const f = (id, nom, cont, ml) => ({ insumoId:id, nombre:nom, tipo:'copa', contNeto:cont,
+            copaML:1, existenciaAnterior:0, entradas:[], pesos:[],
+            cerradasBodega: ml / cont, cerradasBarra:0, ventasCopasDirectas:0,
+            cortesiaCopas:0, mermaCopas:0, ventasBotella:0 });
+        const filas = [f('preLim1','Limoncello SB 1', 2900, mlGarrafa)];
+        if (conBot !== false) filas.push(f('preBot','Limoncello SB Bot.', 750, mlBotellas));
+        filas.push(f('vodka',"Vodka American 2 · Sam's", 1800, 0),
+                   f('limon','Limón', 1000, 0), f('azucar','Azucar', 1000, 0),
+                   f('agua','Agua', 1000, 0));
+        setVar(K, 'filasCaptura', filas);
+        vm.runInContext('_consumoDirty = true; _cancelDirty = true;', K);
+        return K._repartoPrebatch();
+    };
+    const n2 = (v) => Math.round(v * 10) / 10;
+    const vodkaDe = (rep) => n2((rep.porInsumo['vodka'] || {}).fis || 0);
+
+    /* ── EL CASO, CON SUS CIFRAS ── */
+    test('EL CASO · el vodka de las botellas también llega', () =>
+        eq(vodkaDe(montar(1952, 1094)), n2((1952 + 1094) * 1750 / 2770), '1924 ml'));
+    /* La prueba de que ANTES faltaba: solo con la garrafa daba 1233 ml. */
+    test('…y es más que lo que había antes, que era solo la garrafa', () =>
+        eq(vodkaDe(montar(1952, 1094)) > n2(1952 * 1750 / 2770), true,
+           'faltaban 691 ml, los de las botellas'));
+    test('…sin botellas, sigue dando lo de la garrafa y ya', () =>
+        eq(vodkaDe(montar(1952, 0, false)), n2(1952 * 1750 / 2770), 'sin inventar nada'));
+    /* Cada insumo su proporción, no solo el que más pesa. */
+    test('…y el azúcar recibe la suya, de los dos niveles', () => {
+        const rep = montar(1952, 1094);
+        return eq(n2((rep.porInsumo['azucar'] || {}).fis || 0),
+                  n2((1952 + 1094) * 320 / 2770), 'proporcional');
+    });
+    /* NADA SE CUENTA DOS VECES: la suma de lo repartido a los insumos tiene
+       que ser exactamente lo que había en los dos batches juntos. Es el
+       candado que impide que una cascada infle el inventario. */
+    test('la suma repartida == lo que hay en los dos batches, ni un ml más', () => {
+        const rep = montar(1952, 1094);
+        const suma = ['vodka','limon','azucar','agua']
+            .reduce((s, k) => s + ((rep.porInsumo[k] || {}).fis || 0), 0);
+        return eq(n2(suma), 3046, 'sin inflar');
+    });
+    /* Y el batch de en medio NO se queda además con lo que recibió: ya lo
+       repartió hacia abajo. Si se lo quedara, el mismo Limoncello contaría
+       dos veces —dentro del embotellado y dentro de sus insumos—. */
+    test('…y el batch de en medio no se queda con lo que ya repartió', () => {
+        const rep = montar(1952, 1094);
+        return eq(n2((rep.porInsumo['preLim1'] || {}).fis || 0), 0, 'sin doble conteo');
+    });
+
+    /* ── EL ORDEN ──
+       Es lo único que hace que funcione: el que alimenta va primero. */
+    test('el que alimenta a otro se reparte PRIMERO', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        return eq(src.indexOf('function _ordenPrebatches') > -1 &&
+                  src.indexOf('_ordenPrebatches(_elegibles).forEach') > -1, true, 'en orden');
+    });
+    /* Una receta no puede llevarse a sí misma, pero si alguien lo captura el
+       Resultado no se puede colgar: se corta y se procesa como venga. */
+    test('…y un ciclo capturado por error no cuelga el Resultado', () => {
+        setVar(K, '_cacheRecetasInv', [
+            { id:'srA', nombre:'A', tipo:'sub-bebidas', status:'activa',
+              ingredientes:[{ insumoId:'preB', cantidad:100, unidad:'ML' }] },
+            { id:'srB', nombre:'B', tipo:'sub-bebidas', status:'activa',
+              ingredientes:[{ insumoId:'preA', cantidad:100, unidad:'ML' }] }]);
+        setVar(K, '_cacheInsumosInv', [
+            { id:'preA', nombre:'A', esSubReceta:true, recetaId:'srA', activo:'1' },
+            { id:'preB', nombre:'B', esSubReceta:true, recetaId:'srB', activo:'1' }]);
+        setVar(K, 'invActual', { id:'invT', area:'barra', entradasLog:[], ventasCompuesto:{},
+            cancelaciones:[], descuentos:[], filas:[], prebatchProducidos:{}, cocktailsVendidos:{} });
+        const f = (id, nom) => ({ insumoId:id, nombre:nom, tipo:'copa', contNeto:1000, copaML:1,
+            existenciaAnterior:0, entradas:[], pesos:[], cerradasBodega:1, cerradasBarra:0 });
+        setVar(K, 'filasCaptura', [f('preA','A'), f('preB','B')]);
+        vm.runInContext('_consumoDirty = true; _cancelDirty = true;', K);
+        let ok = true;
+        try { K._repartoPrebatch(); } catch (e) { ok = false; }
+        return eq(ok, true, 'no se cuelga');
+    });
+
+    /* ── EL RENGLÓN DE UN INSUMO QUE YA NO EXISTE ──
+       «Ya revisé y no sé por qué sigue apareciendo». El inventario guarda sus
+       renglones al abrirse; si después se borra ese insumo del catálogo, el
+       renglón sigue ahí arrastrando un faltante que no explica nadie. */
+    test('un renglón sin insumo detrás se marca', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        return eq(src.indexOf('este insumo ya no está en el catálogo') > -1, true, 'señalado');
+    });
+    test('…y dice de dónde salió, para saber qué hacer con él', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        const i = src.indexOf('este insumo ya no está en el catálogo');
+        return eq(src.slice(Math.max(0, i - 420), i).indexOf('quedó del día que se abrió') > -1,
+                  true, 'con explicación');
     });
 }
 

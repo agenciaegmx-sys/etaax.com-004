@@ -1261,8 +1261,51 @@ function _consumoBaseProd(fila) {
 // solo "pierde" lo que salió por ventas, y lo que sigue dentro de la botella
 // pesada NO genera falso faltante. El faltante real del batch aparece
 // proporcional en cada destilado.
+/* ══ UN BATCH HECHO DE OTRO BATCH ═════════════════════════════════════════
+   El caso real: «Limoncello SB Bot.» son las botellas de 750 ml, y su receta
+   lleva UN ingrediente — «Limoncello SB 1», que a su vez es el batch de la
+   garrafa, hecho con vodka.
+
+   El reparto bajaba UN escalón: el Limoncello de la garrafa le devolvía su
+   vodka al vodka, pero el Limoncello EMBOTELLADO le devolvía su contenido al
+   Limoncello de la garrafa… y ahí se quedaba. El vodka que hay dentro de las
+   botellas no llegaba a ninguna parte: con 1.09 L embotellados, faltaban 0.69
+   L de vodka en el Resultado sin que nada lo dijera.
+
+   Ahora los batches se reparten EN ORDEN: primero los que alimentan a otros,
+   para que cuando le toque al de abajo ya traiga lo que recibió de arriba.
+   Es lo mismo que hace una lista de materiales de dos niveles — y es lo que
+   el modelo decía desde el principio; solo faltaba encadenarlo. */
+function _ordenPrebatches(filas) {
+    /* A va ANTES que B si la receta de A lleva a B: así B hereda lo que A le
+       pasó. Orden por inserción con una visita en profundidad; un ciclo
+       (A lleva B y B lleva A) no puede existir en una receta real, pero si
+       alguien lo captura no se cuelga: se corta y se procesa como venga. */
+    var porId = {};
+    filas.forEach(function (x) { porId[x.pf.insumoId] = x; });
+    var orden = [], estado = {};
+    function visita(x) {
+        var k = x.pf.insumoId;
+        if (estado[k]) return;              // 1 = en curso (ciclo), 2 = listo
+        estado[k] = 1;
+        (x.sr.ingredientes || []).forEach(function (ing) {
+            var id = ing && ing.insumoId; if (!id) return;
+            var fi = _filaDeMiembro(id);
+            var hijo = fi && porId[fi.insumoId];
+            /* El hijo se visita primero SOLO si es otro batch: así cuando se
+               reparta él, ya traerá lo que este le entregó. */
+            if (hijo && hijo !== x && estado[hijo.pf.insumoId] !== 1) visita(hijo);
+        });
+        estado[k] = 2;
+        orden.unshift(x);                   // los padres quedan delante
+    }
+    filas.forEach(visita);
+    return orden;
+}
+
 function _repartoPrebatch() {
     var out = { porInsumo: {}, esPB: {}, lista: [] };
+    var _elegibles = [];
     (filasCaptura || []).forEach(function(pf){
         if (!pf || pf.tipo === 'pza' || pf.esCompuesto) return;
         var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(pf.insumoId) : null;
@@ -1272,6 +1315,10 @@ function _repartoPrebatch() {
         if (!_esFilaPrincipalPrebatch(pf.insumoId)) return;
         var sr = (window._recetaResolver ? window._recetaResolver(ins.recetaId) : getRecetas().find(function(r){ return r.id === ins.recetaId; }));
         if (!sr || !(sr.ingredientes || []).length) return;
+        _elegibles.push({ pf: pf, ins: ins, sr: sr });
+    });
+    _ordenPrebatches(_elegibles).forEach(function (_e) {
+        var pf = _e.pf, ins = _e.ins, sr = _e.sr;
         // TOTAL = suma de TODOS los ingredientes de la sub-receta (rendimiento base),
         // no solo los ligados a un insumo. Así cada insumo recibe su proporción real
         // dentro del batch completo (ej. Aperol 60 de 1180 ml), no dentro del subconjunto
@@ -1288,8 +1335,16 @@ function _repartoPrebatch() {
         // Magnitudes del prebatch en unidad BASE (ml/g)
         var toB = pf.tipo === 'copa' ? (parseFloat(pf.copaML) || 0) : 1;
         if (pf.tipo === 'copa' && !toB) return;
-        var eaB    = (parseFloat(pf.existenciaAnterior) || 0) * toB;
-        var entB   = getEntradasCopas(pf) * toB;
+        /* ══ LO QUE ESTE BATCH YA RECIBIÓ DE OTRO ════════════════════════
+           Si llegó aquí después de un batch que lo lleva como ingrediente, su
+           parte ya está en out.porInsumo —en las unidades de SU fila— y hay
+           que devolverla a unidad base antes de repartirla hacia abajo. Sin
+           esto, el vodka de las botellas de Limoncello se quedaba a medio
+           camino. */
+        var _rec = out.porInsumo[pf.insumoId];
+        var _her = function (campo) { return _rec ? (parseFloat(_rec[campo]) || 0) * toB : 0; };
+        var eaB    = (parseFloat(pf.existenciaAnterior) || 0) * toB + _her('ea');
+        var entB   = getEntradasCopas(pf) * toB + _her('ent');
         /* Lo VENDIDO del batch, en unidad base, buscado POR SU SUB-RECETA. Dos
            razones para no usar el id del insumo ni calcVentasCopasRecetas:
              · calcVentasCopasRecetas devuelve 0 sin copaML (un prebatch de cocina se
@@ -1300,15 +1355,17 @@ function _repartoPrebatch() {
            En los dos casos el batch salía con venta 0 y sus insumos no recibían nada. */
         var ventaB = _consumoBaseSubReceta(ins.recetaId)
                    + (parseFloat(pf.ventasCopasDirectas) || 0) * toB
-                   + (parseFloat(pf.ventasBotella) || 0) * (parseFloat(pf.contNeto) || 0);
-        var cmB    = ((parseFloat(pf.cortesiaCopas) || 0) + (parseFloat(pf.mermaCopas) || 0)) * toB + (parseFloat(pf.mermaBase) || 0);
+                   + (parseFloat(pf.ventasBotella) || 0) * (parseFloat(pf.contNeto) || 0)
+                   + _her('vco');
+        var cmB    = ((parseFloat(pf.cortesiaCopas) || 0) + (parseFloat(pf.mermaCopas) || 0)) * toB +
+                     (parseFloat(pf.mermaBase) || 0) + _her('cm');
         /* El batch también se va en lo cancelado: si se cancelan diez Negronis
            hechos con el Mix Negroni, ese mix salió de la botella. Sin esto, el
            reparto de la variancia le echaba la culpa a los insumos. */
         var canB   = getCancelacionesCopas(pf.insumoId) * toB
-                   + _cancelBaseSubReceta(ins.recetaId);
-        var teoB   = calcExistenciaTeorica(pf) * toB;
-        var fisB   = calcExistencia(pf) * toB;
+                   + _cancelBaseSubReceta(ins.recetaId) + _her('can');
+        var teoB   = calcExistenciaTeorica(pf) * toB + _her('teo');
+        var fisB   = calcExistencia(pf) * toB + _her('fis');
         out.esPB[pf.insumoId] = 1;
         var desg = [];
         partes.forEach(function(p){
@@ -1333,6 +1390,10 @@ function _repartoPrebatch() {
             a.teo += conv(teoB);  a.fis += conv(fisB);
             a.dif += conv(fisB - teoB);
         });
+        /* Lo heredado ya se repartió hacia abajo: si se quedara además en su
+           propio renglón, el mismo producto contaría dos veces —una dentro del
+           batch de arriba y otra en los insumos de este—. Se vacía. */
+        if (_rec) { ['ea','ent','vco','cm','can','teo','fis','dif','venta'].forEach(function (c) { _rec[c] = 0; }); }
         out.lista.push({ insumoId: pf.insumoId, nombre: pf.nombre, fisML: fisB, teoML: teoB, desglose: desg });
     });
     return out;
@@ -8944,10 +9005,15 @@ function _step5TablasHTML() {
         const _nb = (v) => { const r = Math.round(v * 10) / 10; return r % 1 ? r.toFixed(1) : String(r); };
         const _dentroBat = (copas) => {
             if (!(Math.abs(copas) > 0.05) || !(copasBot > 0)) return '';
+            /* En botellas Y en litros. Se compara contra la receta del batch,
+               que está en litros, y contra la bodega, que cuenta botellas: dar
+               solo una de las dos obliga a convertir en la cabeza. */
+            var _ml = copas * (parseFloat(fila.copaML) || 0);
+            var _lt = _ml ? '  ·  ' + (Math.abs(_ml) >= 1000 ? _nb(_ml / 1000) + ' L' : _nb(_ml) + ' ml') : '';
             return '<div style="font-size:9px;opacity:.7;white-space:nowrap" title="Este producto' +
                 ' está dentro de un batch (una sub-receta de producción propia). Su parte se le' +
                 ' devuelve aquí para que la diferencia mire TODO el producto, no solo el' +
-                ' embotellado.">↳ ' + _nb(copas / copasBot) + ' bot en batches</div>';
+                ' embotellado.">↳ ' + _nb(copas / copasBot) + ' bot' + _lt + ' en batches</div>';
         };
         const entBotStr = entBot > 0 ? `+${entBot % 1 ? entBot.toFixed(1) : entBot} ${_unidadCompra(fila)}` : '—';
         const fisicoBot = copasBot > 0 ? (fisico/copasBot).toFixed(2) : fisico.toFixed(1);
@@ -8957,6 +9023,22 @@ function _step5TablasHTML() {
                 <td style="min-width:140px">
                     <div style="font-size:14px;font-weight:600">${etx(insumoTitulo(fila))}</div>
                     <div style="font-size:11.5px;color:var(--text-dim)">${fila.categoria||''}</div>
+                    ${(function(){
+                        /* ══ UN RENGLÓN SIN INSUMO DETRÁS ══════════════════════
+                           El inventario guarda sus renglones cuando se abre. Si
+                           después se borra ese insumo del catálogo, el renglón
+                           sigue aquí con su existencia anterior — y arrastra un
+                           faltante de un producto que ya no existe, sin que
+                           nada diga por qué sigue apareciendo. Le pasó con un
+                           vodka viejo: «ya revisé y no sé por qué sigue». */
+                        var _vivo = (typeof window._insumoResolver === 'function')
+                            ? window._insumoResolver(fila.insumoId) : null;
+                        if (_vivo) return '';
+                        return '<div style="font-size:9.5px;color:var(--accent);margin-top:2px;' +
+                            'line-height:1.5" title="Este renglón quedó del día que se abrió el ' +
+                            'inventario. El insumo ya no está en el catálogo, así que su faltante ' +
+                            'no lo explica nadie.">⚠️ este insumo ya no está en el catálogo</div>';
+                    })()}
                     ${_contC?`<div style="font-size:9.5px;color:#7ab8f5">📦 ${_contC}</div>`:''}
                     <button onclick="event.stopPropagation();toggleBateo('${fila.insumoId}')" style="margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid ${esBateo(fila.insumoId)?'#3dbe7a':'#888'};background:${esBateo(fila.insumoId)?'#3dbe7a':'transparent'};color:${esBateo(fila.insumoId)?'#fff':'#999'}">🏏 ${esBateo(fila.insumoId)?'De bateo ✓':'Marcar bateo'}</button>${_btnNotaInsumo(fila.insumoId)}
                 </td>
