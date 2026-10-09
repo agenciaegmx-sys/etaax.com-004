@@ -1375,7 +1375,12 @@ function _repartoPrebatch() {
             // no encontraba nada y ese insumo se quedaba SIN su parte del batch
             // (coctelería en cero aunque el prebatch sí se hubiera consumido).
             var fi = _filaDeMiembro(p.id);
-            desg.push({ insumoId: (fi && fi.insumoId) || p.id, nombre: fi ? fi.nombre : p.id, ml: fisB * sh });
+            /* Sin renglón en este inventario se caía al ID CRUDO y el reporte
+               imprimía «7d0b72c22» como si fuera un producto. El catálogo sí
+               sabe su nombre aunque no se esté contando aquí. */
+            var _insP = (typeof window._insumoResolver === 'function') ? window._insumoResolver(p.id) : null;
+            var _nomP = (fi && fi.nombre) || (_insP && _insP.nombre) || '(sin renglón)';
+            desg.push({ insumoId: (fi && fi.insumoId) || p.id, nombre: _nomP, ml: fisB * sh });
             if (!fi) return; // ingrediente sin fila en este inventario → solo informativo
             var u = fi.tipo === 'copa' ? (parseFloat(fi.copaML) || 0) : (fi.tipo === 'pza' ? (parseFloat(fi.contNeto) || 0) : 1);
             if (fi.tipo !== 'peso' && !(u > 0)) return;
@@ -9966,6 +9971,48 @@ function verReporteDirectivo(gerencial, modo) {
     // ── Inventario completo: render por grupo y PAGINADO en hojas A4 (~26 filas por hoja) ──
     const _ncRd = v => (v % 1 ? (Math.round(v*10)/10).toFixed(1) : v);
     const _grupoInvHTML = ([grp, items]) => {
+        /* ══ LA PRODUCCIÓN PROPIA NO ES UNA TABLA DE VARIANZA ═════════════
+           Se imprimía con las mismas nueve columnas que un refresco —entradas,
+           venta por copa, venta por botella, varianza, %, dif. $— y TODAS
+           salían en cero, porque su diferencia no vive ahí: ya se repartió a
+           los insumos que lo componen. Nueve columnas en cero junto a nueve
+           columnas con datos se leen como un error, no como una aclaración.
+
+           Un batch, en el reporte, contesta dos preguntas: cuántos se hicieron
+           y cuánto quedó. Lo demás ya está contado en sus insumos. */
+        if (grp === GPROD_RD) {
+            const _u = (a, v) => a.f.tipo === 'pza' ? v.toFixed(0) + ' pza'
+                               : (a.copasBot > 0 ? (v / a.copasBot).toFixed(2) : v.toFixed(1)) + ' bot';
+            const _ml = (a, v) => {
+                var ml = a.f.tipo === 'pza' ? v * (parseFloat(a.f.contNeto) || 0)
+                                            : v * (parseFloat(a.f.copaML) || 0);
+                if (!ml) return '';
+                return '  ·  ' + (Math.abs(ml) >= 1000 ? (Math.round(ml / 100) / 10) + ' L'
+                                                       : Math.round(ml) + ' ml');
+            };
+            return `<div style="break-inside:avoid;page-break-inside:avoid;margin-bottom:10px">
+              <div class="rd-sec" style="margin-top:14px">${etx(grp)}</div>
+              <div style="font-size:9.5px;color:#56514a;margin:-4px 0 7px;line-height:1.5">
+                Informativo. Lo que se llevó cada batch ya está descontado en sus insumos,
+                y su diferencia se reparte ahí — por eso aquí no hay varianza.</div>
+              ${items.map(a => {
+                  const hechos = (typeof _batchesProducidos === 'function')
+                      ? _batchesProducidos(a.f.insumoId) : 0;
+                  const partes = ((_repCache && (_repCache.lista || [])
+                      .find(x => x.insumoId === a.f.insumoId) || {}).desglose || []);
+                  return `<div style="border-bottom:1px solid #cfcabd;padding:6px 2px">
+                    <div style="font-size:11.5px;font-weight:700;color:#15140f">${etx(a.f.nombre)}</div>
+                    <div style="font-size:10.5px;color:#3f3b33;margin-top:2px">
+                      Batches hechos en el periodo: <b>${hechos % 1 ? hechos.toFixed(1) : hechos}</b>
+                      &nbsp;·&nbsp; Existencia actual: <b>${_u(a, a.fisico)}${_ml(a, a.fisico)}</b></div>
+                    ${partes.length ? `<div style="font-size:9.5px;color:#56514a;margin-top:3px;line-height:1.6">
+                      Se reparte a: ${partes.map(p => etx(p.nombre) + ' ' +
+                          (Math.abs(p.ml) >= 1000 ? (Math.round(p.ml / 100) / 10) + ' L'
+                                                  : Math.round(p.ml) + ' ml')).join('  ·  ')}</div>` : ''}
+                  </div>`;
+              }).join('')}
+            </div>`;
+        }
         let gDif = 0, gVend = 0, gNet = 0;
         const _pzaGrupo = items.length > 0 && items.every(a => a.f.tipo === 'pza');
         // Color por SIGNO (no por severidad): rojo = FALTANTE (−), verde =

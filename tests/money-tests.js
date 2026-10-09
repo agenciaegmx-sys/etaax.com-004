@@ -22015,6 +22015,74 @@ console.log('\n══ BH41 · «Sin renglón» cuando el renglón sí está ═�
     });
 }
 
+/* ═══════════ SUITE BH42 · LA PRODUCCIÓN PROPIA EN EL IMPRESO ════════════
+   En el reporte impreso, los batches salían con las mismas nueve columnas que
+   un refresco —entradas, venta por copa, venta por botella, varianza, %,
+   dif. $— y TODAS en cero. No porque falten datos: su diferencia no vive ahí,
+   ya se repartió a los insumos que lo componen.
+
+   Nueve columnas en cero junto a nueve columnas con datos se leen como un
+   error, no como una aclaración. Un batch, en el reporte, contesta dos
+   preguntas: cuántos se hicieron y cuánto quedó. Lo demás ya está contado en
+   sus insumos.
+
+   Y de paso: un ingrediente sin renglón en este inventario se imprimía con su
+   ID CRUDO —«7d0b72c22»— como si fuera un producto.                        */
+console.log('\n══ BH42 · La producción propia en el impreso ══');
+{
+    const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    /* El bloque del grupo, extraído por su guardia: es lo que decide si ese
+       grupo se imprime como tabla o como informativo. */
+    const bloque = (() => {
+        const i = src.indexOf("if (grp === GPROD_RD) {");
+        const fin = src.indexOf('        let gDif = 0, gVend = 0, gNet = 0;', i);
+        return src.slice(i, fin > 0 ? fin : i + 3000);
+    })();
+
+    test('la producción propia se imprime aparte de las tablas de varianza', () =>
+        eq(src.indexOf("if (grp === GPROD_RD) {") > -1, true, 'su propio bloque'));
+    /* Las dos preguntas que contesta un batch. */
+    test('…diciendo cuántos batches se hicieron', () =>
+        eq(bloque.indexOf('Batches hechos en el periodo') > -1 &&
+           bloque.indexOf('_batchesProducidos(a.f.insumoId)') > -1, true, 'lo producido'));
+    test('…y cuánto quedó, con su equivalencia en litros', () =>
+        eq(bloque.indexOf('Existencia actual') > -1 && bloque.indexOf("' L'") > -1,
+           true, 'lo que hay'));
+    test('…y en qué se reparte', () =>
+        eq(bloque.indexOf('Se reparte a:') > -1, true, 'la distribución'));
+    /* Lo que NO debe llevar: las columnas que salían en cero. */
+    ['Varianza', 'Dif. $', 'Vta. copa', 'Entradas'].forEach(col =>
+        test('…y NO lleva la columna «' + col + '», que salía en cero', () =>
+            eq(bloque.indexOf(col) === -1, true, 'sin ceros que parecen error')));
+    /* Y dice POR QUÉ no hay varianza, que es la pregunta que deja un bloque
+       sin esas columnas al lado de otros que sí las tienen. */
+    test('…y explica por qué aquí no hay varianza', () =>
+        eq(bloque.indexOf('ya está descontado en sus insumos') > -1, true, 'con el motivo'));
+    /* El resto de los grupos sigue imprimiéndose como siempre: esto es un caso
+       especial, no un cambio de formato para todos. */
+    test('los demás grupos siguen con su tabla completa', () => {
+        const i = src.indexOf('const _grupoInvHTML = ([grp, items]) => {');
+        const resto = src.slice(i, i + 9000);
+        return eq(resto.indexOf('let gDif = 0, gVend = 0, gNet = 0;') > -1 &&
+                  resto.indexOf('const rows = items.map(a => {') > -1, true, 'intactos');
+    });
+
+    /* ── EL ID CRUDO COMO NOMBRE ──
+       «Contiene: California Don Simón 2183 ml · 7d0b72c22 2183 ml». Un
+       ingrediente sin renglón en este inventario caía al id. El catálogo sabe
+       su nombre aunque no se esté contando aquí. */
+    test('un ingrediente sin renglón se imprime con su NOMBRE, no con su id', () => {
+        const i = src.indexOf('var _insP = (typeof window._insumoResolver');
+        const b = src.slice(i, i + 420);
+        return eq(b.indexOf('_insP && _insP.nombre') > -1 &&
+                  b.indexOf("'(sin renglón)'") > -1, true, 'legible');
+    });
+    test('…y si de plano no está en el catálogo, lo dice en palabras', () => {
+        const i = src.indexOf('var _nomP =');
+        return eq(src.slice(i, i + 200).indexOf("|| '(sin renglón)'") > -1, true, 'sin ids sueltos');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
