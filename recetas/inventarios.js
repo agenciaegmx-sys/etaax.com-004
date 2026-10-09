@@ -1416,9 +1416,41 @@ function _prebatchDiagnostico() {
            receta con su nombre exacto y está apuntando a otra. «Mix Negroni
            PR» no dispara nada, porque no existe ninguna receta con ese nombre. */
         var _n = function (x) { return String(x || '').trim().toLowerCase(); };
+        /* ══ EL PARENTESCO FALSO ══════════════════════════════════════════
+           LA CAUSA REAL, y la que ningún aviso veía. «Limoncello SB Bot.»
+           tenía origenId apuntando a «Limoncello SB 1» —de haberla creado
+           duplicando— así que el sistema la tomaba por «la copia de esa
+           sucursal» de la otra. El mismo recetaId daba DOS respuestas: la
+           ficha enseñaba la infusión con su vodka y el cálculo usaba la de
+           embotellar.
+
+           El resolver ya no se deja engañar (insumo-label.js ignora una copia
+           que se llama distinto), pero el dato sigue torcido y conviene
+           arreglarlo: mientras esté así, cualquier pantalla que mire el
+           origenId a pelo se vuelve a confundir. */
+        var _mal = recs.find(function (r) {
+            if (!r || !r.origenId) return false;
+            var m = recs.find(function (y) { return y && y.id === r.origenId; });
+            return m && _n(m.nombre) && _n(r.nombre) && _n(m.nombre) !== _n(r.nombre) &&
+                   (r.id === sr.id || m.id === sr.id);
+        });
+        if (_mal) {
+            var _padre = recs.find(function (y) { return y && y.id === _mal.origenId; });
+            out.push({ fila: f.nombre, mal: 'parentesco', soltarId: _mal.id,
+                txt: 'la sub-receta «' + _mal.nombre + '» está marcada como copia de «' +
+                     ((_padre && _padre.nombre) || '?') + '», pero son recetas distintas — ' +
+                     'pasa al crear una duplicando la otra' });
+        }
+
+        /* La gemela no puede ser la MISMA receta vista por otro lado. Un
+           negocio con sucursales tiene una copia legítima de «Tinto de Verano
+           SB» por cada una: todas se llaman igual y todas SON esa receta.
+           Avisar ahí es gritar en lo normal — le salieron tres renglones de
+           golpe. Se compara por la raíz, no por el id. */
+        var _raiz = function (r) { return (r && (r.origenId || r.id)) || ''; };
         var gemela = recs.find(function (r) {
             return r && String(r.tipo || '').indexOf('sub') === 0 &&
-                   _n(r.nombre) === _n(f.nombre) && r.id !== sr.id;
+                   _n(r.nombre) === _n(f.nombre) && _raiz(r) !== _raiz(sr);
         });
         if (gemela) {
             out.push({ fila: f.nombre, mal: 'ligacruzada', recetaId: gemela.id, insumoId: f.insumoId,
@@ -1574,6 +1606,40 @@ function _copiarDiagPrebatch() {
 }
 window._copiarDiagPrebatch = _copiarDiagPrebatch;
 
+/* Soltar un parentesco falso: la receta deja de ser «copia de» otra y pasa a
+   valerse por sí misma. No se borra nada ni se toca su contenido — solo se
+   quita el vínculo que nunca debió existir. */
+async function _soltarParentesco(recetaId) {
+    var r = getRecetas().find(function (x) { return x.id === recetaId; });
+    if (!r) { alert('No se encontró la sub-receta.'); return; }
+    var padre = getRecetas().find(function (x) { return x.id === r.origenId; });
+    if (!confirm('«' + (r.nombre || '') + '» va a dejar de ser una copia de «' +
+                 ((padre && padre.nombre) || '?') + '».' + String.fromCharCode(10, 10) +
+                 'No se borra ni se cambia su contenido: solo se quita un vínculo que no ' +
+                 'le corresponde, porque son recetas distintas.' +
+                 String.fromCharCode(10, 10) + '¿Las separamos?')) return;
+    var antes = r.origenId;
+    delete r.origenId;
+    var negId = getNegocioActivo();
+    try {
+        if (typeof _supabase !== 'undefined' && negId) {
+            var q = await _supabase.from('recetas')
+                .upsert({ id: r.id, negocio_id: negId, datos: r }, { onConflict: 'id' });
+            if (q.error) throw q.error;
+        }
+        try { _skPut(_sk('recetas'), JSON.stringify(getRecetas())); } catch (e2) {}
+    } catch (e) {
+        r.origenId = antes;   // no se guardó: no se hizo
+        alert('No se pudo guardar, así que NO se hizo.' + String.fromCharCode(10, 10) +
+              ((e && e.message) || e));
+        return;
+    }
+    _consumoDirty = true; _cancelDirty = true;
+    window._step5Dirty = true; window._step5Force = true;
+    if (typeof renderStepContent === 'function') renderStepContent();
+}
+window._soltarParentesco = _soltarParentesco;
+
 /* ══ ENSEÑAR LA CUENTA, NO SOLO EL RESULTADO ══════════════════════════════
    «Capturo la producción y el vodka no baja» puede romperse en cinco sitios
    distintos, y desde fuera los cinco se ven igual: un cero. Esto desarma la
@@ -1648,8 +1714,11 @@ function _prebatchDesglose() {
                insumo y no sea la que usa, el arreglo se ofrece aquí mismo:
                es donde se está mirando el problema. */
             religarA: (function () {
+                // Por la RAÍZ, no por el id: una copia legítima por sucursal
+                // es la misma receta y no es ninguna gemela.
+                var _rz = function (r) { return (r && (r.origenId || r.id)) || ''; };
                 var g = recs.find(function (r) {
-                    return r && String(r.tipo || '').indexOf('sub') === 0 && r.id !== sr.id &&
+                    return r && String(r.tipo || '').indexOf('sub') === 0 && _rz(r) !== _rz(sr) &&
                            String(r.nombre || '').trim().toLowerCase() ===
                            String(nom || '').trim().toLowerCase();
                 });
@@ -1739,6 +1808,12 @@ function _prebatchAvisoHTML() {
                a otro módulo a buscar un insumo entre tres que se llaman casi
                igual, para cambiarle una liga que no se ve por ningún lado, es
                pedirle que no lo haga. */
+            if (x.mal === 'parentesco' && x.soltarId)
+                return '<li><b style="color:var(--text)">' + etx(x.fila) + '</b> — ' + etx(x.txt) +
+                    ' <button onclick="_soltarParentesco(\'' + x.soltarId + '\')" ' +
+                    'style="margin-left:6px;font-size:10.5px;padding:2px 9px;border-radius:5px;cursor:pointer;' +
+                    'background:transparent;border:1px solid var(--green);color:var(--green)">' +
+                    '✂️ Separarlas</button></li>';
             var btn = (x.mal === 'ligacruzada' && x.insumoId && x.recetaId)
                 ? ' <button onclick="_religarPrebatch(\'' + x.insumoId + '\',\'' + x.recetaId + '\')" ' +
                   'style="margin-left:6px;font-size:10.5px;padding:2px 9px;border-radius:5px;cursor:pointer;' +

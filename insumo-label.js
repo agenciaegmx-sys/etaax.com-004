@@ -111,14 +111,22 @@
             var k = getSig ? getSig() : getArr();
             if (_ix === null || k !== _key) {
                 _ix = {}; _byCanon = {};
-                (getArr() || []).forEach(function (x) {
-                    if (!x || !x.id) return;
-                    _ix[x.id] = x;
-                    if (x.origenId) { // COPIA por sucursal → indexar canónico → {sucursal: copia}
-                        var mem = window._insumoSucursales ? window._insumoSucursales(x) : (x.sucursalId ? [x.sucursalId] : []);
-                        var bag = (_byCanon[x.origenId] = _byCanon[x.origenId] || {});
-                        mem.forEach(function (m) { bag[_eff(m)] = x; });
-                    }
+                var _arr = getArr() || [];
+                _arr.forEach(function (x) { if (x && x.id) _ix[x.id] = x; });
+                _arr.forEach(function (x) {
+                    if (!x || !x.id || !x.origenId) return;   // COPIA por sucursal
+                    /* Mismo criterio que el resolver de recetas: una «copia»
+                       que se llama DISTINTO que su maestro no es una copia,
+                       es otro producto con el parentesco mal puesto —y
+                       devolverla en lugar del maestro le cambia el producto a
+                       quien preguntó. Pasa al duplicar un registro para crear
+                       otro parecido, que es lo más natural del mundo. */
+                    var _m = _ix[x.origenId];
+                    var _nm = function (o) { return String((o && o.nombre) || '').trim().toLowerCase(); };
+                    if (_m && _nm(_m) && _nm(x) && _nm(_m) !== _nm(x)) return;
+                    var mem = window._insumoSucursales ? window._insumoSucursales(x) : (x.sucursalId ? [x.sucursalId] : []);
+                    var bag = (_byCanon[x.origenId] = _byCanon[x.origenId] || {});
+                    mem.forEach(function (m) { bag[_eff(m)] = x; });
                 });
                 _key = k;
             }
@@ -140,17 +148,38 @@
         function _sucAct() { try { return localStorage.getItem('etaax_sucursal_activa') || ''; } catch (e) { return ''; } }
         function _eff(s) { return s || 'suc_principal'; }
         function _mem(r) { return (r && r.sucursales && r.sucursales.length) ? r.sucursales : (r && r.sucursalId ? [r.sucursalId] : []); }
+        function _nom(r) { return String((r && r.nombre) || '').trim().toLowerCase(); }
         return function (id) {
             var k = getSig ? getSig() : getArr();
             if (_ix === null || k !== _key) {
                 _ix = {}; _byCanon = {};
-                (getArr() || []).forEach(function (r) {
-                    if (!r || !r.id) return;
-                    _ix[r.id] = r;
-                    if (r.origenId) {
-                        var bag = (_byCanon[r.origenId] = _byCanon[r.origenId] || {});
-                        _mem(r).forEach(function (m) { bag[_eff(m)] = r; });
-                    }
+                var arr = getArr() || [];
+                arr.forEach(function (r) { if (r && r.id) _ix[r.id] = r; });
+                arr.forEach(function (r) {
+                    if (!r || !r.id || !r.origenId) return;
+                    /* ══ UNA «COPIA» QUE SE LLAMA DISTINTO NO ES UNA COPIA ═══
+                       EL CASO QUE COSTÓ CUATRO VUELTAS. En el catálogo de
+                       Edwin, la sub-receta «Limoncello SB Bot.» tenía origenId
+                       apuntando a «Limoncello SB 1» —seguramente por haberla
+                       creado duplicando— y el resolver la devolvía como «la
+                       copia de esa sucursal».
+
+                       Resultado: el MISMO recetaId daba dos respuestas según
+                       quién preguntara. La ficha, que busca por id crudo,
+                       enseñaba «Limoncello SB 1» con su vodka; el cálculo, que
+                       pasa por aquí, usaba la de embotellar. El vodka nunca se
+                       descontaba y todas las pantallas se veían bien.
+
+                       Una copia por sucursal es EL MISMO producto en otra
+                       sucursal: la crea «vincular a sucursal» y le deja el
+                       mismo nombre. Si el nombre es otro, es otro producto con
+                       un parentesco mal puesto, y devolverlo en lugar del
+                       maestro es cambiarle la receta a alguien a sus espaldas.
+                       Ante la duda, el maestro: es lo que el dato pidió. */
+                    var maestro = _ix[r.origenId];
+                    if (maestro && _nom(maestro) && _nom(r) && _nom(maestro) !== _nom(r)) return;
+                    var bag = (_byCanon[r.origenId] = _byCanon[r.origenId] || {});
+                    _mem(r).forEach(function (m) { bag[_eff(m)] = r; });
                 });
                 _key = k;
             }

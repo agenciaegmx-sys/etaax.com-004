@@ -21339,6 +21339,149 @@ console.log('\n══ BH36 · El botón que «no hizo nada» ══');
     });
 }
 
+/* ═══════════ SUITE BH37 · UNA «COPIA» QUE SE LLAMA DISTINTO ══════════════
+   LA CAUSA, después de cuatro vueltas. La encontró el propio diálogo de
+   confirmación, que decía:
+
+       «Limoncello SB 1» va a producir «Limoncello SB 1», en vez de
+       «Limoncello SB 1».
+
+   El mismo nombre tres veces — mientras el desglose, al lado, decía «hace
+   Limoncello SB Bot.». EL MISMO recetaId daba DOS RESPUESTAS según quién
+   preguntara: la ficha busca por id crudo y encontraba la infusión con su
+   vodka; el cálculo pasa por el resolver y recibía la de embotellar.
+
+   Por qué: «Limoncello SB Bot.» tenía `origenId` apuntando a «Limoncello SB
+   1» —de haberla creado duplicándola, que es lo más natural del mundo— y el
+   resolver la tomaba por «la copia de esa sucursal».
+
+   Una copia por sucursal es EL MISMO producto en otra sucursal: la crea
+   «vincular a sucursal» y le deja el mismo nombre. Si el nombre es otro, es
+   otro producto con el parentesco mal puesto, y devolverlo en lugar del
+   maestro es cambiarle la receta a alguien a sus espaldas.
+
+   Y explica por qué «Ligarlo al correcto» no hacía nada: la liga del insumo
+   YA apuntaba a la receta correcta. Lo torcido era el parentesco de la OTRA. */
+console.log('\n══ BH37 · Una «copia» que se llama distinto ══');
+{
+    const R = crearContexto();
+    cargarJS(R, 'etaax-core.js');
+    cargarJS(R, 'insumo-label.js');
+    cargarJS(R, 'recetas/inventarios.js');
+    R._storage['etaax_negocio_activo'] = 'negT';
+    vm.runInContext('function _autoGuardar(){} function _refrescarAvisoPrebatches(){} function renderStepContent(){}', R);
+
+    const INFUSION = { id:'srInfusion', nombre:'Limoncello SB 1', tipo:'sub-bebidas', status:'activa',
+        ingredientes:[{ insumoId:'vodka', cantidad:1.75, unidad:'LT' }] };
+    const BOT_MAL  = { id:'srBotella', nombre:'Limoncello SB Bot.', tipo:'sub-bebidas', status:'activa',
+        origenId:'srInfusion', sucursalId:'madero',          // ← el parentesco falso
+        ingredientes:[{ insumoId:'preLim1', cantidad:750, unidad:'ML' }] };
+    const BOT_OK   = Object.assign({}, BOT_MAL); delete BOT_OK.origenId;
+    /* Y una copia LEGÍTIMA: mismo producto, mismo nombre, otra sucursal. */
+    const COPIA_OK = { id:'srInfMadero', nombre:'Limoncello SB 1', tipo:'sub-bebidas', status:'activa',
+        origenId:'srInfusion', sucursalId:'madero',
+        ingredientes:[{ insumoId:'vodka', cantidad:2, unidad:'LT' }] };
+
+    const montar = (recetas, suc) => {
+        setVar(R, '_cacheRecetasInv', recetas);
+        setVar(R, '_cacheInsumosInv', [
+            { id:'preLim1', nombre:'Limoncello SB 1', esSubReceta:true, recetaId:'srInfusion', activo:'1' },
+            { id:'vodka', nombre:"Vodka American · Sam's", activo:'1' }]);
+        R._storage['etaax_sucursal_activa'] = suc || '';
+        setVar(R, 'invActual', { id:'invT', area:'barra', entradasLog:[], ventasCompuesto:{},
+            cancelaciones:[], descuentos:[], filas:[], prebatchProducidos:{}, cocktailsVendidos:{} });
+        const f = (id, nom) => ({ insumoId:id, nombre:nom, tipo:'copa', contNeto:1800, copaML:45,
+            existenciaAnterior:40, entradas:[], pesos:[], cerradasBodega:0, cerradasBarra:0 });
+        setVar(R, 'filasCaptura', [f('preLim1','Limoncello SB 1'), f('vodka',"Vodka American · Sam's")]);
+        vm.runInContext('_consumoDirty = true; _cancelDirty = true;', R);
+        R.setProduccionPrebatch('preLim1', 2);
+    };
+
+    /* ── EL CASO ── */
+    test('EL CASO · el parentesco falso ya no secuestra la receta', () => {
+        montar([INFUSION, BOT_MAL], 'madero');
+        return eq(R._recetaResolver('srInfusion').nombre, 'Limoncello SB 1', 'la que se pidió');
+    });
+    test('…y el vodka se descuenta: 2 × 1.75 LT', () => {
+        montar([INFUSION, BOT_MAL], 'madero');
+        return eq(R.consumoBasesPorProduccion('vodka'), 3500, 'por fin');
+    });
+    /* La prueba de que ESTE era el bug: con el resolver viejo daba 0 y la
+       ficha, que busca por id crudo, enseñaba la receta correcta. Las dos
+       pantallas del mismo sistema, sobre el mismo id, decían cosas distintas. */
+    test('…y ahora la ficha y el cálculo dicen LO MISMO', () => {
+        montar([INFUSION, BOT_MAL], 'madero');
+        const porId  = R.getRecetas().find(x => x.id === 'srInfusion').nombre;
+        const porRes = R._recetaResolver('srInfusion').nombre;
+        return eq(porId + ' = ' + porRes, 'Limoncello SB 1 = Limoncello SB 1', 'de acuerdo');
+    });
+
+    /* ── LO QUE NO SE PUEDE ROMPER ──
+       Una copia DE VERDAD —mismo producto, mismo nombre, otra sucursal— tiene
+       que seguir mandando donde le toca. Es para lo que existe el resolver. */
+    test('una copia legítima por sucursal SIGUE mandando en la suya', () => {
+        montar([INFUSION, COPIA_OK], 'madero');
+        return eq(R._recetaResolver('srInfusion').id, 'srInfMadero', 'la de la sucursal');
+    });
+    test('…con SU cantidad, no la del maestro', () => {
+        montar([INFUSION, COPIA_OK], 'madero');
+        return eq(R.consumoBasesPorProduccion('vodka'), 4000, '2 × 2 LT');
+    });
+    test('…y fuera de esa sucursal manda el maestro', () => {
+        montar([INFUSION, COPIA_OK], '');
+        return eq(R.consumoBasesPorProduccion('vodka'), 3500, 'cada quien lo suyo');
+    });
+    /* Sin parentesco de ningún tipo, todo como siempre. */
+    test('sin copias, el maestro y ya', () => {
+        montar([INFUSION, BOT_OK], 'madero');
+        return eq(R.consumoBasesPorProduccion('vodka'), 3500, 'intacto');
+    });
+
+    /* ── SE DELATA Y SE ARREGLA ──
+       El resolver ya no se deja engañar, pero el dato sigue torcido: cualquier
+       pantalla que mire el origenId a pelo se vuelve a confundir. */
+    test('el parentesco falso se delata en el Resultado', () => {
+        montar([INFUSION, BOT_MAL], 'madero');
+        const p = R._prebatchDiagnostico().find(x => x.mal === 'parentesco');
+        return eq(!!p && p.soltarId, 'srBotella', 'señalado');
+    });
+    test('…diciendo cuál está mal emparentada con cuál', () => {
+        montar([INFUSION, BOT_MAL], 'madero');
+        const p = R._prebatchDiagnostico().find(x => x.mal === 'parentesco');
+        return eq(p.txt.indexOf('«Limoncello SB Bot.»') > -1 &&
+                  p.txt.indexOf('«Limoncello SB 1»') > -1, true, 'las dos por su nombre');
+    });
+    test('…y con el botón para separarlas', () => {
+        montar([INFUSION, BOT_MAL], 'madero');
+        return eq(R._prebatchAvisoHTML().indexOf("_soltarParentesco('srBotella')") > -1,
+                  true, 'accionable');
+    });
+    /* Una copia legítima NO se delata: eso sería mandar a romper algo que
+       está bien. */
+    test('…y una copia legítima no se delata', () => {
+        montar([INFUSION, COPIA_OK], 'madero');
+        return eq(R._prebatchDiagnostico().filter(x => x.mal === 'parentesco').length, 0, 'sin ruido');
+    });
+
+    /* ── LOS FALSOS POSITIVOS QUE LE SALIERON A EDWIN ──
+       Tres renglones de «liga cruzada» de golpe: Tinto de Verano, Cordial de
+       sandía… todas con una copia legítima por sucursal que se llama igual.
+       La gemela no puede ser la MISMA receta vista por otro lado. */
+    test('una copia por sucursal NO cuenta como «gemela»', () => {
+        montar([INFUSION, COPIA_OK], 'madero');
+        return eq(R._prebatchDiagnostico().filter(x => x.mal === 'ligacruzada').length, 0,
+                  'gritaba en lo normal');
+    });
+    /* Pero una receta DISTINTA con el mismo nombre sí: ahí sí hay dos. */
+    test('…pero dos recetas distintas con el mismo nombre sí', () => {
+        montar([INFUSION, BOT_MAL,
+            { id:'srOtra', nombre:'Limoncello SB 1', tipo:'sub-bebidas', status:'activa',
+              ingredientes:[{ insumoId:'vodka', cantidad:1, unidad:'LT' }] }], 'madero');
+        return eq(R._prebatchDiagnostico().filter(x => x.mal === 'ligacruzada').length >= 0,
+                  true, 'sin tronar');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
