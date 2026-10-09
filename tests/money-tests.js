@@ -22784,6 +22784,109 @@ console.log('\n══ BH47 · La carta vestida del negocio ══');
         const h = avisoCon({ fondo: '#13120f', texto: '#f0ece4', acento: '#1a1814' });
         return eq(h.indexOf('acento') > -1, true, 'los precios se leen con el acento');
     });
+    /* ══ EL SELECTOR DE COLOR QUE SE CERRABA SOLO ════════════════════════
+       Al arrastrar dentro del selector de color del sistema, el panel se
+       repintaba y el cuadrito desaparecía: elegir un color para el precio era
+       imposible, se salía a la primera arrastrada.
+
+       `oninput` de un `input[type=color]` se dispara en CADA movimiento del
+       cursor —no al soltar, que es lo que yo había supuesto al escribirlo—, y
+       el selector que abre el sistema está pegado a ESE elemento. Repintar el
+       panel lo reemplaza por otro igual, el selector se queda sin dueño y se
+       cierra.
+
+       Por eso lo que se mide aquí no es «que el color se guarde» sino que
+       NADA de lo que cuelga de un `oninput` rehaga el panel. Es la clase de
+       regla que se rompe sola en cuanto alguien agregue el siguiente control
+       y copie la línea de al lado. */
+    {
+        let repintes = 0;
+        const realPintar = getVar(E, '_goPintar');
+        setVar(E, '_goPintar', () => { repintes++; });
+        /* Un renglón de mentira, como el que arma el panel: el cuadrito de
+           color y su botón «auto» dentro del mismo contenedor. */
+        const hacerFila = () => {
+            const btn = { className: 'ap-auto', disabled: true, style: { opacity: '.3' } };
+            const inp = { value: '#123456', parentElement: null };
+            const fila = { querySelector: (s) => (s === '.ap-auto' ? btn : inp) };
+            inp.parentElement = fila; btn.parentElement = fila;
+            return { inp, btn };
+        };
+
+        setVar(E, '_cartaCfg', { tema: {} });
+        const f1 = hacerFila();
+        f1.inp.value = '#00ff00';
+        E._goColorIn(f1.inp, 'pre');
+
+        test('elegir el color NO repinta el panel (el selector sigue abierto)', () =>
+            eq(repintes, 0, 'cero repintes'));
+        test('…y el color sí quedó guardado', () =>
+            eq(getVar(E, '_cartaCfg').tema.preC, '#00ff00', 'en el tema'));
+        test('…y el botón «auto» se prende, que es lo único que cambia', () =>
+            eq(f1.btn.disabled, false, 'ya se puede volver a heredar'));
+
+        /* Arrastrar los cuatro colores de arriba tampoco: son los que más se
+           mueven, porque de ahí sale el ambiente de toda la carta. */
+        ['fondo', 'tarjeta', 'texto', 'acento'].forEach(k => E._goTemaIn(k, '#101010'));
+        test('…ni mover el fondo, las tarjetas, el texto o el acento', () =>
+            eq(repintes, 0, 'ninguno de los cuatro'));
+
+        /* Y volver a «auto» deja el cuadrito enseñando el color que ahora
+           hereda. Si se quedara con el descartado, diría que el precio es
+           verde cuando ya volvió al acento. */
+        const f2 = hacerFila();
+        /* Con color propio, el botón está PRENDIDO: es el estado real desde el
+           que se toca «auto». Arrancarlo apagado —como hacía mi primera
+           versión— deja la prueba celebrando el valor con el que nació, y la
+           mutación que quita el apagado pasa de largo. */
+        f2.btn.disabled = false; f2.btn.style.opacity = '';
+        setVar(E, '_cartaCfg', { tema: { acento: '#9c2b2b', preC: '#00ff00' } });
+        E.document.getElementById('apC_pre').value = '#00ff00';
+        E._goColorAuto(f2.btn, 'pre');
+        test('volver a «auto» borra el color propio', () =>
+            eq(getVar(E, '_cartaCfg').tema.preC, '', 'vuelve a heredar'));
+        /* Y el botón se apaga: dejarlo prendido ofrece volver a algo donde ya
+           se está, y el siguiente clic no hace nada visible. */
+        test('…y el botón «auto» se apaga, que ya no hay a dónde volver', () =>
+            eq(f2.btn.disabled, true, 'apagado'));
+        test('…y el cuadrito enseña el color que hereda, no el descartado', () =>
+            eq(E.document.getElementById('apC_pre').value, '#9c2b2b', 'el acento'));
+        test('…sin repintar tampoco', () => eq(repintes, 0, 'cero'));
+
+        /* Mover el acento tiene que arrastrar al precio que lo hereda: si el
+           cuadrito se queda en el color viejo, parece que el precio no cambió
+           —y en la maqueta sí cambió—, que es la peor combinación. */
+        setVar(E, '_cartaCfg', { tema: {} });
+        E._goTemaIn('acento', '#0000ff');
+        test('un campo en «auto» sigue al color del que hereda', () =>
+            eq(E.document.getElementById('apC_pre').value, '#0000ff', 'el precio sigue al acento'));
+        /* Pero al que tiene color propio NO se le escribe encima: ese es el
+           que puede estar abierto en ese momento. */
+        setVar(E, '_cartaCfg', { tema: { preC: '#00ff00' } });
+        E.document.getElementById('apC_pre').value = '#00ff00';
+        E._goTemaIn('acento', '#ff0000');
+        test('…y al que tiene color propio no se le toca el suyo', () =>
+            eq(E.document.getElementById('apC_pre').value, '#00ff00', 'intacto'));
+
+        /* Negrita y cursiva tampoco: se prenden cambiando su propia clase. */
+        setVar(E, '_cartaCfg', { tema: {} });
+        E._goTg({ classList: { toggle(){} } }, 'nomI');
+        test('negrita y cursiva tampoco rehacen el panel', () => eq(repintes, 0, 'cero'));
+
+        setVar(E, '_goPintar', realPintar);
+
+        /* Y el enganche en el HTML: que los cuadritos llamen al manejador que
+           no repinta. Con que uno se escriba a la antigua, ese campo vuelve a
+           cerrarse al arrastrar. */
+        test('los tres cuadritos de color llaman al manejador que no repinta', () => {
+            const src = fs.readFileSync(path.join(RAIZ, 'administrativo/menu.html'), 'utf8');
+            const i = src.indexOf('function _goApariencia');
+            const cuerpo = src.slice(i, src.indexOf('\n}', i));
+            eq(cuerpo.indexOf('oninput="_goColorIn(this,') > -1, true, 'el manejador nuevo');
+            return eq(/oninput="_goTemaIn\([^"]*,1\)/.test(cuerpo), false, 'ninguno pide repintar');
+        });
+    }
+
     /* Avisa, NO bloquea: es su carta y su decisión. Un candado que impide
        guardar aquí se sortea escribiendo el color en otra parte. */
     test('avisar no es impedir guardar', () => {

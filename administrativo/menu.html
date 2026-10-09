@@ -1020,10 +1020,10 @@ function _goApariencia() {
                 'onclick="_goTg(this,\'' + k + 'B\')">B</button>' +
             '<button class="ap-tg it' + (t[k+'I'] ? ' on' : '') + '" title="Cursiva" ' +
                 'onclick="_goTg(this,\'' + k + 'I\')">I</button>' +
-            '<input type="color" value="' + esc(t[k+'C'] || _goAutoCol(k, t)) + '" ' +
-                'oninput="_goTemaIn(\'' + k + 'C\',this.value,1)">' +
+            '<input type="color" id="apC_' + k + '" value="' + esc(t[k+'C'] || _goAutoCol(k, t)) + '" ' +
+                'oninput="_goColorIn(this,\'' + k + '\')">' +
             '<button class="ap-auto" title="Volver al color que hereda" ' +
-                'onclick="_goTemaIn(\'' + k + 'C\',\'\',1)"' + (auto ? ' disabled style="opacity:.3"' : '') +
+                'onclick="_goColorAuto(this,\'' + k + '\')"' + (auto ? ' disabled style="opacity:.3"' : '') +
                 '>auto</button>' +
         '</div>';
     }).join('');
@@ -1040,21 +1040,60 @@ function _goAutoCol(k, t) {
     return t.texto;
 }
 
-/* Se cambia el tema y se repinta SOLO la maqueta. Repintar todo el panel
-   mataría el arrastre del selector de color —que dispara `input` en cada
-   movimiento— y dejaría de verse el cambio mientras se elige, que es
-   justamente para lo que sirve. */
-function _goTemaIn(k, v, repintar) {
+/* ══ AQUÍ NO SE REPINTA EL PANEL. NUNCA. ═════════════════════════════════
+   `oninput` de un selector de color se dispara en CADA movimiento del cursor
+   —no al soltar, como yo creía al escribirlo la primera vez—. Y el selector
+   que abre el sistema está pegado al elemento `<input>`: repintar el panel lo
+   reemplaza, el selector se queda sin dueño y se cierra de golpe. Elegir un
+   color era imposible: a la primera arrastrada se salía.
+
+   Así que lo único que se toca aquí es la maqueta —un atributo `style`, el
+   elemento sigue siendo el mismo— y el aviso de contraste. Lo demás que tenga
+   que reaccionar al color lo hace cambiando SU propio elemento, sin rehacer
+   nada. */
+function _goTemaIn(k, v) {
     _cartaCfg = _cartaCfg || {};
     _cartaCfg.tema = _cartaCfg.tema || {};
     _cartaCfg.tema[k] = v;
     var cel = document.getElementById('apCel');
     if (cel) cel.setAttribute('style', _temaVars());
     _goAvisoContraste();
-    /* Los colores por campo sí necesitan repintar su renglón: el botón «auto»
-       se prende y se apaga con ellos. Se hace al soltar, no en cada
-       movimiento, para no matar el arrastre. */
-    if (repintar) _goPintar();
+    _goAutoSeguir();
+}
+
+/* Los campos en «auto» siguen al color del que heredan. Si se mueve el
+   acento, el cuadrito del precio —que está heredándolo— tiene que moverse con
+   él; si no, enseña el color de antes y parece que el precio no cambió.
+   Solo se tocan los que están en auto: el que tiene color propio es el que
+   puede estar abierto en ese momento, y escribirle el valor encima mientras
+   se arrastra es justo lo que no se puede hacer. */
+function _goAutoSeguir() {
+    var t = CartaTema.norm(_tema());
+    ['nom', 'des', 'pre'].forEach(function (k) {
+        if (t[k + 'C']) return;
+        var inp = document.getElementById('apC_' + k);
+        if (inp) inp.value = _goAutoCol(k, t);
+    });
+}
+
+/* Un color elegido a mano: se guarda y se prende su botón «auto», que es lo
+   único que cambia de aspecto en ese renglón. Antes esto repintaba el panel
+   entero para lograr lo mismo. */
+function _goColorIn(el, k) {
+    _goTemaIn(k + 'C', el.value);
+    var b = el.parentElement && el.parentElement.querySelector('.ap-auto');
+    if (b) { b.disabled = false; b.style.opacity = ''; }
+}
+
+/* Volver a heredar. El cuadrito se queda enseñando el color que ahora hereda
+   —y no el que se acaba de descartar— porque de eso ya se encarga
+   `_goAutoSeguir()` dentro de `_goTemaIn`: al quedar sin color propio, este
+   campo entra en la lista de los que siguen a su fuente. Repetirlo aquí era
+   código muerto; la batería de mutaciones lo delató al borrarlo y no romper
+   nada. */
+function _goColorAuto(btn, k) {
+    _goTemaIn(k + 'C', '');
+    btn.disabled = true; btn.style.opacity = '.3';
 }
 
 function _goTg(btn, k) {
