@@ -22254,9 +22254,15 @@ console.log('\n══ BH44 · Un solo capital ══');
     });
 
     /* ── EL REPORTE DE EXISTENCIAS, LOS DOS BUGS DE SU IMPRESO ── */
+    /* CIEGA DE LA BATERÍA: este patrón existe en DOS funciones que arman
+       renglones, y la otra siempre lo tuvo. Buscarlo en el archivo entero
+       pasaba aunque _rowsDeInventario —la del inventario en curso, la que
+       estaba rota— lo perdiera. Se mira SU cuerpo. */
     test('el impreso cuenta los insumos de verdad, no «1»', () => {
-        const i = src.indexOf('rows.push({ insumoId:f.insumoId, nombre:');
-        return eq(i > -1, true, 'el Set tenía undefined en todos');
+        const i = src.indexOf('function _rowsDeInventario(');
+        const cuerpo = src.slice(i, src.indexOf('\n}', i));
+        return eq(cuerpo.indexOf('insumoId:f.insumoId') > -1, true,
+                  'el Set tenía undefined en todos');
     });
     /* La columna «Última existencia» es del reporte de ÚLTIMAS existencias,
        donde cada producto viene de un inventario distinto. En el inventario
