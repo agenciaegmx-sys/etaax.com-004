@@ -883,14 +883,17 @@ function _goPintar() {
     var h = '<div class="cel" id="apCel" style="' + esc(_temaVars()) + '">' +
         '<div class="cel-notch"></div>' +
         (mar.logo ? '<img class="cel-logo" src="' + esc(mar.logo) + '" alt="">' : '') +
-        '<div class="cel-tit">' + esc((cfg.titulo || '').trim() || (nom || 'Nuestra carta')) + '</div>' +
+        '<div class="cel-tit">' + esc(nom || 'Nuestra carta') + '</div>' +
         '<div class="cel-sub">' + esc(String(cfg.nota || '').slice(0, 34)) + '</div>' +
         '<div class="cel-regla"></div>' +
         '<div class="cel-tabs">' +
             _goOrden.filter(function (g) { return cnt[g]; }).slice(0, 4).map(function (g, i) {
                 return '<div class="cel-tab' + (i === 0 ? ' on' : '') + '">' + esc(g) + '</div>';
             }).join('') +
-        '</div>';
+        '</div>' +
+        /* El texto del primer grupo, donde va a salir: pegado a sus
+           platillos. Sin verlo aquí no hay forma de saber si cabe. */
+        (_goNotaDe(prim) ? '<div class="cel-gnota">' + esc(_goNotaDe(prim).slice(0, 60)) + '</div>' : '');
     if (ejem.length) {
         /* Con nombre, descripción y precio en la tarjeta: son los tres campos
            que se pueden vestir, y sin verlos juntos nadie sabe si el precio en
@@ -914,10 +917,14 @@ function _goPintar() {
     }
     h += '<div class="cel-pie">etaax.com ®</div></div>';
 
+    /* EL TÍTULO DEL ENCABEZADO YA NO SE ESCRIBE. Es el nombre de la sucursal
+       y punto: un campo libre ahí invitaba a escribir el nombre de una
+       sección —«Entradas»— y la carta entera se anunciaba como si fuera de
+       un solo grupo. Ese texto va ahora bajo el título de SU grupo, abajo. */
     h += '<div class="qr-sec" style="margin-top:22px">Encabezado</div>' +
-        '<label class="qr-lbl">Título <span class="qr-opt">(si lo dejas vacío sale el nombre de la sucursal)</span></label>' +
-        '<input class="qr-in" id="goTitulo" maxlength="60" placeholder="' + esc(nom || 'Nuestra carta') + '" ' +
-            'value="' + esc(cfg.titulo || '') + '" oninput="_goCfgIn()">' +
+        '<div class="qr-nota" style="margin:0 0 4px">Arriba de la carta sale ' +
+            '<b style="color:var(--text)">' + esc(nom || 'el nombre de la sucursal') + '</b> ' +
+            'con su logo. El texto de cada sección se pone más abajo, en su grupo.</div>' +
         '<label class="qr-lbl">Una línea debajo <span class="qr-opt">(opcional)</span></label>' +
         '<input class="qr-in" id="goNota" maxlength="90" placeholder="Cocina de temporada · Tulum" ' +
             'value="' + esc(cfg.nota || '') + '" oninput="_goCfgIn()">' +
@@ -944,7 +951,8 @@ function _goPintar() {
     } else {
         h += _goOrden.map(function (g, i) {
             var n = cnt[g] || 0;
-            return '<div class="go-fila' + (n ? '' : ' vacio') + '">' +
+            return '<div class="go-bloque' + (n ? '' : ' vacio') + '">' +
+              '<div class="go-fila">' +
                 '<div class="go-pos">' + (i + 1) + '</div>' +
                 '<div class="go-nom">' + esc(g) +
                     '<small>' + (n ? n + ' platillo' + (n === 1 ? '' : 's') : 'ninguno prendido ahora') + '</small></div>' +
@@ -952,11 +960,18 @@ function _goPintar() {
                     ' title="Subir">▲</button>' +
                 '<button class="go-mv" onclick="_goMover(' + i + ',1)"' +
                     (i === _goOrden.length - 1 ? ' disabled' : '') + ' title="Bajar">▼</button>' +
+              '</div>' +
+              /* El texto de ESTE grupo, pegado a él. En su propio renglón y no
+                 en una pantalla aparte: la pregunta «¿qué dice debajo de
+                 Entradas?» se contesta mirando el renglón de Entradas. */
+              '<input class="go-nota" maxlength="140" placeholder="Texto bajo «' + esc(g) + '» (opcional)" ' +
+                  'value="' + esc(_goNotaDe(g)) + '" oninput="_goNotaIn(this,' + i + ')">' +
             '</div>';
         }).join('');
         h += '<div class="qr-nota">Los grupos sin nada prendido no salen en la carta, pero guardan su lugar ' +
              'para cuando vuelvas a prender algo ahí. ' + tot + ' platillo' + (tot === 1 ? '' : 's') +
-             ' en total.</div>';
+             ' en total.<br>El <b style="color:var(--text)">nombre</b> de cada grupo sale del escandallo, y ' +
+             'se cambia platillo por platillo en «En la carta».</div>';
     }
     cu.innerHTML = h;
     _goAvisoContraste();
@@ -1136,13 +1151,46 @@ function _goAvisoContraste() {
    hasta Guardar: cancelar tiene que poder deshacer de verdad. */
 function _goCfgIn() {
     _cartaCfg = _cartaCfg || {};
-    var t = document.getElementById('goTitulo'), n = document.getElementById('goNota');
-    _cartaCfg.titulo = t ? t.value : '';
-    _cartaCfg.nota   = n ? n.value : '';
-    var cel = document.querySelector('#grupOrdCuerpo .cel-tit');
+    var n = document.getElementById('goNota');
+    _cartaCfg.nota = n ? n.value : '';
     var sub = document.querySelector('#grupOrdCuerpo .cel-sub');
-    if (cel) cel.textContent = (_cartaCfg.titulo || '').trim() || (_sucNomMenu() || 'Nuestra carta');
     if (sub) sub.textContent = String(_cartaCfg.nota || '').slice(0, 34);
+}
+
+function _goNotaDe(g) {
+    var m = (_cartaCfg && _cartaCfg.grupoNotas) || {};
+    return String(m[g] || '');
+}
+
+/* Igual que los colores: NO se repinta el panel. Repintar aquí mataría el
+   cursor a media palabra —el campo se reemplaza por otro igual y el foco se
+   pierde—, que es el mismo tropiezo del selector de color. Se toca solo el
+   renglón de la maqueta. */
+function _goNotaIn(el, i) {
+    var g = _goOrden[i];
+    if (!g) return;
+    _cartaCfg = _cartaCfg || {};
+    _cartaCfg.grupoNotas = _cartaCfg.grupoNotas || {};
+    _cartaCfg.grupoNotas[g] = el.value;
+    /* La maqueta solo enseña la del PRIMER grupo con platillos: es el único
+       que se alcanza a ver en la pantalla del teléfono de muestra. */
+    var cnt = _goConteos();
+    var prim = _goOrden.filter(function (x) { return cnt[x]; })[0] || '';
+    if (g !== prim) return;
+    var cel = document.getElementById('apCel');
+    var box = cel && cel.querySelector('.cel-gnota');
+    var txt = String(el.value || '').slice(0, 60);
+    if (box) { box.textContent = txt; box.style.display = txt ? '' : 'none'; }
+    else if (txt && cel) {
+        box = document.createElement('div');
+        box.className = 'cel-gnota';
+        box.textContent = txt;
+        /* Justo DEBAJO de las pestañas, que es donde sale en la carta — y no
+           al final con un appendChild, que lo dejaría después del pie. */
+        var tabs = cel.querySelector('.cel-tabs');
+        if (tabs && tabs.nextSibling) cel.insertBefore(box, tabs.nextSibling);
+        else cel.appendChild(box);
+    }
 }
 
 function _goMover(i, paso) {
@@ -1203,14 +1251,27 @@ function _logoParaCarta(cb) {
     } catch (e) { cb(''); }
 }
 
+function _goNotasLimpias() {
+    var m = (_cartaCfg && _cartaCfg.grupoNotas) || {}, out = {};
+    _goOrden.forEach(function (g) {
+        var t = String(m[g] || '').trim();
+        if (t) out[g] = t;
+    });
+    return out;
+}
+
 async function guardarGruposCarta() {
     _goCfgIn();
     var logo = await new Promise(function (res) { _logoParaCarta(res); });
     try {
         var r = await _supabase.rpc('menu_cfg_guardar', {
             p_neg: getNegocioActivo(), p_suc: _sucMenu(),
-            p_cfg: { titulo: (_cartaCfg.titulo || '').trim(), nota: (_cartaCfg.nota || '').trim(),
+            p_cfg: { nota: (_cartaCfg.nota || '').trim(),
                      grupos: _goOrden,
+                     /* Solo las de los grupos que EXISTEN, y sin las vacías:
+                        un grupo que desapareció del escandallo no tiene por
+                        qué dejar su texto guardado para siempre. */
+                     grupoNotas: _goNotasLimpias(),
                      /* Normalizado antes de salir: lo que se guarda es lo que
                         /carta-tema.js sabe leer, sin colores a medio escribir. */
                      tema: CartaTema.norm(_tema()),
@@ -1222,7 +1283,7 @@ async function guardarGruposCarta() {
     } catch (e) {
         alert('No se pudo guardar: ' + ((e && e.message) || e) +
               String.fromCharCode(10, 10) + '¿Corriste la migración v66 en Supabase? ' +
-              'Y la v68, que es la que guarda los ajustes de apariencia.');
+              'Y la v68 y la v69, que son las de la apariencia y el texto de cada grupo.');
     }
 }
 
@@ -1380,6 +1441,7 @@ document.addEventListener('DOMContentLoaded', function() { renderMenu(); _sbInit
   font-weight:var(--ct-des-w); font-style:var(--ct-des-i); }
 .cel-card .pr { font-size:8.5px; margin-top:3px; color:var(--ct-pre-c);
   font-weight:var(--ct-pre-w); font-style:var(--ct-pre-i); }
+.cel-gnota { font-size:7.5px; color:var(--ct-dim); line-height:1.45; margin-top:7px; }
 .cel-mas { font-size:9px; color:var(--ct-dim); text-align:center; margin-top:9px; }
 .cel-pie { font-size:7px; color:var(--ct-dim); text-align:center; margin-top:10px; letter-spacing:.9px;
   opacity:.75; }
@@ -1416,9 +1478,18 @@ document.addEventListener('DOMContentLoaded', function() { renderMenu(); _sbInit
 /* Las filas que se acomodan. Flechas y no arrastrar: esto se usa en tablet
    detrás de la barra, y arrastrar con el dedo en una lista con scroll propio
    falla justo cuando hay prisa. */
-.go-fila { display:flex; align-items:center; gap:9px; background:var(--surface2);
-  border:1px solid var(--border); border-radius:10px; padding:9px 10px; margin-bottom:7px; }
-.go-fila.vacio { opacity:.5; }
+.go-bloque { background:var(--surface2); border:1px solid var(--border); border-radius:10px;
+  padding:9px 10px; margin-bottom:7px; }
+.go-bloque.vacio { opacity:.5; }
+.go-fila { display:flex; align-items:center; gap:9px; }
+/* El texto de la sección, en el renglón de su sección. Discreto hasta que se
+   toca: son dos líneas por grupo y con diez grupos la lista se vuelve un
+   formulario en vez de una lista que se acomoda. */
+.go-nota { width:100%; margin-top:8px; background:transparent; border:none;
+  border-top:1px dashed var(--border); color:var(--text-muted); border-radius:0;
+  padding:8px 2px 2px; font-family:inherit; font-size:12.5px; outline:none; }
+.go-nota::placeholder { color:var(--text-dim); }
+.go-nota:focus { color:var(--text); border-top-color:var(--green); }
 .go-pos { width:21px; height:21px; border-radius:50%; background:var(--border); color:var(--text-muted);
   font-size:10.5px; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-weight:700; }
 .go-nom { flex:1; font-size:13.5px; color:var(--text); min-width:0; }

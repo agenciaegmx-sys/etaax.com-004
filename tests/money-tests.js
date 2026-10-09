@@ -18322,8 +18322,14 @@ console.log('\n══ BH23 · La carta de la mesa ══');
        nadie se entera hasta que un comensal escanea. Por eso los ajustes se
        guardan con una función que MEZCLA y que no sabe escribir el token. */
     const cfg23 = ult23('menu_cfg_guardar');
-    test('guardar los ajustes MEZCLA, no reemplaza', () =>
-        eq(cfg23.txt.indexOf('SET datos = menu_publico.datos || v_limpio') > -1, true, 'merge'));
+    test('guardar los ajustes MEZCLA, no reemplaza', () => {
+        /* La forma del merge cambió en la v69 —ahora resta además las llaves
+           que llegaron vacías, para que borrar un texto lo borre— pero lo que
+           este candado vigila es que siga MEZCLANDO: el `||` con `datos` a la
+           izquierda. Un `SET datos = v_limpio` a secas mata el token. */
+        eq(/SET datos = \(?menu_publico\.datos \|\| v_limpio\)?/.test(cfg23.txt), true, 'merge');
+        return eq(/SET datos = v_limpio/.test(cfg23.txt), false, 'nunca un reemplazo');
+    });
     /* Se mira el CÓDIGO, sin los comentarios: el comentario de arriba de esa
        función explica justamente que el token no va, y un indexOf a secas se
        caza a sí mismo. Van ocho veces en este archivo. */
@@ -22757,8 +22763,13 @@ console.log('\n══ BH47 · La carta vestida del negocio ══');
         return carta.slice(i, carta.indexOf('\n}', i));
     })();
     test('el renglón grande es la sucursal, no el negocio', () =>
-        eq(/var tit = String\(d\.titulo \|\| ''\)\.trim\(\) \|\| suc/.test(encab),
-           true, 'la sucursal manda sobre el negocio'));
+        eq(/var tit = String\(d\.sucNom \|\| ''\)\.trim\(\)/.test(encab),
+           true, 'la sucursal, primero'));
+    /* Y YA NO ES UN CAMPO LIBRE. Mientras lo fue, invitaba a escribir ahí el
+       nombre de una sección —«Entradas»— y la carta entera se anunciaba como
+       si fuera de un solo grupo. Ese texto va bajo el título de SU grupo. */
+    test('…y no un texto que alguien escriba, que acababa siendo un grupo', () =>
+        eq(encab.indexOf('d.titulo') < 0, true, 'sin título libre'));
     test('…y el nombre del negocio ya no se pinta en ningún lado', () => {
         eq(encab.indexOf("$('cSub')") < 0, true, 'sin el renglón del negocio');
         return eq(carta.indexOf('id="cSub"') < 0, true, 'ni el elemento');
@@ -22769,10 +22780,22 @@ console.log('\n══ BH47 · La carta vestida del negocio ══');
     test('…salvo que no haya sucursal, y entonces sí, antes que «Carta»', () =>
         eq(/\|\| String\(d\.negocio \|\| ''\)\.trim\(\) \|\| 'Carta'/.test(encab),
            true, 'la escalera completa'));
-    /* Y la sucursal debajo solo si el título es otro: si el título YA es la
-       sucursal, repetirla es ruido. */
-    test('la sucursal no se repite debajo de sí misma', () =>
-        eq(encab.indexOf('!igual(suc, tit)') > -1, true, 'compara antes de pintar'));
+    test('…ni queda el renglón donde se repetía debajo', () =>
+        eq(carta.indexOf('id="cSuc"') < 0, true, 'un solo nombre arriba'));
+
+    /* El texto de la sección se pinta bajo SU título, que es donde sirve. */
+    test('la carta pinta el texto de cada grupo bajo su título', () => {
+        const i = carta.indexOf('function pintar(');
+        const cuerpo = carta.slice(i, carta.indexOf('\n}', i));
+        eq(cuerpo.indexOf("NOTAS[g]") > -1, true, 'el de ESE grupo');
+        return eq(cuerpo.indexOf("'<div class=\"grupo-nota\">' + etx(nota)") > -1,
+                  true, 'escapado, como todo lo que escribe el negocio');
+    });
+    test('…y un grupo sin texto no deja un hueco', () => {
+        const i = carta.indexOf('function pintar(');
+        const cuerpo = carta.slice(i, carta.indexOf('\n}', i));
+        return eq(/nota \? '<div class="grupo-nota">'/.test(cuerpo), true, 'solo si hay');
+    });
 
     /* ── EL LOGO, REDONDO ──
        Como una foto de perfil: es la forma con la que todo el mundo lee «esta
@@ -22938,6 +22961,40 @@ console.log('\n══ BH47 · La carta vestida del negocio ══');
                   true, 'guardar no consulta el aviso');
     });
 
+    /* ── EL TEXTO POR GRUPO, EN EL EDITOR ─────────────────────────────── */
+    {
+        setVar(E, '_goOrden', ['Entradas', 'Fuertes', 'Postres']);
+        setVar(E, '_cartaCfg', {});
+        let repintes2 = 0;
+        const realPintar2 = getVar(E, '_goPintar');
+        setVar(E, '_goPintar', () => { repintes2++; });
+
+        E._goNotaIn({ value: 'Servido de 1 a 6 pm' }, 0);
+        test('el texto se guarda bajo SU grupo, no bajo el de al lado', () =>
+            eq(getVar(E, '_cartaCfg').grupoNotas['Entradas'], 'Servido de 1 a 6 pm', 'en Entradas'));
+        /* Mismo tropiezo que el selector de color: repintar reemplaza el campo
+           y el cursor se pierde a media palabra. */
+        test('…y escribirlo no rehace el panel (el cursor se queda)', () =>
+            eq(repintes2, 0, 'cero repintes'));
+        E._goNotaIn({ value: 'De la casa' }, 2);
+        test('…y cada grupo guarda el suyo', () =>
+            eq(getVar(E, '_cartaCfg').grupoNotas['Postres'], 'De la casa', 'en Postres'));
+
+        /* Lo que se manda al servidor: sin las vacías y sin las de grupos que
+           ya no existen. Un grupo que desapareció del escandallo no tiene por
+           qué dejar su texto guardado para siempre. */
+        setVar(E, '_cartaCfg', { grupoNotas: {
+            'Entradas': '  Servido de 1 a 6 pm  ', 'Fuertes': '   ', 'Difuntos': 'grupo que ya no existe'
+        } });
+        const limpias = E._goNotasLimpias();
+        test('al guardar se manda solo lo que tiene texto', () =>
+            eq(Object.keys(limpias).join('|'), 'Entradas', 'ni vacías ni fantasmas'));
+        test('…y sin los espacios de sobra', () =>
+            eq(limpias['Entradas'], 'Servido de 1 a 6 pm', 'recortado'));
+
+        setVar(E, '_goPintar', realPintar2);
+    }
+
     /* ── El logo pesado ──
        Los logos de ahora son URLs de Storage (cien caracteres). Los viejos son
        base64 y pueden pesar cientos de kilobytes: eso lo descargaría ENTERO
@@ -23017,6 +23074,63 @@ console.log('\n══ BH47 · La carta vestida del negocio ══');
         const lista = guar.txt.slice(i, guar.txt.indexOf('));', i));
         return eq(lista.indexOf("'activa'") < 0, true, 'ese va por su propia puerta');
     });
+    /* ══ BORRAR UN TEXTO TENÍA QUE BORRARLO ══════════════════════════════
+       Se borraba la línea del encabezado, se guardaba, y seguía ahí. Dos
+       piezas correctas por separado que juntas se comían los borrados:
+
+         · `jsonb_strip_nulls` tira las llaves nulas, y un texto vacío llegaba
+           como NULL por el `NULLIF(…,'')`: «borrado» y «no lo mandé» eran
+           exactamente lo mismo para la función;
+         · el guardado MEZCLA —y tiene que mezclar, para que el editor del
+           orden no pise lo de la apariencia—, pero un merge con la llave
+           ausente deja la vieja en su sitio.
+
+       La regla nueva: ausente = no se toca; vacía = se quita. */
+    test('borrar un texto lo borra: ausente y vacío son cosas distintas', () => {
+        const codigo = guar.txt.split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
+        /* `p_cfg ? 'x'` pregunta si la llave VIENE, sin mirar su valor. Es
+           justo lo que faltaba para poder distinguir las dos cosas. */
+        eq(/p_cfg \? 'nota'/.test(codigo), true, 'pregunta si la llave viene');
+        return eq(codigo.indexOf('v_vacias') > -1, true, 'y las vacías se quitan');
+    });
+    /* EL ORDEN IMPORTA Y ES SUTIL: primero el merge (lo que no se mandó se
+       queda) y DESPUÉS la resta (lo que se mandó vacío se va). Al revés, el
+       merge volvería a meter lo que la resta acaba de quitar y el borrado
+       seguiría sin funcionar — con el código luciendo correcto. */
+    test('…y se resta DESPUÉS de mezclar, no antes', () =>
+        eq(/SET datos = \(menu_publico\.datos \|\| v_limpio\) - v_vacias/.test(guar.txt),
+           true, 'merge y luego resta'));
+    /* También en el alta: una carta nueva no puede nacer con llaves vacías. */
+    test('…también cuando la fila se crea por primera vez', () =>
+        eq(/VALUES \(v_id, p_neg, \(v_limpio - v_vacias\)/.test(guar.txt), true, 'sin basura de origen'));
+
+    /* ── EL TEXTO DE CADA GRUPO ──
+       Donde de verdad hace falta: «servido de 1 a 6 pm» pegado a los platillos
+       de los que habla, no en el encabezado de la carta entera. */
+    test('cada grupo puede llevar su propio texto', () => {
+        eq(guar.txt.indexOf('grupoNotas') > -1, true, 'se guarda');
+        return eq(ver.txt.indexOf('grupoNotas') > -1, true, 'y la carta lo recibe');
+    });
+    test('…y sin texto no llega «undefined», llega un objeto vacío', () =>
+        eq(/'grupoNotas', COALESCE\(v_cfg->'grupoNotas', '\{\}'::jsonb\)/.test(ver.txt),
+           true, 'COALESCE a {}'));
+
+    /* ── EL TÍTULO LIBRE DEL ENCABEZADO SE FUE ──
+       Invitaba a escribir ahí el nombre de una sección y entonces la carta
+       entera se anunciaba como si fuera de un solo grupo. */
+    test('el encabezado ya no acepta un título libre', () => {
+        const codigo = guar.txt.split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
+        eq(codigo.indexOf("'titulo'") < 0, true, 'no se guarda');
+        return eq(ver.txt.split('\n').map(l => l.replace(/--.*$/, '')).join('\n')
+                     .indexOf("'titulo'") < 0, true, 'ni se devuelve');
+    });
+    /* Y los que ya se escribieron se van con el campo: si no, quedan en la
+       fila para siempre, invisibles y sin forma de borrarlos. */
+    test('…y los que ya estaban escritos se limpian al correr la migración', () => {
+        const v69 = fs.readFileSync(path.join(RAIZ, 'supabase-migration-v69.sql'), 'utf8');
+        return eq(/UPDATE menu_publico SET datos = datos - 'titulo'/.test(v69), true, 'una sola vez');
+    });
+
     /* Y la lista blanca de los platillos no se amplió de contrabando: la
        apariencia es del negocio, los costos no salen ni con tema nuevo.
 
@@ -23028,6 +23142,85 @@ console.log('\n══ BH47 · La carta vestida del negocio ══');
         const codigo = ver.txt.split('\n').map(l => l.replace(/--.*$/, '')).join('\n');
         return eq(/costo|proveedor|margen|ingrediente/i.test(codigo), false, 'ni un campo más');
     });
+}
+
+/* ═══════════ SUITE BH48 · LO QUE DE VERDAD SALE AL GUARDAR ══════════════
+   Las dos mutaciones que se me escaparon en BH47 fueron las mismas dos
+   pruebas: las que LEÍAN el código en vez de correrlo.
+
+     · cambié `nota: (…).trim()` por `nota: (…).trim() || undefined` —que es
+       exactamente el bug: la llave deja de viajar y el servidor no puede
+       distinguir «bórrala» de «no la toqué»— y el regex seguía casando;
+     · cambié `grupoNotas: _goNotasLimpias()` por el objeto crudo, y como la
+       prueba llamaba a `_goNotasLimpias()` por su cuenta, nunca notó que el
+       guardado ya no la usaba.
+
+   Leer el código dice que una línea está escrita. Correrlo dice qué sale por
+   el cable, que es lo único que el servidor va a ver.                      */
+async function suiteCartaGuardado() {
+    console.log('\n══ BH48 · Lo que de verdad sale al guardar ══');
+    const E = crearContexto();
+    cargarJS(E, 'carta-tema.js');
+    cargarJS(E, 'reporte-marca.js');
+    cargarInline(E, 'administrativo/menu.html');
+    E._storage['etaax_negocio_activo'] = 'negT';
+    E._storage['etaax_sucursal_activa'] = 'suc_a';
+    E._storage['etaax_negT_sucursales'] = JSON.stringify([{ id: 'suc_a', nombre: 'Tata Mezcalería' }]);
+
+    /* El cable: se queda con lo que se le manda al servidor. */
+    let enviado = null;
+    E._supabase.rpc = function (fn, args) { enviado = { fn, args }; return Promise.resolve({ error: null }); };
+
+    setVar(E, '_goOrden', ['Entradas', 'Fuertes']);
+    setVar(E, '_cartaCfg', { nota: '', grupoNotas: { 'Entradas': 'De 1 a 6 pm', 'Difuntos': 'ya no existe' } });
+    E.document.getElementById('goNota').value = '';
+    await E.guardarGruposCarta();
+
+    const p = (enviado && enviado.args && enviado.args.p_cfg) || {};
+
+    await testA('se guarda con la función que mezcla, no con un upsert', () =>
+        eq(enviado && enviado.fn, 'menu_cfg_guardar', 'la que no sabe escribir el token'));
+
+    /* EL BORRADO. El arreglo del servidor no sirve de nada si el editor omite
+       la llave: lo que no llega no se puede distinguir de lo que no se tocó. */
+    await testA('al borrar la línea, la llave VIAJA vacía — no se omite', () => {
+        eq('nota' in p, true, 'la llave va');
+        return eq(p.nota, '', 'y va vacía, que es la orden de borrarla');
+    });
+
+    /* Las notas de grupos que ya no existen no se mandan: un grupo que
+       desapareció del escandallo no tiene por qué dejar su texto guardado
+       para siempre. */
+    await testA('solo se mandan las notas de los grupos que existen', () =>
+        eq(Object.keys(p.grupoNotas || {}).join('|'), 'Entradas', 'sin fantasmas'));
+
+    /* Y el título libre del encabezado ya no sale de aquí. */
+    await testA('el encabezado ya no manda un título libre', () =>
+        eq('titulo' in p, false, 'el renglón grande es la sucursal'));
+
+    /* El nombre de la sucursal y el tema sí: la carta es pública y no puede
+       ir a buscarlos. */
+    await testA('la sucursal viaja, porque la carta no puede ir por ella', () =>
+        eq(p.sucNom, 'Tata Mezcalería', 'en la fila'));
+    await testA('…y el tema, normalizado', () =>
+        eq(p.tema && p.tema.fondo, CartaTemaDef(), 'listo para leerse'));
+
+    /* Con texto SÍ viaja el texto, no solo el vacío: una prueba que solo mira
+       el caso vacío pasaría igual con un `nota: ''` fijo. */
+    enviado = null;
+    setVar(E, '_cartaCfg', { nota: 'Cocina de temporada', grupoNotas: {} });
+    E.document.getElementById('goNota').value = 'Cocina de temporada';
+    await E.guardarGruposCarta();
+    const p2 = (enviado && enviado.args && enviado.args.p_cfg) || {};
+    await testA('…y con texto viaja el texto, no un vacío fijo', () =>
+        eq(p2.nota, 'Cocina de temporada', 'lo que se escribió'));
+}
+/* El fondo del tema por default, para no repetir el hex en la prueba. */
+function CartaTemaDef() {
+    const w = {}; vm.runInContext('(function(){' +
+        fs.readFileSync(path.join(RAIZ, 'carta-tema.js'), 'utf8') + '})()',
+        vm.createContext({ window: w, document: { documentElement: { style: {} } } }));
+    return w.CartaTema.DEF.fondo;
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */
@@ -23045,4 +23238,5 @@ async function suiteSalirAsync(){ for (const [n, f] of testAsyncCola) await test
 suiteBuscadorIngredientes();
 suiteInsumoRecienAgregado();
 suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin)
-    .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteSinRenglon).then(resumen);
+    .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteSinRenglon)
+    .then(suiteCartaGuardado).then(resumen);

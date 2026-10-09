@@ -65,8 +65,6 @@ body { background:var(--ct-bg); color:var(--ct-txt); font-family:var(--ct-f);
     box-shadow:0 0 0 1px var(--ct-borde), 0 6px 18px rgba(0,0,0,.14); }
 .cab-neg { font-family:var(--ct-ft); font-size:33px; letter-spacing:3px; line-height:1.05;
     color:var(--ct-txt); }
-.cab-suc { font-size:12px; color:var(--ct-ac); margin-top:6px; letter-spacing:2.4px;
-    text-transform:uppercase; font-weight:600; }
 .cab-nota { font-size:12.5px; color:var(--ct-dim); margin-top:14px; line-height:1.6;
     max-width:520px; margin-left:auto; margin-right:auto; }
 .regla { width:54px; height:2px; background:var(--ct-ac); margin:18px auto 0; border-radius:2px; }
@@ -87,6 +85,11 @@ body { background:var(--ct-bg); color:var(--ct-txt); font-family:var(--ct-f);
 .grupo-tit { font-family:var(--ct-ft); font-size:22px; letter-spacing:2.4px;
     color:var(--ct-ac); margin:30px 0 14px; display:flex; align-items:center; gap:12px; }
 .grupo-tit::after { content:''; flex:1; height:1px; background:var(--ct-borde); }
+/* El texto de la sección, bajo su título. Es donde cabe «servido de 1 a 6 pm»
+   o «todos nuestros moles llevan 32 ingredientes»: pegado a los platillos de
+   los que habla, no en el encabezado de la carta entera. */
+.grupo-nota { font-size:12.5px; color:var(--ct-dim); line-height:1.6; margin:-6px 0 14px;
+    max-width:560px; }
 
 .rejilla { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
 @media (min-width:560px) { .rejilla { grid-template-columns:repeat(3,1fr); } }
@@ -143,7 +146,6 @@ body { background:var(--ct-bg); color:var(--ct-txt); font-family:var(--ct-f);
 <div class="cab">
     <img class="cab-logo" id="cLogo" alt="" hidden>
     <div class="cab-neg" id="cNeg">—</div>
-    <div class="cab-suc" id="cSuc"></div>
     <div class="regla"></div>
     <div class="cab-nota" id="cNota"></div>
 </div>
@@ -177,7 +179,7 @@ body { background:var(--ct-bg); color:var(--ct-txt); font-family:var(--ct-f);
    ══════════════════════════════════════════════════════════════════════════ */
 var Q = new URLSearchParams(location.search);
 var NEG = Q.get('n') || '', TOKEN = Q.get('t') || '';
-var ITEMS = [], VISTA = [], VIDX = 0, TAB = '';
+var ITEMS = [], VISTA = [], VIDX = 0, TAB = '', NOTAS = {};
 
 function etx(s) { return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -205,6 +207,7 @@ async function cargar() {
         encabezado(d);
         $('cNota').textContent = d.nota || '';
         ITEMS = d.items || [];
+        NOTAS = d.grupoNotas || {};
         if (!ITEMS.length) { estado('La carta se está preparando.<br>Vuelve en un rato.'); return; }
         pintar(ordenGrupos(d.grupos));
         $('cPie').hidden = false;
@@ -231,25 +234,25 @@ function vestir(d) {
     } catch (e) {}
 }
 
-/* El logo y el nombre de la SUCURSAL, no los de ETAAX y tampoco los del
-   negocio. Quien escanea está sentado en un lugar concreto: lo que le dice
-   dónde está es «Tata Mezcalería + Cocina», no «Grupo JP» — el nombre fiscal
-   del grupo no le dice nada a nadie en la mesa, y encima le robaba el renglón
-   grande al nombre que sí importa.
+/* EL RENGLÓN GRANDE ES LA SUCURSAL. Siempre, y nada más.
+
+   Antes era un campo libre, y eso invitaba a escribir ahí el nombre de una
+   sección —«Entradas»— con lo que la carta entera se anunciaba como si fuera
+   de un solo grupo. El texto de cada sección va ahora donde tiene sentido:
+   debajo del título de SU grupo.
+
+   Quien escanea está sentado en un lugar concreto, y lo que le dice dónde
+   está es «Tata Mezcalería + Cocina» — ni «Grupo JP», que es el nombre del
+   grupo empresarial y no le dice nada a nadie en la mesa, ni un rótulo que
+   cambia según lo último que alguien escribió.
 
    Solo se cae al nombre del negocio si no hay sucursal: pasa con las cartas
    guardadas antes de la v68 y con los negocios de una sola sucursal que nunca
    la dieron de alta. Mejor eso que un encabezado que diga «Carta». */
 function encabezado(d) {
-    var suc = String(d.sucNom || '').trim();
-    var tit = String(d.titulo || '').trim() || suc || String(d.negocio || '').trim() || 'Carta';
-    function igual(a, b) { return a.toLowerCase() === b.toLowerCase(); }
-
+    var tit = String(d.sucNom || '').trim() || String(d.negocio || '').trim() || 'Carta';
     document.title = tit;
     $('cNeg').textContent = tit;
-    /* La sucursal debajo solo si el negocio escribió un título propio: si no,
-       el título YA es la sucursal y repetirla es ruido. */
-    $('cSuc').textContent = (suc && !igual(suc, tit)) ? suc : '';
 
     /* El logo viene de nuestra propia consulta, pero igual se revisa antes de
        meterlo en un `src`: una dirección con `javascript:` ahí se ejecuta. */
@@ -305,7 +308,10 @@ function pintar(grupos) {
         if (!items.length) return '';
         var desde = VISTA.length;
         VISTA = VISTA.concat(items);
-        return '<div class="grupo-tit">' + etx(g) + '</div><div class="rejilla">' +
+        var nota = String((NOTAS && NOTAS[g]) || '').trim();
+        return '<div class="grupo-tit">' + etx(g) + '</div>' +
+            (nota ? '<div class="grupo-nota">' + etx(nota) + '</div>' : '') +
+            '<div class="rejilla">' +
             items.map(function (it, i) {
                 return '<button class="plato" data-i="' + (desde + i) + '">' +
                     (it.foto
