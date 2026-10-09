@@ -21482,6 +21482,108 @@ console.log('\n══ BH37 · Una «copia» que se llama distinto ══');
     });
 }
 
+/* ═══════════ SUITE BH38 · DECIR EN QUÉ UNIDAD, Y DE DÓNDE SALE ══════════
+   El prebatch ya descuenta (BH37), y entonces aparecieron dos números que
+   parecen errores y no lo son — porque nada los explicaba:
+
+   1. «↳ 77.8 cop en batches». El número estaba bien: 2 batches × 1.75 LT son
+      3500 ml, y entre copas de 45 dan 77.8. Pero nadie sirve un batch con el
+      copero: la receta pide LITROS y lo que se vació fueron dos botellas.
+      Traducir a copas obliga a deshacer la cuenta en la cabeza justo cuando
+      se está revisando si cuadra.
+
+   2. El Paso 1 dice que había 1.4 botellas y el Resultado dice 3.3. Las dos
+      son ciertas: parte del vodka no está en sus botellas, está DENTRO del
+      Limoncello, y el modelo le devuelve su parte para que la diferencia mire
+      todo el vodka del negocio. La cuenta estaba bien; lo que faltaba era
+      decirlo. Dos pantallas del mismo producto con números distintos y sin una
+      línea que lo explique no es un modelo, es un error aparente.           */
+console.log('\n══ BH38 · Decir en qué unidad, y de dónde sale ══');
+{
+    const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    const fnDe = (nombre) => {
+        const i = src.indexOf('function ' + nombre + '(');
+        if (i < 0) throw new Error('no existe ' + nombre);
+        const abre = src.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < src.length) {
+            if (src[j] === '{') prof++;
+            else if (src[j] === '}') { prof--; if (!prof) return src.slice(i, j + 1); }
+            j++;
+        }
+        throw new Error('sin cerrar ' + nombre);
+    };
+    /* Se corre _lineaProd de verdad: es una función pura sobre la fila. */
+    const linea = (() => {
+        const c = { console, parseFloat, Math, String,
+                    etx: (x) => String(x == null ? '' : x) };
+        vm.createContext(c);
+        vm.runInContext(fnDe('_lineaProd'), c);
+        return c._lineaProd;
+    })();
+    const BOTELLA = { copaML: 45, contNeto: 1800 };
+
+    /* ── 1. LA UNIDAD DEL BATCH ── */
+    test('el batch se dice en LITROS, no en copas', () => {
+        const h = linea(BOTELLA, 3500 / 45, 0, '77.8 cop');
+        return eq(h.indexOf('3.5 L') > -1 && h.indexOf('>↳ 77.8 cop') === -1,
+                  true, 'como se vierte');
+    });
+    test('…y con su equivalencia en botellas, que es como se cuenta', () => {
+        const h = linea(BOTELLA, 3500 / 45, 0, '77.8 cop');
+        return eq(h.indexOf('1.9 bot') > -1, true, 'en la bodega');
+    });
+    /* Menos de un litro se queda en ml: «0.4 L» se lee peor que «350 ml». */
+    test('…y por debajo del litro, en mililitros', () => {
+        const h = linea(BOTELLA, 350 / 45, 0, '7.8 cop');
+        return eq(h.indexOf('350 ml') > -1 && h.indexOf(' L') === -1, true, 'sin decimales tontos');
+    });
+    /* La cifra en copas no se pierde: queda en el título, porque la columna
+       de al lado está en copas y hay que poder cuadrarlas. */
+    test('…y la cifra en copas sigue estando, en el título', () => {
+        const h = linea(BOTELLA, 3500 / 45, 0, '77.8 cop');
+        return eq(h.indexOf('title="77.8 cop') > -1, true, 'para cuadrar con la columna');
+    });
+    /* Sin tamaño de copa no se puede convertir: se queda como venía en vez de
+       inventar una unidad. */
+    test('…y sin copa definida, no se inventa una unidad', () => {
+        const h = linea({ copaML: 0, contNeto: 0 }, 5, 0, '5 pza');
+        return eq(h.indexOf('5 pza') > -1, true, 'tal cual');
+    });
+    /* Cuando el batch NO se reparte, su consumo ya va sumado en la cifra de
+       arriba y repetirlo abajo sería contarlo dos veces a la vista. */
+    test('cuando el batch no se reparte, no se repite la línea', () =>
+        eq(linea(BOTELLA, 10, 3, '10 cop'), '', 'sin duplicar'));
+    test('…y sin producción tampoco', () =>
+        eq(linea(BOTELLA, 0, 0, '0'), '', 'sin ruido'));
+
+    /* ── 2. DE DÓNDE SALE LA EXISTENCIA QUE NO ESTÁ EN SUS BOTELLAS ── */
+    test('la existencia anterior dice cuánto está dentro de un batch', () => {
+        const i = src.indexOf('const eaBot     =');
+        const bloque = src.slice(i, i + 1900);
+        return eq(bloque.indexOf('bot en batches') > -1, true, 'explicado');
+    });
+    test('…y se pinta junto a la anterior Y junto al físico', () => {
+        return eq((src.match(/\$\{_dentroBat\(adj\.(ea|fis)\)\}/g) || []).length, 2,
+                  'las dos cifras que no cuadran con el Paso 1');
+    });
+    /* Sin reparto no se pinta: la inmensa mayoría de los renglones no tiene
+       nada dentro de ningún batch y una línea de más en cada uno es ruido. */
+    test('…y no se pinta cuando no hay nada dentro de un batch', () => {
+        const i = src.indexOf('const _dentroBat =');
+        const bloque = src.slice(i, i + 600);
+        return eq(/if \(!\(Math\.abs\(copas\) > 0\.05\)/.test(bloque), true, 'solo cuando aplica');
+    });
+    /* Y explica POR QUÉ, no solo cuánto: el que mira un faltante necesita
+       saber que el producto no se perdió, cambió de envase. */
+    test('…y el porqué está en el título, no solo el número', () => {
+        const i = src.indexOf('const _dentroBat =');
+        const bloque = src.slice(i, i + 700);
+        return eq(bloque.indexOf('está dentro de un batch') > -1 &&
+                  bloque.indexOf('no solo el') > -1, true, 'con explicación');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');

@@ -8861,10 +8861,28 @@ function _step5TablasHTML() {
        de vodka se fueron a los batches — si no, la celda no explica el renglón.
        Cuando el prebatch NO se está repartiendo, esa producción SÍ va dentro de la
        cifra (es lo único que se llevó el insumo) y entonces no se repite abajo. */
+    /* ══ UN BATCH NO SE MIDE EN COPAS ═════════════════════════════════════
+       Esta línea decía «↳ 77.8 cop en batches». El número estaba bien —3500 ml
+       entre copas de 45— pero nadie sirve un batch con el copero: la receta
+       dice 1.75 LT por batch y lo que se vació fueron DOS BOTELLAS.
+
+       Traducir a copas obliga a deshacer la cuenta en la cabeza justo cuando
+       se está revisando si cuadra. Va en la unidad en la que se vertió, y la
+       equivalencia en botellas al lado, que es como se cuenta en la bodega. */
     function _lineaProd(fila, prodVer, prodMat, txt) {
         if (!(prodVer > 0) || prodMat > 0) return '';
-        return '<div style="font-size:9.5px;opacity:.7;font-weight:500;white-space:nowrap">↳ ' +
-               txt + ' en batches</div>';
+        var cop = parseFloat(fila.copaML) || 0;
+        var cn  = parseFloat(fila.contNeto) || 0;
+        var ml  = prodVer * cop;
+        var leg = txt;
+        if (cop > 0 && ml > 0) {
+            var n1 = function (x) { var r = Math.round(x * 10) / 10; return r % 1 ? r.toFixed(1) : String(r); };
+            leg = (ml >= 1000 ? n1(ml / 1000) + ' L' : n1(ml) + ' ml');
+            if (cn > 0) leg += ' · ' + n1(ml / cn) + ' bot';
+        }
+        return '<div style="font-size:9.5px;opacity:.7;font-weight:500;white-space:nowrap"' +
+               ' title="' + etx(txt) + ' — la receta del batch pide ' +
+               (cop > 0 ? etx(leg) : etx(txt)) + '">↳ ' + leg + ' en batches</div>';
     }
     function _tituloCoct(fila, prodVer, prodMat) {
         if (!(prodVer > 0)) return _origenConsumo(fila);
@@ -8913,6 +8931,24 @@ function _step5TablasHTML() {
         const pctVal    = _pctVarianza(dif, _usoTotal(ventaCopa + ventaBot * copasBot, prodPBver, prodPBmat));
         const pctStr    = pctVal !== null ? (pctVal>=0?'+':'')+pctVal.toFixed(1)+'%' : '—';
         const eaBot     = copasBot > 0 ? (ea/copasBot).toFixed(1) : ea.toFixed(1);
+        /* ══ POR QUÉ EL PASO 1 DICE 1.4 Y ESTE RENGLÓN DICE 3.3 ══════════════
+           Porque parte de este producto NO está en sus botellas: está dentro
+           de un batch. El Limoncello que hay en la barra lleva vodka adentro, y
+           el modelo le devuelve al vodka su parte —en la existencia anterior,
+           en el físico y en el teórico— para que la diferencia salga sobre
+           TODO el vodka del negocio y no solo sobre el que quedó embotellado.
+
+           La cuenta estaba bien; lo que faltaba era decirlo. Dos pantallas del
+           mismo producto con números distintos y sin una línea que lo explique
+           no es un modelo, es un error aparente. */
+        const _nb = (v) => { const r = Math.round(v * 10) / 10; return r % 1 ? r.toFixed(1) : String(r); };
+        const _dentroBat = (copas) => {
+            if (!(Math.abs(copas) > 0.05) || !(copasBot > 0)) return '';
+            return '<div style="font-size:9px;opacity:.7;white-space:nowrap" title="Este producto' +
+                ' está dentro de un batch (una sub-receta de producción propia). Su parte se le' +
+                ' devuelve aquí para que la diferencia mire TODO el producto, no solo el' +
+                ' embotellado.">↳ ' + _nb(copas / copasBot) + ' bot en batches</div>';
+        };
         const entBotStr = entBot > 0 ? `+${entBot % 1 ? entBot.toFixed(1) : entBot} ${_unidadCompra(fila)}` : '—';
         const fisicoBot = copasBot > 0 ? (fisico/copasBot).toFixed(2) : fisico.toFixed(1);
         const difStr    = _fmtCopSgn(dif, fila);
@@ -8924,7 +8960,7 @@ function _step5TablasHTML() {
                     ${_contC?`<div style="font-size:9.5px;color:#7ab8f5">📦 ${_contC}</div>`:''}
                     <button onclick="event.stopPropagation();toggleBateo('${fila.insumoId}')" style="margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid ${esBateo(fila.insumoId)?'#3dbe7a':'#888'};background:${esBateo(fila.insumoId)?'#3dbe7a':'transparent'};color:${esBateo(fila.insumoId)?'#fff':'#999'}">🏏 ${esBateo(fila.insumoId)?'De bateo ✓':'Marcar bateo'}</button>${_btnNotaInsumo(fila.insumoId)}
                 </td>
-                <td style="text-align:center;white-space:nowrap">${eaBot} bot</td>
+                <td style="text-align:center;white-space:nowrap">${eaBot} bot${_dentroBat(adj.ea)}</td>
                 <td style="text-align:center;color:var(--green);white-space:nowrap">${entBotStr}</td>
                 <td style="text-align:center;color:var(--accent)">${ventaBot > 0 ? ventaBot + ' bot' : '—'}</td>
                 <td style="text-align:center;color:var(--accent)">${ventaCopaDir > 0 ? _fmtCop(ventaCopaDir, fila) : '—'}</td>
@@ -8936,7 +8972,7 @@ function _step5TablasHTML() {
                         : '—'}
                 </td>
                 <td style="text-align:center;color:var(--text-muted)">${cancelCop > 0 ? _fmtCop(cancelCop, fila) : '—'}</td>
-                <td style="text-align:center;font-weight:600;white-space:nowrap">${fisicoBot} bot</td>
+                <td style="text-align:center;font-weight:600;white-space:nowrap">${fisicoBot} bot${_dentroBat(adj.fis)}</td>
                 <td style="text-align:center;font-weight:700;color:${color};white-space:nowrap">${difStr}</td>
                 <td style="text-align:center;font-size:11px;color:${color}">${pctStr}</td>
                 <td style="text-align:right;font-weight:600;color:${color};white-space:nowrap">${difCosto>=0?'+':''}$${difCosto.toFixed(2)}</td>
