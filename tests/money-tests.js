@@ -22565,19 +22565,31 @@ console.log('\n══ BH47 · La carta vestida del negocio ══');
        líneas salen de mezclar el texto con el fondo. Es lo que permite que el
        MISMO tema funcione en claro: con grises fijos, quien eligiera fondo
        blanco se quedaba con bordes negros y letra chica invisible. */
-    test('en fondo claro, el gris de la letra chica se oscurece', () => {
-        const claro = V({ fondo: '#ffffff', texto: '#111111' });
-        const dim = CT.hex(claro['--ct-dim'], '');
-        /* Entre el texto y el fondo: más claro que la letra, más oscuro que
-           el papel. Un gris fijo de tema oscuro quedaría casi blanco aquí. */
-        const L = (h) => parseInt(h.slice(1, 3), 16);
-        eq(L(dim) > L('#111111'), true, 'más claro que el texto');
-        return eq(L(dim) < L('#ffffff'), true, 'más oscuro que el fondo');
+    /* Luminancia, no el canal rojo: `contraste(x, negro)` crece con la
+       luminancia, así que sirve para ordenar tres colores sin escribir otra
+       vez la fórmula de WCAG. */
+    const luz = (h) => CT.contraste(h, '#000000');
+    test('el gris de la letra chica DEPENDE de los colores elegidos', () => {
+        /* Mismo texto, fondo distinto → gris distinto. Es la prueba que
+           distingue un gris calculado de uno escrito a mano: mi primera
+           versión solo miraba que cayera «entre» los dos, y un gris fijo de
+           tema oscuro también cae entre blanco y negro. Pasó la mutación. */
+        const a = V({ fondo: '#ffffff', texto: '#111111' })['--ct-dim'];
+        const b = V({ fondo: '#000000', texto: '#111111' })['--ct-dim'];
+        return eq(a !== b, true, 'se mueve con el fondo (' + a + ' vs ' + b + ')');
     });
-    test('…y en fondo oscuro se aclara', () => {
-        const osc = V({ fondo: '#000000', texto: '#ffffff' });
-        const L = (h) => parseInt(h.slice(1, 3), 16);
-        return eq(L(CT.hex(osc['--ct-dim'], '')) < 255, true, 'entre los dos');
+    test('…y cae entre el texto y el fondo, en claro y en oscuro', () => {
+        const claro = V({ fondo: '#ffffff', texto: '#111111' })['--ct-dim'];
+        eq(luz(claro) > luz('#111111') && luz(claro) < luz('#ffffff'), true, 'fondo claro');
+        const osc = V({ fondo: '#000000', texto: '#ffffff' })['--ct-dim'];
+        return eq(luz(osc) > luz('#000000') && luz(osc) < luz('#ffffff'), true, 'fondo oscuro');
+    });
+    /* Las líneas también: con un borde fijo, quien elige fondo blanco se
+       queda con rejilla negra alrededor de cada tarjeta. */
+    test('…y las líneas igual, que es lo que enmarca cada tarjeta', () => {
+        const a = V({ fondo: '#ffffff', texto: '#111111' })['--ct-borde'];
+        const b = V({ fondo: '#13120f', texto: '#111111' })['--ct-borde'];
+        return eq(a !== b, true, 'se mueve con el fondo');
     });
 
     /* ── El color por campo: vacío = hereda ──
@@ -22637,10 +22649,41 @@ console.log('\n══ BH47 · La carta vestida del negocio ══');
         const fijos = (css.match(/#[0-9a-f]{3,6}/gi) || []).filter(c => c.toLowerCase() !== '#2a2721');
         return eq(fijos.join(' '), '', 'todo sale de --ct-*');
     });
-    test('…y la carta real pinta los tres campos con esas variables', () => {
-        ['--ct-nom-c', '--ct-des-c', '--ct-pre-c', '--ct-nom-w', '--ct-des-i', '--ct-pre-w']
-            .forEach(v => eq(carta.indexOf('var(' + v + ')') > -1, true, v));
-        return eq(carta.indexOf("--oro") < 0, true, 'sin la paleta vieja');
+    /* REGLA POR REGLA, no buscando en todo el archivo. Los tres campos se
+       pintan en DOS lugares —la tarjeta de la rejilla y la vista grande— y
+       buscar `var(--ct-pre-c)` en el archivo completo lo encuentra en uno
+       aunque el otro esté con el oro fijo. Es la mutación que se me escapó:
+       dejé `.plato-precio` en #c9a227 y el candado se felicitó solo. */
+    const regla = (sel) => {
+        const i = carta.indexOf('\n' + sel + ' {');
+        if (i < 0) return '';
+        return carta.slice(i, carta.indexOf('}', i));
+    };
+    test('…y la carta real pinta cada campo con esas variables, en los dos lados', () => {
+        const PIDEN = {
+            '.plato-nom':    ['--ct-nom-c', '--ct-nom-w', '--ct-nom-i'],
+            '.plato-desc':   ['--ct-des-c', '--ct-des-w', '--ct-des-i'],
+            '.plato-precio': ['--ct-pre-c', '--ct-pre-w', '--ct-pre-i'],
+            '.vista-desc':   ['--ct-des-c', '--ct-des-w', '--ct-des-i'],
+            '.vista-precio': ['--ct-pre-c', '--ct-pre-w', '--ct-pre-i'],
+            '.vista-nom':    ['--ct-nom-c', '--ct-nom-i']
+        };
+        Object.keys(PIDEN).forEach(sel => {
+            const css = regla(sel);
+            eq(css.length > 0, true, 'existe ' + sel);
+            PIDEN[sel].forEach(v => eq(css.indexOf('var(' + v + ')') > -1, true, sel + ' → ' + v));
+            /* Y ni un color fijo dentro: uno solo basta para que el tema del
+               negocio no se vea en ese dato. */
+            eq((css.match(/#[0-9a-f]{3,6}/i) || []).join(' '), '', sel + ' sin color fijo');
+        });
+        return eq(carta.indexOf('--oro') < 0, true, 'sin la paleta vieja');
+    });
+    /* El fondo y la tipografía del `body`: si se quedan fijos, elegir fondo
+       claro pinta las tarjetas claras sobre una página negra. */
+    test('…y el fondo y la tipografía de la página también', () => {
+        const css = regla('body');
+        eq(css.indexOf('var(--ct-bg)') > -1, true, 'fondo');
+        return eq(css.indexOf('var(--ct-f)') > -1, true, 'tipografía');
     });
     /* La carta trae los defaults ESCRITOS en su :root. No es duplicar el
        cálculo: es que la primera pintada —antes de que llegue la consulta— ya
