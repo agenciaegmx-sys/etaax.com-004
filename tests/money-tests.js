@@ -21851,6 +21851,157 @@ console.log('\n══ BH40 · Fuera del impreso, y la nota que faltaba ══');
         eq(html.indexOf('.inv-steps { box-shadow:') > -1, true, 'con borde'));
 }
 
+/* ═══════════ SUITE BH41 · «SIN RENGLÓN» CUANDO EL RENGLÓN SÍ ESTÁ ═══════
+   EL CASO DEL SIDRAL. La receta del Tinto de Verano pide 2 LT de «Sidral
+   Mundet 3L» y el desglose decía «sin renglón en este inventario» — mientras
+   el Sidral salía en el reporte, con sus tres piezas y su contenido.
+
+   Las dos cosas eran ciertas: hay DOS insumos con ese nombre y la receta
+   apunta al que no se está contando. Pasa al rehacer un insumo —el mismo caso
+   del vodka con el 2—: el nuevo entra al inventario y las recetas se quedan
+   señalando al viejo. Es invisible, porque los dos se llaman igual.
+
+   Y la matemática no tenía nada que ver: con la fila bien apuntada, un insumo
+   de PIEZA pedido en LITROS se descuenta perfecto —2 LT de una botella de 3 L
+   son 0.67 piezas— y eso se comprueba aquí para que no se vuelva a buscar por
+   ese lado.                                                                 */
+async function suiteSinRenglon() {
+console.log('\n══ BH41 · «Sin renglón» cuando el renglón sí está ══');
+    const S = crearContexto();
+    cargarJS(S, 'etaax-core.js');
+    cargarJS(S, 'insumo-label.js');
+    cargarJS(S, 'recetas/inventarios.js');
+    S._storage['etaax_negocio_activo'] = 'negT';
+    vm.runInContext('function _autoGuardar(){} function _refrescarAvisoPrebatches(){} function renderStepContent(){}', S);
+
+    const RECS = (idSidral) => ([{ id:'srTinto', nombre:'Tinto de Verano SB', tipo:'sub-bebidas',
+        status:'activa', camposExtra:{ rendimientoFinal:'4030', unidadRendimientoFinal:'ML' },
+        ingredientes:[{ insumoId:'vino', cantidad:2, unidad:'LT' },
+                      { insumoId:idSidral, cantidad:2, unidad:'LT' }] }]);
+    /* Dos Sidrales con el MISMO nombre: el viejo (al que apunta la receta) y
+       el que de verdad se está contando. */
+    const INS = [
+        { id:'preTinto', nombre:'Tinto de Verano SB', esSubReceta:true, recetaId:'srTinto', activo:'1' },
+        { id:'vino',       nombre:'California Don Simón', activo:'1' },
+        { id:'sidralNuevo', nombre:'Sidral Mundet 3L', activo:'1' },
+        { id:'sidralViejo', nombre:'Sidral Mundet 3L', activo:'1' }];
+
+    const montar = (idSidral) => {
+        setVar(S, '_cacheRecetasInv', RECS(idSidral));
+        setVar(S, '_cacheInsumosInv', INS);
+        setVar(S, 'invActual', { id:'invT', area:'barra', entradasLog:[], ventasCompuesto:{},
+            cancelaciones:[], descuentos:[], filas:[], prebatchProducidos:{}, cocktailsVendidos:{} });
+        const fT = { insumoId:'preTinto', nombre:'Tinto de Verano SB', tipo:'copa', contNeto:4030,
+            copaML:1, rendimientoBatch:4030, existenciaAnterior:0, entradas:[], pesos:[],
+            cerradasBodega:0, cerradasBarra:0, ventasCopasDirectas:0, cortesiaCopas:0,
+            mermaCopas:0, ventasBotella:0 };
+        const fV = { insumoId:'vino', nombre:'California Don Simón', tipo:'copa', contNeto:5000,
+            copaML:150, existenciaAnterior:0, entradas:[], pesos:[], cerradasBodega:0,
+            cerradasBarra:0, ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0 };
+        /* Solo el NUEVO tiene renglón: es el que se contó. */
+        const fS = { insumoId:'sidralNuevo', nombre:'Sidral Mundet 3L', tipo:'pza', contNeto:3000,
+            copaML:0, existenciaAnterior:0, entradas:['3'], pesos:[], cerradasBodega:3,
+            cerradasBarra:0, ventasCopasDirectas:0, cortesiaCopas:0, mermaCopas:0, ventasBotella:0 };
+        setVar(S, 'filasCaptura', [fT, fV, fS]);
+        vm.runInContext('_consumoDirty = true; _cancelDirty = true;', S);
+        S.setProduccionPrebatch('preTinto', 2);
+        return { fT, fV, fS };
+    };
+    const n3 = (v) => Math.round(v * 1000) / 1000;
+
+    /* ── LA MATEMÁTICA NO ERA EL PROBLEMA ──
+       Un insumo de PIEZA pedido en LITROS se descuenta bien: 2 LT por batch,
+       dos batches, de botellas de 3 L → 1.33 piezas. */
+    test('un insumo de PIEZA pedido en LITROS se descuenta bien', () => {
+        const f = montar('sidralNuevo');
+        return eq(n3(S._consumoBaseProd(f.fS)), n3(4000 / 3000), '4 L de botellas de 3 L');
+    });
+    test('…y llega al teórico: 3 compradas − 1.33 usadas', () => {
+        const f = montar('sidralNuevo');
+        return eq(n3(S.calcExistenciaTeorica(f.fS)), n3(3 - 4000 / 3000), 'sin redondear a piezas');
+    });
+    /* El vino, que es de copa, se descuenta por su lado: no es que uno
+       funcione «porque es vino». */
+    test('…igual que el vino, que es de copa', () => {
+        const f = montar('sidralNuevo');
+        return eq(n3(S._consumoBaseProd(f.fV)), n3(4000 / 150), 'cada uno en su unidad');
+    });
+
+    /* ── LO QUE SÍ ERA: LA RECETA APUNTA AL OTRO ── */
+    const ingSidral = () => (S._prebatchDesglose()[0].ings || [])
+        .find(i => String(i.nombre).indexOf('Sidral') === 0);
+    test('EL CASO · apuntando al insumo viejo, no se descuenta nada', () => {
+        montar('sidralViejo');
+        return eq(S.consumoBasesPorProduccion('sidralNuevo'), 0, 'el síntoma');
+    });
+    /* Y aquí está la mejora: decir «sin renglón» a secas manda a buscar un
+       renglón que SÍ está ahí. */
+    test('…y el desglose dice que apunta a OTRO con el mismo nombre', () => {
+        montar('sidralViejo');
+        const i = ingSidral();
+        return eq(!!(i && i.otroIgual) && i.otroIgual.insumoId, 'sidralNuevo', 'señalado');
+    });
+    test('…con el botón para apuntarla al que sí se cuenta', () => {
+        montar('sidralViejo');
+        const h = S._prebatchDesgloseHTML();
+        return eq(h.indexOf("_reapuntarIngrediente('srTinto','sidralViejo','sidralNuevo')") > -1,
+                  true, 'accionable');
+    });
+    /* Si NO hay otro con ese nombre, se queda el aviso de siempre: ahí sí
+       falta el renglón de verdad. */
+    test('…y si de verdad falta el renglón, se dice como antes', () => {
+        montar('sidralViejo');
+        setVar(S, 'filasCaptura', vm.runInContext('filasCaptura', S).filter(f => f.insumoId !== 'sidralNuevo'));
+        vm.runInContext('_consumoDirty = true;', S);
+        const i = ingSidral();
+        return eq(!!(i && i.sinFila) && !i.otroIgual, true, 'sin confundir los dos casos');
+    });
+    /* Y con la receta bien apuntada, ni un aviso. */
+    test('…y bien apuntada no se dice nada', () => {
+        montar('sidralNuevo');
+        const i = ingSidral();
+        return eq(!!(i && (i.sinFila || i.otroIgual)), false, 'sin ruido');
+    });
+
+    /* ── REAPUNTAR, CORRIÉNDOLO ── */
+    const reapuntar = async (responde, falla) => {
+        montar('sidralViejo');
+        const dichos = [];
+        S.confirm = (t) => { dichos.push(t); return responde; };
+        S.alert = (t) => dichos.push(t);
+        S._supabase = { from: () => ({ upsert: () => Promise.resolve(
+            { error: falla ? { message: 'sin permiso' } : null }) }) };
+        await S._reapuntarIngrediente('srTinto', 'sidralViejo', 'sidralNuevo');
+        const r = S.getRecetas().find(x => x.id === 'srTinto');
+        const ing = (r.ingredientes || []).find(i => i.cantidad === 2 && i.unidad === 'LT' && i.insumoId !== 'vino');
+        vm.runInContext('_consumoDirty = true;', S);
+        return { apunta: ing && ing.insumoId, dichos: dichos.join(' '),
+                 sidral: S.consumoBasesPorProduccion('sidralNuevo') };
+    };
+    await testA('reapuntar PREGUNTA antes de tocar la receta', async () =>
+        eq((await reapuntar(false)).dichos.length > 0, true, 'pregunta'));
+    await testA('…y un «no» deja la receta igual', async () =>
+        eq((await reapuntar(false)).apunta, 'sidralViejo', 'intacta'));
+    await testA('…y un «sí» la reapunta', async () =>
+        eq((await reapuntar(true)).apunta, 'sidralNuevo', 'cambiada'));
+    await testA('…y a partir de ahí el Sidral SÍ se descuenta', async () =>
+        eq((await reapuntar(true)).sidral, 4000, '2 batches × 2 LT'));
+    /* Si no se guarda, no se hace: dejarlo a medias se ve arreglado y al
+       recargar está igual. */
+    await testA('…y si no se guarda, se deshace y se dice', async () => {
+        const r = await reapuntar(true, true);
+        return eq(r.apunta === 'sidralViejo' && r.dichos.indexOf('NO se hizo') > -1,
+                  true, 'sin mentir');
+    });
+    /* No toca la cantidad ni la unidad: solo a cuál de los dos apunta. */
+    await testA('…y no cambia la cantidad ni la unidad', async () => {
+        await reapuntar(true);
+        const r = S.getRecetas().find(x => x.id === 'srTinto');
+        const ing = (r.ingredientes || []).find(i => i.insumoId === 'sidralNuevo');
+        return eq(ing.cantidad + ' ' + ing.unidad, '2 LT', 'solo la liga');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
@@ -21866,4 +22017,4 @@ async function suiteSalirAsync(){ for (const [n, f] of testAsyncCola) await test
 suiteBuscadorIngredientes();
 suiteInsumoRecienAgregado();
 suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin)
-    .then(suiteLigaCruzada).then(suiteBotonReligar).then(resumen);
+    .then(suiteLigaCruzada).then(suiteBotonReligar).then(suiteSinRenglon).then(resumen);

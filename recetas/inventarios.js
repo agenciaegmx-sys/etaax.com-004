@@ -1701,6 +1701,43 @@ async function _soltarParentesco(recetaId) {
 }
 window._soltarParentesco = _soltarParentesco;
 
+/* Reapuntar un ingrediente de la sub-receta al insumo que SÍ se está
+   contando. Cambia un solo campo —a qué insumo señala ese renglón de la
+   receta— y no toca la cantidad ni la unidad. */
+async function _reapuntarIngrediente(recetaId, viejoId, nuevoId) {
+    var r = getRecetas().find(function (x) { return x.id === recetaId; });
+    if (!r) { alert('No se encontró la sub-receta.'); return; }
+    var ing = (r.ingredientes || []).find(function (i) { return i && i.insumoId === viejoId; });
+    if (!ing) { alert('Ese ingrediente ya no está en la receta.'); return; }
+    var nue = (typeof window._insumoResolver === 'function') ? window._insumoResolver(nuevoId) : null;
+    if (!confirm('En «' + (r.nombre || '') + '», los ' + (ing.cantidad || 0) + ' ' + (ing.unidad || '') +
+                 ' van a salir del insumo que SÍ se está contando en este inventario.' +
+                 String.fromCharCode(10, 10) +
+                 'No cambia la cantidad ni la receta: solo a cuál de los dos insumos con ese ' +
+                 'nombre apunta.' + String.fromCharCode(10, 10) + '¿Lo reapuntamos?')) return;
+    var antes = ing.insumoId;
+    ing.insumoId = nuevoId;
+    if (nue && nue.nombre) ing.nombre = nue.nombre;
+    var negId = getNegocioActivo();
+    try {
+        if (typeof _supabase !== 'undefined' && negId) {
+            var q = await _supabase.from('recetas')
+                .upsert({ id: r.id, negocio_id: negId, datos: r }, { onConflict: 'id' });
+            if (q.error) throw q.error;
+        }
+        try { _skPut(_sk('recetas'), JSON.stringify(getRecetas())); } catch (e2) {}
+    } catch (e) {
+        ing.insumoId = antes;          // no se guardó: no se hizo
+        alert('No se pudo guardar, así que NO se hizo.' + String.fromCharCode(10, 10) +
+              ((e && e.message) || e));
+        return;
+    }
+    _consumoDirty = true; _cancelDirty = true;
+    window._step5Dirty = true; window._step5Force = true;
+    if (typeof renderStepContent === 'function') renderStepContent();
+}
+window._reapuntarIngrediente = _reapuntarIngrediente;
+
 /* ══ ENSEÑAR LA CUENTA, NO SOLO EL RESULTADO ══════════════════════════════
    «Capturo la producción y el vodka no baja» puede romperse en cinco sitios
    distintos, y desde fuera los cinco se ven igual: un cero. Esto desarma la
@@ -1742,12 +1779,39 @@ function _prebatchDesglose() {
             var z = _normIngrediente(ing || {});
             var u = (z.unidad || '').toUpperCase();
             var base = (u === 'PZA' || u === 'PZ' || u === '') ? z.cant : ingredienteBase(z.cant, z.unidad);
+            /* ══ «SIN RENGLÓN» NO SIEMPRE QUIERE DECIR QUE FALTE ══════════
+               EL CASO DEL SIDRAL. La receta del Tinto de Verano pedía 2 LT de
+               «Sidral Mundet 3L» y el desglose decía «sin renglón en este
+               inventario» — mientras el Sidral salía en el reporte con sus
+               tres piezas. Las dos cosas eran ciertas: hay DOS insumos con ese
+               nombre y la receta apunta al que no se está contando.
+
+               Pasa al rehacer un insumo (el mismo caso del vodka): el nuevo
+               entra al inventario y las recetas se quedan señalando al viejo.
+               Y es invisible, porque los dos se llaman igual.
+
+               Decir «sin renglón» a secas manda a buscar un renglón que SÍ
+               está ahí. Si existe otro insumo con el mismo nombre que sí
+               tiene renglón, se dice y se ofrece reapuntar la receta. */
+            var otroIgual = null;
+            if (!!can && !filas[can] && ins) {
+                var nomI = String(ins.nombre || '').trim().toLowerCase();
+                var cand = (filasCaptura || []).find(function (fx) {
+                    if (!fx || !fx.insumoId) return false;
+                    var ix = (typeof window._insumoResolver === 'function')
+                        ? window._insumoResolver(fx.insumoId) : null;
+                    return ix && String(ix.nombre || '').trim().toLowerCase() === nomI;
+                });
+                if (cand) otroIgual = { insumoId: cand.insumoId, nombre: cand.nombre,
+                                        recetaId: sr.id, viejoId: iid };
+            }
             return {
                 nombre: (ins && ins.nombre) || (ing && ing.nombre) || '(sin insumo)',
                 cant: base * n,
                 unidad: (u === 'PZA' || u === 'PZ' || u === '') ? 'pza' : (u === 'G' || u === 'KG' ? 'g' : 'ml'),
                 sinInsumo: !ins,
-                sinFila: !!can && !filas[can]
+                sinFila: !!can && !filas[can],
+                otroIgual: otroIgual
             };
         });
         /* ══ LA CADENA CRUDA ══════════════════════════════════════════════
@@ -1836,9 +1900,19 @@ function _prebatchDesgloseHTML() {
                           /* El renglón que falta es el dato: un ingrediente sin
                              renglón en este inventario NO se descuenta en ningún
                              lado, y es invisible salvo aquí. */
-                          var nota = i.sinInsumo ? ' <span style="color:var(--red)">— ese insumo ya no existe</span>'
-                                    : i.sinFila  ? ' <span style="color:var(--accent)">— sin renglón en este inventario: ' +
-                                                   'NO se le descuenta</span>' : '';
+                          var nota = i.sinInsumo
+                              ? ' <span style="color:var(--red)">— ese insumo ya no existe</span>'
+                              : i.otroIgual
+                              ? ' <span style="color:var(--accent)">— la receta apunta a OTRO insumo con el ' +
+                                'mismo nombre, y ese no se está contando</span>' +
+                                ' <button onclick="_reapuntarIngrediente(\'' + i.otroIgual.recetaId + '\',\'' +
+                                i.otroIgual.viejoId + '\',\'' + i.otroIgual.insumoId + '\')" ' +
+                                'style="margin-left:4px;font-size:10px;padding:1px 8px;border-radius:5px;' +
+                                'cursor:pointer;background:transparent;border:1px solid var(--green);' +
+                                'color:var(--green)">🔗 Apuntarla al que sí</button>'
+                              : i.sinFila
+                              ? ' <span style="color:var(--accent)">— sin renglón en este inventario: ' +
+                                'NO se le descuenta</span>' : '';
                           return '· ' + etx(i.nombre) + ' <b style="color:var(--text)">−' + cant + ' ' + i.unidad +
                                  '</b>' + nota;
                       }).join('<br>') + '</div>'
