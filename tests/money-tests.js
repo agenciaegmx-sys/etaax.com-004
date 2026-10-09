@@ -2601,6 +2601,11 @@ console.log('\n══ SUITE S · Invitaciones de alta (admin.html) ══');
        trae: se le pone el del propio Node, que es el mismo del navegador. */
     A.crypto = require('crypto').webcrypto;
     A.location = { origin: 'https://etaax.com', pathname: '/admin.html' };
+    /* El panel escapa los ids con `etaaxJsArg` antes de meterlos en un
+       `onclick` (BH49). La página lo carga con su propio <script src>, así que
+       aquí hay que dárselo igual que en el navegador — sin él, cualquier render
+       del panel truena a media prueba. */
+    cargarJS(A, 'js-arg.js');
     cargarInline(A, 'admin.html');
 
     /* Si el token se pudiera adivinar, se daría de alta un negocio ajeno. */
@@ -23221,6 +23226,155 @@ function CartaTemaDef() {
         fs.readFileSync(path.join(RAIZ, 'carta-tema.js'), 'utf8') + '})()',
         vm.createContext({ window: w, document: { documentElement: { style: {} } } }));
     return w.CartaTema.DEF.fondo;
+}
+
+/* ═══════════ SUITE BH49 · UN ID NO ES CÓDIGO (R01 de la auditoría) ═══════
+   LO QUE PASABA. El panel de plataforma armaba sus botones concatenando:
+
+       '<button onclick="eliminarNegocio(\'' + n.id + '\')">'
+
+   y el id del negocio lo escribe EL CLIENTE: es `text` sin formato, lo manda
+   hub.html al registrarse, y la política solo exige que el dueño sea quien es.
+   Un cliente podía guardarse un negocio cuyo id cerrara la cadena y escribiera
+   instrucciones. Al abrir el panel, esas instrucciones corrían en la sesión
+   del administrador de plataforma — la que alcanza a TODOS los negocios.
+
+   DOS LENGUAJES ANIDADOS. El navegador lee el atributo con el parser de HTML
+   y le entrega el resultado al de JavaScript. Por eso `etx()` no alcanzaba:
+   escapa la comilla como `&#39;`, el parser de HTML la vuelve a convertir en
+   `'` y la cadena se rompe igual. Escapar para HTML no es escapar para
+   JavaScript, y confundirlos es justo lo que dejaba la puerta abierta.
+
+   Aquí se prueban las dos mitades: que el escape sea correcto, y que el panel
+   lo USE en todos sus botones — no solo en el que se reprodujo.            */
+console.log('\n══ BH49 · Un id no es código ══');
+{
+    const E = crearContexto();
+    cargarJS(E, 'js-arg.js');
+    const J = E.etaaxJsArg;
+
+    /* El navegador, simulado en el orden REAL en que lee: primero el parser de
+       HTML descodifica el atributo, y lo que queda se lo pasa a JavaScript.
+       Probar solo una de las dos capas es como no probar ninguna. */
+    const comoLoLeeElNavegador = (crudo) => {
+        const atributo = J(crudo);
+        const trasHTML = atributo
+            .replace(/&quot;/g, '"').replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+        /* `eval` de UN literal de cadena: si el escape falla, esto o truena o
+           devuelve algo distinto de lo que entró. Las dos cosas son el bug. */
+        return eval("'" + trasHTML + "'");
+    };
+
+    const MALOS = {
+        'el payload de la auditoría': "n');globalThis.auditMarker=1;//",
+        'comilla simple suelta':      "o'brien",
+        'comilla doble':              'a"b',
+        'barra invertida':            'a\\b',
+        'barra y comilla juntas':     "a\\'b",
+        'salto de línea':             'a\nb',
+        'retorno de carro':           'a\rb',
+        'cierra el atributo':         '" onmouseover="x',
+        'cierra un script':           '</script><img src=x onerror=1>',
+        'separador de línea unicode': 'a b',
+        'una entidad ya escrita':     '&amp;#39;',
+        'id normal':                  'mg3k1abc'
+    };
+    Object.keys(MALOS).forEach(caso => {
+        test('vuelve EXACTO y no ejecuta nada · ' + caso, () =>
+            eq(comoLoLeeElNavegador(MALOS[caso]), MALOS[caso], 'ida y vuelta'));
+    });
+    test('un nulo no se vuelve la palabra «null»', () => {
+        eq(J(null), '', 'vacío');
+        return eq(J(undefined), '', 'vacío');
+    });
+    /* La barra invertida PRIMERO. Si se escapara después de la comilla,
+       duplicaría las barras que el propio escape acaba de meter y el literal
+       saldría corrido. Es el error clásico de escribir estas funciones. */
+    test('la barra invertida se escapa antes que la comilla', () =>
+        eq(J("'"), "\\'", 'una sola barra, no tres'));
+
+    /* ── Y AHORA EL PANEL, CORRIENDO DE VERDAD ──
+       Lo de arriba prueba el escape. Esto prueba que el panel lo use: se le da
+       un negocio con el id envenenado y se mira el HTML que genera. */
+    /* El panel lee la tolerancia de cobro del núcleo y la marca de los
+       recibos: se le dan igual que en el navegador, o el render truena antes
+       de llegar a lo que se quiere mirar. */
+    cargarJS(E, 'etaax-core.js');
+    cargarJS(E, 'precios.js');
+    cargarJS(E, 'reporte-marca.js');
+    cargarInline(E, 'admin.html');
+    const VENENO = "n');globalThis.auditMarker=1;//";
+    setVar(E, '_data', {
+        negocios: [{ id: VENENO, usuario_id: 'u1', datos: { nombre: 'Prueba', emoji: '🏢', tipo: 'bar' } }],
+        staff: [], usuarios: [{ id: 'u1', datos: { nombre: 'Dueño' } }],
+        suscripciones: [], solicitudes: [], pagos: []
+    });
+    E.renderNegocios();
+    const html = E.document.getElementById('tbodyNegocios').innerHTML;
+
+    test('el panel genera la fila (no se rompió al blindarlo)', () =>
+        eq(html.indexOf('eliminarNegocio') > -1, true, 'los botones siguen ahí'));
+    /* La prueba que importa: el id llega como DATO. Si la cadena se hubiera
+       cerrado, aparecería `');` suelto dentro del handler. */
+    test('el id envenenado NO cierra la cadena del onclick', () =>
+        eq(/onclick="[^"]*\('\)\s*;/.test(html), false, 'no hay cadena cerrada'));
+    /* OJO con lo que se mide aquí. El texto del ataque SÍ aparece en el HTML
+       —es el nombre del id y también se pinta como contenido de la celda— y
+       eso está bien: aparece como DATO. Mi primera versión exigía que no
+       apareciera, y eso es pedirle al panel que no enseñe el id, no que lo
+       escape. Lo que de verdad significa «escapado» es que la comilla que
+       traía quedó precedida de una barra: dentro del literal, no cerrándolo. */
+    test('…y la comilla que traía quedó escapada, dentro del literal', () => {
+        /* La forma CRUDA —comilla suelta, cadena cerrada— no puede estar en
+           ningún lado; la escapada sí, y es la prueba de que el escape corrió.
+           (Mi primera versión usaba un regex no-greedy que se paraba justo en
+           la comilla escapada y leía `n\` como si fuera todo el argumento.) */
+        eq(html.indexOf("n');globalThis") > -1, false, 'sin la forma cruda');
+        return eq(html.indexOf("n\\');globalThis") > -1, true, 'con la barra delante');
+    });
+    /* Y de verdad ejecutable: se toma el handler generado y se corre. Antes
+       esto ponía el marcador; ahora tiene que llamar a la función con el id
+       completo como texto. */
+    test('ejecutar el handler llama a la función con el id como texto', () => {
+        const m = html.match(/onclick="event\.stopPropagation\(\);(eliminarNegocio\([^"]*?\))"/);
+        eq(!!m, true, 'se encontró el handler');
+        const codigo = m[1]
+            .replace(/&quot;/g, '"').replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+        let recibido = null, marcador = null;
+        const caja = { eliminarNegocio: (v) => { recibido = v; }, globalThis: {} };
+        vm.createContext(caja);
+        vm.runInContext(codigo, caja);
+        marcador = caja.auditMarker;
+        eq(marcador, undefined, 'no se ejecutó el ataque');
+        return eq(recibido, VENENO, 'el id llegó entero, como dato');
+    });
+
+    /* ── EL CANDADO QUE EVITA QUE VUELVA ──
+       Arreglar los diecinueve sitios de hoy no sirve si el de mañana se
+       escribe a la antigua. Esto recorre los dos paneles y exige que todo
+       dato que entre a un `onclick` pase por el escape. */
+    ['admin.html', 'admin-catalogo-insumos.html'].forEach(archivo => {
+        test('ningún onclick de ' + archivo + ' concatena un dato sin escapar', () => {
+            const src = fs.readFileSync(path.join(RAIZ, archivo), 'utf8');
+            const sueltos = src.split('\n').map((l, i) => ({ l, n: i + 1 })).filter(x => {
+                if (x.l.indexOf('onclick') < 0) return false;
+                /* Solo los GENERADOS: un onclick escrito a mano en el HTML no
+                   concatena nada y no puede llevar un dato dentro. */
+                if (!/onclick=[^>]*\+\s*[A-Za-z_]/.test(x.l)) return false;
+                if (x.l.indexOf('etaaxJsArg') > -1) return false;
+                /* Los índices de un forEach son números, no texto de nadie. */
+                if (/\+\s*(v\.)?idx\s*\+/.test(x.l)) return false;
+                return true;
+            });
+            return eq(sueltos.map(x => x.n).join(', '), '', 'líneas sin escapar');
+        });
+        test('…y ' + archivo + ' carga el escape', () => {
+            const src = fs.readFileSync(path.join(RAIZ, archivo), 'utf8');
+            return eq(src.indexOf('src="/js-arg.js"') > -1, true, 'el helper va cargado');
+        });
+    });
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

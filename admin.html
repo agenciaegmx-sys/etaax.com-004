@@ -659,6 +659,7 @@ async function betaAppCopiar() {
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
+<script src="/js-arg.js"></script><!-- un id dentro de un onclick es un dato, no código -->
 <script src="/password.js"></script><!-- medidor y generador: la misma regla que el alta -->
 <script src="/reporte-marca.js"></script>
 <script src="/precios.js"></script><!-- tabla de precios por sucursal (una sola verdad) -->
@@ -983,8 +984,8 @@ function renderSolicitudes() {
         var sucsHoy = _data.sucsNeg[s.negocio_id];
         var btnB = 'border:none;border-radius:6px;padding:5px 9px;font-family:inherit;font-size:11px;cursor:pointer;margin-right:4px;';
         var acciones = d.estado === 'pendiente'
-            ? '<button style="' + btnB + 'background:rgba(61,190,122,.15);color:#3dbe7a" onclick="activarSolicitud(\'' + s.id + '\')">✅ Activar sucursal</button>' +
-              '<button style="' + btnB + 'background:rgba(232,90,90,.14);color:#e85a5a" title="Rechazar" onclick="rechazarSolicitud(\'' + s.id + '\')">✖</button>'
+            ? '<button style="' + btnB + 'background:rgba(61,190,122,.15);color:#3dbe7a" onclick="activarSolicitud(\'' + etaaxJsArg(s.id) + '\')">✅ Activar sucursal</button>' +
+              '<button style="' + btnB + 'background:rgba(232,90,90,.14);color:#e85a5a" title="Rechazar" onclick="rechazarSolicitud(\'' + etaaxJsArg(s.id) + '\')">✖</button>'
             : (d.atendidaAt ? '<span style="font-size:11px;color:var(--muted)">' + new Date(d.atendidaAt).toLocaleDateString('es-MX') + '</span>' : '—');
         return '<tr>' +
             '<td>' + fecha + '</td>' +
@@ -1082,7 +1083,7 @@ function renderUsuarios() {
         var cnt  = negsCount[u.id] || 0;
         var fecha = u.created_at ? new Date(u.created_at).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) : '—';
         var nombre = esc(u.nombre || '—');
-        return '<tr class="clickable" onclick="abrirDetalleUsuario(\'' + u.id + '\')">' +
+        return '<tr class="clickable" onclick="abrirDetalleUsuario(\'' + etaaxJsArg(u.id) + '\')">' +
             '<td><strong>' + nombre + '</strong></td>' +
             '<td><span class="badge ' + p.cls + '">' + p.nombre + '</span></td>' +
             '<td class="text-green">' + cnt + ' negocio' + (cnt!==1?'s':'') + '</td>' +
@@ -1124,15 +1125,15 @@ function renderNegocios() {
         var badge = '<span class="badge" style="background:' + st.color + '22;color:' + st.color + ';border:1px solid ' + st.color + '55">' + st.label + '</span>';
         // Botones de gestión (stopPropagation para no abrir el detalle).
         var btnBase = 'border:none;border-radius:6px;padding:5px 9px;font-family:inherit;font-size:11px;cursor:pointer;margin-right:4px;';
-        var btnActivar = '<button onclick="event.stopPropagation();activarSuscripcion(\'' + n.id + '\')" style="' + btnBase + 'background:rgba(61,190,122,.15);color:#3dbe7a">' + (st.activa ? '+1 mes' : 'Activar 1 mes') + '</button>';
+        var btnActivar = '<button onclick="event.stopPropagation();activarSuscripcion(\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:rgba(61,190,122,.15);color:#3dbe7a">' + (st.activa ? '+1 mes' : 'Activar 1 mes') + '</button>';
         var btnCancelar = st.estado !== 'cancelada' && st.estado !== 'pendiente'
-            ? '<button onclick="event.stopPropagation();cancelarSuscripcion(\'' + n.id + '\')" style="' + btnBase + 'background:rgba(232,90,90,.14);color:#e85a5a">Cancelar</button>'
+            ? '<button onclick="event.stopPropagation();cancelarSuscripcion(\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:rgba(232,90,90,.14);color:#e85a5a">Cancelar</button>'
             : '';
-        var btnCobro = '<button title="Día de cobro y días de tolerancia" onclick="event.stopPropagation();configurarCobro(\'' + n.id + '\')" style="' + btnBase + 'background:rgba(122,184,245,.14);color:#7ab8f5">📅</button>';
-        var btnRecibo = '<button title="Generar recibo de pago o presupuesto de este negocio" onclick="event.stopPropagation();abrirDocumentoModal(\'recibo\',\'' + n.id + '\')" style="' + btnBase + 'background:rgba(245,200,66,.14);color:var(--accent-text)">🧾</button>';
-        var btnRespaldo = '<button title="Descargar respaldo del negocio" onclick="event.stopPropagation();descargarRespaldoNegocio(\'' + n.id + '\')" style="' + btnBase + 'background:var(--s2);color:var(--muted)">⬇️</button>';
-        var btnEliminar = '<button title="Eliminar negocio" onclick="event.stopPropagation();eliminarNegocio(\'' + n.id + '\')" style="' + btnBase + 'background:rgba(232,90,90,.10);color:#e85a5a">🗑️</button>';
-        return '<tr class="clickable" onclick="abrirDetalleNegocio(\'' + n.id + '\')">' +
+        var btnCobro = '<button title="Día de cobro y días de tolerancia" onclick="event.stopPropagation();configurarCobro(\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:rgba(122,184,245,.14);color:#7ab8f5">📅</button>';
+        var btnRecibo = '<button title="Generar recibo de pago o presupuesto de este negocio" onclick="event.stopPropagation();abrirDocumentoModal(\'recibo\',\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:rgba(245,200,66,.14);color:var(--accent-text)">🧾</button>';
+        var btnRespaldo = '<button title="Descargar respaldo del negocio" onclick="event.stopPropagation();descargarRespaldoNegocio(\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:var(--s2);color:var(--muted)">⬇️</button>';
+        var btnEliminar = '<button title="Eliminar negocio" onclick="event.stopPropagation();eliminarNegocio(\'' + etaaxJsArg(n.id) + '\')" style="' + btnBase + 'background:rgba(232,90,90,.10);color:#e85a5a">🗑️</button>';
+        return '<tr class="clickable" onclick="abrirDetalleNegocio(\'' + etaaxJsArg(n.id) + '\')">' +
             '<td><strong>' + esc(d.emoji||'🏢') + ' ' + esc(d.nombre||'—') + '</strong>' +
                 '<div class="text-dim" style="font-size:11px">' + esc(d.tipo||'—') + ' · ' + staff + ' colab.</div></td>' +
             '<td class="text-dim">' + esc(dueno ? (dueno.nombre||'—') : '—') + '</td>' +
@@ -2506,22 +2507,22 @@ function abrirDetalleNegocio(nid) {
            y no en una pantalla aparte: las dos preguntas que contestan —«quién
            entró a este negocio» y «cómo le devuelvo el acceso»— se hacen
            mirando un negocio concreto. */
-        '<button onclick="verAccesosNegocio(\'' + n.id + '\')" ' +
+        '<button onclick="verAccesosNegocio(\'' + etaaxJsArg(n.id) + '\')" ' +
             'style="width:100%;margin-top:10px;background:var(--s2);color:var(--text);font-family:\'DM Sans\',sans-serif;' +
             'font-size:13px;font-weight:600;padding:11px;border-radius:8px;border:1px solid var(--b1);cursor:pointer;letter-spacing:.3px">' +
             '🕘 Historial de accesos' +
         '</button>' +
-        (dueno ? '<button onclick="abrirCredenciales(\'' + n.id + '\')" ' +
+        (dueno ? '<button onclick="abrirCredenciales(\'' + etaaxJsArg(n.id) + '\')" ' +
             'style="width:100%;margin-top:10px;background:var(--s2);color:var(--text);font-family:\'DM Sans\',sans-serif;' +
             'font-size:13px;font-weight:600;padding:11px;border-radius:8px;border:1px solid var(--b1);cursor:pointer;letter-spacing:.3px">' +
             '🔑 Correo y contraseña del dueño' +
         '</button>' : '') +
-        '<button onclick="descargarRespaldoNegocio(\'' + n.id + '\')" ' +
+        '<button onclick="descargarRespaldoNegocio(\'' + etaaxJsArg(n.id) + '\')" ' +
             'style="width:100%;margin-top:10px;background:var(--s2);color:var(--text);font-family:\'DM Sans\',sans-serif;' +
             'font-size:13px;font-weight:600;padding:11px;border-radius:8px;border:1px solid var(--b1);cursor:pointer;letter-spacing:.3px">' +
             '⬇️ Descargar respaldo' +
         '</button>' +
-        '<button onclick="eliminarNegocio(\'' + n.id + '\')" ' +
+        '<button onclick="eliminarNegocio(\'' + etaaxJsArg(n.id) + '\')" ' +
             'style="width:100%;margin-top:10px;background:transparent;color:var(--red,#e05252);font-family:\'DM Sans\',sans-serif;' +
             'font-size:13px;font-weight:600;padding:11px;border-radius:8px;border:1px solid var(--red,#e05252);cursor:pointer;letter-spacing:.3px">' +
             '🗑 Eliminar negocio' +
@@ -2762,7 +2763,7 @@ function renderProveedores() {
     }
     document.getElementById('tbodyProveedores').innerHTML = rows.map(function(p) {
         var d = p.datos || {};
-        return '<tr class="clickable" onclick="abrirFormProveedor(\'' + p.id + '\')">' +
+        return '<tr class="clickable" onclick="abrirFormProveedor(\'' + etaaxJsArg(p.id) + '\')">' +
             '<td><strong>' + esc(d.nombre||'—') + '</strong></td>' +
             '<td class="text-dim">' + esc(TIPOS_PROVEEDOR[d.tipo] || d.tipo || '—') + '</td>' +
             '<td class="text-dim">' + esc(d.contacto||'—') + '</td>' +
@@ -2824,7 +2825,7 @@ function abrirFormProveedor(id) {
         '<button class="btn-form-save" id="fp_btn" onclick="guardarProveedor(\'' + (id||'') + '\')">' +
             (es ? 'Guardar cambios' : 'Agregar proveedor') +
         '</button>' +
-        (es ? '<button class="btn-form-delete" onclick="eliminarProveedor(\'' + id + '\')">Eliminar proveedor</button>' : '');
+        (es ? '<button class="btn-form-delete" onclick="eliminarProveedor(\'' + etaaxJsArg(id) + '\')">Eliminar proveedor</button>' : '');
 
     document.getElementById('formPanel').classList.add('open');
     setTimeout(function(){ document.getElementById('fp_nombre').focus(); }, 80);
@@ -2968,7 +2969,7 @@ async function generarInvitacion() {
             '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
                 '<a href="' + esc(mailto) + '" style="background:#3dbe7a;color:#0a0908;text-decoration:none;font-weight:700;padding:9px 16px;border-radius:8px;font-size:13px">✉️ Mandar el correo</a>' +
                 '<a href="' + esc(wa) + '" target="_blank" rel="noopener" style="background:#25d366;color:#0a0908;text-decoration:none;font-weight:700;padding:9px 16px;border-radius:8px;font-size:13px">💬 Avisar por WhatsApp</a>' +
-                '<button onclick="_copiarInv(\'' + token + '\')" style="background:transparent;border:1px solid #2a2824;color:#a8a29a;padding:9px 16px;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit">Copiar link</button>' +
+                '<button onclick="_copiarInv(\'' + etaaxJsArg(token) + '\')" style="background:transparent;border:1px solid #2a2824;color:#a8a29a;padding:9px 16px;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit">Copiar link</button>' +
             '</div>' +
         '</div>';
 
@@ -3067,10 +3068,10 @@ function renderInvitaciones() {
             '<td style="white-space:nowrap">' +
                 (usada ? '' :
                     (vencida ? '' :
-                        '<button onclick="_copiarInv(\'' + esc(i.token) + '\')" style="background:transparent;border:1px solid #2a2824;color:#a8a29a;padding:5px 11px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit">Copiar link</button> ') +
+                        '<button onclick="_copiarInv(\'' + etaaxJsArg(i.token) + '\')" style="background:transparent;border:1px solid #2a2824;color:#a8a29a;padding:5px 11px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit">Copiar link</button> ') +
                     /* Cancelar también en las caducadas: ya no sirven y solo
                        ensucian la lista mientras se hacen pruebas. */
-                    '<button onclick="cancelarInvitacion(\'' + esc(i.token) + '\')" title="El link deja de servir" style="background:transparent;border:1px solid rgba(224,90,58,.5);color:#e05a3a;padding:5px 11px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit">Cancelar</button>') +
+                    '<button onclick="cancelarInvitacion(\'' + etaaxJsArg(i.token) + '\')" title="El link deja de servir" style="background:transparent;border:1px solid rgba(224,90,58,.5);color:#e05a3a;padding:5px 11px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit">Cancelar</button>') +
             '</td>' +
         '</tr>';
     }).join('');

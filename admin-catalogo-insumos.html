@@ -498,6 +498,7 @@
 <!-- ── Scripts ── -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
+<script src="/js-arg.js"></script><!-- un id dentro de un onclick es un dato, no código -->
 <script src="/etaax-store.js"></script><!-- almacenamiento grande: la cola de salida no cabe en localStorage -->
 <script src="etaax-db.js"></script>
 <script src="security.js"></script>
@@ -996,8 +997,8 @@ function _renderNovedades(){
                 '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">'+g.versiones.length+' versión'+(multi?'es':'')+' en: '+negs+'</div>'+
                 _novAvisoReaparece(g.versiones)+
               '</div>'+
-              '<button class="btn-vista" style="white-space:nowrap" onclick="_novToggle(\''+_escN(insumoId)+'\')" id="novBtn-'+_escN(insumoId)+'">▸ Ver desglose</button>'+
-              '<button class="btn-vista" style="white-space:nowrap;color:var(--text-dim)" title="Descartar esta novedad (reaparece si el negocio vuelve a cambiar algo)" onclick="_novDescartarGrupo(\''+_escN(insumoId)+'\')">✕ No actualizar</button>'+
+              '<button class="btn-vista" style="white-space:nowrap" onclick="_novToggle(\''+etaaxJsArg(insumoId)+'\')" id="novBtn-'+_escN(insumoId)+'">▸ Ver desglose</button>'+
+              '<button class="btn-vista" style="white-space:nowrap;color:var(--text-dim)" title="Descartar esta novedad (reaparece si el negocio vuelve a cambiar algo)" onclick="_novDescartarGrupo(\''+etaaxJsArg(insumoId)+'\')">✕ No actualizar</button>'+
             '</div>'+
             '<div id="novDet-'+_escN(insumoId)+'" style="display:none;margin-top:10px;padding:12px;background:var(--surface2,rgba(255,255,255,.03));border:1px solid var(--border);border-radius:10px">'+
               '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px">📗 Catálogo ETAAX actual</div>'+
@@ -1153,8 +1154,8 @@ function abrirDuplicados(){
                     return '<div style="display:flex;align-items:center;gap:10px;font-size:12px;padding:5px 0;border-top:1px solid var(--border)">'
                       + '<span style="flex:1;color:var(--text-muted)">'+_escN(_dupResumenIns(c))+'</span>'
                       + '<span style="font-size:10px;color:var(--text-dim)">'+_escN(String(c.id).slice(-8))+'</span>'
-                      + '<button class="btn-vista" style="font-size:11px;padding:3px 9px" onclick="_dupVer(\''+_escN(c.id)+'\')">Ver</button>'
-                      + '<button class="btn-vista" style="font-size:11px;padding:3px 9px;color:var(--red);border-color:rgba(224,90,58,.5)" onclick="_dupBorrar(\''+_escN(c.id)+'\')">Borrar</button>'
+                      + '<button class="btn-vista" style="font-size:11px;padding:3px 9px" onclick="_dupVer(\''+etaaxJsArg(c.id)+'\')">Ver</button>'
+                      + '<button class="btn-vista" style="font-size:11px;padding:3px 9px;color:var(--red);border-color:rgba(224,90,58,.5)" onclick="_dupBorrar(\''+etaaxJsArg(c.id)+'\')">Borrar</button>'
                       + '</div>';
                   }).join('')
                 + '</div>';
