@@ -22165,6 +22165,118 @@ console.log('\n══ BH43 · Dos cifras para lo mismo ══');
         eq(simular(CASO, { vodkaFantasma: 1 }).todo, 643, 'sigue enseñando todo'));
 }
 
+/* ═══════════ SUITE BH44 · UN SOLO CAPITAL ═══════════════════════════════
+   El Paso 5 decía «Capital a costo $77,198.49» y el reporte de existencias
+   —la lista producto por producto que se imprime para ir a contar— decía
+   «$77,364.76». $166 de diferencia sobre lo mismo.
+
+   Eran dos formas de valuar los batches. El Resultado los excluía y le sumaba
+   su contenido a los insumos, valuándolo al costo de CADA INGREDIENTE; la
+   lista los incluye tal cual, al costo del batch.
+
+   Manda la lista: el capital es lo que hay en la bodega valuado como está —el
+   Limoncello de la garrafa vale lo que vale el Limoncello, no la suma de sus
+   partes revaluadas— y es la cifra que se puede cotejar renglón por renglón.
+   El reparto se queda donde sirve: en la VARIANCIA.                        */
+console.log('\n══ BH44 · Un solo capital ══');
+{
+    const W = crearContexto();
+    cargarJS(W, 'etaax-core.js');
+    cargarJS(W, 'insumo-label.js');
+    cargarJS(W, 'recetas/inventarios.js');
+    W._storage['etaax_negocio_activo'] = 'negT';
+    vm.runInContext('function _autoGuardar(){} function _refrescarAvisoPrebatches(){}', W);
+
+    /* Un batch cuyo costo propio NO es el de sus partes revaluadas: es el caso
+       que destapaba la diferencia. */
+    setVar(W, '_cacheRecetasInv', [{ id:'srMix', nombre:'Mix', tipo:'sub-bebidas', status:'activa',
+        ingredientes:[{ insumoId:'campari', cantidad:500, unidad:'ML' },
+                      { insumoId:'jugo',    cantidad:500, unidad:'ML' }] }]);
+    setVar(W, '_cacheInsumosInv', [
+        { id:'preMix', nombre:'Mix PR', esSubReceta:true, recetaId:'srMix', activo:'1' },
+        { id:'campari', nombre:'Campari', activo:'1' },
+        { id:'jugo', nombre:'Jugo', activo:'1' }]);
+    setVar(W, 'invActual', { id:'invT', area:'barra', entradasLog:[], ventasCompuesto:{},
+        cancelaciones:[], descuentos:[], filas:[], prebatchProducidos:{}, cocktailsVendidos:{} });
+    /* costoUnitario distinto por producto: el batch a 2/ml, el Campari a 5/ml
+       y el jugo a 0.2/ml. Valuar su contenido de una forma o de otra da
+       números distintos — que es justo el bug. */
+    const f = (id, nom, ml, costo) => ({ insumoId:id, nombre:nom, tipo:'copa', contNeto:1000,
+        copaML:1, costoUnitario:costo, precioCarta:0, existenciaAnterior:0, entradas:[],
+        pesos:[], cerradasBodega: ml / 1000, cerradasBarra:0, ventasCopasDirectas:0,
+        cortesiaCopas:0, mermaCopas:0, ventasBotella:0 });
+    setVar(W, 'filasCaptura', [f('preMix','Mix PR', 1000, 2000),
+                               f('campari','Campari', 500, 5000),
+                               f('jugo','Jugo', 500, 200)]);
+    vm.runInContext('_consumoDirty = true; _cancelDirty = true;', W);
+
+    /* El capital de la LISTA: cada renglón, su existencia por su costo. Es la
+       definición simple, la que se puede cotejar caminando la bodega. */
+    const capLista = () => (vm.runInContext('filasCaptura', W) || [])
+        .reduce((t, x) => t + W.calcExistencia(x) * W.costoCopa(x), 0);
+
+    test('el capital es la existencia por su costo, renglón por renglón', () => {
+        const esperado = 1000 * W.costoCopa(vm.runInContext('filasCaptura[0]', W)) +
+                          500 * W.costoCopa(vm.runInContext('filasCaptura[1]', W)) +
+                          500 * W.costoCopa(vm.runInContext('filasCaptura[2]', W));
+        return eq(Math.round(capLista()), Math.round(esperado), 'lo que hay, como está');
+    });
+    /* EL CANDADO QUE IMPORTA: el batch cuenta con SU costo y sus insumos NO
+       reciben su parte en el capital. Si el Resultado volviera a repartir,
+       los dos números se separan otra vez. */
+    const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    test('el Resultado NO reparte el batch para el capital', () => {
+        const i = src.indexOf('let capitalCosto=0, capitalCarta=0, difCostoTotal=0');
+        const b = src.slice(i, i + 1900);
+        return eq(b.indexOf('const exist = calcExistencia(fila);') > -1 &&
+                  b.indexOf('calcExistencia(fila) + adj.fis') === -1, true, 'sin reparto');
+    });
+    test('…ni el reporte impreso', () => {
+        const i = src.indexOf('const _existCap = calcExistencia(f);');
+        return eq(i > -1 && src.slice(i, i + 260).indexOf('capitalCosto += _existCap * cc') > -1,
+                  true, 'la misma regla en los tres');
+    });
+    /* Y el batch ya NO se salta: antes su capital era cero y el de la lista no. */
+    test('…y el batch ya no sale del capital con valor cero', () => {
+        const i = src.indexOf('let capitalCosto=0, capitalCarta=0, difCostoTotal=0');
+        const b = src.slice(i, i + 1900);
+        const posSalto = b.indexOf('if (_esPrebatchRepartido(fila.insumoId)) return;');
+        const posCap   = b.indexOf('capitalCosto  += exist * cc;');
+        return eq(posSalto > posCap, true, 'cuenta y luego se salta la variancia');
+    });
+    /* LO QUE NO SE PUEDE ROMPER: el reparto sigue mandando en la VARIANCIA,
+       que es su trabajo. El batch no tiene diferencia propia. */
+    test('la variancia del batch SIGUE viviendo en sus insumos', () => {
+        const i = src.indexOf('// La variancia SÍ usa el reparto');
+        const b = src.slice(i, i + 300);
+        return eq(b.indexOf('if (_esPrebatchRepartido(fila.insumoId)) return;') > -1,
+                  true, 'cada lente en lo suyo');
+    });
+
+    /* ── EL REPORTE DE EXISTENCIAS, LOS DOS BUGS DE SU IMPRESO ── */
+    test('el impreso cuenta los insumos de verdad, no «1»', () => {
+        const i = src.indexOf('rows.push({ insumoId:f.insumoId, nombre:');
+        return eq(i > -1, true, 'el Set tenía undefined en todos');
+    });
+    /* La columna «Última existencia» es del reporte de ÚLTIMAS existencias,
+       donde cada producto viene de un inventario distinto. En el inventario
+       EN CURSO todos son del mismo día —el del encabezado— y salía vacía 120
+       veces. */
+    test('…y la columna «Última existencia» se quita cuando no hay fechas', () => {
+        const i = src.indexOf('var _hayFechas = rows.some');
+        return eq(i > -1 &&
+                  src.indexOf("(_hayFechas?'<th class=\"c\">Última existencia</th>':'')") > -1,
+                  true, 'sin columna vacía');
+    });
+    test('…y el colspan del encabezado de grupo la descuenta', () =>
+        eq(src.indexOf("var _nCols = (op ? 7 : 8) - (_hayFechas ? 0 : 1);") > -1,
+           true, 'la tabla no se desalinea'));
+    test('…pero sigue saliendo donde SÍ hay fechas que enseñar', () => {
+        const i = src.indexOf("(_hayFechas?'<td class=\"c\"");
+        return eq(i > -1, true, 'el otro reporte intacto');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');

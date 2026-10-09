@@ -3092,7 +3092,10 @@ function _rowsDeInventario(inv) {
         if (barra <= 0 && bodega <= 0 && total <= 0) return;
         var copasBot = (f.tipo === 'copa' && f.contNeto > 0 && f.copaML > 0) ? f.contNeto/f.copaML : 0;
         var costoCompra = f.tipo === 'copa' ? cc*copasBot : cc;
-        rows.push({ nombre:f.nombre||'—', familia:f.familia||f.categoria||'Otros',
+        /* insumoId SÍ viaja: el encabezado del impreso cuenta insumos únicos
+           con un Set sobre este campo, y sin él todos los renglones eran
+           `undefined` — el reporte de 120 productos decía «1 insumos». */
+        rows.push({ insumoId:f.insumoId, nombre:f.nombre||'—', familia:f.familia||f.categoria||'Otros',
             subcat:f.subcategoria||f.categoria||'', tipo:f.tipo,
             copaML:f.copaML, contNeto:f.contNeto, baseUnit:f.baseUnit, barra:barra, bodega:bodega, total:total,
             costoUnit:costoCompra, capital:total*cc, capBarra:barra*cc, capBodega:bodega*cc });
@@ -3671,12 +3674,24 @@ function imprimirReporteExistencias(opts){
         "@page { size:letter landscape; margin:1cm; }";
 
     var op = _repModoOp;
+    /* ══ «ÚLTIMA EXISTENCIA» NO APLICA AL INVENTARIO EN CURSO ═════════════
+       Esa columna existe para el reporte de ÚLTIMAS existencias, donde cada
+       producto viene de un inventario distinto y la fecha dice qué tan fresco
+       es el dato. Al imprimir el inventario EN CURSO todos los renglones son
+       del mismo día —el que ya está en el encabezado— y la columna salía
+       vacía, 120 veces.
+
+       Se quita cuando no hay fechas que enseñar. Repetir el total en una
+       segunda columna también la llenaría, pero una columna que dice lo mismo
+       que la de al lado no es un dato: es una columna menos para lo que sí
+       importa, en una hoja horizontal que ya va apretada. */
+    var _hayFechas = rows.some(function (r) { return !!r.fecha; });
     // ── Separado POR GRUPO de producto, con su subtotal ──
     // Una lista corrida de 260 insumos no se puede leer ni cotejar contra la
     // bodega; agrupada, cada familia se cuenta y se cierra por su cuenta.
     var _grupos = {};
     rows.forEach(function(r){ var g = r.familia || 'Sin grupo'; (_grupos[g] = _grupos[g] || []).push(r); });
-    var _nCols = op ? 7 : 8;
+    var _nCols = (op ? 7 : 8) - (_hayFechas ? 0 : 1);
     var _cuerpo = Object.keys(_grupos).sort(function(a,b){ return String(a).localeCompare(String(b),'es'); }).map(function(g){
         var lista = _grupos[g];
         var sub = lista.reduce(function(t,r){ return t + (r.capital||0); }, 0);
@@ -3686,15 +3701,17 @@ function imprimirReporteExistencias(opts){
         return head + lista.map(function(r){ var cont=_fmtContenido(r); return '<tr><td style="font-weight:600;padding-left:18px">'+etx(r.nombre)+(cont?'<div class="grp" style="color:#5a8fc7">📦 '+cont+'</div>':'')+'</td><td style="color:#888">'+etx(r.familia)+'</td>'+
             '<td class="r">'+_fmtCant(r.barra,r)+'</td><td class="r">'+_fmtCant(r.bodega,r)+'</td>'+
             '<td class="r b" style="color:#1a1916">'+_fmtCant(r.total,r)+'</td><td class="r" style="color:#888">'+_repMoney(r.costoUnit)+'</td>'+
-            (op?'':'<td class="r b">'+_repMoney(r.capital)+'</td>')+'<td class="c" style="color:#aaa">'+_repFecha(r.fecha)+'</td></tr>'; }).join('');
+            (op?'':'<td class="r b">'+_repMoney(r.capital)+'</td>')+
+            (_hayFechas?'<td class="c" style="color:#56514a">'+_repFecha(r.fecha)+'</td>':'')+'</tr>'; }).join('');
     }).join('');
     var tabla = '<table class="ct"><thead><tr>'+
         '<th style="text-align:left">Insumo</th><th style="text-align:left">Familia</th>'+
         '<th class="r">Exist. Barra</th><th class="r">Exist. Bodega</th><th class="r">Total exist.</th>'+
-        '<th class="r">Costo prov.</th>'+(op?'':'<th class="r">Capital</th>')+'<th class="c">Última existencia</th></tr></thead><tbody>'+
+        '<th class="r">Costo prov.</th>'+(op?'':'<th class="r">Capital</th>')+
+        (_hayFechas?'<th class="c">Última existencia</th>':'')+'</tr></thead><tbody>'+
         _cuerpo+
         '</tbody>'+(op?'':'<tfoot><tr><td colspan="6" class="r" style="text-transform:uppercase;font-size:9px;letter-spacing:1.5px;color:#888">Capital · Barra '+_repMoney(totBarra)+' &nbsp;·&nbsp; Bodega '+_repMoney(totBodega)+'</td>'+
-        '<td class="r b" style="font-size:13px">'+_repMoney(totCap)+'</td><td></td></tr></tfoot>')+'</table>';
+        '<td class="r b" style="font-size:13px">'+_repMoney(totCap)+'</td>'+(_hayFechas?'<td></td>':'')+'</tr></tfoot>')+'</table>';
 
     var resumen = op ? '' : '<div style="display:flex;gap:22px;padding:10px 22px 0;font-size:11px;color:#555">'+
         '<span>📍 <b>Barra</b> '+_repMoney(totBarra)+'</span>'+
@@ -8340,15 +8357,29 @@ function renderStep5() {
     const vcomps = _compuestosActivos().map(_virtualFilaCompuesto);
     _repCache = _repartoPrebatch(); // reparto del prebatch a sus insumos (una vez por render)
     let capitalCosto=0, capitalCarta=0, difCostoTotal=0, difNetoCosto=0, conAlerta=0;
-    // Capital: existencia real de TODAS las filas (los miembros cuentan su capital una vez).
+    /* ══ EL CAPITAL SE VALÚA COMO ESTÁ, NO COMO SE REPARTE ════════════════
+       Esto excluía los batches y le sumaba su contenido a los insumos,
+       valuándolo al costo de CADA INGREDIENTE. El reporte de existencias
+       —la lista producto por producto que se imprime para ir a contar— los
+       incluye tal cual, al costo del batch. Dos números para lo mismo:
+       $77,198 contra $77,365.
+
+       Manda el reporte de existencias. El capital es lo que hay en la bodega
+       valuado como está: el Limoncello de la garrafa vale lo que vale el
+       Limoncello, no la suma de sus partes revaluadas. Y además es la cifra
+       que se puede cotejar renglón por renglón con la lista.
+
+       EL REPARTO SE QUEDA donde sirve: en la VARIANCIA, que es su trabajo
+       —decidir a quién le falta producto—. Las dos lentes conviven; lo que no
+       puede pasar es que dos pantallas den dos capitales. */
     filasCaptura.forEach(fila => {
-        // Prebatch REPARTIDO: su capital/diferencia viven en sus insumos (parte proporcional).
-        if (_esPrebatchRepartido(fila.insumoId)) return;
         const adj   = _repartoDe(fila.insumoId);
-        const exist = calcExistencia(fila) + adj.fis;
+        const exist = calcExistencia(fila);
         const cc    = costoCopa(fila);
         capitalCosto  += exist * cc;
         capitalCarta  += exist * (fila.precioCarta||0);
+        // La variancia SÍ usa el reparto: el prebatch no tiene diferencia propia.
+        if (_esPrebatchRepartido(fila.insumoId)) return;
         // La diferencia de los MIEMBROS se evalúa en su compuesto, no individual.
         if (!mapaC5[fila.insumoId]) {
             const dif = calcDiferencia(fila) + adj.dif;
@@ -9822,7 +9853,13 @@ function verReporteDirectivo(gerencial, modo) {
         const ventaNetaF = f.tipo === 'pza' ? ventaPzaTot : (ventaCopa + ventaBot * copasBot);
         const varPct     = esPBo ? 0 : (_pctVarianza(dif, _usoTotal(ventaNetaF, prodPBver, prodPB)) ?? 0);
         const _bat       = esBateo(f.insumoId) || esPBo; // de bateo / prebatch repartido: sin alerta propia
-        if (!esPBo) { capitalCosto += fisico * cc; capitalCarta += fisico * (f.precioCarta || 0); }
+        /* Misma regla que el Resultado y que el reporte de existencias: el
+           capital es lo que hay, valuado como está. El batch cuenta con su
+           propio costo y sus insumos no reciben su parte AQUÍ (sí en la
+           variancia, que es otra cosa). */
+        const _existCap = calcExistencia(f);
+        capitalCosto += _existCap * cc;
+        capitalCarta += _existCap * (f.precioCarta || 0);
         difTotal     += difCosto;
         if (!_bat && Math.abs(varPct) > 25) conAlerta++;
         else if (!_bat && Math.abs(varPct) > 10) conRiesgo++;
