@@ -437,7 +437,11 @@ body:not(.has-ctx) .inv-wizard-header { top: 48px; } /* sin ctx-bar (staff): sol
    y se leían como parte de la barra. Un respiro, y una sombra que marca dónde
    termina la barra cuando el contenido pasa por debajo. */
 .inv-steps { box-shadow: 0 2px 8px rgba(0,0,0,.18); }
-#stepContent { padding-top: 16px; }
+/* El Paso 5 NO se pinta en #stepContent: tiene su propio contenedor
+   persistente (#step5Keep, la caché de render). Darle el aire solo al primero
+   dejaba el Resultado —el que tiene los cards de capital— pegado a la barra,
+   que es justo donde se notaba. */
+#stepContent, #step5Keep { padding-top: 16px; }
 .inv-step {
     display: flex; flex-direction: column; align-items: center; gap: 4px;
     padding: 10px 20px; cursor: pointer; border-bottom: 3px solid transparent;

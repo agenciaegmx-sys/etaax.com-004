@@ -1807,6 +1807,12 @@ function _prebatchDesglose() {
             }
             return {
                 nombre: (ins && ins.nombre) || (ing && ing.nombre) || '(sin insumo)',
+                /* Los ids del ingrediente, para la cadena plegada. Tres vueltas
+                   con el Sidral sin poder ver por qué un ingrediente empata y
+                   el de al lado no: están en la MISMA receta y el único dato
+                   que los distingue es a qué id apuntan. */
+                ids: { pide: iid || '-', canon: can || '-',
+                       fila: (filas[can] && filas[can].insumoId) || 'NINGUNO' },
                 cant: base * n,
                 unidad: (u === 'PZA' || u === 'PZ' || u === '') ? 'pza' : (u === 'G' || u === 'KG' ? 'g' : 'ml'),
                 sinInsumo: !ins,
@@ -1887,6 +1893,14 @@ function _prebatchDesgloseHTML() {
                 'insumo que manda: ' + etx(x.cadena.resuelveA) + ' (' + etx(x.cadena.sucDelIns) + ')<br>' +
                 'su recetaId: ' + etx(x.cadena.recetaId) + '<br>' +
                 'receta usada: ' + etx(x.cadena.recetaUsada) + ' — ' + etx(x.cadena.recetaNom) +
+                /* Y el porqué de cada ingrediente: a qué id apunta la receta,
+                   a cuál se reduce y qué renglón del inventario le tocó. Con
+                   dos insumos del mismo nombre es lo único que los separa. */
+                (x.ings || []).map(function (i) {
+                    if (!i.ids) return '';
+                    return '<br>· ' + etx(i.nombre) + ': pide ' + etx(i.ids.pide) +
+                           ' → canon ' + etx(i.ids.canon) + ' → renglón ' + etx(i.ids.fila);
+                }).join('') +
                 '</div></details>' : '';
             return '<div style="margin-bottom:9px">' +
                 '<div style="font-size:12.5px;color:var(--text);font-weight:600">' + etx(x.nombre) +
@@ -9233,7 +9247,7 @@ function _step5TablasHTML() {
                     <div style="font-size:14px;font-weight:600">${etx(insumoTitulo(fila))}</div>
                     <div style="font-size:11.5px;color:var(--text-dim)">${fila.categoria||''}</div>
                     ${_contP?`<div style="font-size:9.5px;color:#7ab8f5">📦 ${_contP}</div>`:''}
-                    <button onclick="event.stopPropagation();toggleBateo('${fila.insumoId}')" style="margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid ${esBateo(fila.insumoId)?'#3dbe7a':'#888'};background:${esBateo(fila.insumoId)?'#3dbe7a':'transparent'};color:${esBateo(fila.insumoId)?'#fff':'#999'}">🏏 ${esBateo(fila.insumoId)?'De bateo ✓':'Marcar bateo'}</button>${_btnNotaInsumo(fila.insumoId)}
+                    <button onclick="event.stopPropagation();toggleBateo('${fila.insumoId}')" style="margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid ${esBateo(fila.insumoId)?'#3dbe7a':'#888'};background:${esBateo(fila.insumoId)?'#3dbe7a':'transparent'};color:${esBateo(fila.insumoId)?'#fff':'#999'}">🏏 ${esBateo(fila.insumoId)?'De bateo ✓':'Marcar bateo'}</button>${_btnNotaInsumo(fila.insumoId)}${_btnOcultoImpreso(fila.insumoId)}
                 </td>
                 <td style="text-align:center">${ea.toFixed(0)} pza</td>
                 <td style="text-align:center;color:var(--green)">${entTotal>0?'+'+entTotal.toFixed(0)+' pza':'—'}</td>
@@ -9387,7 +9401,7 @@ function _step5TablasHTML() {
                 <div style="font-size:10px;color:var(--text-dim)">${members.length} presentaciones</div>
                 <span style="display:inline-block;margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;border:1px solid var(--viol);color:var(--viol)">🧩 compuesto</span>
                 <button onclick="var d=document.getElementById('compDesg-${comp.id}');d.style.display=d.style.display==='none'?'':'none';this.textContent=d.style.display==='none'?'▸ Ver desglose':'▾ Ocultar desglose'" style="margin-top:3px;margin-left:4px;font-size:9px;padding:1px 7px;border-radius:4px;cursor:pointer;border:1px solid var(--viol);background:transparent;color:var(--viol)">▸ Ver desglose</button>
-                ${_btnNotaInsumo(vf.compId||vf.insumoId)}
+                ${_btnNotaInsumo(vf.compId||vf.insumoId)}${_btnOcultoImpreso(vf.compId||vf.insumoId)}
             </td>`;
         // Compuesto de PIEZAS: mismas columnas que sus vecinos de la tabla de
         // piezas (teórico y físico), no las de botella/copa.

@@ -21834,6 +21834,12 @@ console.log('\n══ BH40 · Fuera del impreso, y la nota que faltaba ══');
     });
     /* Marcar un renglón no cambia ningún número del inventario: no debe
        disparar el recálculo pesado del resumen. */
+    /* El botón tiene que estar en los TRES tipos de renglón. Lo puse solo en
+       los de copa y faltaba justo donde Edwin lo necesitaba: refrescos, sodas
+       y cervezas se cuentan por PIEZA. */
+    test('el botón está en los renglones de copa, de pieza y de compuesto', () =>
+        eq((src.match(/\$\{_btnOcultoImpreso\(/g) || []).length >= 3, true,
+           'los tres tipos'));
     test('…y marcarlo no invalida el resumen', () => {
         const i = src.indexOf('function toggleOcultoImpreso');
         const cuerpo = src.slice(i, i + 700);
@@ -21843,8 +21849,15 @@ console.log('\n══ BH40 · Fuera del impreso, y la nota que faltaba ══');
 
     /* ── 3. EL AIRE ENTRE LA BARRA Y LAS TARJETAS ── */
     const html = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.html'), 'utf8');
+    /* Y el PASO 5 también: no se pinta en #stepContent sino en su propio
+       contenedor persistente (#step5Keep, la caché de render). Darle el aire
+       solo al primero dejaba el Resultado —el de los cards de capital— pegado
+       a la barra, que es justo donde se veía mal. */
     test('el contenido ya no arranca pegado a la barra de pasos', () =>
-        eq(/#stepContent \{ padding-top: 16px; \}/.test(html), true, 'con aire'));
+        eq(/#stepContent, #step5Keep \{ padding-top: 16px; \}/.test(html), true, 'con aire'));
+    test('…incluido el Resultado, que tiene su propio contenedor', () =>
+        eq(html.indexOf('#step5Keep') > -1 &&
+           /#step5Keep[^}]*padding-top/.test(html), true, 'el de los cards'));
     /* La barra es pegajosa: sin sombra, lo que pasa por debajo se lee como
        parte de ella. */
     test('…y la barra marca dónde termina cuando algo pasa por debajo', () =>
