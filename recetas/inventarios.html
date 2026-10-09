@@ -432,6 +432,12 @@ body:not(.has-ctx) .inv-wizard-header { top: 48px; } /* sin ctx-bar (staff): sol
     scrollbar-width: none; position: sticky; top: 156px; z-index: 91;
 }
 .inv-steps::-webkit-scrollbar { display: none; }
+/* La barra de pasos es PEGAJOSA, así que lo que viene abajo le queda encima al
+   hacer scroll: los cards de capital arrancaban literalmente tocando el borde
+   y se leían como parte de la barra. Un respiro, y una sombra que marca dónde
+   termina la barra cuando el contenido pasa por debajo. */
+.inv-steps { box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+#stepContent { padding-top: 16px; }
 .inv-step {
     display: flex; flex-direction: column; align-items: center; gap: 4px;
     padding: 10px 20px; cursor: pointer; border-bottom: 3px solid transparent;

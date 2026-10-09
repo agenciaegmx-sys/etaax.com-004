@@ -21734,6 +21734,123 @@ console.log('\n══ BH39 · Un batch hecho de otro batch ══');
     });
 }
 
+/* ═══════════ SUITE BH40 · FUERA DEL IMPRESO, Y LA NOTA QUE FALTABA ══════
+   Tres cosas de Edwin, con el prebatch ya cuadrando:
+
+   1. «Vendido vs compras» no tenía dónde justificarse. Un comprado-contra-
+      vendido que no cuadra pide tanta explicación como un faltante —«entró
+      mercancía en consignación», «se surtió de la otra sucursal»— y sin eso
+      el reporte directivo enseña un número raro sin nadie que lo defienda.
+
+   2. Hay renglones que hay que seguir viendo al revisar y que no tienen nada
+      que hacer en el reporte que se le pasa a dirección: el vodka que ya se
+      borró del catálogo, las infusiones que se llevan aparte. La única salida
+      era borrarlos del inventario — y entonces también se pierde el dato.
+
+   3. Los cards de capital arrancaban tocando la barra de pasos.            */
+console.log('\n══ BH40 · Fuera del impreso, y la nota que faltaba ══');
+{
+    const O = crearContexto();
+    cargarJS(O, 'etaax-core.js');
+    cargarJS(O, 'insumo-label.js');
+    cargarJS(O, 'recetas/inventarios.js');
+    O._storage['etaax_negocio_activo'] = 'negT';
+    vm.runInContext('function _autoGuardar(){} function renderStepContent(){}', O);
+    const base = () => setVar(O, 'invActual', { id:'invT', area:'barra', entradasLog:[],
+        ventasCompuesto:{}, cancelaciones:[], descuentos:[], filas:[],
+        prebatchProducidos:{}, cocktailsVendidos:{} });
+
+    /* ── 1. LA NOTA DE «VENDIDO VS COMPRAS» ── */
+    test('se puede comentar el vendido contra compras', () => {
+        base();
+        vm.runInContext("invActual.notasCard = { '__vtacompras__': 'Entró consignación de 3 cajas' };", O);
+        return eq(O._notaCard('__vtacompras__'), 'Entró consignación de 3 cajas', 'guardada');
+    });
+    /* El sobrante neto ya tenía su nota en un campo propio desde antes: se
+       respeta o se perdería lo ya escrito en los inventarios cerrados. */
+    test('…y la del sobrante neto sigue donde estaba', () => {
+        base();
+        vm.runInContext("invActual.comentarioNeto = 'lo de siempre';", O);
+        return eq(O._notaCard('__neto__'), 'lo de siempre', 'sin perder lo viejo');
+    });
+    test('…y el botón sale en la tarjeta', () => {
+        base();
+        return eq(O._btnNotaCard('__vtacompras__').indexOf("editarNotaInsumo('__vtacompras__')") > -1,
+                  true, 'a la mano');
+    });
+    /* Las tarjetas del resumen NO son insumos: su nota va aparte o ensuciaría
+       el mapa que el reporte recorre insumo por insumo. */
+    const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    test('…y no se mezcla con las notas de los insumos', () =>
+        eq(/if \(String\(id\)\.indexOf\('__'\) === 0\) \{[\s\S]{0,200}invActual\.notasCard/.test(src),
+           true, 'en su cajón'));
+    /* Y llega al impreso, que es para lo que sirve. */
+    test('…y sale en el reporte directivo', () =>
+        eq(src.indexOf("_notaCard('__vtacompras__') ? `<div style=\"margin-top:8px") > -1,
+           true, 'donde se lee'));
+
+    /* ── 2. FUERA DEL IMPRESO, NO DEL INVENTARIO ── */
+    test('un insumo se puede sacar del impreso y volver a meter', () => {
+        base();
+        O.toggleOcultoImpreso('vodkaViejo');
+        const fuera = O.esOcultoImpreso('vodkaViejo');
+        O.toggleOcultoImpreso('vodkaViejo');
+        return eq(fuera + '→' + O.esOcultoImpreso('vodkaViejo'), 'true→false', 'reversible');
+    });
+    /* Se guarda EN EL INVENTARIO, no en una preferencia del navegador: la
+       decisión es de ese corte, no de quien lo mire. */
+    test('…y la decisión viaja con el inventario, no con el navegador', () => {
+        base();
+        O.toggleOcultoImpreso('vodkaViejo');
+        return eq(vm.runInContext('!!(invActual.ocultosReporte && invActual.ocultosReporte.vodkaViejo)', O),
+                  true, 'del corte');
+    });
+    test('…y no arrastra a los demás', () => {
+        base();
+        O.toggleOcultoImpreso('vodkaViejo');
+        return eq(O.esOcultoImpreso('otroInsumo'), false, 'uno por uno');
+    });
+    /* EL CANDADO QUE IMPORTA: se saca ANTES de sumar. Si se filtrara solo al
+       pintar la tabla, el capital y los totales seguirían contándolo y el
+       reporte no cuadraría consigo mismo — un número que no suma sus propios
+       renglones es peor que un renglón de más. */
+    test('…y sale de los TOTALES, no solo de la tabla', () =>
+        eq(src.indexOf('filasCaptura.filter(f => !esOcultoImpreso(f && f.insumoId)).map(f =>') > -1,
+           true, 'antes de sumar'));
+    /* En la pantalla se sigue viendo: ese es el punto. */
+    test('…pero se sigue viendo en el Resultado', () => {
+        const i = src.indexOf('const analisis = filasCaptura.filter');
+        const paso5 = src.indexOf('function _step5TablasHTML');
+        const bloque = src.slice(paso5, paso5 + 3000);
+        return eq(bloque.indexOf('esOcultoImpreso') === -1, true, 'solo el impreso');
+    });
+    test('…y el botón dice en cuál de los dos estados está', () => {
+        base();
+        const a = O._btnOcultoImpreso('x');
+        O.toggleOcultoImpreso('x');
+        const b = O._btnOcultoImpreso('x');
+        return eq(a.indexOf('En el impreso') > -1 && b.indexOf('Fuera del impreso') > -1,
+                  true, 'sin adivinar');
+    });
+    /* Marcar un renglón no cambia ningún número del inventario: no debe
+       disparar el recálculo pesado del resumen. */
+    test('…y marcarlo no invalida el resumen', () => {
+        const i = src.indexOf('function toggleOcultoImpreso');
+        const cuerpo = src.slice(i, i + 700);
+        return eq(cuerpo.indexOf('{ soloNota: true }') > -1 &&
+                  cuerpo.indexOf('_step5Dirty') === -1, true, 'sin recalcular de más');
+    });
+
+    /* ── 3. EL AIRE ENTRE LA BARRA Y LAS TARJETAS ── */
+    const html = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.html'), 'utf8');
+    test('el contenido ya no arranca pegado a la barra de pasos', () =>
+        eq(/#stepContent \{ padding-top: 16px; \}/.test(html), true, 'con aire'));
+    /* La barra es pegajosa: sin sombra, lo que pasa por debajo se lee como
+       parte de ella. */
+    test('…y la barra marca dónde termina cuando algo pasa por debajo', () =>
+        eq(html.indexOf('.inv-steps { box-shadow:') > -1, true, 'con borde'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');

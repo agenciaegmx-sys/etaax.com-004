@@ -3127,6 +3127,42 @@ function _bateoKey() {
     var suc = localStorage.getItem('etaax_sucursal_activa') || 'matriz';
     return 'etaax_' + neg + '_inv_bateo_' + suc;
 }
+/* ══ FUERA DEL IMPRESO, NO DEL INVENTARIO ═════════════════════════════════
+   Hay renglones que hay que seguir viendo al revisar y que NO tienen nada que
+   hacer en el reporte que se le pasa a dirección: un insumo que ya se borró
+   del catálogo y arrastra su faltante, una infusión que se lleva aparte. Hoy
+   la única salida era borrarlos del inventario —y entonces también se pierde
+   el dato de quien lo revisa.
+
+   Se guarda EN EL INVENTARIO, no en una preferencia del navegador: la
+   decisión es de ese corte («en este cierre no cuenten el vodka viejo»), no
+   de quien lo esté mirando. */
+function _ocultosImp() { return (invActual && invActual.ocultosReporte) || {}; }
+function esOcultoImpreso(insumoId) { return !!_ocultosImp()[insumoId]; }
+function toggleOcultoImpreso(insumoId) {
+    if (!invActual) return;
+    if (!invActual.ocultosReporte) invActual.ocultosReporte = {};
+    if (invActual.ocultosReporte[insumoId]) delete invActual.ocultosReporte[insumoId];
+    else invActual.ocultosReporte[insumoId] = 1;
+    _autoGuardar({ soloNota: true });   // no cambia ningún número: no invalida el resumen
+    var w = document.getElementById('ocultoWrap-' + insumoId);
+    if (w) { w.outerHTML = _btnOcultoImpreso(insumoId); return; }
+    if (typeof renderStepContent === 'function') renderStepContent();
+}
+window.toggleOcultoImpreso = toggleOcultoImpreso;
+function _btnOcultoImpreso(insumoId) {
+    var o = esOcultoImpreso(insumoId);
+    return '<span id="ocultoWrap-' + insumoId + '">' +
+        '<button onclick="event.stopPropagation();toggleOcultoImpreso(\'' + insumoId + '\')" ' +
+        'title="' + (o ? 'Vuelve a salir en el reporte impreso'
+                       : 'Se sigue viendo aquí, pero no sale en el reporte impreso') + '" ' +
+        'style="margin-top:3px;margin-left:4px;font-size:9px;padding:1px 6px;border-radius:4px;' +
+        'cursor:pointer;border:1px solid ' + (o ? 'var(--accent)' : '#888') + ';background:transparent;' +
+        'color:' + (o ? 'var(--accent)' : '#999') + '">' +
+        (o ? '🚫 Fuera del impreso' : '🖨️ En el impreso') + '</button></span>';
+}
+window._btnOcultoImpreso = _btnOcultoImpreso;
+
 function getBateo() { try { return JSON.parse(localStorage.getItem(_bateoKey()) || '[]') || []; } catch(e) { return []; } }
 function esBateo(insumoId) { return getBateo().indexOf(insumoId) >= 0; }
 function toggleBateo(insumoId) {
@@ -4009,9 +4045,13 @@ function editarNotaInsumo(id) {
     if (!invActual) return;
     _notaInsEditId = id;
     // Caso especial: nota del sobrante/faltante NETO del inventario (no es un insumo).
-    if (id === '__neto__') {
-        document.getElementById('notaInsNombre').textContent = '📊 Sobrante / Faltante neto del inventario';
-        document.getElementById('notaInsInput').value = invActual.comentarioNeto || '';
+    var _TITCARD = {
+        '__neto__':      '📊 Sobrante / Faltante neto del inventario',
+        '__vtacompras__':'📦 Vendido contra compras del periodo'
+    };
+    if (_TITCARD[id]) {
+        document.getElementById('notaInsNombre').textContent = _TITCARD[id];
+        document.getElementById('notaInsInput').value = _notaCard(id);
         document.getElementById('modalNotaInsumo').style.display = 'flex';
         setTimeout(function(){ var t = document.getElementById('notaInsInput'); if (t) t.focus(); }, 60);
         return;
@@ -4044,6 +4084,18 @@ function _guardarNotaInsumo() {
         if (contN && typeof renderStepContent === 'function') renderStepContent();
         return;
     }
+    /* Las tarjetas del resumen no son insumos: su nota va aparte, o
+       ensuciaría el mapa que el reporte recorre por insumo. */
+    if (String(id).indexOf('__') === 0) {
+        if (!invActual.notasCard) invActual.notasCard = {};
+        if (txt) invActual.notasCard[id] = txt; else delete invActual.notasCard[id];
+        _autoGuardar({ soloNota: true });
+        _cerrarNotaInsumo();
+        var wC = document.getElementById('notaWrap-' + id);
+        if (wC) { wC.outerHTML = _btnNotaCard(id); return; }
+        if (typeof renderStepContent === 'function') renderStepContent();
+        return;
+    }
     if (!invActual.notasInsumo) invActual.notasInsumo = {};
     if (txt) invActual.notasInsumo[id] = txt; else delete invActual.notasInsumo[id];
     // Una nota NO cambia ningún número → no invalida el resumen (soloNota) y no dispara
@@ -4072,16 +4124,30 @@ function _btnNotaInsumo(id) {
     '</span>';
 }
 // Botón + display de la nota del sobrante/faltante NETO (mismo estilo que la nota de insumo).
-function _btnNotaNeto() {
-    var n = (invActual && invActual.comentarioNeto) || '';
-    return '<span id="notaWrap-__neto__" style="display:inline-block">' +
-        '<button onclick="event.stopPropagation();editarNotaInsumo(\'__neto__\')" ' +
+function _btnNotaNeto() { return _btnNotaCard('__neto__'); }
+window._btnNotaNeto = _btnNotaNeto;
+
+/* El mismo botón de nota, para cualquier tarjeta del resumen. Estaba cableado
+   al sobrante/faltante; un comprado-contra-vendido que no cuadra pide tanta
+   explicación como un faltante —«entró mercancía en consignación», «se surtió
+   de la otra sucursal»— y sin eso el reporte directivo enseña un número raro
+   sin nadie que lo defienda. */
+function _btnNotaCard(id) {
+    var n = _notaCard(id);
+    return '<span id="notaWrap-' + id + '" style="display:inline-block">' +
+        '<button onclick="event.stopPropagation();editarNotaInsumo(\'' + id + '\')" ' +
         'style="font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;background:transparent;' +
         'border:1px solid ' + (n?'var(--accent)':'#888') + ';color:' + (n?'var(--accent)':'#999') + '">📝 ' + (n?'Nota ✓':'Agregar nota') + '</button>' +
         (n ? '<div style="font-size:11px;color:var(--accent);margin-top:5px;font-style:italic;line-height:1.5">📝 ' + etx(n) + '</div>' : '') +
     '</span>';
 }
-window._btnNotaNeto = _btnNotaNeto;
+window._btnNotaCard = _btnNotaCard;
+/* El sobrante neto guarda su nota en un campo propio desde antes (comentarioNeto)
+   y se respeta para no perder lo ya escrito; las demás van juntas en un mapa. */
+function _notaCard(id) {
+    if (id === '__neto__') return (invActual && invActual.comentarioNeto) || '';
+    return (invActual && invActual.notasCard && invActual.notasCard[id]) || '';
+}
 
 // ── Menú COMPARTIR del reporte ───────────────────────────────────────────────
 function _toggleRdShare(e) {
@@ -8116,7 +8182,9 @@ function _resumenEjecutivo() {
         '<div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">'+
         card('Vendido a precio proveedor', M(vendidoCosto), 'var(--text)', 'costo de lo que salió')+
         card('Compras del periodo', M(comprasCosto), 'var(--text)', comprasU>0 ? (comprasU%1?comprasU.toFixed(1):comprasU)+' unid. compradas' : 'sin compras registradas')+
-        card('Vendido vs Compras', (vendidoCosto-comprasCosto>=0?'+':'−')+M(Math.abs(vendidoCosto-comprasCosto)), (vendidoCosto-comprasCosto>=0?'var(--green)':'var(--red)'), vendidoCosto>=comprasCosto?'compraste menos de lo que vendiste':'compraste más de lo que vendiste')+
+        card('Vendido vs Compras', (vendidoCosto-comprasCosto>=0?'+':'−')+M(Math.abs(vendidoCosto-comprasCosto)), (vendidoCosto-comprasCosto>=0?'var(--green)':'var(--red)'),
+            (vendidoCosto>=comprasCosto?'compraste menos de lo que vendiste':'compraste más de lo que vendiste')+
+            '<div style="margin-top:6px">'+(typeof _btnNotaCard==='function'?_btnNotaCard('__vtacompras__'):'')+'</div>')+
         '</div>'+
         (function(){
             // Entradas que NO son compra: cada una con su card, solo si hubo.
@@ -9040,7 +9108,7 @@ function _step5TablasHTML() {
                             'no lo explica nadie.">⚠️ este insumo ya no está en el catálogo</div>';
                     })()}
                     ${_contC?`<div style="font-size:9.5px;color:#7ab8f5">📦 ${_contC}</div>`:''}
-                    <button onclick="event.stopPropagation();toggleBateo('${fila.insumoId}')" style="margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid ${esBateo(fila.insumoId)?'#3dbe7a':'#888'};background:${esBateo(fila.insumoId)?'#3dbe7a':'transparent'};color:${esBateo(fila.insumoId)?'#fff':'#999'}">🏏 ${esBateo(fila.insumoId)?'De bateo ✓':'Marcar bateo'}</button>${_btnNotaInsumo(fila.insumoId)}
+                    <button onclick="event.stopPropagation();toggleBateo('${fila.insumoId}')" style="margin-top:3px;font-size:9px;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid ${esBateo(fila.insumoId)?'#3dbe7a':'#888'};background:${esBateo(fila.insumoId)?'#3dbe7a':'transparent'};color:${esBateo(fila.insumoId)?'#fff':'#999'}">🏏 ${esBateo(fila.insumoId)?'De bateo ✓':'Marcar bateo'}</button>${_btnNotaInsumo(fila.insumoId)}${_btnOcultoImpreso(fila.insumoId)}
                 </td>
                 <td style="text-align:center;white-space:nowrap">${eaBot} bot${_dentroBat(adj.ea)}</td>
                 <td style="text-align:center;color:var(--green);white-space:nowrap">${entBotStr}</td>
@@ -9570,7 +9638,10 @@ function verReporteDirectivo(gerencial, modo) {
     let conAlerta = 0, conRiesgo = 0, conOk = 0;
 
     _repCache = _repartoPrebatch(); // reparto prebatch→insumos (vista operativa)
-    const analisis = filasCaptura.map(f => {
+    /* Los apartados del impreso salen ANTES de cualquier suma: si se filtraran
+       solo al pintar la tabla, el capital y los totales seguirían contándolos
+       y el reporte no cuadraría consigo mismo. */
+    const analisis = filasCaptura.filter(f => !esOcultoImpreso(f && f.insumoId)).map(f => {
         // Prebatch repartido: se excluye del análisis (su variancia vive en sus insumos).
         const esPBo     = _esPrebatchRepartido(f.insumoId);
         const adjO      = esPBo ? _repZero : _repartoDe(f.insumoId);
@@ -10148,6 +10219,10 @@ function verReporteDirectivo(gerencial, modo) {
       <div class="rd-kl">Vendido vs Compras</div>
       <div class="rd-kv" style="color:${vendidoCosto-comprasCosto>=0?cOk:cCrit}">${vendidoCosto-comprasCosto>=0?'+':'−'}$${_m0(Math.abs(vendidoCosto-comprasCosto))}</div>
       <div class="rd-ks">${vendidoCosto>=comprasCosto?'compraste menos de lo que vendiste':'compraste más de lo que vendiste'}</div>
+      ${_notaCard('__vtacompras__') ? `<div style="margin-top:8px;border-top:1px dashed #b9b3a5;padding-top:7px">
+        <div style="font-size:9px;color:#56514a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">📝 Comentario de dirección</div>
+        <div style="font-size:11px;color:#15140f;line-height:1.5;white-space:pre-wrap">${etx(_notaCard('__vtacompras__'))}</div>
+      </div>` : ''}
     </div>
   </div>
 
