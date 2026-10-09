@@ -1079,7 +1079,22 @@ function consumoBasesPorProduccion(insumoId) {
     Object.keys(prod).forEach(function(pid) {
         var n = parseFloat(prod[pid]) || 0;
         if (!n) return;
-        var pre = getInsumos().find(function(x){ return x.id === pid; });
+        /* ══ POR EL RESOLVER, NO POR UN .find DE ID CRUDO ══════════════════
+           Un .find crudo devuelve el MAESTRO; el resolver devuelve la COPIA de
+           la sucursal donde se está parado — y la copia puede tener su propia
+           liga a otra sub-receta.
+
+           Mientras esto buscaba en crudo, la PANTALLA y el CÁLCULO leían
+           registros distintos: la tarjeta del Paso 3 (que sale del catálogo
+           acotado a la sucursal) decía «hace Limoncello SB Bot.» y esta cuenta
+           descontaba los ingredientes de la otra. Dos verdades a la vez sobre
+           el mismo batch, y ninguna pantalla donde se vieran juntas.
+
+           Manda la COPIA: es el registro que la sucursal ve y sobre el que se
+           capturó. Sexto sitio de la misma familia copia↔maestro. */
+        var pre = (typeof window._insumoResolver === 'function')
+            ? window._insumoResolver(pid)
+            : getInsumos().find(function(x){ return x.id === pid; });
         if (!pre || !pre.recetaId) return;
         var sr = (window._recetaResolver ? window._recetaResolver(pre.recetaId) : getRecetas().find(function(r){ return r.id === pre.recetaId; }));
         if (!sr) return;
@@ -1181,7 +1196,12 @@ function consumoBasesPorProduccionDetalle(insumoId) {
     Object.keys(prod).forEach(function (pid) {
         var n = parseFloat(prod[pid]) || 0;
         if (!n) return;
-        var pre = getInsumos().find(function (x) { return x.id === pid; });
+        // Por el resolver, igual que consumoBasesPorProduccion: si esta leyera
+        // el maestro y aquella la copia, las piezas y los ml de un mismo batch
+        // saldrían de recetas distintas.
+        var pre = (typeof window._insumoResolver === 'function')
+            ? window._insumoResolver(pid)
+            : getInsumos().find(function (x) { return x.id === pid; });
         if (!pre || !pre.recetaId) return;
         var sr = (window._recetaResolver ? window._recetaResolver(pre.recetaId) : getRecetas().find(function (r) { return r.id === pre.recetaId; }));
         if (!sr) return;
@@ -1489,6 +1509,7 @@ window._religarPrebatch = _religarPrebatch;
    pensaba, y la única forma hoy es ir insumo por insumo. */
 function _prebatchDesglose() {
     var prod = (invActual && invActual.prebatchProducidos) || {};
+    var recs = (typeof getRecetas === 'function') ? getRecetas() : [];
     var filas = {};
     (filasCaptura || []).forEach(function (f) {
         if (f && f.insumoId) filas[_canonInsumoId(f.insumoId) || f.insumoId] = f;
@@ -1525,7 +1546,39 @@ function _prebatchDesglose() {
                 sinFila: !!can && !filas[can]
             };
         });
-        out.push({ nombre: nom, batches: n, receta: sr.nombre, mal: '', ings: ings });
+        /* ══ LA CADENA CRUDA ══════════════════════════════════════════════
+           Tres vueltas discutiendo esto a ciegas: yo no veo los datos de
+           Edwin y él no ve los ids. La cadena tiene cuatro eslabones y los
+           nombres de tres de ellos se parecen tanto que no se distinguen al
+           hablar. Aquí quedan los cuatro, con sus ids, para que una captura
+           de pantalla cierre la discusión en vez de abrir otra.
+
+           `capturadoEn` vs `resuelveA` es la pareja que importa: si se
+           capturó sobre el maestro y el resolver devuelve la copia de la
+           sucursal, la liga que manda es la de la COPIA — y puede ser otra. */
+        var mismo = (pre.id === pid);
+        out.push({
+            nombre: nom, batches: n, receta: sr.nombre, mal: '', ings: ings,
+            cadena: {
+                capturadoEn: pid,
+                resuelveA:   pre.id + (mismo ? '' : '  ⚠️ otro registro'),
+                sucDelIns:   pre.sucursalId || (pre.origenId ? 'copia' : 'maestro'),
+                recetaId:    pre.recetaId,
+                recetaUsada: sr.id + (sr.id === pre.recetaId ? '' : '  ⚠️ copia por sucursal'),
+                recetaNom:   sr.nombre
+            },
+            /* Si existe una sub-receta que se llame EXACTAMENTE como el
+               insumo y no sea la que usa, el arreglo se ofrece aquí mismo:
+               es donde se está mirando el problema. */
+            religarA: (function () {
+                var g = recs.find(function (r) {
+                    return r && String(r.tipo || '').indexOf('sub') === 0 && r.id !== sr.id &&
+                           String(r.nombre || '').trim().toLowerCase() ===
+                           String(nom || '').trim().toLowerCase();
+                });
+                return g ? { id: g.id, nombre: g.nombre, insumoId: pre.id } : null;
+            })()
+        });
     });
     return out;
 }
@@ -1543,10 +1596,28 @@ function _prebatchDesgloseHTML() {
             if (x.mal) return '<div style="font-size:12px;color:var(--accent);margin-bottom:7px">' +
                 '<b style="color:var(--text)">' + etx(x.nombre) + '</b> · ' + x.batches +
                 ' batch' + (x.batches === 1 ? '' : 'es') + ' — ' + etx(x.mal) + '</div>';
+            var _rel = x.religarA
+                ? ' <button onclick="_religarPrebatch(\'' + x.religarA.insumoId + '\',\'' + x.religarA.id + '\')" ' +
+                  'style="margin-left:6px;font-size:10px;padding:1px 8px;border-radius:5px;cursor:pointer;' +
+                  'background:transparent;border:1px solid var(--green);color:var(--green)">' +
+                  '🔗 Ligarlo a «' + etx(x.religarA.nombre) + '»</button>'
+                : '';
+            /* La cadena va PLEGADA: son ids y no se leen todos los días, pero
+               cuando algo no cuadra es lo único que lo resuelve sin adivinar. */
+            var _cad = x.cadena ? '<details style="margin-top:4px"><summary style="font-size:10.5px;' +
+                'color:var(--text-dim);cursor:pointer;list-style:none">· ver la liga (ids)</summary>' +
+                '<div style="font-size:10.5px;color:var(--text-dim);line-height:1.7;margin:4px 0 0 10px;' +
+                'font-family:ui-monospace,monospace;word-break:break-all">' +
+                'capturado en: ' + etx(x.cadena.capturadoEn) + '<br>' +
+                'insumo que manda: ' + etx(x.cadena.resuelveA) + ' (' + etx(x.cadena.sucDelIns) + ')<br>' +
+                'su recetaId: ' + etx(x.cadena.recetaId) + '<br>' +
+                'receta usada: ' + etx(x.cadena.recetaUsada) + ' — ' + etx(x.cadena.recetaNom) +
+                '</div></details>' : '';
             return '<div style="margin-bottom:9px">' +
                 '<div style="font-size:12.5px;color:var(--text);font-weight:600">' + etx(x.nombre) +
                 ' · ' + x.batches + ' batch' + (x.batches === 1 ? '' : 'es') +
-                '<span style="font-weight:400;color:var(--text-dim)"> → hace ' + etx(x.receta) + '</span></div>' +
+                '<span style="font-weight:400;color:var(--text-dim)"> → hace ' + etx(x.receta) + '</span>' +
+                _rel + '</div>' + _cad +
                 (x.ings.length
                     ? '<div style="font-size:11.5px;color:var(--text-muted);line-height:1.8;margin-top:3px">' +
                       x.ings.map(function (i) {

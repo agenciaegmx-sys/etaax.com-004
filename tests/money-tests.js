@@ -21061,6 +21061,124 @@ console.log('\n══ BH34 · La liga cruzada ══');
     });
 }
 
+/* ═══════════ SUITE BH35 · LA PANTALLA Y EL CÁLCULO, SOBRE EL MISMO REGISTRO
+   TRES VUELTAS DISCUTIENDO A CIEGAS: yo no veo los datos de Edwin y él no ve
+   los ids. Al montar su caso para medirlo apareció algo que ninguna de las dos
+   partes podía ver desde su lado.
+
+   `consumoBasesPorProduccion` buscaba el insumo del batch con un .find por id
+   CRUDO —que devuelve el MAESTRO— mientras la tarjeta del Paso 3 sale del
+   catálogo acotado a la sucursal —la COPIA—. Si la copia tiene su propia liga
+   a otra sub-receta, la pantalla decía «hace Limoncello SB Bot.» y la cuenta
+   descontaba los ingredientes de la otra.
+
+   Dos verdades a la vez sobre el mismo batch, y ninguna pantalla donde se
+   vieran juntas. Manda la COPIA: es el registro que la sucursal ve y sobre el
+   que se capturó. Sexto sitio de la familia copia↔maestro.                  */
+console.log('\n══ BH35 · La pantalla y el cálculo, sobre el mismo registro ══');
+{
+    const M = crearContexto();
+    cargarJS(M, 'etaax-core.js');
+    cargarJS(M, 'insumo-label.js');
+    cargarJS(M, 'recetas/inventarios.js');
+    M._storage['etaax_negocio_activo'] = 'negT';
+    vm.runInContext('function _autoGuardar(){} function _refrescarAvisoPrebatches(){} function renderStepContent(){}', M);
+
+    const RECS = [
+        { id:'srInfusion', nombre:'Limoncello SB 1', tipo:'sub-bebidas', status:'activa',
+          camposExtra:{ rendimientoFinal:'2.6', unidadRendimientoFinal:'LT' },
+          ingredientes:[{ insumoId:'vodka', cantidad:1.75, unidad:'LT' }] },
+        { id:'srBotella', nombre:'Limoncello SB Bot.', tipo:'sub-bebidas', status:'activa',
+          camposExtra:{ rendimientoFinal:'750', unidadRendimientoFinal:'ML' },
+          ingredientes:[{ insumoId:'preLim1', cantidad:750, unidad:'ML' }] }];
+
+    const montar = (insumos, suc) => {
+        setVar(M, '_cacheRecetasInv', RECS);
+        setVar(M, '_cacheInsumosInv', insumos);
+        M._storage['etaax_sucursal_activa'] = suc || '';
+        setVar(M, 'invActual', { id:'invT', area:'barra', entradasLog:[], ventasCompuesto:{},
+            cancelaciones:[], descuentos:[], filas:[], prebatchProducidos:{}, cocktailsVendidos:{} });
+        const f = (id, nom) => ({ insumoId:id, nombre:nom, tipo:'copa', contNeto:1800, copaML:45,
+            existenciaAnterior:40, entradas:[], pesos:[], cerradasBodega:0, cerradasBarra:0 });
+        setVar(M, 'filasCaptura', [f('preLim1','Limoncello SB 1'), f('vodka',"Vodka American · Sam's")]);
+        vm.runInContext('_consumoDirty = true; _cancelDirty = true;', M);
+        M.setProduccionPrebatch('preLim1', 2);
+        return M._prebatchDesglose()[0];
+    };
+    const MAESTRO_OK = [
+        { id:'preLim1', nombre:'Limoncello SB 1', esSubReceta:true, recetaId:'srInfusion', activo:'1' },
+        { id:'vodka', nombre:"Vodka American · Sam's", activo:'1' }];
+    const CON_COPIA_CRUZADA = [
+        { id:'preLim1', nombre:'Limoncello SB 1', esSubReceta:true, recetaId:'srInfusion', activo:'1' },
+        { id:'preLim1C', origenId:'preLim1', sucursalId:'madero', nombre:'Limoncello SB 1',
+          esSubReceta:true, recetaId:'srBotella', activo:'1' },
+        { id:'vodka', nombre:"Vodka American · Sam's", activo:'1' }];
+
+    /* ── LO QUE SE VE Y LO QUE SE DESCUENTA, DE ACUERDO ──
+       Es la prueba que destapó el bug: antes esto daba «Bot.» y 3500 ml a la
+       vez — la pantalla leyendo la copia y la cuenta leyendo el maestro. */
+    test('lo que la pantalla dice es lo que la cuenta descuenta', () => {
+        const d = montar(CON_COPIA_CRUZADA, 'madero');
+        const vodka = M.consumoBasesPorProduccion('vodka');
+        return eq(d.receta + ' / ' + vodka, 'Limoncello SB Bot. / 0',
+                  'la copia manda en los dos');
+    });
+    test('…y con la liga bien, los dos dicen vodka', () => {
+        const d = montar(MAESTRO_OK);
+        return eq(d.receta + ' / ' + M.consumoBasesPorProduccion('vodka'),
+                  'Limoncello SB 1 / 3500', 'de acuerdo');
+    });
+    /* La copia manda a propósito: es el registro que esa sucursal ve en su
+       catálogo y sobre el que se capturó. Si mandara el maestro, dos sucursales
+       con batches distintos descontarían lo mismo. */
+    test('manda la COPIA de la sucursal, no el maestro', () => {
+        const d = montar(CON_COPIA_CRUZADA, 'madero');
+        return eq(d.cadena.recetaId, 'srBotella', 'la que ve quien captura');
+    });
+    test('…y fuera de esa sucursal manda el maestro', () => {
+        const d = montar(CON_COPIA_CRUZADA, '');
+        return eq(d.cadena.recetaId, 'srInfusion', 'cada quien lo suyo');
+    });
+    /* Las piezas y los ml de un mismo batch tienen que salir de la MISMA
+       receta: son dos funciones distintas y leían el registro por su cuenta. */
+    test('las piezas y los ml salen de la misma receta', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        const crudos = (src.match(/var pre = getInsumos\(\)\.find/g) || []).length;
+        return eq(crudos, 0, 'ninguna busca en crudo');
+    });
+
+    /* ── LA CADENA, PARA NO VOLVER A DISCUTIR A CIEGAS ──
+       Cuatro eslabones cuyos nombres se parecen tanto que no se distinguen al
+       hablar. Con los ids a la vista, una captura de pantalla cierra la
+       discusión en vez de abrir otra. */
+    test('el desglose enseña dónde se capturó y qué registro manda', () => {
+        const d = montar(CON_COPIA_CRUZADA, 'madero');
+        return eq(d.cadena.capturadoEn + ' → ' + d.cadena.resuelveA.split('  ')[0],
+                  'preLim1 → preLim1C', 'los dos ids');
+    });
+    test('…y avisa cuando el registro que manda NO es sobre el que se capturó', () => {
+        const d = montar(CON_COPIA_CRUZADA, 'madero');
+        return eq(d.cadena.resuelveA.indexOf('otro registro') > -1, true, 'marcado');
+    });
+    test('…y no avisa cuando es el mismo', () => {
+        const d = montar(MAESTRO_OK);
+        return eq(d.cadena.resuelveA.indexOf('otro registro') === -1, true, 'sin ruido');
+    });
+    test('…y dice de qué sucursal es ese registro', () => {
+        return eq(montar(CON_COPIA_CRUZADA, 'madero').cadena.sucDelIns + '|' +
+                  montar(MAESTRO_OK).cadena.sucDelIns, 'madero|maestro', 'ubicado');
+    });
+    /* El arreglo se ofrece DONDE se está mirando el problema, y apuntando al
+       registro que manda — no al maestro, que no es el que está mal. */
+    test('el desglose ofrece religar al que de verdad manda', () => {
+        const d = montar(CON_COPIA_CRUZADA, 'madero');
+        return eq(d.religarA && (d.religarA.insumoId + '→' + d.religarA.id),
+                  'preLim1C→srInfusion', 'el registro correcto');
+    });
+    test('…y con la liga bien no ofrece nada', () =>
+        eq(montar(MAESTRO_OK).religarA, null, 'sin botón de más'));
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
