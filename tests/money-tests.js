@@ -21815,8 +21815,17 @@ console.log('\n══ BH40 · Fuera del impreso, y la nota que faltaba ══');
        reporte no cuadraría consigo mismo — un número que no suma sus propios
        renglones es peor que un renglón de más. */
     test('…y sale de los TOTALES, no solo de la tabla', () =>
-        eq(src.indexOf('filasCaptura.filter(f => !esOcultoImpreso(f && f.insumoId)).map(f =>') > -1,
+        eq(src.indexOf('const analisis = filasCaptura.filter(f => !_fueraImp(f)).map(f =>') > -1,
            true, 'antes de sumar'));
+    /* Un miembro de compuesto se imprime DENTRO de su compuesto: apartar el
+       compuesto tiene que llevárselos a todos, o la tabla esconde el renglón
+       y los totales lo siguen contando. */
+    test('…y apartar un compuesto se lleva a sus presentaciones', () => {
+        const i = src.indexOf('const _fueraImp = (f) =>');
+        const b = src.slice(i, i + 420);
+        return eq(b.indexOf('_compDeMiembro[f.insumoId]') > -1 &&
+                  b.indexOf('esOcultoImpreso(c.id || c)') > -1, true, 'completo');
+    });
     /* En la pantalla se sigue viendo: ese es el punto. */
     test('…pero se sigue viendo en el Resultado', () => {
         const i = src.indexOf('const analisis = filasCaptura.filter');
@@ -22081,6 +22090,79 @@ console.log('\n══ BH42 · La producción propia en el impreso ══');
         const i = src.indexOf('var _nomP =');
         return eq(src.slice(i, i + 200).indexOf("|| '(sin renglón)'") > -1, true, 'sin ids sueltos');
     });
+}
+
+/* ═══════════ SUITE BH43 · DOS CIFRAS PARA LO MISMO ══════════════════════
+   El Resultado decía «Sobrante a carta +$643» y el reporte impreso «+$2,048».
+   Edwin lo leyó como un bug viejo. No lo era: la diferencia son $1,405 — el
+   vodka fantasma, que él mismo había apartado del impreso.
+
+   Los dos números eran correctos: la pantalla enseña TODO y el impreso deja
+   fuera lo apartado. Pero dos cifras para lo mismo, sin una línea que lo
+   explique, es un error aparente — y además lo había causado yo al meter el
+   «ocultar del impreso» sin decir lo que implicaba.
+
+   Es el mismo patrón que el Paso 1 contra el Paso 5: cuando dos pantallas del
+   mismo dato dan números distintos a propósito, el deber de la que se mira
+   primero es decirlo.                                                      */
+console.log('\n══ BH43 · Dos cifras para lo mismo ══');
+{
+    const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+
+    /* ── EL RESUMEN DICE LO QUE VA A DECIR EL IMPRESO ── */
+    test('el Resultado dice cuánto va a salir en el impreso', () =>
+        eq(src.indexOf('↳ en el impreso:') > -1, true, 'las dos cifras juntas'));
+    test('…y cuántos insumos están apartados', () =>
+        eq(/ocultosN \+ ' insumo' \+ \(ocultosN === 1 \? '' : 's'\) \+ ' fuera del impreso/.test(src),
+           true, 'de dónde sale la diferencia'));
+    /* Sin nada apartado no se pinta: los dos números coinciden y una línea
+       que dice lo mismo dos veces solo quita espacio. */
+    test('…y no se pinta cuando no hay nada apartado', () => {
+        const i = src.indexOf('var _lineaImp = ocultosN > 0');
+        return eq(src.slice(i, i + 120).indexOf('ocultosN > 0') > -1, true, 'solo cuando difieren');
+    });
+    /* El total del impreso se calcula EN EL MISMO recorrido que el de la
+       pantalla. Con dos recorridos distintos, la línea que promete «esto es
+       lo que vas a imprimir» acabaría mintiendo en cuanto uno de los dos
+       cambie — que es exactamente lo que pasó para llegar aquí. */
+    test('…y el total del impreso sale del MISMO recorrido, no de otro', () => {
+        const i = src.indexOf('var faltCartaImp = 0, sobrCartaImp = 0, ocultosN = 0;');
+        const fin = src.indexOf('var _subNeto =', i);
+        const bloque = src.slice(i, fin);
+        return eq((bloque.match(/faltCartaImp \+=/g) || []).length >= 2 &&
+                  (bloque.match(/sobrCartaImp \+=/g) || []).length >= 2,
+                  true, 'una sola pasada');
+    });
+    /* Y suma miembro por miembro, igual que el total de la pantalla: si uno
+       valuara el compuesto por su fila agregada, volverían a no cuadrar —ya
+       pasó una vez, con $12,205 contra $12,919. */
+    test('…y los compuestos suman por miembro en los dos', () => {
+        const i = src.indexOf('var mFuera = esOcultoImpreso(m.insumoId)');
+        /* La ventana cubre el bloque entero del miembro: recortarla corto ya
+           me dio un falso rojo aquí mismo. */
+        return eq(i > -1 && src.slice(i, i + 900).indexOf('sobrCartaImp += mDif') > -1,
+                  true, 'con su propio precio');
+    });
+
+    /* ── LA ARITMÉTICA DEL CASO ──
+       Se comprueba la regla, no el renderizado: lo apartado sale del total del
+       impreso y se queda en el de la pantalla. Con el vodka de −1405 dentro,
+       643; fuera, 2048. */
+    const simular = (difs, ocultos) => {
+        let todo = 0, imp = 0;
+        difs.forEach(d => {
+            todo += d.carta;
+            if (!ocultos[d.id]) imp += d.carta;
+        });
+        return { todo: todo, imp: imp };
+    };
+    const CASO = [{ id:'resto', carta: 2048 }, { id:'vodkaFantasma', carta: -1405 }];
+    test('EL CASO · con el vodka dentro, +643', () =>
+        eq(simular(CASO, {}).todo, 643, 'lo que ve la pantalla'));
+    test('…y apartado del impreso, +2,048', () =>
+        eq(simular(CASO, { vodkaFantasma: 1 }).imp, 2048, 'lo que sale impreso'));
+    test('…y la pantalla sigue diciendo 643: no se le quita nada', () =>
+        eq(simular(CASO, { vodkaFantasma: 1 }).todo, 643, 'sigue enseñando todo'));
 }
 
 /* ═══════════════ RESUMEN ═══════════════ */

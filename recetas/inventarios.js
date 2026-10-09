@@ -8154,6 +8154,14 @@ function _usoTotal(ventas, prodVer, prodMat) {
 //    vendidos por categoría, usados/sin usar, vendido vs compras) ──
 function _resumenEjecutivo() {
     var faltU=0, sobrU=0, faltCosto=0, sobrCosto=0, faltCarta=0, sobrCarta=0;
+    /* ══ LA PANTALLA Y EL IMPRESO DABAN NÚMEROS DISTINTOS ═════════════════
+       Y los dos tenían razón: la pantalla enseña TODO y el impreso deja fuera
+       lo que se apartó a mano. Edwin sacó el vodka fantasma —−$1,405— y el
+       Resultado decía +$643 mientras el reporte decía +$2,048.
+
+       Dos cifras para lo mismo, sin una línea que lo explique, es un error
+       aparente. Se calcula también el total del IMPRESO y se dice al lado. */
+    var faltCartaImp = 0, sobrCartaImp = 0, ocultosN = 0;
     var mermados=[], mermaCosto=0, usados=0, sinUsar=0, sinUsarLista=[], vendidoCosto=0;
     var _mapaRE = _compDeInsumo();
     _repCache = _repartoPrebatch(); // reparto prebatch→insumos (resumen ejecutivo)
@@ -8177,12 +8185,20 @@ function _resumenEjecutivo() {
                 var m = _filaDeMiembro(mid); if (!m) return;
                 var mAj = _repartoDe(m.insumoId);
                 var mDif = calcDiferencia(m) + mAj.dif, mCc = costoCopa(m);
-                if (mDif < -0.001) { faltU++; faltCosto += Math.abs(mDif)*mCc; faltCarta += Math.abs(mDif)*(m.precioCarta||0); }
-                else if (mDif > 0.001) { sobrU++; sobrCosto += mDif*mCc; sobrCarta += mDif*(m.precioCarta||0); }
+                /* Un miembro se aparta por su propio renglón o por el de su
+                   compuesto: en la tabla se ve dentro del compuesto, así que
+                   ocultar el compuesto tiene que llevárselos a todos. */
+                var mFuera = esOcultoImpreso(m.insumoId) || esOcultoImpreso(f.compId || f.insumoId);
+                if (mDif < -0.001) { faltU++; faltCosto += Math.abs(mDif)*mCc; faltCarta += Math.abs(mDif)*(m.precioCarta||0);
+                    if (mFuera) ocultosN++; else faltCartaImp += Math.abs(mDif)*(m.precioCarta||0); }
+                else if (mDif > 0.001) { sobrU++; sobrCosto += mDif*mCc; sobrCarta += mDif*(m.precioCarta||0);
+                    if (mFuera) ocultosN++; else sobrCartaImp += mDif*(m.precioCarta||0); }
             });
         }
-        else if (dif < -0.001) { faltU++; faltCosto += Math.abs(dif)*cc; faltCarta += Math.abs(dif)*(f.precioCarta||0); }
-        else if (dif > 0.001) { sobrU++; sobrCosto += dif*cc; sobrCarta += dif*(f.precioCarta||0); }
+        else if (dif < -0.001) { faltU++; faltCosto += Math.abs(dif)*cc; faltCarta += Math.abs(dif)*(f.precioCarta||0);
+            if (esOcultoImpreso(f.insumoId)) ocultosN++; else faltCartaImp += Math.abs(dif)*(f.precioCarta||0); }
+        else if (dif > 0.001) { sobrU++; sobrCosto += dif*cc; sobrCarta += dif*(f.precioCarta||0);
+            if (esOcultoImpreso(f.insumoId)) ocultosN++; else sobrCartaImp += dif*(f.precioCarta||0); }
         var merma = (parseFloat(f.mermaCopas)||0) + (parseFloat(f.mermaBase)||0);
         if (merma > 0) { mermados.push({nombre:f.nombre, costo:merma*cc, f:f, m:merma}); mermaCosto += merma*cc; }
         var cons = _consumoPeriodo(f) + _aR.venta; // compuesto-aware + su parte de ventas del prebatch
@@ -8262,7 +8278,20 @@ function _resumenEjecutivo() {
             // vez de − cuando a costo había sobrante pero a carta faltante).
             var netCosto = sobrCosto - faltCosto, netCarta = sobrCarta - faltCarta;
             var esSobrCarta = netCarta >= 0;
+            /* Lo que va a decir el IMPRESO, cuando no es lo mismo. Sin esta
+               línea, el que compara las dos pantallas encuentra una
+               contradicción donde hay una decisión suya. */
+            var netCartaImp = sobrCartaImp - faltCartaImp;
+            var _lineaImp = ocultosN > 0
+                ? '<div style="margin-top:4px;font-size:11px;color:var(--text-dim);line-height:1.5"' +
+                  ' title="Los apartados se siguen viendo aquí; en el reporte impreso no entran, ' +
+                  'ni en la tabla ni en los totales.">↳ en el impreso: <b style="color:' +
+                  (netCartaImp >= 0 ? 'var(--green)' : 'var(--red)') + '">' +
+                  (netCartaImp >= 0 ? '+' : '−') + M(Math.abs(netCartaImp)) + '</b> — ' +
+                  ocultosN + ' insumo' + (ocultosN === 1 ? '' : 's') + ' fuera del impreso</div>'
+                : '';
             var _subNeto = (faltU+sobrU)+' insumos con diferencia · '+(netCosto>=0?'+':'−')+M(Math.abs(netCosto))+' a costo'+
+                _lineaImp +
                 '<div style="margin-top:6px">'+(typeof _btnNotaNeto==='function'?_btnNotaNeto():'')+'</div>';
             return '<div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">'+
                 card(esSobrCarta ? 'Sobrante (a carta)' : 'Faltante (a carta)',
@@ -9734,7 +9763,17 @@ function verReporteDirectivo(gerencial, modo) {
     /* Los apartados del impreso salen ANTES de cualquier suma: si se filtraran
        solo al pintar la tabla, el capital y los totales seguirían contándolos
        y el reporte no cuadraría consigo mismo. */
-    const analisis = filasCaptura.filter(f => !esOcultoImpreso(f && f.insumoId)).map(f => {
+    /* Un miembro de compuesto se imprime DENTRO de su compuesto, así que
+       apartar el compuesto tiene que llevárselos a todos: si no, la tabla
+       esconde el renglón y los totales lo siguen contando. */
+    const _compDeMiembro = _compDeInsumo();
+    const _fueraImp = (f) => {
+        if (!f || !f.insumoId) return false;
+        if (esOcultoImpreso(f.insumoId)) return true;
+        var c = _compDeMiembro[f.insumoId];
+        return !!(c && esOcultoImpreso(c.id || c));
+    };
+    const analisis = filasCaptura.filter(f => !_fueraImp(f)).map(f => {
         // Prebatch repartido: se excluye del análisis (su variancia vive en sus insumos).
         const esPBo     = _esPrebatchRepartido(f.insumoId);
         const adjO      = esPBo ? _repZero : _repartoDe(f.insumoId);
