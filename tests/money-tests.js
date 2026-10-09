@@ -20683,12 +20683,20 @@ console.log('\n══ BH32 · Enseñar la cuenta, no solo el resultado ══');
        la única pista era la lista de bases, y había que deducirlo. */
     test('la tarjeta del Paso 3 dice qué sub-receta produce', () =>
         eq(src.indexOf('hace: ${etx(sr.nombre)}') > -1, true, 'sin deducir'));
-    /* Y lo que NO se hizo: avisar cuando el nombre del insumo y el de su
-       sub-receta no coinciden. La conversión les pone sufijos («Mix Negroni»
-       → «Mix Negroni PR»), así que gritaba en lo normal. Queda escrito para
-       no volver a intentarlo. */
-    test('…pero NO se avisa por un nombre con sufijo: eso es lo normal', () =>
-        eq(src.indexOf("mal: 'ligacruzada'") === -1, true, 'sin falsos positivos'));
+    /* ESTE TEST SE EQUIVOCÓ DE CONCLUSIÓN. Lo escribí prohibiendo el aviso de
+       liga cruzada porque mi PRIMER intento gritaba en lo normal (comparaba
+       nombres parecidos, y la conversión les pone sufijos). Pero el problema
+       sí existía —era el caso de Edwin— y lo que estaba mal era la regla, no
+       la idea. Prohibirlo cerró la puerta al arreglo bueno.
+
+       La regla correcta no compara nombres: pregunta si EXISTE una sub-receta
+       con el nombre EXACTO del insumo y distinta de la ligada. Se comprueba
+       corriéndola, en BH34. */
+    test('…y el aviso de liga cruzada NO se dispara por un sufijo', () => {
+        const i = src.indexOf("mal: 'ligacruzada'");
+        const bloque = src.slice(Math.max(0, i - 900), i);
+        return eq(bloque.indexOf('_n(r.nombre) === _n(f.nombre)') > -1, true, 'por nombre exacto');
+    });
 }
 
 /* ═══════════ SUITE BH33 · LA NOTA DEL MIEMBRO Y EL CONTEO QUE NO DECÍA CUÁNTO
@@ -20825,6 +20833,153 @@ console.log('\n══ BH33 · La nota del miembro y el conteo que no decía cuá
         const qr  = ent.indexOf("var sub = [x.variedad, x.marca].filter(Boolean).join(' · ');") > -1;
         const app = amv.indexOf("var sub = [x.variedad, x.marca].filter(Boolean).join(' · ');") > -1;
         return eq(qr && app, true, 'misma redacción');
+    });
+}
+
+/* ═══════════ SUITE BH34 · LA LIGA CRUZADA ════════════════════════════════
+   EL CASO, y costó dos vueltas dar con la regla buena.
+
+   El insumo «Limoncello SB 1» apuntaba a la sub-receta «Limoncello SB Bot.»
+   —la de EMBOTELLAR, que consume Limoncello— mientras el insumo «Limoncello
+   SB Bot.» apuntaba a la otra. Capturar batches en el primero descontaba
+   Limoncello en vez del vodka de la infusión, y TODO lo demás estaba bien
+   formado: la liga existía, la receta existía, tenía ingredientes, el insumo
+   estaba marcado como producción propia. Ninguna comprobación se quejaba.
+
+   PRIMER INTENTO, MALO: avisar cuando el nombre del insumo y el de su
+   sub-receta no coincidieran. La conversión «Cargar como insumo» les pone
+   sufijos —«Mix Negroni» → «Mix Negroni PR»— así que gritaba en lo normal, y
+   un aviso que sale siempre enseña a ignorar los avisos. Lo quité… y de paso
+   escribí un candado que PROHIBÍA el aviso, cerrándole la puerta al arreglo
+   bueno. El problema sí existía; lo que estaba mal era la regla.
+
+   LA REGLA BUENA no compara nombres parecidos: pregunta si EXISTE una
+   sub-receta que se llame EXACTAMENTE como el insumo y que no sea la ligada.
+   Si existe, no hay ambigüedad: hay una receta con su nombre exacto y está
+   apuntando a otra.                                                         */
+console.log('\n══ BH34 · La liga cruzada ══');
+{
+    const X = crearContexto();
+    cargarJS(X, 'etaax-core.js');
+    cargarJS(X, 'insumo-label.js');
+    cargarJS(X, 'recetas/inventarios.js');
+    X._storage['etaax_negocio_activo'] = 'negT';
+    vm.runInContext('function _autoGuardar(){} function _refrescarAvisoPrebatches(){} function renderStepContent(){}', X);
+
+    /* El catálogo real de Edwin, en chico: la infusión (con vodka) y el
+       embotellado (que consume la infusión). */
+    const RECS = [
+        { id:'srInfusion', nombre:'Limoncello SB 1', tipo:'sub-bebidas', status:'activa',
+          camposExtra:{ rendimientoFinal:'2.6', unidadRendimientoFinal:'LT' },
+          ingredientes:[{ insumoId:'vodka', cantidad:1.75, unidad:'LT' }] },
+        { id:'srBotella', nombre:'Limoncello SB Bot.', tipo:'sub-bebidas', status:'activa',
+          camposExtra:{ rendimientoFinal:'750', unidadRendimientoFinal:'ML' },
+          ingredientes:[{ insumoId:'preLim1', cantidad:750, unidad:'ML' }] }
+    ];
+    const montar = (ligaDeLim1) => {
+        setVar(X, '_cacheRecetasInv', RECS);
+        setVar(X, '_cacheInsumosInv', [
+            { id:'preLim1', nombre:'Limoncello SB 1',    esSubReceta:true, recetaId:ligaDeLim1, activo:'1' },
+            { id:'preBot',  nombre:'Limoncello SB Bot.', esSubReceta:true, recetaId:'srInfusion', activo:'1' },
+            { id:'vodka',   nombre:"Vodka American · Sam's", activo:'1' }]);
+        setVar(X, 'invActual', { id:'invT', area:'barra', entradasLog:[], ventasCompuesto:{},
+            cancelaciones:[], descuentos:[], filas:[], prebatchProducidos:{}, cocktailsVendidos:{} });
+        const f = (id, nom) => ({ insumoId:id, nombre:nom, tipo:'copa', contNeto:1800, copaML:45,
+            existenciaAnterior:40, entradas:[], pesos:[], cerradasBodega:0, cerradasBarra:0 });
+        setVar(X, 'filasCaptura', [f('preLim1','Limoncello SB 1'), f('preBot','Limoncello SB Bot.'),
+                                   f('vodka',"Vodka American · Sam's")]);
+        vm.runInContext('_consumoDirty = true; _cancelDirty = true;', X);
+        return X._prebatchDiagnostico();
+    };
+
+    test('EL CASO · la liga cruzada se delata', () => {
+        const d = montar('srBotella');            // apunta a la de embotellar
+        const c = d.find(x => x.mal === 'ligacruzada');
+        return eq(!!c && c.fila, 'Limoncello SB 1', 'cazada');
+    });
+    test('…y dice a cuál debería estar ligado', () => {
+        const c = montar('srBotella').find(x => x.mal === 'ligacruzada');
+        return eq(c.recetaId, 'srInfusion', 'la de su nombre exacto');
+    });
+    /* La prueba de que importa: con la liga cruzada el vodka no baja. */
+    test('…y mientras está cruzada, el vodka NO se descuenta', () => {
+        montar('srBotella');
+        X.setProduccionPrebatch('preLim1', 2);
+        return eq(X.consumoBasesPorProduccion('vodka'), 0, 'el síntoma de Edwin');
+    });
+    test('…y con la liga correcta SÍ baja', () => {
+        montar('srInfusion');
+        X.setProduccionPrebatch('preLim1', 2);
+        return eq(X.consumoBasesPorProduccion('vodka'), 3500, '2 × 1.75 LT');
+    });
+    /* Bien ligado, no se dice nada de este insumo. */
+    test('con la liga correcta no se avisa de él', () => {
+        const d = montar('srInfusion');
+        return eq(d.filter(x => x.mal === 'ligacruzada' && x.fila === 'Limoncello SB 1').length,
+                  0, 'sin ruido');
+    });
+
+    /* ── EL FALSO POSITIVO QUE TUMBÓ EL PRIMER INTENTO ──
+       «Mix Negroni PR» ligado a «Mix Negroni» es lo NORMAL: así los nombra la
+       conversión. No existe ninguna receta llamada «Mix Negroni PR», así que
+       la regla nueva no tiene con qué dispararse. */
+    test('un sufijo de conversión NO dispara el aviso', () => {
+        setVar(X, '_cacheRecetasInv', [{ id:'srMix', nombre:'Mix Negroni', tipo:'sub-bebidas',
+            status:'activa', ingredientes:[{ insumoId:'campari', cantidad:500, unidad:'ML' }] }]);
+        setVar(X, '_cacheInsumosInv', [
+            { id:'preMix', nombre:'Mix Negroni PR', esSubReceta:true, recetaId:'srMix', activo:'1' },
+            { id:'campari', nombre:'Campari', activo:'1' }]);
+        setVar(X, 'invActual', { id:'invT', area:'barra', entradasLog:[], ventasCompuesto:{},
+            cancelaciones:[], descuentos:[], filas:[], prebatchProducidos:{}, cocktailsVendidos:{} });
+        setVar(X, 'filasCaptura', [{ insumoId:'preMix', nombre:'Mix Negroni PR', tipo:'copa',
+            contNeto:1000, copaML:45, existenciaAnterior:0, entradas:[], pesos:[],
+            cerradasBodega:0, cerradasBarra:0 }]);
+        return eq(X._prebatchDiagnostico().filter(x => x.mal === 'ligacruzada').length, 0,
+                  'así los nombra la conversión');
+    });
+    /* Ni dos recetas con el mismo nombre ligadas a la que les toca. */
+    test('…ni una receta que se llama igual pero ES la ligada', () => {
+        const d = montar('srInfusion');
+        return eq(d.filter(x => x.mal === 'ligacruzada').length <= 1, true,
+                  'solo la que de verdad apunta a otra');
+    });
+
+    /* ── SE PUEDE ARREGLAR DESDE DONDE SE VE ──
+       Un diagnóstico que no se puede atender no sirve de nada: mandar a
+       alguien a otro módulo a buscar un insumo entre tres que se llaman casi
+       igual, para cambiarle una liga que no se ve, es pedirle que no lo haga. */
+    const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    test('el aviso trae el botón para ligarlo al correcto', () =>
+        eq(src.indexOf('_religarPrebatch(') > -1 &&
+           src.indexOf('🔗 Ligarlo al correcto') > -1, true, 'accionable'));
+    /* Cambia un dato con consecuencias: el inventario abierto empieza a
+       descontar otras cosas. Se pregunta con las DOS recetas por su nombre. */
+    test('…y pregunta nombrando las dos recetas, no con un «¿seguro?»', () => {
+        const i = src.indexOf('async function _religarPrebatch');
+        const cuerpo = src.slice(i, i + 1800);
+        return eq(cuerpo.indexOf('va a producir') > -1 &&
+                  cuerpo.indexOf('en vez de') > -1 &&
+                  cuerpo.indexOf('ins.nombre') > -1 && cuerpo.indexOf('nueva.nombre') > -1 &&
+                  cuerpo.indexOf('vieja.nombre') > -1, true, 'con las consecuencias');
+    });
+    test('…y avisa que lo ya capturado va a descontar otra cosa', () => {
+        const i = src.indexOf('async function _religarPrebatch');
+        return eq(src.slice(i, i + 1800).indexOf('van a descontar OTROS insumos') > -1,
+                  true, 'sin sorpresas');
+    });
+    /* Cambiar la liga mueve el consumo, el reparto y el teórico: los tres
+       cachés tienen que caer o el Resultado seguiría enseñando lo viejo —
+       justo el bug que se arregló hace dos entregas. */
+    test('…y tira los tres cachés al cambiarla', () => {
+        const i = src.indexOf('async function _religarPrebatch');
+        const cuerpo = src.slice(i, i + 1800);
+        return eq(cuerpo.indexOf('_consumoDirty = true') > -1 &&
+                  cuerpo.indexOf('_cancelDirty = true') > -1 &&
+                  cuerpo.indexOf('window._step5Force = true') > -1, true, 'repinta de verdad');
+    });
+    test('…y lo guarda en la nube, no solo en esta pantalla', () => {
+        const i = src.indexOf('async function _religarPrebatch');
+        return eq(src.slice(i, i + 1800).indexOf("from('negocio_insumos')") > -1, true, 'persiste');
     });
 }
 

@@ -1376,11 +1376,36 @@ function _prebatchDiagnostico() {
                 txt: 'su sub-receta «' + sr.nombre + '» no tiene ingredientes capturados' });
             return;
         }
-        /* AQUÍ ESTUVO UNA HEURÍSTICA MÍA QUE NO SERVÍA: avisar cuando el
-           nombre del insumo y el de su sub-receta no coincidían. La conversión
-           «Cargar como insumo» les pone sufijos («Mix Negroni» → «Mix Negroni
-           PR»), así que gritaba en lo normal. Un aviso que sale siempre enseña
-           a ignorar los avisos. */
+        /* ══ LIGAS CRUZADAS ═══════════════════════════════════════════════
+           EL CASO REAL, y costó dos vueltas encontrar la regla buena.
+
+           El insumo «Limoncello SB 1» apuntaba a la sub-receta «Limoncello SB
+           Bot.» —la de EMBOTELLAR, que consume Limoncello— mientras el insumo
+           «Limoncello SB Bot.» apuntaba a la otra. Capturar batches en el
+           primero descontaba Limoncello en vez del vodka, y todo lo demás
+           estaba bien formado: ninguna comprobación de las que había se
+           quejaba.
+
+           PRIMER INTENTO, MALO: avisar cuando el nombre del insumo y el de su
+           sub-receta no coincidían. La conversión les pone sufijos («Mix
+           Negroni» → «Mix Negroni PR»), así que gritaba en lo normal.
+
+           LA REGLA BUENA no compara nombres parecidos: pregunta si EXISTE una
+           sub-receta que se llame EXACTAMENTE como este insumo y que no sea la
+           que tiene ligada. Si existe, no hay ambigüedad posible — hay una
+           receta con su nombre exacto y está apuntando a otra. «Mix Negroni
+           PR» no dispara nada, porque no existe ninguna receta con ese nombre. */
+        var _n = function (x) { return String(x || '').trim().toLowerCase(); };
+        var gemela = recs.find(function (r) {
+            return r && String(r.tipo || '').indexOf('sub') === 0 &&
+                   _n(r.nombre) === _n(f.nombre) && r.id !== sr.id;
+        });
+        if (gemela) {
+            out.push({ fila: f.nombre, mal: 'ligacruzada', recetaId: gemela.id, insumoId: f.insumoId,
+                txt: 'está ligado a «' + sr.nombre + '», pero existe una sub-receta que se llama ' +
+                     'exactamente como él: capturar batches aquí descuenta los ingredientes ' +
+                     'de la OTRA' });
+        }
     });
 
     /* Y al revés: un coctel que se bebe un prebatch que NO tiene renglón aquí.
@@ -1414,6 +1439,43 @@ function _prebatchDiagnostico() {
     });
     return out;
 }
+
+/* ══ ARREGLAR LA LIGA DESDE DONDE SE VE EL PROBLEMA ═══════════════════════
+   Un diagnóstico que no se puede atender no sirve de nada. Mandar a alguien a
+   otro módulo a buscar un insumo entre tres que se llaman casi igual, para
+   cambiarle una liga que no se ve por ningún lado, es pedirle que no lo haga.
+
+   Esto cambia UN dato del insumo —a qué sub-receta produce— y es una
+   operación con consecuencias: el inventario abierto empieza a descontar
+   otras cosas. Por eso se pregunta con las dos recetas por su nombre, no con
+   un «¿seguro?». */
+async function _religarPrebatch(insumoId, recetaId) {
+    var ins = (typeof window._insumoResolver === 'function') ? window._insumoResolver(insumoId) : null;
+    var nueva = getRecetas().find(function (r) { return r.id === recetaId; });
+    if (!ins || !nueva) { alert('No se encontró el insumo o la sub-receta.'); return; }
+    var vieja = getRecetas().find(function (r) { return r.id === ins.recetaId; });
+    if (!confirm('«' + (ins.nombre || '') + '» va a producir «' + (nueva.nombre || '') + '»' +
+                 (vieja ? ', en vez de «' + vieja.nombre + '»' : '') + '.' +
+                 String.fromCharCode(10, 10) +
+                 'Los batches que ya capturaste van a descontar OTROS insumos: ' +
+                 'revisa el Resultado después de hacerlo.' +
+                 String.fromCharCode(10, 10) + '¿Lo ligamos?')) return;
+    ins.recetaId = recetaId;
+    var negId = getNegocioActivo();
+    try {
+        if (typeof _supabase !== 'undefined' && negId) {
+            var r = await _supabase.from('negocio_insumos')
+                .upsert({ negocio_id: negId, insumo_id: ins.id, datos: ins });
+            if (r.error) throw r.error;
+        }
+    } catch (e) { alert('Se cambió aquí pero no se pudo guardar: ' + ((e && e.message) || e)); }
+    /* Todo lo que depende de la liga cambia: el consumo, el reparto, el
+       teórico. Se tiran los tres cachés y se repinta. */
+    _consumoDirty = true; _cancelDirty = true;
+    window._step5Dirty = true; window._step5Force = true;
+    if (typeof renderStepContent === 'function') renderStepContent();
+}
+window._religarPrebatch = _religarPrebatch;
 
 /* ══ ENSEÑAR LA CUENTA, NO SOLO EL RESULTADO ══════════════════════════════
    «Capturo la producción y el vodka no baja» puede romperse en cinco sitios
@@ -1521,7 +1583,17 @@ function _prebatchAvisoHTML() {
         'diferencia sin explicación.</div>' +
         '<ul style="margin:9px 0 0 16px;padding:0;font-size:11.5px;color:var(--text-muted);line-height:1.75">' +
         p.map(function (x) {
-            return '<li><b style="color:var(--text)">' + etx(x.fila) + '</b> — ' + etx(x.txt) + '</li>';
+            /* Para la liga cruzada se ofrece ARREGLARLA aquí. Mandar a alguien
+               a otro módulo a buscar un insumo entre tres que se llaman casi
+               igual, para cambiarle una liga que no se ve por ningún lado, es
+               pedirle que no lo haga. */
+            var btn = (x.mal === 'ligacruzada' && x.insumoId && x.recetaId)
+                ? ' <button onclick="_religarPrebatch(\'' + x.insumoId + '\',\'' + x.recetaId + '\')" ' +
+                  'style="margin-left:6px;font-size:10.5px;padding:2px 9px;border-radius:5px;cursor:pointer;' +
+                  'background:transparent;border:1px solid var(--green);color:var(--green)">' +
+                  '🔗 Ligarlo al correcto</button>'
+                : '';
+            return '<li><b style="color:var(--text)">' + etx(x.fila) + '</b> — ' + etx(x.txt) + btn + '</li>';
         }).join('') +
         '</ul><div style="font-size:11px;color:var(--text-dim);margin-top:9px;line-height:1.6">' +
         'Se arregla en Recetas → Insumos, volviendo a «Cargar como insumo» la sub-receta, ' +
