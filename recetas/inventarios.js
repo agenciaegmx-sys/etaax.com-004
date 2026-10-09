@@ -1480,15 +1480,36 @@ async function _religarPrebatch(insumoId, recetaId) {
                  'Los batches que ya capturaste van a descontar OTROS insumos: ' +
                  'revisa el Resultado después de hacerlo.' +
                  String.fromCharCode(10, 10) + '¿Lo ligamos?')) return;
+
+    var antes = ins.recetaId;
     ins.recetaId = recetaId;
     var negId = getNegocioActivo();
     try {
         if (typeof _supabase !== 'undefined' && negId) {
             var r = await _supabase.from('negocio_insumos')
-                .upsert({ negocio_id: negId, insumo_id: ins.id, datos: ins });
+                .upsert({ negocio_id: negId, insumo_id: ins.id, datos: ins }, { onConflict: 'negocio_id,insumo_id' });
             if (r.error) throw r.error;
         }
-    } catch (e) { alert('Se cambió aquí pero no se pudo guardar: ' + ((e && e.message) || e)); }
+        /* EL ESPEJO LOCAL. Antes esto solo cambiaba el objeto en memoria. El
+           catálogo se vuelve a leer de localStorage al recargar, y el realtime
+           de insumos lo repuebla desde la nube: cualquiera de los dos revivía
+           la liga vieja y parecía que el botón «no hizo nada». */
+        try {
+            _skPut(_sk('insumos'), JSON.stringify((getInsumos() || []).map(function (x) {
+                var c = Object.assign({}, x); c.foto = ''; c.fotoUrl = ''; return c;
+            })));
+        } catch (e2) {}
+    } catch (e) {
+        /* SE DESHACE. Dejar el cambio en pantalla cuando no se guardó es la
+           peor de las dos opciones: se ve arreglado, se cierra el inventario,
+           y al volver está igual que antes sin que nadie sepa por qué. */
+        ins.recetaId = antes;
+        alert('No se pudo guardar el cambio, así que NO se hizo.' +
+              String.fromCharCode(10, 10) + ((e && e.message) || e) +
+              String.fromCharCode(10, 10) +
+              'Vuelve a intentarlo; si sigue, mándame el «ver la liga (ids)» de ese renglón.');
+        return;
+    }
     /* Todo lo que depende de la liga cambia: el consumo, el reparto, el
        teórico. Se tiran los tres cachés y se repinta. */
     _consumoDirty = true; _cancelDirty = true;
@@ -1496,6 +1517,62 @@ async function _religarPrebatch(insumoId, recetaId) {
     if (typeof renderStepContent === 'function') renderStepContent();
 }
 window._religarPrebatch = _religarPrebatch;
+
+/* ══ VOLCADO DE LA CADENA, PARA CUANDO HAY QUE PREGUNTAR ══════════════════
+   Llevamos tres vueltas con el mismo síntoma porque yo no veo los datos y
+   quien los tiene no ve los ids. Esto copia al portapapeles los registros que
+   intervienen —lo capturado, el insumo que manda, su liga, la receta que se
+   usa y sus ingredientes— en texto plano, para pegarlo en un mensaje.
+
+   Va solo lo que hace falta para rastrear la cadena: ni precios, ni
+   proveedores, ni nada que no sea de este problema. */
+function _copiarDiagPrebatch() {
+    var L = [];
+    L.push('— ETAAX · cadena del prebatch —');
+    L.push('negocio: ' + (getNegocioActivo() || '?') +
+           '   sucursal: ' + (localStorage.getItem('etaax_sucursal_activa') || '(global)'));
+    L.push('inventario: ' + ((invActual && invActual.nombre) || (invActual && invActual.id) || '?') +
+           '   área: ' + ((invActual && invActual.area) || '?'));
+    var prod = (invActual && invActual.prebatchProducidos) || {};
+    Object.keys(prod).forEach(function (pid) {
+        var n = parseFloat(prod[pid]) || 0; if (!n) return;
+        var pre = window._insumoResolver ? window._insumoResolver(pid) : null;
+        L.push('');
+        L.push('CAPTURADO EN: ' + pid + '  × ' + n + ' batches');
+        if (!pre) { L.push('  (ese insumo no está en el catálogo)'); return; }
+        L.push('  insumo que manda: ' + pre.id + ' · "' + (pre.nombre || '') + '"' +
+               '  esSubReceta=' + !!pre.esSubReceta +
+               '  origenId=' + (pre.origenId || '-') + '  suc=' + (pre.sucursalId || '-'));
+        L.push('  su recetaId: ' + (pre.recetaId || '(vacío)'));
+        var sr = window._recetaResolver ? window._recetaResolver(pre.recetaId) : null;
+        if (!sr) { L.push('  receta usada: NO SE ENCUENTRA'); return; }
+        L.push('  receta usada: ' + sr.id + ' · "' + (sr.nombre || '') + '"' +
+               '  tipo=' + (sr.tipo || '-') + '  origenId=' + (sr.origenId || '-'));
+        (sr.ingredientes || []).forEach(function (ing) {
+            var ii = window._insumoResolver ? window._insumoResolver(ing.insumoId) : null;
+            L.push('    · ' + (ing.cantidad || 0) + ' ' + (ing.unidad || '') +
+                   '  insumoId=' + (ing.insumoId || '-') +
+                   '  canon=' + (_canonInsumoId(ing.insumoId) || '-') +
+                   '  → ' + (ii ? '"' + (ii.nombre || '') + '"' : 'NO ESTÁ EN EL CATÁLOGO') +
+                   '  renglón=' + (_filaDe(_canonInsumoId(ing.insumoId) || ing.insumoId) ? 'sí' : 'NO'));
+        });
+    });
+    /* Las sub-recetas que existen con ese nombre: es lo que delata una liga
+       cruzada, y sin verlas juntas no se distingue cuál es cuál. */
+    L.push('');
+    L.push('SUB-RECETAS DEL NEGOCIO:');
+    (getRecetas() || []).filter(function (r) { return r && String(r.tipo || '').indexOf('sub') === 0; })
+        .forEach(function (r) {
+            L.push('  ' + r.id + ' · "' + (r.nombre || '') + '"  ings=' + ((r.ingredientes || []).length) +
+                   '  origenId=' + (r.origenId || '-'));
+        });
+    var txt = L.join(String.fromCharCode(10));
+    try {
+        navigator.clipboard.writeText(txt);
+        alert('Copiado. Pégalo en el chat.');
+    } catch (e) { window.prompt('Copia esto:', txt); }
+}
+window._copiarDiagPrebatch = _copiarDiagPrebatch;
 
 /* ══ ENSEÑAR LA CUENTA, NO SOLO EL RESULTADO ══════════════════════════════
    «Capturo la producción y el vodka no baja» puede romperse en cinco sitios
@@ -1591,7 +1668,11 @@ function _prebatchDesgloseHTML() {
     return '<div style="margin:0 16px 14px;background:var(--surface);border:1px solid ' +
         (hayProblema ? 'rgba(245,200,66,.5)' : 'var(--border)') + ';border-radius:12px;padding:13px 15px">' +
         '<div style="font-size:11.5px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;' +
-        'color:var(--text-muted);margin-bottom:9px">🏭 Qué se llevó la producción de batches</div>' +
+        'color:var(--text-muted);margin-bottom:9px">🏭 Qué se llevó la producción de batches' +
+        '<button onclick="_copiarDiagPrebatch()" style="margin-left:10px;font-size:10px;' +
+        'padding:2px 9px;border-radius:5px;cursor:pointer;background:transparent;' +
+        'border:1px solid var(--border);color:var(--text-dim);letter-spacing:0;' +
+        'text-transform:none;font-weight:500">📋 Copiar diagnóstico</button></div>' +
         d.map(function (x) {
             if (x.mal) return '<div style="font-size:12px;color:var(--accent);margin-bottom:7px">' +
                 '<b style="color:var(--text)">' + etx(x.nombre) + '</b> · ' + x.batches +

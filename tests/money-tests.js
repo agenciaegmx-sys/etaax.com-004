@@ -21193,6 +21193,152 @@ console.log('\n══ BH35 · La pantalla y el cálculo, sobre el mismo registro
         eq(montar(MAESTRO_OK).religarA, null, 'sin botón de más'));
 }
 
+/* ═══════════ SUITE BH36 · EL BOTÓN QUE «NO HIZO NADA» ════════════════════
+   Edwin picó «Ligarlo al correcto» y no pasó nada. Dos defectos encima:
+
+   1. EL CAMBIO NO SE ESPEJABA EN LOCAL. Solo se mutaba el objeto en memoria y
+      se mandaba a la nube. El catálogo se vuelve a leer de localStorage al
+      recargar, y el realtime de insumos lo repuebla desde ahí: cualquiera de
+      los dos revivía la liga vieja. Parecía que el botón no hacía nada —
+      porque efectivamente, al siguiente parpadeo, no quedaba nada.
+
+   2. SI EL GUARDADO FALLABA, EL CAMBIO SE QUEDABA EN PANTALLA. Es la peor de
+      las dos opciones: se ve arreglado, se cierra el inventario y al volver
+      está igual que antes sin que nadie sepa por qué. Ahora se deshace y se
+      dice que NO se hizo.
+
+   Y para dejar de depurar a ciegas —tres vueltas con el mismo síntoma porque
+   yo no veo los datos y quien los tiene no ve los ids— hay un volcado de la
+   cadena al portapapeles.                                                   */
+async function suiteBotonReligar() {
+console.log('\n══ BH36 · El botón que «no hizo nada» ══');
+    const B = crearContexto();
+    cargarJS(B, 'etaax-core.js');
+    cargarJS(B, 'insumo-label.js');
+    cargarJS(B, 'recetas/inventarios.js');
+    B._storage['etaax_negocio_activo'] = 'negT';
+    vm.runInContext('function _autoGuardar(){} function _refrescarAvisoPrebatches(){} function renderStepContent(){}', B);
+
+    const RECS = [
+        { id:'srInfusion', nombre:'Limoncello SB 1', tipo:'sub-bebidas', status:'activa',
+          ingredientes:[{ insumoId:'vodka', cantidad:1.75, unidad:'LT' }] },
+        { id:'srBotella', nombre:'Limoncello SB Bot.', tipo:'sub-bebidas', status:'activa',
+          ingredientes:[{ insumoId:'preLim1', cantidad:750, unidad:'ML' }] }];
+    const montar = () => {
+        setVar(B, '_cacheRecetasInv', RECS);
+        setVar(B, '_cacheInsumosInv', [
+            { id:'preLim1', nombre:'Limoncello SB 1', esSubReceta:true, recetaId:'srBotella', activo:'1' },
+            { id:'vodka', nombre:"Vodka American · Sam's", activo:'1' }]);
+        setVar(B, 'invActual', { id:'invT', nombre:'Bebidas Barra', area:'barra', entradasLog:[],
+            ventasCompuesto:{}, cancelaciones:[], descuentos:[], filas:[],
+            prebatchProducidos:{}, cocktailsVendidos:{} });
+        const f = (id, nom) => ({ insumoId:id, nombre:nom, tipo:'copa', contNeto:1800, copaML:45,
+            existenciaAnterior:40, entradas:[], pesos:[], cerradasBodega:0, cerradasBarra:0 });
+        setVar(B, 'filasCaptura', [f('preLim1','Limoncello SB 1'), f('vodka',"Vodka American · Sam's")]);
+        vm.runInContext('_consumoDirty = true; _cancelDirty = true;', B);
+        B.setProduccionPrebatch('preLim1', 2);
+    };
+    const correr = async (errorAlGuardar) => {
+        montar();
+        const dichos = [];
+        B.confirm = () => true;
+        B.alert = (t) => dichos.push(t);
+        B._supabase = { from: () => ({ upsert: () => Promise.resolve(
+            { error: errorAlGuardar ? { message: 'permiso denegado' } : null }) }) };
+        await B._religarPrebatch('preLim1', 'srInfusion');
+        const ins = B.getInsumos().find(x => x.id === 'preLim1');
+        return { liga: ins && ins.recetaId, dichos: dichos.join(' '), vodka: B.consumoBasesPorProduccion('vodka') };
+    };
+
+    /* ── 1. EL ESPEJO LOCAL ── */
+    await testA('al religar, el catálogo local queda al día', async () => {
+        await correr(false);
+        const guardado = JSON.parse(B._storage['etaax_negT_insumos'] || '[]');
+        const ins = guardado.find(x => x.id === 'preLim1');
+        return eq(ins && ins.recetaId, 'srInfusion', 'sobrevive a una recarga');
+    });
+    /* Era lo que hacía que pareciera que el botón no hacía nada: cambiaba en
+       memoria, y al siguiente parpadeo el catálogo volvía a leerse de local. */
+    test('…sin eso, recargar revivía la liga vieja', () => {
+        const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+        const i = src.indexOf('async function _religarPrebatch');
+        return eq(src.slice(i, i + 2600).indexOf("_skPut(_sk('insumos')") > -1, true, 'espejado');
+    });
+    /* El espejo va SIN fotos, como todos los demás: una base64 por insumo
+       revienta la cuota de localStorage y el guardado falla en silencio. */
+    await testA('…y el espejo va sin fotos, por la cuota', async () => {
+        montar();
+        B.getInsumos()[0].foto = 'data:image/png;base64,AAAA';
+        B.confirm = () => true; B.alert = () => {};
+        B._supabase = { from: () => ({ upsert: () => Promise.resolve({ error:null }) }) };
+        await B._religarPrebatch('preLim1', 'srInfusion');
+        const g = JSON.parse(B._storage['etaax_negT_insumos'] || '[]');
+        return eq((g.find(x => x.id === 'preLim1') || {}).foto, '', 'sin base64');
+    });
+
+    /* ── 2. SI NO SE GUARDA, NO SE HACE ── */
+    await testA('si el guardado falla, el cambio SE DESHACE', async () => {
+        const r = await correr(true);
+        return eq(r.liga, 'srBotella', 'no se queda a medias');
+    });
+    await testA('…y se dice que NO se hizo, con el motivo', async () => {
+        const r = await correr(true);
+        return eq(r.dichos.indexOf('NO se hizo') > -1 && r.dichos.indexOf('permiso denegado') > -1,
+                  true, 'sin mentir');
+    });
+    /* La prueba de que deshacer importa: con el cambio a medias, el vodka
+       aparecería descontado en pantalla y no lo estaría en los datos. */
+    await testA('…y el vodka NO se descuenta si no se guardó', async () => {
+        const r = await correr(true);
+        return eq(r.vodka, 0, 'coherente con lo guardado');
+    });
+    await testA('y cuando sí se guarda, el vodka baja', async () => {
+        const r = await correr(false);
+        return eq(r.liga + '|' + r.vodka, 'srInfusion|3500', 'el arreglo sirve');
+    });
+
+    /* ── 3. EL VOLCADO, PARA NO PREGUNTAR A CIEGAS ── */
+    const dump = () => {
+        montar();
+        let copiado = '';
+        B.navigator = { clipboard: { writeText: (t) => { copiado = t; } } };
+        B.alert = () => {};
+        B._copiarDiagPrebatch();
+        return copiado;
+    };
+    test('el volcado trae los ids de la cadena completa', () => {
+        const t = dump();
+        return eq(['CAPTURADO EN: preLim1', 'insumo que manda: preLim1',
+                   'su recetaId: srBotella', 'receta usada: srBotella'].every(x => t.indexOf(x) > -1),
+                  true, 'los cuatro eslabones');
+    });
+    test('…y las sub-recetas que existen, para ver el cruce', () => {
+        const t = dump();
+        return eq(t.indexOf('SUB-RECETAS DEL NEGOCIO') > -1 &&
+                  t.indexOf('srInfusion · "Limoncello SB 1"') > -1, true, 'la gemela a la vista');
+    });
+    test('…y por cada ingrediente, si tiene renglón en el inventario', () => {
+        const t = dump();
+        return eq(/insumoId=preLim1[^\n]*renglón=sí/.test(t), true, 'lo que se descuenta o no');
+    });
+    /* Un volcado que arrastre precios o proveedores no se puede pegar en un
+       chat. Va SOLO la cadena. */
+    test('…y NO arrastra precios ni proveedores', () => {
+        montar();
+        B.getInsumos()[1].costoUnitario = 999;
+        B.getInsumos()[1].proveedor = 'Secreto S.A.';
+        let c = '';
+        B.navigator = { clipboard: { writeText: (t) => { c = t; } } };
+        B.alert = () => {};
+        B._copiarDiagPrebatch();
+        return eq(c.indexOf('999') === -1 && c.indexOf('Secreto') === -1, true, 'pegable sin miedo');
+    });
+    test('…y el botón para copiarlo está en el desglose', () => {
+        montar();
+        return eq(B._prebatchDesgloseHTML().indexOf('_copiarDiagPrebatch()') > -1, true, 'a la mano');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
@@ -21208,4 +21354,4 @@ async function suiteSalirAsync(){ for (const [n, f] of testAsyncCola) await test
 suiteBuscadorIngredientes();
 suiteInsumoRecienAgregado();
 suiteSalirAsync().then(suiteAlmacenPrivado).then(suiteFrenoLogin)
-    .then(suiteLigaCruzada).then(resumen);
+    .then(suiteLigaCruzada).then(suiteBotonReligar).then(resumen);
