@@ -67,10 +67,27 @@ if (typeof window._makeRecetaResolver === 'function') window._recetaResolver = w
 // Id CANÓNICO de un insumo (maestro): si el id pertenece a una COPIA por sucursal, devuelve
 // el id del maestro (origenId); si no, el mismo id. Así las filas del inventario, las recetas
 // y los registros del QR empatan SIEMPRE por la misma identidad, aunque existan copias.
+/* ══ EL ID CANÓNICO DEPENDÍA DE DÓNDE ESTABAS PARADO ═══════════════════════
+   EL CASO: una sub-receta cuyo ingrediente apunta a la COPIA por sucursal de un
+   insumo, y el renglón del inventario que usa el MAESTRO. Producir el batch no
+   le descontaba NADA a ese insumo — el Limoncello se llevaba 1.75 LT de vodka y
+   el vodka seguía entero en el reporte. Con los vinos sí funcionaba, porque
+   esos ingredientes apuntan al maestro.
+
+   Por qué: el resolver, parado FUERA de la sucursal de la copia, devuelve el
+   MAESTRO — y el maestro no tiene `origenId`, así que este `|| id` se caía al
+   id que le habían pasado: el de la COPIA. O sea que el «id canónico» de una
+   copia era… ella misma. Parado DENTRO de esa sucursal sí daba el maestro.
+   Un identificador que cambia según dónde estés no identifica nada.
+
+   El arreglo es tomar el id del objeto que el resolver YA resolvió: si devolvió
+   la copia, su origenId; si devolvió el maestro, el id del maestro. El `|| id`
+   se queda solo para un insumo que ya no existe en el catálogo —ahí no hay nada
+   que resolver y conservar su id es mejor que devolver vacío. */
 function _canonInsumoId(id) {
     if (!id) return id;
     var r = (typeof window._insumoResolver === 'function') ? window._insumoResolver(id) : null;
-    return (r && r.origenId) || id;
+    return (r && (r.origenId || r.id)) || id;
 }
 // Insumos acotados a la SUCURSAL activa (regla "sin sucursal = matriz: ve todo").
 // Sin esto, el inventario leía los insumos de TODAS las sucursales y los duplicaba.
@@ -6108,15 +6125,30 @@ function _renderProduccionPrebatch() {
     const items = pres.map(p => {
         const n  = parseFloat(prod[p.id]) || 0;
         const sr = (window._recetaResolver ? window._recetaResolver(p.recetaId) : getRecetas().find(r => r.id === p.recetaId));
+        /* Por el resolver, no por un .find de id crudo: si el ingrediente apunta
+           a la copia por sucursal, el find no lo encuentra y la lista de bases
+           salía como «Vino, ?, ?». Los signos de interrogación no eran datos
+           que faltaran: era el buscador equivocado. */
         const bases = sr ? (sr.ingredientes||[]).map(ing => {
-            const ins = getInsumos().find(x => x.id === ing.insumoId);
-            return ins ? ins.nombre.split(' ')[0] : '?';
+            const ins = (typeof window._insumoResolver === 'function')
+                ? window._insumoResolver(ing.insumoId) : null;
+            return ins ? String(ins.nombre || '').split(' ')[0] : '?';
         }).slice(0,3).join(', ') : '';
-        return `<div class="step3-menu-item ${n>0?'has-cnt':''}">
+        return `<div class="step3-menu-item pb ${n>0?'has-cnt':''}">
             <div style="flex:1;min-width:0">
-                <div style="font-weight:600;font-size:14px;color:var(--text);
-                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${etx(p.nombre)}</div>
-                ${bases?`<div style="font-size:10px;color:var(--text-dim);margin-top:2px;
+                <div style="display:flex;align-items:flex-start;gap:6px">
+                    <!-- El nombre en DOS renglones, no cortado. «Limoncello SB 1»
+                         y «Limoncello SB Bot.» se veían los dos como
+                         «Limoncello S…»: imposible saber en cuál se captura. -->
+                    <div style="flex:1;min-width:0;font-weight:600;font-size:14px;color:var(--text);
+                        line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;
+                        -webkit-box-orient:vertical;overflow:hidden"
+                        title="${etx(p.nombre)}">${etx(p.nombre)}</div>
+                    ${p.recetaId ? `<button onclick="verFichaReceta('${p.recetaId}')"
+                        title="Ver la sub-receta" style="background:none;border:none;cursor:pointer;
+                        color:var(--text-dim);font-size:13px;padding:0;flex-shrink:0;line-height:1.2">📋</button>` : ''}
+                </div>
+                ${bases?`<div style="font-size:10px;color:var(--text-dim);margin-top:3px;
                     white-space:nowrap;overflow:hidden;text-overflow:ellipsis">↓ ${etx(bases)}</div>`:''}
             </div>
             <div class="step3-counter">

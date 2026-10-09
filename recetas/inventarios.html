@@ -733,6 +733,12 @@ body:not(.has-ctx) .inv-wizard-header { top: 48px; } /* sin ctx-bar (staff): sol
     border:1px solid var(--border); border-radius:10px; background:var(--surface);
     transition:border-color 0.15s; }
 .step3-menu-item.has-cnt { border-color:rgba(61,190,122,0.45); background:rgba(61,190,122,0.04); }
+/* Solo las tarjetas de PREBATCH: su nombre va en dos renglones («Limoncello SB
+   1» y «Limoncello SB Bot.» se veían los dos como «Limoncello S…»), y con el
+   nombre alto el contador centrado quedaba flotando. Las de coctel se quedan
+   como están: ahí el nombre cabe en uno. */
+.step3-menu-item.pb { align-items:flex-start; }
+.step3-menu-item.pb .step3-counter { margin-top:1px; }
 .step3-counter { display:flex; align-items:center; gap:0; border:1px solid var(--border);
     border-radius:8px; overflow:hidden; flex-shrink:0; }
 .step3-counter button { background:var(--bg); border:none; cursor:pointer; color:var(--text-muted);

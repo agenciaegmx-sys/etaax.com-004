@@ -20368,6 +20368,175 @@ console.log('\n══ BH30 · Capturar los batches del Paso 3 ══');
     });
 }
 
+/* ═══════════ SUITE BH31 · EL ID QUE CAMBIABA SEGÚN DÓNDE ESTABAS ═════════
+   EL CASO DE EDWIN, con nombre y apellido: la sub-receta «Limoncello SB 1»
+   lleva 1.75 LT de «Vodka American · Sam's». Captura la producción en el Paso
+   3 y en el Resultado el vodka sale ENTERO, como si no se hubiera usado. Con
+   los vinos sí funcionaba.
+
+   La diferencia: el ingrediente del Limoncello apunta a la COPIA por sucursal
+   del vodka, y el renglón del inventario usa el MAESTRO. Los vinos apuntan al
+   maestro directo.
+
+   LA CAUSA, que es peor que el síntoma: `_canonInsumoId` devolvía
+   `resolver(id).origenId || id`. Parado FUERA de la sucursal de la copia, el
+   resolver devuelve el MAESTRO — y el maestro no tiene origenId — así que se
+   caía al `|| id`, que es el id de la COPIA. O sea que el «id canónico» de una
+   copia era ella misma. Parado DENTRO de esa sucursal sí daba el maestro.
+
+   Un identificador que cambia según dónde estés parado no identifica nada, y
+   esta función la usan 39 sitios del inventario.                            */
+console.log('\n══ BH31 · El id que cambiaba según dónde estabas ══');
+{
+    const L = crearContexto();
+    cargarJS(L, 'etaax-core.js');
+    cargarJS(L, 'insumo-label.js');
+    cargarJS(L, 'recetas/inventarios.js');
+    L._storage['etaax_negocio_activo'] = 'negT';
+    vm.runInContext('function _autoGuardar(){} function _refrescarAvisoPrebatches(){}', L);
+
+    /* ── EL IDENTIFICADOR, A SOLAS ── */
+    const catalogo = () => setVar(L, '_cacheInsumosInv', [
+        { id:'vodka',      nombre:"Vodka American · Sam's", activo:'1' },
+        { id:'vodkaCopia', origenId:'vodka', sucursalId:'sucB',
+          nombre:"Vodka American · Sam's", activo:'1' }]);
+
+    test('el id canónico de una copia es su maestro, se mire desde donde se mire', () => {
+        catalogo();
+        L._storage['etaax_sucursal_activa'] = '';        // vista global
+        const fuera = L._canonInsumoId('vodkaCopia');
+        L._storage['etaax_sucursal_activa'] = 'sucB';    // parado en su sucursal
+        const dentro = L._canonInsumoId('vodkaCopia');
+        L._storage['etaax_sucursal_activa'] = '';
+        return eq(fuera + '|' + dentro, 'vodka|vodka', 'el mismo desde los dos lados');
+    });
+    test('…y el del maestro sigue siendo él mismo', () => {
+        catalogo();
+        return eq(L._canonInsumoId('vodka'), 'vodka', 'sin cambios');
+    });
+    /* Un insumo que ya no está en el catálogo —se borró, o es de otro negocio—
+       conserva su id: no hay nada que resolver, y devolver vacío lo sacaría de
+       cualquier comparación en silencio. */
+    test('…y un insumo que ya no existe conserva su id', () => {
+        catalogo();
+        return eq(L._canonInsumoId('fantasma'), 'fantasma', 'sin perderlo');
+    });
+    test('…y un id vacío no se inventa nada', () =>
+        eq([L._canonInsumoId(''), L._canonInsumoId(null)].join('|'), '|', 'tal cual'));
+
+    /* ── EL CASO COMPLETO, CON SUS CIFRAS ──
+       1 batch de Limoncello = 1.75 LT de vodka = 1750 ml. La botella es de
+       1750 ml y la copa de 45 ml → 38.89 copas. */
+    const montarLim = (idDelIngrediente) => {
+        setVar(L, '_cacheRecetasInv', [
+            { id:'srLim1', nombre:'Limoncello SB 1', tipo:'sub-bebidas', status:'activa',
+              camposExtra:{ rendimientoFinal:'2.6', unidadRendimientoFinal:'LT' },
+              ingredientes:[{ insumoId:'limon',  cantidad:200,  unidad:'G' },
+                            { insumoId:'azucar', cantidad:320,  unidad:'G' },
+                            { insumoId:'agua',   cantidad:500,  unidad:'ML' },
+                            { insumoId:idDelIngrediente, cantidad:1.75, unidad:'LT' }] }]);
+        setVar(L, '_cacheInsumosInv', [
+            { id:'preLim1', nombre:'Limoncello SB 1', esSubReceta:true, recetaId:'srLim1', activo:'1' },
+            { id:'vodka', nombre:"Vodka American · Sam's", activo:'1' },
+            { id:'vodkaCopia', origenId:'vodka', sucursalId:'sucB',
+              nombre:"Vodka American · Sam's", activo:'1' },
+            { id:'limon', nombre:'Limón eureca', activo:'1' },
+            { id:'azucar', nombre:'Azucar', activo:'1' },
+            { id:'agua', nombre:'Agua natural', activo:'1' }]);
+        setVar(L, 'invActual', { id:'invT', area:'barra', entradasLog:[], ventasCompuesto:{},
+            cancelaciones:[], descuentos:[], filas:[], prebatchProducidos:{}, cocktailsVendidos:{} });
+        const fVod = { insumoId:'vodka', nombre:"Vodka American · Sam's", tipo:'copa',
+            contNeto:1750, copaML:45, existenciaAnterior:40, ventasCopasDirectas:0,
+            cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[], pesos:[],
+            cerradasBodega:0, cerradasBarra:0 };
+        const fLim = { insumoId:'preLim1', nombre:'Limoncello SB 1', tipo:'copa', contNeto:2900,
+            copaML:30, rendimientoBatch:2600, existenciaAnterior:0, ventasCopasDirectas:0,
+            cortesiaCopas:0, mermaCopas:0, ventasBotella:0, entradas:[], pesos:[],
+            cerradasBodega:0, cerradasBarra:0 };
+        setVar(L, 'filasCaptura', [fLim, fVod]);
+        vm.runInContext('_consumoDirty = true; _cancelDirty = true;', L);
+        return { fVod, fLim };
+    };
+    const n3 = (v) => Math.round(v * 1000) / 1000;
+
+    test('EL CASO · producir 1 batch se lleva 1750 ml de vodka…', () => {
+        montarLim('vodkaCopia');                       // el ingrediente apunta a la COPIA
+        L.setProduccionPrebatch('preLim1', 1);
+        return eq(n3(L.consumoBasesPorProduccion('vodka')), 1750, '1.75 LT');
+    });
+    test('…y eso baja del teórico del vodka', () => {
+        const f = montarLim('vodkaCopia');
+        L.setProduccionPrebatch('preLim1', 1);
+        return eq(n3(L.calcExistenciaTeorica(f.fVod)), n3(40 - 1750/45), 'ya no sale entero');
+    });
+    /* ANTES ESTO DABA 40: el vodka salía intacto en el Resultado aunque el
+       Limoncello se hubiera llevado una botella y tres cuartos. */
+    test('…que es justo lo que ANTES no pasaba', () => {
+        const f = montarLim('vodkaCopia');
+        return eq(n3(L.calcExistenciaTeorica(f.fVod)), 40, 'sin producir, intacto — la referencia');
+    });
+    /* Y el caso que SÍ funcionaba (los vinos: ingrediente al maestro) tiene que
+       seguir igual. Es la regresión más fácil de meter al arreglar la otra. */
+    test('…y el ingrediente que apunta al MAESTRO sigue funcionando', () => {
+        const f = montarLim('vodka');
+        L.setProduccionPrebatch('preLim1', 1);
+        return eq(n3(L.calcExistenciaTeorica(f.fVod)), n3(40 - 1750/45), 'sin regresión');
+    });
+    /* Medio batch, que es lo que se acaba de habilitar: media botella. */
+    test('…y medio batch se lleva la mitad', () => {
+        const f = montarLim('vodkaCopia');
+        L.setProduccionPrebatch('preLim1', 0.5);
+        return eq(n3(L.calcExistenciaTeorica(f.fVod)), n3(40 - 875/45), '875 ml');
+    });
+    /* Da igual desde qué sucursal se mire: era la mitad del bug. */
+    test('…y da lo mismo desde qué sucursal se mire', () => {
+        const f = montarLim('vodkaCopia');
+        L.setProduccionPrebatch('preLim1', 1);
+        const global = n3(L.consumoBasesPorProduccion('vodka'));
+        L._storage['etaax_sucursal_activa'] = 'sucB';
+        vm.runInContext('_consumoDirty = true;', L);
+        const dentro = n3(L.consumoBasesPorProduccion('vodka'));
+        L._storage['etaax_sucursal_activa'] = '';
+        return eq(global + '|' + dentro, '1750|1750', 'mismo número');
+    });
+
+    /* ── LA TARJETA DEL PASO 3 ──
+       «El diseño corta los nombres»: «Limoncello SB 1» y «Limoncello SB Bot.»
+       se veían los dos como «Limoncello S…». Capturar en la tarjeta equivocada
+       con esa información es cuestión de tiempo. */
+    const src = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.js'), 'utf8');
+    const html = fs.readFileSync(path.join(RAIZ, 'recetas/inventarios.html'), 'utf8');
+    test('el nombre del prebatch cabe en dos renglones, no se corta', () => {
+        const i = src.indexOf('class="step3-menu-item pb');
+        const card = src.slice(i, i + 900);
+        return eq(card.indexOf('-webkit-line-clamp:2') > -1 &&
+                  card.indexOf('white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${etx(p.nombre)}') === -1,
+                  true, 'dos renglones');
+    });
+    test('…y con el nombre completo al pasar el ratón', () => {
+        const i = src.indexOf('class="step3-menu-item pb');
+        return eq(src.slice(i, i + 900).indexOf('title="${etx(p.nombre)}"') > -1, true, 'con title');
+    });
+    /* La vista previa que pidió: la misma que ya tienen los cócteles. */
+    test('…y se puede abrir la sub-receta desde su tarjeta', () =>
+        eq(src.indexOf("verFichaReceta('${p.recetaId}')") > -1, true, 'con 📋'));
+    /* Solo las tarjetas de prebatch se alinean arriba: las de coctel tienen el
+       nombre en un renglón y ahí el contador centrado está bien. */
+    test('…y el cambio de alineación NO toca las tarjetas de coctel', () =>
+        eq(html.indexOf('.step3-menu-item.pb { align-items:flex-start; }') > -1 &&
+           html.indexOf('.step3-menu-item { display:flex; align-items:center;') > -1,
+           true, 'acotado'));
+    /* Los «?» de la lista de bases no eran datos que faltaran: era un .find por
+       id crudo que no encuentra las copias. El mismo bug, en la pantalla. */
+    test('la lista de bases encuentra los ingredientes que son copias', () => {
+        const i = src.indexOf('const bases = sr ?');
+        const bloque = src.slice(i, i + 420);
+        return eq(bloque.indexOf('window._insumoResolver(ing.insumoId)') > -1 &&
+                  bloque.indexOf('getInsumos().find(x => x.id === ing.insumoId)') === -1,
+                  true, 'sin signos de interrogación');
+    });
+}
+
 /* ═══════════════ RESUMEN ═══════════════ */
 function resumen() {
     console.log('\n════════════════════════════════════');
