@@ -38,6 +38,7 @@ Cambios de esquema: los archivos `supabase-migration-v*.sql` NO se aplican autom
 ### Páginas / módulos
 
 - `index.html` — landing pública de marketing (sin scripts de app, sin guarda).
+- `carta.html` — la carta que abre el cliente al escanear el QR de la mesa. **Pública y SIN sesión** (no lleva page-guard): pide todo con una sola RPC `menu_publico_ver(negocio, token)` que arma cada platillo campo por campo. Es la única página donde un desconocido toca la tabla `recetas`, así que se arma con **lista blanca** —lo que no esté enumerado no viaja— y nunca con una lista negra, que se queda vieja en cuanto alguien agrega un campo al escandallo. Se edita desde `administrativo/menu.html`. Al tocarla, correr la suite BH23/BH47/BH48 del candado: vigilan los tres candados (nada visible hasta prenderlo platillo por platillo, sub-recetas fuera, solo esa sucursal) contra la ÚLTIMA definición SQL de la función, no contra la migración que la creó.
 - `hub.html` — login (Supabase Auth) y selector de negocio + módulos. Es el punto de entrada; al elegir negocio escribe el contexto en localStorage.
 - `recetas/index.html` + `app.js` — módulo de costeos/escandallos de recetas (el más grande).
 - `administrativo/` — ventas, gastos, clientes, proveedores, staff, menú, permisos.
@@ -52,6 +53,7 @@ Cambios de esquema: los archivos `supabase-migration-v*.sql` NO se aplican autom
 - `ctx-bar.js` — barra de contexto del negocio activo; expone `window._ctxBarInit` y `ctxSalir()`.
 - `security.js` — auto-logout por inactividad (30 min) y el helper global `etx()` para escapar HTML. Usar `etx()` en toda concatenación de HTML con datos de usuario.
 - `admin-guard.js` — modal `_pedirClaveAdmin(accion, callback)` que re-verifica la contraseña antes de acciones destructivas.
+- `carta-tema.js` (`window.CartaTema`) — colores, tipografías y estilos por campo de la carta pública. **Una sola verdad para dos pantallas**: la maqueta de teléfono del editor (`administrativo/menu.html`) y `carta.html` piden el MISMO bloque de variables `--ct-*` con `CartaTema.vars(tema)`. Nunca escribir un color fijo en ninguna de las dos: una maqueta que calcula por su cuenta miente, y el dueño ya pegó los códigos en las mesas. Los grises (letra chica, líneas) se CALCULAN mezclando texto con fondo — por eso el mismo tema funciona en fondo claro.
 
 ### Contexto de sesión (localStorage)
 
@@ -75,6 +77,8 @@ Patrón de acceso en el cliente:
 3. localStorage se mantiene como respaldo (sin fotos base64, por la quota).
 
 La migración localStorage→Supabase ya está completa para todos los módulos; al tocar persistencia, seguir este patrón y no inventar otro.
+
+**Guardados PARCIALES (RPC que mezclan en vez de reemplazar):** cuando varias pantallas escriben en la misma fila `datos`, el guardado no manda el objeto completo —pisaría lo de las otras— sino solo sus llaves, y el servidor hace `datos || v_limpio`. OJO con el borrado: `jsonb_strip_nulls` + `NULLIF(x,'')` convierte un texto vacío en «no mandé esa llave», y el merge deja la vieja en su sitio → **borrar un campo se vuelve imposible**. La regla es distinguir las dos cosas con `p_cfg ? 'llave'` (ausente = no se toca; vacía = se quita), y restar las vacías DESPUÉS del merge, nunca antes. Ver `menu_cfg_guardar` en `supabase-migration-v69.sql`.
 
 ### Restricciones importantes
 
