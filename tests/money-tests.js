@@ -21151,6 +21151,20 @@ console.log('\n══ BH35 · La pantalla y el cálculo, sobre el mismo registro
        Cuatro eslabones cuyos nombres se parecen tanto que no se distinguen al
        hablar. Con los ids a la vista, una captura de pantalla cierra la
        discusión en vez de abrir otra. */
+    /* CIEGA DE LA BATERÍA: todo esto comprobaba el OBJETO que arma el
+       desglose, no lo que acaba en pantalla. La cadena podía dejar de
+       pintarse con los once candados en verde. */
+    test('la cadena se PINTA, no solo se calcula', () => {
+        montar(CON_COPIA_CRUZADA, 'madero');
+        const h = M._prebatchDesgloseHTML();
+        return eq(h.indexOf('ver la liga (ids)') > -1 && h.indexOf('preLim1C') > -1,
+                  true, 'en pantalla');
+    });
+    test('…y el botón de religar también', () => {
+        montar(CON_COPIA_CRUZADA, 'madero');
+        return eq(M._prebatchDesgloseHTML().indexOf("_religarPrebatch('preLim1C','srInfusion')") > -1,
+                  true, 'accionable donde se ve');
+    });
     test('el desglose enseña dónde se capturó y qué registro manda', () => {
         const d = montar(CON_COPIA_CRUZADA, 'madero');
         return eq(d.cadena.capturadoEn + ' → ' + d.cadena.resuelveA.split('  ')[0],
