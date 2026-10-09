@@ -22644,10 +22644,19 @@ console.log('\n══ BH47 · La carta vestida del negocio ══');
         const ini = menu.indexOf('.cel { width:252px');
         const fin = menu.indexOf('.ap-cols {', ini);
         const css = menu.slice(ini, fin);
-        /* El marco del teléfono (#2a2721) sí es fijo a propósito: es el
-           aparato, no la carta. Lo demás sale de las variables. */
-        const fijos = (css.match(/#[0-9a-f]{3,6}/gi) || []).filter(c => c.toLowerCase() !== '#2a2721');
-        return eq(fijos.join(' '), '', 'todo sale de --ct-*');
+        /* Dos colores fijos están permitidos, y solo dos, porque ninguno es
+           de la carta:
+             · #2a2721 — el marco y la muesca del teléfono. Es el aparato.
+             · #fff    — la placa detrás del logo redondo. Un logo con
+                         transparencia sobre el color de la carta se ve sucio;
+                         el círculo blanco es lo que lo hace parecer una foto
+                         de perfil. Es la misma placa que lleva el QR.
+           Cualquier otro significa que algo de la carta se pintó a mano y la
+           maqueta dejó de reflejar el tema del negocio. */
+        const PERMITIDOS = ['#2a2721', '#fff'];
+        const fijos = (css.match(/#[0-9a-f]{3,6}/gi) || [])
+            .filter(c => PERMITIDOS.indexOf(c.toLowerCase()) < 0);
+        return eq(fijos.join(' '), '', 'todo lo demás sale de --ct-*');
     });
     /* REGLA POR REGLA, no buscando en todo el archivo. Los tres campos se
        pintan en DOS lugares —la tarjeta de la rejilla y la vista grande— y
@@ -22738,15 +22747,47 @@ console.log('\n══ BH47 · La carta vestida del negocio ══');
         eq(cab.indexOf('id="cLogo"') > -1, true, 'el logo del negocio');
         return eq(cab.toLowerCase().indexOf('etaax') < 0, true, 'sin marca de ETAAX arriba');
     });
-    test('el nombre de la sucursal sale en el encabezado', () =>
-        eq(carta.indexOf("$('cSuc').textContent") > -1, true, 'su sucursal'));
-    /* Repetir «Mammut · Mammut» porque el título quedó igual al nombre del
-       negocio es ruido, y pasa en cuanto alguien escribe su nombre en el
-       título — que es lo primero que todos hacen. */
-    test('…sin repetir lo que el título ya dijo', () => {
+    /* ── EL ENCABEZADO DICE DÓNDE ESTÁS SENTADO ──
+       El renglón grande era el nombre del NEGOCIO: «GRUPO JP». A quien tiene
+       el teléfono en la mano eso no le dice nada —y encima le robaba el
+       renglón al nombre que sí lo identifica, «Tata Mezcalería + Cocina»—.
+       Ahora el grande es la sucursal, y el nombre del negocio no sale. */
+    const encab = (() => {
         const i = carta.indexOf('function encabezado');
-        const cuerpo = carta.slice(i, carta.indexOf('\n}', i));
-        return eq(cuerpo.indexOf('!igual(suc, tit)') > -1, true, 'compara antes de pintar');
+        return carta.slice(i, carta.indexOf('\n}', i));
+    })();
+    test('el renglón grande es la sucursal, no el negocio', () =>
+        eq(/var tit = String\(d\.titulo \|\| ''\)\.trim\(\) \|\| suc/.test(encab),
+           true, 'la sucursal manda sobre el negocio'));
+    test('…y el nombre del negocio ya no se pinta en ningún lado', () => {
+        eq(encab.indexOf("$('cSub')") < 0, true, 'sin el renglón del negocio');
+        return eq(carta.indexOf('id="cSub"') < 0, true, 'ni el elemento');
+    });
+    /* Pero el negocio sigue como ÚLTIMO recurso: las cartas guardadas antes
+       de la v68 no traen sucursal, y un encabezado que diga «Carta» es peor
+       que uno que diga el nombre del grupo. */
+    test('…salvo que no haya sucursal, y entonces sí, antes que «Carta»', () =>
+        eq(/\|\| String\(d\.negocio \|\| ''\)\.trim\(\) \|\| 'Carta'/.test(encab),
+           true, 'la escalera completa'));
+    /* Y la sucursal debajo solo si el título es otro: si el título YA es la
+       sucursal, repetirla es ruido. */
+    test('la sucursal no se repite debajo de sí misma', () =>
+        eq(encab.indexOf('!igual(suc, tit)') > -1, true, 'compara antes de pintar'));
+
+    /* ── EL LOGO, REDONDO ──
+       Como una foto de perfil: es la forma con la que todo el mundo lee «esta
+       es la marca de quien publica», sin que haya que explicarla. */
+    test('el logo se ve redondo, como foto de perfil', () => {
+        const css = regla('.cab-logo');
+        eq(css.indexOf('border-radius:50%') > -1, true, 'círculo');
+        /* Cuadrado de verdad: con ancho y alto distintos, `border-radius:50%`
+           da un óvalo, no un círculo. */
+        return eq(/width:(\d+)px; height:\1px/.test(css), true, 'cuadrado, no óvalo');
+    });
+    test('…y llena el círculo, con placa blanca para los logos transparentes', () => {
+        const css = regla('.cab-logo');
+        eq(css.indexOf('object-fit:cover') > -1, true, 'recorta como Instagram');
+        return eq(css.indexOf('background:#fff') > -1, true, 'sin ver la carta por detrás');
     });
     /* El logo entra en un `src`. Viene de nuestra propia consulta, pero una
        dirección `javascript:` ahí se ejecuta — y la fila la escribe un cliente
