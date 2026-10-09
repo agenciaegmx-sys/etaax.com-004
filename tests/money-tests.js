@@ -10869,9 +10869,24 @@ console.log('\n══ BF2 · Conteos del QR que se suman ══');
                   t.indexOf("'_'+CNT_SEL.id,") === -1, true, 'id único');
     });
     /* Y como ahora SUMAN, precargar el conteo anterior contaría doble. */
+    /* Se mira la FUNCIÓN ENTERA, no sus primeros 900 caracteres. Así estaba y
+       tronó al agregarle un comentario: la línea que buscaba se corrió más
+       allá del recorte. Un candado que depende de cuánto texto hay antes no
+       está protegiendo la conducta, está protegiendo el tamaño del archivo. */
+    const _cuerpoEnt = (nombre) => {
+        const i = ent.indexOf('function ' + nombre + '(');
+        if (i < 0) throw new Error('no existe ' + nombre);
+        const abre = ent.indexOf('{', i);
+        let prof = 0, j = abre;
+        while (j < ent.length) {
+            if (ent[j] === '{') prof++;
+            else if (ent[j] === '}') { prof--; if (!prof) return ent.slice(i, j + 1); }
+            j++;
+        }
+        throw new Error('sin cerrar ' + nombre);
+    };
     test('el formulario ya no precarga el conteo anterior', () => {
-        const i = ent.indexOf('function selCnt(id){');
-        const t = ent.slice(i, i + 900);
+        const t = _cuerpoEnt('selCnt');
         return eq(t.indexOf("document.getElementById('cntBodega').value = '';") > -1 &&
                   t.indexOf('prev.cerradasBodega') === -1, true, 'en blanco');
     });
